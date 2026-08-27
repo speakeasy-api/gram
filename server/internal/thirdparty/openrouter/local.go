@@ -38,6 +38,22 @@ func (o *Development) ReinstateAPIKeyLimitWithDB(ctx context.Context, db DBTX, o
 	return o.ReinstateAPIKeyLimit(ctx, orgID, keyType, limit)
 }
 
+func (*Development) AddAPIKeyDisableCause(context.Context, string, KeyType, DisableCause) (DisableCauseChange, error) {
+	return DisableCauseChange{}, nil
+}
+
+func (o *Development) AddAPIKeyDisableCauseWithDB(ctx context.Context, _ DBTX, orgID string, keyType KeyType, cause DisableCause) (DisableCauseChange, error) {
+	return o.AddAPIKeyDisableCause(ctx, orgID, keyType, cause)
+}
+
+func (*Development) RemoveAPIKeyDisableCause(context.Context, string, KeyType, DisableCause, *int) (int, DisableCauseChange, error) {
+	return 0, DisableCauseChange{}, nil
+}
+
+func (o *Development) RemoveAPIKeyDisableCauseWithDB(ctx context.Context, _ DBTX, orgID string, keyType KeyType, cause DisableCause, limit *int) (int, DisableCauseChange, error) {
+	return o.RemoveAPIKeyDisableCause(ctx, orgID, keyType, cause, limit)
+}
+
 func (o *Development) DisableAPIKey(ctx context.Context, orgID string, keyType KeyType) error {
 	return nil
 }

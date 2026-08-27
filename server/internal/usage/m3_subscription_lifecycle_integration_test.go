@@ -132,7 +132,6 @@ func (p *m3OpenRouterProvisioner) reinstateAPIKeyLimit(ctx context.Context, db o
 	refreshed, err := openrouterrepo.New(db).UpdateOpenRouterKey(ctx, openrouterrepo.UpdateOpenRouterKeyParams{
 		MonthlyCredits: int64(*limit),
 		KeyHash:        key.KeyHash,
-		Reinstate:      key.Disabled,
 		OrganizationID: organizationID,
 		KeyType:        string(keyType),
 	})
@@ -141,6 +140,22 @@ func (p *m3OpenRouterProvisioner) reinstateAPIKeyLimit(ctx context.Context, db o
 	}
 	p.refreshCalls = append(p.refreshCalls, keyType)
 	return int(refreshed.MonthlyCredits), nil
+}
+
+func (*m3OpenRouterProvisioner) AddAPIKeyDisableCause(context.Context, string, openrouter.KeyType, openrouter.DisableCause) (openrouter.DisableCauseChange, error) {
+	return openrouter.DisableCauseChange{}, nil
+}
+
+func (*m3OpenRouterProvisioner) AddAPIKeyDisableCauseWithDB(context.Context, openrouter.DBTX, string, openrouter.KeyType, openrouter.DisableCause) (openrouter.DisableCauseChange, error) {
+	return openrouter.DisableCauseChange{}, nil
+}
+
+func (*m3OpenRouterProvisioner) RemoveAPIKeyDisableCause(context.Context, string, openrouter.KeyType, openrouter.DisableCause, *int) (int, openrouter.DisableCauseChange, error) {
+	return 0, openrouter.DisableCauseChange{}, nil
+}
+
+func (*m3OpenRouterProvisioner) RemoveAPIKeyDisableCauseWithDB(context.Context, openrouter.DBTX, string, openrouter.KeyType, openrouter.DisableCause, *int) (int, openrouter.DisableCauseChange, error) {
+	return 0, openrouter.DisableCauseChange{}, nil
 }
 
 func (p *m3OpenRouterProvisioner) DisableAPIKey(ctx context.Context, organizationID string, keyType openrouter.KeyType) error {

@@ -65,6 +65,22 @@ func (m *mockProvisioner) RefreshAPIKeyLimit(ctx context.Context, orgID string, 
 	return 0, nil
 }
 
+func (*mockProvisioner) AddAPIKeyDisableCause(context.Context, string, KeyType, DisableCause) (DisableCauseChange, error) {
+	return DisableCauseChange{}, nil
+}
+
+func (m *mockProvisioner) AddAPIKeyDisableCauseWithDB(ctx context.Context, _ DBTX, orgID string, keyType KeyType, cause DisableCause) (DisableCauseChange, error) {
+	return m.AddAPIKeyDisableCause(ctx, orgID, keyType, cause)
+}
+
+func (*mockProvisioner) RemoveAPIKeyDisableCause(context.Context, string, KeyType, DisableCause, *int) (int, DisableCauseChange, error) {
+	return 0, DisableCauseChange{}, nil
+}
+
+func (m *mockProvisioner) RemoveAPIKeyDisableCauseWithDB(ctx context.Context, _ DBTX, orgID string, keyType KeyType, cause DisableCause, limit *int) (int, DisableCauseChange, error) {
+	return m.RemoveAPIKeyDisableCause(ctx, orgID, keyType, cause, limit)
+}
+
 func (m *mockProvisioner) DisableAPIKey(ctx context.Context, orgID string, keyType KeyType) error {
 	return nil
 }

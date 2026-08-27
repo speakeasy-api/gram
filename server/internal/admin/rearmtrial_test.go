@@ -98,7 +98,6 @@ func (p *rearmProvisioner) refreshAPIKeyLimit(ctx context.Context, orgID string,
 			KeyType:        string(keyType),
 			MonthlyCredits: int64(conv.PtrValOr(limit, 0)),
 			KeyHash:        "hash-" + orgID + "-" + string(keyType),
-			Reinstate:      true,
 		}); err != nil {
 			return 0, fmt.Errorf("reinstate %s key: %w", keyType, err)
 		}

@@ -4,6 +4,11 @@ import "fmt"
 
 type DisableCause string
 
+type DisableCauseChange struct {
+	CauseChanged     bool
+	KeyAccessChanged bool
+}
+
 const (
 	DisableCauseAdminLock       DisableCause = "admin_lock"
 	DisableCauseTrialDemotion   DisableCause = "trial_demotion"

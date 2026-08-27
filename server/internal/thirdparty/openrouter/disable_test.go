@@ -20,10 +20,11 @@ import (
 )
 
 type disableTestUpstream struct {
-	server  *httptest.Server
-	mu      sync.Mutex
-	patches []string
-	onPatch func()
+	server      *httptest.Server
+	mu          sync.Mutex
+	patches     []string
+	onPatch     func()
+	patchStatus int
 }
 
 // recorded returns the raw patch bodies. They stay raw because the field a
@@ -44,6 +45,13 @@ func (u *disableTestUpstream) interceptPatch(fn func()) {
 	u.onPatch = fn
 }
 
+func (u *disableTestUpstream) respondToPatchesWith(status int) {
+	u.mu.Lock()
+	defer u.mu.Unlock()
+
+	u.patchStatus = status
+}
+
 func newDisableTestProvisioner(t *testing.T, orgID string) (*OpenRouter, *disableTestUpstream, *repo.Queries) {
 	t.Helper()
 
@@ -61,7 +69,7 @@ func newDisableTestProvisioner(t *testing.T, orgID string) (*OpenRouter, *disabl
 	})
 	require.NoError(t, err)
 
-	upstream := &disableTestUpstream{server: nil, mu: sync.Mutex{}, patches: nil, onPatch: nil}
+	upstream := &disableTestUpstream{server: nil, mu: sync.Mutex{}, patches: nil, onPatch: nil, patchStatus: 0}
 	upstream.server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 
@@ -81,10 +89,15 @@ func newDisableTestProvisioner(t *testing.T, orgID string) (*OpenRouter, *disabl
 			upstream.mu.Lock()
 			upstream.patches = append(upstream.patches, string(raw))
 			onPatch := upstream.onPatch
+			patchStatus := upstream.patchStatus
 			upstream.mu.Unlock()
 
 			if onPatch != nil {
 				onPatch()
+			}
+			if patchStatus != 0 {
+				w.WriteHeader(patchStatus)
+				return
 			}
 
 			_ = json.NewEncoder(w).Encode(map[string]any{
@@ -150,6 +163,190 @@ func TestOpenRouterDisableCausesAreASet(t *testing.T) {
 	require.True(t, withoutTrial.Disabled)
 }
 
+func TestAddAPIKeyDisableCause(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	orgID := "org-" + uuid.NewString()[:8]
+	provisioner, upstream, queries := newDisableTestProvisioner(t, orgID)
+	_, err := provisioner.ProvisionAPIKey(ctx, orgID, KeyTypeChat)
+	require.NoError(t, err)
+
+	change, err := provisioner.AddAPIKeyDisableCause(ctx, orgID, KeyTypeChat, DisableCauseAdminLock)
+	require.NoError(t, err)
+	require.Equal(t, DisableCauseChange{CauseChanged: true, KeyAccessChanged: true}, change)
+	require.Equal(t, []string{`{"disabled":true}`}, upstream.recorded())
+
+	change, err = provisioner.AddAPIKeyDisableCauseWithDB(ctx, provisioner.db, orgID, KeyTypeChat, DisableCauseTrialDemotion)
+	require.NoError(t, err)
+	require.Equal(t, DisableCauseChange{CauseChanged: true}, change)
+	require.Len(t, upstream.recorded(), 1)
+
+	change, err = provisioner.AddAPIKeyDisableCause(ctx, orgID, KeyTypeChat, DisableCauseTrialDemotion)
+	require.NoError(t, err)
+	require.Equal(t, DisableCauseChange{}, change)
+	require.Len(t, upstream.recorded(), 1)
+
+	row, err := queries.GetOpenRouterAPIKey(ctx, repo.GetOpenRouterAPIKeyParams{OrganizationID: orgID, KeyType: string(KeyTypeChat)})
+	require.NoError(t, err)
+	require.ElementsMatch(t, []string{"admin_lock", "trial_demotion"}, row.DisableCauses)
+}
+
+func TestAddAPIKeyDisableCause_UpstreamFailureAndRetry(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	orgID := "org-" + uuid.NewString()[:8]
+	provisioner, upstream, queries := newDisableTestProvisioner(t, orgID)
+	_, err := provisioner.ProvisionAPIKey(ctx, orgID, KeyTypeInternal)
+	require.NoError(t, err)
+
+	upstream.respondToPatchesWith(http.StatusBadGateway)
+	_, err = provisioner.AddAPIKeyDisableCause(ctx, orgID, KeyTypeInternal, DisableCauseAdminLock)
+	require.Error(t, err)
+	row, readErr := queries.GetOpenRouterAPIKey(ctx, repo.GetOpenRouterAPIKeyParams{OrganizationID: orgID, KeyType: string(KeyTypeInternal)})
+	require.NoError(t, readErr)
+	require.Empty(t, row.DisableCauses)
+
+	failedAttempts := len(upstream.recorded())
+	upstream.respondToPatchesWith(0)
+	change, err := provisioner.AddAPIKeyDisableCause(ctx, orgID, KeyTypeInternal, DisableCauseAdminLock)
+	require.NoError(t, err)
+	require.Equal(t, DisableCauseChange{CauseChanged: true, KeyAccessChanged: true}, change)
+	require.Len(t, upstream.recorded(), failedAttempts+1)
+	change, err = provisioner.AddAPIKeyDisableCause(ctx, orgID, KeyTypeInternal, DisableCauseAdminLock)
+	require.NoError(t, err)
+	require.Equal(t, DisableCauseChange{}, change)
+	require.Len(t, upstream.recorded(), failedAttempts+1, "the successful retry must not patch again")
+}
+
+func TestAddAPIKeyDisableCause_ValidatesAndMissingKeyIsNoop(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	orgID := "org-" + uuid.NewString()[:8]
+	provisioner, upstream, _ := newDisableTestProvisioner(t, orgID)
+	change, err := provisioner.AddAPIKeyDisableCause(ctx, orgID, KeyTypeChat, DisableCauseAdminLock)
+	require.NoError(t, err)
+	require.Equal(t, DisableCauseChange{}, change)
+	require.Empty(t, upstream.recorded())
+
+	_, err = provisioner.AddAPIKeyDisableCause(ctx, orgID, KeyType("invalid"), DisableCauseAdminLock)
+	require.Error(t, err)
+	_, err = provisioner.AddAPIKeyDisableCauseWithDB(ctx, provisioner.db, orgID, KeyTypeChat, DisableCause("invalid"))
+	require.Error(t, err)
+}
+
+func TestRemoveAPIKeyDisableCause(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	orgID := "org-" + uuid.NewString()[:8]
+	provisioner, upstream, queries := newDisableTestProvisioner(t, orgID)
+	_, err := provisioner.ProvisionAPIKey(ctx, orgID, KeyTypeChat)
+	require.NoError(t, err)
+	_, err = provisioner.AddAPIKeyDisableCause(ctx, orgID, KeyTypeChat, DisableCauseAdminLock)
+	require.NoError(t, err)
+	_, err = provisioner.AddAPIKeyDisableCause(ctx, orgID, KeyTypeChat, DisableCauseTrialDemotion)
+	require.NoError(t, err)
+	before, err := queries.GetOpenRouterAPIKey(ctx, repo.GetOpenRouterAPIKeyParams{OrganizationID: orgID, KeyType: string(KeyTypeChat)})
+	require.NoError(t, err)
+
+	limit := int(before.MonthlyCredits)
+	gotLimit, change, err := provisioner.RemoveAPIKeyDisableCauseWithDB(ctx, provisioner.db, orgID, KeyTypeChat, DisableCauseTrialDemotion, &limit)
+	require.NoError(t, err)
+	require.Equal(t, limit, gotLimit)
+	require.Equal(t, DisableCauseChange{CauseChanged: true}, change)
+	require.Len(t, upstream.recorded(), 1)
+
+	gotLimit, change, err = provisioner.RemoveAPIKeyDisableCause(ctx, orgID, KeyTypeChat, DisableCauseTrialDemotion, &limit)
+	require.NoError(t, err)
+	require.Zero(t, gotLimit)
+	require.Equal(t, DisableCauseChange{}, change)
+	require.Len(t, upstream.recorded(), 1)
+
+	gotLimit, change, err = provisioner.RemoveAPIKeyDisableCause(ctx, orgID, KeyTypeChat, DisableCauseAdminLock, &limit)
+	require.NoError(t, err)
+	require.Equal(t, limit, gotLimit)
+	require.Equal(t, DisableCauseChange{CauseChanged: true, KeyAccessChanged: true}, change)
+	require.Equal(t, []string{`{"disabled":true}`, `{"disabled":false}`}, upstream.recorded())
+
+	row, err := queries.GetOpenRouterAPIKey(ctx, repo.GetOpenRouterAPIKeyParams{OrganizationID: orgID, KeyType: string(KeyTypeChat)})
+	require.NoError(t, err)
+	require.Empty(t, row.DisableCauses)
+
+	_, _, err = provisioner.RemoveAPIKeyDisableCause(ctx, orgID, KeyType("invalid"), DisableCauseAdminLock, nil)
+	require.Error(t, err)
+	_, _, err = provisioner.RemoveAPIKeyDisableCauseWithDB(ctx, provisioner.db, orgID, KeyTypeChat, DisableCause("invalid"), nil)
+	require.Error(t, err)
+}
+
+func TestRemoveAPIKeyDisableCause_UpstreamFailurePreservesCause(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	orgID := "org-" + uuid.NewString()[:8]
+	provisioner, upstream, queries := newDisableTestProvisioner(t, orgID)
+	_, err := provisioner.ProvisionAPIKey(ctx, orgID, KeyTypeInternal)
+	require.NoError(t, err)
+	_, err = provisioner.AddAPIKeyDisableCause(ctx, orgID, KeyTypeInternal, DisableCauseBillingInactive)
+	require.NoError(t, err)
+
+	upstream.respondToPatchesWith(http.StatusBadGateway)
+	_, _, err = provisioner.RemoveAPIKeyDisableCause(ctx, orgID, KeyTypeInternal, DisableCauseBillingInactive, nil)
+	require.Error(t, err)
+	row, readErr := queries.GetOpenRouterAPIKey(ctx, repo.GetOpenRouterAPIKeyParams{OrganizationID: orgID, KeyType: string(KeyTypeInternal)})
+	require.NoError(t, readErr)
+	require.Equal(t, []string{"billing_inactive"}, row.DisableCauses)
+}
+
+func TestRefreshAPIKeyLimit_PreservesDisableCauses(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	orgID := "org-" + uuid.NewString()[:8]
+	provisioner, upstream, queries := newDisableTestProvisioner(t, orgID)
+	_, err := provisioner.ProvisionAPIKey(ctx, orgID, KeyTypeInternal)
+	require.NoError(t, err)
+	_, err = queries.AddOpenRouterAPIKeyDisableCause(ctx, repo.AddOpenRouterAPIKeyDisableCauseParams{OrganizationID: orgID, KeyType: string(KeyTypeInternal), DisableCause: string(DisableCauseTrialDemotion)})
+	require.NoError(t, err)
+
+	limit := 42
+	got, err := provisioner.RefreshAPIKeyLimit(ctx, orgID, KeyTypeInternal, &limit)
+	require.NoError(t, err)
+	require.Equal(t, 42, got)
+	patches := upstream.recorded()
+	require.Len(t, patches, 1)
+	require.JSONEq(t, `{"limit":42,"limit_reset":"monthly"}`, patches[0])
+
+	row, err := queries.GetOpenRouterAPIKey(ctx, repo.GetOpenRouterAPIKeyParams{OrganizationID: orgID, KeyType: string(KeyTypeInternal)})
+	require.NoError(t, err)
+	require.Equal(t, []string{"trial_demotion"}, row.DisableCauses)
+}
+
+func TestDevelopmentDisableCauseMethodsAreNoops(t *testing.T) {
+	t.Parallel()
+
+	dev := NewDevelopment("dev-key")
+	change, err := dev.AddAPIKeyDisableCause(t.Context(), "org", KeyTypeChat, DisableCauseAdminLock)
+	require.NoError(t, err)
+	require.Equal(t, DisableCauseChange{}, change)
+
+	change, err = dev.AddAPIKeyDisableCauseWithDB(t.Context(), nil, "org", KeyTypeChat, DisableCauseAdminLock)
+	require.NoError(t, err)
+	require.Equal(t, DisableCauseChange{}, change)
+
+	limit, change, err := dev.RemoveAPIKeyDisableCause(t.Context(), "org", KeyTypeChat, DisableCauseAdminLock, new(42))
+	require.NoError(t, err)
+	require.Zero(t, limit)
+	require.Equal(t, DisableCauseChange{}, change)
+
+	limit, change, err = dev.RemoveAPIKeyDisableCauseWithDB(t.Context(), nil, "org", KeyTypeChat, DisableCauseAdminLock, new(42))
+	require.NoError(t, err)
+	require.Zero(t, limit)
+	require.Equal(t, DisableCauseChange{}, change)
+}
+
 func TestDisableAPIKey_DisablesKeyUpstream(t *testing.T) {
 	t.Parallel()
 
@@ -200,7 +397,7 @@ func TestProvisionAPIKey_RefusesDisabledKey(t *testing.T) {
 
 	// Reinstatement makes resolution work again without minting a new key.
 	limit := 42
-	_, err = provisioner.RefreshAPIKeyLimit(ctx, orgID, KeyTypeInternal, &limit)
+	_, err = provisioner.ReinstateAPIKeyLimit(ctx, orgID, KeyTypeInternal, &limit)
 	require.NoError(t, err)
 
 	key, err = provisioner.ProvisionAPIKey(ctx, orgID, KeyTypeInternal)
@@ -248,7 +445,7 @@ func TestDisableAPIKey_NoKeyIsNoop(t *testing.T) {
 
 // Sales reinstate a demoted organization by raising its limit, so the refresh
 // path has to clear the flag on both sides.
-func TestRefreshAPIKeyLimit_ReinstatesDisabledKey(t *testing.T) {
+func TestReinstateAPIKeyLimit_ReinstatesDisabledKey(t *testing.T) {
 	t.Parallel()
 
 	ctx := t.Context()
@@ -260,7 +457,7 @@ func TestRefreshAPIKeyLimit_ReinstatesDisabledKey(t *testing.T) {
 	require.NoError(t, provisioner.DisableAPIKey(ctx, orgID, KeyTypeInternal))
 
 	limit := 42
-	refreshed, err := provisioner.RefreshAPIKeyLimit(ctx, orgID, KeyTypeInternal, &limit)
+	refreshed, err := provisioner.ReinstateAPIKeyLimit(ctx, orgID, KeyTypeInternal, &limit)
 	require.NoError(t, err)
 	require.Equal(t, 42, refreshed)
 
@@ -280,7 +477,7 @@ func TestRefreshAPIKeyLimit_ReinstatesDisabledKey(t *testing.T) {
 	// Refreshing an enabled key must send the body it sent before the disabled
 	// field existed. Carrying disabled=false on every refresh would revive a
 	// key an operator turned off on the OpenRouter dashboard.
-	_, err = provisioner.RefreshAPIKeyLimit(ctx, orgID, KeyTypeInternal, &limit)
+	_, err = provisioner.ReinstateAPIKeyLimit(ctx, orgID, KeyTypeInternal, &limit)
 	require.NoError(t, err)
 
 	patches = upstream.recorded()
@@ -288,7 +485,7 @@ func TestRefreshAPIKeyLimit_ReinstatesDisabledKey(t *testing.T) {
 	require.JSONEq(t, `{"limit":42,"limit_reset":"monthly"}`, patches[2])
 }
 
-func TestRefreshAPIKeyLimit_RemovesOnlyLegacyAdminLock(t *testing.T) {
+func TestReinstateAPIKeyLimit_RemovesOnlyLegacyAdminLock(t *testing.T) {
 	t.Parallel()
 
 	ctx := t.Context()
@@ -307,7 +504,7 @@ func TestRefreshAPIKeyLimit_RemovesOnlyLegacyAdminLock(t *testing.T) {
 	require.NoError(t, err)
 
 	limit := 42
-	_, err = provisioner.RefreshAPIKeyLimit(ctx, orgID, KeyTypeInternal, &limit)
+	_, err = provisioner.ReinstateAPIKeyLimit(ctx, orgID, KeyTypeInternal, &limit)
 	require.NoError(t, err)
 
 	row, err := queries.GetOpenRouterAPIKey(ctx, repo.GetOpenRouterAPIKeyParams{
@@ -320,7 +517,7 @@ func TestRefreshAPIKeyLimit_RemovesOnlyLegacyAdminLock(t *testing.T) {
 
 	// A retry sees that admin_lock is already gone, preserves the remaining
 	// cause, and reasserts the disabled upstream state.
-	_, err = provisioner.RefreshAPIKeyLimit(ctx, orgID, KeyTypeInternal, &limit)
+	_, err = provisioner.ReinstateAPIKeyLimit(ctx, orgID, KeyTypeInternal, &limit)
 	require.NoError(t, err)
 
 	patches := upstream.recorded()
@@ -337,7 +534,7 @@ func TestRefreshAPIKeyLimit_RemovesOnlyLegacyAdminLock(t *testing.T) {
 	require.True(t, row.Disabled)
 }
 
-func TestRefreshAPIKeyLimit_RetryDisablesAfterConcurrentCause(t *testing.T) {
+func TestReinstateAPIKeyLimit_RetryDisablesAfterConcurrentCause(t *testing.T) {
 	t.Parallel()
 
 	ctx := t.Context()
@@ -362,7 +559,7 @@ func TestRefreshAPIKeyLimit_RetryDisablesAfterConcurrentCause(t *testing.T) {
 	})
 
 	limit := 42
-	_, err = provisioner.RefreshAPIKeyLimit(ctx, orgID, KeyTypeInternal, &limit)
+	_, err = provisioner.ReinstateAPIKeyLimit(ctx, orgID, KeyTypeInternal, &limit)
 	require.NoError(t, err)
 	require.NoError(t, <-injected)
 
@@ -374,7 +571,7 @@ func TestRefreshAPIKeyLimit_RetryDisablesAfterConcurrentCause(t *testing.T) {
 	require.Equal(t, []string{"trial_demotion"}, row.DisableCauses)
 	require.True(t, row.Disabled)
 
-	_, err = provisioner.RefreshAPIKeyLimit(ctx, orgID, KeyTypeInternal, &limit)
+	_, err = provisioner.ReinstateAPIKeyLimit(ctx, orgID, KeyTypeInternal, &limit)
 	require.NoError(t, err)
 
 	patches := upstream.recorded()
