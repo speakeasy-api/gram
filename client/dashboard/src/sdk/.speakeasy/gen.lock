@@ -4643,7 +4643,7 @@ examples:
         application/json: {"key_type": "chat", "organization_id": "<id>"}
       responses:
         "200":
-          application/json: {"created_at": "2024-08-21T13:21:54.974Z", "disabled": true, "gram_account_type": "<value>", "key_type": "<value>", "monthly_credits": 166947, "organization_id": "<id>", "organization_name": "<value>", "organization_slug": "<value>", "updated_at": "2026-04-19T14:12:31.155Z"}
+          application/json: {"created_at": "2024-08-21T13:21:54.974Z", "disable_causes": [], "disabled": true, "gram_account_type": "<value>", "key_type": "<value>", "monthly_credits": 166947, "organization_id": "<id>", "organization_name": "<value>", "organization_slug": "<value>", "updated_at": "2026-04-19T14:12:31.155Z"}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
         "500":
@@ -4776,7 +4776,7 @@ examples:
         application/json: {"key_type": "internal", "organization_id": "<id>"}
       responses:
         "200":
-          application/json: {"created_at": "2025-07-27T03:56:09.631Z", "disabled": true, "gram_account_type": "<value>", "key_type": "<value>", "monthly_credits": 945065, "organization_id": "<id>", "organization_name": "<value>", "organization_slug": "<value>", "updated_at": "2026-03-30T05:03:57.632Z"}
+          application/json: {"created_at": "2025-07-27T03:56:09.631Z", "disable_causes": ["trial_demotion"], "disabled": true, "gram_account_type": "<value>", "key_type": "<value>", "monthly_credits": 945065, "organization_id": "<id>", "organization_name": "<value>", "organization_slug": "<value>", "updated_at": "2026-03-30T05:03:57.632Z"}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
         "500":

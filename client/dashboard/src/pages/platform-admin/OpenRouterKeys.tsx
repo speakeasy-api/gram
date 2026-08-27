@@ -20,6 +20,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
 import { useIsPlatformAdmin } from "@/contexts/Auth";
+import { causeLabels, keyAction } from "./openRouterKeyState";
 
 // Rows per page; also the ceiling on concurrent live usage fetches, since
 // only mounted rows request usage.
@@ -135,7 +136,7 @@ function KeysTable(): JSX.Element {
   const disable = useDisableAdminOpenRouterKeyMutation({
     onSuccess: (key) => {
       toast.success(
-        `Disabled the ${key.keyType} key for ${key.organizationName}.`,
+        `Admin lock added to the ${key.keyType} key for ${key.organizationName}.`,
       );
       invalidate();
     },
@@ -148,7 +149,7 @@ function KeysTable(): JSX.Element {
   const enable = useEnableAdminOpenRouterKeyMutation({
     onSuccess: (key) => {
       toast.success(
-        `Enabled the ${key.keyType} key for ${key.organizationName}.`,
+        `Admin lock removed from the ${key.keyType} key for ${key.organizationName}.`,
       );
       invalidate();
     },
@@ -184,10 +185,10 @@ function KeysTable(): JSX.Element {
     const keyType = row.keyType === "internal" ? "internal" : "chat";
     const body = { organizationId: row.organizationId, keyType } as const;
     const actions: Action[] = [];
-    if (row.disabled) {
+    if (keyAction(row.disableCauses) === "remove-admin-lock") {
       actions.push({
         icon: "play",
-        label: "Enable key",
+        label: "Remove admin lock",
         disabled: enable.isPending,
         onClick: () =>
           enable.mutate({
@@ -266,6 +267,27 @@ function KeysTable(): JSX.Element {
             <Badge.Text>Enabled</Badge.Text>
           </Badge>
         ),
+    },
+    {
+      key: "causes",
+      header: "Causes",
+      width: "180px",
+      render: (row) => {
+        const labels = causeLabels(row.disableCauses);
+        return labels.length > 0 ? (
+          <div className="space-y-1">
+            {labels.map((label) => (
+              <Text key={label} small>
+                {label}
+              </Text>
+            ))}
+          </div>
+        ) : (
+          <Text muted small>
+            —
+          </Text>
+        );
+      },
     },
     {
       key: "actions",

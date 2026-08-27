@@ -52,7 +52,7 @@ export class AdminOpenRouterKeys extends ClientSDK {
    * enableKey adminOpenRouterKeys
    *
    * @remarks
-   * Reinstate a disabled platform OpenRouter key, upstream and locally, keeping its recorded credit ceiling. Requires platform admin.
+   * Remove the platform-admin lock from an OpenRouter key, preserving any automatic disable causes and its recorded credit ceiling. Requires platform admin.
    */
   async enableKey(
     request: EnableAdminOpenRouterKeyRequest,

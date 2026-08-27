@@ -7,14 +7,14 @@ import { remap as remap$ } from "../../lib/primitives.js";
 import { ClosedEnum } from "../../types/enums.js";
 
 /**
- * Key type to enable.
+ * Key type from which to remove the platform-admin lock.
  */
 export const EnableOpenRouterKeyRequestBodyKeyType = {
   Chat: "chat",
   Internal: "internal",
 } as const;
 /**
- * Key type to enable.
+ * Key type from which to remove the platform-admin lock.
  */
 export type EnableOpenRouterKeyRequestBodyKeyType = ClosedEnum<
   typeof EnableOpenRouterKeyRequestBodyKeyType
@@ -22,7 +22,7 @@ export type EnableOpenRouterKeyRequestBodyKeyType = ClosedEnum<
 
 export type EnableOpenRouterKeyRequestBody = {
   /**
-   * Key type to enable.
+   * Key type from which to remove the platform-admin lock.
    */
   keyType: EnableOpenRouterKeyRequestBodyKeyType;
   /**
