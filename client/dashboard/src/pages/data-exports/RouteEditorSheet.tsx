@@ -19,6 +19,7 @@ import {
 } from "@/components/ui/Sheet";
 import { Switch } from "@/components/ui/Switch";
 import { Text } from "@/components/ui/Text";
+import { DataSource } from "@gram/client/models/components/createdataexportrouteform.js";
 import type { OtelDestination } from "@gram/client/models/components/oteldestination.js";
 import { Plus } from "lucide-react";
 import { useMemo, useState } from "react";
@@ -94,20 +95,19 @@ export function RouteEditorSheet({
         <div className="min-h-0 flex-1 overflow-y-auto px-6">
           <div className="space-y-3 py-6">
             <Label>Source</Label>
-            <Select value="otel_forwarding" disabled>
+            <Select value={DataSource.OtelForwarding} disabled>
               <SelectTrigger className="w-full">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="otel_forwarding">
+                <SelectItem value={DataSource.OtelForwarding}>
                   Product telemetry
                 </SelectItem>
               </SelectContent>
             </Select>
             <Text muted className="text-sm leading-relaxed">
               OTLP traces and logs from every MCP server and tool call. Risk
-              findings, agent sessions and tool calls will appear here as they
-              ship.
+              findings and agent sessions will appear here as they ship.
             </Text>
           </div>
 

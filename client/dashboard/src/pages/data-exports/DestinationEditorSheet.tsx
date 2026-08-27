@@ -14,6 +14,7 @@ import { Stack } from "@/components/ui/Stack";
 import { Switch } from "@/components/ui/Switch";
 import { Text } from "@/components/ui/Text";
 import { RequireScope } from "@/components/require-scope";
+import { WriteOnlyHeaderRow } from "@/components/write-only-header-row";
 import {
   blankWriteOnlyHeader,
   editableHeaderFromServer,
@@ -24,7 +25,7 @@ import {
 import { useForm } from "@tanstack/react-form";
 import type { OtelDestination } from "@gram/client/models/components/oteldestination.js";
 import type { DataExportRoute } from "@gram/client/models/components/dataexportroute.js";
-import { Plus, Trash2 } from "lucide-react";
+import { Plus } from "lucide-react";
 import { useMemo } from "react";
 
 export type DestinationFormValues = {
@@ -101,19 +102,9 @@ export function DestinationEditorSheet({
             void form.handleSubmit();
           }}
         >
-          <form.Subscribe
-            selector={(state) => [state.values, state.isSubmitting] as const}
-          >
-            {([values, isSubmitting]) => {
+          <form.Subscribe selector={(state) => state.isSubmitting}>
+            {(isSubmitting) => {
               const disabled = formDisabled || isSubmitting;
-              const canSave =
-                values.name.trim() !== "" &&
-                values.endpointUrl.trim() !== "" &&
-                hasValidWriteOnlyHeaders(values.headers) &&
-                !disabled;
-              let saveLabel = destination ? "Save" : "Create destination";
-              if (saving) saveLabel = "Saving";
-
               return (
                 <fieldset disabled={disabled} className="contents">
                   <div className="min-h-0 flex-1 overflow-y-auto px-6">
@@ -201,43 +192,25 @@ export function DestinationEditorSheet({
                                       name={`headers[${index}].value` as const}
                                     >
                                       {(valueField) => (
-                                        <div className="flex items-center gap-2">
-                                          <Input
-                                            name={nameField.name}
-                                            aria-label={`Header ${index + 1} name`}
-                                            placeholder="Header name"
-                                            value={nameField.state.value}
-                                            onChange={nameField.handleChange}
-                                            onBlur={nameField.handleBlur}
-                                            className="flex-1"
-                                          />
-                                          <Input
-                                            name={valueField.name}
-                                            aria-label={`Header ${index + 1} value`}
-                                            placeholder={
-                                              preservesStoredHeaderValue(header)
-                                                ? "••••"
-                                                : "Header value"
-                                            }
-                                            value={valueField.state.value}
-                                            onChange={valueField.handleChange}
-                                            onBlur={valueField.handleBlur}
-                                            type="password"
-                                            reveal
-                                            className="flex-1"
-                                          />
-                                          <Button
-                                            type="button"
-                                            variant="tertiary"
-                                            size="sm"
-                                            aria-label={`Remove header ${header.name || index + 1}`}
-                                            onClick={() =>
-                                              headersField.removeValue(index)
-                                            }
-                                          >
-                                            <Trash2 className="size-3.5" />
-                                          </Button>
-                                        </div>
+                                        <WriteOnlyHeaderRow
+                                          name={nameField.state.value}
+                                          value={valueField.state.value}
+                                          hasStoredValue={preservesStoredHeaderValue(
+                                            header,
+                                          )}
+                                          nameInputName={nameField.name}
+                                          valueInputName={valueField.name}
+                                          disabled={disabled}
+                                          onNameChange={nameField.handleChange}
+                                          onNameBlur={nameField.handleBlur}
+                                          onValueChange={
+                                            valueField.handleChange
+                                          }
+                                          onValueBlur={valueField.handleBlur}
+                                          onRemove={() =>
+                                            headersField.removeValue(index)
+                                          }
+                                        />
                                       )}
                                     </form.Field>
                                   )}
@@ -256,35 +229,38 @@ export function DestinationEditorSheet({
                     <div className="space-y-3 border-t py-5">
                       <form.Field name="includeSensitiveData">
                         {(field) => (
-                          <div className="flex items-start justify-between gap-4">
-                            <div className="space-y-1">
-                              <Label>Include sensitive data</Label>
-                              <Text muted className="text-sm">
-                                Send tool arguments, results and prompt content
-                                to this destination.
-                              </Text>
+                          <>
+                            <div className="flex items-start justify-between gap-4">
+                              <div className="space-y-1">
+                                <Label>Include sensitive data</Label>
+                                <Text muted className="text-sm">
+                                  Send tool arguments, results and prompt
+                                  content to this destination.
+                                </Text>
+                              </div>
+                              <RequireScope
+                                scope="project:write"
+                                level="component"
+                              >
+                                <Switch
+                                  checked={field.state.value}
+                                  onCheckedChange={field.handleChange}
+                                  aria-label="Include sensitive data"
+                                />
+                              </RequireScope>
                             </div>
-                            <RequireScope
-                              scope="project:write"
-                              level="component"
-                            >
-                              <Switch
-                                checked={field.state.value}
-                                onCheckedChange={field.handleChange}
-                                aria-label="Include sensitive data"
-                              />
-                            </RequireScope>
-                          </div>
+                            {field.state.value ? (
+                              <Alert variant="warning" alignTop>
+                                <Text className="text-sm">
+                                  Payloads sent here will contain customer data.
+                                  This applies to every source routed to this
+                                  destination.
+                                </Text>
+                              </Alert>
+                            ) : null}
+                          </>
                         )}
                       </form.Field>
-                      {values.includeSensitiveData ? (
-                        <Alert variant="warning" alignTop>
-                          <Text className="text-sm">
-                            Payloads sent here will contain customer data. This
-                            applies to every source routed to this destination.
-                          </Text>
-                        </Alert>
-                      ) : null}
                     </div>
 
                     {isEditing ? (
@@ -319,48 +295,78 @@ export function DestinationEditorSheet({
                     ) : null}
                   </div>
 
-                  <SheetFooter className="min-h-14 flex-row items-center justify-between border-t bg-muted/30 px-6 py-3">
-                    <div>
-                      {destination ? (
-                        <RequireScope scope="project:write" level="component">
-                          <Button
-                            type="button"
-                            variant="destructive-secondary"
-                            size="sm"
-                            disabled={isRouted || disabled}
-                            tooltip={
-                              isRouted
-                                ? "Remove this destination from every source before deleting it."
-                                : undefined
-                            }
-                            onClick={() => onRequestDelete(destination)}
-                          >
-                            Delete
-                          </Button>
-                        </RequireScope>
-                      ) : null}
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <Button
-                        type="button"
-                        variant="secondary"
-                        size="sm"
-                        onClick={onClose}
-                      >
-                        Cancel
-                      </Button>
-                      <RequireScope scope="project:write" level="component">
-                        <Button
-                          type="submit"
-                          variant="primary"
-                          size="sm"
-                          disabled={!canSave}
-                        >
-                          {saveLabel}
-                        </Button>
-                      </RequireScope>
-                    </div>
-                  </SheetFooter>
+                  <form.Subscribe
+                    selector={(state) =>
+                      [
+                        state.values.name,
+                        state.values.endpointUrl,
+                        state.values.headers,
+                      ] as const
+                    }
+                  >
+                    {([name, endpointUrl, headers]) => {
+                      const canSave =
+                        name.trim() !== "" &&
+                        endpointUrl.trim() !== "" &&
+                        hasValidWriteOnlyHeaders(headers) &&
+                        !disabled;
+
+                      return (
+                        <SheetFooter className="min-h-14 flex-row items-center justify-between border-t bg-muted/30 px-6 py-3">
+                          <div>
+                            {destination ? (
+                              <RequireScope
+                                scope="project:write"
+                                level="component"
+                              >
+                                <Button
+                                  type="button"
+                                  variant="destructive-secondary"
+                                  size="sm"
+                                  disabled={isRouted || disabled}
+                                  tooltip={
+                                    isRouted
+                                      ? "Remove this destination from every source before deleting it."
+                                      : undefined
+                                  }
+                                  onClick={() => onRequestDelete(destination)}
+                                >
+                                  Delete
+                                </Button>
+                              </RequireScope>
+                            ) : null}
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <Button
+                              type="button"
+                              variant="secondary"
+                              size="sm"
+                              onClick={onClose}
+                            >
+                              Cancel
+                            </Button>
+                            <RequireScope
+                              scope="project:write"
+                              level="component"
+                            >
+                              <Button
+                                type="submit"
+                                variant="primary"
+                                size="sm"
+                                disabled={!canSave}
+                              >
+                                {saving
+                                  ? "Saving"
+                                  : destination
+                                    ? "Save"
+                                    : "Create destination"}
+                              </Button>
+                            </RequireScope>
+                          </div>
+                        </SheetFooter>
+                      );
+                    }}
+                  </form.Subscribe>
                 </fieldset>
               );
             }}

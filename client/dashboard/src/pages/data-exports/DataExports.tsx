@@ -11,8 +11,10 @@ import { SkeletonTable } from "@/components/ui/Skeleton";
 import { Switch } from "@/components/ui/Switch";
 import { type Column, Table } from "@/components/ui/Table";
 import { Text } from "@/components/ui/Text";
+import { toError } from "@/lib/errors";
 import { writeOnlyHeaderInput } from "@/lib/write-only-headers";
 import { useQueryClient } from "@tanstack/react-query";
+import { DataSource } from "@gram/client/models/components/createdataexportrouteform.js";
 import type { DataExportRoute } from "@gram/client/models/components/dataexportroute.js";
 import type { ListDataExportRoutesResult } from "@gram/client/models/components/listdataexportroutesresult.js";
 import type { OtelDestination } from "@gram/client/models/components/oteldestination.js";
@@ -31,7 +33,7 @@ import {
 import { useUpdateDataExportRouteMutation } from "@gram/client/react-query/updateDataExportRoute.js";
 import { useUpdateOtelDestinationMutation } from "@gram/client/react-query/updateOtelDestination.js";
 import { Plus } from "lucide-react";
-import { useCallback, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { toast } from "sonner";
 import {
   DestinationEditorSheet,
@@ -39,7 +41,12 @@ import {
 } from "./DestinationEditorSheet";
 import { RouteEditorSheet } from "./RouteEditorSheet";
 
-const OTEL_FORWARDING_SOURCE = "otel_forwarding" as const;
+const OTEL_FORWARDING_SOURCE = DataSource.OtelForwarding;
+const DATA_EXPORT_ROUTES_QUERY_KEY = [
+  "@gram/client",
+  "dataExports",
+  "listRoutes",
+] as const;
 const EMPTY_DESTINATIONS: OtelDestination[] = [];
 const EMPTY_ROUTES: DataExportRoute[] = [];
 
@@ -56,10 +63,6 @@ function SensitiveDataBadge({
     );
   }
   return <Badge size="md">Excluded</Badge>;
-}
-
-function errorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : "Unexpected error";
 }
 
 export default function DataExports(): JSX.Element {
@@ -115,15 +118,6 @@ function DataExportsInner(): JSX.Element {
     [routedRows],
   );
 
-  const invalidateLists = useCallback(
-    async () =>
-      Promise.all([
-        invalidateAllOtelDestinations(queryClient),
-        invalidateAllDataExportRoutes(queryClient),
-      ]),
-    [queryClient],
-  );
-
   const handleSaveDestination = async (values: DestinationFormValues) => {
     try {
       let saved: OtelDestination;
@@ -174,15 +168,20 @@ function DataExportsInner(): JSX.Element {
           });
         } catch (error) {
           toast.error(
-            `Destination created, but routing failed: ${errorMessage(error)}`,
+            `Destination created, but routing failed: ${toError(error).message}`,
           );
         }
       }
 
-      await invalidateLists();
+      await Promise.all([
+        invalidateAllOtelDestinations(queryClient),
+        editor?.routeAfterCreate
+          ? invalidateAllDataExportRoutes(queryClient)
+          : Promise.resolve(),
+      ]);
       setEditor(undefined);
     } catch (error) {
-      toast.error(`Failed to save destination: ${errorMessage(error)}`);
+      toast.error(`Failed to save destination: ${toError(error).message}`);
     }
   };
 
@@ -192,12 +191,12 @@ function DataExportsInner(): JSX.Element {
       await deleteDestination.mutateAsync({
         request: { id: deleteCandidate.id },
       });
-      await invalidateLists();
+      await invalidateAllOtelDestinations(queryClient);
       toast.success("Destination deleted");
       setDeleteCandidate(undefined);
       setEditor(undefined);
     } catch (error) {
-      toast.error(`Failed to delete destination: ${errorMessage(error)}`);
+      toast.error(`Failed to delete destination: ${toError(error).message}`);
     }
   };
 
@@ -215,11 +214,11 @@ function DataExportsInner(): JSX.Element {
           },
         },
       });
-      await invalidateLists();
+      await invalidateAllDataExportRoutes(queryClient);
       toast.success(`Route to ${destination.name} created`);
       setRouteEditorOpen(false);
     } catch (error) {
-      toast.error(`Failed to create route: ${errorMessage(error)}`);
+      toast.error(`Failed to create route: ${toError(error).message}`);
     }
   };
 
@@ -227,11 +226,14 @@ function DataExportsInner(): JSX.Element {
     route: DataExportRoute,
     enabled: boolean,
   ) => {
+    await queryClient.cancelQueries({
+      queryKey: DATA_EXPORT_ROUTES_QUERY_KEY,
+    });
     const previous = queryClient.getQueriesData<ListDataExportRoutesResult>({
-      queryKey: ["@gram/client", "dataExports", "listRoutes"],
+      queryKey: DATA_EXPORT_ROUTES_QUERY_KEY,
     });
     queryClient.setQueriesData<ListDataExportRoutesResult>(
-      { queryKey: ["@gram/client", "dataExports", "listRoutes"] },
+      { queryKey: DATA_EXPORT_ROUTES_QUERY_KEY },
       (current) =>
         current
           ? {
@@ -258,19 +260,19 @@ function DataExportsInner(): JSX.Element {
       for (const [key, value] of previous) {
         queryClient.setQueryData(key, value);
       }
-      toast.error(`Failed to update route: ${errorMessage(error)}`);
+      toast.error(`Failed to update route: ${toError(error).message}`);
     } finally {
-      await invalidateLists();
+      await invalidateAllDataExportRoutes(queryClient);
     }
   };
 
   const handleDeleteRoute = async (route: DataExportRoute) => {
     try {
       await deleteRoute.mutateAsync({ request: { id: route.id } });
-      await invalidateLists();
+      await invalidateAllDataExportRoutes(queryClient);
       toast.success("Destination removed from Product telemetry");
     } catch (error) {
-      toast.error(`Failed to remove destination: ${errorMessage(error)}`);
+      toast.error(`Failed to remove destination: ${toError(error).message}`);
     }
   };
 
@@ -305,7 +307,7 @@ function DataExportsInner(): JSX.Element {
     >
       {error ? (
         <Alert variant="error">
-          Unable to load data exports: {errorMessage(error)}
+          Unable to load data exports: {toError(error).message}
         </Alert>
       ) : loading ? (
         <>
