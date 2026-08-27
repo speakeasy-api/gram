@@ -514,29 +514,43 @@ type TransportAdapterRegistration struct {
 
 // ResolveTransportDisposition applies the shared transport-neutral evaluation matrix.
 func ResolveTransportDisposition(result EvaluationResult, failurePolicy FailurePolicy) (TransportDisposition, error) {
+	disposition, _, err := resolveTransportDisposition(result, failurePolicy)
+	return disposition, err
+}
+
+func resolveTransportDisposition(result EvaluationResult, suppliedPolicy FailurePolicy) (TransportDisposition, FailurePolicy, error) {
 	if err := validateEvaluationResult(result); err != nil {
-		return TransportDisposition{}, err
+		return TransportDisposition{}, "", err
 	}
-	if failurePolicy != FailurePolicyFailOpen && failurePolicy != FailurePolicyFailClosed {
-		return TransportDisposition{}, fmt.Errorf("invalid failure policy %q", failurePolicy)
-	}
-	if authoritativePolicy, ok := result.FailurePolicy(); ok {
-		failurePolicy = authoritativePolicy
+	failurePolicy, err := effectiveFailurePolicy(result, suppliedPolicy)
+	if err != nil {
+		return TransportDisposition{}, "", err
 	}
 
 	switch result.kind {
 	case EvaluationResultMatch:
-		return NewMatchedDenialDisposition(result.externalNote)
+		disposition, err := NewMatchedDenialDisposition(result.externalNote)
+		return disposition, failurePolicy, err
 	case EvaluationResultNoMatch:
-		return NewContinueDisposition(), nil
+		return NewContinueDisposition(), failurePolicy, nil
 	case EvaluationResultInfrastructureFailure:
 		if failurePolicy == FailurePolicyFailOpen {
-			return NewContinueDisposition(), nil
+			return NewContinueDisposition(), failurePolicy, nil
 		}
-		return NewInfrastructureRejectionDisposition(), nil
+		return NewInfrastructureRejectionDisposition(), failurePolicy, nil
 	default:
-		return TransportDisposition{}, errors.New("invalid evaluation result")
+		return TransportDisposition{}, "", errors.New("invalid evaluation result")
 	}
+}
+
+func effectiveFailurePolicy(result EvaluationResult, suppliedPolicy FailurePolicy) (FailurePolicy, error) {
+	if authoritativePolicy, ok := result.FailurePolicy(); ok {
+		return authoritativePolicy, nil
+	}
+	if suppliedPolicy != FailurePolicyFailOpen && suppliedPolicy != FailurePolicyFailClosed {
+		return "", fmt.Errorf("invalid failure policy %q", suppliedPolicy)
+	}
+	return suppliedPolicy, nil
 }
 
 func validateEvaluationResult(result EvaluationResult) error {

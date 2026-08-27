@@ -120,7 +120,7 @@ func (e *Evaluator) prepare(request EvaluationRequest) (preparedEvaluation, erro
 			PrincipalKinds: nil,
 			PrincipalKeys:  nil,
 		},
-		policies:        make(map[DefinitionKey]FailurePolicy, len(request.DefinitionKeys)),
+		policies:        nil,
 		effectivePolicy: FailurePolicyFailOpen,
 		noMatchReason:   "",
 	}
@@ -129,13 +129,17 @@ func (e *Evaluator) prepare(request EvaluationRequest) (preparedEvaluation, erro
 		return prepared, fmt.Errorf(format, args...)
 	}
 
-	if err := validateIdentifier("evaluation organization ID", string(request.OrganizationID)); err != nil {
-		return invalid("%v", err)
-	}
 	if len(request.DefinitionKeys) == 0 || len(request.DefinitionKeys) > MaxEvaluationDefinitionCandidates {
 		return invalid("evaluation definition candidate count must be between 1 and %d", MaxEvaluationDefinitionCandidates)
 	}
+	if len(request.PrincipalCandidates) > MaxEvaluationPrincipalCandidates {
+		return invalid("evaluation principal candidate count must not exceed %d", MaxEvaluationPrincipalCandidates)
+	}
+	if err := validateIdentifier("evaluation organization ID", string(request.OrganizationID)); err != nil {
+		return invalid("%v", err)
+	}
 
+	prepared.policies = make(map[DefinitionKey]FailurePolicy, len(request.DefinitionKeys))
 	definitions := make([]Definition, 0, len(request.DefinitionKeys))
 	supportedPrincipalKinds := make(map[PrincipalKind]struct{})
 	prepared.params.DefinitionKeys = make([]string, 0, len(request.DefinitionKeys))
@@ -180,9 +184,6 @@ func (e *Evaluator) prepare(request EvaluationRequest) (preparedEvaluation, erro
 	if len(request.PrincipalCandidates) == 0 {
 		prepared.noMatchReason = NoMatchReasonUnsupportedIdentity
 		return prepared, nil
-	}
-	if len(request.PrincipalCandidates) > MaxEvaluationPrincipalCandidates {
-		return invalid("evaluation principal candidate count must not exceed %d", MaxEvaluationPrincipalCandidates)
 	}
 	seenPrincipals := make(map[PrincipalCandidate]struct{}, len(request.PrincipalCandidates))
 	prepared.params.PrincipalKinds = make([]string, 0, len(request.PrincipalCandidates))
