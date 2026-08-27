@@ -130,11 +130,11 @@ func (p *m3OpenRouterProvisioner) reinstateAPIKeyLimit(ctx context.Context, db o
 		return 0, fmt.Errorf("get OpenRouter API key: %w", err)
 	}
 	refreshed, err := openrouterrepo.New(db).UpdateOpenRouterKey(ctx, openrouterrepo.UpdateOpenRouterKeyParams{
-		MonthlyCredits:  int64(*limit),
-		KeyHash:         key.KeyHash,
-		ReinstateLegacy: key.Disabled,
-		OrganizationID:  organizationID,
-		KeyType:         string(keyType),
+		MonthlyCredits: int64(*limit),
+		KeyHash:        key.KeyHash,
+		Reinstate:      key.Disabled,
+		OrganizationID: organizationID,
+		KeyType:        string(keyType),
 	})
 	if err != nil {
 		return 0, fmt.Errorf("update OpenRouter API key: %w", err)

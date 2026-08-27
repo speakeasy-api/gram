@@ -113,6 +113,14 @@ func (s *stubProvisioner) refreshAPIKeyLimit(ctx context.Context, db openrouter.
 	return keyLimit, nil
 }
 
+func (*stubProvisioner) AddAPIKeyDisableCause(context.Context, string, openrouter.KeyType, openrouter.DisableCause) (openrouter.DisableCauseChange, error) {
+	return openrouter.DisableCauseChange{}, nil
+}
+
+func (*stubProvisioner) RemoveAPIKeyDisableCause(context.Context, string, openrouter.KeyType, openrouter.DisableCause, *int) (int, openrouter.DisableCauseChange, error) {
+	return 0, openrouter.DisableCauseChange{}, nil
+}
+
 func (s *stubProvisioner) DisableAPIKey(ctx context.Context, orgID string, keyType openrouter.KeyType) error {
 	s.mu.Lock()
 	s.disableCalls = append(s.disableCalls, orgID+"/"+string(keyType))
