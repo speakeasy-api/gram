@@ -115,7 +115,7 @@ func (s *stubProvisioner) AddAPIKeyDisableCauseWithDB(ctx context.Context, db op
 	queries := orgrepo.New(db)
 	key, err := queries.GetOpenRouterAPIKey(ctx, orgrepo.GetOpenRouterAPIKeyParams{OrganizationID: orgID, KeyType: string(keyType)})
 	if err != nil {
-		return openrouter.DisableCauseChange{}, err
+		return openrouter.DisableCauseChange{}, fmt.Errorf("get OpenRouter API key: %w", err)
 	}
 	call := orgID + "/" + string(keyType) + "/" + string(cause)
 	s.mu.Lock()
@@ -125,7 +125,7 @@ func (s *stubProvisioner) AddAPIKeyDisableCauseWithDB(ctx context.Context, db op
 		return openrouter.DisableCauseChange{}, nil
 	}
 	if _, err := queries.AddOpenRouterAPIKeyDisableCause(ctx, orgrepo.AddOpenRouterAPIKeyDisableCauseParams{DisableCause: string(cause), OrganizationID: orgID, KeyType: string(keyType)}); err != nil {
-		return openrouter.DisableCauseChange{}, err
+		return openrouter.DisableCauseChange{}, fmt.Errorf("add OpenRouter API key disable cause: %w", err)
 	}
 	change := openrouter.DisableCauseChange{CauseChanged: true, KeyAccessChanged: !key.Disabled}
 	if change.KeyAccessChanged {
@@ -144,7 +144,7 @@ func (s *stubProvisioner) RemoveAPIKeyDisableCauseWithDB(ctx context.Context, db
 	queries := orgrepo.New(db)
 	key, err := queries.GetOpenRouterAPIKey(ctx, orgrepo.GetOpenRouterAPIKeyParams{OrganizationID: orgID, KeyType: string(keyType)})
 	if err != nil {
-		return 0, openrouter.DisableCauseChange{}, err
+		return 0, openrouter.DisableCauseChange{}, fmt.Errorf("get OpenRouter API key: %w", err)
 	}
 	call := orgID + "/" + string(keyType) + "/" + string(cause)
 	s.mu.Lock()
@@ -164,12 +164,12 @@ func (s *stubProvisioner) RemoveAPIKeyDisableCauseWithDB(ctx context.Context, db
 			MonthlyCredits: int64(resultLimit),
 			KeyHash:        key.KeyHash,
 		}); err != nil {
-			return 0, openrouter.DisableCauseChange{}, err
+			return 0, openrouter.DisableCauseChange{}, fmt.Errorf("update OpenRouter API key: %w", err)
 		}
 	}
 	updated, err := queries.RemoveOpenRouterAPIKeyDisableCause(ctx, orgrepo.RemoveOpenRouterAPIKeyDisableCauseParams{DisableCause: string(cause), OrganizationID: orgID, KeyType: string(keyType)})
 	if err != nil {
-		return 0, openrouter.DisableCauseChange{}, err
+		return 0, openrouter.DisableCauseChange{}, fmt.Errorf("remove OpenRouter API key disable cause: %w", err)
 	}
 	change := openrouter.DisableCauseChange{CauseChanged: true, KeyAccessChanged: !updated.Disabled}
 	if change.KeyAccessChanged {

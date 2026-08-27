@@ -733,19 +733,19 @@ func (d *devProvisioner) RefreshAPIKeyLimit(_ context.Context, _ string, _ openr
 	return 0, fmt.Errorf("not implemented in bench")
 }
 func (*devProvisioner) AddAPIKeyDisableCause(context.Context, string, openrouter.KeyType, openrouter.DisableCause) (openrouter.DisableCauseChange, error) {
-	return openrouter.DisableCauseChange{}, nil
+	return openrouter.DisableCauseChange{CauseChanged: false, KeyAccessChanged: false}, nil
 }
 
 func (*devProvisioner) AddAPIKeyDisableCauseWithDB(context.Context, openrouter.DBTX, string, openrouter.KeyType, openrouter.DisableCause) (openrouter.DisableCauseChange, error) {
-	return openrouter.DisableCauseChange{}, nil
+	return openrouter.DisableCauseChange{CauseChanged: false, KeyAccessChanged: false}, nil
 }
 
 func (*devProvisioner) RemoveAPIKeyDisableCause(context.Context, string, openrouter.KeyType, openrouter.DisableCause, *int) (int, openrouter.DisableCauseChange, error) {
-	return 0, openrouter.DisableCauseChange{}, nil
+	return 0, openrouter.DisableCauseChange{CauseChanged: false, KeyAccessChanged: false}, nil
 }
 
 func (*devProvisioner) RemoveAPIKeyDisableCauseWithDB(context.Context, openrouter.DBTX, string, openrouter.KeyType, openrouter.DisableCause, *int) (int, openrouter.DisableCauseChange, error) {
-	return 0, openrouter.DisableCauseChange{}, nil
+	return 0, openrouter.DisableCauseChange{CauseChanged: false, KeyAccessChanged: false}, nil
 }
 
 func (d *devProvisioner) GetCreditsUsed(_ context.Context, _ string, _ openrouter.KeyType) (float64, int, error) {

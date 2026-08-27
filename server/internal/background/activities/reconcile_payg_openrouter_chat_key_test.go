@@ -3,6 +3,7 @@ package activities_test
 import (
 	"context"
 	"errors"
+	"fmt"
 	"slices"
 	"sync"
 	"testing"
@@ -22,6 +23,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 	openrouterrepo "github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter/repo"
+	trialsrepo "github.com/speakeasy-api/gram/server/internal/trials/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -76,7 +78,7 @@ func (m *mockPaygChatKeyProvisioner) RemoveAPIKeyDisableCauseWithDB(ctx context.
 		return 0, openrouter.DisableCauseChange{}, nil
 	}
 	if err != nil {
-		return 0, openrouter.DisableCauseChange{}, err
+		return 0, openrouter.DisableCauseChange{}, fmt.Errorf("get OpenRouter API key: %w", err)
 	}
 	if limit != nil && key.MonthlyCredits == int64(*limit) && !slices.Contains(key.DisableCauses, string(cause)) {
 		return *limit, openrouter.DisableCauseChange{}, nil
@@ -300,7 +302,15 @@ func TestReconcilePaygOpenRouterChatKeyStripeConversionRemovesTrialDemotionFromB
 	reconciler, provisioner, db, organizationID := setupPaygChatKeyReconciler(t, "payg", pgtype.Text{String: "subscription_placeholder", Valid: true})
 	createPaygReconcilerKey(t, db, organizationID, openrouter.KeyTypeChat, 50)
 	createPaygReconcilerKey(t, db, organizationID, openrouter.KeyTypeInternal, 37)
-	_, err := db.Exec(t.Context(), `INSERT INTO trials (organization_id, tier, ends_at, demoted_at, converted_at) VALUES ($1, 'enterprise', clock_timestamp() - interval '2 days', clock_timestamp() - interval '1 day', clock_timestamp())`, organizationID)
+	now := time.Now().UTC()
+	err := trialsrepo.New(db).InsertTrialFixture(t.Context(), trialsrepo.InsertTrialFixtureParams{
+		OrganizationID: organizationID,
+		Tier:           "enterprise",
+		CreatedAt:      pgtype.Timestamptz{Time: now.Add(-3 * 24 * time.Hour), Valid: true},
+		EndsAt:         pgtype.Timestamptz{Time: now.Add(-2 * 24 * time.Hour), Valid: true},
+		ConvertedAt:    pgtype.Timestamptz{Time: now, Valid: true},
+		DemotedAt:      pgtype.Timestamptz{Time: now.Add(-24 * time.Hour), Valid: true},
+	})
 	require.NoError(t, err)
 	for _, keyType := range openrouter.AllKeyTypes {
 		_, err = openrouterrepo.New(db).AddOpenRouterAPIKeyDisableCause(t.Context(), openrouterrepo.AddOpenRouterAPIKeyDisableCauseParams{OrganizationID: organizationID, KeyType: string(keyType), DisableCause: string(openrouter.DisableCauseTrialDemotion)})
@@ -343,6 +353,7 @@ func TestReconcilePaygOpenRouterChatKeyBillingLossOwnsOnlyBillingInactive(t *tes
 	t.Parallel()
 
 	t.Run("enabled chat key changes effective access", func(t *testing.T) {
+		t.Parallel()
 		reconciler, provisioner, _, organizationID := setupPaygChatKeyReconciler(t, "free", pgtype.Text{})
 		provisioner.On("AddAPIKeyDisableCauseWithDB", mock.Anything, organizationID, openrouter.KeyTypeChat).Return(nil).Once()
 
@@ -352,6 +363,7 @@ func TestReconcilePaygOpenRouterChatKeyBillingLossOwnsOnlyBillingInactive(t *tes
 	})
 
 	t.Run("admin locked chat key stays disabled without another state patch", func(t *testing.T) {
+		t.Parallel()
 		reconciler, provisioner, _, organizationID := setupPaygChatKeyReconciler(t, "free", pgtype.Text{})
 		provisioner.layeredAdd = true
 

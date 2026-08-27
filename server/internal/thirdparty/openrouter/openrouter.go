@@ -676,19 +676,19 @@ func (o *OpenRouter) addAPIKeyDisableCause(ctx context.Context, db DBTX, orgID s
 	key, err := keyRepo.GetOpenRouterAPIKey(ctx, repo.GetOpenRouterAPIKeyParams{OrganizationID: orgID, KeyType: string(keyType)})
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
-		return DisableCauseChange{}, nil
+		return DisableCauseChange{CauseChanged: false, KeyAccessChanged: false}, nil
 	case err != nil:
 		return DisableCauseChange{}, fmt.Errorf("get OpenRouter API key to add disable cause: %w", err)
 	}
 	if slices.Contains(key.DisableCauses, string(cause)) {
-		return DisableCauseChange{}, nil
+		return DisableCauseChange{CauseChanged: false, KeyAccessChanged: false}, nil
 	}
 
 	accessChanged := len(key.DisableCauses) == 0
 	if accessChanged {
 		patchCtx, cancel := context.WithTimeout(ctx, upstreamKeyPatchTimeout)
 		defer cancel()
-		if _, err := o.patchOpenRouterAPIKey(patchCtx, key.KeyHash, updateKeyRequest{Disabled: new(true)}); err != nil {
+		if _, err := o.patchOpenRouterAPIKey(patchCtx, key.KeyHash, updateKeyRequest{Limit: nil, LimitReset: "", Disabled: new(true)}); err != nil {
 			return DisableCauseChange{}, fmt.Errorf("disable upstream OpenRouter API key: %w", err)
 		}
 	}
@@ -724,15 +724,15 @@ func (o *OpenRouter) removeAPIKeyDisableCause(ctx context.Context, db DBTX, orgI
 	key, err := keyRepo.GetOpenRouterAPIKey(ctx, repo.GetOpenRouterAPIKeyParams{OrganizationID: orgID, KeyType: string(keyType)})
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
-		return 0, DisableCauseChange{}, nil
+		return 0, DisableCauseChange{CauseChanged: false, KeyAccessChanged: false}, nil
 	case err != nil:
 		return 0, DisableCauseChange{}, fmt.Errorf("get OpenRouter API key to remove disable cause: %w", err)
 	}
 	if !slices.Contains(key.DisableCauses, string(cause)) {
-		return 0, DisableCauseChange{}, nil
+		return 0, DisableCauseChange{CauseChanged: false, KeyAccessChanged: false}, nil
 	}
 
-	keyLimit := int(key.MonthlyCredits)
+	var keyLimit int
 	if limit != nil {
 		keyLimit = *limit
 	} else {
@@ -745,7 +745,7 @@ func (o *OpenRouter) removeAPIKeyDisableCause(ctx context.Context, db DBTX, orgI
 
 	accessChanged := len(key.DisableCauses) == 1
 	limitChanged := int64(keyLimit) != key.MonthlyCredits
-	patch := updateKeyRequest{}
+	patch := updateKeyRequest{Limit: nil, LimitReset: "", Disabled: nil}
 	if limitChanged {
 		creditLimit := float64(keyLimit)
 		patch.Limit = &creditLimit

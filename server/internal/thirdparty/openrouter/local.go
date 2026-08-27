@@ -31,7 +31,7 @@ func (o *Development) RefreshAPIKeyLimitWithDB(ctx context.Context, db DBTX, org
 }
 
 func (*Development) AddAPIKeyDisableCause(context.Context, string, KeyType, DisableCause) (DisableCauseChange, error) {
-	return DisableCauseChange{}, nil
+	return DisableCauseChange{CauseChanged: false, KeyAccessChanged: false}, nil
 }
 
 func (o *Development) AddAPIKeyDisableCauseWithDB(ctx context.Context, _ DBTX, orgID string, keyType KeyType, cause DisableCause) (DisableCauseChange, error) {
@@ -39,7 +39,7 @@ func (o *Development) AddAPIKeyDisableCauseWithDB(ctx context.Context, _ DBTX, o
 }
 
 func (*Development) RemoveAPIKeyDisableCause(context.Context, string, KeyType, DisableCause, *int) (int, DisableCauseChange, error) {
-	return 0, DisableCauseChange{}, nil
+	return 0, DisableCauseChange{CauseChanged: false, KeyAccessChanged: false}, nil
 }
 
 func (o *Development) RemoveAPIKeyDisableCauseWithDB(ctx context.Context, _ DBTX, orgID string, keyType KeyType, cause DisableCause, limit *int) (int, DisableCauseChange, error) {

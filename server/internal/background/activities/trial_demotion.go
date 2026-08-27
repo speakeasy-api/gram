@@ -100,8 +100,11 @@ func (d *DemoteExpiredTrials) Demote(ctx context.Context, args DemoteExpiredTria
 				return errors.New("OpenRouter key provisioner cannot use the locked database session")
 			}
 			change, err := dbProvisioner.AddAPIKeyDisableCauseWithDB(ctx, conn, args.OrganizationID, keyType, openrouter.DisableCauseTrialDemotion)
+			if err != nil {
+				return fmt.Errorf("add trial demotion disable cause: %w", err)
+			}
 			keyAccessChanged = keyAccessChanged || change.KeyAccessChanged
-			return err
+			return nil
 		}); err != nil {
 			return fmt.Errorf("disable openrouter %s key: %w", keyType, err)
 		}

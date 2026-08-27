@@ -385,3 +385,7 @@ WHERE om.id = sqlc.arg('id')::text
    OR (sqlc.arg('allow_slug')::boolean AND om.slug = sqlc.arg('id')::text)
 ORDER BY (om.id = sqlc.arg('id')::text) DESC
 LIMIT 1;
+
+-- name: LockTrialForUpdate :one
+-- Test synchronization helper: hold the trial row while a concurrent re-arm blocks.
+SELECT organization_id FROM trials WHERE organization_id = @organization_id FOR UPDATE;

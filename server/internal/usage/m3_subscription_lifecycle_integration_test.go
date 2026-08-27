@@ -149,7 +149,10 @@ func (p *m3OpenRouterProvisioner) AddAPIKeyDisableCauseWithDB(ctx context.Contex
 func (p *m3OpenRouterProvisioner) addAPIKeyDisableCause(ctx context.Context, db openrouterrepo.DBTX, organizationID string, keyType openrouter.KeyType, cause openrouter.DisableCause) (openrouter.DisableCauseChange, error) {
 	p.disableCalls = append(p.disableCalls, keyType)
 	_, err := openrouterrepo.New(db).AddOpenRouterAPIKeyDisableCause(ctx, openrouterrepo.AddOpenRouterAPIKeyDisableCauseParams{OrganizationID: organizationID, KeyType: string(keyType), DisableCause: string(cause)})
-	return openrouter.DisableCauseChange{CauseChanged: err == nil}, err
+	if err != nil {
+		return openrouter.DisableCauseChange{}, fmt.Errorf("add OpenRouter API key disable cause: %w", err)
+	}
+	return openrouter.DisableCauseChange{CauseChanged: true}, nil
 }
 
 func (p *m3OpenRouterProvisioner) RemoveAPIKeyDisableCause(ctx context.Context, organizationID string, keyType openrouter.KeyType, cause openrouter.DisableCause, limit *int) (int, openrouter.DisableCauseChange, error) {
@@ -166,7 +169,10 @@ func (p *m3OpenRouterProvisioner) removeAPIKeyDisableCause(ctx context.Context, 
 		return 0, openrouter.DisableCauseChange{}, err
 	}
 	_, err = openrouterrepo.New(db).RemoveOpenRouterAPIKeyDisableCause(ctx, openrouterrepo.RemoveOpenRouterAPIKeyDisableCauseParams{OrganizationID: organizationID, KeyType: string(keyType), DisableCause: string(cause)})
-	return refreshed, openrouter.DisableCauseChange{CauseChanged: err == nil}, err
+	if err != nil {
+		return 0, openrouter.DisableCauseChange{}, fmt.Errorf("remove OpenRouter API key disable cause: %w", err)
+	}
+	return refreshed, openrouter.DisableCauseChange{CauseChanged: true}, nil
 }
 
 func (*m3OpenRouterProvisioner) GetCreditsUsed(context.Context, string, openrouter.KeyType) (float64, int, error) {

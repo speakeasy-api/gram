@@ -788,3 +788,15 @@ func (q *Queries) GetProjectBySlug(ctx context.Context, slug string) (GetProject
 	err := row.Scan(&i.ID, &i.Slug)
 	return i, err
 }
+
+const lockTrialForUpdate = `-- name: LockTrialForUpdate :one
+SELECT organization_id FROM trials WHERE organization_id = $1 FOR UPDATE
+`
+
+// Test synchronization helper: hold the trial row while a concurrent re-arm blocks.
+func (q *Queries) LockTrialForUpdate(ctx context.Context, organizationID string) (string, error) {
+	row := q.db.QueryRow(ctx, lockTrialForUpdate, organizationID)
+	var organization_id string
+	err := row.Scan(&organization_id)
+	return organization_id, err
+}
