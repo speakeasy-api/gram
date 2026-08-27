@@ -3174,8 +3174,8 @@ func ValidateCreateRouteRequestBody(body *CreateRouteRequestBody) (err error) {
 		err = goa.MergeErrors(err, goa.MissingFieldError("data_source", "body"))
 	}
 	if body.DataSource != nil {
-		if !(*body.DataSource == "otel_logs" || *body.DataSource == "otel_traces") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.data_source", *body.DataSource, []any{"otel_logs", "otel_traces"}))
+		if !(*body.DataSource == "otel_forwarding") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.data_source", *body.DataSource, []any{"otel_forwarding"}))
 		}
 	}
 	if body.OtelDestinationID != nil {
@@ -3194,8 +3194,8 @@ func ValidateUpdateRouteRequestBody(body *UpdateRouteRequestBody) (err error) {
 		err = goa.MergeErrors(err, goa.MissingFieldError("enabled", "body"))
 	}
 	if body.DataSource != nil {
-		if !(*body.DataSource == "otel_logs" || *body.DataSource == "otel_traces") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.data_source", *body.DataSource, []any{"otel_logs", "otel_traces"}))
+		if !(*body.DataSource == "otel_forwarding") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.data_source", *body.DataSource, []any{"otel_forwarding"}))
 		}
 	}
 	if body.OtelDestinationID != nil {

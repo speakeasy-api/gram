@@ -22,7 +22,7 @@ func TestRouteCRUDPreservesNullableDestinationAndAudits(t *testing.T) {
 	destination := createOtelDestination(t, ctx, ti, "https://collector.example.test", "exclude")
 
 	created, err := ti.service.CreateRoute(ctx, &gen.CreateRoutePayload{SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil,
-		DataSource: "otel_logs", Enabled: false, OtelDestinationID: nil})
+		DataSource: "otel_forwarding", Enabled: false, OtelDestinationID: nil})
 	require.NoError(t, err)
 	require.False(t, created.Enabled)
 	require.Nil(t, created.OtelDestinationID)
@@ -32,7 +32,7 @@ func TestRouteCRUDPreservesNullableDestinationAndAudits(t *testing.T) {
 	require.Equal(t, []*gen.DataExportRoute{created}, listed.Routes)
 
 	updated, err := ti.service.UpdateRoute(ctx, &gen.UpdateRoutePayload{SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil,
-		ID: created.ID, DataSource: "otel_logs", Enabled: true, OtelDestinationID: &destination.ID})
+		ID: created.ID, DataSource: "otel_forwarding", Enabled: true, OtelDestinationID: &destination.ID})
 	require.NoError(t, err)
 	require.True(t, updated.Enabled)
 	require.Equal(t, destination.ID, *updated.OtelDestinationID)
@@ -60,16 +60,16 @@ func TestRouteCRUDPreservesNullableDestinationAndAudits(t *testing.T) {
 	}
 }
 
-func TestRouteRejectsEnabledWithoutUsableDestinationAndUnknownSource(t *testing.T) {
+func TestRouteRejectsEnabledWithoutUsableDestinationAndUnsupportedSource(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestService(t)
 	_, err := ti.service.CreateRoute(ctx, &gen.CreateRoutePayload{SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil,
-		DataSource: "otel_logs", Enabled: true, OtelDestinationID: nil})
+		DataSource: "otel_forwarding", Enabled: true, OtelDestinationID: nil})
 	requireOopsCode(t, err, oops.CodeInvalid)
 
 	_, err = ti.service.CreateRoute(ctx, &gen.CreateRoutePayload{SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil,
-		DataSource: "otel_metrics", Enabled: false, OtelDestinationID: nil})
+		DataSource: "risk_findings", Enabled: false, OtelDestinationID: nil})
 	requireOopsCode(t, err, oops.CodeInvalid)
 }
 
@@ -78,10 +78,10 @@ func TestRouteRejectsDuplicateProjectSource(t *testing.T) {
 
 	ctx, ti := newTestService(t)
 	_, err := ti.service.CreateRoute(ctx, &gen.CreateRoutePayload{SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil,
-		DataSource: "otel_traces", Enabled: false, OtelDestinationID: nil})
+		DataSource: "otel_forwarding", Enabled: false, OtelDestinationID: nil})
 	require.NoError(t, err)
 	_, err = ti.service.CreateRoute(ctx, &gen.CreateRoutePayload{SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil,
-		DataSource: "otel_traces", Enabled: false, OtelDestinationID: nil})
+		DataSource: "otel_forwarding", Enabled: false, OtelDestinationID: nil})
 	requireOopsCode(t, err, oops.CodeConflict)
 }
 
@@ -106,7 +106,7 @@ func TestRouteRejectsCrossProjectDestinationReferences(t *testing.T) {
 	otherDestination := createOtelDestination(t, otherCtx, ti, "https://other-collector.example.test", "exclude")
 
 	_, err = ti.service.CreateRoute(ctx, &gen.CreateRoutePayload{SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil,
-		DataSource: "otel_logs", Enabled: true, OtelDestinationID: &otherDestination.ID})
+		DataSource: "otel_forwarding", Enabled: true, OtelDestinationID: &otherDestination.ID})
 	requireOopsCode(t, err, oops.CodeInvalid)
 
 	listed, err := ti.service.ListOtelDestinations(ctx, &gen.ListOtelDestinationsPayload{SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil})
@@ -122,7 +122,7 @@ func TestRouteCreateRollsBackWhenAuditInsertFails(t *testing.T) {
 	require.NoError(t, audittest.RejectAction(ctx, ti.conn, audit.ActionDataExportRouteCreate))
 
 	_, err := ti.service.CreateRoute(ctx, &gen.CreateRoutePayload{SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil,
-		DataSource: "otel_logs", Enabled: true, OtelDestinationID: &destination.ID})
+		DataSource: "otel_forwarding", Enabled: true, OtelDestinationID: &destination.ID})
 	requireOopsCode(t, err, oops.CodeUnexpected)
 
 	authCtx, ok := contextvalues.GetAuthContext(ctx)

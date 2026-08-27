@@ -372,20 +372,16 @@ func (s *Service) buildDestinationView(row repo.OtelDestination) (*gen.OtelDesti
 
 type dataSource string
 
-const (
-	dataSourceOTELLogs   dataSource = "otel_logs"
-	dataSourceOTELTraces dataSource = "otel_traces"
-)
+const dataSourceOTELForwarding dataSource = "otel_forwarding"
 
 func parseDataSource(value string) (dataSource, error) {
 	source := dataSource(value)
-	switch source {
-	case dataSourceOTELLogs, dataSourceOTELTraces:
-		return source, nil
-	default:
+	if source != dataSourceOTELForwarding {
 		return "", fmt.Errorf("unsupported data source %q", value)
 	}
+	return source, nil
 }
+
 func (s *Service) ListRoutes(ctx context.Context, _ *gen.ListRoutesPayload) (*gen.ListDataExportRoutesResult, error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil {

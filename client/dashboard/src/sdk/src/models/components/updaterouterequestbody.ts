@@ -10,8 +10,7 @@ import { ClosedEnum } from "../../types/enums.js";
  * Class of data exported by this route.
  */
 export const UpdateRouteRequestBodyDataSource = {
-  OtelLogs: "otel_logs",
-  OtelTraces: "otel_traces",
+  OtelForwarding: "otel_forwarding",
 } as const;
 /**
  * Class of data exported by this route.

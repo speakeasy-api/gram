@@ -178,7 +178,7 @@ func TestDestinationDeletionConflictsWhileRouteReferencesIt(t *testing.T) {
 	ctx, ti := newTestService(t)
 	destination := createOtelDestination(t, ctx, ti, "https://collector.example.test", "exclude")
 	_, err := ti.service.CreateRoute(ctx, &gen.CreateRoutePayload{SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil,
-		DataSource: "otel_logs", Enabled: true, OtelDestinationID: &destination.ID})
+		DataSource: "otel_forwarding", Enabled: true, OtelDestinationID: &destination.ID})
 	require.NoError(t, err)
 
 	err = ti.service.DeleteOtelDestination(ctx, &gen.DeleteOtelDestinationPayload{ID: destination.ID, SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil})

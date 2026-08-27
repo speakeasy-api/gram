@@ -224,7 +224,7 @@ var DataExportRoute = Type("DataExportRoute", func() {
 	Attribute("id", String, "Route ID.", func() { Format(FormatUUID) })
 	Attribute("project_id", String, "Project that owns the route.", func() { Format(FormatUUID) })
 	Attribute("data_source", String, "Class of data exported by this route.", func() {
-		Enum("otel_logs", "otel_traces")
+		Enum("otel_forwarding")
 	})
 	Attribute("enabled", Boolean, "Whether the route is enabled.")
 	Attribute("otel_destination_id", String, "OTEL destination used by this route. Omitted when no destination is selected.", func() { Format(FormatUUID) })
@@ -255,7 +255,7 @@ var UpdateOtelDestinationForm = Type("UpdateOtelDestinationForm", func() {
 
 var CreateDataExportRouteForm = Type("CreateDataExportRouteForm", func() {
 	Description("Form for creating a data export route.")
-	Attribute("data_source", String, "Class of data exported by this route.", func() { Enum("otel_logs", "otel_traces") })
+	Attribute("data_source", String, "Class of data exported by this route.", func() { Enum("otel_forwarding") })
 	Attribute("enabled", Boolean, "Whether the route is enabled.", func() { Default(true) })
 	Attribute("otel_destination_id", String, "OTEL destination used by this route. Required when enabled.", func() { Format(FormatUUID) })
 	Required("data_source")
@@ -264,7 +264,7 @@ var CreateDataExportRouteForm = Type("CreateDataExportRouteForm", func() {
 var UpdateDataExportRouteForm = Type("UpdateDataExportRouteForm", func() {
 	Description("Full replacement form for a data export route. Omit otel_destination_id to clear the destination.")
 	Attribute("id", String, "Route ID.", func() { Format(FormatUUID) })
-	Attribute("data_source", String, "Class of data exported by this route.", func() { Enum("otel_logs", "otel_traces") })
+	Attribute("data_source", String, "Class of data exported by this route.", func() { Enum("otel_forwarding") })
 	Attribute("enabled", Boolean, "Whether the route is enabled.")
 	Attribute("otel_destination_id", String, "OTEL destination used by this route. Required when enabled.", func() { Format(FormatUUID) })
 	Required("id", "data_source", "enabled")
