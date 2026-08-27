@@ -239,7 +239,7 @@ func (s *Service) UpdateOtelDestination(ctx context.Context, payload *gen.Update
 			continue
 		}
 
-		headerInputs[i] = destinationHeaderInput{name: input.Name, valid: true}
+		headerInputs[i] = destinationHeaderInput{name: input.Name, value: "", hasValue: false, valid: true}
 		if input.Value != nil {
 			headerInputs[i].value = *input.Value
 			headerInputs[i].hasValue = true
