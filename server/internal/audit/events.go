@@ -30,6 +30,7 @@ const (
 	subjectTypeGcpKmsKey                   subjectType = "gcp_kms_key"
 	subjectTypeJsonWebKey                  subjectType = "json_web_key"
 	subjectTypeJsonWebKeySet               subjectType = "json_web_key_set"
+	subjectTypeKillswitchPrescription      subjectType = "killswitch_prescription"
 	subjectTypeLiteLLMInstance             subjectType = "litellm_instance"
 	subjectTypeMcpApprovalRequest          subjectType = "mcp_approval_request"
 	subjectTypeMcpCollection               subjectType = "mcp_collection"

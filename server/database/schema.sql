@@ -7728,6 +7728,10 @@ CREATE TABLE IF NOT EXISTS killswitch_prescription_versions (
   CONSTRAINT killswitch_prescription_versions_internal_note_check CHECK (char_length(internal_note) BETWEEN 1 AND 4000)
 );
 CREATE UNIQUE INDEX IF NOT EXISTS killswitch_prescription_versions_org_prescription_version_key ON killswitch_prescription_versions (organization_id, prescription_id, version);
+-- Privileged cross-organization expiry discovery: the maintenance sweep scans due
+-- versions globally ordered by expires_at, so the index deliberately does not lead
+-- with organization_id.
+CREATE INDEX IF NOT EXISTS killswitch_prescription_versions_expiry_due_idx ON killswitch_prescription_versions (expires_at) WHERE state = 'active' AND expires_at IS NOT NULL;
 
 CREATE TABLE IF NOT EXISTS killswitch_prescription_version_resources (
   organization_id TEXT NOT NULL,

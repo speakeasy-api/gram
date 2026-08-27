@@ -171,6 +171,66 @@ USING expired
 WHERE operation.organization_id = @organization_id
   AND operation.operation_id = expired.operation_id;
 
+-- name: ListDueKillswitchExpiries :many
+-- Privileged cross-organization discovery for the maintenance sweep. Killswitch
+-- maintenance deliberately spans tenants; every subsequent mutation is
+-- requalified by the candidate's organization_id under a row lock. The STABLE
+-- statement_timestamp() keeps the expires_at comparison plannable as an index
+-- bound; per-candidate eligibility is re-decided under the row lock.
+SELECT organization_id, prescription_id, version
+FROM killswitch_prescription_versions
+WHERE state = 'active'
+  AND expires_at IS NOT NULL
+  AND expires_at <= statement_timestamp()
+  AND (superseded_at IS NULL OR expires_at < superseded_at)
+  AND NOT EXISTS (
+    SELECT 1
+    FROM killswitch_expiry_events AS marker
+    WHERE marker.prescription_id = killswitch_prescription_versions.prescription_id
+      AND marker.version = killswitch_prescription_versions.version
+  )
+ORDER BY expires_at, prescription_id, version
+LIMIT @batch_size;
+
+-- name: LockKillswitchVersionForExpiry :one
+SELECT state, expires_at, superseded_at, clock_timestamp()::timestamptz AS database_now
+FROM killswitch_prescription_versions
+WHERE organization_id = @organization_id
+  AND prescription_id = @prescription_id
+  AND version = @version
+FOR UPDATE;
+
+-- name: RecordKillswitchExpiryEvent :execrows
+INSERT INTO killswitch_expiry_events (
+  organization_id,
+  prescription_id,
+  version
+) VALUES (
+  @organization_id,
+  @prescription_id,
+  @version
+)
+ON CONFLICT (prescription_id, version) DO NOTHING;
+
+-- name: DeleteExpiredKillswitchOperationsGlobal :execrows
+-- Privileged cross-organization retention cleanup for the maintenance sweep.
+-- Receipts are deleted strictly by their database-anchored expires_at; replay
+-- validity is decided by the claim query, never by cleanup timing. The STABLE
+-- statement_timestamp() keeps the expires_at comparison plannable as an index
+-- bound.
+WITH expired AS (
+  SELECT organization_id, operation_id
+  FROM killswitch_operations
+  WHERE expires_at <= statement_timestamp()
+  ORDER BY expires_at, organization_id, operation_id
+  FOR UPDATE SKIP LOCKED
+  LIMIT @batch_size
+)
+DELETE FROM killswitch_operations AS operation
+USING expired
+WHERE operation.organization_id = expired.organization_id
+  AND operation.operation_id = expired.operation_id;
+
 -- name: LockKillswitchPrescriptionCurrent :one
 SELECT id, organization_id, definition_key, principal_kind, principal_key, resource_kind, current_version
 FROM killswitch_prescriptions
