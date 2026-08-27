@@ -254,6 +254,25 @@ func TestEvaluatorUsesSuccessfulDatabaseResultWhenParentCancellationRaces(t *tes
 	require.Equal(t, "Authoritative match.", note)
 }
 
+func TestEvaluatorUsesSuccessfulNoMatchWhenParentCancellationRaces(t *testing.T) {
+	t.Parallel()
+
+	registry := evaluationRegistry(t)
+	ctx, cancel := context.WithCancel(t.Context())
+	query := evaluationQueryFunc(func(context.Context, repo.EvaluateCurrentPrescriptionsParams) (repo.EvaluateCurrentPrescriptionsRow, error) {
+		cancel()
+		return repo.EvaluateCurrentPrescriptionsRow{}, pgx.ErrNoRows
+	})
+	evaluator, err := newEvaluator(query, registry, time.Second, nil)
+	require.NoError(t, err)
+
+	result := evaluator.Evaluate(ctx, evaluationRequest("closed-tools"))
+	require.Equal(t, EvaluationResultNoMatch, result.Kind())
+	reason, ok := result.NoMatchReason()
+	require.True(t, ok)
+	require.Equal(t, NoMatchReasonNoPrescription, reason)
+}
+
 func TestEvaluatorDistinguishesInFlightParentDeadlineFromEvaluatorTimeout(t *testing.T) {
 	t.Parallel()
 

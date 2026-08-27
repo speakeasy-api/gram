@@ -82,16 +82,16 @@ func (e *Evaluator) Evaluate(ctx context.Context, request EvaluationRequest) Eva
 	queryContext, cancel := context.WithTimeoutCause(ctx, e.timeout, ErrEvaluatorTimeout)
 	defer cancel()
 	row, err := e.queries.EvaluateCurrentPrescriptions(queryContext, prepared.params)
+	if errors.Is(err, pgx.ErrNoRows) {
+		outcome = killswitchEvaluationOutcomeUnmatched
+		result, _ := NewNoMatchResult(NoMatchReasonNoPrescription)
+		return result
+	}
 	if cause := context.Cause(queryContext); err != nil && cause != nil {
 		if errors.Is(cause, ErrEvaluatorTimeout) {
 			return infrastructureFailureResult(errors.Join(cause, queryContext.Err()), prepared.effectivePolicy, InfrastructureFailureTimeout)
 		}
 		return infrastructureFailureResult(cause, prepared.effectivePolicy, InfrastructureFailureParentCancellation)
-	}
-	if errors.Is(err, pgx.ErrNoRows) {
-		outcome = killswitchEvaluationOutcomeUnmatched
-		result, _ := NewNoMatchResult(NoMatchReasonNoPrescription)
-		return result
 	}
 	if err != nil {
 		return infrastructureFailureResult(fmt.Errorf("evaluate current kill-switch prescriptions: %w", err), prepared.effectivePolicy, InfrastructureFailureDatabase)
