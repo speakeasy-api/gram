@@ -51,12 +51,14 @@ func TestLocalFixturesAfterLogin(t *testing.T) {
 		"the two id derivations coincide; this test would be vacuous")
 
 	require.NoError(t, demoseedtest.PlantLoginArtifacts(ctx, db, demoseedtest.LoginArtifacts{
-		OrgID:    spec.OrgID,
-		OrgName:  spec.OrgName,
-		OrgSlug:  spec.OrgSlug,
-		UserID:   loginUserID,
-		Email:    testDeveloperEmail,
-		WorkOSID: subject,
+		OrgID:        spec.OrgID,
+		OrgWorkOSID:  spec.WorkOSOrgID,
+		OrgName:      spec.OrgName,
+		OrgSlug:      spec.OrgSlug,
+		UserID:       loginUserID,
+		Email:        testDeveloperEmail,
+		WorkOSID:     subject,
+		MembershipID: "devidp_mem_from_login",
 	}))
 
 	seedLocalPostgres(ctx, t, db, spec)
@@ -72,6 +74,7 @@ func TestLocalFixturesAfterLogin(t *testing.T) {
 		UserID:          loginUserID,
 		WorkOSID:        subject,
 		Whitelisted:     true,
+		OrgWorkOSID:     spec.WorkOSOrgID,
 		Memberships:     1,
 		RoleAssignments: 1,
 	}, state)
@@ -104,6 +107,7 @@ func TestLocalFixturesReseed(t *testing.T) {
 		UserID:          seedUserID.String(),
 		WorkOSID:        devidentity.WorkOSUserID(seedUserID),
 		Whitelisted:     true,
+		OrgWorkOSID:     spec.WorkOSOrgID,
 		Memberships:     1,
 		RoleAssignments: 1,
 	}, state)

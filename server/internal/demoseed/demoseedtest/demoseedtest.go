@@ -294,29 +294,45 @@ func TamperDemoRows(ctx context.Context, db *pgxpool.Pool, ch driver.Conn, orgID
 
 // LoginArtifacts is the state a developer's first login leaves in Postgres
 // before the local seed has ever run: the organization (created
-// un-whitelisted) and the user row, whose id the auth callback derives from
-// the IDP subject rather than from the email the seed keys on.
+// un-whitelisted, already linked to WorkOS), the user row — whose id the auth
+// callback derives from the IDP subject rather than from the email the seed
+// keys on — and the membership tying the two together.
 type LoginArtifacts struct {
-	OrgID    string
-	OrgName  string
-	OrgSlug  string
-	UserID   string
-	Email    string
+	OrgID string
+	// OrgWorkOSID is the WorkOS organization the callback linked the org to,
+	// so the seed meets an already-linked row rather than a bare one.
+	OrgWorkOSID string
+	OrgName     string
+	OrgSlug     string
+	UserID      string
+	Email       string
+	// WorkOSID is the login subject, which the callback also records on the
+	// membership.
 	WorkOSID string
+	// MembershipID is the WorkOS membership id the callback recorded. It is
+	// deliberately not the 'devidp_mem_'-prefixed one the seed writes: the
+	// seed has to adopt the membership it finds, not only one it made.
+	MembershipID string
 }
 
 // PlantLoginArtifacts writes what logging in before seeding would have
 // written.
 func PlantLoginArtifacts(ctx context.Context, db *pgxpool.Pool, a LoginArtifacts) error {
 	if _, err := db.Exec(ctx, `
-		INSERT INTO organization_metadata (id, name, slug, whitelisted)
-		VALUES ($1, $2, $3, FALSE)`, a.OrgID, a.OrgName, a.OrgSlug); err != nil {
+		INSERT INTO organization_metadata (id, name, slug, workos_id, whitelisted)
+		VALUES ($1, $2, $3, $4, FALSE)`, a.OrgID, a.OrgName, a.OrgSlug, a.OrgWorkOSID); err != nil {
 		return fmt.Errorf("plant organization: %w", err)
 	}
 	if _, err := db.Exec(ctx, `
 		INSERT INTO users (id, email, display_name, workos_id)
 		VALUES ($1, $2, 'Dev', $3)`, a.UserID, a.Email, a.WorkOSID); err != nil {
 		return fmt.Errorf("plant user: %w", err)
+	}
+	if _, err := db.Exec(ctx, `
+		INSERT INTO organization_user_relationships
+			(organization_id, user_id, workos_user_id, workos_membership_id)
+		VALUES ($1, $2, $3, $4)`, a.OrgID, a.UserID, a.WorkOSID, a.MembershipID); err != nil {
+		return fmt.Errorf("plant membership: %w", err)
 	}
 	return nil
 }
@@ -330,8 +346,10 @@ type DeveloperState struct {
 	// UserID and WorkOSID come from the single row when Users == 1.
 	UserID   string
 	WorkOSID string
-	// Whitelisted is the organization's gate flag.
+	// Whitelisted is the organization's gate flag, and OrgWorkOSID its link
+	// to the IDP.
 	Whitelisted bool
+	OrgWorkOSID string
 	// Memberships and RoleAssignments count the live rows tying UserID to the
 	// organization.
 	Memberships     int
@@ -356,8 +374,8 @@ func ReadDeveloperState(ctx context.Context, db *pgxpool.Pool, orgID, email stri
 		return state, fmt.Errorf("read user: %w", err)
 	}
 	if err := db.QueryRow(ctx,
-		`SELECT whitelisted FROM organization_metadata WHERE id = $1`, orgID,
-	).Scan(&state.Whitelisted); err != nil {
+		`SELECT whitelisted, coalesce(workos_id, '') FROM organization_metadata WHERE id = $1`, orgID,
+	).Scan(&state.Whitelisted, &state.OrgWorkOSID); err != nil {
 		return state, fmt.Errorf("read organization: %w", err)
 	}
 	if err := db.QueryRow(ctx, `
