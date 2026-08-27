@@ -108,8 +108,8 @@ export function WriteReportProvider({
 type OpenDialog = "disable" | "extend" | "rearm";
 
 /**
- * Disable, re-enable, extend and re-arm, wherever the record is on screen: the
- * row menu, the peek panel footer and the record header.
+ * Disable, re-enable, extend and re-arm wherever organization actions are
+ * reused: the row menu, the peek panel footer and the overview panels.
  *
  * One component for all of them, because they are the same actions against the
  * same record: two implementations would be two answers to "can this trial be
@@ -126,9 +126,9 @@ export function OrganizationActions({
 }: {
   org: AdminOrganization;
   layout: "menu" | "buttons";
-  // Which of the record's actions this instance draws. The record shows two
-  // bars at once: lifecycle in the header, the trial's own resolution in the
-  // callout beside the deadline it acts on. `all` is every other surface.
+  // Which of the organization's actions this instance draws. The overview
+  // separates lifecycle actions into Danger zone and trial actions into the
+  // Enterprise trial panel. `all` keeps the row menu and peek footer complete.
   actions?: "all" | "lifecycle" | "trial";
   // For a surface that is not the page's own background. A stock outline
   // button brings the page's border and fill with it, which inside a toned
