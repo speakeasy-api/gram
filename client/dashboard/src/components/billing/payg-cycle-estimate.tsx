@@ -12,6 +12,7 @@ import { Stack } from "@/components/ui/Stack";
 import { Text } from "@/components/ui/Text";
 import type { PaygBillingSummary } from "@gram/client/models/components/paygbillingsummary.js";
 import { useGetPaygBillingSummary } from "@gram/client/react-query/getPaygBillingSummary.js";
+import { useEffect, useRef } from "react";
 
 // The window Stripe leaves itself to close a cycle. Named here because it is
 // the difference between an estimate the customer can trust and one that looks
@@ -37,10 +38,39 @@ export function PaygCycleEstimate(): JSX.Element | null {
 
   // The shared query client throws everything but a 401/403 to the app error
   // boundary, which would take the whole billing page down over one estimate.
-  const { data, isError } = useGetPaygBillingSummary(undefined, undefined, {
-    enabled: billing,
-    throwOnError: false,
-  });
+  const { data, isError, refetch } = useGetPaygBillingSummary(
+    undefined,
+    undefined,
+    {
+      enabled: billing,
+      throwOnError: false,
+    },
+  );
+
+  // A cached summary can outlive the cycle it described: at a cycle boundary
+  // the live subscription moves onto the new period while the cache still
+  // holds the prior cycle's summary. The summary's period start is the
+  // subscription's own anchor (the server copies it verbatim), so a mismatch
+  // identifies a stale summary — kept loading, and refetched once per new
+  // anchor. Once per anchor rather than while mismatched: the mismatch can
+  // also mean the SUBSCRIPTION read is the stale one, and refetching the
+  // summary until they agree would poll the endpoint in a loop.
+  const anchorMs =
+    subscription?.currentPeriodStart instanceof Date
+      ? subscription.currentPeriodStart.getTime()
+      : null;
+  const stale =
+    data !== undefined &&
+    anchorMs !== null &&
+    (!(data.periodStart instanceof Date) ||
+      data.periodStart.getTime() !== anchorMs);
+  const refetchedForAnchor = useRef<number | null>(null);
+  useEffect(() => {
+    if (!stale || anchorMs === null) return;
+    if (refetchedForAnchor.current === anchorMs) return;
+    refetchedForAnchor.current = anchorMs;
+    void refetch();
+  }, [stale, anchorMs, refetch]);
 
   if (!billing) return null;
 
@@ -50,20 +80,7 @@ export function PaygCycleEstimate(): JSX.Element | null {
   // a missing one costs the customer nothing.
   if (isError) return null;
 
-  // A cached summary can outlive the cycle it described: at a cycle boundary
-  // the live subscription moves onto the new period before the summary refetch
-  // lands, and the prior cycle's figures would read as current. The summary's
-  // period start is the subscription's own anchor (the server copies it
-  // verbatim), so a mismatch identifies a stale summary — kept loading until
-  // the fresh one arrives.
-  const anchor = subscription?.currentPeriodStart;
-  const summary =
-    data !== undefined &&
-    anchor instanceof Date &&
-    data.periodStart instanceof Date &&
-    data.periodStart.getTime() === anchor.getTime()
-      ? data
-      : undefined;
+  const summary = stale ? undefined : data;
 
   return (
     <Stack gap={3}>

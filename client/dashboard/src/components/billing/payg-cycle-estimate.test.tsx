@@ -79,8 +79,11 @@ function billingSubscription(status = "active") {
 
 type SummaryQueryState = { data?: Summary | undefined; isError?: boolean };
 
+/** The refetch the staleness guard fires once per new subscription anchor. */
+const refetchSummary = vi.fn();
+
 function summaryQuery({ data, isError = false }: SummaryQueryState = {}) {
-  mocks.summary.mockReturnValue({ data, isError });
+  mocks.summary.mockReturnValue({ data, isError, refetch: refetchSummary });
 }
 
 /** The options the estimate passed to its generated query hook. */
@@ -243,19 +246,26 @@ describe("PaygCycleEstimate", () => {
     });
   });
 
-  // At a cycle boundary the live subscription moves onto the new period before
-  // the summary refetch lands — the prior cycle's cached figures must not read
-  // as current.
-  it("keeps a cached summary from a prior cycle loading, not rendered", () => {
-    stripeSubscription({
-      status: "active",
-      currentPeriodStart: new Date("2026-07-01T12:00:00.000Z"),
+  // At a cycle boundary the live subscription moves onto the new period while
+  // the cache still holds the prior cycle's summary — those figures must not
+  // read as current, and the fresh summary has to be asked for.
+  it("keeps a cached prior-cycle summary loading and refetches it once", () => {
+    summaryQuery({
+      data: summaryData({
+        periodStart: new Date("2026-07-01T12:00:00.000Z"),
+        periodEnd: PERIOD_START,
+      }),
     });
 
-    render(<PaygCycleEstimate />);
+    const { rerender } = render(<PaygCycleEstimate />);
+    rerender(<PaygCycleEstimate />);
 
     expect(estimatedTotal()).toBeNull();
     expect(screen.queryByText(/Current billing cycle/)).toBeNull();
+    // Once per new anchor, not once per render: the mismatch can also mean
+    // the subscription read is the stale one, and refetching until the two
+    // agree would poll the endpoint in a loop.
+    expect(refetchSummary).toHaveBeenCalledTimes(1);
   });
 
   // A 404, a conflict, or an outage all leave the page without an estimate
