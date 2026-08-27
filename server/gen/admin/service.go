@@ -87,6 +87,12 @@ type Service interface {
 	// Removes a scheduled period-end cancellation from an organization's PAYG
 	// subscription.
 	ResumeStripeSubscription(context.Context, *ResumeStripeSubscriptionPayload) (res *AdminStripeSubscription, err error)
+	// Starts a new enterprise trial for an organization that has never trialled,
+	// or restarts one that has expired without converting or being demoted. Sets
+	// the account type, whitelist flag, trial entitlements and a fresh runway
+	// counted from now. A running, demoted or converted trial is rejected: those
+	// are extend, re-arm and a contract.
+	StartTrial(context.Context, *StartTrialPayload) (res *AdminOrganization, err error)
 }
 
 // Auther defines the authorization functions to be implemented by the service.
@@ -109,7 +115,7 @@ const ServiceName = "admin"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [24]string{"login", "callback", "logout", "getProject", "updateOrganization", "bulkUpdateAccountType", "disableOrganization", "enableOrganization", "getOrganization", "listOrganizationMembers", "listOrganizationProjects", "listOrganizationActivity", "listOrganizations", "extendTrial", "createOrganization", "rearmTrial", "getOrganizationStats", "getInferenceKeys", "setInferenceKeyMonthlyLimit", "getInferenceSpendHistory", "getPaygBillingSummary", "getStripeSubscription", "cancelStripeSubscription", "resumeStripeSubscription"}
+var MethodNames = [25]string{"login", "callback", "logout", "getProject", "updateOrganization", "bulkUpdateAccountType", "disableOrganization", "enableOrganization", "getOrganization", "listOrganizationMembers", "listOrganizationProjects", "listOrganizationActivity", "listOrganizations", "extendTrial", "createOrganization", "rearmTrial", "getOrganizationStats", "getInferenceKeys", "setInferenceKeyMonthlyLimit", "getInferenceSpendHistory", "getPaygBillingSummary", "getStripeSubscription", "cancelStripeSubscription", "resumeStripeSubscription", "startTrial"}
 
 // AdminBulkUpdateAccountTypeResult is the result type of the admin service
 // bulkUpdateAccountType method.
@@ -600,6 +606,15 @@ type SetInferenceKeyMonthlyLimitPayload struct {
 	OrganizationID    string
 	KeyType           string
 	MonthlyCredits    int
+}
+
+// StartTrialPayload is the payload type of the admin service startTrial method.
+type StartTrialPayload struct {
+	AdminSessionToken *string
+	// Organization ID.
+	ID string
+	// Number of days the trial runs for, counted from now.
+	Days int
 }
 
 // UpdateOrganizationPayload is the payload type of the admin service

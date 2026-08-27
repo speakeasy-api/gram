@@ -466,6 +466,30 @@ export function rearmTrial(
   });
 }
 
+// The server's own bounds for a start, mirrored the way the re-arm bounds
+// above are. See MinTrialStartDays and MaxTrialStartDays in
+// server/internal/constants/trials.go.
+export const MIN_TRIAL_START_DAYS = 1;
+export const MAX_TRIAL_START_DAYS = 365;
+
+export type StartTrialRequest = {
+  id: string;
+  days: number;
+};
+
+// Grants a new enterprise trial counted from now. Only an organization that
+// has never trialled, or whose trial has expired without converting or being
+// demoted, can be started; anything else is refused with a conflict.
+export function startTrial(
+  body: StartTrialRequest,
+): Promise<AdminOrganization> {
+  return gramAdminFetch<AdminOrganization>("/admin/trial.start", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+}
+
 export type CreateOrganizationRequest = {
   name: string;
 };

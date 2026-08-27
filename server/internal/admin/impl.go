@@ -30,6 +30,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/auth/orgslug"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/background/activities/keybillinglock"
+	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/chat/analysis"
 	"github.com/speakeasy-api/gram/server/internal/constants"
@@ -1267,6 +1268,127 @@ func (s *Service) rearmTrialLocked(
 	)
 
 	return s.readOrganizationAfterWrite(ctx, payload.ID, "fetch organization after trial re-arm")
+}
+
+// StartTrial grants a new enterprise trial, either to an organization that has
+// never trialled or to one whose previous trial expired without converting or
+// being demoted.
+//
+// Keys come back up before the grant commits, matching re-arm: a partial
+// failure must leave the organization without a running trial rather than an
+// admitted trial whose keys are still disabled.
+func (s *Service) StartTrial(ctx context.Context, payload *gen.StartTrialPayload) (*gen.AdminOrganization, error) {
+	// Defence in depth against a non-HTTP caller: the design's bounds are
+	// generated into the request decoder alone. Keep this on the wide
+	// payload.Days, above the int32 narrowing, or 1<<32 + 1 truncates into range.
+	if payload.Days < constants.MinTrialStartDays || payload.Days > constants.MaxTrialStartDays {
+		return nil, oops.E(oops.CodeInvalid, nil, "days must be between %d and %d", constants.MinTrialStartDays, constants.MaxTrialStartDays)
+	}
+
+	logger := s.logger.With(attr.SlogOrganizationID(payload.ID))
+	lockedKeys := make(map[openrouter.KeyType]*pgxpool.Conn, len(openrouter.AllKeyTypes))
+	var result *gen.AdminOrganization
+	err := s.withTrialKeyBillingLocks(ctx, logger, payload.ID, openrouter.AllKeyTypes, lockedKeys, func() error {
+		var lockedErr error
+		result, lockedErr = s.startTrialLocked(ctx, logger, payload, lockedKeys)
+		return lockedErr
+	})
+	if err == nil {
+		return result, nil
+	}
+
+	var shareable *oops.ShareableError
+	if errors.As(err, &shareable) {
+		return nil, shareable
+	}
+	if errors.Is(err, keybillinglock.ErrAcquireTimeout) {
+		return nil, oops.E(oops.CodeUnavailable, err, "another billing operation is in progress; retry shortly").LogWarn(ctx, logger)
+	}
+	return nil, oops.E(oops.CodeUnexpected, err, "lock inference keys for trial start").LogError(ctx, logger)
+}
+
+func (s *Service) startTrialLocked(
+	ctx context.Context,
+	logger *slog.Logger,
+	payload *gen.StartTrialPayload,
+	lockedKeys map[openrouter.KeyType]*pgxpool.Conn,
+) (*gen.AdminOrganization, error) {
+	tx, err := s.db.Begin(ctx)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "begin trial start transaction").LogError(ctx, logger)
+	}
+	defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
+
+	trials := trialsRepo.New(tx)
+
+	started, err := trials.StartTrial(ctx, trialsRepo.StartTrialParams{
+		OrganizationID: payload.ID,
+		Tier:           string(billing.TierEnterprise),
+		StartForDays:   conv.SafeInt32(payload.Days),
+	})
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		_ = tx.Rollback(ctx)
+		return nil, s.rejectTrialChange(ctx, logger, payload.ID,
+			"look up organization after unstarted trial",
+			"organization has no startable enterprise trial")
+	case err != nil:
+		return nil, oops.E(oops.CodeUnexpected, err, "start trial").LogError(ctx, logger)
+	}
+
+	uncapped, err := s.reviveTrialKeys(ctx, logger, lockedKeys, payload.ID)
+	if err != nil {
+		return nil, err
+	}
+
+	organization, err := trials.RestoreOrganizationFromTrial(ctx, trialsRepo.RestoreOrganizationFromTrialParams{
+		OrganizationID: payload.ID,
+		AccountType:    started.Tier,
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "restore organization from trial").LogError(ctx, logger)
+	}
+
+	if err := productfeatures.SeedEnterpriseTrialBundleTx(ctx, tx, payload.ID); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "seed enterprise trial entitlements").LogError(ctx, logger)
+	}
+
+	if err := productfeatures.SetTrialRuntimeFeaturesTx(ctx, tx, payload.ID, true); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "enable trial runtime features").LogError(ctx, logger)
+	}
+
+	actor, actorDisplayName, operatorEmail := adminActor(ctx)
+	if err := s.audit.LogOrganizationEnterpriseTrialStarted(ctx, tx, audit.LogOrganizationEnterpriseTrialStartedEvent{
+		OrganizationID:   payload.ID,
+		Actor:            actor,
+		ActorDisplayName: actorDisplayName,
+		ActorSlug:        nil,
+		OrganizationName: organization.Name,
+		OrganizationSlug: organization.Slug,
+		AccountType:      started.Tier,
+		TrialEndsAt:      started.EndsAt.Time,
+	}); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "log trial start").LogError(ctx, logger)
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "commit trial start transaction").LogError(ctx, logger)
+	}
+
+	s.recapRevivedKeys(ctx, logger, lockedKeys, payload.ID, uncapped)
+	for _, feature := range productfeatures.EnterpriseTrialBundle {
+		s.productFeatures.UpdateFeatureCache(ctx, payload.ID, feature, true)
+	}
+	for _, feature := range productfeatures.TrialRuntimeFeatures {
+		s.productFeatures.UpdateFeatureCache(ctx, payload.ID, feature, true)
+	}
+	s.productFeatures.UpdateFeatureCache(ctx, payload.ID, productfeatures.FeatureSkills, true)
+
+	logger.InfoContext(ctx, "started enterprise trial",
+		attr.SlogAuthUserEmail(conv.PtrValOr(operatorEmail, "unknown")),
+	)
+
+	return s.readOrganizationAfterWrite(ctx, payload.ID, "fetch organization after trial start")
 }
 
 // reviveTrialKeys brings every platform key the organization holds back up, and

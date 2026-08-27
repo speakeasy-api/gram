@@ -35,21 +35,31 @@ import {
   errorMessage,
   MAX_TRIAL_EXTENSION_DAYS,
   MAX_TRIAL_REARM_DAYS,
+  MAX_TRIAL_START_DAYS,
   MIN_TRIAL_EXTENSION_DAYS,
   MIN_TRIAL_REARM_DAYS,
+  MIN_TRIAL_START_DAYS,
   type AdminOrganization,
 } from "@/lib/gramAdminApi";
-import { calendarDate, dayISO, dayOf, trialEndDay } from "@/lib/trialDates";
+import {
+  calendarDate,
+  dayISO,
+  dayOf,
+  trialEndDay,
+  utcTodayDay,
+} from "@/lib/trialDates";
 import { fmtDateShort } from "@/lib/utils";
 
 import { PEEK_PANEL_ID } from "./PeekPanel";
 import {
   canExtendTrial,
   canRearmTrial,
+  canStartTrial,
   useDisableOrganization,
   useEnableOrganization,
   useExtendTrial,
   useRearmTrial,
+  useStartTrial,
 } from "./rowActions";
 import { WriteReportContext, type WriteReporter } from "./writeReport";
 
@@ -73,6 +83,11 @@ const REARM_BOUNDS: DayBounds = {
   max: MAX_TRIAL_REARM_DAYS,
 };
 
+const START_BOUNDS: DayBounds = {
+  min: MIN_TRIAL_START_DAYS,
+  max: MAX_TRIAL_START_DAYS,
+};
+
 function boundsHint({ min, max }: DayBounds): string {
   return `Enter a whole number of days between ${min} and ${max}.`;
 }
@@ -91,6 +106,15 @@ function extensionRange(org: AdminOrganization): DayRange | undefined {
   };
 }
 
+function startTrialRange(): DayRange {
+  const anchor = utcTodayDay();
+  return {
+    anchor,
+    earliest: anchor + MIN_TRIAL_START_DAYS,
+    latest: anchor + MAX_TRIAL_START_DAYS,
+  };
+}
+
 export function WriteReportProvider({
   value,
   children,
@@ -105,15 +129,16 @@ export function WriteReportProvider({
   );
 }
 
-type OpenDialog = "disable" | "extend" | "rearm";
+type OpenDialog = "disable" | "extend" | "rearm" | "start";
 
 /**
- * Disable, re-enable, extend and re-arm, wherever the record is on screen: the
- * row menu, the peek panel footer and the record header.
+ * Disable, re-enable, extend, re-arm and start, wherever the record is on
+ * screen: the row menu, the peek panel footer, the record header and the
+ * overview trial row.
  *
  * One component for all of them, because they are the same actions against the
  * same record: two implementations would be two answers to "can this trial be
- * extended" and two confirmations to keep in step.
+ * started" and two confirmations to keep in step.
  *
  * `buttons` names the shape rather than the place. It was `footer` while the
  * peek panel was the only surface that drew it that way.
@@ -127,8 +152,8 @@ export function OrganizationActions({
   org: AdminOrganization;
   layout: "menu" | "buttons";
   // Which of the record's actions this instance draws. The record shows two
-  // bars at once: lifecycle in the header, the trial's own resolution in the
-  // callout beside the deadline it acts on. `all` is every other surface.
+  // bars at once: lifecycle in the header, the trial's own resolution beside
+  // the facts it acts on. `all` is every other surface.
   actions?: "all" | "lifecycle" | "trial";
   // For a surface that is not the page's own background. A stock outline
   // button brings the page's border and fill with it, which inside a toned
@@ -144,27 +169,32 @@ export function OrganizationActions({
   const enable = useEnableOrganization();
   const extend = useExtendTrial();
   const rearm = useRearmTrial();
+  const start = useStartTrial();
 
   const isDisabled = Boolean(org.disabled_at);
   const busy =
     disable.isPending ||
     enable.isPending ||
     extend.isPending ||
-    rearm.isPending;
+    rearm.isPending ||
+    start.isPending;
 
   // The two failures a trial dialog reports, written once so the bounds refusal
   // and the server's own refusal are led by the same words.
   const extendFailureLead = `Could not extend the trial for ${org.name}`;
   const rearmFailureLead = `Could not re-arm the trial for ${org.name}`;
+  const startFailureLead = `Could not start the trial for ${org.name}`;
 
   // Only extend has a date to add days to. Re-arm counts from now, so it gets
   // no calendar and its dialog falls back to a day count.
   const extendRange = extensionRange(org);
+  const startRange = startTrialRange();
 
   // Read once and used by both layouts, so a menu caller cannot get a
   // different answer from a buttons caller passing the same `actions`.
   const showLifecycle = actions !== "trial";
   const showExtend = actions !== "lifecycle" && canExtendTrial(org);
+  const showStart = actions !== "lifecycle" && canStartTrial(org);
 
   const menuTrigger = useRef<HTMLButtonElement>(null);
 
@@ -183,6 +213,7 @@ export function OrganizationActions({
     disable.reset();
     extend.reset();
     rearm.reset();
+    start.reset();
     setOpen(dialog);
   };
 
@@ -266,6 +297,21 @@ export function OrganizationActions({
     );
   };
 
+  const runStart = (days: number): void => {
+    start.mutate(
+      { id: org.id, days },
+      {
+        onSuccess: () => {
+          setOpen(undefined);
+          showFailure(null);
+          announce(`${org.name} trial started for ${dayCount(days)}.`);
+        },
+        onError: (error) =>
+          announce(`${startFailureLead}: ${errorMessage(error)}`),
+      },
+    );
+  };
+
   const dialogs = (
     <>
       {open === "disable" && (
@@ -315,6 +361,22 @@ export function OrganizationActions({
           onCancel={() => setOpen(undefined)}
           onCloseAutoFocus={restoreFocus}
           onSubmit={runRearm}
+        />
+      )}
+      {open === "start" && (
+        <TrialDaysDialog
+          bounds={START_BOUNDS}
+          range={startRange}
+          title={`Start a trial for ${org.name}?`}
+          description="Sets the account type, brings the model provider keys up, and takes the organization out from behind the book-a-demo gate. The trial then runs until the date below, counted from today."
+          submitLabel="Start trial"
+          pendingLabel="Starting..."
+          failureLead={startFailureLead}
+          pending={start.isPending}
+          failure={start.error}
+          onCancel={() => setOpen(undefined)}
+          onCloseAutoFocus={restoreFocus}
+          onSubmit={runStart}
         />
       )}
     </>
@@ -391,6 +453,18 @@ export function OrganizationActions({
             Re-arm trial
           </Button>
         )}
+        {showStart && (
+          <Button
+            variant="outline"
+            size="xs"
+            aria-label={`Start trial for ${org.name}`}
+            aria-busy={busy}
+            className={buttonClassName}
+            onClick={(event) => openDialog("start", event.currentTarget)}
+          >
+            Start trial
+          </Button>
+        )}
         {dialogs}
       </>,
     );
@@ -446,6 +520,13 @@ export function OrganizationActions({
               onSelect={() => openDialog("rearm", menuTrigger.current)}
             >
               Re-arm trial
+            </DropdownMenuItem>
+          )}
+          {showStart && (
+            <DropdownMenuItem
+              onSelect={() => openDialog("start", menuTrigger.current)}
+            >
+              Start trial
             </DropdownMenuItem>
           )}
         </DropdownMenuContent>

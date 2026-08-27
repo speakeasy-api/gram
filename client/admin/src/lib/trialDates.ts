@@ -45,6 +45,16 @@ export function dayISO(day: number): string {
   return new Date(day * MS_PER_DAY).toISOString();
 }
 
+// The UTC day the operator is standing on, so a start that has no existing
+// end date to add days to can still offer a calendar whose days agree with
+// `fmtDateShort`.
+export function utcTodayDay(now: Date = new Date()): number {
+  return (
+    Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()) /
+    MS_PER_DAY
+  );
+}
+
 function quantity(value: number, unit: "day" | "hour" | "minute"): string {
   return `${value} ${unit}${value === 1 ? "" : "s"}`;
 }

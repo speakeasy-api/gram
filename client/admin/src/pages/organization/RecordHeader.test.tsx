@@ -157,6 +157,18 @@ describe("RecordHeader", () => {
     expect(labels).not.toContain("Extend trial");
   });
 
+  it("does not offer Start trial in the header of a record that never trialled", async () => {
+    const org = anOrganization({ trial_state: "none" });
+    await renderWithApp(<RecordHeader org={org} />);
+
+    expect(
+      screen.getByRole("button", { name: `Disable ${org.name}` }),
+    ).toBeTruthy();
+    expect(
+      screen.queryByRole("button", { name: `Start trial for ${org.name}` }),
+    ).toBeNull();
+  });
+
   it("offers Re-enable rather than Disable for a disabled organization", async () => {
     const org = anOrganization({ disabled_at: "2026-02-01T00:00:00Z" });
     await renderWithApp(<RecordHeader org={org} />);

@@ -67,6 +67,8 @@ const mocks = vi.hoisted(() => ({
     vi.fn<(body: { id: string; days: number }) => Promise<AdminOrganization>>(),
   rearmTrial:
     vi.fn<(body: { id: string; days: number }) => Promise<AdminOrganization>>(),
+  startTrial:
+    vi.fn<(body: { id: string; days: number }) => Promise<AdminOrganization>>(),
   bulkUpdateAccountType:
     vi.fn<
       (
@@ -95,6 +97,7 @@ vi.mock("@/lib/gramAdminApi", async (importOriginal) => {
     enableOrganization: mocks.enableOrganization,
     extendTrial: mocks.extendTrial,
     rearmTrial: mocks.rearmTrial,
+    startTrial: mocks.startTrial,
     bulkUpdateAccountType: mocks.bulkUpdateAccountType,
     createOrganization: mocks.createOrganization,
   };
@@ -185,6 +188,7 @@ if (!FIRST_ORG.disabled_at || SECOND_ORG.disabled_at) {
 // carries so a row that failed to repaint cannot read as one that did.
 const DISABLED_AT = "2026-08-01T00:00:00Z";
 const EXTENDED_TRIAL_END = "2026-05-20T00:00:00Z";
+const STARTED_TRIAL_END = "2026-08-28T00:00:00Z";
 
 function orgByID(id: string): AdminOrganization {
   const org = ORGS.find((row) => row.id === id);
@@ -408,6 +412,16 @@ beforeEach(() => {
   // No default answer: the one describe that re-arms owns a record none of the
   // rows above it carry, so it supplies its own.
   mocks.rearmTrial.mockReset();
+  mocks.startTrial.mockReset();
+  mocks.startTrial.mockImplementation(({ id }) =>
+    Promise.resolve({
+      ...orgByID(id),
+      account_type: "enterprise",
+      whitelisted: true,
+      trial_state: "running",
+      trial_ends_at: STARTED_TRIAL_END,
+    }),
+  );
   // Everything the request asked for, and nothing missing. The reversal guards
   // nothing on its own, because only the length of this array is ever read;
   // "names the organizations the server could not find" is the test that holds
@@ -2356,6 +2370,15 @@ describe("organizations list write actions", () => {
     });
   }
 
+  it("offers Start trial on a live organization that never trialled", async () => {
+    await renderRouteTree(routeTree, { initialPath: "/organizations" });
+    await openRowMenu(LIVE.name);
+
+    expect(screen.getByRole("menuitem", { name: "Start trial" })).toBeTruthy();
+    expect(screen.queryByRole("menuitem", { name: "Extend trial" })).toBeNull();
+    expect(screen.queryByRole("menuitem", { name: "Re-arm trial" })).toBeNull();
+  });
+
   it("repaints the row out of the answer rather than asking for the list again", async () => {
     await renderRouteTree(routeTree, { initialPath: "/organizations" });
     const link = await screen.findByRole("link", { name: LIVE.name });
@@ -4161,6 +4184,56 @@ describe("re-arming a trial from the peek panel", () => {
     // The panel, and specifically not the body. Radix would have focused a
     // DialogTrigger that does not exist here, leaving the keyboard at the top
     // of the page with the panel still open beside it.
+    await waitFor(() => {
+      expect(document.activeElement).toBe(peekPanel());
+    });
+    expect(document.activeElement).not.toBe(document.body);
+  });
+});
+
+describe("starting a trial from the peek panel", () => {
+  async function pressStart(): Promise<HTMLElement> {
+    await renderRouteTree(routeTree, { initialPath: "/organizations" });
+    await peekOn(SECOND_ORG.name);
+    const control = within(peekPanel()).getByRole("button", {
+      name: `Start trial for ${SECOND_ORG.name}`,
+    });
+    fireEvent.click(control);
+    await screen.findByRole("dialog");
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Start trial" }));
+    });
+    await waitFor(() => {
+      expect(screen.queryByRole("dialog")).toBeNull();
+    });
+    return control;
+  }
+
+  it("starts from the panel and repaints the panel with the answer", async () => {
+    await pressStart();
+
+    expect(mocks.startTrial).toHaveBeenCalledWith({
+      id: SECOND_ORG.id,
+      days: 14,
+    });
+    expect(peekPanel().textContent).toContain(shortDate(STARTED_TRIAL_END));
+    expect(announcement()).toBe(
+      `${SECOND_ORG.name} trial started for 14 days.`,
+    );
+  });
+
+  it("gives the keyboard to the panel when the control that opened the dialog goes", async () => {
+    const control = await pressStart();
+
+    // Same sibling-slot unmount as re-arm: Start comes down and Extend comes
+    // up, so the node the dialog opened from is gone.
+    expect(control.isConnected).toBe(false);
+    expect(
+      within(peekPanel()).getByRole("button", {
+        name: `Extend trial for ${SECOND_ORG.name}`,
+      }),
+    ).toBeTruthy();
+
     await waitFor(() => {
       expect(document.activeElement).toBe(peekPanel());
     });

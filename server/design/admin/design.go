@@ -767,4 +767,35 @@ var _ = Service("admin", func() {
 		HTTP(func() { POST("/admin/organization.resumeStripeSubscription"); Response(StatusOK) })
 		Meta("openapi:operationId", "adminResumeStripeSubscription")
 	})
+
+	// Appended, not inserted: see the note above extendTrial. New methods go last.
+	Method("startTrial", func() {
+		Description("Starts a new enterprise trial for an organization that has never trialled, or restarts one that has expired without converting or being demoted. Sets the account type, whitelist flag, trial entitlements and a fresh runway counted from now. A running, demoted or converted trial is rejected: those are extend, re-arm and a contract.")
+
+		Payload(func() {
+			security.AdminAuthPayload()
+			Required("id", "days")
+
+			// Shares extendTrial's body shape, and the OpenAPI emitter names a
+			// deduplicated schema after the first method it met.
+			Meta("openapi:typename", "StartTrialRequestBody")
+
+			Attribute("id", String, "Organization ID.", func() {
+				MinLength(1)
+			})
+			Attribute("days", Int, "Number of days the trial runs for, counted from now.", func() {
+				Minimum(constants.MinTrialStartDays)
+				Maximum(constants.MaxTrialStartDays)
+			})
+		})
+
+		Result(AdminOrganization)
+
+		HTTP(func() {
+			POST("/admin/trial.start")
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "adminStartTrial")
+	})
 })

@@ -5,6 +5,8 @@ import { useParams } from "@tanstack/react-router";
 import { useConfirmDialog } from "@/components/ConfirmDialog";
 import { CopyValue } from "@/components/CopyValue";
 import { TrialFacts } from "@/pages/organization/TrialFacts";
+import { OrganizationActions } from "@/pages/organizations/OrganizationActions";
+import { canStartTrial } from "@/pages/organizations/rowActions";
 import {
   Select,
   SelectContent,
@@ -222,7 +224,16 @@ export function Overview({ org }: { org: AdminOrganization }): JSX.Element {
           </Select>
         </Row>
         <Row label="Trial">
-          <TrialFacts org={org} />
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <TrialFacts org={org} />
+            {canStartTrial(org) ? (
+              <OrganizationActions
+                org={org}
+                layout="buttons"
+                actions="trial"
+              />
+            ) : null}
+          </div>
         </Row>
       </Group>
 

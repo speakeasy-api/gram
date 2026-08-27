@@ -39,10 +39,11 @@ type Client struct {
 	GetStripeSubscriptionEndpoint       goa.Endpoint
 	CancelStripeSubscriptionEndpoint    goa.Endpoint
 	ResumeStripeSubscriptionEndpoint    goa.Endpoint
+	StartTrialEndpoint                  goa.Endpoint
 }
 
 // NewClient initializes a "admin" service client given the endpoints.
-func NewClient(login, callback, logout, getProject, updateOrganization, bulkUpdateAccountType, disableOrganization, enableOrganization, getOrganization, listOrganizationMembers, listOrganizationProjects, listOrganizationActivity, listOrganizations, extendTrial, createOrganization, rearmTrial, getOrganizationStats, getInferenceKeys, setInferenceKeyMonthlyLimit, getInferenceSpendHistory, getPaygBillingSummary, getStripeSubscription, cancelStripeSubscription, resumeStripeSubscription goa.Endpoint) *Client {
+func NewClient(login, callback, logout, getProject, updateOrganization, bulkUpdateAccountType, disableOrganization, enableOrganization, getOrganization, listOrganizationMembers, listOrganizationProjects, listOrganizationActivity, listOrganizations, extendTrial, createOrganization, rearmTrial, getOrganizationStats, getInferenceKeys, setInferenceKeyMonthlyLimit, getInferenceSpendHistory, getPaygBillingSummary, getStripeSubscription, cancelStripeSubscription, resumeStripeSubscription, startTrial goa.Endpoint) *Client {
 	return &Client{
 		LoginEndpoint:                       login,
 		CallbackEndpoint:                    callback,
@@ -68,6 +69,7 @@ func NewClient(login, callback, logout, getProject, updateOrganization, bulkUpda
 		GetStripeSubscriptionEndpoint:       getStripeSubscription,
 		CancelStripeSubscriptionEndpoint:    cancelStripeSubscription,
 		ResumeStripeSubscriptionEndpoint:    resumeStripeSubscription,
+		StartTrialEndpoint:                  startTrial,
 	}
 }
 
@@ -610,4 +612,26 @@ func (c *Client) ResumeStripeSubscription(ctx context.Context, p *ResumeStripeSu
 		return
 	}
 	return ires.(*AdminStripeSubscription), nil
+}
+
+// StartTrial calls the "startTrial" endpoint of the "admin" service.
+// StartTrial may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) StartTrial(ctx context.Context, p *StartTrialPayload) (res *AdminOrganization, err error) {
+	var ires any
+	ires, err = c.StartTrialEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*AdminOrganization), nil
 }
