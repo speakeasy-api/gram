@@ -66,11 +66,14 @@ export function PaygCycleEstimate(): JSX.Element | null {
       data.periodStart.getTime() !== anchorMs);
   const refetchedForAnchor = useRef<number | null>(null);
   useEffect(() => {
-    if (!stale || anchorMs === null) return;
+    // `refetch` runs even on a disabled query, so the billing gate has to be
+    // re-asserted here — a trial or canceled subscription holding a stale
+    // cached summary must not request the billing endpoint.
+    if (!billing || !stale || anchorMs === null) return;
     if (refetchedForAnchor.current === anchorMs) return;
     refetchedForAnchor.current = anchorMs;
     void refetch();
-  }, [stale, anchorMs, refetch]);
+  }, [billing, stale, anchorMs, refetch]);
 
   if (!billing) return null;
 

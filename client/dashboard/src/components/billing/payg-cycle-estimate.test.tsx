@@ -250,6 +250,39 @@ describe("PaygCycleEstimate", () => {
   // the cache still holds the prior cycle's summary — those figures must not
   // read as current, and the fresh summary has to be asked for.
   it("keeps a cached prior-cycle summary loading and refetches it once", () => {
+    const priorCycle = summaryData({
+      periodStart: new Date("2026-07-01T12:00:00.000Z"),
+      periodEnd: PERIOD_START,
+    });
+    summaryQuery({ data: priorCycle });
+
+    const { rerender } = render(<PaygCycleEstimate />);
+
+    expect(estimatedTotal()).toBeNull();
+    expect(screen.queryByText(/Current billing cycle/)).toBeNull();
+    expect(refetchSummary).toHaveBeenCalledTimes(1);
+
+    // A new refetch identity re-runs the guard's effect; the still-mismatched
+    // anchor must not be asked for again — the mismatch can also mean the
+    // subscription read is the stale one, and refetching until the two agree
+    // would poll the endpoint in a loop.
+    const laterRefetch = vi.fn();
+    mocks.summary.mockReturnValue({
+      data: priorCycle,
+      isError: false,
+      refetch: laterRefetch,
+    });
+    rerender(<PaygCycleEstimate />);
+
+    expect(laterRefetch).not.toHaveBeenCalled();
+    expect(refetchSummary).toHaveBeenCalledTimes(1);
+  });
+
+  // A stale cached summary on a subscription that stopped billing has no cycle
+  // to refetch for — the disabled query must not be forced to hit the billing
+  // endpoint.
+  it("never refetches a stale summary for a non-billing subscription", () => {
+    billingSubscription("canceled");
     summaryQuery({
       data: summaryData({
         periodStart: new Date("2026-07-01T12:00:00.000Z"),
@@ -257,15 +290,9 @@ describe("PaygCycleEstimate", () => {
       }),
     });
 
-    const { rerender } = render(<PaygCycleEstimate />);
-    rerender(<PaygCycleEstimate />);
+    render(<PaygCycleEstimate />);
 
-    expect(estimatedTotal()).toBeNull();
-    expect(screen.queryByText(/Current billing cycle/)).toBeNull();
-    // Once per new anchor, not once per render: the mismatch can also mean
-    // the subscription read is the stale one, and refetching until the two
-    // agree would poll the endpoint in a loop.
-    expect(refetchSummary).toHaveBeenCalledTimes(1);
+    expect(refetchSummary).not.toHaveBeenCalled();
   });
 
   // A 404, a conflict, or an outage all leave the page without an estimate
