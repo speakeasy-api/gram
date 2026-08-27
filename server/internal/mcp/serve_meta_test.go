@@ -204,6 +204,9 @@ func TestServePublic_MetaEndpoint_ServerDiscover(t *testing.T) {
 	require.NoError(t, json.Unmarshal(envelope["result"], &result))
 	require.Equal(t, []string{mcpversions.ServedMetaServer}, result.ProtocolVersions)
 	require.Equal(t, "Gram Gateway", result.ServerInfo.Name)
+
+	// The self-description is assembled from constants, so it is shareable.
+	requireCacheHints(t, envelope["result"], "public")
 }
 
 func TestServePublic_MetaEndpoint_ToolsList_FixedContract(t *testing.T) {
@@ -234,6 +237,10 @@ func TestServePublic_MetaEndpoint_ToolsList_FixedContract(t *testing.T) {
 		names = append(names, tool.Name)
 	}
 	require.Equal(t, []string{"list_servers", "describe_server", "describe_tools", "execute_tool"}, names)
+
+	// The contract consults neither the endpoint nor the meta server, so every
+	// caller receives these same four tools.
+	requireCacheHints(t, envelope["result"], "public")
 }
 
 func TestServePublic_MetaEndpoint_ListServers_ReturnsOrderedMembers(t *testing.T) {

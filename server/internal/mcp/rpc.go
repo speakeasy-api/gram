@@ -24,6 +24,66 @@ const (
 	resultTypeComplete = "complete"
 )
 
+// cacheScope is MCP 2026-07-28's disclosure boundary for a cacheable result.
+// The specification reads an absent value as public, so every hint emitted
+// here names one of these explicitly rather than relying on that default.
+type cacheScope string
+
+const (
+	// cacheScopePublic permits any client, shared gateway, or caching proxy to
+	// store the result and serve it to any user.
+	cacheScopePublic cacheScope = "public"
+
+	// cacheScopePrivate confines caching to the requesting user's own client.
+	cacheScopePrivate cacheScope = "private"
+)
+
+// cacheHints carries the two members MCP 2026-07-28 requires on the results of
+// server/discover, tools/list, prompts/list, resources/list,
+// resources/templates/list, and resources/read.
+type cacheHints struct {
+	// TTLMs is how long a client may treat the result as fresh. Zero means
+	// immediately stale, and is the only value emitted today, on every
+	// operation. Raising it is deferred until there is evidence to set it
+	// from; a caller-uniform result is no more ready for a non-zero TTL than
+	// a caller-varying one, because nothing here advertises a listChanged
+	// capability, so a client has no channel to learn a list went stale
+	// before the TTL expires.
+	TTLMs int `json:"ttlMs"`
+
+	// CacheScope is the disclosure boundary for the result.
+	CacheScope cacheScope `json:"cacheScope"`
+}
+
+// The caching stances the cacheable operations resolve to. Both carry a zero
+// TTL; they differ only in who may be served the retained copy, which is the
+// value a future non-zero TTL would rely on being right.
+var (
+	// cacheHintsCallerVarying marks a result whose content depends on who
+	// asked, so no shared cache may serve it to a second caller.
+	cacheHintsCallerVarying = &cacheHints{TTLMs: 0, CacheScope: cacheScopePrivate}
+
+	// cacheHintsCallerUniform marks a result every caller receives identically.
+	cacheHintsCallerUniform = &cacheHints{TTLMs: 0, CacheScope: cacheScopePublic}
+)
+
+// hostedListCacheHints resolves the caching stance of a hosted list result
+// whose entries are not filtered per caller. Such a result is byte-identical
+// for everyone allowed to see it, so what remains is whether seeing it
+// required authorization at all: "public" licenses an intermediary to serve
+// the retained body to any caller, including one that never presented
+// credentials, which on a private server discloses the inventory the
+// visibility setting exists to withhold. An authenticated request is treated
+// as caller-varying on either kind of server, so a session-bound response is
+// never handed to an anonymous one.
+func hostedListCacheHints(mcpIsPublic, authenticated bool) *cacheHints {
+	if mcpIsPublic && !authenticated {
+		return cacheHintsCallerUniform
+	}
+
+	return cacheHintsCallerVarying
+}
+
 // Server identities injected into every result's _meta and answered from the
 // two initialize handlers. serverInfo is display/debug only per the MCP spec,
 // so the static version carries no compatibility meaning; keeping it constant
@@ -52,6 +112,12 @@ type result[T any] struct {
 	// identity. A zero value falls back to the hosted-toolset identity at
 	// marshal time.
 	serverIdentity serverInfo
+
+	// cacheHints are the caching members MCP 2026-07-28 requires on the six
+	// cacheable operations. Nil for every other method, which the
+	// specification leaves without caching hints, and which therefore emits
+	// neither member.
+	cacheHints *cacheHints
 }
 
 func (m result[T]) MarshalJSON() ([]byte, error) {
@@ -65,7 +131,7 @@ func (m result[T]) MarshalJSON() ([]byte, error) {
 		identity = serverInfoHostedToolset
 	}
 
-	spliced, err := spliceResultProtocolFields(resultBytes, identity)
+	spliced, err := spliceResultProtocolFields(resultBytes, identity, m.cacheHints)
 	if err != nil {
 		return nil, fmt.Errorf("splice result protocol fields: %w", err)
 	}
@@ -88,6 +154,12 @@ func (m result[T]) MarshalJSON() ([]byte, error) {
 // unconditionally. Both are fill-if-missing so a result relayed from an
 // upstream MCP server keeps whatever the upstream already supplied.
 //
+// Non-nil hints add the caching members the same revision requires on the six
+// cacheable operations, which callers serving any other method leave nil.
+// Those two overwrite rather than fill: an upstream's own caching stance
+// cannot account for the visibility rules and per-caller configuration
+// layered in front of it here.
+//
 // A result that is not a JSON object — possible only when an MCP-passthrough
 // tool returns spec-violating output — is returned unchanged: the malformed
 // shape stays the upstream's problem rather than becoming a Gram
@@ -96,7 +168,7 @@ func (m result[T]) MarshalJSON() ([]byte, error) {
 // re-marshaled in sorted order, and insignificant whitespace and HTML
 // escaping inside values may change, exactly as the pre-splice envelope
 // already did to passthrough bodies.
-func spliceResultProtocolFields(resultBytes []byte, identity serverInfo) (json.RawMessage, error) {
+func spliceResultProtocolFields(resultBytes []byte, identity serverInfo, hints *cacheHints) (json.RawMessage, error) {
 	var fields map[string]json.RawMessage
 	if err := json.Unmarshal(resultBytes, &fields); err != nil || fields == nil {
 		return resultBytes, nil
@@ -104,6 +176,18 @@ func spliceResultProtocolFields(resultBytes []byte, identity serverInfo) (json.R
 
 	if _, ok := fields["resultType"]; !ok {
 		fields["resultType"] = json.RawMessage(strconv.Quote(resultTypeComplete))
+	}
+
+	// The caching hints, unlike the fields above, overwrite rather than fill.
+	// On the resources/read passthrough path the relayed body carries an
+	// upstream MCP server's own hints, and an upstream declaring its result
+	// public is describing its own caller-uniformity: it cannot account for
+	// the visibility rules and per-caller header configuration layered in
+	// front of it here, either of which can make the same upstream body
+	// caller-specific by the time it reaches the client.
+	if hints != nil {
+		fields["ttlMs"] = json.RawMessage(strconv.Itoa(hints.TTLMs))
+		fields["cacheScope"] = json.RawMessage(strconv.Quote(string(hints.CacheScope)))
 	}
 
 	meta := map[string]json.RawMessage{}
@@ -154,6 +238,7 @@ func (m *result[T]) UnmarshalJSON(data []byte) error {
 	m.ID = envelope.ID
 	m.Result = envelope.Result
 	m.serverIdentity = serverInfo{Name: "", Version: ""}
+	m.cacheHints = nil
 
 	return nil
 }

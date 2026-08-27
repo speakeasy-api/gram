@@ -264,6 +264,14 @@ func TestServePublic_RBAC_ToolsList_PublicMCPSkipsFiltering(t *testing.T) {
 	require.Len(t, names, 2)
 	require.Contains(t, names, "pub_tool_a")
 	require.Contains(t, names, "pub_tool_b")
+
+	// Skipping the authorization filter does not make the catalog shareable.
+	// A hosted tools/list still turns on the Gram-Mode header, the session's
+	// tool selection, the ?tags= filter, and any upstream listing made with
+	// the caller's own credentials, none of which a public MCP rules out.
+	var envelope map[string]json.RawMessage
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &envelope))
+	requireCacheHints(t, envelope["result"], "private")
 }
 
 // ---------------------------------------------------------------------------

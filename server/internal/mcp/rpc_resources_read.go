@@ -241,6 +241,7 @@ func handleResourcesRead(
 			ID:             req.ID,
 			Result:         json.RawMessage(rw.body.Bytes()),
 			serverIdentity: serverInfoHostedToolset,
+			cacheHints:     cacheHintsCallerVarying,
 		})
 		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "failed to serialize MCP passthrough result").LogError(ctx, logger)
@@ -277,6 +278,11 @@ func handleResourcesRead(
 			Contents: []resourceContent{content},
 		},
 		serverIdentity: serverInfoHostedToolset,
+		// The body is produced by invoking the resource with the caller's own
+		// configuration, and MCP-* request headers reach that configuration on
+		// every server regardless of visibility or authentication. Two callers
+		// reading the same URI can therefore receive different content.
+		cacheHints: cacheHintsCallerVarying,
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to serialize resources/read result").LogError(ctx, logger)

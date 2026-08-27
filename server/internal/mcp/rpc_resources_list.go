@@ -55,6 +55,7 @@ func handleResourcesList(ctx context.Context, logger *slog.Logger, db *pgxpool.P
 			Resources: resources,
 		},
 		serverIdentity: serverInfoHostedToolset,
+		cacheHints:     hostedListCacheHints(conv.PtrValOr(toolset.McpIsPublic, false), payload.authenticated),
 	}
 
 	bs, err := json.Marshal(result)

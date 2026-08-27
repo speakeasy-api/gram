@@ -347,6 +347,7 @@ func (s *Service) handleMetaInitialize(
 			Instructions: metamcp.Instructions,
 		},
 		serverIdentity: serverInfoMetaServer,
+		cacheHints:     nil,
 	}
 	bs, err := json.Marshal(result)
 	if err != nil {
@@ -371,6 +372,9 @@ func (s *Service) handleMetaServerDiscover(
 			Instructions: metamcp.Instructions,
 		},
 		serverIdentity: serverInfoMetaServer,
+		// The self-description is assembled from constants, so every caller of
+		// this endpoint receives the same payload.
+		cacheHints: cacheHintsCallerUniform,
 	}
 	bs, err := json.Marshal(result)
 	if err != nil {
@@ -396,6 +400,9 @@ func (s *Service) listMetaServerTools(ctx context.Context, logger *slog.Logger, 
 		ID:             req.ID,
 		Result:         toolsListResultTools{Tools: tools},
 		serverIdentity: serverInfoMetaServer,
+		// The gateway tool contract is fixed and consults neither the endpoint
+		// nor the meta server, so every caller receives the same four tools.
+		cacheHints: cacheHintsCallerUniform,
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to serialize tools/list response").LogError(ctx, logger)
