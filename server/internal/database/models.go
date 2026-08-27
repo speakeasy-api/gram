@@ -1091,6 +1091,60 @@ type JsonWebKeySet struct {
 	Deleted        bool
 }
 
+type KillswitchExpiryEvent struct {
+	OrganizationID string
+	PrescriptionID uuid.UUID
+	Version        int64
+	RecordedAt     pgtype.Timestamptz
+}
+
+type KillswitchOperation struct {
+	OrganizationID string
+	OperationID    uuid.UUID
+	ActorUserID    string
+	Operation      string
+	RequestHash    string
+	Status         string
+	Response       []byte
+	ExpiresAt      pgtype.Timestamptz
+	CreatedAt      pgtype.Timestamptz
+	UpdatedAt      pgtype.Timestamptz
+}
+
+type KillswitchPrescription struct {
+	ID             uuid.UUID
+	OrganizationID string
+	DefinitionKey  string
+	PrincipalKind  string
+	PrincipalKey   string
+	ResourceKind   string
+	CurrentVersion int64
+	CreatedAt      pgtype.Timestamptz
+	UpdatedAt      pgtype.Timestamptz
+}
+
+type KillswitchPrescriptionVersion struct {
+	OrganizationID string
+	PrescriptionID uuid.UUID
+	Version        int64
+	State          string
+	ResourceScope  string
+	StartsAt       pgtype.Timestamptz
+	ExpiresAt      pgtype.Timestamptz
+	ActivatedAt    pgtype.Timestamptz
+	SupersededAt   pgtype.Timestamptz
+	InternalNote   string
+	ExternalNote   string
+	CreatedAt      pgtype.Timestamptz
+}
+
+type KillswitchPrescriptionVersionResource struct {
+	OrganizationID string
+	PrescriptionID uuid.UUID
+	Version        int64
+	ResourceKey    string
+}
+
 type LitellmInstance struct {
 	ID                       uuid.UUID
 	OrganizationID           string
