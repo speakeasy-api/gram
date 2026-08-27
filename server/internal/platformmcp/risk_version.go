@@ -184,18 +184,23 @@ func riskPolicyVersionState(ctx context.Context, db riskrepo.DBTX, policy policy
 	if err != nil {
 		return RiskPolicyVersionState{}, fmt.Errorf("load risk policy version row: %w", err)
 	}
+	audience, err := policycore.New(db).AudiencePrincipalURNs(ctx, row.OrganizationID, row.ID.String())
+	if err != nil {
+		return RiskPolicyVersionState{}, fmt.Errorf("load risk policy version audience: %w", err)
+	}
+	state.Policy = policycore.Project(row, audience, nil)
 	state.AnalyzerConfig = row.AnalyzerConfig
-	allowedGrants, err := riskPolicyVersionURLGrants(ctx, db, policy, authz.ScopeRiskPolicyBypass)
+	allowedGrants, err := riskPolicyVersionURLGrants(ctx, db, state.Policy, authz.ScopeRiskPolicyBypass)
 	if err != nil {
 		return RiskPolicyVersionState{}, err
 	}
-	blockedGrants, err := riskPolicyVersionURLGrants(ctx, db, policy, authz.ScopeRiskPolicyBlock)
+	blockedGrants, err := riskPolicyVersionURLGrants(ctx, db, state.Policy, authz.ScopeRiskPolicyBlock)
 	if err != nil {
 		return RiskPolicyVersionState{}, err
 	}
 	state.AllowedURLGrants = allowedGrants
 	state.BlockedURLGrants = blockedGrants
-	standing, err := approvalQueries.ListStandingServerDecisionsForProject(ctx, policy.ProjectID)
+	standing, err := approvalQueries.ListStandingServerDecisionsForProject(ctx, state.Policy.ProjectID)
 	if err != nil {
 		return RiskPolicyVersionState{}, fmt.Errorf("load risk policy standing decisions: %w", err)
 	}

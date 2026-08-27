@@ -327,6 +327,8 @@ func TestRiskMutationHandlerSelectionAcceptsExportedSuccessContract(t *testing.T
 			return nil, want, nil
 		},
 	})
+	require.NotContains(t, descriptorByName(t, registrar, operationCreateRiskPolicy).Description, "not enabled")
+	require.Contains(t, descriptorByName(t, registrar, operationUpdateRiskPolicy).Description, "not enabled")
 	for _, descriptor := range registrar.Descriptors() {
 		if descriptor.Name != operationCreateRiskPolicy {
 			continue
@@ -358,6 +360,7 @@ func TestRiskMutationHandlerSelectionRequiresAvailableCatalogForLiveCallbacks(t 
 	var refusal *ToolRefusalError
 	require.ErrorAs(t, err, &refusal)
 	require.Contains(t, refusal.Payload, `"code":"feature_unavailable"`)
+	require.Contains(t, create.Description, "not enabled")
 	require.False(t, called, "catalog failure must keep live callbacks unavailable")
 }
 
@@ -370,6 +373,9 @@ func TestRiskMutationHandlerSelectionDefaultsEveryWriteToStableRefusal(t *testin
 	server := mcp.NewServer(&mcp.Implementation{Name: "test", Version: "test"}, nil)
 	registrar := newRegistrar(server)
 	registerRiskMutationHandlers(registrar, catalog, true, &RiskMutationHandlers{})
+	for _, name := range []string{operationCreateRiskPolicy, operationUpdateRiskPolicy, operationCreateRiskExclusion, operationUpdateRiskExclusion} {
+		require.Contains(t, descriptorByName(t, registrar, name).Description, "not enabled")
+	}
 	arguments := map[string]json.RawMessage{
 		"create_risk_policy":    json.RawMessage(`{"project_slug":"default","policy_type":"standard","name":"policy","enabled":true,"sources":["gitleaks"],"idempotency_key":"key"}`),
 		"update_risk_policy":    json.RawMessage(`{"project_slug":"default","policy_id":"11111111-1111-4111-8111-111111111111","expected_version":"version","idempotency_key":"key","patch":{"enabled":true}}`),

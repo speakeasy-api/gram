@@ -107,10 +107,10 @@ type UpdateMutation struct {
 	BlockedURLsSet       bool
 	EffectiveDisposition string
 	SupersedeDecisions   bool
-	// ValidateLocked runs after the current row and audience are locked but
-	// before any domain write. Platform adapters use it for opaque optimistic
-	// concurrency tokens without moving policy mutation logic out of this core.
-	ValidateLocked func(context.Context, pgx.Tx, Policy) error
+	// ValidateLocked runs after the current row is locked but before any domain
+	// write. It returns the authoritative policy snapshot used by the adapter for
+	// validation so the core can carry its audience through audit and results.
+	ValidateLocked func(context.Context, pgx.Tx, Policy) (Policy, error)
 	Actor          Actor
 }
 
@@ -337,8 +337,17 @@ func (c *Core) updatePolicyInTransaction(ctx context.Context, tx pgx.Tx, input U
 		return MutationResult{}, mutationError("load risk policy audience snapshot", err)
 	}
 	if input.ValidateLocked != nil {
-		if err := input.ValidateLocked(ctx, tx, Project(locked, currentAudience, nil)); err != nil {
+		validated, err := input.ValidateLocked(ctx, tx, Project(locked, currentAudience, nil))
+		if err != nil {
 			return MutationResult{}, err
+		}
+		currentAudience = validated.AudiencePrincipalURNs
+	}
+	effectiveAudience := input.AudiencePrincipals
+	if !input.AudienceChanged {
+		effectiveAudience, err = parsePrincipalURNs(currentAudience)
+		if err != nil {
+			return MutationResult{}, mutationError("parse risk policy audience snapshot", err)
 		}
 	}
 	row, err := queries.UpdateRiskPolicy(ctx, input.Params)
@@ -388,7 +397,7 @@ func (c *Core) updatePolicyInTransaction(ctx context.Context, tx pgx.Tx, input U
 			PolicyID:       row.ID.String(),
 			Scope:          authz.ScopeRiskPolicyBypass,
 			DesiredURLs:    optionalURLs(input.AllowedURLs, input.AllowedURLsSet),
-			Principals:     input.AudiencePrincipals,
+			Principals:     effectiveAudience,
 			PreserveURLs:   preserveDecisionURLs,
 		}); err != nil {
 			return MutationResult{}, mutationError("reconcile shadow mcp policy allowed urls", err)
@@ -412,7 +421,7 @@ func (c *Core) updatePolicyInTransaction(ctx context.Context, tx pgx.Tx, input U
 		}
 	}
 
-	audience := principalStrings(input.AudiencePrincipals)
+	audience := principalStrings(effectiveAudience)
 	if err := deps.Auditor.LogPolicyUpdate(ctx, tx, UpdateAuditEvent{
 		OrganizationID: row.OrganizationID,
 		ProjectID:      row.ProjectID,
@@ -466,6 +475,18 @@ func principalStrings(principals []urn.Principal) []string {
 		values = append(values, principal.String())
 	}
 	return values
+}
+
+func parsePrincipalURNs(values []string) ([]urn.Principal, error) {
+	principals := make([]urn.Principal, 0, len(values))
+	for _, value := range values {
+		principal, err := urn.ParsePrincipal(value)
+		if err != nil {
+			return nil, fmt.Errorf("parse principal %q: %w", value, err)
+		}
+		principals = append(principals, principal)
+	}
+	return principals, nil
 }
 
 func isBlockingShadowPolicy(row repo.RiskPolicy) bool {

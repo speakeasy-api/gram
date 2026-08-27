@@ -134,25 +134,33 @@ func registerRiskMutationHandlers(reg *Registrar, catalog policycatalog.Catalog,
 	updatePolicy := unavailableRiskMutationTool[UpdateRiskPolicyToolOutput]()
 	createExclusion := unavailableRiskMutationTool[CreateRiskExclusionToolOutput]()
 	updateExclusion := unavailableRiskMutationTool[UpdateRiskExclusionToolOutput]()
+	createPolicyDescription := "Create a risk policy in an explicit project. Risk policy mutations are not enabled in this rollout."
+	updatePolicyDescription := "Patch a risk policy in an explicit project. Risk policy mutations are not enabled in this rollout."
+	createExclusionDescription := "Create a non-regex risk exclusion in an explicit project. Exclusion mutations are not enabled in this rollout."
+	updateExclusionDescription := "Enable or disable one risk exclusion without changing its definition. Exclusion mutations are not enabled in this rollout."
 	if catalogAvailable && handlers != nil && handlers.Controls != nil {
 		if handlers.CreatePolicy != nil {
 			createPolicy = handlers.CreatePolicy
+			createPolicyDescription = "Create an allowlisted standard or prompt-based risk policy in an explicit project with idempotent replay safety."
 		}
 		if handlers.UpdatePolicy != nil {
 			updatePolicy = handlers.UpdatePolicy
+			updatePolicyDescription = "Patch allowlisted fields on a risk policy in an explicit project using an opaque expected version; omitted fields are preserved."
 		}
 		if handlers.CreateExclusion != nil {
 			createExclusion = handlers.CreateExclusion
+			createExclusionDescription = "Create a non-regex risk exclusion in an explicit project with idempotent replay safety."
 		}
 		if handlers.UpdateExclusion != nil {
 			updateExclusion = handlers.UpdateExclusion
+			updateExclusionDescription = "Enable or disable one risk exclusion without changing its definition using an opaque expected version."
 		}
 	}
 	meta := ToolMeta{Audiences: bothAudiences, ProjectScope: ProjectScopeExplicit}
-	addTool(reg, &mcp.Tool{Name: "create_risk_policy", Title: "Create Risk Policy", Description: "Create an allowlisted standard or prompt-based risk policy in an explicit project with idempotent replay safety.", InputSchema: createPolicySchema}, meta, createPolicy)
-	addTool(reg, &mcp.Tool{Name: "update_risk_policy", Title: "Update Risk Policy", Description: "Patch allowlisted fields on a risk policy in an explicit project using an opaque expected version; omitted fields are preserved.", InputSchema: updatePolicySchema}, meta, updatePolicy)
-	addTool(reg, &mcp.Tool{Name: "create_risk_exclusion", Title: "Create Risk Exclusion", Description: "Create a non-regex risk exclusion in an explicit project. Exclusion mutations are not enabled in this rollout.", InputSchema: createExclusionSchema}, meta, createExclusion)
-	addTool(reg, &mcp.Tool{Name: "update_risk_exclusion", Title: "Update Risk Exclusion", Description: "Enable or disable one risk exclusion without changing its definition. Exclusion mutations are not enabled in this rollout.", InputSchema: updateRiskExclusionSchema()}, meta, updateExclusion)
+	addTool(reg, &mcp.Tool{Name: "create_risk_policy", Title: "Create Risk Policy", Description: createPolicyDescription, InputSchema: createPolicySchema}, meta, createPolicy)
+	addTool(reg, &mcp.Tool{Name: "update_risk_policy", Title: "Update Risk Policy", Description: updatePolicyDescription, InputSchema: updatePolicySchema}, meta, updatePolicy)
+	addTool(reg, &mcp.Tool{Name: "create_risk_exclusion", Title: "Create Risk Exclusion", Description: createExclusionDescription, InputSchema: createExclusionSchema}, meta, createExclusion)
+	addTool(reg, &mcp.Tool{Name: "update_risk_exclusion", Title: "Update Risk Exclusion", Description: updateExclusionDescription, InputSchema: updateRiskExclusionSchema()}, meta, updateExclusion)
 }
 
 func unavailableRiskMutationTool[Out any]() mcp.ToolHandlerFor[map[string]any, Out] {

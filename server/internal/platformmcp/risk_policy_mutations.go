@@ -200,7 +200,8 @@ func (s *riskPolicyMutationService) updatePolicyTool(ctx context.Context, _ *mcp
 	if err := decodeRiskMutationInput(raw, &input); err != nil {
 		return riskMutationToolRefusal[UpdateRiskPolicyToolOutput](err)
 	}
-	project, err := s.controls.Admit(ctx, principal, strings.TrimSpace(input.ProjectSlug))
+	input.ProjectSlug = strings.TrimSpace(input.ProjectSlug)
+	project, err := s.controls.Admit(ctx, principal, input.ProjectSlug)
 	if err != nil {
 		return riskMutationToolRefusal[UpdateRiskPolicyToolOutput](err)
 	}
@@ -225,19 +226,19 @@ func (s *riskPolicyMutationService) updatePolicyTool(ctx context.Context, _ *mcp
 		if err != nil {
 			return nil, fmt.Errorf("load risk policy update target: %w", err)
 		}
-		mutation, _, err := s.prepareUpdate(ctx, tx, principal, project, current, input)
+		mutation, _, err := s.prepareUpdate(ctx, principal, project, current, input)
 		if err != nil {
 			return nil, err
 		}
-		mutation.ValidateLocked = func(ctx context.Context, tx pgx.Tx, locked policycore.Policy) error {
+		mutation.ValidateLocked = func(ctx context.Context, tx pgx.Tx, locked policycore.Policy) (policycore.Policy, error) {
 			state, err := riskPolicyVersionState(ctx, tx, locked, true)
 			if err != nil {
-				return riskMutationUnavailableWithCause(err)
+				return policycore.Policy{}, riskMutationUnavailableWithCause(err)
 			}
 			if !s.controls.Versions().ValidPolicyVersion(state, input.ExpectedVersion) {
-				return riskMutationConflict("The risk policy changed after it was read. Read it again and retry with the new version.")
+				return policycore.Policy{}, riskMutationConflict("The risk policy changed after it was read. Read it again and retry with the new version.")
 			}
-			return nil
+			return state.Policy, nil
 		}
 		result, err := s.policies.UpdatePolicyInTransaction(ctx, tx, mutation)
 		if err != nil {
@@ -450,8 +451,8 @@ func (s *riskPolicyMutationService) prepareCreate(ctx context.Context, principal
 	return preparedRiskPolicyCreate{normalized: normalized, params: params}, nil
 }
 
-func (s *riskPolicyMutationService) prepareUpdate(ctx context.Context, db riskrepo.DBTX, principal Principal, project ResolvedProject, current riskrepo.RiskPolicy, input updateRiskPolicyInput) (policycore.UpdateMutation, map[string]any, error) {
-	if input.ProjectSlug != project.Slug || input.IdempotencyKey == "" || len(input.IdempotencyKey) > 128 {
+func (s *riskPolicyMutationService) prepareUpdate(ctx context.Context, principal Principal, project ResolvedProject, current riskrepo.RiskPolicy, input updateRiskPolicyInput) (policycore.UpdateMutation, map[string]any, error) {
+	if strings.TrimSpace(input.ProjectSlug) != project.Slug || input.IdempotencyKey == "" || len(input.IdempotencyKey) > 128 {
 		return policycore.UpdateMutation{}, nil, invalidRiskPolicyRequest()
 	}
 	params := riskrepo.UpdateRiskPolicyParams{
@@ -672,20 +673,8 @@ func (s *riskPolicyMutationService) prepareUpdate(ctx context.Context, db riskre
 			}
 		}
 	}
-	audience, err := policycore.New(db).AudiencePrincipalURNs(ctx, principal.OrganizationID, current.ID.String())
-	if err != nil {
-		return policycore.UpdateMutation{}, nil, riskMutationUnavailableWithCause(err)
-	}
-	principals := make([]urn.Principal, 0, len(audience))
-	for _, value := range audience {
-		parsed, err := urn.ParsePrincipal(value)
-		if err != nil {
-			return policycore.UpdateMutation{}, nil, riskMutationUnavailableWithCause(err)
-		}
-		principals = append(principals, parsed)
-	}
 	return policycore.UpdateMutation{
-		Current: current, Params: params, AudiencePrincipals: principals, AudienceChanged: false,
+		Current: current, Params: params, AudiencePrincipals: nil, AudienceChanged: false,
 		AllowedURLs: nil, AllowedURLsSet: false, BlockedURLs: nil, BlockedURLsSet: false,
 		EffectiveDisposition: effectiveDisposition,
 		SupersedeDecisions:   false,
@@ -770,7 +759,11 @@ func (s *riskPolicyMutationService) requirePromptPolicies(ctx context.Context, p
 }
 
 func (s *riskPolicyMutationService) matchExistingCreate(ctx context.Context, tx pgx.Tx, organizationID string, projectID uuid.UUID, prepared preparedRiskPolicyCreate) (*policycore.MutationResult, error) {
-	rows, err := riskrepo.New(tx).ListRiskPolicies(ctx, projectID)
+	rows, err := riskrepo.New(tx).ListRiskPolicyCreateCandidates(ctx, riskrepo.ListRiskPolicyCreateCandidatesParams{
+		ProjectID:  projectID,
+		Name:       prepared.params.Name,
+		PolicyType: prepared.normalized.PolicyType,
+	})
 	if err != nil {
 		return nil, fmt.Errorf("list risk policies for create convergence: %w", err)
 	}

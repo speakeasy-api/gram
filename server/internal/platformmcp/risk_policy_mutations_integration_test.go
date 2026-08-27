@@ -96,7 +96,7 @@ func TestRiskPolicyMutationHandlersCreateUpdateReplayAndRedact(t *testing.T) {
 	requireRiskMutationRefusal(t, err, "conflict")
 
 	updateInput := map[string]any{
-		"project_slug":     project.Slug,
+		"project_slug":     "  " + project.Slug + "  ",
 		"policy_id":        policyID.String(),
 		"expected_version": read.Policy.Version,
 		"idempotency_key":  "update-policy-key",
@@ -114,16 +114,33 @@ func TestRiskPolicyMutationHandlersCreateUpdateReplayAndRedact(t *testing.T) {
 	require.ElementsMatch(t, []string{"gitleaks"}, stored.Sources, "omitted sparse fields are preserved")
 	require.True(t, stored.Enabled)
 
+	targetedAudience := urn.NewPrincipal(urn.PrincipalTypeUser, "targeted-user")
+	require.NoError(t, authz.ReplaceGrantAudience(ctx, conn, authz.ResourceGrant{
+		Resource:   authz.Resource{OrganizationID: principal.OrganizationID, Scope: authz.ScopeRiskPolicyEvaluate, ResourceID: policyID.String()},
+		Principals: []urn.Principal{targetedAudience},
+		Selector:   authz.NewSelector(authz.ScopeRiskPolicyEvaluate, policyID.String()),
+	}))
+	targetedRead, err := reads.GetPolicy(ctx, principal, GetRiskPolicyInput{ProjectSlug: project.Slug, PolicyID: policyID.String()})
+	require.NoError(t, err)
+	require.NotEqual(t, updated.Version, targetedRead.Policy.Version, "an audience-only enforcement change invalidates the policy version")
+
 	secondUpdate := map[string]any{
 		"project_slug":     project.Slug,
 		"policy_id":        policyID.String(),
-		"expected_version": updated.Version,
+		"expected_version": targetedRead.Policy.Version,
 		"idempotency_key":  "update-policy-key-2",
 		"patch":            map[string]any{"enabled": false},
 	}
 	_, second, err := handlers.UpdatePolicy(ctx, nil, secondUpdate)
 	require.NoError(t, err)
-	require.NotEqual(t, updated.Version, second.Version)
+	require.NotEqual(t, targetedRead.Policy.Version, second.Version)
+	evaluationGrants, err := authz.ListGrantsForResource(ctx, conn, authz.Resource{OrganizationID: principal.OrganizationID, Scope: authz.ScopeRiskPolicyEvaluate, ResourceID: policyID.String()})
+	require.NoError(t, err)
+	require.Len(t, evaluationGrants, 1)
+	require.Equal(t, targetedAudience.String(), evaluationGrants[0].PrincipalUrn, "a sparse update preserves the locked audience")
+	postUpdateRead, err := reads.GetPolicy(ctx, principal, GetRiskPolicyInput{ProjectSlug: project.Slug, PolicyID: policyID.String()})
+	require.NoError(t, err)
+	require.Equal(t, second.Version, postUpdateRead.Policy.Version, "the mutation result uses the locked authoritative audience")
 
 	_, replayedUpdate, err := handlers.UpdatePolicy(ctx, nil, updateInput)
 	require.NoError(t, err)
@@ -171,6 +188,10 @@ func TestRiskPolicyMutationHandlersCreateUpdateReplayAndRedact(t *testing.T) {
 	}
 	_, promptCreated, err := handlers.CreatePolicy(ctx, nil, promptInput)
 	require.NoError(t, err)
+	candidates, err := riskrepo.New(conn).ListRiskPolicyCreateCandidates(ctx, riskrepo.ListRiskPolicyCreateCandidatesParams{ProjectID: project.ID, Name: "Policy", PolicyType: "standard"})
+	require.NoError(t, err)
+	require.Len(t, candidates, 1)
+	require.Equal(t, policyID, candidates[0].ID, "create convergence narrows by project, name, and policy type")
 	flags.SetFlag(feature.FlagPromptPolicies, principal.OrganizationID, false)
 	promptReplay := cloneRiskMutationInput(promptInput)
 	_, _, err = handlers.CreatePolicy(ctx, nil, promptReplay)

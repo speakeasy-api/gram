@@ -3718,6 +3718,73 @@ func (q *Queries) ListRiskPolicyBypassRequests(ctx context.Context, arg ListRisk
 	return items, nil
 }
 
+const listRiskPolicyCreateCandidates = `-- name: ListRiskPolicyCreateCandidates :many
+SELECT id, project_id, organization_id, enabled, name, policy_type, sources, presidio_entities, analyzer_config, prompt_injection_rules, disabled_rules, custom_rule_ids, message_types, scope_include, scope_exempt, action, audience_type, shadow_mcp_disposition, auto_name, user_message, prompt, model_config, score, version, created_at, updated_at, deleted_at, deleted
+FROM risk_policies
+WHERE project_id = $1
+  AND name = $2
+  AND policy_type = $3
+  AND deleted IS FALSE
+ORDER BY id
+`
+
+type ListRiskPolicyCreateCandidatesParams struct {
+	ProjectID  uuid.UUID
+	Name       string
+	PolicyType string
+}
+
+// Platform MCP create convergence narrows by the stable public identity before
+// loading sensitive policy definitions for exact canonical comparison.
+func (q *Queries) ListRiskPolicyCreateCandidates(ctx context.Context, arg ListRiskPolicyCreateCandidatesParams) ([]RiskPolicy, error) {
+	rows, err := q.db.Query(ctx, listRiskPolicyCreateCandidates, arg.ProjectID, arg.Name, arg.PolicyType)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []RiskPolicy
+	for rows.Next() {
+		var i RiskPolicy
+		if err := rows.Scan(
+			&i.ID,
+			&i.ProjectID,
+			&i.OrganizationID,
+			&i.Enabled,
+			&i.Name,
+			&i.PolicyType,
+			&i.Sources,
+			&i.PresidioEntities,
+			&i.AnalyzerConfig,
+			&i.PromptInjectionRules,
+			&i.DisabledRules,
+			&i.CustomRuleIds,
+			&i.MessageTypes,
+			&i.ScopeInclude,
+			&i.ScopeExempt,
+			&i.Action,
+			&i.AudienceType,
+			&i.ShadowMcpDisposition,
+			&i.AutoName,
+			&i.UserMessage,
+			&i.Prompt,
+			&i.ModelConfig,
+			&i.Score,
+			&i.Version,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.DeletedAt,
+			&i.Deleted,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listRiskPolicyEvalReviews = `-- name: ListRiskPolicyEvalReviews :many
 SELECT id, project_id, organization_id, risk_policy_id, risk_policy_version, chat_id, verdict, reviewed_by, created_at, updated_at, deleted_at, deleted
 FROM risk_policy_eval_reviews
