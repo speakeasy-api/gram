@@ -544,11 +544,11 @@ func resolveTransportDisposition(result EvaluationResult, suppliedPolicy Failure
 }
 
 func effectiveFailurePolicy(result EvaluationResult, suppliedPolicy FailurePolicy) (FailurePolicy, error) {
-	if authoritativePolicy, ok := result.FailurePolicy(); ok {
-		return authoritativePolicy, nil
-	}
 	if suppliedPolicy != FailurePolicyFailOpen && suppliedPolicy != FailurePolicyFailClosed {
 		return "", fmt.Errorf("invalid failure policy %q", suppliedPolicy)
+	}
+	if authoritativePolicy, ok := result.FailurePolicy(); ok {
+		return authoritativePolicy, nil
 	}
 	return suppliedPolicy, nil
 }

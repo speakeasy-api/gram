@@ -158,6 +158,8 @@ func TestResolveTransportDispositionUsesAuthoritativeEmbeddedPolicy(t *testing.T
 	disposition, err := ResolveTransportDisposition(classified, FailurePolicyFailOpen)
 	require.NoError(t, err)
 	require.Equal(t, TransportDispositionInfrastructureRejection, disposition.Kind())
+	_, err = ResolveTransportDisposition(classified, FailurePolicy("invalid"))
+	require.EqualError(t, err, `invalid failure policy "invalid"`)
 
 	legacy, err := NewInfrastructureFailureResult(errors.New("evaluation unavailable"))
 	require.NoError(t, err)
@@ -227,6 +229,29 @@ func TestEvaluatorDistinguishesFailuresAndAppliesCandidatePolicies(t *testing.T)
 			}
 		})
 	}
+}
+
+func TestEvaluatorUsesSuccessfulDatabaseResultWhenParentCancellationRaces(t *testing.T) {
+	t.Parallel()
+
+	registry := evaluationRegistry(t)
+	ctx, cancel := context.WithCancel(t.Context())
+	query := evaluationQueryFunc(func(context.Context, repo.EvaluateCurrentPrescriptionsParams) (repo.EvaluateCurrentPrescriptionsRow, error) {
+		cancel()
+		return repo.EvaluateCurrentPrescriptionsRow{
+			PrescriptionID: uuid.MustParse("00000000-0000-0000-0000-000000000001"),
+			DefinitionKey:  "block-tools",
+			ExternalNote:   "Authoritative match.",
+		}, nil
+	})
+	evaluator, err := newEvaluator(query, registry, time.Second, nil)
+	require.NoError(t, err)
+
+	result := evaluator.Evaluate(ctx, evaluationRequest("block-tools"))
+	require.Equal(t, EvaluationResultMatch, result.Kind())
+	note, ok := result.ExternalNote()
+	require.True(t, ok)
+	require.Equal(t, "Authoritative match.", note)
 }
 
 func TestEvaluatorDistinguishesInFlightParentDeadlineFromEvaluatorTimeout(t *testing.T) {

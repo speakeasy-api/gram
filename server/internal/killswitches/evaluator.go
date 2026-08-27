@@ -82,7 +82,7 @@ func (e *Evaluator) Evaluate(ctx context.Context, request EvaluationRequest) Eva
 	queryContext, cancel := context.WithTimeoutCause(ctx, e.timeout, ErrEvaluatorTimeout)
 	defer cancel()
 	row, err := e.queries.EvaluateCurrentPrescriptions(queryContext, prepared.params)
-	if cause := context.Cause(queryContext); cause != nil {
+	if cause := context.Cause(queryContext); err != nil && cause != nil {
 		if errors.Is(cause, ErrEvaluatorTimeout) {
 			return infrastructureFailureResult(errors.Join(cause, queryContext.Err()), prepared.effectivePolicy, InfrastructureFailureTimeout)
 		}
