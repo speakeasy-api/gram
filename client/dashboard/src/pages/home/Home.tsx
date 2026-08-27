@@ -8,6 +8,7 @@ import {
 } from "@/components/brand-mesh";
 import { cn } from "@/lib/utils";
 import { ChatLanding } from "@/pages/chat/Chat";
+import { useProject } from "@/contexts/Auth";
 import { useRBAC } from "@/hooks/useRBAC";
 import { useRoutes } from "@/routes";
 import { Navigate } from "react-router";
@@ -15,6 +16,7 @@ import { Navigate } from "react-router";
 export default function Home(): JSX.Element {
   const { hasAnyScope, isLoading } = useRBAC();
   const routes = useRoutes();
+  const { id: projectId } = useProject();
   // Home carries its own "Ask anything" widget, so suppress the floating dock.
   useHideInsightsDock();
 
@@ -22,8 +24,8 @@ export default function Home(): JSX.Element {
   // overview's project:read fallback.
   if (
     !isLoading &&
-    !hasAnyScope(["project:read"]) &&
-    hasAnyScope(["mcp:read", "mcp:write"])
+    !hasAnyScope(["project:read"], projectId) &&
+    hasAnyScope(["mcp:read", "mcp:write"], projectId)
   ) {
     return <Navigate to={routes.mcp.href()} replace />;
   }
