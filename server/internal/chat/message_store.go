@@ -48,7 +48,7 @@ func NewChatMessageWriter(logger *slog.Logger, db *pgxpool.Pool, assetStorage as
 	ctx, cancel := context.WithCancel(context.Background()) //nolint:contextcheck // shutdown context must outlive any single request
 	w = &ChatMessageWriter{
 		db:           db,
-		logger:       logger,
+		logger:       logger.With(attr.SlogComponent("chat-message-writer")),
 		assetStorage: assetStorage,
 		stokenCodec:  stokens.NewCodec(),
 		observers:    nil,
@@ -175,36 +175,39 @@ type storedToolCall struct {
 	} `json:"function"`
 }
 
-// storedMessageContent returns every stored text fragment that contributes to
-// the storage meter. Malformed tool-call JSON is counted verbatim so content is
-// never omitted merely because its structured representation cannot be decoded.
-func storedMessageContent(content string, toolCalls []byte) []string {
+// extractMeteredContent returns every stored text fragment that contributes to
+// the storage meter. It rejects malformed tool calls rather than silently
+// changing how their content is measured.
+func extractMeteredContent(content string, toolCalls []byte) ([]string, error) {
 	parts := []string{content}
 	if len(toolCalls) == 0 {
-		return parts
+		return parts, nil
 	}
 
 	var calls []storedToolCall
 	if err := json.Unmarshal(toolCalls, &calls); err != nil {
-		return append(parts, string(toolCalls))
+		return nil, fmt.Errorf("unmarshal stored tool calls: %w", err)
 	}
-	for _, call := range calls {
+	for i, call := range calls {
 		parts = append(parts, call.Function.Name)
 		if len(call.Function.Arguments) == 0 {
 			continue
 		}
-		var arguments string
+		var arguments *string
 		if err := json.Unmarshal(call.Function.Arguments, &arguments); err != nil {
-			arguments = string(call.Function.Arguments)
+			return nil, fmt.Errorf("unmarshal stored tool call %d arguments: %w", i, err)
 		}
-		parts = append(parts, arguments)
+		if arguments == nil {
+			return nil, fmt.Errorf("stored tool call %d arguments must be a JSON string", i)
+		}
+		parts = append(parts, *arguments)
 	}
-	return parts
+	return parts, nil
 }
 
-// storageReadings measures one durable message and returns its project-scoped
+// meterMessage measures one durable message and returns its project-scoped
 // storage usage keyed by the message UUID. A zero-token message emits no reading.
-func (w *ChatMessageWriter) storageReadings(
+func (w *ChatMessageWriter) meterMessage(
 	ctx context.Context,
 	organizationID string,
 	projectID uuid.UUID,
@@ -213,7 +216,11 @@ func (w *ChatMessageWriter) storageReadings(
 	toolCalls []byte,
 	occurredAt time.Time,
 ) ([]metering.Reading, error) {
-	count, err := w.stokenCodec.Count(ctx, storedMessageContent(content, toolCalls)...)
+	contentParts, err := extractMeteredContent(content, toolCalls)
+	if err != nil {
+		return nil, fmt.Errorf("extract stored chat message content: %w", err)
+	}
+	count, err := w.stokenCodec.Count(ctx, contentParts...)
 	if err != nil {
 		return nil, fmt.Errorf("count stored chat message: %w", err)
 	}
@@ -237,8 +244,11 @@ func (w *ChatMessageWriter) storageReadings(
 	return []metering.Reading{reading}, nil
 }
 
-func (w *ChatMessageWriter) readingsForMessages(
+// meterMessages generates storage readings independently for each row.
+// Metering failures are logged and skipped so they never block message storage.
+func (w *ChatMessageWriter) meterMessages(
 	ctx context.Context,
+	logger *slog.Logger,
 	organizationID string,
 	projectID uuid.UUID,
 	params []repo.CreateChatMessageParams,
@@ -249,7 +259,7 @@ func (w *ChatMessageWriter) readingsForMessages(
 		if param.ProjectID != projectID {
 			return nil, fmt.Errorf("chat message project id does not match writer project")
 		}
-		rowReadings, err := w.storageReadings(
+		rowReadings, err := w.meterMessage(
 			ctx,
 			organizationID,
 			projectID,
@@ -259,7 +269,13 @@ func (w *ChatMessageWriter) readingsForMessages(
 			occurredAt,
 		)
 		if err != nil {
-			return nil, err
+			logger.ErrorContext(ctx, "generate chat message storage reading",
+				attr.SlogError(err),
+				attr.SlogMessageID(param.ID.String()),
+				attr.SlogOrganizationID(organizationID),
+				attr.SlogProjectID(param.ProjectID.String()),
+			)
+			continue
 		}
 		readings = append(readings, rowReadings...)
 	}
@@ -290,7 +306,7 @@ func (w *ChatMessageWriter) writeMessages(ctx context.Context, projectID uuid.UU
 	if err != nil {
 		return 0, fmt.Errorf("get project organization id: %w", err)
 	}
-	readings, err := w.readingsForMessages(ctx, organizationID, projectID, params, occurredAt)
+	readings, err := w.meterMessages(ctx, w.logger, organizationID, projectID, params, occurredAt)
 	if err != nil {
 		return 0, err
 	}
@@ -341,7 +357,7 @@ func (w *ChatMessageWriter) WriteCorrelated(ctx context.Context, projectID uuid.
 	if err != nil {
 		return 0, fmt.Errorf("get project organization id: %w", err)
 	}
-	readings, err := w.readingsForMessages(ctx, organizationID, projectID, params, occurredAt)
+	readings, err := w.meterMessages(ctx, w.logger, organizationID, projectID, params, occurredAt)
 	if err != nil {
 		return 0, err
 	}
@@ -426,7 +442,7 @@ func (w *ChatMessageWriter) WriteExternal(ctx context.Context, projectID uuid.UU
 		if !param.CreatedAt.Valid {
 			param.CreatedAt = createdAt
 		}
-		readings, err := w.storageReadings(
+		readings, err := w.meterMessage(
 			ctx,
 			organizationID,
 			projectID,
@@ -436,7 +452,12 @@ func (w *ChatMessageWriter) WriteExternal(ctx context.Context, projectID uuid.UU
 			occurredAt,
 		)
 		if err != nil {
-			return total, err
+			w.logger.ErrorContext(ctx, "generate external chat message storage reading",
+				attr.SlogError(err),
+				attr.SlogMessageID(param.ID.String()),
+				attr.SlogProjectID(projectID.String()),
+			)
+			readings = nil
 		}
 
 		inserted, err := func() (bool, error) {
@@ -491,7 +512,7 @@ func (w *ChatMessageWriter) WriteInTx(ctx context.Context, tx repo.DBTX, params 
 	if err != nil {
 		return 0, fmt.Errorf("get project organization id: %w", err)
 	}
-	readings, err := w.readingsForMessages(ctx, organizationID, projectID, params, occurredAt)
+	readings, err := w.meterMessages(ctx, w.logger, organizationID, projectID, params, occurredAt)
 	if err != nil {
 		return 0, err
 	}
@@ -543,11 +564,11 @@ func (w *ChatMessageWriter) WriteTurn(ctx context.Context, projectID uuid.UUID, 
 	if err != nil {
 		return fmt.Errorf("get project organization id: %w", err)
 	}
-	pendingReadings, err := w.readingsForMessages(ctx, organizationID, projectID, pendingParams, occurredAt)
+	pendingReadings, err := w.meterMessages(ctx, w.logger, organizationID, projectID, pendingParams, occurredAt)
 	if err != nil {
 		return err
 	}
-	assistantReadings, err := w.readingsForMessages(ctx, organizationID, projectID, assistants, occurredAt)
+	assistantReadings, err := w.meterMessages(ctx, w.logger, organizationID, projectID, assistants, occurredAt)
 	if err != nil {
 		return err
 	}
