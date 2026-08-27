@@ -305,6 +305,22 @@ describe("useMcpGuideOperations", () => {
     );
   });
 
+  it("excludes non-official catalog entries from curated choices", () => {
+    const communityServer = catalogServer({
+      title: "Notion",
+      meta: {},
+    });
+    queryHooks.catalog.mockReturnValue(
+      queryResult({ servers: [catalogServer(), communityServer] }),
+    );
+
+    const { result } = renderHook(() => useMcpGuideOperations());
+
+    expect(
+      result.current.catalogServers?.map((server) => server.title),
+    ).toEqual(["Linear"]);
+  });
+
   it("excludes curated servers that require user-supplied credentials", () => {
     const apiKeyServer = catalogServer({
       title: "Notion",
