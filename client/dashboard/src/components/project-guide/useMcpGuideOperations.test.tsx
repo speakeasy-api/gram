@@ -24,6 +24,10 @@ const refetchTraces = vi.hoisted(() =>
 );
 const startInstall = vi.hoisted(() => vi.fn(() => Promise.resolve()));
 const resetInstall = vi.hoisted(() => vi.fn());
+const guideStore = vi.hoisted(() => ({
+  mark: vi.fn(),
+  specifier: undefined as string | undefined,
+}));
 
 function deferred<T>(): {
   promise: Promise<T>;
@@ -41,8 +45,8 @@ vi.mock("@/contexts/Sdk", () => ({
   useSlugs: () => ({ orgSlug: "org", projectSlug: requestProject.slug }),
 }));
 vi.mock("./projectGuideStores", () => ({
-  markProjectGuideMcpServerSelected: vi.fn(),
-  useProjectGuideMcpServerSelection: () => undefined,
+  markProjectGuideMcpServerSelected: guideStore.mark,
+  useProjectGuideMcpServerSelection: () => guideStore.specifier,
 }));
 vi.mock("@/pages/catalog/hooks", () => ({
   useListMCPCatalog: queryHooks.catalog,
@@ -89,6 +93,7 @@ vi.mock("@/lib/utils", async (importOriginal) => ({
 }));
 
 import { useMcpGuideOperations } from "./useMcpGuideOperations";
+import { markProjectGuideMcpServerSelected } from "./projectGuideStores";
 
 function catalogServer(
   overrides: Partial<PulseMCPServer> = {},
@@ -99,7 +104,7 @@ function catalogServer(
     registrySpecifier: "example/read-only",
     version: "1.0.0",
     title: "Linear",
-    meta: {},
+    meta: { "com.pulsemcp/server": { isOfficial: true } },
     toolCount: 2,
     isReadOnly: true,
     supportsDcr: true,
@@ -138,6 +143,7 @@ beforeEach(() => {
     isError: false,
   });
   requestProject.slug = "request-project";
+  guideStore.specifier = undefined;
   queryHooks.catalog.mockReturnValue(
     queryResult({
       servers: [
@@ -277,12 +283,26 @@ describe("useMcpGuideOperations", () => {
 
     expect(startInstall).not.toHaveBeenCalled();
     expect(resetInstall).toHaveBeenCalledOnce();
+    expect(markProjectGuideMcpServerSelected).toHaveBeenCalledWith(
+      "org",
+      "request-project",
+      SERVER.registrySpecifier,
+    );
     expect(workflowHook).toHaveBeenLastCalledWith({
       servers: [SERVER],
       projectSlug: "request-project",
       autoSelectRemotes: true,
       serverNameSuffix: "_Governed",
     });
+  });
+
+  it("restores the stored catalog selection for the current project", () => {
+    guideStore.specifier = SERVER.registrySpecifier;
+    const { result } = renderHook(() => useMcpGuideOperations());
+
+    expect(result.current.selectedServer?.registrySpecifier).toBe(
+      SERVER.registrySpecifier,
+    );
   });
 
   it("excludes curated servers that require user-supplied credentials", () => {
