@@ -127,10 +127,11 @@ func readBoundedBody(body io.Reader) ([]byte, error) {
 const (
 	registryListPageSize = 50
 	// registryListMaxPages bounds the catalog crawl to the expected catalog size
-	// (~100 servers = two pages), matching the multi-registry cap in the
-	// ListCatalog handler. If a registry returns more, fetchAllServers serves the
-	// first registryListMaxPages*registryListPageSize and logs a warning, so
-	// growth past the assumption surfaces loudly instead of truncating silently.
+	// (~100 servers = two pages), matching catalogListCap in the ListCatalog
+	// handler. If a registry returns more, fetchAllServers serves the first
+	// registryListMaxPages*registryListPageSize and logs a warning, so growth
+	// past the assumption surfaces loudly instead of truncating silently.
+	// Pinned specifiers are merged in after the crawl so they still appear.
 	registryListMaxPages = 2
 )
 
@@ -381,6 +382,7 @@ func (c *RegistryClient) ListServers(ctx context.Context, registry Registry, par
 		if err != nil {
 			return CachedListServers{}, err
 		}
+		list.Servers = c.mergePinnedPulseServers(ctx, registry, list.Servers)
 
 		// A truncated list is a partial catalog: the registry outgrew the page
 		// bound. Serve it so the page still renders, but do not freeze a partial
@@ -494,6 +496,75 @@ func (c *RegistryClient) fetchAllServers(ctx context.Context, registry Registry,
 	}
 
 	return CachedListServers{Key: cacheKey, Servers: servers}, truncated, nil
+}
+
+func (c *RegistryClient) mergePinnedPulseServers(ctx context.Context, registry Registry, servers []*types.ExternalMCPServerEntry) []*types.ExternalMCPServerEntry {
+	if c == nil || !isPulseCatalogRegistry(registry.URL) {
+		return servers
+	}
+	return mergePinnedServers(servers, func(specifier string) (*types.ExternalMCPServerEntry, error) {
+		entry, err := c.fetchServerListEntry(ctx, registry, specifier)
+		if err != nil {
+			c.logger.WarnContext(ctx, "pinned catalog server could not be fetched",
+				attr.SlogName(specifier),
+				attr.SlogMCPRegistryURL(registry.URL),
+				attr.SlogError(err),
+			)
+			return nil, err
+		}
+		return entry, nil
+	})
+}
+
+func (c *RegistryClient) fetchServerListEntry(ctx context.Context, registry Registry, serverName string) (*types.ExternalMCPServerEntry, error) {
+	parsed, err := url.Parse(strings.TrimRight(registry.URL, "/"))
+	if err != nil {
+		return nil, fmt.Errorf("parse registry url: %w", err)
+	}
+	requestURL := parsed.JoinPath("v0.1", "servers", serverName, "versions", "latest")
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, requestURL.String(), http.NoBody)
+	if err != nil {
+		return nil, fmt.Errorf("create pinned catalog request: %w", err)
+	}
+	if c.backend.Match(req) {
+		if err := c.backend.Authorize(req); err != nil {
+			return nil, fmt.Errorf("authorize pinned catalog request: %w", err)
+		}
+	}
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("fetch pinned catalog server: %w", err)
+	}
+	defer o11y.LogDefer(ctx, c.logger, func() error {
+		return resp.Body.Close()
+	})
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("registry returned status %d", resp.StatusCode)
+	}
+
+	body, err := readBoundedBody(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("read pinned catalog server: %w", err)
+	}
+
+	var entry serverEntry
+	if err := json.Unmarshal(body, &entry); err != nil {
+		return nil, fmt.Errorf("decode pinned catalog server: %w", err)
+	}
+	if entry.Server.Name != serverName {
+		return nil, fmt.Errorf("pinned catalog server name %q does not match %q", entry.Server.Name, serverName)
+	}
+
+	converted, err := convertListServers(registry.ID, []serverEntry{entry})
+	if err != nil {
+		return nil, err
+	}
+	if len(converted) != 1 {
+		return nil, fmt.Errorf("pinned catalog server %q was not convertible", serverName)
+	}
+	return converted[0], nil
 }
 
 func (c *RegistryClient) newListServersRequest(ctx context.Context, registryURL string, cursor string) (*http.Request, error) {

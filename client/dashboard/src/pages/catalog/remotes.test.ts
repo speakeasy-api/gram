@@ -8,6 +8,7 @@ import {
   collectibleHeaders,
   dedupeRemotesByUrl,
   filterToHttpRemotes,
+  getRemoteDisplayInfo,
   isFigmaCatalogServer,
   normalizeRemoteUrl,
 } from "./remotes";
@@ -236,5 +237,42 @@ describe("catalogHeadersForRemoteUrl", () => {
         "https://other.example/mcp",
       ),
     ).toEqual([]);
+  });
+});
+
+describe("getRemoteDisplayInfo", () => {
+  it("uses friendly names for Salesforce hosted MCP endpoints", () => {
+    expect(
+      getRemoteDisplayInfo(
+        "https://api.salesforce.com/platform/mcp/v1/platform/sobject-all",
+      ),
+    ).toEqual({
+      name: "SObject All",
+      description: "Full CRUD access to all Salesforce objects",
+    });
+    expect(
+      getRemoteDisplayInfo(
+        "https://api.salesforce.com/platform/mcp/v1/sandbox/platform/flows",
+      ),
+    ).toEqual({
+      name: "Flows",
+      description: "Lightning Flows exposed as MCP tools",
+    });
+    expect(
+      getRemoteDisplayInfo(
+        "https://api.salesforce.com/platform/mcp/v1/platform/api-catalog",
+      ),
+    ).toEqual({
+      name: "API Catalog",
+      description: "REST endpoints published as custom MCP tools",
+    });
+    expect(
+      getRemoteDisplayInfo(
+        "https://api.salesforce.com/platform/mcp/v1/platform/data-360",
+      ),
+    ).toEqual({
+      name: "Data 360",
+      description: "Unified Data Cloud queries",
+    });
   });
 });

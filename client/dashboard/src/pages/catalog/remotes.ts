@@ -170,6 +170,26 @@ const REMOTE_DISPLAY_INFO: Record<
     name: "SObject Deletes",
     description: "Delete Salesforce records",
   },
+  flows: {
+    name: "Flows",
+    description: "Lightning Flows exposed as MCP tools",
+  },
+  "api-catalog": {
+    name: "API Catalog",
+    description: "REST endpoints published as custom MCP tools",
+  },
+  "custom-servers": {
+    name: "Custom Servers",
+    description: "Org-built MCP servers and custom tools",
+  },
+  "prompt-builder": {
+    name: "Prompt Builder",
+    description: "Prompt templates exposed as MCP resources",
+  },
+  "data-360": {
+    name: "Data 360",
+    description: "Unified Data Cloud queries",
+  },
   "invocable-actions": {
     name: "Invocable Actions",
     description: "Execute Flows, Apex actions, and quick actions",

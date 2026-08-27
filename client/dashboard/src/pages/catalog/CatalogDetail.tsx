@@ -43,6 +43,10 @@ const SERVER_WEBSITE_MAP: Record<string, string> = {
   "io.github.getsentry/sentry-mcp": "sentry.io",
   "io.github.github/github-mcp-server": "github.com",
   "com.notion/mcp": "notion.so",
+  "com.pulsemcp.mirror/salesforce-platform": "salesforce.com",
+  "com.pulsemcp.mirror/salesforce-invocable-actions": "salesforce.com",
+  "com.pulsemcp.mirror/salesforce-flows": "salesforce.com",
+  "com.pulsemcp.mirror/salesforce-tableau-next": "salesforce.com",
 };
 
 export function CatalogDetailRoot(): JSX.Element {

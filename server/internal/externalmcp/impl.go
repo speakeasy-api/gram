@@ -181,12 +181,14 @@ func (s *Service) ListCatalog(ctx context.Context, payload *gen.ListCatalogPaylo
 	}
 
 	// Preserve the existing public cap until cursor pagination is upgraded.
-	if len(servers) > 100 {
+	// Pinned official remotes (e.g. Salesforce) stay in the window even when
+	// they sort past the cap.
+	if len(servers) > catalogListCap {
 		s.logger.WarnContext(ctx, "catalog result truncated to cap",
 			attr.SlogStatsMCPServerCount(len(servers)),
-			attr.SlogPaginationLimit(100),
+			attr.SlogPaginationLimit(catalogListCap),
 		)
-		servers = servers[:100]
+		servers = capCatalogServers(servers, catalogListCap)
 	}
 	return &gen.ListCatalogResult{Servers: servers, NextCursor: nil}, nil
 }

@@ -538,6 +538,79 @@ func TestListServers_DoesNotCacheTruncatedCatalog(t *testing.T) {
 	require.Equal(t, []string{"", pageOneCursor, "", pageOneCursor}, gotCursors)
 }
 
+func TestFetchServerListEntry_ConvertsDetailsPayload(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	logger := testenv.NewLogger(t)
+	tracerProvider := testenv.NewTracerProvider(t)
+	guardianPolicy, err := guardian.NewUnsafePolicy(tracerProvider, []string{})
+	require.NoError(t, err)
+
+	specifier := "com.pulsemcp.mirror/salesforce-platform"
+	title := "Salesforce Platform"
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		assert.Contains(t, r.URL.EscapedPath(), "salesforce-platform")
+		assert.Contains(t, r.URL.EscapedPath(), "versions/latest")
+		response := serverEntry{
+			Server: serverJSON{
+				Name:        specifier,
+				Description: "Hosted Salesforce MCP servers",
+				Version:     "1.0.0",
+				Title:       &title,
+				WebsiteURL:  nil,
+				Icons:       nil,
+				Remotes: []serverRemoteJSON{
+					{URL: "https://api.salesforce.com/platform/mcp/v1/platform/sobject-all", Type: "streamable-http", Headers: nil, Variables: nil},
+				},
+				Repository: nil,
+				Packages:   nil,
+			},
+			Meta: pulseMCPServerMeta{
+				Server: serverMetaServer{IsOfficial: true},
+				Version: serverMetaVersion{
+					Status:   "active",
+					IsLatest: true,
+				},
+			},
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		assert.NoError(t, json.NewEncoder(w).Encode(response))
+	}))
+	defer server.Close()
+
+	client := NewRegistryClient(logger, tracerProvider, guardianPolicy, &PassthroughBackend{}, cache.NoopCache)
+	client.httpClient = server.Client()
+	registry := Registry{ID: uuid.New(), URL: server.URL}
+
+	entry, err := client.fetchServerListEntry(ctx, registry, specifier)
+	require.NoError(t, err)
+	require.Equal(t, specifier, entry.RegistrySpecifier)
+	require.Equal(t, title, *entry.Title)
+	require.Len(t, entry.Remotes, 1)
+	require.Equal(t, "https://api.salesforce.com/platform/mcp/v1/platform/sobject-all", entry.Remotes[0].URL)
+}
+
+func TestFetchServerListEntry_RejectsNameMismatch(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	logger := testenv.NewLogger(t)
+	tracerProvider := testenv.NewTracerProvider(t)
+	guardianPolicy, err := guardian.NewUnsafePolicy(tracerProvider, []string{})
+	require.NoError(t, err)
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		assert.NoError(t, json.NewEncoder(w).Encode(activeServerEntry("other-server")))
+	}))
+	defer server.Close()
+
+	client := NewRegistryClient(logger, tracerProvider, guardianPolicy, &PassthroughBackend{}, cache.NoopCache)
+	client.httpClient = server.Client()
+
+	_, err = client.fetchServerListEntry(ctx, Registry{ID: uuid.New(), URL: server.URL}, "com.pulsemcp.mirror/salesforce-platform")
+	require.Error(t, err)
+}
+
 func TestGetServerDetails_OnlyStreamableHTTP(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
