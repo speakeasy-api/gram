@@ -1432,6 +1432,7 @@ func (s *Service) persistCanonicalConversationEvent(ctx context.Context, payload
 	}
 	baseMsg := func(role, content string) chatRepo.CreateChatMessageParams {
 		return chatRepo.CreateChatMessageParams{
+			ID:               uuid.Nil,
 			ChatID:           sessionIDToUUID(sessionID),
 			ProjectID:        *authCtx.ProjectID,
 			Role:             role,

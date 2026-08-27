@@ -185,6 +185,7 @@ func TestChatMessageWriter_BatchKeepsInsertionOrder(t *testing.T) {
 	params := make([]repo.CreateChatMessageParams, 0, len(roles))
 	for _, role := range roles {
 		params = append(params, repo.CreateChatMessageParams{
+			ID:         uuid.Nil,
 			ChatID:     chatID,
 			ProjectID:  ti.projectID,
 			Role:       role,
@@ -224,6 +225,7 @@ func TestChatMessageWriter_CorrelatedMessageStampsMissingCreatedAt(t *testing.T)
 	t.Cleanup(func() { _ = shutdown(context.WithoutCancel(t.Context())) })
 
 	_, err := writer.WriteCorrelated(ctx, ti.projectID, repo.CreateChatMessageParams{
+		ID:         uuid.Nil,
 		ChatID:     chatID,
 		ProjectID:  ti.projectID,
 		Role:       "user",
@@ -246,6 +248,7 @@ func TestChatMessageWriter_CorrelatedMessageStampsMissingCreatedAt(t *testing.T)
 
 	eventTime := time.Now().UTC().Add(-time.Hour).Truncate(time.Microsecond)
 	_, err = writer.WriteCorrelated(ctx, ti.projectID, repo.CreateChatMessageParams{
+		ID:         uuid.Nil,
 		ChatID:     chatID,
 		ProjectID:  ti.projectID,
 		Role:       "user",
