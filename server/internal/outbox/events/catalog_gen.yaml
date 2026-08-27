@@ -1978,7 +1978,7 @@ webhooks:
                 required: true
     audit_log.organization_enterprise_trial_event_v1:
         post:
-            description: Emitted when the organization's enterprise trial is armed, extended, demoted, or re-armed
+            description: Emitted when the organization's enterprise trial is armed, extended, converted, demoted, or re-armed
             operationId: audit_log.organization_enterprise_trial_event_v1
             requestBody:
                 content:
