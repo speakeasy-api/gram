@@ -42,7 +42,7 @@ func TestMarkEnterpriseTrialConvertedRequestBody_RequiresOrganizationIDOnly(t *t
 func TestMarkEnterpriseTrialConverted_AcceptsEveryEligibleStateAndPreservesHistory(t *testing.T) {
 	t.Parallel()
 
-	now := time.Now().UTC()
+	now := time.Now().UTC().Truncate(time.Microsecond).Add(time.Nanosecond)
 	demotedAt := now.Add(-9 * 24 * time.Hour)
 	disabledAt := now.Add(-8 * 24 * time.Hour)
 	cases := []struct {
@@ -92,7 +92,7 @@ func TestMarkEnterpriseTrialConverted_AcceptsEveryEligibleStateAndPreservesHisto
 			require.True(t, state.Whitelisted)
 			if tc.disabledAt != nil {
 				require.True(t, state.DisabledAt.Valid)
-				require.WithinDuration(t, *tc.disabledAt, state.DisabledAt.Time, 0)
+				require.WithinDuration(t, *tc.disabledAt, state.DisabledAt.Time, time.Microsecond)
 			}
 		})
 	}
@@ -181,7 +181,7 @@ func TestMarkEnterpriseTrialConverted_RejectsMissingNoTrialAndPayg(t *testing.T)
 	ctx, svc, conn, _ := newRearmService(t)
 	seedOrg(t, ctx, conn, orgFixture{id: "org_convert_no_trial", name: "No Trial", slug: "no-trial", accountType: "enterprise", whitelisted: true})
 	seedOrg(t, ctx, conn, orgFixture{id: "org_convert_payg", name: "PAYG", slug: "payg", accountType: "payg", whitelisted: true})
-	convertedAt := time.Now().UTC().Add(-time.Hour)
+	convertedAt := time.Now().UTC().Add(-time.Hour).Truncate(time.Microsecond).Add(time.Nanosecond)
 	seedTrial(t, ctx, conn, trialFixture{orgID: "org_convert_payg", endsAt: time.Now().UTC().Add(10 * 24 * time.Hour), convertedAt: &convertedAt})
 
 	_, err := svc.MarkEnterpriseTrialConverted(ctx, &gen.MarkEnterpriseTrialConvertedPayload{ID: "org_convert_missing"})
@@ -190,7 +190,7 @@ func TestMarkEnterpriseTrialConverted_RejectsMissingNoTrialAndPayg(t *testing.T)
 	requireOopsCode(t, err, oops.CodeConflict)
 	_, err = svc.MarkEnterpriseTrialConverted(ctx, &gen.MarkEnterpriseTrialConvertedPayload{ID: "org_convert_payg"})
 	requireOopsCode(t, err, oops.CodeConflict)
-	require.True(t, convertedAt.Equal(readTrial(t, ctx, conn, "org_convert_payg").ConvertedAt.Time))
+	require.WithinDuration(t, convertedAt, readTrial(t, ctx, conn, "org_convert_payg").ConvertedAt.Time, time.Microsecond)
 }
 
 type assertiveNotifierError struct{}

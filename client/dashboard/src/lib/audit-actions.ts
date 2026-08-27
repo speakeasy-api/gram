@@ -98,6 +98,7 @@ export const AUDIT_ACTIONS = [
   "openrouter-key:set_spend_cap",
   "organization:device_agent_configuration_updated",
   "organization:enterprise_trial_armed",
+  "organization:enterprise_trial_converted",
   "organization:enterprise_trial_demoted",
   "organization:enterprise_trial_extended",
   "organization:enterprise_trial_rearmed",
@@ -445,6 +446,8 @@ export function staticActionPhrase(action: AuditAction): string {
       return "updated device agent configuration";
     case "organization:enterprise_trial_armed":
       return "started enterprise trial";
+    case "organization:enterprise_trial_converted":
+      return "converted enterprise trial";
     case "organization:enterprise_trial_demoted":
       return "ended enterprise trial";
     case "organization:enterprise_trial_extended":
