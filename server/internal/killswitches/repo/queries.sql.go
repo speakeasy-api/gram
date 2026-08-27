@@ -343,6 +343,110 @@ func (q *Queries) DeleteExpiredKillswitchOperations(ctx context.Context, arg Del
 	return result.RowsAffected(), nil
 }
 
+const evaluateCurrentPrescriptions = `-- name: EvaluateCurrentPrescriptions :one
+WITH evaluation_clock AS MATERIALIZED (
+  SELECT clock_timestamp() AS database_now
+),
+definition_candidates AS (
+  SELECT definition_key, definition_rank
+  FROM unnest($4::text[]) WITH ORDINALITY AS candidate(definition_key, definition_rank)
+),
+principal_candidates AS (
+  SELECT principal_kind, principal_key, principal_rank
+  FROM ROWS FROM (
+    unnest($5::text[]),
+    unnest($6::text[])
+  ) WITH ORDINALITY AS candidate(principal_kind, principal_key, principal_rank)
+)
+SELECT
+  matched.prescription_id,
+  matched.definition_key,
+  matched.external_note
+FROM definition_candidates AS definition_candidate
+CROSS JOIN principal_candidates AS principal_candidate
+CROSS JOIN LATERAL (
+  SELECT
+    prescription.id AS prescription_id,
+    prescription.definition_key,
+    version.external_note,
+    CASE version.resource_scope WHEN 'selected' THEN 0 ELSE 1 END AS resource_scope_rank,
+    version.starts_at,
+    version.activated_at
+  FROM killswitch_prescriptions AS prescription
+  JOIN killswitch_prescription_versions AS version
+    ON version.organization_id = prescription.organization_id
+    AND version.prescription_id = prescription.id
+    AND version.version = prescription.current_version
+  CROSS JOIN evaluation_clock
+  WHERE prescription.organization_id = $1
+    AND prescription.definition_key = definition_candidate.definition_key
+    AND prescription.principal_kind = principal_candidate.principal_kind
+    AND prescription.principal_key = principal_candidate.principal_key
+    AND prescription.resource_kind = $2
+    AND version.state = 'active'
+    AND version.starts_at <= evaluation_clock.database_now
+    AND (version.expires_at IS NULL OR version.expires_at > evaluation_clock.database_now)
+    AND (
+      version.resource_scope = 'all'
+      OR (
+        version.resource_scope = 'selected'
+        AND EXISTS (
+          SELECT 1
+          FROM killswitch_prescription_version_resources AS resource
+          WHERE resource.organization_id = $1
+            AND resource.organization_id = version.organization_id
+            AND resource.prescription_id = version.prescription_id
+            AND resource.version = version.version
+            AND resource.resource_key = $3
+        )
+      )
+    )
+  ORDER BY
+    resource_scope_rank,
+    version.starts_at DESC,
+    version.activated_at DESC NULLS LAST,
+    prescription.id ASC
+  LIMIT 1
+) AS matched
+ORDER BY
+  definition_candidate.definition_rank,
+  matched.resource_scope_rank,
+  principal_candidate.principal_rank,
+  matched.starts_at DESC,
+  matched.activated_at DESC NULLS LAST,
+  matched.prescription_id ASC
+LIMIT 1
+`
+
+type EvaluateCurrentPrescriptionsParams struct {
+	OrganizationID string
+	ResourceKind   string
+	ResourceKey    string
+	DefinitionKeys []string
+	PrincipalKinds []string
+	PrincipalKeys  []string
+}
+
+type EvaluateCurrentPrescriptionsRow struct {
+	PrescriptionID uuid.UUID
+	DefinitionKey  string
+	ExternalNote   string
+}
+
+func (q *Queries) EvaluateCurrentPrescriptions(ctx context.Context, arg EvaluateCurrentPrescriptionsParams) (EvaluateCurrentPrescriptionsRow, error) {
+	row := q.db.QueryRow(ctx, evaluateCurrentPrescriptions,
+		arg.OrganizationID,
+		arg.ResourceKind,
+		arg.ResourceKey,
+		arg.DefinitionKeys,
+		arg.PrincipalKinds,
+		arg.PrincipalKeys,
+	)
+	var i EvaluateCurrentPrescriptionsRow
+	err := row.Scan(&i.PrescriptionID, &i.DefinitionKey, &i.ExternalNote)
+	return i, err
+}
+
 const getKillswitchDatabaseTime = `-- name: GetKillswitchDatabaseTime :one
 SELECT clock_timestamp()::timestamptz
 `
