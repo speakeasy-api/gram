@@ -71,9 +71,10 @@ export function observabilityMcpEntries({
   const serverById = new Map(mcpServers.map((server) => [server.id, server]));
   const endpointByServer = new Map<string, EndpointUrlSource>();
   for (const endpoint of endpoints) {
-    if (!endpoint.mcpServerId) continue;
-    const existing = endpointByServer.get(endpoint.mcpServerId);
-    if (!existing || (existing.customDomainId && !endpoint.customDomainId)) {
+    // Custom-domain slugs are not registered on the Gram origin this config
+    // dials, so a Gram `/mcp/{slug}` tools/list would 404.
+    if (!endpoint.mcpServerId || endpoint.customDomainId) continue;
+    if (!endpointByServer.has(endpoint.mcpServerId)) {
       endpointByServer.set(endpoint.mcpServerId, endpoint);
     }
   }
