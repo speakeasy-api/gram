@@ -96,7 +96,10 @@ func TestPolicy_ClientHonorsDialTimeout(t *testing.T) {
 	client := policy.Client(guardian.WithDialTimeout(100 * time.Millisecond))
 	start := time.Now()
 	// TEST-NET-1 is unroutable; without a short dial timeout this hangs for ~30s.
-	_, err = client.Get("http://192.0.2.1:9/")
+	resp, err := client.Get("http://192.0.2.1:9/")
+	if resp != nil {
+		_ = resp.Body.Close()
+	}
 	elapsed := time.Since(start)
 	require.Error(t, err)
 	require.Less(t, elapsed, 500*time.Millisecond, "dial timeout must fail fast, took %s", elapsed)
