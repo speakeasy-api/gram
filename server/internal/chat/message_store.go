@@ -306,6 +306,8 @@ func insertChatMessages(ctx context.Context, db repo.DBTX, params []repo.CreateC
 		return 0, nil
 	}
 
+	// Validate each distinct chat/project pair once before COPY FROM so a batch
+	// cannot write a message under a project that does not own its chat.
 	seen := make(map[chatProjectKey]struct{}, len(params))
 	for _, param := range params {
 		key := chatProjectKey{chatID: param.ChatID, projectID: param.ProjectID}
