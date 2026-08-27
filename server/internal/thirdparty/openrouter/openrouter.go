@@ -703,20 +703,20 @@ func (o *OpenRouter) AddAPIKeyDisableCause(ctx context.Context, orgID string, ke
 	key, err := o.repo.GetOpenRouterAPIKey(ctx, repo.GetOpenRouterAPIKeyParams{OrganizationID: orgID, KeyType: string(keyType)})
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
-		return DisableCauseChange{}, nil
+		return DisableCauseChange{CauseChanged: false, KeyAccessChanged: false}, nil
 	case err != nil:
 		return DisableCauseChange{}, fmt.Errorf("read OpenRouter key before adding disable cause: %w", err)
 	case key.DisableCauses == nil:
 		return DisableCauseChange{}, errors.New("cannot add OpenRouter disable cause to unclassified key")
 	case slices.Contains(key.DisableCauses, string(cause)):
-		return DisableCauseChange{}, nil
+		return DisableCauseChange{CauseChanged: false, KeyAccessChanged: false}, nil
 	}
 
 	accessChanged := len(key.DisableCauses) == 0
 	if accessChanged {
 		patchCtx, cancel := context.WithTimeout(ctx, upstreamKeyPatchTimeout)
 		defer cancel()
-		response, err := o.patchOpenRouterAPIKey(patchCtx, key.KeyHash, updateKeyRequest{Disabled: new(true)})
+		response, err := o.patchOpenRouterAPIKey(patchCtx, key.KeyHash, updateKeyRequest{Limit: nil, LimitReset: "", Disabled: new(true)})
 		if err != nil {
 			return DisableCauseChange{}, fmt.Errorf("disable upstream OpenRouter API key: %w", err)
 		}

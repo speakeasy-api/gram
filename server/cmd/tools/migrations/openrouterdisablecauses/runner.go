@@ -7,13 +7,18 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"math"
 	"slices"
 	"strings"
 	"time"
 
+	"github.com/jackc/pgerrcode"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
+
+	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 )
 
 type Mode string
@@ -73,6 +78,8 @@ type Runner struct {
 func NewRunner(pool *pgxpool.Pool, logger *slog.Logger, options Options) *Runner {
 	if options.BatchSize <= 0 {
 		options.BatchSize = 100
+	} else if options.BatchSize > math.MaxInt32 {
+		options.BatchSize = math.MaxInt32
 	}
 	if options.LockTimeout <= 0 {
 		options.LockTimeout = 2 * time.Second
@@ -83,12 +90,16 @@ func NewRunner(pool *pgxpool.Pool, logger *slog.Logger, options Options) *Runner
 	if options.MaxLockRetries < 0 {
 		options.MaxLockRetries = 0
 	}
-	return &Runner{pool: pool, logger: logger, options: options}
+	return &Runner{pool: pool, logger: logger, options: options, beforeCommit: nil}
 }
 
 func (r *Runner) Run(ctx context.Context, mode Mode) (Summary, error) {
 	started := time.Now()
-	summary := Summary{Mode: mode, CauseSets: map[string]int64{}, Ambiguous: map[string]int64{}, Validation: map[string]int64{}}
+	summary := Summary{
+		Mode: mode, Scanned: 0, Classified: 0, Updated: 0, CauseSets: map[string]int64{},
+		Ambiguous: map[string]int64{}, Validation: map[string]int64{}, SkippedDeleted: 0,
+		Batches: 0, LockRetries: 0, RemainingNulls: 0, Elapsed: 0,
+	}
 	if mode == ModeValidate {
 		return r.validate(ctx, summary, started)
 	}
@@ -105,7 +116,7 @@ func (r *Runner) Run(ctx context.Context, mode Mode) (Summary, error) {
 				summary.LockRetries++
 				select {
 				case <-ctx.Done():
-					return summary, ctx.Err()
+					return summary, fmt.Errorf("wait to retry classification batch: %w", ctx.Err())
 				case <-time.After(25 * time.Millisecond):
 					continue
 				}
@@ -114,12 +125,12 @@ func (r *Runner) Run(ctx context.Context, mode Mode) (Summary, error) {
 		}
 		if len(rows) > 0 {
 			r.logger.InfoContext(ctx, "OpenRouter disable cause classification batch complete",
-				slog.String("mode", string(mode)),
-				slog.Int64("batches", summary.Batches),
-				slog.Int64("scanned", summary.Scanned),
-				slog.Int64("classified", summary.Classified),
-				slog.Int64("updated", summary.Updated),
-				slog.Int64("ambiguous", sumCounts(summary.Ambiguous)),
+				attr.SlogOpenRouterBackfillMode(string(mode)),
+				attr.SlogOpenRouterBackfillBatches(summary.Batches),
+				attr.SlogOpenRouterBackfillScanned(summary.Scanned),
+				attr.SlogOpenRouterBackfillClassified(summary.Classified),
+				attr.SlogOpenRouterBackfillUpdated(summary.Updated),
+				attr.SlogOpenRouterBackfillAmbiguous(sumCounts(summary.Ambiguous)),
 			)
 			afterOrg = rows[len(rows)-1].OrganizationID
 			afterKey = rows[len(rows)-1].KeyType
@@ -153,7 +164,7 @@ func (r *Runner) Run(ctx context.Context, mode Mode) (Summary, error) {
 }
 
 func (r *Runner) runBatch(ctx context.Context, mode Mode, afterOrg, afterKey string, summary *Summary) ([]LockClassificationBatchRow, error) {
-	tx, err := r.pool.BeginTx(ctx, pgx.TxOptions{})
+	tx, err := r.pool.BeginTx(ctx, pgx.TxOptions{IsoLevel: "", AccessMode: "", DeferrableMode: "", BeginQuery: "", CommitQuery: ""})
 	if err != nil {
 		return nil, fmt.Errorf("begin classification batch: %w", err)
 	}
@@ -163,7 +174,7 @@ func (r *Runner) runBatch(ctx context.Context, mode Mode, afterOrg, afterKey str
 	if _, err := q.SetLocalTimeouts(ctx, SetLocalTimeoutsParams{LockTimeout: r.options.LockTimeout.String(), StatementTimeout: r.options.StatementTimeout.String()}); err != nil {
 		return nil, fmt.Errorf("set classification timeouts: %w", err)
 	}
-	rows, err := q.LockClassificationBatch(ctx, LockClassificationBatchParams{AfterOrganizationID: afterOrg, AfterKeyType: afterKey, BatchSize: int32(r.options.BatchSize)})
+	rows, err := q.LockClassificationBatch(ctx, LockClassificationBatchParams{AfterOrganizationID: afterOrg, AfterKeyType: afterKey, BatchSize: conv.SafeInt32(r.options.BatchSize)})
 	if err != nil {
 		return nil, fmt.Errorf("lock classification batch: %w", err)
 	}
@@ -271,7 +282,7 @@ func causeSetName(causes []string) string {
 
 func isLockTimeout(err error) bool {
 	var pgErr *pgconn.PgError
-	return errors.As(err, &pgErr) && (pgErr.Code == "55P03" || pgErr.Code == "57014")
+	return errors.As(err, &pgErr) && (pgErr.Code == pgerrcode.LockNotAvailable || pgErr.Code == pgerrcode.QueryCanceled)
 }
 
 func sumCounts(counts map[string]int64) int64 {
@@ -283,7 +294,7 @@ func sumCounts(counts map[string]int64) int64 {
 }
 
 func projectionFromFields(legacyDisabled bool, trialState, billingState string, admin AdminState) Projection {
-	p := Projection{LegacyDisabled: legacyDisabled, Admin: admin}
+	p := Projection{LegacyDisabled: legacyDisabled, Trial: TrialNone, Billing: BillingIrrelevant, Admin: admin}
 	switch trialState {
 	case "demoted":
 		p.Trial = TrialDemoted
@@ -305,7 +316,7 @@ func (r *Runner) validate(ctx context.Context, summary Summary, started time.Tim
 	afterOrg, afterKey := "", ""
 	q := New(r.pool)
 	for {
-		rows, err := q.ListValidationBatch(ctx, ListValidationBatchParams{AfterOrganizationID: afterOrg, AfterKeyType: afterKey, BatchSize: int32(r.options.BatchSize)})
+		rows, err := q.ListValidationBatch(ctx, ListValidationBatchParams{AfterOrganizationID: afterOrg, AfterKeyType: afterKey, BatchSize: conv.SafeInt32(r.options.BatchSize)})
 		if err != nil {
 			return summary, fmt.Errorf("list OpenRouter validation batch: %w", err)
 		}
@@ -361,8 +372,10 @@ func (r *Runner) validate(ctx context.Context, summary Summary, started time.Tim
 
 func classifyValidationAdmin(row ListValidationBatchRow) AdminState {
 	return classifyAdmin(LockClassificationBatchRow{
-		KeyType: row.KeyType, AdminAction: row.AdminAction, AdminMetadata: row.AdminMetadata,
-		AdminBeforeSnapshot: row.AdminBeforeSnapshot, AdminAfterSnapshot: row.AdminAfterSnapshot,
+		OrganizationID: row.OrganizationID, KeyType: row.KeyType, LegacyDisabled: row.LegacyDisabled,
+		TrialState: row.TrialState, BillingState: row.BillingState, AdminAction: row.AdminAction,
+		AdminMetadata: row.AdminMetadata, AdminBeforeSnapshot: row.AdminBeforeSnapshot,
+		AdminAfterSnapshot: row.AdminAfterSnapshot,
 	})
 }
 

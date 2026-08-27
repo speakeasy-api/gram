@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"flag"
+	"fmt"
 	"io"
 	"log"
 	"log/slog"
@@ -136,7 +137,7 @@ func decodeManualOverride(reader io.Reader, expectedToken string) (openrouterdis
 		return openrouterdisablecauses.ManualOverride{}, errors.New("manual override input must contain one JSON object")
 	}
 	if err := openrouterdisablecauses.AuthorizeManualOverride(envelope.AuthorizationToken, expectedToken); err != nil {
-		return openrouterdisablecauses.ManualOverride{}, err
+		return openrouterdisablecauses.ManualOverride{}, fmt.Errorf("authorize manual override: %w", err)
 	}
 	if envelope.OrganizationID == "" || envelope.KeyType == "" || envelope.Causes == nil {
 		return openrouterdisablecauses.ManualOverride{}, errors.New("manual override fields are required")
@@ -147,7 +148,10 @@ func decodeManualOverride(reader io.Reader, expectedToken string) (openrouterdis
 func writeOpenRouterDisableCausesSummary(writer io.Writer, summary commandSummary) error {
 	encoder := json.NewEncoder(writer)
 	encoder.SetEscapeHTML(true)
-	return encoder.Encode(summary)
+	if err := encoder.Encode(summary); err != nil {
+		return fmt.Errorf("encode OpenRouter disable causes summary: %w", err)
+	}
+	return nil
 }
 
 func runOpenRouterDisableCauses(args []string, stdin io.Reader, stdout io.Writer, getenv func(string) string) int {
@@ -171,7 +175,10 @@ func runOpenRouterDisableCauses(args []string, stdin io.Reader, stdout io.Writer
 	})
 	started := time.Now()
 	result := "success"
-	summary := openrouterdisablecauses.Summary{Mode: cfg.mode}
+	summary := openrouterdisablecauses.Summary{
+		Mode: cfg.mode, Scanned: 0, Classified: 0, Updated: 0, CauseSets: nil, Ambiguous: nil,
+		Validation: nil, SkippedDeleted: 0, Batches: 0, LockRetries: 0, RemainingNulls: 0, Elapsed: 0,
+	}
 	var manualChanged *bool
 	if cfg.manualOverride {
 		override, decodeErr := decodeManualOverride(stdin, cfg.overrideToken)

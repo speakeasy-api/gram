@@ -18,6 +18,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	orgmetarepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter/repo"
 	trialsrepo "github.com/speakeasy-api/gram/server/internal/trials/repo"
@@ -64,10 +65,9 @@ func TestListKeysUsesEffectiveDisabledCompatibility(t *testing.T) {
 	adminCtx := withAdmin(t, ctx)
 	classifiedEnabled := seedKey(t, ctx, ti, "compat-enabled", "chat", "sk-or-compat-enabled")
 	classifiedDisabled := seedKey(t, ctx, ti, "compat-disabled", "internal", "sk-or-compat-disabled")
-	_, err := ti.conn.Exec(ctx, `UPDATE openrouter_api_keys SET disabled=TRUE, disable_causes='{}' WHERE organization_id=$1`, classifiedEnabled)
-	require.NoError(t, err)
-	_, err = ti.conn.Exec(ctx, `UPDATE openrouter_api_keys SET disabled=FALSE, disable_causes=ARRAY['trial_demotion'] WHERE organization_id=$1`, classifiedDisabled)
-	require.NoError(t, err)
+	fixtures := testrepo.New(ti.conn)
+	require.NoError(t, fixtures.SetOpenRouterAPIKeyClassificationFixture(ctx, testrepo.SetOpenRouterAPIKeyClassificationFixtureParams{OrganizationID: classifiedEnabled, KeyType: string(openrouter.KeyTypeChat), Disabled: true, DisableCauses: []string{}}))
+	require.NoError(t, fixtures.SetOpenRouterAPIKeyClassificationFixture(ctx, testrepo.SetOpenRouterAPIKeyClassificationFixtureParams{OrganizationID: classifiedDisabled, KeyType: "internal", Disabled: false, DisableCauses: []string{"trial_demotion"}}))
 
 	res, err := ti.service.ListKeys(adminCtx, &gen.ListKeysPayload{SessionToken: nil})
 	require.NoError(t, err)

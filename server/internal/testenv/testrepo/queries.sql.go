@@ -1842,6 +1842,32 @@ func (q *Queries) SetMCPServerRemoteSessionIssuerFixture(ctx context.Context, ar
 	return result.RowsAffected(), nil
 }
 
+const setOpenRouterAPIKeyClassificationFixture = `-- name: SetOpenRouterAPIKeyClassificationFixture :exec
+UPDATE openrouter_api_keys
+SET disabled = $1,
+    disable_causes = $2::text[]
+WHERE organization_id = $3
+  AND key_type = $4
+`
+
+type SetOpenRouterAPIKeyClassificationFixtureParams struct {
+	Disabled       bool
+	DisableCauses  []string
+	OrganizationID string
+	KeyType        string
+}
+
+// Test-only fixture: creates compatibility states that production writes reject.
+func (q *Queries) SetOpenRouterAPIKeyClassificationFixture(ctx context.Context, arg SetOpenRouterAPIKeyClassificationFixtureParams) error {
+	_, err := q.db.Exec(ctx, setOpenRouterAPIKeyClassificationFixture,
+		arg.Disabled,
+		arg.DisableCauses,
+		arg.OrganizationID,
+		arg.KeyType,
+	)
+	return err
+}
+
 const setOpenRouterAPIKeyCreatedAtFixture = `-- name: SetOpenRouterAPIKeyCreatedAtFixture :exec
 UPDATE openrouter_api_keys
 SET created_at = $1
