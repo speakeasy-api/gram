@@ -80,7 +80,7 @@ func (f *runnerFixture) seedAdminAudit(t *testing.T, orgID, keyType, action stri
 	require.NoError(t, New(f.pool).SeedAdminAuditFixture(t.Context(), SeedAdminAuditFixtureParams{
 		OrganizationID: orgID,
 		Action:         action,
-		SubjectID:      "openrouter_api_key:" + orgID + "/" + keyType,
+		SubjectID:      orgID + "/" + keyType,
 		BeforeSnapshot: nil,
 		AfterSnapshot:  nil,
 		Metadata:       []byte(metadata),
@@ -175,6 +175,95 @@ func TestRunnerDryRunApplyResumeAndIdempotency(t *testing.T) {
 	require.Equal(t, int64(1), rerun.Scanned)
 }
 
+func (f *runnerFixture) seedPaygDeactivationAudit(t *testing.T, orgID, subjectType string, beforeSnapshot, afterSnapshot []byte) {
+	t.Helper()
+	require.NoError(t, New(f.pool).SeedAuditLogFixture(t.Context(), SeedAuditLogFixtureParams{
+		OrganizationID: orgID,
+		Action:         "organization:payg_deactivated",
+		SubjectID:      orgID,
+		SubjectType:    subjectType,
+		BeforeSnapshot: beforeSnapshot,
+		AfterSnapshot:  afterSnapshot,
+		Metadata:       nil,
+	}))
+}
+
+func TestRunnerMatchesProductionAdminAuditIdentity(t *testing.T) {
+	t.Parallel()
+	f := newRunnerFixture(t)
+	now := time.Now().UTC()
+	demotedAt := now.Add(-2 * time.Hour)
+
+	productionSubject := f.seedKey(t, "internal", true, "free")
+	f.seedTrial(t, productionSubject, &demotedAt, nil, now.Add(-3*time.Hour))
+	f.seedAdminAudit(t, productionSubject, "internal", "openrouter-key:disable", false)
+
+	prefixedSubject := f.seedKey(t, "internal", true, "free")
+	require.NoError(t, New(f.pool).SeedAuditLogFixture(t.Context(), SeedAuditLogFixtureParams{
+		OrganizationID: prefixedSubject,
+		Action:         "openrouter-key:disable",
+		SubjectID:      "openrouter_api_key:" + prefixedSubject + "/internal",
+		SubjectType:    "openrouter_api_key",
+		Metadata:       []byte(`{"key_type":"internal"}`),
+	}))
+
+	wrongSubjectType := f.seedKey(t, "internal", true, "free")
+	require.NoError(t, New(f.pool).SeedAuditLogFixture(t.Context(), SeedAuditLogFixtureParams{
+		OrganizationID: wrongSubjectType,
+		Action:         "openrouter-key:disable",
+		SubjectID:      wrongSubjectType + "/internal",
+		SubjectType:    "organization",
+		Metadata:       []byte(`{"key_type":"internal"}`),
+	}))
+
+	summary, err := newTestRunner(f.pool, 100).Run(t.Context(), ModeApply)
+	require.ErrorIs(t, err, ErrAmbiguousRows)
+	require.Equal(t, []string{CauseAdminLock, CauseTrialDemotion}, f.causes(t, productionSubject, "internal"))
+	require.Nil(t, f.causes(t, prefixedSubject, "internal"))
+	require.Nil(t, f.causes(t, wrongSubjectType, "internal"))
+	require.Equal(t, int64(2), summary.Ambiguous[AmbiguousNoProvenance])
+}
+
+func TestRunnerClassifiesBillingInactiveOnlyFromAuditedPriorPayg(t *testing.T) {
+	t.Parallel()
+	f := newRunnerFixture(t)
+
+	valid := f.seedKey(t, "chat", true, "free")
+	f.seedBilling(t, valid, nil)
+	f.seedPaygDeactivationAudit(t, valid, "organization", []byte(`{"account_type":"payg","whitelisted":true}`), []byte(`{"account_type":"free","whitelisted":false}`))
+
+	neverPayg := f.seedKey(t, "chat", true, "free")
+	f.seedBilling(t, neverPayg, nil)
+
+	malformed := f.seedKey(t, "chat", true, "free")
+	f.seedBilling(t, malformed, nil)
+	f.seedPaygDeactivationAudit(t, malformed, "organization", []byte(`{"account_type":"free"}`), []byte(`{"account_type":"free"}`))
+
+	wrongSubjectType := f.seedKey(t, "chat", true, "free")
+	f.seedBilling(t, wrongSubjectType, nil)
+	f.seedPaygDeactivationAudit(t, wrongSubjectType, "openrouter_api_key", []byte(`{"account_type":"payg"}`), []byte(`{"account_type":"free"}`))
+
+	active := f.seedKey(t, "chat", false, "payg")
+	subscription := "sub_test"
+	f.seedBilling(t, active, &subscription)
+
+	freeWithSubscription := f.seedKey(t, "chat", true, "free")
+	f.seedBilling(t, freeWithSubscription, &subscription)
+
+	paygWithoutSubscription := f.seedKey(t, "chat", true, "payg")
+	f.seedBilling(t, paygWithoutSubscription, nil)
+
+	summary, err := newTestRunner(f.pool, 100).Run(t.Context(), ModeApply)
+	require.ErrorIs(t, err, ErrAmbiguousRows)
+	require.Equal(t, []string{CauseBillingInactive}, f.causes(t, valid, "chat"))
+	for _, orgID := range []string{neverPayg, malformed, wrongSubjectType, freeWithSubscription, paygWithoutSubscription} {
+		require.Nil(t, f.causes(t, orgID, "chat"))
+	}
+	require.Empty(t, f.causes(t, active, "chat"))
+	require.Equal(t, int64(2), summary.Ambiguous[AmbiguousNoProvenance])
+	require.Equal(t, int64(3), summary.Ambiguous[AmbiguousBillingProjection])
+}
+
 func TestRunnerClassifiesDurableProjections(t *testing.T) {
 	t.Parallel()
 	f := newRunnerFixture(t)
@@ -184,12 +273,14 @@ func TestRunnerClassifiesDurableProjections(t *testing.T) {
 	demotedAt, convertedAt := now.Add(-2*time.Hour), now.Add(-time.Hour)
 	f.seedTrial(t, converted, &demotedAt, &convertedAt, now.Add(-3*time.Hour))
 
-	billing := f.seedKey(t, "chat", true, "base")
+	billing := f.seedKey(t, "chat", true, "free")
 	f.seedBilling(t, billing, nil)
+	f.seedPaygDeactivationAudit(t, billing, "organization", []byte(`{"account_type":"payg"}`), []byte(`{"account_type":"free"}`))
 
-	multiple := f.seedKey(t, "chat", true, "base")
+	multiple := f.seedKey(t, "chat", true, "free")
 	f.seedTrial(t, multiple, &demotedAt, nil, now.Add(-3*time.Hour))
 	f.seedBilling(t, multiple, nil)
+	f.seedPaygDeactivationAudit(t, multiple, "organization", []byte(`{"account_type":"payg"}`), []byte(`{"account_type":"free"}`))
 	f.seedAdminAudit(t, multiple, "chat", "openrouter-key:disable", false)
 
 	latestEnable := f.seedKey(t, "internal", true, "free")
@@ -197,7 +288,7 @@ func TestRunnerClassifiesDurableProjections(t *testing.T) {
 	f.seedAdminAudit(t, latestEnable, "internal", "openrouter-key:disable", false)
 	f.seedAdminAudit(t, latestEnable, "internal", "openrouter-key:enable", false)
 
-	badBilling := f.seedKey(t, "chat", true, "base")
+	badBilling := f.seedKey(t, "chat", true, "free")
 	sub := "sub_test"
 	f.seedBilling(t, badBilling, &sub)
 
@@ -208,7 +299,7 @@ func TestRunnerClassifiesDurableProjections(t *testing.T) {
 	require.NoError(t, New(f.pool).SeedAdminAuditFixture(t.Context(), SeedAdminAuditFixtureParams{
 		OrganizationID: wrongKeyTypeAudit,
 		Action:         "openrouter-key:disable",
-		SubjectID:      "openrouter_api_key:" + wrongKeyTypeAudit + "/internal",
+		SubjectID:      wrongKeyTypeAudit + "/internal",
 		Metadata:       []byte(`{"key_type":"chat"}`),
 	}))
 
@@ -265,8 +356,9 @@ func TestRunnerValidationFindsEveryUnsafeClass(t *testing.T) {
 	mirror := f.seedKey(t, "chat", false, "free")
 	unknown := f.seedKey(t, "chat", true, "free")
 	duplicate := f.seedKey(t, "chat", true, "free")
-	reclassified := f.seedKey(t, "chat", true, "base")
+	reclassified := f.seedKey(t, "chat", true, "free")
 	f.seedBilling(t, reclassified, nil)
+	f.seedPaygDeactivationAudit(t, reclassified, "organization", []byte(`{"account_type":"payg"}`), []byte(`{"account_type":"free"}`))
 	q := New(f.pool)
 	require.NoError(t, q.SetOpenRouterClassificationFixture(t.Context(), SetOpenRouterClassificationFixtureParams{OrganizationID: mirror, KeyType: "chat", DisableCauses: []string{"admin_lock"}, Disabled: false}))
 	require.NoError(t, q.SetOpenRouterClassificationFixture(t.Context(), SetOpenRouterClassificationFixtureParams{OrganizationID: unknown, KeyType: "chat", DisableCauses: []string{"future_cause"}, Disabled: true}))
@@ -291,7 +383,7 @@ func TestRunnerValidationRequiresEvidenceForEveryAmbiguousStoredClassification(t
 	noProvenance := f.seedKey(t, "internal", true, "free")
 	malformedAudit := f.seedKey(t, "internal", true, "free")
 	f.seedAdminAudit(t, malformedAudit, "internal", "openrouter-key:disable", true)
-	inconsistentBilling := f.seedKey(t, "chat", true, "base")
+	inconsistentBilling := f.seedKey(t, "chat", true, "free")
 	subscription := "sub_test"
 	f.seedBilling(t, inconsistentBilling, &subscription)
 	contradictoryTrial := f.seedKey(t, "internal", true, "free")
@@ -363,7 +455,7 @@ func TestRunnerValidationUsesCoherentSnapshotAcrossProvenanceMutation(t *testing
 		OrganizationID: other, KeyType: "chat", DisableCauses: []string{}, Disabled: false,
 	}))
 	require.NoError(t, q.SeedAdminAuditFixture(t.Context(), SeedAdminAuditFixtureParams{
-		OrganizationID: orgID, Action: "openrouter-key:disable", SubjectID: "openrouter_api_key:" + orgID + "/internal",
+		OrganizationID: orgID, Action: "openrouter-key:disable", SubjectID: orgID + "/internal",
 		BeforeSnapshot: []byte(`{"disabled":false,"disable_causes":[]}`),
 		AfterSnapshot:  []byte(`{"disabled":true,"disable_causes":["admin_lock"]}`),
 		Metadata:       []byte(`{"key_type":"internal"}`),
@@ -374,7 +466,7 @@ func TestRunnerValidationUsesCoherentSnapshotAcrossProvenanceMutation(t *testing
 	runner.afterValidationBatch = func() {
 		once.Do(func() {
 			require.NoError(t, q.SeedAdminAuditFixture(t.Context(), SeedAdminAuditFixtureParams{
-				OrganizationID: orgID, Action: "openrouter-key:enable", SubjectID: "openrouter_api_key:" + orgID + "/internal",
+				OrganizationID: orgID, Action: "openrouter-key:enable", SubjectID: orgID + "/internal",
 				BeforeSnapshot: []byte(`{"disabled":true,"disable_causes":["admin_lock"]}`),
 				AfterSnapshot:  []byte(`{"disabled":false,"disable_causes":[]}`),
 				Metadata:       []byte(`{"key_type":"internal"}`),
