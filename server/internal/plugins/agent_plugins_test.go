@@ -53,7 +53,7 @@ func TestCompileAgentPluginUsesPinnedSchemasAndKeylessMode(t *testing.T) {
 		Skills:               []PluginSkillInfo{{Name: "review", Content: "---\nname: review\ndescription: Review code.\n---\n"}},
 		AgentPluginsV1Issues: nil,
 	}
-	cfg := GenerateConfig{OrgName: "Example", OrgEmail: "", OrgID: "org-example", ServerURL: "https://app.getgram.ai", APIKey: "consumer-secret", HooksAPIKey: "hooks-secret", ProjectSlug: "default", IsDefaultProject: true, Version: "1", PlatformMCPEnabled: false, MarketplaceName: "", BrowserLogin: false, HooksOrgName: "", InstallFailOpen: false}
+	cfg := GenerateConfig{OrgName: "Example", OrgEmail: "", OrgID: "org-example", ServerURL: "https://app.getgram.ai", APIKey: "consumer-secret", HooksAPIKey: "hooks-secret", ProjectSlug: "default", IsDefaultProject: true, Version: "1", MarketplaceName: "", BrowserLogin: false, HooksOrgName: "", InstallFailOpen: false}
 
 	files, err := compileAgentPlugin(plugin, cfg, agentPluginCredentialsKeyless)
 	require.NoError(t, err)
@@ -92,7 +92,7 @@ func TestCompileAgentPluginUsesPinnedSchemasAndKeylessMode(t *testing.T) {
 func TestAgentPluginMarketplaceKeepsNativeSources(t *testing.T) {
 	t.Parallel()
 
-	cfg := GenerateConfig{OrgName: "Example", OrgEmail: "", OrgID: "", ServerURL: "https://app.getgram.ai", APIKey: "", HooksAPIKey: "", ProjectSlug: "default", IsDefaultProject: true, Version: "", PlatformMCPEnabled: false, MarketplaceName: "", BrowserLogin: false, HooksOrgName: "", InstallFailOpen: false}
+	cfg := GenerateConfig{OrgName: "Example", OrgEmail: "", OrgID: "", ServerURL: "https://app.getgram.ai", APIKey: "", HooksAPIKey: "", ProjectSlug: "default", IsDefaultProject: true, Version: "", MarketplaceName: "", BrowserLogin: false, HooksOrgName: "", InstallFailOpen: false}
 	compatible := PluginInfo{Name: "Tools", Slug: "tools", Description: "", Servers: []PluginServerInfo{{DisplayName: "tools", Policy: "required", MCPURL: "https://example.com/mcp", IsPublic: true, IsOAuth: false, IsUnproxied: false, EnvConfigs: nil}}, Skills: nil, AgentPluginsV1Issues: nil}
 	incompatible := compatible
 	incompatible.Servers = append([]PluginServerInfo(nil), compatible.Servers...)

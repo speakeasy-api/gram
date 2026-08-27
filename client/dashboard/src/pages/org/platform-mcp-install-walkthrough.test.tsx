@@ -3,41 +3,6 @@ import { cleanup, render, screen } from "@testing-library/react";
 
 import { PlatformMCPInstallWalkthrough } from "./platform-mcp-install-walkthrough";
 
-// A fully provisioned organization: both packaged routes are on offer, so a
-// closed route in these tests is the agent's doing rather than the org's.
-const packageStatus = vi.hoisted(() => ({
-  current: {
-    freshness: "current",
-    marketplaceName: "acme",
-    marketplaceUrl: "https://github.com/acme/marketplace",
-    repoUrl: "https://github.com/acme/marketplace",
-    directDownloadAvailable: true,
-    repairAllowed: false,
-    admission: "admitted",
-  } as Record<string, unknown>,
-}));
-
-vi.mock("@gram/client/react-query/platformMCPPackageStatus.js", () => ({
-  usePlatformMCPPackageStatus: () => ({
-    data: packageStatus.current,
-    isLoading: false,
-  }),
-  invalidateAllPlatformMCPPackageStatus: vi.fn(),
-}));
-vi.mock("@gram/client/react-query/repairPlatformMCPPackage.js", () => ({
-  useRepairPlatformMCPPackageMutation: () => ({
-    mutate: vi.fn(),
-    isPending: false,
-  }),
-}));
-vi.mock("@tanstack/react-query", () => ({ useQueryClient: () => ({}) }));
-vi.mock("@/contexts/Fetcher", () => ({
-  useFetcher: () => ({ fetch: vi.fn() }),
-}));
-vi.mock("../plugins/downloadPluginPackage", () => ({
-  downloadResponse: vi.fn(),
-}));
-vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
 // The real CodeBlock reads theme config from a provider this unit test has no
 // reason to mount; the snippet text is what the assertions are about.
 vi.mock("@/components/code", () => ({
@@ -57,10 +22,9 @@ describe("PlatformMCPInstallWalkthrough", () => {
       <PlatformMCPInstallWalkthrough initialClient="other" mcpUrl={MCP_URL} />,
     );
 
-    // No reviewed package is built for an uncertified agent, so neither
-    // packaged route is selectable even though the organization has both.
-    expect(methodButton(/GitHub installation/).disabled).toBe(true);
-    expect(methodButton(/Direct .* ZIP/).disabled).toBe(true);
+    // No reviewed package is built for an uncertified agent, so the marketplace
+    // route is closed even though it is open to every certified agent.
+    expect(methodButton(/Marketplace install/).disabled).toBe(true);
 
     expect(
       screen.getByText("Add Platform MCP as a remote MCP server"),
@@ -78,14 +42,13 @@ describe("PlatformMCPInstallWalkthrough", () => {
     ).toBeTruthy();
   });
 
-  it("keeps the other agent on the MCP config even when asked for a package", () => {
-    // initialMethod names a packaged route the agent has no package for. The
-    // walkthrough must not honour it — doing so rendered a download step for a
-    // "platform-mcp-null.zip" that no endpoint serves.
+  it("keeps the other agent on the MCP config even when asked for the marketplace", () => {
+    // initialMethod names a route the agent has no package for. The walkthrough
+    // must not honour it.
     render(
       <PlatformMCPInstallWalkthrough
         initialClient="other"
-        initialMethod="download"
+        initialMethod="marketplace"
         mcpUrl={MCP_URL}
       />,
     );
@@ -93,11 +56,10 @@ describe("PlatformMCPInstallWalkthrough", () => {
     expect(
       screen.getByText("Add Platform MCP as a remote MCP server"),
     ).toBeTruthy();
-    expect(screen.queryByText(/\.zip/)).toBeNull();
     expect(screen.queryByText(/marketplace add/)).toBeNull();
   });
 
-  it("keeps the packaged routes open for a certified agent", () => {
+  it("keeps the marketplace route open for a certified agent", () => {
     render(
       <PlatformMCPInstallWalkthrough
         initialClient="claude_code"
@@ -105,7 +67,26 @@ describe("PlatformMCPInstallWalkthrough", () => {
       />,
     );
 
-    expect(methodButton(/GitHub installation/).disabled).toBe(false);
-    expect(methodButton(/Direct .* ZIP/).disabled).toBe(false);
+    expect(methodButton(/Marketplace install/).disabled).toBe(false);
+  });
+
+  // The public repository is the same for every organization, so the commands
+  // are fixed rather than resolved from per-organization package state.
+  it("installs a certified agent from the public marketplace", () => {
+    render(
+      <PlatformMCPInstallWalkthrough
+        initialClient="claude_code"
+        mcpUrl={MCP_URL}
+      />,
+    );
+
+    expect(
+      screen.getByText(
+        "/plugin marketplace add https://github.com/speakeasy-api/marketplace",
+      ),
+    ).toBeTruthy();
+    expect(
+      screen.getByText("/plugin install platform-mcp@speakeasy"),
+    ).toBeTruthy();
   });
 });

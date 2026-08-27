@@ -2,18 +2,8 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
 import { InstallSteps, type InstallStep } from "@/components/install-steps";
 import { Text } from "@/components/ui/Text";
-import { useFetcher } from "@/contexts/Fetcher";
 import type { ClientFamily } from "@gram/client/models/components/recordinstallintentrequestbody.js";
-import {
-  invalidateAllPlatformMCPPackageStatus,
-  usePlatformMCPPackageStatus,
-} from "@gram/client/react-query/platformMCPPackageStatus.js";
-import { useRepairPlatformMCPPackageMutation } from "@gram/client/react-query/repairPlatformMCPPackage.js";
-import { useQueryClient } from "@tanstack/react-query";
-import { Download, RefreshCw } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { toast } from "sonner";
-import { downloadResponse } from "../plugins/downloadPluginPackage";
 
 type PlatformMCPInstallClient = {
   id: ClientFamily;
@@ -35,17 +25,17 @@ const PLATFORM_MCP_INSTALL_CLIENTS: PlatformMCPInstallClient[] = [
   {
     id: "codex",
     label: "OpenAI Codex",
-    description: "Install from the marketplace or a Codex ZIP",
+    description: "Add the marketplace, then install for your account",
   },
   {
     id: "cursor",
     label: "Cursor",
-    description: "Import the marketplace or use a Cursor ZIP",
+    description: "Import the marketplace into your Cursor team",
   },
   {
     id: "opencode",
     label: "OpenCode",
-    description: "Extract the OpenCode package into your config directory",
+    description: "Copy the OpenCode package out of the public repository",
   },
   {
     id: "other",
@@ -54,22 +44,17 @@ const PLATFORM_MCP_INSTALL_CLIENTS: PlatformMCPInstallClient[] = [
   },
 ];
 
-export type PlatformMCPInstallMethod = "marketplace" | "download" | "manual";
-type PackagePlatform = "claude" | "cursor" | "codex" | "opencode";
+export type PlatformMCPInstallMethod = "marketplace" | "manual";
 
 const PLATFORM_MCP_PLUGIN_NAME = "platform-mcp";
 
-function packagePlatform(client: ClientFamily): PackagePlatform | null {
-  if (client === "claude_code" || client === "claude_cowork") return "claude";
-  // No reviewed package is built for an uncertified agent, so it has no
-  // platform to download or extract.
-  if (client === "other") return null;
-  return client;
-}
-
-function packageFilename(client: ClientFamily): string {
-  return `${PLATFORM_MCP_PLUGIN_NAME}-${packagePlatform(client)}.zip`;
-}
+// Platform MCP ships from one public repository for every organization. It
+// carries no credentials and no organization identity — access is decided at
+// OAuth time — so the marketplace coordinates are fixed rather than resolved
+// per organization.
+const PUBLIC_MARKETPLACE_REPO_URL =
+  "https://github.com/speakeasy-api/marketplace";
+const PUBLIC_MARKETPLACE_NAME = "speakeasy";
 
 // Whether a reviewed plugin package exists for this agent at all. Both packaged
 // install routes are closed without one, leaving the remote MCP configuration.
@@ -214,24 +199,19 @@ function manualSteps(client: ClientFamily, mcpUrl: string): InstallStep[] {
   }
 }
 
-function marketplaceSteps(
-  client: ClientFamily,
-  marketplaceName: string,
-  marketplaceUrl: string,
-  repoUrl: string,
-): InstallStep[] {
+function marketplaceSteps(client: ClientFamily): InstallStep[] {
   if (client === "claude_cowork") {
     return [
       {
         title: "Open Claude Cowork plugin settings",
         description:
-          "Sign in to Claude.ai with your organization-admin account and open Organization Settings → Plugins. These controls are needed to add a private GitHub plugin source.",
+          "Sign in to Claude.ai with your organization-admin account and open Organization Settings → Plugins.",
       },
       {
-        title: "Sync your organization marketplace from GitHub",
+        title: "Sync the Speakeasy marketplace from GitHub",
         description:
-          "Choose Add plugin → Sync from GitHub. Authorize the Claude GitHub App for the canonical marketplace repository, then select this exact repository.",
-        code: repoUrl,
+          "Choose Add plugin → Sync from GitHub and select this repository. It is public, so no GitHub App authorization is required.",
+        code: PUBLIC_MARKETPLACE_REPO_URL,
         language: "text",
       },
       {
@@ -252,10 +232,10 @@ function marketplaceSteps(
   if (client === "cursor") {
     return [
       {
-        title: "Import the organization marketplace into Cursor",
+        title: "Import the Speakeasy marketplace into Cursor",
         description:
-          "Open the Cursor dashboard for the team you administer, go to Settings → Plugins → Import, and paste the canonical marketplace repository URL.",
-        code: repoUrl,
+          "Open the Cursor dashboard for the team you administer, go to Settings → Plugins → Import, and paste this repository URL.",
+        code: PUBLIC_MARKETPLACE_REPO_URL,
         language: "text",
       },
       {
@@ -276,15 +256,15 @@ function marketplaceSteps(
   if (client === "codex") {
     return [
       {
-        title: "Add the organization marketplace to Codex",
+        title: "Add the Speakeasy marketplace to Codex",
         description:
           "Run this in the Codex CLI profile where you want Platform MCP. This package contains no Observability hooks or hook approvals.",
-        code: `codex plugin marketplace add ${marketplaceUrl}`,
+        code: `codex plugin marketplace add ${PUBLIC_MARKETPLACE_REPO_URL}`,
       },
       {
         title: "Install the Platform MCP package",
         description:
-          "Open /plugins, find platform-mcp-codex in the organization marketplace, and install it for your account. ChatGPT Codex and the Codex CLI must each be verified separately; the Codex IDE extension remains a manual recovery path until certified.",
+          "Open /plugins, find platform-mcp-codex in the Speakeasy marketplace, and install it for your account. ChatGPT Codex and the Codex CLI must each be verified separately; the Codex IDE extension remains a manual recovery path until certified.",
         code: "codex /plugins",
       },
       {
@@ -295,18 +275,40 @@ function marketplaceSteps(
     ];
   }
 
+  if (client === "opencode") {
+    return [
+      {
+        title: "Clone the Speakeasy marketplace repository",
+        description:
+          "OpenCode has no marketplace importer, so copy the package out of the public repository instead.",
+        code: `git clone ${PUBLIC_MARKETPLACE_REPO_URL}`,
+      },
+      {
+        title: "Copy the OpenCode package into your config directory",
+        description:
+          "Copy opencode-plugins/platform-mcp into ~/.config/opencode for your account, or into .opencode for one repository. This installs both the loader and the reviewed skill path.",
+        code: `cp -R platform-mcp/opencode-plugins/${PLATFORM_MCP_PLUGIN_NAME}/. ~/.config/opencode/`,
+      },
+      {
+        title: "Restart OpenCode and complete OAuth",
+        description:
+          "Start a new OpenCode session under your account, use Platform MCP, and complete AI Control Plane browser authorization when prompted.",
+      },
+    ];
+  }
+
   return [
     {
       title: "Add the marketplace to your Claude Code install",
       description:
-        "Run this command in the Claude Code environment where you want to use Platform MCP. It registers the organization marketplace for your local Claude Code profile.",
-      code: `/plugin marketplace add ${marketplaceUrl}`,
+        "Run this command in the Claude Code environment where you want to use Platform MCP. It registers the Speakeasy marketplace for your local Claude Code profile.",
+      code: `/plugin marketplace add ${PUBLIC_MARKETPLACE_REPO_URL}`,
     },
     {
       title: "Install Platform MCP for your profile",
       description:
         "Install only the Platform MCP package into your Claude Code profile. This does not install it for other organization members.",
-      code: `/plugin install ${PLATFORM_MCP_PLUGIN_NAME}@${marketplaceName}`,
+      code: `/plugin install ${PLATFORM_MCP_PLUGIN_NAME}@${PUBLIC_MARKETPLACE_NAME}`,
     },
     {
       title: "Restart your Claude Code session and complete OAuth",
@@ -324,28 +326,11 @@ export function PlatformMCPInstallWalkthrough({
   allowMethodSelection = true,
   onInstructionIntent,
 }: PlatformMCPInstallWalkthroughProps): JSX.Element {
-  const queryClient = useQueryClient();
-  const { fetch: authFetch } = useFetcher();
   const [client, setClient] = useState<ClientFamily>(initialClient);
   const [selectedMethod, setMethod] = useState<PlatformMCPInstallMethod>(
     initialMethod ?? "marketplace",
   );
-  const [isDownloading, setIsDownloading] = useState(false);
   const explicitMethodRef = useRef(false);
-  const status = usePlatformMCPPackageStatus(undefined, undefined, {
-    refetchInterval: 5_000,
-  });
-  const repair = useRepairPlatformMCPPackageMutation({
-    onSuccess: async () => {
-      await invalidateAllPlatformMCPPackageStatus(queryClient);
-      toast.success(
-        "Platform MCP package is ready in the organization marketplace",
-      );
-    },
-    onError: () => {
-      toast.error("Could not publish the Platform MCP package");
-    },
-  });
 
   useEffect(() => {
     setClient(initialClient);
@@ -356,152 +341,25 @@ export function PlatformMCPInstallWalkthrough({
     explicitMethodRef.current = false;
   }, [initialMethod]);
 
-  const packageStatus = status.data;
-  // An agent with no reviewed package has exactly one route, so the packaged
-  // methods stay unreachable for it however the state got there: while the
-  // package status is still loading, on an explicit initialMethod, or in the
-  // render before the effect below settles. Deriving the method closes all
-  // three at once instead of guarding each place one is read.
+  // An agent with no reviewed package has exactly one route, so the marketplace
+  // method stays unreachable for it however the state got there: on an explicit
+  // initialMethod, or in the render before the effect below settles. Deriving
+  // the method closes both at once instead of guarding each place one is read.
   const method = supportsPackages(client) ? selectedMethod : "manual";
-  const supportsMarketplace = supportsPackages(client) && client !== "opencode";
-  const marketplaceReady =
-    supportsMarketplace &&
-    packageStatus?.freshness === "current" &&
-    !!packageStatus.marketplaceName &&
-    !!packageStatus.marketplaceUrl &&
-    !!packageStatus.repoUrl;
 
+  // The public marketplace is always installable, so the preferred route no
+  // longer depends on any per-organization package state.
   useEffect(() => {
-    if (status.isLoading || explicitMethodRef.current) return;
-
-    if (initialMethod === "manual") {
-      setMethod("manual");
-    } else if (
-      initialMethod === "download" &&
-      packageStatus?.directDownloadAvailable
-    ) {
-      setMethod("download");
-    } else if (
-      supportsMarketplace &&
-      initialMethod === "marketplace" &&
-      (marketplaceReady || packageStatus?.repairAllowed)
-    ) {
-      setMethod("marketplace");
-    } else if (marketplaceReady) {
-      setMethod("marketplace");
-    } else if (packageStatus?.directDownloadAvailable) {
-      setMethod("download");
-    } else {
-      setMethod("manual");
-    }
-  }, [
-    initialMethod,
-    marketplaceReady,
-    packageStatus?.directDownloadAvailable,
-    packageStatus?.repairAllowed,
-    status.isLoading,
-    supportsMarketplace,
-  ]);
+    if (explicitMethodRef.current) return;
+    setMethod(initialMethod === "manual" ? "manual" : "marketplace");
+  }, [initialMethod]);
 
   const steps = useMemo(() => {
     if (method === "marketplace") {
-      if (
-        packageStatus?.marketplaceName &&
-        packageStatus.marketplaceUrl &&
-        packageStatus.repoUrl
-      ) {
-        return marketplaceSteps(
-          client,
-          packageStatus.marketplaceName,
-          packageStatus.marketplaceUrl,
-          packageStatus.repoUrl,
-        );
-      }
-      return [];
-    }
-    if (method === "download") {
-      const filename = packageFilename(client);
-      const extractStep: InstallStep = (() => {
-        switch (client) {
-          case "claude_cowork":
-            return {
-              title: "Upload the package to Claude Cowork",
-              description:
-                "In Organization Settings → Plugins, choose Add plugin → Upload a file. Make the uploaded plugin available to your admin account, then install it for yourself.",
-            };
-          case "claude_code":
-            return {
-              title: "Extract and load the Claude plugin",
-              description:
-                "Extract the ZIP to a stable directory you control and launch Claude Code with that directory as a local plugin.",
-              code: `claude --plugin-dir /path/to/${filename.replace(/\.zip$/, "")}`,
-            };
-          case "cursor":
-            return {
-              title: "Import the extracted Cursor plugin",
-              description:
-                "Extract the ZIP, then import its directory from Cursor Settings → Plugins. This is a native Cursor plugin package, not an MCP-only deeplink.",
-            };
-          case "codex":
-            return {
-              title: "Install the extracted Codex plugin",
-              description:
-                "Extract the ZIP into the Codex plugin location used by your CLI profile, then install or enable platform-mcp-codex from /plugins. This package contains no Observability hooks or approvals.",
-            };
-          case "opencode":
-            return {
-              title: "Extract into your OpenCode config directory",
-              description:
-                "Extract the ZIP contents directly into ~/.config/opencode for your account, or into .opencode for one repository. The package installs both the loader and reviewed skill path.",
-            };
-          case "other":
-            // Unreachable: no package exists, so this agent never reaches the
-            // download method. Kept so the switch stays total over the enum.
-            return {
-              title: "No package is available for this agent",
-              description: "Connect the remote MCP manually instead.",
-            };
-        }
-      })();
-      return [
-        {
-          title: `Download ${filename}`,
-          description: `Download the credential-free ${PLATFORM_MCP_INSTALL_CLIENTS.find((item) => item.id === client)?.label ?? "agent"} Platform MCP package from the Speakeasy AI Control Plane.`,
-        },
-        extractStep,
-        {
-          title: "Update by replacing the extracted package",
-          description:
-            "Direct downloads do not auto-update. Download the new ZIP, replace the previous package, and avoid keeping duplicate marketplace and ZIP installations enabled.",
-        },
-        {
-          title: "Restart your client and complete OAuth",
-          description:
-            "Open a new session under your account, use Platform MCP, and complete AI Control Plane browser authorization when prompted.",
-        },
-      ];
+      return marketplaceSteps(client);
     }
     return manualSteps(client, mcpUrl);
-  }, [client, mcpUrl, method, packageStatus]);
-
-  const download = async () => {
-    setIsDownloading(true);
-    onInstructionIntent?.();
-    try {
-      const platform = packagePlatform(client);
-      if (!platform) throw new Error("no package for this agent");
-      const response = await authFetch(
-        `/rpc/plugins.downloadPlatformMCPPlugin?platform=${platform}`,
-        {},
-      );
-      if (!response.ok) throw new Error("download failed");
-      await downloadResponse(response, packageFilename(client));
-    } catch {
-      toast.error("Could not download the Platform MCP package");
-    } finally {
-      setIsDownloading(false);
-    }
-  };
+  }, [client, mcpUrl, method]);
 
   return (
     <div className="space-y-5">
@@ -528,50 +386,6 @@ export function PlatformMCPInstallWalkthrough({
         </div>
       )}
 
-      {packageStatus?.admission === "indeterminate" && (
-        <Alert variant="warning">
-          <div>
-            <AlertTitle>Package availability is temporarily unknown</AlertTitle>
-            <AlertDescription>
-              Marketplace repair and direct download are disabled until the AI
-              Control Plane can confirm organization admission. Existing runtime
-              authorization is unaffected.
-            </AlertDescription>
-          </div>
-        </Alert>
-      )}
-
-      {supportsMarketplace &&
-        packageStatus?.repairAllowed &&
-        !marketplaceReady && (
-          <Alert>
-            <div>
-              <AlertTitle>Prepare the canonical marketplace</AlertTitle>
-              <AlertDescription>
-                Publish or repair the credential-free Platform Plugin in the
-                organization&apos;s default-project marketplace before
-                installing it.
-              </AlertDescription>
-            </div>
-            <Button
-              size="sm"
-              disabled={repair.isPending}
-              onClick={() =>
-                repair.mutate({
-                  security: { sessionHeaderGramSession: "" },
-                })
-              }
-            >
-              <Button.LeftIcon>
-                <RefreshCw className="size-3" />
-              </Button.LeftIcon>
-              <Button.Text>
-                {repair.isPending ? "Publishing…" : "Publish package"}
-              </Button.Text>
-            </Button>
-          </Alert>
-        )}
-
       {allowMethodSelection && (
         <div>
           <Text small className="mb-2 font-medium">
@@ -581,32 +395,13 @@ export function PlatformMCPInstallWalkthrough({
             <Button
               size="sm"
               variant={method === "marketplace" ? "primary" : "secondary"}
-              disabled={!marketplaceReady}
+              disabled={!supportsPackages(client)}
               onClick={() => {
                 explicitMethodRef.current = true;
                 setMethod("marketplace");
               }}
             >
-              GitHub installation (preferred)
-            </Button>
-            <Button
-              size="sm"
-              variant={method === "download" ? "primary" : "secondary"}
-              disabled={
-                !supportsPackages(client) ||
-                !packageStatus?.directDownloadAvailable
-              }
-              onClick={() => {
-                explicitMethodRef.current = true;
-                setMethod("download");
-              }}
-            >
-              Direct{" "}
-              {
-                PLATFORM_MCP_INSTALL_CLIENTS.find((item) => item.id === client)
-                  ?.label
-              }{" "}
-              ZIP
+              Marketplace install (preferred)
             </Button>
             <Button
               size="sm"
@@ -637,19 +432,6 @@ export function PlatformMCPInstallWalkthrough({
 
       {steps.length > 0 && (
         <InstallSteps steps={steps} onCopy={onInstructionIntent} />
-      )}
-
-      {method === "download" && (
-        <Button disabled={isDownloading} onClick={() => void download()}>
-          <Button.LeftIcon>
-            <Download className="size-3" />
-          </Button.LeftIcon>
-          <Button.Text>
-            {isDownloading
-              ? "Downloading…"
-              : `Download ${PLATFORM_MCP_INSTALL_CLIENTS.find((item) => item.id === client)?.label ?? "agent"} ZIP`}
-          </Button.Text>
-        </Button>
       )}
 
       <Alert>
