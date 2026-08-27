@@ -54,7 +54,7 @@ func parseOpenRouterDisableCausesFlags(args []string, getenv func(string) string
 	fs := flag.NewFlagSet("openrouter-disable-causes", flag.ContinueOnError)
 	fs.SetOutput(io.Discard)
 	apply := fs.Bool("apply", false, "apply safe classifications")
-	validate := fs.Bool("validate", false, "validate the complete live population")
+	validate := fs.Bool("validate", false, "prove the complete live population at one snapshot (not a contract handoff)")
 	manual := fs.Bool("manual-override", false, "read one protected override from stdin")
 	environment := fs.String("environment", "", "explicit target environment")
 	confirmProduction := fs.String("confirm-production", "", "must equal production for a production write")

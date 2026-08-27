@@ -87,6 +87,41 @@ func (f *runnerFixture) seedAdminAudit(t *testing.T, orgID, keyType, action stri
 	}))
 }
 
+func TestClassifyAdminValidatesNonNullAuditTransition(t *testing.T) {
+	t.Parallel()
+	row := func(action, before, after string) LockClassificationBatchRow {
+		return LockClassificationBatchRow{
+			KeyType: "chat", AdminAction: action, AdminMetadata: []byte(`{"key_type":"chat"}`),
+			AdminBeforeSnapshot: []byte(before), AdminAfterSnapshot: []byte(after),
+		}
+	}
+
+	tests := []struct {
+		name   string
+		row    LockClassificationBatchRow
+		wanted AdminState
+	}{
+		{name: "legacy disable with both NULL snapshots", row: row("openrouter-key:disable", "", ""), wanted: AdminDisabled},
+		{name: "legacy enable with both NULL snapshots", row: row("openrouter-key:enable", "", ""), wanted: AdminEnabled},
+		{name: "disable adds admin lock", row: row("openrouter-key:disable", `{"disabled":false,"disable_causes":[]}`, `{"disabled":true,"disable_causes":["admin_lock"]}`), wanted: AdminDisabled},
+		{name: "enable removes admin lock and preserves another cause", row: row("openrouter-key:enable", `{"disabled":true,"disable_causes":["admin_lock","trial_demotion"]}`, `{"disabled":true,"disable_causes":["trial_demotion"]}`), wanted: AdminEnabled},
+		{name: "one sided snapshot", row: row("openrouter-key:disable", "", `{"disabled":true,"disable_causes":["admin_lock"]}`), wanted: AdminMalformed},
+		{name: "malformed snapshot", row: row("openrouter-key:disable", `{`, `{"disabled":true,"disable_causes":["admin_lock"]}`), wanted: AdminMalformed},
+		{name: "noncanonical duplicate", row: row("openrouter-key:disable", `{"disabled":false,"disable_causes":[]}`, `{"disabled":true,"disable_causes":["admin_lock","admin_lock"]}`), wanted: AdminMalformed},
+		{name: "noncanonical order", row: row("openrouter-key:enable", `{"disabled":true,"disable_causes":["trial_demotion","admin_lock"]}`, `{"disabled":true,"disable_causes":["trial_demotion"]}`), wanted: AdminMalformed},
+		{name: "before mirror mismatch", row: row("openrouter-key:disable", `{"disabled":true,"disable_causes":[]}`, `{"disabled":true,"disable_causes":["admin_lock"]}`), wanted: AdminMalformed},
+		{name: "disable does not add lock", row: row("openrouter-key:disable", `{"disabled":false,"disable_causes":[]}`, `{"disabled":false,"disable_causes":[]}`), wanted: AdminMalformed},
+		{name: "enable does not remove lock", row: row("openrouter-key:enable", `{"disabled":true,"disable_causes":["admin_lock"]}`, `{"disabled":true,"disable_causes":["admin_lock"]}`), wanted: AdminMalformed},
+		{name: "changes unrelated cause", row: row("openrouter-key:disable", `{"disabled":true,"disable_causes":["trial_demotion"]}`, `{"disabled":true,"disable_causes":["admin_lock","billing_inactive"]}`), wanted: AdminMalformed},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			require.Equal(t, tt.wanted, classifyAdmin(tt.row))
+		})
+	}
+}
+
 func newTestRunner(pool *pgxpool.Pool, batchSize int) *Runner {
 	return NewRunner(pool, slog.New(slog.DiscardHandler), Options{BatchSize: batchSize, LockTimeout: time.Second, StatementTimeout: 5 * time.Second, MaxLockRetries: 2})
 }
@@ -284,7 +319,7 @@ func TestRunnerValidationRequiresEvidenceForEveryAmbiguousStoredClassification(t
 	require.Empty(t, summary.Validation)
 }
 
-func TestRunnerValidationRejectsPopulationChangedDuringPass(t *testing.T) {
+func TestRunnerValidationUsesCoherentSnapshotAcrossKeyMutation(t *testing.T) {
 	t.Parallel()
 	f := newRunnerFixture(t)
 	first := f.seedKey(t, "chat", false, "free")
@@ -300,45 +335,60 @@ func TestRunnerValidationRejectsPopulationChangedDuringPass(t *testing.T) {
 	var once sync.Once
 	runner.afterValidationBatch = func() {
 		once.Do(func() {
-			require.NoError(t, q.TouchOpenRouterClassificationFixture(t.Context(), TouchOpenRouterClassificationFixtureParams{
+			require.NoError(t, q.ResetOpenRouterClassificationFixture(t.Context(), ResetOpenRouterClassificationFixtureParams{
 				OrganizationID: first, KeyType: "chat",
 			}))
 		})
 	}
 
 	summary, err := runner.Run(t.Context(), ModeValidate)
+	require.NoError(t, err)
+	require.Empty(t, summary.Validation)
+
+	subsequent, err := newTestRunner(f.pool, 1).Run(t.Context(), ModeValidate)
 	require.ErrorIs(t, err, ErrValidationFailed)
-	require.Positive(t, summary.Validation[ValidationUnstable])
+	require.Equal(t, int64(1), subsequent.Validation[ValidationNull])
 }
 
-func TestRunnerValidationDetectsBehindCursorNullReset(t *testing.T) {
+func TestRunnerValidationUsesCoherentSnapshotAcrossProvenanceMutation(t *testing.T) {
 	t.Parallel()
 	f := newRunnerFixture(t)
-	first := f.seedKey(t, "chat", false, "free")
-	second := f.seedKey(t, "chat", false, "free")
+	orgID := f.seedKey(t, "internal", true, "free")
+	other := f.seedKey(t, "chat", false, "free")
 	q := New(f.pool)
-	for _, orgID := range []string{first, second} {
-		require.NoError(t, q.SetOpenRouterClassificationFixture(t.Context(), SetOpenRouterClassificationFixtureParams{
-			OrganizationID: orgID, KeyType: "chat", DisableCauses: []string{}, Disabled: false,
-		}))
-	}
+	require.NoError(t, q.SetOpenRouterClassificationFixture(t.Context(), SetOpenRouterClassificationFixtureParams{
+		OrganizationID: orgID, KeyType: "internal", DisableCauses: []string{CauseAdminLock}, Disabled: true,
+	}))
+	require.NoError(t, q.SetOpenRouterClassificationFixture(t.Context(), SetOpenRouterClassificationFixtureParams{
+		OrganizationID: other, KeyType: "chat", DisableCauses: []string{}, Disabled: false,
+	}))
+	require.NoError(t, q.SeedAdminAuditFixture(t.Context(), SeedAdminAuditFixtureParams{
+		OrganizationID: orgID, Action: "openrouter-key:disable", SubjectID: "openrouter_api_key:" + orgID + "/internal",
+		BeforeSnapshot: []byte(`{"disabled":false,"disable_causes":[]}`),
+		AfterSnapshot:  []byte(`{"disabled":true,"disable_causes":["admin_lock"]}`),
+		Metadata:       []byte(`{"key_type":"internal"}`),
+	}))
 
 	runner := newTestRunner(f.pool, 1)
 	var once sync.Once
 	runner.afterValidationBatch = func() {
 		once.Do(func() {
-			require.NoError(t, q.ResetOpenRouterClassificationFixture(t.Context(), ResetOpenRouterClassificationFixtureParams{
-				OrganizationID: first, KeyType: "chat",
-			}))
-			require.NoError(t, q.ResetOpenRouterClassificationFixture(t.Context(), ResetOpenRouterClassificationFixtureParams{
-				OrganizationID: second, KeyType: "chat",
+			require.NoError(t, q.SeedAdminAuditFixture(t.Context(), SeedAdminAuditFixtureParams{
+				OrganizationID: orgID, Action: "openrouter-key:enable", SubjectID: "openrouter_api_key:" + orgID + "/internal",
+				BeforeSnapshot: []byte(`{"disabled":true,"disable_causes":["admin_lock"]}`),
+				AfterSnapshot:  []byte(`{"disabled":false,"disable_causes":[]}`),
+				Metadata:       []byte(`{"key_type":"internal"}`),
 			}))
 		})
 	}
 
 	summary, err := runner.Run(t.Context(), ModeValidate)
+	require.NoError(t, err)
+	require.Empty(t, summary.Validation)
+
+	subsequent, err := newTestRunner(f.pool, 1).Run(t.Context(), ModeValidate)
 	require.ErrorIs(t, err, ErrValidationFailed)
-	require.Positive(t, summary.Validation[ValidationNull])
+	require.Equal(t, int64(1), subsequent.Validation[ValidationAmbiguous])
 }
 
 func TestRunnerManualOverrideIsAuthorizedIdempotentAndPreservesAccess(t *testing.T) {
