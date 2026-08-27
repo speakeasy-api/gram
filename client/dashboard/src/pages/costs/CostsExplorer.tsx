@@ -65,6 +65,7 @@ import {
   isSessionLeaf,
   isSessionsAxis,
   LABELS,
+  llmTokens,
   type Measures,
   nextAvailableDimension,
   parseDrillPath,
@@ -102,7 +103,7 @@ function sumRowMeasures(rows: QueryRow[]): Measures {
       cost: acc.cost + (r.measures.totalCost ?? 0),
       sessions: acc.sessions + (r.measures.totalChats ?? 0),
       tools: acc.tools + (r.measures.totalToolCalls ?? 0),
-      tokens: acc.tokens + (r.measures.totalTokens ?? 0),
+      tokens: acc.tokens + llmTokens(r.measures),
       cacheCreation:
         acc.cacheCreation + (r.measures.cacheCreationInputTokens ?? 0),
       workUnits: acc.workUnits + (r.measures.totalWorkUnits ?? 0),
@@ -768,7 +769,7 @@ export function CostsExplorer(): JSX.Element {
         cost[i] = (cost[i] ?? 0) + (p.measures.totalCost ?? 0);
         chats[i] = (chats[i] ?? 0) + (p.measures.totalChats ?? 0);
         tools[i] = (tools[i] ?? 0) + (p.measures.totalToolCalls ?? 0);
-        tokens[i] = (tokens[i] ?? 0) + (p.measures.totalTokens ?? 0);
+        tokens[i] = (tokens[i] ?? 0) + llmTokens(p.measures);
         cacheCreation[i] =
           (cacheCreation[i] ?? 0) + (p.measures.cacheCreationInputTokens ?? 0);
         workUnits[i] = (workUnits[i] ?? 0) + (p.measures.totalWorkUnits ?? 0);

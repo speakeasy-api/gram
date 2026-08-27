@@ -45,6 +45,7 @@ import {
   useDateRangeFilter,
 } from "@/components/observe/useDateRangeFilter";
 import { safeBase64Encode } from "@/components/observe/observeFilterUtils";
+import { llmTokens } from "@/pages/costs/taxonomy";
 import { ActivityTimelineCard } from "./ActivityTimelineCard";
 import { buildProjectOverviewQuery } from "./projectOverviewQuery";
 
@@ -198,13 +199,13 @@ export function ProjectDashboard(): JSX.Element {
 
   const topUsersByTokens = useMemo(() => {
     return [...rankableUserRows]
-      .sort((a, b) => b.measures.totalTokens - a.measures.totalTokens)
+      .sort((a, b) => llmTokens(b.measures) - llmTokens(a.measures))
       .slice(0, 5)
-      .filter((r) => r.measures.totalTokens > 0)
+      .filter((r) => llmTokens(r.measures) > 0)
       .map((r) => ({
         key: r.groupValue,
         label: memberByEmail.get(r.groupValue)?.name ?? r.groupValue,
-        value: r.measures.totalTokens,
+        value: llmTokens(r.measures),
       }));
   }, [rankableUserRows, memberByEmail]);
 
@@ -276,19 +277,24 @@ export function ProjectDashboard(): JSX.Element {
   );
 
   const mostUsedAgents = useMemo(() => {
-    return (usageByAgentData?.table ?? [])
-      .filter(
-        (r) =>
-          r.groupValue !== "" &&
-          r.groupValue !== "Other" &&
-          r.measures.totalTokens > 0,
-      )
-      .slice(0, 5)
-      .map((r) => ({
-        key: r.groupValue,
-        label: formatPlatform(r.groupValue),
-        value: r.measures.totalTokens,
-      }));
+    return (
+      (usageByAgentData?.table ?? [])
+        .filter(
+          (r) =>
+            r.groupValue !== "" &&
+            r.groupValue !== "Other" &&
+            llmTokens(r.measures) > 0,
+        )
+        // The server ranks by the TUM total_tokens measure; re-rank by the
+        // displayed LLM tokens so order matches the numbers shown.
+        .sort((a, b) => llmTokens(b.measures) - llmTokens(a.measures))
+        .slice(0, 5)
+        .map((r) => ({
+          key: r.groupValue,
+          label: formatPlatform(r.groupValue),
+          value: llmTokens(r.measures),
+        }))
+    );
   }, [usageByAgentData]);
 
   // MCP-hosting fallback: external end-users (customer-supplied IDs) and their
