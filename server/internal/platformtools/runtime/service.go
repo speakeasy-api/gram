@@ -194,15 +194,15 @@ func ManagedAssistantUsersTools(orgSvc platformusers.OrganizationsService) []pla
 // content never reaches the model context. The exclusion and false-positive
 // tools mutate project state; the risk service gates them on org admin and
 // audits the invoking user as the actor.
-func ManagedAssistantRiskTools(riskSvc platformrisk.RiskService) []platformtools.ExternalTool {
+func ManagedAssistantRiskTools(riskSvc platformrisk.RiskService, redactionKey string) []platformtools.ExternalTool {
 	return []platformtools.ExternalTool{
 		{Executor: platformrisk.NewListRiskPoliciesTool(riskSvc), RequiredFeature: ""},
 		{Executor: platformrisk.NewListRiskResultsForAgentTool(riskSvc), RequiredFeature: ""},
 		{Executor: platformrisk.NewListRiskResultsByChatTool(riskSvc), RequiredFeature: ""},
 		{Executor: platformrisk.NewGetRiskPolicyStatusTool(riskSvc), RequiredFeature: ""},
 		{Executor: platformrisk.NewGetRiskRuleBreakdownTool(riskSvc), RequiredFeature: ""},
-		{Executor: platformrisk.NewListRiskExclusionsTool(riskSvc), RequiredFeature: ""},
-		{Executor: platformrisk.NewCreateRiskExclusionTool(riskSvc), RequiredFeature: ""},
+		{Executor: platformrisk.NewListRiskExclusionsTool(riskSvc, redactionKey), RequiredFeature: ""},
+		{Executor: platformrisk.NewCreateRiskExclusionTool(riskSvc, redactionKey), RequiredFeature: ""},
 		{Executor: platformrisk.NewMarkRiskResultsFalsePositiveTool(riskSvc), RequiredFeature: ""},
 		{Executor: platformrisk.NewUnmarkRiskResultsFalsePositiveTool(riskSvc), RequiredFeature: ""},
 	}

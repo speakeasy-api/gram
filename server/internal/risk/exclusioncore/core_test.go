@@ -52,14 +52,21 @@ func TestAuditSnapshotRedactsSensitiveFields(t *testing.T) {
 		UpdatedAt:      time.Time{},
 	}
 
-	snapshot := AuditSnapshot(exclusion)
-	require.Equal(t, "<redacted>", snapshot.MatchValue)
-	require.Equal(t, "<redacted>", snapshot.RuleIDFilter)
-	require.Equal(t, "<redacted>", snapshot.SourceFilter)
+	redactor := NewRedactor("test-redaction-key")
+	snapshot := AuditSnapshot(redactor, exclusion)
+	require.Regexp(t, `^redacted:hmac-sha256:[0-9a-f]{16}$`, snapshot.MatchValue)
+	require.Regexp(t, `^redacted:hmac-sha256:[0-9a-f]{16}$`, snapshot.RuleIDFilter)
+	require.Regexp(t, `^redacted:hmac-sha256:[0-9a-f]{16}$`, snapshot.SourceFilter)
 	require.NotEqual(t, exclusion.MatchValue, snapshot.MatchValue)
 	require.NotEqual(t, exclusion.RuleIDFilter, snapshot.RuleIDFilter)
 	require.NotEqual(t, exclusion.SourceFilter, snapshot.SourceFilter)
-	require.Equal(t, "exact:<redacted>", DisplayName(exclusion))
+	require.Equal(t, snapshot.MatchValue, AuditSnapshot(redactor, exclusion).MatchValue)
+	require.NotEqual(t, snapshot.MatchValue, snapshot.RuleIDFilter, "field domains must not collide")
+	require.Equal(t, "exact:"+snapshot.MatchValue, DisplayName(redactor, exclusion))
+
+	otherProject := exclusion
+	otherProject.ProjectID = uuid.New()
+	require.NotEqual(t, snapshot.MatchValue, AuditSnapshot(redactor, otherProject).MatchValue)
 
 	// Redaction returns a copy; the caller's response projection stays intact.
 	require.Equal(t, "sensitive-value", exclusion.MatchValue)

@@ -241,6 +241,7 @@ func NewService(
 			Transactor:  db,
 			Auditor:     exclusionMutationAuditor{logger: auditLogger},
 			AfterCommit: newExclusionAfterCommit(logger, reconciler),
+			Redactor:    exclusioncore.NewRedactor(jwtSecret),
 		}),
 		auth:                         auth.New(logger, db, sessions, authzEngine),
 		authz:                        authzEngine,

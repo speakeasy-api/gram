@@ -20,7 +20,6 @@ const (
 	RegexMaxLength      = 512
 	MaxRegexPerScope    = 50
 	displayNameMaxRunes = 80
-	redactedValue       = "<redacted>"
 )
 
 var (
@@ -70,6 +69,7 @@ type MutationDependencies struct {
 	Transactor  Transactor
 	Auditor     MutationAuditor
 	AfterCommit AfterCommit
+	Redactor    Redactor
 }
 
 type Core struct {
@@ -143,25 +143,19 @@ func ValidateMatchValue(matchType, matchValue string) error {
 	return nil
 }
 
-func RedactValue(value string) string {
-	if value == "" {
-		return ""
-	}
-	return redactedValue
-}
-
-func DisplayName(exclusion Exclusion) string {
-	name := exclusion.MatchType + ":" + RedactValue(exclusion.MatchValue)
+func DisplayName(redactor Redactor, exclusion Exclusion) string {
+	name := exclusion.MatchType + ":" + redactor.Redact(exclusion.ProjectID.String(), "match_value", exclusion.MatchValue)
 	if len([]rune(name)) > displayNameMaxRunes {
 		return string([]rune(name)[:displayNameMaxRunes])
 	}
 	return name
 }
 
-func AuditSnapshot(exclusion Exclusion) Exclusion {
-	exclusion.MatchValue = RedactValue(exclusion.MatchValue)
-	exclusion.RuleIDFilter = RedactValue(exclusion.RuleIDFilter)
-	exclusion.SourceFilter = RedactValue(exclusion.SourceFilter)
+func AuditSnapshot(redactor Redactor, exclusion Exclusion) Exclusion {
+	projectID := exclusion.ProjectID.String()
+	exclusion.MatchValue = redactor.Redact(projectID, "match_value", exclusion.MatchValue)
+	exclusion.RuleIDFilter = redactor.Redact(projectID, "rule_id_filter", exclusion.RuleIDFilter)
+	exclusion.SourceFilter = redactor.Redact(projectID, "source_filter", exclusion.SourceFilter)
 	return exclusion
 }
 
@@ -274,8 +268,8 @@ func (c *Core) Create(ctx context.Context, input CreateMutation) (Exclusion, err
 		OrganizationID: row.OrganizationID,
 		ProjectID:      row.ProjectID,
 		Actor:          input.Actor,
-		Exclusion:      AuditSnapshot(exclusion),
-		DisplayName:    DisplayName(exclusion),
+		Exclusion:      AuditSnapshot(deps.Redactor, exclusion),
+		DisplayName:    DisplayName(deps.Redactor, exclusion),
 	}); err != nil {
 		return Exclusion{}, mutationError("log risk exclusion create", err)
 	}
@@ -323,9 +317,9 @@ func (c *Core) Toggle(ctx context.Context, input ToggleMutation) (Exclusion, err
 		OrganizationID: row.OrganizationID,
 		ProjectID:      row.ProjectID,
 		Actor:          input.Actor,
-		Before:         AuditSnapshot(beforeExclusion),
-		After:          AuditSnapshot(afterExclusion),
-		DisplayName:    DisplayName(afterExclusion),
+		Before:         AuditSnapshot(deps.Redactor, beforeExclusion),
+		After:          AuditSnapshot(deps.Redactor, afterExclusion),
+		DisplayName:    DisplayName(deps.Redactor, afterExclusion),
 	}); err != nil {
 		return Exclusion{}, mutationError("log risk exclusion toggle", err)
 	}
@@ -405,9 +399,9 @@ func (c *Core) Update(ctx context.Context, input UpdateMutation) (Exclusion, err
 		OrganizationID: row.OrganizationID,
 		ProjectID:      row.ProjectID,
 		Actor:          input.Actor,
-		Before:         AuditSnapshot(beforeExclusion),
-		After:          AuditSnapshot(afterExclusion),
-		DisplayName:    DisplayName(afterExclusion),
+		Before:         AuditSnapshot(deps.Redactor, beforeExclusion),
+		After:          AuditSnapshot(deps.Redactor, afterExclusion),
+		DisplayName:    DisplayName(deps.Redactor, afterExclusion),
 	}); err != nil {
 		return Exclusion{}, mutationError("log risk exclusion update", err)
 	}
@@ -450,8 +444,8 @@ func (c *Core) Delete(ctx context.Context, input DeleteMutation) error {
 		OrganizationID: before.OrganizationID,
 		ProjectID:      before.ProjectID,
 		Actor:          input.Actor,
-		Exclusion:      AuditSnapshot(exclusion),
-		DisplayName:    DisplayName(exclusion),
+		Exclusion:      AuditSnapshot(deps.Redactor, exclusion),
+		DisplayName:    DisplayName(deps.Redactor, exclusion),
 	}); err != nil {
 		return mutationError("log risk exclusion delete", err)
 	}
@@ -465,7 +459,7 @@ func (c *Core) Delete(ctx context.Context, input DeleteMutation) error {
 }
 
 func (c *Core) requireMutationDependencies() (*MutationDependencies, error) {
-	if c.mutations == nil || c.mutations.Transactor == nil || c.mutations.Auditor == nil {
+	if c.mutations == nil || c.mutations.Transactor == nil || c.mutations.Auditor == nil || !c.mutations.Redactor.Configured() {
 		return nil, mutationError("risk exclusion mutation dependencies are not configured", nil)
 	}
 	return c.mutations, nil
