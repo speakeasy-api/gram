@@ -74093,6 +74093,10 @@ components:
                     type: string
                     description: The ID of the meta MCP server
                     format: uuid
+                member_count:
+                    type: integer
+                    description: The number of live members. Only populated by listMetaMcpServers.
+                    format: int64
                 name:
                     type: string
                     description: The display name of the meta MCP server

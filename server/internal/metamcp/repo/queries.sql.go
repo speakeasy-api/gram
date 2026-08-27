@@ -612,12 +612,16 @@ func (q *Queries) ListMetaMCPMembersForRemoteSessionIssuer(ctx context.Context, 
 }
 
 const listMetaMCPServers = `-- name: ListMetaMCPServers :many
-SELECT id, organization_id, project_id, user_session_issuer_id, name, visibility, created_at, updated_at, deleted_at, deleted
+SELECT meta_mcp_servers.id, meta_mcp_servers.organization_id, meta_mcp_servers.project_id, meta_mcp_servers.user_session_issuer_id, meta_mcp_servers.name, meta_mcp_servers.visibility, meta_mcp_servers.created_at, meta_mcp_servers.updated_at, meta_mcp_servers.deleted_at, meta_mcp_servers.deleted,
+       (SELECT count(*)
+        FROM meta_mcp_server_members AS mm
+        WHERE mm.meta_mcp_server_id = meta_mcp_servers.id
+          AND mm.deleted IS FALSE) AS member_count
 FROM meta_mcp_servers
-WHERE organization_id = $1
-  AND project_id = $2
-  AND deleted IS FALSE
-ORDER BY created_at DESC, id DESC
+WHERE meta_mcp_servers.organization_id = $1
+  AND meta_mcp_servers.project_id = $2
+  AND meta_mcp_servers.deleted IS FALSE
+ORDER BY meta_mcp_servers.created_at DESC, meta_mcp_servers.id DESC
 `
 
 type ListMetaMCPServersParams struct {
@@ -625,26 +629,32 @@ type ListMetaMCPServersParams struct {
 	ProjectID      uuid.UUID
 }
 
-func (q *Queries) ListMetaMCPServers(ctx context.Context, arg ListMetaMCPServersParams) ([]MetaMcpServer, error) {
+type ListMetaMCPServersRow struct {
+	MetaMcpServer MetaMcpServer
+	MemberCount   int64
+}
+
+func (q *Queries) ListMetaMCPServers(ctx context.Context, arg ListMetaMCPServersParams) ([]ListMetaMCPServersRow, error) {
 	rows, err := q.db.Query(ctx, listMetaMCPServers, arg.OrganizationID, arg.ProjectID)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []MetaMcpServer
+	var items []ListMetaMCPServersRow
 	for rows.Next() {
-		var i MetaMcpServer
+		var i ListMetaMCPServersRow
 		if err := rows.Scan(
-			&i.ID,
-			&i.OrganizationID,
-			&i.ProjectID,
-			&i.UserSessionIssuerID,
-			&i.Name,
-			&i.Visibility,
-			&i.CreatedAt,
-			&i.UpdatedAt,
-			&i.DeletedAt,
-			&i.Deleted,
+			&i.MetaMcpServer.ID,
+			&i.MetaMcpServer.OrganizationID,
+			&i.MetaMcpServer.ProjectID,
+			&i.MetaMcpServer.UserSessionIssuerID,
+			&i.MetaMcpServer.Name,
+			&i.MetaMcpServer.Visibility,
+			&i.MetaMcpServer.CreatedAt,
+			&i.MetaMcpServer.UpdatedAt,
+			&i.MetaMcpServer.DeletedAt,
+			&i.MetaMcpServer.Deleted,
+			&i.MemberCount,
 		); err != nil {
 			return nil, err
 		}

@@ -586,9 +586,6 @@ function MCPOverview() {
                     <GatewayCard
                       key={gateway.id}
                       gateway={gateway}
-                      endpointCount={
-                        endpointCountByGatewayId.get(gateway.id) ?? 0
-                      }
                       url={gatewayUrlById.get(gateway.id)}
                     />
                   ))}

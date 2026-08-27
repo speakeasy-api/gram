@@ -10,11 +10,9 @@ import { ArrowRight, Network } from "lucide-react";
 // listing grid, alongside MCPCard (toolsets) and MCPServerCard (mcp_servers).
 export function GatewayCard({
   gateway,
-  endpointCount,
   url,
 }: {
   gateway: MetaMcpServer;
-  endpointCount: number;
   /** Canonical address, when the gateway has one. */
   url: string | undefined;
 }): JSX.Element {
@@ -39,7 +37,7 @@ export function GatewayCard({
         </Text>
         <Badge variant="neutral" className="bg-card">
           <Badge.Text>
-            {`${endpointCount} ${endpointCount === 1 ? "endpoint" : "endpoints"}`}
+            {`${gateway.memberCount ?? 0} ${gateway.memberCount === 1 ? "member" : "members"}`}
           </Badge.Text>
         </Badge>
       </div>

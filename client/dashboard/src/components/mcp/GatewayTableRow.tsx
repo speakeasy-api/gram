@@ -52,9 +52,14 @@ export function GatewayTableRow({
         </Text>
       </td>
 
-      {/* Tools column slot */}
+      {/* Tools column slot — a gateway's cargo is its member servers */}
       <td className="px-3 py-3">
-        <Badge variant="neutral">Gateway</Badge>
+        <div className="flex items-center gap-2">
+          <Badge variant="neutral">Gateway</Badge>
+          <Text small muted>
+            {`${gateway.memberCount ?? 0} ${gateway.memberCount === 1 ? "member" : "members"}`}
+          </Text>
+        </div>
       </td>
     </DotRow>
   );
