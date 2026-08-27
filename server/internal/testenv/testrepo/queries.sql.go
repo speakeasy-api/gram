@@ -1908,19 +1908,6 @@ func (q *Queries) SetWorkosLastEventIDFixture(ctx context.Context, arg SetWorkos
 	return err
 }
 
-const softDeleteChatFixture = `-- name: SoftDeleteChatFixture :exec
-UPDATE chats
-SET deleted_at = clock_timestamp()
-WHERE id = $1
-`
-
-// Test-only fixture: tombstones a chat. The deleted column is generated from
-// deleted_at, so a soft delete has to set the timestamp.
-func (q *Queries) SoftDeleteChatFixture(ctx context.Context, id uuid.UUID) error {
-	_, err := q.db.Exec(ctx, softDeleteChatFixture, id)
-	return err
-}
-
 const updateChatMessageCreatedAt = `-- name: UpdateChatMessageCreatedAt :exec
 UPDATE chat_messages
 SET created_at = $1

@@ -529,13 +529,6 @@ SELECT blob_url, consumed_at
 FROM session_handoff_links
 WHERE token = @token;
 
--- name: SoftDeleteChatFixture :exec
--- Test-only fixture: tombstones a chat. The deleted column is generated from
--- deleted_at, so a soft delete has to set the timestamp.
-UPDATE chats
-SET deleted_at = clock_timestamp()
-WHERE id = @id;
-
 -- name: SeedCapturedAgentChatFixture :one
 -- Test-only fixture: inserts the chat row a captured agent session hangs off,
 -- with the harness-native session id stored as external_chat_id and an

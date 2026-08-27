@@ -175,7 +175,7 @@ func TestSessionRecallListReturnsOnlyOwnedSessions(t *testing.T) {
 	// drop it from the list and refuse a direct continue.
 	deletedSession := "ses_" + uuid.NewString()
 	deletedChatID := seedRecallChat(t, ctx, conn, project.ID, principal.OrganizationID, principal.UserID, deletedSession, "deleted own session", uuid.NullUUID{UUID: uuid.Nil, Valid: false})
-	require.NoError(t, testrepo.New(conn).SoftDeleteChatFixture(ctx, deletedChatID))
+	require.NoError(t, testrepo.New(conn).ForceSoftDeleteChat(ctx, deletedChatID))
 
 	out, err := svc.ListMySessions(ctx, principal, ListMySessionsInput{Limit: 0})
 	require.NoError(t, err)
