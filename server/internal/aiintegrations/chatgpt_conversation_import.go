@@ -96,10 +96,11 @@ type ChatGPTConversationImportService struct {
 	guardianPolicy *guardian.Policy
 	db             *pgxpool.Pool
 	writer         *chat.ChatMessageWriter
+	mirror         *ChatOTELMirror
 	heartbeat      func(ctx context.Context, page int)
 }
 
-func NewChatGPTConversationImportService(logger *slog.Logger, store *Store, db *pgxpool.Pool, guardianPolicy *guardian.Policy, writer *chat.ChatMessageWriter, heartbeat func(ctx context.Context, page int)) *ChatGPTConversationImportService {
+func NewChatGPTConversationImportService(logger *slog.Logger, store *Store, db *pgxpool.Pool, guardianPolicy *guardian.Policy, writer *chat.ChatMessageWriter, mirror *ChatOTELMirror, heartbeat func(ctx context.Context, page int)) *ChatGPTConversationImportService {
 	if heartbeat == nil {
 		panic("chatgpt conversation import service requires heartbeat")
 	}
@@ -109,6 +110,7 @@ func NewChatGPTConversationImportService(logger *slog.Logger, store *Store, db *
 		guardianPolicy: guardianPolicy,
 		db:             db,
 		writer:         writer,
+		mirror:         mirror,
 		heartbeat:      heartbeat,
 	}
 }
@@ -365,7 +367,7 @@ func (src *chatgptConversationSource) writeFile(ctx context.Context, file codexa
 	}
 
 	fallbacksBefore := src.timestampFallbacks()
-	rows := make([]chatrepo.CreateExternalChatMessageParams, 0, len(events))
+	messages := make([]ChatOTELMessage, 0, len(events))
 	for _, event := range events {
 		if event.Conversation.ID == "" || event.Message.ID == "" {
 			continue
@@ -388,35 +390,38 @@ func (src *chatgptConversationSource) writeFile(ctx context.Context, file codexa
 			contentRaw = event.Message.Content.Value
 		}
 
-		rows = append(rows, chatrepo.CreateExternalChatMessageParams{
-			ChatID:            src.chatIDs[event.Conversation.ID],
-			Role:              role,
-			ProjectID:         src.cfg.ProjectID,
-			Content:           content,
-			ContentRaw:        contentRaw,
-			ContentAssetUrl:   pgtype.Text{String: "", Valid: false},
-			StorageError:      pgtype.Text{String: "", Valid: false},
-			Model:             pgtype.Text{String: "", Valid: false},
-			MessageID:         pgtype.Text{String: "", Valid: false},
-			ToolCallID:        pgtype.Text{String: "", Valid: false},
-			UserID:            conv.ToPGText(userID),
-			ExternalUserID:    conv.ToPGText(event.Actor.UserID),
-			ExternalMessageID: conv.ToPGText(event.Message.ID),
-			FinishReason:      pgtype.Text{String: "", Valid: false},
-			ToolCalls:         nil,
-			PromptTokens:      0,
-			CompletionTokens:  0,
-			TotalTokens:       0,
-			Origin:            pgtype.Text{String: "", Valid: false},
-			// The feed has no browser user agent; the author's client type
-			// (e.g. desktop_web) is the closest surface signal, so it rides
-			// this column for later per-client analysis.
-			UserAgent:   conv.ToPGTextEmpty(event.Message.Author.ClientType),
-			IpAddress:   pgtype.Text{String: "", Valid: false},
-			Source:      conv.ToPGText(chatgptConversationSourceSlug),
-			ContentHash: nil,
-			Generation:  0,
-			CreatedAt:   conv.ToPGTimestamptz(createdAt),
+		messages = append(messages, ChatOTELMessage{
+			Row: chatrepo.CreateExternalChatMessageParams{
+				ChatID:            src.chatIDs[event.Conversation.ID],
+				Role:              role,
+				ProjectID:         src.cfg.ProjectID,
+				Content:           content,
+				ContentRaw:        contentRaw,
+				ContentAssetUrl:   pgtype.Text{String: "", Valid: false},
+				StorageError:      pgtype.Text{String: "", Valid: false},
+				Model:             pgtype.Text{String: "", Valid: false},
+				MessageID:         pgtype.Text{String: "", Valid: false},
+				ToolCallID:        pgtype.Text{String: "", Valid: false},
+				UserID:            conv.ToPGText(userID),
+				ExternalUserID:    conv.ToPGText(event.Actor.UserID),
+				ExternalMessageID: conv.ToPGText(event.Message.ID),
+				FinishReason:      pgtype.Text{String: "", Valid: false},
+				ToolCalls:         nil,
+				PromptTokens:      0,
+				CompletionTokens:  0,
+				TotalTokens:       0,
+				Origin:            pgtype.Text{String: "", Valid: false},
+				// The feed has no browser user agent; the author's client type
+				// (e.g. desktop_web) is the closest surface signal, so it rides
+				// this column for later per-client analysis.
+				UserAgent:   conv.ToPGTextEmpty(event.Message.Author.ClientType),
+				IpAddress:   pgtype.Text{String: "", Valid: false},
+				Source:      conv.ToPGText(chatgptConversationSourceSlug),
+				ContentHash: nil,
+				Generation:  0,
+				CreatedAt:   conv.ToPGTimestamptz(createdAt),
+			},
+			ExternalUserEmail: event.Actor.UserEmail,
 		})
 	}
 	if fallbacks := src.timestampFallbacks() - fallbacksBefore; fallbacks > 0 {
@@ -425,14 +430,16 @@ func (src *chatgptConversationSource) writeFile(ctx context.Context, file codexa
 			attr.SlogChatGPTComplianceTimestampFallbacks(fallbacks),
 		)
 	}
-	if len(rows) == 0 {
+	if len(messages) == 0 {
 		return nil
 	}
 
-	// WriteExternal inserts row by row, so a mid-batch failure still leaves
-	// the earlier rows durable — record the partial count before propagating
-	// the error so failure details describe the replay-safe work accurately.
-	written, err := src.svc.writer.WriteExternal(ctx, src.cfg.ProjectID, rows)
+	// Mirror every fetched row to the OTEL log topic before the Postgres
+	// write. Publishing is unconditional: a replayed file publishes the same
+	// rows again even though the insert dedupes them, and downstream
+	// consumers dedupe on the deterministic record id.
+	src.svc.mirror.PublishMessages(ctx, src.cfg, messages)
+	written, err := src.svc.writer.WriteExternal(ctx, src.cfg.ProjectID, chatOTELMessageRows(messages))
 	src.progressMu.Lock()
 	src.progress.MessagesWritten += written
 	src.progressMu.Unlock()

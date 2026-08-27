@@ -13,6 +13,8 @@ import (
 	"go.temporal.io/sdk/activity"
 	"go.temporal.io/sdk/temporal"
 
+	otelv1 "github.com/speakeasy-api/gram/infra/gen/gram/otel/v1"
+	"github.com/speakeasy-api/gram/infra/pkg/gcp"
 	"github.com/speakeasy-api/gram/server/internal/aiintegrations"
 	"github.com/speakeasy-api/gram/server/internal/chat"
 	"github.com/speakeasy-api/gram/server/internal/conv"
@@ -71,8 +73,10 @@ func NewPollAIData(
 	telemetryLogger *telemetry.Logger,
 	guardianPolicy *guardian.Policy,
 	chatWriter *chat.ChatMessageWriter,
+	otelLogPublisher gcp.Publisher[*otelv1.InboundLogRecord],
 ) *PollAIData {
 	store := aiintegrations.NewStore(logger, db, encryptionClient)
+	chatMirror := aiintegrations.NewChatOTELMirror(logger, otelLogPublisher)
 	complianceHeartbeat := func(ctx context.Context, scope string, page int) {
 		activity.RecordHeartbeat(ctx, map[string]any{
 			"schedule": aiintegrations.ScheduleAnthropicCompliance,
@@ -112,12 +116,12 @@ func NewPollAIData(
 				"page":     page,
 			})
 		}),
-		anthropicComplianceImporter:   aiintegrations.NewComplianceImportService(logger, db, guardianPolicy, chatWriter, complianceHeartbeat),
+		anthropicComplianceImporter:   aiintegrations.NewComplianceImportService(logger, db, guardianPolicy, chatWriter, chatMirror, complianceHeartbeat),
 		anthropicAnalyticsUsagePoller: aiintegrations.NewAnthropicUsageAnalyticsPoller(store, guardianPolicy, telemetryLogger, analyticsHeartbeat),
 		anthropicAnalyticsCostPoller:  aiintegrations.NewAnthropicCostAnalyticsPoller(store, guardianPolicy, telemetryLogger, analyticsHeartbeat),
 		codexCostImporter:             aiintegrations.NewCodexCostImportService(logger, store, telemetryLogger, guardianPolicy, codexHeartbeat),
-		chatgptConversationImporter:   aiintegrations.NewChatGPTConversationImportService(logger, store, db, guardianPolicy, chatWriter, chatgptHeartbeat),
-		codexCloudImporter:            aiintegrations.NewCodexCloudImportService(logger, store, db, guardianPolicy, chatWriter, codexCloudHeartbeat),
+		chatgptConversationImporter:   aiintegrations.NewChatGPTConversationImportService(logger, store, db, guardianPolicy, chatWriter, chatMirror, chatgptHeartbeat),
+		codexCloudImporter:            aiintegrations.NewCodexCloudImportService(logger, store, db, guardianPolicy, chatWriter, chatMirror, codexCloudHeartbeat),
 	}
 }
 

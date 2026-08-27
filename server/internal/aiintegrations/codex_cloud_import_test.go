@@ -17,6 +17,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/chat"
 	chatrepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/otel/dialect"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
@@ -111,7 +112,9 @@ func TestCodexCloudProcessPageWritesChatAndMessagesIdempotently(t *testing.T) {
 	t.Cleanup(func() { _ = shutdown(context.Background()) })
 
 	heartbeats := 0
-	svc := NewCodexCloudImportService(testenv.NewLogger(t), store, conn, nil, writer, func(context.Context, int) { heartbeats++ })
+	capture := &captureOTELLogPublisher{}
+	mirror := NewChatOTELMirror(testenv.NewLogger(t), capture)
+	svc := NewCodexCloudImportService(testenv.NewLogger(t), store, conn, nil, writer, mirror, func(context.Context, int) { heartbeats++ })
 	file := codexCloudFixtureFile(codexCloudFixture)
 	src := &codexCloudSource{
 		client: &stubCodexComplianceClient{
@@ -171,6 +174,22 @@ func TestCodexCloudProcessPageWritesChatAndMessagesIdempotently(t *testing.T) {
 	require.Zero(t, messages[1].CompletionTokens)
 	require.Zero(t, messages[1].TotalTokens)
 
+	// Every fetched message is mirrored onto the OTEL inbound log topic.
+	mirrored := capture.Sent()
+	require.Len(t, mirrored, 2)
+	require.Equal(t, "Fix the flaky retry test in CI", mirrored[0].GetBody().GetStringValue())
+	require.Equal(t, orgID, mirrored[0].GetProvenance().GetOrganizationId())
+	require.Equal(t, project.ID.String(), mirrored[0].GetProvenance().GetProjectId())
+	gotUserID, ok := mirrorRecordAttr(mirrored[0], dialect.ComplianceLogUserIDAttr)
+	require.True(t, ok)
+	require.Equal(t, "oai_user_1", gotUserID)
+	gotEmail, ok := mirrorRecordAttr(mirrored[0], dialect.ComplianceLogUserEmailAttr)
+	require.True(t, ok)
+	require.Equal(t, "grace@example.com", gotEmail)
+	for _, kv := range mirrored[0].GetAttributes() {
+		require.NotEqual(t, userRow.ID, kv.GetValue().GetStringValue())
+	}
+
 	// Replaying the same file must not duplicate messages: the insert
 	// dedupes on (chat_id, external_message_id).
 	src.chatIDs = map[string]uuid.UUID{}
@@ -179,6 +198,10 @@ func TestCodexCloudProcessPageWritesChatAndMessagesIdempotently(t *testing.T) {
 	messages, err = chatrepo.New(conn).ListChatMessages(ctx, chatrepo.ListChatMessagesParams{ChatID: chatID, ProjectID: project.ID})
 	require.NoError(t, err)
 	require.Len(t, messages, 2)
+	// The mirror publishes before the write, unconditionally: the replay
+	// republishes the same rows (deterministic record ids let downstream
+	// dedupe) even though Postgres stays deduped.
+	require.Len(t, capture.Sent(), 4)
 
 	// A later poll window (fresh run: empty caches) sees only the session's
 	// later turns and derives a MID-SESSION prompt as its "first". First-wins
@@ -198,6 +221,8 @@ func TestCodexCloudProcessPageWritesChatAndMessagesIdempotently(t *testing.T) {
 	messages, err = chatrepo.New(conn).ListChatMessages(ctx, chatrepo.ListChatMessagesParams{ChatID: chatID, ProjectID: project.ID})
 	require.NoError(t, err)
 	require.Len(t, messages, 3)
+	// The later window's fetched message is mirrored as well.
+	require.Len(t, capture.Sent(), 5)
 	chatRow, err = chatrepo.New(conn).GetChat(ctx, chatrepo.GetChatParams{ID: chatID, ProjectID: project.ID})
 	require.NoError(t, err)
 	require.Equal(t, "Fix the flaky retry test in CI", chatRow.Title.String,
@@ -207,7 +232,7 @@ func TestCodexCloudProcessPageWritesChatAndMessagesIdempotently(t *testing.T) {
 func newCodexCloudTestSource(cfg Config, client codexComplianceClient) *codexCloudSource {
 	return &codexCloudSource{
 		client:         client,
-		svc:            &CodexCloudImportService{logger: nil, store: nil, guardianPolicy: nil, db: nil, writer: nil, heartbeat: func(context.Context, int) {}},
+		svc:            &CodexCloudImportService{logger: nil, store: nil, guardianPolicy: nil, db: nil, writer: nil, mirror: nil, heartbeat: func(context.Context, int) {}},
 		cfg:            cfg,
 		pageLimit:      codexCloudPageLimit,
 		users:          nil,
@@ -277,7 +302,7 @@ func TestCodexCloudTitleBackfillsWhenPromptArrivesInLaterFile(t *testing.T) {
 	fileB.ID = "eclf_backfill_b"
 	fileB.EndTime = fileA.EndTime.Add(time.Minute)
 
-	svc := NewCodexCloudImportService(testenv.NewLogger(t), store, conn, nil, writer, func(context.Context, int) {})
+	svc := NewCodexCloudImportService(testenv.NewLogger(t), store, conn, nil, writer, newTestChatOTELMirror(t), func(context.Context, int) {})
 	src := &codexCloudSource{
 		client: &stubCodexComplianceClient{
 			listPages:  nil,
@@ -357,7 +382,7 @@ func TestCodexCloudMalformedTimestampCountsOncePerEvent(t *testing.T) {
 	file := codexCloudFixtureFile(malformed)
 	file.ID = "eclf_bad_ts"
 
-	svc := NewCodexCloudImportService(testenv.NewLogger(t), store, conn, nil, writer, func(context.Context, int) {})
+	svc := NewCodexCloudImportService(testenv.NewLogger(t), store, conn, nil, writer, newTestChatOTELMirror(t), func(context.Context, int) {})
 	src := &codexCloudSource{
 		client: &stubCodexComplianceClient{
 			listPages:  nil,
@@ -398,7 +423,7 @@ func TestSyncCodexCloudSessionsRejectsMisconfiguredIntegrations(t *testing.T) {
 	ctx, conn, store, _ := newStoreTestDB(t)
 	writer, shutdown := chat.NewChatMessageWriter(testenv.NewLogger(t), conn, nil)
 	t.Cleanup(func() { _ = shutdown(context.Background()) })
-	svc := NewCodexCloudImportService(testenv.NewLogger(t), store, conn, nil, writer, func(context.Context, int) {})
+	svc := NewCodexCloudImportService(testenv.NewLogger(t), store, conn, nil, writer, newTestChatOTELMirror(t), func(context.Context, int) {})
 
 	workspaceID := "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee"
 	now := time.Now().UTC()
@@ -481,7 +506,7 @@ func TestCodexCloudCountsEventsMissingIdentifiers(t *testing.T) {
 	file := codexCloudFixtureFile(body)
 	file.ID = "eclf_missing_ids"
 
-	svc := NewCodexCloudImportService(testenv.NewLogger(t), store, conn, nil, writer, func(context.Context, int) {})
+	svc := NewCodexCloudImportService(testenv.NewLogger(t), store, conn, nil, writer, newTestChatOTELMirror(t), func(context.Context, int) {})
 	src := &codexCloudSource{
 		client:         &stubCodexComplianceClient{downloads: map[string][]byte{file.ID: []byte(body)}},
 		svc:            svc,

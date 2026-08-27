@@ -45,7 +45,7 @@ func TestUpsertActivityChatPreservesResolvedUserOnUnresolvedResync(t *testing.T)
 	cfg := created.Config
 	cfg.ProjectID = project.ID
 
-	svc := NewComplianceImportService(testenv.NewLogger(t), conn, nil, nil, func(context.Context, string, int) {})
+	svc := NewComplianceImportService(testenv.NewLogger(t), conn, nil, nil, newTestChatOTELMirror(t), func(context.Context, string, int) {})
 	resolver := newConnectedUserResolver(conn, orgID)
 
 	// First activity: the actor email resolves to a connected user.

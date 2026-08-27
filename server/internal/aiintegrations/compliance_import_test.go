@@ -13,6 +13,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/chat"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
+	"github.com/speakeasy-api/gram/server/internal/otel/dialect"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	anthropicapi "github.com/speakeasy-api/gram/server/internal/thirdparty/anthropic"
 )
@@ -63,7 +64,7 @@ func complianceDiscoveryService(t *testing.T, serverURL string) (*ComplianceImpo
 	policy, err := guardian.NewUnsafePolicy(testenv.NewTracerProvider(t), []string{})
 	require.NoError(t, err)
 	client := anthropicapi.New(policy, anthropicapi.WithBaseURL(serverURL), anthropicapi.WithAPIKey("anthropic-key"))
-	svc := NewComplianceImportService(testenv.NewLogger(t), nil, policy, nil, func(context.Context, string, int) {})
+	svc := NewComplianceImportService(testenv.NewLogger(t), nil, policy, nil, newTestChatOTELMirror(t), func(context.Context, string, int) {})
 	return svc, client
 }
 
@@ -255,15 +256,15 @@ func TestWriteMessagePagesAdvancesActivitiesCursor(t *testing.T) {
 	writer, shutdown := chat.NewChatMessageWriter(testenv.NewLogger(t), conn, nil)
 	t.Cleanup(func() { _ = shutdown(context.Background()) })
 
-	svc := NewComplianceImportService(testenv.NewLogger(t), conn, nil, writer, func(context.Context, string, int) {})
+	svc := NewComplianceImportService(testenv.NewLogger(t), conn, nil, writer, newTestChatOTELMirror(t), func(context.Context, string, int) {})
 
 	in := make(chan messagePageBatch, 4)
-	in <- messagePageBatch{chatID: uuid.Nil, rows: nil, lastID: "", activitiesCursor: "", cursorOnly: false}
-	in <- messagePageBatch{chatID: uuid.Nil, rows: nil, lastID: "", activitiesCursor: "act_100", cursorOnly: false}
+	in <- messagePageBatch{chatID: uuid.Nil, messages: nil, lastID: "", activitiesCursor: "", cursorOnly: false}
+	in <- messagePageBatch{chatID: uuid.Nil, messages: nil, lastID: "", activitiesCursor: "act_100", cursorOnly: false}
 	// A cursor-only sentinel from a fully-filtered activities page: advances
 	// the cursor without counting as a written message page.
-	in <- messagePageBatch{chatID: uuid.Nil, rows: nil, lastID: "", activitiesCursor: "act_150", cursorOnly: true}
-	in <- messagePageBatch{chatID: uuid.Nil, rows: nil, lastID: "", activitiesCursor: "act_200", cursorOnly: false}
+	in <- messagePageBatch{chatID: uuid.Nil, messages: nil, lastID: "", activitiesCursor: "act_150", cursorOnly: true}
+	in <- messagePageBatch{chatID: uuid.Nil, messages: nil, lastID: "", activitiesCursor: "act_200", cursorOnly: false}
 	close(in)
 
 	progress := &ComplianceSyncProgress{
@@ -287,4 +288,39 @@ func TestWriteMessagePagesAdvancesActivitiesCursor(t *testing.T) {
 	reloaded, err := store.GetUsagePollConfig(ctx, cfg.ID, ScheduleAnthropicCompliance)
 	require.NoError(t, err)
 	require.Equal(t, "act_200", reloaded.LastCursor)
+}
+
+func TestBuildExternalMessageRowsCarriesProviderIdentityForMirror(t *testing.T) {
+	t.Parallel()
+
+	ctx, conn, _, orgID := newStoreTestDB(t)
+	cfg := complianceDiscoveryConfig("")
+	activity := complianceUserActivity("act_1", "chat_ext_1")
+	activity.Actor.UserAgent = "Mozilla/5.0"
+	page := &anthropicapi.ChatMessagesPage{
+		ID:   "chat_ext_1",
+		Href: "https://claude.ai/chat/chat_ext_1",
+		User: anthropicapi.ChatUser{ID: "anthropic_user_1", EmailAddress: "ada@example.com"},
+		Messages: []anthropicapi.ChatMessage{
+			{ID: "msg_1", Role: "user", CreatedAt: "2026-07-14T10:00:00Z", Content: []byte(`[{"type":"text","text":"hello"}]`)},
+		},
+	}
+
+	svc := NewComplianceImportService(testenv.NewLogger(t), conn, nil, nil, newTestChatOTELMirror(t), func(context.Context, string, int) {})
+	messages, err := svc.buildExternalMessageRows(ctx, cfg, uuid.New(), page, activity, newConnectedUserResolver(conn, orgID))
+	require.NoError(t, err)
+	require.Len(t, messages, 1)
+	require.Equal(t, "anthropic_user_1", messages[0].Row.ExternalUserID.String)
+	require.Equal(t, "ada@example.com", messages[0].ExternalUserEmail)
+
+	record := chatMessageLogRecord(cfg, messages[0])
+	gotUserID, ok := mirrorRecordAttr(record, dialect.ComplianceLogUserIDAttr)
+	require.True(t, ok)
+	require.Equal(t, "anthropic_user_1", gotUserID)
+	gotEmail, ok := mirrorRecordAttr(record, dialect.ComplianceLogUserEmailAttr)
+	require.True(t, ok)
+	require.Equal(t, "ada@example.com", gotEmail)
+	for _, kv := range record.GetAttributes() {
+		require.NotEqual(t, messages[0].Row.UserID.String, kv.GetValue().GetStringValue())
+	}
 }
