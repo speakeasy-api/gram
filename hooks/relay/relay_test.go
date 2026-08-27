@@ -1184,6 +1184,8 @@ func TestUnparseable2xxBlocksGatingEvent(t *testing.T) {
 	}))
 	t.Cleanup(srv.Close)
 	cfg := authedConfig(t, srv.URL)
+	// Cached posture: without it the cold-start pass would fail this open.
+	writeOrgSettings(cfg, false)
 
 	res := invoke(t, cfg, agenthooks.ProviderClaudeCode, "claude/pre_tool_use.json")
 	require.Contains(t, string(res.Stdout), `"permissionDecision":"deny"`)

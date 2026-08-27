@@ -34,7 +34,6 @@ import (
 	pluginsrepo "github.com/speakeasy-api/gram/server/internal/plugins/repo"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
-	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	unproxiedmcprepo "github.com/speakeasy-api/gram/server/internal/unproxiedmcp/repo"
@@ -101,7 +100,7 @@ func newTestPluginsService(t *testing.T) (context.Context, *testInstance) {
 
 	auditLogger := audit.NewLogger()
 
-	svc := plugins.NewService(logger, tracerProvider, conn, sessionManager, cache.NewRedisCacheAdapter(redisClient), authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient()), auditLogger, nil, "local", "https://app.getgram.ai", nil, nil)
+	svc := plugins.NewService(logger, tracerProvider, conn, sessionManager, cache.NewRedisCacheAdapter(redisClient), authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient()), auditLogger, nil, "local", "https://app.getgram.ai", nil)
 
 	return ctx, &testInstance{
 		service:        svc,
@@ -132,14 +131,14 @@ func createTestRolePrincipal(t *testing.T, ctx context.Context, ti *testInstance
 
 func newTestPluginsServiceWithGitHub(t *testing.T, ghClient plugins.GitHubPublisher) (context.Context, *testInstance) {
 	t.Helper()
-	return newTestPluginsServiceWithGitHubAndFeatures(t, ghClient, nil, nil)
+	return newTestPluginsServiceWithGitHubAndFeatures(t, ghClient, nil)
 }
 
 // newTestPluginsServiceWithGitHubAndFeatures builds a dashboard-style Service
 // (with auth) that also carries a feature provider, so the phased-rollout gating
 // on human-initiated hook-output changes (marketplace rename, observability-mode
 // toggle) can be exercised end to end.
-func newTestPluginsServiceWithGitHubAndFeatures(t *testing.T, ghClient plugins.GitHubPublisher, features feature.Provider, platformAdmission plugins.PlatformMCPAdmission) (context.Context, *testInstance) {
+func newTestPluginsServiceWithGitHubAndFeatures(t *testing.T, ghClient plugins.GitHubPublisher, features feature.Provider) (context.Context, *testInstance) {
 	t.Helper()
 
 	ctx := context.Background()
@@ -188,7 +187,6 @@ func newTestPluginsServiceWithGitHubAndFeatures(t *testing.T, ghClient plugins.G
 		"local",
 		"https://app.getgram.ai",
 		features,
-		platformAdmission,
 	)
 
 	return ctx, &testInstance{
@@ -202,7 +200,7 @@ func newTestPluginsServiceWithGitHubAndFeatures(t *testing.T, ghClient plugins.G
 // worker does) that shares ti's database and GitHub mock but carries a feature
 // provider, so phased-rollout gating can be exercised end to end. Build fixtures
 // via ti.service (which has auth); publish via the returned publisher.
-func newTestPluginPublisher(t *testing.T, ti *testInstance, ghClient plugins.GitHubPublisher, features feature.Provider, platformAdmission plugins.PlatformMCPAdmission) *plugins.Service {
+func newTestPluginPublisher(t *testing.T, ti *testInstance, ghClient plugins.GitHubPublisher, features feature.Provider) *plugins.Service {
 	t.Helper()
 
 	ghConfig := &plugins.GitHubConfig{
@@ -219,7 +217,6 @@ func newTestPluginPublisher(t *testing.T, ti *testInstance, ghClient plugins.Git
 		"local",
 		"https://app.getgram.ai",
 		features,
-		platformAdmission,
 	)
 }
 
@@ -243,19 +240,6 @@ func rewindPublishedHooksVersion(t *testing.T, ctx context.Context, conn *pgxpoo
 		PublishedMcpFingerprints: current.PublishedMcpFingerprints,
 		PublishedHooksVersion:    conv.ToPGText(version),
 		PublishedHooksConfig:     current.PublishedHooksConfig,
-	})
-	require.NoError(t, err)
-}
-
-// publishOrgID returns the organization id the publisher resolves for a project
-// — the org-metadata id used as the FlagHooksRollout distinct id, which is not
-// necessarily the same string as authCtx.ActiveOrganizationID.
-func setProjectSlug(t *testing.T, ctx context.Context, conn *pgxpool.Pool, projectID uuid.UUID, slug string) {
-	t.Helper()
-
-	err := testrepo.New(conn).SetProjectSlugFixture(ctx, testrepo.SetProjectSlugFixtureParams{
-		Slug: slug,
-		ID:   projectID,
 	})
 	require.NoError(t, err)
 }

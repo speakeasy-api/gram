@@ -11,6 +11,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	metamcprepo "github.com/speakeasy-api/gram/server/internal/metamcp/repo"
+	"github.com/speakeasy-api/gram/server/internal/metamcp/visibility"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 )
 
@@ -129,6 +130,7 @@ func TestListMetaMcpMembers_CrossProjectMetaInvisible(t *testing.T) {
 		ProjectID:           otherProjectID,
 		Name:                "foreign meta",
 		UserSessionIssuerID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		Visibility:          visibility.Private,
 	})
 	require.NoError(t, err)
 

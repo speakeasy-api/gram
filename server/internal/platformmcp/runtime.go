@@ -212,7 +212,7 @@ func (r *Runtime) Handler() http.Handler {
 		}
 		if !enabled {
 			r.recordAuthOutcome(req.Context(), "access_denied", "platform_disabled")
-			http.Error(w, "unavailable", http.StatusForbidden)
+			http.Error(w, "Platform MCP is not enabled for this organization", http.StatusForbidden)
 			return
 		}
 		if err := r.authorizer.RequireLiveOrgAdmin(req.Context(), principal); err != nil {

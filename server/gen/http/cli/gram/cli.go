@@ -44,6 +44,7 @@ import (
 	functionsc "github.com/speakeasy-api/gram/server/gen/http/functions/client"
 	hooksc "github.com/speakeasy-api/gram/server/gen/http/hooks/client"
 	hooksservernamesc "github.com/speakeasy-api/gram/server/gen/http/hooks_server_names/client"
+	identityc "github.com/speakeasy-api/gram/server/gen/http/identity/client"
 	instancesc "github.com/speakeasy-api/gram/server/gen/http/instances/client"
 	integrationsc "github.com/speakeasy-api/gram/server/gen/http/integrations/client"
 	jsonwebkeysetsc "github.com/speakeasy-api/gram/server/gen/http/json_web_key_sets/client"
@@ -127,6 +128,7 @@ func UsageCommands() []string {
 		"functions get-signed-asset-url",
 		"hooks-server-names (list|upsert|delete)",
 		"hooks (claude|cursor|codex|ingest|upload-skill-content|skill-feedback|logs|metrics)",
+		"identity resolve",
 		"instances get-instance",
 		"integrations (get|list)",
 		"json-web-key-sets (create-set|update-set|list-sets|get-set|delete-set|list-keys|publish-key|activate-key|retire-key|revoke-key)",
@@ -147,7 +149,7 @@ func UsageCommands() []string {
 		"admin-external-credentials (create-gcp-iam-platform-credential|list-platform-external-credentials|update-gcp-iam-platform-credential|get-gcp-iam-platform-credential|verify-gcp-iam-platform-credential|delete-gcp-iam-platform-credential)",
 		"admin-open-router-keys (list-keys|get-key-usage|disable-key|enable-key)",
 		"platform-mcp (get-onboarding|start-onboarding|record-dashboard-cta-event|record-install-intent|record-agent-configuration-copied|start-onboarding-setup|recheck-onboarding-readiness|distribute-onboarding-candidate|remove-onboarding-distribution|repair-onboarding-publication|dismiss-onboarding)",
-		"plugins (list-plugins|get-plugin|create-plugin|update-plugin|delete-plugin|add-plugin-server|update-plugin-server|remove-plugin-server|set-plugin-assignments|list-audiences|download-plugin-package|download-platform-mcp-plugin|download-observability-plugin|download-codex-install-script|get-platform-mcp-package-status|repair-platform-mcp-package|get-publish-status|publish-plugins|get-marketplace-settings|update-marketplace-settings)",
+		"plugins (list-plugins|get-plugin|create-plugin|update-plugin|delete-plugin|add-plugin-server|update-plugin-server|remove-plugin-server|set-plugin-assignments|list-audiences|download-plugin-package|download-observability-plugin|download-codex-install-script|get-publish-status|publish-plugins|get-marketplace-settings|update-marketplace-settings)",
 		"features (get-product-features|set-product-feature|set-remote-session-auto-refresh-policy)",
 		"projects (get-project|create-project|list-projects|set-logo|list-allowed-origins|upsert-allowed-origin|delete-project|set-organization-whitelist)",
 		"remote-mcp (create-server|create-server-and-mcp-server|list-servers|get-server|update-server|discover-protected-resource-metadata|verify-url|delete-server|list-server-headers|get-server-header|create-server-header|update-server-header|delete-server-header)",
@@ -167,7 +169,7 @@ func UsageCommands() []string {
 		"templates (create-template|update-template|get-template|list-templates|delete-template|render-template-by-id|render-template)",
 		"token-exchange exchange",
 		"tools list-tools",
-		"toolsets (create-toolset|list-toolsets|list-toolsets-for-org|update-toolset|delete-toolset|get-toolset|list-tool-filters|check-mcp-slug-availability|clone-toolset|add-externaloauth-server|removeoauth-server|set-user-session-issuer|set-tool-variations-group)",
+		"toolsets (create-toolset|list-toolsets|list-toolsets-for-org|update-toolset|delete-toolset|get-toolset|list-tool-filters|list-tool-schema-static-values|check-mcp-slug-availability|clone-toolset|add-externaloauth-server|removeoauth-server|set-user-session-issuer|set-tool-variations-group)",
 		"triggers (list-trigger-definitions|list-trigger-instances|list-trigger-events|get-trigger-instance|create-trigger-instance|update-trigger-instance|delete-trigger-instance|pause-trigger-instance|resume-trigger-instance)",
 		"tunneled-mcp (create-server|list-servers|get-server|list-server-connections|update-server|rotate-server-key|delete-server)",
 		"unproxied-mcp (create-server|list-servers|get-server|list-tools|delete-server)",
@@ -1285,6 +1287,13 @@ func ParseEndpoint(
 		hooksMetricsApikeyTokenFlag      = hooksMetricsFlags.String("apikey-token", "", "")
 		hooksMetricsProjectSlugInputFlag = hooksMetricsFlags.String("project-slug-input", "", "")
 
+		identityFlags = flag.NewFlagSet("identity", flag.ContinueOnError)
+
+		identityResolveFlags            = flag.NewFlagSet("resolve", flag.ExitOnError)
+		identityResolveUrnFlag          = identityResolveFlags.String("urn", "REQUIRED", "")
+		identityResolveApikeyTokenFlag  = identityResolveFlags.String("apikey-token", "", "")
+		identityResolveSessionTokenFlag = identityResolveFlags.String("session-token", "", "")
+
 		instancesFlags = flag.NewFlagSet("instances", flag.ContinueOnError)
 
 		instancesGetInstanceFlags                 = flag.NewFlagSet("get-instance", flag.ExitOnError)
@@ -1965,11 +1974,6 @@ func ParseEndpoint(
 		pluginsDownloadPluginPackageSessionTokenFlag     = pluginsDownloadPluginPackageFlags.String("session-token", "", "")
 		pluginsDownloadPluginPackageProjectSlugInputFlag = pluginsDownloadPluginPackageFlags.String("project-slug-input", "", "")
 
-		pluginsDownloadPlatformMCPPluginFlags                = flag.NewFlagSet("download-platform-mcp-plugin", flag.ExitOnError)
-		pluginsDownloadPlatformMCPPluginPlatformFlag         = pluginsDownloadPlatformMCPPluginFlags.String("platform", "REQUIRED", "")
-		pluginsDownloadPlatformMCPPluginSessionTokenFlag     = pluginsDownloadPlatformMCPPluginFlags.String("session-token", "", "")
-		pluginsDownloadPlatformMCPPluginProjectSlugInputFlag = pluginsDownloadPlatformMCPPluginFlags.String("project-slug-input", "", "")
-
 		pluginsDownloadObservabilityPluginFlags                = flag.NewFlagSet("download-observability-plugin", flag.ExitOnError)
 		pluginsDownloadObservabilityPluginPlatformFlag         = pluginsDownloadObservabilityPluginFlags.String("platform", "REQUIRED", "")
 		pluginsDownloadObservabilityPluginSessionTokenFlag     = pluginsDownloadObservabilityPluginFlags.String("session-token", "", "")
@@ -1978,13 +1982,6 @@ func ParseEndpoint(
 		pluginsDownloadCodexInstallScriptFlags                = flag.NewFlagSet("download-codex-install-script", flag.ExitOnError)
 		pluginsDownloadCodexInstallScriptSessionTokenFlag     = pluginsDownloadCodexInstallScriptFlags.String("session-token", "", "")
 		pluginsDownloadCodexInstallScriptProjectSlugInputFlag = pluginsDownloadCodexInstallScriptFlags.String("project-slug-input", "", "")
-
-		pluginsGetPlatformMCPPackageStatusFlags            = flag.NewFlagSet("get-platform-mcp-package-status", flag.ExitOnError)
-		pluginsGetPlatformMCPPackageStatusSessionTokenFlag = pluginsGetPlatformMCPPackageStatusFlags.String("session-token", "", "")
-
-		pluginsRepairPlatformMCPPackageFlags                = flag.NewFlagSet("repair-platform-mcp-package", flag.ExitOnError)
-		pluginsRepairPlatformMCPPackageSessionTokenFlag     = pluginsRepairPlatformMCPPackageFlags.String("session-token", "", "")
-		pluginsRepairPlatformMCPPackageProjectSlugInputFlag = pluginsRepairPlatformMCPPackageFlags.String("project-slug-input", "", "")
 
 		pluginsGetPublishStatusFlags                = flag.NewFlagSet("get-publish-status", flag.ExitOnError)
 		pluginsGetPublishStatusSessionTokenFlag     = pluginsGetPublishStatusFlags.String("session-token", "", "")
@@ -2807,16 +2804,18 @@ func ParseEndpoint(
 		skillEfficacyUpsertSettingsApikeyTokenFlag  = skillEfficacyUpsertSettingsFlags.String("apikey-token", "", "")
 		skillEfficacyUpsertSettingsSessionTokenFlag = skillEfficacyUpsertSettingsFlags.String("session-token", "", "")
 
-		skillEfficacyQueryInsightsFlags                     = flag.NewFlagSet("query-insights", flag.ExitOnError)
-		skillEfficacyQueryInsightsSkillIdsFlag              = skillEfficacyQueryInsightsFlags.String("skill-ids", "", "")
-		skillEfficacyQueryInsightsFromFlag                  = skillEfficacyQueryInsightsFlags.String("from", "", "")
-		skillEfficacyQueryInsightsToFlag                    = skillEfficacyQueryInsightsFlags.String("to", "", "")
-		skillEfficacyQueryInsightsIncludeVersionsFlag       = skillEfficacyQueryInsightsFlags.String("include-versions", "", "")
-		skillEfficacyQueryInsightsIncludeScoredSessionsFlag = skillEfficacyQueryInsightsFlags.String("include-scored-sessions", "", "")
-		skillEfficacyQueryInsightsCursorFlag                = skillEfficacyQueryInsightsFlags.String("cursor", "", "")
-		skillEfficacyQueryInsightsLimitFlag                 = skillEfficacyQueryInsightsFlags.String("limit", "20", "")
-		skillEfficacyQueryInsightsSessionTokenFlag          = skillEfficacyQueryInsightsFlags.String("session-token", "", "")
-		skillEfficacyQueryInsightsProjectSlugInputFlag      = skillEfficacyQueryInsightsFlags.String("project-slug-input", "", "")
+		skillEfficacyQueryInsightsFlags                       = flag.NewFlagSet("query-insights", flag.ExitOnError)
+		skillEfficacyQueryInsightsSkillIdsFlag                = skillEfficacyQueryInsightsFlags.String("skill-ids", "", "")
+		skillEfficacyQueryInsightsFromFlag                    = skillEfficacyQueryInsightsFlags.String("from", "", "")
+		skillEfficacyQueryInsightsToFlag                      = skillEfficacyQueryInsightsFlags.String("to", "", "")
+		skillEfficacyQueryInsightsIncludeVersionsFlag         = skillEfficacyQueryInsightsFlags.String("include-versions", "", "")
+		skillEfficacyQueryInsightsIncludeScoredSessionsFlag   = skillEfficacyQueryInsightsFlags.String("include-scored-sessions", "", "")
+		skillEfficacyQueryInsightsIncludeSessionCostFlag      = skillEfficacyQueryInsightsFlags.String("include-session-cost", "", "")
+		skillEfficacyQueryInsightsIncludeRegressionSignalFlag = skillEfficacyQueryInsightsFlags.String("include-regression-signal", "", "")
+		skillEfficacyQueryInsightsCursorFlag                  = skillEfficacyQueryInsightsFlags.String("cursor", "", "")
+		skillEfficacyQueryInsightsLimitFlag                   = skillEfficacyQueryInsightsFlags.String("limit", "20", "")
+		skillEfficacyQueryInsightsSessionTokenFlag            = skillEfficacyQueryInsightsFlags.String("session-token", "", "")
+		skillEfficacyQueryInsightsProjectSlugInputFlag        = skillEfficacyQueryInsightsFlags.String("project-slug-input", "", "")
 
 		skillsFlags = flag.NewFlagSet("skills", flag.ContinueOnError)
 
@@ -3320,6 +3319,12 @@ func ParseEndpoint(
 		toolsetsListToolFiltersSessionTokenFlag     = toolsetsListToolFiltersFlags.String("session-token", "", "")
 		toolsetsListToolFiltersApikeyTokenFlag      = toolsetsListToolFiltersFlags.String("apikey-token", "", "")
 		toolsetsListToolFiltersProjectSlugInputFlag = toolsetsListToolFiltersFlags.String("project-slug-input", "", "")
+
+		toolsetsListToolSchemaStaticValuesFlags                = flag.NewFlagSet("list-tool-schema-static-values", flag.ExitOnError)
+		toolsetsListToolSchemaStaticValuesSlugFlag             = toolsetsListToolSchemaStaticValuesFlags.String("slug", "REQUIRED", "")
+		toolsetsListToolSchemaStaticValuesSessionTokenFlag     = toolsetsListToolSchemaStaticValuesFlags.String("session-token", "", "")
+		toolsetsListToolSchemaStaticValuesApikeyTokenFlag      = toolsetsListToolSchemaStaticValuesFlags.String("apikey-token", "", "")
+		toolsetsListToolSchemaStaticValuesProjectSlugInputFlag = toolsetsListToolSchemaStaticValuesFlags.String("project-slug-input", "", "")
 
 		toolsetsCheckMCPSlugAvailabilityFlags                = flag.NewFlagSet("check-mcp-slug-availability", flag.ExitOnError)
 		toolsetsCheckMCPSlugAvailabilitySlugFlag             = toolsetsCheckMCPSlugAvailabilityFlags.String("slug", "REQUIRED", "")
@@ -3967,6 +3972,9 @@ func ParseEndpoint(
 	hooksLogsFlags.Usage = hooksLogsUsage
 	hooksMetricsFlags.Usage = hooksMetricsUsage
 
+	identityFlags.Usage = identityUsage
+	identityResolveFlags.Usage = identityResolveUsage
+
 	instancesFlags.Usage = instancesUsage
 	instancesGetInstanceFlags.Usage = instancesGetInstanceUsage
 
@@ -4138,11 +4146,8 @@ func ParseEndpoint(
 	pluginsSetPluginAssignmentsFlags.Usage = pluginsSetPluginAssignmentsUsage
 	pluginsListAudiencesFlags.Usage = pluginsListAudiencesUsage
 	pluginsDownloadPluginPackageFlags.Usage = pluginsDownloadPluginPackageUsage
-	pluginsDownloadPlatformMCPPluginFlags.Usage = pluginsDownloadPlatformMCPPluginUsage
 	pluginsDownloadObservabilityPluginFlags.Usage = pluginsDownloadObservabilityPluginUsage
 	pluginsDownloadCodexInstallScriptFlags.Usage = pluginsDownloadCodexInstallScriptUsage
-	pluginsGetPlatformMCPPackageStatusFlags.Usage = pluginsGetPlatformMCPPackageStatusUsage
-	pluginsRepairPlatformMCPPackageFlags.Usage = pluginsRepairPlatformMCPPackageUsage
 	pluginsGetPublishStatusFlags.Usage = pluginsGetPublishStatusUsage
 	pluginsPublishPluginsFlags.Usage = pluginsPublishPluginsUsage
 	pluginsGetMarketplaceSettingsFlags.Usage = pluginsGetMarketplaceSettingsUsage
@@ -4403,6 +4408,7 @@ func ParseEndpoint(
 	toolsetsDeleteToolsetFlags.Usage = toolsetsDeleteToolsetUsage
 	toolsetsGetToolsetFlags.Usage = toolsetsGetToolsetUsage
 	toolsetsListToolFiltersFlags.Usage = toolsetsListToolFiltersUsage
+	toolsetsListToolSchemaStaticValuesFlags.Usage = toolsetsListToolSchemaStaticValuesUsage
 	toolsetsCheckMCPSlugAvailabilityFlags.Usage = toolsetsCheckMCPSlugAvailabilityUsage
 	toolsetsCloneToolsetFlags.Usage = toolsetsCloneToolsetUsage
 	toolsetsAddExternalOAuthServerFlags.Usage = toolsetsAddExternalOAuthServerUsage
@@ -4563,6 +4569,8 @@ func ParseEndpoint(
 			svcf = hooksServerNamesFlags
 		case "hooks":
 			svcf = hooksFlags
+		case "identity":
+			svcf = identityFlags
 		case "instances":
 			svcf = instancesFlags
 		case "integrations":
@@ -5388,6 +5396,13 @@ func ParseEndpoint(
 
 			}
 
+		case "identity":
+			switch epn {
+			case "resolve":
+				epf = identityResolveFlags
+
+			}
+
 		case "instances":
 			switch epn {
 			case "get-instance":
@@ -5860,20 +5875,11 @@ func ParseEndpoint(
 			case "download-plugin-package":
 				epf = pluginsDownloadPluginPackageFlags
 
-			case "download-platform-mcp-plugin":
-				epf = pluginsDownloadPlatformMCPPluginFlags
-
 			case "download-observability-plugin":
 				epf = pluginsDownloadObservabilityPluginFlags
 
 			case "download-codex-install-script":
 				epf = pluginsDownloadCodexInstallScriptFlags
-
-			case "get-platform-mcp-package-status":
-				epf = pluginsGetPlatformMCPPackageStatusFlags
-
-			case "repair-platform-mcp-package":
-				epf = pluginsRepairPlatformMCPPackageFlags
 
 			case "get-publish-status":
 				epf = pluginsGetPublishStatusFlags
@@ -6614,6 +6620,9 @@ func ParseEndpoint(
 
 			case "list-tool-filters":
 				epf = toolsetsListToolFiltersFlags
+
+			case "list-tool-schema-static-values":
+				epf = toolsetsListToolSchemaStaticValuesFlags
 
 			case "check-mcp-slug-availability":
 				epf = toolsetsCheckMCPSlugAvailabilityFlags
@@ -7612,6 +7621,13 @@ func ParseEndpoint(
 				endpoint = c.Metrics()
 				data, err = hooksc.BuildMetricsPayload(*hooksMetricsBodyFlag, *hooksMetricsApikeyTokenFlag, *hooksMetricsProjectSlugInputFlag)
 			}
+		case "identity":
+			c := identityc.NewClient(scheme, host, doer, enc, dec, restore)
+			switch epn {
+			case "resolve":
+				endpoint = c.Resolve()
+				data, err = identityc.BuildResolvePayload(*identityResolveUrnFlag, *identityResolveApikeyTokenFlag, *identityResolveSessionTokenFlag)
+			}
 		case "instances":
 			c := instancesc.NewClient(scheme, host, doer, enc, dec, restore)
 			switch epn {
@@ -8097,21 +8113,12 @@ func ParseEndpoint(
 			case "download-plugin-package":
 				endpoint = c.DownloadPluginPackage()
 				data, err = pluginsc.BuildDownloadPluginPackagePayload(*pluginsDownloadPluginPackagePluginIDFlag, *pluginsDownloadPluginPackagePlatformFlag, *pluginsDownloadPluginPackageSessionTokenFlag, *pluginsDownloadPluginPackageProjectSlugInputFlag)
-			case "download-platform-mcp-plugin":
-				endpoint = c.DownloadPlatformMCPPlugin()
-				data, err = pluginsc.BuildDownloadPlatformMCPPluginPayload(*pluginsDownloadPlatformMCPPluginPlatformFlag, *pluginsDownloadPlatformMCPPluginSessionTokenFlag, *pluginsDownloadPlatformMCPPluginProjectSlugInputFlag)
 			case "download-observability-plugin":
 				endpoint = c.DownloadObservabilityPlugin()
 				data, err = pluginsc.BuildDownloadObservabilityPluginPayload(*pluginsDownloadObservabilityPluginPlatformFlag, *pluginsDownloadObservabilityPluginSessionTokenFlag, *pluginsDownloadObservabilityPluginProjectSlugInputFlag)
 			case "download-codex-install-script":
 				endpoint = c.DownloadCodexInstallScript()
 				data, err = pluginsc.BuildDownloadCodexInstallScriptPayload(*pluginsDownloadCodexInstallScriptSessionTokenFlag, *pluginsDownloadCodexInstallScriptProjectSlugInputFlag)
-			case "get-platform-mcp-package-status":
-				endpoint = c.GetPlatformMCPPackageStatus()
-				data, err = pluginsc.BuildGetPlatformMCPPackageStatusPayload(*pluginsGetPlatformMCPPackageStatusSessionTokenFlag)
-			case "repair-platform-mcp-package":
-				endpoint = c.RepairPlatformMCPPackage()
-				data, err = pluginsc.BuildRepairPlatformMCPPackagePayload(*pluginsRepairPlatformMCPPackageSessionTokenFlag, *pluginsRepairPlatformMCPPackageProjectSlugInputFlag)
 			case "get-publish-status":
 				endpoint = c.GetPublishStatus()
 				data, err = pluginsc.BuildGetPublishStatusPayload(*pluginsGetPublishStatusSessionTokenFlag, *pluginsGetPublishStatusProjectSlugInputFlag)
@@ -8583,7 +8590,7 @@ func ParseEndpoint(
 				data, err = skillefficacyc.BuildUpsertSettingsPayload(*skillEfficacyUpsertSettingsBodyFlag, *skillEfficacyUpsertSettingsApikeyTokenFlag, *skillEfficacyUpsertSettingsSessionTokenFlag)
 			case "query-insights":
 				endpoint = c.QueryInsights()
-				data, err = skillefficacyc.BuildQueryInsightsPayload(*skillEfficacyQueryInsightsSkillIdsFlag, *skillEfficacyQueryInsightsFromFlag, *skillEfficacyQueryInsightsToFlag, *skillEfficacyQueryInsightsIncludeVersionsFlag, *skillEfficacyQueryInsightsIncludeScoredSessionsFlag, *skillEfficacyQueryInsightsCursorFlag, *skillEfficacyQueryInsightsLimitFlag, *skillEfficacyQueryInsightsSessionTokenFlag, *skillEfficacyQueryInsightsProjectSlugInputFlag)
+				data, err = skillefficacyc.BuildQueryInsightsPayload(*skillEfficacyQueryInsightsSkillIdsFlag, *skillEfficacyQueryInsightsFromFlag, *skillEfficacyQueryInsightsToFlag, *skillEfficacyQueryInsightsIncludeVersionsFlag, *skillEfficacyQueryInsightsIncludeScoredSessionsFlag, *skillEfficacyQueryInsightsIncludeSessionCostFlag, *skillEfficacyQueryInsightsIncludeRegressionSignalFlag, *skillEfficacyQueryInsightsCursorFlag, *skillEfficacyQueryInsightsLimitFlag, *skillEfficacyQueryInsightsSessionTokenFlag, *skillEfficacyQueryInsightsProjectSlugInputFlag)
 			}
 		case "skills":
 			c := skillsc.NewClient(scheme, host, doer, enc, dec, restore)
@@ -8852,6 +8859,9 @@ func ParseEndpoint(
 			case "list-tool-filters":
 				endpoint = c.ListToolFilters()
 				data, err = toolsetsc.BuildListToolFiltersPayload(*toolsetsListToolFiltersSlugFlag, *toolsetsListToolFiltersSessionTokenFlag, *toolsetsListToolFiltersApikeyTokenFlag, *toolsetsListToolFiltersProjectSlugInputFlag)
+			case "list-tool-schema-static-values":
+				endpoint = c.ListToolSchemaStaticValues()
+				data, err = toolsetsc.BuildListToolSchemaStaticValuesPayload(*toolsetsListToolSchemaStaticValuesSlugFlag, *toolsetsListToolSchemaStaticValuesSessionTokenFlag, *toolsetsListToolSchemaStaticValuesApikeyTokenFlag, *toolsetsListToolSchemaStaticValuesProjectSlugInputFlag)
 			case "check-mcp-slug-availability":
 				endpoint = c.CheckMCPSlugAvailability()
 				data, err = toolsetsc.BuildCheckMCPSlugAvailabilityPayload(*toolsetsCheckMCPSlugAvailabilitySlugFlag, *toolsetsCheckMCPSlugAvailabilitySessionTokenFlag, *toolsetsCheckMCPSlugAvailabilityApikeyTokenFlag, *toolsetsCheckMCPSlugAvailabilityProjectSlugInputFlag)
@@ -14030,6 +14040,38 @@ func hooksMetricsUsage() {
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "hooks metrics --body '{\n      \"resourceMetrics\": [\n         {\n            \"resource\": {\n               \"attributes\": [\n                  {\n                     \"key\": \"abc123\",\n                     \"value\": {\n                        \"arrayValue\": \"abc123\",\n                        \"boolValue\": false,\n                        \"bytesValue\": \"abc123\",\n                        \"doubleValue\": 1,\n                        \"intValue\": \"abc123\",\n                        \"kvlistValue\": \"abc123\",\n                        \"stringValue\": \"abc123\"\n                     }\n                  }\n               ],\n               \"droppedAttributesCount\": 1\n            },\n            \"scopeMetrics\": [\n               {\n                  \"metrics\": [\n                     {\n                        \"description\": \"abc123\",\n                        \"exponentialHistogram\": \"abc123\",\n                        \"gauge\": \"abc123\",\n                        \"histogram\": \"abc123\",\n                        \"name\": \"abc123\",\n                        \"sum\": {\n                           \"aggregationTemporality\": \"abc123\",\n                           \"dataPoints\": [\n                              {\n                                 \"asDouble\": 1,\n                                 \"asInt\": \"abc123\",\n                                 \"attributes\": [\n                                    {\n                                       \"key\": \"abc123\",\n                                       \"value\": {\n                                          \"arrayValue\": \"abc123\",\n                                          \"boolValue\": false,\n                                          \"bytesValue\": \"abc123\",\n                                          \"doubleValue\": 1,\n                                          \"intValue\": \"abc123\",\n                                          \"kvlistValue\": \"abc123\",\n                                          \"stringValue\": \"abc123\"\n                                       }\n                                    }\n                                 ],\n                                 \"startTimeUnixNano\": \"abc123\",\n                                 \"timeUnixNano\": \"abc123\"\n                              }\n                           ],\n                           \"isMonotonic\": false\n                        },\n                        \"summary\": \"abc123\",\n                        \"unit\": \"abc123\"\n                     }\n                  ],\n                  \"scope\": {\n                     \"name\": \"abc123\",\n                     \"version\": \"abc123\"\n                  }\n               }\n            ]\n         }\n      ]\n   }' --apikey-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
+// identityUsage displays the usage of the identity command and its subcommands.
+func identityUsage() {
+	fmt.Fprintln(os.Stderr, `Resolves the identifiers Gram records activity under into a single identity.`)
+	fmt.Fprintf(os.Stderr, "Usage:\n    %s [globalflags] identity COMMAND [flags]\n\n", os.Args[0])
+	fmt.Fprintln(os.Stderr, "COMMAND:")
+	fmt.Fprintln(os.Stderr, `    resolve: Resolve an identity URN into every identifier the subject's activity is recorded under.`)
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Additional help:")
+	fmt.Fprintf(os.Stderr, "    %s identity COMMAND --help\n", os.Args[0])
+}
+func identityResolveUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] identity resolve", os.Args[0])
+	fmt.Fprint(os.Stderr, " -urn STRING")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Resolve an identity URN into every identifier the subject's activity is recorded under.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -urn STRING: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "identity resolve --urn \"user:user_01abc\" --apikey-token \"abc123\" --session-token \"abc123\"")
+}
+
 // instancesUsage displays the usage of the instances command and its
 // subcommands.
 func instancesUsage() {
@@ -15372,7 +15414,7 @@ func metaMcpUsage() {
 	fmt.Fprintln(os.Stderr, `    create-meta-mcp-server: Create a new meta MCP server`)
 	fmt.Fprintln(os.Stderr, `    get-meta-mcp-server: Get a meta MCP server by id`)
 	fmt.Fprintln(os.Stderr, `    list-meta-mcp-servers: List meta MCP servers for a project`)
-	fmt.Fprintln(os.Stderr, `    update-meta-mcp-server: Update a meta MCP server. This is a full-record replace: a user_session_issuer_id omitted from the request becomes null on the stored record.`)
+	fmt.Fprintln(os.Stderr, `    update-meta-mcp-server: Update a meta MCP server. This is a full-record replace: a user_session_issuer_id omitted from the request becomes null on the stored record. Visibility is the exception — omitting it preserves the stored value, so a caller that does not manage visibility cannot re-enable a disabled gateway by saving an unrelated field.`)
 	fmt.Fprintln(os.Stderr, `    delete-meta-mcp-server: Delete a meta MCP server. Its live memberships and MCP endpoints are deleted along with it.`)
 	fmt.Fprintln(os.Stderr, `    list-meta-mcp-members: List the members of a meta MCP server, ordered by sort order`)
 	fmt.Fprintln(os.Stderr, `    add-meta-mcp-member: Add an MCP server to a meta MCP server's member set`)
@@ -15403,7 +15445,7 @@ func metaMcpCreateMetaMcpServerUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "meta-mcp create-meta-mcp-server --body '{\n      \"name\": \"aa\",\n      \"user_session_issuer_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }' --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "meta-mcp create-meta-mcp-server --body '{\n      \"name\": \"aa\",\n      \"user_session_issuer_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"visibility\": \"private\"\n   }' --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 func metaMcpGetMetaMcpServerUsage() {
@@ -15463,7 +15505,7 @@ func metaMcpUpdateMetaMcpServerUsage() {
 
 	// Description
 	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Update a meta MCP server. This is a full-record replace: a user_session_issuer_id omitted from the request becomes null on the stored record.`)
+	fmt.Fprintln(os.Stderr, `Update a meta MCP server. This is a full-record replace: a user_session_issuer_id omitted from the request becomes null on the stored record. Visibility is the exception — omitting it preserves the stored value, so a caller that does not manage visibility cannot re-enable a disabled gateway by saving an unrelated field.`)
 
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -body JSON: `)
@@ -15473,7 +15515,7 @@ func metaMcpUpdateMetaMcpServerUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "meta-mcp update-meta-mcp-server --body '{\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"name\": \"aa\",\n      \"user_session_issuer_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }' --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "meta-mcp update-meta-mcp-server --body '{\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"name\": \"aa\",\n      \"user_session_issuer_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"visibility\": \"private\"\n   }' --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 func metaMcpDeleteMetaMcpServerUsage() {
@@ -16954,11 +16996,8 @@ func pluginsUsage() {
 	fmt.Fprintln(os.Stderr, `    set-plugin-assignments: Replace all assignments for a plugin with the given list of principal URNs.`)
 	fmt.Fprintln(os.Stderr, `    list-audiences: List the audiences that can be assigned to plugins.`)
 	fmt.Fprintln(os.Stderr, `    download-plugin-package: Download a ZIP of a single plugin package for direct installation.`)
-	fmt.Fprintln(os.Stderr, `    download-platform-mcp-plugin: Download a credential-free Platform MCP plugin ZIP from the server-owned package definition. This does not require a GitHub marketplace and does not mint an API key.`)
 	fmt.Fprintln(os.Stderr, `    download-observability-plugin: Download a ZIP of the per-org observability plugin (Gram hooks). Mints a fresh hooks-scoped API key on each download and embeds it in the plugin's hook script.`)
 	fmt.Fprintln(os.Stderr, `    download-codex-install-script: Download a bash install script that registers the Codex observability marketplace and pre-approves all hook events. Requires a published marketplace.`)
-	fmt.Fprintln(os.Stderr, `    get-platform-mcp-package-status: Get the organization-scoped Platform MCP package and canonical default-project marketplace status.`)
-	fmt.Fprintln(os.Stderr, `    repair-platform-mcp-package: Idempotently publish or repair the Platform MCP package in the organization's canonical default-project marketplace.`)
 	fmt.Fprintln(os.Stderr, `    get-publish-status: Check whether GitHub publishing is configured and connected for this project.`)
 	fmt.Fprintln(os.Stderr, `    publish-plugins: Generate and publish all plugin packages to a GitHub repository.`)
 	fmt.Fprintln(os.Stderr, `    get-marketplace-settings: Get the marketplace settings for the current project, including the effective marketplace name and the server-side default.`)
@@ -17209,28 +17248,6 @@ func pluginsDownloadPluginPackageUsage() {
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "plugins download-plugin-package --plugin-id \"550e8400-e29b-41d4-a716-446655440000\" --platform \"cursor\" --session-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
-func pluginsDownloadPlatformMCPPluginUsage() {
-	// Header with flags
-	fmt.Fprintf(os.Stderr, "%s [flags] plugins download-platform-mcp-plugin", os.Args[0])
-	fmt.Fprint(os.Stderr, " -platform STRING")
-	fmt.Fprint(os.Stderr, " -session-token STRING")
-	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
-	fmt.Fprintln(os.Stderr)
-
-	// Description
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Download a credential-free Platform MCP plugin ZIP from the server-owned package definition. This does not require a GitHub marketplace and does not mint an API key.`)
-
-	// Flags list
-	fmt.Fprintln(os.Stderr, `    -platform STRING: `)
-	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
-	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
-
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "plugins download-platform-mcp-plugin --platform \"cursor\" --session-token \"abc123\" --project-slug-input \"abc123\"")
-}
-
 func pluginsDownloadObservabilityPluginUsage() {
 	// Header with flags
 	fmt.Fprintf(os.Stderr, "%s [flags] plugins download-observability-plugin", os.Args[0])
@@ -17271,44 +17288,6 @@ func pluginsDownloadCodexInstallScriptUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "plugins download-codex-install-script --session-token \"abc123\" --project-slug-input \"abc123\"")
-}
-
-func pluginsGetPlatformMCPPackageStatusUsage() {
-	// Header with flags
-	fmt.Fprintf(os.Stderr, "%s [flags] plugins get-platform-mcp-package-status", os.Args[0])
-	fmt.Fprint(os.Stderr, " -session-token STRING")
-	fmt.Fprintln(os.Stderr)
-
-	// Description
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Get the organization-scoped Platform MCP package and canonical default-project marketplace status.`)
-
-	// Flags list
-	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
-
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "plugins get-platform-mcp-package-status --session-token \"abc123\"")
-}
-
-func pluginsRepairPlatformMCPPackageUsage() {
-	// Header with flags
-	fmt.Fprintf(os.Stderr, "%s [flags] plugins repair-platform-mcp-package", os.Args[0])
-	fmt.Fprint(os.Stderr, " -session-token STRING")
-	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
-	fmt.Fprintln(os.Stderr)
-
-	// Description
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Idempotently publish or repair the Platform MCP package in the organization's canonical default-project marketplace.`)
-
-	// Flags list
-	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
-	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
-
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "plugins repair-platform-mcp-package --session-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 func pluginsGetPublishStatusUsage() {
@@ -20872,6 +20851,8 @@ func skillEfficacyQueryInsightsUsage() {
 	fmt.Fprint(os.Stderr, " -to STRING")
 	fmt.Fprint(os.Stderr, " -include-versions BOOL")
 	fmt.Fprint(os.Stderr, " -include-scored-sessions BOOL")
+	fmt.Fprint(os.Stderr, " -include-session-cost BOOL")
+	fmt.Fprint(os.Stderr, " -include-regression-signal BOOL")
 	fmt.Fprint(os.Stderr, " -cursor STRING")
 	fmt.Fprint(os.Stderr, " -limit INT")
 	fmt.Fprint(os.Stderr, " -session-token STRING")
@@ -20888,6 +20869,8 @@ func skillEfficacyQueryInsightsUsage() {
 	fmt.Fprintln(os.Stderr, `    -to STRING: `)
 	fmt.Fprintln(os.Stderr, `    -include-versions BOOL: `)
 	fmt.Fprintln(os.Stderr, `    -include-scored-sessions BOOL: `)
+	fmt.Fprintln(os.Stderr, `    -include-session-cost BOOL: `)
+	fmt.Fprintln(os.Stderr, `    -include-regression-signal BOOL: `)
 	fmt.Fprintln(os.Stderr, `    -cursor STRING: `)
 	fmt.Fprintln(os.Stderr, `    -limit INT: `)
 	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
@@ -20895,7 +20878,7 @@ func skillEfficacyQueryInsightsUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "skill-efficacy query-insights --skill-ids '[\n      \"abc123\"\n   ]' --from \"1970-01-01T00:00:01Z\" --to \"1970-01-01T00:00:01Z\" --include-versions false --include-scored-sessions false --cursor \"abc123\" --limit 2 --session-token \"abc123\" --project-slug-input \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "skill-efficacy query-insights --skill-ids '[\n      \"abc123\"\n   ]' --from \"1970-01-01T00:00:01Z\" --to \"1970-01-01T00:00:01Z\" --include-versions false --include-scored-sessions false --include-session-cost false --include-regression-signal false --cursor \"abc123\" --limit 2 --session-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 // skillsUsage displays the usage of the skills command and its subcommands.
@@ -22815,6 +22798,7 @@ func toolsetsUsage() {
 	fmt.Fprintln(os.Stderr, `    delete-toolset: Delete a toolset by its ID`)
 	fmt.Fprintln(os.Stderr, `    get-toolset: Get detailed information about a toolset including full HTTP tool definitions`)
 	fmt.Fprintln(os.Stderr, `    list-tool-filters: List the tool filter scopes (tags) available on a toolset-backed MCP server and the tools under each, including tools excluded from all filters. Read-only; reflects the explicit tool variations group configured on the toolset, deriving effective tags with the same logic as the runtime ?tags= filter. Returns filtering disabled when no explicit group is set.`)
+	fmt.Fprintln(os.Stderr, `    list-tool-schema-static-values: List every const, default, enum, example, and examples value in each tool input schema. The result is deliberately mechanical: clients decide how to present or interpret the values. This supports reviewing the exact schema contents before changing how a toolset is shared.`)
 	fmt.Fprintln(os.Stderr, `    check-mcp-slug-availability: Check if a MCP slug is available`)
 	fmt.Fprintln(os.Stderr, `    clone-toolset: Clone an existing toolset with a new name`)
 	fmt.Fprintln(os.Stderr, `    add-externaloauth-server: Associate an external OAuth server with a toolset`)
@@ -22987,6 +22971,30 @@ func toolsetsListToolFiltersUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "toolsets list-tool-filters --slug \"aaa\" --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func toolsetsListToolSchemaStaticValuesUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] toolsets list-tool-schema-static-values", os.Args[0])
+	fmt.Fprint(os.Stderr, " -slug STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `List every const, default, enum, example, and examples value in each tool input schema. The result is deliberately mechanical: clients decide how to present or interpret the values. This supports reviewing the exact schema contents before changing how a toolset is shared.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -slug STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "toolsets list-tool-schema-static-values --slug \"aaa\" --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 func toolsetsCheckMCPSlugAvailabilityUsage() {

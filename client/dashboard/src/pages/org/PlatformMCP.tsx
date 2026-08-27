@@ -47,7 +47,6 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useRecordPlatformMCPAgentConfigurationCopiedMutation } from "@gram/client/react-query/recordPlatformMCPAgentConfigurationCopied.js";
 import { useRecordPlatformMCPInstallIntentMutation } from "@gram/client/react-query/recordPlatformMCPInstallIntent.js";
 import { useStartPlatformMCPOnboardingMutation } from "@gram/client/react-query/startPlatformMCPOnboarding.js";
-import { usePlatformMCPPackageStatus } from "@gram/client/react-query/platformMCPPackageStatus.js";
 import {
   SourceSurface,
   type SourceSurface as SourceSurfaceValue,
@@ -78,6 +77,11 @@ const clients: Array<{
     id: "opencode",
     label: "opencode",
     description: "Open-source terminal coding agent",
+  },
+  {
+    id: "other",
+    label: "Other agent",
+    description: "Any MCP-capable agent",
   },
 ];
 
@@ -1093,43 +1097,39 @@ function PlatformMCPInstallMethodSheet({
   onBack: () => void;
   onSelect: (method: PlatformMCPInstallMethod) => void;
 }): JSX.Element {
-  const status = usePlatformMCPPackageStatus(undefined, undefined, {
-    refetchInterval: 5_000,
-  });
-  const packageStatus = status.data;
-  const supportsMarketplace = client.id !== "opencode";
-  const marketplaceAvailable =
-    supportsMarketplace &&
-    (packageStatus?.freshness === "current" ||
-      packageStatus?.repairAllowed === true);
-  const downloadAvailable = packageStatus?.directDownloadAvailable === true;
+  // No reviewed plugin package is built for an agent we have not certified, so
+  // the marketplace route is closed and only the remote MCP config is offered.
+  const supportsPackages = client.id !== "other";
   const methods: Array<{
     id: PlatformMCPInstallMethod;
     title: string;
     description: string;
-    disabled?: boolean;
-  }> = [
-    {
-      id: "marketplace",
-      title: "Install from your organization marketplace",
-      description:
-        "Recommended. Install the reviewed plugin and receive future updates from the canonical GitHub marketplace.",
-      disabled: !marketplaceAvailable,
-    },
-    {
-      id: "download",
-      title: `Download the ${client.label} plugin`,
-      description:
-        "Download a credential-free ZIP for your account. Direct packages must be updated manually.",
-      disabled: !downloadAvailable,
-    },
-    {
-      id: "manual",
-      title: "Connect the MCP manually",
-      description:
-        "Recovery option. Configure only the remote MCP without the reviewed catalogue workflow skill.",
-    },
-  ];
+  }> = supportsPackages
+    ? [
+        {
+          id: "marketplace",
+          title: "Install from the Speakeasy marketplace",
+          description:
+            "Recommended. Install the reviewed plugin and receive future updates from the public GitHub marketplace.",
+        },
+        {
+          id: "manual",
+          title: "Connect the MCP manually",
+          description:
+            "Recovery option. Configure only the remote MCP without the reviewed catalogue workflow skill.",
+        },
+      ]
+    : // The marketplace route is listed only where a reviewed package exists.
+      // Offering it greyed out here would read as an organization problem
+      // rather than what it is: no plugin is built for an uncertified agent.
+      [
+        {
+          id: "manual",
+          title: "Connect the MCP manually",
+          description:
+            "Configure the remote MCP in your agent's own configuration. The reviewed catalogue workflow skill is not installed.",
+        },
+      ];
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
@@ -1159,9 +1159,8 @@ function PlatformMCPInstallMethodSheet({
               <button
                 key={method.id}
                 type="button"
-                disabled={method.disabled || status.isLoading}
                 onClick={() => onSelect(method.id)}
-                className="border-border bg-card hover:border-foreground/20 flex w-full items-center gap-4 border p-4 text-left transition-all disabled:cursor-not-allowed disabled:opacity-50"
+                className="border-border bg-card hover:border-foreground/20 flex w-full items-center gap-4 border p-4 text-left transition-all"
               >
                 <div className="min-w-0 flex-1 space-y-1">
                   <p className="text-foreground text-sm font-medium">
@@ -1170,11 +1169,6 @@ function PlatformMCPInstallMethodSheet({
                   <p className="text-muted-foreground text-xs">
                     {method.description}
                   </p>
-                  {method.disabled && !status.isLoading ? (
-                    <p className="text-muted-foreground text-xs">
-                      Not currently available for this organization.
-                    </p>
-                  ) : null}
                 </div>
                 <ChevronRight className="text-muted-foreground h-4 w-4 shrink-0" />
               </button>

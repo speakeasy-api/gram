@@ -528,3 +528,24 @@ WHERE organization_id = @organization_id
 SELECT blob_url, consumed_at
 FROM session_handoff_links
 WHERE token = @token;
+
+-- name: ForceSoftDeleteRemoteSessionIssuerFixture :exec
+-- Tombstones a remote session issuer regardless of its clients. Production
+-- deletes refuse while a live client references it, so this is the only way to
+-- build the state the derivation must reject.
+UPDATE remote_session_issuers
+SET deleted_at = clock_timestamp()
+WHERE id = @id;
+
+-- name: SetMCPServerRemoteSessionIssuerFixture :execrows
+-- Test-only fixture: stamps the denormalised upstream authorization server on
+-- an MCP server. Server creation cannot set it — no client bindings exist yet —
+-- so tests seed it after the fact, standing in for the binding resync.
+--
+-- Returns the row count so the caller can insist the stamp landed: one that
+-- matched nothing would otherwise let a negative test pass vacuously.
+UPDATE mcp_servers
+SET remote_session_issuer_id = @remote_session_issuer_id
+WHERE id = @id
+  AND project_id = @project_id
+  AND deleted IS FALSE;

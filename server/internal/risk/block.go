@@ -61,6 +61,7 @@ func (s *Service) GetRiskBlock(ctx context.Context, payload *gen.GetRiskBlockPay
 		Reason:     blockReason(row.Reason),
 		PolicyName: row.PolicyName.String,
 		ToolName:   conv.FromPGText[string](row.ToolName),
+		Provider:   conv.PtrEmpty(row.Provider),
 		CreatedAt:  row.CreatedAt.Time.Format(time.RFC3339),
 		Feedback:   blockFeedbackSentiment(row.Feedback),
 	}, nil
@@ -121,6 +122,7 @@ func (s *Service) SubmitRiskBlockFeedback(ctx context.Context, payload *gen.Subm
 		Reason:     blockReason(row.Reason),
 		PolicyName: row.PolicyName,
 		ToolName:   conv.FromPGText[string](row.ToolName),
+		Provider:   conv.PtrEmpty(row.Provider),
 		CreatedAt:  row.CreatedAt.Time.Format(time.RFC3339),
 		Feedback:   blockFeedbackSentiment(row.Feedback),
 	}, nil

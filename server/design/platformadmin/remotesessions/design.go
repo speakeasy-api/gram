@@ -445,8 +445,8 @@ var IssuerConvergenceCandidate = Type("IssuerConvergenceCandidate", func() {
 	Attribute("organization_id", String, "The organization that owns the candidate. Empty for a legacy project-scoped issuer written before this column existed.")
 	Attribute("organization_name", String, "Display name of the owning organization. Empty when the organization has no synced metadata.")
 	Attribute("client_count", Int, "Number of non-deleted remote_session_clients that would move onto the target issuer.")
-	Attribute("endpoint_mismatches", ArrayOf(String), "Names of the authorization-server metadata fields (issuer, token_endpoint, authorization_endpoint) that differ from the target. Non-empty blocks the migration.")
-	Attribute("warnings", ArrayOf(String), "Non-blocking divergences (oidc, passthrough, scopes_supported). The target issuer's values become authoritative for the migrated clients.")
+	Attribute("endpoint_mismatches", ArrayOf(rsissuers.IssuerFieldMismatch), "The authorization-server metadata fields (issuer, token_endpoint, authorization_endpoint) that differ from the target, with both sides' values. Non-empty blocks the migration.")
+	Attribute("warnings", ArrayOf(rsissuers.IssuerFieldMismatch), "Non-blocking divergences (oidc, passthrough, scopes_supported), with both sides' values. The target issuer's values become authoritative for the migrated clients.")
 
 	Required("issuer", "organization_id", "organization_name", "client_count", "endpoint_mismatches", "warnings")
 })
@@ -469,9 +469,9 @@ var IssuerMigratePreflight = Type("IssuerMigratePreflight", func() {
 
 	Attribute("client_count", Int, "Number of non-deleted remote_session_clients that would be re-pointed from the source issuer to the target issuer.")
 	Attribute("mcp_server_names", ArrayOf(String), "Display names of MCP servers attached to the source issuer's clients.")
-	Attribute("endpoint_mismatches", ArrayOf(String), "Names of the authorization-server metadata fields (issuer, token_endpoint, authorization_endpoint) that differ between source and target. Non-empty blocks the migration.")
+	Attribute("endpoint_mismatches", ArrayOf(rsissuers.IssuerFieldMismatch), "The authorization-server metadata fields (issuer, token_endpoint, authorization_endpoint) that differ between source and target, with both sides' values. Non-empty blocks the migration.")
 	Attribute("conflicting_mcp_server_names", ArrayOf(String), "Display names of MCP servers where both the source and the target issuer already have a client bound. Non-empty blocks the migration; detach one client per listed server and retry.")
-	Attribute("warnings", ArrayOf(String), "Non-blocking divergences (oidc, passthrough, scopes_supported). The target issuer's values become authoritative for the migrated clients.")
+	Attribute("warnings", ArrayOf(rsissuers.IssuerFieldMismatch), "Non-blocking divergences (oidc, passthrough, scopes_supported), with both sides' values. The target issuer's values become authoritative for the migrated clients.")
 	Attribute("can_migrate", Boolean, "TRUE when the migration would succeed: no endpoint mismatches and no conflicting MCP-server bindings.")
 	Attribute("target_tenant_client_count", Int, "Number of tenant-owned remote_session_clients already registered with the target issuer, BEFORE this migration. Any non-zero value blocks deleting the target issuer, and only the owning organizations can clear it, so a successful migration is effectively one-way.")
 

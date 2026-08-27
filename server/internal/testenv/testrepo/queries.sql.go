@@ -388,6 +388,20 @@ func (q *Queries) ForceSoftDeleteOrganizationUserRelationshipsFixture(ctx contex
 	return err
 }
 
+const forceSoftDeleteRemoteSessionIssuerFixture = `-- name: ForceSoftDeleteRemoteSessionIssuerFixture :exec
+UPDATE remote_session_issuers
+SET deleted_at = clock_timestamp()
+WHERE id = $1
+`
+
+// Tombstones a remote session issuer regardless of its clients. Production
+// deletes refuse while a live client references it, so this is the only way to
+// build the state the derivation must reject.
+func (q *Queries) ForceSoftDeleteRemoteSessionIssuerFixture(ctx context.Context, id uuid.UUID) error {
+	_, err := q.db.Exec(ctx, forceSoftDeleteRemoteSessionIssuerFixture, id)
+	return err
+}
+
 const forceSoftDeleteUser = `-- name: ForceSoftDeleteUser :exec
 UPDATE users
 SET deleted_at = clock_timestamp()
@@ -1515,6 +1529,34 @@ type SetFunctionToolVariablesParams struct {
 func (q *Queries) SetFunctionToolVariables(ctx context.Context, arg SetFunctionToolVariablesParams) error {
 	_, err := q.db.Exec(ctx, setFunctionToolVariables, arg.Variables, arg.ID, arg.ProjectID)
 	return err
+}
+
+const setMCPServerRemoteSessionIssuerFixture = `-- name: SetMCPServerRemoteSessionIssuerFixture :execrows
+UPDATE mcp_servers
+SET remote_session_issuer_id = $1
+WHERE id = $2
+  AND project_id = $3
+  AND deleted IS FALSE
+`
+
+type SetMCPServerRemoteSessionIssuerFixtureParams struct {
+	RemoteSessionIssuerID uuid.NullUUID
+	ID                    uuid.UUID
+	ProjectID             uuid.UUID
+}
+
+// Test-only fixture: stamps the denormalised upstream authorization server on
+// an MCP server. Server creation cannot set it — no client bindings exist yet —
+// so tests seed it after the fact, standing in for the binding resync.
+//
+// Returns the row count so the caller can insist the stamp landed: one that
+// matched nothing would otherwise let a negative test pass vacuously.
+func (q *Queries) SetMCPServerRemoteSessionIssuerFixture(ctx context.Context, arg SetMCPServerRemoteSessionIssuerFixtureParams) (int64, error) {
+	result, err := q.db.Exec(ctx, setMCPServerRemoteSessionIssuerFixture, arg.RemoteSessionIssuerID, arg.ID, arg.ProjectID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const setOpenRouterAPIKeyCreatedAtFixture = `-- name: SetOpenRouterAPIKeyCreatedAtFixture :exec
