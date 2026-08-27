@@ -5,7 +5,7 @@
 // describe_server, describe_tools, execute_tool). Hosted (toolset-backed)
 // members serve the full drill-down through the in-process tool dispatch;
 // proxied (remote/tunneled) members answer a deterministic not-implemented
-// error on the drill-down tools until their runtime lands (AGE-3291 PR 2).
+// error on the drill-down tools until their runtime lands (AIM-87).
 
 package mcp
 
