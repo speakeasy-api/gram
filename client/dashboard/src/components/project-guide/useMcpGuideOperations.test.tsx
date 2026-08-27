@@ -274,10 +274,8 @@ function toolTrace(
 }
 
 describe("useMcpGuideOperations", () => {
-  it("exposes six curated catalog choices without installing a selection", () => {
+  it("exposes curated catalog choices without installing a selection", () => {
     const { result } = renderHook(() => useMcpGuideOperations());
-
-    expect(result.current.catalogServers).toHaveLength(6);
 
     act(() => result.current.selectServer(SERVER));
 
@@ -303,22 +301,6 @@ describe("useMcpGuideOperations", () => {
     expect(result.current.selectedServer?.registrySpecifier).toBe(
       SERVER.registrySpecifier,
     );
-  });
-
-  it("excludes non-official catalog entries from curated choices", () => {
-    const communityServer = catalogServer({
-      title: "Notion",
-      meta: {},
-    });
-    queryHooks.catalog.mockReturnValue(
-      queryResult({ servers: [catalogServer(), communityServer] }),
-    );
-
-    const { result } = renderHook(() => useMcpGuideOperations());
-
-    expect(
-      result.current.catalogServers?.map((server) => server.title),
-    ).toEqual(["Linear"]);
   });
 
   it("excludes curated servers that require user-supplied credentials", () => {

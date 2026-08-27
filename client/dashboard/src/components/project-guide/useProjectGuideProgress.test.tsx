@@ -95,6 +95,47 @@ beforeEach(() => {
   });
 });
 
+function setMcpProgressData({
+  servers,
+  remoteServers,
+  defaultPluginServerIds,
+  activity,
+  selectedSpecifier = "example/catalog",
+}: {
+  servers: unknown[];
+  remoteServers: unknown[];
+  defaultPluginServerIds: string[];
+  activity: unknown[];
+  selectedSpecifier?: string;
+}): void {
+  selectedMcpServer.specifier = selectedSpecifier;
+  queryHooks.servers.mockReturnValue({
+    data: { mcpServers: servers },
+    isPending: false,
+  });
+  queryHooks.remoteServers.mockReturnValue({
+    data: { remoteMcpServers: remoteServers },
+    isPending: false,
+  });
+  queryHooks.plugins.mockReturnValue({
+    data: {
+      plugins: [
+        {
+          isDefault: true,
+          servers: defaultPluginServerIds.map((mcpServerId) => ({
+            mcpServerId,
+          })),
+        },
+      ],
+    },
+    isPending: false,
+  });
+  queryHooks.activity.mockReturnValue({
+    data: { activity },
+    isPending: false,
+  });
+}
+
 describe("useProjectGuideProgress", () => {
   it("keeps both journeys not started with known empty data", () => {
     const { result } = renderHook(() => useProjectGuideProgress());
@@ -304,59 +345,41 @@ describe("useProjectGuideProgress", () => {
   });
 
   it("credits activity for a guide-configured catalog server", () => {
-    queryHooks.servers.mockReturnValue({
-      data: {
-        mcpServers: [
-          {
-            id: "server-1",
-            name: "Catalog",
-            slug: "server-one",
-            remoteMcpServerId: "remote-1",
-          },
-          {
-            id: "server-2",
-            name: "Catalog_Governed",
-            slug: "server-two",
-            remoteMcpServerId: "remote-2",
-          },
-        ],
-      },
-      isPending: false,
-    });
-    queryHooks.remoteServers.mockReturnValue({
-      data: {
-        remoteMcpServers: [
-          {
-            id: "remote-1",
-            url: "https://catalog-one.example/mcp",
-            transportType: "streamable-http",
-          },
-          {
-            id: "remote-2",
-            url: "https://catalog.example/mcp",
-            transportType: "streamable-http",
-          },
-        ],
-      },
-      isPending: false,
-    });
-    queryHooks.plugins.mockReturnValue({
-      data: {
-        plugins: [{ isDefault: true, servers: [{ mcpServerId: "server-2" }] }],
-      },
-      isPending: false,
-    });
-    queryHooks.activity.mockReturnValue({
-      data: {
-        activity: [
-          {
-            targetId: "server-two",
-            targetType: "hosted_mcp_server",
-            totalToolCalls: 1,
-          },
-        ],
-      },
-      isPending: false,
+    setMcpProgressData({
+      servers: [
+        {
+          id: "server-1",
+          name: "Catalog",
+          slug: "server-one",
+          remoteMcpServerId: "remote-1",
+        },
+        {
+          id: "server-2",
+          name: "Catalog_Governed",
+          slug: "server-two",
+          remoteMcpServerId: "remote-2",
+        },
+      ],
+      remoteServers: [
+        {
+          id: "remote-1",
+          url: "https://catalog-one.example/mcp",
+          transportType: "streamable-http",
+        },
+        {
+          id: "remote-2",
+          url: "https://catalog.example/mcp",
+          transportType: "streamable-http",
+        },
+      ],
+      defaultPluginServerIds: ["server-2"],
+      activity: [
+        {
+          targetId: "server-two",
+          targetType: "hosted_mcp_server",
+          totalToolCalls: 1,
+        },
+      ],
     });
 
     const { result } = renderHook(() => useProjectGuideProgress());
@@ -365,48 +388,30 @@ describe("useProjectGuideProgress", () => {
   });
 
   it("credits activity from a renamed catalog server", () => {
-    queryHooks.servers.mockReturnValue({
-      data: {
-        mcpServers: [
-          {
-            id: "server-1",
-            name: "Catalog",
-            slug: "server-one",
-            remoteMcpServerId: "remote-1",
-          },
-        ],
-      },
-      isPending: false,
-    });
-    queryHooks.remoteServers.mockReturnValue({
-      data: {
-        remoteMcpServers: [
-          {
-            id: "remote-1",
-            url: "https://catalog.example/mcp",
-            transportType: "streamable-http",
-          },
-        ],
-      },
-      isPending: false,
-    });
-    queryHooks.plugins.mockReturnValue({
-      data: {
-        plugins: [{ isDefault: true, servers: [{ mcpServerId: "server-1" }] }],
-      },
-      isPending: false,
-    });
-    queryHooks.activity.mockReturnValue({
-      data: {
-        activity: [
-          {
-            targetId: "server-one",
-            targetType: "hosted_mcp_server",
-            totalToolCalls: 1,
-          },
-        ],
-      },
-      isPending: false,
+    setMcpProgressData({
+      servers: [
+        {
+          id: "server-1",
+          name: "Catalog",
+          slug: "server-one",
+          remoteMcpServerId: "remote-1",
+        },
+      ],
+      remoteServers: [
+        {
+          id: "remote-1",
+          url: "https://catalog.example/mcp",
+          transportType: "streamable-http",
+        },
+      ],
+      defaultPluginServerIds: ["server-1"],
+      activity: [
+        {
+          targetId: "server-one",
+          targetType: "hosted_mcp_server",
+          totalToolCalls: 1,
+        },
+      ],
     });
 
     const { result } = renderHook(() => useProjectGuideProgress());
@@ -415,48 +420,30 @@ describe("useProjectGuideProgress", () => {
   });
 
   it("does not complete from activity on an unconfigured server", () => {
-    queryHooks.servers.mockReturnValue({
-      data: {
-        mcpServers: [
-          {
-            id: "server-1",
-            name: "Custom",
-            slug: "custom-server",
-            remoteMcpServerId: "custom-remote",
-          },
-        ],
-      },
-      isPending: false,
-    });
-    queryHooks.remoteServers.mockReturnValue({
-      data: {
-        remoteMcpServers: [
-          {
-            id: "custom-remote",
-            url: "https://custom.example/mcp",
-            transportType: "streamable-http",
-          },
-        ],
-      },
-      isPending: false,
-    });
-    queryHooks.plugins.mockReturnValue({
-      data: {
-        plugins: [{ isDefault: true, servers: [{ mcpServerId: "server-1" }] }],
-      },
-      isPending: false,
-    });
-    queryHooks.activity.mockReturnValue({
-      data: {
-        activity: [
-          {
-            targetId: "custom-server",
-            targetType: "hosted_mcp_server",
-            totalToolCalls: 1,
-          },
-        ],
-      },
-      isPending: false,
+    setMcpProgressData({
+      servers: [
+        {
+          id: "server-1",
+          name: "Custom",
+          slug: "custom-server",
+          remoteMcpServerId: "custom-remote",
+        },
+      ],
+      remoteServers: [
+        {
+          id: "custom-remote",
+          url: "https://custom.example/mcp",
+          transportType: "streamable-http",
+        },
+      ],
+      defaultPluginServerIds: ["server-1"],
+      activity: [
+        {
+          targetId: "custom-server",
+          targetType: "hosted_mcp_server",
+          totalToolCalls: 1,
+        },
+      ],
     });
 
     const { result } = renderHook(() => useProjectGuideProgress());
@@ -467,49 +454,31 @@ describe("useProjectGuideProgress", () => {
   });
 
   it("does not complete from a different governed catalog server", () => {
-    selectedMcpServer.specifier = "other/catalog";
-    queryHooks.servers.mockReturnValue({
-      data: {
-        mcpServers: [
-          {
-            id: "server-1",
-            name: "Catalog_Governed",
-            slug: "server-one",
-            remoteMcpServerId: "remote-1",
-          },
-        ],
-      },
-      isPending: false,
-    });
-    queryHooks.remoteServers.mockReturnValue({
-      data: {
-        remoteMcpServers: [
-          {
-            id: "remote-1",
-            url: "https://catalog.example/mcp",
-            transportType: "streamable-http",
-          },
-        ],
-      },
-      isPending: false,
-    });
-    queryHooks.plugins.mockReturnValue({
-      data: {
-        plugins: [{ isDefault: true, servers: [{ mcpServerId: "server-1" }] }],
-      },
-      isPending: false,
-    });
-    queryHooks.activity.mockReturnValue({
-      data: {
-        activity: [
-          {
-            targetId: "server-one",
-            targetType: "hosted_mcp_server",
-            totalToolCalls: 1,
-          },
-        ],
-      },
-      isPending: false,
+    setMcpProgressData({
+      selectedSpecifier: "other/catalog",
+      servers: [
+        {
+          id: "server-1",
+          name: "Catalog_Governed",
+          slug: "server-one",
+          remoteMcpServerId: "remote-1",
+        },
+      ],
+      remoteServers: [
+        {
+          id: "remote-1",
+          url: "https://catalog.example/mcp",
+          transportType: "streamable-http",
+        },
+      ],
+      defaultPluginServerIds: ["server-1"],
+      activity: [
+        {
+          targetId: "server-one",
+          targetType: "hosted_mcp_server",
+          totalToolCalls: 1,
+        },
+      ],
     });
 
     const { result } = renderHook(() => useProjectGuideProgress());
@@ -520,57 +489,34 @@ describe("useProjectGuideProgress", () => {
   });
 
   it("ignores custom, tunneled, and same-slug activity false positives", () => {
-    queryHooks.servers.mockReturnValue({
-      data: {
-        mcpServers: [
-          {
-            id: "custom-server",
-            remoteMcpServerId: "custom-remote",
-            slug: "catalog-server",
-          },
-          {
-            id: "tunneled-server",
-            slug: "catalog-server",
-            tunneledMcpServerId: "tunnel-1",
-          },
-        ],
-      },
-      isPending: false,
-    });
-    queryHooks.remoteServers.mockReturnValue({
-      data: {
-        remoteMcpServers: [
-          {
-            id: "custom-remote",
-            url: "https://custom.example/mcp",
-            transportType: "streamable-http",
-          },
-        ],
-      },
-      isPending: false,
-    });
-    queryHooks.plugins.mockReturnValue({
-      data: {
-        plugins: [
-          {
-            isDefault: true,
-            servers: [{ mcpServerId: "custom-server" }],
-          },
-        ],
-      },
-      isPending: false,
-    });
-    queryHooks.activity.mockReturnValue({
-      data: {
-        activity: [
-          {
-            targetId: "catalog-server",
-            targetType: "tunneled_mcp_server",
-            totalToolCalls: 2,
-          },
-        ],
-      },
-      isPending: false,
+    setMcpProgressData({
+      servers: [
+        {
+          id: "custom-server",
+          remoteMcpServerId: "custom-remote",
+          slug: "catalog-server",
+        },
+        {
+          id: "tunneled-server",
+          slug: "catalog-server",
+          tunneledMcpServerId: "tunnel-1",
+        },
+      ],
+      remoteServers: [
+        {
+          id: "custom-remote",
+          url: "https://custom.example/mcp",
+          transportType: "streamable-http",
+        },
+      ],
+      defaultPluginServerIds: ["custom-server"],
+      activity: [
+        {
+          targetId: "catalog-server",
+          targetType: "tunneled_mcp_server",
+          totalToolCalls: 2,
+        },
+      ],
     });
 
     const { result } = renderHook(() => useProjectGuideProgress());

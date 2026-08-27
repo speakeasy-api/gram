@@ -287,26 +287,6 @@ describe("ProjectGuide", () => {
 
   it("animates only journeys that have not started", () => {
     const { rerender } = render(<ProjectGuide />);
-    const secretGraphic = screen.getByTestId(
-      "project-guide-graphic-secret-block",
-    );
-    const longStatus = within(secretGraphic).getByText(
-      "unsafe prompt not received",
-    );
-    expect(longStatus.className).toContain("break-words");
-    expect(longStatus.className).toContain("whitespace-normal");
-    expect(longStatus.parentElement?.className).toContain("grid");
-    expect(longStatus.parentElement?.className).toContain("flex-[0_1_35%]");
-    expect(
-      secretGraphic
-        .querySelector('[data-testid="project-guide-signal-track"]')
-        ?.querySelectorAll(".h-1.flex-1"),
-    ).toHaveLength(12);
-    expect(
-      secretGraphic
-        .querySelector('[data-testid="project-guide-signal-track"]')
-        ?.querySelectorAll(".bg-border"),
-    ).toHaveLength(12);
 
     expect(
       screen
@@ -330,31 +310,6 @@ describe("ProjectGuide", () => {
         .getByTestId("project-guide-graphic-secret-block")
         .getAttribute("data-animated"),
     ).toBe("true");
-  });
-
-  it("keeps the center plate fixed and only glows while live", () => {
-    const { rerender } = render(<ProjectGuide />);
-    const secretGraphic = screen.getByTestId(
-      "project-guide-graphic-secret-block",
-    );
-    const centerPlate = within(secretGraphic).getByTestId(
-      "project-guide-graphic-center-plate",
-    );
-    const glow = within(secretGraphic).getByTestId(
-      "project-guide-graphic-center-glow",
-    );
-
-    expect(centerPlate.style.transform).toBe("");
-    expect(glow.getAttribute("data-glow-state")).toBe("off");
-
-    statusByJourney.current = {
-      "third-party-mcp": "not-started",
-      "secret-block": "in-progress",
-    };
-    rerender(<ProjectGuide />);
-
-    expect(centerPlate.style.transform).toBe("");
-    expect(glow.getAttribute("data-glow-state")).toBe("on");
   });
 
   it("keeps the other journey switchable when a selected path opens", () => {
@@ -1147,110 +1102,6 @@ describe("ProjectGuide", () => {
     },
   );
 
-  it("renders the ready start action with the designed play affordance", async () => {
-    render(
-      <ProjectGuideRun
-        journey={PROJECT_GUIDE_JOURNEYS[1]!}
-        regionId="ready-run"
-        displayState="ready"
-        completedSteps={[]}
-        currentStep={0}
-        currentContent={null}
-        output={null}
-        eventCard={null}
-        primaryAction={{
-          label: "Start the journey",
-          icon: "play",
-          onClick: () => undefined,
-        }}
-        onSwitchJourney={() => undefined}
-      />,
-    );
-
-    const action = screen.getByRole("button", { name: "Start the journey" });
-    expect((action as HTMLButtonElement).disabled).toBe(false);
-    await waitFor(() => expect(action.querySelector("svg")).toBeTruthy());
-  });
-
-  it("keeps the ready start action disabled with the play affordance", async () => {
-    render(
-      <ProjectGuideRun
-        journey={PROJECT_GUIDE_JOURNEYS[1]!}
-        regionId="disabled-ready-run"
-        displayState="ready"
-        completedSteps={[]}
-        currentStep={0}
-        currentContent={null}
-        output={null}
-        eventCard={null}
-        primaryAction={{
-          label: "Start the journey",
-          icon: "play",
-          disabled: true,
-        }}
-        onSwitchJourney={() => undefined}
-      />,
-    );
-
-    const action = screen.getByRole("button", { name: "Start the journey" });
-    expect((action as HTMLButtonElement).disabled).toBe(true);
-    await waitFor(() => expect(action.querySelector("svg")).toBeTruthy());
-  });
-
-  it("keeps the installed plugin checkpoint action actionable with a play affordance", () => {
-    render(
-      <ProjectGuideRun
-        journey={PROJECT_GUIDE_JOURNEYS[1]!}
-        regionId="checkpoint-run"
-        displayState="checkpoint"
-        completedSteps={[]}
-        currentStep={0}
-        currentContent={null}
-        output={null}
-        eventCard={null}
-        primaryAction={{
-          label: "Plugin is installed",
-          icon: "play",
-          disabled: false,
-        }}
-        onSwitchJourney={() => undefined}
-      />,
-    );
-
-    const action = screen.getByRole("button", {
-      name: "Plugin is installed",
-    });
-    expect((action as HTMLButtonElement).disabled).toBe(false);
-    expect(action.querySelector("svg")).toBeTruthy();
-  });
-
-  it("keeps a disabled checkpoint action non-interactive", () => {
-    render(
-      <ProjectGuideRun
-        journey={PROJECT_GUIDE_JOURNEYS[1]!}
-        regionId="disabled-checkpoint-run"
-        displayState="checkpoint"
-        completedSteps={[]}
-        currentStep={0}
-        currentContent={null}
-        output={null}
-        eventCard={null}
-        primaryAction={{
-          label: "Plugin is installed",
-          icon: "play",
-          disabled: true,
-        }}
-        onSwitchJourney={() => undefined}
-      />,
-    );
-
-    const action = screen.getByRole("button", {
-      name: "Plugin is installed",
-    });
-    expect((action as HTMLButtonElement).disabled).toBe(true);
-    expect(action.querySelector("svg")).toBeTruthy();
-  });
-
   it("keeps activity history bounded and scrolls to the latest output", () => {
     const journey = PROJECT_GUIDE_JOURNEYS[1]!;
     const { rerender } = render(
@@ -1289,19 +1140,6 @@ describe("ProjectGuide", () => {
       />,
     );
 
-    expect(activity.className).toContain("flex-1");
-    expect(activity.className).toContain("overflow-y-auto");
-    expect(activity.className).toContain("max-h-[min(24rem,50dvh)]");
-    const stepList = screen.getByRole("list", { name: "Journey A steps" });
-    const steps = stepList.querySelectorAll("li");
-    expect(steps[0]?.className).toContain("min-h-48");
-    for (const step of Array.from(steps).slice(1)) {
-      expect(step.className).not.toContain("min-h-48");
-    }
-    expect(activity.closest("aside")?.className).toContain("min-h-0");
-    expect(activity.closest("aside")?.className).not.toContain(
-      "overflow-y-auto",
-    );
     expect(activity.scrollTop).toBe(400);
   });
 

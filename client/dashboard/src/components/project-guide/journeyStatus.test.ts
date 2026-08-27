@@ -111,7 +111,7 @@ function pluginServer(mcpServerId: string): PluginServer {
 }
 
 describe("catalogBackedMcpServers", () => {
-  it("matches catalog remote URLs and ignores unread inputs", () => {
+  it("matches catalog remote URLs and ignores unread or unsupported inputs", () => {
     expect(
       catalogBackedMcpServers(
         [server({ remoteMcpServerId: "remote-id" })],
@@ -124,6 +124,20 @@ describe("catalogBackedMcpServers", () => {
         [server({ remoteMcpServerId: "remote-id" })],
         undefined,
         [catalogServer()],
+      ),
+    ).toEqual([]);
+    expect(
+      catalogBackedMcpServers(
+        [server({ remoteMcpServerId: "remote-id" })],
+        [remote({ transportType: "sse" })],
+        [catalogServer()],
+      ),
+    ).toEqual([]);
+    expect(
+      catalogBackedMcpServers(
+        [server({ remoteMcpServerId: "remote-id" })],
+        [remote({ url: "http://catalog.example/mcp" })],
+        [catalogServer("http://catalog.example/mcp")],
       ),
     ).toEqual([]);
   });
@@ -165,153 +179,96 @@ describe("hasBlockingSecretsPolicy", () => {
     ).toBe(true);
   });
 
-  it("rejects an omitted message type list", () => {
-    expect(
-      hasBlockingSecretsPolicy([
-        policy({ action: "block", sources: ["gitleaks"] }),
-      ]),
-    ).toBe(false);
-  });
-
-  it("rejects an empty message type list", () => {
-    expect(
-      hasBlockingSecretsPolicy([
-        policy({
-          action: "block",
-          sources: ["gitleaks"],
-          messageTypes: [],
-        }),
-      ]),
-    ).toBe(false);
-  });
-
-  it("rejects a targeted secrets policy", () => {
-    expect(
-      hasBlockingSecretsPolicy([
-        policy({
-          action: "block",
-          audienceType: "targeted",
-          sources: ["gitleaks"],
-          messageTypes: ["tool_request", "tool_response"],
-        }),
-      ]),
-    ).toBe(false);
-  });
-
-  it("rejects a prompt-based secrets policy", () => {
-    expect(
-      hasBlockingSecretsPolicy([
-        policy({
-          action: "block",
-          policyType: "prompt_based",
-          sources: ["gitleaks"],
-          messageTypes: ["tool_request", "tool_response"],
-        }),
-      ]),
-    ).toBe(false);
-  });
-
-  it("rejects a policy with every secrets rule disabled", () => {
-    expect(
-      hasBlockingSecretsPolicy([
-        policy({
-          action: "block",
-          sources: ["gitleaks"],
-          messageTypes: ["tool_request", "tool_response"],
-          disabledRules: DETECTION_RULES.secrets.map((rule) => rule.id),
-        }),
-      ]),
-    ).toBe(false);
-  });
-
-  it("rejects a policy scoped away from the whole project", () => {
-    expect(
-      hasBlockingSecretsPolicy([
-        policy({
-          action: "block",
-          sources: ["gitleaks"],
-          messageTypes: ["tool_request", "tool_response"],
-          scopeInclude: "user:admin",
-        }),
-      ]),
-    ).toBe(false);
-  });
-
-  it("does not treat an SSE or insecure remote as catalog-backed", () => {
-    expect(
-      catalogBackedMcpServers(
-        [server({ remoteMcpServerId: "remote-id" })],
-        [remote({ transportType: "sse" })],
-        [catalogServer()],
-      ),
-    ).toEqual([]);
-    expect(
-      catalogBackedMcpServers(
-        [server({ remoteMcpServerId: "remote-id" })],
-        [remote({ url: "http://catalog.example/mcp" })],
-        [catalogServer("http://catalog.example/mcp")],
-      ),
-    ).toEqual([]);
-  });
-
-  it("rejects extra message types outside the standard tool surfaces", () => {
-    expect(
-      hasBlockingSecretsPolicy([
-        policy({
-          action: "block",
-          sources: ["gitleaks"],
-          messageTypes: ["tool_request", "tool_response", "user_message"],
-        }),
-      ]),
-    ).toBe(false);
-  });
-
-  it("rejects a policy that combines secrets with another source", () => {
-    expect(
-      hasBlockingSecretsPolicy([
-        policy({
-          action: "block",
-          sources: ["gitleaks", "prompt_injection"],
-          messageTypes: ["tool_request", "tool_response"],
-        }),
-      ]),
-    ).toBe(false);
-  });
-
-  it("rejects a secrets policy that does not scan tool requests and responses", () => {
-    expect(
-      hasBlockingSecretsPolicy([
-        policy({
-          action: "block",
-          sources: ["gitleaks"],
-          messageTypes: ["user_message"],
-        }),
-      ]),
-    ).toBe(false);
-  });
-
-  it("rejects a flag-only secrets policy", () => {
-    expect(
-      hasBlockingSecretsPolicy([
-        policy({ action: "flag", sources: ["gitleaks"] }),
-      ]),
-    ).toBe(false);
-  });
-
-  it("rejects a disabled blocking policy", () => {
-    expect(
-      hasBlockingSecretsPolicy([
-        policy({ action: "block", sources: ["gitleaks"], enabled: false }),
-      ]),
-    ).toBe(false);
-  });
-
-  it("rejects a blocking policy for another category", () => {
-    expect(
-      hasBlockingSecretsPolicy([
-        policy({ action: "block", sources: ["shadow_mcp"] }),
-      ]),
-    ).toBe(false);
+  it.each<{
+    name: string;
+    overrides: Partial<RiskPolicy>;
+  }>([
+    {
+      name: "an omitted message type list",
+      overrides: { action: "block", sources: ["gitleaks"] },
+    },
+    {
+      name: "an empty message type list",
+      overrides: {
+        action: "block",
+        sources: ["gitleaks"],
+        messageTypes: [],
+      },
+    },
+    {
+      name: "a targeted secrets policy",
+      overrides: {
+        action: "block",
+        audienceType: "targeted",
+        sources: ["gitleaks"],
+        messageTypes: ["tool_request", "tool_response"],
+      },
+    },
+    {
+      name: "a prompt-based secrets policy",
+      overrides: {
+        action: "block",
+        policyType: "prompt_based",
+        sources: ["gitleaks"],
+        messageTypes: ["tool_request", "tool_response"],
+      },
+    },
+    {
+      name: "a policy with every secrets rule disabled",
+      overrides: {
+        action: "block",
+        sources: ["gitleaks"],
+        messageTypes: ["tool_request", "tool_response"],
+        disabledRules: DETECTION_RULES.secrets.map((rule) => rule.id),
+      },
+    },
+    {
+      name: "a policy scoped away from the whole project",
+      overrides: {
+        action: "block",
+        sources: ["gitleaks"],
+        messageTypes: ["tool_request", "tool_response"],
+        scopeInclude: "user:admin",
+      },
+    },
+    {
+      name: "extra message types outside the standard tool surfaces",
+      overrides: {
+        action: "block",
+        sources: ["gitleaks"],
+        messageTypes: ["tool_request", "tool_response", "user_message"],
+      },
+    },
+    {
+      name: "a policy that combines secrets with another source",
+      overrides: {
+        action: "block",
+        sources: ["gitleaks", "prompt_injection"],
+        messageTypes: ["tool_request", "tool_response"],
+      },
+    },
+    {
+      name: "a policy that does not scan tool requests and responses",
+      overrides: {
+        action: "block",
+        sources: ["gitleaks"],
+        messageTypes: ["user_message"],
+      },
+    },
+    {
+      name: "a flag-only secrets policy",
+      overrides: { action: "flag", sources: ["gitleaks"] },
+    },
+    {
+      name: "a disabled blocking policy",
+      overrides: { action: "block", sources: ["gitleaks"], enabled: false },
+    },
+    {
+      name: "a blocking policy for another category",
+      overrides: { action: "block", sources: ["shadow_mcp"] },
+    },
+  ])("rejects $name", ({ overrides }) => {
+    expect(hasBlockingSecretsPolicy([policy(overrides)])).toBe(false);
   });
 
   it("handles an unread list", () => {

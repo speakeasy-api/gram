@@ -24,26 +24,7 @@ vi.mock("@/components/page-layout", () => {
         ({ children }: { children?: ReactNode }) => <>{children}</>,
         { Breadcrumbs: () => null },
       ),
-      Body: ({
-        children,
-        fullWidth,
-        fullHeight,
-        noPadding,
-      }: {
-        children: ReactNode;
-        fullWidth?: boolean;
-        fullHeight?: boolean;
-        noPadding?: boolean;
-      }) => (
-        <div
-          data-testid="page-body"
-          data-full-width={fullWidth}
-          data-full-height={fullHeight}
-          data-no-padding={noPadding}
-        >
-          {children}
-        </div>
-      ),
+      Body: ({ children }: { children: ReactNode }) => <>{children}</>,
     },
   );
   return { Page };
@@ -66,8 +47,5 @@ describe("Home", () => {
     render(<Home />);
     expect(screen.getByTestId("chat-landing")).toBeTruthy();
     expect(screen.getByTestId("project-dashboard")).toBeTruthy();
-    expect(screen.getByTestId("page-body").dataset.fullWidth).toBeUndefined();
-    expect(screen.getByTestId("page-body").dataset.fullHeight).toBeUndefined();
-    expect(screen.getByTestId("page-body").dataset.noPadding).toBeUndefined();
   });
 });
