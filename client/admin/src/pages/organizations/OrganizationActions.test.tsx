@@ -492,8 +492,9 @@ describe("the row menu", () => {
   });
 });
 
-// The record draws two bars at once, so each has to be able to ask for its own
-// half. Both layouts are gated, not just the one the record happens to use.
+// The Overview separates lifecycle actions into Danger zone and trial actions
+// into the Enterprise trial panel, so each instance needs its own action scope.
+// Both layouts honor that scope, not just the buttons used by the Overview.
 describe("the actions prop", () => {
   it.each([
     ["all", "live running", ORG, ["Disable", "Extend trial"]],
