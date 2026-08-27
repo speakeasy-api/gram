@@ -224,7 +224,7 @@ export function OrgWelcomeBanner(): JSX.Element | null {
         )}
       >
         <span className="text-eyebrow">Welcome to Speakeasy</span>
-        <h2 className="text-foreground font-display text-[40px] leading-[0.92] font-thin tracking-[-0.04em] lg:text-[60px]">
+        <h2 className="text-foreground font-display text-[40px] leading-[0.98] font-thin tracking-[-0.04em] lg:text-[60px]">
           {headlineLines.map((line, i) => (
             <Fragment key={line}>
               {i > 0 ? <br /> : null}
