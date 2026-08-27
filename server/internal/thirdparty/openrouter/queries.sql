@@ -41,8 +41,14 @@ WHERE organization_id = @organization_id
 -- name: UpdateOpenRouterKey :one
 UPDATE openrouter_api_keys
 SET monthly_credits = @monthly_credits, key_hash = @key_hash,
-    disabled = disabled AND NOT @reinstate::boolean,
-    disable_causes = CASE WHEN @reinstate::boolean THEN '{}'::text[] ELSE disable_causes END,
+    disabled = CASE
+      WHEN @reinstate::boolean AND disable_causes IS NULL THEN FALSE
+      ELSE disabled
+    END,
+    disable_causes = CASE
+      WHEN @reinstate::boolean AND disable_causes IS NULL THEN '{}'::text[]
+      ELSE disable_causes
+    END,
     updated_at = GREATEST(clock_timestamp(), updated_at + INTERVAL '1 microsecond')
 WHERE organization_id = @organization_id
   AND key_type = @key_type

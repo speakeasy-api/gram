@@ -380,7 +380,21 @@ WHERE id = @organization_id
 -- name: DisablePaygOpenRouterChatKey :exec
 UPDATE openrouter_api_keys
 SET disabled = TRUE,
-    disable_causes = NULL,
+    disable_causes = CASE
+      WHEN disable_causes IS NULL THEN NULL
+      WHEN 'billing_inactive' = ANY(disable_causes) THEN disable_causes
+      ELSE ARRAY(
+        SELECT cause
+        FROM unnest(array_append(disable_causes, 'billing_inactive')) AS causes(cause)
+        GROUP BY cause
+        ORDER BY CASE cause
+          WHEN 'admin_lock' THEN 1
+          WHEN 'trial_demotion' THEN 2
+          WHEN 'billing_inactive' THEN 3
+          ELSE 4
+        END
+      )
+    END,
     updated_at = clock_timestamp()
 WHERE organization_id = @organization_id
   AND key_type = 'chat'

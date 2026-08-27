@@ -269,8 +269,14 @@ func (q *Queries) ReleaseOpenRouterKeyBillingLock(ctx context.Context, arg Relea
 const updateOpenRouterKey = `-- name: UpdateOpenRouterKey :one
 UPDATE openrouter_api_keys
 SET monthly_credits = $1, key_hash = $2,
-    disabled = disabled AND NOT $3::boolean,
-    disable_causes = CASE WHEN $3::boolean THEN '{}'::text[] ELSE disable_causes END,
+    disabled = CASE
+      WHEN $3::boolean AND disable_causes IS NULL THEN FALSE
+      ELSE disabled
+    END,
+    disable_causes = CASE
+      WHEN $3::boolean AND disable_causes IS NULL THEN '{}'::text[]
+      ELSE disable_causes
+    END,
     updated_at = GREATEST(clock_timestamp(), updated_at + INTERVAL '1 microsecond')
 WHERE organization_id = $4
   AND key_type = $5

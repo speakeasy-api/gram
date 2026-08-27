@@ -635,8 +635,11 @@ func (o *OpenRouter) refreshAPIKeyLimit(ctx context.Context, db DBTX, orgID stri
 	creditLimit := float64(keyLimit)
 	patch := updateKeyRequest{Limit: &creditLimit, LimitReset: "monthly", Disabled: nil}
 	effectiveDisabled := EffectiveDisabled(key.Disabled, key.DisableCauses)
-	if effectiveDisabled {
-		// Setting a limit on a disabled key does not bring it back upstream.
+	legacyReinstate := effectiveDisabled && key.DisableCauses == nil
+	if legacyReinstate {
+		// Before classification, setting a limit on a disabled key also restored
+		// the legacy broad switch. Classified causes are authoritative and may
+		// only be removed by their owning cause-aware path.
 		patch.Disabled = new(false)
 	}
 
@@ -665,10 +668,10 @@ func (o *OpenRouter) refreshAPIKeyLimit(ctx context.Context, db DBTX, orgID stri
 		KeyType:        string(keyType),
 		MonthlyCredits: int64(keyLimit),
 		KeyHash:        keyResponse.Data.Hash,
-		// This matches the upstream PATCH above. A lockdown committed after the
-		// read is preserved because key.Disabled was false at the read and this
-		// value therefore remains false.
-		Reinstate: effectiveDisabled,
+		// This matches the upstream PATCH above. SQL also checks that the row is
+		// still unclassified, so a cause classified during the network call is
+		// never cleared locally.
+		Reinstate: legacyReinstate,
 	})
 	if err != nil {
 		return 0, oops.E(oops.CodeUnexpected, err, "failed to update openrouter key").LogError(ctx, o.logger)
