@@ -54,7 +54,7 @@ export type JourneyFixture = {
   };
 };
 
-export const SECRET_BLOCK_STEPS = [
+const SECRET_BLOCK_STEPS = [
   "Create a secrets policy set to deny",
   "Setup the observability plugin",
   "Add it to your agent",
@@ -62,7 +62,7 @@ export const SECRET_BLOCK_STEPS = [
   "Watch the block land",
 ];
 
-export const PROJECT_GUIDE_MCP_STEPS = [
+const PROJECT_GUIDE_MCP_STEPS = [
   "Pick and set up a server",
   "Connect your client",
   "Ask the agent to list the tools",
