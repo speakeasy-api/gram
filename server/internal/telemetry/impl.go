@@ -803,7 +803,7 @@ func (s *Service) reverseResolveAccountOwners(ctx context.Context, orgID string,
 		}
 		unresolved = append(unresolved, conv.NormalizeEmail(key))
 	}
-	unresolved = dedupeNonEmpty(unresolved)
+	unresolved = conv.DedupeNonEmpty(unresolved)
 	if len(unresolved) == 0 {
 		return
 	}
@@ -825,7 +825,7 @@ func (s *Service) reverseResolveAccountOwners(ctx context.Context, orgID string,
 		if _, ok := ownerByKey[key]; ok || !strings.Contains(key, "@") {
 			continue
 		}
-		owners := dedupeNonEmpty(ownersByEmail[conv.NormalizeEmail(key)])
+		owners := conv.DedupeNonEmpty(ownersByEmail[conv.NormalizeEmail(key)])
 		if len(owners) == 1 {
 			ownerByKey[key] = owners[0]
 		}
@@ -858,7 +858,7 @@ func (s *Service) expandUserSearchKeys(ctx context.Context, orgID string, keys [
 			ids = append(ids, key)
 		}
 	}
-	emails = dedupeNonEmpty(emails)
+	emails = conv.DedupeNonEmpty(emails)
 
 	users := usersRepo.New(s.db)
 
@@ -914,14 +914,14 @@ func (s *Service) expandUserSearchKeys(ctx context.Context, orgID string, keys [
 				ownersByEmail[email] = append(ownersByEmail[email], conv.FromPGTextOrEmpty[string](account.UserID))
 			}
 			for _, owners := range ownersByEmail {
-				if owners = dedupeNonEmpty(owners); len(owners) == 1 {
+				if owners = conv.DedupeNonEmpty(owners); len(owners) == 1 {
 					ids = append(ids, owners[0])
 				}
 			}
 		}
 	}
 
-	ids = dedupeNonEmpty(ids)
+	ids = conv.DedupeNonEmpty(ids)
 
 	if len(ids) > 0 {
 		rows, err := users.GetConnectedUsersByIDs(ctx, usersRepo.GetConnectedUsersByIDsParams{
@@ -950,7 +950,7 @@ func (s *Service) expandUserSearchKeys(ctx context.Context, orgID string, keys [
 
 	// Keep the caller's match-nothing semantics: blank-only keys must not
 	// degenerate into no filter at all (which would return every user).
-	expanded := dedupeNonEmpty(append(out, ids...))
+	expanded := conv.DedupeNonEmpty(append(out, ids...))
 	if len(expanded) == 0 {
 		return keys
 	}
@@ -993,30 +993,6 @@ func (s *Service) expandEmployeeEmailFilters(ctx context.Context, orgID string, 
 	}
 
 	return filters
-}
-
-// dedupeNonEmpty drops blanks and repeats while keeping first-seen order.
-// Dropping blanks is the load-bearing half: a blank in a key set would match
-// every email-less row in the project — everyone else's hook rows.
-func dedupeNonEmpty(values []string) []string {
-	if len(values) == 0 {
-		return nil
-	}
-
-	seen := make(map[string]struct{}, len(values))
-	out := make([]string, 0, len(values))
-	for _, value := range values {
-		if value == "" {
-			continue
-		}
-		if _, ok := seen[value]; ok {
-			continue
-		}
-		seen[value] = struct{}{}
-		out = append(out, value)
-	}
-
-	return out
 }
 
 func dedupe(values []string) []string {
