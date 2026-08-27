@@ -4,7 +4,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/golang-jwt/jwt/v5"
+	"github.com/speakeasy-api/gram/server/internal/oauth/jwtclaims"
 )
 
 // tokenResponse is the slice of the upstream /token reply we care about.
@@ -66,16 +66,11 @@ func (t tokenResponse) AccessExpiresAt(now time.Time) *time.Time {
 		return &deadline
 	}
 
-	claims := jwt.MapClaims{}
-	if _, _, err := jwt.NewParser().ParseUnverified(t.AccessToken, claims); err != nil {
+	exp, ok := jwtclaims.UnsafeExtractExpiry(t.AccessToken)
+	if !ok {
 		return nil
 	}
-	exp, err := claims.GetExpirationTime()
-	if err != nil || exp == nil {
-		return nil
-	}
-	deadline := exp.Time
-	return &deadline
+	return &exp
 }
 
 // AuthorizationLifetimeSeconds is the remaining absolute lifetime of the
