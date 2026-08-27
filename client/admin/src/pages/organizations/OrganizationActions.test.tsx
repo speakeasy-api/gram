@@ -493,7 +493,9 @@ describe("the row menu", () => {
       // Never trialled, or expired without converting or being demoted. A
       // running trial is extend's job, a demoted one is re-arm's, and a
       // converted one has become a contract.
-      expect(menuItems().includes("Start trial")).toBe(STARTABLE.includes(state));
+      expect(menuItems().includes("Start trial")).toBe(
+        STARTABLE.includes(state),
+      );
     },
   );
 

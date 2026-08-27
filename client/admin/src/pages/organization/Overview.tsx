@@ -227,11 +227,7 @@ export function Overview({ org }: { org: AdminOrganization }): JSX.Element {
           <div className="flex flex-wrap items-start justify-between gap-3">
             <TrialFacts org={org} />
             {canStartTrial(org) ? (
-              <OrganizationActions
-                org={org}
-                layout="buttons"
-                actions="trial"
-              />
+              <OrganizationActions org={org} layout="buttons" actions="trial" />
             ) : null}
           </div>
         </Row>

@@ -4192,11 +4192,14 @@ describe("re-arming a trial from the peek panel", () => {
 });
 
 describe("starting a trial from the peek panel", () => {
+  const org = SECOND_ORG;
+  if (!org) throw new Error("the list fixture needs a never-trialled row");
+
   async function pressStart(): Promise<HTMLElement> {
     await renderRouteTree(routeTree, { initialPath: "/organizations" });
-    await peekOn(SECOND_ORG.name);
+    await peekOn(org.name);
     const control = within(peekPanel()).getByRole("button", {
-      name: `Start trial for ${SECOND_ORG.name}`,
+      name: `Start trial for ${org.name}`,
     });
     fireEvent.click(control);
     await screen.findByRole("dialog");
@@ -4213,13 +4216,11 @@ describe("starting a trial from the peek panel", () => {
     await pressStart();
 
     expect(mocks.startTrial).toHaveBeenCalledWith({
-      id: SECOND_ORG.id,
+      id: org.id,
       days: 14,
     });
     expect(peekPanel().textContent).toContain(shortDate(STARTED_TRIAL_END));
-    expect(announcement()).toBe(
-      `${SECOND_ORG.name} trial started for 14 days.`,
-    );
+    expect(announcement()).toBe(`${org.name} trial started for 14 days.`);
   });
 
   it("gives the keyboard to the panel when the control that opened the dialog goes", async () => {
@@ -4230,7 +4231,7 @@ describe("starting a trial from the peek panel", () => {
     expect(control.isConnected).toBe(false);
     expect(
       within(peekPanel()).getByRole("button", {
-        name: `Extend trial for ${SECOND_ORG.name}`,
+        name: `Extend trial for ${org.name}`,
       }),
     ).toBeTruthy();
 
