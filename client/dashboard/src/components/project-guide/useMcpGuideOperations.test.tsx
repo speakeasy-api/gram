@@ -104,7 +104,7 @@ function catalogServer(
     registrySpecifier: "example/read-only",
     version: "1.0.0",
     title: "Linear",
-    meta: { "com.pulsemcp/server": { isOfficial: true } },
+    meta: {},
     toolCount: 2,
     isReadOnly: true,
     supportsDcr: true,

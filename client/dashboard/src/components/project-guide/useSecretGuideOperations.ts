@@ -10,7 +10,6 @@ import { hasBlockingSecretsPolicy } from "@/components/project-guide/journeyStat
 import { useOrganization } from "@/contexts/Auth";
 import { useFetcher } from "@/contexts/Fetcher";
 import { useProjectSlugForRequests } from "@/contexts/Sdk";
-import { useRBAC } from "@/hooks/useRBAC";
 import { downloadResponse } from "@/pages/plugins/downloadPluginPackage";
 import { getRuleTitleFallback } from "@/pages/security/risk-utils";
 import { useRoutes } from "@/routes";
@@ -220,7 +219,6 @@ export function useSecretGuideOperations(): {
 } {
   const gramProject = useProjectSlugForRequests();
   const organization = useOrganization();
-  const { hasScope, isLoading: rbacLoading } = useRBAC();
   const { fetch: authFetch } = useFetcher();
   const routes = useRoutes();
   const queryClient = useQueryClient();
@@ -428,16 +426,6 @@ export function useSecretGuideOperations(): {
       });
       return;
     }
-    if (rbacLoading) return;
-    if (!hasScope("org:admin")) {
-      updateActiveOperation(undefined);
-      operation.report({
-        type: "error",
-        scope: operation.scope,
-        message: "An organization admin is required to create this policy.",
-      });
-      return;
-    }
     const key = projectGuideOperationKey(operation.scope);
     if (startedFor.current.has(key)) return;
     startedFor.current.add(key);
@@ -497,8 +485,6 @@ export function useSecretGuideOperations(): {
     matchingPolicy,
     policyError,
     policyPending,
-    hasScope,
-    rbacLoading,
     queryClient,
     isCurrentOperation,
     updateActiveOperation,
@@ -509,16 +495,6 @@ export function useSecretGuideOperations(): {
     if (!operation || operation.paused || operation.scope.step !== 1) return;
     if (!client) {
       updateActiveOperation(undefined);
-      return;
-    }
-    if (rbacLoading) return;
-    if (!hasScope("org:admin")) {
-      updateActiveOperation(undefined);
-      operation.report({
-        type: "error",
-        scope: operation.scope,
-        message: "An organization admin is required to download the plugin.",
-      });
       return;
     }
     if (downloadedFilename) {
@@ -603,8 +579,6 @@ export function useSecretGuideOperations(): {
     client,
     downloadedFilename,
     isCurrentOperation,
-    hasScope,
-    rbacLoading,
     updateActiveOperation,
   ]);
 
