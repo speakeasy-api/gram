@@ -253,6 +253,9 @@ describe("ProjectGuide", () => {
     render(<ProjectGuide />);
 
     expect(
+      screen.getByRole("link", { name: "Back to home" }).getAttribute("href"),
+    ).toBe("/org/projects/project-guide-test");
+    expect(
       screen.getByRole("heading", {
         name: "Put your agent traffic under control",
       }),

@@ -57,7 +57,8 @@ import {
 import { useMachine } from "@xstate/react";
 import { motion, useReducedMotion } from "motion/react";
 import { useCallback, useEffect, useRef } from "react";
-import { useNavigate } from "react-router";
+import { Link, useNavigate } from "react-router";
+import { ChevronLeft, Home } from "lucide-react";
 
 type McpGuideOperations = ReturnType<typeof useMcpGuideOperations>;
 type SecretGuideOperations = ReturnType<typeof useSecretGuideOperations>;
@@ -230,7 +231,7 @@ function ProjectGuideContent({
     : undefined;
   if (isComplete) {
     return (
-      <GuideCanvas>
+      <GuideCanvas homeHref={routes.home.href()}>
         <ProjectGuideComplete
           reducedMotion={reducedMotion}
           onReturnToProjectHome={returnToProjectHome}
@@ -240,7 +241,7 @@ function ProjectGuideContent({
   }
 
   return (
-    <GuideCanvas>
+    <GuideCanvas homeHref={routes.home.href()}>
       <section className="border-border bg-card mx-auto flex w-full max-w-[1200px] flex-col overflow-hidden border shadow-sm">
         <header className="border-border flex items-end gap-3.5 border-b px-6 py-4">
           <div>
@@ -1297,17 +1298,30 @@ function projectGuideContentId(journeyId: JourneyId): string {
   return `project-guide-${journeyId}-content`;
 }
 
-function GuideCanvas({ children }: { children: React.ReactNode }): JSX.Element {
+function GuideCanvas({
+  children,
+  homeHref,
+}: {
+  children: React.ReactNode;
+  homeHref: string;
+}): JSX.Element {
   return (
     <div
-      className={cn(
-        BRAND_MESH_SURFACE_CLASS,
-        "relative flex min-h-0 w-full flex-1 p-4 sm:p-8",
-      )}
+      className={cn(BRAND_MESH_SURFACE_CLASS, "flex h-full w-full flex-col")}
     >
       <BrandMeshLayers />
-      <div className="relative z-10 flex min-h-0 w-full flex-1 overflow-y-auto">
-        <div className="flex min-h-full w-full items-center justify-center">
+      <header className="relative z-10 flex h-(--header-height) shrink-0 items-center px-8">
+        <Link
+          to={homeHref}
+          aria-label="Back to home"
+          className="border-border bg-card text-muted-foreground hover:border-foreground hover:text-foreground flex items-center gap-1 border px-2.5 py-1.5 transition-colors"
+        >
+          <ChevronLeft className="size-4" />
+          <Home className="size-4" />
+        </Link>
+      </header>
+      <div className="relative z-10 min-h-0 flex-1 overflow-y-auto">
+        <div className="flex min-h-full w-full items-center justify-center p-4 sm:p-8">
           {children}
         </div>
       </div>
