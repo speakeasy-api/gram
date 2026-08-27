@@ -72323,6 +72323,15 @@ components:
         - coverage_bucket
         - first_seen_at
         - last_seen_at
+    MarkEnterpriseTrialConvertedRequestBody:
+      type: object
+      properties:
+        id:
+          type: string
+          description: Organization ID.
+          minLength: 1
+      required:
+        - id
     MarkRiskResultsFalsePositiveRequestBody:
       type: object
       properties:

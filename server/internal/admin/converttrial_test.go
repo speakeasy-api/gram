@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"sync"
 	"testing"
 	"time"
@@ -219,6 +220,7 @@ func waitForBlockedBackendCount(t *testing.T, ctx context.Context, conn *pgxpool
 
 	require.Eventually(t, func() bool {
 		var blocked int64
+		//nolint:glint // notestingrawsql: PostgreSQL system view is absent from SQLc's schema snapshot.
 		err := conn.QueryRow(ctx, `
 			SELECT count(*)
 			FROM pg_stat_activity
@@ -527,7 +529,7 @@ func TestMarkEnterpriseTrialConverted_SerializesWithBillingCauseMutation(t *test
 			for _, cause := range []openrouter.DisableCause{openrouter.DisableCauseAdminLock, openrouter.DisableCauseBillingInactive} {
 				_, mutationErr := orrepo.New(keyConn).AddOpenRouterAPIKeyDisableCause(ctx, orrepo.AddOpenRouterAPIKeyDisableCauseParams{OrganizationID: orgID, KeyType: string(openrouter.KeyTypeChat), DisableCause: string(cause)})
 				if mutationErr != nil {
-					return mutationErr
+					return fmt.Errorf("add %s disable cause: %w", cause, mutationErr)
 				}
 			}
 			close(mutationStarted)

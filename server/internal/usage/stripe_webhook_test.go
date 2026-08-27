@@ -1263,20 +1263,9 @@ func TestStripeCheckoutConversionAuditFailureRollsBackTrialAndPaygActivation(t *
 		Tier:           "enterprise",
 		EndsAt:         pgtype.Timestamptz{Time: time.Now().UTC().Add(7 * 24 * time.Hour), Valid: true},
 	}))
-	_, err := db.Exec(ctx, `
-		CREATE FUNCTION fail_enterprise_trial_conversion_audit() RETURNS trigger AS $$
-		BEGIN
-			IF NEW.action = 'organization:enterprise_trial_converted' THEN
-				RAISE EXCEPTION 'forced enterprise trial conversion audit failure';
-			END IF;
-			RETURN NEW;
-		END;
-		$$ LANGUAGE plpgsql;
-		CREATE TRIGGER fail_enterprise_trial_conversion_audit
-		BEFORE INSERT ON audit_logs
-		FOR EACH ROW EXECUTE FUNCTION fail_enterprise_trial_conversion_audit();
-	`)
-	require.NoError(t, err)
+	queries := repo.New(db)
+	require.NoError(t, queries.CreateEnterpriseTrialConversionAuditFailureFunctionFixture(ctx))
+	require.NoError(t, queries.CreateEnterpriseTrialConversionAuditFailureTriggerFixture(ctx))
 
 	require.Equal(t, http.StatusInternalServerError, serveStripeWebhook(service, "failure").Code)
 

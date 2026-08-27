@@ -830,3 +830,19 @@ WHERE organization_id = @organization_id
 UPDATE openrouter_api_keys
 SET created_at = @created_at
 WHERE organization_id = @organization_id;
+
+-- name: CreateEnterpriseTrialConversionAuditFailureFunctionFixture :exec
+-- Test-only trigger function for proving conversion audit failures roll back checkout changes.
+CREATE OR REPLACE FUNCTION fail_enterprise_trial_conversion_audit() RETURNS trigger AS $$
+BEGIN
+  IF NEW.action = 'organization:enterprise_trial_converted' THEN
+    RAISE EXCEPTION 'forced enterprise trial conversion audit failure';
+  END IF;
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+-- name: CreateEnterpriseTrialConversionAuditFailureTriggerFixture :exec
+CREATE TRIGGER fail_enterprise_trial_conversion_audit
+BEFORE INSERT ON audit_logs
+FOR EACH ROW EXECUTE FUNCTION fail_enterprise_trial_conversion_audit();

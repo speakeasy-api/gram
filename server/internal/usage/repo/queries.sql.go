@@ -230,6 +230,34 @@ func (q *Queries) CountStripeWebhookReceiptsFixture(ctx context.Context, organiz
 	return count, err
 }
 
+const createEnterpriseTrialConversionAuditFailureFunctionFixture = `-- name: CreateEnterpriseTrialConversionAuditFailureFunctionFixture :exec
+CREATE OR REPLACE FUNCTION fail_enterprise_trial_conversion_audit() RETURNS trigger AS $$
+BEGIN
+  IF NEW.action = 'organization:enterprise_trial_converted' THEN
+    RAISE EXCEPTION 'forced enterprise trial conversion audit failure';
+  END IF;
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql
+`
+
+// Test-only trigger function for proving conversion audit failures roll back checkout changes.
+func (q *Queries) CreateEnterpriseTrialConversionAuditFailureFunctionFixture(ctx context.Context) error {
+	_, err := q.db.Exec(ctx, createEnterpriseTrialConversionAuditFailureFunctionFixture)
+	return err
+}
+
+const createEnterpriseTrialConversionAuditFailureTriggerFixture = `-- name: CreateEnterpriseTrialConversionAuditFailureTriggerFixture :exec
+CREATE TRIGGER fail_enterprise_trial_conversion_audit
+BEFORE INSERT ON audit_logs
+FOR EACH ROW EXECUTE FUNCTION fail_enterprise_trial_conversion_audit()
+`
+
+func (q *Queries) CreateEnterpriseTrialConversionAuditFailureTriggerFixture(ctx context.Context) error {
+	_, err := q.db.Exec(ctx, createEnterpriseTrialConversionAuditFailureTriggerFixture)
+	return err
+}
+
 const createLegacyTUMMeterReportFixture = `-- name: CreateLegacyTUMMeterReportFixture :one
 INSERT INTO stripe_meter_reports (
     organization_id
