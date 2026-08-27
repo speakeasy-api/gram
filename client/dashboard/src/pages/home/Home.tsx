@@ -8,10 +8,25 @@ import {
 } from "@/components/brand-mesh";
 import { cn } from "@/lib/utils";
 import { ChatLanding } from "@/pages/chat/Chat";
+import { useRBAC } from "@/hooks/useRBAC";
+import { useRoutes } from "@/routes";
+import { Navigate } from "react-router";
 
 export default function Home(): JSX.Element {
+  const { hasAnyScope, isLoading } = useRBAC();
+  const routes = useRoutes();
   // Home carries its own "Ask anything" widget, so suppress the floating dock.
   useHideInsightsDock();
+
+  // Keep MCP-only users on the MCP page instead of rendering the project
+  // overview's project:read fallback.
+  if (
+    !isLoading &&
+    !hasAnyScope(["project:read"]) &&
+    hasAnyScope(["mcp:read", "mcp:write"])
+  ) {
+    return <Navigate to={routes.mcp.href()} replace />;
+  }
 
   return (
     <Page>

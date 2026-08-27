@@ -38,6 +38,7 @@ import Environments, {
 } from "./pages/environments/Environments";
 import Home from "./pages/home/Home";
 import { ProjectGuide } from "./components/project-guide/ProjectGuide";
+import { RequireScope } from "./components/require-scope";
 import Integrations from "./pages/integrations/Integrations";
 import Login from "./pages/login/Login";
 import Register from "./pages/login/Register";
@@ -210,6 +211,14 @@ type RouteEntry = {
     }
 );
 
+function ProjectGuidePage(): JSX.Element {
+  return (
+    <RequireScope scope="project:read" level="page">
+      <ProjectGuide />
+    </RequireScope>
+  );
+}
+
 const ROUTE_STRUCTURE = {
   login: {
     title: "Login",
@@ -246,7 +255,7 @@ const ROUTE_STRUCTURE = {
   guide: {
     title: "Project Guide",
     url: "guide",
-    component: ProjectGuide,
+    component: ProjectGuidePage,
   },
   chat: {
     title: "Project Assistant",

@@ -7,6 +7,9 @@ vi.mock("@/components/project/ProjectDashboard", () => ({
 vi.mock("@/pages/chat/Chat", () => ({
   ChatLanding: () => <div data-testid="chat-landing" />,
 }));
+vi.mock("@/routes", () => ({
+  useRoutes: () => ({ mcp: { href: () => "/org/projects/project/mcp" } }),
+}));
 vi.mock("@/components/insights-context", () => ({
   useHideInsightsDock: () => undefined,
 }));
