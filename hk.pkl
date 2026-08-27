@@ -1,18 +1,8 @@
-amends "package://github.com/jdx/hk/releases/download/v1.38.0/hk@1.38.0#/Config.pkl"
+amends "package://github.com/jdx/hk/releases/download/v1.56.1/hk@1.56.1#/Config.pkl"
 
-import "package://github.com/jdx/hk/releases/download/v1.38.0/hk@1.38.0#/Builtins.pkl"
-import "pkl:json"
+import "package://github.com/jdx/hk/releases/download/v1.56.1/hk@1.56.1#/Builtins.pkl"
 // Runtime data and local service configuration are outside source checks.
 exclude = List("local")
-
-// Source the oxfmt step's exclude list from `.oxfmtrc.json` so the two stay in sync.
-// Strip the leading `/` that .oxfmtrc.json uses for repo-root anchoring; hk globs are root-relative.
-local oxfmtIgnorePatterns: List<String> =
-  new json.Parser {}
-    .parse(read(".oxfmtrc.json"))
-    .getProperty("ignorePatterns")
-    .toList()
-    .map((p) -> let (s = p as String) if (s.startsWith("/")) s.substring(1, s.length) else s)
 
 local linters = new Mapping<String, Step> {
   ["pkleval"] = Builtins.pkl
@@ -69,15 +59,15 @@ local linters = new Mapping<String, Step> {
         "**/*.markdown.mdx",
         "**/*.md",
       )
-    exclude = oxfmtIgnorePatterns
-    // `--no-error-on-unmatched-pattern` keeps oxfmt from failing when every file
-    // it is handed is excluded by `.oxfmtrc.json`'s own ignorePatterns. This can
-    // happen when a commit only touches oxfmt-ignored files (e.g. the generated
-    // `docs/pubsub-topology.md`): hk caches the compiled config keyed on hk.pkl
-    // and does not track the `read(".oxfmtrc.json")` above, so a stale cache can
-    // pass an ignored file through `exclude`. Without the flag oxfmt would exit
-    // non-zero on "all files excluded" and break the hook; with it, oxfmt simply
-    // formats nothing and leaves the file untouched.
+    // `.oxfmtrc.json`'s own `ignorePatterns` decide what oxfmt formats, and this
+    // step deliberately does not mirror them: hk keys its compiled-config cache
+    // on imports, so a `read()` of that file would not invalidate the cache when
+    // it changed, and the copy here could silently drift.
+    //
+    // The cost is that oxfmt gets handed files it will skip, including whole
+    // generated trees. `--no-error-on-unmatched-pattern` covers the case where
+    // it is handed nothing but ignored files, which would otherwise exit
+    // non-zero on "all files excluded" and break the hook.
     check = "aube exec oxfmt -- --check --no-error-on-unmatched-pattern {{files}}"
     fix = "aube exec oxfmt -- --write --no-error-on-unmatched-pattern {{files}}"
   }
