@@ -1748,6 +1748,9 @@ var queryDimensions = []any{
 var queryMeasures = []any{
 	"total_cost",
 	"total_tokens",
+	// Computed rank: input + output, the population person-facing surfaces
+	// display (total_tokens additionally counts cache writes).
+	"llm_tokens",
 	"total_input_tokens",
 	"total_output_tokens",
 	"cache_read_input_tokens",

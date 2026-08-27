@@ -76375,6 +76375,7 @@ components:
                     enum:
                         - total_cost
                         - total_tokens
+                        - llm_tokens
                         - total_input_tokens
                         - total_output_tokens
                         - cache_read_input_tokens
