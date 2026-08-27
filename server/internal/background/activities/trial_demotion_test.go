@@ -29,8 +29,16 @@ import (
 type trialProvisioner struct {
 	*openrouter.Development
 
-	disabled []string
-	failWith error
+	causeAdds            []trialCauseAdd
+	adminLocked          bool
+	upstreamStatePatches int
+	failWith             error
+}
+
+type trialCauseAdd struct {
+	orgID   string
+	keyType openrouter.KeyType
+	cause   openrouter.DisableCause
 }
 
 type recordingTrialNotifier struct {
@@ -52,17 +60,16 @@ func (n *recordingTrialNotifier) TrialInactive(_ context.Context, organizationID
 
 var _ openrouter.Provisioner = (*trialProvisioner)(nil)
 
-func (p *trialProvisioner) DisableAPIKey(_ context.Context, orgID string, keyType openrouter.KeyType) error {
+func (p *trialProvisioner) AddAPIKeyDisableCauseWithDB(_ context.Context, _ openrouter.DBTX, orgID string, keyType openrouter.KeyType, cause openrouter.DisableCause) (openrouter.DisableCauseChange, error) {
 	if p.failWith != nil {
-		return p.failWith
+		return openrouter.DisableCauseChange{}, p.failWith
 	}
-	p.disabled = append(p.disabled, orgID+":"+string(keyType))
-
-	return nil
-}
-
-func (p *trialProvisioner) DisableAPIKeyWithDB(ctx context.Context, _ openrouter.DBTX, orgID string, keyType openrouter.KeyType) error {
-	return p.DisableAPIKey(ctx, orgID, keyType)
+	p.causeAdds = append(p.causeAdds, trialCauseAdd{orgID: orgID, keyType: keyType, cause: cause})
+	if p.adminLocked {
+		return openrouter.DisableCauseChange{CauseChanged: true, KeyAccessChanged: false}, nil
+	}
+	p.upstreamStatePatches++
+	return openrouter.DisableCauseChange{CauseChanged: true, KeyAccessChanged: true}, nil
 }
 
 type trialTestInstance struct {
@@ -83,7 +90,7 @@ func newTrialTestInstance(t *testing.T) (context.Context, *trialTestInstance) {
 	conn, err := infra.CloneTestDatabase(t, "trialdemotion")
 	require.NoError(t, err)
 
-	provisioner := &trialProvisioner{Development: openrouter.NewDevelopment(""), disabled: nil, failWith: nil}
+	provisioner := &trialProvisioner{Development: openrouter.NewDevelopment(""), causeAdds: nil, failWith: nil}
 	notifier := &recordingTrialNotifier{inactive: nil}
 	redisClient, err := infra.NewRedisClient(t, 0)
 	require.NoError(t, err)
@@ -138,6 +145,21 @@ func newTrialOrg(t *testing.T, ctx context.Context, ti *trialTestInstance, endsA
 	return orgID
 }
 
+func TestDemoteExpiredTrials_AddsTrialDemotionToAdminLockedKeys(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTrialTestInstance(t)
+	orgID := newTrialOrg(t, ctx, ti, time.Now().Add(-time.Hour).UTC())
+	ti.provisioner.adminLocked = true
+
+	require.NoError(t, ti.activity.Demote(ctx, activities.DemoteExpiredTrialArgs{OrganizationID: orgID}))
+	require.ElementsMatch(t, []trialCauseAdd{
+		{orgID: orgID, keyType: openrouter.KeyTypeChat, cause: openrouter.DisableCauseTrialDemotion},
+		{orgID: orgID, keyType: openrouter.KeyTypeInternal, cause: openrouter.DisableCauseTrialDemotion},
+	}, ti.provisioner.causeAdds)
+	require.Zero(t, ti.provisioner.upstreamStatePatches, "an admin-locked key must not receive another disabled-state patch")
+}
+
 func TestDemoteExpiredTrials_LocksOutExpiredTrial(t *testing.T) {
 	t.Parallel()
 
@@ -182,7 +204,10 @@ func TestDemoteExpiredTrials_LocksOutExpiredTrial(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, trial.DemotedAt.Valid)
 
-	require.ElementsMatch(t, []string{orgID + ":chat", orgID + ":internal"}, ti.provisioner.disabled)
+	require.ElementsMatch(t, []trialCauseAdd{
+		{orgID: orgID, keyType: openrouter.KeyTypeChat, cause: openrouter.DisableCauseTrialDemotion},
+		{orgID: orgID, keyType: openrouter.KeyTypeInternal, cause: openrouter.DisableCauseTrialDemotion},
+	}, ti.provisioner.causeAdds)
 	require.Equal(t, []string{orgID}, ti.notifier.inactive)
 	for _, feature := range productfeatures.TrialRuntimeFeatures {
 		enabled, err := ti.productFeatures.IsFeatureEnabled(ctx, orgID, feature)
@@ -262,7 +287,7 @@ func TestDemoteExpiredTrials_DemoteSkipsTrialConvertedAfterListing(t *testing.T)
 	require.NoError(t, err)
 	require.False(t, trial.DemotedAt.Valid)
 
-	require.Empty(t, ti.provisioner.disabled, "a trial that converted keeps its keys")
+	require.Empty(t, ti.provisioner.causeAdds, "a trial that converted keeps its keys")
 	require.Empty(t, ti.notifier.inactive, "a no-op demotion must not publish trial inactivity")
 }
 

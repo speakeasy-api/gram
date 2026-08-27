@@ -13,7 +13,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/background/activities/repo"
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
-	openrouterrepo "github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -24,11 +23,7 @@ type ReconcilePaygOpenRouterChatKey struct {
 }
 
 func NewReconcilePaygOpenRouterChatKey(logger *slog.Logger, db *pgxpool.Pool, openRouter openrouter.Provisioner) *ReconcilePaygOpenRouterChatKey {
-	return &ReconcilePaygOpenRouterChatKey{
-		logger:     logger,
-		db:         db,
-		openRouter: openRouter,
-	}
+	return &ReconcilePaygOpenRouterChatKey{logger: logger, db: db, openRouter: openRouter}
 }
 
 type ReconcilePaygOpenRouterChatKeyArgs struct {
@@ -45,7 +40,7 @@ func (r *ReconcilePaygOpenRouterChatKey) Do(ctx context.Context, args ReconcileP
 	}
 
 	if err := withOpenRouterKeyBillingConnectionLock(ctx, r.logger, r.db, args.OrganizationID, openrouter.KeyTypeChat, func(conn *pgxpool.Conn, queries *repo.Queries) error {
-		return r.reconcileLocked(ctx, conn, queries, args)
+		return r.reconcileChatLocked(ctx, conn, queries, args)
 	}); err != nil {
 		return err
 	}
@@ -53,99 +48,60 @@ func (r *ReconcilePaygOpenRouterChatKey) Do(ctx context.Context, args ReconcileP
 		return nil
 	}
 
-	// Trial demotion disables both platform keys, while subscription loss only
-	// disables Other inference. Re-enable Security inference only when it is
-	// actually disabled; an ordinary recheckout therefore leaves its independent
-	// cap and enabled state untouched.
 	return withOpenRouterKeyBillingConnectionLock(ctx, r.logger, r.db, args.OrganizationID, openrouter.KeyTypeInternal, func(conn *pgxpool.Conn, queries *repo.Queries) error {
-		return r.reenableSecurityLocked(ctx, conn, queries, args.OrganizationID)
+		return r.reconcileConvertedTrialInternalLocked(ctx, conn, queries, args.OrganizationID)
 	})
 }
 
-func (r *ReconcilePaygOpenRouterChatKey) reconcileLocked(ctx context.Context, conn *pgxpool.Conn, queries *repo.Queries, args ReconcilePaygOpenRouterChatKeyArgs) error {
+func (r *ReconcilePaygOpenRouterChatKey) reconcileChatLocked(ctx context.Context, conn *pgxpool.Conn, queries *repo.Queries, args ReconcilePaygOpenRouterChatKeyArgs) error {
 	projection, err := queries.GetPaygOpenRouterChatKeyProjection(ctx, args.OrganizationID)
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
-		// Organization deletion also removes its platform keys. An old outbox
-		// delivery has no remaining desired state to apply.
 		return nil
 	case err != nil:
 		return fmt.Errorf("read PAYG Other inference key billing projection: %w", err)
 	}
 
 	hasSubscription := projection.StripeSubscriptionID.Valid && projection.StripeSubscriptionID.String != ""
+	dbProvisioner, ok := r.openRouter.(openRouterKeyBillingDBProvisioner)
+	if !ok {
+		return errors.New("OpenRouter key provisioner cannot use the locked database session")
+	}
+
 	switch {
 	case projection.GramAccountType == string(billing.TierPayg) && hasSubscription:
 		if args.DesiredState != openrouter.KeyDesiredStateEnabled {
 			return nil
 		}
-		limit, ok := openrouter.AccountTypeCreditLimit(billing.TierPayg)
-		if !ok {
-			return errors.New("PAYG OpenRouter credit policy is unavailable")
-		}
-		key, err := openrouterrepo.New(conn).GetOpenRouterAPIKey(ctx, openrouterrepo.GetOpenRouterAPIKeyParams{
-			OrganizationID: args.OrganizationID,
-			KeyType:        string(openrouter.KeyTypeChat),
-		})
-		if errors.Is(err, pgx.ErrNoRows) {
-			// Keys are provisioned lazily. Billing activation must not create one.
-			return nil
-		}
+		limit, err := paygKeyLimitLocked(ctx, conn, args.OrganizationID, openrouter.KeyTypeChat)
 		if err != nil {
-			return fmt.Errorf("read PAYG Other inference key: %w", err)
+			return err
 		}
-		if !key.Disabled {
-			if key.MonthlyCredits == int64(limit) {
-				return nil
-			}
-			chosen, err := auditrepo.New(conn).GetLatestOpenRouterSpendCapAuditOperation(ctx, auditrepo.GetLatestOpenRouterSpendCapAuditOperationParams{
-				OrganizationID: args.OrganizationID,
-				SubjectID:      urn.NewOpenRouterAPIKey(args.OrganizationID, string(openrouter.KeyTypeChat)).ID,
-			})
-			if err != nil {
-				return fmt.Errorf("read latest Other inference cap selection: %w", err)
-			}
-			if chosen.OperationID != "" {
-				// A customer cap completed after this activation wake-up began. Do
-				// not let a retry overwrite that newer intent with the default.
-				return nil
-			}
+		if _, _, err := dbProvisioner.RemoveAPIKeyDisableCauseWithDB(ctx, conn, args.OrganizationID, openrouter.KeyTypeChat, openrouter.DisableCauseBillingInactive, &limit); err != nil && !errors.Is(err, pgx.ErrNoRows) {
+			return fmt.Errorf("restore PAYG Other inference key billing access: %w", err)
 		}
-		dbProvisioner, ok := r.openRouter.(openRouterSpendCapDBProvisioner)
-		if !ok {
-			return errors.New("OpenRouter key provisioner cannot use the locked database session")
-		}
-		if _, err := dbProvisioner.ReinstateAPIKeyLimitWithDB(ctx, conn, args.OrganizationID, openrouter.KeyTypeChat, &limit); errors.Is(err, pgx.ErrNoRows) {
-			return nil
-		} else if err != nil {
-			return fmt.Errorf("enable PAYG Other inference key: %w", err)
+		if projection.TrialDemotedAt.Valid && projection.TrialConvertedAt.Valid {
+			if _, _, err := dbProvisioner.RemoveAPIKeyDisableCauseWithDB(ctx, conn, args.OrganizationID, openrouter.KeyTypeChat, openrouter.DisableCauseTrialDemotion, &limit); err != nil && !errors.Is(err, pgx.ErrNoRows) {
+				return fmt.Errorf("restore converted trial Other inference key: %w", err)
+			}
 		}
 	case projection.GramAccountType == string(billing.TierBase) && !hasSubscription:
 		if args.DesiredState != openrouter.KeyDesiredStateDisabled {
 			return nil
 		}
-		dbProvisioner, ok := r.openRouter.(openRouterKeyBillingDBProvisioner)
-		if !ok {
-			return errors.New("OpenRouter key provisioner cannot use the locked database session")
-		}
-		if err := dbProvisioner.DisableAPIKeyWithDB(ctx, conn, args.OrganizationID, openrouter.KeyTypeChat); err != nil {
-			return fmt.Errorf("disable PAYG Other inference key: %w", err)
+		if _, err := dbProvisioner.AddAPIKeyDisableCauseWithDB(ctx, conn, args.OrganizationID, openrouter.KeyTypeChat, openrouter.DisableCauseBillingInactive); err != nil {
+			return fmt.Errorf("disable PAYG Other inference key for inactive billing: %w", err)
 		}
 	case projection.GramAccountType != string(billing.TierPayg) && projection.GramAccountType != string(billing.TierBase):
-		// Enterprise and Polar-managed tiers are outside self-serve Stripe
-		// billing. Old PAYG events must not mutate their keys.
 		return nil
 	default:
-		// The billing transition writes both halves in one transaction. A mixed
-		// projection means another writer did not honor that invariant; retrying
-		// is safer than granting or revoking access from partial state.
 		return fmt.Errorf("inconsistent PAYG Other inference key billing projection: account_type=%q has_subscription=%t", projection.GramAccountType, hasSubscription)
 	}
 
 	return nil
 }
 
-func (r *ReconcilePaygOpenRouterChatKey) reenableSecurityLocked(ctx context.Context, conn *pgxpool.Conn, queries *repo.Queries, organizationID string) error {
+func (r *ReconcilePaygOpenRouterChatKey) reconcileConvertedTrialInternalLocked(ctx context.Context, conn *pgxpool.Conn, queries *repo.Queries, organizationID string) error {
 	projection, err := queries.GetPaygOpenRouterChatKeyProjection(ctx, organizationID)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil
@@ -153,44 +109,39 @@ func (r *ReconcilePaygOpenRouterChatKey) reenableSecurityLocked(ctx context.Cont
 	if err != nil {
 		return fmt.Errorf("read PAYG Security inference key billing projection: %w", err)
 	}
-	if projection.GramAccountType != string(billing.TierPayg) || !projection.StripeSubscriptionID.Valid || projection.StripeSubscriptionID.String == "" {
+	hasSubscription := projection.StripeSubscriptionID.Valid && projection.StripeSubscriptionID.String != ""
+	if projection.GramAccountType != string(billing.TierPayg) || !hasSubscription || !projection.TrialDemotedAt.Valid || !projection.TrialConvertedAt.Valid {
 		return nil
 	}
 
-	key, err := openrouterrepo.New(conn).GetOpenRouterAPIKey(ctx, openrouterrepo.GetOpenRouterAPIKeyParams{
-		OrganizationID: organizationID,
-		KeyType:        string(openrouter.KeyTypeInternal),
-	})
-	if errors.Is(err, pgx.ErrNoRows) || (err == nil && !key.Disabled) {
-		return nil
-	}
+	limit, err := paygKeyLimitLocked(ctx, conn, organizationID, openrouter.KeyTypeInternal)
 	if err != nil {
-		return fmt.Errorf("read PAYG Security inference key: %w", err)
+		return err
 	}
+	dbProvisioner, ok := r.openRouter.(openRouterKeyBillingDBProvisioner)
+	if !ok {
+		return errors.New("OpenRouter key provisioner cannot use the locked database session")
+	}
+	if _, _, err := dbProvisioner.RemoveAPIKeyDisableCauseWithDB(ctx, conn, organizationID, openrouter.KeyTypeInternal, openrouter.DisableCauseTrialDemotion, &limit); err != nil && !errors.Is(err, pgx.ErrNoRows) {
+		return fmt.Errorf("restore converted trial Security inference key: %w", err)
+	}
+	return nil
+}
 
+func paygKeyLimitLocked(ctx context.Context, conn *pgxpool.Conn, organizationID string, keyType openrouter.KeyType) (int, error) {
 	limit, ok := openrouter.AccountTypeCreditLimit(billing.TierPayg)
 	if !ok {
-		return errors.New("PAYG OpenRouter credit policy is unavailable")
+		return 0, errors.New("PAYG OpenRouter credit policy is unavailable")
 	}
 	chosen, err := auditrepo.New(conn).GetLatestOpenRouterSpendCapAuditOperation(ctx, auditrepo.GetLatestOpenRouterSpendCapAuditOperationParams{
 		OrganizationID: organizationID,
-		SubjectID:      urn.NewOpenRouterAPIKey(organizationID, string(openrouter.KeyTypeInternal)).ID,
+		SubjectID:      urn.NewOpenRouterAPIKey(organizationID, string(keyType)).ID,
 	})
 	if err != nil {
-		return fmt.Errorf("read latest Security inference cap selection: %w", err)
+		return 0, fmt.Errorf("read latest %s inference cap selection: %w", keyType, err)
 	}
 	if chosen.OperationID != "" && chosen.MonthlyCredits > 0 {
 		limit = int(chosen.MonthlyCredits)
 	}
-	dbProvisioner, ok := r.openRouter.(openRouterSpendCapDBProvisioner)
-	if !ok {
-		return errors.New("OpenRouter key provisioner cannot use the locked database session")
-	}
-	if _, err := dbProvisioner.ReinstateAPIKeyLimitWithDB(ctx, conn, organizationID, openrouter.KeyTypeInternal, &limit); errors.Is(err, pgx.ErrNoRows) {
-		return nil
-	} else if err != nil {
-		return fmt.Errorf("enable PAYG Security inference key: %w", err)
-	}
-
-	return nil
+	return limit, nil
 }

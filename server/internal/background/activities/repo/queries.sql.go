@@ -1124,6 +1124,8 @@ SELECT
     organization_metadata.gram_account_type
   , billing_metadata.stripe_subscription_id
   , chat_key.disabled AS chat_key_disabled
+  , trials.demoted_at AS trial_demoted_at
+  , trials.converted_at AS trial_converted_at
 FROM organization_metadata
 LEFT JOIN billing_metadata
   ON billing_metadata.organization_id = organization_metadata.id
@@ -1131,6 +1133,8 @@ LEFT JOIN openrouter_api_keys chat_key
   ON chat_key.organization_id = organization_metadata.id
  AND chat_key.key_type = 'chat'
  AND chat_key.deleted IS FALSE
+LEFT JOIN trials
+  ON trials.organization_id = organization_metadata.id
 WHERE organization_metadata.id = $1
 `
 
@@ -1138,12 +1142,20 @@ type GetPaygOpenRouterChatKeyProjectionRow struct {
 	GramAccountType      string
 	StripeSubscriptionID pgtype.Text
 	ChatKeyDisabled      pgtype.Bool
+	TrialDemotedAt       pgtype.Timestamptz
+	TrialConvertedAt     pgtype.Timestamptz
 }
 
 func (q *Queries) GetPaygOpenRouterChatKeyProjection(ctx context.Context, organizationID string) (GetPaygOpenRouterChatKeyProjectionRow, error) {
 	row := q.db.QueryRow(ctx, getPaygOpenRouterChatKeyProjection, organizationID)
 	var i GetPaygOpenRouterChatKeyProjectionRow
-	err := row.Scan(&i.GramAccountType, &i.StripeSubscriptionID, &i.ChatKeyDisabled)
+	err := row.Scan(
+		&i.GramAccountType,
+		&i.StripeSubscriptionID,
+		&i.ChatKeyDisabled,
+		&i.TrialDemotedAt,
+		&i.TrialConvertedAt,
+	)
 	return i, err
 }
 

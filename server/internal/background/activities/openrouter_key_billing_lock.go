@@ -17,7 +17,8 @@ import (
 
 type openRouterKeyBillingDBProvisioner interface {
 	RefreshAPIKeyLimitWithDB(context.Context, openrouter.DBTX, string, openrouter.KeyType, *int) (int, error)
-	DisableAPIKeyWithDB(context.Context, openrouter.DBTX, string, openrouter.KeyType) error
+	AddAPIKeyDisableCauseWithDB(context.Context, openrouter.DBTX, string, openrouter.KeyType, openrouter.DisableCause) (openrouter.DisableCauseChange, error)
+	RemoveAPIKeyDisableCauseWithDB(context.Context, openrouter.DBTX, string, openrouter.KeyType, openrouter.DisableCause, *int) (int, openrouter.DisableCauseChange, error)
 	ReconcileMonthlyCreditsWithDB(context.Context, openrouter.DBTX, string, openrouter.KeyType, int64, int64, *int64) (int64, error)
 }
 

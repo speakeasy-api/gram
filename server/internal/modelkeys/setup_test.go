@@ -83,10 +83,6 @@ func (*stubProvisioner) RemoveAPIKeyDisableCauseWithDB(context.Context, openrout
 	return 0, openrouter.DisableCauseChange{}, nil
 }
 
-func (p *stubProvisioner) DisableAPIKey(ctx context.Context, orgID string, keyType openrouter.KeyType) error {
-	return nil
-}
-
 func (p *stubProvisioner) GetCreditsUsed(ctx context.Context, orgID string, keyType openrouter.KeyType) (float64, int, error) {
 	return 0, 0, nil
 }

@@ -1,6 +1,7 @@
 package openrouter
 
 import (
+	"context"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -18,6 +19,16 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter/repo"
 )
+
+func addAdminLockForTest(provisioner *OpenRouter, ctx context.Context, orgID string, keyType KeyType) error {
+	_, err := provisioner.AddAPIKeyDisableCause(ctx, orgID, keyType, DisableCauseAdminLock)
+	return err
+}
+
+func removeAdminLockForTest(provisioner *OpenRouter, ctx context.Context, orgID string, keyType KeyType, limit *int) (int, error) {
+	refreshed, _, err := provisioner.RemoveAPIKeyDisableCause(ctx, orgID, keyType, DisableCauseAdminLock, limit)
+	return refreshed, err
+}
 
 type disableTestUpstream struct {
 	server      *httptest.Server
@@ -347,7 +358,7 @@ func TestDevelopmentDisableCauseMethodsAreNoops(t *testing.T) {
 	require.Equal(t, DisableCauseChange{}, change)
 }
 
-func TestDisableAPIKey_DisablesKeyUpstream(t *testing.T) {
+func TestAddAdminLock_DisablesKeyUpstream(t *testing.T) {
 	t.Parallel()
 
 	ctx := t.Context()
@@ -363,7 +374,7 @@ func TestDisableAPIKey_DisablesKeyUpstream(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	require.NoError(t, provisioner.DisableAPIKey(ctx, orgID, KeyTypeInternal))
+	require.NoError(t, addAdminLockForTest(provisioner, ctx, orgID, KeyTypeInternal))
 
 	// The patch carries the off switch and nothing else. Touching the ceiling
 	// would lose the value a reinstatement restores.
@@ -389,7 +400,7 @@ func TestProvisionAPIKey_RefusesDisabledKey(t *testing.T) {
 
 	_, err := provisioner.ProvisionAPIKey(ctx, orgID, KeyTypeInternal)
 	require.NoError(t, err)
-	require.NoError(t, provisioner.DisableAPIKey(ctx, orgID, KeyTypeInternal))
+	require.NoError(t, addAdminLockForTest(provisioner, ctx, orgID, KeyTypeInternal))
 
 	key, err := provisioner.ProvisionAPIKey(ctx, orgID, KeyTypeInternal)
 	require.ErrorIs(t, err, ErrPlatformKeyDisabled)
@@ -397,7 +408,7 @@ func TestProvisionAPIKey_RefusesDisabledKey(t *testing.T) {
 
 	// Reinstatement makes resolution work again without minting a new key.
 	limit := 42
-	_, err = provisioner.ReinstateAPIKeyLimit(ctx, orgID, KeyTypeInternal, &limit)
+	_, err = removeAdminLockForTest(provisioner, ctx, orgID, KeyTypeInternal, &limit)
 	require.NoError(t, err)
 
 	key, err = provisioner.ProvisionAPIKey(ctx, orgID, KeyTypeInternal)
@@ -407,7 +418,7 @@ func TestProvisionAPIKey_RefusesDisabledKey(t *testing.T) {
 
 // A retried demotion must not fail on a key it already turned off, so
 // disabling twice has to stay safe.
-func TestDisableAPIKey_IsIdempotent(t *testing.T) {
+func TestAddAdminLock_IsIdempotent(t *testing.T) {
 	t.Parallel()
 
 	ctx := t.Context()
@@ -417,10 +428,10 @@ func TestDisableAPIKey_IsIdempotent(t *testing.T) {
 	_, err := provisioner.ProvisionAPIKey(ctx, orgID, KeyTypeInternal)
 	require.NoError(t, err)
 
-	require.NoError(t, provisioner.DisableAPIKey(ctx, orgID, KeyTypeInternal))
-	require.NoError(t, provisioner.DisableAPIKey(ctx, orgID, KeyTypeInternal))
+	require.NoError(t, addAdminLockForTest(provisioner, ctx, orgID, KeyTypeInternal))
+	require.NoError(t, addAdminLockForTest(provisioner, ctx, orgID, KeyTypeInternal))
 
-	require.Len(t, upstream.recorded(), 2)
+	require.Len(t, upstream.recorded(), 1)
 
 	row, err := queries.GetOpenRouterAPIKey(ctx, repo.GetOpenRouterAPIKeyParams{
 		OrganizationID: orgID,
@@ -432,152 +443,15 @@ func TestDisableAPIKey_IsIdempotent(t *testing.T) {
 
 // An organization that never provisioned a key of this type has nothing to
 // lock down, and the sweeper must not fail on it.
-func TestDisableAPIKey_NoKeyIsNoop(t *testing.T) {
+func TestAddAdminLock_NoKeyIsNoop(t *testing.T) {
 	t.Parallel()
 
 	ctx := t.Context()
 	orgID := "org-" + uuid.NewString()[:8]
 	provisioner, upstream, _ := newDisableTestProvisioner(t, orgID)
 
-	require.NoError(t, provisioner.DisableAPIKey(ctx, orgID, KeyTypeChat))
+	require.NoError(t, addAdminLockForTest(provisioner, ctx, orgID, KeyTypeChat))
 	require.Empty(t, upstream.recorded())
-}
-
-// Sales reinstate a demoted organization by raising its limit, so the refresh
-// path has to clear the flag on both sides.
-func TestReinstateAPIKeyLimit_ReinstatesDisabledKey(t *testing.T) {
-	t.Parallel()
-
-	ctx := t.Context()
-	orgID := "org-" + uuid.NewString()[:8]
-	provisioner, upstream, queries := newDisableTestProvisioner(t, orgID)
-
-	_, err := provisioner.ProvisionAPIKey(ctx, orgID, KeyTypeInternal)
-	require.NoError(t, err)
-	require.NoError(t, provisioner.DisableAPIKey(ctx, orgID, KeyTypeInternal))
-
-	limit := 42
-	refreshed, err := provisioner.ReinstateAPIKeyLimit(ctx, orgID, KeyTypeInternal, &limit)
-	require.NoError(t, err)
-	require.Equal(t, 42, refreshed)
-
-	patches := upstream.recorded()
-	require.Len(t, patches, 2)
-	require.JSONEq(t, `{"limit":42,"limit_reset":"monthly","disabled":false}`, patches[1],
-		"a limit alone does not bring a disabled key back")
-
-	row, err := queries.GetOpenRouterAPIKey(ctx, repo.GetOpenRouterAPIKeyParams{
-		OrganizationID: orgID,
-		KeyType:        string(KeyTypeInternal),
-	})
-	require.NoError(t, err)
-	require.False(t, row.Disabled, "a stale flag keeps key resolution failing after reinstatement")
-	require.Equal(t, int64(42), row.MonthlyCredits)
-
-	// Refreshing an enabled key must send the body it sent before the disabled
-	// field existed. Carrying disabled=false on every refresh would revive a
-	// key an operator turned off on the OpenRouter dashboard.
-	_, err = provisioner.ReinstateAPIKeyLimit(ctx, orgID, KeyTypeInternal, &limit)
-	require.NoError(t, err)
-
-	patches = upstream.recorded()
-	require.Len(t, patches, 3)
-	require.JSONEq(t, `{"limit":42,"limit_reset":"monthly"}`, patches[2])
-}
-
-func TestReinstateAPIKeyLimit_RemovesOnlyLegacyAdminLock(t *testing.T) {
-	t.Parallel()
-
-	ctx := t.Context()
-	orgID := "org-" + uuid.NewString()[:8]
-	provisioner, upstream, queries := newDisableTestProvisioner(t, orgID)
-
-	_, err := provisioner.ProvisionAPIKey(ctx, orgID, KeyTypeInternal)
-	require.NoError(t, err)
-	require.NoError(t, provisioner.DisableAPIKey(ctx, orgID, KeyTypeInternal))
-
-	_, err = queries.AddOpenRouterAPIKeyDisableCause(ctx, repo.AddOpenRouterAPIKeyDisableCauseParams{
-		OrganizationID: orgID,
-		KeyType:        string(KeyTypeInternal),
-		DisableCause:   string(DisableCauseTrialDemotion),
-	})
-	require.NoError(t, err)
-
-	limit := 42
-	_, err = provisioner.ReinstateAPIKeyLimit(ctx, orgID, KeyTypeInternal, &limit)
-	require.NoError(t, err)
-
-	row, err := queries.GetOpenRouterAPIKey(ctx, repo.GetOpenRouterAPIKeyParams{
-		OrganizationID: orgID,
-		KeyType:        string(KeyTypeInternal),
-	})
-	require.NoError(t, err)
-	require.Equal(t, []string{"trial_demotion"}, row.DisableCauses)
-	require.True(t, row.Disabled)
-
-	// A retry sees that admin_lock is already gone, preserves the remaining
-	// cause, and reasserts the disabled upstream state.
-	_, err = provisioner.ReinstateAPIKeyLimit(ctx, orgID, KeyTypeInternal, &limit)
-	require.NoError(t, err)
-
-	patches := upstream.recorded()
-	require.Len(t, patches, 3)
-	require.JSONEq(t, `{"limit":42,"limit_reset":"monthly","disabled":true}`, patches[1])
-	require.JSONEq(t, `{"limit":42,"limit_reset":"monthly","disabled":true}`, patches[2])
-
-	row, err = queries.GetOpenRouterAPIKey(ctx, repo.GetOpenRouterAPIKeyParams{
-		OrganizationID: orgID,
-		KeyType:        string(KeyTypeInternal),
-	})
-	require.NoError(t, err)
-	require.Equal(t, []string{"trial_demotion"}, row.DisableCauses)
-	require.True(t, row.Disabled)
-}
-
-func TestReinstateAPIKeyLimit_RetryDisablesAfterConcurrentCause(t *testing.T) {
-	t.Parallel()
-
-	ctx := t.Context()
-	orgID := "org-" + uuid.NewString()[:8]
-	provisioner, upstream, queries := newDisableTestProvisioner(t, orgID)
-
-	_, err := provisioner.ProvisionAPIKey(ctx, orgID, KeyTypeInternal)
-	require.NoError(t, err)
-	require.NoError(t, provisioner.DisableAPIKey(ctx, orgID, KeyTypeInternal))
-
-	injected := make(chan error, 1)
-	var injectOnce sync.Once
-	upstream.interceptPatch(func() {
-		injectOnce.Do(func() {
-			_, err := queries.AddOpenRouterAPIKeyDisableCause(ctx, repo.AddOpenRouterAPIKeyDisableCauseParams{
-				OrganizationID: orgID,
-				KeyType:        string(KeyTypeInternal),
-				DisableCause:   string(DisableCauseTrialDemotion),
-			})
-			injected <- err
-		})
-	})
-
-	limit := 42
-	_, err = provisioner.ReinstateAPIKeyLimit(ctx, orgID, KeyTypeInternal, &limit)
-	require.NoError(t, err)
-	require.NoError(t, <-injected)
-
-	row, err := queries.GetOpenRouterAPIKey(ctx, repo.GetOpenRouterAPIKeyParams{
-		OrganizationID: orgID,
-		KeyType:        string(KeyTypeInternal),
-	})
-	require.NoError(t, err)
-	require.Equal(t, []string{"trial_demotion"}, row.DisableCauses)
-	require.True(t, row.Disabled)
-
-	_, err = provisioner.ReinstateAPIKeyLimit(ctx, orgID, KeyTypeInternal, &limit)
-	require.NoError(t, err)
-
-	patches := upstream.recorded()
-	require.Len(t, patches, 3)
-	require.JSONEq(t, `{"limit":42,"limit_reset":"monthly","disabled":false}`, patches[1])
-	require.JSONEq(t, `{"limit":42,"limit_reset":"monthly","disabled":true}`, patches[2])
 }
 
 // A refresh reads the key row, patches upstream, then writes the row back. A
@@ -802,7 +676,7 @@ func TestRefreshAPIKeyLimit_NilPreservesDisabledKeyAfterTierTransition(t *testin
 			raisedCap := 321
 			_, err = provisioner.RefreshAPIKeyLimit(ctx, orgID, keyType, &raisedCap)
 			require.NoError(t, err)
-			require.NoError(t, provisioner.DisableAPIKey(ctx, orgID, keyType))
+			require.NoError(t, addAdminLockForTest(provisioner, ctx, orgID, keyType))
 			require.NoError(t, provisioner.orgRepo.SetAccountType(ctx, orgRepo.SetAccountTypeParams{
 				ID:              orgID,
 				GramAccountType: string(billing.TierBase),
@@ -895,7 +769,7 @@ func TestRefreshAPIKeyLimit_NilPreservesPaygZeroSpendCap(t *testing.T) {
 	}
 }
 
-func TestReinstateAPIKeyLimit_NilRevivesLegacyZeroChatKey(t *testing.T) {
+func TestRemoveAdminLock_NilRevivesLegacyZeroChatKey(t *testing.T) {
 	t.Parallel()
 
 	ctx := t.Context()
@@ -909,9 +783,9 @@ func TestReinstateAPIKeyLimit_NilRevivesLegacyZeroChatKey(t *testing.T) {
 		KeyType:        string(KeyTypeChat),
 		MonthlyCredits: 0,
 	}))
-	require.NoError(t, provisioner.DisableAPIKey(ctx, orgID, KeyTypeChat))
+	require.NoError(t, addAdminLockForTest(provisioner, ctx, orgID, KeyTypeChat))
 
-	refreshed, err := provisioner.ReinstateAPIKeyLimit(ctx, orgID, KeyTypeChat, nil)
+	refreshed, err := removeAdminLockForTest(provisioner, ctx, orgID, KeyTypeChat, nil)
 	require.NoError(t, err)
 	require.Positive(t, refreshed)
 	patches := upstream.recorded()

@@ -110,18 +110,14 @@ func (*m3OpenRouterProvisioner) ProvisionAPIKey(context.Context, string, openrou
 }
 
 func (p *m3OpenRouterProvisioner) RefreshAPIKeyLimit(ctx context.Context, organizationID string, keyType openrouter.KeyType, limit *int) (int, error) {
-	return p.reinstateAPIKeyLimit(ctx, p.db, organizationID, keyType, limit)
+	return p.refreshAPIKeyLimit(ctx, p.db, organizationID, keyType, limit)
 }
 
 func (p *m3OpenRouterProvisioner) RefreshAPIKeyLimitWithDB(ctx context.Context, db openrouter.DBTX, organizationID string, keyType openrouter.KeyType, limit *int) (int, error) {
-	return p.reinstateAPIKeyLimit(ctx, db, organizationID, keyType, limit)
+	return p.refreshAPIKeyLimit(ctx, db, organizationID, keyType, limit)
 }
 
-func (p *m3OpenRouterProvisioner) ReinstateAPIKeyLimitWithDB(ctx context.Context, db openrouter.DBTX, organizationID string, keyType openrouter.KeyType, limit *int) (int, error) {
-	return p.reinstateAPIKeyLimit(ctx, db, organizationID, keyType, limit)
-}
-
-func (p *m3OpenRouterProvisioner) reinstateAPIKeyLimit(ctx context.Context, db openrouterrepo.DBTX, organizationID string, keyType openrouter.KeyType, limit *int) (int, error) {
+func (p *m3OpenRouterProvisioner) refreshAPIKeyLimit(ctx context.Context, db openrouterrepo.DBTX, organizationID string, keyType openrouter.KeyType, limit *int) (int, error) {
 	key, err := openrouterrepo.New(db).GetOpenRouterAPIKey(ctx, openrouterrepo.GetOpenRouterAPIKeyParams{
 		OrganizationID: organizationID,
 		KeyType:        string(keyType),
@@ -142,39 +138,35 @@ func (p *m3OpenRouterProvisioner) reinstateAPIKeyLimit(ctx context.Context, db o
 	return int(refreshed.MonthlyCredits), nil
 }
 
-func (*m3OpenRouterProvisioner) AddAPIKeyDisableCause(context.Context, string, openrouter.KeyType, openrouter.DisableCause) (openrouter.DisableCauseChange, error) {
-	return openrouter.DisableCauseChange{}, nil
+func (p *m3OpenRouterProvisioner) AddAPIKeyDisableCause(ctx context.Context, organizationID string, keyType openrouter.KeyType, cause openrouter.DisableCause) (openrouter.DisableCauseChange, error) {
+	return p.addAPIKeyDisableCause(ctx, p.db, organizationID, keyType, cause)
 }
 
-func (*m3OpenRouterProvisioner) AddAPIKeyDisableCauseWithDB(context.Context, openrouter.DBTX, string, openrouter.KeyType, openrouter.DisableCause) (openrouter.DisableCauseChange, error) {
-	return openrouter.DisableCauseChange{}, nil
+func (p *m3OpenRouterProvisioner) AddAPIKeyDisableCauseWithDB(ctx context.Context, db openrouter.DBTX, organizationID string, keyType openrouter.KeyType, cause openrouter.DisableCause) (openrouter.DisableCauseChange, error) {
+	return p.addAPIKeyDisableCause(ctx, db, organizationID, keyType, cause)
 }
 
-func (*m3OpenRouterProvisioner) RemoveAPIKeyDisableCause(context.Context, string, openrouter.KeyType, openrouter.DisableCause, *int) (int, openrouter.DisableCauseChange, error) {
-	return 0, openrouter.DisableCauseChange{}, nil
-}
-
-func (*m3OpenRouterProvisioner) RemoveAPIKeyDisableCauseWithDB(context.Context, openrouter.DBTX, string, openrouter.KeyType, openrouter.DisableCause, *int) (int, openrouter.DisableCauseChange, error) {
-	return 0, openrouter.DisableCauseChange{}, nil
-}
-
-func (p *m3OpenRouterProvisioner) DisableAPIKey(ctx context.Context, organizationID string, keyType openrouter.KeyType) error {
-	return p.disableAPIKey(ctx, p.db, organizationID, keyType)
-}
-
-func (p *m3OpenRouterProvisioner) DisableAPIKeyWithDB(ctx context.Context, db openrouter.DBTX, organizationID string, keyType openrouter.KeyType) error {
-	return p.disableAPIKey(ctx, db, organizationID, keyType)
-}
-
-func (p *m3OpenRouterProvisioner) disableAPIKey(ctx context.Context, db openrouter.DBTX, organizationID string, keyType openrouter.KeyType) error {
+func (p *m3OpenRouterProvisioner) addAPIKeyDisableCause(ctx context.Context, db openrouterrepo.DBTX, organizationID string, keyType openrouter.KeyType, cause openrouter.DisableCause) (openrouter.DisableCauseChange, error) {
 	p.disableCalls = append(p.disableCalls, keyType)
-	if err := openrouterrepo.New(db).DisableOpenRouterAPIKey(ctx, openrouterrepo.DisableOpenRouterAPIKeyParams{
-		OrganizationID: organizationID,
-		KeyType:        string(keyType),
-	}); err != nil {
-		return fmt.Errorf("disable OpenRouter API key: %w", err)
+	_, err := openrouterrepo.New(db).AddOpenRouterAPIKeyDisableCause(ctx, openrouterrepo.AddOpenRouterAPIKeyDisableCauseParams{OrganizationID: organizationID, KeyType: string(keyType), DisableCause: string(cause)})
+	return openrouter.DisableCauseChange{CauseChanged: err == nil}, err
+}
+
+func (p *m3OpenRouterProvisioner) RemoveAPIKeyDisableCause(ctx context.Context, organizationID string, keyType openrouter.KeyType, cause openrouter.DisableCause, limit *int) (int, openrouter.DisableCauseChange, error) {
+	return p.removeAPIKeyDisableCause(ctx, p.db, organizationID, keyType, cause, limit)
+}
+
+func (p *m3OpenRouterProvisioner) RemoveAPIKeyDisableCauseWithDB(ctx context.Context, db openrouter.DBTX, organizationID string, keyType openrouter.KeyType, cause openrouter.DisableCause, limit *int) (int, openrouter.DisableCauseChange, error) {
+	return p.removeAPIKeyDisableCause(ctx, db, organizationID, keyType, cause, limit)
+}
+
+func (p *m3OpenRouterProvisioner) removeAPIKeyDisableCause(ctx context.Context, db openrouterrepo.DBTX, organizationID string, keyType openrouter.KeyType, cause openrouter.DisableCause, limit *int) (int, openrouter.DisableCauseChange, error) {
+	refreshed, err := p.refreshAPIKeyLimit(ctx, db, organizationID, keyType, limit)
+	if err != nil {
+		return 0, openrouter.DisableCauseChange{}, err
 	}
-	return nil
+	_, err = openrouterrepo.New(db).RemoveOpenRouterAPIKeyDisableCause(ctx, openrouterrepo.RemoveOpenRouterAPIKeyDisableCauseParams{OrganizationID: organizationID, KeyType: string(keyType), DisableCause: string(cause)})
+	return refreshed, openrouter.DisableCauseChange{CauseChanged: err == nil}, err
 }
 
 func (*m3OpenRouterProvisioner) GetCreditsUsed(context.Context, string, openrouter.KeyType) (float64, int, error) {
@@ -283,7 +275,7 @@ func TestM3SubscriptionLossRecheckoutAndStaleReplayLifecycle(t *testing.T) {
 	checkout("event_initial_checkout", "subscription_initial", firstAnchor)
 	deleted("event_subscription_loss", "subscription_initial")
 	require.EqualValues(t, 1, metrics.SubscriptionLosses())
-	require.True(t, keyState(openrouter.KeyTypeChat).Disabled)
+	require.False(t, keyState(openrouter.KeyTypeChat).Disabled, "billing metadata commits before the durable key wake-up is consumed")
 	require.False(t, keyState(openrouter.KeyTypeInternal).Disabled)
 
 	reconciler := activities.NewReconcilePaygOpenRouterChatKey(logger, db, provisioner)

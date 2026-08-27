@@ -180,10 +180,6 @@ func (*recordingOpenRouterProvisioner) RemoveAPIKeyDisableCauseWithDB(context.Co
 	return 0, openrouter.DisableCauseChange{}, nil
 }
 
-func (*recordingOpenRouterProvisioner) DisableAPIKey(context.Context, string, openrouter.KeyType) error {
-	return fmt.Errorf("not implemented")
-}
-
 func (*recordingOpenRouterProvisioner) GetCreditsUsed(context.Context, string, openrouter.KeyType) (float64, int, error) {
 	return 0, 0, fmt.Errorf("not implemented")
 }

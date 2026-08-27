@@ -330,10 +330,6 @@ func (s *Service) deactivatePaygSubscription(ctx context.Context, tx pgx.Tx, org
 	if organizationRows != 1 {
 		return stripeWebhookResult{}, fmt.Errorf("deactivate PAYG organization: expected one row, updated %d", organizationRows)
 	}
-	if err := q.DisablePaygOpenRouterChatKey(ctx, organizationID); err != nil {
-		return stripeWebhookResult{}, fmt.Errorf("disable PAYG OpenRouter chat key: %w", err)
-	}
-
 	if s.auditLogger == nil {
 		return stripeWebhookResult{}, errors.New("audit logger is unavailable")
 	}

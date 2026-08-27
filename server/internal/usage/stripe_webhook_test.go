@@ -1323,7 +1323,7 @@ func TestStripeSubscriptionDeletionDeactivatesCurrentPaygBillingAtomically(t *te
 		KeyType:        string(openrouter.KeyTypeChat),
 	})
 	require.NoError(t, err)
-	require.True(t, chatKey.Disabled)
+	require.False(t, chatKey.Disabled, "the durable reconciliation activity owns billing_inactive")
 	require.EqualValues(t, 321, chatKey.MonthlyCredits)
 	internalKey, err := openrouterrepo.New(db).GetOpenRouterAPIKey(t.Context(), openrouterrepo.GetOpenRouterAPIKeyParams{
 		OrganizationID: stripeWebhookOrganizationID,
@@ -1393,7 +1393,7 @@ func TestStripeSubscriptionDeletionDeactivatesUnwhitelistedPaygBilling(t *testin
 		KeyType:        string(openrouter.KeyTypeChat),
 	})
 	require.NoError(t, err)
-	require.True(t, chatKey.Disabled)
+	require.False(t, chatKey.Disabled, "the durable reconciliation activity owns billing_inactive")
 
 	record, err := audittest.LatestAuditLogByAction(t.Context(), db, audit.ActionOrganizationPaygDeactivated)
 	require.NoError(t, err)

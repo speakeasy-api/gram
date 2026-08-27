@@ -29,7 +29,6 @@ import (
 	openrouterrepo "github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter/repo"
 	trialsrepo "github.com/speakeasy-api/gram/server/internal/trials/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
-	usagerepo "github.com/speakeasy-api/gram/server/internal/usage/repo"
 )
 
 type failFirstSpendCapAuditLogger struct {
@@ -950,7 +949,8 @@ func TestSetOpenRouterSpendCapRecordedRetryNoopsWhenKeyIsDisabled(t *testing.T) 
 	}
 
 	require.ErrorContains(t, run(), "re-arm OpenRouter chat credits alerts")
-	require.NoError(t, usagerepo.New(db).DisablePaygOpenRouterChatKey(t.Context(), organizationID))
+	_, err := openrouterrepo.New(db).AddOpenRouterAPIKeyDisableCause(t.Context(), openrouterrepo.AddOpenRouterAPIKeyDisableCauseParams{OrganizationID: organizationID, KeyType: string(openrouter.KeyTypeChat), DisableCause: string(openrouter.DisableCauseBillingInactive)})
+	require.NoError(t, err)
 	require.NoError(t, run())
 	provisioner.AssertExpectations(t)
 

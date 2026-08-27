@@ -510,20 +510,6 @@ func (q *Queries) DeactivatePaygOrganization(ctx context.Context, organizationID
 	return result.RowsAffected(), nil
 }
 
-const disablePaygOpenRouterChatKey = `-- name: DisablePaygOpenRouterChatKey :exec
-UPDATE openrouter_api_keys
-SET disabled = TRUE,
-    updated_at = clock_timestamp()
-WHERE organization_id = $1
-  AND key_type = 'chat'
-  AND deleted IS FALSE
-`
-
-func (q *Queries) DisablePaygOpenRouterChatKey(ctx context.Context, organizationID string) error {
-	_, err := q.db.Exec(ctx, disablePaygOpenRouterChatKey, organizationID)
-	return err
-}
-
 const finalizeStripeCheckoutIntent = `-- name: FinalizeStripeCheckoutIntent :one
 WITH locked AS (
   SELECT

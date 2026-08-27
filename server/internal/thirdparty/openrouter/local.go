@@ -30,14 +30,6 @@ func (o *Development) RefreshAPIKeyLimitWithDB(ctx context.Context, db DBTX, org
 	return o.RefreshAPIKeyLimit(ctx, orgID, keyType, limit)
 }
 
-func (o *Development) ReinstateAPIKeyLimit(ctx context.Context, orgID string, keyType KeyType, limit *int) (int, error) {
-	return 0, nil
-}
-
-func (o *Development) ReinstateAPIKeyLimitWithDB(ctx context.Context, db DBTX, orgID string, keyType KeyType, limit *int) (int, error) {
-	return o.ReinstateAPIKeyLimit(ctx, orgID, keyType, limit)
-}
-
 func (*Development) AddAPIKeyDisableCause(context.Context, string, KeyType, DisableCause) (DisableCauseChange, error) {
 	return DisableCauseChange{}, nil
 }
@@ -52,14 +44,6 @@ func (*Development) RemoveAPIKeyDisableCause(context.Context, string, KeyType, D
 
 func (o *Development) RemoveAPIKeyDisableCauseWithDB(ctx context.Context, _ DBTX, orgID string, keyType KeyType, cause DisableCause, limit *int) (int, DisableCauseChange, error) {
 	return o.RemoveAPIKeyDisableCause(ctx, orgID, keyType, cause, limit)
-}
-
-func (o *Development) DisableAPIKey(ctx context.Context, orgID string, keyType KeyType) error {
-	return nil
-}
-
-func (o *Development) DisableAPIKeyWithDB(ctx context.Context, db DBTX, orgID string, keyType KeyType) error {
-	return o.DisableAPIKey(ctx, orgID, keyType)
 }
 
 func (o *Development) GetCreditsUsed(ctx context.Context, orgID string, keyType KeyType) (float64, int, error) {

@@ -333,9 +333,6 @@ type Provisioner interface {
 	RemoveAPIKeyDisableCause(ctx context.Context, orgID string, keyType KeyType, cause DisableCause, limit *int) (int, DisableCauseChange, error)
 	RemoveAPIKeyDisableCauseWithDB(ctx context.Context, db DBTX, orgID string, keyType KeyType, cause DisableCause, limit *int) (int, DisableCauseChange, error)
 
-	// DisableAPIKey is retained temporarily while callers migrate to causes.
-	DisableAPIKey(ctx context.Context, orgID string, keyType KeyType) error
-
 	GetCreditsUsed(ctx context.Context, orgID string, keyType KeyType) (float64, int, error)
 
 	// GetKeyUsage issues GET /v1/key for the given API key and returns the
@@ -567,30 +564,17 @@ func (o *OpenRouter) createAndStoreAPIKey(ctx context.Context, orgID string, key
 }
 
 func (o *OpenRouter) RefreshAPIKeyLimit(ctx context.Context, orgID string, keyType KeyType, limit *int) (int, error) {
-	return o.refreshAPIKeyLimit(ctx, o.db, orgID, keyType, limit, false)
+	return o.refreshAPIKeyLimit(ctx, o.db, orgID, keyType, limit)
 }
 
 // RefreshAPIKeyLimitWithDB is RefreshAPIKeyLimit using db for every local read
 // and write. Callers holding a session advisory lock must use the same
 // connection rather than acquiring a second pool connection while locked.
 func (o *OpenRouter) RefreshAPIKeyLimitWithDB(ctx context.Context, db DBTX, orgID string, keyType KeyType, limit *int) (int, error) {
-	return o.refreshAPIKeyLimit(ctx, db, orgID, keyType, limit, false)
+	return o.refreshAPIKeyLimit(ctx, db, orgID, keyType, limit)
 }
 
-// ReinstateAPIKeyLimit refreshes a key while explicitly allowing a disabled
-// key to come back when its caller needs the policy default resolved from nil.
-func (o *OpenRouter) ReinstateAPIKeyLimit(ctx context.Context, orgID string, keyType KeyType, limit *int) (int, error) {
-	return o.refreshAPIKeyLimit(ctx, o.db, orgID, keyType, limit, true)
-}
-
-// ReinstateAPIKeyLimitWithDB is ReinstateAPIKeyLimit using db for every local
-// read and write. Callers holding a session advisory lock must pass that same
-// connection instead of making the pool acquire a second connection.
-func (o *OpenRouter) ReinstateAPIKeyLimitWithDB(ctx context.Context, db DBTX, orgID string, keyType KeyType, limit *int) (int, error) {
-	return o.refreshAPIKeyLimit(ctx, db, orgID, keyType, limit, true)
-}
-
-func (o *OpenRouter) refreshAPIKeyLimit(ctx context.Context, db DBTX, orgID string, keyType KeyType, limit *int, reinstate bool) (int, error) {
+func (o *OpenRouter) refreshAPIKeyLimit(ctx context.Context, db DBTX, orgID string, keyType KeyType, limit *int) (int, error) {
 	keyType = keyType.OrDefault()
 	if err := keyType.Validate(); err != nil {
 		return 0, fmt.Errorf("refresh openrouter key limit: %w", err)
@@ -607,7 +591,7 @@ func (o *OpenRouter) refreshAPIKeyLimit(ctx context.Context, db DBTX, orgID stri
 		return 0, fmt.Errorf("failed to get OpenRouter API key: %w", err)
 	}
 
-	if limit == nil && key.Disabled && !reinstate {
+	if limit == nil && key.Disabled {
 		// Generic refreshes must never undo a billing lockdown. An explicit
 		// activation, re-subscription, or platform-admin enable is the only path
 		// allowed to reinstate either platform key.
@@ -618,7 +602,7 @@ func (o *OpenRouter) refreshAPIKeyLimit(ctx context.Context, db DBTX, orgID stri
 	if err != nil {
 		return 0, oops.E(oops.CodeUnexpected, err, "failed to get organization").LogError(ctx, o.logger)
 	}
-	if limit == nil && org.GramAccountType == string(billing.TierPayg) && !reinstate {
+	if limit == nil && org.GramAccountType == string(billing.TierPayg) {
 		// OpenRouter is the authority for a PAYG customer's chosen inference cap
 		// on each materialized platform key. Generic tier refreshes preserve both
 		// the mirrored value and the key's
@@ -635,18 +619,8 @@ func (o *OpenRouter) refreshAPIKeyLimit(ctx context.Context, db DBTX, orgID stri
 		keyLimit = o.defaultLimitForOrg(ctx, db, org)
 	}
 
-	removeLegacyAdminLock := reinstate && slices.Contains(key.DisableCauses, string(DisableCauseAdminLock))
-
 	creditLimit := float64(keyLimit)
 	patch := updateKeyRequest{Limit: &creditLimit, LimitReset: "monthly", Disabled: nil}
-	if reinstate && key.Disabled {
-		// Reassert the local effective state so a retry repairs an upstream enable
-		// that raced with another cause landing during the prior PATCH.
-		patch.Disabled = new(true)
-		if removeLegacyAdminLock && len(key.DisableCauses) == 1 {
-			patch.Disabled = new(false)
-		}
-	}
 
 	patchCtx, cancel := context.WithTimeout(ctx, upstreamKeyPatchTimeout)
 	defer cancel()
@@ -676,17 +650,6 @@ func (o *OpenRouter) refreshAPIKeyLimit(ctx context.Context, db DBTX, orgID stri
 	})
 	if err != nil {
 		return 0, oops.E(oops.CodeUnexpected, err, "failed to update openrouter key").LogError(ctx, o.logger)
-	}
-
-	if removeLegacyAdminLock {
-		_, err = keyRepo.RemoveOpenRouterAPIKeyDisableCause(ctx, repo.RemoveOpenRouterAPIKeyDisableCauseParams{
-			OrganizationID: orgID,
-			KeyType:        string(keyType),
-			DisableCause:   string(DisableCauseAdminLock),
-		})
-		if err != nil {
-			return 0, oops.E(oops.CodeUnexpected, err, "failed to remove legacy OpenRouter admin lock").LogError(ctx, o.logger)
-		}
 	}
 
 	return keyLimit, nil
@@ -814,60 +777,6 @@ func (o *OpenRouter) removeAPIKeyDisableCause(ctx context.Context, db DBTX, orgI
 	}
 
 	return keyLimit, DisableCauseChange{CauseChanged: true, KeyAccessChanged: accessChanged}, nil
-}
-
-// DisableAPIKey stops an organization from spending on its platform key. Gram
-// enforces the lockdown itself: ProvisionAPIKey refuses a disabled key and
-// returns ErrPlatformKeyDisabled. The upstream flag covers any spend that never
-// passes through key resolution, such as a key that leaked.
-//
-// The upstream PATCH runs before the local write. The reverse order would
-// record a lockdown that a permanently failing PATCH never made.
-func (o *OpenRouter) DisableAPIKey(ctx context.Context, orgID string, keyType KeyType) error {
-	return o.disableAPIKey(ctx, o.db, orgID, keyType)
-}
-
-// DisableAPIKeyWithDB is DisableAPIKey using db for every local read and
-// write. It is used while a caller owns the key's session advisory lock.
-func (o *OpenRouter) DisableAPIKeyWithDB(ctx context.Context, db DBTX, orgID string, keyType KeyType) error {
-	return o.disableAPIKey(ctx, db, orgID, keyType)
-}
-
-func (o *OpenRouter) disableAPIKey(ctx context.Context, db DBTX, orgID string, keyType KeyType) error {
-	keyType = keyType.OrDefault()
-	if err := keyType.Validate(); err != nil {
-		return fmt.Errorf("disable openrouter key: %w", err)
-	}
-
-	keyRepo := repo.New(db)
-	key, err := keyRepo.GetOpenRouterAPIKey(ctx, repo.GetOpenRouterAPIKeyParams{
-		OrganizationID: orgID,
-		KeyType:        string(keyType),
-	})
-	switch {
-	case errors.Is(err, pgx.ErrNoRows):
-		// An organization that never ran a completion has no key of this type.
-		return nil
-	case err != nil:
-		return fmt.Errorf("get openrouter key to disable: %w", err)
-	}
-
-	if _, err := o.patchOpenRouterAPIKey(ctx, key.KeyHash, updateKeyRequest{
-		Limit:      nil,
-		LimitReset: "",
-		Disabled:   new(true),
-	}); err != nil {
-		return fmt.Errorf("disable upstream openrouter key: %w", err)
-	}
-
-	if err := keyRepo.DisableOpenRouterAPIKey(ctx, repo.DisableOpenRouterAPIKeyParams{
-		OrganizationID: orgID,
-		KeyType:        string(keyType),
-	}); err != nil {
-		return fmt.Errorf("mark openrouter key disabled: %w", err)
-	}
-
-	return nil
 }
 
 type keyUsageResponse struct {

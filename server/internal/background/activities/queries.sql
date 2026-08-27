@@ -64,6 +64,8 @@ SELECT
     organization_metadata.gram_account_type
   , billing_metadata.stripe_subscription_id
   , chat_key.disabled AS chat_key_disabled
+  , trials.demoted_at AS trial_demoted_at
+  , trials.converted_at AS trial_converted_at
 FROM organization_metadata
 LEFT JOIN billing_metadata
   ON billing_metadata.organization_id = organization_metadata.id
@@ -71,6 +73,8 @@ LEFT JOIN openrouter_api_keys chat_key
   ON chat_key.organization_id = organization_metadata.id
  AND chat_key.key_type = 'chat'
  AND chat_key.deleted IS FALSE
+LEFT JOIN trials
+  ON trials.organization_id = organization_metadata.id
 WHERE organization_metadata.id = @organization_id;
 
 -- name: GetOpenRouterInferenceKeyLimit :one

@@ -377,14 +377,6 @@ SET gram_account_type = 'free',
 WHERE id = @organization_id
   AND gram_account_type = 'payg';
 
--- name: DisablePaygOpenRouterChatKey :exec
-UPDATE openrouter_api_keys
-SET disabled = TRUE,
-    updated_at = clock_timestamp()
-WHERE organization_id = @organization_id
-  AND key_type = 'chat'
-  AND deleted IS FALSE;
-
 -- name: CreateStripeBillingMetadataFixture :exec
 -- Test-only fixture for webhook tests that need a Stripe customer association.
 INSERT INTO billing_metadata (organization_id, stripe_customer_id)

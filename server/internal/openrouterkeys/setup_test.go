@@ -180,20 +180,6 @@ func (s *stubProvisioner) RemoveAPIKeyDisableCauseWithDB(ctx context.Context, db
 	return resultLimit, change, nil
 }
 
-func (s *stubProvisioner) DisableAPIKey(ctx context.Context, orgID string, keyType openrouter.KeyType) error {
-	s.mu.Lock()
-	s.disableCalls = append(s.disableCalls, orgID+"/"+string(keyType))
-	s.mu.Unlock()
-
-	if err := orgrepo.New(s.conn).DisableOpenRouterAPIKey(ctx, orgrepo.DisableOpenRouterAPIKeyParams{
-		OrganizationID: orgID,
-		KeyType:        string(keyType),
-	}); err != nil {
-		return fmt.Errorf("stub disable write: %w", err)
-	}
-	return nil
-}
-
 func (s *stubProvisioner) GetCreditsUsed(ctx context.Context, orgID string, keyType openrouter.KeyType) (float64, int, error) {
 	return 0, 0, nil
 }

@@ -88,20 +88,27 @@ func (d *DemoteExpiredTrials) Demote(ctx context.Context, args DemoteExpiredTria
 	// stamp back and leaves the trial armed for the next sweep, which a lockdown
 	// after the commit would not get: a stamped row drops out of the sweep.
 	//
-	// DisableAPIKeyWithDB writes its disabled flag on the locked key session,
+	// AddAPIKeyDisableCauseWithDB writes its cause on the locked key session,
 	// outside dbtx, so a key already taken down stays down through an
 	// organization-transaction rollback. The organization reads as enterprise
 	// with a dead key until the next sweep completes the demotion.
+	keyAccessChanged := false
 	for _, keyType := range openrouter.AllKeyTypes {
 		if err := keybillinglock.With(ctx, d.logger, d.db, args.OrganizationID, keyType, func(conn *pgxpool.Conn) error {
 			dbProvisioner, ok := d.openRouter.(openRouterKeyBillingDBProvisioner)
 			if !ok {
 				return errors.New("OpenRouter key provisioner cannot use the locked database session")
 			}
-			return dbProvisioner.DisableAPIKeyWithDB(ctx, conn, args.OrganizationID, keyType)
+			change, err := dbProvisioner.AddAPIKeyDisableCauseWithDB(ctx, conn, args.OrganizationID, keyType, openrouter.DisableCauseTrialDemotion)
+			keyAccessChanged = keyAccessChanged || change.KeyAccessChanged
+			return err
 		}); err != nil {
 			return fmt.Errorf("disable openrouter %s key: %w", keyType, err)
 		}
+	}
+
+	if keyAccessChanged {
+		d.logger.DebugContext(ctx, "trial demotion changed platform key access", attr.SlogOrganizationID(args.OrganizationID))
 	}
 
 	if err := productfeatures.SetTrialRuntimeFeaturesTx(ctx, dbtx, args.OrganizationID, false); err != nil {

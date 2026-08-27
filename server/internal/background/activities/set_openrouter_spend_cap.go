@@ -32,7 +32,7 @@ type openRouterSpendCapAuditLogger interface {
 }
 
 type openRouterSpendCapDBProvisioner interface {
-	ReinstateAPIKeyLimitWithDB(context.Context, openrouter.DBTX, string, openrouter.KeyType, *int) (int, error)
+	RefreshAPIKeyLimitWithDB(context.Context, openrouter.DBTX, string, openrouter.KeyType, *int) (int, error)
 }
 
 const spendCapKeyBillingLockWaitTimeout = 10 * time.Second
@@ -274,7 +274,7 @@ func (s *SetOpenRouterSpendCap) setLocked(ctx context.Context, conn *pgxpool.Con
 		if !ok {
 			return temporal.NewNonRetryableApplicationError("OpenRouter spend-cap provisioner cannot use the locked database session", "invalid-spend-cap-provisioner", nil)
 		}
-		refreshed, err = dbProvisioner.ReinstateAPIKeyLimitWithDB(ctx, conn, args.OrganizationID, keyType, &args.Limit)
+		refreshed, err = dbProvisioner.RefreshAPIKeyLimitWithDB(ctx, conn, args.OrganizationID, keyType, &args.Limit)
 		if err != nil {
 			return fmt.Errorf("refresh OpenRouter %s inference cap: %w", keyType, err)
 		}

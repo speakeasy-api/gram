@@ -9,6 +9,7 @@ import (
 	"math"
 	"net/http"
 	"net/url"
+	"slices"
 	"strings"
 	"time"
 
@@ -89,8 +90,8 @@ type BillingOperations interface {
 // TrialKeyReviver is the OpenRouter surface a trial re-arm needs.
 type TrialKeyReviver interface {
 	RefreshAPIKeyLimit(ctx context.Context, orgID string, keyType openrouter.KeyType, limit *int) (int, error)
-	ReinstateAPIKeyLimit(ctx context.Context, orgID string, keyType openrouter.KeyType, limit *int) (int, error)
-	ReinstateAPIKeyLimitWithDB(ctx context.Context, db openrouter.DBTX, orgID string, keyType openrouter.KeyType, limit *int) (int, error)
+	RefreshAPIKeyLimitWithDB(ctx context.Context, db openrouter.DBTX, orgID string, keyType openrouter.KeyType, limit *int) (int, error)
+	RemoveAPIKeyDisableCauseWithDB(ctx context.Context, db openrouter.DBTX, orgID string, keyType openrouter.KeyType, cause openrouter.DisableCause, limit *int) (int, openrouter.DisableCauseChange, error)
 }
 
 type OpenRouterSpendCapScheduler interface {
@@ -128,12 +129,12 @@ func (TrialKeysUnavailable) RefreshAPIKeyLimit(context.Context, string, openrout
 	return 0, ErrOpenRouterUnavailable
 }
 
-func (TrialKeysUnavailable) ReinstateAPIKeyLimit(context.Context, string, openrouter.KeyType, *int) (int, error) {
+func (TrialKeysUnavailable) RefreshAPIKeyLimitWithDB(context.Context, openrouter.DBTX, string, openrouter.KeyType, *int) (int, error) {
 	return 0, ErrOpenRouterUnavailable
 }
 
-func (TrialKeysUnavailable) ReinstateAPIKeyLimitWithDB(context.Context, openrouter.DBTX, string, openrouter.KeyType, *int) (int, error) {
-	return 0, ErrOpenRouterUnavailable
+func (TrialKeysUnavailable) RemoveAPIKeyDisableCauseWithDB(context.Context, openrouter.DBTX, string, openrouter.KeyType, openrouter.DisableCause, *int) (int, openrouter.DisableCauseChange, error) {
+	return 0, openrouter.DisableCauseChange{}, ErrOpenRouterUnavailable
 }
 
 func (TrialKeysUnavailable) GetCreditsUsed(context.Context, string, openrouter.KeyType) (float64, int, error) {
@@ -1221,9 +1222,12 @@ func (s *Service) rearmTrialLocked(
 		return nil, oops.E(oops.CodeUnexpected, err, "re-arm trial").LogError(ctx, logger)
 	}
 
-	uncapped, err := s.reviveTrialKeys(ctx, logger, lockedKeys, payload.ID)
+	uncapped, keyAccessChanged, err := s.reviveTrialKeys(ctx, logger, lockedKeys, payload.ID)
 	if err != nil {
 		return nil, err
+	}
+	if keyAccessChanged {
+		logger.DebugContext(ctx, "trial re-arm changed platform key access")
 	}
 
 	organization, err := trials.RestoreOrganizationFromTrial(ctx, trialsRepo.RestoreOrganizationFromTrialParams{
@@ -1270,22 +1274,24 @@ func (s *Service) rearmTrialLocked(
 }
 
 // reviveTrialKeys brings every platform key the organization holds back up, and
-// returns the types revived at a pre-commit ceiling, for recapRevivedKeys.
+// returns the types revived at a pre-commit ceiling for recapRevivedKeys and
+// whether any key's effective access changed.
 //
 // Shaped like openrouterkeys.EnableKey rather than the demotion's blind loop:
-// DisableAPIKey no-ops on a missing key row, RefreshAPIKeyLimit errors on one.
+// Cause removal no-ops on a missing key row, RefreshAPIKeyLimit errors on one.
 //
 // The caller holds both per-key session locks through commit. Key revival uses
 // those locked sessions but stays outside the organization transaction, so a
 // later rollback leaves the org demoted with live keys instead of exposing an
 // admitted trial whose keys are still disabled.
-func (s *Service) reviveTrialKeys(ctx context.Context, logger *slog.Logger, lockedKeys map[openrouter.KeyType]*pgxpool.Conn, organizationID string) ([]openrouter.KeyType, error) {
+func (s *Service) reviveTrialKeys(ctx context.Context, logger *slog.Logger, lockedKeys map[openrouter.KeyType]*pgxpool.Conn, organizationID string) ([]openrouter.KeyType, bool, error) {
 	var uncapped []openrouter.KeyType
+	keyAccessChanged := false
 
 	for _, keyType := range openrouter.AllKeyTypes {
 		conn := lockedKeys[keyType]
 		if conn == nil {
-			return nil, oops.E(oops.CodeUnexpected, nil, "missing openrouter %s key lock", keyType).LogError(ctx, logger)
+			return nil, false, oops.E(oops.CodeUnexpected, nil, "missing openrouter %s key lock", keyType).LogError(ctx, logger)
 		}
 		row, err := orrepo.New(conn).GetOpenRouterAPIKey(ctx, orrepo.GetOpenRouterAPIKeyParams{
 			OrganizationID: organizationID,
@@ -1295,8 +1301,8 @@ func (s *Service) reviveTrialKeys(ctx context.Context, logger *slog.Logger, lock
 		case errors.Is(err, pgx.ErrNoRows):
 			continue
 		case err != nil:
-			return nil, oops.E(oops.CodeUnexpected, err, "read openrouter %s key", keyType).LogError(ctx, logger)
-		case !row.Disabled:
+			return nil, false, oops.E(oops.CodeUnexpected, err, "read openrouter %s key", keyType).LogError(ctx, logger)
+		case !slices.Contains(row.DisableCauses, string(openrouter.DisableCauseTrialDemotion)):
 			continue
 		}
 
@@ -1307,16 +1313,17 @@ func (s *Service) reviveTrialKeys(ctx context.Context, logger *slog.Logger, lock
 			uncapped = append(uncapped, keyType)
 		}
 		limit := conv.PtrEmpty(int(row.MonthlyCredits))
-		_, err = s.openRouter.ReinstateAPIKeyLimitWithDB(ctx, conn, organizationID, keyType, limit)
+		_, change, err := s.openRouter.RemoveAPIKeyDisableCauseWithDB(ctx, conn, organizationID, keyType, openrouter.DisableCauseTrialDemotion, limit)
+		keyAccessChanged = keyAccessChanged || change.KeyAccessChanged
 		switch {
 		case errors.Is(err, ErrOpenRouterUnavailable):
-			return nil, oops.E(oops.CodeInvalid, err, "this server cannot revive model provider keys: it is missing either the OpenRouter provisioning key or a usable encryption key. The server log says which at startup")
+			return nil, false, oops.E(oops.CodeInvalid, err, "this server cannot revive model provider keys: it is missing either the OpenRouter provisioning key or a usable encryption key. The server log says which at startup")
 		case err != nil:
-			return nil, oops.E(oops.CodeGatewayError, err, "revive openrouter %s key", keyType).LogError(ctx, logger)
+			return nil, false, oops.E(oops.CodeGatewayError, err, "revive openrouter %s key", keyType).LogError(ctx, logger)
 		}
 	}
 
-	return uncapped, nil
+	return uncapped, keyAccessChanged, nil
 }
 
 // recapRevivedKeys puts the trial's own ceiling on the keys reviveTrialKeys
@@ -1334,7 +1341,7 @@ func (s *Service) recapRevivedKeys(ctx context.Context, logger *slog.Logger, loc
 			)
 			continue
 		}
-		if _, err := s.openRouter.ReinstateAPIKeyLimitWithDB(ctx, conn, organizationID, keyType, nil); err != nil {
+		if _, err := s.openRouter.RefreshAPIKeyLimitWithDB(ctx, conn, organizationID, keyType, nil); err != nil {
 			logger.ErrorContext(ctx, "re-armed trial key kept the free-tier allowance: refresh it from the platform admin key page",
 				attr.SlogError(err),
 				attr.SlogOpenRouterKeyType(string(keyType)),

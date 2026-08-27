@@ -3,11 +3,13 @@ package activities_test
 import (
 	"context"
 	"errors"
+	"slices"
 	"sync"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/mock"
@@ -23,8 +25,17 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
+type paygCauseCall struct {
+	organizationID string
+	keyType        openrouter.KeyType
+	cause          openrouter.DisableCause
+}
+
 type mockPaygChatKeyProvisioner struct {
 	mock.Mock
+	addedCauses   []paygCauseCall
+	removedCauses []paygCauseCall
+	layeredAdd    bool
 }
 
 func (m *mockPaygChatKeyProvisioner) ProvisionAPIKey(ctx context.Context, organizationID string, keyType openrouter.KeyType) (string, error) {
@@ -41,32 +52,43 @@ func (m *mockPaygChatKeyProvisioner) RefreshAPIKeyLimitWithDB(ctx context.Contex
 	return m.RefreshAPIKeyLimit(ctx, organizationID, keyType, limit)
 }
 
-func (m *mockPaygChatKeyProvisioner) ReinstateAPIKeyLimitWithDB(ctx context.Context, _ openrouter.DBTX, organizationID string, keyType openrouter.KeyType, limit *int) (int, error) {
-	return m.RefreshAPIKeyLimit(ctx, organizationID, keyType, limit)
-}
-
 func (*mockPaygChatKeyProvisioner) AddAPIKeyDisableCause(context.Context, string, openrouter.KeyType, openrouter.DisableCause) (openrouter.DisableCauseChange, error) {
 	return openrouter.DisableCauseChange{}, nil
 }
 
-func (*mockPaygChatKeyProvisioner) AddAPIKeyDisableCauseWithDB(context.Context, openrouter.DBTX, string, openrouter.KeyType, openrouter.DisableCause) (openrouter.DisableCauseChange, error) {
-	return openrouter.DisableCauseChange{}, nil
+func (m *mockPaygChatKeyProvisioner) AddAPIKeyDisableCauseWithDB(ctx context.Context, _ openrouter.DBTX, organizationID string, keyType openrouter.KeyType, cause openrouter.DisableCause) (openrouter.DisableCauseChange, error) {
+	m.addedCauses = append(m.addedCauses, paygCauseCall{organizationID: organizationID, keyType: keyType, cause: cause})
+	if m.layeredAdd {
+		return openrouter.DisableCauseChange{CauseChanged: true, KeyAccessChanged: false}, nil
+	}
+	err := m.Called(ctx, organizationID, keyType).Error(0)
+	return openrouter.DisableCauseChange{CauseChanged: err == nil, KeyAccessChanged: err == nil}, err
 }
 
 func (*mockPaygChatKeyProvisioner) RemoveAPIKeyDisableCause(context.Context, string, openrouter.KeyType, openrouter.DisableCause, *int) (int, openrouter.DisableCauseChange, error) {
 	return 0, openrouter.DisableCauseChange{}, nil
 }
 
-func (*mockPaygChatKeyProvisioner) RemoveAPIKeyDisableCauseWithDB(context.Context, openrouter.DBTX, string, openrouter.KeyType, openrouter.DisableCause, *int) (int, openrouter.DisableCauseChange, error) {
-	return 0, openrouter.DisableCauseChange{}, nil
-}
-
-func (m *mockPaygChatKeyProvisioner) DisableAPIKey(ctx context.Context, organizationID string, keyType openrouter.KeyType) error {
-	return m.Called(ctx, organizationID, keyType).Error(0)
-}
-
-func (m *mockPaygChatKeyProvisioner) DisableAPIKeyWithDB(ctx context.Context, _ openrouter.DBTX, organizationID string, keyType openrouter.KeyType) error {
-	return m.DisableAPIKey(ctx, organizationID, keyType)
+func (m *mockPaygChatKeyProvisioner) RemoveAPIKeyDisableCauseWithDB(ctx context.Context, db openrouter.DBTX, organizationID string, keyType openrouter.KeyType, cause openrouter.DisableCause, limit *int) (int, openrouter.DisableCauseChange, error) {
+	m.removedCauses = append(m.removedCauses, paygCauseCall{organizationID: organizationID, keyType: keyType, cause: cause})
+	key, err := openrouterrepo.New(db).GetOpenRouterAPIKey(ctx, openrouterrepo.GetOpenRouterAPIKeyParams{OrganizationID: organizationID, KeyType: string(keyType)})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return 0, openrouter.DisableCauseChange{}, nil
+	}
+	if err != nil {
+		return 0, openrouter.DisableCauseChange{}, err
+	}
+	if limit != nil && key.MonthlyCredits == int64(*limit) && !slices.Contains(key.DisableCauses, string(cause)) {
+		return *limit, openrouter.DisableCauseChange{}, nil
+	}
+	if cause == openrouter.DisableCauseTrialDemotion {
+		if limit == nil {
+			return 0, openrouter.DisableCauseChange{CauseChanged: true}, nil
+		}
+		return *limit, openrouter.DisableCauseChange{CauseChanged: true}, nil
+	}
+	refreshed, err := m.RefreshAPIKeyLimit(ctx, organizationID, keyType, limit)
+	return refreshed, openrouter.DisableCauseChange{CauseChanged: err == nil, KeyAccessChanged: err == nil}, err
 }
 
 func (m *mockPaygChatKeyProvisioner) GetCreditsUsed(ctx context.Context, organizationID string, keyType openrouter.KeyType) (float64, int, error) {
@@ -155,7 +177,7 @@ func TestReconcilePaygOpenRouterChatKeyCurrentPaidStateEnablesOtherInferenceWhen
 	})).Return(100, nil).Once()
 
 	require.NoError(t, reconciler.Do(t.Context(), activities.ReconcilePaygOpenRouterChatKeyArgs{OrganizationID: organizationID, DesiredState: openrouter.KeyDesiredStateEnabled}))
-	provisioner.AssertNotCalled(t, "DisableAPIKey", mock.Anything, mock.Anything, mock.Anything)
+	provisioner.AssertNotCalled(t, "AddAPIKeyDisableCauseWithDB", mock.Anything, mock.Anything, mock.Anything)
 	provisioner.AssertExpectations(t)
 }
 
@@ -211,7 +233,7 @@ func TestReconcilePaygOpenRouterChatKeyActivationRetryPreservesSelectedOtherCap(
 	provisioner.AssertNotCalled(t, "RefreshAPIKeyLimit", mock.Anything, mock.Anything, mock.Anything, mock.Anything)
 }
 
-func TestReconcilePaygOpenRouterChatKeyReenablesDisabledSecurityAtRecordedCap(t *testing.T) {
+func TestReconcilePaygOpenRouterChatKeyOrdinaryRecoveryPreservesAdminLockedSecurityAtRecordedCap(t *testing.T) {
 	t.Parallel()
 
 	reconciler, provisioner, db, organizationID := setupPaygChatKeyReconciler(t, "payg", pgtype.Text{String: "subscription_placeholder", Valid: true})
@@ -244,15 +266,12 @@ func TestReconcilePaygOpenRouterChatKeyReenablesDisabledSecurityAtRecordedCap(t 
 		},
 	}))
 	provisioner.On("RefreshAPIKeyLimit", mock.Anything, organizationID, openrouter.KeyTypeChat, mock.AnythingOfType("*int")).Return(100, nil).Once()
-	provisioner.On("RefreshAPIKeyLimit", mock.Anything, organizationID, openrouter.KeyTypeInternal, mock.MatchedBy(func(limit *int) bool {
-		return limit != nil && *limit == 37
-	})).Return(37, nil).Once()
 
 	require.NoError(t, reconciler.Do(t.Context(), activities.ReconcilePaygOpenRouterChatKeyArgs{OrganizationID: organizationID, DesiredState: openrouter.KeyDesiredStateEnabled}))
 	provisioner.AssertExpectations(t)
 }
 
-func TestReconcilePaygOpenRouterChatKeyReenablesDisabledTrialSecurityAtPaygDefault(t *testing.T) {
+func TestReconcilePaygOpenRouterChatKeyOrdinaryRecoveryPreservesUnconvertedTrialSecurity(t *testing.T) {
 	t.Parallel()
 
 	reconciler, provisioner, db, organizationID := setupPaygChatKeyReconciler(t, "payg", pgtype.Text{String: "subscription_placeholder", Valid: true})
@@ -270,11 +289,32 @@ func TestReconcilePaygOpenRouterChatKeyReenablesDisabledTrialSecurityAtPaygDefau
 		KeyType:        string(openrouter.KeyTypeInternal),
 	}))
 	provisioner.On("RefreshAPIKeyLimit", mock.Anything, organizationID, openrouter.KeyTypeChat, mock.AnythingOfType("*int")).Return(100, nil).Once()
-	provisioner.On("RefreshAPIKeyLimit", mock.Anything, organizationID, openrouter.KeyTypeInternal, mock.MatchedBy(func(limit *int) bool {
-		return limit != nil && *limit == 100
-	})).Return(100, nil).Once()
 
 	require.NoError(t, reconciler.Do(t.Context(), activities.ReconcilePaygOpenRouterChatKeyArgs{OrganizationID: organizationID, DesiredState: openrouter.KeyDesiredStateEnabled}))
+	provisioner.AssertExpectations(t)
+}
+
+func TestReconcilePaygOpenRouterChatKeyStripeConversionRemovesTrialDemotionFromBothKeys(t *testing.T) {
+	t.Parallel()
+
+	reconciler, provisioner, db, organizationID := setupPaygChatKeyReconciler(t, "payg", pgtype.Text{String: "subscription_placeholder", Valid: true})
+	createPaygReconcilerKey(t, db, organizationID, openrouter.KeyTypeChat, 50)
+	createPaygReconcilerKey(t, db, organizationID, openrouter.KeyTypeInternal, 37)
+	_, err := db.Exec(t.Context(), `INSERT INTO trials (organization_id, tier, ends_at, demoted_at, converted_at) VALUES ($1, 'enterprise', clock_timestamp() - interval '2 days', clock_timestamp() - interval '1 day', clock_timestamp())`, organizationID)
+	require.NoError(t, err)
+	for _, keyType := range openrouter.AllKeyTypes {
+		_, err = openrouterrepo.New(db).AddOpenRouterAPIKeyDisableCause(t.Context(), openrouterrepo.AddOpenRouterAPIKeyDisableCauseParams{OrganizationID: organizationID, KeyType: string(keyType), DisableCause: string(openrouter.DisableCauseTrialDemotion)})
+		require.NoError(t, err)
+	}
+	provisioner.On("RefreshAPIKeyLimit", mock.Anything, organizationID, openrouter.KeyTypeChat, mock.MatchedBy(func(limit *int) bool { return limit != nil && *limit == 100 })).Return(100, nil).Once()
+	provisioner.On("RefreshAPIKeyLimit", mock.Anything, organizationID, openrouter.KeyTypeInternal, mock.Anything).Return(100, nil).Maybe()
+
+	require.NoError(t, reconciler.Do(t.Context(), activities.ReconcilePaygOpenRouterChatKeyArgs{OrganizationID: organizationID, DesiredState: openrouter.KeyDesiredStateEnabled}))
+	require.ElementsMatch(t, []paygCauseCall{
+		{organizationID: organizationID, keyType: openrouter.KeyTypeChat, cause: openrouter.DisableCauseBillingInactive},
+		{organizationID: organizationID, keyType: openrouter.KeyTypeChat, cause: openrouter.DisableCauseTrialDemotion},
+		{organizationID: organizationID, keyType: openrouter.KeyTypeInternal, cause: openrouter.DisableCauseTrialDemotion},
+	}, provisioner.removedCauses)
 	provisioner.AssertExpectations(t)
 }
 
@@ -284,7 +324,7 @@ func TestReconcilePaygOpenRouterChatKeyCurrentPaidStateWithoutKeyIsNoop(t *testi
 	reconciler, provisioner, _, organizationID := setupPaygChatKeyReconciler(t, "payg", pgtype.Text{String: "subscription_placeholder", Valid: true})
 
 	require.NoError(t, reconciler.Do(t.Context(), activities.ReconcilePaygOpenRouterChatKeyArgs{OrganizationID: organizationID, DesiredState: openrouter.KeyDesiredStateEnabled}))
-	provisioner.AssertNotCalled(t, "DisableAPIKey", mock.Anything, mock.Anything, mock.Anything)
+	provisioner.AssertNotCalled(t, "AddAPIKeyDisableCauseWithDB", mock.Anything, mock.Anything, mock.Anything)
 	provisioner.AssertExpectations(t)
 }
 
@@ -292,10 +332,47 @@ func TestReconcilePaygOpenRouterChatKeyCurrentFreeStateDisablesOtherOnly(t *test
 	t.Parallel()
 
 	reconciler, provisioner, _, organizationID := setupPaygChatKeyReconciler(t, "free", pgtype.Text{})
-	provisioner.On("DisableAPIKey", mock.Anything, organizationID, openrouter.KeyTypeChat).Return(nil).Once()
+	provisioner.On("AddAPIKeyDisableCauseWithDB", mock.Anything, organizationID, openrouter.KeyTypeChat).Return(nil).Once()
 
 	require.NoError(t, reconciler.Do(t.Context(), activities.ReconcilePaygOpenRouterChatKeyArgs{OrganizationID: organizationID, DesiredState: openrouter.KeyDesiredStateDisabled}))
 	provisioner.AssertNotCalled(t, "RefreshAPIKeyLimit", mock.Anything, mock.Anything, mock.Anything, mock.Anything)
+	provisioner.AssertExpectations(t)
+}
+
+func TestReconcilePaygOpenRouterChatKeyBillingLossOwnsOnlyBillingInactive(t *testing.T) {
+	t.Parallel()
+
+	t.Run("enabled chat key changes effective access", func(t *testing.T) {
+		reconciler, provisioner, _, organizationID := setupPaygChatKeyReconciler(t, "free", pgtype.Text{})
+		provisioner.On("AddAPIKeyDisableCauseWithDB", mock.Anything, organizationID, openrouter.KeyTypeChat).Return(nil).Once()
+
+		require.NoError(t, reconciler.Do(t.Context(), activities.ReconcilePaygOpenRouterChatKeyArgs{OrganizationID: organizationID, DesiredState: openrouter.KeyDesiredStateDisabled}))
+		require.Equal(t, []paygCauseCall{{organizationID: organizationID, keyType: openrouter.KeyTypeChat, cause: openrouter.DisableCauseBillingInactive}}, provisioner.addedCauses)
+		provisioner.AssertExpectations(t)
+	})
+
+	t.Run("admin locked chat key stays disabled without another state patch", func(t *testing.T) {
+		reconciler, provisioner, _, organizationID := setupPaygChatKeyReconciler(t, "free", pgtype.Text{})
+		provisioner.layeredAdd = true
+
+		require.NoError(t, reconciler.Do(t.Context(), activities.ReconcilePaygOpenRouterChatKeyArgs{OrganizationID: organizationID, DesiredState: openrouter.KeyDesiredStateDisabled}))
+		require.Equal(t, []paygCauseCall{{organizationID: organizationID, keyType: openrouter.KeyTypeChat, cause: openrouter.DisableCauseBillingInactive}}, provisioner.addedCauses)
+		provisioner.AssertNotCalled(t, "AddAPIKeyDisableCauseWithDB", mock.Anything, mock.Anything, mock.Anything)
+	})
+}
+
+func TestReconcilePaygOpenRouterChatKeyBillingRecoveryRemovesOnlyBillingInactive(t *testing.T) {
+	t.Parallel()
+
+	reconciler, provisioner, db, organizationID := setupPaygChatKeyReconciler(t, "payg", pgtype.Text{String: "subscription_placeholder", Valid: true})
+	createPaygReconcilerKey(t, db, organizationID, openrouter.KeyTypeChat, 50)
+	provisioner.On("RefreshAPIKeyLimit", mock.Anything, organizationID, openrouter.KeyTypeChat, mock.MatchedBy(func(limit *int) bool { return limit != nil && *limit == 100 })).Return(100, nil).Once()
+
+	require.NoError(t, reconciler.Do(t.Context(), activities.ReconcilePaygOpenRouterChatKeyArgs{OrganizationID: organizationID, DesiredState: openrouter.KeyDesiredStateEnabled}))
+	require.Equal(t, []paygCauseCall{{organizationID: organizationID, keyType: openrouter.KeyTypeChat, cause: openrouter.DisableCauseBillingInactive}}, provisioner.removedCauses)
+	for _, call := range provisioner.removedCauses {
+		require.NotEqual(t, openrouter.DisableCauseTrialDemotion, call.cause, "ordinary billing recovery must preserve trial demotion")
+	}
 	provisioner.AssertExpectations(t)
 }
 
@@ -303,7 +380,7 @@ func TestReconcilePaygOpenRouterChatKeyStaleActivationWakeupCannotOverrideCurren
 	t.Parallel()
 
 	reconciler, provisioner, _, organizationID := setupPaygChatKeyReconciler(t, "free", pgtype.Text{})
-	provisioner.On("DisableAPIKey", mock.Anything, organizationID, openrouter.KeyTypeChat).Return(nil).Once()
+	provisioner.On("AddAPIKeyDisableCauseWithDB", mock.Anything, organizationID, openrouter.KeyTypeChat).Return(nil).Once()
 
 	require.NoError(t, reconciler.Do(t.Context(), activities.ReconcilePaygOpenRouterChatKeyArgs{OrganizationID: organizationID, DesiredState: openrouter.KeyDesiredStateDisabled}), "newer deactivation wake-up")
 	require.NoError(t, reconciler.Do(t.Context(), activities.ReconcilePaygOpenRouterChatKeyArgs{OrganizationID: organizationID, DesiredState: openrouter.KeyDesiredStateEnabled}), "stale activation delivered last")
@@ -322,7 +399,7 @@ func TestReconcilePaygOpenRouterChatKeyStaleDeactivationWakeupCannotOverrideCurr
 	require.NoError(t, reconciler.Do(t.Context(), activities.ReconcilePaygOpenRouterChatKeyArgs{OrganizationID: organizationID, DesiredState: openrouter.KeyDesiredStateEnabled}), "newer activation wake-up")
 	require.NoError(t, reconciler.Do(t.Context(), activities.ReconcilePaygOpenRouterChatKeyArgs{OrganizationID: organizationID, DesiredState: openrouter.KeyDesiredStateDisabled}), "stale deactivation delivered last")
 
-	provisioner.AssertNotCalled(t, "DisableAPIKey", mock.Anything, mock.Anything, mock.Anything)
+	provisioner.AssertNotCalled(t, "AddAPIKeyDisableCauseWithDB", mock.Anything, mock.Anything, mock.Anything)
 	provisioner.AssertExpectations(t)
 }
 
@@ -330,8 +407,8 @@ func TestReconcilePaygOpenRouterChatKeyExternalFailureIsRetryableAndIdempotent(t
 	t.Parallel()
 
 	reconciler, provisioner, _, organizationID := setupPaygChatKeyReconciler(t, "free", pgtype.Text{})
-	provisioner.On("DisableAPIKey", mock.Anything, organizationID, openrouter.KeyTypeChat).Return(errors.New("upstream unavailable")).Once()
-	provisioner.On("DisableAPIKey", mock.Anything, organizationID, openrouter.KeyTypeChat).Return(nil).Once()
+	provisioner.On("AddAPIKeyDisableCauseWithDB", mock.Anything, organizationID, openrouter.KeyTypeChat).Return(errors.New("upstream unavailable")).Once()
+	provisioner.On("AddAPIKeyDisableCauseWithDB", mock.Anything, organizationID, openrouter.KeyTypeChat).Return(nil).Once()
 
 	args := activities.ReconcilePaygOpenRouterChatKeyArgs{OrganizationID: organizationID, DesiredState: openrouter.KeyDesiredStateDisabled}
 	require.ErrorContains(t, reconciler.Do(t.Context(), args), "disable PAYG Other inference key")
@@ -347,7 +424,7 @@ func TestReconcilePaygOpenRouterChatKeyRejectsMixedProjection(t *testing.T) {
 	err := reconciler.Do(t.Context(), activities.ReconcilePaygOpenRouterChatKeyArgs{OrganizationID: organizationID, DesiredState: openrouter.KeyDesiredStateEnabled})
 	require.ErrorContains(t, err, "inconsistent PAYG Other inference key billing projection")
 	provisioner.AssertNotCalled(t, "RefreshAPIKeyLimit", mock.Anything, mock.Anything, mock.Anything, mock.Anything)
-	provisioner.AssertNotCalled(t, "DisableAPIKey", mock.Anything, mock.Anything, mock.Anything)
+	provisioner.AssertNotCalled(t, "AddAPIKeyDisableCauseWithDB", mock.Anything, mock.Anything, mock.Anything)
 }
 
 func TestReconcilePaygOpenRouterChatKeyIgnoresEnterpriseOrganization(t *testing.T) {
@@ -356,7 +433,7 @@ func TestReconcilePaygOpenRouterChatKeyIgnoresEnterpriseOrganization(t *testing.
 	reconciler, provisioner, _, organizationID := setupPaygChatKeyReconciler(t, "enterprise", pgtype.Text{})
 	require.NoError(t, reconciler.Do(t.Context(), activities.ReconcilePaygOpenRouterChatKeyArgs{OrganizationID: organizationID, DesiredState: openrouter.KeyDesiredStateDisabled}))
 	provisioner.AssertNotCalled(t, "RefreshAPIKeyLimit", mock.Anything, mock.Anything, mock.Anything, mock.Anything)
-	provisioner.AssertNotCalled(t, "DisableAPIKey", mock.Anything, mock.Anything, mock.Anything)
+	provisioner.AssertNotCalled(t, "AddAPIKeyDisableCauseWithDB", mock.Anything, mock.Anything, mock.Anything)
 }
 
 func TestReconcilePaygOpenRouterChatKeyIgnoresPolarOrganization(t *testing.T) {
@@ -365,7 +442,7 @@ func TestReconcilePaygOpenRouterChatKeyIgnoresPolarOrganization(t *testing.T) {
 	reconciler, provisioner, _, organizationID := setupPaygChatKeyReconciler(t, "pro", pgtype.Text{})
 	require.NoError(t, reconciler.Do(t.Context(), activities.ReconcilePaygOpenRouterChatKeyArgs{OrganizationID: organizationID, DesiredState: openrouter.KeyDesiredStateDisabled}))
 	provisioner.AssertNotCalled(t, "RefreshAPIKeyLimit", mock.Anything, mock.Anything, mock.Anything, mock.Anything)
-	provisioner.AssertNotCalled(t, "DisableAPIKey", mock.Anything, mock.Anything, mock.Anything)
+	provisioner.AssertNotCalled(t, "AddAPIKeyDisableCauseWithDB", mock.Anything, mock.Anything, mock.Anything)
 }
 
 func TestRefreshOpenRouterChatKeyDoesNotReinstateCommittedSubscriptionLoss(t *testing.T) {

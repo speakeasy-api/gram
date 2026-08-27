@@ -81,10 +81,6 @@ func (m *mockProvisioner) RemoveAPIKeyDisableCauseWithDB(ctx context.Context, _ 
 	return m.RemoveAPIKeyDisableCause(ctx, orgID, keyType, cause, limit)
 }
 
-func (m *mockProvisioner) DisableAPIKey(ctx context.Context, orgID string, keyType KeyType) error {
-	return nil
-}
-
 func (m *mockProvisioner) GetCreditsUsed(ctx context.Context, orgID string, keyType KeyType) (float64, int, error) {
 	return 0, 0, nil
 }
