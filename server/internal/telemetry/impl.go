@@ -995,6 +995,30 @@ func (s *Service) expandEmployeeEmailFilters(ctx context.Context, orgID string, 
 	return filters
 }
 
+// dedupeNonEmpty drops blanks and repeats while keeping first-seen order.
+// Dropping blanks is the load-bearing half: a blank in a key set would match
+// every email-less row in the project — everyone else's hook rows.
+func dedupeNonEmpty(values []string) []string {
+	if len(values) == 0 {
+		return nil
+	}
+
+	seen := make(map[string]struct{}, len(values))
+	out := make([]string, 0, len(values))
+	for _, value := range values {
+		if value == "" {
+			continue
+		}
+		if _, ok := seen[value]; ok {
+			continue
+		}
+		seen[value] = struct{}{}
+		out = append(out, value)
+	}
+
+	return out
+}
+
 func dedupe(values []string) []string {
 	seen := make(map[string]struct{}, len(values))
 	out := make([]string, 0, len(values))
