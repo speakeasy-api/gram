@@ -679,6 +679,33 @@ func TestServePublic_MetaEndpoint_ListServers_UnknownVisibilityFailsClosed(t *te
 	require.Empty(t, listed.Servers)
 }
 
+// An anonymous caller on an ungated endpoint carries no AuthContext, which
+// authz reports as Unauthorized: a denial that filters the private member,
+// never a request-level error.
+func TestServePublic_MetaEndpoint_Anonymous_PrivateServerMemberFiltered(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	slug := "meta-" + uuid.NewString()
+	meta := createMetaMcpEndpoint(t, ctx, ti.conn, *authCtx.ProjectID, authCtx.ActiveOrganizationID, slug, uuid.Nil)
+	open := seedHostedMetaMember(t, ctx, ti, meta.ID, "open member", 1, mcpservers.VisibilityPublic, "alpha_tool")
+	seedHostedMetaMember(t, ctx, ti, meta.ID, "closed member", 2, mcpservers.VisibilityPrivate, "beta_tool")
+
+	envelope := callMetaTool(t, context.Background(), ti, slug, "list_servers", map[string]any{})
+	result := decodeMetaToolResult(t, envelope)
+	var listed struct {
+		Servers []struct {
+			Slug string `json:"slug"`
+		} `json:"servers"`
+	}
+	require.NoError(t, json.Unmarshal(result.StructuredContent, &listed))
+	require.Len(t, listed.Servers, 1)
+	require.Equal(t, open.slug, listed.Servers[0].Slug)
+}
+
 // Ungated meta endpoints serve anonymously: without the issuer gate no
 // identity exists, so a private-toolset member is listed (server visibility
 // is public) but its drill-down reads as nonexistent.
