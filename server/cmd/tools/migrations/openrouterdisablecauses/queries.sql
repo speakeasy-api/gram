@@ -62,6 +62,14 @@ WHERE organization_id = @organization_id
   AND disable_causes IS NULL
   AND deleted IS FALSE;
 
+-- name: GetValidationPopulationFingerprint :one
+SELECT md5(COALESCE(string_agg(
+  concat_ws(E'\x1f', organization_id, key_type, disabled::text, disable_causes::text, updated_at::text),
+  E'\x1e' ORDER BY organization_id, key_type
+), '')) AS fingerprint
+FROM openrouter_api_keys
+WHERE deleted IS FALSE;
+
 -- name: CountLiveNullClassifications :one
 SELECT count(*)
 FROM openrouter_api_keys
@@ -149,12 +157,22 @@ INSERT INTO audit_logs (
 )
 VALUES (
   @organization_id, 'system:test', 'system', @action, @subject_id, 'openrouter_api_key',
-  '{"disabled":false,"disable_causes":[]}', @after_snapshot, @metadata
+  @before_snapshot, @after_snapshot, @metadata
 );
 
 -- name: SetOpenRouterClassificationFixture :exec
 UPDATE openrouter_api_keys
 SET disable_causes = @disable_causes::text[], disabled = @disabled
+WHERE organization_id = @organization_id AND key_type = @key_type;
+
+-- name: TouchOpenRouterClassificationFixture :exec
+UPDATE openrouter_api_keys
+SET updated_at = GREATEST(clock_timestamp(), updated_at + INTERVAL '1 microsecond')
+WHERE organization_id = @organization_id AND key_type = @key_type;
+
+-- name: ResetOpenRouterClassificationFixture :exec
+UPDATE openrouter_api_keys
+SET disable_causes = NULL
 WHERE organization_id = @organization_id AND key_type = @key_type;
 
 -- name: CountAllNullClassificationsFixture :one
@@ -164,3 +182,6 @@ WHERE disable_causes IS NULL;
 
 -- name: LockAuditLogsFixture :exec
 LOCK TABLE audit_logs IN ACCESS EXCLUSIVE MODE;
+
+-- name: LockOpenRouterKeysFixture :exec
+LOCK TABLE openrouter_api_keys IN ACCESS EXCLUSIVE MODE;

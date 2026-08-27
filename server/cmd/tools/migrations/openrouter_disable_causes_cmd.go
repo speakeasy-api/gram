@@ -24,17 +24,18 @@ import (
 const classifierVersion = "v1"
 
 type openRouterDisableCausesConfig struct {
-	dbURL                 string
-	environment           string
-	codeSHA               string
-	mode                  openrouterdisablecauses.Mode
-	manualOverride        bool
-	confirmManualOverride bool
-	batchSize             int
-	lockTimeout           time.Duration
-	statementTimeout      time.Duration
-	maxLockRetries        int
-	overrideToken         string
+	dbURL                    string
+	environment              string
+	codeSHA                  string
+	mode                     openrouterdisablecauses.Mode
+	manualOverride           bool
+	confirmManualOverride    bool
+	validateOverrideManifest bool
+	batchSize                int
+	lockTimeout              time.Duration
+	statementTimeout         time.Duration
+	maxLockRetries           int
+	overrideToken            string
 }
 
 type commandSummary struct {
@@ -58,6 +59,7 @@ func parseOpenRouterDisableCausesFlags(args []string, getenv func(string) string
 	environment := fs.String("environment", "", "explicit target environment")
 	confirmProduction := fs.String("confirm-production", "", "must equal production for a production write")
 	confirmManual := fs.Bool("confirm-manual-override", false, "required for manual override mode")
+	validateOverrides := fs.Bool("validate-override-manifest", false, "read the protected manual override manifest from stdin during validation")
 	batchSize := fs.Int("batch-size", 100, "keyset batch size")
 	lockTimeout := fs.Duration("lock-timeout", 2*time.Second, "per-transaction lock timeout")
 	statementTimeout := fs.Duration("statement-timeout", 30*time.Second, "per-transaction statement timeout")
@@ -103,7 +105,7 @@ func parseOpenRouterDisableCausesFlags(args []string, getenv func(string) string
 	}
 	cfg := openRouterDisableCausesConfig{
 		dbURL: getenv("GRAM_DATABASE_URL"), environment: *environment, codeSHA: getenv("GRAM_CODE_SHA"),
-		mode: mode, manualOverride: *manual, confirmManualOverride: *confirmManual, batchSize: *batchSize,
+		mode: mode, manualOverride: *manual, confirmManualOverride: *confirmManual, validateOverrideManifest: *validateOverrides, batchSize: *batchSize,
 		lockTimeout: *lockTimeout, statementTimeout: *statementTimeout, maxLockRetries: *maxLockRetries,
 		overrideToken: getenv("GRAM_OPENROUTER_DISABLE_CAUSES_OVERRIDE_TOKEN"),
 	}
@@ -113,7 +115,10 @@ func parseOpenRouterDisableCausesFlags(args []string, getenv func(string) string
 	if cfg.codeSHA == "" {
 		cfg.codeSHA = "unknown"
 	}
-	if cfg.manualOverride && cfg.overrideToken == "" {
+	if cfg.validateOverrideManifest && cfg.mode != openrouterdisablecauses.ModeValidate {
+		return cfg, errors.New("validation override manifest requires validate mode")
+	}
+	if (cfg.manualOverride || cfg.validateOverrideManifest) && cfg.overrideToken == "" {
 		return cfg, errors.New("manual override authorization is not configured")
 	}
 	return cfg, nil
@@ -143,6 +148,30 @@ func decodeManualOverride(reader io.Reader, expectedToken string) (openrouterdis
 		return openrouterdisablecauses.ManualOverride{}, errors.New("manual override fields are required")
 	}
 	return openrouterdisablecauses.ManualOverride{OrganizationID: envelope.OrganizationID, KeyType: envelope.KeyType, Causes: envelope.Causes}, nil
+}
+
+type validationOverrideEnvelope struct {
+	AuthorizationToken string                                   `json:"authorization_token"`
+	Overrides          []openrouterdisablecauses.ManualOverride `json:"overrides"`
+}
+
+func decodeValidationOverrides(reader io.Reader, expectedToken string) ([]openrouterdisablecauses.ManualOverride, error) {
+	decoder := json.NewDecoder(io.LimitReader(reader, 64*1024))
+	decoder.DisallowUnknownFields()
+	var envelope validationOverrideEnvelope
+	if err := decoder.Decode(&envelope); err != nil {
+		return nil, errors.New("invalid validation override manifest")
+	}
+	if decoder.Decode(&struct{}{}) != io.EOF {
+		return nil, errors.New("validation override manifest must contain one JSON object")
+	}
+	if err := openrouterdisablecauses.AuthorizeManualOverride(envelope.AuthorizationToken, expectedToken); err != nil {
+		return nil, fmt.Errorf("authorize validation override manifest: %w", err)
+	}
+	if envelope.Overrides == nil {
+		return nil, errors.New("validation override manifest overrides are required")
+	}
+	return envelope.Overrides, nil
 }
 
 func writeOpenRouterDisableCausesSummary(writer io.Writer, summary commandSummary) error {
@@ -189,6 +218,13 @@ func runOpenRouterDisableCauses(args []string, stdin io.Reader, stdout io.Writer
 		changed, applyErr := runner.ApplyManualOverride(ctx, override)
 		manualChanged = &changed
 		err = applyErr
+	} else if cfg.validateOverrideManifest {
+		overrides, decodeErr := decodeValidationOverrides(stdin, cfg.overrideToken)
+		if decodeErr != nil {
+			log.Printf("validation override manifest rejected")
+			return 1
+		}
+		summary, err = runner.Validate(ctx, overrides)
 	} else {
 		summary, err = runner.Run(ctx, cfg.mode)
 	}
