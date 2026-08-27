@@ -349,7 +349,6 @@ checksum = "sha256:1b1630c3ae133448a9445911499ab2d59bd77f860abbd595dbc89da4eb82c
 url = "https://github.com/pnpm/pnpm/releases/download/v11.19.0/pnpm-linux-arm64.tar.gz"
 url_api = "https://api.github.com/repos/pnpm/pnpm/releases/assets/496485122"
 provenance = "github-attestations"
-provenance_verified = true
 
 [tools."github:pnpm/pnpm"."platforms.linux-arm64-musl"]
 checksum = "sha256:89309036b565a41e28f970a95c45ae2c448f80cc54c77a309f140e11706dd858"

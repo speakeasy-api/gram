@@ -16,6 +16,14 @@ type SchemaTool struct {
 // tool — reported explicitly rather than silently dropped, so an agent
 // holding a stale catalog knows to rediscover.
 type DescribeToolsResult struct {
-	Tools    []SchemaTool `json:"tools"`
-	NotFound []string     `json:"not_found,omitempty"`
+	Tools    []SchemaTool   `json:"tools"`
+	NotFound []string       `json:"not_found,omitempty"`
+	Failed   []FailedServer `json:"failed,omitempty"`
+}
+
+// FailedServer is one member whose catalog could not be read; its names are
+// reported here so a member outage degrades only that member.
+type FailedServer struct {
+	Server  string `json:"server"`
+	Message string `json:"message"`
 }

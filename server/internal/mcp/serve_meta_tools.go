@@ -1,7 +1,7 @@
-// Gateway drill-down tools over hosted (toolset-backed) members. Execution
+// Meta MCP drill-down tools over hosted (toolset-backed) members. Execution
 // reuses handleToolsCall, so billing, guardian, RBAC, audit, and telemetry
-// apply as on direct calls. Proxied members answer not-implemented until
-// AIM-87's proxied-member dispatch.
+// apply as on direct calls. Proxied members dispatch through their own
+// upstream sessions (serve_meta_proxy.go).
 
 package mcp
 
@@ -62,14 +62,9 @@ func (s *Service) handleMetaDescribeServerCall(
 	if !ok {
 		return nil, oops.E(oops.CodeNotFound, nil, "unknown server %q; call list_servers to see available servers", args.Server).LogWarn(ctx, logger)
 	}
-	if member.backend != metaMemberBackendHosted {
-		return nil, oops.E(oops.CodeNotImplemented, nil, "describe_server is not yet available for proxied member servers")
-	}
-
-	catalog, err := s.describeMemberToolset(ctx, logger, gate, member)
+	catalog, err := s.describeMetaMember(ctx, logger, gate, member)
 	if err != nil {
-		var memberErr *metaMemberError
-		if errors.As(err, &memberErr) {
+		if memberErr, ok := errors.AsType[*metaMemberError](err); ok {
 			return marshalMetaToolError(ctx, logger, req.ID, memberErr.message)
 		}
 		return nil, err
@@ -88,7 +83,7 @@ func (s *Service) handleMetaDescribeServerCall(
 			Slug:      member.slug,
 			Name:      member.name,
 			SortOrder: int(member.sortOrder),
-			Status:    member.status(),
+			Status:    s.memberStatus(ctx, member),
 		},
 		Tools: described,
 	})
@@ -149,9 +144,6 @@ func (s *Service) handleMetaDescribeToolsCall(
 			notFound = append(notFound, qualified)
 			continue
 		}
-		if member.backend != metaMemberBackendHosted {
-			return nil, oops.E(oops.CodeNotImplemented, nil, "describe_tools is not yet available for proxied member servers")
-		}
 		mr, ok := requestsBySlug[serverSlug]
 		if !ok {
 			mr = &memberRequest{member: member, toolNames: nil}
@@ -162,13 +154,16 @@ func (s *Service) handleMetaDescribeToolsCall(
 	}
 
 	described := []metamcp.SchemaTool{}
+	failed := []metamcp.FailedServer{}
 	for _, slug := range order {
 		mr := requestsBySlug[slug]
-		catalog, err := s.describeMemberToolset(ctx, logger, gate, mr.member)
+		catalog, err := s.describeMetaMember(ctx, logger, gate, mr.member)
 		if err != nil {
-			var memberErr *metaMemberError
-			if errors.As(err, &memberErr) {
-				return marshalMetaToolError(ctx, logger, req.ID, memberErr.message)
+			// A member outage degrades only that member: its names land in
+			// failed while every other member is still described.
+			if memberErr, ok := errors.AsType[*metaMemberError](err); ok {
+				failed = append(failed, metamcp.FailedServer{Server: mr.member.slug, Message: memberErr.message})
+				continue
 			}
 			return nil, err
 		}
@@ -190,6 +185,7 @@ func (s *Service) handleMetaDescribeToolsCall(
 	structured, err := json.Marshal(metamcp.DescribeToolsResult{
 		Tools:    described,
 		NotFound: notFound,
+		Failed:   failed,
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "serialize describe_tools result").LogError(ctx, logger)
@@ -223,13 +219,12 @@ func (s *Service) handleMetaExecuteToolCall(
 		return nil, oops.E(oops.CodeNotFound, nil, "unknown server %q; call list_servers to see available servers", serverSlug).LogWarn(ctx, logger)
 	}
 	if member.backend != metaMemberBackendHosted {
-		return nil, oops.E(oops.CodeNotImplemented, nil, "execute_tool is not yet available for proxied member servers")
+		return s.executeProxiedMemberTool(ctx, logger, gate, member, req, toolName, arguments, meta)
 	}
 
 	toolset, inputs, err := s.buildMemberDispatch(ctx, logger, gate, member)
 	if err != nil {
-		var memberErr *metaMemberError
-		if errors.As(err, &memberErr) {
+		if memberErr, ok := errors.AsType[*metaMemberError](err); ok {
 			return marshalMetaToolError(ctx, logger, req.ID, memberErr.message)
 		}
 		return nil, err
@@ -243,7 +238,7 @@ func (s *Service) handleMetaExecuteToolCall(
 	}
 	if !satisfied {
 		return marshalMetaToolError(ctx, logger, req.ID,
-			fmt.Sprintf("server %q requires authentication that this gateway session does not satisfy", member.slug))
+			fmt.Sprintf("server %q requires authentication that this meta MCP session does not satisfy", member.slug))
 	}
 
 	// The outer request's _meta rides along: the member dispatch serves the
@@ -314,7 +309,7 @@ func (s *Service) describeMemberToolset(
 	catalog := &memberCatalog{entries: nil, byName: map[string]*toolListEntry{}}
 	duplicates := map[string]bool{}
 	for _, tool := range described.Tools {
-		// External-MCP passthrough tools are excluded from the gateway
+		// External-MCP passthrough tools are excluded from the meta MCP
 		// catalog (toolToListEntry returns nil); they belong to the
 		// proxied-member runtime.
 		entry := toolToListEntry(tool)
@@ -388,7 +383,7 @@ func (s *Service) buildMemberDispatch(
 	// so multi-credential meta sessions keep hosted members callable.
 	tokenInputs, err := appendRemoteSessionTokenInputs(nil, hostedMemberTokens(gate.tokens))
 	if err != nil {
-		return nil, nil, oops.E(oops.CodeUnexpected, err, "resolve upstream tokens for gateway member").LogError(ctx, logger)
+		return nil, nil, oops.E(oops.CodeUnexpected, err, "resolve upstream tokens for meta MCP member").LogError(ctx, logger)
 	}
 
 	var environment string
@@ -444,7 +439,10 @@ func (s *Service) buildMemberDispatch(
 }
 
 // hostedMemberTokens narrows a gate's token map to what a hosted member may
-// receive: exactly one token with no recorded resource. A resource-qualified
+// receive: exactly one token with no recorded resource. The tunneled arm of
+// routeMetaMemberToken applies the same rule, so on a mixed gateway one
+// unqualified credential reaches both; recording synthetic tunnel resources
+// (AIM-87 follow-up) is what will split them. A resource-qualified
 // token belongs to the member it was consented for, and several tokens are
 // unroutable without a scheme-to-issuer mapping; both cases yield no token.
 func hostedMemberTokens(tokens map[uuid.UUID]remotesessions.UpstreamToken) map[uuid.UUID]remotesessions.UpstreamToken {
@@ -486,7 +484,7 @@ func (s *Service) loadMemberToolset(
 	}
 	if !toolset.McpIsPublic && gate.authenticated {
 		// Toolset-level mcp:connect gate, matching ServeToolsetResolved's
-		// connection check; the gateway maps a denial to nonexistent rather
+		// connection check; the meta MCP maps a denial to nonexistent rather
 		// than Forbidden, per its unauthorized-reads-as-nonexistent rule.
 		// Grants context was prepared in resolveMetaMemberSnapshot.
 		if err := s.authz.Require(ctx, authz.MCPCheck(authz.ScopeMCPConnect, toolset.ID.String(), toolset.ProjectID.String())); err != nil {
@@ -500,7 +498,7 @@ func (s *Service) loadMemberToolset(
 	return &toolset, toolset.ProjectID, nil
 }
 
-// marshalMetaToolCallResult wraps structuredContent in the gateway's
+// marshalMetaToolCallResult wraps structuredContent in the meta MCP's
 // tools/call envelope with a mirroring text chunk.
 func marshalMetaToolCallResult(ctx context.Context, logger *slog.Logger, id mcpjsonrpc.ID, structured []byte) (json.RawMessage, error) {
 	chunk, err := json.Marshal(contentChunk[string, json.RawMessage]{

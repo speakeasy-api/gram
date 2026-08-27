@@ -13,6 +13,7 @@ package sessionhandoff
 import (
 	"encoding/json"
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -260,8 +261,8 @@ func renderRecent(turns []Turn, budget int, redactToolPayloads bool) (body strin
 	var entries []string
 	used := 0
 	included := 0
-	for i := len(turns) - 1; i >= 0; i-- {
-		entry := renderTurn(turns[i], redactToolPayloads)
+	for _, turn := range slices.Backward(turns) {
+		entry := renderTurn(turn, redactToolPayloads)
 		if entry == "" {
 			included++ // skipped-by-content turns don't count as lost
 			continue
@@ -287,8 +288,8 @@ func renderRecent(turns []Turn, budget int, redactToolPayloads bool) (body strin
 
 func joinReversed(entries []string) string {
 	var b strings.Builder
-	for i := len(entries) - 1; i >= 0; i-- {
-		b.WriteString(entries[i])
+	for _, entrie := range slices.Backward(entries) {
+		b.WriteString(entrie)
 	}
 	return b.String()
 }
@@ -383,9 +384,9 @@ func firstUserText(turns []Turn) string {
 }
 
 func lastAssistantText(turns []Turn) string {
-	for i := len(turns) - 1; i >= 0; i-- {
-		if turns[i].Role == "assistant" && strings.TrimSpace(turns[i].Text) != "" {
-			return strings.TrimSpace(turns[i].Text)
+	for _, turn := range slices.Backward(turns) {
+		if turn.Role == "assistant" && strings.TrimSpace(turn.Text) != "" {
+			return strings.TrimSpace(turn.Text)
 		}
 	}
 	return ""
