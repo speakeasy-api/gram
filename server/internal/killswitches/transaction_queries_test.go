@@ -23,6 +23,7 @@ func TestLifecycleTransactionQueriesRejectTransactionControlAndMultipleStatement
 		"START /* split keyword */ TRANSACTION",
 		"PREPARE /* split keyword */ TRANSACTION 'prepared_change'",
 		"SET TRANSACTION ISOLATION LEVEL SERIALIZABLE",
+		"SET SESSION /* split phrase */ CHARACTERISTICS AS TRANSACTION READ ONLY",
 		"SELECT 1; COMMIT",
 		"SELECT ';'; ROLLBACK",
 		"SELECT $body$; COMMIT$body$; SELECT 2",
