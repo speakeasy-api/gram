@@ -54,12 +54,16 @@ WHERE id = @id
 FOR UPDATE;
 
 -- name: ListMetaMCPServers :many
-SELECT *
+SELECT sqlc.embed(meta_mcp_servers),
+       (SELECT count(*)
+        FROM meta_mcp_server_members AS mm
+        WHERE mm.meta_mcp_server_id = meta_mcp_servers.id
+          AND mm.deleted IS FALSE) AS member_count
 FROM meta_mcp_servers
-WHERE organization_id = @organization_id
-  AND project_id = @project_id
-  AND deleted IS FALSE
-ORDER BY created_at DESC, id DESC;
+WHERE meta_mcp_servers.organization_id = @organization_id
+  AND meta_mcp_servers.project_id = @project_id
+  AND meta_mcp_servers.deleted IS FALSE
+ORDER BY meta_mcp_servers.created_at DESC, meta_mcp_servers.id DESC;
 
 -- name: UpdateMetaMCPServer :one
 -- Full-record replace: a null user_session_issuer_id clears the reference. A

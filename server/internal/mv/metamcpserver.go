@@ -19,14 +19,19 @@ func BuildMetaMcpServerView(server repo.MetaMcpServer) *types.MetaMcpServer {
 		Visibility:          types.MetaMcpServerVisibility(server.Visibility),
 		CreatedAt:           conv.FromPGTimestamptz(server.CreatedAt),
 		UpdatedAt:           conv.FromPGTimestamptz(server.UpdatedAt),
+		MemberCount:         nil,
 	}
 }
 
-// BuildMetaMcpServerListView converts a slice of repo rows into API types.
-func BuildMetaMcpServerListView(servers []repo.MetaMcpServer) []*types.MetaMcpServer {
+// BuildMetaMcpServerListView converts a slice of repo listing rows into API
+// types, carrying each server's live member count.
+func BuildMetaMcpServerListView(servers []repo.ListMetaMCPServersRow) []*types.MetaMcpServer {
 	result := make([]*types.MetaMcpServer, len(servers))
 	for i, s := range servers {
-		result[i] = BuildMetaMcpServerView(s)
+		view := BuildMetaMcpServerView(s.MetaMcpServer)
+		count := int(s.MemberCount)
+		view.MemberCount = &count
+		result[i] = view
 	}
 	return result
 }

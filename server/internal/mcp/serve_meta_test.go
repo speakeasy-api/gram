@@ -20,6 +20,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpversions"
+	"github.com/speakeasy-api/gram/server/internal/mcp/metamcp"
 	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
@@ -170,7 +171,11 @@ func TestServePublic_MetaEndpoint_Initialize(t *testing.T) {
 	// Instructions are deliberately generic: the member inventory belongs to
 	// list_servers, so neither the meta server's name nor its members appear.
 	require.Contains(t, result.Instructions, "list_servers")
-	require.Contains(t, result.Instructions, "rediscovery")
+	require.Contains(t, result.Instructions, "describe_tools")
+	// The two rules agents get wrong: guessing arguments, and reading an
+	// unobservable member as a missing one.
+	require.Contains(t, result.Instructions, "Never execute a name you have not described")
+	require.Contains(t, result.Instructions, metamcp.StatusUnknown)
 	require.NotContains(t, result.Instructions, "test meta MCP")
 }
 

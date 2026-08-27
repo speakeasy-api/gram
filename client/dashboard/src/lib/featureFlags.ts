@@ -8,6 +8,7 @@ export const FEATURE_FLAGS = {
   experimentalChat: "gram-experimental-chat",
   externalMcpUserSessions: "onboard-external-mcp-to-user-sessions",
   functions: "gram-functions",
+  gatewayEndpoints: "gram-gateway-endpoints",
   headlessModeSwitcher: "headless-mode-switcher",
   mcpResearch: "gram-mcp-research",
   newCostsPage: "gram-new-costs-page",

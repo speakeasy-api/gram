@@ -56,7 +56,7 @@ export function SettingsTab({
       <BrandingSection mcpServer={mcpServer} />
       {isUnproxied ? null : (
         <ServerUrlSection
-          mcpServer={mcpServer}
+          backend={{ mcpServerId: mcpServer.id }}
           endpoints={endpoints}
           isLoadingEndpoints={isLoadingEndpoints}
         />

@@ -46,6 +46,7 @@ import { LogsRoot } from "./pages/logs/Logs";
 import { BuiltInMCPDetailPage } from "./pages/mcp/BuiltInMCPDetailPage";
 import { MCPDetailPage } from "./pages/mcp/MCPDetails";
 import { MCPPage, MCPRoot } from "./pages/mcp/MCP";
+import GatewayDetailPage from "./pages/mcp/gateway/GatewayDetails";
 import MCPServerDetails from "./pages/mcp/x/MCPServerDetails";
 import {
   InsightsEmployeeDetailPage,
@@ -507,6 +508,39 @@ const ROUTE_STRUCTURE = {
           },
           settings: {
             title: "MCP Server Settings",
+            url: "settings",
+          },
+        },
+      },
+      // Gateway Endpoints (meta MCP servers). Addressed by id: a gateway has
+      // no slug of its own — routing identity lives on its mcp_endpoints.
+      gateway: {
+        title: "Gateway Details",
+        url: "gateway/:gatewayId",
+        component: GatewayDetailPage,
+        subPages: {
+          overview: {
+            title: "Gateway Overview",
+            url: "overview",
+          },
+          members: {
+            title: "Gateway Members",
+            url: "members",
+          },
+          inspect: {
+            title: "Gateway Inspect",
+            url: "inspect",
+          },
+          teamAccess: {
+            title: "Gateway Team Access",
+            url: "team-access",
+          },
+          sessions: {
+            title: "Gateway Clients and Sessions",
+            url: "sessions",
+          },
+          settings: {
+            title: "Gateway Settings",
             url: "settings",
           },
         },

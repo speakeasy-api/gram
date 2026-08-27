@@ -16,6 +16,7 @@ import { useSdkClient, useSlugs } from "@/contexts/Sdk";
 import { useRBAC } from "@/hooks/useRBAC";
 import {
   invalidateRootMcpEndpointQueries,
+  patchMcpEndpointInCache,
   useRootMcpEndpointMutation,
 } from "@/hooks/useRootMcpEndpoint";
 import { useCustomDomains } from "@/hooks/useToolsetUrl";
@@ -23,7 +24,6 @@ import { getServerURL } from "@/lib/utils";
 import { useOrgRoutes } from "@/routes";
 import type { CustomDomain } from "@gram/client/models/components/customdomain.js";
 import type { McpEndpoint } from "@gram/client/models/components/mcpendpoint.js";
-import type { McpServer } from "@gram/client/models/components/mcpserver.js";
 import { useDeleteMcpEndpointMutation } from "@gram/client/react-query/deleteMcpEndpoint.js";
 import { useUpdateMcpEndpointMutation } from "@gram/client/react-query/updateMcpEndpoint.js";
 import { Badge } from "@/components/ui/Badge";
@@ -44,6 +44,12 @@ const ADDRESS_RANDOM_SUFFIX_ALPHABET = "abcdefghijklmnopqrstuvwxyz0123456789";
 const ADDRESS_RANDOM_SUFFIX_LENGTH = 5;
 export const MCP_SERVER_URL_SECTION_ID = "server-url";
 
+// The endpoint create/update forms take exactly one backend id; spreading one
+// of these supplies it.
+export type EndpointBackendRef =
+  | { mcpServerId: string }
+  | { metaMcpServerId: string };
+
 function generateAddressSuffix() {
   let suffix = "";
   for (let i = 0; i < ADDRESS_RANDOM_SUFFIX_LENGTH; i += 1) {
@@ -56,13 +62,16 @@ function generateAddressSuffix() {
 }
 
 export function ServerUrlSection({
-  mcpServer,
+  backend,
   endpoints,
   isLoadingEndpoints,
+  /** What the addresses point at, for copy that reads naturally. */
+  subject = "server",
 }: {
-  mcpServer: McpServer;
+  backend: EndpointBackendRef;
   endpoints: McpEndpoint[];
   isLoadingEndpoints: boolean;
+  subject?: "server" | "gateway";
 }): JSX.Element {
   const { domains } = useCustomDomains();
   const orgRoutes = useOrgRoutes();
@@ -125,9 +134,11 @@ export function ServerUrlSection({
   return (
     <SettingsSection id={MCP_SERVER_URL_SECTION_ID}>
       <SettingsSection.Header>
-        <SettingsSection.Title>Server URL</SettingsSection.Title>
+        <SettingsSection.Title>
+          {subject === "gateway" ? "Gateway URL" : "Server URL"}
+        </SettingsSection.Title>
         <SettingsSection.Description>
-          The web address MCP clients use to connect to this server.
+          {`The web address MCP clients use to connect to this ${subject}.`}
         </SettingsSection.Description>
       </SettingsSection.Header>
       <SettingsSection.Panel>
@@ -143,20 +154,20 @@ export function ServerUrlSection({
                 <FieldLabel>Hosted Address</FieldLabel>
                 {platformEndpoint ? (
                   <AddressRow
-                    mcpServer={mcpServer}
+                    backend={backend}
                     endpoint={platformEndpoint}
                     isLastEndpoint={endpoints.length === 1}
                   />
                 ) : addingPlatform ? (
                   <NewPlatformAddressRow
-                    mcpServer={mcpServer}
+                    backend={backend}
                     onClose={() => setAddingPlatform(false)}
                   />
                 ) : (
                   <RequireScope scope="mcp:write" level="component">
                     <SettingsInlineEmptyState
                       title="No hosted address"
-                      description="Create the default Speakeasy-hosted URL for this server."
+                      description={`Create the default Speakeasy-hosted URL for this ${subject}.`}
                       actionLabel="Add"
                       onAction={() => setAddingPlatform(true)}
                     />
@@ -176,7 +187,7 @@ export function ServerUrlSection({
                 {customDomainEndpoints.map((endpoint) => (
                   <AddressRow
                     key={endpoint.id}
-                    mcpServer={mcpServer}
+                    backend={backend}
                     endpoint={endpoint}
                     domains={availableDomains}
                     isLastEndpoint={endpoints.length === 1}
@@ -185,7 +196,7 @@ export function ServerUrlSection({
                 ))}
                 {addingCustom && (
                   <NewCustomAddressRow
-                    mcpServer={mcpServer}
+                    backend={backend}
                     domains={availableDomains}
                     onClose={() => setAddingCustom(false)}
                   />
@@ -227,13 +238,13 @@ export function ServerUrlSection({
 // for the server's last address, which asks for confirmation first since it
 // leaves the server unreachable and unpublishable.
 function AddressRow({
-  mcpServer,
+  backend,
   endpoint,
   domains,
   isLastEndpoint,
   canManageDomainRoot = false,
 }: {
-  mcpServer: McpServer;
+  backend: EndpointBackendRef;
   endpoint: McpEndpoint;
   domains?: CustomDomain[];
   isLastEndpoint: boolean;
@@ -262,7 +273,8 @@ function AddressRow({
 
   const queryClient = useQueryClient();
   const update = useUpdateMcpEndpointMutation({
-    onSuccess: async () => {
+    onSuccess: async (updated) => {
+      patchMcpEndpointInCache(queryClient, updated);
       await invalidateRootMcpEndpointQueries(queryClient);
       toast.success("Address updated");
     },
@@ -307,7 +319,7 @@ function AddressRow({
       request: {
         updateMcpEndpointForm: {
           id: endpoint.id,
-          mcpServerId: mcpServer.id,
+          ...backend,
           slug: fullSlug,
           customDomainId: endpoint.customDomainId ?? undefined,
         },
@@ -513,10 +525,10 @@ function RemoveLastAddressDialog({
 }
 
 function NewPlatformAddressRow({
-  mcpServer,
+  backend,
   onClose,
 }: {
-  mcpServer: McpServer;
+  backend: EndpointBackendRef;
   onClose: () => void;
 }) {
   const [suffix, setSuffix] = useState(generateAddressSuffix);
@@ -537,7 +549,7 @@ function NewPlatformAddressRow({
     try {
       await client.mcpEndpoints.create({
         createMcpEndpointForm: {
-          mcpServerId: mcpServer.id,
+          ...backend,
           slug: fullSlug,
         },
       });
@@ -608,11 +620,11 @@ function NewPlatformAddressRow({
 }
 
 function NewCustomAddressRow({
-  mcpServer,
+  backend,
   domains,
   onClose,
 }: {
-  mcpServer: McpServer;
+  backend: EndpointBackendRef;
   domains: CustomDomain[];
   onClose: () => void;
 }) {
@@ -634,7 +646,7 @@ function NewCustomAddressRow({
     try {
       await client.mcpEndpoints.create({
         createMcpEndpointForm: {
-          mcpServerId: mcpServer.id,
+          ...backend,
           slug: trimmed,
           customDomainId: domainId,
         },
