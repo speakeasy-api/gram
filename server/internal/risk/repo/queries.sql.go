@@ -2377,6 +2377,7 @@ SELECT
     b.project_id,
     b.reason,
     b.tool_name,
+    b.provider,
     b.feedback,
     b.created_at,
     b.user_id,
@@ -2406,6 +2407,7 @@ type GetToolCallBlockRow struct {
 	ProjectID  uuid.UUID
 	Reason     string
 	ToolName   pgtype.Text
+	Provider   string
 	Feedback   pgtype.Text
 	CreatedAt  pgtype.Timestamptz
 	UserID     string
@@ -2430,6 +2432,7 @@ func (q *Queries) GetToolCallBlock(ctx context.Context, arg GetToolCallBlockPara
 		&i.ProjectID,
 		&i.Reason,
 		&i.ToolName,
+		&i.Provider,
 		&i.Feedback,
 		&i.CreatedAt,
 		&i.UserID,
@@ -5528,7 +5531,7 @@ WHERE tool_call_blocks.id = $3
       AND our.deleted_at IS NULL
   )
 RETURNING tool_call_blocks.id, tool_call_blocks.project_id, tool_call_blocks.reason, tool_call_blocks.tool_name,
-  tool_call_blocks.feedback, tool_call_blocks.created_at,
+  tool_call_blocks.provider, tool_call_blocks.feedback, tool_call_blocks.created_at,
   COALESCE((SELECT rp.name FROM risk_policies rp WHERE rp.id = tool_call_blocks.risk_policy_id AND rp.deleted IS FALSE), '')::text AS policy_name
 `
 
@@ -5544,6 +5547,7 @@ type UpdateToolCallBlockFeedbackRow struct {
 	ProjectID  uuid.UUID
 	Reason     string
 	ToolName   pgtype.Text
+	Provider   string
 	Feedback   pgtype.Text
 	CreatedAt  pgtype.Timestamptz
 	PolicyName string
@@ -5565,6 +5569,7 @@ func (q *Queries) UpdateToolCallBlockFeedback(ctx context.Context, arg UpdateToo
 		&i.ProjectID,
 		&i.Reason,
 		&i.ToolName,
+		&i.Provider,
 		&i.Feedback,
 		&i.CreatedAt,
 		&i.PolicyName,

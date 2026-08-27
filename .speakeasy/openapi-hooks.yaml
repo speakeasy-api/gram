@@ -804,6 +804,8 @@ tags:
     description: Manages display name overrides for hooks servers.
   - name: hooks
     description: Receives hook events from coding assistants for tool usage observability.
+  - name: identity
+    description: Resolves the identifiers Gram records activity under into a single identity.
   - name: instances
     description: Consumer APIs for interacting with all relevant data for an instance of a toolset and environment.
   - name: integrations

@@ -45,7 +45,7 @@ func (s *Service) checkSpendGate(ctx context.Context, ev hookevents.Event) *spen
 // variant cannot dodge the gate.
 func spendGatedAdapter(adapter string) bool {
 	switch strings.ToLower(strings.TrimSpace(adapter)) {
-	case "claude", "codex", "cursor", "copilot":
+	case "claude", "codex", "cursor", "copilot", "openclaw":
 		return true
 	default:
 		return false

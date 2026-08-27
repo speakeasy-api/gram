@@ -34,6 +34,13 @@ export const AGENT_PROVIDERS = {
     description: "Open-source personal AI agent gateway",
     iconSource: "openclaw",
   },
+  other: {
+    name: "Other agent",
+    description: "Any MCP-capable agent",
+    // No vendor mark exists for "whatever you use" — the icon resolver falls
+    // through to its globe for an unrecognised source.
+    iconSource: "other",
+  },
   copilot: {
     name: "GitHub Copilot",
     description: "Microsoft / GitHub AI pair programmer",

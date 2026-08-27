@@ -60,12 +60,17 @@ func (s *Service) GetUserProfile(ctx context.Context, organizationID, userID str
 	}
 
 	return &UserProfile{
-		ID:            row.ID,
-		UserID:        conv.FromPGTextOrEmpty[string](row.UserID),
-		ExternalID:    row.ExternalID,
-		Email:         conv.FromPGTextOrEmpty[string](row.Email),
-		RawAttributes: attributes,
-		Groups:        groups,
+		ID:             row.ID,
+		UserID:         conv.FromPGTextOrEmpty[string](row.UserID),
+		ExternalID:     row.ExternalID,
+		Email:          conv.FromPGTextOrEmpty[string](row.Email),
+		DepartmentName: stringAttribute(attributes, "department_name"),
+		JobTitle:       stringAttribute(attributes, "job_title"),
+		EmployeeType:   stringAttribute(attributes, "employee_type"),
+		DivisionName:   stringAttribute(attributes, "division_name"),
+		CostCenterName: stringAttribute(attributes, "cost_center_name"),
+		RawAttributes:  attributes,
+		Groups:         groups,
 	}, nil
 }
 
