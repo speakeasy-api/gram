@@ -79,6 +79,11 @@ const clients: Array<{
     label: "opencode",
     description: "Open-source terminal coding agent",
   },
+  {
+    id: "other",
+    label: "Other agent",
+    description: "Any MCP-capable agent",
+  },
 ];
 
 function starterPrompt(currentProjectSlug?: string): string {
@@ -1097,39 +1102,55 @@ function PlatformMCPInstallMethodSheet({
     refetchInterval: 5_000,
   });
   const packageStatus = status.data;
-  const supportsMarketplace = client.id !== "opencode";
+  // No reviewed plugin package is built for an agent we have not certified, so
+  // both packaged routes are closed and only the remote MCP config is offered.
+  const supportsPackages = client.id !== "other";
+  const supportsMarketplace = supportsPackages && client.id !== "opencode";
   const marketplaceAvailable =
     supportsMarketplace &&
     (packageStatus?.freshness === "current" ||
       packageStatus?.repairAllowed === true);
-  const downloadAvailable = packageStatus?.directDownloadAvailable === true;
+  const downloadAvailable =
+    supportsPackages && packageStatus?.directDownloadAvailable === true;
   const methods: Array<{
     id: PlatformMCPInstallMethod;
     title: string;
     description: string;
     disabled?: boolean;
-  }> = [
-    {
-      id: "marketplace",
-      title: "Install from your organization marketplace",
-      description:
-        "Recommended. Install the reviewed plugin and receive future updates from the canonical GitHub marketplace.",
-      disabled: !marketplaceAvailable,
-    },
-    {
-      id: "download",
-      title: `Download the ${client.label} plugin`,
-      description:
-        "Download a credential-free ZIP for your account. Direct packages must be updated manually.",
-      disabled: !downloadAvailable,
-    },
-    {
-      id: "manual",
-      title: "Connect the MCP manually",
-      description:
-        "Recovery option. Configure only the remote MCP without the reviewed catalogue workflow skill.",
-    },
-  ];
+  }> = supportsPackages
+    ? [
+        {
+          id: "marketplace",
+          title: "Install from your organization marketplace",
+          description:
+            "Recommended. Install the reviewed plugin and receive future updates from the canonical GitHub marketplace.",
+          disabled: !marketplaceAvailable,
+        },
+        {
+          id: "download",
+          title: `Download the ${client.label} plugin`,
+          description:
+            "Download a credential-free ZIP for your account. Direct packages must be updated manually.",
+          disabled: !downloadAvailable,
+        },
+        {
+          id: "manual",
+          title: "Connect the MCP manually",
+          description:
+            "Recovery option. Configure only the remote MCP without the reviewed catalogue workflow skill.",
+        },
+      ]
+    : // The packaged routes are listed only where a reviewed package exists.
+      // Offering them greyed out here would read as an organization problem
+      // rather than what it is: no plugin is built for an uncertified agent.
+      [
+        {
+          id: "manual",
+          title: "Connect the MCP manually",
+          description:
+            "Configure the remote MCP in your agent's own configuration. The reviewed catalogue workflow skill is not installed.",
+        },
+      ];
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
