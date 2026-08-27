@@ -20,10 +20,11 @@ import (
 )
 
 type disableTestUpstream struct {
-	server  *httptest.Server
-	mu      sync.Mutex
-	patches []string
-	onPatch func()
+	server    *httptest.Server
+	mu        sync.Mutex
+	patches   []string
+	onPatch   func()
+	patchHash string
 }
 
 // recorded returns the raw patch bodies. They stay raw because the field a
@@ -44,6 +45,12 @@ func (u *disableTestUpstream) interceptPatch(fn func()) {
 	u.onPatch = fn
 }
 
+func (u *disableTestUpstream) respondWithPatchHash(hash string) {
+	u.mu.Lock()
+	defer u.mu.Unlock()
+	u.patchHash = hash
+}
+
 func newDisableTestProvisioner(t *testing.T, orgID string) (*OpenRouter, *disableTestUpstream, *repo.Queries) {
 	t.Helper()
 
@@ -61,7 +68,7 @@ func newDisableTestProvisioner(t *testing.T, orgID string) (*OpenRouter, *disabl
 	})
 	require.NoError(t, err)
 
-	upstream := &disableTestUpstream{server: nil, mu: sync.Mutex{}, patches: nil, onPatch: nil}
+	upstream := &disableTestUpstream{server: nil, mu: sync.Mutex{}, patches: nil, onPatch: nil, patchHash: "hash-1"}
 	upstream.server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 
@@ -81,6 +88,7 @@ func newDisableTestProvisioner(t *testing.T, orgID string) (*OpenRouter, *disabl
 			upstream.mu.Lock()
 			upstream.patches = append(upstream.patches, string(raw))
 			onPatch := upstream.onPatch
+			patchHash := upstream.patchHash
 			upstream.mu.Unlock()
 
 			if onPatch != nil {
@@ -88,7 +96,7 @@ func newDisableTestProvisioner(t *testing.T, orgID string) (*OpenRouter, *disabl
 			}
 
 			_ = json.NewEncoder(w).Encode(map[string]any{
-				"data": map[string]any{"limit": 100.0, "hash": "hash-1"},
+				"data": map[string]any{"limit": 100.0, "hash": patchHash},
 			})
 		default:
 			w.WriteHeader(http.StatusNotFound)
@@ -103,6 +111,99 @@ func newDisableTestProvisioner(t *testing.T, orgID string) (*OpenRouter, *disabl
 	provisioner.baseURL = upstream.server.URL
 
 	return provisioner, upstream, repo.New(conn)
+}
+
+func TestEffectiveDisabledCompatibility(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name          string
+		legacy        bool
+		disableCauses []string
+		want          bool
+	}{
+		{name: "unclassified enabled", legacy: false, disableCauses: nil, want: false},
+		{name: "unclassified disabled", legacy: true, disableCauses: nil, want: true},
+		{name: "classified empty ignores stale legacy disabled", legacy: true, disableCauses: []string{}, want: false},
+		{name: "classified cause ignores stale legacy enabled", legacy: false, disableCauses: []string{"trial_demotion"}, want: true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			require.Equal(t, tt.want, EffectiveDisabled(tt.legacy, tt.disableCauses))
+		})
+	}
+}
+
+func TestProvisionAPIKeyInitializesClassifiedEnabledRow(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	orgID := "org-" + uuid.NewString()[:8]
+	provisioner, _, queries := newDisableTestProvisioner(t, orgID)
+
+	_, err := provisioner.ProvisionAPIKey(ctx, orgID, KeyTypeChat)
+	require.NoError(t, err)
+
+	row, err := queries.GetOpenRouterAPIKey(ctx, repo.GetOpenRouterAPIKeyParams{OrganizationID: orgID, KeyType: string(KeyTypeChat)})
+	require.NoError(t, err)
+	require.NotNil(t, row.DisableCauses)
+	require.Empty(t, row.DisableCauses)
+}
+
+func TestProvisionAPIKeyUsesClassifiedEffectiveState(t *testing.T) {
+	t.Parallel()
+
+	t.Run("empty causes override stale legacy disabled", func(t *testing.T) {
+		t.Parallel()
+		ctx := t.Context()
+		orgID := "org-" + uuid.NewString()[:8]
+		provisioner, _, _ := newDisableTestProvisioner(t, orgID)
+
+		wantKey, err := provisioner.ProvisionAPIKey(ctx, orgID, KeyTypeChat)
+		require.NoError(t, err)
+		_, err = provisioner.db.Exec(ctx, `UPDATE openrouter_api_keys SET disabled = TRUE, disable_causes = '{}' WHERE organization_id = $1 AND key_type = $2`, orgID, string(KeyTypeChat))
+		require.NoError(t, err)
+
+		gotKey, err := provisioner.ProvisionAPIKey(ctx, orgID, KeyTypeChat)
+		require.NoError(t, err)
+		require.Equal(t, wantKey, gotKey)
+	})
+
+	t.Run("causes override stale legacy enabled", func(t *testing.T) {
+		t.Parallel()
+		ctx := t.Context()
+		orgID := "org-" + uuid.NewString()[:8]
+		provisioner, _, _ := newDisableTestProvisioner(t, orgID)
+
+		_, err := provisioner.ProvisionAPIKey(ctx, orgID, KeyTypeChat)
+		require.NoError(t, err)
+		_, err = provisioner.db.Exec(ctx, `UPDATE openrouter_api_keys SET disabled = FALSE, disable_causes = ARRAY['trial_demotion'] WHERE organization_id = $1 AND key_type = $2`, orgID, string(KeyTypeChat))
+		require.NoError(t, err)
+
+		_, err = provisioner.ProvisionAPIKey(ctx, orgID, KeyTypeChat)
+		require.ErrorIs(t, err, ErrPlatformKeyDisabled)
+	})
+}
+
+func TestAddAPIKeyDisableCauseRejectsMismatchedUpstreamIdentityWithoutLocalWrite(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	orgID := "org-" + uuid.NewString()[:8]
+	provisioner, upstream, queries := newDisableTestProvisioner(t, orgID)
+	_, err := provisioner.ProvisionAPIKey(ctx, orgID, KeyTypeChat)
+	require.NoError(t, err)
+	upstream.respondWithPatchHash("different-hash")
+
+	_, err = provisioner.AddAPIKeyDisableCause(ctx, orgID, KeyTypeChat, DisableCauseAdminLock)
+	require.ErrorContains(t, err, "identity mismatch")
+
+	row, err := queries.GetOpenRouterAPIKey(ctx, repo.GetOpenRouterAPIKeyParams{OrganizationID: orgID, KeyType: string(KeyTypeChat)})
+	require.NoError(t, err)
+	require.False(t, row.Disabled)
+	require.Empty(t, row.DisableCauses)
 }
 
 func TestDisableAPIKey_DisablesKeyUpstream(t *testing.T) {

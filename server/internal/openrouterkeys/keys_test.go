@@ -57,6 +57,28 @@ func TestListKeys_ReturnsSeededKeys(t *testing.T) {
 	require.False(t, found.Disabled)
 }
 
+func TestListKeysUsesEffectiveDisabledCompatibility(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	adminCtx := withAdmin(t, ctx)
+	classifiedEnabled := seedKey(t, ctx, ti, "compat-enabled", "chat", "sk-or-compat-enabled")
+	classifiedDisabled := seedKey(t, ctx, ti, "compat-disabled", "internal", "sk-or-compat-disabled")
+	_, err := ti.conn.Exec(ctx, `UPDATE openrouter_api_keys SET disabled=TRUE, disable_causes='{}' WHERE organization_id=$1`, classifiedEnabled)
+	require.NoError(t, err)
+	_, err = ti.conn.Exec(ctx, `UPDATE openrouter_api_keys SET disabled=FALSE, disable_causes=ARRAY['trial_demotion'] WHERE organization_id=$1`, classifiedDisabled)
+	require.NoError(t, err)
+
+	res, err := ti.service.ListKeys(adminCtx, &gen.ListKeysPayload{SessionToken: nil})
+	require.NoError(t, err)
+	states := make(map[string]bool)
+	for _, key := range res.Keys {
+		states[key.OrganizationID] = key.Disabled
+	}
+	require.False(t, states[classifiedEnabled])
+	require.True(t, states[classifiedDisabled])
+}
+
 func TestGetKeyUsage_DecryptsStoredCiphertext(t *testing.T) {
 	t.Parallel()
 

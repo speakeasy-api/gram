@@ -113,7 +113,7 @@ FROM latest_months
 ORDER BY period_start;
 
 -- name: ListMaterializedOpenRouterInferenceKeys :many
-SELECT key_type, monthly_credits, disabled
+SELECT key_type, monthly_credits, (CASE WHEN disable_causes IS NULL THEN disabled ELSE cardinality(disable_causes) > 0 END)::boolean AS disabled
 FROM openrouter_api_keys
 WHERE organization_id = @organization_id
   AND key_type = ANY(@key_types::text[])
@@ -121,7 +121,7 @@ WHERE organization_id = @organization_id
 ORDER BY key_type;
 
 -- name: GetMaterializedOpenRouterInferenceKey :one
-SELECT key_type, disabled
+SELECT key_type, (CASE WHEN disable_causes IS NULL THEN disabled ELSE cardinality(disable_causes) > 0 END)::boolean AS disabled
 FROM openrouter_api_keys
 WHERE organization_id = @organization_id
   AND key_type = @key_type
@@ -380,6 +380,7 @@ WHERE id = @organization_id
 -- name: DisablePaygOpenRouterChatKey :exec
 UPDATE openrouter_api_keys
 SET disabled = TRUE,
+    disable_causes = NULL,
     updated_at = clock_timestamp()
 WHERE organization_id = @organization_id
   AND key_type = 'chat'

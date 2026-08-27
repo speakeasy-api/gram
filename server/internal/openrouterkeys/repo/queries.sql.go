@@ -19,7 +19,7 @@ SELECT
     om.gram_account_type,
     k.key_type,
     k.monthly_credits,
-    k.disabled,
+    (CASE WHEN k.disable_causes IS NULL THEN k.disabled ELSE cardinality(k.disable_causes) > 0 END)::boolean AS disabled,
     k.created_at,
     k.updated_at
 FROM openrouter_api_keys k
@@ -71,7 +71,7 @@ SELECT
     om.gram_account_type,
     k.key_type,
     k.monthly_credits,
-    k.disabled,
+    (CASE WHEN k.disable_causes IS NULL THEN k.disabled ELSE cardinality(k.disable_causes) > 0 END)::boolean AS disabled,
     k.created_at,
     k.updated_at
 FROM openrouter_api_keys k
