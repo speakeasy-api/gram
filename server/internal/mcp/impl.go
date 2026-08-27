@@ -55,6 +55,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/httpcache"
 	"github.com/speakeasy-api/gram/server/internal/inv"
+	"github.com/speakeasy-api/gram/server/internal/killswitches/mcptoolexecution"
 	"github.com/speakeasy-api/gram/server/internal/mcp/httpheaders"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpmetrics"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcprequests"
@@ -97,20 +98,21 @@ type IdentityResolver interface {
 }
 
 type Service struct {
-	logger          *slog.Logger
-	tracer          trace.Tracer
-	metrics         *mcpmetrics.Metrics
-	guardianPolicy  *guardian.Policy
-	db              *pgxpool.Pool
-	authRepo        *auth_repo.Queries
-	toolsetsRepo    *toolsets_repo.Queries
-	mcpMetadataRepo *metadata_repo.Queries
-	orgsRepo        *organizations_repo.Queries
-	auth            *auth.Auth
-	env             toolconfig.EnvironmentLoader
-	serverURL       *url.URL
-	siteURL         *url.URL
-	posthog         *posthog.Posthog // posthog metrics will no-op if the dependency is not provided
+	logger           *slog.Logger
+	tracer           trace.Tracer
+	metrics          *mcpmetrics.Metrics
+	identityCoverage *mcptoolexecution.IdentityCoverageCheckpoint
+	guardianPolicy   *guardian.Policy
+	db               *pgxpool.Pool
+	authRepo         *auth_repo.Queries
+	toolsetsRepo     *toolsets_repo.Queries
+	mcpMetadataRepo  *metadata_repo.Queries
+	orgsRepo         *organizations_repo.Queries
+	auth             *auth.Auth
+	env              toolconfig.EnvironmentLoader
+	serverURL        *url.URL
+	siteURL          *url.URL
+	posthog          *posthog.Posthog // posthog metrics will no-op if the dependency is not provided
 	// features resolves flag-controlled behavior (the managed assistant's
 	// Platform MCP toolset variant). Wired from the environment-aware
 	// provider: the posthog client in production, the CSV-backed in-memory
@@ -326,6 +328,7 @@ func NewService(
 	tracer := tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/mcp")
 	meter := meterProvider.Meter("github.com/speakeasy-api/gram/server/internal/mcp")
 	logger = logger.With(attr.SlogComponent("mcp"))
+	metrics := mcpmetrics.NewMetrics(meter, logger)
 
 	platformSvc := platformtoolsruntime.NewService(
 		logger,
@@ -341,7 +344,8 @@ func NewService(
 	return &Service{
 		logger:                  logger,
 		tracer:                  tracer,
-		metrics:                 mcpmetrics.NewMetrics(meter, logger),
+		metrics:                 metrics,
+		identityCoverage:        mcptoolexecution.NewIdentityCoverageCheckpoint(db, metrics),
 		guardianPolicy:          guardianPolicy,
 		db:                      db,
 		authRepo:                auth_repo.New(db),
@@ -1345,7 +1349,7 @@ func (s *Service) handleRequest(ctx context.Context, payload *mcpInputs, req *ra
 	case "tools/list":
 		return handleToolsList(ctx, s.logger, s.authz, s.guardianPolicy, s.db, s.env, payload, req, s.posthog, &s.toolsetCache, s.vectorToolStore, s.temporal, s.shadowMCPClient, s.platformExtras, s.sessionClientInfo)
 	case "tools/call":
-		return handleToolsCall(ctx, s.logger, s.metrics, s.authz, s.guardianPolicy, s.db, s.env, payload, req, s.toolProxy, s.billingTracker, s.billingRepository, &s.toolsetCache, s.telemLogger, s.vectorToolStore, s.temporal, s.mcpMetadataRepo, s.auditLogger, s.platformExtras, s.sessionClientInfo)
+		return handleToolsCall(ctx, s.logger, s.metrics, s.identityCoverage, s.authz, s.guardianPolicy, s.db, s.env, payload, req, s.toolProxy, s.billingTracker, s.billingRepository, &s.toolsetCache, s.telemLogger, s.vectorToolStore, s.temporal, s.mcpMetadataRepo, s.auditLogger, s.platformExtras, s.sessionClientInfo)
 	case "prompts/list":
 		return handlePromptsList(ctx, s.logger, s.db, payload, req, &s.toolsetCache, s.platformExtras)
 	case "prompts/get":
@@ -1596,6 +1600,7 @@ func (s *Service) HandleToolsCall(
 		ctx,
 		s.logger,
 		s.metrics,
+		s.identityCoverage,
 		s.authz,
 		s.guardianPolicy,
 		s.db,

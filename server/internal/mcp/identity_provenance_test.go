@@ -19,6 +19,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/keys"
 	"github.com/speakeasy-api/gram/server/internal/mcp"
 	"github.com/speakeasy-api/gram/server/internal/mcpidentity"
+	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -73,9 +74,16 @@ func TestApplyIssuerGate_RejectedAssistantTokenStampsNothing(t *testing.T) {
 	require.True(t, ok)
 
 	assistantID := createAssistant(t, ti, authCtx, "CrossProject")
+	otherProject, err := projectsrepo.New(ti.conn).CreateProject(t.Context(), projectsrepo.CreateProjectParams{
+		Name:           "provenance-other-" + uuid.NewString()[:8],
+		Slug:           "provenance-other-" + uuid.NewString()[:8],
+		OrganizationID: authCtx.ActiveOrganizationID,
+	})
+	require.NoError(t, err)
+
 	token, err := assistanttokens.New("test-jwt-secret", ti.conn, ti.authzEngine).Generate(assistanttokens.GenerateInput{
 		OrgID:       authCtx.ActiveOrganizationID,
-		ProjectID:   uuid.New(),
+		ProjectID:   otherProject.ID,
 		UserID:      authCtx.UserID,
 		AssistantID: assistantID,
 		ThreadID:    uuid.Nil,

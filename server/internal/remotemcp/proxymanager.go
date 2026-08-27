@@ -3,6 +3,7 @@ package remotemcp
 import (
 	"log/slog"
 
+	"github.com/jackc/pgx/v5/pgxpool"
 	"go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/trace"
 
@@ -10,6 +11,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
+	"github.com/speakeasy-api/gram/server/internal/killswitches/mcptoolexecution"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpmetrics"
 	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
@@ -39,8 +41,9 @@ type ProxyManager struct {
 	posthog        *posthog.Posthog
 	telemLogger    *tm.Logger
 
-	proxyMetrics *proxy.Metrics
-	mcpMetrics   *ProxyMetrics
+	proxyMetrics     *proxy.Metrics
+	mcpMetrics       *ProxyMetrics
+	identityCoverage *mcptoolexecution.IdentityCoverageCheckpoint
 
 	// requestOTELCounterInterceptor emits the shared per-request census
 	// counter (mcp.request) for the remote- and tunnel-backed /x/mcp traffic,
@@ -70,6 +73,7 @@ func NewProxyManager(
 	logger *slog.Logger,
 	tracerProvider trace.TracerProvider,
 	meterProvider metric.MeterProvider,
+	db *pgxpool.Pool,
 	guardianPolicy *guardian.Policy,
 	authzEngine *authz.Engine,
 	posthogClient *posthog.Posthog,
@@ -82,6 +86,7 @@ func NewProxyManager(
 ) *ProxyManager {
 	logger = logger.With(attr.SlogComponent("remotemcp"))
 	meter := meterProvider.Meter("github.com/speakeasy-api/gram/server/internal/remotemcp")
+	mcpMetrics := NewProxyMetrics(meter, logger)
 
 	return &ProxyManager{
 		logger:                                logger,
@@ -91,7 +96,8 @@ func NewProxyManager(
 		posthog:                               posthogClient,
 		telemLogger:                           telemLogger,
 		proxyMetrics:                          proxy.NewMetrics(meter, logger),
-		mcpMetrics:                            NewProxyMetrics(meter, logger),
+		mcpMetrics:                            mcpMetrics,
+		identityCoverage:                      mcptoolexecution.NewIdentityCoverageCheckpoint(db, mcpMetrics),
 		requestOTELCounterInterceptor:         NewRequestOTELCounterInterceptor(mcpmetrics.NewRequestCounter(meter, logger)),
 		toolDispositions:                      toolDispositions,
 		toolsCallUsageLimitsInterceptor:       NewToolsCallUsageLimitsInterceptor(billingRepo, logger),
@@ -194,7 +200,7 @@ func (f *ProxyManager) BuildTarget(
 	// anything scoped to an identity or a risk policy. It is a no-op for
 	// the arguments that don't carry it.
 	toolsCallReqInterceptors := []proxy.ToolsCallRequestInterceptor{
-		NewToolsCallOTELCounterInterceptor(f.mcpMetrics, identity, logger),
+		NewToolsCallOTELCounterInterceptor(f.mcpMetrics, f.identityCoverage, identity, logger),
 		f.toolsCallUsageLimitsInterceptor,
 		NewToolsCallStripToolsetIDInterceptor(logger),
 		clickHouseLogInterceptor,

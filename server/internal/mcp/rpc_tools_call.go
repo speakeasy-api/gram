@@ -31,6 +31,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/functions"
 	"github.com/speakeasy-api/gram/server/internal/gateway"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
+	"github.com/speakeasy-api/gram/server/internal/killswitches/mcptoolexecution"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpmetrics"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcprequests"
 	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
@@ -71,6 +72,7 @@ func handleToolsCall(
 	ctx context.Context,
 	logger *slog.Logger,
 	metrics *mcpmetrics.Metrics,
+	identityCoverage *mcptoolexecution.IdentityCoverageCheckpoint,
 	authzEngine *authz.Engine,
 	guardianPolicy *guardian.Policy,
 	db *pgxpool.Pool,
@@ -165,6 +167,12 @@ func handleToolsCall(
 	if requestContext, _ := contextvalues.GetRequestContext(ctx); requestContext != nil {
 		mcpURL = requestContext.Host + requestContext.ReqURL
 		metrics.RecordMCPToolCall(ctx, toolset.OrganizationID, mcpURL, params.Name)
+
+		serverSource := mcptoolexecution.ServerSource{}
+		if payload.mcpServerID != nil {
+			serverSource.FrontingServerID = uuid.NullUUID{UUID: *payload.mcpServerID, Valid: true}
+		}
+		identityCoverage.Record(ctx, toolset.OrganizationID, mcpmetrics.KillswitchSurfaceHosted, serverSource)
 	}
 
 	toolsetHelpers := toolsets.NewToolsets(db, platformExtras...)
