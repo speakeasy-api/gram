@@ -25,6 +25,8 @@ func TestIsEmailIdentifier(t *testing.T) {
 		{identifier: "a@b@c", want: false},
 		{identifier: "dev@", want: false},
 		{identifier: "Dev User <dev@example.com>", want: false},
+		{identifier: `"dev user"@example.com`, want: false},
+		{identifier: " dev@example.com", want: false},
 	}
 
 	for _, tt := range tests {

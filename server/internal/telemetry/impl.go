@@ -804,6 +804,14 @@ func (s *Service) expandEmployeeEmailFilters(ctx context.Context, orgID string, 
 				emails = s.resolveEmployeeIdentity(ctx, orgID, value).Emails
 				resolved[key] = emails
 			}
+			if len(emails) == 0 {
+				// The value contains an @ but is not an address the fold can
+				// expand ("dev@"), so it keeps literal filter semantics.
+				// Dropping it would empty the filter and widen the query from
+				// one employee to the whole org.
+				values = append(values, value)
+				continue
+			}
 			values = append(values, emails...)
 		}
 		filters[i].Values = dedupe(values)

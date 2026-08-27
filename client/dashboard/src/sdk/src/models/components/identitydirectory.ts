@@ -9,7 +9,7 @@ import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
 /**
- * WorkOS Directory Sync attributes for an identity. Every field is mapped by the customer's IdP and may be absent.
+ * WorkOS Directory Sync attributes for an identity. Every field is mapped by the customer's IdP: scalar attributes are absent when unset or blank, and 'groups' is always present, empty when the identity belongs to none.
  */
 export type IdentityDirectory = {
   /**

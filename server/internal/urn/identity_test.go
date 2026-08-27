@@ -144,3 +144,14 @@ func TestIdentityZeroValue(t *testing.T) {
 
 	require.False(t, urn.NewUserIdentity("user_01abc").IsZero())
 }
+
+// Parsing normalizes an email id, but a URN built from the exported fields
+// skips that. Two links to the same person must not key on different strings.
+func TestIdentityRejectsUnnormalizedEmailID(t *testing.T) {
+	t.Parallel()
+
+	unnormalized := urn.Identity{Kind: urn.IdentityKindEmail, ID: "Dev@Acme.Corp"}
+
+	_, err := unnormalized.Value()
+	require.ErrorIs(t, err, urn.ErrInvalid)
+}

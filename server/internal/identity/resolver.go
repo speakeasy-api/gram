@@ -169,19 +169,40 @@ func (r *Resolver) ExpandIdentifier(ctx context.Context, orgID, identifier strin
 		return Subject{UserIDs: nil, Emails: nil}, errors.New("identity identifier is empty")
 	}
 
-	var subject Subject
 	if isEmailIdentifier(identifier) {
-		subject = r.expandEmail(ctx, orgID, identifier)
-	} else {
-		subject = r.expandUserID(ctx, orgID, identifier)
+		return r.ExpandEmail(ctx, orgID, identifier), nil
 	}
 
-	r.appendLinkedAccountEmails(ctx, orgID, &subject)
+	return r.ExpandUserID(ctx, orgID, identifier), nil
+}
+
+// ExpandEmail folds an address, and ExpandUserID a Gram user id, onto the same
+// set of identifiers. Callers that already know which namespace they hold — an
+// identity URN carries its kind — must use these rather than the classifier,
+// so a user id shaped like an address cannot resolve against someone else.
+func (r *Resolver) ExpandEmail(ctx context.Context, orgID, email string) Subject {
+	subject := r.expandEmail(ctx, orgID, email)
+	r.completeSubject(ctx, orgID, &subject)
+
+	return subject
+}
+
+// ExpandUserID folds a Gram user id onto every identifier the same person's
+// work is recorded under.
+func (r *Resolver) ExpandUserID(ctx context.Context, orgID, userID string) Subject {
+	subject := r.expandUserID(ctx, orgID, userID)
+	r.completeSubject(ctx, orgID, &subject)
+
+	return subject
+}
+
+// completeSubject adds the identifiers that do not depend on which namespace
+// the caller started from, and settles the order both fields promise.
+func (r *Resolver) completeSubject(ctx context.Context, orgID string, subject *Subject) {
+	r.appendLinkedAccountEmails(ctx, orgID, subject)
 
 	subject.Emails = dedupeNonEmpty(subject.Emails)
 	subject.UserIDs = dedupeNonEmpty(subject.UserIDs)
-
-	return subject, nil
 }
 
 // expandEmail folds an address onto the person who owns it. Usage from someone
@@ -274,6 +295,9 @@ func (r *Resolver) directoryEmails(ctx context.Context, orgID string, userIDs []
 
 	emails := make([]string, 0, len(rows)*2)
 	for _, row := range rows {
+		if row.DeletedAt.Valid {
+			continue
+		}
 		emails = append(emails, row.Email, conv.NormalizeEmail(row.Email))
 	}
 
@@ -305,11 +329,12 @@ func (r *Resolver) appendLinkedAccountEmails(ctx context.Context, orgID string, 
 // isEmailIdentifier reports whether an identifier is an address rather than a
 // Gram user id. A bare "@" test would classify anything containing one as an
 // address and fold it against every email-keyed row, so the value is parsed.
-// A display-name form ("Dev User <dev@example.com>") is not an identifier
-// anything is stored under, so it is not an address here either.
+// Only the bare form counts: a display name ("Dev User <dev@example.com>") or a
+// quoted local part is not what any subsystem stores an address under, and
+// requiring the parse to round-trip rejects both.
 func isEmailIdentifier(identifier string) bool {
 	address, err := mail.ParseAddress(identifier)
-	return err == nil && address.Name == ""
+	return err == nil && address.Name == "" && address.Address == identifier
 }
 
 // Resolve maps any identity key to the identifiers the subject's data is
@@ -346,11 +371,15 @@ func (r *Resolver) Resolve(ctx context.Context, orgID string, subjectURN urn.Ide
 		record.DisplayName = subjectURN.ID
 		return record, nil
 
-	case urn.IdentityKindUser, urn.IdentityKindEmail:
-		subject, err := r.ExpandIdentifier(ctx, orgID, subjectURN.ID)
-		if err != nil {
-			return Record{}, fmt.Errorf("expand identity subject: %w", err)
-		}
+	case urn.IdentityKindUser:
+		// The URN carries the namespace, so a user id is expanded as a user id
+		// even when it happens to be shaped like an address.
+		subject := r.ExpandUserID(ctx, orgID, subjectURN.ID)
+		record.UserIDs = subject.UserIDs
+		record.Emails = subject.Emails
+
+	case urn.IdentityKindEmail:
+		subject := r.ExpandEmail(ctx, orgID, subjectURN.ID)
 		record.UserIDs = subject.UserIDs
 		record.Emails = subject.Emails
 
@@ -359,10 +388,7 @@ func (r *Resolver) Resolve(ctx context.Context, orgID string, subjectURN urn.Ide
 		// so an address gets the same fold as an email key; anything else
 		// identifies usage we cannot attribute.
 		if isEmailIdentifier(subjectURN.ID) {
-			subject, err := r.ExpandIdentifier(ctx, orgID, subjectURN.ID)
-			if err != nil {
-				return Record{}, fmt.Errorf("expand identity subject: %w", err)
-			}
+			subject := r.ExpandEmail(ctx, orgID, subjectURN.ID)
 			record.UserIDs = subject.UserIDs
 			record.Emails = subject.Emails
 		}
@@ -377,26 +403,26 @@ func (r *Resolver) Resolve(ctx context.Context, orgID string, subjectURN urn.Ide
 	record.ExternalUserIDs = dedupeNonEmpty(append(record.ExternalUserIDs, record.Emails...))
 
 	attached := false
-	var lookupErr error
 	if userID := record.GramUserID(); userID != "" {
-		attached, lookupErr = r.attachUserProfile(ctx, orgID, userID, &record)
-		if !attached && lookupErr == nil {
+		found, err := r.attachUserProfile(ctx, orgID, userID, &record)
+		if err != nil {
+			// A failed lookup says nothing about whether the member exists.
+			// Reporting them as unattributed would turn a transient database
+			// error into a real person rendering with no roles and no devices,
+			// so the caller is told the identity could not be resolved.
+			return Record{}, fmt.Errorf("resolve identity user profile: %w", err)
+		}
+		if !found {
 			// The id matched no org member. Keep the identifiers the usage is
 			// recorded under, but do not claim a directory user the caller
 			// would then key user-only sections off.
-			//
-			// Only on a definitive empty result: a failed lookup says nothing
-			// about whether the member exists, and dropping their ids would
-			// turn a transient database error into a real person rendering as
-			// unattributed.
 			record.UserIDs = nil
 		}
+		attached = found
 	}
 	if !attached {
 		record.Kind = KindUnattributed
-		// Redirecting the canonical URN is also withheld on a lookup failure,
-		// for the same reason: it would move a real member's page.
-		if email := record.PrimaryEmail(); email != "" && lookupErr == nil {
+		if email := record.PrimaryEmail(); email != "" {
 			record.CanonicalURN = urn.NewEmailIdentity(email)
 		}
 		if record.DisplayName == "" {
@@ -423,13 +449,15 @@ func (r *Resolver) attachUserProfile(ctx context.Context, orgID, userID string, 
 		r.logger.WarnContext(ctx, "failed to load identity user profile", attr.SlogError(err), attr.SlogUserID(userID))
 		return false, fmt.Errorf("load identity user profile: %w", err)
 	}
-	if len(rows) == 0 {
+	// GetConnectedUsersByIDs excludes removed memberships but not soft-deleted
+	// user rows, so a deleted person would otherwise come back as a member's
+	// profile to any org:read caller.
+	row, ok := firstActive(rows)
+	if !ok {
 		// The id resolved no org member: usage exists but the person is not
 		// (or no longer) in this directory.
 		return false, nil
 	}
-
-	row := rows[0]
 	record.Kind = KindHuman
 	record.CanonicalURN = urn.NewUserIdentity(row.ID)
 	record.WorkosUserID = conv.FromPGTextOrEmpty[string](row.WorkosID)
@@ -471,6 +499,20 @@ func (r *Resolver) loadDirectory(ctx context.Context, orgID, userID string) Dire
 		CostCenterName: strings.TrimSpace(attributes.CostCenterName),
 		Groups:         profile.GroupNames(),
 	}
+}
+
+// firstActive returns the first row that is still an active user. Only the
+// membership join is filtered in SQL, so a soft-deleted user row reaches here.
+func firstActive(rows []usersRepo.User) (usersRepo.User, bool) {
+	for _, row := range rows {
+		if !row.DeletedAt.Valid {
+			return row, true
+		}
+	}
+
+	var none usersRepo.User
+
+	return none, false
 }
 
 // dedupeNonEmpty drops blanks and repeats while keeping first-seen order, so

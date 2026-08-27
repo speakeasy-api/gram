@@ -48,7 +48,7 @@ var ResolveIdentityForm = Type("ResolveIdentityForm", func() {
 })
 
 var IdentityDirectory = Type("IdentityDirectory", func() {
-	Description("WorkOS Directory Sync attributes for an identity. Every field is mapped by the customer's IdP and may be absent.")
+	Description("WorkOS Directory Sync attributes for an identity. Every field is mapped by the customer's IdP: scalar attributes are absent when unset or blank, and 'groups' is always present, empty when the identity belongs to none.")
 
 	Required("groups")
 
@@ -66,7 +66,7 @@ var IdentityModel = Type("IdentityModel", func() {
 	Required("kind", "canonical_urn", "display_name", "user_ids", "emails", "external_user_ids", "directory")
 
 	Attribute("kind", String, func() {
-		Description("What sort of subject this is: 'human' for a directory user, 'apikey' for a subject acting under an API key, 'agent' for an agent identity, or 'unattributed' for activity whose identifier matches no directory row.")
+		Description("What sort of subject this is: 'human' for a directory user, 'apikey' for a subject acting under an API key, 'agent' for an agent identity, or 'unattributed' for activity that cannot be attributed to exactly one directory user — an identifier matching no directory row, or one several members claim.")
 		Enum("human", "apikey", "agent", "unattributed")
 	})
 	Attribute("canonical_urn", String, func() {

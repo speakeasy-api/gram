@@ -17,7 +17,9 @@ import (
 type ResolveResponseBody struct {
 	// What sort of subject this is: 'human' for a directory user, 'apikey' for a
 	// subject acting under an API key, 'agent' for an agent identity, or
-	// 'unattributed' for activity whose identifier matches no directory row.
+	// 'unattributed' for activity that cannot be attributed to exactly one
+	// directory user — an identifier matching no directory row, or one several
+	// members claim.
 	Kind *string `form:"kind,omitempty" json:"kind,omitempty" xml:"kind,omitempty"`
 	// The identity URN clients should navigate to. Resolving any URN for the same
 	// subject returns this one, so links built from different identifiers converge

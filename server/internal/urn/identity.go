@@ -266,6 +266,13 @@ func (u *Identity) validate() error {
 			u.err = fmt.Errorf("%w: email identity id must be the bare address", ErrInvalid)
 			return u.err
 		}
+		// Parsing normalizes, but an identity built from the exported fields
+		// does not go through it. Every email identity has to key on the same
+		// string or two links to the same person diverge.
+		if u.ID != normalizeIdentityEmail(u.ID) {
+			u.err = fmt.Errorf("%w: email identity id must be normalized", ErrInvalid)
+			return u.err
+		}
 	}
 
 	if u.Kind == IdentityKindAPIKey {

@@ -44,7 +44,8 @@ const ServiceName = "identity"
 var MethodNames = [1]string{"resolve"}
 
 // WorkOS Directory Sync attributes for an identity. Every field is mapped by
-// the customer's IdP and may be absent.
+// the customer's IdP: scalar attributes are absent when unset or blank, and
+// 'groups' is always present, empty when the identity belongs to none.
 type IdentityDirectory struct {
 	// The directory department.
 	DepartmentName *string
@@ -64,7 +65,9 @@ type IdentityDirectory struct {
 type IdentityModel struct {
 	// What sort of subject this is: 'human' for a directory user, 'apikey' for a
 	// subject acting under an API key, 'agent' for an agent identity, or
-	// 'unattributed' for activity whose identifier matches no directory row.
+	// 'unattributed' for activity that cannot be attributed to exactly one
+	// directory user — an identifier matching no directory row, or one several
+	// members claim.
 	Kind string
 	// The identity URN clients should navigate to. Resolving any URN for the same
 	// subject returns this one, so links built from different identifiers converge

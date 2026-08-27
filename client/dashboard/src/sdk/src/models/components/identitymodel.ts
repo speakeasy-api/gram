@@ -14,7 +14,7 @@ import {
 } from "./identitydirectory.js";
 
 /**
- * What sort of subject this is: 'human' for a directory user, 'apikey' for a subject acting under an API key, 'agent' for an agent identity, or 'unattributed' for activity whose identifier matches no directory row.
+ * What sort of subject this is: 'human' for a directory user, 'apikey' for a subject acting under an API key, 'agent' for an agent identity, or 'unattributed' for activity that cannot be attributed to exactly one directory user — an identifier matching no directory row, or one several members claim.
  */
 export const IdentityModelKind = {
   Human: "human",
@@ -23,7 +23,7 @@ export const IdentityModelKind = {
   Unattributed: "unattributed",
 } as const;
 /**
- * What sort of subject this is: 'human' for a directory user, 'apikey' for a subject acting under an API key, 'agent' for an agent identity, or 'unattributed' for activity whose identifier matches no directory row.
+ * What sort of subject this is: 'human' for a directory user, 'apikey' for a subject acting under an API key, 'agent' for an agent identity, or 'unattributed' for activity that cannot be attributed to exactly one directory user — an identifier matching no directory row, or one several members claim.
  */
 export type IdentityModelKind = ClosedEnum<typeof IdentityModelKind>;
 
@@ -36,7 +36,7 @@ export type IdentityModel = {
    */
   canonicalUrn: string;
   /**
-   * WorkOS Directory Sync attributes for an identity. Every field is mapped by the customer's IdP and may be absent.
+   * WorkOS Directory Sync attributes for an identity. Every field is mapped by the customer's IdP: scalar attributes are absent when unset or blank, and 'groups' is always present, empty when the identity belongs to none.
    */
   directory: IdentityDirectory;
   /**
@@ -52,7 +52,7 @@ export type IdentityModel = {
    */
   externalUserIds: Array<string>;
   /**
-   * What sort of subject this is: 'human' for a directory user, 'apikey' for a subject acting under an API key, 'agent' for an agent identity, or 'unattributed' for activity whose identifier matches no directory row.
+   * What sort of subject this is: 'human' for a directory user, 'apikey' for a subject acting under an API key, 'agent' for an agent identity, or 'unattributed' for activity that cannot be attributed to exactly one directory user — an identifier matching no directory row, or one several members claim.
    */
   kind: IdentityModelKind;
   /**
