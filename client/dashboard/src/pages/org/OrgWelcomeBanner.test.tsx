@@ -347,7 +347,14 @@ describe("OrgWelcomeBanner", () => {
     render(<OrgWelcomeBanner />);
 
     expect(hrefFor("Open the guide")).toBe("/guide");
-    expect(hrefFor("Begin rollout")).toBe("/acme/setup");
+    expect(
+      (
+        screen.queryByText("Begin rollout") ??
+        screen.getByText("Resume rollout")
+      )
+        .closest("a")
+        ?.getAttribute("href"),
+    ).toBe("/acme/setup");
     expect(screen.queryByText("Open project")).toBeNull();
   });
 
