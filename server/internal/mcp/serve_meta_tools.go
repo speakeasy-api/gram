@@ -20,6 +20,7 @@ import (
 	environmentsrepo "github.com/speakeasy-api/gram/server/internal/environments/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcprequests"
 	"github.com/speakeasy-api/gram/server/internal/mcp/metamcp"
+	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
 	"github.com/speakeasy-api/gram/server/internal/mcpjsonrpc"
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -301,6 +302,13 @@ func (s *Service) describeMemberToolset(
 	described, err := mv.DescribeToolset(ctx, logger, s.db, mv.ProjectID(toolset.ProjectID), mv.ToolsetSlug(conv.ToLower(toolset.Slug)), &s.toolsetCache, variationsGroupID, s.platformExtras...)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "describe member toolset").LogError(ctx, logger)
+	}
+
+	// The consent-screen tool selection narrows describe exactly as
+	// buildMemberDispatch narrows execute, so the two surfaces agree on the
+	// session's visible tools (parity with rpc_tools_list.go).
+	if gate.toolSelection != nil {
+		described.Tools = toolfilter.FilterToolsBySelection(described.Tools, gate.toolSelection)
 	}
 
 	catalog := &memberCatalog{entries: nil, byName: map[string]*toolListEntry{}}

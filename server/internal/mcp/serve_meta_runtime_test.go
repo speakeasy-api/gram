@@ -8,6 +8,7 @@ package mcp_test
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"testing"
 	"time"
@@ -29,6 +30,7 @@ import (
 	toolsets_repo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	"github.com/speakeasy-api/gram/server/internal/usersessions"
+	usersessions_repo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 	variations_repo "github.com/speakeasy-api/gram/server/internal/variations/repo"
 )
 
@@ -631,6 +633,12 @@ func TestServePublic_MetaEndpoint_PrivateToolset_NoConnectGrant_ReadsUnknown(t *
 			"arguments": map[string]any{},
 		})
 		require.Contains(t, string(envelope["error"]), "unknown server", "execute_tool with %s", name)
+
+		// Deliberate disclosure: the member's server row is public, and
+		// list_servers gates on server visibility alone, so the slug still
+		// lists; the private toolset reads as nonexistent only on drill-down.
+		envelope = callMetaTool(t, deniedCtx, ti, slug, "list_servers", map[string]any{})
+		require.Contains(t, string(envelope["result"]), member.slug, "list_servers with %s", name)
 	}
 
 	// Positive control: a toolset-level grant opens both describe and
@@ -700,6 +708,55 @@ func TestServePublic_MetaEndpoint_Anonymous_PrivateToolsetMemberHidden(t *testin
 
 	envelope = callMetaTool(t, anonCtx, ti, slug, "describe_server", map[string]any{"server": member.slug})
 	require.Contains(t, string(envelope["error"]), "unknown server")
+}
+
+// A session carrying a consent-screen tool selection cannot be spent on a
+// meta endpoint: selections bind to "toolset:"/"mcp_server:" resources and a
+// meta endpoint expects none, so the gate rejects into reauth instead of
+// letting describe and dispatch drift on enforcement. This is what keeps
+// gate.toolSelection provably nil on the meta path today.
+func TestServePublic_MetaEndpoint_ToolSelectionSessionRejected(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	projectID := *authCtx.ProjectID
+
+	issuerID := createUserSessionIssuer(t, ctx, ti.conn, projectID)
+	slug := "meta-selection-" + uuid.NewString()[:8]
+	meta := createMetaMcpEndpoint(t, ctx, ti.conn, projectID, authCtx.ActiveOrganizationID, slug, issuerID)
+	seedHostedMetaMember(t, ctx, ti, meta.ID, "hosted member", 1, mcpservers.VisibilityPublic, "alpha_tool")
+
+	subject := urn.NewUserSubject("selection-user-" + uuid.NewString())
+	bearer, jti, err := usersessions.NewSigner("test-jwt-secret").Mint(usersessions.MintParams{
+		Subject:  subject,
+		Audience: urn.NewUserSessionIssuer(issuerID).String(),
+		Issuer:   ti.serverURL.String() + "/mcp/" + slug,
+		Lifetime: time.Hour,
+	})
+	require.NoError(t, err)
+
+	selection := fmt.Appendf(nil, `{"resource":"toolset:%s","grant_id":"%s","allow":[{"type":"tool","name":"alpha_tool"}]}`, uuid.New(), uuid.NewString())
+	now := time.Now()
+	_, err = usersessions_repo.New(ti.conn).CreateUserSession(context.Background(), usersessions_repo.CreateUserSessionParams{
+		UserSessionIssuerID: issuerID,
+		UserSessionClientID: uuid.NullUUID{},
+		SubjectUrn:          subject,
+		Jti:                 jti,
+		RefreshTokenHash:    "test-selection-" + uuid.NewString(),
+		RefreshExpiresAt:    pgtype.Timestamptz{Time: now.Add(24 * time.Hour), Valid: true},
+		ExpiresAt:           pgtype.Timestamptz{Time: now.Add(time.Hour), Valid: true},
+		ToolSelection:       selection,
+	})
+	require.NoError(t, err)
+
+	_, err = servePublicHTTP(t, context.Background(), ti, slug, makeMetaRPCBody(t, "tools/call", map[string]any{
+		"name":      "list_servers",
+		"arguments": map[string]any{},
+	}), bearer, nil)
+	require.ErrorContains(t, err, "invalid access token",
+		"a selection-bound session must reject into reauth, not serve unfiltered")
 }
 
 // A meta session holding several member credentials — the normal state once

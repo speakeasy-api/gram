@@ -6,6 +6,7 @@ package mcp
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 
 	"github.com/google/uuid"
@@ -98,11 +99,18 @@ func (s *Service) resolveMetaMemberSnapshot(
 		// private members require mcp:connect (as authorizeProxyBackendAccess)
 		// with denied members filtered so unauthorized reads as nonexistent,
 		// and any other value (malformed or future) is filtered the same way.
+		// This gates on the member server's own visibility only: a hosted
+		// member whose toolset is private still lists here (its endpoint is
+		// public), then reads as nonexistent on drill-down (loadMemberToolset).
 		switch row.McpServerVisibility {
 		case mcpservers.VisibilityPublic:
 		case mcpservers.VisibilityPrivate:
 			if err := s.authz.Require(ctx, authz.MCPCheck(authz.ScopeMCPConnect, connectResourceID.String(), projectID.String())); err != nil {
-				continue
+				var oopsErr *oops.ShareableError
+				if errors.As(err, &oopsErr) && oopsErr.Code == oops.CodeForbidden {
+					continue
+				}
+				return ctx, nil, oops.E(oops.CodeUnexpected, err, "check member authz").LogError(ctx, logger)
 			}
 		default:
 			continue
