@@ -116,6 +116,7 @@ describe("useProjectGuideProgress", () => {
           {
             id: "remote-1",
             url: "https://catalog.example/mcp",
+            transportType: "streamable-http",
           },
         ],
       },
@@ -189,6 +190,7 @@ describe("useProjectGuideProgress", () => {
           {
             id: "remote-1",
             url: "https://catalog.example/mcp",
+            transportType: "streamable-http",
           },
         ],
       },
@@ -324,8 +326,16 @@ describe("useProjectGuideProgress", () => {
     queryHooks.remoteServers.mockReturnValue({
       data: {
         remoteMcpServers: [
-          { id: "remote-1", url: "https://catalog-one.example/mcp" },
-          { id: "remote-2", url: "https://catalog.example/mcp" },
+          {
+            id: "remote-1",
+            url: "https://catalog-one.example/mcp",
+            transportType: "streamable-http",
+          },
+          {
+            id: "remote-2",
+            url: "https://catalog.example/mcp",
+            transportType: "streamable-http",
+          },
         ],
       },
       isPending: false,
@@ -354,7 +364,7 @@ describe("useProjectGuideProgress", () => {
     expect(result.current.statusByJourney["third-party-mcp"]).toBe("done");
   });
 
-  it("does not complete from activity on an unconfigured catalog server", () => {
+  it("credits activity from a renamed catalog server", () => {
     queryHooks.servers.mockReturnValue({
       data: {
         mcpServers: [
@@ -371,7 +381,11 @@ describe("useProjectGuideProgress", () => {
     queryHooks.remoteServers.mockReturnValue({
       data: {
         remoteMcpServers: [
-          { id: "remote-1", url: "https://catalog.example/mcp" },
+          {
+            id: "remote-1",
+            url: "https://catalog.example/mcp",
+            transportType: "streamable-http",
+          },
         ],
       },
       isPending: false,
@@ -397,8 +411,58 @@ describe("useProjectGuideProgress", () => {
 
     const { result } = renderHook(() => useProjectGuideProgress());
 
+    expect(result.current.statusByJourney["third-party-mcp"]).toBe("done");
+  });
+
+  it("does not complete from activity on an unconfigured server", () => {
+    queryHooks.servers.mockReturnValue({
+      data: {
+        mcpServers: [
+          {
+            id: "server-1",
+            name: "Custom",
+            slug: "custom-server",
+            remoteMcpServerId: "custom-remote",
+          },
+        ],
+      },
+      isPending: false,
+    });
+    queryHooks.remoteServers.mockReturnValue({
+      data: {
+        remoteMcpServers: [
+          {
+            id: "custom-remote",
+            url: "https://custom.example/mcp",
+            transportType: "streamable-http",
+          },
+        ],
+      },
+      isPending: false,
+    });
+    queryHooks.plugins.mockReturnValue({
+      data: {
+        plugins: [{ isDefault: true, servers: [{ mcpServerId: "server-1" }] }],
+      },
+      isPending: false,
+    });
+    queryHooks.activity.mockReturnValue({
+      data: {
+        activity: [
+          {
+            targetId: "custom-server",
+            targetType: "hosted_mcp_server",
+            totalToolCalls: 1,
+          },
+        ],
+      },
+      isPending: false,
+    });
+
+    const { result } = renderHook(() => useProjectGuideProgress());
+
     expect(result.current.statusByJourney["third-party-mcp"]).toBe(
-      "in-progress",
+      "not-started",
     );
   });
 
@@ -420,7 +484,11 @@ describe("useProjectGuideProgress", () => {
     queryHooks.remoteServers.mockReturnValue({
       data: {
         remoteMcpServers: [
-          { id: "remote-1", url: "https://catalog.example/mcp" },
+          {
+            id: "remote-1",
+            url: "https://catalog.example/mcp",
+            transportType: "streamable-http",
+          },
         ],
       },
       isPending: false,
@@ -472,7 +540,11 @@ describe("useProjectGuideProgress", () => {
     queryHooks.remoteServers.mockReturnValue({
       data: {
         remoteMcpServers: [
-          { id: "custom-remote", url: "https://custom.example/mcp" },
+          {
+            id: "custom-remote",
+            url: "https://custom.example/mcp",
+            transportType: "streamable-http",
+          },
         ],
       },
       isPending: false,

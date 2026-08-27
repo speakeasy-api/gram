@@ -73,7 +73,7 @@ export type ProjectGuideOperationSignal =
   | {
       type: "abort";
       scope: ProjectGuideOperationScope;
-      reason: "switch" | "back" | "rewind";
+      reason: "switch" | "back" | "rewind" | "timeout";
     };
 
 export type ProjectGuideEvent =
@@ -144,7 +144,7 @@ const NARRATIVE_STEP_RESULTS: Record<JourneyId, readonly string[]> = {
     "Secrets policy created",
     "Observability plugin downloaded",
     "Observability plugin installed",
-    "Blocked risk event recorded",
+    "Prompt sent",
     "Blocked risk event recorded",
   ],
 };
@@ -604,6 +604,7 @@ export const projectGuideMachine = setup({
       elapsedListeningSeconds:
         context.errorFrom === "waiting" ? 0 : context.elapsedListeningSeconds,
       error: null,
+      operationProgress: null,
     })),
     rewind: assign(({ context, event }) => {
       if (event.type !== "REWIND" || !context.activePath) return {};
@@ -660,7 +661,9 @@ export const projectGuideMachine = setup({
           ? "switch"
           : event.type === "BACK"
             ? "back"
-            : "rewind";
+            : event.type === "LISTEN_TICK"
+              ? "timeout"
+              : "rewind";
       context.onSignal?.({
         type: "abort",
         scope,
@@ -847,7 +850,7 @@ export const projectGuideMachine = setup({
           {
             guard: "listenTimedOut",
             target: "error",
-            actions: "recordTimeout",
+            actions: ["signalAbort", "recordTimeout"],
           },
           { actions: "recordElapsed" },
         ],

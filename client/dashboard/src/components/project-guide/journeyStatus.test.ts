@@ -6,6 +6,7 @@ import type { RemoteMcpServer } from "@gram/client/models/components/remotemcpse
 import type { RiskPolicy } from "@gram/client/models/components/riskpolicy.js";
 import type { RiskResult } from "@gram/client/models/components/riskresult.js";
 import type { PulseMCPServer } from "@/pages/catalog/hooks";
+import { DETECTION_RULES } from "@/pages/security/policy-data";
 import { describe, expect, it } from "vitest";
 import {
   catalogBackedMcpServers,
@@ -14,7 +15,6 @@ import {
   hasBlockingSecretsPolicy,
   hasDefaultPluginServer,
   hasMcpServerActivity,
-  isGuideMcpServer,
   latestSecretsFinding,
 } from "./journeyStatus";
 
@@ -152,13 +152,6 @@ describe("hasMcpServerActivity", () => {
   });
 });
 
-describe("isGuideMcpServer", () => {
-  it("requires the existing guide setup suffix", () => {
-    expect(isGuideMcpServer(server({ name: "Linear_Governed" }))).toBe(true);
-    expect(isGuideMcpServer(server({ name: "Linear" }))).toBe(false);
-  });
-});
-
 describe("hasBlockingSecretsPolicy", () => {
   it("matches an enabled gitleaks policy set to block", () => {
     expect(
@@ -216,6 +209,49 @@ describe("hasBlockingSecretsPolicy", () => {
         }),
       ]),
     ).toBe(false);
+  });
+
+  it("rejects a policy with every secrets rule disabled", () => {
+    expect(
+      hasBlockingSecretsPolicy([
+        policy({
+          action: "block",
+          sources: ["gitleaks"],
+          messageTypes: ["tool_request", "tool_response"],
+          disabledRules: DETECTION_RULES.secrets.map((rule) => rule.id),
+        }),
+      ]),
+    ).toBe(false);
+  });
+
+  it("rejects a policy scoped away from the whole project", () => {
+    expect(
+      hasBlockingSecretsPolicy([
+        policy({
+          action: "block",
+          sources: ["gitleaks"],
+          messageTypes: ["tool_request", "tool_response"],
+          scopeInclude: "user:admin",
+        }),
+      ]),
+    ).toBe(false);
+  });
+
+  it("does not treat an SSE or insecure remote as catalog-backed", () => {
+    expect(
+      catalogBackedMcpServers(
+        [server({ remoteMcpServerId: "remote-id" })],
+        [remote({ transportType: "sse" })],
+        [catalogServer()],
+      ),
+    ).toEqual([]);
+    expect(
+      catalogBackedMcpServers(
+        [server({ remoteMcpServerId: "remote-id" })],
+        [remote({ url: "http://catalog.example/mcp" })],
+        [catalogServer("http://catalog.example/mcp")],
+      ),
+    ).toEqual([]);
   });
 
   it("rejects extra message types outside the standard tool surfaces", () => {

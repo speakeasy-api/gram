@@ -17,6 +17,10 @@ const mutateAsync = vi.hoisted(() => vi.fn());
 const authFetch = vi.hoisted(() => vi.fn());
 const downloadResponse = vi.hoisted(() => vi.fn(() => Promise.resolve()));
 const invalidatePolicies = vi.hoisted(() => vi.fn(() => Promise.resolve()));
+const rbac = vi.hoisted(() => ({
+  hasScope: vi.fn(() => true),
+  isLoading: false,
+}));
 
 vi.mock("@/contexts/Sdk", () => ({
   useProjectSlugForRequests: () => "request-project",
@@ -24,6 +28,7 @@ vi.mock("@/contexts/Sdk", () => ({
 vi.mock("@/contexts/Auth", () => ({
   useOrganization: () => ({ id: "organization-id" }),
 }));
+vi.mock("@/hooks/useRBAC", () => ({ useRBAC: () => rbac }));
 vi.mock("@/contexts/Fetcher", () => ({
   useFetcher: () => ({ fetch: authFetch }),
 }));
@@ -47,6 +52,7 @@ vi.mock("@gram/client/react-query/listHooksTraces.js", () => ({
   useListHooksTraces: queryHooks.hooks,
 }));
 vi.mock("@gram/client/react-query/riskListResults.js", () => ({
+  invalidateAllRiskListResults: vi.fn(() => Promise.resolve()),
   useRiskListResults: queryHooks.results,
 }));
 vi.mock("@/pages/plugins/downloadPluginPackage", () => ({
@@ -385,7 +391,7 @@ describe("useSecretGuideOperations", () => {
       progress: 0.5,
     });
     expect(hook.current.installCommand).toBe(
-      "unzip -oq gram-observability.zip -d ~/.claude/plugins/",
+      "unzip -oq gram-observability.zip -d ~/gram-observability\nclaude --plugin-dir ~/gram-observability",
     );
   });
 
@@ -468,6 +474,12 @@ describe("useSecretGuideOperations", () => {
   });
 
   it.each([
+    {
+      client: "claude" as const,
+      filename: "observability-claude.zip",
+      command:
+        "unzip -oq observability-claude.zip -d ~/gram-observability\nclaude --plugin-dir ~/gram-observability",
+    },
     {
       client: "cursor" as const,
       filename: "observability-cursor.zip",

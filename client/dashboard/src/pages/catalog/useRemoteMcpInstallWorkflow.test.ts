@@ -279,7 +279,11 @@ describe("useRemoteMcpInstallWorkflow", () => {
       }),
     ];
     const { result } = renderHook(() =>
-      useRemoteMcpInstallWorkflow({ servers, autoSelectRemotes: true }),
+      useRemoteMcpInstallWorkflow({
+        servers,
+        autoSelectRemotes: true,
+        serverNameSuffix: "_Governed",
+      }),
     );
     const state = result.current;
     expect(state.phase).toBe("configure");
@@ -685,8 +689,8 @@ describe("useRemoteMcpInstallWorkflow", () => {
       (call) => call[0].createServerForm.name,
     );
     expect(names).toEqual([
-      "Salesforce Salesforce Core",
-      "Salesforce Health Cloud",
+      "Salesforce Salesforce Core_Governed",
+      "Salesforce Health Cloud_Governed",
     ]);
   });
 

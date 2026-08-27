@@ -46,11 +46,6 @@ export type JourneyFixture = {
   accent: string;
   event: {
     label: string;
-    kind: string;
-    title: string;
-    rows: Array<{ key: string; value: string }>;
-    note: string;
-    tone: "allow" | "deny";
   };
 };
 
@@ -120,14 +115,6 @@ export const PROJECT_GUIDE_FIXTURES: Record<JourneyId, JourneyFixture> = {
     accent: "#2879D8",
     event: {
       label: "The call you watched",
-      kind: "Governed call",
-      title: "linear.tools/list",
-      rows: [
-        { key: "access", value: "allowed · 27 of 27 tools visible" },
-        { key: "upstream", value: "forwarded with the resolved credential" },
-      ],
-      note: "The call landed in Tool Logs before it reached the upstream.",
-      tone: "allow",
     },
   },
   "secret-block": {
@@ -135,14 +122,6 @@ export const PROJECT_GUIDE_FIXTURES: Record<JourneyId, JourneyFixture> = {
     accent: "#B45A28",
     event: {
       label: "The event you watched",
-      kind: "Denied · risk event",
-      title: "request denied by secrets policy",
-      rows: [
-        { key: "rule", value: "secrets.aws_access_key_id" },
-        { key: "match", value: "AKIA···· · highlighted in the transcript" },
-      ],
-      note: "The request was blocked before the model answered.",
-      tone: "deny",
     },
   },
 };

@@ -14,7 +14,7 @@ import { useRoutes } from "@/routes";
 import { Navigate } from "react-router";
 
 export default function Home(): JSX.Element {
-  const { hasAnyScope, isLoading } = useRBAC();
+  const { hasAnyScope, hasAnyScopeInProject, isLoading } = useRBAC();
   const routes = useRoutes();
   const { id: projectId } = useProject();
   // Home carries its own "Ask anything" widget, so suppress the floating dock.
@@ -25,7 +25,7 @@ export default function Home(): JSX.Element {
   if (
     !isLoading &&
     !hasAnyScope(["project:read"], projectId) &&
-    hasAnyScope(["mcp:read", "mcp:write"], projectId)
+    hasAnyScopeInProject(["mcp:read", "mcp:write"], projectId)
   ) {
     return <Navigate to={routes.mcp.href()} replace />;
   }

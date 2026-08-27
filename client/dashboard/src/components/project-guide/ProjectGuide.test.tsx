@@ -191,7 +191,8 @@ function resetSecretOperations(): void {
     clientSelected: true,
     downloadedFilename: "gram-observability.zip",
     handleSignal: vi.fn(),
-    installCommand: "unzip -oq gram-observability.zip -d ~/.claude/plugins/",
+    installCommand:
+      "unzip -oq gram-observability.zip -d ~/gram-observability\nclaude --plugin-dir ~/gram-observability",
     policyError: false,
     policyPending: false,
     promptCopied: false,
@@ -1753,7 +1754,7 @@ describe("ProjectGuide", () => {
       Boolean(
         element?.tagName === "PRE" &&
         element.textContent?.includes(
-          "unzip -oq gram-observability.zip -d ~/.claude/plugins/",
+          "unzip -oq gram-observability.zip -d ~/gram-observability",
         ),
       ),
     );

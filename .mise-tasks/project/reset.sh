@@ -5,10 +5,14 @@
 #MISE confirm="Reset project-home journey resources in the local database?"
 
 #USAGE flag "--project <slug>" help="Project slug to reset" default="default"
+#USAGE flag "--project-id <id>" help="Exact project ID to reset when the slug is ambiguous" default=""
+#USAGE flag "--policy-id <id>" help="Exact risk policy ID to remove" default=""
 
 set -euo pipefail
 
 project_slug="${usage_project:-default}"
+project_id="${usage_project_id:-}"
+policy_id="${usage_policy_id:-}"
 
 if [ -z "$project_slug" ]; then
   echo "project:reset: --project must not be empty" >&2
@@ -16,21 +20,25 @@ if [ -z "$project_slug" ]; then
 fi
 
 docker exec -i "${COMPOSE_PROJECT_NAME:-gram}-gram-db-1" \
-  psql -U "$DB_USER" -d "$DB_NAME" -v ON_ERROR_STOP=1 -v project_slug="$project_slug" <<'SQL'
+  psql -U "$DB_USER" -d "$DB_NAME" -v ON_ERROR_STOP=1 -v project_slug="$project_slug" -v project_id="$project_id" -v policy_id="$policy_id" <<'SQL'
 BEGIN;
 
 CREATE TEMP TABLE reset_project ON COMMIT DROP AS
 SELECT id
 FROM projects
-WHERE slug = :'project_slug'
-  AND deleted IS FALSE
-ORDER BY created_at, id
-LIMIT 1;
+WHERE deleted IS FALSE
+  AND (
+    (NULLIF(:'project_id', '') IS NOT NULL AND id = NULLIF(:'project_id', '')::uuid)
+    OR (NULLIF(:'project_id', '') IS NULL AND slug = :'project_slug')
+  );
 
 DO $$
 BEGIN
-  IF NOT EXISTS (SELECT 1 FROM reset_project) THEN
+  IF (SELECT count(*) FROM reset_project) = 0 THEN
     RAISE EXCEPTION 'active project not found';
+  END IF;
+  IF (SELECT count(*) FROM reset_project) > 1 THEN
+    RAISE EXCEPTION 'project slug is ambiguous; pass --project-id';
   END IF;
 END
 $$;
@@ -70,6 +78,16 @@ WHERE s.user_session_issuer_id IS NOT NULL
         FROM journey_mcp_servers AS selected
         WHERE selected.id = other.id
       )
+  )
+  AND NOT EXISTS (
+    SELECT 1 FROM meta_mcp_servers AS other
+    WHERE other.user_session_issuer_id = s.user_session_issuer_id
+      AND other.deleted IS FALSE
+  )
+  AND NOT EXISTS (
+    SELECT 1 FROM toolsets AS other
+    WHERE other.user_session_issuer_id = s.user_session_issuer_id
+      AND other.deleted IS FALSE
   );
 
 CREATE TEMP TABLE journey_default_plugins ON COMMIT DROP AS
@@ -224,65 +242,44 @@ SET deleted_at = clock_timestamp(), updated_at = clock_timestamp()
 WHERE id IN (SELECT id FROM empty_default_plugins)
   AND deleted IS FALSE;
 
+CREATE TEMP TABLE journey_risk_policies ON COMMIT DROP AS
+SELECT policy.id
+FROM risk_policies AS policy
+JOIN reset_project AS rp ON rp.id = policy.project_id
+WHERE NULLIF(:'policy_id', '') IS NOT NULL
+  AND policy.id = NULLIF(:'policy_id', '')::uuid
+  AND policy.deleted IS FALSE;
+
+DO $$
+BEGIN
+  IF NULLIF(:'policy_id', '') IS NOT NULL
+     AND NOT EXISTS (SELECT 1 FROM journey_risk_policies) THEN
+    RAISE EXCEPTION 'risk policy not found in the selected project';
+  END IF;
+END
+$$;
+
 \echo 'Removing the project-home blocking secrets policy...'
+UPDATE tool_call_blocks
+SET deleted_at = clock_timestamp(), updated_at = clock_timestamp()
+WHERE risk_policy_id IN (SELECT id FROM journey_risk_policies)
+  AND deleted IS FALSE;
+
 DELETE FROM risk_results
-WHERE risk_policy_id IN (
-  SELECT policy.id
-  FROM risk_policies AS policy
-  JOIN reset_project AS rp ON rp.id = policy.project_id
-  WHERE policy.deleted IS FALSE
-    AND policy.policy_type = 'standard'
-    AND policy.action = 'block'
-    AND policy.audience_type = 'everyone'
-    AND policy.auto_name IS TRUE
-    AND policy.sources = ARRAY['gitleaks']::text[]
-    AND policy.message_types @> ARRAY['tool_request', 'tool_response']::text[]
-    AND cardinality(policy.message_types) = 2
-);
+WHERE risk_policy_id IN (SELECT id FROM journey_risk_policies);
 
 DELETE FROM risk_exclusions
-WHERE risk_policy_id IN (
-  SELECT policy.id
-  FROM risk_policies AS policy
-  JOIN reset_project AS rp ON rp.id = policy.project_id
-  WHERE policy.deleted IS FALSE
-    AND policy.policy_type = 'standard'
-    AND policy.action = 'block'
-    AND policy.audience_type = 'everyone'
-    AND policy.auto_name IS TRUE
-    AND policy.sources = ARRAY['gitleaks']::text[]
-    AND policy.message_types @> ARRAY['tool_request', 'tool_response']::text[]
-    AND cardinality(policy.message_types) = 2
-);
+WHERE risk_policy_id IN (SELECT id FROM journey_risk_policies);
 
 UPDATE risk_policy_bypass_requests
 SET deleted_at = clock_timestamp(), updated_at = clock_timestamp()
-WHERE risk_policy_id IN (
-  SELECT policy.id
-  FROM risk_policies AS policy
-  JOIN reset_project AS rp ON rp.id = policy.project_id
-  WHERE policy.deleted IS FALSE
-    AND policy.policy_type = 'standard'
-    AND policy.action = 'block'
-    AND policy.audience_type = 'everyone'
-    AND policy.auto_name IS TRUE
-    AND policy.sources = ARRAY['gitleaks']::text[]
-    AND policy.message_types @> ARRAY['tool_request', 'tool_response']::text[]
-    AND cardinality(policy.message_types) = 2
-  )
+WHERE risk_policy_id IN (SELECT id FROM journey_risk_policies)
   AND deleted IS FALSE;
 
 UPDATE risk_policies
 SET deleted_at = clock_timestamp(), updated_at = clock_timestamp()
-WHERE project_id IN (SELECT id FROM reset_project)
-  AND deleted IS FALSE
-  AND policy_type = 'standard'
-  AND action = 'block'
-  AND audience_type = 'everyone'
-  AND auto_name IS TRUE
-  AND sources = ARRAY['gitleaks']::text[]
-  AND message_types @> ARRAY['tool_request', 'tool_response']::text[]
-  AND cardinality(message_types) = 2;
+WHERE id IN (SELECT id FROM journey_risk_policies)
+  AND deleted IS FALSE;
 
 COMMIT;
 SQL

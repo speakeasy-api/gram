@@ -65,6 +65,9 @@ vi.mock("@gram/client/react-query/remoteMcpServers.js", () => ({
 vi.mock("@gram/client/react-query/listToolUsageTraces.js", () => ({
   useListToolUsageTraces: queryHooks.toolTraces,
 }));
+vi.mock("@gram/client/react-query/getMcpServerActivity.js", () => ({
+  invalidateAllGetMcpServerActivity: vi.fn(() => Promise.resolve()),
+}));
 vi.mock("@/routes", () => ({
   useRoutes: () => ({
     logs: { href: () => "/projects/request-project/logs" },
@@ -76,6 +79,9 @@ vi.mock("@/routes", () => ({
       },
     },
   }),
+}));
+vi.mock("@tanstack/react-query", () => ({
+  useQueryClient: () => ({}),
 }));
 vi.mock("@/lib/utils", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/utils")>()),
@@ -206,6 +212,7 @@ function setExistingServer({
         {
           id: "remote-id",
           url: "https://upstream.example/mcp",
+          transportType: "streamable-http",
         },
       ],
     }),
@@ -269,6 +276,7 @@ describe("useMcpGuideOperations", () => {
     act(() => result.current.selectServer(SERVER));
 
     expect(startInstall).not.toHaveBeenCalled();
+    expect(resetInstall).toHaveBeenCalledOnce();
     expect(workflowHook).toHaveBeenLastCalledWith({
       servers: [SERVER],
       projectSlug: "request-project",

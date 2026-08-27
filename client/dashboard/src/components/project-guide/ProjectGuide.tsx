@@ -96,6 +96,8 @@ function ProjectGuideContent({
   );
   const reportTimersRef = useRef(new Set<number>());
   const nextReportAtRef = useRef(0);
+  const pausedRef = useRef(false);
+  const pendingReportsRef = useRef<ProjectGuideOperationReport[]>([]);
   mcpOperationSignalRef.current = mcpOperations.handleSignal;
   secretOperationSignalRef.current = secretOperations.handleSignal;
   const [snapshot, send] = useMachine(projectGuideMachine, {
@@ -103,6 +105,12 @@ function ProjectGuideContent({
       onSignal: (signal) => {
         if (signal.type === "abort") {
           nextReportAtRef.current = 0;
+          pausedRef.current = false;
+          pendingReportsRef.current = [];
+        } else if (signal.type === "pause") {
+          pausedRef.current = true;
+        } else if (signal.type === "resume") {
+          pausedRef.current = false;
         }
         const report =
           signal.type === "prepare"
@@ -122,7 +130,11 @@ function ProjectGuideContent({
       nextReportAtRef.current = dispatchAt + PROJECT_GUIDE_MICRO_STEP_DELAY_MS;
       const timer = window.setTimeout(() => {
         reportTimersRef.current.delete(timer);
-        send({ type: "ADAPTER_REPORT", report });
+        if (pausedRef.current) {
+          pendingReportsRef.current.push(report);
+        } else {
+          send({ type: "ADAPTER_REPORT", report });
+        }
       }, dispatchAt - now);
       reportTimersRef.current.add(timer);
     },
@@ -140,6 +152,18 @@ function ProjectGuideContent({
   const reducedMotion = useReducedMotion();
   const selected = snapshot.context.activePath;
   const displayState = snapshot.value as ProjectGuideDisplayState;
+  useEffect(() => {
+    if (displayState === "paused") return;
+    const pending = pendingReportsRef.current.splice(0);
+    for (const report of pending) {
+      send({ type: "ADAPTER_REPORT", report });
+    }
+  }, [displayState, send]);
+
+  useEffect(() => {
+    if (orgSlug && projectSlug) markProjectGuideStarted(orgSlug, projectSlug);
+  }, [orgSlug, projectSlug]);
+
   const selectedJourney = PROJECT_GUIDE_JOURNEYS.find(
     (journey) => journey.id === selected,
   );
@@ -168,7 +192,6 @@ function ProjectGuideContent({
   }, [displayState, send, snapshot.context.elapsedListeningSeconds]);
 
   const openJourney = (journey: JourneyMeta): void => {
-    if (orgSlug && projectSlug) markProjectGuideStarted(orgSlug, projectSlug);
     send({
       type: "OPEN",
       path: journey.id,
@@ -1046,7 +1069,12 @@ function McpClientConnection({
   operations: McpGuideOperations;
 }): JSX.Element | null {
   if (!operations.endpointUrl || !operations.connectionPrompts) {
-    return null;
+    return (
+      <p className="text-muted-foreground text-sm">
+        A governed endpoint is unavailable. Retry the setup step before
+        connecting your client.
+      </p>
+    );
   }
 
   return (
@@ -1147,14 +1175,17 @@ function ProjectGuideOutput({
           }
         />
       ))}
-      {error && (
-        <ProjectGuideOutputRow
-          accent={accent}
-          kind="error"
-          message={error}
-          role="alert"
-        />
-      )}
+      {error &&
+        !entries.some(
+          (entry) => entry.kind === "error" && entry.message === error,
+        ) && (
+          <ProjectGuideOutputRow
+            accent={accent}
+            kind="error"
+            message={error}
+            role="alert"
+          />
+        )}
     </ol>
   );
 }
@@ -1271,12 +1302,14 @@ function GuideCanvas({ children }: { children: React.ReactNode }): JSX.Element {
     <div
       className={cn(
         BRAND_MESH_SURFACE_CLASS,
-        "relative flex min-h-dvh w-full p-4 sm:p-8",
+        "relative flex min-h-0 w-full flex-1 p-4 sm:p-8",
       )}
     >
       <BrandMeshLayers />
-      <div className="relative z-10 flex w-full items-center justify-center">
-        {children}
+      <div className="relative z-10 flex min-h-0 w-full flex-1 overflow-y-auto">
+        <div className="flex min-h-full w-full items-center justify-center">
+          {children}
+        </div>
       </div>
     </div>
   );

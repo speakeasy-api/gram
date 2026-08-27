@@ -184,7 +184,7 @@ function buildInstallTargets(config: ServerConfig): InstallTarget[] {
     remote,
     name:
       config.remotes.length > 1
-        ? `${config.name} ${getRemoteDisplayInfo(remote.url).name}`
+        ? `${config.name.replace(/_Governed$/, "")} ${getRemoteDisplayInfo(remote.url).name}_Governed`
         : config.name,
     headers: collectibleHeaders(remote).flatMap((header) => {
       const value =

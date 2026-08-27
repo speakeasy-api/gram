@@ -11,7 +11,7 @@ export function ProjectGuideSidebarCta(): JSX.Element | null {
   if (!useProjectGuideStarted(orgSlug, projectSlug)) return null;
 
   return (
-    <div className="group border-border/60 bg-card relative overflow-hidden border p-3 group-data-[collapsible=icon]:border-0 group-data-[collapsible=icon]:bg-transparent group-data-[collapsible=icon]:p-0">
+    <div className="group/guide-cta border-border/60 bg-card relative overflow-hidden border p-3 group-data-[collapsible=icon]:border-0 group-data-[collapsible=icon]:bg-transparent group-data-[collapsible=icon]:p-0">
       <span
         aria-hidden="true"
         className="bg-gradient-primary pointer-events-none absolute inset-x-0 top-0 z-10 h-px group-data-[collapsible=icon]:hidden"
@@ -36,14 +36,14 @@ export function ProjectGuideSidebarCta(): JSX.Element | null {
         </span>
         <span className="text-foreground relative z-10 mt-3 flex items-center gap-1 text-sm font-medium">
           Continue
-          <ArrowRight className="size-3.5 transition-transform group-hover:translate-x-0.5" />
+          <ArrowRight className="size-3.5 transition-transform group-hover/guide-cta:translate-x-0.5" />
         </span>
       </Link>
       <Link
         to={routes.guide.href()}
         aria-label="Project guide"
         title="Project guide"
-        className="hidden text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset group-data-[collapsible=icon]:flex group-data-[collapsible=icon]:size-8 group-data-[collapsible=icon]:items-center group-data-[collapsible=icon]:justify-center"
+        className="hidden text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset group-data-[collapsible=icon]:mx-auto group-data-[collapsible=icon]:flex group-data-[collapsible=icon]:size-8 group-data-[collapsible=icon]:items-center group-data-[collapsible=icon]:justify-center"
       >
         <Sparkles className="size-4" />
       </Link>

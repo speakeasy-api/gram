@@ -83,9 +83,12 @@ export function ProjectGuideRun({
     currentContent
   );
   const activityLogRef = useRef<HTMLDivElement>(null);
+  const stickToBottomRef = useRef(true);
   useEffect(() => {
     const activityLog = activityLogRef.current;
-    if (activityLog) activityLog.scrollTop = activityLog.scrollHeight;
+    if (activityLog && stickToBottomRef.current) {
+      activityLog.scrollTop = activityLog.scrollHeight;
+    }
   }, [output]);
 
   return (
@@ -135,7 +138,7 @@ export function ProjectGuideRun({
                   key={step}
                   aria-current={current ? "step" : undefined}
                   className={cn(
-                    "border-neutral-softest min-w-0 border-b border-r-3 py-5 pl-6 pr-5",
+                    "border-neutral-softest min-w-0 border-b border-r-[3px] py-5 pl-6 pr-5",
                     current && "min-h-48",
                     current && "border-r-foreground",
                   )}
@@ -212,6 +215,15 @@ export function ProjectGuideRun({
             </div>
             <div
               ref={activityLogRef}
+              onScroll={() => {
+                const activityLog = activityLogRef.current;
+                if (!activityLog) return;
+                stickToBottomRef.current =
+                  activityLog.scrollHeight -
+                    activityLog.scrollTop -
+                    activityLog.clientHeight <
+                  24;
+              }}
               role="log"
               aria-label={`${journey.id === "third-party-mcp" ? "Journey A" : "Journey B"} activity`}
               aria-live="polite"
@@ -314,9 +326,7 @@ function CompletionStepBody({
 }): JSX.Element {
   return (
     <div className="grid gap-3 pt-3">
-      <h4 className="text-display-xs whitespace-nowrap">
-        {journey.completion.heading}
-      </h4>
+      <h4 className="text-display-xs">{journey.completion.heading}</h4>
       <p className="text-muted-foreground max-w-md text-body-sm">
         {body ?? journey.completion.body}
       </p>

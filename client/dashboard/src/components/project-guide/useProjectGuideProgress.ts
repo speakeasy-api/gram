@@ -4,7 +4,6 @@ import {
   hasBlockingSecretsPolicy,
   hasDefaultPluginServer,
   hasMcpServerActivity,
-  isGuideMcpServer,
   latestSecretsFinding,
 } from "@/components/project-guide/journeyStatus";
 import type {
@@ -101,7 +100,7 @@ export function useProjectGuideProgress(): {
     remoteServers,
     catalogServers,
   );
-  const guideMcpServers = catalogMcpServers.filter(isGuideMcpServer);
+  const guideMcpServers = catalogMcpServers;
   const selectedCatalogUrls = new Set(
     (catalogServers ?? [])
       .filter(

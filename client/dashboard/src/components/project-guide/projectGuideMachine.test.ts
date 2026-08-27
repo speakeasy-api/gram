@@ -342,6 +342,11 @@ describe("project guide coordinator contract", () => {
     expect(service.getSnapshot().value).toBe("error");
     expect(service.getSnapshot().context.error).toContain("No event seen");
     expect(service.getSnapshot().context.output.at(-1)?.kind).toBe("error");
+    expect(signals.at(-1)).toEqual({
+      type: "abort",
+      scope: { path: "third-party-mcp", step: 3, attempt: 0, runId: 2 },
+      reason: "timeout",
+    });
   });
 
   it("rewinds progress and aborts work at the prior step", () => {

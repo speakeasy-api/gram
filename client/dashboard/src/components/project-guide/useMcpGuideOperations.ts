@@ -34,11 +34,13 @@ import type { Plugin } from "@gram/client/models/components/plugin.js";
 import type { RemoteMcpServer } from "@gram/client/models/components/remotemcpserver.js";
 import type { ToolUsageTraceSummary } from "@gram/client/models/components/toolusagetracesummary.js";
 import type { ExternalMCPServer } from "@gram/client/models/components/externalmcpserver.js";
+import { invalidateAllGetMcpServerActivity } from "@gram/client/react-query/getMcpServerActivity.js";
 import { useListToolUsageTraces } from "@gram/client/react-query/listToolUsageTraces.js";
 import { useMcpEndpoints } from "@gram/client/react-query/mcpEndpoints.js";
 import { useMcpServers } from "@gram/client/react-query/mcpServers.js";
 import { usePlugins } from "@gram/client/react-query/plugins.js";
 import { useRemoteMcpServers } from "@gram/client/react-query/remoteMcpServers.js";
+import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 export type McpGuideClient = "claude" | "cursor" | "codex";
@@ -245,6 +247,7 @@ export function useMcpGuideOperations(): {
   const gramProject = useProjectSlugForRequests();
   const { orgSlug, projectSlug } = useSlugs();
   const routes = useRoutes();
+  const queryClient = useQueryClient();
   const [selectedServerOverride, setSelectedServerOverride] = useState<
     PulseMCPServer | undefined
   >(undefined);
@@ -502,15 +505,45 @@ export function useMcpGuideOperations(): {
     serversQuery,
   ]);
 
-  const retryActivity = useCallback(() => {
-    if (!activityBaselineRef.current) {
-      void captureActivityBaseline();
-      return;
-    }
-    setSuppressActivityError(true);
-    tracesRequest.listToolUsageTracesPayload.to = new Date();
-    void activityQuery.refetch().finally(() => setSuppressActivityError(false));
-  }, [activityQuery, captureActivityBaseline, tracesRequest]);
+  const reportBaselineFailure = useCallback(
+    (
+      report: (report: ProjectGuideOperationReport) => void,
+      scope: ProjectGuideOperationScope,
+    ) => {
+      const baselineCapture = captureActivityBaselineRef.current();
+      const generation = activityBaselineGenerationRef.current;
+      void baselineCapture.then((ready) => {
+        if (activityBaselineGenerationRef.current !== generation || ready) {
+          return;
+        }
+        updateActiveOperation(undefined);
+        report({
+          type: "error",
+          scope,
+          message: "We couldn't prepare the connection yet. Try again.",
+        });
+      });
+    },
+    [updateActiveOperation],
+  );
+
+  const retryActivity = useCallback(
+    (
+      report: (report: ProjectGuideOperationReport) => void,
+      scope: ProjectGuideOperationScope,
+    ) => {
+      if (!activityBaselineRef.current) {
+        reportBaselineFailure(report, scope);
+        return;
+      }
+      setSuppressActivityError(true);
+      tracesRequest.listToolUsageTracesPayload.to = new Date();
+      void activityQuery
+        .refetch()
+        .finally(() => setSuppressActivityError(false));
+    },
+    [activityQuery, reportBaselineFailure, tracesRequest],
+  );
 
   const handleSignal = useCallback(
     (
@@ -569,13 +602,22 @@ export function useMcpGuideOperations(): {
           scope: signal.scope,
           message: "Listening for a new call on the selected governed endpoint",
         });
+        if (!activityBaselineRef.current) {
+          reportBaselineFailure(report, signal.scope);
+        }
       }
       if (signal.type === "retry") {
         if (signal.scope.step === 0) workflow.reset();
-        if (signal.scope.step === 3) retryActivity();
+        if (signal.scope.step === 3) retryActivity(report, signal.scope);
       }
     },
-    [resolvedName, retryActivity, updateActiveOperation, workflow],
+    [
+      reportBaselineFailure,
+      resolvedName,
+      retryActivity,
+      updateActiveOperation,
+      workflow,
+    ],
   );
 
   useEffect(() => {
@@ -766,6 +808,7 @@ export function useMcpGuideOperations(): {
       note: "The first new call is recorded in Tool Logs.",
     };
     updateActiveOperation(undefined);
+    void invalidateAllGetMcpServerActivity(queryClient);
     operation.report({ type: "event", scope: operation.scope, event });
   }, [
     activeOperation,
@@ -776,6 +819,7 @@ export function useMcpGuideOperations(): {
     mcpServer,
     suppressActivityError,
     updateActiveOperation,
+    queryClient,
   ]);
 
   return {
@@ -801,6 +845,7 @@ export function useMcpGuideOperations(): {
     },
     selectServer: (server) => {
       setSelectedServerOverride(server);
+      workflow.reset();
       if (orgSlug && projectSlug) {
         markProjectGuideMcpServerSelected(
           orgSlug,

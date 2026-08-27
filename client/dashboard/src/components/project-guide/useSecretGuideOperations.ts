@@ -10,6 +10,7 @@ import { hasBlockingSecretsPolicy } from "@/components/project-guide/journeyStat
 import { useOrganization } from "@/contexts/Auth";
 import { useFetcher } from "@/contexts/Fetcher";
 import { useProjectSlugForRequests } from "@/contexts/Sdk";
+import { useRBAC } from "@/hooks/useRBAC";
 import { downloadResponse } from "@/pages/plugins/downloadPluginPackage";
 import { getRuleTitleFallback } from "@/pages/security/risk-utils";
 import { useRoutes } from "@/routes";
@@ -23,6 +24,7 @@ import {
   useRiskListPolicies,
 } from "@gram/client/react-query/riskListPolicies.js";
 import { useRiskListResults } from "@gram/client/react-query/riskListResults.js";
+import { invalidateAllRiskListResults } from "@gram/client/react-query/riskListResults.js";
 import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
@@ -97,6 +99,11 @@ function installDetails(
   if (client === "codex") {
     return {
       command: `unzip -oq ${shellFilename(filename)} -d ~/gram-observability\nbash ~/gram-observability/install.sh`,
+    };
+  }
+  if (client === "claude") {
+    return {
+      command: `unzip -oq ${shellFilename(filename)} -d ~/gram-observability\nclaude --plugin-dir ~/gram-observability`,
     };
   }
   const { installDirectory } = SECRET_GUIDE_CLIENTS[client];
@@ -213,6 +220,7 @@ export function useSecretGuideOperations(): {
 } {
   const gramProject = useProjectSlugForRequests();
   const organization = useOrganization();
+  const { hasScope, isLoading: rbacLoading } = useRBAC();
   const { fetch: authFetch } = useFetcher();
   const routes = useRoutes();
   const queryClient = useQueryClient();
@@ -420,6 +428,16 @@ export function useSecretGuideOperations(): {
       });
       return;
     }
+    if (rbacLoading) return;
+    if (!hasScope("org:admin")) {
+      updateActiveOperation(undefined);
+      operation.report({
+        type: "error",
+        scope: operation.scope,
+        message: "An organization admin is required to create this policy.",
+      });
+      return;
+    }
     const key = projectGuideOperationKey(operation.scope);
     if (startedFor.current.has(key)) return;
     startedFor.current.add(key);
@@ -479,6 +497,8 @@ export function useSecretGuideOperations(): {
     matchingPolicy,
     policyError,
     policyPending,
+    hasScope,
+    rbacLoading,
     queryClient,
     isCurrentOperation,
     updateActiveOperation,
@@ -489,6 +509,16 @@ export function useSecretGuideOperations(): {
     if (!operation || operation.paused || operation.scope.step !== 1) return;
     if (!client) {
       updateActiveOperation(undefined);
+      return;
+    }
+    if (rbacLoading) return;
+    if (!hasScope("org:admin")) {
+      updateActiveOperation(undefined);
+      operation.report({
+        type: "error",
+        scope: operation.scope,
+        message: "An organization admin is required to download the plugin.",
+      });
       return;
     }
     if (downloadedFilename) {
@@ -573,6 +603,8 @@ export function useSecretGuideOperations(): {
     client,
     downloadedFilename,
     isCurrentOperation,
+    hasScope,
+    rbacLoading,
     updateActiveOperation,
   ]);
 
@@ -617,6 +649,7 @@ export function useSecretGuideOperations(): {
       note: "The prompt was blocked before the model answered.",
     };
     updateActiveOperation(undefined);
+    void invalidateAllRiskListResults(queryClient);
     operation.report({ type: "event", scope: operation.scope, event });
   }, [
     activeOperation,
@@ -628,6 +661,8 @@ export function useSecretGuideOperations(): {
     tracesQuery.data?.traces,
     tracesQuery.isPending,
     updateActiveOperation,
+    gramProject,
+    queryClient,
   ]);
 
   const resolvedClient = client ?? "claude";

@@ -49,7 +49,11 @@ vi.mock("@/components/page-layout", () => {
   return { Page };
 });
 vi.mock("@/hooks/useRBAC", () => ({
-  useRBAC: () => ({ hasAnyScope: () => true, isLoading: false }),
+  useRBAC: () => ({
+    hasAnyScope: () => true,
+    hasAnyScopeInProject: () => true,
+    isLoading: false,
+  }),
 }));
 import Home from "./Home.tsx";
 

@@ -1,5 +1,6 @@
 import type { JourneyStatus } from "@/components/project-guide/journeys";
 import { normalizeRemoteUrl } from "@/pages/catalog/remotes";
+import { DETECTION_RULES } from "@/pages/security/policy-data";
 import type { McpServer } from "@gram/client/models/components/mcpserver.js";
 import type { McpServerActivity } from "@gram/client/models/components/mcpserveractivity.js";
 import type { Plugin } from "@gram/client/models/components/plugin.js";
@@ -22,13 +23,22 @@ export function catalogBackedMcpServers(
   const catalogUrls = new Set(
     catalogServers.flatMap((server) =>
       (server.remotes ?? [])
-        .filter((remote) => remote.transportType === "streamable-http")
+        .filter(
+          (remote) =>
+            remote.transportType === "streamable-http" &&
+            remote.url.startsWith("https://"),
+        )
         .map((remote) => normalizeRemoteUrl(remote.url)),
     ),
   );
   const catalogRemoteIds = new Set(
     remoteMcpServers
-      .filter((remote) => catalogUrls.has(normalizeRemoteUrl(remote.url)))
+      .filter(
+        (remote) =>
+          remote.transportType === "streamable-http" &&
+          remote.url.startsWith("https://") &&
+          catalogUrls.has(normalizeRemoteUrl(remote.url)),
+      )
       .map((remote) => remote.id),
   );
 
@@ -68,10 +78,6 @@ export function hasMcpServerActivity(
   );
 }
 
-export function isGuideMcpServer(server: McpServer): boolean {
-  return server.name?.endsWith("_Governed") === true;
-}
-
 export function latestSecretsFinding(
   results: RiskResult[] | undefined,
 ): RiskResult | undefined {
@@ -99,7 +105,17 @@ export function hasBlockingSecretsPolicy(
       policy.sources.includes("gitleaks") &&
       messageTypes.length === 2 &&
       messageTypes.includes("tool_request") &&
-      messageTypes.includes("tool_response")
+      messageTypes.includes("tool_response") &&
+      DETECTION_RULES.secrets.some(
+        (rule) => !rule.hidden && !policy.disabledRules?.includes(rule.id),
+      ) &&
+      !policy.scopeInclude &&
+      !policy.scopeExempt &&
+      !(policy.detectionScopes ?? []).some(
+        (scope) =>
+          scope.category === "secrets" &&
+          (Boolean(scope.scopeInclude) || Boolean(scope.scopeExempt)),
+      )
     );
   });
 }

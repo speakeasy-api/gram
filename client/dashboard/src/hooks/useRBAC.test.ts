@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   exclusionScopesForScope,
   hasScopeInGrants,
+  hasScopeInProject,
   resourceKindForScope,
   selectorMatches,
   selectorMatchesStrict,
@@ -57,6 +58,39 @@ describe("resourceKindForScope", () => {
   it("returns '*' for unknown scope families", () => {
     expect(resourceKindForScope("root")).toBe("*");
     expect(resourceKindForScope("unknown:thing")).toBe("*");
+  });
+});
+
+describe("hasScopeInProject", () => {
+  it("matches MCP grants constrained by the project selector", () => {
+    expect(
+      hasScopeInProject(
+        [
+          {
+            scope: "mcp:read",
+            selectors: [
+              { resourceKind: "mcp", resourceId: "*", projectId: "project_a" },
+            ],
+          },
+        ],
+        "mcp:read",
+        "project_a",
+      ),
+    ).toBe(true);
+    expect(
+      hasScopeInProject(
+        [
+          {
+            scope: "mcp:read",
+            selectors: [
+              { resourceKind: "mcp", resourceId: "*", projectId: "project_a" },
+            ],
+          },
+        ],
+        "mcp:read",
+        "project_b",
+      ),
+    ).toBe(false);
   });
 });
 
