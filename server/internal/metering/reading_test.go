@@ -48,10 +48,9 @@ func TestReadingIDUsesInitialV1Contract(t *testing.T) {
 	require.Equal(t, uuid.MustParse("c30a00ac-8471-56c4-b59e-f09ebd00ca21"), reading.ID())
 }
 
-func TestNewUsageRejectsInconsistentDefinition(t *testing.T) {
+func TestNewUsageRejectsUnknownDefinition(t *testing.T) {
 	t.Parallel()
-	definition := metering.AgentSessionStorage()
-	definition.Unit = metering.Unit("bytes")
+	definition := metering.Definition{}
 	now := time.Now().UTC()
 
 	_, err := metering.NewUsage(metering.UsageInput{

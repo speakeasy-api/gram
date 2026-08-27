@@ -48,15 +48,15 @@ func toProto(reading Reading, readingID uuid.UUID) *meteringv1.MeterReading {
 	if reading.scope.kind == scopeKindProject {
 		message.SetProjectId(reading.scope.projectID.String())
 	}
-	message.SetMeterId(string(reading.meter.ID))
+	message.SetMeterId(string(reading.meter.id))
 	message.SetOperationId(reading.operationID)
-	message.SetUnit(string(reading.meter.Unit))
+	message.SetUnit(string(reading.meter.unit))
 	message.SetValue(reading.value)
 	message.SetOccurredAt(reading.occurredAt.Format(time.RFC3339Nano))
 	message.SetAttributes(maps.Clone(reading.attributes))
-	message.SetMeterVersion(reading.meter.Version)
+	message.SetMeterVersion(reading.meter.version)
 	message.SetProducedAt(reading.producedAt.Format(time.RFC3339Nano))
-	message.SetMeasurementMethod(string(reading.meter.MeasurementMethod))
+	message.SetMeasurementMethod(string(reading.meter.measurementMethod))
 	message.SetSource(reading.source)
 
 	switch reading.kind {

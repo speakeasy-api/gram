@@ -30,7 +30,7 @@ func usageMessage(t *testing.T, input metering.UsageInput) (*meteringv1.MeterRea
 	t.Helper()
 	reading, err := metering.NewUsage(input)
 	require.NoError(t, err)
-	message := commonMessage(reading.ID(), input.Meter, input.Scope, input.OperationID, input.Value, input.OccurredAt, input.ProducedAt, input.Source, input.Attributes)
+	message := commonMessage(reading.ID(), input.Scope, input.OperationID, input.Value, input.OccurredAt, input.ProducedAt, input.Source, input.Attributes)
 	message.SetKind(meteringv1.MeterReading_KIND_USAGE)
 	return message, reading
 }
@@ -39,7 +39,7 @@ func adjustmentMessage(t *testing.T, input metering.AdjustmentInput) (*meteringv
 	t.Helper()
 	reading, err := metering.NewAdjustment(input)
 	require.NoError(t, err)
-	message := commonMessage(reading.ID(), input.Meter, input.Scope, input.OperationID, input.Value, input.OccurredAt, input.ProducedAt, input.Source, input.Attributes)
+	message := commonMessage(reading.ID(), input.Scope, input.OperationID, input.Value, input.OccurredAt, input.ProducedAt, input.Source, input.Attributes)
 	message.SetKind(meteringv1.MeterReading_KIND_ADJUSTMENT)
 	message.SetCorrectsReadingId(input.CorrectsReadingID.String())
 	message.SetAdjustmentReason(input.Reason)
@@ -48,7 +48,6 @@ func adjustmentMessage(t *testing.T, input metering.AdjustmentInput) (*meteringv
 
 func commonMessage(
 	id uuid.UUID,
-	definition metering.Definition,
 	scope metering.Scope,
 	operationID string,
 	value int64,
@@ -63,15 +62,15 @@ func commonMessage(
 	if projectID, ok := scope.ProjectID(); ok {
 		message.SetProjectId(projectID.String())
 	}
-	message.SetMeterId(string(definition.ID))
+	message.SetMeterId(string(metering.MeterAgentSessionStorage))
 	message.SetOperationId(operationID)
-	message.SetUnit(string(definition.Unit))
+	message.SetUnit(string(metering.UnitSTokens))
 	message.SetValue(value)
 	message.SetOccurredAt(occurredAt.Format(time.RFC3339Nano))
 	message.SetAttributes(attributes)
-	message.SetMeterVersion(definition.Version)
+	message.SetMeterVersion(1)
 	message.SetProducedAt(producedAt.Format(time.RFC3339Nano))
-	message.SetMeasurementMethod(string(definition.MeasurementMethod))
+	message.SetMeasurementMethod(string(metering.MeasurementTiktokenO200kBase))
 	message.SetSource(source)
 	return message
 }
@@ -101,7 +100,7 @@ func TestMeterReadingCHWriterSkipsPoisonAndDeduplicatesBatch(t *testing.T) {
 	require.Len(t, capture.rows, 1)
 	require.Equal(t, reading.ID(), capture.rows[0].ID)
 	require.Equal(t, input.Value, capture.rows[0].Value)
-	require.Equal(t, string(input.Meter.MeasurementMethod), capture.rows[0].Attributes["codec"])
+	require.Equal(t, string(metering.MeasurementTiktokenO200kBase), capture.rows[0].Attributes["codec"])
 }
 
 func TestMeterReadingCHWriterPropagatesInsertFailure(t *testing.T) {
@@ -165,7 +164,7 @@ func TestMeterReadingCHWriterRedeliveryConvergesAndPreservesAdjustment(t *testin
 		SELECT count(), sum(value)
 		FROM billing_meter_readings FINAL
 		WHERE organization_id = ? AND project_id = ? AND meter_id = ?
-	`, scope.OrganizationID(), projectID, string(definition.ID)).Scan(&count, &net))
+	`, scope.OrganizationID(), projectID, string(metering.MeterAgentSessionStorage)).Scan(&count, &net))
 	require.Equal(t, uint64(2), count)
 	require.Equal(t, int64(6), net)
 }

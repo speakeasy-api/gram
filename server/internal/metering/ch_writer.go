@@ -87,10 +87,10 @@ func meterReadingRow(message *meteringv1.MeterReading, insertedAt time.Time) (ch
 	if !ok {
 		return zero, "unknown_meter_definition"
 	}
-	if message.GetUnit() != string(definition.Unit) {
+	if message.GetUnit() != string(definition.unit) {
 		return zero, "invalid_unit"
 	}
-	if message.GetMeasurementMethod() != string(definition.MeasurementMethod) {
+	if message.GetMeasurementMethod() != string(definition.measurementMethod) {
 		return zero, "invalid_measurement_method"
 	}
 
@@ -156,17 +156,17 @@ func meterReadingRow(message *meteringv1.MeterReading, insertedAt time.Time) (ch
 	if attributes == nil {
 		attributes = make(map[string]string, 1)
 	}
-	if definition.Unit == UnitSTokens {
-		attributes["codec"] = string(definition.MeasurementMethod)
+	if definition.unit == UnitSTokens {
+		attributes["codec"] = string(definition.measurementMethod)
 	}
 
 	return chrepo.ReadingRow{
 		ID:                id,
 		OrganizationID:    scope.organizationID,
 		ProjectID:         scope.projectID,
-		MeterID:           string(definition.ID),
+		MeterID:           string(definition.id),
 		OperationID:       message.GetOperationId(),
-		Unit:              string(definition.Unit),
+		Unit:              string(definition.unit),
 		Value:             message.GetValue(),
 		OccurredAt:        occurredAt,
 		InsertedAt:        insertedAt,

@@ -231,8 +231,8 @@ func (r Reading) ID() uuid.UUID {
 	preimage := "gram:meter-reading:v1\x00" +
 		r.scope.organizationID + "\x00" +
 		r.scope.projectID.String() + "\x00" +
-		string(r.meter.ID) + "\x00" +
-		strconv.FormatUint(uint64(r.meter.Version), 10) + "\x00" +
+		string(r.meter.id) + "\x00" +
+		strconv.FormatUint(uint64(r.meter.version), 10) + "\x00" +
 		r.operationID
 	return uuid.NewSHA1(uuid.NameSpaceURL, []byte(preimage))
 }

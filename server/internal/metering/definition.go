@@ -11,21 +11,13 @@ type Unit string
 // MeasurementMethod identifies how a quantity was measured.
 type MeasurementMethod string
 
-// Definition pins the semantics used to interpret a reading.
+// Definition is an opaque, registered meter contract.
 type Definition struct {
-	// ID identifies the meter.
-	ID MeterID
-
-	// Version changes whenever the meter semantics change.
-	Version uint32
-
-	// Unit is the canonical integral base unit.
-	Unit Unit
-
-	// MeasurementMethod identifies the measurement implementation when applicable.
-	MeasurementMethod MeasurementMethod
-
-	scopeKind scopeKind
+	id                MeterID
+	version           uint32
+	unit              Unit
+	measurementMethod MeasurementMethod
+	scopeKind         scopeKind
 }
 
 const (
@@ -42,10 +34,10 @@ const (
 // AgentSessionStorage returns the current durable message-storage definition.
 func AgentSessionStorage() Definition {
 	return Definition{
-		ID:                MeterAgentSessionStorage,
-		Version:           1,
-		Unit:              UnitSTokens,
-		MeasurementMethod: MeasurementTiktokenO200kBase,
+		id:                MeterAgentSessionStorage,
+		version:           1,
+		unit:              UnitSTokens,
+		measurementMethod: MeasurementTiktokenO200kBase,
 		scopeKind:         scopeKindProject,
 	}
 }
@@ -53,22 +45,17 @@ func AgentSessionStorage() Definition {
 // LookupDefinition returns a registered meter definition by identity.
 func LookupDefinition(id MeterID, version uint32) (Definition, bool) {
 	definition := AgentSessionStorage()
-	if id == definition.ID && version == definition.Version {
+	if id == definition.id && version == definition.version {
 		return definition, true
 	}
-	return Definition{
-		ID:                "",
-		Version:           0,
-		Unit:              "",
-		MeasurementMethod: "",
-		scopeKind:         0,
-	}, false
+	var zero Definition
+	return zero, false
 }
 
 func validateDefinition(definition Definition) bool {
-	if strings.TrimSpace(string(definition.ID)) == "" || definition.Version == 0 || strings.TrimSpace(string(definition.Unit)) == "" {
+	if strings.TrimSpace(string(definition.id)) == "" || definition.version == 0 || strings.TrimSpace(string(definition.unit)) == "" {
 		return false
 	}
-	registered, ok := LookupDefinition(definition.ID, definition.Version)
+	registered, ok := LookupDefinition(definition.id, definition.version)
 	return ok && registered == definition
 }

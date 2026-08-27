@@ -83,14 +83,13 @@ func TestChatStorageReadingPipelineToClickHouse(t *testing.T) {
 	require.NoError(t, proto.Unmarshal(outboxRows[0].Message, message))
 	expected, err := stokens.NewCodec().Count(ctx, "Plan a route")
 	require.NoError(t, err)
-	definition := metering.AgentSessionStorage()
-	require.Equal(t, string(definition.ID), message.GetMeterId())
-	require.Equal(t, string(definition.Unit), message.GetUnit())
+	require.Equal(t, string(metering.MeterAgentSessionStorage), message.GetMeterId())
+	require.Equal(t, string(metering.UnitSTokens), message.GetUnit())
 	require.NotContains(t, message.GetAttributes(), "codec")
 	require.Equal(t, int64(expected), message.GetValue())
-	require.Equal(t, definition.Version, message.GetMeterVersion())
+	require.Equal(t, uint32(1), message.GetMeterVersion())
 	require.Equal(t, meteringv1.MeterReading_KIND_USAGE, message.GetKind())
-	require.Equal(t, string(definition.MeasurementMethod), message.GetMeasurementMethod())
+	require.Equal(t, string(metering.MeasurementTiktokenO200kBase), message.GetMeasurementMethod())
 	require.Equal(t, "chat_message_writer", message.GetSource())
 
 	clickhouseConn, err := infra.NewClickhouseClient(t)
@@ -105,7 +104,7 @@ func TestChatStorageReadingPipelineToClickHouse(t *testing.T) {
 		SELECT count(), sum(value)
 		FROM billing_meter_readings FINAL
 		WHERE organization_id = ? AND project_id = ? AND meter_id = ?
-	`, organizationID, project.ID, string(definition.ID)).Scan(&count, &value))
+	`, organizationID, project.ID, string(metering.MeterAgentSessionStorage)).Scan(&count, &value))
 	require.Equal(t, uint64(1), count)
 	require.Equal(t, int64(expected), value)
 }
