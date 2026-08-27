@@ -27,6 +27,9 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/stokens"
 )
 
+// ErrChatNotInProject indicates that a chat is absent or owned by another project.
+var ErrChatNotInProject = errors.New("chat does not belong to project")
+
 // ChatMessageWriter is the only sanctioned way to persist chat messages.
 // It wraps repo.CreateChatMessage and notifies observers after a successful
 // write that stored at least one message. External packages must use Write,
@@ -296,7 +299,7 @@ func requireChatProject(ctx context.Context, db repo.DBTX, chatID uuid.UUID, pro
 		return fmt.Errorf("check chat project: %w", err)
 	}
 	if !belongs {
-		return fmt.Errorf("chat does not belong to project")
+		return ErrChatNotInProject
 	}
 	return nil
 }

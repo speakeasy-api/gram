@@ -395,8 +395,11 @@ func (s *Service) insertMessageWithFallbackUpsertResult(
 		return n > 0, nil
 	}
 
-	// If this is not a foreign key violation (chat doesn't exist), fail.
-	if !isForeignKeyViolation(err) {
+	// A missing chat now fails the writer's tenant preflight before PostgreSQL
+	// can raise its foreign-key error. Try the same project-scoped upsert for
+	// either signal: it creates a missing chat but rejects an existing chat
+	// owned by another project.
+	if !isForeignKeyViolation(err) && !errors.Is(err, chat.ErrChatNotInProject) {
 		return false, fmt.Errorf("insert chat message: %w", err)
 	}
 
@@ -412,7 +415,7 @@ func (s *Service) insertMessageWithFallbackUpsertResult(
 		Cwd:            conv.ToPGTextEmpty(metadata.Cwd),
 	})
 	if upsertErr != nil {
-		return false, fmt.Errorf("upsert claude code session after FK violation: %w", upsertErr)
+		return false, fmt.Errorf("upsert claude code session after missing chat: %w", upsertErr)
 	}
 
 	n, err = writeMessage()
