@@ -8,12 +8,21 @@ import {
 } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type { Action } from "@/components/ui/MoreActions";
+import type { Column } from "@/components/ui/Table";
+import type { AdminOpenRouterKey } from "@gram/client/models/components/adminopenrouterkey.js";
+
+type MutationOptions = {
+  onSuccess: (
+    key: Pick<AdminOpenRouterKey, "keyType" | "organizationName">,
+  ) => void;
+};
 
 const mocks = vi.hoisted(() => ({
   disableMutate: vi.fn(),
-  disableOptions: undefined as any,
+  disableOptions: undefined as MutationOptions | undefined,
   enableMutate: vi.fn(),
-  enableOptions: undefined as any,
+  enableOptions: undefined as MutationOptions | undefined,
   invalidate: vi.fn(),
   toastSuccess: vi.fn(),
 }));
@@ -38,12 +47,18 @@ vi.mock("@/components/page-layout", () => {
 });
 
 vi.mock("@/components/ui/Table", () => ({
-  Table: ({ columns, data }: { columns: any[]; data: any[] }) => (
+  Table: ({
+    columns,
+    data,
+  }: {
+    columns: Column<AdminOpenRouterKey>[];
+    data: AdminOpenRouterKey[];
+  }) => (
     <div>
       {data.map((row) => (
         <div key={row.organizationSlug} data-testid={row.organizationSlug}>
           {columns.map((column) => (
-            <div key={column.key}>{column.render?.(row)}</div>
+            <div key={String(column.key)}>{column.render?.(row)}</div>
           ))}
         </div>
       ))}
@@ -52,7 +67,7 @@ vi.mock("@/components/ui/Table", () => ({
 }));
 
 vi.mock("@/components/ui/MoreActions", () => ({
-  MoreActions: ({ actions }: { actions: any[] }) => (
+  MoreActions: ({ actions }: { actions: Action[] }) => (
     <div>
       {actions.map((action) => (
         <button key={action.label} onClick={action.onClick}>
@@ -108,14 +123,14 @@ vi.mock("@gram/client/react-query/adminOpenRouterKeyUsage.js", () => ({
 }));
 
 vi.mock("@gram/client/react-query/disableAdminOpenRouterKey.js", () => ({
-  useDisableAdminOpenRouterKeyMutation: (options: any) => {
+  useDisableAdminOpenRouterKeyMutation: (options: MutationOptions) => {
     mocks.disableOptions = options;
     return { mutate: mocks.disableMutate, isPending: false };
   },
 }));
 
 vi.mock("@gram/client/react-query/enableAdminOpenRouterKey.js", () => ({
-  useEnableAdminOpenRouterKeyMutation: (options: any) => {
+  useEnableAdminOpenRouterKeyMutation: (options: MutationOptions) => {
     mocks.enableOptions = options;
     return { mutate: mocks.enableMutate, isPending: false };
   },
@@ -199,7 +214,7 @@ describe("PlatformAdminOpenRouterKeys", () => {
       keyType: "chat",
       organizationName: "Automatic cause",
     };
-    mocks.disableOptions.onSuccess(automaticKey);
+    mocks.disableOptions?.onSuccess(automaticKey);
     expect(mocks.toastSuccess).toHaveBeenCalledWith(
       "Admin lock added to the chat key for Automatic cause.",
     );
@@ -209,7 +224,7 @@ describe("PlatformAdminOpenRouterKeys", () => {
       keyType: "internal",
       organizationName: "Combined causes",
     };
-    mocks.enableOptions.onSuccess(combinedKey);
+    mocks.enableOptions?.onSuccess(combinedKey);
     expect(mocks.toastSuccess).toHaveBeenCalledWith(
       "Admin lock removed from the internal key for Combined causes.",
     );

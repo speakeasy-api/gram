@@ -1,4 +1,4 @@
-export const DISABLE_CAUSE_LABELS = {
+const DISABLE_CAUSE_LABELS = {
   admin_lock: "Admin lock",
   trial_demotion: "Trial demotion",
   billing_inactive: "Billing inactive",
