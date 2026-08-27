@@ -1,21 +1,32 @@
 package admin
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
+	"sync"
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/admin"
 	srv "github.com/speakeasy-api/gram/server/gen/http/admin/server"
+	"github.com/speakeasy-api/gram/server/internal/admin/repo"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
+	"github.com/speakeasy-api/gram/server/internal/background/activities/keybillinglock"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/outbox/events"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
+	testrepo "github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 	orrepo "github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter/repo"
+	trialsRepo "github.com/speakeasy-api/gram/server/internal/trials/repo"
 )
 
 func TestMarkEnterpriseTrialConvertedRequestBody_RequiresOrganizationIDOnly(t *testing.T) {
@@ -182,6 +193,27 @@ type assertiveNotifierError struct{}
 
 func (assertiveNotifierError) Error() string { return "notifier unavailable" }
 
+type concurrentTrialNotifier struct {
+	mu       sync.Mutex
+	inactive []string
+}
+
+func (*concurrentTrialNotifier) TrialStarted(context.Context, string) error       { return nil }
+func (*concurrentTrialNotifier) AdminAdded(context.Context, string, string) error { return nil }
+
+func (n *concurrentTrialNotifier) TrialInactive(_ context.Context, organizationID string) error {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	n.inactive = append(n.inactive, organizationID)
+	return nil
+}
+
+func (n *concurrentTrialNotifier) inactiveCount() int {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	return len(n.inactive)
+}
+
 func TestMarkEnterpriseTrialConverted_AuditFailureRollsBackConversionAndRestoration(t *testing.T) {
 	t.Parallel()
 
@@ -189,9 +221,13 @@ func TestMarkEnterpriseTrialConverted_AuditFailureRollsBackConversionAndRestorat
 	orgID := "org_convert_audit_atomic"
 	seedDemotedTrial(t, ctx, conn, orgID, "enterprise")
 	before := readTrial(t, ctx, conn, orgID)
+	outboxBefore, err := testrepo.New(conn).CountOutboxEntriesByEventType(ctx, string(events.OrganizationEnterpriseTrialV1.EventType()))
+	require.NoError(t, err)
+	notifier := &fakeTrialNotifier{}
+	svc.trial = notifier
 	require.NoError(t, audittest.RejectAction(ctx, conn, audit.ActionOrganizationEnterpriseTrialConverted))
 
-	_, err := svc.MarkEnterpriseTrialConverted(ctx, &gen.MarkEnterpriseTrialConvertedPayload{ID: orgID})
+	_, err = svc.MarkEnterpriseTrialConverted(ctx, &gen.MarkEnterpriseTrialConvertedPayload{ID: orgID})
 	requireOopsCode(t, err, oops.CodeUnexpected)
 
 	after := readTrial(t, ctx, conn, orgID)
@@ -200,6 +236,264 @@ func TestMarkEnterpriseTrialConverted_AuditFailureRollsBackConversionAndRestorat
 	state := readOrgState(t, ctx, conn, orgID)
 	require.Equal(t, "free", state.GramAccountType)
 	require.False(t, state.Whitelisted)
+	outboxAfter, err := testrepo.New(conn).CountOutboxEntriesByEventType(ctx, string(events.OrganizationEnterpriseTrialV1.EventType()))
+	require.NoError(t, err)
+	require.Equal(t, outboxBefore, outboxAfter)
+	require.Empty(t, notifier.inactive)
+}
+
+func TestMarkEnterpriseTrialConverted_ConcurrentAndReplayedCallsCommitOneConversion(t *testing.T) { //nolint:paralleltest // Coordinates writers against one trial row.
+	ctx, svc, conn, _ := newRearmService(t)
+	const orgID = "org_convert_concurrent"
+	seedOrg(t, ctx, conn, orgFixture{id: orgID, name: "Concurrent Conversion", slug: "concurrent-conversion", accountType: "enterprise", whitelisted: true})
+	seedTrial(t, ctx, conn, trialFixture{orgID: orgID, endsAt: time.Now().UTC().Add(24 * time.Hour)})
+	notifier := &concurrentTrialNotifier{}
+	svc.trial = notifier
+
+	before, err := audittest.AuditLogCountByAction(ctx, conn, audit.ActionOrganizationEnterpriseTrialConverted)
+	require.NoError(t, err)
+
+	const calls = 2
+	start := make(chan struct{})
+	results := make(chan error, calls)
+	var wg sync.WaitGroup
+	for range calls {
+		wg.Go(func() {
+			<-start
+			_, callErr := svc.MarkEnterpriseTrialConverted(ctx, &gen.MarkEnterpriseTrialConvertedPayload{ID: orgID})
+			results <- callErr
+		})
+	}
+	close(start)
+	wg.Wait()
+	close(results)
+
+	for callErr := range results {
+		require.NoError(t, callErr)
+	}
+	require.True(t, readTrial(t, ctx, conn, orgID).ConvertedAt.Valid)
+	after, err := audittest.AuditLogCountByAction(ctx, conn, audit.ActionOrganizationEnterpriseTrialConverted)
+	require.NoError(t, err)
+	require.Equal(t, before+1, after)
+	require.Equal(t, calls, notifier.inactiveCount(), "every successful conversion replay must enqueue TrialInactive")
+}
+
+func TestMarkEnterpriseTrialConverted_UpstreamFailureRollsBackAndRetryConverges(t *testing.T) {
+	t.Parallel()
+
+	ctx, svc, conn, provisioner := newRearmService(t)
+	orgID := "org_convert_upstream_retry_" + uuid.NewString()
+	seedDemotedTrial(t, ctx, conn, orgID, "enterprise")
+	seedDisabledTrialRuntimeFeatures(t, ctx, svc, conn, orgID)
+	notifier := &fakeTrialNotifier{}
+	svc.trial = notifier
+	provisioner.failOn = openrouter.KeyTypeInternal
+	provisioner.failWith = errors.New("upstream unavailable")
+
+	auditBefore, err := audittest.AuditLogCountByAction(ctx, conn, audit.ActionOrganizationEnterpriseTrialConverted)
+	require.NoError(t, err)
+	outboxBefore, err := testrepo.New(conn).CountOutboxEntriesByEventType(ctx, string(events.OrganizationEnterpriseTrialV1.EventType()))
+	require.NoError(t, err)
+
+	_, err = svc.MarkEnterpriseTrialConverted(ctx, &gen.MarkEnterpriseTrialConvertedPayload{ID: orgID})
+	requireOopsCode(t, err, oops.CodeGatewayError)
+	trial := readTrial(t, ctx, conn, orgID)
+	require.False(t, trial.ConvertedAt.Valid)
+	require.True(t, trial.DemotedAt.Valid)
+	state := readOrgState(t, ctx, conn, orgID)
+	require.Equal(t, "free", state.GramAccountType)
+	require.False(t, state.Whitelisted)
+	require.Empty(t, notifier.inactive)
+
+	auditAfterFailure, err := audittest.AuditLogCountByAction(ctx, conn, audit.ActionOrganizationEnterpriseTrialConverted)
+	require.NoError(t, err)
+	require.Equal(t, auditBefore, auditAfterFailure)
+	outboxAfterFailure, err := testrepo.New(conn).CountOutboxEntriesByEventType(ctx, string(events.OrganizationEnterpriseTrialV1.EventType()))
+	require.NoError(t, err)
+	require.Equal(t, outboxBefore, outboxAfterFailure)
+
+	provisioner.failWith = nil
+	_, err = svc.MarkEnterpriseTrialConverted(ctx, &gen.MarkEnterpriseTrialConvertedPayload{ID: orgID})
+	require.NoError(t, err)
+	require.True(t, readTrial(t, ctx, conn, orgID).ConvertedAt.Valid)
+	state = readOrgState(t, ctx, conn, orgID)
+	require.Equal(t, "enterprise", state.GramAccountType)
+	require.True(t, state.Whitelisted)
+	require.Equal(t, []string{orgID}, notifier.inactive)
+
+	auditAfterRetry, err := audittest.AuditLogCountByAction(ctx, conn, audit.ActionOrganizationEnterpriseTrialConverted)
+	require.NoError(t, err)
+	require.Equal(t, auditBefore+1, auditAfterRetry)
+	outboxAfterRetry, err := testrepo.New(conn).CountOutboxEntriesByEventType(ctx, string(events.OrganizationEnterpriseTrialV1.EventType()))
+	require.NoError(t, err)
+	require.Equal(t, outboxBefore+1, outboxAfterRetry)
+}
+
+func TestMarkEnterpriseTrialConverted_TrialRowPrecedesChatAndInternalKeyLocks(t *testing.T) { //nolint:paralleltest // Deliberately coordinates lock owners.
+	ctx, svc, conn, _ := newRearmService(t)
+	const orgID = "org_convert_lock_order"
+	seedOrg(t, ctx, conn, orgFixture{id: orgID, name: "Lock Order", slug: "lock-order", accountType: "enterprise", whitelisted: true})
+	seedTrial(t, ctx, conn, trialFixture{orgID: orgID, endsAt: time.Now().UTC().Add(24 * time.Hour)})
+
+	trialOwner := testenv.BeginTx(t, ctx, conn)
+	lockedID, err := repo.New(trialOwner).LockTrialForUpdate(ctx, orgID)
+	require.NoError(t, err)
+	require.Equal(t, orgID, lockedID)
+
+	converted := make(chan error, 1)
+	go func() {
+		_, conversionErr := svc.MarkEnterpriseTrialConverted(ctx, &gen.MarkEnterpriseTrialConvertedPayload{ID: orgID})
+		converted <- conversionErr
+	}()
+	testenv.WaitForBlockedBackend(t, ctx, conn)
+
+	logger := testenv.NewLogger(t)
+	err = keybillinglock.WithAcquireTimeout(ctx, logger, conn, orgID, openrouter.KeyTypeChat, time.Second, func(_ *pgxpool.Conn) error {
+		return keybillinglock.WithAcquireTimeout(ctx, logger, conn, orgID, openrouter.KeyTypeInternal, time.Second, func(_ *pgxpool.Conn) error {
+			return trialOwner.Commit(ctx)
+		})
+	})
+	if err != nil {
+		require.NoError(t, trialOwner.Rollback(ctx))
+	}
+	require.NoError(t, err)
+
+	select {
+	case err = <-converted:
+		require.NoError(t, err)
+	case <-time.After(5 * time.Second):
+		t.Fatal("conversion deadlocked while acquiring chat then internal billing locks")
+	}
+}
+
+func TestMarkEnterpriseTrialConverted_SerializesBehindTrialDemotion(t *testing.T) { //nolint:paralleltest // Coordinates two lifecycle writers.
+	ctx, svc, conn, _ := newRearmService(t)
+	const orgID = "org_convert_after_demotion"
+	seedOrg(t, ctx, conn, orgFixture{id: orgID, name: "Demotion Race", slug: "demotion-race", accountType: "enterprise", whitelisted: true})
+	seedTrial(t, ctx, conn, trialFixture{orgID: orgID, endsAt: time.Now().UTC().Add(-24 * time.Hour)})
+
+	demotionTx := testenv.BeginTx(t, ctx, conn)
+	demotionQueries := trialsRepo.New(demotionTx)
+	_, err := demotionQueries.MarkTrialDemoted(ctx, orgID)
+	require.NoError(t, err)
+	_, err = demotionQueries.DemoteOrganizationToFree(ctx, orgID)
+	require.NoError(t, err)
+
+	converted := make(chan error, 1)
+	go func() {
+		_, conversionErr := svc.MarkEnterpriseTrialConverted(ctx, &gen.MarkEnterpriseTrialConvertedPayload{ID: orgID})
+		converted <- conversionErr
+	}()
+	testenv.WaitForBlockedBackend(t, ctx, conn)
+	require.NoError(t, demotionTx.Commit(ctx))
+
+	select {
+	case err = <-converted:
+		require.NoError(t, err)
+	case <-time.After(5 * time.Second):
+		t.Fatal("conversion deadlocked behind trial demotion")
+	}
+	trial := readTrial(t, ctx, conn, orgID)
+	require.True(t, trial.ConvertedAt.Valid)
+	require.True(t, trial.DemotedAt.Valid, "conversion preserves demotion history")
+	state := readOrgState(t, ctx, conn, orgID)
+	require.Equal(t, "enterprise", state.GramAccountType)
+	require.True(t, state.Whitelisted)
+}
+
+func TestMarkEnterpriseTrialConverted_SerializesBehindTrialRearm(t *testing.T) { //nolint:paralleltest // Coordinates two lifecycle writers.
+	ctx, svc, conn, _ := newRearmService(t)
+	const orgID = "org_convert_after_rearm"
+	seedDemotedTrial(t, ctx, conn, orgID, "enterprise")
+
+	rearmTx := testenv.BeginTx(t, ctx, conn)
+	rearmQueries := trialsRepo.New(rearmTx)
+	_, err := rearmQueries.RearmTrial(ctx, trialsRepo.RearmTrialParams{OrganizationID: orgID, RearmForDays: 14})
+	require.NoError(t, err)
+	_, err = rearmQueries.RestoreOrganizationFromTrial(ctx, trialsRepo.RestoreOrganizationFromTrialParams{OrganizationID: orgID, AccountType: "enterprise"})
+	require.NoError(t, err)
+
+	converted := make(chan error, 1)
+	go func() {
+		_, conversionErr := svc.MarkEnterpriseTrialConverted(ctx, &gen.MarkEnterpriseTrialConvertedPayload{ID: orgID})
+		converted <- conversionErr
+	}()
+	testenv.WaitForBlockedBackend(t, ctx, conn)
+	require.NoError(t, rearmTx.Commit(ctx))
+
+	select {
+	case err = <-converted:
+		require.NoError(t, err)
+	case <-time.After(5 * time.Second):
+		t.Fatal("conversion deadlocked behind trial re-arm")
+	}
+	require.True(t, readTrial(t, ctx, conn, orgID).ConvertedAt.Valid)
+	_, err = svc.RearmTrial(ctx, &gen.RearmTrialPayload{ID: orgID, Days: 14})
+	requireOopsCode(t, err, oops.CodeConflict)
+}
+
+func TestMarkEnterpriseTrialConverted_SerializesWithBillingCauseMutation(t *testing.T) { //nolint:paralleltest // Coordinates the chat-key lock holder and conversion.
+	ctx, svc, conn, _ := newRearmService(t)
+	const orgID = "org_convert_cause_race"
+	seedDemotedTrial(t, ctx, conn, orgID, "enterprise")
+
+	mutationStarted := make(chan struct{})
+	releaseMutation := make(chan struct{})
+	mutationDone := make(chan error, 1)
+	go func() {
+		mutationDone <- keybillinglock.WithAcquireTimeout(ctx, testenv.NewLogger(t), conn, orgID, openrouter.KeyTypeChat, time.Second, func(keyConn *pgxpool.Conn) error {
+			for _, cause := range []openrouter.DisableCause{openrouter.DisableCauseAdminLock, openrouter.DisableCauseBillingInactive} {
+				_, mutationErr := orrepo.New(keyConn).AddOpenRouterAPIKeyDisableCause(ctx, orrepo.AddOpenRouterAPIKeyDisableCauseParams{OrganizationID: orgID, KeyType: string(openrouter.KeyTypeChat), DisableCause: string(cause)})
+				if mutationErr != nil {
+					return mutationErr
+				}
+			}
+			close(mutationStarted)
+			<-releaseMutation
+			return nil
+		})
+	}()
+	<-mutationStarted
+
+	converted := make(chan error, 1)
+	go func() {
+		_, conversionErr := svc.MarkEnterpriseTrialConverted(ctx, &gen.MarkEnterpriseTrialConvertedPayload{ID: orgID})
+		converted <- conversionErr
+	}()
+	testenv.WaitForBlockedBackend(t, ctx, conn)
+	close(releaseMutation)
+	require.NoError(t, <-mutationDone)
+
+	select {
+	case err := <-converted:
+		require.NoError(t, err)
+	case <-time.After(5 * time.Second):
+		t.Fatal("conversion deadlocked behind billing cause mutation")
+	}
+	key := readOpenRouterKey(t, ctx, conn, orgID, openrouter.KeyTypeChat)
+	require.NotContains(t, key.DisableCauses, string(openrouter.DisableCauseTrialDemotion))
+	require.Contains(t, key.DisableCauses, string(openrouter.DisableCauseAdminLock))
+	require.Contains(t, key.DisableCauses, string(openrouter.DisableCauseBillingInactive))
+	require.True(t, key.Disabled, "remaining causes must keep effective access disabled")
+}
+
+func TestMarkEnterpriseTrialConverted_CannotBeDemotedOrRearmed(t *testing.T) {
+	t.Parallel()
+
+	ctx, svc, conn, _ := newRearmService(t)
+	const orgID = "org_convert_terminal"
+	seedDemotedTrial(t, ctx, conn, orgID, "enterprise")
+	_, err := svc.MarkEnterpriseTrialConverted(ctx, &gen.MarkEnterpriseTrialConvertedPayload{ID: orgID})
+	require.NoError(t, err)
+	converted := readTrial(t, ctx, conn, orgID)
+
+	_, err = trialsRepo.New(conn).MarkTrialDemoted(ctx, orgID)
+	require.Error(t, err)
+	_, err = svc.RearmTrial(ctx, &gen.RearmTrialPayload{ID: orgID, Days: 14})
+	requireOopsCode(t, err, oops.CodeConflict)
+	after := readTrial(t, ctx, conn, orgID)
+	require.Equal(t, converted.ConvertedAt, after.ConvertedAt)
+	require.Equal(t, converted.EndsAt, after.EndsAt)
 }
 
 func TestUpdateOrganization_DoesNotInferEnterpriseTrialConversion(t *testing.T) {
