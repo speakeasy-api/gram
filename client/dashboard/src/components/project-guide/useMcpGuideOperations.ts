@@ -92,6 +92,7 @@ function curateCatalogServers(
   if (!servers) return undefined;
   return servers
     .filter(isPulseMcpServer)
+    .filter((server) => server.meta["com.pulsemcp/server"]?.isOfficial === true)
     .filter(canConfigureWithoutUserCredentials)
     .filter((server) =>
       AUTOMATIC_CATALOG_SERVER_NAMES.includes(
