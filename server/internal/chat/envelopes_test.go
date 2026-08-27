@@ -134,3 +134,10 @@ func TestStripLeadingEnvelopesKeepsColonLineAfterOpenClawHistory(t *testing.T) {
 	input := "Chat history since last reply (untrusted, for context):\n#1 2026-08-27 13:51:33 EDT alice: hi\nNote: can you continue"
 	require.Equal(t, "Note: can you continue", chat.StripLeadingEnvelopes(input))
 }
+
+func TestStripLeadingEnvelopesKeepsTimestampPhraseAfterOpenClawHistory(t *testing.T) {
+	t.Parallel()
+
+	input := "Chat history since last reply (untrusted, for context):\n#1 2026-08-27 13:51:33 EDT alice: hi\n2026-08-27 standup: can you continue"
+	require.Equal(t, "2026-08-27 standup: can you continue", chat.StripLeadingEnvelopes(input))
+}
