@@ -326,7 +326,7 @@ func (s *LifecycleService) executeMutation(ctx context.Context, mutation Mutatio
 		return MutationResult{}, fmt.Errorf("encode killswitch operation response: %w", err)
 	}
 	if s.beforeCommit != nil {
-		event := MutationEvent{OrganizationID: mutation.OrganizationID, ActorUserID: mutation.ActorUserID, OperationID: mutation.OperationID, Operation: operation, Result: result}
+		event := MutationEvent{OrganizationID: mutation.OrganizationID, ActorUserID: mutation.ActorUserID, ActorDisplayName: mutation.ActorDisplayName, OperationID: mutation.OperationID, Operation: operation, Result: result}
 		if err := s.beforeCommit(ctx, restricted, event); err != nil {
 			return MutationResult{}, fmt.Errorf("before killswitch lifecycle commit: %w", err)
 		}
@@ -594,6 +594,9 @@ func validateMutationContext(mutation MutationContext) error {
 		return fmt.Errorf("%w: %w", ErrInvalidArgument, err)
 	}
 	if err := validateIdentifier("actor user ID", mutation.ActorUserID); err != nil {
+		return fmt.Errorf("%w: %w", ErrInvalidArgument, err)
+	}
+	if err := validateIdentifier("actor display name", mutation.ActorDisplayName); err != nil {
 		return fmt.Errorf("%w: %w", ErrInvalidArgument, err)
 	}
 	if mutation.OperationID == uuid.Nil {

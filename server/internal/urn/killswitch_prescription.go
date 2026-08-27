@@ -37,6 +37,9 @@ func ParseKillswitchPrescription(value string) (KillswitchPrescription, error) {
 	if err != nil {
 		return KillswitchPrescription{}, fmt.Errorf("%w: invalid killswitch prescription uuid", ErrInvalid)
 	}
+	if id == uuid.Nil {
+		return KillswitchPrescription{}, fmt.Errorf("%w: empty id", ErrInvalid)
+	}
 
 	return KillswitchPrescription{ID: id}, nil
 }

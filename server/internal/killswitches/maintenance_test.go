@@ -14,6 +14,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/audit"
+	"github.com/speakeasy-api/gram/server/internal/killswitches/repo"
 )
 
 // insertVersionRow fabricates one prescription header and version directly so
@@ -88,6 +89,7 @@ func TestExpirySweepRecordsOnlyGenuinelyExpiredVersions(t *testing.T) {
 	for _, row := range auditRows {
 		require.Equal(t, "killswitch:expire", row.Action)
 		require.Equal(t, "system", row.ActorID)
+		require.Equal(t, "System", row.ActorDisplayName)
 		require.Equal(t, "killswitch_prescription", row.SubjectType)
 		require.False(t, expiredAtOf(t, row.Metadata).IsZero())
 	}
@@ -162,6 +164,60 @@ func TestExpiryConcurrentSweepsRecordExactlyOnce(t *testing.T) {
 	require.Len(t, listOutboxMessages(t, conn, orgID), 1)
 }
 
+func TestExpirySweepSerializesWithLifecycleHeaderLock(t *testing.T) {
+	t.Parallel()
+
+	conn, orgID := newLifecycleDatabase(t, "killswitch_expiry_lifecycle_lock")
+	prescription := insertVersionRow(t, conn, orgID, "active", "clock_timestamp() - interval '1 hour'", "NULL")
+	prescriptionID := uuid.MustParse(string(prescription))
+	maintenance := NewMaintenanceService(conn, audit.NewLogger())
+
+	tx, err := conn.Begin(t.Context())
+	require.NoError(t, err)
+	defer func() { _ = tx.Rollback(t.Context()) }()
+	_, err = tx.Exec(t.Context(), `
+		SELECT id FROM killswitch_prescriptions
+		WHERE organization_id = $1 AND id = $2
+		FOR UPDATE
+	`, orgID, prescriptionID)
+	require.NoError(t, err)
+
+	type expiryResult struct {
+		recorded int64
+		err      error
+	}
+	resultCh := make(chan expiryResult, 1)
+	go func() {
+		recorded, recordErr := maintenance.recordExpiry(context.Background(), repo.ListDueKillswitchExpiriesRow{OrganizationID: orgID, PrescriptionID: prescriptionID, Version: 1})
+		resultCh <- expiryResult{recorded: recorded, err: recordErr}
+	}()
+
+	select {
+	case result := <-resultCh:
+		require.FailNow(t, "expiry recording bypassed the lifecycle header lock", "result: %+v", result)
+	case <-time.After(150 * time.Millisecond):
+	}
+
+	_, err = tx.Exec(t.Context(), `
+		UPDATE killswitch_prescription_versions
+		SET superseded_at = expires_at
+		WHERE organization_id = $1 AND prescription_id = $2 AND version = 1
+	`, orgID, prescriptionID)
+	require.NoError(t, err)
+	require.NoError(t, tx.Commit(t.Context()))
+
+	select {
+	case result := <-resultCh:
+		require.NoError(t, result.err)
+		require.Zero(t, result.recorded, "expiry eligibility is rechecked after the lifecycle lock releases")
+	case <-time.After(5 * time.Second):
+		require.FailNow(t, "expiry recording did not resume after the lifecycle transaction committed")
+	}
+	require.Zero(t, countExpiryMarkers(t, conn, orgID))
+	require.Empty(t, listAuditRows(t, conn, orgID))
+	require.Empty(t, listOutboxMessages(t, conn, orgID))
+}
+
 func TestExpiryRetryRecovery(t *testing.T) {
 	t.Parallel()
 
@@ -229,7 +285,7 @@ func TestOperationCleanupBoundaryAndBatching(t *testing.T) {
 	require.Equal(t, int64(1), deleted, "the privileged sweep continues across organizations")
 	deleted, err = maintenance.CleanupExpiredOperationsGlobal(t.Context(), 2)
 	require.NoError(t, err)
-	require.Zero(t, deleted, "receipts strictly before their boundary are retained")
+	require.Zero(t, deleted, "receipts strictly after their expiry boundary are retained")
 
 	require.Equal(t, 1, countOperations(t, conn, orgID))
 	require.Zero(t, countOperations(t, conn, otherOrgID))

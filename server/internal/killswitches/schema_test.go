@@ -296,6 +296,25 @@ func TestKillswitchSchemaPinsTenancyAndIdempotency(t *testing.T) {
 	requireConstraint(t, err, "killswitch_operations_pkey")
 }
 
+func TestKillswitchExpiryDiscoveryIndexMatchesEligibilityAndOrder(t *testing.T) {
+	t.Parallel()
+
+	conn, err := infra.CloneTestDatabase(t, "killswitch_expiry_index")
+	require.NoError(t, err)
+
+	var indexDefinition string
+	require.NoError(t, conn.QueryRow(t.Context(), `
+		SELECT indexdef
+		FROM pg_indexes
+		WHERE schemaname = 'public'
+		  AND indexname = 'killswitch_prescription_versions_expiry_due_idx'
+	`).Scan(&indexDefinition))
+	require.Contains(t, indexDefinition, "USING btree (expires_at, prescription_id, version)")
+	require.Contains(t, indexDefinition, "state = 'active'::text")
+	require.Contains(t, indexDefinition, "superseded_at IS NULL")
+	require.Contains(t, indexDefinition, "expires_at < superseded_at")
+}
+
 func insertOrganization(t *testing.T, conn *pgxpool.Pool, organizationID string) {
 	t.Helper()
 

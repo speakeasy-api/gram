@@ -19,18 +19,19 @@ import (
 const sentinelInternalNote = "SENTINEL-INTERNAL-NOTE-d0f1"
 
 type auditRow struct {
-	Action        string
-	ActorID       string
-	SubjectID     string
-	SubjectType   string
-	AfterSnapshot []byte
-	Metadata      []byte
+	Action           string
+	ActorID          string
+	ActorDisplayName string
+	SubjectID        string
+	SubjectType      string
+	AfterSnapshot    []byte
+	Metadata         []byte
 }
 
 func listAuditRows(t *testing.T, conn *pgxpool.Pool, orgID string) []auditRow {
 	t.Helper()
 	rows, err := conn.Query(t.Context(), `
-		SELECT action, actor_id, subject_id, subject_type, coalesce(after_snapshot, 'null'::jsonb), coalesce(metadata, 'null'::jsonb)
+		SELECT action, actor_id, coalesce(actor_display_name, ''), subject_id, subject_type, coalesce(after_snapshot, 'null'::jsonb), coalesce(metadata, 'null'::jsonb)
 		FROM audit_logs
 		WHERE organization_id = $1
 		ORDER BY seq
@@ -40,7 +41,7 @@ func listAuditRows(t *testing.T, conn *pgxpool.Pool, orgID string) []auditRow {
 	var result []auditRow
 	for rows.Next() {
 		var row auditRow
-		require.NoError(t, rows.Scan(&row.Action, &row.ActorID, &row.SubjectID, &row.SubjectType, &row.AfterSnapshot, &row.Metadata))
+		require.NoError(t, rows.Scan(&row.Action, &row.ActorID, &row.ActorDisplayName, &row.SubjectID, &row.SubjectType, &row.AfterSnapshot, &row.Metadata))
 		result = append(result, row)
 	}
 	require.NoError(t, rows.Err())
@@ -108,6 +109,7 @@ func TestLifecycleAuditAtomicityAndReplay(t *testing.T) {
 		require.Equal(t, string(activated.PrescriptionID), row.SubjectID)
 		require.Equal(t, "killswitch_prescription", row.SubjectType)
 		require.Equal(t, "user:test", row.ActorID)
+		require.Equal(t, "Test User", row.ActorDisplayName)
 	}
 	require.Equal(t, []string{"killswitch:activate", "killswitch:change", "killswitch:deactivate", "killswitch:activate"}, actions, "reactivation is recorded as an activation")
 
@@ -126,6 +128,7 @@ func TestLifecycleAuditAtomicityAndReplay(t *testing.T) {
 	require.Len(t, messages, 4, "each successful transition enqueues exactly one outbox row")
 	for _, message := range messages {
 		require.True(t, bytes.Contains(message, []byte("audit_log.killswitch_event_v1")), "outbox rows carry the cataloged killswitch event type")
+		require.Contains(t, string(message), `"actor_display_name":"Test User"`)
 	}
 	requireNoSentinelLeak(t, conn, orgID)
 

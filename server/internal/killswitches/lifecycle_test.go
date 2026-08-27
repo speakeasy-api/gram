@@ -736,7 +736,7 @@ func newLifecycleServiceForTest(t *testing.T, conn *pgxpool.Pool, principalValid
 }
 
 func testMutationContext(orgID string, operationID uuid.UUID) MutationContext {
-	return MutationContext{OrganizationID: OrganizationID(orgID), ActorUserID: "user:test", OperationID: operationID}
+	return MutationContext{OrganizationID: OrganizationID(orgID), ActorUserID: "user:test", ActorDisplayName: "Test User", OperationID: operationID}
 }
 
 func testActivateRequest(orgID string, operationID uuid.UUID) ActivatePrescriptionRequest {

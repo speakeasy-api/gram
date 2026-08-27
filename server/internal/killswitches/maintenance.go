@@ -15,7 +15,10 @@ import (
 
 // maintenanceActorUserID is the synthetic actor recorded on background-emitted
 // audit entries, matching the fleet's existing system-job convention.
-const maintenanceActorUserID = "system"
+const (
+	maintenanceActorUserID      = "system"
+	maintenanceActorDisplayName = "System"
+)
 
 // MaintenanceService owns the privileged cross-organization killswitch
 // maintenance transactions: version-specific expiry history and operation
@@ -80,6 +83,14 @@ func (s *MaintenanceService) recordExpiry(ctx context.Context, candidate repo.Li
 	defer func() { _ = tx.Rollback(ctx) }()
 	queries := repo.New(tx)
 
+	_, err = queries.LockKillswitchPrescriptionCurrent(ctx, repo.LockKillswitchPrescriptionCurrentParams{OrganizationID: candidate.OrganizationID, PrescriptionID: candidate.PrescriptionID})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return 0, nil
+	}
+	if err != nil {
+		return 0, fmt.Errorf("lock killswitch prescription for expiry: %w", err)
+	}
+
 	locked, err := queries.LockKillswitchVersionForExpiry(ctx, repo.LockKillswitchVersionForExpiryParams(candidate))
 	if errors.Is(err, pgx.ErrNoRows) {
 		return 0, nil
@@ -99,12 +110,14 @@ func (s *MaintenanceService) recordExpiry(ctx context.Context, candidate repo.Li
 		return 0, nil
 	}
 
+	actorDisplayName := maintenanceActorDisplayName
 	if err := s.auditLogger.LogKillswitchExpire(ctx, tx, audit.LogKillswitchExpireEvent{
-		OrganizationID:  candidate.OrganizationID,
-		Actor:           urn.NewPrincipal(urn.PrincipalTypeUser, maintenanceActorUserID),
-		PrescriptionURN: urn.NewKillswitchPrescription(candidate.PrescriptionID),
-		Version:         candidate.Version,
-		ExpiredAt:       locked.ExpiresAt.Time.UTC(),
+		OrganizationID:   candidate.OrganizationID,
+		Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, maintenanceActorUserID),
+		ActorDisplayName: &actorDisplayName,
+		PrescriptionURN:  urn.NewKillswitchPrescription(candidate.PrescriptionID),
+		Version:          candidate.Version,
+		ExpiredAt:        locked.ExpiresAt.Time.UTC(),
 	}); err != nil {
 		return 0, fmt.Errorf("audit killswitch expiry: %w", err)
 	}

@@ -25,6 +25,7 @@ func NewAuditBeforeCommitHook(auditLogger *audit.Logger) BeforeCommitHook {
 		if err := auditLogger.LogKillswitchLifecycle(ctx, queries, audit.LogKillswitchLifecycleEvent{
 			OrganizationID:   string(event.OrganizationID),
 			Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, event.ActorUserID),
+			ActorDisplayName: &event.ActorDisplayName,
 			Action:           action,
 			PrescriptionURN:  urn.NewKillswitchPrescription(prescriptionID),
 			Version:          event.Result.Version,

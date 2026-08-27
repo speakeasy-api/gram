@@ -37,7 +37,8 @@ type killswitchLifecycleMetadata struct {
 type LogKillswitchLifecycleEvent struct {
 	OrganizationID string
 
-	Actor urn.Principal
+	Actor            urn.Principal
+	ActorDisplayName *string
 
 	// Action must be one of the killswitch lifecycle actions; reactivation is
 	// recorded as an activation.
@@ -76,7 +77,7 @@ func (l *Logger) LogKillswitchLifecycle(ctx context.Context, dbtx repo.DBTX, eve
 
 		ActorID:          event.Actor.ID,
 		ActorType:        string(event.Actor.Type),
-		ActorDisplayName: conv.ToPGTextEmpty(""),
+		ActorDisplayName: conv.PtrToPGTextEmpty(event.ActorDisplayName),
 		ActorSlug:        conv.ToPGTextEmpty(""),
 
 		Action: string(action),
@@ -106,7 +107,8 @@ type killswitchExpireMetadata struct {
 type LogKillswitchExpireEvent struct {
 	OrganizationID string
 
-	Actor urn.Principal
+	Actor            urn.Principal
+	ActorDisplayName *string
 
 	PrescriptionURN urn.KillswitchPrescription
 	Version         int64
@@ -127,7 +129,7 @@ func (l *Logger) LogKillswitchExpire(ctx context.Context, dbtx repo.DBTX, event 
 
 		ActorID:          event.Actor.ID,
 		ActorType:        string(event.Actor.Type),
-		ActorDisplayName: conv.ToPGTextEmpty(""),
+		ActorDisplayName: conv.PtrToPGTextEmpty(event.ActorDisplayName),
 		ActorSlug:        conv.ToPGTextEmpty(""),
 
 		Action: string(action),

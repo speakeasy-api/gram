@@ -50,6 +50,7 @@ func TestKillswitchPrescriptionRejectsInvalidValues(t *testing.T) {
 		"killswitch_prescription:",
 		"wrong:6b1e4d2a-8f4c-4b3e-9a51-0c9d2e7f1a23",
 		"killswitch_prescription:not-a-uuid",
+		"killswitch_prescription:00000000-0000-0000-0000-000000000000",
 		"killswitch_prescription:6b1e4d2a-8f4c-4b3e-9a51-0c9d2e7f1a23:extra",
 	} {
 		_, err := urn.ParseKillswitchPrescription(value)
