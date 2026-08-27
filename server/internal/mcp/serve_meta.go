@@ -224,6 +224,7 @@ func validateMetaDeclaredProtocolVersion(req *rawRequest, headerValue string) er
 			ID:      req.ID,
 			Code:    oops.MCPCodeInvalidRequest,
 			Message: fmt.Sprintf("conflicting protocol version declarations: MCP-Protocol-Version header %q does not match the request _meta declaration %q", headerVersion, metaVersion),
+			Data:    nil,
 		}
 	}
 
@@ -245,6 +246,7 @@ func unsupportedMetaProtocolVersionError(req *rawRequest, declared string) *oops
 		ID:      req.ID,
 		Code:    oops.MCPCodeInvalidRequest,
 		Message: fmt.Sprintf("unsupported protocol version %q; supported versions: %s", declared, mcpversions.ServedMetaServer),
+		Data:    nil,
 	}
 }
 

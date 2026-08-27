@@ -36,6 +36,7 @@ func MCPErrHandle(logger *slog.Logger, handler func(http.ResponseWriter, *http.R
 			ID:      mcpID,
 			Code:    MCPCodeInternalError,
 			Message: MCPCodeInternalError.Message(),
+			Data:    nil,
 		}
 
 		var shareableErr *ShareableError
@@ -126,12 +127,14 @@ func NewMCPErrorFromCause(id mcpjsonrpc.ID, source error) *MCPError {
 			ID:      id,
 			Code:    shareableErr.Code.MCPCode(),
 			Message: shareableErr.Error(),
+			Data:    nil,
 		}
 	default:
 		return &MCPError{
 			ID:      id,
 			Code:    MCPCodeInternalError,
 			Message: MCPCodeInternalError.Message(),
+			Data:    nil,
 		}
 	}
 }
