@@ -4,7 +4,6 @@ import { RequireScope } from "@/components/require-scope";
 import { Alert } from "@/components/ui/Alert";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
-import { Combobox, type DropdownItem } from "@/components/ui/Combobox";
 import { Dialog } from "@/components/ui/Dialog";
 import { Icon } from "@/components/ui/Icon";
 import { MoreActions } from "@/components/ui/MoreActions";
@@ -38,9 +37,9 @@ import {
   DestinationEditorSheet,
   type DestinationFormValues,
 } from "./DestinationEditorSheet";
+import { RouteEditorSheet } from "./RouteEditorSheet";
 
 const OTEL_FORWARDING_SOURCE = "otel_forwarding" as const;
-const NEW_DESTINATION_VALUE = "__new_destination__";
 const EMPTY_DESTINATIONS: OtelDestination[] = [];
 const EMPTY_ROUTES: DataExportRoute[] = [];
 
@@ -87,6 +86,7 @@ function DataExportsInner(): JSX.Element {
     routeAfterCreate: boolean;
   }>();
   const [deleteCandidate, setDeleteCandidate] = useState<OtelDestination>();
+  const [routeEditorOpen, setRouteEditorOpen] = useState(false);
 
   const destinations =
     destinationsQuery.data?.destinations ?? EMPTY_DESTINATIONS;
@@ -109,6 +109,10 @@ function DataExportsInner(): JSX.Element {
         return destination ? [{ route, destination }] : [];
       }),
     [destinationByID, routes],
+  );
+  const routedDestinationIDs = useMemo(
+    () => new Set(routedRows.map(({ destination }) => destination.id)),
+    [routedRows],
   );
 
   const invalidateLists = useCallback(
@@ -197,21 +201,25 @@ function DataExportsInner(): JSX.Element {
     }
   };
 
-  const handleCreateRoute = async (destination: OtelDestination) => {
+  const handleCreateRoute = async (
+    destination: OtelDestination,
+    enabled: boolean,
+  ) => {
     try {
       await createRoute.mutateAsync({
         request: {
           createDataExportRouteForm: {
             dataSource: OTEL_FORWARDING_SOURCE,
-            enabled: true,
+            enabled,
             otelDestinationId: destination.id,
           },
         },
       });
       await invalidateLists();
-      toast.success(`${destination.name} added to Product telemetry`);
+      toast.success(`Route to ${destination.name} created`);
+      setRouteEditorOpen(false);
     } catch (error) {
-      toast.error(`Failed to add destination: ${errorMessage(error)}`);
+      toast.error(`Failed to create route: ${errorMessage(error)}`);
     }
   };
 
@@ -340,16 +348,11 @@ function DataExportsInner(): JSX.Element {
         />
       ) : (
         <>
-          <SourcesSection
-            destinations={destinations}
+          <RouteDiagram rows={routedRows} />
+          <RoutesSection
             rows={routedRows}
             mutating={mutating}
-            onAddDestination={(destination) =>
-              void handleCreateRoute(destination)
-            }
-            onNewDestination={() =>
-              setEditor({ destination: undefined, routeAfterCreate: true })
-            }
+            onNewRoute={() => setRouteEditorOpen(true)}
             onEditDestination={(destination) =>
               setEditor({ destination, routeAfterCreate: false })
             }
@@ -395,6 +398,20 @@ function DataExportsInner(): JSX.Element {
         />
       ) : null}
 
+      {routeEditorOpen ? (
+        <RouteEditorSheet
+          destinations={destinations}
+          routedDestinationIDs={routedDestinationIDs}
+          saving={createRoute.isPending}
+          onClose={() => setRouteEditorOpen(false)}
+          onCreate={handleCreateRoute}
+          onCreateDestination={() => {
+            setRouteEditorOpen(false);
+            setEditor({ destination: undefined, routeAfterCreate: true });
+          }}
+        />
+      ) : null}
+
       <DeleteDestinationDialog
         destination={deleteCandidate}
         deleting={deleteDestination.isPending}
@@ -412,58 +429,170 @@ type SourceRouteRow = {
   destination: OtelDestination;
 };
 
-type DestinationPickerItem = DropdownItem & {
-  destination?: OtelDestination;
-  createNew?: boolean;
-};
+function RouteDiagram({ rows }: { rows: SourceRouteRow[] }): JSX.Element {
+  return (
+    <div className="overflow-x-auto border bg-card px-6 py-6">
+      <div className="min-w-[900px]">
+        <div className="grid grid-cols-[280px_minmax(140px,220px)_minmax(420px,1fr)] items-end gap-x-0 pb-2">
+          <span className="text-eyebrow text-muted-foreground">Source</span>
+          <span aria-hidden="true" />
+          <span className="text-eyebrow text-muted-foreground">
+            Destinations
+          </span>
+        </div>
 
-function SourcesSection({
-  destinations,
+        <div className="grid grid-cols-[280px_minmax(140px,220px)_minmax(420px,1fr)] gap-x-0">
+          <div className="flex flex-col justify-center">
+            <div className="border border-foreground px-5 py-4">
+              <Text className="font-medium">Product telemetry</Text>
+              <span className="mt-1 block font-mono text-xs text-placeholder">
+                OTLP traces &amp; logs
+              </span>
+            </div>
+            <Text muted className="mt-3 text-xs">
+              More sources will appear as they ship.
+            </Text>
+          </div>
+
+          <div className="relative min-h-full" aria-hidden="true">
+            {rows.length > 0 ? (
+              <svg
+                viewBox="0 0 200 100"
+                preserveAspectRatio="none"
+                className="absolute inset-0 h-full w-full overflow-visible"
+              >
+                <defs>
+                  <marker
+                    id="route-arrow-active"
+                    markerWidth="8"
+                    markerHeight="8"
+                    refX="7"
+                    refY="4"
+                    orient="auto"
+                  >
+                    <path d="M0,0 L8,4 L0,8 Z" className="fill-foreground" />
+                  </marker>
+                  <marker
+                    id="route-arrow-paused"
+                    markerWidth="8"
+                    markerHeight="8"
+                    refX="7"
+                    refY="4"
+                    orient="auto"
+                  >
+                    <path
+                      d="M0,0 L8,4 L0,8 Z"
+                      className="fill-muted-foreground"
+                    />
+                  </marker>
+                </defs>
+                {rows.map(({ route }, index) => {
+                  const destinationY =
+                    ((index + 0.5) / Math.max(rows.length, 1)) * 100;
+                  return (
+                    <path
+                      key={route.id}
+                      d={`M 0 50 C 75 50, 110 ${destinationY}, 196 ${destinationY}`}
+                      fill="none"
+                      className={
+                        route.enabled
+                          ? "stroke-foreground"
+                          : "stroke-muted-foreground"
+                      }
+                      strokeWidth="1"
+                      strokeDasharray={route.enabled ? undefined : "4 4"}
+                      vectorEffect="non-scaling-stroke"
+                      markerEnd={
+                        route.enabled
+                          ? "url(#route-arrow-active)"
+                          : "url(#route-arrow-paused)"
+                      }
+                    />
+                  );
+                })}
+              </svg>
+            ) : null}
+          </div>
+
+          <div className="space-y-3">
+            {rows.length === 0 ? (
+              <Text muted className="flex min-h-16 items-center border px-5">
+                No destinations routed
+              </Text>
+            ) : (
+              rows.map(({ route, destination }) => (
+                <div
+                  key={route.id}
+                  className="flex min-h-16 items-center justify-between gap-4 border px-5 py-3"
+                >
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2">
+                      <Text
+                        className={
+                          route.enabled
+                            ? "truncate font-medium"
+                            : "text-muted-foreground truncate font-medium"
+                        }
+                      >
+                        {destination.name}
+                      </Text>
+                      {destination.sensitiveData === "include" ? (
+                        <Badge variant="warning" background={false} size="sm">
+                          Sensitive
+                        </Badge>
+                      ) : null}
+                    </div>
+                    <span className="mt-1 block truncate font-mono text-xs text-placeholder">
+                      {destination.endpointUrl}
+                    </span>
+                  </div>
+                  {route.enabled ? (
+                    <span className="flex shrink-0 items-center gap-1.5 text-sm text-default-success">
+                      <Icon name="check" className="size-3.5" />
+                      Live
+                    </span>
+                  ) : (
+                    <span className="shrink-0 text-sm text-placeholder">
+                      Paused
+                    </span>
+                  )}
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function RoutesSection({
   rows,
   mutating,
-  onAddDestination,
-  onNewDestination,
+  onNewRoute,
   onEditDestination,
   onToggleRoute,
   onDeleteRoute,
 }: {
-  destinations: OtelDestination[];
   rows: SourceRouteRow[];
   mutating: boolean;
-  onAddDestination: (destination: OtelDestination) => void;
-  onNewDestination: () => void;
+  onNewRoute: () => void;
   onEditDestination: (destination: OtelDestination) => void;
   onToggleRoute: (route: DataExportRoute, enabled: boolean) => void;
   onDeleteRoute: (route: DataExportRoute) => void;
 }): JSX.Element {
-  const routedIDs = useMemo(
-    () => new Set(rows.map((row) => row.destination.id)),
-    [rows],
-  );
-  const pickerItems = useMemo<DestinationPickerItem[]>(
-    () => [
-      ...destinations
-        .filter((destination) => !routedIDs.has(destination.id))
-        .map((destination) => ({
-          value: destination.id,
-          label: destination.name,
-          keywords: [destination.endpointUrl],
-          destination,
-        })),
-      {
-        value: NEW_DESTINATION_VALUE,
-        label: "New destination",
-        createNew: true,
-      },
-    ],
-    [destinations, routedIDs],
-  );
   const columns = useMemo<Column<SourceRouteRow>[]>(
     () => [
       {
+        key: "source",
+        header: "Source",
+        width: "1.2fr",
+        render: () => <Text className="font-medium">Product telemetry</Text>,
+      },
+      {
         key: "destination",
         header: "Destination",
-        width: "1.5fr",
+        width: "1.2fr",
         render: ({ destination }) => (
           <Text className="truncate font-medium">{destination.name}</Text>
         ),
@@ -489,19 +618,16 @@ function SourcesSection({
       {
         key: "status",
         header: "Status",
-        width: "1fr",
-        render: ({ route }) => (
-          <span className="flex items-center gap-1.5 text-sm">
-            {route.enabled ? (
-              <>
-                <Icon name="check" className="size-3.5 text-default-success" />
-                Enabled
-              </>
-            ) : (
-              <span className="text-placeholder">Paused</span>
-            )}
-          </span>
-        ),
+        width: "0.8fr",
+        render: ({ route }) =>
+          route.enabled ? (
+            <span className="flex items-center gap-1.5 text-sm">
+              <Icon name="check" className="size-3.5 text-default-success" />
+              Enabled
+            </span>
+          ) : (
+            <span className="text-sm text-placeholder">Paused</span>
+          ),
       },
       {
         key: "enabled",
@@ -532,7 +658,7 @@ function SourcesSection({
                   onClick: () => onEditDestination(destination),
                 },
                 {
-                  label: "Remove from source",
+                  label: "Delete route",
                   icon: "trash-2",
                   destructive: true,
                   onClick: () => onDeleteRoute(route),
@@ -548,57 +674,26 @@ function SourcesSection({
 
   return (
     <SettingsSection>
-      <SettingsSection.Header>
-        <SettingsSection.Title>Sources</SettingsSection.Title>
-        <SettingsSection.Description>
-          Each source can fan out to any number of destinations.
-        </SettingsSection.Description>
-      </SettingsSection.Header>
-      <SettingsSection.Panel>
-        <div className="flex items-center justify-between gap-4 border-b px-6 py-[18px]">
-          <div>
-            <Text className="font-medium">Product telemetry</Text>
-            <Text muted className="mt-1 text-[13px]">
-              OTLP traces and logs from every MCP server and tool call in this
-              project.
-            </Text>
-          </div>
-          <RequireScope scope="project:write" level="component">
-            <Combobox
-              items={pickerItems}
-              selected={undefined}
-              onSelectionChange={(item) => {
-                if (item.createNew) onNewDestination();
-                else if (item.destination) onAddDestination(item.destination);
-              }}
-              disabledMessage={
-                mutating ? "A route update is in progress." : undefined
-              }
-              contentClassName="w-[280px]"
-              searchable
-              searchPlaceholder="Find a destination"
-            >
-              <span className="flex items-center gap-1.5">
-                <Plus className="size-3.5" />
-                Add destination
-              </span>
-            </Combobox>
-          </RequireScope>
-        </div>
-        <Table
-          columns={columns}
-          data={rows}
-          rowKey={(row) => row.route.id}
-          noResultsMessage="No destinations routed from Product telemetry."
-        />
-        <div className="flex items-center gap-2 border-t bg-surface-secondary-default px-6 py-3 text-placeholder">
-          <Icon name="info" className="size-3.5" />
-          <Text className="text-xs">
-            Risk findings, agent sessions and tool calls will appear here as
-            sources when they ship.
-          </Text>
-        </div>
-      </SettingsSection.Panel>
+      <div className="flex items-end justify-between gap-4">
+        <SettingsSection.Header>
+          <SettingsSection.Title>Routes</SettingsSection.Title>
+          <SettingsSection.Description>
+            One source, one destination, per row. Add as many as you need.
+          </SettingsSection.Description>
+        </SettingsSection.Header>
+        <RequireScope scope="project:write" level="component">
+          <Button variant="primary" size="sm" onClick={onNewRoute}>
+            <Plus className="mr-1 size-3.5" />
+            New route
+          </Button>
+        </RequireScope>
+      </div>
+      <Table
+        columns={columns}
+        data={rows}
+        rowKey={(row) => row.route.id}
+        noResultsMessage="No routes configured."
+      />
     </SettingsSection>
   );
 }
