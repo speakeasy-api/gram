@@ -61,7 +61,7 @@ func newEvaluator(queries evaluationQueries, registry *Registry, timeout time.Du
 // Evaluate returns a matched denial, an ordinary no-match, or a classified infrastructure failure.
 func (e *Evaluator) Evaluate(ctx context.Context, request EvaluationRequest) EvaluationResult {
 	outcome := killswitchEvaluationOutcomeEvaluatorFailure
-	if e.metrics != nil {
+	if e.metrics.enabled(ctx) {
 		started := time.Now()
 		defer func() { e.metrics.record(ctx, outcome, time.Since(started)) }()
 	}
@@ -79,23 +79,22 @@ func (e *Evaluator) Evaluate(ctx context.Context, request EvaluationRequest) Eva
 		return result
 	}
 
-	queryContext, cancel := context.WithTimeout(ctx, e.timeout)
+	queryContext, cancel := context.WithTimeoutCause(ctx, e.timeout, ErrEvaluatorTimeout)
 	defer cancel()
 	row, err := e.queries.EvaluateCurrentPrescriptions(queryContext, prepared.params)
+	if cause := context.Cause(queryContext); cause != nil {
+		if errors.Is(cause, ErrEvaluatorTimeout) {
+			return infrastructureFailureResult(errors.Join(cause, queryContext.Err()), prepared.effectivePolicy, InfrastructureFailureTimeout)
+		}
+		return infrastructureFailureResult(cause, prepared.effectivePolicy, InfrastructureFailureParentCancellation)
+	}
 	if errors.Is(err, pgx.ErrNoRows) {
 		outcome = killswitchEvaluationOutcomeUnmatched
 		result, _ := NewNoMatchResult(NoMatchReasonNoPrescription)
 		return result
 	}
 	if err != nil {
-		switch {
-		case ctx.Err() != nil:
-			return infrastructureFailureResult(ctx.Err(), prepared.effectivePolicy, InfrastructureFailureParentCancellation)
-		case queryContext.Err() != nil:
-			return infrastructureFailureResult(errors.Join(ErrEvaluatorTimeout, queryContext.Err()), prepared.effectivePolicy, InfrastructureFailureTimeout)
-		default:
-			return infrastructureFailureResult(fmt.Errorf("evaluate current kill-switch prescriptions: %w", err), prepared.effectivePolicy, InfrastructureFailureDatabase)
-		}
+		return infrastructureFailureResult(fmt.Errorf("evaluate current kill-switch prescriptions: %w", err), prepared.effectivePolicy, InfrastructureFailureDatabase)
 	}
 
 	policy, ok := prepared.policies[DefinitionKey(row.DefinitionKey)]

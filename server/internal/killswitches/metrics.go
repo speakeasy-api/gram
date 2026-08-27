@@ -50,6 +50,10 @@ func newEvaluationMetrics(meterProvider metric.MeterProvider, logger *slog.Logge
 	}
 }
 
+func (m *evaluationMetrics) enabled(ctx context.Context) bool {
+	return m != nil && m.duration != nil && m.duration.Enabled(ctx)
+}
+
 func (m *evaluationMetrics) record(ctx context.Context, outcome string, duration time.Duration) {
 	var option metric.RecordOption
 	switch outcome {

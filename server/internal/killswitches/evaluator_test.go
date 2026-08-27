@@ -10,6 +10,8 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/stretchr/testify/require"
+	"go.opentelemetry.io/otel/metric"
+	metricnoop "go.opentelemetry.io/otel/metric/noop"
 	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
 	"go.opentelemetry.io/otel/sdk/metric/metricdata"
 
@@ -23,10 +25,27 @@ func (f evaluationQueryFunc) EvaluateCurrentPrescriptions(ctx context.Context, p
 	return f(ctx, params)
 }
 
+type disabledTrackingHistogram struct {
+	metricnoop.Float64Histogram
+	enabledCalls atomic.Int32
+	recordCalls  atomic.Int32
+}
+
+func (h *disabledTrackingHistogram) Enabled(context.Context) bool {
+	h.enabledCalls.Add(1)
+	return false
+}
+
+func (h *disabledTrackingHistogram) Record(context.Context, float64, ...metric.RecordOption) {
+	h.recordCalls.Add(1)
+}
+
 func TestEvaluatorRequiresBoundedTimeoutAndCandidates(t *testing.T) {
 	t.Parallel()
 	registry := evaluationRegistry(t)
+	var calls atomic.Int32
 	query := evaluationQueryFunc(func(context.Context, repo.EvaluateCurrentPrescriptionsParams) (repo.EvaluateCurrentPrescriptionsRow, error) {
+		calls.Add(1)
 		return repo.EvaluateCurrentPrescriptionsRow{}, pgx.ErrNoRows
 	})
 
@@ -45,6 +64,15 @@ func TestEvaluatorRequiresBoundedTimeoutAndCandidates(t *testing.T) {
 	policy, ok := result.FailurePolicy()
 	require.True(t, ok)
 	require.Equal(t, FailurePolicyFailClosed, policy)
+
+	request = evaluationRequest("block-tools")
+	request.PrincipalCandidates = make([]PrincipalCandidate, MaxEvaluationPrincipalCandidates+1)
+	result = evaluator.Evaluate(t.Context(), request)
+	require.Equal(t, EvaluationResultInfrastructureFailure, result.Kind())
+	kind, ok = result.InfrastructureFailureKind()
+	require.True(t, ok)
+	require.Equal(t, InfrastructureFailureInvalidRequest, kind)
+	require.Zero(t, calls.Load())
 }
 
 func TestEvaluatorUsesOneQueryAndRetainsWinningPolicy(t *testing.T) {
@@ -176,6 +204,27 @@ func TestEvaluatorDistinguishesInFlightParentDeadlineFromEvaluatorTimeout(t *tes
 	require.NotErrorIs(t, result.InfrastructureError(), ErrEvaluatorTimeout)
 }
 
+func TestEvaluatorTimeoutCauseWinsWhenParentExpiresBeforeDelayedQueryReturn(t *testing.T) {
+	t.Parallel()
+
+	registry := evaluationRegistry(t)
+	parentContext, cancel := context.WithTimeout(t.Context(), 20*time.Millisecond)
+	defer cancel()
+	query := evaluationQueryFunc(func(queryContext context.Context, _ repo.EvaluateCurrentPrescriptionsParams) (repo.EvaluateCurrentPrescriptionsRow, error) {
+		<-queryContext.Done()
+		<-parentContext.Done()
+		return repo.EvaluateCurrentPrescriptionsRow{}, queryContext.Err()
+	})
+	evaluator, err := newEvaluator(query, registry, 5*time.Millisecond, nil)
+	require.NoError(t, err)
+
+	result := evaluator.Evaluate(parentContext, evaluationRequest("block-tools"))
+	kind, ok := result.InfrastructureFailureKind()
+	require.True(t, ok)
+	require.Equal(t, InfrastructureFailureTimeout, kind)
+	require.ErrorIs(t, result.InfrastructureError(), ErrEvaluatorTimeout)
+}
+
 func TestEvaluatorPreservesParentCancellationAndSkipsUnsupportedCandidates(t *testing.T) {
 	t.Parallel()
 	registry := evaluationRegistry(t)
@@ -218,6 +267,28 @@ func TestEvaluatorPreservesParentCancellationAndSkipsUnsupportedCandidates(t *te
 	require.True(t, ok)
 	require.Equal(t, NoMatchReasonUnsupportedResource, reason)
 	require.Zero(t, calls.Load())
+}
+
+func TestEvaluatorSkipsRecordingWhenMetricInstrumentIsDisabled(t *testing.T) {
+	t.Parallel()
+
+	histogram := &disabledTrackingHistogram{}
+	metrics := &evaluationMetrics{
+		duration:               histogram,
+		matchedOption:          nil,
+		unmatchedOption:        nil,
+		evaluatorFailureOption: nil,
+	}
+	query := evaluationQueryFunc(func(context.Context, repo.EvaluateCurrentPrescriptionsParams) (repo.EvaluateCurrentPrescriptionsRow, error) {
+		return repo.EvaluateCurrentPrescriptionsRow{}, pgx.ErrNoRows
+	})
+	evaluator, err := newEvaluator(query, evaluationRegistry(t), time.Second, metrics)
+	require.NoError(t, err)
+
+	result := evaluator.Evaluate(t.Context(), evaluationRequest("block-tools"))
+	require.Equal(t, EvaluationResultNoMatch, result.Kind())
+	require.Equal(t, int32(1), histogram.enabledCalls.Load())
+	require.Zero(t, histogram.recordCalls.Load())
 }
 
 func TestKillswitchEvaluationMetricsHaveClosedAttributes(t *testing.T) {

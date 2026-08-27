@@ -3,6 +3,8 @@ package killswitches
 
 import (
 	"context"
+	"regexp"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -101,6 +103,7 @@ func TestEvaluateCurrentPrescriptionsIntegration(t *testing.T) {
 
 	insert(evaluationFixture{ID: evaluationUUID(10), DefinitionKey: "block-tools", PrincipalKind: "user", PrincipalKey: "user:principal", Version: 1, State: "active", Scope: "selected", StartsAt: older, ExpiresAt: &activeUntil, ActivatedAt: &activated, ExternalNote: "Exact principal.", Resources: []string{"tool:principal"}})
 	insert(evaluationFixture{ID: evaluationUUID(11), DefinitionKey: "block-tools", PrincipalKind: "service", PrincipalKey: "service:principal", Version: 1, State: "active", Scope: "selected", StartsAt: past, ExpiresAt: &activeUntil, ActivatedAt: &newerActivation, ExternalNote: "Broader principal.", Resources: []string{"tool:principal"}})
+	insert(evaluationFixture{ID: evaluationUUID(23), DefinitionKey: "block-tools", PrincipalKind: "user", PrincipalKey: "service:principal", Version: 1, State: "active", Scope: "selected", StartsAt: databaseNow.Add(-time.Minute), ExpiresAt: &activeUntil, ActivatedAt: &newerActivation, ExternalNote: "Crossed principal tuple.", Resources: []string{"tool:principal"}})
 	row, err = evaluate([]string{"user", "service"}, []string{"user:principal", "service:principal"}, []string{"block-tools"}, "tool:principal")
 	require.NoError(t, err)
 	require.Equal(t, "Exact principal.", row.ExternalNote)
@@ -233,14 +236,28 @@ func TestEvaluateCurrentPrescriptionsRepresentativePlan(t *testing.T) {
 		}
 	}
 	require.NotEmpty(t, principalCandidatePlan)
-	require.Contains(t, principalCandidatePlan, "rows=1")
-	require.NotContains(t, principalCandidatePlan, "rows=1000")
+	estimateMatch := regexp.MustCompile(`(?:^|\s)rows=([0-9]+)(?:\s|$)`).FindStringSubmatch(principalCandidatePlan)
+	require.Len(t, estimateMatch, 2)
+	estimatedRows, err := strconv.Atoi(estimateMatch[1])
+	require.NoError(t, err)
+	require.Equal(t, 1, estimatedRows)
 	require.Contains(t, plan, "killswitch_prescriptions_evaluator_idx")
 	require.Contains(t, plan, "killswitch_prescription_version_resources_lookup_idx")
 }
 
 func TestKillswitchEvaluationIntervalUsesExactDatabaseTimeBoundaries(t *testing.T) {
-	conn, _ := newLifecycleDatabase(t, "killswitch_evaluator_interval_boundaries")
+	conn, organizationID := newLifecycleDatabase(t, "killswitch_evaluator_interval_boundaries")
+	capture := &capturingEvaluationDB{DBTX: conn, query: "", args: nil}
+	_, err := repo.New(capture).EvaluateCurrentPrescriptions(t.Context(), repo.EvaluateCurrentPrescriptionsParams{
+		OrganizationID: organizationID, ResourceKind: "tool", ResourceKey: "tool:boundary",
+		DefinitionKeys: []string{"block-tools"}, PrincipalKinds: []string{"user"}, PrincipalKeys: []string{"user:boundary"},
+	})
+	require.ErrorIs(t, err, pgx.ErrNoRows)
+	require.Contains(t, capture.query, "WITH evaluation_clock AS MATERIALIZED")
+	require.Equal(t, 1, strings.Count(capture.query, "clock_timestamp()"))
+	require.Contains(t, capture.query, "version.starts_at <= evaluation_clock.database_now")
+	require.Contains(t, capture.query, "version.expires_at > evaluation_clock.database_now")
+
 	var startsAtBoundaryMatches, expiresAtBoundaryMatches bool
 	require.NoError(t, conn.QueryRow(t.Context(), `
 		WITH evaluation_clock AS MATERIALIZED (
