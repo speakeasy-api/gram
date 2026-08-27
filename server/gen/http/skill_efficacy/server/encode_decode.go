@@ -473,8 +473,8 @@ func DecodeQueryInsightsRequest(mux goahttp.Muxer, decoder func(*http.Request) g
 			to                      *string
 			includeVersions         *bool
 			includeScoredSessions   *bool
-			includeSessionCost      bool
-			includeRegressionSignal bool
+			includeSessionCost      *bool
+			includeRegressionSignal *bool
 			cursor                  *string
 			limit                   int
 			sessionToken            *string
@@ -519,26 +519,22 @@ func DecodeQueryInsightsRequest(mux goahttp.Muxer, decoder func(*http.Request) g
 		}
 		{
 			includeSessionCostRaw := qp.Get("include_session_cost")
-			if includeSessionCostRaw == "" {
-				includeSessionCost = true
-			} else {
+			if includeSessionCostRaw != "" {
 				v, err2 := strconv.ParseBool(includeSessionCostRaw)
 				if err2 != nil {
 					err = goa.MergeErrors(err, goa.InvalidFieldTypeError("include_session_cost", includeSessionCostRaw, "boolean"))
 				}
-				includeSessionCost = v
+				includeSessionCost = &v
 			}
 		}
 		{
 			includeRegressionSignalRaw := qp.Get("include_regression_signal")
-			if includeRegressionSignalRaw == "" {
-				includeRegressionSignal = true
-			} else {
+			if includeRegressionSignalRaw != "" {
 				v, err2 := strconv.ParseBool(includeRegressionSignalRaw)
 				if err2 != nil {
 					err = goa.MergeErrors(err, goa.InvalidFieldTypeError("include_regression_signal", includeRegressionSignalRaw, "boolean"))
 				}
-				includeRegressionSignal = v
+				includeRegressionSignal = &v
 			}
 		}
 		cursorRaw := qp.Get("cursor")

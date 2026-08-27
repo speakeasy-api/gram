@@ -108,8 +108,8 @@ export type QuerySkillEfficacyInsightsRequest$Outbound = {
   to?: string | undefined;
   include_versions?: boolean | undefined;
   include_scored_sessions?: boolean | undefined;
-  include_session_cost: boolean;
-  include_regression_signal: boolean;
+  include_session_cost?: boolean | undefined;
+  include_regression_signal?: boolean | undefined;
   cursor?: string | undefined;
   limit: number;
   "Gram-Session"?: string | undefined;
@@ -127,8 +127,8 @@ export const QuerySkillEfficacyInsightsRequest$outboundSchema: z.ZodMiniType<
     to: z.optional(z.pipe(z.date(), z.transform(v => v.toISOString()))),
     includeVersions: z.optional(z.boolean()),
     includeScoredSessions: z.optional(z.boolean()),
-    includeSessionCost: z._default(z.boolean(), true),
-    includeRegressionSignal: z._default(z.boolean(), true),
+    includeSessionCost: z.optional(z.boolean()),
+    includeRegressionSignal: z.optional(z.boolean()),
     cursor: z.optional(z.string()),
     limit: z._default(z.int(), 20),
     gramSession: z.optional(z.string()),

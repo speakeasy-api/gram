@@ -149,19 +149,23 @@ func BuildQueryInsightsPayload(skillEfficacyQueryInsightsSkillIds string, skillE
 			}
 		}
 	}
-	var includeSessionCost bool
+	var includeSessionCost *bool
 	{
 		if skillEfficacyQueryInsightsIncludeSessionCost != "" {
-			includeSessionCost, err = strconv.ParseBool(skillEfficacyQueryInsightsIncludeSessionCost)
+			var val bool
+			val, err = strconv.ParseBool(skillEfficacyQueryInsightsIncludeSessionCost)
+			includeSessionCost = &val
 			if err != nil {
 				return nil, fmt.Errorf("invalid value for includeSessionCost, must be BOOL")
 			}
 		}
 	}
-	var includeRegressionSignal bool
+	var includeRegressionSignal *bool
 	{
 		if skillEfficacyQueryInsightsIncludeRegressionSignal != "" {
-			includeRegressionSignal, err = strconv.ParseBool(skillEfficacyQueryInsightsIncludeRegressionSignal)
+			var val bool
+			val, err = strconv.ParseBool(skillEfficacyQueryInsightsIncludeRegressionSignal)
+			includeRegressionSignal = &val
 			if err != nil {
 				return nil, fmt.Errorf("invalid value for includeRegressionSignal, must be BOOL")
 			}

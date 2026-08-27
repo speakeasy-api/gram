@@ -158,7 +158,7 @@ func (s *Service) QueryInsights(ctx context.Context, payload *gen.QueryInsightsP
 			From:                from,
 			To:                  to,
 			IntervalSeconds:     int64((24 * time.Hour).Seconds()),
-			IncludeSessionUsage: payload.IncludeSessionCost,
+			IncludeSessionUsage: conv.PtrValOr(payload.IncludeSessionCost, true),
 		})
 		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "query skill efficacy insights").LogError(ctx, logger)
@@ -167,7 +167,7 @@ func (s *Service) QueryInsights(ctx context.Context, payload *gen.QueryInsightsP
 	result := buildInsightsView(responseSkillIDs, rows, payload.IncludeVersions != nil && *payload.IncludeVersions)
 	result.From = from.Format(time.RFC3339)
 	result.To = to.Format(time.RFC3339)
-	if payload.IncludeRegressionSignal {
+	if conv.PtrValOr(payload.IncludeRegressionSignal, true) {
 		if err := s.attachRegressionSignals(ctx, logger, authCtx, result); err != nil {
 			return nil, err
 		}

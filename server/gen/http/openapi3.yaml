@@ -46097,7 +46097,6 @@ paths:
                   in: query
                   name: include_session_cost
                   schema:
-                    default: true
                     description: Calculate attributed session cost. Disable for surfaces that do not display it.
                     type: boolean
                 - allowEmptyValue: true
@@ -46105,7 +46104,6 @@ paths:
                   in: query
                   name: include_regression_signal
                   schema:
-                    default: true
                     description: Calculate the current-versus-predecessor efficacy regression signal.
                     type: boolean
                 - allowEmptyValue: true
