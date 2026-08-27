@@ -5,6 +5,7 @@ import { useParams } from "@tanstack/react-router";
 import { useConfirmDialog } from "@/components/ConfirmDialog";
 import { CopyValue } from "@/components/CopyValue";
 import { TrialFacts } from "@/pages/organization/TrialFacts";
+import { OrganizationActions } from "@/pages/organizations/OrganizationActions";
 import {
   Select,
   SelectContent,
@@ -36,7 +37,7 @@ function Row({
   children: React.ReactNode;
 }) {
   return (
-    <div className="grid grid-cols-[12rem_1fr] items-baseline gap-3 py-1">
+    <div className="grid grid-cols-1 gap-1 py-1 sm:grid-cols-[7.5rem_minmax(0,1fr)] sm:items-center sm:gap-3">
       <span data-slot="field-label" className="text-muted-foreground text-sm">
         {label}
       </span>
@@ -45,21 +46,20 @@ function Row({
   );
 }
 
-function Group({
+function Panel({
   title,
   children,
+  className,
 }: {
   title: string;
   children: React.ReactNode;
+  className?: string;
 }) {
   return (
-    <section className="mt-5 first:mt-0">
-      {/* h5 under the record name's h4 in RecordHeader. A group is part of the
-          record, not a sibling of it. */}
-      <h5 className="text-muted-foreground mb-1 text-xs font-medium">
-        {title}
-      </h5>
-      {children}
+    <section className={cn("bg-card rounded-lg border", className)}>
+      {/* h5 follows the record name's h4 in RecordHeader. */}
+      <h5 className="border-b px-5 py-2.5 text-sm font-semibold">{title}</h5>
+      <div className="p-5">{children}</div>
     </section>
   );
 }
@@ -151,109 +151,148 @@ export function Overview({ org }: { org: AdminOrganization }): JSX.Element {
     });
   };
 
+  const showTrialPanel =
+    org.trial_state === "running" ||
+    org.trial_state === "ending_soon" ||
+    org.trial_state === "expired" ||
+    org.trial_state === "demoted";
+
   return (
-    <div className="border-border bg-muted/10 rounded-md border p-4">
-      <Group title="Identity">
-        <Row label="Name">
-          <span className="text-sm">{org.name}</span>
-        </Row>
-        <Row label="Slug">
-          <CopyValue label="Slug" value={org.slug} className="text-sm" />
-        </Row>
-        <Row label="Organization id">
-          <CopyValue
-            label="Organization id"
-            value={org.id}
-            className="text-sm"
-          />
-        </Row>
-        <Row label="WorkOS id">
-          {/* No control over an absent value: a button that copies "-" is
-              worse than no button. */}
-          {org.workos_id ? (
+    <div className="flex flex-wrap items-start gap-4">
+      <div className="min-w-[min(100%,32rem)] flex-[2_1_32rem] space-y-4">
+        <Panel title="Details">
+          <Row label="Name">
+            <span className="text-sm">{org.name}</span>
+          </Row>
+          <Row label="Slug">
+            <CopyValue label="Slug" value={org.slug} className="text-sm" />
+          </Row>
+          <Row label="Organization id">
             <CopyValue
-              label="WorkOS id"
-              value={org.workos_id}
+              label="Organization id"
+              value={org.id}
               className="text-sm"
             />
-          ) : (
-            <span className="text-muted-foreground text-sm">-</span>
-          )}
-        </Row>
-        <Row label="Created">
-          <span className="text-sm">{fmtDateShort(org.created_at)}</span>
-        </Row>
-        <Row label="Updated">
-          <span className="text-sm">{fmtDateShort(org.updated_at)}</span>
-        </Row>
-      </Group>
-
-      <Group title="Plan">
-        <Row label="Account type">
-          <Select
-            value={org.account_type}
-            disabled={mut.isPending}
-            onValueChange={(v) => {
-              void commit(
-                { account_type: v },
-                `Account type: ${org.account_type} → ${v}`,
-                accountTypeControl,
-              );
-            }}
-          >
-            <SelectTrigger
-              ref={accountTypeControl}
-              className="h-auto w-auto px-2 py-1.5"
-            >
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {ACCOUNT_TYPE_OPTIONS.map((t) => (
-                <SelectItem key={t} value={t}>
-                  {t}
-                </SelectItem>
-              ))}
-              {!isAccountType(org.account_type) && (
-                <SelectItem value={org.account_type}>
-                  {org.account_type}
-                </SelectItem>
-              )}
-            </SelectContent>
-          </Select>
-        </Row>
-        <Row label="Trial">
-          <TrialFacts org={org} />
-        </Row>
-      </Group>
-
-      {/* Access, not a setting. `whitelisted` gates the platform, so it keeps
-          its own group away from anything that reads as a preference. */}
-      <Group title="Access">
-        <Row label="Whitelisted">
-          <Switch
-            ref={whitelistedControl}
-            checked={org.whitelisted}
-            disabled={mut.isPending}
-            onCheckedChange={(v) => {
-              void commit(
-                { whitelisted: v },
-                `Whitelisted: ${yesNo(org.whitelisted)} → ${yesNo(v)}`,
-                whitelistedControl,
-              );
-            }}
-          />
-        </Row>
-        <Row label="Disabled at">
-          <span
-            className={cn(
-              "text-sm",
-              !org.disabled_at && "text-muted-foreground",
+          </Row>
+          <Row label="WorkOS id">
+            {/* No control over an absent value: a button that copies "-" is
+              worse than no button. */}
+            {org.workos_id ? (
+              <CopyValue
+                label="WorkOS id"
+                value={org.workos_id}
+                className="text-sm"
+              />
+            ) : (
+              <span className="text-muted-foreground text-sm">-</span>
             )}
-          >
-            {fmtDateShort(org.disabled_at)}
-          </span>
-        </Row>
-      </Group>
+          </Row>
+          <Row label="Created">
+            <span className="text-sm">{fmtDateShort(org.created_at)}</span>
+          </Row>
+          <Row label="Updated">
+            <span className="text-sm">{fmtDateShort(org.updated_at)}</span>
+          </Row>
+          <Row label="Account type">
+            <Select
+              value={org.account_type}
+              disabled={mut.isPending}
+              onValueChange={(v) => {
+                void commit(
+                  { account_type: v },
+                  `Account type: ${org.account_type} → ${v}`,
+                  accountTypeControl,
+                );
+              }}
+            >
+              <SelectTrigger
+                ref={accountTypeControl}
+                className="h-auto w-auto px-2 py-1.5"
+              >
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {ACCOUNT_TYPE_OPTIONS.map((t) => (
+                  <SelectItem key={t} value={t}>
+                    {t}
+                  </SelectItem>
+                ))}
+                {!isAccountType(org.account_type) && (
+                  <SelectItem value={org.account_type}>
+                    {org.account_type}
+                  </SelectItem>
+                )}
+              </SelectContent>
+            </Select>
+          </Row>
+          <Row label="Whitelisted">
+            <Switch
+              ref={whitelistedControl}
+              checked={org.whitelisted}
+              disabled={mut.isPending}
+              onCheckedChange={(v) => {
+                void commit(
+                  { whitelisted: v },
+                  `Whitelisted: ${yesNo(org.whitelisted)} → ${yesNo(v)}`,
+                  whitelistedControl,
+                );
+              }}
+            />
+          </Row>
+          <Row label="Disabled at">
+            <span
+              className={cn(
+                "text-sm",
+                !org.disabled_at && "text-muted-foreground",
+              )}
+            >
+              {fmtDateShort(org.disabled_at)}
+            </span>
+          </Row>
+        </Panel>
+
+        <Panel
+          title="Danger zone"
+          className="border-destructive [&>h5]:text-destructive"
+        >
+          <div className="flex flex-wrap items-center justify-between gap-4">
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-medium">
+                {org.disabled_at
+                  ? "Re-enable organization"
+                  : "Disable organization"}
+              </p>
+              <p className="text-muted-foreground mt-0.5 text-sm">
+                {org.disabled_at
+                  ? `Disabled ${fmtDateShort(org.disabled_at)}. Re-enabling restores access for every member and takes effect at once.`
+                  : "Every member loses access to Gram until the organization is re-enabled. Sessions end immediately; nothing is deleted."}
+              </p>
+            </div>
+            <OrganizationActions
+              org={org}
+              layout="buttons"
+              actions="lifecycle"
+              buttonClassName={
+                org.disabled_at
+                  ? undefined
+                  : "border-destructive bg-destructive text-white hover:bg-destructive/90 hover:text-white"
+              }
+            />
+          </div>
+        </Panel>
+      </div>
+
+      {showTrialPanel && (
+        <aside className="bg-card w-full max-w-80 flex-[1_1_16rem] rounded-lg border">
+          <h5 className="border-b px-5 py-2.5 text-sm font-semibold">
+            Enterprise trial
+          </h5>
+          <div className="space-y-4 p-5">
+            <TrialFacts org={org} />
+            <OrganizationActions org={org} layout="buttons" actions="trial" />
+          </div>
+        </aside>
+      )}
 
       {confirmDialog}
     </div>
