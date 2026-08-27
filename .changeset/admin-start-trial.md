@@ -1,5 +1,6 @@
 ---
 "admin": patch
+"dashboard": patch
 "server": minor
 ---
 
