@@ -61,7 +61,6 @@ func riskPolicyAudiencePrincipals(audienceType string, principalURNs []string) (
 	return principals, nil
 }
 
-
 func clearRiskPolicyAudienceGrants(ctx context.Context, db repo.DBTX, organizationID string, policyID string) error {
 	if err := authz.ReplaceGrantAudience(ctx, db, authz.ResourceGrant{
 		OrganizationID: organizationID,
