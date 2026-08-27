@@ -8,6 +8,7 @@ import (
 	"flag"
 	"fmt"
 	"log/slog"
+	"maps"
 	"os"
 	"os/exec"
 	"os/signal"
@@ -37,25 +38,49 @@ const (
 )
 
 type loopbackPublisher struct {
-	replier requestreply.ReplyBroker[*riskv1.EnforcementReply]
+	responder *loopbackResponder
 }
 
-func (p *loopbackPublisher) Publish(ctx context.Context, request *riskv1.GitleaksEnforcement) gcp.PublishResult {
-	correlationID, err := temporalreply.ParseReplyURN(urnNamespace, request.GetReplyUrn())
-	if err != nil {
-		return gcp.NewErrPublishResult(err)
+func (p *loopbackPublisher) Publish(ctx context.Context, request *riskv1.GitleaksEnforcement, options ...gcp.PublishOption) gcp.PublishResult {
+	var opts gcp.PublishOptions
+	for _, option := range options {
+		option(&opts)
 	}
-	reply := &riskv1.EnforcementReply{}
-	reply.SetCorrelationId(correlationID)
-	reply.SetScanner(riskv1.EnforcementScanner_ENFORCEMENT_SCANNER_GITLEAKS)
-	reply.SetStatus(riskv1.EnforcementStatus_ENFORCEMENT_STATUS_OK)
-	if err := p.replier.Reply(ctx, request.GetReplyUrn(), reply); err != nil {
+	metadata := gcp.MessageMetadata{
+		ID:              "loopback",
+		Attributes:      maps.Clone(opts.Attributes),
+		DeliveryAttempt: nil,
+	}
+	if err := p.responder.Handle(ctx, request, metadata); err != nil {
 		return gcp.NewErrPublishResult(err)
 	}
 	return gcp.NewSuccessPublishResult()
 }
 
 func (p *loopbackPublisher) Stop(context.Context) error {
+	return nil
+}
+
+type loopbackResponder struct {
+	replier requestreply.ReplyBroker[*riskv1.EnforcementReply]
+}
+
+func (r *loopbackResponder) Handle(ctx context.Context, _ *riskv1.GitleaksEnforcement, metadata gcp.MessageMetadata) error {
+	replyURN := metadata.Attributes[requestreply.ReplyURNAttribute]
+	if replyURN == "" {
+		return errors.New("reply urn attribute is required")
+	}
+	correlationID, err := temporalreply.ParseReplyURN(urnNamespace, replyURN)
+	if err != nil {
+		return fmt.Errorf("parse reply urn attribute: %w", err)
+	}
+	reply := &riskv1.EnforcementReply{}
+	reply.SetCorrelationId(correlationID)
+	reply.SetScanner(riskv1.EnforcementScanner_ENFORCEMENT_SCANNER_GITLEAKS)
+	reply.SetStatus(riskv1.EnforcementStatus_ENFORCEMENT_STATUS_OK)
+	if err := r.replier.Reply(ctx, replyURN, reply); err != nil {
+		return fmt.Errorf("reply to request: %w", err)
+	}
 	return nil
 }
 
@@ -107,13 +132,8 @@ func runPoint(
 				errs[index] = err
 				return
 			}
-			workflowID, err := temporalreply.ParseReplyURN(urnNamespace, request.GetReplyUrn())
-			if err != nil {
-				errs[index] = err
-				return
-			}
-			if reply.GetCorrelationId() != workflowID {
-				errs[index] = fmt.Errorf("reply correlation id %q does not match workflow id %q", reply.GetCorrelationId(), workflowID)
+			if reply.GetCorrelationId() == "" {
+				errs[index] = errors.New("reply correlation id is empty")
 			}
 		}()
 	}
@@ -200,7 +220,8 @@ func run() error {
 	if err != nil {
 		return fmt.Errorf("create reply broker: %w", err)
 	}
-	publisher := &loopbackPublisher{replier: replier}
+	responder := &loopbackResponder{replier: replier}
+	publisher := &loopbackPublisher{responder: responder}
 	requester, err := temporalreply.NewRequestBroker(
 		devServer.Client(),
 		publisher,

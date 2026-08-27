@@ -31,9 +31,9 @@ type Config struct {
 	URNNamespace string
 }
 
-// Requester starts a per-request workflow, publishes an addressed request, and
-// waits for the workflow's first reply.
-type Requester[Req requestreply.AddressedMessage, Resp proto.Message] struct {
+// Requester starts a per-request workflow, publishes its return address as
+// transport metadata, and waits for the workflow's first reply.
+type Requester[Req proto.Message, Resp proto.Message] struct {
 	client            client.Client
 	publisher         gcp.Publisher[Req]
 	responsePrototype Resp
@@ -48,7 +48,7 @@ type Replier[Resp proto.Message] struct {
 
 // NewRequestBroker builds a Temporal request broker. responsePrototype must be
 // a non-nil message of the reply type and is used only to allocate results.
-func NewRequestBroker[Req requestreply.AddressedMessage, Resp proto.Message](
+func NewRequestBroker[Req proto.Message, Resp proto.Message](
 	temporalClient client.Client,
 	publisher gcp.Publisher[Req],
 	responsePrototype Resp,
@@ -110,8 +110,10 @@ func (r *Requester[Req, Resp]) Request(ctx context.Context, req Req) (Resp, erro
 		return zero, fmt.Errorf("start reply workflow: %w", err)
 	}
 
-	req.SetReplyUrn(ReplyURN(r.config.URNNamespace, correlationID.String()))
-	if _, err := r.publisher.Publish(ctx, req).Get(ctx); err != nil {
+	replyURN := ReplyURN(r.config.URNNamespace, correlationID.String())
+	if _, err := r.publisher.Publish(ctx, req, gcp.WithMessageAttributes(map[string]string{
+		requestreply.ReplyURNAttribute: replyURN,
+	})).Get(ctx); err != nil {
 		r.cancelWorkflow(ctx, run)
 		if ctxErr := ctx.Err(); ctxErr != nil {
 			return zero, ctxErr //nolint:wrapcheck // Request returns the context error as part of its contract.
@@ -189,5 +191,5 @@ func ParseReplyURN(namespace, value string) (string, error) {
 	return correlationID, nil
 }
 
-var _ requestreply.RequestBroker[requestreply.AddressedMessage, proto.Message] = (*Requester[requestreply.AddressedMessage, proto.Message])(nil)
+var _ requestreply.RequestBroker[proto.Message, proto.Message] = (*Requester[proto.Message, proto.Message])(nil)
 var _ requestreply.ReplyBroker[proto.Message] = (*Replier[proto.Message])(nil)

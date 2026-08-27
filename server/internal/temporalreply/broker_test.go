@@ -2,6 +2,7 @@ package temporalreply
 
 import (
 	"context"
+	"maps"
 	"testing"
 	"time"
 
@@ -14,17 +15,24 @@ import (
 
 	riskv1 "github.com/speakeasy-api/gram/infra/gen/gram/risk/v1"
 	"github.com/speakeasy-api/gram/infra/pkg/gcp"
+	"github.com/speakeasy-api/gram/server/internal/requestreply"
 )
 
 const testURNNamespace = "test:reply"
 
 type capturePublisher struct {
-	message *riskv1.GitleaksEnforcement
-	result  gcp.PublishResult
+	message    *riskv1.GitleaksEnforcement
+	attributes map[string]string
+	result     gcp.PublishResult
 }
 
-func (p *capturePublisher) Publish(_ context.Context, message *riskv1.GitleaksEnforcement) gcp.PublishResult {
+func (p *capturePublisher) Publish(_ context.Context, message *riskv1.GitleaksEnforcement, options ...gcp.PublishOption) gcp.PublishResult {
+	var opts gcp.PublishOptions
+	for _, option := range options {
+		option(&opts)
+	}
 	p.message = message
+	p.attributes = maps.Clone(opts.Attributes)
 	return p.result
 }
 
@@ -37,7 +45,7 @@ func TestRequesterRoundTrip(t *testing.T) {
 
 	temporalClient := temporalmocks.NewClient(t)
 	run := temporalmocks.NewWorkflowRun(t)
-	publisher := &capturePublisher{message: nil, result: gcp.NewSuccessPublishResult()}
+	publisher := &capturePublisher{message: nil, attributes: nil, result: gcp.NewSuccessPublishResult()}
 	reply := &riskv1.EnforcementReply{}
 	reply.SetReason("first")
 	payload, err := proto.Marshal(reply)
@@ -69,7 +77,9 @@ func TestRequesterRoundTrip(t *testing.T) {
 	require.Equal(t, "first", got.GetReason())
 	require.Same(t, request, publisher.message)
 
-	workflowID, err := ParseReplyURN(testURNNamespace, request.GetReplyUrn())
+	replyURN := publisher.attributes[requestreply.ReplyURNAttribute]
+	require.NotEmpty(t, replyURN)
+	workflowID, err := ParseReplyURN(testURNNamespace, replyURN)
 	require.NoError(t, err)
 	parsedID, err := uuid.Parse(workflowID)
 	require.NoError(t, err)
@@ -81,7 +91,7 @@ func TestRequesterDeadlineReturnsZeroResponseAndContextError(t *testing.T) {
 
 	temporalClient := temporalmocks.NewClient(t)
 	run := temporalmocks.NewWorkflowRun(t)
-	publisher := &capturePublisher{message: nil, result: gcp.NewSuccessPublishResult()}
+	publisher := &capturePublisher{message: nil, attributes: nil, result: gcp.NewSuccessPublishResult()}
 	temporalClient.On("ExecuteWorkflow", mock.Anything, mock.Anything, WorkflowName).Return(run, nil)
 	run.On("Get", mock.Anything, mock.Anything).Return(func(ctx context.Context, _ any) error {
 		return ctx.Err()
