@@ -40,7 +40,7 @@ type stripeWebhookResult struct {
 	subscriptionLost     bool
 }
 
-type stripeWebhookHandler func(context.Context, *slog.Logger, pgx.Tx, string, *stripeclient.WebhookEvent, *stripeclient.CheckoutSessionState, *stripeclient.InvoiceState) (stripeWebhookResult, error)
+type stripeWebhookHandler func(context.Context, *slog.Logger, pgx.Tx, string, bool, *stripeclient.WebhookEvent, *stripeclient.CheckoutSessionState, *stripeclient.InvoiceState) (stripeWebhookResult, error)
 
 func (s *Service) handleStripeWebhook(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
@@ -154,10 +154,13 @@ func (s *Service) handleStripeWebhook(w http.ResponseWriter, r *http.Request) er
 			return oops.E(oops.CodeUnexpected, err, "failed to lock billing metadata organization").LogError(ctx, logger)
 		}
 	}
+	trialConverted := false
 	if event.Type == "checkout.session.completed" && checkoutEligible {
-		if _, err := trialsrepo.New(tx).MarkTrialConverted(ctx, organizationID); err != nil {
+		convertedRows, err := trialsrepo.New(tx).MarkTrialConverted(ctx, organizationID)
+		if err != nil {
 			return oops.E(oops.CodeUnexpected, err, "failed to mark enterprise trial converted").LogError(ctx, logger)
 		}
+		trialConverted = convertedRows > 0
 	}
 
 	// Trial demotion locks the trial row before it takes the platform-key
@@ -188,7 +191,7 @@ func (s *Service) handleStripeWebhook(w http.ResponseWriter, r *http.Request) er
 		return nil
 	}
 
-	result, err := s.stripeHandler(ctx, logger, tx, organizationID, event, checkoutState, invoiceState)
+	result, err := s.stripeHandler(ctx, logger, tx, organizationID, trialConverted, event, checkoutState, invoiceState)
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "failed to handle Stripe webhook event").LogError(ctx, logger)
 	}
@@ -275,10 +278,10 @@ func (s *Service) currentCheckoutSession(ctx context.Context, event *stripeclien
 	}
 }
 
-func (s *Service) serviceStripeWebhookHandler(ctx context.Context, logger *slog.Logger, tx pgx.Tx, organizationID string, event *stripeclient.WebhookEvent, checkout *stripeclient.CheckoutSessionState, invoice *stripeclient.InvoiceState) (stripeWebhookResult, error) {
+func (s *Service) serviceStripeWebhookHandler(ctx context.Context, logger *slog.Logger, tx pgx.Tx, organizationID string, trialConverted bool, event *stripeclient.WebhookEvent, checkout *stripeclient.CheckoutSessionState, invoice *stripeclient.InvoiceState) (stripeWebhookResult, error) {
 	switch event.Type {
 	case "checkout.session.completed":
-		return s.activatePaygCheckout(ctx, tx, organizationID, event, checkout)
+		return s.activatePaygCheckout(ctx, tx, organizationID, trialConverted, event, checkout)
 	case "invoice.created":
 		recorded, err := s.recordStripeInvoice(ctx, tx, organizationID, event, invoice)
 		if err != nil {
@@ -415,7 +418,7 @@ func (s *Service) recordStripeInvoice(ctx context.Context, tx pgx.Tx, organizati
 	return true, nil
 }
 
-func (s *Service) activatePaygCheckout(ctx context.Context, tx pgx.Tx, organizationID string, event *stripeclient.WebhookEvent, checkout *stripeclient.CheckoutSessionState) (stripeWebhookResult, error) {
+func (s *Service) activatePaygCheckout(ctx context.Context, tx pgx.Tx, organizationID string, trialConverted bool, event *stripeclient.WebhookEvent, checkout *stripeclient.CheckoutSessionState) (stripeWebhookResult, error) {
 	if checkout == nil {
 		return stripeWebhookResult{}, errors.New("missing current Stripe Checkout state")
 	}
@@ -467,6 +470,11 @@ func (s *Service) activatePaygCheckout(ctx context.Context, tx pgx.Tx, organizat
 		state.BillingCycleAnchorDay == anchorDay &&
 		state.GramAccountType == "payg" && state.Whitelisted
 	if alreadyActivated {
+		if trialConverted {
+			if err := s.logStripeEnterpriseTrialConversion(ctx, tx, organizationID, state.OrganizationName, state.OrganizationSlug); err != nil {
+				return stripeWebhookResult{}, err
+			}
+		}
 		return stripeWebhookResult{newlyEnabledFeatures: newlyEnabled, invoicePaymentFailed: false, subscriptionLost: false}, nil
 	}
 
@@ -505,5 +513,29 @@ func (s *Service) activatePaygCheckout(ctx context.Context, tx pgx.Tx, organizat
 		return stripeWebhookResult{}, fmt.Errorf("log PAYG organization activation: %w", err)
 	}
 
+	if trialConverted {
+		if err := s.logStripeEnterpriseTrialConversion(ctx, tx, organizationID, state.OrganizationName, state.OrganizationSlug); err != nil {
+			return stripeWebhookResult{}, err
+		}
+	}
+
 	return stripeWebhookResult{newlyEnabledFeatures: newlyEnabled, invoicePaymentFailed: false, subscriptionLost: false}, nil
+}
+
+func (s *Service) logStripeEnterpriseTrialConversion(ctx context.Context, tx pgx.Tx, organizationID, organizationName, organizationSlug string) error {
+	if s.auditLogger == nil {
+		return errors.New("audit logger is unavailable")
+	}
+	if err := s.auditLogger.LogOrganizationEnterpriseTrialConverted(ctx, tx, audit.LogOrganizationEnterpriseTrialConvertedEvent{
+		OrganizationID:   organizationID,
+		Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, "system"),
+		ActorDisplayName: nil,
+		ActorSlug:        nil,
+		OrganizationName: organizationName,
+		OrganizationSlug: organizationSlug,
+		ConversionSource: "stripe_checkout",
+	}); err != nil {
+		return fmt.Errorf("log enterprise trial conversion: %w", err)
+	}
+	return nil
 }

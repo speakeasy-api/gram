@@ -48,7 +48,11 @@ type fakeStripeWebhookClient struct {
 	verifyCalls   atomic.Int32
 }
 
-const stripeWebhookOrganizationID = "org_placeholder"
+const (
+	stripeWebhookOrganizationID    = "org_placeholder"
+	enterpriseTrialConvertedAction = audit.Action("organization:enterprise_trial_converted")
+	stripeCheckoutConversionSource = "stripe_checkout"
+)
 
 func (f *fakeStripeWebhookClient) CreateCustomer(context.Context, stripeclient.CreateCustomerInput) (*stripeclient.Customer, error) {
 	return nil, errors.New("not implemented")
@@ -145,7 +149,7 @@ func (f *fakeStripeWebhookClient) Catalog() stripeclient.Catalog {
 	return stripeclient.Catalog{PriceIDTUM: "", MeterIDTUM: "", MeterEventName: "", PortalConfigurationID: ""}
 }
 
-func testStripeWebhookHandler(context.Context, *slog.Logger, pgx.Tx, string, *stripeclient.WebhookEvent, *stripeclient.CheckoutSessionState, *stripeclient.InvoiceState) (stripeWebhookResult, error) {
+func testStripeWebhookHandler(context.Context, *slog.Logger, pgx.Tx, string, bool, *stripeclient.WebhookEvent, *stripeclient.CheckoutSessionState, *stripeclient.InvoiceState) (stripeWebhookResult, error) {
 	return stripeWebhookResult{newlyEnabledFeatures: nil, invoicePaymentFailed: false, subscriptionLost: false}, nil
 }
 
@@ -284,6 +288,16 @@ func paygSchedulingIntentCount(t *testing.T, db *pgxpool.Pool) int {
 
 func organizationBillingActionIntentCount(t *testing.T, db *pgxpool.Pool, action audit.Action) int {
 	t.Helper()
+	return organizationActionIntentCount(t, db, string(events.OrganizationBillingV1.EventType()), action)
+}
+
+func organizationEnterpriseTrialActionIntentCount(t *testing.T, db *pgxpool.Pool, action audit.Action) int {
+	t.Helper()
+	return organizationActionIntentCount(t, db, string(events.OrganizationEnterpriseTrialV1.EventType()), action)
+}
+
+func organizationActionIntentCount(t *testing.T, db *pgxpool.Pool, eventType string, action audit.Action) int {
+	t.Helper()
 
 	rows, err := testrepo.New(db).ListPublishOutboxRows(t.Context())
 	require.NoError(t, err)
@@ -292,7 +306,7 @@ func organizationBillingActionIntentCount(t *testing.T, db *pgxpool.Pool, action
 	for _, row := range rows {
 		var event webhooksv1.Event
 		require.NoError(t, proto.Unmarshal(row.Message, &event))
-		if event.GetEventType() != string(events.OrganizationBillingV1.EventType()) {
+		if event.GetEventType() != eventType {
 			continue
 		}
 
@@ -496,7 +510,7 @@ func TestStripeWebhookAcknowledgesEventsWithoutDispatch(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
 
-			service, db := newStripeWebhookService(t, "customer_placeholder", func(context.Context, *slog.Logger, pgx.Tx, string, *stripeclient.WebhookEvent, *stripeclient.CheckoutSessionState, *stripeclient.InvoiceState) (stripeWebhookResult, error) {
+			service, db := newStripeWebhookService(t, "customer_placeholder", func(context.Context, *slog.Logger, pgx.Tx, string, bool, *stripeclient.WebhookEvent, *stripeclient.CheckoutSessionState, *stripeclient.InvoiceState) (stripeWebhookResult, error) {
 				t.Fatal("handler must not run")
 				return stripeWebhookResult{}, nil
 			})
@@ -532,7 +546,7 @@ func TestStripeWebhookSequentialDuplicateDispatchesOnce(t *testing.T) {
 	t.Parallel()
 
 	var calls atomic.Int32
-	service, db := newStripeWebhookService(t, "customer_placeholder", func(context.Context, *slog.Logger, pgx.Tx, string, *stripeclient.WebhookEvent, *stripeclient.CheckoutSessionState, *stripeclient.InvoiceState) (stripeWebhookResult, error) {
+	service, db := newStripeWebhookService(t, "customer_placeholder", func(context.Context, *slog.Logger, pgx.Tx, string, bool, *stripeclient.WebhookEvent, *stripeclient.CheckoutSessionState, *stripeclient.InvoiceState) (stripeWebhookResult, error) {
 		calls.Add(1)
 		return stripeWebhookResult{}, nil
 	})
@@ -550,7 +564,7 @@ func TestStripeWebhookConcurrentDuplicateDispatchesOnce(t *testing.T) {
 	entered := make(chan struct{})
 	release := make(chan struct{})
 	var enterOnce sync.Once
-	service, db := newStripeWebhookService(t, "customer_placeholder", func(context.Context, *slog.Logger, pgx.Tx, string, *stripeclient.WebhookEvent, *stripeclient.CheckoutSessionState, *stripeclient.InvoiceState) (stripeWebhookResult, error) {
+	service, db := newStripeWebhookService(t, "customer_placeholder", func(context.Context, *slog.Logger, pgx.Tx, string, bool, *stripeclient.WebhookEvent, *stripeclient.CheckoutSessionState, *stripeclient.InvoiceState) (stripeWebhookResult, error) {
 		calls.Add(1)
 		enterOnce.Do(func() { close(entered) })
 		<-release
@@ -580,7 +594,7 @@ func TestStripeWebhookConcurrentDistinctEventsForSameCustomerDoNotSerialize(t *t
 			close(release)
 		}
 	}()
-	service, db := newStripeWebhookService(t, "customer_placeholder", func(context.Context, *slog.Logger, pgx.Tx, string, *stripeclient.WebhookEvent, *stripeclient.CheckoutSessionState, *stripeclient.InvoiceState) (stripeWebhookResult, error) {
+	service, db := newStripeWebhookService(t, "customer_placeholder", func(context.Context, *slog.Logger, pgx.Tx, string, bool, *stripeclient.WebhookEvent, *stripeclient.CheckoutSessionState, *stripeclient.InvoiceState) (stripeWebhookResult, error) {
 		calls.Add(1)
 		<-release
 		return stripeWebhookResult{}, nil
@@ -614,7 +628,7 @@ func TestStripeWebhookHandlerFailureRollsBackForRetry(t *testing.T) {
 	t.Parallel()
 
 	var calls atomic.Int32
-	service, db := newStripeWebhookService(t, "customer_placeholder", func(context.Context, *slog.Logger, pgx.Tx, string, *stripeclient.WebhookEvent, *stripeclient.CheckoutSessionState, *stripeclient.InvoiceState) (stripeWebhookResult, error) {
+	service, db := newStripeWebhookService(t, "customer_placeholder", func(context.Context, *slog.Logger, pgx.Tx, string, bool, *stripeclient.WebhookEvent, *stripeclient.CheckoutSessionState, *stripeclient.InvoiceState) (stripeWebhookResult, error) {
 		if calls.Add(1) == 1 {
 			return stripeWebhookResult{}, errors.New("transient handler failure")
 		}
@@ -1057,6 +1071,51 @@ func TestStripeCheckoutCompletionActivatesColdPaygOrganization(t *testing.T) {
 	require.NotContains(t, string(record.AfterSnapshot), "subscription_activation")
 }
 
+func TestStripeCheckoutEnterpriseTrialConversionAuditIsIdempotent(t *testing.T) {
+	t.Parallel()
+
+	service, db := newStripeWebhookService(t, "customer_placeholder", nil)
+	configurePaygCheckout(t, service, "event_trial_conversion", "subscription_trial_conversion", "active")
+	ctx := t.Context()
+	require.NoError(t, trialsrepo.New(db).CreateTrial(ctx, trialsrepo.CreateTrialParams{
+		OrganizationID: stripeWebhookOrganizationID,
+		Tier:           "enterprise",
+		EndsAt:         pgtype.Timestamptz{Time: time.Now().UTC().Add(7 * 24 * time.Hour), Valid: true},
+	}))
+
+	require.Equal(t, http.StatusOK, serveStripeWebhook(service, "first").Code)
+
+	count, err := audittest.AuditLogCountByAction(ctx, db, enterpriseTrialConvertedAction)
+	require.NoError(t, err)
+	require.EqualValues(t, 1, count)
+	record, err := audittest.LatestAuditLogByAction(ctx, db, enterpriseTrialConvertedAction)
+	require.NoError(t, err)
+	require.Equal(t, "system", record.ActorID)
+	metadata, err := audittest.DecodeAuditData(record.Metadata)
+	require.NoError(t, err)
+	require.Equal(t, stripeCheckoutConversionSource, metadata["conversion_source"])
+	require.Equal(t, 1, organizationEnterpriseTrialActionIntentCount(t, db, enterpriseTrialConvertedAction))
+
+	client, ok := service.stripeClient.(*fakeStripeWebhookClient)
+	require.True(t, ok)
+	client.verify = func(_ []byte, _ string) (*stripeclient.WebhookEvent, error) {
+		return &stripeclient.WebhookEvent{
+			ID:             "event_trial_conversion_replay",
+			Type:           "checkout.session.completed",
+			Created:        time.Now().UTC(),
+			ObjectID:       "checkout_placeholder",
+			CustomerID:     "customer_placeholder",
+			SubscriptionID: "subscription_trial_conversion",
+		}, nil
+	}
+	require.Equal(t, http.StatusOK, serveStripeWebhook(service, "replay").Code)
+
+	count, err = audittest.AuditLogCountByAction(ctx, db, enterpriseTrialConvertedAction)
+	require.NoError(t, err)
+	require.EqualValues(t, 1, count)
+	require.Equal(t, 1, organizationEnterpriseTrialActionIntentCount(t, db, enterpriseTrialConvertedAction))
+}
+
 func TestStripeCheckoutCompletionRestoresDemotedTrialRuntimeFeatures(t *testing.T) {
 	t.Parallel()
 
@@ -1193,27 +1252,53 @@ func TestStripeCheckoutExactReplaySkipsCurrentStateRetrieval(t *testing.T) {
 	require.Equal(t, 1, paygSchedulingIntentCount(t, service.db))
 }
 
-func TestStripeCheckoutAuditFailureRollsBackActivationAndSchedulingIntent(t *testing.T) {
+func TestStripeCheckoutConversionAuditFailureRollsBackTrialAndPaygActivation(t *testing.T) {
 	t.Parallel()
 
 	service, db := newStripeWebhookService(t, "customer_placeholder", nil)
 	featureCache := configurePaygCheckout(t, service, "event_audit_failure", "subscription_audit_failure", "active")
-	service.auditLogger = nil
+	ctx := t.Context()
+	require.NoError(t, trialsrepo.New(db).CreateTrial(ctx, trialsrepo.CreateTrialParams{
+		OrganizationID: stripeWebhookOrganizationID,
+		Tier:           "enterprise",
+		EndsAt:         pgtype.Timestamptz{Time: time.Now().UTC().Add(7 * 24 * time.Hour), Valid: true},
+	}))
+	_, err := db.Exec(ctx, `
+		CREATE FUNCTION fail_enterprise_trial_conversion_audit() RETURNS trigger AS $$
+		BEGIN
+			IF NEW.action = 'organization:enterprise_trial_converted' THEN
+				RAISE EXCEPTION 'forced enterprise trial conversion audit failure';
+			END IF;
+			RETURN NEW;
+		END;
+		$$ LANGUAGE plpgsql;
+		CREATE TRIGGER fail_enterprise_trial_conversion_audit
+		BEFORE INSERT ON audit_logs
+		FOR EACH ROW EXECUTE FUNCTION fail_enterprise_trial_conversion_audit();
+	`)
+	require.NoError(t, err)
 
 	require.Equal(t, http.StatusInternalServerError, serveStripeWebhook(service, "failure").Code)
 
-	metadata, err := repo.New(db).GetBillingMetadata(t.Context(), stripeWebhookOrganizationID)
+	metadata, err := repo.New(db).GetBillingMetadata(ctx, stripeWebhookOrganizationID)
 	require.NoError(t, err)
 	require.False(t, metadata.StripeSubscriptionID.Valid)
-	organization, err := orgrepo.New(db).GetOrganizationMetadata(t.Context(), stripeWebhookOrganizationID)
+	organization, err := orgrepo.New(db).GetOrganizationMetadata(ctx, stripeWebhookOrganizationID)
 	require.NoError(t, err)
 	require.NotEqual(t, "payg", organization.GramAccountType)
+	trial, err := trialsrepo.New(db).GetTrial(ctx, stripeWebhookOrganizationID)
+	require.NoError(t, err)
+	require.False(t, trial.ConvertedAt.Valid)
 	require.Zero(t, stripeWebhookReceiptCount(t, db))
 	require.Zero(t, paygSchedulingIntentCount(t, db))
 	require.Empty(t, featureCache.snapshot())
-	count, err := audittest.AuditLogCountByAction(t.Context(), db, audit.ActionOrganizationPaygActivated)
+	paygCount, err := audittest.AuditLogCountByAction(ctx, db, audit.ActionOrganizationPaygActivated)
 	require.NoError(t, err)
-	require.Zero(t, count)
+	require.Zero(t, paygCount)
+	conversionCount, err := audittest.AuditLogCountByAction(ctx, db, enterpriseTrialConvertedAction)
+	require.NoError(t, err)
+	require.Zero(t, conversionCount)
+	require.Zero(t, organizationEnterpriseTrialActionIntentCount(t, db, enterpriseTrialConvertedAction))
 }
 
 func TestStripeCheckoutSubscriptionConflictRollsBackTrialConversion(t *testing.T) {
