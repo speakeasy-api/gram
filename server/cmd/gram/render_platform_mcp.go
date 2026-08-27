@@ -40,6 +40,17 @@ func newRenderPlatformMCPCommand() *cli.Command {
 			}
 
 			out := c.String("out")
+			// The publish job copies this directory wholesale into the public
+			// repository, so anything already sitting here would be published
+			// alongside the render. Refuse rather than delete: the caller named
+			// the path, and clearing it for them could destroy unrelated files.
+			entries, err := os.ReadDir(out)
+			switch {
+			case err == nil && len(entries) > 0:
+				return fmt.Errorf("output directory %s is not empty; render into a fresh directory", out)
+			case err != nil && !os.IsNotExist(err):
+				return fmt.Errorf("read output directory: %w", err)
+			}
 			if err := os.MkdirAll(out, 0o750); err != nil {
 				return fmt.Errorf("create output directory: %w", err)
 			}

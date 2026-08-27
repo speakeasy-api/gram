@@ -1104,7 +1104,6 @@ function PlatformMCPInstallMethodSheet({
     id: PlatformMCPInstallMethod;
     title: string;
     description: string;
-    disabled?: boolean;
   }> = supportsPackages
     ? [
         {
@@ -1160,9 +1159,8 @@ function PlatformMCPInstallMethodSheet({
               <button
                 key={method.id}
                 type="button"
-                disabled={method.disabled}
                 onClick={() => onSelect(method.id)}
-                className="border-border bg-card hover:border-foreground/20 flex w-full items-center gap-4 border p-4 text-left transition-all disabled:cursor-not-allowed disabled:opacity-50"
+                className="border-border bg-card hover:border-foreground/20 flex w-full items-center gap-4 border p-4 text-left transition-all"
               >
                 <div className="min-w-0 flex-1 space-y-1">
                   <p className="text-foreground text-sm font-medium">
@@ -1171,11 +1169,6 @@ function PlatformMCPInstallMethodSheet({
                   <p className="text-muted-foreground text-xs">
                     {method.description}
                   </p>
-                  {method.disabled ? (
-                    <p className="text-muted-foreground text-xs">
-                      Not currently available for this organization.
-                    </p>
-                  ) : null}
                 </div>
                 <ChevronRight className="text-muted-foreground h-4 w-4 shrink-0" />
               </button>

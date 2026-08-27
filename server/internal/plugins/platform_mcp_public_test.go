@@ -63,13 +63,25 @@ func TestPublicPlatformMCPFilesCarriesNoSecrets(t *testing.T) {
 	}
 }
 
+// The published .mcp.json is what every installed client dials, so a plaintext
+// deployment URL would reach every install at once.
+func TestPublicPlatformMCPFilesRejectsInsecureServerURL(t *testing.T) {
+	t.Parallel()
+
+	_, err := PublicPlatformMCPFiles("http://app.getgram.ai", "17")
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "must be https")
+}
+
 func TestPublicPlatformMCPFilesRequiresServerURL(t *testing.T) {
 	t.Parallel()
 
 	_, err := PublicPlatformMCPFiles("  ", "17")
 	require.Error(t, err)
 
-	_, err = PublicPlatformMCPFiles("not-a-url", "17")
+	// https, so it clears the scheme guard above and reaches the shape
+	// validation the shared generator applies.
+	_, err = PublicPlatformMCPFiles("https:///missing-host", "17")
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "invalid Platform MCP server URL")
 }

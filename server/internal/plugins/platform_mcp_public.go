@@ -36,6 +36,13 @@ func PublicPlatformMCPFiles(serverURL string, version string) (map[string][]byte
 	if strings.TrimSpace(serverURL) == "" {
 		return nil, fmt.Errorf("server URL is required")
 	}
+	// This tree is world-readable and its .mcp.json is what every installed
+	// client dials, so an http:// deployment URL would publish a downgrade to
+	// everyone at once. The shared generator still allows http for local
+	// development; the public render does not.
+	if !strings.HasPrefix(serverURL, "https://") {
+		return nil, fmt.Errorf("public marketplace server URL must be https, got %q", serverURL)
+	}
 
 	cfg := GenerateConfig{
 		OrgName:          publicMarketplaceDisplayName,
