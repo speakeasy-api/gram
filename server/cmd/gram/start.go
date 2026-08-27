@@ -825,6 +825,7 @@ func newStartCommand() *cli.Command {
 			logsEnabled := newFeatureChecker(logger, productFeatures, productfeatures.FeatureLogs)
 			toolIOLogsEnabled := newFeatureChecker(logger, productFeatures, productfeatures.FeatureToolIOLogs)
 			sessionCaptureEnabled := newFeatureChecker(logger, productFeatures, productfeatures.FeatureSessionCapture)
+			sessionPortabilityEnabled := newFeatureChecker(logger, productFeatures, productfeatures.FeatureSessionPortability)
 			challengeLoggingEnabled := authz.ChallengeLoggingEnabled(newFeatureChecker(logger, productFeatures, productfeatures.FeatureAuthzChallengeLogging))
 			roleClient, err := newAccessRoleProvider(ctx, logger, guardianPolicy, c)
 			if err != nil {
@@ -1545,6 +1546,7 @@ func newStartCommand() *cli.Command {
 				Telemetry:              telemetryrepo.New(chDB),
 				TelemetryDrilldown:     telemetryrepo.New(chDB),
 				SessionCapture:         platformmcp.FeatureChecker(sessionCaptureEnabled),
+				SessionPortability:     platformmcp.FeatureChecker(sessionPortabilityEnabled),
 				LocalFixture:           platformFixture,
 			})
 			if err != nil {
