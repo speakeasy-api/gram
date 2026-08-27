@@ -365,7 +365,7 @@ const mcpGeneratorVersion = "11"
 // platformMCPGeneratorVersion is independent from mcpGeneratorVersion so adding
 // or changing the first-party Platform MCP never triggers a fleet-wide customer
 // plugin republish.
-const platformMCPGeneratorVersion = "2"
+const platformMCPGeneratorVersion = "3"
 
 // hooksGeneratorVersion is the sole rollout signal for the observability (hooks)
 // plugin. It is stamped into the hooks plugin.json version (see
@@ -397,14 +397,21 @@ const (
 const mcpSharedFingerprintKey = "__shared__"
 
 const (
-	platformMCPPluginName         = "platform-mcp"
+	// The plugin name and the MCP server name are what agents concatenate into
+	// the label shown next to every tool call — Claude Code renders
+	// "plugin:speakeasy:platform" — so they read as vendor and surface instead
+	// of repeating "platform-mcp" twice. Cursor and Codex packages keep a
+	// client suffix because all five package roots share one repository.
+	platformMCPPluginName         = "speakeasy"
 	platformMCPDisplayName        = "Platform MCP"
-	platformMCPServerName         = "platform-mcp"
-	platformMCPPluginRoot         = "platform-mcp"
+	platformMCPServerName         = "platform"
+	platformMCPCursorPluginName   = "speakeasy-cursor"
+	platformMCPCodexPluginName    = "speakeasy-codex"
+	platformMCPPluginRoot         = platformMCPPluginName
 	platformMCPDescription        = "Manage MCPs, Risk Policies and explore logs in your favorite agent."
-	platformMCPCursorPluginRoot   = cursorPluginRoot + "/platform-mcp-cursor"
-	platformMCPCodexPluginRoot    = "platform-mcp-codex"
-	platformMCPOpenCodePluginRoot = opencodePluginRoot + "/platform-mcp"
+	platformMCPCursorPluginRoot   = cursorPluginRoot + "/" + platformMCPCursorPluginName
+	platformMCPCodexPluginRoot    = platformMCPCodexPluginName
+	platformMCPOpenCodePluginRoot = opencodePluginRoot + "/" + platformMCPPluginName
 	platformMCPAgentPluginRoot    = agentPluginRoot + "/" + platformMCPPluginName
 )
 
@@ -2325,7 +2332,7 @@ func platformMCPPluginInfo(platformURL string) PluginInfo {
 func generatePlatformMCPCursorPackage(cfg GenerateConfig, platformURL string) (map[string][]byte, error) {
 	plugin := platformMCPPluginInfo(platformURL)
 	files := make(map[string][]byte)
-	if err := generateCursorPluginInDir(files, "", "platform-mcp-cursor", plugin, cfg); err != nil {
+	if err := generateCursorPluginInDir(files, "", platformMCPCursorPluginName, plugin, cfg); err != nil {
 		return nil, fmt.Errorf("generate Platform MCP Cursor package: %w", err)
 	}
 	var manifest cursorPluginMeta
@@ -2349,7 +2356,7 @@ func generatePlatformMCPCursorPackage(cfg GenerateConfig, platformURL string) (m
 func generatePlatformMCPCodexPackage(cfg GenerateConfig, platformURL string) (map[string][]byte, error) {
 	plugin := platformMCPPluginInfo(platformURL)
 	files := make(map[string][]byte)
-	if err := generateCodexPluginInDir(files, "", "platform-mcp-codex", plugin, cfg); err != nil {
+	if err := generateCodexPluginInDir(files, "", platformMCPCodexPluginName, plugin, cfg); err != nil {
 		return nil, fmt.Errorf("generate Platform MCP Codex package: %w", err)
 	}
 	var manifest codexPluginMeta
