@@ -86426,6 +86426,9 @@ components:
                 provider:
                     type: string
                     description: AI provider the account belongs to ('anthropic', 'openai', 'cursor')
+                user_id:
+                    type: string
+                    description: Gram user id of the directory owner of this account; the authoritative link between account-email-keyed usage and the org member
             description: 'A linked AI account for a user. The identity is (provider, email): the same email registered on two providers is two distinct accounts.'
             required:
                 - provider
