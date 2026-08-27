@@ -64,20 +64,6 @@ export default function App(): JSX.Element {
     root.classList.add(theme);
     root.classList.remove(theme === "dark" ? "light" : "dark");
 
-    // Update favicon based on theme
-    const favicon = document.getElementById("favicon") as HTMLLinkElement;
-    const faviconAlt = document.getElementById(
-      "favicon-alt",
-    ) as HTMLLinkElement;
-
-    if (favicon) {
-      favicon.href = theme === "dark" ? "/favicon-dark.png" : "/favicon.png";
-    }
-
-    if (faviconAlt) {
-      faviconAlt.href = theme === "dark" ? "/favicon-dark.ico" : "/favicon.ico";
-    }
-
     localStorage.setItem(PREFERRED_THEME_STORAGE_KEY, theme);
 
     setTheme(theme);
