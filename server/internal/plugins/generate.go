@@ -399,14 +399,14 @@ const mcpSharedFingerprintKey = "__shared__"
 const (
 	// The plugin name and the MCP server name are what agents concatenate into
 	// the label shown next to every tool call — Claude Code renders
-	// "plugin:speakeasy:platform" — so they read as vendor and surface instead
-	// of repeating "platform-mcp" twice. Cursor and Codex packages keep a
-	// client suffix because all five package roots share one repository.
-	platformMCPPluginName         = "speakeasy"
+	// "plugin:platform:platform" — so they read as surface-surface instead of
+	// repeating "platform-mcp" twice. Cursor and Codex packages keep a client
+	// suffix because all five package roots share one repository.
+	platformMCPPluginName         = "platform"
 	platformMCPDisplayName        = "Platform MCP"
 	platformMCPServerName         = "platform"
-	platformMCPCursorPluginName   = "speakeasy-cursor"
-	platformMCPCodexPluginName    = "speakeasy-codex"
+	platformMCPCursorPluginName   = "platform-cursor"
+	platformMCPCodexPluginName    = "platform-codex"
 	platformMCPPluginRoot         = platformMCPPluginName
 	platformMCPDescription        = "Manage MCPs, Risk Policies and explore logs in your favorite agent."
 	platformMCPCursorPluginRoot   = cursorPluginRoot + "/" + platformMCPCursorPluginName

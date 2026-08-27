@@ -48,13 +48,13 @@ export type PlatformMCPInstallMethod = "marketplace" | "manual";
 
 // The plugin name and the MCP server name are what an agent concatenates into
 // the label beside every tool call — Claude Code renders
-// "plugin:speakeasy:platform". These mirror the generated packages in
+// "plugin:platform:platform". These mirror the generated packages in
 // server/internal/plugins/generate.go; the Cursor and Codex packages keep a
 // client suffix because all package roots share one repository.
-const PLATFORM_MCP_PLUGIN_NAME = "speakeasy";
+const PLATFORM_MCP_PLUGIN_NAME = "platform";
 const PLATFORM_MCP_SERVER_NAME = "platform";
-const PLATFORM_MCP_CURSOR_PLUGIN_NAME = "speakeasy-cursor";
-const PLATFORM_MCP_CODEX_PLUGIN_NAME = "speakeasy-codex";
+const PLATFORM_MCP_CURSOR_PLUGIN_NAME = "platform-cursor";
+const PLATFORM_MCP_CODEX_PLUGIN_NAME = "platform-codex";
 
 // Platform MCP ships from one public repository for every organization. It
 // carries no credentials and no organization identity — access is decided at
@@ -293,7 +293,7 @@ function marketplaceSteps(client: ClientFamily): InstallStep[] {
       {
         title: "Copy the OpenCode package into your config directory",
         description:
-          "Copy opencode-plugins/speakeasy into ~/.config/opencode for your account, or into .opencode for one repository. This installs both the loader and the reviewed skill path.",
+          "Copy opencode-plugins/platform into ~/.config/opencode for your account, or into .opencode for one repository. This installs both the loader and the reviewed skill path.",
         code: `cp -R marketplace/opencode-plugins/${PLATFORM_MCP_PLUGIN_NAME}/. ~/.config/opencode/`,
       },
       {

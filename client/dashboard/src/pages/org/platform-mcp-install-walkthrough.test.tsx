@@ -85,8 +85,6 @@ describe("PlatformMCPInstallWalkthrough", () => {
         "/plugin marketplace add https://github.com/speakeasy-api/marketplace",
       ),
     ).toBeTruthy();
-    expect(
-      screen.getByText("/plugin install speakeasy@speakeasy"),
-    ).toBeTruthy();
+    expect(screen.getByText("/plugin install platform@speakeasy")).toBeTruthy();
   });
 });
