@@ -373,6 +373,11 @@ func newStartCommand() *cli.Command {
 			Usage:   "Maximum concurrently tracked anonymous MCP sessions per tunnel (0 uses the built-in default)",
 			EnvVars: []string{"GRAM_PUBLIC_TUNNELS_LIVE_SESSION_CAP"},
 		},
+		&cli.DurationFlag{
+			Name:    "meta-member-call-timeout",
+			Usage:   "Deadline for one gateway member upstream call, handshake included (0 uses the built-in default)",
+			EnvVars: []string{"GRAM_META_MEMBER_CALL_TIMEOUT"},
+		},
 		&cli.StringFlag{
 			Name:    "openrouter-provisioning-key",
 			Usage:   "Provisioning key for OpenRouter to create new API keys for orgs - https://openrouter.ai/settings/provisioning-keys",
@@ -1086,6 +1091,9 @@ func newStartCommand() *cli.Command {
 					InitializeRate:     ratelimit.Rate{Tokens: 0, Interval: 0, Burst: 0},
 					RequestRate:        ratelimit.Rate{Tokens: 0, Interval: 0, Burst: 0},
 					MaxRequestLifetime: 0,
+				},
+				mcp.MetaRuntimeConfig{
+					MemberCallTimeout: c.Duration("meta-member-call-timeout"),
 				},
 			)
 

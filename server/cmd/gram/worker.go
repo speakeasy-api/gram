@@ -836,6 +836,7 @@ func newWorkerCommand() *cli.Command {
 					RequestRate:        ratelimit.Rate{Tokens: 0, Interval: 0, Burst: 0},
 					MaxRequestLifetime: 0,
 				},
+				mcp.MetaRuntimeConfig{MemberCallTimeout: 0},
 			)
 
 			chatClient := chat.NewAgenticChatClient(

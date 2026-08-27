@@ -1,4 +1,4 @@
-// serve_meta_runtime_test.go verifies the gateway drill-down runtime for
+// serve_meta_runtime_test.go verifies the meta MCP drill-down runtime for
 // hosted members: describe_server/describe_tools/execute_tool routing,
 // qualified-name handling, member exclusion rules, proxied-member
 // not-implemented answers, the notification/version interaction, and the
@@ -226,7 +226,7 @@ func TestServePublic_MetaEndpoint_ExecuteTool_HostedMember_Dispatches(t *testing
 	// reaches the member dispatch, resolves the tool, attempts execution, and
 	// fails there — surfacing as an internal error. Routing failures look
 	// different (not-found codes, unknown server / tool not found messages),
-	// so this pins that the gateway handed the call to the member's tool
+	// so this pins that the meta MCP handed the call to the member's tool
 	// execution path without pinning dispatch-internal message text. The
 	// outer _meta rides along to prove forwarding does not disturb routing.
 	w, err := servePublicHTTP(t, ctx, ti, slug, makeMetaRPCBody(t, "tools/call", map[string]any{
@@ -329,26 +329,41 @@ func TestServePublic_MetaEndpoint_ListServers_StatusByBackend(t *testing.T) {
 	hostedMember := seedHostedMetaMember(t, ctx, ti, meta.ID, "hosted member", 1, mcpservers.VisibilityPublic, "alpha_tool")
 	proxiedSlug := "member-remote-" + uuid.NewString()[:8]
 	seedMetaMember(t, ctx, ti.conn, *authCtx.ProjectID, meta.ID, "remote member", proxiedSlug, 2, mcpservers.VisibilityPrivate)
+	tunneledSlug := "member-tunnel-" + uuid.NewString()[:8]
+	tunnelID := seedTunneledMetaMember(t, ctx, ti, *authCtx.ProjectID, meta.ID, "tunneled member", tunneledSlug, 3)
 
-	envelope := callMetaTool(t, ctx, ti, slug, "list_servers", map[string]any{})
-	result := decodeMetaToolResult(t, envelope)
+	listStatuses := func() map[string]string {
+		envelope := callMetaTool(t, ctx, ti, slug, "list_servers", map[string]any{})
+		result := decodeMetaToolResult(t, envelope)
+		var listed struct {
+			Servers []struct {
+				Slug   string `json:"slug"`
+				Status string `json:"status"`
+			} `json:"servers"`
+		}
+		require.NoError(t, json.Unmarshal(result.StructuredContent, &listed))
+		statuses := map[string]string{}
+		for _, server := range listed.Servers {
+			statuses[server.Slug] = server.Status
+		}
+		return statuses
+	}
 
-	var listed struct {
-		Servers []struct {
-			Slug   string `json:"slug"`
-			Status string `json:"status"`
-		} `json:"servers"`
-	}
-	require.NoError(t, json.Unmarshal(result.StructuredContent, &listed))
-	statuses := map[string]string{}
-	for _, server := range listed.Servers {
-		statuses[server.Slug] = server.Status
-	}
+	statuses := listStatuses()
 	require.Equal(t, "available", statuses[hostedMember.slug], "hosted members execute in-process and are always available")
-	require.Equal(t, "unknown", statuses[proxiedSlug], "proxied members stay unknown until the proxied runtime lands")
+	require.Equal(t, "unknown", statuses[proxiedSlug], "remote members stay unknown until cached health exists")
+	require.Equal(t, "unavailable", statuses[tunneledSlug], "a tunneled member with no live route is unavailable")
+
+	require.NoError(t, ti.tunnelRoutes.Publish(ctx, tunnelID.String(), "http://tunnel-gateway.internal.example:8443", time.Hour))
+	statuses = listStatuses()
+	require.Equal(t, "available", statuses[tunneledSlug], "a published route flips the tunneled member to available")
+	require.Equal(t, "unknown", statuses[proxiedSlug], "route publication must not disturb the remote member's status")
 }
 
-func TestServePublic_MetaEndpoint_DrillDown_ProxiedMember_NotImplemented(t *testing.T) {
+// A proxied member is drill-down navigable end to end: describe_server and
+// describe_tools read its live tools/list, and a dead member degrades
+// member-scoped.
+func TestServePublic_MetaEndpoint_DrillDown_ProxiedMember(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestMCPService(t)
@@ -357,17 +372,31 @@ func TestServePublic_MetaEndpoint_DrillDown_ProxiedMember_NotImplemented(t *test
 
 	slug := "meta-" + uuid.NewString()
 	meta := createMetaMcpEndpoint(t, ctx, ti.conn, *authCtx.ProjectID, authCtx.ActiveOrganizationID, slug, uuid.Nil)
+	upstream := newRecordingUpstream(t, "ping")
 	proxiedSlug := "member-remote-" + uuid.NewString()[:8]
-	seedMetaMember(t, ctx, ti.conn, *authCtx.ProjectID, meta.ID, "remote member", proxiedSlug, 1, mcpservers.VisibilityPrivate)
+	seedMetaMemberWithUpstream(t, ctx, ti.conn, *authCtx.ProjectID, meta.ID, "remote member", proxiedSlug, 1, upstream.url)
 
-	for tool, arguments := range map[string]map[string]any{
-		"describe_server": {"server": proxiedSlug},
-		"describe_tools":  {"tools": []string{proxiedSlug + "--anything"}},
-		"execute_tool":    {"name": proxiedSlug + "--anything", "arguments": map[string]any{}},
-	} {
-		envelope := callMetaTool(t, ctx, ti, slug, tool, arguments)
-		require.Contains(t, string(envelope["error"]), "not yet available for proxied member servers", "tool %s must answer deterministically", tool)
-	}
+	envelope := callMetaTool(t, ctx, ti, slug, "describe_server", map[string]any{"server": proxiedSlug})
+	require.Contains(t, string(envelope["result"]), proxiedSlug+"--ping",
+		"describe_server must qualify the proxied member's live tool names")
+
+	envelope = callMetaTool(t, ctx, ti, slug, "describe_tools", map[string]any{"tools": []string{proxiedSlug + "--ping"}})
+	require.Contains(t, string(envelope["result"]), `"inputSchema"`,
+		"describe_tools must return the proxied tool's schema")
+	require.NotContains(t, string(envelope["result"]), `"failed"`,
+		"a healthy member must not be reported failed")
+
+	// An unreachable member degrades member-scoped in describe_tools rather
+	// than failing the whole call.
+	deadSlug := "member-dead-" + uuid.NewString()[:8]
+	seedMetaMemberWithUpstream(t, ctx, ti.conn, *authCtx.ProjectID, meta.ID, "dead member", deadSlug, 2, "http://127.0.0.1:1/mcp")
+	envelope = callMetaTool(t, ctx, ti, slug, "describe_tools", map[string]any{
+		"tools": []string{proxiedSlug + "--ping", deadSlug + "--anything"},
+	})
+	body := string(envelope["result"])
+	require.Contains(t, body, proxiedSlug+"--ping", "the healthy member must still be described")
+	require.Contains(t, body, `"failed"`, "the dead member must land in failed")
+	require.Contains(t, body, deadSlug, "failed must name the dead member")
 }
 
 // A membership row pointing at a slugless server (legacy pre-2026-05 rows;

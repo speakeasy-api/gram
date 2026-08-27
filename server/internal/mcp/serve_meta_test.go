@@ -52,7 +52,7 @@ func createMetaMcpEndpoint(
 	meta, err := metamcprepo.New(conn).CreateMetaMCPServer(ctx, metamcprepo.CreateMetaMCPServerParams{
 		OrganizationID:      organizationID,
 		ProjectID:           projectID,
-		Name:                "test gateway",
+		Name:                "test meta MCP",
 		UserSessionIssuerID: issuer,
 		Visibility:          visibility.Private,
 	})
@@ -176,7 +176,7 @@ func TestServePublic_MetaEndpoint_Initialize(t *testing.T) {
 	// unobservable member as a missing one.
 	require.Contains(t, result.Instructions, "Never execute a name you have not described")
 	require.Contains(t, result.Instructions, metamcp.StatusUnknown)
-	require.NotContains(t, result.Instructions, "test gateway")
+	require.NotContains(t, result.Instructions, "test meta MCP")
 }
 
 func TestServePublic_MetaEndpoint_ServerDiscover(t *testing.T) {
