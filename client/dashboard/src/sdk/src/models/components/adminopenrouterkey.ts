@@ -5,16 +5,8 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
-import { ClosedEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
-
-export const DisableCauses = {
-  AdminLock: "admin_lock",
-  TrialDemotion: "trial_demotion",
-  BillingInactive: "billing_inactive",
-} as const;
-export type DisableCauses = ClosedEnum<typeof DisableCauses>;
 
 /**
  * One organization's platform OpenRouter key of a given type, without its key material.
@@ -27,7 +19,7 @@ export type AdminOpenRouterKey = {
   /**
    * Independent reasons that keep the key disabled.
    */
-  disableCauses: Array<DisableCauses>;
+  disableCauses: Array<string>;
   /**
    * Whether one or more active causes keep the key disabled.
    */
@@ -63,10 +55,6 @@ export type AdminOpenRouterKey = {
 };
 
 /** @internal */
-export const DisableCauses$inboundSchema: z.ZodMiniEnum<typeof DisableCauses> =
-  z.enum(DisableCauses);
-
-/** @internal */
 export const AdminOpenRouterKey$inboundSchema: z.ZodMiniType<
   AdminOpenRouterKey,
   unknown
@@ -76,7 +64,7 @@ export const AdminOpenRouterKey$inboundSchema: z.ZodMiniType<
       z.iso.datetime({ offset: true }),
       z.transform(v => new Date(v)),
     ),
-    disable_causes: z.array(DisableCauses$inboundSchema),
+    disable_causes: z.array(z.string()),
     disabled: z.boolean(),
     gram_account_type: z.string(),
     key_type: z.string(),

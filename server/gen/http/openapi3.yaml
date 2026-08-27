@@ -62542,10 +62542,6 @@ components:
                     type: array
                     items:
                         type: string
-                        enum:
-                            - admin_lock
-                            - trial_demotion
-                            - billing_inactive
                     description: Independent reasons that keep the key disabled.
                 disabled:
                     type: boolean

@@ -1615,11 +1615,6 @@ func ValidateDisableKeyResponseBody(body *DisableKeyResponseBody) (err error) {
 	if body.UpdatedAt == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("updated_at", "body"))
 	}
-	for _, e := range body.DisableCauses {
-		if !(e == "admin_lock" || e == "trial_demotion" || e == "billing_inactive") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.disable_causes[*]", e, []any{"admin_lock", "trial_demotion", "billing_inactive"}))
-		}
-	}
 	if body.CreatedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))
 	}
@@ -1661,11 +1656,6 @@ func ValidateEnableKeyResponseBody(body *EnableKeyResponseBody) (err error) {
 	}
 	if body.UpdatedAt == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("updated_at", "body"))
-	}
-	for _, e := range body.DisableCauses {
-		if !(e == "admin_lock" || e == "trial_demotion" || e == "billing_inactive") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.disable_causes[*]", e, []any{"admin_lock", "trial_demotion", "billing_inactive"}))
-		}
 	}
 	if body.CreatedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))
@@ -2668,11 +2658,6 @@ func ValidateAdminOpenRouterKeyResponseBody(body *AdminOpenRouterKeyResponseBody
 	}
 	if body.UpdatedAt == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("updated_at", "body"))
-	}
-	for _, e := range body.DisableCauses {
-		if !(e == "admin_lock" || e == "trial_demotion" || e == "billing_inactive") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.disable_causes[*]", e, []any{"admin_lock", "trial_demotion", "billing_inactive"}))
-		}
 	}
 	if body.CreatedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))

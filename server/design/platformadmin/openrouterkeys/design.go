@@ -23,9 +23,7 @@ var AdminKey = Type("AdminOpenRouterKey", func() {
 	Attribute("key_type", String, "Which upstream key this row provisions: 'chat' pays for customer-facing completions, 'internal' pays for platform-initiated LLM usage.")
 	Attribute("monthly_credits", Int64, "Monthly credit ceiling last mirrored from OpenRouter.")
 	Attribute("disabled", Boolean, "Whether one or more active causes keep the key disabled.")
-	Attribute("disable_causes", ArrayOf(String, func() {
-		Enum("admin_lock", "trial_demotion", "billing_inactive")
-	}), "Independent reasons that keep the key disabled.")
+	Attribute("disable_causes", ArrayOf(String), "Independent reasons that keep the key disabled.")
 	Attribute("created_at", String, "When the key row was created.", func() { Format(FormatDateTime) })
 	Attribute("updated_at", String, "When the key row was last updated.", func() { Format(FormatDateTime) })
 })

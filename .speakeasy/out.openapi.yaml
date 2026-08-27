@@ -3301,7 +3301,7 @@ paths:
         name: DisableAdminOpenRouterKey
   /rpc/adminOpenRouterKeys.enableKey:
     post:
-      description: Reinstate a disabled platform OpenRouter key, upstream and locally, keeping its recorded credit ceiling. Requires platform admin.
+      description: Remove the platform-admin lock from an OpenRouter key, preserving any automatic disable causes and its recorded credit ceiling. Requires platform admin.
       operationId: enableAdminOpenRouterKey
       parameters:
         - allowEmptyValue: true
@@ -61154,9 +61154,14 @@ components:
           type: string
           description: When the key row was created.
           format: date-time
+        disable_causes:
+          type: array
+          items:
+            type: string
+          description: Independent reasons that keep the key disabled.
         disabled:
           type: boolean
-          description: Whether the key is locked down (refused locally and disabled upstream).
+          description: Whether one or more active causes keep the key disabled.
         gram_account_type:
           type: string
           description: The organization's Gram account type (e.g. free, pro, enterprise).
@@ -61189,6 +61194,7 @@ components:
         - key_type
         - monthly_credits
         - disabled
+        - disable_causes
         - created_at
         - updated_at
     AdminOrganization:
@@ -66332,7 +66338,7 @@ components:
       properties:
         key_type:
           type: string
-          description: Key type to enable.
+          description: Key type from which to remove the platform-admin lock.
           enum:
             - chat
             - internal
