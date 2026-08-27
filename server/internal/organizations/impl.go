@@ -36,6 +36,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/auth/identity"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
@@ -1184,6 +1185,10 @@ func (s *Service) GenerateWorkOSAdminPortalLink(ctx context.Context, payload *ge
 		return nil, err
 	}
 
+	if err := s.requirePortalIntentEntitlement(ctx, ac, workos.PortalIntent(payload.Intent)); err != nil {
+		return nil, err
+	}
+
 	org, err := orgrepo.New(s.db).GetOrganizationMetadata(ctx, ac.ActiveOrganizationID)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to read organization details").LogError(ctx, s.logger)
@@ -1229,6 +1234,39 @@ func (s *Service) GenerateWorkOSAdminPortalLink(ctx context.Context, payload *ge
 	return &gen.GenerateWorkOSAdminPortalLinkResult{
 		URL: link,
 	}, nil
+}
+
+// requirePortalIntentEntitlement fails closed: an intent without an explicit
+// mapping here is denied, so intents added at the design layer cannot bypass
+// entitlement checks.
+func (s *Service) requirePortalIntentEntitlement(ctx context.Context, ac *contextvalues.AuthContext, intent workos.PortalIntent) error {
+	var feature productfeatures.Feature
+	switch intent {
+	case workos.PortalIntentDomainVerification:
+		// Ungated: orgs need domain verification to claim domains regardless of tier.
+		return nil
+	case workos.PortalIntentSSO:
+		feature = productfeatures.FeatureSSO
+	case workos.PortalIntentDSync:
+		feature = productfeatures.FeatureSCIM
+	case workos.PortalIntentAuditLogs, workos.PortalIntentLogStreams:
+		if ac.AccountType != string(billing.TierEnterprise) {
+			return oops.E(oops.CodeForbidden, nil, "an enterprise plan is required for %s", intent).LogError(ctx, s.logger)
+		}
+		return nil
+	default:
+		return oops.E(oops.CodeForbidden, nil, "unsupported admin portal intent").LogError(ctx, s.logger)
+	}
+
+	enabled, err := s.features.IsFeatureEnabled(ctx, ac.ActiveOrganizationID, feature)
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "check admin portal entitlement").LogError(ctx, s.logger)
+	}
+	if !enabled {
+		return oops.E(oops.CodeForbidden, nil, "organization is not entitled to %s", intent).LogError(ctx, s.logger)
+	}
+
+	return nil
 }
 
 func (s *Service) authContext(ctx context.Context) (*contextvalues.AuthContext, error) {

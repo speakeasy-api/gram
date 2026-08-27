@@ -23,6 +23,9 @@ const (
 	ActionOrganizationHooksFailOpenEnabled  Action = "organization:hooks_fail_open_enabled"
 	ActionOrganizationHooksFailOpenDisabled Action = "organization:hooks_fail_open_disabled"
 
+	ActionOrganizationProductFeatureEnabled  Action = "organization:product_feature_enabled"
+	ActionOrganizationProductFeatureDisabled Action = "organization:product_feature_disabled"
+
 	ActionOrganizationDeviceAgentConfigurationUpdated Action = "organization:device_agent_configuration_updated"
 
 	ActionOrganizationEnterpriseTrialArmed Action = "organization:enterprise_trial_armed"
@@ -271,6 +274,63 @@ func (l *Logger) LogOrganizationHooksFailOpenToggled(ctx context.Context, dbtx r
 	}
 
 	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.OrganizationHooksFailOpenV1})
+}
+
+// LogOrganizationProductFeatureToggledEvent records a productFeatures.set
+// change for every feature except hooks_fail_open, which keeps its dedicated
+// action so security-posture changes stay distinguishable. The toggled
+// feature's name is carried in metadata under "feature_name".
+type LogOrganizationProductFeatureToggledEvent struct {
+	OrganizationID string
+
+	Actor            urn.Principal
+	ActorDisplayName *string
+	ActorSlug        *string
+
+	OrganizationName string
+	OrganizationSlug string
+
+	FeatureName    string
+	FeatureEnabled bool
+}
+
+func (l *Logger) LogOrganizationProductFeatureToggled(ctx context.Context, dbtx repo.DBTX, event LogOrganizationProductFeatureToggledEvent) error {
+	var action Action
+	if event.FeatureEnabled {
+		action = ActionOrganizationProductFeatureEnabled
+	} else {
+		action = ActionOrganizationProductFeatureDisabled
+	}
+
+	metadata, err := marshalAuditPayload(map[string]any{
+		"feature_name": event.FeatureName,
+	})
+	if err != nil {
+		return fmt.Errorf("marshal %s metadata: %w", action, err)
+	}
+
+	entry := repo.InsertAuditLogParams{
+		OrganizationID: event.OrganizationID,
+		ProjectID:      uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+
+		ActorID:          event.Actor.ID,
+		ActorType:        string(event.Actor.Type),
+		ActorDisplayName: conv.PtrToPGTextEmpty(event.ActorDisplayName),
+		ActorSlug:        conv.PtrToPGTextEmpty(event.ActorSlug),
+
+		Action: string(action),
+
+		SubjectID:          event.OrganizationID,
+		SubjectType:        "organization",
+		SubjectDisplayName: conv.ToPGTextEmpty(event.OrganizationName),
+		SubjectSlug:        conv.ToPGTextEmpty(event.OrganizationSlug),
+
+		Metadata:       metadata,
+		BeforeSnapshot: nil,
+		AfterSnapshot:  nil,
+	}
+
+	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.OrganizationProductFeatureV1})
 }
 
 type DeviceAgentConfigurationSnapshot struct {

@@ -481,6 +481,23 @@ func withProAccount(t *testing.T, ctx context.Context) context.Context {
 	return contextvalues.SetAuthContext(ctx, authCtx)
 }
 
+// withFreeAccount returns a context whose account type is "free". The stub
+// billing repository reports every org as pro during authentication, so
+// free-tier denial paths are only reachable through this override. The auth
+// context is copied because contexts share the underlying pointer; mutating
+// it in place would downgrade every context derived from ctx.
+func withFreeAccount(t *testing.T, ctx context.Context) context.Context {
+	t.Helper()
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	freeAuthCtx := *authCtx
+	freeAuthCtx.AccountType = "free"
+
+	return contextvalues.SetAuthContext(ctx, &freeAuthCtx)
+}
+
 func createMinimalPrivateToolset(t *testing.T, ctx context.Context, ti *testInstance, name string) *types.Toolset {
 	t.Helper()
 

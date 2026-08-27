@@ -48,6 +48,16 @@ func TestMain(m *testing.M) {
 	os.Exit(code)
 }
 
+// withPlatformAdmin marks the test session as a platform admin (users.admin
+// bit), which staff-only feature toggles require in addition to org:admin.
+func withPlatformAdmin(t *testing.T, ctx context.Context) context.Context {
+	t.Helper()
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok, "auth context not found")
+	authCtx.IsAdmin = true
+	return contextvalues.SetAuthContext(ctx, authCtx)
+}
+
 func requestedOrganizationID(ctx context.Context) string {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil {

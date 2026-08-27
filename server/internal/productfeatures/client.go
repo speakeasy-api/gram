@@ -392,7 +392,7 @@ func SeedEnterpriseTrialBundleTx(ctx context.Context, tx pgx.Tx, organizationID 
 		}
 	}
 
-	if err := EnableSkillsTx(ctx, tx, organizationID); err != nil {
+	if _, err := EnableSkillsTx(ctx, tx, organizationID); err != nil {
 		return fmt.Errorf("enable Skills for enterprise trial: %w", err)
 	}
 
@@ -436,23 +436,25 @@ func SeedPaygEntitlementsTx(ctx context.Context, tx pgx.Tx, organizationID strin
 
 // EnableSkillsTx provisions the built-in Skills grants and enables the
 // org-level Skills feature in the caller's transaction. Existing grants and
-// exclusions are preserved.
-func EnableSkillsTx(ctx context.Context, dbtx repo.DBTX, organizationID string) error {
+// exclusions are preserved. It reports whether the feature row was newly
+// inserted, so callers can audit actual transitions without a separate read.
+func EnableSkillsTx(ctx context.Context, dbtx repo.DBTX, organizationID string) (bool, error) {
 	q := repo.New(dbtx)
 	if _, err := q.LockOrganizationMetadata(ctx, organizationID); err != nil {
-		return fmt.Errorf("lock organization for Skills enable: %w", err)
+		return false, fmt.Errorf("lock organization for Skills enable: %w", err)
 	}
 
 	if err := provisionSkillsSystemRoleGrantsTx(ctx, dbtx, organizationID); err != nil {
-		return err
+		return false, err
 	}
 
-	if _, err := q.EnableFeature(ctx, repo.EnableFeatureParams{
+	inserted, err := q.EnableFeature(ctx, repo.EnableFeatureParams{
 		OrganizationID: organizationID,
 		FeatureName:    string(FeatureSkills),
-	}); err != nil {
-		return fmt.Errorf("enable Skills feature flag: %w", err)
+	})
+	if err != nil {
+		return false, fmt.Errorf("enable Skills feature flag: %w", err)
 	}
 
-	return nil
+	return inserted > 0, nil
 }

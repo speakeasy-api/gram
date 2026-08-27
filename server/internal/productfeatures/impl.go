@@ -114,6 +114,14 @@ func (s *Service) SetProductFeature(ctx context.Context, payload *gen.SetProduct
 		return err
 	}
 
+	// Staff-managed entitlements (SSO, SCIM, ...) must not be self-granted by
+	// organization admins; org-settable operational toggles need org:admin only.
+	if Feature(payload.FeatureName).RequiresPlatformAdmin() {
+		if _, _, err := auth.RequirePlatformAdmin(ctx, s.logger); err != nil {
+			return err
+		}
+	}
+
 	if payload.FeatureName == string(FeatureSkills) && !payload.Enabled {
 		return nil
 	}
@@ -139,9 +147,11 @@ func (s *Service) SetProductFeature(ctx context.Context, payload *gen.SetProduct
 	if payload.Enabled && payload.FeatureName == string(FeatureSkills) {
 		// Skills enablement also provisions the built-in RBAC grants, so it
 		// goes through its dedicated transactional path.
-		if err := EnableSkillsTx(ctx, dbtx, orgID); err != nil {
+		inserted, err := EnableSkillsTx(ctx, dbtx, orgID)
+		if err != nil {
 			return oops.E(oops.CodeUnexpected, err, "enable Skills feature").LogError(ctx, s.logger, attr.SlogOrganizationID(orgID))
 		}
+		changed = inserted
 	} else if payload.Enabled {
 		inserted, err := q.EnableFeature(ctx, repo.EnableFeatureParams{
 			OrganizationID: orgID,
@@ -167,24 +177,37 @@ func (s *Service) SetProductFeature(ctx context.Context, payload *gen.SetProduct
 		}
 	}
 
-	// Fail-open governs whether blocking policies are enforced during a
-	// control-plane outage, so flipping it is a security-posture change that
-	// must leave an audit trail.
-	if payload.FeatureName == string(FeatureHooksFailOpen) && changed {
+	if changed {
 		org, err := orgrepo.New(dbtx).GetOrganizationMetadata(ctx, orgID)
 		if err != nil {
-			return oops.E(oops.CodeUnexpected, err, "read organization for hooks fail-open audit event").LogError(ctx, s.logger, attr.SlogOrganizationID(orgID))
+			return oops.E(oops.CodeUnexpected, err, "read organization for feature toggle audit event").LogError(ctx, s.logger, attr.SlogOrganizationID(orgID))
 		}
-		if err := s.audit.LogOrganizationHooksFailOpenToggled(ctx, dbtx, audit.LogOrganizationHooksFailOpenToggledEvent{
+		// Fail-open governs whether blocking policies are enforced during a
+		// control-plane outage, so it keeps a dedicated audit action that makes
+		// posture changes distinguishable from ordinary feature toggles.
+		if payload.FeatureName == string(FeatureHooksFailOpen) {
+			if err := s.audit.LogOrganizationHooksFailOpenToggled(ctx, dbtx, audit.LogOrganizationHooksFailOpenToggledEvent{
+				OrganizationID:   orgID,
+				Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
+				ActorDisplayName: authCtx.Email,
+				ActorSlug:        nil,
+				OrganizationName: org.Name,
+				OrganizationSlug: org.Slug,
+				FailOpenEnabled:  payload.Enabled,
+			}); err != nil {
+				return oops.E(oops.CodeUnexpected, err, "record hooks fail-open audit event").LogError(ctx, s.logger, attr.SlogOrganizationID(orgID))
+			}
+		} else if err := s.audit.LogOrganizationProductFeatureToggled(ctx, dbtx, audit.LogOrganizationProductFeatureToggledEvent{
 			OrganizationID:   orgID,
 			Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
 			ActorDisplayName: authCtx.Email,
 			ActorSlug:        nil,
 			OrganizationName: org.Name,
 			OrganizationSlug: org.Slug,
-			FailOpenEnabled:  payload.Enabled,
+			FeatureName:      payload.FeatureName,
+			FeatureEnabled:   payload.Enabled,
 		}); err != nil {
-			return oops.E(oops.CodeUnexpected, err, "record hooks fail-open audit event").LogError(ctx, s.logger, attr.SlogOrganizationID(orgID))
+			return oops.E(oops.CodeUnexpected, err, "record feature toggle audit event").LogError(ctx, s.logger, attr.SlogOrganizationID(orgID))
 		}
 	}
 

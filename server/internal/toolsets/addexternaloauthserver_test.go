@@ -9,6 +9,7 @@ import (
 	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
+	"github.com/speakeasy-api/gram/server/internal/oops"
 )
 
 func TestToolsetsService_AddExternalOAuthServer_AuditLog(t *testing.T) {
@@ -56,6 +57,34 @@ func TestToolsetsService_AddExternalOAuthServer_AuditLog(t *testing.T) {
 	afterCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionToolsetAttachExternalOAuth)
 	require.NoError(t, err)
 	require.Equal(t, beforeCount+1, afterCount)
+}
+
+func TestToolsetsService_AddExternalOAuthServer_FreeTierDenied(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestToolsetsService(t)
+	toolset := createMinimalPublicToolset(t, ctx, ti, "Free Tier External OAuth Toolset")
+	freeCtx := withFreeAccount(t, ctx)
+
+	_, err := ti.service.AddExternalOAuthServer(freeCtx, &gen.AddExternalOAuthServerPayload{
+		SessionToken: nil,
+		ApikeyToken:  nil,
+		Slug:         toolset.Slug,
+		ExternalOauthServer: &types.ExternalOAuthServerForm{
+			Slug: types.Slug("free-tier-external-oauth"),
+			Metadata: map[string]any{
+				"issuer":         "https://example.com",
+				"token_endpoint": "https://example.com/token",
+			},
+		},
+		ProjectSlugInput: nil,
+	})
+	require.Error(t, err)
+
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeForbidden, oopsErr.Code)
+	require.Contains(t, err.Error(), "free accounts cannot add external OAuth servers")
 }
 
 func TestToolsetsService_AddExternalOAuthServer_PrivateToolset_NoAuditLog(t *testing.T) {
