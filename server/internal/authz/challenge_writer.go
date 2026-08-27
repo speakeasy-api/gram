@@ -7,7 +7,9 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/metric"
+	"go.opentelemetry.io/otel/trace"
 
 	authzv1 "github.com/speakeasy-api/gram/infra/gen/gram/authz/v1"
 	"github.com/speakeasy-api/gram/infra/pkg/gcp"
@@ -31,8 +33,8 @@ type ChallengeInserter interface {
 
 // ChallengeCHWriter consumes authz challenge events from Pub/Sub and persists
 // them to ClickHouse in batches. Invalid messages are poison records: they are
-// logged and acknowledged, while ClickHouse failures are returned so the batch
-// is redelivered.
+// logged and acknowledged, while a failed insert is staged against the messages
+// it covered so only those redeliver.
 type ChallengeCHWriter struct {
 	logger             *slog.Logger
 	inserter           ChallengeInserter
@@ -75,11 +77,37 @@ func NewChallengeCHWriter(
 	}
 }
 
-var _ streams.BatchHandler[*authzv1.Challenge] = (*ChallengeCHWriter)(nil)
+var _ streams.BatchResultHandler[*authzv1.Challenge] = (*ChallengeCHWriter)(nil)
 
-func (w *ChallengeCHWriter) HandleBatch(ctx context.Context, messages []*authzv1.Challenge, _ []gcp.MessageMetadata) error {
+// HandleBatchWithResult adapts processBatch to the streams runner: an insert
+// failure is staged against the messages it actually covered, so poison records
+// are acknowledged and dropped whatever the insert does rather than being
+// nacked alongside rows that deserve a retry.
+func (w *ChallengeCHWriter) HandleBatchWithResult(ctx context.Context, batch []gcp.BatchMessage[*authzv1.Challenge]) error {
+	messages := make([]*authzv1.Challenge, len(batch))
+	for i, m := range batch {
+		messages[i] = m.Message
+	}
+
+	for i, err := range w.processBatch(ctx, messages) {
+		if err != nil {
+			batch[i].Fail(err)
+		}
+	}
+
+	return nil
+}
+
+// processBatch writes the batch's valid rows to ClickHouse. The returned slice
+// is parallel to messages: a non-nil entry means that message must redeliver.
+// Poison records keep a nil entry so they are acknowledged and dropped — they
+// can never be persisted, and a failing insert says nothing about them.
+func (w *ChallengeCHWriter) processBatch(ctx context.Context, messages []*authzv1.Challenge) []error {
+	failed := make([]error, len(messages))
+
 	rows := make([]authzrepo.ChallengeRow, 0, len(messages))
-	for _, message := range messages {
+	covered := make([]int, 0, len(messages))
+	for i, message := range messages {
 		row, err := challengeRowFromMessage(message)
 		if err != nil {
 			w.logger.ErrorContext(ctx, "skipping unprocessable authz challenge message",
@@ -92,21 +120,36 @@ func (w *ChallengeCHWriter) HandleBatch(ctx context.Context, messages []*authzv1
 			continue
 		}
 		rows = append(rows, row)
+		covered = append(covered, i)
 	}
 
 	if len(rows) == 0 {
-		return nil
+		return failed
 	}
 
 	err := w.inserter.InsertChallenges(ctx, rows)
 	if w.challengesInserted != nil {
 		w.challengesInserted.Add(ctx, int64(len(rows)), metric.WithAttributes(attr.Outcome(o11y.OutcomeFromError(err))))
 	}
-	if err != nil {
-		return fmt.Errorf("insert authz challenges: %w", err)
+	if err == nil {
+		return failed
 	}
 
-	return nil
+	err = fmt.Errorf("insert authz challenges: %w", err)
+	w.logger.ErrorContext(ctx, "failed to insert authz challenge batch", attr.SlogError(err))
+
+	// Staged failures leave the runner's batch span unmarked because the handler
+	// returns nil, so record the insert failure here: a ClickHouse outage stalls
+	// every ClickHouse writer at once and has to stay visible in traces.
+	span := trace.SpanFromContext(ctx)
+	span.RecordError(err)
+	span.SetStatus(codes.Error, err.Error())
+
+	for _, i := range covered {
+		failed[i] = err
+	}
+
+	return failed
 }
 
 func challengeRowFromMessage(message *authzv1.Challenge) (authzrepo.ChallengeRow, error) {

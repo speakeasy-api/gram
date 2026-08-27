@@ -11,7 +11,6 @@ import (
 	"github.com/stretchr/testify/require"
 
 	authzv1 "github.com/speakeasy-api/gram/infra/gen/gram/authz/v1"
-	"github.com/speakeasy-api/gram/infra/pkg/gcp"
 	authzrepo "github.com/speakeasy-api/gram/server/internal/authz/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
@@ -58,31 +57,17 @@ func newChallengeCHWriter(t *testing.T) (*ChallengeCHWriter, clickhouse.Conn) {
 	return NewChallengeCHWriter(testenv.NewLogger(t), testenv.NewMeterProvider(t), authzrepo.New(conn)), conn
 }
 
-// challengeMetadata returns metadata parallel to messages. The writer ignores
-// it, but HandleBatch takes it to satisfy the streams.BatchHandler contract.
-func challengeMetadata(count int) []gcp.MessageMetadata {
-	metas := make([]gcp.MessageMetadata, count)
-	for i := range metas {
-		metas[i] = gcp.MessageMetadata{
-			ID:              "message-id",
-			Attributes:      nil,
-			DeliveryAttempt: nil,
-		}
-	}
-	return metas
-}
-
 func TestChallengeCHWriterPersistsMessage(t *testing.T) {
 	t.Parallel()
 
 	writer, conn := newChallengeCHWriter(t)
 	message := testChallengeMessage()
 
-	err := writer.HandleBatch(t.Context(), []*authzv1.Challenge{message}, challengeMetadata(1))
-	require.NoError(t, err)
+	failed := writer.processBatch(t.Context(), []*authzv1.Challenge{message})
+	require.Equal(t, []error{nil}, failed)
 
 	var count uint64
-	err = conn.QueryRow(t.Context(), `SELECT count() FROM authz_challenges WHERE id = ?`, message.GetId()).Scan(&count)
+	err := conn.QueryRow(t.Context(), `SELECT count() FROM authz_challenges WHERE id = ?`, message.GetId()).Scan(&count)
 	require.NoError(t, err)
 	require.Equal(t, uint64(1), count)
 }
@@ -94,11 +79,11 @@ func TestChallengeCHWriterPersistsBatch(t *testing.T) {
 	first := testChallengeMessage()
 	second := testChallengeMessage()
 
-	err := writer.HandleBatch(t.Context(), []*authzv1.Challenge{first, second}, challengeMetadata(2))
-	require.NoError(t, err)
+	failed := writer.processBatch(t.Context(), []*authzv1.Challenge{first, second})
+	require.Equal(t, []error{nil, nil}, failed)
 
 	var count uint64
-	err = conn.QueryRow(t.Context(), `SELECT count() FROM authz_challenges WHERE id IN (?, ?)`, first.GetId(), second.GetId()).Scan(&count)
+	err := conn.QueryRow(t.Context(), `SELECT count() FROM authz_challenges WHERE id IN (?, ?)`, first.GetId(), second.GetId()).Scan(&count)
 	require.NoError(t, err)
 	require.Equal(t, uint64(2), count)
 }
@@ -113,11 +98,11 @@ func TestChallengeCHWriterSkipsInvalidMessageInBatch(t *testing.T) {
 	invalid := testChallengeMessage()
 	invalid.SetTraceId(strings.Repeat("a", maxChallengeTraceIDBytes+1))
 
-	err := writer.HandleBatch(t.Context(), []*authzv1.Challenge{invalid, valid}, challengeMetadata(2))
-	require.NoError(t, err)
+	failed := writer.processBatch(t.Context(), []*authzv1.Challenge{invalid, valid})
+	require.Equal(t, []error{nil, nil}, failed)
 
 	var validCount uint64
-	err = conn.QueryRow(t.Context(), `SELECT count() FROM authz_challenges WHERE id = ?`, valid.GetId()).Scan(&validCount)
+	err := conn.QueryRow(t.Context(), `SELECT count() FROM authz_challenges WHERE id = ?`, valid.GetId()).Scan(&validCount)
 	require.NoError(t, err)
 	require.Equal(t, uint64(1), validCount)
 
@@ -127,6 +112,23 @@ func TestChallengeCHWriterSkipsInvalidMessageInBatch(t *testing.T) {
 	require.Zero(t, invalidCount)
 }
 
+// A failing insert says nothing about a poison record, so the poison keeps its
+// nil entry and is acknowledged while only the rows the insert covered redeliver.
+func TestChallengeCHWriterDropsPoisonWhenInsertFails(t *testing.T) {
+	t.Parallel()
+
+	writer, _ := newChallengeCHWriter(t)
+	invalid := testChallengeMessage()
+	invalid.SetTraceId(strings.Repeat("a", maxChallengeTraceIDBytes+1))
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+
+	failed := writer.processBatch(ctx, []*authzv1.Challenge{invalid, testChallengeMessage()})
+	require.Len(t, failed, 2)
+	require.NoError(t, failed[0])
+	require.ErrorContains(t, failed[1], "insert authz challenges")
+}
+
 func TestChallengeCHWriterAcknowledgesInvalidMessage(t *testing.T) {
 	t.Parallel()
 
@@ -134,11 +136,11 @@ func TestChallengeCHWriterAcknowledgesInvalidMessage(t *testing.T) {
 	id := "not-a-uuid"
 	timestamp := time.Now().UTC().Format(time.RFC3339Nano)
 
-	err := writer.HandleBatch(t.Context(), []*authzv1.Challenge{authzv1.Challenge_builder{
+	failed := writer.processBatch(t.Context(), []*authzv1.Challenge{authzv1.Challenge_builder{
 		Id:        &id,
 		Timestamp: &timestamp,
-	}.Build()}, challengeMetadata(1))
-	require.NoError(t, err)
+	}.Build()})
+	require.Equal(t, []error{nil}, failed)
 }
 
 func TestChallengeCHWriterAcknowledgesOverlongTraceID(t *testing.T) {
@@ -148,11 +150,11 @@ func TestChallengeCHWriterAcknowledgesOverlongTraceID(t *testing.T) {
 	message := testChallengeMessage()
 	message.SetTraceId(strings.Repeat("a", maxChallengeTraceIDBytes+1))
 
-	err := writer.HandleBatch(t.Context(), []*authzv1.Challenge{message}, challengeMetadata(1))
-	require.NoError(t, err)
+	failed := writer.processBatch(t.Context(), []*authzv1.Challenge{message})
+	require.Equal(t, []error{nil}, failed)
 
 	var count uint64
-	err = conn.QueryRow(t.Context(), `SELECT count() FROM authz_challenges WHERE id = ?`, message.GetId()).Scan(&count)
+	err := conn.QueryRow(t.Context(), `SELECT count() FROM authz_challenges WHERE id = ?`, message.GetId()).Scan(&count)
 	require.NoError(t, err)
 	require.Zero(t, count)
 }
@@ -164,11 +166,11 @@ func TestChallengeCHWriterAcknowledgesOverlongSpanID(t *testing.T) {
 	message := testChallengeMessage()
 	message.SetSpanId(strings.Repeat("a", maxChallengeSpanIDBytes+1))
 
-	err := writer.HandleBatch(t.Context(), []*authzv1.Challenge{message}, challengeMetadata(1))
-	require.NoError(t, err)
+	failed := writer.processBatch(t.Context(), []*authzv1.Challenge{message})
+	require.Equal(t, []error{nil}, failed)
 
 	var count uint64
-	err = conn.QueryRow(t.Context(), `SELECT count() FROM authz_challenges WHERE id = ?`, message.GetId()).Scan(&count)
+	err := conn.QueryRow(t.Context(), `SELECT count() FROM authz_challenges WHERE id = ?`, message.GetId()).Scan(&count)
 	require.NoError(t, err)
 	require.Zero(t, count)
 }
@@ -180,8 +182,9 @@ func TestChallengeCHWriterRetriesClickHouseFailure(t *testing.T) {
 	ctx, cancel := context.WithCancel(t.Context())
 	cancel()
 
-	err := writer.HandleBatch(ctx, []*authzv1.Challenge{testChallengeMessage()}, challengeMetadata(1))
-	require.ErrorContains(t, err, "insert authz challenges")
+	failed := writer.processBatch(ctx, []*authzv1.Challenge{testChallengeMessage()})
+	require.Len(t, failed, 1)
+	require.ErrorContains(t, failed[0], "insert authz challenges")
 }
 
 func testChallengeMessage() *authzv1.Challenge {
