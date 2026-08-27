@@ -299,7 +299,7 @@ func (s *RefreshService) refresh(
 	sess = current
 
 	if current.UpdatedAt.Time.After(snapshotAt) {
-		if accessTokenUsable(current, time.Now()) {
+		if accessTokenLive(current, time.Now()) {
 			plain, err := s.enc.Decrypt(current.AccessTokenEncrypted)
 			if err != nil {
 				return zero, "", fmt.Errorf("decrypt concurrently refreshed access token: %w", err)
@@ -307,7 +307,7 @@ func (s *RefreshService) refresh(
 			return RefreshResult{Session: current, AccessToken: plain, Outcome: remotesessionmetrics.RefreshOutcomeAdoptedConcurrentWinner, IssuerURL: ""}, "", nil
 		}
 	}
-	if !current.RefreshTokenEncrypted.Valid || current.RefreshTokenEncrypted.String == "" {
+	if !hasRefreshToken(current) {
 		return zero, "", ErrNoValidToken
 	}
 	if !refreshTokenUsable(current, time.Now()) {
@@ -385,7 +385,7 @@ func (s *RefreshService) refresh(
 		return zero, client.IssuerUrl, refreshErr
 	}
 
-	if !accessTokenUsable(latest, time.Now()) {
+	if !accessTokenLive(latest, time.Now()) {
 		return zero, client.IssuerUrl, refreshErr
 	}
 	plain, err := s.enc.Decrypt(latest.AccessTokenEncrypted)
@@ -397,19 +397,44 @@ func (s *RefreshService) refresh(
 }
 
 // accessTokenExpirySkew is the window before access_expires_at within which a
-// stored access token is already treated as expired. It absorbs clock drift
-// against the upstream and the time the proxied call itself takes: a token
-// that expires mid-request is rejected upstream exactly as an expired one is,
-// so refreshing a moment early costs one refresh grant where forwarding the
-// token costs the caller a failed tool call.
+// stored access token is refreshed rather than forwarded. It absorbs clock
+// drift against the upstream and the time the proxied call itself takes: a
+// token that expires mid-request is rejected upstream exactly as an expired
+// one is, so refreshing a moment early costs one refresh grant where
+// forwarding the token costs the caller a failed tool call.
 const accessTokenExpirySkew = 30 * time.Second
 
-// accessTokenUsable reports whether sess's stored access token can be
-// forwarded at now: the authorization is live and either no access expiry is
-// known or the deadline is more than accessTokenExpirySkew away.
-func accessTokenUsable(sess remotesessions_repo.RemoteSession, now time.Time) bool {
+// accessTokenLive reports whether sess's stored access token is inside its
+// stated lifetime at now: the authorization is live and either no access
+// expiry is known or the deadline has not passed. This is the bar for adopting
+// a row a concurrent refresh wrote moments ago: that token is the newest a
+// refresh can produce, so refreshing again would only spend another grant on a
+// token with the same lifetime — and against a provider whose tokens live
+// shorter than accessTokenExpirySkew, every waiter would reject every winner.
+func accessTokenLive(sess remotesessions_repo.RemoteSession, now time.Time) bool {
 	return authorizationUsable(sess, now) &&
-		(!sess.AccessExpiresAt.Valid || sess.AccessExpiresAt.Time.After(now.Add(accessTokenExpirySkew)))
+		(!sess.AccessExpiresAt.Valid || sess.AccessExpiresAt.Time.After(now))
+}
+
+// accessTokenUsable reports whether sess's stored access token should be
+// forwarded at now rather than refreshed. A live token is forwarded unless a
+// usable refresh grant exists and the deadline is within
+// accessTokenExpirySkew. With no refresh path the token is forwarded until its
+// stated deadline: the only alternative is a reconnect prompt
+// accessTokenExpirySkew early, and ListRemoteSessionStatusesForSubject reports
+// that same window as active.
+func accessTokenUsable(sess remotesessions_repo.RemoteSession, now time.Time) bool {
+	if !accessTokenLive(sess, now) {
+		return false
+	}
+	if !sess.AccessExpiresAt.Valid || !hasRefreshToken(sess) || !refreshTokenUsable(sess, now) {
+		return true
+	}
+	return sess.AccessExpiresAt.Time.After(now.Add(accessTokenExpirySkew))
+}
+
+func hasRefreshToken(sess remotesessions_repo.RemoteSession) bool {
+	return sess.RefreshTokenEncrypted.Valid && sess.RefreshTokenEncrypted.String != ""
 }
 
 func refreshTokenUsable(sess remotesessions_repo.RemoteSession, now time.Time) bool {
@@ -456,7 +481,7 @@ func (s *RefreshService) awaitRefreshedSession(
 		if !latest.UpdatedAt.Time.After(sess.UpdatedAt.Time) {
 			continue
 		}
-		if !accessTokenUsable(latest, time.Now()) {
+		if !accessTokenLive(latest, time.Now()) {
 			return zero, false
 		}
 

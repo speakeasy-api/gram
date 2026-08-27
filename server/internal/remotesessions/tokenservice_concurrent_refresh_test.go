@@ -18,6 +18,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 )
 
@@ -42,6 +43,9 @@ type rotatingUpstream struct {
 	replays   int
 	arrived   int
 	gate      chan struct{}
+	// expiresIn, when positive, is the expires_in the refresh grant reports.
+	// Zero omits the field, as the initial exchange always does.
+	expiresIn int
 }
 
 func newRotatingUpstream() *rotatingUpstream {
@@ -53,6 +57,7 @@ func newRotatingUpstream() *rotatingUpstream {
 		replays:   0,
 		arrived:   0,
 		gate:      make(chan struct{}),
+		expiresIn: 0,
 	}
 }
 
@@ -118,9 +123,14 @@ func (u *rotatingUpstream) handler(w http.ResponseWriter, r *http.Request) {
 	rotated := fmt.Sprintf("refresh-rotated-%d", u.rotations)
 	u.live[rotated] = true
 
-	_, _ = w.Write(fmt.Appendf(nil,
-		`{"access_token":"access-rotated-%d","refresh_token":%q,"token_type":"Bearer"}`,
-		u.rotations, rotated))
+	response := fmt.Appendf(nil,
+		`{"access_token":"access-rotated-%d","refresh_token":%q,"token_type":"Bearer"`,
+		u.rotations, rotated)
+	if u.expiresIn > 0 {
+		response = fmt.Appendf(response, `,"expires_in":%d`, u.expiresIn)
+	}
+	response = append(response, '}')
+	_, _ = w.Write(response)
 }
 
 // resolveConcurrently drives concurrentRefreshCallers simultaneous resolves
@@ -204,4 +214,27 @@ func TestResolveAccessToken_ConcurrentRefresh_CollapsesToSingleUpstreamCall(t *t
 
 	require.Equal(t, 1, upstream.refreshAttempts(),
 		"concurrent resolves for one subject must collapse into a single upstream refresh")
+}
+
+// The adoption guard: a provider whose access tokens live for less than
+// accessTokenExpirySkew writes a row that is inside the skew window the moment
+// it lands. That token is still the newest a refresh can produce, so waiters
+// must adopt it. Rejecting it sends each of them upstream with the winner's
+// rotated refresh token — one more grant per waiter, and replays once two of
+// them race.
+func TestResolveAccessToken_ConcurrentRefresh_ShortLivedTokenIsAdopted(t *testing.T) {
+	t.Parallel()
+
+	upstream := newRotatingUpstream()
+	upstream.expiresIn = int(remotesessions.AccessTokenExpirySkew / time.Second / 2)
+	_, _, tokens := resolveConcurrently(t, "concurrent-refresh-short-lived", upstream)
+
+	for i, tok := range tokens {
+		require.Equal(t, "access-rotated-1", tok, "caller %d must adopt the single rotation", i)
+	}
+	require.Equal(t, 1, upstream.refreshAttempts(),
+		"waiters must adopt a token inside the skew window rather than refresh again")
+	require.Zero(t, upstream.consumedReplays(),
+		"a consumed refresh token was presented upstream %d time(s)",
+		upstream.consumedReplays())
 }

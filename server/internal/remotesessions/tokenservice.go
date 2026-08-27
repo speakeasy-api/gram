@@ -18,9 +18,10 @@
 //     has linked under the user_session_issuer, returning them as a
 //     remote_session_issuer_id -> token map.
 //
-// Refresh is invoked only when the stored access_expires_at has passed
-// or is within accessTokenExpirySkew of passing. A still-valid access
-// token short-circuits: no upstream token endpoint is contacted.
+// Refresh is invoked only when the stored access_expires_at has passed,
+// or is within accessTokenExpirySkew of passing and a refresh grant is
+// available. A still-valid access token short-circuits: no upstream
+// token endpoint is contacted.
 
 package remotesessions
 
@@ -443,9 +444,10 @@ func (m *ChallengeManager) resolveBoundAccessTokens(
 // just-backfilled RFC 8707 resource, from the same row as the token.
 //
 // The usable window depends on what the upstream told us:
-//   - access_expires_at set: the upstream-stated expiry governs, less
-//     accessTokenExpirySkew so a token about to expire is refreshed before it
-//     is forwarded rather than rejected upstream mid-request.
+//   - access_expires_at set: the upstream-stated expiry governs. With a usable
+//     refresh grant, a token within accessTokenExpirySkew of it is refreshed
+//     before it is forwarded rather than rejected upstream mid-request; with
+//     none, the token is forwarded until the deadline itself.
 //   - access_expires_at NULL: no expiry was reported, so the stored access
 //     token is served as-is. A refresh token does not imply that access expires.
 //
@@ -461,7 +463,7 @@ func (m *ChallengeManager) validateAndRefresh(
 		return "", sess, ErrNoValidToken
 	}
 
-	hasRefresh := sess.RefreshTokenEncrypted.Valid && sess.RefreshTokenEncrypted.String != ""
+	hasRefresh := hasRefreshToken(sess)
 
 	if accessTokenUsable(sess, now) {
 		plain, err := m.enc.Decrypt(sess.AccessTokenEncrypted)
