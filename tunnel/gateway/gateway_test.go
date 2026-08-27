@@ -39,6 +39,13 @@ func newForwardTestGateway(t *testing.T, cfg Config) *Gateway {
 	return gw
 }
 
+func mustAdd(t *testing.T, reg *registry, tunnelID, sessionID string, s *yamux.Session, proxy http.Handler, connection route.Connection) func() {
+	t.Helper()
+	remove, ok := reg.add(tunnelID, sessionID, s, proxy, connection)
+	require.True(t, ok, "registry add rejected")
+	return remove
+}
+
 func TestNewRejectsMissingForwardToken(t *testing.T) {
 	t.Parallel()
 
@@ -126,8 +133,8 @@ func TestRegistryBeginForwardRoundRobinsWithoutConsumerSession(t *testing.T) {
 	reg := newRegistry()
 	sessionA := newYamuxSession(t)
 	sessionB := newYamuxSession(t)
-	removeA := reg.add("tunnel-1", "session-a", sessionA, http.NotFoundHandler(), route.Connection{GatewaySessionID: "session-a", Metadata: map[string]string{}})
-	removeB := reg.add("tunnel-1", "session-b", sessionB, http.NotFoundHandler(), route.Connection{GatewaySessionID: "session-b", Metadata: map[string]string{}})
+	removeA := mustAdd(t, reg, "tunnel-1", "session-a", sessionA, http.NotFoundHandler(), route.Connection{GatewaySessionID: "session-a", Metadata: map[string]string{}})
+	removeB := mustAdd(t, reg, "tunnel-1", "session-b", sessionB, http.NotFoundHandler(), route.Connection{GatewaySessionID: "session-b", Metadata: map[string]string{}})
 	t.Cleanup(removeA)
 	t.Cleanup(removeB)
 
@@ -143,8 +150,8 @@ func TestRegistryBeginForwardSticksStableConsumerSession(t *testing.T) {
 	reg := newRegistry()
 	sessionA := newYamuxSession(t)
 	sessionB := newYamuxSession(t)
-	removeA := reg.add("tunnel-1", "session-a", sessionA, http.NotFoundHandler(), route.Connection{GatewaySessionID: "session-a", Metadata: map[string]string{}})
-	removeB := reg.add("tunnel-1", "session-b", sessionB, http.NotFoundHandler(), route.Connection{GatewaySessionID: "session-b", Metadata: map[string]string{}})
+	removeA := mustAdd(t, reg, "tunnel-1", "session-a", sessionA, http.NotFoundHandler(), route.Connection{GatewaySessionID: "session-a", Metadata: map[string]string{}})
+	removeB := mustAdd(t, reg, "tunnel-1", "session-b", sessionB, http.NotFoundHandler(), route.Connection{GatewaySessionID: "session-b", Metadata: map[string]string{}})
 	t.Cleanup(removeA)
 	t.Cleanup(removeB)
 
@@ -161,8 +168,8 @@ func TestRegistryBeginForwardUsesNextRankedEligibleSession(t *testing.T) {
 	reg := newRegistry()
 	sessionA := newYamuxSession(t)
 	sessionB := newYamuxSession(t)
-	removeA := reg.add("tunnel-1", "session-a", sessionA, http.NotFoundHandler(), route.Connection{GatewaySessionID: "session-a", Metadata: map[string]string{}})
-	removeB := reg.add("tunnel-1", "session-b", sessionB, http.NotFoundHandler(), route.Connection{GatewaySessionID: "session-b", Metadata: map[string]string{}})
+	removeA := mustAdd(t, reg, "tunnel-1", "session-a", sessionA, http.NotFoundHandler(), route.Connection{GatewaySessionID: "session-a", Metadata: map[string]string{}})
+	removeB := mustAdd(t, reg, "tunnel-1", "session-b", sessionB, http.NotFoundHandler(), route.Connection{GatewaySessionID: "session-b", Metadata: map[string]string{}})
 	t.Cleanup(removeA)
 	t.Cleanup(removeB)
 
@@ -185,7 +192,7 @@ func TestRegistryBeginForwardDistinguishesBusyFromNoSession(t *testing.T) {
 	require.Equal(t, forwardNoSession, failure)
 
 	session := newYamuxSession(t)
-	remove := reg.add("tunnel-1", "session-a", session, http.NotFoundHandler(), route.Connection{GatewaySessionID: "session-a", Metadata: map[string]string{}})
+	remove := mustAdd(t, reg, "tunnel-1", "session-a", session, http.NotFoundHandler(), route.Connection{GatewaySessionID: "session-a", Metadata: map[string]string{}})
 	t.Cleanup(remove)
 
 	entry, failure := reg.beginForward("tunnel-1", "", "", time.Now().UTC(), 1)
@@ -204,7 +211,7 @@ func TestForwardHandlerReportsTunnelBusyAtCap(t *testing.T) {
 
 	gw := newForwardTestGateway(t, Config{ForwardToken: "s3cret", MaxStreamsPerTunnel: 1})
 	session := newYamuxSession(t)
-	remove := gw.reg.add("tunnel-1", "session-a", session, http.NotFoundHandler(), route.Connection{GatewaySessionID: "session-a", Metadata: map[string]string{}})
+	remove := mustAdd(t, gw.reg, "tunnel-1", "session-a", session, http.NotFoundHandler(), route.Connection{GatewaySessionID: "session-a", Metadata: map[string]string{}})
 	t.Cleanup(remove)
 
 	// Occupy the single substream slot so the next forward hits the cap.
@@ -256,7 +263,7 @@ func TestCleanupSessionStateHealsReconnectRace(t *testing.T) {
 	require.NoError(t, table.Publish(ctx, "tunnel-1", "gw-1:8091", time.Minute))
 	sessionB := newYamuxSession(t)
 	hooked.beforeUnpublish = func() {
-		remove := gw.reg.add("tunnel-1", "session-b", sessionB, http.NotFoundHandler(), route.Connection{GatewaySessionID: "session-b", Metadata: map[string]string{}})
+		remove := mustAdd(t, gw.reg, "tunnel-1", "session-b", sessionB, http.NotFoundHandler(), route.Connection{GatewaySessionID: "session-b", Metadata: map[string]string{}})
 		t.Cleanup(remove)
 	}
 
@@ -300,10 +307,10 @@ func TestUnpublishAllDropsHostedRoutes(t *testing.T) {
 	require.NoError(t, table.Publish(ctx, "tunnel-1", "gw-2:8091", time.Minute))
 
 	session1 := newYamuxSession(t)
-	remove1 := gw.reg.add("tunnel-1", "session-a", session1, http.NotFoundHandler(), route.Connection{GatewaySessionID: "session-a", Metadata: map[string]string{}})
+	remove1 := mustAdd(t, gw.reg, "tunnel-1", "session-a", session1, http.NotFoundHandler(), route.Connection{GatewaySessionID: "session-a", Metadata: map[string]string{}})
 	t.Cleanup(remove1)
 	session2 := newYamuxSession(t)
-	remove2 := gw.reg.add("tunnel-2", "session-b", session2, http.NotFoundHandler(), route.Connection{GatewaySessionID: "session-b", Metadata: map[string]string{}})
+	remove2 := mustAdd(t, gw.reg, "tunnel-2", "session-b", session2, http.NotFoundHandler(), route.Connection{GatewaySessionID: "session-b", Metadata: map[string]string{}})
 	t.Cleanup(remove2)
 
 	gw.UnpublishAll(ctx)
@@ -315,6 +322,46 @@ func TestUnpublishAllDropsHostedRoutes(t *testing.T) {
 	candidates, err = table.Candidates(ctx, "tunnel-2")
 	require.NoError(t, err)
 	require.Empty(t, candidates)
+}
+
+// After SIGTERM drain, a live session, refresh ticker, or new connect must
+// not put this gateway back in the route table.
+func TestUnpublishAllStopsRepublishAndNewConnects(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	table := route.NewRouteTable()
+	gw := newForwardTestGateway(t, Config{ForwardToken: "s3cret", AdvertiseAddr: "gw-1:8091"})
+	gw.routes = table
+
+	require.NoError(t, table.Publish(ctx, "tunnel-1", "gw-1:8091", time.Minute))
+	session := newYamuxSession(t)
+	remove := mustAdd(t, gw.reg, "tunnel-1", "session-a", session, http.NotFoundHandler(), route.Connection{GatewaySessionID: "session-a", Metadata: map[string]string{}})
+	t.Cleanup(remove)
+
+	gw.UnpublishAll(ctx)
+
+	candidates, err := table.Candidates(ctx, "tunnel-1")
+	require.NoError(t, err)
+	require.Empty(t, candidates)
+
+	_, ok := gw.reg.add("tunnel-1", "session-b", newYamuxSession(t), http.NotFoundHandler(), route.Connection{GatewaySessionID: "session-b", Metadata: map[string]string{}})
+	require.False(t, ok, "drain must refuse new sessions")
+
+	require.NoError(t, gw.publishOwnRoute(ctx, "tunnel-1"))
+	candidates, err = table.Candidates(ctx, "tunnel-1")
+	require.NoError(t, err)
+	require.Empty(t, candidates, "refresh must not republish after drain")
+
+	gw.cleanupSessionState("tunnel-1")
+	candidates, err = table.Candidates(ctx, "tunnel-1")
+	require.NoError(t, err)
+	require.Empty(t, candidates, "disconnect cleanup must not republish after drain")
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/connect", nil)
+	gw.PublicHandler().ServeHTTP(rec, req)
+	require.Equal(t, http.StatusServiceUnavailable, rec.Code)
 }
 
 // recordingKeyStore wraps StaticKeyStore with a MarkConnected spy.
@@ -369,8 +416,8 @@ func TestRegistryBeginForwardExactSessionHitsOnlyThatSession(t *testing.T) {
 	reg := newRegistry()
 	sessionA := newYamuxSession(t)
 	sessionB := newYamuxSession(t)
-	removeA := reg.add("tunnel-1", "session-a", sessionA, http.NotFoundHandler(), route.Connection{GatewaySessionID: "session-a", Metadata: map[string]string{}})
-	removeB := reg.add("tunnel-1", "session-b", sessionB, http.NotFoundHandler(), route.Connection{GatewaySessionID: "session-b", Metadata: map[string]string{}})
+	removeA := mustAdd(t, reg, "tunnel-1", "session-a", sessionA, http.NotFoundHandler(), route.Connection{GatewaySessionID: "session-a", Metadata: map[string]string{}})
+	removeB := mustAdd(t, reg, "tunnel-1", "session-b", sessionB, http.NotFoundHandler(), route.Connection{GatewaySessionID: "session-b", Metadata: map[string]string{}})
 	t.Cleanup(removeA)
 	t.Cleanup(removeB)
 
@@ -386,7 +433,7 @@ func TestRegistryBeginForwardExactSessionHitsOnlyThatSession(t *testing.T) {
 func TestRegistryBeginForwardExactSessionMissingIsNoSession(t *testing.T) {
 	reg := newRegistry()
 	sessionA := newYamuxSession(t)
-	removeA := reg.add("tunnel-1", "session-a", sessionA, http.NotFoundHandler(), route.Connection{GatewaySessionID: "session-a", Metadata: map[string]string{}})
+	removeA := mustAdd(t, reg, "tunnel-1", "session-a", sessionA, http.NotFoundHandler(), route.Connection{GatewaySessionID: "session-a", Metadata: map[string]string{}})
 	t.Cleanup(removeA)
 
 	_, failure := reg.beginForward("tunnel-1", "", "session-gone", time.Now().UTC(), 0)
@@ -398,7 +445,7 @@ func TestRegistryBeginForwardExactSessionMissingIsNoSession(t *testing.T) {
 func TestRegistryBeginForwardExactSessionAtCapIsBusy(t *testing.T) {
 	reg := newRegistry()
 	sessionA := newYamuxSession(t)
-	removeA := reg.add("tunnel-1", "session-a", sessionA, http.NotFoundHandler(), route.Connection{GatewaySessionID: "session-a", Metadata: map[string]string{}})
+	removeA := mustAdd(t, reg, "tunnel-1", "session-a", sessionA, http.NotFoundHandler(), route.Connection{GatewaySessionID: "session-a", Metadata: map[string]string{}})
 	t.Cleanup(removeA)
 
 	entry, failure := reg.beginForward("tunnel-1", "", "session-a", time.Now().UTC(), 1)
@@ -421,7 +468,7 @@ func TestForwardHandlerReportsAgentSessionAndStripsExactHeader(t *testing.T) {
 		forwarded = r.Header.Clone()
 		w.WriteHeader(http.StatusOK)
 	})
-	remove := gw.reg.add("tunnel-1", "session-a", session, captureProxy, route.Connection{GatewaySessionID: "session-a", Metadata: map[string]string{}})
+	remove := mustAdd(t, gw.reg, "tunnel-1", "session-a", session, captureProxy, route.Connection{GatewaySessionID: "session-a", Metadata: map[string]string{}})
 	t.Cleanup(remove)
 
 	rec := httptest.NewRecorder()

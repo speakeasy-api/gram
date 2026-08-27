@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"net/http/httputil"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/coder/websocket"
@@ -56,6 +57,9 @@ type Gateway struct {
 	routes route.Store
 	reg    *registry
 	logger *slog.Logger
+	// routeMu serializes this process's Publish against UnpublishAll so a
+	// refresh or in-flight connect cannot republish a route after drain.
+	routeMu sync.Mutex
 }
 
 func New(cfg Config, keys KeyResolver, routes route.Store, logger *slog.Logger) (*Gateway, error) {
@@ -70,11 +74,12 @@ func New(cfg Config, keys KeyResolver, routes route.Store, logger *slog.Logger) 
 		cfg.MaxSessions = defaultMaxSessions
 	}
 	return &Gateway{
-		cfg:    cfg,
-		keys:   keys,
-		routes: routes,
-		reg:    newRegistry(),
-		logger: logger,
+		cfg:     cfg,
+		keys:    keys,
+		routes:  routes,
+		reg:     newRegistry(),
+		logger:  logger,
+		routeMu: sync.Mutex{},
 	}, nil
 }
 
@@ -102,10 +107,15 @@ func (g *Gateway) ActiveSessions() int { return g.reg.activeSessions() }
 // SetAdvertiseAddr lets tests publish listener addresses known only after bind.
 func (g *Gateway) SetAdvertiseAddr(addr string) { g.cfg.AdvertiseAddr = addr }
 
-// UnpublishAll drops every route and connection snapshot this gateway currently
-// owns. Called on SIGTERM before listeners stop so gram-server stops pinning
-// new traffic here immediately, rather than waiting for the route TTL.
+// UnpublishAll marks the gateway draining (new connects and route publishes
+// are refused) and drops every route and connection snapshot this process
+// currently owns. Called on SIGTERM before listeners stop so gram-server
+// stops pinning new traffic here immediately, rather than waiting for the
+// route TTL.
 func (g *Gateway) UnpublishAll(ctx context.Context) {
+	g.reg.beginDrain()
+	g.routeMu.Lock()
+	defer g.routeMu.Unlock()
 	stateCtx, cancel := routeOperationContext(ctx)
 	defer cancel()
 	for _, tunnelID := range g.reg.tunnelIDs() {
@@ -117,7 +127,24 @@ func (g *Gateway) UnpublishAll(ctx context.Context) {
 	}
 }
 
+// publishOwnRoute publishes this gateway as an owner of tunnelID unless the
+// process is draining. Holding routeMu with UnpublishAll closes the window
+// where a refresh could republish after the drain snapshot.
+func (g *Gateway) publishOwnRoute(ctx context.Context, tunnelID string) error {
+	g.routeMu.Lock()
+	defer g.routeMu.Unlock()
+	if g.reg.isDraining() {
+		return nil
+	}
+	return g.routes.Publish(ctx, tunnelID, g.cfg.AdvertiseAddr, routeTTL)
+}
+
 func (g *Gateway) handleConnect(w http.ResponseWriter, r *http.Request) {
+	if g.reg.isDraining() {
+		g.logger.WarnContext(r.Context(), "tunnel connect rejected", slog.String("reason", "draining"))
+		http.Error(w, "tunnel gateway is draining", http.StatusServiceUnavailable)
+		return
+	}
 	// Shed before key lookup so a connect storm cannot load the key resolver.
 	if g.reg.activeSessions() >= g.cfg.MaxSessions {
 		g.logger.WarnContext(r.Context(), "tunnel connect rejected",
@@ -195,7 +222,7 @@ func (g *Gateway) handleConnect(w http.ResponseWriter, r *http.Request) {
 
 	sessionID := uuid.NewString()
 	now := time.Now().UTC()
-	remove := g.reg.add(tunnelID, sessionID, session, g.newSessionProxy(tunnelID, session), route.Connection{
+	remove, ok := g.reg.add(tunnelID, sessionID, session, g.newSessionProxy(tunnelID, session), route.Connection{
 		GatewaySessionID:       sessionID,
 		ServiceVersion:         serviceVersion,
 		AgentVersion:           agentVersion,
@@ -206,8 +233,14 @@ func (g *Gateway) handleConnect(w http.ResponseWriter, r *http.Request) {
 		ActiveConsumerSessions: 0,
 		Metadata:               metadata,
 	})
+	if !ok {
+		g.logger.WarnContext(r.Context(), "tunnel connect rejected",
+			slog.String("reason", "draining"), slog.String("tunnel_id", tunnelID))
+		_ = session.Close()
+		return
+	}
 	stateCtx, cancelState := routeOperationContext(r.Context())
-	if err := g.routes.Publish(stateCtx, tunnelID, g.cfg.AdvertiseAddr, routeTTL); err != nil {
+	if err := g.publishOwnRoute(stateCtx, tunnelID); err != nil {
 		g.logger.WarnContext(r.Context(), "tunnel route publish failed", slog.Any("error", err))
 	}
 	g.publishConnectionSnapshot(stateCtx, tunnelID, now)
@@ -236,7 +269,9 @@ func (g *Gateway) handleConnect(w http.ResponseWriter, r *http.Request) {
 // just published; after unpublishing we re-check the registry and republish if
 // a session appeared. Any connect that adds itself after the re-check performs
 // its own Publish after our Unpublish, so every interleaving converges on a
-// published route while live sessions exist.
+// published route while live sessions exist. Drain is the exception: once
+// UnpublishAll has begun, add() and publishOwnRoute refuse, and this heal
+// must not put the departing gateway back in the table.
 func (g *Gateway) cleanupSessionState(tunnelID string) {
 	stateCtx, cancelState := routeOperationContext(context.Background())
 	defer cancelState()
@@ -244,10 +279,15 @@ func (g *Gateway) cleanupSessionState(tunnelID string) {
 		g.publishConnectionSnapshot(stateCtx, tunnelID, time.Now().UTC())
 		return
 	}
+	g.routeMu.Lock()
+	defer g.routeMu.Unlock()
 	if err := g.routes.Unpublish(stateCtx, tunnelID, g.cfg.AdvertiseAddr); err != nil {
 		g.logger.WarnContext(stateCtx, "tunnel route unpublish failed", slog.Any("error", err))
 	}
 	g.deleteConnectionSnapshot(stateCtx, tunnelID)
+	if g.reg.isDraining() {
+		return
+	}
 	if g.reg.tunnelSessionCount(tunnelID) > 0 {
 		if err := g.routes.Publish(stateCtx, tunnelID, g.cfg.AdvertiseAddr, routeTTL); err != nil {
 			g.logger.WarnContext(stateCtx, "tunnel route republish after reconnect race failed", slog.Any("error", err))
@@ -264,6 +304,9 @@ func (g *Gateway) refreshSessionState(tunnelID, keyHash string, session *yamux.S
 		case <-stop:
 			return
 		case <-t.C:
+			if g.reg.isDraining() {
+				continue
+			}
 			if checker, ok := g.keys.(ActiveTunnelChecker); ok {
 				opCtx, cancel := routeOperationContext(context.Background())
 				active, err := checker.IsActive(opCtx, tunnelID, keyHash)
@@ -281,7 +324,7 @@ func (g *Gateway) refreshSessionState(tunnelID, keyHash string, session *yamux.S
 				}
 			}
 			opCtx, cancel := routeOperationContext(context.Background())
-			if err := g.routes.Publish(opCtx, tunnelID, g.cfg.AdvertiseAddr, routeTTL); err != nil {
+			if err := g.publishOwnRoute(opCtx, tunnelID); err != nil {
 				g.logger.WarnContext(opCtx, "tunnel route refresh failed",
 					slog.String("tunnel_id", tunnelID), slog.Any("error", err))
 			}

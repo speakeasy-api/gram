@@ -19,6 +19,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/mcp"
+	"github.com/speakeasy-api/gram/server/internal/mcp/tunnelsessions"
 	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -119,6 +120,7 @@ func (g *fakeTunnelGateway) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 type publicTunnelFixture struct {
 	endpointSlug  string
 	tunnelID      uuid.UUID
+	mcpServerID   uuid.UUID
 	gateway       *fakeTunnelGateway
 	gatewayServer *httptest.Server
 }
@@ -184,6 +186,7 @@ func newPublicTunnelFixture(t *testing.T, ctx context.Context, ti *testInstance,
 	return publicTunnelFixture{
 		endpointSlug:  endpointSlug,
 		tunnelID:      tunneledServer.ID,
+		mcpServerID:   mcpServer.ID,
 		gateway:       gateway,
 		gatewayServer: gatewayServer,
 	}
@@ -357,12 +360,13 @@ func TestServePublic_Tunneled_PinnedGatewayDialFailureIs404(t *testing.T) {
 	require.ErrorAs(t, err, &oopsErr)
 	require.Equal(t, oops.CodeNotFound, oopsErr.Code)
 	require.Less(t, elapsed, 5*time.Second, "dial to a dead pinned gateway must not wait for the 30s default")
+	require.Equal(t, forwardsAfterInit, gateway.forwardCount(), "closed gateway must not receive the pinned request")
 
-	_, err = serveTunneledPublicRequest(t, ti, fixture.endpointSlug, http.MethodPost, makeToolsListBody(), sid)
-	require.Error(t, err)
-	require.ErrorAs(t, err, &oopsErr)
-	require.Equal(t, oops.CodeNotFound, oopsErr.Code)
-	require.Equal(t, forwardsAfterInit, gateway.forwardCount(), "dropped session must not be re-forwarded")
+	redisClient, redisErr := infra.NewRedisClient(t, 0)
+	require.NoError(t, redisErr)
+	sessions := tunnelsessions.NewStore(redisClient, 24*time.Hour, 10000)
+	_, err = sessions.Resolve(ctx, fixture.tunnelID.String(), fixture.mcpServerID.String(), sid, false)
+	require.ErrorIs(t, err, tunnelsessions.ErrNotFound, "dial failure must drop the session mapping")
 }
 
 // A session pin whose recorded gateway has left the candidate set (route

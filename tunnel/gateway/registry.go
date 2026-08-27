@@ -19,7 +19,10 @@ const consumerSessionTTL = 5 * time.Minute
 // Multiple agents may share a tunnel key. Stable consumer keys stick to one live session;
 // requests without a consumer key round-robin across live sessions.
 type registry struct {
-	mu       sync.RWMutex
+	mu sync.RWMutex
+	// draining is set on SIGTERM. Once true, add() refuses new sessions so
+	// UnpublishAll cannot race with a connect that would republish a route.
+	draining bool
 	sessions map[string][]*sessEntry
 	rr       map[string]uint64 // round-robin cursor per tunnel
 }
@@ -38,12 +41,25 @@ type sessEntry struct {
 
 func newRegistry() *registry {
 	return &registry{
+		draining: false,
 		sessions: make(map[string][]*sessEntry),
 		rr:       make(map[string]uint64),
 	}
 }
 
-func (r *registry) add(tunnelID, sessionID string, s *yamux.Session, proxy http.Handler, connection route.Connection) func() {
+func (r *registry) beginDrain() {
+	r.mu.Lock()
+	r.draining = true
+	r.mu.Unlock()
+}
+
+func (r *registry) isDraining() bool {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return r.draining
+}
+
+func (r *registry) add(tunnelID, sessionID string, s *yamux.Session, proxy http.Handler, connection route.Connection) (func(), bool) {
 	entry := &sessEntry{
 		id:               sessionID,
 		session:          s,
@@ -53,11 +69,14 @@ func (r *registry) add(tunnelID, sessionID string, s *yamux.Session, proxy http.
 		consumerSessions: make(map[string]time.Time),
 	}
 	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.draining {
+		return nil, false
+	}
 	r.sessions[tunnelID] = append(r.sessions[tunnelID], entry)
 	if _, ok := r.rr[tunnelID]; !ok {
 		r.rr[tunnelID] = 0
 	}
-	r.mu.Unlock()
 
 	return func() {
 		r.mu.Lock()
@@ -73,7 +92,7 @@ func (r *registry) add(tunnelID, sessionID string, s *yamux.Session, proxy http.
 			delete(r.sessions, tunnelID)
 			delete(r.rr, tunnelID)
 		}
-	}
+	}, true
 }
 
 func (r *registry) tunnelSessionCount(tunnelID string) int {

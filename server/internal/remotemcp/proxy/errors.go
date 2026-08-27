@@ -34,7 +34,9 @@ var ErrBatchRequest = errors.New("batch requests are not supported")
 // failures that never produced response headers because the peer could not
 // be reached: dial timeout, connection refused, reset, DNS. A headers-phase
 // timeout after a successful TCP connect does not wrap this error — the
-// peer accepted the connection, so it is not gone.
+// peer accepted the connection, so it is not gone. A parent-request
+// deadline that expires during dial is also not this error: the peer was
+// not shown to be gone.
 var ErrUpstreamUnreachable = errors.New("remote mcp server unreachable")
 
 // classifyForwardError maps a [http.Client.Do] failure into a typed proxy
@@ -47,6 +49,11 @@ func (p *Proxy) classifyForwardError(ctx context.Context, err error, timedOut bo
 	case timedOut:
 		return oops.E(oops.CodeGatewayError, err, "remote mcp server timed out").LogError(ctx, p.Logger)
 	case errors.Is(err, context.DeadlineExceeded):
+		// A parent-request deadline is not a dead peer: the client (or
+		// MaxRequestLifetime) expired while we were still connecting.
+		if errors.Is(ctx.Err(), context.DeadlineExceeded) {
+			return oops.E(oops.CodeGatewayError, err, "remote mcp server timed out").LogError(ctx, p.Logger)
+		}
 		// Transport-level deadline (dial timeout, TLSHandshakeTimeout)
 		// before any headers. The peer was never reached.
 		return oops.E(oops.CodeGatewayError, fmt.Errorf("%w: %w", ErrUpstreamUnreachable, err), "remote mcp server timed out").LogError(ctx, p.Logger)

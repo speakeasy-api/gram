@@ -876,6 +876,27 @@ func TestProxy_Post_UpstreamUnreachableReturnsGatewayError(t *testing.T) {
 	require.ErrorIs(t, err, proxy.ErrUpstreamUnreachable)
 }
 
+func TestProxy_Post_ParentDeadlineIsNotUnreachable(t *testing.T) {
+	t.Parallel()
+
+	p := newProxyForTest(t, "http://192.0.2.1:9")
+	p.GuardianClientOptions = []guardian.ClientOption{guardian.WithDialTimeout(5 * time.Second)}
+	p.NonStreamingTimeout = 5 * time.Second
+
+	ctx, cancel := context.WithTimeout(t.Context(), 50*time.Millisecond)
+	defer cancel()
+	req := httptest.NewRequestWithContext(ctx, http.MethodPost, "/x/mcp/id", strings.NewReader(initializeRequest))
+	req.Header.Set("Content-Type", "application/json")
+
+	rr := httptest.NewRecorder()
+	err := p.Post(rr, req)
+
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeGatewayError, oopsErr.Code)
+	require.NotErrorIs(t, err, proxy.ErrUpstreamUnreachable, "parent request deadline is not a dead peer")
+}
+
 func TestProxy_Post_OversizedUpstreamBodyReturnsError(t *testing.T) {
 	t.Parallel()
 
