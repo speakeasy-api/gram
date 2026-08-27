@@ -432,6 +432,24 @@ type SourceRouteRow = {
 function RouteDiagram({ rows }: { rows: SourceRouteRow[] }): JSX.Element {
   return (
     <div className="overflow-x-auto border bg-card px-6 py-6">
+      <style>{`
+        @keyframes data-export-route-beam {
+          to {
+            stroke-dashoffset: -164;
+          }
+        }
+
+        .data-export-route-beam {
+          animation: data-export-route-beam 1.8s linear infinite;
+          filter: drop-shadow(0 0 2px var(--stroke-success-default));
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+          .data-export-route-beam {
+            display: none;
+          }
+        }
+      `}</style>
       <div className="min-w-[900px]">
         <div className="grid grid-cols-[280px_minmax(140px,220px)_minmax(420px,1fr)] items-end gap-x-0 pb-2">
           <span className="text-eyebrow text-muted-foreground">Source</span>
@@ -489,25 +507,38 @@ function RouteDiagram({ rows }: { rows: SourceRouteRow[] }): JSX.Element {
                 {rows.map(({ route }, index) => {
                   const destinationY =
                     ((index + 0.5) / Math.max(rows.length, 1)) * 100;
+                  const path = `M 0 50 C 75 50, 110 ${destinationY}, 196 ${destinationY}`;
                   return (
-                    <path
-                      key={route.id}
-                      d={`M 0 50 C 75 50, 110 ${destinationY}, 196 ${destinationY}`}
-                      fill="none"
-                      className={
-                        route.enabled
-                          ? "stroke-foreground"
-                          : "stroke-muted-foreground"
-                      }
-                      strokeWidth="1"
-                      strokeDasharray={route.enabled ? undefined : "4 4"}
-                      vectorEffect="non-scaling-stroke"
-                      markerEnd={
-                        route.enabled
-                          ? "url(#route-arrow-active)"
-                          : "url(#route-arrow-paused)"
-                      }
-                    />
+                    <g key={route.id}>
+                      <path
+                        d={path}
+                        fill="none"
+                        className={
+                          route.enabled
+                            ? "stroke-foreground"
+                            : "stroke-muted-foreground"
+                        }
+                        strokeWidth="2"
+                        strokeDasharray={route.enabled ? undefined : "5 5"}
+                        vectorEffect="non-scaling-stroke"
+                        markerEnd={
+                          route.enabled
+                            ? "url(#route-arrow-active)"
+                            : "url(#route-arrow-paused)"
+                        }
+                      />
+                      {route.enabled ? (
+                        <path
+                          d={path}
+                          fill="none"
+                          className="data-export-route-beam stroke-success-highlight"
+                          strokeWidth="3.5"
+                          strokeLinecap="round"
+                          strokeDasharray="24 140"
+                          vectorEffect="non-scaling-stroke"
+                        />
+                      ) : null}
+                    </g>
                   );
                 })}
               </svg>
