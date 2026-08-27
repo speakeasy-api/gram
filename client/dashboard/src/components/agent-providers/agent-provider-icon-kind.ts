@@ -11,6 +11,7 @@ export type AgentProviderIconKind =
   | "gemini"
   | "glean"
   | "bedrock"
+  | "catchall"
   | "unknown";
 
 export function agentProviderIconKind(source?: string): AgentProviderIconKind {
@@ -55,6 +56,9 @@ export function agentProviderIconKind(source?: string): AgentProviderIconKind {
   ) {
     return "bedrock";
   }
+  // The catch-all agent has no vendor mark to carry, so the globe is its
+  // deliberate icon rather than the fallback an unrecognised source lands on.
+  if (normalizedSource === "other") return "catchall";
 
   return "unknown";
 }

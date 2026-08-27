@@ -47,6 +47,11 @@ const PLATFORM_MCP_INSTALL_CLIENTS: PlatformMCPInstallClient[] = [
     label: "OpenCode",
     description: "Extract the OpenCode package into your config directory",
   },
+  {
+    id: "other",
+    label: "Other agent",
+    description: "Point any MCP-capable agent at the remote endpoint",
+  },
 ];
 
 export type PlatformMCPInstallMethod = "marketplace" | "download" | "manual";
@@ -54,13 +59,22 @@ type PackagePlatform = "claude" | "cursor" | "codex" | "opencode";
 
 const PLATFORM_MCP_PLUGIN_NAME = "platform-mcp";
 
-function packagePlatform(client: ClientFamily): PackagePlatform {
+function packagePlatform(client: ClientFamily): PackagePlatform | null {
   if (client === "claude_code" || client === "claude_cowork") return "claude";
+  // No reviewed package is built for an uncertified agent, so it has no
+  // platform to download or extract.
+  if (client === "other") return null;
   return client;
 }
 
 function packageFilename(client: ClientFamily): string {
   return `${PLATFORM_MCP_PLUGIN_NAME}-${packagePlatform(client)}.zip`;
+}
+
+// Whether a reviewed plugin package exists for this agent at all. Both packaged
+// install routes are closed without one, leaving the remote MCP configuration.
+function supportsPackages(client: ClientFamily): boolean {
+  return client !== "other";
 }
 
 type PlatformMCPInstallWalkthroughProps = {
@@ -165,6 +179,21 @@ function manualSteps(client: ClientFamily, mcpUrl: string): InstallStep[] {
           title: "Restart Cursor and complete OAuth",
           description:
             "Open a new Cursor agent session under your account, use Platform MCP, and complete AI Control Plane browser authorization when prompted.",
+        },
+      ];
+    case "other":
+      return [
+        {
+          title: "Add Platform MCP as a remote MCP server",
+          description:
+            "Add this remote server to your agent's MCP configuration. Most agents use this shape; if yours expects a different one, keep the URL and match its own format. Platform MCP speaks streamable HTTP with OAuth.",
+          code: manualConfig(client, mcpUrl),
+          language: "json",
+        },
+        {
+          title: "Restart your agent and complete OAuth",
+          description:
+            "Start a new session under your account, use Platform MCP, and complete AI Control Plane browser authorization when prompted.",
         },
       ];
     case "opencode":
@@ -298,7 +327,7 @@ export function PlatformMCPInstallWalkthrough({
   const queryClient = useQueryClient();
   const { fetch: authFetch } = useFetcher();
   const [client, setClient] = useState<ClientFamily>(initialClient);
-  const [method, setMethod] = useState<PlatformMCPInstallMethod>(
+  const [selectedMethod, setMethod] = useState<PlatformMCPInstallMethod>(
     initialMethod ?? "marketplace",
   );
   const [isDownloading, setIsDownloading] = useState(false);
@@ -328,7 +357,13 @@ export function PlatformMCPInstallWalkthrough({
   }, [initialMethod]);
 
   const packageStatus = status.data;
-  const supportsMarketplace = client !== "opencode";
+  // An agent with no reviewed package has exactly one route, so the packaged
+  // methods stay unreachable for it however the state got there: while the
+  // package status is still loading, on an explicit initialMethod, or in the
+  // render before the effect below settles. Deriving the method closes all
+  // three at once instead of guarding each place one is read.
+  const method = supportsPackages(client) ? selectedMethod : "manual";
+  const supportsMarketplace = supportsPackages(client) && client !== "opencode";
   const marketplaceReady =
     supportsMarketplace &&
     packageStatus?.freshness === "current" &&
@@ -419,6 +454,13 @@ export function PlatformMCPInstallWalkthrough({
               description:
                 "Extract the ZIP contents directly into ~/.config/opencode for your account, or into .opencode for one repository. The package installs both the loader and reviewed skill path.",
             };
+          case "other":
+            // Unreachable: no package exists, so this agent never reaches the
+            // download method. Kept so the switch stays total over the enum.
+            return {
+              title: "No package is available for this agent",
+              description: "Connect the remote MCP manually instead.",
+            };
         }
       })();
       return [
@@ -447,6 +489,7 @@ export function PlatformMCPInstallWalkthrough({
     onInstructionIntent?.();
     try {
       const platform = packagePlatform(client);
+      if (!platform) throw new Error("no package for this agent");
       const response = await authFetch(
         `/rpc/plugins.downloadPlatformMCPPlugin?platform=${platform}`,
         {},
@@ -549,7 +592,10 @@ export function PlatformMCPInstallWalkthrough({
             <Button
               size="sm"
               variant={method === "download" ? "primary" : "secondary"}
-              disabled={!packageStatus?.directDownloadAvailable}
+              disabled={
+                !supportsPackages(client) ||
+                !packageStatus?.directDownloadAvailable
+              }
               onClick={() => {
                 explicitMethodRef.current = true;
                 setMethod("download");
@@ -581,8 +627,9 @@ export function PlatformMCPInstallWalkthrough({
           <div>
             <AlertTitle>MCP only—reviewed skills are not installed</AlertTitle>
             <AlertDescription>
-              This recovery route connects only the remote MCP. Use a certified
-              plugin package to install the reviewed catalog workflow skill too.
+              {supportsPackages(client)
+                ? "This recovery route connects only the remote MCP. Use a certified plugin package to install the reviewed catalog workflow skill too."
+                : "This agent has no certified plugin package, so only the remote MCP is connected. Pick a certified agent if you also want the reviewed catalog workflow skill."}
             </AlertDescription>
           </div>
         </Alert>

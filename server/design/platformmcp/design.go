@@ -121,7 +121,7 @@ var _ = Service("platformMcp", func() {
 		Description("Record a selected manual-install client family for the current user's Platform MCP workflow.")
 		Payload(func() {
 			Attribute("client_family", String, "Manual-install client family.", func() {
-				Enum("claude_code", "claude_cowork", "codex", "cursor", "opencode")
+				Enum("claude_code", "claude_cowork", "codex", "cursor", "opencode", "other")
 			})
 			Required("client_family")
 			security.SessionPayload()

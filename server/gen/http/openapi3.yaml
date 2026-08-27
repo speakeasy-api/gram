@@ -76716,6 +76716,7 @@ components:
                         - codex
                         - cursor
                         - opencode
+                        - other
             required:
                 - client_family
         RecordSkillResult:
