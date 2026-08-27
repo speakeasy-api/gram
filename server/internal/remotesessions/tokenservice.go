@@ -21,7 +21,9 @@
 // Refresh is invoked only when the stored access_expires_at has passed,
 // or is within AccessTokenExpirySkew of passing and a refresh grant is
 // available. A still-valid access token short-circuits: no upstream
-// token endpoint is contacted.
+// token endpoint is contacted. A refresh that fails inside the skew
+// window falls back to the stored token, which is still within its
+// stated lifetime; only a failure past the deadline leaves no token.
 
 package remotesessions
 
@@ -124,9 +126,9 @@ const remoteSessionLastUsedCutoff = 5 * time.Minute
 // AccessTokenExpirySkew of passing) and a refresh_token is present.
 //
 // Returns ("", nil) when there is no usable token for this binding —
-// no row, expired with no refresh path, refresh failed, decryption
-// failed. The empty string is the "no token" signal; the caller
-// decides whether absence is a challenge or a no-op.
+// no row, expired with no refresh path, refresh failed past the
+// deadline, decryption failed. The empty string is the "no token"
+// signal; the caller decides whether absence is a challenge or a no-op.
 //
 // Returns a non-nil error only for unexpected failures (database
 // errors). "No token available" is not an error.
@@ -181,34 +183,14 @@ func (m *ChallengeManager) resolveUpstreamToken(
 			return zero, nil
 		}
 		// validateAndRefresh errors only when a refresh was required (the
-		// stored access token is past its usable window) and could not be
+		// stored access token is past its deadline) and could not be
 		// completed — the upstream rejected the refresh token, or the stored
 		// token could not be decrypted. That is a broken link needing a
 		// re-connect, distinct from "never linked" (the pgx.ErrNoRows case
 		// above). Both collapse to the same empty-token signal downstream and
-		// then to a byte-identical 401, so log the reason here — using the
-		// public-safe TokenRefreshError.Reason when present — instead of
-		// discarding it silently. The issuer URL and outcome are the ones the
-		// upstream-refresh metric recorded, so this line joins to its series;
-		// the user id is what lets "how many users are affected" be answered,
-		// since a client id is one row per provider connection, not per user.
-		reason := "upstream token refresh failed"
-		if refreshErr, ok := errors.AsType[*TokenRefreshError](err); ok {
-			reason = refreshErr.Reason
-		}
-		args := []any{
-			attr.SlogRemoteSessionClientID(clientID.String()),
-			attr.SlogUserSessionIssuerID(sess.UserSessionIssuerID.String()),
-			attr.SlogOAuthFailureReason(reason),
-			attr.SlogError(err),
-		}
-		if failure, ok := errors.AsType[*RefreshError](err); ok {
-			args = append(args, attr.SlogOAuthIssuer(failure.IssuerURL), attr.SlogOutcome(string(failure.Outcome)))
-		}
-		if subject.Kind == urn.SessionSubjectKindUser {
-			args = append(args, attr.SlogUserID(subject.ID))
-		}
-		m.logger.WarnContext(ctx, "remote session unusable: upstream token refresh failed", args...)
+		// then to a byte-identical 401, so log the reason here instead of
+		// discarding it silently.
+		m.logger.WarnContext(ctx, "remote session unusable: upstream token refresh failed", refreshFailureAttrs(sess, err)...)
 		return zero, nil
 	}
 
@@ -447,7 +429,9 @@ func (m *ChallengeManager) resolveBoundAccessTokens(
 //   - access_expires_at set: the upstream-stated expiry governs. With a usable
 //     refresh grant, a token within AccessTokenExpirySkew of it is refreshed
 //     before it is forwarded rather than rejected upstream mid-request; with
-//     none, the token is forwarded until the deadline itself.
+//     none, the token is forwarded until the deadline itself. A refresh that
+//     fails inside the skew window falls back to the stored token until the
+//     deadline; only a failure past the deadline is an error.
 //   - access_expires_at NULL: no expiry was reported, so the stored access
 //     token is served as-is. A refresh token does not imply that access expires.
 //
@@ -479,11 +463,51 @@ func (m *ChallengeManager) validateAndRefresh(
 
 	res, err := m.refresher.RefreshNow(ctx, sess, resource, remotesessionmetrics.RefreshTriggerRequest)
 	if err != nil {
-		return "", sess, err
+		// Inside the skew window the stored token is still within its stated
+		// lifetime, so a refresh that fails there — an upstream 5xx or 429, a
+		// lock cache blip — leaves it exactly as usable as it was before the
+		// attempt. Forwarding it keeps the early refresh a pure optimization:
+		// nobody is sent to reconnect while holding a token that still works.
+		// Past the deadline there is nothing to fall back to.
+		if !accessTokenLive(sess, time.Now()) {
+			return "", sess, err
+		}
+		plain, derr := m.enc.Decrypt(sess.AccessTokenEncrypted)
+		if derr != nil {
+			return "", sess, fmt.Errorf("decrypt access token after failed refresh: %w", derr)
+		}
+		m.logger.WarnContext(ctx, "remote session refresh failed inside the expiry skew; forwarding the stored access token until its deadline", refreshFailureAttrs(sess, err)...)
+		return plain, sess, nil
 	}
 	// remotesessionmetrics.RefreshOutcomeSessionInactive lands here as an empty token, which the
 	// caller treats the same as "never linked".
 	return res.AccessToken, res.Session, nil
+}
+
+// refreshFailureAttrs is the attribute set a failed request-path refresh is
+// logged with. The reason is the public-safe TokenRefreshError.Reason when
+// there is one. The issuer URL and outcome are the ones the upstream-refresh
+// metric recorded for the attempt, so the log line joins to its series; the
+// user id is what lets "how many users are affected" be answered, since a
+// client id is one row per provider connection, not per user.
+func refreshFailureAttrs(sess remotesessions_repo.RemoteSession, err error) []any {
+	reason := "upstream token refresh failed"
+	if refreshErr, ok := errors.AsType[*TokenRefreshError](err); ok {
+		reason = refreshErr.Reason
+	}
+	args := []any{
+		attr.SlogRemoteSessionClientID(sess.RemoteSessionClientID.String()),
+		attr.SlogUserSessionIssuerID(sess.UserSessionIssuerID.String()),
+		attr.SlogOAuthFailureReason(reason),
+		attr.SlogError(err),
+	}
+	if failure, ok := errors.AsType[*RefreshError](err); ok {
+		args = append(args, attr.SlogOAuthIssuer(failure.IssuerURL), attr.SlogOutcome(string(failure.Outcome)))
+	}
+	if sess.SubjectUrn.Kind == urn.SessionSubjectKindUser {
+		args = append(args, attr.SlogUserID(sess.SubjectUrn.ID))
+	}
+	return args
 }
 
 // refreshSessionTokens POSTs grant_type=refresh_token to the upstream token
