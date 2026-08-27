@@ -31,7 +31,6 @@ var (
 
 type riskPolicyReader interface {
 	ListPage(ctx context.Context, organizationID string, projectID uuid.UUID, cursor *policycore.PageCursor, limit int32) ([]policycore.Policy, error)
-	Get(ctx context.Context, projectID, policyID uuid.UUID) (policycore.Policy, error)
 }
 
 type riskExclusionReader interface {
@@ -85,6 +84,7 @@ type RiskReadService struct {
 	catalog            policycatalog.Catalog
 	catalogFingerprint string
 	redactionKey       []byte
+	loadPolicyDetail   func(context.Context, uuid.UUID, uuid.UUID) (policycore.Policy, string, error)
 }
 
 func newRiskReadService(db *pgxpool.Pool, keyMaterial string) (*RiskReadService, error) {
@@ -103,6 +103,10 @@ func newRiskReadService(db *pgxpool.Pool, keyMaterial string) (*RiskReadService,
 	if err != nil {
 		return nil, fmt.Errorf("fingerprint risk policy catalog: %w", err)
 	}
+	versions, err := newRiskVersionCodec(keyMaterial)
+	if err != nil {
+		return nil, err
+	}
 	redactionKey := sha256.Sum256([]byte("platform-mcp-risk-value:" + keyMaterial))
 	return &RiskReadService{
 		projects:           postgresRiskProjectResolver{queries: platformrepo.New(db)},
@@ -112,6 +116,35 @@ func newRiskReadService(db *pgxpool.Pool, keyMaterial string) (*RiskReadService,
 		catalog:            catalog,
 		catalogFingerprint: fingerprint,
 		redactionKey:       redactionKey[:],
+		loadPolicyDetail: func(ctx context.Context, projectID, policyID uuid.UUID) (policycore.Policy, string, error) {
+			tx, err := db.BeginTx(ctx, pgx.TxOptions{
+				IsoLevel:       pgx.RepeatableRead,
+				AccessMode:     pgx.ReadOnly,
+				DeferrableMode: "",
+				BeginQuery:     "",
+				CommitQuery:    "",
+			})
+			if err != nil {
+				return policycore.Policy{}, "", fmt.Errorf("begin risk policy detail snapshot: %w", err)
+			}
+			defer func() { _ = tx.Rollback(ctx) }()
+			policy, err := policycore.New(tx).Get(ctx, projectID, policyID)
+			if err != nil {
+				return policycore.Policy{}, "", fmt.Errorf("load risk policy detail snapshot: %w", err)
+			}
+			state, err := riskPolicyVersionState(ctx, tx, policy, false)
+			if err != nil {
+				return policycore.Policy{}, "", err
+			}
+			version, err := versions.PolicyVersion(state)
+			if err != nil {
+				return policycore.Policy{}, "", err
+			}
+			if err := tx.Commit(ctx); err != nil {
+				return policycore.Policy{}, "", fmt.Errorf("commit risk policy detail snapshot: %w", err)
+			}
+			return policy, version, nil
+		},
 	}, nil
 }
 
@@ -146,6 +179,7 @@ type RiskDetectionScope struct {
 
 type RiskPolicyDetail struct {
 	RiskPolicySummary
+	Version                string               `json:"version"`
 	PresidioEntities       []string             `json:"presidio_entities"`
 	PresidioScoreThreshold *float64             `json:"presidio_score_threshold,omitempty"`
 	ApprovedEmailDomains   []string             `json:"approved_email_domains"`
@@ -267,14 +301,16 @@ func (s *RiskReadService) GetPolicy(ctx context.Context, principal Principal, in
 	if err != nil {
 		return GetRiskPolicyOutput{}, ErrRiskReadInvalid
 	}
-	policy, err := s.policies.Get(ctx, project.ID, policyID)
+	policy, version, err := s.loadPolicyDetail(ctx, project.ID, policyID)
 	if errors.Is(err, policycore.ErrLoadPolicy) {
 		return GetRiskPolicyOutput{}, ErrRiskReadNotFound
 	}
 	if err != nil {
-		return GetRiskPolicyOutput{}, fmt.Errorf("get risk policy: %w", err)
+		return GetRiskPolicyOutput{}, fmt.Errorf("get risk policy detail: %w", err)
 	}
-	return GetRiskPolicyOutput{Project: riskProject(project), CatalogVersion: s.catalog.Schema, CatalogFingerprint: s.catalogFingerprint, Policy: s.policyDetail(policy)}, nil
+	detail := s.policyDetail(policy)
+	detail.Version = version
+	return GetRiskPolicyOutput{Project: riskProject(project), CatalogVersion: s.catalog.Schema, CatalogFingerprint: s.catalogFingerprint, Policy: detail}, nil
 }
 
 func (s *RiskReadService) ListExclusions(ctx context.Context, principal Principal, input ListRiskExclusionsInput) (ListRiskExclusionsOutput, error) {
@@ -324,7 +360,7 @@ func (s *RiskReadService) ListExclusions(ctx context.Context, principal Principa
 }
 
 func (s *RiskReadService) valid() bool {
-	return s != nil && s.projects != nil && s.policies != nil && s.exclusions != nil && s.cursor != nil && len(s.redactionKey) > 0 && s.catalog.Schema != "" && s.catalogFingerprint != ""
+	return s != nil && s.projects != nil && s.policies != nil && s.exclusions != nil && s.cursor != nil && len(s.redactionKey) > 0 && s.catalog.Schema != "" && s.catalogFingerprint != "" && s.loadPolicyDetail != nil
 }
 
 func riskPageLimit(value int) (int, error) {
@@ -359,6 +395,7 @@ func (s *RiskReadService) policyDetail(policy policycore.Policy) RiskPolicyDetai
 	detectionScopes, _ := s.projectDetectionScopes(policy)
 	detail := RiskPolicyDetail{
 		RiskPolicySummary:      s.policySummary(policy),
+		Version:                "",
 		PresidioEntities:       allowlisted(policy.PresidioEntities, s.catalog.PresidioEntities),
 		PresidioScoreThreshold: policy.PresidioScoreThreshold,
 		ApprovedEmailDomains:   append([]string{}, policy.ApprovedEmailDomains...),

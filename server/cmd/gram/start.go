@@ -1526,6 +1526,11 @@ func newStartCommand() *cli.Command {
 			mcpCatalog := externalmcp.NewCatalogService(db, mcpRegistryClient, nil)
 			externalmcp.Attach(mux, externalmcp.NewService(logger, tracerProvider, db, sessionManager, mcpRegistryClient, mcpCatalog, authzEngine, serverURL))
 			collections.Attach(mux, collections.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger, serverURL))
+			riskSignaler := background.NewThrottledSignaler(
+				&background.TemporalRiskAnalysisSignaler{TemporalEnv: temporalEnv, Logger: logger},
+				30*time.Second,
+				logger,
+			)
 			platformMCPAssistant, err := configurePlatformMCP(ctx, platformMCPConfig{
 				Logger:                 logger,
 				MeterProvider:          meterProvider,
@@ -1551,6 +1556,9 @@ func newStartCommand() *cli.Command {
 				PluginPublisher:        pluginPublisher,
 				TemporalEnv:            temporalEnv,
 				Skills:                 skillsService,
+				RiskPolicyApprovals:    mcpApprovalService,
+				RiskPolicySignaler:     riskSignaler,
+				RiskPolicyCache:        shadowMCPClient,
 				Telemetry:              telemetryrepo.New(chDB),
 				TelemetryDrilldown:     telemetryrepo.New(chDB),
 				SessionCapture:         platformmcp.FeatureChecker(sessionCaptureEnabled),
@@ -1569,11 +1577,6 @@ func newStartCommand() *cli.Command {
 			functions.Attach(mux, functions.NewService(logger, tracerProvider, db, encryptionClient, tigrisStore))
 			otelsvc.Attach(mux, otelsvc.NewService(logger, tracerProvider, db, chDB, sessionManager, authzEngine, otelsvc.FeatureChecker(logsEnabled), publishers.OTELSpans, publishers.OTELLogs, publishers.OTELMetrics))
 
-			riskSignaler := background.NewThrottledSignaler(
-				&background.TemporalRiskAnalysisSignaler{TemporalEnv: temporalEnv, Logger: logger},
-				30*time.Second,
-				logger,
-			)
 			// riskSignaler.Shutdown is intentionally NOT registered as a shutdownFunc.
 			// runShutdown runs every func concurrently, which races temporalClient.Close()
 			// against the signaler's trailing-edge flush over the same gRPC connection

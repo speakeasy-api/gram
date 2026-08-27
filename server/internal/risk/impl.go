@@ -1022,6 +1022,7 @@ func (s *Service) UpdateRiskPolicy(ctx context.Context, payload *gen.UpdateRiskP
 		BlockedURLsSet:       payload.ShadowMcpBlockedUrls != nil,
 		EffectiveDisposition: effectiveDisposition,
 		SupersedeDecisions:   payload.SupersedeDecisions != nil && *payload.SupersedeDecisions,
+		ValidateLocked:       nil,
 		Actor: policycore.Actor{
 			Principal:   urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
 			DisplayName: authCtx.Email,
