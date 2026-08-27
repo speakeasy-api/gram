@@ -504,8 +504,7 @@ func (s *Service) executeProxiedMemberTool(
 	ctx = s.memberAttributionContext(ctx, logger, gate)
 	build, err := s.dialMetaMember(ctx, logger, *gate, member, gate.callerIdentity())
 	if err != nil {
-		var memberErr *metaMemberError
-		if errors.As(err, &memberErr) {
+		if memberErr, ok := errors.AsType[*metaMemberError](err); ok {
 			return marshalMetaToolError(ctx, logger, req.ID, memberErr.message)
 		}
 		return nil, oops.E(oops.CodeUnexpected, err, "dial meta MCP member").LogError(ctx, logger)
@@ -517,8 +516,7 @@ func (s *Service) executeProxiedMemberTool(
 		Meta:      memberWireMeta(meta),
 	})
 	if err != nil {
-		var memberErr *metaMemberError
-		if errors.As(err, &memberErr) {
+		if memberErr, ok := errors.AsType[*metaMemberError](err); ok {
 			return marshalMetaToolError(ctx, logger, req.ID, memberErr.message)
 		}
 		return nil, oops.E(oops.CodeUnexpected, err, "call meta MCP member tool").LogError(ctx, logger)
