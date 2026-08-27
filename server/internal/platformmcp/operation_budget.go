@@ -10,22 +10,24 @@ import (
 )
 
 const (
-	CatalogConnectionLimitName        = "platform-mcp-catalog-connection"
-	CatalogOrganizationLimitName      = "platform-mcp-catalog-organization"
-	RegistrationConnectionLimitName   = "platform-mcp-registration-connection"
-	RegistrationOrganizationLimitName = "platform-mcp-registration-organization"
-	HandoffConnectionLimitName        = "platform-mcp-handoff-connection"
-	HandoffOrganizationLimitName      = "platform-mcp-handoff-organization"
-	SetupConnectionLimitName          = "platform-mcp-setup-connection"
-	SetupOrganizationLimitName        = "platform-mcp-setup-organization"
-	RepairConnectionLimitName         = "platform-mcp-repair-connection"
-	RepairOrganizationLimitName       = "platform-mcp-repair-organization"
-	DocsConnectionLimitName           = "platform-mcp-docs-connection"
-	DocsOrganizationLimitName         = "platform-mcp-docs-organization"
-	SkillsConnectionLimitName         = "platform-mcp-skills-connection"
-	SkillsOrganizationLimitName       = "platform-mcp-skills-organization"
-	LifecycleConnectionLimitName      = "platform-mcp-lifecycle-connection"
-	LifecycleOrganizationLimitName    = "platform-mcp-lifecycle-organization"
+	CatalogConnectionLimitName         = "platform-mcp-catalog-connection"
+	CatalogOrganizationLimitName       = "platform-mcp-catalog-organization"
+	RegistrationConnectionLimitName    = "platform-mcp-registration-connection"
+	RegistrationOrganizationLimitName  = "platform-mcp-registration-organization"
+	HandoffConnectionLimitName         = "platform-mcp-handoff-connection"
+	HandoffOrganizationLimitName       = "platform-mcp-handoff-organization"
+	SetupConnectionLimitName           = "platform-mcp-setup-connection"
+	SetupOrganizationLimitName         = "platform-mcp-setup-organization"
+	RepairConnectionLimitName          = "platform-mcp-repair-connection"
+	RepairOrganizationLimitName        = "platform-mcp-repair-organization"
+	DocsConnectionLimitName            = "platform-mcp-docs-connection"
+	DocsOrganizationLimitName          = "platform-mcp-docs-organization"
+	SkillsConnectionLimitName          = "platform-mcp-skills-connection"
+	SkillsOrganizationLimitName        = "platform-mcp-skills-organization"
+	LifecycleConnectionLimitName       = "platform-mcp-lifecycle-connection"
+	LifecycleOrganizationLimitName     = "platform-mcp-lifecycle-organization"
+	SessionRecallConnectionLimitName   = "platform-mcp-session-recall-connection"
+	SessionRecallOrganizationLimitName = "platform-mcp-session-recall-organization"
 )
 
 const (
@@ -58,6 +60,13 @@ const (
 	// meter the volume rather than the calls.
 	DrilldownRowsPerConnectionPerWindow          = 1000
 	DrilldownMetricQueriesPerConnectionPerWindow = 20
+
+	// SessionRecallsPer* bound continue_session. Metered separately and lower
+	// than every other read: each allowed call serves an entire session
+	// transcript as a digest, so this allowance must not be fundable by
+	// spending any other budget.
+	SessionRecallsPerConnectionPerMinute   = 10
+	SessionRecallsPerOrganizationPerMinute = 100
 )
 
 // DrilldownVolumeWindow is the interval the drill-down volume caps refill over.
@@ -175,6 +184,9 @@ type OperationBudgets struct {
 	// Diagnostics so exhausting it is not possible by spending the summary
 	// allowance, and so it can be tightened on its own.
 	SensitiveDiagnostics OperationBudget
+	// SensitiveSessionRecall meters continue_session — the only operation that
+	// serves whole-transcript content — on its own low allowance.
+	SensitiveSessionRecall OperationBudget
 	// DrilldownVolume meters what the drill-downs return rather than how often
 	// they are called: rows and spans against one bucket, metric queries
 	// against another, both per connection over DrilldownVolumeWindow.
@@ -230,5 +242,5 @@ func (b DrilldownVolumeBudget) allow(ctx context.Context, principal Principal, l
 }
 
 func (b OperationBudgets) Valid() bool {
-	return b.Catalog.valid() && b.Registration.valid() && b.Handoff.valid() && b.SetupStart.valid() && b.Repair.valid() && b.Docs.valid() && b.Skills.valid() && b.LifecycleMetadata.valid() && b.Diagnostics.valid() && b.SensitiveDiagnostics.valid() && b.DrilldownVolume.valid()
+	return b.Catalog.valid() && b.Registration.valid() && b.Handoff.valid() && b.SetupStart.valid() && b.Repair.valid() && b.Docs.valid() && b.Skills.valid() && b.LifecycleMetadata.valid() && b.Diagnostics.valid() && b.SensitiveDiagnostics.valid() && b.SensitiveSessionRecall.valid() && b.DrilldownVolume.valid()
 }

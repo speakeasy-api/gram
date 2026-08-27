@@ -2438,6 +2438,108 @@ WHERE m.id = @mcp_server_id
   AND m.project_id = @project_id
   AND m.deleted IS FALSE;
 
+-- Session recall (list_my_sessions / continue_session). Every read below
+-- fuses tenancy and ownership into the row filter — organization, owner
+-- user_id, not-deleted, and the personal-account exclusion — rather than
+-- fetching then authorizing. An unresolved actor (empty user_id) matches no
+-- rows because chats.user_id is never the empty string: fail-closed.
+-- Personal-account sessions are excluded from BOTH list and continue:
+-- personal-account ownership attribution is partly device-bridge-inferred,
+-- which is acceptable for titles but not for transcripts (see the
+-- ListOwnedChatSessionMeta warning in agent/queries.sql). The predicate
+-- (ua.id IS NULL OR ua.account_type <> 'personal') also drops rows whose
+-- account_type is NULL — the comparison evaluates to NULL — and that is
+-- deliberate: an unclassified account might be personal, so it gets the
+-- same fail-closed treatment.
+
+-- name: ListOwnedChatSessionsForRecall :many
+SELECT c.id, c.external_chat_id, c.title, c.summary, c.cwd, c.updated_at, c.project_id, p.name AS project_name, p.slug AS project_slug
+FROM chats c
+JOIN projects p ON p.id = c.project_id
+LEFT JOIN user_accounts ua ON ua.id = c.user_account_id
+WHERE c.organization_id = @organization_id
+  AND c.user_id = @user_id::text
+  AND c.deleted IS FALSE
+  AND (ua.id IS NULL OR ua.account_type <> 'personal')
+ORDER BY c.updated_at DESC
+LIMIT @row_limit;
+
+-- name: GetOwnedChatForRecall :one
+SELECT c.id, c.external_chat_id, c.title, c.cwd, c.updated_at, c.project_id
+FROM chats c
+LEFT JOIN user_accounts ua ON ua.id = c.user_account_id
+WHERE c.id = @chat_id
+  AND c.organization_id = @organization_id
+  AND c.user_id = @user_id::text
+  AND c.deleted IS FALSE
+  AND (ua.id IS NULL OR ua.account_type <> 'personal');
+
+-- name: ListOwnedChatTranscriptMessagesForRecall :many
+-- Latest generation only: compaction/edit rewrites bump chat_messages.generation
+-- and the digest must reflect the current conversation view, not superseded
+-- rows. chat_messages.project_id is NULL on old rows — always filtered, so
+-- pre-project-stamp rows fail closed rather than leaking across tenants.
+-- Newest rows first under @row_limit so the cap keeps the end of a long
+-- session — the part a handoff digest is about — and the service restores
+-- chronological order. Content is never truncated here: finding-span
+-- verification compares exact bytes, so per-message bounding happens after
+-- masking, not at the read.
+SELECT cm.id, cm.seq, cm.created_at, cm.role, cm.content, cm.content_asset_url, cm.tool_calls, cm.tool_call_id, cm.tool_urn, cm.source, cm.risk_analyzed_at
+FROM chat_messages cm
+JOIN chats c ON c.id = cm.chat_id
+LEFT JOIN user_accounts ua ON ua.id = c.user_account_id
+WHERE cm.chat_id = @chat_id
+  AND cm.project_id = @project_id
+  AND c.organization_id = @organization_id
+  AND c.user_id = @user_id::text
+  AND c.deleted IS FALSE
+  AND (ua.id IS NULL OR ua.account_type <> 'personal')
+  AND cm.generation = (
+    SELECT COALESCE(MAX(generation), 0)
+    FROM chat_messages
+    WHERE chat_id = @chat_id
+      AND project_id = @project_id
+  )
+ORDER BY cm.created_at DESC, cm.seq DESC
+LIMIT @row_limit;
+
+-- name: ListRiskFindingSpansForRecall :many
+-- Findings that drive inline masking of the recall digest. Message-anchored
+-- rows only (the digest does not render content parts), with the canonical
+-- suppression filters from risk's ListRiskResultsByChatFound: found, not
+-- excluded, not swept as false positive, policy still enabled and not deleted.
+SELECT rr.chat_message_id, rr.source, rr.rule_id, rr.match, rr.spans, rr.start_pos, rr.end_pos
+FROM risk_results rr
+JOIN chat_messages cm ON cm.id = rr.chat_message_id
+JOIN chats c ON c.id = cm.chat_id
+LEFT JOIN user_accounts ua ON ua.id = c.user_account_id
+JOIN risk_policies rp ON rp.id = rr.risk_policy_id AND rp.deleted IS FALSE AND rp.enabled IS TRUE
+WHERE cm.chat_id = @chat_id
+  AND rr.project_id = @project_id
+  AND c.organization_id = @organization_id
+  AND c.user_id = @user_id::text
+  AND c.deleted IS FALSE
+  AND (ua.id IS NULL OR ua.account_type <> 'personal')
+  AND rr.found IS TRUE AND rr.excluded_at IS NULL AND rr.false_positive_at IS NULL
+ORDER BY cm.created_at ASC, cm.seq ASC, rr.id ASC;
+
+-- name: InsertChatSessionRecallLink :exec
+-- Sibling of agent's InsertChatSessionLink with kind='recall'. A v1 recall
+-- edge always has a NULL child: the OAuth principal carries no harness
+-- session id, so the continuation is unknowable at recall time and each
+-- recall records a distinct event. The ON CONFLICT clause is therefore inert
+-- today (the partial unique index only covers non-NULL children) and kept
+-- verbatim for forward safety.
+INSERT INTO chat_session_links (
+  project_id, organization_id, parent_chat_id, child_chat_id,
+  parent_session_id, child_session_id, kind, target_harness, source_surface,
+  actor_email, device_serial, device_hostname
+) VALUES (
+  @project_id, @organization_id, @parent_chat_id, @child_chat_id,
+  @parent_session_id, @child_session_id, 'recall', @target_harness, @source_surface,
+  @actor_email, @device_serial, @device_hostname
+)
+ON CONFLICT (project_id, parent_chat_id, child_chat_id) WHERE child_chat_id IS NOT NULL DO NOTHING;
 -- Plugin inventory. Plugins are the unit an administrator installs and reasons
 -- about, so this surface reads them directly rather than inferring them from
 -- distribution targets. Membership is derived from plugin_servers and

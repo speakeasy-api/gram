@@ -10,6 +10,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
 const attachPlatformMCPOperationReceiptRegistration = `-- name: AttachPlatformMCPOperationReceiptRegistration :one
@@ -1838,6 +1839,46 @@ func (q *Queries) GetLatestRedeemedPlatformMCPSetupHandoff(ctx context.Context, 
 		&i.InvalidatedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const getOwnedChatForRecall = `-- name: GetOwnedChatForRecall :one
+SELECT c.id, c.external_chat_id, c.title, c.cwd, c.updated_at, c.project_id
+FROM chats c
+LEFT JOIN user_accounts ua ON ua.id = c.user_account_id
+WHERE c.id = $1
+  AND c.organization_id = $2
+  AND c.user_id = $3::text
+  AND c.deleted IS FALSE
+  AND (ua.id IS NULL OR ua.account_type <> 'personal')
+`
+
+type GetOwnedChatForRecallParams struct {
+	ChatID         uuid.UUID
+	OrganizationID string
+	UserID         string
+}
+
+type GetOwnedChatForRecallRow struct {
+	ID             uuid.UUID
+	ExternalChatID pgtype.Text
+	Title          pgtype.Text
+	Cwd            pgtype.Text
+	UpdatedAt      pgtype.Timestamptz
+	ProjectID      uuid.UUID
+}
+
+func (q *Queries) GetOwnedChatForRecall(ctx context.Context, arg GetOwnedChatForRecallParams) (GetOwnedChatForRecallRow, error) {
+	row := q.db.QueryRow(ctx, getOwnedChatForRecall, arg.ChatID, arg.OrganizationID, arg.UserID)
+	var i GetOwnedChatForRecallRow
+	err := row.Scan(
+		&i.ID,
+		&i.ExternalChatID,
+		&i.Title,
+		&i.Cwd,
+		&i.UpdatedAt,
+		&i.ProjectID,
 	)
 	return i, err
 }
@@ -3677,6 +3718,56 @@ func (q *Queries) HasPlatformMCPSelectedUseEvidence(ctx context.Context, arg Has
 	return exists, err
 }
 
+const insertChatSessionRecallLink = `-- name: InsertChatSessionRecallLink :exec
+INSERT INTO chat_session_links (
+  project_id, organization_id, parent_chat_id, child_chat_id,
+  parent_session_id, child_session_id, kind, target_harness, source_surface,
+  actor_email, device_serial, device_hostname
+) VALUES (
+  $1, $2, $3, $4,
+  $5, $6, 'recall', $7, $8,
+  $9, $10, $11
+)
+ON CONFLICT (project_id, parent_chat_id, child_chat_id) WHERE child_chat_id IS NOT NULL DO NOTHING
+`
+
+type InsertChatSessionRecallLinkParams struct {
+	ProjectID       uuid.UUID
+	OrganizationID  string
+	ParentChatID    uuid.UUID
+	ChildChatID     uuid.NullUUID
+	ParentSessionID string
+	ChildSessionID  pgtype.Text
+	TargetHarness   string
+	SourceSurface   pgtype.Text
+	ActorEmail      pgtype.Text
+	DeviceSerial    pgtype.Text
+	DeviceHostname  pgtype.Text
+}
+
+// Sibling of agent's InsertChatSessionLink with kind='recall'. A v1 recall
+// edge always has a NULL child: the OAuth principal carries no harness
+// session id, so the continuation is unknowable at recall time and each
+// recall records a distinct event. The ON CONFLICT clause is therefore inert
+// today (the partial unique index only covers non-NULL children) and kept
+// verbatim for forward safety.
+func (q *Queries) InsertChatSessionRecallLink(ctx context.Context, arg InsertChatSessionRecallLinkParams) error {
+	_, err := q.db.Exec(ctx, insertChatSessionRecallLink,
+		arg.ProjectID,
+		arg.OrganizationID,
+		arg.ParentChatID,
+		arg.ChildChatID,
+		arg.ParentSessionID,
+		arg.ChildSessionID,
+		arg.TargetHarness,
+		arg.SourceSurface,
+		arg.ActorEmail,
+		arg.DeviceSerial,
+		arg.DeviceHostname,
+	)
+	return err
+}
+
 const invalidateActivePlatformMCPSetupHandoffs = `-- name: InvalidateActivePlatformMCPSetupHandoffs :execrows
 UPDATE platform_mcp_setup_handoffs
 SET invalidated_at = clock_timestamp(),
@@ -3787,6 +3878,171 @@ func (q *Queries) IsPlatformMCPNewModelEligible(ctx context.Context, organizatio
 	var exists bool
 	err := row.Scan(&exists)
 	return exists, err
+}
+
+const listOwnedChatSessionsForRecall = `-- name: ListOwnedChatSessionsForRecall :many
+
+SELECT c.id, c.external_chat_id, c.title, c.summary, c.cwd, c.updated_at, c.project_id, p.name AS project_name, p.slug AS project_slug
+FROM chats c
+JOIN projects p ON p.id = c.project_id
+LEFT JOIN user_accounts ua ON ua.id = c.user_account_id
+WHERE c.organization_id = $1
+  AND c.user_id = $2::text
+  AND c.deleted IS FALSE
+  AND (ua.id IS NULL OR ua.account_type <> 'personal')
+ORDER BY c.updated_at DESC
+LIMIT $3
+`
+
+type ListOwnedChatSessionsForRecallParams struct {
+	OrganizationID string
+	UserID         string
+	RowLimit       int32
+}
+
+type ListOwnedChatSessionsForRecallRow struct {
+	ID             uuid.UUID
+	ExternalChatID pgtype.Text
+	Title          pgtype.Text
+	Summary        pgtype.Text
+	Cwd            pgtype.Text
+	UpdatedAt      pgtype.Timestamptz
+	ProjectID      uuid.UUID
+	ProjectName    string
+	ProjectSlug    string
+}
+
+// Session recall (list_my_sessions / continue_session). Every read below
+// fuses tenancy and ownership into the row filter — organization, owner
+// user_id, not-deleted, and the personal-account exclusion — rather than
+// fetching then authorizing. An unresolved actor (empty user_id) matches no
+// rows because chats.user_id is never the empty string: fail-closed.
+// Personal-account sessions are excluded from BOTH list and continue:
+// personal-account ownership attribution is partly device-bridge-inferred,
+// which is acceptable for titles but not for transcripts (see the
+// ListOwnedChatSessionMeta warning in agent/queries.sql). The predicate
+// (ua.id IS NULL OR ua.account_type <> 'personal') also drops rows whose
+// account_type is NULL — the comparison evaluates to NULL — and that is
+// deliberate: an unclassified account might be personal, so it gets the
+// same fail-closed treatment.
+func (q *Queries) ListOwnedChatSessionsForRecall(ctx context.Context, arg ListOwnedChatSessionsForRecallParams) ([]ListOwnedChatSessionsForRecallRow, error) {
+	rows, err := q.db.Query(ctx, listOwnedChatSessionsForRecall, arg.OrganizationID, arg.UserID, arg.RowLimit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListOwnedChatSessionsForRecallRow
+	for rows.Next() {
+		var i ListOwnedChatSessionsForRecallRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.ExternalChatID,
+			&i.Title,
+			&i.Summary,
+			&i.Cwd,
+			&i.UpdatedAt,
+			&i.ProjectID,
+			&i.ProjectName,
+			&i.ProjectSlug,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listOwnedChatTranscriptMessagesForRecall = `-- name: ListOwnedChatTranscriptMessagesForRecall :many
+SELECT cm.id, cm.seq, cm.created_at, cm.role, cm.content, cm.content_asset_url, cm.tool_calls, cm.tool_call_id, cm.tool_urn, cm.source, cm.risk_analyzed_at
+FROM chat_messages cm
+JOIN chats c ON c.id = cm.chat_id
+LEFT JOIN user_accounts ua ON ua.id = c.user_account_id
+WHERE cm.chat_id = $1
+  AND cm.project_id = $2
+  AND c.organization_id = $3
+  AND c.user_id = $4::text
+  AND c.deleted IS FALSE
+  AND (ua.id IS NULL OR ua.account_type <> 'personal')
+  AND cm.generation = (
+    SELECT COALESCE(MAX(generation), 0)
+    FROM chat_messages
+    WHERE chat_id = $1
+      AND project_id = $2
+  )
+ORDER BY cm.created_at DESC, cm.seq DESC
+LIMIT $5
+`
+
+type ListOwnedChatTranscriptMessagesForRecallParams struct {
+	ChatID         uuid.UUID
+	ProjectID      uuid.NullUUID
+	OrganizationID string
+	UserID         string
+	RowLimit       int32
+}
+
+type ListOwnedChatTranscriptMessagesForRecallRow struct {
+	ID              uuid.UUID
+	Seq             int64
+	CreatedAt       pgtype.Timestamptz
+	Role            string
+	Content         string
+	ContentAssetUrl pgtype.Text
+	ToolCalls       []byte
+	ToolCallID      pgtype.Text
+	ToolUrn         urn.Tool
+	Source          pgtype.Text
+	RiskAnalyzedAt  pgtype.Timestamptz
+}
+
+// Latest generation only: compaction/edit rewrites bump chat_messages.generation
+// and the digest must reflect the current conversation view, not superseded
+// rows. chat_messages.project_id is NULL on old rows — always filtered, so
+// pre-project-stamp rows fail closed rather than leaking across tenants.
+// Newest rows first under @row_limit so the cap keeps the end of a long
+// session — the part a handoff digest is about — and the service restores
+// chronological order. Content is never truncated here: finding-span
+// verification compares exact bytes, so per-message bounding happens after
+// masking, not at the read.
+func (q *Queries) ListOwnedChatTranscriptMessagesForRecall(ctx context.Context, arg ListOwnedChatTranscriptMessagesForRecallParams) ([]ListOwnedChatTranscriptMessagesForRecallRow, error) {
+	rows, err := q.db.Query(ctx, listOwnedChatTranscriptMessagesForRecall,
+		arg.ChatID,
+		arg.ProjectID,
+		arg.OrganizationID,
+		arg.UserID,
+		arg.RowLimit,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListOwnedChatTranscriptMessagesForRecallRow
+	for rows.Next() {
+		var i ListOwnedChatTranscriptMessagesForRecallRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Seq,
+			&i.CreatedAt,
+			&i.Role,
+			&i.Content,
+			&i.ContentAssetUrl,
+			&i.ToolCalls,
+			&i.ToolCallID,
+			&i.ToolUrn,
+			&i.Source,
+			&i.RiskAnalyzedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const listPlatformMCPClientConnectionsForUpdate = `-- name: ListPlatformMCPClientConnectionsForUpdate :many
@@ -4671,6 +4927,77 @@ func (q *Queries) ListPlatformMCPSubjectConnections(ctx context.Context, arg Lis
 			&i.AuthorizedAt,
 			&i.ReauthorizedAt,
 			&i.Ready,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listRiskFindingSpansForRecall = `-- name: ListRiskFindingSpansForRecall :many
+SELECT rr.chat_message_id, rr.source, rr.rule_id, rr.match, rr.spans, rr.start_pos, rr.end_pos
+FROM risk_results rr
+JOIN chat_messages cm ON cm.id = rr.chat_message_id
+JOIN chats c ON c.id = cm.chat_id
+LEFT JOIN user_accounts ua ON ua.id = c.user_account_id
+JOIN risk_policies rp ON rp.id = rr.risk_policy_id AND rp.deleted IS FALSE AND rp.enabled IS TRUE
+WHERE cm.chat_id = $1
+  AND rr.project_id = $2
+  AND c.organization_id = $3
+  AND c.user_id = $4::text
+  AND c.deleted IS FALSE
+  AND (ua.id IS NULL OR ua.account_type <> 'personal')
+  AND rr.found IS TRUE AND rr.excluded_at IS NULL AND rr.false_positive_at IS NULL
+ORDER BY cm.created_at ASC, cm.seq ASC, rr.id ASC
+`
+
+type ListRiskFindingSpansForRecallParams struct {
+	ChatID         uuid.UUID
+	ProjectID      uuid.UUID
+	OrganizationID string
+	UserID         string
+}
+
+type ListRiskFindingSpansForRecallRow struct {
+	ChatMessageID uuid.NullUUID
+	Source        string
+	RuleID        pgtype.Text
+	Match         pgtype.Text
+	Spans         []byte
+	StartPos      pgtype.Int4
+	EndPos        pgtype.Int4
+}
+
+// Findings that drive inline masking of the recall digest. Message-anchored
+// rows only (the digest does not render content parts), with the canonical
+// suppression filters from risk's ListRiskResultsByChatFound: found, not
+// excluded, not swept as false positive, policy still enabled and not deleted.
+func (q *Queries) ListRiskFindingSpansForRecall(ctx context.Context, arg ListRiskFindingSpansForRecallParams) ([]ListRiskFindingSpansForRecallRow, error) {
+	rows, err := q.db.Query(ctx, listRiskFindingSpansForRecall,
+		arg.ChatID,
+		arg.ProjectID,
+		arg.OrganizationID,
+		arg.UserID,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListRiskFindingSpansForRecallRow
+	for rows.Next() {
+		var i ListRiskFindingSpansForRecallRow
+		if err := rows.Scan(
+			&i.ChatMessageID,
+			&i.Source,
+			&i.RuleID,
+			&i.Match,
+			&i.Spans,
+			&i.StartPos,
+			&i.EndPos,
 		); err != nil {
 			return nil, err
 		}

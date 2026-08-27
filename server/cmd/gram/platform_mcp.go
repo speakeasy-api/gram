@@ -35,6 +35,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/platformmcp"
 	"github.com/speakeasy-api/gram/server/internal/platformmcp/localfixture"
 	"github.com/speakeasy-api/gram/server/internal/platformmcp/remotesessionprovider"
+	platformrepo "github.com/speakeasy-api/gram/server/internal/platformmcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/platformmcp/setupcorpus"
 	"github.com/speakeasy-api/gram/server/internal/plugins"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
@@ -77,6 +78,10 @@ type platformMCPConfig struct {
 	// what a project overview's active-user count measures. Shared with the
 	// telemetry service so both surfaces answer from the same source.
 	SessionCapture platformmcp.FeatureChecker
+	// SessionPortability gates the session-recall tools (list_my_sessions /
+	// continue_session). Sibling of SessionCapture: capture records sessions,
+	// portability serves them back as redacted handoff digests.
+	SessionPortability platformmcp.FeatureChecker
 	// TelemetryDrilldown is the row-level half of the same read model. Nil
 	// withholds the drill-down tools while leaving the overview-first entry
 	// points serving.
@@ -223,6 +228,12 @@ func configureLocalFixturePlatformMCP(ctx context.Context, config platformMCPCon
 			Connection:   ratelimit.New(limitStore, platformmcp.SensitiveDiagnosticsConnectionLimitName, ratelimit.PerMinute(platformmcp.SensitiveDiagnosticQueriesPerConnectionPerMinute), ratelimit.WithMetrics(config.MeterProvider)),
 			Organization: ratelimit.New(limitStore, platformmcp.SensitiveDiagnosticsOrganizationLimitName, ratelimit.PerMinute(platformmcp.SensitiveDiagnosticQueriesPerOrganizationPerMinute), ratelimit.WithMetrics(config.MeterProvider)),
 		},
+		// Session recall serves whole-transcript digests, so it is metered on
+		// its own low allowance that no other budget can fund.
+		SensitiveSessionRecall: platformmcp.OperationBudget{
+			Connection:   ratelimit.New(limitStore, platformmcp.SessionRecallConnectionLimitName, ratelimit.PerMinute(platformmcp.SessionRecallsPerConnectionPerMinute), ratelimit.WithMetrics(config.MeterProvider)),
+			Organization: ratelimit.New(limitStore, platformmcp.SessionRecallOrganizationLimitName, ratelimit.PerMinute(platformmcp.SessionRecallsPerOrganizationPerMinute), ratelimit.WithMetrics(config.MeterProvider)),
+		},
 		// The second drill-down cap: what a connection may accumulate over ten
 		// minutes, rather than how often it may call. Both buckets refill over
 		// that window, so a caller paging steadily under the per-minute rate
@@ -293,6 +304,7 @@ func configureLocalFixturePlatformMCP(ctx context.Context, config platformMCPCon
 	platformReader := platformmcp.NewPostgresReader(config.Logger, config.DB)
 	diagnostics := platformmcp.NewDiagnosticsService(config.DB, config.Telemetry, config.SessionCapture, platformReader, readiness, budgets.Diagnostics).
 		WithDrilldown(config.TelemetryDrilldown, config.JWTSigningKey, budgets.SensitiveDiagnostics, budgets.DrilldownVolume, platformmcp.NewPostgresDrilldownAuditor(config.DB))
+	sessionRecall := platformmcp.NewSessionRecallService(config.Logger, config.DB, platformrepo.New(config.DB), audit.NewLogger(), config.SessionPortability, budgets.SensitiveSessionRecall)
 	runtime := platformmcp.NewRuntimeWithLifecycle(
 		config.Logger,
 		authenticator,
@@ -314,6 +326,7 @@ func configureLocalFixturePlatformMCP(ctx context.Context, config platformMCPCon
 		skillAuthoring,
 		diagnostics,
 		pluginInventory,
+		sessionRecall,
 		fixtureConfig.CatalogDescriptor(),
 	).WithOAuthTelemetry(oauthTelemetry)
 	oauth.Attach(config.Mux)
@@ -537,6 +550,12 @@ func configureBrowserPlatformMCP(ctx context.Context, config platformMCPConfig) 
 			Connection:   ratelimit.New(limitStore, platformmcp.SensitiveDiagnosticsConnectionLimitName, ratelimit.PerMinute(platformmcp.SensitiveDiagnosticQueriesPerConnectionPerMinute), ratelimit.WithMetrics(config.MeterProvider)),
 			Organization: ratelimit.New(limitStore, platformmcp.SensitiveDiagnosticsOrganizationLimitName, ratelimit.PerMinute(platformmcp.SensitiveDiagnosticQueriesPerOrganizationPerMinute), ratelimit.WithMetrics(config.MeterProvider)),
 		},
+		// Session recall serves whole-transcript digests, so it is metered on
+		// its own low allowance that no other budget can fund.
+		SensitiveSessionRecall: platformmcp.OperationBudget{
+			Connection:   ratelimit.New(limitStore, platformmcp.SessionRecallConnectionLimitName, ratelimit.PerMinute(platformmcp.SessionRecallsPerConnectionPerMinute), ratelimit.WithMetrics(config.MeterProvider)),
+			Organization: ratelimit.New(limitStore, platformmcp.SessionRecallOrganizationLimitName, ratelimit.PerMinute(platformmcp.SessionRecallsPerOrganizationPerMinute), ratelimit.WithMetrics(config.MeterProvider)),
+		},
 		// The second drill-down cap: what a connection may accumulate over ten
 		// minutes, rather than how often it may call. Both buckets refill over
 		// that window, so a caller paging steadily under the per-minute rate
@@ -596,6 +615,7 @@ func configureBrowserPlatformMCP(ctx context.Context, config platformMCPConfig) 
 	platformReader := platformmcp.NewPostgresReader(config.Logger, config.DB)
 	diagnostics := platformmcp.NewDiagnosticsService(config.DB, config.Telemetry, config.SessionCapture, platformReader, readiness, budgets.Diagnostics).
 		WithDrilldown(config.TelemetryDrilldown, config.JWTSigningKey, budgets.SensitiveDiagnostics, budgets.DrilldownVolume, platformmcp.NewPostgresDrilldownAuditor(config.DB))
+	sessionRecall := platformmcp.NewSessionRecallService(config.Logger, config.DB, platformrepo.New(config.DB), audit.NewLogger(), config.SessionPortability, budgets.SensitiveSessionRecall)
 	runtime := platformmcp.NewRuntimeWithLifecycle(
 		config.Logger,
 		authenticator,
@@ -614,6 +634,7 @@ func configureBrowserPlatformMCP(ctx context.Context, config platformMCPConfig) 
 		skillAuthoring,
 		diagnostics,
 		pluginInventory,
+		sessionRecall,
 		platformmcp.CatalogDescriptor{},
 	).WithOAuthTelemetry(oauthTelemetry)
 	oauth.Attach(config.Mux)
