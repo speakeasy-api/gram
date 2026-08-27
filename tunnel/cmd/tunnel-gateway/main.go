@@ -78,12 +78,19 @@ func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	go func() {
-		<-ctx.Done()
+	drain := func() {
+		unpubCtx, unpubCancel := context.WithTimeout(context.Background(), 5*time.Second)
+		gw.UnpublishAll(unpubCtx)
+		unpubCancel()
 		shutCtx, cancel := context.WithTimeout(context.Background(), 25*time.Second)
-		defer cancel()
 		_ = publicSrv.Shutdown(shutCtx)
 		_ = forwardSrv.Shutdown(shutCtx)
+		cancel()
+	}
+
+	go func() {
+		<-ctx.Done()
+		drain()
 	}()
 
 	errCh := make(chan error, 2)
@@ -97,10 +104,7 @@ func main() {
 	for range 2 {
 		if err := <-errCh; err != nil {
 			stop()
-			shutCtx, cancel := context.WithTimeout(context.Background(), 25*time.Second)
-			_ = publicSrv.Shutdown(shutCtx)
-			_ = forwardSrv.Shutdown(shutCtx)
-			cancel()
+			drain()
 			logger.ErrorContext(context.Background(), "tunnel-gateway server error", slog.Any("error", err))
 			os.Exit(1)
 		}

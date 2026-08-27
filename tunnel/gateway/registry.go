@@ -233,3 +233,13 @@ func (r *registry) activeSessions() int {
 	}
 	return n
 }
+
+func (r *registry) tunnelIDs() []string {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	ids := make([]string, 0, len(r.sessions))
+	for id := range r.sessions {
+		ids = append(ids, id)
+	}
+	return ids
+}

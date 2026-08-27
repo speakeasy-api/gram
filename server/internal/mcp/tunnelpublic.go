@@ -33,7 +33,6 @@ import (
 	"github.com/redis/go-redis/v9"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
-	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/mcp/tunnelrouting"
 	"github.com/speakeasy-api/gram/server/internal/mcp/tunnelsessions"
 	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
@@ -438,9 +437,10 @@ func isValidBackendSessionID(sid string) bool {
 // serveTunneledPublicSession serves an anonymous request that carries a
 // Gram-owned session id: resolve the Redis mapping, pin the forward to the
 // exact recorded gateway + agent session, and translate the session header in
-// both directions. A lost mapping or dead target surfaces as HTTP 404 so MCP
-// clients re-initialize; the cross-gateway retryer is never used because the
-// backend session exists on exactly one agent.
+// both directions. A lost mapping, unpublished route, unreachable pinned
+// gateway, or dead agent surfaces as HTTP 404 so MCP clients re-initialize;
+// the cross-gateway retryer is never used because the backend session exists
+// on exactly one agent.
 func (s *Service) serveTunneledPublicSession(
 	w http.ResponseWriter,
 	r *http.Request,
@@ -529,9 +529,7 @@ func (s *Service) serveTunneledPublicSession(
 	)
 	// Redirects won't work across a tunnel boundary; disable.
 	p.DisableRedirects = true
-	if len(m.gatewayCIDRs) > 0 {
-		p.GuardianClientOptions = []guardian.ClientOption{guardian.WithAllowedCIDRBlocks(m.gatewayCIDRs...)}
-	}
+	p.GuardianClientOptions = m.gatewayClientOptions()
 
 	isDelete := r.Method == http.MethodDelete
 	p.UpstreamResponseInterceptor = func(ctx context.Context, resp *http.Response) error {
@@ -567,6 +565,12 @@ func (s *Service) serveTunneledPublicSession(
 	}
 
 	if err := serveProxyBackend(w, r, p); err != nil {
+		if errors.Is(err, proxy.ErrUpstreamUnreachable) {
+			if delErr := rt.sessions.Delete(ctx, tunnelID, mcpServerID, sid); delErr != nil {
+				logger.ErrorContext(ctx, "drop anonymous tunnel session for unreachable gateway", attr.SlogError(delErr))
+			}
+			return oops.E(oops.CodeNotFound, err, "session not found").LogWarn(ctx, logger.With(attr.SlogErrorMessage("pinned tunnel gateway is unreachable")))
+		}
 		return fmt.Errorf("serve public tunneled session: %w", err)
 	}
 	return nil

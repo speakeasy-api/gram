@@ -287,6 +287,36 @@ func TestCleanupSessionStateRemovesRouteWhenLastSessionCloses(t *testing.T) {
 	require.Empty(t, candidates)
 }
 
+func TestUnpublishAllDropsHostedRoutes(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	table := route.NewRouteTable()
+	gw := newForwardTestGateway(t, Config{ForwardToken: "s3cret", AdvertiseAddr: "gw-1:8091"})
+	gw.routes = table
+
+	require.NoError(t, table.Publish(ctx, "tunnel-1", "gw-1:8091", time.Minute))
+	require.NoError(t, table.Publish(ctx, "tunnel-2", "gw-1:8091", time.Minute))
+	require.NoError(t, table.Publish(ctx, "tunnel-1", "gw-2:8091", time.Minute))
+
+	session1 := newYamuxSession(t)
+	remove1 := gw.reg.add("tunnel-1", "session-a", session1, http.NotFoundHandler(), route.Connection{GatewaySessionID: "session-a", Metadata: map[string]string{}})
+	t.Cleanup(remove1)
+	session2 := newYamuxSession(t)
+	remove2 := gw.reg.add("tunnel-2", "session-b", session2, http.NotFoundHandler(), route.Connection{GatewaySessionID: "session-b", Metadata: map[string]string{}})
+	t.Cleanup(remove2)
+
+	gw.UnpublishAll(ctx)
+
+	candidates, err := table.Candidates(ctx, "tunnel-1")
+	require.NoError(t, err)
+	require.Equal(t, []string{"gw-2:8091"}, candidates, "other owners must survive drain")
+
+	candidates, err = table.Candidates(ctx, "tunnel-2")
+	require.NoError(t, err)
+	require.Empty(t, candidates)
+}
+
 // recordingKeyStore wraps StaticKeyStore with a MarkConnected spy.
 type recordingKeyStore struct {
 	*StaticKeyStore

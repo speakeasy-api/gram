@@ -143,6 +143,7 @@ type httpClientOptions struct {
 	resolver          *net.Resolver
 	allowedCIDRBlocks []*net.IPNet
 	resilience        *resilienceOptions
+	dialTimeout       time.Duration
 }
 
 // ClientOption configures a single [Policy.Client] / [Policy.PooledClient]
@@ -192,6 +193,20 @@ func WithAllowedCIDRBlocks(cidrs ...string) func(*httpClientOptions) {
 func WithRetryConfig(config *RetryConfig) func(*httpClientOptions) {
 	return func(o *httpClientOptions) {
 		o.retryConfig = config
+	}
+}
+
+// defaultDialTimeout is the TCP connect bound used when a caller does not
+// set [WithDialTimeout]. It matches Go's historical [net.Dialer] default.
+const defaultDialTimeout = 30 * time.Second
+
+// WithDialTimeout sets the TCP connect timeout for this client. Use a short
+// value for destinations that are expected to accept in milliseconds (e.g.
+// cluster-internal pod IPs) so a dead peer fails fast instead of waiting
+// for the 30s default. Zero or negative leaves the default in place.
+func WithDialTimeout(d time.Duration) func(*httpClientOptions) {
+	return func(o *httpClientOptions) {
+		o.dialTimeout = d
 	}
 }
 
@@ -336,6 +351,9 @@ func (p *Policy) clientWithBaseTransport(transport *http.Transport, options ...f
 	if len(opts.allowedCIDRBlocks) > 0 {
 		dialOpts = append(dialOpts, WithDialerAllowedCIDRBlocks(opts.allowedCIDRBlocks))
 	}
+	if opts.dialTimeout > 0 {
+		dialOpts = append(dialOpts, WithDialerTimeout(opts.dialTimeout))
+	}
 	transport.DialContext = p.Dialer(dialOpts...).DialContext
 
 	// Merge into any existing transport TLS config rather than replacing
@@ -419,6 +437,7 @@ func (p *Policy) clientWithBaseTransport(transport *http.Transport, options ...f
 type dialerOptions struct {
 	resolver          *net.Resolver
 	allowedCIDRBlocks []*net.IPNet
+	timeout           time.Duration
 }
 
 func WithDialerResolver(resolver *net.Resolver) func(*dialerOptions) {
@@ -433,6 +452,14 @@ func WithDialerResolver(resolver *net.Resolver) func(*dialerOptions) {
 func WithDialerAllowedCIDRBlocks(blocks []*net.IPNet) func(*dialerOptions) {
 	return func(o *dialerOptions) {
 		o.allowedCIDRBlocks = blocks
+	}
+}
+
+// WithDialerTimeout sets the TCP connect timeout on a [Policy.Dialer].
+// Zero or negative leaves [defaultDialTimeout] in place.
+func WithDialerTimeout(d time.Duration) func(*dialerOptions) {
+	return func(o *dialerOptions) {
+		o.timeout = d
 	}
 }
 
@@ -455,8 +482,13 @@ func (p *Policy) Dialer(options ...func(*dialerOptions)) *net.Dialer {
 		resolver = p.resolver.Resolver()
 	}
 
+	timeout := defaultDialTimeout
+	if opts.timeout > 0 {
+		timeout = opts.timeout
+	}
+
 	return &net.Dialer{
-		Timeout:   30 * time.Second,
+		Timeout:   timeout,
 		KeepAlive: 30 * time.Second,
 		DualStack: true,
 		Resolver:  resolver,

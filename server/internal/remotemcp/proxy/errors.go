@@ -3,6 +3,7 @@ package proxy
 import (
 	"context"
 	"errors"
+	"fmt"
 
 	"github.com/speakeasy-api/gram/server/internal/oops"
 )
@@ -29,6 +30,13 @@ var ErrUndecodableJSONRPCBody = errors.New("upstream response is not a json-rpc 
 // supported") rather than a generic decode failure.
 var ErrBatchRequest = errors.New("batch requests are not supported")
 
+// ErrUpstreamUnreachable is wrapped into connect-phase [http.Client.Do]
+// failures that never produced response headers because the peer could not
+// be reached: dial timeout, connection refused, reset, DNS. A headers-phase
+// timeout after a successful TCP connect does not wrap this error — the
+// peer accepted the connection, so it is not gone.
+var ErrUpstreamUnreachable = errors.New("remote mcp server unreachable")
+
 // classifyForwardError maps a [http.Client.Do] failure into a typed proxy
 // error. timedOut is true when the failure was caused by the proxy's own
 // phase-1 timer firing (vs. a parent-context cancellation from the user
@@ -39,12 +47,12 @@ func (p *Proxy) classifyForwardError(ctx context.Context, err error, timedOut bo
 	case timedOut:
 		return oops.E(oops.CodeGatewayError, err, "remote mcp server timed out").LogError(ctx, p.Logger)
 	case errors.Is(err, context.DeadlineExceeded):
-		// Backstop in case any transport-level deadline (e.g.
-		// TLSHandshakeTimeout) fires before our phase timer.
-		return oops.E(oops.CodeGatewayError, err, "remote mcp server timed out").LogError(ctx, p.Logger)
+		// Transport-level deadline (dial timeout, TLSHandshakeTimeout)
+		// before any headers. The peer was never reached.
+		return oops.E(oops.CodeGatewayError, fmt.Errorf("%w: %w", ErrUpstreamUnreachable, err), "remote mcp server timed out").LogError(ctx, p.Logger)
 	case errors.Is(err, context.Canceled):
 		return oops.E(oops.CodeBadRequest, err, "client cancelled request").LogError(ctx, p.Logger)
 	default:
-		return oops.E(oops.CodeGatewayError, err, "remote mcp server unreachable").LogError(ctx, p.Logger)
+		return oops.E(oops.CodeGatewayError, fmt.Errorf("%w: %w", ErrUpstreamUnreachable, err), "remote mcp server unreachable").LogError(ctx, p.Logger)
 	}
 }

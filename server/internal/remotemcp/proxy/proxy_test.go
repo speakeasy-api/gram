@@ -673,6 +673,7 @@ func TestProxy_Post_HeadersPhaseTimeoutReturnsGatewayError(t *testing.T) {
 	var oopsErr *oops.ShareableError
 	require.ErrorAs(t, err, &oopsErr)
 	require.Equal(t, oops.CodeGatewayError, oopsErr.Code)
+	require.NotErrorIs(t, err, proxy.ErrUpstreamUnreachable, "headers-phase timeout is not a connect failure")
 }
 
 func TestProxy_Post_NonStreamingBodyPhaseTimeoutReturnsGatewayError(t *testing.T) {
@@ -872,6 +873,7 @@ func TestProxy_Post_UpstreamUnreachableReturnsGatewayError(t *testing.T) {
 	var oopsErr *oops.ShareableError
 	require.ErrorAs(t, err, &oopsErr)
 	require.Equal(t, oops.CodeGatewayError, oopsErr.Code)
+	require.ErrorIs(t, err, proxy.ErrUpstreamUnreachable)
 }
 
 func TestProxy_Post_OversizedUpstreamBodyReturnsError(t *testing.T) {

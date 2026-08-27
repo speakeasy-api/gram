@@ -3,6 +3,7 @@ package mcp
 import (
 	"context"
 	"log/slog"
+	"time"
 
 	"github.com/google/uuid"
 
@@ -37,6 +38,19 @@ func newTunnelManager(routes route.Store, forwardToken string, proxyManager *rem
 		proxyManager: proxyManager,
 		gatewayCIDRs: gatewayCIDRs,
 	}
+}
+
+// gatewayDialTimeout bounds TCP connect to a cluster-internal tunnel
+// gateway. A healthy gateway accepts in milliseconds; the guardian default
+// of 30s only prolongs dials to dead pod IPs after a rollout.
+const gatewayDialTimeout = 2 * time.Second
+
+func (m *tunnelManager) gatewayClientOptions() []guardian.ClientOption {
+	opts := []guardian.ClientOption{guardian.WithDialTimeout(gatewayDialTimeout)}
+	if len(m.gatewayCIDRs) > 0 {
+		opts = append(opts, guardian.WithAllowedCIDRBlocks(m.gatewayCIDRs...))
+	}
+	return opts
 }
 
 // buildProxy constructs the tunnel-backed proxy for one request.
@@ -102,8 +116,6 @@ func (m *tunnelManager) buildProxy(
 	p.UpstreamResponseRetryer = tunnelrouting.Retryer(m.routes, tunnelID, addr, clientAffinityKey, m.forwardToken)
 	// Redirects won't work across a tunnel boundary; disable.
 	p.DisableRedirects = true
-	if len(m.gatewayCIDRs) > 0 {
-		p.GuardianClientOptions = []guardian.ClientOption{guardian.WithAllowedCIDRBlocks(m.gatewayCIDRs...)}
-	}
+	p.GuardianClientOptions = m.gatewayClientOptions()
 	return p, nil
 }

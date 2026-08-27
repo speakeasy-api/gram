@@ -102,6 +102,21 @@ func (g *Gateway) ActiveSessions() int { return g.reg.activeSessions() }
 // SetAdvertiseAddr lets tests publish listener addresses known only after bind.
 func (g *Gateway) SetAdvertiseAddr(addr string) { g.cfg.AdvertiseAddr = addr }
 
+// UnpublishAll drops every route and connection snapshot this gateway currently
+// owns. Called on SIGTERM before listeners stop so gram-server stops pinning
+// new traffic here immediately, rather than waiting for the route TTL.
+func (g *Gateway) UnpublishAll(ctx context.Context) {
+	stateCtx, cancel := routeOperationContext(ctx)
+	defer cancel()
+	for _, tunnelID := range g.reg.tunnelIDs() {
+		if err := g.routes.Unpublish(stateCtx, tunnelID, g.cfg.AdvertiseAddr); err != nil {
+			g.logger.WarnContext(stateCtx, "tunnel route unpublish on shutdown failed",
+				slog.String("tunnel_id", tunnelID), slog.Any("error", err))
+		}
+		g.deleteConnectionSnapshot(stateCtx, tunnelID)
+	}
+}
+
 func (g *Gateway) handleConnect(w http.ResponseWriter, r *http.Request) {
 	// Shed before key lookup so a connect storm cannot load the key resolver.
 	if g.reg.activeSessions() >= g.cfg.MaxSessions {

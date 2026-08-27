@@ -80,6 +80,28 @@ func TestPolicy_Dialer(t *testing.T) {
 	require.NotNil(t, dialer.ControlContext)
 }
 
+func TestPolicy_DialerCustomTimeout(t *testing.T) {
+	t.Parallel()
+	policy := guardian.NewDefaultPolicy(testenv.NewTracerProvider(t))
+	dialer := policy.Dialer(guardian.WithDialerTimeout(2 * time.Second))
+
+	require.Equal(t, 2*time.Second, dialer.Timeout)
+}
+
+func TestPolicy_ClientHonorsDialTimeout(t *testing.T) {
+	t.Parallel()
+	policy, err := guardian.NewUnsafePolicy(testenv.NewTracerProvider(t), []string{})
+	require.NoError(t, err)
+
+	client := policy.Client(guardian.WithDialTimeout(100 * time.Millisecond))
+	start := time.Now()
+	// TEST-NET-1 is unroutable; without a short dial timeout this hangs for ~30s.
+	_, err = client.Get("http://192.0.2.1:9/")
+	elapsed := time.Since(start)
+	require.Error(t, err)
+	require.Less(t, elapsed, 500*time.Millisecond, "dial timeout must fail fast, took %s", elapsed)
+}
+
 func TestPolicy_DialerControlContext(t *testing.T) {
 	t.Parallel()
 	policy := guardian.NewDefaultPolicy(testenv.NewTracerProvider(t))

@@ -117,9 +117,10 @@ func (g *fakeTunnelGateway) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 type publicTunnelFixture struct {
-	endpointSlug string
-	tunnelID     uuid.UUID
-	gateway      *fakeTunnelGateway
+	endpointSlug  string
+	tunnelID      uuid.UUID
+	gateway       *fakeTunnelGateway
+	gatewayServer *httptest.Server
 }
 
 func newPublicTunnelFixture(t *testing.T, ctx context.Context, ti *testInstance, gateway *fakeTunnelGateway, allowPublic bool) publicTunnelFixture {
@@ -181,9 +182,10 @@ func newPublicTunnelFixture(t *testing.T, ctx context.Context, ti *testInstance,
 	require.NoError(t, ti.tunnelRoutes.Publish(ctx, tunneledServer.ID.String(), gatewayServer.URL, time.Hour))
 
 	return publicTunnelFixture{
-		endpointSlug: endpointSlug,
-		tunnelID:     tunneledServer.ID,
-		gateway:      gateway,
+		endpointSlug:  endpointSlug,
+		tunnelID:      tunneledServer.ID,
+		gateway:       gateway,
+		gatewayServer: gatewayServer,
 	}
 }
 
@@ -330,6 +332,59 @@ func TestServePublic_Tunneled_DeadAgentSessionTranslatesTo404(t *testing.T) {
 	require.ErrorAs(t, err, &oopsErr)
 	require.Equal(t, oops.CodeNotFound, oopsErr.Code)
 	require.Equal(t, before, gateway.forwardCount(), "dropped session must not be re-forwarded")
+}
+
+// A pinned gateway that is still in the route table but no longer accepting
+// connections (pod IP after listener stop / crash) must surface as 404 and
+// drop the mapping — not hang for the 30s dial timeout and return 502.
+func TestServePublic_Tunneled_PinnedGatewayDialFailureIs404(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPService(t)
+	gateway := &fakeTunnelGateway{t: t, agentSessionID: "agent-1", backendSessionID: "backend-secret-session", legacy: false, dead: false, challenge: ""}
+	fixture := newPublicTunnelFixture(t, ctx, ti, gateway, true)
+
+	sid := initializeTunneledPublicSession(t, ti, fixture)
+	forwardsAfterInit := gateway.forwardCount()
+
+	fixture.gatewayServer.Close()
+
+	start := time.Now()
+	_, err := serveTunneledPublicRequest(t, ti, fixture.endpointSlug, http.MethodPost, makeToolsListBody(), sid)
+	elapsed := time.Since(start)
+	require.Error(t, err)
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeNotFound, oopsErr.Code)
+	require.Less(t, elapsed, 5*time.Second, "dial to a dead pinned gateway must not wait for the 30s default")
+
+	_, err = serveTunneledPublicRequest(t, ti, fixture.endpointSlug, http.MethodPost, makeToolsListBody(), sid)
+	require.Error(t, err)
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeNotFound, oopsErr.Code)
+	require.Equal(t, forwardsAfterInit, gateway.forwardCount(), "dropped session must not be re-forwarded")
+}
+
+// A session pin whose recorded gateway has left the candidate set (route
+// unpublished or TTL expired) must 404 without forwarding.
+func TestServePublic_Tunneled_PinnedGatewayGoneFromCandidatesIs404(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPService(t)
+	gateway := &fakeTunnelGateway{t: t, agentSessionID: "agent-1", backendSessionID: "backend-secret-session", legacy: false, dead: false, challenge: ""}
+	fixture := newPublicTunnelFixture(t, ctx, ti, gateway, true)
+
+	sid := initializeTunneledPublicSession(t, ti, fixture)
+	forwardsAfterInit := gateway.forwardCount()
+
+	require.NoError(t, ti.tunnelRoutes.Delete(ctx, fixture.tunnelID.String()))
+
+	_, err := serveTunneledPublicRequest(t, ti, fixture.endpointSlug, http.MethodPost, makeToolsListBody(), sid)
+	require.Error(t, err)
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeNotFound, oopsErr.Code)
+	require.Equal(t, forwardsAfterInit, gateway.forwardCount(), "dead-gateway session must not be forwarded")
 }
 
 func TestServePublic_Tunneled_DeleteTerminatesSession(t *testing.T) {
