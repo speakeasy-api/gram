@@ -5,6 +5,8 @@ server/internal/risk/enforcereply/dispatch_test.go
   s_b390d6ce53b276::t_87e9c0cb8b75cc 2-4,6-14,16-36,74-79,88,90-108,113,115,118-119,159-163,165-183,185-200,202-211
   s_b390d6ce53b276::t_dc036efc4d43ca 37-55
   s_b390d6ce53b276::t_bd4dc079a3d257 120-125,131-133,139,141-158
+  s_b390d6ce53b276::t_0fdcab7601b926 126-130,134-138,140
+  s_b390d6ce53b276::t_a8cb1e49190a93 57-62,64-69
 infra/proto/gram/risk/v1/gitleaks_enforcement.proto
   s_6640015607fdd4::t_c451dd4b956460 1-25
 docs/research/2026-08-20-enforcement-reply-load-test.md
@@ -150,6 +152,8 @@ server/internal/risk/enforcereply/dispatch.go
   s_b390d6ce53b276::t_9447b58bb6876e 133-135
   s_b390d6ce53b276::t_c3d6bd2462d5d4 91-93
   s_b390d6ce53b276::t_91f9ab9066a303 89-90,94-95,98,109-110
+  s_b390d6ce53b276::t_2f863140652656 153-177
+  s_b390d6ce53b276::t_e7638e3417baaf 72,96-97,99-108
 infra/gen/gram/risk/v1/enforcement_reply.pb.go
   s_6640015607fdd4::t_86defa842afffb 1-658,671-697,699,702-761,764-794,796-836,838,840-868,876-881,883,885-929,933-995
 infra/gen/gram/risk/v1/gitleaks_enforcement.pb.go
@@ -217,6 +221,7 @@ pystreams/src/pystreams/risk/replywriter.py
   s_b390d6ce53b276::t_79c0557c9bc059 1-11,13-14,16-25,27,29-30,32-48,50-55,57-65
   s_b390d6ce53b276::t_b693924e9af08a 12,15
   s_b390d6ce53b276::t_35e5e57fcbf34c 49
+  s_b390d6ce53b276::t_6ffa9f3689fddc 26,56
 pystreams/src/pystreams/risk/fingerprint.py
   s_b390d6ce53b276::t_524695306e4bdd 54-57,67-68
   s_b390d6ce53b276::t_5091b256197eb7 114,119-124
@@ -229,6 +234,7 @@ pystreams/src/pystreams/risk/enforce_handler.py
   s_b390d6ce53b276::t_c5681cd7873420 158-162
   s_b390d6ce53b276::t_40504d431632ce 1-102,104-136,138-157,163-196,198-259
   s_b390d6ce53b276::t_7400c7b4ef169f 103,137
+  s_b390d6ce53b276::t_6ffa9f3689fddc 197
 pystreams/pyproject.toml
   s_b390d6ce53b276::t_f78c42f5119e40 21
   s_b390d6ce53b276::t_8274c5692ac093 29
@@ -243,6 +249,7 @@ pystreams/tests/test_risk_enforce.py
   s_b390d6ce53b276::t_e16ef120f09a77 67
   s_b390d6ce53b276::t_bcd72104d1ba4d 64-66,68-72
   s_b390d6ce53b276::t_bc62da6bf5c08d 232-234,236-241
+  s_b390d6ce53b276::t_dd32a42ab03783 154,157,181
 pystreams/src/pystreams/cmd/multi.py
   s_b390d6ce53b276::t_f73e8347c54294 33-34,36,38
   s_b390d6ce53b276::t_5b9b9403c4dd59 12-18
