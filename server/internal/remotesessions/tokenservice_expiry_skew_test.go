@@ -7,7 +7,6 @@ package remotesessions_test
 
 import (
 	"net/http"
-	"strconv"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -22,17 +21,19 @@ import (
 func TestResolveAccessToken_NoRefreshToken_InsideSkew_ServedUntilDeadline(t *testing.T) {
 	t.Parallel()
 
-	const upstreamAccessToken = "access-short-lived-no-refresh"
-	expiresIn := strconv.Itoa(int((remotesessions.AccessTokenExpirySkew - 5*time.Second) / time.Second))
+	const upstreamAccessToken = "access-no-refresh"
 	ctx, env := newSyntheticExpiryEnv(t, "no-refresh-skew", func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"access_token":"` + upstreamAccessToken + `","token_type":"Bearer","expires_in":` + expiresIn + `}`))
+		_, _ = w.Write([]byte(`{"access_token":"` + upstreamAccessToken + `","token_type":"Bearer","expires_in":3600}`))
 	})
-
-	require.True(t, env.session.AccessExpiresAt.Valid)
 	require.False(t, env.session.RefreshTokenEncrypted.Valid, "no refresh token should be stored")
-	require.True(t, env.session.AccessExpiresAt.Time.Before(time.Now().Add(remotesessions.AccessTokenExpirySkew)),
-		"fixture must land inside the skew window")
+
+	// Stand in for the stored token reaching the skew window.
+	require.NoError(t, env.q.SetRemoteSessionAccessExpiresAt(ctx, repo.SetRemoteSessionAccessExpiresAtParams{
+		ID:              env.session.ID,
+		ProjectID:       conv.ToNullUUID(env.projectID),
+		AccessExpiresAt: conv.ToPGTimestamptz(time.Now().Add(remotesessions.AccessTokenExpirySkew / 2)),
+	}))
 
 	resolved, err := env.mgr.ResolveAccessToken(ctx, env.clientID, env.subject, "")
 	require.NoError(t, err)

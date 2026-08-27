@@ -15,6 +15,7 @@ package remotesessions_test
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -177,6 +178,27 @@ type syntheticExpiryEnv struct {
 func newSyntheticExpiryEnv(t *testing.T, slugSuffix string, tokenHandler http.HandlerFunc) (context.Context, syntheticExpiryEnv) {
 	t.Helper()
 
+	ctx, env, callback, err := driveSyntheticLogin(t, slugSuffix, tokenHandler)
+	require.NoError(t, err)
+	require.Equal(t, http.StatusSeeOther, callback.Code)
+
+	session, err := env.q.GetActiveRemoteSession(ctx, repo.GetActiveRemoteSessionParams{
+		SubjectUrn:            env.subject,
+		RemoteSessionClientID: env.clientID,
+	})
+	require.NoError(t, err)
+	env.session = session
+
+	return ctx, env
+}
+
+// driveSyntheticLogin is newSyntheticExpiryEnv up to and including the
+// callback. The callback's recorder and error come back unasserted, so a test
+// can exercise a code exchange the callback is expected to reject; the
+// returned env carries no session row.
+func driveSyntheticLogin(t *testing.T, slugSuffix string, tokenHandler http.HandlerFunc) (context.Context, syntheticExpiryEnv, *httptest.ResponseRecorder, error) {
+	t.Helper()
+
 	ctx, ti := newTestService(t)
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
@@ -277,14 +299,10 @@ func newSyntheticExpiryEnv(t *testing.T, slugSuffix string, tokenHandler http.Ha
 	cbReq := httptest.NewRequest(http.MethodGet,
 		"/mcp/remote_login_callback?code=upstream-code&state="+url.QueryEscape(state), nil)
 	cbW := httptest.NewRecorder()
-	require.NoError(t, mgr.HandleRemoteLoginCallback(cbW, cbReq))
-	require.Equal(t, http.StatusSeeOther, cbW.Code)
-
-	session, err := q.GetActiveRemoteSession(ctx, repo.GetActiveRemoteSessionParams{
-		SubjectUrn:            subject,
-		RemoteSessionClientID: client.ID,
-	})
-	require.NoError(t, err)
+	callbackErr := mgr.HandleRemoteLoginCallback(cbW, cbReq)
+	if callbackErr != nil {
+		callbackErr = fmt.Errorf("handle remote login callback: %w", callbackErr)
+	}
 
 	return ctx, syntheticExpiryEnv{
 		mgr:       mgr,
@@ -297,6 +315,5 @@ func newSyntheticExpiryEnv(t *testing.T, slugSuffix string, tokenHandler http.Ha
 		organizationID: authCtx.ActiveOrganizationID,
 		clientID:       client.ID,
 		subject:        subject,
-		session:        session,
-	}
+	}, cbW, callbackErr
 }

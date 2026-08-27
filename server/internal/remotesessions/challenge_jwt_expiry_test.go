@@ -14,9 +14,11 @@ import (
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
+	"github.com/jackc/pgx/v5"
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 )
@@ -108,6 +110,78 @@ func TestRemoteLoginCallback_JWTAccessToken_RefreshesInsideExpirySkew(t *testing
 	require.NoError(t, err)
 	require.Equal(t, rotated, resolved)
 	require.Equal(t, int64(1), refreshCount.Load())
+}
+
+func TestRemoteLoginCallback_JWTAccessToken_PastExpWithRefreshToken_RefreshesOnFirstUse(t *testing.T) {
+	t.Parallel()
+
+	// A provider that pins exp to its own session can hand out a token that
+	// is already past it. With a refresh grant the exchange is recorded and
+	// the first resolution recovers by refreshing.
+	expired := mintJWTAccessToken(t, time.Now().Add(-time.Minute))
+	rotated := mintJWTAccessToken(t, time.Now().Add(24*time.Hour))
+	var refreshCount atomic.Int64
+	ctx, env := newSyntheticExpiryEnv(t, "jwt-past-exp-refresh", func(w http.ResponseWriter, r *http.Request) {
+		_ = r.ParseForm()
+		w.Header().Set("Content-Type", "application/json")
+		if r.Form.Get("grant_type") == "refresh_token" {
+			refreshCount.Add(1)
+			_, _ = w.Write([]byte(jwtProviderTokenBody(rotated, "refresh-rotated")))
+			return
+		}
+		_, _ = w.Write([]byte(jwtProviderTokenBody(expired, "refresh-initial")))
+	})
+	require.True(t, env.session.AccessExpiresAt.Valid)
+	require.False(t, env.session.AccessExpiresAt.Time.After(time.Now()), "the persisted deadline is the past exp")
+
+	resolved, err := env.mgr.ResolveAccessToken(ctx, env.clientID, env.subject, "")
+	require.NoError(t, err)
+	require.Equal(t, rotated, resolved)
+	require.Equal(t, int64(1), refreshCount.Load())
+}
+
+func TestRemoteLoginCallback_JWTAccessToken_PastExpWithoutRefreshToken_IsRejected(t *testing.T) {
+	t.Parallel()
+
+	// With no refresh grant nothing can recover an already-expired token.
+	// Recording the row would show the session as connected while every
+	// resolution answered with a reconnect prompt, so the exchange is
+	// declined instead.
+	expired := mintJWTAccessToken(t, time.Now().Add(-time.Minute))
+	ctx, env, _, err := driveSyntheticLogin(t, "jwt-past-exp-no-refresh", func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"access_token":"` + expired + `","scope":"read write","token_type":"Bearer"}`))
+	})
+	var rejected *oops.ShareableError
+	require.ErrorAs(t, err, &rejected)
+	require.Equal(t, oops.CodeUnauthorized, rejected.Code)
+
+	_, err = env.q.GetActiveRemoteSession(ctx, repo.GetActiveRemoteSessionParams{
+		SubjectUrn:            env.subject,
+		RemoteSessionClientID: env.clientID,
+	})
+	require.ErrorIs(t, err, pgx.ErrNoRows, "a session that cannot be used is never recorded as connected")
+}
+
+func TestRemoteLoginCallback_JWTAccessToken_ExpInsideSkewWithoutRefreshToken_IsRejected(t *testing.T) {
+	t.Parallel()
+
+	// The bar is the same margin the request path refreshes at: a token with
+	// less than the skew left and nothing to renew it is not a usable session.
+	expiring := mintJWTAccessToken(t, time.Now().Add(remotesessions.AccessTokenExpirySkew/2))
+	ctx, env, _, err := driveSyntheticLogin(t, "jwt-skew-exp-no-refresh", func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"access_token":"` + expiring + `","scope":"read write","token_type":"Bearer"}`))
+	})
+	var rejected *oops.ShareableError
+	require.ErrorAs(t, err, &rejected)
+	require.Equal(t, oops.CodeUnauthorized, rejected.Code)
+
+	_, err = env.q.GetActiveRemoteSession(ctx, repo.GetActiveRemoteSessionParams{
+		SubjectUrn:            env.subject,
+		RemoteSessionClientID: env.clientID,
+	})
+	require.ErrorIs(t, err, pgx.ErrNoRows)
 }
 
 // jwtProviderTokenBody is a token response with no expires_in: the only expiry

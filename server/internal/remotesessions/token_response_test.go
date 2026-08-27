@@ -115,9 +115,10 @@ func TestTokenResponseAccessExpiresAt_JWTWithoutExp(t *testing.T) {
 func TestTokenResponseAccessExpiresAt_PastExpIsReported(t *testing.T) {
 	t.Parallel()
 
-	// A deadline the provider asserts is stored even when it has already
-	// passed: the request path then refreshes instead of forwarding a token
-	// the provider is already rejecting.
+	// A deadline the provider asserts is reported even when it has already
+	// passed. With a refresh grant the request path then refreshes instead of
+	// forwarding a token the provider is already rejecting; without one the
+	// code exchange declines to record the session at all.
 	now := time.Date(2026, 8, 26, 12, 0, 0, 0, time.UTC)
 	exp := now.Add(-time.Minute)
 	tok := tokenResponse{AccessToken: mintJWT(t, jwt.MapClaims{"exp": exp.Unix()})}
