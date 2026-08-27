@@ -10,12 +10,14 @@ INSERT INTO openrouter_api_keys (
   , key_encrypted
   , key_hash
   , monthly_credits
+  , disable_causes
 ) VALUES (
     @organization_id
   , @key_type
   , @key_encrypted
   , @key_hash
   , @monthly_credits
+  , '{}'::text[]
 )
 RETURNING *;
 
@@ -30,9 +32,27 @@ WHERE organization_id = @organization_id
 UPDATE openrouter_api_keys
 SET monthly_credits = @monthly_credits, key_hash = @key_hash,
     disabled = disabled AND NOT @reinstate::boolean,
+    disable_causes = CASE WHEN @reinstate::boolean THEN '{}'::text[] ELSE disable_causes END,
     updated_at = GREATEST(clock_timestamp(), updated_at + INTERVAL '1 microsecond')
 WHERE organization_id = @organization_id
   AND key_type = @key_type
+  AND deleted IS FALSE
+RETURNING *;
+
+-- name: AddOpenRouterAPIKeyDisableCause :one
+UPDATE openrouter_api_keys
+SET disable_causes = CASE
+      WHEN @disable_cause::text = ANY(disable_causes) THEN disable_causes
+      ELSE array_append(disable_causes, @disable_cause::text)
+    END,
+    disabled = TRUE,
+    updated_at = CASE
+      WHEN @disable_cause::text = ANY(disable_causes) THEN updated_at
+      ELSE GREATEST(clock_timestamp(), updated_at + INTERVAL '1 microsecond')
+    END
+WHERE organization_id = @organization_id
+  AND key_type = @key_type
+  AND disable_causes IS NOT NULL
   AND deleted IS FALSE
 RETURNING *;
 
@@ -42,6 +62,7 @@ RETURNING *;
 -- refuses to hand the key to a completion.
 UPDATE openrouter_api_keys
 SET disabled = TRUE,
+    disable_causes = NULL,
     updated_at = clock_timestamp()
 WHERE organization_id = @organization_id
   AND key_type = @key_type

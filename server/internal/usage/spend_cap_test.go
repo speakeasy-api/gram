@@ -207,6 +207,26 @@ func TestGetInferenceSpendCapsListsOnlyMaterializedPlatformKeys(t *testing.T) {
 	require.ElementsMatch(t, []openrouter.KeyType{openrouter.KeyTypeChat, openrouter.KeyTypeInternal}, credits.calls)
 }
 
+func TestMaterializedInferenceKeyReadsUseEffectiveDisabledCompatibility(t *testing.T) {
+	t.Parallel()
+
+	organizationID := "org-inference-cap-compat"
+	_, db, _, _ := newTUMTestService(t, organizationID)
+	createUsageInferenceKey(t, db, organizationID, openrouter.KeyTypeChat, 100)
+	_, err := db.Exec(t.Context(), `UPDATE openrouter_api_keys SET disabled=TRUE, disable_causes='{}' WHERE organization_id=$1 AND key_type='chat'`, organizationID)
+	require.NoError(t, err)
+
+	key, err := repo.New(db).GetMaterializedOpenRouterInferenceKey(t.Context(), repo.GetMaterializedOpenRouterInferenceKeyParams{OrganizationID: organizationID, KeyType: "chat"})
+	require.NoError(t, err)
+	require.False(t, key.Disabled)
+
+	_, err = db.Exec(t.Context(), `UPDATE openrouter_api_keys SET disabled=FALSE, disable_causes=ARRAY['billing_inactive'] WHERE organization_id=$1 AND key_type='chat'`, organizationID)
+	require.NoError(t, err)
+	key, err = repo.New(db).GetMaterializedOpenRouterInferenceKey(t.Context(), repo.GetMaterializedOpenRouterInferenceKeyParams{OrganizationID: organizationID, KeyType: "chat"})
+	require.NoError(t, err)
+	require.True(t, key.Disabled)
+}
+
 func TestGetInferenceSpendCapsReturnsEmptyBeforeKeyMaterialization(t *testing.T) {
 	t.Parallel()
 

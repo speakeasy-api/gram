@@ -448,7 +448,7 @@ func (o *OpenRouter) ProvisionAPIKey(ctx context.Context, orgID string, keyType 
 		// Every platform-key completion resolves through here, so this is where
 		// the lockdown binds. Refusing locally beats an upstream rejection
 		// whose status also means "our provisioning key is broken".
-		if key.Disabled {
+		if EffectiveDisabled(key.Disabled, key.DisableCauses) {
 			return "", fmt.Errorf("resolve %s key: %w", keyType, ErrPlatformKeyDisabled)
 		}
 		openrouterKey, err = o.keyMaterial(key)
@@ -503,7 +503,7 @@ func (o *OpenRouter) createAndStoreAPIKey(ctx context.Context, orgID string, key
 		// the caller's read and this re-read under the lock. A row without a
 		// ciphertext hard-errors in keyMaterial rather than falling through to
 		// mint a replacement upstream key.
-		if key.Disabled {
+		if EffectiveDisabled(key.Disabled, key.DisableCauses) {
 			return "", fmt.Errorf("resolve %s key: %w", keyType, ErrPlatformKeyDisabled)
 		}
 		plaintext, keyErr := o.keyMaterial(key)
@@ -604,7 +604,7 @@ func (o *OpenRouter) refreshAPIKeyLimit(ctx context.Context, db DBTX, orgID stri
 		return 0, fmt.Errorf("failed to get OpenRouter API key: %w", err)
 	}
 
-	if limit == nil && key.Disabled && !reinstate {
+	if limit == nil && EffectiveDisabled(key.Disabled, key.DisableCauses) && !reinstate {
 		// Generic refreshes must never undo a billing lockdown. An explicit
 		// activation, re-subscription, or platform-admin enable is the only path
 		// allowed to reinstate either platform key.
@@ -634,7 +634,8 @@ func (o *OpenRouter) refreshAPIKeyLimit(ctx context.Context, db DBTX, orgID stri
 
 	creditLimit := float64(keyLimit)
 	patch := updateKeyRequest{Limit: &creditLimit, LimitReset: "monthly", Disabled: nil}
-	if key.Disabled {
+	effectiveDisabled := EffectiveDisabled(key.Disabled, key.DisableCauses)
+	if effectiveDisabled {
 		// Setting a limit on a disabled key does not bring it back upstream.
 		patch.Disabled = new(false)
 	}
@@ -667,7 +668,7 @@ func (o *OpenRouter) refreshAPIKeyLimit(ctx context.Context, db DBTX, orgID stri
 		// This matches the upstream PATCH above. A lockdown committed after the
 		// read is preserved because key.Disabled was false at the read and this
 		// value therefore remains false.
-		Reinstate: key.Disabled,
+		Reinstate: effectiveDisabled,
 	})
 	if err != nil {
 		return 0, oops.E(oops.CodeUnexpected, err, "failed to update openrouter key").LogError(ctx, o.logger)
@@ -685,6 +686,49 @@ func (o *OpenRouter) refreshAPIKeyLimit(ctx context.Context, db DBTX, orgID stri
 // record a lockdown that a permanently failing PATCH never made.
 func (o *OpenRouter) DisableAPIKey(ctx context.Context, orgID string, keyType KeyType) error {
 	return o.disableAPIKey(ctx, o.db, orgID, keyType)
+}
+
+// AddAPIKeyDisableCause is staged for the cause-specific cutover. Wave B does
+// not call it from product paths, but keeping the primitive here lets identity
+// validation ship before any cause can be persisted after an upstream PATCH.
+func (o *OpenRouter) AddAPIKeyDisableCause(ctx context.Context, orgID string, keyType KeyType, cause DisableCause) (DisableCauseChange, error) {
+	keyType = keyType.OrDefault()
+	if err := keyType.Validate(); err != nil {
+		return DisableCauseChange{}, fmt.Errorf("add OpenRouter API key disable cause: %w", err)
+	}
+	if err := cause.Validate(); err != nil {
+		return DisableCauseChange{}, fmt.Errorf("add OpenRouter API key disable cause: %w", err)
+	}
+
+	key, err := o.repo.GetOpenRouterAPIKey(ctx, repo.GetOpenRouterAPIKeyParams{OrganizationID: orgID, KeyType: string(keyType)})
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		return DisableCauseChange{}, nil
+	case err != nil:
+		return DisableCauseChange{}, fmt.Errorf("read OpenRouter key before adding disable cause: %w", err)
+	case key.DisableCauses == nil:
+		return DisableCauseChange{}, errors.New("cannot add OpenRouter disable cause to unclassified key")
+	case slices.Contains(key.DisableCauses, string(cause)):
+		return DisableCauseChange{}, nil
+	}
+
+	accessChanged := len(key.DisableCauses) == 0
+	if accessChanged {
+		patchCtx, cancel := context.WithTimeout(ctx, upstreamKeyPatchTimeout)
+		defer cancel()
+		response, err := o.patchOpenRouterAPIKey(patchCtx, key.KeyHash, updateKeyRequest{Disabled: new(true)})
+		if err != nil {
+			return DisableCauseChange{}, fmt.Errorf("disable upstream OpenRouter API key: %w", err)
+		}
+		if response.Data.Hash != key.KeyHash {
+			return DisableCauseChange{}, errors.New("OpenRouter key identity mismatch after disable")
+		}
+	}
+
+	if _, err := o.repo.AddOpenRouterAPIKeyDisableCause(ctx, repo.AddOpenRouterAPIKeyDisableCauseParams{OrganizationID: orgID, KeyType: string(keyType), DisableCause: string(cause)}); err != nil {
+		return DisableCauseChange{}, fmt.Errorf("persist OpenRouter API key disable cause: %w", err)
+	}
+	return DisableCauseChange{CauseChanged: true, KeyAccessChanged: accessChanged}, nil
 }
 
 // DisableAPIKeyWithDB is DisableAPIKey using db for every local read and
