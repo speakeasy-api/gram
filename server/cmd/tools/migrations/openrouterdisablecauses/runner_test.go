@@ -74,18 +74,15 @@ func nullableTimestamptz(value *time.Time) pgtype.Timestamptz {
 func (f *runnerFixture) seedAdminAudit(t *testing.T, orgID, keyType, action string, malformed bool) {
 	t.Helper()
 	metadata := fmt.Sprintf(`{"key_type":%q}`, keyType)
-	after := fmt.Sprintf(`{"disabled":true,"disable_causes":[%q]}`, CauseAdminLock)
-	if action == "openrouter-key:enable" {
-		after = `{"disabled":false,"disable_causes":[]}`
-	}
 	if malformed {
-		after = `{"disabled":true,"disable_causes":"not-an-array"}`
+		metadata = `{"key_type":42}`
 	}
 	require.NoError(t, New(f.pool).SeedAdminAuditFixture(t.Context(), SeedAdminAuditFixtureParams{
 		OrganizationID: orgID,
 		Action:         action,
 		SubjectID:      "openrouter_api_key:" + orgID + "/" + keyType,
-		AfterSnapshot:  []byte(after),
+		BeforeSnapshot: nil,
+		AfterSnapshot:  nil,
 		Metadata:       []byte(metadata),
 	}))
 }
@@ -172,6 +169,14 @@ func TestRunnerClassifiesDurableProjections(t *testing.T) {
 	badAudit := f.seedKey(t, "internal", true, "free")
 	f.seedAdminAudit(t, badAudit, "internal", "openrouter-key:disable", true)
 
+	wrongKeyTypeAudit := f.seedKey(t, "internal", true, "free")
+	require.NoError(t, New(f.pool).SeedAdminAuditFixture(t.Context(), SeedAdminAuditFixtureParams{
+		OrganizationID: wrongKeyTypeAudit,
+		Action:         "openrouter-key:disable",
+		SubjectID:      "openrouter_api_key:" + wrongKeyTypeAudit + "/internal",
+		Metadata:       []byte(`{"key_type":"chat"}`),
+	}))
+
 	summary, err := newTestRunner(f.pool, 100).Run(t.Context(), ModeApply)
 	require.ErrorIs(t, err, ErrAmbiguousRows)
 	require.Equal(t, []string{CauseTrialDemotion}, f.causes(t, converted, "internal"))
@@ -180,8 +185,9 @@ func TestRunnerClassifiesDurableProjections(t *testing.T) {
 	require.Equal(t, []string{CauseTrialDemotion}, f.causes(t, latestEnable, "internal"))
 	require.Nil(t, f.causes(t, badBilling, "chat"))
 	require.Nil(t, f.causes(t, badAudit, "internal"))
+	require.Nil(t, f.causes(t, wrongKeyTypeAudit, "internal"))
 	require.Equal(t, int64(1), summary.Ambiguous[AmbiguousBillingProjection])
-	require.Equal(t, int64(1), summary.Ambiguous[AmbiguousAdminAudit])
+	require.Equal(t, int64(2), summary.Ambiguous[AmbiguousAdminAudit])
 }
 
 func TestRunnerConcurrentApplyUsesSkipLocked(t *testing.T) {
@@ -242,6 +248,99 @@ func TestRunnerValidationFindsEveryUnsafeClass(t *testing.T) {
 	require.GreaterOrEqual(t, summary.Validation[ValidationReclassificationMismatch], int64(1))
 }
 
+func TestRunnerValidationRequiresEvidenceForEveryAmbiguousStoredClassification(t *testing.T) {
+	t.Parallel()
+	f := newRunnerFixture(t)
+	now := time.Now().UTC()
+
+	noProvenance := f.seedKey(t, "internal", true, "free")
+	malformedAudit := f.seedKey(t, "internal", true, "free")
+	f.seedAdminAudit(t, malformedAudit, "internal", "openrouter-key:disable", true)
+	inconsistentBilling := f.seedKey(t, "chat", true, "base")
+	subscription := "sub_test"
+	f.seedBilling(t, inconsistentBilling, &subscription)
+	contradictoryTrial := f.seedKey(t, "internal", true, "free")
+	demotedAt := now.Add(-time.Hour)
+	f.seedTrial(t, contradictoryTrial, &demotedAt, nil, now.Add(time.Hour))
+
+	q := New(f.pool)
+	var overrides []ManualOverride
+	for _, target := range []struct{ organizationID, keyType string }{
+		{noProvenance, "internal"}, {malformedAudit, "internal"},
+		{inconsistentBilling, "chat"}, {contradictoryTrial, "internal"},
+	} {
+		require.NoError(t, q.SetOpenRouterClassificationFixture(t.Context(), SetOpenRouterClassificationFixtureParams{
+			OrganizationID: target.organizationID, KeyType: target.keyType, DisableCauses: []string{CauseAdminLock}, Disabled: true,
+		}))
+		overrides = append(overrides, ManualOverride{OrganizationID: target.organizationID, KeyType: target.keyType, Causes: []string{CauseAdminLock}})
+	}
+
+	summary, err := newTestRunner(f.pool, 2).Run(t.Context(), ModeValidate)
+	require.ErrorIs(t, err, ErrValidationFailed)
+	require.Equal(t, int64(4), summary.Validation[ValidationAmbiguous])
+
+	summary, err = newTestRunner(f.pool, 2).Validate(t.Context(), overrides)
+	require.NoError(t, err)
+	require.Empty(t, summary.Validation)
+}
+
+func TestRunnerValidationRejectsPopulationChangedDuringPass(t *testing.T) {
+	t.Parallel()
+	f := newRunnerFixture(t)
+	first := f.seedKey(t, "chat", false, "free")
+	second := f.seedKey(t, "chat", false, "free")
+	q := New(f.pool)
+	for _, orgID := range []string{first, second} {
+		require.NoError(t, q.SetOpenRouterClassificationFixture(t.Context(), SetOpenRouterClassificationFixtureParams{
+			OrganizationID: orgID, KeyType: "chat", DisableCauses: []string{}, Disabled: false,
+		}))
+	}
+
+	runner := newTestRunner(f.pool, 1)
+	var once sync.Once
+	runner.afterValidationBatch = func() {
+		once.Do(func() {
+			require.NoError(t, q.TouchOpenRouterClassificationFixture(t.Context(), TouchOpenRouterClassificationFixtureParams{
+				OrganizationID: first, KeyType: "chat",
+			}))
+		})
+	}
+
+	summary, err := runner.Run(t.Context(), ModeValidate)
+	require.ErrorIs(t, err, ErrValidationFailed)
+	require.Positive(t, summary.Validation[ValidationUnstable])
+}
+
+func TestRunnerValidationDetectsBehindCursorNullReset(t *testing.T) {
+	t.Parallel()
+	f := newRunnerFixture(t)
+	first := f.seedKey(t, "chat", false, "free")
+	second := f.seedKey(t, "chat", false, "free")
+	q := New(f.pool)
+	for _, orgID := range []string{first, second} {
+		require.NoError(t, q.SetOpenRouterClassificationFixture(t.Context(), SetOpenRouterClassificationFixtureParams{
+			OrganizationID: orgID, KeyType: "chat", DisableCauses: []string{}, Disabled: false,
+		}))
+	}
+
+	runner := newTestRunner(f.pool, 1)
+	var once sync.Once
+	runner.afterValidationBatch = func() {
+		once.Do(func() {
+			require.NoError(t, q.ResetOpenRouterClassificationFixture(t.Context(), ResetOpenRouterClassificationFixtureParams{
+				OrganizationID: first, KeyType: "chat",
+			}))
+			require.NoError(t, q.ResetOpenRouterClassificationFixture(t.Context(), ResetOpenRouterClassificationFixtureParams{
+				OrganizationID: second, KeyType: "chat",
+			}))
+		})
+	}
+
+	summary, err := runner.Run(t.Context(), ModeValidate)
+	require.ErrorIs(t, err, ErrValidationFailed)
+	require.Positive(t, summary.Validation[ValidationNull])
+}
+
 func TestRunnerManualOverrideIsAuthorizedIdempotentAndPreservesAccess(t *testing.T) {
 	t.Parallel()
 	f := newRunnerFixture(t)
@@ -262,6 +361,10 @@ func TestRunnerManualOverrideIsAuthorizedIdempotentAndPreservesAccess(t *testing
 	require.False(t, changed)
 
 	validation, err := runner.Run(t.Context(), ModeValidate)
+	require.ErrorIs(t, err, ErrValidationFailed)
+	require.Equal(t, int64(1), validation.Validation[ValidationAmbiguous])
+
+	validation, err = runner.Validate(t.Context(), []ManualOverride{req})
 	require.NoError(t, err)
 	require.Empty(t, validation.Validation)
 
@@ -283,6 +386,38 @@ func TestRunnerBoundsStatementTimeoutRetries(t *testing.T) {
 	require.Error(t, err)
 	require.Equal(t, int64(1), summary.LockRetries)
 	require.Less(t, time.Since(started), time.Second)
+}
+
+func TestRunnerBoundsTerminalCountStatementTimeout(t *testing.T) {
+	t.Parallel()
+	f := newRunnerFixture(t)
+	f.seedKey(t, "chat", false, "free")
+
+	runner := NewRunner(f.pool, slog.New(slog.DiscardHandler), Options{BatchSize: 1, LockTimeout: 25 * time.Millisecond, StatementTimeout: 50 * time.Millisecond})
+	blocker := testenv.BeginTx(t, t.Context(), f.pool)
+	runner.beforeRemainingCount = func() {
+		require.NoError(t, New(blocker).LockOpenRouterKeysFixture(t.Context()))
+	}
+	ctx, cancel := context.WithTimeout(t.Context(), 500*time.Millisecond)
+	defer cancel()
+	started := time.Now()
+	_, err := runner.Run(ctx, ModeApply)
+	require.Error(t, err)
+	require.Less(t, time.Since(started), 250*time.Millisecond)
+}
+
+func TestRunnerValidationQueryUsesStatementTimeout(t *testing.T) {
+	t.Parallel()
+	f := newRunnerFixture(t)
+	f.seedKey(t, "chat", false, "free")
+	blocker := testenv.BeginTx(t, t.Context(), f.pool)
+	require.NoError(t, New(blocker).LockAuditLogsFixture(t.Context()))
+
+	runner := NewRunner(f.pool, slog.New(slog.DiscardHandler), Options{BatchSize: 1, LockTimeout: 25 * time.Millisecond, StatementTimeout: 50 * time.Millisecond})
+	started := time.Now()
+	_, err := runner.Run(t.Context(), ModeValidate)
+	require.Error(t, err)
+	require.Less(t, time.Since(started), 250*time.Millisecond)
 }
 
 func TestRunnerCrashRollsBackBatchAndResumes(t *testing.T) {

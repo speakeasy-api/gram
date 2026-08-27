@@ -119,6 +119,22 @@ func (q *Queries) GetOpenRouterDisableCausesFixture(ctx context.Context, arg Get
 	return disable_causes, err
 }
 
+const getValidationPopulationFingerprint = `-- name: GetValidationPopulationFingerprint :one
+SELECT md5(COALESCE(string_agg(
+  concat_ws(E'\x1f', organization_id, key_type, disabled::text, disable_causes::text, updated_at::text),
+  E'\x1e' ORDER BY organization_id, key_type
+), '')) AS fingerprint
+FROM openrouter_api_keys
+WHERE deleted IS FALSE
+`
+
+func (q *Queries) GetValidationPopulationFingerprint(ctx context.Context) (string, error) {
+	row := q.db.QueryRow(ctx, getValidationPopulationFingerprint)
+	var fingerprint string
+	err := row.Scan(&fingerprint)
+	return fingerprint, err
+}
+
 const listValidationBatch = `-- name: ListValidationBatch :many
 SELECT
   k.organization_id,
@@ -318,6 +334,31 @@ func (q *Queries) LockClassificationBatch(ctx context.Context, arg LockClassific
 	return items, nil
 }
 
+const lockOpenRouterKeysFixture = `-- name: LockOpenRouterKeysFixture :exec
+LOCK TABLE openrouter_api_keys IN ACCESS EXCLUSIVE MODE
+`
+
+func (q *Queries) LockOpenRouterKeysFixture(ctx context.Context) error {
+	_, err := q.db.Exec(ctx, lockOpenRouterKeysFixture)
+	return err
+}
+
+const resetOpenRouterClassificationFixture = `-- name: ResetOpenRouterClassificationFixture :exec
+UPDATE openrouter_api_keys
+SET disable_causes = NULL
+WHERE organization_id = $1 AND key_type = $2
+`
+
+type ResetOpenRouterClassificationFixtureParams struct {
+	OrganizationID string
+	KeyType        string
+}
+
+func (q *Queries) ResetOpenRouterClassificationFixture(ctx context.Context, arg ResetOpenRouterClassificationFixtureParams) error {
+	_, err := q.db.Exec(ctx, resetOpenRouterClassificationFixture, arg.OrganizationID, arg.KeyType)
+	return err
+}
+
 const seedAdminAuditFixture = `-- name: SeedAdminAuditFixture :exec
 INSERT INTO audit_logs (
   organization_id, actor_id, actor_type, action, subject_id, subject_type,
@@ -325,7 +366,7 @@ INSERT INTO audit_logs (
 )
 VALUES (
   $1, 'system:test', 'system', $2, $3, 'openrouter_api_key',
-  '{"disabled":false,"disable_causes":[]}', $4, $5
+  $4, $5, $6
 )
 `
 
@@ -333,6 +374,7 @@ type SeedAdminAuditFixtureParams struct {
 	OrganizationID string
 	Action         string
 	SubjectID      string
+	BeforeSnapshot []byte
 	AfterSnapshot  []byte
 	Metadata       []byte
 }
@@ -342,6 +384,7 @@ func (q *Queries) SeedAdminAuditFixture(ctx context.Context, arg SeedAdminAuditF
 		arg.OrganizationID,
 		arg.Action,
 		arg.SubjectID,
+		arg.BeforeSnapshot,
 		arg.AfterSnapshot,
 		arg.Metadata,
 	)
@@ -459,5 +502,21 @@ func (q *Queries) SetOpenRouterClassificationFixture(ctx context.Context, arg Se
 		arg.OrganizationID,
 		arg.KeyType,
 	)
+	return err
+}
+
+const touchOpenRouterClassificationFixture = `-- name: TouchOpenRouterClassificationFixture :exec
+UPDATE openrouter_api_keys
+SET updated_at = GREATEST(clock_timestamp(), updated_at + INTERVAL '1 microsecond')
+WHERE organization_id = $1 AND key_type = $2
+`
+
+type TouchOpenRouterClassificationFixtureParams struct {
+	OrganizationID string
+	KeyType        string
+}
+
+func (q *Queries) TouchOpenRouterClassificationFixture(ctx context.Context, arg TouchOpenRouterClassificationFixtureParams) error {
+	_, err := q.db.Exec(ctx, touchOpenRouterClassificationFixture, arg.OrganizationID, arg.KeyType)
 	return err
 }

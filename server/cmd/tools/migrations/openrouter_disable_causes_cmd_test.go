@@ -70,6 +70,20 @@ func TestDecodeManualOverrideRequiresProtectedAuthorization(t *testing.T) {
 	require.Equal(t, "<ORG_ID>", override.OrganizationID)
 }
 
+func TestDecodeValidationOverridesRequiresProtectedAuthorization(t *testing.T) {
+	t.Parallel()
+
+	raw := []byte(`{"authorization_token":"wrong","overrides":[{"organization_id":"<ORG_ID>","key_type":"chat","causes":["admin_lock"]}]}`)
+	_, err := decodeValidationOverrides(bytes.NewReader(raw), "expected")
+	require.ErrorIs(t, err, openrouterdisablecauses.ErrManualOverrideUnauthorized)
+
+	raw = []byte(`{"authorization_token":"expected","overrides":[{"organization_id":"<ORG_ID>","key_type":"chat","causes":["admin_lock"]}]}`)
+	overrides, err := decodeValidationOverrides(bytes.NewReader(raw), "expected")
+	require.NoError(t, err)
+	require.Len(t, overrides, 1)
+	require.Equal(t, "<ORG_ID>", overrides[0].OrganizationID)
+}
+
 func TestOpenRouterDisableCausesSummaryIsAggregateOnly(t *testing.T) {
 	t.Parallel()
 
