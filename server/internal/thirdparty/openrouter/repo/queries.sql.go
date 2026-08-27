@@ -60,7 +60,7 @@ INSERT INTO openrouter_api_keys (
   , $4
   , $5
 )
-RETURNING organization_id, key_type, key, key_encrypted, key_hash, monthly_credits, disabled, created_at, updated_at, deleted_at, deleted
+RETURNING organization_id, key_type, key, key_encrypted, key_hash, monthly_credits, disabled, disable_causes, created_at, updated_at, deleted_at, deleted
 `
 
 type CreateOpenRouterAPIKeyParams struct {
@@ -88,6 +88,7 @@ func (q *Queries) CreateOpenRouterAPIKey(ctx context.Context, arg CreateOpenRout
 		&i.KeyHash,
 		&i.MonthlyCredits,
 		&i.Disabled,
+		&i.DisableCauses,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -119,7 +120,7 @@ func (q *Queries) DisableOpenRouterAPIKey(ctx context.Context, arg DisableOpenRo
 }
 
 const getOpenRouterAPIKey = `-- name: GetOpenRouterAPIKey :one
-SELECT organization_id, key_type, key, key_encrypted, key_hash, monthly_credits, disabled, created_at, updated_at, deleted_at, deleted
+SELECT organization_id, key_type, key, key_encrypted, key_hash, monthly_credits, disabled, disable_causes, created_at, updated_at, deleted_at, deleted
 FROM openrouter_api_keys
 WHERE organization_id = $1
   AND key_type = $2
@@ -142,6 +143,7 @@ func (q *Queries) GetOpenRouterAPIKey(ctx context.Context, arg GetOpenRouterAPIK
 		&i.KeyHash,
 		&i.MonthlyCredits,
 		&i.Disabled,
+		&i.DisableCauses,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -174,7 +176,7 @@ SET monthly_credits = $1, key_hash = $2,
 WHERE organization_id = $4
   AND key_type = $5
   AND deleted IS FALSE
-RETURNING organization_id, key_type, key, key_encrypted, key_hash, monthly_credits, disabled, created_at, updated_at, deleted_at, deleted
+RETURNING organization_id, key_type, key, key_encrypted, key_hash, monthly_credits, disabled, disable_causes, created_at, updated_at, deleted_at, deleted
 `
 
 type UpdateOpenRouterKeyParams struct {
@@ -202,6 +204,7 @@ func (q *Queries) UpdateOpenRouterKey(ctx context.Context, arg UpdateOpenRouterK
 		&i.KeyHash,
 		&i.MonthlyCredits,
 		&i.Disabled,
+		&i.DisableCauses,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
