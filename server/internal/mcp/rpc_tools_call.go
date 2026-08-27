@@ -167,13 +167,15 @@ func handleToolsCall(
 	if requestContext, _ := contextvalues.GetRequestContext(ctx); requestContext != nil {
 		mcpURL = requestContext.Host + requestContext.ReqURL
 		metrics.RecordMCPToolCall(ctx, toolset.OrganizationID, mcpURL, params.Name)
-
-		serverSource := mcptoolexecution.ServerSource{}
-		if payload.mcpServerID != nil {
-			serverSource.FrontingServerID = uuid.NullUUID{UUID: *payload.mcpServerID, Valid: true}
-		}
-		identityCoverage.Record(ctx, toolset.OrganizationID, mcpmetrics.KillswitchSurfaceHosted, serverSource)
 	}
+
+	serverSource := mcptoolexecution.ServerSource{
+		FrontingServerID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+	}
+	if payload.mcpServerID != nil {
+		serverSource.FrontingServerID = uuid.NullUUID{UUID: *payload.mcpServerID, Valid: true}
+	}
+	identityCoverage.Record(ctx, toolset.OrganizationID, mcpmetrics.KillswitchSurfaceHosted, serverSource)
 
 	toolsetHelpers := toolsets.NewToolsets(db, platformExtras...)
 

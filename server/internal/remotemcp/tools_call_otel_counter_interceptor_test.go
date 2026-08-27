@@ -29,7 +29,7 @@ func newCounterInterceptorForTest(t *testing.T) *ToolsCallOTELCounterInterceptor
 		RemoteMCPServerID:   "srv-test",
 		TunneledMCPServerID: "",
 		McpServerID:         "mcp-test",
-	}, logger)
+	}, "org-route", logger)
 }
 
 type recordingIdentityCoverage struct {
@@ -95,7 +95,7 @@ func TestToolsCallOTELCounterInterceptor_AuthenticatedRequestPassesThrough(t *te
 	require.NoError(t, interceptor.InterceptToolsCallRequest(ctx, newToolsCallRequestForCounter(t, "search_tickets")))
 }
 
-func TestToolsCallOTELCounterInterceptor_RecordsPrivateProxyIdentityCoverage(t *testing.T) {
+func TestToolsCallOTELCounterInterceptor_RecordsPrivateProxyIdentityCoverageWithoutAuthContext(t *testing.T) {
 	t.Parallel()
 
 	logger := testenv.NewLogger(t)
@@ -105,13 +105,13 @@ func TestToolsCallOTELCounterInterceptor_RecordsPrivateProxyIdentityCoverage(t *
 		NewProxyMetrics(testenv.NewMeterProvider(t).Meter("test"), logger),
 		coverage,
 		proxy.ServerIdentity{McpServerID: serverID.String()},
+		"org-route",
 		logger,
 	)
-	ctx := contextvalues.SetAuthContext(t.Context(), &contextvalues.AuthContext{ActiveOrganizationID: "org-counter"})
 
-	require.NoError(t, interceptor.InterceptToolsCallRequest(ctx, newToolsCallRequestForCounter(t, "search_tickets")))
+	require.NoError(t, interceptor.InterceptToolsCallRequest(t.Context(), newToolsCallRequestForCounter(t, "search_tickets")))
 	require.Equal(t, 1, coverage.calls)
-	require.Equal(t, "org-counter", coverage.organizationID)
+	require.Equal(t, "org-route", coverage.organizationID)
 	require.Equal(t, mcpmetrics.KillswitchSurfacePrivateProxy, coverage.surface)
 	require.Equal(t, uuid.NullUUID{UUID: serverID, Valid: true}, coverage.source.FrontingServerID)
 }

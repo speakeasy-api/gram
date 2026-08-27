@@ -7,8 +7,11 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpmetrics"
 	"github.com/speakeasy-api/gram/server/internal/mcpidentity"
+	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 )
 
 type coverageObservation struct {
@@ -47,13 +50,14 @@ func TestIdentityCoverageCheckpoint_RevalidatesEachCall(t *testing.T) {
 		resource: mcpmetrics.KillswitchResourceCanonicalServer,
 	}, recorder.observations[0])
 
-	_, err := conn.Exec(t.Context(), `
-		UPDATE organization_user_relationships
-		SET deleted_at = clock_timestamp()
-		WHERE organization_id = $1 AND user_id = $2
-	`, orgID, userID)
-	require.NoError(t, err)
-	_, err = conn.Exec(t.Context(), `UPDATE mcp_servers SET deleted_at = clock_timestamp() WHERE id = $1`, serverID)
+	require.NoError(t, testrepo.New(conn).ForceSoftDeleteOrganizationUserRelationship(t.Context(), testrepo.ForceSoftDeleteOrganizationUserRelationshipParams{
+		OrganizationID: orgID,
+		UserID:         conv.ToPGText(userID),
+	}))
+	_, err := mcpserversrepo.New(conn).DeleteMCPServer(t.Context(), mcpserversrepo.DeleteMCPServerParams{
+		ID:        serverID,
+		ProjectID: projectID,
+	})
 	require.NoError(t, err)
 
 	checkpoint.Record(ctx, orgID, mcpmetrics.KillswitchSurfaceHosted, source)
@@ -76,6 +80,12 @@ func TestIdentityCoverageCheckpoint_UsesOnlyStampedProvenance(t *testing.T) {
 
 	checkpoint.Record(t.Context(), orgID, mcpmetrics.KillswitchSurfacePrivateProxy, source)
 	checkpoint.Record(
+		mcpidentity.WithIdentity(t.Context(), mcpidentity.Identity{Kind: mcpidentity.KindAnonymous}),
+		orgID,
+		mcpmetrics.KillswitchSurfacePrivateProxy,
+		source,
+	)
+	checkpoint.Record(
 		mcpidentity.WithIdentity(t.Context(), mcpidentity.Identity{Kind: mcpidentity.KindAPIKey}),
 		orgID,
 		mcpmetrics.KillswitchSurfacePrivateProxy,
@@ -83,7 +93,9 @@ func TestIdentityCoverageCheckpoint_UsesOnlyStampedProvenance(t *testing.T) {
 	)
 
 	require.Equal(t, mcpmetrics.KillswitchIdentityUnattributed, recorder.observations[0].identity)
-	require.Equal(t, mcpmetrics.KillswitchIdentityAPIKey, recorder.observations[1].identity)
-	require.Equal(t, mcpmetrics.KillswitchResourceCanonicalServer, recorder.observations[0].resource)
-	require.Equal(t, mcpmetrics.KillswitchResourceCanonicalServer, recorder.observations[1].resource)
+	require.Equal(t, mcpmetrics.KillswitchIdentityAnonymous, recorder.observations[1].identity)
+	require.Equal(t, mcpmetrics.KillswitchIdentityAPIKey, recorder.observations[2].identity)
+	for _, observation := range recorder.observations {
+		require.Equal(t, mcpmetrics.KillswitchResourceCanonicalServer, observation.resource)
+	}
 }

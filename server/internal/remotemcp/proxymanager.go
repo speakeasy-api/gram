@@ -142,6 +142,7 @@ func (f *ProxyManager) Build(
 	mcpServerID string,
 	headers []remotemcprepo.RemoteMcpServerHeader,
 	visibility string,
+	organizationID string,
 	projectID string,
 	upstreamAuth string,
 	wwwAuthenticate string,
@@ -161,7 +162,7 @@ func (f *ProxyManager) Build(
 		RemoteMCPServerID:   server.ID.String(),
 		TunneledMCPServerID: "",
 		McpServerID:         mcpServerID,
-	}, server.Url, configured, visibility, projectID, upstreamAuth, wwwAuthenticate, selection)
+	}, server.Url, configured, visibility, organizationID, projectID, upstreamAuth, wwwAuthenticate, selection)
 }
 
 func (f *ProxyManager) BuildTarget(
@@ -170,6 +171,7 @@ func (f *ProxyManager) BuildTarget(
 	upstreamURL string,
 	headers []proxy.ConfiguredHeader,
 	visibility string,
+	organizationID string,
 	projectID string,
 	upstreamAuth string,
 	wwwAuthenticate string,
@@ -200,7 +202,7 @@ func (f *ProxyManager) BuildTarget(
 	// anything scoped to an identity or a risk policy. It is a no-op for
 	// the arguments that don't carry it.
 	toolsCallReqInterceptors := []proxy.ToolsCallRequestInterceptor{
-		NewToolsCallOTELCounterInterceptor(f.mcpMetrics, f.identityCoverage, identity, logger),
+		NewToolsCallOTELCounterInterceptor(f.mcpMetrics, f.identityCoverage, identity, organizationID, logger),
 		f.toolsCallUsageLimitsInterceptor,
 		NewToolsCallStripToolsetIDInterceptor(logger),
 		clickHouseLogInterceptor,
