@@ -538,6 +538,8 @@ func EncodeQueryInsightsRequest(encoder func(*http.Request) goahttp.Encoder) fun
 		if p.IncludeScoredSessions != nil {
 			values.Add("include_scored_sessions", fmt.Sprintf("%v", *p.IncludeScoredSessions))
 		}
+		values.Add("include_session_cost", fmt.Sprintf("%v", p.IncludeSessionCost))
+		values.Add("include_regression_signal", fmt.Sprintf("%v", p.IncludeRegressionSignal))
 		if p.Cursor != nil {
 			values.Add("cursor", *p.Cursor)
 		}

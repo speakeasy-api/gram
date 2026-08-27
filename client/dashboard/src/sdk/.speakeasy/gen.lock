@@ -7957,6 +7957,8 @@ examples:
         query:
           skill_ids: ["<value 1>"]
           limit: 20
+          include_session_cost: true
+          include_regression_signal: true
       requestBody:
         application/json: {"skill_ids": ["<value 1>"]}
       responses:

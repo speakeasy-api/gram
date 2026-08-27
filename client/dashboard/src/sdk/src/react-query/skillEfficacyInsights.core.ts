@@ -86,6 +86,8 @@ export function buildSkillEfficacyInsightsQuery(
       to: request?.to,
       includeVersions: request?.includeVersions,
       includeScoredSessions: request?.includeScoredSessions,
+      includeSessionCost: request?.includeSessionCost,
+      includeRegressionSignal: request?.includeRegressionSignal,
       cursor: request?.cursor,
       limit: request?.limit,
       gramSession: request?.gramSession,
@@ -133,6 +135,8 @@ export function buildSkillEfficacyInsightsInfiniteQuery(
       to: request?.to,
       includeVersions: request?.includeVersions,
       includeScoredSessions: request?.includeScoredSessions,
+      includeSessionCost: request?.includeSessionCost,
+      includeRegressionSignal: request?.includeRegressionSignal,
       cursor: request?.cursor,
       limit: request?.limit,
       gramSession: request?.gramSession,
@@ -179,6 +183,8 @@ export function queryKeySkillEfficacyInsights(
     to?: Date | undefined;
     includeVersions?: boolean | undefined;
     includeScoredSessions?: boolean | undefined;
+    includeSessionCost?: boolean | undefined;
+    includeRegressionSignal?: boolean | undefined;
     cursor?: string | undefined;
     limit?: number | undefined;
     gramSession?: string | undefined;
@@ -195,6 +201,8 @@ export function queryKeySkillEfficacyInsightsInfinite(
     to?: Date | undefined;
     includeVersions?: boolean | undefined;
     includeScoredSessions?: boolean | undefined;
+    includeSessionCost?: boolean | undefined;
+    includeRegressionSignal?: boolean | undefined;
     cursor?: string | undefined;
     limit?: number | undefined;
     gramSession?: string | undefined;

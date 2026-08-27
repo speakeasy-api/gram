@@ -96,7 +96,7 @@ func BuildUpsertSettingsPayload(skillEfficacyUpsertSettingsBody string, skillEff
 
 // BuildQueryInsightsPayload builds the payload for the skillEfficacy
 // queryInsights endpoint from CLI flags.
-func BuildQueryInsightsPayload(skillEfficacyQueryInsightsSkillIds string, skillEfficacyQueryInsightsFrom string, skillEfficacyQueryInsightsTo string, skillEfficacyQueryInsightsIncludeVersions string, skillEfficacyQueryInsightsIncludeScoredSessions string, skillEfficacyQueryInsightsCursor string, skillEfficacyQueryInsightsLimit string, skillEfficacyQueryInsightsSessionToken string, skillEfficacyQueryInsightsProjectSlugInput string) (*skillefficacy.QueryInsightsPayload, error) {
+func BuildQueryInsightsPayload(skillEfficacyQueryInsightsSkillIds string, skillEfficacyQueryInsightsFrom string, skillEfficacyQueryInsightsTo string, skillEfficacyQueryInsightsIncludeVersions string, skillEfficacyQueryInsightsIncludeScoredSessions string, skillEfficacyQueryInsightsIncludeSessionCost string, skillEfficacyQueryInsightsIncludeRegressionSignal string, skillEfficacyQueryInsightsCursor string, skillEfficacyQueryInsightsLimit string, skillEfficacyQueryInsightsSessionToken string, skillEfficacyQueryInsightsProjectSlugInput string) (*skillefficacy.QueryInsightsPayload, error) {
 	var err error
 	var skillIds []string
 	{
@@ -149,6 +149,24 @@ func BuildQueryInsightsPayload(skillEfficacyQueryInsightsSkillIds string, skillE
 			}
 		}
 	}
+	var includeSessionCost bool
+	{
+		if skillEfficacyQueryInsightsIncludeSessionCost != "" {
+			includeSessionCost, err = strconv.ParseBool(skillEfficacyQueryInsightsIncludeSessionCost)
+			if err != nil {
+				return nil, fmt.Errorf("invalid value for includeSessionCost, must be BOOL")
+			}
+		}
+	}
+	var includeRegressionSignal bool
+	{
+		if skillEfficacyQueryInsightsIncludeRegressionSignal != "" {
+			includeRegressionSignal, err = strconv.ParseBool(skillEfficacyQueryInsightsIncludeRegressionSignal)
+			if err != nil {
+				return nil, fmt.Errorf("invalid value for includeRegressionSignal, must be BOOL")
+			}
+		}
+	}
 	var cursor *string
 	{
 		if skillEfficacyQueryInsightsCursor != "" {
@@ -193,6 +211,8 @@ func BuildQueryInsightsPayload(skillEfficacyQueryInsightsSkillIds string, skillE
 	v.To = to
 	v.IncludeVersions = includeVersions
 	v.IncludeScoredSessions = includeScoredSessions
+	v.IncludeSessionCost = includeSessionCost
+	v.IncludeRegressionSignal = includeRegressionSignal
 	v.Cursor = cursor
 	v.Limit = limit
 	v.SessionToken = sessionToken

@@ -46093,6 +46093,22 @@ paths:
                     description: Include a newest-first page of scored sessions. Intended for one skill detail view.
                     type: boolean
                 - allowEmptyValue: true
+                  description: Calculate attributed session cost. Disable for surfaces that do not display it.
+                  in: query
+                  name: include_session_cost
+                  schema:
+                    default: true
+                    description: Calculate attributed session cost. Disable for surfaces that do not display it.
+                    type: boolean
+                - allowEmptyValue: true
+                  description: Calculate the current-versus-predecessor efficacy regression signal.
+                  in: query
+                  name: include_regression_signal
+                  schema:
+                    default: true
+                    description: Calculate the current-versus-predecessor efficacy regression signal.
+                    type: boolean
+                - allowEmptyValue: true
                   description: Cursor for the next page of scored sessions.
                   in: query
                   name: cursor

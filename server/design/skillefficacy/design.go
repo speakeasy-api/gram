@@ -185,6 +185,8 @@ var _ = Service("skillEfficacy", func() {
 			Attribute("to", String, "RFC3339 window end; defaults to now.", func() { Format(FormatDateTime) })
 			Attribute("include_versions", Boolean, "Include per-version daily trends.")
 			Attribute("include_scored_sessions", Boolean, "Include a newest-first page of scored sessions. Intended for one skill detail view.")
+			Attribute("include_session_cost", Boolean, "Calculate attributed session cost. Disable for surfaces that do not display it.", func() { Default(true) })
+			Attribute("include_regression_signal", Boolean, "Calculate the current-versus-predecessor efficacy regression signal.", func() { Default(true) })
 			Attribute("cursor", String, "Cursor for the next page of scored sessions.")
 			Attribute("limit", Int, "The number of scored sessions to return per page.", func() {
 				Default(20)
@@ -202,6 +204,8 @@ var _ = Service("skillEfficacy", func() {
 			Param("to")
 			Param("include_versions")
 			Param("include_scored_sessions")
+			Param("include_session_cost")
+			Param("include_regression_signal")
 			Param("cursor")
 			Param("limit")
 			Response(StatusOK)
