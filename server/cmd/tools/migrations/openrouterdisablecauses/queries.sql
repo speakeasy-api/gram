@@ -62,14 +62,6 @@ WHERE organization_id = @organization_id
   AND disable_causes IS NULL
   AND deleted IS FALSE;
 
--- name: GetValidationPopulationFingerprint :one
-SELECT md5(COALESCE(string_agg(
-  concat_ws(E'\x1f', organization_id, key_type, disabled::text, disable_causes::text, updated_at::text),
-  E'\x1e' ORDER BY organization_id, key_type
-), '')) AS fingerprint
-FROM openrouter_api_keys
-WHERE deleted IS FALSE;
-
 -- name: CountLiveNullClassifications :one
 SELECT count(*)
 FROM openrouter_api_keys
@@ -89,7 +81,7 @@ SELECT
   CASE
     WHEN t.demoted_at IS NULL THEN 'none'
     WHEN t.converted_at IS NOT NULL AND t.converted_at < t.demoted_at THEN 'contradictory'
-    WHEN t.ends_at > clock_timestamp() THEN 'contradictory'
+    WHEN t.ends_at > CURRENT_TIMESTAMP THEN 'contradictory'
     ELSE 'demoted'
   END AS trial_state,
   CASE

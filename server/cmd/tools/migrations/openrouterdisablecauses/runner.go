@@ -45,7 +45,6 @@ const (
 	ValidationAmbiguous                = "ambiguous"
 	ValidationReclassificationMismatch = "reclassification_mismatch"
 	ValidationOverrideMismatch         = "override_mismatch"
-	ValidationUnstable                 = "unstable_population"
 )
 
 type Options struct {
@@ -272,11 +271,7 @@ func classifyAdmin(row LockClassificationBatchRow) AdminState {
 		var before, after adminSnapshot
 		if len(row.AdminBeforeSnapshot) == 0 || len(row.AdminAfterSnapshot) == 0 ||
 			json.Unmarshal(row.AdminBeforeSnapshot, &before) != nil || json.Unmarshal(row.AdminAfterSnapshot, &after) != nil ||
-			!validAdminSnapshot(before) || !validAdminSnapshot(after) {
-			return AdminMalformed
-		}
-		hasAdminLock := slices.Contains(after.DisableCauses, CauseAdminLock)
-		if (row.AdminAction == "openrouter-key:disable") != hasAdminLock {
+			!validAdminSnapshot(before) || !validAdminSnapshot(after) || !validAdminTransition(row.AdminAction, before, after) {
 			return AdminMalformed
 		}
 	}
@@ -296,7 +291,34 @@ func validAdminSnapshot(snapshot adminSnapshot) bool {
 		return false
 	}
 	causes, err := CanonicalizeCauses(snapshot.DisableCauses)
-	return err == nil && *snapshot.Disabled == (len(causes) > 0)
+	return err == nil && slices.Equal(snapshot.DisableCauses, causes) && *snapshot.Disabled == (len(causes) > 0)
+}
+
+func validAdminTransition(action string, before, after adminSnapshot) bool {
+	beforeHasLock := slices.Contains(before.DisableCauses, CauseAdminLock)
+	afterHasLock := slices.Contains(after.DisableCauses, CauseAdminLock)
+	withoutAdminLock := func(causes []string) []string {
+		result := make([]string, 0, len(causes))
+		for _, cause := range causes {
+			if cause != CauseAdminLock {
+				result = append(result, cause)
+			}
+		}
+		return result
+	}
+	beforeOther := withoutAdminLock(before.DisableCauses)
+	afterOther := withoutAdminLock(after.DisableCauses)
+	if !slices.Equal(beforeOther, afterOther) {
+		return false
+	}
+	switch action {
+	case "openrouter-key:disable":
+		return !beforeHasLock && afterHasLock
+	case "openrouter-key:enable":
+		return beforeHasLock && !afterHasLock
+	default:
+		return false
+	}
 }
 
 func causeSetName(causes []string) string {
@@ -343,6 +365,10 @@ func projectionFromFields(legacyDisabled bool, trialState, billingState string, 
 	return p
 }
 
+// Validate proves consistency at one read-only REPEATABLE READ snapshot. Success
+// is not a writer fence or contract handoff; callers must validate again after
+// normal sweeps, and the later contract migration must enforce its preconditions
+// atomically after every provenance writer is cause-aware.
 func (r *Runner) Validate(ctx context.Context, overrides []ManualOverride) (Summary, error) {
 	started := time.Now()
 	summary := Summary{
@@ -365,32 +391,14 @@ func (r *Runner) Validate(ctx context.Context, overrides []ManualOverride) (Summ
 	return r.validate(ctx, summary, started, approved)
 }
 
-// validate deliberately performs two bounded READ COMMITTED passes. The final
-// live-NULL predicate in each pass catches compatibility resets behind the
-// keyset cursor. This is a deployment fence, not a writer lock: run it only
-// after cutover has stopped all writers from disabling keys with NULL causes.
+// validate proves the complete population at one PostgreSQL snapshot. It is not
+// a writer fence or contract handoff: a later validation must detect later
+// mutations, and the contract migration must atomically enforce its own
+// preconditions after the cause-aware writer cutover.
 func (r *Runner) validate(ctx context.Context, summary Summary, started time.Time, approved map[string][]string) (Summary, error) {
 	approvedSeen := make(map[string]bool, len(approved))
-	previousFingerprint := ""
-	for range 2 {
-		pass := Summary{
-			Mode: ModeValidate, Scanned: 0, Classified: 0, Updated: 0, CauseSets: nil, Ambiguous: nil,
-			Validation: map[string]int64{}, SkippedDeleted: 0, Batches: 0, LockRetries: 0, RemainingNulls: 0, Elapsed: 0,
-		}
-		fingerprint, err := r.validatePass(ctx, &pass, approved, approvedSeen, previousFingerprint)
-		if err != nil {
-			return summary, err
-		}
-		previousFingerprint = fingerprint
-		summary.Scanned += pass.Scanned
-		summary.Batches += pass.Batches
-		summary.RemainingNulls = pass.RemainingNulls
-		summary.SkippedDeleted = pass.SkippedDeleted
-		for predicate, count := range pass.Validation {
-			if count > summary.Validation[predicate] {
-				summary.Validation[predicate] = count
-			}
-		}
+	if err := r.validateSnapshot(ctx, &summary, approved, approvedSeen); err != nil {
+		return summary, err
 	}
 	for key := range approved {
 		if !approvedSeen[key] {
@@ -404,31 +412,24 @@ func (r *Runner) validate(ctx context.Context, summary Summary, started time.Tim
 	return summary, nil
 }
 
-func (r *Runner) validatePass(ctx context.Context, summary *Summary, approved map[string][]string, approvedSeen map[string]bool, previousFingerprint string) (string, error) {
+func (r *Runner) validateSnapshot(ctx context.Context, summary *Summary, approved map[string][]string, approvedSeen map[string]bool) error {
 	tx, err := r.pool.BeginTx(ctx, pgx.TxOptions{
-		IsoLevel: "", AccessMode: pgx.ReadOnly, DeferrableMode: "", BeginQuery: "", CommitQuery: "",
+		IsoLevel: pgx.RepeatableRead, AccessMode: pgx.ReadOnly, DeferrableMode: "", BeginQuery: "", CommitQuery: "",
 	})
 	if err != nil {
-		return "", fmt.Errorf("begin validation pass: %w", err)
+		return fmt.Errorf("begin validation snapshot: %w", err)
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 	q := New(tx)
 	if _, err := q.SetLocalTimeouts(ctx, SetLocalTimeoutsParams{LockTimeout: r.options.LockTimeout.String(), StatementTimeout: r.options.StatementTimeout.String()}); err != nil {
-		return "", fmt.Errorf("set validation timeouts: %w", err)
-	}
-	startFingerprint, err := q.GetValidationPopulationFingerprint(ctx)
-	if err != nil {
-		return "", fmt.Errorf("fingerprint OpenRouter validation population before pass: %w", err)
-	}
-	if previousFingerprint != "" && previousFingerprint != startFingerprint {
-		summary.Validation[ValidationUnstable]++
+		return fmt.Errorf("set validation timeouts: %w", err)
 	}
 
 	afterOrg, afterKey := "", ""
 	for {
 		rows, err := q.ListValidationBatch(ctx, ListValidationBatchParams{AfterOrganizationID: afterOrg, AfterKeyType: afterKey, BatchSize: conv.SafeInt32(r.options.BatchSize)})
 		if err != nil {
-			return "", fmt.Errorf("list OpenRouter validation batch: %w", err)
+			return fmt.Errorf("list OpenRouter validation batch: %w", err)
 		}
 		if len(rows) == 0 {
 			break
@@ -479,16 +480,9 @@ func (r *Runner) validatePass(ctx context.Context, summary *Summary, approved ma
 			r.afterValidationBatch()
 		}
 	}
-	endFingerprint, err := q.GetValidationPopulationFingerprint(ctx)
-	if err != nil {
-		return "", fmt.Errorf("fingerprint OpenRouter validation population after pass: %w", err)
-	}
-	if startFingerprint != endFingerprint {
-		summary.Validation[ValidationUnstable]++
-	}
 	remaining, err := q.CountLiveNullClassifications(ctx)
 	if err != nil {
-		return "", fmt.Errorf("count live NULL classifications during validation: %w", err)
+		return fmt.Errorf("count live NULL classifications during validation: %w", err)
 	}
 	summary.RemainingNulls = remaining
 	if remaining > summary.Validation[ValidationNull] {
@@ -496,13 +490,13 @@ func (r *Runner) validatePass(ctx context.Context, summary *Summary, approved ma
 	}
 	deleted, err := q.CountDeletedNullClassifications(ctx)
 	if err != nil {
-		return "", fmt.Errorf("count deleted NULL classifications: %w", err)
+		return fmt.Errorf("count deleted NULL classifications: %w", err)
 	}
 	summary.SkippedDeleted = deleted
 	if err := tx.Commit(ctx); err != nil {
-		return "", fmt.Errorf("commit validation pass: %w", err)
+		return fmt.Errorf("commit validation snapshot: %w", err)
 	}
-	return endFingerprint, nil
+	return nil
 }
 
 func classifyValidationAdmin(row ListValidationBatchRow) AdminState {

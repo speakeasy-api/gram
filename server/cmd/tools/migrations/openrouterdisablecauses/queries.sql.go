@@ -119,22 +119,6 @@ func (q *Queries) GetOpenRouterDisableCausesFixture(ctx context.Context, arg Get
 	return disable_causes, err
 }
 
-const getValidationPopulationFingerprint = `-- name: GetValidationPopulationFingerprint :one
-SELECT md5(COALESCE(string_agg(
-  concat_ws(E'\x1f', organization_id, key_type, disabled::text, disable_causes::text, updated_at::text),
-  E'\x1e' ORDER BY organization_id, key_type
-), '')) AS fingerprint
-FROM openrouter_api_keys
-WHERE deleted IS FALSE
-`
-
-func (q *Queries) GetValidationPopulationFingerprint(ctx context.Context) (string, error) {
-	row := q.db.QueryRow(ctx, getValidationPopulationFingerprint)
-	var fingerprint string
-	err := row.Scan(&fingerprint)
-	return fingerprint, err
-}
-
 const listValidationBatch = `-- name: ListValidationBatch :many
 SELECT
   k.organization_id,
@@ -144,7 +128,7 @@ SELECT
   CASE
     WHEN t.demoted_at IS NULL THEN 'none'
     WHEN t.converted_at IS NOT NULL AND t.converted_at < t.demoted_at THEN 'contradictory'
-    WHEN t.ends_at > clock_timestamp() THEN 'contradictory'
+    WHEN t.ends_at > CURRENT_TIMESTAMP THEN 'contradictory'
     ELSE 'demoted'
   END AS trial_state,
   CASE
