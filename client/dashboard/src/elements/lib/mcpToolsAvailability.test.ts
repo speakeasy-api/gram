@@ -1,9 +1,11 @@
 import { describe, expect, it } from "vitest";
 import {
+  composerContextToolsEmptyMessage,
   mcpToolsAvailability,
   mcpToolsSendBlocked,
   mcpToolsSendTooltip,
   mcpToolsWelcomeSubtitle,
+  NO_CONTEXT_TOOLS_MESSAGE,
   NO_MCP_TOOLS_MESSAGE,
 } from "./mcpToolsAvailability";
 
@@ -57,6 +59,15 @@ describe("mcpToolsAvailability", () => {
     expect(mcpToolsSendBlocked(true, false, {}, new Error("401"))).toBe(true);
     expect(mcpToolsSendBlocked(true, false, { list_issues: {} }, null)).toBe(
       false,
+    );
+  });
+});
+
+describe("composerContextToolsEmptyMessage", () => {
+  it("explains a settled empty tools/list instead of vanishing", () => {
+    expect(composerContextToolsEmptyMessage(true)).toBe("Loading tools…");
+    expect(composerContextToolsEmptyMessage(false)).toBe(
+      NO_CONTEXT_TOOLS_MESSAGE,
     );
   });
 });

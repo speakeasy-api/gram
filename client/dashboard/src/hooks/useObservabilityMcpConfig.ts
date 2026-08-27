@@ -6,7 +6,9 @@ import type { ElementsConfig, MCPServerEntry, ToolsFilter } from "@/elements";
 import { chatSessionsCreate } from "@gram/client/funcs/chatSessionsCreate";
 import { useGramContext } from "@gram/client/react-query/_context.js";
 import { useListToolsets } from "@gram/client/react-query/listToolsets.js";
+import { useMcpServers } from "@gram/client/react-query/mcpServers.js";
 import { useCallback, useMemo } from "react";
+import { isNoMcpAccessConfigured } from "./projectAssistantAccess";
 
 interface ObservabilityMcpConfigOptions {
   toolsToInclude: ToolsFilter;
@@ -98,16 +100,28 @@ export function useObservabilityMcpConfig({
 }
 
 /**
- * Whether the project has no toolsets configured yet.
+ * Whether the project has neither toolsets nor MCP servers.
  * Used to show a setup prompt in the AI Insights sidebar.
  */
 export function useNoToolsetsConfigured(projectSlug?: string): boolean {
-  const { data: toolsetsData, isLoading } = useListToolsets(
-    projectSlug ? { gramProject: projectSlug } : undefined,
+  const enabled = Boolean(projectSlug);
+  const request = projectSlug ? { gramProject: projectSlug } : undefined;
+  const { data: toolsetsData, isLoading: toolsetsLoading } = useListToolsets(
+    request,
     undefined,
-    { enabled: Boolean(projectSlug) },
+    { enabled },
+  );
+  const { data: mcpServersData, isLoading: mcpServersLoading } = useMcpServers(
+    request,
+    undefined,
+    { enabled },
   );
 
-  if (!projectSlug || isLoading) return false;
-  return !toolsetsData?.toolsets?.length;
+  return isNoMcpAccessConfigured({
+    projectSlug,
+    toolsetsLoading,
+    toolsetCount: toolsetsData?.toolsets?.length ?? 0,
+    mcpServersLoading,
+    mcpServerCount: mcpServersData?.mcpServers?.length ?? 0,
+  });
 }

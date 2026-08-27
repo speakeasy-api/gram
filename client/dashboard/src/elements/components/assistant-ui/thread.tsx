@@ -93,6 +93,7 @@ import { useToolMentions } from "@/elements/hooks/useToolMentions";
 import { getApiUrl } from "@/elements/lib/api";
 import { dictationAdapter } from "@/elements/lib/dictation";
 import {
+  composerContextToolsEmptyMessage,
   mcpToolsAvailability,
   mcpToolsSendBlocked,
   mcpToolsSendTooltip,
@@ -1355,11 +1356,11 @@ const ComposerContextPicker: FC = () => {
 
   // Both halves stay visible while their source is still loading, so the
   // button appears immediately rather than popping in once the async list
-  // resolves — but a half that loaded empty is dropped, and a button with
-  // nothing behind it at all is not rendered.
+  // resolves. An empty tools/list stays visible too — hiding it would read
+  // as "this assistant has no tools" with no explanation.
   const hasSkills =
     !!skillContext && (skillContext.skills.length > 0 || skillContext.loading);
-  const hasTools = toolMentionsEnabled && (tools.length > 0 || mcpToolsLoading);
+  const hasTools = toolMentionsEnabled;
   if (!hasSkills && !hasTools) {
     return null;
   }
@@ -1630,7 +1631,9 @@ const ComposerContextPicker: FC = () => {
                   />
                   <ContextToolResults
                     tools={matchingTools}
-                    loading={mcpToolsLoading}
+                    emptyMessage={composerContextToolsEmptyMessage(
+                      mcpToolsLoading,
+                    )}
                     onSelect={insertMention}
                   />
                 </>
@@ -1644,17 +1647,17 @@ const ComposerContextPicker: FC = () => {
 
 function ContextToolResults({
   tools,
-  loading,
+  emptyMessage,
   onSelect,
 }: {
   tools: MentionableTool[];
-  loading: boolean;
+  emptyMessage: string;
   onSelect: (toolName: string) => void;
 }): React.ReactElement {
   if (tools.length === 0) {
     return (
       <div className="px-2 py-6 text-center text-xs text-muted-foreground">
-        {loading ? "Loading tools…" : "No tools found"}
+        {emptyMessage}
       </div>
     );
   }

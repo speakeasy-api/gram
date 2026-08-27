@@ -4,6 +4,10 @@ export type McpToolsAvailability = "loading" | "ready" | "unavailable";
 export const NO_MCP_TOOLS_MESSAGE =
   "No tools loaded from this server — connect authentication to test it.";
 
+/** Shown in the composer @-picker when tools/list settled empty or failed. */
+export const NO_CONTEXT_TOOLS_MESSAGE =
+  "No tools loaded from attached servers.";
+
 /**
  * Distinguishes in-flight tools/list from a settled empty/error result so
  * callers can avoid flashing the empty state during normal load.
@@ -61,4 +65,8 @@ export function mcpToolsWelcomeSubtitle(
     case "ready":
       return readySubtitle ?? "";
   }
+}
+
+export function composerContextToolsEmptyMessage(loading: boolean): string {
+  return loading ? "Loading tools…" : NO_CONTEXT_TOOLS_MESSAGE;
 }
