@@ -52,6 +52,14 @@ export function cyclesFromTum(tum: TokensUnderManagement): BillingCycle[] {
   );
 }
 
+// Whether any cycle has ever recorded usage. Both clauses are needed: the
+// synthesized active cycle carries live tokens with no daily series, while a
+// history cycle can hold days whose recomputed tokens disagree with its billed
+// total — either one is usage.
+export function cyclesHaveUsage(cycles: BillingCycle[]): boolean {
+  return cycles.some((c) => c.tokens > 0 || c.days.length > 0);
+}
+
 const cycleMonthFormat = new Intl.DateTimeFormat("en-US", {
   month: "long",
   timeZone: "UTC",

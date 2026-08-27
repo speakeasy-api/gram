@@ -30,8 +30,8 @@ import {
   PaygPaymentFailedBanner,
 } from "@/components/billing/billing-banners";
 import { InferenceCapsSection } from "@/components/billing/inference-caps-section";
+import { PaygCycleEstimate } from "@/components/billing/payg-cycle-estimate";
 import { PaygPlanSection } from "@/components/billing/payg-plan-section";
-import { PaygUsageSection } from "@/components/billing/payg-usage-section";
 import { StartPaygCheckoutCTA } from "@/components/billing/start-payg-checkout-cta";
 import { PaygPriceList } from "@/components/billing/payg-price-list";
 import { TopUpCTA, UsageProgress } from "@/components/billing/usage-controls";
@@ -64,19 +64,32 @@ function BillingInner() {
   const productTier = useProductTier();
   const isPlatformAdmin = useIsPlatformAdmin();
 
-  // Enterprise contracts bill on tokens under management, so enterprise orgs
-  // see the TUM view instead of the self-serve usage meters. Trials run on the
-  // enterprise tier, so the pay-as-you-go CTA has to be repeated here — the
-  // early return is exactly the path an org in an active trial takes.
-  if (productTier === "enterprise") {
+  // Enterprise and pay as you go both bill on tokens under management, so they
+  // share one usage view: the TUM section, with the PAYG invoice estimate at
+  // its head for the tier Stripe is billing. Trials run on both tiers, so the
+  // pay-as-you-go CTA and price list sit on this shared path too — each owns
+  // its own trial rule.
+  if (productTier === "enterprise" || productTier === "payg") {
     return (
       <>
         <StartPaygCheckoutCTA label="Add payment method" />
-        <TumUsageSection />
-        {/* Renders only during an active trial — the section owns that rule. */}
+        <TumUsageSection
+          estimate={productTier === "payg" ? <PaygCycleEstimate /> : undefined}
+        />
+        {/* Renders for pay as you go, and for enterprise only during an
+            active trial — the section owns that rule. */}
         <InferenceCapsSection />
+        {/* Renders only for converted pay as you go — the section owns that
+            rule. */}
+        <PaygPlanSection />
+        {/* Only pay-as-you-go organizations get product billing notifications;
+            enterprise contracts are billed through their contract terms. */}
+        {productTier === "payg" && <BillingEmailSection />}
+        {/* Renders only during an active trial — the section owns that rule. */}
         <PaygPriceList />
-        {isPlatformAdmin && <TumAdminSection />}
+        {/* Contract settings (allowance, anchor day) are platform-staff
+            controls for enterprise contracts; Stripe owns them on PAYG. */}
+        {isPlatformAdmin && productTier === "enterprise" && <TumAdminSection />}
       </>
     );
   }
@@ -84,17 +97,9 @@ function BillingInner() {
   return (
     <>
       <StartPaygCheckoutCTA label="Add payment method" />
-      {/* Pay as you go bills through Stripe, so it gets the cycle usage and
-          invoice estimate. Every other self-serve tier still meters against
-          Polar period usage, which says nothing about a Stripe invoice. */}
-      {productTier === "payg" ? <PaygUsageSection /> : <UsageSection />}
-      {/* Renders only for pay as you go — the section owns that rule. */}
-      <PaygPlanSection />
-      {/* Renders only for pay as you go — the section owns that rule. */}
-      <InferenceCapsSection />
-      {/* Only pay-as-you-go organizations get product billing notifications;
-          enterprise contracts are billed through their contract terms. */}
-      {productTier === "payg" && <BillingEmailSection />}
+      {/* The remaining self-serve tiers still meter against Polar period
+          usage, which says nothing about a Stripe invoice. */}
+      <UsageSection />
       {/* The product tiers / self serve billing section is DEPRECATED, and thus only shown to users already on a paid, non-enterprise tier */}
       {(productTier === "base_PAID" || productTier === "__deprecated__pro") && (
         <UsageTiers />

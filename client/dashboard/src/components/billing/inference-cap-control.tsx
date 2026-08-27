@@ -143,7 +143,7 @@ function LockedCapField({ cap }: { cap: InferenceSpendCap }): JSX.Element {
     <Stack gap={4} className="max-w-md">
       <Stack gap={2}>
         <Label htmlFor={fieldId}>{label}</Label>
-        <InferenceCapMeter cap={cap} title={false} />
+        <InferenceCapMeter cap={cap} />
         <Input
           id={fieldId}
           type="number"
@@ -174,7 +174,7 @@ function CapReadOnly({
   return (
     <Stack gap={2} className="max-w-md">
       <Text className="text-eyebrow">{inferenceCapLabel(cap.keyType)}</Text>
-      <InferenceCapMeter cap={cap} title={false} />
+      <InferenceCapMeter cap={cap} />
       <Text muted small>
         {note}
       </Text>
@@ -297,7 +297,7 @@ function CapForm({
       <Stack gap={4} className="max-w-md">
         <Stack gap={2}>
           <Label htmlFor={fieldId}>{label}</Label>
-          <InferenceCapMeter cap={cap} title={false} />
+          <InferenceCapMeter cap={cap} />
           <Input
             id={fieldId}
             type="number"

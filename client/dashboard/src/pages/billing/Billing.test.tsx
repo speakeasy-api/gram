@@ -128,8 +128,15 @@ vi.mock("@gram/client/react-query/setBillingEmail.js", () => ({
     isError: false,
   }),
 }));
+// The estimate slot is rendered through so the page test can see which tier
+// hands the PAYG invoice estimate to the shared usage section.
 vi.mock("@/components/billing/tum-section", () => ({
-  TumUsageSection: () => <div>tum usage</div>,
+  TumUsageSection: ({ estimate }: { estimate?: ReactNode }) => (
+    <div>
+      tum usage
+      {estimate}
+    </div>
+  ),
 }));
 vi.mock("@/components/billing/tum-admin-section", () => ({
   TumAdminSection: () => <div>tum admin</div>,
@@ -182,10 +189,7 @@ const inferenceCapsSection = () =>
 
 const planSection = () => screen.queryByRole("heading", { name: /^plan$/i });
 
-// Both usage sections are titled "Usage"; their descriptions are what say which
-// billing model the figures below them come from.
-const paygUsageSection = () =>
-  screen.queryByText(/current pay-as-you-go billing cycle/i);
+const tumUsageSection = () => screen.queryByText("tum usage");
 
 const polarUsageSection = () =>
   screen.queryByText(/summary of your organization's usage this period/i);
@@ -415,18 +419,22 @@ describe("Billing", () => {
     expect(mocks.inferenceCaps).not.toHaveBeenCalled();
   });
 
-  // Pay as you go bills through Stripe. The Polar usage meters describe a
-  // period it isn't billed on, so the tier swaps the whole section — two
-  // disagreeing totals on one billing page is worse than one.
-  it("puts the pay as you go cycle usage on the payg view", () => {
+  // Pay as you go bills on tokens under management through Stripe, so it gets
+  // the shared TUM usage view with the invoice estimate at its head. The Polar
+  // usage meters describe a period it isn't billed on — two disagreeing totals
+  // on one billing page is worse than one.
+  it("puts the shared TUM usage view with the estimate on the payg view", () => {
     mocks.productTier.mockReturnValue("payg");
     mocks.session.mockReturnValue({ trial: null });
 
     renderBilling();
 
-    expect(paygUsageSection()).not.toBeNull();
+    expect(tumUsageSection()).not.toBeNull();
     expect(polarUsageSection()).toBeNull();
     expect(mocks.periodUsage).not.toHaveBeenCalled();
+    // The estimate is mounted inside the usage section — its own gate decides
+    // whether the request fires.
+    expect(mocks.paygBillingSummary).toHaveBeenCalled();
   });
 
   it.each<ProductTier>(["base", "base_PAID", "__deprecated__pro"])(
@@ -437,7 +445,7 @@ describe("Billing", () => {
       renderBilling();
 
       expect(polarUsageSection()).not.toBeNull();
-      expect(paygUsageSection()).toBeNull();
+      expect(tumUsageSection()).toBeNull();
       expect(mocks.periodUsage).toHaveBeenCalled();
       expect(mocks.paygBillingSummary).not.toHaveBeenCalled();
       expect(mocks.inferenceCaps).not.toHaveBeenCalled();
@@ -445,14 +453,14 @@ describe("Billing", () => {
   );
 
   // Enterprise contracts bill on tokens under management through the TUM view,
-  // which owns its own figures — neither usage section belongs there.
+  // which owns its own figures — the PAYG estimate and Polar meters never
+  // mount there, so neither request can fire.
   it("keeps the enterprise view on the TUM figures", () => {
     mocks.productTier.mockReturnValue("enterprise");
 
     renderBilling();
 
-    expect(screen.getByText("tum usage")).toBeTruthy();
-    expect(paygUsageSection()).toBeNull();
+    expect(tumUsageSection()).not.toBeNull();
     expect(polarUsageSection()).toBeNull();
     expect(mocks.paygBillingSummary).not.toHaveBeenCalled();
   });
