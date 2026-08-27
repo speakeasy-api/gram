@@ -427,6 +427,54 @@ func TestDisableAPIKey_NoKeyIsNoop(t *testing.T) {
 
 // Sales reinstate a demoted organization by raising its limit, so the refresh
 // path has to clear the flag on both sides.
+func TestRefreshAPIKeyLimit_PreservesClassifiedDisableCauses(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name          string
+		disabled      bool
+		disableCauses []string
+	}{
+		{name: "admin and trial", disabled: true, disableCauses: []string{"admin_lock", "trial_demotion"}},
+		{name: "stale false admin and billing", disabled: false, disableCauses: []string{"admin_lock", "billing_inactive"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			ctx := t.Context()
+			orgID := "org-" + uuid.NewString()[:8]
+			provisioner, upstream, queries := newDisableTestProvisioner(t, orgID)
+			_, err := provisioner.ProvisionAPIKey(ctx, orgID, KeyTypeInternal)
+			require.NoError(t, err)
+			require.NoError(t, testrepo.New(provisioner.db).SetOpenRouterAPIKeyClassificationFixture(ctx, testrepo.SetOpenRouterAPIKeyClassificationFixtureParams{
+				OrganizationID: orgID,
+				KeyType:        string(KeyTypeInternal),
+				Disabled:       tt.disabled,
+				DisableCauses:  tt.disableCauses,
+			}))
+
+			limit := 42
+			refreshed, err := provisioner.RefreshAPIKeyLimit(ctx, orgID, KeyTypeInternal, &limit)
+			require.NoError(t, err)
+			require.Equal(t, 42, refreshed)
+
+			patches := upstream.recorded()
+			require.Len(t, patches, 1)
+			require.JSONEq(t, `{"limit":42,"limit_reset":"monthly"}`, patches[0])
+
+			row, err := queries.GetOpenRouterAPIKey(ctx, repo.GetOpenRouterAPIKeyParams{
+				OrganizationID: orgID,
+				KeyType:        string(KeyTypeInternal),
+			})
+			require.NoError(t, err)
+			require.Equal(t, tt.disabled, row.Disabled)
+			require.Equal(t, tt.disableCauses, row.DisableCauses)
+			require.Equal(t, int64(42), row.MonthlyCredits)
+		})
+	}
+}
+
 func TestRefreshAPIKeyLimit_ReinstatesDisabledKey(t *testing.T) {
 	t.Parallel()
 
