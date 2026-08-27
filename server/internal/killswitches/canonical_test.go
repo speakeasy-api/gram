@@ -368,9 +368,6 @@ func mustParseTime(t *testing.T, value string) time.Time {
 	return parsed
 }
 
-//go:fix inline
-func ptr[T any](value T) *T { return new(value) }
-
 func assertSameHashV1(t *testing.T, first, second CanonicalMutationV1) {
 	t.Helper()
 	firstHash, err := CanonicalMutationHashV1(first)
