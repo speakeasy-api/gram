@@ -100,8 +100,7 @@ func KickAssistantRuntimeImageRecycle(ctx context.Context, temporalEnv *tenv.Env
 		// StartToClose ceiling) so the second attempt is never truncated.
 		WorkflowRunTimeout: 2*assistantRuntimeImageRecycleActivityTimeout + 15*time.Minute,
 	}, AssistantRuntimeImageRecycleWorkflow)
-	var alreadyStarted *serviceerror.WorkflowExecutionAlreadyStarted
-	if errors.As(err, &alreadyStarted) {
+	if _, ok := errors.AsType[*serviceerror.WorkflowExecutionAlreadyStarted](err); ok {
 		return nil
 	}
 	if err != nil {

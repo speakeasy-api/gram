@@ -1574,13 +1574,11 @@ func (s *Service) handleInviteCallback(w http.ResponseWriter, r *http.Request) {
 }
 
 func inviteRequiresNormalLogin(err error) bool {
-	var ssoRequired *workos_errors.SSORequiredError
-	if errors.As(err, &ssoRequired) {
+	if _, ok := errors.AsType[*workos_errors.SSORequiredError](err); ok {
 		return true
 	}
 
-	var orgAuthRequired *workos_errors.OrganizationAuthenticationMethodsRequiredError
-	if errors.As(err, &orgAuthRequired) {
+	if orgAuthRequired, ok := errors.AsType[*workos_errors.OrganizationAuthenticationMethodsRequiredError](err); ok {
 		return !magicAuthAllowed(orgAuthRequired.AuthMethods)
 	}
 

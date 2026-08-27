@@ -17,7 +17,8 @@ function run() {
   });
   dirs = [...new Set(dirs)];
 
-  $.sync`go fix ${dirs}`;
+  // exhaustruct v5 cannot analyze Go 1.27's direct embedded-field literals.
+  $.sync`go fix -embedlit=false ${dirs}`;
 }
 
 run();
