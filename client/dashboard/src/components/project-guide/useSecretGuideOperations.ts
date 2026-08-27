@@ -224,6 +224,7 @@ export function useSecretGuideOperations(): {
   const activeOperationRef = useRef<ActiveOperation | undefined>(undefined);
   const [, setBaseline] = useState<TelemetryBaseline>();
   const baselineRef = useRef<TelemetryBaseline | undefined>(undefined);
+  const baselineGenerationRef = useRef(0);
   const [baselineError, setBaselineError] = useState(false);
   const [baselinePending, setBaselinePending] = useState(false);
   const [suppressTelemetryError, setSuppressTelemetryError] = useState(false);
@@ -290,7 +291,14 @@ export function useSecretGuideOperations(): {
     [],
   );
 
+  const isCurrentOperation = useCallback((key: string): boolean => {
+    const current = activeOperationRef.current;
+    return Boolean(current && projectGuideOperationKey(current.scope) === key);
+  }, []);
+
   const captureBaseline = useCallback(async (): Promise<boolean> => {
+    const generation = baselineGenerationRef.current + 1;
+    baselineGenerationRef.current = generation;
     baselineRef.current = undefined;
     setBaseline(undefined);
     setBaselineError(false);
@@ -303,6 +311,7 @@ export function useSecretGuideOperations(): {
         resultsQuery.refetch(),
         syntheticSecretRedaction(organization.id),
       ]);
+      if (baselineGenerationRef.current !== generation) return false;
       if (traces.isError || results.isError || !traces.data || !results.data) {
         setBaselineError(true);
         return false;
@@ -322,11 +331,14 @@ export function useSecretGuideOperations(): {
       tracesRequest.listHooksTracesPayload.to = new Date();
       return true;
     } catch {
+      if (baselineGenerationRef.current !== generation) return false;
       setBaselineError(true);
       return false;
     } finally {
-      setBaselinePending(false);
-      setSuppressTelemetryError(false);
+      if (baselineGenerationRef.current === generation) {
+        setBaselinePending(false);
+        setSuppressTelemetryError(false);
+      }
     }
   }, [client, organization.id, resultsQuery, tracesQuery, tracesRequest]);
 
@@ -346,8 +358,11 @@ export function useSecretGuideOperations(): {
       if (signal.scope.path !== "secret-block") return;
       if (signal.type === "abort") {
         updateActiveOperation(undefined);
+        baselineGenerationRef.current += 1;
         baselineRef.current = undefined;
         setBaseline(undefined);
+        setBaselinePending(false);
+        setSuppressTelemetryError(false);
         return;
       }
       if (signal.type === "pause") {
@@ -436,6 +451,7 @@ export function useSecretGuideOperations(): {
         },
       })
       .then((policy) => {
+        if (!isCurrentOperation(key)) return;
         updateActiveOperation(undefined);
         setCreatedPolicy(policy);
         void invalidateRiskListPolicies(queryClient, [{ gramProject }]);
@@ -446,6 +462,7 @@ export function useSecretGuideOperations(): {
         });
       })
       .catch(() => {
+        if (!isCurrentOperation(key)) return;
         updateActiveOperation(undefined);
         operation.report({
           type: "error",
@@ -463,6 +480,7 @@ export function useSecretGuideOperations(): {
     policyError,
     policyPending,
     queryClient,
+    isCurrentOperation,
     updateActiveOperation,
   ]);
 
@@ -523,6 +541,7 @@ export function useSecretGuideOperations(): {
           const fallback = `observability-${client}.zip`;
           const filename = responseFilename(response, fallback);
           await downloadResponse(response, fallback);
+          if (!isCurrentOperation(key)) return;
           setDownloadedFilename(filename);
           updateActiveOperation(undefined);
           operation.report({
@@ -532,6 +551,7 @@ export function useSecretGuideOperations(): {
           });
         })
         .catch(() => {
+          if (!isCurrentOperation(key)) return;
           updateActiveOperation(undefined);
           operation.report({
             type: "error",
@@ -552,6 +572,7 @@ export function useSecretGuideOperations(): {
     authFetch,
     client,
     downloadedFilename,
+    isCurrentOperation,
     updateActiveOperation,
   ]);
 

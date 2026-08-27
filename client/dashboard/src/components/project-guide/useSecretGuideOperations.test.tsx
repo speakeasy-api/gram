@@ -124,6 +124,17 @@ function queryResult<T>(data: T) {
   };
 }
 
+function deferred<T>(): {
+  promise: Promise<T>;
+  resolve: (value: T) => void;
+} {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((nextResolve) => {
+    resolve = nextResolve;
+  });
+  return { promise, resolve };
+}
+
 beforeEach(() => {
   vi.clearAllMocks();
   queryHooks.policies.mockReturnValue(queryResult({ policies: [policy()] }));
@@ -280,6 +291,35 @@ describe("useSecretGuideOperations", () => {
     );
   });
 
+  it("ignores a policy result after the operation is aborted", async () => {
+    queryHooks.policies.mockReturnValue(queryResult({ policies: [] }));
+    const pendingPolicy = deferred<RiskPolicy>();
+    mutateAsync.mockReturnValueOnce(pendingPolicy.promise);
+    const report = vi.fn<(report: ProjectGuideOperationReport) => void>();
+    const { result: hook } = renderHook(() => useSecretGuideOperations());
+
+    act(() =>
+      hook.current.handleSignal({ type: "start", scope: POLICY_SCOPE }, report),
+    );
+    await waitFor(() => expect(mutateAsync).toHaveBeenCalledOnce());
+
+    act(() =>
+      hook.current.handleSignal(
+        { type: "abort", scope: POLICY_SCOPE, reason: "switch" },
+        report,
+      ),
+    );
+    await act(async () => {
+      pendingPolicy.resolve(policy());
+      await pendingPolicy.promise;
+    });
+
+    expect(report).not.toHaveBeenCalledWith(
+      expect.objectContaining({ type: "success" }),
+    );
+    expect(invalidatePolicies).not.toHaveBeenCalled();
+  });
+
   it("treats undefined policy data as unreadable instead of an empty list", async () => {
     queryHooks.policies.mockReturnValue({
       data: undefined,
@@ -374,6 +414,46 @@ describe("useSecretGuideOperations", () => {
       {},
     );
     unmount();
+  });
+
+  it("ignores a plugin download result after the operation is aborted", async () => {
+    vi.useFakeTimers();
+    const pendingDownload = deferred<Response>();
+    authFetch.mockReturnValueOnce(pendingDownload.promise);
+    const report = vi.fn<(report: ProjectGuideOperationReport) => void>();
+    const { result: hook } = renderHook(() => useSecretGuideOperations());
+    const scope = { ...POLICY_SCOPE, step: 1, runId: 2 };
+
+    act(() => hook.current.setClient("claude"));
+    act(() => hook.current.handleSignal({ type: "start", scope }, report));
+    await act(async () => {
+      vi.advanceTimersByTime(PROJECT_GUIDE_MICRO_STEP_DELAY_MS * 2);
+      await Promise.resolve();
+    });
+
+    act(() =>
+      hook.current.handleSignal(
+        { type: "abort", scope, reason: "switch" },
+        report,
+      ),
+    );
+    await act(async () => {
+      pendingDownload.resolve(
+        new Response(new Blob(["zip"]), {
+          status: 200,
+          headers: {
+            "Content-Disposition": 'attachment; filename="stale.zip"',
+          },
+        }),
+      );
+      await pendingDownload.promise;
+      await Promise.resolve();
+    });
+
+    expect(hook.current.downloadedFilename).toBeUndefined();
+    expect(report).not.toHaveBeenCalledWith(
+      expect.objectContaining({ type: "success" }),
+    );
   });
 
   it("waits without reporting or downloading when Step 2 has no client", () => {
@@ -514,6 +594,49 @@ describe("useSecretGuideOperations", () => {
     expect(report).not.toHaveBeenCalledWith(
       expect.objectContaining({ type: "event" }),
     );
+  });
+
+  it("does not publish a telemetry baseline after the operation is aborted", async () => {
+    const pendingTraces = deferred<{
+      data: { traces: HookTraceSummary[] };
+      isError: boolean;
+    }>();
+    const pendingResults = deferred<{
+      data: { results: RiskResult[] };
+      isError: boolean;
+    }>();
+    queryHooks.hooks.mockReturnValue({
+      ...queryResult({ traces: [] }),
+      refetch: () => pendingTraces.promise,
+    });
+    queryHooks.results.mockReturnValue({
+      ...queryResult({ results: [] }),
+      refetch: () => pendingResults.promise,
+    });
+    const report = vi.fn<(report: ProjectGuideOperationReport) => void>();
+    const { result: hook } = renderHook(() => useSecretGuideOperations());
+    let capture!: Promise<boolean>;
+
+    act(() => {
+      capture = hook.current.prepareTelemetryBaseline();
+    });
+    act(() =>
+      hook.current.handleSignal(
+        {
+          type: "abort",
+          scope: { ...POLICY_SCOPE, step: 2 },
+          reason: "switch",
+        },
+        report,
+      ),
+    );
+    await act(async () => {
+      pendingTraces.resolve({ data: { traces: [] }, isError: false });
+      pendingResults.resolve({ data: { results: [] }, isError: false });
+      await capture;
+    });
+
+    await expect(capture).resolves.toBe(false);
   });
 
   it("keeps waiting when Step 5 starts before a baseline is ready", async () => {

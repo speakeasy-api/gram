@@ -215,7 +215,7 @@ export function ProjectGuideRun({
               role="log"
               aria-label={`${journey.id === "third-party-mcp" ? "Journey A" : "Journey B"} activity`}
               aria-live="polite"
-              className="border-neutral-softest bg-muted/30 flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto border p-4"
+              className="border-neutral-softest bg-muted/30 flex min-h-0 max-h-[min(24rem,50dvh)] flex-1 flex-col gap-2 overflow-y-auto border p-4 lg:max-h-none"
             >
               <span className="text-eyebrow text-muted-foreground">
                 Activity

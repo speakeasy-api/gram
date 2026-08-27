@@ -871,7 +871,6 @@ function SecretPluginPhases({
 
   return (
     <ProjectGuidePhaseChecklist
-      title="What you get"
       labels={SECRET_PLUGIN_PHASES}
       statuses={statuses}
     />

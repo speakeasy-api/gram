@@ -10,7 +10,11 @@ import type {
   ProjectGuideOperationSignal,
 } from "@/components/project-guide/projectGuideMachine";
 import { projectGuideOperationKey } from "@/components/project-guide/projectGuideMachine";
-import { useProjectSlugForRequests } from "@/contexts/Sdk";
+import {
+  markProjectGuideMcpServerSelected,
+  useProjectGuideMcpServerSelection,
+} from "@/components/project-guide/projectGuideStores";
+import { useProjectSlugForRequests, useSlugs } from "@/contexts/Sdk";
 import { getServerURL } from "@/lib/utils";
 import { type PulseMCPServer, useListMCPCatalog } from "@/pages/catalog/hooks";
 import {
@@ -239,8 +243,9 @@ export function useMcpGuideOperations(): {
   toolLogsHref: string;
 } {
   const gramProject = useProjectSlugForRequests();
+  const { orgSlug, projectSlug } = useSlugs();
   const routes = useRoutes();
-  const [selectedServer, setSelectedServer] = useState<
+  const [selectedServerOverride, setSelectedServerOverride] = useState<
     PulseMCPServer | undefined
   >(undefined);
   const [client, setClient] = useState<McpGuideClient>("claude");
@@ -252,6 +257,7 @@ export function useMcpGuideOperations(): {
   const activeOperationRef = useRef<ActiveOperation | undefined>(undefined);
   const [, setActivityBaseline] = useState<ActivityBaseline>();
   const activityBaselineRef = useRef<ActivityBaseline | undefined>(undefined);
+  const activityBaselineGenerationRef = useRef(0);
   const captureActivityBaselineRef = useRef<() => Promise<boolean>>(() =>
     Promise.resolve(false),
   );
@@ -288,6 +294,15 @@ export function useMcpGuideOperations(): {
   );
   const catalogError =
     catalog.isError || (!catalog.isPending && catalog.data === undefined);
+  const selectedMcpServerSpecifier = useProjectGuideMcpServerSelection(
+    orgSlug,
+    projectSlug,
+  );
+  const selectedServer =
+    selectedServerOverride ??
+    catalogServers?.find(
+      (server) => server.registrySpecifier === selectedMcpServerSpecifier,
+    );
 
   const projectStatePending =
     serversQuery.isPending ||
@@ -401,6 +416,8 @@ export function useMcpGuideOperations(): {
   );
 
   const captureActivityBaseline = useCallback(async (): Promise<boolean> => {
+    const generation = activityBaselineGenerationRef.current + 1;
+    activityBaselineGenerationRef.current = generation;
     activityBaselineRef.current = undefined;
     setActivityBaseline(undefined);
     setBaselineCaptureError(false);
@@ -409,6 +426,7 @@ export function useMcpGuideOperations(): {
     tracesRequest.listToolUsageTracesPayload.to = new Date();
     try {
       const result = await activityQuery.refetch();
+      if (activityBaselineGenerationRef.current !== generation) return false;
       if (result.isError || !result.data) {
         setBaselineCaptureError(true);
         return false;
@@ -429,11 +447,14 @@ export function useMcpGuideOperations(): {
       tracesRequest.listToolUsageTracesPayload.to = new Date();
       return true;
     } catch {
+      if (activityBaselineGenerationRef.current !== generation) return false;
       setBaselineCaptureError(true);
       return false;
     } finally {
-      setBaselineCapturePending(false);
-      setSuppressActivityError(false);
+      if (activityBaselineGenerationRef.current === generation) {
+        setBaselineCapturePending(false);
+        setSuppressActivityError(false);
+      }
     }
   }, [activityQuery, tracesRequest]);
   captureActivityBaselineRef.current = captureActivityBaseline;
@@ -500,12 +521,18 @@ export function useMcpGuideOperations(): {
 
       if (signal.type === "abort") {
         updateActiveOperation(undefined);
+        activityBaselineGenerationRef.current += 1;
         activityBaselineRef.current = undefined;
         setActivityBaseline(undefined);
+        setBaselineCapturePending(false);
+        setSuppressActivityError(false);
         return;
       }
       if (signal.type === "prepare") {
-        void captureActivityBaselineRef.current().then((ready) => {
+        const baselineCapture = captureActivityBaselineRef.current();
+        const generation = activityBaselineGenerationRef.current;
+        void baselineCapture.then((ready) => {
+          if (activityBaselineGenerationRef.current !== generation) return;
           if (ready) {
             report({
               type: "success",
@@ -773,10 +800,18 @@ export function useMcpGuideOperations(): {
       void catalog.refetch();
     },
     selectServer: (server) => {
-      setSelectedServer(server);
+      setSelectedServerOverride(server);
+      if (orgSlug && projectSlug) {
+        markProjectGuideMcpServerSelected(
+          orgSlug,
+          projectSlug,
+          server.registrySpecifier,
+        );
+      }
       setConnectionPromptCopied(false);
       setPromptCopied(false);
       activityBaselineRef.current = undefined;
+      activityBaselineGenerationRef.current += 1;
       setActivityBaseline(undefined);
       setBaselineCaptureError(false);
     },

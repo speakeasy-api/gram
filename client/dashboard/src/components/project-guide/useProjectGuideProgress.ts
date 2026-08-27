@@ -11,7 +11,9 @@ import type {
   JourneyId,
   JourneyStatus,
 } from "@/components/project-guide/journeys";
-import { useProjectSlugForRequests } from "@/contexts/Sdk";
+import { useProjectGuideMcpServerSelection } from "@/components/project-guide/projectGuideStores";
+import { useProjectSlugForRequests, useSlugs } from "@/contexts/Sdk";
+import { normalizeRemoteUrl } from "@/pages/catalog/remotes";
 import { useListMCPCatalog } from "@/pages/catalog/hooks";
 import { useMcpServers } from "@gram/client/react-query/mcpServers.js";
 import { useGetMcpServerActivity } from "@gram/client/react-query/getMcpServerActivity.js";
@@ -30,6 +32,11 @@ export function useProjectGuideProgress(): {
   isPending: boolean;
 } {
   const gramProject = useProjectSlugForRequests();
+  const { orgSlug, projectSlug } = useSlugs();
+  const selectedMcpServerSpecifier = useProjectGuideMcpServerSelection(
+    orgSlug,
+    projectSlug,
+  );
 
   const catalogQuery = useListMCPCatalog(undefined, undefined, true);
 
@@ -95,13 +102,32 @@ export function useProjectGuideProgress(): {
     catalogServers,
   );
   const guideMcpServers = catalogMcpServers.filter(isGuideMcpServer);
+  const selectedCatalogUrls = new Set(
+    (catalogServers ?? [])
+      .filter(
+        (server) => server.registrySpecifier === selectedMcpServerSpecifier,
+      )
+      .flatMap((server) =>
+        (server.remotes ?? [])
+          .filter((remote) => remote.transportType === "streamable-http")
+          .map((remote) => normalizeRemoteUrl(remote.url)),
+      ),
+  );
+  const selectedGuideMcpServers = guideMcpServers.filter((server) => {
+    const remote = remoteServers?.find(
+      (candidate) => candidate.id === server.remoteMcpServerId,
+    );
+    return Boolean(
+      remote && selectedCatalogUrls.has(normalizeRemoteUrl(remote.url)),
+    );
+  });
 
   const statusByJourney: Record<JourneyId, JourneyStatus> = {
     "third-party-mcp":
       servers && remoteServers && catalogServers && plugins && activity
         ? deriveJourneyStatus({
             startSignal: catalogMcpServers.length > 0,
-            winSignal: guideMcpServers.some(
+            winSignal: selectedGuideMcpServers.some(
               (server) =>
                 hasDefaultPluginServer(plugins, server.id) &&
                 hasMcpServerActivity(activity, server),

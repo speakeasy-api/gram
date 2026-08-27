@@ -12,12 +12,19 @@ const queryHooks = vi.hoisted(() => ({
 }));
 
 const requestProject = vi.hoisted(() => ({ slug: "request-project" }));
+const selectedMcpServer = vi.hoisted(() => ({
+  specifier: undefined as string | undefined,
+}));
 
 vi.mock("@/pages/catalog/hooks", () => ({
   useListMCPCatalog: queryHooks.catalog,
 }));
 vi.mock("@/contexts/Sdk", () => ({
   useProjectSlugForRequests: () => requestProject.slug,
+  useSlugs: () => ({ orgSlug: "org", projectSlug: requestProject.slug }),
+}));
+vi.mock("./projectGuideStores", () => ({
+  useProjectGuideMcpServerSelection: () => selectedMcpServer.specifier,
 }));
 vi.mock("@gram/client/react-query/getMcpServerActivity.js", () => ({
   useGetMcpServerActivity: queryHooks.activity,
@@ -43,6 +50,7 @@ import { useProjectGuideProgress } from "./useProjectGuideProgress";
 beforeEach(() => {
   vi.clearAllMocks();
   requestProject.slug = "request-project";
+  selectedMcpServer.specifier = "example/catalog";
   queryHooks.activity.mockReturnValue({
     data: { activity: [] },
     isPending: false,
@@ -353,6 +361,55 @@ describe("useProjectGuideProgress", () => {
           {
             id: "server-1",
             name: "Catalog",
+            slug: "server-one",
+            remoteMcpServerId: "remote-1",
+          },
+        ],
+      },
+      isPending: false,
+    });
+    queryHooks.remoteServers.mockReturnValue({
+      data: {
+        remoteMcpServers: [
+          { id: "remote-1", url: "https://catalog.example/mcp" },
+        ],
+      },
+      isPending: false,
+    });
+    queryHooks.plugins.mockReturnValue({
+      data: {
+        plugins: [{ isDefault: true, servers: [{ mcpServerId: "server-1" }] }],
+      },
+      isPending: false,
+    });
+    queryHooks.activity.mockReturnValue({
+      data: {
+        activity: [
+          {
+            targetId: "server-one",
+            targetType: "hosted_mcp_server",
+            totalToolCalls: 1,
+          },
+        ],
+      },
+      isPending: false,
+    });
+
+    const { result } = renderHook(() => useProjectGuideProgress());
+
+    expect(result.current.statusByJourney["third-party-mcp"]).toBe(
+      "in-progress",
+    );
+  });
+
+  it("does not complete from a different governed catalog server", () => {
+    selectedMcpServer.specifier = "other/catalog";
+    queryHooks.servers.mockReturnValue({
+      data: {
+        mcpServers: [
+          {
+            id: "server-1",
+            name: "Catalog_Governed",
             slug: "server-one",
             remoteMcpServerId: "remote-1",
           },

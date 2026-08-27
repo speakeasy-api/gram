@@ -25,8 +25,24 @@ const refetchTraces = vi.hoisted(() =>
 const startInstall = vi.hoisted(() => vi.fn(() => Promise.resolve()));
 const resetInstall = vi.hoisted(() => vi.fn());
 
+function deferred<T>(): {
+  promise: Promise<T>;
+  resolve: (value: T) => void;
+} {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((resolvePromise) => {
+    resolve = resolvePromise;
+  });
+  return { promise, resolve };
+}
+
 vi.mock("@/contexts/Sdk", () => ({
   useProjectSlugForRequests: () => requestProject.slug,
+  useSlugs: () => ({ orgSlug: "org", projectSlug: requestProject.slug }),
+}));
+vi.mock("./projectGuideStores", () => ({
+  markProjectGuideMcpServerSelected: vi.fn(),
+  useProjectGuideMcpServerSelection: () => undefined,
 }));
 vi.mock("@/pages/catalog/hooks", () => ({
   useListMCPCatalog: queryHooks.catalog,
@@ -590,6 +606,40 @@ describe("useMcpGuideOperations", () => {
     });
 
     await waitFor(() => expect(refetchTraces).toHaveBeenCalledOnce());
+    expect(result.current.activityBaselineError).toBe(false);
+  });
+
+  it("ignores an activity baseline result after the operation is aborted", async () => {
+    setExistingServer();
+    const pendingRefetch = deferred<{
+      data: { traces: ToolUsageTraceSummary[] };
+      isError: boolean;
+    }>();
+    refetchTraces.mockReturnValueOnce(pendingRefetch.promise);
+    const report = vi.fn<(report: ProjectGuideOperationReport) => void>();
+    const { result } = renderHook(() => useMcpGuideOperations());
+
+    act(() => {
+      result.current.handleSignal(
+        { type: "prepare", scope: { ...SERVER_SCOPE, step: 1 } },
+        report,
+      );
+      result.current.handleSignal(
+        {
+          type: "abort",
+          reason: "switch",
+          scope: { ...SERVER_SCOPE, step: 1 },
+        },
+        report,
+      );
+    });
+
+    await act(async () => {
+      pendingRefetch.resolve({ data: { traces: [] }, isError: false });
+      await pendingRefetch.promise;
+    });
+
+    expect(report).not.toHaveBeenCalled();
     expect(result.current.activityBaselineError).toBe(false);
   });
 

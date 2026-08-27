@@ -8,6 +8,7 @@ import type { RiskPolicy } from "@gram/client/models/components/riskpolicy.js";
 import type { RiskResult } from "@gram/client/models/components/riskresult.js";
 
 type CatalogServerIdentity = {
+  registrySpecifier?: string;
   remotes?: Array<{ transportType: string; url: string }>;
 };
 

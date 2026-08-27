@@ -407,7 +407,6 @@ describe("ProjectGuide", () => {
         "The catalog lists servers from the official MCP Registry. Installing one creates a governed endpoint in front of the vendor's server — the vendor's URL is already known, and nothing upstream changes.",
       ),
     ).toBeTruthy();
-    expect(screen.getByText("What the wizard does")).toBeTruthy();
     expect(screen.getByText("Read the server's tool list")).toBeTruthy();
     expect(screen.getByText("Install it into this project")).toBeTruthy();
     expect(
@@ -1291,6 +1290,7 @@ describe("ProjectGuide", () => {
 
     expect(activity.className).toContain("flex-1");
     expect(activity.className).toContain("overflow-y-auto");
+    expect(activity.className).toContain("max-h-[min(24rem,50dvh)]");
     const stepList = screen.getByRole("list", { name: "Journey A steps" });
     const steps = stepList.querySelectorAll("li");
     expect(steps[0]?.className).toContain("min-h-48");
@@ -1457,7 +1457,6 @@ describe("ProjectGuide", () => {
       }),
     );
 
-    expect(screen.getByText("What the wizard does")).toBeTruthy();
     expect(screen.getByText("Enable the Secrets category")).toBeTruthy();
     expect(screen.getByText("Scope user prompts")).toBeTruthy();
     expect(screen.getByText("Deny the request")).toBeTruthy();
@@ -1510,7 +1509,6 @@ describe("ProjectGuide", () => {
           .getAttribute("aria-pressed"),
       ).toBe("false");
     }
-    expect(screen.getByText("What you get")).toBeTruthy();
     expect(screen.getByText("Build the plugin for this project")).toBeTruthy();
     expect(screen.getByText("Sign the bundle")).toBeTruthy();
     expect(screen.getAllByText("not run")).toHaveLength(2);
@@ -1745,7 +1743,6 @@ describe("ProjectGuide", () => {
       }),
     );
 
-    expect(screen.getByText("What the wizard does")).toBeTruthy();
     expect(screen.getByText("Enable the Secrets category")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Start the journey" }));
     await advanceGuideDelay();
