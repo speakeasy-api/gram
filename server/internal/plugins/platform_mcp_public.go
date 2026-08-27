@@ -6,7 +6,7 @@ import (
 )
 
 // PublicMarketplaceName is the marketplace identifier users type when
-// installing a first-party plugin (`platform@speakeasy`). It is fixed: the
+// installing a first-party plugin (`speakeasy@speakeasy`). It is fixed: the
 // public repository is a single global artifact, not an org-derived one, and it
 // is the umbrella every first-party plugin is published under so registering it
 // once carries future plugins too.

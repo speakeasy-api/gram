@@ -19,10 +19,10 @@ func TestPublicPlatformMCPFiles(t *testing.T) {
 		".agents/plugins/marketplace.json",
 		"README.md",
 		"LICENSE",
-		"platform/.mcp.json",
-		"platform/.claude-plugin/plugin.json",
-		"cursor-plugins/platform-cursor/.cursor-plugin/plugin.json",
-		"platform-codex/.codex-plugin/plugin.json",
+		"speakeasy/.mcp.json",
+		"speakeasy/.claude-plugin/plugin.json",
+		"cursor-plugins/speakeasy-cursor/.cursor-plugin/plugin.json",
+		"speakeasy-codex/.codex-plugin/plugin.json",
 	} {
 		require.Contains(t, files, expected)
 	}
@@ -42,7 +42,7 @@ func TestPublicPlatformMCPFiles(t *testing.T) {
 	require.Contains(t, string(files["LICENSE"]), "Speakeasy Development, Inc.")
 
 	var meta claudePluginMeta
-	require.NoError(t, json.Unmarshal(files["platform/.claude-plugin/plugin.json"], &meta))
+	require.NoError(t, json.Unmarshal(files["speakeasy/.claude-plugin/plugin.json"], &meta))
 	require.Equal(t, "0."+platformMCPGeneratorVersion+".17", meta.Version, "the CI counter must reach the manifest so installs refresh")
 }
 
@@ -75,7 +75,7 @@ func TestPublicPlatformMCPFilesRejectsInsecureServerURL(t *testing.T) {
 	// url.Parse normalizes the scheme, so an uppercase one is still secure.
 	files, err := PublicPlatformMCPFiles("HTTPS://app.getgram.ai", "17")
 	require.NoError(t, err)
-	require.Contains(t, string(files["platform/.mcp.json"]), "app.getgram.ai/platform-mcp")
+	require.Contains(t, string(files["speakeasy/.mcp.json"]), "app.getgram.ai/platform-mcp")
 }
 
 func TestPublicPlatformMCPFilesRequiresServerURL(t *testing.T) {

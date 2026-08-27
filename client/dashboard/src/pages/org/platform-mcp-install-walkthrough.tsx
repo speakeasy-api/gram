@@ -48,13 +48,14 @@ export type PlatformMCPInstallMethod = "marketplace" | "manual";
 
 // The plugin name and the MCP server name are what an agent concatenates into
 // the label beside every tool call — Claude Code renders
-// "plugin:platform:platform". These mirror the generated packages in
-// server/internal/plugins/generate.go; the Cursor and Codex packages keep a
-// client suffix because all package roots share one repository.
-const PLATFORM_MCP_PLUGIN_NAME = "platform";
-const PLATFORM_MCP_SERVER_NAME = "platform";
-const PLATFORM_MCP_CURSOR_PLUGIN_NAME = "platform-cursor";
-const PLATFORM_MCP_CODEX_PLUGIN_NAME = "platform-codex";
+// "plugin:speakeasy:speakeasy" — providing a clear brand signal. These mirror
+// the generated packages in server/internal/plugins/generate.go; the Cursor
+// and Codex packages keep a client suffix because all package roots share one
+// repository.
+const PLATFORM_MCP_PLUGIN_NAME = "speakeasy";
+const PLATFORM_MCP_SERVER_NAME = "speakeasy";
+const PLATFORM_MCP_CURSOR_PLUGIN_NAME = "speakeasy-cursor";
+const PLATFORM_MCP_CODEX_PLUGIN_NAME = "speakeasy-codex";
 
 // Platform MCP ships from one public repository for every organization. It
 // carries no credentials and no organization identity — access is decided at
