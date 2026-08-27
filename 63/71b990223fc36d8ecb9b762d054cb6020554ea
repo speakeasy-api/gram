@@ -1,0 +1,62 @@
+.speakeasy/out.openapi.yaml
+  h_2620cc60cfd1e9 65057-65059,65069,74468-74470,74489,84881-84883,84893,84909-84911,84919
+client/dashboard/src/sdk/.speakeasy/gen.lock
+  h_2620cc60cfd1e9 3808,3811,7155,9553,9556
+client/dashboard/src/sdk/src/models/components/createoteldestinationform.ts
+  h_2620cc60cfd1e9 38-41,56,68
+client/dashboard/src/sdk/src/models/components/oteldestination.ts
+  h_2620cc60cfd1e9 50-53,86
+client/dashboard/src/sdk/src/models/components/updateoteldestinationrequestbody.ts
+  h_2620cc60cfd1e9 37-40,57,69
+server/design/dataexports/design.go
+  h_2620cc60cfd1e9 212,220,239,246,252,256
+server/gen/data_exports/service.go
+  h_2620cc60cfd1e9 73-74,173-174,213-214
+server/gen/http/cli/gram/cli.go
+  h_2620cc60cfd1e9 12143,12169
+server/gen/http/data_exports/client/cli.go
+  h_2620cc60cfd1e9 55,87,124,164
+server/gen/http/data_exports/client/encode_decode.go
+  h_2620cc60cfd1e9 1938
+server/gen/http/data_exports/client/types.go
+  h_2620cc60cfd1e9 18-19,31-32,77-78,98-99,1651-1652,1715,1744,1963,2137,3128-3130,3185-3187,5269-5271
+server/gen/http/data_exports/server/encode_decode.go
+  h_2620cc60cfd1e9 1877
+server/gen/http/data_exports/server/types.go
+  h_2620cc60cfd1e9 18-19,31-32,77-78,98-99,1651-1652,1736,1763,3008,3036,3130-3132,3160-3162
+server/gen/http/openapi3.yaml
+  h_2620cc60cfd1e9 66434-66436,66446,75841-75843,75862,86252-86254,86264,86280-86282,86290
+server/internal/audit/oteldestinations.go
+  h_2620cc60cfd1e9 27,41-42,60,80,109,128-129,147
+server/internal/dataexports/authorization_test.go
+  h_2620cc60cfd1e9 45,53,61
+server/internal/dataexports/destinations.go
+  h_2620cc60cfd1e9 41-48,161,174
+server/internal/dataexports/destinations_test.go
+  h_2620cc60cfd1e9 26,34,51,59,94-95,127,131,135,144,153,157,166,176,205,220-236
+server/internal/dataexports/impl.go
+  h_2620cc60cfd1e9 122-126,165,181,205-208,266,269,280,289,362,455-456,529-530
+server/internal/dataexports/queries.sql
+  h_2620cc60cfd1e9 41,48,58-59
+server/internal/dataexports/repo/models.go
+  h_2620cc60cfd1e9 29
+server/internal/dataexports/repo/queries.sql.go
+  h_2620cc60cfd1e9 70,79-80,82,88,99,109,158,183,196,220,279,308,397,414,477-480,482-484,486,490,502,515
+server/internal/dataexports/routes_test.go
+  h_2620cc60cfd1e9 76,80-90,92-110
+server/internal/dataexports/setup_test.go
+  h_2620cc60cfd1e9 80
+server/internal/mv/dataexports.go
+  h_2620cc60cfd1e9 29
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.0",
+  "base_commit_sha": "6371b990223fc36d8ecb9b762d054cb6020554ea",
+  "prompts": {},
+  "humans": {
+    "h_2620cc60cfd1e9": {
+      "author": "tgmendes <tiago@speakeasy.com>"
+    }
+  }
+}

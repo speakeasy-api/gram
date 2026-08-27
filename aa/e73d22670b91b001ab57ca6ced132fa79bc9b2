@@ -1,0 +1,42 @@
+.speakeasy/out.openapi.yaml
+  h_2620cc60cfd1e9 64726,66509,84647,85534
+client/dashboard/src/sdk/.speakeasy/gen.lock
+  h_2620cc60cfd1e9 3625,3628,6736,9315,9318
+client/dashboard/src/sdk/src/models/components/createdataexportrouteform.ts
+  h_2620cc60cfd1e9 13
+client/dashboard/src/sdk/src/models/components/dataexportroute.ts
+  h_2620cc60cfd1e9 16
+client/dashboard/src/sdk/src/models/components/updaterouterequestbody.ts
+  h_2620cc60cfd1e9 13
+server/design/dataexports/design.go
+  h_2620cc60cfd1e9 227,258,267
+server/gen/http/cli/gram/cli.go
+  h_2620cc60cfd1e9 12242,12268
+server/gen/http/data_exports/client/cli.go
+  h_2620cc60cfd1e9 262,264-265,318,320-321
+server/gen/http/data_exports/client/types.go
+  h_2620cc60cfd1e9 3257-3258,3301-3302,5334-5335
+server/gen/http/data_exports/server/types.go
+  h_2620cc60cfd1e9 3177-3178,3197-3198
+server/gen/http/openapi3.yaml
+  h_2620cc60cfd1e9 66101,67884,86016,86903
+server/internal/dataexports/authorization_test.go
+  h_2620cc60cfd1e9 48,56,64
+server/internal/dataexports/destinations_test.go
+  h_2620cc60cfd1e9 181
+server/internal/dataexports/impl.go
+  h_2620cc60cfd1e9 375,379,382,384
+server/internal/dataexports/routes_test.go
+  h_2620cc60cfd1e9 25,35,63,68,72,81,84,109,125
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.0",
+  "base_commit_sha": "aae73d22670b91b001ab57ca6ced132fa79bc9b2",
+  "prompts": {},
+  "humans": {
+    "h_2620cc60cfd1e9": {
+      "author": "tgmendes <tiago@speakeasy.com>"
+    }
+  }
+}
