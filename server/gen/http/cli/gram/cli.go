@@ -32,6 +32,7 @@ import (
 	chatc "github.com/speakeasy-api/gram/server/gen/http/chat/client"
 	chatsessionsc "github.com/speakeasy-api/gram/server/gen/http/chat_sessions/client"
 	cliauthc "github.com/speakeasy-api/gram/server/gen/http/cli_auth/client"
+	dataexportsc "github.com/speakeasy-api/gram/server/gen/http/data_exports/client"
 	deploymentsc "github.com/speakeasy-api/gram/server/gen/http/deployments/client"
 	deviceintegrationsc "github.com/speakeasy-api/gram/server/gen/http/device_integrations/client"
 	domainsc "github.com/speakeasy-api/gram/server/gen/http/domains/client"
@@ -119,6 +120,7 @@ func UsageCommands() []string {
 		"chat (list-chats|get-assistant-session-summary|get-work-units-trend|load-chat|generate-title|credit-usage|delete-chat|set-pinned|summarize|summarize-tool-call|submit-feedback|list-sources|list-session-links)",
 		"chat-sessions (create|revoke)",
 		"cli-auth (authorize|redeem)",
+		"data-exports (list-otel-destinations|create-otel-destination|update-otel-destination|delete-otel-destination|list-routes|create-route|update-route|delete-route)",
 		"deployments (get-deployment|get-latest-deployment|get-active-deployment|create-deployment|evolve|redeploy|list-deployments|get-deployment-logs)",
 		"device-integrations (list-providers|get-config|upsert-config|delete-config|test-connection|list-schedules|set-schedule-enabled|retry-schedule|list-managed-devices|get-coverage)",
 		"domains (get-domain|list-domains|create-domain|update-domain|set-root-mcp-endpoint|list-root-mcp-servers|check-health|delete-domain|list-mcp-endpoints)",
@@ -889,6 +891,56 @@ func ParseEndpoint(
 
 		cliAuthRedeemFlags    = flag.NewFlagSet("redeem", flag.ExitOnError)
 		cliAuthRedeemBodyFlag = cliAuthRedeemFlags.String("body", "REQUIRED", "")
+
+		dataExportsFlags = flag.NewFlagSet("data-exports", flag.ContinueOnError)
+
+		dataExportsListOtelDestinationsFlags                = flag.NewFlagSet("list-otel-destinations", flag.ExitOnError)
+		dataExportsListOtelDestinationsSessionTokenFlag     = dataExportsListOtelDestinationsFlags.String("session-token", "", "")
+		dataExportsListOtelDestinationsApikeyTokenFlag      = dataExportsListOtelDestinationsFlags.String("apikey-token", "", "")
+		dataExportsListOtelDestinationsProjectSlugInputFlag = dataExportsListOtelDestinationsFlags.String("project-slug-input", "", "")
+
+		dataExportsCreateOtelDestinationFlags                = flag.NewFlagSet("create-otel-destination", flag.ExitOnError)
+		dataExportsCreateOtelDestinationBodyFlag             = dataExportsCreateOtelDestinationFlags.String("body", "REQUIRED", "")
+		dataExportsCreateOtelDestinationSessionTokenFlag     = dataExportsCreateOtelDestinationFlags.String("session-token", "", "")
+		dataExportsCreateOtelDestinationApikeyTokenFlag      = dataExportsCreateOtelDestinationFlags.String("apikey-token", "", "")
+		dataExportsCreateOtelDestinationProjectSlugInputFlag = dataExportsCreateOtelDestinationFlags.String("project-slug-input", "", "")
+
+		dataExportsUpdateOtelDestinationFlags                = flag.NewFlagSet("update-otel-destination", flag.ExitOnError)
+		dataExportsUpdateOtelDestinationBodyFlag             = dataExportsUpdateOtelDestinationFlags.String("body", "REQUIRED", "")
+		dataExportsUpdateOtelDestinationIDFlag               = dataExportsUpdateOtelDestinationFlags.String("id", "REQUIRED", "")
+		dataExportsUpdateOtelDestinationSessionTokenFlag     = dataExportsUpdateOtelDestinationFlags.String("session-token", "", "")
+		dataExportsUpdateOtelDestinationApikeyTokenFlag      = dataExportsUpdateOtelDestinationFlags.String("apikey-token", "", "")
+		dataExportsUpdateOtelDestinationProjectSlugInputFlag = dataExportsUpdateOtelDestinationFlags.String("project-slug-input", "", "")
+
+		dataExportsDeleteOtelDestinationFlags                = flag.NewFlagSet("delete-otel-destination", flag.ExitOnError)
+		dataExportsDeleteOtelDestinationIDFlag               = dataExportsDeleteOtelDestinationFlags.String("id", "REQUIRED", "")
+		dataExportsDeleteOtelDestinationSessionTokenFlag     = dataExportsDeleteOtelDestinationFlags.String("session-token", "", "")
+		dataExportsDeleteOtelDestinationApikeyTokenFlag      = dataExportsDeleteOtelDestinationFlags.String("apikey-token", "", "")
+		dataExportsDeleteOtelDestinationProjectSlugInputFlag = dataExportsDeleteOtelDestinationFlags.String("project-slug-input", "", "")
+
+		dataExportsListRoutesFlags                = flag.NewFlagSet("list-routes", flag.ExitOnError)
+		dataExportsListRoutesSessionTokenFlag     = dataExportsListRoutesFlags.String("session-token", "", "")
+		dataExportsListRoutesApikeyTokenFlag      = dataExportsListRoutesFlags.String("apikey-token", "", "")
+		dataExportsListRoutesProjectSlugInputFlag = dataExportsListRoutesFlags.String("project-slug-input", "", "")
+
+		dataExportsCreateRouteFlags                = flag.NewFlagSet("create-route", flag.ExitOnError)
+		dataExportsCreateRouteBodyFlag             = dataExportsCreateRouteFlags.String("body", "REQUIRED", "")
+		dataExportsCreateRouteSessionTokenFlag     = dataExportsCreateRouteFlags.String("session-token", "", "")
+		dataExportsCreateRouteApikeyTokenFlag      = dataExportsCreateRouteFlags.String("apikey-token", "", "")
+		dataExportsCreateRouteProjectSlugInputFlag = dataExportsCreateRouteFlags.String("project-slug-input", "", "")
+
+		dataExportsUpdateRouteFlags                = flag.NewFlagSet("update-route", flag.ExitOnError)
+		dataExportsUpdateRouteBodyFlag             = dataExportsUpdateRouteFlags.String("body", "REQUIRED", "")
+		dataExportsUpdateRouteIDFlag               = dataExportsUpdateRouteFlags.String("id", "REQUIRED", "")
+		dataExportsUpdateRouteSessionTokenFlag     = dataExportsUpdateRouteFlags.String("session-token", "", "")
+		dataExportsUpdateRouteApikeyTokenFlag      = dataExportsUpdateRouteFlags.String("apikey-token", "", "")
+		dataExportsUpdateRouteProjectSlugInputFlag = dataExportsUpdateRouteFlags.String("project-slug-input", "", "")
+
+		dataExportsDeleteRouteFlags                = flag.NewFlagSet("delete-route", flag.ExitOnError)
+		dataExportsDeleteRouteIDFlag               = dataExportsDeleteRouteFlags.String("id", "REQUIRED", "")
+		dataExportsDeleteRouteSessionTokenFlag     = dataExportsDeleteRouteFlags.String("session-token", "", "")
+		dataExportsDeleteRouteApikeyTokenFlag      = dataExportsDeleteRouteFlags.String("apikey-token", "", "")
+		dataExportsDeleteRouteProjectSlugInputFlag = dataExportsDeleteRouteFlags.String("project-slug-input", "", "")
 
 		deploymentsFlags = flag.NewFlagSet("deployments", flag.ContinueOnError)
 
@@ -3913,6 +3965,16 @@ func ParseEndpoint(
 	cliAuthAuthorizeFlags.Usage = cliAuthAuthorizeUsage
 	cliAuthRedeemFlags.Usage = cliAuthRedeemUsage
 
+	dataExportsFlags.Usage = dataExportsUsage
+	dataExportsListOtelDestinationsFlags.Usage = dataExportsListOtelDestinationsUsage
+	dataExportsCreateOtelDestinationFlags.Usage = dataExportsCreateOtelDestinationUsage
+	dataExportsUpdateOtelDestinationFlags.Usage = dataExportsUpdateOtelDestinationUsage
+	dataExportsDeleteOtelDestinationFlags.Usage = dataExportsDeleteOtelDestinationUsage
+	dataExportsListRoutesFlags.Usage = dataExportsListRoutesUsage
+	dataExportsCreateRouteFlags.Usage = dataExportsCreateRouteUsage
+	dataExportsUpdateRouteFlags.Usage = dataExportsUpdateRouteUsage
+	dataExportsDeleteRouteFlags.Usage = dataExportsDeleteRouteUsage
+
 	deploymentsFlags.Usage = deploymentsUsage
 	deploymentsGetDeploymentFlags.Usage = deploymentsGetDeploymentUsage
 	deploymentsGetLatestDeploymentFlags.Usage = deploymentsGetLatestDeploymentUsage
@@ -4598,6 +4660,8 @@ func ParseEndpoint(
 			svcf = chatSessionsFlags
 		case "cli-auth":
 			svcf = cliAuthFlags
+		case "data-exports":
+			svcf = dataExportsFlags
 		case "deployments":
 			svcf = deploymentsFlags
 		case "device-integrations":
@@ -5173,6 +5237,34 @@ func ParseEndpoint(
 
 			case "redeem":
 				epf = cliAuthRedeemFlags
+
+			}
+
+		case "data-exports":
+			switch epn {
+			case "list-otel-destinations":
+				epf = dataExportsListOtelDestinationsFlags
+
+			case "create-otel-destination":
+				epf = dataExportsCreateOtelDestinationFlags
+
+			case "update-otel-destination":
+				epf = dataExportsUpdateOtelDestinationFlags
+
+			case "delete-otel-destination":
+				epf = dataExportsDeleteOtelDestinationFlags
+
+			case "list-routes":
+				epf = dataExportsListRoutesFlags
+
+			case "create-route":
+				epf = dataExportsCreateRouteFlags
+
+			case "update-route":
+				epf = dataExportsUpdateRouteFlags
+
+			case "delete-route":
+				epf = dataExportsDeleteRouteFlags
 
 			}
 
@@ -7431,6 +7523,34 @@ func ParseEndpoint(
 			case "redeem":
 				endpoint = c.Redeem()
 				data, err = cliauthc.BuildRedeemPayload(*cliAuthRedeemBodyFlag)
+			}
+		case "data-exports":
+			c := dataexportsc.NewClient(scheme, host, doer, enc, dec, restore)
+			switch epn {
+			case "list-otel-destinations":
+				endpoint = c.ListOtelDestinations()
+				data, err = dataexportsc.BuildListOtelDestinationsPayload(*dataExportsListOtelDestinationsSessionTokenFlag, *dataExportsListOtelDestinationsApikeyTokenFlag, *dataExportsListOtelDestinationsProjectSlugInputFlag)
+			case "create-otel-destination":
+				endpoint = c.CreateOtelDestination()
+				data, err = dataexportsc.BuildCreateOtelDestinationPayload(*dataExportsCreateOtelDestinationBodyFlag, *dataExportsCreateOtelDestinationSessionTokenFlag, *dataExportsCreateOtelDestinationApikeyTokenFlag, *dataExportsCreateOtelDestinationProjectSlugInputFlag)
+			case "update-otel-destination":
+				endpoint = c.UpdateOtelDestination()
+				data, err = dataexportsc.BuildUpdateOtelDestinationPayload(*dataExportsUpdateOtelDestinationBodyFlag, *dataExportsUpdateOtelDestinationIDFlag, *dataExportsUpdateOtelDestinationSessionTokenFlag, *dataExportsUpdateOtelDestinationApikeyTokenFlag, *dataExportsUpdateOtelDestinationProjectSlugInputFlag)
+			case "delete-otel-destination":
+				endpoint = c.DeleteOtelDestination()
+				data, err = dataexportsc.BuildDeleteOtelDestinationPayload(*dataExportsDeleteOtelDestinationIDFlag, *dataExportsDeleteOtelDestinationSessionTokenFlag, *dataExportsDeleteOtelDestinationApikeyTokenFlag, *dataExportsDeleteOtelDestinationProjectSlugInputFlag)
+			case "list-routes":
+				endpoint = c.ListRoutes()
+				data, err = dataexportsc.BuildListRoutesPayload(*dataExportsListRoutesSessionTokenFlag, *dataExportsListRoutesApikeyTokenFlag, *dataExportsListRoutesProjectSlugInputFlag)
+			case "create-route":
+				endpoint = c.CreateRoute()
+				data, err = dataexportsc.BuildCreateRoutePayload(*dataExportsCreateRouteBodyFlag, *dataExportsCreateRouteSessionTokenFlag, *dataExportsCreateRouteApikeyTokenFlag, *dataExportsCreateRouteProjectSlugInputFlag)
+			case "update-route":
+				endpoint = c.UpdateRoute()
+				data, err = dataexportsc.BuildUpdateRoutePayload(*dataExportsUpdateRouteBodyFlag, *dataExportsUpdateRouteIDFlag, *dataExportsUpdateRouteSessionTokenFlag, *dataExportsUpdateRouteApikeyTokenFlag, *dataExportsUpdateRouteProjectSlugInputFlag)
+			case "delete-route":
+				endpoint = c.DeleteRoute()
+				data, err = dataexportsc.BuildDeleteRoutePayload(*dataExportsDeleteRouteIDFlag, *dataExportsDeleteRouteSessionTokenFlag, *dataExportsDeleteRouteApikeyTokenFlag, *dataExportsDeleteRouteProjectSlugInputFlag)
 			}
 		case "deployments":
 			c := deploymentsc.NewClient(scheme, host, doer, enc, dec, restore)
@@ -12294,6 +12414,216 @@ func cliAuthRedeemUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "cli-auth redeem --body '{\n      \"code\": \"abc123\",\n      \"code_verifier\": \"aaa\"\n   }'")
+}
+
+// dataExportsUsage displays the usage of the data-exports command and its
+// subcommands.
+func dataExportsUsage() {
+	fmt.Fprintln(os.Stderr, `Manage project-scoped OTEL destinations and data export routes.`)
+	fmt.Fprintf(os.Stderr, "Usage:\n    %s [globalflags] data-exports COMMAND [flags]\n\n", os.Args[0])
+	fmt.Fprintln(os.Stderr, "COMMAND:")
+	fmt.Fprintln(os.Stderr, `    list-otel-destinations: List OTEL destinations for the selected project.`)
+	fmt.Fprintln(os.Stderr, `    create-otel-destination: Create an OTEL destination in the selected project.`)
+	fmt.Fprintln(os.Stderr, `    update-otel-destination: Replace an OTEL destination in the selected project.`)
+	fmt.Fprintln(os.Stderr, `    delete-otel-destination: Delete an OTEL destination that is not referenced by an active route.`)
+	fmt.Fprintln(os.Stderr, `    list-routes: List data export routes for the selected project.`)
+	fmt.Fprintln(os.Stderr, `    create-route: Create a data export route in the selected project.`)
+	fmt.Fprintln(os.Stderr, `    update-route: Replace a data export route in the selected project.`)
+	fmt.Fprintln(os.Stderr, `    delete-route: Delete a data export route in the selected project.`)
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Additional help:")
+	fmt.Fprintf(os.Stderr, "    %s data-exports COMMAND --help\n", os.Args[0])
+}
+func dataExportsListOtelDestinationsUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] data-exports list-otel-destinations", os.Args[0])
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `List OTEL destinations for the selected project.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "data-exports list-otel-destinations --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func dataExportsCreateOtelDestinationUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] data-exports create-otel-destination", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Create an OTEL destination in the selected project.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "data-exports create-otel-destination --body '{\n      \"endpoint_url\": \"https://example.com/foo\",\n      \"headers\": [\n         {\n            \"name\": \"abc123\",\n            \"value\": \"abc123\"\n         }\n      ],\n      \"sensitive_data\": \"include\"\n   }' --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func dataExportsUpdateOtelDestinationUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] data-exports update-otel-destination", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -id STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Replace an OTEL destination in the selected project.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "data-exports update-otel-destination --body '{\n      \"endpoint_url\": \"https://example.com/foo\",\n      \"headers\": [\n         {\n            \"name\": \"abc123\",\n            \"value\": \"abc123\"\n         }\n      ],\n      \"sensitive_data\": \"include\"\n   }' --id \"550e8400-e29b-41d4-a716-446655440000\" --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func dataExportsDeleteOtelDestinationUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] data-exports delete-otel-destination", os.Args[0])
+	fmt.Fprint(os.Stderr, " -id STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Delete an OTEL destination that is not referenced by an active route.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "data-exports delete-otel-destination --id \"550e8400-e29b-41d4-a716-446655440000\" --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func dataExportsListRoutesUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] data-exports list-routes", os.Args[0])
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `List data export routes for the selected project.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "data-exports list-routes --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func dataExportsCreateRouteUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] data-exports create-route", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Create a data export route in the selected project.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "data-exports create-route --body '{\n      \"data_source\": \"otel_traces\",\n      \"enabled\": false,\n      \"otel_destination_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }' --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func dataExportsUpdateRouteUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] data-exports update-route", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -id STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Replace a data export route in the selected project.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "data-exports update-route --body '{\n      \"data_source\": \"otel_traces\",\n      \"enabled\": false,\n      \"otel_destination_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }' --id \"550e8400-e29b-41d4-a716-446655440000\" --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func dataExportsDeleteRouteUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] data-exports delete-route", os.Args[0])
+	fmt.Fprint(os.Stderr, " -id STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Delete a data export route in the selected project.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "data-exports delete-route --id \"550e8400-e29b-41d4-a716-446655440000\" --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 // deploymentsUsage displays the usage of the deployments command and its

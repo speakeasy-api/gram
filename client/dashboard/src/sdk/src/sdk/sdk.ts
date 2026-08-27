@@ -20,6 +20,7 @@ import { BusinessMemories } from "./businessmemories.js";
 import { Chat } from "./chat.js";
 import { ChatSessions } from "./chatsessions.js";
 import { CliAuth } from "./cliauth.js";
+import { DataExports } from "./dataexports.js";
 import { Deployments } from "./deployments.js";
 import { DeviceIntegrations } from "./deviceintegrations.js";
 import { Domains } from "./domains.js";
@@ -178,6 +179,10 @@ export class Gram extends ClientSDK {
     return (this._cliAuth ??= new CliAuth(this._options));
   }
 
+  private _dataExports?: DataExports;
+  get dataExports(): DataExports {
+    return (this._dataExports ??= new DataExports(this._options));
+  }
   private _deployments?: Deployments;
   get deployments(): Deployments {
     return (this._deployments ??= new Deployments(this._options));
