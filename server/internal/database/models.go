@@ -1392,6 +1392,7 @@ type OpenrouterApiKey struct {
 	KeyEncrypted   pgtype.Text
 	KeyHash        string
 	MonthlyCredits int64
+	DisableCauses  []string
 	Disabled       bool
 	CreatedAt      pgtype.Timestamptz
 	UpdatedAt      pgtype.Timestamptz

@@ -11,6 +11,48 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const addOpenRouterAPIKeyDisableCause = `-- name: AddOpenRouterAPIKeyDisableCause :one
+UPDATE openrouter_api_keys
+SET disable_causes = CASE
+      WHEN $1::text = ANY(disable_causes) THEN disable_causes
+      ELSE array_append(disable_causes, $1::text)
+    END,
+    updated_at = CASE
+      WHEN $1::text = ANY(disable_causes) THEN updated_at
+      ELSE GREATEST(clock_timestamp(), updated_at + INTERVAL '1 microsecond')
+    END
+WHERE organization_id = $2
+  AND key_type = $3
+  AND deleted IS FALSE
+RETURNING organization_id, key_type, key, key_encrypted, key_hash, monthly_credits, disable_causes, disabled, created_at, updated_at, deleted_at, deleted
+`
+
+type AddOpenRouterAPIKeyDisableCauseParams struct {
+	DisableCause   string
+	OrganizationID string
+	KeyType        string
+}
+
+func (q *Queries) AddOpenRouterAPIKeyDisableCause(ctx context.Context, arg AddOpenRouterAPIKeyDisableCauseParams) (OpenrouterApiKey, error) {
+	row := q.db.QueryRow(ctx, addOpenRouterAPIKeyDisableCause, arg.DisableCause, arg.OrganizationID, arg.KeyType)
+	var i OpenrouterApiKey
+	err := row.Scan(
+		&i.OrganizationID,
+		&i.KeyType,
+		&i.Key,
+		&i.KeyEncrypted,
+		&i.KeyHash,
+		&i.MonthlyCredits,
+		&i.DisableCauses,
+		&i.Disabled,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
 const compareAndSetOpenRouterKeyMonthlyCredits = `-- name: CompareAndSetOpenRouterKeyMonthlyCredits :execrows
 UPDATE openrouter_api_keys
 SET monthly_credits = $1,
@@ -60,7 +102,7 @@ INSERT INTO openrouter_api_keys (
   , $4
   , $5
 )
-RETURNING organization_id, key_type, key, key_encrypted, key_hash, monthly_credits, disabled, created_at, updated_at, deleted_at, deleted
+RETURNING organization_id, key_type, key, key_encrypted, key_hash, monthly_credits, disable_causes, disabled, created_at, updated_at, deleted_at, deleted
 `
 
 type CreateOpenRouterAPIKeyParams struct {
@@ -87,6 +129,7 @@ func (q *Queries) CreateOpenRouterAPIKey(ctx context.Context, arg CreateOpenRout
 		&i.KeyEncrypted,
 		&i.KeyHash,
 		&i.MonthlyCredits,
+		&i.DisableCauses,
 		&i.Disabled,
 		&i.CreatedAt,
 		&i.UpdatedAt,
@@ -98,7 +141,10 @@ func (q *Queries) CreateOpenRouterAPIKey(ctx context.Context, arg CreateOpenRout
 
 const disableOpenRouterAPIKey = `-- name: DisableOpenRouterAPIKey :exec
 UPDATE openrouter_api_keys
-SET disabled = TRUE,
+SET disable_causes = CASE
+      WHEN 'admin_lock' = ANY(disable_causes) THEN disable_causes
+      ELSE array_append(disable_causes, 'admin_lock')
+    END,
     updated_at = clock_timestamp()
 WHERE organization_id = $1
   AND key_type = $2
@@ -119,7 +165,7 @@ func (q *Queries) DisableOpenRouterAPIKey(ctx context.Context, arg DisableOpenRo
 }
 
 const getOpenRouterAPIKey = `-- name: GetOpenRouterAPIKey :one
-SELECT organization_id, key_type, key, key_encrypted, key_hash, monthly_credits, disabled, created_at, updated_at, deleted_at, deleted
+SELECT organization_id, key_type, key, key_encrypted, key_hash, monthly_credits, disable_causes, disabled, created_at, updated_at, deleted_at, deleted
 FROM openrouter_api_keys
 WHERE organization_id = $1
   AND key_type = $2
@@ -141,6 +187,7 @@ func (q *Queries) GetOpenRouterAPIKey(ctx context.Context, arg GetOpenRouterAPIK
 		&i.KeyEncrypted,
 		&i.KeyHash,
 		&i.MonthlyCredits,
+		&i.DisableCauses,
 		&i.Disabled,
 		&i.CreatedAt,
 		&i.UpdatedAt,
@@ -166,21 +213,59 @@ func (q *Queries) LockOpenRouterKeyProvisioning(ctx context.Context, arg LockOpe
 	return err
 }
 
+const removeOpenRouterAPIKeyDisableCause = `-- name: RemoveOpenRouterAPIKeyDisableCause :one
+UPDATE openrouter_api_keys
+SET disable_causes = array_remove(disable_causes, $1::text),
+    updated_at = CASE
+      WHEN $1::text = ANY(disable_causes)
+        THEN GREATEST(clock_timestamp(), updated_at + INTERVAL '1 microsecond')
+      ELSE updated_at
+    END
+WHERE organization_id = $2
+  AND key_type = $3
+  AND deleted IS FALSE
+RETURNING organization_id, key_type, key, key_encrypted, key_hash, monthly_credits, disable_causes, disabled, created_at, updated_at, deleted_at, deleted
+`
+
+type RemoveOpenRouterAPIKeyDisableCauseParams struct {
+	DisableCause   string
+	OrganizationID string
+	KeyType        string
+}
+
+func (q *Queries) RemoveOpenRouterAPIKeyDisableCause(ctx context.Context, arg RemoveOpenRouterAPIKeyDisableCauseParams) (OpenrouterApiKey, error) {
+	row := q.db.QueryRow(ctx, removeOpenRouterAPIKeyDisableCause, arg.DisableCause, arg.OrganizationID, arg.KeyType)
+	var i OpenrouterApiKey
+	err := row.Scan(
+		&i.OrganizationID,
+		&i.KeyType,
+		&i.Key,
+		&i.KeyEncrypted,
+		&i.KeyHash,
+		&i.MonthlyCredits,
+		&i.DisableCauses,
+		&i.Disabled,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
 const updateOpenRouterKey = `-- name: UpdateOpenRouterKey :one
 UPDATE openrouter_api_keys
 SET monthly_credits = $1, key_hash = $2,
-    disabled = disabled AND NOT $3::boolean,
     updated_at = GREATEST(clock_timestamp(), updated_at + INTERVAL '1 microsecond')
-WHERE organization_id = $4
-  AND key_type = $5
+WHERE organization_id = $3
+  AND key_type = $4
   AND deleted IS FALSE
-RETURNING organization_id, key_type, key, key_encrypted, key_hash, monthly_credits, disabled, created_at, updated_at, deleted_at, deleted
+RETURNING organization_id, key_type, key, key_encrypted, key_hash, monthly_credits, disable_causes, disabled, created_at, updated_at, deleted_at, deleted
 `
 
 type UpdateOpenRouterKeyParams struct {
 	MonthlyCredits int64
 	KeyHash        string
-	Reinstate      bool
 	OrganizationID string
 	KeyType        string
 }
@@ -189,7 +274,6 @@ func (q *Queries) UpdateOpenRouterKey(ctx context.Context, arg UpdateOpenRouterK
 	row := q.db.QueryRow(ctx, updateOpenRouterKey,
 		arg.MonthlyCredits,
 		arg.KeyHash,
-		arg.Reinstate,
 		arg.OrganizationID,
 		arg.KeyType,
 	)
@@ -201,6 +285,7 @@ func (q *Queries) UpdateOpenRouterKey(ctx context.Context, arg UpdateOpenRouterK
 		&i.KeyEncrypted,
 		&i.KeyHash,
 		&i.MonthlyCredits,
+		&i.DisableCauses,
 		&i.Disabled,
 		&i.CreatedAt,
 		&i.UpdatedAt,

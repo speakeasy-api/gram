@@ -29,8 +29,35 @@ WHERE organization_id = @organization_id
 -- name: UpdateOpenRouterKey :one
 UPDATE openrouter_api_keys
 SET monthly_credits = @monthly_credits, key_hash = @key_hash,
-    disabled = disabled AND NOT @reinstate::boolean,
     updated_at = GREATEST(clock_timestamp(), updated_at + INTERVAL '1 microsecond')
+WHERE organization_id = @organization_id
+  AND key_type = @key_type
+  AND deleted IS FALSE
+RETURNING *;
+
+-- name: AddOpenRouterAPIKeyDisableCause :one
+UPDATE openrouter_api_keys
+SET disable_causes = CASE
+      WHEN @disable_cause::text = ANY(disable_causes) THEN disable_causes
+      ELSE array_append(disable_causes, @disable_cause::text)
+    END,
+    updated_at = CASE
+      WHEN @disable_cause::text = ANY(disable_causes) THEN updated_at
+      ELSE GREATEST(clock_timestamp(), updated_at + INTERVAL '1 microsecond')
+    END
+WHERE organization_id = @organization_id
+  AND key_type = @key_type
+  AND deleted IS FALSE
+RETURNING *;
+
+-- name: RemoveOpenRouterAPIKeyDisableCause :one
+UPDATE openrouter_api_keys
+SET disable_causes = array_remove(disable_causes, @disable_cause::text),
+    updated_at = CASE
+      WHEN @disable_cause::text = ANY(disable_causes)
+        THEN GREATEST(clock_timestamp(), updated_at + INTERVAL '1 microsecond')
+      ELSE updated_at
+    END
 WHERE organization_id = @organization_id
   AND key_type = @key_type
   AND deleted IS FALSE
@@ -41,7 +68,10 @@ RETURNING *;
 -- the same upstream key and its ceiling. ProvisionAPIKey reads this flag and
 -- refuses to hand the key to a completion.
 UPDATE openrouter_api_keys
-SET disabled = TRUE,
+SET disable_causes = CASE
+      WHEN 'admin_lock' = ANY(disable_causes) THEN disable_causes
+      ELSE array_append(disable_causes, 'admin_lock')
+    END,
     updated_at = clock_timestamp()
 WHERE organization_id = @organization_id
   AND key_type = @key_type

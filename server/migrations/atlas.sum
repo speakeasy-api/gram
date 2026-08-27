@@ -1,4 +1,4 @@
-h1:aI7RQxqZLKGE6m9dNCGeMozWy5tE4uNZyMHZgM/Fj7Q=
+h1:xinBOq+eW3kSdsSeGYMwSS/0LSywsKPmmEMSjMWGDOw=
 20250502122425_initial-tables.sql h1:Hu3O60/bB4fjZpUay8FzyOjw6vngp087zU+U/wVKn7k=
 20250502130852_initial-indexes.sql h1:oYbnwi9y9PPTqu7uVbSPSALhCY8XF3rv03nDfG4b7mo=
 20250502154250_relax-http-security-fields.sql h1:0+OYIDq7IHmx7CP5BChVwfpF2rOSrRDxnqawXio2EVo=
@@ -369,3 +369,4 @@ h1:aI7RQxqZLKGE6m9dNCGeMozWy5tE4uNZyMHZgM/Fj7Q=
 20260825221933_gcp-iam-credentials-add-skip-project-verification.sql h1:DZOWCldTGLdSq4DlHGhu2wnFhLiqVffCgOKC8LoGzkE=
 20260826163849_drop-mcp-server-authorization-exclusivity.sql h1:kTyvUQ+UXxaRY6PirpiwKX23Uq1VvLn5j5LxOHUXu3g=
 20260826174212_add-mcp-servers-user-session-issuer-index.sql h1:bV8x2GJNJerKXp7s1VyyO0GBQygI7ZPXwSdDbhrIftE=
+20260827023219_openrouter-disable-causes.sql h1:PoWmvvFTmKpFT4l5T5BVpfHMUnr/AVDaQjeWPg2oOiA=

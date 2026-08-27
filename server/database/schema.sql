@@ -2326,7 +2326,8 @@ CREATE TABLE IF NOT EXISTS openrouter_api_keys (
   key_encrypted TEXT,
   key_hash TEXT NOT NULL,
   monthly_credits BIGINT NOT NULL DEFAULT 0,
-  disabled BOOLEAN NOT NULL DEFAULT FALSE,
+  disable_causes TEXT[] NOT NULL DEFAULT '{}'::text[],
+  disabled BOOLEAN NOT NULL GENERATED ALWAYS AS (cardinality(disable_causes) > 0) stored,
 
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),

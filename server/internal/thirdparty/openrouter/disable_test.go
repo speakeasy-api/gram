@@ -105,6 +105,51 @@ func newDisableTestProvisioner(t *testing.T, orgID string) (*OpenRouter, *disabl
 	return provisioner, upstream, repo.New(conn)
 }
 
+func TestOpenRouterDisableCausesAreASet(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	orgID := "org-" + uuid.NewString()[:8]
+	provisioner, _, queries := newDisableTestProvisioner(t, orgID)
+
+	_, err := provisioner.ProvisionAPIKey(ctx, orgID, KeyTypeChat)
+	require.NoError(t, err)
+
+	added, err := queries.AddOpenRouterAPIKeyDisableCause(ctx, repo.AddOpenRouterAPIKeyDisableCauseParams{
+		OrganizationID: orgID,
+		KeyType:        string(KeyTypeChat),
+		DisableCause:   string(DisableCauseAdminLock),
+	})
+	require.NoError(t, err)
+	require.Equal(t, []string{"admin_lock"}, added.DisableCauses)
+	require.True(t, added.Disabled)
+
+	addedAgain, err := queries.AddOpenRouterAPIKeyDisableCause(ctx, repo.AddOpenRouterAPIKeyDisableCauseParams{
+		OrganizationID: orgID,
+		KeyType:        string(KeyTypeChat),
+		DisableCause:   string(DisableCauseAdminLock),
+	})
+	require.NoError(t, err)
+	require.Equal(t, []string{"admin_lock"}, addedAgain.DisableCauses)
+
+	withTrial, err := queries.AddOpenRouterAPIKeyDisableCause(ctx, repo.AddOpenRouterAPIKeyDisableCauseParams{
+		OrganizationID: orgID,
+		KeyType:        string(KeyTypeChat),
+		DisableCause:   string(DisableCauseTrialDemotion),
+	})
+	require.NoError(t, err)
+	require.ElementsMatch(t, []string{"admin_lock", "trial_demotion"}, withTrial.DisableCauses)
+
+	withoutTrial, err := queries.RemoveOpenRouterAPIKeyDisableCause(ctx, repo.RemoveOpenRouterAPIKeyDisableCauseParams{
+		OrganizationID: orgID,
+		KeyType:        string(KeyTypeChat),
+		DisableCause:   string(DisableCauseTrialDemotion),
+	})
+	require.NoError(t, err)
+	require.Equal(t, []string{"admin_lock"}, withoutTrial.DisableCauses)
+	require.True(t, withoutTrial.Disabled)
+}
+
 func TestDisableAPIKey_DisablesKeyUpstream(t *testing.T) {
 	t.Parallel()
 
@@ -295,7 +340,6 @@ func TestRefreshAPIKeyLimit_RejectsChangedUpstreamIdentity(t *testing.T) {
 		KeyType:        string(KeyTypeChat),
 		MonthlyCredits: 100,
 		KeyHash:        "hash-stored",
-		Reinstate:      false,
 	})
 	require.NoError(t, err)
 
