@@ -33071,6 +33071,7 @@ paths:
               - cursor
               - codex
               - opencode
+              - copilot
               - openclaw
             type: string
         - allowEmptyValue: true

@@ -38,6 +38,55 @@ const CLAUDE_CODE_SETTINGS_DOCS_URL =
 
 const CURSOR_DASHBOARD_URL = "https://cursor.com/dashboard";
 
+/**
+ * Downloads the server-generated observability plugin ZIP. opencode and copilot
+ * differ only in the `platform` query value and the fallback filename.
+ */
+function useObservabilityPluginDownload(
+  platform: string,
+  fallbackName: string,
+) {
+  const { fetch: authFetch } = useFetcher();
+  const [isDownloading, setIsDownloading] = useState(false);
+
+  const download = async () => {
+    setIsDownloading(true);
+    try {
+      const resp = await authFetch(
+        `/rpc/plugins.downloadObservabilityPlugin?platform=${platform}`,
+        {},
+      );
+      if (!resp.ok) {
+        toast.error(
+          resp.status === 403
+            ? "Downloading the observability plugin requires an org admin."
+            : "Failed to download observability plugin",
+        );
+        return;
+      }
+      const blob = await resp.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download =
+        resp.headers
+          .get("Content-Disposition")
+          ?.match(/filename="(.+)"/)?.[1] ?? fallbackName;
+      a.click();
+      // Revoke on the next task: some browsers kick the blob download off
+      // asynchronously and a same-task revoke aborts it.
+      setTimeout(() => URL.revokeObjectURL(url), 0);
+    } catch (err) {
+      toast.error("Failed to download observability plugin");
+      console.error("observability plugin download failed", err);
+    } finally {
+      setIsDownloading(false);
+    }
+  };
+
+  return { isDownloading, download };
+}
+
 type ContentProps = {
   repoOwner: string;
   repoName: string;
@@ -626,8 +675,8 @@ function CodexInstallContent({
  * hosted install page.
  */
 function OpencodeInstallContent(): JSX.Element {
-  const { fetch: authFetch } = useFetcher();
-  const [isDownloading, setIsDownloading] = useState(false);
+  const { isDownloading, download: handleDownloadPlugin } =
+    useObservabilityPluginDownload("opencode", "observability-opencode.zip");
 
   const installBinary = `curl -fsSL https://raw.githubusercontent.com/speakeasy-api/gram/main/hooks/install.sh | sh`;
 
@@ -647,39 +696,6 @@ speakeasy-hooks install --provider=opencode --dir=. --project=your-project-slug`
     }
   }
 }`;
-
-  const handleDownloadPlugin = async () => {
-    setIsDownloading(true);
-    try {
-      const resp = await authFetch(
-        "/rpc/plugins.downloadObservabilityPlugin?platform=opencode",
-        {},
-      );
-      if (!resp.ok) {
-        toast.error(
-          resp.status === 403
-            ? "Downloading the observability plugin requires an org admin."
-            : "Failed to download observability plugin",
-        );
-        return;
-      }
-      const blob = await resp.blob();
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download =
-        resp.headers
-          .get("Content-Disposition")
-          ?.match(/filename="(.+)"/)?.[1] ?? "observability-opencode.zip";
-      a.click();
-      URL.revokeObjectURL(url);
-    } catch (err) {
-      toast.error("Failed to download observability plugin");
-      console.error("observability plugin download failed", err);
-    } finally {
-      setIsDownloading(false);
-    }
-  };
 
   return (
     <div className="min-w-0 space-y-6">
@@ -758,6 +774,83 @@ speakeasy-hooks install --provider=opencode --dir=. --project=your-project-slug`
           {mcpConfig}
         </CodeBlock>
       </div>
+    </div>
+  );
+}
+
+/**
+ * GitHub Copilot install. Same server-generated observability ZIP as opencode
+ * (plugins.downloadObservabilityPlugin?platform=copilot) — plugin.json +
+ * hooks/hooks.json + speakeasy.json + bootstrappers, with a freshly-minted
+ * hooks-scoped key already embedded. Exported so the hooks setup dialog can
+ * show the same instructions without a second copy of them.
+ */
+export function CopilotInstallContent(): JSX.Element {
+  const { isDownloading, download: handleDownloadPlugin } =
+    useObservabilityPluginDownload("copilot", "observability-copilot.zip");
+
+  return (
+    <div className="min-w-0 space-y-6">
+      {/* ── Quick install ─────────────────────────────────────────────────── */}
+      <div>
+        <h3 className="mb-2 text-sm font-semibold">Quick install</h3>
+        <p className="text-muted-foreground mb-3 text-sm">
+          Download the Gram observability plugin as a ZIP — a self-contained
+          Copilot plugin with a hooks-scoped API key already embedded (no CLI,
+          no key to export).
+        </p>
+        <Button
+          variant="secondary"
+          size="sm"
+          disabled={isDownloading}
+          onClick={() => void handleDownloadPlugin()}
+          className="inline-flex items-center gap-2"
+        >
+          <Download className="size-4" />
+          {isDownloading ? "Downloading…" : "Download Plugin"}
+        </Button>
+        <p className="text-muted-foreground mt-2 text-xs">
+          Then extract and load it:{" "}
+          <code className="bg-muted px-1 py-0.5">
+            unzip observability-copilot.zip -d gram-hooks && copilot
+            --plugin-dir gram-hooks
+          </code>
+        </p>
+      </div>
+
+      <div className="border-t" />
+
+      {/* ── Caveats ───────────────────────────────────────────────────────── */}
+      <div className="space-y-3">
+        <p className="text-muted-foreground text-xs font-semibold tracking-wide uppercase">
+          Before you install
+        </p>
+        <p className="text-muted-foreground text-sm">
+          Hooks run in{" "}
+          <span className="text-foreground font-medium">Copilot CLI</span> only.
+          MCP servers and skills from your Gram plugin also load in VS Code and
+          the Copilot app, but those surfaces never fire hooks — so no
+          telemetry, spend gating, or policy enforcement there.
+        </p>
+        <p className="text-muted-foreground text-sm">
+          Copilot stops running a tool's hook chain at the first deny. If
+          another plugin denies a tool call before Gram's entry runs, that call
+          is never reported.
+        </p>
+      </div>
+
+      <RelatedLinks
+        links={[
+          {
+            href: "https://docs.github.com/en/copilot/reference/hooks-reference",
+            label: "Hooks Reference",
+          },
+          {
+            href: "https://docs.github.com/en/copilot/reference/copilot-cli-reference/cli-plugin-reference",
+            label: "Plugin Reference",
+          },
+        ]}
+      />
     </div>
   );
 }
@@ -1027,6 +1120,7 @@ export function InstallInstructionsDialog({
                 />
               )}
               {selected === "opencode" && <OpencodeInstallContent />}
+              {selected === "copilot" && <CopilotInstallContent />}
             </div>
           </div>
         </div>

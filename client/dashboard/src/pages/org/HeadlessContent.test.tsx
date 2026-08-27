@@ -49,6 +49,7 @@ describe("HeadlessContent", () => {
       "OpenAI Codex",
       "opencode",
       "OpenClaw",
+      "GitHub Copilot",
     ]);
   });
 });
