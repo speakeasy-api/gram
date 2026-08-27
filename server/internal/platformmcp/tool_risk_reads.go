@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"maps"
 
 	"github.com/google/jsonschema-go/jsonschema"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -124,19 +125,20 @@ func riskReadToolCall[Out any](ctx context.Context, call func(principal Principa
 }
 
 func riskListSchema(withPolicy bool) *jsonschema.Schema {
-	properties := projectSelectorProperties()
-	properties["cursor"] = &jsonschema.Schema{Type: "string", Description: "Opaque cursor returned by the previous page."}
-	properties["limit"] = &jsonschema.Schema{Type: "integer", Minimum: new(float64(1)), Maximum: new(float64(riskReadPageSize)), Description: "Page size; defaults to 50 and cannot exceed 50."}
+	properties := map[string]*jsonschema.Schema{
+		"cursor": {Type: "string", Description: "Opaque cursor returned by the previous page."},
+		"limit":  {Type: "integer", Minimum: new(float64(1)), Maximum: new(float64(riskReadPageSize)), Description: "Page size; defaults to 50 and cannot exceed 50."},
+	}
 	if withPolicy {
 		properties["policy_id"] = uuidSchema("Optional exact policy ID filter.")
 	}
-	return closedObject(properties, nil)
+	return projectSelectorSchema(properties, nil)
 }
 
 func riskGetPolicySchema() *jsonschema.Schema {
-	properties := projectSelectorProperties()
-	properties["policy_id"] = uuidSchema("Exact policy ID to read.")
-	return closedObject(properties, []string{"policy_id"})
+	return projectSelectorSchema(map[string]*jsonschema.Schema{
+		"policy_id": uuidSchema("Exact policy ID to read."),
+	}, []string{"policy_id"})
 }
 
 func createRiskPolicySchema(catalog policycatalog.Catalog) *jsonschema.Schema {
@@ -251,11 +253,14 @@ func detectionScopesSchema(catalog policycatalog.Catalog) *jsonschema.Schema {
 	return arraySchema(scope, 0, true)
 }
 
-func projectSelectorProperties() map[string]*jsonschema.Schema {
-	return map[string]*jsonschema.Schema{
-		"project_id":   uuidSchema("Optional exact project ID. Omit both project selectors to use the literal default project."),
-		"project_slug": stringSchema("Optional exact project slug. Omit both project selectors to use the literal default project.", 1, 0),
-	}
+func projectSelectorSchema(common map[string]*jsonschema.Schema, required []string) *jsonschema.Schema {
+	properties := make(map[string]*jsonschema.Schema, len(common)+2)
+	maps.Copy(properties, common)
+	properties["project_id"] = uuidSchema("Optional exact project ID. Omit both project selectors to use the literal default project.")
+	properties["project_slug"] = stringSchema("Optional exact project slug. Omit both project selectors to use the literal default project.", 1, 128)
+	schema := closedObject(properties, required)
+	schema.Not = &jsonschema.Schema{Required: []string{"project_id", "project_slug"}}
+	return schema
 }
 
 func closedObject(properties map[string]*jsonschema.Schema, required []string) *jsonschema.Schema {
@@ -278,7 +283,7 @@ func uuidSchema(description string) *jsonschema.Schema {
 }
 func catalogEnumSchema(catalog policycatalog.Catalog, values []string) *jsonschema.Schema {
 	if catalog.Schema == "" {
-		return stringSchema("Pinned catalog value.", 1, 0)
+		return stringSchema("Pinned catalog value.", 1, 256)
 	}
 	return enumSchema(values...)
 }

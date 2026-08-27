@@ -361,7 +361,7 @@ func (s *RiskReadService) policyDetail(policy policycore.Policy) RiskPolicyDetai
 		RiskPolicySummary:      s.policySummary(policy),
 		PresidioEntities:       allowlisted(policy.PresidioEntities, s.catalog.PresidioEntities),
 		PresidioScoreThreshold: policy.PresidioScoreThreshold,
-		ApprovedEmailDomains:   slices.Clone(policy.ApprovedEmailDomains),
+		ApprovedEmailDomains:   append([]string{}, policy.ApprovedEmailDomains...),
 		DisabledRules:          allowlisted(policy.DisabledRules, s.catalog.DisabledRules),
 		MessageTypes:           allowlisted(policy.MessageTypes, s.catalog.PolicyMessageTypes),
 		DetectionScopes:        detectionScopes,
@@ -489,10 +489,13 @@ func (s *RiskReadService) exclusionSummary(exclusion exclusioncore.Exclusion) Ri
 		}
 	}
 	if exclusion.SourceFilter != "" {
-		if slices.Contains(s.catalog.Sources, exclusion.SourceFilter) {
-			result.SourceFilter = exclusion.SourceFilter
-		} else {
+		switch {
+		case !slices.Contains(s.catalog.Sources, exclusion.SourceFilter):
 			unsupported = append(unsupported, "unknown_detector_value")
+		case exclusion.MatchType == "entity_type" && exclusion.SourceFilter != policycatalog.PresidioSource:
+			unsupported = append(unsupported, "unsupported_source_filter")
+		default:
+			result.SourceFilter = exclusion.SourceFilter
 		}
 	}
 	slices.Sort(unsupported)

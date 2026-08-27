@@ -227,6 +227,12 @@ func hideProjectFields(schema map[string]any) {
 			}
 		}
 	}
+	if nested, ok := schema["not"].(map[string]any); ok {
+		hideProjectFields(nested)
+		if required, ok := nested["required"].([]any); ok && len(required) == 0 {
+			delete(schema, "not")
+		}
+	}
 }
 
 // projectFields reports which project arguments a tool declares, including in

@@ -63,6 +63,25 @@ func TestDefaultableTargetPolicyInjectsAssistantProject(t *testing.T) {
 	require.Contains(t, schema.Properties, "cursor")
 }
 
+func TestTargetPolicyRemovesProjectSelectorExclusionFromAssistantSchema(t *testing.T) {
+	t.Parallel()
+
+	tool := Tool{descriptor: platformmcp.Descriptor{
+		Name:        "list_risk_policies",
+		InputSchema: []byte(`{"type":"object","properties":{"project_id":{"type":"string"},"project_slug":{"type":"string"},"cursor":{"type":"string"}},"not":{"required":["project_id","project_slug"]}}`),
+		Meta:        platformmcp.ToolMeta{ProjectScope: platformmcp.ProjectScopeDefaultable},
+	}}
+
+	var schema map[string]any
+	require.NoError(t, json.Unmarshal(tool.assistantInputSchema(), &schema))
+	properties, ok := schema["properties"].(map[string]any)
+	require.True(t, ok)
+	require.NotContains(t, properties, "project_id")
+	require.NotContains(t, properties, "project_slug")
+	require.Contains(t, properties, "cursor")
+	require.NotContains(t, schema, "not", "project-only exclusion must not reject every assistant call after injection fields are hidden")
+}
+
 func TestTargetPolicyHandlesOneOfProjectSelectors(t *testing.T) {
 	t.Parallel()
 

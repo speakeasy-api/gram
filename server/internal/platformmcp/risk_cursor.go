@@ -53,8 +53,9 @@ func (c *riskCursorCodec) Encode(cursor riskCursor) (string, error) {
 }
 
 func (c *riskCursorCodec) Decode(value string, principal Principal, kind string, projectID, policyID uuid.UUID) (riskCursor, error) {
+	incompleteConnection := (principal.ConnectionID == "") != (principal.Generation == "")
 	binding := principalCursorBinding(principal)
-	if c == nil || len(c.key) == 0 || value == "" || principal.OrganizationID == "" || binding == "" || kind == "" || projectID == uuid.Nil {
+	if c == nil || len(c.key) == 0 || value == "" || principal.OrganizationID == "" || incompleteConnection || binding == "" || kind == "" || projectID == uuid.Nil {
 		return riskCursor{}, ErrRiskCursorInvalid
 	}
 	token, err := base64.RawURLEncoding.DecodeString(value)

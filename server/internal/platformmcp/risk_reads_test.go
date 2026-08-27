@@ -121,6 +121,11 @@ func TestRiskReadCursorBindingAndPagination(t *testing.T) {
 	require.ErrorIs(t, err, ErrRiskCursorInvalid)
 	_, err = service.ListPolicies(t.Context(), principal, ListRiskPoliciesInput{Limit: 2, Cursor: first.NextCursor + "tampered"})
 	require.ErrorIs(t, err, ErrRiskCursorInvalid)
+
+	incomplete := principal
+	incomplete.ConnectionID = ""
+	_, err = service.ListPolicies(t.Context(), incomplete, ListRiskPoliciesInput{Limit: 2, Cursor: first.NextCursor})
+	require.ErrorIs(t, err, ErrRiskCursorInvalid)
 }
 
 func TestRiskReadProjectionsOmitSensitivePolicyFields(t *testing.T) {
@@ -140,6 +145,8 @@ func TestRiskReadProjectionsOmitSensitivePolicyFields(t *testing.T) {
 	output, err := service.GetPolicy(t.Context(), testRiskPrincipal("user"), GetRiskPolicyInput{ProjectSlug: "project", PolicyID: policy.ID.String()})
 	require.NoError(t, err)
 	require.Equal(t, &prompt, output.Policy.Prompt)
+	require.Empty(t, output.Policy.ApprovedEmailDomains)
+	require.NotNil(t, output.Policy.ApprovedEmailDomains)
 	require.Empty(t, output.Policy.Action)
 	require.ElementsMatch(t, []string{"custom_rules", "model_config", "raw_scope", "targeted_audience", "unknown_detector_value", "unsupported_action"}, output.Policy.Compatibility.UnsupportedFields)
 
@@ -161,16 +168,19 @@ func TestRiskExclusionProjectionRedactsExactAndRegex(t *testing.T) {
 		{ID: uuid.New(), ProjectID: project.ID, OrganizationID: "<ORG_ID>", MatchType: "exact", MatchValue: "sensitive-exact", Enabled: true, CreatedAt: now, UpdatedAt: now},
 		{ID: uuid.New(), ProjectID: project.ID, OrganizationID: "<ORG_ID>", MatchType: "regex", MatchValue: "^sensitive.*", Enabled: false, CreatedAt: now.Add(-time.Minute), UpdatedAt: now},
 		{ID: uuid.New(), ProjectID: project.ID, OrganizationID: "<ORG_ID>", MatchType: "source", MatchValue: "gitleaks", Enabled: true, CreatedAt: now.Add(-2 * time.Minute), UpdatedAt: now},
+		{ID: uuid.New(), ProjectID: project.ID, OrganizationID: "<ORG_ID>", MatchType: "entity_type", MatchValue: "EMAIL_ADDRESS", SourceFilter: "gitleaks", Enabled: true, CreatedAt: now.Add(-3 * time.Minute), UpdatedAt: now},
 	}
 	service := testRiskReadService(t, &stubRiskProjects{project: project, expected: []riskProjectCall{{organizationID: "<ORG_ID>", projectID: project.ID.String()}}}, &stubRiskPolicies{}, &stubRiskExclusions{exclusions: exclusions})
 	output, err := service.ListExclusions(t.Context(), testRiskPrincipal("user"), ListRiskExclusionsInput{ProjectID: project.ID.String()})
 	require.NoError(t, err)
-	require.Len(t, output.Exclusions, 3)
+	require.Len(t, output.Exclusions, 4)
 	require.Empty(t, output.Exclusions[0].MatchValue)
 	require.NotEmpty(t, output.Exclusions[0].MatchFingerprint)
 	require.Equal(t, len([]rune("sensitive-exact")), output.Exclusions[0].MatchLength)
 	require.Contains(t, output.Exclusions[1].Compatibility.UnsupportedFields, "legacy_regex")
 	require.Equal(t, "gitleaks", output.Exclusions[2].MatchValue)
+	require.Empty(t, output.Exclusions[3].SourceFilter)
+	require.Contains(t, output.Exclusions[3].Compatibility.UnsupportedFields, "unsupported_source_filter")
 
 	encoded, err := json.Marshal(output)
 	require.NoError(t, err)
@@ -248,6 +258,8 @@ func TestUnavailableRiskToolRegistrationSurvivesCatalogFailure(t *testing.T) {
 
 	_, err = create.Invoke(ContextWithPrincipal(t.Context(), testRiskPrincipal("user")), json.RawMessage(`{"project_slug":"project","policy_type":"standard","name":"policy","enabled":true,"sources":["gitleaks"],"idempotency_key":"key","unknown":true}`))
 	require.ErrorContains(t, err, "arguments do not match the tool schema")
+	_, err = create.Invoke(ContextWithPrincipal(t.Context(), testRiskPrincipal("user")), json.RawMessage(`{"project_slug":"project","policy_type":"standard","name":"policy","enabled":true,"sources":["`+strings.Repeat("x", 257)+`"],"idempotency_key":"key"}`))
+	require.ErrorContains(t, err, "arguments do not match the tool schema")
 
 	for _, test := range []struct {
 		name      string
@@ -290,8 +302,12 @@ func TestRiskToolRegistrationAndStableStubs(t *testing.T) {
 		}
 	}
 
+	listPolicies := descriptorByName(t, reg, "list_risk_policies")
+	_, err := listPolicies.Invoke(ContextWithPrincipal(t.Context(), testRiskPrincipal("user")), json.RawMessage(`{"project_id":"11111111-1111-4111-8111-111111111111","project_slug":"project"}`))
+	require.ErrorContains(t, err, "arguments do not match the tool schema")
+
 	createPolicy := descriptorByName(t, reg, "create_risk_policy")
-	_, err := createPolicy.Invoke(ContextWithPrincipal(t.Context(), testRiskPrincipal("user")), json.RawMessage(`{"project_slug":"project","policy_type":"standard","name":"policy","enabled":true,"sources":["presidio"],"presidio_entities":["not-pinned"],"idempotency_key":"key"}`))
+	_, err = createPolicy.Invoke(ContextWithPrincipal(t.Context(), testRiskPrincipal("user")), json.RawMessage(`{"project_slug":"project","policy_type":"standard","name":"policy","enabled":true,"sources":["presidio"],"presidio_entities":["not-pinned"],"idempotency_key":"key"}`))
 	require.ErrorContains(t, err, "arguments do not match the tool schema")
 	domains := make([]string, 51)
 	for i := range domains {
