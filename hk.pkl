@@ -35,7 +35,12 @@ local linters = new Mapping<String, Step> {
     fix = "gofmt -s -w {{files}}"
   }
   ["gofix"] {
-    batch = true
+    // Not batched, unlike the formatters above. `batch = true` splits the file
+    // list across parallel invocations, which pays off for per-file tools. This
+    // step is package-scoped: `go:fix` maps each file to its enclosing package
+    // and runs `go fix` on that package, type-checking it and its full
+    // dependency graph. Batching therefore turns N files in one package into N
+    // concurrent cold builds of the same graph, each forking its own compilers.
     glob = "**/*.go"
     exclude = "**/testdata/**"
     fix = "mise run -q go:fix {{files}}"
