@@ -53,7 +53,7 @@ const PLATFORM_MCP_PLUGIN_NAME = "platform-mcp";
 // OAuth time — so the marketplace coordinates are fixed rather than resolved
 // per organization.
 const PUBLIC_MARKETPLACE_REPO_URL =
-  "https://github.com/speakeasy-api/platform-mcp";
+  "https://github.com/speakeasy-api/marketplace";
 const PUBLIC_MARKETPLACE_NAME = "speakeasy";
 
 // Whether a reviewed plugin package exists for this agent at all. Both packaged

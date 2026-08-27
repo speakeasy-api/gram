@@ -1,4 +1,4 @@
-name: Publish Platform MCP Marketplace
+name: Publish Speakeasy Marketplace
 
 on:
   push:
@@ -9,18 +9,18 @@ on:
       - "server/internal/plugins/platform_mcp_skills/**"
       - "server/internal/plugins/agent_plugins.go"
       - "server/cmd/gram/render_platform_mcp.go"
-      - ".github/workflows/publish-platform-mcp-marketplace.yaml"
+      - ".github/workflows/publish-marketplace.yaml"
   workflow_dispatch:
 
 permissions:
   contents: read
 
 concurrency:
-  group: publish-platform-mcp-marketplace
+  group: publish-marketplace
   cancel-in-progress: false
 
 env:
-  TARGET_REPO: speakeasy-api/platform-mcp
+  TARGET_REPO: speakeasy-api/marketplace
   TARGET_BRANCH: main
   SERVER_URL: https://app.getgram.ai
 
@@ -36,7 +36,7 @@ jobs:
           go-version-file: "go.mod"
           cache: false
 
-      - name: Render the public Platform MCP marketplace
+      - name: Render the public marketplace
         working-directory: server
         env:
           # run_number is strictly monotonic per workflow, so every publish
@@ -57,7 +57,7 @@ jobs:
           app-id: ${{ secrets.GRAM_BOT_APP_ID }}
           private-key: ${{ secrets.GRAM_BOT_PRIVATE_KEY }}
           owner: speakeasy-api
-          repositories: platform-mcp
+          repositories: marketplace
 
       - name: Publish to the public marketplace repo
         env:
@@ -75,8 +75,11 @@ jobs:
           git config user.email "gram-bot[bot]@users.noreply.github.com"
           git checkout -B "$TARGET_BRANCH"
 
-          # The render is the complete tree: drop everything tracked first so
-          # removals propagate, then lay the render down.
+          # The render is the complete tree, so everything tracked is dropped
+          # first and removals propagate. That is only safe while every file in
+          # the target repository comes from this render — a plugin added there
+          # by any other route would be deleted on the next publish. Add new
+          # first-party plugins to the generator, not to the repository.
           git rm -rq --ignore-unmatch .
           cp -R "$RUNNER_TEMP/render/." .
 
@@ -86,5 +89,5 @@ jobs:
             exit 0
           fi
 
-          git commit -m "chore: publish Platform MCP marketplace (gram@${GITHUB_SHA:0:12})"
+          git commit -m "chore: publish marketplace (gram@${GITHUB_SHA:0:12})"
           git push origin "$TARGET_BRANCH"

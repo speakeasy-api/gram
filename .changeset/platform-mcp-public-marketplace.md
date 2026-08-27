@@ -2,7 +2,7 @@
 "server": minor
 ---
 
-Publishes the first-party Platform MCP package from one public marketplace repository (`speakeasy-api/platform-mcp`) rather than injecting it into every organization's private plugin repository.
+Publishes the first-party Platform MCP package from Speakeasy's public plugin marketplace (`speakeasy-api/marketplace`) rather than injecting it into every organization's private plugin repository. Registering that marketplace once also picks up any first-party plugin published there later.
 
 The package never carried organization identity or credentials — it authenticates through its own OAuth flow — so a single global render serves every organization. A CI job renders the tree and pushes it on each change; installs become the same two commands for everyone (`/plugin marketplace add …`, `/plugin install platform-mcp@speakeasy`), and OpenCode gains an install route it never had.
 

@@ -15,7 +15,7 @@ import (
 func newRenderPlatformMCPCommand() *cli.Command {
 	return &cli.Command{
 		Name:  "render-platform-mcp",
-		Usage: "Render the public Platform MCP marketplace tree (speakeasy-api/platform-mcp) into a directory",
+		Usage: "Render the public Speakeasy marketplace tree (speakeasy-api/marketplace) into a directory",
 		Flags: []cli.Flag{
 			&cli.StringFlag{
 				Name:  "server-url",

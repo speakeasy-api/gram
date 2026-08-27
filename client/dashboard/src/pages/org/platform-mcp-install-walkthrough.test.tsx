@@ -82,7 +82,7 @@ describe("PlatformMCPInstallWalkthrough", () => {
 
     expect(
       screen.getByText(
-        "/plugin marketplace add https://github.com/speakeasy-api/platform-mcp",
+        "/plugin marketplace add https://github.com/speakeasy-api/marketplace",
       ),
     ).toBeTruthy();
     expect(

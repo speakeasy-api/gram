@@ -6,19 +6,21 @@ import (
 )
 
 // PublicMarketplaceName is the marketplace identifier users type when
-// installing the first-party package (`platform-mcp@speakeasy`). It is fixed:
-// the public repository is a single global artifact, not an org-derived one.
+// installing a first-party plugin (`platform-mcp@speakeasy`). It is fixed: the
+// public repository is a single global artifact, not an org-derived one, and it
+// is the umbrella every first-party plugin is published under so registering it
+// once carries future plugins too.
 const PublicMarketplaceName = "speakeasy"
 
 // PublicMarketplaceRepoURL is the canonical clone URL every client registers.
-const PublicMarketplaceRepoURL = "https://github.com/speakeasy-api/platform-mcp"
+const PublicMarketplaceRepoURL = "https://github.com/speakeasy-api/marketplace"
 
 const publicMarketplaceDisplayName = "Speakeasy"
 
 const publicMarketplaceOwnerEmail = "support@speakeasy.com"
 
 // PublicPlatformMCPFiles renders the complete file tree of the public
-// speakeasy-api/platform-mcp repository: the five per-client Platform MCP
+// speakeasy-api/marketplace repository: the five per-client Platform MCP
 // package roots plus the Claude, Cursor, and Codex marketplace manifests that
 // advertise them. Unlike the per-organization marketplaces, this tree carries
 // no organization identity and no credentials — the package authenticates
@@ -157,11 +159,12 @@ func publicMarketplaceReadme() []byte {
 	var b strings.Builder
 	b.WriteString("# " + platformMCPDisplayName + "\n\n")
 	b.WriteString(platformMCPDescription + "\n\n")
-	b.WriteString("This repository is the public plugin marketplace for the first-party Speakeasy ")
-	b.WriteString("[Platform MCP](https://www.speakeasy.com/product/gram) package. It contains no credentials: ")
-	b.WriteString("the package authenticates against your organization through OAuth on first use, and installing ")
-	b.WriteString("it grants no access on its own.\n\n")
-	b.WriteString("> **Auto-generated.** Every file here is rendered from the Speakeasy control plane and force-pushed on each release. Manual edits are discarded.\n\n")
+	b.WriteString("This repository is Speakeasy's public plugin marketplace. Registering it once makes every ")
+	b.WriteString("plugin Speakeasy publishes available in your agent, including ones added later. It contains no ")
+	b.WriteString("credentials: plugins authenticate against your organization through OAuth on first use, and ")
+	b.WriteString("installing one grants no access on its own.\n\n")
+	b.WriteString("It currently ships [Platform MCP](https://www.speakeasy.com/product/gram).\n\n")
+	b.WriteString("> **Auto-generated.** Every file here is rendered from the Speakeasy control plane and replaced on each release. Manual edits are discarded.\n\n")
 
 	b.WriteString("## Claude Code\n\n")
 	b.WriteString("```\n")
