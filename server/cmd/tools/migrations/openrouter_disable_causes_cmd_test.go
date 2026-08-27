@@ -2,9 +2,13 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"testing"
 
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/cmd/tools/migrations/openrouterdisablecauses"
@@ -37,9 +41,14 @@ func TestParseOpenRouterDisableCausesFlagsRequiresExplicitSafeModes(t *testing.T
 	require.ErrorContains(t, err, "exactly one mode")
 	_, err = parseOpenRouterDisableCausesFlags([]string{"-apply"}, getenv)
 	require.ErrorContains(t, err, "environment")
-	_, err = parseOpenRouterDisableCausesFlags([]string{"-apply", "-environment=production"}, getenv)
+	_, err = parseOpenRouterDisableCausesFlags([]string{"-apply", "-environment=staging"}, getenv)
+	require.ErrorContains(t, err, "confirm-environment")
+	_, err = parseOpenRouterDisableCausesFlags([]string{"-apply", "-environment=production", "-confirm-environment=production"}, getenv)
 	require.ErrorContains(t, err, "confirm-production")
-	_, err = parseOpenRouterDisableCausesFlags([]string{"-manual-override", "-environment=production", "-confirm-production=production"}, getenv)
+	cfg, err := parseOpenRouterDisableCausesFlags([]string{"-apply", "-environment=staging", "-confirm-environment=staging"}, getenv)
+	require.NoError(t, err)
+	require.Equal(t, openrouterdisablecauses.ModeApply, cfg.mode)
+	_, err = parseOpenRouterDisableCausesFlags([]string{"-manual-override", "-environment=production", "-confirm-environment=production", "-confirm-production=production"}, getenv)
 	require.ErrorContains(t, err, "confirm-manual-override")
 
 	manualGetenv := func(key string) string {
@@ -52,9 +61,66 @@ func TestParseOpenRouterDisableCausesFlagsRequiresExplicitSafeModes(t *testing.T
 			return ""
 		}
 	}
-	cfg, err := parseOpenRouterDisableCausesFlags([]string{"-manual-override", "-confirm-manual-override", "-environment=staging"}, manualGetenv)
+	cfg, err = parseOpenRouterDisableCausesFlags([]string{"-manual-override", "-confirm-manual-override", "-environment=staging"}, manualGetenv)
+	require.ErrorContains(t, err, "confirm-environment")
+	cfg, err = parseOpenRouterDisableCausesFlags([]string{"-manual-override", "-confirm-manual-override", "-environment=staging", "-confirm-environment=staging"}, manualGetenv)
 	require.NoError(t, err)
 	require.Equal(t, openrouterdisablecauses.ModeManualOverride, cfg.mode)
+}
+
+func TestOpenRouterDisableCausesBlockedLogIsCategorizedAndPrivacySafe(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name     string
+		err      error
+		category string
+	}{
+		{name: "ambiguous rows", err: fmt.Errorf("organization <ORG_ID>: %w", openrouterdisablecauses.ErrAmbiguousRows), category: "ambiguous_rows"},
+		{name: "validation", err: openrouterdisablecauses.ErrValidationFailed, category: "validation_failed"},
+		{name: "override conflict", err: openrouterdisablecauses.ErrManualOverrideConflict, category: "override_conflict"},
+		{name: "database timeout", err: fmt.Errorf("postgres://user:secret@host/db: %w", context.DeadlineExceeded), category: "database_or_timeout"},
+		{name: "database connection", err: &pgconn.ConnectError{}, category: "database_or_timeout"},
+		{name: "unexpected", err: errors.New("override contents <ORG_ID>"), category: "unexpected"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			line := blockedOpenRouterDisableCausesLogLine(tt.err)
+			require.Contains(t, line, "error_category="+tt.category)
+			require.NotContains(t, line, "<ORG_ID>")
+			require.NotContains(t, line, "secret")
+			require.NotContains(t, line, "postgres://")
+		})
+	}
+}
+
+func TestDocumentedOpenRouterDisableCausesModesParse(t *testing.T) {
+	t.Parallel()
+	getenv := func(key string) string {
+		switch key {
+		case "GRAM_DATABASE_URL":
+			return "postgres://test"
+		case "GRAM_OPENROUTER_DISABLE_CAUSES_OVERRIDE_TOKEN":
+			return "protected"
+		default:
+			return ""
+		}
+	}
+
+	for _, args := range [][]string{
+		{"-environment=staging"},
+		{"-validate", "-environment=staging"},
+		{"-apply", "-environment=staging", "-confirm-environment=staging"},
+		{"-apply", "-environment=production", "-confirm-environment=production", "-confirm-production=production"},
+		{"-manual-override", "-environment=staging", "-confirm-environment=staging", "-confirm-manual-override"},
+	} {
+		_, err := parseOpenRouterDisableCausesFlags(args, getenv)
+		require.NoError(t, err)
+	}
+
+	_, err := parseOpenRouterDisableCausesFlags([]string{"-environment=staging", "-dry-run=false"}, getenv)
+	require.Error(t, err)
 }
 
 func TestDecodeManualOverrideRequiresProtectedAuthorization(t *testing.T) {
