@@ -16,10 +16,10 @@ import (
 	goahttp "goa.design/goa/v3/http"
 	"goa.design/goa/v3/security"
 
-	"github.com/speakeasy-api/gram/glint/annotations"
 	gen "github.com/speakeasy-api/gram/server/gen/deployments"
 	srv "github.com/speakeasy-api/gram/server/gen/http/deployments/server"
 	"github.com/speakeasy-api/gram/server/gen/types"
+	"github.com/speakeasy-api/gram/server/internal/annotations"
 	"github.com/speakeasy-api/gram/server/internal/assets"
 	assetsRepo "github.com/speakeasy-api/gram/server/internal/assets/repo"
 	"github.com/speakeasy-api/gram/server/internal/attr"

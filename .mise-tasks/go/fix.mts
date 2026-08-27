@@ -5,6 +5,7 @@
 
 //USAGE arg "[files]..." help="Go files to fix; read from stdin, one per line, when omitted"
 
+import { existsSync } from "node:fs";
 import path from "node:path";
 import { $ } from "zx";
 
@@ -29,21 +30,42 @@ async function inputFiles(): Promise<string[]> {
     .filter((line) => line !== "");
 }
 
+// Returns the directory of the nearest go.mod at or above dir. The repository
+// holds more than one Go module (the root module and glint), and `go fix`
+// only accepts packages from the module it runs in.
+function moduleRoot(dir: string): string {
+  let current = dir;
+  while (!existsSync(path.join(current, "go.mod"))) {
+    const parent = path.dirname(current);
+    if (parent === current) {
+      throw new Error(`no go.mod found above ${dir}`);
+    }
+    current = parent;
+  }
+  return current;
+}
+
 async function run() {
-  const cwd = process.cwd();
   const files = await inputFiles();
   if (files.length === 0) {
     return;
   }
 
-  let dirs = files.map((f) => {
-    const relpath = path.relative(cwd, path.dirname(path.resolve(f)));
-    return relpath.startsWith("..") ? relpath : `./${relpath}`;
-  });
-  dirs = [...new Set(dirs)];
+  const dirsByModule = new Map<string, Set<string>>();
+  for (const f of files) {
+    const dir = path.dirname(path.resolve(f));
+    const root = moduleRoot(dir);
+    const relpath = path.relative(root, dir);
+    const pkg = relpath === "" ? "." : `./${relpath}`;
+    (
+      dirsByModule.get(root) ?? dirsByModule.set(root, new Set()).get(root)!
+    ).add(pkg);
+  }
 
-  // exhaustruct v5 cannot analyze Go 1.27's direct embedded-field literals.
-  $.sync`go fix -embedlit=false ${dirs}`;
+  for (const [root, pkgs] of dirsByModule) {
+    // exhaustruct v5 cannot analyze Go 1.27's direct embedded-field literals.
+    $.sync`go -C ${root} fix -embedlit=false ${[...pkgs]}`;
+  }
 }
 
 await run();
