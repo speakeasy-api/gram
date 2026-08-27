@@ -29,11 +29,15 @@ type stubRiskProjects struct {
 	project  ResolvedProject
 	expected []riskProjectCall
 	calls    []riskProjectCall
+	err      error
 }
 
 func (s *stubRiskProjects) Resolve(_ context.Context, organizationID, projectID, projectSlug string) (ResolvedProject, error) {
 	call := riskProjectCall{organizationID: organizationID, projectID: projectID, projectSlug: projectSlug}
 	s.calls = append(s.calls, call)
+	if s.err != nil {
+		return ResolvedProject{}, s.err
+	}
 	index := len(s.calls) - 1
 	if index >= len(s.expected) || s.expected[index] != call {
 		return ResolvedProject{}, fmt.Errorf("unexpected project resolution call: %+v", call)

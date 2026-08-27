@@ -149,6 +149,10 @@ type operationBudgetResult struct {
 // assistant — can be composed from the same registration pass rather than from
 // a second list that would drift.
 func newServer(reader Reader, catalog Catalog, registrations *RegistrationService, cursorKeyMaterial string, setupResources []SetupResource, feedback *FeedbackService, onboarding *OnboardingService, distributions *DistributionService, skills *SkillsService, diagnostics *DiagnosticsService, plugins *PluginsService, sessionRecall *SessionRecallService, candidate CatalogDescriptor) (*mcp.Server, *Registrar) {
+	return newServerWithRiskMutations(reader, catalog, registrations, cursorKeyMaterial, setupResources, feedback, onboarding, distributions, skills, diagnostics, plugins, sessionRecall, nil, candidate)
+}
+
+func newServerWithRiskMutations(reader Reader, catalog Catalog, registrations *RegistrationService, cursorKeyMaterial string, setupResources []SetupResource, feedback *FeedbackService, onboarding *OnboardingService, distributions *DistributionService, skills *SkillsService, diagnostics *DiagnosticsService, plugins *PluginsService, sessionRecall *SessionRecallService, riskMutations *RiskMutationHandlers, candidate CatalogDescriptor) (*mcp.Server, *Registrar) {
 	server := mcp.NewServer(&mcp.Implementation{
 		Name:    "platform-mcp",
 		Title:   "Platform MCP",
@@ -176,9 +180,9 @@ func newServer(reader Reader, catalog Catalog, registrations *RegistrationServic
 
 	registerReadTools(reg, reader, cursorKeyMaterial)
 	if postgresReader, ok := reader.(*PostgresReader); ok {
-		registerRiskTools(reg, postgresReader.riskReads)
+		registerRiskToolsWithMutations(reg, postgresReader.riskReads, riskMutations)
 	} else {
-		registerUnavailableRiskTools(reg)
+		registerUnavailableRiskToolsWithMutations(reg, riskMutations)
 	}
 	registerSetupResources(reg, setupResources, time.Now)
 	if registrations == nil || !registrations.budgets.Docs.valid() {

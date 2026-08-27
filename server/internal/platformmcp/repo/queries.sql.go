@@ -170,9 +170,10 @@ UPDATE platform_mcp_operation_receipts
 SET registration_id = $1,
     status = $2,
     result_code = $3,
+    result_payload = $4,
     updated_at = clock_timestamp()
-WHERE id = $4
-  AND organization_id = $5
+WHERE id = $5
+  AND organization_id = $6
 RETURNING id, organization_id, project_id, registration_id, connection_id, connection_generation, user_id, acting_surface, operation, idempotency_key, input_hash, status, result_code, result_payload, expires_at, created_at, updated_at
 `
 
@@ -180,6 +181,7 @@ type CompletePlatformMCPOperationReceiptParams struct {
 	RegistrationID uuid.NullUUID
 	Status         string
 	ResultCode     pgtype.Text
+	ResultPayload  []byte
 	ID             uuid.UUID
 	OrganizationID string
 }
@@ -189,6 +191,7 @@ func (q *Queries) CompletePlatformMCPOperationReceipt(ctx context.Context, arg C
 		arg.RegistrationID,
 		arg.Status,
 		arg.ResultCode,
+		arg.ResultPayload,
 		arg.ID,
 		arg.OrganizationID,
 	)
@@ -929,6 +932,7 @@ INSERT INTO platform_mcp_operation_receipts (
     input_hash,
     status,
     result_code,
+    result_payload,
     expires_at
 ) VALUES (
     $1,
@@ -943,7 +947,8 @@ INSERT INTO platform_mcp_operation_receipts (
     $10,
     $11,
     $12,
-    $13
+    $13,
+    $14
 )
 RETURNING id, organization_id, project_id, registration_id, connection_id, connection_generation, user_id, acting_surface, operation, idempotency_key, input_hash, status, result_code, result_payload, expires_at, created_at, updated_at
 `
@@ -961,6 +966,7 @@ type CreatePlatformMCPOperationReceiptParams struct {
 	InputHash            string
 	Status               string
 	ResultCode           pgtype.Text
+	ResultPayload        []byte
 	ExpiresAt            pgtype.Timestamptz
 }
 
@@ -978,6 +984,7 @@ func (q *Queries) CreatePlatformMCPOperationReceipt(ctx context.Context, arg Cre
 		arg.InputHash,
 		arg.Status,
 		arg.ResultCode,
+		arg.ResultPayload,
 		arg.ExpiresAt,
 	)
 	var i PlatformMcpOperationReceipt

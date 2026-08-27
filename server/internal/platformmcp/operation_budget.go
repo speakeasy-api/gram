@@ -28,6 +28,8 @@ const (
 	LifecycleOrganizationLimitName     = "platform-mcp-lifecycle-organization"
 	SessionRecallConnectionLimitName   = "platform-mcp-session-recall-connection"
 	SessionRecallOrganizationLimitName = "platform-mcp-session-recall-organization"
+	RiskMutationConnectionLimitName    = "platform-mcp-risk-mutation-connection"
+	RiskMutationOrganizationLimitName  = "platform-mcp-risk-mutation-organization"
 )
 
 const (
@@ -51,6 +53,12 @@ const (
 	// fund them by spending the summary allowance.
 	SensitiveDiagnosticQueriesPerConnectionPerMinute   = 30
 	SensitiveDiagnosticQueriesPerOrganizationPerMinute = 300
+
+	// RiskMutationsPer* bound all risk policy and exclusion writes together.
+	// Keeping one shared budget prevents a caller from multiplying the permitted
+	// write rate by alternating between mutation tools.
+	RiskMutationsPerConnectionPerMinute   = 5
+	RiskMutationsPerOrganizationPerMinute = 50
 
 	// DrilldownRowsPerConnectionPerWindow and
 	// DrilldownMetricQueriesPerConnectionPerWindow are the second cap the
@@ -101,19 +109,32 @@ func (b OperationBudget) valid() bool {
 }
 
 func (b OperationBudget) Allow(ctx context.Context, principal Principal) error {
+	return b.allow(ctx, principal, false)
+}
+
+// AllowConnectionOrOrganization charges OAuth calls to both their connection
+// and organization buckets. A connection-less assistant has no connection to
+// charge, so it consumes only the organization allowance.
+func (b OperationBudget) AllowConnectionOrOrganization(ctx context.Context, principal Principal) error {
+	return b.allow(ctx, principal, true)
+}
+
+func (b OperationBudget) allow(ctx context.Context, principal Principal, organizationOnlyWithoutConnection bool) error {
 	if !b.valid() || principal.OrganizationID == "" {
 		return ErrOperationBudgetUnavailable
 	}
-	actorKey, err := operationBudgetActorKey(principal)
-	if err != nil {
-		return err
-	}
-	connection, err := b.Connection.Allow(ctx, actorKey)
-	if err != nil {
-		return fmt.Errorf("limit platform mcp actor operation: %w: %w", ErrOperationBudgetUnavailable, err)
-	}
-	if !connection.Allowed {
-		return ErrOperationRateLimited
+	if principal.HasConnection() || !organizationOnlyWithoutConnection {
+		actorKey, err := operationBudgetActorKey(principal)
+		if err != nil {
+			return err
+		}
+		connection, err := b.Connection.Allow(ctx, actorKey)
+		if err != nil {
+			return fmt.Errorf("limit platform mcp actor operation: %w: %w", ErrOperationBudgetUnavailable, err)
+		}
+		if !connection.Allowed {
+			return ErrOperationRateLimited
+		}
 	}
 	organization, err := b.Organization.Allow(ctx, principal.OrganizationID)
 	if err != nil {
@@ -187,6 +208,9 @@ type OperationBudgets struct {
 	// SensitiveSessionRecall meters continue_session — the only operation that
 	// serves whole-transcript content — on its own low allowance.
 	SensitiveSessionRecall OperationBudget
+	// RiskMutations is shared by policy and exclusion writes. Connection-less
+	// assistant calls consume only its organization bucket.
+	RiskMutations OperationBudget
 	// DrilldownVolume meters what the drill-downs return rather than how often
 	// they are called: rows and spans against one bucket, metric queries
 	// against another, both per connection over DrilldownVolumeWindow.
@@ -242,5 +266,5 @@ func (b DrilldownVolumeBudget) allow(ctx context.Context, principal Principal, l
 }
 
 func (b OperationBudgets) Valid() bool {
-	return b.Catalog.valid() && b.Registration.valid() && b.Handoff.valid() && b.SetupStart.valid() && b.Repair.valid() && b.Docs.valid() && b.Skills.valid() && b.LifecycleMetadata.valid() && b.Diagnostics.valid() && b.SensitiveDiagnostics.valid() && b.SensitiveSessionRecall.valid() && b.DrilldownVolume.valid()
+	return b.Catalog.valid() && b.Registration.valid() && b.Handoff.valid() && b.SetupStart.valid() && b.Repair.valid() && b.Docs.valid() && b.Skills.valid() && b.LifecycleMetadata.valid() && b.Diagnostics.valid() && b.SensitiveDiagnostics.valid() && b.SensitiveSessionRecall.valid() && b.RiskMutations.valid() && b.DrilldownVolume.valid()
 }

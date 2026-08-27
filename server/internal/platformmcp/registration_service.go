@@ -100,6 +100,7 @@ func NewRegistrationService(catalog Catalog, gate CatalogRegistrationGateChecker
 			Handoff:           OperationBudget{Connection: nil, Organization: nil},
 			SetupStart:        OperationBudget{Connection: nil, Organization: nil},
 			Repair:            OperationBudget{Connection: nil, Organization: nil},
+			RiskMutations:     OperationBudget{Connection: nil, Organization: nil},
 			LifecycleMetadata: OperationBudget{Connection: nil, Organization: nil},
 		},
 	}
