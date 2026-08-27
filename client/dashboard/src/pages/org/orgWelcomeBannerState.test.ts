@@ -4,6 +4,7 @@ import {
   isOverviewZeroData,
   recommendedWelcomeCardId,
   selectWelcomeCardIds,
+  welcomeHeadline,
   type WelcomeBannerInputs,
   type WelcomeCardId,
 } from "./orgWelcomeBannerState";
@@ -77,6 +78,26 @@ describe("selectWelcomeCardIds", () => {
 
   it("non-trial member, has data: default project", () => {
     expect(ids({})).toEqual(["defaultProject"]);
+  });
+});
+
+describe("welcomeHeadline", () => {
+  it("uses Let’s get started for a single first-move card", () => {
+    expect(
+      welcomeHeadline({ columnCount: 1, isTrial: false, isZeroData: true }),
+    ).toEqual(["Let’s get started"]);
+  });
+
+  it("keeps Choose your first move when there is more than one card", () => {
+    expect(
+      welcomeHeadline({ columnCount: 2, isTrial: true, isZeroData: false }),
+    ).toEqual(["Choose your", "first move"]);
+  });
+
+  it("keeps Pick up where you left off for a single resume card", () => {
+    expect(
+      welcomeHeadline({ columnCount: 1, isTrial: false, isZeroData: false }),
+    ).toEqual(["Pick up where", "you left off"]);
   });
 });
 

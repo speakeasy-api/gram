@@ -43,6 +43,22 @@ export function recommendedWelcomeCardId(
   return ids[0];
 }
 
+/** Display copy above the cards. One card is a prompt, not a choice. */
+export function welcomeHeadline({
+  columnCount,
+  isTrial,
+  isZeroData,
+}: {
+  columnCount: number;
+  isTrial: boolean;
+  isZeroData: boolean;
+}): readonly string[] {
+  if (columnCount === 1 && (isTrial || isZeroData))
+    return ["Let’s get started"];
+  if (isTrial || isZeroData) return ["Choose your", "first move"];
+  return ["Pick up where", "you left off"];
+}
+
 /**
  * Onboarding-biased: missing overview, logs off, or a pending fetch all
  * read as zero data so Platform MCP never flashes in then swaps out.

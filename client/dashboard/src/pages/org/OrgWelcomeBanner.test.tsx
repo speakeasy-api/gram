@@ -245,6 +245,9 @@ describe("OrgWelcomeBanner", () => {
     expect(hrefFor("Open the guide")).toBe("/guide");
     expect(screen.queryByText("Begin rollout")).toBeNull();
     expect(screen.queryByText("Announcement")).toBeNull();
+    expect(
+      screen.getByRole("heading", { name: "Let’s get started" }),
+    ).toBeTruthy();
   });
 
   it("non-trial member, has data: default project only", () => {

@@ -24,6 +24,7 @@ import {
   isOverviewZeroData,
   recommendedWelcomeCardId,
   selectWelcomeCardIds,
+  welcomeHeadline,
   type WelcomeCardId,
 } from "@/pages/org/orgWelcomeBannerState";
 import { useOrgRoutes, useRoutes } from "@/routes";
@@ -35,7 +36,7 @@ import { useGramContext } from "@gram/client/react-query/_context.js";
 import { useProductFeatures } from "@gram/client/react-query/productFeatures.js";
 import { useRecordPlatformMCPDashboardCtaEventMutation } from "@gram/client/react-query/recordPlatformMCPDashboardCtaEvent.js";
 import { useQuery } from "@tanstack/react-query";
-import { useEffect, useRef } from "react";
+import { Fragment, useEffect, useRef } from "react";
 import { Link } from "react-router";
 
 // Matches the page column OrgHome applies to everything below the banner.
@@ -208,20 +209,7 @@ export function OrgWelcomeBanner(): JSX.Element | null {
   if (!visible) return null;
 
   const columnCount = cards.length + (showAnnouncement ? 1 : 0);
-  const headline =
-    isTrial || isZeroData ? (
-      <>
-        Choose your
-        <br />
-        first move
-      </>
-    ) : (
-      <>
-        Pick up where
-        <br />
-        you left off
-      </>
-    );
+  const headlineLines = welcomeHeadline({ columnCount, isTrial, isZeroData });
 
   return (
     // Section runs the full width of the content area; the column class below
@@ -237,7 +225,12 @@ export function OrgWelcomeBanner(): JSX.Element | null {
       >
         <span className="text-eyebrow">Welcome to Speakeasy</span>
         <h2 className="text-foreground font-display text-[40px] leading-[0.92] font-thin tracking-[-0.04em] lg:text-[60px]">
-          {headline}
+          {headlineLines.map((line, i) => (
+            <Fragment key={line}>
+              {i > 0 ? <br /> : null}
+              {line}
+            </Fragment>
+          ))}
         </h2>
       </div>
 
