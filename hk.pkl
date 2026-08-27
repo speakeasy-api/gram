@@ -31,9 +31,15 @@ local linters = new Mapping<String, Step> {
     // and runs `go fix` on that package, type-checking it and its full
     // dependency graph. Batching therefore turns N files in one package into N
     // concurrent cold builds of the same graph, each forking its own compilers.
+    //
+    // The list goes over stdin rather than argv so that hk cannot split it
+    // either. Repo-wide it is ~230KB, which exceeds Linux's 128KiB
+    // per-argument cap once hk renders it into a single `sh -c` string; hk
+    // skips its own ARG_MAX batching for steps that use stdin.
     glob = "**/*.go"
     exclude = "**/testdata/**"
-    fix = "mise run -q go:fix {{files}}"
+    stdin = "{{ files_list | join(sep='\n') }}"
+    fix = "mise run -q go:fix"
   }
   ["oxfmt"] {
     batch = true
