@@ -80,8 +80,6 @@ func RunLocalFixtures(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool
 	if err != nil {
 		return err
 	}
-	logger.InfoContext(ctx, "adopting developer into the local org", attr.SlogUserID(dev.ID))
-
 	// The system roles are a prerequisite for the Admin assignment below and
 	// are not org-specific data the seed can fabricate — provisioning owns
 	// them in every other environment, so reuse its seeder rather than
@@ -117,13 +115,22 @@ func RunLocalFixtures(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool
 		}
 	}()
 
+	// Resolve the developer's user row before anything references it: a login
+	// that happened before this seed owns an id we cannot predict.
+	var workosID string
+	if err := tx.QueryRow(ctx, localUpsertDeveloperSQL, dev.ID, dev.Email, dev.Name, dev.WorkOSID).
+		Scan(&dev.ID, &workosID); err != nil {
+		return fmt.Errorf("local fixture %q: %w", "upsert developer", err)
+	}
+	logger.InfoContext(ctx, "adopting developer into the local org", attr.SlogUserID(dev.ID))
+
 	for _, step := range []struct {
 		name string
 		sql  string
 		args []any
 	}{
 		{"link org to the dev-idp", localLinkWorkOSOrgSQL, []any{spec.OrgID, spec.WorkOSOrgID}},
-		{"adopt developer", localAdoptDeveloperSQL, []any{spec.OrgID, dev.ID, dev.Email, dev.Name}},
+		{"adopt developer", localAdoptDeveloperSQL, []any{spec.OrgID, dev.ID, workosID}},
 		{"grant session visibility", localSessionVisibilitySQL, []any{spec.OrgID, dev.ID}},
 		{"enable platform mcp", localPlatformMCPFeatureSQL, []any{spec.OrgID}},
 		{"api key", localAPIKeySQL, []any{spec.OrgID, spec.ProjectID(), dev.ID, localAPIKeyID(), LocalAPIKeyName, apiKeyHash, apiKey[:len(auth.APIKeyPrefix(env))+5]}},
@@ -186,9 +193,14 @@ func StaleOverrideVars() []string {
 
 // developer is the local user the fixtures adopt into the org.
 type developer struct {
-	ID    string
-	Email string
-	Name  string
+	// ID is the id a user row would get if none exists yet. An earlier login
+	// may already have created one under a different id, in which case
+	// localUpsertDeveloperSQL returns that one instead.
+	ID string
+	// WorkOSID is the subject the dev-idp presents for this developer.
+	WorkOSID string
+	Email    string
+	Name     string
 }
 
 // resolveDeveloper mirrors the dev-idp's default-user bootstrap: the git
@@ -214,10 +226,12 @@ func resolveDeveloper(ctx context.Context, email string) (developer, error) {
 		}
 	}
 
+	uid := devidentity.DeterministicUserID(email)
 	return developer{
-		ID:    devidentity.DeterministicUserID(email).String(),
-		Email: email,
-		Name:  name,
+		ID:       uid.String(),
+		WorkOSID: devidentity.WorkOSUserID(uid),
+		Email:    email,
+		Name:     name,
 	}, nil
 }
 
@@ -258,24 +272,37 @@ SET workos_id = $2, updated_at = clock_timestamp()
 WHERE id = $1 AND workos_id IS DISTINCT FROM $2
 `
 
-// You, as a real member. users.workos_id doubles as the WorkOS subject the
-// dev-idp will present at login, and the dev-idp uses the same user id there,
-// so the row survives your first real login unchanged.
+// You, as a real member.
+//
+// Keyed on email, not id: a developer who logged in before seeding already has
+// a row whose id the auth callback derived from the dev-idp subject
+// (users.UserIDFromWorkOSID), which is not the id derived here from the email.
+// ON CONFLICT (id) would miss that row and collide on users_email_key instead,
+// so the statement returns the id that actually exists and the rest of the
+// fixtures use it. Login-first and seed-first therefore converge on one row:
+// the auth callback resolves an existing user by email too (see
+// identity.resolveGramUserID).
+//
+// users.workos_id is the subject the dev-idp will present at login. It has to
+// be the WorkOS-shaped form, not a bare UUID — a mismatch there is invisible
+// until login mints a second user.
+const localUpsertDeveloperSQL = `
+INSERT INTO users (id, email, display_name, workos_id, admin)
+VALUES ($1, $2, $3, $4, TRUE)
+ON CONFLICT (email) DO UPDATE
+  SET display_name = EXCLUDED.display_name,
+      workos_id = EXCLUDED.workos_id,
+      admin = TRUE, deleted_at = NULL, updated_at = clock_timestamp()
+RETURNING id, workos_id
+`
+
+// Your membership and Admin role assignment, against the user id
+// localUpsertDeveloperSQL resolved.
 const localAdoptDeveloperSQL = `
-WITH dev AS (
-  INSERT INTO users (id, email, display_name, workos_id, admin)
-  VALUES ($2, $3, $4, $2, TRUE)
-  ON CONFLICT (id) DO UPDATE
-    SET email = EXCLUDED.email, display_name = EXCLUDED.display_name,
-        workos_id = COALESCE(users.workos_id, EXCLUDED.workos_id),
-        admin = TRUE, updated_at = clock_timestamp()
-  RETURNING id, workos_id
-),
-membership AS (
+WITH membership AS (
   INSERT INTO organization_user_relationships
     (organization_id, user_id, workos_user_id, workos_membership_id)
-  SELECT $1, dev.id, dev.workos_id, 'devidp_mem_' || dev.id
-  FROM dev
+  VALUES ($1, $2, $3, 'devidp_mem_' || $2)
   ON CONFLICT (organization_id, user_id) WHERE deleted IS FALSE
   DO UPDATE SET
     workos_user_id = EXCLUDED.workos_user_id,
