@@ -284,6 +284,54 @@ func (q *Queries) ListExpiredTrials(ctx context.Context) ([]string, error) {
 	return items, nil
 }
 
+const lockEnterpriseTrialForConversion = `-- name: LockEnterpriseTrialForConversion :one
+SELECT tier, ends_at, converted_at, demoted_at
+FROM trials
+WHERE organization_id = $1
+FOR UPDATE
+`
+
+type LockEnterpriseTrialForConversionRow struct {
+	Tier        string
+	EndsAt      pgtype.Timestamptz
+	ConvertedAt pgtype.Timestamptz
+	DemotedAt   pgtype.Timestamptz
+}
+
+// This row lock is the first lock in the manual conversion transition. It is
+// retained while deterministic per-key billing locks are acquired, so the
+// demotion and conversion paths cannot invert their lock order.
+func (q *Queries) LockEnterpriseTrialForConversion(ctx context.Context, organizationID string) (LockEnterpriseTrialForConversionRow, error) {
+	row := q.db.QueryRow(ctx, lockEnterpriseTrialForConversion, organizationID)
+	var i LockEnterpriseTrialForConversionRow
+	err := row.Scan(
+		&i.Tier,
+		&i.EndsAt,
+		&i.ConvertedAt,
+		&i.DemotedAt,
+	)
+	return i, err
+}
+
+const markEnterpriseTrialConverted = `-- name: MarkEnterpriseTrialConverted :one
+UPDATE trials
+SET converted_at = clock_timestamp(),
+    updated_at = clock_timestamp()
+WHERE organization_id = $1
+  AND converted_at IS NULL
+RETURNING converted_at
+`
+
+// The server owns the conversion timestamp. Historical lifecycle timestamps
+// remain untouched. The converted_at predicate is replay protection after the
+// caller's locking read.
+func (q *Queries) MarkEnterpriseTrialConverted(ctx context.Context, organizationID string) (pgtype.Timestamptz, error) {
+	row := q.db.QueryRow(ctx, markEnterpriseTrialConverted, organizationID)
+	var converted_at pgtype.Timestamptz
+	err := row.Scan(&converted_at)
+	return converted_at, err
+}
+
 const markTrialConverted = `-- name: MarkTrialConverted :execrows
 UPDATE trials
 SET converted_at = clock_timestamp(),

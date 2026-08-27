@@ -35,6 +35,10 @@ type Client struct {
 	// updateOrganization endpoint.
 	UpdateOrganizationDoer goahttp.Doer
 
+	// MarkEnterpriseTrialConverted Doer is the HTTP client used to make requests
+	// to the markEnterpriseTrialConverted endpoint.
+	MarkEnterpriseTrialConvertedDoer goahttp.Doer
+
 	// BulkUpdateAccountType Doer is the HTTP client used to make requests to the
 	// bulkUpdateAccountType endpoint.
 	BulkUpdateAccountTypeDoer goahttp.Doer
@@ -131,35 +135,36 @@ func NewClient(
 	restoreBody bool,
 ) *Client {
 	return &Client{
-		LoginDoer:                       doer,
-		CallbackDoer:                    doer,
-		LogoutDoer:                      doer,
-		GetProjectDoer:                  doer,
-		UpdateOrganizationDoer:          doer,
-		BulkUpdateAccountTypeDoer:       doer,
-		DisableOrganizationDoer:         doer,
-		EnableOrganizationDoer:          doer,
-		GetOrganizationDoer:             doer,
-		ListOrganizationMembersDoer:     doer,
-		ListOrganizationProjectsDoer:    doer,
-		ListOrganizationActivityDoer:    doer,
-		ListOrganizationsDoer:           doer,
-		ExtendTrialDoer:                 doer,
-		CreateOrganizationDoer:          doer,
-		RearmTrialDoer:                  doer,
-		GetOrganizationStatsDoer:        doer,
-		GetInferenceKeysDoer:            doer,
-		SetInferenceKeyMonthlyLimitDoer: doer,
-		GetInferenceSpendHistoryDoer:    doer,
-		GetPaygBillingSummaryDoer:       doer,
-		GetStripeSubscriptionDoer:       doer,
-		CancelStripeSubscriptionDoer:    doer,
-		ResumeStripeSubscriptionDoer:    doer,
-		RestoreResponseBody:             restoreBody,
-		scheme:                          scheme,
-		host:                            host,
-		decoder:                         dec,
-		encoder:                         enc,
+		LoginDoer:                        doer,
+		CallbackDoer:                     doer,
+		LogoutDoer:                       doer,
+		GetProjectDoer:                   doer,
+		UpdateOrganizationDoer:           doer,
+		MarkEnterpriseTrialConvertedDoer: doer,
+		BulkUpdateAccountTypeDoer:        doer,
+		DisableOrganizationDoer:          doer,
+		EnableOrganizationDoer:           doer,
+		GetOrganizationDoer:              doer,
+		ListOrganizationMembersDoer:      doer,
+		ListOrganizationProjectsDoer:     doer,
+		ListOrganizationActivityDoer:     doer,
+		ListOrganizationsDoer:            doer,
+		ExtendTrialDoer:                  doer,
+		CreateOrganizationDoer:           doer,
+		RearmTrialDoer:                   doer,
+		GetOrganizationStatsDoer:         doer,
+		GetInferenceKeysDoer:             doer,
+		SetInferenceKeyMonthlyLimitDoer:  doer,
+		GetInferenceSpendHistoryDoer:     doer,
+		GetPaygBillingSummaryDoer:        doer,
+		GetStripeSubscriptionDoer:        doer,
+		CancelStripeSubscriptionDoer:     doer,
+		ResumeStripeSubscriptionDoer:     doer,
+		RestoreResponseBody:              restoreBody,
+		scheme:                           scheme,
+		host:                             host,
+		decoder:                          dec,
+		encoder:                          enc,
 	}
 }
 
@@ -278,6 +283,30 @@ func (c *Client) UpdateOrganization() goa.Endpoint {
 		resp, err := c.UpdateOrganizationDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("admin", "updateOrganization", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// MarkEnterpriseTrialConverted returns an endpoint that makes HTTP requests to
+// the admin service markEnterpriseTrialConverted server.
+func (c *Client) MarkEnterpriseTrialConverted() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeMarkEnterpriseTrialConvertedRequest(c.encoder)
+		decodeResponse = DecodeMarkEnterpriseTrialConvertedResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildMarkEnterpriseTrialConvertedRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.MarkEnterpriseTrialConvertedDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("admin", "markEnterpriseTrialConverted", err)
 		}
 		return decodeResponse(resp)
 	}

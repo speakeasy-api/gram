@@ -29,6 +29,9 @@ type Service interface {
 	// Updates admin-managed fields on an organization. At least one of
 	// account_type or whitelisted must be supplied.
 	UpdateOrganization(context.Context, *UpdateOrganizationPayload) (res *AdminOrganization, err error)
+	// Records that an organization's enterprise trial converted to a signed
+	// contract.
+	MarkEnterpriseTrialConverted(context.Context, *MarkEnterpriseTrialConvertedPayload) (res *AdminOrganization, err error)
 	// Sets one account type on many organizations in a single statement. An ID
 	// that matches no organization is reported back rather than failing the batch,
 	// so a stale ID costs the operator that row and not the whole call.
@@ -109,7 +112,7 @@ const ServiceName = "admin"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [24]string{"login", "callback", "logout", "getProject", "updateOrganization", "bulkUpdateAccountType", "disableOrganization", "enableOrganization", "getOrganization", "listOrganizationMembers", "listOrganizationProjects", "listOrganizationActivity", "listOrganizations", "extendTrial", "createOrganization", "rearmTrial", "getOrganizationStats", "getInferenceKeys", "setInferenceKeyMonthlyLimit", "getInferenceSpendHistory", "getPaygBillingSummary", "getStripeSubscription", "cancelStripeSubscription", "resumeStripeSubscription"}
+var MethodNames = [25]string{"login", "callback", "logout", "getProject", "updateOrganization", "markEnterpriseTrialConverted", "bulkUpdateAccountType", "disableOrganization", "enableOrganization", "getOrganization", "listOrganizationMembers", "listOrganizationProjects", "listOrganizationActivity", "listOrganizations", "extendTrial", "createOrganization", "rearmTrial", "getOrganizationStats", "getInferenceKeys", "setInferenceKeyMonthlyLimit", "getInferenceSpendHistory", "getPaygBillingSummary", "getStripeSubscription", "cancelStripeSubscription", "resumeStripeSubscription"}
 
 // AdminBulkUpdateAccountTypeResult is the result type of the admin service
 // bulkUpdateAccountType method.
@@ -575,6 +578,14 @@ type LoginResult struct {
 type LogoutPayload struct {
 	// The session cookie value to clear for logging out
 	SessionID *string
+}
+
+// MarkEnterpriseTrialConvertedPayload is the payload type of the admin service
+// markEnterpriseTrialConverted method.
+type MarkEnterpriseTrialConvertedPayload struct {
+	AdminSessionToken *string
+	// Organization ID.
+	ID string
 }
 
 // RearmTrialPayload is the payload type of the admin service rearmTrial method.

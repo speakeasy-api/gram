@@ -56,6 +56,26 @@ SET converted_at = clock_timestamp(),
 WHERE organization_id = @organization_id
   AND converted_at IS NULL;
 
+-- name: LockEnterpriseTrialForConversion :one
+-- This row lock is the first lock in the manual conversion transition. It is
+-- retained while deterministic per-key billing locks are acquired, so the
+-- demotion and conversion paths cannot invert their lock order.
+SELECT tier, ends_at, converted_at, demoted_at
+FROM trials
+WHERE organization_id = @organization_id
+FOR UPDATE;
+
+-- name: MarkEnterpriseTrialConverted :one
+-- The server owns the conversion timestamp. Historical lifecycle timestamps
+-- remain untouched. The converted_at predicate is replay protection after the
+-- caller's locking read.
+UPDATE trials
+SET converted_at = clock_timestamp(),
+    updated_at = clock_timestamp()
+WHERE organization_id = @organization_id
+  AND converted_at IS NULL
+RETURNING converted_at;
+
 -- name: MarkTrialDemoted :one
 -- No rows means the trial no longer meets the sweep conditions.
 UPDATE trials

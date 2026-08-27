@@ -356,6 +356,28 @@ var _ = Service("admin", func() {
 		Meta("openapi:operationId", "adminUpdateOrganization")
 	})
 
+	Method("markEnterpriseTrialConverted", func() {
+		Description("Records that an organization's enterprise trial converted to a signed contract.")
+
+		Payload(func() {
+			security.AdminAuthPayload()
+			Required("id")
+
+			Attribute("id", String, "Organization ID.", func() {
+				MinLength(1)
+			})
+		})
+
+		Result(AdminOrganization)
+
+		HTTP(func() {
+			POST("/admin/trial.convert")
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "adminMarkEnterpriseTrialConverted")
+	})
+
 	Method("bulkUpdateAccountType", func() {
 		Description("Sets one account type on many organizations in a single statement. An ID that matches no organization is reported back rather than failing the batch, so a stale ID costs the operator that row and not the whole call.")
 
