@@ -632,10 +632,13 @@ func (o *OpenRouter) refreshAPIKeyLimit(ctx context.Context, db DBTX, orgID stri
 		keyLimit = o.defaultLimitForOrg(ctx, db, org)
 	}
 
+	removeLegacyAdminLock := (reinstate || limit != nil) && slices.Contains(key.DisableCauses, string(DisableCauseAdminLock))
+
 	creditLimit := float64(keyLimit)
 	patch := updateKeyRequest{Limit: &creditLimit, LimitReset: "monthly", Disabled: nil}
-	if key.Disabled {
-		// Setting a limit on a disabled key does not bring it back upstream.
+	if removeLegacyAdminLock && len(key.DisableCauses) == 1 {
+		// The legacy reinstate paths enable upstream only when removing the admin
+		// lock makes the key locally enabled. Other causes keep it disabled.
 		patch.Disabled = new(false)
 	}
 
@@ -667,6 +670,17 @@ func (o *OpenRouter) refreshAPIKeyLimit(ctx context.Context, db DBTX, orgID stri
 	})
 	if err != nil {
 		return 0, oops.E(oops.CodeUnexpected, err, "failed to update openrouter key").LogError(ctx, o.logger)
+	}
+
+	if removeLegacyAdminLock {
+		_, err = keyRepo.RemoveOpenRouterAPIKeyDisableCause(ctx, repo.RemoveOpenRouterAPIKeyDisableCauseParams{
+			OrganizationID: orgID,
+			KeyType:        string(keyType),
+			DisableCause:   string(DisableCauseAdminLock),
+		})
+		if err != nil {
+			return 0, oops.E(oops.CodeUnexpected, err, "failed to remove legacy OpenRouter admin lock").LogError(ctx, o.logger)
+		}
 	}
 
 	return keyLimit, nil

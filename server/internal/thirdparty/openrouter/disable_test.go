@@ -288,6 +288,55 @@ func TestRefreshAPIKeyLimit_ReinstatesDisabledKey(t *testing.T) {
 	require.JSONEq(t, `{"limit":42,"limit_reset":"monthly"}`, patches[2])
 }
 
+func TestRefreshAPIKeyLimit_RemovesOnlyLegacyAdminLock(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	orgID := "org-" + uuid.NewString()[:8]
+	provisioner, upstream, queries := newDisableTestProvisioner(t, orgID)
+
+	_, err := provisioner.ProvisionAPIKey(ctx, orgID, KeyTypeInternal)
+	require.NoError(t, err)
+	require.NoError(t, provisioner.DisableAPIKey(ctx, orgID, KeyTypeInternal))
+
+	_, err = queries.AddOpenRouterAPIKeyDisableCause(ctx, repo.AddOpenRouterAPIKeyDisableCauseParams{
+		OrganizationID: orgID,
+		KeyType:        string(KeyTypeInternal),
+		DisableCause:   string(DisableCauseTrialDemotion),
+	})
+	require.NoError(t, err)
+
+	limit := 42
+	_, err = provisioner.RefreshAPIKeyLimit(ctx, orgID, KeyTypeInternal, &limit)
+	require.NoError(t, err)
+
+	row, err := queries.GetOpenRouterAPIKey(ctx, repo.GetOpenRouterAPIKeyParams{
+		OrganizationID: orgID,
+		KeyType:        string(KeyTypeInternal),
+	})
+	require.NoError(t, err)
+	require.Equal(t, []string{"trial_demotion"}, row.DisableCauses)
+	require.True(t, row.Disabled)
+
+	// A retry sees that admin_lock is already gone, preserves the remaining
+	// cause, and repeats only the limit patch.
+	_, err = provisioner.RefreshAPIKeyLimit(ctx, orgID, KeyTypeInternal, &limit)
+	require.NoError(t, err)
+
+	patches := upstream.recorded()
+	require.Len(t, patches, 3)
+	require.JSONEq(t, `{"limit":42,"limit_reset":"monthly"}`, patches[1])
+	require.JSONEq(t, `{"limit":42,"limit_reset":"monthly"}`, patches[2])
+
+	row, err = queries.GetOpenRouterAPIKey(ctx, repo.GetOpenRouterAPIKeyParams{
+		OrganizationID: orgID,
+		KeyType:        string(KeyTypeInternal),
+	})
+	require.NoError(t, err)
+	require.Equal(t, []string{"trial_demotion"}, row.DisableCauses)
+	require.True(t, row.Disabled)
+}
+
 // A refresh reads the key row, patches upstream, then writes the row back. A
 // lockdown that commits inside that window has to survive the write: the
 // refresh never sent disabled=false, so clearing the local flag would hand out
