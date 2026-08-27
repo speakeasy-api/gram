@@ -149,41 +149,6 @@ func (q *Queries) GetDataExportRouteForUpdate(ctx context.Context, arg GetDataEx
 	return i, err
 }
 
-const getOtelDestination = `-- name: GetOtelDestination :one
-SELECT id, organization_id, project_id, endpoint_url, headers_encrypted, sensitive_data, created_at, updated_at, deleted_at, deleted
-FROM otel_destinations
-WHERE organization_id = $1
-  AND project_id = $2
-  AND id = $3
-  AND deleted IS FALSE
-`
-
-type GetOtelDestinationParams struct {
-	OrganizationID string
-	ProjectID      uuid.UUID
-	ID             uuid.UUID
-}
-
-// Fetch one active destination for storage-level tests of write-only fields.
-// Production mutations use the locking variants below.
-func (q *Queries) GetOtelDestination(ctx context.Context, arg GetOtelDestinationParams) (OtelDestination, error) {
-	row := q.db.QueryRow(ctx, getOtelDestination, arg.OrganizationID, arg.ProjectID, arg.ID)
-	var i OtelDestination
-	err := row.Scan(
-		&i.ID,
-		&i.OrganizationID,
-		&i.ProjectID,
-		&i.EndpointUrl,
-		&i.HeadersEncrypted,
-		&i.SensitiveData,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-		&i.DeletedAt,
-		&i.Deleted,
-	)
-	return i, err
-}
-
 const getOtelDestinationForRoute = `-- name: GetOtelDestinationForRoute :one
 SELECT id, organization_id, project_id, endpoint_url, headers_encrypted, sensitive_data, created_at, updated_at, deleted_at, deleted
 FROM otel_destinations
@@ -394,7 +359,7 @@ type SoftDeleteDataExportRouteParams struct {
 	ID             uuid.UUID
 }
 
-// Tombstone a route while its FOR UPDATE lock is held.
+// Atomically lock and tombstone a route, returning the deleted audit subject.
 func (q *Queries) SoftDeleteDataExportRoute(ctx context.Context, arg SoftDeleteDataExportRouteParams) (DataExportRoute, error) {
 	row := q.db.QueryRow(ctx, softDeleteDataExportRoute, arg.OrganizationID, arg.ProjectID, arg.ID)
 	var i DataExportRoute

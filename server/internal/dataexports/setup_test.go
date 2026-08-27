@@ -6,24 +6,20 @@ import (
 	"os"
 	"testing"
 
-	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 	gen "github.com/speakeasy-api/gram/server/gen/data_exports"
 	"github.com/stretchr/testify/require"
 
-	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/authztest"
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/cache"
-	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/dataexports"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
-	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
 var infra *testenv.Environment
@@ -69,42 +65,11 @@ func newTestService(t *testing.T) (context.Context, *testInstance) {
 	return ctx, &testInstance{service: service, conn: conn, enc: enc}
 }
 
-func withExactAccessGrants(t *testing.T, ctx context.Context, conn *pgxpool.Pool, grants ...authz.Grant) context.Context {
-	t.Helper()
-	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	require.True(t, ok)
-	require.NotNil(t, authCtx)
-
-	principal := urn.NewPrincipal(urn.PrincipalTypeRole, "dataexports-rbac-grants-"+uuid.NewString())
-	for _, grant := range grants {
-		selectors, err := grant.Selector.MarshalJSON()
-		require.NoError(t, err)
-		_, err = accessrepo.New(conn).UpsertPrincipalGrant(ctx, accessrepo.UpsertPrincipalGrantParams{
-			OrganizationID: authCtx.ActiveOrganizationID,
-			PrincipalUrn:   principal,
-			Scope:          string(grant.Scope),
-			Selectors:      selectors,
-		})
-		require.NoError(t, err)
-	}
-
-	loadedGrants, err := authz.LoadGrants(ctx, conn, authCtx.ActiveOrganizationID, []urn.Principal{principal})
-	require.NoError(t, err)
-	return authz.GrantsToContext(ctx, loadedGrants)
-}
-
 func requireOopsCode(t *testing.T, err error, code oops.Code) {
 	t.Helper()
 	var oopsErr *oops.ShareableError
 	require.ErrorAs(t, err, &oopsErr)
 	require.Equal(t, code, oopsErr.Code)
-}
-
-func mustUUID(t *testing.T, value string) uuid.UUID {
-	t.Helper()
-	parsed, err := uuid.Parse(value)
-	require.NoError(t, err)
-	return parsed
 }
 
 func createOtelDestination(t *testing.T, ctx context.Context, ti *testInstance, endpointURL, sensitiveData string) *gen.OtelDestination {

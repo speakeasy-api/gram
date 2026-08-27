@@ -2,9 +2,9 @@ package mv
 
 import (
 	"sort"
-	"time"
 
 	gen "github.com/speakeasy-api/gram/server/gen/data_exports"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/dataexports/repo"
 )
 
@@ -29,25 +29,20 @@ func BuildOtelDestinationView(row repo.OtelDestination, headers map[string]strin
 		EndpointURL:   row.EndpointUrl,
 		SensitiveData: sensitiveData,
 		Headers:       headerViews,
-		CreatedAt:     row.CreatedAt.Time.Format(time.RFC3339),
-		UpdatedAt:     row.UpdatedAt.Time.Format(time.RFC3339),
+		CreatedAt:     conv.FromPGTimestamptz(row.CreatedAt),
+		UpdatedAt:     conv.FromPGTimestamptz(row.UpdatedAt),
 	}
 }
 
 func BuildDataExportRouteView(row repo.DataExportRoute) *gen.DataExportRoute {
-	var destinationID *string
-	if row.OtelDestinationID.Valid {
-		value := row.OtelDestinationID.UUID.String()
-		destinationID = &value
-	}
 
 	return &gen.DataExportRoute{
 		ID:                row.ID.String(),
 		ProjectID:         row.ProjectID.String(),
 		DataSource:        row.DataSource,
 		Enabled:           row.Enabled,
-		OtelDestinationID: destinationID,
-		CreatedAt:         row.CreatedAt.Time.Format(time.RFC3339),
-		UpdatedAt:         row.UpdatedAt.Time.Format(time.RFC3339),
+		OtelDestinationID: conv.FromNullableUUID(row.OtelDestinationID),
+		CreatedAt:         conv.FromPGTimestamptz(row.CreatedAt),
+		UpdatedAt:         conv.FromPGTimestamptz(row.UpdatedAt),
 	}
 }

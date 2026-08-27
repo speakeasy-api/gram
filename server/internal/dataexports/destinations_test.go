@@ -53,12 +53,14 @@ func TestDestinationCRUDPreservesWriteOnlyHeadersAndAuditsSafeSnapshots(t *testi
 
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
-	row, err := repo.New(ti.conn).GetOtelDestination(ctx, repo.GetOtelDestinationParams{
+	rows, err := repo.New(ti.conn).ListOtelDestinations(ctx, repo.ListOtelDestinationsParams{
 		OrganizationID: authCtx.ActiveOrganizationID,
 		ProjectID:      *authCtx.ProjectID,
-		ID:             mustUUID(t, created.ID),
 	})
 	require.NoError(t, err)
+	require.Len(t, rows, 1)
+	row := rows[0]
+	require.Equal(t, created.ID, row.ID.String())
 	require.True(t, row.HeadersEncrypted.Valid)
 	require.NotContains(t, row.HeadersEncrypted.String, secret)
 	plaintext, err := ti.enc.Decrypt(row.HeadersEncrypted.String)

@@ -12,7 +12,6 @@ import (
 
 	gen "github.com/speakeasy-api/gram/server/gen/data_exports"
 	"github.com/speakeasy-api/gram/server/internal/audit"
-	"github.com/speakeasy-api/gram/server/internal/dataexports/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 )
 
@@ -69,6 +68,10 @@ func validateDestinationURL(raw string) (string, error) {
 func normalizeHeaderInputs(inputs []*gen.OtelDestinationHeaderInput, existing map[string]string) (map[string]string, error) {
 	headers := make(map[string]string, len(inputs))
 	seen := make(map[string]struct{}, len(inputs))
+	existingByFoldedName := make(map[string]string, len(existing))
+	for name, value := range existing {
+		existingByFoldedName[strings.ToLower(name)] = value
+	}
 	for _, input := range inputs {
 		if input == nil {
 			return nil, oops.E(oops.CodeInvalid, nil, "header entry cannot be null")
@@ -89,7 +92,7 @@ func normalizeHeaderInputs(inputs []*gen.OtelDestinationHeaderInput, existing ma
 			continue
 		}
 
-		value, exists := valueForHeader(existing, name)
+		value, exists := existingByFoldedName[folded]
 		if !exists {
 			return nil, oops.E(oops.CodeInvalid, nil, "header value is required for new header %q", name)
 		}
@@ -97,15 +100,6 @@ func normalizeHeaderInputs(inputs []*gen.OtelDestinationHeaderInput, existing ma
 	}
 
 	return headers, nil
-}
-
-func valueForHeader(headers map[string]string, name string) (string, bool) {
-	for existingName, value := range headers {
-		if strings.EqualFold(existingName, name) {
-			return value, true
-		}
-	}
-	return "", false
 }
 
 func (s *Service) encryptHeaders(headers map[string]string) (pgtype.Text, error) {
@@ -144,16 +138,7 @@ func (s *Service) decryptHeaders(stored pgtype.Text) (map[string]string, error) 
 	return headers, nil
 }
 
-func (s *Service) destinationSnapshot(row repo.OtelDestination) (*audit.OtelDestinationSnapshot, error) {
-	headers, err := s.decryptHeaders(row.HeadersEncrypted)
-	if err != nil {
-		return nil, err
-	}
-	policy, err := sensitiveDataFromRow(row.SensitiveData)
-	if err != nil {
-		return nil, err
-	}
-
+func destinationSnapshot(endpointURL string, headers map[string]string, policy sensitiveData) *audit.OtelDestinationSnapshot {
 	names := make([]string, 0, len(headers))
 	for name := range headers {
 		names = append(names, name)
@@ -161,8 +146,8 @@ func (s *Service) destinationSnapshot(row repo.OtelDestination) (*audit.OtelDest
 	sort.Strings(names)
 
 	return &audit.OtelDestinationSnapshot{
-		EndpointURL:   row.EndpointUrl,
+		EndpointURL:   endpointURL,
 		HeaderNames:   names,
 		SensitiveData: string(policy),
-	}, nil
+	}
 }

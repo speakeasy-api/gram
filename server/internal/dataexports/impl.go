@@ -218,6 +218,10 @@ func (s *Service) UpdateOtelDestination(ctx context.Context, payload *gen.Update
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "decode OTEL destination headers").LogError(ctx, logger)
 	}
+	beforePolicy, err := sensitiveDataFromRow(before.SensitiveData)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "decode OTEL destination sensitive-data policy").LogError(ctx, logger)
+	}
 	headers, err := normalizeHeaderInputs(payload.Headers, existingHeaders)
 	if err != nil {
 		return nil, err
@@ -226,10 +230,7 @@ func (s *Service) UpdateOtelDestination(ctx context.Context, payload *gen.Update
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "encrypt OTEL destination headers").LogError(ctx, logger)
 	}
-	beforeSnapshot, err := s.destinationSnapshot(before)
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "snapshot OTEL destination before update").LogError(ctx, logger)
-	}
+	beforeSnapshot := destinationSnapshot(before.EndpointUrl, existingHeaders, beforePolicy)
 
 	after, err := queries.UpdateOtelDestination(ctx, repo.UpdateOtelDestinationParams{
 		EndpointUrl:      endpointURL,
@@ -242,10 +243,7 @@ func (s *Service) UpdateOtelDestination(ctx context.Context, payload *gen.Update
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "update OTEL destination").LogError(ctx, logger)
 	}
-	afterSnapshot, err := s.destinationSnapshot(after)
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "snapshot OTEL destination after update").LogError(ctx, logger)
-	}
+	afterSnapshot := destinationSnapshot(after.EndpointUrl, headers, policy)
 
 	if err := s.audit.LogOtelDestinationUpdate(ctx, dbtx, audit.LogOtelDestinationUpdateEvent{
 		OrganizationID:            authCtx.ActiveOrganizationID,
@@ -546,7 +544,7 @@ func (s *Service) DeleteRoute(ctx context.Context, payload *gen.DeleteRoutePaylo
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 	queries := repo.New(dbtx)
 
-	before, err := queries.GetDataExportRouteForUpdate(ctx, repo.GetDataExportRouteForUpdateParams{
+	deleted, err := queries.SoftDeleteDataExportRoute(ctx, repo.SoftDeleteDataExportRouteParams{
 		OrganizationID: authCtx.ActiveOrganizationID,
 		ProjectID:      *authCtx.ProjectID,
 		ID:             routeID,
@@ -554,15 +552,6 @@ func (s *Service) DeleteRoute(ctx context.Context, payload *gen.DeleteRoutePaylo
 	if errors.Is(err, pgx.ErrNoRows) {
 		return oops.E(oops.CodeNotFound, err, "data export route not found")
 	}
-	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "lock data export route").LogError(ctx, logger)
-	}
-
-	deleted, err := queries.SoftDeleteDataExportRoute(ctx, repo.SoftDeleteDataExportRouteParams{
-		OrganizationID: authCtx.ActiveOrganizationID,
-		ProjectID:      *authCtx.ProjectID,
-		ID:             routeID,
-	})
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "delete data export route").LogError(ctx, logger)
 	}
@@ -573,7 +562,7 @@ func (s *Service) DeleteRoute(ctx context.Context, payload *gen.DeleteRoutePaylo
 		ActorDisplayName: authCtx.Email,
 		ActorSlug:        nil,
 		RouteURN:         urn.NewDataExportRoute(deleted.ID),
-		DataSource:       before.DataSource,
+		DataSource:       deleted.DataSource,
 	}); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "log data export route deletion").LogError(ctx, logger)
 	}
@@ -626,14 +615,9 @@ func (s *Service) validateRouteDestination(
 }
 
 func routeSnapshot(row repo.DataExportRoute) *audit.DataExportRouteSnapshot {
-	var destinationID *string
-	if row.OtelDestinationID.Valid {
-		value := row.OtelDestinationID.UUID.String()
-		destinationID = &value
-	}
 	return &audit.DataExportRouteSnapshot{
 		DataSource:        row.DataSource,
 		Enabled:           row.Enabled,
-		OtelDestinationID: destinationID,
+		OtelDestinationID: conv.FromNullableUUID(row.OtelDestinationID),
 	}
 }

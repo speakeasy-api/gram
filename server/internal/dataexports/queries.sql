@@ -9,15 +9,6 @@ WHERE organization_id = @organization_id
   AND deleted IS FALSE
 ORDER BY created_at, id;
 
--- Fetch one active destination for storage-level tests of write-only fields.
--- Production mutations use the locking variants below.
--- name: GetOtelDestination :one
-SELECT *
-FROM otel_destinations
-WHERE organization_id = @organization_id
-  AND project_id = @project_id
-  AND id = @id
-  AND deleted IS FALSE;
 
 -- Lock a destination before merging preserved header secrets or deleting it.
 -- The lock keeps the before snapshot and subsequent mutation on one row version.
@@ -147,7 +138,7 @@ WHERE organization_id = @organization_id
   AND deleted IS FALSE
 RETURNING *;
 
--- Tombstone a route while its FOR UPDATE lock is held.
+-- Atomically lock and tombstone a route, returning the deleted audit subject.
 -- name: SoftDeleteDataExportRoute :one
 UPDATE data_export_routes
 SET deleted_at = clock_timestamp(),
