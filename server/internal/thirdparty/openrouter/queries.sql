@@ -3,6 +3,16 @@
 -- completions cannot both mint an upstream OpenRouter key.
 SELECT pg_advisory_xact_lock(hashtext('openrouter_key:' || @organization_id::text || ':' || @key_type::text));
 
+-- name: AcquireOpenRouterKeyBillingLock :exec
+SELECT pg_advisory_lock(
+    hashtextextended('openrouter-' || @key_type::text || '-billing:' || @organization_id::text, 0)
+);
+
+-- name: ReleaseOpenRouterKeyBillingLock :one
+SELECT pg_advisory_unlock(
+    hashtextextended('openrouter-' || @key_type::text || '-billing:' || @organization_id::text, 0)
+) AS unlocked;
+
 -- name: CreateOpenRouterAPIKey :one
 INSERT INTO openrouter_api_keys (
     organization_id
@@ -43,7 +53,17 @@ RETURNING *;
 UPDATE openrouter_api_keys
 SET disable_causes = CASE
       WHEN @disable_cause::text = ANY(disable_causes) THEN disable_causes
-      ELSE array_append(disable_causes, @disable_cause::text)
+      ELSE ARRAY(
+        SELECT cause
+        FROM unnest(array_append(disable_causes, @disable_cause::text)) AS causes(cause)
+        GROUP BY cause
+        ORDER BY CASE cause
+          WHEN 'admin_lock' THEN 1
+          WHEN 'trial_demotion' THEN 2
+          WHEN 'billing_inactive' THEN 3
+          ELSE 4
+        END
+      )
     END,
     disabled = TRUE,
     updated_at = CASE
@@ -52,6 +72,7 @@ SET disable_causes = CASE
     END
 WHERE organization_id = @organization_id
   AND key_type = @key_type
+  AND key_hash = @key_hash
   AND disable_causes IS NOT NULL
   AND deleted IS FALSE
 RETURNING *;
