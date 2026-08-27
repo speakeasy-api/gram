@@ -24,9 +24,10 @@ import (
 // OpenClaw prepends its own envelope to channel-originated turns (Discord /
 // Slack / Telegram): a "Delivery: …" hint line, "<Label> (untrusted…):"
 // headers over a ```json fence (Conversation info, Sender, Reply target, …),
-// and chat-history / chat-window paragraphs whose every line is
-// "[#id ts] sender: text" (the entry shape bounds the paragraph so a human
-// line right after it survives). An optional "[Thu 2026-08-27 13:51 EDT]"
+// and chat-history / chat-window paragraphs whose rows are
+// "#id 2026-08-27 13:51:33 EDT [reply target] ->#id sender: text"; a row is
+// recognized by its leading #id or timestamp marker, which bounds the
+// paragraph so a human line right after it survives. An optional "[Thu 2026-08-27 13:51 EDT]"
 // timestamp stamps the head of the whole text; it is only removed when an
 // envelope element follows, so a human message that opens with a
 // timestamp-shaped bracket is left alone. The hooks relay strips all of this
@@ -39,7 +40,7 @@ var leadingEnvelopeRE = regexp.MustCompile(`(?s)^` +
 	`|\s*<notification>.*?</notification>\s*` +
 	"|\\s*Delivery: (?:to send a message, use the `message` tool\\.|Final assistant text is not automatically delivered in this run\\.[^\\n]*|No visible reply is delivered automatically in this run[^\\n]*)\\s*" +
 	"|\\s*[^\\n]* \\(untrusted[^)\\n]*\\):\\n```json\\n.*?\\n```\\s*" +
-	`|\s*[^\n]* \(untrusted(?:, chronological[^)\n]*|, for context)\):\n(?:[^\n:]+: [^\n]*(?:\n|$))*\s*` +
+	`|\s*[^\n]* \(untrusted(?:, chronological[^)\n]*|, for context)\):\n(?:(?:#\S+|\d{4}-\d{2}-\d{2} \d{2}:\d{2})[^\n]*: [^\n]*(?:\n|$))*\s*` +
 	`)+`)
 
 // StripLeadingEnvelopes removes any leading harness framing so downstream LLM
