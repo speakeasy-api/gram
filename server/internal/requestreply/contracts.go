@@ -7,19 +7,14 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-// AddressedMessage is satisfied by generated request protos that declare a
-// reply_urn field using the opaque API.
-type AddressedMessage interface {
-	proto.Message
-	GetReplyUrn() string
-	SetReplyUrn(string)
-}
+// ReplyURNAttribute carries the request's transport-level return address.
+const ReplyURNAttribute = "gram-reply-urn"
 
 // RequestBroker publishes requests and waits for their correlated replies.
-type RequestBroker[Req AddressedMessage, Resp proto.Message] interface {
-	// Request mints a correlation id, stamps the reply address, publishes req,
-	// and blocks until its reply arrives or ctx ends. A context deadline returns
-	// the zero Resp and the context error.
+type RequestBroker[Req proto.Message, Resp proto.Message] interface {
+	// Request mints a correlation id, publishes req with its reply address in
+	// transport metadata, and blocks until its reply arrives or ctx ends. A
+	// context deadline returns the zero Resp and the context error.
 	Request(ctx context.Context, req Req) (Resp, error)
 }
 

@@ -7,6 +7,8 @@ import "gcp/pubsub/v1/options.proto";
 option go_package = "github.com/speakeasy-api/gram/infra/gen/gram/risk/v1;riskv1";
 
 message GitleaksEnforcement {
+  reserved 8;
+
   string request_id = 1;
   string chat_message_id = 2;
   string project_id = 3;
@@ -15,7 +17,6 @@ message GitleaksEnforcement {
   int64 risk_policy_version = 6;
   string created_at = 7; // Must be UTC timestamp in RFC3339 format, e.g. 2023-01-01T00:00:00Z
 
-  string reply_urn = 8;
   string content = 9;
   string content_part_id = 10;
 

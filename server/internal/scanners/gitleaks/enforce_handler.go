@@ -98,7 +98,11 @@ func (h *EnforceHandler) Handle(ctx context.Context, m *riskv1.GitleaksEnforceme
 	if m.GetProjectId() == "" {
 		return errors.New("enforcement project id is required")
 	}
-	_, correlationID, err := enforcereply.ParseReplyURN(m.GetReplyUrn())
+	replyURN := meta.Attributes[requestreply.ReplyURNAttribute]
+	if replyURN == "" {
+		return errors.New("enforcement reply urn attribute is required")
+	}
+	_, correlationID, err := enforcereply.ParseReplyURN(replyURN)
 	if err != nil {
 		return fmt.Errorf("parse enforcement reply urn: %w", err)
 	}
@@ -162,7 +166,7 @@ func (h *EnforceHandler) Handle(ctx context.Context, m *riskv1.GitleaksEnforceme
 			DeliveryAttempt: new(deliveryAttempt),
 		}.Build(),
 	}.Build()
-	if err := h.writer.Reply(ctx, m.GetReplyUrn(), reply); err != nil {
+	if err := h.writer.Reply(ctx, replyURN, reply); err != nil {
 		h.metrics.replyWriteErrors.Add(ctx, 1)
 		h.logger.ErrorContext(ctx, "write gitleaks enforcement reply; acknowledging request", attr.SlogError(err))
 		return nil

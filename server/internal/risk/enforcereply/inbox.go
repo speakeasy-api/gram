@@ -172,5 +172,4 @@ func InboxKey(replicaID string) string {
 	return redisinbox.Key(keyspace, replicaID)
 }
 
-var _ requestreply.AddressedMessage = (*riskv1.GitleaksEnforcement)(nil)
 var _ requestreply.ReplyBroker[*riskv1.EnforcementReply] = (*Writer)(nil)

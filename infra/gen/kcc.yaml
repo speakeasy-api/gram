@@ -922,6 +922,7 @@ pubsub:
       definition: |
         edition = "2024";
         message GitleaksEnforcement {
+          reserved 8;
           string request_id = 1;
           string chat_message_id = 2;
           string project_id = 3;
@@ -929,7 +930,6 @@ pubsub:
           string risk_policy_id = 5;
           int64 risk_policy_version = 6;
           string created_at = 7;
-          string reply_urn = 8;
           string content = 9;
           string content_part_id = 10;
         }

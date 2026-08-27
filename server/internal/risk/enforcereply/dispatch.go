@@ -9,6 +9,7 @@ import (
 
 	"github.com/google/uuid"
 	"golang.org/x/sync/errgroup"
+	"google.golang.org/protobuf/proto"
 
 	riskv1 "github.com/speakeasy-api/gram/infra/gen/gram/risk/v1"
 	"github.com/speakeasy-api/gram/infra/pkg/gcp"
@@ -26,14 +27,14 @@ const (
 
 // EnforcementLane is the non-generic request seam used by enforcement fan-out.
 type EnforcementLane interface {
-	Request(ctx context.Context, req requestreply.AddressedMessage) (*riskv1.EnforcementReply, error)
+	Request(ctx context.Context, req proto.Message) (*riskv1.EnforcementReply, error)
 }
 
-type typedEnforcementLane[Req requestreply.AddressedMessage] struct {
+type typedEnforcementLane[Req proto.Message] struct {
 	broker requestreply.RequestBroker[Req, *riskv1.EnforcementReply]
 }
 
-func (l *typedEnforcementLane[Req]) Request(ctx context.Context, req requestreply.AddressedMessage) (*riskv1.EnforcementReply, error) {
+func (l *typedEnforcementLane[Req]) Request(ctx context.Context, req proto.Message) (*riskv1.EnforcementReply, error) {
 	typed, ok := req.(Req)
 	if !ok {
 		return nil, fmt.Errorf("unexpected enforcement request type %T", req)
@@ -136,7 +137,6 @@ func (d *Dispatcher) Dispatch(ctx context.Context, request DispatchRequest) (Out
 				ProjectId:      new(request.ProjectID),
 				OrganizationId: new(request.OrganizationID),
 				CreatedAt:      new(createdAt),
-				ReplyUrn:       new(""),
 				Content:        new(request.Content),
 			}.Build()
 			reply, requestErr := d.gitleaks.Request(laneCtx, enforcement)

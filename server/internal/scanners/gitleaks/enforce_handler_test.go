@@ -11,6 +11,7 @@ import (
 
 	riskv1 "github.com/speakeasy-api/gram/infra/gen/gram/risk/v1"
 	"github.com/speakeasy-api/gram/infra/pkg/gcp"
+	"github.com/speakeasy-api/gram/server/internal/requestreply"
 	"github.com/speakeasy-api/gram/server/internal/risk"
 	"github.com/speakeasy-api/gram/server/internal/risk/enforcereply"
 	"github.com/speakeasy-api/gram/server/internal/scanners/gitleaks"
@@ -28,11 +29,10 @@ func TestEnforceHandlerWritesSafePepperedReply(t *testing.T) {
 		ProjectId:      new("project-safe"),
 		OrganizationId: new("org-safe"),
 		CreatedAt:      new(time.Now().UTC().Format(time.RFC3339Nano)),
-		ReplyUrn:       new(enforcereply.ReplyURN("replica-safe", "scan-safe")),
 		Content:        new(content),
 	}.Build()
 	deliveryAttempt := 2
-	require.NoError(t, handler.Handle(t.Context(), request, gcp.MessageMetadata{DeliveryAttempt: &deliveryAttempt}))
+	require.NoError(t, handler.Handle(t.Context(), request, replyMetadata("replica-safe", "scan-safe", &deliveryAttempt)))
 	require.Equal(t, 60*time.Second, mr.TTL(enforcereply.InboxKey("replica-safe")))
 
 	payload, err := client.LPop(t.Context(), enforcereply.InboxKey("replica-safe")).Bytes()
@@ -74,11 +74,10 @@ func TestEnforceHandlerAcknowledgesStaleRequest(t *testing.T) {
 		ProjectId:      new("project-stale"),
 		OrganizationId: new("org-stale"),
 		CreatedAt:      new(time.Now().Add(-31 * time.Second).UTC().Format(time.RFC3339Nano)),
-		ReplyUrn:       new(enforcereply.ReplyURN("replica-stale", "scan-stale")),
 		Content:        new(fakeSecret),
 	}.Build()
 
-	require.NoError(t, handler.Handle(t.Context(), request, gcp.MessageMetadata{DeliveryAttempt: nil}))
+	require.NoError(t, handler.Handle(t.Context(), request, replyMetadata("replica-stale", "scan-stale", nil)))
 	require.False(t, mr.Exists(enforcereply.InboxKey("replica-stale")))
 	require.Equal(t, int64(1), counterValue(t, reader, "risk.enforcement.gitleaks.stale_dropped"))
 }
@@ -95,11 +94,10 @@ func TestEnforceHandlerAcknowledgesReplyWriteFailure(t *testing.T) {
 		ProjectId:      new("project-write-failure"),
 		OrganizationId: new("org-write-failure"),
 		CreatedAt:      new(time.Now().UTC().Format(time.RFC3339Nano)),
-		ReplyUrn:       new(enforcereply.ReplyURN("replica-write-failure", "scan-write-failure")),
 		Content:        new("safe content"),
 	}.Build()
 
-	require.NoError(t, handler.Handle(t.Context(), request, gcp.MessageMetadata{DeliveryAttempt: nil}))
+	require.NoError(t, handler.Handle(t.Context(), request, replyMetadata("replica-write-failure", "scan-write-failure", nil)))
 	require.Equal(t, int64(1), counterValue(t, reader, "risk.enforcement.gitleaks.reply_write_errors"))
 }
 
@@ -114,12 +112,38 @@ func TestEnforceHandlerRejectsMalformedCreatedAt(t *testing.T) {
 		ProjectId:      new("project-malformed"),
 		OrganizationId: new("org-malformed"),
 		CreatedAt:      new("not-a-timestamp"),
-		ReplyUrn:       new(enforcereply.ReplyURN("replica-malformed", "scan-malformed")),
 		Content:        new("safe content"),
 	}.Build()
 
-	err := handler.Handle(t.Context(), request, gcp.MessageMetadata{DeliveryAttempt: nil})
+	err := handler.Handle(t.Context(), request, replyMetadata("replica-malformed", "scan-malformed", nil))
 	require.ErrorContains(t, err, "parse enforcement created_at")
+}
+
+func TestEnforceHandlerRejectsMissingReplyURNAttribute(t *testing.T) {
+	t.Parallel()
+
+	_, _, writer := newReplyWriter(t)
+	meterProvider, _ := newTestMeterProvider(t)
+	handler, _ := newTestEnforceHandler(t, meterProvider, writer, gitleaks.DefaultMaxRequestAge)
+	request := riskv1.GitleaksEnforcement_builder{
+		RequestId:      new("scan-missing-reply-urn"),
+		ProjectId:      new("project-missing-reply-urn"),
+		OrganizationId: new("org-missing-reply-urn"),
+		CreatedAt:      new(time.Now().UTC().Format(time.RFC3339Nano)),
+		Content:        new("safe content"),
+	}.Build()
+
+	err := handler.Handle(t.Context(), request, gcp.MessageMetadata{})
+	require.ErrorContains(t, err, "enforcement reply urn attribute is required")
+}
+
+func replyMetadata(replicaID, correlationID string, deliveryAttempt *int) gcp.MessageMetadata {
+	return gcp.MessageMetadata{
+		Attributes: map[string]string{
+			requestreply.ReplyURNAttribute: enforcereply.ReplyURN(replicaID, correlationID),
+		},
+		DeliveryAttempt: deliveryAttempt,
+	}
 }
 
 func counterValue(t *testing.T, reader interface {

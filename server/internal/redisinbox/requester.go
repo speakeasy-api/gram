@@ -12,19 +12,19 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/requestreply"
 )
 
-// Requester publishes addressed messages after installing their reply waiter.
-type Requester[Req requestreply.AddressedMessage, Resp proto.Message] struct {
+// Requester publishes messages after installing their reply waiter.
+type Requester[Req proto.Message, Resp proto.Message] struct {
 	inbox     *Inbox[Resp]
 	publisher gcp.Publisher[Req]
 }
 
 // NewRequestBroker composes a publisher with a replica reply inbox.
-func NewRequestBroker[Req requestreply.AddressedMessage, Resp proto.Message](inbox *Inbox[Resp], publisher gcp.Publisher[Req]) *Requester[Req, Resp] {
+func NewRequestBroker[Req proto.Message, Resp proto.Message](inbox *Inbox[Resp], publisher gcp.Publisher[Req]) *Requester[Req, Resp] {
 	return &Requester[Req, Resp]{inbox: inbox, publisher: publisher}
 }
 
-// Request registers before publishing, stamps a fresh UUIDv7 return address,
-// and waits for the first correlated reply.
+// Request registers before publishing with a fresh UUIDv7 return address and
+// waits for the first correlated reply.
 func (r *Requester[Req, Resp]) Request(ctx context.Context, req Req) (Resp, error) {
 	var zero Resp
 	correlationID, err := uuid.NewV7()
@@ -38,8 +38,10 @@ func (r *Requester[Req, Resp]) Request(ctx context.Context, req Req) (Resp, erro
 	}
 	defer release()
 
-	req.SetReplyUrn(r.inbox.URN(correlationID.String()))
-	if _, err := r.publisher.Publish(ctx, req).Get(ctx); err != nil {
+	replyURN := r.inbox.URN(correlationID.String())
+	if _, err := r.publisher.Publish(ctx, req, gcp.WithMessageAttributes(map[string]string{
+		requestreply.ReplyURNAttribute: replyURN,
+	})).Get(ctx); err != nil {
 		if ctxErr := ctx.Err(); ctxErr != nil {
 			return zero, ctxErr //nolint:wrapcheck // Request returns the context error as part of its contract.
 		}
@@ -57,4 +59,4 @@ func (r *Requester[Req, Resp]) Close(ctx context.Context) error {
 	return nil
 }
 
-var _ requestreply.RequestBroker[requestreply.AddressedMessage, proto.Message] = (*Requester[requestreply.AddressedMessage, proto.Message])(nil)
+var _ requestreply.RequestBroker[proto.Message, proto.Message] = (*Requester[proto.Message, proto.Message])(nil)
