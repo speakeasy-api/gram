@@ -71,16 +71,19 @@ func TestMarkEnterpriseTrialConverted_AcceptsEveryEligibleStateAndPreservesHisto
 			seedTrial(t, ctx, conn, trialFixture{orgID: orgID, endsAt: tc.endsAt, demotedAt: tc.demotedAt})
 
 			before := readTrial(t, ctx, conn, orgID)
-			started := time.Now().UTC()
+			trialQueries := trialsRepo.New(conn)
+			started, err := trialQueries.GetTrialClockFixture(ctx)
+			require.NoError(t, err)
 			res, err := svc.MarkEnterpriseTrialConverted(ctx, &gen.MarkEnterpriseTrialConvertedPayload{ID: orgID})
-			finished := time.Now().UTC()
+			require.NoError(t, err)
+			finished, err := trialQueries.GetTrialClockFixture(ctx)
 			require.NoError(t, err)
 			require.Equal(t, orgID, res.ID)
 
 			after := readTrial(t, ctx, conn, orgID)
 			require.True(t, after.ConvertedAt.Valid)
-			require.False(t, after.ConvertedAt.Time.Before(started))
-			require.False(t, after.ConvertedAt.Time.After(finished))
+			require.False(t, after.ConvertedAt.Time.Before(started.Time))
+			require.False(t, after.ConvertedAt.Time.After(finished.Time))
 			require.Equal(t, before.EndsAt.Time, after.EndsAt.Time)
 			require.Equal(t, before.DemotedAt, after.DemotedAt)
 

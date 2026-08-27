@@ -221,6 +221,18 @@ func (q *Queries) GetTrial(ctx context.Context, organizationID string) (Trial, e
 	return i, err
 }
 
+const getTrialClockFixture = `-- name: GetTrialClockFixture :one
+SELECT clock_timestamp()::timestamptz
+`
+
+// Test-only clock bound for timestamps assigned by PostgreSQL.
+func (q *Queries) GetTrialClockFixture(ctx context.Context) (pgtype.Timestamptz, error) {
+	row := q.db.QueryRow(ctx, getTrialClockFixture)
+	var column_1 pgtype.Timestamptz
+	err := row.Scan(&column_1)
+	return column_1, err
+}
+
 const insertTrialFixture = `-- name: InsertTrialFixture :exec
 INSERT INTO trials (organization_id, tier, created_at, ends_at, converted_at, demoted_at)
 VALUES (

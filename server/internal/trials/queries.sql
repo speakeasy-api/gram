@@ -1,3 +1,7 @@
+-- name: GetTrialClockFixture :one
+-- Test-only clock bound for timestamps assigned by PostgreSQL.
+SELECT clock_timestamp()::timestamptz;
+
 -- name: CreateTrial :exec
 -- One row per organization forever: extend a trial by moving ends_at forward,
 -- never by inserting a second row.
