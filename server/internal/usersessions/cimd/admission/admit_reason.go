@@ -18,8 +18,12 @@ package admission
 type AdmitReason string
 
 const (
-	// AdmitOpen: the issuer skips admission entirely. Document validation
-	// still ran, but no policy was consulted.
+	// AdmitOpen: open mode admitted the client and the shadow could not
+	// reach a verdict, because the lookup it needed failed. Every other
+	// open-mode admission records what the shadow decided, so this value
+	// means "admitted, verdict unavailable" rather than "admitted, nothing
+	// consulted". A sustained rise in it is a broken measurement, not a
+	// policy signal, and it is paired with an error log naming the cause.
 	AdmitOpen AdmitReason = "admitted_open"
 
 	// AdmitCatalogExact: an exact entry in Gram's curated catalog.
@@ -35,4 +39,20 @@ const (
 	// URL lookup is a database query the caller performs — so the caller
 	// supplies it.
 	AdmitCustom AdmitReason = "admitted_custom"
+
+	// AdmitOpenNotListed: open mode admitted the client, and the shadow
+	// evaluation found no rule anywhere that covers it — not an enabled
+	// catalog entry, not one of the issuer's own URLs. This is the same
+	// signal DenialNotListed carries, from a request that succeeded, and it
+	// is the value worth alerting on now that the resting state refuses
+	// nobody. A rise means the catalog is missing a client customers use.
+	AdmitOpenNotListed AdmitReason = "admitted_open_not_listed"
+
+	// AdmitOpenOversized: open mode admitted the client, and the shadow
+	// refused to evaluate a client_id longer than MaxClientIDLength rather
+	// than hand it to the database. Kept apart from AdmitOpen so that value
+	// keeps meaning "the measurement broke": this one is working exactly as
+	// intended, and on an unauthenticated endpoint a rise in it is a
+	// probing campaign rather than a fault.
+	AdmitOpenOversized AdmitReason = "admitted_open_oversized"
 )

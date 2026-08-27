@@ -197,7 +197,15 @@ func (s *OAuthHTTP) admitCIMDClient(ctx context.Context, clientID string) error 
 	}
 
 	if decision.Outcome == admission.OutcomeAdmit {
-		s.cimdAdmission.RecordAdmitted(ctx, platformCIMDAdmissionMode, decision.Admit)
+		reason := decision.Admit
+		if reason == admission.AdmitOpen {
+			// Open admitted without consulting anything, so there is no
+			// verdict in that value. The shadow supplies one: the client is
+			// let through either way, and what a catalog-enforcing policy
+			// would have said about it is what lands on the counter.
+			reason = s.shadowCIMDAdmitReason(ctx, clientID)
+		}
+		s.cimdAdmission.RecordAdmitted(ctx, platformCIMDAdmissionMode, reason)
 		return nil
 	}
 
@@ -218,6 +226,48 @@ func (s *OAuthHTTP) admitCIMDClient(ctx context.Context, clientID string) error 
 	}
 	s.logger.InfoContext(ctx, "cimd admission denied", logAttrs...)
 	return &admission.DenialError{Mode: platformCIMDAdmissionMode, Reason: decision.Denial}
+}
+
+// shadowCIMDAdmitReason computes what a catalog-enforcing policy WOULD have
+// decided about a client_id this server is admitting anyway, and returns it
+// as the outcome to record. Every return value is an AdmitReason: the shadow
+// is telemetry, and nothing it produces may become a refusal.
+//
+// It is catalog-only, unlike the hosted authorization server's shadow. There
+// is no per-issuer custom URL table here to consult, so a catalog miss is
+// already the whole verdict.
+func (s *OAuthHTTP) shadowCIMDAdmitReason(ctx context.Context, clientID string) admission.AdmitReason {
+	shadow := admission.EvaluateShadow(clientID)
+
+	switch shadow.Outcome {
+	case admission.OutcomeAdmit:
+		return shadow.Admit
+	case admission.OutcomeCheckCustom:
+		// The branch that asks for a custom-URL lookup this server cannot
+		// perform. It reaches the counter as an admission, never the
+		// OutcomeCheckCustom to DenialNotListed mapping above: that one is a
+		// real refusal, and this is a measurement of a request that
+		// succeeded.
+		//
+		// The presented client_id goes in the log and never in a metric
+		// dimension. The message keeps "denied" honest when nothing was.
+		s.logger.InfoContext(ctx, "cimd admission would deny",
+			attr.SlogOAuthClientID(truncateClientIDForLog(clientID)),
+			attr.SlogCIMDAdmissionMode(platformCIMDAdmissionMode),
+			attr.SlogCIMDAdmissionOutcome(admission.DenialNotListed),
+		)
+		return admission.AdmitOpenNotListed
+	case admission.OutcomeDeny:
+		// Unreachable: an oversized client_id was already refused for real
+		// above, before the shadow could run. Named anyway rather than
+		// folded into AdmitOpen, so the two do not blur together if that
+		// ordering ever changes.
+		return admission.AdmitOpenOversized
+	default:
+		// Unreachable: Decision carries exactly the three outcomes above.
+		// Recorded as a missing verdict rather than invented as one.
+		return admission.AdmitOpen
+	}
 }
 
 // truncateClientIDForLog bounds a presented client_id for logging. The value

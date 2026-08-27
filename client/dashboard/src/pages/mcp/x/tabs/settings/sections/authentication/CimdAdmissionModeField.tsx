@@ -31,13 +31,12 @@ import { Loader2 } from "lucide-react";
 import { useEffect, useId, useState, type MouseEvent } from "react";
 import { toast } from "sonner";
 
-// The three modes an operator can actually choose. The read side of the API
-// can also return "reporting" — the default for an issuer that has never
-// been configured — but it is not writable and is deliberately not shown as
-// a fourth option: it is as permissive as "open" while it is on, so naming
-// it as a choice would put a reassuring label on the least restrictive
-// state. An unconfigured issuer therefore renders with nothing selected. See
-// server/internal/usersessions/cimd/admission/mode.go.
+// The three modes an operator can actually choose, and between them every
+// mode an issuer can be in: "open" is what an issuer carries unless someone
+// changes it. The read side of the API can also return "reporting", a legacy
+// value that admits exactly what "open" admits. It is not writable and is
+// deliberately not offered as a fourth option, so an issuer still storing it
+// renders with nothing selected.
 const MODE_OPTIONS: {
   value: WritableMode;
   title: string;
@@ -68,18 +67,25 @@ const MODE_OPTIONS: {
 
 export function CimdAdmissionModeField({
   userSessionIssuer,
+  onDraftModeChange,
 }: {
   userSessionIssuer: UserSessionIssuer;
+  /**
+   * Publishes each unsaved selection so a sibling field can render against
+   * it. The custom-URL list belongs to the modes that consult it, and an
+   * operator moving an issuer onto "Known clients" needs to stage those URLs
+   * before the switch takes effect, not after.
+   */
+  onDraftModeChange?: (mode: WritableMode) => void;
 }): JSX.Element {
   const queryClient = useQueryClient();
   const fieldId = useId();
   const effectiveMode = userSessionIssuer.clientIdMetadataAdmissionMode;
 
-  // "reporting" is only ever returned for an issuer whose mode was never
-  // set, and it cannot be written back, so there is no option to select for
-  // it. Saving any mode leaves that state permanently, but it is a
-  // short-lived migration default rather than something an operator chose,
-  // so it is not worth a confirmation step in front of every first save.
+  // "reporting" cannot be written back, so there is no option to select for
+  // it and the group renders with nothing chosen. Only a row stored before
+  // "open" became the written default can still read back as it, and saving
+  // any mode leaves that state for good.
   const unconfigured = effectiveMode === "reporting";
 
   const [draftMode, setDraftMode] = useState<WritableMode | null>(null);
@@ -138,7 +144,10 @@ export function CimdAdmissionModeField({
       <RadioGroup
         aria-labelledby={`${fieldId}-label`}
         value={selectedMode ?? ""}
-        onValueChange={(next) => setDraftMode(next as WritableMode)}
+        onValueChange={(next) => {
+          setDraftMode(next as WritableMode);
+          onDraftModeChange?.(next as WritableMode);
+        }}
         className="space-y-2.5"
       >
         {MODE_OPTIONS.map((option) => (

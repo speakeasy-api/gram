@@ -311,14 +311,21 @@ INSERT INTO user_session_issuers (
     organization_id,
     slug,
     authn_challenge_mode,
-    session_duration
+    session_duration,
+    client_id_metadata_admission_mode
 )
 VALUES (
     $1::uuid,
     $2,
     $3,
     $4,
-    $5
+    $5,
+    -- Written explicitly rather than left NULL so the resting policy is a
+    -- real, readable, operator-changeable value on the row instead of an
+    -- absence the application has to interpret. A literal, not a parameter:
+    -- the create form carries no admission field, and an operator changes
+    -- the mode afterwards through the update endpoint.
+    'open'
 )
 RETURNING id, project_id, organization_id, slug, authn_challenge_mode, session_duration, classification, client_id_metadata_admission_mode, created_at, updated_at, deleted_at, deleted
 `
@@ -2266,9 +2273,9 @@ SET
     slug = COALESCE($1::text, slug),
     authn_challenge_mode = COALESCE($2::text, authn_challenge_mode),
     session_duration = COALESCE($3::interval, session_duration),
-    -- Omitting the mode keeps the stored value, including NULL. Once a
-    -- concrete mode is written the column can never return to NULL through
-    -- this endpoint: "never configured" is a one-way state, and the API
+    -- Omitting the mode keeps the stored value, NULL included. Rows created
+    -- before the insert above wrote a mode explicitly stay NULL until a
+    -- backfill converges them, and nothing here needs to care: the API
     -- reports the resolved effective mode either way.
     client_id_metadata_admission_mode = COALESCE($4::text, client_id_metadata_admission_mode),
     updated_at = clock_timestamp()

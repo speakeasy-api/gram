@@ -90,7 +90,21 @@ vi.mock("./UserSessionDurationField", () => ({
 }));
 
 vi.mock("./CimdAdmissionModeField", () => ({
-  CimdAdmissionModeField: () => <div>cimd-admission-mode</div>,
+  CimdAdmissionModeField: ({
+    onDraftModeChange,
+  }: {
+    onDraftModeChange?: (mode: string) => void;
+  }) => (
+    <div>
+      cimd-admission-mode
+      <button type="button" onClick={() => onDraftModeChange?.("presets")}>
+        draft-presets
+      </button>
+      <button type="button" onClick={() => onDraftModeChange?.("open")}>
+        draft-open
+      </button>
+    </div>
+  ),
 }));
 
 vi.mock("./CimdCustomClientsField", () => ({
@@ -250,6 +264,58 @@ describe("AuthenticationSectionBody", () => {
       expect(screen.getByText("cimd-custom-clients")).toBeDefined();
     },
   );
+
+  it("reveals the custom CIMD client list for an unsaved Known clients selection", () => {
+    useUserSessionIssuer.mockReturnValue({
+      data: {
+        id: "user-session-issuer",
+        clientIdMetadataAdmissionMode: "open",
+      },
+      isLoading: false,
+      isError: false,
+    });
+    useAllRemoteSessionClients.mockReturnValue({ items: [], isLoading: false });
+    useProtectedResourceMetadata.mockReturnValue({
+      status: "idle",
+      metadata: null,
+    });
+
+    render(
+      <AuthenticationSectionBody target={remoteTargetWithSessionIssuer} />,
+    );
+
+    // Staging the URLs that "Known clients" enforces has to be possible
+    // BEFORE the mode is saved, or an operator switches into enforcement
+    // with an empty list and races to fill it while clients are being
+    // turned away.
+    expect(screen.queryByText("cimd-custom-clients")).toBeNull();
+    fireEvent.click(screen.getByText("draft-presets"));
+    expect(screen.getByText("cimd-custom-clients")).toBeDefined();
+  });
+
+  it("hides the custom CIMD client list again when the selection moves off Known clients", () => {
+    useUserSessionIssuer.mockReturnValue({
+      data: {
+        id: "user-session-issuer",
+        clientIdMetadataAdmissionMode: "presets",
+      },
+      isLoading: false,
+      isError: false,
+    });
+    useAllRemoteSessionClients.mockReturnValue({ items: [], isLoading: false });
+    useProtectedResourceMetadata.mockReturnValue({
+      status: "idle",
+      metadata: null,
+    });
+
+    render(
+      <AuthenticationSectionBody target={remoteTargetWithSessionIssuer} />,
+    );
+
+    expect(screen.getByText("cimd-custom-clients")).toBeDefined();
+    fireEvent.click(screen.getByText("draft-open"));
+    expect(screen.queryByText("cimd-custom-clients")).toBeNull();
+  });
 
   it.each(["open", "disabled"])(
     "hides the custom CIMD client list in %s mode",

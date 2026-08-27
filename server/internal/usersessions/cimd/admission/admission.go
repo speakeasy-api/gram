@@ -22,10 +22,10 @@ const MaxClientIDLength = 2048
 // URL rows, which is a database lookup only the caller can perform, and is
 // what OutcomeCheckCustom asks for.
 //
-// ModeReporting returns the identical decision to ModePresets. That is the
-// entire point: the recorded outcome must be comparable to what ModePresets
-// will produce after the switch. The caller consults Mode.Enforces to learn
-// that a denial should be recorded and then discarded.
+// ModeReporting returns the identical decision to ModePresets, so the
+// outcome it records is directly comparable to what ModePresets produces.
+// The caller consults Mode.Enforces to learn that a denial should be
+// recorded and then discarded.
 func Evaluate(mode Mode, clientID string) Decision {
 	switch mode {
 	case ModeOpen:
@@ -49,4 +49,26 @@ func Evaluate(mode Mode, clientID string) Decision {
 		// backstop for a mode built any other way.
 		return denyDecision(DenialUnknownMode)
 	}
+}
+
+// EvaluateShadow computes the decision ModePresets WOULD make for a
+// presented client_id, for a caller that is admitting it regardless. It is
+// how an open-mode issuer keeps producing the catalog-gap signal that
+// enforcement would otherwise be needed to discover: the client is let
+// through, and what a curated allowlist would have said about it is
+// recorded anyway.
+//
+// It is deliberately NOT reachable through Evaluate, and that separation is
+// load-bearing rather than stylistic. Evaluate is the enforcement path: what
+// it returns decides whether a client is refused. This function's result
+// decides nothing, so the two must not share a return value that a caller
+// could act on by mistake.
+//
+// The result is telemetry. Callers translate it into an AdmitReason — a
+// metric label — and must never surface it as a refusal. OutcomeCheckCustom
+// still asks for the custom-URL lookup, and an OutcomeDeny here means only
+// that no shadow verdict is available, never that the client should be
+// turned away.
+func EvaluateShadow(clientID string) Decision {
+	return Evaluate(ModePresets, clientID)
 }
