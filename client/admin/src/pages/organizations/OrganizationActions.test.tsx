@@ -112,7 +112,7 @@ const NONE_ORG: AdminOrganization = {
   trial_ends_at: undefined,
 };
 
-// Expired and not yet demoted: Start trial still, even though an old end
+// Expired and not yet demoted: Restart trial, even though an old end
 // date is on the wire. The calendar must ignore that date and count from
 // today, or the grant would restart from a deadline that has already passed.
 const EXPIRED_ORG: AdminOrganization = {
@@ -149,7 +149,6 @@ const ORG_NO_END: AdminOrganization = { ...ORG, trial_ends_at: undefined };
 // the module under test: importing the set would move this expectation along
 // with the rule it is meant to hold in place.
 const EXTENDABLE: (TrialState | undefined)[] = ["running", "ending_soon"];
-const STARTABLE: (TrialState | undefined)[] = ["none", "expired"];
 
 const DEFAULT_DAYS = "14";
 
@@ -334,8 +333,8 @@ async function openRearmDialog(): Promise<void> {
   await screen.findByRole("dialog");
 }
 
-async function openStartDialog(): Promise<void> {
-  fireEvent.click(screen.getByRole("menuitem", { name: "Start trial" }));
+async function openStartDialog(item = "Start trial"): Promise<void> {
+  fireEvent.click(screen.getByRole("menuitem", { name: item }));
   await screen.findByRole("dialog");
 }
 
@@ -353,9 +352,9 @@ async function submitRearmDays(value: string): Promise<void> {
   });
 }
 
-async function submitStart(): Promise<void> {
+async function submitStart(label = "Start trial"): Promise<void> {
   await act(async () => {
-    fireEvent.click(screen.getByRole("button", { name: "Start trial" }));
+    fireEvent.click(screen.getByRole("button", { name: label }));
   });
 }
 
@@ -468,7 +467,8 @@ describe("the row menu", () => {
         (item) =>
           item === "Extend trial" ||
           item === "Re-arm trial" ||
-          item === "Start trial",
+          item === "Start trial" ||
+          item === "Restart trial",
       );
       expect(offered.length).toBeLessThanOrEqual(1);
     },
@@ -492,10 +492,10 @@ describe("the row menu", () => {
 
       // Never trialled, or expired without converting or being demoted. A
       // running trial is extend's job, a demoted one is re-arm's, and a
-      // converted one has become a contract.
-      expect(menuItems().includes("Start trial")).toBe(
-        STARTABLE.includes(state),
-      );
+      // converted one has become a contract. Expired is a restart of the
+      // same write, named for the field it sits on.
+      expect(menuItems().includes("Start trial")).toBe(state === "none");
+      expect(menuItems().includes("Restart trial")).toBe(state === "expired");
     },
   );
 
@@ -505,6 +505,7 @@ describe("the row menu", () => {
       await renderMenu({ ...DISABLED_ORG, trial_state: state });
 
       expect(menuItems().includes("Start trial")).toBe(false);
+      expect(menuItems().includes("Restart trial")).toBe(false);
     },
   );
 
@@ -644,6 +645,42 @@ describe("the actions prop", () => {
         name: `Start trial for ${NONE_ORG.name}`,
       }),
     ).toHaveLength(1);
+  });
+
+  it("draws the trial field as the start control when asked", async () => {
+    await renderWithApp(
+      <WriteReportProvider value={REPORTER}>
+        <OrganizationActions
+          org={NONE_ORG}
+          layout="buttons"
+          actions="trial"
+          fieldTrigger
+        />
+      </WriteReportProvider>,
+    );
+
+    const control = screen.getByRole("button", {
+      name: `Start trial for ${NONE_ORG.name}`,
+    });
+    expect(control.textContent).toBe("No trial");
+  });
+
+  it("names the field Restart trial when the trial has expired", async () => {
+    await renderWithApp(
+      <WriteReportProvider value={REPORTER}>
+        <OrganizationActions
+          org={EXPIRED_ORG}
+          layout="buttons"
+          actions="trial"
+          fieldTrigger
+        />
+      </WriteReportProvider>,
+    );
+
+    const control = screen.getByRole("button", {
+      name: `Restart trial for ${EXPIRED_ORG.name}`,
+    });
+    expect(control.textContent).toBe("Restart trial");
   });
 });
 
@@ -1391,19 +1428,25 @@ describe("the start trial dialog", () => {
 
   it("counts from today even when an expired trial still carries an old end", async () => {
     await renderMenu(EXPIRED_ORG);
-    await openStartDialog();
+    await openStartDialog("Restart trial");
 
     // The expired record's last day is in May. Anchoring there would offer
     // May dates and send a count the server would add to now, not to May.
     expect(endDateTrigger().textContent).toBe(rendered(START_DEFAULT));
     expect(dialog().textContent).not.toContain(rendered("2026-05-06"));
+    expect(dialog().textContent).toContain(
+      `Restart the trial for ${EXPIRED_ORG.name}?`,
+    );
 
-    await submitStart();
+    await submitStart("Restart trial");
 
     expect(mocks.startTrial).toHaveBeenCalledWith({
       id: EXPIRED_ORG.id,
       days: 14,
     });
+    expect(announce).toHaveBeenCalledWith(
+      `${EXPIRED_ORG.name} trial restarted for 14 days.`,
+    );
   });
 
   it.each([
@@ -2018,6 +2061,21 @@ describe("the peek panel footer", () => {
     expect(
       screen.queryByRole("button", {
         name: `Re-arm trial for ${NONE_ORG.name}`,
+      }),
+    ).toBeNull();
+  });
+
+  it("offers Restart trial for an expired trial that has not been demoted", async () => {
+    await renderFooter(EXPIRED_ORG);
+
+    expect(
+      screen.getByRole("button", {
+        name: `Restart trial for ${EXPIRED_ORG.name}`,
+      }),
+    ).toBeTruthy();
+    expect(
+      screen.queryByRole("button", {
+        name: `Start trial for ${EXPIRED_ORG.name}`,
       }),
     ).toBeNull();
   });

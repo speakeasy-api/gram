@@ -189,13 +189,16 @@ describe("Overview", () => {
     });
 
     await screen.findByText("Trial");
-    expect(within(valueBeside("Trial")).getByText("No trial")).toBeTruthy();
+    const trial = valueBeside("Trial");
+    // The field is the control: "No trial" is the button, not a caption beside
+    // a separate Start trial action.
     expect(
-      screen.getByRole("button", { name: `Start trial for ${ORG.name}` }),
-    ).toBeTruthy();
+      within(trial).getByRole("button", { name: `Start trial for ${ORG.name}` })
+        .textContent,
+    ).toBe("No trial");
   });
 
-  it("offers Start trial beside an expired trial that has not been demoted", async () => {
+  it("offers Restart trial beside an expired trial that has not been demoted", async () => {
     mocks.getOrganization.mockResolvedValue({
       ...ORG,
       trial_state: "expired",
@@ -207,7 +210,7 @@ describe("Overview", () => {
     await screen.findByText("Trial");
     expect(within(valueBeside("Trial")).getByText("Expired")).toBeTruthy();
     expect(
-      screen.getByRole("button", { name: `Start trial for ${ORG.name}` }),
+      screen.getByRole("button", { name: `Restart trial for ${ORG.name}` }),
     ).toBeTruthy();
   });
 

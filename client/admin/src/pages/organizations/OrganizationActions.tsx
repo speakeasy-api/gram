@@ -48,7 +48,7 @@ import {
   trialEndDay,
   utcTodayDay,
 } from "@/lib/trialDates";
-import { fmtDateShort } from "@/lib/utils";
+import { cn, fmtDateShort } from "@/lib/utils";
 
 import { PEEK_PANEL_ID } from "./PeekPanel";
 import {
@@ -148,6 +148,7 @@ export function OrganizationActions({
   layout,
   actions = "all",
   buttonClassName,
+  fieldTrigger,
 }: {
   org: AdminOrganization;
   layout: "menu" | "buttons";
@@ -159,6 +160,9 @@ export function OrganizationActions({
   // button brings the page's border and fill with it, which inside a toned
   // panel reads as a control belonging to something else.
   buttonClassName?: string;
+  // Overview's Trial row: the control is the field value, sized like Account
+  // type beside it. Peek and the row menu keep a named action.
+  fieldTrigger?: boolean;
 }): JSX.Element {
   const { announce, showFailure } = useContext(WriteReportContext);
   const [open, setOpen] = useState<OpenDialog>();
@@ -183,7 +187,8 @@ export function OrganizationActions({
   // and the server's own refusal are led by the same words.
   const extendFailureLead = `Could not extend the trial for ${org.name}`;
   const rearmFailureLead = `Could not re-arm the trial for ${org.name}`;
-  const startFailureLead = `Could not start the trial for ${org.name}`;
+  const startCopy = startTrialCopy(org);
+  const startFailureLead = startCopy.failureLead;
 
   // Only extend has a date to add days to. Re-arm counts from now, so it gets
   // no calendar and its dialog falls back to a day count.
@@ -304,7 +309,7 @@ export function OrganizationActions({
         onSuccess: () => {
           setOpen(undefined);
           showFailure(null);
-          announce(`${org.name} trial started for ${dayCount(days)}.`);
+          announce(startCopy.started(days));
         },
         onError: (error) =>
           announce(`${startFailureLead}: ${errorMessage(error)}`),
@@ -367,10 +372,10 @@ export function OrganizationActions({
         <TrialDaysDialog
           bounds={START_BOUNDS}
           range={startRange}
-          title={`Start a trial for ${org.name}?`}
+          title={startCopy.title}
           description="Puts the organization on the enterprise tier for the duration of the trial, brings the model provider keys up, and takes it out from behind the book-a-demo gate. The trial then runs until the date below, counted from today."
-          submitLabel="Start trial"
-          pendingLabel="Starting..."
+          submitLabel={startCopy.submitLabel}
+          pendingLabel={startCopy.pendingLabel}
           failureLead={startFailureLead}
           pending={start.isPending}
           failure={start.error}
@@ -457,12 +462,15 @@ export function OrganizationActions({
           <Button
             variant="outline"
             size="xs"
-            aria-label={`Start trial for ${org.name}`}
+            aria-label={startCopy.ariaLabel}
             aria-busy={busy}
-            className={buttonClassName}
+            className={cn(
+              fieldTrigger && FIELD_TRIGGER_CLASS_NAME,
+              buttonClassName,
+            )}
             onClick={(event) => openDialog("start", event.currentTarget)}
           >
-            Start trial
+            {fieldTrigger ? startCopy.fieldLabel : startCopy.actionLabel}
           </Button>
         )}
         {dialogs}
@@ -526,7 +534,7 @@ export function OrganizationActions({
             <DropdownMenuItem
               onSelect={() => openDialog("start", menuTrigger.current)}
             >
-              Start trial
+              {startCopy.actionLabel}
             </DropdownMenuItem>
           )}
         </DropdownMenuContent>
@@ -538,6 +546,48 @@ export function OrganizationActions({
 
 function dayCount(days: number): string {
   return `${days} ${days === 1 ? "day" : "days"}`;
+}
+
+// Account type's compact trigger: `h-auto w-auto px-2 py-1.5` on SelectTrigger.
+// The start control in that row has to read as the same kind of field.
+const FIELD_TRIGGER_CLASS_NAME =
+  "h-auto w-auto min-w-0 px-2 py-1.5 text-left text-sm font-normal";
+
+type StartTrialCopy = {
+  actionLabel: string;
+  fieldLabel: string;
+  ariaLabel: string;
+  title: string;
+  submitLabel: string;
+  pendingLabel: string;
+  failureLead: string;
+  started: (days: number) => string;
+};
+
+function startTrialCopy(org: AdminOrganization): StartTrialCopy {
+  if (org.trial_state === "expired") {
+    return {
+      actionLabel: "Restart trial",
+      fieldLabel: "Restart trial",
+      ariaLabel: `Restart trial for ${org.name}`,
+      title: `Restart the trial for ${org.name}?`,
+      submitLabel: "Restart trial",
+      pendingLabel: "Restarting...",
+      failureLead: `Could not restart the trial for ${org.name}`,
+      started: (days) => `${org.name} trial restarted for ${dayCount(days)}.`,
+    };
+  }
+
+  return {
+    actionLabel: "Start trial",
+    fieldLabel: "No trial",
+    ariaLabel: `Start trial for ${org.name}`,
+    title: `Start a trial for ${org.name}?`,
+    submitLabel: "Start trial",
+    pendingLabel: "Starting...",
+    failureLead: `Could not start the trial for ${org.name}`,
+    started: (days) => `${org.name} trial started for ${dayCount(days)}.`,
+  };
 }
 
 // The dialog's own account of a failure, beside the field it is about. The
