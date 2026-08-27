@@ -26,6 +26,7 @@ import (
 	mcpmetadata_repo "github.com/speakeasy-api/gram/server/internal/mcpmetadata/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	metamcp_repo "github.com/speakeasy-api/gram/server/internal/metamcp/repo"
+	"github.com/speakeasy-api/gram/server/internal/metamcp/visibility"
 	organizations_repo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	projects_repo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp/remotemcptest"
@@ -1905,6 +1906,7 @@ func TestServeInstallPage_MetaBackedEndpoint_ReturnsNotFound(t *testing.T) {
 		ProjectID:           *authCtx.ProjectID,
 		Name:                "install page gateway",
 		UserSessionIssuerID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		Visibility:          visibility.Private,
 	})
 	require.NoError(t, err)
 

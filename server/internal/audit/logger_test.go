@@ -14,6 +14,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	auditrepo "github.com/speakeasy-api/gram/server/internal/audit/audittest/repo"
+	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/outbox/events"
 	testrepo "github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
@@ -69,6 +70,81 @@ func TestLogger_OutboxEntrySnapshotsAreInlineJSON(t *testing.T) {
 	// metadata must be a JSON object inlined into the payload, not a base64-encoded string.
 	_, ok := decoded["metadata"].(map[string]any)
 	require.True(t, ok, "metadata should be a JSON object, not a base64 string; payload=%s", string(payload))
+}
+
+func TestLogger_OutboxActorIdentity(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name               string
+		actingSurface      string
+		wantWebhookDisplay string
+		wantWebhookSlug    string
+	}{
+		{
+			name:               "admin surface masks the actor identity",
+			actingSurface:      string(audit.SurfaceAdmin),
+			wantWebhookDisplay: audit.SpeakeasyTeamActorLabel,
+			wantWebhookSlug:    "",
+		},
+		{
+			name:               "non-admin surface preserves the actor identity",
+			actingSurface:      string(audit.SurfaceDashboard),
+			wantWebhookDisplay: "Private Actor Name",
+			wantWebhookSlug:    "private-actor",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			ctx := contextvalues.SetActingSurface(t.Context(), tt.actingSurface)
+			conn, err := infra.CloneTestDatabase(t, "testdb")
+			require.NoError(t, err)
+
+			orgID := uuid.New().String()
+			_, err = orgrepo.New(conn).UpsertOrganizationMetadata(ctx, orgrepo.UpsertOrganizationMetadataParams{
+				ID:          orgID,
+				Name:        "Test Org",
+				Slug:        "test-org-" + orgID[:8],
+				WorkosID:    pgtype.Text{},
+				Whitelisted: pgtype.Bool{},
+			})
+			require.NoError(t, err)
+
+			displayName := "Private Actor Name"
+			slug := "private-actor"
+			err = audit.NewLogger().LogOrganizationWebhooksToggled(ctx, conn, audit.LogOrganizationWebhooksToggledEvent{
+				OrganizationID:   orgID,
+				Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, "user_test01"),
+				ActorDisplayName: &displayName,
+				ActorSlug:        &slug,
+				OrganizationName: "Test Org",
+				OrganizationSlug: "test-org-" + orgID[:8],
+				WebhooksEnabled:  true,
+			})
+			require.NoError(t, err)
+
+			record, err := audittest.LatestAuditLogByAction(ctx, conn, audit.ActionOrganizationWebhooksEnabled)
+			require.NoError(t, err)
+			require.Equal(t, displayName, record.ActorDisplay)
+			require.Equal(t, slug, record.ActorSlug)
+
+			envelope, err := auditrepo.New(conn).GetLatestOutboxPayloadByOrg(ctx, auditrepo.GetLatestOutboxPayloadByOrgParams{
+				OrganizationID: orgID,
+				EventType:      string(events.OrganizationWebhooksV1.EventType()),
+			})
+			require.NoError(t, err)
+
+			var event webhooksv1.Event
+			require.NoError(t, proto.Unmarshal(envelope, &event))
+			var payload events.AuditLogCreatedPayloadV1
+			require.NoError(t, json.Unmarshal(event.GetPayload(), &payload))
+			require.Equal(t, tt.wantWebhookDisplay, payload.ActorDisplayName)
+			require.Equal(t, tt.wantWebhookSlug, payload.ActorSlug)
+		})
+	}
 }
 
 func TestLogger_WritesAuditLogAndOutboxEntry(t *testing.T) {

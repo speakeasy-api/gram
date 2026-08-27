@@ -8,7 +8,6 @@ import (
 	"net/http"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
-	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/businessmemory"
 	"github.com/speakeasy-api/gram/server/internal/chat/analysis"
 	"github.com/speakeasy-api/gram/server/internal/chatanalysis"
@@ -85,7 +84,7 @@ func (s *Service) handleTriggerChatAnalysis(w http.ResponseWriter, r *http.Reque
 		return oops.E(oops.CodeUnexpected, err, "trigger chat analysis").LogError(ctx, s.logger)
 	}
 
-	_, operatorEmail := adminActor(ctx)
+	_, _, operatorEmail := adminActor(ctx)
 	s.logger.InfoContext(ctx, "triggered chat analysis",
 		attr.SlogOrganizationID(organizationID),
 		attr.SlogAuthUserEmail(conv.PtrValOr(operatorEmail, "unknown")),
@@ -126,10 +125,10 @@ func (s *Service) handleSetChatAnalysisSettings(w http.ResponseWriter, r *http.R
 	if err != nil {
 		return err
 	}
-	actor, operatorEmail := adminActor(ctx)
+	actor, actorDisplayName, operatorEmail := adminActor(ctx)
 	settings, err := chatanalysis.UpsertSettings(
 		ctx, s.db, s.audit, organizationID, body.Judge, *body.Enabled, *body.DailyCap,
-		actor, conv.PtrEmpty(audit.SpeakeasyTeamActorLabel),
+		actor, actorDisplayName,
 	)
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "update chat analysis settings").LogError(ctx, s.logger)

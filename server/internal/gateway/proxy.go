@@ -206,7 +206,7 @@ func (tp *ToolProxy) Do(
 	case ToolKindPlatform:
 		return tp.doPlatform(ctx, logger.With(attr.SlogComponent("gateway-platform-caller")), w, requestBody, env, plan, attrs)
 	case ToolKindExternalMCP:
-		return tp.doExternalMCP(ctx, logger.With(attr.SlogComponent("gateway-externalmcp-caller")), w, requestBody, env, plan.ExternalMCP)
+		return tp.doExternalMCP(ctx, logger.With(attr.SlogComponent("gateway-externalmcp-caller")), w, requestBody, env, plan.Descriptor, plan.ExternalMCP)
 	default:
 		return fmt.Errorf("tool type not supported: %s", plan.Kind)
 	}
@@ -235,7 +235,13 @@ func (tp *ToolProxy) doPlatform(
 			attr.SlogHTTPResponseStatusCode(responseStatusCode),
 			attr.SlogHTTPRequestMethod(http.MethodPost),
 		)
-		tp.metrics.RecordToolCall(ctx, plan.Descriptor.OrganizationID, plan.Descriptor.URN, responseStatusCode)
+		tp.metrics.RecordToolCall(ctx, toolCallRecord{
+			OrganizationID: plan.Descriptor.OrganizationID,
+			URN:            plan.Descriptor.URN,
+			ToolName:       plan.Descriptor.URN.Name,
+			StatusCode:     responseStatusCode,
+			Outcome:        toolCallOutcomeForStatus(responseStatusCode),
+		})
 		span.SetAttributes(attr.HTTPResponseStatusCode(responseStatusCode))
 	}()
 
@@ -458,7 +464,13 @@ func (tp *ToolProxy) doFunction(
 			attr.SlogHTTPResponseHeaderContentType(ct),
 		)
 		// Record metrics for the tool call, some cardinality is introduced with org and tool name we will keep an eye on it
-		tp.metrics.RecordToolCall(ctx, descriptor.OrganizationID, descriptor.URN, responseStatusCode)
+		tp.metrics.RecordToolCall(ctx, toolCallRecord{
+			OrganizationID: descriptor.OrganizationID,
+			URN:            descriptor.URN,
+			ToolName:       descriptor.URN.Name,
+			StatusCode:     responseStatusCode,
+			Outcome:        toolCallOutcomeForStatus(responseStatusCode),
+		})
 
 		span.SetAttributes(attr.HTTPResponseStatusCode(responseStatusCode))
 	}()
@@ -546,7 +558,13 @@ func (tp *ToolProxy) doHTTP(
 			attr.SlogHTTPResponseHeaderContentType(plan.RequestContentType.Value),
 		)
 		// Record metrics for the tool call, some cardinality is introduced with org and tool name we will keep an eye on it
-		tp.metrics.RecordToolCall(ctx, descriptor.OrganizationID, descriptor.URN, responseStatusCode)
+		tp.metrics.RecordToolCall(ctx, toolCallRecord{
+			OrganizationID: descriptor.OrganizationID,
+			URN:            descriptor.URN,
+			ToolName:       descriptor.URN.Name,
+			StatusCode:     responseStatusCode,
+			Outcome:        toolCallOutcomeForStatus(responseStatusCode),
+		})
 
 		span.SetAttributes(attr.HTTPResponseStatusCode(responseStatusCode))
 	}()
@@ -791,18 +809,36 @@ type promptGetParams struct {
 }
 
 func (tp *ToolProxy) doPrompt(ctx context.Context, logger *slog.Logger, w http.ResponseWriter, requestBody io.Reader, env toolconfig.ToolCallEnv, descriptor *ToolDescriptor, plan *PromptToolCallPlan) error {
+	span := trace.SpanFromContext(ctx)
+
+	var responseStatusCode int
+	defer func() {
+		tp.metrics.RecordToolCall(ctx, toolCallRecord{
+			OrganizationID: descriptor.OrganizationID,
+			URN:            descriptor.URN,
+			ToolName:       descriptor.URN.Name,
+			StatusCode:     responseStatusCode,
+			Outcome:        toolCallOutcomeForStatus(responseStatusCode),
+		})
+
+		span.SetAttributes(attr.HTTPResponseStatusCode(responseStatusCode))
+	}()
+
 	var params promptGetParams
 	if err := json.NewDecoder(requestBody).Decode(&params); err != nil {
+		responseStatusCode = http.StatusBadRequest
 		return oops.E(oops.CodeBadRequest, err, "failed to parse get prompt request").LogError(ctx, logger)
 	}
 
 	promptData, err := templates.RenderTemplate(ctx, logger, plan.Prompt, plan.Kind, plan.Engine, params.Arguments)
 	if err != nil {
+		responseStatusCode = http.StatusBadRequest
 		return oops.E(oops.CodeBadRequest, err, "failed to render template").LogError(ctx, logger)
 	}
 
+	responseStatusCode = http.StatusOK
 	w.Header().Set("Content-Type", "text/plain")
-	w.WriteHeader(http.StatusOK)
+	w.WriteHeader(responseStatusCode)
 	if _, err := w.Write([]byte(promptData)); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "failed to write prompt data").LogError(ctx, logger)
 	}
@@ -857,15 +893,48 @@ func (tp *ToolProxy) doExternalMCP(
 	w http.ResponseWriter,
 	requestBody io.Reader,
 	env toolconfig.ToolCallEnv,
+	descriptor *ToolDescriptor,
 	plan *ExternalMCPToolCallPlan,
 ) error {
+	span := trace.SpanFromContext(ctx)
+
+	// Use the tool name from the plan (resolved by the proxy tool executor for
+	// proxy tools, or set directly for materialized tools)
+	toolName := plan.ToolName
+
+	// A proxy tool's name is whatever the caller sent after the server slug:
+	// nothing validates it against the upstream's tool list. Only a name the
+	// upstream answered successfully reaches the metric dimension, so a bogus
+	// name cannot mint a timeseries per call, including against an upstream
+	// that rejects an unknown tool in-band as an errored result rather than as
+	// a protocol error. Every other call is attributed to the URN name.
+	recordedToolName := descriptor.URN.Name
+
+	var responseStatusCode int
+	// An in-band failure is still answered with a 200, so the status code alone
+	// would record the call as a success.
+	var upstreamReportedError bool
+	defer func() {
+		outcome := toolCallOutcomeForStatus(responseStatusCode)
+		if upstreamReportedError {
+			outcome = toolCallOutcomeToolError
+		}
+
+		tp.metrics.RecordToolCall(ctx, toolCallRecord{
+			OrganizationID: descriptor.OrganizationID,
+			URN:            descriptor.URN,
+			ToolName:       recordedToolName,
+			StatusCode:     responseStatusCode,
+			Outcome:        outcome,
+		})
+
+		span.SetAttributes(attr.HTTPResponseStatusCode(responseStatusCode))
+	}()
+
 	arguments, err := io.ReadAll(requestBody)
 	if err != nil {
 		return oops.E(oops.CodeBadRequest, err, "failed to read tool arguments").LogError(ctx, logger)
 	}
-
-	// Use the tool name from the plan (set by Match for proxy tools, or directly for materialized tools)
-	toolName := plan.ToolName
 
 	// Only pass OAuth token if this plan requires it
 	var oauthToken string
@@ -897,21 +966,25 @@ func (tp *ToolProxy) doExternalMCP(
 
 	// An upstream that reports failure in-band — a result carrying isError
 	// rather than a transport or protocol error — reaches none of the error
-	// paths above, so the whole class is otherwise invisible: the result is
-	// forwarded to the caller and nothing is recorded. Providers that surface a
-	// rejected or expired bearer as a tool result rather than a 401 are the
-	// motivating case, since the failure is then visible to the end user and to
-	// no one operating the service.
+	// paths above, and the result is forwarded to the caller as a successful
+	// response, so this is the only place the failure can be detected.
+	// Providers that surface a rejected or expired bearer as a tool result
+	// rather than a 401 are the motivating case, since the failure is
+	// otherwise visible to the end user and to no one operating the service.
 	if callResult.IsError {
+		upstreamReportedError = true
 		logger.ErrorContext(ctx, "external MCP tool returned an error result",
 			attr.SlogToolName(toolName),
 			attr.SlogURL(plan.RemoteURL),
 			attr.SlogErrorMessage(externalMCPErrorSummary(callResult.Content)),
 		)
+	} else {
+		recordedToolName = toolName
 	}
 
+	responseStatusCode = http.StatusOK
 	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
+	w.WriteHeader(responseStatusCode)
 
 	response := struct {
 		Content []json.RawMessage `json:"content"`

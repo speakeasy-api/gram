@@ -211,7 +211,7 @@ func (q *Queries) ListAuditActionFacets(ctx context.Context, arg ListAuditAction
 
 const listAuditActorFacets = `-- name: ListAuditActorFacets :many
 WITH filtered_logs AS (
-  SELECT actor_id, actor_type, actor_display_name, seq
+  SELECT actor_id, actor_type, actor_display_name, acting_surface, seq
   FROM audit_logs
   WHERE organization_id = $1
     AND subject_type <> 'assistant'
@@ -225,7 +225,8 @@ WITH filtered_logs AS (
     COUNT(*)::bigint AS count,
     -- Flags actor ids that appear as user actors, so callers can restrict
     -- user-specific treatment (e.g. Speakeasy staff masking) to them.
-    BOOL_OR(actor_type = 'user')::boolean AS is_user_actor
+    BOOL_OR(actor_type = 'user')::boolean AS is_user_actor,
+    BOOL_OR(COALESCE(acting_surface = 'admin', FALSE))::boolean AS is_admin_actor
   FROM filtered_logs
   GROUP BY actor_id
 ), latest_actor_names AS (
@@ -241,7 +242,8 @@ SELECT
   actor_counts.actor_id AS value,
   COALESCE(latest_actor_names.actor_display_name, actor_counts.actor_id) AS display_name,
   actor_counts.count,
-  actor_counts.is_user_actor
+  actor_counts.is_user_actor,
+  actor_counts.is_admin_actor
 FROM actor_counts
 LEFT JOIN latest_actor_names ON latest_actor_names.actor_id = actor_counts.actor_id
 ORDER BY actor_counts.count DESC, actor_counts.actor_id ASC
@@ -253,10 +255,11 @@ type ListAuditActorFacetsParams struct {
 }
 
 type ListAuditActorFacetsRow struct {
-	Value       string
-	DisplayName string
-	Count       int64
-	IsUserActor bool
+	Value        string
+	DisplayName  string
+	Count        int64
+	IsUserActor  bool
+	IsAdminActor bool
 }
 
 // Assistant activity events are excluded: facets power the platform audit
@@ -275,6 +278,7 @@ func (q *Queries) ListAuditActorFacets(ctx context.Context, arg ListAuditActorFa
 			&i.DisplayName,
 			&i.Count,
 			&i.IsUserActor,
+			&i.IsAdminActor,
 		); err != nil {
 			return nil, err
 		}
@@ -308,40 +312,44 @@ WHERE a.organization_id = $1
     OR a.action = $5::text
   )
   AND (
-    ($6::text IS NULL AND a.subject_type <> 'assistant')
+    (
+      $6::text IS NULL
+      AND ($7::boolean OR a.subject_type <> 'assistant')
+    )
     OR a.subject_type = $6::text
   )
   AND (
-    $7::text IS NULL
-    OR a.subject_id = $7::text
+    $8::text IS NULL
+    OR a.subject_id = $8::text
   )
   -- An empty or absent list is no filter, so a caller composing filters can
   -- always send the parameter.
   AND (
-    coalesce(cardinality($8::text[]), 0) = 0
-    OR a.subject_id = ANY($8::text[])
+    coalesce(cardinality($9::text[]), 0) = 0
+    OR a.subject_id = ANY($9::text[])
   )
   -- A row written before attribution existed has no surface. Coalescing here
   -- means filtering for 'unknown' finds those rows too, instead of returning
   -- nothing and implying the organization has no unattributed history.
   AND (
-    $9::text IS NULL
-    OR COALESCE(a.acting_surface, 'unknown') = $9::text
+    $10::text IS NULL
+    OR COALESCE(a.acting_surface, 'unknown') = $10::text
   )
 ORDER BY a.seq DESC
 LIMIT 51
 `
 
 type ListAuditLogsParams struct {
-	OrganizationID string
-	ProjectID      uuid.NullUUID
-	CursorSeq      pgtype.Int8
-	ActorID        pgtype.Text
-	Action         pgtype.Text
-	SubjectType    pgtype.Text
-	SubjectID      pgtype.Text
-	SubjectIds     []string
-	ActingSurface  pgtype.Text
+	OrganizationID         string
+	ProjectID              uuid.NullUUID
+	CursorSeq              pgtype.Int8
+	ActorID                pgtype.Text
+	Action                 pgtype.Text
+	SubjectType            pgtype.Text
+	IncludeAssistantEvents bool
+	SubjectID              pgtype.Text
+	SubjectIds             []string
+	ActingSurface          pgtype.Text
 }
 
 type ListAuditLogsRow struct {
@@ -369,7 +377,7 @@ type ListAuditLogsRow struct {
 
 // When no subject_type filter is given, assistant activity events (one per
 // assistant tool call) are excluded so they don't drown out the platform
-// audit feed; callers fetch them explicitly with subject_type = 'assistant'.
+// audit feed. The private admin caller can explicitly include all events.
 func (q *Queries) ListAuditLogs(ctx context.Context, arg ListAuditLogsParams) ([]ListAuditLogsRow, error) {
 	rows, err := q.db.Query(ctx, listAuditLogs,
 		arg.OrganizationID,
@@ -378,6 +386,7 @@ func (q *Queries) ListAuditLogs(ctx context.Context, arg ListAuditLogsParams) ([
 		arg.ActorID,
 		arg.Action,
 		arg.SubjectType,
+		arg.IncludeAssistantEvents,
 		arg.SubjectID,
 		arg.SubjectIds,
 		arg.ActingSurface,
@@ -474,4 +483,21 @@ func (q *Queries) ListAuditSurfaceFacets(ctx context.Context, arg ListAuditSurfa
 		return nil, err
 	}
 	return items, nil
+}
+
+const updateAuditLogCreatedAtForTesting = `-- name: UpdateAuditLogCreatedAtForTesting :exec
+UPDATE audit_logs
+SET created_at = $1
+WHERE id = ANY($2::uuid[])
+`
+
+type UpdateAuditLogCreatedAtForTestingParams struct {
+	CreatedAt pgtype.Timestamptz
+	Ids       []uuid.UUID
+}
+
+// Test fixture for deterministic ordering and cursor-boundary coverage.
+func (q *Queries) UpdateAuditLogCreatedAtForTesting(ctx context.Context, arg UpdateAuditLogCreatedAtForTestingParams) error {
+	_, err := q.db.Exec(ctx, updateAuditLogCreatedAtForTesting, arg.CreatedAt, arg.Ids)
+	return err
 }

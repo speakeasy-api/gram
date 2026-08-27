@@ -261,6 +261,15 @@ UPDATE user_session_issuers
 SET client_id_metadata_admission_mode = @client_id_metadata_admission_mode
 WHERE id = @id AND project_id = @project_id::uuid AND deleted IS FALSE;
 
+-- name: SetUserSessionIssuerOrganizationID :exec
+-- Test-only fixture: repoints an issuer's organization so tests can observe
+-- what a child row does when its parent's tenancy no longer matches its own.
+-- No production path moves an issuer between organizations yet, so there is
+-- no other way to reach that state.
+UPDATE user_session_issuers
+SET organization_id = @organization_id
+WHERE id = @id AND project_id = @project_id::uuid AND deleted IS FALSE;
+
 -- name: InsertPluginAssignmentFixture :exec
 -- Test-only fixture: writes a plugin_assignments row with an EXPLICIT
 -- organization_id so tests can seed a cross-tenant/stale assignment that the
@@ -519,3 +528,24 @@ WHERE organization_id = @organization_id
 SELECT blob_url, consumed_at
 FROM session_handoff_links
 WHERE token = @token;
+
+-- name: ForceSoftDeleteRemoteSessionIssuerFixture :exec
+-- Tombstones a remote session issuer regardless of its clients. Production
+-- deletes refuse while a live client references it, so this is the only way to
+-- build the state the derivation must reject.
+UPDATE remote_session_issuers
+SET deleted_at = clock_timestamp()
+WHERE id = @id;
+
+-- name: SetMCPServerRemoteSessionIssuerFixture :execrows
+-- Test-only fixture: stamps the denormalised upstream authorization server on
+-- an MCP server. Server creation cannot set it — no client bindings exist yet —
+-- so tests seed it after the fact, standing in for the binding resync.
+--
+-- Returns the row count so the caller can insist the stamp landed: one that
+-- matched nothing would otherwise let a negative test pass vacuously.
+UPDATE mcp_servers
+SET remote_session_issuer_id = @remote_session_issuer_id
+WHERE id = @id
+  AND project_id = @project_id
+  AND deleted IS FALSE;

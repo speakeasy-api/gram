@@ -4155,6 +4155,44 @@ func (q *Queries) ListTenantRemoteSessionIssuersByIssuerURL(ctx context.Context,
 	return items, nil
 }
 
+const listUserSessionIssuersBoundToProjectClient = `-- name: ListUserSessionIssuersBoundToProjectClient :many
+SELECT link.user_session_issuer_id
+FROM remote_session_client_user_session_issuers AS link
+JOIN remote_session_clients AS c
+  ON c.id = link.remote_session_client_id
+WHERE link.remote_session_client_id = $1
+  AND c.project_id = $2
+ORDER BY link.user_session_issuer_id
+`
+
+type ListUserSessionIssuersBoundToProjectClientParams struct {
+	RemoteSessionClientID uuid.UUID
+	ProjectID             uuid.NullUUID
+}
+
+// The bindings DeleteRemoteSessionClient is about to purge, read first so the
+// post-commit resync knows which issuers to recompute. Mirrors the purge's own
+// predicate exactly: narrower would miss bindings the purge still deletes.
+func (q *Queries) ListUserSessionIssuersBoundToProjectClient(ctx context.Context, arg ListUserSessionIssuersBoundToProjectClientParams) ([]uuid.UUID, error) {
+	rows, err := q.db.Query(ctx, listUserSessionIssuersBoundToProjectClient, arg.RemoteSessionClientID, arg.ProjectID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []uuid.UUID
+	for rows.Next() {
+		var user_session_issuer_id uuid.UUID
+		if err := rows.Scan(&user_session_issuer_id); err != nil {
+			return nil, err
+		}
+		items = append(items, user_session_issuer_id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const lockRemoteSessionClientForSessionWrite = `-- name: LockRemoteSessionClientForSessionWrite :one
 SELECT id
 FROM remote_session_clients

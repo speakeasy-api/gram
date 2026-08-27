@@ -139,6 +139,14 @@ describe("RecordNav", () => {
     expect(item.textContent).toContain("0");
   });
 
+  it("preserves the organization slug in the Activity href", async () => {
+    await mount([]);
+
+    expect(
+      screen.getByRole("link", { name: "Activity" }).getAttribute("href"),
+    ).toBe("/organizations/test-org/activity");
+  });
+
   it("points Projects at the list when the organization has two projects", async () => {
     await mount([
       aProject(),
@@ -167,6 +175,9 @@ describe("RecordNav", () => {
     expect(
       screen.getByRole("link", { name: "Overview" }).getAttribute("href"),
     ).toBe("/organizations/org_1");
+    expect(
+      screen.getByRole("link", { name: "Activity" }).getAttribute("href"),
+    ).toBe("/organizations/org_1/activity");
     expect(
       screen.getByRole("link", { name: "Members" }).getAttribute("href"),
     ).toBe("/organizations/org_1/members");

@@ -26,7 +26,9 @@ type Service interface {
 	ListMetaMcpServers(context.Context, *ListMetaMcpServersPayload) (res *ListMetaMcpServersResult, err error)
 	// Update a meta MCP server. This is a full-record replace: a
 	// user_session_issuer_id omitted from the request becomes null on the stored
-	// record.
+	// record. Visibility is the exception — omitting it preserves the stored
+	// value, so a caller that does not manage visibility cannot re-enable a
+	// disabled gateway by saving an unrelated field.
 	UpdateMetaMcpServer(context.Context, *UpdateMetaMcpServerPayload) (res *types.MetaMcpServer, err error)
 	// Delete a meta MCP server. Its live memberships and MCP endpoints are deleted
 	// along with it.
@@ -88,6 +90,9 @@ type CreateMetaMcpServerPayload struct {
 	// The ID of the user session issuer used to authenticate callers. Omit for no
 	// issuer.
 	UserSessionIssuerID *string
+	// The visibility of the gateway. Defaults to private, which requires callers
+	// to authenticate.
+	Visibility *types.MetaMcpServerVisibility
 }
 
 // DeleteMetaMcpServerPayload is the payload type of the metaMcp service
@@ -175,6 +180,8 @@ type UpdateMetaMcpServerPayload struct {
 	// The ID of the user session issuer used to authenticate callers. Omit for no
 	// issuer.
 	UserSessionIssuerID *string
+	// The visibility of the gateway. Omit to leave it unchanged.
+	Visibility *types.MetaMcpServerVisibility
 }
 
 // MakeUnauthorized builds a goa.ServiceError from an error.

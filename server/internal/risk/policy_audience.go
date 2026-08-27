@@ -61,35 +61,6 @@ func riskPolicyAudiencePrincipals(audienceType string, principalURNs []string) (
 	return principals, nil
 }
 
-func principalStrings(principals []urn.Principal) []string {
-	values := make([]string, 0, len(principals))
-	for _, principal := range principals {
-		values = append(values, principal.String())
-	}
-	return values
-}
-
-func syncRiskPolicyAudienceGrants(ctx context.Context, db repo.DBTX, organizationID string, policyID string, audienceType string, principalURNs []string) error {
-	principals, err := riskPolicyAudiencePrincipals(audienceType, principalURNs)
-	if err != nil {
-		return err
-	}
-
-	if err := authz.ReplaceGrantAudience(ctx, db, authz.ResourceGrant{
-		Resource: authz.Resource{
-			OrganizationID: organizationID,
-			Scope:          authz.ScopeRiskPolicyEvaluate,
-			ResourceID:     policyID,
-		},
-		Principals: principals,
-		Selector:   authz.NewSelector(authz.ScopeRiskPolicyEvaluate, policyID),
-	}); err != nil {
-		return fmt.Errorf("replace risk policy audience grants: %w", err)
-	}
-
-	return nil
-}
-
 func clearRiskPolicyAudienceGrants(ctx context.Context, db repo.DBTX, organizationID string, policyID string) error {
 	if err := authz.ReplaceGrantAudience(ctx, db, authz.ResourceGrant{
 		Resource: authz.Resource{

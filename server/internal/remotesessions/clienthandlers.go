@@ -357,6 +357,10 @@ func (s *Service) finalizeClientCreate(
 		return nil, oops.E(oops.CodeUnexpected, err, "commit transaction").LogError(ctx, logger)
 	}
 
+	// Post-commit and best-effort: a failed recompute leaves a stale value the
+	// next binding change heals, not a failed create.
+	BestEffortResyncMCPServerRemoteSessionIssuers(ctx, logger, s.db, authCtx.ActiveOrganizationID, *authCtx.ProjectID, userIssuerIDs)
+
 	view, err := mv.BuildRemoteSessionClientView(created, userIssuerIDs)
 	if err != nil {
 		return nil, oops.E(oops.CodeInvariantViolation, err, "build remote session client view").LogError(ctx, logger)
@@ -629,7 +633,7 @@ func (s *Service) AttachUserSessionIssuer(ctx context.Context, payload *gen.Atta
 		return nil, oops.E(oops.CodeUnexpected, err, "attach remote session client to user session issuer").LogError(ctx, logger)
 	}
 
-	return s.commitClientAttachmentChange(ctx, logger, dbtx, txRepo, *authCtx, clientID, func(ctx context.Context, dbtx pgx.Tx) error {
+	return s.commitClientAttachmentChange(ctx, logger, dbtx, txRepo, *authCtx, clientID, []uuid.UUID{userIssuerID}, func(ctx context.Context, dbtx pgx.Tx) error {
 		return s.auditLogger.LogRemoteSessionClientAttachUserSessionIssuer(ctx, dbtx, audit.LogRemoteSessionClientUserSessionIssuerAttachmentEvent{
 			OrganizationID:         authCtx.ActiveOrganizationID,
 			ProjectID:              *authCtx.ProjectID,
@@ -713,7 +717,7 @@ func (s *Service) DetachUserSessionIssuer(ctx context.Context, payload *gen.Deta
 		return nil, oops.E(oops.CodeUnexpected, err, "detach remote session client from user session issuer").LogError(ctx, logger)
 	}
 
-	return s.commitClientAttachmentChange(ctx, logger, dbtx, txRepo, *authCtx, clientID, func(ctx context.Context, dbtx pgx.Tx) error {
+	return s.commitClientAttachmentChange(ctx, logger, dbtx, txRepo, *authCtx, clientID, []uuid.UUID{userIssuerID}, func(ctx context.Context, dbtx pgx.Tx) error {
 		return s.auditLogger.LogRemoteSessionClientDetachUserSessionIssuer(ctx, dbtx, audit.LogRemoteSessionClientUserSessionIssuerAttachmentEvent{
 			OrganizationID:         authCtx.ActiveOrganizationID,
 			ProjectID:              *authCtx.ProjectID,
@@ -738,6 +742,7 @@ func (s *Service) commitClientAttachmentChange(
 	txRepo *repo.Queries,
 	authCtx contextvalues.AuthContext,
 	clientID uuid.UUID,
+	touchedUserIssuerIDs []uuid.UUID,
 	auditFn func(ctx context.Context, dbtx pgx.Tx) error,
 ) (*types.RemoteSessionClient, error) {
 	updated, err := txRepo.GetRemoteSessionClientByID(ctx, repo.GetRemoteSessionClientByIDParams{
@@ -761,6 +766,10 @@ func (s *Service) commitClientAttachmentChange(
 	if err := dbtx.Commit(ctx); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "commit transaction").LogError(ctx, logger)
 	}
+
+	// Post-commit and best-effort: a failed recompute leaves a stale value the
+	// next binding change heals, not a failed request.
+	BestEffortResyncMCPServerRemoteSessionIssuers(ctx, logger, s.db, authCtx.ActiveOrganizationID, *authCtx.ProjectID, touchedUserIssuerIDs)
 
 	return afterView, nil
 }
@@ -805,6 +814,16 @@ func (s *Service) DeleteRemoteSessionClient(ctx context.Context, payload *gen.De
 		return oops.E(oops.CodeUnexpected, err, "delete remote session client").LogError(ctx, logger)
 	}
 
+	// Read the bindings before the purge removes them, so the post-commit
+	// resync knows which issuers to recompute.
+	boundUserIssuerIDs, err := txRepo.ListUserSessionIssuersBoundToProjectClient(ctx, repo.ListUserSessionIssuersBoundToProjectClientParams{
+		RemoteSessionClientID: clientID,
+		ProjectID:             conv.ToNullUUID(*authCtx.ProjectID),
+	})
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "list user session issuers bound to client").LogError(ctx, logger)
+	}
+
 	if err := txRepo.DeleteUserSessionIssuerAttachmentsForRemoteSessionClient(
 		ctx,
 		repo.DeleteUserSessionIssuerAttachmentsForRemoteSessionClientParams{
@@ -845,6 +864,8 @@ func (s *Service) DeleteRemoteSessionClient(ctx context.Context, payload *gen.De
 	// upstream tokens are revoked on the same best-effort terms as an explicit
 	// revoke: post-commit, bounded, never surfaced to the caller.
 	s.revoker.RevokeAllDetached(ctx, revokedCredentials(cascaded))
+
+	BestEffortResyncMCPServerRemoteSessionIssuers(ctx, logger, s.db, authCtx.ActiveOrganizationID, *authCtx.ProjectID, boundUserIssuerIDs)
 
 	return nil
 }

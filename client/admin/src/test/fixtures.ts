@@ -5,10 +5,29 @@
 // carries a real organization, project or person.
 
 import type {
+  AdminAuditLog,
   AdminOrganization,
   AdminOrganizationMember,
   AdminProject,
 } from "@/lib/gramAdminApi";
+
+export function anActivityLog(
+  overrides: Partial<AdminAuditLog> = {},
+): AdminAuditLog {
+  return {
+    id: "event_1",
+    actor_id: "user_1",
+    actor_type: "user",
+    actor_display_name: "Example Operator",
+    action: "organization:settings_updated",
+    acting_surface: "dashboard",
+    subject_id: "org_1",
+    subject_type: "organization",
+    subject_display_name: "Test Org",
+    created_at: "2026-01-15T12:30:00Z",
+    ...overrides,
+  };
+}
 
 export function anOrganization(
   overrides: Partial<AdminOrganization> = {},
