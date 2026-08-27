@@ -7,6 +7,8 @@ package openrouterdisablecauses
 
 import (
 	"context"
+
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 const compareAndSetClassification = `-- name: CompareAndSetClassification :execrows
@@ -32,6 +34,19 @@ func (q *Queries) CompareAndSetClassification(ctx context.Context, arg CompareAn
 		return 0, err
 	}
 	return result.RowsAffected(), nil
+}
+
+const countAllNullClassificationsFixture = `-- name: CountAllNullClassificationsFixture :one
+SELECT count(*)
+FROM openrouter_api_keys
+WHERE disable_causes IS NULL
+`
+
+func (q *Queries) CountAllNullClassificationsFixture(ctx context.Context) (int64, error) {
+	row := q.db.QueryRow(ctx, countAllNullClassificationsFixture)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
 }
 
 const countDeletedNullClassifications = `-- name: CountDeletedNullClassifications :one
@@ -84,6 +99,24 @@ func (q *Queries) GetManualOverrideTarget(ctx context.Context, arg GetManualOver
 	var i GetManualOverrideTargetRow
 	err := row.Scan(&i.Disabled, &i.DisableCauses)
 	return i, err
+}
+
+const getOpenRouterDisableCausesFixture = `-- name: GetOpenRouterDisableCausesFixture :one
+SELECT disable_causes
+FROM openrouter_api_keys
+WHERE organization_id = $1 AND key_type = $2
+`
+
+type GetOpenRouterDisableCausesFixtureParams struct {
+	OrganizationID string
+	KeyType        string
+}
+
+func (q *Queries) GetOpenRouterDisableCausesFixture(ctx context.Context, arg GetOpenRouterDisableCausesFixtureParams) ([]string, error) {
+	row := q.db.QueryRow(ctx, getOpenRouterDisableCausesFixture, arg.OrganizationID, arg.KeyType)
+	var disable_causes []string
+	err := row.Scan(&disable_causes)
+	return disable_causes, err
 }
 
 const listValidationBatch = `-- name: ListValidationBatch :many
@@ -176,6 +209,15 @@ func (q *Queries) ListValidationBatch(ctx context.Context, arg ListValidationBat
 		return nil, err
 	}
 	return items, nil
+}
+
+const lockAuditLogsFixture = `-- name: LockAuditLogsFixture :exec
+LOCK TABLE audit_logs IN ACCESS EXCLUSIVE MODE
+`
+
+func (q *Queries) LockAuditLogsFixture(ctx context.Context) error {
+	_, err := q.db.Exec(ctx, lockAuditLogsFixture)
+	return err
 }
 
 const lockClassificationBatch = `-- name: LockClassificationBatch :many
@@ -276,6 +318,104 @@ func (q *Queries) LockClassificationBatch(ctx context.Context, arg LockClassific
 	return items, nil
 }
 
+const seedAdminAuditFixture = `-- name: SeedAdminAuditFixture :exec
+INSERT INTO audit_logs (
+  organization_id, actor_id, actor_type, action, subject_id, subject_type,
+  before_snapshot, after_snapshot, metadata
+)
+VALUES (
+  $1, 'system:test', 'system', $2, $3, 'openrouter_api_key',
+  '{"disabled":false,"disable_causes":[]}', $4, $5
+)
+`
+
+type SeedAdminAuditFixtureParams struct {
+	OrganizationID string
+	Action         string
+	SubjectID      string
+	AfterSnapshot  []byte
+	Metadata       []byte
+}
+
+func (q *Queries) SeedAdminAuditFixture(ctx context.Context, arg SeedAdminAuditFixtureParams) error {
+	_, err := q.db.Exec(ctx, seedAdminAuditFixture,
+		arg.OrganizationID,
+		arg.Action,
+		arg.SubjectID,
+		arg.AfterSnapshot,
+		arg.Metadata,
+	)
+	return err
+}
+
+const seedBillingFixture = `-- name: SeedBillingFixture :exec
+INSERT INTO billing_metadata (organization_id, stripe_subscription_id)
+VALUES ($1, $2)
+`
+
+type SeedBillingFixtureParams struct {
+	OrganizationID       string
+	StripeSubscriptionID pgtype.Text
+}
+
+func (q *Queries) SeedBillingFixture(ctx context.Context, arg SeedBillingFixtureParams) error {
+	_, err := q.db.Exec(ctx, seedBillingFixture, arg.OrganizationID, arg.StripeSubscriptionID)
+	return err
+}
+
+const seedOpenRouterKeyFixture = `-- name: SeedOpenRouterKeyFixture :exec
+INSERT INTO openrouter_api_keys (organization_id, key_type, key_hash, disabled, disable_causes)
+VALUES ($1, $2, 'test-hash', $3, NULL)
+`
+
+type SeedOpenRouterKeyFixtureParams struct {
+	OrganizationID string
+	KeyType        string
+	Disabled       bool
+}
+
+func (q *Queries) SeedOpenRouterKeyFixture(ctx context.Context, arg SeedOpenRouterKeyFixtureParams) error {
+	_, err := q.db.Exec(ctx, seedOpenRouterKeyFixture, arg.OrganizationID, arg.KeyType, arg.Disabled)
+	return err
+}
+
+const seedOrganizationFixture = `-- name: SeedOrganizationFixture :exec
+INSERT INTO organization_metadata (id, name, slug, gram_account_type)
+VALUES ($1, 'test', $1, $2)
+`
+
+type SeedOrganizationFixtureParams struct {
+	OrganizationID string
+	AccountType    string
+}
+
+func (q *Queries) SeedOrganizationFixture(ctx context.Context, arg SeedOrganizationFixtureParams) error {
+	_, err := q.db.Exec(ctx, seedOrganizationFixture, arg.OrganizationID, arg.AccountType)
+	return err
+}
+
+const seedTrialFixture = `-- name: SeedTrialFixture :exec
+INSERT INTO trials (organization_id, tier, ends_at, demoted_at, converted_at)
+VALUES ($1, 'enterprise', $2, $3, $4)
+`
+
+type SeedTrialFixtureParams struct {
+	OrganizationID string
+	EndsAt         pgtype.Timestamptz
+	DemotedAt      pgtype.Timestamptz
+	ConvertedAt    pgtype.Timestamptz
+}
+
+func (q *Queries) SeedTrialFixture(ctx context.Context, arg SeedTrialFixtureParams) error {
+	_, err := q.db.Exec(ctx, seedTrialFixture,
+		arg.OrganizationID,
+		arg.EndsAt,
+		arg.DemotedAt,
+		arg.ConvertedAt,
+	)
+	return err
+}
+
 const setLocalTimeouts = `-- name: SetLocalTimeouts :one
 SELECT
   set_config('lock_timeout', $1::text, true) AS lock_timeout,
@@ -297,4 +437,27 @@ func (q *Queries) SetLocalTimeouts(ctx context.Context, arg SetLocalTimeoutsPara
 	var i SetLocalTimeoutsRow
 	err := row.Scan(&i.LockTimeout, &i.StatementTimeout)
 	return i, err
+}
+
+const setOpenRouterClassificationFixture = `-- name: SetOpenRouterClassificationFixture :exec
+UPDATE openrouter_api_keys
+SET disable_causes = $1::text[], disabled = $2
+WHERE organization_id = $3 AND key_type = $4
+`
+
+type SetOpenRouterClassificationFixtureParams struct {
+	DisableCauses  []string
+	Disabled       bool
+	OrganizationID string
+	KeyType        string
+}
+
+func (q *Queries) SetOpenRouterClassificationFixture(ctx context.Context, arg SetOpenRouterClassificationFixtureParams) error {
+	_, err := q.db.Exec(ctx, setOpenRouterClassificationFixture,
+		arg.DisableCauses,
+		arg.Disabled,
+		arg.OrganizationID,
+		arg.KeyType,
+	)
+	return err
 }

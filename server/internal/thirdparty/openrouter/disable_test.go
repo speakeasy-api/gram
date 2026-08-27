@@ -16,6 +16,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	orgRepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter/repo"
 )
 
@@ -163,7 +164,7 @@ func TestProvisionAPIKeyUsesClassifiedEffectiveState(t *testing.T) {
 
 		wantKey, err := provisioner.ProvisionAPIKey(ctx, orgID, KeyTypeChat)
 		require.NoError(t, err)
-		_, err = provisioner.db.Exec(ctx, `UPDATE openrouter_api_keys SET disabled = TRUE, disable_causes = '{}' WHERE organization_id = $1 AND key_type = $2`, orgID, string(KeyTypeChat))
+		err = testrepo.New(provisioner.db).SetOpenRouterAPIKeyClassificationFixture(ctx, testrepo.SetOpenRouterAPIKeyClassificationFixtureParams{OrganizationID: orgID, KeyType: string(KeyTypeChat), Disabled: true, DisableCauses: []string{}})
 		require.NoError(t, err)
 
 		gotKey, err := provisioner.ProvisionAPIKey(ctx, orgID, KeyTypeChat)
@@ -179,7 +180,7 @@ func TestProvisionAPIKeyUsesClassifiedEffectiveState(t *testing.T) {
 
 		_, err := provisioner.ProvisionAPIKey(ctx, orgID, KeyTypeChat)
 		require.NoError(t, err)
-		_, err = provisioner.db.Exec(ctx, `UPDATE openrouter_api_keys SET disabled = FALSE, disable_causes = ARRAY['trial_demotion'] WHERE organization_id = $1 AND key_type = $2`, orgID, string(KeyTypeChat))
+		err = testrepo.New(provisioner.db).SetOpenRouterAPIKeyClassificationFixture(ctx, testrepo.SetOpenRouterAPIKeyClassificationFixtureParams{OrganizationID: orgID, KeyType: string(KeyTypeChat), Disabled: false, DisableCauses: []string{"trial_demotion"}})
 		require.NoError(t, err)
 
 		_, err = provisioner.ProvisionAPIKey(ctx, orgID, KeyTypeChat)

@@ -5,13 +5,17 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"math"
 	"sync"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
+
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
 type runnerFixture struct {
@@ -28,30 +32,43 @@ func newRunnerFixture(t *testing.T) *runnerFixture {
 func (f *runnerFixture) seedKey(t *testing.T, keyType string, disabled bool, accountType string) string {
 	t.Helper()
 	orgID := "org_" + uuid.NewString()
-	_, err := f.pool.Exec(t.Context(), `INSERT INTO organization_metadata (id, name, slug, gram_account_type) VALUES ($1, 'test', $1, $2)`, orgID, accountType)
-	require.NoError(t, err)
-	_, err = f.pool.Exec(t.Context(), `INSERT INTO openrouter_api_keys (organization_id, key_type, key_hash, disabled, disable_causes) VALUES ($1, $2, 'test-hash', $3, NULL)`, orgID, keyType, disabled)
-	require.NoError(t, err)
+	q := New(f.pool)
+	require.NoError(t, q.SeedOrganizationFixture(t.Context(), SeedOrganizationFixtureParams{OrganizationID: orgID, AccountType: accountType}))
+	require.NoError(t, q.SeedOpenRouterKeyFixture(t.Context(), SeedOpenRouterKeyFixtureParams{OrganizationID: orgID, KeyType: keyType, Disabled: disabled}))
 	return orgID
 }
 
 func (f *runnerFixture) causes(t *testing.T, orgID, keyType string) []string {
 	t.Helper()
-	var causes []string
-	require.NoError(t, f.pool.QueryRow(t.Context(), `SELECT disable_causes FROM openrouter_api_keys WHERE organization_id=$1 AND key_type=$2`, orgID, keyType).Scan(&causes))
+	causes, err := New(f.pool).GetOpenRouterDisableCausesFixture(t.Context(), GetOpenRouterDisableCausesFixtureParams{OrganizationID: orgID, KeyType: keyType})
+	require.NoError(t, err)
 	return causes
 }
 
 func (f *runnerFixture) seedTrial(t *testing.T, orgID string, demotedAt, convertedAt *time.Time, endsAt time.Time) {
 	t.Helper()
-	_, err := f.pool.Exec(t.Context(), `INSERT INTO trials (organization_id, tier, ends_at, demoted_at, converted_at) VALUES ($1, 'enterprise', $2, $3, $4)`, orgID, endsAt, demotedAt, convertedAt)
-	require.NoError(t, err)
+	require.NoError(t, New(f.pool).SeedTrialFixture(t.Context(), SeedTrialFixtureParams{
+		OrganizationID: orgID,
+		EndsAt:         pgtype.Timestamptz{Time: endsAt, Valid: true},
+		DemotedAt:      nullableTimestamptz(demotedAt),
+		ConvertedAt:    nullableTimestamptz(convertedAt),
+	}))
 }
 
 func (f *runnerFixture) seedBilling(t *testing.T, orgID string, subscription *string) {
 	t.Helper()
-	_, err := f.pool.Exec(t.Context(), `INSERT INTO billing_metadata (organization_id, stripe_subscription_id) VALUES ($1, $2)`, orgID, subscription)
-	require.NoError(t, err)
+	value := pgtype.Text{}
+	if subscription != nil {
+		value = pgtype.Text{String: *subscription, Valid: true}
+	}
+	require.NoError(t, New(f.pool).SeedBillingFixture(t.Context(), SeedBillingFixtureParams{OrganizationID: orgID, StripeSubscriptionID: value}))
+}
+
+func nullableTimestamptz(value *time.Time) pgtype.Timestamptz {
+	if value == nil {
+		return pgtype.Timestamptz{}
+	}
+	return pgtype.Timestamptz{Time: *value, Valid: true}
 }
 
 func (f *runnerFixture) seedAdminAudit(t *testing.T, orgID, keyType, action string, malformed bool) {
@@ -64,12 +81,23 @@ func (f *runnerFixture) seedAdminAudit(t *testing.T, orgID, keyType, action stri
 	if malformed {
 		after = `{"disabled":true,"disable_causes":"not-an-array"}`
 	}
-	_, err := f.pool.Exec(t.Context(), `INSERT INTO audit_logs (organization_id, actor_id, actor_type, action, subject_id, subject_type, before_snapshot, after_snapshot, metadata) VALUES ($1, 'system:test', 'system', $2, $3, 'openrouter_api_key', '{"disabled":false,"disable_causes":[]}', $4, $5)`, orgID, action, "openrouter_api_key:"+orgID+"/"+keyType, after, metadata)
-	require.NoError(t, err)
+	require.NoError(t, New(f.pool).SeedAdminAuditFixture(t.Context(), SeedAdminAuditFixtureParams{
+		OrganizationID: orgID,
+		Action:         action,
+		SubjectID:      "openrouter_api_key:" + orgID + "/" + keyType,
+		AfterSnapshot:  []byte(after),
+		Metadata:       []byte(metadata),
+	}))
 }
 
 func newTestRunner(pool *pgxpool.Pool, batchSize int) *Runner {
 	return NewRunner(pool, slog.New(slog.DiscardHandler), Options{BatchSize: batchSize, LockTimeout: time.Second, StatementTimeout: 5 * time.Second, MaxLockRetries: 2})
+}
+
+func TestNewRunnerBoundsBatchSizeForSQLcParameter(t *testing.T) {
+	t.Parallel()
+	runner := NewRunner(nil, slog.New(slog.DiscardHandler), Options{BatchSize: math.MaxInt})
+	require.Equal(t, math.MaxInt32, runner.options.BatchSize)
 }
 
 func TestRunnerSafeDryRunSucceedsWithoutWrites(t *testing.T) {
@@ -180,8 +208,8 @@ func TestRunnerConcurrentApplyUsesSkipLocked(t *testing.T) {
 		require.NoError(t, err)
 	}
 
-	var remaining int
-	require.NoError(t, f.pool.QueryRow(t.Context(), `SELECT count(*) FROM openrouter_api_keys WHERE disable_causes IS NULL AND deleted IS FALSE`).Scan(&remaining))
+	remaining, err := New(f.pool).CountLiveNullClassifications(t.Context())
+	require.NoError(t, err)
 	require.Zero(t, remaining)
 }
 
@@ -198,14 +226,11 @@ func TestRunnerValidationFindsEveryUnsafeClass(t *testing.T) {
 	duplicate := f.seedKey(t, "chat", true, "free")
 	reclassified := f.seedKey(t, "chat", true, "base")
 	f.seedBilling(t, reclassified, nil)
-	_, err := f.pool.Exec(t.Context(), `UPDATE openrouter_api_keys SET disable_causes=ARRAY['admin_lock'], disabled=FALSE WHERE organization_id=$1`, mirror)
-	require.NoError(t, err)
-	_, err = f.pool.Exec(t.Context(), `UPDATE openrouter_api_keys SET disable_causes=ARRAY['future_cause'] WHERE organization_id=$1`, unknown)
-	require.NoError(t, err)
-	_, err = f.pool.Exec(t.Context(), `UPDATE openrouter_api_keys SET disable_causes=ARRAY['admin_lock','admin_lock'] WHERE organization_id=$1`, duplicate)
-	require.NoError(t, err)
-	_, err = f.pool.Exec(t.Context(), `UPDATE openrouter_api_keys SET disable_causes=ARRAY['admin_lock'] WHERE organization_id=$1`, reclassified)
-	require.NoError(t, err)
+	q := New(f.pool)
+	require.NoError(t, q.SetOpenRouterClassificationFixture(t.Context(), SetOpenRouterClassificationFixtureParams{OrganizationID: mirror, KeyType: "chat", DisableCauses: []string{"admin_lock"}, Disabled: false}))
+	require.NoError(t, q.SetOpenRouterClassificationFixture(t.Context(), SetOpenRouterClassificationFixtureParams{OrganizationID: unknown, KeyType: "chat", DisableCauses: []string{"future_cause"}, Disabled: true}))
+	require.NoError(t, q.SetOpenRouterClassificationFixture(t.Context(), SetOpenRouterClassificationFixtureParams{OrganizationID: duplicate, KeyType: "chat", DisableCauses: []string{"admin_lock", "admin_lock"}, Disabled: true}))
+	require.NoError(t, q.SetOpenRouterClassificationFixture(t.Context(), SetOpenRouterClassificationFixtureParams{OrganizationID: reclassified, KeyType: "chat", DisableCauses: []string{"admin_lock"}, Disabled: true}))
 
 	summary, err := newTestRunner(f.pool, 2).Run(t.Context(), ModeValidate)
 	require.ErrorIs(t, err, ErrValidationFailed)
@@ -249,11 +274,8 @@ func TestRunnerBoundsStatementTimeoutRetries(t *testing.T) {
 	f := newRunnerFixture(t)
 	f.seedKey(t, "chat", false, "free")
 
-	blocker, err := f.pool.Begin(t.Context())
-	require.NoError(t, err)
-	defer func() { _ = blocker.Rollback(t.Context()) }()
-	_, err = blocker.Exec(t.Context(), `LOCK TABLE audit_logs IN ACCESS EXCLUSIVE MODE`)
-	require.NoError(t, err)
+	blocker := testenv.BeginTx(t, t.Context(), f.pool)
+	require.NoError(t, New(blocker).LockAuditLogsFixture(t.Context()))
 
 	runner := NewRunner(f.pool, slog.New(slog.DiscardHandler), Options{BatchSize: 1, LockTimeout: 25 * time.Millisecond, StatementTimeout: 50 * time.Millisecond, MaxLockRetries: 1})
 	started := time.Now()
@@ -276,9 +298,9 @@ func TestRunnerCrashRollsBackBatchAndResumes(t *testing.T) {
 	require.ErrorContains(t, err, "simulated crash")
 	require.Zero(t, failed.Updated, "rolled-back rows must not be reported as durable updates")
 
-	var remaining int
-	require.NoError(t, f.pool.QueryRow(t.Context(), `SELECT count(*) FROM openrouter_api_keys WHERE disable_causes IS NULL`).Scan(&remaining))
-	require.Equal(t, 3, remaining)
+	remaining, err := New(f.pool).CountAllNullClassificationsFixture(t.Context())
+	require.NoError(t, err)
+	require.Equal(t, int64(3), remaining)
 
 	summary, err := newTestRunner(f.pool, 2).Run(t.Context(), ModeApply)
 	require.NoError(t, err)

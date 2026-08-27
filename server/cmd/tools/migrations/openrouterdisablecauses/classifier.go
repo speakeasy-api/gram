@@ -54,16 +54,16 @@ type Classification struct {
 
 func Classify(p Projection) Classification {
 	if !p.LegacyDisabled {
-		return Classification{Classified: true, Causes: []string{}}
+		return Classification{Classified: true, Causes: []string{}, AmbiguousReason: ""}
 	}
 
 	switch {
 	case p.Trial == TrialContradictory:
-		return Classification{AmbiguousReason: AmbiguousTrialProjection}
+		return Classification{Classified: false, Causes: nil, AmbiguousReason: AmbiguousTrialProjection}
 	case p.Billing == BillingInconsistent:
-		return Classification{AmbiguousReason: AmbiguousBillingProjection}
+		return Classification{Classified: false, Causes: nil, AmbiguousReason: AmbiguousBillingProjection}
 	case p.Admin == AdminMalformed:
-		return Classification{AmbiguousReason: AmbiguousAdminAudit}
+		return Classification{Classified: false, Causes: nil, AmbiguousReason: AmbiguousAdminAudit}
 	}
 
 	causes := make([]string, 0, 3)
@@ -77,10 +77,10 @@ func Classify(p Projection) Classification {
 		causes = append(causes, CauseBillingInactive)
 	}
 	if len(causes) == 0 {
-		return Classification{AmbiguousReason: AmbiguousNoProvenance}
+		return Classification{Classified: false, Causes: nil, AmbiguousReason: AmbiguousNoProvenance}
 	}
 
-	return Classification{Classified: true, Causes: causes}
+	return Classification{Classified: true, Causes: causes, AmbiguousReason: ""}
 }
 
 func CanonicalizeCauses(causes []string) ([]string, error) {

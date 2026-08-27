@@ -15,6 +15,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authztest"
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 	openrouterrepo "github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter/repo"
 	stripeclient "github.com/speakeasy-api/gram/server/internal/thirdparty/stripe"
@@ -213,14 +214,14 @@ func TestMaterializedInferenceKeyReadsUseEffectiveDisabledCompatibility(t *testi
 	organizationID := "org-inference-cap-compat"
 	_, db, _, _ := newTUMTestService(t, organizationID)
 	createUsageInferenceKey(t, db, organizationID, openrouter.KeyTypeChat, 100)
-	_, err := db.Exec(t.Context(), `UPDATE openrouter_api_keys SET disabled=TRUE, disable_causes='{}' WHERE organization_id=$1 AND key_type='chat'`, organizationID)
+	err := testrepo.New(db).SetOpenRouterAPIKeyClassificationFixture(t.Context(), testrepo.SetOpenRouterAPIKeyClassificationFixtureParams{OrganizationID: organizationID, KeyType: string(openrouter.KeyTypeChat), Disabled: true, DisableCauses: []string{}})
 	require.NoError(t, err)
 
 	key, err := repo.New(db).GetMaterializedOpenRouterInferenceKey(t.Context(), repo.GetMaterializedOpenRouterInferenceKeyParams{OrganizationID: organizationID, KeyType: "chat"})
 	require.NoError(t, err)
 	require.False(t, key.Disabled)
 
-	_, err = db.Exec(t.Context(), `UPDATE openrouter_api_keys SET disabled=FALSE, disable_causes=ARRAY['billing_inactive'] WHERE organization_id=$1 AND key_type='chat'`, organizationID)
+	err = testrepo.New(db).SetOpenRouterAPIKeyClassificationFixture(t.Context(), testrepo.SetOpenRouterAPIKeyClassificationFixtureParams{OrganizationID: organizationID, KeyType: string(openrouter.KeyTypeChat), Disabled: false, DisableCauses: []string{"billing_inactive"}})
 	require.NoError(t, err)
 	key, err = repo.New(db).GetMaterializedOpenRouterInferenceKey(t.Context(), repo.GetMaterializedOpenRouterInferenceKeyParams{OrganizationID: organizationID, KeyType: "chat"})
 	require.NoError(t, err)

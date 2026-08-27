@@ -120,3 +120,47 @@ WHERE organization_id = @organization_id
   AND key_type = @key_type
   AND deleted IS FALSE
 FOR UPDATE;
+
+-- name: SeedOrganizationFixture :exec
+INSERT INTO organization_metadata (id, name, slug, gram_account_type)
+VALUES (@organization_id, 'test', @organization_id, @account_type);
+
+-- name: SeedOpenRouterKeyFixture :exec
+INSERT INTO openrouter_api_keys (organization_id, key_type, key_hash, disabled, disable_causes)
+VALUES (@organization_id, @key_type, 'test-hash', @disabled, NULL);
+
+-- name: GetOpenRouterDisableCausesFixture :one
+SELECT disable_causes
+FROM openrouter_api_keys
+WHERE organization_id = @organization_id AND key_type = @key_type;
+
+-- name: SeedTrialFixture :exec
+INSERT INTO trials (organization_id, tier, ends_at, demoted_at, converted_at)
+VALUES (@organization_id, 'enterprise', @ends_at, sqlc.narg('demoted_at'), sqlc.narg('converted_at'));
+
+-- name: SeedBillingFixture :exec
+INSERT INTO billing_metadata (organization_id, stripe_subscription_id)
+VALUES (@organization_id, sqlc.narg('stripe_subscription_id'));
+
+-- name: SeedAdminAuditFixture :exec
+INSERT INTO audit_logs (
+  organization_id, actor_id, actor_type, action, subject_id, subject_type,
+  before_snapshot, after_snapshot, metadata
+)
+VALUES (
+  @organization_id, 'system:test', 'system', @action, @subject_id, 'openrouter_api_key',
+  '{"disabled":false,"disable_causes":[]}', @after_snapshot, @metadata
+);
+
+-- name: SetOpenRouterClassificationFixture :exec
+UPDATE openrouter_api_keys
+SET disable_causes = @disable_causes::text[], disabled = @disabled
+WHERE organization_id = @organization_id AND key_type = @key_type;
+
+-- name: CountAllNullClassificationsFixture :one
+SELECT count(*)
+FROM openrouter_api_keys
+WHERE disable_causes IS NULL;
+
+-- name: LockAuditLogsFixture :exec
+LOCK TABLE audit_logs IN ACCESS EXCLUSIVE MODE;

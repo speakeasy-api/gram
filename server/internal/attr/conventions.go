@@ -377,6 +377,12 @@ const (
 	OpenAPIOperationIDKey             = attribute.Key("gram.openapi.operation_id")
 	OpenAPIPathKey                    = attribute.Key("gram.openapi.path")
 	OpenAPIVersionKey                 = attribute.Key("gram.openapi.version")
+	OpenRouterBackfillAmbiguousKey    = attribute.Key("gram.openrouter.backfill.ambiguous")
+	OpenRouterBackfillBatchesKey      = attribute.Key("gram.openrouter.backfill.batches")
+	OpenRouterBackfillClassifiedKey   = attribute.Key("gram.openrouter.backfill.classified")
+	OpenRouterBackfillModeKey         = attribute.Key("gram.openrouter.backfill.mode")
+	OpenRouterBackfillScannedKey      = attribute.Key("gram.openrouter.backfill.scanned")
+	OpenRouterBackfillUpdatedKey      = attribute.Key("gram.openrouter.backfill.updated")
 	OpenRouterKeyLimitKey             = attribute.Key("gram.openrouter.key.limit")
 	OpenRouterKeyPreviousLimitKey     = attribute.Key("gram.openrouter.key.previous_limit")
 	OpenRouterKeyTypeKey              = attribute.Key("gram.openrouter.key.type")
@@ -1537,6 +1543,30 @@ func SlogOpenAPIPath(v string) slog.Attr      { return slog.String(string(OpenAP
 
 func OpenAPIVersion(v string) attribute.KeyValue { return OpenAPIVersionKey.String(v) }
 func SlogOpenAPIVersion(v string) slog.Attr      { return slog.String(string(OpenAPIVersionKey), v) }
+
+func SlogOpenRouterBackfillAmbiguous(v int64) slog.Attr {
+	return slog.Int64(string(OpenRouterBackfillAmbiguousKey), v)
+}
+
+func SlogOpenRouterBackfillBatches(v int64) slog.Attr {
+	return slog.Int64(string(OpenRouterBackfillBatchesKey), v)
+}
+
+func SlogOpenRouterBackfillClassified(v int64) slog.Attr {
+	return slog.Int64(string(OpenRouterBackfillClassifiedKey), v)
+}
+
+func SlogOpenRouterBackfillMode(v string) slog.Attr {
+	return slog.String(string(OpenRouterBackfillModeKey), v)
+}
+
+func SlogOpenRouterBackfillScanned(v int64) slog.Attr {
+	return slog.Int64(string(OpenRouterBackfillScannedKey), v)
+}
+
+func SlogOpenRouterBackfillUpdated(v int64) slog.Attr {
+	return slog.Int64(string(OpenRouterBackfillUpdatedKey), v)
+}
 
 func OpenRouterKeyLimit(v int) attribute.KeyValue { return OpenRouterKeyLimitKey.Int(v) }
 func SlogOpenRouterKeyLimit(v int) slog.Attr      { return slog.Int(string(OpenRouterKeyLimitKey), v) }
