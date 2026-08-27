@@ -67,9 +67,18 @@ func TestEvaluateCurrentPrescriptionsIntegration(t *testing.T) {
 		insertEvaluationFixture(t, conn, fixture)
 	}
 	evaluate := func(principalKinds, principalKeys, definitions []string, resource string) (repo.EvaluateCurrentPrescriptionsRow, error) {
+		compatibleDefinitions := make([]string, 0, len(definitions)*len(principalKinds))
+		compatiblePrincipalKinds := make([]string, 0, len(definitions)*len(principalKinds))
+		for _, definition := range definitions {
+			for _, principalKind := range principalKinds {
+				compatibleDefinitions = append(compatibleDefinitions, definition)
+				compatiblePrincipalKinds = append(compatiblePrincipalKinds, principalKind)
+			}
+		}
 		return queries.EvaluateCurrentPrescriptions(t.Context(), repo.EvaluateCurrentPrescriptionsParams{
 			OrganizationID: organizationID, ResourceKind: "tool", ResourceKey: resource,
 			DefinitionKeys: definitions, PrincipalKinds: principalKinds, PrincipalKeys: principalKeys,
+			CompatibleDefinitionKeys: compatibleDefinitions, CompatiblePrincipalKinds: compatiblePrincipalKinds,
 		})
 	}
 
@@ -163,6 +172,16 @@ func TestEvaluateCurrentPrescriptionsIntegration(t *testing.T) {
 	insertEvaluationFixture(t, conn, evaluationFixture{ID: evaluationUUID(19), OrganizationID: otherOrganization, DefinitionKey: "block-tools", PrincipalKind: "user", PrincipalKey: "user:tenant", ResourceKind: "tool", CurrentVersion: 1, Version: 1, State: "active", Scope: "selected", StartsAt: past, ExpiresAt: &activeUntil, ActivatedAt: &activated, ExternalNote: "Other tenant.", Resources: []string{"tool:tenant"}})
 	_, err = evaluate([]string{"user"}, []string{"user:tenant"}, []string{"block-tools"}, "tool:tenant")
 	require.ErrorIs(t, err, pgx.ErrNoRows)
+
+	insert(evaluationFixture{ID: evaluationUUID(25), DefinitionKey: "service-only", PrincipalKind: "user", PrincipalKey: "user:compatible", Version: 1, State: "active", Scope: "all", StartsAt: past, ExpiresAt: &activeUntil, ActivatedAt: &activated, ExternalNote: "Incompatible higher-ranked definition."})
+	insert(evaluationFixture{ID: evaluationUUID(26), DefinitionKey: "user-only", PrincipalKind: "user", PrincipalKey: "user:compatible", Version: 1, State: "active", Scope: "all", StartsAt: past, ExpiresAt: &activeUntil, ActivatedAt: &activated, ExternalNote: "Compatible lower-ranked definition."})
+	row, err = queries.EvaluateCurrentPrescriptions(t.Context(), repo.EvaluateCurrentPrescriptionsParams{
+		OrganizationID: organizationID, ResourceKind: "tool", ResourceKey: "tool:compatible",
+		DefinitionKeys: []string{"service-only", "user-only"}, PrincipalKinds: []string{"user"}, PrincipalKeys: []string{"user:compatible"},
+		CompatibleDefinitionKeys: []string{"user-only"}, CompatiblePrincipalKinds: []string{"user"},
+	})
+	require.NoError(t, err)
+	require.Equal(t, "Compatible lower-ranked definition.", row.ExternalNote)
 }
 
 func TestEvaluateCurrentPrescriptionsRepresentativePlan(t *testing.T) {
@@ -208,6 +227,7 @@ func TestEvaluateCurrentPrescriptionsRepresentativePlan(t *testing.T) {
 	_, err = queries.EvaluateCurrentPrescriptions(t.Context(), repo.EvaluateCurrentPrescriptionsParams{
 		OrganizationID: organizationID, ResourceKind: "tool", ResourceKey: "tool:plan",
 		DefinitionKeys: []string{"block-tools"}, PrincipalKinds: []string{"user"}, PrincipalKeys: []string{"user:plan"},
+		CompatibleDefinitionKeys: []string{"block-tools"}, CompatiblePrincipalKinds: []string{"user"},
 	})
 	require.NoError(t, err)
 	require.NotContains(t, capture.query, "generate_subscripts")
@@ -251,6 +271,7 @@ func TestKillswitchEvaluationIntervalUsesExactDatabaseTimeBoundaries(t *testing.
 	_, err := repo.New(capture).EvaluateCurrentPrescriptions(t.Context(), repo.EvaluateCurrentPrescriptionsParams{
 		OrganizationID: organizationID, ResourceKind: "tool", ResourceKey: "tool:boundary",
 		DefinitionKeys: []string{"block-tools"}, PrincipalKinds: []string{"user"}, PrincipalKeys: []string{"user:boundary"},
+		CompatibleDefinitionKeys: []string{"block-tools"}, CompatiblePrincipalKinds: []string{"user"},
 	})
 	require.ErrorIs(t, err, pgx.ErrNoRows)
 	require.Contains(t, capture.query, "WITH evaluation_clock AS MATERIALIZED")

@@ -94,6 +94,8 @@ func TestEvaluatorUsesOneQueryAndRetainsWinningPolicy(t *testing.T) {
 		require.Equal(t, []string{"closed-tools", "block-tools"}, params.DefinitionKeys)
 		require.Equal(t, []string{"user"}, params.PrincipalKinds)
 		require.Equal(t, []string{"user:alpha"}, params.PrincipalKeys)
+		require.Equal(t, []string{"closed-tools", "block-tools"}, params.CompatibleDefinitionKeys)
+		require.Equal(t, []string{"user", "user"}, params.CompatiblePrincipalKinds)
 		return repo.EvaluateCurrentPrescriptionsRow{PrescriptionID: prescriptionID, DefinitionKey: "closed-tools", ExternalNote: "Exact public note."}, nil
 	})
 	evaluator, err := newEvaluator(query, registry, time.Second, nil)
@@ -108,6 +110,44 @@ func TestEvaluatorUsesOneQueryAndRetainsWinningPolicy(t *testing.T) {
 	policy, ok := result.FailurePolicy()
 	require.True(t, ok)
 	require.Equal(t, FailurePolicyFailClosed, policy)
+}
+
+func TestEvaluatorPreservesDefinitionPrincipalCompatibility(t *testing.T) {
+	t.Parallel()
+	registration := validRegistration()
+	registration.Definitions[0].PrincipalKinds = []PrincipalKind{"user"}
+	serviceOnly := registration.Definitions[0]
+	serviceOnly.Key = "service-only"
+	serviceOnly.PrincipalKinds = []PrincipalKind{"service"}
+	registration.Definitions = append(registration.Definitions, serviceOnly)
+	for _, coverage := range append([]CoverageContract(nil), registration.Coverage...) {
+		coverage.Definition = serviceOnly.Key
+		registration.Coverage = append(registration.Coverage, coverage)
+	}
+	registry, err := BuildRegistry(registration)
+	require.NoError(t, err)
+
+	query := evaluationQueryFunc(func(_ context.Context, params repo.EvaluateCurrentPrescriptionsParams) (repo.EvaluateCurrentPrescriptionsRow, error) {
+		require.Equal(t, []string{"service-only", "block-tools"}, params.DefinitionKeys)
+		require.Equal(t, []string{"service", "user"}, params.PrincipalKinds)
+		require.Equal(t, []string{"service:alpha", "user:alpha"}, params.PrincipalKeys)
+		require.Equal(t, []string{"service-only", "block-tools"}, params.CompatibleDefinitionKeys)
+		require.Equal(t, []string{"service", "user"}, params.CompatiblePrincipalKinds)
+		return repo.EvaluateCurrentPrescriptionsRow{}, pgx.ErrNoRows
+	})
+	evaluator, err := newEvaluator(query, registry, time.Second, nil)
+	require.NoError(t, err)
+
+	result := evaluator.Evaluate(t.Context(), EvaluationRequest{
+		OrganizationID: "org:test",
+		DefinitionKeys: []DefinitionKey{"service-only", "block-tools"},
+		PrincipalCandidates: []PrincipalCandidate{
+			{Kind: "service", Key: "service:alpha"},
+			{Kind: "user", Key: "user:alpha"},
+		},
+		ResourceKind: "tool", ResourceKey: "org:test:tool:alpha",
+	})
+	require.Equal(t, EvaluationResultNoMatch, result.Kind())
 }
 
 func TestResolveTransportDispositionUsesAuthoritativeEmbeddedPolicy(t *testing.T) {

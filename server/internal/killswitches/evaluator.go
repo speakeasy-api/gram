@@ -113,12 +113,14 @@ func (e *Evaluator) Evaluate(ctx context.Context, request EvaluationRequest) Eva
 func (e *Evaluator) prepare(request EvaluationRequest) (preparedEvaluation, error) {
 	prepared := preparedEvaluation{
 		params: repo.EvaluateCurrentPrescriptionsParams{
-			OrganizationID: "",
-			ResourceKind:   "",
-			ResourceKey:    "",
-			DefinitionKeys: nil,
-			PrincipalKinds: nil,
-			PrincipalKeys:  nil,
+			OrganizationID:           "",
+			ResourceKind:             "",
+			ResourceKey:              "",
+			DefinitionKeys:           nil,
+			PrincipalKinds:           nil,
+			PrincipalKeys:            nil,
+			CompatibleDefinitionKeys: nil,
+			CompatiblePrincipalKinds: nil,
 		},
 		policies:        nil,
 		effectivePolicy: FailurePolicyFailOpen,
@@ -188,6 +190,9 @@ func (e *Evaluator) prepare(request EvaluationRequest) (preparedEvaluation, erro
 	seenPrincipals := make(map[PrincipalCandidate]struct{}, len(request.PrincipalCandidates))
 	prepared.params.PrincipalKinds = make([]string, 0, len(request.PrincipalCandidates))
 	prepared.params.PrincipalKeys = make([]string, 0, len(request.PrincipalCandidates))
+	compatibleCapacity := len(definitions) * len(request.PrincipalCandidates)
+	prepared.params.CompatibleDefinitionKeys = make([]string, 0, compatibleCapacity)
+	prepared.params.CompatiblePrincipalKinds = make([]string, 0, compatibleCapacity)
 	for _, candidate := range request.PrincipalCandidates {
 		if err := validateIdentifier("evaluation principal kind", string(candidate.Kind)); err != nil {
 			return invalid("%v", err)
@@ -204,6 +209,12 @@ func (e *Evaluator) prepare(request EvaluationRequest) (preparedEvaluation, erro
 		seenPrincipals[candidate] = struct{}{}
 		prepared.params.PrincipalKinds = append(prepared.params.PrincipalKinds, string(candidate.Kind))
 		prepared.params.PrincipalKeys = append(prepared.params.PrincipalKeys, string(candidate.Key))
+		for _, definition := range definitions {
+			if slices.Contains(definition.PrincipalKinds, candidate.Kind) {
+				prepared.params.CompatibleDefinitionKeys = append(prepared.params.CompatibleDefinitionKeys, string(definition.Key))
+				prepared.params.CompatiblePrincipalKinds = append(prepared.params.CompatiblePrincipalKinds, string(candidate.Kind))
+			}
+		}
 	}
 	return prepared, nil
 }

@@ -12,13 +12,26 @@ principal_candidates AS (
     unnest(@principal_kinds::text[]),
     unnest(@principal_keys::text[])
   ) WITH ORDINALITY AS candidate(principal_kind, principal_key, principal_rank)
+),
+compatible_definition_principals AS (
+  SELECT definition_key, principal_kind
+  FROM ROWS FROM (
+    unnest(@compatible_definition_keys::text[]),
+    unnest(@compatible_principal_kinds::text[])
+  ) AS candidate(definition_key, principal_kind)
 )
 SELECT
   matched.prescription_id,
   matched.definition_key,
   matched.external_note
 FROM definition_candidates AS definition_candidate
-CROSS JOIN principal_candidates AS principal_candidate
+JOIN principal_candidates AS principal_candidate
+  ON EXISTS (
+    SELECT 1
+    FROM compatible_definition_principals AS compatible
+    WHERE compatible.definition_key = definition_candidate.definition_key
+      AND compatible.principal_kind = principal_candidate.principal_kind
+  )
 CROSS JOIN LATERAL (
   SELECT
     prescription.id AS prescription_id,

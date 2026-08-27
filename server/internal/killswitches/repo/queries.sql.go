@@ -357,13 +357,26 @@ principal_candidates AS (
     unnest($5::text[]),
     unnest($6::text[])
   ) WITH ORDINALITY AS candidate(principal_kind, principal_key, principal_rank)
+),
+compatible_definition_principals AS (
+  SELECT definition_key, principal_kind
+  FROM ROWS FROM (
+    unnest($7::text[]),
+    unnest($8::text[])
+  ) AS candidate(definition_key, principal_kind)
 )
 SELECT
   matched.prescription_id,
   matched.definition_key,
   matched.external_note
 FROM definition_candidates AS definition_candidate
-CROSS JOIN principal_candidates AS principal_candidate
+JOIN principal_candidates AS principal_candidate
+  ON EXISTS (
+    SELECT 1
+    FROM compatible_definition_principals AS compatible
+    WHERE compatible.definition_key = definition_candidate.definition_key
+      AND compatible.principal_kind = principal_candidate.principal_kind
+  )
 CROSS JOIN LATERAL (
   SELECT
     prescription.id AS prescription_id,
@@ -419,12 +432,14 @@ LIMIT 1
 `
 
 type EvaluateCurrentPrescriptionsParams struct {
-	OrganizationID string
-	ResourceKind   string
-	ResourceKey    string
-	DefinitionKeys []string
-	PrincipalKinds []string
-	PrincipalKeys  []string
+	OrganizationID           string
+	ResourceKind             string
+	ResourceKey              string
+	DefinitionKeys           []string
+	PrincipalKinds           []string
+	PrincipalKeys            []string
+	CompatibleDefinitionKeys []string
+	CompatiblePrincipalKinds []string
 }
 
 type EvaluateCurrentPrescriptionsRow struct {
@@ -441,6 +456,8 @@ func (q *Queries) EvaluateCurrentPrescriptions(ctx context.Context, arg Evaluate
 		arg.DefinitionKeys,
 		arg.PrincipalKinds,
 		arg.PrincipalKeys,
+		arg.CompatibleDefinitionKeys,
+		arg.CompatiblePrincipalKinds,
 	)
 	var i EvaluateCurrentPrescriptionsRow
 	err := row.Scan(&i.PrescriptionID, &i.DefinitionKey, &i.ExternalNote)
