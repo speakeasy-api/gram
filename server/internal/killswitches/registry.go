@@ -230,18 +230,19 @@ func validateCanonicalizationFixture[T ~string](
 
 func wrapTransportAdapter(key TransportAdapterKey, adapter TransportAdapter) TransportAdapter {
 	return func(result EvaluationResult, failurePolicy FailurePolicy) (TransportDisposition, error) {
-		if err := validateEvaluationResult(result); err != nil {
+		expected, err := ResolveTransportDisposition(result, failurePolicy)
+		if err != nil {
 			return TransportDisposition{}, fmt.Errorf("transport adapter %q: %w", key, err)
-		}
-		if failurePolicy != FailurePolicyFailOpen && failurePolicy != FailurePolicyFailClosed {
-			return TransportDisposition{}, fmt.Errorf("transport adapter %q: invalid failure policy %q", key, failurePolicy)
 		}
 		disposition, err := adapter(result, failurePolicy)
 		if err != nil {
 			return TransportDisposition{}, fmt.Errorf("transport adapter %q: %w", key, err)
 		}
-		if err := validateTransportDisposition(disposition); err != nil {
-			return TransportDisposition{}, fmt.Errorf("transport adapter %q: %w", key, err)
+		if disposition.kind != expected.kind {
+			return TransportDisposition{}, fmt.Errorf("transport adapter %q returned disposition %q, expected %q for the result/policy matrix", key, disposition.kind, expected.kind)
+		}
+		if disposition.externalNote != expected.externalNote {
+			return TransportDisposition{}, fmt.Errorf("transport adapter %q did not preserve the result/policy matrix external note", key)
 		}
 		return disposition, nil
 	}

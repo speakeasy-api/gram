@@ -485,20 +485,3 @@ func validateEvaluationResult(result EvaluationResult) error {
 	}
 	return nil
 }
-
-func validateTransportDisposition(disposition TransportDisposition) error {
-	switch disposition.kind {
-	case TransportDispositionContinue, TransportDispositionInfrastructureRejection:
-		if disposition.externalNote != "" {
-			return errors.New("non-match transport disposition contains match language")
-		}
-	case TransportDispositionMatchedDenial:
-		normalized, err := NormalizeExternalNote(disposition.externalNote)
-		if err != nil || normalized != disposition.externalNote {
-			return errors.New("matched transport disposition requires a normalized external note")
-		}
-	default:
-		return errors.New("invalid transport disposition")
-	}
-	return nil
-}

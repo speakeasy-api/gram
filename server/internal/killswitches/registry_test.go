@@ -537,21 +537,42 @@ func TestRegisteredTransportAdapterResolvesNeutralBehaviorMatrix(t *testing.T) {
 	}
 }
 
-func TestRegisteredTransportAdapterValidatesBehaviorOutput(t *testing.T) {
+func TestRegisteredTransportAdapterRejectsOffMatrixDispositions(t *testing.T) {
 	t.Parallel()
 
-	input := validRegistration()
-	input.TransportAdapters[0].Adapter = func(EvaluationResult, FailurePolicy) (TransportDisposition, error) {
-		return TransportDisposition{}, nil
-	}
-	registry, err := BuildRegistry(input)
-	if err != nil {
-		t.Fatalf("build registry: %v", err)
-	}
-	adapter, _ := registry.TransportAdapter("jsonrpc")
+	match, _ := NewMatchResult(testPrescriptionID, "Access paused.")
 	noMatch, _ := NewNoMatchResult(NoMatchReasonNoPrescription)
-	if _, err := adapter(noMatch, FailurePolicyFailOpen); err == nil {
-		t.Fatal("invalid zero disposition accepted")
+	failure, _ := NewInfrastructureFailureResult(errors.New("evaluation unavailable"))
+	otherMatchedDenial, _ := NewMatchedDenialDisposition("Different note.")
+	tests := []struct {
+		name        string
+		result      EvaluationResult
+		policy      FailurePolicy
+		disposition TransportDisposition
+	}{
+		{name: "invalid shape", result: noMatch, policy: FailurePolicyFailOpen, disposition: TransportDisposition{}},
+		{name: "match continues", result: match, policy: FailurePolicyFailOpen, disposition: NewContinueDisposition()},
+		{name: "match note replaced", result: match, policy: FailurePolicyFailClosed, disposition: otherMatchedDenial},
+		{name: "no match denied", result: noMatch, policy: FailurePolicyFailClosed, disposition: NewInfrastructureRejectionDisposition()},
+		{name: "fail open rejected", result: failure, policy: FailurePolicyFailOpen, disposition: NewInfrastructureRejectionDisposition()},
+		{name: "fail closed continues", result: failure, policy: FailurePolicyFailClosed, disposition: NewContinueDisposition()},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			input := validRegistration()
+			input.TransportAdapters[0].Adapter = func(EvaluationResult, FailurePolicy) (TransportDisposition, error) {
+				return tt.disposition, nil
+			}
+			registry, err := BuildRegistry(input)
+			if err != nil {
+				t.Fatalf("build registry: %v", err)
+			}
+			adapter, _ := registry.TransportAdapter("jsonrpc")
+			if _, err := adapter(tt.result, tt.policy); err == nil {
+				t.Fatal("off-matrix transport disposition accepted")
+			}
+		})
 	}
 }
 
