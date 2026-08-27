@@ -67,6 +67,7 @@ const createOtelDestination = `-- name: CreateOtelDestination :one
 INSERT INTO otel_destinations (
   organization_id,
   project_id,
+  name,
   endpoint_url,
   headers_encrypted,
   sensitive_data
@@ -75,14 +76,16 @@ INSERT INTO otel_destinations (
   $2,
   $3,
   $4,
-  $5
+  $5,
+  $6
 )
-RETURNING id, organization_id, project_id, endpoint_url, headers_encrypted, sensitive_data, created_at, updated_at, deleted_at, deleted
+RETURNING id, organization_id, project_id, name, endpoint_url, headers_encrypted, sensitive_data, created_at, updated_at, deleted_at, deleted
 `
 
 type CreateOtelDestinationParams struct {
 	OrganizationID   string
 	ProjectID        uuid.UUID
+	Name             string
 	EndpointUrl      string
 	HeadersEncrypted pgtype.Text
 	SensitiveData    pgtype.Text
@@ -93,6 +96,7 @@ func (q *Queries) CreateOtelDestination(ctx context.Context, arg CreateOtelDesti
 	row := q.db.QueryRow(ctx, createOtelDestination,
 		arg.OrganizationID,
 		arg.ProjectID,
+		arg.Name,
 		arg.EndpointUrl,
 		arg.HeadersEncrypted,
 		arg.SensitiveData,
@@ -102,6 +106,7 @@ func (q *Queries) CreateOtelDestination(ctx context.Context, arg CreateOtelDesti
 		&i.ID,
 		&i.OrganizationID,
 		&i.ProjectID,
+		&i.Name,
 		&i.EndpointUrl,
 		&i.HeadersEncrypted,
 		&i.SensitiveData,
@@ -150,7 +155,7 @@ func (q *Queries) GetDataExportRouteForUpdate(ctx context.Context, arg GetDataEx
 }
 
 const getOtelDestinationForRoute = `-- name: GetOtelDestinationForRoute :one
-SELECT id, organization_id, project_id, endpoint_url, headers_encrypted, sensitive_data, created_at, updated_at, deleted_at, deleted
+SELECT id, organization_id, project_id, name, endpoint_url, headers_encrypted, sensitive_data, created_at, updated_at, deleted_at, deleted
 FROM otel_destinations
 WHERE organization_id = $1
   AND project_id = $2
@@ -175,6 +180,7 @@ func (q *Queries) GetOtelDestinationForRoute(ctx context.Context, arg GetOtelDes
 		&i.ID,
 		&i.OrganizationID,
 		&i.ProjectID,
+		&i.Name,
 		&i.EndpointUrl,
 		&i.HeadersEncrypted,
 		&i.SensitiveData,
@@ -187,7 +193,7 @@ func (q *Queries) GetOtelDestinationForRoute(ctx context.Context, arg GetOtelDes
 }
 
 const getOtelDestinationForUpdate = `-- name: GetOtelDestinationForUpdate :one
-SELECT id, organization_id, project_id, endpoint_url, headers_encrypted, sensitive_data, created_at, updated_at, deleted_at, deleted
+SELECT id, organization_id, project_id, name, endpoint_url, headers_encrypted, sensitive_data, created_at, updated_at, deleted_at, deleted
 FROM otel_destinations
 WHERE organization_id = $1
   AND project_id = $2
@@ -211,6 +217,7 @@ func (q *Queries) GetOtelDestinationForUpdate(ctx context.Context, arg GetOtelDe
 		&i.ID,
 		&i.OrganizationID,
 		&i.ProjectID,
+		&i.Name,
 		&i.EndpointUrl,
 		&i.HeadersEncrypted,
 		&i.SensitiveData,
@@ -269,7 +276,7 @@ func (q *Queries) ListDataExportRoutes(ctx context.Context, arg ListDataExportRo
 }
 
 const listOtelDestinations = `-- name: ListOtelDestinations :many
-SELECT id, organization_id, project_id, endpoint_url, headers_encrypted, sensitive_data, created_at, updated_at, deleted_at, deleted
+SELECT id, organization_id, project_id, name, endpoint_url, headers_encrypted, sensitive_data, created_at, updated_at, deleted_at, deleted
 FROM otel_destinations
 WHERE organization_id = $1
   AND project_id = $2
@@ -298,6 +305,7 @@ func (q *Queries) ListOtelDestinations(ctx context.Context, arg ListOtelDestinat
 			&i.ID,
 			&i.OrganizationID,
 			&i.ProjectID,
+			&i.Name,
 			&i.EndpointUrl,
 			&i.HeadersEncrypted,
 			&i.SensitiveData,
@@ -386,7 +394,7 @@ WHERE organization_id = $1
   AND project_id = $2
   AND id = $3
   AND deleted IS FALSE
-RETURNING id, organization_id, project_id, endpoint_url, headers_encrypted, sensitive_data, created_at, updated_at, deleted_at, deleted
+RETURNING id, organization_id, project_id, name, endpoint_url, headers_encrypted, sensitive_data, created_at, updated_at, deleted_at, deleted
 `
 
 type SoftDeleteOtelDestinationParams struct {
@@ -403,6 +411,7 @@ func (q *Queries) SoftDeleteOtelDestination(ctx context.Context, arg SoftDeleteO
 		&i.ID,
 		&i.OrganizationID,
 		&i.ProjectID,
+		&i.Name,
 		&i.EndpointUrl,
 		&i.HeadersEncrypted,
 		&i.SensitiveData,
@@ -465,18 +474,20 @@ func (q *Queries) UpdateDataExportRoute(ctx context.Context, arg UpdateDataExpor
 
 const updateOtelDestination = `-- name: UpdateOtelDestination :one
 UPDATE otel_destinations
-SET endpoint_url = $1,
-    headers_encrypted = $2,
-    sensitive_data = $3,
+SET name = $1,
+    endpoint_url = $2,
+    headers_encrypted = $3,
+    sensitive_data = $4,
     updated_at = clock_timestamp()
-WHERE organization_id = $4
-  AND project_id = $5
-  AND id = $6
+WHERE organization_id = $5
+  AND project_id = $6
+  AND id = $7
   AND deleted IS FALSE
-RETURNING id, organization_id, project_id, endpoint_url, headers_encrypted, sensitive_data, created_at, updated_at, deleted_at, deleted
+RETURNING id, organization_id, project_id, name, endpoint_url, headers_encrypted, sensitive_data, created_at, updated_at, deleted_at, deleted
 `
 
 type UpdateOtelDestinationParams struct {
+	Name             string
 	EndpointUrl      string
 	HeadersEncrypted pgtype.Text
 	SensitiveData    pgtype.Text
@@ -488,6 +499,7 @@ type UpdateOtelDestinationParams struct {
 // Replace validated destination configuration and return the after snapshot.
 func (q *Queries) UpdateOtelDestination(ctx context.Context, arg UpdateOtelDestinationParams) (OtelDestination, error) {
 	row := q.db.QueryRow(ctx, updateOtelDestination,
+		arg.Name,
 		arg.EndpointUrl,
 		arg.HeadersEncrypted,
 		arg.SensitiveData,
@@ -500,6 +512,7 @@ func (q *Queries) UpdateOtelDestination(ctx context.Context, arg UpdateOtelDesti
 		&i.ID,
 		&i.OrganizationID,
 		&i.ProjectID,
+		&i.Name,
 		&i.EndpointUrl,
 		&i.HeadersEncrypted,
 		&i.SensitiveData,

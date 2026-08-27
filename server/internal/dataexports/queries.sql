@@ -38,12 +38,14 @@ FOR SHARE;
 INSERT INTO otel_destinations (
   organization_id,
   project_id,
+  name,
   endpoint_url,
   headers_encrypted,
   sensitive_data
 ) VALUES (
   @organization_id,
   @project_id,
+  @name,
   @endpoint_url,
   @headers_encrypted,
   @sensitive_data
@@ -53,7 +55,8 @@ RETURNING *;
 -- Replace validated destination configuration and return the after snapshot.
 -- name: UpdateOtelDestination :one
 UPDATE otel_destinations
-SET endpoint_url = @endpoint_url,
+SET name = @name,
+    endpoint_url = @endpoint_url,
     headers_encrypted = @headers_encrypted,
     sensitive_data = @sensitive_data,
     updated_at = clock_timestamp()

@@ -35,6 +35,10 @@ export type UpdateOtelDestinationRequestBody = {
    */
   headers: Array<OtelDestinationHeaderInput>;
   /**
+   * Human-readable destination name.
+   */
+  name: string;
+  /**
    * Sensitive-data policy.
    */
   sensitiveData: UpdateOtelDestinationRequestBodySensitiveData;
@@ -50,6 +54,7 @@ export const UpdateOtelDestinationRequestBodySensitiveData$outboundSchema:
 export type UpdateOtelDestinationRequestBody$Outbound = {
   endpoint_url: string;
   headers: Array<OtelDestinationHeaderInput$Outbound>;
+  name: string;
   sensitive_data: string;
 };
 
@@ -61,6 +66,7 @@ export const UpdateOtelDestinationRequestBody$outboundSchema: z.ZodMiniType<
   z.object({
     endpointUrl: z.string(),
     headers: z.array(OtelDestinationHeaderInput$outboundSchema),
+    name: z.string(),
     sensitiveData: UpdateOtelDestinationRequestBodySensitiveData$outboundSchema,
   }),
   z.transform((v) => {

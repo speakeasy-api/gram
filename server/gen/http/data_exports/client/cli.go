@@ -52,7 +52,7 @@ func BuildCreateOtelDestinationPayload(dataExportsCreateOtelDestinationBody stri
 	{
 		err = json.Unmarshal([]byte(dataExportsCreateOtelDestinationBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"endpoint_url\": \"https://example.com/foo\",\n      \"headers\": [\n         {\n            \"name\": \"abc123\",\n            \"value\": \"abc123\"\n         }\n      ],\n      \"sensitive_data\": \"include\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"endpoint_url\": \"https://example.com/foo\",\n      \"headers\": [\n         {\n            \"name\": \"abc123\",\n            \"value\": \"abc123\"\n         }\n      ],\n      \"name\": \"abc123\",\n      \"sensitive_data\": \"include\"\n   }'")
 		}
 		if body.Headers == nil {
 			err = goa.MergeErrors(err, goa.MissingFieldError("headers", "body"))
@@ -84,6 +84,7 @@ func BuildCreateOtelDestinationPayload(dataExportsCreateOtelDestinationBody stri
 		}
 	}
 	v := &dataexports.CreateOtelDestinationPayload{
+		Name:          body.Name,
 		EndpointURL:   body.EndpointURL,
 		SensitiveData: body.SensitiveData,
 	}
@@ -120,7 +121,7 @@ func BuildUpdateOtelDestinationPayload(dataExportsUpdateOtelDestinationBody stri
 	{
 		err = json.Unmarshal([]byte(dataExportsUpdateOtelDestinationBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"endpoint_url\": \"https://example.com/foo\",\n      \"headers\": [\n         {\n            \"name\": \"abc123\",\n            \"value\": \"abc123\"\n         }\n      ],\n      \"sensitive_data\": \"include\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"endpoint_url\": \"https://example.com/foo\",\n      \"headers\": [\n         {\n            \"name\": \"abc123\",\n            \"value\": \"abc123\"\n         }\n      ],\n      \"name\": \"abc123\",\n      \"sensitive_data\": \"include\"\n   }'")
 		}
 		if body.Headers == nil {
 			err = goa.MergeErrors(err, goa.MissingFieldError("headers", "body"))
@@ -160,6 +161,7 @@ func BuildUpdateOtelDestinationPayload(dataExportsUpdateOtelDestinationBody stri
 		}
 	}
 	v := &dataexports.UpdateOtelDestinationPayload{
+		Name:          body.Name,
 		EndpointURL:   body.EndpointURL,
 		SensitiveData: body.SensitiveData,
 	}

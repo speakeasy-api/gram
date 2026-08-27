@@ -73,15 +73,41 @@ func TestRouteRejectsEnabledWithoutUsableDestinationAndUnsupportedSource(t *test
 	requireOopsCode(t, err, oops.CodeInvalid)
 }
 
-func TestRouteRejectsDuplicateProjectSource(t *testing.T) {
+func TestRouteAllowsSourceFanoutAndRejectsDuplicateDestination(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestService(t)
-	_, err := ti.service.CreateRoute(ctx, &gen.CreateRoutePayload{SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil,
-		DataSource: "otel_forwarding", Enabled: false, OtelDestinationID: nil})
+	first := createOtelDestination(t, ctx, ti, "https://first.example.test", "exclude")
+	second := createOtelDestination(t, ctx, ti, "https://second.example.test", "exclude")
+
+	_, err := ti.service.CreateRoute(ctx, &gen.CreateRoutePayload{
+		SessionToken:      nil,
+		ApikeyToken:       nil,
+		ProjectSlugInput:  nil,
+		DataSource:        "otel_forwarding",
+		Enabled:           true,
+		OtelDestinationID: &first.ID,
+	})
 	require.NoError(t, err)
-	_, err = ti.service.CreateRoute(ctx, &gen.CreateRoutePayload{SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil,
-		DataSource: "otel_forwarding", Enabled: false, OtelDestinationID: nil})
+
+	_, err = ti.service.CreateRoute(ctx, &gen.CreateRoutePayload{
+		SessionToken:      nil,
+		ApikeyToken:       nil,
+		ProjectSlugInput:  nil,
+		DataSource:        "otel_forwarding",
+		Enabled:           true,
+		OtelDestinationID: &second.ID,
+	})
+	require.NoError(t, err)
+
+	_, err = ti.service.CreateRoute(ctx, &gen.CreateRoutePayload{
+		SessionToken:      nil,
+		ApikeyToken:       nil,
+		ProjectSlugInput:  nil,
+		DataSource:        "otel_forwarding",
+		Enabled:           true,
+		OtelDestinationID: &first.ID,
+	})
 	requireOopsCode(t, err, oops.CodeConflict)
 }
 

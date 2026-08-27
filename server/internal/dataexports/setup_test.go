@@ -77,6 +77,7 @@ func createOtelDestination(t *testing.T, ctx context.Context, ti *testInstance, 
 	destination, err := ti.service.CreateOtelDestination(ctx, &gen.CreateOtelDestinationPayload{SessionToken: nil,
 		ApikeyToken:      nil,
 		ProjectSlugInput: nil,
+		Name:             "Test destination",
 		EndpointURL:      endpointURL,
 		SensitiveData:    sensitiveData,
 		Headers:          []*gen.CreateOtelDestinationHeaderInput{}})

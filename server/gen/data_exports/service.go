@@ -70,6 +70,8 @@ type CreateOtelDestinationPayload struct {
 	SessionToken     *string
 	ApikeyToken      *string
 	ProjectSlugInput *string
+	// Human-readable destination name.
+	Name string
 	// OTLP base URL.
 	EndpointURL string
 	// Sensitive-data policy.
@@ -168,6 +170,8 @@ type OtelDestination struct {
 	ID string
 	// Project that owns the destination.
 	ProjectID string
+	// Human-readable destination name.
+	Name string
 	// OTLP base URL. Signal-specific paths are appended during delivery.
 	EndpointURL string
 	// Whether sensitive data is included in payloads sent to this destination.
@@ -206,6 +210,8 @@ type UpdateOtelDestinationPayload struct {
 	ProjectSlugInput *string
 	// Destination ID.
 	ID string
+	// Human-readable destination name.
+	Name string
 	// OTLP base URL.
 	EndpointURL string
 	// Sensitive-data policy.

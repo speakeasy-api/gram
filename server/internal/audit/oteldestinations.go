@@ -24,6 +24,7 @@ type OtelDestinationHeaderSnapshot struct {
 }
 
 type OtelDestinationSnapshot struct {
+	Name          string                          `json:"name"`
 	EndpointURL   string                          `json:"endpoint_url"`
 	Headers       []OtelDestinationHeaderSnapshot `json:"headers"`
 	SensitiveData string                          `json:"sensitive_data"`
@@ -37,8 +38,8 @@ type LogOtelDestinationCreateEvent struct {
 	ActorDisplayName *string
 	ActorSlug        *string
 
-	DestinationURN urn.OtelDestination
-	EndpointURL    string
+	DestinationURN  urn.OtelDestination
+	DestinationName string
 }
 
 func (l *Logger) LogOtelDestinationCreate(ctx context.Context, dbtx repo.DBTX, event LogOtelDestinationCreateEvent) error {
@@ -56,7 +57,7 @@ func (l *Logger) LogOtelDestinationCreate(ctx context.Context, dbtx repo.DBTX, e
 
 		SubjectID:          event.DestinationURN.ID.String(),
 		SubjectType:        string(subjectTypeOtelDestination),
-		SubjectDisplayName: conv.ToPGTextEmpty(event.EndpointURL),
+		SubjectDisplayName: conv.ToPGTextEmpty(event.DestinationName),
 		SubjectSlug:        conv.ToPGTextEmpty(""),
 
 		BeforeSnapshot: nil,
@@ -76,7 +77,7 @@ type LogOtelDestinationUpdateEvent struct {
 	ActorSlug        *string
 
 	DestinationURN            urn.OtelDestination
-	EndpointURL               string
+	DestinationName           string
 	DestinationSnapshotBefore *OtelDestinationSnapshot
 	DestinationSnapshotAfter  *OtelDestinationSnapshot
 }
@@ -105,7 +106,7 @@ func (l *Logger) LogOtelDestinationUpdate(ctx context.Context, dbtx repo.DBTX, e
 
 		SubjectID:          event.DestinationURN.ID.String(),
 		SubjectType:        string(subjectTypeOtelDestination),
-		SubjectDisplayName: conv.ToPGTextEmpty(event.EndpointURL),
+		SubjectDisplayName: conv.ToPGTextEmpty(event.DestinationName),
 		SubjectSlug:        conv.ToPGTextEmpty(""),
 
 		BeforeSnapshot: beforeSnapshot,
@@ -124,8 +125,8 @@ type LogOtelDestinationDeleteEvent struct {
 	ActorDisplayName *string
 	ActorSlug        *string
 
-	DestinationURN urn.OtelDestination
-	EndpointURL    string
+	DestinationURN  urn.OtelDestination
+	DestinationName string
 }
 
 func (l *Logger) LogOtelDestinationDelete(ctx context.Context, dbtx repo.DBTX, event LogOtelDestinationDeleteEvent) error {
@@ -143,7 +144,7 @@ func (l *Logger) LogOtelDestinationDelete(ctx context.Context, dbtx repo.DBTX, e
 
 		SubjectID:          event.DestinationURN.ID.String(),
 		SubjectType:        string(subjectTypeOtelDestination),
-		SubjectDisplayName: conv.ToPGTextEmpty(event.EndpointURL),
+		SubjectDisplayName: conv.ToPGTextEmpty(event.DestinationName),
 		SubjectSlug:        conv.ToPGTextEmpty(""),
 
 		BeforeSnapshot: nil,

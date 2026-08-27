@@ -23,6 +23,7 @@ func TestDestinationCRUDPreservesWriteOnlyHeadersAndAuditsSafeSnapshots(t *testi
 	created, err := ti.service.CreateOtelDestination(ctx, &gen.CreateOtelDestinationPayload{SessionToken: nil,
 		ApikeyToken:      nil,
 		ProjectSlugInput: nil,
+		Name:             "Primary collector",
 		EndpointURL:      "https://collector.example.test/otlp",
 		SensitiveData:    "include",
 		Headers: []*gen.CreateOtelDestinationHeaderInput{
@@ -30,6 +31,7 @@ func TestDestinationCRUDPreservesWriteOnlyHeadersAndAuditsSafeSnapshots(t *testi
 			{Name: "X-API-Key", Value: secretToClear},
 		}})
 	require.NoError(t, err)
+	require.Equal(t, "Primary collector", created.Name)
 	require.Equal(t, "include", created.SensitiveData)
 	require.Equal(t, []*gen.OtelDestinationHeader{
 		{Name: "Authorization", HasValue: true},
@@ -46,6 +48,7 @@ func TestDestinationCRUDPreservesWriteOnlyHeadersAndAuditsSafeSnapshots(t *testi
 		ApikeyToken:      nil,
 		ProjectSlugInput: nil,
 		ID:               created.ID,
+		Name:             "Renamed collector",
 		EndpointURL:      "https://collector.example.test/new-base",
 		SensitiveData:    "exclude",
 		Headers: []*gen.OtelDestinationHeaderInput{
@@ -53,6 +56,7 @@ func TestDestinationCRUDPreservesWriteOnlyHeadersAndAuditsSafeSnapshots(t *testi
 			{Name: "x-api-key", Value: &cleared},
 		}})
 	require.NoError(t, err)
+	require.Equal(t, "Renamed collector", updated.Name)
 	require.Equal(t, "exclude", updated.SensitiveData)
 	require.Equal(t, []*gen.OtelDestinationHeader{
 		{Name: "authorization", HasValue: true},
@@ -87,6 +91,8 @@ func TestDestinationCRUDPreservesWriteOnlyHeadersAndAuditsSafeSnapshots(t *testi
 	require.NoError(t, err)
 	afterSnapshot, err := audittest.DecodeAuditData(auditRecord.AfterSnapshot)
 	require.NoError(t, err)
+	require.Equal(t, "Primary collector", beforeSnapshot["name"])
+	require.Equal(t, "Renamed collector", afterSnapshot["name"])
 	require.Equal(t, []any{
 		map[string]any{"name": "Authorization", "has_value": true},
 		map[string]any{"name": "X-API-Key", "has_value": true},
@@ -118,15 +124,15 @@ func TestDestinationRejectsUserinfoAndFragments(t *testing.T) {
 
 	ctx, ti := newTestService(t)
 	_, err := ti.service.CreateOtelDestination(ctx, &gen.CreateOtelDestinationPayload{SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil,
-		EndpointURL: "https://user:password@collector.example.test", SensitiveData: "exclude", Headers: []*gen.CreateOtelDestinationHeaderInput{}})
+		Name: "Test destination", EndpointURL: "https://user:password@collector.example.test", SensitiveData: "exclude", Headers: []*gen.CreateOtelDestinationHeaderInput{}})
 	requireOopsCode(t, err, oops.CodeInvalid)
 
 	_, err = ti.service.CreateOtelDestination(ctx, &gen.CreateOtelDestinationPayload{SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil,
-		EndpointURL: "https://collector.example.test/otlp#fragment", SensitiveData: "exclude", Headers: []*gen.CreateOtelDestinationHeaderInput{}})
+		Name: "Test destination", EndpointURL: "https://collector.example.test/otlp#fragment", SensitiveData: "exclude", Headers: []*gen.CreateOtelDestinationHeaderInput{}})
 	requireOopsCode(t, err, oops.CodeInvalid)
 
 	_, err = ti.service.CreateOtelDestination(ctx, &gen.CreateOtelDestinationPayload{SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil,
-		EndpointURL: "https://collector.example.test/otlp#", SensitiveData: "exclude", Headers: []*gen.CreateOtelDestinationHeaderInput{}})
+		Name: "Test destination", EndpointURL: "https://collector.example.test/otlp#", SensitiveData: "exclude", Headers: []*gen.CreateOtelDestinationHeaderInput{}})
 	requireOopsCode(t, err, oops.CodeInvalid)
 }
 
@@ -135,7 +141,7 @@ func TestDestinationRejectsMissingHostname(t *testing.T) {
 
 	ctx, ti := newTestService(t)
 	_, err := ti.service.CreateOtelDestination(ctx, &gen.CreateOtelDestinationPayload{SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil,
-		EndpointURL: "https://:4318", SensitiveData: "exclude", Headers: []*gen.CreateOtelDestinationHeaderInput{}})
+		Name: "Test destination", EndpointURL: "https://:4318", SensitiveData: "exclude", Headers: []*gen.CreateOtelDestinationHeaderInput{}})
 	requireOopsCode(t, err, oops.CodeInvalid)
 }
 
@@ -144,11 +150,11 @@ func TestDestinationRejectsQueries(t *testing.T) {
 
 	ctx, ti := newTestService(t)
 	_, err := ti.service.CreateOtelDestination(ctx, &gen.CreateOtelDestinationPayload{SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil,
-		EndpointURL: "https://collector.example.test/otlp?token=secret", SensitiveData: "exclude", Headers: []*gen.CreateOtelDestinationHeaderInput{}})
+		Name: "Test destination", EndpointURL: "https://collector.example.test/otlp?token=secret", SensitiveData: "exclude", Headers: []*gen.CreateOtelDestinationHeaderInput{}})
 	requireOopsCode(t, err, oops.CodeInvalid)
 
 	_, err = ti.service.CreateOtelDestination(ctx, &gen.CreateOtelDestinationPayload{SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil,
-		EndpointURL: "https://collector.example.test/otlp?", SensitiveData: "exclude", Headers: []*gen.CreateOtelDestinationHeaderInput{}})
+		Name: "Test destination", EndpointURL: "https://collector.example.test/otlp?", SensitiveData: "exclude", Headers: []*gen.CreateOtelDestinationHeaderInput{}})
 	requireOopsCode(t, err, oops.CodeInvalid)
 }
 
@@ -157,7 +163,7 @@ func TestDestinationRejectsInvalidHeaderValue(t *testing.T) {
 
 	ctx, ti := newTestService(t)
 	_, err := ti.service.CreateOtelDestination(ctx, &gen.CreateOtelDestinationPayload{SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil,
-		EndpointURL: "https://collector.example.test", SensitiveData: "exclude",
+		Name: "Test destination", EndpointURL: "https://collector.example.test", SensitiveData: "exclude",
 		Headers: []*gen.CreateOtelDestinationHeaderInput{{Name: "Authorization", Value: "Bearer safe\r\nX-Injected: true"}}})
 	requireOopsCode(t, err, oops.CodeInvalid)
 }
@@ -167,7 +173,7 @@ func TestDestinationAllowsHTTP(t *testing.T) {
 
 	ctx, ti := newTestService(t)
 	created, err := ti.service.CreateOtelDestination(ctx, &gen.CreateOtelDestinationPayload{SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil,
-		EndpointURL: "http://collector.example.test:4318", SensitiveData: "exclude", Headers: []*gen.CreateOtelDestinationHeaderInput{}})
+		Name: "Test destination", EndpointURL: "http://collector.example.test:4318", SensitiveData: "exclude", Headers: []*gen.CreateOtelDestinationHeaderInput{}})
 	require.NoError(t, err)
 	require.Equal(t, "http://collector.example.test:4318", created.EndpointURL)
 }
@@ -196,7 +202,7 @@ func TestDestinationCreateRollsBackWhenAuditInsertFails(t *testing.T) {
 	require.NoError(t, audittest.RejectAction(ctx, ti.conn, audit.ActionOtelDestinationCreate))
 
 	_, err := ti.service.CreateOtelDestination(ctx, &gen.CreateOtelDestinationPayload{SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil,
-		EndpointURL: "https://collector.example.test", SensitiveData: "exclude", Headers: []*gen.CreateOtelDestinationHeaderInput{}})
+		Name: "Test destination", EndpointURL: "https://collector.example.test", SensitiveData: "exclude", Headers: []*gen.CreateOtelDestinationHeaderInput{}})
 	requireOopsCode(t, err, oops.CodeUnexpected)
 
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
@@ -211,6 +217,22 @@ func TestDestinationRejectsUnknownSensitiveDataPolicy(t *testing.T) {
 
 	ctx, ti := newTestService(t)
 	_, err := ti.service.CreateOtelDestination(ctx, &gen.CreateOtelDestinationPayload{SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil,
-		EndpointURL: "https://collector.example.test", SensitiveData: "redact", Headers: []*gen.CreateOtelDestinationHeaderInput{}})
+		Name: "Test destination", EndpointURL: "https://collector.example.test", SensitiveData: "redact", Headers: []*gen.CreateOtelDestinationHeaderInput{}})
+	requireOopsCode(t, err, oops.CodeInvalid)
+}
+
+func TestDestinationRejectsBlankName(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	_, err := ti.service.CreateOtelDestination(ctx, &gen.CreateOtelDestinationPayload{
+		SessionToken:     nil,
+		ApikeyToken:      nil,
+		ProjectSlugInput: nil,
+		Name:             "  ",
+		EndpointURL:      "https://collector.example.test",
+		SensitiveData:    "exclude",
+		Headers:          []*gen.CreateOtelDestinationHeaderInput{},
+	})
 	requireOopsCode(t, err, oops.CodeInvalid)
 }

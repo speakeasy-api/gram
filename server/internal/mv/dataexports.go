@@ -26,6 +26,7 @@ func BuildOtelDestinationView(row repo.OtelDestination, headers map[string]strin
 	return &gen.OtelDestination{
 		ID:            row.ID.String(),
 		ProjectID:     row.ProjectID.String(),
+		Name:          row.Name,
 		EndpointURL:   row.EndpointUrl,
 		SensitiveData: sensitiveData,
 		Headers:       headerViews,

@@ -1874,6 +1874,7 @@ func marshalDataexportsOtelDestinationToOtelDestinationResponseBody(v *dataexpor
 	res := &OtelDestinationResponseBody{
 		ID:            v.ID,
 		ProjectID:     v.ProjectID,
+		Name:          v.Name,
 		EndpointURL:   v.EndpointURL,
 		SensitiveData: v.SensitiveData,
 		CreatedAt:     v.CreatedAt,

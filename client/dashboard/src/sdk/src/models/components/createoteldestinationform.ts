@@ -36,6 +36,10 @@ export type CreateOtelDestinationForm = {
    */
   headers: Array<CreateOtelDestinationHeaderInput>;
   /**
+   * Human-readable destination name.
+   */
+  name: string;
+  /**
    * Sensitive-data policy.
    */
   sensitiveData?: SensitiveData | undefined;
@@ -49,6 +53,7 @@ export const SensitiveData$outboundSchema: z.ZodMiniEnum<typeof SensitiveData> =
 export type CreateOtelDestinationForm$Outbound = {
   endpoint_url: string;
   headers: Array<CreateOtelDestinationHeaderInput$Outbound>;
+  name: string;
   sensitive_data: string;
 };
 
@@ -60,6 +65,7 @@ export const CreateOtelDestinationForm$outboundSchema: z.ZodMiniType<
   z.object({
     endpointUrl: z.string(),
     headers: z.array(CreateOtelDestinationHeaderInput$outboundSchema),
+    name: z.string(),
     sensitiveData: z._default(SensitiveData$outboundSchema, "exclude"),
   }),
   z.transform((v) => {

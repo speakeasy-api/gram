@@ -38,6 +38,14 @@ func sensitiveDataFromRow(value pgtype.Text) (sensitiveData, error) {
 	return parseSensitiveData(value.String)
 }
 
+func validateDestinationName(raw string) (string, error) {
+	name := strings.TrimSpace(raw)
+	if name == "" {
+		return "", oops.E(oops.CodeInvalid, nil, "name is required")
+	}
+	return name, nil
+}
+
 func validateDestinationURL(raw string) (string, error) {
 	raw = strings.TrimSpace(raw)
 	if raw == "" {
@@ -150,7 +158,7 @@ func (s *Service) decryptHeaders(stored pgtype.Text) (map[string]string, error) 
 	return headers, nil
 }
 
-func destinationSnapshot(endpointURL string, headers map[string]string, policy sensitiveData) *audit.OtelDestinationSnapshot {
+func destinationSnapshot(name, endpointURL string, headers map[string]string, policy sensitiveData) *audit.OtelDestinationSnapshot {
 	headersSnapshot := make([]audit.OtelDestinationHeaderSnapshot, 0, len(headers))
 	for name, value := range headers {
 		headersSnapshot = append(headersSnapshot, audit.OtelDestinationHeaderSnapshot{
@@ -163,6 +171,7 @@ func destinationSnapshot(endpointURL string, headers map[string]string, policy s
 	})
 
 	return &audit.OtelDestinationSnapshot{
+		Name:          name,
 		EndpointURL:   endpointURL,
 		Headers:       headersSnapshot,
 		SensitiveData: string(policy),

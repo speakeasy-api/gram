@@ -48,6 +48,10 @@ export type OtelDestination = {
    */
   id: string;
   /**
+   * Human-readable destination name.
+   */
+  name: string;
+  /**
    * Project that owns the destination.
    */
   projectId: string;
@@ -79,6 +83,7 @@ export const OtelDestination$inboundSchema: z.ZodMiniType<
     endpoint_url: z.string(),
     headers: z.array(OtelDestinationHeader$inboundSchema),
     id: z.string(),
+    name: z.string(),
     project_id: z.string(),
     sensitive_data: OtelDestinationSensitiveData$inboundSchema,
     updated_at: z.pipe(

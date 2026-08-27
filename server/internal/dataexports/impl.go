@@ -119,6 +119,11 @@ func (s *Service) CreateOtelDestination(ctx context.Context, payload *gen.Create
 		return nil, err
 	}
 
+	name, err := validateDestinationName(payload.Name)
+	if err != nil {
+		return nil, err
+	}
+
 	endpointURL, err := validateDestinationURL(payload.EndpointURL)
 	if err != nil {
 		return nil, err
@@ -157,6 +162,7 @@ func (s *Service) CreateOtelDestination(ctx context.Context, payload *gen.Create
 	row, err := repo.New(dbtx).CreateOtelDestination(ctx, repo.CreateOtelDestinationParams{
 		OrganizationID:   authCtx.ActiveOrganizationID,
 		ProjectID:        *authCtx.ProjectID,
+		Name:             name,
 		EndpointUrl:      endpointURL,
 		HeadersEncrypted: headersEncrypted,
 		SensitiveData:    conv.ToPGText(string(policy)),
@@ -172,7 +178,7 @@ func (s *Service) CreateOtelDestination(ctx context.Context, payload *gen.Create
 		ActorDisplayName: authCtx.Email,
 		ActorSlug:        nil,
 		DestinationURN:   urn.NewOtelDestination(row.ID),
-		EndpointURL:      row.EndpointUrl,
+		DestinationName:  row.Name,
 	}); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "log OTEL destination creation").LogError(ctx, logger)
 	}
@@ -195,6 +201,10 @@ func (s *Service) UpdateOtelDestination(ctx context.Context, payload *gen.Update
 	destinationID, err := uuid.Parse(payload.ID)
 	if err != nil {
 		return nil, oops.E(oops.CodeInvalid, err, "invalid destination id")
+	}
+	name, err := validateDestinationName(payload.Name)
+	if err != nil {
+		return nil, err
 	}
 	endpointURL, err := validateDestinationURL(payload.EndpointURL)
 	if err != nil {
@@ -253,9 +263,10 @@ func (s *Service) UpdateOtelDestination(ctx context.Context, payload *gen.Update
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "encrypt OTEL destination headers").LogError(ctx, logger)
 	}
-	beforeSnapshot := destinationSnapshot(before.EndpointUrl, existingHeaders, beforePolicy)
+	beforeSnapshot := destinationSnapshot(before.Name, before.EndpointUrl, existingHeaders, beforePolicy)
 
 	after, err := queries.UpdateOtelDestination(ctx, repo.UpdateOtelDestinationParams{
+		Name:             name,
 		EndpointUrl:      endpointURL,
 		HeadersEncrypted: headersEncrypted,
 		SensitiveData:    conv.ToPGText(string(policy)),
@@ -266,7 +277,7 @@ func (s *Service) UpdateOtelDestination(ctx context.Context, payload *gen.Update
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "update OTEL destination").LogError(ctx, logger)
 	}
-	afterSnapshot := destinationSnapshot(after.EndpointUrl, headers, policy)
+	afterSnapshot := destinationSnapshot(after.Name, after.EndpointUrl, headers, policy)
 
 	if err := s.audit.LogOtelDestinationUpdate(ctx, dbtx, audit.LogOtelDestinationUpdateEvent{
 		OrganizationID:            authCtx.ActiveOrganizationID,
@@ -275,7 +286,7 @@ func (s *Service) UpdateOtelDestination(ctx context.Context, payload *gen.Update
 		ActorDisplayName:          authCtx.Email,
 		ActorSlug:                 nil,
 		DestinationURN:            urn.NewOtelDestination(after.ID),
-		EndpointURL:               after.EndpointUrl,
+		DestinationName:           after.Name,
 		DestinationSnapshotBefore: beforeSnapshot,
 		DestinationSnapshotAfter:  afterSnapshot,
 	}); err != nil {
@@ -348,7 +359,7 @@ func (s *Service) DeleteOtelDestination(ctx context.Context, payload *gen.Delete
 		ActorDisplayName: authCtx.Email,
 		ActorSlug:        nil,
 		DestinationURN:   urn.NewOtelDestination(deleted.ID),
-		EndpointURL:      before.EndpointUrl,
+		DestinationName:  before.Name,
 	}); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "log OTEL destination deletion").LogError(ctx, logger)
 	}
@@ -441,8 +452,8 @@ func (s *Service) CreateRoute(ctx context.Context, payload *gen.CreateRoutePaylo
 	})
 	if err != nil {
 		var pgErr *pgconn.PgError
-		if errors.As(err, &pgErr) && pgErr.Code == pgerrcode.UniqueViolation && pgErr.ConstraintName == "data_export_routes_project_source_key" {
-			return nil, oops.E(oops.CodeConflict, err, "an active data export route already exists for this data source")
+		if errors.As(err, &pgErr) && pgErr.Code == pgerrcode.UniqueViolation && pgErr.ConstraintName == "data_export_routes_project_source_destination_key" {
+			return nil, oops.E(oops.CodeConflict, err, "this destination is already routed from the data source")
 		}
 		return nil, oops.E(oops.CodeUnexpected, err, "create data export route").LogError(ctx, logger)
 	}
@@ -515,8 +526,8 @@ func (s *Service) UpdateRoute(ctx context.Context, payload *gen.UpdateRoutePaylo
 	})
 	if err != nil {
 		var pgErr *pgconn.PgError
-		if errors.As(err, &pgErr) && pgErr.Code == pgerrcode.UniqueViolation && pgErr.ConstraintName == "data_export_routes_project_source_key" {
-			return nil, oops.E(oops.CodeConflict, err, "an active data export route already exists for this data source")
+		if errors.As(err, &pgErr) && pgErr.Code == pgerrcode.UniqueViolation && pgErr.ConstraintName == "data_export_routes_project_source_destination_key" {
+			return nil, oops.E(oops.CodeConflict, err, "this destination is already routed from the data source")
 		}
 		return nil, oops.E(oops.CodeUnexpected, err, "update data export route").LogError(ctx, logger)
 	}

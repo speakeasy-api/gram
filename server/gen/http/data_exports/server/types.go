@@ -15,6 +15,8 @@ import (
 // CreateOtelDestinationRequestBody is the type of the "dataExports" service
 // "createOtelDestination" endpoint HTTP request body.
 type CreateOtelDestinationRequestBody struct {
+	// Human-readable destination name.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// OTLP base URL.
 	EndpointURL *string `form:"endpoint_url,omitempty" json:"endpoint_url,omitempty" xml:"endpoint_url,omitempty"`
 	// Sensitive-data policy.
@@ -26,6 +28,8 @@ type CreateOtelDestinationRequestBody struct {
 // UpdateOtelDestinationRequestBody is the type of the "dataExports" service
 // "updateOtelDestination" endpoint HTTP request body.
 type UpdateOtelDestinationRequestBody struct {
+	// Human-readable destination name.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// OTLP base URL.
 	EndpointURL *string `form:"endpoint_url,omitempty" json:"endpoint_url,omitempty" xml:"endpoint_url,omitempty"`
 	// Sensitive-data policy.
@@ -70,6 +74,8 @@ type CreateOtelDestinationResponseBody struct {
 	ID string `form:"id" json:"id" xml:"id"`
 	// Project that owns the destination.
 	ProjectID string `form:"project_id" json:"project_id" xml:"project_id"`
+	// Human-readable destination name.
+	Name string `form:"name" json:"name" xml:"name"`
 	// OTLP base URL. Signal-specific paths are appended during delivery.
 	EndpointURL string `form:"endpoint_url" json:"endpoint_url" xml:"endpoint_url"`
 	// Whether sensitive data is included in payloads sent to this destination.
@@ -89,6 +95,8 @@ type UpdateOtelDestinationResponseBody struct {
 	ID string `form:"id" json:"id" xml:"id"`
 	// Project that owns the destination.
 	ProjectID string `form:"project_id" json:"project_id" xml:"project_id"`
+	// Human-readable destination name.
+	Name string `form:"name" json:"name" xml:"name"`
 	// OTLP base URL. Signal-specific paths are appended during delivery.
 	EndpointURL string `form:"endpoint_url" json:"endpoint_url" xml:"endpoint_url"`
 	// Whether sensitive data is included in payloads sent to this destination.
@@ -1640,6 +1648,8 @@ type OtelDestinationResponseBody struct {
 	ID string `form:"id" json:"id" xml:"id"`
 	// Project that owns the destination.
 	ProjectID string `form:"project_id" json:"project_id" xml:"project_id"`
+	// Human-readable destination name.
+	Name string `form:"name" json:"name" xml:"name"`
 	// OTLP base URL. Signal-specific paths are appended during delivery.
 	EndpointURL string `form:"endpoint_url" json:"endpoint_url" xml:"endpoint_url"`
 	// Whether sensitive data is included in payloads sent to this destination.
@@ -1723,6 +1733,7 @@ func NewCreateOtelDestinationResponseBody(res *dataexports.OtelDestination) *Cre
 	body := &CreateOtelDestinationResponseBody{
 		ID:            res.ID,
 		ProjectID:     res.ProjectID,
+		Name:          res.Name,
 		EndpointURL:   res.EndpointURL,
 		SensitiveData: res.SensitiveData,
 		CreatedAt:     res.CreatedAt,
@@ -1749,6 +1760,7 @@ func NewUpdateOtelDestinationResponseBody(res *dataexports.OtelDestination) *Upd
 	body := &UpdateOtelDestinationResponseBody{
 		ID:            res.ID,
 		ProjectID:     res.ProjectID,
+		Name:          res.Name,
 		EndpointURL:   res.EndpointURL,
 		SensitiveData: res.SensitiveData,
 		CreatedAt:     res.CreatedAt,
@@ -2993,6 +3005,7 @@ func NewListOtelDestinationsPayload(sessionToken *string, apikeyToken *string, p
 // createOtelDestination endpoint payload.
 func NewCreateOtelDestinationPayload(body *CreateOtelDestinationRequestBody, sessionToken *string, apikeyToken *string, projectSlugInput *string) *dataexports.CreateOtelDestinationPayload {
 	v := &dataexports.CreateOtelDestinationPayload{
+		Name:        *body.Name,
 		EndpointURL: *body.EndpointURL,
 	}
 	if body.SensitiveData != nil {
@@ -3020,6 +3033,7 @@ func NewCreateOtelDestinationPayload(body *CreateOtelDestinationRequestBody, ses
 // updateOtelDestination endpoint payload.
 func NewUpdateOtelDestinationPayload(body *UpdateOtelDestinationRequestBody, id string, sessionToken *string, apikeyToken *string, projectSlugInput *string) *dataexports.UpdateOtelDestinationPayload {
 	v := &dataexports.UpdateOtelDestinationPayload{
+		Name:          *body.Name,
 		EndpointURL:   *body.EndpointURL,
 		SensitiveData: *body.SensitiveData,
 	}
@@ -3113,6 +3127,9 @@ func NewDeleteRoutePayload(id string, sessionToken *string, apikeyToken *string,
 // ValidateCreateOtelDestinationRequestBody runs the validations defined on
 // CreateOtelDestinationRequestBody
 func ValidateCreateOtelDestinationRequestBody(body *CreateOtelDestinationRequestBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
 	if body.EndpointURL == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("endpoint_url", "body"))
 	}
@@ -3140,6 +3157,9 @@ func ValidateCreateOtelDestinationRequestBody(body *CreateOtelDestinationRequest
 // ValidateUpdateOtelDestinationRequestBody runs the validations defined on
 // UpdateOtelDestinationRequestBody
 func ValidateUpdateOtelDestinationRequestBody(body *UpdateOtelDestinationRequestBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
 	if body.EndpointURL == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("endpoint_url", "body"))
 	}

@@ -209,6 +209,7 @@ var OtelDestination = Type("OtelDestination", func() {
 	Description("A reusable customer-owned OTLP collector connection.")
 	Attribute("id", String, "Destination ID.", func() { Format(FormatUUID) })
 	Attribute("project_id", String, "Project that owns the destination.", func() { Format(FormatUUID) })
+	Attribute("name", String, "Human-readable destination name.")
 	Attribute("endpoint_url", String, "OTLP base URL. Signal-specific paths are appended during delivery.", func() { Format(FormatURI) })
 	Attribute("sensitive_data", String, "Whether sensitive data is included in payloads sent to this destination.", func() {
 		Enum("exclude", "include")
@@ -216,7 +217,7 @@ var OtelDestination = Type("OtelDestination", func() {
 	Attribute("headers", ArrayOf(OtelDestinationHeader), "Configured header names. Header values are never returned.")
 	Attribute("created_at", String, "Creation timestamp.", func() { Format(FormatDateTime) })
 	Attribute("updated_at", String, "Last update timestamp.", func() { Format(FormatDateTime) })
-	Required("id", "project_id", "endpoint_url", "sensitive_data", "headers", "created_at", "updated_at")
+	Required("id", "project_id", "name", "endpoint_url", "sensitive_data", "headers", "created_at", "updated_at")
 })
 
 var DataExportRoute = Type("DataExportRoute", func() {
@@ -235,22 +236,24 @@ var DataExportRoute = Type("DataExportRoute", func() {
 
 var CreateOtelDestinationForm = Type("CreateOtelDestinationForm", func() {
 	Description("Form for creating an OTEL destination.")
+	Attribute("name", String, "Human-readable destination name.")
 	Attribute("endpoint_url", String, "OTLP base URL.", func() { Format(FormatURI) })
 	Attribute("sensitive_data", String, "Sensitive-data policy.", func() {
 		Enum("exclude", "include")
 		Default("exclude")
 	})
 	Attribute("headers", ArrayOf(CreateOtelDestinationHeaderInput), "Write-only headers.")
-	Required("endpoint_url", "headers")
+	Required("name", "endpoint_url", "headers")
 })
 
 var UpdateOtelDestinationForm = Type("UpdateOtelDestinationForm", func() {
 	Description("Full replacement form for an OTEL destination. Header entries with omitted values preserve existing encrypted values by case-insensitive name.")
 	Attribute("id", String, "Destination ID.", func() { Format(FormatUUID) })
+	Attribute("name", String, "Human-readable destination name.")
 	Attribute("endpoint_url", String, "OTLP base URL.", func() { Format(FormatURI) })
 	Attribute("sensitive_data", String, "Sensitive-data policy.", func() { Enum("exclude", "include") })
 	Attribute("headers", ArrayOf(OtelDestinationHeaderInput), "Complete header-name set for the destination.")
-	Required("id", "endpoint_url", "sensitive_data", "headers")
+	Required("id", "name", "endpoint_url", "sensitive_data", "headers")
 })
 
 var CreateDataExportRouteForm = Type("CreateDataExportRouteForm", func() {
