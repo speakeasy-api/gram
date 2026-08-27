@@ -503,31 +503,34 @@ func TestPublishPersistsHighConfidenceRecommendationsIdempotently(t *testing.T) 
 	require.Equal(t, 1, retry.Scored)
 	require.Len(t, h.signaler.calls, 2, "one workflow signal is sent after each complete durable write attempt")
 
-	var count int
-	require.NoError(t, h.fixture.db.QueryRow(t.Context(), `SELECT COUNT(*) FROM skill_feedback WHERE project_id = $1 AND skill_id = $2`, h.fixture.projectID, evaluation.SkillID).Scan(&count))
-	require.Equal(t, 2, count, "deterministic ids make the retry a project-scoped no-op")
+	feedback, err := repo.New(h.fixture.db).ListSkillFeedbackByID(t.Context(), repo.ListSkillFeedbackByIDParams{
+		ProjectID:       h.fixture.projectID,
+		SkillID:         uuid.NullUUID{UUID: evaluation.SkillID, Valid: true},
+		CursorCreatedAt: pgtype.Timestamptz{},
+		CursorID:        uuid.NullUUID{},
+		PageLimit:       10,
+	})
+	require.NoError(t, err)
+	require.Len(t, feedback, 2, "deterministic ids make the retry a project-scoped no-op")
+	feedbackByID := make(map[uuid.UUID]repo.SkillFeedback, len(feedback))
+	for _, stored := range feedback {
+		feedbackByID[stored.ID] = stored
+	}
 
 	for position, expected := range judged.Verdict.Recommendations {
 		if expected.Confidence != "high" {
 			continue
 		}
 		expectedID := uuid.NewSHA1(evaluation.ID, fmt.Appendf(nil, "skill-efficacy-recommendation:%d", position))
-		var skillVersionID uuid.UUID
-		var source, outcome string
-		var note, sessionID, userID, userEmail pgtype.Text
-		err := h.fixture.db.QueryRow(t.Context(), `
-SELECT skill_version_id, source, outcome, note, session_id, user_id, user_email
-FROM skill_feedback
-WHERE project_id = $1 AND id = $2
-`, h.fixture.projectID, expectedID).Scan(&skillVersionID, &source, &outcome, &note, &sessionID, &userID, &userEmail)
-		require.NoError(t, err)
-		require.Equal(t, evaluation.SkillVersionID, skillVersionID)
-		require.Equal(t, string(domainskills.FeedbackSourceDev), source)
-		require.Equal(t, expected.Outcome, outcome)
-		require.Equal(t, expected.Note, note.String)
-		require.Equal(t, evaluation.ChatID.String(), sessionID.String)
-		require.False(t, userID.Valid)
-		require.False(t, userEmail.Valid)
+		stored, ok := feedbackByID[expectedID]
+		require.True(t, ok)
+		require.Equal(t, evaluation.SkillVersionID, stored.SkillVersionID.UUID)
+		require.Equal(t, string(domainskills.FeedbackSourceDev), stored.Source)
+		require.Equal(t, expected.Outcome, stored.Outcome)
+		require.Equal(t, expected.Note, stored.Note.String)
+		require.Equal(t, evaluation.ChatID.String(), stored.SessionID.String)
+		require.False(t, stored.UserID.Valid)
+		require.False(t, stored.UserEmail.Valid)
 	}
 }
 
@@ -545,9 +548,15 @@ func TestPublishSignalFailureLeavesFeedbackDurableAndStillScores(t *testing.T) {
 	require.Equal(t, 1, result.Scored)
 	require.Equal(t, []string{evaluation.ID.String()}, h.publishedIDs(t, evaluation), "the daily sweep covers a failed best-effort workflow signal")
 
-	var count int
-	require.NoError(t, h.fixture.db.QueryRow(t.Context(), `SELECT COUNT(*) FROM skill_feedback WHERE project_id = $1 AND skill_id = $2`, h.fixture.projectID, evaluation.SkillID).Scan(&count))
-	require.Equal(t, 1, count)
+	feedback, err := repo.New(h.fixture.db).ListSkillFeedbackByID(t.Context(), repo.ListSkillFeedbackByIDParams{
+		ProjectID:       h.fixture.projectID,
+		SkillID:         uuid.NullUUID{UUID: evaluation.SkillID, Valid: true},
+		CursorCreatedAt: pgtype.Timestamptz{},
+		CursorID:        uuid.NullUUID{},
+		PageLimit:       10,
+	})
+	require.NoError(t, err)
+	require.Len(t, feedback, 1)
 	require.Len(t, h.signaler.calls, 1)
 }
 

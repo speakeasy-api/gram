@@ -516,6 +516,8 @@ func (p *Publisher) persistRecommendations(ctx context.Context, projectID uuid.U
 			Outcome:        recommendation.Outcome,
 			Note:           conv.ToPGText(recommendation.Note),
 			SessionID:      conv.ToPGText(input.ChatID.String()),
+			UserID:         pgtype.Text{String: "", Valid: false},
+			UserEmail:      pgtype.Text{String: "", Valid: false},
 		})
 		if err != nil {
 			return fmt.Errorf("persist skill efficacy recommendation: %w", err)
