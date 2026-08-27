@@ -1356,7 +1356,7 @@ describe("the start trial dialog", () => {
 
     const text = dialog().textContent ?? "";
     expect(text).toContain(`Start a trial for ${NONE_ORG.name}?`);
-    expect(text).toContain("account type");
+    expect(text).toContain("enterprise");
     expect(text).toContain("model provider keys");
     expect(text).toContain("book-a-demo gate");
     expect(text).toContain("counted from today");

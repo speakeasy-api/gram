@@ -30,12 +30,7 @@ func seedOrgReadyForTrial(t *testing.T, ctx context.Context, conn *pgxpool.Pool,
 	t.Helper()
 
 	seedOrg(t, ctx, conn, f)
-
-	tx, err := conn.Begin(ctx)
-	require.NoError(t, err)
-	defer func() { _ = tx.Rollback(ctx) }()
-	require.NoError(t, authz.SeedSystemRoleGrantsTx(ctx, tx, f.id))
-	require.NoError(t, tx.Commit(ctx))
+	require.NoError(t, authz.SeedSystemRoleGrants(ctx, conn, f.id))
 }
 
 func TestStartTrial_GrantsATrialToAnOrganizationThatNeverTrialled(t *testing.T) {
@@ -150,11 +145,11 @@ func TestStartTrial_RejectsTrialsThatAreNotStartable(t *testing.T) {
 	demotedAt := now.Add(-9 * 24 * time.Hour)
 
 	cases := []struct {
-		name   string
-		orgID  string
-		trial  *trialFixture
-		want   oops.Code
-		noRow  bool
+		name  string
+		orgID string
+		trial *trialFixture
+		want  oops.Code
+		noRow bool
 	}{
 		{name: "running", orgID: "org_start_reject_running", trial: &trialFixture{endsAt: now.Add(10 * 24 * time.Hour)}},
 		{name: "demoted", orgID: "org_start_reject_demoted", trial: &trialFixture{endsAt: now.Add(-10 * 24 * time.Hour), demotedAt: &demotedAt}},

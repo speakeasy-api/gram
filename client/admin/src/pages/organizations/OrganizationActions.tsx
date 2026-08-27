@@ -368,7 +368,7 @@ export function OrganizationActions({
           bounds={START_BOUNDS}
           range={startRange}
           title={`Start a trial for ${org.name}?`}
-          description="Sets the account type, brings the model provider keys up, and takes the organization out from behind the book-a-demo gate. The trial then runs until the date below, counted from today."
+          description="Puts the organization on the enterprise tier for the duration of the trial, brings the model provider keys up, and takes it out from behind the book-a-demo gate. The trial then runs until the date below, counted from today."
           submitLabel="Start trial"
           pendingLabel="Starting..."
           failureLead={startFailureLead}
