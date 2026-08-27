@@ -133,9 +133,14 @@ SELECT
   END AS trial_state,
   CASE
     WHEN k.key_type <> 'chat' THEN 'irrelevant'
-    WHEN om.gram_account_type = 'base' AND bm.stripe_subscription_id IS NULL THEN 'inactive'
     WHEN om.gram_account_type = 'payg' AND bm.stripe_subscription_id IS NOT NULL THEN 'active'
-    WHEN om.gram_account_type IN ('base', 'payg') THEN 'inconsistent'
+    WHEN om.gram_account_type = 'free' AND bm.stripe_subscription_id IS NULL AND latest_payg_deactivation.action IS NULL THEN 'irrelevant'
+    WHEN om.gram_account_type = 'free' AND bm.stripe_subscription_id IS NULL
+      AND jsonb_typeof(latest_payg_deactivation.before_snapshot) = 'object'
+      AND jsonb_typeof(latest_payg_deactivation.after_snapshot) = 'object'
+      AND latest_payg_deactivation.before_snapshot ->> 'account_type' = 'payg'
+      AND latest_payg_deactivation.after_snapshot ->> 'account_type' = 'free' THEN 'inactive'
+    WHEN om.gram_account_type IN ('free', 'payg') THEN 'inconsistent'
     ELSE 'irrelevant'
   END AS billing_state,
   COALESCE(latest_admin.action, '') AS admin_action,
@@ -147,10 +152,21 @@ JOIN organization_metadata AS om ON om.id = k.organization_id
 LEFT JOIN trials AS t ON t.organization_id = k.organization_id
 LEFT JOIN billing_metadata AS bm ON bm.organization_id = k.organization_id
 LEFT JOIN LATERAL (
+  SELECT a.action, a.before_snapshot, a.after_snapshot
+  FROM audit_logs AS a
+  WHERE a.organization_id = k.organization_id
+    AND a.subject_id = k.organization_id
+    AND a.subject_type = 'organization'
+    AND a.action = 'organization:payg_deactivated'
+  ORDER BY a.seq DESC
+  LIMIT 1
+) AS latest_payg_deactivation ON TRUE
+LEFT JOIN LATERAL (
   SELECT a.action, a.metadata, a.before_snapshot, a.after_snapshot
   FROM audit_logs AS a
   WHERE a.organization_id = k.organization_id
-    AND a.subject_id = 'openrouter_api_key:' || k.organization_id || '/' || k.key_type
+    AND a.subject_id = k.organization_id || '/' || k.key_type
+    AND a.subject_type = 'openrouter_api_key'
     AND a.action IN ('openrouter-key:disable', 'openrouter-key:enable')
   ORDER BY a.seq DESC
   LIMIT 1
@@ -243,9 +259,14 @@ SELECT
   END AS trial_state,
   CASE
     WHEN k.key_type <> 'chat' THEN 'irrelevant'
-    WHEN om.gram_account_type = 'base' AND bm.stripe_subscription_id IS NULL THEN 'inactive'
     WHEN om.gram_account_type = 'payg' AND bm.stripe_subscription_id IS NOT NULL THEN 'active'
-    WHEN om.gram_account_type IN ('base', 'payg') THEN 'inconsistent'
+    WHEN om.gram_account_type = 'free' AND bm.stripe_subscription_id IS NULL AND latest_payg_deactivation.action IS NULL THEN 'irrelevant'
+    WHEN om.gram_account_type = 'free' AND bm.stripe_subscription_id IS NULL
+      AND jsonb_typeof(latest_payg_deactivation.before_snapshot) = 'object'
+      AND jsonb_typeof(latest_payg_deactivation.after_snapshot) = 'object'
+      AND latest_payg_deactivation.before_snapshot ->> 'account_type' = 'payg'
+      AND latest_payg_deactivation.after_snapshot ->> 'account_type' = 'free' THEN 'inactive'
+    WHEN om.gram_account_type IN ('free', 'payg') THEN 'inconsistent'
     ELSE 'irrelevant'
   END AS billing_state,
   COALESCE(latest_admin.action, '') AS admin_action,
@@ -259,10 +280,21 @@ JOIN organization_metadata AS om ON om.id = k.organization_id
 LEFT JOIN trials AS t ON t.organization_id = k.organization_id
 LEFT JOIN billing_metadata AS bm ON bm.organization_id = k.organization_id
 LEFT JOIN LATERAL (
+  SELECT a.action, a.before_snapshot, a.after_snapshot
+  FROM audit_logs AS a
+  WHERE a.organization_id = k.organization_id
+    AND a.subject_id = k.organization_id
+    AND a.subject_type = 'organization'
+    AND a.action = 'organization:payg_deactivated'
+  ORDER BY a.seq DESC
+  LIMIT 1
+) AS latest_payg_deactivation ON TRUE
+LEFT JOIN LATERAL (
   SELECT a.action, a.metadata, a.before_snapshot, a.after_snapshot
   FROM audit_logs AS a
   WHERE a.organization_id = k.organization_id
-    AND a.subject_id = 'openrouter_api_key:' || k.organization_id || '/' || k.key_type
+    AND a.subject_id = k.organization_id || '/' || k.key_type
+    AND a.subject_type = 'openrouter_api_key'
     AND a.action IN ('openrouter-key:disable', 'openrouter-key:enable')
   ORDER BY a.seq DESC
   LIMIT 1
@@ -375,6 +407,40 @@ func (q *Queries) SeedAdminAuditFixture(ctx context.Context, arg SeedAdminAuditF
 	return err
 }
 
+const seedAuditLogFixture = `-- name: SeedAuditLogFixture :exec
+INSERT INTO audit_logs (
+  organization_id, actor_id, actor_type, action, subject_id, subject_type,
+  before_snapshot, after_snapshot, metadata
+)
+VALUES (
+  $1, 'system:test', 'system', $2, $3, $4,
+  $5, $6, $7
+)
+`
+
+type SeedAuditLogFixtureParams struct {
+	OrganizationID string
+	Action         string
+	SubjectID      string
+	SubjectType    string
+	BeforeSnapshot []byte
+	AfterSnapshot  []byte
+	Metadata       []byte
+}
+
+func (q *Queries) SeedAuditLogFixture(ctx context.Context, arg SeedAuditLogFixtureParams) error {
+	_, err := q.db.Exec(ctx, seedAuditLogFixture,
+		arg.OrganizationID,
+		arg.Action,
+		arg.SubjectID,
+		arg.SubjectType,
+		arg.BeforeSnapshot,
+		arg.AfterSnapshot,
+		arg.Metadata,
+	)
+	return err
+}
+
 const seedBillingFixture = `-- name: SeedBillingFixture :exec
 INSERT INTO billing_metadata (organization_id, stripe_subscription_id)
 VALUES ($1, $2)
@@ -407,6 +473,7 @@ func (q *Queries) SeedOpenRouterKeyFixture(ctx context.Context, arg SeedOpenRout
 }
 
 const seedOrganizationFixture = `-- name: SeedOrganizationFixture :exec
+
 INSERT INTO organization_metadata (id, name, slug, gram_account_type)
 VALUES ($1, 'test', $1, $2)
 `
@@ -416,6 +483,8 @@ type SeedOrganizationFixtureParams struct {
 	AccountType    string
 }
 
+// TEST FIXTURE ONLY: every query below is for package tests and may create impossible states or take exclusive locks.
+// Non-test application code must never call these generated methods.
 func (q *Queries) SeedOrganizationFixture(ctx context.Context, arg SeedOrganizationFixtureParams) error {
 	_, err := q.db.Exec(ctx, seedOrganizationFixture, arg.OrganizationID, arg.AccountType)
 	return err
