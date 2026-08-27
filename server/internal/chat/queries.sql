@@ -484,6 +484,14 @@ SELECT organization_id
 FROM projects
 WHERE id = @project_id;
 
+-- name: ChatBelongsToProject :one
+SELECT EXISTS (
+  SELECT 1
+  FROM chats
+  WHERE id = @chat_id::uuid
+    AND project_id = @project_id::uuid
+);
+
 -- name: CountChats :one
 -- Fallback for chats.list pagination: ListChats returns the total alongside
 -- each page via a window count, so this only runs when a requested page is

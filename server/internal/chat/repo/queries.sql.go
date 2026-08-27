@@ -73,6 +73,27 @@ func (q *Queries) AssistantExistsInProject(ctx context.Context, arg AssistantExi
 	return assistant_exists, err
 }
 
+const chatBelongsToProject = `-- name: ChatBelongsToProject :one
+SELECT EXISTS (
+  SELECT 1
+  FROM chats
+  WHERE id = $1::uuid
+    AND project_id = $2::uuid
+)
+`
+
+type ChatBelongsToProjectParams struct {
+	ChatID    uuid.UUID
+	ProjectID uuid.UUID
+}
+
+func (q *Queries) ChatBelongsToProject(ctx context.Context, arg ChatBelongsToProjectParams) (bool, error) {
+	row := q.db.QueryRow(ctx, chatBelongsToProject, arg.ChatID, arg.ProjectID)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
+}
+
 const countChatMessages = `-- name: CountChatMessages :one
 SELECT COUNT(*) FROM chat_messages
 WHERE chat_id = $1 AND project_id = $2::uuid

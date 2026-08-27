@@ -3,6 +3,7 @@ package metering_test
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -76,6 +77,14 @@ func TestChatStorageReadingPipelineToClickHouse(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, int64(1), written)
 
+	storedMessages, err := chatrepo.New(conn).ListChatMessages(ctx, chatrepo.ListChatMessagesParams{
+		ChatID:    chatID,
+		ProjectID: project.ID,
+	})
+	require.NoError(t, err)
+	require.Len(t, storedMessages, 1)
+	storedID := storedMessages[0].ID
+
 	outboxRows, err := testrepo.New(conn).ListPublishOutboxRows(ctx)
 	require.NoError(t, err)
 	require.Len(t, outboxRows, 1)
@@ -91,6 +100,23 @@ func TestChatStorageReadingPipelineToClickHouse(t *testing.T) {
 	require.Equal(t, meteringv1.MeterReading_KIND_USAGE, message.GetKind())
 	require.Equal(t, string(metering.MeasurementTiktokenO200kBase), message.GetMeasurementMethod())
 	require.Equal(t, "chat_message_writer", message.GetSource())
+	require.Equal(t, "chat_message:"+storedID.String(), message.GetOperationId())
+	occurredAt, err := time.Parse(time.RFC3339Nano, message.GetOccurredAt())
+	require.NoError(t, err)
+	producedAt, err := time.Parse(time.RFC3339Nano, message.GetProducedAt())
+	require.NoError(t, err)
+	expectedReading, err := metering.NewUsage(metering.UsageInput{
+		Meter:       metering.AgentSessionStorage(),
+		Scope:       metering.ProjectScope(organizationID, project.ID),
+		OperationID: message.GetOperationId(),
+		Value:       message.GetValue(),
+		OccurredAt:  occurredAt,
+		ProducedAt:  producedAt,
+		Source:      message.GetSource(),
+		Attributes:  message.GetAttributes(),
+	})
+	require.NoError(t, err)
+	require.Equal(t, expectedReading.ID().String(), message.GetId())
 
 	clickhouseConn, err := infra.NewClickhouseClient(t)
 	require.NoError(t, err)

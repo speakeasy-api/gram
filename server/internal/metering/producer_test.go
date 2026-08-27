@@ -155,6 +155,22 @@ func TestEnqueueRejectsMixedOrganizationBatchAtomically(t *testing.T) {
 	require.Empty(t, rows)
 }
 
+func TestEnqueueRejectsZeroReading(t *testing.T) {
+	t.Parallel()
+	conn, _ := newMeteringPostgres(t)
+	ctx := t.Context()
+	var reading metering.Reading
+
+	tx, err := conn.Begin(ctx) //nolint:glint // transaction contains only package APIs and SQLc-generated queries
+	require.NoError(t, err)
+	require.Error(t, metering.Enqueue(ctx, tx, []metering.Reading{reading}))
+	require.NoError(t, tx.Commit(ctx))
+
+	rows, err := testrepo.New(conn).ListPublishOutboxRows(ctx)
+	require.NoError(t, err)
+	require.Empty(t, rows)
+}
+
 func TestEnqueueRollsBackWithCallerTransaction(t *testing.T) {
 	t.Parallel()
 	conn, organizationID := newMeteringPostgres(t)

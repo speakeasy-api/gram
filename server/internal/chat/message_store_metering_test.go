@@ -37,6 +37,16 @@ func meterMessages(t *testing.T, ti *chatTestInstance) []*meteringv1.MeterReadin
 	return messages
 }
 
+func minimalChatMessageParams(chatID uuid.UUID, projectID uuid.UUID) repo.CreateChatMessageParams {
+	param := repo.CreateChatMessageParams{}
+	param.ID = uuid.Nil
+	param.ChatID = chatID
+	param.ProjectID = projectID
+	param.Role = "user"
+	param.Content = "cross-project message"
+	return param
+}
+
 func TestChatMessageWriterMetersStoredTextAndToolCalls(t *testing.T) {
 	t.Parallel()
 	ti := newTestChatService(t)
@@ -156,6 +166,89 @@ func TestChatMessageWriterMetersExternalMessageOnceAtStorageTime(t *testing.T) {
 	require.NoError(t, err)
 	require.Zero(t, written)
 	require.Len(t, meterMessages(t, ti), 1)
+}
+
+func TestChatMessageWriterRejectsExternalMessageForAnotherProject(t *testing.T) {
+	t.Parallel()
+	ti := newTestChatService(t)
+	ctx := initSessionCtx(t, ti)
+	chatID := seedChat(t, ctx, ti, "u", "", "external project mismatch")
+	writer, shutdown := chat.NewChatMessageWriter(testenv.NewLogger(t), ti.conn, assetstest.NewTestBlobStore(t))
+	t.Cleanup(func() { _ = shutdown(context.WithoutCancel(t.Context())) })
+
+	param := repo.CreateExternalChatMessageParams{}
+	param.ChatID = chatID
+	param.ProjectID = uuid.New()
+	param.Role = "user"
+	param.Content = "wrong project"
+	param.ExternalMessageID = conv.ToPGText("external-project-mismatch")
+
+	written, err := writer.WriteExternal(ctx, ti.projectID, []repo.CreateExternalChatMessageParams{param})
+
+	require.ErrorContains(t, err, "project id does not match")
+	require.Zero(t, written)
+	require.Empty(t, meterMessages(t, ti))
+}
+
+func TestChatMessageWriterRejectsChatOwnedByAnotherProject(t *testing.T) {
+	t.Parallel()
+	ti := newTestChatService(t)
+	ctx := initSessionCtx(t, ti)
+	otherProject := createProjectInSameOrg(t, ti)
+	foreignChat := seedChatInProject(t, ti, otherProject, "foreign chat")
+	writer, shutdown := chat.NewChatMessageWriter(testenv.NewLogger(t), ti.conn, assetstest.NewTestBlobStore(t))
+	t.Cleanup(func() { _ = shutdown(context.WithoutCancel(t.Context())) })
+
+	written, err := writer.Write(ctx, ti.projectID, []repo.CreateChatMessageParams{
+		minimalChatMessageParams(foreignChat, ti.projectID),
+	})
+
+	require.ErrorContains(t, err, "chat does not belong to project")
+	require.Zero(t, written)
+	require.Empty(t, meterMessages(t, ti))
+}
+
+func TestChatMessageWriterRejectsCorrelatedChatOwnedByAnotherProject(t *testing.T) {
+	t.Parallel()
+	ti := newTestChatService(t)
+	ctx := initSessionCtx(t, ti)
+	otherProject := createProjectInSameOrg(t, ti)
+	foreignChat := seedChatInProject(t, ti, otherProject, "foreign correlated chat")
+	writer, shutdown := chat.NewChatMessageWriter(testenv.NewLogger(t), ti.conn, assetstest.NewTestBlobStore(t))
+	t.Cleanup(func() { _ = shutdown(context.WithoutCancel(t.Context())) })
+
+	written, err := writer.WriteCorrelated(
+		ctx,
+		ti.projectID,
+		minimalChatMessageParams(foreignChat, ti.projectID),
+		"cross-project-correlation",
+	)
+
+	require.ErrorContains(t, err, "chat does not belong to project")
+	require.Zero(t, written)
+	require.Empty(t, meterMessages(t, ti))
+}
+
+func TestChatMessageWriterRejectsExternalChatOwnedByAnotherProject(t *testing.T) {
+	t.Parallel()
+	ti := newTestChatService(t)
+	ctx := initSessionCtx(t, ti)
+	otherProject := createProjectInSameOrg(t, ti)
+	foreignChat := seedChatInProject(t, ti, otherProject, "foreign external chat")
+	writer, shutdown := chat.NewChatMessageWriter(testenv.NewLogger(t), ti.conn, assetstest.NewTestBlobStore(t))
+	t.Cleanup(func() { _ = shutdown(context.WithoutCancel(t.Context())) })
+
+	param := repo.CreateExternalChatMessageParams{}
+	param.ChatID = foreignChat
+	param.ProjectID = ti.projectID
+	param.Role = "user"
+	param.Content = "cross-project external message"
+	param.ExternalMessageID = conv.ToPGText("cross-project-external")
+	written, err := writer.WriteExternal(ctx, ti.projectID, []repo.CreateExternalChatMessageParams{param})
+
+	require.ErrorContains(t, err, "chat does not belong to project")
+	require.Zero(t, written)
+	require.Empty(t, meterMessages(t, ti))
 }
 
 func TestChatMessageWriterDoesNotMeterCorrelatedPromotion(t *testing.T) {

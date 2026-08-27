@@ -28,11 +28,12 @@ func TestReadingsForMessagesLogsAndSkipsMeteringFailure(t *testing.T) {
 	param.ID = messageID
 	param.ProjectID = projectID
 	param.Content = "meter this message"
+	param.ToolCalls = []byte(`[{"function":`)
 
 	readings, err := writer.meterMessages(
 		t.Context(),
 		logger,
-		"",
+		"org-"+uuid.NewString(),
 		projectID,
 		[]repo.CreateChatMessageParams{param},
 		time.Now().UTC(),

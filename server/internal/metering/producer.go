@@ -22,6 +22,9 @@ func Enqueue(ctx context.Context, dbtx outboxrepo.DBTX, readings []Reading) erro
 	organizationID := readings[0].scope.organizationID
 	messages := make([]outbox.Message, 0, len(readings))
 	for i, reading := range readings {
+		if err := reading.validate(); err != nil {
+			return fmt.Errorf("validate meter reading %d: %w", i, err)
+		}
 		if reading.scope.organizationID != organizationID {
 			return fmt.Errorf("meter reading %d organization id does not match batch organization", i)
 		}

@@ -282,9 +282,40 @@ func (w *ChatMessageWriter) meterMessages(
 	return readings, nil
 }
 
+type chatProjectKey struct {
+	chatID    uuid.UUID
+	projectID uuid.UUID
+}
+
+func requireChatProject(ctx context.Context, db repo.DBTX, chatID uuid.UUID, projectID uuid.UUID) error {
+	belongs, err := repo.New(db).ChatBelongsToProject(ctx, repo.ChatBelongsToProjectParams{
+		ChatID:    chatID,
+		ProjectID: projectID,
+	})
+	if err != nil {
+		return fmt.Errorf("check chat project: %w", err)
+	}
+	if !belongs {
+		return fmt.Errorf("chat does not belong to project")
+	}
+	return nil
+}
+
 func insertChatMessages(ctx context.Context, db repo.DBTX, params []repo.CreateChatMessageParams) (int64, error) {
 	if len(params) == 0 {
 		return 0, nil
+	}
+
+	seen := make(map[chatProjectKey]struct{}, len(params))
+	for _, param := range params {
+		key := chatProjectKey{chatID: param.ChatID, projectID: param.ProjectID}
+		if _, ok := seen[key]; ok {
+			continue
+		}
+		if err := requireChatProject(ctx, db, key.chatID, key.projectID); err != nil {
+			return 0, err
+		}
+		seen[key] = struct{}{}
 	}
 	n, err := repo.New(db).CreateChatMessage(ctx, params)
 	if err != nil {
@@ -368,6 +399,10 @@ func (w *ChatMessageWriter) WriteCorrelated(ctx context.Context, projectID uuid.
 	}
 	defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
 
+	if err := requireChatProject(ctx, tx, param.ChatID, param.ProjectID); err != nil {
+		return 0, err
+	}
+
 	storedID, err := repo.New(tx).UpsertCorrelatedChatMessage(ctx, repo.UpsertCorrelatedChatMessageParams{
 		ID:                param.ID,
 		ChatID:            param.ChatID,
@@ -433,6 +468,9 @@ func (w *ChatMessageWriter) WriteExternal(ctx context.Context, projectID uuid.UU
 	var total int64
 	for i := range params {
 		param := &params[i]
+		if param.ProjectID != projectID {
+			return total, fmt.Errorf("external chat message project id does not match writer project")
+		}
 		if param.ID == uuid.Nil {
 			param.ID, err = uuid.NewV7()
 			if err != nil {
@@ -466,6 +504,9 @@ func (w *ChatMessageWriter) WriteExternal(ctx context.Context, projectID uuid.UU
 				return false, fmt.Errorf("begin external chat message transaction: %w", err)
 			}
 			defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
+			if err := requireChatProject(ctx, tx, param.ChatID, param.ProjectID); err != nil {
+				return false, err
+			}
 
 			if _, err := repo.New(tx).CreateExternalChatMessage(ctx, *param); errors.Is(err, pgx.ErrNoRows) {
 				return false, nil

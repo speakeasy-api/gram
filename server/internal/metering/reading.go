@@ -136,14 +136,7 @@ type Reading struct {
 
 // NewUsage validates and constructs an ordinary usage reading.
 func NewUsage(input UsageInput) (Reading, error) {
-	if err := validateReadingInput(input.Meter, input.Scope, input.OperationID, input.OccurredAt, input.ProducedAt); err != nil {
-		return Reading{}, err
-	}
-	if input.Value <= 0 {
-		return Reading{}, fmt.Errorf("usage value must be positive")
-	}
-
-	return Reading{
+	reading := Reading{
 		meter:             input.Meter,
 		scope:             input.Scope,
 		operationID:       input.OperationID,
@@ -155,24 +148,15 @@ func NewUsage(input UsageInput) (Reading, error) {
 		adjustmentReason:  "",
 		source:            input.Source,
 		attributes:        maps.Clone(input.Attributes),
-	}, nil
+	}
+	if err := reading.validate(); err != nil {
+		return Reading{}, err
+	}
+	return reading, nil
 }
 
 // NewAdjustment validates and constructs a signed adjustment reading.
 func NewAdjustment(input AdjustmentInput) (Reading, error) {
-	if err := validateReadingInput(input.Meter, input.Scope, input.OperationID, input.OccurredAt, input.ProducedAt); err != nil {
-		return Reading{}, err
-	}
-	if input.Value == 0 {
-		return Reading{}, fmt.Errorf("adjustment value must not be zero")
-	}
-	if input.CorrectsReadingID == uuid.Nil {
-		return Reading{}, fmt.Errorf("adjustment correction id must not be zero")
-	}
-	if strings.TrimSpace(input.Reason) == "" {
-		return Reading{}, fmt.Errorf("adjustment reason must not be empty")
-	}
-
 	reading := Reading{
 		meter:             input.Meter,
 		scope:             input.Scope,
@@ -186,8 +170,8 @@ func NewAdjustment(input AdjustmentInput) (Reading, error) {
 		source:            input.Source,
 		attributes:        maps.Clone(input.Attributes),
 	}
-	if reading.ID() == input.CorrectsReadingID {
-		return Reading{}, fmt.Errorf("adjustment must not correct itself")
+	if err := reading.validate(); err != nil {
+		return Reading{}, err
 	}
 	return reading, nil
 }
@@ -222,6 +206,37 @@ func validateReadingInput(meter Definition, scope Scope, operationID string, occ
 	}
 	if producedAt.IsZero() || producedAt.Location() != time.UTC {
 		return fmt.Errorf("reading produced at must be a nonzero UTC timestamp")
+	}
+	return nil
+}
+
+func (r Reading) validate() error {
+	if err := validateReadingInput(r.meter, r.scope, r.operationID, r.occurredAt, r.producedAt); err != nil {
+		return err
+	}
+	switch r.kind {
+	case readingKindUsage:
+		if r.value <= 0 {
+			return fmt.Errorf("usage value must be positive")
+		}
+		if r.correctsReadingID != uuid.Nil || r.adjustmentReason != "" {
+			return fmt.Errorf("usage must not contain adjustment fields")
+		}
+	case readingKindAdjustment:
+		if r.value == 0 {
+			return fmt.Errorf("adjustment value must not be zero")
+		}
+		if r.correctsReadingID == uuid.Nil {
+			return fmt.Errorf("adjustment correction id must not be zero")
+		}
+		if strings.TrimSpace(r.adjustmentReason) == "" {
+			return fmt.Errorf("adjustment reason must not be empty")
+		}
+		if r.ID() == r.correctsReadingID {
+			return fmt.Errorf("adjustment must not correct itself")
+		}
+	default:
+		return fmt.Errorf("reading kind is invalid")
 	}
 	return nil
 }
