@@ -2010,6 +2010,7 @@ var RiskBlock = Type("RiskBlock", func() {
 	Attribute("reason", String, "Human-readable reason the tool call was blocked.")
 	Attribute("policy_name", String, "Name of the risk policy that blocked the call.")
 	Attribute("tool_name", String, "Name of the tool that was blocked, when known.")
+	Attribute("provider", String, "Agent surface that reported the blocked call (adapter slug, e.g. \"openclaw\"), when known.")
 	Attribute("created_at", String, "When the block occurred.", func() {
 		Format(FormatDateTime)
 	})

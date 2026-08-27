@@ -980,6 +980,9 @@ type RiskBlock struct {
 	PolicyName string
 	// Name of the tool that was blocked, when known.
 	ToolName *string
+	// Agent surface that reported the blocked call (adapter slug, e.g.
+	// "openclaw"), when known.
+	Provider *string
 	// When the block occurred.
 	CreatedAt string
 	// Existing feedback sentiment recorded for this block, when any.
