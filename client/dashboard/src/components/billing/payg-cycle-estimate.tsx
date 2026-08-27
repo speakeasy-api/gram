@@ -50,10 +50,28 @@ export function PaygCycleEstimate(): JSX.Element | null {
   // a missing one costs the customer nothing.
   if (isError) return null;
 
+  // A cached summary can outlive the cycle it described: at a cycle boundary
+  // the live subscription moves onto the new period before the summary refetch
+  // lands, and the prior cycle's figures would read as current. The summary's
+  // period start is the subscription's own anchor (the server copies it
+  // verbatim), so a mismatch identifies a stale summary — kept loading until
+  // the fresh one arrives.
+  const anchor = subscription?.currentPeriodStart;
+  const summary =
+    data !== undefined &&
+    anchor instanceof Date &&
+    data.periodStart instanceof Date &&
+    data.periodStart.getTime() === anchor.getTime()
+      ? data
+      : undefined;
+
   return (
     <Stack gap={3}>
-      <CycleCaption summary={data} />
-      <StatRow isLoading={data === undefined} metrics={estimateMetrics(data)} />
+      <CycleCaption summary={summary} />
+      <StatRow
+        isLoading={summary === undefined}
+        metrics={estimateMetrics(summary)}
+      />
     </Stack>
   );
 }

@@ -24,12 +24,12 @@ import { PaygCycleEstimate } from "./payg-cycle-estimate";
 
 // The subscription's anchor is read against the real clock, so it is pinned far
 // enough either side of now that no run can land on the wrong side of it.
-const OPENED_PERIOD_START = new Date("2020-01-01T00:00:00.000Z");
 const UNOPENED_PERIOD_START = new Date("2999-01-01T00:00:00.000Z");
 
-// The dates the summary itself reports, which are what gets rendered. Midday
-// UTC so a formatted day can't slide either side of the date line in whichever
-// time zone the tests happen to run in.
+// The dates the summary itself reports, which are what gets rendered — and the
+// subscription anchor the estimate matches the summary against. Midday UTC so
+// a formatted day can't slide either side of the date line in whichever time
+// zone the tests happen to run in.
 const PERIOD_START = new Date("2026-08-01T12:00:00.000Z");
 const PERIOD_END = new Date("2026-09-01T12:00:00.000Z");
 
@@ -69,9 +69,12 @@ function stripeSubscription(data: Subscription | undefined) {
   mocks.subscription.mockReturnValue({ data });
 }
 
-/** A subscription Stripe is billing, on a period that has already opened. */
+/**
+ * A subscription Stripe is billing, on a period that has already opened and
+ * whose anchor matches the summary's own period.
+ */
 function billingSubscription(status = "active") {
-  stripeSubscription({ status, currentPeriodStart: OPENED_PERIOD_START });
+  stripeSubscription({ status, currentPeriodStart: PERIOD_START });
 }
 
 type SummaryQueryState = { data?: Summary | undefined; isError?: boolean };
@@ -238,6 +241,21 @@ describe("PaygCycleEstimate", () => {
 
       expect(summaryOptions().enabled).toBe(false);
     });
+  });
+
+  // At a cycle boundary the live subscription moves onto the new period before
+  // the summary refetch lands — the prior cycle's cached figures must not read
+  // as current.
+  it("keeps a cached summary from a prior cycle loading, not rendered", () => {
+    stripeSubscription({
+      status: "active",
+      currentPeriodStart: new Date("2026-07-01T12:00:00.000Z"),
+    });
+
+    render(<PaygCycleEstimate />);
+
+    expect(estimatedTotal()).toBeNull();
+    expect(screen.queryByText(/Current billing cycle/)).toBeNull();
   });
 
   // A 404, a conflict, or an outage all leave the page without an estimate
