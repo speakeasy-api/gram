@@ -140,6 +140,15 @@ func TestKillswitchSchemaRejectsInvalidRows(t *testing.T) {
 		requireConstraint(t, err, tc.constraint)
 	}
 
+	// PostgreSQL text cannot represent NUL. Application normalization rejects it first, and this
+	// assertion documents the persistence boundary in case unnormalized input reaches the driver.
+	_, err = conn.Exec(ctx, `
+		INSERT INTO killswitch_prescription_versions (
+			organization_id, prescription_id, version, state, resource_scope, starts_at, internal_note, external_note
+		) VALUES ($1, $2, 1, 'active', 'selected', $3, $4, 'external')
+	`, orgID, prescriptionID, startsAt, "internal\x00note")
+	require.Error(t, err)
+
 	_, err = conn.Exec(ctx, `
 		INSERT INTO killswitch_prescription_versions (
 			organization_id, prescription_id, version, state, resource_scope, starts_at, internal_note, external_note
