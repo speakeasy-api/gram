@@ -30,6 +30,7 @@ pystreams/tests/test_risk_enforce.py
   s_b390d6ce53b276::t_9ba61a43cd426f 1-12,14-33,38-64,74-79,80-85,86-89,96-112,114-140,142-156,158-159,161-179,183,185-230,245-252
   s_b390d6ce53b276::t_f2385f9f3e853c 231-234,238
   s_b390d6ce53b276::t_1d173fc10446d6 113
+  s_b390d6ce53b276::t_6fed413f00226d 13,90-95
 infra/internal/diagram/diagram.go
   s_b390d6ce53b276::t_2b912cf5d1be85 568
 server/internal/risk/enforcereply/dispatch_test.go
@@ -37,6 +38,8 @@ server/internal/risk/enforcereply/dispatch_test.go
   s_b390d6ce53b276::t_bd4dc079a3d257 136-139,148-149,157,159-173,174-175
   s_b390d6ce53b276::t_dc036efc4d43ca 46-47,49-50,56-57,59-68
   s_b390d6ce53b276::t_a8cb1e49190a93 70-75,77-82
+  s_b390d6ce53b276::t_ebcea6fddc9922 140-143,147,150-152,156
+  s_b390d6ce53b276::t_1e8351b7dfef57 48,51-55,58
 infra/gen_py/gram/risk/v1/presidio_enforcer_pb2.py
   s_b390d6ce53b276::t_71c2d39f5bf176 1-40
 infra/pkg/topics/topics_gen.go
@@ -57,13 +60,19 @@ pystreams/src/pystreams/cmd/multi.py
   s_b390d6ce53b276::t_b466a1b5d87d94 264-273
 infra/gen_py/gram/risk/v1/presidio_enforcement_pb2.pyi
   s_b390d6ce53b276::t_62eaeefba94cfd 1-10,12-18,19-29,30-33
+  s_b390d6ce53b276::t_eb344983d07b66 11,34
 pystreams/src/pystreams/risk/enforce_handler.py
   s_b390d6ce53b276::t_40504d431632ce 1-47,52-106,108-140,142-149,153,155-164,170-203,205-215,217-266
   s_b390d6ce53b276::t_6ffa9f3689fddc 204
   s_b390d6ce53b276::t_7400c7b4ef169f 107,141
   s_b390d6ce53b276::t_c5681cd7873420 165-169
+  s_b390d6ce53b276::t_468836718f579f 48-51
+  s_b390d6ce53b276::t_b92d9907c7f857 216
+  s_b390d6ce53b276::t_16784a85e82294 150-152,154
 infra/proto/gram/risk/v1/presidio_enforcement.proto
   s_b390d6ce53b276::t_024825ffc3de16 1-17,22-33
+  s_b390d6ce53b276::t_7876a3505927aa 18-20
+  s_b390d6ce53b276::t_c6b113630baf8c 21
 infra/gen/gram/risk/v1/presidio_enforcer.pb.go
   s_b390d6ce53b276::t_4f9806a9ce9e04 1-111
 infra/gen_py/gram/risk/v1/presidio_enforcement_pb2.py
@@ -78,8 +87,10 @@ server/internal/risk/enforcereply/dispatch.go
   s_b390d6ce53b276::t_2f863140652656 157,159-166,167-175,176-179
   s_b390d6ce53b276::t_91f9ab9066a303 90-91,95-96
   s_b390d6ce53b276::t_87e9c0cb8b75cc 86
+  s_b390d6ce53b276::t_b414e51f1664ce 158
 infra/gen/kcc.yaml
   s_b390d6ce53b276::t_62eaeefba94cfd 959-973,976-981,1373-1390,1668-1683
+  s_b390d6ce53b276::t_eb344983d07b66 974-975
 pystreams/src/pystreams/risk/replywriter.py
   s_b390d6ce53b276::t_b693924e9af08a 12,15
   s_b390d6ce53b276::t_79c0557c9bc059 1-11,13-14,16-25,27,29-30,32-48,50-55,57-65
