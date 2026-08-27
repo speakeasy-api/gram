@@ -4072,6 +4072,7 @@ CREATE TABLE IF NOT EXISTS otel_destinations (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
   organization_id TEXT NOT NULL,
   project_id uuid NOT NULL,
+  name TEXT NOT NULL,
   endpoint_url TEXT NOT NULL,
   headers_encrypted TEXT,
   sensitive_data TEXT DEFAULT 'exclude',
@@ -4116,11 +4117,10 @@ CREATE TABLE IF NOT EXISTS data_export_routes (
   CONSTRAINT data_export_routes_destination_tenant_fkey FOREIGN KEY (organization_id, project_id, otel_destination_id) REFERENCES otel_destinations (organization_id, project_id, id) ON DELETE RESTRICT
 );
 
--- A project can have at most one non-deleted export route per source. Supporting
--- multiple destinations per source requires destination-specific delivery state
--- so retrying one failed destination does not redeliver to successful ones.
-CREATE UNIQUE INDEX IF NOT EXISTS data_export_routes_project_source_key
-  ON data_export_routes (project_id, data_source)
+-- One source can fan out to multiple destinations, while the same destination
+-- can appear at most once for that source.
+CREATE UNIQUE INDEX IF NOT EXISTS data_export_routes_project_source_destination_key
+  ON data_export_routes (project_id, data_source, otel_destination_id)
   WHERE deleted IS FALSE;
 
 -- AI integration configs: encrypted provider credentials and activation
