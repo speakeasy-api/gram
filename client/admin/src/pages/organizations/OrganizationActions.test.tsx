@@ -159,14 +159,15 @@ async function renderFooter(org: AdminOrganization = ORG): Promise<void> {
 // broken by that caller.
 async function renderMenuWith(
   actions: "all" | "lifecycle" | "trial",
+  org: AdminOrganization = ORG,
 ): Promise<void> {
   await renderWithApp(
     <WriteReportProvider value={REPORTER}>
-      <OrganizationActions org={ORG} layout="menu" actions={actions} />
+      <OrganizationActions org={org} layout="menu" actions={actions} />
     </WriteReportProvider>,
   );
   fireEvent.pointerDown(
-    screen.getByRole("button", { name: `Actions for ${ORG.name}` }),
+    screen.getByRole("button", { name: `Actions for ${org.name}` }),
     { button: 0, ctrlKey: false, pointerType: "mouse" },
   );
 }
@@ -495,15 +496,18 @@ describe("the row menu", () => {
 // half. Both layouts are gated, not just the one the record happens to use.
 describe("the actions prop", () => {
   it.each([
-    ["all", ["Disable", "Extend trial"]],
-    ["lifecycle", ["Disable"]],
-    ["trial", ["Extend trial"]],
-  ] as ["all" | "lifecycle" | "trial", string[]][])(
-    "draws %s as buttons",
-    async (actions, expected) => {
+    ["all", "live running", ORG, ["Disable", "Extend trial"]],
+    ["lifecycle", "live running", ORG, ["Disable"]],
+    ["trial", "live running", ORG, ["Extend trial"]],
+    ["lifecycle", "demoted", DEMOTED_ORG, ["Disable"]],
+    ["trial", "demoted", DEMOTED_ORG, ["Re-arm trial"]],
+    ["trial", "disabled running", DISABLED_ORG, []],
+  ] as ["all" | "lifecycle" | "trial", string, AdminOrganization, string[]][])(
+    "draws %s as buttons for a %s organization",
+    async (actions, _state, org, expected) => {
       await renderWithApp(
         <WriteReportProvider value={REPORTER}>
-          <OrganizationActions org={ORG} layout="buttons" actions={actions} />
+          <OrganizationActions org={org} layout="buttons" actions={actions} />
         </WriteReportProvider>,
       );
 
@@ -514,13 +518,16 @@ describe("the actions prop", () => {
   );
 
   it.each([
-    ["all", ["Disable", "Extend trial"]],
-    ["lifecycle", ["Disable"]],
-    ["trial", ["Extend trial"]],
-  ] as ["all" | "lifecycle" | "trial", string[]][])(
-    "draws %s in the menu too",
-    async (actions, expected) => {
-      await renderMenuWith(actions);
+    ["all", "live running", ORG, ["Disable", "Extend trial"]],
+    ["lifecycle", "live running", ORG, ["Disable"]],
+    ["trial", "live running", ORG, ["Extend trial"]],
+    ["lifecycle", "demoted", DEMOTED_ORG, ["Disable"]],
+    ["trial", "demoted", DEMOTED_ORG, ["Re-arm trial"]],
+    ["trial", "disabled running", DISABLED_ORG, []],
+  ] as ["all" | "lifecycle" | "trial", string, AdminOrganization, string[]][])(
+    "draws %s in the menu for a %s organization",
+    async (actions, _state, org, expected) => {
+      await renderMenuWith(actions, org);
 
       expect(menuItems()).toEqual(expected);
     },

@@ -165,6 +165,7 @@ export function OrganizationActions({
   // different answer from a buttons caller passing the same `actions`.
   const showLifecycle = actions !== "trial";
   const showExtend = actions !== "lifecycle" && canExtendTrial(org);
+  const showRearm = actions !== "lifecycle" && canRearmTrial(org);
 
   const menuTrigger = useRef<HTMLButtonElement>(null);
 
@@ -380,7 +381,7 @@ export function OrganizationActions({
             Extend trial
           </Button>
         )}
-        {canRearmTrial(org) && (
+        {showRearm && (
           <Button
             variant="outline"
             size="xs"
@@ -441,7 +442,7 @@ export function OrganizationActions({
               Extend trial
             </DropdownMenuItem>
           )}
-          {canRearmTrial(org) && (
+          {showRearm && (
             <DropdownMenuItem
               onSelect={() => openDialog("rearm", menuTrigger.current)}
             >
