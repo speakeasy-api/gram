@@ -2554,34 +2554,6 @@ func hooksFilesOf(files map[string][]byte) map[string]string {
 	return out
 }
 
-// remapPublishedFilesToLegacyPlatformMCPLayout rewrites only the Agent Plugin
-// directory and the OpenCode identifier so a live repository that still uses
-// that published layout can be reconstructed in tests.
-func remapPublishedFilesToLegacyPlatformMCPLayout(files map[string][]byte) map[string][]byte {
-	legacy := make(map[string][]byte, len(files))
-	for filePath, content := range files {
-		legacy[remapPublishedPathToLegacyPlatformMCP(filePath)] = content
-	}
-	return legacy
-}
-
-func remapPublishedPathToLegacyPlatformMCP(filePath string) string {
-	const currentAgentPrefix = "agent-plugins/platform-mcp/"
-	const legacyAgentPrefix = "agent-plugins/speakeasy-aicp-platform-mcp/"
-	if rest, ok := strings.CutPrefix(filePath, currentAgentPrefix); ok {
-		return legacyAgentPrefix + rest
-	}
-	if filePath == "opencode-plugins/platform-mcp/plugin/platform-mcp.ts" {
-		return "opencode-plugins/platform-mcp/plugin/speakeasy-aicp-platform-mcp.ts"
-	}
-	const currentOpenCodeIDPrefix = "opencode-plugins/platform-mcp/platform-mcp/"
-	const legacyOpenCodeIDPrefix = "opencode-plugins/platform-mcp/speakeasy-aicp-platform-mcp/"
-	if rest, ok := strings.CutPrefix(filePath, currentOpenCodeIDPrefix); ok {
-		return legacyOpenCodeIDPrefix + rest
-	}
-	return filePath
-}
-
 func filesWithPrefix(files map[string][]byte, prefix string) map[string]string {
 	out := make(map[string]string)
 	for p, content := range files {

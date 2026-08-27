@@ -34,7 +34,6 @@ import (
 	pluginsrepo "github.com/speakeasy-api/gram/server/internal/plugins/repo"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
-	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	unproxiedmcprepo "github.com/speakeasy-api/gram/server/internal/unproxiedmcp/repo"
@@ -241,19 +240,6 @@ func rewindPublishedHooksVersion(t *testing.T, ctx context.Context, conn *pgxpoo
 		PublishedMcpFingerprints: current.PublishedMcpFingerprints,
 		PublishedHooksVersion:    conv.ToPGText(version),
 		PublishedHooksConfig:     current.PublishedHooksConfig,
-	})
-	require.NoError(t, err)
-}
-
-// publishOrgID returns the organization id the publisher resolves for a project
-// — the org-metadata id used as the FlagHooksRollout distinct id, which is not
-// necessarily the same string as authCtx.ActiveOrganizationID.
-func setProjectSlug(t *testing.T, ctx context.Context, conn *pgxpool.Pool, projectID uuid.UUID, slug string) {
-	t.Helper()
-
-	err := testrepo.New(conn).SetProjectSlugFixture(ctx, testrepo.SetProjectSlugFixtureParams{
-		Slug: slug,
-		ID:   projectID,
 	})
 	require.NoError(t, err)
 }

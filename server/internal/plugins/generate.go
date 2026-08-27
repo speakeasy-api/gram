@@ -632,17 +632,6 @@ func mcpFilePaths(plugins []PluginInfo, cfg GenerateConfig) ([]string, error) {
 	return slices.Sorted(maps.Keys(files)), nil
 }
 
-// sharedFilePaths returns the deterministic marketplace manifests and README
-// paths that are regenerated on every publish. An indeterminate Platform MCP
-// admission must verify them before skipping so a partial repo is repaired.
-func sharedFilePaths(plugins []PluginInfo, cfg GenerateConfig) ([]string, error) {
-	files, err := generateSharedFiles(plugins, cfg)
-	if err != nil {
-		return nil, fmt.Errorf("enumerate shared file paths: %w", err)
-	}
-	return slices.Sorted(maps.Keys(files)), nil
-}
-
 // generateMCPFiles produces the feature (MCP) plugin subtree — one plugin per
 // PluginInfo — for Claude, Cursor, and Codex.
 func generateMCPFiles(plugins []PluginInfo, cfg GenerateConfig) (map[string][]byte, error) {
@@ -2198,14 +2187,6 @@ echo "✓ Speakeasy observability plugin installed. Restart Codex to activate."
 `)
 
 	return []byte(b.String())
-}
-
-func generatePlatformMCPFiles(cfg GenerateConfig) (map[string][]byte, error) {
-	files := make(map[string][]byte)
-	if err := generatePlatformMCPFilesInto(files, cfg); err != nil {
-		return nil, err
-	}
-	return files, nil
 }
 
 func generatePlatformMCPFilesInto(files map[string][]byte, cfg GenerateConfig) error {
