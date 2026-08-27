@@ -31,12 +31,12 @@ import { Loader2 } from "lucide-react";
 import { useEffect, useId, useState, type MouseEvent } from "react";
 import { toast } from "sonner";
 
-// The three modes an operator can actually choose, and between them every
-// mode an issuer can be in: "open" is what an issuer carries unless someone
-// changes it. The read side of the API can also return "reporting", a legacy
-// value that admits exactly what "open" admits. It is not writable and is
-// deliberately not offered as a fourth option, so an issuer still storing it
-// renders with nothing selected.
+// The three WRITABLE modes. "open" is what an issuer carries unless someone
+// changes it, so it is what a newly created or never-configured issuer shows
+// as selected. The read side of the API can also return "reporting", a
+// legacy value that admits exactly what "open" admits. It is not writable
+// and is deliberately not offered as a fourth option, so an issuer still
+// storing it renders with nothing selected.
 const MODE_OPTIONS: {
   value: WritableMode;
   title: string;

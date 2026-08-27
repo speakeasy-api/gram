@@ -47,8 +47,9 @@ func modeGuidance(mode string) string {
 	case admission.ModeDisabled:
 		return "Off: client ID metadata documents are not accepted at all, and the server stops advertising them, so apps use dynamic client registration instead."
 	case admission.ModeReporting:
-		// Not writable, and nothing resolves to it any more, but a row
-		// written while it was the default still reads back as it.
+		// Not writable, and no default resolves to it any more. Nothing in
+		// the application ever stored it either, so only a row carrying the
+		// legacy value from a direct database write still reads back as it.
 		return "Watching only: every app can sign in, while we record which ones \"known apps only\" would have turned away."
 	default:
 		return ""

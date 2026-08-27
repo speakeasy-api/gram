@@ -66,9 +66,10 @@ func Evaluate(mode Mode, clientID string) Decision {
 //
 // The result is telemetry. Callers translate it into an AdmitReason — a
 // metric label — and must never surface it as a refusal. OutcomeCheckCustom
-// still asks for the custom-URL lookup, and an OutcomeDeny here means only
-// that no shadow verdict is available, never that the client should be
-// turned away.
+// still asks for the custom-URL lookup. OutcomeDeny carries one case, an
+// oversized client_id refused before it could become a query parameter, and
+// it is a verdict about the measurement rather than about the client: even
+// then, the client is not to be turned away.
 func EvaluateShadow(clientID string) Decision {
 	return Evaluate(ModePresets, clientID)
 }

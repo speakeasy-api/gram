@@ -257,15 +257,12 @@ func (s *OAuthHTTP) shadowCIMDAdmitReason(ctx context.Context, clientID string) 
 			attr.SlogCIMDAdmissionOutcome(admission.DenialNotListed),
 		)
 		return admission.AdmitOpenNotListed
-	case admission.OutcomeDeny:
-		// Unreachable: an oversized client_id was already refused for real
-		// above, before the shadow could run. Named anyway rather than
-		// folded into AdmitOpen, so the two do not blur together if that
-		// ordering ever changes.
-		return admission.AdmitOpenOversized
 	default:
-		// Unreachable: Decision carries exactly the three outcomes above.
-		// Recorded as a missing verdict rather than invented as one.
+		// OutcomeDeny is unreachable here: an oversized client_id is refused
+		// for real before the shadow runs, so this server never records
+		// AdmitOpenOversized the way the hosted one does. Anything reaching
+		// this arm has no verdict behind it and is recorded as such rather
+		// than invented.
 		return admission.AdmitOpen
 	}
 }

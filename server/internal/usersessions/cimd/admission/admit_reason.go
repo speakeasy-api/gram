@@ -45,7 +45,12 @@ const (
 	// catalog entry, not one of the issuer's own URLs. This is the same
 	// signal DenialNotListed carries, from a request that succeeded, and it
 	// is the value worth alerting on now that the resting state refuses
-	// nobody. A rise means the catalog is missing a client customers use.
+	// nobody.
+	//
+	// A rise is a POSSIBLE catalog gap, not a confirmed one. Admission runs
+	// before any authentication, so an attacker-chosen or malformed URL
+	// reaches this outcome exactly as a real client does. The client_id on
+	// the paired log line is what tells the two apart.
 	AdmitOpenNotListed AdmitReason = "admitted_open_not_listed"
 
 	// AdmitOpenOversized: open mode admitted the client, and the shadow

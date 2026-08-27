@@ -26,10 +26,15 @@ const (
 	ModeReporting Mode = "reporting"
 
 	// ModeOpen admits every spec-valid client. Document validation rules
-	// all still apply — open means "any spec-valid client", not "any
-	// client" — and the decision ModePresets would have made is computed
-	// and recorded alongside the admission, so a catalog gap stays visible
-	// on an issuer that refuses nobody.
+	// all still apply: open means "any spec-valid client", not "any
+	// client".
+	//
+	// The mode itself records nothing beyond the admission. Evaluate
+	// returns AdmitOpen immediately and consults no catalog, so a caller
+	// running this mode MUST call EvaluateShadow separately and record what
+	// it decided. Skipping that is silent: the client is admitted either
+	// way, and the only thing lost is every catalog gap this issuer would
+	// have revealed.
 	ModeOpen Mode = "open"
 )
 
