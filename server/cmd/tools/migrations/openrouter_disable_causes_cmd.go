@@ -1,0 +1,236 @@
+package main
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"flag"
+	"io"
+	"log"
+	"log/slog"
+	"strings"
+	"time"
+
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgxpool"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/metric"
+
+	"github.com/speakeasy-api/gram/server/cmd/tools/migrations/openrouterdisablecauses"
+)
+
+const classifierVersion = "v1"
+
+type openRouterDisableCausesConfig struct {
+	dbURL                 string
+	environment           string
+	codeSHA               string
+	mode                  openrouterdisablecauses.Mode
+	manualOverride        bool
+	confirmManualOverride bool
+	batchSize             int
+	lockTimeout           time.Duration
+	statementTimeout      time.Duration
+	maxLockRetries        int
+	overrideToken         string
+}
+
+type commandSummary struct {
+	RunID             string                          `json:"run_id"`
+	Mode              string                          `json:"mode"`
+	Environment       string                          `json:"environment"`
+	CodeSHA           string                          `json:"code_sha"`
+	ClassifierVersion string                          `json:"classifier_version"`
+	Result            string                          `json:"result"`
+	ElapsedMS         int64                           `json:"elapsed_ms"`
+	Summary           openrouterdisablecauses.Summary `json:"summary"`
+	ManualChanged     *bool                           `json:"manual_changed,omitempty"`
+}
+
+func parseOpenRouterDisableCausesFlags(args []string, getenv func(string) string) (openRouterDisableCausesConfig, error) {
+	fs := flag.NewFlagSet("openrouter-disable-causes", flag.ContinueOnError)
+	fs.SetOutput(io.Discard)
+	apply := fs.Bool("apply", false, "apply safe classifications")
+	validate := fs.Bool("validate", false, "validate the complete live population")
+	manual := fs.Bool("manual-override", false, "read one protected override from stdin")
+	environment := fs.String("environment", "", "explicit target environment")
+	confirmProduction := fs.String("confirm-production", "", "must equal production for a production write")
+	confirmManual := fs.Bool("confirm-manual-override", false, "required for manual override mode")
+	batchSize := fs.Int("batch-size", 100, "keyset batch size")
+	lockTimeout := fs.Duration("lock-timeout", 2*time.Second, "per-transaction lock timeout")
+	statementTimeout := fs.Duration("statement-timeout", 30*time.Second, "per-transaction statement timeout")
+	maxLockRetries := fs.Int("max-lock-retries", 3, "bounded lock retry count")
+	if err := fs.Parse(args); err != nil {
+		return openRouterDisableCausesConfig{}, errors.New("invalid openrouter-disable-causes flags")
+	}
+	if fs.NArg() != 0 {
+		return openRouterDisableCausesConfig{}, errors.New("unexpected positional arguments")
+	}
+	selected := 0
+	for _, enabled := range []bool{*apply, *validate, *manual} {
+		if enabled {
+			selected++
+		}
+	}
+	if selected > 1 {
+		return openRouterDisableCausesConfig{}, errors.New("select exactly one mode: apply, validate, or manual-override")
+	}
+	if strings.TrimSpace(*environment) == "" {
+		return openRouterDisableCausesConfig{}, errors.New("environment is required")
+	}
+	if *batchSize <= 0 || *lockTimeout <= 0 || *statementTimeout <= 0 || *maxLockRetries < 0 {
+		return openRouterDisableCausesConfig{}, errors.New("batch size and timeouts must be positive and retries nonnegative")
+	}
+	writeMode := *apply || *manual
+	if *environment == "production" && writeMode && *confirmProduction != "production" {
+		return openRouterDisableCausesConfig{}, errors.New("production writes require -confirm-production=production")
+	}
+	if *manual && !*confirmManual {
+		return openRouterDisableCausesConfig{}, errors.New("manual override requires -confirm-manual-override")
+	}
+
+	mode := openrouterdisablecauses.ModeDryRun
+	if *apply {
+		mode = openrouterdisablecauses.ModeApply
+	}
+	if *validate {
+		mode = openrouterdisablecauses.ModeValidate
+	}
+	if *manual {
+		mode = openrouterdisablecauses.ModeManualOverride
+	}
+	cfg := openRouterDisableCausesConfig{
+		dbURL: getenv("GRAM_DATABASE_URL"), environment: *environment, codeSHA: getenv("GRAM_CODE_SHA"),
+		mode: mode, manualOverride: *manual, confirmManualOverride: *confirmManual, batchSize: *batchSize,
+		lockTimeout: *lockTimeout, statementTimeout: *statementTimeout, maxLockRetries: *maxLockRetries,
+		overrideToken: getenv("GRAM_OPENROUTER_DISABLE_CAUSES_OVERRIDE_TOKEN"),
+	}
+	if cfg.dbURL == "" {
+		return cfg, errors.New("missing $GRAM_DATABASE_URL")
+	}
+	if cfg.codeSHA == "" {
+		cfg.codeSHA = "unknown"
+	}
+	if cfg.manualOverride && cfg.overrideToken == "" {
+		return cfg, errors.New("manual override authorization is not configured")
+	}
+	return cfg, nil
+}
+
+type manualOverrideEnvelope struct {
+	AuthorizationToken string   `json:"authorization_token"`
+	OrganizationID     string   `json:"organization_id"`
+	KeyType            string   `json:"key_type"`
+	Causes             []string `json:"causes"`
+}
+
+func decodeManualOverride(reader io.Reader, expectedToken string) (openrouterdisablecauses.ManualOverride, error) {
+	decoder := json.NewDecoder(io.LimitReader(reader, 64*1024))
+	decoder.DisallowUnknownFields()
+	var envelope manualOverrideEnvelope
+	if err := decoder.Decode(&envelope); err != nil {
+		return openrouterdisablecauses.ManualOverride{}, errors.New("invalid manual override input")
+	}
+	if decoder.Decode(&struct{}{}) != io.EOF {
+		return openrouterdisablecauses.ManualOverride{}, errors.New("manual override input must contain one JSON object")
+	}
+	if err := openrouterdisablecauses.AuthorizeManualOverride(envelope.AuthorizationToken, expectedToken); err != nil {
+		return openrouterdisablecauses.ManualOverride{}, err
+	}
+	if envelope.OrganizationID == "" || envelope.KeyType == "" || envelope.Causes == nil {
+		return openrouterdisablecauses.ManualOverride{}, errors.New("manual override fields are required")
+	}
+	return openrouterdisablecauses.ManualOverride{OrganizationID: envelope.OrganizationID, KeyType: envelope.KeyType, Causes: envelope.Causes}, nil
+}
+
+func writeOpenRouterDisableCausesSummary(writer io.Writer, summary commandSummary) error {
+	encoder := json.NewEncoder(writer)
+	encoder.SetEscapeHTML(true)
+	return encoder.Encode(summary)
+}
+
+func runOpenRouterDisableCauses(args []string, stdin io.Reader, stdout io.Writer, getenv func(string) string) int {
+	cfg, err := parseOpenRouterDisableCausesFlags(args, getenv)
+	if err != nil {
+		log.Printf("invalid openrouter-disable-causes configuration: %v", err)
+		return 2
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	pool, err := pgxpool.New(ctx, cfg.dbURL)
+	if err != nil {
+		log.Printf("connect postgres for openrouter-disable-causes failed")
+		return 1
+	}
+	defer pool.Close()
+
+	runID := uuid.NewString()
+	runner := openrouterdisablecauses.NewRunner(pool, slog.Default(), openrouterdisablecauses.Options{
+		BatchSize: cfg.batchSize, LockTimeout: cfg.lockTimeout, StatementTimeout: cfg.statementTimeout, MaxLockRetries: cfg.maxLockRetries,
+	})
+	started := time.Now()
+	result := "success"
+	summary := openrouterdisablecauses.Summary{Mode: cfg.mode}
+	var manualChanged *bool
+	if cfg.manualOverride {
+		override, decodeErr := decodeManualOverride(stdin, cfg.overrideToken)
+		if decodeErr != nil {
+			log.Printf("manual override rejected: %v", decodeErr)
+			return 1
+		}
+		changed, applyErr := runner.ApplyManualOverride(ctx, override)
+		manualChanged = &changed
+		err = applyErr
+	} else {
+		summary, err = runner.Run(ctx, cfg.mode)
+	}
+	if err != nil {
+		result = "blocked"
+	}
+	commandResult := commandSummary{
+		RunID: runID, Mode: string(cfg.mode), Environment: cfg.environment, CodeSHA: cfg.codeSHA,
+		ClassifierVersion: classifierVersion, Result: result, ElapsedMS: time.Since(started).Milliseconds(), Summary: summary, ManualChanged: manualChanged,
+	}
+	if writeErr := writeOpenRouterDisableCausesSummary(stdout, commandResult); writeErr != nil {
+		log.Printf("write aggregate openrouter-disable-causes summary: %v", writeErr)
+		return 1
+	}
+	recordOpenRouterDisableCausesMetrics(ctx, commandResult)
+	if err != nil {
+		log.Printf("openrouter-disable-causes blocked; inspect aggregate reason counts")
+		return 1
+	}
+	return 0
+}
+
+func recordOpenRouterDisableCausesMetrics(ctx context.Context, result commandSummary) {
+	meter := otel.Meter("gram.server.cmd.tools.migrations.openrouter-disable-causes")
+	runs, _ := meter.Int64Counter("gram.openrouter_disable_causes.runs")
+	rows, _ := meter.Int64Counter("gram.openrouter_disable_causes.rows")
+	classifications, _ := meter.Int64Counter("gram.openrouter_disable_causes.classifications")
+	ambiguous, _ := meter.Int64Counter("gram.openrouter_disable_causes.ambiguous")
+	validation, _ := meter.Int64Counter("gram.openrouter_disable_causes.validation_failures")
+	batches, _ := meter.Int64Counter("gram.openrouter_disable_causes.batches")
+	lockRetries, _ := meter.Int64Counter("gram.openrouter_disable_causes.lock_retries")
+	duration, _ := meter.Int64Histogram("gram.openrouter_disable_causes.duration_ms", metric.WithUnit("ms"))
+	attrs := metric.WithAttributes(
+		attribute.String("run.id", result.RunID), attribute.String("mode", result.Mode),
+		attribute.String("environment", result.Environment), attribute.String("code.sha", result.CodeSHA),
+		attribute.String("classifier.version", result.ClassifierVersion), attribute.String("result", result.Result),
+	)
+	runs.Add(ctx, 1, attrs)
+	rows.Add(ctx, result.Summary.Scanned, attrs)
+	batches.Add(ctx, result.Summary.Batches, attrs)
+	lockRetries.Add(ctx, result.Summary.LockRetries, attrs)
+	for causeSet, count := range result.Summary.CauseSets {
+		classifications.Add(ctx, count, attrs, metric.WithAttributes(attribute.String("cause_set", causeSet)))
+	}
+	for reason, count := range result.Summary.Ambiguous {
+		ambiguous.Add(ctx, count, attrs, metric.WithAttributes(attribute.String("reason", reason)))
+	}
+	for predicate, count := range result.Summary.Validation {
+		validation.Add(ctx, count, attrs, metric.WithAttributes(attribute.String("predicate", predicate)))
+	}
+	duration.Record(ctx, result.ElapsedMS, attrs)
+}

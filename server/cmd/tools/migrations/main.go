@@ -1,12 +1,15 @@
 // Command migrations back-fills historical data into ClickHouse using a generic
-// Source -> Transform -> Sink pipeline (see the pipeline package). Two
-// migrations are wired, selected by an optional leading subcommand:
+// Source -> Transform -> Sink pipeline (see the pipeline package). Migration
+// modes are selected by an optional leading subcommand:
 //
 //   - riskfindings (default): moves Postgres risk_results rows into the
 //     ClickHouse risk_findings event log (see RISK_RESULTS_MIGRATION.md).
 //   - riskfindingscols: backfills the message_created_at and assistant_id
 //     columns onto existing risk_findings rows via ClickHouse mutations (see
 //     RISKFINDINGS_COLS_MIGRATION.md).
+//   - openrouter-disable-causes: classifies nullable OpenRouter disable causes
+//     from durable PostgreSQL projections. It defaults to dry-run and makes no
+//     OpenRouter calls.
 //
 // It is an offline operator tool, run by hand against production reached
 // through Cloud SQL Auth Proxy and a ClickHouse tunnel:
@@ -102,9 +105,11 @@ func run() int {
 		return runRiskFindings(args)
 	case "riskfindingscols":
 		return runRiskFindingsCols(args)
+	case "openrouter-disable-causes":
+		return runOpenRouterDisableCauses(args, os.Stdin, os.Stdout, os.Getenv)
 	default:
 		// The unrecognized name is deliberately not echoed (log injection).
-		log.Printf("unknown migration subcommand (available: riskfindings, riskfindingscols)")
+		log.Printf("unknown migration subcommand (available: riskfindings, riskfindingscols, openrouter-disable-causes)")
 		return 2
 	}
 }
