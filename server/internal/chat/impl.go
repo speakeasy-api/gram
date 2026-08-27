@@ -1299,17 +1299,17 @@ func (s *Service) LoadChat(ctx context.Context, payload *gen.LoadChatPayload) (*
 	var source *string
 	var originatingClient *string
 	if isInitialLatest {
-		for i := len(latestPageRows) - 1; i >= 0; i-- {
-			if latestPageRows[i].Source.Valid && latestPageRows[i].Source.String != "" {
-				v := latestPageRows[i].Source.String
+		for _, latestPageRow := range slices.Backward(latestPageRows) {
+			if latestPageRow.Source.Valid && latestPageRow.Source.String != "" {
+				v := latestPageRow.Source.String
 				source = &v
 				break
 			}
 		}
 		if source != nil && *source == "litellm" {
-			for i := len(latestPageRows) - 1; i >= 0; i-- {
-				client := latestPageRows[i].UserAgent.String
-				if latestPageRows[i].Source.String == "litellm" && (client == "claude-code" || client == "codex" || client == "opencode") {
+			for _, latestPageRow := range slices.Backward(latestPageRows) {
+				client := latestPageRow.UserAgent.String
+				if latestPageRow.Source.String == "litellm" && (client == "claude-code" || client == "codex" || client == "opencode") {
 					originatingClient = &client
 					break
 				}

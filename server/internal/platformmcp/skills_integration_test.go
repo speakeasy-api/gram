@@ -344,7 +344,7 @@ func newSkillsVerticalFixture(t *testing.T, ctx context.Context, name string, op
 
 	runtime := NewRuntimeWithLifecycle(
 		logger, &testAuthenticator{principal: principal}, testGate{enabled: true}, &testAuthorizer{},
-		"", "test-cursor-key", nil, nil, nil, nil, nil, nil, nil, nil, skillsSurface, nil, nil, CatalogDescriptor{},
+		"", "test-cursor-key", nil, nil, nil, nil, nil, nil, nil, nil, skillsSurface, nil, nil, nil, CatalogDescriptor{},
 	)
 	server := httptest.NewServer(runtime.Handler())
 	t.Cleanup(server.Close)

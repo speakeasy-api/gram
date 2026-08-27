@@ -521,8 +521,7 @@ func platformToolCallError(ctx context.Context, logger *slog.Logger, err error, 
 		return rejected
 	}
 
-	var shareableErr *oops.ShareableError
-	if errors.As(err, &shareableErr) {
+	if _, ok := errors.AsType[*oops.ShareableError](err); ok {
 		return fmt.Errorf("execute platform tool: %w", err)
 	}
 

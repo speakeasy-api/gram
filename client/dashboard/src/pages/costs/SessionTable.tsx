@@ -3,6 +3,7 @@ import { SkeletonTable } from "@/components/ui/Skeleton";
 import { Text } from "@/components/ui/Text";
 import { cn } from "@/lib/utils";
 import type { SessionSummary } from "@gram/client/models/components/sessionsummary.js";
+import { llmTokens } from "./taxonomy";
 import { formatDistanceToNow } from "date-fns";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { Fragment, useEffect, useMemo, useState } from "react";
@@ -70,7 +71,7 @@ function sortValue(session: SessionSummary, key: SortKey): number {
     case "cost":
       return session.totalCost;
     case "tokens":
-      return session.totalTokens;
+      return llmTokens(session);
     case "tools":
       return session.toolCallCount;
     case "messages":
@@ -184,7 +185,7 @@ const SESSION_COLUMNS: SessionColumn[] = [
     track: "minmax(max-content,1fr)",
     sortKey: "tokens",
     render: (s) => (
-      <span className={NUM_CELL}>{s.totalTokens.toLocaleString()}</span>
+      <span className={NUM_CELL}>{llmTokens(s).toLocaleString()}</span>
     ),
   },
   {

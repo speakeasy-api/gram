@@ -38,6 +38,7 @@ import {
   friendlyName,
   isAttributionDim,
   LABELS,
+  llmTokens,
   type Measures,
   pluralLabel,
 } from "./taxonomy";
@@ -77,7 +78,7 @@ function buildCostCsv(
       cacheMetric
         ? (r.measures.cacheCreationInputTokens ?? 0)
         : (r.measures.totalToolCalls ?? 0),
-      r.measures.totalTokens ?? 0,
+      llmTokens(r.measures),
     ];
   });
   return toCsv(header, body);

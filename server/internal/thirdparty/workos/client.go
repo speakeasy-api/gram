@@ -48,8 +48,7 @@ func IsNotFound(err error) bool {
 // wrapSDKError translates WorkOS SDK errors into APIError so that all WorkOS
 // errors surface through a single type. Non-HTTP errors are wrapped normally.
 func wrapSDKError(err error, context string) error {
-	var httpErr workos_errors.HTTPError
-	if errors.As(err, &httpErr) {
+	if httpErr, ok := errors.AsType[workos_errors.HTTPError](err); ok {
 		return &APIError{Method: "", Path: "", StatusCode: httpErr.Code, Body: httpErr.Message}
 	}
 	return fmt.Errorf("%s: %w", context, err)

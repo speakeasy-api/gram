@@ -193,8 +193,7 @@ func (s *Service) ServeConsentAction(w http.ResponseWriter, r *http.Request, end
 			case errors.Is(refreshErr, remotesessions.ErrRemoteSessionNotRefreshable):
 				return oops.E(oops.CodeBadRequest, refreshErr, "Reconnect this service before refreshing it.").LogWarn(ctx, logger)
 			default:
-				var tokenRefreshErr *remotesessions.TokenRefreshError
-				if errors.As(refreshErr, &tokenRefreshErr) {
+				if tokenRefreshErr, ok := errors.AsType[*remotesessions.TokenRefreshError](refreshErr); ok {
 					return oops.E(oops.CodeBadRequest, refreshErr, "Unable to refresh: %s", tokenRefreshErr.Reason).LogWarn(ctx, logger)
 				}
 				return oops.E(oops.CodeUnexpected, refreshErr, "refresh remote session").LogError(ctx, logger)

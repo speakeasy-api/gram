@@ -18,7 +18,13 @@ import { Button } from "@/components/ui/Button";
 import { Icon } from "@/components/ui/Icon";
 import { useQueryClient } from "@tanstack/react-query";
 import { format } from "date-fns";
-import { ArrowUpRight, CircleDashed, GitBranch, Pin } from "lucide-react";
+import {
+  ArrowUpRight,
+  CircleDashed,
+  GitBranch,
+  History,
+  Pin,
+} from "lucide-react";
 import { useCallback, useMemo, useState, type MouseEvent } from "react";
 import { toast } from "sonner";
 import { formatPlatform } from "@/lib/formatPlatform";
@@ -121,6 +127,20 @@ function SessionLineageIcons({
           <CircleDashed
             className="size-3.5"
             aria-label="Moved, continuation not yet captured"
+          />
+        </SimpleTooltip>
+      )}
+      {summary.recalledCount > 0 && (
+        <SimpleTooltip
+          tooltip={
+            summary.recalledCount === 1
+              ? "Recalled into a later session"
+              : `Recalled into ${summary.recalledCount} later sessions`
+          }
+        >
+          <History
+            className="size-3.5"
+            aria-label="Recalled into a later session"
           />
         </SimpleTooltip>
       )}

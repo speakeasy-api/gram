@@ -55,6 +55,9 @@ const (
 	OnboardingClientCodex        OnboardingClientFamily = "codex"
 	OnboardingClientCursor       OnboardingClientFamily = "cursor"
 	OnboardingClientOpencode     OnboardingClientFamily = "opencode"
+	// Any agent outside the certified set. It has no plugin package, so its
+	// walkthrough offers the remote MCP configuration only.
+	OnboardingClientOther OnboardingClientFamily = "other"
 )
 
 type OnboardingWorkflow struct {
@@ -652,7 +655,7 @@ func validOnboardingSource(surface OnboardingSourceSurface) bool {
 
 func validOnboardingClient(client OnboardingClientFamily) bool {
 	switch client {
-	case OnboardingClientClaudeCode, OnboardingClientClaudeCowork, OnboardingClientCodex, OnboardingClientCursor, OnboardingClientOpencode:
+	case OnboardingClientClaudeCode, OnboardingClientClaudeCowork, OnboardingClientCodex, OnboardingClientCursor, OnboardingClientOpencode, OnboardingClientOther:
 		return true
 	default:
 		return false

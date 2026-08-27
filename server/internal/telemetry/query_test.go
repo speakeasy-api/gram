@@ -894,6 +894,53 @@ func TestQuery_DefaultSortByAndTopN(t *testing.T) {
 	require.InDelta(t, 3.0, res.Table[10].Measures.TotalCost, 1e-9)
 }
 
+// sort_by=llm_tokens ranks by input + output, not the stored TUM total_tokens
+// (which adds cache writes) — a cache-heavy group must not displace a
+// higher-LLM group inside top_n on the surfaces that display LLM tokens.
+func TestQuery_SortByLLMTokens(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestLogsService(t)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	projectID := authCtx.ProjectID.String()
+
+	ctx = authztest.WithExactGrants(t, ctx, authz.Grant{
+		Scope:    authz.ScopeOrgRead,
+		Selector: authz.NewSelector(authz.ScopeOrgRead, authCtx.ActiveOrganizationID),
+	})
+
+	now := time.Date(2026, time.July, 14, 1, 0, 0, 0, time.UTC)
+	ts := now.Add(-10 * time.Minute)
+	// Cache-heavy: TUM total dwarfs its LLM tokens.
+	insertAttributeClaudeAPIRequestLog(t, ctx, projectID, ts, uuid.NewString(), 1, 10, 5, 0, 100000, "m", "cachey@x.com", "A", nil, "main", "", "", "", "")
+	// LLM-heavy: no cache writes, more input+output.
+	insertAttributeClaudeAPIRequestLog(t, ctx, projectID, ts, uuid.NewString(), 1, 1000, 500, 0, 0, "m", "llm@x.com", "B", nil, "main", "", "", "", "")
+
+	from := now.Add(-1 * time.Hour).Format(time.RFC3339)
+	to := now.Add(1 * time.Hour).Format(time.RFC3339)
+
+	var res *gen.QueryResult
+	require.Eventually(t, func() bool {
+		r, err := ti.service.Query(ctx, &gen.QueryPayload{
+			From:    from,
+			To:      to,
+			GroupBy: conv.PtrEmpty("email"),
+			SortBy:  "llm_tokens",
+			TopN:    1,
+		})
+		if err != nil || r == nil {
+			return false
+		}
+		res = r
+		return len(r.Table) == 2
+	}, 10*time.Second, 200*time.Millisecond)
+
+	require.Equal(t, "llm@x.com", res.Table[0].GroupValue)
+	require.Equal(t, "Other", res.Table[1].GroupValue)
+}
+
 // TestQuery_CountsToolCalls covers the provenance-first tool counting: Claude
 // tool calls come only from OTEL tool_result rows deduped by tool_use_id;
 // Codex/Cursor tool calls come from completed hook rows; Claude hook rows and

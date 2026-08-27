@@ -407,6 +407,7 @@ export function AgentProviderIcon({
       return <GleanIcon className={className} />;
     case "bedrock":
       return <BedrockIcon className={className} />;
+    case "catchall":
     case "unknown":
       return <GlobeIcon className={className} />;
   }
