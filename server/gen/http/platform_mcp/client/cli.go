@@ -100,8 +100,8 @@ func BuildRecordInstallIntentPayload(platformMcpRecordInstallIntentBody string, 
 		if err != nil {
 			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"client_family\": \"claude_cowork\"\n   }'")
 		}
-		if !(body.ClientFamily == "claude_code" || body.ClientFamily == "claude_cowork" || body.ClientFamily == "codex" || body.ClientFamily == "cursor" || body.ClientFamily == "opencode") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.client_family", body.ClientFamily, []any{"claude_code", "claude_cowork", "codex", "cursor", "opencode"}))
+		if !(body.ClientFamily == "claude_code" || body.ClientFamily == "claude_cowork" || body.ClientFamily == "codex" || body.ClientFamily == "cursor" || body.ClientFamily == "opencode" || body.ClientFamily == "other") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.client_family", body.ClientFamily, []any{"claude_code", "claude_cowork", "codex", "cursor", "opencode", "other"}))
 		}
 		if err != nil {
 			return nil, err

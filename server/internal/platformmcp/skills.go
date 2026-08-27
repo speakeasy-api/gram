@@ -783,7 +783,7 @@ func (s *PostgresSkillTargets) SkillTargets(ctx context.Context, organizationID 
 	limit := limitPerKind
 	// Clamped to the lookup ceiling before the narrowing conversion, so a caller
 	// cannot ask for a page size that does not fit the query parameter.
-	bounded := int32(min(max(limit, 1), maxSkillTargetLookup)) //nolint:gosec // bounded above by maxSkillTargetLookup
+	bounded := int32(min(max(limit, 1), maxSkillTargetLookup))
 	queries := platformrepo.New(s.db)
 	plugins, err := queries.ListPlatformMCPProjectPlugins(ctx, platformrepo.ListPlatformMCPProjectPluginsParams{
 		ProjectID:      projectID,

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -72,8 +73,8 @@ func (g *fakeTunnelGateway) forwardCount() int {
 func (g *fakeTunnelGateway) forwardFor(substr string) http.Header {
 	g.mu.Lock()
 	defer g.mu.Unlock()
-	for i := len(g.forwardBodies) - 1; i >= 0; i-- {
-		if strings.Contains(g.forwardBodies[i], substr) {
+	for i, v := range slices.Backward(g.forwardBodies) {
+		if strings.Contains(v, substr) {
 			return g.forwards[i]
 		}
 	}

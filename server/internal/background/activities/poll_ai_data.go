@@ -257,8 +257,7 @@ func (p *PollAIData) Do(ctx context.Context, input string) (err error) {
 // for organization members. Its ShareableError cause remains available to
 // internal callers, but RecordSchedulePollFailure stores only Error().
 func shareablePollError(schedule string, cause error) error {
-	var contentErr *aiintegrations.CodexCostContentError
-	if errors.As(cause, &contentErr) {
+	if contentErr, ok := errors.AsType[*aiintegrations.CodexCostContentError](cause); ok {
 		return oops.E(oops.CodeUnexpected, cause, "%s", contentErr.ShareableMessage())
 	}
 
@@ -277,8 +276,7 @@ func shareablePollError(schedule string, cause error) error {
 		}
 	}
 
-	var codexErr *codexapi.HTTPError
-	if errors.As(cause, &codexErr) {
+	if codexErr, ok := errors.AsType[*codexapi.HTTPError](cause); ok {
 		switch schedule {
 		case aiintegrations.ScheduleCodexCompliance:
 			switch codexErr.StatusCode {
@@ -313,16 +311,14 @@ func shareablePollError(schedule string, cause error) error {
 	if status := pollUnavailableHTTPStatus(cause); status != 0 {
 		return oops.E(oops.CodeUnavailable, cause, "provider api is temporarily unavailable (HTTP %d); the sync will back off and retry", status)
 	}
-	var exhausted *guardian.RetriesExhaustedError
-	if errors.As(cause, &exhausted) {
+	if _, ok := errors.AsType[*guardian.RetriesExhaustedError](cause); ok {
 		return oops.E(oops.CodeUnavailable, cause, "provider api is unreachable; the sync will back off and retry")
 	}
 
 	// An interior oops boundary already chose a safe public message and code
 	// (e.g. a schedule/provider mismatch or the telemetry insert wrap), so
 	// persist that instead of falling back to the generic schedule message.
-	var shareable *oops.ShareableError
-	if errors.As(cause, &shareable) {
+	if shareable, ok := errors.AsType[*oops.ShareableError](cause); ok {
 		return shareable
 	}
 
@@ -353,16 +349,13 @@ func shareablePollError(schedule string, cause error) error {
 // failures are permanent until the user fixes the integration configuration,
 // so retrying them is wasted work.
 func pollRejectedByProvider(err error) bool {
-	var cursorErr *cursorapi.HTTPError
-	if errors.As(err, &cursorErr) {
+	if cursorErr, ok := errors.AsType[*cursorapi.HTTPError](err); ok {
 		return cursorErr.StatusCode == 401
 	}
-	var anthropicErr *anthropicapi.HTTPError
-	if errors.As(err, &anthropicErr) {
+	if anthropicErr, ok := errors.AsType[*anthropicapi.HTTPError](err); ok {
 		return anthropicErr.StatusCode == 401 || anthropicErr.StatusCode == 403 || anthropicErr.StatusCode == 404
 	}
-	var codexErr *codexapi.HTTPError
-	if errors.As(err, &codexErr) {
+	if codexErr, ok := errors.AsType[*codexapi.HTTPError](err); ok {
 		return codexErr.StatusCode == 401 || codexErr.StatusCode == 403 || codexErr.StatusCode == 404
 	}
 	return false
@@ -388,8 +381,7 @@ func pollProviderUnavailable(err error) bool {
 	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
 		return false
 	}
-	var exhausted *guardian.RetriesExhaustedError
-	if errors.As(err, &exhausted) {
+	if exhausted, ok := errors.AsType[*guardian.RetriesExhaustedError](err); ok {
 		// Repeated transport failures with no response affirm an outage. A
 		// single response-less attempt means the retry policy refused to
 		// retry (TLS verification, redirect policy, resilience denial) —
@@ -413,8 +405,7 @@ func pollUnavailableHTTPStatus(err error) int {
 	if errors.As(err, &exhausted) && statusUnavailable(exhausted.StatusCode) {
 		return exhausted.StatusCode
 	}
-	var rateLimited *cursorapi.RateLimitError
-	if errors.As(err, &rateLimited) {
+	if _, ok := errors.AsType[*cursorapi.RateLimitError](err); ok {
 		return http.StatusTooManyRequests
 	}
 	var cursorErr *cursorapi.HTTPError
@@ -449,8 +440,7 @@ func newPollFailureError(configID uuid.UUID, provider string, attempt int32, rej
 		Progress:            nil,
 	}
 
-	var syncErr *aiintegrations.SyncError
-	if errors.As(cause, &syncErr) {
+	if syncErr, ok := errors.AsType[*aiintegrations.SyncError](cause); ok {
 		details.Progress = syncErr.Progress
 		details.Stages = make([]stageFailureDetail, 0, len(syncErr.Stages))
 		for _, stage := range syncErr.Stages {

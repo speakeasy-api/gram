@@ -28,6 +28,25 @@ func (c *Codec) Name() string {
 	return c.codec.GetName()
 }
 
+// Count counts arbitrary text content.
+func (c *Codec) Count(ctx context.Context, content ...string) (int, error) {
+	count := 0
+
+	for _, part := range content {
+		if err := ctx.Err(); err != nil {
+			return 0, fmt.Errorf("count aborted: %w", err)
+		}
+
+		c, err := c.codec.Count(part)
+		if err != nil {
+			return 0, fmt.Errorf("codec count: %w", err)
+		}
+		count += c
+	}
+
+	return count, nil
+}
+
 // CountInput counts assistant text, user prompts, tool names, tool inputs, and
 // tool outputs. Other message metadata and part variants do not contribute.
 func (c *Codec) CountInput(ctx context.Context, messages genaiconv.InputMessages) (int, error) {

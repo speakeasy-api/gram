@@ -1014,6 +1014,9 @@ type GetRiskBlockResponseBody struct {
 	PolicyName *string `form:"policy_name,omitempty" json:"policy_name,omitempty" xml:"policy_name,omitempty"`
 	// Name of the tool that was blocked, when known.
 	ToolName *string `form:"tool_name,omitempty" json:"tool_name,omitempty" xml:"tool_name,omitempty"`
+	// Agent surface that reported the blocked call (adapter slug, e.g.
+	// "openclaw"), when known.
+	Provider *string `form:"provider,omitempty" json:"provider,omitempty" xml:"provider,omitempty"`
 	// When the block occurred.
 	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
 	// Existing feedback sentiment recorded for this block, when any.
@@ -1033,6 +1036,9 @@ type SubmitRiskBlockFeedbackResponseBody struct {
 	PolicyName *string `form:"policy_name,omitempty" json:"policy_name,omitempty" xml:"policy_name,omitempty"`
 	// Name of the tool that was blocked, when known.
 	ToolName *string `form:"tool_name,omitempty" json:"tool_name,omitempty" xml:"tool_name,omitempty"`
+	// Agent surface that reported the blocked call (adapter slug, e.g.
+	// "openclaw"), when known.
+	Provider *string `form:"provider,omitempty" json:"provider,omitempty" xml:"provider,omitempty"`
 	// When the block occurred.
 	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
 	// Existing feedback sentiment recorded for this block, when any.
@@ -16299,6 +16305,7 @@ func NewGetRiskBlockRiskBlockOK(body *GetRiskBlockResponseBody) *risk.RiskBlock 
 		Reason:     *body.Reason,
 		PolicyName: *body.PolicyName,
 		ToolName:   body.ToolName,
+		Provider:   body.Provider,
 		CreatedAt:  *body.CreatedAt,
 		Feedback:   body.Feedback,
 	}
@@ -16465,6 +16472,7 @@ func NewSubmitRiskBlockFeedbackRiskBlockOK(body *SubmitRiskBlockFeedbackResponse
 		Reason:     *body.Reason,
 		PolicyName: *body.PolicyName,
 		ToolName:   body.ToolName,
+		Provider:   body.Provider,
 		CreatedAt:  *body.CreatedAt,
 		Feedback:   body.Feedback,
 	}

@@ -1,4 +1,4 @@
-version: v2.11.2
+version: v2.13.1
 
 plugins:
   - module: github.com/speakeasy-api/gram

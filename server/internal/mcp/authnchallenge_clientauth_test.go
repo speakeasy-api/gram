@@ -296,7 +296,7 @@ func TestHandleToken_PrivateKeyJWT_RefreshGrant(t *testing.T) {
 
 	refreshToken := seedUserSessionWithSelection(t, ctx, ti, issuer.ID, client.ID, nil)
 
-	w := postRefreshGrant(t, ti, toolset.McpSlug.String, client.ClientID, refreshToken)
+	w := postRefreshGrant(t, ti, toolset.McpSlug.String, client.ClientID, refreshToken, "")
 	requireInvalidClient(t, w)
 
 	form := url.Values{}

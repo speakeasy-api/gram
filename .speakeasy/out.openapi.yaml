@@ -19715,6 +19715,106 @@ paths:
         - apikey_header_Gram-Key: []
           project_slug_header_Gram-Project: []
         - {}
+  /rpc/identity.resolve:
+    get:
+      description: Resolve an identity URN into every identifier the subject's activity is recorded under.
+      operationId: resolveIdentity
+      parameters:
+        - allowEmptyValue: true
+          description: The identity URN to resolve, in the form '<kind>:<id>'. Kind is one of 'user' (Gram user id), 'email', 'external' (the external user id an agent reported), 'apikey', or 'agent'. Callers pass whichever identifier they hold; every URN for the same subject resolves to the same identity.
+          example: user:user_01abc
+          in: query
+          name: urn
+          required: true
+          schema:
+            description: The identity URN to resolve, in the form '<kind>:<id>'. Kind is one of 'user' (Gram user id), 'email', 'external' (the external user id an agent reported), 'apikey', or 'agent'. Callers pass whichever identifier they hold; every URN for the same subject resolves to the same identity.
+            example: user:user_01abc
+            type: string
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IdentityModel'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - apikey_header_Gram-Key: []
+        - session_header_Gram-Session: []
+        - {}
+      summary: resolve identity
+      tags:
+        - identity
+      x-speakeasy-name-override: resolve
+      x-speakeasy-react-hook:
+        name: Identity
   /rpc/instances.get:
     get:
       description: Load all relevant data for an instance of a toolset and environment
@@ -32971,6 +33071,7 @@ paths:
               - cursor
               - codex
               - opencode
+              - copilot
               - openclaw
             type: string
         - allowEmptyValue: true
@@ -33064,122 +33165,6 @@ paths:
       tags:
         - plugins
       x-speakeasy-name-override: downloadObservabilityPlugin
-  /rpc/plugins.downloadPlatformMCPPlugin:
-    get:
-      description: Download a credential-free Platform MCP plugin ZIP from the server-owned package definition. This does not require a GitHub marketplace and does not mint an API key.
-      operationId: downloadPlatformMCPPlugin
-      parameters:
-        - allowEmptyValue: true
-          description: Target package format.
-          in: query
-          name: platform
-          required: true
-          schema:
-            description: Target package format.
-            enum:
-              - claude
-              - cursor
-              - codex
-              - opencode
-              - agent-plugin
-            type: string
-        - allowEmptyValue: true
-          description: Session header
-          in: header
-          name: Gram-Session
-          schema:
-            description: Session header
-            type: string
-        - allowEmptyValue: true
-          description: project header
-          in: header
-          name: Gram-Project
-          schema:
-            description: project header
-            type: string
-      responses:
-        "200":
-          content:
-            application/zip:
-              schema:
-                format: binary
-                type: string
-          description: OK response.
-          headers:
-            Content-Disposition:
-              schema:
-                type: string
-            Content-Type:
-              schema:
-                type: string
-        "400":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'bad_request: request is invalid'
-        "401":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'unauthorized: unauthorized access'
-        "403":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'forbidden: permission denied'
-        "404":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'not_found: resource not found'
-        "409":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'conflict: resource already exists'
-        "412":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'failed_precondition: resource is not in a valid state for this operation'
-        "415":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'unsupported_media: unsupported media type'
-        "422":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'invalid: request contains one or more invalidation fields'
-        "500":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'unexpected: an unexpected error occurred'
-        "502":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'gateway_error: an unexpected error occurred'
-      security:
-        - project_slug_header_Gram-Project: []
-          session_header_Gram-Session: []
-        - {}
-      summary: downloadPlatformMCPPlugin plugins
-      tags:
-        - plugins
-      x-speakeasy-name-override: downloadPlatformMCPPlugin
   /rpc/plugins.downloadPluginPackage:
     get:
       description: Download a ZIP of a single plugin package for direct installation.
@@ -33394,88 +33379,6 @@ paths:
       x-speakeasy-name-override: getMarketplaceSettings
       x-speakeasy-react-hook:
         name: MarketplaceSettings
-  /rpc/plugins.getPlatformMCPPackageStatus:
-    get:
-      description: Get the organization-scoped Platform MCP package and canonical default-project marketplace status.
-      operationId: getPlatformMCPPackageStatus
-      parameters:
-        - allowEmptyValue: true
-          description: Session header
-          in: header
-          name: Gram-Session
-          schema:
-            description: Session header
-            type: string
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/PlatformMCPPackageStatusResult'
-          description: OK response.
-        "400":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'bad_request: request is invalid'
-        "401":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'unauthorized: unauthorized access'
-        "403":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'forbidden: permission denied'
-        "404":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'not_found: resource not found'
-        "409":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'conflict: resource already exists'
-        "415":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'unsupported_media: unsupported media type'
-        "422":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'invalid: request contains one or more invalidation fields'
-        "500":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'unexpected: an unexpected error occurred'
-        "502":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'gateway_error: an unexpected error occurred'
-      security:
-        - session_header_Gram-Session: []
-        - {}
-      summary: getPlatformMCPPackageStatus plugins
-      tags:
-        - plugins
-      x-speakeasy-name-override: getPlatformMCPPackageStatus
-      x-speakeasy-react-hook:
-        name: PlatformMCPPackageStatus
   /rpc/plugins.getPlugin:
     get:
       description: Get a plugin with its servers and assignments.
@@ -34041,102 +33944,6 @@ paths:
       x-speakeasy-name-override: removePluginServer
       x-speakeasy-react-hook:
         name: RemovePluginServer
-  /rpc/plugins.repairPlatformMCPPackage:
-    post:
-      description: Idempotently publish or repair the Platform MCP package in the organization's canonical default-project marketplace.
-      operationId: repairPlatformMCPPackage
-      parameters:
-        - allowEmptyValue: true
-          description: Session header
-          in: header
-          name: Gram-Session
-          schema:
-            description: Session header
-            type: string
-        - allowEmptyValue: true
-          description: project header
-          in: header
-          name: Gram-Project
-          schema:
-            description: project header
-            type: string
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/PlatformMCPPackageStatusResult'
-          description: OK response.
-        "400":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'bad_request: request is invalid'
-        "401":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'unauthorized: unauthorized access'
-        "403":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'forbidden: permission denied'
-        "404":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'not_found: resource not found'
-        "409":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'conflict: resource already exists'
-        "412":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'failed_precondition: resource is not in a valid state for this operation'
-        "415":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'unsupported_media: unsupported media type'
-        "422":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'invalid: request contains one or more invalidation fields'
-        "500":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'unexpected: an unexpected error occurred'
-        "502":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'gateway_error: an unexpected error occurred'
-      security:
-        - project_slug_header_Gram-Project: []
-          session_header_Gram-Session: []
-        - {}
-      summary: repairPlatformMCPPackage plugins
-      tags:
-        - plugins
-      x-speakeasy-name-override: repairPlatformMCPPackage
-      x-speakeasy-react-hook:
-        name: RepairPlatformMCPPackage
   /rpc/plugins.setPluginAssignments:
     put:
       description: Replace all assignments for a plugin with the given list of principal URNs.
@@ -44556,6 +44363,20 @@ paths:
           name: include_scored_sessions
           schema:
             description: Include a newest-first page of scored sessions. Intended for one skill detail view.
+            type: boolean
+        - allowEmptyValue: true
+          description: Calculate attributed session cost. Disable for surfaces that do not display it.
+          in: query
+          name: include_session_cost
+          schema:
+            description: Calculate attributed session cost. Disable for surfaces that do not display it.
+            type: boolean
+        - allowEmptyValue: true
+          description: Calculate the current-versus-predecessor efficacy regression signal.
+          in: query
+          name: include_regression_signal
+          schema:
+            description: Calculate the current-versus-predecessor efficacy regression signal.
             type: boolean
         - allowEmptyValue: true
           description: Cursor for the next page of scored sessions.
@@ -69523,6 +69344,81 @@ components:
         - success_count
         - failure_count
         - failure_rate
+    IdentityDirectory:
+      type: object
+      properties:
+        cost_center_name:
+          type: string
+          description: The directory cost centre.
+        department_name:
+          type: string
+          description: The directory department.
+        division_name:
+          type: string
+          description: The directory division.
+        employee_type:
+          type: string
+          description: The directory employment type.
+        groups:
+          type: array
+          items:
+            type: string
+          description: The directory groups the identity currently belongs to.
+        job_title:
+          type: string
+          description: The directory job title.
+      description: 'WorkOS Directory Sync attributes for an identity. Every field is mapped by the customer''s IdP: scalar attributes are absent when unset or blank, and ''groups'' is always present, empty when the identity belongs to none.'
+      required:
+        - groups
+    IdentityModel:
+      type: object
+      properties:
+        canonical_urn:
+          type: string
+          description: The identity URN clients should navigate to. Resolving any URN for the same subject returns this one, so links built from different identifiers converge on a single page.
+        directory:
+          $ref: '#/components/schemas/IdentityDirectory'
+        display_name:
+          type: string
+          description: The subject's name, falling back to its primary email.
+        emails:
+          type: array
+          items:
+            type: string
+          description: Every address the subject is known by — directory email first, then linked AI account emails. Telemetry and cost aggregate over this set.
+        external_user_ids:
+          type: array
+          items:
+            type: string
+          description: The identifiers agents report for this subject. Risk findings key on these.
+        kind:
+          type: string
+          description: 'What sort of subject this is: ''user'' for a directory user, ''apikey'' for a subject acting under an API key, ''agent'' for an agent identity, or ''unattributed'' for activity that cannot be attributed to exactly one directory user — an identifier matching no directory row, or one several members claim.'
+          enum:
+            - user
+            - apikey
+            - agent
+            - unattributed
+        photo_url:
+          type: string
+          description: The subject's avatar, when the directory supplied one.
+        user_ids:
+          type: array
+          items:
+            type: string
+          description: The Gram user ids this identity resolves to, the first being the directory owner. Empty when the subject matches no directory row. Audit logs, chats, user sessions and plugin assignments key on these.
+        workos_user_id:
+          type: string
+          description: The WorkOS user id, which RBAC role assignments key on. Absent for subjects with no WorkOS link.
+      description: One subject with every identifier its activity is keyed under, so a client can query each subsystem with the identifier that subsystem expects.
+      required:
+        - kind
+        - canonical_urn
+        - display_name
+        - user_ids
+        - emails
+        - external_user_ids
+        - directory
     InferenceSpendCap:
       type: object
       properties:
@@ -73994,72 +73890,6 @@ components:
         - selected_use_verified
         - distribution_expected_version
         - repair_action
-    PlatformMCPPackageStatusResult:
-      type: object
-      properties:
-        admission:
-          type: string
-          description: 'Organization package admission: enabled, disabled, or indeterminate.'
-          enum:
-            - enabled
-            - disabled
-            - indeterminate
-        agent_plugin_filename:
-          type: string
-          description: Deterministic portable Agent Plugins direct-download ZIP filename.
-        available:
-          type: boolean
-          description: Whether organization admission currently permits installing the package.
-        canonical_project_slug:
-          type: string
-          description: Literal default project that owns the canonical organization marketplace, when present.
-        claude_filename:
-          type: string
-          description: Deterministic Claude direct-download ZIP filename.
-        direct_download_available:
-          type: boolean
-          description: Whether keyless direct downloads are currently admitted.
-        freshness:
-          type: string
-          description: 'Platform package freshness: current, stale, missing, unavailable, or indeterminate.'
-          enum:
-            - current
-            - stale
-            - missing
-            - unavailable
-            - indeterminate
-        marketplace_connected:
-          type: boolean
-          description: Whether the canonical default project has a published GitHub marketplace.
-        marketplace_name:
-          type: string
-          description: Effective name of the canonical marketplace, when its default project is present.
-        marketplace_url:
-          type: string
-          description: Git URL used by supported clients to register the canonical marketplace.
-        package_name:
-          type: string
-          description: Fixed Platform MCP package identity.
-        package_present:
-          type: boolean
-          description: Whether the last successful canonical publish recorded the Platform package fingerprint.
-        repair_allowed:
-          type: boolean
-          description: Whether an organization admin can publish or repair the canonical package now.
-        repo_url:
-          type: string
-          description: Canonical GitHub repository URL.
-      required:
-        - admission
-        - available
-        - package_name
-        - claude_filename
-        - agent_plugin_filename
-        - marketplace_connected
-        - package_present
-        - freshness
-        - repair_allowed
-        - direct_download_available
     PlatformToolDefinition:
       type: object
       properties:
@@ -75172,6 +75002,7 @@ components:
           enum:
             - total_cost
             - total_tokens
+            - llm_tokens
             - total_input_tokens
             - total_output_tokens
             - cache_read_input_tokens
@@ -75345,6 +75176,7 @@ components:
             - codex
             - cursor
             - opencode
+            - other
       required:
         - client_family
     RecordSkillResult:
@@ -76155,6 +75987,15 @@ components:
           description: The created resolution records.
       required:
         - resolutions
+    ResolveIdentityForm:
+      type: object
+      properties:
+        urn:
+          type: string
+          description: The identity URN to resolve, in the form '<kind>:<id>'. Kind is one of 'user' (Gram user id), 'email', 'external' (the external user id an agent reported), 'apikey', or 'agent'. Callers pass whichever identifier they hold; every URN for the same subject resolves to the same identity.
+          example: user:user_01abc
+      required:
+        - urn
     ResolveShadowMCPInventoryRequestForm:
       type: object
       properties:
@@ -76298,6 +76139,9 @@ components:
           type: string
           description: The project the block belongs to.
           format: uuid
+        provider:
+          type: string
+          description: Agent surface that reported the blocked call (adapter slug, e.g. "openclaw"), when known.
         reason:
           type: string
           description: Human-readable reason the tool call was blocked.
@@ -85213,6 +85057,9 @@ components:
         provider:
           type: string
           description: AI provider the account belongs to ('anthropic', 'openai', 'cursor')
+        user_id:
+          type: string
+          description: Gram user id of the directory owner of this account; the authoritative link between account-email-keyed usage and the org member
       description: 'A linked AI account for a user. The identity is (provider, email): the same email registered on two providers is two distinct accounts.'
       required:
         - provider
@@ -86034,6 +85881,8 @@ tags:
     description: Manages display name overrides for hooks servers.
   - name: hooks
     description: Receives hook events from coding assistants for tool usage observability.
+  - name: identity
+    description: Resolves the identifiers Gram records activity under into a single identity.
   - name: instances
     description: Consumer APIs for interacting with all relevant data for an instance of a toolset and environment.
   - name: integrations

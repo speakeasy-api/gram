@@ -53,7 +53,7 @@ func TestCompileAgentPluginUsesPinnedSchemasAndKeylessMode(t *testing.T) {
 		Skills:               []PluginSkillInfo{{Name: "review", Content: "---\nname: review\ndescription: Review code.\n---\n"}},
 		AgentPluginsV1Issues: nil,
 	}
-	cfg := GenerateConfig{OrgName: "Example", OrgEmail: "", OrgID: "org-example", ServerURL: "https://app.getgram.ai", APIKey: "consumer-secret", HooksAPIKey: "hooks-secret", ProjectSlug: "default", IsDefaultProject: true, Version: "1", PlatformMCPEnabled: false, MarketplaceName: "", BrowserLogin: false, HooksOrgName: "", InstallFailOpen: false}
+	cfg := GenerateConfig{OrgName: "Example", OrgEmail: "", OrgID: "org-example", ServerURL: "https://app.getgram.ai", APIKey: "consumer-secret", HooksAPIKey: "hooks-secret", ProjectSlug: "default", IsDefaultProject: true, Version: "1", MarketplaceName: "", BrowserLogin: false, HooksOrgName: "", InstallFailOpen: false}
 
 	files, err := compileAgentPlugin(plugin, cfg, agentPluginCredentialsKeyless)
 	require.NoError(t, err)
@@ -92,7 +92,7 @@ func TestCompileAgentPluginUsesPinnedSchemasAndKeylessMode(t *testing.T) {
 func TestAgentPluginMarketplaceKeepsNativeSources(t *testing.T) {
 	t.Parallel()
 
-	cfg := GenerateConfig{OrgName: "Example", OrgEmail: "", OrgID: "", ServerURL: "https://app.getgram.ai", APIKey: "", HooksAPIKey: "", ProjectSlug: "default", IsDefaultProject: true, Version: "", PlatformMCPEnabled: false, MarketplaceName: "", BrowserLogin: false, HooksOrgName: "", InstallFailOpen: false}
+	cfg := GenerateConfig{OrgName: "Example", OrgEmail: "", OrgID: "", ServerURL: "https://app.getgram.ai", APIKey: "", HooksAPIKey: "", ProjectSlug: "default", IsDefaultProject: true, Version: "", MarketplaceName: "", BrowserLogin: false, HooksOrgName: "", InstallFailOpen: false}
 	compatible := PluginInfo{Name: "Tools", Slug: "tools", Description: "", Servers: []PluginServerInfo{{DisplayName: "tools", Policy: "required", MCPURL: "https://example.com/mcp", IsPublic: true, IsOAuth: false, IsUnproxied: false, EnvConfigs: nil}}, Skills: nil, AgentPluginsV1Issues: nil}
 	incompatible := compatible
 	incompatible.Servers = append([]PluginServerInfo(nil), compatible.Servers...)
@@ -117,12 +117,25 @@ func TestAgentPluginMarketplaceKeepsNativeSources(t *testing.T) {
 	require.Equal(t, "./tools-codex", sharedCodex.Plugins[0].Source.Path)
 	require.Equal(t, "./tools-codex", legacyCodex.Plugins[0].Source.Path)
 
+	// Copilot serves feature plugins only through the Agent Plugins package, so
+	// its manifest — unlike the three native ones above — does track
+	// compatibility: an incompatible plugin is omitted rather than pointed at a
+	// directory generateMCPFiles never wrote.
+	var sharedCopilot, legacyCopilot marketplaceManifest
+	require.NoError(t, json.Unmarshal(sharedFiles["marketplace.json"], &sharedCopilot))
+	require.NoError(t, json.Unmarshal(legacyFiles["marketplace.json"], &legacyCopilot))
+	require.Equal(t, "./agent-plugins/tools", sharedCopilot.Plugins[0].Source)
+	require.Empty(t, legacyCopilot.Plugins)
+
 	sharedFingerprint, err := MCPFingerprints([]PluginInfo{compatible}, cfg)
 	require.NoError(t, err)
 	legacyFingerprint, err := MCPFingerprints([]PluginInfo{incompatible}, cfg)
 	require.NoError(t, err)
 	require.NotEqual(t, sharedFingerprint["tools"], legacyFingerprint["tools"])
-	require.Equal(t, sharedFingerprint[mcpSharedFingerprintKey], legacyFingerprint[mcpSharedFingerprintKey])
+	// The shared fingerprint follows the Copilot manifest, so flipping a plugin's
+	// portability republishes the catalog — which is the point: the entry has to
+	// appear or disappear for Copilot to see the change.
+	require.NotEqual(t, sharedFingerprint[mcpSharedFingerprintKey], legacyFingerprint[mcpSharedFingerprintKey])
 }
 
 func TestAgentPluginZipIsDeterministicAndExecutable(t *testing.T) {

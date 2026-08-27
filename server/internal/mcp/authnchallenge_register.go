@@ -96,8 +96,7 @@ func (s *Service) ServeRegister(w http.ResponseWriter, r *http.Request, endpoint
 
 	var req usersessions.RegistrationRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		var maxBytesErr *http.MaxBytesError
-		if errors.As(err, &maxBytesErr) {
+		if _, ok := errors.AsType[*http.MaxBytesError](err); ok {
 			return writeDCRError(ctx, w, logger, "invalid_client_metadata", fmt.Sprintf("request body exceeds %d bytes", dcrMaxBodyBytes))
 		}
 		return writeDCRError(ctx, w, logger, "invalid_client_metadata", "request body is not valid JSON")
@@ -105,8 +104,7 @@ func (s *Service) ServeRegister(w http.ResponseWriter, r *http.Request, endpoint
 
 	req.SetDefaults()
 	if err := req.Validate(usersessions.SupportedAuthMethods); err != nil {
-		var oauthErr *oauthwire.Error
-		if errors.As(err, &oauthErr) {
+		if oauthErr, ok := errors.AsType[*oauthwire.Error](err); ok {
 			return writeDCRError(ctx, w, logger, oauthErr.Code, oauthErr.Description)
 		}
 		return oops.E(oops.CodeUnexpected, err, "validate DCR request").LogError(ctx, logger)

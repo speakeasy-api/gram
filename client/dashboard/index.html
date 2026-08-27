@@ -2,8 +2,10 @@
 <html lang="en" class="dark:scheme-dark">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" id="favicon" href="/favicon.png" />
-    <link rel="alternate icon" id="favicon-alt" href="/favicon.ico" />
+    <!-- The SVG adapts to the browser color scheme on its own; the .ico is the
+         fallback for browsers that don't render SVG favicons. -->
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="alternate icon" href="/favicon.ico" />
 
     <!-- Apply the theme class before first paint to avoid a flash of the
          wrong theme on load. Mirrors App.tsx (key: "preferred-theme",

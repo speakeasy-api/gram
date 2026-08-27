@@ -1,5 +1,8 @@
 import { AgentProviderIcon } from "@/components/agent-providers/AgentProviderIcon";
-import { agentProvidersForSurface } from "@/components/agent-providers/agent-providers";
+import {
+  AGENT_PROVIDERS,
+  agentProvidersForSurface,
+} from "@/components/agent-providers/agent-providers";
 import { GramIcon } from "@/components/gram-logo/variants/icon";
 import { ModeSwitchStarfield } from "@/components/mode-switch-starfield";
 import { RequireScope } from "@/components/require-scope";
@@ -10,10 +13,16 @@ import { useState } from "react";
 import { PlatformMCPOnboardingContent } from "./PlatformMCP";
 
 // The agents the Platform MCP walkthrough supports, with the same brand marks
-// and copy the setup wizard uses.
-const AGENTS = agentProvidersForSurface("plugins").filter(
-  (provider) => provider.available,
-);
+// and copy the setup wizard uses, and a catch-all last. The catch-all is
+// appended here rather than added to the "plugins" surface because that surface
+// also drives the marketplace install dialog, which has per-agent plugin
+// instructions an uncertified agent has no answer for.
+const AGENTS = [
+  ...agentProvidersForSurface("plugins").filter(
+    (provider) => provider.available,
+  ),
+  { id: "other" as const, ...AGENT_PROVIDERS.other },
+];
 
 const STEPS = [
   { index: "01", label: "Pick your agent" },
@@ -122,8 +131,13 @@ function HeadlessHero(): JSX.Element {
                   {/* The vendor marks clash out of the box — an orange
                       squircle next to a flat black cube next to a line glyph.
                       Desaturated they read as one set; the row's own hover
-                      brings the brand color back. */}
-                  <span className="border-neutral-softest flex h-8 w-8 shrink-0 items-center justify-center border bg-white/5">
+                      brings the brand color back.
+
+                      The color is set here because the monochrome marks
+                      (Cursor, Codex, opencode, the catch-all globe) are drawn
+                      in currentColor: without it they inherit the page's ink
+                      foreground and disappear into this dark panel. */}
+                  <span className="text-default-fixed-light border-neutral-softest flex h-8 w-8 shrink-0 items-center justify-center border bg-white/5">
                     <AgentProviderIcon
                       source={agent.iconSource}
                       className="h-4 w-4 opacity-80 grayscale transition group-hover:opacity-100 group-hover:grayscale-0"

@@ -64,8 +64,7 @@ func (s *Service) handleMetaDescribeServerCall(
 	}
 	catalog, err := s.describeMetaMember(ctx, logger, gate, member)
 	if err != nil {
-		var memberErr *metaMemberError
-		if errors.As(err, &memberErr) {
+		if memberErr, ok := errors.AsType[*metaMemberError](err); ok {
 			return marshalMetaToolError(ctx, logger, req.ID, memberErr.message)
 		}
 		return nil, err
@@ -162,8 +161,7 @@ func (s *Service) handleMetaDescribeToolsCall(
 		if err != nil {
 			// A member outage degrades only that member: its names land in
 			// failed while every other member is still described.
-			var memberErr *metaMemberError
-			if errors.As(err, &memberErr) {
+			if memberErr, ok := errors.AsType[*metaMemberError](err); ok {
 				failed = append(failed, metamcp.FailedServer{Server: mr.member.slug, Message: memberErr.message})
 				continue
 			}
@@ -226,8 +224,7 @@ func (s *Service) handleMetaExecuteToolCall(
 
 	toolset, inputs, err := s.buildMemberDispatch(ctx, logger, gate, member)
 	if err != nil {
-		var memberErr *metaMemberError
-		if errors.As(err, &memberErr) {
+		if memberErr, ok := errors.AsType[*metaMemberError](err); ok {
 			return marshalMetaToolError(ctx, logger, req.ID, memberErr.message)
 		}
 		return nil, err

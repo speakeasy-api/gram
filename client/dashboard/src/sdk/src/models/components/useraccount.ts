@@ -36,6 +36,10 @@ export type UserAccount = {
    * AI provider the account belongs to ('anthropic', 'openai', 'cursor')
    */
   provider: string;
+  /**
+   * Gram user id of the directory owner of this account; the authoritative link between account-email-keyed usage and the org member
+   */
+  userId?: string | undefined;
 };
 
 /** @internal */
@@ -48,12 +52,14 @@ export const UserAccount$inboundSchema: z.ZodMiniType<UserAccount, unknown> = z
       id: z.optional(z.string()),
       last_seen_unix_nano: z.optional(z.string()),
       provider: z.string(),
+      user_id: z.optional(z.string()),
     }),
     z.transform((v) => {
       return remap$(v, {
         "account_type": "accountType",
         "external_org_id": "externalOrgId",
         "last_seen_unix_nano": "lastSeenUnixNano",
+        "user_id": "userId",
       });
     }),
   );

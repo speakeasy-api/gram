@@ -351,8 +351,13 @@ BEGIN
   INSERT INTO organization_metadata (id, name, slug, gram_account_type, whitelisted)
   VALUES (demo_org, 'Acme Demo Org', 'acme-demo', 'enterprise', TRUE)
   ON CONFLICT (id) DO UPDATE
+    -- whitelisted is repaired, not just set on insert: a developer who logged
+    -- in before seeding already has this row, created un-whitelisted by the
+    -- auth callback, and without this the seed leaves them on the BookDemo
+    -- gate.
     SET name = EXCLUDED.name, slug = EXCLUDED.slug,
-        gram_account_type = EXCLUDED.gram_account_type;
+        gram_account_type = EXCLUDED.gram_account_type,
+        whitelisted = EXCLUDED.whitelisted;
 
   -- plugin_servers RESTRICTs the mcp_server it attaches, and adding a server
   -- auto-attaches it to the Default plugin — so in the writable local tenant

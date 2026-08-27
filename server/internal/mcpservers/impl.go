@@ -232,7 +232,7 @@ func (s *Service) scheduleDefaultServerIcon(ctx context.Context, projectID, mcpS
 	if !ids.UnproxiedMcpServerID.Valid && !ids.RemoteMcpServerID.Valid {
 		return
 	}
-	bgCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 30*time.Second) //nolint:gosec // cancel is deferred inside the detached goroutine below
+	bgCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 30*time.Second)
 	logger := s.logger.With(attr.SlogProjectID(projectID.String()))
 	go func() {
 		defer cancel()
@@ -755,11 +755,10 @@ func (s *Service) triggerInitialPublishIfNeeded(ctx context.Context, authCtx *co
 
 	enqueueCtx := context.WithoutCancel(ctx)
 	if _, err := background.ExecutePluginInitialPublishWorkflow(enqueueCtx, s.temporalEnv, plugins.PublishProjectInput{
-		ProjectID:              *authCtx.ProjectID,
-		CreatedByUserID:        authCtx.UserID,
-		CommitMessage:          "Initial marketplace publish",
-		ForcePlatformMCPRepair: false,
-		SkipIfUnchanged:        false,
+		ProjectID:       *authCtx.ProjectID,
+		CreatedByUserID: authCtx.UserID,
+		CommitMessage:   "Initial marketplace publish",
+		SkipIfUnchanged: false,
 	}); err != nil {
 		s.logger.WarnContext(ctx, "failed to enqueue initial plugin publish", attr.SlogError(err))
 	}

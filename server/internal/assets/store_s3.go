@@ -292,14 +292,12 @@ func (s *s3ChunkReader) Close() error {
 
 func isS3NotFoundError(err error) bool {
 	// Check if the error is a "not found" error
-	var notFound *types.NotFound
-	if errors.As(err, &notFound) {
+	if _, ok := errors.AsType[*types.NotFound](err); ok {
 		return true
 	}
 
 	// Also check for NoSuchKey (some S3-compatible services use this)
-	var noSuchKey *types.NoSuchKey
-	if errors.As(err, &noSuchKey) {
+	if _, ok := errors.AsType[*types.NoSuchKey](err); ok {
 		return true
 	}
 

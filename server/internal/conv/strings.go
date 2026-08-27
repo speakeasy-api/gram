@@ -46,3 +46,28 @@ func TruncateDetail(s string, maxRunes int) string {
 
 	return string(runes[:maxRunes]) + truncatedDetailNotice
 }
+
+// DedupeNonEmpty drops blanks and repeats while keeping first-seen order.
+// Dropping blanks is the load-bearing half for identity-filter callers: a
+// blank in a key set would match every email-less row in scope — everyone
+// else's rows.
+func DedupeNonEmpty(values []string) []string {
+	if len(values) == 0 {
+		return nil
+	}
+
+	seen := make(map[string]struct{}, len(values))
+	out := make([]string, 0, len(values))
+	for _, value := range values {
+		if value == "" {
+			continue
+		}
+		if _, ok := seen[value]; ok {
+			continue
+		}
+		seen[value] = struct{}{}
+		out = append(out, value)
+	}
+
+	return out
+}

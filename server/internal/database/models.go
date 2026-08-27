@@ -529,6 +529,19 @@ type CustomDomain struct {
 	Deleted                  bool
 }
 
+type DataExportRoute struct {
+	ID                uuid.UUID
+	OrganizationID    string
+	ProjectID         uuid.UUID
+	DataSource        string
+	Enabled           bool
+	OtelDestinationID uuid.NullUUID
+	CreatedAt         pgtype.Timestamptz
+	UpdatedAt         pgtype.Timestamptz
+	DeletedAt         pgtype.Timestamptz
+	Deleted           bool
+}
+
 type Deployment struct {
 	ID             uuid.UUID
 	Seq            int64
@@ -1533,6 +1546,19 @@ type OrganizationUserRelationship struct {
 	UpdatedAt          pgtype.Timestamptz
 	DeletedAt          pgtype.Timestamptz
 	Deleted            bool
+}
+
+type OtelDestination struct {
+	ID               uuid.UUID
+	OrganizationID   string
+	ProjectID        uuid.UUID
+	EndpointUrl      string
+	HeadersEncrypted pgtype.Text
+	SensitiveData    pgtype.Text
+	CreatedAt        pgtype.Timestamptz
+	UpdatedAt        pgtype.Timestamptz
+	DeletedAt        pgtype.Timestamptz
+	Deleted          bool
 }
 
 type OtelForwardingConfig struct {
