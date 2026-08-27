@@ -1,4 +1,4 @@
-// tokenservice_expiry_skew_test.go pins where accessTokenExpirySkew applies on
+// tokenservice_expiry_skew_test.go pins where AccessTokenExpirySkew applies on
 // the lazy request path. The skew trades one refresh grant for a token that
 // would otherwise be rejected upstream mid-request, so it only applies when
 // there is a refresh grant to spend.

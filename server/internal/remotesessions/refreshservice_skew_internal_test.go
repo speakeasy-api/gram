@@ -15,7 +15,7 @@ func TestAccessTokenUsable_DeadlineInsideSkewWithRefreshIsExpired(t *testing.T) 
 
 	now := time.Date(2026, 8, 26, 12, 0, 0, 0, time.UTC)
 	sess := remotesessions_repo.RemoteSession{
-		AccessExpiresAt:       conv.ToPGTimestamptz(now.Add(accessTokenExpirySkew / 2)),
+		AccessExpiresAt:       conv.ToPGTimestamptz(now.Add(AccessTokenExpirySkew / 2)),
 		RefreshTokenEncrypted: conv.ToPGText("enc-refresh"),
 	}
 	require.False(t, accessTokenUsable(sess, now), "a token expiring inside the skew window must be refreshed, not forwarded")
@@ -25,11 +25,11 @@ func TestAccessTokenUsable_DeadlineInsideSkewWithoutRefreshIsUsable(t *testing.T
 	t.Parallel()
 
 	// With nothing to refresh with, the only alternative to forwarding is a
-	// reconnect prompt accessTokenExpirySkew early — while the consent UI still
+	// reconnect prompt AccessTokenExpirySkew early — while the consent UI still
 	// reports the session as connected.
 	now := time.Date(2026, 8, 26, 12, 0, 0, 0, time.UTC)
 	sess := remotesessions_repo.RemoteSession{
-		AccessExpiresAt: conv.ToPGTimestamptz(now.Add(accessTokenExpirySkew / 2)),
+		AccessExpiresAt: conv.ToPGTimestamptz(now.Add(AccessTokenExpirySkew / 2)),
 	}
 	require.True(t, accessTokenUsable(sess, now), "without a refresh grant the token is forwarded until its stated deadline")
 }
@@ -39,7 +39,7 @@ func TestAccessTokenUsable_DeadlineInsideSkewWithExpiredRefreshIsUsable(t *testi
 
 	now := time.Date(2026, 8, 26, 12, 0, 0, 0, time.UTC)
 	sess := remotesessions_repo.RemoteSession{
-		AccessExpiresAt:       conv.ToPGTimestamptz(now.Add(accessTokenExpirySkew / 2)),
+		AccessExpiresAt:       conv.ToPGTimestamptz(now.Add(AccessTokenExpirySkew / 2)),
 		RefreshTokenEncrypted: conv.ToPGText("enc-refresh"),
 		RefreshExpiresAt:      conv.ToPGTimestamptz(now.Add(-time.Second)),
 	}
@@ -61,7 +61,7 @@ func TestAccessTokenUsable_DeadlineBeyondSkewIsUsable(t *testing.T) {
 
 	now := time.Date(2026, 8, 26, 12, 0, 0, 0, time.UTC)
 	sess := remotesessions_repo.RemoteSession{
-		AccessExpiresAt:       conv.ToPGTimestamptz(now.Add(accessTokenExpirySkew + time.Second)),
+		AccessExpiresAt:       conv.ToPGTimestamptz(now.Add(AccessTokenExpirySkew + time.Second)),
 		RefreshTokenEncrypted: conv.ToPGText("enc-refresh"),
 	}
 	require.True(t, accessTokenUsable(sess, now))
@@ -92,7 +92,7 @@ func TestAccessTokenLive_DeadlineInsideSkewIsLive(t *testing.T) {
 	// skew: that token is the newest a refresh can produce.
 	now := time.Date(2026, 8, 26, 12, 0, 0, 0, time.UTC)
 	sess := remotesessions_repo.RemoteSession{
-		AccessExpiresAt:       conv.ToPGTimestamptz(now.Add(accessTokenExpirySkew / 2)),
+		AccessExpiresAt:       conv.ToPGTimestamptz(now.Add(AccessTokenExpirySkew / 2)),
 		RefreshTokenEncrypted: conv.ToPGText("enc-refresh"),
 	}
 	require.True(t, accessTokenLive(sess, now))

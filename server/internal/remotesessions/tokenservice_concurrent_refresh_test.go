@@ -217,7 +217,7 @@ func TestResolveAccessToken_ConcurrentRefresh_CollapsesToSingleUpstreamCall(t *t
 }
 
 // The adoption guard: a provider whose access tokens live for less than
-// accessTokenExpirySkew writes a row that is inside the skew window the moment
+// AccessTokenExpirySkew writes a row that is inside the skew window the moment
 // it lands. That token is still the newest a refresh can produce, so waiters
 // must adopt it. Rejecting it sends each of them upstream with the winner's
 // rotated refresh token — one more grant per waiter, and replays once two of

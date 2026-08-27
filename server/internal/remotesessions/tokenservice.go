@@ -19,7 +19,7 @@
 //     remote_session_issuer_id -> token map.
 //
 // Refresh is invoked only when the stored access_expires_at has passed,
-// or is within accessTokenExpirySkew of passing and a refresh grant is
+// or is within AccessTokenExpirySkew of passing and a refresh grant is
 // available. A still-valid access token short-circuits: no upstream
 // token endpoint is contacted.
 
@@ -121,7 +121,7 @@ const remoteSessionLastUsedCutoff = 5 * time.Minute
 // ResolveAccessToken returns the upstream access token stored for the
 // (client, subject) pair, refreshing via the upstream /token endpoint
 // when the stored access_expires_at has passed (or is within
-// accessTokenExpirySkew of passing) and a refresh_token is present.
+// AccessTokenExpirySkew of passing) and a refresh_token is present.
 //
 // Returns ("", nil) when there is no usable token for this binding —
 // no row, expired with no refresh path, refresh failed, decryption
@@ -445,7 +445,7 @@ func (m *ChallengeManager) resolveBoundAccessTokens(
 //
 // The usable window depends on what the upstream told us:
 //   - access_expires_at set: the upstream-stated expiry governs. With a usable
-//     refresh grant, a token within accessTokenExpirySkew of it is refreshed
+//     refresh grant, a token within AccessTokenExpirySkew of it is refreshed
 //     before it is forwarded rather than rejected upstream mid-request; with
 //     none, the token is forwarded until the deadline itself.
 //   - access_expires_at NULL: no expiry was reported, so the stored access
