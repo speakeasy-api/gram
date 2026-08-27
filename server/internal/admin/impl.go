@@ -1146,11 +1146,34 @@ func (s *Service) RearmTrial(ctx context.Context, payload *gen.RearmTrialPayload
 	}
 
 	logger := s.logger.With(attr.SlogOrganizationID(payload.ID))
+	tx, err := s.db.Begin(ctx)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "begin trial re-arm transaction").LogError(ctx, logger)
+	}
+	defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
+
+	trials := trialsRepo.New(tx)
+	rearmed, err := trials.RearmTrial(ctx, trialsRepo.RearmTrialParams{
+		OrganizationID: payload.ID,
+		RearmForDays:   conv.SafeInt32(payload.Days),
+	})
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		// rejectTrialChange reads on the pool, so this connection goes back
+		// before it asks for a second one. The deferred rollback is idempotent.
+		_ = tx.Rollback(ctx)
+		return nil, s.rejectTrialChange(ctx, logger, payload.ID,
+			"look up organization after unrearmed trial",
+			"organization has no demoted enterprise trial to re-arm")
+	case err != nil:
+		return nil, oops.E(oops.CodeUnexpected, err, "re-arm trial").LogError(ctx, logger)
+	}
+
 	lockedKeys := make(map[openrouter.KeyType]*pgxpool.Conn, len(openrouter.AllKeyTypes))
 	var result *gen.AdminOrganization
-	err := s.withTrialKeyBillingLocks(ctx, logger, payload.ID, openrouter.AllKeyTypes, lockedKeys, func() error {
+	err = s.withTrialKeyBillingLocks(ctx, logger, payload.ID, openrouter.AllKeyTypes, lockedKeys, func() error {
 		var lockedErr error
-		result, lockedErr = s.rearmTrialLocked(ctx, logger, payload, lockedKeys)
+		result, lockedErr = s.rearmTrialLocked(ctx, logger, payload, lockedKeys, tx, trials, rearmed)
 		return lockedErr
 	})
 	if err == nil {
@@ -1196,32 +1219,10 @@ func (s *Service) rearmTrialLocked(
 	logger *slog.Logger,
 	payload *gen.RearmTrialPayload,
 	lockedKeys map[openrouter.KeyType]*pgxpool.Conn,
+	tx pgx.Tx,
+	trials *trialsRepo.Queries,
+	rearmed trialsRepo.RearmTrialRow,
 ) (*gen.AdminOrganization, error) {
-
-	tx, err := s.db.Begin(ctx)
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "begin trial re-arm transaction").LogError(ctx, logger)
-	}
-	defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
-
-	trials := trialsRepo.New(tx)
-
-	rearmed, err := trials.RearmTrial(ctx, trialsRepo.RearmTrialParams{
-		OrganizationID: payload.ID,
-		RearmForDays:   conv.SafeInt32(payload.Days),
-	})
-	switch {
-	case errors.Is(err, pgx.ErrNoRows):
-		// rejectTrialChange reads on the pool, so this connection goes back
-		// before it asks for a second one. The deferred rollback is idempotent.
-		_ = tx.Rollback(ctx)
-		return nil, s.rejectTrialChange(ctx, logger, payload.ID,
-			"look up organization after unrearmed trial",
-			"organization has no demoted enterprise trial to re-arm")
-	case err != nil:
-		return nil, oops.E(oops.CodeUnexpected, err, "re-arm trial").LogError(ctx, logger)
-	}
-
 	uncapped, keyAccessChanged, err := s.reviveTrialKeys(ctx, logger, lockedKeys, payload.ID)
 	if err != nil {
 		return nil, err
@@ -1280,7 +1281,8 @@ func (s *Service) rearmTrialLocked(
 // Shaped like openrouterkeys.EnableKey rather than the demotion's blind loop:
 // Cause removal no-ops on a missing key row, RefreshAPIKeyLimit errors on one.
 //
-// The caller holds both per-key session locks through commit. Key revival uses
+// The caller holds the trial row lock before both per-key session locks and
+// retains all three through commit. Key revival uses
 // those locked sessions but stays outside the organization transaction, so a
 // later rollback leaves the org demoted with live keys instead of exposing an
 // admitted trial whose keys are still disabled.

@@ -21,6 +21,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	audittestrepo "github.com/speakeasy-api/gram/server/internal/audit/audittest/repo"
+	"github.com/speakeasy-api/gram/server/internal/background/activities/keybillinglock"
 	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
@@ -435,6 +436,94 @@ func TestRearmTrial_RevivesKeysBeforeTheRestoreCommits(t *testing.T) {
 }
 
 // The failure lands on the second key type, so the first is already back up.
+func TestRearmTrial_TrialRowLockPrecedesKeyLocks(t *testing.T) { //nolint:paralleltest // Coordinates two writers against one cloned database.
+	ctx, svc, pool, provisioner := newRearmService(t)
+	const orgID = "org_rearm_lock_order"
+	seedDemotedTrial(t, ctx, pool, orgID, "enterprise")
+
+	trialOwnerTx, err := pool.Begin(ctx)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = trialOwnerTx.Rollback(context.WithoutCancel(ctx)) })
+	var lockedOrgID string
+	require.NoError(t, trialOwnerTx.QueryRow(ctx, `SELECT organization_id FROM trials WHERE organization_id = $1 FOR UPDATE`, orgID).Scan(&lockedOrgID))
+	require.Equal(t, orgID, lockedOrgID)
+
+	type rearmResult struct {
+		err error
+	}
+	rearmed := make(chan rearmResult, 1)
+	go func() {
+		_, rearmErr := svc.RearmTrial(ctx, &gen.RearmTrialPayload{ID: orgID, Days: 14})
+		rearmed <- rearmResult{err: rearmErr}
+	}()
+
+	blockedPID := waitForBlockedTrialRearm(t, ctx, pool)
+	var advisoryLocks int
+	require.NoError(t, pool.QueryRow(ctx, `SELECT count(*) FROM pg_locks WHERE pid = $1 AND locktype = 'advisory' AND granted`, blockedPID).Scan(&advisoryLocks))
+
+	logger := testenv.NewLogger(t)
+	trialOwnerErr := keybillinglock.WithAcquireTimeout(ctx, logger, pool, orgID, openrouter.KeyTypeChat, time.Second, func(_ *pgxpool.Conn) error {
+		return keybillinglock.WithAcquireTimeout(ctx, logger, pool, orgID, openrouter.KeyTypeInternal, time.Second, func(_ *pgxpool.Conn) error {
+			return trialOwnerTx.Commit(ctx)
+		})
+	})
+	if trialOwnerErr != nil {
+		require.NoError(t, trialOwnerTx.Rollback(ctx))
+	}
+
+	var result rearmResult
+	select {
+	case result = <-rearmed:
+	case <-time.After(5 * time.Second):
+		t.Fatal("concurrent trial demotion and re-arm did not complete")
+	}
+	require.Zero(t, advisoryLocks, "re-arm must not hold key locks while waiting for the trial row")
+	require.NoError(t, trialOwnerErr)
+	require.NoError(t, result.err)
+	require.Len(t, provisioner.revivals, len(openrouter.AllKeyTypes))
+	for _, revival := range provisioner.revivals {
+		require.Equal(t, "free", revival.accountTypeSeen, "key work must finish before organization restoration commits")
+		require.True(t, revival.demotedSeen, "key work must observe the demoted trial before re-arm commits")
+	}
+}
+
+func waitForBlockedTrialRearm(t *testing.T, ctx context.Context, pool *pgxpool.Pool) int32 {
+	t.Helper()
+
+	deadline := time.Now().Add(3 * time.Second)
+	for time.Now().Before(deadline) {
+		var pid int32
+		err := pool.QueryRow(ctx, `
+			SELECT pid
+			FROM pg_stat_activity
+			WHERE datname = current_database()
+			  AND pid <> pg_backend_pid()
+			  AND query LIKE '%SET demoted_at = NULL%'
+			  AND wait_event_type = 'Lock'
+			LIMIT 1
+		`).Scan(&pid)
+		if err == nil {
+			return pid
+		}
+		if !errors.Is(err, pgx.ErrNoRows) {
+			require.NoError(t, err)
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	rows, err := pool.Query(ctx, `SELECT pid, state, coalesce(wait_event_type, ''), left(query, 160) FROM pg_stat_activity WHERE datname = current_database() AND pid <> pg_backend_pid()`)
+	require.NoError(t, err)
+	defer rows.Close()
+	var activity []string
+	for rows.Next() {
+		var pid int32
+		var state, waitType, query string
+		require.NoError(t, rows.Scan(&pid, &state, &waitType, &query))
+		activity = append(activity, fmt.Sprintf("pid=%d state=%s wait=%s query=%q", pid, state, waitType, query))
+	}
+	t.Fatalf("re-arm never blocked on the trial row lock: %v", activity)
+	return 0
+}
+
 func TestRearmTrial_KeyRevivalFailureLeavesTheOrganizationDemoted(t *testing.T) {
 	t.Parallel()
 

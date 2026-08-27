@@ -748,9 +748,6 @@ func (*devProvisioner) RemoveAPIKeyDisableCauseWithDB(context.Context, openroute
 	return 0, openrouter.DisableCauseChange{}, nil
 }
 
-func (d *devProvisioner) DisableAPIKey(_ context.Context, _ string, _ openrouter.KeyType) error {
-	return fmt.Errorf("not implemented in bench")
-}
 func (d *devProvisioner) GetCreditsUsed(_ context.Context, _ string, _ openrouter.KeyType) (float64, int, error) {
 	return 0, 0, fmt.Errorf("not implemented in bench")
 }
