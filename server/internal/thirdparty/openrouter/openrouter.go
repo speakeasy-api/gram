@@ -636,10 +636,13 @@ func (o *OpenRouter) refreshAPIKeyLimit(ctx context.Context, db DBTX, orgID stri
 
 	creditLimit := float64(keyLimit)
 	patch := updateKeyRequest{Limit: &creditLimit, LimitReset: "monthly", Disabled: nil}
-	if removeLegacyAdminLock && len(key.DisableCauses) == 1 {
-		// The legacy reinstate paths enable upstream only when removing the admin
-		// lock makes the key locally enabled. Other causes keep it disabled.
-		patch.Disabled = new(false)
+	if key.Disabled {
+		// Reassert the local effective state so a retry repairs an upstream enable
+		// that raced with another cause landing during the prior PATCH.
+		patch.Disabled = new(true)
+		if removeLegacyAdminLock && len(key.DisableCauses) == 1 {
+			patch.Disabled = new(false)
+		}
 	}
 
 	patchCtx, cancel := context.WithTimeout(ctx, upstreamKeyPatchTimeout)

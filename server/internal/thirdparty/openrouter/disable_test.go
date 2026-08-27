@@ -319,14 +319,14 @@ func TestRefreshAPIKeyLimit_RemovesOnlyLegacyAdminLock(t *testing.T) {
 	require.True(t, row.Disabled)
 
 	// A retry sees that admin_lock is already gone, preserves the remaining
-	// cause, and repeats only the limit patch.
+	// cause, and reasserts the disabled upstream state.
 	_, err = provisioner.RefreshAPIKeyLimit(ctx, orgID, KeyTypeInternal, &limit)
 	require.NoError(t, err)
 
 	patches := upstream.recorded()
 	require.Len(t, patches, 3)
-	require.JSONEq(t, `{"limit":42,"limit_reset":"monthly"}`, patches[1])
-	require.JSONEq(t, `{"limit":42,"limit_reset":"monthly"}`, patches[2])
+	require.JSONEq(t, `{"limit":42,"limit_reset":"monthly","disabled":true}`, patches[1])
+	require.JSONEq(t, `{"limit":42,"limit_reset":"monthly","disabled":true}`, patches[2])
 
 	row, err = queries.GetOpenRouterAPIKey(ctx, repo.GetOpenRouterAPIKeyParams{
 		OrganizationID: orgID,
@@ -335,6 +335,52 @@ func TestRefreshAPIKeyLimit_RemovesOnlyLegacyAdminLock(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, []string{"trial_demotion"}, row.DisableCauses)
 	require.True(t, row.Disabled)
+}
+
+func TestRefreshAPIKeyLimit_RetryDisablesAfterConcurrentCause(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	orgID := "org-" + uuid.NewString()[:8]
+	provisioner, upstream, queries := newDisableTestProvisioner(t, orgID)
+
+	_, err := provisioner.ProvisionAPIKey(ctx, orgID, KeyTypeInternal)
+	require.NoError(t, err)
+	require.NoError(t, provisioner.DisableAPIKey(ctx, orgID, KeyTypeInternal))
+
+	injected := make(chan error, 1)
+	var injectOnce sync.Once
+	upstream.interceptPatch(func() {
+		injectOnce.Do(func() {
+			_, err := queries.AddOpenRouterAPIKeyDisableCause(ctx, repo.AddOpenRouterAPIKeyDisableCauseParams{
+				OrganizationID: orgID,
+				KeyType:        string(KeyTypeInternal),
+				DisableCause:   string(DisableCauseTrialDemotion),
+			})
+			injected <- err
+		})
+	})
+
+	limit := 42
+	_, err = provisioner.RefreshAPIKeyLimit(ctx, orgID, KeyTypeInternal, &limit)
+	require.NoError(t, err)
+	require.NoError(t, <-injected)
+
+	row, err := queries.GetOpenRouterAPIKey(ctx, repo.GetOpenRouterAPIKeyParams{
+		OrganizationID: orgID,
+		KeyType:        string(KeyTypeInternal),
+	})
+	require.NoError(t, err)
+	require.Equal(t, []string{"trial_demotion"}, row.DisableCauses)
+	require.True(t, row.Disabled)
+
+	_, err = provisioner.RefreshAPIKeyLimit(ctx, orgID, KeyTypeInternal, &limit)
+	require.NoError(t, err)
+
+	patches := upstream.recorded()
+	require.Len(t, patches, 3)
+	require.JSONEq(t, `{"limit":42,"limit_reset":"monthly","disabled":false}`, patches[1])
+	require.JSONEq(t, `{"limit":42,"limit_reset":"monthly","disabled":true}`, patches[2])
 }
 
 // A refresh reads the key row, patches upstream, then writes the row back. A
