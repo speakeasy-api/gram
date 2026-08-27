@@ -63,7 +63,7 @@ type IdentityDirectory struct {
 
 // IdentityModel is the result type of the identity service resolve method.
 type IdentityModel struct {
-	// What sort of subject this is: 'human' for a directory user, 'apikey' for a
+	// What sort of subject this is: 'user' for a directory user, 'apikey' for a
 	// subject acting under an API key, 'agent' for an agent identity, or
 	// 'unattributed' for activity that cannot be attributed to exactly one
 	// directory user — an identifier matching no directory row, or one several

@@ -44,7 +44,7 @@ func TestResolve_DirectoryUser(t *testing.T) {
 	resolved, err := ti.service.Resolve(ctx, &gen.ResolvePayload{Urn: "user:" + mockidp.MockUserID, ApikeyToken: nil, SessionToken: nil})
 	require.NoError(t, err)
 
-	require.Equal(t, "human", resolved.Kind)
+	require.Equal(t, "user", resolved.Kind)
 	require.Equal(t, "Dev User", resolved.DisplayName)
 	require.Equal(t, []string{mockidp.MockUserID}, resolved.UserIds)
 	require.Contains(t, resolved.Emails, mockidp.MockUserEmail)
@@ -86,7 +86,7 @@ func TestResolve_ExternalUserID(t *testing.T) {
 
 	addressShaped, err := ti.service.Resolve(ctx, &gen.ResolvePayload{Urn: "external:" + mockidp.MockUserEmail, ApikeyToken: nil, SessionToken: nil})
 	require.NoError(t, err)
-	require.Equal(t, "human", addressShaped.Kind)
+	require.Equal(t, "user", addressShaped.Kind)
 	require.Equal(t, "user:"+mockidp.MockUserID, addressShaped.CanonicalUrn)
 }
 

@@ -15,7 +15,7 @@ import (
 // ResolveResponseBody is the type of the "identity" service "resolve" endpoint
 // HTTP response body.
 type ResolveResponseBody struct {
-	// What sort of subject this is: 'human' for a directory user, 'apikey' for a
+	// What sort of subject this is: 'user' for a directory user, 'apikey' for a
 	// subject acting under an API key, 'agent' for an agent identity, or
 	// 'unattributed' for activity that cannot be attributed to exactly one
 	// directory user — an identifier matching no directory row, or one several
@@ -442,8 +442,8 @@ func ValidateResolveResponseBody(body *ResolveResponseBody) (err error) {
 		err = goa.MergeErrors(err, goa.MissingFieldError("directory", "body"))
 	}
 	if body.Kind != nil {
-		if !(*body.Kind == "human" || *body.Kind == "apikey" || *body.Kind == "agent" || *body.Kind == "unattributed") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.kind", *body.Kind, []any{"human", "apikey", "agent", "unattributed"}))
+		if !(*body.Kind == "user" || *body.Kind == "apikey" || *body.Kind == "agent" || *body.Kind == "unattributed") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.kind", *body.Kind, []any{"user", "apikey", "agent", "unattributed"}))
 		}
 	}
 	if body.Directory != nil {

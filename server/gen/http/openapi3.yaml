@@ -71053,9 +71053,9 @@ components:
                     description: The identifiers agents report for this subject. Risk findings key on these.
                 kind:
                     type: string
-                    description: 'What sort of subject this is: ''human'' for a directory user, ''apikey'' for a subject acting under an API key, ''agent'' for an agent identity, or ''unattributed'' for activity that cannot be attributed to exactly one directory user — an identifier matching no directory row, or one several members claim.'
+                    description: 'What sort of subject this is: ''user'' for a directory user, ''apikey'' for a subject acting under an API key, ''agent'' for an agent identity, or ''unattributed'' for activity that cannot be attributed to exactly one directory user — an identifier matching no directory row, or one several members claim.'
                     enum:
-                        - human
+                        - user
                         - apikey
                         - agent
                         - unattributed

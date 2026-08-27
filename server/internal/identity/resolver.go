@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"log/slog"
 	"net/mail"
-	"strings"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/speakeasy-api/gram/server/internal/attr"
@@ -23,8 +22,8 @@ import (
 type Kind string
 
 const (
-	// KindHuman is a person: a directory user, or usage that resolves to one.
-	KindHuman Kind = "human"
+	// KindUser is a person: a directory user, or usage that resolves to one.
+	KindUser Kind = "user"
 
 	// KindAPIKey is a subject acting under an API key rather than a session.
 	KindAPIKey Kind = "apikey"
@@ -42,28 +41,6 @@ const (
 // parses so links minted today stay valid, but nothing mints agent identities
 // yet, so there is nothing to resolve.
 var ErrAgentUnsupported = errors.New("agent identities are not supported yet")
-
-// Directory holds the WorkOS Directory Sync attributes for a person. Every
-// field is customer-controlled through IdP mappings and may be absent.
-type Directory struct {
-	// DepartmentName is the directory department attribute.
-	DepartmentName string
-
-	// JobTitle is the directory job title attribute.
-	JobTitle string
-
-	// EmployeeType is the directory employment type attribute.
-	EmployeeType string
-
-	// DivisionName is the directory division attribute.
-	DivisionName string
-
-	// CostCenterName is the directory cost centre attribute.
-	CostCenterName string
-
-	// Groups are the directory groups the person currently belongs to.
-	Groups []string
-}
 
 // Record is one subject with every identifier its data is keyed under, so a
 // caller can fan out to each subsystem with the key that subsystem expects.
@@ -99,9 +76,9 @@ type Record struct {
 	// PhotoURL is the subject's avatar, when the directory supplied one.
 	PhotoURL string
 
-	// Directory holds the Directory Sync attributes, empty when the subject
-	// has no directory row.
-	Directory Directory
+	// Directory is the Directory Sync profile, nil when the subject has no
+	// directory row.
+	Directory *directory.UserProfile
 }
 
 // GramUserID is the subject's owning Gram user id, or "" when the identity
@@ -181,34 +158,6 @@ func (r *Resolver) ExpandIdentifier(ctx context.Context, orgID, identifier strin
 // identity URN carries its kind — must use these rather than the classifier,
 // so a user id shaped like an address cannot resolve against someone else.
 func (r *Resolver) ExpandEmail(ctx context.Context, orgID, email string) Subject {
-	subject := r.expandEmail(ctx, orgID, email)
-	r.completeSubject(ctx, orgID, &subject)
-
-	return subject
-}
-
-// ExpandUserID folds a Gram user id onto every identifier the same person's
-// work is recorded under.
-func (r *Resolver) ExpandUserID(ctx context.Context, orgID, userID string) Subject {
-	subject := r.expandUserID(ctx, orgID, userID)
-	r.completeSubject(ctx, orgID, &subject)
-
-	return subject
-}
-
-// completeSubject adds the identifiers that do not depend on which namespace
-// the caller started from, and settles the order both fields promise.
-func (r *Resolver) completeSubject(ctx context.Context, orgID string, subject *Subject) {
-	r.appendLinkedAccountEmails(ctx, orgID, subject)
-
-	subject.Emails = dedupeNonEmpty(subject.Emails)
-	subject.UserIDs = dedupeNonEmpty(subject.UserIDs)
-}
-
-// expandEmail folds an address onto the person who owns it. Usage from someone
-// with no directory row still aggregates by email, so an address that owns
-// nobody is not an error — it is simply an identity with no user ids.
-func (r *Resolver) expandEmail(ctx context.Context, orgID, email string) Subject {
 	subject := Subject{UserIDs: nil, Emails: []string{email, conv.NormalizeEmail(email)}}
 
 	rows, err := r.users.GetConnectedUsersMatchingEmails(ctx, usersRepo.GetConnectedUsersMatchingEmailsParams{
@@ -221,39 +170,52 @@ func (r *Resolver) expandEmail(ctx context.Context, orgID, email string) Subject
 	}
 
 	switch len(rows) {
-	case 1:
-		// The directory row already carries the canonical email, so there is
-		// nothing more to look up by id.
-		subject.UserIDs = append(subject.UserIDs, rows[0].ID)
-		subject.Emails = append(subject.Emails, rows[0].Email, conv.NormalizeEmail(rows[0].Email))
-
 	case 0:
 		// Directory ownership wins, so a provider account is only
 		// reverse-resolved when the address has no directory row at all.
-		owner, ok := r.accountOwner(ctx, orgID, subject.Emails)
-		if !ok {
-			break
+		if owner, ok := r.accountOwner(ctx, orgID, subject.Emails); ok {
+			subject.UserIDs = append(subject.UserIDs, owner)
+			// A linked account email resolves through user_accounts rather
+			// than users, so the owner's own address still has to be added.
+			subject.Emails = append(subject.Emails, r.userEmails(ctx, orgID, subject.UserIDs)...)
 		}
-		subject.UserIDs = append(subject.UserIDs, owner)
-		// A linked account email resolves through user_accounts rather than
-		// users, so the owner's directory email still has to be added.
-		subject.Emails = append(subject.Emails, r.directoryEmails(ctx, orgID, subject.UserIDs)...)
+
+	case 1:
+		// The member row already carries the canonical email, so there is
+		// nothing more to look up by id.
+		subject.UserIDs = append(subject.UserIDs, rows[0].ID)
+		subject.Emails = append(subject.Emails, rows[0].Email, conv.NormalizeEmail(rows[0].Email))
 
 	default:
 		// More than one member matches: ownership is ambiguous, so the address
 		// stays attached to no user.
 	}
 
+	r.completeSubject(ctx, orgID, &subject)
+
 	return subject
 }
 
-// expandUserID folds a Gram user id onto the addresses their work is recorded
-// under.
-func (r *Resolver) expandUserID(ctx context.Context, orgID, userID string) Subject {
-	return Subject{
+// ExpandUserID folds a Gram user id onto every identifier the same person's
+// work is recorded under.
+func (r *Resolver) ExpandUserID(ctx context.Context, orgID, userID string) Subject {
+	subject := Subject{
 		UserIDs: []string{userID},
-		Emails:  r.directoryEmails(ctx, orgID, []string{userID}),
+		Emails:  r.userEmails(ctx, orgID, []string{userID}),
 	}
+
+	r.completeSubject(ctx, orgID, &subject)
+
+	return subject
+}
+
+// completeSubject adds the identifiers that do not depend on which namespace
+// the caller started from, and settles the order both fields promise.
+func (r *Resolver) completeSubject(ctx context.Context, orgID string, subject *Subject) {
+	r.appendLinkedAccountEmails(ctx, orgID, subject)
+
+	subject.Emails = dedupeNonEmpty(subject.Emails)
+	subject.UserIDs = dedupeNonEmpty(subject.UserIDs)
 }
 
 // accountOwner returns the single Gram user who linked an AI provider account
@@ -281,9 +243,9 @@ func (r *Resolver) accountOwner(ctx context.Context, orgID string, emails []stri
 	return owners[0], true
 }
 
-// directoryEmails returns the directory addresses of the given org members,
-// both verbatim and normalized.
-func (r *Resolver) directoryEmails(ctx context.Context, orgID string, userIDs []string) []string {
+// userEmails returns the addresses of the given org members, both verbatim and
+// normalized.
+func (r *Resolver) userEmails(ctx context.Context, orgID string, userIDs []string) []string {
 	rows, err := r.users.GetConnectedUsersByIDs(ctx, usersRepo.GetConnectedUsersByIDsParams{
 		Ids:            userIDs,
 		OrganizationID: orgID,
@@ -357,7 +319,7 @@ func (r *Resolver) Resolve(ctx context.Context, orgID string, subjectURN urn.Ide
 		WorkosUserID:    "",
 		DisplayName:     "",
 		PhotoURL:        "",
-		Directory:       Directory{DepartmentName: "", JobTitle: "", EmployeeType: "", DivisionName: "", CostCenterName: "", Groups: nil},
+		Directory:       nil,
 	}
 
 	switch subjectURN.Kind {
@@ -458,7 +420,7 @@ func (r *Resolver) attachUserProfile(ctx context.Context, orgID, userID string, 
 		// (or no longer) in this directory.
 		return false, nil
 	}
-	record.Kind = KindHuman
+	record.Kind = KindUser
 	record.CanonicalURN = urn.NewUserIdentity(row.ID)
 	record.WorkosUserID = conv.FromPGTextOrEmpty[string](row.WorkosID)
 	record.PhotoURL = conv.FromPGTextOrEmpty[string](row.PhotoUrl)
@@ -472,33 +434,20 @@ func (r *Resolver) attachUserProfile(ctx context.Context, orgID, userID string, 
 	return true, nil
 }
 
-// loadDirectory reads the Directory Sync attributes and group memberships for
-// a user. Directory Sync is optional, so an absent profile is not an error.
-func (r *Resolver) loadDirectory(ctx context.Context, orgID, userID string) Directory {
-	empty := Directory{DepartmentName: "", JobTitle: "", EmployeeType: "", DivisionName: "", CostCenterName: "", Groups: nil}
-
+// loadDirectory reads the Directory Sync profile for a user. Directory Sync is
+// optional, so an absent profile is not an error.
+func (r *Resolver) loadDirectory(ctx context.Context, orgID, userID string) *directory.UserProfile {
 	profile, err := r.directory.GetUserProfile(ctx, orgID, userID)
 	switch {
 	case errors.Is(err, directory.ErrUserNotFound):
 		// No Directory Sync for this org, or the user was directory-deleted.
-		return empty
+		return nil
 	case err != nil:
 		r.logger.WarnContext(ctx, "failed to load directory profile for identity", attr.SlogError(err), attr.SlogUserID(userID))
-		return empty
+		return nil
 	}
 
-	// IdP mappings are customer-controlled, so a value that is only whitespace
-	// is reported as absent rather than as a blank attribute.
-	attributes := profile.Attributes()
-
-	return Directory{
-		DepartmentName: strings.TrimSpace(attributes.DepartmentName),
-		JobTitle:       strings.TrimSpace(attributes.JobTitle),
-		EmployeeType:   strings.TrimSpace(attributes.EmployeeType),
-		DivisionName:   strings.TrimSpace(attributes.DivisionName),
-		CostCenterName: strings.TrimSpace(attributes.CostCenterName),
-		Groups:         profile.GroupNames(),
-	}
+	return profile
 }
 
 // firstActive returns the first row that is still an active user. Only the

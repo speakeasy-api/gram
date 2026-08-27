@@ -66,8 +66,8 @@ var IdentityModel = Type("IdentityModel", func() {
 	Required("kind", "canonical_urn", "display_name", "user_ids", "emails", "external_user_ids", "directory")
 
 	Attribute("kind", String, func() {
-		Description("What sort of subject this is: 'human' for a directory user, 'apikey' for a subject acting under an API key, 'agent' for an agent identity, or 'unattributed' for activity that cannot be attributed to exactly one directory user — an identifier matching no directory row, or one several members claim.")
-		Enum("human", "apikey", "agent", "unattributed")
+		Description("What sort of subject this is: 'user' for a directory user, 'apikey' for a subject acting under an API key, 'agent' for an agent identity, or 'unattributed' for activity that cannot be attributed to exactly one directory user — an identifier matching no directory row, or one several members claim.")
+		Enum("user", "apikey", "agent", "unattributed")
 	})
 	Attribute("canonical_urn", String, func() {
 		Description("The identity URN clients should navigate to. Resolving any URN for the same subject returns this one, so links built from different identifiers converge on a single page.")

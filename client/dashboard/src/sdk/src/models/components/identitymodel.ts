@@ -14,16 +14,16 @@ import {
 } from "./identitydirectory.js";
 
 /**
- * What sort of subject this is: 'human' for a directory user, 'apikey' for a subject acting under an API key, 'agent' for an agent identity, or 'unattributed' for activity that cannot be attributed to exactly one directory user — an identifier matching no directory row, or one several members claim.
+ * What sort of subject this is: 'user' for a directory user, 'apikey' for a subject acting under an API key, 'agent' for an agent identity, or 'unattributed' for activity that cannot be attributed to exactly one directory user — an identifier matching no directory row, or one several members claim.
  */
 export const IdentityModelKind = {
-  Human: "human",
+  User: "user",
   Apikey: "apikey",
   Agent: "agent",
   Unattributed: "unattributed",
 } as const;
 /**
- * What sort of subject this is: 'human' for a directory user, 'apikey' for a subject acting under an API key, 'agent' for an agent identity, or 'unattributed' for activity that cannot be attributed to exactly one directory user — an identifier matching no directory row, or one several members claim.
+ * What sort of subject this is: 'user' for a directory user, 'apikey' for a subject acting under an API key, 'agent' for an agent identity, or 'unattributed' for activity that cannot be attributed to exactly one directory user — an identifier matching no directory row, or one several members claim.
  */
 export type IdentityModelKind = ClosedEnum<typeof IdentityModelKind>;
 
@@ -52,7 +52,7 @@ export type IdentityModel = {
    */
   externalUserIds: Array<string>;
   /**
-   * What sort of subject this is: 'human' for a directory user, 'apikey' for a subject acting under an API key, 'agent' for an agent identity, or 'unattributed' for activity that cannot be attributed to exactly one directory user — an identifier matching no directory row, or one several members claim.
+   * What sort of subject this is: 'user' for a directory user, 'apikey' for a subject acting under an API key, 'agent' for an agent identity, or 'unattributed' for activity that cannot be attributed to exactly one directory user — an identifier matching no directory row, or one several members claim.
    */
   kind: IdentityModelKind;
   /**
