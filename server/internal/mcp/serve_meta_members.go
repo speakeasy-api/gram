@@ -125,8 +125,11 @@ func (s *Service) resolveMetaMemberSnapshot(
 		case mcpservers.VisibilityPublic:
 		case mcpservers.VisibilityPrivate:
 			if err := s.authz.Require(ctx, authz.MCPCheck(authz.ScopeMCPConnect, connectResourceID.String(), projectID.String())); err != nil {
+				// Forbidden and Unauthorized (anonymous callers on an ungated
+				// endpoint carry no AuthContext) are denials: filter the
+				// member. Anything else is an evaluation failure.
 				var oopsErr *oops.ShareableError
-				if errors.As(err, &oopsErr) && oopsErr.Code == oops.CodeForbidden {
+				if errors.As(err, &oopsErr) && (oopsErr.Code == oops.CodeForbidden || oopsErr.Code == oops.CodeUnauthorized) {
 					continue
 				}
 				return ctx, nil, oops.E(oops.CodeUnexpected, err, "check member authz").LogError(ctx, logger)
