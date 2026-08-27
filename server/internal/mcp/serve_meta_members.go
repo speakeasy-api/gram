@@ -24,7 +24,7 @@ type metaMemberBackend int
 const (
 	// Toolset-backed: executes in-process.
 	metaMemberBackendHosted metaMemberBackend = iota
-	// Remote/tunneled: upstream MCP session (AGE-3291 PR 2).
+	// Remote/tunneled: dispatched through the member's own upstream (AIM-87).
 	metaMemberBackendProxied
 )
 

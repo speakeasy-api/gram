@@ -190,9 +190,12 @@ func handleToolsCall(
 		return fullPlan.ExternalMCP, nil
 	}
 
-	planInputs, err := executor.MatchPlanInputs(ctx, params.Name, uuid.UUID(projectID), resolve)
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to match proxy tool").LogError(ctx, logger)
+	var planInputs *externalmcp.ToolCallPlan
+	if !payload.skipProxyTools {
+		planInputs, err = executor.MatchPlanInputs(ctx, params.Name, uuid.UUID(projectID), resolve)
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "failed to match proxy tool").LogError(ctx, logger)
+		}
 	}
 
 	var tool *types.Tool

@@ -564,6 +564,7 @@ JOIN remote_mcp_servers r
 WHERE m.meta_mcp_server_id = $1
   AND m.project_id = $2
   AND m.deleted IS FALSE
+  AND s.slug IS NOT NULL
   AND s.remote_session_issuer_id = $3
 ORDER BY m.sort_order, m.created_at, m.id
 `

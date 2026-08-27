@@ -1,7 +1,7 @@
 // Meta MCP drill-down tools over hosted (toolset-backed) members. Execution
 // reuses handleToolsCall, so billing, guardian, RBAC, audit, and telemetry
 // apply as on direct calls. Proxied members answer not-implemented until
-// AGE-3291 PR 2.
+// AIM-87's proxied-member dispatch.
 
 package mcp
 
@@ -23,6 +23,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcpjsonrpc"
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	toolsets_repo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 )
 
@@ -304,7 +305,7 @@ func (s *Service) describeMemberToolset(
 	duplicates := map[string]bool{}
 	for _, tool := range described.Tools {
 		// External-MCP passthrough tools are excluded from the meta MCP
-		// catalog in PR 1 (toolToListEntry returns nil); they belong to the
+		// catalog (toolToListEntry returns nil); they belong to the
 		// proxied-member runtime.
 		entry := toolToListEntry(tool)
 		if entry == nil {
@@ -322,7 +323,7 @@ func (s *Service) describeMemberToolset(
 		delete(catalog.byName, name)
 	}
 
-	// H1 parity with the direct surface's tools/list: private authenticated
+	// Parity with the direct surface's tools/list: private authenticated
 	// toolsets filter per-tool mcp:connect with tools/call's dimensions, so
 	// describe never discloses a tool the member endpoint would hide.
 	if gate.authenticated && !toolset.McpIsPublic {
@@ -370,10 +371,12 @@ func (s *Service) buildMemberDispatch(
 		return nil, nil, err
 	}
 
-	// The gate's single remote-session token (one_per_issuer invariant) is
-	// injected into every hosted member's oauth2 tools; per-member routing by
-	// upstream resource lands with the proxied runtime (AIS-152 adjacency).
-	tokenInputs, err := appendRemoteSessionTokenInputs(nil, gate.tokens)
+	// A hosted member records no upstream resource, so only a lone
+	// unqualified token can be its credential: a token consented for a
+	// specific member must never reach another member's tools, and several
+	// tokens are unroutable. Both degrade to no token rather than an error,
+	// so multi-credential meta sessions keep hosted members callable.
+	tokenInputs, err := appendRemoteSessionTokenInputs(nil, hostedMemberTokens(gate.tokens))
 	if err != nil {
 		return nil, nil, oops.E(oops.CodeUnexpected, err, "resolve upstream tokens for meta MCP member").LogError(ctx, logger)
 	}
@@ -422,11 +425,28 @@ func (s *Service) buildMemberDispatch(
 		apiKeyID:              gate.apiKeyID,
 		toolVariationsGroupID: variationsGroupID,
 		mcpServerID:           &serverID,
+		skipProxyTools:        true,
 		tags:                  nil,
 		protocolVersion:       gate.protocolVersion,
 		toolSelection:         gate.toolSelection,
 	}
 	return toolset, inputs, nil
+}
+
+// hostedMemberTokens narrows a gate's token map to what a hosted member may
+// receive: exactly one token with no recorded resource. A resource-qualified
+// token belongs to the member it was consented for, and several tokens are
+// unroutable without a scheme-to-issuer mapping; both cases yield no token.
+func hostedMemberTokens(tokens map[uuid.UUID]remotesessions.UpstreamToken) map[uuid.UUID]remotesessions.UpstreamToken {
+	if len(tokens) != 1 {
+		return nil
+	}
+	for _, entry := range tokens {
+		if entry.Resource != "" {
+			return nil
+		}
+	}
+	return tokens
 }
 
 // loadMemberToolset loads the member's toolset row, applying the member

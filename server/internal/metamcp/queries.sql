@@ -295,5 +295,6 @@ JOIN remote_mcp_servers r
 WHERE m.meta_mcp_server_id = @meta_mcp_server_id
   AND m.project_id = @project_id
   AND m.deleted IS FALSE
+  AND s.slug IS NOT NULL
   AND s.remote_session_issuer_id = @remote_session_issuer_id
 ORDER BY m.sort_order, m.created_at, m.id;
