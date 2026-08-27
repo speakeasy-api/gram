@@ -30,7 +30,7 @@ func newRenderPlatformMCPCommand() *cli.Command {
 			&cli.StringFlag{
 				Name:     "out",
 				Required: true,
-				Usage:    "Directory to render into. Existing generated content is replaced",
+				Usage:    "Directory to render into. Must not exist or be empty",
 			},
 		},
 		Action: func(c *cli.Context) error {

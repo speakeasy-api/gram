@@ -71,6 +71,11 @@ func TestPublicPlatformMCPFilesRejectsInsecureServerURL(t *testing.T) {
 	_, err := PublicPlatformMCPFiles("http://app.getgram.ai", "17")
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "must be https")
+
+	// url.Parse normalizes the scheme, so an uppercase one is still secure.
+	files, err := PublicPlatformMCPFiles("HTTPS://app.getgram.ai", "17")
+	require.NoError(t, err)
+	require.Contains(t, string(files["platform-mcp/.mcp.json"]), "app.getgram.ai/platform-mcp")
 }
 
 func TestPublicPlatformMCPFilesRequiresServerURL(t *testing.T) {

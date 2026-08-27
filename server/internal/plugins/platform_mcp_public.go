@@ -40,7 +40,10 @@ func PublicPlatformMCPFiles(serverURL string, version string) (map[string][]byte
 	// client dials, so an http:// deployment URL would publish a downgrade to
 	// everyone at once. The shared generator still allows http for local
 	// development; the public render does not.
-	if !strings.HasPrefix(serverURL, "https://") {
+	// Scheme comparison is case-insensitive: url.Parse normalizes HTTPS:// to
+	// https://, so a case-sensitive prefix test would reject a URL the shared
+	// generator goes on to accept.
+	if !strings.HasPrefix(strings.ToLower(strings.TrimSpace(serverURL)), "https://") {
 		return nil, fmt.Errorf("public marketplace server URL must be https, got %q", serverURL)
 	}
 
