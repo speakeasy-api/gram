@@ -67,6 +67,28 @@ export function mcpToolsWelcomeSubtitle(
   }
 }
 
-export function composerContextToolsEmptyMessage(loading: boolean): string {
-  return loading ? "Loading tools…" : NO_CONTEXT_TOOLS_MESSAGE;
+/**
+ * True while tools/list has not settled. A disabled query (no servers yet)
+ * is not pending — that is a settled empty, not an in-flight list.
+ */
+export function mcpToolsListPending(
+  loading: boolean,
+  tools: Record<string, unknown> | undefined,
+  error: unknown,
+  toolsQueryEnabled: boolean,
+): boolean {
+  if (loading) return true;
+  if (!toolsQueryEnabled) return false;
+  return mcpToolsAvailability(loading, tools, error) === "loading";
+}
+
+export function composerContextToolsEmptyMessage(
+  loading: boolean,
+  tools: Record<string, unknown> | undefined,
+  error: unknown,
+  toolsQueryEnabled: boolean,
+): string {
+  return mcpToolsListPending(loading, tools, error, toolsQueryEnabled)
+    ? "Loading tools…"
+    : NO_CONTEXT_TOOLS_MESSAGE;
 }

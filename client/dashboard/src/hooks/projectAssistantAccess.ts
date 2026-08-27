@@ -1,8 +1,8 @@
 /**
  * True when the project has neither toolsets nor MCP servers. Either
  * attachment kind is enough for the Project Assistant to have tools.
- * Returns false while either list is still loading so the dock does not
- * flash a "create a server" prompt during the first paint.
+ * Returns false while either list is still loading, failed, or unknown so
+ * the dock does not treat a suppressed 403 / failed listing as "empty".
  */
 export function isNoMcpAccessConfigured({
   projectSlug,
@@ -10,14 +10,20 @@ export function isNoMcpAccessConfigured({
   toolsetCount,
   mcpServersLoading,
   mcpServerCount,
+  toolsetsFailed = false,
+  mcpServersFailed = false,
 }: {
   projectSlug?: string;
   toolsetsLoading: boolean;
-  toolsetCount: number;
+  toolsetCount: number | undefined;
   mcpServersLoading: boolean;
-  mcpServerCount: number;
+  mcpServerCount: number | undefined;
+  toolsetsFailed?: boolean;
+  mcpServersFailed?: boolean;
 }): boolean {
   if (!projectSlug || toolsetsLoading || mcpServersLoading) return false;
+  if (toolsetsFailed || mcpServersFailed) return false;
+  if (toolsetCount === undefined || mcpServerCount === undefined) return false;
   return toolsetCount === 0 && mcpServerCount === 0;
 }
 

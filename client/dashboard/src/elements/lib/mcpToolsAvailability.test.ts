@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   composerContextToolsEmptyMessage,
   mcpToolsAvailability,
+  mcpToolsListPending,
   mcpToolsSendBlocked,
   mcpToolsSendTooltip,
   mcpToolsWelcomeSubtitle,
@@ -64,11 +65,35 @@ describe("mcpToolsAvailability", () => {
 });
 
 describe("composerContextToolsEmptyMessage", () => {
-  it("explains a settled empty tools/list instead of vanishing", () => {
-    expect(composerContextToolsEmptyMessage(true)).toBe("Loading tools…");
-    expect(composerContextToolsEmptyMessage(false)).toBe(
+  it("stays on loading while tools/list has not settled", () => {
+    expect(composerContextToolsEmptyMessage(true, undefined, null, true)).toBe(
+      "Loading tools…",
+    );
+    expect(composerContextToolsEmptyMessage(false, undefined, null, true)).toBe(
+      "Loading tools…",
+    );
+  });
+
+  it("explains a settled empty or failed tools/list instead of vanishing", () => {
+    expect(composerContextToolsEmptyMessage(false, {}, null, true)).toBe(
       NO_CONTEXT_TOOLS_MESSAGE,
     );
+    expect(
+      composerContextToolsEmptyMessage(
+        false,
+        undefined,
+        new Error("401"),
+        true,
+      ),
+    ).toBe(NO_CONTEXT_TOOLS_MESSAGE);
+  });
+
+  it("does not spin forever when the tools query is disabled", () => {
+    expect(
+      composerContextToolsEmptyMessage(false, undefined, null, false),
+    ).toBe(NO_CONTEXT_TOOLS_MESSAGE);
+    expect(mcpToolsListPending(false, undefined, null, false)).toBe(false);
+    expect(mcpToolsListPending(true, undefined, null, false)).toBe(true);
   });
 });
 

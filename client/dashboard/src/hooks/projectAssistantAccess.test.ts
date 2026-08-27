@@ -40,6 +40,21 @@ describe("isNoMcpAccessConfigured", () => {
       isNoMcpAccessConfigured({ ...settledEmpty, mcpServerCount: 1 }),
     ).toBe(false);
   });
+
+  it("is false when either listing failed or the count is still unknown", () => {
+    expect(
+      isNoMcpAccessConfigured({ ...settledEmpty, toolsetsFailed: true }),
+    ).toBe(false);
+    expect(
+      isNoMcpAccessConfigured({ ...settledEmpty, mcpServersFailed: true }),
+    ).toBe(false);
+    expect(
+      isNoMcpAccessConfigured({ ...settledEmpty, toolsetCount: undefined }),
+    ).toBe(false);
+    expect(
+      isNoMcpAccessConfigured({ ...settledEmpty, mcpServerCount: undefined }),
+    ).toBe(false);
+  });
 });
 
 describe("showProjectAssistantConnecting", () => {

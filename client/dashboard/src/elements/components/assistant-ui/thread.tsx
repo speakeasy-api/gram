@@ -95,6 +95,7 @@ import { dictationAdapter } from "@/elements/lib/dictation";
 import {
   composerContextToolsEmptyMessage,
   mcpToolsAvailability,
+  mcpToolsListPending,
   mcpToolsSendBlocked,
   mcpToolsSendTooltip,
 } from "@/elements/lib/mcpToolsAvailability";
@@ -1314,7 +1315,7 @@ const CONTEXT_ALL_TOOLS_SECTION = "__all_tools__";
  * `@mention` into the draft — but the user makes one trip to one list.
  */
 const ComposerContextPicker: FC = () => {
-  const { config, mcpTools, mcpToolsLoading } = useElements();
+  const { config, mcpTools, mcpToolsLoading, mcpToolsError } = useElements();
   const aui = useAui();
   const triggerRef = useRef<HTMLButtonElement>(null);
   // Read the composer text from the same reactive source the tool-mention
@@ -1337,6 +1338,14 @@ const ComposerContextPicker: FC = () => {
       composerConfig.toolMentions.enabled !== false);
 
   const tools = useMemo(() => toolSetToMentionableTools(mcpTools), [mcpTools]);
+  const toolsQueryEnabled =
+    Boolean(config.mcp) || (config.mcps?.length ?? 0) > 0;
+  const toolsListPending = mcpToolsListPending(
+    mcpToolsLoading,
+    mcpTools,
+    mcpToolsError,
+    toolsQueryEnabled,
+  );
 
   const categories = useMemo<ToolCategory[]>(() => {
     const grouped = new Map<string, MentionableTool[]>();
@@ -1595,7 +1604,7 @@ const ComposerContextPicker: FC = () => {
                 {/* A search that outruns the fetch has nothing to match yet;
                     saying "nothing found" there reports absence when the
                     answer is simply not back. */}
-                {skillContext?.loading || mcpToolsLoading
+                {skillContext?.loading || toolsListPending
                   ? "Loading…"
                   : "Nothing found"}
               </div>
@@ -1633,6 +1642,9 @@ const ComposerContextPicker: FC = () => {
                     tools={matchingTools}
                     emptyMessage={composerContextToolsEmptyMessage(
                       mcpToolsLoading,
+                      mcpTools,
+                      mcpToolsError,
+                      toolsQueryEnabled,
                     )}
                     onSelect={insertMention}
                   />

@@ -106,22 +106,30 @@ export function useObservabilityMcpConfig({
 export function useNoToolsetsConfigured(projectSlug?: string): boolean {
   const enabled = Boolean(projectSlug);
   const request = projectSlug ? { gramProject: projectSlug } : undefined;
-  const { data: toolsetsData, isLoading: toolsetsLoading } = useListToolsets(
-    request,
-    undefined,
-    { enabled },
-  );
-  const { data: mcpServersData, isLoading: mcpServersLoading } = useMcpServers(
-    request,
-    undefined,
-    { enabled },
-  );
+  const {
+    data: toolsetsData,
+    isLoading: toolsetsLoading,
+    isError: toolsetsFailed,
+  } = useListToolsets(request, undefined, { enabled });
+  const {
+    data: mcpServersData,
+    isLoading: mcpServersLoading,
+    isError: mcpServersFailed,
+  } = useMcpServers(request, undefined, { enabled });
 
   return isNoMcpAccessConfigured({
     projectSlug,
     toolsetsLoading,
-    toolsetCount: toolsetsData?.toolsets?.length ?? 0,
+    toolsetCount:
+      toolsetsData === undefined
+        ? undefined
+        : (toolsetsData.toolsets?.length ?? 0),
     mcpServersLoading,
-    mcpServerCount: mcpServersData?.mcpServers?.length ?? 0,
+    mcpServerCount:
+      mcpServersData === undefined
+        ? undefined
+        : (mcpServersData.mcpServers?.length ?? 0),
+    toolsetsFailed,
+    mcpServersFailed,
   });
 }
