@@ -535,6 +535,12 @@ func (r *Runner) ApplyManualOverride(ctx context.Context, override ManualOverrid
 	if _, err := q.SetLocalTimeouts(ctx, SetLocalTimeoutsParams{LockTimeout: r.options.LockTimeout.String(), StatementTimeout: r.options.StatementTimeout.String()}); err != nil {
 		return false, fmt.Errorf("set manual override timeouts: %w", err)
 	}
+	if err := q.AcquireOpenRouterBillingLock(ctx, AcquireOpenRouterBillingLockParams{
+		OrganizationID: override.OrganizationID,
+		KeyType:        override.KeyType,
+	}); err != nil {
+		return false, fmt.Errorf("lock manual override billing state: %w", err)
+	}
 	target, err := q.GetManualOverrideTarget(ctx, GetManualOverrideTargetParams{OrganizationID: override.OrganizationID, KeyType: override.KeyType})
 	if err != nil {
 		return false, fmt.Errorf("read manual override target: %w", err)

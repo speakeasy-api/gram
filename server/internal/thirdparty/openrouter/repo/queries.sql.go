@@ -11,6 +11,23 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const acquireOpenRouterBillingLock = `-- name: AcquireOpenRouterBillingLock :exec
+SELECT pg_advisory_xact_lock(
+    hashtextextended('openrouter-' || $1::text || '-billing:' || $2::text, 0)
+)
+`
+
+type AcquireOpenRouterBillingLockParams struct {
+	KeyType        string
+	OrganizationID string
+}
+
+// Shared with billing reconciliation and the disable-cause classifier.
+func (q *Queries) AcquireOpenRouterBillingLock(ctx context.Context, arg AcquireOpenRouterBillingLockParams) error {
+	_, err := q.db.Exec(ctx, acquireOpenRouterBillingLock, arg.KeyType, arg.OrganizationID)
+	return err
+}
+
 const acquireOpenRouterKeyBillingLock = `-- name: AcquireOpenRouterKeyBillingLock :exec
 SELECT pg_advisory_lock(
     hashtextextended('openrouter-' || $1::text || '-billing:' || $2::text, 0)

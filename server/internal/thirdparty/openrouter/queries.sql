@@ -31,6 +31,12 @@ INSERT INTO openrouter_api_keys (
 )
 RETURNING *;
 
+-- name: AcquireOpenRouterBillingLock :exec
+-- Shared with billing reconciliation and the disable-cause classifier.
+SELECT pg_advisory_xact_lock(
+    hashtextextended('openrouter-' || @key_type::text || '-billing:' || @organization_id::text, 0)
+);
+
 -- name: GetOpenRouterAPIKey :one
 SELECT *
 FROM openrouter_api_keys

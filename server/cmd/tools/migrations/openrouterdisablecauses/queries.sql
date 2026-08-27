@@ -10,6 +10,11 @@ WITH candidates AS (
   WHERE k.disable_causes IS NULL
     AND k.deleted IS FALSE
     AND (k.organization_id, k.key_type) > (@after_organization_id::text, @after_key_type::text)
+    -- Billing writers lock in advisory-then-row order. Try the same advisory
+    -- lock before FOR UPDATE so concurrent batches skip rather than deadlock.
+    AND pg_try_advisory_xact_lock(
+      hashtextextended('openrouter-' || k.key_type || '-billing:' || k.organization_id, 0)
+    )
   ORDER BY k.organization_id, k.key_type
   LIMIT @batch_size::int
   FOR UPDATE OF k SKIP LOCKED
@@ -67,6 +72,11 @@ LEFT JOIN LATERAL (
   LIMIT 1
 ) AS latest_admin ON TRUE
 ORDER BY k.organization_id, k.key_type;
+
+-- name: AcquireOpenRouterBillingLock :exec
+SELECT pg_advisory_xact_lock(
+    hashtextextended('openrouter-' || @key_type::text || '-billing:' || @organization_id::text, 0)
+);
 
 -- name: CompareAndSetClassification :execrows
 UPDATE openrouter_api_keys

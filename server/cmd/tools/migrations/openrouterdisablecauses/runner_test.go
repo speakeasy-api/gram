@@ -316,6 +316,55 @@ func TestRunnerClassifiesDurableProjections(t *testing.T) {
 	require.Equal(t, int64(2), summary.Ambiguous[AmbiguousAdminAudit])
 }
 
+func TestRunnerApplySkipsKeyWithBillingAdvisoryLock(t *testing.T) {
+	t.Parallel()
+	f := newRunnerFixture(t)
+	orgID := f.seedKey(t, "chat", false, "free")
+
+	blocker := testenv.BeginTx(t, t.Context(), f.pool)
+	require.NoError(t, New(blocker).AcquireOpenRouterBillingLock(t.Context(), AcquireOpenRouterBillingLockParams{
+		OrganizationID: orgID, KeyType: "chat",
+	}))
+
+	runner := NewRunner(f.pool, slog.New(slog.DiscardHandler), Options{BatchSize: 1, LockTimeout: 25 * time.Millisecond, StatementTimeout: time.Second, MaxLockRetries: 0})
+	summary, err := runner.Run(t.Context(), ModeApply)
+	require.Error(t, err)
+	require.Zero(t, summary.Updated)
+	require.Nil(t, f.causes(t, orgID, "chat"))
+
+	require.NoError(t, blocker.Commit(t.Context()))
+	summary, err = runner.Run(t.Context(), ModeApply)
+	require.NoError(t, err)
+	require.Equal(t, int64(1), summary.Updated)
+	require.Empty(t, f.causes(t, orgID, "chat"))
+}
+
+func TestRunnerManualOverrideWaitsForBillingAdvisoryLock(t *testing.T) {
+	t.Parallel()
+	f := newRunnerFixture(t)
+	orgID := f.seedKey(t, "internal", true, "free")
+
+	blocker := testenv.BeginTx(t, t.Context(), f.pool)
+	require.NoError(t, New(blocker).AcquireOpenRouterBillingLock(t.Context(), AcquireOpenRouterBillingLockParams{
+		OrganizationID: orgID, KeyType: "internal",
+	}))
+
+	done := make(chan error, 1)
+	go func() {
+		_, applyErr := newTestRunner(f.pool, 1).ApplyManualOverride(t.Context(), ManualOverride{OrganizationID: orgID, KeyType: "internal", Causes: []string{CauseAdminLock}})
+		done <- applyErr
+	}()
+	select {
+	case applyErr := <-done:
+		require.NoError(t, applyErr)
+		require.FailNow(t, "manual override ignored the billing advisory lock")
+	case <-time.After(150 * time.Millisecond):
+	}
+	require.NoError(t, blocker.Commit(t.Context()))
+	require.NoError(t, <-done)
+	require.Equal(t, []string{CauseAdminLock}, f.causes(t, orgID, "internal"))
+}
+
 func TestRunnerConcurrentApplyUsesSkipLocked(t *testing.T) {
 	t.Parallel()
 	f := newRunnerFixture(t)
