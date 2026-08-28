@@ -4,6 +4,7 @@ import {
 } from "@/components/observe/insightsEmployeesData";
 import { StatTile, StatTileGroup } from "@/components/chart/stat-tile";
 import { defineFilters, useFilterState } from "@/components/filters";
+import { useOrganization } from "@/contexts/Auth";
 import { Page } from "@/components/page-layout";
 import { RequireScope } from "@/components/require-scope";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/Avatar";
@@ -73,6 +74,7 @@ export default function IdentitiesIndex(): JSX.Element {
 
 function IdentitiesIndexContent(): JSX.Element {
   const orgRoutes = useOrgRoutes();
+  const organization = useOrganization();
   const navigate = useNavigate();
   const client = useGramContext();
   const [search, setSearch] = useState("");
@@ -91,7 +93,7 @@ function IdentitiesIndexContent(): JSX.Element {
   // date range would make the list answer "who was active lately" — a question
   // the per-identity pages already answer, each over its own window.
   const usageQuery = useQuery({
-    queryKey: ["identities", "usage", "all-time"],
+    queryKey: ["identities", "usage", "all-time", organization.id],
     queryFn: () => fetchIdentityUsage(client, ALL_TIME_FROM, new Date()),
     throwOnError: false,
   });

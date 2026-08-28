@@ -13,8 +13,10 @@ import {
 import { encodeIdentityUrn } from "@/lib/identity-urn";
 import { useIdentityOutlet } from "./identityRoute";
 import {
+  useIdentityProject,
   useIdentityAuditLogs,
   useIdentityChallenges,
+  useCanReadOthersChats,
   useIdentityChats,
   useIdentityDevices,
   useIdentityMetrics,
@@ -26,12 +28,17 @@ import {
 export default function IdentityOverview(): JSX.Element {
   const { identity, urn } = useIdentityOutlet();
   const { from, to } = useIdentityWindow();
-  const routes = useRoutes();
+  const project = useIdentityProject();
+  // Project routes resolve against the project this page is filtered to: the
+  // page is org-level, so the router has no :projectSlug of its own to fill in
+  // and every handoff would otherwise resolve to a path with the slug missing.
+  const routes = useRoutes({ projectSlug: project.slug });
   const orgRoutes = useOrgRoutes();
   const encodedUrn = encodeIdentityUrn(urn);
 
   const metricsQuery = useIdentityMetrics(identity, from, to);
   const chatsQuery = useIdentityChats(identity, from, to);
+  const canReadOthersChats = useCanReadOthersChats();
   const auditQuery = useIdentityAuditLogs(identity);
   const riskQuery = useIdentityRisk(identity, from, to);
   const challengesQuery = useIdentityChallenges(identity);
@@ -228,7 +235,12 @@ export default function IdentityOverview(): JSX.Element {
                 : undefined
             }
           >
-            {chats.length === 0 ? (
+            {!canReadOthersChats ? (
+              <IdentityPanelEmpty>
+                Listing someone else&rsquo;s sessions needs the chat:read
+                permission.
+              </IdentityPanelEmpty>
+            ) : chats.length === 0 ? (
               <IdentityPanelEmpty>
                 No chat sessions in this window.
               </IdentityPanelEmpty>

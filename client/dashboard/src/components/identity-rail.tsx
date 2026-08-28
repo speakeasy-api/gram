@@ -11,8 +11,8 @@ export type IdentityRailItem = {
 
 /**
  * The identity page's own navigation, in the page rather than in the app
- * sidebar: the person is the subject of the page, but they are not a place in
- * the product, so the surrounding project nav stays where the reader left it.
+ * sidebar: the person is the subject of the page, and the sections below are
+ * theirs, not the product's.
  *
  * Items are routes, not anchors — each sub-page loads only its own queries and
  * is linkable on its own.

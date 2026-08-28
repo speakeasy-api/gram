@@ -3,6 +3,7 @@ import { useDateRangeFilter } from "@/components/observe/useDateRangeFilter";
 import { Page } from "@/components/page-layout";
 import { IdentityRail } from "@/components/identity-rail";
 import { identityRailItems } from "@/components/identity-rail-items";
+import { useRecentLabelOverride } from "@/components/command-palette/recentlyVisited";
 import { RequireScope } from "@/components/require-scope";
 import {
   RouteNotFoundState,
@@ -38,7 +39,9 @@ const KIND_LABELS: Record<IdentityModel["kind"], string> = {
 
 export default function IdentityDetailRoot(): JSX.Element {
   return (
-    <RequireScope scope="org:admin" level="page">
+    // org:read, matching both the index and the server gate on
+    // identity.resolve. The admin-only panels gate themselves.
+    <RequireScope scope={["org:read", "org:admin"]} level="page">
       <IdentityDetailContent />
     </RequireScope>
   );
@@ -54,6 +57,9 @@ function IdentityDetailContent(): JSX.Element {
     throwOnError: false,
     enabled: !!urn,
   });
+  // Without this the recents entry is the sub-page segment ("overview"), since
+  // the URN is neither an id nor long enough for the label heuristic to reject.
+  useRecentLabelOverride(location.pathname, identityQuery.data?.displayName);
 
   // The bare route carries no panels of its own; overview is the landing view.
   if (
@@ -124,7 +130,11 @@ function IdentityDetailContent(): JSX.Element {
             the navigation from the panels, which carry the card surface. */}
         <div className="bg-background flex min-h-0 flex-1 gap-8 px-8 py-8">
           <IdentityRail
-            items={identityRailItems(orgRoutes, encodedUrn ?? "")}
+            items={identityRailItems(
+              orgRoutes,
+              encodedUrn ?? "",
+              location.search,
+            )}
             className="sticky top-8 hidden w-44 shrink-0 self-start lg:flex"
           />
           <div className="min-w-0 flex-1">

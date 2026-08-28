@@ -8,7 +8,9 @@ import {
 import { useIdentityOutlet } from "./identityRoute";
 import { IdentitySection } from "./IdentitySection";
 import {
+  useIdentityProject,
   useIdentityAuditLogs,
+  useCanReadOthersChats,
   useIdentityChats,
   useIdentityWindow,
 } from "./useIdentityQueries";
@@ -16,11 +18,16 @@ import {
 export default function IdentityActivity(): JSX.Element {
   const { identity } = useIdentityOutlet();
   const { from, to } = useIdentityWindow();
-  const routes = useRoutes();
+  const project = useIdentityProject();
+  // Project routes resolve against the project this page is filtered to: the
+  // page is org-level, so the router has no :projectSlug of its own to fill in
+  // and every handoff would otherwise resolve to a path with the slug missing.
+  const routes = useRoutes({ projectSlug: project.slug });
   const orgRoutes = useOrgRoutes();
 
   const auditQuery = useIdentityAuditLogs(identity);
   const chatsQuery = useIdentityChats(identity, from, to, 20);
+  const canReadOthersChats = useCanReadOthersChats();
 
   const logs = auditQuery.data?.result.logs ?? [];
   const chats = chatsQuery.data?.chats ?? [];
@@ -79,7 +86,12 @@ export default function IdentityActivity(): JSX.Element {
               : undefined
           }
         >
-          {chats.length === 0 ? (
+          {!canReadOthersChats ? (
+            <IdentityPanelEmpty>
+              Listing someone else&rsquo;s sessions needs the chat:read
+              permission.
+            </IdentityPanelEmpty>
+          ) : chats.length === 0 ? (
             <IdentityPanelEmpty>
               No chat sessions in this window.
             </IdentityPanelEmpty>

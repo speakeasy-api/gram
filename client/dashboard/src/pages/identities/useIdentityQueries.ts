@@ -1,5 +1,6 @@
 import { useDateRangeFilter } from "@/components/observe/useDateRangeFilter";
 import { useOrganization, useProject } from "@/contexts/Auth";
+import { useRBAC } from "@/hooks/useRBAC";
 import { useSearchParams } from "react-router";
 import type { AccessMember } from "@gram/client/models/components/accessmember.js";
 import type { IdentityModel } from "@gram/client/models/components/identitymodel.js";
@@ -97,6 +98,20 @@ export function useIdentityMetrics(
   );
 }
 
+/**
+ * Whether this viewer can be shown someone else's sessions at all.
+ *
+ * chat.list honours an explicit user filter only for a caller holding an
+ * unrestricted chat:read grant;;without it the filter is discarded and the
+ * caller's OWN sessions come back instead. Rendering those under the subject's
+ * name would be a silent misattribution, so the panel asks for nothing rather
+ * than asking for something it cannot trust.
+ */
+export function useCanReadOthersChats(): boolean {
+  const { hasScope } = useRBAC();
+  return hasScope("chat:read");
+}
+
 export function useIdentityChats(
   identity: IdentityModel,
   from: Date,
@@ -104,6 +119,7 @@ export function useIdentityChats(
   limit = 5,
 ): ReturnType<typeof useListChats> {
   const { slug: gramProject } = useIdentityProject();
+  const canReadOthersChats = useCanReadOthersChats();
   const userId = identity.userIds[0];
   const externalUserId = identity.externalUserIds[0];
   return useListChats(
@@ -116,7 +132,10 @@ export function useIdentityChats(
       gramProject,
     },
     undefined,
-    { ...OFF, enabled: !!userId || !!externalUserId },
+    {
+      ...OFF,
+      enabled: canReadOthersChats && (!!userId || !!externalUserId),
+    },
   );
 }
 

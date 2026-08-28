@@ -7,12 +7,20 @@ import {
 } from "./IdentityPanel";
 import { useIdentityOutlet } from "./identityRoute";
 import { IdentitySection } from "./IdentitySection";
-import { useIdentityMetrics, useIdentityWindow } from "./useIdentityQueries";
+import {
+  useIdentityMetrics,
+  useIdentityProject,
+  useIdentityWindow,
+} from "./useIdentityQueries";
 
 export default function IdentityCost(): JSX.Element {
   const { identity } = useIdentityOutlet();
   const { from, to } = useIdentityWindow();
-  const routes = useRoutes();
+  const project = useIdentityProject();
+  // Project routes resolve against the project this page is filtered to: the
+  // page is org-level, so the router has no :projectSlug of its own to fill in
+  // and every handoff would otherwise resolve to a path with the slug missing.
+  const routes = useRoutes({ projectSlug: project.slug });
 
   const metricsQuery = useIdentityMetrics(identity, from, to);
   const metrics = metricsQuery.data?.metrics;
