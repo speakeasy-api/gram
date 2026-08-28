@@ -17,12 +17,12 @@ import (
 
 const hostedEvaluatorTimeout = 2 * time.Second
 
-// HostedCheckpoint authoritatively evaluates the M2 kill switch before hosted
-// tools/call configuration or execution work begins.
+// HostedCheckpoint authoritatively evaluates the ordered MCP and AI-access
+// kill switches before hosted tools/call configuration or execution work begins.
 type HostedCheckpoint struct {
 	principal     killswitches.PrincipalAdapter
 	resource      killswitches.ResourceAdapter
-	evaluator     *killswitches.Evaluator
+	evaluator     evaluator
 	transport     killswitches.TransportAdapter
 	failurePolicy killswitches.FailurePolicy
 	recorder      IdentityCoverageRecorder
@@ -106,7 +106,7 @@ func (c *HostedCheckpoint) Evaluate(ctx context.Context, organizationID string, 
 
 	result := c.evaluator.Evaluate(evaluationCtx, killswitches.EvaluationRequest{
 		OrganizationID:      organization,
-		DefinitionKeys:      []killswitches.DefinitionKey{DefinitionKeyMCPToolExecution},
+		DefinitionKeys:      mcpEvaluationDefinitionKeys(),
 		PrincipalCandidates: derivation.principalResult.Candidates(),
 		ResourceKind:        ResourceKindMCPServer,
 		ResourceKey:         resourceKey,

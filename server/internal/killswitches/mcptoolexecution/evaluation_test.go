@@ -13,12 +13,9 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
-// TestMCPToolExecutionEvaluationAcrossProjects proves the end-to-end
-// adapter-to-evaluator slice with real database state: authoritative
-// candidates from provenance, canonical server keys from fronting IDs, and
-// selected-one, selected-many (cross-project), and dynamic all-server
-// matching — including a server created after the all-server activation,
-// without materializing the organization's server list.
+// TestHostedCheckpoint_ReevaluatesAndFailsClosed proves hosted MCP performs
+// one dual-definition evaluation on every covered call and preserves
+// fail-closed non-match language for infrastructure failures.
 func TestHostedCheckpoint_ReevaluatesAndFailsClosed(t *testing.T) {
 	t.Parallel()
 
@@ -32,19 +29,22 @@ func TestHostedCheckpoint_ReevaluatesAndFailsClosed(t *testing.T) {
 	recorder := &coverageRecorder{}
 	checkpoint, err := NewHostedCheckpoint(conn, testenv.NewMeterProvider(t), testenv.NewLogger(t), recorder)
 	require.NoError(t, err)
+	counted := &countingEvaluator{delegate: checkpoint.evaluator}
+	checkpoint.evaluator = counted
 	ctx := testIdentityContext(t, mcpidentity.KindUserSession, userID)
 
 	disposition, err := checkpoint.Evaluate(ctx, orgID, source)
 	require.NoError(t, err)
 	require.Equal(t, killswitches.TransportDispositionContinue, disposition.Kind())
 
-	note := "Exact operator note."
+	note := "AI access paused exactly."
 	insertPrescription(t, conn, orgID, prescriptionFixture{
-		ID:           uuid.New(),
-		PrincipalKey: userID,
-		Scope:        "selected",
-		Resources:    []string{serverID.String()},
-		ExternalNote: note,
+		ID:            uuid.New(),
+		DefinitionKey: DefinitionKeyAIAccess,
+		PrincipalKey:  userID,
+		Scope:         "selected",
+		Resources:     []string{serverID.String()},
+		ExternalNote:  note,
 	})
 
 	disposition, err = checkpoint.Evaluate(ctx, orgID, source)
@@ -53,6 +53,10 @@ func TestHostedCheckpoint_ReevaluatesAndFailsClosed(t *testing.T) {
 	gotNote, ok := disposition.ExternalNote()
 	require.True(t, ok)
 	require.Equal(t, note, gotNote)
+	require.Equal(t, 2, counted.calls)
+	for _, request := range counted.requests {
+		require.Equal(t, []killswitches.DefinitionKey{DefinitionKeyMCPToolExecution, DefinitionKeyAIAccess}, request.DefinitionKeys)
+	}
 	require.Len(t, recorder.observations, 2)
 	for _, observation := range recorder.observations {
 		require.Equal(t, coverageObservation{
