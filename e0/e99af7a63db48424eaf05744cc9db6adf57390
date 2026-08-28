@@ -1,0 +1,18 @@
+server/database/schema.sql
+  h_2620cc60cfd1e9 4120-4123
+server/migrations/20260828101442_data_export_routes_single_destination.sql
+  h_2620cc60cfd1e9 1-6
+server/migrations/atlas.sum
+  h_2620cc60cfd1e9 1,375
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.0",
+  "base_commit_sha": "e0e99af7a63db48424eaf05744cc9db6adf57390",
+  "prompts": {},
+  "humans": {
+    "h_2620cc60cfd1e9": {
+      "author": "tgmendes <tiago@speakeasy.com>"
+    }
+  }
+}
