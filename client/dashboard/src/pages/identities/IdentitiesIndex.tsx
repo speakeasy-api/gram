@@ -59,8 +59,7 @@ const IDENTITY_FILTERS = defineFilters([
     label: "Kind",
     kind: "multiselect",
     pinned: true,
-    description:
-      "A directory member, an address we cannot attribute to one, or an id an agent reported for itself.",
+    description: "Humans and agents.",
   },
 ]);
 
@@ -248,9 +247,8 @@ function IdentitiesIndexContent(): JSX.Element {
     <Page.Section>
       <Page.Section.Title>Identities</Page.Section.Title>
       <Page.Section.Description>
-        {rows.length} of {identities.length} — directory members, the addresses
-        behind unattributed activity, and the agents that reported for
-        themselves.
+        {rows.length} of {identities.length} — every person and agent whose
+        activity flows through the platform.
       </Page.Section.Description>
       <Page.Section.Body>
         <StatTileGroup>
@@ -350,15 +348,7 @@ function IdentityCell({ identity }: { identity: Employee }): JSX.Element {
         </AvatarFallback>
       </Avatar>
       <div className="flex min-w-0 flex-col">
-        <Text
-          className={
-            kind === "person"
-              ? "truncate font-medium"
-              : "truncate font-mono text-sm"
-          }
-        >
-          {identity.name}
-        </Text>
+        <Text className="truncate font-medium">{identity.name}</Text>
         {kind === "person" && secondary && (
           <Text muted small className="truncate text-xs">
             {secondary}
