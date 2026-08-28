@@ -246,7 +246,9 @@ func TestEnableKey_RealOpenRouterCompletesOnLockedSession(t *testing.T) {
 	ctx, ti := newTestServiceWithProvisioner(t, func(logger *slog.Logger, tracerProvider trace.TracerProvider, conn *pgxpool.Pool, enc *encryption.Client) openrouter.Provisioner {
 		policy, err := guardian.NewUnsafePolicy(tracerProvider, nil)
 		require.NoError(t, err)
-		return openrouter.New(logger, tracerProvider, policy, conn, "test", "provisioning-key", nil, nil, nil, enc, openrouter.WithBaseURL(upstream.URL))
+		testBaseURL, err := openrouter.WithTestBaseURL(upstream.URL)
+		require.NoError(t, err)
+		return openrouter.New(logger, tracerProvider, policy, conn, "test", "provisioning-key", nil, nil, nil, enc, testBaseURL)
 	})
 	adminCtx := withAdmin(t, ctx)
 	orgID := seedKey(t, ctx, ti, "enablereal", "chat", "sk-or-enable-real")
