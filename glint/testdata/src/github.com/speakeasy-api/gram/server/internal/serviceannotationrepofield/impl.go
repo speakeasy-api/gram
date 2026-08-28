@@ -1,9 +1,9 @@
 package serviceannotationrepofield
 
 import (
-	"serviceannotationrepofield/repo"
+	"github.com/speakeasy-api/gram/server/internal/serviceannotationrepofield/repo"
 
-	"github.com/speakeasy-api/gram/glint/annotations"
+	"github.com/speakeasy-api/gram/server/internal/annotations"
 )
 
 type TestService interface {
@@ -16,7 +16,7 @@ type TestAuther interface {
 
 type Service struct {
 	annotations.Service[TestService, TestAuther]
-	repo *repo.Queries // want `field "repo" in Service has type \*serviceannotationrepofield/repo.Queries which is sqlc-generated; services should use \*pgxpool.Pool and create repo instances in methods`
+	repo *repo.Queries // want `field "repo" in Service has type \*github.com/speakeasy-api/gram/server/internal/serviceannotationrepofield/repo.Queries which is sqlc-generated; services should use \*pgxpool.Pool and create repo instances in methods`
 }
 
 var _ TestService = (*Service)(nil)

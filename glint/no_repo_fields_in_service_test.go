@@ -11,14 +11,14 @@ func TestNoRepoFieldsInServiceGood(t *testing.T) {
 	t.Parallel()
 
 	testdata := analysistest.TestData()
-	analysistest.Run(t, testdata, newNoRepoFieldsInServiceAnalyzer(noRepoFieldsInServiceSettings{}), "serviceannotation")
+	analysistest.Run(t, testdata, newNoRepoFieldsInServiceAnalyzer(noRepoFieldsInServiceSettings{}), "github.com/speakeasy-api/gram/server/internal/serviceannotation")
 }
 
 func TestNoRepoFieldsInServiceViolation(t *testing.T) {
 	t.Parallel()
 
 	testdata := analysistest.TestData()
-	analysistest.Run(t, testdata, newNoRepoFieldsInServiceAnalyzer(noRepoFieldsInServiceSettings{}), "serviceannotationrepofield")
+	analysistest.Run(t, testdata, newNoRepoFieldsInServiceAnalyzer(noRepoFieldsInServiceSettings{}), "github.com/speakeasy-api/gram/server/internal/serviceannotationrepofield")
 }
 
 func TestBuildAnalyzersSkipsDisabledNoRepoFieldsInService(t *testing.T) {

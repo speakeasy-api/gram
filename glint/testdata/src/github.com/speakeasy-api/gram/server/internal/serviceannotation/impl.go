@@ -1,6 +1,6 @@
-package serviceannotationmissingattach
+package serviceannotation
 
-import "github.com/speakeasy-api/gram/glint/annotations"
+import "github.com/speakeasy-api/gram/server/internal/annotations"
 
 type TestService interface {
 	DoSomething()
@@ -10,7 +10,7 @@ type TestAuther interface {
 	Authenticate()
 }
 
-type Service struct { // want `Service embeds annotations.Service but package has no func Attach\(\.\.\., \*Service\)`
+type Service struct {
 	annotations.Service[TestService, TestAuther]
 }
 
@@ -19,3 +19,5 @@ var _ TestAuther = (*Service)(nil)
 
 func (s *Service) DoSomething()  {}
 func (s *Service) Authenticate() {}
+
+func Attach(service *Service) {}

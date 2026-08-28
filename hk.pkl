@@ -9,7 +9,7 @@ local linters = new Mapping<String, Step> {
   ["pklfmt"] = Builtins.pkl_format
   ["gomodtidy"] {
     glob = List("**/go.mod", "**/go.sum", "**/*.go")
-    fix = "go mod tidy"
+    fix = "mise run -q go:tidy"
   }
   ["gofmt"] {
     batch = true
