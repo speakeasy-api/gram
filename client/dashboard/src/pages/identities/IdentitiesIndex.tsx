@@ -186,7 +186,7 @@ function IdentitiesIndexContent(): JSX.Element {
   // the per-identity pages already answer, each over its own window.
   const usageQuery = useQuery({
     queryKey: identityRosterQueryKey(organization.id, projectSlug),
-    queryFn: () => fetchIdentityRoster(client),
+    queryFn: () => fetchIdentityRoster(client, projectSlug),
     throwOnError: false,
   });
 

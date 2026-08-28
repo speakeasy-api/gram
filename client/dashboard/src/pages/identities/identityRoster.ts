@@ -29,6 +29,8 @@ export function identityRosterQueryKey(
  */
 export async function fetchIdentityRoster(
   client: Parameters<typeof telemetrySearchUsers>[0],
+  /** The project to read under, which must match the cache key's. */
+  gramProject: string,
 ): Promise<UserSummary[]> {
   const users: UserSummary[] = [];
   let cursor: string | undefined;
@@ -36,6 +38,7 @@ export async function fetchIdentityRoster(
   do {
     const result = await unwrapAsync(
       telemetrySearchUsers(client, {
+        gramProject,
         searchUsersPayload: {
           cursor,
           filter: { from: ALL_TIME_FROM, to: new Date() },

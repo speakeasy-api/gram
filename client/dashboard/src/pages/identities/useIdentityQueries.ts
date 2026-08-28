@@ -1,6 +1,5 @@
 import { useDateRangeFilter } from "@/components/observe/useDateRangeFilter";
 import { useOrganization, useProject, useSession } from "@/contexts/Auth";
-import { useProjectSlugForRequests } from "@/contexts/Sdk";
 import { useRBAC } from "@/hooks/useRBAC";
 import { useGramContext } from "@gram/client/react-query/_context.js";
 import { useQuery } from "@tanstack/react-query";
@@ -126,7 +125,7 @@ export function useIdentityIsKnown(identity: IdentityModel | undefined): {
 } {
   const client = useGramContext();
   const organization = useOrganization();
-  const projectSlug = useProjectSlugForRequests();
+  const { slug: projectSlug } = useIdentityProject();
   const hasDirectoryRow = (identity?.userIds.length ?? 0) > 0;
   const identifiers = new Set(
     [...(identity?.emails ?? []), ...(identity?.externalUserIds ?? [])].map(
@@ -140,7 +139,7 @@ export function useIdentityIsKnown(identity: IdentityModel | undefined): {
   // id-keyed ones from raw logs, and the id filter matches neither.
   const query = useQuery({
     queryKey: identityRosterQueryKey(organization.id, projectSlug),
-    queryFn: () => fetchIdentityRoster(client),
+    queryFn: () => fetchIdentityRoster(client, projectSlug),
     throwOnError: false,
     enabled: !!identity && !hasDirectoryRow && identifiers.size > 0,
   });
