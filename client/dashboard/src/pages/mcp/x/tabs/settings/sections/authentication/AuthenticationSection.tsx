@@ -9,9 +9,10 @@ import {
 import { Text } from "@/components/ui/Text";
 import type { McpServer } from "@gram/client/models/components/mcpserver.js";
 import type { RemoteSessionIssuer } from "@gram/client/models/components/remotesessionissuer.js";
+import { UpdateUserSessionIssuerFormClientIdMetadataAdmissionMode as WritableMode } from "@gram/client/models/components/updateusersessionissuerform.js";
 import { useRemoteSessionIssuers } from "@gram/client/react-query/remoteSessionIssuers.js";
 import { useUserSessionIssuer } from "@gram/client/react-query/userSessionIssuer.js";
-import { useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { SettingsInlineEmptyState } from "../../SettingsInlineEmptyState";
 import { SettingsSection } from "@/components/detail/settings-section";
 import { AttachRemoteIdentityProviderSheet } from "./AttachRemoteIdentityProviderSheet";
@@ -164,6 +165,28 @@ export function AuthenticationSectionBody({
     [allIssuers, associatedIssuerIds],
   );
 
+  // Mirrors the unsaved selection in the admission mode field so the
+  // custom-URL list can render against it. The field owns the draft; this is
+  // a copy, so it has to be reset on every trigger the field resets its own
+  // on: a change to the saved mode, a different issuer, and the field going
+  // away. That last one is not hypothetical — the field lives in one branch
+  // below and this state does not, so a failed background refetch swaps the
+  // branch for an error, unmounts the field, and remounts it later with a
+  // fresh draft. Without it in the deps, this copy would keep a selection
+  // the field no longer holds, and the list would render for a mode nothing
+  // is showing as chosen.
+  const [cimdDraftMode, setCimdDraftMode] = useState<WritableMode | null>(null);
+  const savedCimdMode = userSessionIssuer?.clientIdMetadataAdmissionMode;
+  const loadedIssuerId = userSessionIssuer?.id;
+  const cimdFieldMounted =
+    issuerConfigured &&
+    !isLoadingUserSessionIssuer &&
+    !isUserSessionIssuerError &&
+    !!userSessionIssuer;
+  useEffect(() => {
+    setCimdDraftMode(null);
+  }, [savedCimdMode, loadedIssuerId, cimdFieldMounted]);
+
   const [sheetOpen, setSheetOpen] = useState(false);
   const [sheetInitialUrl, setSheetInitialUrl] = useState<string | undefined>();
   const [sheetInitialScopes, setSheetInitialScopes] = useState<string[]>();
@@ -213,17 +236,23 @@ export function AuthenticationSectionBody({
   } else if (isUserSessionIssuerError || !userSessionIssuer) {
     authenticationFields = <AuthenticationLoadErrorField />;
   } else {
-    // The custom-URL list only means anything in the modes that consult it.
-    // Keyed on the SAVED effective mode, not an unsaved draft in the mode
-    // field, so the list never claims to apply before the policy does.
+    // The custom-URL list only means anything in the modes that consult it,
+    // so it follows the selection rather than the saved value: an operator
+    // moving onto "Known clients" can add the URLs that mode enforces before
+    // saving it, instead of switching first and racing to fill the list
+    // while enforcement is already live with nothing in it.
+    const shownMode =
+      cimdDraftMode ?? userSessionIssuer.clientIdMetadataAdmissionMode;
     const admitsCustomUrls =
-      userSessionIssuer.clientIdMetadataAdmissionMode === "presets" ||
-      userSessionIssuer.clientIdMetadataAdmissionMode === "reporting";
+      shownMode === "presets" || shownMode === "reporting";
 
     authenticationFields = (
       <>
         <UserSessionDurationField userSessionIssuer={userSessionIssuer} />
-        <CimdAdmissionModeField userSessionIssuer={userSessionIssuer} />
+        <CimdAdmissionModeField
+          userSessionIssuer={userSessionIssuer}
+          onDraftModeChange={setCimdDraftMode}
+        />
         {admitsCustomUrls && (
           <CimdCustomClientsField userSessionIssuer={userSessionIssuer} />
         )}

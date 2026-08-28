@@ -6,17 +6,21 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestResolveMode_NullResolvesToReporting pins the rollout lever. An issuer
-// whose mode was never configured measures rather than enforces, so
-// admission control ships without changing anyone's behaviour. Flipping
-// this to ModePresets is the deliberate, evidence-gated final step.
-func TestResolveMode_NullResolvesToReporting(t *testing.T) {
+// TestResolveMode_NullResolvesToOpen pins the resting policy. An issuer
+// whose mode was never configured admits every spec-valid client: a presets
+// denial is unrecoverable for the end user, so enforcement is something an
+// operator opts into rather than something a default does to them.
+//
+// New rows are written 'open' explicitly, so this branch covers rows created
+// before that and any row a direct database write leaves unset.
+func TestResolveMode_NullResolvesToOpen(t *testing.T) {
 	t.Parallel()
 
 	mode, recognized := ResolveMode("", false)
-	require.Equal(t, ModeReporting, mode)
+	require.Equal(t, ModeOpen, mode)
 	require.True(t, recognized, "an absent mode is a valid state, not a data error")
-	require.False(t, mode.Enforces(), "the default must not enforce yet")
+	require.Equal(t, OutcomeAdmit, Evaluate(mode, "https://unknown.example.com/client.json").Outcome,
+		"the default must refuse nobody")
 }
 
 // TestResolveMode_EmptyStringFailsClosed: a non-NULL empty string is a data
@@ -66,18 +70,17 @@ func TestIsValidMode(t *testing.T) {
 	require.False(t, IsValidMode("allow-everything"))
 }
 
-// TestReportingIsNotWritable: reporting is as permissive as open for as
-// long as it is on, so it must never be selectable through the management
-// API. It is a deployment-time default, not a setting an operator can leave
-// switched on.
+// TestReportingIsNotWritable: reporting admits exactly what open admits, so
+// offering it through the management API would put a second, vaguer name on
+// a mode that already has an honest one.
 func TestReportingIsNotWritable(t *testing.T) {
 	t.Parallel()
 
 	require.False(t, IsValidMode(string(ModeReporting)))
 	require.NotContains(t, Modes(), ModeReporting)
 
-	// ResolveMode must still recognize it, or the rollout lever could not
-	// resolve its own value.
+	// ResolveMode must still recognize it, or a row written while it was
+	// the default would fail closed.
 	mode, recognized := ResolveMode(string(ModeReporting), true)
 	require.Equal(t, ModeReporting, mode)
 	require.True(t, recognized)
@@ -85,6 +88,10 @@ func TestReportingIsNotWritable(t *testing.T) {
 
 // TestEnforces covers the one property that separates reporting from every
 // other mode.
+//
+// ModeOpen enforces, which is not a contradiction to relax: Evaluate never
+// denies under it, so a caller can only hold an OutcomeDeny it built itself
+// as a real refusal. The shadow measurement never produces one.
 func TestEnforces(t *testing.T) {
 	t.Parallel()
 

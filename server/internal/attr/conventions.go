@@ -193,17 +193,24 @@ const (
 	CIMDCrossOriginRedirectOriginsKey = attribute.Key("gram.cimd.cross_origin_redirect_origins")
 
 	// CIMDAdmissionModeKey is the effective per-issuer CIMD admission policy
-	// ("disabled", "presets", "open") — the low-cardinality dimension on
+	// ("disabled", "presets", "open", and "reporting" on rows that predate
+	// the open default) — the low-cardinality dimension on
 	// cimd.admission.decisions. Operator-chosen, never attacker-influenced.
 	CIMDAdmissionModeKey = attribute.Key("gram.cimd.admission_mode")
 
 	// CIMDAdmissionOutcomeKey is the machine-readable admission decision on
 	// cimd.admission.decisions. Admissions carry the reason they were
 	// admitted rather than a bare "admitted", so the values are
-	// "admitted_open", "admitted_catalog_exact", "admitted_catalog_pattern",
-	// "admitted_custom", "denied_disabled", "denied_not_listed",
-	// "denied_oversized", and "denied_unknown_mode". Chart the admitted_*
-	// values as a group; there is no single value meaning "admitted".
+	// "admitted_open", "admitted_open_not_listed",
+	// "admitted_open_oversized", "admitted_catalog_exact",
+	// "admitted_catalog_pattern", "admitted_custom", "denied_disabled",
+	// "denied_not_listed", "denied_oversized", and "denied_unknown_mode".
+	// Chart the admitted_* values as a group; there is no single value
+	// meaning "admitted".
+	//
+	// "admitted_open_not_listed" is the catalog-gap signal on an issuer that
+	// refuses nobody: the client got in, and no rule anywhere covered it.
+	// Alert on it alongside "denied_not_listed".
 	CIMDAdmissionOutcomeKey = attribute.Key("gram.cimd.admission_outcome")
 
 	// JWKSOriginKey is the host of a remote JWK Set URL — the per-key-host
