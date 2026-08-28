@@ -10,6 +10,7 @@ SELECT
     k.key_type,
     k.monthly_credits,
     (CASE WHEN k.disable_causes IS NULL THEN k.disabled ELSE cardinality(k.disable_causes) > 0 END)::boolean AS disabled,
+    k.disable_causes,
     k.created_at,
     k.updated_at
 FROM openrouter_api_keys k
@@ -26,6 +27,7 @@ SELECT
     k.key_type,
     k.monthly_credits,
     (CASE WHEN k.disable_causes IS NULL THEN k.disabled ELSE cardinality(k.disable_causes) > 0 END)::boolean AS disabled,
+    k.disable_causes,
     k.created_at,
     k.updated_at
 FROM openrouter_api_keys k

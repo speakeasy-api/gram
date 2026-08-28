@@ -11,6 +11,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"slices"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -27,11 +28,9 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/background/activities/keybillinglock"
-	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
-	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/openrouterkeys/repo"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
@@ -40,7 +39,8 @@ import (
 )
 
 type lockedSessionProvisioner interface {
-	RefreshAPIKeyLimitWithDB(context.Context, openrouter.DBTX, string, openrouter.KeyType, *int) (int, error)
+	AddAPIKeyDisableCauseWithDB(context.Context, openrouter.DBTX, string, openrouter.KeyType, openrouter.DisableCause) (openrouter.DisableCauseChange, error)
+	RemoveAPIKeyDisableCauseWithDB(context.Context, openrouter.DBTX, string, openrouter.KeyType, openrouter.DisableCause, *int) (int, openrouter.DisableCauseChange, error)
 }
 
 type Service struct {
@@ -133,6 +133,7 @@ func (s *Service) ListKeys(ctx context.Context, _ *gen.ListKeysPayload) (*gen.Li
 			KeyType:          row.KeyType,
 			MonthlyCredits:   row.MonthlyCredits,
 			Disabled:         row.Disabled,
+			DisableCauses:    row.DisableCauses,
 			CreatedAt:        row.CreatedAt.Time.Format(time.RFC3339),
 			UpdatedAt:        row.UpdatedAt.Time.Format(time.RFC3339),
 		})
@@ -187,46 +188,9 @@ func (s *Service) DisableKey(ctx context.Context, payload *gen.DisableKeyPayload
 	}
 	logger = logger.With(attr.SlogOrganizationID(payload.OrganizationID), attr.SlogOpenRouterKeyType(payload.KeyType))
 
-	changed := false
-	err = keybillinglock.WithAcquireTimeout(ctx, logger, s.db, payload.OrganizationID, openrouter.KeyType(payload.KeyType), keyBillingLockWaitTimeout, func(conn *pgxpool.Conn) error {
-		// DisableAPIKey treats a missing key as a no-op, but the admin surface
-		// should 404 instead of pretending success.
-		row, err := repo.New(conn).GetOpenRouterAPIKeyForAdmin(ctx, repo.GetOpenRouterAPIKeyForAdminParams{
-			OrganizationID: payload.OrganizationID,
-			KeyType:        payload.KeyType,
-		})
-		switch {
-		case errors.Is(err, pgx.ErrNoRows):
-			return oops.E(oops.CodeNotFound, err, "no openrouter key of this type for the organization")
-		case err != nil:
-			return oops.E(oops.CodeUnexpected, err, "read openrouter key").LogError(ctx, logger)
-		case row.Disabled:
-			return nil
-		}
-
-		if err := s.provisioner.DisableAPIKey(ctx, payload.OrganizationID, openrouter.KeyType(payload.KeyType)); err != nil {
-			return oops.E(oops.CodeUnexpected, err, "disable openrouter key").LogError(ctx, logger)
-		}
-		changed = true
-		return nil
-	})
-	if err != nil {
-		if shareable, ok := errors.AsType[*oops.ShareableError](err); ok {
-			return nil, shareable
-		}
-		if errors.Is(err, keybillinglock.ErrAcquireTimeout) {
-			return nil, oops.E(oops.CodeUnavailable, err, "another billing operation is in progress; retry shortly").LogWarn(ctx, logger)
-		}
-		return nil, oops.E(oops.CodeUnexpected, err, "lock openrouter key for disable").LogError(ctx, logger)
+	if err := s.mutateAdminLock(ctx, logger, authCtx, payload.OrganizationID, payload.KeyType, true); err != nil {
+		return nil, err
 	}
-	if !changed {
-		return s.adminKeyView(ctx, logger, payload.OrganizationID, payload.KeyType)
-	}
-
-	if err := s.logKeyAction(ctx, authCtx, payload.OrganizationID, payload.KeyType, audit.ActionOpenRouterAPIKeyDisable); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "log openrouter key disable").LogError(ctx, logger)
-	}
-
 	return s.adminKeyView(ctx, logger, payload.OrganizationID, payload.KeyType)
 }
 
@@ -237,59 +201,81 @@ func (s *Service) EnableKey(ctx context.Context, payload *gen.EnableKeyPayload) 
 	}
 	logger = logger.With(attr.SlogOrganizationID(payload.OrganizationID), attr.SlogOpenRouterKeyType(payload.KeyType))
 
-	changed := false
-	err = keybillinglock.WithAcquireTimeout(ctx, logger, s.db, payload.OrganizationID, openrouter.KeyType(payload.KeyType), keyBillingLockWaitTimeout, func(conn *pgxpool.Conn) error {
-		row, err := repo.New(conn).GetOpenRouterAPIKeyForAdmin(ctx, repo.GetOpenRouterAPIKeyForAdminParams{
-			OrganizationID: payload.OrganizationID,
-			KeyType:        payload.KeyType,
+	if err := s.mutateAdminLock(ctx, logger, authCtx, payload.OrganizationID, payload.KeyType, false); err != nil {
+		return nil, err
+	}
+	return s.adminKeyView(ctx, logger, payload.OrganizationID, payload.KeyType)
+}
+
+func (s *Service) mutateAdminLock(ctx context.Context, logger *slog.Logger, authCtx *contextvalues.AuthContext, organizationID, keyType string, add bool) error {
+	action := audit.ActionOpenRouterAPIKeyEnable
+	operation := "enable"
+	if add {
+		action = audit.ActionOpenRouterAPIKeyDisable
+		operation = "disable"
+	}
+
+	err := keybillinglock.WithAcquireTimeout(ctx, logger, s.db, organizationID, openrouter.KeyType(keyType), keyBillingLockWaitTimeout, func(conn *pgxpool.Conn) error {
+		tx, err := conn.Begin(ctx)
+		if err != nil {
+			return fmt.Errorf("begin openrouter key %s transaction: %w", operation, err)
+		}
+		defer func() { _ = tx.Rollback(ctx) }()
+
+		row, err := repo.New(tx).GetOpenRouterAPIKeyForAdmin(ctx, repo.GetOpenRouterAPIKeyForAdminParams{
+			OrganizationID: organizationID,
+			KeyType:        keyType,
 		})
 		switch {
 		case errors.Is(err, pgx.ErrNoRows):
 			return oops.E(oops.CodeNotFound, err, "no openrouter key of this type for the organization")
 		case err != nil:
-			return oops.E(oops.CodeUnexpected, err, "read openrouter key").LogError(ctx, logger)
-		case !row.Disabled:
+			return fmt.Errorf("read openrouter key before %s: %w", operation, err)
+		case row.DisableCauses == nil:
+			return fmt.Errorf("%s openrouter key: disable causes are unclassified", operation)
+		}
+
+		hasAdminLock := slices.Contains(row.DisableCauses, string(openrouter.DisableCauseAdminLock))
+		if hasAdminLock == add {
 			return nil
 		}
 
-		// Keep a recorded ceiling. Legacy zero rows resolve to the current
-		// account policy before the explicit refresh.
-		limit := int(row.MonthlyCredits)
-		if limit == 0 {
-			var ok bool
-			limit, ok = openrouter.ResolveDefaultCreditLimit(ctx, logger, conn, row.OrganizationID, billing.Tier(row.GramAccountType))
-			if !ok {
-				return oops.E(oops.CodeUnexpected, fmt.Errorf("no OpenRouter credit policy for account type %q", row.GramAccountType), "enable openrouter key").LogError(ctx, logger)
-			}
-		}
-		dbProvisioner, ok := s.provisioner.(lockedSessionProvisioner)
+		provisioner, ok := s.provisioner.(lockedSessionProvisioner)
 		if !ok {
-			return oops.E(oops.CodeUnexpected, errors.New("OpenRouter key provisioner cannot use the locked database session"), "enable openrouter key").LogError(ctx, logger)
+			return fmt.Errorf("%s openrouter key: provisioner cannot use the locked database session", operation)
 		}
-		if _, err := dbProvisioner.RefreshAPIKeyLimitWithDB(ctx, conn, payload.OrganizationID, openrouter.KeyType(payload.KeyType), &limit); err != nil {
-			return oops.E(oops.CodeUnexpected, err, "enable openrouter key").LogError(ctx, logger)
+
+		var change openrouter.DisableCauseChange
+		if add {
+			change, err = provisioner.AddAPIKeyDisableCauseWithDB(ctx, tx, organizationID, openrouter.KeyType(keyType), openrouter.DisableCauseAdminLock)
+		} else {
+			_, change, err = provisioner.RemoveAPIKeyDisableCauseWithDB(ctx, tx, organizationID, openrouter.KeyType(keyType), openrouter.DisableCauseAdminLock, nil)
 		}
-		changed = true
+		if err != nil {
+			return fmt.Errorf("%s openrouter key admin lock: %w", operation, err)
+		}
+		if !change.CauseChanged {
+			return fmt.Errorf("%s openrouter key admin lock: cause did not change after locked preflight", operation)
+		}
+
+		if err := s.logKeyAction(ctx, tx, authCtx, organizationID, keyType, action); err != nil {
+			return err
+		}
+		if err := tx.Commit(ctx); err != nil {
+			return fmt.Errorf("commit openrouter key %s transaction: %w", operation, err)
+		}
 		return nil
 	})
-	if err != nil {
-		if shareable, ok := errors.AsType[*oops.ShareableError](err); ok {
-			return nil, shareable
-		}
-		if errors.Is(err, keybillinglock.ErrAcquireTimeout) {
-			return nil, oops.E(oops.CodeUnavailable, err, "another billing operation is in progress; retry shortly").LogWarn(ctx, logger)
-		}
-		return nil, oops.E(oops.CodeUnexpected, err, "lock openrouter key for enable").LogError(ctx, logger)
+	if err == nil {
+		return nil
 	}
-	if !changed {
-		return s.adminKeyView(ctx, logger, payload.OrganizationID, payload.KeyType)
+	if shareable, ok := errors.AsType[*oops.ShareableError](err); ok {
+		return shareable
 	}
-
-	if err := s.logKeyAction(ctx, authCtx, payload.OrganizationID, payload.KeyType, audit.ActionOpenRouterAPIKeyEnable); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "log openrouter key enable").LogError(ctx, logger)
+	if errors.Is(err, keybillinglock.ErrAcquireTimeout) {
+		return oops.E(oops.CodeUnavailable, err, "another billing operation is in progress; retry shortly").LogWarn(ctx, logger)
 	}
-
-	return s.adminKeyView(ctx, logger, payload.OrganizationID, payload.KeyType)
+	return oops.E(oops.CodeUnexpected, err, "admin %s openrouter key", operation).LogError(ctx, logger)
 }
 
 // keyMaterial resolves the usable API key from a row by decrypting the
@@ -307,15 +293,11 @@ func (s *Service) keyMaterial(row orrepo.OpenrouterApiKey) (string, error) {
 	return plaintext, nil
 }
 
-// logKeyAction writes the audit entry for the upstream enable/disable
-// actions. Those PATCH OpenRouter outside any local transaction, so the entry
-// commits in its own transaction once the action has already succeeded.
-func (s *Service) logKeyAction(ctx context.Context, authCtx *contextvalues.AuthContext, organizationID string, keyType string, action audit.Action) error {
-	dbtx, err := s.db.Begin(ctx)
-	if err != nil {
-		return fmt.Errorf("begin audit transaction: %w", err)
-	}
-	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
+// logKeyAction writes snapshot-free audit and outbox records on the caller's
+// mutation transaction so local cause state and customer-visible history are
+// committed or rolled back together.
+func (s *Service) logKeyAction(ctx context.Context, dbtx pgx.Tx, authCtx *contextvalues.AuthContext, organizationID string, keyType string, action audit.Action) error {
+	var err error
 
 	actor := urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID)
 	keyURN := urn.NewOpenRouterAPIKey(organizationID, keyType)
@@ -346,9 +328,6 @@ func (s *Service) logKeyAction(ctx context.Context, authCtx *contextvalues.AuthC
 		return fmt.Errorf("log %s: %w", action, err)
 	}
 
-	if err := dbtx.Commit(ctx); err != nil {
-		return fmt.Errorf("commit audit transaction: %w", err)
-	}
 	return nil
 }
 
@@ -369,6 +348,7 @@ func (s *Service) adminKeyView(ctx context.Context, logger *slog.Logger, organiz
 		KeyType:          row.KeyType,
 		MonthlyCredits:   row.MonthlyCredits,
 		Disabled:         row.Disabled,
+		DisableCauses:    row.DisableCauses,
 		CreatedAt:        row.CreatedAt.Time.Format(time.RFC3339),
 		UpdatedAt:        row.UpdatedAt.Time.Format(time.RFC3339),
 	}, nil

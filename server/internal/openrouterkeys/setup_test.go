@@ -70,9 +70,11 @@ type stubProvisioner struct {
 	usage      float64
 	usageLimit *int64
 
-	usageCalls   []string
-	disableCalls []string
-	refreshCalls []string
+	usageCalls       []string
+	disableCalls     []string
+	refreshCalls     []string
+	addCauseCalls    []string
+	removeCauseCalls []string
 }
 
 var _ openrouter.Provisioner = (*stubProvisioner)(nil)
@@ -118,7 +120,19 @@ func (s *stubProvisioner) refreshAPIKeyLimit(ctx context.Context, db openrouter.
 }
 
 func (s *stubProvisioner) AddAPIKeyDisableCause(ctx context.Context, orgID string, keyType openrouter.KeyType, cause openrouter.DisableCause) (openrouter.DisableCauseChange, error) {
-	queries := orgrepo.New(s.conn)
+	return s.addAPIKeyDisableCause(ctx, s.conn, orgID, keyType, cause)
+}
+
+func (s *stubProvisioner) AddAPIKeyDisableCauseWithDB(ctx context.Context, db openrouter.DBTX, orgID string, keyType openrouter.KeyType, cause openrouter.DisableCause) (openrouter.DisableCauseChange, error) {
+	return s.addAPIKeyDisableCause(ctx, db, orgID, keyType, cause)
+}
+
+func (s *stubProvisioner) addAPIKeyDisableCause(ctx context.Context, db openrouter.DBTX, orgID string, keyType openrouter.KeyType, cause openrouter.DisableCause) (openrouter.DisableCauseChange, error) {
+	s.mu.Lock()
+	s.addCauseCalls = append(s.addCauseCalls, orgID+"/"+string(keyType)+"/"+string(cause))
+	s.mu.Unlock()
+
+	queries := orgrepo.New(db)
 	key, err := queries.GetOpenRouterAPIKey(ctx, orgrepo.GetOpenRouterAPIKeyParams{OrganizationID: orgID, KeyType: string(keyType)})
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
@@ -141,11 +155,23 @@ func (s *stubProvisioner) AddAPIKeyDisableCause(ctx context.Context, orgID strin
 }
 
 func (s *stubProvisioner) RemoveAPIKeyDisableCause(ctx context.Context, orgID string, keyType openrouter.KeyType, cause openrouter.DisableCause, limit *int) (int, openrouter.DisableCauseChange, error) {
+	return s.removeAPIKeyDisableCause(ctx, s.conn, orgID, keyType, cause, limit)
+}
+
+func (s *stubProvisioner) RemoveAPIKeyDisableCauseWithDB(ctx context.Context, db openrouter.DBTX, orgID string, keyType openrouter.KeyType, cause openrouter.DisableCause, limit *int) (int, openrouter.DisableCauseChange, error) {
+	return s.removeAPIKeyDisableCause(ctx, db, orgID, keyType, cause, limit)
+}
+
+func (s *stubProvisioner) removeAPIKeyDisableCause(ctx context.Context, db openrouter.DBTX, orgID string, keyType openrouter.KeyType, cause openrouter.DisableCause, limit *int) (int, openrouter.DisableCauseChange, error) {
+	s.mu.Lock()
+	s.removeCauseCalls = append(s.removeCauseCalls, orgID+"/"+string(keyType)+"/"+string(cause))
+	s.mu.Unlock()
+
 	if limit != nil && *limit <= 0 {
 		return 0, openrouter.DisableCauseChange{}, errors.New("remove OpenRouter API key disable cause: monthly credits must be positive")
 	}
 
-	queries := orgrepo.New(s.conn)
+	queries := orgrepo.New(db)
 	key, err := queries.GetOpenRouterAPIKey(ctx, orgrepo.GetOpenRouterAPIKeyParams{OrganizationID: orgID, KeyType: string(keyType)})
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
@@ -166,16 +192,14 @@ func (s *stubProvisioner) RemoveAPIKeyDisableCause(ctx context.Context, orgID st
 		}
 	}
 	keyLimit := int(key.MonthlyCredits)
-	if accessChanged {
-		if limit != nil {
-			keyLimit = *limit
-		} else if key.MonthlyCredits == 0 {
-			org, orgErr := orgmetarepo.New(s.conn).GetOrganizationMetadata(ctx, orgID)
-			if orgErr != nil {
-				return 0, openrouter.DisableCauseChange{}, fmt.Errorf("stub remove disable cause organization read: %w", orgErr)
-			}
-			keyLimit, _ = openrouter.ResolveDefaultCreditLimit(ctx, s.logger, s.conn, orgID, billing.Tier(org.GramAccountType))
+	if accessChanged && limit != nil {
+		keyLimit = *limit
+	} else if accessChanged && key.MonthlyCredits == 0 {
+		org, orgErr := orgmetarepo.New(db).GetOrganizationMetadata(ctx, orgID)
+		if orgErr != nil {
+			return 0, openrouter.DisableCauseChange{}, fmt.Errorf("stub remove disable cause organization read: %w", orgErr)
 		}
+		keyLimit, _ = openrouter.ResolveDefaultCreditLimit(ctx, s.logger, db, org.ID, billing.Tier(org.GramAccountType))
 	}
 	if _, err := queries.RemoveOpenRouterAPIKeyDisableCause(ctx, orgrepo.RemoveOpenRouterAPIKeyDisableCauseParams{
 		OrganizationID: orgID, KeyType: string(keyType), KeyHash: key.KeyHash, DisableCause: string(cause),
@@ -232,6 +256,20 @@ func (s *stubProvisioner) RefreshCalls() []string {
 	defer s.mu.Unlock()
 
 	return append([]string(nil), s.refreshCalls...)
+}
+
+func (s *stubProvisioner) AddCauseCalls() []string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	return append([]string(nil), s.addCauseCalls...)
+}
+
+func (s *stubProvisioner) RemoveCauseCalls() []string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	return append([]string(nil), s.removeCauseCalls...)
 }
 
 type provisionerFactory func(*slog.Logger, trace.TracerProvider, *pgxpool.Pool, *encryption.Client) openrouter.Provisioner

@@ -25,6 +25,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	orgmetarepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
+	"github.com/speakeasy-api/gram/server/internal/outbox/events"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
@@ -312,10 +313,7 @@ func TestEnableKey_ReinstatesWithRecordedLimit(t *testing.T) {
 		KeyType:        string(openrouter.KeyTypeChat),
 		MonthlyCredits: int64(recordedLimit),
 	}))
-	require.NoError(t, orgrepo.New(ti.conn).DisableOpenRouterAPIKey(ctx, orgrepo.DisableOpenRouterAPIKeyParams{
-		OrganizationID: orgID,
-		KeyType:        "chat",
-	}))
+	setDisableCauses(t, ctx, ti, orgID, "chat", []string{"admin_lock"})
 
 	before, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionOpenRouterAPIKeyEnable)
 	require.NoError(t, err)
@@ -376,10 +374,7 @@ func TestEnableKey_RealOpenRouterCompletesOnLockedSession(t *testing.T) {
 		KeyType:        string(openrouter.KeyTypeChat),
 		MonthlyCredits: 7,
 	}))
-	require.NoError(t, orgrepo.New(ti.conn).DisableOpenRouterAPIKey(ctx, orgrepo.DisableOpenRouterAPIKeyParams{
-		OrganizationID: orgID,
-		KeyType:        string(openrouter.KeyTypeChat),
-	}))
+	setDisableCauses(t, ctx, ti, orgID, string(openrouter.KeyTypeChat), []string{"admin_lock"})
 	before, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionOpenRouterAPIKeyEnable)
 	require.NoError(t, err)
 
@@ -407,7 +402,7 @@ func TestEnableKey_RealOpenRouterCompletesOnLockedSession(t *testing.T) {
 	require.NoError(t, patch.err)
 	require.Equal(t, http.MethodPatch, patch.method)
 	require.Equal(t, "/v1/keys/hash-enablereal", patch.path)
-	require.InDelta(t, 7, patch.limit, 0)
+	require.InDelta(t, 0, patch.limit, 0, "admin enable passes a nil limit when removing admin_lock")
 	release()
 
 	var result enableResult
@@ -425,7 +420,7 @@ func TestEnableKey_RealOpenRouterCompletesOnLockedSession(t *testing.T) {
 	require.Equal(t, before+1, after)
 }
 
-func TestEnableKey_ReinstatesLegacyZeroSecurityKeyAtPaygPolicy(t *testing.T) {
+func TestEnableKey_ReinstatesZeroSecurityKeyAtPaygPolicy(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestService(t)
@@ -441,10 +436,7 @@ func TestEnableKey_ReinstatesLegacyZeroSecurityKeyAtPaygPolicy(t *testing.T) {
 		KeyType:        string(openrouter.KeyTypeInternal),
 		MonthlyCredits: 0,
 	}))
-	require.NoError(t, orgrepo.New(ti.conn).DisableOpenRouterAPIKey(ctx, orgrepo.DisableOpenRouterAPIKeyParams{
-		OrganizationID: orgID,
-		KeyType:        string(openrouter.KeyTypeInternal),
-	}))
+	setDisableCauses(t, ctx, ti, orgID, string(openrouter.KeyTypeInternal), []string{"admin_lock"})
 
 	expected, ok := openrouter.AccountTypeCreditLimit(billing.TierPayg)
 	require.True(t, ok)
@@ -456,10 +448,10 @@ func TestEnableKey_ReinstatesLegacyZeroSecurityKeyAtPaygPolicy(t *testing.T) {
 	require.NoError(t, err)
 	require.False(t, view.Disabled)
 	require.EqualValues(t, expected, view.MonthlyCredits)
-	require.Equal(t, []string{orgID + "/" + string(openrouter.KeyTypeInternal)}, ti.provisioner.refreshCalls)
+	require.Empty(t, view.DisableCauses)
 }
 
-func TestEnableKey_ReinstatesLegacyZeroTrialKeyAtTrialPolicy(t *testing.T) {
+func TestEnableKey_ReinstatesZeroTrialKeyAtTrialPolicy(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestService(t)
@@ -480,10 +472,7 @@ func TestEnableKey_ReinstatesLegacyZeroTrialKeyAtTrialPolicy(t *testing.T) {
 		KeyType:        string(openrouter.KeyTypeInternal),
 		MonthlyCredits: 0,
 	}))
-	require.NoError(t, orgrepo.New(ti.conn).DisableOpenRouterAPIKey(ctx, orgrepo.DisableOpenRouterAPIKeyParams{
-		OrganizationID: orgID,
-		KeyType:        string(openrouter.KeyTypeInternal),
-	}))
+	setDisableCauses(t, ctx, ti, orgID, string(openrouter.KeyTypeInternal), []string{"admin_lock"})
 
 	expected, ok := openrouter.DefaultCreditLimit(orgID, billing.TierEnterprise, true)
 	require.True(t, ok)
@@ -503,10 +492,7 @@ func TestEnableKeyWaitsForPerKeyBillingLock(t *testing.T) {
 	ctx, ti := newTestService(t)
 	adminCtx := withAdmin(t, ctx)
 	orgID := seedKey(t, ctx, ti, "enablelocked", "internal", "sk-or-enable-locked")
-	require.NoError(t, orgrepo.New(ti.conn).DisableOpenRouterAPIKey(ctx, orgrepo.DisableOpenRouterAPIKeyParams{
-		OrganizationID: orgID,
-		KeyType:        string(openrouter.KeyTypeInternal),
-	}))
+	setDisableCauses(t, ctx, ti, orgID, string(openrouter.KeyTypeInternal), []string{"admin_lock"})
 
 	lockConn, err := ti.conn.Acquire(ctx)
 	require.NoError(t, err)
@@ -715,4 +701,185 @@ func TestEnableKey_AlreadyEnabledSkipsUpstream(t *testing.T) {
 	require.NoError(t, err)
 	require.False(t, view.Disabled)
 	require.Empty(t, ti.provisioner.refreshCalls)
+}
+
+func TestAdminDisableCauseSingleAndOverlappingTransitions(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	adminCtx := withAdmin(t, ctx)
+	orgID := seedKey(t, ctx, ti, "admin-causes", "chat", "sk-or-admin-causes")
+
+	view, err := ti.service.DisableKey(adminCtx, &gen.DisableKeyPayload{OrganizationID: orgID, KeyType: "chat"})
+	require.NoError(t, err)
+	require.True(t, view.Disabled)
+	require.Equal(t, []string{"admin_lock"}, view.DisableCauses)
+
+	view, err = ti.service.EnableKey(adminCtx, &gen.EnableKeyPayload{OrganizationID: orgID, KeyType: "chat"})
+	require.NoError(t, err)
+	require.False(t, view.Disabled)
+	require.Empty(t, view.DisableCauses)
+
+	setDisableCauses(t, ctx, ti, orgID, "chat", []string{"billing_inactive"})
+	view, err = ti.service.DisableKey(adminCtx, &gen.DisableKeyPayload{OrganizationID: orgID, KeyType: "chat"})
+	require.NoError(t, err)
+	require.True(t, view.Disabled)
+	require.ElementsMatch(t, []string{"billing_inactive", "admin_lock"}, view.DisableCauses)
+
+	view, err = ti.service.EnableKey(adminCtx, &gen.EnableKeyPayload{OrganizationID: orgID, KeyType: "chat"})
+	require.NoError(t, err)
+	require.True(t, view.Disabled)
+	require.Equal(t, []string{"billing_inactive"}, view.DisableCauses)
+}
+
+func TestAdminCauseMutationNULLFailsClosedAndMissing404s(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	adminCtx := withAdmin(t, ctx)
+	orgID := seedKey(t, ctx, ti, "admin-null", "chat", "sk-or-admin-null")
+	setDisableCauses(t, ctx, ti, orgID, "chat", nil)
+
+	_, err := ti.service.DisableKey(adminCtx, &gen.DisableKeyPayload{OrganizationID: orgID, KeyType: "chat"})
+	requireOopsCode(t, err, oops.CodeUnexpected)
+	_, err = ti.service.EnableKey(adminCtx, &gen.EnableKeyPayload{OrganizationID: orgID, KeyType: "chat"})
+	requireOopsCode(t, err, oops.CodeUnexpected)
+
+	_, err = ti.service.DisableKey(adminCtx, &gen.DisableKeyPayload{OrganizationID: "missing-org", KeyType: "chat"})
+	requireOopsCode(t, err, oops.CodeNotFound)
+	_, err = ti.service.EnableKey(adminCtx, &gen.EnableKeyPayload{OrganizationID: "missing-org", KeyType: "chat"})
+	requireOopsCode(t, err, oops.CodeNotFound)
+}
+
+func TestAdminCauseRetriesAreIdempotent(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	adminCtx := withAdmin(t, ctx)
+	orgID := seedKey(t, ctx, ti, "admin-retry", "chat", "sk-or-admin-retry")
+	auditBefore := auditCount(t, ctx, ti, audit.ActionOpenRouterAPIKeyDisable)
+	outboxBefore := outboxCount(t, ctx, ti)
+
+	first, err := ti.service.DisableKey(adminCtx, &gen.DisableKeyPayload{OrganizationID: orgID, KeyType: "chat"})
+	require.NoError(t, err)
+	second, err := ti.service.DisableKey(adminCtx, &gen.DisableKeyPayload{OrganizationID: orgID, KeyType: "chat"})
+	require.NoError(t, err)
+	require.Equal(t, first.DisableCauses, second.DisableCauses)
+	require.Equal(t, auditBefore+1, auditCount(t, ctx, ti, audit.ActionOpenRouterAPIKeyDisable))
+	require.Equal(t, outboxBefore+1, outboxCount(t, ctx, ti))
+	require.Equal(t, []string{orgID + "/chat/admin_lock"}, ti.provisioner.AddCauseCalls())
+
+	enableAuditBefore := auditCount(t, ctx, ti, audit.ActionOpenRouterAPIKeyEnable)
+	first, err = ti.service.EnableKey(adminCtx, &gen.EnableKeyPayload{OrganizationID: orgID, KeyType: "chat"})
+	require.NoError(t, err)
+	second, err = ti.service.EnableKey(adminCtx, &gen.EnableKeyPayload{OrganizationID: orgID, KeyType: "chat"})
+	require.NoError(t, err)
+	require.Equal(t, first.DisableCauses, second.DisableCauses)
+	require.Empty(t, second.DisableCauses)
+	require.Equal(t, enableAuditBefore+1, auditCount(t, ctx, ti, audit.ActionOpenRouterAPIKeyEnable))
+	require.Equal(t, outboxBefore+2, outboxCount(t, ctx, ti))
+	require.Equal(t, []string{orgID + "/chat/admin_lock"}, ti.provisioner.RemoveCauseCalls())
+}
+
+func TestAdminCauseAuditFailureRollsBackAndRetryCommitsOnce(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	adminCtx := withAdmin(t, ctx)
+	orgID := seedKey(t, ctx, ti, "admin-audit-rollback", "chat", "sk-or-admin-audit-rollback")
+	auditBefore := auditCount(t, ctx, ti, audit.ActionOpenRouterAPIKeyDisable)
+	outboxBefore := outboxCount(t, ctx, ti)
+
+	fixtures := testrepo.New(ti.conn)
+	require.NoError(t, fixtures.InstallOpenRouterAdminDisableAuditFailureFixture(ctx))
+	require.NoError(t, fixtures.EnableOpenRouterAdminDisableAuditFailureFixture(ctx))
+
+	_, err := ti.service.DisableKey(adminCtx, &gen.DisableKeyPayload{OrganizationID: orgID, KeyType: "chat"})
+	requireOopsCode(t, err, oops.CodeUnexpected)
+	require.Empty(t, readDisableCauses(t, ctx, ti, orgID, "chat"))
+	require.Equal(t, auditBefore, auditCount(t, ctx, ti, audit.ActionOpenRouterAPIKeyDisable))
+	require.Equal(t, outboxBefore, outboxCount(t, ctx, ti))
+
+	require.NoError(t, fixtures.DisableOpenRouterAdminDisableAuditFailureFixture(ctx))
+	view, err := ti.service.DisableKey(adminCtx, &gen.DisableKeyPayload{OrganizationID: orgID, KeyType: "chat"})
+	require.NoError(t, err)
+	require.Equal(t, []string{"admin_lock"}, view.DisableCauses)
+	require.Equal(t, auditBefore+1, auditCount(t, ctx, ti, audit.ActionOpenRouterAPIKeyDisable))
+	require.Equal(t, outboxBefore+1, outboxCount(t, ctx, ti))
+}
+
+func TestEnableWithoutAdminLockSkipsPolicyUpstreamAndAudit(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	adminCtx := withAdmin(t, ctx)
+	orgID := seedKey(t, ctx, ti, "admin-enable-noop", "chat", "sk-or-admin-enable-noop")
+	setDisableCauses(t, ctx, ti, orgID, "chat", []string{"billing_inactive"})
+	require.NoError(t, orgrepo.New(ti.conn).UpdateOpenRouterKeyMonthlyCredits(ctx, orgrepo.UpdateOpenRouterKeyMonthlyCreditsParams{
+		OrganizationID: orgID,
+		KeyType:        "chat",
+		MonthlyCredits: 0,
+	}))
+	require.NoError(t, orgmetarepo.New(ti.conn).SetAccountType(ctx, orgmetarepo.SetAccountTypeParams{
+		ID:              orgID,
+		GramAccountType: "unsupported-account",
+	}))
+	auditBefore := auditCount(t, ctx, ti, audit.ActionOpenRouterAPIKeyEnable)
+
+	view, err := ti.service.EnableKey(adminCtx, &gen.EnableKeyPayload{OrganizationID: orgID, KeyType: "chat"})
+	require.NoError(t, err)
+	require.True(t, view.Disabled)
+	require.Equal(t, []string{"billing_inactive"}, view.DisableCauses)
+	require.Empty(t, ti.provisioner.RefreshCalls())
+	require.Empty(t, ti.provisioner.RemoveCauseCalls())
+	require.Equal(t, auditBefore, auditCount(t, ctx, ti, audit.ActionOpenRouterAPIKeyEnable))
+}
+
+func TestAdminViewExposesFutureDisableCausesWithoutChangingCompatibilityBoolean(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	adminCtx := withAdmin(t, ctx)
+	orgID := seedKey(t, ctx, ti, "admin-future-cause", "chat", "sk-or-admin-future-cause")
+	setDisableCauses(t, ctx, ti, orgID, "chat", []string{"future_cause"})
+
+	result, err := ti.service.ListKeys(adminCtx, &gen.ListKeysPayload{})
+	require.NoError(t, err)
+	var found *gen.AdminOpenRouterKey
+	for _, key := range result.Keys {
+		if key.OrganizationID == orgID && key.KeyType == "chat" {
+			found = key
+		}
+	}
+	require.NotNil(t, found)
+	require.True(t, found.Disabled)
+	require.Equal(t, []string{"future_cause"}, found.DisableCauses)
+}
+
+func setDisableCauses(t *testing.T, ctx context.Context, ti *testInstance, orgID, keyType string, causes []string) {
+	t.Helper()
+	require.NoError(t, testrepo.New(ti.conn).SetOpenRouterAPIKeyClassificationFixture(ctx, testrepo.SetOpenRouterAPIKeyClassificationFixtureParams{
+		OrganizationID: orgID, KeyType: keyType, Disabled: len(causes) > 0, DisableCauses: causes,
+	}))
+}
+
+func readDisableCauses(t *testing.T, ctx context.Context, ti *testInstance, orgID, keyType string) []string {
+	t.Helper()
+	row, err := orgrepo.New(ti.conn).GetOpenRouterAPIKey(ctx, orgrepo.GetOpenRouterAPIKeyParams{OrganizationID: orgID, KeyType: keyType})
+	require.NoError(t, err)
+	return row.DisableCauses
+}
+
+func auditCount(t *testing.T, ctx context.Context, ti *testInstance, action audit.Action) int64 {
+	t.Helper()
+	count, err := audittest.AuditLogCountByAction(ctx, ti.conn, action)
+	require.NoError(t, err)
+	return count
+}
+
+func outboxCount(t *testing.T, ctx context.Context, ti *testInstance) int64 {
+	t.Helper()
+	count, err := testrepo.New(ti.conn).CountOutboxEntriesByEventType(ctx, string(events.OpenRouterAPIKeyV1.EventType()))
+	require.NoError(t, err)
+	return count
 }

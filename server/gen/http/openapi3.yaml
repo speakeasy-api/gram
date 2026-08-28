@@ -63792,6 +63792,11 @@ components:
                     type: string
                     description: When the key row was created.
                     format: date-time
+                disable_causes:
+                    type: array
+                    items:
+                        type: string
+                    description: Administrative view of every reason currently disabling the key. Values are open-ended for forward compatibility.
                 disabled:
                     type: boolean
                     description: Whether the key is locked down (refused locally and disabled upstream).

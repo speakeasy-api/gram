@@ -20,6 +20,7 @@ SELECT
     k.key_type,
     k.monthly_credits,
     (CASE WHEN k.disable_causes IS NULL THEN k.disabled ELSE cardinality(k.disable_causes) > 0 END)::boolean AS disabled,
+    k.disable_causes,
     k.created_at,
     k.updated_at
 FROM openrouter_api_keys k
@@ -42,6 +43,7 @@ type GetOpenRouterAPIKeyForAdminRow struct {
 	KeyType          string
 	MonthlyCredits   int64
 	Disabled         bool
+	DisableCauses    []string
 	CreatedAt        pgtype.Timestamptz
 	UpdatedAt        pgtype.Timestamptz
 }
@@ -57,6 +59,7 @@ func (q *Queries) GetOpenRouterAPIKeyForAdmin(ctx context.Context, arg GetOpenRo
 		&i.KeyType,
 		&i.MonthlyCredits,
 		&i.Disabled,
+		&i.DisableCauses,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
@@ -72,6 +75,7 @@ SELECT
     k.key_type,
     k.monthly_credits,
     (CASE WHEN k.disable_causes IS NULL THEN k.disabled ELSE cardinality(k.disable_causes) > 0 END)::boolean AS disabled,
+    k.disable_causes,
     k.created_at,
     k.updated_at
 FROM openrouter_api_keys k
@@ -88,6 +92,7 @@ type ListOpenRouterAPIKeysForAdminRow struct {
 	KeyType          string
 	MonthlyCredits   int64
 	Disabled         bool
+	DisableCauses    []string
 	CreatedAt        pgtype.Timestamptz
 	UpdatedAt        pgtype.Timestamptz
 }
@@ -112,6 +117,7 @@ func (q *Queries) ListOpenRouterAPIKeysForAdmin(ctx context.Context) ([]ListOpen
 			&i.KeyType,
 			&i.MonthlyCredits,
 			&i.Disabled,
+			&i.DisableCauses,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 		); err != nil {

@@ -70,6 +70,9 @@ type AdminOpenRouterKey struct {
 	MonthlyCredits int64
 	// Whether the key is locked down (refused locally and disabled upstream).
 	Disabled bool
+	// Administrative view of every reason currently disabling the key. Values are
+	// open-ended for forward compatibility.
+	DisableCauses []string
 	// When the key row was created.
 	CreatedAt string
 	// When the key row was last updated.
