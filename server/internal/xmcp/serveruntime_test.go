@@ -23,6 +23,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/auth"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/killswitches/mcptoolexecution"
 	"github.com/speakeasy-api/gram/server/internal/mcp"
 	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
@@ -743,6 +744,44 @@ func TestServeMCP_IssuerGatedToolsetBackend_HappyPath(t *testing.T) {
 	rr := runHandler(t, ctx, ti, http.MethodPost, slug, bearer(accessToken), []byte(initializeBody))
 	require.NotEqual(t, http.StatusUnauthorized, rr.Code, "issuer-gated bearer must not be rejected by the legacy auth chain inside ServeToolsetResolved; body=%s", rr.Body.String())
 	require.Equal(t, http.StatusOK, rr.Code, "ServeMCP should respond 200; body=%s", rr.Body.String())
+}
+
+func TestServeMCP_IssuerGatedToolsetBackend_Killswitch(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+	require.NotEmpty(t, authCtx.UserID)
+
+	slug, mcpServer, issuerID := seedIssuerGatedToolsetMCPEndpoint(t, ctx, ti, authCtx.ActiveOrganizationID, *authCtx.ProjectID, "public")
+	mcpEndpoint, err := mcpendpointsrepo.New(ti.conn).GetMCPEndpointByCustomDomainAndSlug(ctx, mcpendpointsrepo.GetMCPEndpointByCustomDomainAndSlugParams{
+		Slug:           slug,
+		CustomDomainID: uuid.NullUUID{},
+	})
+	require.NoError(t, err)
+	endpoint := mcp.NewResolvedMcpEndpointFromMcpServer(&mcpEndpoint, &mcpServer, authCtx.ActiveOrganizationID)
+	accessToken := mintIssuerGatedAccessToken(t, ctx, ti, slug, endpoint, issuerID, urn.NewUserSubject(authCtx.UserID))
+
+	err = testrepo.New(ti.conn).InsertKillswitchPrescriptionFixture(ctx, testrepo.InsertKillswitchPrescriptionFixtureParams{
+		PrescriptionID: uuid.New(),
+		OrganizationID: authCtx.ActiveOrganizationID,
+		DefinitionKey:  string(mcptoolexecution.DefinitionKeyMCPToolExecution),
+		PrincipalKind:  string(mcptoolexecution.PrincipalKindUser),
+		PrincipalKey:   authCtx.UserID,
+		ResourceKind:   string(mcptoolexecution.ResourceKindMCPServer),
+		ResourceScope:  "selected",
+		InternalNote:   "test context",
+		ExternalNote:   "Exact x/mcp note.",
+		ResourceKeys:   []string{mcpServer.ID.String()},
+	})
+	require.NoError(t, err)
+
+	body := []byte(`{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"missing_tool","arguments":{}}}`)
+	rr := runHandler(t, ctx, ti, http.MethodPost, slug, bearer(accessToken), body)
+	require.Equal(t, http.StatusOK, rr.Code)
+	require.JSONEq(t, `{"jsonrpc":"2.0","id":2,"error":{"code":-32003,"message":"Exact x/mcp note.","data":{"code":"mcp_tool_calls_paused"}}}`, rr.Body.String())
 }
 
 // TestServeMCP_IssuerGatedRemoteBackend_Private_HappyPath exercises the

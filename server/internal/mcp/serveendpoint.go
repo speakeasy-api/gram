@@ -154,10 +154,13 @@ func (s *Service) serveResolvedMCPEndpoint(
 
 	// Issuer-gated mcp_servers run the JWT-validation branch here, before
 	// backend dispatch. ServeToolsetResolved then skips its in-toolset
-	// gate (skipIssuerGate=true) so the same request isn't gated twice;
-	// remote-backed proxying forwards the upstream remote-session token
-	// via AuthorizationOverride.
+	// gate (skipIssuerGate=true) so the same request isn't gated twice.
+	// Credential resolution stays pending until backend dispatch: remote
+	// backends resolve immediately, while hosted tools/call waits until after
+	// kill-switch evaluation.
 	var upstreamTokens map[uuid.UUID]remotesessions.UpstreamToken
+	var pendingIssuerGate *issuerGateAuthentication
+	var err error
 	var upstreamResource string
 	var sessionToolSelection *toolfilter.SessionSelection
 	var wwwAuthenticate string
@@ -167,13 +170,13 @@ func (s *Service) serveResolvedMCPEndpoint(
 			return err
 		}
 		upstreamResource = resolvedEndpoint.UpstreamResource
-		newCtx, tokens, toolSelection, err := s.ApplyIssuerGate(ctx, w, httpheaders.AuthorizationBearerToken(r), s.BaseURLForRequest(r), resolvedEndpoint)
+		newCtx, authentication, toolSelection, err := s.authenticateIssuerGate(ctx, w, httpheaders.AuthorizationBearerToken(r), s.BaseURLForRequest(r), resolvedEndpoint)
 		if err != nil {
 			return fmt.Errorf("apply issuer gate: %w", err)
 		}
 		ctx = newCtx
 		r = r.WithContext(ctx)
-		upstreamTokens = tokens
+		pendingIssuerGate = authentication
 		sessionToolSelection = toolSelection
 
 		// Issuer-gated clients authenticate with this server's AS, so an
@@ -189,6 +192,12 @@ func (s *Service) serveResolvedMCPEndpoint(
 
 	switch {
 	case mcpServer.RemoteMcpServerID.Valid, mcpServer.TunneledMcpServerID.Valid:
+		if pendingIssuerGate != nil {
+			upstreamTokens, err = s.resolveIssuerGateAccessTokens(ctx, w, pendingIssuerGate)
+			if err != nil {
+				return fmt.Errorf("resolve issuer-gated upstream tokens: %w", err)
+			}
+		}
 		upstreamToken, err := routeUpstreamToken(ctx, logger, upstreamTokens, upstreamResource)
 		var routeErr *upstreamRoutingError
 		switch {
@@ -229,7 +238,7 @@ func (s *Service) serveResolvedMCPEndpoint(
 			mcpServerVariationsGroupID = &id
 		}
 
-		if err := s.ServeToolsetResolved(w, r, &toolset, slug, mcpRouteBase, issuerGated, upstreamTokens, sessionToolSelection, mcpServerVariationsGroupID, &mcpServer.ID); err != nil {
+		if err := s.serveToolsetResolved(w, r, &toolset, slug, mcpRouteBase, issuerGated, nil, sessionToolSelection, mcpServerVariationsGroupID, &mcpServer.ID, pendingIssuerGate); err != nil {
 			return fmt.Errorf("serve toolset-backed mcp: %w", err)
 		}
 		return nil

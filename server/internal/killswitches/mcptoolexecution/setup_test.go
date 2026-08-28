@@ -13,6 +13,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/testenv"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 )
 
 var infra *testenv.Environment
@@ -130,29 +131,18 @@ type prescriptionFixture struct {
 // prescription with the concrete user principal and mcp_server resource kind.
 func insertPrescription(t *testing.T, conn *pgxpool.Pool, organizationID string, fixture prescriptionFixture) {
 	t.Helper()
-	var databaseNow time.Time
-	require.NoError(t, conn.QueryRow(t.Context(), "SELECT clock_timestamp()").Scan(&databaseNow))
-	startsAt := databaseNow.Add(-time.Hour)
-	activatedAt := databaseNow.Add(-time.Hour)
 
-	_, err := conn.Exec(t.Context(), `
-		INSERT INTO killswitch_prescriptions (id, organization_id, definition_key, principal_kind, principal_key, resource_kind, current_version)
-		VALUES ($1, $2, $3, $4, $5, $6, 1)
-	`, fixture.ID, organizationID, string(DefinitionKeyMCPToolExecution), string(PrincipalKindUser), fixture.PrincipalKey, string(ResourceKindMCPServer))
+	err := testrepo.New(conn).InsertKillswitchPrescriptionFixture(t.Context(), testrepo.InsertKillswitchPrescriptionFixtureParams{
+		PrescriptionID: fixture.ID,
+		OrganizationID: organizationID,
+		DefinitionKey:  string(DefinitionKeyMCPToolExecution),
+		PrincipalKind:  string(PrincipalKindUser),
+		PrincipalKey:   fixture.PrincipalKey,
+		ResourceKind:   string(ResourceKindMCPServer),
+		ResourceScope:  fixture.Scope,
+		InternalNote:   "test fixture context",
+		ExternalNote:   fixture.ExternalNote,
+		ResourceKeys:   fixture.Resources,
+	})
 	require.NoError(t, err)
-
-	_, err = conn.Exec(t.Context(), `
-		INSERT INTO killswitch_prescription_versions (
-		  organization_id, prescription_id, version, state, resource_scope, starts_at, expires_at, activated_at, internal_note, external_note
-		) VALUES ($1, $2, 1, 'active', $3, $4, NULL, $5, 'test fixture context', $6)
-	`, organizationID, fixture.ID, fixture.Scope, startsAt, activatedAt, fixture.ExternalNote)
-	require.NoError(t, err)
-
-	for _, resource := range fixture.Resources {
-		_, err = conn.Exec(t.Context(), `
-			INSERT INTO killswitch_prescription_version_resources (organization_id, prescription_id, version, resource_key)
-			VALUES ($1, $2, 1, $3)
-		`, organizationID, fixture.ID, resource)
-		require.NoError(t, err)
-	}
 }

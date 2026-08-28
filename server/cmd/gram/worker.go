@@ -781,7 +781,7 @@ func newWorkerCommand() *cli.Command {
 				serverURL,
 			)
 
-			mcpService := mcp.NewService(
+			mcpService, err := mcp.NewService(
 				logger,
 				tracerProvider,
 				meterProvider,
@@ -832,6 +832,9 @@ func newWorkerCommand() *cli.Command {
 				},
 				mcp.MetaRuntimeConfig{MemberCallTimeout: 0},
 			)
+			if err != nil {
+				return fmt.Errorf("initialize MCP service: %w", err)
+			}
 
 			chatClient := chat.NewAgenticChatClient(
 				logger,
