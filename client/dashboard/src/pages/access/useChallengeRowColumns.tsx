@@ -222,17 +222,18 @@ export function useChallengeRowColumns(
           const display = member?.email ?? row.resolvedBy;
           return (
             <Tooltip>
+              {/* The avatar stays the trigger: asChild hands it the ref the
+                  tooltip positions against, which a wrapper would swallow. The
+                  identity column beside this one carries the link. */}
               <TooltipTrigger asChild>
-                <IdentityLink identifier={{ userId }}>
-                  <Avatar className="h-7 w-7">
-                    {member?.photoUrl && (
-                      <AvatarImage src={member.photoUrl} alt={display} />
-                    )}
-                    <AvatarFallback className="text-[10px]">
-                      {getInitials(display)}
-                    </AvatarFallback>
-                  </Avatar>
-                </IdentityLink>
+                <Avatar className="h-7 w-7">
+                  {member?.photoUrl && (
+                    <AvatarImage src={member.photoUrl} alt={display} />
+                  )}
+                  <AvatarFallback className="text-[10px]">
+                    {getInitials(display)}
+                  </AvatarFallback>
+                </Avatar>
               </TooltipTrigger>
               <TooltipContent>{display}</TooltipContent>
             </Tooltip>

@@ -465,7 +465,7 @@ export function MCPTeamAccessTab({
           <Table.Header columns={columns} />
           {memberAccess.length === 0 ? (
             <Table.NoResultsMessage>
-              <div className="px-4 py-6 text-center">
+              <div className="text-center">
                 No team members have access to this server.
               </div>
             </Table.NoResultsMessage>

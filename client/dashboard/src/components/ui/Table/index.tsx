@@ -611,6 +611,20 @@ const RowContainer = forwardRef<HTMLTableRowElement, RowContainerProps>(
       onClick();
     };
 
+    // A click that started on a control inside the row belongs to that control:
+    // without this a row-level navigation also fires for the actions menu, a
+    // link, or a checkbox, and steals it.
+    const handleClick = (event: React.MouseEvent<HTMLTableRowElement>) => {
+      if (!onClick) return;
+      if (
+        event.target instanceof Element &&
+        event.target.closest("a,button,input,select,textarea,[role='menuitem']")
+      ) {
+        return;
+      }
+      onClick();
+    };
+
     return (
       <tr
         ref={ref}
@@ -625,7 +639,7 @@ const RowContainer = forwardRef<HTMLTableRowElement, RowContainerProps>(
             "cursor-pointer hover:bg-accent focus-visible:bg-accent focus-visible:ring-ring focus-visible:ring-2 focus-visible:ring-inset focus-visible:outline-none",
           className,
         )}
-        onClick={onClick}
+        onClick={handleClick}
         onKeyDown={isClickable ? handleKeyDown : onKeyDown}
         tabIndex={isClickable ? 0 : tabIndex}
       >

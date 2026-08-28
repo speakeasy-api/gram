@@ -9,7 +9,6 @@ import { identityHandoffs } from "./identityHandoffs";
 import { useIdentityOutlet } from "./identityRoute";
 import { IdentitySection } from "./IdentitySection";
 import {
-  useIdentityMember,
   useIdentityMetrics,
   useIdentityProject,
   useIdentityWindow,
@@ -24,13 +23,9 @@ export default function IdentityCost(): JSX.Element {
   // and every handoff would otherwise resolve to a path with the slug missing.
   const routes = useRoutes({ projectSlug: project.slug });
   const orgRoutes = useOrgRoutes();
-  const { member } = useIdentityMember(identity);
-  const handoffs = identityHandoffs(
-    identity,
-    routes,
-    orgRoutes,
-    member?.principalUrn,
-  );
+  // No handoff on this page filters by principal, so the member list this
+  // would otherwise fetch is not worth the request.
+  const handoffs = identityHandoffs(identity, routes, orgRoutes, undefined);
 
   const metricsQuery = useIdentityMetrics(identity, from, to);
   const metrics = metricsQuery.data?.metrics;

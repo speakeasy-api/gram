@@ -51,7 +51,7 @@ export default function IdentityAccess(): JSX.Element {
         <IdentityPanel
           title="Roles"
           handoffLabel="Roles & Permissions"
-          handoffHref={handoffs.challenges}
+          handoffHref={handoffs.roles}
           footer={
             member ? undefined : "No org member row resolves to this identity."
           }

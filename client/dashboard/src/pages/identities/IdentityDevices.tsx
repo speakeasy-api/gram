@@ -8,11 +8,7 @@ import {
 import { identityHandoffs } from "./identityHandoffs";
 import { useIdentityOutlet } from "./identityRoute";
 import { IdentitySection } from "./IdentitySection";
-import {
-  useIdentityDevices,
-  useIdentityMember,
-  useIdentityProject,
-} from "./useIdentityQueries";
+import { useIdentityDevices, useIdentityProject } from "./useIdentityQueries";
 
 /** How each coverage bucket reads, and whether it is worth flagging. */
 const COVERAGE: Record<string, { label: string; flag: boolean }> = {
@@ -33,13 +29,9 @@ export default function IdentityDevices(): JSX.Element {
   const routes = useRoutes({ projectSlug: project.slug });
   const { identity } = useIdentityOutlet();
   const orgRoutes = useOrgRoutes();
-  const { member } = useIdentityMember(identity);
-  const handoffs = identityHandoffs(
-    identity,
-    routes,
-    orgRoutes,
-    member?.principalUrn,
-  );
+  // No handoff on this page filters by principal, so the member list this
+  // would otherwise fetch is not worth the request.
+  const handoffs = identityHandoffs(identity, routes, orgRoutes, undefined);
   const devicesQuery = useIdentityDevices(identity);
   const devices = devicesQuery.data?.result.devices ?? [];
 

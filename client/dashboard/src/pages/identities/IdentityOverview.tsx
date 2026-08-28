@@ -20,12 +20,12 @@ import {
   useIdentityChallenges,
   useIdentityChats,
   useIdentityDevices,
-  useIdentityMember,
   useIdentityMetrics,
   useIdentityProject,
   useIdentityRisk,
   useIdentityShadowServers,
   useIdentityWindow,
+  useIsSelf,
 } from "./useIdentityQueries";
 
 export default function IdentityOverview(): JSX.Element {
@@ -37,18 +37,16 @@ export default function IdentityOverview(): JSX.Element {
   // and every handoff would otherwise resolve to a path with the slug missing.
   const routes = useRoutes({ projectSlug: project.slug });
   const orgRoutes = useOrgRoutes();
-  const { member } = useIdentityMember(identity);
-  const handoffs = identityHandoffs(
-    identity,
-    routes,
-    orgRoutes,
-    member?.principalUrn,
-  );
+  // No handoff on this page filters by principal, so the member list this
+  // would otherwise fetch is not worth the request.
+  const handoffs = identityHandoffs(identity, routes, orgRoutes, undefined);
   const encodedUrn = encodeIdentityUrn(urn);
 
   const metricsQuery = useIdentityMetrics(identity, from, to);
   const chatsQuery = useIdentityChats(identity, from, to);
-  const canReadOthersChats = useCanReadOthersChats();
+  const hasChatRead = useCanReadOthersChats();
+  const isSelf = useIsSelf(identity);
+  const canReadOthersChats = hasChatRead || isSelf;
   const canReadRisk = useCanReadRisk();
   const auditQuery = useIdentityAuditLogs(identity);
   const riskQuery = useIdentityRisk(identity, from, to);

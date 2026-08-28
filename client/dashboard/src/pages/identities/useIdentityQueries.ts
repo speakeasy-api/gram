@@ -1,5 +1,5 @@
 import { useDateRangeFilter } from "@/components/observe/useDateRangeFilter";
-import { useOrganization, useProject } from "@/contexts/Auth";
+import { useOrganization, useProject, useSession } from "@/contexts/Auth";
 import { useRBAC } from "@/hooks/useRBAC";
 import { useGramContext } from "@gram/client/react-query/_context.js";
 import { useQuery } from "@tanstack/react-query";
@@ -145,6 +145,11 @@ export function useIdentityIsKnown(identity: IdentityModel | undefined): {
 
   if (!identity) return { known: true, isPending: true };
   if (hasDirectoryRow) return { known: true, isPending: false };
+  // Only an unattributed subject is the "identifier nothing was recorded
+  // under" case: an api-key or agent identity legitimately carries neither an
+  // address nor an agent id, and is still a real subject.
+  if (identity.kind !== "unattributed")
+    return { known: true, isPending: false };
   if (identifiers.size === 0) return { known: false, isPending: false };
   if (query.isPending) return { known: false, isPending: true };
   return {
@@ -165,6 +170,17 @@ export function useCanReadRisk(): boolean {
   return hasScope("org:admin");
 }
 
+/** Whether the identity on screen is the person reading the page. */
+export function useIsSelf(identity: IdentityModel): boolean {
+  const { user } = useSession();
+  return (
+    identity.userIds.includes(user.id) ||
+    identity.emails.some(
+      (email) => email.toLowerCase() === user.email.toLowerCase(),
+    )
+  );
+}
+
 export function useCanReadOthersChats(): boolean {
   const { hasScope } = useRBAC();
   return hasScope("chat:read");
@@ -177,7 +193,12 @@ export function useIdentityChats(
   limit = 5,
 ): ReturnType<typeof useListChats> {
   const { slug: gramProject } = useIdentityProject();
-  const canReadOthersChats = useCanReadOthersChats();
+  // Without chat:read the endpoint returns the caller's own sessions whatever
+  // filter it is handed — which is exactly right when the subject IS the
+  // caller, and a misattribution for anyone else.
+  const hasChatRead = useCanReadOthersChats();
+  const isSelf = useIsSelf(identity);
+  const canReadOthersChats = hasChatRead || isSelf;
   const userId = identity.userIds[0];
   const externalUserId = identity.externalUserIds[0];
   return useListChats(

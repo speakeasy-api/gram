@@ -21,6 +21,7 @@ export function identityHandoffs(
   costs: string;
   riskEvents: string;
   challenges: string;
+  roles: string;
   shadowMcp: string;
   deviceAgent: string;
 } {
@@ -56,6 +57,8 @@ export function identityHandoffs(
     challenges: query(`${orgRoutes.access.href()}/challenges`, {
       identity: principalUrn,
     }),
+    // The roles panel continues on the roles tab, not the challenge log.
+    roles: `${orgRoutes.access.href()}/roles`,
     // Neither of these has a per-person filter to carry: the shadow inventory
     // is keyed by server and the device list by device.
     shadowMcp: routes.shadowMCP.href(),
