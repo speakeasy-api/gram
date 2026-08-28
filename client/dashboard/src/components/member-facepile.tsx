@@ -143,7 +143,7 @@ export function MemberFacepile({
           the pile's total width is deterministic — no negative-margin growth
           that would overflow the table column. */}
       <div
-        className="grid grid-flow-col items-center justify-start [grid-auto-columns:1.15rem]"
+        className="grid grid-flow-col items-center justify-start [grid-auto-columns:1.4rem]"
         // Clear only when leaving the whole pile. Moving between overlapping
         // faces just updates which is active, avoiding the flicker from
         // racing per-face enter/leave events.

@@ -140,7 +140,7 @@ export default function IdentityOverview(): JSX.Element {
         <div className="text-muted-foreground flex items-start gap-2">
           <Info className="mt-0.5 size-3.5 shrink-0" />
           <Text variant="small" muted className="text-xs">
-            Each panel shows this identity&rsquo;s slice. Open in continues on
+            Each panel shows this identity&rsquo;s slice. Open in links lead to
             the page that owns the data.
           </Text>
         </div>
