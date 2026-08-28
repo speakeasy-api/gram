@@ -14,18 +14,23 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/audit"
+	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
+	openrouterrepo "github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter/repo"
 	stripeclient "github.com/speakeasy-api/gram/server/internal/thirdparty/stripe"
 	trialsrepo "github.com/speakeasy-api/gram/server/internal/trials/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	"github.com/speakeasy-api/gram/server/internal/usage/repo"
 )
 
-const maxStripeWebhookBodyBytes = 1 << 20
+const (
+	maxStripeWebhookBodyBytes       = 1 << 20
+	stripeLifecycleReconcileTimeout = 10 * time.Second
+)
 
 var acceptedStripeWebhookEvents = map[string]struct{}{
 	"checkout.session.completed":    {},
@@ -36,6 +41,7 @@ var acceptedStripeWebhookEvents = map[string]struct{}{
 
 type stripeWebhookResult struct {
 	newlyEnabledFeatures []productfeatures.Feature
+	reconcileKeyTypes    []openrouter.KeyType
 	invoicePaymentFailed bool
 	subscriptionLost     bool
 }
@@ -154,17 +160,33 @@ func (s *Service) handleStripeWebhook(w http.ResponseWriter, r *http.Request) er
 		}
 	}
 	if event.Type == "checkout.session.completed" && checkoutEligible {
-		if _, err := trialsrepo.New(tx).MarkTrialConverted(ctx, organizationID); err != nil {
-			return oops.E(oops.CodeUnexpected, err, "failed to mark enterprise trial converted").LogError(ctx, logger)
+		trialQueries := trialsrepo.New(tx)
+		_, err := trialQueries.LockTrialLifecycleForRearm(ctx, organizationID)
+		switch {
+		case errors.Is(err, pgx.ErrNoRows):
+		case err != nil:
+			return oops.E(oops.CodeUnexpected, err, "failed to lock enterprise trial lifecycle").LogError(ctx, logger)
+		default:
+			if _, err := trialQueries.MarkTrialConverted(ctx, organizationID); err != nil {
+				return oops.E(oops.CodeUnexpected, err, "failed to mark enterprise trial converted").LogError(ctx, logger)
+			}
 		}
 	}
 
 	// Trial demotion locks the trial row before it takes the platform-key
 	// locks. Checkout must use the same order so a conversion racing the hourly
 	// sweep cannot deadlock on the inverse trials-row/key-lock sequence.
-	if (event.Type == "checkout.session.completed" && checkoutEligible) || event.Type == "customer.subscription.deleted" {
+	switch {
+	case event.Type == "checkout.session.completed" && checkoutEligible:
 		if err := acquireOpenRouterBillingLocks(ctx, queries, organizationID); err != nil {
 			return oops.E(oops.CodeUnexpected, err, "failed to lock OpenRouter billing state").LogError(ctx, logger)
+		}
+	case event.Type == "customer.subscription.deleted":
+		if err := queries.AcquireOpenRouterBillingLock(ctx, repo.AcquireOpenRouterBillingLockParams{
+			KeyType:        string(openrouter.KeyTypeChat),
+			OrganizationID: organizationID,
+		}); err != nil {
+			return oops.E(oops.CodeUnexpected, err, "failed to lock OpenRouter chat billing state").LogError(ctx, logger)
 		}
 	}
 
@@ -204,6 +226,16 @@ func (s *Service) handleStripeWebhook(w http.ResponseWriter, r *http.Request) er
 	}
 	if result.subscriptionLost && s.stripeMetrics != nil {
 		s.stripeMetrics.RecordSubscriptionLost(ctx)
+	}
+	if reconciler, ok := s.openRouter.(openrouter.DisableStateReconciler); ok {
+		for _, keyType := range result.reconcileKeyTypes {
+			reconcileCtx, cancel := context.WithTimeout(ctx, stripeLifecycleReconcileTimeout)
+			err := reconciler.ReconcileAPIKeyDisabled(reconcileCtx, organizationID, keyType)
+			cancel()
+			if err != nil {
+				return oops.E(oops.CodeUnexpected, err, "failed to reconcile committed OpenRouter lifecycle state").LogError(ctx, logger)
+			}
+		}
 	}
 
 	return nil
@@ -290,11 +322,93 @@ func (s *Service) serviceStripeWebhookHandler(ctx context.Context, logger *slog.
 		}
 	case "invoice.payment_failed":
 		logger.InfoContext(ctx, "received Stripe invoice payment failure")
-		return stripeWebhookResult{newlyEnabledFeatures: nil, invoicePaymentFailed: true, subscriptionLost: false}, nil
+		return stripeWebhookResult{newlyEnabledFeatures: nil, reconcileKeyTypes: nil, invoicePaymentFailed: true, subscriptionLost: false}, nil
 	case "customer.subscription.deleted":
 		return s.deactivatePaygSubscription(ctx, tx, organizationID, event)
 	}
-	return stripeWebhookResult{newlyEnabledFeatures: nil, invoicePaymentFailed: false, subscriptionLost: false}, nil
+	return stripeWebhookResult{newlyEnabledFeatures: nil, reconcileKeyTypes: nil, invoicePaymentFailed: false, subscriptionLost: false}, nil
+}
+
+func getClassifiedOpenRouterKeyTx(ctx context.Context, tx pgx.Tx, organizationID string, keyType openrouter.KeyType) (*openrouterrepo.OpenrouterApiKey, error) {
+	key, err := openrouterrepo.New(tx).GetOpenRouterAPIKey(ctx, openrouterrepo.GetOpenRouterAPIKeyParams{
+		OrganizationID: organizationID,
+		KeyType:        string(keyType),
+	})
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		return nil, nil
+	case err != nil:
+		return nil, fmt.Errorf("read OpenRouter %s key lifecycle: %w", keyType, err)
+	case key.DisableCauses == nil:
+		return nil, fmt.Errorf("OpenRouter %s key lifecycle causes are unclassified", keyType)
+	default:
+		return &key, nil
+	}
+}
+
+func addOpenRouterDisableCauseTx(ctx context.Context, tx pgx.Tx, organizationID string, keyType openrouter.KeyType, cause openrouter.DisableCause) error {
+	key, err := getClassifiedOpenRouterKeyTx(ctx, tx, organizationID, keyType)
+	if err != nil || key == nil {
+		return err
+	}
+	_, err = openrouterrepo.New(tx).AddOpenRouterAPIKeyDisableCause(ctx, openrouterrepo.AddOpenRouterAPIKeyDisableCauseParams{
+		OrganizationID: organizationID,
+		KeyType:        string(keyType),
+		KeyHash:        key.KeyHash,
+		DisableCause:   string(cause),
+	})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return fmt.Errorf("OpenRouter %s key changed while adding %s lifecycle cause", keyType, cause)
+	}
+	if err != nil {
+		return fmt.Errorf("persist OpenRouter %s key %s lifecycle cause: %w", keyType, cause, err)
+	}
+	return nil
+}
+
+func removeOpenRouterDisableCauseTx(ctx context.Context, tx pgx.Tx, organizationID string, keyType openrouter.KeyType, cause openrouter.DisableCause) error {
+	key, err := getClassifiedOpenRouterKeyTx(ctx, tx, organizationID, keyType)
+	if err != nil || key == nil {
+		return err
+	}
+	_, err = openrouterrepo.New(tx).RemoveOpenRouterAPIKeyDisableCause(ctx, openrouterrepo.RemoveOpenRouterAPIKeyDisableCauseParams{
+		OrganizationID:       organizationID,
+		KeyType:              string(keyType),
+		KeyHash:              key.KeyHash,
+		DisableCause:         string(cause),
+		MonthlyCredits:       key.MonthlyCredits,
+		UpdateMonthlyCredits: false,
+	})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return fmt.Errorf("OpenRouter %s key changed while removing %s lifecycle cause", keyType, cause)
+	}
+	if err != nil {
+		return fmt.Errorf("persist OpenRouter %s key %s lifecycle cause removal: %w", keyType, cause, err)
+	}
+	return nil
+}
+
+func recoverPaygOpenRouterChatKeyTx(ctx context.Context, tx pgx.Tx, organizationID string) error {
+	key, err := getClassifiedOpenRouterKeyTx(ctx, tx, organizationID, openrouter.KeyTypeChat)
+	if err != nil || key == nil {
+		return err
+	}
+	limit, ok := openrouter.AccountTypeCreditLimit(billing.TierPayg)
+	if !ok || limit <= 0 {
+		return errors.New("PAYG OpenRouter chat key credit policy is unavailable")
+	}
+	rows, err := repo.New(tx).RecoverPaygOpenRouterChatKey(ctx, repo.RecoverPaygOpenRouterChatKeyParams{
+		MonthlyCredits: int64(limit),
+		OrganizationID: organizationID,
+		KeyHash:        key.KeyHash,
+	})
+	if err != nil {
+		return fmt.Errorf("persist OpenRouter chat key PAYG recovery: %w", err)
+	}
+	if rows != 1 {
+		return fmt.Errorf("OpenRouter chat key changed while recovering PAYG billing: updated %d rows", rows)
+	}
+	return nil
 }
 
 func (s *Service) deactivatePaygSubscription(ctx context.Context, tx pgx.Tx, organizationID string, event *stripeclient.WebhookEvent) (stripeWebhookResult, error) {
@@ -307,7 +421,7 @@ func (s *Service) deactivatePaygSubscription(ctx context.Context, tx pgx.Tx, org
 	if !state.StripeCustomerID.Valid || state.StripeCustomerID.String != event.CustomerID ||
 		state.GramAccountType != "payg" ||
 		!state.StripeSubscriptionID.Valid || state.StripeSubscriptionID.String != event.ObjectID {
-		return stripeWebhookResult{newlyEnabledFeatures: nil, invoicePaymentFailed: false, subscriptionLost: false}, nil
+		return stripeWebhookResult{newlyEnabledFeatures: nil, reconcileKeyTypes: nil, invoicePaymentFailed: false, subscriptionLost: false}, nil
 	}
 
 	billingRows, err := q.DeactivatePaygBillingMetadata(ctx, repo.DeactivatePaygBillingMetadataParams{
@@ -329,8 +443,8 @@ func (s *Service) deactivatePaygSubscription(ctx context.Context, tx pgx.Tx, org
 	if organizationRows != 1 {
 		return stripeWebhookResult{}, fmt.Errorf("deactivate PAYG organization: expected one row, updated %d", organizationRows)
 	}
-	if err := q.DisablePaygOpenRouterChatKey(ctx, organizationID); err != nil {
-		return stripeWebhookResult{}, fmt.Errorf("disable PAYG OpenRouter chat key: %w", err)
+	if err := addOpenRouterDisableCauseTx(ctx, tx, organizationID, openrouter.KeyTypeChat, openrouter.DisableCauseBillingInactive); err != nil {
+		return stripeWebhookResult{}, fmt.Errorf("record inactive PAYG billing for OpenRouter chat key: %w", err)
 	}
 
 	if s.auditLogger == nil {
@@ -355,7 +469,12 @@ func (s *Service) deactivatePaygSubscription(ctx context.Context, tx pgx.Tx, org
 		return stripeWebhookResult{}, fmt.Errorf("log PAYG organization deactivation: %w", err)
 	}
 
-	return stripeWebhookResult{newlyEnabledFeatures: nil, invoicePaymentFailed: false, subscriptionLost: true}, nil
+	return stripeWebhookResult{
+		newlyEnabledFeatures: nil,
+		reconcileKeyTypes:    []openrouter.KeyType{openrouter.KeyTypeChat},
+		invoicePaymentFailed: false,
+		subscriptionLost:     true,
+	}, nil
 }
 
 func (s *Service) recordStripeInvoice(ctx context.Context, tx pgx.Tx, organizationID string, event *stripeclient.WebhookEvent, invoice *stripeclient.InvoiceState) (bool, error) {
@@ -447,6 +566,7 @@ func (s *Service) activatePaygCheckout(ctx context.Context, tx pgx.Tx, organizat
 	}
 
 	newlyEnabled := []productfeatures.Feature(nil)
+	convertedDemotedTrial := false
 	trial, err := trialsrepo.New(tx).GetTrial(ctx, organizationID)
 	if errors.Is(err, pgx.ErrNoRows) {
 		newlyEnabled, err = productfeatures.SeedPaygEntitlementsTx(ctx, tx, organizationID)
@@ -456,10 +576,26 @@ func (s *Service) activatePaygCheckout(ctx context.Context, tx pgx.Tx, organizat
 	} else if err != nil {
 		return stripeWebhookResult{}, fmt.Errorf("read trial state for PAYG activation: %w", err)
 	} else if trial.DemotedAt.Valid {
+		if !trial.ConvertedAt.Valid {
+			return stripeWebhookResult{}, errors.New("demoted enterprise trial is not durably converted")
+		}
+		convertedDemotedTrial = true
 		if err := productfeatures.SetTrialRuntimeFeaturesTx(ctx, tx, organizationID, true); err != nil {
 			return stripeWebhookResult{}, fmt.Errorf("restore demoted trial runtime features: %w", err)
 		}
 		newlyEnabled = append(newlyEnabled, productfeatures.TrialRuntimeFeatures...)
+	}
+
+	reconcileKeyTypes := []openrouter.KeyType{openrouter.KeyTypeChat}
+	if convertedDemotedTrial {
+		reconcileKeyTypes = append([]openrouter.KeyType(nil), openrouter.AllKeyTypes...)
+		for _, keyType := range openrouter.AllKeyTypes {
+			if err := removeOpenRouterDisableCauseTx(ctx, tx, organizationID, keyType, openrouter.DisableCauseTrialDemotion); err != nil {
+				return stripeWebhookResult{}, fmt.Errorf("replace demoted trial OpenRouter %s key lifecycle: %w", keyType, err)
+			}
+		}
+	} else if err := recoverPaygOpenRouterChatKeyTx(ctx, tx, organizationID); err != nil {
+		return stripeWebhookResult{}, fmt.Errorf("recover PAYG OpenRouter chat key billing: %w", err)
 	}
 
 	anchorDay := conv.SafeInt32(checkout.BillingCycleAnchor.UTC().Day())
@@ -470,7 +606,12 @@ func (s *Service) activatePaygCheckout(ctx context.Context, tx pgx.Tx, organizat
 		state.BillingCycleAnchorDay == anchorDay &&
 		state.GramAccountType == "payg" && state.Whitelisted
 	if alreadyActivated {
-		return stripeWebhookResult{newlyEnabledFeatures: newlyEnabled, invoicePaymentFailed: false, subscriptionLost: false}, nil
+		return stripeWebhookResult{
+			newlyEnabledFeatures: newlyEnabled,
+			reconcileKeyTypes:    reconcileKeyTypes,
+			invoicePaymentFailed: false,
+			subscriptionLost:     false,
+		}, nil
 	}
 
 	if _, err := q.ActivatePaygBillingMetadata(ctx, repo.ActivatePaygBillingMetadataParams{
@@ -508,5 +649,10 @@ func (s *Service) activatePaygCheckout(ctx context.Context, tx pgx.Tx, organizat
 		return stripeWebhookResult{}, fmt.Errorf("log PAYG organization activation: %w", err)
 	}
 
-	return stripeWebhookResult{newlyEnabledFeatures: newlyEnabled, invoicePaymentFailed: false, subscriptionLost: false}, nil
+	return stripeWebhookResult{
+		newlyEnabledFeatures: newlyEnabled,
+		reconcileKeyTypes:    reconcileKeyTypes,
+		invoicePaymentFailed: false,
+		subscriptionLost:     false,
+	}, nil
 }

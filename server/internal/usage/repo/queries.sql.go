@@ -1839,6 +1839,47 @@ func (q *Queries) PrepareStripeCheckoutIntent(ctx context.Context, arg PrepareSt
 	return i, err
 }
 
+const recoverPaygOpenRouterChatKey = `-- name: RecoverPaygOpenRouterChatKey :execrows
+UPDATE openrouter_api_keys
+SET disable_causes = ARRAY(
+      SELECT cause
+      FROM unnest(array_remove(disable_causes, 'billing_inactive')) AS causes(cause)
+      GROUP BY cause
+      ORDER BY CASE cause
+        WHEN 'admin_lock' THEN 1
+        WHEN 'trial_demotion' THEN 2
+        WHEN 'billing_inactive' THEN 3
+        ELSE 4
+      END, cause
+    ),
+    disabled = cardinality(array_remove(disable_causes, 'billing_inactive')) > 0,
+    monthly_credits = $1,
+    updated_at = CASE
+      WHEN 'billing_inactive' = ANY(disable_causes) OR monthly_credits != $1
+        THEN GREATEST(clock_timestamp(), updated_at + INTERVAL '1 microsecond')
+      ELSE updated_at
+    END
+WHERE organization_id = $2
+  AND key_type = 'chat'
+  AND key_hash = $3
+  AND disable_causes IS NOT NULL
+  AND deleted IS FALSE
+`
+
+type RecoverPaygOpenRouterChatKeyParams struct {
+	MonthlyCredits int64
+	OrganizationID string
+	KeyHash        string
+}
+
+func (q *Queries) RecoverPaygOpenRouterChatKey(ctx context.Context, arg RecoverPaygOpenRouterChatKeyParams) (int64, error) {
+	result, err := q.db.Exec(ctx, recoverPaygOpenRouterChatKey, arg.MonthlyCredits, arg.OrganizationID, arg.KeyHash)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const setOpenRouterAPIKeyCreatedAtFixture = `-- name: SetOpenRouterAPIKeyCreatedAtFixture :exec
 UPDATE openrouter_api_keys
 SET created_at = $1
@@ -1873,6 +1914,39 @@ type SetOpenRouterAPIKeysCreatedAtFixtureParams struct {
 func (q *Queries) SetOpenRouterAPIKeysCreatedAtFixture(ctx context.Context, arg SetOpenRouterAPIKeysCreatedAtFixtureParams) error {
 	_, err := q.db.Exec(ctx, setOpenRouterAPIKeysCreatedAtFixture, arg.CreatedAt, arg.OrganizationID)
 	return err
+}
+
+const setOpenRouterKeyLifecycleFixture = `-- name: SetOpenRouterKeyLifecycleFixture :execrows
+UPDATE openrouter_api_keys
+SET disabled = $1,
+    disable_causes = $2,
+    monthly_credits = $3
+WHERE organization_id = $4
+  AND key_type = $5
+  AND deleted IS FALSE
+`
+
+type SetOpenRouterKeyLifecycleFixtureParams struct {
+	Disabled       bool
+	DisableCauses  []string
+	MonthlyCredits int64
+	OrganizationID string
+	KeyType        string
+}
+
+// Test-only fixture for Stripe lifecycle tests.
+func (q *Queries) SetOpenRouterKeyLifecycleFixture(ctx context.Context, arg SetOpenRouterKeyLifecycleFixtureParams) (int64, error) {
+	result, err := q.db.Exec(ctx, setOpenRouterKeyLifecycleFixture,
+		arg.Disabled,
+		arg.DisableCauses,
+		arg.MonthlyCredits,
+		arg.OrganizationID,
+		arg.KeyType,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const setStripeCheckoutSessionFixture = `-- name: SetStripeCheckoutSessionFixture :exec

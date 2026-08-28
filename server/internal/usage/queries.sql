@@ -400,6 +400,42 @@ WHERE organization_id = @organization_id
   AND key_type = 'chat'
   AND deleted IS FALSE;
 
+-- name: RecoverPaygOpenRouterChatKey :execrows
+UPDATE openrouter_api_keys
+SET disable_causes = ARRAY(
+      SELECT cause
+      FROM unnest(array_remove(disable_causes, 'billing_inactive')) AS causes(cause)
+      GROUP BY cause
+      ORDER BY CASE cause
+        WHEN 'admin_lock' THEN 1
+        WHEN 'trial_demotion' THEN 2
+        WHEN 'billing_inactive' THEN 3
+        ELSE 4
+      END, cause
+    ),
+    disabled = cardinality(array_remove(disable_causes, 'billing_inactive')) > 0,
+    monthly_credits = @monthly_credits,
+    updated_at = CASE
+      WHEN 'billing_inactive' = ANY(disable_causes) OR monthly_credits != @monthly_credits
+        THEN GREATEST(clock_timestamp(), updated_at + INTERVAL '1 microsecond')
+      ELSE updated_at
+    END
+WHERE organization_id = @organization_id
+  AND key_type = 'chat'
+  AND key_hash = @key_hash
+  AND disable_causes IS NOT NULL
+  AND deleted IS FALSE;
+
+-- name: SetOpenRouterKeyLifecycleFixture :execrows
+-- Test-only fixture for Stripe lifecycle tests.
+UPDATE openrouter_api_keys
+SET disabled = @disabled,
+    disable_causes = @disable_causes,
+    monthly_credits = @monthly_credits
+WHERE organization_id = @organization_id
+  AND key_type = @key_type
+  AND deleted IS FALSE;
+
 -- name: CreateStripeBillingMetadataFixture :exec
 -- Test-only fixture for webhook tests that need a Stripe customer association.
 INSERT INTO billing_metadata (organization_id, stripe_customer_id)
