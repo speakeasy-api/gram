@@ -296,9 +296,6 @@ func TestPlatformServiceAllOperationsAreEvaluatorIndependent(t *testing.T) {
 	}
 }
 
-//go:fix inline
-func testStringPtr(value string) *string { return new(value) }
-
 func invokeAllPlatformMethods(ctx context.Context, service *PlatformService, organizationID string) []error {
 	prescriptionID := "00000000-0000-0000-0000-000000000001"
 	operationID := uuid.NewString()
