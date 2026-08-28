@@ -40,12 +40,22 @@ func runCursorGuardWorkflowTest(t *testing.T, operations func(*testsuite.TestWor
 
 func armAdminMutation(t *testing.T, env *testsuite.TestWorkflowEnvironment, id string, delay time.Duration, after func()) {
 	t.Helper()
+	armAdminMutationWithToken(t, env, id, delay, nil, after)
+}
+
+func armAdminMutationWithToken(t *testing.T, env *testsuite.TestWorkflowEnvironment, id string, delay time.Duration, token *atomic.Int64, after func()) {
+	t.Helper()
 	env.RegisterDelayedCallback(func() {
 		env.UpdateWorkflow(OpenRouterAdminBeginUpdate, id, &testsuite.TestUpdateCallback{
 			OnReject: func(err error) { require.NoError(t, err) },
 			OnAccept: func() {},
-			OnComplete: func(_ any, err error) {
+			OnComplete: func(result any, err error) {
 				require.NoError(t, err)
+				if token != nil {
+					value, ok := result.(int64)
+					require.True(t, ok)
+					token.Store(value)
+				}
 				if after != nil {
 					after()
 				}

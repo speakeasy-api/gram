@@ -13,9 +13,11 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/openrouterkeys"
 )
 
-func completeAdminMutation(t *testing.T, env *testsuite.TestWorkflowEnvironment, id string, delay time.Duration, completed *atomic.Int32) {
+func completeAdminMutation(t *testing.T, env *testsuite.TestWorkflowEnvironment, id string, delay time.Duration, completed *atomic.Int32, token func() int64, onComplete func()) {
 	t.Helper()
 	env.RegisterDelayedCallback(func() {
+		operationToken := token()
+		require.NotZero(t, operationToken)
 		env.UpdateWorkflow(OpenRouterAdminCompleteUpdate, id, &testsuite.TestUpdateCallback{
 			OnReject: func(err error) { require.NoError(t, err) },
 			OnAccept: func() {},
@@ -24,12 +26,15 @@ func completeAdminMutation(t *testing.T, env *testsuite.TestWorkflowEnvironment,
 				if completed != nil {
 					completed.Add(1)
 				}
+				if onComplete != nil {
+					onComplete()
+				}
 			},
-		}, int64(1))
+		}, operationToken)
 	}, delay)
 }
 
-func runCompleteUpdateWorkflow(t *testing.T, schedule func(*testsuite.TestWorkflowEnvironment, *atomic.Int64, *atomic.Int32)) (int32, int64, int64) {
+func runCompleteUpdateWorkflow(t *testing.T, schedule func(*testsuite.TestWorkflowEnvironment, *atomic.Int64, *atomic.Int32, *atomic.Int32)) (int32, int64, int64) {
 	t.Helper()
 	var suite testsuite.WorkflowTestSuite
 	env := suite.NewTestWorkflowEnvironment()
@@ -48,7 +53,7 @@ func runCompleteUpdateWorkflow(t *testing.T, schedule func(*testsuite.TestWorkfl
 		reconciled.Store(current)
 		return current, nil
 	}, activity.RegisterOptions{Name: OpenRouterAdminReconcileActivityName})
-	schedule(env, &cursor, &completed)
+	schedule(env, &cursor, &completed, &patches)
 	env.ExecuteWorkflow(testOpenRouterAdminWorkflow, openrouterkeys.AdminReconciliationScope{OrganizationID: "organization_placeholder", KeyType: "chat"})
 	require.NoError(t, env.GetWorkflowError())
 	return patches.Load(), int64(completed.Load()), reconciled.Load()
@@ -56,9 +61,9 @@ func runCompleteUpdateWorkflow(t *testing.T, schedule func(*testsuite.TestWorkfl
 
 func TestOpenRouterAdminCompleteUpdateAcknowledgesWithoutFollowingIdleRun(t *testing.T) {
 	t.Parallel()
-	patches, completed, reconciled := runCompleteUpdateWorkflow(t, func(env *testsuite.TestWorkflowEnvironment, cursor *atomic.Int64, completed *atomic.Int32) {
+	patches, completed, reconciled := runCompleteUpdateWorkflow(t, func(env *testsuite.TestWorkflowEnvironment, cursor *atomic.Int64, completed *atomic.Int32, _ *atomic.Int32) {
 		cursor.Store(1)
-		completeAdminMutation(t, env, "a-complete", time.Millisecond, completed)
+		completeAdminMutation(t, env, "a-complete", time.Millisecond, completed, func() int64 { return -1 }, nil)
 	})
 	require.Zero(t, patches, "a Complete without its Begin baseline cannot safely scan historical evidence")
 	require.EqualValues(t, 1, completed)
@@ -67,9 +72,12 @@ func TestOpenRouterAdminCompleteUpdateAcknowledgesWithoutFollowingIdleRun(t *tes
 
 func TestOpenRouterAdminCompleteUpdateAcceptedDuringClose(t *testing.T) {
 	t.Parallel()
-	patches, completed, _ := runCompleteUpdateWorkflow(t, func(env *testsuite.TestWorkflowEnvironment, cursor *atomic.Int64, completed *atomic.Int32) {
-		armAdminMutation(t, env, "a-begin", time.Millisecond, func() { cursor.Store(1) })
-		completeAdminMutation(t, env, "a-close-race", testOpenRouterAdminGuardDelay-time.Millisecond, completed)
+	patches, completed, _ := runCompleteUpdateWorkflow(t, func(env *testsuite.TestWorkflowEnvironment, cursor *atomic.Int64, completed *atomic.Int32, patches *atomic.Int32) {
+		var token atomic.Int64
+		armAdminMutationWithToken(t, env, "a-begin", time.Millisecond, &token, func() { cursor.Store(1) })
+		completeAdminMutation(t, env, "a-close-race", testOpenRouterAdminGuardDelay-time.Millisecond, completed, token.Load, func() {
+			require.EqualValues(t, 1, patches.Load(), "Complete must reconcile the token returned by Begin")
+		})
 	})
 	require.EqualValues(t, 1, patches)
 	require.EqualValues(t, 1, completed)
@@ -77,11 +85,11 @@ func TestOpenRouterAdminCompleteUpdateAcceptedDuringClose(t *testing.T) {
 
 func TestOpenRouterAdminCompleteUpdateStartsSuccessorAfterClose(t *testing.T) {
 	t.Parallel()
-	patches, completed, _ := runCompleteUpdateWorkflow(t, func(env *testsuite.TestWorkflowEnvironment, cursor *atomic.Int64, completed *atomic.Int32) {
+	patches, completed, _ := runCompleteUpdateWorkflow(t, func(env *testsuite.TestWorkflowEnvironment, cursor *atomic.Int64, completed *atomic.Int32, _ *atomic.Int32) {
 		// This fresh run models atomic Update-With-Start choosing the start arm
 		// after the predecessor has already closed.
 		cursor.Store(7)
-		completeAdminMutation(t, env, "successor-complete", time.Millisecond, completed)
+		completeAdminMutation(t, env, "successor-complete", time.Millisecond, completed, func() int64 { return -1 }, nil)
 	})
 	require.Zero(t, patches, "the predecessor guard already reconciled before a successor can start")
 	require.EqualValues(t, 1, completed)
@@ -89,11 +97,11 @@ func TestOpenRouterAdminCompleteUpdateStartsSuccessorAfterClose(t *testing.T) {
 
 func TestOpenRouterAdminConcurrentCompletesAreAcknowledgedAtLatestCursor(t *testing.T) {
 	t.Parallel()
-	patches, completed, reconciled := runCompleteUpdateWorkflow(t, func(env *testsuite.TestWorkflowEnvironment, cursor *atomic.Int64, completed *atomic.Int32) {
+	patches, completed, reconciled := runCompleteUpdateWorkflow(t, func(env *testsuite.TestWorkflowEnvironment, cursor *atomic.Int64, completed *atomic.Int32, _ *atomic.Int32) {
 		for i := int64(1); i <= 3; i++ {
 			value := i
 			env.RegisterDelayedCallback(func() { cursor.Store(value) }, time.Duration(2*i-1)*time.Millisecond)
-			completeAdminMutation(t, env, string(rune('a'+i-1)), time.Duration(2*i)*time.Millisecond, completed)
+			completeAdminMutation(t, env, string(rune('a'+i-1)), time.Duration(2*i)*time.Millisecond, completed, func() int64 { return -1 }, nil)
 		}
 	})
 	require.Zero(t, patches)
@@ -103,9 +111,9 @@ func TestOpenRouterAdminConcurrentCompletesAreAcknowledgedAtLatestCursor(t *test
 
 func TestOpenRouterAdminTimedOutCompleteUpdateStillConverges(t *testing.T) {
 	t.Parallel()
-	patches, completed, reconciled := runCompleteUpdateWorkflow(t, func(env *testsuite.TestWorkflowEnvironment, cursor *atomic.Int64, completed *atomic.Int32) {
+	patches, completed, reconciled := runCompleteUpdateWorkflow(t, func(env *testsuite.TestWorkflowEnvironment, cursor *atomic.Int64, completed *atomic.Int32, _ *atomic.Int32) {
 		cursor.Store(9)
-		completeAdminMutation(t, env, "accepted-before-client-timeout", time.Millisecond, completed)
+		completeAdminMutation(t, env, "accepted-before-client-timeout", time.Millisecond, completed, func() int64 { return -1 }, nil)
 	})
 	require.Zero(t, patches)
 	require.EqualValues(t, 1, completed, "accepted update must finish after its caller stops waiting")

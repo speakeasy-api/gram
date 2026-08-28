@@ -109,7 +109,6 @@ func openRouterAdminReconciliationWorkflow(ctx workflow.Context, scope openroute
 		delete(operations, token)
 		pendingClose = false
 		generation++
-		wake.Send(handlerCtx, nil)
 		return nil
 	}); err != nil {
 		return fmt.Errorf("register OpenRouter admin Complete update: %w", err)

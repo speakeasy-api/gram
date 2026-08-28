@@ -2,6 +2,7 @@ package background
 
 import (
 	"context"
+	"fmt"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -61,6 +62,57 @@ func TestOpenRouterAdminAbortRetiresOnlyItsOperation(t *testing.T) {
 	require.NotEqual(t, tokenA, tokenB)
 	require.EqualValues(t, 1, reconciles.Load())
 	require.EqualValues(t, 1, reconciledCursor.Load())
+}
+
+func TestOpenRouterAdminConcurrentCompletionsDoNotBlockWorkflow(t *testing.T) {
+	t.Parallel()
+	const operationCount = 101
+	var suite testsuite.WorkflowTestSuite
+	env := suite.NewTestWorkflowEnvironment()
+	env.SetTestTimeout(2 * time.Second)
+	var reconciles atomic.Int32
+	var completed atomic.Int32
+	tokens := make([]int64, operationCount)
+	env.RegisterActivityWithOptions(func(context.Context, openrouterkeys.AdminReconciliationScope) (int64, error) {
+		return 0, nil
+	}, activity.RegisterOptions{Name: OpenRouterAdminCaptureCursorActivityName})
+	env.RegisterActivityWithOptions(func(_ context.Context, checkpoint openrouterkeys.AdminReconciliationCheckpoint) (int64, error) {
+		reconciles.Add(1)
+		return checkpoint.Cursor, nil
+	}, activity.RegisterOptions{Name: OpenRouterAdminReconcileActivityName})
+	env.RegisterDelayedCallback(func() {
+		for i := range operationCount {
+			index := i
+			env.UpdateWorkflow(OpenRouterAdminBeginUpdate, fmt.Sprintf("begin-%d", i), &testsuite.TestUpdateCallback{
+				OnReject: func(err error) { require.NoError(t, err) },
+				OnAccept: func() {},
+				OnComplete: func(result any, err error) {
+					require.NoError(t, err)
+					var ok bool
+					tokens[index], ok = result.(int64)
+					require.True(t, ok)
+				},
+			})
+		}
+	}, time.Millisecond)
+	env.RegisterDelayedCallback(func() {
+		for i, token := range tokens {
+			require.NotZero(t, token)
+			env.UpdateWorkflow(OpenRouterAdminCompleteUpdate, fmt.Sprintf("complete-%d", i), &testsuite.TestUpdateCallback{
+				OnReject: func(err error) { require.NoError(t, err) },
+				OnAccept: func() {},
+				OnComplete: func(_ any, err error) {
+					require.NoError(t, err)
+					completed.Add(1)
+				},
+			}, token)
+		}
+	}, 2*time.Millisecond)
+
+	env.ExecuteWorkflow(testOpenRouterAdminWorkflow, openrouterkeys.AdminReconciliationScope{OrganizationID: "organization_placeholder", KeyType: "chat"})
+	require.NoError(t, env.GetWorkflowError())
+	require.EqualValues(t, operationCount, completed.Load())
+	require.EqualValues(t, operationCount, reconciles.Load())
 }
 
 func TestOpenRouterAdminTokenMismatchAndCompleteRetryAreIdempotent(t *testing.T) {

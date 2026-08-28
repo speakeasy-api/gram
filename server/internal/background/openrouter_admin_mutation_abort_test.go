@@ -44,15 +44,14 @@ func runAbortWorkflow(t *testing.T) (int32, int32) {
 	return reconciles.Load(), completed.Load()
 }
 
-func TestOpenRouterAdminAbortIsTerminalWithoutGuardReconcile(t *testing.T) {
+func TestOpenRouterAdminAbortClosesWithoutReconcileAndAllowsFreshRun(t *testing.T) {
 	t.Parallel()
 	reconciles, completed := runAbortWorkflow(t)
 	require.Zero(t, reconciles)
 	require.EqualValues(t, 1, completed)
-}
 
-func TestOpenRouterAdminAbortClosureAllowsFreshRun(t *testing.T) {
-	t.Parallel()
+	// ExecuteWorkflow returning above proves the exact-token Abort closed the
+	// first run; this independent run models a later Update-With-Start Begin.
 	attempts, err := runCaptureFailureWorkflow(t, 0)
 	require.NoError(t, err)
 	require.EqualValues(t, 1, attempts)
