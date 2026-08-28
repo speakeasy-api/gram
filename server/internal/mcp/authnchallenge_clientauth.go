@@ -145,17 +145,17 @@ func (s *Service) verifyClientAssertion(ctx context.Context, logger *slog.Logger
 		return string(clientauth.ReasonVerifierMisconfigured)
 	}
 
-	result, err := s.clientAssertionVerifier.Verify(ctx, assertion, clientauth.Expectation{
-		ClientID: row.ClientID,
+	result, err := s.clientAssertionVerifier.Verify(ctx, assertion, clientauth.ClientExpectation(
+		row.ClientID,
 		// Scoped to the issuer, so every key set its clients name draws on
 		// one fetch budget.
-		KeySource: keySource.WithFetchScope(endpoint.UserSessionIssuerID.String()),
+		keySource.WithFetchScope(endpoint.UserSessionIssuerID.String()),
 		// The issuer row id, never a URL: an endpoint reachable on a custom
 		// domain and the default host has two issuer URLs, and keying the
 		// replay guard on either would let one assertion be spent per host.
-		ReplayIssuer: endpoint.UserSessionIssuerID.String(),
-		Audiences:    urls.clientAssertionAudiences(at),
-	})
+		endpoint.UserSessionIssuerID.String(),
+		urls.clientAssertionAudiences(at),
+	))
 	if err != nil {
 		reason := clientauth.ReasonOf(err)
 		if reason == "" {
