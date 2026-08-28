@@ -303,20 +303,24 @@ func TestKillswitchExpiryDiscoveryIndexMatchesEligibilityAndOrder(t *testing.T) 
 	require.NoError(t, err)
 
 	var (
-		indexColumns   []string
-		indexPredicate string
+		indexColumns      []string
+		indexPredicate    string
+		indexAccessMethod string
 	)
 	require.NoError(t, conn.QueryRow(t.Context(), `
 		SELECT ARRAY(
 			SELECT pg_get_indexdef(indexrelid, position, true)
 			FROM generate_series(1, indnkeyatts) AS position
 			ORDER BY position
-		), pg_get_expr(indpred, indrelid)
+		), pg_get_expr(indpred, indrelid), access_method.amname
 		FROM pg_index
+		JOIN pg_class index_class ON index_class.oid = indexrelid
+		JOIN pg_am access_method ON access_method.oid = index_class.relam
 		WHERE indexrelid = 'killswitch_prescription_versions_expiry_due_idx'::regclass
-	`).Scan(&indexColumns, &indexPredicate))
+	`).Scan(&indexColumns, &indexPredicate, &indexAccessMethod))
 	require.Equal(t, []string{"expires_at", "prescription_id", "version"}, indexColumns)
-	require.Equal(t, "((state = 'active'::text) AND (expires_at IS NOT NULL) AND ((superseded_at IS NULL) OR (expires_at < superseded_at)))", indexPredicate)
+	require.Equal(t, "((state = 'active'::text) AND (expires_at IS NOT NULL) AND (expiry_event_recorded_at IS NULL) AND ((superseded_at IS NULL) OR (expires_at < superseded_at)))", indexPredicate)
+	require.Equal(t, "btree", indexAccessMethod)
 }
 
 func insertOrganization(t *testing.T, conn *pgxpool.Pool, organizationID string) {

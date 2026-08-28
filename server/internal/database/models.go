@@ -1124,18 +1124,19 @@ type KillswitchPrescription struct {
 }
 
 type KillswitchPrescriptionVersion struct {
-	OrganizationID string
-	PrescriptionID uuid.UUID
-	Version        int64
-	State          string
-	ResourceScope  string
-	StartsAt       pgtype.Timestamptz
-	ExpiresAt      pgtype.Timestamptz
-	ActivatedAt    pgtype.Timestamptz
-	SupersededAt   pgtype.Timestamptz
-	InternalNote   string
-	ExternalNote   string
-	CreatedAt      pgtype.Timestamptz
+	OrganizationID        string
+	PrescriptionID        uuid.UUID
+	Version               int64
+	State                 string
+	ResourceScope         string
+	StartsAt              pgtype.Timestamptz
+	ExpiresAt             pgtype.Timestamptz
+	ActivatedAt           pgtype.Timestamptz
+	SupersededAt          pgtype.Timestamptz
+	ExpiryEventRecordedAt pgtype.Timestamptz
+	InternalNote          string
+	ExternalNote          string
+	CreatedAt             pgtype.Timestamptz
 }
 
 type KillswitchPrescriptionVersionResource struct {

@@ -182,35 +182,40 @@ FROM killswitch_prescription_versions
 WHERE state = 'active'
   AND expires_at IS NOT NULL
   AND expires_at <= statement_timestamp()
+  AND expiry_event_recorded_at IS NULL
   AND (superseded_at IS NULL OR expires_at < superseded_at)
-  AND NOT EXISTS (
-    SELECT 1
-    FROM killswitch_expiry_events AS marker
-    WHERE marker.prescription_id = killswitch_prescription_versions.prescription_id
-      AND marker.version = killswitch_prescription_versions.version
-  )
 ORDER BY expires_at, prescription_id, version
 LIMIT @batch_size;
 
 -- name: LockKillswitchVersionForExpiry :one
-SELECT state, expires_at, superseded_at, clock_timestamp()::timestamptz AS database_now
+SELECT state, expires_at, superseded_at, expiry_event_recorded_at, clock_timestamp()::timestamptz AS database_now
 FROM killswitch_prescription_versions
 WHERE organization_id = @organization_id
   AND prescription_id = @prescription_id
   AND version = @version
 FOR UPDATE;
 
--- name: RecordKillswitchExpiryEvent :execrows
-INSERT INTO killswitch_expiry_events (
-  organization_id,
-  prescription_id,
-  version
-) VALUES (
-  @organization_id,
-  @prescription_id,
-  @version
+-- name: CompleteKillswitchExpiryEvent :one
+WITH inserted_event AS (
+  INSERT INTO killswitch_expiry_events (
+    organization_id,
+    prescription_id,
+    version
+  ) VALUES (
+    @organization_id,
+    @prescription_id,
+    @version
+  )
+  ON CONFLICT (prescription_id, version) DO NOTHING
+  RETURNING 1
 )
-ON CONFLICT (prescription_id, version) DO NOTHING;
+UPDATE killswitch_prescription_versions AS version_row
+SET expiry_event_recorded_at = clock_timestamp()
+WHERE version_row.organization_id = @organization_id
+  AND version_row.prescription_id = @prescription_id
+  AND version_row.version = @version
+  AND version_row.expiry_event_recorded_at IS NULL
+RETURNING EXISTS (SELECT 1 FROM inserted_event) AS event_inserted;
 
 -- name: DeleteExpiredKillswitchOperationsGlobal :execrows
 -- Privileged cross-organization retention cleanup for the maintenance sweep.
