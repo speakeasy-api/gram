@@ -16,18 +16,45 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 	trialsrepo "github.com/speakeasy-api/gram/server/internal/trials/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
+	usagerepo "github.com/speakeasy-api/gram/server/internal/usage/repo"
 )
+
+var errStripeCheckoutTrialLifecycleChanged = errors.New("trial lifecycle changed after Stripe Checkout preparation")
 
 // convertEnterpriseTrialForCheckoutTx records the local conversion contract
 // only. Provider reconciliation is deliberately left to the caller after the
 // Stripe business transaction commits.
-func (s *Service) convertEnterpriseTrialForCheckoutTx(ctx context.Context, tx pgx.Tx, organizationID string, now time.Time) (bool, error) {
+func (s *Service) convertEnterpriseTrialForCheckoutTx(ctx context.Context, tx pgx.Tx, organizationID string, now time.Time, expectedTrial *stripeCheckoutTrialFingerprint, preparedTrialFingerprint string, checkoutSessionID string) (bool, error) {
 	trial, err := trialsrepo.New(tx).LockTrialLifecycle(ctx, organizationID)
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
+		receiptAlreadyAttached, receiptErr := stripeCheckoutReceiptAttached(ctx, tx, organizationID, checkoutSessionID)
+		if receiptErr != nil {
+			return false, receiptErr
+		}
+		if receiptAlreadyAttached {
+			return false, nil
+		}
+		if expectedTrial != nil || preparedTrialFingerprint != "none" {
+			return false, errStripeCheckoutTrialLifecycleChanged
+		}
 		return false, nil
 	case err != nil:
 		return false, fmt.Errorf("lock enterprise trial checkout conversion: %w", err)
+	}
+	receiptAlreadyAttached, err := stripeCheckoutReceiptAttached(ctx, tx, organizationID, checkoutSessionID)
+	if err != nil {
+		return false, err
+	}
+	if receiptAlreadyAttached {
+		return false, nil
+	}
+	currentTrial, err := trialsrepo.New(tx).GetTrial(ctx, organizationID)
+	if err != nil {
+		return false, fmt.Errorf("read locked trial lifecycle: %w", err)
+	}
+	if !stripeCheckoutTrialMatches(expectedTrial, currentTrial) || preparedTrialFingerprint != stripeCheckoutTrialFingerprintDigest(expectedTrial) {
+		return false, errStripeCheckoutTrialLifecycleChanged
 	}
 	if trial.ConvertedAt.Valid || trial.DemotedAt.Valid || trial.Tier != "enterprise" || !trial.EndsAt.Valid || !trial.EndsAt.Time.After(now) {
 		return false, nil
@@ -111,6 +138,37 @@ func (s *Service) convertEnterpriseTrialForCheckoutTx(ctx context.Context, tx pg
 		return false, fmt.Errorf("log enterprise trial checkout conversion: %w", err)
 	}
 	return true, nil
+}
+
+func stripeCheckoutReceiptAttached(ctx context.Context, tx pgx.Tx, organizationID, checkoutSessionID string) (bool, error) {
+	metadata, err := usagerepo.New(tx).GetBillingMetadata(ctx, organizationID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return false, nil
+	}
+	if err != nil {
+		return false, fmt.Errorf("read Stripe Checkout receipt under trial lock: %w", err)
+	}
+	return metadata.StripeCheckoutSessionID.Valid && metadata.StripeCheckoutSessionID.String == checkoutSessionID, nil
+}
+
+func stripeCheckoutTrialMatches(expected *stripeCheckoutTrialFingerprint, actual trialsrepo.Trial) bool {
+	if expected == nil {
+		return false
+	}
+	return expected.organizationID == actual.OrganizationID &&
+		expected.tier == actual.Tier &&
+		expected.endsAt.Equal(actual.EndsAt.Time) &&
+		checkoutOptionalTimesEqual(expected.convertedAt, checkoutOptionalTime(actual.ConvertedAt)) &&
+		checkoutOptionalTimesEqual(expected.demotedAt, checkoutOptionalTime(actual.DemotedAt)) &&
+		expected.createdAt.Equal(actual.CreatedAt.Time) &&
+		expected.updatedAt.Equal(actual.UpdatedAt.Time)
+}
+
+func checkoutOptionalTimesEqual(left, right *time.Time) bool {
+	if left == nil || right == nil {
+		return left == nil && right == nil
+	}
+	return left.Equal(*right)
 }
 
 func checkoutConversionTrialSnapshot(tier string, endsAt, convertedAt, demotedAt pgtype.Timestamptz) audit.OrganizationEnterpriseTrialConversionLifecycleSnapshot {

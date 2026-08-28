@@ -1,5 +1,6 @@
 import { Button } from "@/components/ui/Button";
 import { useInfiniteQuery } from "@tanstack/react-query";
+import { useCallback, useEffect, useRef } from "react";
 import { AdminSection } from "./AdminSection";
 
 const TRIAL_ACTION_PREFIX = "organization:enterprise_trial_";
@@ -63,15 +64,41 @@ export function OrganizationActivity({
     retry: false,
   });
 
+  const fetchInFlight = useRef(false);
+  const mounted = useRef(true);
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
+  const fetchNextPage = query.fetchNextPage;
+  const fetchOlder = useCallback(async () => {
+    if (fetchInFlight.current) return;
+    fetchInFlight.current = true;
+    try {
+      await fetchNextPage({ cancelRefetch: false });
+    } finally {
+      if (mounted.current) fetchInFlight.current = false;
+    }
+  }, [fetchNextPage]);
+
   if (query.isLoading)
     return (
-      <p className="px-4 py-3 text-sm text-muted-foreground">
+      <p
+        role="status"
+        aria-live="polite"
+        className="px-4 py-3 text-sm text-muted-foreground"
+      >
         Loading activity…
       </p>
     );
-  if (query.isError) {
+  if (query.isError && !query.data) {
     return (
-      <div className="flex items-center gap-3 px-4 py-3 text-sm">
+      <div
+        role="alert"
+        className="flex flex-wrap items-center gap-3 px-4 py-3 text-sm"
+      >
         <span>Activity could not be loaded.</span>
         <Button
           size="sm"
@@ -96,7 +123,7 @@ export function OrganizationActivity({
     return byTime === 0 ? right.id.localeCompare(left.id) : byTime;
   });
 
-  if (logs.length === 0)
+  if (logs.length === 0 && !query.hasNextPage)
     return (
       <p className="px-4 py-3 text-sm text-muted-foreground">
         No activity yet.
@@ -108,15 +135,34 @@ export function OrganizationActivity({
       {logs.map((log) => (
         <ActivityItem key={log.id} log={log} />
       ))}
-      {query.hasNextPage && (
+      {query.isFetchNextPageError && (
+        <div
+          role="alert"
+          aria-label="Older activity could not be loaded."
+          className="flex flex-wrap items-center gap-3 px-4 py-3 text-sm"
+        >
+          <span>Older activity could not be loaded.</span>
+          <Button
+            size="sm"
+            variant="secondary"
+            onClick={() => void fetchOlder()}
+          >
+            Retry older activity
+          </Button>
+        </div>
+      )}
+      {query.hasNextPage && !query.isFetchNextPageError && (
         <div className="px-4 py-3">
+          {query.isFetchingNextPage && (
+            <span role="status" aria-live="polite" className="sr-only">
+              Loading older activity…
+            </span>
+          )}
           <Button
             size="sm"
             variant="secondary"
             disabled={query.isFetchingNextPage}
-            onClick={() => {
-              if (!query.isFetchingNextPage) void query.fetchNextPage();
-            }}
+            onClick={() => void fetchOlder()}
           >
             {query.isFetchingNextPage ? "Loading…" : "Load older activity"}
           </Button>
@@ -149,7 +195,7 @@ function ActivityItem({ log }: { log: ActivityLog }): JSX.Element {
       data-testid={`activity-${log.id}`}
     >
       <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <div>
+        <div className="min-w-0 break-words">
           <span className="font-medium">{actorLabel(log)}</span>{" "}
           <span>{activityPhrase(log)}</span>
         </div>
@@ -161,11 +207,11 @@ function ActivityItem({ log }: { log: ActivityLog }): JSX.Element {
         </time>
       </div>
       {diffs.length > 0 && (
-        <dl className="grid grid-cols-[minmax(8rem,auto)_1fr] gap-x-4 gap-y-1 rounded-md bg-muted/40 px-3 py-2 text-xs">
+        <dl className="grid grid-cols-1 gap-x-4 gap-y-1 rounded-md bg-muted/40 px-3 py-2 text-xs sm:grid-cols-[minmax(8rem,auto)_1fr]">
           {diffs.map((diff) => (
             <div className="contents" key={diff.label}>
               <dt className="text-muted-foreground">{diff.label}</dt>
-              <dd>
+              <dd className="min-w-0 break-words">
                 {diff.before} → {diff.after}
               </dd>
             </div>
@@ -174,7 +220,7 @@ function ActivityItem({ log }: { log: ActivityLog }): JSX.Element {
       )}
       <details className="text-xs text-muted-foreground">
         <summary className="cursor-pointer">Details</summary>
-        <code>{log.action}</code>
+        <code className="break-all">{log.action}</code>
       </details>
     </article>
   );

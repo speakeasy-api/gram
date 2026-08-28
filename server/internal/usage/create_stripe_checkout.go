@@ -2,6 +2,7 @@ package usage
 
 import (
 	"context"
+	"crypto/sha256"
 	"errors"
 	"fmt"
 	"time"
@@ -36,6 +37,16 @@ type stripeCheckoutIntent struct {
 	billingCycleAnchor time.Time
 	trialEnd           *time.Time
 	expiresAt          time.Time
+}
+
+type stripeCheckoutTrialFingerprint struct {
+	organizationID string
+	tier           string
+	endsAt         time.Time
+	convertedAt    *time.Time
+	demotedAt      *time.Time
+	createdAt      time.Time
+	updatedAt      time.Time
 }
 
 type preparedStripeCheckoutIntent struct {
@@ -73,16 +84,20 @@ func (s *Service) CreateStripeCheckout(ctx context.Context, _ *gen.CreateStripeC
 
 	now := time.Now().UTC().Truncate(time.Second)
 	var productTrialEnd *time.Time
-	trial, err := trialsrepo.New(s.db).GetActiveTrial(ctx, authCtx.ActiveOrganizationID)
+	var expectedTrial *stripeCheckoutTrialFingerprint
+	trial, err := trialsrepo.New(s.db).GetTrial(ctx, authCtx.ActiveOrganizationID)
 	switch {
 	case err == nil:
-		end := trial.EndsAt.Time.UTC()
-		productTrialEnd = &end
+		expectedTrial = newStripeCheckoutTrialFingerprint(trial)
+		if trial.Tier == "enterprise" && !trial.ConvertedAt.Valid && !trial.DemotedAt.Valid && trial.EndsAt.Valid && trial.EndsAt.Time.After(now) {
+			end := trial.EndsAt.Time.UTC()
+			productTrialEnd = &end
+		}
 	case errors.Is(err, pgx.ErrNoRows):
 	case err != nil:
-		return "", oops.E(oops.CodeUnexpected, err, "failed to check the active trial").LogError(ctx, s.logger)
+		return "", oops.E(oops.CodeUnexpected, err, "failed to check the trial lifecycle").LogError(ctx, s.logger)
 	}
-	proposedIntent := newStripeCheckoutIntent(authCtx.ActiveOrganizationID, now, productTrialEnd)
+	proposedIntent := newStripeCheckoutIntentForTrial(authCtx.ActiveOrganizationID, now, productTrialEnd, expectedTrial)
 	if proposedIntent.trialEnd != nil && proposedIntent.trialEnd.Sub(now) < minimumStripeCheckoutTrialLead {
 		return "", oops.E(oops.CodeConflict, nil, "the active trial ends too soon to start self-serve billing").LogWarn(ctx, s.logger)
 	}
@@ -144,8 +159,11 @@ func (s *Service) CreateStripeCheckout(ctx context.Context, _ *gen.CreateStripeC
 	}
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 
-	convertedTrial, err := s.convertEnterpriseTrialForCheckoutTx(ctx, dbtx, authCtx.ActiveOrganizationID, now)
+	convertedTrial, err := s.convertEnterpriseTrialForCheckoutTx(ctx, dbtx, authCtx.ActiveOrganizationID, now, expectedTrial, checkoutIntentTrialFingerprint(preparedIntent.idempotencyKey), checkout.ID)
 	if err != nil {
+		if errors.Is(err, errStripeCheckoutTrialLifecycleChanged) {
+			return "", oops.E(oops.CodeConflict, err, "trial lifecycle changed while Stripe Checkout was being created").LogWarn(ctx, s.logger)
+		}
 		return "", oops.E(oops.CodeUnexpected, err, "failed to convert enterprise trial during Stripe Checkout").LogError(ctx, s.logger)
 	}
 
@@ -310,6 +328,10 @@ func checkoutIntentFromRow(row repo.PrepareStripeCheckoutIntentRow) (stripeCheck
 }
 
 func newStripeCheckoutIntent(organizationID string, now time.Time, productTrialEnd *time.Time) stripeCheckoutIntent {
+	return newStripeCheckoutIntentForTrial(organizationID, now, productTrialEnd, nil)
+}
+
+func newStripeCheckoutIntentForTrial(organizationID string, now time.Time, productTrialEnd *time.Time, trial *stripeCheckoutTrialFingerprint) stripeCheckoutIntent {
 	now = now.UTC().Truncate(time.Second)
 	anchor := nextStripeBillingCycleAnchor(now, productTrialEnd)
 	if productTrialEnd == nil && anchor.Sub(now) < minimumStripeCheckoutSessionLifetime+stripeCheckoutExpirySafetyMargin {
@@ -329,11 +351,52 @@ func newStripeCheckoutIntent(organizationID string, now time.Time, productTrialE
 	}
 
 	return stripeCheckoutIntent{
-		idempotencyKey:     fmt.Sprintf("checkout-session:%s:%d:%d", organizationID, anchor.Unix(), expiresAt.Unix()),
+		idempotencyKey:     fmt.Sprintf("checkout-session:%s:%d:%d:%s", organizationID, anchor.Unix(), expiresAt.Unix(), stripeCheckoutTrialFingerprintDigest(trial)),
 		billingCycleAnchor: anchor,
 		trialEnd:           stripeTrialEnd,
 		expiresAt:          expiresAt,
 	}
+}
+
+func newStripeCheckoutTrialFingerprint(trial trialsrepo.Trial) *stripeCheckoutTrialFingerprint {
+	return &stripeCheckoutTrialFingerprint{
+		organizationID: trial.OrganizationID, tier: trial.Tier, endsAt: trial.EndsAt.Time.UTC(),
+		convertedAt: checkoutOptionalTime(trial.ConvertedAt), demotedAt: checkoutOptionalTime(trial.DemotedAt),
+		createdAt: trial.CreatedAt.Time.UTC(), updatedAt: trial.UpdatedAt.Time.UTC(),
+	}
+}
+
+func stripeCheckoutTrialFingerprintDigest(trial *stripeCheckoutTrialFingerprint) string {
+	if trial == nil {
+		return "none"
+	}
+	payload := fmt.Sprintf("%s\x00%s\x00%s\x00%s\x00%s\x00%s\x00%s", trial.organizationID, trial.tier, trial.endsAt.Format(time.RFC3339Nano), checkoutOptionalTimeString(trial.convertedAt), checkoutOptionalTimeString(trial.demotedAt), trial.createdAt.Format(time.RFC3339Nano), trial.updatedAt.Format(time.RFC3339Nano))
+	sum := sha256.Sum256([]byte(payload))
+	return fmt.Sprintf("%x", sum[:12])
+}
+
+func checkoutIntentTrialFingerprint(idempotencyKey string) string {
+	for index := len(idempotencyKey) - 1; index >= 0; index-- {
+		if idempotencyKey[index] == ':' {
+			return idempotencyKey[index+1:]
+		}
+	}
+	return ""
+}
+
+func checkoutOptionalTime(value pgtype.Timestamptz) *time.Time {
+	if !value.Valid {
+		return nil
+	}
+	result := value.Time.UTC()
+	return &result
+}
+
+func checkoutOptionalTimeString(value *time.Time) string {
+	if value == nil {
+		return "null"
+	}
+	return value.UTC().Format(time.RFC3339Nano)
 }
 
 func finiteTimestamptz(value time.Time) pgtype.Timestamptz {

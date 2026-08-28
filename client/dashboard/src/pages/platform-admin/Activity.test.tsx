@@ -176,6 +176,12 @@ describe("organization trial activity", () => {
     expect(within(item).getByText("free → enterprise")).toBeDefined();
     expect(within(item).getByText("Monthly cap (chat)")).toBeDefined();
     expect(within(item).getByText("7 → 50")).toBeDefined();
+    expect(
+      within(item).getByText("Account type").closest("dl")?.className,
+    ).toContain("grid-cols-1");
+    expect(within(item).getByText("free → enterprise").className).toContain(
+      "break-words",
+    );
     expect(item.textContent).not.toContain("private@example.test");
     expect(item.textContent).not.toContain("hash-secret");
     expect(item.textContent).not.toContain("sk-secret");
@@ -219,12 +225,29 @@ describe("organization trial activity", () => {
     expect(fetchNextPage).toHaveBeenCalledTimes(1);
   });
 
+  it("announces incremental loading", () => {
+    ready(
+      [
+        {
+          ...baseLog,
+          id: "armed",
+          action: "organization:enterprise_trial_armed",
+        },
+      ],
+      { hasNextPage: true, isFetchingNextPage: true },
+    );
+    render(<OrganizationActivity organizationId="org-current" />);
+    expect(screen.getByRole("status").textContent).toBe(
+      "Loading older activity…",
+    );
+  });
+
   it("shows loading, empty, and retryable error states", () => {
     queryState = { isLoading: true };
     const { rerender } = render(
       <OrganizationActivity organizationId="org-current" />,
     );
-    expect(screen.getByText("Loading activity…")).toBeDefined();
+    expect(screen.getByRole("status").textContent).toBe("Loading activity…");
 
     queryState = {
       isLoading: false,
@@ -233,7 +256,9 @@ describe("organization trial activity", () => {
       refetch,
     };
     rerender(<OrganizationActivity organizationId="org-current-error" />);
-    expect(screen.getByText("Activity could not be loaded.")).toBeDefined();
+    expect(screen.getByRole("alert").textContent).toContain(
+      "Activity could not be loaded.",
+    );
     fireEvent.click(screen.getByRole("button", { name: "Retry" }));
     expect(refetch).toHaveBeenCalledTimes(1);
 

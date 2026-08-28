@@ -28,8 +28,11 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/outbox/events"
+	"github.com/speakeasy-api/gram/server/internal/productfeatures"
+	featurerepo "github.com/speakeasy-api/gram/server/internal/productfeatures/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
+	openrouterrepo "github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter/repo"
 	stripeclient "github.com/speakeasy-api/gram/server/internal/thirdparty/stripe"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	trialsrepo "github.com/speakeasy-api/gram/server/internal/trials/repo"
@@ -46,6 +49,7 @@ type checkoutStripeClient struct {
 	checkoutInputs           []stripeclient.CreateCheckoutSessionInput
 	customerError            error
 	checkoutError            error
+	afterCheckoutCreate      func()
 	checkoutState            *stripeclient.CheckoutSessionState
 	checkoutGetErr           error
 	subscriptionState        *stripeclient.SubscriptionState
@@ -108,6 +112,9 @@ func (c *checkoutStripeClient) CreateCheckoutSession(_ context.Context, input st
 	checkoutID := fmt.Sprintf("cs_%d", len(c.checkoutResults)+1)
 	checkoutURL := fmt.Sprintf("https://checkout.stripe.test/%d", len(c.checkoutResults)+1)
 	c.checkoutResults[input.IdempotencyKey] = checkoutStripeResult{input: input, id: checkoutID, url: checkoutURL}
+	if c.afterCheckoutCreate != nil {
+		c.afterCheckoutCreate()
+	}
 	return &stripeclient.CheckoutSession{ID: checkoutID, URL: checkoutURL}, nil
 }
 
@@ -587,6 +594,75 @@ func TestCreateStripeCheckoutStartsImmediatelyWhenTrialExpired(t *testing.T) {
 	require.Nil(t, checkouts[0].TrialEnd)
 }
 
+func TestCreateStripeCheckoutRejectsConcurrentTrialLifecycleChanges(t *testing.T) {
+	t.Parallel()
+
+	for _, test := range []struct {
+		name   string
+		mutate func(*testing.T, *stripeCheckoutTestInstance)
+	}{
+		{name: "extend", mutate: func(t *testing.T, ti *stripeCheckoutTestInstance) {
+			t.Helper()
+			_, err := trialsrepo.New(ti.db).ExtendTrial(t.Context(), trialsrepo.ExtendTrialParams{OrganizationID: ti.orgID, ExtendByDays: 1})
+			require.NoError(t, err)
+		}},
+		{name: "rearm", mutate: func(t *testing.T, ti *stripeCheckoutTestInstance) {
+			t.Helper()
+			_, err := ti.db.Exec(t.Context(), `UPDATE trials SET ends_at = clock_timestamp() - interval '1 hour', demoted_at = clock_timestamp(), updated_at = clock_timestamp() WHERE organization_id = $1`, ti.orgID)
+			require.NoError(t, err)
+			_, err = trialsrepo.New(ti.db).RearmTrial(t.Context(), trialsrepo.RearmTrialParams{OrganizationID: ti.orgID, RearmForDays: 7})
+			require.NoError(t, err)
+		}},
+		{name: "demote", mutate: func(t *testing.T, ti *stripeCheckoutTestInstance) {
+			t.Helper()
+			_, err := ti.db.Exec(t.Context(), `UPDATE trials SET demoted_at = clock_timestamp(), updated_at = clock_timestamp() WHERE organization_id = $1`, ti.orgID)
+			require.NoError(t, err)
+		}},
+		{name: "convert", mutate: func(t *testing.T, ti *stripeCheckoutTestInstance) {
+			t.Helper()
+			rows, err := trialsrepo.New(ti.db).MarkTrialConverted(t.Context(), ti.orgID)
+			require.NoError(t, err)
+			require.EqualValues(t, 1, rows)
+		}},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			ti := newStripeCheckoutTestInstance(t)
+			trialEnd := time.Now().UTC().Add(7 * 24 * time.Hour)
+			require.NoError(t, trialsrepo.New(ti.db).CreateTrial(t.Context(), trialsrepo.CreateTrialParams{
+				OrganizationID: ti.orgID, Tier: "enterprise",
+				EndsAt: pgtype.Timestamptz{Time: trialEnd, InfinityModifier: pgtype.Finite, Valid: true},
+			}))
+			beforeOrganization, err := orgrepo.New(ti.db).GetOrganizationMetadata(t.Context(), ti.orgID)
+			require.NoError(t, err)
+			ti.stripe.afterCheckoutCreate = func() { test.mutate(t, ti) }
+
+			_, err = ti.service.CreateStripeCheckout(ti.adminContext(t), &gen.CreateStripeCheckoutPayload{})
+			require.Error(t, err)
+			requireOopsCode(t, err, oops.CodeConflict)
+			_, _, checkouts := ti.stripe.snapshot()
+			require.Len(t, checkouts, 1)
+
+			billingMetadata, readErr := repo.New(ti.db).GetBillingMetadata(t.Context(), ti.orgID)
+			require.NoError(t, readErr)
+			require.False(t, billingMetadata.StripeCheckoutSessionID.Valid)
+			afterOrganization, readErr := orgrepo.New(ti.db).GetOrganizationMetadata(t.Context(), ti.orgID)
+			require.NoError(t, readErr)
+			require.Equal(t, beforeOrganization.GramAccountType, afterOrganization.GramAccountType)
+			require.Equal(t, beforeOrganization.Whitelisted, afterOrganization.Whitelisted)
+			for _, action := range []audit.Action{audit.ActionOrganizationEnterpriseTrialConverted, audit.ActionBillingMetadataCreateStripeCheckout} {
+				count, countErr := audittest.AuditLogCountByAction(t.Context(), ti.db, action)
+				require.NoError(t, countErr)
+				require.Zero(t, count)
+			}
+			_, outboxErr := audittestrepo.New(ti.db).GetLatestOutboxPayloadByOrg(t.Context(), audittestrepo.GetLatestOutboxPayloadByOrgParams{
+				OrganizationID: ti.orgID, EventType: string(events.OrganizationEnterpriseTrialV1.EventType()),
+			})
+			require.ErrorIs(t, outboxErr, pgx.ErrNoRows)
+		})
+	}
+}
+
 func TestCreateStripeCheckoutFirstConversionIsAtomicAndReceiptReplayIsIdempotent(t *testing.T) {
 	t.Parallel()
 
@@ -655,6 +731,20 @@ func TestCreateStripeCheckoutConversionAuditFailureRollsBackBusinessState(t *tes
 	}))
 	beforeOrganization, err := orgrepo.New(ti.db).GetOrganizationMetadata(t.Context(), ti.orgID)
 	require.NoError(t, err)
+	_, err = openrouterrepo.New(ti.db).CreateOpenRouterAPIKey(t.Context(), openrouterrepo.CreateOpenRouterAPIKeyParams{
+		OrganizationID: ti.orgID, KeyType: string(openrouter.KeyTypeChat),
+		KeyEncrypted: pgtype.Text{String: "encrypted-placeholder", Valid: true}, KeyHash: "hash-placeholder", MonthlyCredits: 7,
+	})
+	require.NoError(t, err)
+	_, err = ti.db.Exec(t.Context(), `UPDATE openrouter_api_keys SET disabled = TRUE, disable_causes = ARRAY['trial_demotion', 'billing_inactive', 'admin_lock']::text[] WHERE organization_id = $1 AND key_type = 'chat'`, ti.orgID)
+	require.NoError(t, err)
+	beforeKey, err := openrouterrepo.New(ti.db).GetOpenRouterAPIKey(t.Context(), openrouterrepo.GetOpenRouterAPIKeyParams{OrganizationID: ti.orgID, KeyType: string(openrouter.KeyTypeChat)})
+	require.NoError(t, err)
+	for _, featureName := range productfeatures.TrialRuntimeFeatures {
+		enabled, featureErr := featurerepo.New(ti.db).IsFeatureEnabled(t.Context(), featurerepo.IsFeatureEnabledParams{OrganizationID: ti.orgID, FeatureName: string(featureName)})
+		require.NoError(t, featureErr)
+		require.False(t, enabled)
+	}
 	require.NoError(t, audittest.RejectAction(t.Context(), ti.db, audit.ActionOrganizationEnterpriseTrialConverted))
 
 	_, err = ti.service.CreateStripeCheckout(ti.adminContext(t), &gen.CreateStripeCheckoutPayload{})
@@ -666,6 +756,17 @@ func TestCreateStripeCheckoutConversionAuditFailureRollsBackBusinessState(t *tes
 	require.NoError(t, readErr)
 	require.Equal(t, beforeOrganization.GramAccountType, afterOrganization.GramAccountType)
 	require.Equal(t, beforeOrganization.Whitelisted, afterOrganization.Whitelisted)
+	afterKey, readErr := openrouterrepo.New(ti.db).GetOpenRouterAPIKey(t.Context(), openrouterrepo.GetOpenRouterAPIKeyParams{OrganizationID: ti.orgID, KeyType: string(openrouter.KeyTypeChat)})
+	require.NoError(t, readErr)
+	require.Equal(t, beforeKey.MonthlyCredits, afterKey.MonthlyCredits)
+	require.Equal(t, beforeKey.DisableCauses, afterKey.DisableCauses)
+	require.Equal(t, beforeKey.Disabled, afterKey.Disabled)
+	require.Equal(t, openrouter.EffectiveDisabled(beforeKey.Disabled, beforeKey.DisableCauses), openrouter.EffectiveDisabled(afterKey.Disabled, afterKey.DisableCauses))
+	for _, featureName := range productfeatures.TrialRuntimeFeatures {
+		enabled, featureErr := featurerepo.New(ti.db).IsFeatureEnabled(t.Context(), featurerepo.IsFeatureEnabledParams{OrganizationID: ti.orgID, FeatureName: string(featureName)})
+		require.NoError(t, featureErr)
+		require.False(t, enabled)
+	}
 	checkoutAuditCount, readErr := audittest.AuditLogCountByAction(t.Context(), ti.db, audit.ActionBillingMetadataCreateStripeCheckout)
 	require.NoError(t, readErr)
 	require.Zero(t, checkoutAuditCount)
