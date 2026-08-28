@@ -4,7 +4,11 @@ import (
 	"context"
 	"log/slog"
 
+	"github.com/google/uuid"
+
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/killswitches/mcptoolexecution"
+	"github.com/speakeasy-api/gram/server/internal/mcp/mcpmetrics"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp/proxy"
 )
 
@@ -13,10 +17,16 @@ import (
 // [proxy.ToolsCallRequestInterceptor]: counting at the request side mirrors
 // `/mcp` (which records before forwarding to the upstream tool executor) so
 // the same metric tracks attempted calls regardless of upstream success.
+type identityCoverageCheckpoint interface {
+	Record(context.Context, string, mcpmetrics.KillswitchCoverageSurface, mcptoolexecution.ServerSource)
+}
+
 type ToolsCallOTELCounterInterceptor struct {
-	metrics  *ProxyMetrics
-	identity proxy.ServerIdentity
-	logger   *slog.Logger
+	metrics          *ProxyMetrics
+	identityCoverage identityCoverageCheckpoint
+	identity         proxy.ServerIdentity
+	organizationID   string
+	logger           *slog.Logger
 }
 
 var _ proxy.ToolsCallRequestInterceptor = (*ToolsCallOTELCounterInterceptor)(nil)
@@ -26,11 +36,13 @@ var _ proxy.ToolsCallRequestInterceptor = (*ToolsCallOTELCounterInterceptor)(nil
 // so the counter's `gram.remote_mcp_server.id` and `gram.mcp_server.id`
 // labels are closed over without re-deriving them from the URL path on every
 // call.
-func NewToolsCallOTELCounterInterceptor(m *ProxyMetrics, identity proxy.ServerIdentity, logger *slog.Logger) *ToolsCallOTELCounterInterceptor {
+func NewToolsCallOTELCounterInterceptor(m *ProxyMetrics, identityCoverage identityCoverageCheckpoint, identity proxy.ServerIdentity, organizationID string, logger *slog.Logger) *ToolsCallOTELCounterInterceptor {
 	return &ToolsCallOTELCounterInterceptor{
-		metrics:  m,
-		identity: identity,
-		logger:   logger,
+		metrics:          m,
+		identityCoverage: identityCoverage,
+		identity:         identity,
+		organizationID:   organizationID,
+		logger:           logger,
 	}
 }
 
@@ -43,20 +55,24 @@ func (i *ToolsCallOTELCounterInterceptor) Name() string {
 // Always returns nil — counter recording is best-effort and must not block
 // tool invocation on metrics-backend failures.
 func (i *ToolsCallOTELCounterInterceptor) InterceptToolsCallRequest(ctx context.Context, call *proxy.ToolsCallRequest) error {
-	if i.metrics == nil || call == nil || call.Params == nil {
+	if call == nil || call.Params == nil {
 		return nil
 	}
 
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	if !ok || authCtx == nil {
-		return nil
+	if i.metrics != nil && ok && authCtx != nil {
+		var mcpURL string
+		if requestContext, _ := contextvalues.GetRequestContext(ctx); requestContext != nil {
+			mcpURL = requestContext.Host + requestContext.ReqURL
+		}
+		i.metrics.RecordMCPToolCall(ctx, authCtx.ActiveOrganizationID, mcpURL, i.identity, call.Params.Name)
 	}
 
-	var mcpURL string
-	if requestContext, _ := contextvalues.GetRequestContext(ctx); requestContext != nil {
-		mcpURL = requestContext.Host + requestContext.ReqURL
+	if i.identityCoverage != nil {
+		serverID, err := uuid.Parse(i.identity.McpServerID)
+		i.identityCoverage.Record(ctx, i.organizationID, mcpmetrics.KillswitchSurfacePrivateProxy, mcptoolexecution.ServerSource{
+			FrontingServerID: uuid.NullUUID{UUID: serverID, Valid: err == nil},
+		})
 	}
-
-	i.metrics.RecordMCPToolCall(ctx, authCtx.ActiveOrganizationID, mcpURL, i.identity, call.Params.Name)
 	return nil
 }

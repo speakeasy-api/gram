@@ -1,14 +1,18 @@
 package remotemcp
 
 import (
+	"context"
 	"net/http"
 	"testing"
 
+	"github.com/google/uuid"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/killswitches/mcptoolexecution"
+	"github.com/speakeasy-api/gram/server/internal/mcp/mcpmetrics"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp/proxy"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
@@ -21,11 +25,25 @@ import (
 func newCounterInterceptorForTest(t *testing.T) *ToolsCallOTELCounterInterceptor {
 	t.Helper()
 	logger := testenv.NewLogger(t)
-	return NewToolsCallOTELCounterInterceptor(NewProxyMetrics(testenv.NewMeterProvider(t).Meter("test"), logger), proxy.ServerIdentity{
+	return NewToolsCallOTELCounterInterceptor(NewProxyMetrics(testenv.NewMeterProvider(t).Meter("test"), logger), nil, proxy.ServerIdentity{
 		RemoteMCPServerID:   "srv-test",
 		TunneledMCPServerID: "",
 		McpServerID:         "mcp-test",
-	}, logger)
+	}, "org-route", logger)
+}
+
+type recordingIdentityCoverage struct {
+	organizationID string
+	surface        mcpmetrics.KillswitchCoverageSurface
+	source         mcptoolexecution.ServerSource
+	calls          int
+}
+
+func (r *recordingIdentityCoverage) Record(_ context.Context, organizationID string, surface mcpmetrics.KillswitchCoverageSurface, source mcptoolexecution.ServerSource) {
+	r.organizationID = organizationID
+	r.surface = surface
+	r.source = source
+	r.calls++
 }
 
 func newToolsCallRequestForCounter(t *testing.T, toolName string) *proxy.ToolsCallRequest {
@@ -75,6 +93,27 @@ func TestToolsCallOTELCounterInterceptor_AuthenticatedRequestPassesThrough(t *te
 	})
 
 	require.NoError(t, interceptor.InterceptToolsCallRequest(ctx, newToolsCallRequestForCounter(t, "search_tickets")))
+}
+
+func TestToolsCallOTELCounterInterceptor_RecordsPrivateProxyIdentityCoverageWithoutAuthContext(t *testing.T) {
+	t.Parallel()
+
+	logger := testenv.NewLogger(t)
+	serverID := uuid.New()
+	coverage := &recordingIdentityCoverage{}
+	interceptor := NewToolsCallOTELCounterInterceptor(
+		NewProxyMetrics(testenv.NewMeterProvider(t).Meter("test"), logger),
+		coverage,
+		proxy.ServerIdentity{McpServerID: serverID.String()},
+		"org-route",
+		logger,
+	)
+
+	require.NoError(t, interceptor.InterceptToolsCallRequest(t.Context(), newToolsCallRequestForCounter(t, "search_tickets")))
+	require.Equal(t, 1, coverage.calls)
+	require.Equal(t, "org-route", coverage.organizationID)
+	require.Equal(t, mcpmetrics.KillswitchSurfacePrivateProxy, coverage.surface)
+	require.Equal(t, uuid.NullUUID{UUID: serverID, Valid: true}, coverage.source.FrontingServerID)
 }
 
 func TestToolsCallOTELCounterInterceptor_NeverRejects(t *testing.T) {

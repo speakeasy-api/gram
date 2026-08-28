@@ -192,7 +192,8 @@ func (s *Service) serveTunneledPublicBackend(
 		return oops.E(oops.CodeRateLimitExceeded, nil, "too many requests to this MCP server").LogWarn(ctx, logger)
 	}
 
-	ctx, err = s.prepareProxyBackendContext(ctx, w, r, logger, endpoint, mcpServer)
+	var organizationID string
+	ctx, organizationID, err = s.prepareProxyBackendContext(ctx, w, r, logger, endpoint, mcpServer)
 	if err != nil {
 		return err
 	}
@@ -200,9 +201,9 @@ func (s *Service) serveTunneledPublicBackend(
 
 	sid := strings.TrimSpace(r.Header.Get(proxy.McpSessionIDHeader))
 	if sid != "" {
-		return s.serveTunneledPublicSession(w, r, logger, endpoint, mcpServer, tunnelID, sid)
+		return s.serveTunneledPublicSession(w, r, logger, endpoint, mcpServer, organizationID, tunnelID, sid)
 	}
-	return s.serveTunneledPublicInit(w, r, logger, endpoint, mcpServer, tunnelID)
+	return s.serveTunneledPublicInit(w, r, logger, endpoint, mcpServer, organizationID, tunnelID)
 }
 
 // stripPublicResponseHeaders removes headers that must never reach an
@@ -236,6 +237,7 @@ func (s *Service) serveTunneledPublicInit(
 	logger *slog.Logger,
 	endpoint *mcpendpointsrepo.McpEndpoint,
 	mcpServer *mcpserversrepo.McpServer,
+	organizationID string,
 	tunnelID string,
 ) error {
 	ctx := r.Context()
@@ -275,7 +277,7 @@ func (s *Service) serveTunneledPublicInit(
 		reserved = true
 	}
 
-	p, err := s.tunnelManager.buildProxy(ctx, tunnelrouting.ClientAffinityKeyFromRequest(r), logger, endpoint.ProjectID, mcpServer, "", "", nil)
+	p, err := s.tunnelManager.buildProxy(ctx, tunnelrouting.ClientAffinityKeyFromRequest(r), logger, endpoint.ProjectID, organizationID, mcpServer, "", "", nil)
 	if err != nil {
 		if reserved {
 			s.rollbackReservation(ctx, logger, tunnelID, mcpServerID, sid)
@@ -447,6 +449,7 @@ func (s *Service) serveTunneledPublicSession(
 	logger *slog.Logger,
 	endpoint *mcpendpointsrepo.McpEndpoint,
 	mcpServer *mcpserversrepo.McpServer,
+	organizationID string,
 	tunnelID string,
 	sid string,
 ) error {
@@ -522,6 +525,7 @@ func (s *Service) serveTunneledPublicSession(
 		session.GatewayAddr,
 		headers,
 		mcpServer.Visibility,
+		organizationID,
 		endpoint.ProjectID.String(),
 		"",
 		"",

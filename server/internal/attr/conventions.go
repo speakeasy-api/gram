@@ -306,7 +306,16 @@ const (
 	// McpSurfaceKey is the inbound MCP serving surface: "hosting" for the
 	// third-party-facing /mcp/{slug} and /x/mcp/{slug} paths (all backends), or
 	// "platform" for the assistant-token-only /platform/mcp/{toolsetSlug} path.
-	McpSurfaceKey                 = attribute.Key("gram.mcp.surface")
+	McpSurfaceKey = attribute.Key("gram.mcp.surface")
+	// McpKillswitchSurfaceKey is the kill-switch enforcement surface a covered
+	// MCP tools/call reached: "hosted" or "private_proxy".
+	McpKillswitchSurfaceKey = attribute.Key("gram.mcp.killswitch.surface")
+	// McpKillswitchIdentityClassKey is the bounded kill-switch identity
+	// coverage class of a covered MCP tools/call. Never a user identifier.
+	McpKillswitchIdentityClassKey = attribute.Key("gram.mcp.killswitch.identity_class")
+	// McpKillswitchResourceClassKey is the bounded kill-switch resource
+	// coverage class of a covered MCP tools/call. Never a server identifier.
+	McpKillswitchResourceClassKey = attribute.Key("gram.mcp.killswitch.resource_class")
 	McpRequestedTagsKey           = attribute.Key("gram.mcp.requested_tags")
 	McpToolsReturnedKey           = attribute.Key("gram.mcp.tools_returned")
 	McpToolsFilteredKey           = attribute.Key("gram.mcp.tools_filtered")
@@ -1974,6 +1983,18 @@ func SlogMcpMethod(v string) slog.Attr      { return slog.String(string(McpMetho
 
 func McpSurface(v string) attribute.KeyValue { return McpSurfaceKey.String(v) }
 func SlogMcpSurface(v string) slog.Attr      { return slog.String(string(McpSurfaceKey), v) }
+
+func McpKillswitchSurface[V ~string](v V) attribute.KeyValue {
+	return McpKillswitchSurfaceKey.String(string(v))
+}
+
+func McpKillswitchIdentityClass[V ~string](v V) attribute.KeyValue {
+	return McpKillswitchIdentityClassKey.String(string(v))
+}
+
+func McpKillswitchResourceClass[V ~string](v V) attribute.KeyValue {
+	return McpKillswitchResourceClassKey.String(string(v))
+}
 
 func MCPRequestedProtocolVersion(v string) attribute.KeyValue {
 	return McpRequestedProtocolVersionKey.String(v)

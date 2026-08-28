@@ -401,6 +401,34 @@ func (q *Queries) GetMCPServerBySlug(ctx context.Context, arg GetMCPServerBySlug
 	return i, err
 }
 
+const hasLiveMCPServerInOrganization = `-- name: HasLiveMCPServerInOrganization :one
+SELECT EXISTS(
+  SELECT 1
+  FROM mcp_servers AS m
+  JOIN projects AS p ON p.id = m.project_id
+  WHERE m.id = $1
+    AND p.organization_id = $2
+    AND m.deleted IS FALSE
+    AND p.deleted IS FALSE
+) AS exists
+`
+
+type HasLiveMCPServerInOrganizationParams struct {
+	ID             uuid.UUID
+	OrganizationID string
+}
+
+// Reports whether an MCP server is live and owned by the organization:
+// the server is not deleted and its project is not deleted. Used by
+// kill-switch resource validation, where a server under a soft-deleted
+// project must stop counting as a current organization resource.
+func (q *Queries) HasLiveMCPServerInOrganization(ctx context.Context, arg HasLiveMCPServerInOrganizationParams) (bool, error) {
+	row := q.db.QueryRow(ctx, hasLiveMCPServerInOrganization, arg.ID, arg.OrganizationID)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
+}
+
 const listMCPServerToolMetadata = `-- name: ListMCPServerToolMetadata :many
 SELECT id, project_id, mcp_server_id, tool_name, title, read_only_hint, destructive_hint, idempotent_hint, open_world_hint, created_at, updated_at, deleted_at, deleted
 FROM mcp_server_tool_metadata

@@ -72,6 +72,7 @@ type Metrics struct {
 
 	mcpToolCallCounter metric.Int64Counter
 	mcpRequestDuration metric.Float64Histogram
+	identityCoverage   *IdentityCoverageCounter
 
 	// oauthFlow{Started,Completed,Failed,Declined}Counter instrument the
 	// user-facing OAuth flow as a unit. They decompose a flow's terminal
@@ -191,6 +192,7 @@ func NewMetrics(meter metric.Meter, logger *slog.Logger) *Metrics {
 		mcpInitializeCounter:                 mcpInitializeCounter,
 		mcpRequestRejectedCounter:            mcpRequestRejectedCounter,
 		requestCensus:                        NewRequestCounter(meter, logger),
+		identityCoverage:                     NewIdentityCoverageCounter(meter, logger),
 		oauthFlowStartedCounter:              oauthFlowStartedCounter,
 		oauthFlowCompletedCounter:            oauthFlowCompletedCounter,
 		oauthFlowFailedCounter:               oauthFlowFailedCounter,
@@ -210,6 +212,15 @@ func (m *Metrics) RecordMCPToolCall(ctx context.Context, orgID string, mcpURL st
 		attr.OrganizationID(orgID),
 	}
 	m.mcpToolCallCounter.Add(ctx, 1, metric.WithAttributes(kv...))
+}
+
+// RecordKillswitchIdentityCoverage records the bounded coverage classes for
+// one tools/call observed at a registered MCP checkpoint.
+func (m *Metrics) RecordKillswitchIdentityCoverage(ctx context.Context, surface KillswitchCoverageSurface, identity KillswitchIdentityClass, resource KillswitchResourceClass) {
+	if m == nil {
+		return
+	}
+	m.identityCoverage.Record(ctx, surface, identity, resource)
 }
 
 // RecordMCPInitialize counts one observed MCP handshake, dimensioned by the
