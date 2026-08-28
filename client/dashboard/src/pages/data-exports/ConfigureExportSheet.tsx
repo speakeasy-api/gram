@@ -105,7 +105,7 @@ function submitLabel(
 ): string {
   if (loading) return "Loading project";
   if (saving) return "Saving";
-  return route ? "Save export" : "Configure export";
+  return route ? "Save export" : "Create export";
 }
 
 export function ConfigureExportSheet({
@@ -195,7 +195,7 @@ export function ConfigureExportSheet({
         className="w-[560px] max-w-[calc(100vw-2rem)] gap-0 bg-card p-0 sm:max-w-[560px]"
       >
         <SheetHeader className="border-b px-6 py-5">
-          <SheetTitle>Configure export</SheetTitle>
+          <SheetTitle>{route ? "Configure export" : "New export"}</SheetTitle>
           <SheetDescription>
             Choose the project, what to send, and where it should go.
           </SheetDescription>
