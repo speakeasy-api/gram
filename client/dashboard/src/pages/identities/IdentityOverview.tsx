@@ -140,9 +140,8 @@ export default function IdentityOverview(): JSX.Element {
         <div className="text-muted-foreground flex items-start gap-2">
           <Info className="mt-0.5 size-3.5 shrink-0" />
           <Text variant="small" muted className="text-xs">
-            Panels here show this person&rsquo;s slice and nothing more. Every{" "}
-            <strong className="font-medium">Open in</strong> leaves for the page
-            that owns the data.
+            Each panel shows this identity&rsquo;s slice. Open in continues on
+            the page that owns the data.
           </Text>
         </div>
 
@@ -172,7 +171,7 @@ export default function IdentityOverview(): JSX.Element {
           )}
         </IdentityPanel>
 
-        <StatTileGroup>
+        <StatTileGroup className="overflow-x-auto [&>*]:min-w-[9rem]">
           <StatTile
             title="Spend"
             value={metrics?.totalCost ?? 0}

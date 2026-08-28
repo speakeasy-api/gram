@@ -616,11 +616,11 @@ const RowContainer = forwardRef<HTMLTableRowElement, RowContainerProps>(
     // link, or a checkbox, and steals it.
     const handleClick = (event: React.MouseEvent<HTMLTableRowElement>) => {
       if (!onClick) return;
-      if (
-        event.target instanceof Element &&
-        event.target.closest("a,button,input,select,textarea,[role='menuitem']")
-      ) {
-        return;
+      if (event.target instanceof Element) {
+        const control = event.target.closest("a,button,input,select,textarea");
+        // Bounded to this row: an unbounded closest() would also match a
+        // clickable ancestor wrapping the whole table.
+        if (control && event.currentTarget.contains(control)) return;
       }
       onClick();
     };

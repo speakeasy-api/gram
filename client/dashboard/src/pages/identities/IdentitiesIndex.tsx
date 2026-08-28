@@ -255,7 +255,7 @@ function IdentitiesIndexContent(): JSX.Element {
         platform knows about, account here or not.
       </Page.Section.Description>
       <Page.Section.Body>
-        <StatTileGroup>
+        <StatTileGroup className="overflow-x-auto [&>*]:min-w-[9rem]">
           <StatTile
             title="Identities"
             value={identities.length}

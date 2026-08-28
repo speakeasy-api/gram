@@ -429,7 +429,7 @@ function ConnectionGroupRow({
             {group.identity?.urn ? (
               <IdentityLink
                 identifier={{ urn: group.identity.urn }}
-                className="text-foreground truncate text-sm font-medium underline decoration-dotted underline-offset-4"
+                className="text-foreground truncate text-sm font-medium"
               >
                 {group.label}
               </IdentityLink>

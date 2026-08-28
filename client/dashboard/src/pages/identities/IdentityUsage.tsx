@@ -46,7 +46,7 @@ export default function IdentityUsage(): JSX.Element {
       meta={`${tools.length} tool${tools.length === 1 ? "" : "s"} · ${models.length} model${models.length === 1 ? "" : "s"}`}
     >
       <div className="flex flex-col gap-6">
-        <StatTileGroup>
+        <StatTileGroup className="overflow-x-auto [&>*]:min-w-[9rem]">
           <StatTile
             title="Tool calls"
             value={metrics?.totalToolCalls ?? 0}

@@ -166,14 +166,16 @@ function IdentityDetailContent(): JSX.Element {
         {/* Rail beside the content, not in the app sidebar: the reader keeps
             the project nav they arrived with. The recessed ground separates
             the navigation from the panels, which carry the card surface. */}
-        <div className="bg-background flex min-h-0 flex-1 gap-8 px-8 py-8">
+        <div className="bg-background flex min-h-0 flex-1 flex-col gap-6 px-8 py-8 lg:flex-row lg:gap-8">
           <IdentityRail
             items={identityRailItems(
               orgRoutes,
               encodedUrn ?? "",
               location.search,
             )}
-            className="sticky top-8 hidden w-44 shrink-0 self-start lg:flex"
+            // Narrow, the rail is a scrollable row above the content: hiding
+            // it left the other sub-pages reachable only by editing the URL.
+            className="border-border -mx-2 shrink-0 flex-row overflow-x-auto border-b px-2 pb-1 lg:sticky lg:top-8 lg:mx-0 lg:w-44 lg:flex-col lg:self-start lg:overflow-visible lg:border-b-0 lg:px-0 lg:pb-0"
           />
           <div className="min-w-0 flex-1">
             <Outlet context={context} />
@@ -200,6 +202,10 @@ function IdentityHeader({
   } = useDateRangeFilter();
 
   const primaryEmail = identity.emails[0];
+  // Tobias is for names. When the only name we have is the address itself, the
+  // display face loses the punctuation that makes it readable, and repeating it
+  // underneath says nothing twice.
+  const nameIsAddress = identity.displayName === primaryEmail;
   const { directory } = identity;
   // Department, title and employment type read as one line rather than as
   // three chips: they describe the person, they are not filters.
@@ -222,11 +228,17 @@ function IdentityHeader({
             <AvatarFallback>{getInitials(identity.displayName)}</AvatarFallback>
           </Avatar>
           <div className="flex min-w-0 flex-col gap-1">
-            <h1 className="text-display-sm truncate font-thin">
+            <h1
+              className={
+                nameIsAddress
+                  ? "truncate font-mono text-xl"
+                  : "text-display-sm truncate font-thin"
+              }
+            >
               {identity.displayName}
             </h1>
             <div className="flex items-center gap-2">
-              {primaryEmail && (
+              {primaryEmail && !nameIsAddress && (
                 <Text variant="small" muted className="truncate">
                   {primaryEmail}
                 </Text>

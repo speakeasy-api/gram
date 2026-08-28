@@ -70,22 +70,22 @@ export default function IdentityActivity(): JSX.Element {
               No recorded changes by this identity.
             </IdentityPanelEmpty>
           ) : (
-            logs
-              .slice(0, 20)
-              .map((log) => (
-                <IdentityPanelRow
-                  key={log.id}
-                  title={log.action}
-                  detail={[
-                    log.subjectDisplayName ?? log.subjectType,
-                    log.projectSlug,
-                    log.actingSurface,
-                  ]
-                    .filter(Boolean)
-                    .join(" · ")}
-                  trailing={<HumanizeDateTime date={log.createdAt} />}
-                />
-              ))
+            logs.slice(0, 20).map((log) => (
+              <IdentityPanelRow
+                key={log.id}
+                title={log.action}
+                detail={[
+                  log.subjectDisplayName ?? log.subjectType,
+                  log.projectSlug,
+                  // The API sends "unknown" when no surface was identified;
+                  // printing that word says less than saying nothing.
+                  log.actingSurface === "unknown" ? "" : log.actingSurface,
+                ]
+                  .filter(Boolean)
+                  .join(" · ")}
+                trailing={<HumanizeDateTime date={log.createdAt} />}
+              />
+            ))
           )}
         </IdentityPanel>
 

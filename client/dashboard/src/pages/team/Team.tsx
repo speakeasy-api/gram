@@ -948,7 +948,7 @@ function TeamInner() {
               noResultsMessage={
                 <Stack
                   gap={2}
-                  className="bg-background h-full p-8"
+                  className="bg-background -mx-4 -my-6 h-full p-8"
                   align="center"
                   justify="center"
                 >

@@ -130,9 +130,9 @@ function RiskOverviewUsersIndexContent() {
                         )}
                       </span>
                     </div>
-                    <div className="bg-muted h-1 w-full rounded-full">
+                    <div className="bg-muted h-1 w-full">
                       <div
-                        className="h-1 rounded-full bg-blue-700 dark:bg-blue-500"
+                        className="bg-destructive h-1"
                         style={{ width: `${pct}%` }}
                       />
                     </div>

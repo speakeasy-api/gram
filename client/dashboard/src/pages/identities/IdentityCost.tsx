@@ -46,7 +46,7 @@ export default function IdentityCost(): JSX.Element {
       meta={`${models.length} model${models.length === 1 ? "" : "s"}`}
     >
       <div className="flex flex-col gap-6">
-        <StatTileGroup>
+        <StatTileGroup className="overflow-x-auto [&>*]:min-w-[9rem]">
           <StatTile
             title="Spend"
             value={metrics?.totalCost ?? 0}
@@ -59,14 +59,14 @@ export default function IdentityCost(): JSX.Element {
             value={metrics?.totalInputTokens ?? 0}
             format="compact"
             tone="neutral"
-            icon="arrow-down"
+            icon="arrow-down-to-line"
           />
           <StatTile
             title="Output tokens"
             value={metrics?.totalOutputTokens ?? 0}
             format="compact"
             tone="neutral"
-            icon="arrow-up"
+            icon="arrow-up-from-line"
           />
           <StatTile
             title="Cache reads"

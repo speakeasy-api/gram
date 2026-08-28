@@ -71,7 +71,14 @@ export function IdentityLink({
       // Person references sit inside clickable rows on several surfaces; the
       // link must win over the row rather than firing both.
       onClick={(event) => event.stopPropagation()}
-      className={cn("hover:underline", className)}
+      // A rest-state affordance, not hover-only: these sit in table cells and
+      // inside rows that are themselves clickable, where an invisible link is
+      // undiscoverable. Solid rather than dotted — dotted already means
+      // "definition/tooltip" elsewhere in this app.
+      className={cn(
+        "decoration-foreground/30 hover:decoration-foreground underline underline-offset-4",
+        className,
+      )}
     >
       {children}
     </Link>
