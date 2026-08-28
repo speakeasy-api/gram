@@ -64,6 +64,7 @@ import (
 	otelc "github.com/speakeasy-api/gram/server/gen/http/otel/client"
 	otelforwardingc "github.com/speakeasy-api/gram/server/gen/http/otel_forwarding/client"
 	packagesc "github.com/speakeasy-api/gram/server/gen/http/packages/client"
+	platformkillswitchesc "github.com/speakeasy-api/gram/server/gen/http/platform_killswitches/client"
 	platformmcpc "github.com/speakeasy-api/gram/server/gen/http/platform_mcp/client"
 	pluginsc "github.com/speakeasy-api/gram/server/gen/http/plugins/client"
 	projectsc "github.com/speakeasy-api/gram/server/gen/http/projects/client"
@@ -145,6 +146,7 @@ func UsageCommands() []string {
 		"admin-assets upload-platform-image",
 		"admin-chat-analysis (get-settings|upsert-work-units-settings|upsert-business-memory-settings|trigger-analysis)",
 		"admin-external-credentials (create-gcp-iam-platform-credential|list-platform-external-credentials|update-gcp-iam-platform-credential|get-gcp-iam-platform-credential|verify-gcp-iam-platform-credential|delete-gcp-iam-platform-credential)",
+		"platform-killswitches (list-definitions|activate-prescription|change-prescription|deactivate-prescription|get-prescription|list-prescriptions)",
 		"admin-open-router-keys (list-keys|get-key-usage|disable-key|enable-key)",
 		"platform-mcp (get-onboarding|start-onboarding|record-dashboard-cta-event|record-install-intent|record-agent-configuration-copied|start-onboarding-setup|recheck-onboarding-readiness|distribute-onboarding-candidate|remove-onboarding-distribution|repair-onboarding-publication|dismiss-onboarding)",
 		"plugins (list-plugins|get-plugin|create-plugin|update-plugin|delete-plugin|add-plugin-server|update-plugin-server|remove-plugin-server|set-plugin-assignments|list-audiences|download-plugin-package|download-platform-mcp-plugin|download-observability-plugin|download-codex-install-script|get-platform-mcp-package-status|repair-platform-mcp-package|get-publish-status|publish-plugins|get-marketplace-settings|update-marketplace-settings)",
@@ -1848,6 +1850,34 @@ func ParseEndpoint(
 		adminExternalCredentialsDeleteGcpIamPlatformCredentialFlags            = flag.NewFlagSet("delete-gcp-iam-platform-credential", flag.ExitOnError)
 		adminExternalCredentialsDeleteGcpIamPlatformCredentialIDFlag           = adminExternalCredentialsDeleteGcpIamPlatformCredentialFlags.String("id", "REQUIRED", "")
 		adminExternalCredentialsDeleteGcpIamPlatformCredentialSessionTokenFlag = adminExternalCredentialsDeleteGcpIamPlatformCredentialFlags.String("session-token", "", "")
+
+		platformKillswitchesFlags = flag.NewFlagSet("platform-killswitches", flag.ContinueOnError)
+
+		platformKillswitchesListDefinitionsFlags            = flag.NewFlagSet("list-definitions", flag.ExitOnError)
+		platformKillswitchesListDefinitionsSessionTokenFlag = platformKillswitchesListDefinitionsFlags.String("session-token", "", "")
+
+		platformKillswitchesActivatePrescriptionFlags            = flag.NewFlagSet("activate-prescription", flag.ExitOnError)
+		platformKillswitchesActivatePrescriptionBodyFlag         = platformKillswitchesActivatePrescriptionFlags.String("body", "REQUIRED", "")
+		platformKillswitchesActivatePrescriptionSessionTokenFlag = platformKillswitchesActivatePrescriptionFlags.String("session-token", "", "")
+
+		platformKillswitchesChangePrescriptionFlags            = flag.NewFlagSet("change-prescription", flag.ExitOnError)
+		platformKillswitchesChangePrescriptionBodyFlag         = platformKillswitchesChangePrescriptionFlags.String("body", "REQUIRED", "")
+		platformKillswitchesChangePrescriptionSessionTokenFlag = platformKillswitchesChangePrescriptionFlags.String("session-token", "", "")
+
+		platformKillswitchesDeactivatePrescriptionFlags            = flag.NewFlagSet("deactivate-prescription", flag.ExitOnError)
+		platformKillswitchesDeactivatePrescriptionBodyFlag         = platformKillswitchesDeactivatePrescriptionFlags.String("body", "REQUIRED", "")
+		platformKillswitchesDeactivatePrescriptionSessionTokenFlag = platformKillswitchesDeactivatePrescriptionFlags.String("session-token", "", "")
+
+		platformKillswitchesGetPrescriptionFlags              = flag.NewFlagSet("get-prescription", flag.ExitOnError)
+		platformKillswitchesGetPrescriptionOrganizationIDFlag = platformKillswitchesGetPrescriptionFlags.String("organization-id", "REQUIRED", "")
+		platformKillswitchesGetPrescriptionPrescriptionIDFlag = platformKillswitchesGetPrescriptionFlags.String("prescription-id", "REQUIRED", "")
+		platformKillswitchesGetPrescriptionSessionTokenFlag   = platformKillswitchesGetPrescriptionFlags.String("session-token", "", "")
+
+		platformKillswitchesListPrescriptionsFlags              = flag.NewFlagSet("list-prescriptions", flag.ExitOnError)
+		platformKillswitchesListPrescriptionsOrganizationIDFlag = platformKillswitchesListPrescriptionsFlags.String("organization-id", "REQUIRED", "")
+		platformKillswitchesListPrescriptionsLimitFlag          = platformKillswitchesListPrescriptionsFlags.String("limit", "", "")
+		platformKillswitchesListPrescriptionsAfterIDFlag        = platformKillswitchesListPrescriptionsFlags.String("after-id", "", "")
+		platformKillswitchesListPrescriptionsSessionTokenFlag   = platformKillswitchesListPrescriptionsFlags.String("session-token", "", "")
 
 		adminOpenRouterKeysFlags = flag.NewFlagSet("admin-open-router-keys", flag.ContinueOnError)
 
@@ -4113,6 +4143,14 @@ func ParseEndpoint(
 	adminExternalCredentialsVerifyGcpIamPlatformCredentialFlags.Usage = adminExternalCredentialsVerifyGcpIamPlatformCredentialUsage
 	adminExternalCredentialsDeleteGcpIamPlatformCredentialFlags.Usage = adminExternalCredentialsDeleteGcpIamPlatformCredentialUsage
 
+	platformKillswitchesFlags.Usage = platformKillswitchesUsage
+	platformKillswitchesListDefinitionsFlags.Usage = platformKillswitchesListDefinitionsUsage
+	platformKillswitchesActivatePrescriptionFlags.Usage = platformKillswitchesActivatePrescriptionUsage
+	platformKillswitchesChangePrescriptionFlags.Usage = platformKillswitchesChangePrescriptionUsage
+	platformKillswitchesDeactivatePrescriptionFlags.Usage = platformKillswitchesDeactivatePrescriptionUsage
+	platformKillswitchesGetPrescriptionFlags.Usage = platformKillswitchesGetPrescriptionUsage
+	platformKillswitchesListPrescriptionsFlags.Usage = platformKillswitchesListPrescriptionsUsage
+
 	adminOpenRouterKeysFlags.Usage = adminOpenRouterKeysUsage
 	adminOpenRouterKeysListKeysFlags.Usage = adminOpenRouterKeysListKeysUsage
 	adminOpenRouterKeysGetKeyUsageFlags.Usage = adminOpenRouterKeysGetKeyUsageUsage
@@ -4606,6 +4644,8 @@ func ParseEndpoint(
 			svcf = adminChatAnalysisFlags
 		case "admin-external-credentials":
 			svcf = adminExternalCredentialsFlags
+		case "platform-killswitches":
+			svcf = platformKillswitchesFlags
 		case "admin-open-router-keys":
 			svcf = adminOpenRouterKeysFlags
 		case "platform-mcp":
@@ -5776,6 +5816,28 @@ func ParseEndpoint(
 
 			case "delete-gcp-iam-platform-credential":
 				epf = adminExternalCredentialsDeleteGcpIamPlatformCredentialFlags
+
+			}
+
+		case "platform-killswitches":
+			switch epn {
+			case "list-definitions":
+				epf = platformKillswitchesListDefinitionsFlags
+
+			case "activate-prescription":
+				epf = platformKillswitchesActivatePrescriptionFlags
+
+			case "change-prescription":
+				epf = platformKillswitchesChangePrescriptionFlags
+
+			case "deactivate-prescription":
+				epf = platformKillswitchesDeactivatePrescriptionFlags
+
+			case "get-prescription":
+				epf = platformKillswitchesGetPrescriptionFlags
+
+			case "list-prescriptions":
+				epf = platformKillswitchesListPrescriptionsFlags
 
 			}
 
@@ -8017,6 +8079,28 @@ func ParseEndpoint(
 			case "delete-gcp-iam-platform-credential":
 				endpoint = c.DeleteGcpIamPlatformCredential()
 				data, err = adminexternalcredentialsc.BuildDeleteGcpIamPlatformCredentialPayload(*adminExternalCredentialsDeleteGcpIamPlatformCredentialIDFlag, *adminExternalCredentialsDeleteGcpIamPlatformCredentialSessionTokenFlag)
+			}
+		case "platform-killswitches":
+			c := platformkillswitchesc.NewClient(scheme, host, doer, enc, dec, restore)
+			switch epn {
+			case "list-definitions":
+				endpoint = c.ListDefinitions()
+				data, err = platformkillswitchesc.BuildListDefinitionsPayload(*platformKillswitchesListDefinitionsSessionTokenFlag)
+			case "activate-prescription":
+				endpoint = c.ActivatePrescription()
+				data, err = platformkillswitchesc.BuildActivatePrescriptionPayload(*platformKillswitchesActivatePrescriptionBodyFlag, *platformKillswitchesActivatePrescriptionSessionTokenFlag)
+			case "change-prescription":
+				endpoint = c.ChangePrescription()
+				data, err = platformkillswitchesc.BuildChangePrescriptionPayload(*platformKillswitchesChangePrescriptionBodyFlag, *platformKillswitchesChangePrescriptionSessionTokenFlag)
+			case "deactivate-prescription":
+				endpoint = c.DeactivatePrescription()
+				data, err = platformkillswitchesc.BuildDeactivatePrescriptionPayload(*platformKillswitchesDeactivatePrescriptionBodyFlag, *platformKillswitchesDeactivatePrescriptionSessionTokenFlag)
+			case "get-prescription":
+				endpoint = c.GetPrescription()
+				data, err = platformkillswitchesc.BuildGetPrescriptionPayload(*platformKillswitchesGetPrescriptionOrganizationIDFlag, *platformKillswitchesGetPrescriptionPrescriptionIDFlag, *platformKillswitchesGetPrescriptionSessionTokenFlag)
+			case "list-prescriptions":
+				endpoint = c.ListPrescriptions()
+				data, err = platformkillswitchesc.BuildListPrescriptionsPayload(*platformKillswitchesListPrescriptionsOrganizationIDFlag, *platformKillswitchesListPrescriptionsLimitFlag, *platformKillswitchesListPrescriptionsAfterIDFlag, *platformKillswitchesListPrescriptionsSessionTokenFlag)
 			}
 		case "admin-open-router-keys":
 			c := adminopenrouterkeysc.NewClient(scheme, host, doer, enc, dec, restore)
@@ -16624,6 +16708,146 @@ func adminExternalCredentialsDeleteGcpIamPlatformCredentialUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin-external-credentials delete-gcp-iam-platform-credential --id \"550e8400-e29b-41d4-a716-446655440000\" --session-token \"abc123\"")
+}
+
+// platformKillswitchesUsage displays the usage of the platform-killswitches
+// command and its subcommands.
+func platformKillswitchesUsage() {
+	fmt.Fprintln(os.Stderr, `Platform break-glass access to generic killswitch lifecycle operations on the main server. Requires a current users.admin entitlement on an ordinary Gram session.`)
+	fmt.Fprintf(os.Stderr, "Usage:\n    %s [globalflags] platform-killswitches COMMAND [flags]\n\n", os.Args[0])
+	fmt.Fprintln(os.Stderr, "COMMAND:")
+	fmt.Fprintln(os.Stderr, `    list-definitions: ListDefinitions implements listDefinitions.`)
+	fmt.Fprintln(os.Stderr, `    activate-prescription: ActivatePrescription implements activatePrescription.`)
+	fmt.Fprintln(os.Stderr, `    change-prescription: ChangePrescription implements changePrescription.`)
+	fmt.Fprintln(os.Stderr, `    deactivate-prescription: DeactivatePrescription implements deactivatePrescription.`)
+	fmt.Fprintln(os.Stderr, `    get-prescription: GetPrescription implements getPrescription.`)
+	fmt.Fprintln(os.Stderr, `    list-prescriptions: ListPrescriptions implements listPrescriptions.`)
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Additional help:")
+	fmt.Fprintf(os.Stderr, "    %s platform-killswitches COMMAND --help\n", os.Args[0])
+}
+func platformKillswitchesListDefinitionsUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] platform-killswitches list-definitions", os.Args[0])
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `ListDefinitions implements listDefinitions.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "platform-killswitches list-definitions --session-token \"abc123\"")
+}
+
+func platformKillswitchesActivatePrescriptionUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] platform-killswitches activate-prescription", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `ActivatePrescription implements activatePrescription.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "platform-killswitches activate-prescription --body '{\n      \"definition\": \"abc123\",\n      \"expected_version\": 1,\n      \"expires_at\": \"1970-01-01T00:00:01Z\",\n      \"external_note\": \"aaa\",\n      \"internal_note\": \"aaa\",\n      \"operation_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"organization_id\": \"abc123\",\n      \"prescription_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"principal_input\": \"abc123\",\n      \"principal_kind\": \"abc123\",\n      \"resource_kind\": \"abc123\",\n      \"resource_scope\": \"selected\",\n      \"selected_resource_inputs\": [\n         \"abc123\",\n         \"abc123\",\n         \"abc123\"\n      ],\n      \"start_mode\": \"at\",\n      \"starts_at\": \"1970-01-01T00:00:01Z\"\n   }' --session-token \"abc123\"")
+}
+
+func platformKillswitchesChangePrescriptionUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] platform-killswitches change-prescription", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `ChangePrescription implements changePrescription.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "platform-killswitches change-prescription --body '{\n      \"expected_version\": 1,\n      \"expires_at\": \"1970-01-01T00:00:01Z\",\n      \"external_note\": \"aaa\",\n      \"internal_note\": \"aaa\",\n      \"operation_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"organization_id\": \"abc123\",\n      \"prescription_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"resource_scope\": \"selected\",\n      \"selected_resource_inputs\": [\n         \"abc123\",\n         \"abc123\",\n         \"abc123\"\n      ],\n      \"start_mode\": \"at\",\n      \"starts_at\": \"1970-01-01T00:00:01Z\"\n   }' --session-token \"abc123\"")
+}
+
+func platformKillswitchesDeactivatePrescriptionUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] platform-killswitches deactivate-prescription", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `DeactivatePrescription implements deactivatePrescription.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "platform-killswitches deactivate-prescription --body '{\n      \"expected_version\": 1,\n      \"operation_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"organization_id\": \"abc123\",\n      \"prescription_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }' --session-token \"abc123\"")
+}
+
+func platformKillswitchesGetPrescriptionUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] platform-killswitches get-prescription", os.Args[0])
+	fmt.Fprint(os.Stderr, " -organization-id STRING")
+	fmt.Fprint(os.Stderr, " -prescription-id STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `GetPrescription implements getPrescription.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -organization-id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -prescription-id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "platform-killswitches get-prescription --organization-id \"abc123\" --prescription-id \"550e8400-e29b-41d4-a716-446655440000\" --session-token \"abc123\"")
+}
+
+func platformKillswitchesListPrescriptionsUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] platform-killswitches list-prescriptions", os.Args[0])
+	fmt.Fprint(os.Stderr, " -organization-id STRING")
+	fmt.Fprint(os.Stderr, " -limit INT32")
+	fmt.Fprint(os.Stderr, " -after-id STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `ListPrescriptions implements listPrescriptions.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -organization-id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -limit INT32: `)
+	fmt.Fprintln(os.Stderr, `    -after-id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "platform-killswitches list-prescriptions --organization-id \"abc123\" --limit 2 --after-id \"550e8400-e29b-41d4-a716-446655440000\" --session-token \"abc123\"")
 }
 
 // adminOpenRouterKeysUsage displays the usage of the admin-open-router-keys

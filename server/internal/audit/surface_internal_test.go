@@ -105,6 +105,14 @@ func TestActingIdentityFromContext_Derivation(t *testing.T) {
 			},
 			surface: SurfacePlatformMCP,
 		},
+		{
+			name: "platform break glass is a distinct closed surface",
+			ctx: func(t *testing.T) context.Context {
+				t.Helper()
+				return contextvalues.SetActingSurface(sessionContext(t, sessionID), string(SurfacePlatformBreakGlass))
+			},
+			surface: SurfacePlatformBreakGlass,
+		},
 	}
 
 	for _, tt := range tests {
@@ -169,7 +177,8 @@ func TestActingIdentityFromContext_ClientIDOnlyFromOAuthClient(t *testing.T) {
 func TestKnownSurfaces_AreLowCardinality(t *testing.T) {
 	t.Parallel()
 
-	require.Len(t, knownSurfaces, 6)
+	require.Len(t, knownSurfaces, 7)
 	require.Contains(t, knownSurfaces, SurfaceUnknown)
 	require.Contains(t, knownSurfaces, SurfaceAdmin)
+	require.Contains(t, knownSurfaces, SurfacePlatformBreakGlass)
 }

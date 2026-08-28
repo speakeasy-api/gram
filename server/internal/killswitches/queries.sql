@@ -350,3 +350,73 @@ WHERE organization_id = @organization_id
   AND version = @version
 ORDER BY resource_key
 LIMIT 1001;
+
+-- name: GetKillswitchCurrentPrescription :one
+SELECT
+  prescription.id,
+  prescription.organization_id,
+  prescription.definition_key,
+  prescription.principal_kind,
+  prescription.principal_key,
+  prescription.resource_kind,
+  prescription.current_version,
+  version.state,
+  version.resource_scope,
+  version.starts_at,
+  version.expires_at,
+  version.activated_at,
+  version.superseded_at,
+  version.internal_note,
+  version.external_note,
+  ARRAY(
+    SELECT resource.resource_key
+    FROM killswitch_prescription_version_resources AS resource
+    WHERE resource.organization_id = prescription.organization_id
+      AND resource.prescription_id = prescription.id
+      AND resource.version = prescription.current_version
+    ORDER BY resource.resource_key
+    LIMIT 1001
+  )::text[] AS selected_resource_keys
+FROM killswitch_prescriptions AS prescription
+JOIN killswitch_prescription_versions AS version
+  ON version.organization_id = prescription.organization_id
+  AND version.prescription_id = prescription.id
+  AND version.version = prescription.current_version
+WHERE prescription.organization_id = @organization_id
+  AND prescription.id = @prescription_id;
+
+-- name: ListKillswitchCurrentPrescriptions :many
+SELECT
+  prescription.id,
+  prescription.organization_id,
+  prescription.definition_key,
+  prescription.principal_kind,
+  prescription.principal_key,
+  prescription.resource_kind,
+  prescription.current_version,
+  version.state,
+  version.resource_scope,
+  version.starts_at,
+  version.expires_at,
+  version.activated_at,
+  version.superseded_at,
+  version.internal_note,
+  version.external_note,
+  ARRAY(
+    SELECT resource.resource_key
+    FROM killswitch_prescription_version_resources AS resource
+    WHERE resource.organization_id = prescription.organization_id
+      AND resource.prescription_id = prescription.id
+      AND resource.version = prescription.current_version
+    ORDER BY resource.resource_key
+    LIMIT 1001
+  )::text[] AS selected_resource_keys
+FROM killswitch_prescriptions AS prescription
+JOIN killswitch_prescription_versions AS version
+  ON version.organization_id = prescription.organization_id
+  AND version.prescription_id = prescription.id
+  AND version.version = prescription.current_version
+WHERE prescription.organization_id = @organization_id
+  AND (sqlc.narg('after_id')::uuid IS NULL OR prescription.id > sqlc.narg('after_id')::uuid)
+ORDER BY prescription.id
+LIMIT @result_limit;

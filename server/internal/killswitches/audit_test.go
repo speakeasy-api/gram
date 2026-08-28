@@ -13,7 +13,10 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
+	gen "github.com/speakeasy-api/gram/server/gen/platform_killswitches"
 	"github.com/speakeasy-api/gram/server/internal/audit"
+	"github.com/speakeasy-api/gram/server/internal/killswitches/repo"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
 const sentinelInternalNote = "SENTINEL-INTERNAL-NOTE-d0f1"
@@ -26,12 +29,13 @@ type auditRow struct {
 	SubjectType      string
 	AfterSnapshot    []byte
 	Metadata         []byte
+	ActingSurface    string
 }
 
 func listAuditRows(t *testing.T, conn *pgxpool.Pool, orgID string) []auditRow {
 	t.Helper()
 	rows, err := conn.Query(t.Context(), `
-		SELECT action, actor_id, coalesce(actor_display_name, ''), subject_id, subject_type, coalesce(after_snapshot, 'null'::jsonb), coalesce(metadata, 'null'::jsonb)
+		SELECT action, actor_id, coalesce(actor_display_name, ''), subject_id, subject_type, coalesce(after_snapshot, 'null'::jsonb), coalesce(metadata, 'null'::jsonb), coalesce(acting_surface, '')
 		FROM audit_logs
 		WHERE organization_id = $1
 		ORDER BY seq
@@ -41,7 +45,7 @@ func listAuditRows(t *testing.T, conn *pgxpool.Pool, orgID string) []auditRow {
 	var result []auditRow
 	for rows.Next() {
 		var row auditRow
-		require.NoError(t, rows.Scan(&row.Action, &row.ActorID, &row.ActorDisplayName, &row.SubjectID, &row.SubjectType, &row.AfterSnapshot, &row.Metadata))
+		require.NoError(t, rows.Scan(&row.Action, &row.ActorID, &row.ActorDisplayName, &row.SubjectID, &row.SubjectType, &row.AfterSnapshot, &row.Metadata, &row.ActingSurface))
 		result = append(result, row)
 	}
 	require.NoError(t, rows.Err())
@@ -142,6 +146,81 @@ func TestLifecycleAuditAtomicityAndReplay(t *testing.T) {
 
 	require.Len(t, listAuditRows(t, conn, orgID), 4, "replay and conflicting reuse must not duplicate audit history")
 	require.Len(t, listOutboxMessages(t, conn, orgID), 4, "replay and conflicting reuse must not duplicate outbox rows")
+}
+
+func TestPlatformBreakGlassDelegationWritesOneAtomicAuditWithClosedSurface(t *testing.T) {
+	t.Parallel()
+
+	conn, orgID := newLifecycleDatabase(t, "killswitch_platform_break_glass_audit")
+	lifecycle := newLifecycleServiceForTest(t, conn, nil, nil, NewAuditBeforeCommitHook(audit.NewLogger()))
+	facade, err := NewFacade(lifecycle)
+	require.NoError(t, err)
+	service := &PlatformService{logger: testenv.NewLogger(t), sessions: &platformAdminReaderStub{results: []bool{true}}, generic: facade}
+
+	result, err := service.ActivatePrescription(
+		validatedCustomerContext(t, "", "user:platform-admin", "platform-admin@example.com"),
+		&gen.ActivatePrescriptionPayload{
+			OrganizationID: orgID, OperationID: uuid.NewString(), Definition: new("block-tools"),
+			PrincipalKind: new("user"), PrincipalInput: new("User:Alpha"), ResourceKind: new("tool"),
+			ResourceScope: "selected", SelectedResourceInputs: []string{"tool:a"}, StartMode: "now",
+			InternalNote: sentinelInternalNote, ExternalNote: "Access paused.",
+		},
+	)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+
+	rows := listAuditRows(t, conn, orgID)
+	require.Len(t, rows, 1, "the adapter must not write a second audit row")
+	require.Equal(t, "user:platform-admin", rows[0].ActorID)
+	require.Equal(t, "platform-admin@example.com", rows[0].ActorDisplayName)
+	require.Equal(t, string(audit.SurfacePlatformBreakGlass), rows[0].ActingSurface)
+	require.Len(t, listOutboxMessages(t, conn, orgID), 1)
+	requireNoSentinelLeak(t, conn, orgID)
+}
+
+func TestManagementAuditAndBreakGlassRemainAvailableDuringEvaluatorIncident(t *testing.T) {
+	t.Parallel()
+
+	conn, orgID := newLifecycleDatabase(t, "killswitch_management_evaluator_incident")
+	lifecycle := newLifecycleServiceForTest(t, conn, nil, nil, NewAuditBeforeCommitHook(audit.NewLogger()))
+	facade, err := NewFacade(lifecycle)
+	require.NoError(t, err)
+	customer, err := NewAuthorizedService(facade, &authorizerStub{})
+	require.NoError(t, err)
+	customerCtx := validatedCustomerContext(t, orgID, "user:customer-admin", "customer-admin@example.com")
+
+	activated, err := customer.ActivatePrescription(customerCtx, AuthorizedActivatePrescriptionRequest{
+		OperationID: uuid.New(), Definition: "block-tools", PrincipalKind: "user", PrincipalInput: "User:Alpha", ResourceKind: "tool",
+		Desired: DesiredVersionInput{ResourceScope: ResourceScopeSelected, SelectedResourceInputs: []string{"tool:a"}, StartMode: StartModeNow, InternalNote: sentinelInternalNote, ExternalNote: "Access paused."},
+	})
+	require.NoError(t, err)
+
+	evaluator, err := newEvaluator(evaluationQueryFunc(func(context.Context, repo.EvaluateCurrentPrescriptionsParams) (repo.EvaluateCurrentPrescriptionsRow, error) {
+		return repo.EvaluateCurrentPrescriptionsRow{}, errors.New("evaluator database unavailable")
+	}), lifecycle.registry, time.Second, nil)
+	require.NoError(t, err)
+	evaluation := evaluator.Evaluate(t.Context(), evaluationRequest("block-tools"))
+	require.Equal(t, EvaluationResultInfrastructureFailure, evaluation.Kind())
+
+	current, err := customer.GetPrescription(customerCtx, AuthorizedGetPrescriptionRequest{PrescriptionID: activated.PrescriptionID})
+	require.NoError(t, err)
+	require.Equal(t, PrescriptionStateActive, current.State)
+
+	platform := &PlatformService{logger: testenv.NewLogger(t), sessions: &platformAdminReaderStub{results: []bool{true}}, generic: facade}
+	deactivated, err := platform.DeactivatePrescription(
+		validatedCustomerContext(t, "", "user:platform-admin", "platform-admin@example.com"),
+		&gen.DeactivatePrescriptionPayload{OrganizationID: orgID, OperationID: uuid.NewString(), PrescriptionID: string(activated.PrescriptionID), ExpectedVersion: activated.Version},
+	)
+	require.NoError(t, err)
+	require.Equal(t, int64(2), deactivated.Version)
+
+	rows := listAuditRows(t, conn, orgID)
+	require.Len(t, rows, 2)
+	require.Equal(t, "user:customer-admin", rows[0].ActorID)
+	require.Equal(t, string(audit.SurfaceDashboard), rows[0].ActingSurface)
+	require.Equal(t, "user:platform-admin", rows[1].ActorID)
+	require.Equal(t, string(audit.SurfacePlatformBreakGlass), rows[1].ActingSurface)
+	require.Len(t, listOutboxMessages(t, conn, orgID), 2)
 }
 
 func TestLifecycleAuditRollback(t *testing.T) {

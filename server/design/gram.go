@@ -47,6 +47,7 @@ import (
 	_ "github.com/speakeasy-api/gram/server/design/platformadmin/assets"
 	_ "github.com/speakeasy-api/gram/server/design/platformadmin/chatanalysis"
 	_ "github.com/speakeasy-api/gram/server/design/platformadmin/externalcredentials"
+	_ "github.com/speakeasy-api/gram/server/design/platformadmin/killswitches"
 	_ "github.com/speakeasy-api/gram/server/design/platformadmin/openrouterkeys"
 	_ "github.com/speakeasy-api/gram/server/design/platformadmin/remotesessions"
 	_ "github.com/speakeasy-api/gram/server/design/platformmcp"
