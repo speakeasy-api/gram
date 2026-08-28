@@ -31,7 +31,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	metamcprepo "github.com/speakeasy-api/gram/server/internal/metamcp/repo"
-	"github.com/speakeasy-api/gram/server/internal/oops"
 	toolsets_repo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	"github.com/speakeasy-api/gram/server/internal/usersessions"
@@ -250,16 +249,14 @@ func TestServePublic_MetaEndpoint_ExecuteTool_HostedMember_Dispatches(t *testing
 	require.Equal(t, http.StatusOK, w.Code, "body=%s", w.Body.String())
 	envelope := decodeRPCResponse(t, w)
 
-	var rpcErr struct {
-		Code    int    `json:"code"`
-		Message string `json:"message"`
-	}
-	require.NoError(t, json.Unmarshal(envelope["error"], &rpcErr))
-	// The fixture tool has no server URL, which real execution rejects as
-	// invalid; what matters is that dispatch reached execution at all.
-	require.Equal(t, int(oops.MCPCodeInvalidParams), rpcErr.Code)
-	require.NotContains(t, rpcErr.Message, "unknown server")
-	require.NotContains(t, rpcErr.Message, "tool not found")
+	// The fixture tool has no server URL, which execution rejects as a
+	// member-scoped tool error; what matters is that dispatch reached
+	// execution at all.
+	text, isError := metaToolResultText(t, envelope)
+	require.True(t, isError)
+	require.Contains(t, text, "no server URL")
+	require.NotContains(t, text, "unknown server")
+	require.NotContains(t, text, "tool not found")
 }
 
 func TestServePublic_MetaEndpoint_ExecuteTool_UnknownToolOnKnownMember(t *testing.T) {
@@ -277,7 +274,9 @@ func TestServePublic_MetaEndpoint_ExecuteTool_UnknownToolOnKnownMember(t *testin
 		"name":      member.slug + "--no_such_tool",
 		"arguments": map[string]any{},
 	})
-	require.Contains(t, string(envelope["error"]), "tool not found")
+	text, isError := metaToolResultText(t, envelope)
+	require.True(t, isError, "an unknown tool on a known member is a member-scoped failure")
+	require.Contains(t, text, "tool not found")
 }
 
 // Discovery and execution agree on an ambiguous name: a variation renaming one
@@ -321,7 +320,9 @@ func TestServePublic_MetaEndpoint_AmbiguousToolName(t *testing.T) {
 		"name":      member.slug + "--beta_tool",
 		"arguments": map[string]any{},
 	})
-	require.Contains(t, string(envelope["error"]), "ambiguous tool name")
+	ambiguousText, ambiguousIsError := metaToolResultText(t, envelope)
+	require.True(t, ambiguousIsError, "an ambiguous name refuses member-scoped rather than aborting the call")
+	require.Contains(t, ambiguousText, "ambiguous tool name")
 }
 
 func TestServePublic_MetaEndpoint_ListServers_StatusByBackend(t *testing.T) {
@@ -910,16 +911,13 @@ func TestServePublic_MetaEndpoint_ExecuteTool_HostedMember_MultiCredentialSessio
 	require.Equal(t, http.StatusOK, w.Code, "body=%s", w.Body.String())
 	envelope := decodeRPCResponse(t, w)
 
-	var rpcErr struct {
-		Code    int    `json:"code"`
-		Message string `json:"message"`
-	}
-	require.NoError(t, json.Unmarshal(envelope["error"], &rpcErr))
-	// The fixture tool has no server URL, so execution still fails as invalid
-	// params — the point is that the multi-credential map no longer aborts
-	// dispatch before execution.
-	require.Equal(t, int(oops.MCPCodeInvalidParams), rpcErr.Code)
-	require.NotContains(t, rpcErr.Message, "remote-session upstream tokens")
+	// The fixture tool has no server URL, so execution still fails — as a
+	// member-scoped tool error — the point is that the multi-credential map
+	// no longer aborts dispatch before execution.
+	text, isError := metaToolResultText(t, envelope)
+	require.True(t, isError)
+	require.Contains(t, text, "no server URL")
+	require.NotContains(t, text, "remote-session upstream tokens")
 }
 
 // A hosted member whose tools cannot resolve a server URL (no environment
