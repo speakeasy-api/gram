@@ -2,52 +2,22 @@
 // inline scripts. Loaded by consent_template.html via a content-hashed
 // <script src>.
 //
-// Three jobs:
+// Two jobs:
 //
 //   1. Neutralise double-clicks on the consent controls. A second activation
 //      while the first request is still pending sends the user to an authn
 //      challenge that has already been consumed, producing "authn challenge
 //      state not found or expired" (AIS-103).
-//   2. Run each upstream Connect in a popup so the consent page keeps its
-//      state — the multi-service case otherwise loses the whole page to a
-//      provider login and comes back from scratch. Degrades to the plain
-//      full-page form POST when popups are blocked or JS is unavailable.
-//   3. Fan the page-level auto-refresh choice out to every card.
+//   2. Fan the page-level auto-refresh choice out to every card.
+//
+// Connect deliberately stays a full-page form POST. Running it in a popup kept
+// the page's state through the provider round trip, but handed the provider a
+// window.opener onto this consent screen — a reverse-tabnabbing target on the
+// one page where a spoof is worth the most — and reloading the parent when the
+// popup closed discarded any pending tool selection, silently widening the
+// grant back to "all tools".
 (function () {
   "use strict";
-
-  // Names the popup, and — because window.name survives navigation within the
-  // same window — is also how the document detects it is running *inside* that
-  // popup after the provider redirected back here.
-  var POPUP_NAME = "gram-connect-upstream";
-  var POPUP_FEATURES = "popup=yes,width=560,height=760";
-  var POPUP_MESSAGE = "gram-consent:upstream-finished";
-
-  var origin = window.location.origin;
-
-  function hasOpener() {
-    try {
-      return !!window.opener && !window.opener.closed;
-    } catch (err) {
-      // A cross-origin opener throws on access; either way it is not ours.
-      return false;
-    }
-  }
-
-  // Running inside the connect popup means the upstream leg has finished (or
-  // was denied) and redirected back to the consent page. The decision belongs
-  // on the page that opened it, so hand back and close rather than rendering a
-  // second consent page inside a 560px window. If close() is refused the
-  // document simply stays and remains usable.
-  if (window.name === POPUP_NAME && hasOpener()) {
-    try {
-      window.opener.postMessage(POPUP_MESSAGE, origin);
-    } catch (err) {
-      // The opener navigated away or is gone; closing is still correct.
-    }
-    window.close();
-    return;
-  }
 
   // A connected first-party flow has no remaining consent step. Briefly show
   // confirmation, then close the tab opened by the dashboard. If the browser
@@ -94,59 +64,8 @@
     });
   }
 
-  // Reload once the upstream leg finishes, so the card reflects the new
-  // connection state. Both signals are needed: the popup posts a message when
-  // it closes itself, and the poll covers a popup the user closed by hand or
-  // one that ended on an error page carrying none of this script.
-  var reloading = false;
-  function reloadOnce() {
-    if (reloading) return;
-    reloading = true;
-    window.location.reload();
-  }
-
-  window.addEventListener("message", function (event) {
-    if (event.origin === origin && event.data === POPUP_MESSAGE) {
-      reloadOnce();
-    }
-  });
-
-  function watchPopup(popup) {
-    var timer = window.setInterval(function () {
-      if (popup.closed) {
-        window.clearInterval(timer);
-        reloadOnce();
-      }
-    }, 500);
-  }
-
-  // Connect / Reconnect: route the form POST into a popup so the consent page
-  // survives the provider round-trip. The popup is opened synchronously in the
-  // click handler — a popup opened any later is blocked — and the form target
-  // is cleared afterwards so a blocked popup, or a later submit, still
-  // navigates normally.
-  var popupButtons = document.querySelectorAll("button[data-popup-action]");
-  Array.prototype.forEach.call(popupButtons, function (popupButton) {
-    popupButton.addEventListener("click", function () {
-      var actionForm = popupButton.form;
-      if (!actionForm) {
-        return;
-      }
-      var popup = window.open("", POPUP_NAME, POPUP_FEATURES);
-      if (!popup) {
-        return;
-      }
-      actionForm.target = POPUP_NAME;
-      popup.focus();
-      watchPopup(popup);
-      window.setTimeout(function () {
-        actionForm.target = "";
-      }, 0);
-    });
-  });
-
-  // Connect / Reconnect and Refresh now each make an upstream request. Guard
-  // both against repeat clicks and make their pending state visible.
+  // Connect / Reconnect and Refresh each make an upstream request. Guard both
+  // against repeat clicks and make their pending state visible.
   function guardActionButtons(selector, pendingLabel) {
     var buttons = document.querySelectorAll(selector);
     Array.prototype.forEach.call(buttons, function (actionButton) {

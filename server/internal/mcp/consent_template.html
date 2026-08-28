@@ -111,7 +111,6 @@
                 method="POST"
                 action="/{{$.MCPRouteBase}}/{{$.MCPSlug}}/connect/remote-session"
                 class="flex shrink-0 items-center gap-1.5"
-                data-remote-form
               >
                 <input type="hidden" name="state" value="{{$.State}}" />
                 <input
@@ -143,7 +142,6 @@
                   value="connect"
                   class="bg-primary text-primary-foreground interact:bg-foreground flex h-8 items-center px-3 text-sm"
                   data-connect-link
-                  data-popup-action
                 >
                   {{if .Expired}}Reconnect{{else}}Connect{{end}}
                 </button>
