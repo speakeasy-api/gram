@@ -5,6 +5,7 @@ import {
   screen,
   waitFor,
 } from "@testing-library/react";
+import type { ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
@@ -100,8 +101,9 @@ describe("SettingsDangerZone", () => {
       request: { id: "proj-1" },
     });
     expect(mocks.invalidateListProjects).toHaveBeenCalled();
-    expect(mocks.toastSuccess).toHaveBeenCalledWith(
-      "Project deleted successfully",
-    );
+    const toastMessage = mocks.toastSuccess.mock.calls[0]?.[0] as ReactNode;
+    const { container } = render(<>{toastMessage}</>);
+    expect(container.textContent).toBe("Project Sandbox deleted successfully");
+    expect(container.querySelector("strong")?.textContent).toBe("Sandbox");
   });
 });

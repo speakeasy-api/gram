@@ -35,7 +35,11 @@ export function SettingsDangerZone(): JSX.Element {
       await invalidateListProjects(queryClient, [
         { organizationId: organization.id },
       ]);
-      toast.success("Project deleted successfully");
+      toast.success(
+        <>
+          Project <strong>{project.name}</strong> deleted successfully
+        </>,
+      );
       // Replace so Back doesn't return to the deleted project's settings
       // (which falls through to another project's settings).
       void navigate(orgRoutes.home.href(), { replace: true });
