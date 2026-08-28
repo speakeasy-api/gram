@@ -1552,6 +1552,7 @@ type OtelDestination struct {
 	ID               uuid.UUID
 	OrganizationID   string
 	ProjectID        uuid.UUID
+	Name             string
 	EndpointUrl      string
 	HeadersEncrypted pgtype.Text
 	SensitiveData    pgtype.Text
