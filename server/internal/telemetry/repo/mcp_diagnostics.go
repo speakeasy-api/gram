@@ -146,30 +146,41 @@ func unionSource(directSQL string, directArgs []any, hookSQL string, hookArgs []
 }
 
 // mcpOutcomeDirectSource classifies calls that reached a hosted MCP server
-// directly. Aggregate aliases carry the "g_" prefix for the reason the tool
-// usage CTE documents: an alias that shadows a trace_summaries column is merged
-// into the enclosing aggregate and fails with ILLEGAL_AGGREGATION.
+// directly. It queries telemetry_logs directly and filters by toolset_slug at
+// the row level to ensure correct per-tool attribution when a trace contains
+// calls to multiple MCP servers.
+//
+// The query groups by trace_id to deduplicate multiple log rows for the same
+// call, but the toolset_slug filter is applied before grouping so only rows
+// matching the specified server are included.
 func (q *Queries) mcpOutcomeDirectSource(arg GetMCPOutcomeBreakdownParams) (string, []any, error) {
-	grouped := sq.Select(
-		"trace_id",
-		"min(start_time_unix_nano) AS event_time_ns",
-		"max(toolset_slug) AS g_toolset_slug",
-		"any(tool_name) AS g_tool_name",
-		"ifNull(anyIfMerge(http_status_code), 0) AS g_http_status_code",
-	).
-		From("trace_summaries").
-		Where(squirrel.Eq{"gram_project_id": arg.GramProjectIDs}).
-		GroupBy("trace_id").
-		Having("min(start_time_unix_nano) >= ?", arg.TimeStart).
-		Having("min(start_time_unix_nano) <= ?", arg.TimeEnd).
-		Having("any(event_source) != 'hook'").
-		Having("g_toolset_slug != ''")
-	if len(arg.ToolsetSlugs) > 0 {
-		grouped = grouped.Having(squirrel.Eq{"g_toolset_slug": arg.ToolsetSlugs})
-	}
-	grouped = withTraceWindowScanBounds(grouped, "start_time_unix_nano", arg.TimeStart, arg.TimeEnd)
+	httpStatusCode := "toInt32OrZero(toString(attributes.http.response.status_code))"
 
-	groupedSQL, groupedArgs, err := grouped.ToSql()
+	sb := sq.Select(
+		"trace_id",
+		"min(time_unix_nano) AS event_time_ns",
+		"max(toolset_slug) AS g_toolset_slug",
+		"max(tool_name) AS g_tool_name",
+		"max("+httpStatusCode+") AS g_http_status_code",
+	).
+		From("telemetry_logs").
+		Where(squirrel.Eq{"gram_project_id": arg.GramProjectIDs}).
+		Where("trace_id IS NOT NULL").
+		Where("trace_id != ''").
+		Where("toolset_slug != ''").
+		Where("event_source != 'hook'")
+
+	if len(arg.ToolsetSlugs) > 0 {
+		sb = sb.Where(squirrel.Eq{"toolset_slug": arg.ToolsetSlugs})
+	}
+
+	sb = sb.GroupBy("trace_id").
+		Having("min(time_unix_nano) >= ?", arg.TimeStart).
+		Having("min(time_unix_nano) <= ?", arg.TimeEnd)
+
+	sb = withTraceWindowScanBounds(sb, "time_unix_nano", arg.TimeStart, arg.TimeEnd)
+
+	groupedSQL, groupedArgs, err := sb.ToSql()
 	if err != nil {
 		return "", nil, fmt.Errorf("build direct mcp outcome source: %w", err)
 	}
@@ -196,29 +207,52 @@ FROM (%s)`, MCPClientUnattributed, outcome, groupedSQL), groupedArgs, nil
 // observed them. This is the only lane that can name a client today, and it
 // names the reporting integration — self-reported evidence, never a metric
 // dimension a caller can filter on.
+//
+// It queries telemetry_logs directly and filters by mcp_server_url at the row
+// level to ensure correct per-tool attribution when a trace (session) contains
+// calls to multiple MCP servers. Grouping uses a tool call dedup identifier
+// (gen_ai.tool.call.id or tool_use_id) to distinguish individual tool calls
+// within a trace.
 func (q *Queries) mcpOutcomeHookSource(arg GetMCPOutcomeBreakdownParams) (string, []any, error) {
-	grouped := sq.Select(
-		"trace_id",
-		"min(start_time_unix_nano) AS event_time_ns",
-		"any(hook_source) AS g_hook_source",
-		"any(tool_name) AS g_tool_name",
-		"max(mcp_server_url) AS g_mcp_server_url",
-		"max(has_result) AS g_has_result",
-		"max(has_error) AS g_has_error",
-	).
-		From("trace_summaries").
-		Where(squirrel.Eq{"gram_project_id": arg.GramProjectIDs}).
-		GroupBy("trace_id").
-		Having("min(start_time_unix_nano) >= ?", arg.TimeStart).
-		Having("min(start_time_unix_nano) <= ?", arg.TimeEnd).
-		Having("any(event_source) = 'hook'").
-		Having("g_mcp_server_url != ''")
-	if len(arg.MCPServerURLSuffixes) > 0 {
-		grouped = grouped.Having("arrayExists(suffix -> endsWith(g_mcp_server_url, suffix), ?)", arg.MCPServerURLSuffixes)
-	}
-	grouped = withTraceWindowScanBounds(grouped, "start_time_unix_nano", arg.TimeStart, arg.TimeEnd)
+	mcpServerURL := "toString(attributes.gram.mcp.server_url)"
+	hasResult := "if(toString(attributes.gen_ai.tool.call.result) != '', 1, 0)"
+	hasError := "if(toString(attributes.gram.hook.error) != '', 1, 0)"
+	// Tool call dedup identifier: prefer tool_use_id, then gen_ai.tool.call.id,
+	// fallback to row id. This mirrors the session schema's tool_call_dedup_id.
+	toolCallDedupID := "multiIf(" +
+		"toString(attributes.tool_use_id) != '', toString(attributes.tool_use_id), " +
+		"toString(attributes.gen_ai.tool.call.id) != '', toString(attributes.gen_ai.tool.call.id), " +
+		"toString(id))"
 
-	groupedSQL, groupedArgs, err := grouped.ToSql()
+	sb := sq.Select(
+		"trace_id",
+		"min(time_unix_nano) AS event_time_ns",
+		"max(hook_source) AS g_hook_source",
+		"max(tool_name) AS g_tool_name",
+		"max("+mcpServerURL+") AS g_mcp_server_url",
+		"max("+hasResult+") AS g_has_result",
+		"max("+hasError+") AS g_has_error",
+	).
+		From("telemetry_logs").
+		Where(squirrel.Eq{"gram_project_id": arg.GramProjectIDs}).
+		Where("trace_id IS NOT NULL").
+		Where("trace_id != ''").
+		Where("event_source = 'hook'").
+		Where(mcpServerURL + " != ''")
+
+	if len(arg.MCPServerURLSuffixes) > 0 {
+		sb = sb.Where("arrayExists(suffix -> endsWith("+mcpServerURL+", suffix), ?)", arg.MCPServerURLSuffixes)
+	}
+
+	// Group by both trace_id and tool_call_dedup_id to distinguish individual
+	// tool calls within a session that may call the same server multiple times.
+	sb = sb.GroupBy("trace_id", toolCallDedupID).
+		Having("min(time_unix_nano) >= ?", arg.TimeStart).
+		Having("min(time_unix_nano) <= ?", arg.TimeEnd)
+
+	sb = withTraceWindowScanBounds(sb, "time_unix_nano", arg.TimeStart, arg.TimeEnd)
+
+	groupedSQL, groupedArgs, err := sb.ToSql()
 	if err != nil {
 		return "", nil, fmt.Errorf("build hook mcp outcome source: %w", err)
 	}
