@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -133,7 +134,7 @@ func TestV2MeterEventClientClassifiesGuardianRateLimit(t *testing.T) {
 func TestV2MeterEventClientPreservesStripeRateLimitCodeAfterGuardianRetries(t *testing.T) {
 	t.Parallel()
 
-	client := newV2MeterEventClientForResponse(t, http.StatusTooManyRequests, `{
+	client, requests := newV2MeterEventClientForResponse(t, http.StatusTooManyRequests, `{
 		"error": {
 			"type": "rate_limit",
 			"code": "meter_event_rate_limit",
@@ -143,6 +144,7 @@ func TestV2MeterEventClientPreservesStripeRateLimitCodeAfterGuardianRetries(t *t
 
 	err := client.CreateMeterEvent(t.Context(), validV2MeterEventInput())
 	require.Error(t, err)
+	require.Equal(t, int64(2), requests.Load())
 	var classified *V2MeterEventError
 	require.ErrorAs(t, err, &classified)
 	require.Equal(t, V2MeterEventErrorRateLimit, classified.Class)
@@ -153,7 +155,7 @@ func TestV2MeterEventClientPreservesStripeRateLimitCodeAfterGuardianRetries(t *t
 func TestV2MeterEventClientPreservesStripeServerCodeAfterGuardianRetries(t *testing.T) {
 	t.Parallel()
 
-	client := newV2MeterEventClientForResponse(t, http.StatusServiceUnavailable, `{
+	client, requests := newV2MeterEventClientForResponse(t, http.StatusServiceUnavailable, `{
 		"error": {
 			"code": "api_unavailable",
 			"message": "temporarily unavailable"
@@ -162,6 +164,7 @@ func TestV2MeterEventClientPreservesStripeServerCodeAfterGuardianRetries(t *test
 
 	err := client.CreateMeterEvent(t.Context(), validV2MeterEventInput())
 	require.Error(t, err)
+	require.Equal(t, int64(2), requests.Load())
 	var classified *V2MeterEventError
 	require.ErrorAs(t, err, &classified)
 	require.Equal(t, V2MeterEventErrorServer, classified.Class)
@@ -169,10 +172,12 @@ func TestV2MeterEventClientPreservesStripeServerCodeAfterGuardianRetries(t *test
 	require.Equal(t, http.StatusServiceUnavailable, classified.HTTPStatusCode)
 }
 
-func newV2MeterEventClientForResponse(t *testing.T, statusCode int, body string) V2MeterEventClient {
+func newV2MeterEventClientForResponse(t *testing.T, statusCode int, body string) (V2MeterEventClient, *atomic.Int64) {
 	t.Helper()
 
+	requests := new(atomic.Int64)
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		requests.Add(1)
 		w.Header().Set("Content-Type", "application/json")
 		w.Header().Set("Retry-After", "0")
 		w.WriteHeader(statusCode)
@@ -182,7 +187,7 @@ func newV2MeterEventClientForResponse(t *testing.T, statusCode int, body string)
 
 	guardianPolicy, err := guardian.NewUnsafePolicy(testenv.NewTracerProvider(t), nil)
 	require.NoError(t, err)
-	return newV2MeterEventClient(guardianPolicy, "sk_test_placeholder", server.URL)
+	return newV2MeterEventClient(guardianPolicy, "sk_test_placeholder", server.URL), requests
 }
 
 func validV2MeterEventInput() V2MeterEventInput {
