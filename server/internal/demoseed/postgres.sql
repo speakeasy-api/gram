@@ -354,6 +354,14 @@ BEGIN
     SET name = EXCLUDED.name, slug = EXCLUDED.slug,
         gram_account_type = EXCLUDED.gram_account_type;
 
+  DELETE FROM killswitch_operations WHERE organization_id = demo_org;
+  DELETE FROM killswitch_prescriptions WHERE organization_id = demo_org;
+  DELETE FROM killswitch_customer_list_watermarks WHERE organization_id = demo_org;
+
+  -- mcp_servers restrict deletion of their toolset backends, so remove them
+  -- before the toolsets and project they belong to.
+  DELETE FROM mcp_servers WHERE project_id IN
+    (SELECT id FROM projects WHERE organization_id = demo_org);
   DELETE FROM toolsets WHERE organization_id = demo_org;
   -- environments.project_id is NOT NULL but its FK is ON DELETE SET NULL, so
   -- the projects delete below fails outright on any environment row. The demo
@@ -586,6 +594,20 @@ BEGIN
   VALUES (us_issuer, proj_a, 'acme-partner-gateway', 'interactive', interval '30 days');
 
   UPDATE toolsets SET user_session_issuer_id = us_issuer WHERE id = toolset_3;
+
+  -- Canonical fronting servers used by the Killswitch selected-resource
+  -- snapshots. The partner-backed entries expose the seeded connection data.
+  INSERT INTO mcp_servers
+    (id, project_id, name, slug, user_session_issuer_id, toolset_id, visibility)
+  VALUES
+    (demo.det_uuid('gram-demo-mcpserver-support'), proj_a, 'Acme Support',
+     'acme-support', NULL, toolset_1, 'private'),
+    (demo.det_uuid('gram-demo-mcpserver-ops'), proj_a, 'Acme Operations',
+     'acme-operations', NULL, toolset_2, 'private'),
+    (demo.det_uuid('gram-demo-mcpserver-linear'), proj_a, 'Linear',
+     'linear', us_issuer, toolset_3, 'private'),
+    (demo.det_uuid('gram-demo-mcpserver-slack'), proj_a, 'Slack',
+     'slack', us_issuer, toolset_3, 'private');
 
   -- Resolved from a Client ID Metadata Document, and the strongest posture
   -- available: it signs an assertion with a key it publishes, so Gram holds no
@@ -1586,6 +1608,12 @@ E'--- a/SKILL.md\n+++ b/SKILL.md\n@@ -6,4 +6,5 @@\n # Refund handling\n \n 1. Ve
   WHERE organization_id = demo_org;
   IF stray <> 8 THEN
     RAISE EXCEPTION 'demo seed postflight: expected 8 killswitch resource snapshots, found %', stray;
+  END IF;
+
+  SELECT count(*) INTO stray FROM mcp_servers
+  WHERE project_id = proj_a AND deleted IS FALSE;
+  IF stray <> 4 THEN
+    RAISE EXCEPTION 'demo seed postflight: expected 4 live MCP servers, found %', stray;
   END IF;
 
   SELECT count(*) INTO stray FROM killswitch_operations
