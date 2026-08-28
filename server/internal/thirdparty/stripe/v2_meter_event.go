@@ -95,8 +95,12 @@ func NewV2MeterEventClient(guardianPolicy *guardian.Policy, apiKey string) V2Met
 		guardian.WithRetryConfig(retries),
 		guardian.WithResilience("stripe-meter-events", guardian.ResilienceConfig{
 			Partition: guardian.PartitionByHost(),
-			Limit:     guardian.PerSecond(1000),
-			Breaker:   guardian.NoBreaker(),
+			Limit: guardian.Limit{
+				Rate:   800,
+				Burst:  100,
+				Period: time.Second,
+			},
+			Breaker: guardian.NoBreaker(),
 		}),
 	)
 	httpClient.Timeout = 30 * time.Second
