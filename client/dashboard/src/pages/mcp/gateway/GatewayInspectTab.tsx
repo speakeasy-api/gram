@@ -204,7 +204,13 @@ function InspectBody({
       {/* Left column: the tool surface, then one level down into a member. */}
       <div className="flex flex-col gap-6">
         <InspectCard title="tools/list" meta={`${data.tools.length} tools`}>
-          <CodeSnippet language="js" code={toolSignatures} fontSize="small" />
+          <CodeSnippet
+            language="js"
+            code={toolSignatures}
+            fontSize="small"
+            className="min-h-full"
+            snippetClassName="self-start"
+          />
         </InspectCard>
 
         {(data.servers?.length ?? 0) > 0 && (
@@ -354,9 +360,10 @@ function InspectCard({
           </Badge>
         )}
       </div>
-      {/* A member catalog runs to dozens of tools; cap the body so one card
-          can't push the rest of the page out of view. */}
-      <div className="border-primary/60 bg-muted/20 max-h-[32rem] overflow-auto border-l-2 px-4 py-3">
+      {/* Every card body is the same fixed height: long content (a member's
+          full catalog) scrolls inside it, short content sits in calm space,
+          and the four cards read as one aligned grid. */}
+      <div className="border-primary/60 bg-muted/20 h-[28rem] overflow-auto border-l-2 px-4 py-3">
         {children}
       </div>
     </div>
