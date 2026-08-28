@@ -921,3 +921,27 @@ func TestServePublic_MetaEndpoint_ExecuteTool_HostedMember_MultiCredentialSessio
 	require.Equal(t, int(oops.MCPCodeInvalidParams), rpcErr.Code)
 	require.NotContains(t, rpcErr.Message, "remote-session upstream tokens")
 }
+
+// A hosted member whose tools cannot resolve a server URL (no environment
+// bound anywhere) must fail member-scoped — a tool result with isError — not
+// abort the JSON-RPC call: on a multi-member gateway one member's
+// misconfiguration must not read as a gateway fault.
+func TestServePublic_MetaEndpoint_ExecuteTool_HostedConfigFailureIsMemberScoped(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPService(t)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	slug := "meta-" + uuid.NewString()
+	meta := createMetaMcpEndpoint(t, ctx, ti.conn, *authCtx.ProjectID, authCtx.ActiveOrganizationID, slug, uuid.Nil)
+	fixture := seedHostedMetaMember(t, ctx, ti, meta.ID, "Env-less member", 0, mcpservers.VisibilityPublic, "echo_tool")
+
+	rpc := executeMetaTool(t, ti, slug, "", fixture.slug+"--echo_tool")
+	require.NotContains(t, rpc, "error", "a member config failure must not abort the call: %s", string(rpc["error"]))
+	text, isError := metaToolResultText(t, rpc)
+	require.True(t, isError, "the member's failure must surface as a tool error result")
+	require.Contains(t, text, fixture.slug, "the failure must name the member")
+	require.Contains(t, text, "no server URL", "the failure must carry the actionable cause")
+}

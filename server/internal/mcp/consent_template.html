@@ -501,7 +501,9 @@
           {{if .FirstParty}}
           <h1>Connect {{.MCPSlug}}</h1>
           <p>
-            Link the services this MCP server needs to access on your behalf.
+            {{if .RemoteSessionCards}}Link the services this MCP server needs
+            to access on your behalf.{{else}}This MCP server needs no
+            per-user service connections — you're all set.{{end}}
           </p>
           {{else}}
           <h1>Authorize {{.ClientName}}</h1>
@@ -743,7 +745,8 @@
         </p>
         {{else if .FirstParty}}
         <p class="info">
-          When you've connected the services above, you can close this tab.
+          {{if .RemoteSessionCards}}When you've connected the services above,
+          you can close this tab.{{else}}You can close this tab.{{end}}
         </p>
         {{else}}
         <div class="actions">
