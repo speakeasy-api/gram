@@ -82,6 +82,7 @@ func TestOpenRouterAdminReconciliationRetriesTransientAndStopsPermanent(t *testi
 		want      int32
 	}{{"transient", false, 3}, {"permanent", true, 1}} {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			var suite testsuite.WorkflowTestSuite
 			env := suite.NewTestWorkflowEnvironment()
 			var cursor atomic.Int64
@@ -104,7 +105,7 @@ func TestOpenRouterAdminReconciliationRetriesTransientAndStopsPermanent(t *testi
 			} else {
 				require.NoError(t, env.GetWorkflowError())
 			}
-			require.EqualValues(t, tc.want, attempts.Load())
+			require.Equal(t, tc.want, attempts.Load())
 		})
 	}
 }

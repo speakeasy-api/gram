@@ -11,6 +11,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/background/activities/keybillinglock"
+	adminrepo "github.com/speakeasy-api/gram/server/internal/openrouterkeys/repo"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 	orrepo "github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter/repo"
 )
@@ -36,6 +37,11 @@ type AdminMutationCoordinator interface {
 	Abort(context.Context, AdminReconciliationScope) error
 }
 
+type ambiguousAdminMutationCommitError struct{ cause error }
+
+func (e *ambiguousAdminMutationCommitError) Error() string { return e.cause.Error() }
+func (e *ambiguousAdminMutationCommitError) Unwrap() error { return e.cause }
+
 type PermanentAdminReconciliationError struct{ cause error }
 
 func (e *PermanentAdminReconciliationError) Error() string { return e.cause.Error() }
@@ -57,64 +63,79 @@ func NewAdminReconciliationExecutor(logger *slog.Logger, db *pgxpool.Pool, provi
 }
 
 func (e *AdminReconciliationExecutor) CaptureCursor(ctx context.Context, scope AdminReconciliationScope) (int64, error) {
-	return readAdminMutationAuditCursor(ctx, e.db, scope)
+	cursor, err := adminrepo.New(e.db).GetOrganizationAuditCursor(ctx, scope.OrganizationID)
+	if err != nil {
+		return 0, fmt.Errorf("read organization audit cursor: %w", err)
+	}
+	return cursor, nil
 }
 
-// ReconcileSince repairs only when the atomic local transaction advanced the
-// matching admin-key audit series. The cursor is read while holding the same
-// canonical advisory lock as the mutation, so the proof and PATCH decision
-// cannot race a commit.
+// ReconcileSince repairs only when the bounded organization sequence range
+// contains matching admin-key commit evidence. The target watermark is read
+// while holding the same canonical advisory lock as the mutation, so the proof
+// and PATCH decision cannot race a commit.
 func (e *AdminReconciliationExecutor) ReconcileSince(ctx context.Context, checkpoint AdminReconciliationCheckpoint) (int64, error) {
 	scope := checkpoint.Scope
 	logger := e.logger.With(attr.SlogOrganizationID(scope.OrganizationID), attr.SlogOpenRouterKeyType(scope.KeyType))
 	var cursor int64
 	err := keybillinglock.WithAcquireTimeout(ctx, logger, e.db, scope.OrganizationID, openrouter.KeyType(scope.KeyType), keyBillingLockWaitTimeout, func(conn *pgxpool.Conn) error {
+		queries := adminrepo.New(conn)
 		var err error
-		cursor, err = readAdminMutationAuditCursor(ctx, conn, scope)
+		cursor, err = queries.GetOrganizationAuditCursor(ctx, scope.OrganizationID)
 		if err != nil {
-			return err
+			return fmt.Errorf("read organization audit cursor: %w", err)
 		}
 		if cursor <= checkpoint.Cursor {
 			return nil
 		}
+		matchingCursor, err := queries.GetAdminMutationAuditCursorSince(ctx, adminrepo.GetAdminMutationAuditCursorSinceParams{
+			OrganizationID: scope.OrganizationID,
+			Baseline:       checkpoint.Cursor,
+			Target:         cursor,
+			KeyType:        scope.KeyType,
+		})
+		if err != nil {
+			return fmt.Errorf("read OpenRouter admin mutation audit cursor: %w", err)
+		}
+		if matchingCursor == 0 {
+			return nil
+		}
 
-		row, err := orrepo.New(conn).GetOpenRouterAPIKey(ctx, orrepo.GetOpenRouterAPIKeyParams{OrganizationID: scope.OrganizationID, KeyType: scope.KeyType})
-		switch {
-		case errors.Is(err, pgx.ErrNoRows):
-			return &PermanentAdminReconciliationError{cause: errors.New("OpenRouter key no longer exists")}
-		case err != nil:
-			return fmt.Errorf("read committed OpenRouter key state: %w", err)
-		case row.DisableCauses == nil:
-			return &PermanentAdminReconciliationError{cause: errors.New("OpenRouter key disable causes are unclassified")}
-		}
-		provisioner, ok := e.provisioner.(lockedSessionProvisioner)
-		if !ok {
-			return &PermanentAdminReconciliationError{cause: errors.New("OpenRouter provisioner cannot reconcile on the locked session")}
-		}
-		return provisioner.ReconcileAPIKeyDisabledWithDB(ctx, conn, scope.OrganizationID, openrouter.KeyType(scope.KeyType))
+		return e.reconcileLocked(ctx, conn, scope)
 	})
-	return cursor, err
+	if err != nil {
+		return cursor, fmt.Errorf("reconcile OpenRouter admin mutation: %w", err)
+	}
+	return cursor, nil
 }
 
 func (e *AdminReconciliationExecutor) Reconcile(ctx context.Context, scope AdminReconciliationScope) error {
-	_, err := e.ReconcileSince(ctx, AdminReconciliationCheckpoint{Scope: scope, Cursor: -1})
-	return err
-}
-
-type auditCursorQuerier interface {
-	QueryRow(context.Context, string, ...any) pgx.Row
-}
-
-func readAdminMutationAuditCursor(ctx context.Context, db auditCursorQuerier, scope AdminReconciliationScope) (int64, error) {
-	const query = `
-SELECT COALESCE(MAX(seq), 0)::bigint
-FROM audit_logs
-WHERE organization_id = $1
-  AND action IN ('openrouter-key:disable', 'openrouter-key:enable')
-  AND metadata->>'key_type' = $2`
-	var cursor int64
-	if err := db.QueryRow(ctx, query, scope.OrganizationID, scope.KeyType).Scan(&cursor); err != nil {
-		return 0, fmt.Errorf("read OpenRouter admin mutation audit cursor: %w", err)
+	logger := e.logger.With(attr.SlogOrganizationID(scope.OrganizationID), attr.SlogOpenRouterKeyType(scope.KeyType))
+	err := keybillinglock.WithAcquireTimeout(ctx, logger, e.db, scope.OrganizationID, openrouter.KeyType(scope.KeyType), keyBillingLockWaitTimeout, func(conn *pgxpool.Conn) error {
+		return e.reconcileLocked(ctx, conn, scope)
+	})
+	if err != nil {
+		return fmt.Errorf("reconcile OpenRouter admin state: %w", err)
 	}
-	return cursor, nil
+	return nil
+}
+
+func (e *AdminReconciliationExecutor) reconcileLocked(ctx context.Context, conn *pgxpool.Conn, scope AdminReconciliationScope) error {
+	row, err := orrepo.New(conn).GetOpenRouterAPIKey(ctx, orrepo.GetOpenRouterAPIKeyParams{OrganizationID: scope.OrganizationID, KeyType: scope.KeyType})
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		return &PermanentAdminReconciliationError{cause: errors.New("OpenRouter key no longer exists")}
+	case err != nil:
+		return fmt.Errorf("read committed OpenRouter key state: %w", err)
+	case row.DisableCauses == nil:
+		return &PermanentAdminReconciliationError{cause: errors.New("OpenRouter key disable causes are unclassified")}
+	}
+	provisioner, ok := e.provisioner.(lockedSessionProvisioner)
+	if !ok {
+		return &PermanentAdminReconciliationError{cause: errors.New("OpenRouter provisioner cannot reconcile on the locked session")}
+	}
+	if err := provisioner.ReconcileAPIKeyDisabledWithDB(ctx, conn, scope.OrganizationID, openrouter.KeyType(scope.KeyType)); err != nil {
+		return fmt.Errorf("reconcile committed OpenRouter key state: %w", err)
+	}
+	return nil
 }

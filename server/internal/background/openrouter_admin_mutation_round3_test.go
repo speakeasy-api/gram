@@ -34,7 +34,7 @@ func runCursorGuardWorkflowTest(t *testing.T, operations func(*testsuite.TestWor
 	operations(env, &cursor)
 	env.ExecuteWorkflow(testOpenRouterAdminWorkflow, openrouterkeys.AdminReconciliationScope{OrganizationID: "organization_placeholder", KeyType: "chat"})
 	require.NoError(t, env.GetWorkflowError())
-	require.EqualValues(t, wantPatches, patches.Load())
+	require.Equal(t, wantPatches, patches.Load())
 	require.Equal(t, wantBaseline, reconciledBaseline.Load())
 }
 
@@ -57,11 +57,13 @@ func armAdminMutation(t *testing.T, env *testsuite.TestWorkflowEnvironment, id s
 func TestOpenRouterAdminGuardRequiresDurableCommitProof(t *testing.T) {
 	t.Parallel()
 	t.Run("precommit crash and audit rollback do not PATCH", func(t *testing.T) {
+		t.Parallel()
 		runCursorGuardWorkflowTest(t, func(env *testsuite.TestWorkflowEnvironment, _ *atomic.Int64) {
 			armAdminMutation(t, env, "rolled-back", time.Millisecond, nil)
 		}, 0, 0)
 	})
 	t.Run("postcommit crash repairs", func(t *testing.T) {
+		t.Parallel()
 		runCursorGuardWorkflowTest(t, func(env *testsuite.TestWorkflowEnvironment, cursor *atomic.Int64) {
 			armAdminMutation(t, env, "committed", time.Millisecond, func() { cursor.Store(1) })
 		}, 1, 0)

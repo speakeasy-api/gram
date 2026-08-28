@@ -1537,6 +1537,25 @@ func (q *Queries) ScrubDeploymentFunctionMachineSpecs(ctx context.Context, deplo
 	return err
 }
 
+const seedAuditLogFixture = `-- name: SeedAuditLogFixture :one
+INSERT INTO audit_logs (organization_id, actor_id, actor_type, action, subject_id, subject_type, metadata)
+VALUES ($1, 'user:<USER_ID>', 'user', $2, 'subject:<SUBJECT_ID>', 'subject', jsonb_build_object('key_type', $3::text))
+RETURNING seq
+`
+
+type SeedAuditLogFixtureParams struct {
+	OrganizationID string
+	Action         string
+	KeyType        string
+}
+
+func (q *Queries) SeedAuditLogFixture(ctx context.Context, arg SeedAuditLogFixtureParams) (int64, error) {
+	row := q.db.QueryRow(ctx, seedAuditLogFixture, arg.OrganizationID, arg.Action, arg.KeyType)
+	var seq int64
+	err := row.Scan(&seq)
+	return seq, err
+}
+
 const seedCapturedAgentChatFixture = `-- name: SeedCapturedAgentChatFixture :one
 INSERT INTO chats (id, project_id, organization_id, user_id, external_chat_id, title, cwd, user_account_id)
 VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
@@ -1775,6 +1794,23 @@ func (q *Queries) SeedRiskResultFixture(ctx context.Context, arg SeedRiskResultF
 	var id uuid.UUID
 	err := row.Scan(&id)
 	return id, err
+}
+
+const seedUnrelatedAuditHistoryFixture = `-- name: SeedUnrelatedAuditHistoryFixture :exec
+INSERT INTO audit_logs (organization_id, actor_id, actor_type, action, subject_id, subject_type, metadata)
+SELECT $1, 'user:<USER_ID>', 'user', 'unrelated:' || n, 'subject:<SUBJECT_ID>', 'subject', jsonb_build_object('key_type', $2::text)
+FROM generate_series(1, $3::int) AS n
+`
+
+type SeedUnrelatedAuditHistoryFixtureParams struct {
+	OrganizationID string
+	KeyType        string
+	EventCount     int32
+}
+
+func (q *Queries) SeedUnrelatedAuditHistoryFixture(ctx context.Context, arg SeedUnrelatedAuditHistoryFixtureParams) error {
+	_, err := q.db.Exec(ctx, seedUnrelatedAuditHistoryFixture, arg.OrganizationID, arg.KeyType, arg.EventCount)
+	return err
 }
 
 const seedUserAccountFixture = `-- name: SeedUserAccountFixture :one

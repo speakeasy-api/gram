@@ -14,7 +14,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/otel/trace"
 
@@ -499,6 +501,36 @@ func TestEnableKey_ReinstatesZeroTrialKeyAtTrialPolicy(t *testing.T) {
 	require.EqualValues(t, expected, view.MonthlyCredits)
 }
 
+func TestAdminMutationDeadlineIncludesDurableBegin(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestServiceWithAdminMutationTimeout(t, 50*time.Millisecond)
+	adminCtx := withAdmin(t, ctx)
+	orgID := seedKey(t, ctx, ti, "admin-begin-deadline", "chat", "sk-or-admin-begin-deadline")
+	requested := make(chan struct{})
+	release := make(chan struct{})
+	ti.coordinator.begin = func(context.Context, openrouterkeys.AdminReconciliationScope) error {
+		close(requested)
+		<-release
+		return nil
+	}
+	done := make(chan error, 1)
+	go func() {
+		_, err := ti.service.DisableKey(adminCtx, &gen.DisableKeyPayload{OrganizationID: orgID, KeyType: "chat"})
+		done <- err
+	}()
+	<-requested
+	require.Never(t, func() bool {
+		return len(readDisableCauses(t, ctx, ti, orgID, "chat")) > 0
+	}, 75*time.Millisecond, 10*time.Millisecond)
+	close(release)
+
+	err := <-done
+	requireOopsCode(t, err, oops.CodeUnavailable)
+	require.Empty(t, readDisableCauses(t, ctx, ti, orgID, "chat"), "a late Begin response must not receive a fresh mutation deadline")
+	require.EqualValues(t, 0, auditCount(t, ctx, ti, audit.ActionOpenRouterAPIKeyDisable))
+}
+
 func TestAdminLocalHardTimeoutCannotCommitAfterCrashGuardBecomesEligible(t *testing.T) {
 	t.Parallel()
 
@@ -511,7 +543,7 @@ func TestAdminLocalHardTimeoutCannotCommitAfterCrashGuardBecomesEligible(t *test
 	queries := activitiesrepo.New(lockConn)
 	params := activitiesrepo.AcquireOpenRouterKeyBillingLockParams{OrganizationID: orgID, KeyType: "chat"}
 	require.NoError(t, queries.AcquireOpenRouterKeyBillingLock(ctx, params))
-	executor := openrouterkeys.NewAdminReconciliationExecutor(slog.Default(), ti.conn, ti.provisioner)
+	executor := openrouterkeys.NewAdminReconciliationExecutor(testenv.NewLogger(t), ti.conn, ti.provisioner)
 	scope := openrouterkeys.AdminReconciliationScope{OrganizationID: orgID, KeyType: "chat"}
 	baseline, err := executor.CaptureCursor(ctx, scope)
 	require.NoError(t, err)
@@ -522,12 +554,94 @@ func TestAdminLocalHardTimeoutCannotCommitAfterCrashGuardBecomesEligible(t *test
 	unlocked, err := queries.ReleaseOpenRouterKeyBillingLock(ctx, activitiesrepo.ReleaseOpenRouterKeyBillingLockParams(params))
 	require.NoError(t, err)
 	require.True(t, unlocked)
-	time.Sleep(100 * time.Millisecond)
-	require.Empty(t, readDisableCauses(t, ctx, ti, orgID, "chat"), "timed-out mutation must never commit later")
+	require.Never(t, func() bool {
+		return len(readDisableCauses(t, ctx, ti, orgID, "chat")) > 0
+	}, 100*time.Millisecond, 10*time.Millisecond, "timed-out mutation must never commit later")
 	require.EqualValues(t, 0, auditCount(t, ctx, ti, audit.ActionOpenRouterAPIKeyDisable))
 	after, err := executor.CaptureCursor(ctx, scope)
 	require.NoError(t, err)
 	require.Equal(t, baseline, after, "rolled-back transaction must not advance commit proof")
+}
+
+func TestAdminReconciliationBaselineIsOrganizationWideSequence(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	orgID := seedKey(t, ctx, ti, "admin-org-baseline", "chat", "sk-or-admin-org-baseline")
+	want, err := testrepo.New(ti.conn).SeedAuditLogFixture(ctx, testrepo.SeedAuditLogFixtureParams{
+		OrganizationID: orgID,
+		Action:         "unrelated:action",
+		KeyType:        "internal",
+	})
+	require.NoError(t, err)
+
+	executor := openrouterkeys.NewAdminReconciliationExecutor(testenv.NewLogger(t), ti.conn, ti.provisioner)
+	got, err := executor.CaptureCursor(ctx, openrouterkeys.AdminReconciliationScope{OrganizationID: orgID, KeyType: "chat"})
+	require.NoError(t, err)
+	require.Equal(t, want, got, "Begin must capture the indexed organization watermark, not scan for a matching historical event")
+}
+
+func TestAdminReconciliationRangeIsBoundedAndUsesOrganizationSequenceIndex(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	orgID := seedKey(t, ctx, ti, "admin-bounded-audit", "chat", "sk-or-admin-bounded-audit")
+	scope := openrouterkeys.AdminReconciliationScope{OrganizationID: orgID, KeyType: "chat"}
+	executor := openrouterkeys.NewAdminReconciliationExecutor(testenv.NewLogger(t), ti.conn, ti.provisioner)
+	baseline, err := executor.CaptureCursor(ctx, scope)
+	require.NoError(t, err)
+
+	err = testrepo.New(ti.conn).SeedUnrelatedAuditHistoryFixture(ctx, testrepo.SeedUnrelatedAuditHistoryFixtureParams{
+		OrganizationID: orgID,
+		KeyType:        "internal",
+		EventCount:     200,
+	})
+	require.NoError(t, err)
+	target, err := executor.CaptureCursor(ctx, scope)
+	require.NoError(t, err)
+
+	before := ti.provisioner.ReconcileCalls()
+	advanced, err := executor.ReconcileSince(ctx, openrouterkeys.AdminReconciliationCheckpoint{Scope: scope, Cursor: baseline})
+	require.NoError(t, err)
+	require.Equal(t, target, advanced)
+	require.Equal(t, before, ti.provisioner.ReconcileCalls(), "a bounded no-match range must not PATCH")
+
+	matching, err := testrepo.New(ti.conn).SeedAuditLogFixture(ctx, testrepo.SeedAuditLogFixtureParams{
+		OrganizationID: orgID,
+		Action:         string(audit.ActionOpenRouterAPIKeyDisable),
+		KeyType:        "chat",
+	})
+	require.NoError(t, err)
+	advanced, err = executor.ReconcileSince(ctx, openrouterkeys.AdminReconciliationCheckpoint{Scope: scope, Cursor: target})
+	require.NoError(t, err)
+	require.Equal(t, matching, advanced)
+	require.Equal(t, before+1, ti.provisioner.ReconcileCalls(), "a recent matching event must PATCH")
+
+	//nolint:glint // This regression intentionally inspects PostgreSQL's plan for the production query.
+	rows, err := ti.conn.Query(ctx, `
+EXPLAIN (COSTS OFF)
+SELECT seq
+FROM audit_logs
+WHERE organization_id = $1
+  AND seq > $2
+  AND seq <= $3
+  AND action IN ('openrouter-key:disable', 'openrouter-key:enable')
+  AND metadata->>'key_type' = $4
+ORDER BY seq DESC
+LIMIT 1`, orgID, target, matching, "chat")
+	require.NoError(t, err)
+	defer rows.Close()
+	var planLines []string
+	for rows.Next() {
+		var line string
+		require.NoError(t, rows.Scan(&line))
+		planLines = append(planLines, line)
+	}
+	require.NoError(t, rows.Err())
+	plan := strings.Join(planLines, "\n")
+	require.Contains(t, plan, "audit_logs_organization_id_seq_idx")
+	require.Contains(t, plan, "seq >")
+	require.Contains(t, plan, "seq <=")
 }
 
 func TestAdminReconciliationAuditCursorAdvancesOnlyForCommittedMutation(t *testing.T) {
@@ -536,7 +650,7 @@ func TestAdminReconciliationAuditCursorAdvancesOnlyForCommittedMutation(t *testi
 	adminCtx := withAdmin(t, ctx)
 	orgID := seedKey(t, ctx, ti, "admin-audit-cursor", "chat", "sk-or-admin-audit-cursor")
 	scope := openrouterkeys.AdminReconciliationScope{OrganizationID: orgID, KeyType: "chat"}
-	executor := openrouterkeys.NewAdminReconciliationExecutor(slog.Default(), ti.conn, ti.provisioner)
+	executor := openrouterkeys.NewAdminReconciliationExecutor(testenv.NewLogger(t), ti.conn, ti.provisioner)
 
 	baseline, err := executor.CaptureCursor(ctx, scope)
 	require.NoError(t, err)
@@ -888,6 +1002,64 @@ func TestAdminCauseAuditFailureRollsBackAndRetryCommitsOnce(t *testing.T) {
 	require.Equal(t, outboxBefore+1, outboxCount(t, ctx, ti))
 }
 
+func TestAdminAmbiguousCommitKeepsDurableReconciliationArmed(t *testing.T) {
+	t.Parallel()
+
+	commitReplyLost := errors.New("commit reply lost")
+	ctx, ti := newTestServiceWithOptions(t, nil, openrouterkeys.WithAdminMutationCommitForTest(func(ctx context.Context, tx pgx.Tx) error {
+		require.NoError(t, tx.Commit(ctx))
+		return commitReplyLost
+	}))
+	adminCtx := withAdmin(t, ctx)
+	orgID := seedKey(t, ctx, ti, "admin-ambiguous-commit", "chat", "sk-or-admin-ambiguous-commit")
+	executor := openrouterkeys.NewAdminReconciliationExecutor(testenv.NewLogger(t), ti.conn, ti.provisioner)
+	var checkpoint openrouterkeys.AdminReconciliationCheckpoint
+	ti.coordinator.begin = func(ctx context.Context, scope openrouterkeys.AdminReconciliationScope) error {
+		cursor, err := executor.CaptureCursor(ctx, scope)
+		checkpoint = openrouterkeys.AdminReconciliationCheckpoint{Scope: scope, Cursor: cursor}
+		if err != nil {
+			return fmt.Errorf("capture cursor: %w", err)
+		}
+		return nil
+	}
+	ti.coordinator.complete = func(ctx context.Context, _ openrouterkeys.AdminReconciliationScope) error {
+		_, err := executor.ReconcileSince(ctx, checkpoint)
+		if err != nil {
+			return fmt.Errorf("reconcile checkpoint: %w", err)
+		}
+		return nil
+	}
+
+	_, err := ti.service.DisableKey(adminCtx, &gen.DisableKeyPayload{OrganizationID: orgID, KeyType: "chat"})
+	requireOopsCode(t, err, oops.CodeUnexpected)
+	require.ErrorContains(t, err, "admin disable openrouter key")
+	completes, aborts := ti.coordinator.Counts()
+	require.Equal(t, 1, completes, "an ambiguous outcome must request evidence-based durable completion")
+	require.Zero(t, aborts, "an ambiguous outcome must not disarm repair")
+	require.Equal(t, []string{"admin_lock"}, readDisableCauses(t, ctx, ti, orgID, "chat"))
+	require.EqualValues(t, 1, auditCount(t, ctx, ti, audit.ActionOpenRouterAPIKeyDisable))
+	require.Equal(t, 1, ti.provisioner.ReconcileCalls(), "completion must reread committed audit evidence and converge upstream")
+}
+
+func TestAdminDefinitelyUncommittedCommitFailureAbortsReconciliation(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestServiceWithOptions(t, nil, openrouterkeys.WithAdminMutationCommitForTest(func(ctx context.Context, tx pgx.Tx) error {
+		require.NoError(t, tx.Rollback(ctx))
+		return pgx.ErrTxCommitRollback
+	}))
+	adminCtx := withAdmin(t, ctx)
+	orgID := seedKey(t, ctx, ti, "admin-rolled-back-commit", "chat", "sk-or-admin-rolled-back-commit")
+
+	_, err := ti.service.DisableKey(adminCtx, &gen.DisableKeyPayload{OrganizationID: orgID, KeyType: "chat"})
+	requireOopsCode(t, err, oops.CodeUnexpected)
+	completes, aborts := ti.coordinator.Counts()
+	require.Zero(t, completes)
+	require.Equal(t, 1, aborts, "a definite rollback may disarm durable repair")
+	require.Empty(t, readDisableCauses(t, ctx, ti, orgID, "chat"))
+	require.EqualValues(t, 0, auditCount(t, ctx, ti, audit.ActionOpenRouterAPIKeyDisable))
+}
+
 func TestEnableWithoutAdminLockSkipsPolicyUpstreamAndAudit(t *testing.T) {
 	t.Parallel()
 
@@ -992,12 +1164,16 @@ func TestAdminMutationTimeoutDoesNotCancelLaterCompletion(t *testing.T) {
 	reconcile := ti.coordinator.complete
 	laterDone := make(chan error, 1)
 	ti.coordinator.complete = func(ctx context.Context, scope openrouterkeys.AdminReconciliationScope) error {
+		deadline, ok := ctx.Deadline()
+		require.True(t, ok)
+		require.Greater(t, time.Until(deadline), time.Second, "completion gets a cleanup deadline independent of the caller")
 		go func() {
-			time.Sleep(75 * time.Millisecond)
+			timer := time.NewTimer(75 * time.Millisecond)
+			defer timer.Stop()
+			<-timer.C
 			laterDone <- reconcile(context.Background(), scope)
 		}()
-		<-ctx.Done()
-		return ctx.Err()
+		return context.DeadlineExceeded
 	}
 
 	waitCtx, cancel := context.WithTimeout(adminCtx, 20*time.Millisecond)
@@ -1011,31 +1187,28 @@ func TestAdminMutationTimeoutDoesNotCancelLaterCompletion(t *testing.T) {
 	require.EqualValues(t, 1, auditCount(t, ctx, ti, audit.ActionOpenRouterAPIKeyDisable))
 }
 
-func TestAdminOverlappingExpiredWaitersConvergeLatestStateWithoutDuplicateAudit(t *testing.T) {
+func TestAdminOverlappingFailedWaitersConvergeLatestStateWithoutDuplicateAudit(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestService(t)
 	adminCtx := withAdmin(t, ctx)
 	orgID := seedKey(t, ctx, ti, "admin-overlap-latest", "chat", "sk-or-admin-overlap-latest")
 	reconcile := ti.coordinator.complete
-	ti.coordinator.complete = func(ctx context.Context, _ openrouterkeys.AdminReconciliationScope) error {
-		<-ctx.Done()
-		return ctx.Err()
+	ti.coordinator.complete = func(context.Context, openrouterkeys.AdminReconciliationScope) error {
+		return context.DeadlineExceeded
 	}
 
 	for _, call := range []func(context.Context) error{
 		func(callCtx context.Context) error {
 			_, err := ti.service.DisableKey(callCtx, &gen.DisableKeyPayload{OrganizationID: orgID, KeyType: "chat"})
-			return err
+			return fmt.Errorf("disable key: %w", err)
 		},
 		func(callCtx context.Context) error {
 			_, err := ti.service.EnableKey(callCtx, &gen.EnableKeyPayload{OrganizationID: orgID, KeyType: "chat"})
-			return err
+			return fmt.Errorf("enable key: %w", err)
 		},
 	} {
-		callCtx, cancel := context.WithTimeout(adminCtx, 20*time.Millisecond)
-		err := call(callCtx)
-		cancel()
+		err := call(adminCtx)
 		requireOopsCode(t, err, oops.CodeUnavailable)
 	}
 
@@ -1102,7 +1275,7 @@ func TestAdminCauseUpstreamFailureCommitsAndRetryReconciles(t *testing.T) {
 				var body struct {
 					Disabled bool `json:"disabled"`
 				}
-				require.NoError(t, json.NewDecoder(r.Body).Decode(&body))
+				assert.NoError(t, json.NewDecoder(r.Body).Decode(&body))
 				mu.Lock()
 				attempts++
 				shouldFail := failUpstream
@@ -1165,8 +1338,8 @@ func TestAdminCauseReconcileUsesReplacementHashAndOverlappingDesiredState(t *tes
 		var body struct {
 			Disabled bool `json:"disabled"`
 		}
-		require.NoError(t, json.NewDecoder(r.Body).Decode(&body))
-		require.True(t, body.Disabled, "billing_inactive keeps the replacement key disabled after admin enable")
+		assert.NoError(t, json.NewDecoder(r.Body).Decode(&body))
+		assert.True(t, body.Disabled, "billing_inactive keeps the replacement key disabled after admin enable")
 		mu.Lock()
 		paths = append(paths, r.URL.Path)
 		shouldFail := failUpstream

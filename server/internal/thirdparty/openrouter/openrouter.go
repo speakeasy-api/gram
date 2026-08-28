@@ -940,7 +940,7 @@ func (o *OpenRouter) removeAPIKeyDisableCauseWithDB(ctx context.Context, db DBTX
 	}
 
 	if reconcileUpstream && accessChanged {
-		patch := updateKeyRequest{Disabled: new(false)}
+		patch := updateKeyRequest{Disabled: new(false), Limit: nil, LimitReset: ""}
 		if limitChanged {
 			creditLimit := float64(keyLimit)
 			patch.Limit = &creditLimit
@@ -1007,7 +1007,7 @@ func (o *OpenRouter) ReconcileAPIKeyDisabledWithDB(ctx context.Context, db DBTX,
 	}
 
 	disabled := EffectiveDisabled(key.Disabled, key.DisableCauses)
-	patch := updateKeyRequest{Disabled: &disabled}
+	patch := updateKeyRequest{Disabled: &disabled, Limit: nil, LimitReset: ""}
 	if !disabled && key.MonthlyCredits > 0 {
 		creditLimit := float64(key.MonthlyCredits)
 		patch.Limit = &creditLimit

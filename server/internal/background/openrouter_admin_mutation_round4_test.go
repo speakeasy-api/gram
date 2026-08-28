@@ -60,9 +60,9 @@ func TestOpenRouterAdminCompleteUpdateAcknowledgesWithoutFollowingIdleRun(t *tes
 		cursor.Store(1)
 		completeAdminMutation(t, env, "a-complete", time.Millisecond, completed)
 	})
-	require.EqualValues(t, 1, patches)
+	require.Zero(t, patches, "a Complete without its Begin baseline cannot safely scan historical evidence")
 	require.EqualValues(t, 1, completed)
-	require.EqualValues(t, 1, reconciled)
+	require.Zero(t, reconciled)
 }
 
 func TestOpenRouterAdminCompleteUpdateAcceptedDuringClose(t *testing.T) {
@@ -83,7 +83,7 @@ func TestOpenRouterAdminCompleteUpdateStartsSuccessorAfterClose(t *testing.T) {
 		cursor.Store(7)
 		completeAdminMutation(t, env, "successor-complete", time.Millisecond, completed)
 	})
-	require.EqualValues(t, 1, patches)
+	require.Zero(t, patches, "the predecessor guard already reconciled before a successor can start")
 	require.EqualValues(t, 1, completed)
 }
 
@@ -96,9 +96,9 @@ func TestOpenRouterAdminConcurrentCompletesAreAcknowledgedAtLatestCursor(t *test
 			completeAdminMutation(t, env, string(rune('a'+i-1)), time.Duration(2*i)*time.Millisecond, completed)
 		}
 	})
-	require.Positive(t, patches)
+	require.Zero(t, patches)
 	require.EqualValues(t, 3, completed)
-	require.EqualValues(t, 3, reconciled)
+	require.Zero(t, reconciled)
 }
 
 func TestOpenRouterAdminTimedOutCompleteUpdateStillConverges(t *testing.T) {
@@ -107,7 +107,7 @@ func TestOpenRouterAdminTimedOutCompleteUpdateStillConverges(t *testing.T) {
 		cursor.Store(9)
 		completeAdminMutation(t, env, "accepted-before-client-timeout", time.Millisecond, completed)
 	})
-	require.EqualValues(t, 1, patches)
+	require.Zero(t, patches)
 	require.EqualValues(t, 1, completed, "accepted update must finish after its caller stops waiting")
-	require.EqualValues(t, 9, reconciled)
+	require.Zero(t, reconciled)
 }

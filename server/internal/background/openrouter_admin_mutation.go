@@ -80,39 +80,34 @@ func openRouterAdminReconciliationWorkflow(ctx workflow.Context, scope openroute
 		wake.Send(handlerCtx, nil)
 		return nil
 	}); err != nil {
-		return err
+		return fmt.Errorf("register OpenRouter admin Begin update: %w", err)
 	}
 	if err := workflow.SetUpdateHandler(ctx, OpenRouterAdminCompleteUpdate, func(handlerCtx workflow.Context) error {
-		target, err := capture(handlerCtx)
-		if err != nil {
-			return err
+		if !hasCursor {
+			// A Complete update can win Update-With-Start after the predecessor's
+			// guard already reconciled and closed. Without that predecessor's Begin
+			// baseline there is no bounded commit proof left to inspect. Keep the
+			// successor alive for one guard window so concurrent Complete updates
+			// are acknowledged without starting a chain of idle runs.
+			armed = true
+			generation++
+			wake.Send(handlerCtx, nil)
+			return nil
 		}
 		armed = true
 		generation++
 		wake.Send(handlerCtx, nil)
 
-		baseline := cursor
-		if !hasCursor {
-			// An atomic Update-With-Start may choose its start arm after the
-			// predecessor closed. With no inherited baseline, cover all current
-			// committed evidence so the close race cannot lose this completion.
-			baseline = 0
+		advanced, err := reconcile(handlerCtx, cursor)
+		if err != nil {
+			return err
 		}
-		for {
-			advanced, err := reconcile(handlerCtx, baseline)
-			if err != nil {
-				return err
-			}
-			if !hasCursor || advanced > cursor {
-				cursor, hasCursor = advanced, true
-			}
-			if advanced >= target {
-				return nil
-			}
-			baseline = advanced
+		if advanced > cursor {
+			cursor = advanced
 		}
+		return nil
 	}); err != nil {
-		return err
+		return fmt.Errorf("register OpenRouter admin Complete update: %w", err)
 	}
 
 	for {
@@ -123,7 +118,7 @@ func openRouterAdminReconciliationWorkflow(ctx workflow.Context, scope openroute
 			selector.Select(ctx)
 			if !armed {
 				if err := workflow.Await(ctx, func() bool { return workflow.AllHandlersFinished(ctx) }); err != nil {
-					return err
+					return fmt.Errorf("await idle OpenRouter admin handlers: %w", err)
 				}
 				if !armed {
 					return nil
@@ -152,16 +147,15 @@ func openRouterAdminReconciliationWorkflow(ctx workflow.Context, scope openroute
 		}
 
 		if err := workflow.Await(ctx, func() bool { return workflow.AllHandlersFinished(ctx) }); err != nil {
-			return err
+			return fmt.Errorf("await guarded OpenRouter admin handlers: %w", err)
 		}
 		if generation != guardGeneration {
 			continue
 		}
-		baseline := cursor
 		if !hasCursor {
-			baseline = 0
+			return nil
 		}
-		advanced, err := reconcile(ctx, baseline)
+		advanced, err := reconcile(ctx, cursor)
 		if err != nil {
 			return err
 		}
@@ -169,7 +163,7 @@ func openRouterAdminReconciliationWorkflow(ctx workflow.Context, scope openroute
 			cursor, hasCursor = advanced, true
 		}
 		if err := workflow.Await(ctx, func() bool { return workflow.AllHandlersFinished(ctx) }); err != nil {
-			return err
+			return fmt.Errorf("await reconciled OpenRouter admin handlers: %w", err)
 		}
 		if generation != guardGeneration {
 			continue
@@ -195,6 +189,7 @@ func NewOpenRouterAdminReconciliationActivities(logger *slog.Logger, reconciler 
 func (a *OpenRouterAdminReconciliationActivities) CaptureCursor(ctx context.Context, scope openrouterkeys.AdminReconciliationScope) (int64, error) {
 	cursor, err := a.reconciler.CaptureCursor(ctx, scope)
 	if err != nil {
+		//nolint:wrapcheck // Temporal's application error must remain outermost for retry classification.
 		return 0, temporal.NewApplicationError("transient OpenRouter admin cursor capture failure", "OpenRouterAdminTransientError")
 	}
 	return cursor, nil
@@ -210,6 +205,7 @@ func (a *OpenRouterAdminReconciliationActivities) Reconcile(ctx context.Context,
 	if openrouterkeys.IsPermanentAdminReconciliationError(err) {
 		return 0, temporal.NewNonRetryableApplicationError("permanent local OpenRouter admin reconciliation error", OpenRouterAdminPermanentErrorType, nil)
 	}
+	//nolint:wrapcheck // Temporal's application error must remain outermost for retry classification.
 	return 0, temporal.NewApplicationError("transient OpenRouter admin reconciliation failure", "OpenRouterAdminTransientError")
 }
 

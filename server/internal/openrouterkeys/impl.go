@@ -54,6 +54,7 @@ type Service struct {
 	provisioner               openrouter.Provisioner
 	coordinator               AdminMutationCoordinator
 	adminLocalMutationTimeout time.Duration
+	commitAdminMutation       func(context.Context, pgx.Tx) error
 }
 
 const (
@@ -102,6 +103,7 @@ func NewService(
 		provisioner:               provisioner,
 		coordinator:               coordinator,
 		adminLocalMutationTimeout: defaultAdminLocalMutationTimeout,
+		commitAdminMutation:       func(ctx context.Context, tx pgx.Tx) error { return tx.Commit(ctx) },
 	}
 	for _, option := range options {
 		option(service)
@@ -238,14 +240,23 @@ func (s *Service) EnableKey(ctx context.Context, payload *gen.EnableKeyPayload) 
 
 func (s *Service) coordinateAdminMutation(ctx context.Context, logger *slog.Logger, authCtx *contextvalues.AuthContext, organizationID, keyType string, disable bool) error {
 	scope := AdminReconciliationScope{OrganizationID: organizationID, KeyType: keyType}
-	if err := s.coordinator.Begin(ctx, scope); err != nil {
+	mutationCtx, cancelMutation := context.WithTimeout(ctx, s.adminLocalMutationTimeout)
+	defer cancelMutation()
+	if err := s.coordinator.Begin(mutationCtx, scope); err != nil {
 		return s.mapCoordinatorError(ctx, logger, err, "start durable admin reconciliation")
 	}
 
-	mutationCtx, cancelMutation := context.WithTimeout(ctx, s.adminLocalMutationTimeout)
 	mutationErr := s.mutateAdminLock(mutationCtx, logger, authCtx, organizationID, keyType, disable)
-	cancelMutation()
 	if mutationErr != nil {
+		if _, ok := errors.AsType[*ambiguousAdminMutationCommitError](mutationErr); ok {
+			completeCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), adminMutationWaitTimeout)
+			completeErr := s.coordinator.CompleteAndWait(completeCtx, scope)
+			cancel()
+			if completeErr != nil {
+				logger.WarnContext(ctx, "complete admin reconciliation coordinator after ambiguous commit", attr.SlogError(completeErr))
+			}
+			return mutationErr
+		}
 		abortCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
 		abortErr := s.coordinator.Abort(abortCtx, scope)
 		cancel()
@@ -255,7 +266,7 @@ func (s *Service) coordinateAdminMutation(ctx context.Context, logger *slog.Logg
 		return mutationErr
 	}
 
-	waitCtx, cancel := context.WithTimeout(ctx, adminMutationWaitTimeout)
+	waitCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), adminMutationWaitTimeout)
 	defer cancel()
 	if err := s.coordinator.CompleteAndWait(waitCtx, scope); err != nil {
 		return s.mapCoordinatorError(ctx, logger, err, "complete durable admin reconciliation")
@@ -327,8 +338,11 @@ func (s *Service) mutateAdminLock(ctx context.Context, logger *slog.Logger, auth
 			}
 		}
 
-		if err := tx.Commit(ctx); err != nil {
-			return fmt.Errorf("commit openrouter key %s transaction: %w", operation, err)
+		if err := s.commitAdminMutation(ctx, tx); err != nil {
+			if errors.Is(err, pgx.ErrTxCommitRollback) {
+				return fmt.Errorf("commit openrouter key %s transaction: %w", operation, err)
+			}
+			return &ambiguousAdminMutationCommitError{cause: fmt.Errorf("commit openrouter key %s transaction: %w", operation, err)}
 		}
 		return nil
 	})
