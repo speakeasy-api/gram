@@ -386,6 +386,7 @@ func newStreamsCommand() *cli.Command {
 			if err != nil {
 				return fmt.Errorf("failed to create Stripe meter event client: %w", err)
 			}
+			stripeCatalog := newStripeCatalog(c)
 
 			_, billingTracker, err := newBillingProvider(ctx, logger, tracerProvider, guardianPolicy, redisClient, posthogClient, stripeClient, c)
 			if err != nil {
@@ -583,7 +584,7 @@ func newStreamsCommand() *cli.Command {
 
 				mustReceive(rg, &authzv1.Challenge{}, &authzv1.ChallengeCHWriter{}, authz.NewChallengeCHWriter(logger, chConn))
 				mustReceiveBatch(rg, &meteringv1.MeterReading{}, &meteringv1.MeterReadingCHWriter{}, metering.NewMeterReadingCHWriter(logger, db, meteringchrepo.New(chConn)), gcp.BatchReceiveSettings{MaxMessages: 1000, MaxBytes: 10 * constants.MiB, MaxLatency: time.Second})
-				mustReceive(rg, &meteringv1.MeterReading{}, &meteringv1.MeterReadingStripeExporter{}, metering.NewMeterReadingStripeExporter(logger, meterProvider, replicaDB, stripeMeterEvents))
+				mustReceive(rg, &meteringv1.MeterReading{}, &meteringv1.MeterReadingStripeExporter{}, metering.NewMeterReadingStripeExporter(logger, meterProvider, replicaDB, stripeMeterEvents, stripeCatalog))
 
 				mustReceive(rg, &otelv1.InboundLogRecord{}, &otelv1.InboundLogRecordTransformer{}, otelsvc.NewLogTransformHandler(
 					logger,

@@ -8,6 +8,7 @@ import (
 	"github.com/urfave/cli/v2"
 
 	"github.com/speakeasy-api/gram/server/internal/guardian"
+	"github.com/speakeasy-api/gram/server/internal/metering"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	stripeclient "github.com/speakeasy-api/gram/server/internal/thirdparty/stripe"
 )
@@ -165,6 +166,42 @@ func TestNewStripeMeterEventClientNonLocalWithoutAPIKeyFails(t *testing.T) {
 	)
 	require.Nil(t, client)
 	require.ErrorContains(t, err, "stripe API key is required")
+}
+
+func TestNewStripeCatalogMapsTUMMeter(t *testing.T) {
+	t.Parallel()
+
+	catalog := newStripeCatalog(newStripeCLIContext(t, map[string]string{
+		"stripe-meter-event-name": "tum",
+	}))
+
+	eventName, err := catalog.MeterEventName(metering.AgentSessionStorage())
+	require.NoError(t, err)
+	require.Equal(t, "tum", eventName)
+}
+
+func TestNewStripeCatalogRejectsUnmappedMeter(t *testing.T) {
+	t.Parallel()
+
+	catalog := newStripeCatalog(newStripeCLIContext(t, map[string]string{
+		"stripe-meter-event-name": "tum",
+	}))
+
+	eventName, err := catalog.MeterEventName(metering.Definition{})
+	require.Empty(t, eventName)
+	require.ErrorContains(t, err, "meter definition is not mapped to Stripe")
+}
+
+func TestNewStripeCatalogRejectsMissingTUMEventName(t *testing.T) {
+	t.Parallel()
+
+	catalog := newStripeCatalog(newStripeCLIContext(t, map[string]string{
+		"stripe-meter-event-name": "unset",
+	}))
+
+	eventName, err := catalog.MeterEventName(metering.AgentSessionStorage())
+	require.Empty(t, eventName)
+	require.ErrorContains(t, err, "stripe TUM meter event name is not configured")
 }
 
 func TestNewBillingProviderAcceptsStripeWithoutPolar(t *testing.T) {

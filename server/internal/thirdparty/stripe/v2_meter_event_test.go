@@ -28,7 +28,7 @@ func TestV2MeterEventClientBuildsStripeRequest(t *testing.T) {
 
 	err := client.CreateMeterEvent(t.Context(), V2MeterEventInput{
 		Identifier: "reading-id",
-		EventName:  "aicp_agent_session_storage_v1",
+		EventName:  "tum",
 		CustomerID: "cus_test",
 		Value:      42,
 		Timestamp:  occurredAt,
@@ -37,7 +37,7 @@ func TestV2MeterEventClientBuildsStripeRequest(t *testing.T) {
 	require.NotNil(t, captured)
 	require.Equal(t, "reading-id", stripesdk.StringValue(captured.Identifier))
 	require.Equal(t, "reading-id", stripesdk.StringValue(captured.IdempotencyKey))
-	require.Equal(t, "aicp_agent_session_storage_v1", stripesdk.StringValue(captured.EventName))
+	require.Equal(t, "tum", stripesdk.StringValue(captured.EventName))
 	require.Equal(t, map[string]string{"stripe_customer_id": "cus_test", "value": "42"}, captured.Payload)
 	require.Equal(t, occurredAt.UTC(), stripesdk.TimeValue(captured.Timestamp))
 }
@@ -173,7 +173,7 @@ func TestV2MeterEventClientClassifiesExhaustedHTTPRetries(t *testing.T) {
 func validV2MeterEventInput() V2MeterEventInput {
 	return V2MeterEventInput{
 		Identifier: "reading-id",
-		EventName:  "aicp_agent_session_storage_v1",
+		EventName:  "tum",
 		CustomerID: "cus_test",
 		Value:      1,
 		Timestamp:  time.Date(2026, time.August, 28, 10, 0, 0, 0, time.UTC),

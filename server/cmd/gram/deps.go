@@ -69,6 +69,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/functions"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/inv"
+	"github.com/speakeasy-api/gram/server/internal/metering"
 	"github.com/speakeasy-api/gram/server/internal/must"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/organizations/orgprovision"
@@ -603,6 +604,21 @@ func newStripeMeterEventClient(
 	default:
 		return nil, errors.New("stripe API key is required")
 	}
+}
+
+func newStripeCatalog(c *cli.Context) metering.StripeCatalog {
+	tumMeterEventName := c.String("stripe-meter-event-name")
+	return metering.StripeCatalogFunc(func(definition metering.Definition) (string, error) {
+		switch definition {
+		case metering.AgentSessionStorage():
+			if !stripeclient.IsConfigured(tumMeterEventName) {
+				return "", errors.New("stripe TUM meter event name is not configured")
+			}
+			return tumMeterEventName, nil
+		default:
+			return "", errors.New("meter definition is not mapped to Stripe")
+		}
+	})
 }
 
 // workosClientOpts builds the ClientOpts threaded into every workos.NewClient

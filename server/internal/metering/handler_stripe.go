@@ -29,23 +29,29 @@ const (
 	stripeCustomerCacheTTL     = 10 * time.Minute
 )
 
-type stripeMeterKey struct {
-	id      MeterID
-	version uint32
-}
-
-var stripeMeterEventNames = map[stripeMeterKey]string{
-	{id: MeterAgentSessionStorage, version: 1}: "aicp_agent_session_storage_v1",
-}
-
 type stripeCustomerReader interface {
 	GetStripeCustomerID(context.Context, string) (pgtype.Text, error)
+}
+
+// StripeCatalog maps registered meter definitions to Stripe meter event names.
+// Returning an empty name with no error explicitly drops and acknowledges the reading.
+type StripeCatalog interface {
+	MeterEventName(Definition) (string, error)
+}
+
+// StripeCatalogFunc adapts a function into a [StripeCatalog].
+type StripeCatalogFunc func(Definition) (string, error)
+
+// MeterEventName implements [StripeCatalog].
+func (f StripeCatalogFunc) MeterEventName(definition Definition) (string, error) {
+	return f(definition)
 }
 
 // MeterReadingStripeExporter sends recognized usage readings to Stripe billing meters.
 type MeterReadingStripeExporter struct {
 	stripeCustomers stripeCustomerReader
 	stripe          stripeclient.V2MeterEventClient
+	stripeCatalog   StripeCatalog
 	customers       *expirable.LRU[string, string]
 	customerLookups singleflight.Group
 	exportErrors    metric.Int64Counter
@@ -57,6 +63,7 @@ func NewMeterReadingStripeExporter(
 	meterProvider metric.MeterProvider,
 	readReplica *pgxpool.Pool,
 	stripe stripeclient.V2MeterEventClient,
+	stripeCatalog StripeCatalog,
 ) *MeterReadingStripeExporter {
 	exportErrors, err := meterProvider.Meter("github.com/speakeasy-api/gram/server/internal/metering").Int64Counter(
 		meterStripeExportErrors,
@@ -70,6 +77,7 @@ func NewMeterReadingStripeExporter(
 	return &MeterReadingStripeExporter{
 		stripeCustomers: meteringrepo.New(readReplica),
 		stripe:          stripe,
+		stripeCatalog:   stripeCatalog,
 		customers:       expirable.NewLRU[string, string](stripeCustomerCacheMaxSize, nil, stripeCustomerCacheTTL),
 		customerLookups: singleflight.Group{},
 		exportErrors:    exportErrors,
@@ -87,12 +95,19 @@ func (e *MeterReadingStripeExporter) Handle(ctx context.Context, reading *meteri
 		return fmt.Errorf("unsupported meter reading kind %s", reading.GetKind())
 	}
 
-	eventName, ok := stripeMeterEventNames[stripeMeterKey{
-		id:      MeterID(reading.GetMeterId()),
-		version: reading.GetMeterVersion(),
-	}]
+	definition, ok := LookupDefinition(MeterID(reading.GetMeterId()), reading.GetMeterVersion())
 	if !ok {
-		return fmt.Errorf("meter %q version %d is not mapped to Stripe", reading.GetMeterId(), reading.GetMeterVersion())
+		return fmt.Errorf("meter %q version %d is not registered", reading.GetMeterId(), reading.GetMeterVersion())
+	}
+	if e.stripeCatalog == nil {
+		return errors.New("stripe catalog is not configured")
+	}
+	eventName, err := e.stripeCatalog.MeterEventName(definition)
+	if err != nil {
+		return fmt.Errorf("map meter %q version %d to Stripe: %w", reading.GetMeterId(), reading.GetMeterVersion(), err)
+	}
+	if eventName == "" {
+		return nil
 	}
 
 	occurredAt, err := time.Parse(time.RFC3339Nano, reading.GetOccurredAt())
