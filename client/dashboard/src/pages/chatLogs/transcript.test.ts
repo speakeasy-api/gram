@@ -4,10 +4,27 @@ import {
   buildDisplayItems,
   displayItemContainsMessage,
   displayItemRows,
+  messageText,
   type DisplayItem,
   type ToolRow,
   type TranscriptRow,
 } from "./transcript";
+
+describe("messageText", () => {
+  it("renders only the human text of an OpenClaw channel turn", () => {
+    const stored =
+      'Conversation info (untrusted metadata):\n```json\n{"chat_id": "channel:42"}\n```\n\n@Bot what does this command do';
+    expect(messageText(stored)).toBe("@Bot what does this command do");
+  });
+
+  it("still strips the assistant runtime's message-context envelope", () => {
+    expect(
+      messageText(
+        "<message-context>\nEventID: e1\n</message-context>\nWhat changed?",
+      ),
+    ).toBe("What changed?");
+  });
+});
 
 describe("argsToString", () => {
   it("omits blank argument payloads instead of rendering an empty section", () => {

@@ -6,18 +6,18 @@ import {
   type ToolCall,
   type TraceEntryType,
 } from "./traceEntries";
+import { stripLeadingEnvelopes } from "@/lib/harnessEnvelopes";
 
 type MessageEntryType = Extract<
   TraceEntryType,
   "user" | "assistant" | "system"
 >;
 
-// Strip the injected `<message-context>…</message-context>` envelope (event id,
-// timestamp, user id) and trailing whitespace the harness prepends to prompts —
-// it's machine plumbing, not part of the conversation.
+// Strip the harness envelope (`<message-context>`, OpenClaw's inbound metadata,
+// …) and trailing whitespace prepended to prompts — it's machine plumbing, not
+// part of the conversation. The stored message keeps it; see harnessEnvelopes.
 function cleanMessageText(raw: string): string {
-  return raw
-    .replace(/^\s*<message-context>[\s\S]*?<\/message-context>/i, "")
+  return stripLeadingEnvelopes(raw)
     .replace(/[ \t]+$/gm, "")
     .trim();
 }
@@ -194,17 +194,13 @@ function hasTextContent(content: unknown): boolean {
   return false;
 }
 
-/** A message with nothing left once the leading <message-context> envelope is
- * stripped — machine plumbing, so its row is hidden instead of rendered as an
- * empty bubble. Only applies to plain string content (arrays go through
+/** A message with nothing left once the leading harness envelope is stripped —
+ * machine plumbing, so its row is hidden instead of rendered as an empty
+ * bubble. Only applies to plain string content (arrays go through
  * hasTextContent). */
 function hasNoVisibleText(content: unknown): boolean {
   if (typeof content !== "string") return false;
-  return (
-    content
-      .replace(/^\s*<message-context>[\s\S]*?<\/message-context>/i, "")
-      .trim().length === 0
-  );
+  return stripLeadingEnvelopes(content).trim().length === 0;
 }
 
 /**

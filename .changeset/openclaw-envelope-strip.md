@@ -1,5 +1,6 @@
 ---
 "server": patch
+"dashboard": patch
 ---
 
-Strip OpenClaw's inbound-metadata envelope (conversation info, reply targets, chat history, delivery hints, timestamp prefix) from turn text before generating session titles and summaries, matching the harness framing already stripped for Claude Code.
+Hide OpenClaw's inbound-metadata envelope (conversation info, reply targets, chat history, delivery hints, timestamp prefix) when rendering session transcripts and when generating session titles and summaries, matching the treatment of the assistant runtime's `<message-context>` framing. Stored messages are unchanged.
