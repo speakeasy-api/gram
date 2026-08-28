@@ -8,6 +8,8 @@ export function WriteOnlyHeaderRow({
   hasStoredValue,
   nameInputName,
   valueInputName,
+  nameInputLabel,
+  valueInputLabel,
   disabled,
   onNameChange,
   onNameBlur,
@@ -20,6 +22,8 @@ export function WriteOnlyHeaderRow({
   hasStoredValue: boolean;
   nameInputName: string;
   valueInputName: string;
+  nameInputLabel: string;
+  valueInputLabel: string;
   disabled: boolean;
   onNameChange: (value: string) => void;
   onNameBlur: () => void;
@@ -31,7 +35,7 @@ export function WriteOnlyHeaderRow({
     <div className="flex items-center gap-2">
       <Input
         name={nameInputName}
-        aria-label="Header name"
+        aria-label={nameInputLabel}
         placeholder="Header name"
         value={name}
         onChange={onNameChange}
@@ -41,13 +45,13 @@ export function WriteOnlyHeaderRow({
       />
       <Input
         name={valueInputName}
-        aria-label="Header value"
+        aria-label={valueInputLabel}
         placeholder={hasStoredValue ? "••••" : "Header value"}
         value={value}
         onChange={onValueChange}
         onBlur={onValueBlur}
         type="password"
-        reveal
+        reveal={!hasStoredValue || value !== ""}
         disabled={disabled}
         className="flex-1"
       />
@@ -59,7 +63,9 @@ export function WriteOnlyHeaderRow({
         disabled={disabled}
         aria-label={`Remove header ${name || "row"}`}
       >
-        <Trash2 className="size-3.5" />
+        <Button.LeftIcon>
+          <Trash2 className="size-3.5" />
+        </Button.LeftIcon>
       </Button>
     </div>
   );

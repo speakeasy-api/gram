@@ -201,6 +201,8 @@ export function DestinationEditorSheet({
                                           }
                                           nameInputName={nameField.name}
                                           valueInputName={valueField.name}
+                                          nameInputLabel={`Header ${index + 1} name`}
+                                          valueInputLabel={`Header ${index + 1} value`}
                                           disabled={disabled}
                                           onNameChange={nameField.handleChange}
                                           onNameBlur={nameField.handleBlur}
