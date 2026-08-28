@@ -1041,6 +1041,61 @@ func TestAdminAmbiguousCommitKeepsDurableReconciliationArmed(t *testing.T) {
 	require.Equal(t, 1, ti.provisioner.ReconcileCalls(), "completion must reread committed audit evidence and converge upstream")
 }
 
+func TestAdminAmbiguousCommitErrorAfterRollbackCompletesWithoutRepair(t *testing.T) {
+	t.Parallel()
+
+	commitReplyLost := errors.New("commit outcome unavailable")
+	commitAttempts := 0
+	ctx, ti := newTestServiceWithOptions(t, nil, openrouterkeys.WithAdminMutationCommitForTest(func(ctx context.Context, tx pgx.Tx) error {
+		commitAttempts++
+		if commitAttempts == 1 {
+			require.NoError(t, tx.Rollback(ctx))
+			return commitReplyLost
+		}
+		return tx.Commit(ctx)
+	}))
+	adminCtx := withAdmin(t, ctx)
+	orgID := seedKey(t, ctx, ti, "admin-ambiguous-rollback", "chat", "sk-or-admin-ambiguous-rollback")
+	executor := openrouterkeys.NewAdminReconciliationExecutor(testenv.NewLogger(t), ti.conn, ti.provisioner)
+	var checkpoint openrouterkeys.AdminReconciliationCheckpoint
+	evidenceChecks := 0
+	ti.coordinator.begin = func(ctx context.Context, scope openrouterkeys.AdminReconciliationScope) error {
+		cursor, err := executor.CaptureCursor(ctx, scope)
+		checkpoint = openrouterkeys.AdminReconciliationCheckpoint{Scope: scope, Cursor: cursor}
+		if err != nil {
+			return fmt.Errorf("capture cursor: %w", err)
+		}
+		return nil
+	}
+	ti.coordinator.complete = func(ctx context.Context, _ openrouterkeys.AdminReconciliationScope) error {
+		evidenceChecks++
+		_, err := executor.ReconcileSince(ctx, checkpoint)
+		if err != nil {
+			return fmt.Errorf("reconcile checkpoint: %w", err)
+		}
+		return nil
+	}
+	outboxBefore := outboxCount(t, ctx, ti)
+
+	_, err := ti.service.DisableKey(adminCtx, &gen.DisableKeyPayload{OrganizationID: orgID, KeyType: "chat"})
+	requireOopsCode(t, err, oops.CodeUnexpected)
+	completes, aborts := ti.coordinator.Counts()
+	require.Equal(t, 1, completes, "ambiguous rollback must route through durable completion")
+	require.Zero(t, aborts)
+	require.Equal(t, 1, evidenceChecks, "completion must perform a bounded durable evidence check")
+	require.Zero(t, ti.provisioner.ReconcileCalls(), "rolled-back evidence must not PATCH upstream")
+	require.Empty(t, readDisableCauses(t, ctx, ti, orgID, "chat"))
+	require.EqualValues(t, 0, auditCount(t, ctx, ti, audit.ActionOpenRouterAPIKeyDisable))
+	require.Equal(t, outboxBefore, outboxCount(t, ctx, ti))
+
+	view, err := ti.service.DisableKey(adminCtx, &gen.DisableKeyPayload{OrganizationID: orgID, KeyType: "chat"})
+	require.NoError(t, err, "the ambiguous API error must remain safe to retry")
+	require.Equal(t, []string{"admin_lock"}, view.DisableCauses)
+	require.EqualValues(t, 1, auditCount(t, ctx, ti, audit.ActionOpenRouterAPIKeyDisable))
+	require.Equal(t, outboxBefore+1, outboxCount(t, ctx, ti))
+	require.Equal(t, 1, ti.provisioner.ReconcileCalls())
+}
+
 func TestAdminDefinitelyUncommittedCommitFailureAbortsReconciliation(t *testing.T) {
 	t.Parallel()
 
