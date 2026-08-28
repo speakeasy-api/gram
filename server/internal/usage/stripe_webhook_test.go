@@ -1586,8 +1586,54 @@ func TestStripeCheckoutDomainReplayIsNoop(t *testing.T) {
 	t.Parallel()
 
 	service, db := newStripeWebhookService(t, "customer_placeholder", nil)
-	configurePaygCheckout(t, service, "event_first", "subscription_replay", "past_due")
+	featureCache := configurePaygCheckout(t, service, "event_first", "subscription_replay", "past_due")
+	metrics := &captureStripeWebhookMetrics{}
+	service.stripeMetrics = metrics
+	createOpenRouterKeyFixture(t, db, openrouter.KeyTypeChat, 17)
+	setOpenRouterKeyLifecycleFixture(t, db, openrouter.KeyTypeChat, true, []string{"billing_inactive"}, 17)
+
+	var patches atomic.Int32
+	var firstPatch map[string]any
+	handlerErrors := make(chan error, 3)
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPatch {
+			handlerErrors <- fmt.Errorf("unexpected OpenRouter method %s", r.Method)
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			return
+		}
+		if patches.Add(1) == 1 {
+			if err := json.NewDecoder(r.Body).Decode(&firstPatch); err != nil {
+				handlerErrors <- fmt.Errorf("decode OpenRouter PATCH: %w", err)
+				w.WriteHeader(http.StatusBadRequest)
+				return
+			}
+		}
+		w.Header().Set("Content-Type", "application/json")
+		if err := json.NewEncoder(w).Encode(map[string]any{
+			"data": map[string]any{"limit": 100.0, "hash": "hash_placeholder_chat"},
+		}); err != nil {
+			handlerErrors <- fmt.Errorf("encode OpenRouter response: %w", err)
+		}
+	}))
+	t.Cleanup(upstream.Close)
+	option, err := openrouter.WithTestBaseURL(upstream.URL)
+	require.NoError(t, err)
+	tracerProvider := testenv.NewTracerProvider(t)
+	guardianPolicy, err := guardian.NewUnsafePolicy(tracerProvider, []string{})
+	require.NoError(t, err)
+	service.openRouter = openrouter.New(
+		testenv.NewLogger(t), tracerProvider, guardianPolicy, db, "test", "provisioning_key_placeholder",
+		nil, nil, nil, testenv.NewEncryptionClient(t), option,
+	)
+
 	require.Equal(t, http.StatusOK, serveStripeWebhook(service, "first").Code)
+	patchesAfterFirst := patches.Load()
+	require.Positive(t, patchesAfterFirst)
+	limit, ok := openrouter.AccountTypeCreditLimit("payg")
+	require.True(t, ok)
+	require.EqualValues(t, limit, firstPatch["limit"], "true recovery must PATCH the current PAYG cap")
+	cacheAfterFirst := featureCache.snapshot()
+	keyAfterFirst := openRouterKeyLifecycleFixture(t, db, openrouter.KeyTypeChat)
 
 	client, ok := service.stripeClient.(*fakeStripeWebhookClient)
 	require.True(t, ok)
@@ -1602,12 +1648,22 @@ func TestStripeCheckoutDomainReplayIsNoop(t *testing.T) {
 		}, nil
 	}
 	require.Equal(t, http.StatusOK, serveStripeWebhook(service, "second").Code)
+	if len(handlerErrors) > 0 {
+		require.NoError(t, <-handlerErrors)
+	}
 
 	require.Equal(t, 1, paygSchedulingIntentCount(t, db))
-	require.Equal(t, 2, stripeWebhookReceiptCount(t, db))
+	require.Equal(t, 2, stripeWebhookReceiptCount(t, db), "the distinct event receipt remains durable")
 	count, err := audittest.AuditLogCountByAction(t.Context(), db, audit.ActionOrganizationPaygActivated)
 	require.NoError(t, err)
 	require.EqualValues(t, 1, count)
+	require.Equal(t, 1, organizationBillingActionIntentCount(t, db, audit.ActionOrganizationPaygActivated))
+	require.Equal(t, patchesAfterFirst, patches.Load(), "unchanged active checkout must not PATCH OpenRouter again")
+	require.Equal(t, cacheAfterFirst, featureCache.snapshot())
+	require.EqualValues(t, 2, client.checkoutCalls.Load(), "a distinct event must verify current Stripe state")
+	require.Zero(t, metrics.invoicePaymentFailures.Load())
+	require.Zero(t, metrics.subscriptionLosses.Load())
+	require.Equal(t, keyAfterFirst, openRouterKeyLifecycleFixture(t, db, openrouter.KeyTypeChat))
 }
 
 func TestStripeCheckoutExactReplaySkipsCurrentStateRetrieval(t *testing.T) {

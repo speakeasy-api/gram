@@ -7,6 +7,7 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"slices"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -432,27 +433,31 @@ func removeOpenRouterDisableCauseTx(ctx context.Context, tx pgx.Tx, organization
 	return nil
 }
 
-func recoverPaygOpenRouterChatKeyTx(ctx context.Context, tx pgx.Tx, organizationID string) error {
+func recoverPaygOpenRouterChatKeyTx(ctx context.Context, tx pgx.Tx, organizationID string) (bool, error) {
 	key, err := getClassifiedOpenRouterKeyTx(ctx, tx, organizationID, openrouter.KeyTypeChat)
 	if err != nil || key == nil {
-		return err
+		return false, err
 	}
 	limit, ok := openrouter.AccountTypeCreditLimit(billing.TierPayg)
 	if !ok || limit <= 0 {
-		return errors.New("PAYG OpenRouter chat key credit policy is unavailable")
+		return false, errors.New("PAYG OpenRouter chat key credit policy is unavailable")
 	}
+	disableCauses := slices.DeleteFunc(slices.Clone(key.DisableCauses), func(cause string) bool {
+		return cause == string(openrouter.DisableCauseBillingInactive)
+	})
+	stateChanged := len(disableCauses) != len(key.DisableCauses) || key.MonthlyCredits != int64(limit) || key.Disabled != (len(disableCauses) > 0)
 	rows, err := repo.New(tx).RecoverPaygOpenRouterChatKey(ctx, repo.RecoverPaygOpenRouterChatKeyParams{
 		MonthlyCredits: int64(limit),
 		OrganizationID: organizationID,
 		KeyHash:        key.KeyHash,
 	})
 	if err != nil {
-		return fmt.Errorf("persist OpenRouter chat key PAYG recovery: %w", err)
+		return false, fmt.Errorf("persist OpenRouter chat key PAYG recovery: %w", err)
 	}
 	if rows != 1 {
-		return fmt.Errorf("OpenRouter chat key changed while recovering PAYG billing: updated %d rows", rows)
+		return false, fmt.Errorf("OpenRouter chat key changed while recovering PAYG billing: updated %d rows", rows)
 	}
-	return nil
+	return stateChanged, nil
 }
 
 func (s *Service) deactivatePaygSubscription(ctx context.Context, tx pgx.Tx, organizationID string, event *stripeclient.WebhookEvent) (stripeWebhookResult, error) {
@@ -630,17 +635,21 @@ func (s *Service) activatePaygCheckout(ctx context.Context, tx pgx.Tx, organizat
 		newlyEnabled = append(newlyEnabled, productfeatures.TrialRuntimeFeatures...)
 	}
 
-	reconcileKeyTypes := []openrouter.KeyType{openrouter.KeyTypeChat}
+	reconcileKeyTypes := []openrouter.KeyType(nil)
 	if convertedDemotedTrial {
-		reconcileKeyTypes = append([]openrouter.KeyType(nil), openrouter.AllKeyTypes...)
+		reconcileKeyTypes = append(reconcileKeyTypes, openrouter.AllKeyTypes...)
 		for _, keyType := range openrouter.AllKeyTypes {
 			if err := removeOpenRouterDisableCauseTx(ctx, tx, organizationID, keyType, openrouter.DisableCauseTrialDemotion); err != nil {
 				return stripeWebhookResult{}, fmt.Errorf("replace demoted trial OpenRouter %s key lifecycle: %w", keyType, err)
 			}
 		}
 	}
-	if err := recoverPaygOpenRouterChatKeyTx(ctx, tx, organizationID); err != nil {
+	chatStateChanged, err := recoverPaygOpenRouterChatKeyTx(ctx, tx, organizationID)
+	if err != nil {
 		return stripeWebhookResult{}, fmt.Errorf("recover PAYG OpenRouter chat key billing: %w", err)
+	}
+	if chatStateChanged && !convertedDemotedTrial {
+		reconcileKeyTypes = append(reconcileKeyTypes, openrouter.KeyTypeChat)
 	}
 
 	anchorDay := conv.SafeInt32(checkout.BillingCycleAnchor.UTC().Day())
