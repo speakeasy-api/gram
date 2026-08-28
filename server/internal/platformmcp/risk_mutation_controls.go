@@ -111,11 +111,17 @@ func (c *RiskMutationControls) Admit(ctx context.Context, principal Principal, p
 		return ResolvedProject{}, riskMutationUnavailableWithCause(err)
 	}
 	organizationSlug, err := c.organizations.OrganizationSlug(ctx, principal.OrganizationID)
-	if err != nil || organizationSlug == "" {
-		return ResolvedProject{}, riskMutationUnavailable()
+	if err != nil {
+		return ResolvedProject{}, riskMutationUnavailableWithCause(err)
+	}
+	if organizationSlug == "" {
+		return ResolvedProject{}, riskMutationUnavailableWithCause(errors.New("organization slug is unavailable"))
 	}
 	evaluation, err := feature.EvaluateFlag(ctx, c.flags, feature.FlagPlatformMCPRiskMutations, principal.OrganizationID, feature.OrgProjectGroups(organizationSlug, project.Slug))
-	if err != nil || evaluation != feature.EvaluationEnabled {
+	if err != nil {
+		return ResolvedProject{}, riskMutationUnavailableWithCause(err)
+	}
+	if evaluation != feature.EvaluationEnabled {
 		return ResolvedProject{}, riskMutationUnavailable()
 	}
 	if err := c.budget.AllowConnectionOrOrganization(ctx, principal); err != nil {
@@ -123,7 +129,7 @@ func (c *RiskMutationControls) Admit(ctx context.Context, principal Principal, p
 		case errors.Is(err, ErrOperationRateLimited):
 			return ResolvedProject{}, &RiskMutationError{Code: "rate_limited", Message: "The risk mutation rate limit was reached.", Cause: err}
 		default:
-			return ResolvedProject{}, riskMutationUnavailable()
+			return ResolvedProject{}, riskMutationUnavailableWithCause(err)
 		}
 	}
 	return project, nil
@@ -134,12 +140,10 @@ func riskMutationUnavailable() error {
 }
 
 func riskMutationUnavailableWithCause(cause error) error {
-	if cause != nil {
-		cause = fmt.Errorf("%w: %w", ErrRiskMutationUnavailable, cause)
-	} else {
-		cause = ErrRiskMutationUnavailable
+	if cause == nil {
+		return &RiskMutationError{Code: unavailableCode, Message: "Risk mutations are not enabled for this project.", Cause: ErrRiskMutationUnavailable}
 	}
-	return &RiskMutationError{Code: unavailableCode, Message: "Risk mutations are not enabled for this project.", Cause: cause}
+	return &RiskMutationError{Code: "unavailable", Message: "Risk mutations are temporarily unavailable.", Cause: fmt.Errorf("%w: %w", ErrRiskMutationUnavailable, cause)}
 }
 
 func riskMutationConflict(message string) error {

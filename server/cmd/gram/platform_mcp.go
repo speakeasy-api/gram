@@ -261,6 +261,7 @@ func configureLocalFixturePlatformMCP(ctx context.Context, config platformMCPCon
 		return AssistantSurface{}, errors.New("local Platform MCP operation budgets are incomplete")
 	}
 	telemetry := platformmcp.NewLifecycleTelemetry(config.Logger, config.MeterProvider)
+	riskTelemetry := platformmcp.NewRiskTelemetry(config.Logger, config.MeterProvider)
 	readiness := platformmcp.NewReadinessService(
 		store,
 		registrationGate,
@@ -348,7 +349,7 @@ func configureLocalFixturePlatformMCP(ctx context.Context, config platformMCPCon
 		sessionRecall,
 		riskMutations,
 		fixtureConfig.CatalogDescriptor(),
-	).WithOAuthTelemetry(oauthTelemetry)
+	).WithOAuthTelemetry(oauthTelemetry).WithRiskTelemetry(riskTelemetry)
 	oauth.Attach(config.Mux)
 	platformmcp.NewDashboardSetupHTTP(dashboardSetupStarter, config.Sessions).Attach(config.Mux)
 	platformmcp.AttachManagement(config.Mux, platformmcp.NewManagementService(config.Logger, config.TracerProvider, config.DB, config.Sessions, config.Authz, gate, authorizer, config.ServerURL.JoinPath("platform-mcp").String(), registrations, readiness, distributions, config.JWTSigningKey, catalog))
@@ -597,6 +598,7 @@ func configureBrowserPlatformMCP(ctx context.Context, config platformMCPConfig) 
 		return AssistantSurface{}, errors.New("platform MCP operation budgets are incomplete")
 	}
 	telemetry := platformmcp.NewLifecycleTelemetry(config.Logger, config.MeterProvider)
+	riskTelemetry := platformmcp.NewRiskTelemetry(config.Logger, config.MeterProvider)
 	readiness := platformmcp.NewReadinessService(
 		store,
 		registrationGate,
@@ -670,7 +672,7 @@ func configureBrowserPlatformMCP(ctx context.Context, config platformMCPConfig) 
 		sessionRecall,
 		riskMutations,
 		platformmcp.CatalogDescriptor{},
-	).WithOAuthTelemetry(oauthTelemetry)
+	).WithOAuthTelemetry(oauthTelemetry).WithRiskTelemetry(riskTelemetry)
 	oauth.Attach(config.Mux)
 	platformmcp.NewDashboardSetupHTTP(dashboardSetupStarter, config.Sessions).Attach(config.Mux)
 	platformmcp.AttachManagement(config.Mux, platformmcp.NewManagementService(config.Logger, config.TracerProvider, config.DB, config.Sessions, config.Authz, gate, authorizer, config.ServerURL.JoinPath("platform-mcp").String(), registrations, readiness, distributions, config.JWTSigningKey, catalog))

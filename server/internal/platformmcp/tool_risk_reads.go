@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"maps"
+	"time"
 
 	"github.com/google/jsonschema-go/jsonschema"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -29,7 +30,7 @@ func registerRiskToolsWithMutations(reg *Registrar, risk *RiskReadService, mutat
 		Annotations: readOnlyAnnotations(),
 		InputSchema: riskListSchema(false),
 	}, ToolMeta{Audiences: bothAudiences, ProjectScope: ProjectScopeDefaultable}, func(ctx context.Context, _ *mcp.CallToolRequest, input ListRiskPoliciesInput) (*mcp.CallToolResult, ListRiskPoliciesOutput, error) {
-		return riskReadToolCall(ctx, func(principal Principal) (ListRiskPoliciesOutput, error) {
+		return riskReadToolCall(ctx, reg.riskTelemetry, "list_risk_policies", func(principal Principal) (ListRiskPoliciesOutput, error) {
 			return risk.ListPolicies(ctx, principal, input)
 		})
 	})
@@ -40,7 +41,7 @@ func registerRiskToolsWithMutations(reg *Registrar, risk *RiskReadService, mutat
 		Annotations: readOnlyAnnotations(),
 		InputSchema: riskGetPolicySchema(),
 	}, ToolMeta{Audiences: bothAudiences, ProjectScope: ProjectScopeDefaultable}, func(ctx context.Context, _ *mcp.CallToolRequest, input GetRiskPolicyInput) (*mcp.CallToolResult, GetRiskPolicyOutput, error) {
-		return riskReadToolCall(ctx, func(principal Principal) (GetRiskPolicyOutput, error) {
+		return riskReadToolCall(ctx, reg.riskTelemetry, "get_risk_policy", func(principal Principal) (GetRiskPolicyOutput, error) {
 			return risk.GetPolicy(ctx, principal, input)
 		})
 	})
@@ -51,7 +52,7 @@ func registerRiskToolsWithMutations(reg *Registrar, risk *RiskReadService, mutat
 		Annotations: readOnlyAnnotations(),
 		InputSchema: riskListSchema(true),
 	}, ToolMeta{Audiences: bothAudiences, ProjectScope: ProjectScopeDefaultable}, func(ctx context.Context, _ *mcp.CallToolRequest, input ListRiskExclusionsInput) (*mcp.CallToolResult, ListRiskExclusionsOutput, error) {
-		return riskReadToolCall(ctx, func(principal Principal) (ListRiskExclusionsOutput, error) {
+		return riskReadToolCall(ctx, reg.riskTelemetry, "list_risk_exclusions", func(principal Principal) (ListRiskExclusionsOutput, error) {
 			return risk.ListExclusions(ctx, principal, input)
 		})
 	})
@@ -79,7 +80,7 @@ func registerUnavailableRiskToolsWithCatalogAndMutations(reg *Registrar, buildCa
 		{"get_risk_policy", "Get Risk Policy", "Read one risk policy. Risk reads are unavailable in this deployment.", riskGetPolicySchema()},
 		{"list_risk_exclusions", "List Risk Exclusions", "List risk exclusions. Risk reads are unavailable in this deployment.", riskListSchema(true)},
 	} {
-		addTool(reg, &mcp.Tool{Name: tool.name, Title: tool.title, Description: tool.description, Annotations: readOnlyAnnotations(), InputSchema: tool.schema}, ToolMeta{Audiences: bothAudiences, ProjectScope: ProjectScopeDefaultable}, unavailableTool("risk_reads"))
+		addTool(reg, &mcp.Tool{Name: tool.name, Title: tool.title, Description: tool.description, Annotations: readOnlyAnnotations(), InputSchema: tool.schema}, ToolMeta{Audiences: bothAudiences, ProjectScope: ProjectScopeDefaultable}, unavailableRiskReadTool(reg, tool.name))
 	}
 	catalog, err := buildCatalog()
 	registerRiskMutationHandlers(reg, catalog, err == nil, mutations)
@@ -157,10 +158,10 @@ func registerRiskMutationHandlers(reg *Registrar, catalog policycatalog.Catalog,
 		}
 	}
 	meta := ToolMeta{Audiences: bothAudiences, ProjectScope: ProjectScopeExplicit}
-	addTool(reg, &mcp.Tool{Name: "create_risk_policy", Title: "Create Risk Policy", Description: createPolicyDescription, InputSchema: createPolicySchema}, meta, createPolicy)
-	addTool(reg, &mcp.Tool{Name: "update_risk_policy", Title: "Update Risk Policy", Description: updatePolicyDescription, InputSchema: updatePolicySchema}, meta, updatePolicy)
-	addTool(reg, &mcp.Tool{Name: "create_risk_exclusion", Title: "Create Risk Exclusion", Description: createExclusionDescription, InputSchema: createExclusionSchema}, meta, createExclusion)
-	addTool(reg, &mcp.Tool{Name: "update_risk_exclusion", Title: "Update Risk Exclusion", Description: updateExclusionDescription, InputSchema: updateRiskExclusionSchema()}, meta, updateExclusion)
+	addTool(reg, &mcp.Tool{Name: "create_risk_policy", Title: "Create Risk Policy", Description: createPolicyDescription, InputSchema: createPolicySchema}, meta, instrumentRiskMutation(reg, "create_risk_policy", createPolicy))
+	addTool(reg, &mcp.Tool{Name: "update_risk_policy", Title: "Update Risk Policy", Description: updatePolicyDescription, InputSchema: updatePolicySchema}, meta, instrumentRiskMutation(reg, "update_risk_policy", updatePolicy))
+	addTool(reg, &mcp.Tool{Name: "create_risk_exclusion", Title: "Create Risk Exclusion", Description: createExclusionDescription, InputSchema: createExclusionSchema}, meta, instrumentRiskMutation(reg, "create_risk_exclusion", createExclusion))
+	addTool(reg, &mcp.Tool{Name: "update_risk_exclusion", Title: "Update Risk Exclusion", Description: updateExclusionDescription, InputSchema: updateRiskExclusionSchema()}, meta, instrumentRiskMutation(reg, "update_risk_exclusion", updateExclusion))
 }
 
 func unavailableRiskMutationTool[Out any]() mcp.ToolHandlerFor[map[string]any, Out] {
@@ -174,11 +175,85 @@ func unavailableRiskMutationTool[Out any]() mcp.ToolHandlerFor[map[string]any, O
 		// Return a tool error rather than an existing IsError result. The MCP SDK
 		// short-circuits on errors before marshaling the typed zero Out value, so
 		// disabled tools emit no empty structured success fields.
-		return nil, zero, &ToolRefusalError{Payload: string(content)}
+		return nil, zero, &ToolRefusalError{Code: unavailableCode, Payload: string(content)}
 	}
 }
 
-func riskReadToolCall[Out any](ctx context.Context, call func(principal Principal) (Out, error)) (*mcp.CallToolResult, Out, error) {
+func instrumentRiskMutation[Out any](reg *Registrar, tool string, handler mcp.ToolHandlerFor[map[string]any, Out]) mcp.ToolHandlerFor[map[string]any, Out] {
+	return func(ctx context.Context, request *mcp.CallToolRequest, input map[string]any) (*mcp.CallToolResult, Out, error) {
+		started := time.Now()
+		result, output, err := handler(ctx, request, input)
+		event := riskTelemetryEvent(tool, riskMutationTelemetryOutcome(err))
+		if err == nil {
+			event = riskMutationSuccessEvent(tool, output)
+		}
+		reg.riskTelemetry.Record(ctx, event, time.Since(started))
+		return result, output, err
+	}
+}
+
+func riskMutationTelemetryOutcome(err error) string {
+	if err == nil {
+		return "succeeded"
+	}
+	var refusal *ToolRefusalError
+	if errors.As(err, &refusal) && validRiskTelemetryOutcome(refusal.Code) {
+		return refusal.Code
+	}
+	var mutation *RiskMutationError
+	if errors.As(err, &mutation) && validRiskTelemetryOutcome(mutation.Code) {
+		return mutation.Code
+	}
+	return "unavailable"
+}
+
+func riskMutationSuccessEvent[Out any](tool string, output Out) RiskToolEvent {
+	event := riskTelemetryEvent(tool, "succeeded")
+	event.Replay = riskTelemetryFresh
+	switch typed := any(output).(type) {
+	case CreateRiskPolicyToolOutput:
+		event.Replay = riskMutationReplayState(typed.Receipt.Replayed, typed.MatchedExisting)
+	case UpdateRiskPolicyToolOutput:
+		event.Replay = riskMutationReplayState(typed.Receipt.Replayed, false)
+	case CreateRiskExclusionToolOutput:
+		event.Replay = riskMutationReplayState(typed.Receipt.Replayed, typed.MatchedExisting)
+		event.Reconciliation = typed.Reconciliation
+	case UpdateRiskExclusionToolOutput:
+		event.Replay = riskMutationReplayState(typed.Receipt.Replayed, false)
+		event.Reconciliation = typed.Reconciliation
+	}
+	return event
+}
+
+func riskMutationReplayState(replayed, matched bool) string {
+	switch {
+	case replayed:
+		return riskTelemetryReceiptReplay
+	case matched:
+		return riskTelemetryMatched
+	default:
+		return riskTelemetryFresh
+	}
+}
+
+func unavailableRiskReadTool(reg *Registrar, tool string) mcp.ToolHandlerFor[map[string]any, featureUnavailableResult] {
+	return func(ctx context.Context, _ *mcp.CallToolRequest, _ map[string]any) (*mcp.CallToolResult, featureUnavailableResult, error) {
+		started := time.Now()
+		result := featureUnavailableResult{Code: unavailableCode, Feature: "risk_reads", Message: "This is not switched on for your organization yet."}
+		reg.riskTelemetry.Record(ctx, riskTelemetryEvent(tool, result.Code), time.Since(started))
+		content, err := json.Marshal(result)
+		if err != nil {
+			return nil, featureUnavailableResult{}, fmt.Errorf("encode unavailable risk read result: %w", err)
+		}
+		return &mcp.CallToolResult{Content: []mcp.Content{&mcp.TextContent{Text: string(content)}}, IsError: true}, result, nil
+	}
+}
+
+func riskReadToolCall[Out any](ctx context.Context, telemetry RiskTelemetry, tool string, call func(principal Principal) (Out, error)) (*mcp.CallToolResult, Out, error) {
+	started := time.Now()
+	event := riskTelemetryEvent(tool, "unavailable")
+	defer func() { telemetry.Record(ctx, event, time.Since(started)) }()
+
 	var zero Out
 	principal, err := principalFromToolContext(ctx)
 	if err != nil {
@@ -186,6 +261,7 @@ func riskReadToolCall[Out any](ctx context.Context, call func(principal Principa
 	}
 	output, err := call(principal)
 	if err == nil {
+		event.Outcome = "succeeded"
 		return nil, output, nil
 	}
 	var refusal featureUnavailableResult
@@ -199,8 +275,13 @@ func riskReadToolCall[Out any](ctx context.Context, call func(principal Principa
 	default:
 		return nil, zero, err
 	}
+	event.Outcome = refusal.Code
+	if errors.Is(err, ErrUnavailable) {
+		event.Outcome = "unavailable"
+	}
 	content, marshalErr := json.Marshal(refusal)
 	if marshalErr != nil {
+		event.Outcome = "unavailable"
 		return nil, zero, fmt.Errorf("encode risk read refusal: %w", marshalErr)
 	}
 	return &mcp.CallToolResult{Content: []mcp.Content{&mcp.TextContent{Text: string(content)}}, IsError: true}, zero, nil
