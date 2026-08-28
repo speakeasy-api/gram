@@ -16,6 +16,7 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"slices"
 	"strings"
 	"time"
 
@@ -75,10 +76,11 @@ func (s *Service) serveResolvedMetaMCPEndpoint(
 
 	logger = logger.With(attr.SlogMetaMcpServerID(metaServer.ID.String()))
 
-	// The version in effect for this exchange is stable regardless of
-	// outcome — this surface always answers ServedMetaServer — so the header
-	// is stamped before the issuer gate and body parsing can bail out.
-	w.Header().Set(mcpversions.HTTPHeader, mcpversions.ServedMetaServer)
+	// Stamped provisionally with the surface's newest revision so responses
+	// that bail before body parsing still carry a version; once the request
+	// is parsed it is re-stamped with the revision in effect.
+	supportedMeta := mcpversions.SupportedMetaServer()
+	w.Header().Set(mcpversions.HTTPHeader, supportedMeta[len(supportedMeta)-1])
 
 	var gateTokens map[uuid.UUID]remotesessions.UpstreamToken
 	var gateToolSelection *toolfilter.SessionSelection
@@ -122,6 +124,16 @@ func (s *Service) serveResolvedMetaMCPEndpoint(
 		return oops.E(oops.CodeBadRequest, errInvalidJSONRPCVersion, "unsupported JSON-RPC version").LogError(ctx, logger)
 	}
 
+	resolution := mcpversions.Resolve(mcprequests.DeclaredProtocolVersion(r.Header.Get(mcpversions.HTTPHeader), req.Params), supportedMeta)
+	if req.Method == "initialize" {
+		// A conforming initialize declares nothing, so Resolve lands on the
+		// default; the negotiated answer is what actually governs the
+		// exchange (the write-back Resolution sanctions).
+		params, _, _ := parseInitializeParams(req.Params)
+		resolution.InEffect = mcpversions.Negotiate(params.ProtocolVersion, supportedMeta)
+	}
+	w.Header().Set(mcpversions.HTTPHeader, resolution.InEffect)
+
 	gate := &metaGateContext{
 		projectID:      mcpEndpoint.ProjectID,
 		organizationID: metaServer.OrganizationID,
@@ -133,14 +145,9 @@ func (s *Service) serveResolvedMetaMCPEndpoint(
 		userID:         "",
 		externalUserID: "",
 		apiKeyID:       "",
-		// The meta surface serves one revision; InEffect is fixed while
-		// Declared keeps what the request actually said, for telemetry.
-		// Member dispatch carries this InEffect verbatim even though the
-		// hosted set excludes it; nothing on the tools/call path reads it.
-		protocolVersion: mcpversions.Resolution{
-			Declared: mcprequests.DeclaredProtocolVersion(r.Header.Get(mcpversions.HTTPHeader), req.Params),
-			InEffect: mcpversions.ServedMetaServer,
-		},
+		// Member dispatch carries this InEffect verbatim; nothing on the
+		// tools/call path reads it (upstream dials pin their own version).
+		protocolVersion: resolution,
 	}
 	// Identity comes from the issuer gate alone: this surface runs no
 	// identity-auth ladder, so ungated meta endpoints serve anonymously —
@@ -224,7 +231,7 @@ func (s *Service) handleMetaMCPRequest(
 	case "ping":
 		return handlePing(ctx, logger, req.ID, serverInfoMetaServer)
 	case "initialize":
-		return s.handleMetaInitialize(ctx, logger, req)
+		return s.handleMetaInitialize(ctx, logger, req, gate.protocolVersion.InEffect)
 	case "server/discover":
 		return s.handleMetaServerDiscover(ctx, logger, req)
 	case "notifications/initialized", "notifications/cancelled":
@@ -251,10 +258,9 @@ const metaProtocolVersionMetaKey = "io.modelcontextprotocol/protocolVersion"
 // version declaration on the meta surface. A declaration may arrive in the
 // MCP-Protocol-Version header, the params-level
 // io.modelcontextprotocol/protocolVersion _meta key, or both; conflicting,
-// unparseable, or unserved declarations — anything but the served revision,
-// including older revisions this package recognizes, matching the set
-// server/discover advertises — produce deterministic structured errors
-// naming the served set. Only a genuinely absent declaration is
+// unparseable, or unserved declarations — anything outside the served set,
+// matching what server/discover advertises — produce deterministic
+// structured errors naming the served set. Only a genuinely absent declaration is
 // accepted, for backward compatibility with handshake-based clients per the
 // specification's versioning rules — a declaration that is present but
 // unsanitizable (or not a string at all) is a malformed value, not an
@@ -301,7 +307,7 @@ func validateMetaDeclaredProtocolVersion(req *rawRequest, headerValue string) er
 	}
 
 	declared := conv.Default(headerVersion, metaVersion)
-	if declared != "" && declared != mcpversions.ServedMetaServer {
+	if declared != "" && !slices.Contains(mcpversions.SupportedMetaServer(), declared) {
 		return unsupportedMetaProtocolVersionError(req, declared)
 	}
 
@@ -310,14 +316,14 @@ func validateMetaDeclaredProtocolVersion(req *rawRequest, headerValue string) er
 
 // unsupportedMetaProtocolVersionError is the structured error for a declared
 // protocol version this surface does not serve. The named set is the served
-// set — exactly [mcpversions.ServedMetaServer], matching what server/discover
-// advertises — not the wider set of recognized revisions. declared must be
-// sanitized (or a placeholder) — it is echoed to the client.
+// set — exactly [mcpversions.SupportedMetaServer], matching what
+// server/discover advertises — not the wider set of recognized revisions.
+// declared must be sanitized (or a placeholder) — it is echoed to the client.
 func unsupportedMetaProtocolVersionError(req *rawRequest, declared string) *oops.MCPError {
 	return &oops.MCPError{
 		ID:      req.ID,
 		Code:    oops.MCPCodeInvalidRequest,
-		Message: fmt.Sprintf("unsupported protocol version %q; supported versions: %s", declared, mcpversions.ServedMetaServer),
+		Message: fmt.Sprintf("unsupported protocol version %q; supported versions: %s", declared, strings.Join(mcpversions.SupportedMetaServer(), ", ")),
 	}
 }
 
@@ -325,21 +331,22 @@ func (s *Service) handleMetaInitialize(
 	ctx context.Context,
 	logger *slog.Logger,
 	req *rawRequest,
+	negotiated string,
 ) (json.RawMessage, error) {
-	// Parsed purely for telemetry: this surface answers ServedMetaServer
-	// unconditionally, and malformed params must not fail the handshake.
+	// Parsed purely for telemetry — negotiation already ran at gate
+	// construction — and malformed params must not fail the handshake.
 	params, _, err := parseInitializeParams(req.Params)
 	if err != nil {
 		logger.WarnContext(ctx, "failed to parse meta mcp initialize params", attr.SlogError(err))
 	}
 
-	recordMCPProtocolVersionSpan(ctx, params.ProtocolVersion, mcpversions.ServedMetaServer)
-	s.metrics.RecordMCPInitialize(ctx, params.ProtocolVersion, mcpversions.ServedMetaServer)
+	recordMCPProtocolVersionSpan(ctx, params.ProtocolVersion, negotiated)
+	s.metrics.RecordMCPInitialize(ctx, params.ProtocolVersion, negotiated)
 
 	result := &result[initializeResult]{
 		ID: req.ID,
 		Result: initializeResult{
-			ProtocolVersion: mcpversions.ServedMetaServer,
+			ProtocolVersion: negotiated,
 			Capabilities: map[string]json.RawMessage{
 				"tools": json.RawMessage("{}"),
 			},
@@ -363,7 +370,7 @@ func (s *Service) handleMetaServerDiscover(
 	result := &result[metamcp.DiscoverResult]{
 		ID: req.ID,
 		Result: metamcp.DiscoverResult{
-			ProtocolVersions: []string{mcpversions.ServedMetaServer},
+			ProtocolVersions: mcpversions.SupportedMetaServer(),
 			Capabilities: map[string]json.RawMessage{
 				"tools": json.RawMessage("{}"),
 			},

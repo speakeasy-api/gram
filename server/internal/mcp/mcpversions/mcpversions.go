@@ -57,12 +57,18 @@ var (
 	supportedPlatformToolset = []string{Version20241105, Version20250326, Version20250618, Version20251125}
 )
 
-// ServedMetaServer is the revision answered on meta-MCP-backed /mcp/{slug}
-// endpoints. That surface is greenfield with no installed client base, so it
-// serves only the current revision — per-request declarations rather than a
-// handshake — and does not participate in [Negotiate]/[Resolve]. Extending it
-// with an older-revision support set is separate, planned work.
-const ServedMetaServer = Version20260728
+// supportedMetaServer is the set negotiated on meta-MCP-backed /mcp/{slug}
+// endpoints. The ceiling is Version20260728 — the surface has served it since
+// birth — but the floor matches the hosted surface's: the clients are the
+// same installed base of ordinary MCP clients, and none of the mainstream
+// ones speak 2026-07-28 yet.
+var supportedMetaServer = []string{Version20241105, Version20250326, Version20250618, Version20251125, Version20260728}
+
+// SupportedMetaServer returns the revisions negotiated on meta-MCP-backed
+// /mcp/{slug} endpoints, oldest first.
+func SupportedMetaServer() []string {
+	return slices.Clone(supportedMetaServer)
+}
 
 // SupportedHostedToolset returns the revisions supported on /mcp/{slug} and on
 // the toolset-backed /x/mcp/{slug}, which share a handler, oldest first. This
