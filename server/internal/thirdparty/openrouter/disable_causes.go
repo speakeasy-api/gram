@@ -3,6 +3,8 @@ package openrouter
 import (
 	"context"
 	"fmt"
+
+	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter/repo"
 )
 
 type DisableCause string
@@ -36,6 +38,24 @@ type DisableCauseChange struct {
 
 func unchangedDisableCauseChange() DisableCauseChange {
 	return DisableCauseChange{CauseChanged: false, KeyAccessChanged: false}
+}
+
+// AcquireAPIKeyBillingTransactionLock serializes a caller-owned business
+// transaction with key replacement and upstream reconciliation. Callers that
+// fan out must acquire these locks in AllKeyTypes order before reading key rows.
+func AcquireAPIKeyBillingTransactionLock(ctx context.Context, db DBTX, orgID string, keyType KeyType) error {
+	keyType = keyType.OrDefault()
+	if err := keyType.Validate(); err != nil {
+		return fmt.Errorf("acquire OpenRouter API key billing transaction lock: %w", err)
+	}
+
+	if err := repo.New(db).AcquireOpenRouterBillingLock(ctx, repo.AcquireOpenRouterBillingLockParams{
+		OrganizationID: orgID,
+		KeyType:        string(keyType),
+	}); err != nil {
+		return fmt.Errorf("acquire OpenRouter %s key billing transaction lock: %w", keyType, err)
+	}
+	return nil
 }
 
 // EffectiveDisabled preserves legacy access for rows that have not been

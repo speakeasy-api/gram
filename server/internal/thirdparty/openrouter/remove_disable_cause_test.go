@@ -169,6 +169,12 @@ func TestAddDisableCauseReconcilesUpstreamAfterRolledBackFinalRemoval(t *testing
 	require.True(t, row.Disabled)
 }
 
+func TestDevelopmentReconcileAPIKeyDisabledIsSafe(t *testing.T) {
+	t.Parallel()
+
+	require.NoError(t, NewDevelopment("local-key").ReconcileAPIKeyDisabled(t.Context(), "org-local", KeyTypeChat))
+}
+
 func TestDisableCauseWithDBUsesCallerLockedConnection(t *testing.T) {
 	t.Parallel()
 

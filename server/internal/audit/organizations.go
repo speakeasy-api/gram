@@ -510,6 +510,7 @@ type LogOrganizationEnterpriseTrialDemotedEvent struct {
 
 	PreviousAccountType string
 	TrialEndsAt         time.Time
+	KeyAccessChanged    bool
 }
 
 func (l *Logger) LogOrganizationEnterpriseTrialDemoted(ctx context.Context, dbtx repo.DBTX, event LogOrganizationEnterpriseTrialDemotedEvent) error {
@@ -518,6 +519,7 @@ func (l *Logger) LogOrganizationEnterpriseTrialDemoted(ctx context.Context, dbtx
 	metadata, err := marshalAuditPayload(map[string]any{
 		"previous_account_type": event.PreviousAccountType,
 		"trial_ends_at":         event.TrialEndsAt,
+		"key_access_changed":    event.KeyAccessChanged,
 	})
 	if err != nil {
 		return fmt.Errorf("marshal %s metadata: %w", action, err)
