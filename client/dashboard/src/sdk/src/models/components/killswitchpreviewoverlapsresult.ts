@@ -13,6 +13,7 @@ import {
 
 export type KillswitchPreviewOverlapsResult = {
   overlaps: Array<KillswitchOverlap>;
+  truncated: boolean;
 };
 
 /** @internal */
@@ -21,6 +22,7 @@ export const KillswitchPreviewOverlapsResult$inboundSchema: z.ZodMiniType<
   unknown
 > = z.object({
   overlaps: z.array(KillswitchOverlap$inboundSchema),
+  truncated: z.boolean(),
 });
 
 export function killswitchPreviewOverlapsResultFromJSON(

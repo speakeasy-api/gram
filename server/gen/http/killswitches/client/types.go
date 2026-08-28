@@ -118,12 +118,14 @@ type EditResponseBody struct {
 type LiftResponseBody struct {
 	Result            *KillswitchMutationReceiptResponseBody `form:"result,omitempty" json:"result,omitempty" xml:"result,omitempty"`
 	RemainingOverlaps []*KillswitchOverlapResponseBody       `form:"remaining_overlaps,omitempty" json:"remaining_overlaps,omitempty" xml:"remaining_overlaps,omitempty"`
+	Truncated         *bool                                  `form:"truncated,omitempty" json:"truncated,omitempty" xml:"truncated,omitempty"`
 }
 
 // PreviewOverlapsResponseBody is the type of the "killswitches" service
 // "previewOverlaps" endpoint HTTP response body.
 type PreviewOverlapsResponseBody struct {
-	Overlaps []*KillswitchOverlapResponseBody `form:"overlaps,omitempty" json:"overlaps,omitempty" xml:"overlaps,omitempty"`
+	Overlaps  []*KillswitchOverlapResponseBody `form:"overlaps,omitempty" json:"overlaps,omitempty" xml:"overlaps,omitempty"`
+	Truncated *bool                            `form:"truncated,omitempty" json:"truncated,omitempty" xml:"truncated,omitempty"`
 }
 
 // BatchUserBadgesResponseBody is the type of the "killswitches" service
@@ -3049,7 +3051,9 @@ func NewEditVersionConflict(body *EditVersionConflictResponseBody) *killswitches
 // NewLiftKillswitchLiftResultOK builds a "killswitches" service "lift"
 // endpoint result from a HTTP "OK" response.
 func NewLiftKillswitchLiftResultOK(body *LiftResponseBody) *killswitches.KillswitchLiftResult {
-	v := &killswitches.KillswitchLiftResult{}
+	v := &killswitches.KillswitchLiftResult{
+		Truncated: *body.Truncated,
+	}
 	v.Result = unmarshalKillswitchMutationReceiptResponseBodyToKillswitchesKillswitchMutationReceipt(body.Result)
 	v.RemainingOverlaps = make([]*killswitches.KillswitchOverlap, len(body.RemainingOverlaps))
 	for i, val := range body.RemainingOverlaps {
@@ -3235,7 +3239,9 @@ func NewLiftVersionConflict(body *LiftVersionConflictResponseBody) *killswitches
 // NewPreviewOverlapsKillswitchPreviewOverlapsResultOK builds a "killswitches"
 // service "previewOverlaps" endpoint result from a HTTP "OK" response.
 func NewPreviewOverlapsKillswitchPreviewOverlapsResultOK(body *PreviewOverlapsResponseBody) *killswitches.KillswitchPreviewOverlapsResult {
-	v := &killswitches.KillswitchPreviewOverlapsResult{}
+	v := &killswitches.KillswitchPreviewOverlapsResult{
+		Truncated: *body.Truncated,
+	}
 	v.Overlaps = make([]*killswitches.KillswitchOverlap, len(body.Overlaps))
 	for i, val := range body.Overlaps {
 		if val == nil {
@@ -3734,10 +3740,16 @@ func ValidateLiftResponseBody(body *LiftResponseBody) (err error) {
 	if body.RemainingOverlaps == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("remaining_overlaps", "body"))
 	}
+	if body.Truncated == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("truncated", "body"))
+	}
 	if body.Result != nil {
 		if err2 := ValidateKillswitchMutationReceiptResponseBody(body.Result); err2 != nil {
 			err = goa.MergeErrors(err, err2)
 		}
+	}
+	if len(body.RemainingOverlaps) > 100 {
+		err = goa.MergeErrors(err, goa.InvalidLengthError("body.remaining_overlaps", body.RemainingOverlaps, len(body.RemainingOverlaps), 100, false))
 	}
 	for _, e := range body.RemainingOverlaps {
 		if e != nil {
@@ -3754,6 +3766,12 @@ func ValidateLiftResponseBody(body *LiftResponseBody) (err error) {
 func ValidatePreviewOverlapsResponseBody(body *PreviewOverlapsResponseBody) (err error) {
 	if body.Overlaps == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("overlaps", "body"))
+	}
+	if body.Truncated == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("truncated", "body"))
+	}
+	if len(body.Overlaps) > 100 {
+		err = goa.MergeErrors(err, goa.InvalidLengthError("body.overlaps", body.Overlaps, len(body.Overlaps), 100, false))
 	}
 	for _, e := range body.Overlaps {
 		if e != nil {

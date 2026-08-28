@@ -315,11 +315,11 @@ func (s *Service) Lift(ctx context.Context, payload *gen.LiftPayload) (*gen.Kill
 	if err != nil {
 		return nil, err
 	}
-	overlaps, err := s.overlaps(ctx, organizationID, string(current.PrincipalKey), current.ResourceScope, stringsFrom(current.SelectedResourceKeys), current.StartsAt, current.ExpiresAt, current.ID)
+	overlaps, truncated, err := s.overlaps(ctx, organizationID, string(current.PrincipalKey), current.ResourceScope, stringsFrom(current.SelectedResourceKeys), current.StartsAt, current.ExpiresAt, current.ID)
 	if err != nil {
 		return nil, err
 	}
-	return &gen.KillswitchLiftResult{Result: mutationResult(result), RemainingOverlaps: overlaps}, nil
+	return &gen.KillswitchLiftResult{Result: mutationResult(result), RemainingOverlaps: overlaps, Truncated: truncated}, nil
 }
 
 func (s *Service) PreviewOverlaps(ctx context.Context, payload *gen.PreviewOverlapsPayload) (*gen.KillswitchPreviewOverlapsResult, error) {
@@ -360,11 +360,11 @@ func (s *Service) PreviewOverlaps(ctx context.Context, payload *gen.PreviewOverl
 		}
 		exclude = current.ID
 	}
-	overlaps, err := s.overlaps(ctx, organizationID, userID, scope, selected, startsAt, endsAt, exclude)
+	overlaps, truncated, err := s.overlaps(ctx, organizationID, userID, scope, selected, startsAt, endsAt, exclude)
 	if err != nil {
 		return nil, err
 	}
-	return &gen.KillswitchPreviewOverlapsResult{Overlaps: overlaps}, nil
+	return &gen.KillswitchPreviewOverlapsResult{Overlaps: overlaps, Truncated: truncated}, nil
 }
 
 func (s *Service) BatchUserBadges(ctx context.Context, payload *gen.BatchUserBadgesPayload) (*gen.KillswitchBatchUserBadgesResult, error) {
@@ -566,12 +566,12 @@ func (s *Service) previewSchedule(ctx context.Context, schedule *gen.KillswitchS
 	return start, endsAt, nil
 }
 
-func (s *Service) overlaps(ctx context.Context, organizationID killswitches.OrganizationID, userID string, scope killswitches.ResourceScope, selected []string, startsAt time.Time, endsAt *time.Time, exclude killswitches.PrescriptionID) ([]*gen.KillswitchOverlap, error) {
+func (s *Service) overlaps(ctx context.Context, organizationID killswitches.OrganizationID, userID string, scope killswitches.ResourceScope, selected []string, startsAt time.Time, endsAt *time.Time, exclude killswitches.PrescriptionID) ([]*gen.KillswitchOverlap, bool, error) {
 	excludeID := uuid.NullUUID{}
 	if exclude != "" {
 		id, err := uuid.Parse(string(exclude))
 		if err != nil {
-			return nil, badRequest(errors.New("killswitch id is invalid"))
+			return nil, false, badRequest(errors.New("killswitch id is invalid"))
 		}
 		excludeID = uuid.NullUUID{UUID: id, Valid: true}
 	}
@@ -580,16 +580,17 @@ func (s *Service) overlaps(ctx context.Context, organizationID killswitches.Orga
 		ExcludeID: excludeID, DraftStartsAt: pgtype.Timestamptz{Time: startsAt, Valid: true}, DraftEndsAt: ptrTime(endsAt), DraftScope: string(scope), DraftSelectedResourceKeys: selected,
 	})
 	if err != nil {
-		return nil, mapError(fmt.Errorf("list killswitch overlaps: %w", err))
+		return nil, false, mapError(fmt.Errorf("list killswitch overlaps: %w", err))
 	}
-	if len(rows) > 100 {
+	truncated := len(rows) > 100
+	if truncated {
 		rows = rows[:100]
 	}
 	result := make([]*gen.KillswitchOverlap, len(rows))
 	for i, row := range rows {
 		result[i] = &gen.KillswitchOverlap{ID: row.ID.String(), Status: gen.KillswitchOverlapStatus(row.CustomerStatus), Scope: outputScope(row.ResourceScope, row.SelectedResourceKeys), Schedule: outputSchedule(row.StartsAt.Time, optionalTime(row.ExpiresAt), row.CustomerStart)}
 	}
-	return result, nil
+	return result, truncated, nil
 }
 
 func summary(id, userID string, version int64, status, start, scope string, selected []string, startsAt time.Time, endsAt *time.Time) *gen.KillswitchSummary {

@@ -120,12 +120,14 @@ type EditResponseBody struct {
 type LiftResponseBody struct {
 	Result            *KillswitchMutationReceiptResponseBody `form:"result" json:"result" xml:"result"`
 	RemainingOverlaps []*KillswitchOverlapResponseBody       `form:"remaining_overlaps" json:"remaining_overlaps" xml:"remaining_overlaps"`
+	Truncated         bool                                   `form:"truncated" json:"truncated" xml:"truncated"`
 }
 
 // PreviewOverlapsResponseBody is the type of the "killswitches" service
 // "previewOverlaps" endpoint HTTP response body.
 type PreviewOverlapsResponseBody struct {
-	Overlaps []*KillswitchOverlapResponseBody `form:"overlaps" json:"overlaps" xml:"overlaps"`
+	Overlaps  []*KillswitchOverlapResponseBody `form:"overlaps" json:"overlaps" xml:"overlaps"`
+	Truncated bool                             `form:"truncated" json:"truncated" xml:"truncated"`
 }
 
 // BatchUserBadgesResponseBody is the type of the "killswitches" service
@@ -2065,7 +2067,9 @@ func NewEditResponseBody(res *killswitches.KillswitchMutationReceipt) *EditRespo
 // NewLiftResponseBody builds the HTTP response body from the result of the
 // "lift" endpoint of the "killswitches" service.
 func NewLiftResponseBody(res *killswitches.KillswitchLiftResult) *LiftResponseBody {
-	body := &LiftResponseBody{}
+	body := &LiftResponseBody{
+		Truncated: res.Truncated,
+	}
 	if res.Result != nil {
 		body.Result = marshalKillswitchesKillswitchMutationReceiptToKillswitchMutationReceiptResponseBody(res.Result)
 	}
@@ -2087,7 +2091,9 @@ func NewLiftResponseBody(res *killswitches.KillswitchLiftResult) *LiftResponseBo
 // NewPreviewOverlapsResponseBody builds the HTTP response body from the result
 // of the "previewOverlaps" endpoint of the "killswitches" service.
 func NewPreviewOverlapsResponseBody(res *killswitches.KillswitchPreviewOverlapsResult) *PreviewOverlapsResponseBody {
-	body := &PreviewOverlapsResponseBody{}
+	body := &PreviewOverlapsResponseBody{
+		Truncated: res.Truncated,
+	}
 	if res.Overlaps != nil {
 		body.Overlaps = make([]*KillswitchOverlapResponseBody, len(res.Overlaps))
 		for i, val := range res.Overlaps {

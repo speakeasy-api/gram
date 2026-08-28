@@ -4,7 +4,7 @@
 
 import * as z from "zod/v4-mini";
 import { GramCore } from "../core.js";
-import { encodeSimple } from "../lib/encodings.js";
+import { encodeJSON, encodeSimple } from "../lib/encodings.js";
 import { matchStatusCode } from "../lib/http.js";
 import * as M from "../lib/matchers.js";
 import { compactMap } from "../lib/primitives.js";
@@ -13,9 +13,9 @@ import { RequestOptions } from "../lib/sdks.js";
 import { resolveSecurity } from "../lib/security.js";
 import { pathToFunc } from "../lib/url.js";
 import {
-  KillswitchListCapabilitiesResult,
-  KillswitchListCapabilitiesResult$inboundSchema,
-} from "../models/components/killswitchlistcapabilitiesresult.js";
+  KillswitchLiftResult,
+  KillswitchLiftResult$inboundSchema,
+} from "../models/components/killswitchliftresult.js";
 import { GramError } from "../models/errors/gramerror.js";
 import {
   ConnectionError,
@@ -24,6 +24,10 @@ import {
   RequestTimeoutError,
   UnexpectedClientError,
 } from "../models/errors/httpclienterrors.js";
+import {
+  KillswitchConflict,
+  KillswitchConflict$inboundSchema,
+} from "../models/errors/killswitchconflict.js";
 import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
 import {
@@ -31,24 +35,25 @@ import {
   ServiceError$inboundSchema,
 } from "../models/errors/serviceerror.js";
 import {
-  KillswitchesNumberListCapabilitiesRequest,
-  KillswitchesNumberListCapabilitiesRequest$outboundSchema,
-  KillswitchesNumberListCapabilitiesSecurity,
-} from "../models/operations/killswitchesnumberlistcapabilities.js";
+  KillswitchesLiftRequest,
+  KillswitchesLiftRequest$outboundSchema,
+  KillswitchesLiftSecurity,
+} from "../models/operations/killswitcheslift.js";
 import { APICall, APIPromise } from "../types/async.js";
 import { Result } from "../types/fp.js";
 
 /**
- * listCapabilities killswitches
+ * lift killswitches
  */
-export function killswitchesKillswitchesNumberListCapabilities(
+export function killswitchesLift(
   client: GramCore,
-  request?: KillswitchesNumberListCapabilitiesRequest | undefined,
-  security?: KillswitchesNumberListCapabilitiesSecurity | undefined,
+  security: KillswitchesLiftSecurity,
+  request: KillswitchesLiftRequest,
   options?: RequestOptions,
 ): APIPromise<
   Result<
-    KillswitchListCapabilitiesResult,
+    KillswitchLiftResult,
+    | KillswitchConflict
     | ServiceError
     | GramError
     | ResponseValidationError
@@ -62,21 +67,22 @@ export function killswitchesKillswitchesNumberListCapabilities(
 > {
   return new APIPromise($do(
     client,
-    request,
     security,
+    request,
     options,
   ));
 }
 
 async function $do(
   client: GramCore,
-  request?: KillswitchesNumberListCapabilitiesRequest | undefined,
-  security?: KillswitchesNumberListCapabilitiesSecurity | undefined,
+  security: KillswitchesLiftSecurity,
+  request: KillswitchesLiftRequest,
   options?: RequestOptions,
 ): Promise<
   [
     Result<
-      KillswitchListCapabilitiesResult,
+      KillswitchLiftResult,
+      | KillswitchConflict
       | ServiceError
       | GramError
       | ResponseValidationError
@@ -92,24 +98,23 @@ async function $do(
 > {
   const parsed = safeParse(
     request,
-    (value) =>
-      z.parse(
-        z.optional(KillswitchesNumberListCapabilitiesRequest$outboundSchema),
-        value,
-      ),
+    (value) => z.parse(KillswitchesLiftRequest$outboundSchema, value),
     "Input validation failed",
   );
   if (!parsed.ok) {
     return [parsed, { status: "invalid" }];
   }
   const payload = parsed.value;
-  const body = null;
+  const body = encodeJSON("body", payload.KillswitchLiftRequest, {
+    explode: true,
+  });
 
-  const path = pathToFunc("/rpc/killswitches.listCapabilities")();
+  const path = pathToFunc("/rpc/killswitches.lift")();
 
   const headers = new Headers(compactMap({
+    "Content-Type": "application/json",
     Accept: "application/json",
-    "Gram-Session": encodeSimple("Gram-Session", payload?.["Gram-Session"], {
+    "Gram-Session": encodeSimple("Gram-Session", payload["Gram-Session"], {
       explode: false,
       charEncoding: "none",
     }),
@@ -128,7 +133,7 @@ async function $do(
   const context = {
     options: client._options,
     baseURL: options?.serverURL ?? client._baseURL ?? "",
-    operationID: "killswitches#listCapabilities",
+    operationID: "killswitchesLift",
     oAuth2Scopes: null,
 
     resolvedSecurity: requestSecurity,
@@ -142,7 +147,7 @@ async function $do(
 
   const requestRes = client._createRequest(context, {
     security: requestSecurity,
-    method: "GET",
+    method: "POST",
     baseURL: options?.serverURL,
     path: path,
     headers: headers,
@@ -172,7 +177,8 @@ async function $do(
   };
 
   const [result] = await M.match<
-    KillswitchListCapabilitiesResult,
+    KillswitchLiftResult,
+    | KillswitchConflict
     | ServiceError
     | GramError
     | ResponseValidationError
@@ -183,7 +189,8 @@ async function $do(
     | UnexpectedClientError
     | SDKValidationError
   >(
-    M.json(200, KillswitchListCapabilitiesResult$inboundSchema),
+    M.json(200, KillswitchLiftResult$inboundSchema),
+    M.jsonErr(409, KillswitchConflict$inboundSchema),
     M.jsonErr([400, 401, 403, 404, 415, 422], ServiceError$inboundSchema),
     M.jsonErr([500, 502, 503], ServiceError$inboundSchema),
     M.fail("4XX"),

@@ -8,10 +8,10 @@ import {
   UseMutationResult,
 } from "@tanstack/react-query";
 import { GramCore } from "../core.js";
-import { killswitchesKillswitchesNumberLift } from "../funcs/killswitchesKillswitchesNumberLift.js";
+import { killswitchesCreate } from "../funcs/killswitchesCreate.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
-import { KillswitchLiftResult } from "../models/components/killswitchliftresult.js";
+import { KillswitchMutationReceipt } from "../models/components/killswitchmutationreceipt.js";
 import { GramError } from "../models/errors/gramerror.js";
 import {
   ConnectionError,
@@ -25,23 +25,22 @@ import { ResponseValidationError } from "../models/errors/responsevalidationerro
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
 import { ServiceError } from "../models/errors/serviceerror.js";
 import {
-  KillswitchesNumberLiftRequest,
-  KillswitchesNumberLiftSecurity,
-} from "../models/operations/killswitchesnumberlift.js";
+  KillswitchesCreateRequest,
+  KillswitchesCreateSecurity,
+} from "../models/operations/killswitchescreate.js";
 import { unwrapAsync } from "../types/fp.js";
 import { useGramContext } from "./_context.js";
 import { MutationHookOptions } from "./_types.js";
 
-export type KillswitchesKillswitchesNumberLiftMutationVariables = {
-  request: KillswitchesNumberLiftRequest;
-  security?: KillswitchesNumberLiftSecurity | undefined;
+export type KillswitchesCreateMutationVariables = {
+  security: KillswitchesCreateSecurity;
+  request: KillswitchesCreateRequest;
   options?: RequestOptions;
 };
 
-export type KillswitchesKillswitchesNumberLiftMutationData =
-  KillswitchLiftResult;
+export type KillswitchesCreateMutationData = KillswitchMutationReceipt;
 
-export type KillswitchesKillswitchesNumberLiftMutationError =
+export type KillswitchesCreateMutationError =
   | KillswitchConflict
   | ServiceError
   | GramError
@@ -54,46 +53,46 @@ export type KillswitchesKillswitchesNumberLiftMutationError =
   | SDKValidationError;
 
 /**
- * lift killswitches
+ * create killswitches
  */
-export function useKillswitchesKillswitchesNumberLiftMutation(
+export function useKillswitchesCreateMutation(
   options?: MutationHookOptions<
-    KillswitchesKillswitchesNumberLiftMutationData,
-    KillswitchesKillswitchesNumberLiftMutationError,
-    KillswitchesKillswitchesNumberLiftMutationVariables
+    KillswitchesCreateMutationData,
+    KillswitchesCreateMutationError,
+    KillswitchesCreateMutationVariables
   >,
 ): UseMutationResult<
-  KillswitchesKillswitchesNumberLiftMutationData,
-  KillswitchesKillswitchesNumberLiftMutationError,
-  KillswitchesKillswitchesNumberLiftMutationVariables
+  KillswitchesCreateMutationData,
+  KillswitchesCreateMutationError,
+  KillswitchesCreateMutationVariables
 > {
   const client = useGramContext();
   return useMutation({
-    ...buildKillswitchesKillswitchesNumberLiftMutation(client, options),
+    ...buildKillswitchesCreateMutation(client, options),
     ...options,
   });
 }
 
-export function mutationKeyKillswitchesKillswitchesNumberLift(): MutationKey {
-  return ["@gram/client", "killswitches", "killswitchesNumberLift"];
+export function mutationKeyKillswitchesCreate(): MutationKey {
+  return ["@gram/client", "killswitches", "create"];
 }
 
-export function buildKillswitchesKillswitchesNumberLiftMutation(
+export function buildKillswitchesCreateMutation(
   client$: GramCore,
   hookOptions?: RequestOptions,
 ): {
   mutationKey: MutationKey;
   mutationFn: (
-    variables: KillswitchesKillswitchesNumberLiftMutationVariables,
-  ) => Promise<KillswitchesKillswitchesNumberLiftMutationData>;
+    variables: KillswitchesCreateMutationVariables,
+  ) => Promise<KillswitchesCreateMutationData>;
 } {
   return {
-    mutationKey: mutationKeyKillswitchesKillswitchesNumberLift(),
-    mutationFn: function killswitchesKillswitchesNumberLiftMutationFn({
-      request,
+    mutationKey: mutationKeyKillswitchesCreate(),
+    mutationFn: function killswitchesCreateMutationFn({
       security,
+      request,
       options,
-    }): Promise<KillswitchesKillswitchesNumberLiftMutationData> {
+    }): Promise<KillswitchesCreateMutationData> {
       const mergedOptions = {
         ...hookOptions,
         ...options,
@@ -106,10 +105,10 @@ export function buildKillswitchesKillswitchesNumberLiftMutation(
           ),
         },
       };
-      return unwrapAsync(killswitchesKillswitchesNumberLift(
+      return unwrapAsync(killswitchesCreate(
         client$,
-        request,
         security,
+        request,
         mergedOptions,
       ));
     },

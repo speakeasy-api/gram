@@ -19,6 +19,7 @@ import {
 export type KillswitchLiftResult = {
   remainingOverlaps: Array<KillswitchOverlap>;
   result: KillswitchMutationReceipt;
+  truncated: boolean;
 };
 
 /** @internal */
@@ -29,6 +30,7 @@ export const KillswitchLiftResult$inboundSchema: z.ZodMiniType<
   z.object({
     remaining_overlaps: z.array(KillswitchOverlap$inboundSchema),
     result: KillswitchMutationReceipt$inboundSchema,
+    truncated: z.boolean(),
   }),
   z.transform((v) => {
     return remap$(v, {

@@ -181,14 +181,16 @@ var ListResult = Type("KillswitchListResult", func() {
 })
 
 var LiftResult = Type("KillswitchLiftResult", func() {
-	Required("result", "remaining_overlaps")
+	Required("result", "remaining_overlaps", "truncated")
 	Attribute("result", MutationResult)
-	Attribute("remaining_overlaps", ArrayOf(Overlap))
+	Attribute("remaining_overlaps", ArrayOf(Overlap), func() { MaxLength(100) })
+	Attribute("truncated", Boolean)
 })
 
 var PreviewOverlapsResult = Type("KillswitchPreviewOverlapsResult", func() {
-	Required("overlaps")
-	Attribute("overlaps", ArrayOf(Overlap))
+	Required("overlaps", "truncated")
+	Attribute("overlaps", ArrayOf(Overlap), func() { MaxLength(100) })
+	Attribute("truncated", Boolean)
 })
 
 var BatchUserBadgesResult = Type("KillswitchBatchUserBadgesResult", func() {
@@ -240,18 +242,21 @@ var _ = Service("killswitches", func() {
 	})
 
 	Method("listCapabilities", func() {
+		Meta("openapi:extension:x-speakeasy-name-override", "listCapabilities")
 		Payload(func() { security.SessionPayload() })
 		Result(ListCapabilitiesResult)
 		HTTP(func() { GET("/rpc/killswitches.listCapabilities"); security.SessionHeader(); Response(StatusOK) })
 	})
 
 	Method("listMCPServers", func() {
+		Meta("openapi:extension:x-speakeasy-name-override", "listMCPServers")
 		Payload(func() { security.SessionPayload() })
 		Result(ListMCPServersResult)
 		HTTP(func() { GET("/rpc/killswitches.listMCPServers"); security.SessionHeader(); Response(StatusOK) })
 	})
 
 	Method("list", func() {
+		Meta("openapi:extension:x-speakeasy-name-override", "list")
 		Payload(func() {
 			security.SessionPayload()
 			Attribute("capability_key", CapabilityKey)
@@ -275,6 +280,7 @@ var _ = Service("killswitches", func() {
 	})
 
 	Method("get", func() {
+		Meta("openapi:extension:x-speakeasy-name-override", "get")
 		Payload(func() {
 			security.SessionPayload()
 			Attribute("id", String, func() { Format(FormatUUID) })
@@ -285,6 +291,7 @@ var _ = Service("killswitches", func() {
 	})
 
 	Method("create", func() {
+		Meta("openapi:extension:x-speakeasy-name-override", "create")
 		declareOperationConflict()
 		Payload(func() {
 			security.SessionPayload()
@@ -301,6 +308,7 @@ var _ = Service("killswitches", func() {
 	})
 
 	Method("edit", func() {
+		Meta("openapi:extension:x-speakeasy-name-override", "edit")
 		declareMutationErrors()
 		Payload(func() {
 			security.SessionPayload()
@@ -318,6 +326,7 @@ var _ = Service("killswitches", func() {
 	})
 
 	Method("lift", func() {
+		Meta("openapi:extension:x-speakeasy-name-override", "lift")
 		declareMutationErrors()
 		Payload(func() {
 			security.SessionPayload()
@@ -335,6 +344,7 @@ var _ = Service("killswitches", func() {
 	})
 
 	Method("previewOverlaps", func() {
+		Meta("openapi:extension:x-speakeasy-name-override", "previewOverlaps")
 		Payload(func() {
 			security.SessionPayload()
 			Extend(PreviewOverlapsForm)
@@ -349,6 +359,7 @@ var _ = Service("killswitches", func() {
 	})
 
 	Method("batchUserBadges", func() {
+		Meta("openapi:extension:x-speakeasy-name-override", "batchUserBadges")
 		Payload(func() {
 			security.SessionPayload()
 			Extend(BatchUserBadgesForm)

@@ -20,11 +20,11 @@ import {
 } from "../components/killswitchliststatus.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
-export type KillswitchesNumberListSecurity = {
-  sessionHeaderGramSession?: string | undefined;
+export type KillswitchesListSecurity = {
+  sessionHeaderGramSession: string;
 };
 
-export type KillswitchesNumberListRequest = {
+export type KillswitchesListRequest = {
   capabilityKey?: KillswitchCapabilityKey | undefined;
   userId?: string | undefined;
   status?: KillswitchListStatus | undefined;
@@ -36,22 +36,22 @@ export type KillswitchesNumberListRequest = {
   gramSession?: string | undefined;
 };
 
-export type KillswitchesNumberListResponse = {
+export type KillswitchesListResponse = {
   result: KillswitchListResult;
 };
 
 /** @internal */
-export type KillswitchesNumberListSecurity$Outbound = {
-  "session_header_Gram-Session"?: string | undefined;
+export type KillswitchesListSecurity$Outbound = {
+  "session_header_Gram-Session": string;
 };
 
 /** @internal */
-export const KillswitchesNumberListSecurity$outboundSchema: z.ZodMiniType<
-  KillswitchesNumberListSecurity$Outbound,
-  KillswitchesNumberListSecurity
+export const KillswitchesListSecurity$outboundSchema: z.ZodMiniType<
+  KillswitchesListSecurity$Outbound,
+  KillswitchesListSecurity
 > = z.pipe(
   z.object({
-    sessionHeaderGramSession: z.optional(z.string()),
+    sessionHeaderGramSession: z.string(),
   }),
   z.transform((v) => {
     return remap$(v, {
@@ -60,18 +60,16 @@ export const KillswitchesNumberListSecurity$outboundSchema: z.ZodMiniType<
   }),
 );
 
-export function killswitchesNumberListSecurityToJSON(
-  killswitchesNumberListSecurity: KillswitchesNumberListSecurity,
+export function killswitchesListSecurityToJSON(
+  killswitchesListSecurity: KillswitchesListSecurity,
 ): string {
   return JSON.stringify(
-    KillswitchesNumberListSecurity$outboundSchema.parse(
-      killswitchesNumberListSecurity,
-    ),
+    KillswitchesListSecurity$outboundSchema.parse(killswitchesListSecurity),
   );
 }
 
 /** @internal */
-export type KillswitchesNumberListRequest$Outbound = {
+export type KillswitchesListRequest$Outbound = {
   capability_key?: string | undefined;
   user_id?: string | undefined;
   status?: string | undefined;
@@ -81,9 +79,9 @@ export type KillswitchesNumberListRequest$Outbound = {
 };
 
 /** @internal */
-export const KillswitchesNumberListRequest$outboundSchema: z.ZodMiniType<
-  KillswitchesNumberListRequest$Outbound,
-  KillswitchesNumberListRequest
+export const KillswitchesListRequest$outboundSchema: z.ZodMiniType<
+  KillswitchesListRequest$Outbound,
+  KillswitchesListRequest
 > = z.pipe(
   z.object({
     capabilityKey: z.optional(KillswitchCapabilityKey$outboundSchema),
@@ -102,19 +100,17 @@ export const KillswitchesNumberListRequest$outboundSchema: z.ZodMiniType<
   }),
 );
 
-export function killswitchesNumberListRequestToJSON(
-  killswitchesNumberListRequest: KillswitchesNumberListRequest,
+export function killswitchesListRequestToJSON(
+  killswitchesListRequest: KillswitchesListRequest,
 ): string {
   return JSON.stringify(
-    KillswitchesNumberListRequest$outboundSchema.parse(
-      killswitchesNumberListRequest,
-    ),
+    KillswitchesListRequest$outboundSchema.parse(killswitchesListRequest),
   );
 }
 
 /** @internal */
-export const KillswitchesNumberListResponse$inboundSchema: z.ZodMiniType<
-  KillswitchesNumberListResponse,
+export const KillswitchesListResponse$inboundSchema: z.ZodMiniType<
+  KillswitchesListResponse,
   unknown
 > = z.pipe(
   z.object({
@@ -127,12 +123,12 @@ export const KillswitchesNumberListResponse$inboundSchema: z.ZodMiniType<
   }),
 );
 
-export function killswitchesNumberListResponseFromJSON(
+export function killswitchesListResponseFromJSON(
   jsonString: string,
-): SafeParseResult<KillswitchesNumberListResponse, SDKValidationError> {
+): SafeParseResult<KillswitchesListResponse, SDKValidationError> {
   return safeParse(
     jsonString,
-    (x) => KillswitchesNumberListResponse$inboundSchema.parse(JSON.parse(x)),
-    `Failed to parse 'KillswitchesNumberListResponse' from JSON`,
+    (x) => KillswitchesListResponse$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'KillswitchesListResponse' from JSON`,
   );
 }

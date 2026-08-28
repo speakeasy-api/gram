@@ -15,6 +15,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 	goa "goa.design/goa/v3/pkg"
+	"gopkg.in/yaml.v3"
 
 	srv "github.com/speakeasy-api/gram/server/gen/http/killswitches/server"
 	gen "github.com/speakeasy-api/gram/server/gen/killswitches"
@@ -83,6 +84,7 @@ func TestCustomerKillswitchLifecycleAndReadModels(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.Len(t, overlaps.Overlaps, 1)
+	require.False(t, overlaps.Truncated)
 
 	_, err = db.Exec(t.Context(), `UPDATE organization_user_relationships SET deleted_at = clock_timestamp() WHERE organization_id = $1 AND user_id = $2`, orgID, userID)
 	require.NoError(t, err)
@@ -94,6 +96,36 @@ func TestCustomerKillswitchLifecycleAndReadModels(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, created.Version+1, lifted.Result.Version)
 	require.Empty(t, lifted.RemainingOverlaps)
+	require.False(t, lifted.Truncated)
+}
+
+func TestCustomerKillswitchOverlapResultsReportTruncation(t *testing.T) {
+	t.Parallel()
+	service, _, orgID, userID, _ := newIntegrationService(t)
+	ctx := customerContext(t, orgID, userID)
+	created := make([]*gen.KillswitchMutationReceipt, 102)
+	for i := range created {
+		result, err := service.Create(ctx, &gen.CreatePayload{
+			OperationID: uuid.NewString(), CapabilityKey: CapabilityMCPToolCalls, UserID: userID,
+			Scope: &gen.KillswitchScope{Type: "all_servers"}, Schedule: &gen.KillswitchSchedule{Start: "now", End: "until_lifted"},
+			ExternalNote: fmt.Sprintf("message %d", i), InternalNote: fmt.Sprintf("context %d", i),
+		})
+		require.NoError(t, err)
+		created[i] = result
+	}
+
+	preview, err := service.PreviewOverlaps(ctx, &gen.PreviewOverlapsPayload{
+		CapabilityKey: CapabilityMCPToolCalls, UserID: userID,
+		Scope: &gen.KillswitchScope{Type: "all_servers"}, Schedule: &gen.KillswitchSchedule{Start: "now", End: "until_lifted"},
+	})
+	require.NoError(t, err)
+	require.Len(t, preview.Overlaps, 100)
+	require.True(t, preview.Truncated)
+
+	lifted, err := service.Lift(ctx, &gen.LiftPayload{OperationID: uuid.NewString(), ID: created[0].ID, ExpectedVersion: created[0].Version})
+	require.NoError(t, err)
+	require.Len(t, lifted.RemainingOverlaps, 100)
+	require.True(t, lifted.Truncated)
 }
 
 func TestCustomerKillswitchScheduleOverlapPaginationAndStaleEdit(t *testing.T) {
@@ -351,6 +383,72 @@ func TestOpenAPIConflictContractIsMutationOnly(t *testing.T) {
 	component := spec[componentStart:]
 	require.Contains(t, component, "operation_conflict")
 	require.Contains(t, component, "version_conflict")
+}
+
+func TestPublishedKillswitchOperationContractIsStable(t *testing.T) {
+	t.Parallel()
+	data, err := os.ReadFile("../../../.speakeasy/out.openapi.yaml")
+	require.NoError(t, err)
+	var spec struct {
+		Paths map[string]map[string]struct {
+			OperationID  string                `yaml:"operationId"`
+			Security     []map[string][]string `yaml:"security"`
+			NameOverride string                `yaml:"x-speakeasy-name-override"`
+		} `yaml:"paths"`
+		Components struct {
+			Schemas map[string]struct {
+				Required   []string `yaml:"required"`
+				Properties map[string]struct {
+					Type     string `yaml:"type"`
+					MaxItems int    `yaml:"maxItems"`
+				} `yaml:"properties"`
+			} `yaml:"schemas"`
+		} `yaml:"components"`
+	}
+	require.NoError(t, yaml.Unmarshal(data, &spec))
+
+	methods := map[string]string{
+		"batchUserBadges":  "post",
+		"create":           "post",
+		"edit":             "post",
+		"get":              "get",
+		"lift":             "post",
+		"list":             "get",
+		"listCapabilities": "get",
+		"listMCPServers":   "get",
+		"previewOverlaps":  "post",
+	}
+	for name, method := range methods {
+		operation := spec.Paths["/rpc/killswitches."+name][method]
+		require.Equal(t, []map[string][]string{{"session_header_Gram-Session": []string{}}}, operation.Security, name)
+		require.Equal(t, name, operation.NameOverride, name)
+		require.Equal(t, "killswitches"+strings.ToUpper(name[:1])+name[1:], operation.OperationID, name)
+
+		exportedName := "Killswitches" + strings.ToUpper(name[:1]) + name[1:]
+		base := "../../../client/dashboard/src/sdk/src/"
+		operationFile := base + "models/operations/" + strings.ToLower(exportedName) + ".ts"
+		operationSource, readErr := os.ReadFile(operationFile)
+		require.NoError(t, readErr)
+		require.Contains(t, string(operationSource), "export type "+exportedName+"Request", operationFile)
+		require.NotContains(t, string(operationSource), "Number", operationFile)
+
+		functionName := "killswitches" + strings.ToUpper(name[:1]) + name[1:]
+		functionFile := base + "funcs/" + functionName + ".ts"
+		functionSource, readErr := os.ReadFile(functionFile)
+		require.NoError(t, readErr)
+		require.Contains(t, string(functionSource), "export function "+functionName, functionFile)
+		require.NotContains(t, string(functionSource), "Number", functionFile)
+	}
+
+	for schema, arrayField := range map[string]string{
+		"KillswitchLiftResult":            "remaining_overlaps",
+		"KillswitchPreviewOverlapsResult": "overlaps",
+	} {
+		contract := spec.Components.Schemas[schema]
+		require.Contains(t, contract.Required, "truncated", schema)
+		require.Equal(t, "boolean", contract.Properties["truncated"].Type, schema)
+		require.Equal(t, 100, contract.Properties[arrayField].MaxItems, schema)
+	}
 }
 
 func TestGeneratedSDKContractUsesStableTaggedUnions(t *testing.T) {

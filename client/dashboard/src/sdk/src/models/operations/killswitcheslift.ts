@@ -10,11 +10,11 @@ import {
   KillswitchLiftRequest$outboundSchema,
 } from "../components/killswitchliftrequest.js";
 
-export type KillswitchesNumberLiftSecurity = {
-  sessionHeaderGramSession?: string | undefined;
+export type KillswitchesLiftSecurity = {
+  sessionHeaderGramSession: string;
 };
 
-export type KillswitchesNumberLiftRequest = {
+export type KillswitchesLiftRequest = {
   /**
    * Session header
    */
@@ -23,17 +23,17 @@ export type KillswitchesNumberLiftRequest = {
 };
 
 /** @internal */
-export type KillswitchesNumberLiftSecurity$Outbound = {
-  "session_header_Gram-Session"?: string | undefined;
+export type KillswitchesLiftSecurity$Outbound = {
+  "session_header_Gram-Session": string;
 };
 
 /** @internal */
-export const KillswitchesNumberLiftSecurity$outboundSchema: z.ZodMiniType<
-  KillswitchesNumberLiftSecurity$Outbound,
-  KillswitchesNumberLiftSecurity
+export const KillswitchesLiftSecurity$outboundSchema: z.ZodMiniType<
+  KillswitchesLiftSecurity$Outbound,
+  KillswitchesLiftSecurity
 > = z.pipe(
   z.object({
-    sessionHeaderGramSession: z.optional(z.string()),
+    sessionHeaderGramSession: z.string(),
   }),
   z.transform((v) => {
     return remap$(v, {
@@ -42,26 +42,24 @@ export const KillswitchesNumberLiftSecurity$outboundSchema: z.ZodMiniType<
   }),
 );
 
-export function killswitchesNumberLiftSecurityToJSON(
-  killswitchesNumberLiftSecurity: KillswitchesNumberLiftSecurity,
+export function killswitchesLiftSecurityToJSON(
+  killswitchesLiftSecurity: KillswitchesLiftSecurity,
 ): string {
   return JSON.stringify(
-    KillswitchesNumberLiftSecurity$outboundSchema.parse(
-      killswitchesNumberLiftSecurity,
-    ),
+    KillswitchesLiftSecurity$outboundSchema.parse(killswitchesLiftSecurity),
   );
 }
 
 /** @internal */
-export type KillswitchesNumberLiftRequest$Outbound = {
+export type KillswitchesLiftRequest$Outbound = {
   "Gram-Session"?: string | undefined;
   KillswitchLiftRequest: KillswitchLiftRequest$Outbound;
 };
 
 /** @internal */
-export const KillswitchesNumberLiftRequest$outboundSchema: z.ZodMiniType<
-  KillswitchesNumberLiftRequest$Outbound,
-  KillswitchesNumberLiftRequest
+export const KillswitchesLiftRequest$outboundSchema: z.ZodMiniType<
+  KillswitchesLiftRequest$Outbound,
+  KillswitchesLiftRequest
 > = z.pipe(
   z.object({
     gramSession: z.optional(z.string()),
@@ -75,12 +73,10 @@ export const KillswitchesNumberLiftRequest$outboundSchema: z.ZodMiniType<
   }),
 );
 
-export function killswitchesNumberLiftRequestToJSON(
-  killswitchesNumberLiftRequest: KillswitchesNumberLiftRequest,
+export function killswitchesLiftRequestToJSON(
+  killswitchesLiftRequest: KillswitchesLiftRequest,
 ): string {
   return JSON.stringify(
-    KillswitchesNumberLiftRequest$outboundSchema.parse(
-      killswitchesNumberLiftRequest,
-    ),
+    KillswitchesLiftRequest$outboundSchema.parse(killswitchesLiftRequest),
   );
 }

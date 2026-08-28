@@ -224,6 +224,71 @@ actions:
   - target: $.paths..security
     update:
       - {}
+  # Killswitch management requires an ordinary live customer session. Remove
+  # the anonymous fallback added above, then restore the one required scheme.
+  - target: $.paths["/rpc/killswitches.batchUserBadges"].post.security
+    remove: true
+  - target: $.paths["/rpc/killswitches.batchUserBadges"].post
+    update:
+      operationId: killswitchesBatchUserBadges
+      security:
+        - session_header_Gram-Session: []
+  - target: $.paths["/rpc/killswitches.create"].post.security
+    remove: true
+  - target: $.paths["/rpc/killswitches.create"].post
+    update:
+      operationId: killswitchesCreate
+      security:
+        - session_header_Gram-Session: []
+  - target: $.paths["/rpc/killswitches.edit"].post.security
+    remove: true
+  - target: $.paths["/rpc/killswitches.edit"].post
+    update:
+      operationId: killswitchesEdit
+      security:
+        - session_header_Gram-Session: []
+  - target: $.paths["/rpc/killswitches.get"].get.security
+    remove: true
+  - target: $.paths["/rpc/killswitches.get"].get
+    update:
+      operationId: killswitchesGet
+      security:
+        - session_header_Gram-Session: []
+  - target: $.paths["/rpc/killswitches.lift"].post.security
+    remove: true
+  - target: $.paths["/rpc/killswitches.lift"].post
+    update:
+      operationId: killswitchesLift
+      security:
+        - session_header_Gram-Session: []
+  - target: $.paths["/rpc/killswitches.list"].get.security
+    remove: true
+  - target: $.paths["/rpc/killswitches.list"].get
+    update:
+      operationId: killswitchesList
+      security:
+        - session_header_Gram-Session: []
+  - target: $.paths["/rpc/killswitches.listCapabilities"].get.security
+    remove: true
+  - target: $.paths["/rpc/killswitches.listCapabilities"].get
+    update:
+      operationId: killswitchesListCapabilities
+      security:
+        - session_header_Gram-Session: []
+  - target: $.paths["/rpc/killswitches.listMCPServers"].get.security
+    remove: true
+  - target: $.paths["/rpc/killswitches.listMCPServers"].get
+    update:
+      operationId: killswitchesListMCPServers
+      security:
+        - session_header_Gram-Session: []
+  - target: $.paths["/rpc/killswitches.previewOverlaps"].post.security
+    remove: true
+  - target: $.paths["/rpc/killswitches.previewOverlaps"].post
+    update:
+      operationId: killswitchesPreviewOverlaps
+      security:
+        - session_header_Gram-Session: []
   - target: $.paths.*[?count(@.tags[?@=='admin'])>0]
     remove: true
   - target: $.paths[?length(@)==0]

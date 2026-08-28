@@ -12,6 +12,10 @@ import { safeParse } from "../lib/schemas.js";
 import { RequestOptions } from "../lib/sdks.js";
 import { resolveSecurity } from "../lib/security.js";
 import { pathToFunc } from "../lib/url.js";
+import {
+  KillswitchDetail,
+  KillswitchDetail$inboundSchema,
+} from "../models/components/killswitchdetail.js";
 import { GramError } from "../models/errors/gramerror.js";
 import {
   ConnectionError,
@@ -27,33 +31,52 @@ import {
   ServiceError$inboundSchema,
 } from "../models/errors/serviceerror.js";
 import {
-  KillswitchesNumberListRequest,
-  KillswitchesNumberListRequest$outboundSchema,
-  KillswitchesNumberListResponse,
-  KillswitchesNumberListResponse$inboundSchema,
-  KillswitchesNumberListSecurity,
-} from "../models/operations/killswitchesnumberlist.js";
+  KillswitchesGetRequest,
+  KillswitchesGetRequest$outboundSchema,
+  KillswitchesGetSecurity,
+} from "../models/operations/killswitchesget.js";
 import { APICall, APIPromise } from "../types/async.js";
 import { Result } from "../types/fp.js";
-import {
-  createPageIterator,
-  haltIterator,
-  PageIterator,
-  Paginator,
-} from "../types/operations.js";
 
 /**
- * list killswitches
+ * get killswitches
  */
-export function killswitchesKillswitchesNumberList(
+export function killswitchesGet(
   client: GramCore,
-  request?: KillswitchesNumberListRequest | undefined,
-  security?: KillswitchesNumberListSecurity | undefined,
+  security: KillswitchesGetSecurity,
+  request: KillswitchesGetRequest,
   options?: RequestOptions,
 ): APIPromise<
-  PageIterator<
+  Result<
+    KillswitchDetail,
+    | ServiceError
+    | GramError
+    | ResponseValidationError
+    | ConnectionError
+    | RequestAbortedError
+    | RequestTimeoutError
+    | InvalidRequestError
+    | UnexpectedClientError
+    | SDKValidationError
+  >
+> {
+  return new APIPromise($do(
+    client,
+    security,
+    request,
+    options,
+  ));
+}
+
+async function $do(
+  client: GramCore,
+  security: KillswitchesGetSecurity,
+  request: KillswitchesGetRequest,
+  options?: RequestOptions,
+): Promise<
+  [
     Result<
-      KillswitchesNumberListResponse,
+      KillswitchDetail,
       | ServiceError
       | GramError
       | ResponseValidationError
@@ -64,67 +87,29 @@ export function killswitchesKillswitchesNumberList(
       | UnexpectedClientError
       | SDKValidationError
     >,
-    { cursor: string }
-  >
-> {
-  return new APIPromise($do(
-    client,
-    request,
-    security,
-    options,
-  ));
-}
-
-async function $do(
-  client: GramCore,
-  request?: KillswitchesNumberListRequest | undefined,
-  security?: KillswitchesNumberListSecurity | undefined,
-  options?: RequestOptions,
-): Promise<
-  [
-    PageIterator<
-      Result<
-        KillswitchesNumberListResponse,
-        | ServiceError
-        | GramError
-        | ResponseValidationError
-        | ConnectionError
-        | RequestAbortedError
-        | RequestTimeoutError
-        | InvalidRequestError
-        | UnexpectedClientError
-        | SDKValidationError
-      >,
-      { cursor: string }
-    >,
     APICall,
   ]
 > {
   const parsed = safeParse(
     request,
-    (value) =>
-      z.parse(z.optional(KillswitchesNumberListRequest$outboundSchema), value),
+    (value) => z.parse(KillswitchesGetRequest$outboundSchema, value),
     "Input validation failed",
   );
   if (!parsed.ok) {
-    return [haltIterator(parsed), { status: "invalid" }];
+    return [parsed, { status: "invalid" }];
   }
   const payload = parsed.value;
   const body = null;
 
-  const path = pathToFunc("/rpc/killswitches.list")();
+  const path = pathToFunc("/rpc/killswitches.get")();
 
   const query = encodeFormQuery({
-    "capability_key": payload?.capability_key,
-    "cursor": payload?.cursor,
-    "limit": payload?.limit,
-    "status": payload?.status,
-    "user_id": payload?.user_id,
+    "id": payload.id,
   });
 
   const headers = new Headers(compactMap({
     Accept: "application/json",
-    "Gram-Session": encodeSimple("Gram-Session", payload?.["Gram-Session"], {
+    "Gram-Session": encodeSimple("Gram-Session", payload["Gram-Session"], {
       explode: false,
       charEncoding: "none",
     }),
@@ -143,7 +128,7 @@ async function $do(
   const context = {
     options: client._options,
     baseURL: options?.serverURL ?? client._baseURL ?? "",
-    operationID: "killswitches#list",
+    operationID: "killswitchesGet",
     oAuth2Scopes: null,
 
     resolvedSecurity: requestSecurity,
@@ -167,7 +152,7 @@ async function $do(
     timeoutMs: options?.timeoutMs || client._options.timeoutMs || -1,
   }, options);
   if (!requestRes.ok) {
-    return [haltIterator(requestRes), { status: "invalid" }];
+    return [requestRes, { status: "invalid" }];
   }
   const req = requestRes.value;
 
@@ -179,7 +164,7 @@ async function $do(
     retryCodes: context.retryCodes,
   });
   if (!doResult.ok) {
-    return [haltIterator(doResult), { status: "request-error", request: req }];
+    return [doResult, { status: "request-error", request: req }];
   }
   const response = doResult.value;
 
@@ -187,8 +172,8 @@ async function $do(
     HttpMeta: { Response: response, Request: req },
   };
 
-  const [result, raw] = await M.match<
-    KillswitchesNumberListResponse,
+  const [result] = await M.match<
+    KillswitchDetail,
     | ServiceError
     | GramError
     | ResponseValidationError
@@ -199,67 +184,15 @@ async function $do(
     | UnexpectedClientError
     | SDKValidationError
   >(
-    M.json(200, KillswitchesNumberListResponse$inboundSchema, {
-      key: "Result",
-    }),
+    M.json(200, KillswitchDetail$inboundSchema),
     M.jsonErr([400, 401, 403, 404, 415, 422], ServiceError$inboundSchema),
     M.jsonErr([500, 502, 503], ServiceError$inboundSchema),
     M.fail("4XX"),
     M.fail("5XX"),
   )(response, req, { extraFields: responseFields });
   if (!result.ok) {
-    return [haltIterator(result), {
-      status: "complete",
-      request: req,
-      response,
-    }];
+    return [result, { status: "complete", request: req, response }];
   }
 
-  const nextFunc = (
-    responseData: unknown,
-  ): {
-    next: Paginator<
-      Result<
-        KillswitchesNumberListResponse,
-        | ServiceError
-        | GramError
-        | ResponseValidationError
-        | ConnectionError
-        | RequestAbortedError
-        | RequestTimeoutError
-        | InvalidRequestError
-        | UnexpectedClientError
-        | SDKValidationError
-      >
-    >;
-    "~next"?: { cursor: string };
-  } => {
-    const nextCursor = (responseData as { next_cursor?: unknown }).next_cursor;
-    if (typeof nextCursor !== "string") {
-      return { next: () => null };
-    }
-    if (nextCursor.trim() === "") {
-      return { next: () => null };
-    }
-
-    const nextVal = () =>
-      killswitchesKillswitchesNumberList(
-        client,
-        {
-          ...request!,
-          cursor: nextCursor,
-        },
-        security,
-        options,
-      );
-
-    return { next: nextVal, "~next": { cursor: nextCursor } };
-  };
-
-  const page = { ...result, ...nextFunc(raw) };
-  return [{ ...page, ...createPageIterator(page, (v) => !v.ok) }, {
-    status: "complete",
-    request: req,
-    response,
-  }];
+  return [result, { status: "complete", request: req, response }];
 }

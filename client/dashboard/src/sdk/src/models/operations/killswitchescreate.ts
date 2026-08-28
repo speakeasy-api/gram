@@ -10,11 +10,11 @@ import {
   KillswitchCreateRequest$outboundSchema,
 } from "../components/killswitchcreaterequest.js";
 
-export type KillswitchesNumberCreateSecurity = {
-  sessionHeaderGramSession?: string | undefined;
+export type KillswitchesCreateSecurity = {
+  sessionHeaderGramSession: string;
 };
 
-export type KillswitchesNumberCreateRequest = {
+export type KillswitchesCreateRequest = {
   /**
    * Session header
    */
@@ -23,17 +23,17 @@ export type KillswitchesNumberCreateRequest = {
 };
 
 /** @internal */
-export type KillswitchesNumberCreateSecurity$Outbound = {
-  "session_header_Gram-Session"?: string | undefined;
+export type KillswitchesCreateSecurity$Outbound = {
+  "session_header_Gram-Session": string;
 };
 
 /** @internal */
-export const KillswitchesNumberCreateSecurity$outboundSchema: z.ZodMiniType<
-  KillswitchesNumberCreateSecurity$Outbound,
-  KillswitchesNumberCreateSecurity
+export const KillswitchesCreateSecurity$outboundSchema: z.ZodMiniType<
+  KillswitchesCreateSecurity$Outbound,
+  KillswitchesCreateSecurity
 > = z.pipe(
   z.object({
-    sessionHeaderGramSession: z.optional(z.string()),
+    sessionHeaderGramSession: z.string(),
   }),
   z.transform((v) => {
     return remap$(v, {
@@ -42,26 +42,24 @@ export const KillswitchesNumberCreateSecurity$outboundSchema: z.ZodMiniType<
   }),
 );
 
-export function killswitchesNumberCreateSecurityToJSON(
-  killswitchesNumberCreateSecurity: KillswitchesNumberCreateSecurity,
+export function killswitchesCreateSecurityToJSON(
+  killswitchesCreateSecurity: KillswitchesCreateSecurity,
 ): string {
   return JSON.stringify(
-    KillswitchesNumberCreateSecurity$outboundSchema.parse(
-      killswitchesNumberCreateSecurity,
-    ),
+    KillswitchesCreateSecurity$outboundSchema.parse(killswitchesCreateSecurity),
   );
 }
 
 /** @internal */
-export type KillswitchesNumberCreateRequest$Outbound = {
+export type KillswitchesCreateRequest$Outbound = {
   "Gram-Session"?: string | undefined;
   KillswitchCreateRequest: KillswitchCreateRequest$Outbound;
 };
 
 /** @internal */
-export const KillswitchesNumberCreateRequest$outboundSchema: z.ZodMiniType<
-  KillswitchesNumberCreateRequest$Outbound,
-  KillswitchesNumberCreateRequest
+export const KillswitchesCreateRequest$outboundSchema: z.ZodMiniType<
+  KillswitchesCreateRequest$Outbound,
+  KillswitchesCreateRequest
 > = z.pipe(
   z.object({
     gramSession: z.optional(z.string()),
@@ -75,12 +73,10 @@ export const KillswitchesNumberCreateRequest$outboundSchema: z.ZodMiniType<
   }),
 );
 
-export function killswitchesNumberCreateRequestToJSON(
-  killswitchesNumberCreateRequest: KillswitchesNumberCreateRequest,
+export function killswitchesCreateRequestToJSON(
+  killswitchesCreateRequest: KillswitchesCreateRequest,
 ): string {
   return JSON.stringify(
-    KillswitchesNumberCreateRequest$outboundSchema.parse(
-      killswitchesNumberCreateRequest,
-    ),
+    KillswitchesCreateRequest$outboundSchema.parse(killswitchesCreateRequest),
   );
 }
