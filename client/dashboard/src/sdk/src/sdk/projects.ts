@@ -9,6 +9,7 @@ import { projectsListAllowedOrigins } from "../funcs/projectsListAllowedOrigins.
 import { projectsRead } from "../funcs/projectsRead.js";
 import { projectsSetLogo } from "../funcs/projectsSetLogo.js";
 import { projectsSetOrganizationWhitelist } from "../funcs/projectsSetOrganizationWhitelist.js";
+import { projectsUpdate } from "../funcs/projectsUpdate.js";
 import { projectsUpsertAllowedOrigin } from "../funcs/projectsUpsertAllowedOrigin.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
 import { CreateProjectResult } from "../models/components/createprojectresult.js";
@@ -16,6 +17,7 @@ import { GetProjectResult } from "../models/components/getprojectresult.js";
 import { ListAllowedOriginsResult } from "../models/components/listallowedoriginsresult.js";
 import { ListProjectsResult } from "../models/components/listprojectsresult.js";
 import { SetProjectLogoResult } from "../models/components/setprojectlogoresult.js";
+import { UpdateProjectResult } from "../models/components/updateprojectresult.js";
 import { UpsertAllowedOriginResult } from "../models/components/upsertallowedoriginresult.js";
 import {
   CreateProjectRequest,
@@ -45,6 +47,10 @@ import {
   SetProjectLogoRequest,
   SetProjectLogoSecurity,
 } from "../models/operations/setprojectlogo.js";
+import {
+  UpdateProjectRequest,
+  UpdateProjectSecurity,
+} from "../models/operations/updateproject.js";
 import {
   UpsertAllowedOriginRequest,
   UpsertAllowedOriginSecurity,
@@ -178,6 +184,25 @@ export class Projects extends ClientSDK {
     options?: RequestOptions,
   ): Promise<void> {
     return unwrapAsync(projectsSetOrganizationWhitelist(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * updateProject projects
+   *
+   * @remarks
+   * Update the display name and URL slug of the current project.
+   */
+  async update(
+    request: UpdateProjectRequest,
+    security?: UpdateProjectSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<UpdateProjectResult> {
+    return unwrapAsync(projectsUpdate(
       this,
       request,
       security,

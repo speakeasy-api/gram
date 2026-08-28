@@ -59,6 +59,29 @@ var _ = Service("projects", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "CreateProject"}`)
 	})
 
+	Method("updateProject", func() {
+		Description("Update the display name and URL slug of the current project.")
+
+		Security(security.Session, security.ProjectSlug)
+
+		Payload(func() {
+			Extend(UpdateProjectForm)
+			security.ProjectPayload()
+			security.SessionPayload()
+		})
+		Result(UpdateProjectResult)
+
+		HTTP(func() {
+			POST("/rpc/projects.update")
+			security.SessionHeader()
+			security.ProjectHeader()
+		})
+
+		Meta("openapi:operationId", "updateProject")
+		Meta("openapi:extension:x-speakeasy-name-override", "update")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "UpdateProject"}`)
+	})
+
 	Method("listProjects", func() {
 		Description("List all projects for an organization.")
 
@@ -237,6 +260,22 @@ var CreateProjectResult = Type("CreateProjectResult", func() {
 	Required("project")
 
 	Attribute("project", shared.Project, "The created project")
+})
+
+var UpdateProjectForm = Type("UpdateProjectForm", func() {
+	Required("name", "slug")
+
+	Attribute("name", String, "The display name of the project", func() {
+		MinLength(1)
+		MaxLength(40)
+	})
+	Attribute("slug", shared.Slug, "The URL-friendly identifier of the project")
+})
+
+var UpdateProjectResult = Type("UpdateProjectResult", func() {
+	Required("project")
+
+	Attribute("project", shared.Project, "The updated project")
 })
 
 var ListProjectsPayload = Type("ListProjectsPayload", func() {

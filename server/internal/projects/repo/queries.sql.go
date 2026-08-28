@@ -414,6 +414,40 @@ func (q *Queries) SetOrganizationWhitelist(ctx context.Context, arg SetOrganizat
 	return err
 }
 
+const updateProject = `-- name: UpdateProject :one
+UPDATE projects
+SET name = $1,
+    slug = $2,
+    updated_at = clock_timestamp()
+WHERE id = $3
+  AND deleted IS FALSE
+RETURNING id, name, slug, organization_id, logo_asset_id, functions_runner_version, created_at, updated_at, deleted_at, deleted
+`
+
+type UpdateProjectParams struct {
+	Name      string
+	Slug      string
+	ProjectID uuid.UUID
+}
+
+func (q *Queries) UpdateProject(ctx context.Context, arg UpdateProjectParams) (Project, error) {
+	row := q.db.QueryRow(ctx, updateProject, arg.Name, arg.Slug, arg.ProjectID)
+	var i Project
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.Slug,
+		&i.OrganizationID,
+		&i.LogoAssetID,
+		&i.FunctionsRunnerVersion,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
 const uploadProjectLogo = `-- name: UploadProjectLogo :one
 UPDATE projects
 SET logo_asset_id = $1,
