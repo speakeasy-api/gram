@@ -469,7 +469,7 @@ export function staticActionPhrase(action: AuditAction): string {
     case "organization:enterprise_trial_rearmed":
       return "restarted enterprise trial";
     case "organization:enterprise_trial_converted":
-      return "converted enterprise trial";
+      return "converted enterprise trial for";
     case "organization:payg_activated":
       return "activated pay-as-you-go billing for";
     case "organization:payg_deactivated":
