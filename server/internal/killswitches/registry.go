@@ -45,6 +45,10 @@ type coverageKey struct {
 
 // BuildRegistry validates a complete registration and returns a finalized snapshot.
 func BuildRegistry(input Registration) (*Registry, error) {
+	if len(input.Definitions) == 0 {
+		return nil, fmt.Errorf("at least one definition is required")
+	}
+
 	registry := &Registry{
 		definitions:       make(map[DefinitionKey]Definition, len(input.Definitions)),
 		identityContracts: make(map[IdentityContractKey]IdentityContract, len(input.IdentityContracts)),

@@ -166,6 +166,7 @@ func TestBuildRegistryRejectsInvalidRegistration(t *testing.T) {
 		name   string
 		mutate func(*Registration)
 	}{
+		{name: "no definitions", mutate: func(r *Registration) { r.Definitions, r.Coverage = nil, nil }},
 		{name: "duplicate definition", mutate: func(r *Registration) { r.Definitions = append(r.Definitions, r.Definitions[0]) }},
 		{name: "duplicate identity contract", mutate: func(r *Registration) { r.IdentityContracts = append(r.IdentityContracts, r.IdentityContracts[0]) }},
 		{name: "duplicate principal adapter", mutate: func(r *Registration) { r.PrincipalAdapters = append(r.PrincipalAdapters, r.PrincipalAdapters[0]) }},
