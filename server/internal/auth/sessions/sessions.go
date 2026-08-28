@@ -162,7 +162,7 @@ func (s *Manager) Authenticate(ctx context.Context, key string) (context.Context
 		if err := s.refreshSession(ctx, session); err != nil {
 			return ctx, err
 		}
-		ctx = contextvalues.SetAuthContext(ctx, authCtx)
+		ctx = contextvalues.WithValidatedGramSession(ctx, authCtx, session.ImpersonatorEmail != "")
 		return ctx, nil
 	}
 
@@ -206,10 +206,10 @@ func (s *Manager) Authenticate(ctx context.Context, key string) (context.Context
 		return ctx, err
 	}
 
+	ctx = contextvalues.WithValidatedGramSession(ctx, authCtx, session.ImpersonatorEmail != "")
 	if validatedSupportAdmin {
-		ctx = contextvalues.WithValidatedSupportSession(ctx, authCtx)
-	} else {
-		ctx = contextvalues.SetAuthContext(ctx, authCtx)
+		validatedAuthCtx, _ := contextvalues.GetAuthContext(ctx)
+		ctx = contextvalues.WithValidatedSupportSession(ctx, validatedAuthCtx)
 	}
 
 	return ctx, nil
@@ -231,15 +231,22 @@ func (s *Manager) AuthenticateWithCookie(ctx context.Context) (context.Context, 
 	return s.Authenticate(ctx, "")
 }
 
-// IsPlatformAdmin reads the authoritative users.admin value directly from the
-// database. Support authorization must not rely on the identity cache because
-// an administrator may have been revoked after that cache was populated.
+// IsPlatformAdmin reads the authoritative users.admin and deletion state
+// directly from the database. Break-glass authorization must not rely on the
+// identity cache because an administrator may have been revoked after that cache was populated.
 func (s *Manager) IsPlatformAdmin(ctx context.Context, userID string) (bool, error) {
 	user, err := s.userRepo.GetUser(ctx, userID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return false, nil
+	}
 	if err != nil {
 		return false, fmt.Errorf("get user for platform admin check: %w", err)
 	}
-	return user.Admin, nil
+	return isCurrentPlatformAdmin(user.Admin, user.DeletedAt.Valid), nil
+}
+
+func isCurrentPlatformAdmin(admin, deleted bool) bool {
+	return admin && !deleted
 }
 
 func (s *Manager) Billing() billing.Repository {

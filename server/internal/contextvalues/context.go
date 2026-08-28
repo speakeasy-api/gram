@@ -28,8 +28,33 @@ type AuthContext struct {
 	IsAdmin               bool
 	// SupportOrganizationID is set only after session authentication validates
 	// a time-bounded platform-admin support session for this organization.
-	SupportOrganizationID   string
-	supportSessionValidated bool
+	SupportOrganizationID     string
+	gramSessionValidated      bool
+	supportSessionValidated   bool
+	legacySessionImpersonated bool
+}
+
+// WithValidatedGramSession records provenance established by sessions.Authenticate.
+// Other authentication paths must not call this function.
+func WithValidatedGramSession(ctx context.Context, authCtx *AuthContext, legacyImpersonated bool) context.Context {
+	validated := *authCtx
+	validated.gramSessionValidated = true
+	validated.legacySessionImpersonated = legacyImpersonated
+	return SetAuthContext(ctx, &validated)
+}
+
+// HasValidatedGramSession reports whether ordinary Gram session authentication
+// positively validated the request credential.
+func HasValidatedGramSession(ctx context.Context) bool {
+	authCtx, ok := GetAuthContext(ctx)
+	return ok && authCtx != nil && authCtx.gramSessionValidated
+}
+
+// IsLegacyImpersonatedSession reports legacy WorkOS impersonation propagated by
+// sessions.Authenticate without exposing the impersonator identity.
+func IsLegacyImpersonatedSession(ctx context.Context) bool {
+	authCtx, ok := GetAuthContext(ctx)
+	return ok && authCtx != nil && authCtx.gramSessionValidated && authCtx.legacySessionImpersonated
 }
 
 // WithValidatedSupportSession records the support decision made during session

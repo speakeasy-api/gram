@@ -33401,6 +33401,563 @@ paths:
             x-speakeasy-name-override: update
             x-speakeasy-react-hook:
                 name: UpdatePackage
+    /rpc/platformKillswitches.activatePrescription:
+        post:
+            tags:
+                - platformKillswitches
+            summary: activatePrescription platformKillswitches
+            operationId: platformKillswitches#activatePrescription
+            parameters:
+                - name: Gram-Session
+                  in: header
+                  description: Session header
+                  allowEmptyValue: true
+                  schema:
+                    type: string
+                    description: Session header
+            requestBody:
+                required: true
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/ActivatePrescriptionRequestBody'
+            responses:
+                "200":
+                    description: OK response.
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/PlatformKillswitchMutationResult'
+                "400":
+                    description: 'bad_request: request is invalid'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "401":
+                    description: 'unauthorized: unauthorized access'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "403":
+                    description: 'forbidden: permission denied'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "404":
+                    description: 'not_found: resource not found'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "409":
+                    description: 'version_conflict: The prescription changed after the supplied expected version.'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "415":
+                    description: 'unsupported_media: unsupported media type'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "422":
+                    description: 'invalid: request contains one or more invalidation fields'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "500":
+                    description: 'unexpected: an unexpected error occurred'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "502":
+                    description: 'gateway_error: an unexpected error occurred'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "503":
+                    description: 'unavailable: service temporarily unavailable'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+            security:
+                - session_header_Gram-Session: []
+    /rpc/platformKillswitches.changePrescription:
+        post:
+            tags:
+                - platformKillswitches
+            summary: changePrescription platformKillswitches
+            operationId: platformKillswitches#changePrescription
+            parameters:
+                - name: Gram-Session
+                  in: header
+                  description: Session header
+                  allowEmptyValue: true
+                  schema:
+                    type: string
+                    description: Session header
+            requestBody:
+                required: true
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/ChangePrescriptionRequestBody'
+            responses:
+                "200":
+                    description: OK response.
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/PlatformKillswitchMutationResult'
+                "400":
+                    description: 'bad_request: request is invalid'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "401":
+                    description: 'unauthorized: unauthorized access'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "403":
+                    description: 'forbidden: permission denied'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "404":
+                    description: 'not_found: resource not found'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "409":
+                    description: 'version_conflict: The prescription changed after the supplied expected version.'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "415":
+                    description: 'unsupported_media: unsupported media type'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "422":
+                    description: 'invalid: request contains one or more invalidation fields'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "500":
+                    description: 'unexpected: an unexpected error occurred'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "502":
+                    description: 'gateway_error: an unexpected error occurred'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "503":
+                    description: 'unavailable: service temporarily unavailable'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+            security:
+                - session_header_Gram-Session: []
+    /rpc/platformKillswitches.deactivatePrescription:
+        post:
+            tags:
+                - platformKillswitches
+            summary: deactivatePrescription platformKillswitches
+            operationId: platformKillswitches#deactivatePrescription
+            parameters:
+                - name: Gram-Session
+                  in: header
+                  description: Session header
+                  allowEmptyValue: true
+                  schema:
+                    type: string
+                    description: Session header
+            requestBody:
+                required: true
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/DeactivatePrescriptionRequestBody'
+            responses:
+                "200":
+                    description: OK response.
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/PlatformKillswitchMutationResult'
+                "400":
+                    description: 'bad_request: request is invalid'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "401":
+                    description: 'unauthorized: unauthorized access'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "403":
+                    description: 'forbidden: permission denied'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "404":
+                    description: 'not_found: resource not found'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "409":
+                    description: 'version_conflict: The prescription changed after the supplied expected version.'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "415":
+                    description: 'unsupported_media: unsupported media type'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "422":
+                    description: 'invalid: request contains one or more invalidation fields'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "500":
+                    description: 'unexpected: an unexpected error occurred'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "502":
+                    description: 'gateway_error: an unexpected error occurred'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "503":
+                    description: 'unavailable: service temporarily unavailable'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+            security:
+                - session_header_Gram-Session: []
+    /rpc/platformKillswitches.getPrescription:
+        get:
+            tags:
+                - platformKillswitches
+            summary: getPrescription platformKillswitches
+            operationId: platformKillswitches#getPrescription
+            parameters:
+                - name: organization_id
+                  in: query
+                  allowEmptyValue: true
+                  required: true
+                  schema:
+                    type: string
+                - name: prescription_id
+                  in: query
+                  allowEmptyValue: true
+                  required: true
+                  schema:
+                    type: string
+                    format: uuid
+                - name: Gram-Session
+                  in: header
+                  description: Session header
+                  allowEmptyValue: true
+                  schema:
+                    type: string
+                    description: Session header
+            responses:
+                "200":
+                    description: OK response.
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/PlatformKillswitchPrescription'
+                "400":
+                    description: 'bad_request: request is invalid'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "401":
+                    description: 'unauthorized: unauthorized access'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "403":
+                    description: 'forbidden: permission denied'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "404":
+                    description: 'not_found: resource not found'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "409":
+                    description: 'version_conflict: The prescription changed after the supplied expected version.'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "415":
+                    description: 'unsupported_media: unsupported media type'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "422":
+                    description: 'invalid: request contains one or more invalidation fields'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "500":
+                    description: 'unexpected: an unexpected error occurred'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "502":
+                    description: 'gateway_error: an unexpected error occurred'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "503":
+                    description: 'unavailable: service temporarily unavailable'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+            security:
+                - session_header_Gram-Session: []
+    /rpc/platformKillswitches.listDefinitions:
+        get:
+            tags:
+                - platformKillswitches
+            summary: listDefinitions platformKillswitches
+            operationId: platformKillswitches#listDefinitions
+            parameters:
+                - name: Gram-Session
+                  in: header
+                  description: Session header
+                  allowEmptyValue: true
+                  schema:
+                    type: string
+                    description: Session header
+            responses:
+                "200":
+                    description: OK response.
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ListDefinitionsResponseBody'
+                "400":
+                    description: 'bad_request: request is invalid'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "401":
+                    description: 'unauthorized: unauthorized access'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "403":
+                    description: 'forbidden: permission denied'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "404":
+                    description: 'not_found: resource not found'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "409":
+                    description: 'version_conflict: The prescription changed after the supplied expected version.'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "415":
+                    description: 'unsupported_media: unsupported media type'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "422":
+                    description: 'invalid: request contains one or more invalidation fields'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "500":
+                    description: 'unexpected: an unexpected error occurred'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "502":
+                    description: 'gateway_error: an unexpected error occurred'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "503":
+                    description: 'unavailable: service temporarily unavailable'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+            security:
+                - session_header_Gram-Session: []
+    /rpc/platformKillswitches.listPrescriptions:
+        get:
+            operationId: platformKillswitches#listPrescriptions
+            parameters:
+                - allowEmptyValue: true
+                  in: query
+                  name: organization_id
+                  required: true
+                  schema:
+                    type: string
+                - allowEmptyValue: true
+                  in: query
+                  name: limit
+                  schema:
+                    format: int32
+                    maximum: 100
+                    minimum: 1
+                    type: integer
+                - allowEmptyValue: true
+                  in: query
+                  name: after_id
+                  schema:
+                    format: uuid
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ListPrescriptionsResponseBody'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'version_conflict: The prescription changed after the supplied expected version.'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+                "503":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unavailable: service temporarily unavailable'
+            security:
+                - session_header_Gram-Session: []
+            summary: listPrescriptions platformKillswitches
+            tags:
+                - platformKillswitches
+            x-speakeasy-pagination:
+                inputs:
+                    - in: parameters
+                      name: after_id
+                      type: cursor
+                outputs:
+                    nextCursor: $.next_after_id
+                type: cursor
     /rpc/platformMcp.dismissOnboarding:
         post:
             description: Dismiss the optional current user's Platform MCP onboarding workflow without changing organization setup or project resources.
@@ -61985,6 +62542,62 @@ components:
                     description: The policy that issued the warning.
             required:
                 - acknowledged
+        ActivatePrescriptionRequestBody:
+            type: object
+            properties:
+                definition:
+                    type: string
+                expected_version:
+                    type: integer
+                    format: int64
+                expires_at:
+                    type: string
+                    format: date-time
+                external_note:
+                    type: string
+                    maxLength: 500
+                internal_note:
+                    type: string
+                    maxLength: 4000
+                operation_id:
+                    type: string
+                    format: uuid
+                organization_id:
+                    type: string
+                prescription_id:
+                    type: string
+                    format: uuid
+                principal_input:
+                    type: string
+                principal_kind:
+                    type: string
+                resource_kind:
+                    type: string
+                resource_scope:
+                    type: string
+                    enum:
+                        - all
+                        - selected
+                selected_resource_inputs:
+                    type: array
+                    items:
+                        type: string
+                    maxItems: 1000
+                start_mode:
+                    type: string
+                    enum:
+                        - now
+                        - at
+                starts_at:
+                    type: string
+                    format: date-time
+            required:
+                - organization_id
+                - operation_id
+                - resource_scope
+                - start_mode
+                - internal_note
+                - external_note
         ActorAttribute:
             type: object
             properties:
@@ -64079,6 +64692,56 @@ components:
                 - resolution_type
                 - resolved_by
                 - created_at
+        ChangePrescriptionRequestBody:
+            type: object
+            properties:
+                expected_version:
+                    type: integer
+                    format: int64
+                expires_at:
+                    type: string
+                    format: date-time
+                external_note:
+                    type: string
+                    maxLength: 500
+                internal_note:
+                    type: string
+                    maxLength: 4000
+                operation_id:
+                    type: string
+                    format: uuid
+                organization_id:
+                    type: string
+                prescription_id:
+                    type: string
+                    format: uuid
+                resource_scope:
+                    type: string
+                    enum:
+                        - all
+                        - selected
+                selected_resource_inputs:
+                    type: array
+                    items:
+                        type: string
+                    maxItems: 1000
+                start_mode:
+                    type: string
+                    enum:
+                        - now
+                        - at
+                starts_at:
+                    type: string
+                    format: date-time
+            required:
+                - organization_id
+                - operation_id
+                - resource_scope
+                - start_mode
+                - internal_note
+                - external_note
+                - prescription_id
+                - expected_version
         Chat:
             type: object
             properties:
@@ -66802,6 +67465,25 @@ components:
                 - project_name
                 - project_slug
                 - is_domain_root
+        DeactivatePrescriptionRequestBody:
+            type: object
+            properties:
+                expected_version:
+                    type: integer
+                    format: int64
+                operation_id:
+                    type: string
+                    format: uuid
+                organization_id:
+                    type: string
+                prescription_id:
+                    type: string
+                    format: uuid
+            required:
+                - organization_id
+                - operation_id
+                - prescription_id
+                - expected_version
         DeclineRiskPolicyChallengeResponseBody:
             type: object
             properties:
@@ -71713,6 +72395,15 @@ components:
             required:
                 - domains
                 - dns_config
+        ListDefinitionsResponseBody:
+            type: object
+            properties:
+                definitions:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/PlatformKillswitchDefinition'
+            required:
+                - definitions
         ListDeploymentForm:
             type: object
             properties:
@@ -72211,6 +72902,18 @@ components:
                     description: The plugins in the organization.
             required:
                 - plugins
+        ListPrescriptionsResponseBody:
+            type: object
+            properties:
+                next_after_id:
+                    type: string
+                    description: Cursor for the next page; empty when exhausted.
+                prescriptions:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/PlatformKillswitchPrescription'
+            required:
+                - prescriptions
         ListProjectsPayload:
             type: object
             properties:
@@ -75101,6 +75804,120 @@ components:
                 - included_servers
                 - actual_enabled_server_count
                 - has_active_subscription
+        PlatformKillswitchDefinition:
+            type: object
+            properties:
+                default_external_note:
+                    type: string
+                enforcement_owner:
+                    type: string
+                failure_policy:
+                    type: string
+                identity_contract:
+                    type: string
+                key:
+                    type: string
+                principal_kinds:
+                    type: array
+                    items:
+                        type: string
+                resource_kinds:
+                    type: array
+                    items:
+                        type: string
+                surfaces:
+                    type: array
+                    items:
+                        type: string
+                transport_adapters:
+                    type: array
+                    items:
+                        type: string
+            required:
+                - key
+                - principal_kinds
+                - resource_kinds
+                - failure_policy
+                - default_external_note
+                - enforcement_owner
+                - identity_contract
+                - surfaces
+                - transport_adapters
+        PlatformKillswitchMutationResult:
+            type: object
+            properties:
+                prescription_id:
+                    type: string
+                    format: uuid
+                replayed:
+                    type: boolean
+                state:
+                    type: string
+                version:
+                    type: integer
+                    format: int64
+            required:
+                - prescription_id
+                - version
+                - state
+                - replayed
+        PlatformKillswitchPrescription:
+            type: object
+            properties:
+                activated_at:
+                    type: string
+                    format: date-time
+                definition:
+                    type: string
+                expires_at:
+                    type: string
+                    format: date-time
+                external_note:
+                    type: string
+                id:
+                    type: string
+                    format: uuid
+                internal_note:
+                    type: string
+                organization_id:
+                    type: string
+                principal_key:
+                    type: string
+                principal_kind:
+                    type: string
+                resource_kind:
+                    type: string
+                resource_scope:
+                    type: string
+                selected_resource_keys:
+                    type: array
+                    items:
+                        type: string
+                starts_at:
+                    type: string
+                    format: date-time
+                state:
+                    type: string
+                superseded_at:
+                    type: string
+                    format: date-time
+                version:
+                    type: integer
+                    format: int64
+            required:
+                - id
+                - organization_id
+                - definition
+                - principal_kind
+                - principal_key
+                - resource_kind
+                - version
+                - state
+                - resource_scope
+                - selected_resource_keys
+                - starts_at
+                - internal_note
+                - external_note
         PlatformMCPOnboardingSetupHandoff:
             type: object
             properties:
@@ -87298,6 +88115,8 @@ tags:
       description: Platform-admin management of an organization's chat session analysis settings. Speakeasy-staff only; every method requires the platform-admin flag.
     - name: adminExternalCredentials
       description: Platform-admin management of platform external_credentials — how Gram authenticates into a cloud provider to reach a platform KMS key. Shared across every organization (organization_id NULL, project_id NULL). Speakeasy-staff only; every method requires the platform-admin flag.
+    - name: platformKillswitches
+      description: Platform break-glass access to generic killswitch lifecycle operations on the main server. Requires a current users.admin entitlement on an ordinary Gram session.
     - name: adminOpenRouterKeys
       description: Platform-admin management of per-organization platform OpenRouter keys. Speakeasy-staff only; every method requires the platform-admin flag.
     - name: platformMcp
