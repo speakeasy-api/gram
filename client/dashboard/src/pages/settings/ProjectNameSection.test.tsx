@@ -10,6 +10,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const testState = vi.hoisted(() => ({
   mutate: vi.fn(),
+  mutationError: null as Error | null,
+  mutationIsError: false,
+  mutationIsPending: false,
   mutationOptions: undefined as
     | {
         onSuccess?: (data: {
@@ -50,9 +53,9 @@ vi.mock("@gram/client/react-query/updateProject", () => ({
   useUpdateProjectMutation: (options: typeof testState.mutationOptions) => {
     testState.mutationOptions = options;
     return {
-      error: null,
-      isError: false,
-      isPending: false,
+      error: testState.mutationError,
+      isError: testState.mutationIsError,
+      isPending: testState.mutationIsPending,
       mutate: testState.mutate,
       reset: vi.fn(),
     };
@@ -69,6 +72,9 @@ import { ProjectNameSection } from "./ProjectNameSection";
 
 beforeEach(() => {
   testState.mutate.mockReset();
+  testState.mutationError = null;
+  testState.mutationIsError = false;
+  testState.mutationIsPending = false;
   testState.mutationOptions = undefined;
   testState.organization.refetch.mockReset();
   testState.navigate.mockReset();
@@ -124,7 +130,10 @@ describe("ProjectNameSection", () => {
     expect(testState.organization.refetch).toHaveBeenCalledTimes(1);
     expect(invalidateAllListProjects).toHaveBeenCalledTimes(1);
     expect(testState.navigate).not.toHaveBeenCalled();
-    expect(testState.setQueriesData).not.toHaveBeenCalled();
+    expect(testState.setQueriesData).toHaveBeenCalledWith(
+      { queryKey: ["@gram/client", "auth", "info"] },
+      expect.any(Function),
+    );
   });
 
   it("warns before changing the slug", async () => {
@@ -152,6 +161,31 @@ describe("ProjectNameSection", () => {
         },
       },
     });
+
+    await act(async () => {
+      await testState.mutationOptions?.onSuccess?.({
+        project: { name: "Current project", slug: "renamed-project" },
+      });
+    });
+    expect(screen.queryByRole("dialog")).toBeNull();
+  });
+
+  it("shows update failures inside the slug confirmation", async () => {
+    const { rerender } = render(<ProjectNameSection />);
+
+    fireEvent.change(screen.getAllByRole("textbox")[1]!, {
+      target: { value: "renamed-project" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    await screen.findByRole("dialog");
+
+    testState.mutationError = new Error("Project slug already exists");
+    testState.mutationIsError = true;
+    rerender(<ProjectNameSection />);
+
+    expect(screen.getByRole("dialog").textContent).toContain(
+      "Project slug already exists",
+    );
   });
 
   it("shows slug requirements only after validation fails", async () => {
@@ -161,11 +195,15 @@ describe("ProjectNameSection", () => {
       "Use only lowercase letters, numbers, dashes, and underscores.";
     expect(screen.queryByText(message)).toBeNull();
 
-    fireEvent.change(screen.getAllByRole("textbox")[1]!, {
+    const slugInput = screen.getAllByRole("textbox")[1]!;
+    fireEvent.change(slugInput, {
       target: { value: "Invalid slug!" },
     });
 
     expect(await screen.findByText(message)).not.toBeNull();
+    expect(slugInput.getAttribute("aria-describedby")).toBe(
+      "project-slug-error",
+    );
     expect(
       (screen.getByRole("button", { name: "Save" }) as HTMLButtonElement)
         .disabled,
@@ -235,5 +273,8 @@ describe("ProjectNameSection", () => {
 
     const slugInput = screen.getAllByRole("textbox")[1]!;
     expect((slugInput as HTMLInputElement).disabled).toBe(true);
+    expect(slugInput.getAttribute("aria-describedby")).toBe(
+      "project-slug-description",
+    );
   });
 });
