@@ -228,10 +228,7 @@ func TestService_GenerateWorkOSAdminPortalLink_AuditLogsEnterprise(t *testing.T)
 	t.Parallel()
 
 	ctx, ti := newTestOrganizationsService(t)
-
-	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	require.True(t, ok)
-	authCtx.AccountType = string(billing.TierEnterprise)
+	ctx = withAccountType(t, ctx, string(billing.TierEnterprise))
 
 	ti.orgs.On("GenerateAdminPortalLink", mock.Anything, mock.Anything, thirdpartyworkos.PortalIntentAuditLogs, thirdpartyworkos.GenerateAdminPortalLinkOpts{}).
 		Return(testPortalLink, nil).Once()
@@ -249,10 +246,7 @@ func TestService_GenerateWorkOSAdminPortalLink_AuditLogsNonEnterpriseDenied(t *t
 	t.Parallel()
 
 	ctx, ti := newTestOrganizationsService(t)
-
-	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	require.True(t, ok)
-	authCtx.AccountType = string(billing.TierPro)
+	ctx = withAccountType(t, ctx, string(billing.TierPro))
 
 	_, err := ti.service.GenerateWorkOSAdminPortalLink(ctx, &gen.GenerateWorkOSAdminPortalLinkPayload{
 		Intent: "audit_logs",
@@ -268,10 +262,7 @@ func TestService_GenerateWorkOSAdminPortalLink_LogStreamsEnterprise(t *testing.T
 	t.Parallel()
 
 	ctx, ti := newTestOrganizationsService(t)
-
-	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	require.True(t, ok)
-	authCtx.AccountType = string(billing.TierEnterprise)
+	ctx = withAccountType(t, ctx, string(billing.TierEnterprise))
 
 	ti.orgs.On("GenerateAdminPortalLink", mock.Anything, mock.Anything, thirdpartyworkos.PortalIntentLogStreams, thirdpartyworkos.GenerateAdminPortalLinkOpts{}).
 		Return(testPortalLink, nil).Once()
@@ -289,10 +280,7 @@ func TestService_GenerateWorkOSAdminPortalLink_LogStreamsNonEnterpriseDenied(t *
 	t.Parallel()
 
 	ctx, ti := newTestOrganizationsService(t)
-
-	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	require.True(t, ok)
-	authCtx.AccountType = string(billing.TierBase)
+	ctx = withAccountType(t, ctx, string(billing.TierBase))
 
 	_, err := ti.service.GenerateWorkOSAdminPortalLink(ctx, &gen.GenerateWorkOSAdminPortalLinkPayload{
 		Intent: "log_streams",
@@ -310,10 +298,7 @@ func TestService_GenerateWorkOSAdminPortalLink_UnknownIntentDenied(t *testing.T)
 	// Fail closed: an intent added at the design layer without an entitlement
 	// mapping must be denied, even for a fully entitled enterprise org.
 	ctx, ti := newTestOrganizationsServiceRBAC(t)
-
-	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	require.True(t, ok)
-	authCtx.AccountType = string(billing.TierEnterprise)
+	ctx = withAccountType(t, ctx, string(billing.TierEnterprise))
 
 	_, err := ti.service.GenerateWorkOSAdminPortalLink(ctx, &gen.GenerateWorkOSAdminPortalLinkPayload{
 		Intent: "certificate_renewal",

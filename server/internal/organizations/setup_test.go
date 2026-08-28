@@ -58,27 +58,21 @@ func seedLocalRole(t *testing.T, ctx context.Context, conn *pgxpool.Pool, organi
 // orgFeatureStub mirrors the unexported feature-checker interface accepted by
 // organizations.NewService so test constructors can parametrize it.
 type orgFeatureStub interface {
-	IsFeatureEnabled(ctx context.Context, organizationID string, feature productfeatures.Feature) (bool, error)
+	IsFeatureEnabledUncached(ctx context.Context, organizationID string, feature productfeatures.Feature) (bool, error)
 }
 
-// stubOrgFeatures returns false for all features — tests use the WorkOS fallback path.
-type stubOrgFeatures struct{}
-
-func (stubOrgFeatures) IsFeatureEnabled(context.Context, string, productfeatures.Feature) (bool, error) {
-	return false, nil
-}
-
-// stubOrgFeaturesEnabled returns true for all features — tests use the RBAC path.
+// stubOrgFeaturesEnabled reports every feature enabled, entitling all
+// feature-gated portal-link intents.
 type stubOrgFeaturesEnabled struct{}
 
-func (stubOrgFeaturesEnabled) IsFeatureEnabled(context.Context, string, productfeatures.Feature) (bool, error) {
+func (stubOrgFeaturesEnabled) IsFeatureEnabledUncached(context.Context, string, productfeatures.Feature) (bool, error) {
 	return true, nil
 }
 
 // featureMapStub enables exactly the features mapped to true.
 type featureMapStub map[productfeatures.Feature]bool
 
-func (m featureMapStub) IsFeatureEnabled(_ context.Context, _ string, feature productfeatures.Feature) (bool, error) {
+func (m featureMapStub) IsFeatureEnabledUncached(_ context.Context, _ string, feature productfeatures.Feature) (bool, error) {
 	return m[feature], nil
 }
 
@@ -89,6 +83,22 @@ func enabledFeatures(features ...productfeatures.Feature) featureMapStub {
 		m[feature] = true
 	}
 	return m
+}
+
+// withAccountType returns a context whose auth context is a copy carrying the
+// given account type. The copy matters: contexts share the underlying auth
+// context pointer, so mutating it in place would retier every context derived
+// from ctx.
+func withAccountType(t *testing.T, ctx context.Context, accountType string) context.Context {
+	t.Helper()
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	clone := *authCtx
+	clone.AccountType = accountType
+
+	return contextvalues.SetAuthContext(ctx, &clone)
 }
 
 // testAuthUserWorkOSID is the WorkOS user id for the session user in tests.
@@ -150,11 +160,13 @@ func (f *fakeTrialNotifier) TrialInactive(context.Context, string) error {
 func newTestOrganizationsService(t *testing.T) (context.Context, *testInstance) {
 	t.Helper()
 
-	return newTestOrganizationsServiceWithFeatures(t, stubOrgFeatures{})
+	return newTestOrganizationsServiceWithFeatures(t, enabledFeatures())
 }
 
-// newTestOrganizationsServiceRBAC creates a service instance where RBAC feature is enabled,
-// so requireOrgTeamManagementAccess takes the access.Require path instead of the WorkOS fallback.
+// newTestOrganizationsServiceRBAC creates a service instance whose feature
+// checker reports every feature enabled. The checker only gates portal-link
+// intent entitlements, so that is the sole difference from
+// newTestOrganizationsService.
 func newTestOrganizationsServiceRBAC(t *testing.T) (context.Context, *testInstance) {
 	t.Helper()
 
@@ -259,7 +271,7 @@ func newTestOrganizationsServiceWithEmail(t *testing.T) (context.Context, *testI
 		"team_invite": "team-invite-test-id",
 	}), true)
 	trialNotifier := &fakeTrialNotifier{}
-	svc := organizations.NewService(logger, tracerProvider, conn, sessionManager, orgs, stubUserProvisioner{}, stubOrgFeatures{}, nil, authzEngine, emailService, trialNotifier, "http://localhost:35291", "http://localhost:5173", auditLogger, svixClient)
+	svc := organizations.NewService(logger, tracerProvider, conn, sessionManager, orgs, stubUserProvisioner{}, enabledFeatures(), nil, authzEngine, emailService, trialNotifier, "http://localhost:35291", "http://localhost:5173", auditLogger, svixClient)
 
 	return ctx, &testInstance{
 		service: svc,

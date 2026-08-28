@@ -82,7 +82,8 @@ type InviteIdentityProvider interface {
 }
 
 type orgFeatureChecker interface {
-	IsFeatureEnabled(ctx context.Context, organizationID string, feature productfeatures.Feature) (bool, error)
+	// Uncached: revocation must gate the very next portal link request.
+	IsFeatureEnabledUncached(ctx context.Context, organizationID string, feature productfeatures.Feature) (bool, error)
 }
 
 // HookEventReader is the subset of the telemetry repo used by the onboarding
@@ -1250,7 +1251,7 @@ func (s *Service) requirePortalIntentEntitlement(ctx context.Context, ac *contex
 	case workos.PortalIntentDSync:
 		feature = productfeatures.FeatureSCIM
 	case workos.PortalIntentAuditLogs, workos.PortalIntentLogStreams:
-		if ac.AccountType != string(billing.TierEnterprise) {
+		if !isEnterpriseAccount(ac.AccountType) {
 			return oops.E(oops.CodeForbidden, nil, "an enterprise plan is required for %s", intent).LogError(ctx, s.logger)
 		}
 		return nil
@@ -1258,7 +1259,7 @@ func (s *Service) requirePortalIntentEntitlement(ctx context.Context, ac *contex
 		return oops.E(oops.CodeForbidden, nil, "unsupported admin portal intent").LogError(ctx, s.logger)
 	}
 
-	enabled, err := s.features.IsFeatureEnabled(ctx, ac.ActiveOrganizationID, feature)
+	enabled, err := s.features.IsFeatureEnabledUncached(ctx, ac.ActiveOrganizationID, feature)
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "check admin portal entitlement").LogError(ctx, s.logger)
 	}
@@ -1267,6 +1268,13 @@ func (s *Service) requirePortalIntentEntitlement(ctx context.Context, ac *contex
 	}
 
 	return nil
+}
+
+// isEnterpriseAccount compares the session's account type against the
+// enterprise tier after normalizing case and whitespace, matching how billing
+// tiers are compared elsewhere.
+func isEnterpriseAccount(accountType string) bool {
+	return billing.Tier(strings.ToLower(strings.TrimSpace(accountType))) == billing.TierEnterprise
 }
 
 func (s *Service) authContext(ctx context.Context) (*contextvalues.AuthContext, error) {
