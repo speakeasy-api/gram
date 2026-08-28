@@ -69,23 +69,25 @@ export const TumUsageSection = ({
     [projectsData],
   );
 
+  const retryAlert = (message: string) => (
+    <Stack direction="horizontal" align="center" gap={3}>
+      <Text muted small role="alert">
+        {message}
+      </Text>
+      <Button
+        variant="secondary"
+        size="sm"
+        disabled={isFetching}
+        onClick={() => void refetch()}
+      >
+        {isFetching ? "RETRYING..." : "RETRY"}
+      </Button>
+    </Stack>
+  );
+
   let body: ReactNode;
   if (!tum && isError) {
-    body = (
-      <Stack direction="horizontal" align="center" gap={3}>
-        <Text muted small role="alert">
-          Couldn't load usage.
-        </Text>
-        <Button
-          variant="secondary"
-          size="sm"
-          disabled={isFetching}
-          onClick={() => void refetch()}
-        >
-          {isFetching ? "RETRYING..." : "RETRY"}
-        </Button>
-      </Stack>
-    );
+    body = retryAlert("Couldn't load usage.");
   } else if (!tum) {
     body = (
       <div className="space-y-4">
@@ -129,6 +131,14 @@ export const TumUsageSection = ({
       <Page.Section.Body>
         <Stack gap={8}>
           {estimate}
+          {/* A failed refetch keeps the cached explorer on screen; the alert
+              says the figures are the last loaded ones rather than showing
+              them as current. */}
+          {tum &&
+            isError &&
+            retryAlert(
+              "Couldn't refresh usage — showing the last loaded data.",
+            )}
           {body}
         </Stack>
       </Page.Section.Body>
