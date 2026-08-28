@@ -1062,6 +1062,7 @@ func newStartCommand() *cli.Command {
 				logger,
 				tracerProvider,
 				meterProvider,
+				db,
 				guardianPolicy,
 				authzEngine,
 				posthogClient,

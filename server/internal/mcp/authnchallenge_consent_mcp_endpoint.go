@@ -365,12 +365,12 @@ func (s *Service) serveConsentProxiedMCP(
 		if herr != nil {
 			return oops.E(oops.CodeUnexpected, herr, "load remote mcp server headers for consent transport").LogError(ctx, logger)
 		}
-		p = s.remoteProxyManager.Build(logger, &remoteServer, serverRow.ID.String(), headers, serverRow.Visibility, endpoint.ProjectID.String(), upstreamToken, "", nil)
+		p = s.remoteProxyManager.Build(logger, &remoteServer, serverRow.ID.String(), headers, serverRow.Visibility, endpoint.OrganizationID, endpoint.ProjectID.String(), upstreamToken, "", nil)
 	} else {
 		// One state-derived affinity key pins the whole consent session
 		// (initialize, list pages, DELETE) to a single gateway.
 		affinity := tunnelrouting.HashedClientAffinityKey("consent", challengeState.ID)
-		p, err = s.tunnelManager.buildProxy(ctx, affinity, logger, endpoint.ProjectID, serverRow, upstreamToken, "", nil)
+		p, err = s.tunnelManager.buildProxy(ctx, affinity, logger, endpoint.ProjectID, endpoint.OrganizationID, serverRow, upstreamToken, "", nil)
 		if err != nil {
 			return err
 		}

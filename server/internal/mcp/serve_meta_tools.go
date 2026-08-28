@@ -259,7 +259,10 @@ func (s *Service) handleMetaExecuteToolCall(
 		Params:  params,
 	}
 
-	body, err := handleToolsCall(ctx, logger, s.metrics, s.authz, s.guardianPolicy, s.db, s.env,
+	// The authoritative route fronts a meta MCP, not the hosted member's
+	// mcp_server. Meta resources are outside the mcp_tool_execution contract,
+	// so do not report the synthetic member dispatch as hosted coverage.
+	body, err := handleToolsCall(ctx, logger, s.metrics, nil, s.authz, s.guardianPolicy, s.db, s.env,
 		inputs, syntheticReq, s.toolProxy, s.billingTracker, s.billingRepository, &s.toolsetCache,
 		s.telemLogger, s.vectorToolStore, s.temporal, s.mcpMetadataRepo, s.auditLogger,
 		s.platformExtras, s.sessionClientInfo)
@@ -437,24 +440,26 @@ func (s *Service) buildMemberDispatch(
 
 	serverID := member.serverID
 	inputs := &mcpInputs{
-		projectID:             projectID,
-		toolset:               toolset.Slug,
-		environment:           environment,
-		mcpEnvVariables:       nil,
-		oauthTokenInputs:      tokenInputs,
-		authenticated:         gate.authenticated,
-		sessionID:             gate.sessionID,
-		chatID:                gate.chatID,
-		mode:                  ToolModeStatic,
-		userID:                gate.userID,
-		externalUserID:        gate.externalUserID,
-		apiKeyID:              gate.apiKeyID,
-		toolVariationsGroupID: variationsGroupID,
-		mcpServerID:           &serverID,
-		skipProxyTools:        true,
-		tags:                  nil,
-		protocolVersion:       gate.protocolVersion,
-		toolSelection:         gate.toolSelection,
+		projectID:                projectID,
+		organizationID:           toolset.OrganizationID,
+		toolset:                  toolset.Slug,
+		environment:              environment,
+		mcpEnvVariables:          nil,
+		oauthTokenInputs:         tokenInputs,
+		authenticated:            gate.authenticated,
+		sessionID:                gate.sessionID,
+		chatID:                   gate.chatID,
+		mode:                     ToolModeStatic,
+		userID:                   gate.userID,
+		externalUserID:           gate.externalUserID,
+		apiKeyID:                 gate.apiKeyID,
+		toolVariationsGroupID:    variationsGroupID,
+		mcpServerID:              &serverID,
+		skipProxyTools:           true,
+		tags:                     nil,
+		protocolVersion:          gate.protocolVersion,
+		identityCoverageRecorded: false,
+		toolSelection:            gate.toolSelection,
 	}
 	return toolset, inputs, nil
 }
