@@ -1230,6 +1230,7 @@ func newStartCommand() *cli.Command {
 				localPlatformMCPFiles, err = plugins.LocalPlatformMCPFiles(
 					c.String("server-url"),
 					localPlatformMCPMarketplaceURL(c.String("server-url")),
+					fmt.Sprintf("%d", time.Now().Unix()),
 				)
 				if err != nil {
 					return fmt.Errorf("render local Platform MCP marketplace: %w", err)

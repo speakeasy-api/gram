@@ -2,7 +2,6 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, render, screen } from "@testing-library/react";
 
 import { PlatformMCPInstallWalkthrough } from "./platform-mcp-install-walkthrough";
-import { platformMCPMarketplaceRepoURL } from "./platform-mcp-marketplace";
 
 // The real CodeBlock reads theme config from a provider this unit test has no
 // reason to mount; the snippet text is what the assertions are about.
@@ -12,13 +11,6 @@ vi.mock("@/components/code", () => ({
 vi.mock("@/lib/utils", async (importOriginal) => ({
   ...(await importOriginal<Record<string, unknown>>()),
   getServerURL: () => "https://localhost:8080",
-}));
-vi.mock("./platform-mcp-marketplace", () => ({
-  platformMCPMarketplaceRepoURL: vi.fn((isDevelopment = true) =>
-    isDevelopment
-      ? "https://localhost:8080/marketplace/local-platform-mcp-marketplace-000000000000.git"
-      : "https://github.com/speakeasy-api/marketplace",
-  ),
 }));
 
 const MCP_URL = "https://app.example.com/mcp/platform";
@@ -105,9 +97,6 @@ describe("PlatformMCPInstallWalkthrough", () => {
   });
 
   it("installs a certified agent from the local marketplace in development", () => {
-    vi.mocked(platformMCPMarketplaceRepoURL).mockReturnValueOnce(
-      "https://localhost:8080/marketplace/local-platform-mcp-marketplace-000000000000.git",
-    );
     render(
       <PlatformMCPInstallWalkthrough
         initialClient="claude_code"
@@ -122,6 +111,26 @@ describe("PlatformMCPInstallWalkthrough", () => {
     ).toBeTruthy();
     expect(
       screen.getByText("/plugin install speakeasy@speakeasy"),
+    ).toBeTruthy();
+  });
+
+  it("clones the OpenCode package into the directory used by the copy step", () => {
+    render(
+      <PlatformMCPInstallWalkthrough
+        initialClient="opencode"
+        mcpUrl={MCP_URL}
+      />,
+    );
+
+    expect(
+      screen.getByText(
+        "git clone https://localhost:8080/marketplace/local-platform-mcp-marketplace-000000000000.git marketplace",
+      ),
+    ).toBeTruthy();
+    expect(
+      screen.getByText(
+        "cp -R marketplace/opencode-plugins/speakeasy/. ~/.config/opencode/",
+      ),
     ).toBeTruthy();
   });
 });

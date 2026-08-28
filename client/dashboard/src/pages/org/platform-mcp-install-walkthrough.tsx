@@ -285,7 +285,7 @@ function marketplaceSteps(client: ClientFamily): InstallStep[] {
         title: "Clone the Speakeasy marketplace repository",
         description:
           "OpenCode has no marketplace importer, so copy the package out of the repository instead.",
-        code: `git clone ${marketplaceURL}`,
+        code: `git clone ${marketplaceURL} marketplace`,
       },
       {
         title: "Copy the OpenCode package into your config directory",
