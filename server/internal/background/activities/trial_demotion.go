@@ -14,6 +14,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
+	openrouterrepo "github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter/repo"
 	"github.com/speakeasy-api/gram/server/internal/trialemails"
 	trialsrepo "github.com/speakeasy-api/gram/server/internal/trials/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -85,10 +86,22 @@ func (d *DemoteExpiredTrials) Demote(ctx context.Context, args DemoteExpiredTria
 			d.logger.InfoContext(ctx, "expired trial changed before demotion", attr.SlogOrganizationID(args.OrganizationID))
 			return nil
 		}
+		if _, lockErr := tx.LockTrialLifecycleForRearm(ctx, args.OrganizationID); lockErr != nil {
+			return fmt.Errorf("lock no-op trial demotion lifecycle: %w", lockErr)
+		}
+		for _, keyType := range openrouter.AllKeyTypes {
+			if lockErr := openrouter.AcquireAPIKeyBillingTransactionLock(ctx, dbtx, args.OrganizationID, keyType); lockErr != nil {
+				return fmt.Errorf("acquire no-op OpenRouter %s key billing lock: %w", keyType, lockErr)
+			}
+		}
+		changedKeyTypes, selectErr := trialDemotionChangedKeyTypes(ctx, dbtx, args.OrganizationID)
+		if selectErr != nil {
+			return selectErr
+		}
 		if rollbackErr := dbtx.Rollback(ctx); rollbackErr != nil {
 			return fmt.Errorf("close no-op trial demotion transaction: %w", rollbackErr)
 		}
-		return d.reconcileOpenRouterKeys(ctx, args.OrganizationID)
+		return d.reconcileOpenRouterKeys(ctx, args.OrganizationID, changedKeyTypes)
 	case err != nil:
 		return fmt.Errorf("mark trial demoted: %w", err)
 	}
@@ -106,12 +119,16 @@ func (d *DemoteExpiredTrials) Demote(ctx context.Context, args DemoteExpiredTria
 		return errors.New("OpenRouter key provisioner cannot persist and reconcile trial demotion causes")
 	}
 	keyAccessChanged := false
+	changedKeyTypes := make([]openrouter.KeyType, 0, len(openrouter.AllKeyTypes))
 	for _, keyType := range openrouter.AllKeyTypes {
 		change, err := provisioner.AddAPIKeyDisableCauseWithDB(ctx, dbtx, args.OrganizationID, keyType, openrouter.DisableCauseTrialDemotion)
 		if err != nil {
 			return fmt.Errorf("add trial demotion cause to OpenRouter %s key: %w", keyType, err)
 		}
 		keyAccessChanged = keyAccessChanged || change.KeyAccessChanged
+		if change.KeyAccessChanged {
+			changedKeyTypes = append(changedKeyTypes, keyType)
+		}
 	}
 
 	if err := productfeatures.SetTrialRuntimeFeaturesTx(ctx, dbtx, args.OrganizationID, false); err != nil {
@@ -149,17 +166,38 @@ func (d *DemoteExpiredTrials) Demote(ctx context.Context, args DemoteExpiredTria
 		}
 	}
 
-	return d.reconcileOpenRouterKeys(ctx, args.OrganizationID)
+	return d.reconcileOpenRouterKeys(ctx, args.OrganizationID, changedKeyTypes)
 }
 
-func (d *DemoteExpiredTrials) reconcileOpenRouterKeys(ctx context.Context, organizationID string) error {
+func trialDemotionChangedKeyTypes(ctx context.Context, db openrouter.DBTX, organizationID string) ([]openrouter.KeyType, error) {
+	changedKeyTypes := make([]openrouter.KeyType, 0, len(openrouter.AllKeyTypes))
+	for _, keyType := range openrouter.AllKeyTypes {
+		key, err := openrouterrepo.New(db).GetOpenRouterAPIKey(ctx, openrouterrepo.GetOpenRouterAPIKeyParams{
+			OrganizationID: organizationID,
+			KeyType:        string(keyType),
+		})
+		switch {
+		case errors.Is(err, pgx.ErrNoRows):
+			continue
+		case err != nil:
+			return nil, fmt.Errorf("read OpenRouter %s key after no-op trial demotion: %w", keyType, err)
+		case key.DisableCauses == nil:
+			return nil, fmt.Errorf("OpenRouter %s key has unclassified causes after trial demotion", keyType)
+		case len(key.DisableCauses) == 1 && key.DisableCauses[0] == string(openrouter.DisableCauseTrialDemotion):
+			changedKeyTypes = append(changedKeyTypes, keyType)
+		}
+	}
+	return changedKeyTypes, nil
+}
+
+func (d *DemoteExpiredTrials) reconcileOpenRouterKeys(ctx context.Context, organizationID string, keyTypes []openrouter.KeyType) error {
 	provisioner, ok := d.openRouter.(trialDemotionOpenRouter)
 	if !ok {
 		return errors.New("OpenRouter key provisioner cannot reconcile trial demotion causes")
 	}
 
 	var reconcileErrors []error
-	for _, keyType := range openrouter.AllKeyTypes {
+	for _, keyType := range keyTypes {
 		if err := provisioner.ReconcileAPIKeyDisabled(ctx, organizationID, keyType); err != nil {
 			reconcileErrors = append(reconcileErrors, fmt.Errorf("reconcile OpenRouter %s key after trial demotion: %w", keyType, err))
 		}

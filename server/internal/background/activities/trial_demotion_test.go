@@ -2,9 +2,14 @@ package activities_test
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"slices"
+	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -17,6 +22,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	"github.com/speakeasy-api/gram/server/internal/background/activities"
 	activitiesrepo "github.com/speakeasy-api/gram/server/internal/background/activities/repo"
+	"github.com/speakeasy-api/gram/server/internal/guardian"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	featurerepo "github.com/speakeasy-api/gram/server/internal/productfeatures/repo"
@@ -388,6 +394,57 @@ func TestDemoteExpiredTrials_PreservesLayeredDisableCauses(t *testing.T) {
 	metadata, err := audittest.DecodeAuditData(entry.Metadata)
 	require.NoError(t, err)
 	require.Equal(t, false, metadata["key_access_changed"], "layering a cause onto disabled keys does not change access")
+	require.Empty(t, ti.provisioner.reconciled, "keys whose effective access did not change must not be patched upstream")
+}
+
+func TestDemoteExpiredTrials_ProductionOpenRouterPatchesOnlyChangedKeys(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTrialTestInstance(t)
+	orgID := newTrialOrg(t, ctx, ti, time.Now().Add(-time.Hour).UTC())
+	materializeTrialKey(t, ctx, ti, orgID, openrouter.KeyTypeChat, []string{string(openrouter.DisableCauseAdminLock)})
+	materializeTrialKey(t, ctx, ti, orgID, openrouter.KeyTypeInternal, []string{})
+
+	var mu sync.Mutex
+	var patchedHashes []string
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPatch {
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			return
+		}
+		hash := strings.TrimPrefix(r.URL.Path, "/v1/keys/")
+		mu.Lock()
+		patchedHashes = append(patchedHashes, hash)
+		mu.Unlock()
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{"data": map[string]any{"hash": hash, "limit": 100.0}})
+	}))
+	t.Cleanup(upstream.Close)
+	option, err := openrouter.WithTestBaseURL(upstream.URL)
+	require.NoError(t, err)
+	tracerProvider := testenv.NewTracerProvider(t)
+	guardianPolicy, err := guardian.NewUnsafePolicy(tracerProvider, []string{})
+	require.NoError(t, err)
+	production := openrouter.New(
+		testenv.NewLogger(t), tracerProvider, guardianPolicy, ti.conn, "test", "provisioning_key_placeholder",
+		nil, nil, nil, testenv.NewEncryptionClient(t), option,
+	)
+	ti.activity = activities.NewDemoteExpiredTrials(
+		testenv.NewLogger(t), ti.conn, production, audit.NewLogger(), ti.notifier, ti.productFeatures,
+	)
+
+	require.NoError(t, ti.activity.Demote(ctx, activities.DemoteExpiredTrialArgs{OrganizationID: orgID}))
+	mu.Lock()
+	gotPatchedHashes := append([]string(nil), patchedHashes...)
+	mu.Unlock()
+	require.Equal(t, []string{"hash-internal"}, gotPatchedHashes)
+	require.NoError(t, ti.activity.Demote(ctx, activities.DemoteExpiredTrialArgs{OrganizationID: orgID}))
+	mu.Lock()
+	gotPatchedHashes = append([]string(nil), patchedHashes...)
+	mu.Unlock()
+	require.Equal(t, []string{"hash-internal", "hash-internal"}, gotPatchedHashes, "retry repairs only the key whose demotion changed access")
+	require.Equal(t, []string{"admin_lock", "trial_demotion"}, trialKey(t, ctx, ti, orgID, openrouter.KeyTypeChat).DisableCauses)
+	require.Equal(t, []string{"trial_demotion"}, trialKey(t, ctx, ti, orgID, openrouter.KeyTypeInternal).DisableCauses)
 }
 
 func TestDemoteExpiredTrials_MissingKeysAreSafe(t *testing.T) {
@@ -397,7 +454,7 @@ func TestDemoteExpiredTrials_MissingKeysAreSafe(t *testing.T) {
 	orgID := newTrialOrg(t, ctx, ti, time.Now().Add(-time.Hour).UTC())
 
 	require.NoError(t, ti.activity.Demote(ctx, activities.DemoteExpiredTrialArgs{OrganizationID: orgID}))
-	require.Equal(t, []string{orgID + ":chat", orgID + ":internal"}, ti.provisioner.reconciled)
+	require.Empty(t, ti.provisioner.reconciled)
 }
 
 func TestDemoteExpiredTrials_NullDisableCausesFailClosedAndRollBack(t *testing.T) {
