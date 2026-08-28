@@ -37,6 +37,7 @@ import Environments, {
   EnvironmentsRoot,
 } from "./pages/environments/Environments";
 import Home from "./pages/home/Home";
+import { ProjectGuidePage } from "./components/project-guide/ProjectGuidePage";
 import Integrations from "./pages/integrations/Integrations";
 import Login from "./pages/login/Login";
 import Register from "./pages/login/Register";
@@ -241,6 +242,11 @@ const ROUTE_STRUCTURE = {
     url: "",
     icon: "house",
     component: Home,
+  },
+  guide: {
+    title: "Project Guide",
+    url: "guide",
+    component: ProjectGuidePage,
   },
   chat: {
     title: "Project Assistant",
