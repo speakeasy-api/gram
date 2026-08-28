@@ -1,9 +1,18 @@
-import { useRef, type JSX, type Ref } from "react";
+import { useRef, useState, type JSX, type Ref } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useParams } from "@tanstack/react-router";
 
 import { useConfirmDialog } from "@/components/ConfirmDialog";
 import { CopyValue } from "@/components/CopyValue";
+import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { TrialFacts } from "@/pages/organization/TrialFacts";
 import { OrganizationActions } from "@/pages/organizations/OrganizationActions";
 import {
@@ -17,13 +26,17 @@ import { Switch } from "@/components/ui/switch";
 import { ACCOUNT_TYPE_OPTIONS, isAccountType } from "@/lib/accountTypes";
 import {
   cancelOrganizationFetches,
+  invalidateOrganizationActivity,
   invalidateOrganizationDetails,
+  invalidateOrganizations,
   invalidateOrganizationStats,
   organizationQuery,
   writeOrganizationToCache,
 } from "@/lib/adminQueries";
 import {
   errorMessage,
+  GramAdminError,
+  markEnterpriseTrialConverted,
   updateOrganization,
   type AdminOrganization,
 } from "@/lib/gramAdminApi";
@@ -77,6 +90,17 @@ function yesNo(v: boolean): string {
   return v ? "yes" : "no";
 }
 
+function canMarkEnterpriseTrialConverted(org: AdminOrganization): boolean {
+  return (
+    org.trial_tier === "enterprise" &&
+    (org.trial_state === "running" ||
+      org.trial_state === "ending_soon" ||
+      org.trial_state === "expired" ||
+      org.trial_state === "demoted") &&
+    !org.trial_converted_at
+  );
+}
+
 // The view reads the record from the same query the layout above it reads, so
 // the two hold one answer per render. A file route renders through `<Outlet/>`
 // and cannot be handed a prop.
@@ -99,12 +123,80 @@ export function Overview({ org }: { org: AdminOrganization }): JSX.Element {
   const qc = useQueryClient();
   const [confirm, confirmDialog] = useConfirmDialog();
   const { announce, showFailure } = useWriteReport();
+  const [conversionOpen, setConversionOpen] = useState(false);
+  const [conversionUncertain, setConversionUncertain] = useState(false);
 
   // Where the keyboard goes when the dialog closes. `useConfirmDialog` has no
   // `DialogTrigger`, so Radix's own restore drops focus on `document.body`.
   const accountTypeControl = useRef<HTMLButtonElement>(null);
   const whitelistedControl = useRef<HTMLButtonElement>(null);
   const detailsHeading = useRef<HTMLHeadingElement>(null);
+  const conversionControl = useRef<HTMLButtonElement>(null);
+  const conversionFocusAfterClose = useRef<"opener" | "details">("opener");
+  const conversionRunning = useRef(false);
+
+  const conversionMut = useMutation({
+    mutationFn: () => markEnterpriseTrialConverted({ id: org.id }),
+  });
+
+  const refreshConversionTruth = async (): Promise<void> => {
+    invalidateOrganizationActivity(qc, org.id);
+    await invalidateOrganizations(qc);
+    await qc.fetchQuery(organizationQuery(org.id));
+  };
+
+  const restoreConversionFocus = (): void => {
+    setTimeout(() => {
+      const target =
+        conversionFocusAfterClose.current === "details"
+          ? detailsHeading.current
+          : conversionControl.current;
+      target?.focus();
+    });
+  };
+
+  const closeConversion = (focus: "opener" | "details"): void => {
+    conversionFocusAfterClose.current = focus;
+    setConversionOpen(false);
+    restoreConversionFocus();
+  };
+
+  const convert = async (): Promise<void> => {
+    if (conversionRunning.current) return;
+    conversionRunning.current = true;
+    showFailure(null);
+    try {
+      await conversionMut.mutateAsync();
+      await refreshConversionTruth();
+      setConversionUncertain(false);
+      closeConversion("details");
+      announce(`${org.name} marked as converted.`);
+    } catch (error) {
+      const preCommit =
+        error instanceof GramAdminError &&
+        error.status >= 400 &&
+        error.status < 500;
+      if (preCommit) {
+        const text = `Could not mark ${org.name} as converted: ${errorMessage(error)}`;
+        announce(text);
+        showFailure(text);
+        closeConversion("opener");
+        return;
+      }
+
+      const text = `Conversion may already be recorded. Refreshing canonical organization truth after: ${errorMessage(error)}`;
+      setConversionUncertain(true);
+      announce(text);
+      showFailure(text);
+      try {
+        await refreshConversionTruth();
+      } catch {
+        // Retry remains available when canonical truth cannot be loaded.
+      }
+    } finally {
+      conversionRunning.current = false;
+    }
+  };
 
   const mut = useMutation({
     mutationFn: (change: FactChange) =>
@@ -215,7 +307,7 @@ export function Overview({ org }: { org: AdminOrganization }): JSX.Element {
           <Row label="Account type">
             <Select
               value={org.account_type}
-              disabled={mut.isPending}
+              disabled={mut.isPending || conversionMut.isPending}
               onValueChange={(v) => {
                 void commit(
                   { account_type: v },
@@ -248,7 +340,7 @@ export function Overview({ org }: { org: AdminOrganization }): JSX.Element {
             <Switch
               ref={whitelistedControl}
               checked={org.whitelisted}
-              disabled={mut.isPending}
+              disabled={mut.isPending || conversionMut.isPending}
               onCheckedChange={(v) => {
                 void commit(
                   { whitelisted: v },
@@ -323,9 +415,69 @@ export function Overview({ org }: { org: AdminOrganization }): JSX.Element {
               actions="trial"
               focusFallbackRef={detailsHeading}
             />
+            {canMarkEnterpriseTrialConverted(org) && (
+              <Button
+                ref={conversionControl}
+                size="sm"
+                disabled={conversionMut.isPending}
+                aria-label={`Mark ${org.name} as converted`}
+                onClick={() => {
+                  setConversionUncertain(false);
+                  setConversionOpen(true);
+                }}
+              >
+                Mark as converted
+              </Button>
+            )}
           </div>
         </aside>
       )}
+
+      <Dialog
+        open={conversionOpen}
+        onOpenChange={(open) => {
+          if (!open && !conversionMut.isPending) closeConversion("opener");
+        }}
+      >
+        <DialogContent
+          showCloseButton={!conversionMut.isPending}
+          onCloseAutoFocus={(event) => event.preventDefault()}
+        >
+          <DialogHeader>
+            <DialogTitle>Mark {org.name} as converted?</DialogTitle>
+            <DialogDescription>
+              This records a signed enterprise conversion, normalizes enterprise
+              access and runtime settings, and reconciles model provider keys
+              according to each key’s disable causes. Keys disabled for admin,
+              billing, or unknown causes remain disabled.
+            </DialogDescription>
+          </DialogHeader>
+          {conversionUncertain && (
+            <p role="alert" className="text-destructive text-sm">
+              Conversion may already be recorded. A canonical organization
+              refresh was requested. Retry safely uses the same idempotent
+              operation.
+            </p>
+          )}
+          <DialogFooter>
+            <Button
+              variant="ghost"
+              size="sm"
+              disabled={conversionMut.isPending}
+              onClick={() => closeConversion("opener")}
+            >
+              Cancel
+            </Button>
+            <Button
+              size="sm"
+              disabled={conversionMut.isPending}
+              onClick={() => void convert()}
+            >
+              {conversionUncertain ? "Retry" : "Mark as converted"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {confirmDialog}
     </div>

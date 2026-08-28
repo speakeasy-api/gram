@@ -15,6 +15,7 @@ import {
   listOrganizationActivity,
   listOrganizations,
   logout,
+  markEnterpriseTrialConverted,
   organizationDashboardUrl,
   MAX_TRIAL_EXTENSION_DAYS,
   MAX_TRIAL_REARM_DAYS,
@@ -424,6 +425,30 @@ describe("the organization write endpoints", () => {
   it("mirrors the server's day-count bounds exactly", () => {
     expect(MIN_TRIAL_EXTENSION_DAYS).toBe(1);
     expect(MAX_TRIAL_EXTENSION_DAYS).toBe(365);
+  });
+
+  it("posts only the id to the dedicated enterprise conversion path and returns the privacy-minimal result", async () => {
+    const result = {
+      organization_id: ORG.id,
+      converted_at: "2026-03-08T12:34:56Z",
+    };
+    const fetch = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify(result), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+    vi.stubGlobal("fetch", fetch);
+
+    await expect(markEnterpriseTrialConverted({ id: ORG.id })).resolves.toEqual(
+      result,
+    );
+    expect(requestOf(fetch)).toEqual({
+      path: "/admin/trial.convert",
+      method: "POST",
+      contentType: "application/json",
+      body: { id: ORG.id },
+    });
   });
 
   it("posts the id to the disable path", async () => {

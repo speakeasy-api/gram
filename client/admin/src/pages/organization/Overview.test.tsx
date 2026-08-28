@@ -9,10 +9,12 @@ import {
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
+  organizationActivityQuery,
   organizationQuery,
   organizationsListQuery,
   organizationsStatsQuery,
 } from "@/lib/adminQueries";
+import { GramAdminError } from "@/lib/gramAdminApi";
 import { routeTree } from "@/routeTree.gen";
 import { anOrganization } from "@/test/fixtures";
 import { renderRouteTree } from "@/test/harness";
@@ -24,6 +26,7 @@ const mocks = vi.hoisted(() => ({
   listOrganizations: vi.fn(),
   getOrganizationStats: vi.fn(),
   updateOrganization: vi.fn(),
+  markEnterpriseTrialConverted: vi.fn(),
 }));
 
 vi.mock("@/lib/gramAdminApi", async (importOriginal) => {
@@ -36,6 +39,7 @@ vi.mock("@/lib/gramAdminApi", async (importOriginal) => {
     listOrganizations: mocks.listOrganizations,
     getOrganizationStats: mocks.getOrganizationStats,
     updateOrganization: mocks.updateOrganization,
+    markEnterpriseTrialConverted: mocks.markEnterpriseTrialConverted,
   };
 });
 
@@ -136,6 +140,11 @@ beforeEach(() => {
   mocks.listOrganizations.mockReset();
   mocks.getOrganizationStats.mockReset();
   mocks.updateOrganization.mockReset();
+  mocks.markEnterpriseTrialConverted.mockReset();
+  mocks.markEnterpriseTrialConverted.mockResolvedValue({
+    organization_id: ORG.id,
+    converted_at: "2026-03-08T12:34:56Z",
+  });
 });
 
 afterEach(() => {
@@ -630,6 +639,273 @@ describe("Overview", () => {
     expect(mocks.updateOrganization).not.toHaveBeenCalled();
   });
 
+  it.each([
+    ["running enterprise trial", { ...ORG, trial_state: "running" }, true],
+    ["ending enterprise trial", { ...ORG, trial_state: "ending_soon" }, true],
+    ["expired enterprise trial", { ...ORG, trial_state: "expired" }, true],
+    ["demoted enterprise trial", { ...ORG, trial_state: "demoted" }, true],
+    [
+      "disabled enterprise trial",
+      { ...ORG, disabled_at: "2026-03-01T00:00:00Z" },
+      true,
+    ],
+    [
+      "enterprise trial with an enterprise account type",
+      { ...ORG, account_type: "enterprise" },
+      true,
+    ],
+    [
+      "enterprise trial with a free account type",
+      { ...ORG, account_type: "free" },
+      true,
+    ],
+    ["non-enterprise trial", { ...ORG, trial_tier: "pro" }, false],
+    [
+      "already converted timestamp",
+      { ...ORG, trial_converted_at: "2026-03-01T00:00:00Z" },
+      false,
+    ],
+    ["converted state", { ...ORG, trial_state: "converted" }, false],
+    ["no trial state", { ...ORG, trial_state: "none" }, false],
+  ] as const)(
+    "offers conversion only for a %s",
+    async (_case, org, eligible) => {
+      mocks.getOrganization.mockResolvedValue(org);
+      await renderRouteTree(routeTree, {
+        initialPath: `/organizations/${org.slug}`,
+      });
+
+      await screen.findByRole("heading", { name: "Details" });
+      const control = screen.queryByRole("button", {
+        name: `Mark ${org.name} as converted`,
+      });
+      expect(Boolean(control)).toBe(eligible);
+    },
+  );
+
+  it("explains the signed conversion and cause-aware reconciliation without promising every key is enabled", async () => {
+    await renderRouteTree(routeTree, {
+      initialPath: `/organizations/${ORG.slug}`,
+    });
+
+    fireEvent.click(
+      await screen.findByRole("button", {
+        name: `Mark ${ORG.name} as converted`,
+      }),
+    );
+    const dialog = await screen.findByRole("dialog");
+    expect(within(dialog).getByRole("heading").textContent).toBe(
+      `Mark ${ORG.name} as converted?`,
+    );
+    expect(dialog.textContent).toContain("signed enterprise conversion");
+    expect(dialog.textContent).toContain(
+      "normalizes enterprise access and runtime settings",
+    );
+    expect(dialog.textContent).toContain(
+      "according to each key’s disable causes",
+    );
+    expect(dialog.textContent).toContain("remain disabled");
+    expect(dialog.textContent).not.toContain("all keys will be enabled");
+  });
+
+  it("returns focus to the conversion opener when the operator cancels", async () => {
+    await renderRouteTree(routeTree, {
+      initialPath: `/organizations/${ORG.slug}`,
+    });
+    const opener = await screen.findByRole("button", {
+      name: `Mark ${ORG.name} as converted`,
+    });
+    fireEvent.click(opener);
+    fireEvent.click(
+      within(await screen.findByRole("dialog")).getByRole("button", {
+        name: "Cancel",
+      }),
+    );
+
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    expect(document.activeElement).toBe(opener);
+    expect(mocks.markEnterpriseTrialConverted).not.toHaveBeenCalled();
+  });
+
+  it("invalidates detail, list, stats, and activity, refetches canonically, and never caches the narrow result as an organization", async () => {
+    const converted = {
+      ...ORG,
+      trial_state: "converted" as const,
+      trial_converted_at: "2026-03-08T12:34:56Z",
+    };
+    mocks.getOrganization
+      .mockResolvedValueOnce(ORG)
+      .mockResolvedValue(converted);
+    const qc = new QueryClient({
+      defaultOptions: {
+        queries: { retry: false },
+        mutations: { retry: false },
+      },
+    });
+    qc.setQueryData(organizationsListQuery().queryKey, {
+      organizations: [ORG],
+      next_cursor: undefined,
+    });
+    const invalidate = vi.spyOn(qc, "invalidateQueries");
+    await renderRouteTree(routeTree, {
+      initialPath: `/organizations/${ORG.slug}`,
+      queryClient: qc,
+    });
+    invalidate.mockClear();
+
+    fireEvent.click(
+      await screen.findByRole("button", {
+        name: `Mark ${ORG.name} as converted`,
+      }),
+    );
+    fireEvent.click(
+      within(await screen.findByRole("dialog")).getByRole("button", {
+        name: "Mark as converted",
+      }),
+    );
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+
+    const invalidatedKeys = invalidate.mock.calls.map(
+      ([filters]) => filters?.queryKey,
+    );
+    expect(invalidatedKeys).toContainEqual(organizationsListQuery().queryKey);
+    expect(invalidatedKeys).toContainEqual(["gram-admin-organization"]);
+    expect(invalidatedKeys).toContainEqual(organizationsStatsQuery.queryKey);
+    expect(invalidatedKeys).toContainEqual(
+      organizationActivityQuery(ORG.id).queryKey,
+    );
+    expect(mocks.getOrganization).toHaveBeenCalledWith(ORG.id);
+    expect(qc.getQueryData(organizationQuery(ORG.id).queryKey)).toEqual(
+      converted,
+    );
+    expect(qc.getQueryData(organizationsListQuery().queryKey)).toEqual({
+      organizations: [ORG],
+      next_cursor: undefined,
+    });
+  });
+
+  it("locks every conversion exit and duplicate submission while pending", async () => {
+    let settle!: (value: {
+      organization_id: string;
+      converted_at: string;
+    }) => void;
+    mocks.markEnterpriseTrialConverted.mockReturnValue(
+      new Promise((resolve) => {
+        settle = resolve;
+      }),
+    );
+    await renderRouteTree(routeTree, {
+      initialPath: `/organizations/${ORG.slug}`,
+    });
+
+    const opener = await screen.findByRole("button", {
+      name: `Mark ${ORG.name} as converted`,
+    });
+    fireEvent.click(opener);
+    const dialog = await screen.findByRole("dialog");
+    const submit = within(dialog).getByRole("button", {
+      name: "Mark as converted",
+    });
+    fireEvent.click(submit);
+    fireEvent.click(submit);
+    await waitFor(() =>
+      expect(mocks.markEnterpriseTrialConverted).toHaveBeenCalled(),
+    );
+
+    expect(payloadOf(mocks.markEnterpriseTrialConverted)).toEqual({
+      id: ORG.id,
+    });
+    expect(isDisabled(submit)).toBe(true);
+    expect(
+      isDisabled(within(dialog).getByRole("button", { name: "Cancel" })),
+    ).toBe(true);
+    expect(isDisabled(opener)).toBe(true);
+    fireEvent.click(submit);
+    expect(mocks.markEnterpriseTrialConverted).toHaveBeenCalledTimes(1);
+
+    settle({ organization_id: ORG.id, converted_at: "2026-03-08T12:34:56Z" });
+  });
+
+  it.each([
+    [409, "Conflict"],
+    [404, "Not Found"],
+    [403, "Forbidden"],
+  ] as const)(
+    "closes and restores the opener for a pre-commit %s error",
+    async (status, label) => {
+      mocks.markEnterpriseTrialConverted.mockRejectedValue(
+        new GramAdminError(
+          status,
+          { message: label },
+          `gram admin ${status} ${label}`,
+        ),
+      );
+      await renderRouteTree(routeTree, {
+        initialPath: `/organizations/${ORG.slug}`,
+      });
+      const opener = await screen.findByRole("button", {
+        name: `Mark ${ORG.name} as converted`,
+      });
+      fireEvent.click(opener);
+      fireEvent.click(
+        within(await screen.findByRole("dialog")).getByRole("button", {
+          name: "Mark as converted",
+        }),
+      );
+
+      await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+      expect(document.activeElement).toBe(opener);
+      expect(liveRegion().textContent).toContain(label);
+    },
+  );
+
+  it("keeps an ambiguous post-commit error open, refetches truth, and safely retries after the panel unmounts", async () => {
+    const converted = {
+      ...ORG,
+      trial_state: "converted" as const,
+      trial_converted_at: "2026-03-08T12:34:56Z",
+    };
+    mocks.getOrganization
+      .mockResolvedValueOnce(ORG)
+      .mockResolvedValue(converted);
+    mocks.markEnterpriseTrialConverted
+      .mockRejectedValueOnce(new Error("provider unavailable"))
+      .mockResolvedValueOnce({
+        organization_id: ORG.id,
+        converted_at: converted.trial_converted_at,
+      });
+    await renderRouteTree(routeTree, {
+      initialPath: `/organizations/${ORG.slug}`,
+    });
+    fireEvent.click(
+      await screen.findByRole("button", {
+        name: `Mark ${ORG.name} as converted`,
+      }),
+    );
+    fireEvent.click(
+      within(await screen.findByRole("dialog")).getByRole("button", {
+        name: "Mark as converted",
+      }),
+    );
+
+    const dialog = await screen.findByRole("dialog");
+    await waitFor(() => {
+      expect(dialog.textContent).toContain("may already be recorded");
+      expect(liveRegion().textContent).toContain("may already be recorded");
+      expect(
+        screen.queryByRole("heading", { name: "Enterprise trial" }),
+      ).toBeNull();
+    });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Retry" }));
+
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    expect(mocks.markEnterpriseTrialConverted).toHaveBeenCalledTimes(2);
+    expect(document.activeElement).toBe(
+      screen.getByRole("heading", { name: "Details" }),
+    );
+    expect(liveRegion().textContent).toContain("marked as converted");
+  });
+
   it.each(["running", "ending_soon", "expired", "demoted"] as const)(
     "shows the trial panel for a %s trial",
     async (trialState) => {
@@ -779,16 +1055,18 @@ describe("Overview", () => {
     ).toBeTruthy();
   });
 
-  it("does not invent an action for an expired trial", async () => {
+  it("offers only the conversion action for an expired trial", async () => {
     mocks.getOrganization.mockResolvedValue({ ...ORG, trial_state: "expired" });
     await renderRouteTree(routeTree, {
       initialPath: `/organizations/${ORG.slug}`,
     });
 
     await screen.findByRole("heading", { name: "Enterprise trial" });
+    const trial = within(panelNamed("Enterprise trial"));
     expect(
-      within(panelNamed("Enterprise trial")).queryByRole("button"),
-    ).toBeNull();
+      trial.getByRole("button", { name: `Mark ${ORG.name} as converted` }),
+    ).toBeTruthy();
+    expect(trial.queryByRole("button", { name: /Extend|Re-arm/ })).toBeNull();
   });
 
   it("wraps a wide Details and Danger zone column beside the trial panel", async () => {

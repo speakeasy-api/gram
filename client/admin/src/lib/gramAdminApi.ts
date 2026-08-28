@@ -392,6 +392,24 @@ export type OrganizationRequest = {
   id: string;
 };
 
+export type MarkEnterpriseTrialConvertedResult = {
+  organization_id: string;
+  converted_at: string;
+};
+
+export function markEnterpriseTrialConverted(
+  body: OrganizationRequest,
+): Promise<MarkEnterpriseTrialConvertedResult> {
+  return gramAdminFetch<MarkEnterpriseTrialConvertedResult>(
+    "/admin/trial.convert",
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    },
+  );
+}
+
 // Both answer the organization in its new state, so a caller updates its cache
 // from the response rather than reading the record back.
 export function disableOrganization(
