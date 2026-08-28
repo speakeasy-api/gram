@@ -22,7 +22,7 @@ type Definition struct {
 
 const (
 	// MeterAgentSessionStorage measures durable agent-session message storage.
-	MeterAgentSessionStorage MeterID = "gram.agent_session.storage"
+	MeterAgentSessionStorage MeterID = "aicp.agent_session.storage"
 
 	// UnitSTokens is the Gram-owned Speakeasy token workload unit.
 	UnitSTokens Unit = "stokens"

@@ -92,7 +92,7 @@ func TestChatStorageReadingPipelineToClickHouse(t *testing.T) {
 	require.NoError(t, proto.Unmarshal(outboxRows[0].Message, message))
 	expected, err := stokens.NewCodec().Count(ctx, "Plan a route")
 	require.NoError(t, err)
-	require.Equal(t, string(metering.MeterAgentSessionStorage), message.GetMeterId())
+	require.Equal(t, "aicp.agent_session.storage", message.GetMeterId())
 	require.Equal(t, string(metering.UnitSTokens), message.GetUnit())
 	require.NotContains(t, message.GetAttributes(), "codec")
 	require.Equal(t, int64(expected), message.GetValue())

@@ -27,7 +27,7 @@ func TestScopeConstructorsExposeOnlyApplicableOwnership(t *testing.T) {
 	require.Equal(t, projectID, storedProjectID)
 }
 
-func TestReadingIDUsesInitialV1Contract(t *testing.T) {
+func TestReadingIDUsesAgentSessionStorageV1Contract(t *testing.T) {
 	t.Parallel()
 	now := time.Date(2026, time.August, 27, 12, 0, 0, 0, time.UTC)
 	reading, err := metering.NewUsage(metering.UsageInput{
@@ -45,7 +45,7 @@ func TestReadingIDUsesInitialV1Contract(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	require.Equal(t, uuid.MustParse("c30a00ac-8471-56c4-b59e-f09ebd00ca21"), reading.ID())
+	require.Equal(t, uuid.MustParse("69e0e49c-c2a0-5c92-bbdd-0b6ccf68ba8b"), reading.ID())
 }
 
 func TestNewUsageRejectsUnknownDefinition(t *testing.T) {
