@@ -11,13 +11,9 @@ import { useSession } from "@/contexts/Auth";
 import { useKillswitchAccess } from "@/hooks/useKillswitchAccess";
 import { useBatchKillswitchUserBadgesMutation } from "@gram/client/react-query/batchKillswitchUserBadges.js";
 import type { KillswitchUserBadge } from "@gram/client/models/components/killswitchuserbadge.js";
-import {
-  killswitchCreateHref,
-  type KillswitchCreateContext,
-} from "./killswitch-routing";
+import { killswitchCreateHref } from "./killswitch-routing";
 
 export { killswitchCreateHref };
-export type { KillswitchCreateContext };
 
 const MAX_BADGE_USERS_PER_REQUEST = 100;
 const MAX_CONCURRENT_BADGE_REQUESTS = 2;
