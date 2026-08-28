@@ -206,8 +206,11 @@ function IdentitiesIndexContent(): JSX.Element {
     const tally = { enrolled: 0, noAccount: 0, agent: 0 };
     for (const identity of identities) {
       if (identity.status === "enrolled") tally.enrolled += 1;
-      if (!identityHasAccount(identity)) tally.noAccount += 1;
-      if (identityKindOf(identity) === "agent") tally.agent += 1;
+      const kind = identityKindOf(identity);
+      if (kind === "person" && !identityHasAccount(identity)) {
+        tally.noAccount += 1;
+      }
+      if (kind === "agent") tally.agent += 1;
     }
     return tally;
   }, [identities]);
@@ -268,7 +271,7 @@ function IdentitiesIndexContent(): JSX.Element {
             icon="circle-check"
           />
           <StatTile
-            title="No account"
+            title="No linked account"
             value={counts.noAccount}
             format="compact"
             tone={counts.noAccount > 0 ? "warning" : "neutral"}
@@ -323,12 +326,6 @@ function IdentitiesIndexContent(): JSX.Element {
 }
 
 /**
- * The leading cell. The three kinds get different faces on purpose: a member
- * has a photo or initials, an unclaimed address gets a question mark, and an
- * agent id gets a bot — the row should say what sort of thing it is before the
- * reader gets to the Kind column.
- */
-/**
  * Initials for a person whose only name is an address: getInitials splits on
  * spaces, which yields a single letter for `ana.vidal@…`. Read the local part
  * instead so an address-only person still gets a real monogram.
@@ -339,6 +336,12 @@ function personInitials(name: string): string {
   return getInitials(local.replace(/[._-]+/g, " "));
 }
 
+/**
+ * The leading cell. Every person reads as a person — photo or initials, name in
+ * the same weight — and only an agent gets a different face, because a bare id
+ * it chose for itself may name no one. Whether a person is linked to an account
+ * here is said beside the name, not by drawing them differently.
+ */
 function IdentityCell({ identity }: { identity: Employee }): JSX.Element {
   const isAgent = identityKindOf(identity) === "agent";
   const hasAccount = identityHasAccount(identity);
@@ -360,7 +363,7 @@ function IdentityCell({ identity }: { identity: Employee }): JSX.Element {
         <div className="flex min-w-0 items-center gap-2">
           <Text className="truncate font-medium">{identity.name}</Text>
           {!isAgent && !hasAccount && (
-            <Badge variant="neutral">No account</Badge>
+            <Badge variant="neutral">No linked account</Badge>
           )}
         </div>
         {secondary && (

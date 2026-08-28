@@ -53,8 +53,14 @@ function kindLabel(identity: IdentityModel): string {
   }
 }
 
-/** True for a subject with activity here but no member record. */
-function hasNoAccount(identity: IdentityModel): boolean {
+/**
+ * True for a person whose activity we see but who is not linked to one account
+ * here. The resolver reports both "matches no member" and "several members
+ * claim this address" as unattributed, so the wording says what is certain —
+ * there is no single account behind this identity — rather than asserting that
+ * no account exists.
+ */
+function hasNoLinkedAccount(identity: IdentityModel): boolean {
   return identity.kind === "unattributed" && identity.emails.length > 0;
 }
 
@@ -239,8 +245,8 @@ function IdentityHeader({
                 </Text>
               )}
               <Badge variant="neutral">{kindLabel(identity)}</Badge>
-              {hasNoAccount(identity) && (
-                <Badge variant="neutral">No account</Badge>
+              {hasNoLinkedAccount(identity) && (
+                <Badge variant="neutral">No linked account</Badge>
               )}
             </div>
           </div>
