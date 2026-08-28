@@ -150,14 +150,27 @@ export function Overview({ org }: { org: AdminOrganization }): JSX.Element {
     await qc.fetchQuery(organizationQuery(org.id));
   };
 
+  const focusConversionTarget = (): boolean => {
+    if (!mounted.current) return false;
+    const target =
+      conversionFocusAfterClose.current === "details"
+        ? detailsHeading.current
+        : conversionControl.current;
+    if (!target?.isConnected) return false;
+    target.focus();
+    return true;
+  };
+
   const restoreConversionFocus = (): void => {
-    setTimeout(() => {
-      const target =
-        conversionFocusAfterClose.current === "details"
-          ? detailsHeading.current
-          : conversionControl.current;
-      target?.focus();
-    });
+    // Controlled dialogs can skip close-autofocus when Presence unmounts. This
+    // second path runs after React disconnects the focused dialog control.
+    setTimeout(() => focusConversionTarget());
+  };
+
+  const restoreConversionFocusFromDialog = (event: Event): void => {
+    // When Radix does run close-autofocus, focus at the end of its Presence
+    // lifecycle. A timer alone runs while FocusScope still traps the keyboard.
+    if (focusConversionTarget()) event.preventDefault();
   };
 
   const closeConversion = (focus: "opener" | "details"): void => {
@@ -455,7 +468,7 @@ export function Overview({ org }: { org: AdminOrganization }): JSX.Element {
       >
         <DialogContent
           showCloseButton={!conversionPending}
-          onCloseAutoFocus={(event) => event.preventDefault()}
+          onCloseAutoFocus={restoreConversionFocusFromDialog}
         >
           <DialogHeader>
             <DialogTitle>Mark {org.name} as converted?</DialogTitle>
