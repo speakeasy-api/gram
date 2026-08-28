@@ -26,8 +26,7 @@ export function effectiveDisabled(key: OpenRouterKeyState): boolean {
 
 export function keyAction(
   causes: readonly string[] | null | undefined,
-): "disable" | "remove-admin-lock" {
-  return causes?.includes("admin_lock") === true
-    ? "remove-admin-lock"
-    : "disable";
+): "disable" | "remove-admin-lock" | null {
+  if (causes == null) return null;
+  return causes.includes("admin_lock") ? "remove-admin-lock" : "disable";
 }

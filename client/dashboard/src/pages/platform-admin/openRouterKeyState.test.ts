@@ -52,7 +52,8 @@ describe("OpenRouter key state", () => {
   });
 
   it("bases the admin action only on the admin lock cause", () => {
-    expect(keyAction(undefined)).toBe("disable");
+    expect(keyAction(undefined)).toBeNull();
+    expect(keyAction(null)).toBeNull();
     expect(keyAction([])).toBe("disable");
     expect(keyAction(["trial_demotion"])).toBe("disable");
     expect(keyAction(["future_cause"])).toBe("disable");

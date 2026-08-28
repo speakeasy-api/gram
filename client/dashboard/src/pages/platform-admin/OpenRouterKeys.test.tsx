@@ -1,5 +1,6 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import {
+  act,
   cleanup,
   fireEvent,
   render,
@@ -8,7 +9,6 @@ import {
 } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { Action } from "@/components/ui/MoreActions";
 import type { Column } from "@/components/ui/Table";
 import type { AdminOpenRouterKey } from "@gram/client/models/components/adminopenrouterkey.js";
 
@@ -22,8 +22,10 @@ type MutationOptions = {
 const mocks = vi.hoisted(() => ({
   disableMutate: vi.fn(),
   disableOptions: undefined as MutationOptions | undefined,
+  disablePending: false,
   enableMutate: vi.fn(),
   enableOptions: undefined as MutationOptions | undefined,
+  enablePending: false,
   invalidate: vi.fn(),
   toastError: vi.fn(),
   toastSuccess: vi.fn(),
@@ -59,21 +61,6 @@ vi.mock("@/components/ui/Table", () => ({
             <div key={String(column.key)}>{column.render?.(row)}</div>
           ))}
         </div>
-      ))}
-    </div>
-  ),
-}));
-vi.mock("@/components/ui/MoreActions", () => ({
-  MoreActions: ({ actions }: { actions: Action[] }) => (
-    <div>
-      {actions.map((action) => (
-        <button
-          key={action.label}
-          disabled={action.disabled}
-          onClick={action.onClick}
-        >
-          {action.label}
-        </button>
       ))}
     </div>
   ),
@@ -133,6 +120,30 @@ vi.mock("@gram/client/react-query/adminOpenRouterKeys.js", () => ({
           organizationSlug: "legacy-state",
           updatedAt: new Date("2026-01-01"),
         },
+        {
+          createdAt: new Date("2026-01-01"),
+          disabled: true,
+          disableCauses: null,
+          gramAccountType: "pro",
+          keyType: "internal",
+          monthlyCredits: 50,
+          organizationId: "legacy-null-id",
+          organizationName: "Legacy null state",
+          organizationSlug: "legacy-null-state",
+          updatedAt: new Date("2026-01-01"),
+        },
+        {
+          createdAt: new Date("2026-01-01"),
+          disabled: false,
+          disableCauses: [],
+          gramAccountType: "pro",
+          keyType: "chat",
+          monthlyCredits: 60,
+          organizationId: "classified-empty-id",
+          organizationName: "Classified empty state",
+          organizationSlug: "classified-empty-state",
+          updatedAt: new Date("2026-01-01"),
+        },
       ],
     },
     isLoading: false,
@@ -145,13 +156,13 @@ vi.mock("@gram/client/react-query/adminOpenRouterKeyUsage.js", () => ({
 vi.mock("@gram/client/react-query/disableAdminOpenRouterKey.js", () => ({
   useDisableAdminOpenRouterKeyMutation: (options: MutationOptions) => {
     mocks.disableOptions = options;
-    return { mutate: mocks.disableMutate, isPending: false };
+    return { mutate: mocks.disableMutate, isPending: mocks.disablePending };
   },
 }));
 vi.mock("@gram/client/react-query/enableAdminOpenRouterKey.js", () => ({
   useEnableAdminOpenRouterKeyMutation: (options: MutationOptions) => {
     mocks.enableOptions = options;
-    return { mutate: mocks.enableMutate, isPending: false };
+    return { mutate: mocks.enableMutate, isPending: mocks.enablePending };
   },
 }));
 vi.mock("sonner", () => ({
@@ -162,7 +173,11 @@ import PlatformAdminOpenRouterKeys from "./OpenRouterKeys";
 
 describe("PlatformAdminOpenRouterKeys", () => {
   afterEach(cleanup);
-  beforeEach(() => vi.clearAllMocks());
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.disablePending = false;
+    mocks.enablePending = false;
+  });
 
   function renderPage(): QueryClient {
     const queryClient = new QueryClient();
@@ -174,43 +189,98 @@ describe("PlatformAdminOpenRouterKeys", () => {
     return queryClient;
   }
 
-  it("shows all causes and offers only the admin-lock action", () => {
+  function openRowActions(testId: string): void {
+    fireEvent.pointerDown(
+      within(screen.getByTestId(testId)).getByRole("button", {
+        name: "Open menu",
+      }),
+      { button: 0, ctrlKey: false },
+    );
+  }
+
+  it("shows classified causes and fails closed for unclassified legacy rows", () => {
     renderPage();
 
     const automatic = within(screen.getByTestId("automatic-cause"));
     expect(automatic.getByText("Trial demotion")).toBeDefined();
+    openRowActions("automatic-cause");
+    expect(screen.getByRole("menuitem", { name: "Disable key" })).toBeDefined();
     expect(
-      automatic.getByRole("button", { name: "Disable key" }),
-    ).toBeDefined();
-    expect(
-      automatic.queryByRole("button", { name: "Remove admin lock" }),
+      screen.queryByRole("menuitem", { name: "Remove admin lock" }),
     ).toBeNull();
+    fireEvent.keyDown(document.activeElement ?? document.body, {
+      key: "Escape",
+    });
 
     const combined = within(screen.getByTestId("combined-causes"));
     expect(combined.getByText("Admin lock")).toBeDefined();
     expect(combined.getByText("Billing inactive")).toBeDefined();
+    openRowActions("combined-causes");
     expect(
-      combined.getByRole("button", { name: "Remove admin lock" }),
+      screen.getByRole("menuitem", { name: "Remove admin lock" }),
     ).toBeDefined();
-    expect(combined.queryByRole("button", { name: "Disable key" })).toBeNull();
+    expect(screen.queryByRole("menuitem", { name: "Disable key" })).toBeNull();
+    fireEvent.keyDown(document.activeElement ?? document.body, {
+      key: "Escape",
+    });
 
     const future = within(screen.getByTestId("future-cause"));
     expect(future.getByText("future_cause")).toBeDefined();
     expect(future.getByText("Disabled")).toBeDefined();
-    expect(future.getByRole("button", { name: "Disable key" })).toBeDefined();
+    openRowActions("future-cause");
+    expect(screen.getByRole("menuitem", { name: "Disable key" })).toBeDefined();
+    fireEvent.keyDown(document.activeElement ?? document.body, {
+      key: "Escape",
+    });
 
-    const legacy = within(screen.getByTestId("legacy-state"));
-    expect(legacy.getByText("Disabled")).toBeDefined();
-    expect(legacy.getByRole("button", { name: "Disable key" })).toBeDefined();
+    for (const testId of ["legacy-state", "legacy-null-state"]) {
+      const legacy = within(screen.getByTestId(testId));
+      expect(legacy.getByText("Disabled")).toBeDefined();
+      expect(legacy.getByText("Unclassified legacy state")).toBeDefined();
+      expect(
+        legacy.getByText(
+          "Disable causes were not recorded for this legacy key.",
+        ),
+      ).toBeDefined();
+      expect(legacy.queryByRole("button", { name: "Open menu" })).toBeNull();
+    }
+
+    const classifiedEmpty = within(
+      screen.getByTestId("classified-empty-state"),
+    );
+    expect(classifiedEmpty.getByText("No disable causes")).toBeDefined();
+    expect(classifiedEmpty.queryByText("Unclassified legacy state")).toBeNull();
+  });
+
+  it("locks row actions while a mutation is pending and restores trigger focus", () => {
+    renderPage();
+    const activeTrigger = within(
+      screen.getByTestId("automatic-cause"),
+    ).getByRole("button", { name: "Open menu" });
+    const oppositeTrigger = within(
+      screen.getByTestId("combined-causes"),
+    ).getByRole("button", { name: "Open menu" });
+
+    openRowActions("automatic-cause");
+    fireEvent.click(screen.getByRole("menuitem", { name: "Disable key" }));
+
+    expect(activeTrigger.getAttribute("aria-busy")).toBe("true");
+    expect(activeTrigger.textContent).toContain("Action in progress");
+    expect((activeTrigger as HTMLButtonElement).disabled).toBe(true);
+    expect((oppositeTrigger as HTMLButtonElement).disabled).toBe(true);
+    expect(mocks.enableMutate).not.toHaveBeenCalled();
+
+    act(() => mocks.disableOptions?.onError(new Error("disable failed")));
+    expect(activeTrigger.getAttribute("aria-busy")).toBe("false");
+    expect((activeTrigger as HTMLButtonElement).disabled).toBe(false);
+    expect((oppositeTrigger as HTMLButtonElement).disabled).toBe(false);
+    expect(document.activeElement).toBe(activeTrigger);
   });
 
   it("uses generated cause-specific mutations and preserves refetch and errors", () => {
     const queryClient = renderPage();
-    fireEvent.click(
-      within(screen.getByTestId("automatic-cause")).getByRole("button", {
-        name: "Disable key",
-      }),
-    );
+    openRowActions("automatic-cause");
+    fireEvent.click(screen.getByRole("menuitem", { name: "Disable key" }));
     expect(mocks.disableMutate).toHaveBeenCalledWith({
       request: {
         disableOpenRouterKeyRequestBody: {
@@ -220,10 +290,20 @@ describe("PlatformAdminOpenRouterKeys", () => {
       },
     });
 
-    fireEvent.click(
-      within(screen.getByTestId("combined-causes")).getByRole("button", {
-        name: "Remove admin lock",
+    act(() =>
+      mocks.disableOptions?.onSuccess({
+        keyType: "chat",
+        organizationName: "Automatic cause",
       }),
+    );
+    expect(mocks.toastSuccess).toHaveBeenCalledWith(
+      "Admin lock added to the chat key for Automatic cause.",
+    );
+    expect(mocks.invalidate).toHaveBeenCalledWith(queryClient);
+
+    openRowActions("combined-causes");
+    fireEvent.click(
+      screen.getByRole("menuitem", { name: "Remove admin lock" }),
     );
     expect(mocks.enableMutate).toHaveBeenCalledWith({
       request: {
@@ -234,25 +314,31 @@ describe("PlatformAdminOpenRouterKeys", () => {
       },
     });
 
-    mocks.disableOptions?.onSuccess({
-      keyType: "chat",
-      organizationName: "Automatic cause",
-    });
-    expect(mocks.toastSuccess).toHaveBeenCalledWith(
-      "Admin lock added to the chat key for Automatic cause.",
+    act(() =>
+      mocks.enableOptions?.onSuccess({
+        keyType: "internal",
+        organizationName: "Combined causes",
+      }),
     );
-    expect(mocks.invalidate).toHaveBeenCalledWith(queryClient);
-
-    mocks.enableOptions?.onSuccess({
-      keyType: "internal",
-      organizationName: "Combined causes",
-    });
     expect(mocks.toastSuccess).toHaveBeenCalledWith(
       "Admin lock removed from the internal key for Combined causes.",
     );
     expect(mocks.invalidate).toHaveBeenCalledTimes(2);
 
-    mocks.enableOptions?.onError(new Error("remove failed"));
+    openRowActions("combined-causes");
+    fireEvent.click(
+      screen.getByRole("menuitem", { name: "Remove admin lock" }),
+    );
+    act(() => mocks.enableOptions?.onError(new Error("remove failed")));
     expect(mocks.toastError).toHaveBeenCalledWith("remove failed");
+
+    openRowActions("combined-causes");
+    fireEvent.click(
+      screen.getByRole("menuitem", { name: "Remove admin lock" }),
+    );
+    act(() => mocks.enableOptions?.onError("non-error rejection"));
+    expect(mocks.toastError).toHaveBeenLastCalledWith(
+      "Failed to remove admin lock",
+    );
   });
 });

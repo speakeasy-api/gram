@@ -133,6 +133,7 @@ function KeysTable(): JSX.Element {
   const queryClient = useQueryClient();
   const { data, isLoading, error } = useAdminOpenRouterKeys();
   const [search, setSearch] = useState("");
+  const [pendingKey, setPendingKey] = useState<string | null>(null);
 
   const invalidate = () => {
     void invalidateAllAdminOpenRouterKeys(queryClient);
@@ -144,11 +145,13 @@ function KeysTable(): JSX.Element {
         `Admin lock added to the ${key.keyType} key for ${key.organizationName}.`,
       );
       invalidate();
+      setPendingKey(null);
     },
     onError: (err) => {
       toast.error(
         err instanceof Error ? err.message : "Failed to disable the key",
       );
+      setPendingKey(null);
     },
   });
   const enable = useEnableAdminOpenRouterKeyMutation({
@@ -157,11 +160,13 @@ function KeysTable(): JSX.Element {
         `Admin lock removed from the ${key.keyType} key for ${key.organizationName}.`,
       );
       invalidate();
+      setPendingKey(null);
     },
     onError: (err) => {
       toast.error(
-        err instanceof Error ? err.message : "Failed to enable the key",
+        err instanceof Error ? err.message : "Failed to remove admin lock",
       );
+      setPendingKey(null);
     },
   });
 
@@ -186,30 +191,43 @@ function KeysTable(): JSX.Element {
     resetOn: [search],
   });
 
+  const mutationPending =
+    pendingKey !== null || disable.isPending || enable.isPending;
+
   const rowActions = (row: AdminOpenRouterKey): Action[] => {
     const keyType = row.keyType === "internal" ? "internal" : "chat";
     const body = { organizationId: row.organizationId, keyType } as const;
+    const action = keyAction(row.disableCauses);
+    if (action === null) return [];
+
+    const rowKey = `${row.organizationId}:${keyType}`;
     const actions: Action[] = [];
-    if (keyAction(row.disableCauses) === "remove-admin-lock") {
+    if (action === "remove-admin-lock") {
       actions.push({
         icon: "play",
         label: "Remove admin lock",
-        disabled: enable.isPending,
-        onClick: () =>
+        disabled: mutationPending,
+        onClick: () => {
+          if (mutationPending) return;
+          setPendingKey(rowKey);
           enable.mutate({
             request: { enableOpenRouterKeyRequestBody: body },
-          }),
+          });
+        },
       });
     } else {
       actions.push({
         icon: "ban",
         label: "Disable key",
         destructive: true,
-        disabled: disable.isPending,
-        onClick: () =>
+        disabled: mutationPending,
+        onClick: () => {
+          if (mutationPending) return;
+          setPendingKey(rowKey);
           disable.mutate({
             request: { disableOpenRouterKeyRequestBody: body },
-          }),
+          });
+        },
       });
     }
     return actions;
@@ -287,9 +305,16 @@ function KeysTable(): JSX.Element {
               </Text>
             ))}
           </div>
+        ) : row.disableCauses == null ? (
+          <Text muted small>
+            Unclassified legacy state{" "}
+            <span className="sr-only">
+              Disable causes were not recorded for this legacy key.
+            </span>
+          </Text>
         ) : (
           <Text muted small>
-            —
+            No disable causes
           </Text>
         );
       },
@@ -298,7 +323,19 @@ function KeysTable(): JSX.Element {
       key: "actions",
       header: "",
       width: "56px",
-      render: (row) => <MoreActions actions={rowActions(row)} />,
+      render: (row) => {
+        const actions = rowActions(row);
+        if (actions.length === 0) return null;
+        const keyType = row.keyType === "internal" ? "internal" : "chat";
+        const rowKey = `${row.organizationId}:${keyType}`;
+        return (
+          <MoreActions
+            actions={actions}
+            triggerLoading={pendingKey === rowKey}
+            triggerDisabled={mutationPending}
+          />
+        );
+      },
     },
   ];
 
