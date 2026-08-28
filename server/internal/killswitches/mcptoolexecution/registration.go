@@ -4,10 +4,10 @@
 // adapter, and the coverage inventory for the hosted and private-proxy MCP
 // tools/call surfaces.
 //
-// Registration declares the contracts only. It does not deploy enforcement:
-// the hosted dispatch checkpoint (DNO-982) and the private forwarding
-// checkpoint (DNO-980) ship separately, and production prescriptions must not
-// be enabled before those checkpoints have reached the fleet.
+// Registration declares the contracts consumed by the hosted dispatch
+// checkpoint. Private forwarding enforcement ships separately, and production
+// prescriptions must not be enabled until every covered checkpoint has reached
+// the fleet.
 package mcptoolexecution
 
 import (
@@ -101,8 +101,8 @@ func NewRegistration(db *pgxpool.Pool) killswitches.Registration {
 				Surface:          SurfaceHostedToolsCall,
 				PrincipalSource:  "Validated user-session provenance (mcpidentity), revalidated as an active organization member on every covered call.",
 				ResourceSource:   "Fronting mcp_servers.id resolved from the mcp_endpoint route, validated as a live server in a live project of the organization. Never a slug, URL, toolset, backend ID, or caller-provided value.",
-				Checkpoint:       "After trusted authentication, tenant resolution, and acting-user validation on hosted MCP tools/call dispatch. Registration does not deploy this checkpoint; the dispatch wiring ships separately (DNO-982).",
-				ProtectedWork:    "Loading or applying tool configuration and local tool execution.",
+				Checkpoint:       "After trusted authentication, tenant resolution, and acting-user validation on hosted MCP tools/call dispatch.",
+				ProtectedWork:    "Loading or applying tool configuration and dispatching local, dynamic, function, platform, or external-MCP proxy execution.",
 				FailurePolicy:    killswitches.FailurePolicyFailClosed,
 				TransportAdapter: TransportAdapterHostedJSONRPC,
 				EnforcementOwner: EnforcementOwner,

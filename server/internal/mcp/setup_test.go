@@ -307,7 +307,8 @@ func newTestMCPServiceWithTunnelPublicConfigAndCacheWrapper(
 	})
 	tunnelRoutes := route.NewRouteTable()
 	features := &feature.InMemory{}
-	svc := mcp.NewService(logger, tracerProvider, meterProvider, conn, sessionManager, chatSessionsManager, env, posthog, features, serverURL, siteURL, enc, mcpCache, guardianPolicy, funcs, billingStub, billingStub, telemLogger, telemService, vectorToolStore, nil, temporalEnv, authzEngine, assistantTokens, shadowMCPClient, auditLogger, nil, featClient.PlatformFeatureCheck, platformToolsets, identityResolver, userSessionSigner, remoteChallengeMgr, remoteProxyManager, tunnelRoutes, "", nil, redisClient, tunnelPublicConfig)
+	svc, err := mcp.NewService(logger, tracerProvider, meterProvider, conn, sessionManager, chatSessionsManager, env, posthog, features, serverURL, siteURL, enc, mcpCache, guardianPolicy, funcs, billingStub, billingStub, telemLogger, telemService, vectorToolStore, nil, temporalEnv, authzEngine, assistantTokens, shadowMCPClient, auditLogger, nil, featClient.PlatformFeatureCheck, platformToolsets, identityResolver, userSessionSigner, remoteChallengeMgr, remoteProxyManager, tunnelRoutes, "", nil, redisClient, tunnelPublicConfig)
+	require.NoError(t, err)
 
 	authnCache := cache.NewTypedObjectCache[mcp.AuthnChallengeState](logger, cacheAdapter, cache.SuffixNone)
 

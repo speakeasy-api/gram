@@ -2,6 +2,7 @@ package mcptoolexecution
 
 import (
 	"context"
+	"sync"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
@@ -13,6 +14,58 @@ import (
 // IdentityCoverageRecorder is implemented by each production MCP metric scope.
 type IdentityCoverageRecorder interface {
 	RecordKillswitchIdentityCoverage(context.Context, mcpmetrics.KillswitchCoverageSurface, mcpmetrics.KillswitchIdentityClass, mcpmetrics.KillswitchResourceClass)
+}
+
+type coverageDerivation struct {
+	principalSource any
+	principalResult killswitches.PrincipalCandidateResult
+	principalErr    error
+	resourceSource  ServerSource
+	resourceResult  killswitches.CanonicalizationResult[killswitches.ResourceKey]
+	resourceErr     error
+}
+
+func deriveCoverage(
+	ctx context.Context,
+	organization killswitches.OrganizationID,
+	principal killswitches.PrincipalAdapter,
+	resource killswitches.ResourceAdapter,
+	resourceSource ServerSource,
+) coverageDerivation {
+	result := coverageDerivation{
+		principalSource: nil,
+		principalResult: killswitches.UnsupportedPrincipalCandidateResult(),
+		principalErr:    nil,
+		resourceSource:  resourceSource,
+		resourceResult:  killswitches.CanonicalizationResult[killswitches.ResourceKey]{},
+		resourceErr:     nil,
+	}
+
+	var group sync.WaitGroup
+	if identity, ok := mcpidentity.FromContext(ctx); ok {
+		result.principalSource = identity
+		group.Go(func() {
+			result.principalResult, result.principalErr = principal.DeriveCandidates(ctx, organization, identity)
+		})
+	}
+	group.Go(func() {
+		result.resourceResult, result.resourceErr = resource.Derive(ctx, organization, resourceSource)
+	})
+	group.Wait()
+
+	return result
+}
+
+func (d coverageDerivation) record(ctx context.Context, recorder IdentityCoverageRecorder, surface mcpmetrics.KillswitchCoverageSurface) {
+	if recorder == nil {
+		return
+	}
+	recorder.RecordKillswitchIdentityCoverage(
+		ctx,
+		surface,
+		ClassifyPrincipalCoverage(d.principalSource, d.principalResult, d.principalErr),
+		ClassifyResourceCoverage(d.resourceSource, d.resourceResult, d.resourceErr),
+	)
 }
 
 // IdentityCoverageCheckpoint derives and records the bounded identity and
@@ -47,20 +100,6 @@ func (c *IdentityCoverageCheckpoint) Record(ctx context.Context, organizationID 
 		return
 	}
 
-	organization := killswitches.OrganizationID(organizationID)
-	principalResult := killswitches.UnsupportedPrincipalCandidateResult()
-	var principalSource any
-	var principalErr error
-	if identity, ok := mcpidentity.FromContext(ctx); ok {
-		principalSource = identity
-		principalResult, principalErr = c.principal.DeriveCandidates(ctx, organization, identity)
-	}
-
-	resourceResult, resourceErr := c.resource.Derive(ctx, organization, resourceSource)
-	c.recorder.RecordKillswitchIdentityCoverage(
-		ctx,
-		surface,
-		ClassifyPrincipalCoverage(principalSource, principalResult, principalErr),
-		ClassifyResourceCoverage(resourceSource, resourceResult, resourceErr),
-	)
+	derivation := deriveCoverage(ctx, killswitches.OrganizationID(organizationID), c.principal, c.resource, resourceSource)
+	derivation.record(ctx, c.recorder, surface)
 }

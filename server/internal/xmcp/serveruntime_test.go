@@ -23,6 +23,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/auth"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/killswitches/mcptoolexecution"
 	"github.com/speakeasy-api/gram/server/internal/mcp"
 	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
@@ -743,6 +744,51 @@ func TestServeMCP_IssuerGatedToolsetBackend_HappyPath(t *testing.T) {
 	rr := runHandler(t, ctx, ti, http.MethodPost, slug, bearer(accessToken), []byte(initializeBody))
 	require.NotEqual(t, http.StatusUnauthorized, rr.Code, "issuer-gated bearer must not be rejected by the legacy auth chain inside ServeToolsetResolved; body=%s", rr.Body.String())
 	require.Equal(t, http.StatusOK, rr.Code, "ServeMCP should respond 200; body=%s", rr.Body.String())
+}
+
+//nolint:glint // Integration fixture writes the three-table immutable prescription aggregate in an isolated database.
+func TestServeMCP_IssuerGatedToolsetBackend_Killswitch(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+	require.NotEmpty(t, authCtx.UserID)
+
+	slug, mcpServer, issuerID := seedIssuerGatedToolsetMCPEndpoint(t, ctx, ti, authCtx.ActiveOrganizationID, *authCtx.ProjectID, "public")
+	mcpEndpoint, err := mcpendpointsrepo.New(ti.conn).GetMCPEndpointByCustomDomainAndSlug(ctx, mcpendpointsrepo.GetMCPEndpointByCustomDomainAndSlugParams{
+		Slug:           slug,
+		CustomDomainID: uuid.NullUUID{},
+	})
+	require.NoError(t, err)
+	endpoint := mcp.NewResolvedMcpEndpointFromMcpServer(&mcpEndpoint, &mcpServer, authCtx.ActiveOrganizationID)
+	accessToken := mintIssuerGatedAccessToken(t, ctx, ti, slug, endpoint, issuerID, urn.NewUserSubject(authCtx.UserID))
+
+	prescriptionID := uuid.New()
+	var databaseNow time.Time
+	require.NoError(t, ti.conn.QueryRow(ctx, "SELECT clock_timestamp()").Scan(&databaseNow))
+	_, err = ti.conn.Exec(ctx, `
+		INSERT INTO killswitch_prescriptions (id, organization_id, definition_key, principal_kind, principal_key, resource_kind, current_version)
+		VALUES ($1, $2, $3, $4, $5, $6, 1)
+	`, prescriptionID, authCtx.ActiveOrganizationID, string(mcptoolexecution.DefinitionKeyMCPToolExecution), string(mcptoolexecution.PrincipalKindUser), authCtx.UserID, string(mcptoolexecution.ResourceKindMCPServer))
+	require.NoError(t, err)
+	_, err = ti.conn.Exec(ctx, `
+		INSERT INTO killswitch_prescription_versions (
+		  organization_id, prescription_id, version, state, resource_scope, starts_at, activated_at, internal_note, external_note
+		) VALUES ($1, $2, 1, 'active', 'selected', $3, $3, 'test context', 'Exact x/mcp note.')
+	`, authCtx.ActiveOrganizationID, prescriptionID, databaseNow.Add(-time.Minute))
+	require.NoError(t, err)
+	_, err = ti.conn.Exec(ctx, `
+		INSERT INTO killswitch_prescription_version_resources (organization_id, prescription_id, version, resource_key)
+		VALUES ($1, $2, 1, $3)
+	`, authCtx.ActiveOrganizationID, prescriptionID, mcpServer.ID.String())
+	require.NoError(t, err)
+
+	body := []byte(`{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"missing_tool","arguments":{}}}`)
+	rr := runHandler(t, ctx, ti, http.MethodPost, slug, bearer(accessToken), body)
+	require.Equal(t, http.StatusOK, rr.Code)
+	require.JSONEq(t, `{"jsonrpc":"2.0","id":2,"error":{"code":-32003,"message":"Exact x/mcp note.","data":{"code":"mcp_tool_calls_paused"}}}`, rr.Body.String())
 }
 
 // TestServeMCP_IssuerGatedRemoteBackend_Private_HappyPath exercises the
