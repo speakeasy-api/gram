@@ -30,6 +30,7 @@ var All = []outbox.EventRegistration{
 	GcpKmsKeyV1,
 	JsonWebKeySetV1,
 	JsonWebKeyV1,
+	KillswitchV1,
 	LiteLLMInstanceV1,
 	McpApprovalRequestV1,
 	McpCollectionV1,

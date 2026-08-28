@@ -296,6 +296,33 @@ func TestKillswitchSchemaPinsTenancyAndIdempotency(t *testing.T) {
 	requireConstraint(t, err, "killswitch_operations_pkey")
 }
 
+func TestKillswitchExpiryDiscoveryIndexMatchesEligibilityAndOrder(t *testing.T) {
+	t.Parallel()
+
+	conn, err := infra.CloneTestDatabase(t, "killswitch_expiry_index")
+	require.NoError(t, err)
+
+	var (
+		indexColumns      []string
+		indexPredicate    string
+		indexAccessMethod string
+	)
+	require.NoError(t, conn.QueryRow(t.Context(), `
+		SELECT ARRAY(
+			SELECT pg_get_indexdef(index_metadata.indexrelid, position, true)
+			FROM generate_series(1, index_metadata.indnkeyatts) AS position
+			ORDER BY position
+		), pg_get_expr(index_metadata.indpred, index_metadata.indrelid), access_method.amname
+		FROM pg_index AS index_metadata
+		JOIN pg_class AS index_relation ON index_relation.oid = index_metadata.indexrelid
+		JOIN pg_am AS access_method ON access_method.oid = index_relation.relam
+		WHERE index_metadata.indexrelid = 'killswitch_prescription_versions_expiry_due_idx'::regclass
+	`).Scan(&indexColumns, &indexPredicate, &indexAccessMethod))
+	require.Equal(t, []string{"expires_at", "prescription_id", "version"}, indexColumns)
+	require.Equal(t, "btree", indexAccessMethod)
+	require.Equal(t, "((state = 'active'::text) AND (expires_at IS NOT NULL) AND ((superseded_at IS NULL) OR (expires_at < superseded_at)))", indexPredicate)
+}
+
 func insertOrganization(t *testing.T, conn *pgxpool.Pool, organizationID string) {
 	t.Helper()
 

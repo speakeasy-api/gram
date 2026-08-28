@@ -50,9 +50,10 @@ func (e *VersionConflictError) Unwrap() error { return ErrVersionConflict }
 
 // MutationContext contains trusted tenancy and actor data plus the organization-wide operation ID.
 type MutationContext struct {
-	OrganizationID OrganizationID
-	ActorUserID    string
-	OperationID    uuid.UUID
+	OrganizationID   OrganizationID
+	ActorUserID      string
+	ActorDisplayName string
+	OperationID      uuid.UUID
 }
 
 // DesiredVersionInput is the complete desired mutable payload for an active version. Both the raw
@@ -150,11 +151,12 @@ type LifecycleValidator interface {
 
 // MutationEvent is passed to the before-commit seam for later audit/outbox integration.
 type MutationEvent struct {
-	OrganizationID OrganizationID
-	ActorUserID    string
-	OperationID    uuid.UUID
-	Operation      MutationOperation
-	Result         MutationResult
+	OrganizationID   OrganizationID
+	ActorUserID      string
+	ActorDisplayName string
+	OperationID      uuid.UUID
+	Operation        MutationOperation
+	Result           MutationResult
 }
 
 // BeforeCommitHook may add audit and outbox writes to the lifecycle transaction, but cannot

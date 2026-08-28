@@ -1,4 +1,4 @@
-h1:ZULnNpKC6tJeSLOohYGzL+arYtf0CIHCYd1MkKWLXyg=
+h1:CeutMp9ldAyEX+6NLEY+U9wyxRqy7KOm7j2fchCz3nM=
 20250502122425_initial-tables.sql h1:Hu3O60/bB4fjZpUay8FzyOjw6vngp087zU+U/wVKn7k=
 20250502130852_initial-indexes.sql h1:oYbnwi9y9PPTqu7uVbSPSALhCY8XF3rv03nDfG4b7mo=
 20250502154250_relax-http-security-fields.sql h1:0+OYIDq7IHmx7CP5BChVwfpF2rOSrRDxnqawXio2EVo=
@@ -374,3 +374,4 @@ h1:ZULnNpKC6tJeSLOohYGzL+arYtf0CIHCYd1MkKWLXyg=
 20260828092510_data_exports_fanout.sql h1:qObwb6bsBowCBl4kdIM+xv+QuTDJ1velUTNWleNk5q8=
 20260828101442_data_export_routes_single_destination.sql h1:Tz5KBmcarW1pNl/D4MR7TA5m/+PnZn5IDk8bQkeniVQ=
 20260828145942_dno-974-durable-killswitch-prescriptions.sql h1:qPmCeNHQURcvp4RrbtPz9t+vs8iyLy0B5LPcEgO2ejY=
+20260828181110_dno-978-killswitch-expiry-discovery-index.sql h1:O4HoCdj2hCOhQHKbtzOJIza01sNlC+1mD+frDob19f8=
