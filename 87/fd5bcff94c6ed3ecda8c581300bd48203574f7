@@ -1,0 +1,22 @@
+.changeset/presidio-supported-entities.md
+  s_b31b5e95980b21::t_fe311c16a0e99f 1-5
+server/internal/risk/policycatalog/catalog_test.go
+  s_b31b5e95980b21::t_a74409222c5b68 79
+  s_b31b5e95980b21::t_fe311c16a0e99f 34,36-38
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.0",
+  "base_commit_sha": "87fd5bcff94c6ed3ecda8c581300bd48203574f7",
+  "prompts": {},
+  "sessions": {
+    "s_b31b5e95980b21": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a04801-df23-7151-ac93-a7d98b4c5479",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "Vishal Gowda <vishal@speakeasy.com>"
+    }
+  }
+}
