@@ -608,9 +608,13 @@ func newStripeMeterEventClient(
 
 func newStripeCatalog(c *cli.Context) metering.StripeCatalog {
 	tumMeterEventName := c.String("stripe-meter-event-name")
+	tumMeterStreamingEnabled := c.Bool(stripeTUMMeterStreamingFlagName)
 	return metering.StripeCatalogFunc(func(definition metering.Definition) (string, error) {
 		switch definition {
 		case metering.AgentSessionStorage():
+			if !tumMeterStreamingEnabled {
+				return "", nil
+			}
 			if !stripeclient.IsConfigured(tumMeterEventName) {
 				return "", errors.New("stripe TUM meter event name is not configured")
 			}

@@ -172,12 +172,25 @@ func TestNewStripeCatalogMapsTUMMeter(t *testing.T) {
 	t.Parallel()
 
 	catalog := newStripeCatalog(newStripeCLIContext(t, map[string]string{
-		"stripe-meter-event-name": "tum",
+		"stripe-meter-event-name":       "tum",
+		stripeTUMMeterStreamingFlagName: "true",
 	}))
 
 	eventName, err := catalog.MeterEventName(metering.AgentSessionStorage())
 	require.NoError(t, err)
 	require.Equal(t, "tum", eventName)
+}
+
+func TestNewStripeCatalogDropsTUMMeterWhenStreamingDisabled(t *testing.T) {
+	t.Parallel()
+
+	catalog := newStripeCatalog(newStripeCLIContext(t, map[string]string{
+		"stripe-meter-event-name": "tum",
+	}))
+
+	eventName, err := catalog.MeterEventName(metering.AgentSessionStorage())
+	require.NoError(t, err)
+	require.Empty(t, eventName)
 }
 
 func TestNewStripeCatalogRejectsUnmappedMeter(t *testing.T) {
@@ -196,7 +209,8 @@ func TestNewStripeCatalogRejectsMissingTUMEventName(t *testing.T) {
 	t.Parallel()
 
 	catalog := newStripeCatalog(newStripeCLIContext(t, map[string]string{
-		"stripe-meter-event-name": "unset",
+		"stripe-meter-event-name":       "unset",
+		stripeTUMMeterStreamingFlagName: "true",
 	}))
 
 	eventName, err := catalog.MeterEventName(metering.AgentSessionStorage())
@@ -258,6 +272,7 @@ func newStripeCLIContext(t *testing.T, values map[string]string) *cli.Context {
 	set.String("stripe-meter-id-tum", "", "")
 	set.String("stripe-meter-event-name", "", "")
 	set.String("stripe-portal-configuration-id", "", "")
+	set.Bool(stripeTUMMeterStreamingFlagName, false, "")
 	set.String("polar-api-key", "", "")
 	for key, value := range values {
 		require.NoError(t, set.Set(key, value))

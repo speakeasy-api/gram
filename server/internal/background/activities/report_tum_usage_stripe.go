@@ -49,6 +49,7 @@ type ReportTUMUsageToStripe struct {
 	logger       *slog.Logger
 	db           *pgxpool.Pool
 	stripeClient tumStripeClient
+	enabled      bool
 }
 
 type tumStripeClient interface {
@@ -57,16 +58,17 @@ type tumStripeClient interface {
 	GetMeterEventSummary(context.Context, stripeclient.GetMeterEventSummaryInput) (float64, error)
 }
 
-func NewReportTUMUsageToStripe(logger *slog.Logger, db *pgxpool.Pool, stripeClient tumStripeClient) *ReportTUMUsageToStripe {
+func NewReportTUMUsageToStripe(logger *slog.Logger, db *pgxpool.Pool, stripeClient tumStripeClient, enabled bool) *ReportTUMUsageToStripe {
 	return &ReportTUMUsageToStripe{
 		logger:       logger,
 		db:           db,
 		stripeClient: stripeClient,
+		enabled:      enabled,
 	}
 }
 
 func (r *ReportTUMUsageToStripe) Do(ctx context.Context, input ReportTUMUsageToStripeInput) error {
-	if r.stripeClient == nil {
+	if !r.enabled || r.stripeClient == nil {
 		return nil
 	}
 
