@@ -7,6 +7,7 @@ import {
   waitFor,
 } from "@testing-library/react";
 import type { ReactNode } from "react";
+import { ErrorBoundary } from "react-error-boundary";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { OrganizationActivity } from "./Activity";
 
@@ -26,12 +27,16 @@ function jsonResponse(body: unknown, status = 200): Response {
   });
 }
 
-function renderActivity(): void {
+function renderActivity({ throwOnError = false } = {}): void {
   const client = new QueryClient({
-    defaultOptions: { queries: { retry: false } },
+    defaultOptions: { queries: { retry: false, throwOnError } },
   });
   const Wrapper = ({ children }: { children: ReactNode }) => (
-    <QueryClientProvider client={client}>{children}</QueryClientProvider>
+    <QueryClientProvider client={client}>
+      <ErrorBoundary fallback={<p>Error loading Page</p>}>
+        {children}
+      </ErrorBoundary>
+    </QueryClientProvider>
   );
   render(<OrganizationActivity organizationId="<ORG_ID>" />, {
     wrapper: Wrapper,
@@ -79,6 +84,59 @@ describe("organization activity pagination query", () => {
       expect.stringContaining("cursor=older-page"),
       expect.anything(),
     );
+  });
+
+  it("keeps a filtered feed mounted when loading older activity fails under route throw semantics", async () => {
+    const unhandledRejection = vi.fn((event: PromiseRejectionEvent) => {
+      event.preventDefault();
+    });
+    window.addEventListener("unhandledrejection", unhandledRejection);
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        jsonResponse({
+          logs: [{ ...baseLog, id: "other", action: "project:update" }],
+          next_cursor: "older",
+        }),
+      )
+      .mockResolvedValueOnce(jsonResponse({ message: "private failure" }, 500))
+      .mockResolvedValueOnce(
+        jsonResponse({
+          logs: [
+            {
+              ...baseLog,
+              id: "trial",
+              action: "organization:enterprise_trial_extended",
+            },
+          ],
+        }),
+      );
+    vi.stubGlobal("fetch", fetchMock);
+
+    renderActivity({ throwOnError: true });
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Load older activity" }),
+    );
+
+    expect(
+      await screen.findByRole("alert", {
+        name: "Older activity could not be loaded.",
+      }),
+    ).toBeDefined();
+    expect(screen.queryByText("Error loading Page")).toBeNull();
+    expect(screen.queryByText("No activity yet.")).toBeNull();
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Retry older activity" }),
+    );
+    expect(await screen.findByText("extended enterprise trial")).toBeDefined();
+    expect(screen.queryByText("Error loading Page")).toBeNull();
+    expect(fetchMock.mock.calls.slice(1).map(([url]) => String(url))).toEqual([
+      expect.stringContaining("cursor=older"),
+      expect.stringContaining("cursor=older"),
+    ]);
+    expect(unhandledRejection).not.toHaveBeenCalled();
+    window.removeEventListener("unhandledrejection", unhandledRejection);
   });
 
   it("guards rapid clicks and retries a rejected page without losing or duplicating rows", async () => {

@@ -62,6 +62,7 @@ export function OrganizationActivity({
     },
     getNextPageParam: (page) => page.next_cursor,
     retry: false,
+    throwOnError: false,
   });
 
   const fetchInFlight = useRef(false);
@@ -78,6 +79,9 @@ export function OrganizationActivity({
     fetchInFlight.current = true;
     try {
       await fetchNextPage({ cancelRefetch: false });
+    } catch {
+      // React Query owns the incremental error state rendered below. Swallow the
+      // expected rejected command promise so it cannot escape the click handler.
     } finally {
       if (mounted.current) fetchInFlight.current = false;
     }
