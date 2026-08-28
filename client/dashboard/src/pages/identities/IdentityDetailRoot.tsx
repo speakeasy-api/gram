@@ -23,11 +23,10 @@ import { Text } from "@/components/ui/Text";
 import { getInitials } from "@/lib/initials";
 import { encodeIdentityUrn } from "@/lib/identity-urn";
 import { isBadRequestError, isNotFoundError } from "@/lib/route-errors";
-import { useOrgRoutes, useRoutes } from "@/routes";
+import { useOrgRoutes } from "@/routes";
 import type { IdentityModel } from "@gram/client/models/components/identitymodel.js";
 import { useIdentity } from "@gram/client/react-query/identity.js";
-import { ArrowLeft } from "lucide-react";
-import { Link, Navigate, Outlet, useLocation, useParams } from "react-router";
+import { Navigate, Outlet, useLocation, useParams } from "react-router";
 import type { IdentityOutletContext } from "./identityRoute";
 import { useIdentityIsKnown, useIdentityProject } from "./useIdentityQueries";
 
@@ -191,7 +190,6 @@ function IdentityHeader({
   identity: IdentityModel;
 }): JSX.Element {
   const project = useIdentityProject();
-  const routes = useRoutes({ projectSlug: project.slug });
   const {
     dateRange,
     customRange,
@@ -215,17 +213,6 @@ function IdentityHeader({
 
   return (
     <div className="flex flex-col gap-4">
-      {/* The way back. Reaching a person from a project page swaps the whole
-          nav shell, and the org sidebar names no projects, so without this the
-          only route back is the browser button. */}
-      <Link
-        to={routes.home.href()}
-        className="text-muted-foreground hover:text-foreground -mb-1 flex w-fit items-center gap-1.5 text-xs"
-      >
-        <ArrowLeft className="size-3" />
-        {project.options.find((option) => option.slug === project.slug)?.name ??
-          "Back to project"}
-      </Link>
       <div className="flex items-start justify-between gap-4">
         <div className="flex min-w-0 items-center gap-4">
           <Avatar className="size-12">
