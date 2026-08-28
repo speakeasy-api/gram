@@ -20,6 +20,10 @@ import (
 // per-call serving path.
 const DefaultEvaluationTimeout = time.Second
 
+func mcpEvaluationDefinitionKeys() []killswitches.DefinitionKey {
+	return []killswitches.DefinitionKey{DefinitionKeyMCPToolExecution, DefinitionKeyAIAccess}
+}
+
 type evaluator interface {
 	Evaluate(context.Context, killswitches.EvaluationRequest) killswitches.EvaluationResult
 }
@@ -38,8 +42,8 @@ type Checkpoint struct {
 	flags         feature.Provider
 }
 
-// NewCheckpoint builds the private MCP tool-execution checkpoint
-// from the registered adapters and authoritative PostgreSQL evaluator.
+// NewCheckpoint builds the private dual-definition MCP checkpoint from the
+// registered adapters and authoritative PostgreSQL evaluator.
 func NewCheckpoint(db *pgxpool.Pool, timeout time.Duration, meterProvider metric.MeterProvider, logger *slog.Logger, flags feature.Provider) (*Checkpoint, error) {
 	registry, err := NewRegistry(db)
 	if err != nil {
@@ -148,7 +152,7 @@ func (c *Checkpoint) evaluate(ctx context.Context, organizationID, mcpServerID s
 
 	result := c.evaluator.Evaluate(ctx, killswitches.EvaluationRequest{
 		OrganizationID:      organization,
-		DefinitionKeys:      []killswitches.DefinitionKey{DefinitionKeyMCPToolExecution},
+		DefinitionKeys:      mcpEvaluationDefinitionKeys(),
 		PrincipalCandidates: derivation.principalResult.Candidates(),
 		ResourceKind:        ResourceKindMCPServer,
 		ResourceKey:         resourceKey,

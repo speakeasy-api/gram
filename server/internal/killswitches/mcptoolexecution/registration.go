@@ -1,13 +1,12 @@
-// Package mcptoolexecution registers the M2 `mcp_tool_execution` kill-switch
-// contracts: the fail-closed definition, the authoritative concrete-user
-// principal adapter, the canonical organization-owned `mcp_server` resource
-// adapter, and the coverage inventory for the hosted and private-proxy MCP
-// tools/call surfaces.
+// Package mcptoolexecution registers the MCP kill-switch contracts: the
+// fail-closed `mcp_tool_execution` and internal `ai_access` definitions, the
+// authoritative concrete-user principal adapter, the canonical
+// organization-owned `mcp_server` resource adapter, and the coverage inventory
+// for the hosted and private-proxy MCP tools/call surfaces.
 //
-// Registration declares the contracts consumed by the hosted dispatch
-// checkpoint. Private forwarding enforcement ships separately, and production
-// prescriptions must not be enabled until every covered checkpoint has reached
-// the fleet.
+// Registration declares the contracts consumed by both MCP checkpoints. The
+// internal ai_access definition is not exposed through customer management or
+// used to claim coverage for planned non-MCP surfaces.
 package mcptoolexecution
 
 import (
@@ -23,6 +22,10 @@ const (
 	// DefinitionKeyMCPToolExecution is the M2 capability governing MCP
 	// tools/call execution.
 	DefinitionKeyMCPToolExecution killswitches.DefinitionKey = "mcp_tool_execution"
+
+	// DefinitionKeyAIAccess is the internal broad AI-access capability. Its
+	// currently verified coverage is limited to authenticated MCP tools/call.
+	DefinitionKeyAIAccess killswitches.DefinitionKey = "ai_access"
 
 	// PrincipalKindUser is the concrete Gram user principal namespace; keys
 	// are user IDs of authoritative active organization members.
@@ -52,31 +55,47 @@ const (
 	TransportAdapterPrivateProxyJSONRPC killswitches.TransportAdapterKey = "mcp_private_proxy_jsonrpc"
 
 	// DefaultExternalNote is the editable customer-safe starting value for
-	// new prescriptions. It never leaks framework vocabulary.
+	// new MCP tool-execution prescriptions. It never leaks framework vocabulary.
 	DefaultExternalNote = "MCP tool calls are currently paused by your organization's administrator."
+
+	// DefaultAIAccessExternalNote is the separate customer-safe starting value
+	// for internal AI-access prescriptions.
+	DefaultAIAccessExternalNote = "AI access is currently paused by your organization's administrator."
 
 	// EnforcementOwner is the team accountable for the enforcement
 	// checkpoints of this definition.
 	EnforcementOwner = "devices-observability"
 )
 
-// NewRegistration assembles the complete code-owned mcp_tool_execution
-// registration. The database is used by the adapters at evaluation and
+// NewRegistration assembles the complete code-owned MCP registration. The database is used by the adapters at evaluation and
 // validation time only; fixture validation during registry construction is
 // pure.
 func NewRegistration(db *pgxpool.Pool) killswitches.Registration {
 	return killswitches.Registration{
-		Definitions: []killswitches.Definition{{
-			Key:                 DefinitionKeyMCPToolExecution,
-			PrincipalKinds:      []killswitches.PrincipalKind{PrincipalKindUser},
-			ResourceKinds:       []killswitches.ResourceKind{ResourceKindMCPServer},
-			FailurePolicy:       killswitches.FailurePolicyFailClosed,
-			DefaultExternalNote: DefaultExternalNote,
-			EnforcementOwner:    EnforcementOwner,
-			IdentityContract:    IdentityContractKeyAuthenticatedUserMCPServer,
-			Surfaces:            []killswitches.Surface{SurfaceHostedToolsCall, SurfacePrivateProxyToolsCall},
-			TransportAdapters:   []killswitches.TransportAdapterKey{TransportAdapterHostedJSONRPC, TransportAdapterPrivateProxyJSONRPC},
-		}},
+		Definitions: []killswitches.Definition{
+			{
+				Key:                 DefinitionKeyMCPToolExecution,
+				PrincipalKinds:      []killswitches.PrincipalKind{PrincipalKindUser},
+				ResourceKinds:       []killswitches.ResourceKind{ResourceKindMCPServer},
+				FailurePolicy:       killswitches.FailurePolicyFailClosed,
+				DefaultExternalNote: DefaultExternalNote,
+				EnforcementOwner:    EnforcementOwner,
+				IdentityContract:    IdentityContractKeyAuthenticatedUserMCPServer,
+				Surfaces:            []killswitches.Surface{SurfaceHostedToolsCall, SurfacePrivateProxyToolsCall},
+				TransportAdapters:   []killswitches.TransportAdapterKey{TransportAdapterHostedJSONRPC, TransportAdapterPrivateProxyJSONRPC},
+			},
+			{
+				Key:                 DefinitionKeyAIAccess,
+				PrincipalKinds:      []killswitches.PrincipalKind{PrincipalKindUser},
+				ResourceKinds:       []killswitches.ResourceKind{ResourceKindMCPServer},
+				FailurePolicy:       killswitches.FailurePolicyFailClosed,
+				DefaultExternalNote: DefaultAIAccessExternalNote,
+				EnforcementOwner:    EnforcementOwner,
+				IdentityContract:    IdentityContractKeyAuthenticatedUserMCPServer,
+				Surfaces:            []killswitches.Surface{SurfaceHostedToolsCall, SurfacePrivateProxyToolsCall},
+				TransportAdapters:   []killswitches.TransportAdapterKey{TransportAdapterHostedJSONRPC, TransportAdapterPrivateProxyJSONRPC},
+			},
+		},
 		IdentityContracts: []killswitches.IdentityContract{{
 			Key:            IdentityContractKeyAuthenticatedUserMCPServer,
 			PrincipalKinds: []killswitches.PrincipalKind{PrincipalKindUser},
@@ -113,8 +132,32 @@ func NewRegistration(db *pgxpool.Pool) killswitches.Registration {
 				Surface:          SurfacePrivateProxyToolsCall,
 				PrincipalSource:  "Validated user-session provenance (mcpidentity), revalidated as an active organization member on every covered call.",
 				ResourceSource:   "Fronting mcp_servers.id resolved from the mcp_endpoint route, validated as a live server in a live project of the organization. The remote or tunneled backend ID is never the key, so hosted and private routes to one server share one canonical resource.",
-				Checkpoint:       "After trusted authentication, tenant resolution, and acting-user validation on private proxied or remote MCP tools/call forwarding. Registration does not deploy this checkpoint; the forwarding wiring ships separately (DNO-980).",
+				Checkpoint:       "After trusted authentication, tenant resolution, and acting-user validation on private proxied or remote MCP tools/call forwarding.",
 				ProtectedWork:    "Tool-level authorization-dependent forwarding work and any upstream request; per-server connection configuration may already be loaded.",
+				FailurePolicy:    killswitches.FailurePolicyFailClosed,
+				TransportAdapter: TransportAdapterPrivateProxyJSONRPC,
+				EnforcementOwner: EnforcementOwner,
+				IdentityContract: IdentityContractKeyAuthenticatedUserMCPServer,
+			},
+			{
+				Definition:       DefinitionKeyAIAccess,
+				Surface:          SurfaceHostedToolsCall,
+				PrincipalSource:  "Validated user-session provenance (mcpidentity), revalidated as an active organization member on every covered call.",
+				ResourceSource:   "Fronting mcp_servers.id resolved from the mcp_endpoint route and validated as a live server in a live project of the organization.",
+				Checkpoint:       "The shared MCP checkpoint after trusted authentication, tenant resolution, and acting-user validation on hosted MCP tools/call dispatch.",
+				ProtectedWork:    "The same hosted MCP tools/call work protected by mcp_tool_execution; no non-MCP AI surface is claimed.",
+				FailurePolicy:    killswitches.FailurePolicyFailClosed,
+				TransportAdapter: TransportAdapterHostedJSONRPC,
+				EnforcementOwner: EnforcementOwner,
+				IdentityContract: IdentityContractKeyAuthenticatedUserMCPServer,
+			},
+			{
+				Definition:       DefinitionKeyAIAccess,
+				Surface:          SurfacePrivateProxyToolsCall,
+				PrincipalSource:  "Validated user-session provenance (mcpidentity), revalidated as an active organization member on every covered call.",
+				ResourceSource:   "Fronting mcp_servers.id resolved from the mcp_endpoint route and validated as a live server in a live project of the organization.",
+				Checkpoint:       "The shared MCP checkpoint after trusted authentication, tenant resolution, and acting-user validation on private proxied or remote MCP tools/call forwarding.",
+				ProtectedWork:    "The same private MCP tools/call work protected by mcp_tool_execution; no non-MCP AI surface is claimed.",
 				FailurePolicy:    killswitches.FailurePolicyFailClosed,
 				TransportAdapter: TransportAdapterPrivateProxyJSONRPC,
 				EnforcementOwner: EnforcementOwner,
@@ -124,17 +167,17 @@ func NewRegistration(db *pgxpool.Pool) killswitches.Registration {
 	}
 }
 
-// NewRegistry builds and validates the finalized mcp_tool_execution registry.
+// NewRegistry builds and validates the finalized MCP registry.
 func NewRegistry(db *pgxpool.Pool) (*killswitches.Registry, error) {
 	registry, err := killswitches.BuildRegistry(NewRegistration(db))
 	if err != nil {
-		return nil, fmt.Errorf("build mcp_tool_execution registry: %w", err)
+		return nil, fmt.Errorf("build MCP kill-switch registry: %w", err)
 	}
 	return registry, nil
 }
 
 // ExcludedMCPSurface documents an MCP serving mode that deliberately produces
-// no supported principal or resource under mcp_tool_execution M2.
+// no supported principal or resource for either registered MCP definition.
 type ExcludedMCPSurface struct {
 	// Name identifies the serving mode.
 	Name string

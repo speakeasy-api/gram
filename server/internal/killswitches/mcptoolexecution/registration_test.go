@@ -18,6 +18,7 @@ func TestMCPToolExecutionRegistration(t *testing.T) {
 
 	registry, err := NewRegistry(nil)
 	require.NoError(t, err)
+	require.Len(t, registry.Definitions(), 2)
 
 	definition, ok := registry.Definition(DefinitionKeyMCPToolExecution)
 	require.True(t, ok)
@@ -27,8 +28,20 @@ func TestMCPToolExecutionRegistration(t *testing.T) {
 	require.Equal(t, IdentityContractKeyAuthenticatedUserMCPServer, definition.IdentityContract)
 	require.ElementsMatch(t, []killswitches.Surface{SurfaceHostedToolsCall, SurfacePrivateProxyToolsCall}, definition.Surfaces)
 	require.ElementsMatch(t, []killswitches.TransportAdapterKey{TransportAdapterHostedJSONRPC, TransportAdapterPrivateProxyJSONRPC}, definition.TransportAdapters)
-	require.NotEmpty(t, definition.DefaultExternalNote)
-	require.NotEmpty(t, definition.EnforcementOwner)
+	require.Equal(t, DefaultExternalNote, definition.DefaultExternalNote)
+	require.Equal(t, EnforcementOwner, definition.EnforcementOwner)
+
+	aiDefinition, ok := registry.Definition(DefinitionKeyAIAccess)
+	require.True(t, ok)
+	require.Equal(t, killswitches.FailurePolicyFailClosed, aiDefinition.FailurePolicy)
+	require.Equal(t, []killswitches.PrincipalKind{PrincipalKindUser}, aiDefinition.PrincipalKinds)
+	require.Equal(t, []killswitches.ResourceKind{ResourceKindMCPServer}, aiDefinition.ResourceKinds)
+	require.Equal(t, IdentityContractKeyAuthenticatedUserMCPServer, aiDefinition.IdentityContract)
+	require.Equal(t, []killswitches.Surface{SurfaceHostedToolsCall, SurfacePrivateProxyToolsCall}, aiDefinition.Surfaces)
+	require.Equal(t, []killswitches.TransportAdapterKey{TransportAdapterHostedJSONRPC, TransportAdapterPrivateProxyJSONRPC}, aiDefinition.TransportAdapters)
+	require.Equal(t, DefaultAIAccessExternalNote, aiDefinition.DefaultExternalNote)
+	require.NotEqual(t, definition.DefaultExternalNote, aiDefinition.DefaultExternalNote)
+	require.Equal(t, EnforcementOwner, aiDefinition.EnforcementOwner)
 
 	adapter, ok := registry.PrincipalAdapter(PrincipalKindUser)
 	require.True(t, ok)
@@ -48,9 +61,10 @@ func TestMCPCoverageInventory(t *testing.T) {
 	require.NoError(t, err)
 
 	inventory := registry.CoverageInventory()
-	require.Len(t, inventory, 2)
+	require.Len(t, inventory, 4)
+	coverageByDefinition := map[killswitches.DefinitionKey][]killswitches.Surface{}
 	for _, contract := range inventory {
-		require.Equal(t, DefinitionKeyMCPToolExecution, contract.Definition)
+		coverageByDefinition[contract.Definition] = append(coverageByDefinition[contract.Definition], contract.Surface)
 		require.Equal(t, killswitches.FailurePolicyFailClosed, contract.FailurePolicy)
 		require.Equal(t, IdentityContractKeyAuthenticatedUserMCPServer, contract.IdentityContract)
 		require.NotEmpty(t, contract.PrincipalSource)
@@ -58,6 +72,8 @@ func TestMCPCoverageInventory(t *testing.T) {
 		require.NotEmpty(t, contract.Checkpoint)
 		require.NotEmpty(t, contract.ProtectedWork)
 	}
+	require.Equal(t, []killswitches.Surface{SurfaceHostedToolsCall, SurfacePrivateProxyToolsCall}, coverageByDefinition[DefinitionKeyMCPToolExecution])
+	require.Equal(t, []killswitches.Surface{SurfaceHostedToolsCall, SurfacePrivateProxyToolsCall}, coverageByDefinition[DefinitionKeyAIAccess])
 
 	hosted, ok := registry.Coverage(DefinitionKeyMCPToolExecution, SurfaceHostedToolsCall)
 	require.True(t, ok)
@@ -67,6 +83,17 @@ func TestMCPCoverageInventory(t *testing.T) {
 	proxy, ok := registry.Coverage(DefinitionKeyMCPToolExecution, SurfacePrivateProxyToolsCall)
 	require.True(t, ok)
 	require.Equal(t, TransportAdapterPrivateProxyJSONRPC, proxy.TransportAdapter)
+
+	aiHosted, ok := registry.Coverage(DefinitionKeyAIAccess, SurfaceHostedToolsCall)
+	require.True(t, ok)
+	require.Equal(t, TransportAdapterHostedJSONRPC, aiHosted.TransportAdapter)
+	aiProxy, ok := registry.Coverage(DefinitionKeyAIAccess, SurfacePrivateProxyToolsCall)
+	require.True(t, ok)
+	require.Equal(t, TransportAdapterPrivateProxyJSONRPC, aiProxy.TransportAdapter)
+	for _, excludedSurface := range []killswitches.Surface{"killswitch_management", "audit_read", "platform_break_glass", "hooks", "litellm", "hosted_inference", "assistant_runtime"} {
+		_, covered := registry.Coverage(DefinitionKeyAIAccess, excludedSurface)
+		require.False(t, covered, string(excludedSurface))
+	}
 
 	excluded := ExcludedMCPSurfaces()
 	names := make([]string, 0, len(excluded))

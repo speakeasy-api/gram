@@ -19,20 +19,24 @@ import (
 type countingEvaluator struct {
 	delegate evaluator
 	calls    int
+	requests []killswitches.EvaluationRequest
 }
 
 func (e *countingEvaluator) Evaluate(ctx context.Context, request killswitches.EvaluationRequest) killswitches.EvaluationResult {
 	e.calls++
+	e.requests = append(e.requests, request)
 	return e.delegate.Evaluate(ctx, request)
 }
 
 type fixedEvaluator struct {
-	result killswitches.EvaluationResult
-	calls  int
+	result   killswitches.EvaluationResult
+	calls    int
+	requests []killswitches.EvaluationRequest
 }
 
-func (e *fixedEvaluator) Evaluate(context.Context, killswitches.EvaluationRequest) killswitches.EvaluationResult {
+func (e *fixedEvaluator) Evaluate(_ context.Context, request killswitches.EvaluationRequest) killswitches.EvaluationResult {
 	e.calls++
+	e.requests = append(e.requests, request)
 	return e.result
 }
 
@@ -40,6 +44,11 @@ func enforcedRollout(organizationID string) *feature.InMemory {
 	flags := &feature.InMemory{}
 	flags.SetFlag(feature.FlagMCPKillswitchEnforce, organizationID, true)
 	return flags
+}
+
+func TestMCPEvaluationDefinitionCandidates(t *testing.T) {
+	t.Parallel()
+	require.Equal(t, []killswitches.DefinitionKey{DefinitionKeyMCPToolExecution, DefinitionKeyAIAccess}, mcpEvaluationDefinitionKeys())
 }
 
 func TestCheckpointEvaluatesEveryCoveredCallWithRealEvaluator(t *testing.T) {
@@ -239,4 +248,6 @@ func TestCheckpointReturnsEvaluatorInfrastructureFailureWithoutMatch(t *testing.
 	_, hasNote := disposition.ExternalNote()
 	require.False(t, hasNote)
 	require.Equal(t, 1, evaluation.calls)
+	require.Len(t, evaluation.requests, 1)
+	require.Equal(t, []killswitches.DefinitionKey{DefinitionKeyMCPToolExecution, DefinitionKeyAIAccess}, evaluation.requests[0].DefinitionKeys)
 }

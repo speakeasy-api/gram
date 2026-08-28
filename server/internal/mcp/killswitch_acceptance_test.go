@@ -47,6 +47,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp/proxy"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	toolsrepo "github.com/speakeasy-api/gram/server/internal/tools/repo"
 	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	tunneledmcprepo "github.com/speakeasy-api/gram/server/internal/tunneledmcp/repo"
@@ -57,8 +58,9 @@ import (
 )
 
 const (
-	acceptanceExternalNote = "Tool calls paused exactly. <b>plain text</b>\nPlain text only."
-	acceptanceInternalNote = "INTERNAL-ONLY incident context"
+	acceptanceExternalNote   = "Tool calls paused exactly. <b>plain text</b>\nPlain text only."
+	acceptanceAIExternalNote = "AI access paused exactly."
+	acceptanceInternalNote   = "INTERNAL-ONLY incident context"
 )
 
 type killswitchAcceptanceFixture struct {
@@ -699,6 +701,74 @@ func TestKillswitchAcceptancePrivateRemoteAndTunnelProductionComposition(t *test
 			requireUserSessionActive(t, f, target)
 			requireUserSessionActive(t, f, other)
 		})
+	}
+}
+
+func TestKillswitchAcceptanceAIAccessProductionComposition(t *testing.T) {
+	t.Parallel()
+
+	ctx, f := newKillswitchAcceptanceFixture(t)
+
+	hosted := f.newHostedTarget(t, ctx, "ai-hosted")
+	var hostedProtectedCalls atomic.Int32
+	hostedSentinel := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		hostedProtectedCalls.Add(1)
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"result":"hosted-ai-ok"}`))
+	}))
+	t.Cleanup(hostedSentinel.Close)
+	f.addHostedSentinelTool(t, ctx, hosted.toolset, "ai_sentinel", hostedSentinel.URL)
+
+	remote := f.newPrivateTarget(t, ctx, "remote")
+	tunnel := f.newPrivateTarget(t, ctx, "tunnel")
+	require.NotEqual(t, remote.backendID, remote.server.ID)
+	require.NotEqual(t, tunnel.backendID, tunnel.server.ID)
+
+	type coveredTarget struct {
+		target         killswitchAcceptanceTarget
+		sessionID      string
+		toolName       string
+		successToken   string
+		protectedCalls func() int32
+	}
+	targets := []coveredTarget{
+		{target: hosted, toolName: "ai_sentinel", successToken: "hosted-ai-ok", protectedCalls: hostedProtectedCalls.Load},
+		{target: remote, toolName: "ping", successToken: remote.successToken, protectedCalls: remote.upstream.calls.Load},
+		{target: tunnel, toolName: "ping", successToken: tunnel.successToken, protectedCalls: tunnel.upstream.calls.Load},
+	}
+	resourceKeys := make([]string, 0, len(targets))
+	for i := range targets {
+		targets[i].sessionID = f.initialize(t, targets[i].target)
+		requireSuccessfulToolCall(t, f.call(t, targets[i].target, makeToolsCallBody(targets[i].toolName), targets[i].sessionID), targets[i].successToken)
+		resourceKeys = append(resourceKeys, targets[i].target.server.ID.String())
+	}
+
+	require.NoError(t, testrepo.New(f.ti.conn).InsertKillswitchPrescriptionFixture(t.Context(), testrepo.InsertKillswitchPrescriptionFixtureParams{
+		PrescriptionID: uuid.New(), OrganizationID: f.auth.ActiveOrganizationID,
+		DefinitionKey: string(mcptoolexecution.DefinitionKeyAIAccess), PrincipalKind: string(mcptoolexecution.PrincipalKindUser), PrincipalKey: f.auth.UserID,
+		ResourceKind: string(mcptoolexecution.ResourceKindMCPServer), ResourceScope: "selected", ResourceKeys: resourceKeys,
+		InternalNote: "internal AI access acceptance fixture", ExternalNote: acceptanceAIExternalNote,
+	}))
+
+	protectedBaselines := make([]int32, len(targets))
+	for i, target := range targets {
+		protectedBaselines[i] = target.protectedCalls()
+		requireKillswitchDenied(t, f.call(t, target.target, makeToolsCallBody(target.toolName), target.sessionID), acceptanceAIExternalNote)
+		require.Equal(t, protectedBaselines[i], target.protectedCalls(), target.target.name)
+	}
+
+	capabilities, err := f.management.ListCapabilities(ctx, &gen.ListCapabilitiesPayload{})
+	require.NoError(t, err)
+	require.Equal(t, []*gen.KillswitchCapability{{Key: killswitchapi.CapabilityMCPToolCalls, Label: "MCP tool calls"}}, capabilities.Capabilities)
+	operationID := uuid.New()
+	mcpPrescription := f.create(t, ctx, operationID, selectedServers(hosted.server.ID, remote.server.ID, tunnel.server.ID), scheduleNow(), acceptanceExternalNote)
+	requireLifecycleEvents(t, f, mcpPrescription.ID, []expectedLifecycleEvent{{
+		action: audit.ActionKillswitchActivate, version: 1, state: "active", operation: "activate", operationID: operationID,
+	}})
+
+	for i, target := range targets {
+		requireKillswitchDenied(t, f.call(t, target.target, makeToolsCallBody(target.toolName), target.sessionID), acceptanceExternalNote)
+		require.Equal(t, protectedBaselines[i], target.protectedCalls(), target.target.name)
 	}
 }
 
