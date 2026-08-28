@@ -192,10 +192,10 @@ func (v Verdict) Normalize() (Verdict, error) {
 			Confidence:             recommendation.Confidence,
 		}
 		if slices.ContainsFunc(recommendations, func(existing RawRecommendation) bool {
-			return existing.IssueType == normalized.IssueType &&
-				existing.ChangeType == normalized.ChangeType &&
-				slices.Equal(existing.EvidenceMessageIndices, normalized.EvidenceMessageIndices) &&
-				existing.Outcome == normalized.Outcome &&
+			// Taxonomy and evidence are transient judge metadata. Persistence and its
+			// stable feedback ID use only these three fields, so normalize to that
+			// same identity before publishing.
+			return existing.Outcome == normalized.Outcome &&
 				existing.Note == normalized.Note &&
 				existing.Confidence == normalized.Confidence
 		}) {

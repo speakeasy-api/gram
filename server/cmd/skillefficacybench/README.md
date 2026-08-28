@@ -63,9 +63,10 @@ in the transcript, supported meaningful transcript roles, strictly increasing
 message indices and timestamps, and each B prescription after the final A message.
 It also requires positive and zero cases plus complete A/B pairs before any model
 call. The committed corpus stores ten score cases and five compact pair definitions.
-Only the error-context and forbidden-PR-section labels accept either
-`partially_helped` or `did_not_help`; only legacy-location accepts either
-`misleading` or `harmful`; all other labels have one reviewed outcome.
+The error-context and forbidden-PR-section labels each accept the two-outcome
+set `partially_helped` or `did_not_help`; legacy-location accepts the two-outcome
+set `misleading` or `harmful`. Every other label has exactly one reviewed
+outcome, including `partially_helped` for chat-release-native-formatting.
 
 Each pair compares the same direct evidence before (`A`) and after (`B`) a user
 explicitly prescribes the correction. `A` expects one structured recommendation.

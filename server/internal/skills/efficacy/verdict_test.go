@@ -178,23 +178,23 @@ func TestNormalizeVerdictKeepsZeroROIEstimate(t *testing.T) {
 	require.InDelta(t, 0.0, *got.EstTurnsSaved, 0)
 }
 
-func TestNormalizeVerdictNormalizesAndExactlyDeduplicatesRecommendations(t *testing.T) {
+func TestNormalizeVerdictNormalizesAndDeduplicatesPersistenceIdentity(t *testing.T) {
 	t.Parallel()
 
 	longNote := strings.Repeat("é", domainskills.MaxFeedbackNoteRunes+1)
 	first := RawRecommendation{IssueType: "requirement_omitted", ChangeType: "reinforce_existing_requirement", EvidenceMessageIndices: []int{2}, Outcome: "did_not_help", Note: longNote, Confidence: "high"}
 	differentEvidence := RawRecommendation{IssueType: "requirement_omitted", ChangeType: "reinforce_existing_requirement", EvidenceMessageIndices: []int{4}, Outcome: "did_not_help", Note: longNote, Confidence: "high"}
+	differentTaxonomy := RawRecommendation{IssueType: "obsolete_guidance", ChangeType: "replace_obsolete_guidance", EvidenceMessageIndices: []int{2}, Outcome: "did_not_help", Note: longNote, Confidence: "high"}
 	differentNote := RawRecommendation{IssueType: "requirement_omitted", ChangeType: "reinforce_existing_requirement", EvidenceMessageIndices: []int{2}, Outcome: "did_not_help", Note: "different evidence", Confidence: "high"}
 	differentConfidence := RawRecommendation{IssueType: "requirement_omitted", ChangeType: "reinforce_existing_requirement", EvidenceMessageIndices: []int{2}, Outcome: "did_not_help", Note: "different evidence", Confidence: "low"}
-	got, err := (Verdict{Score: 0.5, Recommendations: []RawRecommendation{first, first, differentEvidence, differentNote, differentConfidence}}).Normalize()
+	got, err := (Verdict{Score: 0.5, Recommendations: []RawRecommendation{first, first, differentEvidence, differentTaxonomy, differentNote, differentConfidence}}).Normalize()
 
 	require.NoError(t, err)
-	require.Len(t, got.Recommendations, 4)
+	require.Len(t, got.Recommendations, 3)
 	require.Equal(t, domainskills.MaxFeedbackNoteRunes, utf8.RuneCountInString(got.Recommendations[0].Note))
 	require.True(t, utf8.ValidString(got.Recommendations[0].Note))
-	require.Equal(t, []int{4}, got.Recommendations[1].EvidenceMessageIndices)
-	require.Equal(t, differentNote, got.Recommendations[2])
-	require.Equal(t, differentConfidence, got.Recommendations[3])
+	require.Equal(t, differentNote, got.Recommendations[1])
+	require.Equal(t, differentConfidence, got.Recommendations[2])
 }
 
 func TestNormalizeVerdictRejectsInvalidRecommendationDomains(t *testing.T) {
