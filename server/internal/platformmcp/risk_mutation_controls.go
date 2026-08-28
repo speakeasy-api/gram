@@ -8,6 +8,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/speakeasy-api/gram/server/internal/feature"
+	organizationsrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	platformrepo "github.com/speakeasy-api/gram/server/internal/platformmcp/repo"
 )
 
@@ -35,6 +36,32 @@ type RiskMutationError struct {
 
 func (e *RiskMutationError) Error() string { return e.Message }
 func (e *RiskMutationError) Unwrap() error { return e.Cause }
+
+// OrganizationSlugResolver is the narrow organization lookup needed to target
+// the exact-project risk mutation kill switch. It remains separate from the
+// product-feature-only Platform MCP organization gate.
+type OrganizationSlugResolver interface {
+	OrganizationSlug(ctx context.Context, organizationID string) (string, error)
+}
+
+type PostgresOrganizationSlugResolver struct {
+	db *pgxpool.Pool
+}
+
+func NewPostgresOrganizationSlugResolver(db *pgxpool.Pool) *PostgresOrganizationSlugResolver {
+	return &PostgresOrganizationSlugResolver{db: db}
+}
+
+func (r *PostgresOrganizationSlugResolver) OrganizationSlug(ctx context.Context, organizationID string) (string, error) {
+	if r == nil || r.db == nil || organizationID == "" {
+		return "", ErrRiskMutationUnavailable
+	}
+	organization, err := organizationsrepo.New(r.db).GetOrganizationMetadata(ctx, organizationID)
+	if err != nil {
+		return "", fmt.Errorf("get organization for Platform MCP risk mutation: %w", err)
+	}
+	return organization.Slug, nil
+}
 
 // RiskMutationControls owns the checks shared by every risk write. Admission is
 // intentionally separate from receipt execution so callers can prove the flag

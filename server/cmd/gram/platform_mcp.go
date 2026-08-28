@@ -27,6 +27,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/externalmcp"
+	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
@@ -56,6 +57,7 @@ type platformMCPConfig struct {
 	Environment            string
 	JWTSigningKey          string
 	ProductFeatures        *productfeatures.Client
+	FeatureFlags           feature.Provider
 	Authz                  *authz.Engine
 	Encryption             *encryption.Client
 	Identity               *identity.Resolver
