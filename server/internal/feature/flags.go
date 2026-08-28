@@ -36,6 +36,11 @@ const (
 	FlagRiskFindingAnalytics Flag = "risk-finding-analytics"
 	FlagRiskAsyncScanShadow  Flag = "risk-async-scan-shadow"
 
+	// FlagPlatformMCPRiskMutations is the exact-project kill switch for risk
+	// policy and exclusion writes exposed through Platform MCP. It is evaluated
+	// at invocation time and fails closed when absent, disabled, or indeterminate.
+	FlagPlatformMCPRiskMutations Flag = "platform-mcp-risk-mutations"
+
 	// FlagAssistantPlatformMCP grants a project's managed (dashboard)
 	// assistant the Platform MCP read toolset — the "platform" platform
 	// toolset re-serving the Platform MCP read tools over the assistant

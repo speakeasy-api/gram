@@ -27,6 +27,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/externalmcp"
+	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
@@ -56,6 +57,7 @@ type platformMCPConfig struct {
 	Environment            string
 	JWTSigningKey          string
 	ProductFeatures        *productfeatures.Client
+	FeatureFlags           feature.Provider
 	Authz                  *authz.Engine
 	Encryption             *encryption.Client
 	Identity               *identity.Resolver
@@ -204,6 +206,10 @@ func configureLocalFixturePlatformMCP(ctx context.Context, config platformMCPCon
 		},
 		Skills:            newBudget(platformmcp.SkillsConnectionLimitName, platformmcp.SkillsOrganizationLimitName),
 		LifecycleMetadata: newBudget(platformmcp.LifecycleConnectionLimitName, platformmcp.LifecycleOrganizationLimitName),
+		RiskMutations: platformmcp.OperationBudget{
+			Connection:   ratelimit.New(limitStore, platformmcp.RiskMutationConnectionLimitName, ratelimit.PerMinute(platformmcp.RiskMutationsPerConnectionPerMinute), ratelimit.WithMetrics(config.MeterProvider)),
+			Organization: ratelimit.New(limitStore, platformmcp.RiskMutationOrganizationLimitName, ratelimit.PerMinute(platformmcp.RiskMutationsPerOrganizationPerMinute), ratelimit.WithMetrics(config.MeterProvider)),
+		},
 		// Diagnostics are read-only aggregate queries an administrator runs
 		// while investigating, so they are metered well above the shared
 		// five-per-minute mutation budget.
@@ -299,7 +305,11 @@ func configureLocalFixturePlatformMCP(ctx context.Context, config platformMCPCon
 	diagnostics := platformmcp.NewDiagnosticsService(config.DB, config.Telemetry, config.SessionCapture, platformReader, readiness, budgets.Diagnostics).
 		WithDrilldown(config.TelemetryDrilldown, config.JWTSigningKey, budgets.SensitiveDiagnostics, budgets.DrilldownVolume, platformmcp.NewPostgresDrilldownAuditor(config.DB))
 	sessionRecall := platformmcp.NewSessionRecallService(config.Logger, config.DB, platformrepo.New(config.DB), audit.NewLogger(), config.SessionPortability, budgets.SensitiveSessionRecall)
-	runtime := platformmcp.NewRuntimeWithLifecycle(
+	riskMutationControls, err := platformmcp.NewRiskMutationControls(config.DB, config.FeatureFlags, platformmcp.NewPostgresOrganizationSlugResolver(config.DB), budgets.RiskMutations, config.JWTSigningKey)
+	if err != nil {
+		return AssistantSurface{}, fmt.Errorf("create local Platform MCP risk mutation controls: %w", err)
+	}
+	runtime := platformmcp.NewRuntimeWithRiskMutations(
 		config.Logger,
 		authenticator,
 		gate,
@@ -321,6 +331,7 @@ func configureLocalFixturePlatformMCP(ctx context.Context, config platformMCPCon
 		diagnostics,
 		pluginInventory,
 		sessionRecall,
+		&platformmcp.RiskMutationHandlers{Controls: riskMutationControls},
 		fixtureConfig.CatalogDescriptor(),
 	).WithOAuthTelemetry(oauthTelemetry)
 	oauth.Attach(config.Mux)
@@ -522,6 +533,10 @@ func configureBrowserPlatformMCP(ctx context.Context, config platformMCPConfig) 
 		},
 		Skills:            newBudget(platformmcp.SkillsConnectionLimitName, platformmcp.SkillsOrganizationLimitName),
 		LifecycleMetadata: newBudget(platformmcp.LifecycleConnectionLimitName, platformmcp.LifecycleOrganizationLimitName),
+		RiskMutations: platformmcp.OperationBudget{
+			Connection:   ratelimit.New(limitStore, platformmcp.RiskMutationConnectionLimitName, ratelimit.PerMinute(platformmcp.RiskMutationsPerConnectionPerMinute), ratelimit.WithMetrics(config.MeterProvider)),
+			Organization: ratelimit.New(limitStore, platformmcp.RiskMutationOrganizationLimitName, ratelimit.PerMinute(platformmcp.RiskMutationsPerOrganizationPerMinute), ratelimit.WithMetrics(config.MeterProvider)),
+		},
 		// Diagnostics are read-only aggregate queries an administrator runs
 		// while investigating, so they are metered well above the shared
 		// five-per-minute mutation budget.
@@ -606,7 +621,11 @@ func configureBrowserPlatformMCP(ctx context.Context, config platformMCPConfig) 
 	diagnostics := platformmcp.NewDiagnosticsService(config.DB, config.Telemetry, config.SessionCapture, platformReader, readiness, budgets.Diagnostics).
 		WithDrilldown(config.TelemetryDrilldown, config.JWTSigningKey, budgets.SensitiveDiagnostics, budgets.DrilldownVolume, platformmcp.NewPostgresDrilldownAuditor(config.DB))
 	sessionRecall := platformmcp.NewSessionRecallService(config.Logger, config.DB, platformrepo.New(config.DB), audit.NewLogger(), config.SessionPortability, budgets.SensitiveSessionRecall)
-	runtime := platformmcp.NewRuntimeWithLifecycle(
+	riskMutationControls, err := platformmcp.NewRiskMutationControls(config.DB, config.FeatureFlags, platformmcp.NewPostgresOrganizationSlugResolver(config.DB), budgets.RiskMutations, config.JWTSigningKey)
+	if err != nil {
+		return AssistantSurface{}, fmt.Errorf("create browser Platform MCP risk mutation controls: %w", err)
+	}
+	runtime := platformmcp.NewRuntimeWithRiskMutations(
 		config.Logger,
 		authenticator,
 		gate,
@@ -625,6 +644,7 @@ func configureBrowserPlatformMCP(ctx context.Context, config platformMCPConfig) 
 		diagnostics,
 		pluginInventory,
 		sessionRecall,
+		&platformmcp.RiskMutationHandlers{Controls: riskMutationControls},
 		platformmcp.CatalogDescriptor{},
 	).WithOAuthTelemetry(oauthTelemetry)
 	oauth.Attach(config.Mux)

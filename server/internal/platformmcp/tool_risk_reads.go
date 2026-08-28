@@ -14,9 +14,12 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/risk/policycatalog"
 )
 
-func registerRiskTools(reg *Registrar, risk *RiskReadService) {
+// registerRiskToolsWithMutations is the single handler-selection seam used by
+// the external endpoint and assistant catalogue. PR 6 deliberately passes no
+// live handlers, so every mutation remains the same stable unavailable stub.
+func registerRiskToolsWithMutations(reg *Registrar, risk *RiskReadService, mutations *RiskMutationHandlers) {
 	if risk == nil || !risk.valid() {
-		registerUnavailableRiskTools(reg)
+		registerUnavailableRiskToolsWithMutations(reg, mutations)
 		return
 	}
 	addTool(reg, &mcp.Tool{
@@ -52,14 +55,22 @@ func registerRiskTools(reg *Registrar, risk *RiskReadService) {
 			return risk.ListExclusions(ctx, principal, input)
 		})
 	})
-	registerRiskMutationStubs(reg, risk.catalog, true)
+	registerRiskMutationHandlers(reg, risk.catalog, true, mutations)
 }
 
 func registerUnavailableRiskTools(reg *Registrar) {
-	registerUnavailableRiskToolsWithCatalog(reg, policycatalog.Build)
+	registerUnavailableRiskToolsWithMutations(reg, nil)
+}
+
+func registerUnavailableRiskToolsWithMutations(reg *Registrar, mutations *RiskMutationHandlers) {
+	registerUnavailableRiskToolsWithCatalogAndMutations(reg, policycatalog.Build, mutations)
 }
 
 func registerUnavailableRiskToolsWithCatalog(reg *Registrar, buildCatalog func() (policycatalog.Catalog, error)) {
+	registerUnavailableRiskToolsWithCatalogAndMutations(reg, buildCatalog, nil)
+}
+
+func registerUnavailableRiskToolsWithCatalogAndMutations(reg *Registrar, buildCatalog func() (policycatalog.Catalog, error), mutations *RiskMutationHandlers) {
 	for _, tool := range []struct {
 		name, title, description string
 		schema                   *jsonschema.Schema
@@ -71,10 +82,46 @@ func registerUnavailableRiskToolsWithCatalog(reg *Registrar, buildCatalog func()
 		addTool(reg, &mcp.Tool{Name: tool.name, Title: tool.title, Description: tool.description, Annotations: readOnlyAnnotations(), InputSchema: tool.schema}, ToolMeta{Audiences: bothAudiences, ProjectScope: ProjectScopeDefaultable}, unavailableTool("risk_reads"))
 	}
 	catalog, err := buildCatalog()
-	registerRiskMutationStubs(reg, catalog, err == nil)
+	registerRiskMutationHandlers(reg, catalog, err == nil, mutations)
 }
 
-func registerRiskMutationStubs(reg *Registrar, catalog policycatalog.Catalog, catalogAvailable bool) {
+type RiskMutationToolReceipt struct {
+	ID       string `json:"id"`
+	Replayed bool   `json:"replayed"`
+}
+
+type CreateRiskPolicyToolOutput struct {
+	CreateRiskPolicyReceiptResult
+	Receipt RiskMutationToolReceipt `json:"receipt"`
+}
+
+type UpdateRiskPolicyToolOutput struct {
+	UpdateRiskPolicyReceiptResult
+	Receipt RiskMutationToolReceipt `json:"receipt"`
+}
+
+type CreateRiskExclusionToolOutput struct {
+	CreateRiskExclusionReceiptResult
+	Receipt RiskMutationToolReceipt `json:"receipt"`
+}
+
+type UpdateRiskExclusionToolOutput struct {
+	UpdateRiskExclusionReceiptResult
+	Receipt RiskMutationToolReceipt `json:"receipt"`
+}
+
+// RiskMutationHandlers names the four final live callbacks without enabling
+// them. Every callback has an exported success type that composition code can
+// construct, while the schemas remain owned by this package.
+type RiskMutationHandlers struct {
+	Controls        *RiskMutationControls
+	CreatePolicy    mcp.ToolHandlerFor[map[string]any, CreateRiskPolicyToolOutput]
+	UpdatePolicy    mcp.ToolHandlerFor[map[string]any, UpdateRiskPolicyToolOutput]
+	CreateExclusion mcp.ToolHandlerFor[map[string]any, CreateRiskExclusionToolOutput]
+	UpdateExclusion mcp.ToolHandlerFor[map[string]any, UpdateRiskExclusionToolOutput]
+}
+
+func registerRiskMutationHandlers(reg *Registrar, catalog policycatalog.Catalog, catalogAvailable bool, handlers *RiskMutationHandlers) {
 	createPolicySchema := fallbackCreateRiskPolicySchema()
 	updatePolicySchema := fallbackUpdateRiskPolicySchema()
 	createExclusionSchema := fallbackCreateRiskExclusionSchema()
@@ -83,16 +130,43 @@ func registerRiskMutationStubs(reg *Registrar, catalog policycatalog.Catalog, ca
 		updatePolicySchema = updateRiskPolicySchema(catalog)
 		createExclusionSchema = createRiskExclusionSchema(catalog)
 	}
-	for _, tool := range []struct {
-		name, title, description string
-		schema                   *jsonschema.Schema
-	}{
-		{"create_risk_policy", "Create Risk Policy", "Create a risk policy in an explicit project. Risk mutations are not enabled in this rollout.", createPolicySchema},
-		{"update_risk_policy", "Update Risk Policy", "Patch a risk policy in an explicit project using an opaque expected version. Risk mutations are not enabled in this rollout.", updatePolicySchema},
-		{"create_risk_exclusion", "Create Risk Exclusion", "Create a non-regex risk exclusion in an explicit project. Risk mutations are not enabled in this rollout.", createExclusionSchema},
-		{"update_risk_exclusion", "Update Risk Exclusion", "Enable or disable one risk exclusion without changing its definition. Risk mutations are not enabled in this rollout.", updateRiskExclusionSchema()},
-	} {
-		addTool(reg, &mcp.Tool{Name: tool.name, Title: tool.title, Description: tool.description, InputSchema: tool.schema}, ToolMeta{Audiences: bothAudiences, ProjectScope: ProjectScopeExplicit}, unavailableTool("risk_mutations"))
+	createPolicy := unavailableRiskMutationTool[CreateRiskPolicyToolOutput]()
+	updatePolicy := unavailableRiskMutationTool[UpdateRiskPolicyToolOutput]()
+	createExclusion := unavailableRiskMutationTool[CreateRiskExclusionToolOutput]()
+	updateExclusion := unavailableRiskMutationTool[UpdateRiskExclusionToolOutput]()
+	if catalogAvailable && handlers != nil && handlers.Controls != nil {
+		if handlers.CreatePolicy != nil {
+			createPolicy = handlers.CreatePolicy
+		}
+		if handlers.UpdatePolicy != nil {
+			updatePolicy = handlers.UpdatePolicy
+		}
+		if handlers.CreateExclusion != nil {
+			createExclusion = handlers.CreateExclusion
+		}
+		if handlers.UpdateExclusion != nil {
+			updateExclusion = handlers.UpdateExclusion
+		}
+	}
+	meta := ToolMeta{Audiences: bothAudiences, ProjectScope: ProjectScopeExplicit}
+	addTool(reg, &mcp.Tool{Name: "create_risk_policy", Title: "Create Risk Policy", Description: "Create a risk policy in an explicit project. Risk mutations are not enabled in this rollout.", InputSchema: createPolicySchema}, meta, createPolicy)
+	addTool(reg, &mcp.Tool{Name: "update_risk_policy", Title: "Update Risk Policy", Description: "Patch a risk policy in an explicit project using an opaque expected version. Risk mutations are not enabled in this rollout.", InputSchema: updatePolicySchema}, meta, updatePolicy)
+	addTool(reg, &mcp.Tool{Name: "create_risk_exclusion", Title: "Create Risk Exclusion", Description: "Create a non-regex risk exclusion in an explicit project. Risk mutations are not enabled in this rollout.", InputSchema: createExclusionSchema}, meta, createExclusion)
+	addTool(reg, &mcp.Tool{Name: "update_risk_exclusion", Title: "Update Risk Exclusion", Description: "Enable or disable one risk exclusion without changing its definition. Risk mutations are not enabled in this rollout.", InputSchema: updateRiskExclusionSchema()}, meta, updateExclusion)
+}
+
+func unavailableRiskMutationTool[Out any]() mcp.ToolHandlerFor[map[string]any, Out] {
+	return func(_ context.Context, _ *mcp.CallToolRequest, _ map[string]any) (*mcp.CallToolResult, Out, error) {
+		var zero Out
+		result := featureUnavailableResult{Code: unavailableCode, Feature: "risk_mutations", Message: "This Platform MCP capability is not enabled for the current rollout."}
+		content, err := json.Marshal(result)
+		if err != nil {
+			return nil, zero, fmt.Errorf("encode unavailable risk mutation result: %w", err)
+		}
+		// Return a tool error rather than an existing IsError result. The MCP SDK
+		// short-circuits on errors before marshaling the typed zero Out value, so
+		// disabled tools emit no empty structured success fields.
+		return nil, zero, &ToolRefusalError{Payload: string(content)}
 	}
 }
 

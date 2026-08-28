@@ -692,6 +692,7 @@ INSERT INTO platform_mcp_operation_receipts (
     input_hash,
     status,
     result_code,
+    result_payload,
     expires_at
 ) VALUES (
     @organization_id,
@@ -706,6 +707,7 @@ INSERT INTO platform_mcp_operation_receipts (
     @input_hash,
     @status,
     @result_code,
+    @result_payload,
     @expires_at
 )
 RETURNING *;
@@ -724,6 +726,7 @@ UPDATE platform_mcp_operation_receipts
 SET registration_id = @registration_id,
     status = @status,
     result_code = @result_code,
+    result_payload = @result_payload,
     updated_at = clock_timestamp()
 WHERE id = @id
   AND organization_id = @organization_id
