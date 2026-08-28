@@ -19,7 +19,7 @@ func newDemoSeedCommand() *cli.Command {
 		Flags: append([]cli.Flag{
 			&cli.BoolFlag{
 				Name: "local",
-				Usage: "Seed the local development organization instead of the shared demo org: same data, " +
+				Usage: "Seed the local development organization as well as the shared demo org: the same data " +
 					"retargeted at the dev-idp org, writable, plus the local-only fixtures (your user, API key).",
 				EnvVars: []string{"GRAM_DEMO_SEED_LOCAL"},
 			},
@@ -80,17 +80,28 @@ func newDemoSeedCommand() *cli.Command {
 			}
 			defer o11y.NoLogDefer(func() error { return blobShutdown(ctx) })
 
-			spec := demoseed.DefaultSpec()
-			if c.Bool("local") {
-				spec = demoseed.LocalSpec()
+			if !c.Bool("local") {
+				if err := demoseed.Run(ctx, logger, db, ch, blob, demoseed.DefaultSpec()); err != nil {
+					return fmt.Errorf("apply seed: %w", err)
+				}
+				return nil
 			}
 
-			if err := demoseed.Run(ctx, logger, db, ch, blob, spec); err != nil {
+			// Locally both tenants are seeded: the dev-idp org the developer
+			// logs into, and the shared demo org so /explore-demo renders the
+			// same data it does in production. No membership is granted in the
+			// demo org — as in production, it is reached through auth.enterDemo,
+			// not the org switcher.
+			//
+			// The developer's own org goes first: it is the one that lifts the
+			// BookDemo gate, so a demo-org failure (ClickHouse is the flaky
+			// half locally) leaves a usable environment behind.
+			if err := demoseed.Run(ctx, logger, db, ch, blob, demoseed.LocalSpec()); err != nil {
 				return fmt.Errorf("apply seed: %w", err)
 			}
 
-			if !c.Bool("local") {
-				return nil
+			if err := demoseed.Run(ctx, logger, db, ch, blob, demoseed.DefaultSpec()); err != nil {
+				return fmt.Errorf("apply demo org seed: %w", err)
 			}
 
 			// A missing or unreachable cache is not fatal: the fixtures just
