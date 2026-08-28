@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/attr"
@@ -19,6 +20,17 @@ import (
 
 type exclusionMutationAuditor struct {
 	logger *audit.Logger
+}
+
+// NewExclusionMutationCore composes the shared exclusion command for non-Goa
+// adapters with the same audit, reconciliation, and keyed-redaction behavior.
+func NewExclusionMutationCore(logger *slog.Logger, db *pgxpool.Pool, auditLogger *audit.Logger, reconciler RiskExclusionReconciler, redactionKey string) *exclusioncore.Core {
+	return exclusioncore.New(db, exclusioncore.MutationDependencies{
+		Transactor:  db,
+		Auditor:     exclusionMutationAuditor{logger: auditLogger},
+		AfterCommit: newExclusionAfterCommit(logger, reconciler),
+		Redactor:    exclusioncore.NewRedactor(redactionKey),
+	})
 }
 
 func (a exclusionMutationAuditor) LogExclusionCreate(ctx context.Context, db repo.DBTX, event exclusioncore.CreateAuditEvent) error {

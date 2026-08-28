@@ -124,6 +124,45 @@ func TestRiskMutationAdmissionConnectionlessAssistantUsesOrganizationBudget(t *t
 	require.Equal(t, []string{"organization"}, organization.keys)
 }
 
+func TestRiskExclusionMutationErrorPreservesConflict(t *testing.T) {
+	t.Parallel()
+
+	conflict := riskMutationConflict("The risk exclusion changed after it was read.")
+	mapped := mapRiskExclusionMutationError(conflict)
+
+	require.Same(t, conflict, mapped)
+	var mutation *RiskMutationError
+	require.ErrorAs(t, mapped, &mutation)
+	require.Equal(t, "conflict", mutation.Code)
+}
+
+func TestRiskExclusionMutationErrorMapsRegexLimitToInvalidRequest(t *testing.T) {
+	t.Parallel()
+
+	mapped := mapRiskExclusionMutationError(&exclusioncore.RegexLimitError{})
+
+	var mutation *RiskMutationError
+	require.ErrorAs(t, mapped, &mutation)
+	require.Equal(t, "invalid_request", mutation.Code)
+}
+
+func TestPrepareRiskExclusionCreateRejectsWhitespaceOnlyExactValue(t *testing.T) {
+	t.Parallel()
+
+	catalog, err := policycatalog.Build()
+	require.NoError(t, err)
+	service := newRiskExclusionMutationService(nil, nil, catalog)
+	_, err = service.prepareCreate(
+		Principal{OrganizationID: "<ORG_ID>"},
+		ResolvedProject{ID: uuid.New(), Slug: "project"},
+		createRiskExclusionInput{ProjectSlug: "project", MatchType: "exact", MatchValue: "   ", Enabled: true, IdempotencyKey: "key"},
+	)
+
+	var mutation *RiskMutationError
+	require.ErrorAs(t, err, &mutation)
+	require.Equal(t, "invalid_request", mutation.Code)
+}
+
 func TestRiskMutationInputHashIsCanonicalAndOperationSeparated(t *testing.T) {
 	t.Parallel()
 

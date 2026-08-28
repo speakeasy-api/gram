@@ -48,33 +48,34 @@ import (
 )
 
 type platformMCPConfig struct {
-	Logger                 *slog.Logger
-	MeterProvider          metric.MeterProvider
-	TracerProvider         trace.TracerProvider
-	Mux                    goahttp.Muxer
-	DB                     *pgxpool.Pool
-	Redis                  *redis.Client
-	ServerURL              *url.URL
-	DashboardURL           *url.URL
-	Environment            string
-	JWTSigningKey          string
-	ProductFeatures        *productfeatures.Client
-	FeatureFlags           feature.Provider
-	Authz                  *authz.Engine
-	Encryption             *encryption.Client
-	Identity               *identity.Resolver
-	Sessions               *sessions.Manager
-	Registry               *externalmcp.RegistryClient
-	Catalog                *externalmcp.CatalogService
-	GuardianPolicy         *guardian.Policy
-	RemoteChallengeManager *remotesessions.ChallengeManager
-	AuditLogger            *audit.Logger
-	PluginPublisher        *plugins.Service
-	TemporalEnv            *tenv.Environment
-	Skills                 platformmcp.SkillsManagement
-	RiskPolicyApprovals    policycore.ApprovalCoordinator
-	RiskPolicySignaler     policycore.PolicySignaler
-	RiskPolicyCache        policycore.PolicyCacheInvalidator
+	Logger                  *slog.Logger
+	MeterProvider           metric.MeterProvider
+	TracerProvider          trace.TracerProvider
+	Mux                     goahttp.Muxer
+	DB                      *pgxpool.Pool
+	Redis                   *redis.Client
+	ServerURL               *url.URL
+	DashboardURL            *url.URL
+	Environment             string
+	JWTSigningKey           string
+	ProductFeatures         *productfeatures.Client
+	FeatureFlags            feature.Provider
+	Authz                   *authz.Engine
+	Encryption              *encryption.Client
+	Identity                *identity.Resolver
+	Sessions                *sessions.Manager
+	Registry                *externalmcp.RegistryClient
+	Catalog                 *externalmcp.CatalogService
+	GuardianPolicy          *guardian.Policy
+	RemoteChallengeManager  *remotesessions.ChallengeManager
+	AuditLogger             *audit.Logger
+	PluginPublisher         *plugins.Service
+	TemporalEnv             *tenv.Environment
+	Skills                  platformmcp.SkillsManagement
+	RiskPolicyApprovals     policycore.ApprovalCoordinator
+	RiskPolicySignaler      policycore.PolicySignaler
+	RiskPolicyCache         policycore.PolicyCacheInvalidator
+	RiskExclusionReconciler risk.RiskExclusionReconciler
 	// Telemetry is the Gram-owned ClickHouse read model the diagnostics tools
 	// answer from. Nil disables them rather than serving an empty answer, which
 	// a caller would read as "nothing is wrong".
@@ -314,10 +315,11 @@ func configureLocalFixturePlatformMCP(ctx context.Context, config platformMCPCon
 	if err != nil {
 		return AssistantSurface{}, fmt.Errorf("create local Platform MCP risk mutation controls: %w", err)
 	}
-	riskMutations, err := platformmcp.NewRiskPolicyMutationHandlers(
+	riskMutations, err := platformmcp.NewRiskMutationHandlers(
 		config.DB,
 		riskMutationControls,
 		risk.NewPolicyMutationCore(config.DB, config.AuditLogger, config.RiskPolicyApprovals, config.RiskPolicySignaler, config.RiskPolicyCache),
+		risk.NewExclusionMutationCore(config.Logger, config.DB, config.AuditLogger, config.RiskExclusionReconciler, config.JWTSigningKey),
 	)
 	if err != nil {
 		return AssistantSurface{}, fmt.Errorf("create local Platform MCP risk policy mutations: %w", err)
@@ -638,10 +640,11 @@ func configureBrowserPlatformMCP(ctx context.Context, config platformMCPConfig) 
 	if err != nil {
 		return AssistantSurface{}, fmt.Errorf("create browser Platform MCP risk mutation controls: %w", err)
 	}
-	riskMutations, err := platformmcp.NewRiskPolicyMutationHandlers(
+	riskMutations, err := platformmcp.NewRiskMutationHandlers(
 		config.DB,
 		riskMutationControls,
 		risk.NewPolicyMutationCore(config.DB, config.AuditLogger, config.RiskPolicyApprovals, config.RiskPolicySignaler, config.RiskPolicyCache),
+		risk.NewExclusionMutationCore(config.Logger, config.DB, config.AuditLogger, config.RiskExclusionReconciler, config.JWTSigningKey),
 	)
 	if err != nil {
 		return AssistantSurface{}, fmt.Errorf("create browser Platform MCP risk policy mutations: %w", err)

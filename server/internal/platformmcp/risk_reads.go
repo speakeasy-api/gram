@@ -84,6 +84,7 @@ type RiskReadService struct {
 	catalog            policycatalog.Catalog
 	catalogFingerprint string
 	redactionKey       []byte
+	versions           *riskVersionCodec
 	loadPolicyDetail   func(context.Context, uuid.UUID, uuid.UUID) (policycore.Policy, string, error)
 }
 
@@ -116,6 +117,7 @@ func newRiskReadService(db *pgxpool.Pool, keyMaterial string) (*RiskReadService,
 		catalog:            catalog,
 		catalogFingerprint: fingerprint,
 		redactionKey:       redactionKey[:],
+		versions:           versions,
 		loadPolicyDetail: func(ctx context.Context, projectID, policyID uuid.UUID) (policycore.Policy, string, error) {
 			tx, err := db.BeginTx(ctx, pgx.TxOptions{
 				IsoLevel:       pgx.RepeatableRead,
@@ -230,6 +232,7 @@ type RiskExclusionSummary struct {
 	RuleIDFilter     string            `json:"rule_id_filter,omitempty"`
 	SourceFilter     string            `json:"source_filter,omitempty"`
 	Enabled          bool              `json:"enabled"`
+	Version          string            `json:"version"`
 	CreatedAt        string            `json:"created_at"`
 	UpdatedAt        string            `json:"updated_at"`
 	Compatibility    RiskCompatibility `json:"compatibility"`
@@ -347,7 +350,11 @@ func (s *RiskReadService) ListExclusions(ctx context.Context, principal Principa
 	}
 	output := ListRiskExclusionsOutput{Project: riskProject(project), CatalogVersion: s.catalog.Schema, CatalogFingerprint: s.catalogFingerprint, Exclusions: make([]RiskExclusionSummary, 0, min(len(exclusions), limit)), NextCursor: ""}
 	for _, exclusion := range exclusions[:min(len(exclusions), limit)] {
-		output.Exclusions = append(output.Exclusions, s.exclusionSummary(exclusion))
+		summary, err := s.exclusionSummary(exclusion)
+		if err != nil {
+			return ListRiskExclusionsOutput{}, fmt.Errorf("issue risk exclusion version: %w", err)
+		}
+		output.Exclusions = append(output.Exclusions, summary)
 	}
 	if len(exclusions) > limit {
 		last := exclusions[limit-1]
@@ -360,7 +367,7 @@ func (s *RiskReadService) ListExclusions(ctx context.Context, principal Principa
 }
 
 func (s *RiskReadService) valid() bool {
-	return s != nil && s.projects != nil && s.policies != nil && s.exclusions != nil && s.cursor != nil && len(s.redactionKey) > 0 && s.catalog.Schema != "" && s.catalogFingerprint != "" && s.loadPolicyDetail != nil
+	return s != nil && s.projects != nil && s.policies != nil && s.exclusions != nil && s.cursor != nil && len(s.redactionKey) > 0 && s.versions != nil && s.catalog.Schema != "" && s.catalogFingerprint != "" && s.loadPolicyDetail != nil
 }
 
 func riskPageLimit(value int) (int, error) {
@@ -477,12 +484,12 @@ func (s *RiskReadService) projectDetectionScopes(policy policycore.Policy) ([]Ri
 	return result, true
 }
 
-func (s *RiskReadService) exclusionSummary(exclusion exclusioncore.Exclusion) RiskExclusionSummary {
+func (s *RiskReadService) exclusionSummary(exclusion exclusioncore.Exclusion) (RiskExclusionSummary, error) {
 	unsupported := make([]string, 0, 3)
 	result := RiskExclusionSummary{
 		ID: exclusion.ID.String(), PolicyID: nil, MatchType: exclusion.MatchType,
 		MatchValue: "", MatchFingerprint: "", MatchLength: 0,
-		RuleIDFilter: "", SourceFilter: "", Enabled: exclusion.Enabled,
+		RuleIDFilter: "", SourceFilter: "", Enabled: exclusion.Enabled, Version: "",
 		CreatedAt: exclusion.CreatedAt.UTC().Format(time.RFC3339Nano), UpdatedAt: exclusion.UpdatedAt.UTC().Format(time.RFC3339Nano),
 		Compatibility: RiskCompatibility{State: "fully_supported", UnsupportedFields: []string{}},
 	}
@@ -492,7 +499,7 @@ func (s *RiskReadService) exclusionSummary(exclusion exclusioncore.Exclusion) Ri
 	}
 	switch exclusion.MatchType {
 	case "exact", "regex":
-		result.MatchFingerprint = s.fingerprintValue(exclusion.MatchValue)
+		result.MatchFingerprint = s.fingerprintValue(exclusion.ProjectID, exclusion.MatchValue)
 		result.MatchLength = utf8.RuneCountInString(exclusion.MatchValue)
 		if exclusion.MatchType == "regex" {
 			unsupported = append(unsupported, "legacy_regex")
@@ -537,11 +544,18 @@ func (s *RiskReadService) exclusionSummary(exclusion exclusioncore.Exclusion) Ri
 	}
 	slices.Sort(unsupported)
 	result.Compatibility = compatibility(slices.Compact(unsupported))
-	return result
+	version, err := s.versions.ExclusionVersion(exclusion)
+	if err != nil {
+		return RiskExclusionSummary{}, err
+	}
+	result.Version = version
+	return result, nil
 }
 
-func (s *RiskReadService) fingerprintValue(value string) string {
+func (s *RiskReadService) fingerprintValue(projectID uuid.UUID, value string) string {
 	mac := hmac.New(sha256.New, s.redactionKey)
+	_, _ = mac.Write([]byte(projectID.String()))
+	_, _ = mac.Write([]byte{'\x00'})
 	_, _ = mac.Write([]byte(value))
 	return "hmac-sha256:" + hex.EncodeToString(mac.Sum(nil)[:16])
 }
