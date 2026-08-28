@@ -87,6 +87,25 @@
   guardActionButtons("button[data-connect-link]", "Connecting…");
   guardActionButtons("button[data-refresh-link]", "Refreshing…");
 
+  // Session length is stated on the summary line so it is visible without
+  // opening the configuration disclosure; keep the two in step when the
+  // control inside the disclosure changes.
+  var sessionDuration = document.querySelector(
+    'select[name="session_duration_hours"]',
+  );
+  var sessionDurationLabel = document.querySelector(
+    "[data-session-duration-label]",
+  );
+  if (sessionDuration && sessionDurationLabel) {
+    sessionDuration.addEventListener("change", function () {
+      var option = sessionDuration.options[sessionDuration.selectedIndex];
+      var short = option && option.getAttribute("data-short-label");
+      if (short) {
+        sessionDurationLabel.textContent = short;
+      }
+    });
+  }
+
   // Auto refresh: the page-level combobox drives every provider at once. A
   // change syncs each card's hidden auto_refresh input (so a subsequent
   // Connect carries the choice) and, when a stored session exists to update,

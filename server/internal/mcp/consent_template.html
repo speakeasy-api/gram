@@ -85,15 +85,18 @@
                     >Connected{{if .AutoRefreshChecked}} · auto refresh
                     on{{end}}</span
                   >
-                  {{/* Stated inline rather than behind a hover tooltip: it is
-                  the difference between a link that lasts and one that lapses,
-                  and hover-only text is invisible on touch. */}}
-                  {{if .RefreshExpiresIn}}
+                  {{/* Stated inline rather than behind a hover tooltip, which
+                  is invisible on touch — but only when nothing is renewing the
+                  session, since auto refresh is what stops an idle lapse. The
+                  figure is the provider's earliest reported deadline, not a
+                  guarantee, and many providers report none at all. */}}
+                  {{if and .RefreshExpiresIn (not .AutoRefreshChecked)}}
                   <span class="text-xs text-muted-foreground"
-                    >Renews on use. If unused, expires in
+                    >Provider reports it lapsing in
                     <time datetime="{{.RefreshExpiresAt}}"
                       >{{.RefreshExpiresIn}}</time
-                    >.</span
+                    >
+                    without use.</span
                   >
                   {{end}} {{else if .Expired}}
                   <span class="text-xs text-default-warning"
@@ -205,12 +208,16 @@
           >
             <span class="text-xs text-muted-foreground truncate">
               Signing in as
-              <span class="text-foreground font-mono">{{.SubjectDisplay}}</span>
+              <span class="text-foreground font-mono">{{.SubjectDisplay}}</span
+              >{{if .SelectedSessionDuration}} for
+              <span class="text-foreground" data-session-duration-label
+                >{{.SelectedSessionDuration}}</span
+              >{{end}}
             </span>
             <span
               class="text-eyebrow shrink-0 group-open:hidden"
               aria-hidden="true"
-              >Details</span
+              >Configuration</span
             >
             <span
               class="text-eyebrow hidden shrink-0 group-open:inline"
@@ -245,7 +252,11 @@
                   class="bg-card border px-2 py-1.5 font-mono text-sm"
                 >
                   {{range .SessionDurationOptions}}
-                  <option value="{{.Hours}}" {{if .Selected}}selected{{end}}>
+                  <option
+                    value="{{.Hours}}"
+                    data-short-label="{{.ShortLabel}}"
+                    {{if .Selected}}selected{{end}}
+                  >
                     {{.Label}}
                   </option>
                   {{end}}

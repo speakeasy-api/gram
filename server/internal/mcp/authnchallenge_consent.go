@@ -159,14 +159,21 @@ type consentTemplateData struct {
 	// Styles is the compiled design-system stylesheet inlined into the
 	// document head. A build artifact, never user input.
 	Styles template.CSS
+	// SelectedSessionDuration is the preselected length, surfaced on the
+	// summary line so the session's lifetime is visible without opening the
+	// configuration disclosure. Empty when there is no picker.
+	SelectedSessionDuration string
 }
 
 // sessionDurationOption is one <option> of the consent page's session length
 // picker.
 type sessionDurationOption struct {
-	Hours    int
-	Label    string
-	Selected bool
+	Hours int
+	Label string
+	// ShortLabel drops the "(maximum)" qualifier so the duration reads as a
+	// plain phrase on the summary line ("signing in as … for 2 weeks").
+	ShortLabel string
+	Selected   bool
 }
 
 // remoteSessionCard is the per-remote view rendered by the {{range}} block
@@ -491,6 +498,7 @@ func (s *Service) serveConsentGet(w http.ResponseWriter, r *http.Request, endpoi
 		ConsentToolsPrefill:     prefillAttr,
 		ConnectedCardCount:      connectedCardCount,
 		Styles:                  consentPageStyles,
+		SelectedSessionDuration: selectedSessionDuration(durationOptions),
 	}
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
@@ -935,7 +943,12 @@ func buildSessionDurationOptions(issuer usersessions_repo.UserSessionIssuer) []s
 			return
 		}
 		seen[hours] = true
-		options = append(options, sessionDurationOption{Hours: hours, Label: label, Selected: hours == maxHours})
+		options = append(options, sessionDurationOption{
+			Hours:      hours,
+			Label:      label,
+			ShortLabel: formatDurationHours(hours),
+			Selected:   hours == maxHours,
+		})
 	}
 	add(maxHours, formatDurationHours(maxHours)+" (maximum)")
 	for _, preset := range consentDurationPresets {
@@ -1161,4 +1174,15 @@ func (s *Service) maybeAutoConnect(
 
 	http.Redirect(w, r, challengeURL, http.StatusSeeOther)
 	return true, nil
+}
+
+// selectedSessionDuration returns the preselected option's short label, for
+// the summary line. Empty when there is no picker to describe.
+func selectedSessionDuration(options []sessionDurationOption) string {
+	for _, o := range options {
+		if o.Selected {
+			return o.ShortLabel
+		}
+	}
+	return ""
 }

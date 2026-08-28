@@ -142,11 +142,10 @@ func TestConsentTemplateShowsAutoRefreshAndServiceExpiry(t *testing.T) {
 	require.NotContains(t, html, "About auto refresh")
 	require.Contains(t, normalizedHTML, "don't expire from inactivity")
 	require.Contains(t, normalizedHTML, "idle connections lapse and need reconnecting")
-	// The refresh lifetime is stated inline on the card rather than hidden
-	// behind a hover tooltip, which is unreachable on touch.
-	require.Contains(t, normalizedHTML, "Renews on use. If unused, expires in")
-	require.Contains(t, html, `datetime="2026-09-05T18:00:00Z"`)
-	require.Contains(t, html, "31 days")
+	// Auto refresh is on for this card, and auto refresh is precisely what
+	// stops an idle lapse — so the lapse notice must not appear alongside it.
+	require.NotContains(t, normalizedHTML, "lapsing in")
+	require.NotContains(t, html, `datetime="2026-09-05T18:00:00Z"`)
 	// The access lifetime is not a connection lifetime, so it stays off the page.
 	require.NotContains(t, html, `datetime="2026-08-05T18:00:00Z"`)
 	require.NotContains(t, html, "3 hours 12 minutes")
@@ -217,8 +216,8 @@ func TestConsentTemplateShowsAutoRefreshOffWhenOrganizationDisables(t *testing.T
 			CanRefresh:         true,
 			AccessExpiresAt:    "2026-08-05T18:00:00Z",
 			AccessExpiresIn:    "3 hours",
-			RefreshExpiresAt:   "",
-			RefreshExpiresIn:   "",
+			RefreshExpiresAt:   "2026-09-05T18:00:00Z",
+			RefreshExpiresIn:   "31 days",
 			AutoRefreshChecked: false,
 		}},
 		ConsentEnabled:    true,
@@ -233,6 +232,10 @@ func TestConsentTemplateShowsAutoRefreshOffWhenOrganizationDisables(t *testing.T
 	require.Contains(t, normalizeWhitespace(html), "Off · managed by your organization")
 	require.Contains(t, html, `data-auto-refresh-managed`)
 	require.NotContains(t, normalizeWhitespace(html), "auto refresh on")
+	// With nothing renewing the session, an idle lapse is a real outcome and
+	// the provider's reported deadline is worth stating — as a report, not a
+	// guarantee.
+	require.Contains(t, normalizeWhitespace(html), "Provider reports it lapsing in")
 	// Nothing to change and nothing to persist.
 	require.NotContains(t, html, `data-auto-refresh-select`)
 	require.NotContains(t, html, `id="auto-refresh-form"`)
