@@ -448,43 +448,151 @@ func TestDemoteExpiredTrials_AuditFailureRollsBackLifecycleCausesAndOutbox(t *te
 	require.Empty(t, ti.notifier.inactive)
 }
 
-func TestDemoteExpiredTrials_AcquiresAllKeyLocksInAllKeyTypesOrder(t *testing.T) {
+func TestDemoteExpiredTrials_LocksLifecycleBeforeAllKeysAndRows(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTrialTestInstance(t)
 	orgID := newTrialOrg(t, ctx, ti, time.Now().Add(-time.Hour).UTC())
-	internalLockConn, err := ti.conn.Acquire(ctx)
+	for _, keyType := range openrouter.AllKeyTypes {
+		materializeTrialKey(t, ctx, ti, orgID, keyType, []string{})
+	}
+
+	rowLock := testenv.BeginTx(t, ctx, ti.conn)
+	_, err := rowLock.Exec(ctx, `SELECT 1 FROM trials WHERE organization_id = $1 FOR UPDATE`, orgID)
 	require.NoError(t, err)
-	internalParams := activitiesrepo.AcquireOpenRouterKeyBillingLockParams{OrganizationID: orgID, KeyType: string(openrouter.KeyTypeInternal)}
-	require.NoError(t, activitiesrepo.New(internalLockConn).AcquireOpenRouterKeyBillingLock(ctx, internalParams))
-	defer internalLockConn.Release()
 
 	demoted := make(chan error, 1)
 	go func() { demoted <- ti.activity.Demote(ctx, activities.DemoteExpiredTrialArgs{OrganizationID: orgID}) }()
 
-	chatWasHeld := false
-	deadline := time.Now().Add(2 * time.Second)
-	for time.Now().Before(deadline) {
-		probe, acquireErr := ti.conn.Acquire(ctx)
-		require.NoError(t, acquireErr)
-		probeCtx, cancel := context.WithTimeout(ctx, 25*time.Millisecond)
-		chatParams := activitiesrepo.AcquireOpenRouterKeyBillingLockParams{OrganizationID: orgID, KeyType: string(openrouter.KeyTypeChat)}
-		lockErr := activitiesrepo.New(probe).AcquireOpenRouterKeyBillingLock(probeCtx, chatParams)
-		cancel()
-		if lockErr != nil {
-			_ = probe.Hijack().Close(ctx)
-			chatWasHeld = true
-			break
-		}
-		unlocked, unlockErr := activitiesrepo.New(probe).ReleaseOpenRouterKeyBillingLock(ctx, activitiesrepo.ReleaseOpenRouterKeyBillingLockParams(chatParams))
+	waitCtx, cancelWait := context.WithTimeout(ctx, 2*time.Second)
+	defer cancelWait()
+	requireCondition(t, waitCtx, func() (bool, error) {
+		var blocked bool
+		err := ti.conn.QueryRow(waitCtx, `
+			SELECT EXISTS (
+				SELECT 1 FROM pg_stat_activity
+				WHERE datname = current_database()
+				  AND state = 'active'
+				  AND wait_event_type = 'Lock'
+				  AND query LIKE '%UPDATE trials%'
+			)
+		`).Scan(&blocked)
+		return blocked, err
+	}, "demotion did not block on the trial row")
+
+	probe, err := ti.conn.Acquire(ctx)
+	require.NoError(t, err)
+	defer probe.Release()
+	for _, keyType := range openrouter.AllKeyTypes {
+		var acquired bool
+		require.NoError(t, probe.QueryRow(ctx, `
+			SELECT pg_try_advisory_lock(
+				hashtextextended('openrouter-' || $1::text || '-billing:' || $2::text, 0)
+			)
+		`, string(keyType), orgID).Scan(&acquired))
+		require.Truef(t, acquired, "%s lock must remain acquirable while the trial row is blocked", keyType)
+		unlocked, unlockErr := activitiesrepo.New(probe).ReleaseOpenRouterKeyBillingLock(ctx, activitiesrepo.ReleaseOpenRouterKeyBillingLockParams{OrganizationID: orgID, KeyType: string(keyType)})
 		require.NoError(t, unlockErr)
 		require.True(t, unlocked)
-		probe.Release()
 	}
-	require.True(t, chatWasHeld, "chat lock must remain held while demotion waits for the later internal lock")
+
+	internalLockConn, err := ti.conn.Acquire(ctx)
+	require.NoError(t, err)
+	defer internalLockConn.Release()
+	internalParams := activitiesrepo.AcquireOpenRouterKeyBillingLockParams{OrganizationID: orgID, KeyType: string(openrouter.KeyTypeInternal)}
+	require.NoError(t, activitiesrepo.New(internalLockConn).AcquireOpenRouterKeyBillingLock(ctx, internalParams))
+	internalLocked := true
+	defer func() {
+		if !internalLocked {
+			return
+		}
+		_, _ = activitiesrepo.New(internalLockConn).ReleaseOpenRouterKeyBillingLock(context.WithoutCancel(ctx), activitiesrepo.ReleaseOpenRouterKeyBillingLockParams(internalParams))
+	}()
+
+	require.NoError(t, rowLock.Commit(ctx))
+
+	chatHeldCtx, cancelChatHeld := context.WithTimeout(ctx, 2*time.Second)
+	defer cancelChatHeld()
+	requireCondition(t, chatHeldCtx, func() (bool, error) {
+		var acquired bool
+		err := probe.QueryRow(chatHeldCtx, `
+			SELECT pg_try_advisory_lock(
+				hashtextextended('openrouter-' || $1::text || '-billing:' || $2::text, 0)
+			)
+		`, string(openrouter.KeyTypeChat), orgID).Scan(&acquired)
+		if err != nil || !acquired {
+			return !acquired, err
+		}
+		unlocked, unlockErr := activitiesrepo.New(probe).ReleaseOpenRouterKeyBillingLock(chatHeldCtx, activitiesrepo.ReleaseOpenRouterKeyBillingLockParams{OrganizationID: orgID, KeyType: string(openrouter.KeyTypeChat)})
+		if unlockErr != nil {
+			return false, unlockErr
+		}
+		if !unlocked {
+			return false, errors.New("probe chat lock was not released")
+		}
+		return false, nil
+	}, "chat lock was not acquired before the blocked internal lock")
+
+	keyProbe := testenv.BeginTx(t, ctx, ti.conn)
+	rows, err := keyProbe.Query(ctx, `
+		SELECT disable_causes
+		FROM openrouter_api_keys
+		WHERE organization_id = $1
+		ORDER BY key_type
+		FOR UPDATE NOWAIT
+	`, orgID)
+	require.NoError(t, err, "key rows must remain unlocked until every advisory lock is held")
+	keyRows := 0
+	for rows.Next() {
+		keyRows++
+		var causes []string
+		require.NoError(t, rows.Scan(&causes))
+		require.Empty(t, causes, "trial_demotion must not be written before the internal lock is acquired")
+	}
+	require.NoError(t, rows.Err())
+	require.Equal(t, len(openrouter.AllKeyTypes), keyRows)
+	rows.Close()
+	require.NoError(t, keyProbe.Rollback(ctx))
 
 	unlocked, err := activitiesrepo.New(internalLockConn).ReleaseOpenRouterKeyBillingLock(ctx, activitiesrepo.ReleaseOpenRouterKeyBillingLockParams(internalParams))
 	require.NoError(t, err)
 	require.True(t, unlocked)
-	require.NoError(t, <-demoted)
+	internalLocked = false
+
+	resultCtx, cancelResult := context.WithTimeout(ctx, 2*time.Second)
+	defer cancelResult()
+	select {
+	case err := <-demoted:
+		require.NoError(t, err)
+	case <-resultCtx.Done():
+		require.FailNow(t, "demotion did not finish after releasing the internal lock", resultCtx.Err().Error())
+	}
+	for _, keyType := range openrouter.AllKeyTypes {
+		require.Equal(t, []string{"trial_demotion"}, trialKey(t, ctx, ti, orgID, keyType).DisableCauses)
+	}
+	trial, err := ti.trials.GetTrial(ctx, orgID)
+	require.NoError(t, err)
+	require.True(t, trial.DemotedAt.Valid)
+	organization, err := ti.orgs.GetOrganizationMetadata(ctx, orgID)
+	require.NoError(t, err)
+	require.Equal(t, "free", organization.GramAccountType)
+}
+
+func requireCondition(t *testing.T, ctx context.Context, condition func() (bool, error), message string) {
+	t.Helper()
+
+	ticker := time.NewTicker(10 * time.Millisecond)
+	defer ticker.Stop()
+	for {
+		met, err := condition()
+		require.NoError(t, err)
+		if met {
+			return
+		}
+		select {
+		case <-ctx.Done():
+			require.FailNow(t, message, ctx.Err().Error())
+		case <-ticker.C:
+		}
+	}
 }
