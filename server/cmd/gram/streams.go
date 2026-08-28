@@ -68,7 +68,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/subscribers"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
-	stripeclient "github.com/speakeasy-api/gram/server/internal/thirdparty/stripe"
 	"github.com/speakeasy-api/gram/server/internal/usage"
 	"github.com/speakeasy-api/gram/server/internal/webhooks/svixrelay"
 )
@@ -383,11 +382,9 @@ func newStreamsCommand() *cli.Command {
 			if err != nil {
 				return fmt.Errorf("failed to create Stripe client: %w", err)
 			}
-			var stripeMeterEvents stripeclient.V2MeterEventClient
-			if serviceEnv == "local" {
-				stripeMeterEvents = stripeclient.NewNoopV2MeterEventClient()
-			} else {
-				stripeMeterEvents = stripeclient.NewV2MeterEventClient(guardianPolicy, c.String("stripe-api-key"))
+			stripeMeterEvents, err := newStripeMeterEventClient(guardianPolicy, c)
+			if err != nil {
+				return fmt.Errorf("failed to create Stripe meter event client: %w", err)
 			}
 
 			_, billingTracker, err := newBillingProvider(ctx, logger, tracerProvider, guardianPolicy, redisClient, posthogClient, stripeClient, c)

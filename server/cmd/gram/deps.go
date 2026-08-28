@@ -590,6 +590,21 @@ func newStripeClient(
 	), nil
 }
 
+func newStripeMeterEventClient(
+	guardianPolicy *guardian.Policy,
+	c *cli.Context,
+) (stripeclient.V2MeterEventClient, error) {
+	apiKey := c.String("stripe-api-key")
+	switch {
+	case stripeclient.IsConfigured(apiKey):
+		return stripeclient.NewV2MeterEventClient(guardianPolicy, apiKey), nil
+	case c.String("environment") == "local":
+		return stripeclient.NewNoopV2MeterEventClient(), nil
+	default:
+		return nil, errors.New("stripe API key is required")
+	}
+}
+
 // workosClientOpts builds the ClientOpts threaded into every workos.NewClient
 // call site below. Pulls the optional --workos-endpoint override (env:
 // WORKOS_API_URL) so local dev can point both real-WorkOS callers at

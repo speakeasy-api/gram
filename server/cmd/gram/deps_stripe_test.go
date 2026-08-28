@@ -125,6 +125,48 @@ func TestNewStripeClientRealClientUsesCatalog(t *testing.T) {
 	}, client.Catalog())
 }
 
+func TestNewStripeMeterEventClientLocalWithoutAPIKeyUsesNoop(t *testing.T) {
+	t.Parallel()
+
+	client, err := newStripeMeterEventClient(
+		guardian.NewDefaultPolicy(testenv.NewTracerProvider(t)),
+		newStripeCLIContext(t, map[string]string{
+			"environment":    "local",
+			"stripe-api-key": "unset",
+		}),
+	)
+	require.NoError(t, err)
+	require.NoError(t, client.CreateMeterEvent(t.Context(), stripeclient.V2MeterEventInput{}))
+}
+
+func TestNewStripeMeterEventClientLocalWithAPIKeyUsesRealClient(t *testing.T) {
+	t.Parallel()
+
+	client, err := newStripeMeterEventClient(
+		guardian.NewDefaultPolicy(testenv.NewTracerProvider(t)),
+		newStripeCLIContext(t, map[string]string{
+			"environment":    "local",
+			"stripe-api-key": "sk_test_placeholder",
+		}),
+	)
+	require.NoError(t, err)
+	require.ErrorContains(t, client.CreateMeterEvent(t.Context(), stripeclient.V2MeterEventInput{}), "identifier is required")
+}
+
+func TestNewStripeMeterEventClientNonLocalWithoutAPIKeyFails(t *testing.T) {
+	t.Parallel()
+
+	client, err := newStripeMeterEventClient(
+		guardian.NewDefaultPolicy(testenv.NewTracerProvider(t)),
+		newStripeCLIContext(t, map[string]string{
+			"environment":    "prod",
+			"stripe-api-key": "unset",
+		}),
+	)
+	require.Nil(t, client)
+	require.ErrorContains(t, err, "stripe API key is required")
+}
+
 func TestNewBillingProviderAcceptsStripeWithoutPolar(t *testing.T) {
 	t.Parallel()
 

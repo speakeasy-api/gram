@@ -9,9 +9,11 @@ import (
 
 	"github.com/hashicorp/golang-lru/v2/expirable"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/metric"
+	"golang.org/x/sync/singleflight"
 
 	meteringv1 "github.com/speakeasy-api/gram/infra/gen/gram/metering/v1"
 	"github.com/speakeasy-api/gram/infra/pkg/gcp"
@@ -36,12 +38,17 @@ var stripeMeterEventNames = map[stripeMeterKey]string{
 	{id: MeterAgentSessionStorage, version: 1}: "aicp_agent_session_storage_v1",
 }
 
+type stripeCustomerReader interface {
+	GetStripeCustomerID(context.Context, string) (pgtype.Text, error)
+}
+
 // MeterReadingStripeExporter sends recognized usage readings to Stripe billing meters.
 type MeterReadingStripeExporter struct {
-	readReplica  *pgxpool.Pool
-	stripe       stripeclient.V2MeterEventClient
-	customers    *expirable.LRU[string, string]
-	exportErrors metric.Int64Counter
+	stripeCustomers stripeCustomerReader
+	stripe          stripeclient.V2MeterEventClient
+	customers       *expirable.LRU[string, string]
+	customerLookups singleflight.Group
+	exportErrors    metric.Int64Counter
 }
 
 // NewMeterReadingStripeExporter creates a Stripe meter-reading subscriber.
@@ -61,10 +68,11 @@ func NewMeterReadingStripeExporter(
 	}
 
 	return &MeterReadingStripeExporter{
-		readReplica:  readReplica,
-		stripe:       stripe,
-		customers:    expirable.NewLRU[string, string](stripeCustomerCacheMaxSize, nil, stripeCustomerCacheTTL),
-		exportErrors: exportErrors,
+		stripeCustomers: meteringrepo.New(readReplica),
+		stripe:          stripe,
+		customers:       expirable.NewLRU[string, string](stripeCustomerCacheMaxSize, nil, stripeCustomerCacheTTL),
+		customerLookups: singleflight.Group{},
+		exportErrors:    exportErrors,
 	}
 }
 
@@ -92,19 +100,12 @@ func (e *MeterReadingStripeExporter) Handle(ctx context.Context, reading *meteri
 		return fmt.Errorf("parse meter reading occurred_at: %w", err)
 	}
 
-	customerID, cached := e.customers.Get(reading.GetOrganizationId())
-	if !cached {
-		resolved, err := meteringrepo.New(e.readReplica).GetStripeCustomerID(ctx, reading.GetOrganizationId())
-		switch {
-		case errors.Is(err, pgx.ErrNoRows):
-			return nil
-		case err != nil:
-			return fmt.Errorf("look up Stripe customer: %w", err)
-		case !resolved.Valid || resolved.String == "":
-			return nil
-		}
-		customerID = resolved.String
-		e.customers.Add(reading.GetOrganizationId(), customerID)
+	customerID, err := e.stripeCustomerID(ctx, reading.GetOrganizationId())
+	if err != nil {
+		return fmt.Errorf("look up Stripe customer: %w", err)
+	}
+	if customerID == "" {
+		return nil
 	}
 
 	err = e.stripe.CreateMeterEvent(ctx, stripeclient.V2MeterEventInput{
@@ -119,6 +120,40 @@ func (e *MeterReadingStripeExporter) Handle(ctx context.Context, reading *meteri
 		return fmt.Errorf("export meter reading to Stripe: %w", err)
 	}
 	return nil
+}
+
+func (e *MeterReadingStripeExporter) stripeCustomerID(ctx context.Context, organizationID string) (string, error) {
+	if customerID, cached := e.customers.Get(organizationID); cached {
+		return customerID, nil
+	}
+
+	value, err, _ := e.customerLookups.Do(organizationID, func() (any, error) {
+		if customerID, cached := e.customers.Get(organizationID); cached {
+			return customerID, nil
+		}
+
+		resolved, err := e.stripeCustomers.GetStripeCustomerID(ctx, organizationID)
+		switch {
+		case errors.Is(err, pgx.ErrNoRows):
+			return "", nil
+		case err != nil:
+			return "", fmt.Errorf("query Stripe customer: %w", err)
+		case !resolved.Valid || resolved.String == "":
+			return "", nil
+		}
+
+		e.customers.Add(organizationID, resolved.String)
+		return resolved.String, nil
+	})
+	if err != nil {
+		return "", fmt.Errorf("coalesce Stripe customer lookup: %w", err)
+	}
+
+	customerID, ok := value.(string)
+	if !ok {
+		return "", fmt.Errorf("unexpected Stripe customer lookup result %T", value)
+	}
+	return customerID, nil
 }
 
 func (e *MeterReadingStripeExporter) recordExportError(ctx context.Context, err error) {
