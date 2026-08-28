@@ -524,13 +524,14 @@ func TestRearmTrial_HistoricalRearmAuditDoesNotAuthorizeNewActiveGenerationRetry
 	ctx, svc, conn, upstream := newProductionRearmService(t)
 	const orgID = "org_rearm_old_generation"
 	currentEndsAt := time.Now().UTC().Add(21 * 24 * time.Hour).Truncate(time.Microsecond)
-	oldEndsAt := currentEndsAt.Add(-7 * 24 * time.Hour)
 	seedOrg(t, ctx, conn, orgFixture{id: orgID, name: orgID, slug: orgID, accountType: "enterprise", whitelisted: true})
 	seedTrial(t, ctx, conn, trialFixture{orgID: orgID, tier: "enterprise", endsAt: currentEndsAt})
 	for _, keyType := range openrouter.AllKeyTypes {
 		seedOpenRouterKey(t, ctx, conn, orgID, keyFixture{keyType: keyType, monthlyCredits: 50, disabled: false})
 	}
-	seedRearmAuditMetadata(t, ctx, conn, orgID, fmt.Sprintf(`{"trial_ends_at":%q}`, oldEndsAt.Format(time.RFC3339Nano)))
+	currentGeneration := readTrial(t, ctx, conn, orgID).CreatedAt.Time
+	staleGeneration := currentGeneration.Add(-time.Hour)
+	seedRearmAuditMetadata(t, ctx, conn, orgID, fmt.Sprintf(`{"trial_generation_created_at":%q}`, staleGeneration.Format(time.RFC3339Nano)))
 
 	_, err := svc.RearmTrial(ctx, &gen.RearmTrialPayload{ID: orgID, Days: 14})
 	requireOopsCode(t, err, oops.CodeConflict)
@@ -545,8 +546,8 @@ func TestRearmTrial_MalformedOrMissingRetryMetadataIsRejected(t *testing.T) {
 		name     string
 		metadata string
 	}{
-		{name: "missing trial end", metadata: `{}`},
-		{name: "malformed trial end", metadata: `{"trial_ends_at":"not-a-time"}`},
+		{name: "missing trial generation", metadata: `{}`},
+		{name: "malformed trial generation", metadata: `{"trial_generation_created_at":"not-a-time"}`},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -589,17 +590,22 @@ func TestRearmTrial_PostCommitReconcileFailureConvergesOnRequestRetry(t *testing
 	}
 
 	committedEndsAt := readTrial(t, ctx, conn, orgID).EndsAt
+	_, err = svc.ExtendTrial(ctx, &gen.ExtendTrialPayload{ID: orgID, Days: 2})
+	require.NoError(t, err)
+	extendedEndsAt := readTrial(t, ctx, conn, orgID).EndsAt
+	require.True(t, extendedEndsAt.Time.After(committedEndsAt.Time), "extension must move the same trial generation forward")
+
 	upstream.setFail(false)
 	result, err := svc.RearmTrial(ctx, &gen.RearmTrialPayload{ID: orgID, Days: 365})
 	require.NoError(t, err)
 	require.Equal(t, orgID, result.ID)
-	require.Equal(t, committedEndsAt, readTrial(t, ctx, conn, orgID).EndsAt, "retry must not replay the lifecycle window")
+	require.Equal(t, extendedEndsAt, readTrial(t, ctx, conn, orgID).EndsAt, "retry must not replay the lifecycle window")
 	afterAudit, err := audittest.AuditLogCountByAction(ctx, conn, audit.ActionOrganizationEnterpriseTrialRearmed)
 	require.NoError(t, err)
 	require.Equal(t, beforeAudit+1, afterAudit, "retry must not invent another lifecycle audit event")
 	afterOutbox, err := testrepo.New(conn).CountPublishOutboxRows(ctx)
 	require.NoError(t, err)
-	require.Equal(t, beforeOutbox+1, afterOutbox, "retry must not invent another lifecycle outbox event")
+	require.Equal(t, beforeOutbox+2, afterOutbox, "extension and initial re-arm each emit once; retry must not emit")
 }
 
 func TestRearmTrial_RestoresTheOrganizationAndRevivesEveryKey(t *testing.T) {

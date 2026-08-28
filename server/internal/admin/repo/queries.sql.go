@@ -158,8 +158,8 @@ func (q *Queries) AdminEnableOrganization(ctx context.Context, id string) (int64
 	return result.RowsAffected(), nil
 }
 
-const adminGetLatestEnterpriseTrialRearmEndsAt = `-- name: AdminGetLatestEnterpriseTrialRearmEndsAt :one
-SELECT COALESCE(metadata->>'trial_ends_at', '')::text AS trial_ends_at
+const adminGetLatestEnterpriseTrialRearmGeneration = `-- name: AdminGetLatestEnterpriseTrialRearmGeneration :one
+SELECT COALESCE(metadata->>'trial_generation_created_at', '')::text AS trial_generation_created_at
 FROM audit_logs
 WHERE organization_id = $1
   AND action = 'organization:enterprise_trial_rearmed'
@@ -167,14 +167,14 @@ ORDER BY seq DESC
 LIMIT 1
 `
 
-// A re-arm retry is valid only for the exact lifecycle generation recorded in
-// the latest matching audit. The organization-first index bounds this backward
-// seq scan, while action filtering and LIMIT 1 select one candidate.
-func (q *Queries) AdminGetLatestEnterpriseTrialRearmEndsAt(ctx context.Context, organizationID string) (string, error) {
-	row := q.db.QueryRow(ctx, adminGetLatestEnterpriseTrialRearmEndsAt, organizationID)
-	var trial_ends_at string
-	err := row.Scan(&trial_ends_at)
-	return trial_ends_at, err
+// A post-commit retry is valid only for the immutable trial-row generation
+// recorded in the latest matching audit. Extensions intentionally change ends_at
+// without creating a new generation.
+func (q *Queries) AdminGetLatestEnterpriseTrialRearmGeneration(ctx context.Context, organizationID string) (string, error) {
+	row := q.db.QueryRow(ctx, adminGetLatestEnterpriseTrialRearmGeneration, organizationID)
+	var trial_generation_created_at string
+	err := row.Scan(&trial_generation_created_at)
+	return trial_generation_created_at, err
 }
 
 const adminGetOrganization = `-- name: AdminGetOrganization :one

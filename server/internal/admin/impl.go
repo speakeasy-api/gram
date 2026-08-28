@@ -1169,13 +1169,13 @@ func (s *Service) RearmTrial(ctx context.Context, payload *gen.RearmTrialPayload
 	}
 
 	if !lockedTrial.DemotedAt.Valid {
-		recordedEndsAt, auditErr := repo.New(tx).AdminGetLatestEnterpriseTrialRearmEndsAt(ctx, payload.ID)
+		recordedGeneration, auditErr := repo.New(tx).AdminGetLatestEnterpriseTrialRearmGeneration(ctx, payload.ID)
 		if auditErr != nil && !errors.Is(auditErr, pgx.ErrNoRows) {
 			return nil, oops.E(oops.CodeUnexpected, auditErr, "check prior trial re-arm generation").LogError(ctx, logger)
 		}
-		parsedEndsAt, parseErr := time.Parse(time.RFC3339Nano, recordedEndsAt)
-		sameGeneration := auditErr == nil && parseErr == nil && lockedTrial.EndsAt.Valid && parsedEndsAt.Equal(lockedTrial.EndsAt.Time)
-		if sameGeneration && lockedTrial.EndsAt.Time.After(time.Now()) {
+		parsedGeneration, parseErr := time.Parse(time.RFC3339Nano, recordedGeneration)
+		sameGeneration := auditErr == nil && parseErr == nil && parsedGeneration.Equal(lockedTrial.CreatedAt.Time)
+		if sameGeneration && lockedTrial.EndsAt.Valid && lockedTrial.EndsAt.Time.After(time.Now()) {
 			if rollbackErr := tx.Rollback(ctx); rollbackErr != nil {
 				return nil, oops.E(oops.CodeUnexpected, rollbackErr, "close trial re-arm retry transaction").LogError(ctx, logger)
 			}
@@ -1236,7 +1236,7 @@ func (s *Service) RearmTrial(ctx context.Context, payload *gen.RearmTrialPayload
 	if err := s.audit.LogOrganizationEnterpriseTrialRearmed(ctx, tx, audit.LogOrganizationEnterpriseTrialRearmedEvent{
 		OrganizationID: payload.ID, Actor: actor, ActorDisplayName: actorDisplayName, ActorSlug: nil,
 		OrganizationName: organization.Name, OrganizationSlug: organization.Slug, AccountType: rearmed.Tier,
-		TrialEndsAt: rearmed.EndsAt.Time, KeyAccessChanged: keyAccessChanged,
+		TrialEndsAt: rearmed.EndsAt.Time, TrialGenerationCreatedAt: lockedTrial.CreatedAt.Time, KeyAccessChanged: keyAccessChanged,
 	}); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "log trial re-arm").LogError(ctx, logger)
 	}

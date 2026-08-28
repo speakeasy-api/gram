@@ -1,8 +1,8 @@
--- name: AdminGetLatestEnterpriseTrialRearmEndsAt :one
--- A re-arm retry is valid only for the exact lifecycle generation recorded in
--- the latest matching audit. The organization-first index bounds this backward
--- seq scan, while action filtering and LIMIT 1 select one candidate.
-SELECT COALESCE(metadata->>'trial_ends_at', '')::text AS trial_ends_at
+-- name: AdminGetLatestEnterpriseTrialRearmGeneration :one
+-- A post-commit retry is valid only for the immutable trial-row generation
+-- recorded in the latest matching audit. Extensions intentionally change ends_at
+-- without creating a new generation.
+SELECT COALESCE(metadata->>'trial_generation_created_at', '')::text AS trial_generation_created_at
 FROM audit_logs
 WHERE organization_id = @organization_id
   AND action = 'organization:enterprise_trial_rearmed'
