@@ -20,6 +20,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
+	metamcprepo "github.com/speakeasy-api/gram/server/internal/metamcp/repo"
 	remotesessionsrepo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 )
 
@@ -63,7 +64,10 @@ func TestUpdateMetaMcpServer_RenamesAndAttachesIssuer(t *testing.T) {
 	require.Equal(t, beforeCount+1, afterCount)
 }
 
-func TestUpdateMetaMcpServer_OmittedIssuerClearsReference(t *testing.T) {
+// An omitted issuer preserves the stored one (matching UpdateMCPServer's
+// COALESCE), and an update can never strand a gateway issuer-less: a gateway
+// that would end up without one gets one minted defensively.
+func TestUpdateMetaMcpServer_OmittedIssuerPreservesReference(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestService(t)
@@ -92,7 +96,40 @@ func TestUpdateMetaMcpServer_OmittedIssuerClearsReference(t *testing.T) {
 		UserSessionIssuerID: nil,
 	})
 	require.NoError(t, err)
-	require.Nil(t, updated.UserSessionIssuerID)
+	require.NotNil(t, updated.UserSessionIssuerID)
+	require.Equal(t, issuerID.String(), *updated.UserSessionIssuerID)
+}
+
+// A pre-defaults gateway row with no issuer gains a minted one on its next
+// update rather than staying in the anonymous trap.
+func TestUpdateMetaMcpServer_MintsIssuerWhenNoneStored(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	row, err := metamcprepo.New(ti.conn).CreateMetaMCPServer(ctx, metamcprepo.CreateMetaMCPServerParams{
+		OrganizationID:      authCtx.ActiveOrganizationID,
+		ProjectID:           *authCtx.ProjectID,
+		Name:                "legacy issuerless",
+		UserSessionIssuerID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		Visibility:          "private",
+	})
+	require.NoError(t, err)
+	require.False(t, row.UserSessionIssuerID.Valid)
+
+	updated, err := ti.service.UpdateMetaMcpServer(ctx, &gen.UpdateMetaMcpServerPayload{
+		SessionToken:        nil,
+		ApikeyToken:         nil,
+		ProjectSlugInput:    nil,
+		ID:                  row.ID.String(),
+		Name:                "legacy issuerless",
+		UserSessionIssuerID: nil,
+	})
+	require.NoError(t, err)
+	require.NotNil(t, updated.UserSessionIssuerID, "update must mint an issuer for an issuerless gateway")
 }
 
 func TestUpdateMetaMcpServer_NotFound(t *testing.T) {
@@ -283,18 +320,7 @@ func TestUpdateMetaMcpServer_RewiresProviderClientsOnIssuerChange(t *testing.T) 
 	require.Equal(t, 1, boundCount(newIssuerID),
 		"issuer change must re-bind member provider clients to the new issuer")
 
-	// Clearing the issuer and attaching another later wires members then too:
-	// the previously-anonymous gateway arc.
-	_, err = ti.service.UpdateMetaMcpServer(ctx, &gen.UpdateMetaMcpServerPayload{
-		SessionToken:        nil,
-		ApikeyToken:         nil,
-		ProjectSlugInput:    nil,
-		ID:                  meta.ID,
-		Name:                meta.Name,
-		UserSessionIssuerID: nil,
-	})
-	require.NoError(t, err)
-
+	// A second swap wires the members again: rewiring is not a one-shot.
 	thirdIssuerID := seedUserSessionIssuer(t, ctx, ti.conn, projectID)
 	_, err = ti.service.UpdateMetaMcpServer(ctx, &gen.UpdateMetaMcpServerPayload{
 		SessionToken:        nil,
@@ -306,5 +332,5 @@ func TestUpdateMetaMcpServer_RewiresProviderClientsOnIssuerChange(t *testing.T) 
 	})
 	require.NoError(t, err)
 	require.Equal(t, 1, boundCount(thirdIssuerID),
-		"gaining an issuer must wire existing members' provider clients")
+		"each issuer change must re-wire member provider clients")
 }

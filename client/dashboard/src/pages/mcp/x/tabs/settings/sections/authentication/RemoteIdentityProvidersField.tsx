@@ -14,12 +14,16 @@ import { SettingsInlineEmptyState } from "../../SettingsInlineEmptyState";
 export function RemoteIdentityProvidersField({
   associatedIssuers,
   isLoading,
+  allowAdditionalProviders,
   onAdd,
   onEdit,
   onDelete,
 }: {
   associatedIssuers: RemoteSessionIssuer[];
   isLoading: boolean;
+  /** Gateways bind a provider per member; remote/tunneled servers have one
+   * upstream, so only their empty state may offer an attach. */
+  allowAdditionalProviders: boolean;
   onAdd: () => void;
   onEdit: (issuer: RemoteSessionIssuer) => void;
   onDelete: (issuer: RemoteSessionIssuer) => void;
@@ -59,14 +63,16 @@ export function RemoteIdentityProvidersField({
             onDelete={() => onDelete(issuer)}
           />
         ))}
-        <RequireScope scope="mcp:write" level="component">
-          <Button variant="secondary" onClick={onAdd}>
-            <Button.LeftIcon>
-              <Plus className="size-4" />
-            </Button.LeftIcon>
-            <Button.Text>Attach Provider</Button.Text>
-          </Button>
-        </RequireScope>
+        {allowAdditionalProviders && (
+          <RequireScope scope="mcp:write" level="component">
+            <Button variant="secondary" onClick={onAdd}>
+              <Button.LeftIcon>
+                <Plus className="size-4" />
+              </Button.LeftIcon>
+              <Button.Text>Attach Provider</Button.Text>
+            </Button>
+          </RequireScope>
+        )}
       </div>
     );
   }

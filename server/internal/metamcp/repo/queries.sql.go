@@ -919,18 +919,6 @@ func (q *Queries) LockMetaMCPServer(ctx context.Context, arg LockMetaMCPServerPa
 	return i, err
 }
 
-const lockRemoteSessionIssuerForClientBinding = `-- name: LockRemoteSessionIssuerForClientBinding :exec
-SELECT pg_advisory_xact_lock(hashtextextended(($1::uuid)::text, 0))
-`
-
-// Same advisory key as remotesessions' lock of the same name: every writer
-// binding a client to a remote issuer takes it, so the auto-attach guard
-// below cannot race a concurrent manual attach into a double binding.
-func (q *Queries) LockRemoteSessionIssuerForClientBinding(ctx context.Context, remoteSessionIssuerID uuid.UUID) error {
-	_, err := q.db.Exec(ctx, lockRemoteSessionIssuerForClientBinding, remoteSessionIssuerID)
-	return err
-}
-
 const lockUserSessionIssuerForMetaMCP = `-- name: LockUserSessionIssuerForMetaMCP :one
 SELECT id
 FROM user_session_issuers

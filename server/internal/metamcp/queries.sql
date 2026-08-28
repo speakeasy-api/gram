@@ -303,12 +303,6 @@ WHERE m.meta_mcp_server_id = @meta_mcp_server_id
   AND s.remote_session_issuer_id = @remote_session_issuer_id
 ORDER BY m.sort_order, m.created_at, m.id;
 
--- name: LockRemoteSessionIssuerForClientBinding :exec
--- Same advisory key as remotesessions' lock of the same name: every writer
--- binding a client to a remote issuer takes it, so the auto-attach guard
--- below cannot race a concurrent manual attach into a double binding.
-SELECT pg_advisory_xact_lock(hashtextextended((@remote_session_issuer_id::uuid)::text, 0));
-
 -- name: AutoAttachMemberProviderClient :execrows
 -- Bind the member's upstream OAuth client to the gateway's issuer so consent
 -- can offer the member's provider. No-op when the gateway's issuer already

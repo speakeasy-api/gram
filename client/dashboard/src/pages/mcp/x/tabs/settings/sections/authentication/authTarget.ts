@@ -30,6 +30,10 @@ export type AuthTarget = {
   /** Link a freshly created issuer to the target (first add). Absent for
    * targets that always have an issuer (mcp servers). */
   linkUserSessionIssuer?: (userSessionIssuerId: string) => Promise<void>;
+  /** True when the target's issuer may bind several upstream providers
+   * (gateways front many members). Remote/tunneled servers have exactly one
+   * upstream and must not offer additional attachments. */
+  multipleProviders?: boolean;
   /** Invalidate the target-specific queries that embed the link. */
   invalidate: (queryClient: QueryClient) => Promise<void>;
 };
@@ -87,6 +91,7 @@ export function useMetaMcpAuthTarget(
     () => ({
       slug: slugSeed,
       userSessionIssuerId: metaMcpServer.userSessionIssuerId ?? null,
+      multipleProviders: true,
       linkUserSessionIssuer: async (userSessionIssuerId: string) => {
         // update is a full-record replace, so the name rides along.
         await client.metaMcp.update({
