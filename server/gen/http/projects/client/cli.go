@@ -91,6 +91,52 @@ func BuildCreateProjectPayload(projectsCreateProjectBody string, projectsCreateP
 	return v, nil
 }
 
+// BuildUpdateProjectPayload builds the payload for the projects updateProject
+// endpoint from CLI flags.
+func BuildUpdateProjectPayload(projectsUpdateProjectBody string, projectsUpdateProjectSessionToken string, projectsUpdateProjectProjectSlugInput string) (*projects.UpdateProjectPayload, error) {
+	var err error
+	var body UpdateProjectRequestBody
+	{
+		err = json.Unmarshal([]byte(projectsUpdateProjectBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"name\": \"aa\",\n      \"slug\": \"aaa\"\n   }'")
+		}
+		if utf8.RuneCountInString(body.Name) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.name", body.Name, utf8.RuneCountInString(body.Name), 1, true))
+		}
+		if utf8.RuneCountInString(body.Name) > 40 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.name", body.Name, utf8.RuneCountInString(body.Name), 40, false))
+		}
+		err = goa.MergeErrors(err, goa.ValidatePattern("body.slug", body.Slug, "^[a-z0-9_-]{1,128}$"))
+		if utf8.RuneCountInString(body.Slug) > 40 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.slug", body.Slug, utf8.RuneCountInString(body.Slug), 40, false))
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if projectsUpdateProjectSessionToken != "" {
+			sessionToken = &projectsUpdateProjectSessionToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if projectsUpdateProjectProjectSlugInput != "" {
+			projectSlugInput = &projectsUpdateProjectProjectSlugInput
+		}
+	}
+	v := &projects.UpdateProjectPayload{
+		Name: body.Name,
+		Slug: types.Slug(body.Slug),
+	}
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
 // BuildListProjectsPayload builds the payload for the projects listProjects
 // endpoint from CLI flags.
 func BuildListProjectsPayload(projectsListProjectsOrganizationID string, projectsListProjectsApikeyToken string, projectsListProjectsSessionToken string) (*projects.ListProjectsPayload, error) {
