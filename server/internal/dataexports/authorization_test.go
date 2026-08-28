@@ -45,7 +45,7 @@ func TestDestinationAndRouteMutationsRequireProjectWrite(t *testing.T) {
 		Name: "Denied destination", EndpointURL: "https://denied.example.test", SensitiveData: "exclude", Headers: []*gen.CreateOtelDestinationHeaderInput{}})
 	requireOopsCode(t, err, oops.CodeForbidden)
 	_, err = ti.service.CreateRoute(projectRead, &gen.CreateRoutePayload{SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil,
-		DataSource: "otel_forwarding", Enabled: true, OtelDestinationID: &destination.ID})
+		DataSource: "product_telemetry", Enabled: true, OtelDestinationID: &destination.ID})
 	requireOopsCode(t, err, oops.CodeForbidden)
 
 	orgAdmin := authztest.WithExactGrants(t, ctx, authz.NewGrant(authz.ScopeOrgAdmin, authCtx.ActiveOrganizationID))
@@ -53,7 +53,7 @@ func TestDestinationAndRouteMutationsRequireProjectWrite(t *testing.T) {
 		Name: "Org admin destination", EndpointURL: "https://org-admin-denied.example.test", SensitiveData: "exclude", Headers: []*gen.CreateOtelDestinationHeaderInput{}})
 	requireOopsCode(t, err, oops.CodeForbidden)
 	_, err = ti.service.CreateRoute(orgAdmin, &gen.CreateRoutePayload{SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil,
-		DataSource: "otel_forwarding", Enabled: true, OtelDestinationID: &destination.ID})
+		DataSource: "product_telemetry", Enabled: true, OtelDestinationID: &destination.ID})
 	requireOopsCode(t, err, oops.CodeForbidden)
 
 	projectWrite := authztest.WithExactGrants(t, ctx, authz.NewGrant(authz.ScopeProjectWrite, authCtx.ProjectID.String()))
@@ -61,6 +61,6 @@ func TestDestinationAndRouteMutationsRequireProjectWrite(t *testing.T) {
 		Name: "Allowed destination", EndpointURL: "https://allowed.example.test", SensitiveData: "exclude", Headers: []*gen.CreateOtelDestinationHeaderInput{}})
 	require.NoError(t, err)
 	_, err = ti.service.CreateRoute(projectWrite, &gen.CreateRoutePayload{SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil,
-		DataSource: "otel_forwarding", Enabled: true, OtelDestinationID: &destination.ID})
+		DataSource: "product_telemetry", Enabled: true, OtelDestinationID: &destination.ID})
 	require.NoError(t, err)
 }

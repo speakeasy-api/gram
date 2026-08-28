@@ -13,7 +13,7 @@ import { SDKValidationError } from "../errors/sdkvalidationerror.js";
  * Class of data exported by this route.
  */
 export const DataExportRouteDataSource = {
-  OtelForwarding: "otel_forwarding",
+  ProductTelemetry: "product_telemetry",
 } as const;
 /**
  * Class of data exported by this route.
@@ -23,7 +23,7 @@ export type DataExportRouteDataSource = ClosedEnum<
 >;
 
 /**
- * A route from one class of project data to an OTEL destination.
+ * The export configuration for one class of project data. A route may contain one destination of each supported type.
  */
 export type DataExportRoute = {
   /**
@@ -43,7 +43,7 @@ export type DataExportRoute = {
    */
   id: string;
   /**
-   * OTEL destination used by this route. Omitted when no destination is selected.
+   * OTEL destination configured on this route. Omitted when no OTEL destination is selected.
    */
   otelDestinationId?: string | undefined;
   /**

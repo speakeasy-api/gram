@@ -42,7 +42,7 @@ import { Result } from "../types/fp.js";
  * createRoute dataExports
  *
  * @remarks
- * Create a data export route in the selected project.
+ * Create the selected data source's export route configuration.
  */
 export function dataExportsCreateRoute(
   client: GramCore,

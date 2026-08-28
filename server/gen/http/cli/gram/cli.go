@@ -12426,10 +12426,10 @@ func dataExportsUsage() {
 	fmt.Fprintln(os.Stderr, `    create-otel-destination: Create an OTEL destination in the selected project.`)
 	fmt.Fprintln(os.Stderr, `    update-otel-destination: Replace an OTEL destination in the selected project.`)
 	fmt.Fprintln(os.Stderr, `    delete-otel-destination: Delete an OTEL destination that is not referenced by an active route.`)
-	fmt.Fprintln(os.Stderr, `    list-routes: List data export routes for the selected project.`)
-	fmt.Fprintln(os.Stderr, `    create-route: Create a data export route in the selected project.`)
-	fmt.Fprintln(os.Stderr, `    update-route: Replace a data export route in the selected project.`)
-	fmt.Fprintln(os.Stderr, `    delete-route: Delete a data export route in the selected project.`)
+	fmt.Fprintln(os.Stderr, `    list-routes: List data source export route configurations for the selected project.`)
+	fmt.Fprintln(os.Stderr, `    create-route: Create the selected data source's export route configuration.`)
+	fmt.Fprintln(os.Stderr, `    update-route: Replace the selected data source's export route configuration.`)
+	fmt.Fprintln(os.Stderr, `    delete-route: Delete a data source's export route configuration.`)
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Additional help:")
 	fmt.Fprintf(os.Stderr, "    %s data-exports COMMAND --help\n", os.Args[0])
@@ -12540,7 +12540,7 @@ func dataExportsListRoutesUsage() {
 
 	// Description
 	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `List data export routes for the selected project.`)
+	fmt.Fprintln(os.Stderr, `List data source export route configurations for the selected project.`)
 
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
@@ -12563,7 +12563,7 @@ func dataExportsCreateRouteUsage() {
 
 	// Description
 	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Create a data export route in the selected project.`)
+	fmt.Fprintln(os.Stderr, `Create the selected data source's export route configuration.`)
 
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -body JSON: `)
@@ -12573,7 +12573,7 @@ func dataExportsCreateRouteUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "data-exports create-route --body '{\n      \"data_source\": \"otel_forwarding\",\n      \"enabled\": false,\n      \"otel_destination_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }' --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "data-exports create-route --body '{\n      \"data_source\": \"product_telemetry\",\n      \"enabled\": false,\n      \"otel_destination_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }' --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 func dataExportsUpdateRouteUsage() {
@@ -12588,7 +12588,7 @@ func dataExportsUpdateRouteUsage() {
 
 	// Description
 	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Replace a data export route in the selected project.`)
+	fmt.Fprintln(os.Stderr, `Replace the selected data source's export route configuration.`)
 
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -body JSON: `)
@@ -12599,7 +12599,7 @@ func dataExportsUpdateRouteUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "data-exports update-route --body '{\n      \"data_source\": \"otel_forwarding\",\n      \"enabled\": false,\n      \"otel_destination_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }' --id \"550e8400-e29b-41d4-a716-446655440000\" --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "data-exports update-route --body '{\n      \"data_source\": \"product_telemetry\",\n      \"enabled\": false,\n      \"otel_destination_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }' --id \"550e8400-e29b-41d4-a716-446655440000\" --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 func dataExportsDeleteRouteUsage() {
@@ -12613,7 +12613,7 @@ func dataExportsDeleteRouteUsage() {
 
 	// Description
 	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Delete a data export route in the selected project.`)
+	fmt.Fprintln(os.Stderr, `Delete a data source's export route configuration.`)
 
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -id STRING: `)

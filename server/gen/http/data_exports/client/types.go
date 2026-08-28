@@ -45,7 +45,7 @@ type CreateRouteRequestBody struct {
 	DataSource string `form:"data_source" json:"data_source" xml:"data_source"`
 	// Whether the route is enabled.
 	Enabled bool `form:"enabled" json:"enabled" xml:"enabled"`
-	// OTEL destination used by this route. Required when enabled.
+	// OTEL destination configured on this route. Required when enabled.
 	OtelDestinationID *string `form:"otel_destination_id,omitempty" json:"otel_destination_id,omitempty" xml:"otel_destination_id,omitempty"`
 }
 
@@ -56,7 +56,7 @@ type UpdateRouteRequestBody struct {
 	DataSource string `form:"data_source" json:"data_source" xml:"data_source"`
 	// Whether the route is enabled.
 	Enabled bool `form:"enabled" json:"enabled" xml:"enabled"`
-	// OTEL destination used by this route. Required when enabled.
+	// OTEL destination configured on this route. Required when enabled.
 	OtelDestinationID *string `form:"otel_destination_id,omitempty" json:"otel_destination_id,omitempty" xml:"otel_destination_id,omitempty"`
 }
 
@@ -127,7 +127,8 @@ type CreateRouteResponseBody struct {
 	DataSource *string `form:"data_source,omitempty" json:"data_source,omitempty" xml:"data_source,omitempty"`
 	// Whether the route is enabled.
 	Enabled *bool `form:"enabled,omitempty" json:"enabled,omitempty" xml:"enabled,omitempty"`
-	// OTEL destination used by this route. Omitted when no destination is selected.
+	// OTEL destination configured on this route. Omitted when no OTEL destination
+	// is selected.
 	OtelDestinationID *string `form:"otel_destination_id,omitempty" json:"otel_destination_id,omitempty" xml:"otel_destination_id,omitempty"`
 	// Creation timestamp.
 	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
@@ -146,7 +147,8 @@ type UpdateRouteResponseBody struct {
 	DataSource *string `form:"data_source,omitempty" json:"data_source,omitempty" xml:"data_source,omitempty"`
 	// Whether the route is enabled.
 	Enabled *bool `form:"enabled,omitempty" json:"enabled,omitempty" xml:"enabled,omitempty"`
-	// OTEL destination used by this route. Omitted when no destination is selected.
+	// OTEL destination configured on this route. Omitted when no OTEL destination
+	// is selected.
 	OtelDestinationID *string `form:"otel_destination_id,omitempty" json:"otel_destination_id,omitempty" xml:"otel_destination_id,omitempty"`
 	// Creation timestamp.
 	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
@@ -1700,7 +1702,8 @@ type DataExportRouteResponseBody struct {
 	DataSource *string `form:"data_source,omitempty" json:"data_source,omitempty" xml:"data_source,omitempty"`
 	// Whether the route is enabled.
 	Enabled *bool `form:"enabled,omitempty" json:"enabled,omitempty" xml:"enabled,omitempty"`
-	// OTEL destination used by this route. Omitted when no destination is selected.
+	// OTEL destination configured on this route. Omitted when no OTEL destination
+	// is selected.
 	OtelDestinationID *string `form:"otel_destination_id,omitempty" json:"otel_destination_id,omitempty" xml:"otel_destination_id,omitempty"`
 	// Creation timestamp.
 	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
@@ -3274,8 +3277,8 @@ func ValidateCreateRouteResponseBody(body *CreateRouteResponseBody) (err error) 
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.project_id", *body.ProjectID, goa.FormatUUID))
 	}
 	if body.DataSource != nil {
-		if !(*body.DataSource == "otel_forwarding") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.data_source", *body.DataSource, []any{"otel_forwarding"}))
+		if !(*body.DataSource == "product_telemetry") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.data_source", *body.DataSource, []any{"product_telemetry"}))
 		}
 	}
 	if body.OtelDestinationID != nil {
@@ -3318,8 +3321,8 @@ func ValidateUpdateRouteResponseBody(body *UpdateRouteResponseBody) (err error) 
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.project_id", *body.ProjectID, goa.FormatUUID))
 	}
 	if body.DataSource != nil {
-		if !(*body.DataSource == "otel_forwarding") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.data_source", *body.DataSource, []any{"otel_forwarding"}))
+		if !(*body.DataSource == "product_telemetry") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.data_source", *body.DataSource, []any{"product_telemetry"}))
 		}
 	}
 	if body.OtelDestinationID != nil {
@@ -5354,8 +5357,8 @@ func ValidateDataExportRouteResponseBody(body *DataExportRouteResponseBody) (err
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.project_id", *body.ProjectID, goa.FormatUUID))
 	}
 	if body.DataSource != nil {
-		if !(*body.DataSource == "otel_forwarding") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.data_source", *body.DataSource, []any{"otel_forwarding"}))
+		if !(*body.DataSource == "product_telemetry") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.data_source", *body.DataSource, []any{"product_telemetry"}))
 		}
 	}
 	if body.OtelDestinationID != nil {

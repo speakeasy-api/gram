@@ -261,10 +261,10 @@ func BuildCreateRoutePayload(dataExportsCreateRouteBody string, dataExportsCreat
 	{
 		err = json.Unmarshal([]byte(dataExportsCreateRouteBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"data_source\": \"otel_forwarding\",\n      \"enabled\": false,\n      \"otel_destination_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"data_source\": \"product_telemetry\",\n      \"enabled\": false,\n      \"otel_destination_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }'")
 		}
-		if !(body.DataSource == "otel_forwarding") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.data_source", body.DataSource, []any{"otel_forwarding"}))
+		if !(body.DataSource == "product_telemetry") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.data_source", body.DataSource, []any{"product_telemetry"}))
 		}
 		if body.OtelDestinationID != nil {
 			err = goa.MergeErrors(err, goa.ValidateFormat("body.otel_destination_id", *body.OtelDestinationID, goa.FormatUUID))
@@ -317,10 +317,10 @@ func BuildUpdateRoutePayload(dataExportsUpdateRouteBody string, dataExportsUpdat
 	{
 		err = json.Unmarshal([]byte(dataExportsUpdateRouteBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"data_source\": \"otel_forwarding\",\n      \"enabled\": false,\n      \"otel_destination_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"data_source\": \"product_telemetry\",\n      \"enabled\": false,\n      \"otel_destination_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }'")
 		}
-		if !(body.DataSource == "otel_forwarding") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.data_source", body.DataSource, []any{"otel_forwarding"}))
+		if !(body.DataSource == "product_telemetry") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.data_source", body.DataSource, []any{"product_telemetry"}))
 		}
 		if body.OtelDestinationID != nil {
 			err = goa.MergeErrors(err, goa.ValidateFormat("body.otel_destination_id", *body.OtelDestinationID, goa.FormatUUID))

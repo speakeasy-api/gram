@@ -59,7 +59,7 @@ export type DataExportRoutesQueryError =
  * listRoutes dataExports
  *
  * @remarks
- * List data export routes for the selected project.
+ * List data source export route configurations for the selected project.
  */
 export function useDataExportRoutes(
   request?: ListDataExportRoutesRequest | undefined,
@@ -85,7 +85,7 @@ export function useDataExportRoutes(
  * listRoutes dataExports
  *
  * @remarks
- * List data export routes for the selected project.
+ * List data source export route configurations for the selected project.
  */
 export function useDataExportRoutesSuspense(
   request?: ListDataExportRoutesRequest | undefined,

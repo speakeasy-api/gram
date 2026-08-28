@@ -99,7 +99,7 @@ var _ = Service("dataExports", func() {
 	})
 
 	Method("listRoutes", func() {
-		Description("List data export routes for the selected project.")
+		Description("List data source export route configurations for the selected project.")
 		Payload(func() {
 			security.SessionPayload()
 			security.ByKeyPayload()
@@ -119,7 +119,7 @@ var _ = Service("dataExports", func() {
 	})
 
 	Method("createRoute", func() {
-		Description("Create a data export route in the selected project.")
+		Description("Create the selected data source's export route configuration.")
 		Payload(func() {
 			Extend(CreateDataExportRouteForm)
 			security.SessionPayload()
@@ -140,7 +140,7 @@ var _ = Service("dataExports", func() {
 	})
 
 	Method("updateRoute", func() {
-		Description("Replace a data export route in the selected project.")
+		Description("Replace the selected data source's export route configuration.")
 		Payload(func() {
 			Extend(UpdateDataExportRouteForm)
 			security.SessionPayload()
@@ -162,7 +162,7 @@ var _ = Service("dataExports", func() {
 	})
 
 	Method("deleteRoute", func() {
-		Description("Delete a data export route in the selected project.")
+		Description("Delete a data source's export route configuration.")
 		Payload(func() {
 			Attribute("id", String, "Route ID.", func() { Format(FormatUUID) })
 			security.SessionPayload()
@@ -221,14 +221,14 @@ var OtelDestination = Type("OtelDestination", func() {
 })
 
 var DataExportRoute = Type("DataExportRoute", func() {
-	Description("A route from one class of project data to an OTEL destination.")
+	Description("The export configuration for one class of project data. A route may contain one destination of each supported type.")
 	Attribute("id", String, "Route ID.", func() { Format(FormatUUID) })
 	Attribute("project_id", String, "Project that owns the route.", func() { Format(FormatUUID) })
 	Attribute("data_source", String, "Class of data exported by this route.", func() {
-		Enum("otel_forwarding")
+		Enum("product_telemetry")
 	})
 	Attribute("enabled", Boolean, "Whether the route is enabled.")
-	Attribute("otel_destination_id", String, "OTEL destination used by this route. Omitted when no destination is selected.", func() { Format(FormatUUID) })
+	Attribute("otel_destination_id", String, "OTEL destination configured on this route. Omitted when no OTEL destination is selected.", func() { Format(FormatUUID) })
 	Attribute("created_at", String, "Creation timestamp.", func() { Format(FormatDateTime) })
 	Attribute("updated_at", String, "Last update timestamp.", func() { Format(FormatDateTime) })
 	Required("id", "project_id", "data_source", "enabled", "created_at", "updated_at")
@@ -257,19 +257,19 @@ var UpdateOtelDestinationForm = Type("UpdateOtelDestinationForm", func() {
 })
 
 var CreateDataExportRouteForm = Type("CreateDataExportRouteForm", func() {
-	Description("Form for creating a data export route.")
-	Attribute("data_source", String, "Class of data exported by this route.", func() { Enum("otel_forwarding") })
+	Description("Form for creating the selected data source's export route.")
+	Attribute("data_source", String, "Class of data exported by this route.", func() { Enum("product_telemetry") })
 	Attribute("enabled", Boolean, "Whether the route is enabled.", func() { Default(true) })
-	Attribute("otel_destination_id", String, "OTEL destination used by this route. Required when enabled.", func() { Format(FormatUUID) })
+	Attribute("otel_destination_id", String, "OTEL destination configured on this route. Required when enabled.", func() { Format(FormatUUID) })
 	Required("data_source")
 })
 
 var UpdateDataExportRouteForm = Type("UpdateDataExportRouteForm", func() {
-	Description("Full replacement form for a data export route. Omit otel_destination_id to clear the destination.")
+	Description("Full replacement form for the selected data source's export route. Omit otel_destination_id to clear its OTEL destination.")
 	Attribute("id", String, "Route ID.", func() { Format(FormatUUID) })
-	Attribute("data_source", String, "Class of data exported by this route.", func() { Enum("otel_forwarding") })
+	Attribute("data_source", String, "Class of data exported by this route.", func() { Enum("product_telemetry") })
 	Attribute("enabled", Boolean, "Whether the route is enabled.")
-	Attribute("otel_destination_id", String, "OTEL destination used by this route. Required when enabled.", func() { Format(FormatUUID) })
+	Attribute("otel_destination_id", String, "OTEL destination configured on this route. Required when enabled.", func() { Format(FormatUUID) })
 	Required("id", "data_source", "enabled")
 })
 

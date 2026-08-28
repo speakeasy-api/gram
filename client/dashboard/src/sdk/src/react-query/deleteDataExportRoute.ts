@@ -53,7 +53,7 @@ export type DeleteDataExportRouteMutationError =
  * deleteRoute dataExports
  *
  * @remarks
- * Delete a data export route in the selected project.
+ * Delete a data source's export route configuration.
  */
 export function useDeleteDataExportRouteMutation(
   options?: MutationHookOptions<

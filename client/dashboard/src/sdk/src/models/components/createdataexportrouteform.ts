@@ -10,7 +10,7 @@ import { ClosedEnum } from "../../types/enums.js";
  * Class of data exported by this route.
  */
 export const DataSource = {
-  OtelForwarding: "otel_forwarding",
+  ProductTelemetry: "product_telemetry",
 } as const;
 /**
  * Class of data exported by this route.
@@ -18,7 +18,7 @@ export const DataSource = {
 export type DataSource = ClosedEnum<typeof DataSource>;
 
 /**
- * Form for creating a data export route.
+ * Form for creating the selected data source's export route.
  */
 export type CreateDataExportRouteForm = {
   /**
@@ -30,7 +30,7 @@ export type CreateDataExportRouteForm = {
    */
   enabled?: boolean | undefined;
   /**
-   * OTEL destination used by this route. Required when enabled.
+   * OTEL destination configured on this route. Required when enabled.
    */
   otelDestinationId?: string | undefined;
 };

@@ -24,13 +24,13 @@ type Service interface {
 	UpdateOtelDestination(context.Context, *UpdateOtelDestinationPayload) (res *OtelDestination, err error)
 	// Delete an OTEL destination that is not referenced by an active route.
 	DeleteOtelDestination(context.Context, *DeleteOtelDestinationPayload) (err error)
-	// List data export routes for the selected project.
+	// List data source export route configurations for the selected project.
 	ListRoutes(context.Context, *ListRoutesPayload) (res *ListDataExportRoutesResult, err error)
-	// Create a data export route in the selected project.
+	// Create the selected data source's export route configuration.
 	CreateRoute(context.Context, *CreateRoutePayload) (res *DataExportRoute, err error)
-	// Replace a data export route in the selected project.
+	// Replace the selected data source's export route configuration.
 	UpdateRoute(context.Context, *UpdateRoutePayload) (res *DataExportRoute, err error)
-	// Delete a data export route in the selected project.
+	// Delete a data source's export route configuration.
 	DeleteRoute(context.Context, *DeleteRoutePayload) (err error)
 }
 
@@ -90,7 +90,7 @@ type CreateRoutePayload struct {
 	DataSource string
 	// Whether the route is enabled.
 	Enabled bool
-	// OTEL destination used by this route. Required when enabled.
+	// OTEL destination configured on this route. Required when enabled.
 	OtelDestinationID *string
 }
 
@@ -105,7 +105,8 @@ type DataExportRoute struct {
 	DataSource string
 	// Whether the route is enabled.
 	Enabled bool
-	// OTEL destination used by this route. Omitted when no destination is selected.
+	// OTEL destination configured on this route. Omitted when no OTEL destination
+	// is selected.
 	OtelDestinationID *string
 	// Creation timestamp.
 	CreatedAt string
@@ -232,7 +233,7 @@ type UpdateRoutePayload struct {
 	DataSource string
 	// Whether the route is enabled.
 	Enabled bool
-	// OTEL destination used by this route. Required when enabled.
+	// OTEL destination configured on this route. Required when enabled.
 	OtelDestinationID *string
 }
 

@@ -73,7 +73,7 @@ export class DataExports extends ClientSDK {
    * createRoute dataExports
    *
    * @remarks
-   * Create a data export route in the selected project.
+   * Create the selected data source's export route configuration.
    */
   async createRoute(
     request: CreateDataExportRouteRequest,
@@ -111,7 +111,7 @@ export class DataExports extends ClientSDK {
    * deleteRoute dataExports
    *
    * @remarks
-   * Delete a data export route in the selected project.
+   * Delete a data source's export route configuration.
    */
   async deleteRoute(
     request: DeleteDataExportRouteRequest,
@@ -149,7 +149,7 @@ export class DataExports extends ClientSDK {
    * listRoutes dataExports
    *
    * @remarks
-   * List data export routes for the selected project.
+   * List data source export route configurations for the selected project.
    */
   async listRoutes(
     request?: ListDataExportRoutesRequest | undefined,
@@ -187,7 +187,7 @@ export class DataExports extends ClientSDK {
    * updateRoute dataExports
    *
    * @remarks
-   * Replace a data export route in the selected project.
+   * Replace the selected data source's export route configuration.
    */
   async updateRoute(
     request: UpdateDataExportRouteRequest,

@@ -38,7 +38,7 @@ import { Result } from "../types/fp.js";
  * deleteRoute dataExports
  *
  * @remarks
- * Delete a data export route in the selected project.
+ * Delete a data source's export route configuration.
  */
 export function dataExportsDeleteRoute(
   client: GramCore,

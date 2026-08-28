@@ -42,7 +42,7 @@ import { Result } from "../types/fp.js";
  * updateRoute dataExports
  *
  * @remarks
- * Replace a data export route in the selected project.
+ * Replace the selected data source's export route configuration.
  */
 export function dataExportsUpdateRoute(
   client: GramCore,

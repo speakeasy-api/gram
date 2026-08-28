@@ -54,7 +54,7 @@ export type CreateDataExportRouteMutationError =
  * createRoute dataExports
  *
  * @remarks
- * Create a data export route in the selected project.
+ * Create the selected data source's export route configuration.
  */
 export function useCreateDataExportRouteMutation(
   options?: MutationHookOptions<

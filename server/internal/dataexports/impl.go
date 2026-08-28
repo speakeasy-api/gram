@@ -383,14 +383,22 @@ func (s *Service) buildDestinationView(row repo.OtelDestination) (*gen.OtelDesti
 
 type dataSource string
 
-const dataSourceOTELForwarding dataSource = "otel_forwarding"
+const dataSourceProductTelemetry dataSource = "product_telemetry"
 
 func parseDataSource(value string) (dataSource, error) {
 	source := dataSource(value)
-	if source != dataSourceOTELForwarding {
+	if source != dataSourceProductTelemetry {
 		return "", fmt.Errorf("unsupported data source %q", value)
 	}
 	return source, nil
+}
+
+func routeSourceConflict(err error) *oops.ShareableError {
+	var pgErr *pgconn.PgError
+	if errors.As(err, &pgErr) && pgErr.Code == pgerrcode.UniqueViolation && pgErr.ConstraintName == "data_export_routes_project_source_key" {
+		return oops.E(oops.CodeConflict, err, "a route already exists for this data source")
+	}
+	return nil
 }
 
 func (s *Service) ListRoutes(ctx context.Context, _ *gen.ListRoutesPayload) (*gen.ListDataExportRoutesResult, error) {
@@ -451,9 +459,8 @@ func (s *Service) CreateRoute(ctx context.Context, payload *gen.CreateRoutePaylo
 		OtelDestinationID: destinationID,
 	})
 	if err != nil {
-		var pgErr *pgconn.PgError
-		if errors.As(err, &pgErr) && pgErr.Code == pgerrcode.UniqueViolation && pgErr.ConstraintName == "data_export_routes_project_source_destination_key" {
-			return nil, oops.E(oops.CodeConflict, err, "this destination is already routed from the data source")
+		if conflict := routeSourceConflict(err); conflict != nil {
+			return nil, conflict
 		}
 		return nil, oops.E(oops.CodeUnexpected, err, "create data export route").LogError(ctx, logger)
 	}
@@ -525,9 +532,8 @@ func (s *Service) UpdateRoute(ctx context.Context, payload *gen.UpdateRoutePaylo
 		ID:                routeID,
 	})
 	if err != nil {
-		var pgErr *pgconn.PgError
-		if errors.As(err, &pgErr) && pgErr.Code == pgerrcode.UniqueViolation && pgErr.ConstraintName == "data_export_routes_project_source_destination_key" {
-			return nil, oops.E(oops.CodeConflict, err, "this destination is already routed from the data source")
+		if conflict := routeSourceConflict(err); conflict != nil {
+			return nil, conflict
 		}
 		return nil, oops.E(oops.CodeUnexpected, err, "update data export route").LogError(ctx, logger)
 	}

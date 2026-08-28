@@ -10,7 +10,7 @@ import { ClosedEnum } from "../../types/enums.js";
  * Class of data exported by this route.
  */
 export const UpdateRouteRequestBodyDataSource = {
-  OtelForwarding: "otel_forwarding",
+  ProductTelemetry: "product_telemetry",
 } as const;
 /**
  * Class of data exported by this route.
@@ -29,7 +29,7 @@ export type UpdateRouteRequestBody = {
    */
   enabled: boolean;
   /**
-   * OTEL destination used by this route. Required when enabled.
+   * OTEL destination configured on this route. Required when enabled.
    */
   otelDestinationId?: string | undefined;
 };
