@@ -240,6 +240,32 @@ describe("ConsentToolsApp", () => {
     expect(formFieldValues("tools")).toEqual([]);
   });
 
+  it("clears an all-tools group that an annotation grant fully covers", async () => {
+    // Every tool is read-only, so granting that annotation covers the whole
+    // inventory. The All tools tick must then be able to turn it back off.
+    listTools.mockResolvedValue({
+      tools: [
+        { name: "get_thing", annotations: { readOnlyHint: true } },
+        { name: "list_things", annotations: { readOnlyHint: true } },
+      ],
+      nextCursor: undefined,
+    });
+    const user = userEvent.setup();
+    renderApp();
+    await openPicker(user);
+    await user.click(screen.getByRole("button", { name: /Read-only/ }));
+    await user.click(screen.getByRole("checkbox", { name: /All 2/ }));
+    expect(formFieldValues("tool_annotations_live")).toEqual(["read_only"]);
+
+    await user.click(screen.getByRole("button", { name: /All tools/ }));
+    const allTick = screen.getByRole("checkbox", { name: /All 2/ });
+    expect(allTick.getAttribute("aria-checked")).toBe("true");
+    await user.click(allTick);
+
+    expect(formFieldValues("tool_annotations_live")).toEqual([]);
+    expect(formFieldValues("tools")).toEqual([]);
+  });
+
   it("bulk-picks the no-annotation group from its header tick", async () => {
     const user = userEvent.setup();
     renderApp();

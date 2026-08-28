@@ -144,12 +144,19 @@ func (s *Service) ServeConsentAction(w http.ResponseWriter, r *http.Request, end
 		// Latch auto-connect off. Without this the redirect back to the consent
 		// page would see a single disconnected card and immediately bounce the
 		// user into the provider again, making disconnect impossible to
-		// complete. A failure to persist the latch is not worth failing the
-		// disconnect over — the user still ends up connected, not stuck.
+		// complete.
+		//
+		// CompareAndSwap, not Store: this handler read the challenge with a
+		// plain Get, so the approve POST may have consumed it since. A Store
+		// would put the consumed challenge back and let a replayed approval
+		// mint a second grant against it. A lost swap means the challenge
+		// moved on, which is not a reason to fail the disconnect that already
+		// succeeded.
 		if !challengeState.AutoConnectDone {
-			challengeState.AutoConnectDone = true
-			if err := s.authnChallengeCache.Store(ctx, challengeState); err != nil {
-				logger.WarnContext(ctx, "persist auto-connect latch after disconnect", attr.SlogError(err))
+			latched := challengeState
+			latched.AutoConnectDone = true
+			if _, err := s.authnChallengeCache.CompareAndSwap(ctx, challengeState, latched); err != nil {
+				logger.WarnContext(ctx, "latch auto-connect off after disconnect", attr.SlogError(err))
 			}
 		}
 		http.Redirect(w, r, backURL, http.StatusSeeOther)

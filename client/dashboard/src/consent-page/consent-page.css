@@ -57,6 +57,13 @@
   font-display: swap;
 }
 @font-face {
+  font-family: "Diatype Mono";
+  src: url("../fonts/diatype-mono/ABCDiatypeMono-Light.woff2") format("woff2");
+  font-weight: 300;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
   font-family: "Tobias";
   src: url("../fonts/tobias/Tobias-Thin.woff2") format("woff2");
   font-weight: 100;
@@ -75,6 +82,17 @@
   --radius-*: initial;
   --muted-foreground: var(--color-neutral-900-64);
   --color-muted-foreground: var(--muted-foreground);
+}
+
+/* Deliberately unlayered, and therefore immune to the tool-access island.
+   That bundle injects its own Tailwind stylesheet at runtime — after this one —
+   and its theme layer redefines --font-mono to Tailwind's default stack. An
+   unlayered declaration outranks anything in a cascade layer, so the page keeps
+   its own typography whether or not the island is on the page. */
+:root {
+  --font-sans: var(--font-diatype);
+  --font-mono: var(--font-diatype-mono);
+  --font-display: var(--font-tobias);
 }
 
 @layer base {

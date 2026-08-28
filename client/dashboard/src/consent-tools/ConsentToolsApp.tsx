@@ -368,13 +368,28 @@ export function ConsentToolsApp({
   // unannotated bucket.
   const toggleGroupPicks = (group: ConsentGroup) => {
     const members = groupTools(tools, group);
-    const every = members.every((t) => picked.has(t.name));
+    // Read "already granted" from the scope, the same union the checkbox
+    // renders from. Reading it from picks alone leaves a group that is fully
+    // covered by an annotation grant showing as checked but refusing to
+    // clear, because none of its tools is individually picked.
+    const granted =
+      members.length > 0 && members.every((t) => scope.has(t.name));
     const next = new Set(picked);
     members.forEach((t) => {
-      if (every) next.delete(t.name);
+      if (granted) next.delete(t.name);
       else next.add(t.name);
     });
     setPicked(next);
+    if (!granted) return;
+    // Dropping picks cannot revoke coverage that came from an annotation, so
+    // clear every grant that reaches into this group as well.
+    const remaining = new Map(annGrants);
+    for (const [annotation] of annGrants) {
+      if (members.some((t) => t.annotations.includes(annotation))) {
+        remaining.delete(annotation);
+      }
+    }
+    setAnnGrants(remaining);
   };
 
   const toggleGroupGrant = () => {

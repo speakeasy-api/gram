@@ -1127,13 +1127,27 @@ func (s *Service) maybeAutoConnect(
 		return false, nil
 	}
 
-	// Persist the latch first: a redirect the latch did not survive is an
-	// infinite bounce between this page and the provider.
-	challengeState.AutoConnectDone = true
-	if err := s.authnChallengeCache.Store(ctx, challengeState); err != nil {
-		logger.WarnContext(ctx, "persist auto-connect latch; falling back to the consent page", attr.SlogError(err))
+	// Claim the latch before redirecting: a redirect the latch did not survive
+	// is an infinite bounce between this page and the provider.
+	//
+	// CompareAndSwap rather than Store, for two reasons. Concurrent GETs would
+	// both read AutoConnectDone=false and both start an upstream login; only
+	// the swap winner may redirect. And a plain Store would recreate a
+	// challenge that the approve POST's GetAndDelete had already consumed,
+	// handing a replayed approval a live state to mint a second grant against.
+	// Losing the race is not an error — it means someone else is driving this
+	// challenge, so fall through and render.
+	claimed := challengeState
+	claimed.AutoConnectDone = true
+	swapped, err := s.authnChallengeCache.CompareAndSwap(ctx, challengeState, claimed)
+	if err != nil {
+		logger.WarnContext(ctx, "claim auto-connect latch; falling back to the consent page", attr.SlogError(err))
 		return false, nil
 	}
+	if !swapped {
+		return false, nil
+	}
+	challengeState = claimed
 
 	// autoRefresh is nil: the subject has not been shown the control yet, so
 	// there is no choice to record. The page's own Connect action is what
