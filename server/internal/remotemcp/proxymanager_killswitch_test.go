@@ -1,6 +1,7 @@
 package remotemcp
 
 import (
+	"slices"
 	"testing"
 
 	"github.com/google/uuid"
@@ -61,17 +62,39 @@ func TestProxyManagerAttachesKillswitchToEveryPrivateBackend(t *testing.T) {
 	)
 
 	for _, built := range []*proxy.Proxy{remote, tunnel} {
-		names := toolsCallInterceptorNames(built)
-		require.GreaterOrEqual(t, len(names), 5)
-		require.Equal(t, []string{
-			"tools-call-otel-counter",
-			"tools-call-killswitch",
-			"tools-call-usage-limits",
-			"tools-call-strip-toolset-id",
-			"tools-call-clickhouse-log",
-		}, names[:5])
+		preForward := toolsCallPreForwardInterceptorNames(built)
+		otelPosition := slices.Index(preForward, "tools-call-otel-counter")
+		killswitchPosition := slices.Index(preForward, "tools-call-killswitch")
+		require.NotEqual(t, -1, otelPosition)
+		require.NotEqual(t, -1, killswitchPosition)
+		require.Equal(t, 1, countInterceptorName(preForward, "tools-call-otel-counter"))
+		require.Equal(t, 1, countInterceptorName(preForward, "tools-call-killswitch"))
+		require.Less(t, otelPosition, killswitchPosition, "the OTel census must run before enforcement")
+
+		downstream := toolsCallInterceptorNames(built)
+		require.NotEmpty(t, downstream, "enforcement must run before downstream tools/call work")
+		require.NotContains(t, downstream, "tools-call-otel-counter")
+		require.NotContains(t, downstream, "tools-call-killswitch")
 	}
-	require.NotContains(t, toolsCallInterceptorNames(public), "tools-call-killswitch")
+	require.NotContains(t, append(toolsCallPreForwardInterceptorNames(public), toolsCallInterceptorNames(public)...), "tools-call-killswitch")
+}
+
+func countInterceptorName(names []string, target string) int {
+	count := 0
+	for _, name := range names {
+		if name == target {
+			count++
+		}
+	}
+	return count
+}
+
+func toolsCallPreForwardInterceptorNames(p *proxy.Proxy) []string {
+	names := make([]string, 0, len(p.ToolsCallPreForwardInterceptors))
+	for _, interceptor := range p.ToolsCallPreForwardInterceptors {
+		names = append(names, interceptor.Name())
+	}
+	return names
 }
 
 func toolsCallInterceptorNames(p *proxy.Proxy) []string {

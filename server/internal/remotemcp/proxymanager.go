@@ -202,13 +202,18 @@ func (f *ProxyManager) BuildTarget(
 	// private — because the property is Gram's own envelope rather than
 	// anything scoped to an identity or a risk policy. It is a no-op for
 	// the arguments that don't carry it.
-	toolsCallReqInterceptors := []proxy.ToolsCallRequestInterceptor{
-		NewToolsCallOTELCounterInterceptor(f.mcpMetrics, nil, identity, organizationID, logger),
-	}
+	toolsCallOTELCounter := NewToolsCallOTELCounterInterceptor(f.mcpMetrics, nil, identity, organizationID, logger)
+	toolsCallPreForwardInterceptors := []proxy.ToolsCallRequestInterceptor(nil)
+	toolsCallReqInterceptors := []proxy.ToolsCallRequestInterceptor{toolsCallOTELCounter}
 	if visibility == mcpservers.VisibilityPrivate {
-		toolsCallReqInterceptors = append(toolsCallReqInterceptors,
+		// Private calls use a method-level preflight so even malformed params
+		// reach the checkpoint before any downstream typed or upstream work.
+		// Move (rather than copy) the OTel census here to avoid double counting.
+		toolsCallPreForwardInterceptors = []proxy.ToolsCallRequestInterceptor{
+			toolsCallOTELCounter,
 			NewToolsCallKillswitchInterceptor(f.killswitchCheckpoint, organizationID, identity.McpServerID, logger),
-		)
+		}
+		toolsCallReqInterceptors = nil
 	}
 	toolsCallReqInterceptors = append(toolsCallReqInterceptors,
 		f.toolsCallUsageLimitsInterceptor,
@@ -277,9 +282,10 @@ func (f *ProxyManager) BuildTarget(
 		InitializeRequestInterceptors: []proxy.InitializeRequestInterceptor{
 			NewInitializePostHogEventInterceptor(f.posthog, identity, logger),
 		},
-		RemoteMessageInterceptors:     nil,
-		ToolsCallRequestInterceptors:  toolsCallReqInterceptors,
-		ToolsCallResponseInterceptors: toolsCallResponseInterceptors,
+		RemoteMessageInterceptors:       nil,
+		ToolsCallPreForwardInterceptors: toolsCallPreForwardInterceptors,
+		ToolsCallRequestInterceptors:    toolsCallReqInterceptors,
+		ToolsCallResponseInterceptors:   toolsCallResponseInterceptors,
 		ToolsListRequestInterceptors: []proxy.ToolsListRequestInterceptor{
 			NewToolsListPostHogEventInterceptor(f.posthog, identity, logger),
 		},

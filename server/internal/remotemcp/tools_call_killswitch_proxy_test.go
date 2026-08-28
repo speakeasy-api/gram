@@ -100,6 +100,55 @@ func TestToolsCallKillswitchStopsProtectedAndUpstreamWork(t *testing.T) {
 	}
 }
 
+func TestToolsCallKillswitchRejectsMalformedParamsAfterCheckpoint(t *testing.T) {
+	t.Parallel()
+
+	var upstreamCalls atomic.Int32
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		upstreamCalls.Add(1)
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"jsonrpc":"2.0","id":7,"result":{}}`))
+	}))
+	t.Cleanup(upstream.Close)
+
+	checkpoint := &fakeKillswitchCheckpoint{disposition: killswitches.NewContinueDisposition()}
+	protectedWork := &countingToolsCallInterceptor{}
+	p := newKillswitchTestProxy(t, upstream.URL,
+		NewToolsCallKillswitchInterceptor(checkpoint, "organization-id", "server-id", testenv.NewLogger(t)),
+		protectedWork,
+	)
+	bodies := []string{
+		`{"jsonrpc":"2.0","id":7,"method":"tools/call","params":[]}`,
+		`{"jsonrpc":"2.0","id":7,"method":"tools/call","params":null}`,
+		`{"jsonrpc":"2.0","id":7,"method":"tools/call"}`,
+	}
+	for _, body := range bodies {
+		req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/x/mcp/server", strings.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Accept", "application/json, text/event-stream")
+		rr := httptest.NewRecorder()
+
+		require.NoError(t, p.Post(rr, req))
+		require.Equal(t, http.StatusOK, rr.Code)
+
+		var envelope map[string]any
+		require.NoError(t, json.Unmarshal(rr.Body.Bytes(), &envelope))
+		require.Equal(t, map[string]any{
+			"jsonrpc": "2.0",
+			"id":      float64(7),
+			"error": map[string]any{
+				"code":    float64(proxy.RejectCodeInvalidParams),
+				"message": "malformed tools/call request",
+				"data":    nil,
+			},
+		}, envelope)
+	}
+
+	require.Equal(t, len(bodies), checkpoint.calls)
+	require.Zero(t, protectedWork.calls.Load())
+	require.Zero(t, upstreamCalls.Load())
+}
+
 func TestToolsCallKillswitchDeniesExistingSessionOnNextCall(t *testing.T) {
 	t.Parallel()
 	var upstreamCalls atomic.Int32
@@ -164,17 +213,19 @@ func TestToolsCallKillswitchExcludesOtherMethods(t *testing.T) {
 
 func newKillswitchTestProxy(t *testing.T, upstreamURL string, interceptors ...proxy.ToolsCallRequestInterceptor) *proxy.Proxy {
 	t.Helper()
+	require.NotEmpty(t, interceptors)
 	tracerProvider := testenv.NewTracerProvider(t)
 	policy, err := guardian.NewUnsafePolicy(tracerProvider, nil)
 	require.NoError(t, err)
 	return &proxy.Proxy{
-		GuardianPolicy:               policy,
-		Logger:                       testenv.NewLogger(t),
-		Tracer:                       tracerProvider.Tracer("killswitch-test"),
-		NonStreamingTimeout:          5 * time.Second,
-		StreamingTimeout:             5 * time.Second,
-		MaxBufferedBodyBytes:         proxy.DefaultMaxBufferedBodyBytes,
-		RemoteURL:                    upstreamURL,
-		ToolsCallRequestInterceptors: interceptors,
+		GuardianPolicy:                  policy,
+		Logger:                          testenv.NewLogger(t),
+		Tracer:                          tracerProvider.Tracer("killswitch-test"),
+		NonStreamingTimeout:             5 * time.Second,
+		StreamingTimeout:                5 * time.Second,
+		MaxBufferedBodyBytes:            proxy.DefaultMaxBufferedBodyBytes,
+		RemoteURL:                       upstreamURL,
+		ToolsCallPreForwardInterceptors: interceptors[:1],
+		ToolsCallRequestInterceptors:    interceptors[1:],
 	}
 }
