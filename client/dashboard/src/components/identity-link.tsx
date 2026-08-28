@@ -1,35 +1,15 @@
-import { encodeIdentityUrn, identityUrnFor } from "@/lib/identity-urn";
 import type { IdentityRef } from "@/lib/identity-urn";
-import { useProject } from "@/contexts/Auth";
-import { useSlugs } from "@/contexts/Sdk";
-import { useRoutes } from "@/routes";
+import { useIdentityHrefBuilder } from "@/lib/useIdentityHref";
 import { cn } from "@/lib/utils";
 import { ArrowUpRight } from "lucide-react";
 import * as React from "react";
 import { Link } from "react-router";
 
-/**
- * Resolves the identity page href for a reference, or null when the surface
- * holds no identifier the resolver can key on.
- *
- * Person references are rendered on org-scoped pages too (Team, Audit Logs,
- * MCP Sessions), where the route carries no :projectSlug to fill in and the
- * link would otherwise resolve to a path matching no route, bouncing the
- * viewer to login. The project context holds the preferred project on those
- * pages, which is the one the identity's data should be read in.
- */
+/** The single-reference form of `useIdentityHrefBuilder`. */
 function useIdentityHref(
   identifier: IdentityRef | null | undefined,
 ): string | null {
-  const { projectSlug: routeProjectSlug } = useSlugs();
-  const contextProject = useProject();
-  const routes = useRoutes({
-    projectSlug: routeProjectSlug || contextProject.slug,
-  });
-  if (!identifier) return null;
-  return routes.identities.overview.href(
-    encodeIdentityUrn(identityUrnFor(identifier)),
-  );
+  return useIdentityHrefBuilder()(identifier);
 }
 
 /**

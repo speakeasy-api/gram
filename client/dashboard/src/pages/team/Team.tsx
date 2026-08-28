@@ -1,4 +1,4 @@
-import { IdentityLink } from "@/components/identity-link";
+import { useIdentityHrefBuilder } from "@/lib/useIdentityHref";
 import { AnyField } from "@/components/moon/any-field";
 import { InputField } from "@/components/moon/input-field";
 import { ResourceListPage } from "@/components/page-templates";
@@ -170,18 +170,18 @@ function MemberRowContextMenu({
   children: React.ReactElement;
 }): React.JSX.Element {
   const model = getMemberMenuModel(member, deps);
-  const hasManageRoles =
-    model.showManageRoles && (model.scimManaged || model.accessMember != null);
-  const hasItemsAbove = hasManageRoles || model.showChallenges;
-
-  if (!hasItemsAbove && !model.canRemove) {
-    return <>{children}</>;
-  }
+  const identityHref = useIdentityHrefBuilder();
+  const profileHref = identityHref({ userId: member.userId });
 
   return (
     <ContextMenu>
       <ContextMenuTrigger asChild>{children}</ContextMenuTrigger>
       <ContextMenuContent className="min-w-[10rem]">
+        {profileHref && (
+          <ContextMenuItem asChild>
+            <Link to={profileHref}>View profile</Link>
+          </ContextMenuItem>
+        )}
         {model.showManageRoles &&
           (model.scimManaged ? (
             <ContextMenuItem disabled>Manage roles</ContextMenuItem>
@@ -201,7 +201,7 @@ function MemberRowContextMenu({
         )}
         {model.canRemove && (
           <>
-            {hasItemsAbove && <ContextMenuSeparator />}
+            <ContextMenuSeparator />
             <RequireScope scope="org:admin" level="component">
               <ContextMenuItem
                 variant="destructive"
@@ -230,6 +230,7 @@ function TeamInner() {
   const user = useUser();
   const queryClient = useQueryClient();
   const navigate = useNavigate();
+  const identityHref = useIdentityHrefBuilder();
   const orgRoutes = useOrgRoutes();
 
   const [isInviteDialogOpen, setIsInviteDialogOpen] = useState(false);
@@ -535,13 +536,9 @@ function TeamInner() {
             </div>
           )}
           <Stack direction="vertical" gap={0}>
-            {/* The member row is where most people first look for someone, so
-                the name is the primary way into their identity page. */}
-            <IdentityLink identifier={{ userId: member.userId }}>
-              <Text variant="body" className="font-medium">
-                {member.name}
-              </Text>
-            </IdentityLink>
+            <Text variant="body" className="font-medium">
+              {member.name}
+            </Text>
             <Text variant="body" className="text-muted-foreground text-sm">
               {member.email}
             </Text>
@@ -634,6 +631,13 @@ function TeamInner() {
               </button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
+              {identityHref({ userId: member.userId }) && (
+                <DropdownMenuItem asChild>
+                  <Link to={identityHref({ userId: member.userId }) ?? ""}>
+                    View profile
+                  </Link>
+                </DropdownMenuItem>
+              )}
               {model.showManageRoles &&
                 (model.scimManaged ? (
                   <SimpleTooltip tooltip="Role assignments are managed by your identity provider. Configure them under SSO → SCIM in identity settings.">
@@ -659,7 +663,7 @@ function TeamInner() {
               )}
               {model.canRemove && (
                 <>
-                  {model.showManageRoles && <DropdownMenuSeparator />}
+                  <DropdownMenuSeparator />
                   <RequireScope scope="org:admin" level="component">
                     <DropdownMenuItem
                       className="text-destructive focus:text-destructive"
@@ -922,6 +926,12 @@ function TeamInner() {
               columns={memberColumns}
               data={visibleMembers}
               rowKey={(row) => row.userId}
+              // The row is where most people first look for someone, so the
+              // whole row opens their profile rather than one link inside it.
+              onRowClick={(row) => {
+                const href = identityHref({ userId: row.userId });
+                if (href) void navigate(href);
+              }}
               renderRow={(row, rowElement) => (
                 <MemberRowContextMenu
                   key={row.userId}

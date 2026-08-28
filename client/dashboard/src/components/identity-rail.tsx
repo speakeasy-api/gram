@@ -25,10 +25,7 @@ export function IdentityRail({
   className?: string;
 }): React.JSX.Element {
   return (
-    <nav
-      aria-label="This identity"
-      className={cn("flex flex-col gap-1", className)}
-    >
+    <nav aria-label="This identity" className={cn("flex flex-col", className)}>
       <p className="text-eyebrow mb-2 pl-3">This identity</p>
       {items.map((item) => (
         <Link
@@ -38,9 +35,10 @@ export function IdentityRail({
           className={cn(
             "border-l-2 px-3 py-1.5 text-sm transition-colors",
             item.active
-              ? // The open section lifts off the recessed ground onto the card
-                // surface the panels beside it use.
-                "bg-card border-foreground text-foreground"
+              ? // The open section lifts off the recessed ground. In dark
+                // mode --card is the ground itself, so the lighter --accent
+                // step carries it, matching the table row hover.
+                "bg-card dark:bg-accent/70 border-foreground text-foreground"
               : "border-border text-muted-foreground hover:text-foreground hover:border-foreground/40",
           )}
         >
