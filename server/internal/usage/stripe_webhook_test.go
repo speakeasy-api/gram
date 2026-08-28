@@ -1682,6 +1682,54 @@ func TestStripeCheckoutDomainReplayIsNoop(t *testing.T) {
 	require.Equal(t, keyAfterFirst, openRouterKeyLifecycleFixture(t, db, openrouter.KeyTypeChat))
 }
 
+func TestStripeCheckoutFinalBillingCauseRecoveryReconcilesStaleDisabledMirror(t *testing.T) {
+	t.Parallel()
+
+	service, db := newStripeWebhookService(t, "customer_placeholder", nil)
+	configurePaygCheckout(t, service, "event_final_cause_recovery", "subscription_final_cause_recovery", "past_due")
+	limit, ok := openrouter.AccountTypeCreditLimit("payg")
+	require.True(t, ok)
+	createOpenRouterKeyFixture(t, db, openrouter.KeyTypeChat, int64(limit))
+	setOpenRouterKeyLifecycleFixture(t, db, openrouter.KeyTypeChat, false, []string{"billing_inactive"}, int64(limit))
+
+	patches := make(chan map[string]any, 10)
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPatch {
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			return
+		}
+		var patch map[string]any
+		if err := json.NewDecoder(r.Body).Decode(&patch); err != nil {
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+		patches <- patch
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"data": map[string]any{"limit": float64(limit), "hash": "hash_placeholder_chat"},
+		})
+	}))
+	t.Cleanup(upstream.Close)
+	option, err := openrouter.WithTestBaseURL(upstream.URL)
+	require.NoError(t, err)
+	tracerProvider := testenv.NewTracerProvider(t)
+	guardianPolicy, err := guardian.NewUnsafePolicy(tracerProvider, []string{})
+	require.NoError(t, err)
+	service.openRouter = openrouter.New(
+		testenv.NewLogger(t), tracerProvider, guardianPolicy, db, "test", "provisioning_key_placeholder",
+		nil, nil, nil, testenv.NewEncryptionClient(t), option,
+	)
+
+	require.Equal(t, http.StatusOK, serveStripeWebhook(service, "final cause recovery").Code)
+	require.Len(t, patches, 1, "removing the final cause must schedule postcommit reconciliation")
+	require.Equal(t, false, (<-patches)["disabled"])
+	key := openRouterKeyLifecycleFixture(t, db, openrouter.KeyTypeChat)
+	require.False(t, key.Disabled)
+	require.Empty(t, key.DisableCauses)
+	require.Equal(t, int64(limit), key.MonthlyCredits)
+	require.Equal(t, 1, stripeWebhookReceiptCount(t, db))
+}
+
 func TestStripeCheckoutLayeredBillingRecoveryDoesNotReconcileUnchangedAccess(t *testing.T) {
 	t.Parallel()
 
@@ -1690,7 +1738,7 @@ func TestStripeCheckoutLayeredBillingRecoveryDoesNotReconcileUnchangedAccess(t *
 	limit, ok := openrouter.AccountTypeCreditLimit("payg")
 	require.True(t, ok)
 	createOpenRouterKeyFixture(t, db, openrouter.KeyTypeChat, int64(limit))
-	setOpenRouterKeyLifecycleFixture(t, db, openrouter.KeyTypeChat, true, []string{"admin_lock", "billing_inactive", "unknown_policy"}, int64(limit))
+	setOpenRouterKeyLifecycleFixture(t, db, openrouter.KeyTypeChat, false, []string{"admin_lock", "billing_inactive", "unknown_policy"}, int64(limit))
 
 	var patches atomic.Int32
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
