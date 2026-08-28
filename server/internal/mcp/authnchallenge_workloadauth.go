@@ -43,9 +43,12 @@ func workloadIssuerKeySource(endpoint *ResolvedMcpEndpoint, issuer *remotesessio
 // charged to.
 //
 // The authorization server's own identifier is the tenant boundary the fetch
-// limiter documents, so it is the base: one endpoint's trusted issuers
-// cannot exhaust another's, and admitting more issuers buys no extra
-// fetches. Never the issuer URL, which two organizations may legitimately
+// limiter documents, and every issuer trusted on that endpoint shares the one
+// budget deliberately. The limiter exists so that no number of registrations
+// buys more fetches; keying per issuer row would hand an operator a fresh
+// budget for each issuer they add, which is the amplification it closes. One
+// tenant's issuers contending for that tenant's own budget is the accepted
+// trade. Never the issuer URL, which two organizations may legitimately
 // share, and never a value derived from the request.
 //
 // The prefix keeps this grant's budget separate from the client
