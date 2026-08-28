@@ -413,6 +413,7 @@ type OrganizationEnterpriseTrialConversionSnapshot struct {
 
 type LogOrganizationEnterpriseTrialConvertedEvent struct {
 	OrganizationID   string
+	ConversionSource string
 	Actor            urn.Principal
 	ActorDisplayName *string
 	ActorSlug        *string
@@ -422,7 +423,7 @@ type LogOrganizationEnterpriseTrialConvertedEvent struct {
 
 func (l *Logger) LogOrganizationEnterpriseTrialConverted(ctx context.Context, dbtx repo.DBTX, event LogOrganizationEnterpriseTrialConvertedEvent) error {
 	action := ActionOrganizationEnterpriseTrialConverted
-	metadata, err := marshalAuditPayload(map[string]any{"conversion_source": "admin"})
+	metadata, err := marshalAuditPayload(map[string]any{"conversion_source": event.ConversionSource})
 	if err != nil {
 		return fmt.Errorf("marshal %s metadata: %w", action, err)
 	}

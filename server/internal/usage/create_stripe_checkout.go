@@ -16,6 +16,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/productfeatures"
+	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 	stripeclient "github.com/speakeasy-api/gram/server/internal/thirdparty/stripe"
 	trialsrepo "github.com/speakeasy-api/gram/server/internal/trials/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -142,6 +144,11 @@ func (s *Service) CreateStripeCheckout(ctx context.Context, _ *gen.CreateStripeC
 	}
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 
+	convertedTrial, err := s.convertEnterpriseTrialForCheckoutTx(ctx, dbtx, authCtx.ActiveOrganizationID, now)
+	if err != nil {
+		return "", oops.E(oops.CodeUnexpected, err, "failed to convert enterprise trial during Stripe Checkout").LogError(ctx, s.logger)
+	}
+
 	finalized, err := repo.New(dbtx).FinalizeStripeCheckoutIntent(ctx, repo.FinalizeStripeCheckoutIntentParams{
 		StripeCheckoutSessionID:          checkout.ID,
 		OrganizationID:                   authCtx.ActiveOrganizationID,
@@ -172,6 +179,26 @@ func (s *Service) CreateStripeCheckout(ctx context.Context, _ *gen.CreateStripeC
 
 	if err := dbtx.Commit(ctx); err != nil {
 		return "", oops.E(oops.CodeUnexpected, err, "failed to finalize Stripe Checkout").LogError(ctx, s.logger)
+	}
+
+	if convertedTrial {
+		if s.productFeatures != nil {
+			for _, runtimeFeature := range productfeatures.TrialRuntimeFeatures {
+				s.productFeatures.UpdateFeatureCache(ctx, authCtx.ActiveOrganizationID, runtimeFeature, true)
+			}
+		}
+		if s.trial != nil {
+			if err := s.trial.TrialInactive(ctx, authCtx.ActiveOrganizationID); err != nil {
+				s.logger.WarnContext(ctx, "failed to stop enterprise trial notifications after Stripe Checkout conversion")
+			}
+		}
+		if provisioner, ok := s.openRouter.(checkoutTrialProvisioner); ok {
+			for _, keyType := range openrouter.AllKeyTypes {
+				if err := provisioner.ReconcileAPIKeyDisabled(ctx, authCtx.ActiveOrganizationID, keyType); err != nil {
+					s.logger.WarnContext(ctx, "failed to reconcile model provider key after Stripe Checkout conversion")
+				}
+			}
+		}
 	}
 
 	return checkout.URL, nil

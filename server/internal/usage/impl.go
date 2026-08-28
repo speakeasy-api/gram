@@ -74,6 +74,11 @@ var _ gen.Service = (*Service)(nil)
 
 const polarWebhookKeyBillingLockWaitTimeout = 5 * time.Second
 
+type checkoutTrialProvisioner interface {
+	PrepareEnterpriseTrialConversionKeyWithDB(context.Context, openrouter.DBTX, string, openrouter.KeyType, int64) (openrouter.EnterpriseTrialConversionKeyChange, error)
+	ReconcileAPIKeyDisabled(context.Context, string, openrouter.KeyType) error
+}
+
 type openRouterBillingDBProvisioner interface {
 	RefreshAPIKeyLimitWithDB(context.Context, openrouter.DBTX, string, openrouter.KeyType, *int) (int, error)
 }

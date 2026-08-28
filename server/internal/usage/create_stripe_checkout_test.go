@@ -2,6 +2,7 @@ package usage
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/url"
@@ -11,12 +12,14 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/usage"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
+	audittestrepo "github.com/speakeasy-api/gram/server/internal/audit/audittest/repo"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/authztest"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
@@ -24,7 +27,9 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
+	"github.com/speakeasy-api/gram/server/internal/outbox/events"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
+	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 	stripeclient "github.com/speakeasy-api/gram/server/internal/thirdparty/stripe"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	trialsrepo "github.com/speakeasy-api/gram/server/internal/trials/repo"
@@ -320,6 +325,22 @@ func TestNewStripeCheckoutIntent(t *testing.T) {
 	})
 }
 
+type checkoutLifecycleProvisioner struct {
+	*openrouter.Development
+	db                    repo.DBTX
+	organizationID        string
+	reconciledAfterCommit []bool
+}
+
+func (p *checkoutLifecycleProvisioner) ReconcileAPIKeyDisabled(ctx context.Context, _ string, _ openrouter.KeyType) error {
+	trial, err := trialsrepo.New(p.db).GetTrial(ctx, p.organizationID)
+	if err != nil {
+		return fmt.Errorf("read trial during post-commit reconciliation: %w", err)
+	}
+	p.reconciledAfterCommit = append(p.reconciledAfterCommit, trial.ConvertedAt.Valid)
+	return nil
+}
+
 type stripeCheckoutTestInstance struct {
 	service *Service
 	db      repo.DBTX
@@ -371,7 +392,7 @@ func newStripeCheckoutTestInstance(t *testing.T) *stripeCheckoutTestInstance {
 		telemetryRepo: nil,
 		auditLogger:   audit.NewLogger(),
 		posthogClient: nil,
-		openRouter:    nil,
+		openRouter:    openrouter.NewDevelopment(""),
 		stripeClient:  stripe,
 		stripeHandler: nil,
 		featureFlags:  flags,
@@ -522,7 +543,7 @@ func TestCreateStripeCheckoutFailsClosedWithoutRolloutProvider(t *testing.T) {
 	require.Empty(t, checkouts)
 }
 
-func TestCreateStripeCheckoutAlignsStripeTrialEndWithoutChangingProductTrial(t *testing.T) {
+func TestCreateStripeCheckoutAlignsStripeTrialEndAndConvertsProductTrial(t *testing.T) {
 	t.Parallel()
 
 	ti := newStripeCheckoutTestInstance(t)
@@ -543,9 +564,10 @@ func TestCreateStripeCheckoutAlignsStripeTrialEndWithoutChangingProductTrial(t *
 	require.Equal(t, wantAnchor, checkouts[0].BillingCycleAnchor)
 	require.Less(t, checkouts[0].ExpiresAt, wantAnchor)
 
-	storedTrial, err := trialsrepo.New(ti.db).GetActiveTrial(t.Context(), ti.orgID)
+	storedTrial, err := trialsrepo.New(ti.db).GetTrial(t.Context(), ti.orgID)
 	require.NoError(t, err)
 	require.True(t, trialEnd.Equal(storedTrial.EndsAt.Time))
+	require.True(t, storedTrial.ConvertedAt.Valid)
 }
 
 func TestCreateStripeCheckoutStartsImmediatelyWhenTrialExpired(t *testing.T) {
@@ -563,6 +585,97 @@ func TestCreateStripeCheckoutStartsImmediatelyWhenTrialExpired(t *testing.T) {
 	_, _, checkouts := ti.stripe.snapshot()
 	require.Len(t, checkouts, 1)
 	require.Nil(t, checkouts[0].TrialEnd)
+}
+
+func TestCreateStripeCheckoutFirstConversionIsAtomicAndReceiptReplayIsIdempotent(t *testing.T) {
+	t.Parallel()
+
+	ti := newStripeCheckoutTestInstance(t)
+	provisioner := &checkoutLifecycleProvisioner{Development: openrouter.NewDevelopment(""), db: ti.db, organizationID: ti.orgID}
+	ti.service.openRouter = provisioner
+	trialEnd := time.Now().UTC().Add(7 * 24 * time.Hour)
+	require.NoError(t, trialsrepo.New(ti.db).CreateTrial(t.Context(), trialsrepo.CreateTrialParams{
+		OrganizationID: ti.orgID,
+		Tier:           "enterprise",
+		EndsAt:         pgtype.Timestamptz{Time: trialEnd, InfinityModifier: pgtype.Finite, Valid: true},
+	}))
+
+	firstURL, err := ti.service.CreateStripeCheckout(ti.adminContext(t), &gen.CreateStripeCheckoutPayload{})
+	require.NoError(t, err)
+	converted, err := trialsrepo.New(ti.db).GetTrial(t.Context(), ti.orgID)
+	require.NoError(t, err)
+	require.True(t, converted.ConvertedAt.Valid)
+	organization, err := orgrepo.New(ti.db).GetOrganizationMetadata(t.Context(), ti.orgID)
+	require.NoError(t, err)
+	require.Equal(t, "enterprise", organization.GramAccountType)
+	require.True(t, organization.Whitelisted)
+
+	record, err := audittest.LatestAuditLogByAction(t.Context(), ti.db, audit.ActionOrganizationEnterpriseTrialConverted)
+	require.NoError(t, err)
+	require.Equal(t, "system", record.ActorID)
+	require.Equal(t, "System", record.ActorDisplay)
+	metadata, err := audittest.DecodeAuditData(record.Metadata)
+	require.NoError(t, err)
+	require.Equal(t, "stripe_checkout", metadata["conversion_source"])
+	require.NotEmpty(t, record.BeforeSnapshot)
+	require.NotEmpty(t, record.AfterSnapshot)
+	require.Equal(t, []bool{true, true}, provisioner.reconciledAfterCommit)
+
+	envelope, err := audittestrepo.New(ti.db).GetLatestOutboxPayloadByOrg(t.Context(), audittestrepo.GetLatestOutboxPayloadByOrgParams{
+		OrganizationID: ti.orgID, EventType: string(events.OrganizationEnterpriseTrialV1.EventType()),
+	})
+	require.NoError(t, err)
+	serialized, err := json.Marshal(map[string]any{
+		"actor_id": record.ActorID, "actor_display": record.ActorDisplay, "metadata": json.RawMessage(record.Metadata),
+		"before_snapshot": json.RawMessage(record.BeforeSnapshot), "after_snapshot": json.RawMessage(record.AfterSnapshot),
+	})
+	require.NoError(t, err)
+	for _, forbidden := range []string{ti.email, "session-billing-test", "workos-" + ti.orgID, "sk-test", "hash-", "prompt", "spend"} {
+		require.NotContains(t, string(serialized), forbidden)
+		require.NotContains(t, string(envelope), forbidden)
+	}
+
+	replayedURL, err := ti.service.CreateStripeCheckout(ti.adminContext(t), &gen.CreateStripeCheckoutPayload{})
+	require.NoError(t, err)
+	require.Equal(t, firstURL, replayedURL)
+	conversionCount, err := audittest.AuditLogCountByAction(t.Context(), ti.db, audit.ActionOrganizationEnterpriseTrialConverted)
+	require.NoError(t, err)
+	require.EqualValues(t, 1, conversionCount)
+}
+
+func TestCreateStripeCheckoutConversionAuditFailureRollsBackBusinessState(t *testing.T) {
+	t.Parallel()
+
+	ti := newStripeCheckoutTestInstance(t)
+	ti.service.openRouter = openrouter.NewDevelopment("")
+	require.NoError(t, trialsrepo.New(ti.db).CreateTrial(t.Context(), trialsrepo.CreateTrialParams{
+		OrganizationID: ti.orgID,
+		Tier:           "enterprise",
+		EndsAt:         pgtype.Timestamptz{Time: time.Now().UTC().Add(7 * 24 * time.Hour), InfinityModifier: pgtype.Finite, Valid: true},
+	}))
+	beforeOrganization, err := orgrepo.New(ti.db).GetOrganizationMetadata(t.Context(), ti.orgID)
+	require.NoError(t, err)
+	require.NoError(t, audittest.RejectAction(t.Context(), ti.db, audit.ActionOrganizationEnterpriseTrialConverted))
+
+	_, err = ti.service.CreateStripeCheckout(ti.adminContext(t), &gen.CreateStripeCheckoutPayload{})
+	require.Error(t, err)
+	afterTrial, readErr := trialsrepo.New(ti.db).GetTrial(t.Context(), ti.orgID)
+	require.NoError(t, readErr)
+	require.False(t, afterTrial.ConvertedAt.Valid)
+	afterOrganization, readErr := orgrepo.New(ti.db).GetOrganizationMetadata(t.Context(), ti.orgID)
+	require.NoError(t, readErr)
+	require.Equal(t, beforeOrganization.GramAccountType, afterOrganization.GramAccountType)
+	require.Equal(t, beforeOrganization.Whitelisted, afterOrganization.Whitelisted)
+	checkoutAuditCount, readErr := audittest.AuditLogCountByAction(t.Context(), ti.db, audit.ActionBillingMetadataCreateStripeCheckout)
+	require.NoError(t, readErr)
+	require.Zero(t, checkoutAuditCount)
+	_, outboxErr := audittestrepo.New(ti.db).GetLatestOutboxPayloadByOrg(t.Context(), audittestrepo.GetLatestOutboxPayloadByOrgParams{
+		OrganizationID: ti.orgID, EventType: string(events.OrganizationEnterpriseTrialV1.EventType()),
+	})
+	require.ErrorIs(t, outboxErr, pgx.ErrNoRows)
+	billingMetadata, readErr := repo.New(ti.db).GetBillingMetadata(t.Context(), ti.orgID)
+	require.NoError(t, readErr)
+	require.False(t, billingMetadata.StripeCheckoutSessionID.Valid)
 }
 
 func TestCreateStripeCheckoutStartsImmediatelyWhenTrialConverted(t *testing.T) {

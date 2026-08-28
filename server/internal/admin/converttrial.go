@@ -189,7 +189,7 @@ func (s *Service) markEnterpriseTrialConverted(ctx context.Context, organization
 	}
 	actor, actorDisplayName := enterpriseTrialConversionAuditActor(ctx)
 	if err := s.audit.LogOrganizationEnterpriseTrialConverted(ctx, tx, audit.LogOrganizationEnterpriseTrialConvertedEvent{
-		OrganizationID: payload.ID, Actor: actor, ActorDisplayName: actorDisplayName, ActorSlug: nil, Before: before, After: after,
+		OrganizationID: payload.ID, ConversionSource: "admin", Actor: actor, ActorDisplayName: actorDisplayName, ActorSlug: nil, Before: before, After: after,
 	}); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "log enterprise trial conversion").LogError(ctx, logger)
 	}
