@@ -2,11 +2,6 @@ import {
   buildEmployees,
   type Employee,
 } from "@/components/observe/insightsEmployeesData";
-import {
-  formatDateRangeLabel,
-  useDateRangeFilter,
-} from "@/components/observe/useDateRangeFilter";
-import { TimeRangePicker } from "@/components/DashboardTimeRangePicker";
 import { StatTile, StatTileGroup } from "@/components/chart/stat-tile";
 import { defineFilters, useFilterState } from "@/components/filters";
 import { Page } from "@/components/page-layout";
@@ -49,6 +44,10 @@ export function IdentitiesIndexRedirect(): JSX.Element {
   return <Navigate to={orgRoutes.identities.href()} replace />;
 }
 
+// The roster reaches back further than any org has existed, so every identity
+// the telemetry knows about is listed however long ago it was last seen.
+const ALL_TIME_FROM = new Date("2020-01-01T00:00:00Z");
+
 const IDENTITY_FILTERS = defineFilters([
   { id: "kind", label: "Kind", kind: "multiselect", pinned: true },
 ]);
@@ -79,16 +78,6 @@ function IdentitiesIndexContent(): JSX.Element {
   const [search, setSearch] = useState("");
   const { values, setValue, clearValue, clearAll } =
     useFilterState(IDENTITY_FILTERS);
-  const {
-    dateRange,
-    customRange,
-    customRangeLabel,
-    from,
-    to,
-    setDateRangeParam,
-    setCustomRangeParam,
-    clearCustomRange,
-  } = useDateRangeFilter("30d");
 
   const membersQuery = useMembers(undefined, undefined, {
     throwOnError: false,
@@ -96,9 +85,14 @@ function IdentitiesIndexContent(): JSX.Element {
   const rolesQuery = useRoles(undefined, undefined, { throwOnError: false });
   // Usage is the only project-scoped read here, and it is what surfaces the
   // identities the directory has never heard of.
+  //
+  // Unwindowed on purpose: this is the roster, not a report. Someone who has
+  // been quiet for a quarter is still an identity, and hiding them behind a
+  // date range would make the list answer "who was active lately" — a question
+  // the per-identity pages already answer, each over its own window.
   const usageQuery = useQuery({
-    queryKey: ["identities", "usage", from.toISOString(), to.toISOString()],
-    queryFn: () => fetchIdentityUsage(client, from, to),
+    queryKey: ["identities", "usage", "all-time"],
+    queryFn: () => fetchIdentityUsage(client, ALL_TIME_FROM, new Date()),
     throwOnError: false,
   });
 
@@ -206,15 +200,13 @@ function IdentitiesIndexContent(): JSX.Element {
     },
   ];
 
-  const rangeLabel = formatDateRangeLabel(dateRange, customRangeLabel);
-
   return (
     <Page.Section>
       <Page.Section.Title>Identities</Page.Section.Title>
       <Page.Section.Description>
         {rows.length} of {identities.length} — directory members, the addresses
         behind unattributed activity, and the agents that reported for
-        themselves{rangeLabel && ` — over ${rangeLabel}`}.
+        themselves.
       </Page.Section.Description>
       <Page.Section.Body>
         <StatTileGroup>
@@ -262,16 +254,6 @@ function IdentitiesIndexContent(): JSX.Element {
             onClear={clearValue as (id: string) => void}
             onClearAll={clearAll}
           />
-          <Page.Toolbar.Actions>
-            <TimeRangePicker
-              preset={customRange ? null : dateRange}
-              customRange={customRange}
-              customRangeLabel={customRangeLabel}
-              onPresetChange={setDateRangeParam}
-              onCustomRangeChange={setCustomRangeParam}
-              onClearCustomRange={clearCustomRange}
-            />
-          </Page.Toolbar.Actions>
         </Page.Toolbar>
         <Table
           columns={columns}
@@ -284,7 +266,7 @@ function IdentitiesIndexContent(): JSX.Element {
               ),
             )
           }
-          noResultsMessage="No identities in this window"
+          noResultsMessage="No identities match these filters"
         />
       </Page.Section.Body>
     </Page.Section>

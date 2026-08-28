@@ -848,8 +848,12 @@ function NoResultsMessage({
     </div>
   );
 
+  // Padded to the same inset as a data cell: the message sits in the grid
+  // where a row would, so flush-left text reads as a broken row.
   const ContentWrapper = ({ children }: PropsWithChildren) => (
-    <div className="[grid-column:1/-1]">{children}</div>
+    <div className="text-muted-foreground [grid-column:1/-1] px-4 py-6 text-sm">
+      {children}
+    </div>
   );
 
   return (
