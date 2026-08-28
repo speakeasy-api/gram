@@ -4,10 +4,6 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/jackc/pgx/v5/pgxpool"
-
-	"github.com/speakeasy-api/gram/server/internal/feature"
-	organizationsrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 )
 
@@ -19,65 +15,19 @@ type CapabilityChecker interface {
 	IsFeatureEnabledUncached(ctx context.Context, organizationID string, feature productfeatures.Feature) (bool, error)
 }
 
-type OrganizationSlugResolver interface {
-	OrganizationSlug(ctx context.Context, organizationID string) (string, error)
-}
-
-type PostgresOrganizationSlugResolver struct {
-	db *pgxpool.Pool
-}
-
-func NewPostgresOrganizationSlugResolver(db *pgxpool.Pool) *PostgresOrganizationSlugResolver {
-	return &PostgresOrganizationSlugResolver{db: db}
-}
-
-func (r *PostgresOrganizationSlugResolver) OrganizationSlug(ctx context.Context, organizationID string) (string, error) {
-	if r == nil || r.db == nil || organizationID == "" {
-		return "", ErrUnavailable
-	}
-	organization, err := organizationsrepo.New(r.db).GetOrganizationMetadata(ctx, organizationID)
-	if err != nil {
-		return "", fmt.Errorf("get organization for Platform MCP rollout: %w", err)
-	}
-	return organization.Slug, nil
-}
-
-// OrganizationGate combines the engineering-owned Platform MCP rollout with the
-// organization-admin entitlement. Both must be enabled: the PostHog flag keeps
-// an unreleased surface inaccessible, while the durable product feature lets an
-// organization opt out after release. Any unavailable dependency fails closed.
+// OrganizationGate enforces the durable organization-admin entitlement. Any
+// unavailable dependency fails closed.
 type OrganizationGate struct {
-	capabilities  CapabilityChecker
-	flags         feature.Provider
-	organizations OrganizationSlugResolver
+	capabilities CapabilityChecker
 }
 
-func NewOrganizationGate(capabilities CapabilityChecker, flags feature.Provider, organizations OrganizationSlugResolver) *OrganizationGate {
-	return &OrganizationGate{
-		capabilities:  capabilities,
-		flags:         flags,
-		organizations: organizations,
-	}
+func NewOrganizationGate(capabilities CapabilityChecker) *OrganizationGate {
+	return &OrganizationGate{capabilities: capabilities}
 }
 
 func (g *OrganizationGate) Enabled(ctx context.Context, organizationID string) (bool, error) {
-	if g == nil || g.capabilities == nil || g.flags == nil || g.organizations == nil || organizationID == "" {
+	if g == nil || g.capabilities == nil || organizationID == "" {
 		return false, ErrUnavailable
-	}
-
-	organizationSlug, err := g.organizations.OrganizationSlug(ctx, organizationID)
-	if err != nil {
-		return false, fmt.Errorf("resolve organization for platform mcp rollout: %w", err)
-	}
-	if organizationSlug == "" {
-		return false, ErrUnavailable
-	}
-	rollout, err := g.flags.IsFlagEnabled(ctx, feature.FlagPlatformMCP, organizationID, feature.OrgProjectGroups(organizationSlug, ""))
-	if err != nil {
-		return false, fmt.Errorf("check platform mcp rollout: %w", err)
-	}
-	if !rollout {
-		return false, nil
 	}
 
 	capable, err := g.capabilities.IsFeatureEnabledUncached(ctx, organizationID, productfeatures.FeaturePlatformMCP)
@@ -105,8 +55,8 @@ func (g *CatalogRegistrationGate) Enabled(ctx context.Context, organizationID, p
 	return g.EnabledOrganization(ctx, organizationID)
 }
 
-// EnabledOrganization checks the same rollout and durable entitlement as a
-// mutation without accepting a project selector. Read-only direct inspection
+// EnabledOrganization checks the same durable entitlement as a mutation
+// without accepting a project selector. Read-only direct inspection
 // needs this gate before it can perform user-directed egress.
 func (g *CatalogRegistrationGate) EnabledOrganization(ctx context.Context, organizationID string) (bool, error) {
 	if g == nil || g.platform == nil || organizationID == "" {

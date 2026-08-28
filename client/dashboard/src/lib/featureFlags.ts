@@ -12,8 +12,6 @@ export const FEATURE_FLAGS = {
   mcpResearch: "gram-mcp-research",
   newCostsPage: "gram-new-costs-page",
   paygSelfServeBilling: "gram-payg-self-serve-billing",
-  platformMcp: "platform-mcp",
-  platformMcpDashboard: "platform-mcp-dashboard",
   promptPolicies: "gram-prompt-policies",
   rbac: "gram-rbac",
   riskWatchdog: "gram-risk-watchdog",
