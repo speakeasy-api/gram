@@ -5,7 +5,7 @@
 ## Safety model
 
 - The default mode is dry-run. There is no `-dry-run` flag.
-- `-apply` and `-manual-override` are the only writing modes. Every write requires `-confirm-environment` to exactly match `-environment`. Production writes additionally require `-confirm-production=production`.
+- `-apply` and `-manual-override` are the only writing modes. Every write requires `-confirm-environment` to exactly match `-environment`. Production writes additionally require `-confirm-production=production`. Manual overrides also require the explicit `-confirm-manual-override` acknowledgement.
 - Automatic billing classification fails closed. `billing_inactive` requires a current `free` account with no subscription and a durable `organization:payg_deactivated` audit whose organization subject and snapshots prove a `payg` to `free` transition. Never-PAYG, malformed, and contradictory rows remain ambiguous.
 - Admin evidence requires the production audit identity: subject ID `<ORG_ID>/<KEY_TYPE>` and subject type `openrouter_api_key`.
 - Output is aggregate JSON only. Blocked logs expose only `ambiguous_rows`, `validation_failed`, `override_conflict`, `database_or_timeout`, or `unexpected`; they do not include row identifiers, override contents, credentials, or database URLs.
@@ -47,7 +47,13 @@ Set `GRAM_DATABASE_URL` in the environment. Do not put credentials in flags or s
 
    Validation is non-writing. A nonzero exit is a stop condition, not a handoff signal.
 
-5. If an authorized investigation establishes evidence unavailable to the classifier, provide one protected override JSON object on standard input. Set `GRAM_OPENROUTER_DISABLE_CAUSES_OVERRIDE_TOKEN` out of band and use all write confirmations. Never paste identifiers, tokens, or manifests into tickets, commits, or logs.
+5. If an authorized investigation establishes evidence unavailable to the classifier, provide one protected override JSON object on standard input. Set `GRAM_OPENROUTER_DISABLE_CAUSES_OVERRIDE_TOKEN` out of band and use all write confirmations. Never paste identifiers, tokens, or manifests into tickets, commits, or logs. Store the object in a protected file and run the complete production command:
+
+   ```sh
+   cat "$PROTECTED_OVERRIDE_FILE" | go run ./server/cmd/tools/migrations openrouter-disable-causes \
+     -manual-override -environment=production -confirm-environment=production \
+     -confirm-production=production -confirm-manual-override
+   ```
 
 ## Retries and recovery
 

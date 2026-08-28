@@ -385,10 +385,20 @@ type OpenRouter struct {
 
 var _ Provisioner = (*OpenRouter)(nil)
 
-func New(logger *slog.Logger, tracerProvider trace.TracerProvider, guardianPolicy *guardian.Policy, db *pgxpool.Pool, env string, provisioningKey string, refresher KeyRefresher, featureClient *productfeatures.Client, tracking billing.Tracker, enc *encryption.Client) *OpenRouter {
+// Option customizes an OpenRouter client without changing production defaults.
+type Option func(*OpenRouter)
+
+// WithBaseURL overrides the production OpenRouter endpoint.
+func WithBaseURL(baseURL string) Option {
+	return func(openRouter *OpenRouter) {
+		openRouter.baseURL = baseURL
+	}
+}
+
+func New(logger *slog.Logger, tracerProvider trace.TracerProvider, guardianPolicy *guardian.Policy, db *pgxpool.Pool, env string, provisioningKey string, refresher KeyRefresher, featureClient *productfeatures.Client, tracking billing.Tracker, enc *encryption.Client, options ...Option) *OpenRouter {
 	orClient := guardianPolicy.PooledClient(guardian.WithDefaultRetryConfig())
 
-	return &OpenRouter{
+	openRouter := &OpenRouter{
 		provisioningKey: provisioningKey,
 		env:             env,
 		logger:          logger.With(attr.SlogComponent("openrouter")),
@@ -401,6 +411,11 @@ func New(logger *slog.Logger, tracerProvider trace.TracerProvider, guardianPolic
 		enc:             enc,
 		baseURL:         OpenRouterBaseURL,
 	}
+	for _, option := range options {
+		option(openRouter)
+	}
+
+	return openRouter
 }
 
 // keyMaterial resolves the usable API key for a row by decrypting the
