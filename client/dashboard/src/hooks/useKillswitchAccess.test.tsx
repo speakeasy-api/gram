@@ -37,14 +37,19 @@ beforeEach(() => {
 });
 
 describe("useKillswitchAccess", () => {
-  it("waits without granting access while RBAC or rollout state loads", () => {
-    mocks.featureFlags.status = "loading";
-    expect(renderHook(() => useKillswitchAccess()).result.current).toEqual({
-      canAccess: false,
-      isLoading: true,
-      reason: "loading",
-    });
-  });
+  it.each(["rbac", "rollout"] as const)(
+    "waits without granting access while %s state loads",
+    (loadingState) => {
+      mocks.rbac.isLoading = loadingState === "rbac";
+      mocks.featureFlags.status =
+        loadingState === "rollout" ? "loading" : "ready";
+      expect(renderHook(() => useKillswitchAccess()).result.current).toEqual({
+        canAccess: false,
+        isLoading: true,
+        reason: "loading",
+      });
+    },
+  );
 
   it.each(["error", "ready"] as const)(
     "fails hidden when rollout state is %s and the flag is unavailable",
