@@ -283,11 +283,54 @@ func TamperDemoRows(ctx context.Context, db *pgxpool.Pool, ch driver.Conn, orgID
 		return fmt.Errorf("tamper postgres api key: %w", err)
 	}
 
+	if err := PlantMCPServerDependents(ctx, db, orgID, projectID); err != nil {
+		return fmt.Errorf("tamper postgres MCP server dependents: %w", err)
+	}
+
 	err = ch.Exec(ctx, fmt.Sprintf(`
 		INSERT INTO telemetry_logs
 		SELECT * FROM telemetry_logs WHERE gram_project_id = toUUID('%s') LIMIT 1`, projectID))
 	if err != nil {
 		return fmt.Errorf("tamper clickhouse telemetry row: %w", err)
+	}
+	return nil
+}
+
+// PlantMCPServerDependents adds the realistic tenant-owned rows that block a
+// hard MCP server delete unless reseed cleanup removes them in FK order.
+func PlantMCPServerDependents(ctx context.Context, db *pgxpool.Pool, orgID, projectID string) error {
+	tag, err := db.Exec(ctx, `
+		WITH target_server AS MATERIALIZED (
+			SELECT id FROM mcp_servers WHERE project_id = $2::uuid ORDER BY id LIMIT 1
+		), new_assistant AS (
+			INSERT INTO assistants (project_id, organization_id, name, model, instructions)
+			VALUES ($2::uuid, $1, 'Reseed safety assistant', 'openai/gpt-4o-mini', 'Test reseed cleanup.')
+			RETURNING id
+		), assistant_attachment AS (
+			INSERT INTO assistant_mcp_servers (assistant_id, mcp_server_id, project_id)
+			SELECT new_assistant.id, target_server.id, $2::uuid
+			FROM new_assistant CROSS JOIN target_server
+		), new_plugin AS (
+			INSERT INTO plugins (organization_id, project_id, name, slug)
+			VALUES ($1, $2::uuid, 'Reseed safety plugin', 'reseed-safety-plugin')
+			RETURNING id
+		), plugin_attachment AS (
+			INSERT INTO plugin_servers (plugin_id, mcp_server_id, display_name)
+			SELECT new_plugin.id, target_server.id, 'Reseed safety server'
+			FROM new_plugin CROSS JOIN target_server
+		)
+		INSERT INTO platform_mcp_catalog_registrations (
+			organization_id, project_id, source_kind, catalog_provider,
+			catalog_reference, status, mcp_server_id, acting_surface
+		)
+		SELECT $1, $2::uuid, 'catalog', 'reseed-safety',
+			'reseed-safety-server', 'ready', target_server.id, 'dashboard'
+		FROM target_server`, orgID, projectID)
+	if err != nil {
+		return fmt.Errorf("plant MCP server dependents: %w", err)
+	}
+	if tag.RowsAffected() != 1 {
+		return fmt.Errorf("plant MCP server dependents: expected 1 catalog registration, got %d", tag.RowsAffected())
 	}
 	return nil
 }

@@ -85,8 +85,12 @@ func TestDemoSeedSafety(t *testing.T) {
 	pgBaseline, err := demoseedtest.SnapshotPostgres(ctx, db)
 	require.NoError(t, err)
 
-	// Provision the other tenant from the transformed seed scripts.
+	// Provision the other tenant from the transformed seed scripts, including
+	// realistic MCP server dependents that the demo cleanup must not touch.
 	require.NoError(t, demoseedtest.ExecPostgresScript(ctx, db, asOtherTenant(t, postgresSQL)))
+	require.NoError(t, demoseedtest.PlantMCPServerDependents(
+		ctx, db, otherTenantSpec.OrgID, otherTenantSpec.ProjectID(),
+	))
 	require.NoError(t, demoseedtest.ExecClickHouseStatements(ctx, ch, splitStatements(asOtherTenant(t, clickhouseSQL))))
 
 	demoProjects := []string{DefaultSpec().ProjectID()}

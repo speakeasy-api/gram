@@ -186,6 +186,9 @@ describe("Killswitch user status", () => {
         thirdChunk[0]!,
       ),
     );
+    expect(screen.getByTestId("badges").textContent?.split(",")).toContain(
+      "user-1",
+    );
     expect(screen.getByTestId("unavailable").textContent?.split(",")).toEqual(
       firstTwoChunks[1],
     );
