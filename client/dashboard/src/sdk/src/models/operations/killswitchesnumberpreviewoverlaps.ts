@@ -5,10 +5,10 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import {
-  PreviewOverlapsRequestBody,
-  PreviewOverlapsRequestBody$Outbound,
-  PreviewOverlapsRequestBody$outboundSchema,
-} from "../components/previewoverlapsrequestbody.js";
+  KillswitchPreviewOverlapsRequest,
+  KillswitchPreviewOverlapsRequest$Outbound,
+  KillswitchPreviewOverlapsRequest$outboundSchema,
+} from "../components/killswitchpreviewoverlapsrequest.js";
 
 export type KillswitchesNumberPreviewOverlapsSecurity = {
   sessionHeaderGramSession?: string | undefined;
@@ -19,7 +19,7 @@ export type KillswitchesNumberPreviewOverlapsRequest = {
    * Session header
    */
   gramSession?: string | undefined;
-  previewOverlapsRequestBody: PreviewOverlapsRequestBody;
+  killswitchPreviewOverlapsRequest: KillswitchPreviewOverlapsRequest;
 };
 
 /** @internal */
@@ -57,7 +57,7 @@ export function killswitchesNumberPreviewOverlapsSecurityToJSON(
 /** @internal */
 export type KillswitchesNumberPreviewOverlapsRequest$Outbound = {
   "Gram-Session"?: string | undefined;
-  PreviewOverlapsRequestBody: PreviewOverlapsRequestBody$Outbound;
+  KillswitchPreviewOverlapsRequest: KillswitchPreviewOverlapsRequest$Outbound;
 };
 
 /** @internal */
@@ -68,12 +68,13 @@ export const KillswitchesNumberPreviewOverlapsRequest$outboundSchema:
   > = z.pipe(
     z.object({
       gramSession: z.optional(z.string()),
-      previewOverlapsRequestBody: PreviewOverlapsRequestBody$outboundSchema,
+      killswitchPreviewOverlapsRequest:
+        KillswitchPreviewOverlapsRequest$outboundSchema,
     }),
     z.transform((v) => {
       return remap$(v, {
         gramSession: "Gram-Session",
-        previewOverlapsRequestBody: "PreviewOverlapsRequestBody",
+        killswitchPreviewOverlapsRequest: "KillswitchPreviewOverlapsRequest",
       });
     }),
   );

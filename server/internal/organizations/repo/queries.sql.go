@@ -1065,7 +1065,7 @@ WHERE our.user_id = $1
   AND our.organization_id = $2
   AND our.deleted_at IS NULL
   AND u.deleted_at IS NULL
-FOR KEY SHARE OF our, u
+FOR SHARE OF our, u
 `
 
 type LockActiveOrganizationUserParams struct {

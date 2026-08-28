@@ -115,9 +115,15 @@ func BuildListPayload(killswitchesListCapabilityKey string, killswitchesListUser
 		}
 	}
 	v := &killswitches.ListPayload{}
-	v.CapabilityKey = capabilityKey
+	if capabilityKey != nil {
+		tmpcapabilityKey := killswitches.KillswitchCapabilityKey(*capabilityKey)
+		v.CapabilityKey = &tmpcapabilityKey
+	}
 	v.UserID = userID
-	v.Status = status
+	if status != nil {
+		tmpstatus := killswitches.KillswitchStatus(*status)
+		v.Status = &tmpstatus
+	}
 	v.Limit = limit
 	v.Cursor = cursor
 	v.SessionToken = sessionToken
@@ -171,12 +177,12 @@ func BuildCreatePayload(killswitchesCreateBody string, killswitchesCreateSession
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.capability_key", body.CapabilityKey, []any{"mcp_tool_calls"}))
 		}
 		if body.Scope != nil {
-			if err2 := ValidateKillswitchScopeRequestBody(body.Scope); err2 != nil {
+			if err2 := ValidateKillswitchScopeRequestBodyRequestBody(body.Scope); err2 != nil {
 				err = goa.MergeErrors(err, err2)
 			}
 		}
 		if body.Schedule != nil {
-			if err2 := ValidateKillswitchScheduleRequestBody(body.Schedule); err2 != nil {
+			if err2 := ValidateKillswitchScheduleRequestBodyRequestBody(body.Schedule); err2 != nil {
 				err = goa.MergeErrors(err, err2)
 			}
 		}
@@ -198,16 +204,16 @@ func BuildCreatePayload(killswitchesCreateBody string, killswitchesCreateSession
 	}
 	v := &killswitches.CreatePayload{
 		OperationID:   body.OperationID,
-		CapabilityKey: body.CapabilityKey,
+		CapabilityKey: killswitches.KillswitchCapabilityKey(body.CapabilityKey),
 		UserID:        body.UserID,
 		ExternalNote:  body.ExternalNote,
 		InternalNote:  body.InternalNote,
 	}
 	if body.Scope != nil {
-		v.Scope = marshalKillswitchScopeRequestBodyToKillswitchesKillswitchScope(body.Scope)
+		v.Scope = marshalKillswitchScopeRequestBodyRequestBodyToKillswitchesKillswitchScope(body.Scope)
 	}
 	if body.Schedule != nil {
-		v.Schedule = marshalKillswitchScheduleRequestBodyToKillswitchesKillswitchSchedule(body.Schedule)
+		v.Schedule = marshalKillswitchScheduleRequestBodyRequestBodyToKillswitchesKillswitchSchedule(body.Schedule)
 	}
 	v.SessionToken = sessionToken
 
@@ -233,12 +239,12 @@ func BuildEditPayload(killswitchesEditBody string, killswitchesEditSessionToken 
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.operation_id", body.OperationID, goa.FormatUUID))
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", body.ID, goa.FormatUUID))
 		if body.Scope != nil {
-			if err2 := ValidateKillswitchScopeRequestBody(body.Scope); err2 != nil {
+			if err2 := ValidateKillswitchScopeRequestBodyRequestBody(body.Scope); err2 != nil {
 				err = goa.MergeErrors(err, err2)
 			}
 		}
 		if body.Schedule != nil {
-			if err2 := ValidateKillswitchScheduleRequestBody(body.Schedule); err2 != nil {
+			if err2 := ValidateKillswitchScheduleRequestBodyRequestBody(body.Schedule); err2 != nil {
 				err = goa.MergeErrors(err, err2)
 			}
 		}
@@ -266,10 +272,10 @@ func BuildEditPayload(killswitchesEditBody string, killswitchesEditSessionToken 
 		InternalNote:    body.InternalNote,
 	}
 	if body.Scope != nil {
-		v.Scope = marshalKillswitchScopeRequestBodyToKillswitchesKillswitchScope(body.Scope)
+		v.Scope = marshalKillswitchScopeRequestBodyRequestBodyToKillswitchesKillswitchScope(body.Scope)
 	}
 	if body.Schedule != nil {
-		v.Schedule = marshalKillswitchScheduleRequestBodyToKillswitchesKillswitchSchedule(body.Schedule)
+		v.Schedule = marshalKillswitchScheduleRequestBodyRequestBodyToKillswitchesKillswitchSchedule(body.Schedule)
 	}
 	v.SessionToken = sessionToken
 
@@ -331,12 +337,12 @@ func BuildPreviewOverlapsPayload(killswitchesPreviewOverlapsBody string, killswi
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.capability_key", body.CapabilityKey, []any{"mcp_tool_calls"}))
 		}
 		if body.Scope != nil {
-			if err2 := ValidateKillswitchScopeRequestBody(body.Scope); err2 != nil {
+			if err2 := ValidateKillswitchScopeRequestBodyRequestBody(body.Scope); err2 != nil {
 				err = goa.MergeErrors(err, err2)
 			}
 		}
 		if body.Schedule != nil {
-			if err2 := ValidateKillswitchScheduleRequestBody(body.Schedule); err2 != nil {
+			if err2 := ValidateKillswitchScheduleRequestBodyRequestBody(body.Schedule); err2 != nil {
 				err = goa.MergeErrors(err, err2)
 			}
 		}
@@ -352,14 +358,14 @@ func BuildPreviewOverlapsPayload(killswitchesPreviewOverlapsBody string, killswi
 	}
 	v := &killswitches.PreviewOverlapsPayload{
 		ID:            body.ID,
-		CapabilityKey: body.CapabilityKey,
+		CapabilityKey: killswitches.KillswitchCapabilityKey(body.CapabilityKey),
 		UserID:        body.UserID,
 	}
 	if body.Scope != nil {
-		v.Scope = marshalKillswitchScopeRequestBodyToKillswitchesKillswitchScope(body.Scope)
+		v.Scope = marshalKillswitchScopeRequestBodyRequestBodyToKillswitchesKillswitchScope(body.Scope)
 	}
 	if body.Schedule != nil {
-		v.Schedule = marshalKillswitchScheduleRequestBodyToKillswitchesKillswitchSchedule(body.Schedule)
+		v.Schedule = marshalKillswitchScheduleRequestBodyRequestBodyToKillswitchesKillswitchSchedule(body.Schedule)
 	}
 	v.SessionToken = sessionToken
 

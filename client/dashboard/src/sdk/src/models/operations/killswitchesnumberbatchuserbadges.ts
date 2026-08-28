@@ -5,10 +5,10 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import {
-  BatchUserBadgesRequestBody,
-  BatchUserBadgesRequestBody$Outbound,
-  BatchUserBadgesRequestBody$outboundSchema,
-} from "../components/batchuserbadgesrequestbody.js";
+  KillswitchBatchUserBadgesRequest,
+  KillswitchBatchUserBadgesRequest$Outbound,
+  KillswitchBatchUserBadgesRequest$outboundSchema,
+} from "../components/killswitchbatchuserbadgesrequest.js";
 
 export type KillswitchesNumberBatchUserBadgesSecurity = {
   sessionHeaderGramSession?: string | undefined;
@@ -19,7 +19,7 @@ export type KillswitchesNumberBatchUserBadgesRequest = {
    * Session header
    */
   gramSession?: string | undefined;
-  batchUserBadgesRequestBody: BatchUserBadgesRequestBody;
+  killswitchBatchUserBadgesRequest: KillswitchBatchUserBadgesRequest;
 };
 
 /** @internal */
@@ -57,7 +57,7 @@ export function killswitchesNumberBatchUserBadgesSecurityToJSON(
 /** @internal */
 export type KillswitchesNumberBatchUserBadgesRequest$Outbound = {
   "Gram-Session"?: string | undefined;
-  BatchUserBadgesRequestBody: BatchUserBadgesRequestBody$Outbound;
+  KillswitchBatchUserBadgesRequest: KillswitchBatchUserBadgesRequest$Outbound;
 };
 
 /** @internal */
@@ -68,12 +68,13 @@ export const KillswitchesNumberBatchUserBadgesRequest$outboundSchema:
   > = z.pipe(
     z.object({
       gramSession: z.optional(z.string()),
-      batchUserBadgesRequestBody: BatchUserBadgesRequestBody$outboundSchema,
+      killswitchBatchUserBadgesRequest:
+        KillswitchBatchUserBadgesRequest$outboundSchema,
     }),
     z.transform((v) => {
       return remap$(v, {
         gramSession: "Gram-Session",
-        batchUserBadgesRequestBody: "BatchUserBadgesRequestBody",
+        killswitchBatchUserBadgesRequest: "KillswitchBatchUserBadgesRequest",
       });
     }),
   );

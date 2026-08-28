@@ -48,23 +48,20 @@ func NewClient(listCapabilities, listMCPServers, list, get, create, edit, lift, 
 //   - "forbidden" (type *goa.ServiceError): permission denied
 //   - "bad_request" (type *goa.ServiceError): request is invalid
 //   - "not_found" (type *goa.ServiceError): resource not found
-//   - "conflict" (type *goa.ServiceError): resource already exists
 //   - "unsupported_media" (type *goa.ServiceError): unsupported media type
 //   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
 //   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
 //   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
 //   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
-//   - "operation_conflict" (type *goa.ServiceError): The operation ID was already used for a different request.
-//   - "version_conflict" (type *goa.ServiceError): The killswitch changed after the supplied version.
 //   - "unavailable" (type *goa.ServiceError): service temporarily unavailable
 //   - error: internal error
-func (c *Client) ListCapabilities(ctx context.Context, p *ListCapabilitiesPayload) (res *ListCapabilitiesResult, err error) {
+func (c *Client) ListCapabilities(ctx context.Context, p *ListCapabilitiesPayload) (res *KillswitchListCapabilitiesResult, err error) {
 	var ires any
 	ires, err = c.ListCapabilitiesEndpoint(ctx, p)
 	if err != nil {
 		return
 	}
-	return ires.(*ListCapabilitiesResult), nil
+	return ires.(*KillswitchListCapabilitiesResult), nil
 }
 
 // ListMCPServers calls the "listMCPServers" endpoint of the "killswitches"
@@ -74,23 +71,20 @@ func (c *Client) ListCapabilities(ctx context.Context, p *ListCapabilitiesPayloa
 //   - "forbidden" (type *goa.ServiceError): permission denied
 //   - "bad_request" (type *goa.ServiceError): request is invalid
 //   - "not_found" (type *goa.ServiceError): resource not found
-//   - "conflict" (type *goa.ServiceError): resource already exists
 //   - "unsupported_media" (type *goa.ServiceError): unsupported media type
 //   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
 //   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
 //   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
 //   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
-//   - "operation_conflict" (type *goa.ServiceError): The operation ID was already used for a different request.
-//   - "version_conflict" (type *goa.ServiceError): The killswitch changed after the supplied version.
 //   - "unavailable" (type *goa.ServiceError): service temporarily unavailable
 //   - error: internal error
-func (c *Client) ListMCPServers(ctx context.Context, p *ListMCPServersPayload) (res *ListMCPServersResult, err error) {
+func (c *Client) ListMCPServers(ctx context.Context, p *ListMCPServersPayload) (res *KillswitchListMCPServersResult, err error) {
 	var ires any
 	ires, err = c.ListMCPServersEndpoint(ctx, p)
 	if err != nil {
 		return
 	}
-	return ires.(*ListMCPServersResult), nil
+	return ires.(*KillswitchListMCPServersResult), nil
 }
 
 // List calls the "list" endpoint of the "killswitches" service.
@@ -99,23 +93,20 @@ func (c *Client) ListMCPServers(ctx context.Context, p *ListMCPServersPayload) (
 //   - "forbidden" (type *goa.ServiceError): permission denied
 //   - "bad_request" (type *goa.ServiceError): request is invalid
 //   - "not_found" (type *goa.ServiceError): resource not found
-//   - "conflict" (type *goa.ServiceError): resource already exists
 //   - "unsupported_media" (type *goa.ServiceError): unsupported media type
 //   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
 //   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
 //   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
 //   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
-//   - "operation_conflict" (type *goa.ServiceError): The operation ID was already used for a different request.
-//   - "version_conflict" (type *goa.ServiceError): The killswitch changed after the supplied version.
 //   - "unavailable" (type *goa.ServiceError): service temporarily unavailable
 //   - error: internal error
-func (c *Client) List(ctx context.Context, p *ListPayload) (res *ListResult, err error) {
+func (c *Client) List(ctx context.Context, p *ListPayload) (res *KillswitchListResult, err error) {
 	var ires any
 	ires, err = c.ListEndpoint(ctx, p)
 	if err != nil {
 		return
 	}
-	return ires.(*ListResult), nil
+	return ires.(*KillswitchListResult), nil
 }
 
 // Get calls the "get" endpoint of the "killswitches" service.
@@ -124,14 +115,11 @@ func (c *Client) List(ctx context.Context, p *ListPayload) (res *ListResult, err
 //   - "forbidden" (type *goa.ServiceError): permission denied
 //   - "bad_request" (type *goa.ServiceError): request is invalid
 //   - "not_found" (type *goa.ServiceError): resource not found
-//   - "conflict" (type *goa.ServiceError): resource already exists
 //   - "unsupported_media" (type *goa.ServiceError): unsupported media type
 //   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
 //   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
 //   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
 //   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
-//   - "operation_conflict" (type *goa.ServiceError): The operation ID was already used for a different request.
-//   - "version_conflict" (type *goa.ServiceError): The killswitch changed after the supplied version.
 //   - "unavailable" (type *goa.ServiceError): service temporarily unavailable
 //   - error: internal error
 func (c *Client) Get(ctx context.Context, p *GetPayload) (res *KillswitchDetail, err error) {
@@ -145,77 +133,73 @@ func (c *Client) Get(ctx context.Context, p *GetPayload) (res *KillswitchDetail,
 
 // Create calls the "create" endpoint of the "killswitches" service.
 // Create may return the following errors:
+//   - "operation_conflict" (type *KillswitchConflict): The operation ID was already used for a different request.
 //   - "unauthorized" (type *goa.ServiceError): unauthorized access
 //   - "forbidden" (type *goa.ServiceError): permission denied
 //   - "bad_request" (type *goa.ServiceError): request is invalid
 //   - "not_found" (type *goa.ServiceError): resource not found
-//   - "conflict" (type *goa.ServiceError): resource already exists
 //   - "unsupported_media" (type *goa.ServiceError): unsupported media type
 //   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
 //   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
 //   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
 //   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
-//   - "operation_conflict" (type *goa.ServiceError): The operation ID was already used for a different request.
-//   - "version_conflict" (type *goa.ServiceError): The killswitch changed after the supplied version.
 //   - "unavailable" (type *goa.ServiceError): service temporarily unavailable
 //   - error: internal error
-func (c *Client) Create(ctx context.Context, p *CreatePayload) (res *KillswitchMutationResult, err error) {
+func (c *Client) Create(ctx context.Context, p *CreatePayload) (res *KillswitchMutationReceipt, err error) {
 	var ires any
 	ires, err = c.CreateEndpoint(ctx, p)
 	if err != nil {
 		return
 	}
-	return ires.(*KillswitchMutationResult), nil
+	return ires.(*KillswitchMutationReceipt), nil
 }
 
 // Edit calls the "edit" endpoint of the "killswitches" service.
 // Edit may return the following errors:
+//   - "operation_conflict" (type *KillswitchConflict): The operation ID was already used for a different request.
+//   - "version_conflict" (type *KillswitchConflict): The killswitch changed after the supplied version.
 //   - "unauthorized" (type *goa.ServiceError): unauthorized access
 //   - "forbidden" (type *goa.ServiceError): permission denied
 //   - "bad_request" (type *goa.ServiceError): request is invalid
 //   - "not_found" (type *goa.ServiceError): resource not found
-//   - "conflict" (type *goa.ServiceError): resource already exists
 //   - "unsupported_media" (type *goa.ServiceError): unsupported media type
 //   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
 //   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
 //   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
 //   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
-//   - "operation_conflict" (type *goa.ServiceError): The operation ID was already used for a different request.
-//   - "version_conflict" (type *goa.ServiceError): The killswitch changed after the supplied version.
 //   - "unavailable" (type *goa.ServiceError): service temporarily unavailable
 //   - error: internal error
-func (c *Client) Edit(ctx context.Context, p *EditPayload) (res *KillswitchMutationResult, err error) {
+func (c *Client) Edit(ctx context.Context, p *EditPayload) (res *KillswitchMutationReceipt, err error) {
 	var ires any
 	ires, err = c.EditEndpoint(ctx, p)
 	if err != nil {
 		return
 	}
-	return ires.(*KillswitchMutationResult), nil
+	return ires.(*KillswitchMutationReceipt), nil
 }
 
 // Lift calls the "lift" endpoint of the "killswitches" service.
 // Lift may return the following errors:
+//   - "operation_conflict" (type *KillswitchConflict): The operation ID was already used for a different request.
+//   - "version_conflict" (type *KillswitchConflict): The killswitch changed after the supplied version.
 //   - "unauthorized" (type *goa.ServiceError): unauthorized access
 //   - "forbidden" (type *goa.ServiceError): permission denied
 //   - "bad_request" (type *goa.ServiceError): request is invalid
 //   - "not_found" (type *goa.ServiceError): resource not found
-//   - "conflict" (type *goa.ServiceError): resource already exists
 //   - "unsupported_media" (type *goa.ServiceError): unsupported media type
 //   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
 //   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
 //   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
 //   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
-//   - "operation_conflict" (type *goa.ServiceError): The operation ID was already used for a different request.
-//   - "version_conflict" (type *goa.ServiceError): The killswitch changed after the supplied version.
 //   - "unavailable" (type *goa.ServiceError): service temporarily unavailable
 //   - error: internal error
-func (c *Client) Lift(ctx context.Context, p *LiftPayload) (res *LiftResult, err error) {
+func (c *Client) Lift(ctx context.Context, p *LiftPayload) (res *KillswitchLiftResult, err error) {
 	var ires any
 	ires, err = c.LiftEndpoint(ctx, p)
 	if err != nil {
 		return
 	}
-	return ires.(*LiftResult), nil
+	return ires.(*KillswitchLiftResult), nil
 }
 
 // PreviewOverlaps calls the "previewOverlaps" endpoint of the "killswitches"
@@ -225,23 +209,20 @@ func (c *Client) Lift(ctx context.Context, p *LiftPayload) (res *LiftResult, err
 //   - "forbidden" (type *goa.ServiceError): permission denied
 //   - "bad_request" (type *goa.ServiceError): request is invalid
 //   - "not_found" (type *goa.ServiceError): resource not found
-//   - "conflict" (type *goa.ServiceError): resource already exists
 //   - "unsupported_media" (type *goa.ServiceError): unsupported media type
 //   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
 //   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
 //   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
 //   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
-//   - "operation_conflict" (type *goa.ServiceError): The operation ID was already used for a different request.
-//   - "version_conflict" (type *goa.ServiceError): The killswitch changed after the supplied version.
 //   - "unavailable" (type *goa.ServiceError): service temporarily unavailable
 //   - error: internal error
-func (c *Client) PreviewOverlaps(ctx context.Context, p *PreviewOverlapsPayload) (res *PreviewOverlapsResult, err error) {
+func (c *Client) PreviewOverlaps(ctx context.Context, p *PreviewOverlapsPayload) (res *KillswitchPreviewOverlapsResult, err error) {
 	var ires any
 	ires, err = c.PreviewOverlapsEndpoint(ctx, p)
 	if err != nil {
 		return
 	}
-	return ires.(*PreviewOverlapsResult), nil
+	return ires.(*KillswitchPreviewOverlapsResult), nil
 }
 
 // BatchUserBadges calls the "batchUserBadges" endpoint of the "killswitches"
@@ -251,21 +232,18 @@ func (c *Client) PreviewOverlaps(ctx context.Context, p *PreviewOverlapsPayload)
 //   - "forbidden" (type *goa.ServiceError): permission denied
 //   - "bad_request" (type *goa.ServiceError): request is invalid
 //   - "not_found" (type *goa.ServiceError): resource not found
-//   - "conflict" (type *goa.ServiceError): resource already exists
 //   - "unsupported_media" (type *goa.ServiceError): unsupported media type
 //   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
 //   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
 //   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
 //   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
-//   - "operation_conflict" (type *goa.ServiceError): The operation ID was already used for a different request.
-//   - "version_conflict" (type *goa.ServiceError): The killswitch changed after the supplied version.
 //   - "unavailable" (type *goa.ServiceError): service temporarily unavailable
 //   - error: internal error
-func (c *Client) BatchUserBadges(ctx context.Context, p *BatchUserBadgesPayload) (res *BatchUserBadgesResult, err error) {
+func (c *Client) BatchUserBadges(ctx context.Context, p *BatchUserBadgesPayload) (res *KillswitchBatchUserBadgesResult, err error) {
 	var ires any
 	ires, err = c.BatchUserBadgesEndpoint(ctx, p)
 	if err != nil {
 		return
 	}
-	return ires.(*BatchUserBadgesResult), nil
+	return ires.(*KillswitchBatchUserBadgesResult), nil
 }

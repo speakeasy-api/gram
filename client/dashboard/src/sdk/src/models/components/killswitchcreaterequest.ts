@@ -5,6 +5,10 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import {
+  KillswitchCapabilityKey,
+  KillswitchCapabilityKey$outboundSchema,
+} from "./killswitchcapabilitykey.js";
+import {
   KillswitchSchedule,
   KillswitchSchedule$Outbound,
   KillswitchSchedule$outboundSchema,
@@ -15,53 +19,56 @@ import {
   KillswitchScope$outboundSchema,
 } from "./killswitchscope.js";
 
-export type EditRequestBody = {
-  expectedVersion: number;
+export type KillswitchCreateRequest = {
   externalNote: string;
-  id: string;
   internalNote: string;
   operationId: string;
   schedule: KillswitchSchedule;
   scope: KillswitchScope;
+  userId: string;
+  capabilityKey: KillswitchCapabilityKey;
 };
 
 /** @internal */
-export type EditRequestBody$Outbound = {
-  expected_version: number;
+export type KillswitchCreateRequest$Outbound = {
   external_note: string;
-  id: string;
   internal_note: string;
   operation_id: string;
   schedule: KillswitchSchedule$Outbound;
   scope: KillswitchScope$Outbound;
+  user_id: string;
+  capability_key: string;
 };
 
 /** @internal */
-export const EditRequestBody$outboundSchema: z.ZodMiniType<
-  EditRequestBody$Outbound,
-  EditRequestBody
+export const KillswitchCreateRequest$outboundSchema: z.ZodMiniType<
+  KillswitchCreateRequest$Outbound,
+  KillswitchCreateRequest
 > = z.pipe(
   z.object({
-    expectedVersion: z.int(),
     externalNote: z.string(),
-    id: z.string(),
     internalNote: z.string(),
     operationId: z.string(),
     schedule: KillswitchSchedule$outboundSchema,
     scope: KillswitchScope$outboundSchema,
+    userId: z.string(),
+    capabilityKey: KillswitchCapabilityKey$outboundSchema,
   }),
   z.transform((v) => {
     return remap$(v, {
-      expectedVersion: "expected_version",
       externalNote: "external_note",
       internalNote: "internal_note",
       operationId: "operation_id",
+      userId: "user_id",
+      capabilityKey: "capability_key",
     });
   }),
 );
 
-export function editRequestBodyToJSON(
-  editRequestBody: EditRequestBody,
+export function killswitchCreateRequestToJSON(
+  killswitchCreateRequest: KillswitchCreateRequest,
 ): string {
-  return JSON.stringify(EditRequestBody$outboundSchema.parse(editRequestBody));
+  return JSON.stringify(
+    KillswitchCreateRequest$outboundSchema.parse(killswitchCreateRequest),
+  );
 }

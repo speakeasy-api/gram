@@ -11,24 +11,24 @@ import {
   KillswitchUserBadge$inboundSchema,
 } from "./killswitchuserbadge.js";
 
-export type BatchUserBadgesResponseBody = {
+export type KillswitchBatchUserBadgesResult = {
   badges: Array<KillswitchUserBadge>;
 };
 
 /** @internal */
-export const BatchUserBadgesResponseBody$inboundSchema: z.ZodMiniType<
-  BatchUserBadgesResponseBody,
+export const KillswitchBatchUserBadgesResult$inboundSchema: z.ZodMiniType<
+  KillswitchBatchUserBadgesResult,
   unknown
 > = z.object({
   badges: z.array(KillswitchUserBadge$inboundSchema),
 });
 
-export function batchUserBadgesResponseBodyFromJSON(
+export function killswitchBatchUserBadgesResultFromJSON(
   jsonString: string,
-): SafeParseResult<BatchUserBadgesResponseBody, SDKValidationError> {
+): SafeParseResult<KillswitchBatchUserBadgesResult, SDKValidationError> {
   return safeParse(
     jsonString,
-    (x) => BatchUserBadgesResponseBody$inboundSchema.parse(JSON.parse(x)),
-    `Failed to parse 'BatchUserBadgesResponseBody' from JSON`,
+    (x) => KillswitchBatchUserBadgesResult$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'KillswitchBatchUserBadgesResult' from JSON`,
   );
 }

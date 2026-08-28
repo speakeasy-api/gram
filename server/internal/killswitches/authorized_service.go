@@ -56,15 +56,17 @@ type organizationAuthorizer interface {
 // authenticates and authorizes every call before deriving trusted tenancy and
 // actor data. It deliberately has no evaluator dependency.
 type AuthorizedService struct {
-	generic    GenericService
-	authorizer organizationAuthorizer
+	generic        GenericService
+	customerReader customerReadService
+	authorizer     organizationAuthorizer
 }
 
 func NewAuthorizedService(generic GenericService, authorizer organizationAuthorizer) (*AuthorizedService, error) {
 	if isNilInterface(generic) || isNilInterface(authorizer) {
 		return nil, ErrInvalidArgument
 	}
-	return &AuthorizedService{generic: generic, authorizer: authorizer}, nil
+	reader, _ := generic.(customerReadService)
+	return &AuthorizedService{generic: generic, customerReader: reader, authorizer: authorizer}, nil
 }
 
 func (s *AuthorizedService) ListDefinitions(ctx context.Context) ([]Definition, error) {
@@ -150,6 +152,25 @@ func (s *AuthorizedService) ListPrescriptions(ctx context.Context, request Autho
 	result, err := s.generic.ListPrescriptions(ctx, ListPrescriptionsRequest{OrganizationID: principal.organizationID, Limit: request.Limit, AfterID: request.AfterID})
 	if err != nil {
 		return ListPrescriptionsResult{}, fmt.Errorf("list authorized killswitch prescriptions: %w", err)
+	}
+	return result, nil
+}
+
+func (s *AuthorizedService) ListCustomerPrescriptions(ctx context.Context, request AuthorizedListCustomerPrescriptionsRequest) (ListCustomerPrescriptionsResult, error) {
+	principal, err := s.requireCustomerAdmin(ctx)
+	if err != nil {
+		return ListCustomerPrescriptionsResult{}, err
+	}
+	if s.customerReader == nil {
+		return ListCustomerPrescriptionsResult{}, ErrInvalidArgument
+	}
+	result, err := s.customerReader.ListCustomerPrescriptions(ctx, ListCustomerPrescriptionsRequest{
+		OrganizationID: principal.organizationID, Definition: request.Definition, PrincipalKind: request.PrincipalKind,
+		ResourceKind: request.ResourceKind, PrincipalKey: request.PrincipalKey, Status: request.Status,
+		Limit: request.Limit, Cursor: request.Cursor, StatusAsOf: request.StatusAsOf,
+	})
+	if err != nil {
+		return ListCustomerPrescriptionsResult{}, fmt.Errorf("list authorized customer killswitches: %w", err)
 	}
 	return result, nil
 }

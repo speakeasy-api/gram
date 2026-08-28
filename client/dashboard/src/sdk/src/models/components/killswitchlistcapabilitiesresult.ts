@@ -16,14 +16,14 @@ import {
   KillswitchComingSoonCapability$inboundSchema,
 } from "./killswitchcomingsooncapability.js";
 
-export type ListCapabilitiesResponseBody = {
+export type KillswitchListCapabilitiesResult = {
   capabilities: Array<KillswitchCapability>;
   comingSoon: Array<KillswitchComingSoonCapability>;
 };
 
 /** @internal */
-export const ListCapabilitiesResponseBody$inboundSchema: z.ZodMiniType<
-  ListCapabilitiesResponseBody,
+export const KillswitchListCapabilitiesResult$inboundSchema: z.ZodMiniType<
+  KillswitchListCapabilitiesResult,
   unknown
 > = z.pipe(
   z.object({
@@ -37,12 +37,12 @@ export const ListCapabilitiesResponseBody$inboundSchema: z.ZodMiniType<
   }),
 );
 
-export function listCapabilitiesResponseBodyFromJSON(
+export function killswitchListCapabilitiesResultFromJSON(
   jsonString: string,
-): SafeParseResult<ListCapabilitiesResponseBody, SDKValidationError> {
+): SafeParseResult<KillswitchListCapabilitiesResult, SDKValidationError> {
   return safeParse(
     jsonString,
-    (x) => ListCapabilitiesResponseBody$inboundSchema.parse(JSON.parse(x)),
-    `Failed to parse 'ListCapabilitiesResponseBody' from JSON`,
+    (x) => KillswitchListCapabilitiesResult$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'KillswitchListCapabilitiesResult' from JSON`,
   );
 }

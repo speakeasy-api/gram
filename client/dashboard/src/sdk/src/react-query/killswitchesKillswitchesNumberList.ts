@@ -16,6 +16,8 @@ import {
   useSuspenseQuery,
   UseSuspenseQueryResult,
 } from "@tanstack/react-query";
+import { KillswitchCapabilityKey } from "../models/components/killswitchcapabilitykey.js";
+import { KillswitchListStatus } from "../models/components/killswitchliststatus.js";
 import { GramError } from "../models/errors/gramerror.js";
 import {
   ConnectionError,
@@ -28,10 +30,8 @@ import { ResponseValidationError } from "../models/errors/responsevalidationerro
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
 import { ServiceError } from "../models/errors/serviceerror.js";
 import {
-  CapabilityKey,
   KillswitchesNumberListRequest,
   KillswitchesNumberListSecurity,
-  Status,
 } from "../models/operations/killswitchesnumberlist.js";
 import { useGramContext } from "./_context.js";
 import {
@@ -211,9 +211,9 @@ export function setKillswitchesKillswitchesNumberListData(
   client: QueryClient,
   queryKeyBase: [
     parameters: {
-      capabilityKey?: CapabilityKey | undefined;
+      capabilityKey?: KillswitchCapabilityKey | undefined;
       userId?: string | undefined;
-      status?: Status | undefined;
+      status?: KillswitchListStatus | undefined;
       limit?: number | undefined;
       cursor?: string | undefined;
       gramSession?: string | undefined;
@@ -233,9 +233,9 @@ export function invalidateKillswitchesKillswitchesNumberList(
   client: QueryClient,
   queryKeyBase: TupleToPrefixes<
     [parameters: {
-      capabilityKey?: CapabilityKey | undefined;
+      capabilityKey?: KillswitchCapabilityKey | undefined;
       userId?: string | undefined;
-      status?: Status | undefined;
+      status?: KillswitchListStatus | undefined;
       limit?: number | undefined;
       cursor?: string | undefined;
       gramSession?: string | undefined;

@@ -13,9 +13,9 @@ import { RequestOptions } from "../lib/sdks.js";
 import { resolveSecurity } from "../lib/security.js";
 import { pathToFunc } from "../lib/url.js";
 import {
-  PreviewOverlapsResponseBody,
-  PreviewOverlapsResponseBody$inboundSchema,
-} from "../models/components/previewoverlapsresponsebody.js";
+  KillswitchPreviewOverlapsResult,
+  KillswitchPreviewOverlapsResult$inboundSchema,
+} from "../models/components/killswitchpreviewoverlapsresult.js";
 import { GramError } from "../models/errors/gramerror.js";
 import {
   ConnectionError,
@@ -48,7 +48,7 @@ export function killswitchesKillswitchesNumberPreviewOverlaps(
   options?: RequestOptions,
 ): APIPromise<
   Result<
-    PreviewOverlapsResponseBody,
+    KillswitchPreviewOverlapsResult,
     | ServiceError
     | GramError
     | ResponseValidationError
@@ -76,7 +76,7 @@ async function $do(
 ): Promise<
   [
     Result<
-      PreviewOverlapsResponseBody,
+      KillswitchPreviewOverlapsResult,
       | ServiceError
       | GramError
       | ResponseValidationError
@@ -100,7 +100,7 @@ async function $do(
     return [parsed, { status: "invalid" }];
   }
   const payload = parsed.value;
-  const body = encodeJSON("body", payload.PreviewOverlapsRequestBody, {
+  const body = encodeJSON("body", payload.KillswitchPreviewOverlapsRequest, {
     explode: true,
   });
 
@@ -172,7 +172,7 @@ async function $do(
   };
 
   const [result] = await M.match<
-    PreviewOverlapsResponseBody,
+    KillswitchPreviewOverlapsResult,
     | ServiceError
     | GramError
     | ResponseValidationError
@@ -183,8 +183,8 @@ async function $do(
     | UnexpectedClientError
     | SDKValidationError
   >(
-    M.json(200, PreviewOverlapsResponseBody$inboundSchema),
-    M.jsonErr([400, 401, 403, 404, 409, 415, 422], ServiceError$inboundSchema),
+    M.json(200, KillswitchPreviewOverlapsResult$inboundSchema),
+    M.jsonErr([400, 401, 403, 404, 415, 422], ServiceError$inboundSchema),
     M.jsonErr([500, 502, 503], ServiceError$inboundSchema),
     M.fail("4XX"),
     M.fail("5XX"),

@@ -13,9 +13,9 @@ import { RequestOptions } from "../lib/sdks.js";
 import { resolveSecurity } from "../lib/security.js";
 import { pathToFunc } from "../lib/url.js";
 import {
-  LiftResponseBody,
-  LiftResponseBody$inboundSchema,
-} from "../models/components/liftresponsebody.js";
+  KillswitchLiftResult,
+  KillswitchLiftResult$inboundSchema,
+} from "../models/components/killswitchliftresult.js";
 import { GramError } from "../models/errors/gramerror.js";
 import {
   ConnectionError,
@@ -24,6 +24,10 @@ import {
   RequestTimeoutError,
   UnexpectedClientError,
 } from "../models/errors/httpclienterrors.js";
+import {
+  KillswitchConflict,
+  KillswitchConflict$inboundSchema,
+} from "../models/errors/killswitchconflict.js";
 import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
 import {
@@ -48,7 +52,8 @@ export function killswitchesKillswitchesNumberLift(
   options?: RequestOptions,
 ): APIPromise<
   Result<
-    LiftResponseBody,
+    KillswitchLiftResult,
+    | KillswitchConflict
     | ServiceError
     | GramError
     | ResponseValidationError
@@ -76,7 +81,8 @@ async function $do(
 ): Promise<
   [
     Result<
-      LiftResponseBody,
+      KillswitchLiftResult,
+      | KillswitchConflict
       | ServiceError
       | GramError
       | ResponseValidationError
@@ -99,7 +105,9 @@ async function $do(
     return [parsed, { status: "invalid" }];
   }
   const payload = parsed.value;
-  const body = encodeJSON("body", payload.LiftRequestBody, { explode: true });
+  const body = encodeJSON("body", payload.KillswitchLiftRequest, {
+    explode: true,
+  });
 
   const path = pathToFunc("/rpc/killswitches.lift")();
 
@@ -169,7 +177,8 @@ async function $do(
   };
 
   const [result] = await M.match<
-    LiftResponseBody,
+    KillswitchLiftResult,
+    | KillswitchConflict
     | ServiceError
     | GramError
     | ResponseValidationError
@@ -180,8 +189,9 @@ async function $do(
     | UnexpectedClientError
     | SDKValidationError
   >(
-    M.json(200, LiftResponseBody$inboundSchema),
-    M.jsonErr([400, 401, 403, 404, 409, 415, 422], ServiceError$inboundSchema),
+    M.json(200, KillswitchLiftResult$inboundSchema),
+    M.jsonErr(409, KillswitchConflict$inboundSchema),
+    M.jsonErr([400, 401, 403, 404, 415, 422], ServiceError$inboundSchema),
     M.jsonErr([500, 502, 503], ServiceError$inboundSchema),
     M.fail("4XX"),
     M.fail("5XX"),

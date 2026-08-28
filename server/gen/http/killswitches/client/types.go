@@ -15,25 +15,25 @@ import (
 // CreateRequestBody is the type of the "killswitches" service "create"
 // endpoint HTTP request body.
 type CreateRequestBody struct {
-	OperationID   string                         `form:"operation_id" json:"operation_id" xml:"operation_id"`
-	CapabilityKey string                         `form:"capability_key" json:"capability_key" xml:"capability_key"`
-	UserID        string                         `form:"user_id" json:"user_id" xml:"user_id"`
-	Scope         *KillswitchScopeRequestBody    `form:"scope" json:"scope" xml:"scope"`
-	Schedule      *KillswitchScheduleRequestBody `form:"schedule" json:"schedule" xml:"schedule"`
-	ExternalNote  string                         `form:"external_note" json:"external_note" xml:"external_note"`
-	InternalNote  string                         `form:"internal_note" json:"internal_note" xml:"internal_note"`
+	OperationID   string                                    `form:"operation_id" json:"operation_id" xml:"operation_id"`
+	CapabilityKey string                                    `form:"capability_key" json:"capability_key" xml:"capability_key"`
+	UserID        string                                    `form:"user_id" json:"user_id" xml:"user_id"`
+	Scope         *KillswitchScopeRequestBodyRequestBody    `form:"scope" json:"scope" xml:"scope"`
+	Schedule      *KillswitchScheduleRequestBodyRequestBody `form:"schedule" json:"schedule" xml:"schedule"`
+	ExternalNote  string                                    `form:"external_note" json:"external_note" xml:"external_note"`
+	InternalNote  string                                    `form:"internal_note" json:"internal_note" xml:"internal_note"`
 }
 
 // EditRequestBody is the type of the "killswitches" service "edit" endpoint
 // HTTP request body.
 type EditRequestBody struct {
-	OperationID     string                         `form:"operation_id" json:"operation_id" xml:"operation_id"`
-	ID              string                         `form:"id" json:"id" xml:"id"`
-	ExpectedVersion int64                          `form:"expected_version" json:"expected_version" xml:"expected_version"`
-	Scope           *KillswitchScopeRequestBody    `form:"scope" json:"scope" xml:"scope"`
-	Schedule        *KillswitchScheduleRequestBody `form:"schedule" json:"schedule" xml:"schedule"`
-	ExternalNote    string                         `form:"external_note" json:"external_note" xml:"external_note"`
-	InternalNote    string                         `form:"internal_note" json:"internal_note" xml:"internal_note"`
+	OperationID     string                                    `form:"operation_id" json:"operation_id" xml:"operation_id"`
+	ID              string                                    `form:"id" json:"id" xml:"id"`
+	ExpectedVersion int64                                     `form:"expected_version" json:"expected_version" xml:"expected_version"`
+	Scope           *KillswitchScopeRequestBodyRequestBody    `form:"scope" json:"scope" xml:"scope"`
+	Schedule        *KillswitchScheduleRequestBodyRequestBody `form:"schedule" json:"schedule" xml:"schedule"`
+	ExternalNote    string                                    `form:"external_note" json:"external_note" xml:"external_note"`
+	InternalNote    string                                    `form:"internal_note" json:"internal_note" xml:"internal_note"`
 }
 
 // LiftRequestBody is the type of the "killswitches" service "lift" endpoint
@@ -47,11 +47,11 @@ type LiftRequestBody struct {
 // PreviewOverlapsRequestBody is the type of the "killswitches" service
 // "previewOverlaps" endpoint HTTP request body.
 type PreviewOverlapsRequestBody struct {
-	ID            *string                        `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	CapabilityKey string                         `form:"capability_key" json:"capability_key" xml:"capability_key"`
-	UserID        string                         `form:"user_id" json:"user_id" xml:"user_id"`
-	Scope         *KillswitchScopeRequestBody    `form:"scope" json:"scope" xml:"scope"`
-	Schedule      *KillswitchScheduleRequestBody `form:"schedule" json:"schedule" xml:"schedule"`
+	ID            *string                                   `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	CapabilityKey string                                    `form:"capability_key" json:"capability_key" xml:"capability_key"`
+	UserID        string                                    `form:"user_id" json:"user_id" xml:"user_id"`
+	Scope         *KillswitchScopeRequestBodyRequestBody    `form:"scope" json:"scope" xml:"scope"`
+	Schedule      *KillswitchScheduleRequestBodyRequestBody `form:"schedule" json:"schedule" xml:"schedule"`
 }
 
 // BatchUserBadgesRequestBody is the type of the "killswitches" service
@@ -102,7 +102,6 @@ type GetResponseBody struct {
 type CreateResponseBody struct {
 	ID       *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
 	Version  *int64  `form:"version,omitempty" json:"version,omitempty" xml:"version,omitempty"`
-	Status   *string `form:"status,omitempty" json:"status,omitempty" xml:"status,omitempty"`
 	Replayed *bool   `form:"replayed,omitempty" json:"replayed,omitempty" xml:"replayed,omitempty"`
 }
 
@@ -111,15 +110,14 @@ type CreateResponseBody struct {
 type EditResponseBody struct {
 	ID       *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
 	Version  *int64  `form:"version,omitempty" json:"version,omitempty" xml:"version,omitempty"`
-	Status   *string `form:"status,omitempty" json:"status,omitempty" xml:"status,omitempty"`
 	Replayed *bool   `form:"replayed,omitempty" json:"replayed,omitempty" xml:"replayed,omitempty"`
 }
 
 // LiftResponseBody is the type of the "killswitches" service "lift" endpoint
 // HTTP response body.
 type LiftResponseBody struct {
-	Result            *KillswitchMutationResultResponseBody `form:"result,omitempty" json:"result,omitempty" xml:"result,omitempty"`
-	RemainingOverlaps []*KillswitchOverlapResponseBody      `form:"remaining_overlaps,omitempty" json:"remaining_overlaps,omitempty" xml:"remaining_overlaps,omitempty"`
+	Result            *KillswitchMutationReceiptResponseBody `form:"result,omitempty" json:"result,omitempty" xml:"result,omitempty"`
+	RemainingOverlaps []*KillswitchOverlapResponseBody       `form:"remaining_overlaps,omitempty" json:"remaining_overlaps,omitempty" xml:"remaining_overlaps,omitempty"`
 }
 
 // PreviewOverlapsResponseBody is the type of the "killswitches" service
@@ -195,63 +193,6 @@ type ListCapabilitiesBadRequestResponseBody struct {
 // service "listCapabilities" endpoint HTTP response body for the "not_found"
 // error.
 type ListCapabilitiesNotFoundResponseBody struct {
-	// Name is the name of this class of errors.
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-	// Is the error temporary?
-	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
-	// Is the error a timeout?
-	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
-	// Is the error a server-side fault?
-	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
-}
-
-// ListCapabilitiesConflictResponseBody is the type of the "killswitches"
-// service "listCapabilities" endpoint HTTP response body for the "conflict"
-// error.
-type ListCapabilitiesConflictResponseBody struct {
-	// Name is the name of this class of errors.
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-	// Is the error temporary?
-	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
-	// Is the error a timeout?
-	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
-	// Is the error a server-side fault?
-	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
-}
-
-// ListCapabilitiesOperationConflictResponseBody is the type of the
-// "killswitches" service "listCapabilities" endpoint HTTP response body for
-// the "operation_conflict" error.
-type ListCapabilitiesOperationConflictResponseBody struct {
-	// Name is the name of this class of errors.
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-	// Is the error temporary?
-	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
-	// Is the error a timeout?
-	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
-	// Is the error a server-side fault?
-	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
-}
-
-// ListCapabilitiesVersionConflictResponseBody is the type of the
-// "killswitches" service "listCapabilities" endpoint HTTP response body for
-// the "version_conflict" error.
-type ListCapabilitiesVersionConflictResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -456,62 +397,6 @@ type ListMCPServersNotFoundResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// ListMCPServersConflictResponseBody is the type of the "killswitches" service
-// "listMCPServers" endpoint HTTP response body for the "conflict" error.
-type ListMCPServersConflictResponseBody struct {
-	// Name is the name of this class of errors.
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-	// Is the error temporary?
-	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
-	// Is the error a timeout?
-	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
-	// Is the error a server-side fault?
-	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
-}
-
-// ListMCPServersOperationConflictResponseBody is the type of the
-// "killswitches" service "listMCPServers" endpoint HTTP response body for the
-// "operation_conflict" error.
-type ListMCPServersOperationConflictResponseBody struct {
-	// Name is the name of this class of errors.
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-	// Is the error temporary?
-	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
-	// Is the error a timeout?
-	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
-	// Is the error a server-side fault?
-	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
-}
-
-// ListMCPServersVersionConflictResponseBody is the type of the "killswitches"
-// service "listMCPServers" endpoint HTTP response body for the
-// "version_conflict" error.
-type ListMCPServersVersionConflictResponseBody struct {
-	// Name is the name of this class of errors.
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-	// Is the error temporary?
-	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
-	// Is the error a timeout?
-	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
-	// Is the error a server-side fault?
-	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
-}
-
 // ListMCPServersUnsupportedMediaResponseBody is the type of the "killswitches"
 // service "listMCPServers" endpoint HTTP response body for the
 // "unsupported_media" error.
@@ -682,60 +567,6 @@ type ListBadRequestResponseBody struct {
 // ListNotFoundResponseBody is the type of the "killswitches" service "list"
 // endpoint HTTP response body for the "not_found" error.
 type ListNotFoundResponseBody struct {
-	// Name is the name of this class of errors.
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-	// Is the error temporary?
-	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
-	// Is the error a timeout?
-	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
-	// Is the error a server-side fault?
-	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
-}
-
-// ListConflictResponseBody is the type of the "killswitches" service "list"
-// endpoint HTTP response body for the "conflict" error.
-type ListConflictResponseBody struct {
-	// Name is the name of this class of errors.
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-	// Is the error temporary?
-	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
-	// Is the error a timeout?
-	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
-	// Is the error a server-side fault?
-	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
-}
-
-// ListOperationConflictResponseBody is the type of the "killswitches" service
-// "list" endpoint HTTP response body for the "operation_conflict" error.
-type ListOperationConflictResponseBody struct {
-	// Name is the name of this class of errors.
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-	// Is the error temporary?
-	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
-	// Is the error a timeout?
-	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
-	// Is the error a server-side fault?
-	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
-}
-
-// ListVersionConflictResponseBody is the type of the "killswitches" service
-// "list" endpoint HTTP response body for the "version_conflict" error.
-type ListVersionConflictResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -931,60 +762,6 @@ type GetNotFoundResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// GetConflictResponseBody is the type of the "killswitches" service "get"
-// endpoint HTTP response body for the "conflict" error.
-type GetConflictResponseBody struct {
-	// Name is the name of this class of errors.
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-	// Is the error temporary?
-	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
-	// Is the error a timeout?
-	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
-	// Is the error a server-side fault?
-	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
-}
-
-// GetOperationConflictResponseBody is the type of the "killswitches" service
-// "get" endpoint HTTP response body for the "operation_conflict" error.
-type GetOperationConflictResponseBody struct {
-	// Name is the name of this class of errors.
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-	// Is the error temporary?
-	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
-	// Is the error a timeout?
-	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
-	// Is the error a server-side fault?
-	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
-}
-
-// GetVersionConflictResponseBody is the type of the "killswitches" service
-// "get" endpoint HTTP response body for the "version_conflict" error.
-type GetVersionConflictResponseBody struct {
-	// Name is the name of this class of errors.
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-	// Is the error temporary?
-	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
-	// Is the error a timeout?
-	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
-	// Is the error a server-side fault?
-	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
-}
-
 // GetUnsupportedMediaResponseBody is the type of the "killswitches" service
 // "get" endpoint HTTP response body for the "unsupported_media" error.
 type GetUnsupportedMediaResponseBody struct {
@@ -1165,61 +942,6 @@ type CreateNotFoundResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// CreateConflictResponseBody is the type of the "killswitches" service
-// "create" endpoint HTTP response body for the "conflict" error.
-type CreateConflictResponseBody struct {
-	// Name is the name of this class of errors.
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-	// Is the error temporary?
-	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
-	// Is the error a timeout?
-	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
-	// Is the error a server-side fault?
-	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
-}
-
-// CreateOperationConflictResponseBody is the type of the "killswitches"
-// service "create" endpoint HTTP response body for the "operation_conflict"
-// error.
-type CreateOperationConflictResponseBody struct {
-	// Name is the name of this class of errors.
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-	// Is the error temporary?
-	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
-	// Is the error a timeout?
-	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
-	// Is the error a server-side fault?
-	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
-}
-
-// CreateVersionConflictResponseBody is the type of the "killswitches" service
-// "create" endpoint HTTP response body for the "version_conflict" error.
-type CreateVersionConflictResponseBody struct {
-	// Name is the name of this class of errors.
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-	// Is the error temporary?
-	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
-	// Is the error a timeout?
-	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
-	// Is the error a server-side fault?
-	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
-}
-
 // CreateUnsupportedMediaResponseBody is the type of the "killswitches" service
 // "create" endpoint HTTP response body for the "unsupported_media" error.
 type CreateUnsupportedMediaResponseBody struct {
@@ -1329,6 +1051,14 @@ type CreateUnavailableResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
+// CreateOperationConflictResponseBody is the type of the "killswitches"
+// service "create" endpoint HTTP response body for the "operation_conflict"
+// error.
+type CreateOperationConflictResponseBody struct {
+	Name    *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+}
+
 // EditUnauthorizedResponseBody is the type of the "killswitches" service
 // "edit" endpoint HTTP response body for the "unauthorized" error.
 type EditUnauthorizedResponseBody struct {
@@ -1386,60 +1116,6 @@ type EditBadRequestResponseBody struct {
 // EditNotFoundResponseBody is the type of the "killswitches" service "edit"
 // endpoint HTTP response body for the "not_found" error.
 type EditNotFoundResponseBody struct {
-	// Name is the name of this class of errors.
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-	// Is the error temporary?
-	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
-	// Is the error a timeout?
-	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
-	// Is the error a server-side fault?
-	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
-}
-
-// EditConflictResponseBody is the type of the "killswitches" service "edit"
-// endpoint HTTP response body for the "conflict" error.
-type EditConflictResponseBody struct {
-	// Name is the name of this class of errors.
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-	// Is the error temporary?
-	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
-	// Is the error a timeout?
-	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
-	// Is the error a server-side fault?
-	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
-}
-
-// EditOperationConflictResponseBody is the type of the "killswitches" service
-// "edit" endpoint HTTP response body for the "operation_conflict" error.
-type EditOperationConflictResponseBody struct {
-	// Name is the name of this class of errors.
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-	// Is the error temporary?
-	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
-	// Is the error a timeout?
-	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
-	// Is the error a server-side fault?
-	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
-}
-
-// EditVersionConflictResponseBody is the type of the "killswitches" service
-// "edit" endpoint HTTP response body for the "version_conflict" error.
-type EditVersionConflictResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -1563,6 +1239,20 @@ type EditUnavailableResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
+// EditOperationConflictResponseBody is the type of the "killswitches" service
+// "edit" endpoint HTTP response body for the "operation_conflict" error.
+type EditOperationConflictResponseBody struct {
+	Name    *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+}
+
+// EditVersionConflictResponseBody is the type of the "killswitches" service
+// "edit" endpoint HTTP response body for the "version_conflict" error.
+type EditVersionConflictResponseBody struct {
+	Name    *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+}
+
 // LiftUnauthorizedResponseBody is the type of the "killswitches" service
 // "lift" endpoint HTTP response body for the "unauthorized" error.
 type LiftUnauthorizedResponseBody struct {
@@ -1620,60 +1310,6 @@ type LiftBadRequestResponseBody struct {
 // LiftNotFoundResponseBody is the type of the "killswitches" service "lift"
 // endpoint HTTP response body for the "not_found" error.
 type LiftNotFoundResponseBody struct {
-	// Name is the name of this class of errors.
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-	// Is the error temporary?
-	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
-	// Is the error a timeout?
-	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
-	// Is the error a server-side fault?
-	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
-}
-
-// LiftConflictResponseBody is the type of the "killswitches" service "lift"
-// endpoint HTTP response body for the "conflict" error.
-type LiftConflictResponseBody struct {
-	// Name is the name of this class of errors.
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-	// Is the error temporary?
-	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
-	// Is the error a timeout?
-	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
-	// Is the error a server-side fault?
-	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
-}
-
-// LiftOperationConflictResponseBody is the type of the "killswitches" service
-// "lift" endpoint HTTP response body for the "operation_conflict" error.
-type LiftOperationConflictResponseBody struct {
-	// Name is the name of this class of errors.
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-	// Is the error temporary?
-	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
-	// Is the error a timeout?
-	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
-	// Is the error a server-side fault?
-	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
-}
-
-// LiftVersionConflictResponseBody is the type of the "killswitches" service
-// "lift" endpoint HTTP response body for the "version_conflict" error.
-type LiftVersionConflictResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -1797,6 +1433,20 @@ type LiftUnavailableResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
+// LiftOperationConflictResponseBody is the type of the "killswitches" service
+// "lift" endpoint HTTP response body for the "operation_conflict" error.
+type LiftOperationConflictResponseBody struct {
+	Name    *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+}
+
+// LiftVersionConflictResponseBody is the type of the "killswitches" service
+// "lift" endpoint HTTP response body for the "version_conflict" error.
+type LiftVersionConflictResponseBody struct {
+	Name    *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+}
+
 // PreviewOverlapsUnauthorizedResponseBody is the type of the "killswitches"
 // service "previewOverlaps" endpoint HTTP response body for the "unauthorized"
 // error.
@@ -1858,63 +1508,6 @@ type PreviewOverlapsBadRequestResponseBody struct {
 // service "previewOverlaps" endpoint HTTP response body for the "not_found"
 // error.
 type PreviewOverlapsNotFoundResponseBody struct {
-	// Name is the name of this class of errors.
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-	// Is the error temporary?
-	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
-	// Is the error a timeout?
-	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
-	// Is the error a server-side fault?
-	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
-}
-
-// PreviewOverlapsConflictResponseBody is the type of the "killswitches"
-// service "previewOverlaps" endpoint HTTP response body for the "conflict"
-// error.
-type PreviewOverlapsConflictResponseBody struct {
-	// Name is the name of this class of errors.
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-	// Is the error temporary?
-	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
-	// Is the error a timeout?
-	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
-	// Is the error a server-side fault?
-	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
-}
-
-// PreviewOverlapsOperationConflictResponseBody is the type of the
-// "killswitches" service "previewOverlaps" endpoint HTTP response body for the
-// "operation_conflict" error.
-type PreviewOverlapsOperationConflictResponseBody struct {
-	// Name is the name of this class of errors.
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-	// Is the error temporary?
-	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
-	// Is the error a timeout?
-	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
-	// Is the error a server-side fault?
-	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
-}
-
-// PreviewOverlapsVersionConflictResponseBody is the type of the "killswitches"
-// service "previewOverlaps" endpoint HTTP response body for the
-// "version_conflict" error.
-type PreviewOverlapsVersionConflictResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -2119,63 +1712,6 @@ type BatchUserBadgesNotFoundResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// BatchUserBadgesConflictResponseBody is the type of the "killswitches"
-// service "batchUserBadges" endpoint HTTP response body for the "conflict"
-// error.
-type BatchUserBadgesConflictResponseBody struct {
-	// Name is the name of this class of errors.
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-	// Is the error temporary?
-	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
-	// Is the error a timeout?
-	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
-	// Is the error a server-side fault?
-	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
-}
-
-// BatchUserBadgesOperationConflictResponseBody is the type of the
-// "killswitches" service "batchUserBadges" endpoint HTTP response body for the
-// "operation_conflict" error.
-type BatchUserBadgesOperationConflictResponseBody struct {
-	// Name is the name of this class of errors.
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-	// Is the error temporary?
-	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
-	// Is the error a timeout?
-	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
-	// Is the error a server-side fault?
-	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
-}
-
-// BatchUserBadgesVersionConflictResponseBody is the type of the "killswitches"
-// service "batchUserBadges" endpoint HTTP response body for the
-// "version_conflict" error.
-type BatchUserBadgesVersionConflictResponseBody struct {
-	// Name is the name of this class of errors.
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-	// Is the error temporary?
-	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
-	// Is the error a timeout?
-	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
-	// Is the error a server-side fault?
-	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
-}
-
 // BatchUserBadgesUnsupportedMediaResponseBody is the type of the
 // "killswitches" service "batchUserBadges" endpoint HTTP response body for the
 // "unsupported_media" error.
@@ -2354,26 +1890,27 @@ type KillswitchHistoryEventResponseBody struct {
 	ChangedAt        *string                         `form:"changed_at,omitempty" json:"changed_at,omitempty" xml:"changed_at,omitempty"`
 }
 
-// KillswitchScopeRequestBody is used to define fields on request body types.
-type KillswitchScopeRequestBody struct {
+// KillswitchScopeRequestBodyRequestBody is used to define fields on request
+// body types.
+type KillswitchScopeRequestBodyRequestBody struct {
 	Type      string   `form:"type" json:"type" xml:"type"`
 	ServerIds []string `form:"server_ids,omitempty" json:"server_ids,omitempty" xml:"server_ids,omitempty"`
 }
 
-// KillswitchScheduleRequestBody is used to define fields on request body types.
-type KillswitchScheduleRequestBody struct {
+// KillswitchScheduleRequestBodyRequestBody is used to define fields on request
+// body types.
+type KillswitchScheduleRequestBodyRequestBody struct {
 	Start    string  `form:"start" json:"start" xml:"start"`
 	StartsAt *string `form:"starts_at,omitempty" json:"starts_at,omitempty" xml:"starts_at,omitempty"`
 	End      string  `form:"end" json:"end" xml:"end"`
 	EndsAt   *string `form:"ends_at,omitempty" json:"ends_at,omitempty" xml:"ends_at,omitempty"`
 }
 
-// KillswitchMutationResultResponseBody is used to define fields on response
+// KillswitchMutationReceiptResponseBody is used to define fields on response
 // body types.
-type KillswitchMutationResultResponseBody struct {
+type KillswitchMutationReceiptResponseBody struct {
 	ID       *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
 	Version  *int64  `form:"version,omitempty" json:"version,omitempty" xml:"version,omitempty"`
-	Status   *string `form:"status,omitempty" json:"status,omitempty" xml:"status,omitempty"`
 	Replayed *bool   `form:"replayed,omitempty" json:"replayed,omitempty" xml:"replayed,omitempty"`
 }
 
@@ -2400,16 +1937,16 @@ type KillswitchUserBadgeResponseBody struct {
 func NewCreateRequestBody(p *killswitches.CreatePayload) *CreateRequestBody {
 	body := &CreateRequestBody{
 		OperationID:   p.OperationID,
-		CapabilityKey: p.CapabilityKey,
+		CapabilityKey: string(p.CapabilityKey),
 		UserID:        p.UserID,
 		ExternalNote:  p.ExternalNote,
 		InternalNote:  p.InternalNote,
 	}
 	if p.Scope != nil {
-		body.Scope = marshalKillswitchesKillswitchScopeToKillswitchScopeRequestBody(p.Scope)
+		body.Scope = marshalKillswitchesKillswitchScopeToKillswitchScopeRequestBodyRequestBody(p.Scope)
 	}
 	if p.Schedule != nil {
-		body.Schedule = marshalKillswitchesKillswitchScheduleToKillswitchScheduleRequestBody(p.Schedule)
+		body.Schedule = marshalKillswitchesKillswitchScheduleToKillswitchScheduleRequestBodyRequestBody(p.Schedule)
 	}
 	return body
 }
@@ -2425,10 +1962,10 @@ func NewEditRequestBody(p *killswitches.EditPayload) *EditRequestBody {
 		InternalNote:    p.InternalNote,
 	}
 	if p.Scope != nil {
-		body.Scope = marshalKillswitchesKillswitchScopeToKillswitchScopeRequestBody(p.Scope)
+		body.Scope = marshalKillswitchesKillswitchScopeToKillswitchScopeRequestBodyRequestBody(p.Scope)
 	}
 	if p.Schedule != nil {
-		body.Schedule = marshalKillswitchesKillswitchScheduleToKillswitchScheduleRequestBody(p.Schedule)
+		body.Schedule = marshalKillswitchesKillswitchScheduleToKillswitchScheduleRequestBodyRequestBody(p.Schedule)
 	}
 	return body
 }
@@ -2449,14 +1986,14 @@ func NewLiftRequestBody(p *killswitches.LiftPayload) *LiftRequestBody {
 func NewPreviewOverlapsRequestBody(p *killswitches.PreviewOverlapsPayload) *PreviewOverlapsRequestBody {
 	body := &PreviewOverlapsRequestBody{
 		ID:            p.ID,
-		CapabilityKey: p.CapabilityKey,
+		CapabilityKey: string(p.CapabilityKey),
 		UserID:        p.UserID,
 	}
 	if p.Scope != nil {
-		body.Scope = marshalKillswitchesKillswitchScopeToKillswitchScopeRequestBody(p.Scope)
+		body.Scope = marshalKillswitchesKillswitchScopeToKillswitchScopeRequestBodyRequestBody(p.Scope)
 	}
 	if p.Schedule != nil {
-		body.Schedule = marshalKillswitchesKillswitchScheduleToKillswitchScheduleRequestBody(p.Schedule)
+		body.Schedule = marshalKillswitchesKillswitchScheduleToKillswitchScheduleRequestBodyRequestBody(p.Schedule)
 	}
 	return body
 }
@@ -2476,10 +2013,11 @@ func NewBatchUserBadgesRequestBody(p *killswitches.BatchUserBadgesPayload) *Batc
 	return body
 }
 
-// NewListCapabilitiesResultOK builds a "killswitches" service
-// "listCapabilities" endpoint result from a HTTP "OK" response.
-func NewListCapabilitiesResultOK(body *ListCapabilitiesResponseBody) *killswitches.ListCapabilitiesResult {
-	v := &killswitches.ListCapabilitiesResult{}
+// NewListCapabilitiesKillswitchListCapabilitiesResultOK builds a
+// "killswitches" service "listCapabilities" endpoint result from a HTTP "OK"
+// response.
+func NewListCapabilitiesKillswitchListCapabilitiesResultOK(body *ListCapabilitiesResponseBody) *killswitches.KillswitchListCapabilitiesResult {
+	v := &killswitches.KillswitchListCapabilitiesResult{}
 	v.Capabilities = make([]*killswitches.KillswitchCapability, len(body.Capabilities))
 	for i, val := range body.Capabilities {
 		if val == nil {
@@ -2548,51 +2086,6 @@ func NewListCapabilitiesBadRequest(body *ListCapabilitiesBadRequestResponseBody)
 // NewListCapabilitiesNotFound builds a killswitches service listCapabilities
 // endpoint not_found error.
 func NewListCapabilitiesNotFound(body *ListCapabilitiesNotFoundResponseBody) *goa.ServiceError {
-	v := &goa.ServiceError{
-		Name:      *body.Name,
-		ID:        *body.ID,
-		Message:   *body.Message,
-		Temporary: *body.Temporary,
-		Timeout:   *body.Timeout,
-		Fault:     *body.Fault,
-	}
-
-	return v
-}
-
-// NewListCapabilitiesConflict builds a killswitches service listCapabilities
-// endpoint conflict error.
-func NewListCapabilitiesConflict(body *ListCapabilitiesConflictResponseBody) *goa.ServiceError {
-	v := &goa.ServiceError{
-		Name:      *body.Name,
-		ID:        *body.ID,
-		Message:   *body.Message,
-		Temporary: *body.Temporary,
-		Timeout:   *body.Timeout,
-		Fault:     *body.Fault,
-	}
-
-	return v
-}
-
-// NewListCapabilitiesOperationConflict builds a killswitches service
-// listCapabilities endpoint operation_conflict error.
-func NewListCapabilitiesOperationConflict(body *ListCapabilitiesOperationConflictResponseBody) *goa.ServiceError {
-	v := &goa.ServiceError{
-		Name:      *body.Name,
-		ID:        *body.ID,
-		Message:   *body.Message,
-		Temporary: *body.Temporary,
-		Timeout:   *body.Timeout,
-		Fault:     *body.Fault,
-	}
-
-	return v
-}
-
-// NewListCapabilitiesVersionConflict builds a killswitches service
-// listCapabilities endpoint version_conflict error.
-func NewListCapabilitiesVersionConflict(body *ListCapabilitiesVersionConflictResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -2695,10 +2188,10 @@ func NewListCapabilitiesUnavailable(body *ListCapabilitiesUnavailableResponseBod
 	return v
 }
 
-// NewListMCPServersResultOK builds a "killswitches" service "listMCPServers"
-// endpoint result from a HTTP "OK" response.
-func NewListMCPServersResultOK(body *ListMCPServersResponseBody) *killswitches.ListMCPServersResult {
-	v := &killswitches.ListMCPServersResult{}
+// NewListMCPServersKillswitchListMCPServersResultOK builds a "killswitches"
+// service "listMCPServers" endpoint result from a HTTP "OK" response.
+func NewListMCPServersKillswitchListMCPServersResultOK(body *ListMCPServersResponseBody) *killswitches.KillswitchListMCPServersResult {
+	v := &killswitches.KillswitchListMCPServersResult{}
 	v.Servers = make([]*killswitches.KillswitchMCPServer, len(body.Servers))
 	for i, val := range body.Servers {
 		if val == nil {
@@ -2759,51 +2252,6 @@ func NewListMCPServersBadRequest(body *ListMCPServersBadRequestResponseBody) *go
 // NewListMCPServersNotFound builds a killswitches service listMCPServers
 // endpoint not_found error.
 func NewListMCPServersNotFound(body *ListMCPServersNotFoundResponseBody) *goa.ServiceError {
-	v := &goa.ServiceError{
-		Name:      *body.Name,
-		ID:        *body.ID,
-		Message:   *body.Message,
-		Temporary: *body.Temporary,
-		Timeout:   *body.Timeout,
-		Fault:     *body.Fault,
-	}
-
-	return v
-}
-
-// NewListMCPServersConflict builds a killswitches service listMCPServers
-// endpoint conflict error.
-func NewListMCPServersConflict(body *ListMCPServersConflictResponseBody) *goa.ServiceError {
-	v := &goa.ServiceError{
-		Name:      *body.Name,
-		ID:        *body.ID,
-		Message:   *body.Message,
-		Temporary: *body.Temporary,
-		Timeout:   *body.Timeout,
-		Fault:     *body.Fault,
-	}
-
-	return v
-}
-
-// NewListMCPServersOperationConflict builds a killswitches service
-// listMCPServers endpoint operation_conflict error.
-func NewListMCPServersOperationConflict(body *ListMCPServersOperationConflictResponseBody) *goa.ServiceError {
-	v := &goa.ServiceError{
-		Name:      *body.Name,
-		ID:        *body.ID,
-		Message:   *body.Message,
-		Temporary: *body.Temporary,
-		Timeout:   *body.Timeout,
-		Fault:     *body.Fault,
-	}
-
-	return v
-}
-
-// NewListMCPServersVersionConflict builds a killswitches service
-// listMCPServers endpoint version_conflict error.
-func NewListMCPServersVersionConflict(body *ListMCPServersVersionConflictResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -2906,10 +2354,10 @@ func NewListMCPServersUnavailable(body *ListMCPServersUnavailableResponseBody) *
 	return v
 }
 
-// NewListResultOK builds a "killswitches" service "list" endpoint result from
-// a HTTP "OK" response.
-func NewListResultOK(body *ListResponseBody) *killswitches.ListResult {
-	v := &killswitches.ListResult{
+// NewListKillswitchListResultOK builds a "killswitches" service "list"
+// endpoint result from a HTTP "OK" response.
+func NewListKillswitchListResultOK(body *ListResponseBody) *killswitches.KillswitchListResult {
+	v := &killswitches.KillswitchListResult{
 		NextCursor: body.NextCursor,
 	}
 	v.Items = make([]*killswitches.KillswitchSummary, len(body.Items))
@@ -2970,50 +2418,6 @@ func NewListBadRequest(body *ListBadRequestResponseBody) *goa.ServiceError {
 
 // NewListNotFound builds a killswitches service list endpoint not_found error.
 func NewListNotFound(body *ListNotFoundResponseBody) *goa.ServiceError {
-	v := &goa.ServiceError{
-		Name:      *body.Name,
-		ID:        *body.ID,
-		Message:   *body.Message,
-		Temporary: *body.Temporary,
-		Timeout:   *body.Timeout,
-		Fault:     *body.Fault,
-	}
-
-	return v
-}
-
-// NewListConflict builds a killswitches service list endpoint conflict error.
-func NewListConflict(body *ListConflictResponseBody) *goa.ServiceError {
-	v := &goa.ServiceError{
-		Name:      *body.Name,
-		ID:        *body.ID,
-		Message:   *body.Message,
-		Temporary: *body.Temporary,
-		Timeout:   *body.Timeout,
-		Fault:     *body.Fault,
-	}
-
-	return v
-}
-
-// NewListOperationConflict builds a killswitches service list endpoint
-// operation_conflict error.
-func NewListOperationConflict(body *ListOperationConflictResponseBody) *goa.ServiceError {
-	v := &goa.ServiceError{
-		Name:      *body.Name,
-		ID:        *body.ID,
-		Message:   *body.Message,
-		Temporary: *body.Temporary,
-		Timeout:   *body.Timeout,
-		Fault:     *body.Fault,
-	}
-
-	return v
-}
-
-// NewListVersionConflict builds a killswitches service list endpoint
-// version_conflict error.
-func NewListVersionConflict(body *ListVersionConflictResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -3123,11 +2527,11 @@ func NewGetKillswitchDetailOK(body *GetResponseBody) *killswitches.KillswitchDet
 		InternalNote:     *body.InternalNote,
 		HistoryTruncated: *body.HistoryTruncated,
 		ID:               *body.ID,
-		CapabilityKey:    *body.CapabilityKey,
+		CapabilityKey:    killswitches.KillswitchCapabilityKey(*body.CapabilityKey),
 		CapabilityLabel:  *body.CapabilityLabel,
 		UserID:           *body.UserID,
 		Version:          *body.Version,
-		Status:           *body.Status,
+		Status:           killswitches.KillswitchStatus(*body.Status),
 	}
 	v.History = make([]*killswitches.KillswitchHistoryEvent, len(body.History))
 	for i, val := range body.History {
@@ -3189,50 +2593,6 @@ func NewGetBadRequest(body *GetBadRequestResponseBody) *goa.ServiceError {
 
 // NewGetNotFound builds a killswitches service get endpoint not_found error.
 func NewGetNotFound(body *GetNotFoundResponseBody) *goa.ServiceError {
-	v := &goa.ServiceError{
-		Name:      *body.Name,
-		ID:        *body.ID,
-		Message:   *body.Message,
-		Temporary: *body.Temporary,
-		Timeout:   *body.Timeout,
-		Fault:     *body.Fault,
-	}
-
-	return v
-}
-
-// NewGetConflict builds a killswitches service get endpoint conflict error.
-func NewGetConflict(body *GetConflictResponseBody) *goa.ServiceError {
-	v := &goa.ServiceError{
-		Name:      *body.Name,
-		ID:        *body.ID,
-		Message:   *body.Message,
-		Temporary: *body.Temporary,
-		Timeout:   *body.Timeout,
-		Fault:     *body.Fault,
-	}
-
-	return v
-}
-
-// NewGetOperationConflict builds a killswitches service get endpoint
-// operation_conflict error.
-func NewGetOperationConflict(body *GetOperationConflictResponseBody) *goa.ServiceError {
-	v := &goa.ServiceError{
-		Name:      *body.Name,
-		ID:        *body.ID,
-		Message:   *body.Message,
-		Temporary: *body.Temporary,
-		Timeout:   *body.Timeout,
-		Fault:     *body.Fault,
-	}
-
-	return v
-}
-
-// NewGetVersionConflict builds a killswitches service get endpoint
-// version_conflict error.
-func NewGetVersionConflict(body *GetVersionConflictResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -3333,13 +2693,12 @@ func NewGetUnavailable(body *GetUnavailableResponseBody) *goa.ServiceError {
 	return v
 }
 
-// NewCreateKillswitchMutationResultOK builds a "killswitches" service "create"
-// endpoint result from a HTTP "OK" response.
-func NewCreateKillswitchMutationResultOK(body *CreateResponseBody) *killswitches.KillswitchMutationResult {
-	v := &killswitches.KillswitchMutationResult{
+// NewCreateKillswitchMutationReceiptOK builds a "killswitches" service
+// "create" endpoint result from a HTTP "OK" response.
+func NewCreateKillswitchMutationReceiptOK(body *CreateResponseBody) *killswitches.KillswitchMutationReceipt {
+	v := &killswitches.KillswitchMutationReceipt{
 		ID:       *body.ID,
 		Version:  *body.Version,
-		Status:   *body.Status,
 		Replayed: *body.Replayed,
 	}
 
@@ -3394,51 +2753,6 @@ func NewCreateBadRequest(body *CreateBadRequestResponseBody) *goa.ServiceError {
 // NewCreateNotFound builds a killswitches service create endpoint not_found
 // error.
 func NewCreateNotFound(body *CreateNotFoundResponseBody) *goa.ServiceError {
-	v := &goa.ServiceError{
-		Name:      *body.Name,
-		ID:        *body.ID,
-		Message:   *body.Message,
-		Temporary: *body.Temporary,
-		Timeout:   *body.Timeout,
-		Fault:     *body.Fault,
-	}
-
-	return v
-}
-
-// NewCreateConflict builds a killswitches service create endpoint conflict
-// error.
-func NewCreateConflict(body *CreateConflictResponseBody) *goa.ServiceError {
-	v := &goa.ServiceError{
-		Name:      *body.Name,
-		ID:        *body.ID,
-		Message:   *body.Message,
-		Temporary: *body.Temporary,
-		Timeout:   *body.Timeout,
-		Fault:     *body.Fault,
-	}
-
-	return v
-}
-
-// NewCreateOperationConflict builds a killswitches service create endpoint
-// operation_conflict error.
-func NewCreateOperationConflict(body *CreateOperationConflictResponseBody) *goa.ServiceError {
-	v := &goa.ServiceError{
-		Name:      *body.Name,
-		ID:        *body.ID,
-		Message:   *body.Message,
-		Temporary: *body.Temporary,
-		Timeout:   *body.Timeout,
-		Fault:     *body.Fault,
-	}
-
-	return v
-}
-
-// NewCreateVersionConflict builds a killswitches service create endpoint
-// version_conflict error.
-func NewCreateVersionConflict(body *CreateVersionConflictResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -3540,13 +2854,23 @@ func NewCreateUnavailable(body *CreateUnavailableResponseBody) *goa.ServiceError
 	return v
 }
 
-// NewEditKillswitchMutationResultOK builds a "killswitches" service "edit"
+// NewCreateOperationConflict builds a killswitches service create endpoint
+// operation_conflict error.
+func NewCreateOperationConflict(body *CreateOperationConflictResponseBody) *killswitches.KillswitchConflict {
+	v := &killswitches.KillswitchConflict{
+		Name:    *body.Name,
+		Message: *body.Message,
+	}
+
+	return v
+}
+
+// NewEditKillswitchMutationReceiptOK builds a "killswitches" service "edit"
 // endpoint result from a HTTP "OK" response.
-func NewEditKillswitchMutationResultOK(body *EditResponseBody) *killswitches.KillswitchMutationResult {
-	v := &killswitches.KillswitchMutationResult{
+func NewEditKillswitchMutationReceiptOK(body *EditResponseBody) *killswitches.KillswitchMutationReceipt {
+	v := &killswitches.KillswitchMutationReceipt{
 		ID:       *body.ID,
 		Version:  *body.Version,
-		Status:   *body.Status,
 		Replayed: *body.Replayed,
 	}
 
@@ -3599,50 +2923,6 @@ func NewEditBadRequest(body *EditBadRequestResponseBody) *goa.ServiceError {
 
 // NewEditNotFound builds a killswitches service edit endpoint not_found error.
 func NewEditNotFound(body *EditNotFoundResponseBody) *goa.ServiceError {
-	v := &goa.ServiceError{
-		Name:      *body.Name,
-		ID:        *body.ID,
-		Message:   *body.Message,
-		Temporary: *body.Temporary,
-		Timeout:   *body.Timeout,
-		Fault:     *body.Fault,
-	}
-
-	return v
-}
-
-// NewEditConflict builds a killswitches service edit endpoint conflict error.
-func NewEditConflict(body *EditConflictResponseBody) *goa.ServiceError {
-	v := &goa.ServiceError{
-		Name:      *body.Name,
-		ID:        *body.ID,
-		Message:   *body.Message,
-		Temporary: *body.Temporary,
-		Timeout:   *body.Timeout,
-		Fault:     *body.Fault,
-	}
-
-	return v
-}
-
-// NewEditOperationConflict builds a killswitches service edit endpoint
-// operation_conflict error.
-func NewEditOperationConflict(body *EditOperationConflictResponseBody) *goa.ServiceError {
-	v := &goa.ServiceError{
-		Name:      *body.Name,
-		ID:        *body.ID,
-		Message:   *body.Message,
-		Temporary: *body.Temporary,
-		Timeout:   *body.Timeout,
-		Fault:     *body.Fault,
-	}
-
-	return v
-}
-
-// NewEditVersionConflict builds a killswitches service edit endpoint
-// version_conflict error.
-func NewEditVersionConflict(body *EditVersionConflictResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -3744,11 +3024,33 @@ func NewEditUnavailable(body *EditUnavailableResponseBody) *goa.ServiceError {
 	return v
 }
 
-// NewLiftResultOK builds a "killswitches" service "lift" endpoint result from
-// a HTTP "OK" response.
-func NewLiftResultOK(body *LiftResponseBody) *killswitches.LiftResult {
-	v := &killswitches.LiftResult{}
-	v.Result = unmarshalKillswitchMutationResultResponseBodyToKillswitchesKillswitchMutationResult(body.Result)
+// NewEditOperationConflict builds a killswitches service edit endpoint
+// operation_conflict error.
+func NewEditOperationConflict(body *EditOperationConflictResponseBody) *killswitches.KillswitchConflict {
+	v := &killswitches.KillswitchConflict{
+		Name:    *body.Name,
+		Message: *body.Message,
+	}
+
+	return v
+}
+
+// NewEditVersionConflict builds a killswitches service edit endpoint
+// version_conflict error.
+func NewEditVersionConflict(body *EditVersionConflictResponseBody) *killswitches.KillswitchConflict {
+	v := &killswitches.KillswitchConflict{
+		Name:    *body.Name,
+		Message: *body.Message,
+	}
+
+	return v
+}
+
+// NewLiftKillswitchLiftResultOK builds a "killswitches" service "lift"
+// endpoint result from a HTTP "OK" response.
+func NewLiftKillswitchLiftResultOK(body *LiftResponseBody) *killswitches.KillswitchLiftResult {
+	v := &killswitches.KillswitchLiftResult{}
+	v.Result = unmarshalKillswitchMutationReceiptResponseBodyToKillswitchesKillswitchMutationReceipt(body.Result)
 	v.RemainingOverlaps = make([]*killswitches.KillswitchOverlap, len(body.RemainingOverlaps))
 	for i, val := range body.RemainingOverlaps {
 		if val == nil {
@@ -3807,50 +3109,6 @@ func NewLiftBadRequest(body *LiftBadRequestResponseBody) *goa.ServiceError {
 
 // NewLiftNotFound builds a killswitches service lift endpoint not_found error.
 func NewLiftNotFound(body *LiftNotFoundResponseBody) *goa.ServiceError {
-	v := &goa.ServiceError{
-		Name:      *body.Name,
-		ID:        *body.ID,
-		Message:   *body.Message,
-		Temporary: *body.Temporary,
-		Timeout:   *body.Timeout,
-		Fault:     *body.Fault,
-	}
-
-	return v
-}
-
-// NewLiftConflict builds a killswitches service lift endpoint conflict error.
-func NewLiftConflict(body *LiftConflictResponseBody) *goa.ServiceError {
-	v := &goa.ServiceError{
-		Name:      *body.Name,
-		ID:        *body.ID,
-		Message:   *body.Message,
-		Temporary: *body.Temporary,
-		Timeout:   *body.Timeout,
-		Fault:     *body.Fault,
-	}
-
-	return v
-}
-
-// NewLiftOperationConflict builds a killswitches service lift endpoint
-// operation_conflict error.
-func NewLiftOperationConflict(body *LiftOperationConflictResponseBody) *goa.ServiceError {
-	v := &goa.ServiceError{
-		Name:      *body.Name,
-		ID:        *body.ID,
-		Message:   *body.Message,
-		Temporary: *body.Temporary,
-		Timeout:   *body.Timeout,
-		Fault:     *body.Fault,
-	}
-
-	return v
-}
-
-// NewLiftVersionConflict builds a killswitches service lift endpoint
-// version_conflict error.
-func NewLiftVersionConflict(body *LiftVersionConflictResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -3952,10 +3210,32 @@ func NewLiftUnavailable(body *LiftUnavailableResponseBody) *goa.ServiceError {
 	return v
 }
 
-// NewPreviewOverlapsResultOK builds a "killswitches" service "previewOverlaps"
-// endpoint result from a HTTP "OK" response.
-func NewPreviewOverlapsResultOK(body *PreviewOverlapsResponseBody) *killswitches.PreviewOverlapsResult {
-	v := &killswitches.PreviewOverlapsResult{}
+// NewLiftOperationConflict builds a killswitches service lift endpoint
+// operation_conflict error.
+func NewLiftOperationConflict(body *LiftOperationConflictResponseBody) *killswitches.KillswitchConflict {
+	v := &killswitches.KillswitchConflict{
+		Name:    *body.Name,
+		Message: *body.Message,
+	}
+
+	return v
+}
+
+// NewLiftVersionConflict builds a killswitches service lift endpoint
+// version_conflict error.
+func NewLiftVersionConflict(body *LiftVersionConflictResponseBody) *killswitches.KillswitchConflict {
+	v := &killswitches.KillswitchConflict{
+		Name:    *body.Name,
+		Message: *body.Message,
+	}
+
+	return v
+}
+
+// NewPreviewOverlapsKillswitchPreviewOverlapsResultOK builds a "killswitches"
+// service "previewOverlaps" endpoint result from a HTTP "OK" response.
+func NewPreviewOverlapsKillswitchPreviewOverlapsResultOK(body *PreviewOverlapsResponseBody) *killswitches.KillswitchPreviewOverlapsResult {
+	v := &killswitches.KillswitchPreviewOverlapsResult{}
 	v.Overlaps = make([]*killswitches.KillswitchOverlap, len(body.Overlaps))
 	for i, val := range body.Overlaps {
 		if val == nil {
@@ -4016,51 +3296,6 @@ func NewPreviewOverlapsBadRequest(body *PreviewOverlapsBadRequestResponseBody) *
 // NewPreviewOverlapsNotFound builds a killswitches service previewOverlaps
 // endpoint not_found error.
 func NewPreviewOverlapsNotFound(body *PreviewOverlapsNotFoundResponseBody) *goa.ServiceError {
-	v := &goa.ServiceError{
-		Name:      *body.Name,
-		ID:        *body.ID,
-		Message:   *body.Message,
-		Temporary: *body.Temporary,
-		Timeout:   *body.Timeout,
-		Fault:     *body.Fault,
-	}
-
-	return v
-}
-
-// NewPreviewOverlapsConflict builds a killswitches service previewOverlaps
-// endpoint conflict error.
-func NewPreviewOverlapsConflict(body *PreviewOverlapsConflictResponseBody) *goa.ServiceError {
-	v := &goa.ServiceError{
-		Name:      *body.Name,
-		ID:        *body.ID,
-		Message:   *body.Message,
-		Temporary: *body.Temporary,
-		Timeout:   *body.Timeout,
-		Fault:     *body.Fault,
-	}
-
-	return v
-}
-
-// NewPreviewOverlapsOperationConflict builds a killswitches service
-// previewOverlaps endpoint operation_conflict error.
-func NewPreviewOverlapsOperationConflict(body *PreviewOverlapsOperationConflictResponseBody) *goa.ServiceError {
-	v := &goa.ServiceError{
-		Name:      *body.Name,
-		ID:        *body.ID,
-		Message:   *body.Message,
-		Temporary: *body.Temporary,
-		Timeout:   *body.Timeout,
-		Fault:     *body.Fault,
-	}
-
-	return v
-}
-
-// NewPreviewOverlapsVersionConflict builds a killswitches service
-// previewOverlaps endpoint version_conflict error.
-func NewPreviewOverlapsVersionConflict(body *PreviewOverlapsVersionConflictResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -4163,10 +3398,10 @@ func NewPreviewOverlapsUnavailable(body *PreviewOverlapsUnavailableResponseBody)
 	return v
 }
 
-// NewBatchUserBadgesResultOK builds a "killswitches" service "batchUserBadges"
-// endpoint result from a HTTP "OK" response.
-func NewBatchUserBadgesResultOK(body *BatchUserBadgesResponseBody) *killswitches.BatchUserBadgesResult {
-	v := &killswitches.BatchUserBadgesResult{}
+// NewBatchUserBadgesKillswitchBatchUserBadgesResultOK builds a "killswitches"
+// service "batchUserBadges" endpoint result from a HTTP "OK" response.
+func NewBatchUserBadgesKillswitchBatchUserBadgesResultOK(body *BatchUserBadgesResponseBody) *killswitches.KillswitchBatchUserBadgesResult {
+	v := &killswitches.KillswitchBatchUserBadgesResult{}
 	v.Badges = make([]*killswitches.KillswitchUserBadge, len(body.Badges))
 	for i, val := range body.Badges {
 		if val == nil {
@@ -4227,51 +3462,6 @@ func NewBatchUserBadgesBadRequest(body *BatchUserBadgesBadRequestResponseBody) *
 // NewBatchUserBadgesNotFound builds a killswitches service batchUserBadges
 // endpoint not_found error.
 func NewBatchUserBadgesNotFound(body *BatchUserBadgesNotFoundResponseBody) *goa.ServiceError {
-	v := &goa.ServiceError{
-		Name:      *body.Name,
-		ID:        *body.ID,
-		Message:   *body.Message,
-		Temporary: *body.Temporary,
-		Timeout:   *body.Timeout,
-		Fault:     *body.Fault,
-	}
-
-	return v
-}
-
-// NewBatchUserBadgesConflict builds a killswitches service batchUserBadges
-// endpoint conflict error.
-func NewBatchUserBadgesConflict(body *BatchUserBadgesConflictResponseBody) *goa.ServiceError {
-	v := &goa.ServiceError{
-		Name:      *body.Name,
-		ID:        *body.ID,
-		Message:   *body.Message,
-		Temporary: *body.Temporary,
-		Timeout:   *body.Timeout,
-		Fault:     *body.Fault,
-	}
-
-	return v
-}
-
-// NewBatchUserBadgesOperationConflict builds a killswitches service
-// batchUserBadges endpoint operation_conflict error.
-func NewBatchUserBadgesOperationConflict(body *BatchUserBadgesOperationConflictResponseBody) *goa.ServiceError {
-	v := &goa.ServiceError{
-		Name:      *body.Name,
-		ID:        *body.ID,
-		Message:   *body.Message,
-		Temporary: *body.Temporary,
-		Timeout:   *body.Timeout,
-		Fault:     *body.Fault,
-	}
-
-	return v
-}
-
-// NewBatchUserBadgesVersionConflict builds a killswitches service
-// batchUserBadges endpoint version_conflict error.
-func NewBatchUserBadgesVersionConflict(body *BatchUserBadgesVersionConflictResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -4510,19 +3700,11 @@ func ValidateCreateResponseBody(body *CreateResponseBody) (err error) {
 	if body.Version == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("version", "body"))
 	}
-	if body.Status == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("status", "body"))
-	}
 	if body.Replayed == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("replayed", "body"))
 	}
 	if body.ID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", *body.ID, goa.FormatUUID))
-	}
-	if body.Status != nil {
-		if !(*body.Status == "active" || *body.Status == "lifted") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.status", *body.Status, []any{"active", "lifted"}))
-		}
 	}
 	return
 }
@@ -4535,19 +3717,11 @@ func ValidateEditResponseBody(body *EditResponseBody) (err error) {
 	if body.Version == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("version", "body"))
 	}
-	if body.Status == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("status", "body"))
-	}
 	if body.Replayed == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("replayed", "body"))
 	}
 	if body.ID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", *body.ID, goa.FormatUUID))
-	}
-	if body.Status != nil {
-		if !(*body.Status == "active" || *body.Status == "lifted") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.status", *body.Status, []any{"active", "lifted"}))
-		}
 	}
 	return
 }
@@ -4561,7 +3735,7 @@ func ValidateLiftResponseBody(body *LiftResponseBody) (err error) {
 		err = goa.MergeErrors(err, goa.MissingFieldError("remaining_overlaps", "body"))
 	}
 	if body.Result != nil {
-		if err2 := ValidateKillswitchMutationResultResponseBody(body.Result); err2 != nil {
+		if err2 := ValidateKillswitchMutationReceiptResponseBody(body.Result); err2 != nil {
 			err = goa.MergeErrors(err, err2)
 		}
 	}
@@ -4682,78 +3856,6 @@ func ValidateListCapabilitiesBadRequestResponseBody(body *ListCapabilitiesBadReq
 // ValidateListCapabilitiesNotFoundResponseBody runs the validations defined on
 // listCapabilities_not_found_response_body
 func ValidateListCapabilitiesNotFoundResponseBody(body *ListCapabilitiesNotFoundResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidateListCapabilitiesConflictResponseBody runs the validations defined on
-// listCapabilities_conflict_response_body
-func ValidateListCapabilitiesConflictResponseBody(body *ListCapabilitiesConflictResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidateListCapabilitiesOperationConflictResponseBody runs the validations
-// defined on listCapabilities_operation_conflict_response_body
-func ValidateListCapabilitiesOperationConflictResponseBody(body *ListCapabilitiesOperationConflictResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidateListCapabilitiesVersionConflictResponseBody runs the validations
-// defined on listCapabilities_version_conflict_response_body
-func ValidateListCapabilitiesVersionConflictResponseBody(body *ListCapabilitiesVersionConflictResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -5015,78 +4117,6 @@ func ValidateListMCPServersNotFoundResponseBody(body *ListMCPServersNotFoundResp
 	return
 }
 
-// ValidateListMCPServersConflictResponseBody runs the validations defined on
-// listMCPServers_conflict_response_body
-func ValidateListMCPServersConflictResponseBody(body *ListMCPServersConflictResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidateListMCPServersOperationConflictResponseBody runs the validations
-// defined on listMCPServers_operation_conflict_response_body
-func ValidateListMCPServersOperationConflictResponseBody(body *ListMCPServersOperationConflictResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidateListMCPServersVersionConflictResponseBody runs the validations
-// defined on listMCPServers_version_conflict_response_body
-func ValidateListMCPServersVersionConflictResponseBody(body *ListMCPServersVersionConflictResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
 // ValidateListMCPServersUnsupportedMediaResponseBody runs the validations
 // defined on listMCPServers_unsupported_media_response_body
 func ValidateListMCPServersUnsupportedMediaResponseBody(body *ListMCPServersUnsupportedMediaResponseBody) (err error) {
@@ -5306,78 +4336,6 @@ func ValidateListBadRequestResponseBody(body *ListBadRequestResponseBody) (err e
 // ValidateListNotFoundResponseBody runs the validations defined on
 // list_not_found_response_body
 func ValidateListNotFoundResponseBody(body *ListNotFoundResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidateListConflictResponseBody runs the validations defined on
-// list_conflict_response_body
-func ValidateListConflictResponseBody(body *ListConflictResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidateListOperationConflictResponseBody runs the validations defined on
-// list_operation_conflict_response_body
-func ValidateListOperationConflictResponseBody(body *ListOperationConflictResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidateListVersionConflictResponseBody runs the validations defined on
-// list_version_conflict_response_body
-func ValidateListVersionConflictResponseBody(body *ListVersionConflictResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -5639,78 +4597,6 @@ func ValidateGetNotFoundResponseBody(body *GetNotFoundResponseBody) (err error) 
 	return
 }
 
-// ValidateGetConflictResponseBody runs the validations defined on
-// get_conflict_response_body
-func ValidateGetConflictResponseBody(body *GetConflictResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidateGetOperationConflictResponseBody runs the validations defined on
-// get_operation_conflict_response_body
-func ValidateGetOperationConflictResponseBody(body *GetOperationConflictResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidateGetVersionConflictResponseBody runs the validations defined on
-// get_version_conflict_response_body
-func ValidateGetVersionConflictResponseBody(body *GetVersionConflictResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
 // ValidateGetUnsupportedMediaResponseBody runs the validations defined on
 // get_unsupported_media_response_body
 func ValidateGetUnsupportedMediaResponseBody(body *GetUnsupportedMediaResponseBody) (err error) {
@@ -5951,78 +4837,6 @@ func ValidateCreateNotFoundResponseBody(body *CreateNotFoundResponseBody) (err e
 	return
 }
 
-// ValidateCreateConflictResponseBody runs the validations defined on
-// create_conflict_response_body
-func ValidateCreateConflictResponseBody(body *CreateConflictResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidateCreateOperationConflictResponseBody runs the validations defined on
-// create_operation_conflict_response_body
-func ValidateCreateOperationConflictResponseBody(body *CreateOperationConflictResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidateCreateVersionConflictResponseBody runs the validations defined on
-// create_version_conflict_response_body
-func ValidateCreateVersionConflictResponseBody(body *CreateVersionConflictResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
 // ValidateCreateUnsupportedMediaResponseBody runs the validations defined on
 // create_unsupported_media_response_body
 func ValidateCreateUnsupportedMediaResponseBody(body *CreateUnsupportedMediaResponseBody) (err error) {
@@ -6167,6 +4981,23 @@ func ValidateCreateUnavailableResponseBody(body *CreateUnavailableResponseBody) 
 	return
 }
 
+// ValidateCreateOperationConflictResponseBody runs the validations defined on
+// create_operation_conflict_response_body
+func ValidateCreateOperationConflictResponseBody(body *CreateOperationConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Name != nil {
+		if !(*body.Name == "operation_conflict" || *body.Name == "version_conflict") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.name", *body.Name, []any{"operation_conflict", "version_conflict"}))
+		}
+	}
+	return
+}
+
 // ValidateEditUnauthorizedResponseBody runs the validations defined on
 // edit_unauthorized_response_body
 func ValidateEditUnauthorizedResponseBody(body *EditUnauthorizedResponseBody) (err error) {
@@ -6242,78 +5073,6 @@ func ValidateEditBadRequestResponseBody(body *EditBadRequestResponseBody) (err e
 // ValidateEditNotFoundResponseBody runs the validations defined on
 // edit_not_found_response_body
 func ValidateEditNotFoundResponseBody(body *EditNotFoundResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidateEditConflictResponseBody runs the validations defined on
-// edit_conflict_response_body
-func ValidateEditConflictResponseBody(body *EditConflictResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidateEditOperationConflictResponseBody runs the validations defined on
-// edit_operation_conflict_response_body
-func ValidateEditOperationConflictResponseBody(body *EditOperationConflictResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidateEditVersionConflictResponseBody runs the validations defined on
-// edit_version_conflict_response_body
-func ValidateEditVersionConflictResponseBody(body *EditVersionConflictResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -6479,6 +5238,40 @@ func ValidateEditUnavailableResponseBody(body *EditUnavailableResponseBody) (err
 	return
 }
 
+// ValidateEditOperationConflictResponseBody runs the validations defined on
+// edit_operation_conflict_response_body
+func ValidateEditOperationConflictResponseBody(body *EditOperationConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Name != nil {
+		if !(*body.Name == "operation_conflict" || *body.Name == "version_conflict") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.name", *body.Name, []any{"operation_conflict", "version_conflict"}))
+		}
+	}
+	return
+}
+
+// ValidateEditVersionConflictResponseBody runs the validations defined on
+// edit_version_conflict_response_body
+func ValidateEditVersionConflictResponseBody(body *EditVersionConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Name != nil {
+		if !(*body.Name == "operation_conflict" || *body.Name == "version_conflict") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.name", *body.Name, []any{"operation_conflict", "version_conflict"}))
+		}
+	}
+	return
+}
+
 // ValidateLiftUnauthorizedResponseBody runs the validations defined on
 // lift_unauthorized_response_body
 func ValidateLiftUnauthorizedResponseBody(body *LiftUnauthorizedResponseBody) (err error) {
@@ -6554,78 +5347,6 @@ func ValidateLiftBadRequestResponseBody(body *LiftBadRequestResponseBody) (err e
 // ValidateLiftNotFoundResponseBody runs the validations defined on
 // lift_not_found_response_body
 func ValidateLiftNotFoundResponseBody(body *LiftNotFoundResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidateLiftConflictResponseBody runs the validations defined on
-// lift_conflict_response_body
-func ValidateLiftConflictResponseBody(body *LiftConflictResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidateLiftOperationConflictResponseBody runs the validations defined on
-// lift_operation_conflict_response_body
-func ValidateLiftOperationConflictResponseBody(body *LiftOperationConflictResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidateLiftVersionConflictResponseBody runs the validations defined on
-// lift_version_conflict_response_body
-func ValidateLiftVersionConflictResponseBody(body *LiftVersionConflictResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -6791,6 +5512,40 @@ func ValidateLiftUnavailableResponseBody(body *LiftUnavailableResponseBody) (err
 	return
 }
 
+// ValidateLiftOperationConflictResponseBody runs the validations defined on
+// lift_operation_conflict_response_body
+func ValidateLiftOperationConflictResponseBody(body *LiftOperationConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Name != nil {
+		if !(*body.Name == "operation_conflict" || *body.Name == "version_conflict") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.name", *body.Name, []any{"operation_conflict", "version_conflict"}))
+		}
+	}
+	return
+}
+
+// ValidateLiftVersionConflictResponseBody runs the validations defined on
+// lift_version_conflict_response_body
+func ValidateLiftVersionConflictResponseBody(body *LiftVersionConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Name != nil {
+		if !(*body.Name == "operation_conflict" || *body.Name == "version_conflict") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.name", *body.Name, []any{"operation_conflict", "version_conflict"}))
+		}
+	}
+	return
+}
+
 // ValidatePreviewOverlapsUnauthorizedResponseBody runs the validations defined
 // on previewOverlaps_unauthorized_response_body
 func ValidatePreviewOverlapsUnauthorizedResponseBody(body *PreviewOverlapsUnauthorizedResponseBody) (err error) {
@@ -6866,78 +5621,6 @@ func ValidatePreviewOverlapsBadRequestResponseBody(body *PreviewOverlapsBadReque
 // ValidatePreviewOverlapsNotFoundResponseBody runs the validations defined on
 // previewOverlaps_not_found_response_body
 func ValidatePreviewOverlapsNotFoundResponseBody(body *PreviewOverlapsNotFoundResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidatePreviewOverlapsConflictResponseBody runs the validations defined on
-// previewOverlaps_conflict_response_body
-func ValidatePreviewOverlapsConflictResponseBody(body *PreviewOverlapsConflictResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidatePreviewOverlapsOperationConflictResponseBody runs the validations
-// defined on previewOverlaps_operation_conflict_response_body
-func ValidatePreviewOverlapsOperationConflictResponseBody(body *PreviewOverlapsOperationConflictResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidatePreviewOverlapsVersionConflictResponseBody runs the validations
-// defined on previewOverlaps_version_conflict_response_body
-func ValidatePreviewOverlapsVersionConflictResponseBody(body *PreviewOverlapsVersionConflictResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -7178,78 +5861,6 @@ func ValidateBatchUserBadgesBadRequestResponseBody(body *BatchUserBadgesBadReque
 // ValidateBatchUserBadgesNotFoundResponseBody runs the validations defined on
 // batchUserBadges_not_found_response_body
 func ValidateBatchUserBadgesNotFoundResponseBody(body *BatchUserBadgesNotFoundResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidateBatchUserBadgesConflictResponseBody runs the validations defined on
-// batchUserBadges_conflict_response_body
-func ValidateBatchUserBadgesConflictResponseBody(body *BatchUserBadgesConflictResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidateBatchUserBadgesOperationConflictResponseBody runs the validations
-// defined on batchUserBadges_operation_conflict_response_body
-func ValidateBatchUserBadgesOperationConflictResponseBody(body *BatchUserBadgesOperationConflictResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidateBatchUserBadgesVersionConflictResponseBody runs the validations
-// defined on batchUserBadges_version_conflict_response_body
-func ValidateBatchUserBadgesVersionConflictResponseBody(body *BatchUserBadgesVersionConflictResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -7619,9 +6230,9 @@ func ValidateKillswitchHistoryEventResponseBody(body *KillswitchHistoryEventResp
 	return
 }
 
-// ValidateKillswitchScopeRequestBody runs the validations defined on
-// KillswitchScopeRequestBody
-func ValidateKillswitchScopeRequestBody(body *KillswitchScopeRequestBody) (err error) {
+// ValidateKillswitchScopeRequestBodyRequestBody runs the validations defined
+// on KillswitchScopeRequestBodyRequestBody
+func ValidateKillswitchScopeRequestBodyRequestBody(body *KillswitchScopeRequestBodyRequestBody) (err error) {
 	if !(body.Type == "all_servers" || body.Type == "selected_servers") {
 		err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.type", body.Type, []any{"all_servers", "selected_servers"}))
 	}
@@ -7634,9 +6245,9 @@ func ValidateKillswitchScopeRequestBody(body *KillswitchScopeRequestBody) (err e
 	return
 }
 
-// ValidateKillswitchScheduleRequestBody runs the validations defined on
-// KillswitchScheduleRequestBody
-func ValidateKillswitchScheduleRequestBody(body *KillswitchScheduleRequestBody) (err error) {
+// ValidateKillswitchScheduleRequestBodyRequestBody runs the validations
+// defined on KillswitchScheduleRequestBodyRequestBody
+func ValidateKillswitchScheduleRequestBodyRequestBody(body *KillswitchScheduleRequestBodyRequestBody) (err error) {
 	if !(body.Start == "now" || body.Start == "scheduled") {
 		err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.start", body.Start, []any{"now", "scheduled"}))
 	}
@@ -7652,28 +6263,20 @@ func ValidateKillswitchScheduleRequestBody(body *KillswitchScheduleRequestBody) 
 	return
 }
 
-// ValidateKillswitchMutationResultResponseBody runs the validations defined on
-// KillswitchMutationResultResponseBody
-func ValidateKillswitchMutationResultResponseBody(body *KillswitchMutationResultResponseBody) (err error) {
+// ValidateKillswitchMutationReceiptResponseBody runs the validations defined
+// on KillswitchMutationReceiptResponseBody
+func ValidateKillswitchMutationReceiptResponseBody(body *KillswitchMutationReceiptResponseBody) (err error) {
 	if body.ID == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
 	}
 	if body.Version == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("version", "body"))
 	}
-	if body.Status == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("status", "body"))
-	}
 	if body.Replayed == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("replayed", "body"))
 	}
 	if body.ID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", *body.ID, goa.FormatUUID))
-	}
-	if body.Status != nil {
-		if !(*body.Status == "active" || *body.Status == "lifted") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.status", *body.Status, []any{"active", "lifted"}))
-		}
 	}
 	return
 }

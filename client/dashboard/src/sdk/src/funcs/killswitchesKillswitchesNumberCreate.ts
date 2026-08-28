@@ -13,9 +13,9 @@ import { RequestOptions } from "../lib/sdks.js";
 import { resolveSecurity } from "../lib/security.js";
 import { pathToFunc } from "../lib/url.js";
 import {
-  KillswitchMutationResult,
-  KillswitchMutationResult$inboundSchema,
-} from "../models/components/killswitchmutationresult.js";
+  KillswitchMutationReceipt,
+  KillswitchMutationReceipt$inboundSchema,
+} from "../models/components/killswitchmutationreceipt.js";
 import { GramError } from "../models/errors/gramerror.js";
 import {
   ConnectionError,
@@ -24,6 +24,10 @@ import {
   RequestTimeoutError,
   UnexpectedClientError,
 } from "../models/errors/httpclienterrors.js";
+import {
+  KillswitchConflict,
+  KillswitchConflict$inboundSchema,
+} from "../models/errors/killswitchconflict.js";
 import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
 import {
@@ -48,7 +52,8 @@ export function killswitchesKillswitchesNumberCreate(
   options?: RequestOptions,
 ): APIPromise<
   Result<
-    KillswitchMutationResult,
+    KillswitchMutationReceipt,
+    | KillswitchConflict
     | ServiceError
     | GramError
     | ResponseValidationError
@@ -76,7 +81,8 @@ async function $do(
 ): Promise<
   [
     Result<
-      KillswitchMutationResult,
+      KillswitchMutationReceipt,
+      | KillswitchConflict
       | ServiceError
       | GramError
       | ResponseValidationError
@@ -99,7 +105,7 @@ async function $do(
     return [parsed, { status: "invalid" }];
   }
   const payload = parsed.value;
-  const body = encodeJSON("body", payload.CreateRequestBody3, {
+  const body = encodeJSON("body", payload.KillswitchCreateRequest, {
     explode: true,
   });
 
@@ -171,7 +177,8 @@ async function $do(
   };
 
   const [result] = await M.match<
-    KillswitchMutationResult,
+    KillswitchMutationReceipt,
+    | KillswitchConflict
     | ServiceError
     | GramError
     | ResponseValidationError
@@ -182,8 +189,9 @@ async function $do(
     | UnexpectedClientError
     | SDKValidationError
   >(
-    M.json(200, KillswitchMutationResult$inboundSchema),
-    M.jsonErr([400, 401, 403, 404, 409, 415, 422], ServiceError$inboundSchema),
+    M.json(200, KillswitchMutationReceipt$inboundSchema),
+    M.jsonErr(409, KillswitchConflict$inboundSchema),
+    M.jsonErr([400, 401, 403, 404, 415, 422], ServiceError$inboundSchema),
     M.jsonErr([500, 502, 503], ServiceError$inboundSchema),
     M.fail("4XX"),
     M.fail("5XX"),

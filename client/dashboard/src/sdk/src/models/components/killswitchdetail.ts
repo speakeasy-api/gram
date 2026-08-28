@@ -5,9 +5,12 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
-import { ClosedEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
+import {
+  KillswitchCapabilityKey,
+  KillswitchCapabilityKey$inboundSchema,
+} from "./killswitchcapabilitykey.js";
 import {
   KillswitchHistoryEvent,
   KillswitchHistoryEvent$inboundSchema,
@@ -20,24 +23,12 @@ import {
   KillswitchScope,
   KillswitchScope$inboundSchema,
 } from "./killswitchscope.js";
-
-export const KillswitchDetailCapabilityKey = {
-  McpToolCalls: "mcp_tool_calls",
-} as const;
-export type KillswitchDetailCapabilityKey = ClosedEnum<
-  typeof KillswitchDetailCapabilityKey
->;
-
-export const KillswitchDetailStatus = {
-  Active: "active",
-  Scheduled: "scheduled",
-  Expired: "expired",
-  Lifted: "lifted",
-} as const;
-export type KillswitchDetailStatus = ClosedEnum<typeof KillswitchDetailStatus>;
+import {
+  KillswitchStatus,
+  KillswitchStatus$inboundSchema,
+} from "./killswitchstatus.js";
 
 export type KillswitchDetail = {
-  capabilityKey: KillswitchDetailCapabilityKey;
   capabilityLabel: string;
   externalNote: string;
   history: Array<KillswitchHistoryEvent>;
@@ -46,20 +37,11 @@ export type KillswitchDetail = {
   internalNote: string;
   schedule: KillswitchSchedule;
   scope: KillswitchScope;
-  status: KillswitchDetailStatus;
   userId: string;
   version: number;
+  capabilityKey: KillswitchCapabilityKey;
+  status: KillswitchStatus;
 };
-
-/** @internal */
-export const KillswitchDetailCapabilityKey$inboundSchema: z.ZodMiniEnum<
-  typeof KillswitchDetailCapabilityKey
-> = z.enum(KillswitchDetailCapabilityKey);
-
-/** @internal */
-export const KillswitchDetailStatus$inboundSchema: z.ZodMiniEnum<
-  typeof KillswitchDetailStatus
-> = z.enum(KillswitchDetailStatus);
 
 /** @internal */
 export const KillswitchDetail$inboundSchema: z.ZodMiniType<
@@ -67,7 +49,6 @@ export const KillswitchDetail$inboundSchema: z.ZodMiniType<
   unknown
 > = z.pipe(
   z.object({
-    capability_key: KillswitchDetailCapabilityKey$inboundSchema,
     capability_label: z.string(),
     external_note: z.string(),
     history: z.array(KillswitchHistoryEvent$inboundSchema),
@@ -76,18 +57,19 @@ export const KillswitchDetail$inboundSchema: z.ZodMiniType<
     internal_note: z.string(),
     schedule: KillswitchSchedule$inboundSchema,
     scope: KillswitchScope$inboundSchema,
-    status: KillswitchDetailStatus$inboundSchema,
     user_id: z.string(),
     version: z.int(),
+    capability_key: KillswitchCapabilityKey$inboundSchema,
+    status: KillswitchStatus$inboundSchema,
   }),
   z.transform((v) => {
     return remap$(v, {
-      "capability_key": "capabilityKey",
       "capability_label": "capabilityLabel",
       "external_note": "externalNote",
       "history_truncated": "historyTruncated",
       "internal_note": "internalNote",
       "user_id": "userId",
+      "capability_key": "capabilityKey",
     });
   }),
 );

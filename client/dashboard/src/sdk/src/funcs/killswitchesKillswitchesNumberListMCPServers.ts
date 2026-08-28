@@ -13,9 +13,9 @@ import { RequestOptions } from "../lib/sdks.js";
 import { resolveSecurity } from "../lib/security.js";
 import { pathToFunc } from "../lib/url.js";
 import {
-  ListMCPServersResponseBody,
-  ListMCPServersResponseBody$inboundSchema,
-} from "../models/components/listmcpserversresponsebody.js";
+  KillswitchListMCPServersResult,
+  KillswitchListMCPServersResult$inboundSchema,
+} from "../models/components/killswitchlistmcpserversresult.js";
 import { GramError } from "../models/errors/gramerror.js";
 import {
   ConnectionError,
@@ -48,7 +48,7 @@ export function killswitchesKillswitchesNumberListMCPServers(
   options?: RequestOptions,
 ): APIPromise<
   Result<
-    ListMCPServersResponseBody,
+    KillswitchListMCPServersResult,
     | ServiceError
     | GramError
     | ResponseValidationError
@@ -76,7 +76,7 @@ async function $do(
 ): Promise<
   [
     Result<
-      ListMCPServersResponseBody,
+      KillswitchListMCPServersResult,
       | ServiceError
       | GramError
       | ResponseValidationError
@@ -172,7 +172,7 @@ async function $do(
   };
 
   const [result] = await M.match<
-    ListMCPServersResponseBody,
+    KillswitchListMCPServersResult,
     | ServiceError
     | GramError
     | ResponseValidationError
@@ -183,8 +183,8 @@ async function $do(
     | UnexpectedClientError
     | SDKValidationError
   >(
-    M.json(200, ListMCPServersResponseBody$inboundSchema),
-    M.jsonErr([400, 401, 403, 404, 409, 415, 422], ServiceError$inboundSchema),
+    M.json(200, KillswitchListMCPServersResult$inboundSchema),
+    M.jsonErr([400, 401, 403, 404, 415, 422], ServiceError$inboundSchema),
     M.jsonErr([500, 502, 503], ServiceError$inboundSchema),
     M.fail("4XX"),
     M.fail("5XX"),

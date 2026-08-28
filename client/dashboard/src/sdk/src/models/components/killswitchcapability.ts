@@ -4,34 +4,25 @@
 
 import * as z from "zod/v4-mini";
 import { safeParse } from "../../lib/schemas.js";
-import { ClosedEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
-
-export const KillswitchCapabilityKey = {
-  McpToolCalls: "mcp_tool_calls",
-} as const;
-export type KillswitchCapabilityKey = ClosedEnum<
-  typeof KillswitchCapabilityKey
->;
+import {
+  KillswitchCapabilityKey,
+  KillswitchCapabilityKey$inboundSchema,
+} from "./killswitchcapabilitykey.js";
 
 export type KillswitchCapability = {
-  key: KillswitchCapabilityKey;
   label: string;
+  key: KillswitchCapabilityKey;
 };
-
-/** @internal */
-export const KillswitchCapabilityKey$inboundSchema: z.ZodMiniEnum<
-  typeof KillswitchCapabilityKey
-> = z.enum(KillswitchCapabilityKey);
 
 /** @internal */
 export const KillswitchCapability$inboundSchema: z.ZodMiniType<
   KillswitchCapability,
   unknown
 > = z.object({
-  key: KillswitchCapabilityKey$inboundSchema,
   label: z.string(),
+  key: KillswitchCapabilityKey$inboundSchema,
 });
 
 export function killswitchCapabilityFromJSON(

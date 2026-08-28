@@ -11,7 +11,7 @@ import { GramCore } from "../core.js";
 import { killswitchesKillswitchesNumberPreviewOverlaps } from "../funcs/killswitchesKillswitchesNumberPreviewOverlaps.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
-import { PreviewOverlapsResponseBody } from "../models/components/previewoverlapsresponsebody.js";
+import { KillswitchPreviewOverlapsResult } from "../models/components/killswitchpreviewoverlapsresult.js";
 import { GramError } from "../models/errors/gramerror.js";
 import {
   ConnectionError,
@@ -38,7 +38,7 @@ export type KillswitchesKillswitchesNumberPreviewOverlapsMutationVariables = {
 };
 
 export type KillswitchesKillswitchesNumberPreviewOverlapsMutationData =
-  PreviewOverlapsResponseBody;
+  KillswitchPreviewOverlapsResult;
 
 export type KillswitchesKillswitchesNumberPreviewOverlapsMutationError =
   | ServiceError

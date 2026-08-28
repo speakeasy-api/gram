@@ -18,23 +18,23 @@ import (
 // Requires an ordinary live organization-administrator session.
 type Service interface {
 	// ListCapabilities implements listCapabilities.
-	ListCapabilities(context.Context, *ListCapabilitiesPayload) (res *ListCapabilitiesResult, err error)
+	ListCapabilities(context.Context, *ListCapabilitiesPayload) (res *KillswitchListCapabilitiesResult, err error)
 	// ListMCPServers implements listMCPServers.
-	ListMCPServers(context.Context, *ListMCPServersPayload) (res *ListMCPServersResult, err error)
+	ListMCPServers(context.Context, *ListMCPServersPayload) (res *KillswitchListMCPServersResult, err error)
 	// List implements list.
-	List(context.Context, *ListPayload) (res *ListResult, err error)
+	List(context.Context, *ListPayload) (res *KillswitchListResult, err error)
 	// Get implements get.
 	Get(context.Context, *GetPayload) (res *KillswitchDetail, err error)
 	// Create implements create.
-	Create(context.Context, *CreatePayload) (res *KillswitchMutationResult, err error)
+	Create(context.Context, *CreatePayload) (res *KillswitchMutationReceipt, err error)
 	// Edit implements edit.
-	Edit(context.Context, *EditPayload) (res *KillswitchMutationResult, err error)
+	Edit(context.Context, *EditPayload) (res *KillswitchMutationReceipt, err error)
 	// Lift implements lift.
-	Lift(context.Context, *LiftPayload) (res *LiftResult, err error)
+	Lift(context.Context, *LiftPayload) (res *KillswitchLiftResult, err error)
 	// PreviewOverlaps implements previewOverlaps.
-	PreviewOverlaps(context.Context, *PreviewOverlapsPayload) (res *PreviewOverlapsResult, err error)
+	PreviewOverlaps(context.Context, *PreviewOverlapsPayload) (res *KillswitchPreviewOverlapsResult, err error)
 	// BatchUserBadges implements batchUserBadges.
-	BatchUserBadges(context.Context, *BatchUserBadgesPayload) (res *BatchUserBadgesResult, err error)
+	BatchUserBadges(context.Context, *BatchUserBadgesPayload) (res *KillswitchBatchUserBadgesResult, err error)
 }
 
 // Auther defines the authorization functions to be implemented by the service.
@@ -66,17 +66,11 @@ type BatchUserBadgesPayload struct {
 	UserIds      []string
 }
 
-// BatchUserBadgesResult is the result type of the killswitches service
-// batchUserBadges method.
-type BatchUserBadgesResult struct {
-	Badges []*KillswitchUserBadge
-}
-
 // CreatePayload is the payload type of the killswitches service create method.
 type CreatePayload struct {
 	SessionToken  *string
 	OperationID   string
-	CapabilityKey string
+	CapabilityKey KillswitchCapabilityKey
 	UserID        string
 	Scope         *KillswitchScope
 	Schedule      *KillswitchSchedule
@@ -102,13 +96,26 @@ type GetPayload struct {
 	ID           string
 }
 
+// KillswitchBatchUserBadgesResult is the result type of the killswitches
+// service batchUserBadges method.
+type KillswitchBatchUserBadgesResult struct {
+	Badges []*KillswitchUserBadge
+}
+
 type KillswitchCapability struct {
-	Key   string
+	Key   KillswitchCapabilityKey
 	Label string
 }
 
+type KillswitchCapabilityKey string
+
 type KillswitchComingSoonCapability struct {
 	Label string
+}
+
+type KillswitchConflict struct {
+	Name    string
+	Message string
 }
 
 // KillswitchDetail is the result type of the killswitches service get method.
@@ -118,20 +125,22 @@ type KillswitchDetail struct {
 	History          []*KillswitchHistoryEvent
 	HistoryTruncated bool
 	ID               string
-	CapabilityKey    string
+	CapabilityKey    KillswitchCapabilityKey
 	CapabilityLabel  string
 	UserID           string
 	Version          int64
-	Status           string
+	Status           KillswitchStatus
 	Scope            *KillswitchScope
 	Schedule         *KillswitchSchedule
 }
 
+type KillswitchHistoryAction string
+
 type KillswitchHistoryEvent struct {
 	Sequence         int64
 	Version          int64
-	Action           string
-	Status           string
+	Action           KillswitchHistoryAction
+	Status           KillswitchStatus
 	Scope            *KillswitchScope
 	Schedule         *KillswitchSchedule
 	ExternalNote     string
@@ -141,47 +150,89 @@ type KillswitchHistoryEvent struct {
 	ChangedAt        string
 }
 
+// KillswitchLiftResult is the result type of the killswitches service lift
+// method.
+type KillswitchLiftResult struct {
+	Result            *KillswitchMutationReceipt
+	RemainingOverlaps []*KillswitchOverlap
+}
+
+// KillswitchListCapabilitiesResult is the result type of the killswitches
+// service listCapabilities method.
+type KillswitchListCapabilitiesResult struct {
+	Capabilities []*KillswitchCapability
+	ComingSoon   []*KillswitchComingSoonCapability
+}
+
+// KillswitchListMCPServersResult is the result type of the killswitches
+// service listMCPServers method.
+type KillswitchListMCPServersResult struct {
+	Servers []*KillswitchMCPServer
+}
+
+// KillswitchListResult is the result type of the killswitches service list
+// method.
+type KillswitchListResult struct {
+	Items      []*KillswitchSummary
+	NextCursor *string
+}
+
 type KillswitchMCPServer struct {
 	ID        string
 	Name      string
 	ProjectID string
 }
 
-// KillswitchMutationResult is the result type of the killswitches service
+// KillswitchMutationReceipt is the result type of the killswitches service
 // create method.
-type KillswitchMutationResult struct {
+type KillswitchMutationReceipt struct {
 	ID       string
 	Version  int64
-	Status   string
 	Replayed bool
 }
 
 type KillswitchOverlap struct {
 	ID       string
-	Status   string
+	Status   KillswitchOverlapStatus
 	Scope    *KillswitchScope
 	Schedule *KillswitchSchedule
 }
 
+type KillswitchOverlapStatus string
+
+// KillswitchPreviewOverlapsResult is the result type of the killswitches
+// service previewOverlaps method.
+type KillswitchPreviewOverlapsResult struct {
+	Overlaps []*KillswitchOverlap
+}
+
 type KillswitchSchedule struct {
-	Start    string
+	Start    KillswitchScheduleStart
 	StartsAt *string
-	End      string
+	End      KillswitchScheduleEnd
 	EndsAt   *string
 }
 
+type KillswitchScheduleEnd string
+
+type KillswitchScheduleStart string
+
 type KillswitchScope struct {
-	Type      string
+	Type      KillswitchScopeType
 	ServerIds []string
 }
 
+type KillswitchScopeType string
+
+type KillswitchStatus string
+
 type KillswitchSummary struct {
 	ID              string
-	CapabilityKey   string
+	CapabilityKey   KillswitchCapabilityKey
 	CapabilityLabel string
 	UserID          string
 	Version         int64
-	Status          string
+	Status          KillswitchStatus
 	Scope           *KillswitchScope
 	Schedule        *KillswitchSchedule
 }
@@ -201,23 +252,10 @@ type LiftPayload struct {
 	ExpectedVersion int64
 }
 
-// LiftResult is the result type of the killswitches service lift method.
-type LiftResult struct {
-	Result            *KillswitchMutationResult
-	RemainingOverlaps []*KillswitchOverlap
-}
-
 // ListCapabilitiesPayload is the payload type of the killswitches service
 // listCapabilities method.
 type ListCapabilitiesPayload struct {
 	SessionToken *string
-}
-
-// ListCapabilitiesResult is the result type of the killswitches service
-// listCapabilities method.
-type ListCapabilitiesResult struct {
-	Capabilities []*KillswitchCapability
-	ComingSoon   []*KillswitchComingSoonCapability
 }
 
 // ListMCPServersPayload is the payload type of the killswitches service
@@ -226,26 +264,14 @@ type ListMCPServersPayload struct {
 	SessionToken *string
 }
 
-// ListMCPServersResult is the result type of the killswitches service
-// listMCPServers method.
-type ListMCPServersResult struct {
-	Servers []*KillswitchMCPServer
-}
-
 // ListPayload is the payload type of the killswitches service list method.
 type ListPayload struct {
 	SessionToken  *string
-	CapabilityKey *string
+	CapabilityKey *KillswitchCapabilityKey
 	UserID        *string
-	Status        *string
+	Status        *KillswitchStatus
 	Limit         *int32
 	Cursor        *string
-}
-
-// ListResult is the result type of the killswitches service list method.
-type ListResult struct {
-	Items      []*KillswitchSummary
-	NextCursor *string
 }
 
 // PreviewOverlapsPayload is the payload type of the killswitches service
@@ -253,16 +279,27 @@ type ListResult struct {
 type PreviewOverlapsPayload struct {
 	SessionToken  *string
 	ID            *string
-	CapabilityKey string
+	CapabilityKey KillswitchCapabilityKey
 	UserID        string
 	Scope         *KillswitchScope
 	Schedule      *KillswitchSchedule
 }
 
-// PreviewOverlapsResult is the result type of the killswitches service
-// previewOverlaps method.
-type PreviewOverlapsResult struct {
-	Overlaps []*KillswitchOverlap
+// Error returns an error description.
+func (e *KillswitchConflict) Error() string {
+	return ""
+}
+
+// ErrorName returns "KillswitchConflict".
+//
+// Deprecated: Use GoaErrorName - https://github.com/goadesign/goa/issues/3105
+func (e *KillswitchConflict) ErrorName() string {
+	return e.GoaErrorName()
+}
+
+// GoaErrorName returns "KillswitchConflict".
+func (e *KillswitchConflict) GoaErrorName() string {
+	return e.Name
 }
 
 // MakeUnauthorized builds a goa.ServiceError from an error.
@@ -283,11 +320,6 @@ func MakeBadRequest(err error) *goa.ServiceError {
 // MakeNotFound builds a goa.ServiceError from an error.
 func MakeNotFound(err error) *goa.ServiceError {
 	return goa.NewServiceError(err, "not_found", false, false, false)
-}
-
-// MakeConflict builds a goa.ServiceError from an error.
-func MakeConflict(err error) *goa.ServiceError {
-	return goa.NewServiceError(err, "conflict", false, false, false)
 }
 
 // MakeUnsupportedMedia builds a goa.ServiceError from an error.
@@ -313,16 +345,6 @@ func MakeUnexpected(err error) *goa.ServiceError {
 // MakeGatewayError builds a goa.ServiceError from an error.
 func MakeGatewayError(err error) *goa.ServiceError {
 	return goa.NewServiceError(err, "gateway_error", false, false, true)
-}
-
-// MakeOperationConflict builds a goa.ServiceError from an error.
-func MakeOperationConflict(err error) *goa.ServiceError {
-	return goa.NewServiceError(err, "operation_conflict", false, false, false)
-}
-
-// MakeVersionConflict builds a goa.ServiceError from an error.
-func MakeVersionConflict(err error) *goa.ServiceError {
-	return goa.NewServiceError(err, "version_conflict", false, false, false)
 }
 
 // MakeUnavailable builds a goa.ServiceError from an error.

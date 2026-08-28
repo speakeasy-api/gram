@@ -4,9 +4,12 @@
 
 import * as z from "zod/v4-mini";
 import { safeParse } from "../../lib/schemas.js";
-import { ClosedEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
+import {
+  KillswitchOverlapStatus,
+  KillswitchOverlapStatus$inboundSchema,
+} from "./killswitchoverlapstatus.js";
 import {
   KillswitchSchedule,
   KillswitchSchedule$inboundSchema,
@@ -16,25 +19,12 @@ import {
   KillswitchScope$inboundSchema,
 } from "./killswitchscope.js";
 
-export const KillswitchOverlapStatus = {
-  Active: "active",
-  Scheduled: "scheduled",
-} as const;
-export type KillswitchOverlapStatus = ClosedEnum<
-  typeof KillswitchOverlapStatus
->;
-
 export type KillswitchOverlap = {
   id: string;
   schedule: KillswitchSchedule;
   scope: KillswitchScope;
   status: KillswitchOverlapStatus;
 };
-
-/** @internal */
-export const KillswitchOverlapStatus$inboundSchema: z.ZodMiniEnum<
-  typeof KillswitchOverlapStatus
-> = z.enum(KillswitchOverlapStatus);
 
 /** @internal */
 export const KillswitchOverlap$inboundSchema: z.ZodMiniType<

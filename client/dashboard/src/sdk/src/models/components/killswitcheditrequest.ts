@@ -4,7 +4,6 @@
 
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
-import { ClosedEnum } from "../../types/enums.js";
 import {
   KillswitchSchedule,
   KillswitchSchedule$Outbound,
@@ -16,65 +15,55 @@ import {
   KillswitchScope$outboundSchema,
 } from "./killswitchscope.js";
 
-export const CapabilityKey = {
-  McpToolCalls: "mcp_tool_calls",
-} as const;
-export type CapabilityKey = ClosedEnum<typeof CapabilityKey>;
-
-export type CreateRequestBody3 = {
-  capabilityKey: CapabilityKey;
+export type KillswitchEditRequest = {
+  expectedVersion: number;
   externalNote: string;
+  id: string;
   internalNote: string;
   operationId: string;
   schedule: KillswitchSchedule;
   scope: KillswitchScope;
-  userId: string;
 };
 
 /** @internal */
-export const CapabilityKey$outboundSchema: z.ZodMiniEnum<typeof CapabilityKey> =
-  z.enum(CapabilityKey);
-
-/** @internal */
-export type CreateRequestBody3$Outbound = {
-  capability_key: string;
+export type KillswitchEditRequest$Outbound = {
+  expected_version: number;
   external_note: string;
+  id: string;
   internal_note: string;
   operation_id: string;
   schedule: KillswitchSchedule$Outbound;
   scope: KillswitchScope$Outbound;
-  user_id: string;
 };
 
 /** @internal */
-export const CreateRequestBody3$outboundSchema: z.ZodMiniType<
-  CreateRequestBody3$Outbound,
-  CreateRequestBody3
+export const KillswitchEditRequest$outboundSchema: z.ZodMiniType<
+  KillswitchEditRequest$Outbound,
+  KillswitchEditRequest
 > = z.pipe(
   z.object({
-    capabilityKey: CapabilityKey$outboundSchema,
+    expectedVersion: z.int(),
     externalNote: z.string(),
+    id: z.string(),
     internalNote: z.string(),
     operationId: z.string(),
     schedule: KillswitchSchedule$outboundSchema,
     scope: KillswitchScope$outboundSchema,
-    userId: z.string(),
   }),
   z.transform((v) => {
     return remap$(v, {
-      capabilityKey: "capability_key",
+      expectedVersion: "expected_version",
       externalNote: "external_note",
       internalNote: "internal_note",
       operationId: "operation_id",
-      userId: "user_id",
     });
   }),
 );
 
-export function createRequestBody3ToJSON(
-  createRequestBody3: CreateRequestBody3,
+export function killswitchEditRequestToJSON(
+  killswitchEditRequest: KillswitchEditRequest,
 ): string {
   return JSON.stringify(
-    CreateRequestBody3$outboundSchema.parse(createRequestBody3),
+    KillswitchEditRequest$outboundSchema.parse(killswitchEditRequest),
   );
 }

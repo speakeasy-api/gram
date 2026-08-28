@@ -5,35 +5,29 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
-import { ClosedEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import {
-  ListResponseBody2,
-  ListResponseBody2$inboundSchema,
-} from "../components/listresponsebody2.js";
+  KillswitchCapabilityKey,
+  KillswitchCapabilityKey$outboundSchema,
+} from "../components/killswitchcapabilitykey.js";
+import {
+  KillswitchListResult,
+  KillswitchListResult$inboundSchema,
+} from "../components/killswitchlistresult.js";
+import {
+  KillswitchListStatus,
+  KillswitchListStatus$outboundSchema,
+} from "../components/killswitchliststatus.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
 export type KillswitchesNumberListSecurity = {
   sessionHeaderGramSession?: string | undefined;
 };
 
-export const CapabilityKey = {
-  McpToolCalls: "mcp_tool_calls",
-} as const;
-export type CapabilityKey = ClosedEnum<typeof CapabilityKey>;
-
-export const Status = {
-  Active: "active",
-  Scheduled: "scheduled",
-  Expired: "expired",
-  Lifted: "lifted",
-} as const;
-export type Status = ClosedEnum<typeof Status>;
-
 export type KillswitchesNumberListRequest = {
-  capabilityKey?: CapabilityKey | undefined;
+  capabilityKey?: KillswitchCapabilityKey | undefined;
   userId?: string | undefined;
-  status?: Status | undefined;
+  status?: KillswitchListStatus | undefined;
   limit?: number | undefined;
   cursor?: string | undefined;
   /**
@@ -43,7 +37,7 @@ export type KillswitchesNumberListRequest = {
 };
 
 export type KillswitchesNumberListResponse = {
-  result: ListResponseBody2;
+  result: KillswitchListResult;
 };
 
 /** @internal */
@@ -77,15 +71,6 @@ export function killswitchesNumberListSecurityToJSON(
 }
 
 /** @internal */
-export const CapabilityKey$outboundSchema: z.ZodMiniEnum<typeof CapabilityKey> =
-  z.enum(CapabilityKey);
-
-/** @internal */
-export const Status$outboundSchema: z.ZodMiniEnum<typeof Status> = z.enum(
-  Status,
-);
-
-/** @internal */
 export type KillswitchesNumberListRequest$Outbound = {
   capability_key?: string | undefined;
   user_id?: string | undefined;
@@ -101,9 +86,9 @@ export const KillswitchesNumberListRequest$outboundSchema: z.ZodMiniType<
   KillswitchesNumberListRequest
 > = z.pipe(
   z.object({
-    capabilityKey: z.optional(CapabilityKey$outboundSchema),
+    capabilityKey: z.optional(KillswitchCapabilityKey$outboundSchema),
     userId: z.optional(z.string()),
-    status: z.optional(Status$outboundSchema),
+    status: z.optional(KillswitchListStatus$outboundSchema),
     limit: z.optional(z.int()),
     cursor: z.optional(z.string()),
     gramSession: z.optional(z.string()),
@@ -133,7 +118,7 @@ export const KillswitchesNumberListResponse$inboundSchema: z.ZodMiniType<
   unknown
 > = z.pipe(
   z.object({
-    Result: ListResponseBody2$inboundSchema,
+    Result: KillswitchListResult$inboundSchema,
   }),
   z.transform((v) => {
     return remap$(v, {

@@ -8,7 +8,7 @@ import { ClosedEnum } from "../../types/enums.js";
 /**
  * CTA action.
  */
-export const RecordDashboardCtaEventRequestBodyAction = {
+export const Action = {
   Impression: "impression",
   Selected: "selected",
   Dismissed: "dismissed",
@@ -16,9 +16,7 @@ export const RecordDashboardCtaEventRequestBodyAction = {
 /**
  * CTA action.
  */
-export type RecordDashboardCtaEventRequestBodyAction = ClosedEnum<
-  typeof RecordDashboardCtaEventRequestBodyAction
->;
+export type Action = ClosedEnum<typeof Action>;
 
 /**
  * CTA surface.
@@ -38,7 +36,7 @@ export type RecordDashboardCtaEventRequestBody = {
   /**
    * CTA action.
    */
-  action: RecordDashboardCtaEventRequestBodyAction;
+  action: Action;
   /**
    * CTA surface.
    */
@@ -46,10 +44,9 @@ export type RecordDashboardCtaEventRequestBody = {
 };
 
 /** @internal */
-export const RecordDashboardCtaEventRequestBodyAction$outboundSchema:
-  z.ZodMiniEnum<typeof RecordDashboardCtaEventRequestBodyAction> = z.enum(
-    RecordDashboardCtaEventRequestBodyAction,
-  );
+export const Action$outboundSchema: z.ZodMiniEnum<typeof Action> = z.enum(
+  Action,
+);
 
 /** @internal */
 export const Surface$outboundSchema: z.ZodMiniEnum<typeof Surface> = z.enum(
@@ -67,7 +64,7 @@ export const RecordDashboardCtaEventRequestBody$outboundSchema: z.ZodMiniType<
   RecordDashboardCtaEventRequestBody$Outbound,
   RecordDashboardCtaEventRequestBody
 > = z.object({
-  action: RecordDashboardCtaEventRequestBodyAction$outboundSchema,
+  action: Action$outboundSchema,
   surface: Surface$outboundSchema,
 });
 

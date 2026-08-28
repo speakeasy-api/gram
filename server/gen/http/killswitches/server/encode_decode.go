@@ -24,7 +24,7 @@ import (
 // the killswitches listCapabilities endpoint.
 func EncodeListCapabilitiesResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
 	return func(ctx context.Context, w http.ResponseWriter, v any) error {
-		res, _ := v.(*killswitches.ListCapabilitiesResult)
+		res, _ := v.(*killswitches.KillswitchListCapabilitiesResult)
 		enc := encoder(ctx, w)
 		body := NewListCapabilitiesResponseBody(res)
 		w.WriteHeader(http.StatusOK)
@@ -123,48 +123,6 @@ func EncodeListCapabilitiesError(encoder func(context.Context, http.ResponseWrit
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusNotFound)
 			return enc.Encode(body)
-		case "conflict":
-			var res *goa.ServiceError
-			errors.As(v, &res)
-			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
-			enc := encoder(ctx, w)
-			var body any
-			if formatter != nil {
-				body = formatter(ctx, res)
-			} else {
-				body = NewListCapabilitiesConflictResponseBody(res)
-			}
-			w.Header().Set("goa-error", res.GoaErrorName())
-			w.WriteHeader(http.StatusConflict)
-			return enc.Encode(body)
-		case "operation_conflict":
-			var res *goa.ServiceError
-			errors.As(v, &res)
-			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
-			enc := encoder(ctx, w)
-			var body any
-			if formatter != nil {
-				body = formatter(ctx, res)
-			} else {
-				body = NewListCapabilitiesOperationConflictResponseBody(res)
-			}
-			w.Header().Set("goa-error", res.GoaErrorName())
-			w.WriteHeader(http.StatusConflict)
-			return enc.Encode(body)
-		case "version_conflict":
-			var res *goa.ServiceError
-			errors.As(v, &res)
-			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
-			enc := encoder(ctx, w)
-			var body any
-			if formatter != nil {
-				body = formatter(ctx, res)
-			} else {
-				body = NewListCapabilitiesVersionConflictResponseBody(res)
-			}
-			w.Header().Set("goa-error", res.GoaErrorName())
-			w.WriteHeader(http.StatusConflict)
-			return enc.Encode(body)
 		case "unsupported_media":
 			var res *goa.ServiceError
 			errors.As(v, &res)
@@ -259,7 +217,7 @@ func EncodeListCapabilitiesError(encoder func(context.Context, http.ResponseWrit
 // the killswitches listMCPServers endpoint.
 func EncodeListMCPServersResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
 	return func(ctx context.Context, w http.ResponseWriter, v any) error {
-		res, _ := v.(*killswitches.ListMCPServersResult)
+		res, _ := v.(*killswitches.KillswitchListMCPServersResult)
 		enc := encoder(ctx, w)
 		body := NewListMCPServersResponseBody(res)
 		w.WriteHeader(http.StatusOK)
@@ -358,48 +316,6 @@ func EncodeListMCPServersError(encoder func(context.Context, http.ResponseWriter
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusNotFound)
 			return enc.Encode(body)
-		case "conflict":
-			var res *goa.ServiceError
-			errors.As(v, &res)
-			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
-			enc := encoder(ctx, w)
-			var body any
-			if formatter != nil {
-				body = formatter(ctx, res)
-			} else {
-				body = NewListMCPServersConflictResponseBody(res)
-			}
-			w.Header().Set("goa-error", res.GoaErrorName())
-			w.WriteHeader(http.StatusConflict)
-			return enc.Encode(body)
-		case "operation_conflict":
-			var res *goa.ServiceError
-			errors.As(v, &res)
-			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
-			enc := encoder(ctx, w)
-			var body any
-			if formatter != nil {
-				body = formatter(ctx, res)
-			} else {
-				body = NewListMCPServersOperationConflictResponseBody(res)
-			}
-			w.Header().Set("goa-error", res.GoaErrorName())
-			w.WriteHeader(http.StatusConflict)
-			return enc.Encode(body)
-		case "version_conflict":
-			var res *goa.ServiceError
-			errors.As(v, &res)
-			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
-			enc := encoder(ctx, w)
-			var body any
-			if formatter != nil {
-				body = formatter(ctx, res)
-			} else {
-				body = NewListMCPServersVersionConflictResponseBody(res)
-			}
-			w.Header().Set("goa-error", res.GoaErrorName())
-			w.WriteHeader(http.StatusConflict)
-			return enc.Encode(body)
 		case "unsupported_media":
 			var res *goa.ServiceError
 			errors.As(v, &res)
@@ -494,7 +410,7 @@ func EncodeListMCPServersError(encoder func(context.Context, http.ResponseWriter
 // killswitches list endpoint.
 func EncodeListResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
 	return func(ctx context.Context, w http.ResponseWriter, v any) error {
-		res, _ := v.(*killswitches.ListResult)
+		res, _ := v.(*killswitches.KillswitchListResult)
 		enc := encoder(ctx, w)
 		body := NewListResponseBody(res)
 		w.WriteHeader(http.StatusOK)
@@ -649,48 +565,6 @@ func EncodeListError(encoder func(context.Context, http.ResponseWriter) goahttp.
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusNotFound)
-			return enc.Encode(body)
-		case "conflict":
-			var res *goa.ServiceError
-			errors.As(v, &res)
-			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
-			enc := encoder(ctx, w)
-			var body any
-			if formatter != nil {
-				body = formatter(ctx, res)
-			} else {
-				body = NewListConflictResponseBody(res)
-			}
-			w.Header().Set("goa-error", res.GoaErrorName())
-			w.WriteHeader(http.StatusConflict)
-			return enc.Encode(body)
-		case "operation_conflict":
-			var res *goa.ServiceError
-			errors.As(v, &res)
-			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
-			enc := encoder(ctx, w)
-			var body any
-			if formatter != nil {
-				body = formatter(ctx, res)
-			} else {
-				body = NewListOperationConflictResponseBody(res)
-			}
-			w.Header().Set("goa-error", res.GoaErrorName())
-			w.WriteHeader(http.StatusConflict)
-			return enc.Encode(body)
-		case "version_conflict":
-			var res *goa.ServiceError
-			errors.As(v, &res)
-			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
-			enc := encoder(ctx, w)
-			var body any
-			if formatter != nil {
-				body = formatter(ctx, res)
-			} else {
-				body = NewListVersionConflictResponseBody(res)
-			}
-			w.Header().Set("goa-error", res.GoaErrorName())
-			w.WriteHeader(http.StatusConflict)
 			return enc.Encode(body)
 		case "unsupported_media":
 			var res *goa.ServiceError
@@ -895,48 +769,6 @@ func EncodeGetError(encoder func(context.Context, http.ResponseWriter) goahttp.E
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusNotFound)
 			return enc.Encode(body)
-		case "conflict":
-			var res *goa.ServiceError
-			errors.As(v, &res)
-			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
-			enc := encoder(ctx, w)
-			var body any
-			if formatter != nil {
-				body = formatter(ctx, res)
-			} else {
-				body = NewGetConflictResponseBody(res)
-			}
-			w.Header().Set("goa-error", res.GoaErrorName())
-			w.WriteHeader(http.StatusConflict)
-			return enc.Encode(body)
-		case "operation_conflict":
-			var res *goa.ServiceError
-			errors.As(v, &res)
-			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
-			enc := encoder(ctx, w)
-			var body any
-			if formatter != nil {
-				body = formatter(ctx, res)
-			} else {
-				body = NewGetOperationConflictResponseBody(res)
-			}
-			w.Header().Set("goa-error", res.GoaErrorName())
-			w.WriteHeader(http.StatusConflict)
-			return enc.Encode(body)
-		case "version_conflict":
-			var res *goa.ServiceError
-			errors.As(v, &res)
-			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
-			enc := encoder(ctx, w)
-			var body any
-			if formatter != nil {
-				body = formatter(ctx, res)
-			} else {
-				body = NewGetVersionConflictResponseBody(res)
-			}
-			w.Header().Set("goa-error", res.GoaErrorName())
-			w.WriteHeader(http.StatusConflict)
-			return enc.Encode(body)
 		case "unsupported_media":
 			var res *goa.ServiceError
 			errors.As(v, &res)
@@ -1031,7 +863,7 @@ func EncodeGetError(encoder func(context.Context, http.ResponseWriter) goahttp.E
 // killswitches create endpoint.
 func EncodeCreateResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
 	return func(ctx context.Context, w http.ResponseWriter, v any) error {
-		res, _ := v.(*killswitches.KillswitchMutationResult)
+		res, _ := v.(*killswitches.KillswitchMutationReceipt)
 		enc := encoder(ctx, w)
 		body := NewCreateResponseBody(res)
 		w.WriteHeader(http.StatusOK)
@@ -1150,48 +982,6 @@ func EncodeCreateError(encoder func(context.Context, http.ResponseWriter) goahtt
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusNotFound)
 			return enc.Encode(body)
-		case "conflict":
-			var res *goa.ServiceError
-			errors.As(v, &res)
-			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
-			enc := encoder(ctx, w)
-			var body any
-			if formatter != nil {
-				body = formatter(ctx, res)
-			} else {
-				body = NewCreateConflictResponseBody(res)
-			}
-			w.Header().Set("goa-error", res.GoaErrorName())
-			w.WriteHeader(http.StatusConflict)
-			return enc.Encode(body)
-		case "operation_conflict":
-			var res *goa.ServiceError
-			errors.As(v, &res)
-			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
-			enc := encoder(ctx, w)
-			var body any
-			if formatter != nil {
-				body = formatter(ctx, res)
-			} else {
-				body = NewCreateOperationConflictResponseBody(res)
-			}
-			w.Header().Set("goa-error", res.GoaErrorName())
-			w.WriteHeader(http.StatusConflict)
-			return enc.Encode(body)
-		case "version_conflict":
-			var res *goa.ServiceError
-			errors.As(v, &res)
-			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
-			enc := encoder(ctx, w)
-			var body any
-			if formatter != nil {
-				body = formatter(ctx, res)
-			} else {
-				body = NewCreateVersionConflictResponseBody(res)
-			}
-			w.Header().Set("goa-error", res.GoaErrorName())
-			w.WriteHeader(http.StatusConflict)
-			return enc.Encode(body)
 		case "unsupported_media":
 			var res *goa.ServiceError
 			errors.As(v, &res)
@@ -1276,6 +1066,20 @@ func EncodeCreateError(encoder func(context.Context, http.ResponseWriter) goahtt
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusServiceUnavailable)
 			return enc.Encode(body)
+		case "operation_conflict":
+			var res *killswitches.KillswitchConflict
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewCreateOperationConflictResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusConflict)
+			return enc.Encode(body)
 		default:
 			return encodeError(ctx, w, v)
 		}
@@ -1286,7 +1090,7 @@ func EncodeCreateError(encoder func(context.Context, http.ResponseWriter) goahtt
 // killswitches edit endpoint.
 func EncodeEditResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
 	return func(ctx context.Context, w http.ResponseWriter, v any) error {
-		res, _ := v.(*killswitches.KillswitchMutationResult)
+		res, _ := v.(*killswitches.KillswitchMutationReceipt)
 		enc := encoder(ctx, w)
 		body := NewEditResponseBody(res)
 		w.WriteHeader(http.StatusOK)
@@ -1405,48 +1209,6 @@ func EncodeEditError(encoder func(context.Context, http.ResponseWriter) goahttp.
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusNotFound)
 			return enc.Encode(body)
-		case "conflict":
-			var res *goa.ServiceError
-			errors.As(v, &res)
-			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
-			enc := encoder(ctx, w)
-			var body any
-			if formatter != nil {
-				body = formatter(ctx, res)
-			} else {
-				body = NewEditConflictResponseBody(res)
-			}
-			w.Header().Set("goa-error", res.GoaErrorName())
-			w.WriteHeader(http.StatusConflict)
-			return enc.Encode(body)
-		case "operation_conflict":
-			var res *goa.ServiceError
-			errors.As(v, &res)
-			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
-			enc := encoder(ctx, w)
-			var body any
-			if formatter != nil {
-				body = formatter(ctx, res)
-			} else {
-				body = NewEditOperationConflictResponseBody(res)
-			}
-			w.Header().Set("goa-error", res.GoaErrorName())
-			w.WriteHeader(http.StatusConflict)
-			return enc.Encode(body)
-		case "version_conflict":
-			var res *goa.ServiceError
-			errors.As(v, &res)
-			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
-			enc := encoder(ctx, w)
-			var body any
-			if formatter != nil {
-				body = formatter(ctx, res)
-			} else {
-				body = NewEditVersionConflictResponseBody(res)
-			}
-			w.Header().Set("goa-error", res.GoaErrorName())
-			w.WriteHeader(http.StatusConflict)
-			return enc.Encode(body)
 		case "unsupported_media":
 			var res *goa.ServiceError
 			errors.As(v, &res)
@@ -1531,6 +1293,34 @@ func EncodeEditError(encoder func(context.Context, http.ResponseWriter) goahttp.
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusServiceUnavailable)
 			return enc.Encode(body)
+		case "operation_conflict":
+			var res *killswitches.KillswitchConflict
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewEditOperationConflictResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusConflict)
+			return enc.Encode(body)
+		case "version_conflict":
+			var res *killswitches.KillswitchConflict
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewEditVersionConflictResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusConflict)
+			return enc.Encode(body)
 		default:
 			return encodeError(ctx, w, v)
 		}
@@ -1541,7 +1331,7 @@ func EncodeEditError(encoder func(context.Context, http.ResponseWriter) goahttp.
 // killswitches lift endpoint.
 func EncodeLiftResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
 	return func(ctx context.Context, w http.ResponseWriter, v any) error {
-		res, _ := v.(*killswitches.LiftResult)
+		res, _ := v.(*killswitches.KillswitchLiftResult)
 		enc := encoder(ctx, w)
 		body := NewLiftResponseBody(res)
 		w.WriteHeader(http.StatusOK)
@@ -1660,48 +1450,6 @@ func EncodeLiftError(encoder func(context.Context, http.ResponseWriter) goahttp.
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusNotFound)
 			return enc.Encode(body)
-		case "conflict":
-			var res *goa.ServiceError
-			errors.As(v, &res)
-			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
-			enc := encoder(ctx, w)
-			var body any
-			if formatter != nil {
-				body = formatter(ctx, res)
-			} else {
-				body = NewLiftConflictResponseBody(res)
-			}
-			w.Header().Set("goa-error", res.GoaErrorName())
-			w.WriteHeader(http.StatusConflict)
-			return enc.Encode(body)
-		case "operation_conflict":
-			var res *goa.ServiceError
-			errors.As(v, &res)
-			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
-			enc := encoder(ctx, w)
-			var body any
-			if formatter != nil {
-				body = formatter(ctx, res)
-			} else {
-				body = NewLiftOperationConflictResponseBody(res)
-			}
-			w.Header().Set("goa-error", res.GoaErrorName())
-			w.WriteHeader(http.StatusConflict)
-			return enc.Encode(body)
-		case "version_conflict":
-			var res *goa.ServiceError
-			errors.As(v, &res)
-			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
-			enc := encoder(ctx, w)
-			var body any
-			if formatter != nil {
-				body = formatter(ctx, res)
-			} else {
-				body = NewLiftVersionConflictResponseBody(res)
-			}
-			w.Header().Set("goa-error", res.GoaErrorName())
-			w.WriteHeader(http.StatusConflict)
-			return enc.Encode(body)
 		case "unsupported_media":
 			var res *goa.ServiceError
 			errors.As(v, &res)
@@ -1786,6 +1534,34 @@ func EncodeLiftError(encoder func(context.Context, http.ResponseWriter) goahttp.
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusServiceUnavailable)
 			return enc.Encode(body)
+		case "operation_conflict":
+			var res *killswitches.KillswitchConflict
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewLiftOperationConflictResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusConflict)
+			return enc.Encode(body)
+		case "version_conflict":
+			var res *killswitches.KillswitchConflict
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewLiftVersionConflictResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusConflict)
+			return enc.Encode(body)
 		default:
 			return encodeError(ctx, w, v)
 		}
@@ -1796,7 +1572,7 @@ func EncodeLiftError(encoder func(context.Context, http.ResponseWriter) goahttp.
 // the killswitches previewOverlaps endpoint.
 func EncodePreviewOverlapsResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
 	return func(ctx context.Context, w http.ResponseWriter, v any) error {
-		res, _ := v.(*killswitches.PreviewOverlapsResult)
+		res, _ := v.(*killswitches.KillswitchPreviewOverlapsResult)
 		enc := encoder(ctx, w)
 		body := NewPreviewOverlapsResponseBody(res)
 		w.WriteHeader(http.StatusOK)
@@ -1915,48 +1691,6 @@ func EncodePreviewOverlapsError(encoder func(context.Context, http.ResponseWrite
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusNotFound)
 			return enc.Encode(body)
-		case "conflict":
-			var res *goa.ServiceError
-			errors.As(v, &res)
-			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
-			enc := encoder(ctx, w)
-			var body any
-			if formatter != nil {
-				body = formatter(ctx, res)
-			} else {
-				body = NewPreviewOverlapsConflictResponseBody(res)
-			}
-			w.Header().Set("goa-error", res.GoaErrorName())
-			w.WriteHeader(http.StatusConflict)
-			return enc.Encode(body)
-		case "operation_conflict":
-			var res *goa.ServiceError
-			errors.As(v, &res)
-			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
-			enc := encoder(ctx, w)
-			var body any
-			if formatter != nil {
-				body = formatter(ctx, res)
-			} else {
-				body = NewPreviewOverlapsOperationConflictResponseBody(res)
-			}
-			w.Header().Set("goa-error", res.GoaErrorName())
-			w.WriteHeader(http.StatusConflict)
-			return enc.Encode(body)
-		case "version_conflict":
-			var res *goa.ServiceError
-			errors.As(v, &res)
-			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
-			enc := encoder(ctx, w)
-			var body any
-			if formatter != nil {
-				body = formatter(ctx, res)
-			} else {
-				body = NewPreviewOverlapsVersionConflictResponseBody(res)
-			}
-			w.Header().Set("goa-error", res.GoaErrorName())
-			w.WriteHeader(http.StatusConflict)
-			return enc.Encode(body)
 		case "unsupported_media":
 			var res *goa.ServiceError
 			errors.As(v, &res)
@@ -2051,7 +1785,7 @@ func EncodePreviewOverlapsError(encoder func(context.Context, http.ResponseWrite
 // the killswitches batchUserBadges endpoint.
 func EncodeBatchUserBadgesResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
 	return func(ctx context.Context, w http.ResponseWriter, v any) error {
-		res, _ := v.(*killswitches.BatchUserBadgesResult)
+		res, _ := v.(*killswitches.KillswitchBatchUserBadgesResult)
 		enc := encoder(ctx, w)
 		body := NewBatchUserBadgesResponseBody(res)
 		w.WriteHeader(http.StatusOK)
@@ -2170,48 +1904,6 @@ func EncodeBatchUserBadgesError(encoder func(context.Context, http.ResponseWrite
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusNotFound)
 			return enc.Encode(body)
-		case "conflict":
-			var res *goa.ServiceError
-			errors.As(v, &res)
-			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
-			enc := encoder(ctx, w)
-			var body any
-			if formatter != nil {
-				body = formatter(ctx, res)
-			} else {
-				body = NewBatchUserBadgesConflictResponseBody(res)
-			}
-			w.Header().Set("goa-error", res.GoaErrorName())
-			w.WriteHeader(http.StatusConflict)
-			return enc.Encode(body)
-		case "operation_conflict":
-			var res *goa.ServiceError
-			errors.As(v, &res)
-			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
-			enc := encoder(ctx, w)
-			var body any
-			if formatter != nil {
-				body = formatter(ctx, res)
-			} else {
-				body = NewBatchUserBadgesOperationConflictResponseBody(res)
-			}
-			w.Header().Set("goa-error", res.GoaErrorName())
-			w.WriteHeader(http.StatusConflict)
-			return enc.Encode(body)
-		case "version_conflict":
-			var res *goa.ServiceError
-			errors.As(v, &res)
-			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
-			enc := encoder(ctx, w)
-			var body any
-			if formatter != nil {
-				body = formatter(ctx, res)
-			} else {
-				body = NewBatchUserBadgesVersionConflictResponseBody(res)
-			}
-			w.Header().Set("goa-error", res.GoaErrorName())
-			w.WriteHeader(http.StatusConflict)
-			return enc.Encode(body)
 		case "unsupported_media":
 			var res *goa.ServiceError
 			errors.As(v, &res)
@@ -2307,7 +1999,7 @@ func EncodeBatchUserBadgesError(encoder func(context.Context, http.ResponseWrite
 // type *killswitches.KillswitchCapability.
 func marshalKillswitchesKillswitchCapabilityToKillswitchCapabilityResponseBody(v *killswitches.KillswitchCapability) *KillswitchCapabilityResponseBody {
 	res := &KillswitchCapabilityResponseBody{
-		Key:   v.Key,
+		Key:   string(v.Key),
 		Label: v.Label,
 	}
 
@@ -2344,11 +2036,11 @@ func marshalKillswitchesKillswitchMCPServerToKillswitchMCPServerResponseBody(v *
 func marshalKillswitchesKillswitchSummaryToKillswitchSummaryResponseBody(v *killswitches.KillswitchSummary) *KillswitchSummaryResponseBody {
 	res := &KillswitchSummaryResponseBody{
 		ID:              v.ID,
-		CapabilityKey:   v.CapabilityKey,
+		CapabilityKey:   string(v.CapabilityKey),
 		CapabilityLabel: v.CapabilityLabel,
 		UserID:          v.UserID,
 		Version:         v.Version,
-		Status:          v.Status,
+		Status:          string(v.Status),
 	}
 	if v.Scope != nil {
 		res.Scope = marshalKillswitchesKillswitchScopeToKillswitchScopeResponseBody(v.Scope)
@@ -2365,7 +2057,7 @@ func marshalKillswitchesKillswitchSummaryToKillswitchSummaryResponseBody(v *kill
 // *killswitches.KillswitchScope.
 func marshalKillswitchesKillswitchScopeToKillswitchScopeResponseBody(v *killswitches.KillswitchScope) *KillswitchScopeResponseBody {
 	res := &KillswitchScopeResponseBody{
-		Type: v.Type,
+		Type: string(v.Type),
 	}
 	if v.ServerIds != nil {
 		res.ServerIds = make([]string, len(v.ServerIds))
@@ -2382,9 +2074,9 @@ func marshalKillswitchesKillswitchScopeToKillswitchScopeResponseBody(v *killswit
 // *killswitches.KillswitchSchedule.
 func marshalKillswitchesKillswitchScheduleToKillswitchScheduleResponseBody(v *killswitches.KillswitchSchedule) *KillswitchScheduleResponseBody {
 	res := &KillswitchScheduleResponseBody{
-		Start:    v.Start,
+		Start:    string(v.Start),
 		StartsAt: v.StartsAt,
-		End:      v.End,
+		End:      string(v.End),
 		EndsAt:   v.EndsAt,
 	}
 
@@ -2398,8 +2090,8 @@ func marshalKillswitchesKillswitchHistoryEventToKillswitchHistoryEventResponseBo
 	res := &KillswitchHistoryEventResponseBody{
 		Sequence:         v.Sequence,
 		Version:          v.Version,
-		Action:           v.Action,
-		Status:           v.Status,
+		Action:           string(v.Action),
+		Status:           string(v.Status),
 		ExternalNote:     v.ExternalNote,
 		InternalNote:     v.InternalNote,
 		ActorUserID:      v.ActorUserID,
@@ -2416,12 +2108,12 @@ func marshalKillswitchesKillswitchHistoryEventToKillswitchHistoryEventResponseBo
 	return res
 }
 
-// unmarshalKillswitchScopeRequestBodyToKillswitchesKillswitchScope builds a
-// value of type *killswitches.KillswitchScope from a value of type
-// *KillswitchScopeRequestBody.
-func unmarshalKillswitchScopeRequestBodyToKillswitchesKillswitchScope(v *KillswitchScopeRequestBody) *killswitches.KillswitchScope {
+// unmarshalKillswitchScopeRequestBodyRequestBodyToKillswitchesKillswitchScope
+// builds a value of type *killswitches.KillswitchScope from a value of type
+// *KillswitchScopeRequestBodyRequestBody.
+func unmarshalKillswitchScopeRequestBodyRequestBodyToKillswitchesKillswitchScope(v *KillswitchScopeRequestBodyRequestBody) *killswitches.KillswitchScope {
 	res := &killswitches.KillswitchScope{
-		Type: *v.Type,
+		Type: killswitches.KillswitchScopeType(*v.Type),
 	}
 	if v.ServerIds != nil {
 		res.ServerIds = make([]string, len(v.ServerIds))
@@ -2433,28 +2125,27 @@ func unmarshalKillswitchScopeRequestBodyToKillswitchesKillswitchScope(v *Killswi
 	return res
 }
 
-// unmarshalKillswitchScheduleRequestBodyToKillswitchesKillswitchSchedule
+// unmarshalKillswitchScheduleRequestBodyRequestBodyToKillswitchesKillswitchSchedule
 // builds a value of type *killswitches.KillswitchSchedule from a value of type
-// *KillswitchScheduleRequestBody.
-func unmarshalKillswitchScheduleRequestBodyToKillswitchesKillswitchSchedule(v *KillswitchScheduleRequestBody) *killswitches.KillswitchSchedule {
+// *KillswitchScheduleRequestBodyRequestBody.
+func unmarshalKillswitchScheduleRequestBodyRequestBodyToKillswitchesKillswitchSchedule(v *KillswitchScheduleRequestBodyRequestBody) *killswitches.KillswitchSchedule {
 	res := &killswitches.KillswitchSchedule{
-		Start:    *v.Start,
+		Start:    killswitches.KillswitchScheduleStart(*v.Start),
 		StartsAt: v.StartsAt,
-		End:      *v.End,
+		End:      killswitches.KillswitchScheduleEnd(*v.End),
 		EndsAt:   v.EndsAt,
 	}
 
 	return res
 }
 
-// marshalKillswitchesKillswitchMutationResultToKillswitchMutationResultResponseBody
-// builds a value of type *KillswitchMutationResultResponseBody from a value of
-// type *killswitches.KillswitchMutationResult.
-func marshalKillswitchesKillswitchMutationResultToKillswitchMutationResultResponseBody(v *killswitches.KillswitchMutationResult) *KillswitchMutationResultResponseBody {
-	res := &KillswitchMutationResultResponseBody{
+// marshalKillswitchesKillswitchMutationReceiptToKillswitchMutationReceiptResponseBody
+// builds a value of type *KillswitchMutationReceiptResponseBody from a value
+// of type *killswitches.KillswitchMutationReceipt.
+func marshalKillswitchesKillswitchMutationReceiptToKillswitchMutationReceiptResponseBody(v *killswitches.KillswitchMutationReceipt) *KillswitchMutationReceiptResponseBody {
+	res := &KillswitchMutationReceiptResponseBody{
 		ID:       v.ID,
 		Version:  v.Version,
-		Status:   v.Status,
 		Replayed: v.Replayed,
 	}
 
@@ -2467,7 +2158,7 @@ func marshalKillswitchesKillswitchMutationResultToKillswitchMutationResultRespon
 func marshalKillswitchesKillswitchOverlapToKillswitchOverlapResponseBody(v *killswitches.KillswitchOverlap) *KillswitchOverlapResponseBody {
 	res := &KillswitchOverlapResponseBody{
 		ID:     v.ID,
-		Status: v.Status,
+		Status: string(v.Status),
 	}
 	if v.Scope != nil {
 		res.Scope = marshalKillswitchesKillswitchScopeToKillswitchScopeResponseBody(v.Scope)
