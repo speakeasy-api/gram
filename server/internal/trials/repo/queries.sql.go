@@ -383,9 +383,6 @@ type RearmTrialRow struct {
 // ends_at moves to a window measured from now, not left where it is:
 // MarkTrialDemoted only demotes an already-past ends_at, so clearing demoted_at
 // alone leaves a row the next sweep demotes again.
-//
-// converted_at IS NULL guards nothing today, because MarkTrialConverted has no
-// production caller. It is written for the conversion path that will (AGE-3218).
 func (q *Queries) RearmTrial(ctx context.Context, arg RearmTrialParams) (RearmTrialRow, error) {
 	row := q.db.QueryRow(ctx, rearmTrial, arg.RearmForDays, arg.OrganizationID)
 	var i RearmTrialRow
