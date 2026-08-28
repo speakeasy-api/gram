@@ -266,10 +266,12 @@ func (s *Service) handleMetaExecuteToolCall(
 	if err != nil {
 		// A member's execution failure must degrade that member, not the
 		// call: on a multi-member gateway an aborted JSON-RPC call reads as
-		// a gateway fault. Internal faults keep the error envelope. The
-		// innermost shareable message carries the actionable cause (every
+		// a gateway fault. Internal faults — unexpected errors and server
+		// invariant violations — keep the error envelope. The innermost
+		// shareable message carries the actionable cause (every
 		// ShareableError public is written to be client-safe).
-		if shareable, ok := errors.AsType[*oops.ShareableError](err); ok && shareable.Code != oops.CodeUnexpected {
+		if shareable, ok := errors.AsType[*oops.ShareableError](err); ok &&
+			shareable.Code != oops.CodeUnexpected && shareable.Code != oops.CodeInvariantViolation {
 			deepest := shareable
 			for inner := errors.Unwrap(error(deepest)); inner != nil; inner = errors.Unwrap(inner) {
 				if innerShareable, ok := errors.AsType[*oops.ShareableError](inner); ok {
