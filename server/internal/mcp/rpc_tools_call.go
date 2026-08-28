@@ -31,6 +31,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/functions"
 	"github.com/speakeasy-api/gram/server/internal/gateway"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
+	"github.com/speakeasy-api/gram/server/internal/killswitches/mcptoolexecution"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpmetrics"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcprequests"
 	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
@@ -61,6 +62,21 @@ type toolsCallParams struct {
 	Meta *mcprequests.WireMeta `json:"_meta,omitempty"`
 }
 
+func recordToolsCallIdentityCoverage(ctx context.Context, checkpoint *mcptoolexecution.IdentityCoverageCheckpoint, organizationID string, payload *mcpInputs) {
+	if payload == nil || payload.identityCoverageRecorded {
+		return
+	}
+
+	serverSource := mcptoolexecution.ServerSource{
+		FrontingServerID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+	}
+	if payload.mcpServerID != nil {
+		serverSource.FrontingServerID = uuid.NullUUID{UUID: *payload.mcpServerID, Valid: true}
+	}
+	checkpoint.Record(ctx, organizationID, mcpmetrics.KillswitchSurfaceHosted, serverSource)
+	payload.identityCoverageRecorded = true
+}
+
 const (
 	listToolsToolName     = "list_tools"
 	describeToolsToolName = "describe_tools"
@@ -71,6 +87,7 @@ func handleToolsCall(
 	ctx context.Context,
 	logger *slog.Logger,
 	metrics *mcpmetrics.Metrics,
+	identityCoverage *mcptoolexecution.IdentityCoverageCheckpoint,
 	authzEngine *authz.Engine,
 	guardianPolicy *guardian.Policy,
 	db *pgxpool.Pool,
@@ -105,6 +122,9 @@ func handleToolsCall(
 	if err != nil {
 		return nil, err
 	}
+	// Direct internal callers do not pass through handleRequest's method
+	// boundary, so record them once the toolset supplies the organization.
+	recordToolsCallIdentityCoverage(ctx, identityCoverage, toolset.OrganizationID, payload)
 
 	// Apply the ?tags= filter before any tool resolution — dynamic dispatch,
 	// proxy matching, and the static name lookup all read this slice, so a

@@ -55,6 +55,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/httpcache"
 	"github.com/speakeasy-api/gram/server/internal/inv"
+	"github.com/speakeasy-api/gram/server/internal/killswitches/mcptoolexecution"
 	"github.com/speakeasy-api/gram/server/internal/mcp/httpheaders"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpmetrics"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcprequests"
@@ -62,6 +63,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcp/sessionclientinfo"
 	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
 	"github.com/speakeasy-api/gram/server/internal/mcpaccess"
+	"github.com/speakeasy-api/gram/server/internal/mcpidentity"
 	"github.com/speakeasy-api/gram/server/internal/mcpjsonrpc"
 	"github.com/speakeasy-api/gram/server/internal/mcpmetadata"
 	metadata_repo "github.com/speakeasy-api/gram/server/internal/mcpmetadata/repo"
@@ -96,20 +98,21 @@ type IdentityResolver interface {
 }
 
 type Service struct {
-	logger          *slog.Logger
-	tracer          trace.Tracer
-	metrics         *mcpmetrics.Metrics
-	guardianPolicy  *guardian.Policy
-	db              *pgxpool.Pool
-	authRepo        *auth_repo.Queries
-	toolsetsRepo    *toolsets_repo.Queries
-	mcpMetadataRepo *metadata_repo.Queries
-	orgsRepo        *organizations_repo.Queries
-	auth            *auth.Auth
-	env             toolconfig.EnvironmentLoader
-	serverURL       *url.URL
-	siteURL         *url.URL
-	posthog         *posthog.Posthog // posthog metrics will no-op if the dependency is not provided
+	logger           *slog.Logger
+	tracer           trace.Tracer
+	metrics          *mcpmetrics.Metrics
+	identityCoverage *mcptoolexecution.IdentityCoverageCheckpoint
+	guardianPolicy   *guardian.Policy
+	db               *pgxpool.Pool
+	authRepo         *auth_repo.Queries
+	toolsetsRepo     *toolsets_repo.Queries
+	mcpMetadataRepo  *metadata_repo.Queries
+	orgsRepo         *organizations_repo.Queries
+	auth             *auth.Auth
+	env              toolconfig.EnvironmentLoader
+	serverURL        *url.URL
+	siteURL          *url.URL
+	posthog          *posthog.Posthog // posthog metrics will no-op if the dependency is not provided
 	// features resolves flag-controlled behavior (the managed assistant's
 	// Platform MCP toolset variant). Wired from the environment-aware
 	// provider: the posthog client in production, the CSV-backed in-memory
@@ -249,6 +252,7 @@ func appendRemoteSessionTokenInputs(dst []oauthTokenInputs, tokens map[uuid.UUID
 
 type mcpInputs struct {
 	projectID        uuid.UUID
+	organizationID   string
 	toolset          string
 	environment      string
 	mcpEnvVariables  map[string]string
@@ -283,6 +287,9 @@ type mcpInputs struct {
 	// initialize handler overwrites InEffect with the negotiated answer, which
 	// is the one sanctioned mutation.
 	protocolVersion mcpversions.Resolution
+	// identityCoverageRecorded prevents internal dispatch layers from
+	// recounting a request already observed at the method boundary.
+	identityCoverageRecorded bool
 	// toolSelection is the consent-screen tool policy loaded from the
 	// session row by the issuer gate. Nil means all tools; non-nil is always
 	// restrictive and intersects with the live toolset, ?tags=, and RBAC.
@@ -333,6 +340,7 @@ func NewService(
 	tracer := tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/mcp")
 	meter := meterProvider.Meter("github.com/speakeasy-api/gram/server/internal/mcp")
 	logger = logger.With(attr.SlogComponent("mcp"))
+	metrics := mcpmetrics.NewMetrics(meter, logger)
 
 	platformSvc := platformtoolsruntime.NewService(
 		logger,
@@ -348,7 +356,8 @@ func NewService(
 	return &Service{
 		logger:                  logger,
 		tracer:                  tracer,
-		metrics:                 mcpmetrics.NewMetrics(meter, logger),
+		metrics:                 metrics,
+		identityCoverage:        mcptoolexecution.NewIdentityCoverageCheckpoint(db, metrics),
 		guardianPolicy:          guardianPolicy,
 		db:                      db,
 		authRepo:                auth_repo.New(db),
@@ -1017,24 +1026,26 @@ func (s *Service) ServeToolsetResolved(w http.ResponseWriter, r *http.Request, t
 	}
 
 	mcpInputs := &mcpInputs{
-		projectID:             toolset.ProjectID,
-		toolset:               toolset.Slug,
-		environment:           selectedEnvironment,
-		mcpEnvVariables:       parseMcpEnvVariables(r, headerDisplayNames),
-		authenticated:         authenticated,
-		oauthTokenInputs:      tokenInputs,
-		sessionID:             sessionID,
-		chatID:                r.Header.Get("Gram-Chat-ID"),
-		mode:                  resolveToolMode(r, *toolset),
-		userID:                userID,
-		externalUserID:        externalUserID,
-		apiKeyID:              apiKeyID,
-		toolVariationsGroupID: toolVariationsGroupID,
-		mcpServerID:           mcpServerID,
-		skipProxyTools:        false,
-		tags:                  tags,
-		protocolVersion:       mcpversions.Resolve(mcprequests.DeclaredProtocolVersion(r.Header.Get(mcpversions.HTTPHeader), req.Params), mcpversions.SupportedHostedToolset()),
-		toolSelection:         callerToolSelection,
+		projectID:                toolset.ProjectID,
+		organizationID:           toolset.OrganizationID,
+		toolset:                  toolset.Slug,
+		environment:              selectedEnvironment,
+		mcpEnvVariables:          parseMcpEnvVariables(r, headerDisplayNames),
+		authenticated:            authenticated,
+		oauthTokenInputs:         tokenInputs,
+		sessionID:                sessionID,
+		chatID:                   r.Header.Get("Gram-Chat-ID"),
+		mode:                     resolveToolMode(r, *toolset),
+		userID:                   userID,
+		externalUserID:           externalUserID,
+		apiKeyID:                 apiKeyID,
+		toolVariationsGroupID:    toolVariationsGroupID,
+		mcpServerID:              mcpServerID,
+		skipProxyTools:           false,
+		tags:                     tags,
+		protocolVersion:          mcpversions.Resolve(mcprequests.DeclaredProtocolVersion(r.Header.Get(mcpversions.HTTPHeader), req.Params), mcpversions.SupportedHostedToolset()),
+		identityCoverageRecorded: false,
+		toolSelection:            callerToolSelection,
 	}
 
 	// Record the resolved variation group and requested tag filter for
@@ -1354,7 +1365,8 @@ func (s *Service) handleRequest(ctx context.Context, payload *mcpInputs, req *ra
 	case "tools/list":
 		return handleToolsList(ctx, s.logger, s.authz, s.guardianPolicy, s.db, s.env, payload, req, s.posthog, &s.toolsetCache, s.vectorToolStore, s.temporal, s.shadowMCPClient, s.platformExtras, s.sessionClientInfo)
 	case "tools/call":
-		return handleToolsCall(ctx, s.logger, s.metrics, s.authz, s.guardianPolicy, s.db, s.env, payload, req, s.toolProxy, s.billingTracker, s.billingRepository, &s.toolsetCache, s.telemLogger, s.vectorToolStore, s.temporal, s.mcpMetadataRepo, s.auditLogger, s.platformExtras, s.sessionClientInfo)
+		recordToolsCallIdentityCoverage(ctx, s.identityCoverage, payload.organizationID, payload)
+		return handleToolsCall(ctx, s.logger, s.metrics, s.identityCoverage, s.authz, s.guardianPolicy, s.db, s.env, payload, req, s.toolProxy, s.billingTracker, s.billingRepository, &s.toolsetCache, s.telemLogger, s.vectorToolStore, s.temporal, s.mcpMetadataRepo, s.auditLogger, s.platformExtras, s.sessionClientInfo)
 	case "prompts/list":
 		return handlePromptsList(ctx, s.logger, s.db, payload, req, &s.toolsetCache, s.platformExtras)
 	case "prompts/get":
@@ -1458,13 +1470,22 @@ func (s *Service) TryPublicIdentityAuth(ctx context.Context, r *http.Request, is
 // is true — today that path is exercised only by toolset-backed flows so
 // the resource is a toolset id; remote-backend callers pass false and the
 // id is decorative.
+//
+// Each successful strategy stamps its mcpidentity provenance here, at the
+// point of credential validation: assistant tokens are KindAssistant, API
+// keys (either scope) are KindAPIKey, and chat-session tokens are
+// KindChatSession. None of these credentials proves an acting Gram user, so
+// none stamps KindUserSession — even though every strategy populates an
+// AuthContext whose user-shaped fields exist for attribution only. A token
+// rejected by every strategy leaves the context unstamped, so downstream
+// checkpoints classify the request as unattributed.
 func (s *Service) authenticateToken(ctx context.Context, token string, oauthResourceID uuid.UUID, isOAuthCapable bool) (context.Context, error) {
 	if token == "" {
 		return ctx, oops.C(oops.CodeUnauthorized)
 	}
 
 	if authorizedCtx, _, err := s.assistantTokens.Authorize(ctx, token); err == nil {
-		return authorizedCtx, nil
+		return mcpidentity.WithIdentity(authorizedCtx, mcpidentity.Identity{Kind: mcpidentity.KindAssistant, UserID: ""}), nil
 	}
 
 	var err error
@@ -1478,7 +1499,7 @@ func (s *Service) authenticateToken(ctx context.Context, token string, oauthReso
 
 	ctx, err = s.auth.Authorize(ctx, token, &sc)
 	if err == nil {
-		return ctx, nil
+		return mcpidentity.WithIdentity(ctx, mcpidentity.Identity{Kind: mcpidentity.KindAPIKey, UserID: ""}), nil
 	}
 
 	// Strategy 3: Try API key authentication (chat scope fallback)
@@ -1489,13 +1510,13 @@ func (s *Service) authenticateToken(ctx context.Context, token string, oauthReso
 	}
 	ctx, err = s.auth.Authorize(ctx, token, &sc)
 	if err == nil {
-		return ctx, nil
+		return mcpidentity.WithIdentity(ctx, mcpidentity.Identity{Kind: mcpidentity.KindAPIKey, UserID: ""}), nil
 	}
 
 	// Strategy 4: Try Chat Sessions Token authentication
 	ctx, err = s.chatSessionsManager.Authorize(ctx, token)
 	if err == nil {
-		return ctx, nil
+		return mcpidentity.WithIdentity(ctx, mcpidentity.Identity{Kind: mcpidentity.KindChatSession, UserID: ""}), nil
 	}
 
 	return ctx, oops.E(oops.CodeUnauthorized, errors.New("failed to authorize token using any strategy"), "failed to authorize").LogWarn(ctx, s.logger, attr.SlogToolsetID(oauthResourceID.String()))
@@ -1596,6 +1617,7 @@ func (s *Service) HandleToolsCall(
 		ctx,
 		s.logger,
 		s.metrics,
+		s.identityCoverage,
 		s.authz,
 		s.guardianPolicy,
 		s.db,

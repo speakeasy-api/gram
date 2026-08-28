@@ -45,6 +45,31 @@ func userRequestMethod(req *UserRequest) string {
 	return ""
 }
 
+// IsToolsCallRequest reports whether req is a single JSON-RPC tools/call
+// request without decoding its method-specific parameters.
+func IsToolsCallRequest(req *UserRequest) bool {
+	return userRequestMethod(req) == methodToolsCall
+}
+
+// ToolsCallName returns the best-effort tool name from a single JSON-RPC
+// tools/call request. The boolean reports method recognition independently of
+// method-parameter validity so method-level observers can include malformed
+// attempts without taking ownership of validation.
+func ToolsCallName(req *UserRequest) (string, bool) {
+	if !IsToolsCallRequest(req) {
+		return "", false
+	}
+
+	var params struct {
+		Name string `json:"name"`
+	}
+	rpcReq, ok := req.JSONRPCMessages[0].(*jsonrpc.Request)
+	if ok {
+		_ = json.Unmarshal(rpcReq.Params, &params)
+	}
+	return params.Name, true
+}
+
 // toolsCallRequestFromUserRequest returns a ToolsCallRequest if req carries
 // exactly one JSON-RPC "tools/call" request whose params decode cleanly.
 // Anything else — notifications, responses, multiple messages, unrelated
