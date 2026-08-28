@@ -75162,7 +75162,7 @@ components:
                     description: Whether Platform MCP successfully added the workflow-bound MCP to the selected project's existing Default plugin.
                 enabled:
                     type: boolean
-                    description: Whether the active organization currently passes the Platform MCP capability and rollout gates.
+                    description: Whether the active organization currently has the Platform MCP product feature enabled.
                 mcp_url:
                     type: string
                     description: Canonical Platform MCP endpoint URL supplied by the server.

@@ -27,7 +27,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/externalmcp"
-	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
@@ -57,7 +56,6 @@ type platformMCPConfig struct {
 	Environment            string
 	JWTSigningKey          string
 	ProductFeatures        *productfeatures.Client
-	FeatureFlags           feature.Provider
 	Authz                  *authz.Engine
 	Encryption             *encryption.Client
 	Identity               *identity.Resolver
@@ -123,11 +121,7 @@ func configureLocalFixturePlatformMCP(ctx context.Context, config platformMCPCon
 		return AssistantSurface{}, fmt.Errorf("clear local Platform MCP fixture registry cache: %w", err)
 	}
 
-	gate := platformmcp.NewOrganizationGate(
-		config.ProductFeatures,
-		config.FeatureFlags,
-		platformmcp.NewPostgresOrganizationSlugResolver(config.DB),
-	)
+	gate := platformmcp.NewOrganizationGate(config.ProductFeatures)
 	authorizer := platformmcp.NewLiveOrgAdminAuthorizer(config.DB, config.Authz)
 	oauthTelemetry := platformmcp.NewOAuthTelemetry(config.Logger, config.MeterProvider)
 	oauthStore := platformmcp.NewPostgresOAuthStore(config.DB).WithTelemetry(oauthTelemetry)
@@ -466,11 +460,7 @@ func loadBrowserPlatformMCPCatalogDescriptors(ctx context.Context, catalog *exte
 }
 
 func configureBrowserPlatformMCP(ctx context.Context, config platformMCPConfig) (AssistantSurface, error) {
-	gate := platformmcp.NewOrganizationGate(
-		config.ProductFeatures,
-		config.FeatureFlags,
-		platformmcp.NewPostgresOrganizationSlugResolver(config.DB),
-	)
+	gate := platformmcp.NewOrganizationGate(config.ProductFeatures)
 	authorizer := platformmcp.NewLiveOrgAdminAuthorizer(config.DB, config.Authz)
 	oauthTelemetry := platformmcp.NewOAuthTelemetry(config.Logger, config.MeterProvider)
 	oauthStore := platformmcp.NewPostgresOAuthStore(config.DB).WithTelemetry(oauthTelemetry)

@@ -107,8 +107,8 @@ export default function PlatformMCP(): JSX.Element | null {
   const currentProjectSlug = searchParams.get("projectSlug") ?? undefined;
   const openFromCta = searchParams.get("setup") === "1" && !!sourceSurface;
 
-  // Wait for rollout flags before routing so an eligible organization never
-  // flashes away from a direct dashboard link.
+  // Wait for dashboard visibility to resolve before routing so an eligible
+  // organization never flashes away from a direct link.
   if (isLoading) {
     return null;
   }

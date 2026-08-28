@@ -65,8 +65,8 @@ type RepairOnboardingPublicationRequestBody struct {
 // GetOnboardingResponseBody is the type of the "platformMcp" service
 // "getOnboarding" endpoint HTTP response body.
 type GetOnboardingResponseBody struct {
-	// Whether the active organization currently passes the Platform MCP capability
-	// and rollout gates.
+	// Whether the active organization currently has the Platform MCP product
+	// feature enabled.
 	Enabled bool `form:"enabled" json:"enabled" xml:"enabled"`
 	// Current server-derived onboarding stage.
 	Stage string `form:"stage" json:"stage" xml:"stage"`
@@ -137,8 +137,8 @@ type GetOnboardingResponseBody struct {
 // StartOnboardingResponseBody is the type of the "platformMcp" service
 // "startOnboarding" endpoint HTTP response body.
 type StartOnboardingResponseBody struct {
-	// Whether the active organization currently passes the Platform MCP capability
-	// and rollout gates.
+	// Whether the active organization currently has the Platform MCP product
+	// feature enabled.
 	Enabled bool `form:"enabled" json:"enabled" xml:"enabled"`
 	// Current server-derived onboarding stage.
 	Stage string `form:"stage" json:"stage" xml:"stage"`
@@ -209,8 +209,8 @@ type StartOnboardingResponseBody struct {
 // RecordInstallIntentResponseBody is the type of the "platformMcp" service
 // "recordInstallIntent" endpoint HTTP response body.
 type RecordInstallIntentResponseBody struct {
-	// Whether the active organization currently passes the Platform MCP capability
-	// and rollout gates.
+	// Whether the active organization currently has the Platform MCP product
+	// feature enabled.
 	Enabled bool `form:"enabled" json:"enabled" xml:"enabled"`
 	// Current server-derived onboarding stage.
 	Stage string `form:"stage" json:"stage" xml:"stage"`
@@ -281,8 +281,8 @@ type RecordInstallIntentResponseBody struct {
 // RecordAgentConfigurationCopiedResponseBody is the type of the "platformMcp"
 // service "recordAgentConfigurationCopied" endpoint HTTP response body.
 type RecordAgentConfigurationCopiedResponseBody struct {
-	// Whether the active organization currently passes the Platform MCP capability
-	// and rollout gates.
+	// Whether the active organization currently has the Platform MCP product
+	// feature enabled.
 	Enabled bool `form:"enabled" json:"enabled" xml:"enabled"`
 	// Current server-derived onboarding stage.
 	Stage string `form:"stage" json:"stage" xml:"stage"`
@@ -363,8 +363,8 @@ type StartOnboardingSetupResponseBody struct {
 // RecheckOnboardingReadinessResponseBody is the type of the "platformMcp"
 // service "recheckOnboardingReadiness" endpoint HTTP response body.
 type RecheckOnboardingReadinessResponseBody struct {
-	// Whether the active organization currently passes the Platform MCP capability
-	// and rollout gates.
+	// Whether the active organization currently has the Platform MCP product
+	// feature enabled.
 	Enabled bool `form:"enabled" json:"enabled" xml:"enabled"`
 	// Current server-derived onboarding stage.
 	Stage string `form:"stage" json:"stage" xml:"stage"`
@@ -435,8 +435,8 @@ type RecheckOnboardingReadinessResponseBody struct {
 // DistributeOnboardingCandidateResponseBody is the type of the "platformMcp"
 // service "distributeOnboardingCandidate" endpoint HTTP response body.
 type DistributeOnboardingCandidateResponseBody struct {
-	// Whether the active organization currently passes the Platform MCP capability
-	// and rollout gates.
+	// Whether the active organization currently has the Platform MCP product
+	// feature enabled.
 	Enabled bool `form:"enabled" json:"enabled" xml:"enabled"`
 	// Current server-derived onboarding stage.
 	Stage string `form:"stage" json:"stage" xml:"stage"`
@@ -507,8 +507,8 @@ type DistributeOnboardingCandidateResponseBody struct {
 // RemoveOnboardingDistributionResponseBody is the type of the "platformMcp"
 // service "removeOnboardingDistribution" endpoint HTTP response body.
 type RemoveOnboardingDistributionResponseBody struct {
-	// Whether the active organization currently passes the Platform MCP capability
-	// and rollout gates.
+	// Whether the active organization currently has the Platform MCP product
+	// feature enabled.
 	Enabled bool `form:"enabled" json:"enabled" xml:"enabled"`
 	// Current server-derived onboarding stage.
 	Stage string `form:"stage" json:"stage" xml:"stage"`
@@ -579,8 +579,8 @@ type RemoveOnboardingDistributionResponseBody struct {
 // RepairOnboardingPublicationResponseBody is the type of the "platformMcp"
 // service "repairOnboardingPublication" endpoint HTTP response body.
 type RepairOnboardingPublicationResponseBody struct {
-	// Whether the active organization currently passes the Platform MCP capability
-	// and rollout gates.
+	// Whether the active organization currently has the Platform MCP product
+	// feature enabled.
 	Enabled bool `form:"enabled" json:"enabled" xml:"enabled"`
 	// Current server-derived onboarding stage.
 	Stage string `form:"stage" json:"stage" xml:"stage"`

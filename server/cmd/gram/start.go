@@ -1538,7 +1538,6 @@ func newStartCommand() *cli.Command {
 				Environment:            c.String("environment"),
 				JWTSigningKey:          c.String(usersessions.JWTSigningKeyFlag),
 				ProductFeatures:        productFeatures,
-				FeatureFlags:           featureFlags,
 				Authz:                  authzEngine,
 				Encryption:             encryptionClient,
 				Identity:               identityResolver,
