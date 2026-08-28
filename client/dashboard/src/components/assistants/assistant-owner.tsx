@@ -1,3 +1,4 @@
+import { IdentityLink } from "@/components/identity-link";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/Avatar";
 import { SimpleTooltip } from "@/components/ui/Tooltip";
 import { Text } from "@/components/ui/Text";
@@ -65,7 +66,10 @@ export function AssistantOwner({
           className="truncate"
           title={display}
         >
-          {variant === "card" ? `Created by ${display}` : display}
+          {variant === "card" ? "Created by " : null}
+          <IdentityLink identifier={{ userId: member.id }}>
+            {display}
+          </IdentityLink>
         </Text>
       </div>
     );

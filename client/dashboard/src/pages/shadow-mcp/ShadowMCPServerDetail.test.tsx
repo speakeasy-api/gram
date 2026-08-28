@@ -38,6 +38,12 @@ vi.mock("react-router", () => ({
   useParams: () => ({
     serverSlug: "github-example-com-mcp-d8860eea",
   }),
+  Link: ({ to, children }: { to: string; children: ReactNode }) => (
+    <a href={to}>{children}</a>
+  ),
+  // The user column links to the identity page, which reads the slugs off the
+  // location to scope that link.
+  useLocation: () => ({ pathname: "/acme/projects/default/shadow-mcp" }),
 }));
 
 vi.mock("@/routes", () => ({
@@ -420,6 +426,9 @@ describe("ShadowMCPServerDetail", () => {
     mocks.useRoutes.mockReturnValue({
       employees: {
         detail: { href: (userSlug: string) => `/employees/${userSlug}` },
+      },
+      identities: {
+        overview: { href: (urn: string) => `/identities/${urn}/overview` },
       },
     });
     mocks.useShadowMCPInventoryServer.mockReturnValue({

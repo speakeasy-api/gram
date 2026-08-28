@@ -26,6 +26,7 @@ import {
   type EmployeeStatus,
   isUnattributedEmployee,
 } from "@/components/observe/insightsEmployeesData";
+import { encodeIdentityUrn } from "@/lib/identity-urn";
 import { ACCOUNT_TYPE_OPTIONS } from "@/components/observe/observeFilterConstants";
 import {
   defineFilters,
@@ -50,7 +51,6 @@ import { useOrgRoutes, useRoutes } from "@/routes";
 import { useSlugs } from "@/contexts/Sdk";
 import { useTelemetry } from "@/contexts/Telemetry";
 import { dateTimeFormatters } from "@/lib/dates";
-import { slugify } from "@/lib/constants";
 import { Badge } from "@/components/ui/Badge";
 import { Icon } from "@/components/ui/Icon";
 import { type Column, type SortDescriptor, Table } from "@/components/ui/Table";
@@ -423,9 +423,12 @@ export function InsightsEmployeesContent(): JSX.Element {
     (sum, item) => sum + item.tokenCount,
     0,
   );
-  const employeesBase = routes.employees.href();
   const openUser = (employee: Employee) => {
-    void navigate(`${employeesBase}/${routeSegmentForEmployee(employee)}`);
+    void navigate(
+      routes.identities.overview.href(
+        encodeIdentityUrn(identityUrnForEmployee(employee)),
+      ),
+    );
   };
   const enrollmentRate =
     totalEmployees > 0 ? (enrolledEmployees / totalEmployees) * 100 : 0;
@@ -854,11 +857,14 @@ function EmployeeTable({
   );
 }
 
-function routeSegmentForEmployee(employee: Employee) {
-  if (isUnattributedEmployee(employee) && employee.name.includes("@")) {
-    return encodeURIComponent(employee.name);
-  }
-  return slugify(employee.name);
+// A row carries whichever identifier it was built from: an org member is a
+// Gram user, and an unattributed usage row is an address when the agent
+// reported one and an agent-side id otherwise. The resolver folds all three
+// onto the same identity.
+function identityUrnForEmployee(employee: Employee): string {
+  if (!isUnattributedEmployee(employee)) return `user:${employee.id}`;
+  const usageId = employee.id.slice("usage:".length);
+  return employee.email ? `email:${employee.email}` : `external:${usageId}`;
 }
 
 function EnrollmentLegend() {

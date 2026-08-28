@@ -1,3 +1,4 @@
+import { IdentityLink } from "@/components/identity-link";
 import { AnyField } from "@/components/moon/any-field";
 import { InputField } from "@/components/moon/input-field";
 import { ResourceListPage } from "@/components/page-templates";
@@ -534,9 +535,13 @@ function TeamInner() {
             </div>
           )}
           <Stack direction="vertical" gap={0}>
-            <Text variant="body" className="font-medium">
-              {member.name}
-            </Text>
+            {/* The member row is where most people first look for someone, so
+                the name is the primary way into their identity page. */}
+            <IdentityLink identifier={{ userId: member.userId }}>
+              <Text variant="body" className="font-medium">
+                {member.name}
+              </Text>
+            </IdentityLink>
             <Text variant="body" className="text-muted-foreground text-sm">
               {member.email}
             </Text>

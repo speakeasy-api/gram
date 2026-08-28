@@ -1,5 +1,6 @@
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/Avatar";
 import { getIdentityTint } from "@/components/gradient-colors";
+import { IdentityLink } from "@/components/identity-link";
 import {
   Popover,
   PopoverContent,
@@ -210,7 +211,13 @@ export function MemberFacepile({
         </div>
         <div className="max-h-64 overflow-y-auto py-1">
           {sorted.map((m) => (
-            <div key={m.id} className="flex items-center gap-2.5 px-3 py-1.5">
+            // The popover list is where a face becomes clickable: the pile
+            // itself is a single trigger, and a row is big enough to aim at.
+            <IdentityLink
+              key={m.id}
+              identifier={{ userId: m.id }}
+              className="hover:bg-accent/40 flex items-center gap-2.5 px-3 py-1.5 no-underline hover:no-underline"
+            >
               <MemberAvatar member={m} className="size-6" />
               <div className="min-w-0">
                 <Text small className="truncate font-medium">
@@ -220,7 +227,7 @@ export function MemberFacepile({
                   {m.email}
                 </Text>
               </div>
-            </div>
+            </IdentityLink>
           ))}
         </div>
       </PopoverContent>

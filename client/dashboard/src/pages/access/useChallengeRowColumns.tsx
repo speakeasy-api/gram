@@ -1,3 +1,4 @@
+import { IdentityLink } from "@/components/identity-link";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/Avatar";
 import {
   Tooltip,
@@ -121,6 +122,10 @@ export function useChallengeRowColumns(
         render: (row: ChallengeBucket) => {
           if (isChild(row)) return null;
           const display = principalDisplayName(row.userEmail, row.principalUrn);
+          // Only user principals are people; an api_key principal resolves to
+          // no identity page.
+          const identifier =
+            row.principalType === "user" ? { urn: row.principalUrn } : null;
           return (
             <Tooltip>
               <TooltipTrigger asChild>
@@ -131,7 +136,7 @@ export function useChallengeRowColumns(
                     rowFade(row),
                   )}
                 >
-                  {display}
+                  <IdentityLink identifier={identifier}>{display}</IdentityLink>
                 </Text>
               </TooltipTrigger>
               {row.roleSlugs.length > 0 && (

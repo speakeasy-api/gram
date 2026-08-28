@@ -1,3 +1,4 @@
+import { IdentityLink } from "@/components/identity-link";
 import { useEffect, useMemo, useState } from "react";
 import { ChevronRight } from "lucide-react";
 
@@ -469,6 +470,17 @@ function ConnectionGroupRow({
         </button>
 
         <span className={CONNECTION_ACTIONS_SLOT}>
+          {/* Outside the row button, which owns the click that expands the
+              group — and a link nested in a button is not valid markup. Only
+              person groups name someone to link to. */}
+          {group.identity?.urn ? (
+            <IdentityLink
+              identifier={{ urn: group.identity.urn }}
+              className="text-muted-foreground hover:text-foreground hidden text-xs sm:inline"
+            >
+              Identity
+            </IdentityLink>
+          ) : null}
           {actions.length > 0 ? <MoreActions actions={actions} /> : null}
         </span>
       </div>

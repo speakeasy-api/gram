@@ -2,6 +2,7 @@ import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import type { ChatOverview } from "@gram/client/models/components/chatoverview.js";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { ReactNode } from "react";
+import { MemoryRouter } from "react-router";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ChatLogsTable } from "./ChatLogsTable";
 
@@ -55,6 +56,9 @@ vi.mock("@gram/client/react-query/listChats.js", () => ({
 }));
 
 vi.mock("@/contexts/Auth", () => ({
+  // The owner cell links to the identity page, which reads the project to
+  // scope that link to.
+  useProject: () => ({ id: "project-1", slug: "default" }),
   useSession: () => ({
     // Distinct from the chat owner so ChatOwnerLabel resolves the member name
     // instead of collapsing to "You".
@@ -84,7 +88,10 @@ function renderTable(ui: ReactNode) {
     defaultOptions: { queries: { retry: false } },
   });
   return render(
-    <QueryClientProvider client={queryClient}>{ui}</QueryClientProvider>,
+    // The owner cell links to the person's identity page.
+    <QueryClientProvider client={queryClient}>
+      <MemoryRouter>{ui}</MemoryRouter>
+    </QueryClientProvider>,
   );
 }
 

@@ -1,3 +1,4 @@
+import { IdentityLink } from "@/components/identity-link";
 import { Text } from "@/components/ui/Text";
 import type { AccessMember } from "@gram/client/models/components/accessmember.js";
 import type { PluginAudience } from "@gram/client/models/components/pluginaudience.js";
@@ -78,9 +79,15 @@ export function PluginAssignmentRow({
         <IconComponent className="h-4 w-4" />
       </div>
       <div className="min-w-0">
-        <Text as="div" className="truncate font-medium">
-          {label}
-        </Text>
+        {/* Only the principals that name one person reach an identity page;
+            roles, groups and attributes name a set. */}
+        <IdentityLink
+          identifier={kind === "user" || kind === "email" ? { urn } : null}
+        >
+          <Text as="div" className="truncate font-medium">
+            {label}
+          </Text>
+        </IdentityLink>
         {description && (
           <Text as="div" small muted className="truncate">
             {description}
