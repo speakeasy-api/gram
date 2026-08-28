@@ -58,11 +58,12 @@ var (
 )
 
 // supportedMetaServer is the set negotiated on meta-MCP-backed /mcp/{slug}
-// endpoints. The ceiling is Version20260728 — the surface has served it since
-// birth — but the floor matches the hosted surface's: the clients are the
-// same installed base of ordinary MCP clients, and none of the mainstream
-// ones speak 2026-07-28 yet.
-var supportedMetaServer = []string{Version20241105, Version20250326, Version20250618, Version20251125, Version20260728}
+// endpoints. It matches the hosted surface's range — same installed base of
+// ordinary MCP clients, same Version20251125 ceiling — and gains
+// Version20260728 together with the other surfaces once the remaining
+// 2026-07-28 integration work completes, not before: advertising it early
+// invites clients into the incomplete parts.
+var supportedMetaServer = []string{Version20241105, Version20250326, Version20250618, Version20251125}
 
 // SupportedMetaServer returns the revisions negotiated on meta-MCP-backed
 // /mcp/{slug} endpoints, oldest first.

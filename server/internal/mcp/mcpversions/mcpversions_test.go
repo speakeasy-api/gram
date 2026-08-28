@@ -73,6 +73,7 @@ func TestSupportedSetsExclude20260728(t *testing.T) {
 
 	require.NotContains(t, mcpversions.SupportedHostedToolset(), mcpversions.Version20260728)
 	require.NotContains(t, mcpversions.SupportedPlatformToolset(), mcpversions.Version20260728)
+	require.NotContains(t, mcpversions.SupportedMetaServer(), mcpversions.Version20260728)
 }
 
 func TestNegotiateEchoesEverySupportedVersion(t *testing.T) {
@@ -250,15 +251,15 @@ func TestSanitizePreservesUnknownButWellFormedValues(t *testing.T) {
 	require.Equal(t, "1999-12-31", mcpversions.Sanitize("1999-12-31"))
 }
 
-// TestSupportedMetaServerSpansFloorToCeiling pins the meta surface's range:
-// the hosted floor (mainstream clients are the same installed base) up
-// through 2026-07-28, which this surface has served since birth.
+// TestSupportedMetaServerSpansFloorToCeiling pins the meta surface's range
+// to the hosted surface's: same installed base, same 2025-11-25 ceiling
+// until the 2026-07-28 integration completes everywhere at once.
 func TestSupportedMetaServerSpansFloorToCeiling(t *testing.T) {
 	t.Parallel()
 
 	set := mcpversions.SupportedMetaServer()
 	require.Equal(t, mcpversions.Version20241105, set[0])
-	require.Equal(t, mcpversions.Version20260728, set[len(set)-1])
+	require.Equal(t, mcpversions.Version20251125, set[len(set)-1])
 
 	mcpversions.SupportedMetaServer()[0] = "mutated"
 	require.Equal(t, mcpversions.Version20241105, mcpversions.SupportedMetaServer()[0], "SupportedMetaServer must not hand out a mutable view of package state")

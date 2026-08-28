@@ -341,7 +341,7 @@ func TestServePublic_MetaEndpoint_UnsupportedDeclaredVersion(t *testing.T) {
 
 	envelope := decodeRPCResponse(t, w)
 	require.Contains(t, string(envelope["error"]), "unsupported protocol version")
-	require.Contains(t, string(envelope["error"]), mcpversions.Version20260728)
+	require.Contains(t, string(envelope["error"]), mcpversions.Version20251125)
 }
 
 // TestServePublic_MetaEndpoint_OlderKnownDeclaredVersionAccepted pins the
@@ -370,13 +370,23 @@ func TestServePublic_MetaEndpoint_OlderKnownDeclaredVersionAccepted(t *testing.T
 	require.Equal(t, mcpversions.Version20250326, w.Header().Get(mcpversions.HTTPHeader))
 
 	w, err = servePublicHTTP(t, ctx, ti, slug, makeMetaRPCBody(t, "tools/list", map[string]any{}), "", map[string]string{
-		mcpversions.HTTPHeader: mcpversions.Version20260728,
+		mcpversions.HTTPHeader: mcpversions.Version20251125,
 	})
 	require.NoError(t, err)
 	require.Equal(t, http.StatusOK, w.Code)
 	envelope = decodeRPCResponse(t, w)
 	require.NotContains(t, envelope, "error")
-	require.Equal(t, mcpversions.Version20260728, w.Header().Get(mcpversions.HTTPHeader))
+	require.Equal(t, mcpversions.Version20251125, w.Header().Get(mcpversions.HTTPHeader))
+
+	// A recognized-but-unserved declaration (2026-07-28 before the
+	// platform-wide flip) is rejected like any other unserved revision.
+	w, err = servePublicHTTP(t, ctx, ti, slug, makeMetaRPCBody(t, "tools/list", map[string]any{}), "", map[string]string{
+		mcpversions.HTTPHeader: mcpversions.Version20260728,
+	})
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, w.Code)
+	envelope = decodeRPCResponse(t, w)
+	require.Contains(t, string(envelope["error"]), "unsupported protocol version")
 }
 
 // TestServePublic_MetaEndpoint_UnsanitizableDeclaredVersion pins that a
@@ -484,7 +494,7 @@ func TestServePublic_MetaEndpoint_IssuerGated_NoAuth_EmitsChallenge(t *testing.T
 	require.Equal(t, expected, wwwAuth)
 	// The provisional version header (the surface's newest revision) is
 	// stamped before the issuer gate can bail out.
-	require.Equal(t, mcpversions.Version20260728, w.Header().Get(mcpversions.HTTPHeader))
+	require.Equal(t, mcpversions.Version20251125, w.Header().Get(mcpversions.HTTPHeader))
 }
 
 func TestServeMCPEndpoint_MetaEndpoint_NoXmcpExposure(t *testing.T) {
@@ -626,9 +636,9 @@ func TestServePublic_MetaEndpoint_Initialize_Negotiation(t *testing.T) {
 		want      string
 	}{
 		{"echoes 2025-06-18", mcpversions.Version20250618, mcpversions.Version20250618},
-		{"echoes 2025-11-25", mcpversions.Version20251125, mcpversions.Version20251125},
-		{"echoes the ceiling", mcpversions.Version20260728, mcpversions.Version20260728},
-		{"unknown gets the newest", "2031-01-01", mcpversions.Version20260728},
+		{"echoes the ceiling", mcpversions.Version20251125, mcpversions.Version20251125},
+		{"unserved 2026-07-28 gets the newest served", mcpversions.Version20260728, mcpversions.Version20251125},
+		{"unknown gets the newest", "2031-01-01", mcpversions.Version20251125},
 		{"absent gets the default", "", mcpversions.DefaultInEffect},
 	}
 	for _, tc := range cases {
