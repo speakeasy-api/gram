@@ -74114,6 +74114,29 @@ components:
         - coverage_bucket
         - first_seen_at
         - last_seen_at
+    MarkEnterpriseTrialConvertedRequestBody:
+      type: object
+      properties:
+        id:
+          type: string
+          description: Organization ID.
+          minLength: 1
+      required:
+        - id
+    MarkEnterpriseTrialConvertedResult:
+      type: object
+      properties:
+        converted_at:
+          type: string
+          description: The time at which the enterprise trial was recorded as converted.
+          format: date-time
+        organization_id:
+          type: string
+          description: The converted organization ID.
+      description: Privacy-minimal result of recording an enterprise trial conversion.
+      required:
+        - organization_id
+        - converted_at
     MarkRiskResultsFalsePositiveRequestBody:
       type: object
       properties:
