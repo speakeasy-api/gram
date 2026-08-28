@@ -1482,6 +1482,100 @@ func TestStripeCheckoutExactReplaySkipsCurrentStateRetrieval(t *testing.T) {
 	require.Equal(t, 1, paygSchedulingIntentCount(t, service.db))
 }
 
+func TestStripeCheckoutConvertedDemotedTrialExactReplayRepairsInternalPostCommitFailure(t *testing.T) {
+	t.Parallel()
+
+	service, db := newStripeWebhookService(t, "customer_placeholder", nil)
+	configurePaygCheckout(t, service, "event_internal_repair_replay", "subscription_internal_repair_replay", "active")
+	createDemotedEnterpriseTrialFixture(t, db)
+	createOpenRouterKeyFixture(t, db, openrouter.KeyTypeChat, 17)
+	createOpenRouterKeyFixture(t, db, openrouter.KeyTypeInternal, 23)
+	setOpenRouterKeyLifecycleFixture(t, db, openrouter.KeyTypeChat, true, []string{"admin_lock", "trial_demotion", "billing_inactive"}, 17)
+	setOpenRouterKeyLifecycleFixture(t, db, openrouter.KeyTypeInternal, true, []string{"trial_demotion", "security_hold"}, 23)
+
+	var chatPatches atomic.Int32
+	var internalPatches atomic.Int32
+	var failInternal atomic.Bool
+	failInternal.Store(true)
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPatch {
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			return
+		}
+
+		keyHash := strings.TrimPrefix(r.URL.Path, "/v1/keys/")
+		switch keyHash {
+		case "hash_placeholder_chat":
+			chatPatches.Add(1)
+		case "hash_placeholder_internal":
+			internalPatches.Add(1)
+			if failInternal.Load() {
+				w.WriteHeader(http.StatusInternalServerError)
+				return
+			}
+		default:
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"data": map[string]any{"limit": 100.0, "hash": keyHash},
+		})
+	}))
+	t.Cleanup(upstream.Close)
+	option, err := openrouter.WithTestBaseURL(upstream.URL)
+	require.NoError(t, err)
+	tracerProvider := testenv.NewTracerProvider(t)
+	guardianPolicy, err := guardian.NewUnsafePolicy(tracerProvider, []string{})
+	require.NoError(t, err)
+	service.openRouter = openrouter.New(
+		testenv.NewLogger(t), tracerProvider, guardianPolicy, db, "test", "provisioning_key_placeholder",
+		nil, nil, nil, testenv.NewEncryptionClient(t), option,
+	)
+
+	require.Equal(t, http.StatusInternalServerError, serveStripeWebhook(service, "first").Code)
+	failedInternalPatchAttempts := internalPatches.Load()
+	require.Positive(t, failedInternalPatchAttempts)
+	require.Positive(t, chatPatches.Load())
+	require.Equal(t, 1, stripeWebhookReceiptCount(t, db))
+	require.Equal(t, 1, organizationBillingActionIntentCount(t, db, audit.ActionOrganizationPaygActivated))
+	require.Equal(t, 1, paygSchedulingIntentCount(t, db))
+
+	chat := openRouterKeyLifecycleFixture(t, db, openrouter.KeyTypeChat)
+	require.Equal(t, []string{"admin_lock"}, chat.DisableCauses)
+	require.True(t, chat.Disabled)
+	limit, ok := openrouter.AccountTypeCreditLimit("payg")
+	require.True(t, ok)
+	require.EqualValues(t, limit, chat.MonthlyCredits)
+	internal := openRouterKeyLifecycleFixture(t, db, openrouter.KeyTypeInternal)
+	require.Equal(t, []string{"security_hold"}, internal.DisableCauses)
+	require.True(t, internal.Disabled)
+	require.EqualValues(t, 23, internal.MonthlyCredits)
+
+	failInternal.Store(false)
+	client, ok := service.stripeClient.(*fakeStripeWebhookClient)
+	require.True(t, ok)
+	require.EqualValues(t, 1, client.checkoutCalls.Load())
+	client.checkoutError = errors.New("exact replay must not fetch Stripe checkout state")
+
+	require.Equal(t, http.StatusOK, serveStripeWebhook(service, "exact replay").Code)
+	require.Greater(t, internalPatches.Load(), failedInternalPatchAttempts)
+	require.EqualValues(t, 1, client.checkoutCalls.Load())
+	require.Equal(t, 1, stripeWebhookReceiptCount(t, db))
+	require.Equal(t, 1, organizationBillingActionIntentCount(t, db, audit.ActionOrganizationPaygActivated))
+	require.Equal(t, 1, paygSchedulingIntentCount(t, db))
+
+	chat = openRouterKeyLifecycleFixture(t, db, openrouter.KeyTypeChat)
+	require.Equal(t, []string{"admin_lock"}, chat.DisableCauses)
+	require.True(t, chat.Disabled)
+	require.EqualValues(t, limit, chat.MonthlyCredits)
+	internal = openRouterKeyLifecycleFixture(t, db, openrouter.KeyTypeInternal)
+	require.Equal(t, []string{"security_hold"}, internal.DisableCauses)
+	require.True(t, internal.Disabled)
+	require.EqualValues(t, 23, internal.MonthlyCredits)
+}
+
 func TestStripeCheckoutExactReplayRepairsPostCommitOpenRouterFailure(t *testing.T) {
 	t.Parallel()
 

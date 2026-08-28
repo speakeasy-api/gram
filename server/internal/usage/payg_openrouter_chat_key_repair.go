@@ -37,7 +37,6 @@ func RepairPaygOpenRouterChatKey(ctx context.Context, logger *slog.Logger, db *p
 	if err != nil {
 		return fmt.Errorf("acquire connection for PAYG OpenRouter chat key repair: %w", err)
 	}
-	defer conn.Release()
 
 	queries := repo.New(conn)
 	lock := repo.AcquireOpenRouterBillingSessionLockParams{
@@ -45,16 +44,28 @@ func RepairPaygOpenRouterChatKey(ctx context.Context, logger *slog.Logger, db *p
 		KeyType:        string(openrouter.KeyTypeChat),
 	}
 	if err := queries.AcquireOpenRouterBillingSessionLock(ctx, lock); err != nil {
+		cleanupCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+		closeErr := conn.Hijack().Close(cleanupCtx)
+		cancel()
+		if closeErr != nil {
+			logger.ErrorContext(ctx, "close connection after PAYG OpenRouter chat key repair lock failure", attr.SlogError(closeErr))
+		}
 		return fmt.Errorf("lock PAYG OpenRouter chat key repair: %w", err)
 	}
 	defer func() {
 		cleanupCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
 		defer cancel()
 		unlocked, unlockErr := queries.ReleaseOpenRouterBillingSessionLock(cleanupCtx, repo.ReleaseOpenRouterBillingSessionLockParams(lock))
-		if unlockErr != nil {
-			logger.ErrorContext(cleanupCtx, "failed to unlock PAYG OpenRouter chat key repair", attr.SlogError(unlockErr))
-		} else if !unlocked {
-			logger.ErrorContext(cleanupCtx, "PAYG OpenRouter chat key repair lock was not held")
+		if unlockErr == nil && unlocked {
+			conn.Release()
+			return
+		}
+		if unlockErr == nil {
+			unlockErr = errors.New("lock was not held by this session")
+		}
+		logger.ErrorContext(cleanupCtx, "failed to unlock PAYG OpenRouter chat key repair", attr.SlogError(unlockErr))
+		if closeErr := conn.Hijack().Close(cleanupCtx); closeErr != nil {
+			logger.ErrorContext(cleanupCtx, "close connection with unreleased PAYG OpenRouter chat key repair lock", attr.SlogError(closeErr))
 		}
 	}()
 

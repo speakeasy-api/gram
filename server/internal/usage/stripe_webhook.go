@@ -95,7 +95,7 @@ func (s *Service) handleStripeWebhook(w http.ResponseWriter, r *http.Request) er
 		logger.InfoContext(ctx, "repairing duplicate Stripe lifecycle event from committed state")
 		switch event.Type {
 		case "checkout.session.completed":
-			err = RepairPaygOpenRouterChatKey(ctx, logger, s.db, s.openRouter, receipt.OrganizationID, openrouter.KeyDesiredStateEnabled)
+			err = s.repairReplayedPaygCheckout(ctx, logger, receipt.OrganizationID)
 		case "customer.subscription.deleted":
 			err = RepairPaygOpenRouterChatKey(ctx, logger, s.db, s.openRouter, receipt.OrganizationID, openrouter.KeyDesiredStateDisabled)
 		default:
@@ -252,6 +252,32 @@ func (s *Service) handleStripeWebhook(w http.ResponseWriter, r *http.Request) er
 		}
 	}
 
+	return nil
+}
+
+func (s *Service) repairReplayedPaygCheckout(ctx context.Context, logger *slog.Logger, organizationID string) error {
+	if err := RepairPaygOpenRouterChatKey(ctx, logger, s.db, s.openRouter, organizationID, openrouter.KeyDesiredStateEnabled); err != nil {
+		return err
+	}
+
+	reconciler, ok := s.openRouter.(openrouter.DisableStateReconciler)
+	if !ok {
+		return errors.New("OpenRouter key provisioner cannot reconcile replayed PAYG checkout lifecycle state")
+	}
+	for index, keyType := range openrouter.AllKeyTypes {
+		if index == 0 {
+			if keyType != openrouter.KeyTypeChat {
+				return errors.New("OpenRouter key reconciliation order must start with chat")
+			}
+			continue
+		}
+		reconcileCtx, cancel := context.WithTimeout(ctx, stripeLifecycleReconcileTimeout)
+		err := reconciler.ReconcileAPIKeyDisabled(reconcileCtx, organizationID, keyType)
+		cancel()
+		if err != nil {
+			return fmt.Errorf("reconcile replayed PAYG checkout OpenRouter %s key: %w", keyType, err)
+		}
+	}
 	return nil
 }
 
