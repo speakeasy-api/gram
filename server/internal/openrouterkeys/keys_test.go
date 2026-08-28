@@ -8,7 +8,6 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
-	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -1241,10 +1240,13 @@ func TestAdminMutationTimeoutDoesNotCancelLaterCompletion(t *testing.T) {
 	defer cancel()
 	_, err := ti.service.DisableKey(waitCtx, &gen.DisableKeyPayload{OrganizationID: orgID, KeyType: "chat"})
 	requireOopsCode(t, err, oops.CodeUnavailable)
-	require.Eventually(t, func() bool {
-		return slices.Equal(readDisableCauses(t, ctx, ti, orgID, "chat"), []string{"admin_lock"})
-	}, time.Second, 10*time.Millisecond)
-	require.NoError(t, <-laterDone)
+	select {
+	case err := <-laterDone:
+		require.NoError(t, err)
+	case <-time.After(5 * time.Second):
+		t.Fatal("later reconciliation did not complete")
+	}
+	require.Equal(t, []string{"admin_lock"}, readDisableCauses(t, ctx, ti, orgID, "chat"))
 	require.EqualValues(t, 1, auditCount(t, ctx, ti, audit.ActionOpenRouterAPIKeyDisable))
 }
 
