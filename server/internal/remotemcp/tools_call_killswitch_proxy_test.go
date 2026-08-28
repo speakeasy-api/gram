@@ -201,6 +201,59 @@ func TestToolsCallKillswitchEvaluatesAmbiguousStrictSessionCalls(t *testing.T) {
 	require.Zero(t, upstreamCalls.Load())
 }
 
+func TestToolsCallKillswitchEvaluatesAmbiguousCallsWithoutSessionSelection(t *testing.T) {
+	t.Parallel()
+
+	var upstreamCalls atomic.Int32
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		upstreamCalls.Add(1)
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"jsonrpc":"2.0","id":7,"result":{}}`))
+	}))
+	t.Cleanup(upstream.Close)
+
+	match, err := killswitches.NewMatchedDenialDisposition("Calls paused by an administrator.")
+	require.NoError(t, err)
+	checkpoint := &fakeKillswitchCheckpoint{disposition: match}
+	protectedWork := &countingToolsCallInterceptor{}
+	p := newKillswitchTestProxy(t, upstream.URL,
+		NewToolsCallKillswitchInterceptor(checkpoint, "organization-id", "server-id", testenv.NewLogger(t)),
+		protectedWork,
+	)
+	require.False(t, p.StrictToolSelection, "no session selection must leave strict tool selection disabled")
+
+	bodies := []string{
+		`{"jsonrpc":"2.0","id":7,"method":"tools/call","method":"ping","params":{"name":"protected","arguments":{}}}`,
+		`{"jsonrpc":"2.0","id":7,"method":"tools/call","params":{"name":"protected"},"params":[]}`,
+	}
+	wantEnvelope := map[string]any{
+		"jsonrpc": "2.0",
+		"id":      float64(7),
+		"error": map[string]any{
+			"code":    float64(proxy.RejectCodeForbidden),
+			"message": "Calls paused by an administrator.",
+			"data":    map[string]any{"code": proxy.KillswitchRejectionCode},
+		},
+	}
+	for i, body := range bodies {
+		req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/x/mcp/server", strings.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Accept", "application/json, text/event-stream")
+		rr := httptest.NewRecorder()
+
+		require.NoError(t, p.Post(rr, req))
+		require.Equal(t, http.StatusOK, rr.Code)
+		require.Equal(t, i+1, checkpoint.calls, "each ambiguous tools/call must evaluate exactly once")
+
+		var envelope map[string]any
+		require.NoError(t, json.Unmarshal(rr.Body.Bytes(), &envelope))
+		require.Equal(t, wantEnvelope, envelope)
+	}
+
+	require.Zero(t, protectedWork.calls.Load())
+	require.Zero(t, upstreamCalls.Load())
+}
+
 func TestToolsCallKillswitchDeniesExistingSessionOnNextCall(t *testing.T) {
 	t.Parallel()
 	var upstreamCalls atomic.Int32

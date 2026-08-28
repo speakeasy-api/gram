@@ -533,7 +533,7 @@ func (p *Proxy) Post(w http.ResponseWriter, r *http.Request) (err error) {
 
 	toolsCallReq, toolsCallDecodeErr := toolsCallRequestFromUserRequest(userReq)
 	toolsCallPreflightReq := toolsCallReq
-	if toolsCallPreflightReq == nil && p.StrictToolSelection && len(p.ToolsCallPreForwardInterceptors) > 0 && hasTopLevelJSONRPCMethod(userReq.body, methodToolsCall) {
+	if toolsCallPreflightReq == nil && len(p.ToolsCallPreForwardInterceptors) > 0 && hasTopLevelJSONRPCMethod(userReq.body, methodToolsCall) {
 		toolsCallPreflightReq = &ToolsCallRequest{Params: nil, UserRequest: userReq}
 	}
 	if toolsCallPreflightReq != nil && len(p.ToolsCallPreForwardInterceptors) > 0 {
