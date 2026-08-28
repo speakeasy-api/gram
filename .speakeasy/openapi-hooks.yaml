@@ -754,6 +754,8 @@ components:
       name: Gram-Session
       in: header
 tags:
+  - name: killswitches
+    description: Manage MCP tool-call killswitches for users in the active organization. Requires an ordinary live organization-administrator session.
   - name: access
     description: Manage roles, team member access control, and authorization challenge events.
   - name: agent
@@ -812,8 +814,6 @@ tags:
     description: Manage organization-level JSON Web Key Sets — published public keys backed by customer KMS keys — and the publish/activate/retire/revoke lifecycle of their keys.
   - name: keys
     description: Managing system api keys.
-  - name: killswitches
-    description: Manage MCP tool-call killswitches for users in the active organization. Requires an ordinary live organization-administrator session.
   - name: litellm
     description: Receives LiteLLM Generic Guardrail callbacks and OpenTelemetry exports.
   - name: mcpApproval

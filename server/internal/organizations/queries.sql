@@ -99,7 +99,7 @@ WHERE our.user_id = @user_id
   AND our.organization_id = @organization_id
   AND our.deleted_at IS NULL
   AND u.deleted_at IS NULL
-FOR KEY SHARE OF our, u;
+FOR SHARE OF our, u;
 
 -- name: GetOrganizationUserRelationship :one
 SELECT *

@@ -62,13 +62,17 @@ func newIntegrationService(t *testing.T) (*Service, *pgxpool.Pool, string, strin
 	}
 	registry, err := mcptoolexecution.NewRegistry(db)
 	require.NoError(t, err)
-	lifecycle, err := killswitches.NewLifecycleService(db, registry, killswitches.NewCustomerLifecycleValidator(), killswitches.NewAuditBeforeCommitHook(audit.NewLogger()))
+	lifecycle, err := killswitches.NewLifecycleService(db, registry, mcptoolexecution.NewCustomerLifecycleValidator(), killswitches.NewAuditBeforeCommitHook(audit.NewLogger()))
 	require.NoError(t, err)
 	facade, err := killswitches.NewFacade(lifecycle)
 	require.NoError(t, err)
 	authorized, err := killswitches.NewAuthorizedService(facade, allowAdmin{})
 	require.NoError(t, err)
-	return &Service{db: db, authorized: authorized, user: mcptoolexecution.NewAuthenticatedUserPrincipalAdapter(db), server: mcptoolexecution.NewMCPServerResourceAdapter(db)}, db, orgID, userID, servers
+	user, ok := registry.PrincipalAdapter(mcptoolexecution.PrincipalKindUser)
+	require.True(t, ok)
+	server, ok := registry.ResourceAdapter(mcptoolexecution.ResourceKindMCPServer)
+	require.True(t, ok)
+	return &Service{db: db, authorized: authorized, user: user, server: server}, db, orgID, userID, servers
 }
 
 func insertForeignServer(t *testing.T, db *pgxpool.Pool) uuid.UUID {

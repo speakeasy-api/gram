@@ -5,88 +5,324 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
-import { ClosedEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
+import {
+  KillswitchScheduleEndBounded,
+  KillswitchScheduleEndBounded$inboundSchema,
+  KillswitchScheduleEndBounded$outboundSchema,
+} from "./killswitchscheduleendbounded.js";
+import {
+  KillswitchScheduleEndUntilLifted,
+  KillswitchScheduleEndUntilLifted$inboundSchema,
+  KillswitchScheduleEndUntilLifted$outboundSchema,
+} from "./killswitchscheduleenduntillifted.js";
+import {
+  KillswitchScheduleStartNow,
+  KillswitchScheduleStartNow$inboundSchema,
+  KillswitchScheduleStartNow$outboundSchema,
+} from "./killswitchschedulestartnow.js";
+import {
+  KillswitchScheduleStartScheduled,
+  KillswitchScheduleStartScheduled$inboundSchema,
+  KillswitchScheduleStartScheduled$outboundSchema,
+} from "./killswitchschedulestartscheduled.js";
 
-export const End = {
-  UntilLifted: "until_lifted",
-  Bounded: "bounded",
-} as const;
-export type End = ClosedEnum<typeof End>;
-
-export const Start = {
-  Now: "now",
-  Scheduled: "scheduled",
-} as const;
-export type Start = ClosedEnum<typeof Start>;
-
-export type KillswitchSchedule = {
-  end: End;
-  endsAt?: Date | undefined;
-  start: Start;
-  startsAt?: Date | undefined;
+export type KillswitchScheduledBoundedSchedule = {
+  start: KillswitchScheduleStartScheduled;
+  startsAt: Date;
+  end: KillswitchScheduleEndBounded;
+  endsAt: Date;
 };
 
-/** @internal */
-export const End$inboundSchema: z.ZodMiniEnum<typeof End> = z.enum(End);
-/** @internal */
-export const End$outboundSchema: z.ZodMiniEnum<typeof End> = End$inboundSchema;
+export type KillswitchScheduledUntilLiftedSchedule = {
+  start: KillswitchScheduleStartScheduled;
+  startsAt: Date;
+  end: KillswitchScheduleEndUntilLifted;
+};
+
+export type KillswitchNowBoundedSchedule = {
+  start: KillswitchScheduleStartNow;
+  end: KillswitchScheduleEndBounded;
+  endsAt: Date;
+};
+
+export type KillswitchNowUntilLiftedSchedule = {
+  start: KillswitchScheduleStartNow;
+  end: KillswitchScheduleEndUntilLifted;
+};
+
+export type KillswitchSchedule =
+  | KillswitchScheduledBoundedSchedule
+  | KillswitchNowBoundedSchedule
+  | KillswitchScheduledUntilLiftedSchedule
+  | KillswitchNowUntilLiftedSchedule;
 
 /** @internal */
-export const Start$inboundSchema: z.ZodMiniEnum<typeof Start> = z.enum(Start);
-/** @internal */
-export const Start$outboundSchema: z.ZodMiniEnum<typeof Start> =
-  Start$inboundSchema;
-
-/** @internal */
-export const KillswitchSchedule$inboundSchema: z.ZodMiniType<
-  KillswitchSchedule,
+export const KillswitchScheduledBoundedSchedule$inboundSchema: z.ZodMiniType<
+  KillswitchScheduledBoundedSchedule,
   unknown
 > = z.pipe(
   z.object({
-    end: End$inboundSchema,
-    ends_at: z.optional(
-      z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v))),
+    start: KillswitchScheduleStartScheduled$inboundSchema,
+    starts_at: z.pipe(
+      z.iso.datetime({ offset: true }),
+      z.transform(v => new Date(v)),
     ),
-    start: Start$inboundSchema,
-    starts_at: z.optional(
-      z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v))),
+    end: KillswitchScheduleEndBounded$inboundSchema,
+    ends_at: z.pipe(
+      z.iso.datetime({ offset: true }),
+      z.transform(v => new Date(v)),
+    ),
+  }),
+  z.transform((v) => {
+    return remap$(v, {
+      "starts_at": "startsAt",
+      "ends_at": "endsAt",
+    });
+  }),
+);
+/** @internal */
+export type KillswitchScheduledBoundedSchedule$Outbound = {
+  start: string;
+  starts_at: string;
+  end: string;
+  ends_at: string;
+};
+
+/** @internal */
+export const KillswitchScheduledBoundedSchedule$outboundSchema: z.ZodMiniType<
+  KillswitchScheduledBoundedSchedule$Outbound,
+  KillswitchScheduledBoundedSchedule
+> = z.pipe(
+  z.object({
+    start: KillswitchScheduleStartScheduled$outboundSchema,
+    startsAt: z.pipe(z.date(), z.transform(v => v.toISOString())),
+    end: KillswitchScheduleEndBounded$outboundSchema,
+    endsAt: z.pipe(z.date(), z.transform(v => v.toISOString())),
+  }),
+  z.transform((v) => {
+    return remap$(v, {
+      startsAt: "starts_at",
+      endsAt: "ends_at",
+    });
+  }),
+);
+
+export function killswitchScheduledBoundedScheduleToJSON(
+  killswitchScheduledBoundedSchedule: KillswitchScheduledBoundedSchedule,
+): string {
+  return JSON.stringify(
+    KillswitchScheduledBoundedSchedule$outboundSchema.parse(
+      killswitchScheduledBoundedSchedule,
+    ),
+  );
+}
+export function killswitchScheduledBoundedScheduleFromJSON(
+  jsonString: string,
+): SafeParseResult<KillswitchScheduledBoundedSchedule, SDKValidationError> {
+  return safeParse(
+    jsonString,
+    (x) =>
+      KillswitchScheduledBoundedSchedule$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'KillswitchScheduledBoundedSchedule' from JSON`,
+  );
+}
+
+/** @internal */
+export const KillswitchScheduledUntilLiftedSchedule$inboundSchema:
+  z.ZodMiniType<KillswitchScheduledUntilLiftedSchedule, unknown> = z.pipe(
+    z.object({
+      start: KillswitchScheduleStartScheduled$inboundSchema,
+      starts_at: z.pipe(
+        z.iso.datetime({ offset: true }),
+        z.transform(v => new Date(v)),
+      ),
+      end: KillswitchScheduleEndUntilLifted$inboundSchema,
+    }),
+    z.transform((v) => {
+      return remap$(v, {
+        "starts_at": "startsAt",
+      });
+    }),
+  );
+/** @internal */
+export type KillswitchScheduledUntilLiftedSchedule$Outbound = {
+  start: string;
+  starts_at: string;
+  end: string;
+};
+
+/** @internal */
+export const KillswitchScheduledUntilLiftedSchedule$outboundSchema:
+  z.ZodMiniType<
+    KillswitchScheduledUntilLiftedSchedule$Outbound,
+    KillswitchScheduledUntilLiftedSchedule
+  > = z.pipe(
+    z.object({
+      start: KillswitchScheduleStartScheduled$outboundSchema,
+      startsAt: z.pipe(z.date(), z.transform(v => v.toISOString())),
+      end: KillswitchScheduleEndUntilLifted$outboundSchema,
+    }),
+    z.transform((v) => {
+      return remap$(v, {
+        startsAt: "starts_at",
+      });
+    }),
+  );
+
+export function killswitchScheduledUntilLiftedScheduleToJSON(
+  killswitchScheduledUntilLiftedSchedule:
+    KillswitchScheduledUntilLiftedSchedule,
+): string {
+  return JSON.stringify(
+    KillswitchScheduledUntilLiftedSchedule$outboundSchema.parse(
+      killswitchScheduledUntilLiftedSchedule,
+    ),
+  );
+}
+export function killswitchScheduledUntilLiftedScheduleFromJSON(
+  jsonString: string,
+): SafeParseResult<KillswitchScheduledUntilLiftedSchedule, SDKValidationError> {
+  return safeParse(
+    jsonString,
+    (x) =>
+      KillswitchScheduledUntilLiftedSchedule$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'KillswitchScheduledUntilLiftedSchedule' from JSON`,
+  );
+}
+
+/** @internal */
+export const KillswitchNowBoundedSchedule$inboundSchema: z.ZodMiniType<
+  KillswitchNowBoundedSchedule,
+  unknown
+> = z.pipe(
+  z.object({
+    start: KillswitchScheduleStartNow$inboundSchema,
+    end: KillswitchScheduleEndBounded$inboundSchema,
+    ends_at: z.pipe(
+      z.iso.datetime({ offset: true }),
+      z.transform(v => new Date(v)),
     ),
   }),
   z.transform((v) => {
     return remap$(v, {
       "ends_at": "endsAt",
-      "starts_at": "startsAt",
     });
   }),
 );
 /** @internal */
-export type KillswitchSchedule$Outbound = {
-  end: string;
-  ends_at?: string | undefined;
+export type KillswitchNowBoundedSchedule$Outbound = {
   start: string;
-  starts_at?: string | undefined;
+  end: string;
+  ends_at: string;
 };
+
+/** @internal */
+export const KillswitchNowBoundedSchedule$outboundSchema: z.ZodMiniType<
+  KillswitchNowBoundedSchedule$Outbound,
+  KillswitchNowBoundedSchedule
+> = z.pipe(
+  z.object({
+    start: KillswitchScheduleStartNow$outboundSchema,
+    end: KillswitchScheduleEndBounded$outboundSchema,
+    endsAt: z.pipe(z.date(), z.transform(v => v.toISOString())),
+  }),
+  z.transform((v) => {
+    return remap$(v, {
+      endsAt: "ends_at",
+    });
+  }),
+);
+
+export function killswitchNowBoundedScheduleToJSON(
+  killswitchNowBoundedSchedule: KillswitchNowBoundedSchedule,
+): string {
+  return JSON.stringify(
+    KillswitchNowBoundedSchedule$outboundSchema.parse(
+      killswitchNowBoundedSchedule,
+    ),
+  );
+}
+export function killswitchNowBoundedScheduleFromJSON(
+  jsonString: string,
+): SafeParseResult<KillswitchNowBoundedSchedule, SDKValidationError> {
+  return safeParse(
+    jsonString,
+    (x) => KillswitchNowBoundedSchedule$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'KillswitchNowBoundedSchedule' from JSON`,
+  );
+}
+
+/** @internal */
+export const KillswitchNowUntilLiftedSchedule$inboundSchema: z.ZodMiniType<
+  KillswitchNowUntilLiftedSchedule,
+  unknown
+> = z.object({
+  start: KillswitchScheduleStartNow$inboundSchema,
+  end: KillswitchScheduleEndUntilLifted$inboundSchema,
+});
+/** @internal */
+export type KillswitchNowUntilLiftedSchedule$Outbound = {
+  start: string;
+  end: string;
+};
+
+/** @internal */
+export const KillswitchNowUntilLiftedSchedule$outboundSchema: z.ZodMiniType<
+  KillswitchNowUntilLiftedSchedule$Outbound,
+  KillswitchNowUntilLiftedSchedule
+> = z.object({
+  start: KillswitchScheduleStartNow$outboundSchema,
+  end: KillswitchScheduleEndUntilLifted$outboundSchema,
+});
+
+export function killswitchNowUntilLiftedScheduleToJSON(
+  killswitchNowUntilLiftedSchedule: KillswitchNowUntilLiftedSchedule,
+): string {
+  return JSON.stringify(
+    KillswitchNowUntilLiftedSchedule$outboundSchema.parse(
+      killswitchNowUntilLiftedSchedule,
+    ),
+  );
+}
+export function killswitchNowUntilLiftedScheduleFromJSON(
+  jsonString: string,
+): SafeParseResult<KillswitchNowUntilLiftedSchedule, SDKValidationError> {
+  return safeParse(
+    jsonString,
+    (x) => KillswitchNowUntilLiftedSchedule$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'KillswitchNowUntilLiftedSchedule' from JSON`,
+  );
+}
+
+/** @internal */
+export const KillswitchSchedule$inboundSchema: z.ZodMiniType<
+  KillswitchSchedule,
+  unknown
+> = z.union([
+  z.lazy(() => KillswitchScheduledBoundedSchedule$inboundSchema),
+  z.lazy(() => KillswitchNowBoundedSchedule$inboundSchema),
+  z.lazy(() => KillswitchScheduledUntilLiftedSchedule$inboundSchema),
+  z.lazy(() => KillswitchNowUntilLiftedSchedule$inboundSchema),
+]);
+/** @internal */
+export type KillswitchSchedule$Outbound =
+  | KillswitchScheduledBoundedSchedule$Outbound
+  | KillswitchNowBoundedSchedule$Outbound
+  | KillswitchScheduledUntilLiftedSchedule$Outbound
+  | KillswitchNowUntilLiftedSchedule$Outbound;
 
 /** @internal */
 export const KillswitchSchedule$outboundSchema: z.ZodMiniType<
   KillswitchSchedule$Outbound,
   KillswitchSchedule
-> = z.pipe(
-  z.object({
-    end: End$outboundSchema,
-    endsAt: z.optional(z.pipe(z.date(), z.transform(v => v.toISOString()))),
-    start: Start$outboundSchema,
-    startsAt: z.optional(z.pipe(z.date(), z.transform(v => v.toISOString()))),
-  }),
-  z.transform((v) => {
-    return remap$(v, {
-      endsAt: "ends_at",
-      startsAt: "starts_at",
-    });
-  }),
-);
+> = z.union([
+  z.lazy(() => KillswitchScheduledBoundedSchedule$outboundSchema),
+  z.lazy(() => KillswitchNowBoundedSchedule$outboundSchema),
+  z.lazy(() => KillswitchScheduledUntilLiftedSchedule$outboundSchema),
+  z.lazy(() => KillswitchNowUntilLiftedSchedule$outboundSchema),
+]);
 
 export function killswitchScheduleToJSON(
   killswitchSchedule: KillswitchSchedule,

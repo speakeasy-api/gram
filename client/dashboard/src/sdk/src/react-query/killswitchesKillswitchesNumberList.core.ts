@@ -11,12 +11,12 @@ import { GramCore } from "../core.js";
 import { killswitchesKillswitchesNumberList } from "../funcs/killswitchesKillswitchesNumberList.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
+import { KillswitchCapabilityKey } from "../models/components/killswitchcapabilitykey.js";
+import { KillswitchListStatus } from "../models/components/killswitchliststatus.js";
 import {
-  CapabilityKey,
   KillswitchesNumberListRequest,
   KillswitchesNumberListResponse,
   KillswitchesNumberListSecurity,
-  Status,
 } from "../models/operations/killswitchesnumberlist.js";
 import { unwrapAsync } from "../types/fp.js";
 import { PageIterator, unwrapResultIterator } from "../types/operations.js";
@@ -177,9 +177,9 @@ export function buildKillswitchesKillswitchesNumberListInfiniteQuery(
 
 export function queryKeyKillswitchesKillswitchesNumberList(
   parameters: {
-    capabilityKey?: CapabilityKey | undefined;
+    capabilityKey?: KillswitchCapabilityKey | undefined;
     userId?: string | undefined;
-    status?: Status | undefined;
+    status?: KillswitchListStatus | undefined;
     limit?: number | undefined;
     cursor?: string | undefined;
     gramSession?: string | undefined;
@@ -190,9 +190,9 @@ export function queryKeyKillswitchesKillswitchesNumberList(
 
 export function queryKeyKillswitchesKillswitchesNumberListInfinite(
   parameters: {
-    capabilityKey?: CapabilityKey | undefined;
+    capabilityKey?: KillswitchCapabilityKey | undefined;
     userId?: string | undefined;
-    status?: Status | undefined;
+    status?: KillswitchListStatus | undefined;
     limit?: number | undefined;
     cursor?: string | undefined;
     gramSession?: string | undefined;

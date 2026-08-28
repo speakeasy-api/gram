@@ -5,10 +5,10 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import {
-  EditRequestBody,
-  EditRequestBody$Outbound,
-  EditRequestBody$outboundSchema,
-} from "../components/editrequestbody.js";
+  KillswitchEditRequest,
+  KillswitchEditRequest$Outbound,
+  KillswitchEditRequest$outboundSchema,
+} from "../components/killswitcheditrequest.js";
 
 export type KillswitchesNumberEditSecurity = {
   sessionHeaderGramSession?: string | undefined;
@@ -19,7 +19,7 @@ export type KillswitchesNumberEditRequest = {
    * Session header
    */
   gramSession?: string | undefined;
-  editRequestBody: EditRequestBody;
+  killswitchEditRequest: KillswitchEditRequest;
 };
 
 /** @internal */
@@ -55,7 +55,7 @@ export function killswitchesNumberEditSecurityToJSON(
 /** @internal */
 export type KillswitchesNumberEditRequest$Outbound = {
   "Gram-Session"?: string | undefined;
-  EditRequestBody: EditRequestBody$Outbound;
+  KillswitchEditRequest: KillswitchEditRequest$Outbound;
 };
 
 /** @internal */
@@ -65,12 +65,12 @@ export const KillswitchesNumberEditRequest$outboundSchema: z.ZodMiniType<
 > = z.pipe(
   z.object({
     gramSession: z.optional(z.string()),
-    editRequestBody: EditRequestBody$outboundSchema,
+    killswitchEditRequest: KillswitchEditRequest$outboundSchema,
   }),
   z.transform((v) => {
     return remap$(v, {
       gramSession: "Gram-Session",
-      editRequestBody: "EditRequestBody",
+      killswitchEditRequest: "KillswitchEditRequest",
     });
   }),
 );

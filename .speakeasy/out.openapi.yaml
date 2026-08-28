@@ -21303,14 +21303,14 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/BatchUserBadgesRequestBody'
+              $ref: '#/components/schemas/KillswitchBatchUserBadgesRequest'
       responses:
         "200":
           description: OK response.
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/BatchUserBadgesResponseBody'
+                $ref: '#/components/schemas/KillswitchBatchUserBadgesResult'
         "400":
           description: 'bad_request: request is invalid'
           content:
@@ -21331,12 +21331,6 @@ paths:
                 $ref: '#/components/schemas/Error'
         "404":
           description: 'not_found: resource not found'
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-        "409":
-          description: 'version_conflict: The killswitch changed after the supplied version.'
           content:
             application/json:
               schema:
@@ -21393,14 +21387,14 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/CreateRequestBody3'
+              $ref: '#/components/schemas/KillswitchCreateRequest'
       responses:
         "200":
           description: OK response.
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/KillswitchMutationResult'
+                $ref: '#/components/schemas/KillswitchMutationReceipt'
         "400":
           description: 'bad_request: request is invalid'
           content:
@@ -21426,11 +21420,11 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
         "409":
-          description: 'version_conflict: The killswitch changed after the supplied version.'
+          description: 'operation_conflict: The operation ID was already used for a different request.'
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Error'
+                $ref: '#/components/schemas/KillswitchConflict'
         "415":
           description: 'unsupported_media: unsupported media type'
           content:
@@ -21483,14 +21477,14 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/EditRequestBody'
+              $ref: '#/components/schemas/KillswitchEditRequest'
       responses:
         "200":
           description: OK response.
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/KillswitchMutationResult'
+                $ref: '#/components/schemas/KillswitchMutationReceipt'
         "400":
           description: 'bad_request: request is invalid'
           content:
@@ -21520,7 +21514,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Error'
+                $ref: '#/components/schemas/KillswitchConflict'
         "415":
           description: 'unsupported_media: unsupported media type'
           content:
@@ -21606,12 +21600,6 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-        "409":
-          description: 'version_conflict: The killswitch changed after the supplied version.'
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
         "415":
           description: 'unsupported_media: unsupported media type'
           content:
@@ -21664,14 +21652,14 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/LiftRequestBody'
+              $ref: '#/components/schemas/KillswitchLiftRequest'
       responses:
         "200":
           description: OK response.
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/LiftResponseBody'
+                $ref: '#/components/schemas/KillswitchLiftResult'
         "400":
           description: 'bad_request: request is invalid'
           content:
@@ -21701,7 +21689,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Error'
+                $ref: '#/components/schemas/KillswitchConflict'
         "415":
           description: 'unsupported_media: unsupported media type'
           content:
@@ -21742,10 +21730,7 @@ paths:
         - allowEmptyValue: true
           in: query
           name: capability_key
-          schema:
-            enum:
-              - mcp_tool_calls
-            type: string
+          schema: {$ref: "#/components/schemas/KillswitchCapabilityKey"}
         - allowEmptyValue: true
           in: query
           name: user_id
@@ -21754,13 +21739,7 @@ paths:
         - allowEmptyValue: true
           in: query
           name: status
-          schema:
-            enum:
-              - active
-              - scheduled
-              - expired
-              - lifted
-            type: string
+          schema: {$ref: "#/components/schemas/KillswitchListStatus"}
         - allowEmptyValue: true
           in: query
           name: limit
@@ -21786,7 +21765,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ListResponseBody2'
+                $ref: '#/components/schemas/KillswitchListResult'
           description: OK response.
         "400":
           content:
@@ -21812,12 +21791,6 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
           description: 'not_found: resource not found'
-        "409":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'version_conflict: The killswitch changed after the supplied version.'
         "415":
           content:
             application/json:
@@ -21882,7 +21855,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ListCapabilitiesResponseBody'
+                $ref: '#/components/schemas/KillswitchListCapabilitiesResult'
         "400":
           description: 'bad_request: request is invalid'
           content:
@@ -21903,12 +21876,6 @@ paths:
                 $ref: '#/components/schemas/Error'
         "404":
           description: 'not_found: resource not found'
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-        "409":
-          description: 'version_conflict: The killswitch changed after the supplied version.'
           content:
             application/json:
               schema:
@@ -21966,7 +21933,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ListMCPServersResponseBody'
+                $ref: '#/components/schemas/KillswitchListMCPServersResult'
         "400":
           description: 'bad_request: request is invalid'
           content:
@@ -21987,12 +21954,6 @@ paths:
                 $ref: '#/components/schemas/Error'
         "404":
           description: 'not_found: resource not found'
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-        "409":
-          description: 'version_conflict: The killswitch changed after the supplied version.'
           content:
             application/json:
               schema:
@@ -22049,14 +22010,14 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/PreviewOverlapsRequestBody'
+              $ref: '#/components/schemas/KillswitchPreviewOverlapsRequest'
       responses:
         "200":
           description: OK response.
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/PreviewOverlapsResponseBody'
+                $ref: '#/components/schemas/KillswitchPreviewOverlapsResult'
         "400":
           description: 'bad_request: request is invalid'
           content:
@@ -22077,12 +22038,6 @@ paths:
                 $ref: '#/components/schemas/Error'
         "404":
           description: 'not_found: resource not found'
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-        "409":
-          description: 'version_conflict: The killswitch changed after the supplied version.'
           content:
             application/json:
               schema:
@@ -63946,26 +63901,6 @@ components:
         - tool_urn
         - created_at
         - updated_at
-    BatchUserBadgesRequestBody:
-      type: object
-      properties:
-        user_ids:
-          type: array
-          items:
-            type: string
-          minItems: 1
-          maxItems: 100
-      required:
-        - user_ids
-    BatchUserBadgesResponseBody:
-      type: object
-      properties:
-        badges:
-          type: array
-          items:
-            $ref: '#/components/schemas/KillswitchUserBadge'
-      required:
-        - badges
     BillingEmail:
       type: object
       properties:
@@ -66249,36 +66184,6 @@ components:
         - name
         - slug
         - mcp_registry_namespace
-    CreateRequestBody3:
-      type: object
-      properties:
-        capability_key:
-          type: string
-          enum:
-            - mcp_tool_calls
-        external_note:
-          type: string
-          maxLength: 500
-        internal_note:
-          type: string
-          maxLength: 4000
-        operation_id:
-          type: string
-          format: uuid
-        schedule:
-          $ref: '#/components/schemas/KillswitchSchedule'
-        scope:
-          $ref: '#/components/schemas/KillswitchScope'
-        user_id:
-          type: string
-      required:
-        - operation_id
-        - scope
-        - schedule
-        - external_note
-        - internal_note
-        - capability_key
-        - user_id
     CreateRequestRequestBody:
       type: object
       properties:
@@ -67835,36 +67740,6 @@ components:
           description: The CNAME target subdomain custom domains should point at, if configured
       required:
         - a_records
-    EditRequestBody:
-      type: object
-      properties:
-        expected_version:
-          type: integer
-          format: int64
-        external_note:
-          type: string
-          maxLength: 500
-        id:
-          type: string
-          format: uuid
-        internal_note:
-          type: string
-          maxLength: 4000
-        operation_id:
-          type: string
-          format: uuid
-        schedule:
-          $ref: '#/components/schemas/KillswitchSchedule'
-        scope:
-          $ref: '#/components/schemas/KillswitchScope'
-      required:
-        - operation_id
-        - scope
-        - schedule
-        - external_note
-        - internal_note
-        - id
-        - expected_version
     EmployeeDataFlowEdge:
       type: object
       properties:
@@ -71693,15 +71568,32 @@ components:
         - scopes
         - created_at
         - updated_at
+    KillswitchBatchUserBadgesRequest:
+      type: object
+      properties:
+        user_ids:
+          type: array
+          items:
+            type: string
+          minItems: 1
+          maxItems: 100
+      required:
+        - user_ids
+    KillswitchBatchUserBadgesResult:
+      type: object
+      properties:
+        badges:
+          type: array
+          items:
+            $ref: '#/components/schemas/KillswitchUserBadge'
+      required:
+        - badges
     KillswitchCapability:
       type: object
       properties:
-        key:
-          type: string
-          enum:
-            - mcp_tool_calls
         label:
           type: string
+        key: {$ref: "#/components/schemas/KillswitchCapabilityKey"}
       required:
         - key
         - label
@@ -71712,13 +71604,45 @@ components:
           type: string
       required:
         - label
+    KillswitchConflict:
+      type: object
+      properties:
+        message:
+          type: string
+        name: {$ref: "#/components/schemas/KillswitchConflictName"}
+      required:
+        - name
+        - message
+    KillswitchCreateRequest:
+      type: object
+      properties:
+        external_note:
+          type: string
+          maxLength: 500
+        internal_note:
+          type: string
+          maxLength: 4000
+        operation_id:
+          type: string
+          format: uuid
+        schedule:
+          $ref: '#/components/schemas/KillswitchSchedule'
+        scope:
+          $ref: '#/components/schemas/KillswitchScope'
+        user_id:
+          type: string
+        capability_key: {$ref: "#/components/schemas/KillswitchCapabilityKey"}
+      required:
+        - operation_id
+        - scope
+        - schedule
+        - external_note
+        - internal_note
+        - capability_key
+        - user_id
     KillswitchDetail:
       type: object
       properties:
-        capability_key:
-          type: string
-          enum:
-            - mcp_tool_calls
         capability_label:
           type: string
         external_note:
@@ -71738,18 +71662,13 @@ components:
           $ref: '#/components/schemas/KillswitchSchedule'
         scope:
           $ref: '#/components/schemas/KillswitchScope'
-        status:
-          type: string
-          enum:
-            - active
-            - scheduled
-            - expired
-            - lifted
         user_id:
           type: string
         version:
           type: integer
           format: int64
+        capability_key: {$ref: "#/components/schemas/KillswitchCapabilityKey"}
+        status: {$ref: "#/components/schemas/KillswitchStatus"}
       required:
         - external_note
         - internal_note
@@ -71763,17 +71682,39 @@ components:
         - status
         - scope
         - schedule
+    KillswitchEditRequest:
+      type: object
+      properties:
+        expected_version:
+          type: integer
+          format: int64
+        external_note:
+          type: string
+          maxLength: 500
+        id:
+          type: string
+          format: uuid
+        internal_note:
+          type: string
+          maxLength: 4000
+        operation_id:
+          type: string
+          format: uuid
+        schedule:
+          $ref: '#/components/schemas/KillswitchSchedule'
+        scope:
+          $ref: '#/components/schemas/KillswitchScope'
+      required:
+        - operation_id
+        - scope
+        - schedule
+        - external_note
+        - internal_note
+        - id
+        - expected_version
     KillswitchHistoryEvent:
       type: object
       properties:
-        action:
-          type: string
-          enum:
-            - created
-            - edited
-            - lifted
-            - expired
-            - restored
         actor_display_name:
           type: string
         actor_user_id:
@@ -71792,16 +71733,11 @@ components:
         sequence:
           type: integer
           format: int64
-        status:
-          type: string
-          enum:
-            - active
-            - scheduled
-            - expired
-            - lifted
         version:
           type: integer
           format: int64
+        action: {$ref: "#/components/schemas/KillswitchHistoryAction"}
+        status: {$ref: "#/components/schemas/KillswitchStatus"}
       required:
         - sequence
         - version
@@ -71812,6 +71748,68 @@ components:
         - external_note
         - internal_note
         - changed_at
+    KillswitchLiftRequest:
+      type: object
+      properties:
+        expected_version:
+          type: integer
+          format: int64
+        id:
+          type: string
+          format: uuid
+        operation_id:
+          type: string
+          format: uuid
+      required:
+        - operation_id
+        - id
+        - expected_version
+    KillswitchLiftResult:
+      type: object
+      properties:
+        remaining_overlaps:
+          type: array
+          items:
+            $ref: '#/components/schemas/KillswitchOverlap'
+        result:
+          $ref: '#/components/schemas/KillswitchMutationReceipt'
+      required:
+        - result
+        - remaining_overlaps
+    KillswitchListCapabilitiesResult:
+      type: object
+      properties:
+        capabilities:
+          type: array
+          items:
+            $ref: '#/components/schemas/KillswitchCapability'
+        coming_soon:
+          type: array
+          items:
+            $ref: '#/components/schemas/KillswitchComingSoonCapability'
+      required:
+        - capabilities
+        - coming_soon
+    KillswitchListMCPServersResult:
+      type: object
+      properties:
+        servers:
+          type: array
+          items:
+            $ref: '#/components/schemas/KillswitchMCPServer'
+      required:
+        - servers
+    KillswitchListResult:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/KillswitchSummary'
+        next_cursor:
+          type: string
+      required:
+        - items
     KillswitchMCPServer:
       type: object
       properties:
@@ -71827,7 +71825,7 @@ components:
         - id
         - name
         - project_id
-    KillswitchMutationResult:
+    KillswitchMutationReceipt:
       type: object
       properties:
         id:
@@ -71835,18 +71833,12 @@ components:
           format: uuid
         replayed:
           type: boolean
-        status:
-          type: string
-          enum:
-            - active
-            - lifted
         version:
           type: integer
           format: int64
       required:
         - id
         - version
-        - status
         - replayed
     KillswitchOverlap:
       type: object
@@ -71858,61 +71850,42 @@ components:
           $ref: '#/components/schemas/KillswitchSchedule'
         scope:
           $ref: '#/components/schemas/KillswitchScope'
-        status:
-          type: string
-          enum:
-            - active
-            - scheduled
+        status: {$ref: "#/components/schemas/KillswitchOverlapStatus"}
       required:
         - id
         - status
         - scope
         - schedule
-    KillswitchSchedule:
+    KillswitchPreviewOverlapsRequest:
       type: object
       properties:
-        end:
+        id:
           type: string
-          enum:
-            - until_lifted
-            - bounded
-        ends_at:
+          format: uuid
+        schedule:
+          $ref: '#/components/schemas/KillswitchSchedule'
+        scope:
+          $ref: '#/components/schemas/KillswitchScope'
+        user_id:
           type: string
-          format: date-time
-        start:
-          type: string
-          enum:
-            - now
-            - scheduled
-        starts_at:
-          type: string
-          format: date-time
+        capability_key: {$ref: "#/components/schemas/KillswitchCapabilityKey"}
       required:
-        - start
-        - end
-    KillswitchScope:
+        - capability_key
+        - user_id
+        - scope
+        - schedule
+    KillswitchPreviewOverlapsResult:
       type: object
       properties:
-        server_ids:
+        overlaps:
           type: array
           items:
-            type: string
-            format: uuid
-          maxItems: 1000
-        type:
-          type: string
-          enum:
-            - all_servers
-            - selected_servers
+            $ref: '#/components/schemas/KillswitchOverlap'
       required:
-        - type
+        - overlaps
     KillswitchSummary:
       type: object
       properties:
-        capability_key:
-          type: string
-          enum:
-            - mcp_tool_calls
         capability_label:
           type: string
         id:
@@ -71922,18 +71895,13 @@ components:
           $ref: '#/components/schemas/KillswitchSchedule'
         scope:
           $ref: '#/components/schemas/KillswitchScope'
-        status:
-          type: string
-          enum:
-            - active
-            - scheduled
-            - expired
-            - lifted
         user_id:
           type: string
         version:
           type: integer
           format: int64
+        capability_key: {$ref: "#/components/schemas/KillswitchCapabilityKey"}
+        status: {$ref: "#/components/schemas/KillswitchStatus"}
       required:
         - id
         - capability_key
@@ -71973,34 +71941,6 @@ components:
       required:
         - client_name
         - activity_count
-    LiftRequestBody:
-      type: object
-      properties:
-        expected_version:
-          type: integer
-          format: int64
-        id:
-          type: string
-          format: uuid
-        operation_id:
-          type: string
-          format: uuid
-      required:
-        - operation_id
-        - id
-        - expected_version
-    LiftResponseBody:
-      type: object
-      properties:
-        remaining_overlaps:
-          type: array
-          items:
-            $ref: '#/components/schemas/KillswitchOverlap'
-        result:
-          $ref: '#/components/schemas/KillswitchMutationResult'
-      required:
-        - result
-        - remaining_overlaps
     ListAIIntegrationSchedulesResult:
       type: object
       properties:
@@ -72233,20 +72173,6 @@ components:
       required:
         - nodes
         - total_memories
-    ListCapabilitiesResponseBody:
-      type: object
-      properties:
-        capabilities:
-          type: array
-          items:
-            $ref: '#/components/schemas/KillswitchCapability'
-        coming_soon:
-          type: array
-          items:
-            $ref: '#/components/schemas/KillswitchComingSoonCapability'
-      required:
-        - capabilities
-        - coming_soon
     ListCatalogResponseBody:
       type: object
       properties:
@@ -72723,15 +72649,6 @@ components:
             $ref: '#/components/schemas/Key'
       required:
         - keys
-    ListMCPServersResponseBody:
-      type: object
-      properties:
-        servers:
-          type: array
-          items:
-            $ref: '#/components/schemas/KillswitchMCPServer'
-      required:
-        - servers
     ListManagedDevicesResult:
       type: object
       properties:
@@ -72980,17 +72897,6 @@ components:
           description: List of collections
       required:
         - collections
-    ListResponseBody2:
-      type: object
-      properties:
-        items:
-          type: array
-          items:
-            $ref: '#/components/schemas/KillswitchSummary'
-        next_cursor:
-          type: string
-      required:
-        - items
     ListRiskEvalReviewsResult:
       type: object
       properties:
@@ -76412,36 +76318,6 @@ components:
         - kind
         - id
         - status
-    PreviewOverlapsRequestBody:
-      type: object
-      properties:
-        capability_key:
-          type: string
-          enum:
-            - mcp_tool_calls
-        id:
-          type: string
-          format: uuid
-        schedule:
-          $ref: '#/components/schemas/KillswitchSchedule'
-        scope:
-          $ref: '#/components/schemas/KillswitchScope'
-        user_id:
-          type: string
-      required:
-        - capability_key
-        - user_id
-        - scope
-        - schedule
-    PreviewOverlapsResponseBody:
-      type: object
-      properties:
-        overlaps:
-          type: array
-          items:
-            $ref: '#/components/schemas/KillswitchOverlap'
-      required:
-        - overlaps
     PreviewSpendRuleRequestBody:
       type: object
       properties:
@@ -88038,6 +87914,75 @@ components:
       required:
         - scores_available
         - buckets
+    KillswitchCapabilityKey: {type: string, enum: [mcp_tool_calls]}
+    KillswitchStatus: {type: string, enum: [active, scheduled, expired, lifted]}
+    KillswitchListStatus: {type: string, enum: [active, scheduled, expired, lifted]}
+    KillswitchHistoryAction: {type: string, enum: [created, edited, lifted, expired, restored]}
+    KillswitchOverlapStatus: {type: string, enum: [active, scheduled]}
+    KillswitchConflictName: {type: string, enum: [operation_conflict, version_conflict]}
+    KillswitchScopeAllServersType: {type: string, enum: [all_servers]}
+    KillswitchScopeSelectedServersType: {type: string, enum: [selected_servers]}
+    KillswitchScheduleStartNow: {type: string, enum: [now]}
+    KillswitchScheduleStartScheduled: {type: string, enum: [scheduled]}
+    KillswitchScheduleEndUntilLifted: {type: string, enum: [until_lifted]}
+    KillswitchScheduleEndBounded: {type: string, enum: [bounded]}
+    KillswitchScope:
+      oneOf:
+        - title: KillswitchAllServersScope
+          type: object
+          additionalProperties: false
+          required: [type]
+          properties:
+            type:
+              $ref: "#/components/schemas/KillswitchScopeAllServersType"
+        - title: KillswitchSelectedServersScope
+          type: object
+          additionalProperties: false
+          required: [type, server_ids]
+          properties:
+            type:
+              $ref: "#/components/schemas/KillswitchScopeSelectedServersType"
+            server_ids:
+              type: array
+              minItems: 1
+              maxItems: 1000
+              items:
+                type: string
+                format: uuid
+    KillswitchSchedule:
+      oneOf:
+        - title: KillswitchNowUntilLiftedSchedule
+          type: object
+          additionalProperties: false
+          required: [start, end]
+          properties:
+            start: {$ref: "#/components/schemas/KillswitchScheduleStartNow"}
+            end: {$ref: "#/components/schemas/KillswitchScheduleEndUntilLifted"}
+        - title: KillswitchNowBoundedSchedule
+          type: object
+          additionalProperties: false
+          required: [start, end, ends_at]
+          properties:
+            start: {$ref: "#/components/schemas/KillswitchScheduleStartNow"}
+            end: {$ref: "#/components/schemas/KillswitchScheduleEndBounded"}
+            ends_at: {type: string, format: date-time}
+        - title: KillswitchScheduledUntilLiftedSchedule
+          type: object
+          additionalProperties: false
+          required: [start, starts_at, end]
+          properties:
+            start: {$ref: "#/components/schemas/KillswitchScheduleStartScheduled"}
+            starts_at: {type: string, format: date-time}
+            end: {$ref: "#/components/schemas/KillswitchScheduleEndUntilLifted"}
+        - title: KillswitchScheduledBoundedSchedule
+          type: object
+          additionalProperties: false
+          required: [start, starts_at, end, ends_at]
+          properties:
+            start: {$ref: "#/components/schemas/KillswitchScheduleStartScheduled"}
+            starts_at: {type: string, format: date-time}
+            end: {$ref: "#/components/schemas/KillswitchScheduleEndBounded"}
+            ends_at: {type: string, format: date-time}
   securitySchemes:
     admin_auth_header_Authorization:
       type: apiKey
@@ -88073,6 +88018,8 @@ components:
       name: Gram-Session
       in: header
 tags:
+  - name: killswitches
+    description: Manage MCP tool-call killswitches for users in the active organization. Requires an ordinary live organization-administrator session.
   - name: access
     description: Manage roles, team member access control, and authorization challenge events.
   - name: agent
@@ -88131,8 +88078,6 @@ tags:
     description: Manage organization-level JSON Web Key Sets — published public keys backed by customer KMS keys — and the publish/activate/retire/revoke lifecycle of their keys.
   - name: keys
     description: Managing system api keys.
-  - name: killswitches
-    description: Manage MCP tool-call killswitches for users in the active organization. Requires an ordinary live organization-administrator session.
   - name: litellm
     description: Receives LiteLLM Generic Guardrail callbacks and OpenTelemetry exports.
   - name: mcpApproval

@@ -11,14 +11,14 @@ import { GramCore } from "../core.js";
 import { killswitchesKillswitchesNumberListMCPServers } from "../funcs/killswitchesKillswitchesNumberListMCPServers.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
-import { ListMCPServersResponseBody } from "../models/components/listmcpserversresponsebody.js";
+import { KillswitchListMCPServersResult } from "../models/components/killswitchlistmcpserversresult.js";
 import {
   KillswitchesNumberListMCPServersRequest,
   KillswitchesNumberListMCPServersSecurity,
 } from "../models/operations/killswitchesnumberlistmcpservers.js";
 import { unwrapAsync } from "../types/fp.js";
 export type KillswitchesKillswitchesNumberListMCPServersQueryData =
-  ListMCPServersResponseBody;
+  KillswitchListMCPServersResult;
 
 export function prefetchKillswitchesKillswitchesNumberListMCPServers(
   queryClient: QueryClient,

@@ -11,24 +11,24 @@ import {
   KillswitchOverlap$inboundSchema,
 } from "./killswitchoverlap.js";
 
-export type PreviewOverlapsResponseBody = {
+export type KillswitchPreviewOverlapsResult = {
   overlaps: Array<KillswitchOverlap>;
 };
 
 /** @internal */
-export const PreviewOverlapsResponseBody$inboundSchema: z.ZodMiniType<
-  PreviewOverlapsResponseBody,
+export const KillswitchPreviewOverlapsResult$inboundSchema: z.ZodMiniType<
+  KillswitchPreviewOverlapsResult,
   unknown
 > = z.object({
   overlaps: z.array(KillswitchOverlap$inboundSchema),
 });
 
-export function previewOverlapsResponseBodyFromJSON(
+export function killswitchPreviewOverlapsResultFromJSON(
   jsonString: string,
-): SafeParseResult<PreviewOverlapsResponseBody, SDKValidationError> {
+): SafeParseResult<KillswitchPreviewOverlapsResult, SDKValidationError> {
   return safeParse(
     jsonString,
-    (x) => PreviewOverlapsResponseBody$inboundSchema.parse(JSON.parse(x)),
-    `Failed to parse 'PreviewOverlapsResponseBody' from JSON`,
+    (x) => KillswitchPreviewOverlapsResult$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'KillswitchPreviewOverlapsResult' from JSON`,
   );
 }

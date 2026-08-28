@@ -8,27 +8,27 @@ import { safeParse } from "../../lib/schemas.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 import {
-  KillswitchMutationResult,
-  KillswitchMutationResult$inboundSchema,
-} from "./killswitchmutationresult.js";
+  KillswitchMutationReceipt,
+  KillswitchMutationReceipt$inboundSchema,
+} from "./killswitchmutationreceipt.js";
 import {
   KillswitchOverlap,
   KillswitchOverlap$inboundSchema,
 } from "./killswitchoverlap.js";
 
-export type LiftResponseBody = {
+export type KillswitchLiftResult = {
   remainingOverlaps: Array<KillswitchOverlap>;
-  result: KillswitchMutationResult;
+  result: KillswitchMutationReceipt;
 };
 
 /** @internal */
-export const LiftResponseBody$inboundSchema: z.ZodMiniType<
-  LiftResponseBody,
+export const KillswitchLiftResult$inboundSchema: z.ZodMiniType<
+  KillswitchLiftResult,
   unknown
 > = z.pipe(
   z.object({
     remaining_overlaps: z.array(KillswitchOverlap$inboundSchema),
-    result: KillswitchMutationResult$inboundSchema,
+    result: KillswitchMutationReceipt$inboundSchema,
   }),
   z.transform((v) => {
     return remap$(v, {
@@ -37,12 +37,12 @@ export const LiftResponseBody$inboundSchema: z.ZodMiniType<
   }),
 );
 
-export function liftResponseBodyFromJSON(
+export function killswitchLiftResultFromJSON(
   jsonString: string,
-): SafeParseResult<LiftResponseBody, SDKValidationError> {
+): SafeParseResult<KillswitchLiftResult, SDKValidationError> {
   return safeParse(
     jsonString,
-    (x) => LiftResponseBody$inboundSchema.parse(JSON.parse(x)),
-    `Failed to parse 'LiftResponseBody' from JSON`,
+    (x) => KillswitchLiftResult$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'KillswitchLiftResult' from JSON`,
   );
 }

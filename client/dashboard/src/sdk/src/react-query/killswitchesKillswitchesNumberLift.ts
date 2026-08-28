@@ -11,7 +11,7 @@ import { GramCore } from "../core.js";
 import { killswitchesKillswitchesNumberLift } from "../funcs/killswitchesKillswitchesNumberLift.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
-import { LiftResponseBody } from "../models/components/liftresponsebody.js";
+import { KillswitchLiftResult } from "../models/components/killswitchliftresult.js";
 import { GramError } from "../models/errors/gramerror.js";
 import {
   ConnectionError,
@@ -20,6 +20,7 @@ import {
   RequestTimeoutError,
   UnexpectedClientError,
 } from "../models/errors/httpclienterrors.js";
+import { KillswitchConflict } from "../models/errors/killswitchconflict.js";
 import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
 import { ServiceError } from "../models/errors/serviceerror.js";
@@ -37,9 +38,11 @@ export type KillswitchesKillswitchesNumberLiftMutationVariables = {
   options?: RequestOptions;
 };
 
-export type KillswitchesKillswitchesNumberLiftMutationData = LiftResponseBody;
+export type KillswitchesKillswitchesNumberLiftMutationData =
+  KillswitchLiftResult;
 
 export type KillswitchesKillswitchesNumberLiftMutationError =
+  | KillswitchConflict
   | ServiceError
   | GramError
   | ResponseValidationError

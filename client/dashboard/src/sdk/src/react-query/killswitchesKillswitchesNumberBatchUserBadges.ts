@@ -11,7 +11,7 @@ import { GramCore } from "../core.js";
 import { killswitchesKillswitchesNumberBatchUserBadges } from "../funcs/killswitchesKillswitchesNumberBatchUserBadges.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
-import { BatchUserBadgesResponseBody } from "../models/components/batchuserbadgesresponsebody.js";
+import { KillswitchBatchUserBadgesResult } from "../models/components/killswitchbatchuserbadgesresult.js";
 import { GramError } from "../models/errors/gramerror.js";
 import {
   ConnectionError,
@@ -38,7 +38,7 @@ export type KillswitchesKillswitchesNumberBatchUserBadgesMutationVariables = {
 };
 
 export type KillswitchesKillswitchesNumberBatchUserBadgesMutationData =
-  BatchUserBadgesResponseBody;
+  KillswitchBatchUserBadgesResult;
 
 export type KillswitchesKillswitchesNumberBatchUserBadgesMutationError =
   | ServiceError

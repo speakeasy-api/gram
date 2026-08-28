@@ -25,10 +25,11 @@ import (
 	gramauth "github.com/speakeasy-api/gram/server/internal/auth"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/killswitches"
 	"github.com/speakeasy-api/gram/server/internal/killswitches/mcptoolexecution"
 	killswitchrepo "github.com/speakeasy-api/gram/server/internal/killswitches/repo"
-	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
+	"github.com/speakeasy-api/gram/server/internal/management/readmodel"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 )
@@ -36,7 +37,6 @@ import (
 const (
 	CapabilityMCPToolCalls = "mcp_tool_calls"
 	capabilityLabel        = "MCP tool calls"
-	maxPageSize            = int32(100)
 	maxHistoryEvents       = int32(100)
 	maxBatchUsers          = 100
 	maxRequestBodyBytes    = 2 << 20
@@ -48,8 +48,8 @@ type Service struct {
 	auth       *gramauth.Auth
 	db         *pgxpool.Pool
 	authorized *killswitches.AuthorizedService
-	user       *mcptoolexecution.AuthenticatedUserPrincipalAdapter
-	server     *mcptoolexecution.MCPServerResourceAdapter
+	user       killswitches.PrincipalAdapter
+	server     killswitches.ResourceAdapter
 }
 
 var _ gen.Service = (*Service)(nil)
@@ -60,9 +60,17 @@ func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pg
 	if err != nil {
 		return nil, fmt.Errorf("build MCP tool-call killswitch registry: %w", err)
 	}
-	lifecycle, err := killswitches.NewLifecycleService(db, registry, killswitches.NewCustomerLifecycleValidator(), killswitches.NewAuditBeforeCommitHook(auditLogger))
+	lifecycle, err := killswitches.NewLifecycleService(db, registry, mcptoolexecution.NewCustomerLifecycleValidator(), killswitches.NewAuditBeforeCommitHook(auditLogger))
 	if err != nil {
 		return nil, fmt.Errorf("build killswitch lifecycle service: %w", err)
+	}
+	user, ok := registry.PrincipalAdapter(mcptoolexecution.PrincipalKindUser)
+	if !ok {
+		return nil, errors.New("MCP tool-call killswitch registry has no user adapter")
+	}
+	server, ok := registry.ResourceAdapter(mcptoolexecution.ResourceKindMCPServer)
+	if !ok {
+		return nil, errors.New("MCP tool-call killswitch registry has no server adapter")
 	}
 	facade, err := killswitches.NewFacade(lifecycle)
 	if err != nil {
@@ -75,7 +83,7 @@ func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pg
 	return &Service{
 		tracer: tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/killswitchapi"), logger: logger,
 		auth: gramauth.New(logger, db, sessionManager, authzEngine), db: db, authorized: authorized,
-		user: mcptoolexecution.NewAuthenticatedUserPrincipalAdapter(db), server: mcptoolexecution.NewMCPServerResourceAdapter(db),
+		user: user, server: server,
 	}, nil
 }
 
@@ -97,22 +105,22 @@ func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.A
 	return s.auth.Authorize(ctx, key, schema)
 }
 
-func (s *Service) ListCapabilities(ctx context.Context, _ *gen.ListCapabilitiesPayload) (*gen.ListCapabilitiesResult, error) {
+func (s *Service) ListCapabilities(ctx context.Context, _ *gen.ListCapabilitiesPayload) (*gen.KillswitchListCapabilitiesResult, error) {
 	if _, err := s.organization(ctx); err != nil {
 		return nil, err
 	}
-	return &gen.ListCapabilitiesResult{
+	return &gen.KillswitchListCapabilitiesResult{
 		Capabilities: []*gen.KillswitchCapability{{Key: CapabilityMCPToolCalls, Label: capabilityLabel}},
 		ComingSoon:   []*gen.KillswitchComingSoonCapability{{Label: "AI access"}},
 	}, nil
 }
 
-func (s *Service) ListMCPServers(ctx context.Context, _ *gen.ListMCPServersPayload) (*gen.ListMCPServersResult, error) {
+func (s *Service) ListMCPServers(ctx context.Context, _ *gen.ListMCPServersPayload) (*gen.KillswitchListMCPServersResult, error) {
 	organizationID, err := s.organization(ctx)
 	if err != nil {
 		return nil, err
 	}
-	rows, err := mcpserversrepo.New(s.db).ListMCPServersByOrganizationID(ctx, string(organizationID))
+	rows, err := readmodel.New(s.db).ListMCPServersForOrganization(ctx, string(organizationID))
 	if err != nil {
 		return nil, mapError(fmt.Errorf("list organization MCP servers: %w", err))
 	}
@@ -120,18 +128,18 @@ func (s *Service) ListMCPServers(ctx context.Context, _ *gen.ListMCPServersPaylo
 	for i, row := range rows {
 		servers[i] = &gen.KillswitchMCPServer{ID: row.ID.String(), Name: row.Name.String, ProjectID: row.ProjectID.String()}
 	}
-	return &gen.ListMCPServersResult{Servers: servers}, nil
+	return &gen.KillswitchListMCPServersResult{Servers: servers}, nil
 }
 
 type listCursor struct {
 	Version   int    `json:"v"`
-	UpdatedAt string `json:"updated_at"`
+	CreatedAt string `json:"created_at"`
 	ID        string `json:"id"`
 	AsOf      string `json:"as_of"`
 	Filter    string `json:"filter"`
 }
 
-func (s *Service) List(ctx context.Context, payload *gen.ListPayload) (*gen.ListResult, error) {
+func (s *Service) List(ctx context.Context, payload *gen.ListPayload) (*gen.KillswitchListResult, error) {
 	organizationID, err := s.organization(ctx)
 	if err != nil {
 		return nil, err
@@ -139,50 +147,50 @@ func (s *Service) List(ctx context.Context, payload *gen.ListPayload) (*gen.List
 	if payload.CapabilityKey != nil && *payload.CapabilityKey != CapabilityMCPToolCalls {
 		return nil, badRequest(errors.New("capability is not available"))
 	}
-	limit := maxPageSize
+	limit := int32(constants.DefaultPageLimit)
 	if payload.Limit != nil {
 		limit = *payload.Limit
 	}
-	if limit < 1 || limit > maxPageSize {
+	if limit < 1 || limit > int32(constants.MaxPageLimit) {
 		return nil, badRequest(errors.New("limit must be between 1 and 100"))
 	}
 
-	userID := pgtype.Text{}
+	var principalKey *killswitches.PrincipalKey
 	if payload.UserID != nil {
 		canonical, err := s.canonicalUser(organizationID, *payload.UserID)
 		if err != nil {
 			return nil, err
 		}
-		userID = pgtype.Text{String: canonical, Valid: true}
+		key := killswitches.PrincipalKey(canonical)
+		principalKey = &key
 	}
-	status := pgtype.Text{}
+	var status *killswitches.CustomerStatus
 	if payload.Status != nil {
-		status = pgtype.Text{String: *payload.Status, Valid: true}
+		value := killswitches.CustomerStatus(*payload.Status)
+		status = &value
 	}
-	filter := listFilter(userID, status)
+	filter := listFilter(principalKey, status)
 
-	cursorTime := pgtype.Timestamptz{}
-	cursorID := uuid.NullUUID{}
+	var cursor *killswitches.CustomerListCursor
 	var asOf time.Time
 	if payload.Cursor != nil {
-		cursor, decodeErr := decodeCursor(*payload.Cursor, filter)
+		decoded, decodeErr := decodeCursor(*payload.Cursor, filter)
 		if decodeErr != nil {
 			return nil, badRequest(decodeErr)
 		}
-		updatedAt, parseErr := time.Parse(time.RFC3339Nano, cursor.UpdatedAt)
+		createdAt, parseErr := time.Parse(time.RFC3339Nano, decoded.CreatedAt)
 		if parseErr != nil {
 			return nil, badRequest(errors.New("cursor is invalid"))
 		}
-		id, parseErr := uuid.Parse(cursor.ID)
-		if parseErr != nil || id.String() != cursor.ID {
+		id, parseErr := uuid.Parse(decoded.ID)
+		if parseErr != nil || id.String() != decoded.ID {
 			return nil, badRequest(errors.New("cursor is invalid"))
 		}
-		asOf, parseErr = time.Parse(time.RFC3339Nano, cursor.AsOf)
+		asOf, parseErr = time.Parse(time.RFC3339Nano, decoded.AsOf)
 		if parseErr != nil {
 			return nil, badRequest(errors.New("cursor is invalid"))
 		}
-		cursorTime = pgtype.Timestamptz{Time: updatedAt, Valid: true}
-		cursorID = uuid.NullUUID{UUID: id, Valid: true}
+		cursor = &killswitches.CustomerListCursor{CreatedAt: createdAt, ID: killswitches.PrescriptionID(id.String())}
 	} else {
 		dbNow, queryErr := killswitchrepo.New(s.db).GetKillswitchDatabaseTime(ctx)
 		if queryErr != nil || !dbNow.Valid {
@@ -191,33 +199,27 @@ func (s *Service) List(ctx context.Context, payload *gen.ListPayload) (*gen.List
 		asOf = dbNow.Time
 	}
 
-	rows, err := killswitchrepo.New(s.db).ListCustomerKillswitches(ctx, killswitchrepo.ListCustomerKillswitchesParams{
-		CustomerStatus: status, ResultLimit: limit + 1, OrganizationID: string(organizationID),
-		DefinitionKey: string(mcptoolexecution.DefinitionKeyMCPToolExecution), PrincipalKind: string(mcptoolexecution.PrincipalKindUser),
-		ResourceKind: string(mcptoolexecution.ResourceKindMCPServer), UserID: userID, CursorUpdatedAt: cursorTime, CursorID: cursorID,
-		StatusAsOf: pgtype.Timestamptz{Time: asOf, Valid: true},
+	result, err := s.authorized.ListCustomerPrescriptions(ctx, killswitches.AuthorizedListCustomerPrescriptionsRequest{
+		Definition: mcptoolexecution.DefinitionKeyMCPToolExecution, PrincipalKind: mcptoolexecution.PrincipalKindUser,
+		ResourceKind: mcptoolexecution.ResourceKindMCPServer, PrincipalKey: principalKey, Status: status,
+		Limit: limit, Cursor: cursor, StatusAsOf: asOf,
 	})
 	if err != nil {
-		return nil, mapError(fmt.Errorf("list customer killswitches: %w", err))
+		return nil, mapError(err)
 	}
-	hasMore := len(rows) > int(limit)
-	if hasMore {
-		rows = rows[:limit]
-	}
-	items := make([]*gen.KillswitchSummary, len(rows))
-	for i, row := range rows {
-		items[i] = summary(row.ID.String(), row.UserID, row.Version, row.CustomerStatus, row.CustomerStart, row.ResourceScope, row.SelectedResourceKeys, row.StartsAt.Time, optionalTime(row.ExpiresAt))
+	items := make([]*gen.KillswitchSummary, len(result.Items))
+	for i, item := range result.Items {
+		items[i] = summary(string(item.ID), string(item.PrincipalKey), item.Version, string(item.Status), string(item.StartMode), string(item.ResourceScope), stringsFrom(item.SelectedResourceKeys), item.StartsAt, item.ExpiresAt)
 	}
 	var next *string
-	if hasMore {
-		last := rows[len(rows)-1]
-		encoded, encodeErr := encodeCursor(listCursor{Version: 1, UpdatedAt: last.UpdatedAt.Time.Format(time.RFC3339Nano), ID: last.ID.String(), AsOf: asOf.Format(time.RFC3339Nano), Filter: filter})
+	if result.NextCursor != nil {
+		encoded, encodeErr := encodeCursor(listCursor{Version: 1, CreatedAt: result.NextCursor.CreatedAt.Format(time.RFC3339Nano), ID: string(result.NextCursor.ID), AsOf: asOf.Format(time.RFC3339Nano), Filter: filter})
 		if encodeErr != nil {
 			return nil, mapError(encodeErr)
 		}
 		next = &encoded
 	}
-	return &gen.ListResult{Items: items, NextCursor: next}, nil
+	return &gen.KillswitchListResult{Items: items, NextCursor: next}, nil
 }
 
 func (s *Service) Get(ctx context.Context, payload *gen.GetPayload) (*gen.KillswitchDetail, error) {
@@ -254,7 +256,7 @@ func (s *Service) Get(ctx context.Context, payload *gen.GetPayload) (*gen.Killsw
 	}, nil
 }
 
-func (s *Service) Create(ctx context.Context, payload *gen.CreatePayload) (*gen.KillswitchMutationResult, error) {
+func (s *Service) Create(ctx context.Context, payload *gen.CreatePayload) (*gen.KillswitchMutationReceipt, error) {
 	if payload.CapabilityKey != CapabilityMCPToolCalls {
 		return nil, badRequest(errors.New("capability is not available"))
 	}
@@ -276,7 +278,7 @@ func (s *Service) Create(ctx context.Context, payload *gen.CreatePayload) (*gen.
 	return mutationResult(result), nil
 }
 
-func (s *Service) Edit(ctx context.Context, payload *gen.EditPayload) (*gen.KillswitchMutationResult, error) {
+func (s *Service) Edit(ctx context.Context, payload *gen.EditPayload) (*gen.KillswitchMutationReceipt, error) {
 	desiredVersion, err := desired(payload.Scope, payload.Schedule, payload.InternalNote, payload.ExternalNote)
 	if err != nil {
 		return nil, err
@@ -297,7 +299,7 @@ func (s *Service) Edit(ctx context.Context, payload *gen.EditPayload) (*gen.Kill
 	return mutationResult(result), nil
 }
 
-func (s *Service) Lift(ctx context.Context, payload *gen.LiftPayload) (*gen.LiftResult, error) {
+func (s *Service) Lift(ctx context.Context, payload *gen.LiftPayload) (*gen.KillswitchLiftResult, error) {
 	if _, _, err := s.getCurated(ctx, payload.ID); err != nil {
 		return nil, err
 	}
@@ -317,10 +319,10 @@ func (s *Service) Lift(ctx context.Context, payload *gen.LiftPayload) (*gen.Lift
 	if err != nil {
 		return nil, err
 	}
-	return &gen.LiftResult{Result: mutationResult(result), RemainingOverlaps: overlaps}, nil
+	return &gen.KillswitchLiftResult{Result: mutationResult(result), RemainingOverlaps: overlaps}, nil
 }
 
-func (s *Service) PreviewOverlaps(ctx context.Context, payload *gen.PreviewOverlapsPayload) (*gen.PreviewOverlapsResult, error) {
+func (s *Service) PreviewOverlaps(ctx context.Context, payload *gen.PreviewOverlapsPayload) (*gen.KillswitchPreviewOverlapsResult, error) {
 	organizationID, err := s.organization(ctx)
 	if err != nil {
 		return nil, err
@@ -362,10 +364,10 @@ func (s *Service) PreviewOverlaps(ctx context.Context, payload *gen.PreviewOverl
 	if err != nil {
 		return nil, err
 	}
-	return &gen.PreviewOverlapsResult{Overlaps: overlaps}, nil
+	return &gen.KillswitchPreviewOverlapsResult{Overlaps: overlaps}, nil
 }
 
-func (s *Service) BatchUserBadges(ctx context.Context, payload *gen.BatchUserBadgesPayload) (*gen.BatchUserBadgesResult, error) {
+func (s *Service) BatchUserBadges(ctx context.Context, payload *gen.BatchUserBadgesPayload) (*gen.KillswitchBatchUserBadgesResult, error) {
 	organizationID, err := s.organization(ctx)
 	if err != nil {
 		return nil, err
@@ -394,7 +396,7 @@ func (s *Service) BatchUserBadges(ctx context.Context, payload *gen.BatchUserBad
 	for i, row := range rows {
 		badges[i] = &gen.KillswitchUserBadge{UserID: row.UserID, Affected: row.AffectedNow || row.Scheduled, AffectedNow: row.AffectedNow, Scheduled: row.Scheduled}
 	}
-	return &gen.BatchUserBadgesResult{Badges: badges}, nil
+	return &gen.KillswitchBatchUserBadgesResult{Badges: badges}, nil
 }
 
 func (s *Service) organization(ctx context.Context) (killswitches.OrganizationID, error) {
@@ -524,17 +526,21 @@ func (s *Service) previewScope(ctx context.Context, organizationID killswitches.
 		if keyErr != nil || !supported {
 			return "", nil, badRequest(errors.New("one or more servers are not available"))
 		}
-		valid, validateErr := s.server.ValidateCurrentOrganization(ctx, organizationID, key)
-		if validateErr != nil {
-			return "", nil, mapError(validateErr)
-		}
-		if !valid {
-			return "", nil, badRequest(errors.New("one or more servers are not available"))
-		}
 		canonical = append(canonical, string(key))
 	}
 	slices.Sort(canonical)
 	canonical = slices.Compact(canonical)
+	keys := make([]killswitches.ResourceKey, len(canonical))
+	for i, key := range canonical {
+		keys[i] = killswitches.ResourceKey(key)
+	}
+	valid, validateErr := mcptoolexecution.ValidateLiveMCPServersInOrganization(ctx, s.db, organizationID, keys)
+	if validateErr != nil {
+		return "", nil, mapError(validateErr)
+	}
+	if !valid {
+		return "", nil, badRequest(errors.New("one or more servers are not available"))
+	}
 	return scope, canonical, nil
 }
 
@@ -581,13 +587,13 @@ func (s *Service) overlaps(ctx context.Context, organizationID killswitches.Orga
 	}
 	result := make([]*gen.KillswitchOverlap, len(rows))
 	for i, row := range rows {
-		result[i] = &gen.KillswitchOverlap{ID: row.ID.String(), Status: row.CustomerStatus, Scope: outputScope(row.ResourceScope, row.SelectedResourceKeys), Schedule: outputSchedule(row.StartsAt.Time, optionalTime(row.ExpiresAt), row.CustomerStart)}
+		result[i] = &gen.KillswitchOverlap{ID: row.ID.String(), Status: gen.KillswitchOverlapStatus(row.CustomerStatus), Scope: outputScope(row.ResourceScope, row.SelectedResourceKeys), Schedule: outputSchedule(row.StartsAt.Time, optionalTime(row.ExpiresAt), row.CustomerStart)}
 	}
 	return result, nil
 }
 
 func summary(id, userID string, version int64, status, start, scope string, selected []string, startsAt time.Time, endsAt *time.Time) *gen.KillswitchSummary {
-	return &gen.KillswitchSummary{ID: id, CapabilityKey: CapabilityMCPToolCalls, CapabilityLabel: capabilityLabel, UserID: userID, Version: version, Status: status, Scope: outputScope(scope, selected), Schedule: outputSchedule(startsAt, endsAt, start)}
+	return &gen.KillswitchSummary{ID: id, CapabilityKey: CapabilityMCPToolCalls, CapabilityLabel: capabilityLabel, UserID: userID, Version: version, Status: gen.KillswitchStatus(status), Scope: outputScope(scope, selected), Schedule: outputSchedule(startsAt, endsAt, start)}
 }
 
 func outputScope(scope string, selected []string) *gen.KillswitchScope {
@@ -647,15 +653,11 @@ func historyEvent(row killswitchrepo.ListCustomerKillswitchHistoryRow) *gen.Kill
 		actorID := row.ActorID
 		actorUserID = &actorID
 	}
-	return &gen.KillswitchHistoryEvent{Sequence: row.Seq, Version: row.Version, Action: action, Status: row.CustomerStatus, Scope: outputScope(row.ResourceScope, row.SelectedResourceKeys), Schedule: outputSchedule(row.StartsAt.Time, optionalTime(row.ExpiresAt), row.CustomerStart), ExternalNote: row.ExternalNote, InternalNote: row.InternalNote, ActorUserID: actorUserID, ActorDisplayName: actorDisplayName, ChangedAt: row.CreatedAt.Time.Format(time.RFC3339Nano)}
+	return &gen.KillswitchHistoryEvent{Sequence: row.Seq, Version: row.Version, Action: gen.KillswitchHistoryAction(action), Status: gen.KillswitchStatus(row.CustomerStatus), Scope: outputScope(row.ResourceScope, row.SelectedResourceKeys), Schedule: outputSchedule(row.StartsAt.Time, optionalTime(row.ExpiresAt), row.CustomerStart), ExternalNote: row.ExternalNote, InternalNote: row.InternalNote, ActorUserID: actorUserID, ActorDisplayName: actorDisplayName, ChangedAt: row.CreatedAt.Time.Format(time.RFC3339Nano)}
 }
 
-func mutationResult(result killswitches.MutationResult) *gen.KillswitchMutationResult {
-	status := "active"
-	if result.State == killswitches.PrescriptionStateInactive {
-		status = "lifted"
-	}
-	return &gen.KillswitchMutationResult{ID: string(result.PrescriptionID), Version: result.Version, Status: status, Replayed: result.Replayed}
+func mutationResult(result killswitches.MutationResult) *gen.KillswitchMutationReceipt {
+	return &gen.KillswitchMutationReceipt{ID: string(result.PrescriptionID), Version: result.Version, Replayed: result.Replayed}
 }
 
 func parseUUID(value string) (uuid.UUID, error) {
@@ -666,8 +668,15 @@ func parseUUID(value string) (uuid.UUID, error) {
 	return id, nil
 }
 
-func listFilter(userID, status pgtype.Text) string {
-	return fmt.Sprintf("%t:%s|%t:%s", userID.Valid, userID.String, status.Valid, status.String)
+func listFilter(userID *killswitches.PrincipalKey, status *killswitches.CustomerStatus) string {
+	var userValue, statusValue string
+	if userID != nil {
+		userValue = string(*userID)
+	}
+	if status != nil {
+		statusValue = string(*status)
+	}
+	return fmt.Sprintf("%t:%s|%t:%s", userID != nil, userValue, status != nil, statusValue)
 }
 
 func encodeCursor(cursor listCursor) (string, error) {
@@ -684,7 +693,7 @@ func decodeCursor(value, filter string) (listCursor, error) {
 		return listCursor{}, errors.New("cursor is invalid")
 	}
 	var cursor listCursor
-	if err := json.Unmarshal(data, &cursor); err != nil || cursor.Version != 1 || cursor.Filter != filter || cursor.UpdatedAt == "" || cursor.ID == "" || cursor.AsOf == "" {
+	if err := json.Unmarshal(data, &cursor); err != nil || cursor.Version != 1 || cursor.Filter != filter || cursor.CreatedAt == "" || cursor.ID == "" || cursor.AsOf == "" {
 		return listCursor{}, errors.New("cursor is invalid")
 	}
 	return cursor, nil
@@ -726,9 +735,9 @@ func mapError(err error) error {
 	case errors.Is(err, killswitches.ErrPrescriptionNotFound):
 		return oops.E(oops.CodeNotFound, err, "resource not found")
 	case errors.Is(err, killswitches.ErrOperationConflict):
-		return gen.MakeOperationConflict(err)
+		return &gen.KillswitchConflict{Name: "operation_conflict", Message: "the operation ID was already used for a different request"}
 	case errors.Is(err, killswitches.ErrVersionConflict):
-		return gen.MakeVersionConflict(err)
+		return &gen.KillswitchConflict{Name: "version_conflict", Message: "the killswitch changed after the supplied version"}
 	case errors.Is(err, killswitches.ErrOperationUnavailable):
 		return oops.E(oops.CodeUnavailable, err, "service is temporarily unavailable")
 	default:

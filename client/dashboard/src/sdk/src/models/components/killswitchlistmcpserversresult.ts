@@ -11,24 +11,24 @@ import {
   KillswitchMCPServer$inboundSchema,
 } from "./killswitchmcpserver.js";
 
-export type ListMCPServersResponseBody = {
+export type KillswitchListMCPServersResult = {
   servers: Array<KillswitchMCPServer>;
 };
 
 /** @internal */
-export const ListMCPServersResponseBody$inboundSchema: z.ZodMiniType<
-  ListMCPServersResponseBody,
+export const KillswitchListMCPServersResult$inboundSchema: z.ZodMiniType<
+  KillswitchListMCPServersResult,
   unknown
 > = z.object({
   servers: z.array(KillswitchMCPServer$inboundSchema),
 });
 
-export function listMCPServersResponseBodyFromJSON(
+export function killswitchListMCPServersResultFromJSON(
   jsonString: string,
-): SafeParseResult<ListMCPServersResponseBody, SDKValidationError> {
+): SafeParseResult<KillswitchListMCPServersResult, SDKValidationError> {
   return safeParse(
     jsonString,
-    (x) => ListMCPServersResponseBody$inboundSchema.parse(JSON.parse(x)),
-    `Failed to parse 'ListMCPServersResponseBody' from JSON`,
+    (x) => KillswitchListMCPServersResult$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'KillswitchListMCPServersResult' from JSON`,
   );
 }

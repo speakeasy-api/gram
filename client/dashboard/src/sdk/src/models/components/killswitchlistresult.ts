@@ -12,14 +12,14 @@ import {
   KillswitchSummary$inboundSchema,
 } from "./killswitchsummary.js";
 
-export type ListResponseBody2 = {
+export type KillswitchListResult = {
   items: Array<KillswitchSummary>;
   nextCursor?: string | undefined;
 };
 
 /** @internal */
-export const ListResponseBody2$inboundSchema: z.ZodMiniType<
-  ListResponseBody2,
+export const KillswitchListResult$inboundSchema: z.ZodMiniType<
+  KillswitchListResult,
   unknown
 > = z.pipe(
   z.object({
@@ -33,12 +33,12 @@ export const ListResponseBody2$inboundSchema: z.ZodMiniType<
   }),
 );
 
-export function listResponseBody2FromJSON(
+export function killswitchListResultFromJSON(
   jsonString: string,
-): SafeParseResult<ListResponseBody2, SDKValidationError> {
+): SafeParseResult<KillswitchListResult, SDKValidationError> {
   return safeParse(
     jsonString,
-    (x) => ListResponseBody2$inboundSchema.parse(JSON.parse(x)),
-    `Failed to parse 'ListResponseBody2' from JSON`,
+    (x) => KillswitchListResult$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'KillswitchListResult' from JSON`,
   );
 }

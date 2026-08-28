@@ -5,23 +5,23 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 
-export type LiftRequestBody = {
+export type KillswitchLiftRequest = {
   expectedVersion: number;
   id: string;
   operationId: string;
 };
 
 /** @internal */
-export type LiftRequestBody$Outbound = {
+export type KillswitchLiftRequest$Outbound = {
   expected_version: number;
   id: string;
   operation_id: string;
 };
 
 /** @internal */
-export const LiftRequestBody$outboundSchema: z.ZodMiniType<
-  LiftRequestBody$Outbound,
-  LiftRequestBody
+export const KillswitchLiftRequest$outboundSchema: z.ZodMiniType<
+  KillswitchLiftRequest$Outbound,
+  KillswitchLiftRequest
 > = z.pipe(
   z.object({
     expectedVersion: z.int(),
@@ -36,8 +36,10 @@ export const LiftRequestBody$outboundSchema: z.ZodMiniType<
   }),
 );
 
-export function liftRequestBodyToJSON(
-  liftRequestBody: LiftRequestBody,
+export function killswitchLiftRequestToJSON(
+  killswitchLiftRequest: KillswitchLiftRequest,
 ): string {
-  return JSON.stringify(LiftRequestBody$outboundSchema.parse(liftRequestBody));
+  return JSON.stringify(
+    KillswitchLiftRequest$outboundSchema.parse(killswitchLiftRequest),
+  );
 }

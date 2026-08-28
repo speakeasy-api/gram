@@ -17,25 +17,25 @@ import (
 // CreateRequestBody is the type of the "killswitches" service "create"
 // endpoint HTTP request body.
 type CreateRequestBody struct {
-	OperationID   *string                        `form:"operation_id,omitempty" json:"operation_id,omitempty" xml:"operation_id,omitempty"`
-	CapabilityKey *string                        `form:"capability_key,omitempty" json:"capability_key,omitempty" xml:"capability_key,omitempty"`
-	UserID        *string                        `form:"user_id,omitempty" json:"user_id,omitempty" xml:"user_id,omitempty"`
-	Scope         *KillswitchScopeRequestBody    `form:"scope,omitempty" json:"scope,omitempty" xml:"scope,omitempty"`
-	Schedule      *KillswitchScheduleRequestBody `form:"schedule,omitempty" json:"schedule,omitempty" xml:"schedule,omitempty"`
-	ExternalNote  *string                        `form:"external_note,omitempty" json:"external_note,omitempty" xml:"external_note,omitempty"`
-	InternalNote  *string                        `form:"internal_note,omitempty" json:"internal_note,omitempty" xml:"internal_note,omitempty"`
+	OperationID   *string                                   `form:"operation_id,omitempty" json:"operation_id,omitempty" xml:"operation_id,omitempty"`
+	CapabilityKey *string                                   `form:"capability_key,omitempty" json:"capability_key,omitempty" xml:"capability_key,omitempty"`
+	UserID        *string                                   `form:"user_id,omitempty" json:"user_id,omitempty" xml:"user_id,omitempty"`
+	Scope         *KillswitchScopeRequestBodyRequestBody    `form:"scope,omitempty" json:"scope,omitempty" xml:"scope,omitempty"`
+	Schedule      *KillswitchScheduleRequestBodyRequestBody `form:"schedule,omitempty" json:"schedule,omitempty" xml:"schedule,omitempty"`
+	ExternalNote  *string                                   `form:"external_note,omitempty" json:"external_note,omitempty" xml:"external_note,omitempty"`
+	InternalNote  *string                                   `form:"internal_note,omitempty" json:"internal_note,omitempty" xml:"internal_note,omitempty"`
 }
 
 // EditRequestBody is the type of the "killswitches" service "edit" endpoint
 // HTTP request body.
 type EditRequestBody struct {
-	OperationID     *string                        `form:"operation_id,omitempty" json:"operation_id,omitempty" xml:"operation_id,omitempty"`
-	ID              *string                        `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	ExpectedVersion *int64                         `form:"expected_version,omitempty" json:"expected_version,omitempty" xml:"expected_version,omitempty"`
-	Scope           *KillswitchScopeRequestBody    `form:"scope,omitempty" json:"scope,omitempty" xml:"scope,omitempty"`
-	Schedule        *KillswitchScheduleRequestBody `form:"schedule,omitempty" json:"schedule,omitempty" xml:"schedule,omitempty"`
-	ExternalNote    *string                        `form:"external_note,omitempty" json:"external_note,omitempty" xml:"external_note,omitempty"`
-	InternalNote    *string                        `form:"internal_note,omitempty" json:"internal_note,omitempty" xml:"internal_note,omitempty"`
+	OperationID     *string                                   `form:"operation_id,omitempty" json:"operation_id,omitempty" xml:"operation_id,omitempty"`
+	ID              *string                                   `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	ExpectedVersion *int64                                    `form:"expected_version,omitempty" json:"expected_version,omitempty" xml:"expected_version,omitempty"`
+	Scope           *KillswitchScopeRequestBodyRequestBody    `form:"scope,omitempty" json:"scope,omitempty" xml:"scope,omitempty"`
+	Schedule        *KillswitchScheduleRequestBodyRequestBody `form:"schedule,omitempty" json:"schedule,omitempty" xml:"schedule,omitempty"`
+	ExternalNote    *string                                   `form:"external_note,omitempty" json:"external_note,omitempty" xml:"external_note,omitempty"`
+	InternalNote    *string                                   `form:"internal_note,omitempty" json:"internal_note,omitempty" xml:"internal_note,omitempty"`
 }
 
 // LiftRequestBody is the type of the "killswitches" service "lift" endpoint
@@ -49,11 +49,11 @@ type LiftRequestBody struct {
 // PreviewOverlapsRequestBody is the type of the "killswitches" service
 // "previewOverlaps" endpoint HTTP request body.
 type PreviewOverlapsRequestBody struct {
-	ID            *string                        `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	CapabilityKey *string                        `form:"capability_key,omitempty" json:"capability_key,omitempty" xml:"capability_key,omitempty"`
-	UserID        *string                        `form:"user_id,omitempty" json:"user_id,omitempty" xml:"user_id,omitempty"`
-	Scope         *KillswitchScopeRequestBody    `form:"scope,omitempty" json:"scope,omitempty" xml:"scope,omitempty"`
-	Schedule      *KillswitchScheduleRequestBody `form:"schedule,omitempty" json:"schedule,omitempty" xml:"schedule,omitempty"`
+	ID            *string                                   `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	CapabilityKey *string                                   `form:"capability_key,omitempty" json:"capability_key,omitempty" xml:"capability_key,omitempty"`
+	UserID        *string                                   `form:"user_id,omitempty" json:"user_id,omitempty" xml:"user_id,omitempty"`
+	Scope         *KillswitchScopeRequestBodyRequestBody    `form:"scope,omitempty" json:"scope,omitempty" xml:"scope,omitempty"`
+	Schedule      *KillswitchScheduleRequestBodyRequestBody `form:"schedule,omitempty" json:"schedule,omitempty" xml:"schedule,omitempty"`
 }
 
 // BatchUserBadgesRequestBody is the type of the "killswitches" service
@@ -104,7 +104,6 @@ type GetResponseBody struct {
 type CreateResponseBody struct {
 	ID       string `form:"id" json:"id" xml:"id"`
 	Version  int64  `form:"version" json:"version" xml:"version"`
-	Status   string `form:"status" json:"status" xml:"status"`
 	Replayed bool   `form:"replayed" json:"replayed" xml:"replayed"`
 }
 
@@ -113,15 +112,14 @@ type CreateResponseBody struct {
 type EditResponseBody struct {
 	ID       string `form:"id" json:"id" xml:"id"`
 	Version  int64  `form:"version" json:"version" xml:"version"`
-	Status   string `form:"status" json:"status" xml:"status"`
 	Replayed bool   `form:"replayed" json:"replayed" xml:"replayed"`
 }
 
 // LiftResponseBody is the type of the "killswitches" service "lift" endpoint
 // HTTP response body.
 type LiftResponseBody struct {
-	Result            *KillswitchMutationResultResponseBody `form:"result" json:"result" xml:"result"`
-	RemainingOverlaps []*KillswitchOverlapResponseBody      `form:"remaining_overlaps" json:"remaining_overlaps" xml:"remaining_overlaps"`
+	Result            *KillswitchMutationReceiptResponseBody `form:"result" json:"result" xml:"result"`
+	RemainingOverlaps []*KillswitchOverlapResponseBody       `form:"remaining_overlaps" json:"remaining_overlaps" xml:"remaining_overlaps"`
 }
 
 // PreviewOverlapsResponseBody is the type of the "killswitches" service
@@ -197,63 +195,6 @@ type ListCapabilitiesBadRequestResponseBody struct {
 // service "listCapabilities" endpoint HTTP response body for the "not_found"
 // error.
 type ListCapabilitiesNotFoundResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// ListCapabilitiesConflictResponseBody is the type of the "killswitches"
-// service "listCapabilities" endpoint HTTP response body for the "conflict"
-// error.
-type ListCapabilitiesConflictResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// ListCapabilitiesOperationConflictResponseBody is the type of the
-// "killswitches" service "listCapabilities" endpoint HTTP response body for
-// the "operation_conflict" error.
-type ListCapabilitiesOperationConflictResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// ListCapabilitiesVersionConflictResponseBody is the type of the
-// "killswitches" service "listCapabilities" endpoint HTTP response body for
-// the "version_conflict" error.
-type ListCapabilitiesVersionConflictResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -458,62 +399,6 @@ type ListMCPServersNotFoundResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// ListMCPServersConflictResponseBody is the type of the "killswitches" service
-// "listMCPServers" endpoint HTTP response body for the "conflict" error.
-type ListMCPServersConflictResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// ListMCPServersOperationConflictResponseBody is the type of the
-// "killswitches" service "listMCPServers" endpoint HTTP response body for the
-// "operation_conflict" error.
-type ListMCPServersOperationConflictResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// ListMCPServersVersionConflictResponseBody is the type of the "killswitches"
-// service "listMCPServers" endpoint HTTP response body for the
-// "version_conflict" error.
-type ListMCPServersVersionConflictResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
 // ListMCPServersUnsupportedMediaResponseBody is the type of the "killswitches"
 // service "listMCPServers" endpoint HTTP response body for the
 // "unsupported_media" error.
@@ -684,60 +569,6 @@ type ListBadRequestResponseBody struct {
 // ListNotFoundResponseBody is the type of the "killswitches" service "list"
 // endpoint HTTP response body for the "not_found" error.
 type ListNotFoundResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// ListConflictResponseBody is the type of the "killswitches" service "list"
-// endpoint HTTP response body for the "conflict" error.
-type ListConflictResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// ListOperationConflictResponseBody is the type of the "killswitches" service
-// "list" endpoint HTTP response body for the "operation_conflict" error.
-type ListOperationConflictResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// ListVersionConflictResponseBody is the type of the "killswitches" service
-// "list" endpoint HTTP response body for the "version_conflict" error.
-type ListVersionConflictResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -933,60 +764,6 @@ type GetNotFoundResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// GetConflictResponseBody is the type of the "killswitches" service "get"
-// endpoint HTTP response body for the "conflict" error.
-type GetConflictResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// GetOperationConflictResponseBody is the type of the "killswitches" service
-// "get" endpoint HTTP response body for the "operation_conflict" error.
-type GetOperationConflictResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// GetVersionConflictResponseBody is the type of the "killswitches" service
-// "get" endpoint HTTP response body for the "version_conflict" error.
-type GetVersionConflictResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
 // GetUnsupportedMediaResponseBody is the type of the "killswitches" service
 // "get" endpoint HTTP response body for the "unsupported_media" error.
 type GetUnsupportedMediaResponseBody struct {
@@ -1167,61 +944,6 @@ type CreateNotFoundResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// CreateConflictResponseBody is the type of the "killswitches" service
-// "create" endpoint HTTP response body for the "conflict" error.
-type CreateConflictResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// CreateOperationConflictResponseBody is the type of the "killswitches"
-// service "create" endpoint HTTP response body for the "operation_conflict"
-// error.
-type CreateOperationConflictResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// CreateVersionConflictResponseBody is the type of the "killswitches" service
-// "create" endpoint HTTP response body for the "version_conflict" error.
-type CreateVersionConflictResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
 // CreateUnsupportedMediaResponseBody is the type of the "killswitches" service
 // "create" endpoint HTTP response body for the "unsupported_media" error.
 type CreateUnsupportedMediaResponseBody struct {
@@ -1331,6 +1053,14 @@ type CreateUnavailableResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// CreateOperationConflictResponseBody is the type of the "killswitches"
+// service "create" endpoint HTTP response body for the "operation_conflict"
+// error.
+type CreateOperationConflictResponseBody struct {
+	Name    string `form:"name" json:"name" xml:"name"`
+	Message string `form:"message" json:"message" xml:"message"`
+}
+
 // EditUnauthorizedResponseBody is the type of the "killswitches" service
 // "edit" endpoint HTTP response body for the "unauthorized" error.
 type EditUnauthorizedResponseBody struct {
@@ -1388,60 +1118,6 @@ type EditBadRequestResponseBody struct {
 // EditNotFoundResponseBody is the type of the "killswitches" service "edit"
 // endpoint HTTP response body for the "not_found" error.
 type EditNotFoundResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// EditConflictResponseBody is the type of the "killswitches" service "edit"
-// endpoint HTTP response body for the "conflict" error.
-type EditConflictResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// EditOperationConflictResponseBody is the type of the "killswitches" service
-// "edit" endpoint HTTP response body for the "operation_conflict" error.
-type EditOperationConflictResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// EditVersionConflictResponseBody is the type of the "killswitches" service
-// "edit" endpoint HTTP response body for the "version_conflict" error.
-type EditVersionConflictResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -1565,6 +1241,20 @@ type EditUnavailableResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// EditOperationConflictResponseBody is the type of the "killswitches" service
+// "edit" endpoint HTTP response body for the "operation_conflict" error.
+type EditOperationConflictResponseBody struct {
+	Name    string `form:"name" json:"name" xml:"name"`
+	Message string `form:"message" json:"message" xml:"message"`
+}
+
+// EditVersionConflictResponseBody is the type of the "killswitches" service
+// "edit" endpoint HTTP response body for the "version_conflict" error.
+type EditVersionConflictResponseBody struct {
+	Name    string `form:"name" json:"name" xml:"name"`
+	Message string `form:"message" json:"message" xml:"message"`
+}
+
 // LiftUnauthorizedResponseBody is the type of the "killswitches" service
 // "lift" endpoint HTTP response body for the "unauthorized" error.
 type LiftUnauthorizedResponseBody struct {
@@ -1622,60 +1312,6 @@ type LiftBadRequestResponseBody struct {
 // LiftNotFoundResponseBody is the type of the "killswitches" service "lift"
 // endpoint HTTP response body for the "not_found" error.
 type LiftNotFoundResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// LiftConflictResponseBody is the type of the "killswitches" service "lift"
-// endpoint HTTP response body for the "conflict" error.
-type LiftConflictResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// LiftOperationConflictResponseBody is the type of the "killswitches" service
-// "lift" endpoint HTTP response body for the "operation_conflict" error.
-type LiftOperationConflictResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// LiftVersionConflictResponseBody is the type of the "killswitches" service
-// "lift" endpoint HTTP response body for the "version_conflict" error.
-type LiftVersionConflictResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -1799,6 +1435,20 @@ type LiftUnavailableResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// LiftOperationConflictResponseBody is the type of the "killswitches" service
+// "lift" endpoint HTTP response body for the "operation_conflict" error.
+type LiftOperationConflictResponseBody struct {
+	Name    string `form:"name" json:"name" xml:"name"`
+	Message string `form:"message" json:"message" xml:"message"`
+}
+
+// LiftVersionConflictResponseBody is the type of the "killswitches" service
+// "lift" endpoint HTTP response body for the "version_conflict" error.
+type LiftVersionConflictResponseBody struct {
+	Name    string `form:"name" json:"name" xml:"name"`
+	Message string `form:"message" json:"message" xml:"message"`
+}
+
 // PreviewOverlapsUnauthorizedResponseBody is the type of the "killswitches"
 // service "previewOverlaps" endpoint HTTP response body for the "unauthorized"
 // error.
@@ -1860,63 +1510,6 @@ type PreviewOverlapsBadRequestResponseBody struct {
 // service "previewOverlaps" endpoint HTTP response body for the "not_found"
 // error.
 type PreviewOverlapsNotFoundResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// PreviewOverlapsConflictResponseBody is the type of the "killswitches"
-// service "previewOverlaps" endpoint HTTP response body for the "conflict"
-// error.
-type PreviewOverlapsConflictResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// PreviewOverlapsOperationConflictResponseBody is the type of the
-// "killswitches" service "previewOverlaps" endpoint HTTP response body for the
-// "operation_conflict" error.
-type PreviewOverlapsOperationConflictResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// PreviewOverlapsVersionConflictResponseBody is the type of the "killswitches"
-// service "previewOverlaps" endpoint HTTP response body for the
-// "version_conflict" error.
-type PreviewOverlapsVersionConflictResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -2121,63 +1714,6 @@ type BatchUserBadgesNotFoundResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// BatchUserBadgesConflictResponseBody is the type of the "killswitches"
-// service "batchUserBadges" endpoint HTTP response body for the "conflict"
-// error.
-type BatchUserBadgesConflictResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// BatchUserBadgesOperationConflictResponseBody is the type of the
-// "killswitches" service "batchUserBadges" endpoint HTTP response body for the
-// "operation_conflict" error.
-type BatchUserBadgesOperationConflictResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// BatchUserBadgesVersionConflictResponseBody is the type of the "killswitches"
-// service "batchUserBadges" endpoint HTTP response body for the
-// "version_conflict" error.
-type BatchUserBadgesVersionConflictResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
 // BatchUserBadgesUnsupportedMediaResponseBody is the type of the
 // "killswitches" service "batchUserBadges" endpoint HTTP response body for the
 // "unsupported_media" error.
@@ -2356,12 +1892,11 @@ type KillswitchHistoryEventResponseBody struct {
 	ChangedAt        string                          `form:"changed_at" json:"changed_at" xml:"changed_at"`
 }
 
-// KillswitchMutationResultResponseBody is used to define fields on response
+// KillswitchMutationReceiptResponseBody is used to define fields on response
 // body types.
-type KillswitchMutationResultResponseBody struct {
+type KillswitchMutationReceiptResponseBody struct {
 	ID       string `form:"id" json:"id" xml:"id"`
 	Version  int64  `form:"version" json:"version" xml:"version"`
-	Status   string `form:"status" json:"status" xml:"status"`
 	Replayed bool   `form:"replayed" json:"replayed" xml:"replayed"`
 }
 
@@ -2383,14 +1918,16 @@ type KillswitchUserBadgeResponseBody struct {
 	Scheduled   bool   `form:"scheduled" json:"scheduled" xml:"scheduled"`
 }
 
-// KillswitchScopeRequestBody is used to define fields on request body types.
-type KillswitchScopeRequestBody struct {
+// KillswitchScopeRequestBodyRequestBody is used to define fields on request
+// body types.
+type KillswitchScopeRequestBodyRequestBody struct {
 	Type      *string  `form:"type,omitempty" json:"type,omitempty" xml:"type,omitempty"`
 	ServerIds []string `form:"server_ids,omitempty" json:"server_ids,omitempty" xml:"server_ids,omitempty"`
 }
 
-// KillswitchScheduleRequestBody is used to define fields on request body types.
-type KillswitchScheduleRequestBody struct {
+// KillswitchScheduleRequestBodyRequestBody is used to define fields on request
+// body types.
+type KillswitchScheduleRequestBodyRequestBody struct {
 	Start    *string `form:"start,omitempty" json:"start,omitempty" xml:"start,omitempty"`
 	StartsAt *string `form:"starts_at,omitempty" json:"starts_at,omitempty" xml:"starts_at,omitempty"`
 	End      *string `form:"end,omitempty" json:"end,omitempty" xml:"end,omitempty"`
@@ -2399,7 +1936,7 @@ type KillswitchScheduleRequestBody struct {
 
 // NewListCapabilitiesResponseBody builds the HTTP response body from the
 // result of the "listCapabilities" endpoint of the "killswitches" service.
-func NewListCapabilitiesResponseBody(res *killswitches.ListCapabilitiesResult) *ListCapabilitiesResponseBody {
+func NewListCapabilitiesResponseBody(res *killswitches.KillswitchListCapabilitiesResult) *ListCapabilitiesResponseBody {
 	body := &ListCapabilitiesResponseBody{}
 	if res.Capabilities != nil {
 		body.Capabilities = make([]*KillswitchCapabilityResponseBody, len(res.Capabilities))
@@ -2430,7 +1967,7 @@ func NewListCapabilitiesResponseBody(res *killswitches.ListCapabilitiesResult) *
 
 // NewListMCPServersResponseBody builds the HTTP response body from the result
 // of the "listMCPServers" endpoint of the "killswitches" service.
-func NewListMCPServersResponseBody(res *killswitches.ListMCPServersResult) *ListMCPServersResponseBody {
+func NewListMCPServersResponseBody(res *killswitches.KillswitchListMCPServersResult) *ListMCPServersResponseBody {
 	body := &ListMCPServersResponseBody{}
 	if res.Servers != nil {
 		body.Servers = make([]*KillswitchMCPServerResponseBody, len(res.Servers))
@@ -2449,7 +1986,7 @@ func NewListMCPServersResponseBody(res *killswitches.ListMCPServersResult) *List
 
 // NewListResponseBody builds the HTTP response body from the result of the
 // "list" endpoint of the "killswitches" service.
-func NewListResponseBody(res *killswitches.ListResult) *ListResponseBody {
+func NewListResponseBody(res *killswitches.KillswitchListResult) *ListResponseBody {
 	body := &ListResponseBody{
 		NextCursor: res.NextCursor,
 	}
@@ -2476,11 +2013,11 @@ func NewGetResponseBody(res *killswitches.KillswitchDetail) *GetResponseBody {
 		InternalNote:     res.InternalNote,
 		HistoryTruncated: res.HistoryTruncated,
 		ID:               res.ID,
-		CapabilityKey:    res.CapabilityKey,
+		CapabilityKey:    string(res.CapabilityKey),
 		CapabilityLabel:  res.CapabilityLabel,
 		UserID:           res.UserID,
 		Version:          res.Version,
-		Status:           res.Status,
+		Status:           string(res.Status),
 	}
 	if res.History != nil {
 		body.History = make([]*KillswitchHistoryEventResponseBody, len(res.History))
@@ -2505,11 +2042,10 @@ func NewGetResponseBody(res *killswitches.KillswitchDetail) *GetResponseBody {
 
 // NewCreateResponseBody builds the HTTP response body from the result of the
 // "create" endpoint of the "killswitches" service.
-func NewCreateResponseBody(res *killswitches.KillswitchMutationResult) *CreateResponseBody {
+func NewCreateResponseBody(res *killswitches.KillswitchMutationReceipt) *CreateResponseBody {
 	body := &CreateResponseBody{
 		ID:       res.ID,
 		Version:  res.Version,
-		Status:   res.Status,
 		Replayed: res.Replayed,
 	}
 	return body
@@ -2517,11 +2053,10 @@ func NewCreateResponseBody(res *killswitches.KillswitchMutationResult) *CreateRe
 
 // NewEditResponseBody builds the HTTP response body from the result of the
 // "edit" endpoint of the "killswitches" service.
-func NewEditResponseBody(res *killswitches.KillswitchMutationResult) *EditResponseBody {
+func NewEditResponseBody(res *killswitches.KillswitchMutationReceipt) *EditResponseBody {
 	body := &EditResponseBody{
 		ID:       res.ID,
 		Version:  res.Version,
-		Status:   res.Status,
 		Replayed: res.Replayed,
 	}
 	return body
@@ -2529,10 +2064,10 @@ func NewEditResponseBody(res *killswitches.KillswitchMutationResult) *EditRespon
 
 // NewLiftResponseBody builds the HTTP response body from the result of the
 // "lift" endpoint of the "killswitches" service.
-func NewLiftResponseBody(res *killswitches.LiftResult) *LiftResponseBody {
+func NewLiftResponseBody(res *killswitches.KillswitchLiftResult) *LiftResponseBody {
 	body := &LiftResponseBody{}
 	if res.Result != nil {
-		body.Result = marshalKillswitchesKillswitchMutationResultToKillswitchMutationResultResponseBody(res.Result)
+		body.Result = marshalKillswitchesKillswitchMutationReceiptToKillswitchMutationReceiptResponseBody(res.Result)
 	}
 	if res.RemainingOverlaps != nil {
 		body.RemainingOverlaps = make([]*KillswitchOverlapResponseBody, len(res.RemainingOverlaps))
@@ -2551,7 +2086,7 @@ func NewLiftResponseBody(res *killswitches.LiftResult) *LiftResponseBody {
 
 // NewPreviewOverlapsResponseBody builds the HTTP response body from the result
 // of the "previewOverlaps" endpoint of the "killswitches" service.
-func NewPreviewOverlapsResponseBody(res *killswitches.PreviewOverlapsResult) *PreviewOverlapsResponseBody {
+func NewPreviewOverlapsResponseBody(res *killswitches.KillswitchPreviewOverlapsResult) *PreviewOverlapsResponseBody {
 	body := &PreviewOverlapsResponseBody{}
 	if res.Overlaps != nil {
 		body.Overlaps = make([]*KillswitchOverlapResponseBody, len(res.Overlaps))
@@ -2570,7 +2105,7 @@ func NewPreviewOverlapsResponseBody(res *killswitches.PreviewOverlapsResult) *Pr
 
 // NewBatchUserBadgesResponseBody builds the HTTP response body from the result
 // of the "batchUserBadges" endpoint of the "killswitches" service.
-func NewBatchUserBadgesResponseBody(res *killswitches.BatchUserBadgesResult) *BatchUserBadgesResponseBody {
+func NewBatchUserBadgesResponseBody(res *killswitches.KillswitchBatchUserBadgesResult) *BatchUserBadgesResponseBody {
 	body := &BatchUserBadgesResponseBody{}
 	if res.Badges != nil {
 		body.Badges = make([]*KillswitchUserBadgeResponseBody, len(res.Badges))
@@ -2634,50 +2169,6 @@ func NewListCapabilitiesBadRequestResponseBody(res *goa.ServiceError) *ListCapab
 // the result of the "listCapabilities" endpoint of the "killswitches" service.
 func NewListCapabilitiesNotFoundResponseBody(res *goa.ServiceError) *ListCapabilitiesNotFoundResponseBody {
 	body := &ListCapabilitiesNotFoundResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewListCapabilitiesConflictResponseBody builds the HTTP response body from
-// the result of the "listCapabilities" endpoint of the "killswitches" service.
-func NewListCapabilitiesConflictResponseBody(res *goa.ServiceError) *ListCapabilitiesConflictResponseBody {
-	body := &ListCapabilitiesConflictResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewListCapabilitiesOperationConflictResponseBody builds the HTTP response
-// body from the result of the "listCapabilities" endpoint of the
-// "killswitches" service.
-func NewListCapabilitiesOperationConflictResponseBody(res *goa.ServiceError) *ListCapabilitiesOperationConflictResponseBody {
-	body := &ListCapabilitiesOperationConflictResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewListCapabilitiesVersionConflictResponseBody builds the HTTP response body
-// from the result of the "listCapabilities" endpoint of the "killswitches"
-// service.
-func NewListCapabilitiesVersionConflictResponseBody(res *goa.ServiceError) *ListCapabilitiesVersionConflictResponseBody {
-	body := &ListCapabilitiesVersionConflictResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -2832,50 +2323,6 @@ func NewListMCPServersNotFoundResponseBody(res *goa.ServiceError) *ListMCPServer
 	return body
 }
 
-// NewListMCPServersConflictResponseBody builds the HTTP response body from the
-// result of the "listMCPServers" endpoint of the "killswitches" service.
-func NewListMCPServersConflictResponseBody(res *goa.ServiceError) *ListMCPServersConflictResponseBody {
-	body := &ListMCPServersConflictResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewListMCPServersOperationConflictResponseBody builds the HTTP response body
-// from the result of the "listMCPServers" endpoint of the "killswitches"
-// service.
-func NewListMCPServersOperationConflictResponseBody(res *goa.ServiceError) *ListMCPServersOperationConflictResponseBody {
-	body := &ListMCPServersOperationConflictResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewListMCPServersVersionConflictResponseBody builds the HTTP response body
-// from the result of the "listMCPServers" endpoint of the "killswitches"
-// service.
-func NewListMCPServersVersionConflictResponseBody(res *goa.ServiceError) *ListMCPServersVersionConflictResponseBody {
-	body := &ListMCPServersVersionConflictResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
 // NewListMCPServersUnsupportedMediaResponseBody builds the HTTP response body
 // from the result of the "listMCPServers" endpoint of the "killswitches"
 // service.
@@ -3008,48 +2455,6 @@ func NewListBadRequestResponseBody(res *goa.ServiceError) *ListBadRequestRespons
 // the "list" endpoint of the "killswitches" service.
 func NewListNotFoundResponseBody(res *goa.ServiceError) *ListNotFoundResponseBody {
 	body := &ListNotFoundResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewListConflictResponseBody builds the HTTP response body from the result of
-// the "list" endpoint of the "killswitches" service.
-func NewListConflictResponseBody(res *goa.ServiceError) *ListConflictResponseBody {
-	body := &ListConflictResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewListOperationConflictResponseBody builds the HTTP response body from the
-// result of the "list" endpoint of the "killswitches" service.
-func NewListOperationConflictResponseBody(res *goa.ServiceError) *ListOperationConflictResponseBody {
-	body := &ListOperationConflictResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewListVersionConflictResponseBody builds the HTTP response body from the
-// result of the "list" endpoint of the "killswitches" service.
-func NewListVersionConflictResponseBody(res *goa.ServiceError) *ListVersionConflictResponseBody {
-	body := &ListVersionConflictResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -3200,48 +2605,6 @@ func NewGetNotFoundResponseBody(res *goa.ServiceError) *GetNotFoundResponseBody 
 	return body
 }
 
-// NewGetConflictResponseBody builds the HTTP response body from the result of
-// the "get" endpoint of the "killswitches" service.
-func NewGetConflictResponseBody(res *goa.ServiceError) *GetConflictResponseBody {
-	body := &GetConflictResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewGetOperationConflictResponseBody builds the HTTP response body from the
-// result of the "get" endpoint of the "killswitches" service.
-func NewGetOperationConflictResponseBody(res *goa.ServiceError) *GetOperationConflictResponseBody {
-	body := &GetOperationConflictResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewGetVersionConflictResponseBody builds the HTTP response body from the
-// result of the "get" endpoint of the "killswitches" service.
-func NewGetVersionConflictResponseBody(res *goa.ServiceError) *GetVersionConflictResponseBody {
-	body := &GetVersionConflictResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
 // NewGetUnsupportedMediaResponseBody builds the HTTP response body from the
 // result of the "get" endpoint of the "killswitches" service.
 func NewGetUnsupportedMediaResponseBody(res *goa.ServiceError) *GetUnsupportedMediaResponseBody {
@@ -3382,48 +2745,6 @@ func NewCreateNotFoundResponseBody(res *goa.ServiceError) *CreateNotFoundRespons
 	return body
 }
 
-// NewCreateConflictResponseBody builds the HTTP response body from the result
-// of the "create" endpoint of the "killswitches" service.
-func NewCreateConflictResponseBody(res *goa.ServiceError) *CreateConflictResponseBody {
-	body := &CreateConflictResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewCreateOperationConflictResponseBody builds the HTTP response body from
-// the result of the "create" endpoint of the "killswitches" service.
-func NewCreateOperationConflictResponseBody(res *goa.ServiceError) *CreateOperationConflictResponseBody {
-	body := &CreateOperationConflictResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewCreateVersionConflictResponseBody builds the HTTP response body from the
-// result of the "create" endpoint of the "killswitches" service.
-func NewCreateVersionConflictResponseBody(res *goa.ServiceError) *CreateVersionConflictResponseBody {
-	body := &CreateVersionConflictResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
 // NewCreateUnsupportedMediaResponseBody builds the HTTP response body from the
 // result of the "create" endpoint of the "killswitches" service.
 func NewCreateUnsupportedMediaResponseBody(res *goa.ServiceError) *CreateUnsupportedMediaResponseBody {
@@ -3508,6 +2829,16 @@ func NewCreateUnavailableResponseBody(res *goa.ServiceError) *CreateUnavailableR
 	return body
 }
 
+// NewCreateOperationConflictResponseBody builds the HTTP response body from
+// the result of the "create" endpoint of the "killswitches" service.
+func NewCreateOperationConflictResponseBody(res *killswitches.KillswitchConflict) *CreateOperationConflictResponseBody {
+	body := &CreateOperationConflictResponseBody{
+		Name:    res.Name,
+		Message: res.Message,
+	}
+	return body
+}
+
 // NewEditUnauthorizedResponseBody builds the HTTP response body from the
 // result of the "edit" endpoint of the "killswitches" service.
 func NewEditUnauthorizedResponseBody(res *goa.ServiceError) *EditUnauthorizedResponseBody {
@@ -3554,48 +2885,6 @@ func NewEditBadRequestResponseBody(res *goa.ServiceError) *EditBadRequestRespons
 // the "edit" endpoint of the "killswitches" service.
 func NewEditNotFoundResponseBody(res *goa.ServiceError) *EditNotFoundResponseBody {
 	body := &EditNotFoundResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewEditConflictResponseBody builds the HTTP response body from the result of
-// the "edit" endpoint of the "killswitches" service.
-func NewEditConflictResponseBody(res *goa.ServiceError) *EditConflictResponseBody {
-	body := &EditConflictResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewEditOperationConflictResponseBody builds the HTTP response body from the
-// result of the "edit" endpoint of the "killswitches" service.
-func NewEditOperationConflictResponseBody(res *goa.ServiceError) *EditOperationConflictResponseBody {
-	body := &EditOperationConflictResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewEditVersionConflictResponseBody builds the HTTP response body from the
-// result of the "edit" endpoint of the "killswitches" service.
-func NewEditVersionConflictResponseBody(res *goa.ServiceError) *EditVersionConflictResponseBody {
-	body := &EditVersionConflictResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -3690,6 +2979,26 @@ func NewEditUnavailableResponseBody(res *goa.ServiceError) *EditUnavailableRespo
 	return body
 }
 
+// NewEditOperationConflictResponseBody builds the HTTP response body from the
+// result of the "edit" endpoint of the "killswitches" service.
+func NewEditOperationConflictResponseBody(res *killswitches.KillswitchConflict) *EditOperationConflictResponseBody {
+	body := &EditOperationConflictResponseBody{
+		Name:    res.Name,
+		Message: res.Message,
+	}
+	return body
+}
+
+// NewEditVersionConflictResponseBody builds the HTTP response body from the
+// result of the "edit" endpoint of the "killswitches" service.
+func NewEditVersionConflictResponseBody(res *killswitches.KillswitchConflict) *EditVersionConflictResponseBody {
+	body := &EditVersionConflictResponseBody{
+		Name:    res.Name,
+		Message: res.Message,
+	}
+	return body
+}
+
 // NewLiftUnauthorizedResponseBody builds the HTTP response body from the
 // result of the "lift" endpoint of the "killswitches" service.
 func NewLiftUnauthorizedResponseBody(res *goa.ServiceError) *LiftUnauthorizedResponseBody {
@@ -3736,48 +3045,6 @@ func NewLiftBadRequestResponseBody(res *goa.ServiceError) *LiftBadRequestRespons
 // the "lift" endpoint of the "killswitches" service.
 func NewLiftNotFoundResponseBody(res *goa.ServiceError) *LiftNotFoundResponseBody {
 	body := &LiftNotFoundResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewLiftConflictResponseBody builds the HTTP response body from the result of
-// the "lift" endpoint of the "killswitches" service.
-func NewLiftConflictResponseBody(res *goa.ServiceError) *LiftConflictResponseBody {
-	body := &LiftConflictResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewLiftOperationConflictResponseBody builds the HTTP response body from the
-// result of the "lift" endpoint of the "killswitches" service.
-func NewLiftOperationConflictResponseBody(res *goa.ServiceError) *LiftOperationConflictResponseBody {
-	body := &LiftOperationConflictResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewLiftVersionConflictResponseBody builds the HTTP response body from the
-// result of the "lift" endpoint of the "killswitches" service.
-func NewLiftVersionConflictResponseBody(res *goa.ServiceError) *LiftVersionConflictResponseBody {
-	body := &LiftVersionConflictResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -3872,6 +3139,26 @@ func NewLiftUnavailableResponseBody(res *goa.ServiceError) *LiftUnavailableRespo
 	return body
 }
 
+// NewLiftOperationConflictResponseBody builds the HTTP response body from the
+// result of the "lift" endpoint of the "killswitches" service.
+func NewLiftOperationConflictResponseBody(res *killswitches.KillswitchConflict) *LiftOperationConflictResponseBody {
+	body := &LiftOperationConflictResponseBody{
+		Name:    res.Name,
+		Message: res.Message,
+	}
+	return body
+}
+
+// NewLiftVersionConflictResponseBody builds the HTTP response body from the
+// result of the "lift" endpoint of the "killswitches" service.
+func NewLiftVersionConflictResponseBody(res *killswitches.KillswitchConflict) *LiftVersionConflictResponseBody {
+	body := &LiftVersionConflictResponseBody{
+		Name:    res.Name,
+		Message: res.Message,
+	}
+	return body
+}
+
 // NewPreviewOverlapsUnauthorizedResponseBody builds the HTTP response body
 // from the result of the "previewOverlaps" endpoint of the "killswitches"
 // service.
@@ -3919,50 +3206,6 @@ func NewPreviewOverlapsBadRequestResponseBody(res *goa.ServiceError) *PreviewOve
 // the result of the "previewOverlaps" endpoint of the "killswitches" service.
 func NewPreviewOverlapsNotFoundResponseBody(res *goa.ServiceError) *PreviewOverlapsNotFoundResponseBody {
 	body := &PreviewOverlapsNotFoundResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewPreviewOverlapsConflictResponseBody builds the HTTP response body from
-// the result of the "previewOverlaps" endpoint of the "killswitches" service.
-func NewPreviewOverlapsConflictResponseBody(res *goa.ServiceError) *PreviewOverlapsConflictResponseBody {
-	body := &PreviewOverlapsConflictResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewPreviewOverlapsOperationConflictResponseBody builds the HTTP response
-// body from the result of the "previewOverlaps" endpoint of the "killswitches"
-// service.
-func NewPreviewOverlapsOperationConflictResponseBody(res *goa.ServiceError) *PreviewOverlapsOperationConflictResponseBody {
-	body := &PreviewOverlapsOperationConflictResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewPreviewOverlapsVersionConflictResponseBody builds the HTTP response body
-// from the result of the "previewOverlaps" endpoint of the "killswitches"
-// service.
-func NewPreviewOverlapsVersionConflictResponseBody(res *goa.ServiceError) *PreviewOverlapsVersionConflictResponseBody {
-	body := &PreviewOverlapsVersionConflictResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -4117,50 +3360,6 @@ func NewBatchUserBadgesNotFoundResponseBody(res *goa.ServiceError) *BatchUserBad
 	return body
 }
 
-// NewBatchUserBadgesConflictResponseBody builds the HTTP response body from
-// the result of the "batchUserBadges" endpoint of the "killswitches" service.
-func NewBatchUserBadgesConflictResponseBody(res *goa.ServiceError) *BatchUserBadgesConflictResponseBody {
-	body := &BatchUserBadgesConflictResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewBatchUserBadgesOperationConflictResponseBody builds the HTTP response
-// body from the result of the "batchUserBadges" endpoint of the "killswitches"
-// service.
-func NewBatchUserBadgesOperationConflictResponseBody(res *goa.ServiceError) *BatchUserBadgesOperationConflictResponseBody {
-	body := &BatchUserBadgesOperationConflictResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewBatchUserBadgesVersionConflictResponseBody builds the HTTP response body
-// from the result of the "batchUserBadges" endpoint of the "killswitches"
-// service.
-func NewBatchUserBadgesVersionConflictResponseBody(res *goa.ServiceError) *BatchUserBadgesVersionConflictResponseBody {
-	body := &BatchUserBadgesVersionConflictResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
 // NewBatchUserBadgesUnsupportedMediaResponseBody builds the HTTP response body
 // from the result of the "batchUserBadges" endpoint of the "killswitches"
 // service.
@@ -4269,9 +3468,15 @@ func NewListMCPServersPayload(sessionToken *string) *killswitches.ListMCPServers
 // NewListPayload builds a killswitches service list endpoint payload.
 func NewListPayload(capabilityKey *string, userID *string, status *string, limit *int32, cursor *string, sessionToken *string) *killswitches.ListPayload {
 	v := &killswitches.ListPayload{}
-	v.CapabilityKey = capabilityKey
+	if capabilityKey != nil {
+		tmpcapabilityKey := killswitches.KillswitchCapabilityKey(*capabilityKey)
+		v.CapabilityKey = &tmpcapabilityKey
+	}
 	v.UserID = userID
-	v.Status = status
+	if status != nil {
+		tmpstatus := killswitches.KillswitchStatus(*status)
+		v.Status = &tmpstatus
+	}
 	v.Limit = limit
 	v.Cursor = cursor
 	v.SessionToken = sessionToken
@@ -4292,13 +3497,13 @@ func NewGetPayload(id string, sessionToken *string) *killswitches.GetPayload {
 func NewCreatePayload(body *CreateRequestBody, sessionToken *string) *killswitches.CreatePayload {
 	v := &killswitches.CreatePayload{
 		OperationID:   *body.OperationID,
-		CapabilityKey: *body.CapabilityKey,
+		CapabilityKey: killswitches.KillswitchCapabilityKey(*body.CapabilityKey),
 		UserID:        *body.UserID,
 		ExternalNote:  *body.ExternalNote,
 		InternalNote:  *body.InternalNote,
 	}
-	v.Scope = unmarshalKillswitchScopeRequestBodyToKillswitchesKillswitchScope(body.Scope)
-	v.Schedule = unmarshalKillswitchScheduleRequestBodyToKillswitchesKillswitchSchedule(body.Schedule)
+	v.Scope = unmarshalKillswitchScopeRequestBodyRequestBodyToKillswitchesKillswitchScope(body.Scope)
+	v.Schedule = unmarshalKillswitchScheduleRequestBodyRequestBodyToKillswitchesKillswitchSchedule(body.Schedule)
 	v.SessionToken = sessionToken
 
 	return v
@@ -4313,8 +3518,8 @@ func NewEditPayload(body *EditRequestBody, sessionToken *string) *killswitches.E
 		ExternalNote:    *body.ExternalNote,
 		InternalNote:    *body.InternalNote,
 	}
-	v.Scope = unmarshalKillswitchScopeRequestBodyToKillswitchesKillswitchScope(body.Scope)
-	v.Schedule = unmarshalKillswitchScheduleRequestBodyToKillswitchesKillswitchSchedule(body.Schedule)
+	v.Scope = unmarshalKillswitchScopeRequestBodyRequestBodyToKillswitchesKillswitchScope(body.Scope)
+	v.Schedule = unmarshalKillswitchScheduleRequestBodyRequestBodyToKillswitchesKillswitchSchedule(body.Schedule)
 	v.SessionToken = sessionToken
 
 	return v
@@ -4337,11 +3542,11 @@ func NewLiftPayload(body *LiftRequestBody, sessionToken *string) *killswitches.L
 func NewPreviewOverlapsPayload(body *PreviewOverlapsRequestBody, sessionToken *string) *killswitches.PreviewOverlapsPayload {
 	v := &killswitches.PreviewOverlapsPayload{
 		ID:            body.ID,
-		CapabilityKey: *body.CapabilityKey,
+		CapabilityKey: killswitches.KillswitchCapabilityKey(*body.CapabilityKey),
 		UserID:        *body.UserID,
 	}
-	v.Scope = unmarshalKillswitchScopeRequestBodyToKillswitchesKillswitchScope(body.Scope)
-	v.Schedule = unmarshalKillswitchScheduleRequestBodyToKillswitchesKillswitchSchedule(body.Schedule)
+	v.Scope = unmarshalKillswitchScopeRequestBodyRequestBodyToKillswitchesKillswitchScope(body.Scope)
+	v.Schedule = unmarshalKillswitchScheduleRequestBodyRequestBodyToKillswitchesKillswitchSchedule(body.Schedule)
 	v.SessionToken = sessionToken
 
 	return v
@@ -4392,12 +3597,12 @@ func ValidateCreateRequestBody(body *CreateRequestBody) (err error) {
 		}
 	}
 	if body.Scope != nil {
-		if err2 := ValidateKillswitchScopeRequestBody(body.Scope); err2 != nil {
+		if err2 := ValidateKillswitchScopeRequestBodyRequestBody(body.Scope); err2 != nil {
 			err = goa.MergeErrors(err, err2)
 		}
 	}
 	if body.Schedule != nil {
-		if err2 := ValidateKillswitchScheduleRequestBody(body.Schedule); err2 != nil {
+		if err2 := ValidateKillswitchScheduleRequestBodyRequestBody(body.Schedule); err2 != nil {
 			err = goa.MergeErrors(err, err2)
 		}
 	}
@@ -4444,12 +3649,12 @@ func ValidateEditRequestBody(body *EditRequestBody) (err error) {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", *body.ID, goa.FormatUUID))
 	}
 	if body.Scope != nil {
-		if err2 := ValidateKillswitchScopeRequestBody(body.Scope); err2 != nil {
+		if err2 := ValidateKillswitchScopeRequestBodyRequestBody(body.Scope); err2 != nil {
 			err = goa.MergeErrors(err, err2)
 		}
 	}
 	if body.Schedule != nil {
-		if err2 := ValidateKillswitchScheduleRequestBody(body.Schedule); err2 != nil {
+		if err2 := ValidateKillswitchScheduleRequestBodyRequestBody(body.Schedule); err2 != nil {
 			err = goa.MergeErrors(err, err2)
 		}
 	}
@@ -4510,12 +3715,12 @@ func ValidatePreviewOverlapsRequestBody(body *PreviewOverlapsRequestBody) (err e
 		}
 	}
 	if body.Scope != nil {
-		if err2 := ValidateKillswitchScopeRequestBody(body.Scope); err2 != nil {
+		if err2 := ValidateKillswitchScopeRequestBodyRequestBody(body.Scope); err2 != nil {
 			err = goa.MergeErrors(err, err2)
 		}
 	}
 	if body.Schedule != nil {
-		if err2 := ValidateKillswitchScheduleRequestBody(body.Schedule); err2 != nil {
+		if err2 := ValidateKillswitchScheduleRequestBodyRequestBody(body.Schedule); err2 != nil {
 			err = goa.MergeErrors(err, err2)
 		}
 	}
@@ -4537,9 +3742,9 @@ func ValidateBatchUserBadgesRequestBody(body *BatchUserBadgesRequestBody) (err e
 	return
 }
 
-// ValidateKillswitchScopeRequestBody runs the validations defined on
-// KillswitchScopeRequestBody
-func ValidateKillswitchScopeRequestBody(body *KillswitchScopeRequestBody) (err error) {
+// ValidateKillswitchScopeRequestBodyRequestBody runs the validations defined
+// on KillswitchScopeRequestBodyRequestBody
+func ValidateKillswitchScopeRequestBodyRequestBody(body *KillswitchScopeRequestBodyRequestBody) (err error) {
 	if body.Type == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("type", "body"))
 	}
@@ -4557,9 +3762,9 @@ func ValidateKillswitchScopeRequestBody(body *KillswitchScopeRequestBody) (err e
 	return
 }
 
-// ValidateKillswitchScheduleRequestBody runs the validations defined on
-// KillswitchScheduleRequestBody
-func ValidateKillswitchScheduleRequestBody(body *KillswitchScheduleRequestBody) (err error) {
+// ValidateKillswitchScheduleRequestBodyRequestBody runs the validations
+// defined on KillswitchScheduleRequestBodyRequestBody
+func ValidateKillswitchScheduleRequestBodyRequestBody(body *KillswitchScheduleRequestBodyRequestBody) (err error) {
 	if body.Start == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("start", "body"))
 	}

@@ -5,38 +5,30 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
-import { ClosedEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
-export const KillswitchScopeType = {
-  AllServers: "all_servers",
-  SelectedServers: "selected_servers",
-} as const;
-export type KillswitchScopeType = ClosedEnum<typeof KillswitchScopeType>;
-
-export type KillswitchScope = {
-  serverIds?: Array<string> | undefined;
-  type: KillswitchScopeType;
+export type KillswitchSelectedServersScope = {
+  type: "selected_servers";
+  serverIds: Array<string>;
 };
 
-/** @internal */
-export const KillswitchScopeType$inboundSchema: z.ZodMiniEnum<
-  typeof KillswitchScopeType
-> = z.enum(KillswitchScopeType);
-/** @internal */
-export const KillswitchScopeType$outboundSchema: z.ZodMiniEnum<
-  typeof KillswitchScopeType
-> = KillswitchScopeType$inboundSchema;
+export type KillswitchAllServersScope = {
+  type: "all_servers";
+};
+
+export type KillswitchScope =
+  | KillswitchAllServersScope
+  | KillswitchSelectedServersScope;
 
 /** @internal */
-export const KillswitchScope$inboundSchema: z.ZodMiniType<
-  KillswitchScope,
+export const KillswitchSelectedServersScope$inboundSchema: z.ZodMiniType<
+  KillswitchSelectedServersScope,
   unknown
 > = z.pipe(
   z.object({
-    server_ids: z.optional(z.array(z.string())),
-    type: KillswitchScopeType$inboundSchema,
+    type: z.literal("selected_servers"),
+    server_ids: z.array(z.string()),
   }),
   z.transform((v) => {
     return remap$(v, {
@@ -45,19 +37,19 @@ export const KillswitchScope$inboundSchema: z.ZodMiniType<
   }),
 );
 /** @internal */
-export type KillswitchScope$Outbound = {
-  server_ids?: Array<string> | undefined;
-  type: string;
+export type KillswitchSelectedServersScope$Outbound = {
+  type: "selected_servers";
+  server_ids: Array<string>;
 };
 
 /** @internal */
-export const KillswitchScope$outboundSchema: z.ZodMiniType<
-  KillswitchScope$Outbound,
-  KillswitchScope
+export const KillswitchSelectedServersScope$outboundSchema: z.ZodMiniType<
+  KillswitchSelectedServersScope$Outbound,
+  KillswitchSelectedServersScope
 > = z.pipe(
   z.object({
-    serverIds: z.optional(z.array(z.string())),
-    type: KillswitchScopeType$outboundSchema,
+    type: z.literal("selected_servers"),
+    serverIds: z.array(z.string()),
   }),
   z.transform((v) => {
     return remap$(v, {
@@ -65,6 +57,84 @@ export const KillswitchScope$outboundSchema: z.ZodMiniType<
     });
   }),
 );
+
+export function killswitchSelectedServersScopeToJSON(
+  killswitchSelectedServersScope: KillswitchSelectedServersScope,
+): string {
+  return JSON.stringify(
+    KillswitchSelectedServersScope$outboundSchema.parse(
+      killswitchSelectedServersScope,
+    ),
+  );
+}
+export function killswitchSelectedServersScopeFromJSON(
+  jsonString: string,
+): SafeParseResult<KillswitchSelectedServersScope, SDKValidationError> {
+  return safeParse(
+    jsonString,
+    (x) => KillswitchSelectedServersScope$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'KillswitchSelectedServersScope' from JSON`,
+  );
+}
+
+/** @internal */
+export const KillswitchAllServersScope$inboundSchema: z.ZodMiniType<
+  KillswitchAllServersScope,
+  unknown
+> = z.object({
+  type: z.literal("all_servers"),
+});
+/** @internal */
+export type KillswitchAllServersScope$Outbound = {
+  type: "all_servers";
+};
+
+/** @internal */
+export const KillswitchAllServersScope$outboundSchema: z.ZodMiniType<
+  KillswitchAllServersScope$Outbound,
+  KillswitchAllServersScope
+> = z.object({
+  type: z.literal("all_servers"),
+});
+
+export function killswitchAllServersScopeToJSON(
+  killswitchAllServersScope: KillswitchAllServersScope,
+): string {
+  return JSON.stringify(
+    KillswitchAllServersScope$outboundSchema.parse(killswitchAllServersScope),
+  );
+}
+export function killswitchAllServersScopeFromJSON(
+  jsonString: string,
+): SafeParseResult<KillswitchAllServersScope, SDKValidationError> {
+  return safeParse(
+    jsonString,
+    (x) => KillswitchAllServersScope$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'KillswitchAllServersScope' from JSON`,
+  );
+}
+
+/** @internal */
+export const KillswitchScope$inboundSchema: z.ZodMiniType<
+  KillswitchScope,
+  unknown
+> = z.union([
+  z.lazy(() => KillswitchAllServersScope$inboundSchema),
+  z.lazy(() => KillswitchSelectedServersScope$inboundSchema),
+]);
+/** @internal */
+export type KillswitchScope$Outbound =
+  | KillswitchAllServersScope$Outbound
+  | KillswitchSelectedServersScope$Outbound;
+
+/** @internal */
+export const KillswitchScope$outboundSchema: z.ZodMiniType<
+  KillswitchScope$Outbound,
+  KillswitchScope
+> = z.union([
+  z.lazy(() => KillswitchAllServersScope$outboundSchema),
+  z.lazy(() => KillswitchSelectedServersScope$outboundSchema),
+]);
 
 export function killswitchScopeToJSON(
   killswitchScope: KillswitchScope,

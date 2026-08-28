@@ -5,9 +5,12 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
-import { ClosedEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
+import {
+  KillswitchCapabilityKey,
+  KillswitchCapabilityKey$inboundSchema,
+} from "./killswitchcapabilitykey.js";
 import {
   KillswitchSchedule,
   KillswitchSchedule$inboundSchema,
@@ -16,44 +19,21 @@ import {
   KillswitchScope,
   KillswitchScope$inboundSchema,
 } from "./killswitchscope.js";
-
-export const KillswitchSummaryCapabilityKey = {
-  McpToolCalls: "mcp_tool_calls",
-} as const;
-export type KillswitchSummaryCapabilityKey = ClosedEnum<
-  typeof KillswitchSummaryCapabilityKey
->;
-
-export const KillswitchSummaryStatus = {
-  Active: "active",
-  Scheduled: "scheduled",
-  Expired: "expired",
-  Lifted: "lifted",
-} as const;
-export type KillswitchSummaryStatus = ClosedEnum<
-  typeof KillswitchSummaryStatus
->;
+import {
+  KillswitchStatus,
+  KillswitchStatus$inboundSchema,
+} from "./killswitchstatus.js";
 
 export type KillswitchSummary = {
-  capabilityKey: KillswitchSummaryCapabilityKey;
   capabilityLabel: string;
   id: string;
   schedule: KillswitchSchedule;
   scope: KillswitchScope;
-  status: KillswitchSummaryStatus;
   userId: string;
   version: number;
+  capabilityKey: KillswitchCapabilityKey;
+  status: KillswitchStatus;
 };
-
-/** @internal */
-export const KillswitchSummaryCapabilityKey$inboundSchema: z.ZodMiniEnum<
-  typeof KillswitchSummaryCapabilityKey
-> = z.enum(KillswitchSummaryCapabilityKey);
-
-/** @internal */
-export const KillswitchSummaryStatus$inboundSchema: z.ZodMiniEnum<
-  typeof KillswitchSummaryStatus
-> = z.enum(KillswitchSummaryStatus);
 
 /** @internal */
 export const KillswitchSummary$inboundSchema: z.ZodMiniType<
@@ -61,20 +41,20 @@ export const KillswitchSummary$inboundSchema: z.ZodMiniType<
   unknown
 > = z.pipe(
   z.object({
-    capability_key: KillswitchSummaryCapabilityKey$inboundSchema,
     capability_label: z.string(),
     id: z.string(),
     schedule: KillswitchSchedule$inboundSchema,
     scope: KillswitchScope$inboundSchema,
-    status: KillswitchSummaryStatus$inboundSchema,
     user_id: z.string(),
     version: z.int(),
+    capability_key: KillswitchCapabilityKey$inboundSchema,
+    status: KillswitchStatus$inboundSchema,
   }),
   z.transform((v) => {
     return remap$(v, {
-      "capability_key": "capabilityKey",
       "capability_label": "capabilityLabel",
       "user_id": "userId",
+      "capability_key": "capabilityKey",
     });
   }),
 );

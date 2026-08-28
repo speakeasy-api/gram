@@ -5,9 +5,12 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
-import { ClosedEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
+import {
+  KillswitchHistoryAction,
+  KillswitchHistoryAction$inboundSchema,
+} from "./killswitchhistoryaction.js";
 import {
   KillswitchSchedule,
   KillswitchSchedule$inboundSchema,
@@ -16,28 +19,12 @@ import {
   KillswitchScope,
   KillswitchScope$inboundSchema,
 } from "./killswitchscope.js";
-
-export const Action = {
-  Created: "created",
-  Edited: "edited",
-  Lifted: "lifted",
-  Expired: "expired",
-  Restored: "restored",
-} as const;
-export type Action = ClosedEnum<typeof Action>;
-
-export const KillswitchHistoryEventStatus = {
-  Active: "active",
-  Scheduled: "scheduled",
-  Expired: "expired",
-  Lifted: "lifted",
-} as const;
-export type KillswitchHistoryEventStatus = ClosedEnum<
-  typeof KillswitchHistoryEventStatus
->;
+import {
+  KillswitchStatus,
+  KillswitchStatus$inboundSchema,
+} from "./killswitchstatus.js";
 
 export type KillswitchHistoryEvent = {
-  action: Action;
   actorDisplayName?: string | undefined;
   actorUserId?: string | undefined;
   changedAt: Date;
@@ -46,19 +33,10 @@ export type KillswitchHistoryEvent = {
   schedule: KillswitchSchedule;
   scope: KillswitchScope;
   sequence: number;
-  status: KillswitchHistoryEventStatus;
   version: number;
+  action: KillswitchHistoryAction;
+  status: KillswitchStatus;
 };
-
-/** @internal */
-export const Action$inboundSchema: z.ZodMiniEnum<typeof Action> = z.enum(
-  Action,
-);
-
-/** @internal */
-export const KillswitchHistoryEventStatus$inboundSchema: z.ZodMiniEnum<
-  typeof KillswitchHistoryEventStatus
-> = z.enum(KillswitchHistoryEventStatus);
 
 /** @internal */
 export const KillswitchHistoryEvent$inboundSchema: z.ZodMiniType<
@@ -66,7 +44,6 @@ export const KillswitchHistoryEvent$inboundSchema: z.ZodMiniType<
   unknown
 > = z.pipe(
   z.object({
-    action: Action$inboundSchema,
     actor_display_name: z.optional(z.string()),
     actor_user_id: z.optional(z.string()),
     changed_at: z.pipe(
@@ -78,8 +55,9 @@ export const KillswitchHistoryEvent$inboundSchema: z.ZodMiniType<
     schedule: KillswitchSchedule$inboundSchema,
     scope: KillswitchScope$inboundSchema,
     sequence: z.int(),
-    status: KillswitchHistoryEventStatus$inboundSchema,
     version: z.int(),
+    action: KillswitchHistoryAction$inboundSchema,
+    status: KillswitchStatus$inboundSchema,
   }),
   z.transform((v) => {
     return remap$(v, {

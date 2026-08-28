@@ -52,40 +52,25 @@ WITH db_time AS (
 )
 SELECT
   requested.user_id::text AS user_id,
-  EXISTS (
-    SELECT 1
-    FROM killswitch_prescriptions AS p
-    JOIN killswitch_prescription_versions AS v
-      ON v.organization_id = p.organization_id
-     AND v.prescription_id = p.id
-     AND v.version = p.current_version
-    CROSS JOIN db_time
-    WHERE p.organization_id = $1
-      AND p.definition_key = $2
-      AND p.principal_kind = $3
-      AND p.principal_key = requested.user_id
-      AND p.resource_kind = $4
-      AND v.state = 'active'
-      AND v.starts_at <= db_time.now
-      AND (v.expires_at IS NULL OR db_time.now < v.expires_at)
-  ) AS affected_now,
-  EXISTS (
-    SELECT 1
-    FROM killswitch_prescriptions AS p
-    JOIN killswitch_prescription_versions AS v
-      ON v.organization_id = p.organization_id
-     AND v.prescription_id = p.id
-     AND v.version = p.current_version
-    CROSS JOIN db_time
-    WHERE p.organization_id = $1
-      AND p.definition_key = $2
-      AND p.principal_kind = $3
-      AND p.principal_key = requested.user_id
-      AND p.resource_kind = $4
-      AND v.state = 'active'
-      AND v.starts_at > db_time.now
-  ) AS scheduled
+  CAST(COALESCE(bool_or(
+    v.state = 'active'
+    AND v.starts_at <= db_time.now
+    AND (v.expires_at IS NULL OR db_time.now < v.expires_at)
+  ), false) AS boolean) AS affected_now,
+  CAST(COALESCE(bool_or(v.state = 'active' AND v.starts_at > db_time.now), false) AS boolean) AS scheduled
 FROM requested
+CROSS JOIN db_time
+LEFT JOIN killswitch_prescriptions AS p
+  ON p.organization_id = $1
+ AND p.definition_key = $2
+ AND p.principal_kind = $3
+ AND p.principal_key = requested.user_id
+ AND p.resource_kind = $4
+LEFT JOIN killswitch_prescription_versions AS v
+  ON v.organization_id = p.organization_id
+ AND v.prescription_id = p.id
+ AND v.version = p.current_version
+GROUP BY requested.user_id
 ORDER BY requested.user_id
 `
 
@@ -773,8 +758,8 @@ SELECT
   )::text[] AS selected_resource_keys,
   CASE
     WHEN v.state = 'inactive' THEN 'lifted'
-    WHEN v.starts_at > clock_timestamp() THEN 'scheduled'
-    WHEN v.expires_at IS NOT NULL AND v.expires_at <= clock_timestamp() THEN 'expired'
+    WHEN v.starts_at > a.created_at THEN 'scheduled'
+    WHEN v.expires_at IS NOT NULL AND v.expires_at <= a.created_at THEN 'expired'
     ELSE 'active'
   END::text AS customer_status,
   CASE WHEN v.starts_at > v.activated_at THEN 'scheduled' ELSE 'now' END::text AS customer_start,
@@ -975,7 +960,7 @@ WITH db_time AS (
   SELECT $3::timestamptz AS now
 ), current_rows AS (
   SELECT
-    p.id, p.updated_at, p.principal_key AS user_id, v.version,
+    p.id, p.created_at, p.principal_key AS user_id, v.version,
     v.resource_scope, v.starts_at, v.expires_at,
     CASE
       WHEN v.state = 'inactive' THEN 'lifted'
@@ -994,26 +979,33 @@ WITH db_time AS (
       LIMIT 1001
     )::text[] AS selected_resource_keys
   FROM killswitch_prescriptions AS p
-  JOIN killswitch_prescription_versions AS v
-    ON v.organization_id = p.organization_id
-   AND v.prescription_id = p.id
-   AND v.version = p.current_version
   CROSS JOIN db_time
+  JOIN LATERAL (
+    SELECT snapshot.organization_id, snapshot.prescription_id, snapshot.version, snapshot.state, snapshot.resource_scope, snapshot.starts_at, snapshot.expires_at, snapshot.activated_at, snapshot.superseded_at, snapshot.internal_note, snapshot.external_note, snapshot.created_at
+    FROM killswitch_prescription_versions AS snapshot
+    WHERE snapshot.organization_id = p.organization_id
+      AND snapshot.prescription_id = p.id
+      AND snapshot.created_at <= db_time.now
+      AND (snapshot.superseded_at IS NULL OR snapshot.superseded_at > db_time.now)
+    ORDER BY snapshot.version DESC
+    LIMIT 1
+  ) AS v ON TRUE
   WHERE p.organization_id = $4
     AND p.definition_key = $5
     AND p.principal_kind = $6
     AND p.resource_kind = $7
+    AND p.created_at <= db_time.now
     AND ($8::text IS NULL OR p.principal_key = $8::text)
     AND (
       $9::timestamptz IS NULL
-      OR (p.updated_at, p.id) < ($9::timestamptz, $10::uuid)
+      OR (p.created_at, p.id) < ($9::timestamptz, $10::uuid)
     )
 )
-SELECT id, updated_at, user_id, version, resource_scope, starts_at, expires_at, customer_status, customer_start, selected_resource_keys
+SELECT id, created_at, user_id, version, resource_scope, starts_at, expires_at, customer_status, customer_start, selected_resource_keys
 FROM current_rows
 WHERE $1::text IS NULL
    OR customer_status = $1::text
-ORDER BY updated_at DESC, id DESC
+ORDER BY created_at DESC, id DESC
 LIMIT $2
 `
 
@@ -1026,13 +1018,13 @@ type ListCustomerKillswitchesParams struct {
 	PrincipalKind   string
 	ResourceKind    string
 	UserID          pgtype.Text
-	CursorUpdatedAt pgtype.Timestamptz
+	CursorCreatedAt pgtype.Timestamptz
 	CursorID        uuid.NullUUID
 }
 
 type ListCustomerKillswitchesRow struct {
 	ID                   uuid.UUID
-	UpdatedAt            pgtype.Timestamptz
+	CreatedAt            pgtype.Timestamptz
 	UserID               string
 	Version              int64
 	ResourceScope        string
@@ -1053,7 +1045,7 @@ func (q *Queries) ListCustomerKillswitches(ctx context.Context, arg ListCustomer
 		arg.PrincipalKind,
 		arg.ResourceKind,
 		arg.UserID,
-		arg.CursorUpdatedAt,
+		arg.CursorCreatedAt,
 		arg.CursorID,
 	)
 	if err != nil {
@@ -1065,7 +1057,7 @@ func (q *Queries) ListCustomerKillswitches(ctx context.Context, arg ListCustomer
 		var i ListCustomerKillswitchesRow
 		if err := rows.Scan(
 			&i.ID,
-			&i.UpdatedAt,
+			&i.CreatedAt,
 			&i.UserID,
 			&i.Version,
 			&i.ResourceScope,

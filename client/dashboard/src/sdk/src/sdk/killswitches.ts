@@ -12,13 +12,13 @@ import { killswitchesKillswitchesNumberListCapabilities } from "../funcs/killswi
 import { killswitchesKillswitchesNumberListMCPServers } from "../funcs/killswitchesKillswitchesNumberListMCPServers.js";
 import { killswitchesKillswitchesNumberPreviewOverlaps } from "../funcs/killswitchesKillswitchesNumberPreviewOverlaps.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
-import { BatchUserBadgesResponseBody } from "../models/components/batchuserbadgesresponsebody.js";
+import { KillswitchBatchUserBadgesResult } from "../models/components/killswitchbatchuserbadgesresult.js";
 import { KillswitchDetail } from "../models/components/killswitchdetail.js";
-import { KillswitchMutationResult } from "../models/components/killswitchmutationresult.js";
-import { LiftResponseBody } from "../models/components/liftresponsebody.js";
-import { ListCapabilitiesResponseBody } from "../models/components/listcapabilitiesresponsebody.js";
-import { ListMCPServersResponseBody } from "../models/components/listmcpserversresponsebody.js";
-import { PreviewOverlapsResponseBody } from "../models/components/previewoverlapsresponsebody.js";
+import { KillswitchLiftResult } from "../models/components/killswitchliftresult.js";
+import { KillswitchListCapabilitiesResult } from "../models/components/killswitchlistcapabilitiesresult.js";
+import { KillswitchListMCPServersResult } from "../models/components/killswitchlistmcpserversresult.js";
+import { KillswitchMutationReceipt } from "../models/components/killswitchmutationreceipt.js";
+import { KillswitchPreviewOverlapsResult } from "../models/components/killswitchpreviewoverlapsresult.js";
 import {
   KillswitchesNumberBatchUserBadgesRequest,
   KillswitchesNumberBatchUserBadgesSecurity,
@@ -67,7 +67,7 @@ export class Killswitches extends ClientSDK {
     request: KillswitchesNumberBatchUserBadgesRequest,
     security?: KillswitchesNumberBatchUserBadgesSecurity | undefined,
     options?: RequestOptions,
-  ): Promise<BatchUserBadgesResponseBody> {
+  ): Promise<KillswitchBatchUserBadgesResult> {
     return unwrapAsync(killswitchesKillswitchesNumberBatchUserBadges(
       this,
       request,
@@ -83,7 +83,7 @@ export class Killswitches extends ClientSDK {
     request: KillswitchesNumberCreateRequest,
     security?: KillswitchesNumberCreateSecurity | undefined,
     options?: RequestOptions,
-  ): Promise<KillswitchMutationResult> {
+  ): Promise<KillswitchMutationReceipt> {
     return unwrapAsync(killswitchesKillswitchesNumberCreate(
       this,
       request,
@@ -99,7 +99,7 @@ export class Killswitches extends ClientSDK {
     request: KillswitchesNumberEditRequest,
     security?: KillswitchesNumberEditSecurity | undefined,
     options?: RequestOptions,
-  ): Promise<KillswitchMutationResult> {
+  ): Promise<KillswitchMutationReceipt> {
     return unwrapAsync(killswitchesKillswitchesNumberEdit(
       this,
       request,
@@ -131,7 +131,7 @@ export class Killswitches extends ClientSDK {
     request: KillswitchesNumberLiftRequest,
     security?: KillswitchesNumberLiftSecurity | undefined,
     options?: RequestOptions,
-  ): Promise<LiftResponseBody> {
+  ): Promise<KillswitchLiftResult> {
     return unwrapAsync(killswitchesKillswitchesNumberLift(
       this,
       request,
@@ -163,7 +163,7 @@ export class Killswitches extends ClientSDK {
     request?: KillswitchesNumberListCapabilitiesRequest | undefined,
     security?: KillswitchesNumberListCapabilitiesSecurity | undefined,
     options?: RequestOptions,
-  ): Promise<ListCapabilitiesResponseBody> {
+  ): Promise<KillswitchListCapabilitiesResult> {
     return unwrapAsync(killswitchesKillswitchesNumberListCapabilities(
       this,
       request,
@@ -179,7 +179,7 @@ export class Killswitches extends ClientSDK {
     request?: KillswitchesNumberListMCPServersRequest | undefined,
     security?: KillswitchesNumberListMCPServersSecurity | undefined,
     options?: RequestOptions,
-  ): Promise<ListMCPServersResponseBody> {
+  ): Promise<KillswitchListMCPServersResult> {
     return unwrapAsync(killswitchesKillswitchesNumberListMCPServers(
       this,
       request,
@@ -195,7 +195,7 @@ export class Killswitches extends ClientSDK {
     request: KillswitchesNumberPreviewOverlapsRequest,
     security?: KillswitchesNumberPreviewOverlapsSecurity | undefined,
     options?: RequestOptions,
-  ): Promise<PreviewOverlapsResponseBody> {
+  ): Promise<KillswitchPreviewOverlapsResult> {
     return unwrapAsync(killswitchesKillswitchesNumberPreviewOverlaps(
       this,
       request,

@@ -58,9 +58,6 @@ func EncodeListCapabilitiesRequest(encoder func(*http.Request) goahttp.Encoder) 
 //   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
 //   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
 //   - "not_found" (type *goa.ServiceError): http.StatusNotFound
-//   - "conflict" (type *goa.ServiceError): http.StatusConflict
-//   - "operation_conflict" (type *goa.ServiceError): http.StatusConflict
-//   - "version_conflict" (type *goa.ServiceError): http.StatusConflict
 //   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
 //   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
 //   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
@@ -96,7 +93,7 @@ func DecodeListCapabilitiesResponse(decoder func(*http.Response) goahttp.Decoder
 			if err != nil {
 				return nil, goahttp.ErrValidationError("killswitches", "listCapabilities", err)
 			}
-			res := NewListCapabilitiesResultOK(&body)
+			res := NewListCapabilitiesKillswitchListCapabilitiesResultOK(&body)
 			return res, nil
 		case http.StatusUnauthorized:
 			var (
@@ -154,55 +151,6 @@ func DecodeListCapabilitiesResponse(decoder func(*http.Response) goahttp.Decoder
 				return nil, goahttp.ErrValidationError("killswitches", "listCapabilities", err)
 			}
 			return nil, NewListCapabilitiesNotFound(&body)
-		case http.StatusConflict:
-			en := resp.Header.Get("goa-error")
-			switch en {
-			case "conflict":
-				var (
-					body ListCapabilitiesConflictResponseBody
-					err  error
-				)
-				err = decoder(resp).Decode(&body)
-				if err != nil {
-					return nil, goahttp.ErrDecodingError("killswitches", "listCapabilities", err)
-				}
-				err = ValidateListCapabilitiesConflictResponseBody(&body)
-				if err != nil {
-					return nil, goahttp.ErrValidationError("killswitches", "listCapabilities", err)
-				}
-				return nil, NewListCapabilitiesConflict(&body)
-			case "operation_conflict":
-				var (
-					body ListCapabilitiesOperationConflictResponseBody
-					err  error
-				)
-				err = decoder(resp).Decode(&body)
-				if err != nil {
-					return nil, goahttp.ErrDecodingError("killswitches", "listCapabilities", err)
-				}
-				err = ValidateListCapabilitiesOperationConflictResponseBody(&body)
-				if err != nil {
-					return nil, goahttp.ErrValidationError("killswitches", "listCapabilities", err)
-				}
-				return nil, NewListCapabilitiesOperationConflict(&body)
-			case "version_conflict":
-				var (
-					body ListCapabilitiesVersionConflictResponseBody
-					err  error
-				)
-				err = decoder(resp).Decode(&body)
-				if err != nil {
-					return nil, goahttp.ErrDecodingError("killswitches", "listCapabilities", err)
-				}
-				err = ValidateListCapabilitiesVersionConflictResponseBody(&body)
-				if err != nil {
-					return nil, goahttp.ErrValidationError("killswitches", "listCapabilities", err)
-				}
-				return nil, NewListCapabilitiesVersionConflict(&body)
-			default:
-				body, _ := io.ReadAll(resp.Body)
-				return nil, goahttp.ErrInvalidResponse("killswitches", "listCapabilities", resp.StatusCode, string(body))
-			}
 		case http.StatusUnsupportedMediaType:
 			var (
 				body ListCapabilitiesUnsupportedMediaResponseBody
@@ -340,9 +288,6 @@ func EncodeListMCPServersRequest(encoder func(*http.Request) goahttp.Encoder) fu
 //   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
 //   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
 //   - "not_found" (type *goa.ServiceError): http.StatusNotFound
-//   - "conflict" (type *goa.ServiceError): http.StatusConflict
-//   - "operation_conflict" (type *goa.ServiceError): http.StatusConflict
-//   - "version_conflict" (type *goa.ServiceError): http.StatusConflict
 //   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
 //   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
 //   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
@@ -378,7 +323,7 @@ func DecodeListMCPServersResponse(decoder func(*http.Response) goahttp.Decoder, 
 			if err != nil {
 				return nil, goahttp.ErrValidationError("killswitches", "listMCPServers", err)
 			}
-			res := NewListMCPServersResultOK(&body)
+			res := NewListMCPServersKillswitchListMCPServersResultOK(&body)
 			return res, nil
 		case http.StatusUnauthorized:
 			var (
@@ -436,55 +381,6 @@ func DecodeListMCPServersResponse(decoder func(*http.Response) goahttp.Decoder, 
 				return nil, goahttp.ErrValidationError("killswitches", "listMCPServers", err)
 			}
 			return nil, NewListMCPServersNotFound(&body)
-		case http.StatusConflict:
-			en := resp.Header.Get("goa-error")
-			switch en {
-			case "conflict":
-				var (
-					body ListMCPServersConflictResponseBody
-					err  error
-				)
-				err = decoder(resp).Decode(&body)
-				if err != nil {
-					return nil, goahttp.ErrDecodingError("killswitches", "listMCPServers", err)
-				}
-				err = ValidateListMCPServersConflictResponseBody(&body)
-				if err != nil {
-					return nil, goahttp.ErrValidationError("killswitches", "listMCPServers", err)
-				}
-				return nil, NewListMCPServersConflict(&body)
-			case "operation_conflict":
-				var (
-					body ListMCPServersOperationConflictResponseBody
-					err  error
-				)
-				err = decoder(resp).Decode(&body)
-				if err != nil {
-					return nil, goahttp.ErrDecodingError("killswitches", "listMCPServers", err)
-				}
-				err = ValidateListMCPServersOperationConflictResponseBody(&body)
-				if err != nil {
-					return nil, goahttp.ErrValidationError("killswitches", "listMCPServers", err)
-				}
-				return nil, NewListMCPServersOperationConflict(&body)
-			case "version_conflict":
-				var (
-					body ListMCPServersVersionConflictResponseBody
-					err  error
-				)
-				err = decoder(resp).Decode(&body)
-				if err != nil {
-					return nil, goahttp.ErrDecodingError("killswitches", "listMCPServers", err)
-				}
-				err = ValidateListMCPServersVersionConflictResponseBody(&body)
-				if err != nil {
-					return nil, goahttp.ErrValidationError("killswitches", "listMCPServers", err)
-				}
-				return nil, NewListMCPServersVersionConflict(&body)
-			default:
-				body, _ := io.ReadAll(resp.Body)
-				return nil, goahttp.ErrInvalidResponse("killswitches", "listMCPServers", resp.StatusCode, string(body))
-			}
 		case http.StatusUnsupportedMediaType:
 			var (
 				body ListMCPServersUnsupportedMediaResponseBody
@@ -612,13 +508,13 @@ func EncodeListRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.R
 		}
 		values := req.URL.Query()
 		if p.CapabilityKey != nil {
-			values.Add("capability_key", *p.CapabilityKey)
+			values.Add("capability_key", string(*p.CapabilityKey))
 		}
 		if p.UserID != nil {
 			values.Add("user_id", *p.UserID)
 		}
 		if p.Status != nil {
-			values.Add("status", *p.Status)
+			values.Add("status", string(*p.Status))
 		}
 		if p.Limit != nil {
 			values.Add("limit", fmt.Sprintf("%v", *p.Limit))
@@ -639,9 +535,6 @@ func EncodeListRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.R
 //   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
 //   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
 //   - "not_found" (type *goa.ServiceError): http.StatusNotFound
-//   - "conflict" (type *goa.ServiceError): http.StatusConflict
-//   - "operation_conflict" (type *goa.ServiceError): http.StatusConflict
-//   - "version_conflict" (type *goa.ServiceError): http.StatusConflict
 //   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
 //   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
 //   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
@@ -677,7 +570,7 @@ func DecodeListResponse(decoder func(*http.Response) goahttp.Decoder, restoreBod
 			if err != nil {
 				return nil, goahttp.ErrValidationError("killswitches", "list", err)
 			}
-			res := NewListResultOK(&body)
+			res := NewListKillswitchListResultOK(&body)
 			return res, nil
 		case http.StatusUnauthorized:
 			var (
@@ -735,55 +628,6 @@ func DecodeListResponse(decoder func(*http.Response) goahttp.Decoder, restoreBod
 				return nil, goahttp.ErrValidationError("killswitches", "list", err)
 			}
 			return nil, NewListNotFound(&body)
-		case http.StatusConflict:
-			en := resp.Header.Get("goa-error")
-			switch en {
-			case "conflict":
-				var (
-					body ListConflictResponseBody
-					err  error
-				)
-				err = decoder(resp).Decode(&body)
-				if err != nil {
-					return nil, goahttp.ErrDecodingError("killswitches", "list", err)
-				}
-				err = ValidateListConflictResponseBody(&body)
-				if err != nil {
-					return nil, goahttp.ErrValidationError("killswitches", "list", err)
-				}
-				return nil, NewListConflict(&body)
-			case "operation_conflict":
-				var (
-					body ListOperationConflictResponseBody
-					err  error
-				)
-				err = decoder(resp).Decode(&body)
-				if err != nil {
-					return nil, goahttp.ErrDecodingError("killswitches", "list", err)
-				}
-				err = ValidateListOperationConflictResponseBody(&body)
-				if err != nil {
-					return nil, goahttp.ErrValidationError("killswitches", "list", err)
-				}
-				return nil, NewListOperationConflict(&body)
-			case "version_conflict":
-				var (
-					body ListVersionConflictResponseBody
-					err  error
-				)
-				err = decoder(resp).Decode(&body)
-				if err != nil {
-					return nil, goahttp.ErrDecodingError("killswitches", "list", err)
-				}
-				err = ValidateListVersionConflictResponseBody(&body)
-				if err != nil {
-					return nil, goahttp.ErrValidationError("killswitches", "list", err)
-				}
-				return nil, NewListVersionConflict(&body)
-			default:
-				body, _ := io.ReadAll(resp.Body)
-				return nil, goahttp.ErrInvalidResponse("killswitches", "list", resp.StatusCode, string(body))
-			}
 		case http.StatusUnsupportedMediaType:
 			var (
 				body ListUnsupportedMediaResponseBody
@@ -924,9 +768,6 @@ func EncodeGetRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Re
 //   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
 //   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
 //   - "not_found" (type *goa.ServiceError): http.StatusNotFound
-//   - "conflict" (type *goa.ServiceError): http.StatusConflict
-//   - "operation_conflict" (type *goa.ServiceError): http.StatusConflict
-//   - "version_conflict" (type *goa.ServiceError): http.StatusConflict
 //   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
 //   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
 //   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
@@ -1020,55 +861,6 @@ func DecodeGetResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody
 				return nil, goahttp.ErrValidationError("killswitches", "get", err)
 			}
 			return nil, NewGetNotFound(&body)
-		case http.StatusConflict:
-			en := resp.Header.Get("goa-error")
-			switch en {
-			case "conflict":
-				var (
-					body GetConflictResponseBody
-					err  error
-				)
-				err = decoder(resp).Decode(&body)
-				if err != nil {
-					return nil, goahttp.ErrDecodingError("killswitches", "get", err)
-				}
-				err = ValidateGetConflictResponseBody(&body)
-				if err != nil {
-					return nil, goahttp.ErrValidationError("killswitches", "get", err)
-				}
-				return nil, NewGetConflict(&body)
-			case "operation_conflict":
-				var (
-					body GetOperationConflictResponseBody
-					err  error
-				)
-				err = decoder(resp).Decode(&body)
-				if err != nil {
-					return nil, goahttp.ErrDecodingError("killswitches", "get", err)
-				}
-				err = ValidateGetOperationConflictResponseBody(&body)
-				if err != nil {
-					return nil, goahttp.ErrValidationError("killswitches", "get", err)
-				}
-				return nil, NewGetOperationConflict(&body)
-			case "version_conflict":
-				var (
-					body GetVersionConflictResponseBody
-					err  error
-				)
-				err = decoder(resp).Decode(&body)
-				if err != nil {
-					return nil, goahttp.ErrDecodingError("killswitches", "get", err)
-				}
-				err = ValidateGetVersionConflictResponseBody(&body)
-				if err != nil {
-					return nil, goahttp.ErrValidationError("killswitches", "get", err)
-				}
-				return nil, NewGetVersionConflict(&body)
-			default:
-				body, _ := io.ReadAll(resp.Body)
-				return nil, goahttp.ErrInvalidResponse("killswitches", "get", resp.StatusCode, string(body))
-			}
 		case http.StatusUnsupportedMediaType:
 			var (
 				body GetUnsupportedMediaResponseBody
@@ -1210,15 +1002,13 @@ func EncodeCreateRequest(encoder func(*http.Request) goahttp.Encoder) func(*http
 //   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
 //   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
 //   - "not_found" (type *goa.ServiceError): http.StatusNotFound
-//   - "conflict" (type *goa.ServiceError): http.StatusConflict
-//   - "operation_conflict" (type *goa.ServiceError): http.StatusConflict
-//   - "version_conflict" (type *goa.ServiceError): http.StatusConflict
 //   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
 //   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
 //   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
 //   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
 //   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
 //   - "unavailable" (type *goa.ServiceError): http.StatusServiceUnavailable
+//   - "operation_conflict" (type *killswitches.KillswitchConflict): http.StatusConflict
 //   - error: internal error
 func DecodeCreateResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
 	return func(resp *http.Response) (any, error) {
@@ -1248,7 +1038,7 @@ func DecodeCreateResponse(decoder func(*http.Response) goahttp.Decoder, restoreB
 			if err != nil {
 				return nil, goahttp.ErrValidationError("killswitches", "create", err)
 			}
-			res := NewCreateKillswitchMutationResultOK(&body)
+			res := NewCreateKillswitchMutationReceiptOK(&body)
 			return res, nil
 		case http.StatusUnauthorized:
 			var (
@@ -1306,55 +1096,6 @@ func DecodeCreateResponse(decoder func(*http.Response) goahttp.Decoder, restoreB
 				return nil, goahttp.ErrValidationError("killswitches", "create", err)
 			}
 			return nil, NewCreateNotFound(&body)
-		case http.StatusConflict:
-			en := resp.Header.Get("goa-error")
-			switch en {
-			case "conflict":
-				var (
-					body CreateConflictResponseBody
-					err  error
-				)
-				err = decoder(resp).Decode(&body)
-				if err != nil {
-					return nil, goahttp.ErrDecodingError("killswitches", "create", err)
-				}
-				err = ValidateCreateConflictResponseBody(&body)
-				if err != nil {
-					return nil, goahttp.ErrValidationError("killswitches", "create", err)
-				}
-				return nil, NewCreateConflict(&body)
-			case "operation_conflict":
-				var (
-					body CreateOperationConflictResponseBody
-					err  error
-				)
-				err = decoder(resp).Decode(&body)
-				if err != nil {
-					return nil, goahttp.ErrDecodingError("killswitches", "create", err)
-				}
-				err = ValidateCreateOperationConflictResponseBody(&body)
-				if err != nil {
-					return nil, goahttp.ErrValidationError("killswitches", "create", err)
-				}
-				return nil, NewCreateOperationConflict(&body)
-			case "version_conflict":
-				var (
-					body CreateVersionConflictResponseBody
-					err  error
-				)
-				err = decoder(resp).Decode(&body)
-				if err != nil {
-					return nil, goahttp.ErrDecodingError("killswitches", "create", err)
-				}
-				err = ValidateCreateVersionConflictResponseBody(&body)
-				if err != nil {
-					return nil, goahttp.ErrValidationError("killswitches", "create", err)
-				}
-				return nil, NewCreateVersionConflict(&body)
-			default:
-				body, _ := io.ReadAll(resp.Body)
-				return nil, goahttp.ErrInvalidResponse("killswitches", "create", resp.StatusCode, string(body))
-			}
 		case http.StatusUnsupportedMediaType:
 			var (
 				body CreateUnsupportedMediaResponseBody
@@ -1446,6 +1187,20 @@ func DecodeCreateResponse(decoder func(*http.Response) goahttp.Decoder, restoreB
 				return nil, goahttp.ErrValidationError("killswitches", "create", err)
 			}
 			return nil, NewCreateUnavailable(&body)
+		case http.StatusConflict:
+			var (
+				body CreateOperationConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("killswitches", "create", err)
+			}
+			err = ValidateCreateOperationConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("killswitches", "create", err)
+			}
+			return nil, NewCreateOperationConflict(&body)
 		default:
 			body, _ := io.ReadAll(resp.Body)
 			return nil, goahttp.ErrInvalidResponse("killswitches", "create", resp.StatusCode, string(body))
@@ -1496,15 +1251,14 @@ func EncodeEditRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.R
 //   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
 //   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
 //   - "not_found" (type *goa.ServiceError): http.StatusNotFound
-//   - "conflict" (type *goa.ServiceError): http.StatusConflict
-//   - "operation_conflict" (type *goa.ServiceError): http.StatusConflict
-//   - "version_conflict" (type *goa.ServiceError): http.StatusConflict
 //   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
 //   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
 //   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
 //   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
 //   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
 //   - "unavailable" (type *goa.ServiceError): http.StatusServiceUnavailable
+//   - "operation_conflict" (type *killswitches.KillswitchConflict): http.StatusConflict
+//   - "version_conflict" (type *killswitches.KillswitchConflict): http.StatusConflict
 //   - error: internal error
 func DecodeEditResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
 	return func(resp *http.Response) (any, error) {
@@ -1534,7 +1288,7 @@ func DecodeEditResponse(decoder func(*http.Response) goahttp.Decoder, restoreBod
 			if err != nil {
 				return nil, goahttp.ErrValidationError("killswitches", "edit", err)
 			}
-			res := NewEditKillswitchMutationResultOK(&body)
+			res := NewEditKillswitchMutationReceiptOK(&body)
 			return res, nil
 		case http.StatusUnauthorized:
 			var (
@@ -1592,55 +1346,6 @@ func DecodeEditResponse(decoder func(*http.Response) goahttp.Decoder, restoreBod
 				return nil, goahttp.ErrValidationError("killswitches", "edit", err)
 			}
 			return nil, NewEditNotFound(&body)
-		case http.StatusConflict:
-			en := resp.Header.Get("goa-error")
-			switch en {
-			case "conflict":
-				var (
-					body EditConflictResponseBody
-					err  error
-				)
-				err = decoder(resp).Decode(&body)
-				if err != nil {
-					return nil, goahttp.ErrDecodingError("killswitches", "edit", err)
-				}
-				err = ValidateEditConflictResponseBody(&body)
-				if err != nil {
-					return nil, goahttp.ErrValidationError("killswitches", "edit", err)
-				}
-				return nil, NewEditConflict(&body)
-			case "operation_conflict":
-				var (
-					body EditOperationConflictResponseBody
-					err  error
-				)
-				err = decoder(resp).Decode(&body)
-				if err != nil {
-					return nil, goahttp.ErrDecodingError("killswitches", "edit", err)
-				}
-				err = ValidateEditOperationConflictResponseBody(&body)
-				if err != nil {
-					return nil, goahttp.ErrValidationError("killswitches", "edit", err)
-				}
-				return nil, NewEditOperationConflict(&body)
-			case "version_conflict":
-				var (
-					body EditVersionConflictResponseBody
-					err  error
-				)
-				err = decoder(resp).Decode(&body)
-				if err != nil {
-					return nil, goahttp.ErrDecodingError("killswitches", "edit", err)
-				}
-				err = ValidateEditVersionConflictResponseBody(&body)
-				if err != nil {
-					return nil, goahttp.ErrValidationError("killswitches", "edit", err)
-				}
-				return nil, NewEditVersionConflict(&body)
-			default:
-				body, _ := io.ReadAll(resp.Body)
-				return nil, goahttp.ErrInvalidResponse("killswitches", "edit", resp.StatusCode, string(body))
-			}
 		case http.StatusUnsupportedMediaType:
 			var (
 				body EditUnsupportedMediaResponseBody
@@ -1732,6 +1437,41 @@ func DecodeEditResponse(decoder func(*http.Response) goahttp.Decoder, restoreBod
 				return nil, goahttp.ErrValidationError("killswitches", "edit", err)
 			}
 			return nil, NewEditUnavailable(&body)
+		case http.StatusConflict:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "operation_conflict":
+				var (
+					body EditOperationConflictResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("killswitches", "edit", err)
+				}
+				err = ValidateEditOperationConflictResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("killswitches", "edit", err)
+				}
+				return nil, NewEditOperationConflict(&body)
+			case "version_conflict":
+				var (
+					body EditVersionConflictResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("killswitches", "edit", err)
+				}
+				err = ValidateEditVersionConflictResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("killswitches", "edit", err)
+				}
+				return nil, NewEditVersionConflict(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("killswitches", "edit", resp.StatusCode, string(body))
+			}
 		default:
 			body, _ := io.ReadAll(resp.Body)
 			return nil, goahttp.ErrInvalidResponse("killswitches", "edit", resp.StatusCode, string(body))
@@ -1782,15 +1522,14 @@ func EncodeLiftRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.R
 //   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
 //   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
 //   - "not_found" (type *goa.ServiceError): http.StatusNotFound
-//   - "conflict" (type *goa.ServiceError): http.StatusConflict
-//   - "operation_conflict" (type *goa.ServiceError): http.StatusConflict
-//   - "version_conflict" (type *goa.ServiceError): http.StatusConflict
 //   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
 //   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
 //   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
 //   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
 //   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
 //   - "unavailable" (type *goa.ServiceError): http.StatusServiceUnavailable
+//   - "operation_conflict" (type *killswitches.KillswitchConflict): http.StatusConflict
+//   - "version_conflict" (type *killswitches.KillswitchConflict): http.StatusConflict
 //   - error: internal error
 func DecodeLiftResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
 	return func(resp *http.Response) (any, error) {
@@ -1820,7 +1559,7 @@ func DecodeLiftResponse(decoder func(*http.Response) goahttp.Decoder, restoreBod
 			if err != nil {
 				return nil, goahttp.ErrValidationError("killswitches", "lift", err)
 			}
-			res := NewLiftResultOK(&body)
+			res := NewLiftKillswitchLiftResultOK(&body)
 			return res, nil
 		case http.StatusUnauthorized:
 			var (
@@ -1878,55 +1617,6 @@ func DecodeLiftResponse(decoder func(*http.Response) goahttp.Decoder, restoreBod
 				return nil, goahttp.ErrValidationError("killswitches", "lift", err)
 			}
 			return nil, NewLiftNotFound(&body)
-		case http.StatusConflict:
-			en := resp.Header.Get("goa-error")
-			switch en {
-			case "conflict":
-				var (
-					body LiftConflictResponseBody
-					err  error
-				)
-				err = decoder(resp).Decode(&body)
-				if err != nil {
-					return nil, goahttp.ErrDecodingError("killswitches", "lift", err)
-				}
-				err = ValidateLiftConflictResponseBody(&body)
-				if err != nil {
-					return nil, goahttp.ErrValidationError("killswitches", "lift", err)
-				}
-				return nil, NewLiftConflict(&body)
-			case "operation_conflict":
-				var (
-					body LiftOperationConflictResponseBody
-					err  error
-				)
-				err = decoder(resp).Decode(&body)
-				if err != nil {
-					return nil, goahttp.ErrDecodingError("killswitches", "lift", err)
-				}
-				err = ValidateLiftOperationConflictResponseBody(&body)
-				if err != nil {
-					return nil, goahttp.ErrValidationError("killswitches", "lift", err)
-				}
-				return nil, NewLiftOperationConflict(&body)
-			case "version_conflict":
-				var (
-					body LiftVersionConflictResponseBody
-					err  error
-				)
-				err = decoder(resp).Decode(&body)
-				if err != nil {
-					return nil, goahttp.ErrDecodingError("killswitches", "lift", err)
-				}
-				err = ValidateLiftVersionConflictResponseBody(&body)
-				if err != nil {
-					return nil, goahttp.ErrValidationError("killswitches", "lift", err)
-				}
-				return nil, NewLiftVersionConflict(&body)
-			default:
-				body, _ := io.ReadAll(resp.Body)
-				return nil, goahttp.ErrInvalidResponse("killswitches", "lift", resp.StatusCode, string(body))
-			}
 		case http.StatusUnsupportedMediaType:
 			var (
 				body LiftUnsupportedMediaResponseBody
@@ -2018,6 +1708,41 @@ func DecodeLiftResponse(decoder func(*http.Response) goahttp.Decoder, restoreBod
 				return nil, goahttp.ErrValidationError("killswitches", "lift", err)
 			}
 			return nil, NewLiftUnavailable(&body)
+		case http.StatusConflict:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "operation_conflict":
+				var (
+					body LiftOperationConflictResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("killswitches", "lift", err)
+				}
+				err = ValidateLiftOperationConflictResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("killswitches", "lift", err)
+				}
+				return nil, NewLiftOperationConflict(&body)
+			case "version_conflict":
+				var (
+					body LiftVersionConflictResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("killswitches", "lift", err)
+				}
+				err = ValidateLiftVersionConflictResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("killswitches", "lift", err)
+				}
+				return nil, NewLiftVersionConflict(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("killswitches", "lift", resp.StatusCode, string(body))
+			}
 		default:
 			body, _ := io.ReadAll(resp.Body)
 			return nil, goahttp.ErrInvalidResponse("killswitches", "lift", resp.StatusCode, string(body))
@@ -2068,9 +1793,6 @@ func EncodePreviewOverlapsRequest(encoder func(*http.Request) goahttp.Encoder) f
 //   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
 //   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
 //   - "not_found" (type *goa.ServiceError): http.StatusNotFound
-//   - "conflict" (type *goa.ServiceError): http.StatusConflict
-//   - "operation_conflict" (type *goa.ServiceError): http.StatusConflict
-//   - "version_conflict" (type *goa.ServiceError): http.StatusConflict
 //   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
 //   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
 //   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
@@ -2106,7 +1828,7 @@ func DecodePreviewOverlapsResponse(decoder func(*http.Response) goahttp.Decoder,
 			if err != nil {
 				return nil, goahttp.ErrValidationError("killswitches", "previewOverlaps", err)
 			}
-			res := NewPreviewOverlapsResultOK(&body)
+			res := NewPreviewOverlapsKillswitchPreviewOverlapsResultOK(&body)
 			return res, nil
 		case http.StatusUnauthorized:
 			var (
@@ -2164,55 +1886,6 @@ func DecodePreviewOverlapsResponse(decoder func(*http.Response) goahttp.Decoder,
 				return nil, goahttp.ErrValidationError("killswitches", "previewOverlaps", err)
 			}
 			return nil, NewPreviewOverlapsNotFound(&body)
-		case http.StatusConflict:
-			en := resp.Header.Get("goa-error")
-			switch en {
-			case "conflict":
-				var (
-					body PreviewOverlapsConflictResponseBody
-					err  error
-				)
-				err = decoder(resp).Decode(&body)
-				if err != nil {
-					return nil, goahttp.ErrDecodingError("killswitches", "previewOverlaps", err)
-				}
-				err = ValidatePreviewOverlapsConflictResponseBody(&body)
-				if err != nil {
-					return nil, goahttp.ErrValidationError("killswitches", "previewOverlaps", err)
-				}
-				return nil, NewPreviewOverlapsConflict(&body)
-			case "operation_conflict":
-				var (
-					body PreviewOverlapsOperationConflictResponseBody
-					err  error
-				)
-				err = decoder(resp).Decode(&body)
-				if err != nil {
-					return nil, goahttp.ErrDecodingError("killswitches", "previewOverlaps", err)
-				}
-				err = ValidatePreviewOverlapsOperationConflictResponseBody(&body)
-				if err != nil {
-					return nil, goahttp.ErrValidationError("killswitches", "previewOverlaps", err)
-				}
-				return nil, NewPreviewOverlapsOperationConflict(&body)
-			case "version_conflict":
-				var (
-					body PreviewOverlapsVersionConflictResponseBody
-					err  error
-				)
-				err = decoder(resp).Decode(&body)
-				if err != nil {
-					return nil, goahttp.ErrDecodingError("killswitches", "previewOverlaps", err)
-				}
-				err = ValidatePreviewOverlapsVersionConflictResponseBody(&body)
-				if err != nil {
-					return nil, goahttp.ErrValidationError("killswitches", "previewOverlaps", err)
-				}
-				return nil, NewPreviewOverlapsVersionConflict(&body)
-			default:
-				body, _ := io.ReadAll(resp.Body)
-				return nil, goahttp.ErrInvalidResponse("killswitches", "previewOverlaps", resp.StatusCode, string(body))
-			}
 		case http.StatusUnsupportedMediaType:
 			var (
 				body PreviewOverlapsUnsupportedMediaResponseBody
@@ -2354,9 +2027,6 @@ func EncodeBatchUserBadgesRequest(encoder func(*http.Request) goahttp.Encoder) f
 //   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
 //   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
 //   - "not_found" (type *goa.ServiceError): http.StatusNotFound
-//   - "conflict" (type *goa.ServiceError): http.StatusConflict
-//   - "operation_conflict" (type *goa.ServiceError): http.StatusConflict
-//   - "version_conflict" (type *goa.ServiceError): http.StatusConflict
 //   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
 //   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
 //   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
@@ -2392,7 +2062,7 @@ func DecodeBatchUserBadgesResponse(decoder func(*http.Response) goahttp.Decoder,
 			if err != nil {
 				return nil, goahttp.ErrValidationError("killswitches", "batchUserBadges", err)
 			}
-			res := NewBatchUserBadgesResultOK(&body)
+			res := NewBatchUserBadgesKillswitchBatchUserBadgesResultOK(&body)
 			return res, nil
 		case http.StatusUnauthorized:
 			var (
@@ -2450,55 +2120,6 @@ func DecodeBatchUserBadgesResponse(decoder func(*http.Response) goahttp.Decoder,
 				return nil, goahttp.ErrValidationError("killswitches", "batchUserBadges", err)
 			}
 			return nil, NewBatchUserBadgesNotFound(&body)
-		case http.StatusConflict:
-			en := resp.Header.Get("goa-error")
-			switch en {
-			case "conflict":
-				var (
-					body BatchUserBadgesConflictResponseBody
-					err  error
-				)
-				err = decoder(resp).Decode(&body)
-				if err != nil {
-					return nil, goahttp.ErrDecodingError("killswitches", "batchUserBadges", err)
-				}
-				err = ValidateBatchUserBadgesConflictResponseBody(&body)
-				if err != nil {
-					return nil, goahttp.ErrValidationError("killswitches", "batchUserBadges", err)
-				}
-				return nil, NewBatchUserBadgesConflict(&body)
-			case "operation_conflict":
-				var (
-					body BatchUserBadgesOperationConflictResponseBody
-					err  error
-				)
-				err = decoder(resp).Decode(&body)
-				if err != nil {
-					return nil, goahttp.ErrDecodingError("killswitches", "batchUserBadges", err)
-				}
-				err = ValidateBatchUserBadgesOperationConflictResponseBody(&body)
-				if err != nil {
-					return nil, goahttp.ErrValidationError("killswitches", "batchUserBadges", err)
-				}
-				return nil, NewBatchUserBadgesOperationConflict(&body)
-			case "version_conflict":
-				var (
-					body BatchUserBadgesVersionConflictResponseBody
-					err  error
-				)
-				err = decoder(resp).Decode(&body)
-				if err != nil {
-					return nil, goahttp.ErrDecodingError("killswitches", "batchUserBadges", err)
-				}
-				err = ValidateBatchUserBadgesVersionConflictResponseBody(&body)
-				if err != nil {
-					return nil, goahttp.ErrValidationError("killswitches", "batchUserBadges", err)
-				}
-				return nil, NewBatchUserBadgesVersionConflict(&body)
-			default:
-				body, _ := io.ReadAll(resp.Body)
-				return nil, goahttp.ErrInvalidResponse("killswitches", "batchUserBadges", resp.StatusCode, string(body))
-			}
 		case http.StatusUnsupportedMediaType:
 			var (
 				body BatchUserBadgesUnsupportedMediaResponseBody
@@ -2602,7 +2223,7 @@ func DecodeBatchUserBadgesResponse(decoder func(*http.Response) goahttp.Decoder,
 // type *KillswitchCapabilityResponseBody.
 func unmarshalKillswitchCapabilityResponseBodyToKillswitchesKillswitchCapability(v *KillswitchCapabilityResponseBody) *killswitches.KillswitchCapability {
 	res := &killswitches.KillswitchCapability{
-		Key:   *v.Key,
+		Key:   killswitches.KillswitchCapabilityKey(*v.Key),
 		Label: *v.Label,
 	}
 
@@ -2639,11 +2260,11 @@ func unmarshalKillswitchMCPServerResponseBodyToKillswitchesKillswitchMCPServer(v
 func unmarshalKillswitchSummaryResponseBodyToKillswitchesKillswitchSummary(v *KillswitchSummaryResponseBody) *killswitches.KillswitchSummary {
 	res := &killswitches.KillswitchSummary{
 		ID:              *v.ID,
-		CapabilityKey:   *v.CapabilityKey,
+		CapabilityKey:   killswitches.KillswitchCapabilityKey(*v.CapabilityKey),
 		CapabilityLabel: *v.CapabilityLabel,
 		UserID:          *v.UserID,
 		Version:         *v.Version,
-		Status:          *v.Status,
+		Status:          killswitches.KillswitchStatus(*v.Status),
 	}
 	res.Scope = unmarshalKillswitchScopeResponseBodyToKillswitchesKillswitchScope(v.Scope)
 	res.Schedule = unmarshalKillswitchScheduleResponseBodyToKillswitchesKillswitchSchedule(v.Schedule)
@@ -2656,7 +2277,7 @@ func unmarshalKillswitchSummaryResponseBodyToKillswitchesKillswitchSummary(v *Ki
 // *KillswitchScopeResponseBody.
 func unmarshalKillswitchScopeResponseBodyToKillswitchesKillswitchScope(v *KillswitchScopeResponseBody) *killswitches.KillswitchScope {
 	res := &killswitches.KillswitchScope{
-		Type: *v.Type,
+		Type: killswitches.KillswitchScopeType(*v.Type),
 	}
 	if v.ServerIds != nil {
 		res.ServerIds = make([]string, len(v.ServerIds))
@@ -2673,9 +2294,9 @@ func unmarshalKillswitchScopeResponseBodyToKillswitchesKillswitchScope(v *Killsw
 // *KillswitchScheduleResponseBody.
 func unmarshalKillswitchScheduleResponseBodyToKillswitchesKillswitchSchedule(v *KillswitchScheduleResponseBody) *killswitches.KillswitchSchedule {
 	res := &killswitches.KillswitchSchedule{
-		Start:    *v.Start,
+		Start:    killswitches.KillswitchScheduleStart(*v.Start),
 		StartsAt: v.StartsAt,
-		End:      *v.End,
+		End:      killswitches.KillswitchScheduleEnd(*v.End),
 		EndsAt:   v.EndsAt,
 	}
 
@@ -2689,8 +2310,8 @@ func unmarshalKillswitchHistoryEventResponseBodyToKillswitchesKillswitchHistoryE
 	res := &killswitches.KillswitchHistoryEvent{
 		Sequence:         *v.Sequence,
 		Version:          *v.Version,
-		Action:           *v.Action,
-		Status:           *v.Status,
+		Action:           killswitches.KillswitchHistoryAction(*v.Action),
+		Status:           killswitches.KillswitchStatus(*v.Status),
 		ExternalNote:     *v.ExternalNote,
 		InternalNote:     *v.InternalNote,
 		ActorUserID:      v.ActorUserID,
@@ -2703,12 +2324,12 @@ func unmarshalKillswitchHistoryEventResponseBodyToKillswitchesKillswitchHistoryE
 	return res
 }
 
-// marshalKillswitchesKillswitchScopeToKillswitchScopeRequestBody builds a
-// value of type *KillswitchScopeRequestBody from a value of type
-// *killswitches.KillswitchScope.
-func marshalKillswitchesKillswitchScopeToKillswitchScopeRequestBody(v *killswitches.KillswitchScope) *KillswitchScopeRequestBody {
-	res := &KillswitchScopeRequestBody{
-		Type: v.Type,
+// marshalKillswitchesKillswitchScopeToKillswitchScopeRequestBodyRequestBody
+// builds a value of type *KillswitchScopeRequestBodyRequestBody from a value
+// of type *killswitches.KillswitchScope.
+func marshalKillswitchesKillswitchScopeToKillswitchScopeRequestBodyRequestBody(v *killswitches.KillswitchScope) *KillswitchScopeRequestBodyRequestBody {
+	res := &KillswitchScopeRequestBodyRequestBody{
+		Type: string(v.Type),
 	}
 	if v.ServerIds != nil {
 		res.ServerIds = make([]string, len(v.ServerIds))
@@ -2720,26 +2341,26 @@ func marshalKillswitchesKillswitchScopeToKillswitchScopeRequestBody(v *killswitc
 	return res
 }
 
-// marshalKillswitchesKillswitchScheduleToKillswitchScheduleRequestBody builds
-// a value of type *KillswitchScheduleRequestBody from a value of type
-// *killswitches.KillswitchSchedule.
-func marshalKillswitchesKillswitchScheduleToKillswitchScheduleRequestBody(v *killswitches.KillswitchSchedule) *KillswitchScheduleRequestBody {
-	res := &KillswitchScheduleRequestBody{
-		Start:    v.Start,
+// marshalKillswitchesKillswitchScheduleToKillswitchScheduleRequestBodyRequestBody
+// builds a value of type *KillswitchScheduleRequestBodyRequestBody from a
+// value of type *killswitches.KillswitchSchedule.
+func marshalKillswitchesKillswitchScheduleToKillswitchScheduleRequestBodyRequestBody(v *killswitches.KillswitchSchedule) *KillswitchScheduleRequestBodyRequestBody {
+	res := &KillswitchScheduleRequestBodyRequestBody{
+		Start:    string(v.Start),
 		StartsAt: v.StartsAt,
-		End:      v.End,
+		End:      string(v.End),
 		EndsAt:   v.EndsAt,
 	}
 
 	return res
 }
 
-// marshalKillswitchScopeRequestBodyToKillswitchesKillswitchScope builds a
-// value of type *killswitches.KillswitchScope from a value of type
-// *KillswitchScopeRequestBody.
-func marshalKillswitchScopeRequestBodyToKillswitchesKillswitchScope(v *KillswitchScopeRequestBody) *killswitches.KillswitchScope {
+// marshalKillswitchScopeRequestBodyRequestBodyToKillswitchesKillswitchScope
+// builds a value of type *killswitches.KillswitchScope from a value of type
+// *KillswitchScopeRequestBodyRequestBody.
+func marshalKillswitchScopeRequestBodyRequestBodyToKillswitchesKillswitchScope(v *KillswitchScopeRequestBodyRequestBody) *killswitches.KillswitchScope {
 	res := &killswitches.KillswitchScope{
-		Type: v.Type,
+		Type: killswitches.KillswitchScopeType(v.Type),
 	}
 	if v.ServerIds != nil {
 		res.ServerIds = make([]string, len(v.ServerIds))
@@ -2751,28 +2372,27 @@ func marshalKillswitchScopeRequestBodyToKillswitchesKillswitchScope(v *Killswitc
 	return res
 }
 
-// marshalKillswitchScheduleRequestBodyToKillswitchesKillswitchSchedule builds
-// a value of type *killswitches.KillswitchSchedule from a value of type
-// *KillswitchScheduleRequestBody.
-func marshalKillswitchScheduleRequestBodyToKillswitchesKillswitchSchedule(v *KillswitchScheduleRequestBody) *killswitches.KillswitchSchedule {
+// marshalKillswitchScheduleRequestBodyRequestBodyToKillswitchesKillswitchSchedule
+// builds a value of type *killswitches.KillswitchSchedule from a value of type
+// *KillswitchScheduleRequestBodyRequestBody.
+func marshalKillswitchScheduleRequestBodyRequestBodyToKillswitchesKillswitchSchedule(v *KillswitchScheduleRequestBodyRequestBody) *killswitches.KillswitchSchedule {
 	res := &killswitches.KillswitchSchedule{
-		Start:    v.Start,
+		Start:    killswitches.KillswitchScheduleStart(v.Start),
 		StartsAt: v.StartsAt,
-		End:      v.End,
+		End:      killswitches.KillswitchScheduleEnd(v.End),
 		EndsAt:   v.EndsAt,
 	}
 
 	return res
 }
 
-// unmarshalKillswitchMutationResultResponseBodyToKillswitchesKillswitchMutationResult
-// builds a value of type *killswitches.KillswitchMutationResult from a value
-// of type *KillswitchMutationResultResponseBody.
-func unmarshalKillswitchMutationResultResponseBodyToKillswitchesKillswitchMutationResult(v *KillswitchMutationResultResponseBody) *killswitches.KillswitchMutationResult {
-	res := &killswitches.KillswitchMutationResult{
+// unmarshalKillswitchMutationReceiptResponseBodyToKillswitchesKillswitchMutationReceipt
+// builds a value of type *killswitches.KillswitchMutationReceipt from a value
+// of type *KillswitchMutationReceiptResponseBody.
+func unmarshalKillswitchMutationReceiptResponseBodyToKillswitchesKillswitchMutationReceipt(v *KillswitchMutationReceiptResponseBody) *killswitches.KillswitchMutationReceipt {
+	res := &killswitches.KillswitchMutationReceipt{
 		ID:       *v.ID,
 		Version:  *v.Version,
-		Status:   *v.Status,
 		Replayed: *v.Replayed,
 	}
 
@@ -2785,7 +2405,7 @@ func unmarshalKillswitchMutationResultResponseBodyToKillswitchesKillswitchMutati
 func unmarshalKillswitchOverlapResponseBodyToKillswitchesKillswitchOverlap(v *KillswitchOverlapResponseBody) *killswitches.KillswitchOverlap {
 	res := &killswitches.KillswitchOverlap{
 		ID:     *v.ID,
-		Status: *v.Status,
+		Status: killswitches.KillswitchOverlapStatus(*v.Status),
 	}
 	res.Scope = unmarshalKillswitchScopeResponseBodyToKillswitchesKillswitchScope(v.Scope)
 	res.Schedule = unmarshalKillswitchScheduleResponseBodyToKillswitchesKillswitchSchedule(v.Schedule)
