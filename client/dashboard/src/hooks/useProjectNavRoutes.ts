@@ -89,7 +89,6 @@ export function useProjectNavRoutes(): ProjectNavRoute[] {
         ? [{ route: routes.orgMemory, scope: observe }]
         : []),
       { route: routes.logs, scope: observe },
-      { route: routes.dataExports, scope: observe },
       // Watchdog supersedes the Risk Overview page: with the flag on, it is
       // the Secure section's landing surface and the legacy overview nav item
       // hides (its route stays reachable by direct URL). Risk Events shows in

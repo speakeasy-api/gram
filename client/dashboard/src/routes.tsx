@@ -671,12 +671,6 @@ const ROUTE_STRUCTURE = {
     icon: "logs",
     component: LogsRoot,
   },
-  dataExports: {
-    title: "Exports",
-    url: "data/exports",
-    icon: "database",
-    component: DataExports,
-  },
   agentSessions: {
     title: "Agent Sessions",
     url: "agent-sessions",
@@ -1080,10 +1074,16 @@ const ORG_ROUTE_STRUCTURE = {
   },
   data: {
     title: "Event Feed",
-    url: "data",
+    url: "data/event-feed",
     icon: "activity",
     stage: "preview",
     component: EventFeed,
+  },
+  dataExports: {
+    title: "Exports",
+    url: "data/exports",
+    icon: "send",
+    component: DataExports,
   },
   skills: {
     title: "Skills",

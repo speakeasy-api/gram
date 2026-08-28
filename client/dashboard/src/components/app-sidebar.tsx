@@ -203,7 +203,6 @@ export function AppSidebar({
                 ? [{ item: routes.orgMemory, ...accessFor(routes.orgMemory) }]
                 : []),
               { item: routes.logs, ...accessFor(routes.logs) },
-              { item: routes.dataExports, ...accessFor(routes.dataExports) },
               { item: routes.employees, ...accessFor(routes.employees) },
             ]}
           />

@@ -31,7 +31,6 @@ const routes = {
   skills: route("Skills", "skills"),
   costs: route("Costs", "costs"),
   deployments: route("Deployments", "deployments"),
-  dataExports: route("Exports", "data/exports"),
   detectionRules: route("Detection Rules", "detection-rules"),
   employees: route("Employees", "employees"),
   environments: route("Environments", "environments"),

@@ -406,8 +406,8 @@ BEGIN
   INSERT INTO projects (id, name, slug, organization_id) VALUES
     (proj_a, 'Default', 'default', demo_org);
 
-  -- Data exports: one source fans out to two named collectors. Header values
-  -- stay absent so the shared seed never carries credentials.
+  -- Data exports: one configured export plus another reusable collector.
+  -- Header values stay absent so the shared seed never carries credentials.
   INSERT INTO otel_destinations (
     id, organization_id, project_id, name, endpoint_url, sensitive_data, created_at
   ) VALUES
@@ -428,15 +428,9 @@ BEGIN
   ) VALUES
     (
       demo.det_uuid('gram-demo-data-export-route-' || demo_org || '-datadog'),
-      demo_org, proj_a, 'otel_forwarding', TRUE,
+      demo_org, proj_a, 'product_telemetry', TRUE,
       demo.det_uuid('gram-demo-otel-destination-' || demo_org || '-datadog'),
       now() - interval '8 days'
-    ),
-    (
-      demo.det_uuid('gram-demo-data-export-route-' || demo_org || '-grafana'),
-      demo_org, proj_a, 'otel_forwarding', FALSE,
-      demo.det_uuid('gram-demo-otel-destination-' || demo_org || '-grafana'),
-      now() - interval '5 days'
     );
 
   -- 'rbac' is required for the agent-sessions list: without it
@@ -2007,8 +2001,8 @@ E'--- a/SKILL.md\n+++ b/SKILL.md\n@@ -6,4 +6,5 @@\n # Refund handling\n \n 1. Ve
   SELECT count(*) INTO stray
   FROM data_export_routes
   WHERE organization_id = demo_org AND project_id = proj_a AND deleted IS FALSE;
-  IF stray <> 2 THEN
-    RAISE EXCEPTION 'demo seed postflight: expected 2 data export routes, found %', stray;
+  IF stray <> 1 THEN
+    RAISE EXCEPTION 'demo seed postflight: expected 1 data export route, found %', stray;
   END IF;
 
   -- Both checks guard an opaque string that fails silently: an unrecognized

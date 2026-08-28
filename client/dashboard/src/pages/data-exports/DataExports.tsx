@@ -1,24 +1,25 @@
 import { InlineEmptyState } from "@/components/inline-empty-state";
 import { SettingsPage, SettingsSection } from "@/components/page-templates";
+import { ProjectAvatar } from "@/components/project-menu";
 import { RequireScope } from "@/components/require-scope";
-import { useProjectSlugForRequests } from "@/contexts/Sdk";
 import { Alert } from "@/components/ui/Alert";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
+import { Combobox, type DropdownItem } from "@/components/ui/Combobox";
 import { Dialog } from "@/components/ui/Dialog";
 import { Icon } from "@/components/ui/Icon";
 import { MoreActions } from "@/components/ui/MoreActions";
 import { SkeletonTable } from "@/components/ui/Skeleton";
 import { Switch } from "@/components/ui/Switch";
-import { type Column, Table } from "@/components/ui/Table";
 import { Text } from "@/components/ui/Text";
+import { useOrganization } from "@/contexts/Auth";
 import { toError } from "@/lib/errors";
-import { writeOnlyHeaderInput } from "@/lib/write-only-headers";
 import { useQueryClient } from "@tanstack/react-query";
 import { DataSource } from "@gram/client/models/components/createdataexportrouteform.js";
 import type { DataExportRoute } from "@gram/client/models/components/dataexportroute.js";
 import type { ListDataExportRoutesResult } from "@gram/client/models/components/listdataexportroutesresult.js";
 import type { OtelDestination } from "@gram/client/models/components/oteldestination.js";
+import type { ProjectEntry } from "@gram/client/models/components/projectentry.js";
 import { useCreateDataExportRouteMutation } from "@gram/client/react-query/createDataExportRoute.js";
 import { useCreateOtelDestinationMutation } from "@gram/client/react-query/createOtelDestination.js";
 import {
@@ -27,67 +28,66 @@ import {
   useDataExportRoutes,
 } from "@gram/client/react-query/dataExportRoutes.js";
 import { useDeleteDataExportRouteMutation } from "@gram/client/react-query/deleteDataExportRoute.js";
-import { useDeleteOtelDestinationMutation } from "@gram/client/react-query/deleteOtelDestination.js";
+import { useListProjects } from "@gram/client/react-query/listProjects.js";
 import {
   invalidateOtelDestinations,
   useOtelDestinations,
 } from "@gram/client/react-query/otelDestinations.js";
 import { useUpdateDataExportRouteMutation } from "@gram/client/react-query/updateDataExportRoute.js";
-import { useUpdateOtelDestinationMutation } from "@gram/client/react-query/updateOtelDestination.js";
 import { Plus } from "lucide-react";
-import { useMemo, useState } from "react";
+import { type ReactNode, useId, useMemo, useState } from "react";
 import { toast } from "sonner";
 import {
-  DestinationEditorSheet,
-  type DestinationFormValues,
-} from "./DestinationEditorSheet";
-import { RouteEditorSheet } from "./RouteEditorSheet";
+  ConfigureExportSheet,
+  type ConfigureExportValues,
+} from "./ConfigureExportSheet";
 
-const OTEL_FORWARDING_SOURCE = DataSource.OtelForwarding;
+const EMPTY_PROJECTS: ProjectEntry[] = [];
 const EMPTY_DESTINATIONS: OtelDestination[] = [];
 const EMPTY_ROUTES: DataExportRoute[] = [];
 
-function SensitiveDataBadge({
-  destination,
-}: {
-  destination: OtelDestination;
-}): JSX.Element {
-  if (destination.sensitiveData === "include") {
-    return (
-      <Badge variant="warning" background={false} size="md">
-        Included
-      </Badge>
-    );
-  }
-  return <Badge size="md">Excluded</Badge>;
+type ExportRow = {
+  route: DataExportRoute;
+  destination?: OtelDestination;
+};
+
+type ProjectOption = DropdownItem & { project: ProjectEntry };
+
+function sourceLabel(dataSource: string): string {
+  if (dataSource === DataSource.ProductTelemetry) return "Product telemetry";
+  return dataSource.replaceAll("_", " ");
 }
 
 export default function DataExports(): JSX.Element {
   return (
-    <RequireScope scope="project:read" level="page">
+    <RequireScope scope="org:read" level="page">
       <DataExportsInner />
     </RequireScope>
   );
 }
 
 function DataExportsInner(): JSX.Element {
+  const organization = useOrganization();
   const queryClient = useQueryClient();
-  const gramProject = useProjectSlugForRequests();
-  const destinationsQuery = useOtelDestinations({ gramProject });
-  const routesQuery = useDataExportRoutes({ gramProject });
+  const projectsQuery = useListProjects({ organizationId: organization.id });
+  const projects = projectsQuery.data?.projects ?? EMPTY_PROJECTS;
+  const [selectedProjectSlug, setSelectedProjectSlug] = useState<string>();
+  const selectedProject =
+    projects.find((project) => project.slug === selectedProjectSlug) ??
+    projects[0];
+  const gramProject = selectedProject?.slug ?? "";
+  const destinationsQuery = useOtelDestinations({ gramProject }, undefined, {
+    enabled: gramProject !== "",
+  });
+  const routesQuery = useDataExportRoutes({ gramProject }, undefined, {
+    enabled: gramProject !== "",
+  });
   const createDestination = useCreateOtelDestinationMutation();
-  const updateDestination = useUpdateOtelDestinationMutation();
-  const deleteDestination = useDeleteOtelDestinationMutation();
   const createRoute = useCreateDataExportRouteMutation();
   const updateRoute = useUpdateDataExportRouteMutation();
   const deleteRoute = useDeleteDataExportRouteMutation();
-
-  const [editor, setEditor] = useState<{
-    destination?: OtelDestination;
-    routeAfterCreateEnabled?: boolean;
-  }>();
-  const [deleteCandidate, setDeleteCandidate] = useState<OtelDestination>();
-  const [routeEditorOpen, setRouteEditorOpen] = useState(false);
+  const [configureOpen, setConfigureOpen] = useState(false);
+  const [deleteCandidate, setDeleteCandidate] = useState<DataExportRoute>();
 
   const destinations =
     destinationsQuery.data?.destinations ?? EMPTY_DESTINATIONS;
@@ -97,48 +97,43 @@ function DataExportsInner(): JSX.Element {
       new Map(destinations.map((destination) => [destination.id, destination])),
     [destinations],
   );
-  const routedRows = useMemo(
+  const exports = useMemo<ExportRow[]>(
     () =>
-      routes.flatMap((route) => {
-        if (
-          route.dataSource !== OTEL_FORWARDING_SOURCE ||
-          !route.otelDestinationId
-        ) {
-          return [];
-        }
-        const destination = destinationByID.get(route.otelDestinationId);
-        return destination ? [{ route, destination }] : [];
-      }),
+      routes.map((route) => ({
+        route,
+        destination: route.otelDestinationId
+          ? destinationByID.get(route.otelDestinationId)
+          : undefined,
+      })),
     [destinationByID, routes],
   );
-  const routedDestinationIDs = useMemo(
-    () => new Set(routedRows.map(({ destination }) => destination.id)),
-    [routedRows],
+  const selectedSourceRoute = routes.find(
+    (route) => route.dataSource === DataSource.ProductTelemetry,
   );
 
-  const handleSaveDestination = async (values: DestinationFormValues) => {
+  const invalidateProjectExports = async (projectSlug: string) =>
+    Promise.all([
+      invalidateOtelDestinations(queryClient, [{ gramProject: projectSlug }]),
+      invalidateDataExportRoutes(queryClient, [{ gramProject: projectSlug }]),
+    ]);
+
+  const handleSaveExport = async (values: ConfigureExportValues) => {
+    const project = projects.find(
+      (candidate) => candidate.slug === values.projectSlug,
+    );
+    if (!project) return;
+
     try {
-      let saved: OtelDestination;
-      if (editor?.destination) {
-        saved = await updateDestination.mutateAsync({
+      const existingDestination = destinations.find(
+        (destination) => destination.id === values.destinationId,
+      );
+      let destinationID = existingDestination?.id;
+      if (!destinationID) {
+        const destination = await createDestination.mutateAsync({
           request: {
-            id: editor.destination.id,
-            updateOtelDestinationRequestBody: {
-              name: values.name.trim(),
-              endpointUrl: values.endpointUrl.trim(),
-              sensitiveData: values.includeSensitiveData
-                ? "include"
-                : "exclude",
-              headers: values.headers.map(writeOnlyHeaderInput),
-            },
-          },
-        });
-        toast.success("Destination saved");
-      } else {
-        saved = await createDestination.mutateAsync({
-          request: {
+            gramProject: project.slug,
             createOtelDestinationForm: {
-              name: values.name.trim(),
+              name: values.destinationName.trim(),
               endpointUrl: values.endpointUrl.trim(),
               sensitiveData: values.includeSensitiveData
                 ? "include"
@@ -150,81 +145,54 @@ function DataExportsInner(): JSX.Element {
             },
           },
         });
-        toast.success("Destination created");
+        destinationID = destination.id;
       }
 
-      if (editor?.routeAfterCreateEnabled !== undefined) {
-        try {
-          await createRoute.mutateAsync({
-            request: {
-              createDataExportRouteForm: {
-                dataSource: OTEL_FORWARDING_SOURCE,
-                enabled: editor.routeAfterCreateEnabled,
-                otelDestinationId: saved.id,
-              },
+      const existingRoute = routes.find(
+        (route) => route.dataSource === values.dataSource,
+      );
+      if (existingRoute) {
+        await updateRoute.mutateAsync({
+          request: {
+            id: existingRoute.id,
+            gramProject: project.slug,
+            updateRouteRequestBody: {
+              dataSource: values.dataSource,
+              enabled: values.enabled,
+              otelDestinationId: destinationID,
             },
-          });
-        } catch (error) {
-          toast.error(
-            `Destination created, but routing failed: ${toError(error).message}`,
-          );
-        }
+          },
+        });
+      } else {
+        await createRoute.mutateAsync({
+          request: {
+            gramProject: project.slug,
+            createDataExportRouteForm: {
+              dataSource: values.dataSource,
+              enabled: values.enabled,
+              otelDestinationId: destinationID,
+            },
+          },
+        });
       }
 
-      await Promise.all([
-        invalidateOtelDestinations(queryClient, [{ gramProject }]),
-        editor?.routeAfterCreateEnabled !== undefined
-          ? invalidateDataExportRoutes(queryClient, [{ gramProject }])
-          : Promise.resolve(),
-      ]);
-      setEditor(undefined);
+      await invalidateProjectExports(project.slug);
+      toast.success(existingRoute ? "Export updated" : "Export configured");
+      setConfigureOpen(false);
     } catch (error) {
-      toast.error(`Failed to save destination: ${toError(error).message}`);
+      await invalidateProjectExports(project.slug);
+      toast.error(`Failed to configure export: ${toError(error).message}`);
     }
   };
 
-  const handleDeleteDestination = async () => {
-    if (!deleteCandidate) return;
-    try {
-      await deleteDestination.mutateAsync({
-        request: { id: deleteCandidate.id },
-      });
-      await invalidateOtelDestinations(queryClient, [{ gramProject }]);
-      toast.success("Destination deleted");
-      setDeleteCandidate(undefined);
-      setEditor(undefined);
-    } catch (error) {
-      toast.error(`Failed to delete destination: ${toError(error).message}`);
-    }
-  };
-
-  const handleCreateRoute = async (
-    destination: OtelDestination,
-    enabled: boolean,
-  ) => {
-    try {
-      await createRoute.mutateAsync({
-        request: {
-          createDataExportRouteForm: {
-            dataSource: OTEL_FORWARDING_SOURCE,
-            enabled,
-            otelDestinationId: destination.id,
-          },
-        },
-      });
-      await invalidateDataExportRoutes(queryClient, [{ gramProject }]);
-      toast.success(`Route to ${destination.name} created`);
-      setRouteEditorOpen(false);
-    } catch (error) {
-      toast.error(`Failed to create route: ${toError(error).message}`);
-    }
-  };
-
-  const handleToggleRoute = async (
+  const handleToggleExport = async (
     route: DataExportRoute,
     enabled: boolean,
   ) => {
-    const queryKey = queryKeyDataExportRoutes({ gramProject });
+    if (!selectedProject) return;
+    const queryKey = queryKeyDataExportRoutes({
+      gramProject: selectedProject.slug,
+    });
     await queryClient.cancelQueries({ queryKey });
     const previous =
       queryClient.getQueryData<ListDataExportRoutesResult>(queryKey);
@@ -232,8 +200,8 @@ function DataExportsInner(): JSX.Element {
       current
         ? {
             ...current,
-            routes: current.routes.map((item) =>
-              item.id === route.id ? { ...item, enabled } : item,
+            routes: current.routes.map((candidate) =>
+              candidate.id === route.id ? { ...candidate, enabled } : candidate,
             ),
           }
         : current,
@@ -243,6 +211,7 @@ function DataExportsInner(): JSX.Element {
       await updateRoute.mutateAsync({
         request: {
           id: route.id,
+          gramProject: selectedProject.slug,
           updateRouteRequestBody: {
             dataSource: route.dataSource,
             enabled,
@@ -252,672 +221,499 @@ function DataExportsInner(): JSX.Element {
       });
     } catch (error) {
       queryClient.setQueryData(queryKey, previous);
-      toast.error(`Failed to update route: ${toError(error).message}`);
+      toast.error(`Failed to update export: ${toError(error).message}`);
     } finally {
-      await invalidateDataExportRoutes(queryClient, [{ gramProject }]);
+      await invalidateDataExportRoutes(queryClient, [
+        { gramProject: selectedProject.slug },
+      ]);
     }
   };
 
-  const handleDeleteRoute = async (route: DataExportRoute) => {
+  const handleDeleteExport = async () => {
+    if (!deleteCandidate || !selectedProject) return;
     try {
-      await deleteRoute.mutateAsync({ request: { id: route.id } });
-      await invalidateDataExportRoutes(queryClient, [{ gramProject }]);
-      toast.success("Destination removed from Product telemetry");
+      await deleteRoute.mutateAsync({
+        request: {
+          id: deleteCandidate.id,
+          gramProject: selectedProject.slug,
+        },
+      });
+      await invalidateDataExportRoutes(queryClient, [
+        { gramProject: selectedProject.slug },
+      ]);
+      toast.success("Export deleted");
+      setDeleteCandidate(undefined);
     } catch (error) {
-      toast.error(`Failed to remove destination: ${toError(error).message}`);
+      toast.error(`Failed to delete export: ${toError(error).message}`);
     }
   };
 
-  const loading = destinationsQuery.isPending || routesQuery.isPending;
-  const error = destinationsQuery.error ?? routesQuery.error;
-  const hasLoadedConfiguration =
-    destinationsQuery.data !== undefined && routesQuery.data !== undefined;
+  const projectOptions = useMemo<ProjectOption[]>(
+    () =>
+      projects.map((project) => ({
+        value: project.slug,
+        label: project.name,
+        project,
+        icon: (
+          <ProjectAvatar project={project} className="size-4 min-h-4 min-w-4" />
+        ),
+      })),
+    [projects],
+  );
+  const selectedProjectOption = projectOptions.find(
+    (option) => option.value === selectedProject?.slug,
+  );
+  const loading =
+    projectsQuery.isPending ||
+    (selectedProject !== undefined &&
+      (destinationsQuery.isPending || routesQuery.isPending));
+  const error =
+    projectsQuery.error ?? destinationsQuery.error ?? routesQuery.error;
   const mutating =
     createDestination.isPending ||
-    updateDestination.isPending ||
     createRoute.isPending ||
     updateRoute.isPending ||
     deleteRoute.isPending;
 
+  const primaryAction = selectedProject ? (
+    <div className="flex items-center gap-2">
+      <Combobox
+        items={projectOptions}
+        selected={selectedProjectOption}
+        onSelectionChange={(option) =>
+          setSelectedProjectSlug(option.project.slug)
+        }
+        variant="secondary"
+        className="h-9 min-w-52"
+        contentClassName="w-72"
+        searchable
+        searchPlaceholder="Search projects"
+      >
+        <div className="flex min-w-0 items-center gap-2">
+          <ProjectAvatar
+            project={selectedProject}
+            className="size-4 min-h-4 min-w-4"
+          />
+          <span className="truncate">{selectedProject.name}</span>
+        </div>
+      </Combobox>
+      <RequireScope
+        scope="project:write"
+        resourceId={selectedProject.id}
+        level="component"
+      >
+        <Button
+          variant="primary"
+          size="sm"
+          onClick={() => setConfigureOpen(true)}
+        >
+          <Button.LeftIcon>
+            <Plus className="size-3.5" />
+          </Button.LeftIcon>
+          Configure export
+        </Button>
+      </RequireScope>
+    </div>
+  ) : null;
+
+  let pageContent: ReactNode;
+  if (loading) {
+    pageContent = <SkeletonTable />;
+  } else if (projects.length === 0 || !selectedProject) {
+    pageContent = (
+      <InlineEmptyState
+        icon="folder"
+        heading="No projects yet"
+        description="Create a project before configuring an export."
+      />
+    );
+  } else if (exports.length === 0) {
+    pageContent = (
+      <InlineEmptyState
+        icon="send"
+        heading="No exports configured"
+        description={`Choose what ${selectedProject.name} should send and where it should go.`}
+        action={primaryAction}
+      />
+    );
+  } else {
+    pageContent = (
+      <>
+        <ExportAnimationStyles />
+        <ExportMap exports={exports} />
+        <SettingsSection>
+          <SettingsSection.Header>
+            <SettingsSection.Title>Configured exports</SettingsSection.Title>
+            <SettingsSection.Description>
+              Data leaving {selectedProject.name}.
+            </SettingsSection.Description>
+          </SettingsSection.Header>
+          <StackExports
+            exports={exports}
+            project={selectedProject}
+            mutating={mutating}
+            onConfigure={() => setConfigureOpen(true)}
+            onToggle={(route, enabled) =>
+              void handleToggleExport(route, enabled)
+            }
+            onDelete={setDeleteCandidate}
+          />
+        </SettingsSection>
+      </>
+    );
+  }
+
   return (
     <SettingsPage
       title="Data exports"
-      description={
-        <span className="block max-w-[720px]">
-          Send a copy of this project&apos;s data to collectors you own. Add a
-          destination once, then route as many sources to it as you like. Header
-          values are encrypted at rest and never returned by the API.{" "}
-          <a
-            href="https://docs.getgram.ai"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-link-primary underline underline-offset-2"
-          >
-            Read the docs
-          </a>
-        </span>
-      }
-      area="Observe"
+      description="Send project data to collectors you control. Each export connects one class of data to one configured endpoint."
+      area="Data"
+      primaryAction={primaryAction}
     >
-      {error && hasLoadedConfiguration ? (
-        <Alert variant="error">
-          Unable to refresh data exports: {toError(error).message}
-        </Alert>
-      ) : null}
-      {error && !hasLoadedConfiguration ? (
+      {error ? (
         <Alert variant="error">
           Unable to load data exports: {toError(error).message}
         </Alert>
-      ) : loading ? (
-        <>
-          <SkeletonTable />
-          <SkeletonTable />
-        </>
-      ) : destinations.length === 0 ? (
-        <InlineEmptyState
-          icon="database"
-          heading="No destinations yet"
-          description="Add the OTLP endpoint of a collector you own. Once it exists you can route product telemetry to it."
-          action={
-            <div className="flex items-center gap-2">
-              <RequireScope scope="project:write" level="component">
-                <Button
-                  variant="primary"
-                  size="sm"
-                  onClick={() =>
-                    setEditor({
-                      destination: undefined,
-                      routeAfterCreateEnabled: undefined,
-                    })
-                  }
-                >
-                  <Plus className="mr-1 size-3.5" />
-                  New destination
-                </Button>
-              </RequireScope>
-              <Button variant="secondary" size="sm" asChild>
-                <a
-                  href="https://docs.getgram.ai"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                >
-                  Read the docs
-                </a>
-              </Button>
-            </div>
-          }
-        />
-      ) : (
-        <>
-          <RouteDiagram rows={routedRows} />
-          <RoutesSection
-            rows={routedRows}
-            mutating={mutating}
-            onNewRoute={() => setRouteEditorOpen(true)}
-            onEditDestination={(destination) =>
-              setEditor({
-                destination,
-                routeAfterCreateEnabled: undefined,
-              })
-            }
-            onToggleRoute={(route, enabled) =>
-              void handleToggleRoute(route, enabled)
-            }
-            onDeleteRoute={(route) => void handleDeleteRoute(route)}
-          />
-          <DestinationsSection
-            destinations={destinations}
-            routes={routes}
-            mutating={mutating}
-            onNewDestination={() =>
-              setEditor({
-                destination: undefined,
-                routeAfterCreateEnabled: undefined,
-              })
-            }
-            onEditDestination={(destination) =>
-              setEditor({
-                destination,
-                routeAfterCreateEnabled: undefined,
-              })
-            }
-            onDeleteDestination={setDeleteCandidate}
-          />
-        </>
-      )}
+      ) : null}
 
-      {editor ? (
-        <DestinationEditorSheet
-          destination={editor.destination}
-          routes={
-            editor.destination
-              ? routes.filter(
-                  (route) => route.otelDestinationId === editor.destination?.id,
-                )
-              : []
-          }
+      {pageContent}
+
+      {configureOpen && selectedProject ? (
+        <ConfigureExportSheet
+          key={selectedProject.slug}
+          projects={projects}
+          project={selectedProject}
+          destinations={destinations}
+          route={selectedSourceRoute}
+          loading={destinationsQuery.isPending || routesQuery.isPending}
           saving={
             createDestination.isPending ||
-            updateDestination.isPending ||
-            createRoute.isPending
+            createRoute.isPending ||
+            updateRoute.isPending
           }
-          deleting={deleteDestination.isPending}
-          onClose={() => setEditor(undefined)}
-          onSave={handleSaveDestination}
-          onRequestDelete={setDeleteCandidate}
+          onClose={() => setConfigureOpen(false)}
+          onProjectChange={setSelectedProjectSlug}
+          onSave={handleSaveExport}
         />
       ) : null}
 
-      {routeEditorOpen ? (
-        <RouteEditorSheet
-          destinations={destinations}
-          routedDestinationIDs={routedDestinationIDs}
-          saving={createRoute.isPending}
-          onClose={() => setRouteEditorOpen(false)}
-          onCreate={handleCreateRoute}
-          onCreateDestination={(enabled) => {
-            setRouteEditorOpen(false);
-            setEditor({
-              destination: undefined,
-              routeAfterCreateEnabled: enabled,
-            });
-          }}
-        />
-      ) : null}
-
-      <DeleteDestinationDialog
-        destination={deleteCandidate}
-        deleting={deleteDestination.isPending}
+      <DeleteExportDialog
+        exportRoute={deleteCandidate}
+        deleting={deleteRoute.isPending}
         onOpenChange={(open) => {
           if (!open) setDeleteCandidate(undefined);
         }}
-        onConfirm={() => void handleDeleteDestination()}
+        onConfirm={() => void handleDeleteExport()}
       />
     </SettingsPage>
   );
 }
 
-type SourceRouteRow = {
-  route: DataExportRoute;
-  destination: OtelDestination;
-};
+function ExportAnimationStyles(): JSX.Element {
+  return (
+    <style>{`
+      @keyframes data-export-beam {
+        to { stroke-dashoffset: -164; }
+      }
 
-function RouteDiagram({ rows }: { rows: SourceRouteRow[] }): JSX.Element {
+      .data-export-beam {
+        animation: data-export-beam 1.8s linear infinite;
+        filter: drop-shadow(0 0 2px var(--stroke-success-default));
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        .data-export-beam { display: none; }
+      }
+    `}</style>
+  );
+}
+
+function ExportMap({ exports }: { exports: ExportRow[] }): JSX.Element {
+  const markerID = `export-map-arrow-${useId().replaceAll(":", "")}`;
+
   return (
     <div className="overflow-x-auto border bg-card px-6 py-6">
-      <style>{`
-        @keyframes data-export-route-beam {
-          to {
-            stroke-dashoffset: -164;
-          }
-        }
-
-        .data-export-route-beam {
-          animation: data-export-route-beam 1.8s linear infinite;
-          filter: drop-shadow(0 0 2px var(--stroke-success-default));
-        }
-
-        @media (prefers-reduced-motion: reduce) {
-          .data-export-route-beam {
-            display: none;
-          }
-        }
-      `}</style>
-      <div className="min-w-[900px]">
-        <div className="grid grid-cols-[280px_minmax(140px,220px)_minmax(420px,1fr)] items-end gap-x-0 pb-2">
-          <span className="text-eyebrow text-muted-foreground">Source</span>
+      <div className="min-w-[860px]">
+        <div className="grid grid-cols-[280px_minmax(160px,240px)_minmax(360px,1fr)] items-end pb-2">
+          <span className="text-eyebrow text-muted-foreground">Data</span>
           <span aria-hidden="true" />
-          <span className="text-eyebrow text-muted-foreground">
-            Destinations
-          </span>
+          <span className="text-eyebrow text-muted-foreground">Sent to</span>
         </div>
-
-        <div className="grid grid-cols-[280px_minmax(140px,220px)_minmax(420px,1fr)] gap-x-0">
-          <div className="flex flex-col justify-center">
-            <div className="border border-foreground px-5 py-4">
-              <Text className="font-medium">Product telemetry</Text>
-              <span className="mt-1 block font-mono text-xs text-placeholder">
-                OTLP traces &amp; logs
-              </span>
-            </div>
-            <Text muted className="mt-3 text-xs">
-              More sources will appear as they ship.
-            </Text>
-          </div>
-
-          <div className="relative min-h-full" aria-hidden="true">
-            {rows.length > 0 ? (
-              <svg
-                viewBox="0 0 200 100"
-                preserveAspectRatio="none"
-                className="absolute inset-0 h-full w-full overflow-visible"
+        <div className="space-y-3">
+          {exports.map(({ route, destination }, index) => {
+            const arrowID = `${markerID}-${index}`;
+            const path = "M 0 32 C 70 32, 120 32, 196 32";
+            return (
+              <div
+                key={route.id}
+                className="grid grid-cols-[280px_minmax(160px,240px)_minmax(360px,1fr)] items-stretch"
               >
-                <defs>
-                  <marker
-                    id="route-arrow-active"
-                    markerWidth="8"
-                    markerHeight="8"
-                    refX="7"
-                    refY="4"
-                    orient="auto"
-                  >
-                    <path d="M0,0 L8,4 L0,8 Z" className="fill-foreground" />
-                  </marker>
-                  <marker
-                    id="route-arrow-paused"
-                    markerWidth="8"
-                    markerHeight="8"
-                    refX="7"
-                    refY="4"
-                    orient="auto"
-                  >
-                    <path
-                      d="M0,0 L8,4 L0,8 Z"
-                      className="fill-muted-foreground"
-                    />
-                  </marker>
-                </defs>
-                {rows.map(({ route }, index) => {
-                  const destinationY =
-                    ((index + 0.5) / Math.max(rows.length, 1)) * 100;
-                  const path = `M 0 50 C 75 50, 110 ${destinationY}, 196 ${destinationY}`;
-                  return (
-                    <g key={route.id}>
+                <div className="flex min-h-20 flex-col justify-center border border-foreground px-5 py-4">
+                  <Text className="font-medium">
+                    {sourceLabel(route.dataSource)}
+                  </Text>
+                  <span className="mt-1 block font-mono text-xs text-placeholder">
+                    OTLP traces &amp; logs
+                  </span>
+                </div>
+                <svg
+                  viewBox="0 0 200 64"
+                  preserveAspectRatio="none"
+                  className="h-full min-h-20 w-full overflow-visible"
+                  aria-hidden="true"
+                >
+                  <defs>
+                    <marker
+                      id={arrowID}
+                      markerWidth="8"
+                      markerHeight="8"
+                      refX="7"
+                      refY="4"
+                      orient="auto"
+                    >
                       <path
-                        d={path}
-                        fill="none"
+                        d="M0,0 L8,4 L0,8 Z"
                         className={
                           route.enabled
-                            ? "stroke-foreground"
-                            : "stroke-muted-foreground"
-                        }
-                        strokeWidth="2"
-                        strokeDasharray={route.enabled ? undefined : "5 5"}
-                        vectorEffect="non-scaling-stroke"
-                        markerEnd={
-                          route.enabled
-                            ? "url(#route-arrow-active)"
-                            : "url(#route-arrow-paused)"
+                            ? "fill-foreground"
+                            : "fill-muted-foreground"
                         }
                       />
-                      {route.enabled ? (
-                        <path
-                          d={path}
-                          fill="none"
-                          className="data-export-route-beam stroke-success-highlight"
-                          strokeWidth="3.5"
-                          strokeLinecap="round"
-                          strokeDasharray="24 140"
-                          vectorEffect="non-scaling-stroke"
-                        />
-                      ) : null}
-                    </g>
-                  );
-                })}
-              </svg>
-            ) : null}
-          </div>
-
-          <div className="space-y-3">
-            {rows.length === 0 ? (
-              <Text muted className="flex min-h-16 items-center border px-5">
-                No destinations routed
-              </Text>
-            ) : (
-              rows.map(({ route, destination }) => (
-                <div
-                  key={route.id}
-                  className="flex min-h-16 items-center justify-between gap-4 border px-5 py-3"
-                >
+                    </marker>
+                  </defs>
+                  <path
+                    d={path}
+                    fill="none"
+                    className={
+                      route.enabled
+                        ? "stroke-foreground"
+                        : "stroke-muted-foreground"
+                    }
+                    strokeWidth="2"
+                    strokeDasharray={route.enabled ? undefined : "5 5"}
+                    vectorEffect="non-scaling-stroke"
+                    markerEnd={`url(#${arrowID})`}
+                  />
+                  {route.enabled ? (
+                    <path
+                      d={path}
+                      fill="none"
+                      className="data-export-beam stroke-success-highlight"
+                      strokeWidth="3.5"
+                      strokeLinecap="round"
+                      strokeDasharray="24 140"
+                      vectorEffect="non-scaling-stroke"
+                    />
+                  ) : null}
+                </svg>
+                <div className="flex min-h-20 items-center justify-between gap-4 border px-5 py-3">
                   <div className="min-w-0">
                     <div className="flex items-center gap-2">
-                      <Text
-                        className={
-                          route.enabled
-                            ? "truncate font-medium"
-                            : "text-muted-foreground truncate font-medium"
-                        }
-                      >
-                        {destination.name}
+                      <Text className="truncate font-medium">
+                        {destination?.name ?? "Not configured"}
                       </Text>
-                      {destination.sensitiveData === "include" ? (
+                      {destination?.sensitiveData === "include" ? (
                         <Badge variant="warning" background={false} size="sm">
                           Sensitive
                         </Badge>
                       ) : null}
                     </div>
                     <span className="mt-1 block truncate font-mono text-xs text-placeholder">
-                      {destination.endpointUrl}
+                      {destination?.endpointUrl ??
+                        "Configure this export to continue"}
                     </span>
                   </div>
-                  {route.enabled ? (
-                    <span className="flex shrink-0 items-center gap-1.5 text-sm text-default-success">
+                  <span
+                    className={
+                      route.enabled
+                        ? "flex shrink-0 items-center gap-1.5 text-sm text-default-success"
+                        : "shrink-0 text-sm text-placeholder"
+                    }
+                  >
+                    {route.enabled ? (
                       <Icon name="check" className="size-3.5" />
-                      Enabled
-                    </span>
-                  ) : (
-                    <span className="shrink-0 text-sm text-placeholder">
-                      Paused
-                    </span>
-                  )}
+                    ) : null}
+                    {route.enabled ? "Enabled" : "Paused"}
+                  </span>
                 </div>
-              ))
-            )}
-          </div>
+              </div>
+            );
+          })}
         </div>
       </div>
     </div>
   );
 }
 
-function RoutesSection({
-  rows,
+function StackExports({
+  exports,
+  project,
   mutating,
-  onNewRoute,
-  onEditDestination,
-  onToggleRoute,
-  onDeleteRoute,
+  onConfigure,
+  onToggle,
+  onDelete,
 }: {
-  rows: SourceRouteRow[];
+  exports: ExportRow[];
+  project: ProjectEntry;
   mutating: boolean;
-  onNewRoute: () => void;
-  onEditDestination: (destination: OtelDestination) => void;
-  onToggleRoute: (route: DataExportRoute, enabled: boolean) => void;
-  onDeleteRoute: (route: DataExportRoute) => void;
+  onConfigure: () => void;
+  onToggle: (route: DataExportRoute, enabled: boolean) => void;
+  onDelete: (route: DataExportRoute) => void;
 }): JSX.Element {
-  const columns = useMemo<Column<SourceRouteRow>[]>(
-    () => [
-      {
-        key: "source",
-        header: "Source",
-        width: "1.2fr",
-        render: () => <Text className="font-medium">Product telemetry</Text>,
-      },
-      {
-        key: "destination",
-        header: "Destination",
-        width: "1.2fr",
-        render: ({ destination }) => (
-          <Text className="truncate font-medium">{destination.name}</Text>
-        ),
-      },
-      {
-        key: "endpoint",
-        header: "Endpoint",
-        width: "2fr",
-        render: ({ destination }) => (
-          <span className="block truncate font-mono text-[13px] text-default">
-            {destination.endpointUrl}
+  return (
+    <div className="space-y-3">
+      {exports.map(({ route, destination }) => (
+        <ExportConnection
+          key={route.id}
+          route={route}
+          destination={destination}
+          project={project}
+          mutating={mutating}
+          onConfigure={onConfigure}
+          onToggle={onToggle}
+          onDelete={onDelete}
+        />
+      ))}
+    </div>
+  );
+}
+
+function ExportConnection({
+  route,
+  destination,
+  project,
+  mutating,
+  onConfigure,
+  onToggle,
+  onDelete,
+}: {
+  route: DataExportRoute;
+  destination?: OtelDestination;
+  project: ProjectEntry;
+  mutating: boolean;
+  onConfigure: () => void;
+  onToggle: (route: DataExportRoute, enabled: boolean) => void;
+  onDelete: (route: DataExportRoute) => void;
+}): JSX.Element {
+  const label = sourceLabel(route.dataSource);
+
+  return (
+    <div className="overflow-x-auto border bg-card">
+      <div className="grid min-w-[680px] grid-cols-[minmax(200px,0.8fr)_minmax(320px,1.2fr)_auto] items-center gap-5 px-5 py-4">
+        <div className="min-w-0">
+          <span className="text-eyebrow text-muted-foreground">
+            {project.name}
           </span>
-        ),
-      },
-      {
-        key: "sensitiveData",
-        header: "Sensitive data",
-        width: "1fr",
-        render: ({ destination }) => (
-          <SensitiveDataBadge destination={destination} />
-        ),
-      },
-      {
-        key: "status",
-        header: "Status",
-        width: "0.8fr",
-        render: ({ route }) =>
-          route.enabled ? (
-            <span className="flex items-center gap-1.5 text-sm">
-              <Icon name="check" className="size-3.5 text-default-success" />
-              Enabled
+          <Text className="mt-1 truncate font-medium">{label}</Text>
+        </div>
+
+        <div className="flex min-w-0 items-center justify-between gap-4 border-l pl-5">
+          <div className="min-w-0">
+            <div className="flex items-center gap-2">
+              <Text className="truncate font-medium">
+                {destination?.name ?? "Not configured"}
+              </Text>
+              {destination?.sensitiveData === "include" ? (
+                <Badge variant="warning" background={false} size="sm">
+                  Sensitive
+                </Badge>
+              ) : null}
+            </div>
+            <span className="mt-1 block truncate font-mono text-xs text-placeholder">
+              {destination?.endpointUrl ?? "Configure this export to continue"}
             </span>
-          ) : (
-            <span className="text-sm text-placeholder">Paused</span>
-          ),
-      },
-      {
-        key: "enabled",
-        header: "On",
-        width: "56px",
-        render: ({ route, destination }) => (
-          <RequireScope scope="project:write" level="component">
+          </div>
+          <span
+            className={
+              route.enabled
+                ? "flex shrink-0 items-center gap-1.5 text-sm text-default-success"
+                : "shrink-0 text-sm text-placeholder"
+            }
+          >
+            {route.enabled ? <Icon name="check" className="size-3.5" /> : null}
+            {route.enabled ? "Enabled" : "Paused"}
+          </span>
+        </div>
+
+        <div className="flex items-center gap-2">
+          <RequireScope
+            scope="project:write"
+            resourceId={project.id}
+            level="component"
+          >
             <Switch
               checked={route.enabled}
-              onCheckedChange={(enabled) => onToggleRoute(route, enabled)}
+              onCheckedChange={(enabled) => onToggle(route, enabled)}
               disabled={mutating}
-              aria-label={`${route.enabled ? "Pause" : "Enable"} route from Product telemetry to ${destination.name}`}
+              aria-label={`${route.enabled ? "Pause" : "Enable"} export from ${label} to ${destination?.name ?? "the configured endpoint"}`}
             />
           </RequireScope>
-        ),
-      },
-      {
-        key: "actions",
-        header: "",
-        width: "44px",
-        render: ({ route, destination }) => (
-          <RequireScope scope="project:write" level="component">
+          <RequireScope
+            scope="project:write"
+            resourceId={project.id}
+            level="component"
+          >
             <MoreActions
               actions={[
                 {
-                  label: "Edit destination",
+                  label: "Configure export",
                   icon: "pencil",
-                  onClick: () => onEditDestination(destination),
+                  onClick: onConfigure,
                 },
                 {
-                  label: "Delete route",
+                  label: "Delete export",
                   icon: "trash-2",
                   destructive: true,
                   disabled: mutating,
-                  onClick: () => onDeleteRoute(route),
+                  onClick: () => onDelete(route),
                 },
               ]}
             />
           </RequireScope>
-        ),
-      },
-    ],
-    [mutating, onDeleteRoute, onEditDestination, onToggleRoute],
-  );
-
-  return (
-    <SettingsSection>
-      <div className="flex items-end justify-between gap-4">
-        <SettingsSection.Header>
-          <SettingsSection.Title>Routes</SettingsSection.Title>
-          <SettingsSection.Description>
-            One source, one destination, per row. Add as many as you need.
-          </SettingsSection.Description>
-        </SettingsSection.Header>
-        <RequireScope scope="project:write" level="component">
-          <Button variant="primary" size="sm" onClick={onNewRoute}>
-            <Plus className="mr-1 size-3.5" />
-            New route
-          </Button>
-        </RequireScope>
+        </div>
       </div>
-      <Table
-        columns={columns}
-        data={rows}
-        rowKey={(row) => row.route.id}
-        noResultsMessage="No routes configured."
-      />
-    </SettingsSection>
+    </div>
   );
 }
 
-function DestinationsSection({
-  destinations,
-  routes,
-  mutating,
-  onNewDestination,
-  onEditDestination,
-  onDeleteDestination,
-}: {
-  destinations: OtelDestination[];
-  routes: DataExportRoute[];
-  mutating: boolean;
-  onNewDestination: () => void;
-  onEditDestination: (destination: OtelDestination) => void;
-  onDeleteDestination: (destination: OtelDestination) => void;
-}): JSX.Element {
-  const routesByDestination = useMemo(() => {
-    const grouped = new Map<string, DataExportRoute[]>();
-    for (const route of routes) {
-      if (!route.otelDestinationId) continue;
-      const current = grouped.get(route.otelDestinationId) ?? [];
-      current.push(route);
-      grouped.set(route.otelDestinationId, current);
-    }
-    return grouped;
-  }, [routes]);
-  const columns = useMemo<Column<OtelDestination>[]>(
-    () => [
-      {
-        key: "name",
-        header: "Name",
-        width: "1.2fr",
-        render: (destination) => (
-          <Text className="truncate font-medium">{destination.name}</Text>
-        ),
-      },
-      {
-        key: "endpoint",
-        header: "Endpoint",
-        width: "2.2fr",
-        render: (destination) => (
-          <span className="block truncate font-mono text-[13px] text-default">
-            {destination.endpointUrl}
-          </span>
-        ),
-      },
-      {
-        key: "headers",
-        header: "Headers",
-        width: "1.5fr",
-        render: (destination) => (
-          <Text className="truncate text-sm">
-            {destination.headers.map((header) => header.name).join(", ") ||
-              "None"}
-          </Text>
-        ),
-      },
-      {
-        key: "sensitiveData",
-        header: "Sensitive data",
-        width: "1fr",
-        render: (destination) => (
-          <SensitiveDataBadge destination={destination} />
-        ),
-      },
-      {
-        key: "sources",
-        header: "Routed from",
-        width: "1.1fr",
-        render: (destination) => {
-          const destinationRoutes =
-            routesByDestination.get(destination.id) ?? [];
-          return destinationRoutes.length > 0 ? (
-            <Text className="text-sm">Product telemetry</Text>
-          ) : (
-            <span className="text-sm text-placeholder">Nothing yet</span>
-          );
-        },
-      },
-      {
-        key: "actions",
-        header: "",
-        width: "44px",
-        render: (destination) => {
-          const isRouted =
-            (routesByDestination.get(destination.id)?.length ?? 0) > 0;
-          return (
-            <RequireScope scope="project:write" level="component">
-              <MoreActions
-                actions={[
-                  {
-                    label: "Edit destination",
-                    icon: "pencil",
-                    onClick: () => onEditDestination(destination),
-                  },
-                  {
-                    label: "Delete destination",
-                    icon: "trash-2",
-                    destructive: true,
-                    disabled: isRouted || mutating,
-                    description: isRouted
-                      ? "Remove it from every source before deleting."
-                      : undefined,
-                    onClick: () => onDeleteDestination(destination),
-                  },
-                ]}
-              />
-            </RequireScope>
-          );
-        },
-      },
-    ],
-    [mutating, onDeleteDestination, onEditDestination, routesByDestination],
-  );
-
-  return (
-    <SettingsSection>
-      <div className="flex items-end justify-between gap-4">
-        <SettingsSection.Header>
-          <SettingsSection.Title>Destinations</SettingsSection.Title>
-          <SettingsSection.Description>
-            OTLP base URLs. Signal-specific paths are appended during delivery.
-          </SettingsSection.Description>
-        </SettingsSection.Header>
-        <RequireScope scope="project:write" level="component">
-          <Button variant="primary" size="sm" onClick={onNewDestination}>
-            <Plus className="mr-1 size-3.5" />
-            New destination
-          </Button>
-        </RequireScope>
-      </div>
-      <Table
-        columns={columns}
-        data={destinations}
-        rowKey={(destination) => destination.id}
-      />
-    </SettingsSection>
-  );
-}
-
-function DeleteDestinationDialog({
-  destination,
+function DeleteExportDialog({
+  exportRoute,
   deleting,
   onOpenChange,
   onConfirm,
 }: {
-  destination?: OtelDestination;
+  exportRoute: DataExportRoute | undefined;
   deleting: boolean;
   onOpenChange: (open: boolean) => void;
   onConfirm: () => void;
 }): JSX.Element {
   return (
-    <Dialog open={destination !== undefined} onOpenChange={onOpenChange}>
+    <Dialog open={exportRoute !== undefined} onOpenChange={onOpenChange}>
       <Dialog.Content>
         <Dialog.Header>
-          <Dialog.Title>Delete {destination?.name}</Dialog.Title>
+          <Dialog.Title>Delete export?</Dialog.Title>
           <Dialog.Description>
-            This removes the destination configuration and its encrypted
-            headers. This action cannot be undone.
+            {exportRoute
+              ? `${sourceLabel(exportRoute.dataSource)} will stop exporting from this project.`
+              : "This export will be removed."}
           </Dialog.Description>
         </Dialog.Header>
         <Dialog.Footer>
           <Button
-            type="button"
             variant="secondary"
+            size="sm"
             onClick={() => onOpenChange(false)}
+            disabled={deleting}
           >
             Cancel
           </Button>
           <Button
-            type="button"
             variant="destructive-primary"
-            disabled={deleting}
+            size="sm"
             onClick={onConfirm}
+            disabled={deleting}
           >
-            {deleting ? "Deleting" : "Delete destination"}
+            {deleting ? "Deleting" : "Delete export"}
           </Button>
         </Dialog.Footer>
       </Dialog.Content>
