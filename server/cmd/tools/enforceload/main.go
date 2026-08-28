@@ -629,7 +629,7 @@ func runFullPoint(
 	outcomes := make(chan awaitOutcome, concurrency)
 	lane := enforcereply.Lane{Scanner: riskv1.EnforcementScanner_ENFORCEMENT_SCANNER_GITLEAKS, PolicyID: ""}
 	const fakeSecret = "wJalrXUtnFEMIbKp7MDoRZfiCYqTvHgNsQ8xLcWd" //nolint:gosec // Synthetic gitleaks fixture.
-	const fakeAccessKeyID = "ASIAZ2XY3WNBQR5TUVWX"
+	const fakeAccessKeyID = "ASIAZ2XY3WNBQR5TUVWX"                //nolint:gosec // Synthetic gitleaks fixture.
 	content := "AccessKeyId: " + fakeAccessKeyID + ", SecretAccessKey: " + fakeSecret
 	for range concurrency {
 		go func() {

@@ -126,7 +126,7 @@ func run() error {
 	}()
 
 	const fakeSecret = "wJalrXUtnFEMIbKp7MDoRZfiCYqTvHgNsQ8xLcWd" //nolint:gosec // Synthetic gitleaks fixture.
-	const fakeAccessKeyID = "ASIAZ2XY3WNBQR5TUVWX"
+	const fakeAccessKeyID = "ASIAZ2XY3WNBQR5TUVWX"                //nolint:gosec // Synthetic gitleaks fixture.
 	lane := enforcereply.Lane{Scanner: riskv1.EnforcementScanner_ENFORCEMENT_SCANNER_GITLEAKS, PolicyID: ""}
 	outcome, err := dispatcher.Dispatch(ctx, enforcereply.DispatchRequest{
 		OrganizationID: "prototype-org",
