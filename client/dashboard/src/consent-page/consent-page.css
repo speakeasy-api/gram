@@ -12,6 +12,16 @@
    woff2 files into server/internal/mcp/consent_page_assets/, which the server
    embeds. Never hand-edit the output. */
 
+/* Layer order for the whole document, declared before anything else so it is
+   the one that sticks. The tool-access island injects a second Tailwind build
+   at runtime, and its layers are named island-* so the two builds can be
+   ordered against each other rather than colliding in one `utilities` layer.
+   The island's utilities sit above this page's preflight — otherwise the
+   reset's `padding:0; border:0` would strip the island's own spacing — and
+   below this page's utilities, so a class both builds emit always resolves to
+   the page's, including its responsive variants. */
+@layer island-theme, theme, base, island-base, components, island-utilities, utilities;
+
 @import "tailwindcss" source(none);
 
 /* Tailwind cannot infer these: the markup lives outside the dashboard package,
