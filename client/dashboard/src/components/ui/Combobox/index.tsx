@@ -36,6 +36,7 @@ export function Combobox<T extends DropdownItem>({
   onOpenChange,
   variant = "secondary",
   className,
+  id,
   label,
   disabledMessage,
   tooltip,
@@ -49,6 +50,7 @@ export function Combobox<T extends DropdownItem>({
   onOpenChange?: (open: boolean) => void;
   children: ReactNode;
   className?: string;
+  id?: string;
   variant?: Parameters<typeof Button>[0]["variant"];
   label?: string;
   disabledMessage?: string;
@@ -67,6 +69,7 @@ export function Combobox<T extends DropdownItem>({
   let trigger = (
     <PopoverTrigger asChild>
       <Button
+        id={id}
         variant={variant}
         role="combobox"
         aria-expanded={open}

@@ -2,6 +2,7 @@ export type EditableWriteOnlyHeader = {
   rowID: string;
   name: string;
   storedName: string | null;
+  hasStoredValue: boolean;
   value: string;
 };
 
@@ -22,7 +23,8 @@ export function editableHeaderFromServer(
   return {
     rowID: `existing-${index}-${header.name}`,
     name: header.name,
-    storedName: header.hasValue ? header.name : null,
+    storedName: header.name,
+    hasStoredValue: header.hasValue,
     value: "",
   };
 }
@@ -35,6 +37,7 @@ export function blankWriteOnlyHeader(): EditableWriteOnlyHeader {
     rowID: `new-${newRowCounter}`,
     name: "",
     storedName: null,
+    hasStoredValue: false,
     value: "",
   };
 }
@@ -52,8 +55,11 @@ export function preservesStoredHeaderValue(
 export function hasValidWriteOnlyHeaders(
   headers: EditableWriteOnlyHeader[],
 ): boolean {
+  const names = new Set<string>();
   return headers.every((header) => {
-    if (header.name.trim() === "") return false;
+    const name = header.name.trim().toLowerCase();
+    if (name === "" || names.has(name)) return false;
+    names.add(name);
     return header.value !== "" || preservesStoredHeaderValue(header);
   });
 }

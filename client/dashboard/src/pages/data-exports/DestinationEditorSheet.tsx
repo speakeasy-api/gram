@@ -81,7 +81,7 @@ export function DestinationEditorSheet({
     <Sheet
       open
       onOpenChange={(open) => {
-        if (!open) onClose();
+        if (!open && !formDisabled && !form.state.isSubmitting) onClose();
       }}
     >
       <SheetContent
@@ -148,8 +148,8 @@ export function DestinationEditorSheet({
                         )}
                       </form.Field>
                       <Text muted className="text-xs leading-relaxed">
-                        OTLP base URL. Signal-specific paths are appended during
-                        delivery.
+                        HTTPS OTLP base URL. Signal-specific paths are appended
+                        during delivery.
                       </Text>
                     </div>
 
@@ -195,9 +195,10 @@ export function DestinationEditorSheet({
                                         <WriteOnlyHeaderRow
                                           name={nameField.state.value}
                                           value={valueField.state.value}
-                                          hasStoredValue={preservesStoredHeaderValue(
-                                            header,
-                                          )}
+                                          hasStoredValue={
+                                            header.hasStoredValue &&
+                                            preservesStoredHeaderValue(header)
+                                          }
                                           nameInputName={nameField.name}
                                           valueInputName={valueField.name}
                                           disabled={disabled}
@@ -305,9 +306,19 @@ export function DestinationEditorSheet({
                     }
                   >
                     {([name, endpointUrl, headers]) => {
+                      let endpointIsValid = false;
+                      try {
+                        const parsedEndpoint = new URL(endpointUrl.trim());
+                        endpointIsValid =
+                          parsedEndpoint.protocol === "https:" &&
+                          parsedEndpoint.hostname !== "";
+                      } catch {
+                        endpointIsValid = false;
+                      }
+
                       const canSave =
                         name.trim() !== "" &&
-                        endpointUrl.trim() !== "" &&
+                        endpointIsValid &&
                         hasValidWriteOnlyHeaders(headers) &&
                         !disabled;
 

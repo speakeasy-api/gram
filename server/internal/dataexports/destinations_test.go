@@ -219,7 +219,7 @@ func TestDestinationRejectsInvalidHeaderValue(t *testing.T) {
 	requireOopsCode(t, err, oops.CodeInvalid)
 }
 
-func TestDestinationAllowsHTTP(t *testing.T) {
+func TestDestinationRejectsHTTP(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestService(t)

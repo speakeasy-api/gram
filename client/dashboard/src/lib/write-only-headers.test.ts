@@ -14,6 +14,19 @@ describe("write-only header form helpers", () => {
       0,
     );
 
+    expect(header.hasStoredValue).toBe(true);
+    expect(preservesStoredHeaderValue(header)).toBe(true);
+    expect(hasValidWriteOnlyHeaders([header])).toBe(true);
+    expect(writeOnlyHeaderInput(header)).toEqual({ name: "Authorization" });
+  });
+
+  it("preserves an unchanged server header without a stored value", () => {
+    const header = editableHeaderFromServer(
+      { name: "Authorization", hasValue: false },
+      0,
+    );
+
+    expect(header.hasStoredValue).toBe(false);
     expect(preservesStoredHeaderValue(header)).toBe(true);
     expect(hasValidWriteOnlyHeaders([header])).toBe(true);
     expect(writeOnlyHeaderInput(header)).toEqual({ name: "Authorization" });
@@ -36,6 +49,17 @@ describe("write-only header form helpers", () => {
     expect(hasValidWriteOnlyHeaders([header])).toBe(false);
     header.value = "Bearer example";
     expect(hasValidWriteOnlyHeaders([header])).toBe(true);
+  });
+
+  it("rejects duplicate header names regardless of casing", () => {
+    const first = blankWriteOnlyHeader();
+    first.name = "Authorization";
+    first.value = "Bearer first";
+    const duplicate = blankWriteOnlyHeader();
+    duplicate.name = " authorization ";
+    duplicate.value = "Bearer second";
+
+    expect(hasValidWriteOnlyHeaders([first, duplicate])).toBe(false);
   });
 
   it("trims submitted names and includes replacement values", () => {

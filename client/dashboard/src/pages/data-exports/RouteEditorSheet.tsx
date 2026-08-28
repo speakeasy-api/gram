@@ -22,7 +22,7 @@ import { Text } from "@/components/ui/Text";
 import { DataSource } from "@gram/client/models/components/createdataexportrouteform.js";
 import type { OtelDestination } from "@gram/client/models/components/oteldestination.js";
 import { Plus } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useId, useMemo, useState } from "react";
 
 const CREATE_DESTINATION_VALUE = "__create_destination__";
 
@@ -44,10 +44,12 @@ export function RouteEditorSheet({
   saving: boolean;
   onClose: () => void;
   onCreate: (destination: OtelDestination, enabled: boolean) => Promise<void>;
-  onCreateDestination: () => void;
+  onCreateDestination: (enabled: boolean) => void;
 }): JSX.Element {
   const [selectedID, setSelectedID] = useState<string>();
   const [enabled, setEnabled] = useState(true);
+  const sourceID = useId();
+  const destinationID = useId();
   const items = useMemo<RouteDestinationItem[]>(
     () => [
       ...destinations.map((destination) => {
@@ -94,9 +96,9 @@ export function RouteEditorSheet({
 
         <div className="min-h-0 flex-1 overflow-y-auto px-6">
           <div className="space-y-3 py-6">
-            <Label>Source</Label>
+            <Label htmlFor={sourceID}>Source</Label>
             <Select value={DataSource.OtelForwarding} disabled>
-              <SelectTrigger className="w-full">
+              <SelectTrigger id={sourceID} className="w-full">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -112,17 +114,18 @@ export function RouteEditorSheet({
           </div>
 
           <div className="space-y-3 border-t py-6">
-            <Label>Destination</Label>
+            <Label htmlFor={destinationID}>Destination</Label>
             <Combobox
+              id={destinationID}
               items={items}
               selected={selected}
               onSelectionChange={(item) => {
-                if (item.createNew) onCreateDestination();
+                if (item.createNew) onCreateDestination(enabled);
                 else setSelectedID(item.value);
               }}
               variant="secondary"
               className="h-10 w-full"
-              contentClassName="w-[440px]"
+              contentClassName="w-[min(440px,calc(100vw-2rem))]"
               searchable
               searchPlaceholder="Search destinations"
             >

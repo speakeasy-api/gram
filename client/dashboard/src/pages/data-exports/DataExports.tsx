@@ -1,6 +1,7 @@
 import { InlineEmptyState } from "@/components/inline-empty-state";
 import { SettingsPage, SettingsSection } from "@/components/page-templates";
 import { RequireScope } from "@/components/require-scope";
+import { useProjectSlugForRequests } from "@/contexts/Sdk";
 import { Alert } from "@/components/ui/Alert";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
@@ -21,13 +22,14 @@ import type { OtelDestination } from "@gram/client/models/components/oteldestina
 import { useCreateDataExportRouteMutation } from "@gram/client/react-query/createDataExportRoute.js";
 import { useCreateOtelDestinationMutation } from "@gram/client/react-query/createOtelDestination.js";
 import {
-  invalidateAllDataExportRoutes,
+  invalidateDataExportRoutes,
+  queryKeyDataExportRoutes,
   useDataExportRoutes,
 } from "@gram/client/react-query/dataExportRoutes.js";
 import { useDeleteDataExportRouteMutation } from "@gram/client/react-query/deleteDataExportRoute.js";
 import { useDeleteOtelDestinationMutation } from "@gram/client/react-query/deleteOtelDestination.js";
 import {
-  invalidateAllOtelDestinations,
+  invalidateOtelDestinations,
   useOtelDestinations,
 } from "@gram/client/react-query/otelDestinations.js";
 import { useUpdateDataExportRouteMutation } from "@gram/client/react-query/updateDataExportRoute.js";
@@ -42,11 +44,6 @@ import {
 import { RouteEditorSheet } from "./RouteEditorSheet";
 
 const OTEL_FORWARDING_SOURCE = DataSource.OtelForwarding;
-const DATA_EXPORT_ROUTES_QUERY_KEY = [
-  "@gram/client",
-  "dataExports",
-  "listRoutes",
-] as const;
 const EMPTY_DESTINATIONS: OtelDestination[] = [];
 const EMPTY_ROUTES: DataExportRoute[] = [];
 
@@ -75,8 +72,9 @@ export default function DataExports(): JSX.Element {
 
 function DataExportsInner(): JSX.Element {
   const queryClient = useQueryClient();
-  const destinationsQuery = useOtelDestinations();
-  const routesQuery = useDataExportRoutes();
+  const gramProject = useProjectSlugForRequests();
+  const destinationsQuery = useOtelDestinations({ gramProject });
+  const routesQuery = useDataExportRoutes({ gramProject });
   const createDestination = useCreateOtelDestinationMutation();
   const updateDestination = useUpdateOtelDestinationMutation();
   const deleteDestination = useDeleteOtelDestinationMutation();
@@ -86,7 +84,7 @@ function DataExportsInner(): JSX.Element {
 
   const [editor, setEditor] = useState<{
     destination?: OtelDestination;
-    routeAfterCreate: boolean;
+    routeAfterCreateEnabled?: boolean;
   }>();
   const [deleteCandidate, setDeleteCandidate] = useState<OtelDestination>();
   const [routeEditorOpen, setRouteEditorOpen] = useState(false);
@@ -155,13 +153,13 @@ function DataExportsInner(): JSX.Element {
         toast.success("Destination created");
       }
 
-      if (editor?.routeAfterCreate) {
+      if (editor?.routeAfterCreateEnabled !== undefined) {
         try {
           await createRoute.mutateAsync({
             request: {
               createDataExportRouteForm: {
                 dataSource: OTEL_FORWARDING_SOURCE,
-                enabled: true,
+                enabled: editor.routeAfterCreateEnabled,
                 otelDestinationId: saved.id,
               },
             },
@@ -174,9 +172,9 @@ function DataExportsInner(): JSX.Element {
       }
 
       await Promise.all([
-        invalidateAllOtelDestinations(queryClient),
-        editor?.routeAfterCreate
-          ? invalidateAllDataExportRoutes(queryClient)
+        invalidateOtelDestinations(queryClient, [{ gramProject }]),
+        editor?.routeAfterCreateEnabled !== undefined
+          ? invalidateDataExportRoutes(queryClient, [{ gramProject }])
           : Promise.resolve(),
       ]);
       setEditor(undefined);
@@ -191,7 +189,7 @@ function DataExportsInner(): JSX.Element {
       await deleteDestination.mutateAsync({
         request: { id: deleteCandidate.id },
       });
-      await invalidateAllOtelDestinations(queryClient);
+      await invalidateOtelDestinations(queryClient, [{ gramProject }]);
       toast.success("Destination deleted");
       setDeleteCandidate(undefined);
       setEditor(undefined);
@@ -214,7 +212,7 @@ function DataExportsInner(): JSX.Element {
           },
         },
       });
-      await invalidateAllDataExportRoutes(queryClient);
+      await invalidateDataExportRoutes(queryClient, [{ gramProject }]);
       toast.success(`Route to ${destination.name} created`);
       setRouteEditorOpen(false);
     } catch (error) {
@@ -226,23 +224,19 @@ function DataExportsInner(): JSX.Element {
     route: DataExportRoute,
     enabled: boolean,
   ) => {
-    await queryClient.cancelQueries({
-      queryKey: DATA_EXPORT_ROUTES_QUERY_KEY,
-    });
-    const previous = queryClient.getQueriesData<ListDataExportRoutesResult>({
-      queryKey: DATA_EXPORT_ROUTES_QUERY_KEY,
-    });
-    queryClient.setQueriesData<ListDataExportRoutesResult>(
-      { queryKey: DATA_EXPORT_ROUTES_QUERY_KEY },
-      (current) =>
-        current
-          ? {
-              ...current,
-              routes: current.routes.map((item) =>
-                item.id === route.id ? { ...item, enabled } : item,
-              ),
-            }
-          : current,
+    const queryKey = queryKeyDataExportRoutes({ gramProject });
+    await queryClient.cancelQueries({ queryKey });
+    const previous =
+      queryClient.getQueryData<ListDataExportRoutesResult>(queryKey);
+    queryClient.setQueryData<ListDataExportRoutesResult>(queryKey, (current) =>
+      current
+        ? {
+            ...current,
+            routes: current.routes.map((item) =>
+              item.id === route.id ? { ...item, enabled } : item,
+            ),
+          }
+        : current,
     );
 
     try {
@@ -257,19 +251,17 @@ function DataExportsInner(): JSX.Element {
         },
       });
     } catch (error) {
-      for (const [key, value] of previous) {
-        queryClient.setQueryData(key, value);
-      }
+      queryClient.setQueryData(queryKey, previous);
       toast.error(`Failed to update route: ${toError(error).message}`);
     } finally {
-      await invalidateAllDataExportRoutes(queryClient);
+      await invalidateDataExportRoutes(queryClient, [{ gramProject }]);
     }
   };
 
   const handleDeleteRoute = async (route: DataExportRoute) => {
     try {
       await deleteRoute.mutateAsync({ request: { id: route.id } });
-      await invalidateAllDataExportRoutes(queryClient);
+      await invalidateDataExportRoutes(queryClient, [{ gramProject }]);
       toast.success("Destination removed from Product telemetry");
     } catch (error) {
       toast.error(`Failed to remove destination: ${toError(error).message}`);
@@ -278,6 +270,8 @@ function DataExportsInner(): JSX.Element {
 
   const loading = destinationsQuery.isPending || routesQuery.isPending;
   const error = destinationsQuery.error ?? routesQuery.error;
+  const hasLoadedConfiguration =
+    destinationsQuery.data !== undefined && routesQuery.data !== undefined;
   const mutating =
     createDestination.isPending ||
     updateDestination.isPending ||
@@ -305,7 +299,12 @@ function DataExportsInner(): JSX.Element {
       }
       area="Observe"
     >
-      {error ? (
+      {error && hasLoadedConfiguration ? (
+        <Alert variant="error">
+          Unable to refresh data exports: {toError(error).message}
+        </Alert>
+      ) : null}
+      {error && !hasLoadedConfiguration ? (
         <Alert variant="error">
           Unable to load data exports: {toError(error).message}
         </Alert>
@@ -328,7 +327,7 @@ function DataExportsInner(): JSX.Element {
                   onClick={() =>
                     setEditor({
                       destination: undefined,
-                      routeAfterCreate: false,
+                      routeAfterCreateEnabled: undefined,
                     })
                   }
                 >
@@ -356,7 +355,10 @@ function DataExportsInner(): JSX.Element {
             mutating={mutating}
             onNewRoute={() => setRouteEditorOpen(true)}
             onEditDestination={(destination) =>
-              setEditor({ destination, routeAfterCreate: false })
+              setEditor({
+                destination,
+                routeAfterCreateEnabled: undefined,
+              })
             }
             onToggleRoute={(route, enabled) =>
               void handleToggleRoute(route, enabled)
@@ -368,10 +370,16 @@ function DataExportsInner(): JSX.Element {
             routes={routes}
             mutating={mutating}
             onNewDestination={() =>
-              setEditor({ destination: undefined, routeAfterCreate: false })
+              setEditor({
+                destination: undefined,
+                routeAfterCreateEnabled: undefined,
+              })
             }
             onEditDestination={(destination) =>
-              setEditor({ destination, routeAfterCreate: false })
+              setEditor({
+                destination,
+                routeAfterCreateEnabled: undefined,
+              })
             }
             onDeleteDestination={setDeleteCandidate}
           />
@@ -407,9 +415,12 @@ function DataExportsInner(): JSX.Element {
           saving={createRoute.isPending}
           onClose={() => setRouteEditorOpen(false)}
           onCreate={handleCreateRoute}
-          onCreateDestination={() => {
+          onCreateDestination={(enabled) => {
             setRouteEditorOpen(false);
-            setEditor({ destination: undefined, routeAfterCreate: true });
+            setEditor({
+              destination: undefined,
+              routeAfterCreateEnabled: enabled,
+            });
           }}
         />
       ) : null}
@@ -582,7 +593,7 @@ function RouteDiagram({ rows }: { rows: SourceRouteRow[] }): JSX.Element {
                   {route.enabled ? (
                     <span className="flex shrink-0 items-center gap-1.5 text-sm text-default-success">
                       <Icon name="check" className="size-3.5" />
-                      Live
+                      Enabled
                     </span>
                   ) : (
                     <span className="shrink-0 text-sm text-placeholder">
@@ -666,13 +677,13 @@ function RoutesSection({
         key: "enabled",
         header: "On",
         width: "56px",
-        render: ({ route }) => (
+        render: ({ route, destination }) => (
           <RequireScope scope="project:write" level="component">
             <Switch
               checked={route.enabled}
               onCheckedChange={(enabled) => onToggleRoute(route, enabled)}
               disabled={mutating}
-              aria-label={`Toggle ${route.id}`}
+              aria-label={`${route.enabled ? "Pause" : "Enable"} route from Product telemetry to ${destination.name}`}
             />
           </RequireScope>
         ),
@@ -694,6 +705,7 @@ function RoutesSection({
                   label: "Delete route",
                   icon: "trash-2",
                   destructive: true,
+                  disabled: mutating,
                   onClick: () => onDeleteRoute(route),
                 },
               ]}
