@@ -8,7 +8,7 @@ import (
 )
 
 type GetMCPReadinessToolInput struct {
-	ProjectSlug    string `json:"project_slug" jsonschema:"explicit AICP project slug that owns the reviewed MCP registration"`
+	ProjectSlug    string `json:"project_slug" jsonschema:"explicit project slug that owns the reviewed MCP registration"`
 	RegistrationID string `json:"registration_id" jsonschema:"Platform MCP registration ID returned by register_catalog_mcp or register_remote_mcp"`
 	Force          bool   `json:"force,omitempty" jsonschema:"force one authenticated provider readiness probe; limited to three probes per minute for this registration; unavailable to managed project assistants"`
 }
@@ -25,7 +25,7 @@ type GetMCPReadinessToolOutput struct {
 }
 
 type GetMCPRepairPlanToolInput struct {
-	ProjectSlug    string `json:"project_slug" jsonschema:"explicit AICP project slug that owns the reviewed MCP registration"`
+	ProjectSlug    string `json:"project_slug" jsonschema:"explicit project slug that owns the reviewed MCP registration"`
 	RegistrationID string `json:"registration_id" jsonschema:"Platform MCP registration ID returned by register_catalog_mcp or register_remote_mcp"`
 }
 
@@ -40,8 +40,8 @@ type GetMCPRepairPlanToolOutput struct {
 func registerReadinessTools(reg *Registrar, readiness *ReadinessService) {
 	addTool(reg, &mcp.Tool{
 		Name:        "get_mcp_readiness",
-		Title:       "Get MCP Readiness",
-		Description: "Return normalized persisted readiness for one reviewed MCP registration when its registration ID is known. A forced authenticated probe is limited to three per minute for that registration and is unavailable to managed project assistants.",
+		Title:       "Check If an MCP Server Is Working",
+		Description: "Say whether one MCP server is working, from the last stored check, when its registration ID is known. Constraints: forcing a fresh authenticated check is limited to three per minute for that MCP server, and is unavailable to managed project assistants.",
 		Annotations: readOnlyAnnotations(),
 	}, ToolMeta{
 		// Assistants only read their own persisted, actor-scoped evidence. A
@@ -74,8 +74,8 @@ func registerReadinessTools(reg *Registrar, readiness *ReadinessService) {
 
 	addTool(reg, &mcp.Tool{
 		Name:        "get_mcp_repair_plan",
-		Title:       "Get MCP Repair Plan",
-		Description: "Return safe, bounded next actions from persisted readiness for one reviewed MCP registration when its registration ID is known. Managed project assistants read only their own actor-scoped evidence.",
+		Title:       "What to Fix on an MCP Server",
+		Description: "List the safe next actions for one MCP server that is not working, from the last stored check, when its registration ID is known. Constraints: managed project assistants read only their own actor-scoped evidence.",
 		Annotations: readOnlyAnnotations(),
 	}, ToolMeta{
 		// Assistants receive a repair projection from their persisted,

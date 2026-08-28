@@ -12,6 +12,11 @@ func LogsOtelPath() string {
 	return "/otel/v1/logs"
 }
 
+// MetricsOtelPath returns the URL path to the otel service metrics HTTP endpoint.
+func MetricsOtelPath() string {
+	return "/otel/v1/metrics"
+}
+
 // TracesOtelPath returns the URL path to the otel service traces HTTP endpoint.
 func TracesOtelPath() string {
 	return "/otel/v1/traces"

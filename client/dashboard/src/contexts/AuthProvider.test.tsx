@@ -47,7 +47,13 @@ import { AuthProvider } from "./AuthProvider";
 import { nullTelemetry, TelemetryStateProvider } from "./Telemetry";
 
 const DAY = 24 * 60 * 60 * 1000;
-const ORG = { id: "org-1", name: "Test Org", slug: "test-org", projects: [] };
+const PROJECT = { id: "project-1", name: "Default", slug: "default" };
+const ORG = {
+  id: "org-1",
+  name: "Test Org",
+  slug: "test-org",
+  projects: [PROJECT],
+};
 const OTHER_ORG = {
   id: "org-2",
   name: "Other Org",
@@ -85,13 +91,17 @@ const LocationProbe = () => {
   );
 };
 
-function renderGate(initialPath = "/") {
+function renderGate(initialPath: string | string[] = "/") {
+  const initialEntries = Array.isArray(initialPath)
+    ? initialPath
+    : [initialPath];
+
   return render(
     <TelemetryStateProvider
       telemetry={telemetry}
       featureFlagsInitiallyAvailable
     >
-      <MemoryRouter initialEntries={[initialPath]}>
+      <MemoryRouter initialEntries={initialEntries}>
         <LocationProbe />
         <AuthProvider>
           <div data-testid="app" />
@@ -162,6 +172,15 @@ describe("AuthProvider organization telemetry group", () => {
     renderGate();
 
     expect(registeredOrgGroups()).toEqual([]);
+  });
+
+  it("lets authenticated users stay on /guide until the guide route resolves", () => {
+    mocks.sessionData.mockReturnValue(gatedSession({ whitelisted: true }));
+
+    renderGate(["/guide"]);
+
+    expect(screen.getByTestId("app")).toBeTruthy();
+    expect(screen.getByTestId("location").textContent).toBe("/guide");
   });
 });
 

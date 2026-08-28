@@ -1,10 +1,14 @@
 package cimd
 
 import (
+	"crypto/ecdsa"
+	"crypto/elliptic"
+	"crypto/rand"
 	"encoding/json"
 	"strings"
 	"testing"
 
+	"github.com/go-jose/go-jose/v4"
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/usersessions/oauthwire"
@@ -170,11 +174,45 @@ func TestValidateDocument_MissingAuthMethodAccepted(t *testing.T) {
 	require.NoError(t, err)
 }
 
-// TestValidateDocument_AsymmetricAuthMethodRejected pins that dropping the
-// absent-value rejection did NOT open the door to confidential clients. An
-// explicit private_key_jwt is still refused until §8.2's RFC 7523 §2.2
-// enforcement lands with it.
-func TestValidateDocument_AsymmetricAuthMethodRejected(t *testing.T) {
+// testPublicJWKS is a single-key public JWK Set holding a real, freshly
+// generated ES256 key: the validators refuse a set with no usable signing
+// key, and a hand-written coordinate pair is not one.
+func testPublicJWKS(t *testing.T) json.RawMessage {
+	t.Helper()
+
+	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	require.NoError(t, err)
+	set := jose.JSONWebKeySet{Keys: []jose.JSONWebKey{{Key: key.Public(), KeyID: "k1", Algorithm: string(jose.ES256), Use: "sig"}}}
+	body, err := json.Marshal(set)
+	require.NoError(t, err)
+	return body
+}
+
+// A private_key_jwt document is accepted with exactly one key source, inline
+// or remote: that is what the token endpoint will verify its assertions
+// against.
+func TestValidateDocument_PrivateKeyJWTAccepted(t *testing.T) {
+	t.Parallel()
+
+	parsed, err := ValidateClientIDURL(testClientID)
+	require.NoError(t, err)
+
+	inline := testDocument(testClientID)
+	inline.TokenEndpointAuthMethod = "private_key_jwt"
+	inline.JWKS = testPublicJWKS(t)
+	_, err = validateDocument(inline, testClientID, parsed)
+	require.NoError(t, err)
+
+	remote := testDocument(testClientID)
+	remote.TokenEndpointAuthMethod = "private_key_jwt"
+	remote.JWKSURI = "https://keys.client.example.com/jwks.json"
+	_, err = validateDocument(remote, testClientID, parsed)
+	require.NoError(t, err, "a jwks_uri on a different host than the client_id is fine: no origin rule applies")
+}
+
+// Declaring private_key_jwt without a key source leaves nothing to verify
+// against, and is refused as its own reason rather than as a bad method.
+func TestValidateDocument_PrivateKeyJWTRequiresKeySource(t *testing.T) {
 	t.Parallel()
 
 	parsed, err := ValidateClientIDURL(testClientID)
@@ -183,7 +221,97 @@ func TestValidateDocument_AsymmetricAuthMethodRejected(t *testing.T) {
 	doc := testDocument(testClientID)
 	doc.TokenEndpointAuthMethod = "private_key_jwt"
 	_, err = validateDocument(doc, testClientID, parsed)
-	requireValidationError(t, err, "invalid_client_metadata", reasonInvalidAuthMethod)
+	requireValidationError(t, err, "invalid_client_metadata", reasonKeySourceMissing)
+}
+
+// RFC 7591 §2 forbids naming both key sources, whatever the method: it leaves
+// the authoritative set undefined.
+func TestValidateDocument_BothKeySourcesRejected(t *testing.T) {
+	t.Parallel()
+
+	parsed, err := ValidateClientIDURL(testClientID)
+	require.NoError(t, err)
+
+	doc := testDocument(testClientID)
+	doc.JWKS = testPublicJWKS(t)
+	doc.JWKSURI = "https://keys.client.example.com/jwks.json"
+	_, err = validateDocument(doc, testClientID, parsed)
+	requireValidationError(t, err, "invalid_client_metadata", reasonKeySourceAmbiguous)
+}
+
+// A jwks_uri is syntax-checked with the same rule the resolver applies, so a
+// document accepted here cannot fail to resolve later for a reason that was
+// visible up front. It is never fetched at validation time.
+func TestValidateDocument_JWKSURIInvalidRejected(t *testing.T) {
+	t.Parallel()
+
+	parsed, err := ValidateClientIDURL(testClientID)
+	require.NoError(t, err)
+
+	for _, uri := range []string{"http://keys.client.example.com/jwks.json", "https://user@keys.client.example.com/jwks.json", "not a url"} {
+		doc := testDocument(testClientID)
+		doc.TokenEndpointAuthMethod = "private_key_jwt"
+		doc.JWKSURI = uri
+		_, err = validateDocument(doc, testClientID, parsed)
+		requireValidationError(t, err, "invalid_client_metadata", reasonJWKSURIInvalid)
+	}
+}
+
+// A jwks that is present but holds no key set does not count as a key
+// source. An explicit null is treated as absent, so a private_key_jwt
+// document carrying only a null jwks is refused for the missing source it
+// is, and null alongside a jwks_uri is not "both present"; a set with no
+// keys array is refused as malformed, since resolve-time parsing would refuse
+// it anyway and the client could never authenticate.
+func TestValidateDocument_DegenerateJWKS(t *testing.T) {
+	t.Parallel()
+
+	parsed, err := ValidateClientIDURL(testClientID)
+	require.NoError(t, err)
+
+	nullOnly := testDocument(testClientID)
+	nullOnly.TokenEndpointAuthMethod = "private_key_jwt"
+	nullOnly.JWKS = json.RawMessage(`null`)
+	_, err = validateDocument(nullOnly, testClientID, parsed)
+	requireValidationError(t, err, "invalid_client_metadata", reasonKeySourceMissing)
+
+	nullWithURI := testDocument(testClientID)
+	nullWithURI.TokenEndpointAuthMethod = "private_key_jwt"
+	nullWithURI.JWKS = json.RawMessage(`null`)
+	nullWithURI.JWKSURI = "https://keys.client.example.com/jwks.json"
+	_, err = validateDocument(nullWithURI, testClientID, parsed)
+	require.NoError(t, err, "a null jwks next to a jwks_uri is one key source, not two")
+
+	for _, raw := range []string{`{}`, `{"keys":null}`} {
+		noKeys := testDocument(testClientID)
+		noKeys.TokenEndpointAuthMethod = "private_key_jwt"
+		noKeys.JWKS = json.RawMessage(raw)
+		_, err = validateDocument(noKeys, testClientID, parsed)
+		requireValidationError(t, err, "invalid_client_metadata", reasonJWKSInvalid)
+	}
+
+	// A well-formed set the resolver would parse to nothing usable.
+	for _, raw := range []string{`{"keys":[]}`, `{"keys":[{"kty":"EC","crv":"P-256","kid":"k1","x":"AA","y":"AA","use":"enc"}]}`} {
+		unusable := testDocument(testClientID)
+		unusable.TokenEndpointAuthMethod = "private_key_jwt"
+		unusable.JWKS = json.RawMessage(raw)
+		_, err = validateDocument(unusable, testClientID, parsed)
+		requireValidationError(t, err, "invalid_client_metadata", reasonJWKSNoSigningKey)
+	}
+}
+
+// A public client may still publish keys; the source rules apply to it but
+// nothing requires one.
+func TestValidateDocument_PublicClientMayPublishKeys(t *testing.T) {
+	t.Parallel()
+
+	parsed, err := ValidateClientIDURL(testClientID)
+	require.NoError(t, err)
+
+	doc := testDocument(testClientID)
+	doc.JWKSURI = "https://keys.client.example.com/jwks.json"
+	_, err = validateDocument(doc, testClientID, parsed)
+	require.NoError(t, err)
 }
 
 func TestValidateDocument_SymmetricAuthMethodRejected(t *testing.T) {

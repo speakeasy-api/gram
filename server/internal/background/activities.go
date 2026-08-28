@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"net/netip"
 	"net/url"
 	"time"
 
@@ -47,6 +48,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/functions"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/k8s"
+	"github.com/speakeasy-api/gram/server/internal/killswitches"
 	mcpapprovaladvisories "github.com/speakeasy-api/gram/server/internal/mcpapproval/advisories"
 	mcpapprovalcatalog "github.com/speakeasy-api/gram/server/internal/mcpapproval/catalog"
 	"github.com/speakeasy-api/gram/server/internal/mcpapproval/domainmeta"
@@ -91,6 +93,7 @@ type Publishers struct {
 	RiskFindings            gcp.Publisher[*riskv1.Finding]
 	TelemetryLogs           gcp.Publisher[*telemetryv1.LogRecord]
 	OTELLogs                gcp.Publisher[*otelv1.InboundLogRecord]
+	OTELMetrics             gcp.Publisher[*otelv1.InboundMetric]
 	OTELSpans               gcp.Publisher[*otelv1.InboundSpan]
 	Outbox                  topics.Publisher
 }
@@ -161,6 +164,7 @@ type Activities struct {
 	cancelAssistantsSubscription    *activities.CancelAssistantsSubscription
 	outboxRelay                     *outbox_relay.Relay
 	outboxGC                        *outbox_relay.GC
+	killswitchMaintenance           *killswitches.MaintenanceService
 	publishOutbox                   *publish_outbox.Relay
 	pluginPublisher                 *activities.PluginPublisher
 	sessionQuarantineReassert       *activities.SessionQuarantineReassert
@@ -192,6 +196,7 @@ func NewActivities(
 	chatClient *chat.Client,
 	k8sClient *k8s.KubernetesClients,
 	expectedTargetCNAME string,
+	expectedARecords []netip.Addr,
 	siteURL *url.URL,
 	billingTracker billing.Tracker,
 	billingRepo billing.Repository,
@@ -302,7 +307,7 @@ func NewActivities(
 		remoteSessionRefresh = activities.NewRemoteSessionRefresh(
 			logger,
 			db,
-			remotesessions.NewRefreshService(logger, db, encryption, guardianPolicy, cacheAdapter),
+			remotesessions.NewRefreshService(logger, meterProvider, db, encryption, guardianPolicy, cacheAdapter),
 		)
 	}
 
@@ -368,7 +373,7 @@ func NewActivities(
 		getDeviceIntegrationCandidates:  activities.NewGetDeviceIntegrationSyncCandidates(logger, meterProvider, db, encryption, guardianPolicy, features),
 		runDeviceIntegrationSync:        activities.NewRunDeviceIntegrationSync(logger, meterProvider, db, encryption, guardianPolicy, features),
 		customDomainIngress:             activities.NewCustomDomainIngress(logger, db, k8sClient),
-		customDomainHealth:              activities.NewCustomDomainHealth(logger, db, k8sClient, expectedTargetCNAME, emailService, siteURL, guardianPolicy),
+		customDomainHealth:              activities.NewCustomDomainHealth(logger, db, k8sClient, expectedTargetCNAME, expectedARecords, emailService, siteURL, guardianPolicy),
 		fireOpenRouterCreditsMetrics:    activities.NewFireOpenRouterCreditsMetrics(logger, meterProvider),
 		sendOpenRouterCreditsAlerts:     activities.NewMaybeSendOpenRouterCreditsAlerts(logger, db, cacheAdapter, emailService, meterProvider),
 		firePlatformUsageMetrics:        activities.NewFirePlatformUsageMetrics(logger, billingTracker),
@@ -391,7 +396,7 @@ func NewActivities(
 		reconcilePaygOpenRouterChatKey:  activities.NewReconcilePaygOpenRouterChatKey(logger, db, openrouterProvisioner),
 		transitionDeployment:            activities.NewTransitionDeployment(logger, db),
 		validateDeployment:              activities.NewValidateDeployment(logger, db, billingRepo),
-		verifyCustomDomain:              activities.NewVerifyCustomDomain(logger, db, auditLogger, expectedTargetCNAME),
+		verifyCustomDomain:              activities.NewVerifyCustomDomain(logger, db, auditLogger, expectedTargetCNAME, expectedARecords),
 		generateToolsetEmbeddings:       activities.NewGenerateToolsetEmbeddingsActivity(tracerProvider, db, ragService, logger),
 		dispatchTrigger:                 activities.NewDispatchTrigger(triggerApp),
 		processScheduledTrigger:         activities.NewProcessScheduledTrigger(triggerApp),
@@ -422,6 +427,7 @@ func NewActivities(
 		cancelAssistantsSubscription:    activities.NewCancelAssistantsSubscription(logger, billingRepo),
 		outboxRelay:                     outbox_relay.New(logger, tracerProvider, db, svixClient),
 		outboxGC:                        outbox_relay.NewGC(logger, meterProvider, db),
+		killswitchMaintenance:           killswitches.NewMaintenanceService(db, auditLogger),
 		publishOutbox:                   publish_outbox.New(logger, tracerProvider, meterProvider, db, publishers.Outbox),
 		pluginPublisher:                 activities.NewPluginPublisher(logger, db, pluginPublisher),
 		sessionQuarantineReassert:       activities.NewSessionQuarantineReassert(logger, db, cacheAdapter),
@@ -564,7 +570,17 @@ func (a *Activities) ReconcilePaygOpenRouterChatKey(ctx context.Context, input a
 	return a.reconcilePaygOpenRouterChatKey.Do(ctx, input)
 }
 
-func (a *Activities) VerifyCustomDomain(ctx context.Context, input activities.VerifyCustomDomainArgs) error {
+func (a *Activities) VerifyCustomDomain(ctx context.Context, input activities.VerifyCustomDomainArgs) (activities.VerifyCustomDomainResult, error) {
+	return a.verifyCustomDomain.Do(ctx, input)
+}
+
+// VerifyCustomDomainV2 is the polling loop's activity. The distinct name
+// keeps a rolling deploy from mixing semantics: a worker predating the loop
+// fails an unrecognized activity type with a retryable NotRegistered error,
+// so the task retries until a new worker executes it — it can never answer
+// with the old fail-fast semantics. The loop treats such retry-exhausted
+// errors as another pending tick.
+func (a *Activities) VerifyCustomDomainV2(ctx context.Context, input activities.VerifyCustomDomainArgs) (activities.VerifyCustomDomainResult, error) {
 	return a.verifyCustomDomain.Do(ctx, input)
 }
 
@@ -925,6 +941,26 @@ func (a *Activities) GCPublishOutboxDeadLetters(ctx context.Context, cutoff time
 	n, err := a.publishOutbox.DeleteDeadLetters(ctx, cutoff, batchSize)
 	if err != nil {
 		return 0, fmt.Errorf("gc publish outbox dead letters: %w", err)
+	}
+	return n, nil
+}
+
+// RecordDueKillswitchExpiries and CleanupExpiredKillswitchOperations take only
+// a batch size and return only aggregate counts: killswitch identifiers,
+// notes, and tenant data stay inside the database-backed maintenance
+// transactions and never enter Temporal history.
+func (a *Activities) RecordDueKillswitchExpiries(ctx context.Context, batchSize int32) (killswitches.ExpiryBatchResult, error) {
+	result, err := a.killswitchMaintenance.RecordDueExpiries(ctx, batchSize)
+	if err != nil {
+		return result, fmt.Errorf("record due killswitch expiries: %w", err)
+	}
+	return result, nil
+}
+
+func (a *Activities) CleanupExpiredKillswitchOperations(ctx context.Context, batchSize int32) (int64, error) {
+	n, err := a.killswitchMaintenance.CleanupExpiredOperationsGlobal(ctx, batchSize)
+	if err != nil {
+		return n, fmt.Errorf("cleanup expired killswitch operations: %w", err)
 	}
 	return n, nil
 }

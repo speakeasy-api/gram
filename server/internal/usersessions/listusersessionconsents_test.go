@@ -29,10 +29,12 @@ func TestListUserSessionConsents(t *testing.T) {
 
 	client, err := seedUserSessionClient(t, ctx, ti.conn, uuid.MustParse(issuer.ID), "list-consents-client")
 	require.NoError(t, err)
+	requireOrganizationID(t, ctx, client.OrganizationID)
 
 	for _, principal := range []urn.SessionSubject{urn.NewUserSubject("p1"), urn.NewUserSubject("p2")} {
-		_, err := seedUserSessionConsent(t, ctx, ti.conn, client.ID, principal)
+		consent, err := seedUserSessionConsent(t, ctx, ti.conn, client.ID, principal)
 		require.NoError(t, err)
+		requireOrganizationID(t, ctx, consent.OrganizationID)
 	}
 
 	got, err := ti.service.ListUserSessionConsents(ctx, &gen.ListUserSessionConsentsPayload{

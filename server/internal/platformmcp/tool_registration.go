@@ -9,7 +9,7 @@ import (
 )
 
 type RegisterCatalogMCPToolInput struct {
-	ProjectSlug     string                     `json:"project_slug" jsonschema:"explicit AICP project slug that will own the reviewed MCP"`
+	ProjectSlug     string                     `json:"project_slug" jsonschema:"explicit project slug that will own the reviewed MCP"`
 	ProviderKey     string                     `json:"provider_key" jsonschema:"server-issued catalogue source identity returned by search_mcp_catalog"`
 	CatalogRef      string                     `json:"catalog_ref" jsonschema:"exact catalogue reference returned by search_mcp_catalog"`
 	NonSecretConfig CatalogConfigurationValues `json:"non_secret_config,omitempty" jsonschema:"only declared non-secret configuration values keyed by inspect_mcp_catalog_candidate configuration field key; do not include API keys, tokens, passwords, OAuth codes, client secrets, or secret headers"`
@@ -30,7 +30,7 @@ type RegisterCatalogMCPToolOutput struct {
 }
 
 type RegisterRemoteMCPToolInput struct {
-	ProjectSlug    string `json:"project_slug" jsonschema:"explicit AICP project slug that will own the user-supplied MCP"`
+	ProjectSlug    string `json:"project_slug" jsonschema:"explicit project slug that will own the user-supplied MCP"`
 	RemoteURL      string `json:"remote_url" jsonschema:"HTTPS Streamable HTTP MCP URL; safe endpoint query parameters are supported, but fragments, userinfo, headers, credentials, and credential-like query parameters are not accepted"`
 	DisplayName    string `json:"display_name,omitempty" jsonschema:"optional project-local display name for the MCP; maximum 256 bytes"`
 	IdempotencyKey string `json:"idempotency_key" jsonschema:"caller-generated idempotency key; reuse only to retry the same project and canonical remote URL"`
@@ -46,11 +46,15 @@ type RegisterRemoteMCPToolOutput struct {
 	DashboardSetupURL string `json:"dashboard_setup_url,omitempty"`
 }
 
-func registerCatalogRegistrationTool(reg *Registrar, registrations *RegistrationService) {
+// registerCatalogRegistrationTool registers the reviewed-catalogue workflow in
+// the caller's onboarding projection after the registration itself succeeds.
+// Distribution resolves its target from that projection, so a catalogue
+// registration that skips the bind can never be distributed.
+func registerCatalogRegistrationTool(reg *Registrar, registrations *RegistrationService, onboarding *OnboardingService) {
 	addTool(reg, &mcp.Tool{
 		Name:        "register_catalog_mcp",
-		Title:       "Register Catalog MCP",
-		Description: "Register one reviewed catalog MCP in an explicit AICP project. Registration creates private project configuration only; it does not distribute the MCP or publish a plugin package.",
+		Title:       "Add a Reviewed MCP Server to a Project",
+		Description: "Add one reviewed catalogue MCP server to a named project. This writes private project configuration only: nobody receives the MCP server until it is put into a plugin.",
 	}, ToolMeta{Audiences: bothAudiences, ProjectScope: ProjectScopeExplicit}, func(ctx context.Context, _ *mcp.CallToolRequest, input RegisterCatalogMCPToolInput) (*mcp.CallToolResult, RegisterCatalogMCPToolOutput, error) {
 		principal, err := principalFromToolContext(ctx)
 		if err != nil {
@@ -62,6 +66,17 @@ func registerCatalogRegistrationTool(reg *Registrar, registrations *Registration
 				return budgetResult, RegisterCatalogMCPToolOutput{}, nil
 			}
 			return nil, RegisterCatalogMCPToolOutput{}, err
+		}
+		if onboarding != nil && principal.HasConnection() {
+			// Registration has committed before this projection work begins. A
+			// bookkeeping failure must not tell the caller that the durable
+			// registration failed and encourage a duplicate retry; returning the
+			// receipt lets the user recover through the dashboard if needed.
+			if err := recordRegistrationOnboarding(ctx, onboarding, principal, result.Project.ID, result.Registration); err != nil {
+				// Onboarding is a post-commit projection. Keep the successful receipt
+				// but classify the failed projection with the bounded lifecycle taxonomy.
+				registrations.telemetry.Record(ctx, LifecycleEvent{Operation: "registration", Phase: "complete", Outcome: lifecycleOutcome(err), State: ""})
+			}
 		}
 		nextAction := "start_setup"
 		if isBrowserCatalogProviderKey(result.ProviderKey) {
@@ -104,8 +119,8 @@ func registerCatalogRegistrationTool(reg *Registrar, registrations *Registration
 func registerRemoteRegistrationTool(reg *Registrar, registrations *RegistrationService, onboarding *OnboardingService) {
 	addTool(reg, &mcp.Tool{
 		Name:        "register_remote_mcp",
-		Title:       "Register Remote MCP",
-		Description: "Register one user-supplied Streamable HTTP MCP URL in an explicit AICP project. The URL is revalidated and re-inspected before private registration. Registration does not distribute the MCP or publish a plugin package.",
+		Title:       "Add Your Own MCP Server to a Project",
+		Description: "Add one MCP server of the user's own, by its Streamable HTTP URL, to a named project. Constraints: the URL is revalidated and re-inspected first. This writes private project configuration only: nobody receives the MCP server until it is put into a plugin.",
 	}, ToolMeta{Audiences: bothAudiences, ProjectScope: ProjectScopeExplicit}, func(ctx context.Context, _ *mcp.CallToolRequest, input RegisterRemoteMCPToolInput) (*mcp.CallToolResult, RegisterRemoteMCPToolOutput, error) {
 		principal, err := principalFromToolContext(ctx)
 		if err != nil {
@@ -123,7 +138,7 @@ func registerRemoteRegistrationTool(reg *Registrar, registrations *RegistrationS
 			// bookkeeping failure must not tell the caller that the durable
 			// registration failed and encourage a duplicate retry; returning the
 			// receipt lets the user recover through the dashboard if needed.
-			if err := recordRemoteRegistrationOnboarding(ctx, onboarding, principal, result); err != nil {
+			if err := recordRegistrationOnboarding(ctx, onboarding, principal, result.Project.ID, result.Registration); err != nil {
 				// Onboarding is a post-commit projection. Keep the successful receipt
 				// but classify the failed projection with the bounded lifecycle taxonomy.
 				registrations.telemetry.Record(ctx, LifecycleEvent{Operation: "registration", Phase: "complete", Outcome: lifecycleOutcome(err), State: ""})
@@ -141,16 +156,16 @@ func registerRemoteRegistrationTool(reg *Registrar, registrations *RegistrationS
 	})
 }
 
-func recordRemoteRegistrationOnboarding(ctx context.Context, onboarding *OnboardingService, principal Principal, result RegisterRemoteMCPResult) error {
+func recordRegistrationOnboarding(ctx context.Context, onboarding *OnboardingService, principal Principal, projectID uuid.UUID, registration string) error {
 	if _, err := onboarding.Start(ctx, principal.OrganizationID, principal.UserID); err != nil {
 		return err
 	}
-	registrationID, err := uuid.Parse(result.Registration)
+	registrationID, err := uuid.Parse(registration)
 	if err != nil {
 		return ErrUnavailable
 	}
-	if _, err := onboarding.BindRegistrationForPrincipal(ctx, principal, result.Project.ID, registrationID); err != nil {
+	if _, err := onboarding.BindRegistrationForPrincipal(ctx, principal, projectID, registrationID); err != nil {
 		return err
 	}
-	return onboarding.RecordRegistrationSucceeded(ctx, principal, result.Project.ID, registrationID)
+	return onboarding.RecordRegistrationSucceeded(ctx, principal, projectID, registrationID)
 }

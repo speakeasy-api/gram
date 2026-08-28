@@ -69,11 +69,13 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/functions"
 	"github.com/speakeasy-api/gram/server/internal/hooks"
+	"github.com/speakeasy-api/gram/server/internal/identityapi"
 	"github.com/speakeasy-api/gram/server/internal/instances"
 	"github.com/speakeasy-api/gram/server/internal/integrations"
 	"github.com/speakeasy-api/gram/server/internal/jsonwebkeysets"
 	"github.com/speakeasy-api/gram/server/internal/k8s"
 	"github.com/speakeasy-api/gram/server/internal/keys"
+	"github.com/speakeasy-api/gram/server/internal/killswitches"
 	"github.com/speakeasy-api/gram/server/internal/litellm"
 	"github.com/speakeasy-api/gram/server/internal/litellm/callcache"
 	"github.com/speakeasy-api/gram/server/internal/marketplace"
@@ -166,6 +168,40 @@ import (
 	"github.com/speakeasy-api/gram/tunnel/route"
 )
 
+const (
+	localPlatformMCPMarketplaceToken = "local-platform-mcp-marketplace-000000000000"
+	localPlatformMCPMarketplaceOwner = "local-platform-mcp"
+	localPlatformMCPMarketplaceRepo  = "platform-mcp"
+)
+
+type localMarketplaceResolver struct {
+	projectRepositories marketplace.Resolver
+}
+
+func (r localMarketplaceResolver) Resolve(ctx context.Context, token string) (marketplace.Upstream, error) {
+	if token == localPlatformMCPMarketplaceToken {
+		return marketplace.Upstream{
+			Token:       token,
+			Owner:       localPlatformMCPMarketplaceOwner,
+			Repo:        localPlatformMCPMarketplaceRepo,
+			AccessToken: "",
+		}, nil
+	}
+	upstream, err := r.projectRepositories.Resolve(ctx, token)
+	if err != nil {
+		return marketplace.Upstream{}, fmt.Errorf("resolve project marketplace: %w", err)
+	}
+	return upstream, nil
+}
+
+func localPlatformMCPMarketplaceURL(serverURL string) string {
+	return strings.TrimRight(serverURL, "/") + marketplace.RoutePrefix + localPlatformMCPMarketplaceToken + ".git"
+}
+
+func isLocalPlatformMCPMarketplaceRoute(r *http.Request) bool {
+	return strings.HasPrefix(r.URL.Path, marketplace.RoutePrefix+localPlatformMCPMarketplaceToken+".git/")
+}
+
 // restoreLocalPluginRepositories repairs marketplace rows created before the
 // persistent local publisher existed. Current snapshots survive restarts and
 // are left untouched, preserving their embedded local API keys.
@@ -205,11 +241,10 @@ func restoreLocalPluginRepositories(
 			}
 
 			if _, err := pluginPublisher.PublishProject(ctx, plugins.PublishProjectInput{
-				ProjectID:              candidate.ProjectID,
-				CreatedByUserID:        candidate.CreatedByUserID,
-				CommitMessage:          "Restore local plugin marketplace",
-				ForcePlatformMCPRepair: false,
-				SkipIfUnchanged:        false,
+				ProjectID:       candidate.ProjectID,
+				CreatedByUserID: candidate.CreatedByUserID,
+				CommitMessage:   "Restore local plugin marketplace",
+				SkipIfUnchanged: false,
 			}); err != nil {
 				logger.WarnContext(ctx, "restore local plugin repository",
 					attr.SlogProjectID(candidate.ProjectID.String()),
@@ -258,16 +293,6 @@ func newStartCommand() *cli.Command {
 			Usage:    "The current server environment", // local, dev, prod
 			Required: true,
 			EnvVars:  []string{"GRAM_ENVIRONMENT"},
-		},
-		&cli.StringFlag{
-			Name:    "custom-domain-k8s-namespace",
-			Usage:   "Kubernetes namespace for custom domain ingresses (defaults to gram-<environment>)",
-			EnvVars: []string{"GRAM_CUSTOM_DOMAIN_K8S_NAMESPACE"},
-		},
-		&cli.StringFlag{
-			Name:    "custom-domain-backend-service",
-			Usage:   "Kubernetes service that custom domain ingresses route to (defaults to gram-server)",
-			EnvVars: []string{"GRAM_CUSTOM_DOMAIN_BACKEND_SERVICE"},
 		},
 		&cli.StringFlag{
 			Name:     "ssl-key-file",
@@ -383,6 +408,11 @@ func newStartCommand() *cli.Command {
 			Usage:   "Maximum concurrently tracked anonymous MCP sessions per tunnel (0 uses the built-in default)",
 			EnvVars: []string{"GRAM_PUBLIC_TUNNELS_LIVE_SESSION_CAP"},
 		},
+		&cli.DurationFlag{
+			Name:    "meta-member-call-timeout",
+			Usage:   "Deadline for one gateway member upstream call, handshake included (0 uses the built-in default)",
+			EnvVars: []string{"GRAM_META_MEMBER_CALL_TIMEOUT"},
+		},
 		&cli.StringFlag{
 			Name:    "openrouter-provisioning-key",
 			Usage:   "Provisioning key for OpenRouter to create new API keys for orgs - https://openrouter.ai/settings/provisioning-keys",
@@ -425,7 +455,6 @@ func newStartCommand() *cli.Command {
 			EnvVars: []string{"GRAM_SINGLE_PROCESS"},
 			Value:   false,
 		},
-
 		&cli.StringFlag{
 			Name:     "pylon-verification-secret",
 			Usage:    "The identity verification secret for pylon",
@@ -532,11 +561,6 @@ func newStartCommand() *cli.Command {
 			EnvVars:  []string{"GRAM_DISALLOWED_CIDR_BLOCKS"},
 			Required: false,
 		},
-		&cli.StringFlag{
-			Name:    "custom-domain-cname",
-			Usage:   "The expected CNAME target for custom domain verification (e.g., cname.getgram.ai.)",
-			EnvVars: []string{"GRAM_CUSTOM_DOMAIN_CNAME"},
-		},
 		&cli.PathFlag{
 			Name:     "config-file",
 			Usage:    "Path to a config file to load. Supported formats are JSON, TOML and YAML.",
@@ -574,6 +598,7 @@ func newStartCommand() *cli.Command {
 		},
 	}
 
+	flags = append(flags, customDomainFlags()...)
 	flags = append(flags, redisFlags()...)
 	flags = append(flags, clickHouseFlags()...)
 	flags = append(flags, functionsFlags()...)
@@ -601,6 +626,11 @@ func newStartCommand() *cli.Command {
 				attr.SlogServiceEnv(serviceEnv),
 			)
 			slog.SetDefault(logger)
+
+			customDomainARecords, err := customDomainARecordsFromCLI(c)
+			if err != nil {
+				return err
+			}
 
 			platformFixture, err := platformMCPLocalFixtureConfigFromCLI(serviceEnv, c.String("server-url"))
 			if err != nil {
@@ -835,6 +865,7 @@ func newStartCommand() *cli.Command {
 			logsEnabled := newFeatureChecker(logger, productFeatures, productfeatures.FeatureLogs)
 			toolIOLogsEnabled := newFeatureChecker(logger, productFeatures, productfeatures.FeatureToolIOLogs)
 			sessionCaptureEnabled := newFeatureChecker(logger, productFeatures, productfeatures.FeatureSessionCapture)
+			sessionPortabilityEnabled := newFeatureChecker(logger, productFeatures, productfeatures.FeatureSessionPortability)
 			challengeLoggingEnabled := authz.ChallengeLoggingEnabled(newFeatureChecker(logger, productFeatures, productfeatures.FeatureAuthzChallengeLogging))
 			roleClient, err := newAccessRoleProvider(ctx, logger, guardianPolicy, c)
 			if err != nil {
@@ -1097,6 +1128,9 @@ func newStartCommand() *cli.Command {
 					RequestRate:        ratelimit.Rate{Tokens: 0, Interval: 0, Burst: 0},
 					MaxRequestLifetime: 0,
 				},
+				mcp.MetaRuntimeConfig{
+					MemberCallTimeout: c.Duration("meta-member-call-timeout"),
+				},
 			)
 
 			chatClient := chat.NewAgenticChatClient(
@@ -1161,12 +1195,12 @@ func newStartCommand() *cli.Command {
 			}
 
 			// Marketplace proxy routes (URL-based marketplace.json + git Smart
-			// HTTP for plugin source clones). Mounted via the outermost
-			// mux.Use middleware so /m/ and /p/ paths short-circuit the Goa
-			// mux. Public base URL is server-url by definition - the proxy
-			// lives on this server, so the plugin sources we embed in the
-			// rendered manifest must point back at it. nil when no App is
-			// configured.
+			// HTTP for plugin source clones). Mounted via the outermost mux.Use
+			// middleware so /marketplace/ paths short-circuit the Goa mux. Public
+			// base URL is server-url by definition: the proxy lives on this server,
+			// so rendered plugin sources point back at it. The GitHub proxy is nil
+			// when no App is configured; local startup still serves the dedicated
+			// Platform MCP repository and, without an App, project repositories.
 			//
 			// We wrap the proxy with the recovery middleware before mounting:
 			// the dispatch happens inside the outermost mux.Use, ahead of the
@@ -1177,6 +1211,8 @@ func newStartCommand() *cli.Command {
 				marketplaceServer      *marketplace.Server
 				localMarketplaceServer *marketplace.LocalServer
 				marketplaceRoutes      http.Handler
+				localMarketplaceRoutes http.Handler
+				localPlatformMCPFiles  map[string][]byte
 			)
 			if ghClient != nil {
 				marketplaceServer = marketplace.NewServer(
@@ -1190,6 +1226,27 @@ func newStartCommand() *cli.Command {
 				)
 			} else if platformFixture == nil {
 				logger.InfoContext(ctx, "marketplace proxy: disabled (no github app configured)")
+			}
+			if c.String("environment") == "local" {
+				localPlatformMCPFiles, err = plugins.LocalPlatformMCPFiles(
+					c.String("server-url"),
+					localPlatformMCPMarketplaceURL(c.String("server-url")),
+					fmt.Sprintf("%d", time.Now().Unix()),
+				)
+				if err != nil {
+					return fmt.Errorf("render local Platform MCP marketplace: %w", err)
+				}
+				localMarketplaceServer = marketplace.NewLocalServer(
+					localMarketplaceResolver{projectRepositories: marketplace.NewLocalDBResolver(db)},
+					func(_ context.Context, owner, repo string) (map[string][]byte, error) {
+						if owner != localPlatformMCPMarketplaceOwner || repo != localPlatformMCPMarketplaceRepo {
+							return nil, marketplace.ErrNotFound
+						}
+						return localPlatformMCPFiles, nil
+					},
+					logger,
+				)
+				localMarketplaceRoutes = middleware.NewRecovery(logger)(localMarketplaceServer.Routes())
 			}
 
 			// Hooks binary artifacts (checksum-verifying proxy in front of the
@@ -1208,12 +1265,16 @@ func newStartCommand() *cli.Command {
 						w.WriteHeader(http.StatusOK)
 						return
 					}
+					if localMarketplaceServer != nil && isLocalPlatformMCPMarketplaceRoute(r) {
+						localMarketplaceRoutes.ServeHTTP(w, r)
+						return
+					}
 					if marketplaceServer != nil && marketplaceServer.IsMarketplaceRoute(r) {
 						marketplaceRoutes.ServeHTTP(w, r)
 						return
 					}
 					if localMarketplaceServer != nil && localMarketplaceServer.IsMarketplaceRoute(r) {
-						marketplaceRoutes.ServeHTTP(w, r)
+						localMarketplaceRoutes.ServeHTTP(w, r)
 						return
 					}
 					if hooksArtifactServer.IsHooksReleaseRoute(r) {
@@ -1332,6 +1393,7 @@ func newStartCommand() *cli.Command {
 				tracerProvider,
 				meterProvider,
 				telemLogger,
+				publishers.OTELLogs,
 				sessionManager,
 				hooksCache,
 				chatClient,
@@ -1361,6 +1423,7 @@ func newStartCommand() *cli.Command {
 			modelkeys.Attach(mux, modelkeys.NewService(logger, tracerProvider, db, sessionManager, authzEngine, encryptionClient, openRouter, productFeatures, auditLogger))
 			otelforwarding.Attach(mux, otelforwarding.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger, otelForwardClient))
 			auditapi.Attach(mux, auditapi.NewService(logger, tracerProvider, db, sessionManager, authzEngine))
+			identityapi.Attach(mux, identityapi.NewService(logger, tracerProvider, db, sessionManager, authzEngine))
 			auth.Attach(mux, auth.NewService(
 				logger,
 				tracerProvider,
@@ -1406,8 +1469,11 @@ func newStartCommand() *cli.Command {
 					InstallationID: 1,
 				}
 				localMarketplaceServer = marketplace.NewLocalServer(
-					marketplace.NewLocalDBResolver(db),
+					localMarketplaceResolver{projectRepositories: marketplace.NewLocalDBResolver(db)},
 					func(ctx context.Context, owner, repo string) (map[string][]byte, error) {
+						if owner == localPlatformMCPMarketplaceOwner && repo == localPlatformMCPMarketplaceRepo {
+							return localPlatformMCPFiles, nil
+						}
 						files, err := localPublisher.MainBranchFiles(ctx, owner, repo)
 						if errors.Is(err, ghclient.ErrRepoNotFound) {
 							return nil, marketplace.ErrNotFound
@@ -1419,7 +1485,7 @@ func newStartCommand() *cli.Command {
 					},
 					logger,
 				)
-				marketplaceRoutes = middleware.NewRecovery(logger)(localMarketplaceServer.Routes())
+				localMarketplaceRoutes = middleware.NewRecovery(logger)(localMarketplaceServer.Routes())
 				logger.InfoContext(ctx, "GitHub publishing for plugins: using local fixture publisher")
 				logger.InfoContext(ctx, "marketplace proxy: using local fixture repository")
 			}
@@ -1428,14 +1494,9 @@ func newStartCommand() *cli.Command {
 			packages.Attach(mux, packages.NewService(logger, tracerProvider, db, sessionManager, authzEngine))
 
 			var pluginPublisher *plugins.Service
-			platformAdmission := platformmcp.NewAdmissionChecker(
-				productFeatures,
-				featureFlags,
-				platformmcp.NewPostgresNewModelEligibility(db),
-			)
 			if pluginsGitHub != nil {
 				logger.InfoContext(ctx, "GitHub publishing for plugins: enabled")
-				pluginPublisher = plugins.NewPublisher(logger, db, auditLogger, pluginsGitHub, c.String("environment"), c.String("server-url"), featureFlags, platformAdmission)
+				pluginPublisher = plugins.NewPublisher(logger, db, auditLogger, pluginsGitHub, c.String("environment"), c.String("server-url"), featureFlags)
 				if localPublisher != nil {
 					if err := restoreLocalPluginRepositories(ctx, logger, db, localPublisher, pluginPublisher); err != nil {
 						return fmt.Errorf("restore local plugin repositories: %w", err)
@@ -1444,7 +1505,7 @@ func newStartCommand() *cli.Command {
 			} else {
 				logger.InfoContext(ctx, "GitHub publishing for plugins: disabled")
 			}
-			pluginsSvc := plugins.NewService(logger, tracerProvider, db, sessionManager, cache.NewRedisCacheAdapter(redisClient), authzEngine, auditLogger, pluginsGitHub, c.String("environment"), c.String("server-url"), featureFlags, platformAdmission)
+			pluginsSvc := plugins.NewService(logger, tracerProvider, db, sessionManager, cache.NewRedisCacheAdapter(redisClient), authzEngine, auditLogger, pluginsGitHub, c.String("environment"), c.String("server-url"), featureFlags)
 			plugins.Attach(mux, pluginsSvc)
 			productfeatures.Attach(mux, productfeatures.NewService(logger, tracerProvider, db, sessionManager, redisClient, authzEngine, auditLogger))
 			skillefficacy.Attach(mux, skillefficacy.NewService(logger, tracerProvider, db, sessionManager, authzEngine, productFeatures, auditLogger, telemetryrepo.New(chDB)))
@@ -1454,6 +1515,10 @@ func newStartCommand() *cli.Command {
 			chatanalysis.Attach(mux, chatanalysis.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger,
 				&background.TemporalChatAnalysisSignaler{TemporalEnv: temporalEnv, Logger: logger}))
 			openrouterkeys.Attach(mux, openrouterkeys.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger, openRouter, encryptionClient))
+			// DNO-979 owns production definitions and authoritative validators. Keep
+			// this break-glass transport mounted but explicitly unavailable until
+			// that safe lifecycle composition exists.
+			killswitches.AttachPlatformService(mux, killswitches.NewPlatformService(logger, tracerProvider, db, sessionManager, authzEngine, nil))
 			skillsService := skills.NewService(logger, tracerProvider, db, sessionManager, authzEngine, productFeatures, auditLogger,
 				&background.TemporalSkillSuggestionSignaler{TemporalEnv: temporalEnv, Logger: logger, StartDelay: 0}, siteURL)
 			skills.Attach(mux, skillsService)
@@ -1481,12 +1546,13 @@ func newStartCommand() *cli.Command {
 			cliauth.Attach(mux, cliauth.NewService(logger, tracerProvider, db, sessionManager, authzEngine, redisClient, c.String("environment")))
 			chatsessionssvc.Attach(mux, chatsessionssvc.NewService(logger, tracerProvider, db, sessionManager, chatSessionsManager, authzEngine))
 			environments.Attach(mux, environments.NewService(logger, tracerProvider, db, sessionManager, encryptionClient, authzEngine, auditLogger))
-			mcpServersService := mcpservers.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger, temporalEnv, toolDispositionCache, pluginsGitHub != nil, assetsService)
+			upstreamRevoker := remotesessions.NewUpstreamRevoker(logger, tracerProvider, meterProvider, db, encryptionClient, guardianPolicy)
+			mcpServersService := mcpservers.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger, temporalEnv, toolDispositionCache, pluginsGitHub != nil, assetsService, upstreamRevoker)
 			mcpservers.Attach(mux, mcpServersService)
 			mcpendpoints.Attach(mux, mcpendpoints.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger, temporalEnv, pluginsGitHub != nil))
 			metamcp.Attach(mux, metamcp.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger, temporalEnv))
 			remoteSessionsCache := cache.NewRedisCacheAdapter(redisClient)
-			remoteSessionsService := remotesessions.NewService(logger, tracerProvider, meterProvider, db, sessionManager, authzEngine, encryptionClient, env, guardianPolicy, auditLogger, serverURL, remotesessions.NewRefreshService(logger, db, encryptionClient, guardianPolicy, remoteSessionsCache))
+			remoteSessionsService := remotesessions.NewService(logger, tracerProvider, meterProvider, db, sessionManager, authzEngine, encryptionClient, env, guardianPolicy, auditLogger, serverURL, remotesessions.NewRefreshService(logger, meterProvider, db, encryptionClient, guardianPolicy, remoteSessionsCache))
 			usersessions.Attach(mux, usersessions.NewService(logger, tracerProvider, meterProvider, db, sessionManager, chatSessionsManager, authzEngine, auditLogger, guardianPolicy, encryptionClient, usersessions.NewSigner(c.String(usersessions.JWTSigningKeyFlag)), serverURL.String(), ratelimit.NewRedisStore(redisClient)))
 			tokenexchange.Attach(mux, tokenexchange.NewService(logger, tracerProvider, db, sessionManager, authzEngine, c.String("environment")))
 			remotesessions.Attach(mux, remoteSessionsService)
@@ -1529,35 +1595,45 @@ func newStartCommand() *cli.Command {
 			mcpCatalog := externalmcp.NewCatalogService(db, mcpRegistryClient, nil)
 			externalmcp.Attach(mux, externalmcp.NewService(logger, tracerProvider, db, sessionManager, mcpRegistryClient, mcpCatalog, authzEngine, serverURL))
 			collections.Attach(mux, collections.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger, serverURL))
+			riskSignaler := background.NewThrottledSignaler(
+				&background.TemporalRiskAnalysisSignaler{TemporalEnv: temporalEnv, Logger: logger},
+				30*time.Second,
+				logger,
+			)
 			platformMCPAssistant, err := configurePlatformMCP(ctx, platformMCPConfig{
-				Logger:                 logger,
-				MeterProvider:          meterProvider,
-				TracerProvider:         tracerProvider,
-				Mux:                    mux,
-				DB:                     db,
-				Redis:                  redisClient,
-				ServerURL:              serverURL,
-				DashboardURL:           siteURL,
-				Environment:            c.String("environment"),
-				JWTSigningKey:          c.String(usersessions.JWTSigningKeyFlag),
-				ProductFeatures:        productFeatures,
-				FeatureFlags:           featureFlags,
-				Authz:                  authzEngine,
-				Encryption:             encryptionClient,
-				Identity:               identityResolver,
-				Sessions:               sessionManager,
-				Registry:               mcpRegistryClient,
-				Catalog:                mcpCatalog,
-				GuardianPolicy:         guardianPolicy,
-				RemoteChallengeManager: remoteChallengeManager,
-				AuditLogger:            auditLogger,
-				PluginPublisher:        pluginPublisher,
-				TemporalEnv:            temporalEnv,
-				Skills:                 skillsService,
-				Telemetry:              telemetryrepo.New(chDB),
-				TelemetryDrilldown:     telemetryrepo.New(chDB),
-				SessionCapture:         platformmcp.FeatureChecker(sessionCaptureEnabled),
-				LocalFixture:           platformFixture,
+				Logger:                  logger,
+				MeterProvider:           meterProvider,
+				TracerProvider:          tracerProvider,
+				Mux:                     mux,
+				DB:                      db,
+				Redis:                   redisClient,
+				ServerURL:               serverURL,
+				DashboardURL:            siteURL,
+				Environment:             c.String("environment"),
+				JWTSigningKey:           c.String(usersessions.JWTSigningKeyFlag),
+				ProductFeatures:         productFeatures,
+				FeatureFlags:            featureFlags,
+				Authz:                   authzEngine,
+				Encryption:              encryptionClient,
+				Identity:                identityResolver,
+				Sessions:                sessionManager,
+				Registry:                mcpRegistryClient,
+				Catalog:                 mcpCatalog,
+				GuardianPolicy:          guardianPolicy,
+				RemoteChallengeManager:  remoteChallengeManager,
+				AuditLogger:             auditLogger,
+				PluginPublisher:         pluginPublisher,
+				TemporalEnv:             temporalEnv,
+				Skills:                  skillsService,
+				RiskPolicyApprovals:     mcpApprovalService,
+				RiskPolicySignaler:      riskSignaler,
+				RiskPolicyCache:         shadowMCPClient,
+				RiskExclusionReconciler: &background.TemporalRiskExclusionReconciler{TemporalEnv: temporalEnv, Logger: logger},
+				Telemetry:               telemetryrepo.New(chDB),
+				TelemetryDrilldown:      telemetryrepo.New(chDB),
+				SessionCapture:          platformmcp.FeatureChecker(sessionCaptureEnabled),
+				SessionPortability:      platformmcp.FeatureChecker(sessionPortabilityEnabled),
+				LocalFixture:            platformFixture,
 			})
 			if err != nil {
 				return err
@@ -1565,17 +1641,12 @@ func newStartCommand() *cli.Command {
 			mcp.Attach(mux, mcpService, mcpMetadataService)
 			chat.Attach(mux, chatService)
 			variations.Attach(mux, variations.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger))
-			customdomains.Attach(mux, customdomains.NewService(logger, tracerProvider, db, sessionManager, &background.CustomDomainRegistrationClient{TemporalEnv: temporalEnv}, authzEngine, auditLogger))
+			customdomains.Attach(mux, customdomains.NewService(logger, tracerProvider, db, sessionManager, &background.CustomDomainRegistrationClient{TemporalEnv: temporalEnv}, authzEngine, auditLogger, c.String("custom-domain-cname"), customDomainARecords))
 			usage.Attach(mux, usage.NewService(logger, tracerProvider, db, sessionManager, billingRepo, serverURL, siteURL, posthogClient, openRouter, openRouterKeyRefresher, stripeClient, authzEngine, telemetryrepo.New(chDB), auditLogger, featureFlags, productFeatures, trialEmailNotifier))
 			tm.Attach(mux, telemSvc)
 			functions.Attach(mux, functions.NewService(logger, tracerProvider, db, encryptionClient, tigrisStore))
-			otelsvc.Attach(mux, otelsvc.NewService(logger, tracerProvider, db, chDB, sessionManager, authzEngine, otelsvc.FeatureChecker(logsEnabled), publishers.OTELSpans, publishers.OTELLogs))
+			otelsvc.Attach(mux, otelsvc.NewService(logger, tracerProvider, db, chDB, sessionManager, authzEngine, otelsvc.FeatureChecker(logsEnabled), publishers.OTELSpans, publishers.OTELLogs, publishers.OTELMetrics))
 
-			riskSignaler := background.NewThrottledSignaler(
-				&background.TemporalRiskAnalysisSignaler{TemporalEnv: temporalEnv, Logger: logger},
-				30*time.Second,
-				logger,
-			)
 			// riskSignaler.Shutdown is intentionally NOT registered as a shutdownFunc.
 			// runShutdown runs every func concurrently, which races temporalClient.Close()
 			// against the signaler's trailing-edge flush over the same gRPC connection
@@ -1617,7 +1688,6 @@ func newStartCommand() *cli.Command {
 					return urls, nil
 				},
 				riskchrepo.New(chDB),
-				publishers.RiskFindings,
 				assetStorage,
 			)
 			chatWriter.AddObserver(riskService)
@@ -1654,7 +1724,7 @@ func newStartCommand() *cli.Command {
 
 			managedInsightsTools = append(managedInsightsTools, platformtoolsruntime.ManagedAssistantChatsTools(chatService)...)
 			managedInsightsTools = append(managedInsightsTools, platformtoolsruntime.ManagedAssistantUsersTools(organizationsService)...)
-			managedInsightsTools = append(managedInsightsTools, platformtoolsruntime.ManagedAssistantRiskTools(riskService)...)
+			managedInsightsTools = append(managedInsightsTools, platformtoolsruntime.ManagedAssistantRiskTools(riskService, c.String(usersessions.JWTSigningKeyFlag))...)
 			managedInsightsTools = append(managedInsightsTools, platformtoolsruntime.ManagedAssistantDeploymentsTools(deploymentsService)...)
 			managedInsightsTools = append(managedInsightsTools, platformtoolsruntime.ManagedAssistantSkillsTools(skillsService, telemetryrepo.New(chDB))...)
 			managedInsightsTools = append(managedInsightsTools, platformtoolsruntime.ManagedAssistantPluginsTools(pluginsSvc)...)
@@ -1729,6 +1799,7 @@ func newStartCommand() *cli.Command {
 						OpenRouterSpend:           openRouter,
 						K8sClient:                 k8sClient,
 						ExpectedTargetCNAME:       c.String("custom-domain-cname"),
+						ExpectedARecords:          customDomainARecords,
 						GitHubEvidenceToken:       c.String("github-evidence-token"),
 						SiteURL:                   siteURL,
 						BillingTracker:            billingTracker,

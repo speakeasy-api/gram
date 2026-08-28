@@ -356,6 +356,37 @@ func TestIngest_SpendGateDeniesCursorPrompt(t *testing.T) {
 	assert.Contains(t, *result.Message, "Intern hard limit")
 }
 
+func TestIngest_SpendGateDeniesCopilotToolCall(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestHooksService(t)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.Email)
+	seedSpendBlock(t, ctx, ti, authCtx.ActiveOrganizationID, *authCtx.Email)
+
+	payload := canonicalIngestPayload("copilot", "tool.requested", "spend-gate-ingest-copilot")
+	rawEventName := "preToolUse"
+	payload.Source.RawEventName = &rawEventName
+	toolName := "bash"
+	toolCallID := "call-spend-copilot-1"
+	payload.Data = &gen.HookIngestData{
+		ToolCall: &gen.HookToolCallData{
+			ID:    &toolCallID,
+			Name:  &toolName,
+			Input: map[string]any{"command": "ls"},
+		},
+	}
+
+	result, err := ti.service.Ingest(ctx, payload)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	assert.Equal(t, "deny", result.Decision)
+	require.NotNil(t, result.Message)
+	assert.Contains(t, *result.Message, "Intern hard limit")
+	assert.Contains(t, *result.Message, "/blocks/")
+}
+
 func TestIngest_SpendGateIgnoresOtherAdapters(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestHooksService(t)
@@ -375,7 +406,7 @@ func TestIngest_SpendGateIgnoresOtherAdapters(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, result)
 	assert.Equal(t, "allow", result.Decision,
-		"spend enforcement covers claude/codex/cursor; opencode passes through pending a product decision")
+		"spend enforcement covers claude/codex/cursor/copilot/openclaw; opencode passes through pending a product decision")
 }
 
 func TestCodex_UserPromptSubmit_SpendGateBlocksBeforeRiskScan(t *testing.T) {
@@ -768,4 +799,56 @@ func TestCursor_SpendGateRedeliveryDoesNotRemintBlockPage(t *testing.T) {
 	require.NotNil(t, second.UserMessage)
 	assert.NotContains(t, *second.UserMessage, "/blocks/",
 		"idempotent redelivery must not mint another block page")
+}
+
+func TestIngest_SpendGateDeniesOpenClawToolCallWithBlockURL(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestHooksService(t)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.Email)
+	seedSpendBlock(t, ctx, ti, authCtx.ActiveOrganizationID, *authCtx.Email)
+
+	payload := canonicalIngestPayload("openclaw", "tool.requested", "spend-gate-ingest-openclaw")
+	toolName := "exec"
+	toolCallID := "call-spend-openclaw-1"
+	payload.Data = &gen.HookIngestData{
+		ToolCall: &gen.HookToolCallData{
+			ID:    &toolCallID,
+			Name:  &toolName,
+			Input: map[string]any{"command": "ls"},
+		},
+	}
+
+	result, err := ti.service.Ingest(ctx, payload)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	assert.Equal(t, "deny", result.Decision)
+	require.NotNil(t, result.Message)
+	assert.Contains(t, *result.Message, "Intern hard limit")
+	assert.Contains(t, *result.Message, "/blocks/")
+}
+
+func TestIngest_SpendGateDeniesOpenClawPrompt(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestHooksService(t)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.Email)
+	seedSpendBlock(t, ctx, ti, authCtx.ActiveOrganizationID, *authCtx.Email)
+
+	payload := canonicalIngestPayload("OpenClaw", "prompt.submitted", "spend-gate-openclaw-prompt")
+	text := "hello"
+	payload.Data = &gen.HookIngestData{
+		Prompt: &gen.HookPromptData{Text: &text},
+	}
+
+	result, err := ti.service.Ingest(ctx, payload)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	assert.Equal(t, "deny", result.Decision, "case variant must not dodge the gate")
+	require.NotNil(t, result.Message)
+	assert.Contains(t, *result.Message, "Intern hard limit")
 }

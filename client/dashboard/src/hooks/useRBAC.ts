@@ -97,11 +97,13 @@ export function hasScopeInGrants(
   grants: EffectiveGrant[],
   scope: Scope,
   resourceId?: string,
+  projectId?: string,
 ): boolean {
   const allowCheck: Record<string, string> = {
     resourceKind: resourceKindForScope(scope),
   };
   if (resourceId) allowCheck.resourceId = resourceId;
+  if (projectId) allowCheck.projectId = projectId;
   // Unscoped allows are existential, but strict exclusions must distinguish
   // unrestricted wildcards from exclusions for one concrete resource.
   const exclusionCheck = resourceId
@@ -138,6 +140,14 @@ export function hasScopeInGrants(
   }
 
   return hasAllow;
+}
+
+export function hasScopeInProject(
+  grants: EffectiveGrant[],
+  scope: Scope,
+  projectId: string,
+): boolean {
+  return hasScopeInGrants(grants, scope, "*", projectId);
 }
 
 /**
@@ -208,17 +218,35 @@ function useRBACImpl() {
     [hasScope],
   );
 
+  const hasAnyScopeInProject = useCallback(
+    (scopes: Scope[], projectId: string): boolean => {
+      return scopes.some((scope) =>
+        hasScopeInProject(grants ?? [], scope, projectId),
+      );
+    },
+    [grants],
+  );
+
   return useMemo(
     () => ({
       hasScope,
       hasAllScopes,
       hasAnyScope,
+      hasAnyScopeInProject,
       isLoading,
       grants: grants ?? [],
       /** Non-null when the grants query failed (e.g. missing org membership). */
       error: error ?? null,
     }),
-    [hasScope, hasAllScopes, hasAnyScope, isLoading, grants, error],
+    [
+      hasScope,
+      hasAllScopes,
+      hasAnyScope,
+      hasAnyScopeInProject,
+      isLoading,
+      grants,
+      error,
+    ],
   );
 }
 

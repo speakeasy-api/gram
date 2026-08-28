@@ -48,7 +48,6 @@ import {
   EXCLUDED_TAG_KEY,
   MCPToolFilterScopesPanel,
 } from "@/pages/mcp/MCPToolFilterScopesPanel";
-import { ONBOARD_EXTERNAL_MCP_TO_USER_SESSIONS_FLAG } from "@/lib/externalMcpUserSessions";
 import {
   getOAuthParadigm,
   isUserSessionIssuerWired,
@@ -601,16 +600,12 @@ export function MCPStatusDropdown({
     const goingPublic = status === "public";
     const needsEnableDialog =
       status === "disabled" || currentStatus === "disabled";
-    const needsPublicWarning = goingPublic && systemVarNames.length > 0;
+    const needsPublicWarning = goingPublic;
     // Guard on mcpIsPublic, not currentStatus: a disabled server can still
     // carry mcp_is_public=true, and Private would flip it (clearing OAuth).
     const needsConvertBlock =
       status === "private" &&
       mustConvertOAuthBeforePrivate({
-        flagEnabled:
-          telemetry.isFeatureEnabled(
-            ONBOARD_EXTERNAL_MCP_TO_USER_SESSIONS_FLAG,
-          ) ?? false,
         mcpIsPublic: toolset.mcpIsPublic ?? false,
         userSessionIssuerWired: isUserSessionIssuerWired(toolset),
         oauthParadigm: getOAuthParadigm(toolset),
@@ -744,6 +739,7 @@ export function MCPStatusDropdown({
         onClose={() => setPublicWarningPending(null)}
         onConfirm={handlePublicWarningConfirm}
         isLoading={updateToolsetMutation.isPending}
+        toolsetSlug={toolset.slug}
         environmentSlug={attachedEnvironment?.slug ?? ""}
         variableNames={systemVarNames}
       />

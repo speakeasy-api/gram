@@ -245,6 +245,7 @@ const ElementsProviderInner = ({ children, config }: ElementsProviderProps) => {
     data: mcpTools,
     mcpHeaders,
     isLoading: mcpQueryLoading,
+    error: mcpToolsQueryError,
   } = useMCPTools({
     auth,
     mcp: config.mcp,
@@ -258,6 +259,7 @@ const ElementsProviderInner = ({ children, config }: ElementsProviderProps) => {
   // tool-list consumer would briefly see an empty, settled state before tools
   // arrive.
   const mcpToolsLoading = auth.isLoading || mcpQueryLoading;
+  const mcpToolsError = mcpToolsQueryError ?? null;
 
   // Store approval helpers in ref so they can be used in async contexts
   const approvalHelpersRef = useRef<ApprovalHelpers>({
@@ -619,8 +621,18 @@ const ElementsProviderInner = ({ children, config }: ElementsProviderProps) => {
       plugins,
       mcpTools,
       mcpToolsLoading,
+      mcpToolsError,
     }),
-    [config, model, isExpanded, isOpen, plugins, mcpTools, mcpToolsLoading],
+    [
+      config,
+      model,
+      isExpanded,
+      isOpen,
+      plugins,
+      mcpTools,
+      mcpToolsLoading,
+      mcpToolsError,
+    ],
   );
 
   const frontendTools = config.tools?.frontendTools ?? {};

@@ -8,6 +8,10 @@ import { safeParse } from "../../lib/schemas.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 import {
+  IssuerFieldMismatch,
+  IssuerFieldMismatch$inboundSchema,
+} from "./issuerfieldmismatch.js";
+import {
   RemoteSessionIssuer,
   RemoteSessionIssuer$inboundSchema,
 } from "./remotesessionissuer.js";
@@ -21,9 +25,9 @@ export type IssuerConvergenceCandidate = {
    */
   clientCount: number;
   /**
-   * Names of the authorization-server metadata fields (issuer, token_endpoint, authorization_endpoint) that differ from the target. Non-empty blocks the migration.
+   * The authorization-server metadata fields (issuer, token_endpoint, authorization_endpoint) that differ from the target, with both sides' values. Non-empty blocks the migration.
    */
-  endpointMismatches: Array<string>;
+  endpointMismatches: Array<IssuerFieldMismatch>;
   /**
    * A remote_session_issuer record — upstream Authorization Server identity that Gram speaks OAuth to.
    */
@@ -37,9 +41,9 @@ export type IssuerConvergenceCandidate = {
    */
   organizationName: string;
   /**
-   * Non-blocking divergences (oidc, passthrough, scopes_supported). The target issuer's values become authoritative for the migrated clients.
+   * Non-blocking divergences (oidc, passthrough, scopes_supported), with both sides' values. The target issuer's values become authoritative for the migrated clients.
    */
-  warnings: Array<string>;
+  warnings: Array<IssuerFieldMismatch>;
 };
 
 /** @internal */
@@ -49,11 +53,11 @@ export const IssuerConvergenceCandidate$inboundSchema: z.ZodMiniType<
 > = z.pipe(
   z.object({
     client_count: z.int(),
-    endpoint_mismatches: z.array(z.string()),
+    endpoint_mismatches: z.array(IssuerFieldMismatch$inboundSchema),
     issuer: RemoteSessionIssuer$inboundSchema,
     organization_id: z.string(),
     organization_name: z.string(),
-    warnings: z.array(z.string()),
+    warnings: z.array(IssuerFieldMismatch$inboundSchema),
   }),
   z.transform((v) => {
     return remap$(v, {

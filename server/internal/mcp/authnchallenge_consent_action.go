@@ -22,6 +22,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions/remotesessionmetrics"
 )
 
 // HandleConsentAction serves `POST /mcp/{mcpSlug}/connect/remote-session`.
@@ -123,6 +124,28 @@ func (s *Service) ServeConsentAction(w http.ResponseWriter, r *http.Request, end
 				autoRefresh = &v
 			}
 		}
+		// Not endpoint.UpstreamResource: under multi-binding that may belong
+		// to a different client's upstream.
+		var clientResource string
+		var rerr error
+		claimedByMember := false
+		if endpoint.MetaMcpServerID.Valid {
+			// Member visibility is judged against the consent subject, as the runtime
+			// request the minted session will make will be.
+			memberCtx, cerr := s.contextForSessionSubject(ctx, endpoint, subject, "consent:"+challengeState.ID, challengeState.ClientID)
+			if cerr != nil {
+				return oops.E(oops.CodeUnexpected, cerr, "stamp consent subject context").LogError(ctx, logger)
+			}
+			clientResource, claimedByMember, rerr = s.resolveMetaMemberResource(memberCtx, logger, endpoint, client.RemoteSessionIssuerID)
+		}
+		// Gate on the claim, not an empty resource: an ambiguous meta MCP has
+		// decided, and falling back would qualify the credential anyway.
+		if rerr == nil && !claimedByMember {
+			clientResource, rerr = s.remoteChallengeMgr.FallbackResourceForClient(ctx, client.ID)
+		}
+		if rerr != nil {
+			return oops.E(oops.CodeUnexpected, rerr, "derive client upstream resource").LogError(ctx, logger)
+		}
 		challengeURL, berr := s.remoteChallengeMgr.BuildAuthorizationUrl(ctx, remotesessions.ParentChallenge{
 			ID:                  challengeState.ID,
 			ProjectID:           endpoint.ProjectID,
@@ -132,7 +155,7 @@ func (s *Service) ServeConsentAction(w http.ResponseWriter, r *http.Request, end
 			McpSlug:             endpoint.Slug,
 			RouteBase:           endpoint.RouteBase,
 			FinalRedirectURI:    "",
-			Resource:            endpoint.UpstreamResource,
+			Resource:            clientResource,
 			AutoRefresh:         autoRefresh,
 		}, *client)
 		if berr != nil {
@@ -146,7 +169,7 @@ func (s *Service) ServeConsentAction(w http.ResponseWriter, r *http.Request, end
 		if cerr != nil {
 			return cerr
 		}
-		if _, err := s.remoteChallengeMgr.DisconnectRemoteSession(ctx, subject, client.ID); err != nil {
+		if _, err := s.remoteChallengeMgr.DisconnectRemoteSession(ctx, subject, endpoint.ProjectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID, client.ID); err != nil {
 			return oops.E(oops.CodeUnexpected, err, "disconnect remote session").LogError(ctx, logger)
 		}
 		http.Redirect(w, r, backURL, http.StatusSeeOther)
@@ -160,22 +183,23 @@ func (s *Service) ServeConsentAction(w http.ResponseWriter, r *http.Request, end
 		result, refreshErr := s.remoteChallengeMgr.RefreshRemoteSession(
 			ctx,
 			subject,
+			endpoint.ProjectID,
+			endpoint.OrganizationID,
+			endpoint.UserSessionIssuerID,
 			client.ID,
-			endpoint.UpstreamResource,
 		)
 		if refreshErr != nil {
 			switch {
 			case errors.Is(refreshErr, remotesessions.ErrRemoteSessionNotRefreshable):
 				return oops.E(oops.CodeBadRequest, refreshErr, "Reconnect this service before refreshing it.").LogWarn(ctx, logger)
 			default:
-				var tokenRefreshErr *remotesessions.TokenRefreshError
-				if errors.As(refreshErr, &tokenRefreshErr) {
+				if tokenRefreshErr, ok := errors.AsType[*remotesessions.TokenRefreshError](refreshErr); ok {
 					return oops.E(oops.CodeBadRequest, refreshErr, "Unable to refresh: %s", tokenRefreshErr.Reason).LogWarn(ctx, logger)
 				}
 				return oops.E(oops.CodeUnexpected, refreshErr, "refresh remote session").LogError(ctx, logger)
 			}
 		}
-		if result.Outcome == remotesessions.RefreshOutcomeSessionInactive {
+		if result.Outcome == remotesessionmetrics.RefreshOutcomeSessionInactive {
 			return oops.E(oops.CodeBadRequest, nil, "Reconnect this service before refreshing it.").LogWarn(ctx, logger)
 		}
 		http.Redirect(w, r, backURL, http.StatusSeeOther)
@@ -194,7 +218,7 @@ func (s *Service) ServeConsentAction(w http.ResponseWriter, r *http.Request, end
 		}
 		enabled := r.PostForm.Get("auto_refresh") == "on"
 		for i := range clients {
-			if _, err := s.remoteChallengeMgr.SetRemoteSessionAutoRefresh(ctx, subject, clients[i].ID, enabled); err != nil {
+			if _, err := s.remoteChallengeMgr.SetRemoteSessionAutoRefresh(ctx, subject, endpoint.ProjectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID, clients[i].ID, enabled); err != nil {
 				return oops.E(oops.CodeUnexpected, err, "set remote session auto refresh").LogError(ctx, logger)
 			}
 		}

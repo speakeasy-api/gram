@@ -102,12 +102,13 @@ func TestGetUserSessionClient_CIMDCacheFields(t *testing.T) {
 
 	documentURL := "https://client.example.com/oauth/client.json"
 	seeded, err := repo.New(ti.conn).UpsertUserSessionClientFromCIMD(ctx, repo.UpsertUserSessionClientFromCIMDParams{
-		UserSessionIssuerID:  uuid.MustParse(issuer.ID),
-		ClientID:             documentURL,
-		ClientName:           "cimd-cache-fields-client",
-		RedirectUris:         []string{"https://client.example.com/cb"},
-		CacheTtlSeconds:      3600,
-		ClientIDMetadataEtag: pgtype.Text{String: `"v1"`, Valid: true},
+		UserSessionIssuerID:     uuid.MustParse(issuer.ID),
+		ClientID:                documentURL,
+		ClientName:              "cimd-cache-fields-client",
+		RedirectUris:            []string{"https://client.example.com/cb"},
+		CacheTtlSeconds:         3600,
+		ClientIDMetadataEtag:    pgtype.Text{String: `"v1"`, Valid: true},
+		TokenEndpointAuthMethod: "none",
 	})
 	require.NoError(t, err)
 
@@ -185,4 +186,38 @@ func TestGetUserSessionClient_BadID(t *testing.T) {
 		ProjectSlugInput: nil,
 	})
 	requireOopsCode(t, err, oops.CodeBadRequest)
+}
+
+// The credential kind is derived from two columns, and only one of them is on
+// the wire. This pins the pair the API actually reports for a registration that
+// authenticates with a signed assertion.
+func TestGetUserSessionClient_ReportsCredentialKind(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+
+	issuer, err := ti.service.CreateUserSessionIssuer(ctx, &issuersgen.CreateUserSessionIssuerPayload{
+		SessionToken:         nil,
+		ApikeyToken:          nil,
+		ProjectSlugInput:     nil,
+		Slug:                 "get-client-credential-issuer",
+		AuthnChallengeMode:   "chain",
+		SessionDurationHours: 24,
+	})
+	require.NoError(t, err)
+
+	client, err := seedUserSessionClientWithAuth(t, ctx, ti.conn, uuid.MustParse(issuer.ID), "get-key-client", "private_key_jwt", pgtype.Text{String: "", Valid: false})
+	require.NoError(t, err)
+
+	got, err := ti.service.GetUserSessionClient(ctx, &gen.GetUserSessionClientPayload{
+		ID:               client.ID.String(),
+		SessionToken:     nil,
+		ApikeyToken:      nil,
+		ProjectSlugInput: nil,
+	})
+	require.NoError(t, err)
+
+	require.Equal(t, "key", got.CredentialKind)
+	require.NotNil(t, got.TokenEndpointAuthMethod)
+	require.Equal(t, "private_key_jwt", *got.TokenEndpointAuthMethod)
 }

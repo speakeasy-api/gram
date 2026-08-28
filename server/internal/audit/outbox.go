@@ -12,14 +12,21 @@ import (
 
 func appendToOutbox(ctx context.Context, dbtx repo.DBTX, entry auditEntry, result repo.InsertAuditLogRow) error {
 	input := entry.Params
+	actorDisplayName := conv.FromPGTextOrEmpty[string](input.ActorDisplayName)
+	actorSlug := conv.FromPGTextOrEmpty[string](input.ActorSlug)
+	if conv.FromPGTextOrEmpty[string](input.ActingSurface) == string(SurfaceAdmin) {
+		actorDisplayName = SpeakeasyTeamActorLabel
+		actorSlug = ""
+	}
+
 	if _, err := outbox.PublishWebhookEvent(ctx, dbtx, result.OrganizationID, entry.OutboxEvent, events.AuditLogCreatedPayloadV1{
 		ID:                 result.ID,
 		OrganizationID:     result.OrganizationID,
 		ProjectID:          input.ProjectID,
 		ActorID:            input.ActorID,
 		ActorType:          input.ActorType,
-		ActorDisplayName:   conv.FromPGTextOrEmpty[string](input.ActorDisplayName),
-		ActorSlug:          conv.FromPGTextOrEmpty[string](input.ActorSlug),
+		ActorDisplayName:   actorDisplayName,
+		ActorSlug:          actorSlug,
 		Action:             input.Action,
 		SubjectID:          input.SubjectID,
 		SubjectType:        input.SubjectType,

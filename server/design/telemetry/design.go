@@ -1511,6 +1511,7 @@ var UserAccountType = Type("UserAccount", func() {
 	Description("A linked AI account for a user. The identity is (provider, email): the same email registered on two providers is two distinct accounts.")
 
 	Attribute("id", String, "Account record id (user_accounts.id); used to scope chat/session views to this account")
+	Attribute("user_id", String, "Gram user id of the directory owner of this account; the authoritative link between account-email-keyed usage and the org member")
 	Attribute("provider", String, "AI provider the account belongs to ('anthropic', 'openai', 'cursor')")
 	Attribute("email", String, "Email associated with the account; may differ from the user's work email for personal accounts")
 	Attribute("account_type", String, "'team' (enterprise) or 'personal' (individual); empty when not yet classified")
@@ -1747,6 +1748,9 @@ var queryDimensions = []any{
 var queryMeasures = []any{
 	"total_cost",
 	"total_tokens",
+	// Computed rank: input + output, the population person-facing surfaces
+	// display (total_tokens additionally counts cache writes).
+	"llm_tokens",
 	"total_input_tokens",
 	"total_output_tokens",
 	"cache_read_input_tokens",

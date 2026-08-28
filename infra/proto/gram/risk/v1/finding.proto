@@ -67,6 +67,16 @@ message Finding {
   // manual suppressions, the catalog reason for automated ones. Optional.
   string excluded_detail = 26;
 
+  // Event-log kind of this message: "finding" for scanner output (dead-letter
+  // sentinels included), "suppression" / "unsuppression" for republished
+  // manual state changes (risk.markResultsFalsePositive and its undo). The
+  // ClickHouse writer persists it so read-time dedup can rank state-change
+  // rows above scanner rows for the same id — a redelivered scanner message
+  // must never clobber a later dismissal. Empty on messages from producers
+  // that predate the field: the writer derives "suppression" when
+  // excluded_at/false_positive_at is carried and "finding" otherwise.
+  string event_kind = 27;
+
   option (gcp.pubsub.v1.topic) = {
     retention_hint: {
       seconds: 604800 /* 7 days */

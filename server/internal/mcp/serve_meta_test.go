@@ -20,10 +20,12 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpversions"
+	"github.com/speakeasy-api/gram/server/internal/mcp/metamcp"
 	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	metamcprepo "github.com/speakeasy-api/gram/server/internal/metamcp/repo"
+	"github.com/speakeasy-api/gram/server/internal/metamcp/visibility"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp/remotemcptest"
 	remotemcprepo "github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
@@ -50,8 +52,9 @@ func createMetaMcpEndpoint(
 	meta, err := metamcprepo.New(conn).CreateMetaMCPServer(ctx, metamcprepo.CreateMetaMCPServerParams{
 		OrganizationID:      organizationID,
 		ProjectID:           projectID,
-		Name:                "test gateway",
+		Name:                "test meta MCP",
 		UserSessionIssuerID: issuer,
+		Visibility:          visibility.Private,
 	})
 	require.NoError(t, err)
 
@@ -168,8 +171,12 @@ func TestServePublic_MetaEndpoint_Initialize(t *testing.T) {
 	// Instructions are deliberately generic: the member inventory belongs to
 	// list_servers, so neither the meta server's name nor its members appear.
 	require.Contains(t, result.Instructions, "list_servers")
-	require.Contains(t, result.Instructions, "rediscovery")
-	require.NotContains(t, result.Instructions, "test gateway")
+	require.Contains(t, result.Instructions, "describe_tools")
+	// The two rules agents get wrong: guessing arguments, and reading an
+	// unobservable member as a missing one.
+	require.Contains(t, result.Instructions, "Never execute a name you have not described")
+	require.Contains(t, result.Instructions, metamcp.StatusUnknown)
+	require.NotContains(t, result.Instructions, "test meta MCP")
 }
 
 func TestServePublic_MetaEndpoint_ServerDiscover(t *testing.T) {
@@ -197,6 +204,9 @@ func TestServePublic_MetaEndpoint_ServerDiscover(t *testing.T) {
 	require.NoError(t, json.Unmarshal(envelope["result"], &result))
 	require.Equal(t, []string{mcpversions.ServedMetaServer}, result.ProtocolVersions)
 	require.Equal(t, "Gram Gateway", result.ServerInfo.Name)
+
+	// The self-description is assembled from constants, so it is shareable.
+	requireCacheHints(t, envelope["result"], "public")
 }
 
 func TestServePublic_MetaEndpoint_ToolsList_FixedContract(t *testing.T) {
@@ -227,6 +237,10 @@ func TestServePublic_MetaEndpoint_ToolsList_FixedContract(t *testing.T) {
 		names = append(names, tool.Name)
 	}
 	require.Equal(t, []string{"list_servers", "describe_server", "describe_tools", "execute_tool"}, names)
+
+	// The contract consults neither the endpoint nor the meta server, so every
+	// caller receives these same four tools.
+	requireCacheHints(t, envelope["result"], "public")
 }
 
 func TestServePublic_MetaEndpoint_ListServers_ReturnsOrderedMembers(t *testing.T) {
@@ -310,30 +324,6 @@ func TestServePublic_MetaEndpoint_ListServers_HidesDisabledMembers(t *testing.T)
 	require.NoError(t, json.Unmarshal(envelope["result"], &result))
 	require.Len(t, result.StructuredContent.Servers, 1)
 	require.Equal(t, liveSlug, result.StructuredContent.Servers[0].Slug)
-}
-
-func TestServePublic_MetaEndpoint_DrillDownToolsNotYetAvailable(t *testing.T) {
-	t.Parallel()
-
-	ctx, ti := newTestMCPService(t)
-
-	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	require.True(t, ok)
-
-	slug := "meta-" + uuid.NewString()
-	createMetaMcpEndpoint(t, ctx, ti.conn, *authCtx.ProjectID, authCtx.ActiveOrganizationID, slug, uuid.Nil)
-
-	for _, tool := range []string{"describe_server", "describe_tools", "execute_tool"} {
-		w, err := servePublicHTTP(t, ctx, ti, slug, makeMetaRPCBody(t, "tools/call", map[string]any{
-			"name":      tool,
-			"arguments": map[string]any{},
-		}), "", nil)
-		require.NoError(t, err)
-		require.Equal(t, http.StatusOK, w.Code)
-
-		envelope := decodeRPCResponse(t, w)
-		require.Contains(t, string(envelope["error"]), "not yet available", "tool %s must answer deterministically", tool)
-	}
 }
 
 func TestServePublic_MetaEndpoint_UnsupportedDeclaredVersion(t *testing.T) {

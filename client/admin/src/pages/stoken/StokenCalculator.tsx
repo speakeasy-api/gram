@@ -1,4 +1,4 @@
-import { useEffect, useRef, type CSSProperties, type JSX } from "react";
+import { useCallback, useState, type CSSProperties, type JSX } from "react";
 import { useNavigate, useSearch } from "@tanstack/react-router";
 import { PlusIcon, Trash2Icon } from "lucide-react";
 
@@ -143,6 +143,8 @@ type ProviderRowEditorProps = {
   calculation: RowCalculation;
   onChange: (id: string, patch: Partial<ProviderRow>) => void;
   onRemove: (id: string) => void;
+  focusId: string | null;
+  onFocused: () => void;
 };
 
 function ProviderRowEditor({
@@ -151,6 +153,8 @@ function ProviderRowEditor({
   calculation,
   onChange,
   onRemove,
+  focusId,
+  onFocused,
 }: ProviderRowEditorProps): JSX.Element {
   const tokenInputId = `${row.id}-tokens`;
   const tokenHelperId = `${row.id}-tokens-helper`;
@@ -196,7 +200,16 @@ function ProviderRowEditor({
               });
             }}
           >
-            <SelectTrigger id={providerSelectId} className="w-full">
+            <SelectTrigger
+              ref={(node) => {
+                if (node && focusId === providerSelectId) {
+                  node.focus();
+                  onFocused();
+                }
+              }}
+              id={providerSelectId}
+              className="w-full"
+            >
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -576,15 +589,8 @@ export function StokenCalculator(): JSX.Element {
   const search = useSearch({ from: ROUTE_ID });
   const navigate = useNavigate({ from: ROUTE_ID });
   const rows = rowsFromSearch(search);
-  const pendingFocusId = useRef<string | null>(null);
-
-  // Adding or removing a row moves focus to the row that took its place, and
-  // the element does not exist until the URL change has rendered.
-  useEffect(() => {
-    if (!pendingFocusId.current) return;
-    document.getElementById(pendingFocusId.current)?.focus();
-    pendingFocusId.current = null;
-  }, [rows]);
+  const [pendingFocusId, setPendingFocusId] = useState<string | null>(null);
+  const focusCompleted = useCallback(() => setPendingFocusId(null), []);
 
   const calculations = rows.map(calculateProviderRow);
   const estimates: Estimate[] = [];
@@ -610,7 +616,7 @@ export function StokenCalculator(): JSX.Element {
 
   function addProvider(): void {
     const row = createProviderRow(rows);
-    pendingFocusId.current = `${row.id}-provider`;
+    setPendingFocusId(`${row.id}-provider`);
     setRows([...rows, row]);
   }
 
@@ -620,9 +626,7 @@ export function StokenCalculator(): JSX.Element {
 
     const remaining = rows.filter((row) => row.id !== id);
     const nextRow = remaining[Math.min(index, remaining.length - 1)];
-    pendingFocusId.current = nextRow
-      ? `${nextRow.id}-provider`
-      : "add-provider";
+    setPendingFocusId(nextRow ? `${nextRow.id}-provider` : "add-provider");
     setRows(remaining);
   }
 
@@ -661,6 +665,8 @@ export function StokenCalculator(): JSX.Element {
               calculation={calculations[index] ?? EMPTY_CALCULATION}
               onChange={updateRow}
               onRemove={removeProvider}
+              focusId={pendingFocusId}
+              onFocused={focusCompleted}
             />
           ))}
           <p
@@ -691,7 +697,17 @@ export function StokenCalculator(): JSX.Element {
                 {estimates.length ? formatRange(total) : "—"}
               </output>
             </div>
-            <Button id="add-provider" type="button" onClick={addProvider}>
+            <Button
+              ref={(node) => {
+                if (node && pendingFocusId === "add-provider") {
+                  node.focus();
+                  focusCompleted();
+                }
+              }}
+              id="add-provider"
+              type="button"
+              onClick={addProvider}
+            >
               <PlusIcon />
               Add provider
             </Button>

@@ -11,12 +11,14 @@ import { toolsetsGetBySlug } from "../funcs/toolsetsGetBySlug.js";
 import { toolsetsList } from "../funcs/toolsetsList.js";
 import { toolsetsListForOrg } from "../funcs/toolsetsListForOrg.js";
 import { toolsetsListToolFilters } from "../funcs/toolsetsListToolFilters.js";
+import { toolsetsListToolSchemaStaticValues } from "../funcs/toolsetsListToolSchemaStaticValues.js";
 import { toolsetsRemoveOAuthServer } from "../funcs/toolsetsRemoveOAuthServer.js";
 import { toolsetsSetToolVariationsGroup } from "../funcs/toolsetsSetToolVariationsGroup.js";
 import { toolsetsSetUserSessionIssuer } from "../funcs/toolsetsSetUserSessionIssuer.js";
 import { toolsetsUpdateBySlug } from "../funcs/toolsetsUpdateBySlug.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
 import { ListToolFiltersResult } from "../models/components/listtoolfiltersresult.js";
+import { ListToolSchemaStaticValuesResult } from "../models/components/listtoolschemastaticvaluesresult.js";
 import { ListToolsetsResult } from "../models/components/listtoolsetsresult.js";
 import { ListToolsetSummariesResult } from "../models/components/listtoolsetsummariesresult.js";
 import { Toolset } from "../models/components/toolset.js";
@@ -56,6 +58,10 @@ import {
   ListToolsetToolFiltersRequest,
   ListToolsetToolFiltersSecurity,
 } from "../models/operations/listtoolsettoolfilters.js";
+import {
+  ListToolsetToolSchemaStaticValuesRequest,
+  ListToolsetToolSchemaStaticValuesSecurity,
+} from "../models/operations/listtoolsettoolschemastaticvalues.js";
 import {
   RemoveOAuthServerRequest,
   RemoveOAuthServerSecurity,
@@ -239,6 +245,25 @@ export class Toolsets extends ClientSDK {
     options?: RequestOptions,
   ): Promise<ListToolFiltersResult> {
     return unwrapAsync(toolsetsListToolFilters(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * listToolSchemaStaticValues toolsets
+   *
+   * @remarks
+   * List every const, default, enum, example, and examples value in each tool input schema. The result is deliberately mechanical: clients decide how to present or interpret the values. This supports reviewing the exact schema contents before changing how a toolset is shared.
+   */
+  async listToolSchemaStaticValues(
+    request: ListToolsetToolSchemaStaticValuesRequest,
+    security?: ListToolsetToolSchemaStaticValuesSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<ListToolSchemaStaticValuesResult> {
+    return unwrapAsync(toolsetsListToolSchemaStaticValues(
       this,
       request,
       security,

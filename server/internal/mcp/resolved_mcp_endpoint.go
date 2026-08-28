@@ -24,10 +24,12 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	mcpservers_repo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	metamcp_repo "github.com/speakeasy-api/gram/server/internal/metamcp/repo"
+	metamcp_visibility "github.com/speakeasy-api/gram/server/internal/metamcp/visibility"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	projects_repo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	toolsets_repo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
+	"github.com/speakeasy-api/gram/server/internal/usersessions/clientauth"
 )
 
 // ResolvedMcpEndpoint carries everything the issuer-gated OAuth handlers
@@ -142,6 +144,29 @@ func (e *ResolvedMcpEndpoint) AuthorizationServerURLs(baseURL string) (Authoriza
 		*p.target = u
 	}
 	return urls, nil
+}
+
+// clientAssertionAudiences is the pair of aud values a client assertion may
+// name when authenticating at the given endpoint: the issuer identifier, or
+// that endpoint's own URL.
+//
+// Derived from the same values the RFC 8414 document advertises, so what a
+// client can read from metadata and what an assertion may name are one
+// value. Only the addressed endpoint's URL is accepted, so an assertion
+// minted for the revocation endpoint does not authenticate a token request or
+// the reverse.
+func (u AuthorizationServerURLs) clientAssertionAudiences(at clientAssertionEndpoint) clientauth.Audiences {
+	endpoint := ""
+	switch at {
+	case clientAssertionAtToken:
+		endpoint = u.Token
+	case clientAssertionAtRevoke:
+		endpoint = u.Revoke
+	}
+	return clientauth.Audiences{
+		Issuer:   u.Issuer,
+		Endpoint: endpoint,
+	}
 }
 
 // ConsentURL is the URL the user agent is redirected to after the
@@ -302,10 +327,11 @@ func NewResolvedMcpEndpointFromMcpServer(
 // NewResolvedMcpEndpointFromMetaMcpServer materialises a ResolvedMcpEndpoint
 // from a resolved (mcp_endpoint, meta_mcp_server) pair plus the owning
 // project's organisation id. Caller is responsible for first checking
-// metaServer.UserSessionIssuerID.Valid. Meta MCP servers have no visibility
-// column, so IsPublic reflects only whether an issuer gates the endpoint.
-// AudienceURN is bound to the issuer URN, matching the generic-server
-// constructor, so tokens stay portable between backends under one issuer.
+// metaServer.UserSessionIssuerID.Valid. AudienceURN is bound to the issuer URN,
+// matching the generic-server constructor, so tokens stay portable between
+// backends under one issuer. IsPublic is always false: a gateway's visibility
+// vocabulary has no anonymous state, and one with no issuer is already refused
+// by RequireUserSessionIssuer.
 func NewResolvedMcpEndpointFromMetaMcpServer(
 	mcpEndpoint *mcpendpoints_repo.McpEndpoint,
 	metaServer *metamcp_repo.MetaMcpServer,
@@ -317,7 +343,7 @@ func NewResolvedMcpEndpointFromMetaMcpServer(
 		// Stamped by RequireUserSessionIssuer, which every path runs next.
 		CIMDAdmissionModeRaw: pgtype.Text{String: "", Valid: false},
 		CustomDomainID:       mcpEndpoint.CustomDomainID,
-		IsPublic:             !metaServer.UserSessionIssuerID.Valid,
+		IsPublic:             false,
 		McpServerID:          uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 		MetaMcpServerID:      uuid.NullUUID{UUID: metaServer.ID, Valid: true},
 		OrganizationID:       organizationID,
@@ -523,16 +549,18 @@ func (s *Service) buildResolvedMetaMcpEndpointByRef(ctx context.Context, ref End
 		// An issuer detached mid-flow closes in-flight challenges.
 		return nil, oops.E(oops.CodeNotFound, nil, "not found")
 	}
-	project, err := projects_repo.New(s.db).GetProjectByID(ctx, mcpEndpoint.ProjectID)
-	switch {
-	case errors.Is(err, pgx.ErrNoRows):
-		return nil, oops.E(oops.CodeNotFound, err, "project not found")
-	case err != nil:
-		return nil, oops.E(oops.CodeUnexpected, err, "load project").LogError(ctx, s.logger)
+	if metaServer.Visibility == metamcp_visibility.Disabled {
+		// A gateway disabled mid-flow closes in-flight challenges, matching
+		// the generic-server branch's visibility check.
+		return nil, oops.E(oops.CodeNotFound, nil, "not found")
 	}
+
 	routeBase := ref.RouteBase
 	if routeBase == "" {
 		routeBase = "mcp"
 	}
-	return NewResolvedMcpEndpointFromMetaMcpServer(&mcpEndpoint, &metaServer, project.OrganizationID, routeBase), nil
+	// The denormalized org id is authoritative — the composite FK on
+	// meta_mcp_servers pins (organization_id, project_id) to the projects
+	// row, and BuildResolvedMcpEndpointForMetaServer already relies on it.
+	return NewResolvedMcpEndpointFromMetaMcpServer(&mcpEndpoint, &metaServer, metaServer.OrganizationID, routeBase), nil
 }

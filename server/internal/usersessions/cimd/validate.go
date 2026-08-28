@@ -1,7 +1,6 @@
 package cimd
 
 import (
-	"encoding/json"
 	"errors"
 	"fmt"
 	"net/url"
@@ -126,10 +125,12 @@ func validateDocument(doc *Document, clientID string, clientIDURL *url.URL) (val
 	if len(doc.ClientName) > maxClientNameLength {
 		return none, oauthValidationError(reasonClientNameTooLong, "invalid_client_metadata", fmt.Sprintf("client_name exceeds the %d byte limit", maxClientNameLength))
 	}
-	// Only public clients are accepted. -02 §8.2's direction of travel is
-	// that capable clients SHOULD authenticate (MCP clients MAY use
-	// private_key_jwt); accepting those is deferred, and when it lands
-	// §8.2's RFC 7523 §2.2 enforcement MUST come with it.
+	// Two methods are accepted: public, and asymmetric. -02 §8.2 says capable
+	// clients SHOULD authenticate and that MCP clients MAY use
+	// private_key_jwt; accepting it here is paired with the RFC 7523 §2.2
+	// enforcement the token endpoint applies to the persisted method, and
+	// the two must never be separated, since a document accepted here is
+	// what that endpoint holds the client to.
 	//
 	// An ABSENT value is treated as "none", not rejected. The field is not
 	// required by -02 (only client_id is) and RFC 7591's
@@ -144,17 +145,23 @@ func validateDocument(doc *Document, clientID string, clientIDURL *url.URL) (val
 	// OpenAI's documents (both ChatGPT's and Codex CLI's) omit the field
 	// entirely while being plain public clients, and rejecting them here
 	// would make any preset for them dead on arrival.
-	if doc.TokenEndpointAuthMethod != "" && doc.TokenEndpointAuthMethod != "none" {
-		return none, oauthValidationError(reasonInvalidAuthMethod, "invalid_client_metadata", `token_endpoint_auth_method must be "none" or absent`)
+	switch doc.TokenEndpointAuthMethod {
+	case "", oauthwire.AuthMethodNone, oauthwire.AuthMethodPrivateKeyJWT:
+	default:
+		return none, oauthValidationError(reasonInvalidAuthMethod, "invalid_client_metadata", `token_endpoint_auth_method must be "none", "private_key_jwt", or absent`)
 	}
 	// -02 §4.1: a metadata document is public, so it must never carry a
 	// client secret in any form. Presence alone invalidates the document.
 	if doc.ClientSecret != nil || doc.ClientSecretExpiresAt != nil {
 		return none, oauthValidationError(reasonContainsSecret, "invalid_client_metadata", "document must not contain client_secret or client_secret_expires_at")
 	}
-	if err := validateJWKSPublicOnly(doc.JWKS); err != nil {
-		return none, err
+	// Key source rules are shared with DCR registration; the sentinel
+	// mapping below owns this package's reasons and wire descriptions.
+	normalizedJWKS, err := jwks.ValidateKeySource(doc.TokenEndpointAuthMethod, doc.JWKS, doc.JWKSURI)
+	if err != nil {
+		return none, keySourceValidationError(err)
 	}
+	doc.JWKS = normalizedJWKS
 
 	if len(doc.RedirectURIs) == 0 {
 		return none, oauthValidationError(reasonMissingRedirectURIs, "invalid_redirect_uri", "redirect_uris is required")
@@ -229,20 +236,25 @@ func IsLoopbackRedirectURI(u *url.URL) bool {
 	}
 }
 
-// validateJWKSPublicOnly rejects a jwks member containing private or
-// symmetric key material (-02 §4.1 — new in -02). A public metadata document
-// carrying a private key would let anyone impersonate the client, so the
-// whole document is invalid. The screening itself is the shared
-// jwks.ValidatePublicOnly; this wrapper maps its sentinels onto this
-// package's metric reasons and client-safe OAuth wire errors.
-func validateJWKSPublicOnly(raw json.RawMessage) error {
-	switch err := jwks.ValidatePublicOnly(raw); {
-	case err == nil:
-		return nil
+// keySourceValidationError maps the shared key source sentinels onto this
+// package's metric reasons and client-safe OAuth wire errors. Private or
+// symmetric material in a public metadata document is fatal for the whole
+// document (-02 §4.1 — new in -02): a private key there would let anyone
+// impersonate the client.
+func keySourceValidationError(err error) error {
+	switch {
 	case errors.Is(err, jwks.ErrPrivateKeyMaterial):
 		return oauthValidationError(reasonJWKSPrivateKey, "invalid_client_metadata", "jwks must not contain private key material")
 	case errors.Is(err, jwks.ErrSymmetricKeyMaterial):
 		return oauthValidationError(reasonJWKSSymmetricKey, "invalid_client_metadata", "jwks must not contain symmetric key material")
+	case errors.Is(err, jwks.ErrKeySourceURIInvalid):
+		return oauthValidationError(reasonJWKSURIInvalid, "invalid_client_metadata", "jwks_uri is not a valid https URL")
+	case errors.Is(err, jwks.ErrKeySourceAmbiguous):
+		return oauthValidationError(reasonKeySourceAmbiguous, "invalid_client_metadata", "jwks and jwks_uri must not both be present")
+	case errors.Is(err, jwks.ErrKeySourceMissing):
+		return oauthValidationError(reasonKeySourceMissing, "invalid_client_metadata", "private_key_jwt requires jwks or jwks_uri")
+	case errors.Is(err, jwks.ErrNoUsableSigningKey):
+		return oauthValidationError(reasonJWKSNoSigningKey, "invalid_client_metadata", "jwks contains no usable signing key")
 	default:
 		return oauthValidationError(reasonJWKSInvalid, "invalid_client_metadata", "jwks is not a valid JWK Set")
 	}

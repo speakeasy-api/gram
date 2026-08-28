@@ -43,7 +43,6 @@ import { Outlet, useNavigate } from "react-router";
 import { toast } from "sonner";
 import { PlatformInstrumentationSheet } from "../setup/components/platform-instrumentation-sheet";
 import { PlatformMCPOnboardingContent } from "../org/PlatformMCP";
-import { usePlatformMCPPackageStatus } from "@gram/client/react-query/platformMCPPackageStatus";
 import {
   MarketplaceCard,
   UninitializedMarketplaceCard,
@@ -85,11 +84,11 @@ export default function Plugins(): JSX.Element {
   const [isObservabilityDownloadMenuOpen, setIsObservabilityDownloadMenuOpen] =
     useState(false);
   const [isDownloadingObservability, setIsDownloadingObservability] = useState<
-    "claude" | "cursor" | "codex" | "opencode" | null
+    "claude" | "cursor" | "codex" | "opencode" | "openclaw" | null
   >(null);
 
   const handleObservabilityDownload = async (
-    platform: "claude" | "cursor" | "codex" | "opencode",
+    platform: "claude" | "cursor" | "codex" | "opencode" | "openclaw",
   ) => {
     setIsObservabilityDownloadMenuOpen(false);
     setIsDownloadingObservability(platform);
@@ -531,7 +530,9 @@ function ObservabilityPluginCard({
   isDownloadMenuOpen: boolean;
   onDownloadMenuOpenChange: (open: boolean) => void;
   isDownloading: boolean;
-  onDownload: (platform: "claude" | "cursor" | "codex" | "opencode") => void;
+  onDownload: (
+    platform: "claude" | "cursor" | "codex" | "opencode" | "openclaw",
+  ) => void;
 }) {
   const [isInstallSheetOpen, setIsInstallSheetOpen] = useState(false);
   const isConnected = !!publishStatus?.connected;
@@ -633,6 +634,14 @@ function ObservabilityPluginCard({
             >
               Download as zip — OpenCode
             </DropdownMenuItem>
+            <DropdownMenuItem
+              disabled={isDownloading}
+              onClick={() => {
+                onDownload("openclaw");
+              }}
+            >
+              Download as zip — OpenClaw
+            </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
       </div>
@@ -651,60 +660,7 @@ function ObservabilityPluginCard({
 }
 
 function PlatformMCPPluginCard(): JSX.Element {
-  const { fetch: authFetch } = useFetcher();
   const [installOpen, setInstallOpen] = useState(false);
-  const [isInstallMenuOpen, setIsInstallMenuOpen] = useState(false);
-  const [downloadingPackage, setDownloadingPackage] = useState<
-    "claude" | "cursor" | "codex" | "opencode" | "agent-plugin" | null
-  >(null);
-  const status = usePlatformMCPPackageStatus(undefined, undefined, {
-    refetchInterval: 5_000,
-  });
-  const packageStatus = status.data;
-  const directDownloadReady =
-    packageStatus?.available === true && packageStatus.directDownloadAvailable;
-
-  const downloadPackage = async (
-    platform: "claude" | "cursor" | "codex" | "opencode" | "agent-plugin",
-  ) => {
-    setIsInstallMenuOpen(false);
-    setDownloadingPackage(platform);
-    try {
-      const response = await authFetch(
-        `/rpc/plugins.downloadPlatformMCPPlugin?platform=${platform}`,
-        {},
-      );
-      if (!response.ok) throw new Error("download failed");
-      await downloadResponse(response, `platform-mcp-${platform}.zip`);
-    } catch (error) {
-      toast.error("Could not download the Platform MCP package");
-      console.error("Platform MCP plugin download failed", error);
-    } finally {
-      setDownloadingPackage(null);
-    }
-  };
-
-  const statusLabel = (() => {
-    if (status.isLoading) return "Checking package availability…";
-    if (packageStatus?.admission === "indeterminate") {
-      return "Package availability temporarily unknown";
-    }
-    if (!packageStatus?.available) return "Not available for this organization";
-    if (
-      packageStatus.marketplaceConnected &&
-      packageStatus.freshness === "current"
-    ) {
-      return "Included in your organization marketplace";
-    }
-    if (
-      packageStatus.marketplaceConnected &&
-      (packageStatus.freshness === "missing" ||
-        packageStatus.freshness === "stale")
-    ) {
-      return "Marketplace update available";
-    }
-    return "Available as a direct download";
-  })();
 
   return (
     <Card.Entity
@@ -731,63 +687,9 @@ function PlatformMCPPluginCard(): JSX.Element {
 
       <div className="mt-auto flex items-center justify-between gap-2 pt-2">
         <Text small muted>
-          {statusLabel}
+          Available from the public Speakeasy marketplace
         </Text>
-        <DropdownMenu
-          open={isInstallMenuOpen}
-          onOpenChange={setIsInstallMenuOpen}
-        >
-          <DropdownMenuTrigger asChild>
-            <PluginInstallButton
-              size="sm"
-              loading={downloadingPackage !== null}
-              disabled={!packageStatus?.available || status.isLoading}
-            />
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end">
-            <DropdownMenuItem
-              onClick={() => {
-                setIsInstallMenuOpen(false);
-                // Let the dropdown release its focus trap before opening the
-                // first sheet in the shared tracked setup flow.
-                setTimeout(() => setInstallOpen(true), 0);
-              }}
-            >
-              Guided setup (preferred)
-            </DropdownMenuItem>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem
-              disabled={!directDownloadReady || downloadingPackage !== null}
-              onClick={() => void downloadPackage("claude")}
-            >
-              Download as zip — Claude
-            </DropdownMenuItem>
-            <DropdownMenuItem
-              disabled={!directDownloadReady || downloadingPackage !== null}
-              onClick={() => void downloadPackage("cursor")}
-            >
-              Download as zip — Cursor
-            </DropdownMenuItem>
-            <DropdownMenuItem
-              disabled={!directDownloadReady || downloadingPackage !== null}
-              onClick={() => void downloadPackage("codex")}
-            >
-              Download as zip — Codex
-            </DropdownMenuItem>
-            <DropdownMenuItem
-              disabled={!directDownloadReady || downloadingPackage !== null}
-              onClick={() => void downloadPackage("opencode")}
-            >
-              Download as zip — OpenCode
-            </DropdownMenuItem>
-            <DropdownMenuItem
-              disabled={!directDownloadReady || downloadingPackage !== null}
-              onClick={() => void downloadPackage("agent-plugin")}
-            >
-              Download as zip — Agent Plugins
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
+        <PluginInstallButton size="sm" onClick={() => setInstallOpen(true)} />
       </div>
 
       <PlatformMCPOnboardingContent

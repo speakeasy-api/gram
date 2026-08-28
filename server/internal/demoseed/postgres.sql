@@ -173,6 +173,19 @@ DECLARE
   doa_id       CONSTANT uuid := 'dec0de00-0000-4000-a000-00000000da01';
   toolset_1    CONSTANT uuid := 'dec0de00-0000-4000-a000-000000005e01';
   toolset_2    CONSTANT uuid := 'dec0de00-0000-4000-a000-000000005e02';
+  toolset_3    CONSTANT uuid := 'dec0de00-0000-4000-a000-000000005e03';
+  us_issuer    CONSTANT uuid := 'dec0de00-0000-4000-a000-000000005a01';
+  -- One registered agent per credential kind the Connections list can report,
+  -- plus the pre-column row whose kind is resolved from the rest of it.
+  usc_key      CONSTANT uuid := 'dec0de00-0000-4000-a000-000000005c01';
+  usc_public   CONSTANT uuid := 'dec0de00-0000-4000-a000-000000005c02';
+  usc_secret   CONSTANT uuid := 'dec0de00-0000-4000-a000-000000005c03';
+  usc_legacy   CONSTANT uuid := 'dec0de00-0000-4000-a000-000000005c04';
+  usc_broken   CONSTANT uuid := 'dec0de00-0000-4000-a000-000000005c05';
+  -- Marked as fake in the value itself. Nothing verifies these: no demo agent
+  -- ever presents a secret, and the seed must never carry a real hash.
+  demo_secret_hash CONSTANT text := '$2a$10$DEMOSEEDNOTAREALBCRYPTHASHxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx';
+  demo_cimd_url CONSTANT text := 'https://agents.example.com/.well-known/oauth-client';
   rule_monthly CONSTANT uuid := 'dec0de00-0000-4000-a000-00000000e001';
   rule_weekly  CONSTANT uuid := 'dec0de00-0000-4000-a000-00000000e002';
 
@@ -338,9 +351,26 @@ BEGIN
   INSERT INTO organization_metadata (id, name, slug, gram_account_type, whitelisted)
   VALUES (demo_org, 'Acme Demo Org', 'acme-demo', 'enterprise', TRUE)
   ON CONFLICT (id) DO UPDATE
+    -- whitelisted is repaired, not just set on insert: a developer who logged
+    -- in before seeding already has this row, created un-whitelisted by the
+    -- auth callback, and without this the seed leaves them on the BookDemo
+    -- gate.
     SET name = EXCLUDED.name, slug = EXCLUDED.slug,
-        gram_account_type = EXCLUDED.gram_account_type;
+        gram_account_type = EXCLUDED.gram_account_type,
+        whitelisted = EXCLUDED.whitelisted;
 
+  -- plugin_servers RESTRICTs the mcp_server it attaches, and adding a server
+  -- auto-attaches it to the Default plugin — so in the writable local tenant
+  -- a developer's own servers block the delete below. mcp_servers in turn
+  -- pins its toolset with RESTRICT, so it must go before the toolsets delete.
+  -- Members and both backends' endpoints cascade from mcp_servers and
+  -- meta_mcp_servers.
+  DELETE FROM plugin_servers WHERE plugin_id IN
+    (SELECT id FROM plugins WHERE organization_id = demo_org);
+  DELETE FROM mcp_servers WHERE project_id = proj_a;
+  DELETE FROM meta_mcp_servers WHERE organization_id = demo_org;
+  -- meta_mcp_servers RESTRICTs its issuer, so issuers clear after it.
+  DELETE FROM user_session_issuers WHERE project_id = proj_a;
   DELETE FROM toolsets WHERE organization_id = demo_org;
   -- environments.project_id is NOT NULL but its FK is ON DELETE SET NULL, so
   -- the projects delete below fails outright on any environment row. The demo
@@ -536,7 +566,14 @@ BEGIN
      'Support workflows: logs, refunds, customer lookups.',
      'acme-demo-support', TRUE, FALSE),
     (toolset_2, demo_org, proj_a, 'Acme Ops', 'acme-ops',
-     'Operational checks and deploy tooling.', NULL, TRUE, FALSE);
+     'Operational checks and deploy tooling.', NULL, TRUE, FALSE),
+    -- The OAuth-protected server, kept separate from the two above: attaching
+    -- a session issuer changes what a server's authentication tab and install
+    -- instructions say, and the support server is the one a visitor meets
+    -- first.
+    (toolset_3, demo_org, proj_a, 'Acme Partner Gateway', 'acme-partner-gateway',
+     'Tools Acme exposes to partner agents, behind OAuth.',
+     'acme-demo-partner', TRUE, FALSE);
 
   -- Version = epoch seconds: the server caches toolset contents in Redis
   -- keyed by (deployment, toolset, version), and a reseed reusing version 1
@@ -544,7 +581,171 @@ BEGIN
   -- changes the cache key, so every reseed is immediately visible.
   INSERT INTO toolset_versions (toolset_id, version, tool_urns, resource_urns) VALUES
     (toolset_1, extract(epoch FROM now())::bigint, tool_urns, '{}'),
-    (toolset_2, extract(epoch FROM now())::bigint, ARRAY[tool_urns[1], tool_urns[2], tool_urns[5], tool_urns[7], tool_urns[8]], '{}');
+    (toolset_2, extract(epoch FROM now())::bigint, ARRAY[tool_urns[1], tool_urns[2], tool_urns[5], tool_urns[7], tool_urns[8]], '{}'),
+    (toolset_3, extract(epoch FROM now())::bigint, ARRAY[tool_urns[1], tool_urns[3], tool_urns[4]], '{}');
+
+  ------------------------------------------------------------------
+  -- MCP connections: the issuer that gates the partner gateway, the agents
+  -- registered against it, and the sessions they hold. Without these the
+  -- Connections surfaces (the server's Clients and Sessions tab, the
+  -- organization MCP Sessions page, and a person's connections on their
+  -- employee page) render an empty state.
+  --
+  -- The registrations deliberately span every credential kind the list can
+  -- report, including one that cannot authenticate at all, so the badge and
+  -- the detail sheet have something to show without a real agent connecting.
+  --
+  -- No explicit deletes: user_session_issuers, user_session_clients, and
+  -- user_sessions all cascade from projects, which is deleted and recreated
+  -- above.
+  ------------------------------------------------------------------
+  INSERT INTO user_session_issuers (id, project_id, slug, authn_challenge_mode, session_duration)
+  VALUES (us_issuer, proj_a, 'acme-partner-gateway', 'interactive', interval '30 days');
+
+  UPDATE toolsets SET user_session_issuer_id = us_issuer WHERE id = toolset_3;
+
+  -- Resolved from a Client ID Metadata Document, and the strongest posture
+  -- available: it signs an assertion with a key it publishes, so Gram holds no
+  -- secret for it. This is the row the "Key-authenticated" badge appears on.
+  INSERT INTO user_session_clients
+    (id, project_id, user_session_issuer_id, client_id, client_name, redirect_uris,
+     client_id_issued_at, client_id_metadata_uri, client_id_metadata_fetched_at,
+     client_id_metadata_cache_expires_at, client_id_metadata_etag,
+     token_endpoint_auth_method, client_jwks_uri)
+  VALUES
+    (usc_key, proj_a, us_issuer, demo_cimd_url, 'Partner Reconciliation Agent',
+     ARRAY['https://agents.example.com/callback'],
+     now() - interval '9 days', demo_cimd_url, now() - interval '2 hours',
+     now() + interval '22 hours', '"demo-etag-v3"',
+     'private_key_jwt', 'https://agents.example.com/.well-known/jwks.json');
+
+  INSERT INTO user_session_clients
+    (id, project_id, user_session_issuer_id, client_id, client_secret_hash, client_name,
+     redirect_uris, client_id_issued_at, token_endpoint_auth_method)
+  VALUES
+    -- A public client: it presents nothing, and PKCE is the whole proof. The
+    -- ordinary case, and deliberately unbadged in the list.
+    (usc_public, proj_a, us_issuer, 'gram_demo_client_public', NULL, 'Claude Code',
+     ARRAY['http://127.0.0.1:41293/callback'], now() - interval '11 days', 'none'),
+    -- A confidential client presenting a secret Gram issued it.
+    (usc_secret, proj_a, us_issuer, 'gram_demo_client_secret', demo_secret_hash,
+     'Acme Nightly Batch', ARRAY['https://batch.example.com/callback'],
+     now() - interval '12 days', 'client_secret_basic'),
+    -- Registered before the method was recorded. The kind still resolves --
+    -- off the stored secret -- rather than reading as unknown, which is the
+    -- whole reason it is derived on the server.
+    (usc_legacy, proj_a, us_issuer, 'gram_demo_client_legacy', demo_secret_hash,
+     'Acme Legacy Connector', ARRAY['https://legacy.example.com/callback'],
+     now() - interval '40 days', NULL),
+    -- Contradicts itself: it committed to signed assertions and yet carries a
+    -- secret, so the token endpoint refuses it. It holds a session it obtained
+    -- before it was broken, and cannot refresh that session.
+    (usc_broken, proj_a, us_issuer, 'gram_demo_client_broken', demo_secret_hash,
+     'Vendor Sync (misconfigured)', ARRAY['https://vendor.example.com/callback'],
+     now() - interval '6 days', 'private_key_jwt');
+
+  -- refresh_token_hash is globally unique, so it is derived rather than
+  -- literal: two tenants seeded into one database would otherwise collide.
+  -- Nothing ever presents these; no demo session can be refreshed.
+  INSERT INTO user_sessions
+    (id, project_id, user_session_issuer_id, user_session_client_id, subject_urn, jti,
+     refresh_token_hash, refresh_expires_at, expires_at, last_used_at, created_at)
+  VALUES
+    (demo.det_uuid('gram-demo-user-session-1'), proj_a, us_issuer, usc_key,
+     'user:' || demo_user_ids[1], 'demo-jti-1',
+     demo.det_uuid('gram-demo-user-session-refresh-1')::text,
+     now() + interval '21 days', now() + interval '40 minutes',
+     now() - interval '25 minutes', now() - interval '9 days'),
+    (demo.det_uuid('gram-demo-user-session-2'), proj_a, us_issuer, usc_key,
+     'user:' || demo_user_ids[3], 'demo-jti-2',
+     demo.det_uuid('gram-demo-user-session-refresh-2')::text,
+     now() + interval '19 days', now() - interval '5 minutes',
+     now() - interval '3 hours', now() - interval '7 days'),
+    (demo.det_uuid('gram-demo-user-session-3'), proj_a, us_issuer, usc_public,
+     'user:' || demo_user_ids[2], 'demo-jti-3',
+     demo.det_uuid('gram-demo-user-session-refresh-3')::text,
+     now() + interval '27 days', now() + interval '35 minutes',
+     now() - interval '2 hours', now() - interval '11 days'),
+    (demo.det_uuid('gram-demo-user-session-4'), proj_a, us_issuer, usc_secret,
+     'user:' || demo_user_ids[4], 'demo-jti-4',
+     demo.det_uuid('gram-demo-user-session-refresh-4')::text,
+     now() + interval '3 days', now() - interval '20 minutes',
+     now() - interval '4 days', now() - interval '12 days'),
+    -- Expiring, and its registration can no longer authenticate, so this one
+    -- is the connection an operator is meant to notice.
+    (demo.det_uuid('gram-demo-user-session-5'), proj_a, us_issuer, usc_broken,
+     'user:' || demo_user_ids[5], 'demo-jti-5',
+     demo.det_uuid('gram-demo-user-session-refresh-5')::text,
+     now() + interval '16 hours', now() - interval '50 minutes',
+     now() - interval '30 hours', now() - interval '6 days');
+
+  ------------------------------------------------------------------
+  -- MCP servers and the Gateway Endpoint fronting them (AGE-3299).
+  -- Two backends so the gateway's member table shows both classes: the
+  -- toolset-backed pair executes in-process, the third-party remotes are
+  -- proxied. URLs are the vendors' public MCP endpoints — no credentials,
+  -- and nothing here connects on its own.
+  ------------------------------------------------------------------
+  INSERT INTO remote_mcp_servers (id, project_id, name, slug, transport_type, url) VALUES
+    (demo.det_uuid('gram-demo-remotemcp-linear'), proj_a, 'Linear', 'linear',
+     'streamable-http', 'https://mcp.linear.app/mcp'),
+    (demo.det_uuid('gram-demo-remotemcp-slack'), proj_a, 'Slack', 'slack',
+     'streamable-http', 'https://mcp.slack.com/mcp');
+
+  -- Remote-backed servers must carry a Gram-as-AS issuer for their lifetime
+  -- (mcp_servers_issuer_required_check); the gateway gets its own so clients
+  -- authenticate to it rather than to a member.
+  -- session_duration must be a Microseconds-only interval: the user-session
+  -- mint rejects Months/Days components (see usersessions/minthandler.go).
+  INSERT INTO user_session_issuers (id, project_id, slug, authn_challenge_mode,
+                                    session_duration) VALUES
+    (demo.det_uuid('gram-demo-issuer-linear'), proj_a, 'linear',
+     'interactive', make_interval(secs => 14 * 24 * 60 * 60)),
+    (demo.det_uuid('gram-demo-issuer-slack'), proj_a, 'slack',
+     'interactive', make_interval(secs => 14 * 24 * 60 * 60)),
+    (demo.det_uuid('gram-demo-issuer-gateway'), proj_a, 'acme-agent-gateway',
+     'interactive', make_interval(secs => 14 * 24 * 60 * 60));
+
+  INSERT INTO mcp_servers (id, project_id, name, slug, toolset_id,
+                           remote_mcp_server_id, user_session_issuer_id,
+                           visibility) VALUES
+    (demo.det_uuid('gram-demo-mcpserver-support'), proj_a, 'Acme Support Tools',
+     'acme-support-tools', toolset_1, NULL, NULL, 'private'),
+    (demo.det_uuid('gram-demo-mcpserver-ops'), proj_a, 'Acme Ops', 'acme-ops',
+     toolset_2, NULL, NULL, 'private'),
+    (demo.det_uuid('gram-demo-mcpserver-linear'), proj_a, 'Linear', 'linear',
+     NULL, demo.det_uuid('gram-demo-remotemcp-linear'),
+     demo.det_uuid('gram-demo-issuer-linear'), 'private'),
+    (demo.det_uuid('gram-demo-mcpserver-slack'), proj_a, 'Slack', 'slack',
+     NULL, demo.det_uuid('gram-demo-remotemcp-slack'),
+     demo.det_uuid('gram-demo-issuer-slack'), 'private');
+
+  INSERT INTO meta_mcp_servers (id, organization_id, project_id, name,
+                                user_session_issuer_id) VALUES
+    (demo.det_uuid('gram-demo-metamcp-1'), demo_org, proj_a, 'Acme Agent Gateway',
+     demo.det_uuid('gram-demo-issuer-gateway'));
+
+  -- sort_order is the order agents see members in list_servers.
+  INSERT INTO meta_mcp_server_members (id, project_id, meta_mcp_server_id,
+                                       mcp_server_id, sort_order) VALUES
+    (demo.det_uuid('gram-demo-metamember-support'), proj_a,
+     demo.det_uuid('gram-demo-metamcp-1'), demo.det_uuid('gram-demo-mcpserver-support'), 0),
+    (demo.det_uuid('gram-demo-metamember-ops'), proj_a,
+     demo.det_uuid('gram-demo-metamcp-1'), demo.det_uuid('gram-demo-mcpserver-ops'), 1),
+    (demo.det_uuid('gram-demo-metamember-linear'), proj_a,
+     demo.det_uuid('gram-demo-metamcp-1'), demo.det_uuid('gram-demo-mcpserver-linear'), 2),
+    (demo.det_uuid('gram-demo-metamember-slack'), proj_a,
+     demo.det_uuid('gram-demo-metamcp-1'), demo.det_uuid('gram-demo-mcpserver-slack'), 3);
+
+  -- Endpoint slugs on the platform domain are globally unique and org-slug
+  -- prefixed, so they rewrite with OrgSlug for the local and test tenants.
+  INSERT INTO mcp_endpoints (id, project_id, meta_mcp_server_id, mcp_server_id, slug) VALUES
+    (demo.det_uuid('gram-demo-endpoint-gateway'), proj_a,
+     demo.det_uuid('gram-demo-metamcp-1'), NULL, 'acme-demo-gateway'),
+    (demo.det_uuid('gram-demo-endpoint-linear'), proj_a, NULL,
+     demo.det_uuid('gram-demo-mcpserver-linear'), 'acme-demo-linear'),
+    (demo.det_uuid('gram-demo-endpoint-slack'), proj_a, NULL,
+     demo.det_uuid('gram-demo-mcpserver-slack'), 'acme-demo-slack');
 
   ------------------------------------------------------------------
   -- Prompts (the Prompts page otherwise falls back to onboarding).
@@ -1326,6 +1527,37 @@ E'--- a/SKILL.md\n+++ b/SKILL.md\n@@ -6,4 +6,5 @@\n # Refund handling\n \n 1. Ve
     RAISE EXCEPTION 'demo seed postflight: % demo-org rows reference non-demo projects', stray;
   END IF;
 
+  -- The gateway is only a gateway if its members survived the reseed, and an
+  -- endpoint is what gives it a URL — without either the MCP pages render it
+  -- as an empty shell.
+  SELECT count(*) INTO stray
+  FROM meta_mcp_server_members m
+  WHERE m.project_id = proj_a AND m.deleted IS FALSE;
+  IF stray <> 4 THEN
+    RAISE EXCEPTION 'demo seed postflight: expected 4 gateway members, found %', stray;
+  END IF;
+
+  SELECT count(*) INTO stray
+  FROM mcp_endpoints e
+  WHERE e.project_id = proj_a AND e.deleted IS FALSE
+    AND e.meta_mcp_server_id IS NOT NULL;
+  IF stray <> 1 THEN
+    RAISE EXCEPTION 'demo seed postflight: expected 1 gateway endpoint, found %', stray;
+  END IF;
+
+  -- A member whose server lost its backend can never be dispatched to, so it
+  -- would sit in the gateway's table permanently unavailable.
+  SELECT count(*) INTO stray
+  FROM meta_mcp_server_members m
+  JOIN mcp_servers s ON s.id = m.mcp_server_id
+  WHERE m.project_id = proj_a AND m.deleted IS FALSE
+    AND (s.deleted IS TRUE OR s.slug IS NULL
+         OR num_nonnulls(s.toolset_id, s.remote_mcp_server_id,
+                         s.tunneled_mcp_server_id, s.unproxied_mcp_server_id) <> 1);
+  IF stray > 0 THEN
+    RAISE EXCEPTION 'demo seed postflight: % gateway members are not servable', stray;
+  END IF;
+
   SELECT count(*) INTO stray FROM session_quarantines
   WHERE organization_id = demo_org AND project_id = proj_a AND released_at IS NULL;
   IF stray <> 1 THEN
@@ -1372,6 +1604,38 @@ E'--- a/SKILL.md\n+++ b/SKILL.md\n@@ -6,4 +6,5 @@\n # Refund handling\n \n 1. Ve
   SELECT count(*) INTO stray FROM api_keys WHERE organization_id = demo_org;
   IF stray > 0 THEN
     RAISE EXCEPTION 'demo seed postflight: % api keys survived the reseed', stray;
+  END IF;
+
+  -- The registrations are the point of the Connections surfaces: one per
+  -- credential kind, plus the pre-column row. A rerun that dropped or
+  -- duplicated any of them would leave the badges telling a different story
+  -- than the one they were seeded to tell.
+  -- One issuer per Connections credential story (acme-partner-gateway) plus
+  -- the three MCP server issuers (linear, slack, acme-agent-gateway).
+  SELECT count(*) INTO stray FROM user_session_issuers
+  WHERE project_id = proj_a AND deleted IS FALSE;
+  IF stray <> 4 THEN
+    RAISE EXCEPTION 'demo seed postflight: expected 4 user session issuers, found %', stray;
+  END IF;
+
+  SELECT count(*) INTO stray FROM user_session_clients
+  WHERE project_id = proj_a AND deleted IS FALSE;
+  IF stray <> 5 THEN
+    RAISE EXCEPTION 'demo seed postflight: expected 5 registered agents, found %', stray;
+  END IF;
+
+  SELECT count(*) INTO stray FROM user_sessions
+  WHERE project_id = proj_a AND deleted IS FALSE;
+  IF stray <> 5 THEN
+    RAISE EXCEPTION 'demo seed postflight: expected 5 MCP connections, found %', stray;
+  END IF;
+
+  -- Every seeded connection hangs off a registration. One with none would be
+  -- filed under "Unknown client" and carry no credential reading at all.
+  SELECT count(*) INTO stray FROM user_sessions
+  WHERE project_id = proj_a AND deleted IS FALSE AND user_session_client_id IS NULL;
+  IF stray > 0 THEN
+    RAISE EXCEPTION 'demo seed postflight: % MCP connections have no registration', stray;
   END IF;
 
   RAISE NOTICE 'demo seed ok: % chats, % findings, % members, % tools',

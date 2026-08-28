@@ -29,6 +29,7 @@ type fetchResult string
 const (
 	fetchResultSuccess         fetchResult = "success"
 	fetchResultFetchError      fetchResult = "fetch_error"
+	fetchResultFetchDenied     fetchResult = "fetch_denied"
 	fetchResultParseError      fetchResult = "parse_error"
 	fetchResultValidationError fetchResult = "validation_error"
 

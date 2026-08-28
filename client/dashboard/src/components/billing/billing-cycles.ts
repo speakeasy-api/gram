@@ -52,6 +52,15 @@ export function cyclesFromTum(tum: TokensUnderManagement): BillingCycle[] {
   );
 }
 
+// Whether any cycle in the server's history window recorded billed usage.
+// Only the billed totals count: a cycle whose days recompute nonzero against
+// a zero billed total scales those days by zero everywhere they render, so
+// admitting it would put the zeroed explorer back where the empty state
+// belongs.
+export function cyclesHaveUsage(cycles: BillingCycle[]): boolean {
+  return cycles.some((c) => c.tokens > 0);
+}
+
 const cycleMonthFormat = new Intl.DateTimeFormat("en-US", {
   month: "long",
   timeZone: "UTC",

@@ -32,12 +32,12 @@ import UserSessions from "./pages/org/UserSessions";
 import EventFeed from "./pages/data/EventFeed";
 import DeviceAgent, { DeviceAgentRoot } from "./pages/device-agent/DeviceAgent";
 import MdmIntegrationDetail from "./pages/org/device-integrations/MdmIntegrationDetail";
-import Elements from "./pages/elements/Elements";
 import EnvironmentPage from "./pages/environments/Environment";
 import Environments, {
   EnvironmentsRoot,
 } from "./pages/environments/Environments";
 import Home from "./pages/home/Home";
+import { ProjectGuidePage } from "./components/project-guide/ProjectGuidePage";
 import Integrations from "./pages/integrations/Integrations";
 import Login from "./pages/login/Login";
 import Register from "./pages/login/Register";
@@ -47,6 +47,7 @@ import { LogsRoot } from "./pages/logs/Logs";
 import { BuiltInMCPDetailPage } from "./pages/mcp/BuiltInMCPDetailPage";
 import { MCPDetailPage } from "./pages/mcp/MCPDetails";
 import { MCPPage, MCPRoot } from "./pages/mcp/MCP";
+import GatewayDetailPage from "./pages/mcp/gateway/GatewayDetails";
 import MCPServerDetails from "./pages/mcp/x/MCPServerDetails";
 import {
   InsightsEmployeeDetailPage,
@@ -83,6 +84,10 @@ import {
   ExternalServicesRoot,
 } from "./pages/org/external-services/ExternalServices";
 import ExternalKeyDetail from "./pages/org/encryption-keys/ExternalKeyDetail";
+import JsonWebKeySetDetail, {
+  SigningKeySetsIndex,
+  SigningKeySetsRoot,
+} from "./pages/org/encryption-keys/jwks/JsonWebKeySetDetail";
 import {
   EncryptionKeysPage,
   EncryptionKeysRoot,
@@ -238,6 +243,11 @@ const ROUTE_STRUCTURE = {
     icon: "house",
     component: Home,
   },
+  guide: {
+    title: "Project Guide",
+    url: "guide",
+    component: ProjectGuidePage,
+  },
   chat: {
     title: "Project Assistant",
     url: "chat",
@@ -259,12 +269,6 @@ const ROUTE_STRUCTURE = {
     url: "playground",
     icon: "message-circle",
     component: Playground,
-  },
-  elements: {
-    title: "Chat Elements",
-    url: "elements",
-    icon: "message-circle",
-    component: Elements,
   },
   integrations: {
     title: "Integrations",
@@ -510,6 +514,39 @@ const ROUTE_STRUCTURE = {
           },
           settings: {
             title: "MCP Server Settings",
+            url: "settings",
+          },
+        },
+      },
+      // Gateway Endpoints (meta MCP servers). Addressed by id: a gateway has
+      // no slug of its own — routing identity lives on its mcp_endpoints.
+      gateway: {
+        title: "Gateway Details",
+        url: "gateway/:gatewayId",
+        component: GatewayDetailPage,
+        subPages: {
+          overview: {
+            title: "Gateway Overview",
+            url: "overview",
+          },
+          members: {
+            title: "Gateway Members",
+            url: "members",
+          },
+          inspect: {
+            title: "Gateway Inspect",
+            url: "inspect",
+          },
+          teamAccess: {
+            title: "Gateway Team Access",
+            url: "team-access",
+          },
+          sessions: {
+            title: "Gateway Clients and Sessions",
+            url: "sessions",
+          },
+          settings: {
+            title: "Gateway Settings",
             url: "settings",
           },
         },
@@ -1101,6 +1138,32 @@ const ORG_ROUTE_STRUCTURE = {
         component: ExternalKeyDetail,
         subPages: {
           overview: { title: "Overview", url: "overview" },
+          signingKeys: { title: "Signing Keys", url: "signing-keys" },
+          settings: { title: "Settings", url: "settings" },
+        },
+      },
+    },
+  },
+  // Signing key sets are listed on the Encryption Keys page (a set is the
+  // published face of the KMS key that backs it), but their detail pages get
+  // their own top-level path so a set id can never be mistaken for the
+  // :provider/:keyId segments of an encryption key. The index redirects to
+  // that list, which keeps the breadcrumb and command palette entry landing
+  // somewhere real. Not in the sidebar.
+  signingKeySets: {
+    title: "Signing Key Sets",
+    url: "signing-keys",
+    icon: "key-round",
+    component: SigningKeySetsRoot,
+    indexComponent: SigningKeySetsIndex,
+    subPages: {
+      setDetail: {
+        title: "Signing Key Set",
+        url: ":setId",
+        component: JsonWebKeySetDetail,
+        subPages: {
+          overview: { title: "Overview", url: "overview" },
+          keys: { title: "Keys", url: "keys" },
           settings: { title: "Settings", url: "settings" },
         },
       },

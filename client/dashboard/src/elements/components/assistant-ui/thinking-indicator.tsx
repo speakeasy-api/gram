@@ -4,6 +4,7 @@ import { useAuiState } from "@assistant-ui/react";
 import { type FC, useEffect, useMemo, useState } from "react";
 
 import { isToolCallAnnotation } from "@/elements/lib/toolCallAnnotation";
+import { RainbowSpinner } from "@/components/ui/Spinner";
 import { cn } from "@/lib/utils";
 
 /**
@@ -220,7 +221,7 @@ export const ThinkingIndicator: FC = () => {
       {/* Stable label for assistive tech — the rotating verb below is purely
           decorative, so announcing each word would just be noise. */}
       <span className="sr-only">Assistant is working…</span>
-      <span className="aui-thinking-dot" aria-hidden="true" />
+      <RainbowSpinner className="size-3.5" />
       <span
         aria-hidden="true"
         className={cn(

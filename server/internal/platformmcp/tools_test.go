@@ -51,7 +51,7 @@ func TestOperationBudgetToolResultMapsRegistrationInputErrors(t *testing.T) {
 			require.Equal(t, test.code, body.Code)
 			if errors.Is(test.err, ErrCatalogUnavailable) {
 				require.Equal(t, "catalog_unavailable", body.Reason)
-				require.Contains(t, body.Message, "Catalogue is temporarily unavailable")
+				require.Contains(t, body.Message, "catalogue of MCP servers is temporarily unavailable")
 			}
 		})
 	}

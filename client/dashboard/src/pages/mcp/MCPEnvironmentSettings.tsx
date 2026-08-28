@@ -11,7 +11,6 @@ import {
 import { useSession } from "@/contexts/Auth";
 import { useTelemetry } from "@/contexts/Telemetry";
 import { useMissingRequiredEnvVars } from "@/hooks/useMissingEnvironmentVariables";
-import { ONBOARD_EXTERNAL_MCP_TO_USER_SESSIONS_FLAG } from "@/lib/externalMcpUserSessions";
 import { Toolset } from "@/lib/toolTypes";
 import { useRoutes } from "@/routes";
 import type { McpEnvironmentConfigInput } from "@gram/client/models/components/mcpenvironmentconfiginput.js";
@@ -58,8 +57,6 @@ import {
   isUserSessionIssuerWired,
   type OAuthParadigm,
   toolsetAuthSurface,
-  type ToolsetConvertAction,
-  toolsetConvertAction,
 } from "./toolsetAuthSurface";
 import { useEnvironmentVariables } from "./useEnvironmentVariables";
 
@@ -946,12 +943,8 @@ type OAuthSectionProps = {
  * convert path.
  */
 function OAuthSection({ toolset }: OAuthSectionProps) {
-  const telemetry = useTelemetry();
   const oauthParadigm = getOAuthParadigm(toolset);
   const surface = toolsetAuthSurface({
-    flagEnabled:
-      telemetry.isFeatureEnabled(ONBOARD_EXTERNAL_MCP_TO_USER_SESSIONS_FLAG) ??
-      false,
     userSessionIssuerWired: isUserSessionIssuerWired(toolset),
     oauthParadigm,
   });
@@ -959,23 +952,10 @@ function OAuthSection({ toolset }: OAuthSectionProps) {
   if (surface === "manage" || surface === "attach") {
     return <ToolsetAuthenticationSection toolset={toolset} />;
   }
-  return (
-    <LegacyOAuthSection
-      toolset={toolset}
-      convertAction={
-        surface === "legacy" ? toolsetConvertAction(oauthParadigm) : null
-      }
-    />
-  );
+  return <LegacyOAuthSection toolset={toolset} />;
 }
 
-function LegacyOAuthSection({
-  toolset,
-  convertAction,
-}: OAuthSectionProps & {
-  /** Migration entry point to render; null when the flag is off. */
-  convertAction: ToolsetConvertAction | null;
-}) {
+function LegacyOAuthSection({ toolset }: OAuthSectionProps) {
   const [isOAuthModalOpen, setIsOAuthModalOpen] = useState(false);
   const [isOAuthDetailsModalOpen, setIsOAuthDetailsModalOpen] = useState(false);
 
@@ -1002,9 +982,8 @@ function LegacyOAuthSection({
     ? "Enable the MCP server to configure OAuth"
     : "This MCP server does not require the OAuth authorization code flow";
 
-  // Flag holders with a wired issuer never reach this component (the
-  // dispatcher sends them to the manage surface), but non-holders can land
-  // here wired, so the legacy display still handles it.
+  // The dispatcher sends wired issuers to the manage surface. Keep this
+  // defensive check aligned in case the legacy section is reused directly.
   const userSessionIssuerWired = !!toolset.userSessionIssuerSlug;
   // Once wired, the external OAuth config is inert — hide Configure so
   // operators aren't steered back into the legacy paradigm.
@@ -1025,9 +1004,7 @@ function LegacyOAuthSection({
               <Badge.Text>Login Secured</Badge.Text>
             </Badge>
           )}
-          {convertAction === "attach-sheet" && (
-            <ConvertToUserSessionsButton toolset={toolset} />
-          )}
+          <ConvertToUserSessionsButton toolset={toolset} />
           {!hideConfigureButton && (
             <Tooltip>
               <TooltipTrigger asChild>

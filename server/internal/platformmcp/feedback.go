@@ -401,5 +401,7 @@ var knownPlatformMCPToolNames = map[string]struct{}{
 	"enable_mcp":                            {},
 	"list_plugins":                          {},
 	"get_plugin":                            {},
+	"get_mcp_client_admission":              {},
+	"set_mcp_client_admission":              {},
 	"send_platform_mcp_feedback":            {},
 }

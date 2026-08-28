@@ -598,7 +598,7 @@ func (s *SkillsService) DistributeSkill(ctx context.Context, principal Principal
 		Target:            target,
 		DistributionID:    distribution.ID,
 		ResolvedVersionID: distribution.ResolvedVersionID,
-		Message:           fmt.Sprintf("The skill is now carried by the %s %q and takes effect for agents using it.", target.Kind, target.Name),
+		Message:           fmt.Sprintf("This skill is now part of the %s %q, so agents using it will load it.", target.Kind, target.Name),
 	}, nil
 }
 
@@ -654,7 +654,7 @@ func (s *SkillsService) authoringResult(ctx context.Context, principal Principal
 		CreatedSkill:        result.CreatedSkill,
 		CreatedVersion:      result.CreatedVersion,
 		Distributed:         false,
-		InertMessage:        "This skill is saved but inert: nothing loads it until it is distributed to a plugin or an assistant with distribute_skill.",
+		InertMessage:        "This skill is saved, but no agent loads it yet. Give it to a plugin or an assistant with distribute_skill for it to take effect.",
 		NextAction:          "distribute_skill",
 		DistributionTargets: targets,
 	}
@@ -747,13 +747,13 @@ func skillsRefusalCode(err error) (string, string, bool) {
 	case oops.CodeConflict:
 		return "conflict", shareable.Error(), true
 	case oops.CodeUnauthorized, oops.CodeForbidden:
-		return "forbidden", "This connection is not authorized to author or distribute skills in this project.", true
+		return "forbidden", "You are not allowed to write or hand out skills in this project.", true
 	case oops.CodeRateLimitExceeded:
 		return "rate_limited", shareable.Error(), true
 	case oops.CodeFailedPrecondition, oops.CodeInvariantViolation:
 		return "conflict", shareable.Error(), true
 	case oops.CodeUnavailable, oops.CodeGatewayError, oops.CodeNotImplemented:
-		return unavailableCode, "The skills service is temporarily unavailable. Retry after a short delay.", true
+		return unavailableCode, "Skills are temporarily unavailable. Try again shortly.", true
 	case oops.CodeUnexpected, oops.CodeMethodNotAllowed, oops.CodeInsufficientCredits, oops.CodeInferenceDisabled, oops.CodeCanceled:
 		return "", "", false
 	default:
@@ -783,7 +783,7 @@ func (s *PostgresSkillTargets) SkillTargets(ctx context.Context, organizationID 
 	limit := limitPerKind
 	// Clamped to the lookup ceiling before the narrowing conversion, so a caller
 	// cannot ask for a page size that does not fit the query parameter.
-	bounded := int32(min(max(limit, 1), maxSkillTargetLookup)) //nolint:gosec // bounded above by maxSkillTargetLookup
+	bounded := int32(min(max(limit, 1), maxSkillTargetLookup))
 	queries := platformrepo.New(s.db)
 	plugins, err := queries.ListPlatformMCPProjectPlugins(ctx, platformrepo.ListPlatformMCPProjectPluginsParams{
 		ProjectID:      projectID,

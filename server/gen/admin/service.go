@@ -9,6 +9,7 @@ package admin
 
 import (
 	"context"
+	"encoding/json"
 
 	goa "goa.design/goa/v3/pkg"
 	"goa.design/goa/v3/security"
@@ -45,6 +46,8 @@ type Service interface {
 	ListOrganizationMembers(context.Context, *ListOrganizationMembersPayload) (res *AdminListOrganizationMembersResult, err error)
 	// Lists projects belonging to an organization (admin view, no auth scoping).
 	ListOrganizationProjects(context.Context, *ListOrganizationProjectsPayload) (res *AdminListOrganizationProjectsResult, err error)
+	// Lists activity belonging to an organization for admin operators.
+	ListOrganizationActivity(context.Context, *ListOrganizationActivityPayload) (res *AdminListOrganizationActivityResult, err error)
 	// Lists organizations for admin operations with optional search and filters.
 	ListOrganizations(context.Context, *ListOrganizationsPayload) (res *AdminListOrganizationsResult, err error)
 	// Extends a running enterprise trial by adding days to its current end date.
@@ -106,7 +109,7 @@ const ServiceName = "admin"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [23]string{"login", "callback", "logout", "getProject", "updateOrganization", "bulkUpdateAccountType", "disableOrganization", "enableOrganization", "getOrganization", "listOrganizationMembers", "listOrganizationProjects", "listOrganizations", "extendTrial", "createOrganization", "rearmTrial", "getOrganizationStats", "getInferenceKeys", "setInferenceKeyMonthlyLimit", "getInferenceSpendHistory", "getPaygBillingSummary", "getStripeSubscription", "cancelStripeSubscription", "resumeStripeSubscription"}
+var MethodNames = [24]string{"login", "callback", "logout", "getProject", "updateOrganization", "bulkUpdateAccountType", "disableOrganization", "enableOrganization", "getOrganization", "listOrganizationMembers", "listOrganizationProjects", "listOrganizationActivity", "listOrganizations", "extendTrial", "createOrganization", "rearmTrial", "getOrganizationStats", "getInferenceKeys", "setInferenceKeyMonthlyLimit", "getInferenceSpendHistory", "getPaygBillingSummary", "getStripeSubscription", "cancelStripeSubscription", "resumeStripeSubscription"}
 
 // AdminBulkUpdateAccountTypeResult is the result type of the admin service
 // bulkUpdateAccountType method.
@@ -141,6 +144,15 @@ type AdminInferenceSpendMonth struct {
 	// Exclusive end of the UTC calendar month.
 	PeriodEnd string
 	SpendUsd  string
+}
+
+// AdminListOrganizationActivityResult is the result type of the admin service
+// listOrganizationActivity method.
+type AdminListOrganizationActivityResult struct {
+	// List of organization activity.
+	Logs []*AuditLog
+	// Cursor for the next page of results.
+	NextCursor *string
 }
 
 // AdminListOrganizationMembersResult is the result type of the admin service
@@ -185,15 +197,17 @@ type AdminOrganization struct {
 	Whitelisted bool
 	// The time at which the organization was disabled, if any.
 	DisabledAt *string
-	// The time at which the free trial started.
-	FreeTrialStartedAt *string
-	// The time at which the free trial ends.
-	FreeTrialEndsAt *string
 	// Lifecycle state of the organization's enterprise trial.
 	TrialState *string
+	// The trial tier. Absent when the organization never trialled.
+	TrialTier *string
 	// The time at which the enterprise trial ends. Absent when the organization
 	// never trialled.
 	TrialEndsAt *string
+	// The time at which the trial converted to a paid plan, if any.
+	TrialConvertedAt *string
+	// The time at which the organization was demoted after its trial, if any.
+	TrialDemotedAt *string
 	// Number of active members in the organization.
 	MemberCount int
 	// The creation date of the organization.
@@ -308,6 +322,33 @@ type AdminStripeSubscription struct {
 	CancelAt           *string
 	CanceledAt         *string
 	PaymentFailed      bool
+}
+
+type AuditLog struct {
+	ID               string
+	ProjectID        *string
+	ProjectSlug      *string
+	ActorID          string
+	ActorType        string
+	ActorDisplayName *string
+	ActorSlug        *string
+	Action           string
+	// How the change was made: 'dashboard', 'api_key', 'platform_mcp',
+	// 'project_assistant', or 'unknown' when no surface was identifiable. Always
+	// present.
+	ActingSurface string
+	// The registered OAuth client the call authenticated as, when it had one.
+	// Absent for calls that carried no OAuth client.
+	ActingClientID     *string
+	SubjectID          string
+	SubjectType        string
+	SubjectDisplayName *string
+	SubjectSlug        *string
+	BeforeSnapshot     json.RawMessage
+	AfterSnapshot      json.RawMessage
+	Metadata           map[string]any
+	// The creation date of the audit log.
+	CreatedAt string
 }
 
 // BulkUpdateAccountTypePayload is the payload type of the admin service
@@ -436,6 +477,16 @@ type GetProjectPayload struct {
 type GetStripeSubscriptionPayload struct {
 	AdminSessionToken *string
 	OrganizationID    string
+}
+
+// ListOrganizationActivityPayload is the payload type of the admin service
+// listOrganizationActivity method.
+type ListOrganizationActivityPayload struct {
+	AdminSessionToken *string
+	// Organization ID.
+	OrganizationID string
+	// Cursor for paginating through organization activity.
+	Cursor *string
 }
 
 // ListOrganizationMembersPayload is the payload type of the admin service

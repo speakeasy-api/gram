@@ -244,7 +244,7 @@ func newTestRiskService(t *testing.T, configure ...func(*testInstance)) (context
 		return ti.reconcileShadowMCPPolicyURLs(ctx, db, input)
 	}, func(ctx context.Context, projectID uuid.UUID, canonicalURLs []string) ([]string, error) {
 		return ti.shadowMCPInventoryURLLookup(ctx, projectID, canonicalURLs)
-	}, chrepo.New(chConn), nil, ti.assetStorage)
+	}, chrepo.New(chConn), ti.assetStorage)
 
 	return ctx, ti
 }

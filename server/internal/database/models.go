@@ -529,6 +529,19 @@ type CustomDomain struct {
 	Deleted                  bool
 }
 
+type DataExportRoute struct {
+	ID                uuid.UUID
+	OrganizationID    string
+	ProjectID         uuid.UUID
+	DataSource        string
+	Enabled           bool
+	OtelDestinationID uuid.NullUUID
+	CreatedAt         pgtype.Timestamptz
+	UpdatedAt         pgtype.Timestamptz
+	DeletedAt         pgtype.Timestamptz
+	Deleted           bool
+}
+
 type Deployment struct {
 	ID             uuid.UUID
 	Seq            int64
@@ -948,6 +961,7 @@ type GcpIamCredential struct {
 	WifPoolID                   pgtype.Text
 	WifProviderID               pgtype.Text
 	WifProjectNumber            pgtype.Text
+	SkipProjectVerification     bool
 	CreatedAt                   pgtype.Timestamptz
 	UpdatedAt                   pgtype.Timestamptz
 }
@@ -1075,6 +1089,60 @@ type JsonWebKeySet struct {
 	UpdatedAt      pgtype.Timestamptz
 	DeletedAt      pgtype.Timestamptz
 	Deleted        bool
+}
+
+type KillswitchExpiryEvent struct {
+	OrganizationID string
+	PrescriptionID uuid.UUID
+	Version        int64
+	RecordedAt     pgtype.Timestamptz
+}
+
+type KillswitchOperation struct {
+	OrganizationID string
+	OperationID    uuid.UUID
+	ActorUserID    string
+	Operation      string
+	RequestHash    string
+	Status         string
+	Response       []byte
+	ExpiresAt      pgtype.Timestamptz
+	CreatedAt      pgtype.Timestamptz
+	UpdatedAt      pgtype.Timestamptz
+}
+
+type KillswitchPrescription struct {
+	ID             uuid.UUID
+	OrganizationID string
+	DefinitionKey  string
+	PrincipalKind  string
+	PrincipalKey   string
+	ResourceKind   string
+	CurrentVersion int64
+	CreatedAt      pgtype.Timestamptz
+	UpdatedAt      pgtype.Timestamptz
+}
+
+type KillswitchPrescriptionVersion struct {
+	OrganizationID string
+	PrescriptionID uuid.UUID
+	Version        int64
+	State          string
+	ResourceScope  string
+	StartsAt       pgtype.Timestamptz
+	ExpiresAt      pgtype.Timestamptz
+	ActivatedAt    pgtype.Timestamptz
+	SupersededAt   pgtype.Timestamptz
+	InternalNote   string
+	ExternalNote   string
+	CreatedAt      pgtype.Timestamptz
+}
+
+type KillswitchPrescriptionVersionResource struct {
+	OrganizationID string
+	PrescriptionID uuid.UUID
+	Version        int64
+	ResourceKey    string
 }
 
 type LitellmInstance struct {
@@ -1240,13 +1308,14 @@ type McpResearchReport struct {
 }
 
 type McpServer struct {
-	ID                  uuid.UUID
-	ProjectID           uuid.UUID
-	Name                pgtype.Text
-	Slug                pgtype.Text
-	EnvironmentID       uuid.NullUUID
-	UserSessionIssuerID uuid.NullUUID
-	RemoteMcpServerID   uuid.NullUUID
+	ID                    uuid.UUID
+	ProjectID             uuid.UUID
+	Name                  pgtype.Text
+	Slug                  pgtype.Text
+	EnvironmentID         uuid.NullUUID
+	UserSessionIssuerID   uuid.NullUUID
+	RemoteSessionIssuerID uuid.NullUUID
+	RemoteMcpServerID     uuid.NullUUID
 	// Optional backend reference to a tunneled MCP source. Exactly one of remote_mcp_server_id, tunneled_mcp_server_id, toolset_id, or unproxied_mcp_server_id must be set.
 	TunneledMcpServerID   uuid.NullUUID
 	ToolsetID             uuid.NullUUID
@@ -1531,6 +1600,20 @@ type OrganizationUserRelationship struct {
 	UpdatedAt          pgtype.Timestamptz
 	DeletedAt          pgtype.Timestamptz
 	Deleted            bool
+}
+
+type OtelDestination struct {
+	ID               uuid.UUID
+	OrganizationID   string
+	ProjectID        uuid.UUID
+	Name             string
+	EndpointUrl      string
+	HeadersEncrypted pgtype.Text
+	SensitiveData    pgtype.Text
+	CreatedAt        pgtype.Timestamptz
+	UpdatedAt        pgtype.Timestamptz
+	DeletedAt        pgtype.Timestamptz
+	Deleted          bool
 }
 
 type OtelForwardingConfig struct {
@@ -2125,6 +2208,7 @@ type RemoteSessionIssuer struct {
 	Name                              pgtype.Text
 	LogoAssetID                       uuid.NullUUID
 	ClientSetupDocumentationUrl       pgtype.Text
+	Metadata                          []byte
 	CreatedAt                         pgtype.Timestamptz
 	UpdatedAt                         pgtype.Timestamptz
 	DeletedAt                         pgtype.Timestamptz
@@ -2948,7 +3032,8 @@ type UserOauthToken struct {
 
 type UserSession struct {
 	ID                  uuid.UUID
-	ProjectID           uuid.UUID
+	ProjectID           uuid.NullUUID
+	OrganizationID      pgtype.Text
 	UserSessionIssuerID uuid.UUID
 	UserSessionClientID uuid.NullUUID
 	SubjectUrn          urn.SessionSubject
@@ -2966,7 +3051,8 @@ type UserSession struct {
 
 type UserSessionClient struct {
 	ID                             uuid.UUID
-	ProjectID                      uuid.UUID
+	ProjectID                      uuid.NullUUID
+	OrganizationID                 pgtype.Text
 	UserSessionIssuerID            uuid.UUID
 	ClientID                       string
 	ClientSecretHash               pgtype.Text
@@ -2989,7 +3075,8 @@ type UserSessionClient struct {
 
 type UserSessionConsent struct {
 	ID                  uuid.UUID
-	ProjectID           uuid.UUID
+	ProjectID           uuid.NullUUID
+	OrganizationID      pgtype.Text
 	SubjectUrn          urn.SessionSubject
 	UserSessionClientID uuid.UUID
 	RemoteSetHash       string
@@ -3002,7 +3089,8 @@ type UserSessionConsent struct {
 
 type UserSessionIssuer struct {
 	ID                            uuid.UUID
-	ProjectID                     uuid.UUID
+	ProjectID                     uuid.NullUUID
+	OrganizationID                pgtype.Text
 	Slug                          string
 	AuthnChallengeMode            string
 	SessionDuration               pgtype.Interval
@@ -3016,7 +3104,8 @@ type UserSessionIssuer struct {
 
 type UserSessionIssuerCimdClient struct {
 	ID                  uuid.UUID
-	ProjectID           uuid.UUID
+	ProjectID           uuid.NullUUID
+	OrganizationID      pgtype.Text
 	UserSessionIssuerID uuid.UUID
 	ClientIDMetadataUri string
 	CreatedAt           pgtype.Timestamptz

@@ -27,13 +27,15 @@ INSERT INTO gcp_iam_credentials (
   impersonate_service_account,
   wif_pool_id,
   wif_provider_id,
-  wif_project_number
+  wif_project_number,
+  skip_project_verification
 ) VALUES (
   @external_credential_id,
   sqlc.narg('impersonate_service_account'),
   sqlc.narg('wif_pool_id'),
   sqlc.narg('wif_provider_id'),
-  sqlc.narg('wif_project_number')
+  sqlc.narg('wif_project_number'),
+  @skip_project_verification
 )
 RETURNING *;
 
@@ -107,6 +109,7 @@ SET impersonate_service_account = sqlc.narg('impersonate_service_account'),
     wif_pool_id = sqlc.narg('wif_pool_id'),
     wif_provider_id = sqlc.narg('wif_provider_id'),
     wif_project_number = sqlc.narg('wif_project_number'),
+    skip_project_verification = @skip_project_verification,
     updated_at = clock_timestamp()
 WHERE external_credential_id = @external_credential_id
 RETURNING *;

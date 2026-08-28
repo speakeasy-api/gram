@@ -249,7 +249,7 @@ WHERE organization_id = @organization_id;
 -- Test-only fixture for defensive paths that handle a dangling soft-delete FK.
 UPDATE user_session_issuers
 SET deleted_at = clock_timestamp()
-WHERE id = @id AND project_id = @project_id AND deleted IS FALSE;
+WHERE id = @id AND project_id = @project_id::uuid AND deleted IS FALSE;
 
 -- name: SetUserSessionIssuerCIMDAdmissionMode :exec
 -- Test-only fixture: writes an issuer's CIMD admission mode as a single-column
@@ -259,7 +259,16 @@ WHERE id = @id AND project_id = @project_id AND deleted IS FALSE;
 -- narrow query.
 UPDATE user_session_issuers
 SET client_id_metadata_admission_mode = @client_id_metadata_admission_mode
-WHERE id = @id AND project_id = @project_id AND deleted IS FALSE;
+WHERE id = @id AND project_id = @project_id::uuid AND deleted IS FALSE;
+
+-- name: SetUserSessionIssuerOrganizationID :exec
+-- Test-only fixture: repoints an issuer's organization so tests can observe
+-- what a child row does when its parent's tenancy no longer matches its own.
+-- No production path moves an issuer between organizations yet, so there is
+-- no other way to reach that state.
+UPDATE user_session_issuers
+SET organization_id = @organization_id
+WHERE id = @id AND project_id = @project_id::uuid AND deleted IS FALSE;
 
 -- name: InsertPluginAssignmentFixture :exec
 -- Test-only fixture: writes a plugin_assignments row with an EXPLICIT
@@ -419,6 +428,13 @@ UPDATE remote_sessions
 SET access_expires_at = clock_timestamp() - interval '1 minute'
 WHERE id = @id;
 
+-- name: SetRemoteSessionResourceFixture :exec
+-- Test-only fixture stamping a stored RFC 8707 resource binding on a row.
+UPDATE remote_sessions
+SET resource = @resource
+WHERE subject_urn = @subject_urn
+  AND remote_session_client_id = @remote_session_client_id;
+
 -- name: GetToolCallBlockLinksFixture :one
 -- Test-only. The block page query deliberately does not expose the optional
 -- foreign keys, but asserting that the salvage cleared exactly the link the
@@ -512,3 +528,71 @@ WHERE organization_id = @organization_id
 SELECT blob_url, consumed_at
 FROM session_handoff_links
 WHERE token = @token;
+
+-- name: SeedCapturedAgentChatFixture :one
+-- Test-only fixture: inserts the chat row a captured agent session hangs off,
+-- with the harness-native session id stored as external_chat_id and an
+-- optional personal/team account attribution.
+INSERT INTO chats (id, project_id, organization_id, user_id, external_chat_id, title, cwd, user_account_id)
+VALUES (@id, @project_id, @organization_id, @user_id, sqlc.narg(external_chat_id), @title, sqlc.narg(cwd), sqlc.narg(user_account_id))
+RETURNING id;
+
+-- name: SeedCapturedAgentChatMessageFixture :one
+-- Test-only fixture: inserts a captured transcript row with the full recall
+-- shape — generation, tool_calls, capture source, asset offload marker, and
+-- risk-analysis completion — at a deterministic created_at.
+INSERT INTO chat_messages (chat_id, project_id, role, content, generation, tool_calls, source, content_asset_url, risk_analyzed_at, created_at)
+VALUES (@chat_id, @project_id, @role, @content, @generation, sqlc.narg(tool_calls), sqlc.narg(source), sqlc.narg(content_asset_url), sqlc.narg(risk_analyzed_at), @created_at)
+RETURNING id;
+
+-- name: SeedUserAccountFixture :one
+-- Test-only fixture: inserts a minimal provider account row so chats can be
+-- attributed to a team or personal account.
+INSERT INTO user_accounts (organization_id, external_account_uuid, account_type)
+VALUES (@organization_id, @external_account_uuid, @account_type)
+RETURNING id;
+
+-- name: SeedRiskPolicyFixture :one
+-- Test-only fixture: inserts an enabled standard risk policy.
+INSERT INTO risk_policies (project_id, organization_id, name, sources, version)
+VALUES (@project_id, @organization_id, @name, @sources, 1)
+RETURNING id;
+
+-- name: SeedRiskResultFixture :one
+-- Test-only fixture: records one open finding against a chat message, with the
+-- primary span mirrored into the spans JSONB set.
+INSERT INTO risk_results (project_id, organization_id, risk_policy_id, risk_policy_version, chat_message_id, source, found, rule_id, match, start_pos, end_pos, spans)
+VALUES (@project_id, @organization_id, @risk_policy_id, 1, @chat_message_id, @source, TRUE, @rule_id, @match, @start_pos, @end_pos, sqlc.narg(spans))
+RETURNING id;
+
+-- name: GetChatSessionLinkByParentFixture :one
+-- Test-only inspection of a recorded session-lineage edge from its parent end.
+SELECT kind, child_chat_id, parent_session_id, target_harness, organization_id, project_id
+FROM chat_session_links
+WHERE parent_chat_id = @parent_chat_id;
+
+-- name: CountChatSessionLinksByKindFixture :one
+SELECT COUNT(*)
+FROM chat_session_links
+WHERE parent_chat_id = @parent_chat_id
+  AND kind = @kind;
+-- name: ForceSoftDeleteRemoteSessionIssuerFixture :exec
+-- Tombstones a remote session issuer regardless of its clients. Production
+-- deletes refuse while a live client references it, so this is the only way to
+-- build the state the derivation must reject.
+UPDATE remote_session_issuers
+SET deleted_at = clock_timestamp()
+WHERE id = @id;
+
+-- name: SetMCPServerRemoteSessionIssuerFixture :execrows
+-- Test-only fixture: stamps the denormalised upstream authorization server on
+-- an MCP server. Server creation cannot set it — no client bindings exist yet —
+-- so tests seed it after the fact, standing in for the binding resync.
+--
+-- Returns the row count so the caller can insist the stamp landed: one that
+-- matched nothing would otherwise let a negative test pass vacuously.
+UPDATE mcp_servers
+SET remote_session_issuer_id = @remote_session_issuer_id
+WHERE id = @id
+  AND project_id = @project_id
+  AND deleted IS FALSE;

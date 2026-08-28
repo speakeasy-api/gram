@@ -1,8 +1,12 @@
 package platformmcp
 
 import (
+	"context"
+	"encoding/json"
+	"sync/atomic"
 	"testing"
 
+	"github.com/google/jsonschema-go/jsonschema"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/stretchr/testify/require"
 )
@@ -13,7 +17,7 @@ import (
 func TestEveryRegisteredToolDeclaresAnAudience(t *testing.T) {
 	t.Parallel()
 
-	_, registrar := newServer(nil, nil, nil, "", nil, nil, nil, nil, nil, nil, nil, CatalogDescriptor{})
+	_, registrar := newServer(nil, nil, nil, "", nil, nil, nil, nil, nil, nil, nil, nil, CatalogDescriptor{})
 	descriptors := registrar.Descriptors()
 	require.NotEmpty(t, descriptors, "the deployment registers tools even when every dependency is absent")
 
@@ -57,6 +61,100 @@ func TestAudienceFilterSelectsPerTool(t *testing.T) {
 	require.Equal(t, []string{"both"}, names(registrar.For(AudienceAssistant)))
 }
 
+type explicitSchemaInput struct {
+	Mode string `json:"mode"`
+}
+
+type explicitSchemaOutput struct {
+	Mode string `json:"mode"`
+}
+
+func TestAddToolExplicitInputSchemaIsAuthoritative(t *testing.T) {
+	t.Parallel()
+
+	server := mcp.NewServer(&mcp.Implementation{Name: "schema-test", Version: "0.0.1"}, nil)
+	registrar := newRegistrar(server)
+	var calls atomic.Int32
+	schema := &jsonschema.Schema{
+		Type: "object",
+		Properties: map[string]*jsonschema.Schema{
+			"mode": {Type: "string", Enum: []any{"safe"}, Default: json.RawMessage(`"safe"`)},
+		},
+		AdditionalProperties: &jsonschema.Schema{Not: &jsonschema.Schema{}},
+	}
+	addTool(registrar, &mcp.Tool{Name: "explicit_schema", InputSchema: schema}, ToolMeta{Audiences: bothAudiences, ProjectScope: ProjectScopeNone}, func(_ context.Context, _ *mcp.CallToolRequest, input explicitSchemaInput) (*mcp.CallToolResult, explicitSchemaOutput, error) {
+		calls.Add(1)
+		return nil, explicitSchemaOutput(input), nil
+	})
+
+	descriptor := registrar.Descriptors()[0]
+	expected, err := json.Marshal(schema)
+	require.NoError(t, err)
+	require.JSONEq(t, string(expected), string(descriptor.InputSchema))
+
+	_, err = descriptor.Invoke(t.Context(), json.RawMessage(`{"mode":"unsafe"}`))
+	require.ErrorContains(t, err, "arguments do not match the tool schema")
+	require.Zero(t, calls.Load())
+
+	out, err := descriptor.Invoke(t.Context(), nil)
+	require.NoError(t, err)
+	require.Equal(t, explicitSchemaOutput{Mode: "safe"}, out)
+	require.EqualValues(t, 1, calls.Load())
+
+	out, err = descriptor.Invoke(t.Context(), json.RawMessage(`{"mode":"safe"}`))
+	require.NoError(t, err)
+	require.Equal(t, explicitSchemaOutput{Mode: "safe"}, out)
+	require.EqualValues(t, 2, calls.Load())
+
+	clientTransport, serverTransport := mcp.NewInMemoryTransports()
+	serverSession, err := server.Connect(t.Context(), serverTransport, nil)
+	require.NoError(t, err)
+	defer func() { _ = serverSession.Close() }()
+	client := mcp.NewClient(&mcp.Implementation{Name: "schema-client", Version: "0.0.1"}, nil)
+	session, err := client.Connect(t.Context(), clientTransport, nil)
+	require.NoError(t, err)
+	defer func() { _ = session.Close() }()
+
+	listed, err := session.ListTools(t.Context(), nil)
+	require.NoError(t, err)
+	require.Len(t, listed.Tools, 1)
+	listedSchema, err := json.Marshal(listed.Tools[0].InputSchema)
+	require.NoError(t, err)
+	require.JSONEq(t, string(expected), string(listedSchema))
+
+	refused, err := session.CallTool(t.Context(), &mcp.CallToolParams{Name: "explicit_schema", Arguments: map[string]any{"mode": "unsafe"}})
+	require.NoError(t, err)
+	require.True(t, refused.IsError)
+	require.EqualValues(t, 2, calls.Load())
+
+	accepted, err := session.CallTool(t.Context(), &mcp.CallToolParams{Name: "explicit_schema", Arguments: map[string]any{}})
+	require.NoError(t, err)
+	require.False(t, accepted.IsError)
+	require.Equal(t, map[string]any{"mode": "safe"}, accepted.StructuredContent)
+	require.EqualValues(t, 3, calls.Load())
+}
+
+func TestAddToolInfersInputSchemaWhenUnset(t *testing.T) {
+	t.Parallel()
+
+	server := mcp.NewServer(&mcp.Implementation{Name: "inferred-test", Version: "0.0.1"}, nil)
+	registrar := newRegistrar(server)
+	addTool(registrar, &mcp.Tool{Name: "inferred_schema"}, ToolMeta{Audiences: bothAudiences, ProjectScope: ProjectScopeNone}, func(_ context.Context, _ *mcp.CallToolRequest, input explicitSchemaInput) (*mcp.CallToolResult, explicitSchemaOutput, error) {
+		return nil, explicitSchemaOutput(input), nil
+	})
+
+	inferred, err := jsonschema.For[explicitSchemaInput](nil)
+	require.NoError(t, err)
+	expected, err := json.Marshal(inferred)
+	require.NoError(t, err)
+	require.JSONEq(t, string(expected), string(registrar.Descriptors()[0].InputSchema))
+
+	_, err = registrar.Descriptors()[0].Invoke(t.Context(), json.RawMessage(`{"mode":42}`))
+	require.ErrorContains(t, err, "arguments do not match the tool schema")
+	_, err = registrar.Descriptors()[0].Invoke(t.Context(), json.RawMessage(`{"mode":"safe"}`))
+	require.NoError(t, err)
+}
+
 func names(descriptors []Descriptor) []string {
 	out := make([]string, 0, len(descriptors))
 	for _, descriptor := range descriptors {
@@ -72,21 +170,24 @@ func names(descriptors []Descriptor) []string {
 func TestAssistantAudienceExcludesConnectionScopedTools(t *testing.T) {
 	t.Parallel()
 
-	_, registrar := newServer(nil, nil, nil, "", nil, nil, nil, nil, nil, nil, nil, CatalogDescriptor{})
+	_, registrar := newServer(nil, nil, nil, "", nil, nil, nil, nil, nil, nil, nil, nil, CatalogDescriptor{})
 
 	admitted := map[string]bool{}
 	for _, descriptor := range registrar.For(AudienceAssistant) {
 		admitted[descriptor.Name] = true
 	}
 
-	// Provider attachment still mutates connection-scoped state. Named-plugin
-	// distribution is intentionally unavailable until compatibility deployment.
+	// Named-plugin distribution is intentionally unavailable until
+	// compatibility deployment. Session recall is external-only in v1: the
+	// shared project-assistant surface must not serve user-personal
+	// cross-project transcripts.
 	for _, name := range []string{
-		"attach_platform_mcp_identity_provider",
 		"distribute_mcp_to_plugin",
 		"remove_mcp_from_plugin",
 		"list_plugins",
 		"get_plugin",
+		"list_my_sessions",
+		"continue_session",
 	} {
 		require.False(t, admitted[name], "tool %q needs a connection or is rollout-gated and must not be admitted to the assistant", name)
 	}
@@ -109,8 +210,18 @@ func TestAssistantAudienceExcludesConnectionScopedTools(t *testing.T) {
 		"get_setup_handoff",
 		"get_mcp_readiness",
 		"get_mcp_repair_plan",
+		"attach_platform_mcp_identity_provider",
+		"get_mcp_client_admission",
+		"set_mcp_client_admission",
 		"disable_mcp",
 		"enable_mcp",
+		"list_risk_policies",
+		"get_risk_policy",
+		"list_risk_exclusions",
+		"create_risk_policy",
+		"update_risk_policy",
+		"create_risk_exclusion",
+		"update_risk_exclusion",
 	} {
 		require.True(t, admitted[name], "tool %q works without a connection and should serve the assistant", name)
 	}
@@ -122,7 +233,7 @@ func TestAssistantAudienceExcludesConnectionScopedTools(t *testing.T) {
 func TestExternalEndpointServesOnlyExternallyAdmittedTools(t *testing.T) {
 	t.Parallel()
 
-	server, registrar := newServer(nil, nil, nil, "", nil, nil, nil, nil, nil, nil, nil, CatalogDescriptor{})
+	server, registrar := newServer(nil, nil, nil, "", nil, nil, nil, nil, nil, nil, nil, nil, CatalogDescriptor{})
 
 	admitted := make(map[string]bool)
 	for _, descriptor := range registrar.For(AudienceExternal) {
@@ -155,4 +266,72 @@ func TestExternalEndpointServesOnlyExternallyAdmittedTools(t *testing.T) {
 		}
 	}
 	require.Positive(t, withheld, "the catalogue withholds at least one tool from the external endpoint, so this test can fail")
+}
+
+// A tool whose result carries a SubjectCount must advertise that field as it
+// serializes — a number or the suppression label — not as the Go struct it is
+// reflected from. Asserted against a real session's tools/list rather than the
+// inference helper, so dropping the schema in addTool fails here too.
+func TestAdvertisedOutputSchemaMatchesTheSubjectCountWireForm(t *testing.T) {
+	t.Parallel()
+
+	// Registered directly rather than through newServer: with no dependencies
+	// the deployment substitutes the "diagnostics are not enabled" stubs, whose
+	// results carry no subject count. The handler is never called here — only
+	// the schema the registration advertises is under test.
+	server := newTestMCPServer()
+	registerDiagnosticsTools(newRegistrar(server), nil)
+
+	clientTransport, serverTransport := mcp.NewInMemoryTransports()
+	serverSession, err := server.Connect(t.Context(), serverTransport, nil)
+	require.NoError(t, err)
+	defer func() { _ = serverSession.Close() }()
+
+	client := mcp.NewClient(&mcp.Implementation{Name: "subject-count-test", Version: "0.0.1"}, nil)
+	session, err := client.Connect(t.Context(), clientTransport, nil)
+	require.NoError(t, err)
+	defer func() { _ = session.Close() }()
+
+	tools, err := session.ListTools(t.Context(), nil)
+	require.NoError(t, err)
+
+	var advertised any
+	for _, tool := range tools.Tools {
+		if tool.Name == "get_project_overview" {
+			advertised = tool.OutputSchema
+		}
+	}
+	require.NotNil(t, advertised, "the external endpoint advertises an output schema for get_project_overview")
+
+	encodedSchema, err := json.Marshal(advertised)
+	require.NoError(t, err)
+	var schema jsonschema.Schema
+	require.NoError(t, json.Unmarshal(encodedSchema, &schema))
+	resolved, err := schema.Resolve(nil)
+	require.NoError(t, err)
+
+	// Zero is reported exactly, three is suppressed, and twenty-five is
+	// reported exactly: the three shapes active_users takes on the wire.
+	for _, count := range []SubjectCount{NewSubjectCount(0), NewSubjectCount(3), NewSubjectCount(25)} {
+		encoded, err := json.Marshal(GetProjectOverviewOutput{ActiveUsers: count})
+		require.NoError(t, err)
+
+		var decoded any
+		require.NoError(t, json.Unmarshal(encoded, &decoded))
+		require.NoError(t, resolved.Validate(decoded), "output %s", encoded)
+	}
+}
+
+// Schema inference panics at process boot, so a tool input the nil-dependency
+// server never registers can crash-loop production while CI stays green. The
+// jsonschema tag is a description; a "word=" prefix is rejected outright.
+func TestClientAdmissionToolInputsInferSchemas(t *testing.T) {
+	t.Parallel()
+
+	_, err := jsonschema.For[GetMCPClientAdmissionToolInput](nil)
+	require.NoError(t, err)
+
+	schema, err := jsonschema.For[SetMCPClientAdmissionToolInput](nil)
+	require.NoError(t, err)
+	require.Contains(t, schema.Properties["mode"].Description, "presets, open, or disabled")
 }

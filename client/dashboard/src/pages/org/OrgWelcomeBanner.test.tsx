@@ -34,6 +34,7 @@ vi.mock("@/routes", () => ({
   useRoutes: ({ projectSlug }: { projectSlug?: string }) => ({
     exploreDemo: { href: () => "/explore-demo" },
     home: { href: () => `/acme/projects/${projectSlug}` },
+    guide: { href: () => `/acme/projects/${projectSlug}/guide` },
   }),
 }));
 vi.mock("react-router", () => ({
@@ -67,7 +68,7 @@ describe("OrgWelcomeBanner", () => {
     render(<OrgWelcomeBanner />);
 
     expect(hrefFor("Enter demo org")).toBe("/explore-demo");
-    expect(hrefFor("Start using Speakeasy")).toBe("/acme/projects/alpha");
+    expect(hrefFor("Start using Speakeasy")).toBe("/guide");
     expect(hrefFor("Begin rollout")).toBe("/acme/setup");
   });
 
@@ -102,20 +103,5 @@ describe("OrgWelcomeBanner", () => {
     render(<OrgWelcomeBanner />);
 
     expect(hrefFor("Start using Speakeasy")).toBe("/acme");
-  });
-
-  it("prefers the last-visited project, then default", () => {
-    projects.current = [
-      { id: "p1", name: "Alpha", slug: "alpha" },
-      { id: "p2", name: "Default", slug: "default" },
-    ];
-
-    render(<OrgWelcomeBanner />);
-    expect(hrefFor("Start using Speakeasy")).toBe("/acme/projects/default");
-
-    cleanup();
-    localStorage.setItem("preferredProject", "alpha");
-    render(<OrgWelcomeBanner />);
-    expect(hrefFor("Start using Speakeasy")).toBe("/acme/projects/alpha");
   });
 });

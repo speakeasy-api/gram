@@ -7153,6 +7153,9 @@ type UserAccountResponseBody struct {
 	// Account record id (user_accounts.id); used to scope chat/session views to
 	// this account
 	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Gram user id of the directory owner of this account; the authoritative link
+	// between account-email-keyed usage and the org member
+	UserID *string `form:"user_id,omitempty" json:"user_id,omitempty" xml:"user_id,omitempty"`
 	// AI provider the account belongs to ('anthropic', 'openai', 'cursor')
 	Provider *string `form:"provider,omitempty" json:"provider,omitempty" xml:"provider,omitempty"`
 	// Email associated with the account; may differ from the user's work email for

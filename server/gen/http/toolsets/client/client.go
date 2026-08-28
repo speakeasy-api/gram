@@ -45,6 +45,10 @@ type Client struct {
 	// listToolFilters endpoint.
 	ListToolFiltersDoer goahttp.Doer
 
+	// ListToolSchemaStaticValues Doer is the HTTP client used to make requests to
+	// the listToolSchemaStaticValues endpoint.
+	ListToolSchemaStaticValuesDoer goahttp.Doer
+
 	// CheckMCPSlugAvailability Doer is the HTTP client used to make requests to
 	// the checkMCPSlugAvailability endpoint.
 	CheckMCPSlugAvailabilityDoer goahttp.Doer
@@ -89,24 +93,25 @@ func NewClient(
 	restoreBody bool,
 ) *Client {
 	return &Client{
-		CreateToolsetDoer:            doer,
-		ListToolsetsDoer:             doer,
-		ListToolsetsForOrgDoer:       doer,
-		UpdateToolsetDoer:            doer,
-		DeleteToolsetDoer:            doer,
-		GetToolsetDoer:               doer,
-		ListToolFiltersDoer:          doer,
-		CheckMCPSlugAvailabilityDoer: doer,
-		CloneToolsetDoer:             doer,
-		AddExternalOAuthServerDoer:   doer,
-		RemoveOAuthServerDoer:        doer,
-		SetUserSessionIssuerDoer:     doer,
-		SetToolVariationsGroupDoer:   doer,
-		RestoreResponseBody:          restoreBody,
-		scheme:                       scheme,
-		host:                         host,
-		decoder:                      dec,
-		encoder:                      enc,
+		CreateToolsetDoer:              doer,
+		ListToolsetsDoer:               doer,
+		ListToolsetsForOrgDoer:         doer,
+		UpdateToolsetDoer:              doer,
+		DeleteToolsetDoer:              doer,
+		GetToolsetDoer:                 doer,
+		ListToolFiltersDoer:            doer,
+		ListToolSchemaStaticValuesDoer: doer,
+		CheckMCPSlugAvailabilityDoer:   doer,
+		CloneToolsetDoer:               doer,
+		AddExternalOAuthServerDoer:     doer,
+		RemoveOAuthServerDoer:          doer,
+		SetUserSessionIssuerDoer:       doer,
+		SetToolVariationsGroupDoer:     doer,
+		RestoreResponseBody:            restoreBody,
+		scheme:                         scheme,
+		host:                           host,
+		decoder:                        dec,
+		encoder:                        enc,
 	}
 }
 
@@ -273,6 +278,30 @@ func (c *Client) ListToolFilters() goa.Endpoint {
 		resp, err := c.ListToolFiltersDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("toolsets", "listToolFilters", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// ListToolSchemaStaticValues returns an endpoint that makes HTTP requests to
+// the toolsets service listToolSchemaStaticValues server.
+func (c *Client) ListToolSchemaStaticValues() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeListToolSchemaStaticValuesRequest(c.encoder)
+		decodeResponse = DecodeListToolSchemaStaticValuesResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildListToolSchemaStaticValuesRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.ListToolSchemaStaticValuesDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("toolsets", "listToolSchemaStaticValues", err)
 		}
 		return decodeResponse(resp)
 	}

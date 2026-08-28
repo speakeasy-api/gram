@@ -45,6 +45,7 @@ import {
   useDateRangeFilter,
 } from "@/components/observe/useDateRangeFilter";
 import { safeBase64Encode } from "@/components/observe/observeFilterUtils";
+import { llmTokens } from "@/pages/costs/taxonomy";
 import { ActivityTimelineCard } from "./ActivityTimelineCard";
 import { buildProjectOverviewQuery } from "./projectOverviewQuery";
 
@@ -167,7 +168,7 @@ export function ProjectDashboard(): JSX.Element {
             from,
             to,
             groupBy: GroupBy.Email,
-            sortBy: "total_tokens",
+            sortBy: "llm_tokens",
             topN: 100,
             filters: projectFilter,
           },
@@ -198,13 +199,13 @@ export function ProjectDashboard(): JSX.Element {
 
   const topUsersByTokens = useMemo(() => {
     return [...rankableUserRows]
-      .sort((a, b) => b.measures.totalTokens - a.measures.totalTokens)
+      .sort((a, b) => llmTokens(b.measures) - llmTokens(a.measures))
       .slice(0, 5)
-      .filter((r) => r.measures.totalTokens > 0)
+      .filter((r) => llmTokens(r.measures) > 0)
       .map((r) => ({
         key: r.groupValue,
         label: memberByEmail.get(r.groupValue)?.name ?? r.groupValue,
-        value: r.measures.totalTokens,
+        value: llmTokens(r.measures),
       }));
   }, [rankableUserRows, memberByEmail]);
 
@@ -263,7 +264,7 @@ export function ProjectDashboard(): JSX.Element {
               from,
               to,
               groupBy: GroupBy.HookSource,
-              sortBy: "total_tokens",
+              sortBy: "llm_tokens",
               topN: 10,
               filters: projectFilter,
             },
@@ -276,19 +277,23 @@ export function ProjectDashboard(): JSX.Element {
   );
 
   const mostUsedAgents = useMemo(() => {
-    return (usageByAgentData?.table ?? [])
-      .filter(
-        (r) =>
-          r.groupValue !== "" &&
-          r.groupValue !== "Other" &&
-          r.measures.totalTokens > 0,
-      )
-      .slice(0, 5)
-      .map((r) => ({
-        key: r.groupValue,
-        label: formatPlatform(r.groupValue),
-        value: r.measures.totalTokens,
-      }));
+    return (
+      (usageByAgentData?.table ?? [])
+        .filter(
+          (r) =>
+            r.groupValue !== "" &&
+            r.groupValue !== "Other" &&
+            llmTokens(r.measures) > 0,
+        )
+        // Server already ranks by llm_tokens; kept as a formality.
+        .sort((a, b) => llmTokens(b.measures) - llmTokens(a.measures))
+        .slice(0, 5)
+        .map((r) => ({
+          key: r.groupValue,
+          label: formatPlatform(r.groupValue),
+          value: llmTokens(r.measures),
+        }))
+    );
   }, [usageByAgentData]);
 
   // MCP-hosting fallback: external end-users (customer-supplied IDs) and their

@@ -20,6 +20,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/usersessions"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/cimd"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/cimd/admission"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/oauthwire"
@@ -157,18 +158,36 @@ func (s *Service) resolveUserSessionClient(ctx context.Context, logger *slog.Log
 			}
 			return &row, nil
 		case cimd.CacheOutcomeRefreshed:
+			if cachedRow != nil && usersessions.CIMDDocumentDowngradesAuthMethod(cachedRow, result.Document) {
+				// A document that drops private_key_jwt after committing to
+				// it is indistinguishable from a domain takeover, and no
+				// legitimate client has been observed doing it. The stored
+				// method stands; the operator's reset is to revoke the
+				// client, after which the next authorize registers afresh.
+				logger.WarnContext(ctx, "cimd document downgrades token_endpoint_auth_method, refusing refresh",
+					attr.SlogOAuthClientID(clientID),
+					attr.SlogOAuthRegisteredAuthMethod(cachedRow.TokenEndpointAuthMethod.String),
+					attr.SlogOAuthDeclaredAuthMethod(result.Document.DeclaredAuthMethod()),
+				)
+				return nil, fmt.Errorf("resolve cimd client: %w", &oauthwire.Error{Code: "invalid_client_metadata", Description: "document may not downgrade token_endpoint_auth_method from private_key_jwt"})
+			}
 			row, err := queries.UpsertUserSessionClientFromCIMD(ctx, usersessions_repo.UpsertUserSessionClientFromCIMDParams{
-				UserSessionIssuerID:  endpoint.UserSessionIssuerID,
-				ClientID:             clientID,
-				ClientName:           result.Document.ClientName,
-				RedirectUris:         result.Document.RedirectURIs,
-				CacheTtlSeconds:      result.TTL.Seconds(),
-				ClientIDMetadataEtag: conv.ToPGTextEmpty(result.ETag),
+				UserSessionIssuerID:     endpoint.UserSessionIssuerID,
+				ClientID:                clientID,
+				ClientName:              result.Document.ClientName,
+				RedirectUris:            result.Document.RedirectURIs,
+				CacheTtlSeconds:         result.TTL.Seconds(),
+				ClientIDMetadataEtag:    conv.ToPGTextEmpty(result.ETag),
+				TokenEndpointAuthMethod: result.Document.DeclaredAuthMethod(),
+				ClientJwks:              result.Document.JWKS,
+				ClientJwksUri:           conv.ToPGTextEmpty(result.Document.JWKSURI),
 			})
 			if err != nil {
-				// No-rows here means the DO UPDATE guard refused to rewrite a
-				// secret-bearing row sharing this client_id; surface it as an
-				// unknown client rather than a 500.
+				// No-rows here means a DO UPDATE guard refused the write:
+				// the row is a secret-bearing registration sharing this
+				// client_id, or a concurrent refresh raced the downgrade
+				// check above. Either surfaces as an unknown client rather
+				// than a 500.
 				if errors.Is(err, pgx.ErrNoRows) {
 					return nil, pgx.ErrNoRows
 				}
@@ -193,7 +212,9 @@ func (s *Service) resolveUserSessionClient(ctx context.Context, logger *slog.Log
 // admitCIMDClient enforces the issuer's CIMD admission policy against a
 // presented URL-shaped client_id, before any document is fetched. Returns
 // nil when the client is admitted, a *admission.DenialError when policy
-// denies it, and a wrapped error when the custom-URL lookup itself fails.
+// denies it, and a wrapped error when a custom-URL lookup the decision
+// depends on fails. An open-mode issuer refuses nobody, so its lookup feeds
+// telemetry only and a failure there is swallowed rather than returned.
 //
 // The catalog is consulted first and in memory, so the common case — a
 // preset client on a presets-mode issuer — never touches the database. Only
@@ -208,6 +229,15 @@ func (s *Service) admitCIMDClient(ctx context.Context, logger *slog.Logger, endp
 		logger.ErrorContext(ctx, "unrecognized cimd admission mode stored on issuer, failing closed",
 			attr.SlogCIMDAdmissionMode(endpoint.CIMDAdmissionModeRaw.String),
 		)
+	}
+
+	if mode == admission.ModeOpen {
+		// Open admits every spec-valid client, so Evaluate has nothing left
+		// to decide here. The shadow takes its place: the client is let
+		// through regardless, and what presets would have said about it is
+		// what lands on the counter.
+		s.cimdAdmissionMetrics.RecordAdmitted(ctx, mode, s.shadowCIMDAdmitReason(ctx, logger, endpoint, clientID))
+		return nil
 	}
 
 	decision := admission.Evaluate(mode, clientID)
@@ -257,6 +287,76 @@ func (s *Service) admitCIMDClient(ctx context.Context, logger *slog.Logger, endp
 
 	logger.InfoContext(ctx, "cimd admission denied", logAttrs...)
 	return &admission.DenialError{Mode: mode, Reason: decision.Denial}
+}
+
+// shadowCIMDAdmitReason computes what ModePresets WOULD have decided about
+// a client_id an open-mode issuer is admitting anyway, and returns it as the
+// outcome to record. It never refuses anything: every return value is an
+// AdmitReason, and a failure to reach a verdict is recorded as one too.
+//
+// The custom-URL lookup is the same one enforcement performs, so
+// AdmitOpenNotListed keeps meaning "no rule anywhere covers this client"
+// rather than the weaker "not in the catalog". It is not a new cost: every
+// catalog miss on an unconfigured issuer already paid for that query before
+// open became the resting state.
+func (s *Service) shadowCIMDAdmitReason(ctx context.Context, logger *slog.Logger, endpoint *ResolvedMcpEndpoint, clientID string) admission.AdmitReason {
+	shadow := admission.EvaluateShadow(clientID)
+
+	switch shadow.Outcome {
+	case admission.OutcomeAdmit:
+		return shadow.Admit
+	case admission.OutcomeDeny:
+		// Reachable only for a client_id too long to hand to the database.
+		// Nothing was refused, since the request was admitted before the
+		// shadow ran, but it is still named on both surfaces rather than
+		// dropped: on an unauthenticated endpoint a run of these is a
+		// probing campaign, and that is worth being able to see.
+		logger.InfoContext(ctx, "cimd admission would deny",
+			attr.SlogOAuthClientID(truncateClientIDForLog(clientID)),
+			attr.SlogCIMDAdmissionMode(admission.ModeOpen),
+			attr.SlogCIMDAdmissionOutcome(shadow.Denial),
+		)
+		return admission.AdmitOpenOversized
+	case admission.OutcomeCheckCustom:
+		admitted, err := usersessions_repo.New(s.db).IssuerAdmitsCimdClientURI(ctx, usersessions_repo.IssuerAdmitsCimdClientURIParams{
+			UserSessionIssuerID: endpoint.UserSessionIssuerID,
+			ClientIDMetadataUri: clientID,
+		})
+		if err != nil {
+			// Telemetry, never the flow. The client is already admitted, so a
+			// failed lookup costs the measurement and nothing else.
+			//
+			// A cancelled context is the client hanging up mid-authorize,
+			// which is ordinary on this surface and says nothing about the
+			// database. Logging those at error level would bury the failures
+			// that do mean something.
+			if !errors.Is(err, context.Canceled) {
+				logger.ErrorContext(ctx, "cimd admission shadow lookup failed",
+					attr.SlogOAuthClientID(truncateClientIDForLog(clientID)),
+					attr.SlogError(err),
+				)
+			}
+			return admission.AdmitOpen
+		}
+		if admitted {
+			return admission.AdmitCustom
+		}
+		// The presented client_id goes in the log and never in a metric
+		// dimension. This is the line an operator triaging a catalog gap
+		// aggregates by client_id: the message keeps "denied" honest when
+		// nothing was, and the outcome attribute carries the shadow's own
+		// verdict so the line reads as the refusal that did not happen.
+		logger.InfoContext(ctx, "cimd admission would deny",
+			attr.SlogOAuthClientID(truncateClientIDForLog(clientID)),
+			attr.SlogCIMDAdmissionMode(admission.ModeOpen),
+			attr.SlogCIMDAdmissionOutcome(admission.DenialNotListed),
+		)
+		return admission.AdmitOpenNotListed
+	default:
+		// Unreachable: Decision carries exactly the three outcomes above.
+		// Recorded as a missing verdict rather than invented as one.
+		return admission.AdmitOpen
+	}
 }
 
 // truncateClientIDForLog bounds a presented client_id for logging. The value

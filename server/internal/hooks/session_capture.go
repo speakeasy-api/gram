@@ -33,8 +33,7 @@ var ErrChatNotFound = errors.New("chat not found")
 // isForeignKeyViolation checks if the error is a PostgreSQL foreign key constraint violation.
 // This indicates that the referenced chat does not exist.
 func isForeignKeyViolation(err error) bool {
-	var pgErr *pgconn.PgError
-	if errors.As(err, &pgErr) {
+	if pgErr, ok := errors.AsType[*pgconn.PgError](err); ok {
 		return pgErr.Code == pgerrcode.ForeignKeyViolation
 	}
 	return false
@@ -396,8 +395,11 @@ func (s *Service) insertMessageWithFallbackUpsertResult(
 		return n > 0, nil
 	}
 
-	// If this is not a foreign key violation (chat doesn't exist), fail.
-	if !isForeignKeyViolation(err) {
+	// A missing chat now fails the writer's tenant preflight before PostgreSQL
+	// can raise its foreign-key error. Try the same project-scoped upsert for
+	// either signal: it creates a missing chat but rejects an existing chat
+	// owned by another project.
+	if !isForeignKeyViolation(err) && !errors.Is(err, chat.ErrChatNotInProject) {
 		return false, fmt.Errorf("insert chat message: %w", err)
 	}
 
@@ -413,7 +415,7 @@ func (s *Service) insertMessageWithFallbackUpsertResult(
 		Cwd:            conv.ToPGTextEmpty(metadata.Cwd),
 	})
 	if upsertErr != nil {
-		return false, fmt.Errorf("upsert claude code session after FK violation: %w", upsertErr)
+		return false, fmt.Errorf("upsert claude code session after missing chat: %w", upsertErr)
 	}
 
 	n, err = writeMessage()
@@ -589,6 +591,7 @@ func (s *Service) persistConversationEvent(ctx context.Context, payload *gen.Cla
 	s.logConversationTelemetry(ctx, payload, metadata, projectID)
 
 	msgParams := chatRepo.CreateChatMessageParams{
+		ID:               uuid.Nil,
 		Replayed:         false,
 		CreatedAt:        conv.PtrToPGTimestamptz(nil),
 		ChatID:           chatID,
@@ -677,6 +680,7 @@ func (s *Service) writeToolCallRequestToPG(ctx context.Context, payload *gen.Cla
 	}
 
 	msgParams := chatRepo.CreateChatMessageParams{
+		ID:               uuid.Nil,
 		Replayed:         false,
 		CreatedAt:        conv.PtrToPGTimestamptz(nil),
 		ChatID:           chatID,
@@ -730,6 +734,7 @@ func (s *Service) writeToolCallResultToPG(ctx context.Context, payload *gen.Clau
 	}
 
 	msgParams := chatRepo.CreateChatMessageParams{
+		ID:               uuid.Nil,
 		Replayed:         false,
 		CreatedAt:        conv.PtrToPGTimestamptz(nil),
 		ChatID:           chatID,

@@ -1,5 +1,7 @@
-import { cleanup, render } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { cleanup, render } from "@testing-library/react";
+
+import { SetupWizard } from "./onboarding-wizard";
 
 vi.mock("react-router", () => ({
   useNavigate: () => vi.fn(),
@@ -15,12 +17,7 @@ vi.mock("@gram/client/react-query/onboardingStatus", () => ({
 vi.mock("@gram/client/react-query/publishStatus", () => ({
   usePublishStatus: () => ({ data: { connected: false }, isLoading: false }),
 }));
-vi.mock("@/hooks/usePlatformMcpDashboardVisibility", () => ({
-  usePlatformMcpDashboardVisibility: () => ({
-    enabled: false,
-    isLoading: false,
-  }),
-}));
+
 vi.mock("@/components/ui/Skeleton", () => ({
   Skeleton: ({ children }: { children: React.ReactNode }) => <>{children}</>,
 }));
@@ -44,8 +41,6 @@ vi.mock("./steps", () => ({
   ConfigurePoliciesStep: () => null,
   PlatformMCPSetupStep: () => null,
 }));
-
-import { SetupWizard } from "./onboarding-wizard";
 
 afterEach(() => {
   cleanup();

@@ -22,6 +22,7 @@ import (
 	"golang.org/x/crypto/bcrypt"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/usersessions"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/oauthwire"
@@ -42,15 +43,17 @@ const dcrMaxBodyBytes int64 = 64 * 1024
 //
 // `scope` is intentionally absent (see RegistrationRequest comment).
 type dcrRegistrationResponse struct {
-	ClientID                string   `json:"client_id"`
-	ClientSecret            string   `json:"client_secret,omitempty"`
-	ClientIDIssuedAt        int64    `json:"client_id_issued_at"`
-	ClientSecretExpiresAt   *int64   `json:"client_secret_expires_at,omitempty"`
-	ClientName              string   `json:"client_name"`
-	RedirectURIs            []string `json:"redirect_uris"`
-	GrantTypes              []string `json:"grant_types"`
-	ResponseTypes           []string `json:"response_types"`
-	TokenEndpointAuthMethod string   `json:"token_endpoint_auth_method"`
+	ClientID                string          `json:"client_id"`
+	ClientSecret            string          `json:"client_secret,omitempty"`
+	ClientIDIssuedAt        int64           `json:"client_id_issued_at"`
+	ClientSecretExpiresAt   *int64          `json:"client_secret_expires_at,omitempty"`
+	ClientName              string          `json:"client_name"`
+	RedirectURIs            []string        `json:"redirect_uris"`
+	GrantTypes              []string        `json:"grant_types"`
+	ResponseTypes           []string        `json:"response_types"`
+	TokenEndpointAuthMethod string          `json:"token_endpoint_auth_method"`
+	JWKS                    json.RawMessage `json:"jwks,omitempty"`
+	JWKSURI                 string          `json:"jwks_uri,omitempty"`
 }
 
 // HandleRegister is the chi handler at `POST /mcp/{mcpSlug}/register`.
@@ -93,17 +96,15 @@ func (s *Service) ServeRegister(w http.ResponseWriter, r *http.Request, endpoint
 
 	var req usersessions.RegistrationRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		var maxBytesErr *http.MaxBytesError
-		if errors.As(err, &maxBytesErr) {
+		if _, ok := errors.AsType[*http.MaxBytesError](err); ok {
 			return writeDCRError(ctx, w, logger, "invalid_client_metadata", fmt.Sprintf("request body exceeds %d bytes", dcrMaxBodyBytes))
 		}
 		return writeDCRError(ctx, w, logger, "invalid_client_metadata", "request body is not valid JSON")
 	}
 
 	req.SetDefaults()
-	if err := req.Validate(); err != nil {
-		var oauthErr *oauthwire.Error
-		if errors.As(err, &oauthErr) {
+	if err := req.Validate(usersessions.SupportedAuthMethods); err != nil {
+		if oauthErr, ok := errors.AsType[*oauthwire.Error](err); ok {
 			return writeDCRError(ctx, w, logger, oauthErr.Code, oauthErr.Description)
 		}
 		return oops.E(oops.CodeUnexpected, err, "validate DCR request").LogError(ctx, logger)
@@ -111,12 +112,17 @@ func (s *Service) ServeRegister(w http.ResponseWriter, r *http.Request, endpoint
 
 	clientID := "client_" + uuid.NewString()
 
-	// Public clients (token_endpoint_auth_method=none) skip secret generation
-	// and store NULL in client_secret_hash. The /token handler treats a NULL
-	// hash as "no secret expected; PKCE is the integrity proof".
+	// What credential the client gets is decided by an explicit list of the
+	// methods that carry a secret, not by "anything but none": an asymmetric
+	// client must not be handed a secret it never asked for, since a stored
+	// hash would make the token endpoint demand it on every request. The
+	// default arm is unreachable after Validate, and refuses rather than
+	// mints if a method is ever added to the accepted set without being
+	// classified here.
 	var clientSecret string
 	var clientSecretHash pgtype.Text
-	if req.TokenEndpointAuthMethod != "none" {
+	switch req.TokenEndpointAuthMethod {
+	case oauthwire.AuthMethodClientSecretBasic, oauthwire.AuthMethodClientSecretPost:
 		var err error
 		clientSecret, err = generateClientSecret()
 		if err != nil {
@@ -127,6 +133,11 @@ func (s *Service) ServeRegister(w http.ResponseWriter, r *http.Request, endpoint
 			return oops.E(oops.CodeUnexpected, hashErr, "failed to hash client secret").LogError(ctx, logger)
 		}
 		clientSecretHash = pgtype.Text{String: string(hashed), Valid: true}
+	case oauthwire.AuthMethodNone, oauthwire.AuthMethodPrivateKeyJWT:
+		// Public clients prove PKCE possession; asymmetric clients prove
+		// possession of a key the server never holds. Neither gets a secret.
+	default:
+		return writeDCRError(ctx, w, logger, "invalid_client_metadata", fmt.Sprintf("unsupported token_endpoint_auth_method %q", req.TokenEndpointAuthMethod))
 	}
 
 	row, err := usersessions_repo.New(s.db).CreateUserSessionClient(ctx, usersessions_repo.CreateUserSessionClientParams{
@@ -136,7 +147,10 @@ func (s *Service) ServeRegister(w http.ResponseWriter, r *http.Request, endpoint
 		ClientName:          req.ClientName,
 		RedirectUris:        req.RedirectURIs,
 		// RFC 7591 §3.2.1 expires_at=0 = non-expiring; we leave the Postgres column NULL.
-		ClientSecretExpiresAt: pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: 0, Valid: false},
+		ClientSecretExpiresAt:   pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: 0, Valid: false},
+		TokenEndpointAuthMethod: req.TokenEndpointAuthMethod,
+		ClientJwks:              req.JWKS,
+		ClientJwksUri:           conv.ToPGTextEmpty(req.JWKSURI),
 	})
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "failed to create user session client").LogError(ctx, logger)
@@ -153,11 +167,13 @@ func (s *Service) ServeRegister(w http.ResponseWriter, r *http.Request, endpoint
 		attr.SlogHTTPRequestHeaderUserAgent(r.UserAgent()),
 	)
 
-	// Confidential clients get client_secret + client_secret_expires_at=0
-	// (non-expiring per RFC 7591 §3.2.1). Public clients (none) get neither
-	// field — emitting them would suggest a secret exists.
+	// Clients that were minted a secret get client_secret plus
+	// client_secret_expires_at=0 (non-expiring per RFC 7591 §3.2.1). Every
+	// other client gets neither field: emitting them would suggest a secret
+	// exists. The key source is echoed as registered, per §3.2.1's rule that
+	// the response reflects the metadata actually stored.
 	var clientSecretExpiresAt *int64
-	if req.TokenEndpointAuthMethod != "none" {
+	if clientSecretHash.Valid {
 		zero := int64(0)
 		clientSecretExpiresAt = &zero
 	}
@@ -172,6 +188,8 @@ func (s *Service) ServeRegister(w http.ResponseWriter, r *http.Request, endpoint
 		GrantTypes:              req.GrantTypes,
 		ResponseTypes:           req.ResponseTypes,
 		TokenEndpointAuthMethod: req.TokenEndpointAuthMethod,
+		JWKS:                    req.JWKS,
+		JWKSURI:                 req.JWKSURI,
 	}
 
 	body, err := json.Marshal(resp)

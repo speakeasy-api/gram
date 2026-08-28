@@ -2,12 +2,10 @@ package auditapi
 
 import (
 	"context"
-	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
-	"strconv"
 	"strings"
 	"time"
 
@@ -100,15 +98,17 @@ func (s *Service) List(ctx context.Context, payload *gen.ListPayload) (*gen.List
 			Int64: 0,
 			Valid: false,
 		},
-		ActorID:       conv.PtrToPGTextEmpty(payload.ActorID),
-		Action:        conv.PtrToPGTextEmpty(payload.Action),
-		SubjectType:   conv.PtrToPGTextEmpty(payload.SubjectType),
-		SubjectID:     conv.PtrToPGTextEmpty(payload.SubjectID),
-		ActingSurface: conv.PtrToPGTextEmpty(payload.ActingSurface),
+		ActorID:                conv.PtrToPGTextEmpty(payload.ActorID),
+		Action:                 conv.PtrToPGTextEmpty(payload.Action),
+		SubjectType:            conv.PtrToPGTextEmpty(payload.SubjectType),
+		SubjectID:              conv.PtrToPGTextEmpty(payload.SubjectID),
+		SubjectIds:             normalizeSubjectIDs(payload.SubjectIds),
+		ActingSurface:          conv.PtrToPGTextEmpty(payload.ActingSurface),
+		IncludeAssistantEvents: false,
 	}
 
 	if payload.Cursor != nil && *payload.Cursor != "" {
-		seq, err := decodeCursor(*payload.Cursor)
+		seq, err := audit.DecodeCursor(*payload.Cursor)
 		if err != nil {
 			return nil, oops.E(oops.CodeBadRequest, err, "invalid cursor").LogError(ctx, s.logger)
 		}
@@ -131,7 +131,7 @@ func (s *Service) List(ctx context.Context, payload *gen.ListPayload) (*gen.List
 
 	var nextCursor *string
 	if len(rows) > listAuditLogsPageSize {
-		cursor := encodeCursor(rows[listAuditLogsPageSize-1].Seq, rows[listAuditLogsPageSize-1].ID.String())
+		cursor := audit.EncodeCursor(rows[listAuditLogsPageSize-1].Seq, rows[listAuditLogsPageSize-1].ID.String())
 		nextCursor = &cursor
 		logs = logs[:listAuditLogsPageSize]
 	}
@@ -147,7 +147,9 @@ func (s *Service) List(ctx context.Context, payload *gen.ListPayload) (*gen.List
 		return nil, oops.E(oops.CodeUnexpected, err, "error resolving audit actor identities").LogError(ctx, s.logger)
 	}
 	for _, log := range logs {
-		if log.ActorType == "user" && speakeasyActors[log.ActorID] {
+		isAdminActor := log.ActingSurface == string(audit.SurfaceAdmin)
+		isSpeakeasyActor := log.ActorType == "user" && speakeasyActors[log.ActorID]
+		if shouldMaskCustomerActor(isAdminActor, isSpeakeasyActor) {
 			log.ActorDisplayName = conv.PtrEmpty(audit.SpeakeasyTeamActorLabel)
 			log.ActorSlug = nil
 		}
@@ -157,6 +159,10 @@ func (s *Service) List(ctx context.Context, payload *gen.ListPayload) (*gen.List
 		Logs:       logs,
 		NextCursor: nextCursor,
 	}, nil
+}
+
+func shouldMaskCustomerActor(isAdminActor, isSpeakeasyActor bool) bool {
+	return isAdminActor || isSpeakeasyActor
 }
 
 // speakeasyActorIDs returns which of the given user actor IDs belong to the
@@ -237,8 +243,8 @@ func (s *Service) ListFacets(ctx context.Context, payload *gen.ListFacetsPayload
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error resolving audit actor identities").LogError(ctx, s.logger)
 	}
-	for _, actor := range actors {
-		if speakeasyActors[actor.Value] {
+	for i, actor := range actors {
+		if shouldMaskCustomerActor(actorRows[i].IsAdminActor, speakeasyActors[actor.Value]) {
 			actor.DisplayName = audit.SpeakeasyTeamActorLabel
 		}
 	}
@@ -267,32 +273,6 @@ func (s *Service) resolveProjectID(ctx context.Context, organizationID string, p
 	default:
 		return uuid.NullUUID{UUID: project.ID, Valid: true}, nil
 	}
-}
-
-func encodeCursor(seq int64, id string) string {
-	// currently, the id is included to ensure the cursor is unique by customer
-	// and reduce predictability (hyrum's law).
-	payload := fmt.Sprintf("%d:%s", seq, id)
-	return base64.RawURLEncoding.EncodeToString([]byte(payload))
-}
-
-func decodeCursor(cursor string) (int64, error) {
-	decoded, err := base64.RawURLEncoding.DecodeString(cursor)
-	if err != nil {
-		return 0, fmt.Errorf("decode cursor: %w", err)
-	}
-
-	parts := strings.SplitN(string(decoded), ":", 2)
-	if len(parts) != 2 {
-		return 0, fmt.Errorf("invalid cursor format")
-	}
-
-	seq, err := strconv.ParseInt(parts[0], 10, 64)
-	if err != nil {
-		return 0, fmt.Errorf("parse cursor seq: %w", err)
-	}
-
-	return seq, nil
 }
 
 func toAuditLog(row repo.ListAuditLogsRow) (*gen.AuditLog, error) {
@@ -379,4 +359,17 @@ func toAuditActionFacetOptions(rows []repo.ListAuditActionFacetsRow) []*gen.Audi
 	return facetOptions(rows, func(row repo.ListAuditActionFacetsRow) (string, string, int64) {
 		return row.Value, row.DisplayName, row.Count
 	})
+}
+
+// normalizeSubjectIDs trims the subject id filter and drops blank entries so a
+// list that is empty once normalized reads as no filter rather than as a filter
+// nothing can match.
+func normalizeSubjectIDs(ids []string) []string {
+	out := make([]string, 0, len(ids))
+	for _, id := range ids {
+		if trimmed := strings.TrimSpace(id); trimmed != "" {
+			out = append(out, trimmed)
+		}
+	}
+	return out
 }

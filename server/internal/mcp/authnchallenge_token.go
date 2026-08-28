@@ -22,7 +22,6 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
-	"golang.org/x/crypto/bcrypt"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/cache"
@@ -159,11 +158,19 @@ func (s *Service) ServeToken(w http.ResponseWriter, r *http.Request, endpoint *R
 	logger := endpoint.LogWith(s.logger)
 
 	grantType := r.PostForm.Get("grant_type")
-	clientID, clientSecret, presentedAuthMethod, _ := extractClientCredentials(r)
-	if clientID == "" {
-		logOAuthClientCredentialEvent(ctx, logger, r, "oauth token client authentication rejected", clientID, presentedAuthMethod, grantType, "missing_client_id")
+	creds := extractClientCredentials(r)
+	presentedAuthMethod := creds.method
+	clientID, reason := resolvePresentedClientID(creds)
+	if reason != "" {
+		logOAuthClientCredentialEvent(ctx, logger, r, "oauth token client authentication rejected", clientID, presentedAuthMethod, grantType, reason)
 		return writeTokenError(ctx, w, logger, http.StatusUnauthorized, "invalid_client", "client_id is required")
 	}
+
+	// Base URL the AS metadata advertises — equals the JWT `iss` claim so
+	// the two sides of the contract stay aligned across custom domains.
+	// Computed before client authentication because an assertion's aud is
+	// checked against URLs derived from it.
+	baseURL := s.BaseURLForRequest(r)
 	// lookupClientOnly: any CIMD row was persisted at authorize time, and
 	// mid-flow token legs must keep working even if the issuer's admission
 	// policy changes between legs.
@@ -171,16 +178,10 @@ func (s *Service) ServeToken(w http.ResponseWriter, r *http.Request, endpoint *R
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			logOAuthClientCredentialEvent(ctx, logger, r, "oauth token client authentication rejected", clientID, presentedAuthMethod, grantType, "unknown_client_id")
-			return writeTokenError(ctx, w, logger, http.StatusUnauthorized, "invalid_client", "unknown client_id")
+			return writeTokenError(ctx, w, logger, http.StatusUnauthorized, "invalid_client", clientAuthFailureDescription)
 		}
 		return oops.E(oops.CodeUnexpected, err, "lookup user session client").LogError(ctx, logger)
 	}
-	// CIMD-resolved clients are public by construction (the AS only accepts
-	// documents declaring token_endpoint_auth_method "none", and the schema
-	// forbids a secret on CIMD rows). Reject any attempt to authenticate
-	// one with credentials per RFC 6749 §5.2 — a URL-shaped client_id
-	// cannot travel via HTTP Basic (r.BasicAuth does no percent-decoding),
-	// so a legitimate CIMD client always presents form client_id + none.
 	// The `disabled` admission mode is an off switch, so it applies to the
 	// token leg too: an operator who turns CIMD off for an issuer expects
 	// outstanding refresh tokens to stop working, not just new authorize
@@ -212,24 +213,14 @@ func (s *Service) ServeToken(w http.ResponseWriter, r *http.Request, endpoint *R
 			return writeTokenError(ctx, w, logger, http.StatusUnauthorized, "invalid_client", "this server does not accept client ID metadata documents")
 		}
 	}
-	if clientRow.ClientIDMetadataUri.Valid && presentedAuthMethod != "none" {
-		logOAuthClientCredentialEvent(ctx, logger, r, "oauth token client authentication rejected", clientID, presentedAuthMethod, grantType, "cimd_client_presented_credentials")
-		return writeTokenError(ctx, w, logger, http.StatusUnauthorized, "invalid_client", `client_id metadata document clients must use token_endpoint_auth_method "none"`)
-	}
-	// Public clients (token_endpoint_auth_method=none) have a NULL hash:
-	// PKCE / refresh-token possession is the integrity proof, no secret check.
-	// Confidential clients MUST present a matching secret.
-	if clientRow.ClientSecretHash.Valid {
-		if err := bcrypt.CompareHashAndPassword([]byte(clientRow.ClientSecretHash.String), []byte(clientSecret)); err != nil {
-			logOAuthClientCredentialEvent(ctx, logger, r, "oauth token client authentication rejected", clientID, presentedAuthMethod, grantType, "client_secret_mismatch")
-			return writeTokenError(ctx, w, logger, http.StatusUnauthorized, "invalid_client", "client secret mismatch")
-		}
+	// Authentication is decided by the method the row persisted, not by
+	// whether the row is CIMD-resolved or carries a secret, so one rule
+	// serves every registration source. Shared with the revocation endpoint.
+	if reason := s.authenticateOAuthClient(ctx, logger, endpoint, clientAssertionAtToken, clientRow, creds, baseURL); reason != "" {
+		logOAuthClientCredentialEvent(ctx, logger, r, "oauth token client authentication rejected", clientID, presentedAuthMethod, grantType, reason)
+		return writeTokenError(ctx, w, logger, http.StatusUnauthorized, "invalid_client", clientAuthFailureDescription)
 	}
 	logOAuthClientCredentialEvent(ctx, logger, r, "oauth token client authenticated", clientID, presentedAuthMethod, grantType, "")
-
-	// Base URL the AS metadata advertises — equals the JWT `iss` claim so
-	// the two sides of the contract stay aligned across custom domains.
-	baseURL := s.BaseURLForRequest(r)
 
 	switch grantType {
 	case "authorization_code":
@@ -272,6 +263,19 @@ func (s *Service) handleTokenAuthorizationCodeGrant(
 	req.SetDefaults()
 	if err := req.Validate(); err != nil {
 		logOAuthClientCredentialEvent(ctx, logger, r, "oauth authorization_code token request rejected", clientRow.ClientID, presentedAuthMethod, "authorization_code", "invalid_request")
+		s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, mcpmetrics.OAuthFlowStageToken)
+		return writeTokenOAuthError(ctx, w, logger, http.StatusBadRequest, err)
+	}
+
+	// RFC 8707 §2, token leg. Built from the address this request arrived on,
+	// so it matches the identifier the protected-resource metadata advertised
+	// to the client that is now redeeming its code.
+	canonicalResource, err := endpoint.RootURL(baseURL)
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "build token resource identifier").LogError(ctx, logger)
+	}
+	if err := oauthwire.ValidateResourceIndicators(req.Resources, canonicalResource); err != nil {
+		logOAuthClientCredentialEvent(ctx, logger, r, "oauth authorization_code token request rejected", clientRow.ClientID, presentedAuthMethod, "authorization_code", "resource_mismatch")
 		s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, mcpmetrics.OAuthFlowStageToken)
 		return writeTokenOAuthError(ctx, w, logger, http.StatusBadRequest, err)
 	}
@@ -393,6 +397,20 @@ func (s *Service) handleTokenRefreshTokenGrant(
 	req.SetDefaults()
 	if err := req.Validate(); err != nil {
 		logOAuthClientCredentialEvent(ctx, logger, r, "oauth refresh_token request rejected", clientRow.ClientID, presentedAuthMethod, "refresh_token", "invalid_request")
+		return writeTokenOAuthError(ctx, w, logger, http.StatusBadRequest, err)
+	}
+
+	// RFC 8707 §2 applies to the refresh leg too: MCP 2026-07-28 has clients
+	// send `resource` on every token request, so a rotation naming another
+	// server is the same misconfiguration as it is on the authorization_code
+	// grant. No flow-failure metric here — a refresh is not part of an initial
+	// flow, and the completion ratio counts only those.
+	canonicalResource, err := endpoint.RootURL(baseURL)
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "build token resource identifier").LogError(ctx, logger)
+	}
+	if err := oauthwire.ValidateResourceIndicators(req.Resources, canonicalResource); err != nil {
+		logOAuthClientCredentialEvent(ctx, logger, r, "oauth refresh_token request rejected", clientRow.ClientID, presentedAuthMethod, "refresh_token", "resource_mismatch")
 		return writeTokenOAuthError(ctx, w, logger, http.StatusBadRequest, err)
 	}
 
@@ -1003,8 +1021,7 @@ func writeTokenSuccess(ctx context.Context, w http.ResponseWriter, logger *slog.
 // invalid_request if err is something else (shouldn't happen — Validate
 // returns *oauthwire.Error).
 func writeTokenOAuthError(ctx context.Context, w http.ResponseWriter, logger *slog.Logger, status int, err error) error {
-	var oauthErr *oauthwire.Error
-	if errors.As(err, &oauthErr) {
+	if oauthErr, ok := errors.AsType[*oauthwire.Error](err); ok {
 		return writeTokenError(ctx, w, logger, status, oauthErr.Code, oauthErr.Description)
 	}
 	return writeTokenError(ctx, w, logger, status, "invalid_request", err.Error())

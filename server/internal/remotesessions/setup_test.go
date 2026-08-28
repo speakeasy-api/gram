@@ -17,6 +17,7 @@ import (
 
 	clientsgen "github.com/speakeasy-api/gram/server/gen/remote_session_clients"
 	issuersgen "github.com/speakeasy-api/gram/server/gen/remote_session_issuers"
+	"github.com/speakeasy-api/gram/server/gen/types"
 	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
 	assetsrepo "github.com/speakeasy-api/gram/server/internal/assets/repo"
 	"github.com/speakeasy-api/gram/server/internal/audit"
@@ -117,7 +118,7 @@ func newTestService(t *testing.T) (context.Context, *testInstance) {
 		guardianPolicy,
 		audit.NewLogger(),
 		serverURL,
-		remotesessions.NewRefreshService(logger, conn, enc, guardianPolicy, redisCache),
+		remotesessions.NewRefreshService(logger, testenv.NewMeterProvider(t), conn, enc, guardianPolicy, redisCache),
 	)
 
 	return ctx, &testInstance{
@@ -157,6 +158,18 @@ func withExactAccessGrants(t *testing.T, ctx context.Context, conn *pgxpool.Pool
 	require.NoError(t, err)
 
 	return authz.GrantsToContext(ctx, loadedGrants)
+}
+
+// mismatchedFields reduces a preflight's or candidate's mismatch set to the
+// field names alone, for assertions about which fields disagree rather than
+// about what their values are.
+func mismatchedFields(mismatches []*types.IssuerFieldMismatch) []string {
+	fields := make([]string, 0, len(mismatches))
+	for _, mismatch := range mismatches {
+		fields = append(fields, mismatch.Field)
+	}
+
+	return fields
 }
 
 func requireOopsCode(t *testing.T, err error, code oops.Code) {
@@ -423,6 +436,29 @@ func seedOrgLevelRemoteClient(t *testing.T, ctx context.Context, conn *pgxpool.P
 		}))
 	}
 	return created.ID
+}
+
+// attachRemoteMcpServerToIssuer binds a remote-backed MCP server to issuerID
+// so clients on that issuer derive serverURL as their resource.
+func attachRemoteMcpServerToIssuer(t *testing.T, ctx context.Context, conn *pgxpool.Pool, projectID, issuerID uuid.UUID, slug, serverURL string) {
+	t.Helper()
+	remoteServer, err := remotemcprepo.New(conn).CreateServer(ctx, remotemcprepo.CreateServerParams{
+		ID:            uuid.New(),
+		ProjectID:     projectID,
+		TransportType: "sse",
+		Url:           serverURL,
+	})
+	require.NoError(t, err)
+	_, err = mcpserversrepo.New(conn).CreateMCPServer(ctx, mcpserversrepo.CreateMCPServerParams{
+		ID:                  uuid.New(),
+		ProjectID:           projectID,
+		Name:                conv.ToPGText(slug),
+		Slug:                conv.ToPGText(slug),
+		RemoteMcpServerID:   conv.ToNullUUID(remoteServer.ID),
+		Visibility:          "private",
+		UserSessionIssuerID: conv.ToNullUUID(issuerID),
+	})
+	require.NoError(t, err)
 }
 
 // seedMCPServerInOrg creates a project in the supplied organization and an MCP

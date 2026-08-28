@@ -10,9 +10,9 @@ import (
 )
 
 type AttachPlatformMCPIdentityProviderToolInput struct {
-	ProjectSlug    string `json:"project_slug" jsonschema:"explicit AICP project slug that owns the reviewed MCP registration"`
+	ProjectSlug    string `json:"project_slug" jsonschema:"explicit project slug that owns the reviewed MCP registration"`
 	RegistrationID string `json:"registration_id" jsonschema:"Platform MCP registration ID returned by register_catalog_mcp or register_remote_mcp"`
-	Confirmed      bool   `json:"confirmed" jsonschema:"set true only after the user explicitly confirms that the AI Control Plane may attach the reviewed MCP's discovered remote identity provider; never include credentials, client secrets, OAuth codes, or tokens"`
+	Confirmed      bool   `json:"confirmed" jsonschema:"set true only after the user explicitly confirms that this MCP server may be connected to the sign-in provider it advertises; never include credentials, client secrets, OAuth codes, or tokens"`
 }
 
 type AttachPlatformMCPIdentityProviderToolOutput struct {
@@ -33,20 +33,22 @@ type identityProviderAttachmentErrorResult struct {
 func registerUnavailableIdentityProviderTool(reg *Registrar) {
 	addTool(reg, &mcp.Tool{
 		Name:        "attach_platform_mcp_identity_provider",
-		Title:       "Attach Platform MCP Identity Provider",
-		Description: "Attach a reviewed MCP's discovered remote identity provider. Provider attachment is not available in the current preview.",
-	}, ToolMeta{Audiences: externalOnly, ProjectScope: ProjectScopeExplicit}, unavailableTool("identity_provider_attachment"))
+		Title:       "Connect an MCP Server's OAuth Provider",
+		Description: "Connect one MCP server to the OAuth provider it advertises. This is not switched on for your organization yet.",
+	}, ToolMeta{Audiences: bothAudiences, ProjectScope: ProjectScopeExplicit}, unavailableTool("identity_provider_attachment"))
 }
 
 func registerIdentityProviderTool(reg *Registrar, registrations *RegistrationService) {
 	addTool(reg, &mcp.Tool{
 		Name:        "attach_platform_mcp_identity_provider",
-		Title:       "Attach Platform MCP Identity Provider",
-		Description: "Attach one reviewed MCP registration's discovered remote identity provider. Ask for explicit user confirmation before calling this tool. It derives provider metadata and dynamic client registration from the persisted MCP source. Non-secret provider URLs may be returned, but it never accepts or returns credentials, OAuth codes, tokens, client secrets, passwords, or API keys. After success, immediately present authorization_url as a clickable link and tell the user to open it and use Connect or Authorize.",
+		Title:       "Connect an MCP Server's OAuth Provider",
+		Description: "Connect one MCP server to the OAuth provider it advertises, so people can sign in to it. Ask for explicit user confirmation before calling this tool. It works out the provider's metadata and performs dynamic client registration from the stored MCP source. Constraints: non-secret provider URLs may be returned, but it never accepts or returns credentials, OAuth codes, tokens, client secrets, passwords, or API keys. After success, immediately present authorization_url as a clickable link and tell the user to open it and use Connect or Authorize.",
 	}, ToolMeta{
-		// Provider setup is connection-scoped, which a connection-less surface
-		// cannot satisfy. The assistant returns the normal dashboard handoff.
-		Audiences: externalOnly, ProjectScope: ProjectScopeExplicit,
+		// Connection-less: the registration is resolved by user and project,
+		// the operation is serialised per user, and the authorization step the
+		// result hands back is a dashboard URL the user opens under their own
+		// session. Nothing here needs the caller's OAuth connection.
+		Audiences: bothAudiences, ProjectScope: ProjectScopeExplicit,
 	}, func(ctx context.Context, _ *mcp.CallToolRequest, input AttachPlatformMCPIdentityProviderToolInput) (*mcp.CallToolResult, AttachPlatformMCPIdentityProviderToolOutput, error) {
 		principal, err := principalFromToolContext(ctx)
 		if err != nil {
@@ -56,7 +58,7 @@ func registerIdentityProviderTool(reg *Registrar, registrations *RegistrationSer
 			return nil, AttachPlatformMCPIdentityProviderToolOutput{}, ErrOnboardingInvalid
 		}
 		if !input.Confirmed {
-			content, marshalErr := json.Marshal(identityProviderAttachmentErrorResult{Code: "confirmation_required", Message: "Ask the user to explicitly confirm that the AI Control Plane may attach the reviewed MCP's discovered remote identity provider, then call this tool again with confirmed: true."})
+			content, marshalErr := json.Marshal(identityProviderAttachmentErrorResult{Code: "confirmation_required", Message: "Ask the user to confirm out loud that this MCP server may be connected to the sign-in provider it advertises, then call this tool again with confirmed: true."})
 			if marshalErr != nil {
 				return nil, AttachPlatformMCPIdentityProviderToolOutput{}, marshalErr
 			}
@@ -79,11 +81,11 @@ func registerIdentityProviderTool(reg *Registrar, registrations *RegistrationSer
 }
 
 func identityProviderAttachmentOutput(projectSlug, registrationID string, attachment CatalogIdentityProviderAttachmentResult, authorizationURL string) AttachPlatformMCPIdentityProviderToolOutput {
-	return AttachPlatformMCPIdentityProviderToolOutput{ProjectSlug: projectSlug, RegistrationID: registrationID, Attached: attachment.Attached, ProviderURL: attachment.ProviderURL, NextAction: "open_authorization_url", Message: "The discovered remote identity provider is attached. Open this Inspect authorization link now: " + authorizationURL + ". Use Connect or Authorize there, then force a fresh readiness check.", AuthorizationURL: authorizationURL}
+	return AttachPlatformMCPIdentityProviderToolOutput{ProjectSlug: projectSlug, RegistrationID: registrationID, Attached: attachment.Attached, ProviderURL: attachment.ProviderURL, NextAction: "open_authorization_url", Message: "This MCP server is now connected to its sign-in provider. Open this link to authorize it: " + authorizationURL + ". Use Connect or Authorize there, then check the MCP server again.", AuthorizationURL: authorizationURL}
 }
 
 func identityProviderAttachmentUnavailableResult() (*mcp.CallToolResult, AttachPlatformMCPIdentityProviderToolOutput, error) {
-	content, err := json.Marshal(identityProviderAttachmentErrorResult{Code: unavailableCode, Message: "Automatic identity-provider attachment is temporarily unavailable. No provider change was confirmed. Retry later or use the server-issued Authentication settings page."})
+	content, err := json.Marshal(identityProviderAttachmentErrorResult{Code: unavailableCode, Message: "Connecting the sign-in provider automatically is temporarily unavailable, and nothing was changed. Try again later, or set it up on the Authentication settings page."})
 	if err != nil {
 		return nil, AttachPlatformMCPIdentityProviderToolOutput{}, err
 	}
@@ -91,7 +93,7 @@ func identityProviderAttachmentUnavailableResult() (*mcp.CallToolResult, AttachP
 }
 
 func identityProviderAttachmentAuthorizationUnavailableResult() (*mcp.CallToolResult, AttachPlatformMCPIdentityProviderToolOutput, error) {
-	content, err := json.Marshal(identityProviderAttachmentErrorResult{Code: "identity_provider_attached_authorization_url_unavailable", Message: "The discovered remote identity provider was attached, but the AI Control Plane could not create the server-issued Inspect authorization link. Open the registered MCP's Inspect page and use Connect or Authorize, then force a fresh readiness check."})
+	content, err := json.Marshal(identityProviderAttachmentErrorResult{Code: "identity_provider_attached_authorization_url_unavailable", Message: "This MCP server is connected to its sign-in provider, but the authorization link could not be created. Open the MCP server's page in the dashboard, use Connect or Authorize, then check it again."})
 	if err != nil {
 		return nil, AttachPlatformMCPIdentityProviderToolOutput{}, err
 	}
@@ -102,9 +104,9 @@ func identityProviderAttachmentError(err error) (*mcp.CallToolResult, bool) {
 	var result identityProviderAttachmentErrorResult
 	switch {
 	case errors.Is(err, ErrIdentityProviderAttachmentUnsupported):
-		result = identityProviderAttachmentErrorResult{Code: "automatic_identity_provider_attachment_unsupported", Message: "This reviewed MCP does not advertise exactly one identity provider with supported OAuth metadata and dynamic client registration. Automatic attachment was not performed. Explain this limitation to the user and ask how they want to proceed."}
+		result = identityProviderAttachmentErrorResult{Code: "automatic_identity_provider_attachment_unsupported", Message: "This MCP server does not advertise exactly one sign-in provider with the OAuth metadata and dynamic client registration needed to set it up automatically, so nothing was changed. Explain that to the user and ask how they want to proceed."}
 	case errors.Is(err, ErrIdentityProviderAttachmentConflict):
-		result = identityProviderAttachmentErrorResult{Code: "identity_provider_attachment_conflict", Message: "This MCP already has a different or ambiguous remote identity-provider configuration. Automatic attachment was not performed. Ask the user how they want to proceed."}
+		result = identityProviderAttachmentErrorResult{Code: "identity_provider_attachment_conflict", Message: "This MCP server already has a different or unclear sign-in provider set up, so nothing was changed. Ask the user how they want to proceed."}
 	case errors.Is(err, ErrIdentityProviderAttachmentUnavailable), errors.Is(err, ErrRegistrationUnavailable), errors.Is(err, ErrOperationRateLimited), errors.Is(err, ErrOperationBudgetUnavailable):
 		return nil, false
 	default:

@@ -17,6 +17,7 @@ import {
 import { AppLayout, LoginCheck, OrgLayout } from "./components/app-layout.tsx";
 import { ModeSwitchProvider } from "./components/mode-switch-stage.tsx";
 import { CommandPalette } from "./components/command-palette";
+import { GuideEntryRedirect } from "./components/project-guide/GuideEntryRedirect";
 import {
   getRecentLabelOverride,
   pageLabel,
@@ -63,20 +64,6 @@ export default function App(): JSX.Element {
     if (root.classList.contains(theme)) return;
     root.classList.add(theme);
     root.classList.remove(theme === "dark" ? "light" : "dark");
-
-    // Update favicon based on theme
-    const favicon = document.getElementById("favicon") as HTMLLinkElement;
-    const faviconAlt = document.getElementById(
-      "favicon-alt",
-    ) as HTMLLinkElement;
-
-    if (favicon) {
-      favicon.href = theme === "dark" ? "/favicon-dark.png" : "/favicon.png";
-    }
-
-    if (faviconAlt) {
-      faviconAlt.href = theme === "dark" ? "/favicon-dark.ico" : "/favicon.ico";
-    }
 
     localStorage.setItem(PREFERRED_THEME_STORAGE_KEY, theme);
 
@@ -363,6 +350,7 @@ const RouteProvider = () => {
           element={<SharedSkillPage />}
         />
         <Route path="/" element={<LoginCheck />}>
+          <Route path="guide" element={<GuideEntryRedirect />} />
           <Route path=":orgSlug/projects/:projectSlug">
             {routesWithSubroutes(outsideStructureRoutes)}
           </Route>

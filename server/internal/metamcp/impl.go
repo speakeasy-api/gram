@@ -122,6 +122,7 @@ func (s *Service) CreateMetaMcpServer(ctx context.Context, payload *gen.CreateMe
 		ProjectID:           *authCtx.ProjectID,
 		Name:                payload.Name,
 		UserSessionIssuerID: issuerID,
+		Visibility:          string(conv.PtrValOrEmpty(payload.Visibility, VisibilityPrivate)),
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "create meta mcp server").LogError(ctx, logger)
@@ -246,6 +247,7 @@ func (s *Service) UpdateMetaMcpServer(ctx context.Context, payload *gen.UpdateMe
 	updated, err := txRepo.UpdateMetaMCPServer(ctx, repo.UpdateMetaMCPServerParams{
 		Name:                payload.Name,
 		UserSessionIssuerID: issuerID,
+		Visibility:          conv.PtrToPGText((*string)(payload.Visibility)),
 		ID:                  serverID,
 		OrganizationID:      authCtx.ActiveOrganizationID,
 		ProjectID:           *authCtx.ProjectID,
@@ -530,6 +532,35 @@ func (s *Service) AddMetaMcpMember(ctx context.Context, payload *gen.AddMetaMcpM
 			return nil, oops.E(oops.CodeInvalid, err, "mcp_server_id does not reference a live server in this project").LogError(ctx, logger)
 		}
 		return nil, oops.E(oops.CodeUnexpected, err, "lock mcp server").LogError(ctx, logger)
+	}
+
+	// The gateway addresses members by qualified serverslug--toolname, so a
+	// slugless server (legacy pre-2026-05 rows never updated since) can never
+	// be reached; updating the server generates a slug. Unproxied backends
+	// have no gateway-side dispatch path.
+	if !server.Slug.Valid {
+		return nil, oops.E(oops.CodeInvalid, nil, "mcp server has no slug; update the server to generate one before attaching it").LogError(ctx, logger)
+	}
+	if server.UnproxiedMcpServerID.Valid {
+		return nil, oops.E(oops.CodeInvalid, nil, "unproxied mcp servers cannot be meta mcp members").LogError(ctx, logger)
+	}
+
+	// The meta lock above serializes concurrent adds, so this sees every
+	// committed member.
+	sharing, err := txRepo.CountMetaMCPMembersSharingBackend(ctx, repo.CountMetaMCPMembersSharingBackendParams{
+		MetaMcpServerID:      metaID,
+		ProjectID:            *authCtx.ProjectID,
+		McpServerID:          mcpServerID,
+		RemoteMcpServerID:    server.RemoteMcpServerID,
+		TunneledMcpServerID:  server.TunneledMcpServerID,
+		ToolsetID:            server.ToolsetID,
+		UnproxiedMcpServerID: server.UnproxiedMcpServerID,
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "count meta mcp members sharing a backend").LogError(ctx, logger)
+	}
+	if sharing > 0 {
+		return nil, oops.E(oops.CodeConflict, nil, "another member of this meta mcp server already fronts the same backend").LogError(ctx, logger)
 	}
 
 	member, err := txRepo.CreateMetaMCPMember(ctx, repo.CreateMetaMCPMemberParams{

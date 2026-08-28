@@ -29,6 +29,18 @@ export const AGENT_PROVIDERS = {
     description: "Open-source terminal coding agent",
     iconSource: "opencode",
   },
+  openclaw: {
+    name: "OpenClaw",
+    description: "Open-source personal AI agent gateway",
+    iconSource: "openclaw",
+  },
+  other: {
+    name: "Other agent",
+    description: "Any MCP-capable agent",
+    // No vendor mark exists for "whatever you use" — the icon resolver falls
+    // through to its globe for an unrecognised source.
+    iconSource: "other",
+  },
   copilot: {
     name: "GitHub Copilot",
     description: "Microsoft / GitHub AI pair programmer",
@@ -73,7 +85,6 @@ export type AgentProvider = {
 export type AgentProviderSurface = keyof typeof ACTIVE_AGENT_PROVIDER_IDS;
 
 export const COMING_SOON_AGENT_PROVIDER_IDS = [
-  "copilot",
   "gemini",
   "glean",
   "bedrock",
@@ -82,9 +93,17 @@ export const COMING_SOON_AGENT_PROVIDER_IDS = [
 ] as const satisfies readonly AgentProviderId[];
 
 export const ACTIVE_AGENT_PROVIDER_IDS = {
-  hooks: ["claude", "cursor", "codex"],
-  plugins: ["claude", "claude-cowork", "cursor", "codex", "opencode"],
-  setup: ["claude", "claude-cowork", "codex", "cursor", "opencode"],
+  hooks: ["claude", "cursor", "codex", "copilot"],
+  plugins: [
+    "claude",
+    "claude-cowork",
+    "cursor",
+    "codex",
+    "opencode",
+    "openclaw",
+    "copilot",
+  ],
+  setup: ["claude", "claude-cowork", "codex", "cursor", "opencode", "openclaw"],
 } as const satisfies Record<string, readonly AgentProviderId[]>;
 
 export function agentProvidersForSurface(

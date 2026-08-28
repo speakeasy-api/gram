@@ -7835,6 +7835,7 @@ func marshalTelemetryUserAccountToUserAccountResponseBody(v *telemetry.UserAccou
 	}
 	res := &UserAccountResponseBody{
 		ID:               v.ID,
+		UserID:           v.UserID,
 		Provider:         v.Provider,
 		Email:            v.Email,
 		AccountType:      v.AccountType,

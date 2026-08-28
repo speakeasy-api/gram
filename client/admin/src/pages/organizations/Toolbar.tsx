@@ -1,7 +1,7 @@
 import { useNavigate, useSearch } from "@tanstack/react-router";
 import type { Column, RowData } from "@tanstack/react-table";
 import { SearchIcon } from "lucide-react";
-import { useEffect, useRef, useState, type JSX, type ReactNode } from "react";
+import { useRef, useState, type JSX, type ReactNode } from "react";
 
 import type {
   DataTableFeatures,
@@ -16,6 +16,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
+import { useOnUnmount } from "@/hooks/useOnUnmount";
 import {
   FILTER_GROUPS,
   filterSummary,
@@ -57,6 +58,11 @@ export function Toolbar({
   // reaches it debounced.
   const committed = search.q ?? "";
   const [draft, setDraft] = useState(committed);
+  const draftRef = useRef(draft);
+  const committedRef = useRef(committed);
+  const searchTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
+  committedRef.current = committed;
+  useOnUnmount(() => clearTimeout(searchTimer.current));
   const [lastCommitted, setLastCommitted] = useState(committed);
 
   // The back button, and a link an operator pasted, both move `q` under the
@@ -69,24 +75,34 @@ export function Toolbar({
     // back here as a change. Repainting on that one would eat a space the
     // operator just typed. `lastCommitted` still moves either way, or this
     // block runs on every render.
-    if (draft.trim() !== committed) setDraft(committed);
+    if (draft.trim() !== committed) {
+      draftRef.current = committed;
+      setDraft(committed);
+    }
   }
 
   const [lastCleared, setLastCleared] = useState(searchCleared);
   if (searchCleared !== lastCleared) {
     setLastCleared(searchCleared);
-    // Dropping the draft drops the commit it had pending with it: the effect
-    // below is keyed on the draft, so its cleanup clears the timer.
-    if (draft !== "") setDraft("");
+    // Invalidate any event-owned debounce that has not reached the URL yet.
+    clearTimeout(searchTimer.current);
+    if (draft !== "") {
+      draftRef.current = "";
+      setDraft("");
+    }
   }
 
-  useEffect(() => {
-    const next = draft.trim();
-    // A term that settles back on the committed one is not a change, so a typo
-    // and a backspace leave the URL alone.
-    if (next === committed) return;
+  const changeSearch = (value: string): void => {
+    draftRef.current = value;
+    setDraft(value);
 
-    const timer = setTimeout(() => {
+    clearTimeout(searchTimer.current);
+    const next = value.trim();
+    if (next === committedRef.current) return;
+
+    searchTimer.current = setTimeout(() => {
+      // Later input, a clear action, or Router navigation supersedes this event.
+      if (draftRef.current !== value || committedRef.current === next) return;
       void navigate({
         search: (prev: OrganizationsSearch) => ({
           ...prev,
@@ -97,9 +113,7 @@ export function Toolbar({
         replace: true,
       });
     }, SEARCH_DEBOUNCE_MS);
-
-    return () => clearTimeout(timer);
-  }, [draft, committed, navigate]);
+  };
 
   // Which group the sheet is showing, and null when it is closed.
   const [openGroup, setOpenGroup] = useState<FilterGroupKey | null>(null);
@@ -132,7 +146,7 @@ export function Toolbar({
           aria-label="Search organizations"
           placeholder="Search by name, slug or id..."
           value={draft}
-          onChange={(e) => setDraft(e.target.value)}
+          onChange={(event) => changeSearch(event.target.value)}
           className="w-full py-1.5 pr-2 pl-8"
         />
       </div>

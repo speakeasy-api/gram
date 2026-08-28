@@ -1669,7 +1669,8 @@ WHERE deleted IS FALSE;
 -- See: https://datatracker.ietf.org/doc/html/rfc8414
 CREATE TABLE IF NOT EXISTS user_session_issuers (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
-  project_id uuid NOT NULL,
+  project_id uuid,
+  organization_id TEXT,
 
   slug TEXT NOT NULL CHECK (slug <> '' AND CHAR_LENGTH(slug) <= 100),
   authn_challenge_mode TEXT NOT NULL, -- One of ('chain', 'interactive'). chain exists for backwards compatibility and should be phased out. interactive will be the main mode going forward
@@ -1685,8 +1686,12 @@ CREATE TABLE IF NOT EXISTS user_session_issuers (
   deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
 
   CONSTRAINT user_session_issuers_pkey PRIMARY KEY (id),
-  CONSTRAINT user_session_issuers_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE
+  CONSTRAINT user_session_issuers_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE,
+  CONSTRAINT user_session_issuers_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE
 );
+
+CREATE INDEX IF NOT EXISTS user_session_issuers_organization_id_idx
+ON user_session_issuers (organization_id);
 
 CREATE UNIQUE INDEX IF NOT EXISTS user_session_issuers_project_slug_key
 ON user_session_issuers (project_id, slug)
@@ -1705,7 +1710,8 @@ WHERE classification = 'project_default_idp' AND deleted IS FALSE;
 -- See: https://datatracker.ietf.org/doc/html/rfc6749#section-1.1
 CREATE TABLE IF NOT EXISTS user_session_clients (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
-  project_id uuid NOT NULL,
+  project_id uuid,
+  organization_id TEXT,
   user_session_issuer_id uuid NOT NULL,
 
   client_id TEXT NOT NULL,
@@ -1758,6 +1764,7 @@ CREATE TABLE IF NOT EXISTS user_session_clients (
 
   CONSTRAINT user_session_clients_pkey PRIMARY KEY (id),
   CONSTRAINT user_session_clients_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE,
+  CONSTRAINT user_session_clients_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE,
   CONSTRAINT user_session_clients_user_session_issuer_id_fkey FOREIGN KEY (user_session_issuer_id) REFERENCES user_session_issuers (id) ON DELETE CASCADE,
   -- CIMD forbids symmetric client secrets (no client_secret_basic,
   -- client_secret_post, or client_secret_jwt), so a CIMD-resolved row must
@@ -1783,6 +1790,9 @@ CREATE TABLE IF NOT EXISTS user_session_clients (
   )
 );
 
+CREATE INDEX IF NOT EXISTS user_session_clients_organization_id_idx
+ON user_session_clients (organization_id);
+
 -- Serves lookups for both DCR and CIMD rows. For CIMD the metadata document
 -- URL is what lands in client_id, so no separate index is needed. Note the
 -- btree entry limit of roughly 2704 bytes caps CIMD URL length in practice;
@@ -1795,7 +1805,8 @@ WHERE deleted IS FALSE;
 -- admission mode.
 CREATE TABLE IF NOT EXISTS user_session_issuer_cimd_clients (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
-  project_id uuid NOT NULL,
+  project_id uuid,
+  organization_id TEXT,
   user_session_issuer_id uuid NOT NULL,
 
   client_id_metadata_uri TEXT NOT NULL,
@@ -1808,6 +1819,8 @@ CREATE TABLE IF NOT EXISTS user_session_issuer_cimd_clients (
   CONSTRAINT user_session_issuer_cimd_clients_pkey PRIMARY KEY (id),
   CONSTRAINT user_session_issuer_cimd_clients_project_id_fkey
     FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE,
+  CONSTRAINT user_session_issuer_cimd_clients_organization_id_fkey
+    FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE,
   CONSTRAINT user_session_issuer_cimd_clients_user_session_issuer_id_fkey
     FOREIGN KEY (user_session_issuer_id) REFERENCES user_session_issuers (id) ON DELETE CASCADE
 );
@@ -1828,11 +1841,15 @@ ON user_session_issuer_cimd_clients (project_id);
 CREATE INDEX IF NOT EXISTS user_session_issuer_cimd_clients_user_session_issuer_id_idx
 ON user_session_issuer_cimd_clients (user_session_issuer_id);
 
+CREATE INDEX IF NOT EXISTS user_session_issuer_cimd_clients_organization_id_idx
+ON user_session_issuer_cimd_clients (organization_id);
+
 -- User Session Consents track records of consent between Clients and Issuers
 -- Consents are scoped to given sets of underlying credentials so they can be reused between login events
 CREATE TABLE IF NOT EXISTS user_session_consents (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
-  project_id uuid NOT NULL,
+  project_id uuid,
+  organization_id TEXT,
 
   subject_urn TEXT NOT NULL,
   user_session_client_id uuid NOT NULL,
@@ -1846,8 +1863,12 @@ CREATE TABLE IF NOT EXISTS user_session_consents (
 
   CONSTRAINT user_session_consents_pkey PRIMARY KEY (id),
   CONSTRAINT user_session_consents_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE,
+  CONSTRAINT user_session_consents_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE,
   CONSTRAINT user_session_consents_user_session_client_id_fkey FOREIGN KEY (user_session_client_id) REFERENCES user_session_clients (id) ON DELETE CASCADE
 );
+
+CREATE INDEX IF NOT EXISTS user_session_consents_organization_id_idx
+ON user_session_consents (organization_id);
 
 CREATE UNIQUE INDEX IF NOT EXISTS user_session_consents_subject_client_set_key
 ON user_session_consents (subject_urn, user_session_client_id, remote_set_hash)
@@ -1857,7 +1878,8 @@ WHERE deleted IS FALSE;
 -- They contain token grant information to allow for validating and exchanging tokens
 CREATE TABLE IF NOT EXISTS user_sessions (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
-  project_id uuid NOT NULL,
+  project_id uuid,
+  organization_id TEXT,
   user_session_issuer_id uuid NOT NULL,
   user_session_client_id uuid,
   subject_urn TEXT NOT NULL,
@@ -1882,9 +1904,13 @@ CREATE TABLE IF NOT EXISTS user_sessions (
 
   CONSTRAINT user_sessions_pkey PRIMARY KEY (id),
   CONSTRAINT user_sessions_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE,
+  CONSTRAINT user_sessions_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE,
   CONSTRAINT user_sessions_user_session_issuer_id_fkey FOREIGN KEY (user_session_issuer_id) REFERENCES user_session_issuers (id) ON DELETE CASCADE,
   CONSTRAINT user_sessions_user_session_client_id_fkey FOREIGN KEY (user_session_client_id) REFERENCES user_session_clients (id) ON DELETE SET NULL
 );
+
+CREATE INDEX IF NOT EXISTS user_sessions_organization_id_idx
+ON user_sessions (organization_id);
 
 CREATE INDEX IF NOT EXISTS user_sessions_user_session_client_id_idx
 ON user_sessions (user_session_client_id)
@@ -1957,6 +1983,11 @@ CREATE TABLE IF NOT EXISTS remote_session_issuers (
   -- Manually set (not RFC 8414) link to instructions for setting up an OAuth
   -- client with this issuer's provider, surfaced to customers.
   client_setup_documentation_url TEXT,
+
+  -- The last discovery document captured for this issuer, verbatim. The typed
+  -- columns above model only what Gram acts on, so re-serving from them would
+  -- drop the OIDC fields they omit.
+  metadata JSONB,
 
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
@@ -4033,6 +4064,65 @@ CREATE UNIQUE INDEX IF NOT EXISTS otel_forwarding_configs_org_project_key
   ON otel_forwarding_configs (organization_id, project_id)
   WHERE project_id IS NOT NULL AND deleted IS FALSE;
 
+-- Reusable customer-owned OTLP collector connections. endpoint_url is an OTLP
+-- base URL; signal-specific paths are appended by the forwarding relays.
+-- sensitive_data is validated in the application so each destination can choose
+-- its disclosure policy independently as routes fan out to multiple sinks.
+CREATE TABLE IF NOT EXISTS otel_destinations (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  organization_id TEXT NOT NULL,
+  project_id uuid NOT NULL,
+  name TEXT NOT NULL,
+  endpoint_url TEXT NOT NULL,
+  headers_encrypted TEXT,
+  sensitive_data TEXT DEFAULT 'exclude',
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  deleted_at timestamptz,
+  deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
+
+  CONSTRAINT otel_destinations_pkey PRIMARY KEY (id),
+  CONSTRAINT otel_destinations_project_tenant_fkey FOREIGN KEY (organization_id, project_id) REFERENCES projects (organization_id, id) ON DELETE CASCADE
+);
+
+-- Supports tenant-pinned references from export routes. This cannot be a
+-- partial index because PostgreSQL requires a non-partial unique key as the
+-- target of a foreign key.
+CREATE UNIQUE INDEX IF NOT EXISTS otel_destinations_tenant_id_key
+  ON otel_destinations (organization_id, project_id, id);
+
+CREATE INDEX IF NOT EXISTS otel_destinations_project_id_idx
+  ON otel_destinations (project_id)
+  WHERE deleted IS FALSE;
+
+-- Declarative routes from a class of project data to an OTLP destination.
+-- data_source values are intentionally validated in the application so adding
+-- a new source does not require a migration.
+CREATE TABLE IF NOT EXISTS data_export_routes (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  organization_id TEXT NOT NULL,
+  project_id uuid NOT NULL,
+  data_source TEXT NOT NULL,
+  enabled boolean NOT NULL DEFAULT true,
+  otel_destination_id uuid,
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  deleted_at timestamptz,
+  deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
+
+  CONSTRAINT data_export_routes_pkey PRIMARY KEY (id),
+  CONSTRAINT data_export_routes_project_tenant_fkey FOREIGN KEY (organization_id, project_id) REFERENCES projects (organization_id, id) ON DELETE CASCADE,
+  CONSTRAINT data_export_routes_destination_tenant_fkey FOREIGN KEY (organization_id, project_id, otel_destination_id) REFERENCES otel_destinations (organization_id, project_id, id) ON DELETE RESTRICT
+);
+
+-- Each project can configure at most one non-deleted route per data source.
+-- Disabled routes still reserve the source until they are deleted.
+CREATE UNIQUE INDEX IF NOT EXISTS data_export_routes_project_source_key
+  ON data_export_routes (project_id, data_source)
+  WHERE deleted IS FALSE;
+
 -- AI integration configs: encrypted provider credentials and activation
 -- metadata. Provider-specific sync state lives in ai_integration_syncs.
 CREATE TABLE IF NOT EXISTS ai_integration_configs (
@@ -4426,6 +4516,11 @@ CREATE TABLE IF NOT EXISTS mcp_servers (
 
   environment_id uuid,
   user_session_issuer_id uuid,
+  -- The authorization server the upstream authenticates against. Coexists with
+  -- user_session_issuer_id: Gram fronting an upstream does not change which AS
+  -- issued the upstream's credential.
+  -- The FK cannot qualify tenancy; writers must use the tenant-scoped lookup.
+  remote_session_issuer_id uuid,
   remote_mcp_server_id uuid,
   tunneled_mcp_server_id uuid,
   toolset_id uuid,
@@ -4450,13 +4545,9 @@ CREATE TABLE IF NOT EXISTS mcp_servers (
   CONSTRAINT mcp_servers_toolset_id_fkey FOREIGN KEY (toolset_id) REFERENCES toolsets (id) ON DELETE RESTRICT,
   CONSTRAINT mcp_servers_unproxied_mcp_server_id_fkey FOREIGN KEY (unproxied_mcp_server_id) REFERENCES unproxied_mcp_servers (id) ON DELETE RESTRICT,
   CONSTRAINT mcp_servers_tool_variations_group_id_fkey FOREIGN KEY (tool_variations_group_id) REFERENCES tool_variations_groups (id) ON DELETE SET NULL,
+  CONSTRAINT mcp_servers_remote_session_issuer_id_fkey FOREIGN KEY (remote_session_issuer_id) REFERENCES remote_session_issuers (id) ON DELETE SET NULL,
   -- Exactly one backend must be set.
-  CONSTRAINT mcp_servers_backend_exclusivity_check CHECK (num_nonnulls(remote_mcp_server_id, tunneled_mcp_server_id, toolset_id, unproxied_mcp_server_id) = 1),
-  -- Remote and tunneled servers carry a Gram-as-AS issuer attached at create
-  -- time for the server's lifetime, regardless of visibility. Toolset- and
-  -- unproxied-backed servers are exempt (unproxied servers are never
-  -- proxied, so there is no Gram-managed OAuth to attach).
-  CONSTRAINT mcp_servers_issuer_required_check CHECK (deleted OR (remote_mcp_server_id IS NULL AND tunneled_mcp_server_id IS NULL) OR user_session_issuer_id IS NOT NULL)
+  CONSTRAINT mcp_servers_backend_exclusivity_check CHECK (num_nonnulls(remote_mcp_server_id, tunneled_mcp_server_id, toolset_id, unproxied_mcp_server_id) = 1)
 );
 
 CREATE INDEX IF NOT EXISTS mcp_servers_project_id_idx
@@ -4470,6 +4561,14 @@ WHERE deleted IS FALSE;
 CREATE UNIQUE INDEX IF NOT EXISTS mcp_servers_project_id_id_key
 ON mcp_servers (project_id, id);
 
+
+-- Drives the resync that recomputes remote_session_issuer_id from a set of user
+-- session issuers. That statement runs inside every client create, attach,
+-- detach and delete, so without this it sequential-scans mcp_servers while
+-- holding write locks.
+CREATE INDEX IF NOT EXISTS mcp_servers_user_session_issuer_id_idx
+ON mcp_servers (user_session_issuer_id)
+WHERE user_session_issuer_id IS NOT NULL;
 
 CREATE INDEX IF NOT EXISTS mcp_servers_remote_mcp_server_id_idx
 ON mcp_servers (remote_mcp_server_id)
@@ -5045,6 +5144,10 @@ CREATE INDEX IF NOT EXISTS risk_policies_project_id_audience_type_idx
 ON risk_policies (project_id, audience_type)
 WHERE deleted IS FALSE;
 
+CREATE INDEX IF NOT EXISTS risk_policies_project_id_created_at_id_idx
+ON risk_policies (project_id, created_at DESC, id DESC)
+WHERE deleted IS FALSE;
+
 -- Durable session quarantine state for hook-ingest enforcement. Active rows
 -- open a Redis-backed session circuit until an org admin releases them.
 CREATE TABLE IF NOT EXISTS session_quarantines (
@@ -5159,6 +5262,14 @@ CREATE TABLE IF NOT EXISTS risk_exclusions (
 
 CREATE INDEX IF NOT EXISTS risk_exclusions_project_policy_idx
 ON risk_exclusions (project_id, risk_policy_id)
+WHERE deleted IS FALSE;
+
+CREATE INDEX IF NOT EXISTS risk_exclusions_project_id_created_at_id_idx
+ON risk_exclusions (project_id, created_at DESC, id DESC)
+WHERE deleted IS FALSE;
+
+CREATE INDEX IF NOT EXISTS risk_exclusions_project_id_risk_policy_id_created_at_id_idx
+ON risk_exclusions (project_id, risk_policy_id, created_at DESC, id DESC)
 WHERE deleted IS FALSE;
 
 -- Individual findings produced by scanning a chat message against a risk policy.
@@ -6079,6 +6190,11 @@ CREATE TABLE IF NOT EXISTS gcp_iam_credentials (
   wif_pool_id TEXT,
   wif_provider_id TEXT,
   wif_project_number TEXT,
+  -- Exempts this credential from the validation that refuses an impersonation
+  -- target in the server's own GCP project. Recorded on the row because the
+  -- same validation runs on the outbound path, where there is no request actor
+  -- to consult.
+  skip_project_verification boolean NOT NULL DEFAULT FALSE,
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   CONSTRAINT gcp_iam_credentials_pkey PRIMARY KEY (external_credential_id),
@@ -7579,3 +7695,93 @@ CREATE INDEX IF NOT EXISTS platform_mcp_feedback_organization_subject_created_at
 CREATE INDEX IF NOT EXISTS platform_mcp_feedback_organization_connection_created_at_idx ON platform_mcp_feedback (organization_id, connection_id, created_at DESC) WHERE connection_id IS NOT NULL;
 CREATE INDEX IF NOT EXISTS platform_mcp_feedback_organization_workflow_created_at_idx ON platform_mcp_feedback (organization_id, workflow_id, created_at DESC) WHERE workflow_id IS NOT NULL;
 CREATE INDEX IF NOT EXISTS platform_mcp_feedback_expires_at_idx ON platform_mcp_feedback (expires_at);
+
+CREATE TABLE IF NOT EXISTS killswitch_prescriptions (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  organization_id TEXT NOT NULL,
+  definition_key TEXT NOT NULL,
+  principal_kind TEXT NOT NULL,
+  principal_key TEXT NOT NULL,
+  resource_kind TEXT NOT NULL,
+  current_version BIGINT NOT NULL,
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  CONSTRAINT killswitch_prescriptions_pkey PRIMARY KEY (id),
+  CONSTRAINT killswitch_prescriptions_definition_key_check CHECK (definition_key <> ''),
+  CONSTRAINT killswitch_prescriptions_principal_kind_check CHECK (principal_kind <> ''),
+  CONSTRAINT killswitch_prescriptions_principal_key_check CHECK (principal_key <> ''),
+  CONSTRAINT killswitch_prescriptions_resource_kind_check CHECK (resource_kind <> ''),
+  CONSTRAINT killswitch_prescriptions_current_version_check CHECK (current_version > 0),
+  CONSTRAINT killswitch_prescriptions_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE
+);
+CREATE UNIQUE INDEX IF NOT EXISTS killswitch_prescriptions_organization_id_id_key ON killswitch_prescriptions (organization_id, id);
+CREATE INDEX IF NOT EXISTS killswitch_prescriptions_evaluator_idx ON killswitch_prescriptions (organization_id, definition_key, principal_kind, principal_key, resource_kind, id);
+
+CREATE TABLE IF NOT EXISTS killswitch_prescription_versions (
+  organization_id TEXT NOT NULL,
+  prescription_id uuid NOT NULL,
+  version BIGINT NOT NULL,
+  state TEXT NOT NULL,
+  resource_scope TEXT NOT NULL,
+  starts_at timestamptz NOT NULL,
+  expires_at timestamptz,
+  activated_at timestamptz,
+  superseded_at timestamptz,
+  internal_note TEXT NOT NULL,
+  external_note TEXT NOT NULL,
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  CONSTRAINT killswitch_prescription_versions_pkey PRIMARY KEY (prescription_id, version),
+  CONSTRAINT killswitch_prescription_versions_prescription_fkey FOREIGN KEY (organization_id, prescription_id) REFERENCES killswitch_prescriptions (organization_id, id) ON DELETE CASCADE,
+  CONSTRAINT killswitch_prescription_versions_version_check CHECK (version > 0),
+  CONSTRAINT killswitch_prescription_versions_state_check CHECK (state <> ''),
+  CONSTRAINT killswitch_prescription_versions_resource_scope_check CHECK (resource_scope IN ('all', 'selected')),
+  CONSTRAINT killswitch_prescription_versions_interval_check CHECK (expires_at IS NULL OR expires_at > starts_at),
+  CONSTRAINT killswitch_prescription_versions_external_note_check CHECK (char_length(external_note) BETWEEN 1 AND 500),
+  CONSTRAINT killswitch_prescription_versions_internal_note_check CHECK (char_length(internal_note) BETWEEN 1 AND 4000)
+);
+CREATE UNIQUE INDEX IF NOT EXISTS killswitch_prescription_versions_org_prescription_version_key ON killswitch_prescription_versions (organization_id, prescription_id, version);
+-- Privileged cross-organization expiry discovery: the maintenance sweep scans due
+-- versions globally ordered by expires_at, prescription_id, and version, so the index
+-- deliberately does not lead with organization_id.
+CREATE INDEX IF NOT EXISTS killswitch_prescription_versions_expiry_due_idx ON killswitch_prescription_versions (expires_at, prescription_id, version) WHERE state = 'active' AND expires_at IS NOT NULL AND (superseded_at IS NULL OR expires_at < superseded_at);
+
+CREATE TABLE IF NOT EXISTS killswitch_prescription_version_resources (
+  organization_id TEXT NOT NULL,
+  prescription_id uuid NOT NULL,
+  version BIGINT NOT NULL,
+  resource_key TEXT NOT NULL,
+  CONSTRAINT killswitch_prescription_version_resources_pkey PRIMARY KEY (prescription_id, version, resource_key),
+  CONSTRAINT killswitch_prescription_version_resources_version_fkey FOREIGN KEY (organization_id, prescription_id, version) REFERENCES killswitch_prescription_versions (organization_id, prescription_id, version) ON DELETE CASCADE,
+  CONSTRAINT killswitch_prescription_version_resources_resource_key_check CHECK (resource_key <> '')
+);
+CREATE INDEX IF NOT EXISTS killswitch_prescription_version_resources_lookup_idx ON killswitch_prescription_version_resources (organization_id, resource_key, prescription_id, version);
+
+CREATE TABLE IF NOT EXISTS killswitch_expiry_events (
+  organization_id TEXT NOT NULL,
+  prescription_id uuid NOT NULL,
+  version BIGINT NOT NULL,
+  recorded_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  CONSTRAINT killswitch_expiry_events_pkey PRIMARY KEY (prescription_id, version),
+  CONSTRAINT killswitch_expiry_events_prescription_version_fkey FOREIGN KEY (organization_id, prescription_id, version) REFERENCES killswitch_prescription_versions (organization_id, prescription_id, version) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS killswitch_operations (
+  organization_id TEXT NOT NULL,
+  operation_id uuid NOT NULL,
+  actor_user_id TEXT NOT NULL,
+  operation TEXT NOT NULL,
+  request_hash TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'pending',
+  response JSONB,
+  expires_at timestamptz NOT NULL,
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  CONSTRAINT killswitch_operations_pkey PRIMARY KEY (organization_id, operation_id),
+  CONSTRAINT killswitch_operations_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE,
+  CONSTRAINT killswitch_operations_actor_user_id_check CHECK (actor_user_id <> ''),
+  CONSTRAINT killswitch_operations_operation_check CHECK (operation <> ''),
+  CONSTRAINT killswitch_operations_request_hash_check CHECK (request_hash <> ''),
+  CONSTRAINT killswitch_operations_status_check CHECK (status IN ('pending', 'completed')),
+  CONSTRAINT killswitch_operations_completed_response_check CHECK ((status = 'pending' AND response IS NULL) OR (status = 'completed' AND response IS NOT NULL))
+);
+CREATE INDEX IF NOT EXISTS killswitch_operations_expires_at_idx ON killswitch_operations (expires_at);

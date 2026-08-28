@@ -10,7 +10,7 @@ import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
 /**
- * The EFFECTIVE CIMD admission policy in force for this issuer: disabled | presets | reporting | open. Always populated, so clients never have to reason about an unset state. Note 'reporting' can be READ but not written: it is the current default for an issuer whose mode has never been configured, and it admits every spec-valid client while recording what 'presets' would have refused. It exists so the platform can measure before switching the default to 'presets'. Set an explicit mode to opt out of it.
+ * The EFFECTIVE CIMD admission policy in force for this issuer: disabled | presets | reporting | open. Always populated, so clients never have to reason about an unset state. 'open' is the resting policy an issuer carries unless an operator chooses otherwise: it admits any spec-valid document, and 'presets' enforcement is opt-in because a denial under it is unrecoverable for the end user. Note 'reporting' can be READ but not written: it is a legacy value that admits exactly what 'open' admits, and no issuer is created with it.
  */
 export const ClientIdMetadataAdmissionMode = {
   Disabled: "disabled",
@@ -19,7 +19,7 @@ export const ClientIdMetadataAdmissionMode = {
   Open: "open",
 } as const;
 /**
- * The EFFECTIVE CIMD admission policy in force for this issuer: disabled | presets | reporting | open. Always populated, so clients never have to reason about an unset state. Note 'reporting' can be READ but not written: it is the current default for an issuer whose mode has never been configured, and it admits every spec-valid client while recording what 'presets' would have refused. It exists so the platform can measure before switching the default to 'presets'. Set an explicit mode to opt out of it.
+ * The EFFECTIVE CIMD admission policy in force for this issuer: disabled | presets | reporting | open. Always populated, so clients never have to reason about an unset state. 'open' is the resting policy an issuer carries unless an operator chooses otherwise: it admits any spec-valid document, and 'presets' enforcement is opt-in because a denial under it is unrecoverable for the end user. Note 'reporting' can be READ but not written: it is a legacy value that admits exactly what 'open' admits, and no issuer is created with it.
  */
 export type ClientIdMetadataAdmissionMode = ClosedEnum<
   typeof ClientIdMetadataAdmissionMode
@@ -34,7 +34,7 @@ export type UserSessionIssuer = {
    */
   authnChallengeMode: string;
   /**
-   * The EFFECTIVE CIMD admission policy in force for this issuer: disabled | presets | reporting | open. Always populated, so clients never have to reason about an unset state. Note 'reporting' can be READ but not written: it is the current default for an issuer whose mode has never been configured, and it admits every spec-valid client while recording what 'presets' would have refused. It exists so the platform can measure before switching the default to 'presets'. Set an explicit mode to opt out of it.
+   * The EFFECTIVE CIMD admission policy in force for this issuer: disabled | presets | reporting | open. Always populated, so clients never have to reason about an unset state. 'open' is the resting policy an issuer carries unless an operator chooses otherwise: it admits any spec-valid document, and 'presets' enforcement is opt-in because a denial under it is unrecoverable for the end user. Note 'reporting' can be READ but not written: it is a legacy value that admits exactly what 'open' admits, and no issuer is created with it.
    */
   clientIdMetadataAdmissionMode: ClientIdMetadataAdmissionMode;
   createdAt: Date;

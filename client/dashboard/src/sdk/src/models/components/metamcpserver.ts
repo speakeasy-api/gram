@@ -5,8 +5,23 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
+import { ClosedEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
+
+/**
+ * The visibility of a meta MCP server. Disabled refuses traffic; private requires a user session.
+ */
+export const MetaMcpServerVisibility = {
+  Disabled: "disabled",
+  Private: "private",
+} as const;
+/**
+ * The visibility of a meta MCP server. Disabled refuses traffic; private requires a user session.
+ */
+export type MetaMcpServerVisibility = ClosedEnum<
+  typeof MetaMcpServerVisibility
+>;
 
 /**
  * A meta MCP server: an aggregate server fronting an explicitly managed set of MCP servers. URL addressability lives on its MCP endpoints.
@@ -20,6 +35,10 @@ export type MetaMcpServer = {
    * The ID of the meta MCP server
    */
   id: string;
+  /**
+   * The number of live members. Only populated by listMetaMcpServers.
+   */
+  memberCount?: number | undefined;
   /**
    * The display name of the meta MCP server
    */
@@ -40,7 +59,16 @@ export type MetaMcpServer = {
    * The ID of the user session issuer used to authenticate callers. Null when no issuer is attached.
    */
   userSessionIssuerId?: string | undefined;
+  /**
+   * The visibility of a meta MCP server. Disabled refuses traffic; private requires a user session.
+   */
+  visibility: MetaMcpServerVisibility;
 };
+
+/** @internal */
+export const MetaMcpServerVisibility$inboundSchema: z.ZodMiniEnum<
+  typeof MetaMcpServerVisibility
+> = z.enum(MetaMcpServerVisibility);
 
 /** @internal */
 export const MetaMcpServer$inboundSchema: z.ZodMiniType<
@@ -53,6 +81,7 @@ export const MetaMcpServer$inboundSchema: z.ZodMiniType<
       z.transform(v => new Date(v)),
     ),
     id: z.string(),
+    member_count: z.optional(z.int()),
     name: z.string(),
     organization_id: z.string(),
     project_id: z.string(),
@@ -61,10 +90,12 @@ export const MetaMcpServer$inboundSchema: z.ZodMiniType<
       z.transform(v => new Date(v)),
     ),
     user_session_issuer_id: z.optional(z.string()),
+    visibility: MetaMcpServerVisibility$inboundSchema,
   }),
   z.transform((v) => {
     return remap$(v, {
       "created_at": "createdAt",
+      "member_count": "memberCount",
       "organization_id": "organizationId",
       "project_id": "projectId",
       "updated_at": "updatedAt",

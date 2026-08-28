@@ -189,8 +189,7 @@ func run(ctx context.Context, logger *slog.Logger, ident auth.RunnerIdentity) er
 	go func() {
 		<-ctx.Done()
 
-		var cancellation *svc.CancellationError
-		if errors.As(context.Cause(ctx), &cancellation) {
+		if cancellation, ok := errors.AsType[*svc.CancellationError](context.Cause(ctx)); ok {
 			logger.ErrorContext(ctx, "shutting down", attr.SlogError(cancellation))
 		} else {
 			logger.InfoContext(ctx, "shutting down")

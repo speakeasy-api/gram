@@ -4,11 +4,10 @@
 // remote_session_issuer_id), and its "any attached session missing/invalid →
 // ErrNoValidToken" rule.
 //
-// The single-client happy path is the only multiplicity reachable today: the
-// remote_session_client_user_session_issuers one_per_issuer unique index still
-// caps a user_session_issuer at one client. The map-with-many-entries and the
-// per-issuer uniqueness invariant become exercisable once AIS-137 drops that
-// index.
+// The one_per_issuer index was dropped in AIS-137, so a user_session_issuer
+// may hold clients on several remote issuers and the map-with-many-entries
+// shape is reachable; each entry carries the credential's grant-time RFC 8707
+// resource so callers can route per upstream.
 
 package remotesessions_test
 
@@ -125,9 +124,9 @@ func TestResolveAccessTokens_SingleClientHappyPath(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	tokens, err := mgr.ResolveAccessTokens(ctx, *authCtx.ProjectID, authCtx.ActiveOrganizationID, userIssuerID, subject, "")
+	tokens, err := mgr.ResolveAccessTokens(ctx, *authCtx.ProjectID, authCtx.ActiveOrganizationID, userIssuerID, subject)
 	require.NoError(t, err)
-	require.Equal(t, map[uuid.UUID]string{remoteIssuerID: "upstream-access-token"}, tokens)
+	require.Equal(t, map[uuid.UUID]remotesessions.UpstreamToken{remoteIssuerID: {Token: "upstream-access-token", Resource: "", RemoteSessionClientID: clientID}}, tokens)
 }
 
 func TestResolveAuthorization_InvalidRequestIsNotReportedAsMissingAuthorization(t *testing.T) {
@@ -210,7 +209,7 @@ func TestResolveAccessTokens_NoClientsReturnsNil(t *testing.T) {
 	userIssuerID := createUserSessionIssuer(t, ctx, ti.conn, "usi-resolve-empty")
 	subject := urn.NewUserSubject("resolve-empty-subject")
 
-	tokens, err := mgr.ResolveAccessTokens(ctx, *authCtx.ProjectID, authCtx.ActiveOrganizationID, userIssuerID, subject, "")
+	tokens, err := mgr.ResolveAccessTokens(ctx, *authCtx.ProjectID, authCtx.ActiveOrganizationID, userIssuerID, subject)
 	require.NoError(t, err)
 	require.Nil(t, tokens)
 }
@@ -230,7 +229,7 @@ func TestResolveAccessTokens_MissingSessionReturnsErrNoValidToken(t *testing.T) 
 	seedActiveClient(t, ctx, ti.conn, *authCtx.ProjectID, userIssuerID, authCtx.ActiveOrganizationID, "rsi-resolve-missing")
 
 	subject := urn.NewUserSubject("resolve-missing-subject")
-	tokens, err := mgr.ResolveAccessTokens(ctx, *authCtx.ProjectID, authCtx.ActiveOrganizationID, userIssuerID, subject, "")
+	tokens, err := mgr.ResolveAccessTokens(ctx, *authCtx.ProjectID, authCtx.ActiveOrganizationID, userIssuerID, subject)
 	require.ErrorIs(t, err, remotesessions.ErrNoValidToken)
 	require.Nil(t, tokens)
 }
@@ -262,7 +261,7 @@ func TestResolveAccessTokens_ExpiredAuthorizationRejectsUnexpiredAccessToken(t *
 	})
 	require.NoError(t, err)
 
-	tokens, err := mgr.ResolveAccessTokens(ctx, *authCtx.ProjectID, authCtx.ActiveOrganizationID, userIssuerID, subject, "")
+	tokens, err := mgr.ResolveAccessTokens(ctx, *authCtx.ProjectID, authCtx.ActiveOrganizationID, userIssuerID, subject)
 	require.ErrorIs(t, err, remotesessions.ErrNoValidToken)
 	require.Nil(t, tokens)
 }
@@ -298,7 +297,57 @@ func TestResolveAccessTokens_TenantClientOnPlatformIssuer(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	tokens, err := mgr.ResolveAccessTokens(ctx, *authCtx.ProjectID, authCtx.ActiveOrganizationID, userIssuerID, subject, "")
+	tokens, err := mgr.ResolveAccessTokens(ctx, *authCtx.ProjectID, authCtx.ActiveOrganizationID, userIssuerID, subject)
 	require.NoError(t, err)
-	require.Equal(t, map[uuid.UUID]string{platformID: "platform-upstream-token"}, tokens)
+	require.Equal(t, map[uuid.UUID]remotesessions.UpstreamToken{platformID: {Token: "platform-upstream-token", Resource: "", RemoteSessionClientID: uuid.MustParse(clientID)}}, tokens)
+}
+
+// Two clients on distinct remote issuers bound to one user_session_issuer —
+// the multi-upstream shape a meta MCP server produces. Every entry must carry
+// its own token and its own grant-time resource so dispatch can route per
+// upstream instead of picking arbitrarily.
+func TestResolveAccessTokens_MultipleUpstreamsCarryQualifiedResources(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	enc := testenv.NewEncryptionClient(t)
+	mgr := newResolveManager(t, ti.conn, enc)
+
+	userIssuerID := createUserSessionIssuer(t, ctx, ti.conn, "usi-resolve-multi")
+	clientA, remoteIssuerA := seedActiveClient(t, ctx, ti.conn, *authCtx.ProjectID, userIssuerID, authCtx.ActiveOrganizationID, "rsi-resolve-multi-a")
+	clientB, remoteIssuerB := seedActiveClient(t, ctx, ti.conn, *authCtx.ProjectID, userIssuerID, authCtx.ActiveOrganizationID, "rsi-resolve-multi-b")
+
+	subject := urn.NewUserSubject("resolve-multi-subject")
+	for _, seed := range []struct {
+		clientID uuid.UUID
+		token    string
+		resource string
+	}{
+		{clientID: clientA, token: "token-a", resource: "https://a.example.com/mcp"},
+		{clientID: clientB, token: "token-b", resource: "https://b.example.com/mcp"},
+	} {
+		accessEnc, err := enc.Encrypt([]byte(seed.token))
+		require.NoError(t, err)
+		_, err = repo.New(ti.conn).UpsertRemoteSession(ctx, repo.UpsertRemoteSessionParams{
+			SubjectUrn:            subject,
+			UserSessionIssuerID:   userIssuerID,
+			RemoteSessionClientID: seed.clientID,
+			AccessTokenEncrypted:  accessEnc,
+			AccessExpiresAt:       pgtype.Timestamptz{Time: time.Now().Add(time.Hour), InfinityModifier: pgtype.Finite, Valid: true},
+			Scopes:                []string{},
+			Resource:              conv.ToPGText(seed.resource),
+		})
+		require.NoError(t, err)
+	}
+
+	tokens, err := mgr.ResolveAccessTokens(ctx, *authCtx.ProjectID, authCtx.ActiveOrganizationID, userIssuerID, subject)
+	require.NoError(t, err)
+	require.Equal(t, map[uuid.UUID]remotesessions.UpstreamToken{
+		remoteIssuerA: {Token: "token-a", Resource: "https://a.example.com/mcp", RemoteSessionClientID: clientA},
+		remoteIssuerB: {Token: "token-b", Resource: "https://b.example.com/mcp", RemoteSessionClientID: clientB},
+	}, tokens)
 }

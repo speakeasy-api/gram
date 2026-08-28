@@ -36,6 +36,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/customdomains"
+	"github.com/speakeasy-api/gram/server/internal/mcp/mcpmetrics"
 	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -213,6 +214,24 @@ func (g UserSessionGrant) TTL() time.Duration { return 10 * time.Minute }
 // endpoint's organization could not be described, so the resulting 401 is
 // not a credential rejection.
 var errIssuerGateOrgLookup = errors.New("describe organization for issuer-gated endpoint")
+
+// The gram.oauth.failure_reason values the issuer gate emits on its rejection
+// logs and on the mcp.request.rejected counter, beyond the bearer-token
+// classification issuerGateFailureReason produces. Together they are a closed
+// set, so the metric dimension stays bounded.
+const (
+	// issuerGateReasonNoCredentials: no bearer token was presented at all,
+	// which is every client's first unauthenticated handshake probe and every
+	// scanner hit on a gated endpoint. Delineated from bad-credential
+	// rejections because it is by far the largest 401 population and would
+	// otherwise swamp the rejected share.
+	issuerGateReasonNoCredentials = "no_credentials"
+
+	// issuerGateReasonInvalidRemoteSession: the bearer token was accepted but
+	// a required upstream remote session for the issuer is missing or
+	// unusable, so the runtime challenged the client to reconnect.
+	issuerGateReasonInvalidRemoteSession = "invalid_remote_session"
+)
 
 func issuerGateFailureReason(err error) string {
 	switch {
@@ -426,12 +445,12 @@ func (s *Service) BaseURLForRequest(r *http.Request) string {
 // for the issuer.
 //
 // On success: returns the request context stamped with the resolved
-// principal plus a remote_session_issuer_id -> upstream access token map.
-// The map is nil/empty when the issuer has no remote_session_clients
-// bound; otherwise it holds one token per remote_session_issuer the
-// subject has linked. Callers wrap each entry into an oauthTokenInputs,
-// tagged with its remote_session_issuer_id, for downstream tool-dispatch
-// chains.
+// principal plus a remote_session_issuer_id -> upstream token map. The map
+// is nil/empty when the issuer has no remote_session_clients bound;
+// otherwise it holds one qualified entry (token + grant-time RFC 8707
+// resource) per remote_session_issuer the subject has linked. Proxied
+// backends route the entry matching their upstream resource; toolset
+// dispatch wraps entries into oauthTokenInputs.
 //
 // On failure: writes a 401 + WWW-Authenticate to w and returns the
 // CodeUnauthorized error from WriteAuthenticateChallenge. A re-auth
@@ -449,10 +468,25 @@ func (s *Service) ApplyIssuerGate(
 	w http.ResponseWriter,
 	authToken, baseURL string,
 	endpoint *ResolvedMcpEndpoint,
-) (context.Context, map[uuid.UUID]string, *toolfilter.SessionSelection, error) {
+) (context.Context, map[uuid.UUID]remotesessions.UpstreamToken, *toolfilter.SessionSelection, error) {
 	protectedResourceURL, err := endpoint.ProtectedResourceURL(baseURL)
 	if err != nil {
 		return ctx, nil, nil, oops.E(oops.CodeUnexpected, err, "build protected-resource URL").LogError(ctx, s.logger)
+	}
+
+	// The gram.mcp.url value for a rejection, rebuilt from the resolved
+	// endpoint rather than taken from the request. The post-authentication
+	// metrics use the raw request URL, query string included; here the caller
+	// is unauthenticated, and a query string any caller can vary freely would
+	// let them mint metric series. The two agree for every query-less request.
+	host := ""
+	if requestContext, _ := contextvalues.GetRequestContext(ctx); requestContext != nil {
+		host = requestContext.Host
+	}
+	mcpURL := host + "/" + endpoint.RouteBase + "/" + endpoint.Slug
+	surface := mcpmetrics.SurfaceHosting
+	if endpoint.MetaMcpServerID.Valid {
+		surface = mcpmetrics.SurfaceMeta
 	}
 
 	newCtx, subject, toolSelection, valErr := s.validateUserSessionToken(ctx, authToken, endpoint)
@@ -474,13 +508,21 @@ func (s *Service) ApplyIssuerGate(
 		// signature / revoked jti), but the errIssuerGateOrgLookup wrap means
 		// the token validated and the org lookup failed — an operational
 		// error, labeled distinctly so nobody chases a phantom bad token.
+		//
+		// The no-credentials probe is counted but not logged: it fires on
+		// every client's first handshake, so a warning per probe is noise.
+		reason := issuerGateReasonNoCredentials
 		if valErr != nil {
+			reason = issuerGateFailureReason(valErr)
 			endpoint.LogWith(s.logger).WarnContext(ctx, "mcp issuer gate rejected bearer token",
 				attr.SlogUserSessionIssuerID(endpoint.UserSessionIssuerID.String()),
-				attr.SlogOAuthFailureReason(issuerGateFailureReason(valErr)),
+				attr.SlogToolsetMCPSlug(endpoint.Slug),
+				attr.SlogMcpURL(mcpURL),
+				attr.SlogOAuthFailureReason(reason),
 				attr.SlogError(valErr),
 			)
 		}
+		s.metrics.RecordMCPRequestRejected(ctx, reason, mcpURL, surface)
 		return ctx, nil, nil, WriteAuthenticateChallenge(w, protectedResourceURL, "expired or invalid access token")
 	}
 
@@ -492,9 +534,9 @@ func (s *Service) ApplyIssuerGate(
 	// endpoint's oauth2 schemes downstream) or fails with ErrNoValidToken
 	// when any attached remote session is missing or invalid — which the
 	// user resolves by re-linking via {routeBase}/{slug}/connect.
-	var upstreamTokens map[uuid.UUID]string
+	var upstreamTokens map[uuid.UUID]remotesessions.UpstreamToken
 	if subject != nil {
-		tokens, rerr := s.remoteChallengeMgr.ResolveAccessTokens(newCtx, endpoint.ProjectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID, *subject, endpoint.UpstreamResource)
+		tokens, rerr := s.remoteChallengeMgr.ResolveAccessTokens(newCtx, endpoint.ProjectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID, *subject)
 		switch {
 		case errors.Is(rerr, remotesessions.ErrNoValidToken):
 			// The Gram user-session token is valid, but a required upstream
@@ -507,8 +549,11 @@ func (s *Service) ApplyIssuerGate(
 			// remotesessions.ResolveAccessToken.
 			endpoint.LogWith(s.logger).WarnContext(newCtx, "mcp issuer gate rejected: upstream remote session missing or unusable",
 				attr.SlogUserSessionIssuerID(endpoint.UserSessionIssuerID.String()),
-				attr.SlogOAuthFailureReason("invalid_remote_session"),
+				attr.SlogToolsetMCPSlug(endpoint.Slug),
+				attr.SlogMcpURL(mcpURL),
+				attr.SlogOAuthFailureReason(issuerGateReasonInvalidRemoteSession),
 			)
+			s.metrics.RecordMCPRequestRejected(newCtx, issuerGateReasonInvalidRemoteSession, mcpURL, surface)
 			return ctx, nil, nil, WriteAuthenticateChallenge(w, protectedResourceURL, "")
 		case rerr != nil:
 			return ctx, nil, nil, oops.E(oops.CodeUnexpected, rerr, "resolve remote session").LogError(newCtx, s.logger)
@@ -554,33 +599,6 @@ func (s *Service) RequireUserSessionIssuer(ctx context.Context, endpoint *Resolv
 	// place that decides what an absent or unrecognized value means.
 	endpoint.CIMDAdmissionModeRaw = issuer.ClientIDMetadataAdmissionMode
 	return nil
-}
-
-// extractClientCredentials returns the client_id + client_secret + presented
-// auth method + ok from either the Authorization header (client_secret_basic)
-// or the form body (client_secret_post / none). HTTP Basic still wins when
-// both are present; callers log the "multiple" presentation to surface client
-// misconfiguration without changing current compatibility behavior.
-func extractClientCredentials(r *http.Request) (string, string, string, bool) {
-	formID := r.PostForm.Get("client_id")
-	formSecret := r.PostForm.Get("client_secret")
-	hasFormCredentials := formID != "" || formSecret != ""
-
-	if id, secret, ok := r.BasicAuth(); ok && id != "" {
-		presentedMethod := "client_secret_basic"
-		if hasFormCredentials {
-			presentedMethod = "multiple"
-		}
-		return id, secret, presentedMethod, true
-	}
-	if formID == "" {
-		return "", "", "none", false
-	}
-	presentedMethod := "none"
-	if formSecret != "" {
-		presentedMethod = "client_secret_post"
-	}
-	return formID, formSecret, presentedMethod, true
 }
 
 func logOAuthClientCredentialEvent(ctx context.Context, logger *slog.Logger, r *http.Request, message, clientID, presentedMethod, grantType, failureReason string) {

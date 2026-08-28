@@ -70,14 +70,18 @@ export function ModeSwitchProvider({
 
   return (
     <ModeSwitchContext.Provider value={{ ...state, switchTo }}>
-      {/* Ink behind the whole chrome: the panes are opaque, so this only shows
-          during a switch — the dark screen the tab cards and the starfield sit
-          on. pointer-events-none because it is positioned and would otherwise
-          swallow clicks on the panes' non-positioned content. */}
-      <div
-        aria-hidden="true"
-        className="bg-surface-tertiary-fixed-dark pointer-events-none fixed inset-0 z-0"
-      />
+      {/* Ink behind the whole chrome: the dark screen the tab cards and the
+          starfield sit on. Only while a switch is in flight — the provider is
+          above the router, so an always-on backdrop would black out routes
+          without an opaque pane of their own, such as login. pointer-events-none
+          because it is positioned and would otherwise swallow clicks on the
+          panes' non-positioned content. */}
+      {state.phase !== "idle" && (
+        <div
+          aria-hidden="true"
+          className="bg-surface-tertiary-fixed-dark pointer-events-none fixed inset-0 z-0"
+        />
+      )}
       {/* Win95 screensaver behind the grid: only while a switch is in flight,
           raked toward whichever card is being opened. */}
       {state.phase !== "idle" && state.from && state.to && (

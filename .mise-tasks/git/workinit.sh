@@ -41,16 +41,6 @@ for item in "${copy_from_main[@]}"; do
   fi
 done
 
-# Seed the custom linter so lint:server can reuse it when build inputs match.
-gcl="${main_worktree}/server/bin/gcl"
-if [ -x "$gcl" ]; then
-  mkdir -p "${current_worktree}/server/bin"
-  tools/rclone copyto --metadata "$gcl" "${current_worktree}/server/bin/gcl"
-  if [ -f "${gcl}.fingerprint" ]; then
-    tools/rclone copyto --metadata "${gcl}.fingerprint" "${current_worktree}/server/bin/gcl.fingerprint"
-  fi
-fi
-
 mise trust
 if ! mise run install:aube --offline; then
   echo "Offline install failed, falling back to online install..."

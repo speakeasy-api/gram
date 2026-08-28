@@ -99,6 +99,99 @@ paths:
       x-speakeasy-name-override: uploadLogs
       x-speakeasy-react-hook:
         name: UploadOpenTelemetryLogs
+  /otel/v1/metrics:
+    post:
+      description: Endpoint to receive OTEL metrics data from LLM providers and harnesses.
+      operationId: uploadMetrics
+      parameters:
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+        - allowEmptyValue: true
+          description: Encoding applied to the OTLP request body. Supported values are gzip and identity.
+          in: header
+          name: Content-Encoding
+          schema:
+            description: Encoding applied to the OTLP request body. Supported values are gzip and identity.
+            type: string
+      responses:
+        "200":
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - apikey_header_Gram-Key: []
+          project_slug_header_Gram-Project: []
+        - {}
+      summary: metrics otel
+      tags:
+        - otel
+      x-speakeasy-name-override: uploadMetrics
+      x-speakeasy-react-hook:
+        name: UploadOpenTelemetryMetrics
   /otel/v1/traces:
     post:
       description: Endpoint to receive OTEL traces data from LLM providers and harnesses.
@@ -8888,6 +8981,16 @@ paths:
             description: Subject ID to filter audit logs to a specific subject (e.g. a single assistant).
             type: string
         - allowEmptyValue: true
+          description: Subject IDs to filter audit logs to a set of subjects at once, e.g. a resource together with the child resources whose events name the child as the subject. Matches any listed subject of any subject type, except that assistant activity events stay excluded unless subject_type is 'assistant'; combine with subject_type to pin the kind. Blank entries are ignored.
+          in: query
+          name: subject_ids
+          schema:
+            description: Subject IDs to filter audit logs to a set of subjects at once, e.g. a resource together with the child resources whose events name the child as the subject. Matches any listed subject of any subject type, except that assistant activity events stay excluded unless subject_type is 'assistant'; combine with subject_type to pin the kind. Blank entries are ignored.
+            items:
+              type: string
+            maxItems: 200
+            type: array
+        - allowEmptyValue: true
           description: Acting surface to filter audit logs to changes made through one surface, e.g. 'platform_mcp' to review agent-driven activity alone.
           in: query
           name: acting_surface
@@ -14867,6 +14970,89 @@ paths:
       x-speakeasy-name-override: listMcpEndpoints
       x-speakeasy-react-hook:
         name: CustomDomainMcpEndpoints
+  /rpc/domain.listRootMcpServers:
+    get:
+      description: List the organization's MCP servers that can be mapped to the custom domain root, including servers not yet attached to the domain
+      operationId: listRootMcpServers
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListRootMcpServersResponseBody'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - session_header_Gram-Session: []
+        - {}
+      summary: listRootMcpServers domains
+      tags:
+        - domains
+      x-speakeasy-name-override: listRootMcpServers
+      x-speakeasy-react-hook:
+        name: RootMcpServers
+        type: query
   /rpc/domain.register:
     post:
       description: Create a custom domain for an organization
@@ -14887,6 +15073,10 @@ paths:
         required: true
       responses:
         "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CustomDomain'
           description: OK response.
         "400":
           content:
@@ -14953,7 +15143,7 @@ paths:
         name: registerDomain
   /rpc/domain.setRootMcpEndpoint:
     post:
-      description: Set or clear the MCP endpoint mapped to a custom domain's root
+      description: Set or clear the MCP endpoint mapped to a custom domain's root. Pass mcp_endpoint_id for an endpoint already attached to the domain, or mcp_server_id to attach a server (creating its domain endpoint if needed) and map it in one call — usable while the domain is still pending verification, so a migration can be staged before DNS cuts over.
       operationId: setRootMcpEndpoint
       parameters:
         - allowEmptyValue: true
@@ -19525,6 +19715,106 @@ paths:
         - apikey_header_Gram-Key: []
           project_slug_header_Gram-Project: []
         - {}
+  /rpc/identity.resolve:
+    get:
+      description: Resolve an identity URN into every identifier the subject's activity is recorded under.
+      operationId: resolveIdentity
+      parameters:
+        - allowEmptyValue: true
+          description: The identity URN to resolve, in the form '<kind>:<id>'. Kind is one of 'user' (Gram user id), 'email', 'external' (the external user id an agent reported), 'apikey', or 'agent'. Callers pass whichever identifier they hold; every URN for the same subject resolves to the same identity.
+          example: user:user_01abc
+          in: query
+          name: urn
+          required: true
+          schema:
+            description: The identity URN to resolve, in the form '<kind>:<id>'. Kind is one of 'user' (Gram user id), 'email', 'external' (the external user id an agent reported), 'apikey', or 'agent'. Callers pass whichever identifier they hold; every URN for the same subject resolves to the same identity.
+            example: user:user_01abc
+            type: string
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IdentityModel'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - apikey_header_Gram-Key: []
+        - session_header_Gram-Session: []
+        - {}
+      summary: resolve identity
+      tags:
+        - identity
+      x-speakeasy-name-override: resolve
+      x-speakeasy-react-hook:
+        name: Identity
   /rpc/instances.get:
     get:
       description: Load all relevant data for an instance of a toolset and environment
@@ -25991,7 +26281,7 @@ paths:
         name: RemoveMetaMcpMember
   /rpc/metaMcp.update:
     post:
-      description: 'Update a meta MCP server. This is a full-record replace: a user_session_issuer_id omitted from the request becomes null on the stored record.'
+      description: 'Update a meta MCP server. This is a full-record replace: a user_session_issuer_id omitted from the request becomes null on the stored record. Visibility is the exception — omitting it preserves the stored value, so a caller that does not manage visibility cannot re-enable a disabled gateway by saving an unrelated field.'
       operationId: updateMetaMcpServer
       parameters:
         - allowEmptyValue: true
@@ -31453,6 +31743,569 @@ paths:
       x-speakeasy-name-override: update
       x-speakeasy-react-hook:
         name: UpdatePackage
+  /rpc/platformKillswitches.activatePrescription:
+    post:
+      tags:
+        - platformKillswitches
+      summary: activatePrescription platformKillswitches
+      operationId: platformKillswitches#activatePrescription
+      parameters:
+        - name: Gram-Session
+          in: header
+          description: Session header
+          allowEmptyValue: true
+          schema:
+            type: string
+            description: Session header
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ActivatePrescriptionRequestBody'
+      responses:
+        "200":
+          description: OK response.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PlatformKillswitchMutationResult'
+        "400":
+          description: 'bad_request: request is invalid'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "401":
+          description: 'unauthorized: unauthorized access'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "403":
+          description: 'forbidden: permission denied'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "404":
+          description: 'not_found: resource not found'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "409":
+          description: 'version_conflict: The prescription changed after the supplied expected version.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "415":
+          description: 'unsupported_media: unsupported media type'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "422":
+          description: 'invalid: request contains one or more invalidation fields'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "500":
+          description: 'unexpected: an unexpected error occurred'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "502":
+          description: 'gateway_error: an unexpected error occurred'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "503":
+          description: 'unavailable: service temporarily unavailable'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+      security:
+        - session_header_Gram-Session: []
+        - {}
+  /rpc/platformKillswitches.changePrescription:
+    post:
+      tags:
+        - platformKillswitches
+      summary: changePrescription platformKillswitches
+      operationId: platformKillswitches#changePrescription
+      parameters:
+        - name: Gram-Session
+          in: header
+          description: Session header
+          allowEmptyValue: true
+          schema:
+            type: string
+            description: Session header
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ChangePrescriptionRequestBody'
+      responses:
+        "200":
+          description: OK response.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PlatformKillswitchMutationResult'
+        "400":
+          description: 'bad_request: request is invalid'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "401":
+          description: 'unauthorized: unauthorized access'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "403":
+          description: 'forbidden: permission denied'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "404":
+          description: 'not_found: resource not found'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "409":
+          description: 'version_conflict: The prescription changed after the supplied expected version.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "415":
+          description: 'unsupported_media: unsupported media type'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "422":
+          description: 'invalid: request contains one or more invalidation fields'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "500":
+          description: 'unexpected: an unexpected error occurred'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "502":
+          description: 'gateway_error: an unexpected error occurred'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "503":
+          description: 'unavailable: service temporarily unavailable'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+      security:
+        - session_header_Gram-Session: []
+        - {}
+  /rpc/platformKillswitches.deactivatePrescription:
+    post:
+      tags:
+        - platformKillswitches
+      summary: deactivatePrescription platformKillswitches
+      operationId: platformKillswitches#deactivatePrescription
+      parameters:
+        - name: Gram-Session
+          in: header
+          description: Session header
+          allowEmptyValue: true
+          schema:
+            type: string
+            description: Session header
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DeactivatePrescriptionRequestBody'
+      responses:
+        "200":
+          description: OK response.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PlatformKillswitchMutationResult'
+        "400":
+          description: 'bad_request: request is invalid'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "401":
+          description: 'unauthorized: unauthorized access'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "403":
+          description: 'forbidden: permission denied'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "404":
+          description: 'not_found: resource not found'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "409":
+          description: 'version_conflict: The prescription changed after the supplied expected version.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "415":
+          description: 'unsupported_media: unsupported media type'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "422":
+          description: 'invalid: request contains one or more invalidation fields'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "500":
+          description: 'unexpected: an unexpected error occurred'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "502":
+          description: 'gateway_error: an unexpected error occurred'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "503":
+          description: 'unavailable: service temporarily unavailable'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+      security:
+        - session_header_Gram-Session: []
+        - {}
+  /rpc/platformKillswitches.getPrescription:
+    get:
+      tags:
+        - platformKillswitches
+      summary: getPrescription platformKillswitches
+      operationId: platformKillswitches#getPrescription
+      parameters:
+        - name: organization_id
+          in: query
+          allowEmptyValue: true
+          required: true
+          schema:
+            type: string
+        - name: prescription_id
+          in: query
+          allowEmptyValue: true
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: Gram-Session
+          in: header
+          description: Session header
+          allowEmptyValue: true
+          schema:
+            type: string
+            description: Session header
+      responses:
+        "200":
+          description: OK response.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PlatformKillswitchPrescription'
+        "400":
+          description: 'bad_request: request is invalid'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "401":
+          description: 'unauthorized: unauthorized access'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "403":
+          description: 'forbidden: permission denied'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "404":
+          description: 'not_found: resource not found'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "409":
+          description: 'version_conflict: The prescription changed after the supplied expected version.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "415":
+          description: 'unsupported_media: unsupported media type'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "422":
+          description: 'invalid: request contains one or more invalidation fields'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "500":
+          description: 'unexpected: an unexpected error occurred'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "502":
+          description: 'gateway_error: an unexpected error occurred'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "503":
+          description: 'unavailable: service temporarily unavailable'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+      security:
+        - session_header_Gram-Session: []
+        - {}
+  /rpc/platformKillswitches.listDefinitions:
+    get:
+      tags:
+        - platformKillswitches
+      summary: listDefinitions platformKillswitches
+      operationId: platformKillswitches#listDefinitions
+      parameters:
+        - name: Gram-Session
+          in: header
+          description: Session header
+          allowEmptyValue: true
+          schema:
+            type: string
+            description: Session header
+      responses:
+        "200":
+          description: OK response.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListDefinitionsResponseBody'
+        "400":
+          description: 'bad_request: request is invalid'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "401":
+          description: 'unauthorized: unauthorized access'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "403":
+          description: 'forbidden: permission denied'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "404":
+          description: 'not_found: resource not found'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "409":
+          description: 'version_conflict: The prescription changed after the supplied expected version.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "415":
+          description: 'unsupported_media: unsupported media type'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "422":
+          description: 'invalid: request contains one or more invalidation fields'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "500":
+          description: 'unexpected: an unexpected error occurred'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "502":
+          description: 'gateway_error: an unexpected error occurred'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "503":
+          description: 'unavailable: service temporarily unavailable'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+      security:
+        - session_header_Gram-Session: []
+        - {}
+  /rpc/platformKillswitches.listPrescriptions:
+    get:
+      operationId: platformKillswitches#listPrescriptions
+      parameters:
+        - allowEmptyValue: true
+          in: query
+          name: organization_id
+          required: true
+          schema:
+            type: string
+        - allowEmptyValue: true
+          in: query
+          name: limit
+          schema:
+            format: int32
+            maximum: 100
+            minimum: 1
+            type: integer
+        - allowEmptyValue: true
+          in: query
+          name: after_id
+          schema:
+            format: uuid
+            type: string
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListPrescriptionsResponseBody'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'version_conflict: The prescription changed after the supplied expected version.'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+        "503":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unavailable: service temporarily unavailable'
+      security:
+        - session_header_Gram-Session: []
+        - {}
+      summary: listPrescriptions platformKillswitches
+      tags:
+        - platformKillswitches
+      x-speakeasy-pagination:
+        inputs:
+          - in: parameters
+            name: after_id
+            type: cursor
+        outputs:
+          nextCursor: $.next_after_id
+        type: cursor
   /rpc/platformMcp.dismissOnboarding:
     post:
       description: Dismiss the optional current user's Platform MCP onboarding workflow without changing organization setup or project resources.
@@ -32781,6 +33634,8 @@ paths:
               - cursor
               - codex
               - opencode
+              - copilot
+              - openclaw
             type: string
         - allowEmptyValue: true
           description: Session header
@@ -32873,122 +33728,6 @@ paths:
       tags:
         - plugins
       x-speakeasy-name-override: downloadObservabilityPlugin
-  /rpc/plugins.downloadPlatformMCPPlugin:
-    get:
-      description: Download a credential-free Platform MCP plugin ZIP from the server-owned package definition. This does not require a GitHub marketplace and does not mint an API key.
-      operationId: downloadPlatformMCPPlugin
-      parameters:
-        - allowEmptyValue: true
-          description: Target package format.
-          in: query
-          name: platform
-          required: true
-          schema:
-            description: Target package format.
-            enum:
-              - claude
-              - cursor
-              - codex
-              - opencode
-              - agent-plugin
-            type: string
-        - allowEmptyValue: true
-          description: Session header
-          in: header
-          name: Gram-Session
-          schema:
-            description: Session header
-            type: string
-        - allowEmptyValue: true
-          description: project header
-          in: header
-          name: Gram-Project
-          schema:
-            description: project header
-            type: string
-      responses:
-        "200":
-          content:
-            application/zip:
-              schema:
-                format: binary
-                type: string
-          description: OK response.
-          headers:
-            Content-Disposition:
-              schema:
-                type: string
-            Content-Type:
-              schema:
-                type: string
-        "400":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'bad_request: request is invalid'
-        "401":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'unauthorized: unauthorized access'
-        "403":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'forbidden: permission denied'
-        "404":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'not_found: resource not found'
-        "409":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'conflict: resource already exists'
-        "412":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'failed_precondition: resource is not in a valid state for this operation'
-        "415":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'unsupported_media: unsupported media type'
-        "422":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'invalid: request contains one or more invalidation fields'
-        "500":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'unexpected: an unexpected error occurred'
-        "502":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'gateway_error: an unexpected error occurred'
-      security:
-        - project_slug_header_Gram-Project: []
-          session_header_Gram-Session: []
-        - {}
-      summary: downloadPlatformMCPPlugin plugins
-      tags:
-        - plugins
-      x-speakeasy-name-override: downloadPlatformMCPPlugin
   /rpc/plugins.downloadPluginPackage:
     get:
       description: Download a ZIP of a single plugin package for direct installation.
@@ -33203,88 +33942,6 @@ paths:
       x-speakeasy-name-override: getMarketplaceSettings
       x-speakeasy-react-hook:
         name: MarketplaceSettings
-  /rpc/plugins.getPlatformMCPPackageStatus:
-    get:
-      description: Get the organization-scoped Platform MCP package and canonical default-project marketplace status.
-      operationId: getPlatformMCPPackageStatus
-      parameters:
-        - allowEmptyValue: true
-          description: Session header
-          in: header
-          name: Gram-Session
-          schema:
-            description: Session header
-            type: string
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/PlatformMCPPackageStatusResult'
-          description: OK response.
-        "400":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'bad_request: request is invalid'
-        "401":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'unauthorized: unauthorized access'
-        "403":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'forbidden: permission denied'
-        "404":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'not_found: resource not found'
-        "409":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'conflict: resource already exists'
-        "415":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'unsupported_media: unsupported media type'
-        "422":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'invalid: request contains one or more invalidation fields'
-        "500":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'unexpected: an unexpected error occurred'
-        "502":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'gateway_error: an unexpected error occurred'
-      security:
-        - session_header_Gram-Session: []
-        - {}
-      summary: getPlatformMCPPackageStatus plugins
-      tags:
-        - plugins
-      x-speakeasy-name-override: getPlatformMCPPackageStatus
-      x-speakeasy-react-hook:
-        name: PlatformMCPPackageStatus
   /rpc/plugins.getPlugin:
     get:
       description: Get a plugin with its servers and assignments.
@@ -33850,102 +34507,6 @@ paths:
       x-speakeasy-name-override: removePluginServer
       x-speakeasy-react-hook:
         name: RemovePluginServer
-  /rpc/plugins.repairPlatformMCPPackage:
-    post:
-      description: Idempotently publish or repair the Platform MCP package in the organization's canonical default-project marketplace.
-      operationId: repairPlatformMCPPackage
-      parameters:
-        - allowEmptyValue: true
-          description: Session header
-          in: header
-          name: Gram-Session
-          schema:
-            description: Session header
-            type: string
-        - allowEmptyValue: true
-          description: project header
-          in: header
-          name: Gram-Project
-          schema:
-            description: project header
-            type: string
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/PlatformMCPPackageStatusResult'
-          description: OK response.
-        "400":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'bad_request: request is invalid'
-        "401":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'unauthorized: unauthorized access'
-        "403":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'forbidden: permission denied'
-        "404":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'not_found: resource not found'
-        "409":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'conflict: resource already exists'
-        "412":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'failed_precondition: resource is not in a valid state for this operation'
-        "415":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'unsupported_media: unsupported media type'
-        "422":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'invalid: request contains one or more invalidation fields'
-        "500":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'unexpected: an unexpected error occurred'
-        "502":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'gateway_error: an unexpected error occurred'
-      security:
-        - project_slug_header_Gram-Project: []
-          session_header_Gram-Session: []
-        - {}
-      summary: repairPlatformMCPPackage plugins
-      tags:
-        - plugins
-      x-speakeasy-name-override: repairPlatformMCPPackage
-      x-speakeasy-react-hook:
-        name: RepairPlatformMCPPackage
   /rpc/plugins.setPluginAssignments:
     put:
       description: Replace all assignments for a plugin with the given list of principal URNs.
@@ -44367,6 +44928,20 @@ paths:
             description: Include a newest-first page of scored sessions. Intended for one skill detail view.
             type: boolean
         - allowEmptyValue: true
+          description: Calculate attributed session cost. Disable for surfaces that do not display it.
+          in: query
+          name: include_session_cost
+          schema:
+            description: Calculate attributed session cost. Disable for surfaces that do not display it.
+            type: boolean
+        - allowEmptyValue: true
+          description: Calculate the current-versus-predecessor efficacy regression signal.
+          in: query
+          name: include_regression_signal
+          schema:
+            description: Calculate the current-versus-predecessor efficacy regression signal.
+            type: boolean
+        - allowEmptyValue: true
           description: Cursor for the next page of scored sessions.
           in: query
           name: cursor
@@ -53435,6 +54010,115 @@ paths:
       x-speakeasy-name-override: listToolFilters
       x-speakeasy-react-hook:
         name: ListToolsetToolFilters
+  /rpc/toolsets.listToolSchemaStaticValues:
+    get:
+      description: 'List every const, default, enum, example, and examples value in each tool input schema. The result is deliberately mechanical: clients decide how to present or interpret the values. This supports reviewing the exact schema contents before changing how a toolset is shared.'
+      operationId: listToolsetToolSchemaStaticValues
+      parameters:
+        - allowEmptyValue: true
+          description: The slug of the toolset
+          in: query
+          name: slug
+          required: true
+          schema:
+            description: A short url-friendly label that uniquely identifies a resource.
+            maxLength: 40
+            pattern: ^[a-z0-9_-]{1,128}$
+            type: string
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListToolSchemaStaticValuesResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - apikey_header_Gram-Key: []
+          project_slug_header_Gram-Project: []
+        - {}
+      summary: listToolSchemaStaticValues toolsets
+      tags:
+        - toolsets
+      x-speakeasy-name-override: listToolSchemaStaticValues
+      x-speakeasy-react-hook:
+        name: ListToolSchemaStaticValues
   /rpc/toolsets.removeOAuthServer:
     post:
       description: Remove OAuth server association from a toolset
@@ -59593,7 +60277,7 @@ paths:
         name: UserSessionFacets
   /rpc/userSessions.mint:
     post:
-      description: 'Mint a user_session on behalf of the authenticated dashboard user, bound to an issuer-gated audience: either a toolset (/mcp) or a remote MCP server (/x/mcp). Exactly one of toolset_id or mcp_server_id must be provided. The minted JWT matches the shape /token would emit after a successful OAuth dance, so the runtime MCP gateway validates it through the same path as a real MCP client''s bearer.'
+      description: 'Mint a user_session on behalf of the authenticated dashboard user, bound to an issuer-gated audience: a toolset (/mcp), a remote MCP server (/x/mcp), or a meta MCP server (/mcp). Exactly one of toolset_id, mcp_server_id, or meta_mcp_server_id must be provided. The minted JWT matches the shape /token would emit after a successful OAuth dance, so the runtime MCP gateway validates it through the same path as a real MCP client''s bearer.'
       operationId: mintUserSession
       parameters:
         - allowEmptyValue: true
@@ -60478,6 +61162,62 @@ components:
           description: The policy that issued the warning.
       required:
         - acknowledged
+    ActivatePrescriptionRequestBody:
+      type: object
+      properties:
+        definition:
+          type: string
+        expected_version:
+          type: integer
+          format: int64
+        expires_at:
+          type: string
+          format: date-time
+        external_note:
+          type: string
+          maxLength: 500
+        internal_note:
+          type: string
+          maxLength: 4000
+        operation_id:
+          type: string
+          format: uuid
+        organization_id:
+          type: string
+        prescription_id:
+          type: string
+          format: uuid
+        principal_input:
+          type: string
+        principal_kind:
+          type: string
+        resource_kind:
+          type: string
+        resource_scope:
+          type: string
+          enum:
+            - all
+            - selected
+        selected_resource_inputs:
+          type: array
+          items:
+            type: string
+          maxItems: 1000
+        start_mode:
+          type: string
+          enum:
+            - now
+            - at
+        starts_at:
+          type: string
+          format: date-time
+      required:
+        - organization_id
+        - operation_id
+        - resource_scope
+        - start_mode
+        - internal_note
+        - external_note
     ActorAttribute:
       type: object
       properties:
@@ -60796,6 +61536,19 @@ components:
         - period_start
         - period_end
         - spend_usd
+    AdminListOrganizationActivityResult:
+      type: object
+      properties:
+        logs:
+          type: array
+          items:
+            $ref: '#/components/schemas/AuditLog'
+          description: List of organization activity.
+        next_cursor:
+          type: string
+          description: Cursor for the next page of results.
+      required:
+        - logs
     AdminListOrganizationMembersResult:
       type: object
       properties:
@@ -60892,14 +61645,6 @@ components:
           type: string
           description: The time at which the organization was disabled, if any.
           format: date-time
-        free_trial_ends_at:
-          type: string
-          description: The time at which the free trial ends.
-          format: date-time
-        free_trial_started_at:
-          type: string
-          description: The time at which the free trial started.
-          format: date-time
         id:
           type: string
           description: The ID of the organization
@@ -60913,6 +61658,14 @@ components:
         slug:
           type: string
           description: The slug of the organization
+        trial_converted_at:
+          type: string
+          description: The time at which the trial converted to a paid plan, if any.
+          format: date-time
+        trial_demoted_at:
+          type: string
+          description: The time at which the organization was demoted after its trial, if any.
+          format: date-time
         trial_ends_at:
           type: string
           description: The time at which the enterprise trial ends. Absent when the organization never trialled.
@@ -60927,6 +61680,9 @@ components:
             - expired
             - demoted
             - converted
+        trial_tier:
+          type: string
+          description: The trial tier. Absent when the organization never trialled.
         updated_at:
           type: string
           description: The last update date of the organization.
@@ -62557,6 +63313,56 @@ components:
         - resolution_type
         - resolved_by
         - created_at
+    ChangePrescriptionRequestBody:
+      type: object
+      properties:
+        expected_version:
+          type: integer
+          format: int64
+        expires_at:
+          type: string
+          format: date-time
+        external_note:
+          type: string
+          maxLength: 500
+        internal_note:
+          type: string
+          maxLength: 4000
+        operation_id:
+          type: string
+          format: uuid
+        organization_id:
+          type: string
+        prescription_id:
+          type: string
+          format: uuid
+        resource_scope:
+          type: string
+          enum:
+            - all
+            - selected
+        selected_resource_inputs:
+          type: array
+          items:
+            type: string
+          maxItems: 1000
+        start_mode:
+          type: string
+          enum:
+            - now
+            - at
+        starts_at:
+          type: string
+          format: date-time
+      required:
+        - organization_id
+        - operation_id
+        - resource_scope
+        - start_mode
+        - internal_note
+        - external_note
+        - prescription_id
+        - expected_version
     Chat:
       type: object
       properties:
@@ -63985,6 +64791,12 @@ components:
           type: string
           description: The ID of the user session issuer used to authenticate callers. Omit for no issuer.
           format: uuid
+        visibility:
+          type: string
+          description: The visibility of a meta MCP server. Disabled refuses traffic; private requires a user session.
+          enum:
+            - disabled
+            - private
       description: Form for creating a new meta MCP server. URL addressability is managed separately through MCP endpoints.
       required:
         - name
@@ -65201,6 +66013,12 @@ components:
           type: string
           description: The MCP endpoint currently mapped to the domain root, if any
           format: uuid
+        suggested_record_type:
+          type: string
+          description: The suggested DNS record type for this domain. A suggestion only — delegated subzones can make an apex-looking domain CNAME-capable.
+          enum:
+            - cname
+            - a
         unhealthy_since:
           type: string
           description: When the current unhealthy period began.
@@ -65222,6 +66040,7 @@ components:
         - updated_at
         - is_updating
         - ip_allowlist
+        - suggested_record_type
     CustomDomainMcpEndpoint:
       type: object
       properties:
@@ -65267,6 +66086,25 @@ components:
         - project_name
         - project_slug
         - is_domain_root
+    DeactivatePrescriptionRequestBody:
+      type: object
+      properties:
+        expected_version:
+          type: integer
+          format: int64
+        operation_id:
+          type: string
+          format: uuid
+        organization_id:
+          type: string
+        prescription_id:
+          type: string
+          format: uuid
+      required:
+        - organization_id
+        - operation_id
+        - prescription_id
+        - expected_version
     DeclineRiskPolicyChallengeResponseBody:
       type: object
       properties:
@@ -65919,6 +66757,19 @@ components:
         plugin_id: 550e8400-e29b-41d4-a716-446655440001
       required:
         - id
+    DomainDNSConfig:
+      type: object
+      properties:
+        a_records:
+          type: array
+          items:
+            type: string
+          description: The static IP addresses apex custom domains should point A records at
+        cname_target:
+          type: string
+          description: The CNAME target subdomain custom domains should point at, if configured
+      required:
+        - a_records
     EmployeeDataFlowEdge:
       type: object
       properties:
@@ -69181,6 +70032,81 @@ components:
         - success_count
         - failure_count
         - failure_rate
+    IdentityDirectory:
+      type: object
+      properties:
+        cost_center_name:
+          type: string
+          description: The directory cost centre.
+        department_name:
+          type: string
+          description: The directory department.
+        division_name:
+          type: string
+          description: The directory division.
+        employee_type:
+          type: string
+          description: The directory employment type.
+        groups:
+          type: array
+          items:
+            type: string
+          description: The directory groups the identity currently belongs to.
+        job_title:
+          type: string
+          description: The directory job title.
+      description: 'WorkOS Directory Sync attributes for an identity. Every field is mapped by the customer''s IdP: scalar attributes are absent when unset or blank, and ''groups'' is always present, empty when the identity belongs to none.'
+      required:
+        - groups
+    IdentityModel:
+      type: object
+      properties:
+        canonical_urn:
+          type: string
+          description: The identity URN clients should navigate to. Resolving any URN for the same subject returns this one, so links built from different identifiers converge on a single page.
+        directory:
+          $ref: '#/components/schemas/IdentityDirectory'
+        display_name:
+          type: string
+          description: The subject's name, falling back to its primary email.
+        emails:
+          type: array
+          items:
+            type: string
+          description: Every address the subject is known by — directory email first, then linked AI account emails. Telemetry and cost aggregate over this set.
+        external_user_ids:
+          type: array
+          items:
+            type: string
+          description: The identifiers agents report for this subject. Risk findings key on these.
+        kind:
+          type: string
+          description: 'What sort of subject this is: ''user'' for a directory user, ''apikey'' for a subject acting under an API key, ''agent'' for an agent identity, or ''unattributed'' for activity that cannot be attributed to exactly one directory user — an identifier matching no directory row, or one several members claim.'
+          enum:
+            - user
+            - apikey
+            - agent
+            - unattributed
+        photo_url:
+          type: string
+          description: The subject's avatar, when the directory supplied one.
+        user_ids:
+          type: array
+          items:
+            type: string
+          description: The Gram user ids this identity resolves to, the first being the directory owner. Empty when the subject matches no directory row. Audit logs, chats, user sessions and plugin assignments key on these.
+        workos_user_id:
+          type: string
+          description: The WorkOS user id, which RBAC role assignments key on. Absent for subjects with no WorkOS link.
+      description: One subject with every identifier its activity is keyed under, so a client can query each subsystem with the identifier that subsystem expects.
+      required:
+        - kind
+        - canonical_urn
+        - display_name
+        - user_ids
+        - emails
+        - external_user_ids
+        - directory
     InferenceSpendCap:
       type: object
       properties:
@@ -69511,8 +70437,8 @@ components:
         endpoint_mismatches:
           type: array
           items:
-            type: string
-          description: Names of the authorization-server metadata fields (issuer, token_endpoint, authorization_endpoint) that differ from the target. Non-empty blocks the migration.
+            $ref: '#/components/schemas/IssuerFieldMismatch'
+          description: The authorization-server metadata fields (issuer, token_endpoint, authorization_endpoint) that differ from the target, with both sides' values. Non-empty blocks the migration.
         issuer:
           $ref: '#/components/schemas/RemoteSessionIssuer'
         organization_id:
@@ -69524,8 +70450,8 @@ components:
         warnings:
           type: array
           items:
-            type: string
-          description: Non-blocking divergences (oidc, passthrough, scopes_supported). The target issuer's values become authoritative for the migrated clients.
+            $ref: '#/components/schemas/IssuerFieldMismatch'
+          description: Non-blocking divergences (oidc, passthrough, scopes_supported), with both sides' values. The target issuer's values become authoritative for the migrated clients.
       description: An organization- or project-level remote_session_issuer that names the same upstream authorization server as a global issuer, and so could be consolidated onto it.
       required:
         - issuer
@@ -69534,6 +70460,31 @@ components:
         - client_count
         - endpoint_mismatches
         - warnings
+    IssuerFieldMismatch:
+      type: object
+      properties:
+        field:
+          type: string
+          description: 'The differing field''s name: issuer, token_endpoint, authorization_endpoint, oidc, passthrough, or scopes_supported.'
+        source_value:
+          type: string
+          description: The source issuer's value for a scalar field, rendered as a string. Null when the source leaves the field unset, and null for a list-valued field.
+        source_values:
+          type: array
+          items:
+            type: string
+          description: The source issuer's entries for a list-valued field. Absent for a scalar field, and absent when the source's list is empty.
+        target_value:
+          type: string
+          description: The target issuer's value for a scalar field, rendered as a string. Null when the target leaves the field unset, and null for a list-valued field.
+        target_values:
+          type: array
+          items:
+            type: string
+          description: The target issuer's entries for a list-valued field. Absent for a scalar field, and absent when the target's list is empty.
+      description: One remote_session_issuer field whose value differs between the source and target of a consolidation, with both sides' values.
+      required:
+        - field
     IssuerMigratePreflight:
       type: object
       properties:
@@ -69552,8 +70503,8 @@ components:
         endpoint_mismatches:
           type: array
           items:
-            type: string
-          description: Names of the authorization-server metadata fields (issuer, token_endpoint, authorization_endpoint) that differ between source and target. Non-empty blocks the migration.
+            $ref: '#/components/schemas/IssuerFieldMismatch'
+          description: The authorization-server metadata fields (issuer, token_endpoint, authorization_endpoint) that differ between source and target, with both sides' values. Non-empty blocks the migration.
         mcp_server_names:
           type: array
           items:
@@ -69566,8 +70517,8 @@ components:
         warnings:
           type: array
           items:
-            type: string
-          description: Non-blocking divergences (oidc, passthrough, scopes_supported). The target issuer's values become authoritative for the migrated clients.
+            $ref: '#/components/schemas/IssuerFieldMismatch'
+          description: Non-blocking divergences (oidc, passthrough, scopes_supported), with both sides' values. The target issuer's values become authoritative for the migrated clients.
       description: 'Authoritative impact summary for consolidating a tenant remote_session_issuer onto a global one: how many clients move, which MCP servers are affected, every blocker that would make the migration fail, and how many tenant-owned clients the target already carries.'
       required:
         - client_count
@@ -69906,6 +70857,12 @@ components:
         subject_id:
           type: string
           description: Subject ID to filter audit logs to a specific subject (e.g. a single assistant).
+        subject_ids:
+          type: array
+          items:
+            type: string
+          description: Subject IDs to filter audit logs to a set of subjects at once, e.g. a resource together with the child resources whose events name the child as the subject. Matches any listed subject of any subject type, except that assistant activity events stay excluded unless subject_type is 'assistant'; combine with subject_type to pin the kind. Blank entries are ignored.
+          maxItems: 200
         subject_type:
           type: string
           description: Subject type to filter audit logs to a specific kind of subject. When omitted, assistant activity events are excluded; pass 'assistant' to list them.
@@ -70053,6 +71010,8 @@ components:
     ListCustomDomainsResult:
       type: object
       properties:
+        dns_config:
+          $ref: '#/components/schemas/DomainDNSConfig'
         domains:
           type: array
           items:
@@ -70060,6 +71019,16 @@ components:
       description: Result of listing an organization's custom domains.
       required:
         - domains
+        - dns_config
+    ListDefinitionsResponseBody:
+      type: object
+      properties:
+        definitions:
+          type: array
+          items:
+            $ref: '#/components/schemas/PlatformKillswitchDefinition'
+      required:
+        - definitions
     ListDeploymentForm:
       type: object
       properties:
@@ -70558,6 +71527,18 @@ components:
           description: The plugins in the organization.
       required:
         - plugins
+    ListPrescriptionsResponseBody:
+      type: object
+      properties:
+        next_after_id:
+          type: string
+          description: Cursor for the next page; empty when exhausted.
+        prescriptions:
+          type: array
+          items:
+            $ref: '#/components/schemas/PlatformKillswitchPrescription'
+      required:
+        - prescriptions
     ListProjectsPayload:
       type: object
       properties:
@@ -70835,6 +71816,15 @@ components:
           description: The roles in your organization.
       required:
         - roles
+    ListRootMcpServersResponseBody:
+      type: object
+      properties:
+        mcp_servers:
+          type: array
+          items:
+            $ref: '#/components/schemas/RootMcpServerOption'
+      required:
+        - mcp_servers
     ListScopesResult:
       type: object
       properties:
@@ -71168,6 +72158,16 @@ components:
             $ref: '#/components/schemas/ToolMetadata'
           description: The stored tool metadata for the MCP server
       description: Result type for listing tool metadata
+      required:
+        - tools
+    ListToolSchemaStaticValuesResult:
+      type: object
+      properties:
+        tools:
+          type: array
+          items:
+            $ref: '#/components/schemas/ToolSchemaStaticValues'
+          description: Per-tool static values for tools whose input schemas contain at least one matching keyword
       required:
         - tools
     ListToolUsageTracesPayload:
@@ -72319,6 +73319,10 @@ components:
           type: string
           description: The ID of the meta MCP server
           format: uuid
+        member_count:
+          type: integer
+          description: The number of live members. Only populated by listMetaMcpServers.
+          format: int64
         name:
           type: string
           description: The display name of the meta MCP server
@@ -72337,12 +73341,19 @@ components:
           type: string
           description: The ID of the user session issuer used to authenticate callers. Null when no issuer is attached.
           format: uuid
+        visibility:
+          type: string
+          description: The visibility of a meta MCP server. Disabled refuses traffic; private requires a user session.
+          enum:
+            - disabled
+            - private
       description: 'A meta MCP server: an aggregate server fronting an explicitly managed set of MCP servers. URL addressability lives on its MCP endpoints.'
       required:
         - id
         - organization_id
         - project_id
         - name
+        - visibility
         - created_at
         - updated_at
     MigrateIssuerRequestBody:
@@ -72412,11 +73423,15 @@ components:
       properties:
         mcp_server_id:
           type: string
-          description: Bind the JWT to this remote MCP server's user_session_issuer audience (the /x/mcp convention, since remote servers have no toolset). Mutually exclusive with toolset_id; exactly one must be set. Must be issuer-gated and live in the caller's project.
+          description: Bind the JWT to this remote MCP server's user_session_issuer audience (the /x/mcp convention, since remote servers have no toolset). Mutually exclusive with the other targets; exactly one must be set. Must be issuer-gated and live in the caller's project.
+          format: uuid
+        meta_mcp_server_id:
+          type: string
+          description: Bind the JWT to this meta MCP server's user_session_issuer audience. Mutually exclusive with the other targets; exactly one must be set. Must be issuer-gated and live in the caller's project.
           format: uuid
         toolset_id:
           type: string
-          description: Bind the JWT to this toolset's /mcp/{slug} audience. Mutually exclusive with mcp_server_id; exactly one must be set. Must be issuer-gated and live in the caller's project.
+          description: Bind the JWT to this toolset's /mcp/{slug} audience. Mutually exclusive with the other targets; exactly one must be set. Must be issuer-gated and live in the caller's project.
           format: uuid
     MintUserSessionResponseBody:
       type: object
@@ -73063,8 +74078,8 @@ components:
         endpoint_mismatches:
           type: array
           items:
-            type: string
-          description: Names of the authorization-server metadata fields (issuer, token_endpoint, authorization_endpoint) that differ between source and target. Non-empty blocks the migration.
+            $ref: '#/components/schemas/IssuerFieldMismatch'
+          description: The authorization-server metadata fields (issuer, token_endpoint, authorization_endpoint) that differ between source and target, with both sides' values. Non-empty blocks the migration.
         mcp_server_names:
           type: array
           items:
@@ -73073,8 +74088,8 @@ components:
         warnings:
           type: array
           items:
-            type: string
-          description: Non-blocking divergences (oidc, passthrough, scopes_supported). The target issuer's values become authoritative for the migrated clients.
+            $ref: '#/components/schemas/IssuerFieldMismatch'
+          description: Non-blocking divergences (oidc, passthrough, scopes_supported), with both sides' values. The target issuer's values become authoritative for the migrated clients.
       description: 'Authoritative impact summary for migrating a remote_session_issuer''s clients onto another issuer: how many clients move, which MCP servers are affected, and every blocker that would make the migration fail.'
       required:
         - client_count
@@ -73414,6 +74429,120 @@ components:
         - included_servers
         - actual_enabled_server_count
         - has_active_subscription
+    PlatformKillswitchDefinition:
+      type: object
+      properties:
+        default_external_note:
+          type: string
+        enforcement_owner:
+          type: string
+        failure_policy:
+          type: string
+        identity_contract:
+          type: string
+        key:
+          type: string
+        principal_kinds:
+          type: array
+          items:
+            type: string
+        resource_kinds:
+          type: array
+          items:
+            type: string
+        surfaces:
+          type: array
+          items:
+            type: string
+        transport_adapters:
+          type: array
+          items:
+            type: string
+      required:
+        - key
+        - principal_kinds
+        - resource_kinds
+        - failure_policy
+        - default_external_note
+        - enforcement_owner
+        - identity_contract
+        - surfaces
+        - transport_adapters
+    PlatformKillswitchMutationResult:
+      type: object
+      properties:
+        prescription_id:
+          type: string
+          format: uuid
+        replayed:
+          type: boolean
+        state:
+          type: string
+        version:
+          type: integer
+          format: int64
+      required:
+        - prescription_id
+        - version
+        - state
+        - replayed
+    PlatformKillswitchPrescription:
+      type: object
+      properties:
+        activated_at:
+          type: string
+          format: date-time
+        definition:
+          type: string
+        expires_at:
+          type: string
+          format: date-time
+        external_note:
+          type: string
+        id:
+          type: string
+          format: uuid
+        internal_note:
+          type: string
+        organization_id:
+          type: string
+        principal_key:
+          type: string
+        principal_kind:
+          type: string
+        resource_kind:
+          type: string
+        resource_scope:
+          type: string
+        selected_resource_keys:
+          type: array
+          items:
+            type: string
+        starts_at:
+          type: string
+          format: date-time
+        state:
+          type: string
+        superseded_at:
+          type: string
+          format: date-time
+        version:
+          type: integer
+          format: int64
+      required:
+        - id
+        - organization_id
+        - definition
+        - principal_kind
+        - principal_key
+        - resource_kind
+        - version
+        - state
+        - resource_scope
+        - selected_resource_keys
+        - starts_at
+        - internal_note
+        - external_note
     PlatformMCPOnboardingSetupHandoff:
       type: object
       properties:
@@ -73475,7 +74604,7 @@ components:
           description: Whether Platform MCP successfully added the workflow-bound MCP to the selected project's existing Default plugin.
         enabled:
           type: boolean
-          description: Whether the active organization currently passes the Platform MCP capability and rollout gates.
+          description: Whether the active organization currently has the Platform MCP product feature enabled.
         mcp_url:
           type: string
           description: Canonical Platform MCP endpoint URL supplied by the server.
@@ -73584,72 +74713,6 @@ components:
         - selected_use_verified
         - distribution_expected_version
         - repair_action
-    PlatformMCPPackageStatusResult:
-      type: object
-      properties:
-        admission:
-          type: string
-          description: 'Organization package admission: enabled, disabled, or indeterminate.'
-          enum:
-            - enabled
-            - disabled
-            - indeterminate
-        agent_plugin_filename:
-          type: string
-          description: Deterministic portable Agent Plugins direct-download ZIP filename.
-        available:
-          type: boolean
-          description: Whether organization admission currently permits installing the package.
-        canonical_project_slug:
-          type: string
-          description: Literal default project that owns the canonical organization marketplace, when present.
-        claude_filename:
-          type: string
-          description: Deterministic Claude direct-download ZIP filename.
-        direct_download_available:
-          type: boolean
-          description: Whether keyless direct downloads are currently admitted.
-        freshness:
-          type: string
-          description: 'Platform package freshness: current, stale, missing, unavailable, or indeterminate.'
-          enum:
-            - current
-            - stale
-            - missing
-            - unavailable
-            - indeterminate
-        marketplace_connected:
-          type: boolean
-          description: Whether the canonical default project has a published GitHub marketplace.
-        marketplace_name:
-          type: string
-          description: Effective name of the canonical marketplace, when its default project is present.
-        marketplace_url:
-          type: string
-          description: Git URL used by supported clients to register the canonical marketplace.
-        package_name:
-          type: string
-          description: Fixed Platform MCP package identity.
-        package_present:
-          type: boolean
-          description: Whether the last successful canonical publish recorded the Platform package fingerprint.
-        repair_allowed:
-          type: boolean
-          description: Whether an organization admin can publish or repair the canonical package now.
-        repo_url:
-          type: string
-          description: Canonical GitHub repository URL.
-      required:
-        - admission
-        - available
-        - package_name
-        - claude_filename
-        - agent_plugin_filename
-        - marketplace_connected
-        - package_present
-        - freshness
-        - repair_allowed
-        - direct_download_available
     PlatformToolDefinition:
       type: object
       properties:
@@ -74762,6 +75825,7 @@ components:
           enum:
             - total_cost
             - total_tokens
+            - llm_tokens
             - total_input_tokens
             - total_output_tokens
             - cache_read_input_tokens
@@ -74935,6 +75999,7 @@ components:
             - codex
             - cursor
             - opencode
+            - other
       required:
         - client_family
     RecordSkillResult:
@@ -75745,6 +76810,15 @@ components:
           description: The created resolution records.
       required:
         - resolutions
+    ResolveIdentityForm:
+      type: object
+      properties:
+        urn:
+          type: string
+          description: The identity URN to resolve, in the form '<kind>:<id>'. Kind is one of 'user' (Gram user id), 'email', 'external' (the external user id an agent reported), 'apikey', or 'agent'. Callers pass whichever identifier they hold; every URN for the same subject resolves to the same identity.
+          example: user:user_01abc
+      required:
+        - urn
     ResolveShadowMCPInventoryRequestForm:
       type: object
       properties:
@@ -75888,6 +76962,9 @@ components:
           type: string
           description: The project the block belongs to.
           format: uuid
+        provider:
+          type: string
+          description: Agent surface that reported the blocked call (adapter slug, e.g. "openclaw"), when known.
         reason:
           type: string
           description: Human-readable reason the tool call was blocked.
@@ -77235,6 +78312,41 @@ components:
         - total_output_tokens
         - total_tokens
         - total_chats
+    RootMcpServerOption:
+      type: object
+      properties:
+        attached_endpoint_id:
+          type: string
+          description: The server's endpoint on this custom domain, when one exists
+          format: uuid
+        attached_endpoint_slug:
+          type: string
+          description: The attached endpoint's slug (its /mcp/<slug> path on the domain), when one exists
+        is_domain_root:
+          type: boolean
+          description: Whether this server currently serves the domain root
+        mcp_server_id:
+          type: string
+          description: The MCP server
+          format: uuid
+        name:
+          type: string
+          description: The MCP server's display name, if set
+        project_id:
+          type: string
+          description: The project the server belongs to
+          format: uuid
+        project_name:
+          type: string
+          description: The project's display name
+        slug:
+          type: string
+          description: The MCP server's slug, if set
+      required:
+        - mcp_server_id
+        - project_id
+        - project_name
+        - is_domain_root
     RotateTunneledMcpServerKeyForm:
       type: object
       properties:
@@ -78475,7 +79587,11 @@ components:
           format: uuid
         mcp_endpoint_id:
           type: string
-          description: The MCP endpoint to map to the domain root. Omit to clear the mapping.
+          description: The MCP endpoint to map to the domain root. Omit both ids to clear the mapping.
+          format: uuid
+        mcp_server_id:
+          type: string
+          description: An MCP server to map to the domain root; its domain endpoint is created when missing. Mutually exclusive with mcp_endpoint_id.
           format: uuid
       required:
         - custom_domain_id
@@ -81274,6 +82390,42 @@ components:
         - failure_count
         - avg_latency_ms
         - failure_rate
+    ToolSchemaStaticValue:
+      type: object
+      properties:
+        keyword:
+          type: string
+          description: The JSON Schema keyword containing the value
+        schema_path:
+          type: string
+          description: JSON Pointer to the schema object containing the keyword
+        value_json:
+          type: string
+          description: JSON-encoded literal value, preserving null and number precision
+      description: A literal value carried by a JSON Schema keyword.
+      required:
+        - schema_path
+        - keyword
+        - value_json
+    ToolSchemaStaticValues:
+      type: object
+      properties:
+        tool_name:
+          type: string
+          description: The tool name
+        tool_urn:
+          type: string
+          description: The tool URN
+        values:
+          type: array
+          items:
+            $ref: '#/components/schemas/ToolSchemaStaticValue'
+          description: Static values in the tool input schema
+      description: Static values found in one tool input schema.
+      required:
+        - tool_urn
+        - tool_name
+        - values
     ToolUsage:
       type: object
       properties:
@@ -83456,7 +84608,13 @@ components:
           type: string
           description: The ID of the user session issuer used to authenticate callers. Omit for no issuer.
           format: uuid
-      description: 'Form for updating a meta MCP server. This is a full-record replace: a user_session_issuer_id omitted from the request becomes null on the stored record.'
+        visibility:
+          type: string
+          description: The visibility of a meta MCP server. Disabled refuses traffic; private requires a user session.
+          enum:
+            - disabled
+            - private
+      description: 'Form for updating a meta MCP server. This is a full-record replace: a user_session_issuer_id omitted from the request becomes null on the stored record. Visibility is the exception — omitting it preserves the stored value, so a caller that does not manage visibility cannot re-enable a disabled gateway by saving an unrelated field.'
       required:
         - id
         - name
@@ -84273,7 +85431,7 @@ components:
             - interactive
         client_id_metadata_admission_mode:
           type: string
-          description: Which CIMD (OAuth Client ID Metadata Document) clients this issuer admits. 'presets' admits Gram's curated catalog plus this issuer's custom URLs; 'open' admits any spec-valid document; 'disabled' admits none and stops advertising CIMD support. Omit to leave unchanged. Once set, the issuer can never return to the unset state — it can only be moved between explicit modes.
+          description: Which CIMD (OAuth Client ID Metadata Document) clients this issuer admits. 'presets' admits Gram's curated catalog plus this issuer's custom URLs; 'open' admits any spec-valid document; 'disabled' admits none and stops advertising CIMD support. Omit to leave unchanged.
           enum:
             - disabled
             - presets
@@ -84722,18 +85880,32 @@ components:
         provider:
           type: string
           description: AI provider the account belongs to ('anthropic', 'openai', 'cursor')
+        user_id:
+          type: string
+          description: Gram user id of the directory owner of this account; the authoritative link between account-email-keyed usage and the org member
       description: 'A linked AI account for a user. The identity is (provider, email): the same email registered on two providers is two distinct accounts.'
       required:
         - provider
     UserSession:
       type: object
       properties:
+        client_credential_kind:
+          type: string
+          description: 'What the client that established this session must present to authenticate: ''public'' (nothing), ''secret'' (a client secret), ''key'' (an assertion signed by its published key), or ''misconfigured''. Derived by the same rule the token endpoint enforces. Null only when the session has no bound client, which is the case for API key and anonymous subjects; a bound client always resolves to one of the four.'
+          enum:
+            - public
+            - secret
+            - key
+            - misconfigured
         client_id_metadata_uri:
           type: string
           description: Set when the client that established this session was resolved from a Client ID Metadata Document (CIMD) hosted at this URL, rather than registered via RFC 7591 DCR. Null for DCR clients and for sessions with no bound client.
         client_name:
           type: string
           description: Name of the MCP client that established the session, if known. Client-controlled and unverified; do not present it as an identity.
+        client_token_endpoint_auth_method:
+          type: string
+          description: The raw RFC 7591 token_endpoint_auth_method the client declared, for debugging against the spec. Null both for a session with no bound client and for a client registered before the value was recorded; client_credential_kind separates those cases and is what should be displayed.
         created_at:
           type: string
           format: date-time
@@ -84841,6 +86013,14 @@ components:
         created_at:
           type: string
           format: date-time
+        credential_kind:
+          type: string
+          description: 'What the client must present to authenticate: ''public'' (nothing), ''secret'' (a client secret), ''key'' (an assertion signed by its published key), or ''misconfigured''. Derived by the same rule the token endpoint enforces, so it reads what the client will actually be held to rather than what it declared. ''misconfigured'' means the registration contradicts itself and the client cannot authenticate at all.'
+          enum:
+            - public
+            - secret
+            - key
+            - misconfigured
         id:
           type: string
           description: The user_session_client id.
@@ -84850,6 +86030,9 @@ components:
           items:
             type: string
           description: Validated on every /authorize.
+        token_endpoint_auth_method:
+          type: string
+          description: The raw RFC 7591 token_endpoint_auth_method the client declared, for debugging against the spec. Null for a client registered before the value was recorded, which is not the same as declaring 'none' -- credential_kind resolves both cases and is what should be displayed.
         updated_at:
           type: string
           format: date-time
@@ -84863,6 +86046,7 @@ components:
         - user_session_issuer_id
         - client_id
         - client_name
+        - credential_kind
         - redirect_uris
         - client_id_issued_at
         - created_at
@@ -84928,7 +86112,7 @@ components:
           description: chain | interactive.
         client_id_metadata_admission_mode:
           type: string
-          description: 'The EFFECTIVE CIMD admission policy in force for this issuer: disabled | presets | reporting | open. Always populated, so clients never have to reason about an unset state. Note ''reporting'' can be READ but not written: it is the current default for an issuer whose mode has never been configured, and it admits every spec-valid client while recording what ''presets'' would have refused. It exists so the platform can measure before switching the default to ''presets''. Set an explicit mode to opt out of it.'
+          description: 'The EFFECTIVE CIMD admission policy in force for this issuer: disabled | presets | reporting | open. Always populated, so clients never have to reason about an unset state. ''open'' is the resting policy an issuer carries unless an operator chooses otherwise: it admits any spec-valid document, and ''presets'' enforcement is opt-in because a denial under it is unrecoverable for the end user. Note ''reporting'' can be READ but not written: it is a legacy value that admits exactly what ''open'' admits, and no issuer is created with it.'
           enum:
             - disabled
             - presets
@@ -85472,8 +86656,6 @@ components:
 tags:
   - name: access
     description: Manage roles, team member access control, and authorization challenge events.
-  - name: admin
-    description: Operations supporting admin tasks, protected by Google workspace auth.
   - name: agent
     description: Endpoints consumed by the Speakeasy device agent running on developer machines. Authenticates via an API key carrying the 'agent_user' scope — the per-user credential minted by token-exchange. An org key with the broader 'agent' scope also satisfies most of these endpoints (it implies 'agent_user'), so existing installs keep working during the transition. The content-bearing session-portability endpoints — getSessionMeta and createSessionHandoff — refuse it and require a per-user key.
   - name: aiIntegrations
@@ -85488,6 +86670,8 @@ tags:
     description: Manage assistants and their runtime configuration.
   - name: auditlogs
     description: Manages audit logs in Gram.
+  - name: admin
+    description: Operations supporting admin tasks, protected by Google workspace auth.
   - name: auth
     description: Managed auth for gram producers and dashboard.
   - name: businessMemories
@@ -85520,6 +86704,8 @@ tags:
     description: Manages display name overrides for hooks servers.
   - name: hooks
     description: Receives hook events from coding assistants for tool usage observability.
+  - name: identity
+    description: Resolves the identifiers Gram records activity under into a single identity.
   - name: instances
     description: Consumer APIs for interacting with all relevant data for an instance of a toolset and environment.
   - name: integrations
@@ -85556,6 +86742,8 @@ tags:
     description: Platform-admin management of an organization's chat session analysis settings. Speakeasy-staff only; every method requires the platform-admin flag.
   - name: adminExternalCredentials
     description: Platform-admin management of platform external_credentials — how Gram authenticates into a cloud provider to reach a platform KMS key. Shared across every organization (organization_id NULL, project_id NULL). Speakeasy-staff only; every method requires the platform-admin flag.
+  - name: platformKillswitches
+    description: Platform break-glass access to generic killswitch lifecycle operations on the main server. Requires a current users.admin entitlement on an ordinary Gram session.
   - name: adminOpenRouterKeys
     description: Platform-admin management of per-organization platform OpenRouter keys. Speakeasy-staff only; every method requires the platform-admin flag.
   - name: platformMcp

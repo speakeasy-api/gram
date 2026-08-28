@@ -211,12 +211,6 @@ export type TrialState = (typeof TRIAL_STATES)[number];
 
 // Convenience method for the listOrganizations endpoint. Mirrors the backend
 // payload shape from server/gen/admin/service.go.
-//
-// `free_trial_started_at` and `free_trial_ends_at` are `NOT NULL` columns with
-// a signup-plus-fourteen-days default that no application code writes, so they
-// report a trial for every organization ever made. Nothing here reads them.
-// They stay declared only because the API still sends them; a follow-up takes
-// them off the wire.
 export type AdminOrganization = {
   id: string;
   name: string;
@@ -225,10 +219,11 @@ export type AdminOrganization = {
   workos_id?: string;
   whitelisted: boolean;
   disabled_at?: string;
-  free_trial_started_at?: string;
-  free_trial_ends_at?: string;
   trial_state?: TrialState;
   trial_ends_at?: string;
+  trial_tier?: string;
+  trial_converted_at?: string;
+  trial_demoted_at?: string;
   member_count: number;
   created_at: string;
   updated_at: string;
@@ -238,6 +233,42 @@ export type ListOrganizationsResult = {
   organizations: AdminOrganization[];
   next_cursor?: string;
 };
+
+export type AdminAuditLog = {
+  id: string;
+  project_id?: string;
+  project_slug?: string;
+  actor_id: string;
+  actor_type: string;
+  actor_display_name?: string;
+  actor_slug?: string;
+  action: string;
+  acting_surface: string;
+  acting_client_id?: string;
+  subject_id: string;
+  subject_type: string;
+  subject_display_name?: string;
+  subject_slug?: string;
+  before_snapshot?: unknown;
+  after_snapshot?: unknown;
+  metadata?: Record<string, unknown>;
+  created_at: string;
+};
+
+export type ListOrganizationActivityResult = {
+  logs: AdminAuditLog[];
+  next_cursor?: string;
+};
+
+export function listOrganizationActivity(
+  organizationID: string,
+  cursor?: string,
+): Promise<ListOrganizationActivityResult> {
+  const qs = toSearchParams({ organization_id: organizationID, cursor });
+  return gramAdminFetch<ListOrganizationActivityResult>(
+    `/admin/organization.activity?${qs.toString()}`,
+  );
+}
 
 // Each filter is a repeated parameter the server reads as a set, and an absent
 // one means no filter of that kind: no account_types is every type, no

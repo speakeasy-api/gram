@@ -190,9 +190,12 @@ func handleToolsCall(
 		return fullPlan.ExternalMCP, nil
 	}
 
-	planInputs, err := executor.MatchPlanInputs(ctx, params.Name, uuid.UUID(projectID), resolve)
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to match proxy tool").LogError(ctx, logger)
+	var planInputs *externalmcp.ToolCallPlan
+	if !payload.skipProxyTools {
+		planInputs, err = executor.MatchPlanInputs(ctx, params.Name, uuid.UUID(projectID), resolve)
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "failed to match proxy tool").LogError(ctx, logger)
+		}
 	}
 
 	var tool *types.Tool
@@ -203,7 +206,9 @@ func handleToolsCall(
 		plan = matchedPlan
 		toolURN = plan.Descriptor.URN
 	} else {
-		// Fall through to materialized tool handling
+		// Fall through to materialized tool handling. Tool variations can
+		// rename two tools onto one name, so the whole slice is scanned:
+		// picking the first match would dispatch an arbitrary one of them.
 		for _, t := range toolset.Tools {
 			if conv.IsProxyTool(t) {
 				continue
@@ -214,8 +219,10 @@ func handleToolsCall(
 				continue
 			}
 			if baseTool.Name == params.Name {
+				if tool != nil {
+					return nil, oops.E(oops.CodeInvalid, nil, "ambiguous tool name: %q matches more than one tool in this toolset", params.Name).LogError(ctx, logger)
+				}
 				tool = t
-				break
 			}
 		}
 
@@ -410,7 +417,13 @@ func handleToolsCall(
 			recordToolCallErrorStatus(ctx, rw, rejected)
 			return nil, rejected
 		}
-		failure := oops.E(oops.CodeUnexpected, err, "failed to execute tool call").LogError(ctx, logger, attr.SlogToolName(params.Name))
+		// Preserve the original classification (e.g. CodeGatewayError for
+		// upstream transport failures) instead of collapsing to CodeUnexpected.
+		code := oops.CodeUnexpected
+		if shareable, ok := errors.AsType[*oops.ShareableError](err); ok {
+			code = shareable.Code
+		}
+		failure := oops.E(code, err, "failed to execute tool call").LogError(ctx, logger, attr.SlogToolName(params.Name))
 		recordToolCallErrorStatus(ctx, rw, failure)
 		return nil, failure
 	}
@@ -445,6 +458,7 @@ func handleToolsCall(
 			ID:             req.ID,
 			Result:         json.RawMessage(rw.body.Bytes()),
 			serverIdentity: serverInfoHostedToolset,
+			cacheHints:     nil,
 		})
 		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "failed to serialize MCP result").LogError(ctx, logger)
@@ -466,6 +480,7 @@ func handleToolsCall(
 			IsError:           rw.statusCode < 200 || rw.statusCode >= 300,
 		},
 		serverIdentity: serverInfoHostedToolset,
+		cacheHints:     nil,
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to serialize tools/call result").LogError(ctx, logger)
@@ -498,8 +513,7 @@ func toolCallRejection(ctx context.Context, logger *slog.Logger, err error, args
 // The response writer starts at 200 because successful tool implementations may
 // write only a body, so failures that occur before WriteHeader must update it.
 func recordToolCallErrorStatus(ctx context.Context, rw *toolCallResponseWriter, err error) {
-	var shareableErr *oops.ShareableError
-	if errors.As(err, &shareableErr) {
+	if shareableErr, ok := errors.AsType[*oops.ShareableError](err); ok {
 		rw.statusCode = shareableErr.HTTPStatus(ctx)
 	}
 }

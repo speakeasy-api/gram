@@ -3,6 +3,7 @@ package platformmcp
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"testing"
 	"time"
@@ -11,6 +12,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
@@ -380,4 +382,85 @@ func testExistingPluginAttacher() ExistingPluginAttacher {
 func testPluginTargets(conn *pgxpool.Pool) *PluginsService {
 	limiter := func() Limiter { return &recordingOperationLimiter{result: ratelimit.Result{Allowed: true}} }
 	return NewPluginsService(conn, OperationBudget{Connection: limiter(), Organization: limiter()}, "test-cursor-key")
+}
+
+// Distribution resolves its target only from the caller's onboarding workflow,
+// so every registration surface must run the same post-commit bind. The
+// registration here goes through the register_catalog_mcp handler rather than
+// the store, because the defect this guards was the handler never binding at
+// all: a catalogue registration succeeded and then could never be distributed.
+func TestCatalogRegistrationToolBindsOnboardingSoTheMCPCanBeDistributed(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	conn, err := platformMCPInfra.CloneTestDatabase(t, "platform_mcp_catalog_registration_bind")
+	require.NoError(t, err)
+
+	principal, project := seedRegistrationLifecycle(t, ctx, conn)
+	store, err := NewRegistrationStore(conn, RegistrationStoreConfig{ActiveRegistrationCap: 5})
+	require.NoError(t, err)
+	onboarding := NewOnboardingService(conn)
+	registrations := newRegistrationService(testCatalog{details: CatalogDetails{
+		CatalogCandidate: CatalogCandidate{Name: "Reviewed MCP", ProviderKey: "provider", CatalogRef: "reviewed/mcp", SetupIntent: "authorize"},
+		Transport:        "streamable-http",
+		remoteURL:        "https://reviewed.example.test/mcp",
+	}}, &testRegistrationGate{enabled: true}, store)
+
+	reg := newRegistrar(mcp.NewServer(&mcp.Implementation{Name: "platform-mcp-test"}, nil))
+	registerCatalogRegistrationTool(reg, registrations, onboarding)
+	register := descriptorByName(t, reg, "register_catalog_mcp")
+
+	output, err := register.Invoke(ContextWithPrincipal(ctx, principal), json.RawMessage(`{"project_slug":"`+project.Slug+`","provider_key":"provider","catalog_ref":"reviewed/mcp","idempotency_key":"catalog-bind-key"}`))
+	require.NoError(t, err)
+	registered, ok := output.(RegisterCatalogMCPToolOutput)
+	require.True(t, ok)
+	registrationID, err := uuid.Parse(registered.RegistrationID)
+	require.NoError(t, err)
+
+	_, err = pluginsrepo.New(conn).CreateDefaultPlugin(ctx, pluginsrepo.CreateDefaultPluginParams{
+		OrganizationID: principal.OrganizationID,
+		ProjectID:      project.ID,
+	})
+	require.NoError(t, err)
+	_, err = store.RecordReadiness(ctx, principal, ReadinessBinding{
+		ProjectID:                        project.ID,
+		RegistrationID:                   registrationID,
+		ProviderAuthorizationFingerprint: "fixture-readiness",
+	}, ReadinessReady, "fixture", time.Now().UTC(), time.Now().UTC().Add(time.Hour))
+	require.NoError(t, err)
+
+	service := NewDistributionService(conn, nil, testExistingPluginAttacher(), func(_ context.Context, _ uuid.UUID, _ string, _ string) error {
+		return nil
+	}, testPluginTargets(conn))
+	attached, err := service.Distribute(ctx, principal, DistributionInput{ProjectSlug: project.Slug, ExpectedVersion: 0})
+	require.NoError(t, err, "a registration made through the catalog tool must be distributable")
+	require.True(t, attached.AttachmentLive)
+}
+
+func descriptorByName(t *testing.T, reg *Registrar, name string) Descriptor {
+	t.Helper()
+
+	for _, descriptor := range reg.Descriptors() {
+		if descriptor.Name == name {
+			return descriptor
+		}
+	}
+	t.Fatalf("tool %q was not registered", name)
+	return Descriptor{}
+}
+
+func TestDistributionToolErrorClassifiesAnInvalidTarget(t *testing.T) {
+	t.Parallel()
+
+	result, ok := distributionToolError(ErrDistributionInvalid)
+	require.True(t, ok, "an invalid distribution target must not escape as a bare error string")
+	require.NotNil(t, result)
+	require.True(t, result.IsError)
+	text, isText := result.Content[0].(*mcp.TextContent)
+	require.True(t, isText)
+
+	var decoded distributionErrorResult
+	require.NoError(t, json.Unmarshal([]byte(text.Text), &decoded))
+	require.Equal(t, "no_distribution_target", decoded.Code)
+	require.NotEmpty(t, decoded.Message)
 }

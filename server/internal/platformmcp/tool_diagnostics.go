@@ -10,8 +10,8 @@ import (
 func registerDiagnosticsTools(reg *Registrar, diagnostics *DiagnosticsService) {
 	addTool(reg, &mcp.Tool{
 		Name:        "get_project_overview",
-		Title:       "Get Project Overview",
-		Description: "Summarize one project's MCP activity and failures over a bounded window. This is the normal entry point for any question about how a project or its MCPs are behaving; use the drill-down diagnostics only after this identifies a specific MCP or failure to look into. Results are aggregated server-side and carry the window they were computed over, how fresh the underlying observations are, and whether there were any observations at all.",
+		Title:       "Project Health Overview",
+		Description: "Summarize how one project's MCP servers have been behaving, and what has been failing, over a recent window. Start here for any question about how a project or its MCP servers are doing; only look further once this names a specific server or failure to investigate. Constraints: results are aggregated server-side and carry the window they cover, how fresh the underlying observations are, and whether there were any observations at all.",
 		Annotations: readOnlyAnnotations(),
 	}, ToolMeta{Audiences: bothAudiences, ProjectScope: ProjectScopeExplicit}, func(ctx context.Context, _ *mcp.CallToolRequest, input GetProjectOverviewInput) (*mcp.CallToolResult, GetProjectOverviewOutput, error) {
 		principal, err := principalFromToolContext(ctx)
@@ -30,8 +30,8 @@ func registerDiagnosticsTools(reg *Registrar, diagnostics *DiagnosticsService) {
 
 	addTool(reg, &mcp.Tool{
 		Name:        "get_mcp_diagnostics",
-		Title:       "Get MCP Diagnostics",
-		Description: "Diagnose one configured MCP that is not working, using the mcp_id find_mcp or get_mcp returned. Returns the latest server-side readiness result, this MCP's call outcomes and the organization's for comparison, the clients that reported failures, and an explicit fault attribution: gram_configuration, provider, client, or indeterminate. An indeterminate answer means the evidence does not separate the candidates and is preferred over a guess. No observations is never evidence that the MCP is healthy.",
+		Title:       "Diagnose an MCP Server",
+		Description: "Work out why one MCP server is not working, using the mcp_id find_mcp or get_mcp returned. Returns the latest server-side check, this server's call outcomes alongside the organization's for comparison, which apps reported failures, and where the fault most likely lies: this platform's configuration, the provider, the app making the calls, or indeterminate. Indeterminate means the evidence does not separate them, and is preferred over a guess. Constraints: no observations is never evidence that the MCP server is healthy.",
 		Annotations: readOnlyAnnotations(),
 	}, ToolMeta{Audiences: bothAudiences, ProjectScope: ProjectScopeExplicit}, func(ctx context.Context, _ *mcp.CallToolRequest, input GetMCPDiagnosticsInput) (*mcp.CallToolResult, GetMCPDiagnosticsOutput, error) {
 		principal, err := principalFromToolContext(ctx)
@@ -55,8 +55,8 @@ func registerUnavailableDiagnosticsTools(reg *Registrar) {
 		title       string
 		description string
 	}{
-		{"get_project_overview", "Get Project Overview", "Summarize one project's MCP activity and failures. Diagnostics are not enabled in the current rollout."},
-		{"get_mcp_diagnostics", "Get MCP Diagnostics", "Diagnose one configured MCP that is not working. Diagnostics are not enabled in the current rollout."},
+		{"get_project_overview", "Project Health Overview", "Summarize one project's MCP activity and failures. This is not switched on for your organization yet."},
+		{"get_mcp_diagnostics", "Diagnose an MCP Server", "Diagnose one MCP server that is not working. This is not switched on for your organization yet."},
 	} {
 		addTool(reg, &mcp.Tool{
 			Name:        tool.name,

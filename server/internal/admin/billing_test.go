@@ -11,7 +11,6 @@ import (
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/admin"
-	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
@@ -210,7 +209,7 @@ func TestSetInferenceKeyMonthlyLimitSchedulesDurableAdminOperation(t *testing.T)
 	require.Equal(t, "oidc-subject-limit", scheduler.actor.ID)
 	require.Equal(t, urn.PrincipalTypeUser, scheduler.actor.Type)
 	require.NotNil(t, scheduler.actorDisplayName)
-	require.Equal(t, audit.SpeakeasyTeamActorLabel, *scheduler.actorDisplayName)
+	require.Equal(t, "Test Operator", *scheduler.actorDisplayName)
 }
 
 func TestSetInferenceKeyMonthlyLimitReportsSchedulerFailure(t *testing.T) {
@@ -377,7 +376,7 @@ func TestCancelStripeSubscriptionUsesExplicitOrganization(t *testing.T) {
 	require.True(t, result.CancelAtPeriodEnd)
 	require.Equal(t, "oidc-subject-billing", fake.actor.Principal.ID)
 	require.NotNil(t, fake.actor.DisplayName)
-	require.Equal(t, audit.SpeakeasyTeamActorLabel, *fake.actor.DisplayName)
+	require.Equal(t, "Test Operator", *fake.actor.DisplayName)
 	require.NotEqual(t, "operator@example.test", *fake.actor.DisplayName)
 }
 

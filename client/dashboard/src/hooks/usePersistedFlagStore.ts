@@ -1,35 +1,35 @@
 import { useSyncExternalStore } from "react";
 
-/**
- * Creates a localStorage-backed, key-scoped boolean flag with a module-level
- * pub/sub, so surfaces living in different parts of the tree sync off a
- * single source of truth instead of a shared React context. Used for
- * "dismiss to the sidebar" CTAs (e.g. a banner or dock plus a sidebar resume
- * button) and for persisted per-resource consent (e.g. MCP Connect).
- */
-export function createPersistedFlagStore(prefix: string): {
-  useFlag: (key: string | undefined) => boolean;
-  write: (key: string, value: boolean) => void;
-} {
+type ScopedStorageStore<T> = {
+  useValue: (slug: string | undefined) => T;
+  write: (slug: string, value: T) => void;
+};
+
+export function createScopedStorageStore<T>(
+  prefix: string,
+  defaultValue: T,
+  decode: (stored: string | null) => T,
+  encode: (value: T) => string | null,
+): ScopedStorageStore<T> {
   const listeners = new Set<() => void>();
-  const storageKey = (key: string) => `${prefix}:${key}`;
+  const storageKey = (slug: string) => `${prefix}:${slug}`;
   // Session-scoped fallback for when localStorage is unavailable (storage
   // disabled, some private-browsing modes): writes land here regardless, so
   // dismiss/resume still works for the session — it just won't persist.
-  const memory = new Map<string, boolean>();
+  const memory = new Map<string, T>();
 
-  function read(key: string): boolean {
+  function read(slug: string | undefined): T {
+    if (!slug) return defaultValue;
     // `write()` always lands the value in `memory`, so once this session has
-    // touched a key, `memory` is the freshest source of truth — prefer it.
+    // touched a slug, `memory` is the freshest source of truth — prefer it.
     // localStorage may be stale (its write threw on quota/disabled) or simply
     // unreadable here, and we must not let either case mask a just-applied
-    // dismiss/resume.
-    const cached = memory.get(key);
-    if (cached !== undefined) return cached;
+    // write.
+    if (memory.has(slug)) return memory.get(slug)!;
     try {
-      return localStorage.getItem(storageKey(key)) === "true";
+      return decode(localStorage.getItem(storageKey(slug)));
     } catch {
-      return false;
+      return defaultValue;
     }
   }
 
@@ -44,7 +44,7 @@ export function createPersistedFlagStore(prefix: string): {
       if (!event.key.startsWith(`${prefix}:`)) return;
       const slug = event.key.slice(prefix.length + 1);
       if (!slug) return;
-      memory.set(slug, event.newValue === "true");
+      memory.set(slug, decode(event.newValue));
       listener();
     };
     window.addEventListener("storage", onStorage);
@@ -54,28 +54,49 @@ export function createPersistedFlagStore(prefix: string): {
     };
   }
 
-  function write(key: string, value: boolean) {
-    memory.set(key, value);
+  function write(slug: string, value: T) {
+    memory.set(slug, value);
     try {
-      if (value) {
-        localStorage.setItem(storageKey(key), "true");
+      const serialized = encode(value);
+      if (serialized === null) {
+        localStorage.removeItem(storageKey(slug));
       } else {
-        localStorage.removeItem(storageKey(key));
+        localStorage.setItem(storageKey(slug), serialized);
       }
     } catch {
       // localStorage unavailable — `memory` above keeps the value readable
-      // for the session
+      // for the session.
     }
     listeners.forEach((listener) => listener());
   }
 
-  function useFlag(key: string | undefined): boolean {
+  function useValue(slug: string | undefined): T {
     return useSyncExternalStore(
       subscribe,
-      () => (key ? read(key) : false),
-      () => false,
+      () => read(slug),
+      () => defaultValue,
     );
   }
 
-  return { useFlag, write };
+  return { useValue, write };
+}
+
+/**
+ * Creates a localStorage-backed, key-scoped boolean flag with a module-level
+ * pub/sub, so surfaces living in different parts of the tree sync off a
+ * single source of truth instead of a shared React context. Used for
+ * "dismiss to the sidebar" CTAs (e.g. a banner or dock plus a sidebar resume
+ * button) and for persisted per-resource consent (e.g. MCP Connect).
+ */
+export function createPersistedFlagStore(prefix: string): {
+  useFlag: (key: string | undefined) => boolean;
+  write: (key: string, value: boolean) => void;
+} {
+  const store = createScopedStorageStore(
+    prefix,
+    false,
+    (stored) => stored === "true",
+    (value) => (value ? "true" : null),
+  );
+  return { useFlag: store.useValue, write: store.write };
 }

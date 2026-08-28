@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"slices"
 	"strings"
 
 	"github.com/google/uuid"
@@ -30,6 +31,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/remotemcp"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp/proxy"
 	remotemcprepo "github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 )
 
@@ -155,7 +157,8 @@ func (s *Service) serveResolvedMCPEndpoint(
 	// gate (skipIssuerGate=true) so the same request isn't gated twice;
 	// remote-backed proxying forwards the upstream remote-session token
 	// via AuthorizationOverride.
-	var upstreamTokens map[uuid.UUID]string
+	var upstreamTokens map[uuid.UUID]remotesessions.UpstreamToken
+	var upstreamResource string
 	var sessionToolSelection *toolfilter.SessionSelection
 	var wwwAuthenticate string
 	if issuerGated {
@@ -163,6 +166,7 @@ func (s *Service) serveResolvedMCPEndpoint(
 		if err != nil {
 			return err
 		}
+		upstreamResource = resolvedEndpoint.UpstreamResource
 		newCtx, tokens, toolSelection, err := s.ApplyIssuerGate(ctx, w, httpheaders.AuthorizationBearerToken(r), s.BaseURLForRequest(r), resolvedEndpoint)
 		if err != nil {
 			return fmt.Errorf("apply issuer gate: %w", err)
@@ -185,8 +189,13 @@ func (s *Service) serveResolvedMCPEndpoint(
 
 	switch {
 	case mcpServer.RemoteMcpServerID.Valid, mcpServer.TunneledMcpServerID.Valid:
-		upstreamToken, err := singleUpstreamToken(upstreamTokens)
-		if err != nil {
+		upstreamToken, err := routeUpstreamToken(ctx, logger, upstreamTokens, upstreamResource)
+		var routeErr *upstreamRoutingError
+		switch {
+		case errors.As(err, &routeErr):
+			// routeUpstreamToken already logged the structured detail.
+			return oops.E(oops.CodeFailedPrecondition, err, "this MCP server's upstream credentials are not configured unambiguously")
+		case err != nil:
 			return oops.E(oops.CodeUnexpected, err, "resolve upstream token for proxied MCP backend").LogError(ctx, logger)
 		}
 		if mcpServer.RemoteMcpServerID.Valid {
@@ -231,25 +240,107 @@ func (s *Service) serveResolvedMCPEndpoint(
 	}
 }
 
-// singleUpstreamToken collapses the per-remote-issuer token map from
-// ApplyIssuerGate to the one Authorization value a remote MCP backend
-// forwards upstream. A remote-backed mcp_server proxies to exactly one
-// upstream, so at most one remote_session token is meaningful: the
-// remote_session_client_user_session_issuers one_per_issuer index binds a
-// user_session_issuer to a single remote issuer, so the map holds 0 or 1
-// entries. More than one token means the runtime cannot tell which upstream
-// credential the backend needs, so it fails closed rather than forwarding an
-// arbitrary (possibly mismatched) token; resolving the right token per
-// upstream is tracked in AIS-152.
-func singleUpstreamToken(tokens map[uuid.UUID]string) (string, error) {
-	if len(tokens) > 1 {
-		return "", fmt.Errorf("remote MCP backend bound to %d remote_session_issuers; cannot determine which upstream token to forward", len(tokens))
+// routeUpstreamToken selects the one Authorization value a proxied
+// (remote or tunneled) MCP backend forwards upstream, from the
+// per-remote-issuer token map ApplyIssuerGate resolved.
+//
+// A proxied mcp_server talks to exactly one upstream, so exactly one entry is
+// meaningful. A user_session_issuer may be bound to several
+// remote_session_clients (the one_per_issuer index was dropped in AIS-137),
+// so the map can hold several entries; selection is by qualified identity —
+// the RFC 8707 resource recorded on each credential at grant time must match
+// the backend's own upstream resource. Ambiguity fails closed: zero or
+// multiple matching entries, or a multi-entry map with no resource to match
+// against (tunneled backends record none), returns an error rather than
+// forwarding an arbitrary, possibly mismatched, bearer.
+//
+// A single-entry map is forwarded as-is: a lone binding is that backend's
+// credential by construction (this preserves behavior for servers connected
+// before resources were recorded, and for tunneled backends whose resource is
+// always empty). A lone credential whose recorded resource disagrees with the
+// backend's is still forwarded, but logged at warn level so the mismatch is
+// visible in production and a future move to strict single-entry matching has
+// a signal for how often it would reject. A backend with no resource of its
+// own (tunneled) has nothing to disagree with, so it never warns.
+func routeUpstreamToken(ctx context.Context, logger *slog.Logger, tokens map[uuid.UUID]remotesessions.UpstreamToken, upstreamResource string) (string, error) {
+	want := strings.TrimRight(upstreamResource, "/")
+
+	switch len(tokens) {
+	case 0:
+		return "", nil
+	case 1:
+		for _, entry := range tokens {
+			if want != "" && entry.Resource != "" && strings.TrimRight(entry.Resource, "/") != want {
+				logger.WarnContext(ctx, "forwarding lone remote_session token whose recorded resource does not match the backend's upstream resource",
+					attr.SlogRemoteSessionClientID(entry.RemoteSessionClientID.String()),
+					attr.SlogOAuthResource(entry.Resource),
+					attr.SlogResourceURI(upstreamResource),
+				)
+			}
+			return entry.Token, nil
+		}
 	}
-	// len <= 1 here, so this returns the sole entry (or "" for an empty map).
-	for _, token := range tokens {
-		return token, nil
+
+	if want == "" {
+		return "", routeFailClosed(ctx, logger, "backend_no_resource", tokens, upstreamResource,
+			fmt.Sprintf("proxied MCP backend has no upstream resource to route by, but %d remote_session tokens resolved", len(tokens)))
 	}
-	return "", nil
+	var match string
+	found, nullResources := 0, 0
+	for _, entry := range tokens {
+		if entry.Resource == "" {
+			nullResources++
+		}
+		if strings.TrimRight(entry.Resource, "/") == want {
+			found++
+			match = entry.Token
+		}
+	}
+	if found != 1 {
+		// Distinguish routing failures by cause: legacy grants minted before
+		// the resource column vs genuine duplicates.
+		reason := "duplicate_resource"
+		if found == 0 {
+			reason = "no_match"
+			if nullResources > 0 {
+				reason = "legacy_null_resource"
+			}
+		}
+		return "", routeFailClosed(ctx, logger, reason, tokens, upstreamResource,
+			fmt.Sprintf("%d of %d resolved remote_session tokens match the backend's upstream resource", found, len(tokens)))
+	}
+	return match, nil
+}
+
+// upstreamRoutingError is a fail-closed routing outcome: the endpoint's
+// credentials are ambiguous for this backend, which is a configuration state
+// an operator must resolve rather than a runtime fault. Call sites map it to a
+// precondition failure so a misconfigured tenant does not page as a 500.
+type upstreamRoutingError struct {
+	reason string
+	detail string
+}
+
+func (e *upstreamRoutingError) Error() string {
+	return "upstream token routing failed closed (" + e.reason + "): " + e.detail
+}
+
+// routeFailClosed emits the one structured line per fail-closed routing
+// outcome — so legacy-NULL, unmatched, duplicate, and resourceless-backend
+// causes are distinguishable in aggregate — and returns the typed error. Call
+// sites do not log it again.
+func routeFailClosed(ctx context.Context, logger *slog.Logger, reason string, tokens map[uuid.UUID]remotesessions.UpstreamToken, upstreamResource, detail string) error {
+	recorded := make([]string, 0, len(tokens))
+	for _, entry := range tokens {
+		recorded = append(recorded, entry.Resource)
+	}
+	slices.Sort(recorded)
+	logger.WarnContext(ctx, "remote_session token routing failed closed",
+		attr.SlogReason(reason),
+		attr.SlogResourceURI(upstreamResource),
+		attr.SlogOAuthResource(strings.Join(recorded, ",")),
+	)
+	return &upstreamRoutingError{reason: reason, detail: detail}
 }
 
 // ResolveMCPEndpointAndServer walks the runtime addressing chain shared by

@@ -31,6 +31,25 @@ const refreshCooldown = 30 * time.Second
 // wire (the distinction is an operational signal, not a client-facing one).
 var ErrRefreshRateLimited = errors.New("key set refresh rate limited")
 
+// ErrFetchRateLimited reports a key set that needs an upstream consult the
+// caller's fetch scope has no budget left for. Like ErrRefreshRateLimited it
+// is operational: on the wire it is a key that could not be resolved.
+var ErrFetchRateLimited = errors.New("key set fetch rate limited for scope")
+
+// ErrFetchLimiterUnavailable reports that the fetch scope budget could not be
+// consulted at all. The resolution fails closed, and like ErrFetchRateLimited
+// it means no upstream request was made.
+var ErrFetchLimiterUnavailable = errors.New("key set fetch rate limiter unavailable")
+
+// isFetchAdmissionError reports whether a resolution failed before any
+// upstream request was issued, at the fetch scope's admission. Such failures
+// say nothing about the origin, so the refresh cooldown must not be stamped
+// for them: doing so would suppress legitimate refreshes against a healthy
+// source for the whole window.
+func isFetchAdmissionError(err error) bool {
+	return errors.Is(err, ErrFetchRateLimited) || errors.Is(err, ErrFetchLimiterUnavailable)
+}
+
 // KeyResolver is the orchestrator request paths use to turn (source, kid)
 // into a verification key. It binds the stateless Resolver to a storage
 // policy and — critically — to the per-source refresh rate limiter, and its
@@ -39,6 +58,9 @@ var ErrRefreshRateLimited = errors.New("key set refresh rate limited")
 // and never through a hand-rolled loop over Resolver.Resolve, which carries
 // no rate limit.
 //
+// An optional second limiter charges every upstream consult to the source's
+// fetch scope, so a party naming many key set URLs still draws on one budget.
+//
 // Failure posture is fail-closed throughout, which is the correct posture
 // for its consumer (client assertion verification, where an unresolvable key
 // set blocks exactly one client): resolver errors, cache errors, and rate
@@ -46,11 +68,16 @@ var ErrRefreshRateLimited = errors.New("key set refresh rate limited")
 // outage fails closed — rotation is delayed rather than the refresh path
 // degrading into an unthrottled fetch amplifier.
 type KeyResolver struct {
-	resolver *Resolver
-	cache    Cache
-	limiter  *ratelimit.Limiter
-	logger   *slog.Logger
-	group    singleflight.Group
+	resolver       *Resolver
+	cache          Cache
+	refreshLimiter *ratelimit.Limiter
+
+	// fetchLimiter, when set, is charged for every upstream consult and
+	// keyed by the source's fetch scope.
+	fetchLimiter *ratelimit.Limiter
+
+	logger *slog.Logger
+	group  singleflight.Group
 }
 
 // NewKeyResolver binds a Resolver to its storage and refresh-limit policy.
@@ -63,26 +90,68 @@ type KeyResolver struct {
 // per-replica: after a real key rotation, each replica needs one forced
 // refresh to converge, so size the limiter burst at or above the replica
 // count or rotation propagates one replica per refill.
-func NewKeyResolver(resolver *Resolver, cache Cache, limiter *ratelimit.Limiter, logger *slog.Logger) (*KeyResolver, error) {
+//
+// fetchLimiter, when non-nil, is a second limiter charged once per upstream
+// consult and keyed by the source's fetch scope. The required refresh
+// limiter bounds how often one key set URL is refetched on an unknown kid,
+// and nothing more: it cannot bound the cold fetch a never-seen URL costs,
+// and a party able to name many URLs, which an unauthenticated registration
+// endpoint allows, gets one cold fetch and one refresh budget per URL. The
+// fetch limiter closes that: every consult a scope causes, cold or forced,
+// draws on that scope's one budget. Callers choose the scope; an
+// authorization server passing its own identifier makes the budget per
+// tenant, so one tenant's key sources cannot exhaust another's, and no
+// number of registrations buys more fetches. Nil disables it.
+func NewKeyResolver(resolver *Resolver, cache Cache, refreshLimiter *ratelimit.Limiter, fetchLimiter *ratelimit.Limiter, logger *slog.Logger) (*KeyResolver, error) {
 	if resolver == nil {
 		return nil, errors.New("jwks: KeyResolver requires a Resolver")
 	}
 	if cache == nil {
 		return nil, errors.New("jwks: KeyResolver requires a Cache")
 	}
-	if limiter == nil {
+	if refreshLimiter == nil {
 		return nil, errors.New("jwks: KeyResolver requires a refresh rate limiter")
 	}
 	if logger == nil {
 		return nil, errors.New("jwks: KeyResolver requires a logger")
 	}
 	return &KeyResolver{
-		resolver: resolver,
-		cache:    cache,
-		limiter:  limiter,
-		logger:   logger.With(attr.SlogComponent("jwks")),
-		group:    singleflight.Group{},
+		resolver:       resolver,
+		cache:          cache,
+		refreshLimiter: refreshLimiter,
+		fetchLimiter:   fetchLimiter,
+		logger:         logger.With(attr.SlogComponent("jwks")),
+		group:          singleflight.Group{},
 	}, nil
+}
+
+// fetchHook is the FetchHook that spends one unit of the source's scope
+// budget, or nil when no fetch limiter is configured. Handed to the resolver
+// so the charge lands exactly when a request is issued and never otherwise.
+func (k *KeyResolver) fetchHook(source Source) FetchHook {
+	if k.fetchLimiter == nil {
+		return nil
+	}
+	return func(ctx context.Context) error {
+		return k.chargeFetch(ctx, source)
+	}
+}
+
+// chargeFetch spends one unit of the source's scope budget. A limiter store
+// outage fails closed, for the same reason the refresh limiter's does.
+func (k *KeyResolver) chargeFetch(ctx context.Context, source Source) error {
+	allowed, err := k.fetchLimiter.Allow(ctx, source.fetchScope)
+	if err != nil {
+		return fmt.Errorf("%w: %w", ErrFetchLimiterUnavailable, err)
+	}
+	if !allowed.Allowed {
+		k.logger.WarnContext(ctx, "jwks fetch denied by scope rate limiter",
+			attr.SlogURLFull(source.uri),
+			attr.SlogJWKSOrigin(source.origin),
+		)
+		return fmt.Errorf("retry after %s: %w", allowed.RetryAfter, ErrFetchRateLimited)
+	}
+	return nil
 }
 
 // VerificationKey returns the verification key an assertion's kid names,
@@ -150,7 +219,10 @@ func (k *KeyResolver) resolveShared(ctx context.Context, source Source) (*Result
 		if err != nil {
 			return nil, err
 		}
-		resolved, err := k.resolver.Resolve(ctx, source, state)
+		// The scope budget is charged by the resolver at the moment it
+		// issues a request, so a warm entry costs nothing and every
+		// consult costs exactly one, whichever cache condition caused it.
+		resolved, err := k.resolver.ResolveWithFetchHook(ctx, source, state, k.fetchHook(source))
 		if err != nil {
 			return nil, err
 		}
@@ -196,7 +268,7 @@ func (k *KeyResolver) refreshShared(ctx context.Context, source Source) (*Result
 			// protecting; fall through to the limiter and refresh.
 		}
 
-		allowed, err := k.limiter.Allow(ctx, source.CacheKey())
+		allowed, err := k.refreshLimiter.Allow(ctx, source.CacheKey())
 		if err != nil {
 			// A limiter store outage fails closed: rotation waits rather
 			// than the refresh path running unthrottled.
@@ -219,7 +291,12 @@ func (k *KeyResolver) refreshShared(ctx context.Context, source Source) (*Result
 			ExpiresAt:   time.Time{},
 			RefreshedAt: state.RefreshedAt,
 		}
-		resolved, err := k.resolver.Resolve(ctx, source, forced)
+		// The scope budget is charged only once the per-source limiter has
+		// admitted the refresh and the resolver is about to issue the
+		// request. A refresh the source's own budget refuses therefore
+		// costs the scope nothing, so unknown-kid probes against an
+		// exhausted source cannot drain the budget its neighbours share.
+		resolved, err := k.resolver.ResolveWithFetchHook(ctx, source, forced, k.fetchHook(source))
 		if err != nil {
 			// A failed consult still stamps the cooldown: the upstream was
 			// genuinely contacted, and without the marker every unknown-kid
@@ -228,12 +305,14 @@ func (k *KeyResolver) refreshShared(ctx context.Context, source Source) (*Result
 			// successful consult. Everything else about the stored state is
 			// kept as it was.
 			//
-			// A canceled caller is the exception: its failure says nothing
-			// about the origin, and stamping it would suppress refresh
-			// against a healthy source for the whole cooldown. The check is
-			// on the caller's context, so a fetch timeout (whose deadline
-			// lives on the derived context) still counts as a consult.
-			if ctx.Err() == nil {
+			// Two exceptions, for failures that never reached the origin. A
+			// canceled caller's failure says nothing about it, and a refusal
+			// at the fetch scope's admission happened before any request;
+			// stamping either would suppress refresh against a healthy source
+			// for the whole cooldown. The context check is on the caller's
+			// context, so a fetch timeout (whose deadline lives on the
+			// derived context) still counts as a consult.
+			if ctx.Err() == nil && !isFetchAdmissionError(err) {
 				k.markConsultFailure(ctx, source, state)
 			}
 			return nil, err

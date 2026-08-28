@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"slices"
 	"strings"
 	"time"
 
@@ -373,8 +374,8 @@ func noneResult() *gen.LitellmIngestResult {
 }
 
 func latestUserPrompt(messages []*gen.LiteLLMStructuredMessage) string {
-	for i := len(messages) - 1; i >= 0; i-- {
-		message := messages[i]
+	for _, message := range slices.Backward(messages) {
+
 		if message != nil && strings.EqualFold(strings.TrimSpace(message.Role), "user") {
 			return messageText(message.Content)
 		}

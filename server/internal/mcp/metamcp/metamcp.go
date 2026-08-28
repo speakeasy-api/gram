@@ -11,6 +11,15 @@ package metamcp
 // memory on an internet-reachable surface.
 const MaxBodyBytes = 1 << 20
 
+// MaxDescribeTools caps how many names one describe_tools call may request.
+// The body cap alone does not bound the response: each name emits a full
+// input schema, so a body of repeated short names amplifies by orders of
+// magnitude.
+const MaxDescribeTools = 250
+
+// MaxMemberResponseBytes caps one proxied member's captured response body.
+const MaxMemberResponseBytes = 4 << 20
+
 // The fixed gateway tool contract. ToolDescribeTools and ToolExecuteTool
 // intentionally carry the same wire names as the dynamic toolset surface's
 // tools so agents see one vocabulary across Gram surfaces.

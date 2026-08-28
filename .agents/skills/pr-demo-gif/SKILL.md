@@ -1,6 +1,6 @@
 ---
 name: pr-demo-gif
-description: Use when a pull request contains a user-visible Gram dashboard change that reviewers should see as a screenshot or short interaction demo.
+description: Always use after creating a pull request that proposes user-visible changes.
 ---
 
 # Demos for frontend PRs

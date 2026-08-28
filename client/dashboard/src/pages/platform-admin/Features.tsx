@@ -12,14 +12,12 @@ import {
 import { Badge } from "@/components/ui/Badge";
 import { useOrganization } from "@/contexts/Auth";
 import { Button } from "@/components/ui/Button";
-import { FEATURE_FLAGS } from "@/lib/featureFlags";
 import { FeatureName } from "@gram/client/models/components/setproductfeaturerequestbody.js";
 import { Input } from "@/components/ui/Input";
 import { Page } from "@/components/page-layout";
 import { PlatformAdminGate } from "./PlatformAdminGate";
 import { Switch } from "@/components/ui/Switch";
 import { toast } from "sonner";
-import { useFeatureFlag } from "@/hooks/useFeatureFlag";
 import { useFeaturesSetMutation } from "@gram/client/react-query/featuresSet.js";
 import { useOrgMemoryDeveloperToggle } from "@/hooks/useOrgMemoryDeveloperToggle";
 import { useQueryClient } from "@tanstack/react-query";
@@ -210,12 +208,6 @@ function ProductFeaturesSection({
   } = useProductFeatures({
     organizationId,
   });
-  const platformMcp = useFeatureFlag(FEATURE_FLAGS.platformMcp);
-  const visibleFeatures = TOGGLEABLE_FEATURES.filter(
-    (feature) =>
-      feature.featureName !== FeatureName.PlatformMcp ||
-      platformMcp.status === "enabled",
-  );
 
   const {
     mutate,
@@ -249,7 +241,7 @@ function ProductFeaturesSection({
     }
     return (
       <div className="divide-border divide-y">
-        {visibleFeatures.map((feature) => {
+        {TOGGLEABLE_FEATURES.map((feature) => {
           const enabled = features[feature.enabledKey];
           const rowPending =
             isPending && pendingFeature === feature.featureName;

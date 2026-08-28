@@ -17,7 +17,9 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/mcpaccess"
+	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
+	metamcprepo "github.com/speakeasy-api/gram/server/internal/metamcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -80,16 +82,26 @@ func (s *Service) MintUserSession(ctx context.Context, payload *gen.MintUserSess
 
 	hasToolset := payload.ToolsetID != nil && *payload.ToolsetID != ""
 	hasServer := payload.McpServerID != nil && *payload.McpServerID != ""
-	if hasToolset == hasServer {
-		return nil, oops.E(oops.CodeBadRequest, nil, "exactly one of toolset_id or mcp_server_id must be provided").LogError(ctx, s.logger)
+	hasMeta := payload.MetaMcpServerID != nil && *payload.MetaMcpServerID != ""
+	targets := 0
+	for _, set := range []bool{hasToolset, hasServer, hasMeta} {
+		if set {
+			targets++
+		}
+	}
+	if targets != 1 {
+		return nil, oops.E(oops.CodeBadRequest, nil, "exactly one of toolset_id, mcp_server_id, or meta_mcp_server_id must be provided").LogError(ctx, s.logger)
 	}
 
 	var target *mintTarget
 	var err error
-	if hasToolset {
+	switch {
+	case hasToolset:
 		target, err = s.resolveToolsetMintTarget(ctx, *payload.ToolsetID, *authCtx.ProjectID)
-	} else {
+	case hasServer:
 		target, err = s.resolveServerMintTarget(ctx, *payload.McpServerID, *authCtx.ProjectID)
+	default:
+		target, err = s.resolveMetaServerMintTarget(ctx, *payload.MetaMcpServerID, *authCtx.ProjectID)
 	}
 	if err != nil {
 		return nil, err
@@ -252,5 +264,67 @@ func (s *Service) resolveServerMintTarget(ctx context.Context, serverIDStr strin
 		issuerURL:  issuerURL,
 		resourceID: server.ID.String(),
 		logAttr:    attr.SlogMcpServerID(server.ID.String()),
+	}, nil
+}
+
+// resolveMetaServerMintTarget binds the JWT to a meta MCP server's
+// user_session_issuer audience, matching what
+// NewResolvedMcpEndpointFromMetaMcpServer expects on the wire. A gateway has
+// no slug of its own, so the issuer claim names its platform endpoint — the
+// address a client would actually connect to. The mcp:connect check runs
+// against the gateway id, so a caller whose grant is restricted to specific
+// resources cannot mint for it.
+func (s *Service) resolveMetaServerMintTarget(ctx context.Context, metaServerIDStr string, projectID uuid.UUID) (*mintTarget, error) {
+	metaServerID, err := uuid.Parse(metaServerIDStr)
+	if err != nil {
+		return nil, oops.E(oops.CodeBadRequest, err, "invalid meta_mcp_server_id").LogError(ctx, s.logger)
+	}
+
+	metaServer, err := metamcprepo.New(s.db).GetMetaMCPServerByIDAndProjectID(ctx, metamcprepo.GetMetaMCPServerByIDAndProjectIDParams{
+		ID:        metaServerID,
+		ProjectID: projectID,
+	})
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		return nil, oops.E(oops.CodeNotFound, err, "meta mcp server not found").LogError(ctx, s.logger)
+	case err != nil:
+		return nil, oops.E(oops.CodeUnexpected, err, "load meta mcp server").LogError(ctx, s.logger)
+	}
+
+	if !metaServer.UserSessionIssuerID.Valid {
+		return nil, oops.E(oops.CodeBadRequest, nil, "meta mcp server is not issuer-gated; minting a user-session JWT is only meaningful for issuer-gated servers").LogError(ctx, s.logger)
+	}
+
+	endpoints, err := mcpendpointsrepo.New(s.db).ListMCPEndpointsByMetaMCPServerID(ctx, mcpendpointsrepo.ListMCPEndpointsByMetaMCPServerIDParams{
+		ProjectID:       projectID,
+		MetaMcpServerID: metaServerID,
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "list meta mcp server endpoints").LogError(ctx, s.logger)
+	}
+	slug := ""
+	for _, endpoint := range endpoints {
+		// Prefer the platform address; a custom-domain endpoint only serves
+		// under its own host, which this claim cannot name.
+		if !endpoint.CustomDomainID.Valid {
+			slug = endpoint.Slug
+			break
+		}
+	}
+	if slug == "" {
+		return nil, oops.E(oops.CodeBadRequest, nil, "meta mcp server has no hosted address to mint against").LogError(ctx, s.logger)
+	}
+
+	issuerURL, err := url.JoinPath(s.serverURL, "mcp", slug)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "build issuer URL").LogError(ctx, s.logger)
+	}
+
+	return &mintTarget{
+		issuerID:   metaServer.UserSessionIssuerID.UUID,
+		audience:   urn.NewUserSessionIssuer(metaServer.UserSessionIssuerID.UUID).String(),
+		issuerURL:  issuerURL,
+		resourceID: metaServer.ID.String(),
+		logAttr:    attr.SlogMetaMcpServerID(metaServer.ID.String()),
 	}, nil
 }

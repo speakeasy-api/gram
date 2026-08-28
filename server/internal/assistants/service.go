@@ -2887,7 +2887,6 @@ func (s *ServiceCore) startProcessingLeaseHeartbeat(
 	runtimeID uuid.UUID,
 	eventID uuid.UUID,
 ) func() {
-	//nolint:gosec // cancel is returned and invoked by the caller to stop the heartbeat goroutine
 	hbCtx, cancel := context.WithCancel(ctx)
 	go func() {
 		ticker := time.NewTicker(processingLeaseHeartbeatTick)
@@ -3435,6 +3434,7 @@ func (s *ServiceCore) selfHealCorruptHistory(ctx context.Context, chatID uuid.UU
 	nextGen := currentGen + 1
 	empty := conv.ToPGTextEmpty("")
 	base := chatrepo.CreateChatMessageParams{
+		ID:               uuid.Nil,
 		Replayed:         false,
 		CreatedAt:        conv.PtrToPGTimestamptz(nil),
 		ChatID:           chatID,

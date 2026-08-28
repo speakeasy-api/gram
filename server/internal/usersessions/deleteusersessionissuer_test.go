@@ -13,6 +13,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	metamcprepo "github.com/speakeasy-api/gram/server/internal/metamcp/repo"
+	"github.com/speakeasy-api/gram/server/internal/metamcp/visibility"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -280,6 +281,7 @@ func TestDeleteUserSessionIssuer_ConflictWithLiveMetaMcpServer(t *testing.T) {
 		ProjectID:           *authCtx.ProjectID,
 		Name:                "issuer-holding meta",
 		UserSessionIssuerID: uuid.NullUUID{UUID: issuerID, Valid: true},
+		Visibility:          visibility.Private,
 	})
 	require.NoError(t, err)
 

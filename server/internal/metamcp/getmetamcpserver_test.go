@@ -7,6 +7,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/meta_mcp"
+	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 )
 
@@ -86,6 +87,19 @@ func TestListMetaMcpServers_ReturnsProjectServers(t *testing.T) {
 	})
 	require.NoError(t, err)
 
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	serverID := seedMcpServer(t, ctx, ti.conn, *authCtx.ProjectID)
+	_, err = ti.service.AddMetaMcpMember(ctx, &gen.AddMetaMcpMemberPayload{
+		SessionToken:     nil,
+		ApikeyToken:      nil,
+		ProjectSlugInput: nil,
+		MetaMcpServerID:  first.ID,
+		McpServerID:      serverID.String(),
+		SortOrder:        nil,
+	})
+	require.NoError(t, err)
+
 	result, err := ti.service.ListMetaMcpServers(ctx, &gen.ListMetaMcpServersPayload{
 		SessionToken:     nil,
 		ApikeyToken:      nil,
@@ -93,10 +107,14 @@ func TestListMetaMcpServers_ReturnsProjectServers(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	ids := make([]string, 0, len(result.MetaMcpServers))
+	countByID := make(map[string]*int, len(result.MetaMcpServers))
 	for _, s := range result.MetaMcpServers {
-		ids = append(ids, s.ID)
+		countByID[s.ID] = s.MemberCount
 	}
-	require.Contains(t, ids, first.ID)
-	require.Contains(t, ids, second.ID)
+	require.Contains(t, countByID, first.ID)
+	require.Contains(t, countByID, second.ID)
+	require.NotNil(t, countByID[first.ID])
+	require.Equal(t, 1, *countByID[first.ID])
+	require.NotNil(t, countByID[second.ID])
+	require.Equal(t, 0, *countByID[second.ID])
 }

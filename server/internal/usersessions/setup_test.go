@@ -16,6 +16,7 @@ import (
 	"github.com/redis/go-redis/v9"
 	"github.com/stretchr/testify/require"
 
+	issuersgen "github.com/speakeasy-api/gram/server/gen/user_session_issuers"
 	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/auth/chatsessions"
@@ -244,15 +245,43 @@ func seedUserSessionClient(t *testing.T, ctx context.Context, conn *pgxpool.Pool
 
 	r := repo.New(conn)
 	row, err := r.CreateUserSessionClient(ctx, repo.CreateUserSessionClientParams{
-		UserSessionIssuerID:   issuerID,
-		ClientID:              clientID,
-		ClientSecretHash:      pgtype.Text{String: "", Valid: false},
-		ClientName:            "test-" + clientID,
-		RedirectUris:          []string{"https://example.com/cb"},
-		ClientSecretExpiresAt: pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: 0, Valid: false},
+		UserSessionIssuerID:     issuerID,
+		ClientID:                clientID,
+		ClientSecretHash:        pgtype.Text{String: "", Valid: false},
+		ClientName:              "test-" + clientID,
+		RedirectUris:            []string{"https://example.com/cb"},
+		ClientSecretExpiresAt:   pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: 0, Valid: false},
+		TokenEndpointAuthMethod: "none",
 	})
 	if err != nil {
 		return repo.UserSessionClient{}, fmt.Errorf("seed user session client: %w", err)
+	}
+	return row, nil
+}
+
+// seedUserSessionClientWithAuth inserts a client that declares a specific
+// token_endpoint_auth_method, and optionally stores a secret hash. Both are
+// inputs to the credential kind the management API reports, and their
+// combinations include ones no registration path would produce -- a declared
+// method with a contradicting secret is exactly the row that reads as
+// misconfigured.
+func seedUserSessionClientWithAuth(t *testing.T, ctx context.Context, conn *pgxpool.Pool, issuerID uuid.UUID, clientID, authMethod string, secretHash pgtype.Text) (repo.UserSessionClient, error) {
+	t.Helper()
+
+	r := repo.New(conn)
+	row, err := r.CreateUserSessionClient(ctx, repo.CreateUserSessionClientParams{
+		UserSessionIssuerID:     issuerID,
+		ClientID:                clientID,
+		ClientSecretHash:        secretHash,
+		ClientName:              "test-" + clientID,
+		RedirectUris:            []string{"https://example.com/cb"},
+		ClientSecretExpiresAt:   pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: 0, Valid: false},
+		TokenEndpointAuthMethod: authMethod,
+		ClientJwks:              nil,
+		ClientJwksUri:           pgtype.Text{String: "https://example.com/jwks.json", Valid: authMethod == "private_key_jwt"},
+	})
+	if err != nil {
+		return repo.UserSessionClient{}, fmt.Errorf("seed user session client with auth: %w", err)
 	}
 	return row, nil
 }
@@ -268,10 +297,11 @@ func seedCimdUserSessionClient(t *testing.T, ctx context.Context, conn *pgxpool.
 
 	r := repo.New(conn)
 	row, err := r.UpsertUserSessionClientFromCIMD(ctx, repo.UpsertUserSessionClientFromCIMDParams{
-		UserSessionIssuerID: issuerID,
-		ClientID:            documentURL,
-		ClientName:          "test-cimd-" + documentURL,
-		RedirectUris:        []string{"https://example.com/cb"},
+		UserSessionIssuerID:     issuerID,
+		ClientID:                documentURL,
+		ClientName:              "test-cimd-" + documentURL,
+		RedirectUris:            []string{"https://example.com/cb"},
+		TokenEndpointAuthMethod: "none",
 	})
 	if err != nil {
 		return repo.UserSessionClient{}, fmt.Errorf("seed cimd user session client: %w", err)
@@ -344,4 +374,35 @@ func seedUserSessionConsent(t *testing.T, ctx context.Context, conn *pgxpool.Poo
 		return repo.UserSessionConsent{}, fmt.Errorf("seed user session consent: %w", err)
 	}
 	return row, nil
+}
+
+// requireOrganizationID asserts that a row carries the organization tenancy of
+// the test's auth context. Every user-session row is written with its
+// organization alongside its project, either supplied by the writer or derived
+// from the row's parent, so a NULL here means a write path skipped it.
+func requireOrganizationID(t *testing.T, ctx context.Context, got pgtype.Text) {
+	t.Helper()
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotEmpty(t, authCtx.ActiveOrganizationID)
+
+	require.True(t, got.Valid, "organization_id must not be NULL")
+	require.Equal(t, authCtx.ActiveOrganizationID, got.String)
+}
+
+// seedIssuer creates an issuer with the given slug and returns its id.
+func seedIssuer(t *testing.T, ctx context.Context, ti *testInstance, slug string) uuid.UUID {
+	t.Helper()
+
+	issuer, err := ti.service.CreateUserSessionIssuer(ctx, &issuersgen.CreateUserSessionIssuerPayload{
+		SessionToken:         nil,
+		ApikeyToken:          nil,
+		ProjectSlugInput:     nil,
+		Slug:                 slug,
+		AuthnChallengeMode:   "chain",
+		SessionDurationHours: 24,
+	})
+	require.NoError(t, err)
+	return uuid.MustParse(issuer.ID)
 }

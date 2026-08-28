@@ -49,6 +49,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/plugins"
 	pluginsrepo "github.com/speakeasy-api/gram/server/internal/plugins/repo"
 	remotemcprepo "github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	tenv "github.com/speakeasy-api/gram/server/internal/temporal"
 	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	tunneledmcprepo "github.com/speakeasy-api/gram/server/internal/tunneledmcp/repo"
@@ -69,6 +70,8 @@ type Service struct {
 	dispositionCache     *ToolDispositionCache
 	pluginsGitHubEnabled bool
 	assets               *assets.Service
+	// revoker handles grants orphaned by DeleteMcpServer's issuer cascade.
+	revoker *remotesessions.UpstreamRevoker
 }
 
 var _ gen.Service = (*Service)(nil)
@@ -85,6 +88,7 @@ func NewService(
 	dispositionCache *ToolDispositionCache,
 	pluginsGitHubEnabled bool,
 	assetsService *assets.Service,
+	revoker *remotesessions.UpstreamRevoker,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("mcpservers"))
 
@@ -99,6 +103,7 @@ func NewService(
 		dispositionCache:     dispositionCache,
 		pluginsGitHubEnabled: pluginsGitHubEnabled,
 		assets:               assetsService,
+		revoker:              revoker,
 	}
 }
 
@@ -227,7 +232,7 @@ func (s *Service) scheduleDefaultServerIcon(ctx context.Context, projectID, mcpS
 	if !ids.UnproxiedMcpServerID.Valid && !ids.RemoteMcpServerID.Valid {
 		return
 	}
-	bgCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 30*time.Second) //nolint:gosec // cancel is deferred inside the detached goroutine below
+	bgCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 30*time.Second)
 	logger := s.logger.With(attr.SlogProjectID(projectID.String()))
 	go func() {
 		defer cancel()
@@ -596,6 +601,10 @@ func (s *Service) UpdateMcpServer(ctx context.Context, payload *gen.UpdateMcpSer
 		return nil, oops.E(oops.CodeInvalid, err, "invalid mcp server").LogError(ctx, logger)
 	}
 
+	if err := verifyMetaMcpBackendUniqueness(ctx, dbtx, *authCtx.ProjectID, serverID, existing, ids, logger); err != nil {
+		return nil, err
+	}
+
 	// Resolve name: nil = leave existing; non-nil = trim and require non-empty.
 	name := existing.Name
 	if payload.Name != nil {
@@ -619,7 +628,7 @@ func (s *Service) UpdateMcpServer(ctx context.Context, payload *gen.UpdateMcpSer
 	// mcp_servers_issuer_required_check.
 	issuerID := uuid.NullUUID{UUID: uuid.Nil, Valid: false}
 	if (ids.RemoteMcpServerID.Valid || ids.TunneledMcpServerID.Valid) && !existing.UserSessionIssuerID.Valid {
-		issuerID, err = mintServerUserSessionIssuer(ctx, dbtx, *authCtx.ProjectID, slug)
+		issuerID, err = mintServerUserSessionIssuer(ctx, dbtx, authCtx.ActiveOrganizationID, *authCtx.ProjectID, slug)
 		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "mint mcp server issuer").LogError(ctx, logger)
 		}
@@ -746,11 +755,10 @@ func (s *Service) triggerInitialPublishIfNeeded(ctx context.Context, authCtx *co
 
 	enqueueCtx := context.WithoutCancel(ctx)
 	if _, err := background.ExecutePluginInitialPublishWorkflow(enqueueCtx, s.temporalEnv, plugins.PublishProjectInput{
-		ProjectID:              *authCtx.ProjectID,
-		CreatedByUserID:        authCtx.UserID,
-		CommitMessage:          "Initial marketplace publish",
-		ForcePlatformMCPRepair: false,
-		SkipIfUnchanged:        false,
+		ProjectID:       *authCtx.ProjectID,
+		CreatedByUserID: authCtx.UserID,
+		CommitMessage:   "Initial marketplace publish",
+		SkipIfUnchanged: false,
 	}); err != nil {
 		s.logger.WarnContext(ctx, "failed to enqueue initial plugin publish", attr.SlogError(err))
 	}
@@ -932,6 +940,7 @@ func (s *Service) DeleteMcpServer(ctx context.Context, payload *gen.DeleteMcpSer
 	// Remote- and tunneled-backed servers own the issuer minted with them.
 	// An issuer may also be referenced by another server or toolset, so only
 	// cascade once this deletion leaves it without an active owner.
+	var orphanCreds []remotesessions.RevokedCredentials
 	if deleted.UserSessionIssuerID.Valid {
 		userSessionsRepo := usersessionsrepo.New(dbtx)
 		// Lock the issuer row before the ownership check. A concurrent meta
@@ -966,11 +975,9 @@ func (s *Service) DeleteMcpServer(ctx context.Context, payload *gen.DeleteMcpSer
 			case err != nil:
 				return oops.E(oops.CodeUnexpected, err, "delete mcp server issuer").LogError(ctx, logger)
 			default:
-				if err := userSessionsRepo.DeleteRemoteSessionClientAttachmentsForUserSessionIssuer(ctx, usersessionsrepo.DeleteRemoteSessionClientAttachmentsForUserSessionIssuerParams{
-					UserSessionIssuerID: deletedIssuer.ID,
-					ProjectID:           *authCtx.ProjectID,
-				}); err != nil {
-					return oops.E(oops.CodeUnexpected, err, "delete mcp server issuer client attachments").LogError(ctx, logger)
+				orphanCreds, err = s.revoker.DetachUserSessionIssuerFromClients(ctx, dbtx, deletedIssuer.ID, *authCtx.ProjectID, authCtx.ActiveOrganizationID)
+				if err != nil {
+					return oops.E(oops.CodeUnexpected, err, "detach remote session clients from mcp server issuer").LogError(ctx, logger)
 				}
 
 				if _, err := userSessionsRepo.SoftDeleteUserSessionsByIssuerID(ctx, deletedIssuer.ID); err != nil {
@@ -1012,6 +1019,9 @@ func (s *Service) DeleteMcpServer(ctx context.Context, payload *gen.DeleteMcpSer
 	if err := dbtx.Commit(ctx); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "commit transaction").LogError(ctx, logger)
 	}
+
+	// Post-commit, best-effort: RFC 7009 for the orphaned grants.
+	s.revoker.RevokeAllDetached(ctx, orphanCreds)
 
 	if err := s.reconcileMcpServerCustomDomains(ctx, rootDomainIDs(rootEndpoints)); err != nil {
 		return err
@@ -1153,6 +1163,45 @@ func verifyTunneledPublicConsent(ctx context.Context, dbtx pgx.Tx, projectID uui
 		return fmt.Errorf("tunneled MCP servers cannot be public until the tunnel source enables public serving")
 	}
 	return nil
+}
+
+// verifyMetaMcpBackendUniqueness rejects repointing a server onto a backend a
+// co-member of one of its meta MCP servers already fronts, the state
+// metamcp.AddMetaMcpMember refuses at attach time. Running after the server
+// lock leaves nowhere to also take the meta lock without inverting that path's
+// meta-then-server order, so a simultaneous attach can still slip past.
+func verifyMetaMcpBackendUniqueness(
+	ctx context.Context,
+	dbtx pgx.Tx,
+	projectID uuid.UUID,
+	serverID uuid.UUID,
+	existing repo.McpServer,
+	ids serverIDs,
+	logger *slog.Logger,
+) error {
+	if ids.RemoteMcpServerID == existing.RemoteMcpServerID &&
+		ids.TunneledMcpServerID == existing.TunneledMcpServerID &&
+		ids.ToolsetID == existing.ToolsetID &&
+		ids.UnproxiedMcpServerID == existing.UnproxiedMcpServerID {
+		return nil
+	}
+
+	metaName, err := metamcprepo.New(dbtx).FindMetaMCPSiblingSharingBackend(ctx, metamcprepo.FindMetaMCPSiblingSharingBackendParams{
+		McpServerID:          serverID,
+		ProjectID:            projectID,
+		RemoteMcpServerID:    ids.RemoteMcpServerID,
+		TunneledMcpServerID:  ids.TunneledMcpServerID,
+		ToolsetID:            ids.ToolsetID,
+		UnproxiedMcpServerID: ids.UnproxiedMcpServerID,
+	})
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		return nil
+	case err != nil:
+		return oops.E(oops.CodeUnexpected, err, "check meta mcp members sharing a backend").LogError(ctx, logger)
+	default:
+		return oops.E(oops.CodeConflict, nil, "another member of meta mcp server %q already fronts this backend", metaName).LogError(ctx, logger)
+	}
 }
 
 func backendFilterCount(ids ...uuid.NullUUID) int {

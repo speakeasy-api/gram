@@ -193,17 +193,24 @@ const (
 	CIMDCrossOriginRedirectOriginsKey = attribute.Key("gram.cimd.cross_origin_redirect_origins")
 
 	// CIMDAdmissionModeKey is the effective per-issuer CIMD admission policy
-	// ("disabled", "presets", "open") — the low-cardinality dimension on
+	// ("disabled", "presets", "open", and "reporting" on rows that predate
+	// the open default) — the low-cardinality dimension on
 	// cimd.admission.decisions. Operator-chosen, never attacker-influenced.
 	CIMDAdmissionModeKey = attribute.Key("gram.cimd.admission_mode")
 
 	// CIMDAdmissionOutcomeKey is the machine-readable admission decision on
 	// cimd.admission.decisions. Admissions carry the reason they were
 	// admitted rather than a bare "admitted", so the values are
-	// "admitted_open", "admitted_catalog_exact", "admitted_catalog_pattern",
-	// "admitted_custom", "denied_disabled", "denied_not_listed",
-	// "denied_oversized", and "denied_unknown_mode". Chart the admitted_*
-	// values as a group; there is no single value meaning "admitted".
+	// "admitted_open", "admitted_open_not_listed",
+	// "admitted_open_oversized", "admitted_catalog_exact",
+	// "admitted_catalog_pattern", "admitted_custom", "denied_disabled",
+	// "denied_not_listed", "denied_oversized", and "denied_unknown_mode".
+	// Chart the admitted_* values as a group; there is no single value
+	// meaning "admitted".
+	//
+	// "admitted_open_not_listed" is the catalog-gap signal on an issuer that
+	// refuses nobody: the client got in, and no rule anywhere covered it.
+	// Alert on it alongside "denied_not_listed".
 	CIMDAdmissionOutcomeKey = attribute.Key("gram.cimd.admission_outcome")
 
 	// JWKSOriginKey is the host of a remote JWK Set URL — the per-key-host
@@ -335,9 +342,25 @@ const (
 	// OAuthFlowStageKey is the coarse, low-cardinality stage at which an OAuth
 	// flow terminated (see the oauthFlowStage enum in the mcp package). Used
 	// as a metric dimension on oauth.flow.failed and in failure logs.
-	OAuthFlowStageKey           = attribute.Key("gram.oauth.flow_stage")
-	OAuthGrantKey               = attribute.Key("gram.oauth.grant")
-	OAuthIssuerKey              = attribute.Key("gram.oauth.issuer")
+	OAuthFlowStageKey = attribute.Key("gram.oauth.flow_stage")
+	OAuthGrantKey     = attribute.Key("gram.oauth.grant")
+	OAuthIssuerKey    = attribute.Key("gram.oauth.issuer")
+
+	// OAuthAssertionAudienceKey records which accepted audience form a verified client assertion carried.
+	OAuthAssertionAudienceKey = attribute.Key("gram.oauth.assertion_audience")
+
+	// OAuthAssertionExpiresAtKey records a verified client assertion's expiry.
+	OAuthAssertionExpiresAtKey = attribute.Key("gram.oauth.assertion_expires_at")
+
+	// OAuthDeclaredAuthMethodKey records the token_endpoint_auth_method a client metadata document declares.
+	OAuthDeclaredAuthMethodKey = attribute.Key("gram.oauth.declared_auth_method")
+
+	// OAuthRefreshTriggerKey names which caller initiated an upstream remote
+	// session refresh: a lazy MCP request, the scheduled worker sweep, or a
+	// manual consent-page or admin action. Used as a metric dimension on
+	// gram.remote_session.upstream_refresh.
+	OAuthRefreshTriggerKey = attribute.Key("gram.oauth.refresh_trigger")
+
 	OAuthPresentedAuthMethodKey = attribute.Key("gram.oauth.presented_auth_method")
 	// OAuthResourceKey is the RFC 8707 resource indicator sent to an
 	// upstream authorization server during the remote-session dance.
@@ -392,6 +415,8 @@ const (
 	WorkOSSSOEnabledKey               = attribute.Key("gram.workos.sso_enabled")
 	WorkOSSCIMEnabledKey              = attribute.Key("gram.workos.scim_enabled")
 	WorkOSDirectoryUserIDKey          = attribute.Key("gram.workos.directory_user_id")
+	ExternalCredentialIDKey           = attribute.Key("gram.external_credential.id")
+	GCPImpersonateServiceAccountKey   = attribute.Key("gram.gcp.impersonate_service_account")
 	WorkOSDirectoryGroupIDKey         = attribute.Key("gram.workos.directory_group_id")
 	OutcomeKey                        = attribute.Key("gram.outcome")
 	PackageNameKey                    = attribute.Key("gram.package.name")
@@ -556,6 +581,7 @@ const (
 	TelemetryCHRowCountKey         = attribute.Key("gram.telemetry.ch.row_count")
 	OTELSpanEnricherNameKey        = attribute.Key("gram.otel.span_enricher_name")
 	OTELLogEnricherNameKey         = attribute.Key("gram.otel.log_enricher_name")
+	OTELMetricEnricherNameKey      = attribute.Key("gram.otel.metric_enricher_name")
 
 	// GenAI semantic convention keys (OTel GenAI semconv - experimental)
 	// See: https://opentelemetry.io/docs/specs/semconv/gen-ai/
@@ -837,6 +863,8 @@ func SlogTelemetryCHRowCount(v int) slog.Attr {
 }
 
 func OTELLogEnricherName(v string) attribute.KeyValue { return OTELLogEnricherNameKey.String(v) }
+
+func OTELMetricEnricherName(v string) attribute.KeyValue { return OTELMetricEnricherNameKey.String(v) }
 
 func OTELSpanEnricherName(v string) attribute.KeyValue { return OTELSpanEnricherNameKey.String(v) }
 func SlogOTELSpanEnricherName(v string) slog.Attr {
@@ -1397,6 +1425,13 @@ func SlogOAuthFlowID(v string) slog.Attr      { return slog.String(string(OAuthF
 func OAuthFlowStage(v string) attribute.KeyValue { return OAuthFlowStageKey.String(v) }
 func SlogOAuthFlowStage(v string) slog.Attr      { return slog.String(string(OAuthFlowStageKey), v) }
 
+func OAuthRefreshTrigger[V ~string](v V) attribute.KeyValue {
+	return OAuthRefreshTriggerKey.String(string(v))
+}
+func SlogOAuthRefreshTrigger(v string) slog.Attr {
+	return slog.String(string(OAuthRefreshTriggerKey), v)
+}
+
 func OAuthErrorDescription(v string) attribute.KeyValue {
 	return OAuthErrorDescriptionKey.String(v)
 }
@@ -1421,6 +1456,15 @@ func OAuthPresentedAuthMethod(v string) attribute.KeyValue {
 }
 func SlogOAuthPresentedAuthMethod(v string) slog.Attr {
 	return slog.String(string(OAuthPresentedAuthMethodKey), v)
+}
+func SlogOAuthDeclaredAuthMethod(v string) slog.Attr {
+	return slog.String(string(OAuthDeclaredAuthMethodKey), v)
+}
+func SlogOAuthAssertionAudience(v string) slog.Attr {
+	return slog.String(string(OAuthAssertionAudienceKey), v)
+}
+func SlogOAuthAssertionExpiresAt(v time.Time) slog.Attr {
+	return slog.Time(string(OAuthAssertionExpiresAtKey), v)
 }
 
 func Provider(v string) attribute.KeyValue { return ProviderKey.String(v) }
@@ -1577,6 +1621,18 @@ func SlogWorkOSOrganizationID(v string) slog.Attr {
 
 func WorkOSUserID(v string) attribute.KeyValue { return WorkOSUserIDKey.String(v) }
 func SlogWorkOSUserID(v string) slog.Attr      { return slog.String(string(WorkOSUserIDKey), v) }
+
+func ExternalCredentialID(v string) attribute.KeyValue { return ExternalCredentialIDKey.String(v) }
+func SlogExternalCredentialID(v string) slog.Attr {
+	return slog.String(string(ExternalCredentialIDKey), v)
+}
+
+func GCPImpersonateServiceAccount(v string) attribute.KeyValue {
+	return GCPImpersonateServiceAccountKey.String(v)
+}
+func SlogGCPImpersonateServiceAccount(v string) slog.Attr {
+	return slog.String(string(GCPImpersonateServiceAccountKey), v)
+}
 
 func WorkOSLinkedUserID(v string) attribute.KeyValue { return WorkOSLinkedUserIDKey.String(v) }
 func SlogWorkOSLinkedUserID(v string) slog.Attr {

@@ -225,7 +225,7 @@ func TestCreateSkillReportsTheSkillIsInertUntilDistributed(t *testing.T) {
 	require.True(t, result.CreatedSkill)
 	require.False(t, result.Distributed)
 	require.Equal(t, "distribute_skill", result.NextAction)
-	require.Contains(t, result.InertMessage, "inert")
+	require.Contains(t, result.InertMessage, "no agent loads it yet")
 	// The result names where the skill can be sent, so a caller does not have
 	// to guess a target — or assume authoring already activated it.
 	require.NotEmpty(t, result.DistributionTargets)
@@ -618,7 +618,7 @@ func TestSkillsToolsAreDeclaredWithAndWithoutTheirDependencies(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
 
-			_, registrar := newServer(nil, nil, nil, "", nil, nil, nil, nil, test.build(), nil, nil, CatalogDescriptor{})
+			_, registrar := newServer(nil, nil, nil, "", nil, nil, nil, nil, test.build(), nil, nil, nil, CatalogDescriptor{})
 
 			registered := make(map[string]Descriptor, len(wanted))
 			for _, descriptor := range registrar.Descriptors() {

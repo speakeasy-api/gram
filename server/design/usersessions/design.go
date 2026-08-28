@@ -81,15 +81,18 @@ var _ = Service("userSessions", func() {
 	})
 
 	Method("mintUserSession", func() {
-		Description("Mint a user_session on behalf of the authenticated dashboard user, bound to an issuer-gated audience: either a toolset (/mcp) or a remote MCP server (/x/mcp). Exactly one of toolset_id or mcp_server_id must be provided. The minted JWT matches the shape /token would emit after a successful OAuth dance, so the runtime MCP gateway validates it through the same path as a real MCP client's bearer.")
+		Description("Mint a user_session on behalf of the authenticated dashboard user, bound to an issuer-gated audience: a toolset (/mcp), a remote MCP server (/x/mcp), or a meta MCP server (/mcp). Exactly one of toolset_id, mcp_server_id, or meta_mcp_server_id must be provided. The minted JWT matches the shape /token would emit after a successful OAuth dance, so the runtime MCP gateway validates it through the same path as a real MCP client's bearer.")
 
 		Security(security.Session, security.ProjectSlug)
 
 		Payload(func() {
-			Attribute("toolset_id", String, "Bind the JWT to this toolset's /mcp/{slug} audience. Mutually exclusive with mcp_server_id; exactly one must be set. Must be issuer-gated and live in the caller's project.", func() {
+			Attribute("toolset_id", String, "Bind the JWT to this toolset's /mcp/{slug} audience. Mutually exclusive with the other targets; exactly one must be set. Must be issuer-gated and live in the caller's project.", func() {
 				Format(FormatUUID)
 			})
-			Attribute("mcp_server_id", String, "Bind the JWT to this remote MCP server's user_session_issuer audience (the /x/mcp convention, since remote servers have no toolset). Mutually exclusive with toolset_id; exactly one must be set. Must be issuer-gated and live in the caller's project.", func() {
+			Attribute("mcp_server_id", String, "Bind the JWT to this remote MCP server's user_session_issuer audience (the /x/mcp convention, since remote servers have no toolset). Mutually exclusive with the other targets; exactly one must be set. Must be issuer-gated and live in the caller's project.", func() {
+				Format(FormatUUID)
+			})
+			Attribute("meta_mcp_server_id", String, "Bind the JWT to this meta MCP server's user_session_issuer audience. Mutually exclusive with the other targets; exactly one must be set. Must be issuer-gated and live in the caller's project.", func() {
 				Format(FormatUUID)
 			})
 			security.SessionPayload()
@@ -173,6 +176,10 @@ var UserSession = Type("UserSession", func() {
 	})
 	Attribute("client_name", String, "Name of the MCP client that established the session, if known. Client-controlled and unverified; do not present it as an identity.")
 	Attribute("client_id_metadata_uri", String, "Set when the client that established this session was resolved from a Client ID Metadata Document (CIMD) hosted at this URL, rather than registered via RFC 7591 DCR. Null for DCR clients and for sessions with no bound client.")
+	Attribute("client_credential_kind", String, "What the client that established this session must present to authenticate: 'public' (nothing), 'secret' (a client secret), 'key' (an assertion signed by its published key), or 'misconfigured'. Derived by the same rule the token endpoint enforces. Null only when the session has no bound client, which is the case for API key and anonymous subjects; a bound client always resolves to one of the four.", func() {
+		Enum("public", "secret", "key", "misconfigured")
+	})
+	Attribute("client_token_endpoint_auth_method", String, "The raw RFC 7591 token_endpoint_auth_method the client declared, for debugging against the spec. Null both for a session with no bound client and for a client registered before the value was recorded; client_credential_kind separates those cases and is what should be displayed.")
 	Attribute("subject_type", String, "Subject kind: 'user', 'apikey', or 'anonymous'.")
 	Attribute("subject_display_name", String, "Resolved human-readable name of the subject, if known.")
 	Attribute("subject_photo_url", String, "Avatar URL for the subject when it resolves to a Gram user with one. Null for API key and anonymous subjects, and for users who have no photo.")

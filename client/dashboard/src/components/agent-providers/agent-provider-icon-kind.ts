@@ -3,6 +3,7 @@ export type AgentProviderIconKind =
   | "cursor"
   | "codex"
   | "opencode"
+  | "openclaw"
   | "litellm"
   | "devin"
   | "mistral"
@@ -10,6 +11,7 @@ export type AgentProviderIconKind =
   | "gemini"
   | "glean"
   | "bedrock"
+  | "catchall"
   | "unknown";
 
 export function agentProviderIconKind(source?: string): AgentProviderIconKind {
@@ -34,6 +36,7 @@ export function agentProviderIconKind(source?: string): AgentProviderIconKind {
     return "codex";
   }
   if (normalizedSource?.includes("opencode")) return "opencode";
+  if (normalizedSource?.includes("openclaw")) return "openclaw";
   if (normalizedSource?.includes("litellm")) return "litellm";
   if (normalizedSource?.includes("devin")) return "devin";
   if (normalizedSource?.includes("mistral")) return "mistral";
@@ -53,6 +56,9 @@ export function agentProviderIconKind(source?: string): AgentProviderIconKind {
   ) {
     return "bedrock";
   }
+  // The catch-all agent has no vendor mark to carry, so the globe is its
+  // deliberate icon rather than the fallback an unrecognised source lands on.
+  if (normalizedSource === "other") return "catchall";
 
   return "unknown";
 }

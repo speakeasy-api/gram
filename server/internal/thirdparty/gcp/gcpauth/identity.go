@@ -125,12 +125,46 @@ func (i *Identity) GramPrincipal(ctx context.Context) (string, error) {
 	return principal.Email, nil
 }
 
-// ImpersonationTargetProblem reports why a target must not be impersonated, or
-// "" when it is acceptable. A non-nil error means the policy could not be
-// evaluated at all, which callers must never treat as acceptance: the screening
-// exists because Gram publishes its own service account by design, so without it
-// an organization member could name an internal service account and use a verify
-// probe to discover which ones Gram holds impersonation rights on.
+// TargetProblemKind classifies why an impersonation target must not be used.
+//
+// It exists so a caller can tell the two refusals apart without matching on
+// message text: one of them is exemptible by a platform administrator and the
+// other never is, and a screening decision that turned on the wording of a
+// sentence would break the moment that sentence was reworded.
+type TargetProblemKind string
+
+const (
+	// TargetUnknown is the zero value, returned only alongside an error. It is
+	// deliberately not the acceptable case: a caller who reads the kind without
+	// checking the error gets a value that no acceptance test matches, so a
+	// screening that could not be evaluated fails closed rather than reading as
+	// permission.
+	TargetUnknown TargetProblemKind = ""
+
+	// TargetOK means the target may be impersonated.
+	TargetOK TargetProblemKind = "ok"
+
+	// TargetMalformed means the target is not a user-managed service account
+	// address, so it cannot be placed in a project at all. No exemption applies
+	// to it: a target that cannot be placed cannot be screened.
+	TargetMalformed TargetProblemKind = "malformed"
+
+	// TargetOwnProject means the target names a service account in this
+	// deployment's own GCP project, which ordinary callers must never reach.
+	TargetOwnProject TargetProblemKind = "own_project"
+)
+
+// ImpersonationTargetProblem classifies why a target must not be impersonated,
+// returning TargetOK when it is acceptable. The accompanying reason explains the
+// refusal in terms the target's owner can act on and is empty when the kind is
+// TargetOK.
+//
+// A non-nil error means the policy could not be evaluated at all, which callers
+// must never treat as acceptance: the screening exists because this deployment
+// publishes its own service account by design, so without it an organization
+// member could name an internal service account and use a verify probe to
+// discover which ones it holds impersonation rights on. Only one of the three
+// return paths is ever meaningful at a time.
 //
 // Both sides of the comparison have to be a user-managed address for it to mean
 // anything. Google's default compute and App Engine service accounts identify
@@ -139,14 +173,14 @@ func (i *Identity) GramPrincipal(ctx context.Context) (string, error) {
 //
 // The logger is taken per call rather than held on the identity so the refusal
 // lands with the caller's request-scoped attributes.
-func (i *Identity) ImpersonationTargetProblem(ctx context.Context, logger *slog.Logger, target string) (string, error) {
+func (i *Identity) ImpersonationTargetProblem(ctx context.Context, logger *slog.Logger, target string) (TargetProblemKind, string, error) {
 	if serviceAccountProject(target) == "" {
-		return "impersonate_service_account must be a user-managed service account (name@PROJECT_ID.iam.gserviceaccount.com)", nil
+		return TargetMalformed, "impersonate_service_account must be a user-managed service account (name@PROJECT_ID.iam.gserviceaccount.com)", nil
 	}
 
 	gramSA, err := i.GramPrincipal(ctx)
 	if err != nil {
-		return "", fmt.Errorf("resolve gram's own gcp identity to screen impersonation target: %w", err)
+		return TargetUnknown, "", fmt.Errorf("resolve gram's own gcp identity to screen impersonation target: %w", err)
 	}
 
 	gramProject := serviceAccountProject(gramSA)
@@ -158,14 +192,14 @@ func (i *Identity) ImpersonationTargetProblem(ctx context.Context, logger *slog.
 		// Gram a dedicated service account) rather than a hole to leave open.
 		logger.ErrorContext(ctx, "gram's own gcp identity is not a user-managed service account, cannot screen impersonation targets",
 			attr.SlogError(errors.New("unrecognized service account form")))
-		return "", fmt.Errorf("gram's own gcp identity %q is not a user-managed service account", gramSA)
+		return TargetUnknown, "", fmt.Errorf("gram's own gcp identity %q is not a user-managed service account", gramSA)
 	}
 
 	if serviceAccountProject(target) == gramProject {
-		return "impersonate_service_account must be a service account in your own GCP project", nil
+		return TargetOwnProject, "impersonate_service_account must be a service account in your own GCP project", nil
 	}
 
-	return "", nil
+	return TargetOK, "", nil
 }
 
 // serviceAccountProject extracts the project id from a user-managed GCP service

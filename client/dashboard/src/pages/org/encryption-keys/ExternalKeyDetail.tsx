@@ -14,13 +14,23 @@ import { activeDetailTab } from "@/lib/detail-tabs";
 import { useOrgRoutes } from "@/routes";
 import { Scope } from "@gram/client/models/components/rolegrant.js";
 import { useGetGcpKmsKey } from "@gram/client/react-query/getGcpKmsKey";
+import { isNotNotFound } from "@/lib/query-errors";
 import { Link, Navigate, useLocation, useParams } from "react-router";
 import { providerFromSlug, providerLabel } from "./providers";
 import { EXTERNAL_KEY_TABS, type ExternalKeyTab } from "./tabs";
 import { OverviewTab } from "./tabs/OverviewTab";
 import { SettingsTab } from "./tabs/SettingsTab";
+import { SigningKeysTab } from "./tabs/SigningKeysTab";
 
 const ORG_READ_SCOPES: Scope[] = ["org:read", "org:admin"];
+
+// Route keys are camelCase while tab segments are kebab-case, so the tab id has
+// to be translated before indexing the route helpers.
+const EXTERNAL_KEY_TAB_ROUTE_KEY = {
+  overview: "overview",
+  "signing-keys": "signingKeys",
+  settings: "settings",
+} as const satisfies Record<ExternalKeyTab, string>;
 
 export default function ExternalKeyDetail(): JSX.Element {
   const { provider: providerParam = "", keyId = "" } = useParams<{
@@ -50,11 +60,18 @@ export default function ExternalKeyDetail(): JSX.Element {
     isError,
   } = useGetGcpKmsKey({ id: keyId }, undefined, {
     enabled: isGcp && keyId !== "" && canRead,
+    // A missing key is handled below by returning to the list; left to the
+    // default, the 404 would surface as a crash in the error boundary. Every
+    // other failure still belongs to the boundary.
+    throwOnError: isNotNotFound,
   });
 
   const activeTab = activeDetailTab(location.pathname, EXTERNAL_KEY_TABS);
   const tabHref = (tab: ExternalKeyTab) =>
-    orgRoutes.encryptionKeys.keyDetail[tab].href(providerParam, keyId);
+    orgRoutes.encryptionKeys.keyDetail[EXTERNAL_KEY_TAB_ROUTE_KEY[tab]].href(
+      providerParam,
+      keyId,
+    );
 
   const label = externalKey?.name ?? "Encryption Key";
 
@@ -122,6 +139,9 @@ export default function ExternalKeyDetail(): JSX.Element {
                 <PageTabsTrigger value="overview" asChild>
                   <Link to={tabHref("overview")}>Overview</Link>
                 </PageTabsTrigger>
+                <PageTabsTrigger value="signing-keys" asChild>
+                  <Link to={tabHref("signing-keys")}>Signing Keys</Link>
+                </PageTabsTrigger>
                 <PageTabsTrigger value="settings" asChild>
                   <Link to={tabHref("settings")}>Settings</Link>
                 </PageTabsTrigger>
@@ -138,6 +158,9 @@ export default function ExternalKeyDetail(): JSX.Element {
                 <OverviewTab key={externalKey.id} externalKey={externalKey} />
               )}
               {isLoading && <Text muted>Loading…</Text>}
+            </TabsContent>
+            <TabsContent value="signing-keys" className="mt-0">
+              <SigningKeysTab externalKeyId={keyId} />
             </TabsContent>
             <TabsContent value="settings" className="mt-0">
               {externalKey && (

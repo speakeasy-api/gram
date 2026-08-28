@@ -203,9 +203,14 @@ func (s *Service) CreateUserSessionIssuerCimdClient(ctx context.Context, payload
 		return nil, oops.E(oops.CodeUnexpected, err, "create user session issuer cimd client").LogError(ctx, logger)
 	}
 
+	projectID := ""
+	if row.ProjectID.Valid {
+		projectID = row.ProjectID.UUID.String()
+	}
+
 	view := &types.UserSessionIssuerCimdClient{
 		ID:                  row.ID.String(),
-		ProjectID:           row.ProjectID.String(),
+		ProjectID:           projectID,
 		UserSessionIssuerID: row.UserSessionIssuerID.String(),
 		ClientIDMetadataURI: row.ClientIDMetadataUri,
 		CreatedAt:           row.CreatedAt.Time.Format(time.RFC3339),
@@ -390,9 +395,14 @@ func (s *Service) DeleteUserSessionIssuerCimdClient(ctx context.Context, payload
 }
 
 func userSessionIssuerCimdClientView(row repo.UserSessionIssuerCimdClient) *types.UserSessionIssuerCimdClient {
+	projectID := ""
+	if row.ProjectID.Valid {
+		projectID = row.ProjectID.UUID.String()
+	}
+
 	return &types.UserSessionIssuerCimdClient{
 		ID:                  row.ID.String(),
-		ProjectID:           row.ProjectID.String(),
+		ProjectID:           projectID,
 		UserSessionIssuerID: row.UserSessionIssuerID.String(),
 		ClientIDMetadataURI: row.ClientIDMetadataUri,
 		CreatedAt:           row.CreatedAt.Time.Format(time.RFC3339),

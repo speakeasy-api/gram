@@ -247,7 +247,8 @@ SELECT
   gic.impersonate_service_account,
   gic.wif_pool_id,
   gic.wif_provider_id,
-  gic.wif_project_number
+  gic.wif_project_number,
+  gic.skip_project_verification
 FROM external_keys AS ek
 LEFT JOIN gcp_kms_keys AS gcp ON gcp.external_key_id = ek.id
 LEFT JOIN external_credentials AS ec
@@ -277,6 +278,7 @@ type GetExternalKeyForMintRow struct {
 	WifPoolID                 pgtype.Text
 	WifProviderID             pgtype.Text
 	WifProjectNumber          pgtype.Text
+	SkipProjectVerification   pgtype.Bool
 }
 
 // Loads everything the mint path needs in one read, before the write
@@ -315,6 +317,7 @@ func (q *Queries) GetExternalKeyForMint(ctx context.Context, arg GetExternalKeyF
 		&i.WifPoolID,
 		&i.WifProviderID,
 		&i.WifProjectNumber,
+		&i.SkipProjectVerification,
 	)
 	return i, err
 }

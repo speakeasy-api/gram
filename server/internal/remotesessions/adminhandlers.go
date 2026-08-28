@@ -692,8 +692,8 @@ func (s *Service) ListGlobalIssuerConvergenceCandidates(ctx context.Context, pay
 			// Both are pure functions of the two issuer records, so the listing can
 			// explain a near-miss without the per-candidate queries the full
 			// preflight needs.
-			EndpointMismatches: endpointMismatches(candidate, target),
-			Warnings:           migrationWarnings(candidate, target),
+			EndpointMismatches: issuerFieldMismatchViews(endpointMismatches(candidate, target)),
+			Warnings:           issuerFieldMismatchViews(migrationWarnings(candidate, target)),
 		})
 	}
 
@@ -742,9 +742,9 @@ func (s *Service) GetGlobalIssuerMigratePreflight(ctx context.Context, payload *
 	return &adminrsgen.IssuerMigratePreflight{
 		ClientCount:               int(preflight.clientCount),
 		McpServerNames:            preflight.mcpServerNames,
-		EndpointMismatches:        preflight.endpointMismatches,
+		EndpointMismatches:        issuerFieldMismatchViews(preflight.endpointMismatches),
 		ConflictingMcpServerNames: preflight.conflictingMcpServerNames,
-		Warnings:                  preflight.warnings,
+		Warnings:                  issuerFieldMismatchViews(preflight.warnings),
 		CanMigrate:                preflight.canMigrate(),
 		TargetTenantClientCount:   int(targetTenantClients),
 	}, nil

@@ -82,6 +82,7 @@ import (
 	toolsets_repo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/cimd"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/cimd/admission"
+	"github.com/speakeasy-api/gram/server/internal/usersessions/clientauth"
 	"github.com/speakeasy-api/gram/tunnel/route"
 )
 
@@ -121,30 +122,34 @@ type Service struct {
 	// before the resolver runs, on their own cimd.admission.decisions
 	// instrument (a denial performs no fetch, so it has no place under
 	// cimd.fetch.attempts).
-	cimdAdmissionMetrics   *admission.Metrics
-	toolProxy              *gateway.ToolProxy
-	oauthRepo              *oauth_repo.Queries
-	billingTracker         billing.Tracker
-	billingRepository      billing.Repository
-	toolsetCache           cache.TypedCacheObject[mv.ToolsetBaseContents]
-	telemLogger            *tm.Logger
-	vectorToolStore        *rag.ToolsetVectorStore
-	temporal               *temporal.Environment
-	assistantTokens        *assistanttokens.Manager
-	sessions               *sessions.Manager
-	identityResolver       IdentityResolver
-	chatSessionsManager    *chatsessions.Manager
-	externalmcpRepo        *externalmcp_repo.Queries
-	deploymentsRepo        *deployments_repo.Queries
-	enc                    *encryption.Client
-	authz                  *authz.Engine
-	shadowMCPClient        *shadowmcp.Client
-	auditLogger            *audit.Logger
-	platformExtras         []platformtools.ExternalTool
-	platformFeatureChecker platformtools.FeatureChecker
-	platformToolsets       map[string]platformtools.Toolset
-	authnChallengeCache    cache.TypedCacheObject[AuthnChallengeState]
-	userSessionGrantCache  cache.TypedCacheObject[UserSessionGrant]
+	cimdAdmissionMetrics *admission.Metrics
+	// clientAssertionVerifier verifies private_key_jwt client assertions at
+	// the token and revocation endpoints. Nil without Redis, in which case
+	// assertion clients are refused rather than admitted unverified.
+	clientAssertionVerifier *clientauth.Verifier
+	toolProxy               *gateway.ToolProxy
+	oauthRepo               *oauth_repo.Queries
+	billingTracker          billing.Tracker
+	billingRepository       billing.Repository
+	toolsetCache            cache.TypedCacheObject[mv.ToolsetBaseContents]
+	telemLogger             *tm.Logger
+	vectorToolStore         *rag.ToolsetVectorStore
+	temporal                *temporal.Environment
+	assistantTokens         *assistanttokens.Manager
+	sessions                *sessions.Manager
+	identityResolver        IdentityResolver
+	chatSessionsManager     *chatsessions.Manager
+	externalmcpRepo         *externalmcp_repo.Queries
+	deploymentsRepo         *deployments_repo.Queries
+	enc                     *encryption.Client
+	authz                   *authz.Engine
+	shadowMCPClient         *shadowmcp.Client
+	auditLogger             *audit.Logger
+	platformExtras          []platformtools.ExternalTool
+	platformFeatureChecker  platformtools.FeatureChecker
+	platformToolsets        map[string]platformtools.Toolset
+	authnChallengeCache     cache.TypedCacheObject[AuthnChallengeState]
+	userSessionGrantCache   cache.TypedCacheObject[UserSessionGrant]
 	// userSessionRefreshReplayCache retains the encrypted rotation outcome.
 	userSessionRefreshReplayCache cache.TypedCacheObject[userSessionRefreshReplay]
 
@@ -175,6 +180,9 @@ type Service struct {
 	tunnelManager      *tunnelManager
 	// Nil when no Redis was wired; every public tunneled request then fails closed.
 	tunnelPublic *tunnelPublicRuntime
+
+	// metaRuntime bounds the gateway's per-member upstream work.
+	metaRuntime MetaRuntimeConfig
 }
 
 // oauthTokenInputs is one upstream OAuth access token collected during MCP
@@ -210,29 +218,30 @@ type oauthTokenInputs struct {
 // left empty, so dispatch injects a remote-session token into every matching
 // oauth2 tool — correct only when a single remote issuer is bound.
 //
-// Fails closed when more than one token resolves: without per-tool routing
-// (AIS-152) we cannot tell which tool needs which issuer's token, and
-// injecting all of them with empty securityKeys could forward the wrong
-// bearer upstream. This mirrors singleUpstreamToken's fail-closed posture for
-// the remote-MCP backend. The state is unreachable while the
-// remote_session_client_user_session_issuers one_per_issuer index caps a
-// user_session_issuer at one client; it becomes reachable once AIS-137 drops
-// that index, at which point AIS-152 must land to route per tool.
-func appendRemoteSessionTokenInputs(dst []oauthTokenInputs, tokens map[uuid.UUID]string) ([]oauthTokenInputs, error) {
+// Fails closed when more than one token resolves: nothing maps a tool's
+// security scheme to a remote_session_issuer (AGE-3285), so we cannot tell
+// which tool needs which issuer's token, and injecting all of them with empty
+// securityKeys would forward an arbitrary bearer upstream. This mirrors
+// routeUpstreamToken's fail-closed posture for the proxied-MCP backends,
+// which can route by the credential's grant-time resource — toolset dispatch
+// has no equivalent qualified identity yet. The multi-token state is
+// reachable: the one_per_issuer index that used to cap a user_session_issuer
+// at one client was dropped in AIS-137.
+func appendRemoteSessionTokenInputs(dst []oauthTokenInputs, tokens map[uuid.UUID]remotesessions.UpstreamToken) ([]oauthTokenInputs, error) {
 	if len(tokens) > 1 {
-		return nil, fmt.Errorf("issuer-gated endpoint resolved %d remote-session upstream tokens; per-tool routing required to dispatch (AIS-152)", len(tokens))
+		return nil, fmt.Errorf("issuer-gated endpoint resolved %d remote-session upstream tokens; per-tool routing requires a security-scheme-to-issuer mapping (AGE-3285)", len(tokens))
 	}
-	for issuerID, token := range tokens {
+	for issuerID, entry := range tokens {
 		// Defensive: ResolveAccessTokens never maps an issuer to an empty
 		// token (it returns ErrNoValidToken instead), so this skip should not
 		// fire; it guards against a caller passing an empty-valued entry.
-		if token == "" {
+		if entry.Token == "" {
 			continue
 		}
 		dst = append(dst, oauthTokenInputs{
 			securityKeys:          nil,
 			remoteSessionIssuerID: uuid.NullUUID{UUID: issuerID, Valid: true},
-			Token:                 token,
+			Token:                 entry.Token,
 		})
 	}
 	return dst, nil
@@ -254,6 +263,10 @@ type mcpInputs struct {
 	// toolVariationsGroupID is the effective variation group resolved per
 	// request (mcp_servers, then toolsets, then nil for the project default).
 	toolVariationsGroupID *uuid.UUID
+	// skipProxyTools drops external-MCP passthrough tools from dispatch.
+	// The meta surface sets it: those tools are hidden from its describe
+	// catalog, so execute must not reach them through the hosted path either.
+	skipProxyTools bool
 	// mcpServerID is the fronting mcp_servers row id when the request arrived
 	// via an mcp_endpoint. Nil on the legacy toolset-by-slug path and for
 	// internal (agent-workflow) callers, which have no fronting server.
@@ -315,6 +328,7 @@ func NewService(
 	tunnelGatewayCIDRs []string,
 	redisClient *redis.Client,
 	tunnelPublicConfig TunnelPublicConfig,
+	metaRuntimeConfig MetaRuntimeConfig,
 ) *Service {
 	tracer := tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/mcp")
 	meter := meterProvider.Meter("github.com/speakeasy-api/gram/server/internal/mcp")
@@ -332,25 +346,26 @@ func NewService(
 	)
 
 	return &Service{
-		logger:               logger,
-		tracer:               tracer,
-		metrics:              mcpmetrics.NewMetrics(meter, logger),
-		guardianPolicy:       guardianPolicy,
-		db:                   db,
-		authRepo:             auth_repo.New(db),
-		toolsetsRepo:         toolsets_repo.New(db),
-		mcpMetadataRepo:      metadata_repo.New(db),
-		orgsRepo:             organizations_repo.New(db),
-		deploymentsRepo:      deployments_repo.New(db),
-		externalmcpRepo:      externalmcp_repo.New(db),
-		auth:                 auth.New(logger, db, sessions, authzEngine),
-		env:                  env,
-		serverURL:            serverURL,
-		siteURL:              siteURL,
-		posthog:              posthog,
-		features:             features,
-		cimdResolver:         cimd.NewResolver(guardianPolicy, meterProvider, logger),
-		cimdAdmissionMetrics: admission.NewMetrics(meterProvider, logger),
+		logger:                  logger,
+		tracer:                  tracer,
+		metrics:                 mcpmetrics.NewMetrics(meter, logger),
+		guardianPolicy:          guardianPolicy,
+		db:                      db,
+		authRepo:                auth_repo.New(db),
+		toolsetsRepo:            toolsets_repo.New(db),
+		mcpMetadataRepo:         metadata_repo.New(db),
+		orgsRepo:                organizations_repo.New(db),
+		deploymentsRepo:         deployments_repo.New(db),
+		externalmcpRepo:         externalmcp_repo.New(db),
+		auth:                    auth.New(logger, db, sessions, authzEngine),
+		env:                     env,
+		serverURL:               serverURL,
+		siteURL:                 siteURL,
+		posthog:                 posthog,
+		features:                features,
+		cimdResolver:            cimd.NewResolver(guardianPolicy, meterProvider, logger),
+		cimdAdmissionMetrics:    admission.NewMetrics(meterProvider, logger),
+		clientAssertionVerifier: newClientAssertionVerifier(redisClient, guardianPolicy, meterProvider, logger),
 		toolProxy: gateway.NewToolProxy(
 			logger,
 			tracerProvider,
@@ -412,6 +427,7 @@ func NewService(
 		remoteProxyManager: remoteProxyManager,
 		tunnelManager:      newTunnelManager(tunnelRoutes, tunnelForwardToken, remoteProxyManager, tunnelGatewayCIDRs),
 		tunnelPublic:       newTunnelPublicRuntime(redisClient, tunnelPublicConfig),
+		metaRuntime:        metaRuntimeConfig.withDefaults(),
 	}
 }
 
@@ -792,7 +808,7 @@ func (s *Service) ServePublic(w http.ResponseWriter, r *http.Request) error {
 // caller-side issuer gate (today: /x/mcp's pre-dispatch ApplyIssuerGate run).
 // Nil when the caller ran no gate or the session carries no policy; the
 // in-toolset gate below populates it for /mcp callers.
-func (s *Service) ServeToolsetResolved(w http.ResponseWriter, r *http.Request, toolset *toolsets_repo.Toolset, mcpSlug, mcpRouteBase string, skipIssuerGate bool, extraUpstreamTokens map[uuid.UUID]string, callerToolSelection *toolfilter.SessionSelection, mcpServerVariationsGroupID *uuid.UUID, mcpServerID *uuid.UUID) error {
+func (s *Service) ServeToolsetResolved(w http.ResponseWriter, r *http.Request, toolset *toolsets_repo.Toolset, mcpSlug, mcpRouteBase string, skipIssuerGate bool, extraUpstreamTokens map[uuid.UUID]remotesessions.UpstreamToken, callerToolSelection *toolfilter.SessionSelection, mcpServerVariationsGroupID *uuid.UUID, mcpServerID *uuid.UUID) error {
 	ctx := r.Context()
 	var err error
 
@@ -1015,6 +1031,7 @@ func (s *Service) ServeToolsetResolved(w http.ResponseWriter, r *http.Request, t
 		apiKeyID:              apiKeyID,
 		toolVariationsGroupID: toolVariationsGroupID,
 		mcpServerID:           mcpServerID,
+		skipProxyTools:        false,
 		tags:                  tags,
 		protocolVersion:       mcpversions.Resolve(mcprequests.DeclaredProtocolVersion(r.Header.Get(mcpversions.HTTPHeader), req.Params), mcpversions.SupportedHostedToolset()),
 		toolSelection:         callerToolSelection,

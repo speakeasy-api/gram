@@ -136,7 +136,12 @@ const RISK_FILTERS = defineFilters([
     kind: "text",
     placeholder: "User contains...",
   },
-  { id: "unique", label: "Unique matches only", kind: "boolean" },
+  {
+    id: "unique",
+    label: "Unique matches only",
+    kind: "boolean",
+    description: "Keep the latest row per policy, rule and matched value.",
+  },
   { id: "assistant", label: "Assistant", kind: "select" },
 ]);
 

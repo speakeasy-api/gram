@@ -361,29 +361,6 @@ export const INSIGHTS_SUGGESTIONS = {
     },
   ],
 
-  elements: [
-    {
-      title: "How many chat sessions?",
-      label: "Embedded chat sessions",
-      icon: "chat",
-      prompt:
-        "How many chat sessions have come through embedded clients recently, and how is that trending?",
-    },
-    {
-      title: "What do users ask?",
-      label: "What users ask",
-      icon: "search",
-      prompt: "What are end users asking most often in chat sessions?",
-    },
-    {
-      title: "Which chats failed?",
-      label: "Chats that errored",
-      icon: "alert",
-      prompt:
-        "Find recent chat sessions that ended in errors and summarize what went wrong.",
-    },
-  ],
-
   integrations: [
     {
       title: "Which integrations are used?",

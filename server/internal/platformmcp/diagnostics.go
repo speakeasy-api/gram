@@ -132,7 +132,7 @@ func (s *DiagnosticsService) valid() bool {
 // filters: the overview is the entry point, and narrowing happens through the
 // drill-down tools once it has identified something to look at.
 type GetProjectOverviewInput struct {
-	ProjectID string `json:"project_id" jsonschema:"AICP project ID to summarize"`
+	ProjectID string `json:"project_id" jsonschema:"project ID to summarize"`
 	Window    string `json:"window,omitempty" jsonschema:"observation window: 1h, 24h (default), 7d, or 30d"`
 }
 
@@ -275,7 +275,7 @@ func (s *DiagnosticsService) GetProjectOverview(ctx context.Context, principal P
 // GetMCPDiagnosticsInput names one configured MCP, using the same identity
 // find_mcp and get_mcp return.
 type GetMCPDiagnosticsInput struct {
-	ProjectID string `json:"project_id" jsonschema:"AICP project ID that owns the MCP"`
+	ProjectID string `json:"project_id" jsonschema:"project ID that owns the MCP"`
 	MCPID     string `json:"mcp_id" jsonschema:"configured MCP ID as returned by find_mcp or get_mcp"`
 	Window    string `json:"window,omitempty" jsonschema:"observation window: 1h (default) or 24h"`
 }

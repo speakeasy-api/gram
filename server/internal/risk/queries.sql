@@ -68,6 +68,12 @@ WHERE id = @id
   AND deleted IS FALSE
 FOR UPDATE;
 
+-- name: LockRiskPolicyMutations :exec
+-- Serialize all policy writes in one project. The single enabled blocking
+-- Shadow MCP policy invariant spans multiple rows, so a row lock alone cannot
+-- protect concurrent creates or enable/disable transitions.
+SELECT pg_advisory_xact_lock(hashtextextended('risk-policy:' || @project_id::text, 0));
+
 -- name: GetRiskPolicyNameIncludingDeleted :one
 SELECT name
 FROM risk_policies
@@ -80,6 +86,34 @@ FROM risk_policies
 WHERE project_id = @project_id
   AND deleted IS FALSE
 ORDER BY created_at DESC;
+
+-- name: ListRiskPolicyCreateCandidates :many
+-- Platform MCP create convergence narrows by the stable public identity before
+-- loading sensitive policy definitions for exact canonical comparison.
+SELECT *
+FROM risk_policies
+WHERE project_id = @project_id
+  AND name = @name
+  AND policy_type = @policy_type
+  AND deleted IS FALSE
+ORDER BY id;
+
+-- name: ListRiskPoliciesPage :many
+-- Platform MCP keyset page. The existing unbounded query remains the Goa
+-- compatibility path.
+SELECT *
+FROM risk_policies
+WHERE project_id = @project_id
+  AND deleted IS FALSE
+  AND (
+    sqlc.narg(cursor_created_at)::timestamptz IS NULL
+    OR (created_at, id) < (
+      sqlc.narg(cursor_created_at)::timestamptz,
+      sqlc.narg(cursor_id)::uuid
+    )
+  )
+ORDER BY created_at DESC, id DESC
+LIMIT @page_limit;
 
 -- name: ListEnabledRiskPoliciesByProject :many
 SELECT *
@@ -856,13 +890,17 @@ ORDER BY buckets.bucket_start ASC, categories.category ASC;
 -- (project_id, id WHERE risk_analyzed_at IS NULL), which shrinks toward
 -- zero at steady state. The id >= @id_lower_bound bound (a UUIDv7 lower
 -- bound computed from the configured lookback) further limits the scan to
--- recent messages, reusing the same partial index ordering.
+-- recent messages, reusing the same partial index ordering. Oldest-first:
+-- under a backlog above the batch limit, newest-first would keep serving
+-- fresh messages while units nearing the lookback's edge age out without a
+-- retry; ascending order drains the window fairly and costs at most the
+-- lookback in added freshness latency.
 SELECT cm.id
 FROM chat_messages cm
 WHERE cm.project_id = @project_id
   AND cm.risk_analyzed_at IS NULL
   AND cm.id >= @id_lower_bound
-ORDER BY cm.id DESC
+ORDER BY cm.id ASC
 LIMIT @batch_limit;
 
 -- name: MarkMessagesRiskAnalyzed :exec
@@ -874,13 +912,14 @@ WHERE id = ANY(@message_ids::uuid[])
 -- name: FetchUnanalyzedContentPartIDs :many
 -- Scans the partial index chat_content_parts_risk_analyzed_at_null_idx
 -- (project_id, id WHERE risk_analyzed_at IS NULL), mirroring the chat_messages
--- unanalyzed sweep for non-turn content.
+-- unanalyzed sweep for non-turn content, including its oldest-first order so
+-- a backlog cannot starve units nearing the lookback's edge.
 SELECT ccp.id
 FROM chat_content_parts ccp
 WHERE ccp.project_id = @project_id
   AND ccp.risk_analyzed_at IS NULL
   AND ccp.id >= @id_lower_bound
-ORDER BY ccp.id DESC
+ORDER BY ccp.id ASC
 LIMIT @batch_limit;
 
 -- name: MarkContentPartsRiskAnalyzed :exec
@@ -1098,17 +1137,40 @@ DO UPDATE SET
 WHERE EXCLUDED.found IS TRUE
   AND risk_results.found IS FALSE;
 
--- name: DeleteRiskResultsForMessages :exec
+-- name: DeleteRiskResultsForUnits :many
+-- Replaces a batch's rows across both anchor kinds in one statement.
+-- Returns the identity and dismissal columns of what the re-analysis
+-- replaced: the writer recomputes each row's deterministic id from the
+-- identity columns to learn which findings an earlier committed attempt
+-- already announced (their webhook outbox events must not be re-emitted) and
+-- which carried a manual dismissal to re-stamp onto the reinserted rows.
+-- Recomputing from identity rather than trusting the stored id keeps rows
+-- written before ids became deterministic (random UUIDs) on the same footing
+-- as new ones. Heavy payload columns (match aside, which is identity) stay
+-- out of the RETURNING set.
 DELETE FROM risk_results
 WHERE risk_policy_id = @risk_policy_id
   AND project_id = @project_id
-  AND chat_message_id = ANY(@message_ids::uuid[]);
+  AND (chat_message_id = ANY(@message_ids::uuid[])
+    OR chat_content_part_id = ANY(@content_part_ids::uuid[]))
+RETURNING id, risk_policy_version, chat_message_id, chat_content_part_id,
+  found, source, rule_id, description, match, start_pos, end_pos,
+  dead_letter_reason, false_positive_at, false_positive_reason;
 
--- name: DeleteRiskResultsForContentParts :exec
-DELETE FROM risk_results
-WHERE risk_policy_id = @risk_policy_id
-  AND project_id = @project_id
-  AND chat_content_part_id = ANY(@content_part_ids::uuid[]);
+-- name: RestoreRiskResultFalsePositiveState :exec
+-- Re-stamps manual dismissals onto re-analyzed rows in the same transaction
+-- that replaced them. Ids that were not reinserted (the finding disappeared)
+-- match nothing, so a vanished finding's dismissal dies with it.
+UPDATE risk_results
+SET false_positive_at = v.false_positive_at
+  , false_positive_reason = NULLIF(v.false_positive_reason, '')
+FROM (
+    SELECT UNNEST(@ids::uuid[]) AS id
+         , UNNEST(@false_positive_ats::timestamptz[]) AS false_positive_at
+         , UNNEST(@false_positive_reasons::text[]) AS false_positive_reason
+) v
+WHERE risk_results.id = v.id
+  AND risk_results.project_id = @project_id;
 
 -- name: GetRiskResultByID :one
 -- Single-row lookup backing risk.results.unmask: fetch a result's raw match
@@ -1495,6 +1557,19 @@ WHERE id = @id
   AND project_id = @project_id
   AND deleted IS FALSE;
 
+-- name: GetRiskExclusionForUpdate :one
+SELECT *
+FROM risk_exclusions
+WHERE id = @id
+  AND project_id = @project_id
+  AND deleted IS FALSE
+FOR UPDATE;
+
+-- name: LockRiskExclusionMutations :exec
+-- Serialize exclusion writes per project. Regex limits span rows and include the
+-- empty global scope, so row locks alone cannot protect the count-and-write.
+SELECT pg_advisory_xact_lock(hashtextextended('risk-exclusion:' || @project_id::text, 0));
+
 -- name: GetRiskExclusionForReconcile :one
 -- Fetches an exclusion regardless of deleted/enabled state so the reconcile
 -- sweep can decide whether to apply (enabled) or only reverse (deleted/disabled).
@@ -1515,6 +1590,24 @@ WHERE project_id = @project_id
   AND (sqlc.narg(risk_policy_id)::uuid IS NULL OR risk_policy_id = sqlc.narg(risk_policy_id))
 ORDER BY created_at DESC;
 
+-- name: ListRiskExclusionsByProjectPage :many
+-- Platform MCP keyset page. The existing unbounded query remains the Goa
+-- compatibility path.
+SELECT *
+FROM risk_exclusions
+WHERE project_id = @project_id
+  AND deleted IS FALSE
+  AND (sqlc.narg(risk_policy_id)::uuid IS NULL OR risk_policy_id = sqlc.narg(risk_policy_id))
+  AND (
+    sqlc.narg(cursor_created_at)::timestamptz IS NULL
+    OR (created_at, id) < (
+      sqlc.narg(cursor_created_at)::timestamptz,
+      sqlc.narg(cursor_id)::uuid
+    )
+  )
+ORDER BY created_at DESC, id DESC
+LIMIT @page_limit;
+
 -- name: ListEnabledExclusionsForPolicy :many
 -- Exclusions that apply when analyzing/enforcing a given policy: the policy's
 -- own plus every global one. Used to build the going-forward ExclusionSet.
@@ -1528,14 +1621,16 @@ ORDER BY created_at;
 
 -- name: CountEnabledRegexExclusionsInScope :one
 -- Enforces the per-scope regex cap. Counts enabled regex exclusions sharing the
--- same scope (same risk_policy_id, treating NULL/global as its own bucket).
+-- same scope (same risk_policy_id, treating NULL/global as its own bucket),
+-- optionally excluding the row currently being updated.
 SELECT COUNT(*)::BIGINT
 FROM risk_exclusions
 WHERE project_id = @project_id
   AND match_type = 'regex'
   AND enabled IS TRUE
   AND deleted IS FALSE
-  AND risk_policy_id IS NOT DISTINCT FROM sqlc.narg(risk_policy_id);
+  AND risk_policy_id IS NOT DISTINCT FROM sqlc.narg(risk_policy_id)
+  AND (sqlc.narg(exclude_id)::uuid IS NULL OR id <> sqlc.narg(exclude_id));
 
 -- name: UpdateRiskExclusion :one
 UPDATE risk_exclusions
@@ -1580,9 +1675,10 @@ WHERE project_id = @project_id
   AND id = ANY(@ids::uuid[]);
 
 -- name: MarkRiskResultsFalsePositive :many
--- Returns full rows (not just id): the caller republishes each one onto the
--- findings topic to append a ClickHouse state-change row, and needs the
--- finding content (source/rule_id/match/...) to build that message.
+-- Returns the full rows the UPDATE actually changed: they drive audit logging
+-- and the ClickHouse mirror's outbox enqueue, both inside the same
+-- transaction as this UPDATE, so a retry that changes nothing correctly
+-- audits and mirrors nothing.
 UPDATE risk_results
 SET false_positive_at = clock_timestamp()
   , false_positive_reason = sqlc.narg(reason)
@@ -1754,6 +1850,7 @@ SELECT
     b.project_id,
     b.reason,
     b.tool_name,
+    b.provider,
     b.feedback,
     b.created_at,
     b.user_id,
@@ -1793,7 +1890,7 @@ WHERE tool_call_blocks.id = sqlc.arg(id)
       AND our.deleted_at IS NULL
   )
 RETURNING tool_call_blocks.id, tool_call_blocks.project_id, tool_call_blocks.reason, tool_call_blocks.tool_name,
-  tool_call_blocks.feedback, tool_call_blocks.created_at,
+  tool_call_blocks.provider, tool_call_blocks.feedback, tool_call_blocks.created_at,
   COALESCE((SELECT rp.name FROM risk_policies rp WHERE rp.id = tool_call_blocks.risk_policy_id AND rp.deleted IS FALSE), '')::text AS policy_name;
 
 

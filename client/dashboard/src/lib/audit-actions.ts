@@ -36,6 +36,7 @@ export const AUDIT_ACTIONS = [
   "chat_session:access",
   "chat_session:handoff_export",
   "chat_session:move",
+  "chat_session:recall",
   "custom_domains:create",
   "custom_domains:delete",
   "custom_domains:update",
@@ -63,6 +64,10 @@ export const AUDIT_ACTIONS = [
   "json_web_key_set:create",
   "json_web_key_set:delete",
   "json_web_key_set:update",
+  "killswitch:activate",
+  "killswitch:change",
+  "killswitch:deactivate",
+  "killswitch:expire",
   "litellm_instance:create",
   "litellm_instance:revoke",
   "litellm_instance:rotate_key",
@@ -327,6 +332,8 @@ export function staticActionPhrase(action: AuditAction): string {
       return "exported chat session handoff";
     case "chat_session:move":
       return "moved chat session";
+    case "chat_session:recall":
+      return "recalled chat session";
 
     case "custom_domains:create":
       return "added custom domain";
@@ -357,6 +364,15 @@ export function staticActionPhrase(action: AuditAction): string {
       return "updated environment";
     case "environment:delete":
       return "deleted environment";
+
+    case "killswitch:activate":
+      return "activated killswitch";
+    case "killswitch:change":
+      return "changed killswitch";
+    case "killswitch:deactivate":
+      return "deactivated killswitch";
+    case "killswitch:expire":
+      return "recorded killswitch expiry";
 
     case "litellm_instance:create":
       return "created LiteLLM instance";

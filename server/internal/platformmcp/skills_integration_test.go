@@ -57,7 +57,7 @@ func TestPlatformMCPSkillsToolsAuthorAndDistributeEndToEnd(t *testing.T) {
 	require.True(t, created.CreatedSkill)
 	require.True(t, created.CreatedVersion)
 	require.False(t, created.Distributed)
-	require.Contains(t, created.InertMessage, "inert")
+	require.Contains(t, created.InertMessage, "no agent loads it yet")
 	require.Equal(t, "distribute_skill", created.NextAction)
 	require.Contains(t, skillTargetNames(created.DistributionTargets), "Marketing")
 
@@ -344,7 +344,7 @@ func newSkillsVerticalFixture(t *testing.T, ctx context.Context, name string, op
 
 	runtime := NewRuntimeWithLifecycle(
 		logger, &testAuthenticator{principal: principal}, testGate{enabled: true}, &testAuthorizer{},
-		"", "test-cursor-key", nil, nil, nil, nil, nil, nil, nil, nil, skillsSurface, nil, nil, CatalogDescriptor{},
+		"", "test-cursor-key", nil, nil, nil, nil, nil, nil, nil, nil, skillsSurface, nil, nil, nil, CatalogDescriptor{},
 	)
 	server := httptest.NewServer(runtime.Handler())
 	t.Cleanup(server.Close)

@@ -54,6 +54,7 @@ const SKILL_FILTERS = defineFilters([
     label: "Classification",
     kind: "multiselect",
     pinned: true,
+    description: "Whether a skill is your own or ships with a plugin.",
   },
   {
     id: "tags",
@@ -185,7 +186,13 @@ export default function SkillsList(): JSX.Element {
     ? metricSkills
     : (pageQuery.data?.result.skills ?? EMPTY_SKILLS);
   const insightsQuery = useSkillEfficacyInsights(
-    metricSort ? {} : { skillIds: insightSkills.map((skill) => skill.id) },
+    metricSort
+      ? { includeSessionCost: false, includeRegressionSignal: false }
+      : {
+          skillIds: insightSkills.map((skill) => skill.id),
+          includeSessionCost: false,
+          includeRegressionSignal: false,
+        },
     undefined,
     {
       throwOnError: false,

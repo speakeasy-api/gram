@@ -5,6 +5,7 @@ import (
 
 	. "goa.design/goa/v3/dsl"
 
+	"github.com/speakeasy-api/gram/server/design/auditlogs"
 	"github.com/speakeasy-api/gram/server/design/security"
 	"github.com/speakeasy-api/gram/server/design/shared"
 	"github.com/speakeasy-api/gram/server/internal/constants"
@@ -25,20 +26,21 @@ var AdminOrganization = Type("AdminOrganization", func() {
 		Description("The time at which the organization was disabled, if any.")
 		Format(FormatDateTime)
 	})
-	Attribute("free_trial_started_at", String, func() {
-		Description("The time at which the free trial started.")
-		Format(FormatDateTime)
-	})
-	Attribute("free_trial_ends_at", String, func() {
-		Description("The time at which the free trial ends.")
-		Format(FormatDateTime)
-	})
 	Attribute("trial_state", String, func() {
 		Description("Lifecycle state of the organization's enterprise trial.")
 		Enum("none", "running", "ending_soon", "expired", "demoted", "converted")
 	})
+	Attribute("trial_tier", String, "The trial tier. Absent when the organization never trialled.")
 	Attribute("trial_ends_at", String, func() {
 		Description("The time at which the enterprise trial ends. Absent when the organization never trialled.")
+		Format(FormatDateTime)
+	})
+	Attribute("trial_converted_at", String, func() {
+		Description("The time at which the trial converted to a paid plan, if any.")
+		Format(FormatDateTime)
+	})
+	Attribute("trial_demoted_at", String, func() {
+		Description("The time at which the organization was demoted after its trial, if any.")
 		Format(FormatDateTime)
 	})
 	Attribute("member_count", Int, "Number of active members in the organization.")
@@ -136,6 +138,13 @@ var AdminListOrganizationsResult = Type("AdminListOrganizationsResult", func() {
 	Attribute("organizations", ArrayOf(AdminOrganization), "The page of organizations.")
 	Attribute("next_cursor", String, "Cursor for the next page; empty when exhausted. Omitted in offset mode.")
 	Attribute("total", Int64, "Number of organizations matching the filters, before paging.")
+})
+
+var AdminListOrganizationActivityResult = Type("AdminListOrganizationActivityResult", func() {
+	Required("logs")
+
+	Attribute("logs", ArrayOf(auditlogs.AuditLog), "List of organization activity.")
+	Attribute("next_cursor", String, "Cursor for the next page of results.")
 })
 
 var AdminOrganizationStats = Type("AdminOrganizationStats", func() {
@@ -491,6 +500,31 @@ var _ = Service("admin", func() {
 		})
 
 		Meta("openapi:operationId", "adminListOrganizationProjects")
+	})
+
+	Method("listOrganizationActivity", func() {
+		Description("Lists activity belonging to an organization for admin operators.")
+
+		Payload(func() {
+			security.AdminAuthPayload()
+			Required("organization_id")
+
+			Attribute("organization_id", String, "Organization ID.")
+			Attribute("cursor", String, "Cursor for paginating through organization activity.")
+		})
+
+		Result(AdminListOrganizationActivityResult)
+
+		HTTP(func() {
+			GET("/admin/organization.activity")
+
+			Param("organization_id")
+			Param("cursor")
+			Response(StatusOK)
+		})
+
+		shared.CursorPagination()
+		Meta("openapi:operationId", "adminListOrganizationActivity")
 	})
 
 	Method("listOrganizations", func() {
