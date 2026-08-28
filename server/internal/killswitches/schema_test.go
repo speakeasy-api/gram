@@ -302,17 +302,21 @@ func TestKillswitchExpiryDiscoveryIndexMatchesEligibilityAndOrder(t *testing.T) 
 	conn, err := infra.CloneTestDatabase(t, "killswitch_expiry_index")
 	require.NoError(t, err)
 
-	var indexDefinition string
+	var (
+		indexColumns   []string
+		indexPredicate string
+	)
 	require.NoError(t, conn.QueryRow(t.Context(), `
-		SELECT indexdef
-		FROM pg_indexes
-		WHERE schemaname = 'public'
-		  AND indexname = 'killswitch_prescription_versions_expiry_due_idx'
-	`).Scan(&indexDefinition))
-	require.Contains(t, indexDefinition, "USING btree (expires_at, prescription_id, version)")
-	require.Contains(t, indexDefinition, "state = 'active'::text")
-	require.Contains(t, indexDefinition, "superseded_at IS NULL")
-	require.Contains(t, indexDefinition, "expires_at < superseded_at")
+		SELECT ARRAY(
+			SELECT pg_get_indexdef(indexrelid, position, true)
+			FROM generate_series(1, indnkeyatts) AS position
+			ORDER BY position
+		), pg_get_expr(indpred, indrelid)
+		FROM pg_index
+		WHERE indexrelid = 'killswitch_prescription_versions_expiry_due_idx'::regclass
+	`).Scan(&indexColumns, &indexPredicate))
+	require.Equal(t, []string{"expires_at", "prescription_id", "version"}, indexColumns)
+	require.Equal(t, "((state = 'active'::text) AND (expires_at IS NOT NULL) AND ((superseded_at IS NULL) OR (expires_at < superseded_at)))", indexPredicate)
 }
 
 func insertOrganization(t *testing.T, conn *pgxpool.Pool, organizationID string) {
