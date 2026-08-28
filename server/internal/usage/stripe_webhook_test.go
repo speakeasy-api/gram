@@ -1692,22 +1692,44 @@ func TestStripeCheckoutFinalBillingCauseRecoveryReconcilesStaleDisabledMirror(t 
 	createOpenRouterKeyFixture(t, db, openrouter.KeyTypeChat, int64(limit))
 	setOpenRouterKeyLifecycleFixture(t, db, openrouter.KeyTypeChat, false, []string{"billing_inactive"}, int64(limit))
 
-	patches := make(chan map[string]any, 10)
+	type openRouterPatch struct {
+		Limit      *float64 `json:"limit"`
+		LimitReset *string  `json:"limit_reset"`
+		Disabled   *bool    `json:"disabled"`
+	}
+	var recorder struct {
+		sync.Mutex
+		paths   []string
+		patches []openRouterPatch
+		errors  []error
+	}
+	recordHandlerError := func(err error) {
+		recorder.Lock()
+		defer recorder.Unlock()
+		recorder.errors = append(recorder.errors, err)
+	}
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPatch {
+			recordHandlerError(fmt.Errorf("unexpected OpenRouter method %s", r.Method))
 			w.WriteHeader(http.StatusMethodNotAllowed)
 			return
 		}
-		var patch map[string]any
+		var patch openRouterPatch
 		if err := json.NewDecoder(r.Body).Decode(&patch); err != nil {
+			recordHandlerError(fmt.Errorf("decode OpenRouter PATCH: %w", err))
 			w.WriteHeader(http.StatusBadRequest)
 			return
 		}
-		patches <- patch
+		recorder.Lock()
+		recorder.paths = append(recorder.paths, r.URL.Path)
+		recorder.patches = append(recorder.patches, patch)
+		recorder.Unlock()
 		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(map[string]any{
+		if err := json.NewEncoder(w).Encode(map[string]any{
 			"data": map[string]any{"limit": float64(limit), "hash": "hash_placeholder_chat"},
-		})
+		}); err != nil {
+			recordHandlerError(fmt.Errorf("encode OpenRouter response: %w", err))
+		}
 	}))
 	t.Cleanup(upstream.Close)
 	option, err := openrouter.WithTestBaseURL(upstream.URL)
@@ -1721,8 +1743,22 @@ func TestStripeCheckoutFinalBillingCauseRecoveryReconcilesStaleDisabledMirror(t 
 	)
 
 	require.Equal(t, http.StatusOK, serveStripeWebhook(service, "final cause recovery").Code)
+	recorder.Lock()
+	paths := slices.Clone(recorder.paths)
+	patches := slices.Clone(recorder.patches)
+	handlerErrors := slices.Clone(recorder.errors)
+	recorder.Unlock()
+	for _, handlerErr := range handlerErrors {
+		require.NoError(t, handlerErr)
+	}
+	require.Equal(t, []string{"/v1/keys/hash_placeholder_chat"}, paths)
 	require.Len(t, patches, 1, "removing the final cause must schedule postcommit reconciliation")
-	require.Equal(t, false, (<-patches)["disabled"])
+	require.NotNil(t, patches[0].Disabled)
+	require.False(t, *patches[0].Disabled)
+	require.NotNil(t, patches[0].Limit)
+	require.InDelta(t, limit, *patches[0].Limit, 0)
+	require.NotNil(t, patches[0].LimitReset)
+	require.Equal(t, "monthly", *patches[0].LimitReset)
 	key := openRouterKeyLifecycleFixture(t, db, openrouter.KeyTypeChat)
 	require.False(t, key.Disabled)
 	require.Empty(t, key.DisableCauses)
