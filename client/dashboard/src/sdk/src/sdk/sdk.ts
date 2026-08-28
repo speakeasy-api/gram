@@ -36,6 +36,7 @@ import { Instances } from "./instances.js";
 import { Integrations } from "./integrations.js";
 import { JsonWebKeySets } from "./jsonwebkeysets.js";
 import { Keys } from "./keys.js";
+import { Killswitches } from "./killswitches.js";
 import { Litellm } from "./litellm.js";
 import { McpApproval } from "./mcpapproval.js";
 import { McpEndpoints } from "./mcpendpoints.js";
@@ -253,6 +254,11 @@ export class Gram extends ClientSDK {
   private _keys?: Keys;
   get keys(): Keys {
     return (this._keys ??= new Keys(this._options));
+  }
+
+  private _killswitches?: Killswitches;
+  get killswitches(): Killswitches {
+    return (this._killswitches ??= new Killswitches(this._options));
   }
 
   private _litellm?: Litellm;

@@ -160,6 +160,16 @@ type customerPrincipal struct {
 	email          string
 }
 
+// CustomerOrganization returns the active organization only after applying
+// the complete ordinary-session organization-admin policy.
+func (s *AuthorizedService) CustomerOrganization(ctx context.Context) (OrganizationID, error) {
+	principal, err := s.requireCustomerAdmin(ctx)
+	if err != nil {
+		return "", err
+	}
+	return principal.organizationID, nil
+}
+
 func (s *AuthorizedService) requireCustomerAdmin(ctx context.Context) (customerPrincipal, error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || !contextvalues.HasValidatedGramSession(ctx) {

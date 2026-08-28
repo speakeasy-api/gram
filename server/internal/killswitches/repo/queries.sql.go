@@ -43,6 +43,92 @@ func (q *Queries) AdvanceKillswitchPrescriptionCurrentVersion(ctx context.Contex
 	return result.RowsAffected(), nil
 }
 
+const batchCustomerKillswitchUserBadges = `-- name: BatchCustomerKillswitchUserBadges :many
+WITH db_time AS (
+  SELECT clock_timestamp() AS now
+), requested AS (
+  SELECT requested_input.user_id::text AS user_id
+  FROM unnest($5::text[]) AS requested_input(user_id)
+)
+SELECT
+  requested.user_id::text AS user_id,
+  EXISTS (
+    SELECT 1
+    FROM killswitch_prescriptions AS p
+    JOIN killswitch_prescription_versions AS v
+      ON v.organization_id = p.organization_id
+     AND v.prescription_id = p.id
+     AND v.version = p.current_version
+    CROSS JOIN db_time
+    WHERE p.organization_id = $1
+      AND p.definition_key = $2
+      AND p.principal_kind = $3
+      AND p.principal_key = requested.user_id
+      AND p.resource_kind = $4
+      AND v.state = 'active'
+      AND v.starts_at <= db_time.now
+      AND (v.expires_at IS NULL OR db_time.now < v.expires_at)
+  ) AS affected_now,
+  EXISTS (
+    SELECT 1
+    FROM killswitch_prescriptions AS p
+    JOIN killswitch_prescription_versions AS v
+      ON v.organization_id = p.organization_id
+     AND v.prescription_id = p.id
+     AND v.version = p.current_version
+    CROSS JOIN db_time
+    WHERE p.organization_id = $1
+      AND p.definition_key = $2
+      AND p.principal_kind = $3
+      AND p.principal_key = requested.user_id
+      AND p.resource_kind = $4
+      AND v.state = 'active'
+      AND v.starts_at > db_time.now
+  ) AS scheduled
+FROM requested
+ORDER BY requested.user_id
+`
+
+type BatchCustomerKillswitchUserBadgesParams struct {
+	OrganizationID string
+	DefinitionKey  string
+	PrincipalKind  string
+	ResourceKind   string
+	UserIds        []string
+}
+
+type BatchCustomerKillswitchUserBadgesRow struct {
+	UserID      string
+	AffectedNow bool
+	Scheduled   bool
+}
+
+func (q *Queries) BatchCustomerKillswitchUserBadges(ctx context.Context, arg BatchCustomerKillswitchUserBadgesParams) ([]BatchCustomerKillswitchUserBadgesRow, error) {
+	rows, err := q.db.Query(ctx, batchCustomerKillswitchUserBadges,
+		arg.OrganizationID,
+		arg.DefinitionKey,
+		arg.PrincipalKind,
+		arg.ResourceKind,
+		arg.UserIds,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []BatchCustomerKillswitchUserBadgesRow
+	for rows.Next() {
+		var i BatchCustomerKillswitchUserBadgesRow
+		if err := rows.Scan(&i.UserID, &i.AffectedNow, &i.Scheduled); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const claimKillswitchOperation = `-- name: ClaimKillswitchOperation :one
 WITH database_time AS (
   SELECT clock_timestamp() AS now
@@ -669,6 +755,334 @@ func (q *Queries) GetKillswitchPrescriptionVersion(ctx context.Context, arg GetK
 		&i.ExternalNote,
 	)
 	return i, err
+}
+
+const listCustomerKillswitchHistory = `-- name: ListCustomerKillswitchHistory :many
+SELECT
+  a.seq, a.action, a.actor_id, a.actor_type, a.actor_display_name, a.created_at,
+  v.version, v.state, v.resource_scope, v.starts_at, v.expires_at,
+  v.internal_note, v.external_note,
+  ARRAY(
+    SELECT r.resource_key
+    FROM killswitch_prescription_version_resources AS r
+    WHERE r.organization_id = v.organization_id
+      AND r.prescription_id = v.prescription_id
+      AND r.version = v.version
+    ORDER BY r.resource_key
+    LIMIT 1001
+  )::text[] AS selected_resource_keys,
+  CASE
+    WHEN v.state = 'inactive' THEN 'lifted'
+    WHEN v.starts_at > clock_timestamp() THEN 'scheduled'
+    WHEN v.expires_at IS NOT NULL AND v.expires_at <= clock_timestamp() THEN 'expired'
+    ELSE 'active'
+  END::text AS customer_status,
+  CASE WHEN v.starts_at > v.activated_at THEN 'scheduled' ELSE 'now' END::text AS customer_start,
+  COALESCE(a.metadata->>'operation', '')::text AS operation
+FROM audit_logs AS a
+JOIN killswitch_prescription_versions AS v
+  ON v.organization_id = a.organization_id
+ AND v.prescription_id = $1
+ AND v.version = COALESCE(
+   (a.after_snapshot->>'version')::bigint,
+   (a.metadata->>'version')::bigint
+ )
+WHERE a.organization_id = $2
+  AND a.subject_type = 'killswitch_prescription'
+  AND a.subject_id = $1::text
+  AND a.action IN ('killswitch:activate', 'killswitch:change', 'killswitch:deactivate', 'killswitch:expire')
+ORDER BY a.seq DESC
+LIMIT $3
+`
+
+type ListCustomerKillswitchHistoryParams struct {
+	PrescriptionID uuid.UUID
+	OrganizationID string
+	ResultLimit    int32
+}
+
+type ListCustomerKillswitchHistoryRow struct {
+	Seq                  int64
+	Action               string
+	ActorID              string
+	ActorType            string
+	ActorDisplayName     pgtype.Text
+	CreatedAt            pgtype.Timestamptz
+	Version              int64
+	State                string
+	ResourceScope        string
+	StartsAt             pgtype.Timestamptz
+	ExpiresAt            pgtype.Timestamptz
+	InternalNote         string
+	ExternalNote         string
+	SelectedResourceKeys []string
+	CustomerStatus       string
+	CustomerStart        string
+	Operation            string
+}
+
+func (q *Queries) ListCustomerKillswitchHistory(ctx context.Context, arg ListCustomerKillswitchHistoryParams) ([]ListCustomerKillswitchHistoryRow, error) {
+	rows, err := q.db.Query(ctx, listCustomerKillswitchHistory, arg.PrescriptionID, arg.OrganizationID, arg.ResultLimit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListCustomerKillswitchHistoryRow
+	for rows.Next() {
+		var i ListCustomerKillswitchHistoryRow
+		if err := rows.Scan(
+			&i.Seq,
+			&i.Action,
+			&i.ActorID,
+			&i.ActorType,
+			&i.ActorDisplayName,
+			&i.CreatedAt,
+			&i.Version,
+			&i.State,
+			&i.ResourceScope,
+			&i.StartsAt,
+			&i.ExpiresAt,
+			&i.InternalNote,
+			&i.ExternalNote,
+			&i.SelectedResourceKeys,
+			&i.CustomerStatus,
+			&i.CustomerStart,
+			&i.Operation,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listCustomerKillswitchOverlaps = `-- name: ListCustomerKillswitchOverlaps :many
+WITH db_time AS (
+  SELECT clock_timestamp() AS now
+)
+SELECT
+  p.id, v.resource_scope, v.starts_at, v.expires_at,
+  CASE WHEN v.starts_at > db_time.now THEN 'scheduled' ELSE 'active' END::text AS customer_status,
+  CASE WHEN v.starts_at > v.activated_at THEN 'scheduled' ELSE 'now' END::text AS customer_start,
+  ARRAY(
+    SELECT r.resource_key
+    FROM killswitch_prescription_version_resources AS r
+    WHERE r.organization_id = p.organization_id
+      AND r.prescription_id = p.id
+      AND r.version = v.version
+    ORDER BY r.resource_key
+    LIMIT 1001
+  )::text[] AS selected_resource_keys
+FROM killswitch_prescriptions AS p
+JOIN killswitch_prescription_versions AS v
+  ON v.organization_id = p.organization_id
+ AND v.prescription_id = p.id
+ AND v.version = p.current_version
+CROSS JOIN db_time
+WHERE p.organization_id = $1
+  AND p.definition_key = $2
+  AND p.principal_kind = $3
+  AND p.principal_key = $4
+  AND p.resource_kind = $5
+  AND v.state = 'active'
+  AND (v.expires_at IS NULL OR db_time.now < v.expires_at)
+  AND ($6::uuid IS NULL OR p.id <> $6::uuid)
+  AND $7::timestamptz < COALESCE(v.expires_at, 'infinity'::timestamptz)
+  AND v.starts_at < COALESCE($8::timestamptz, 'infinity'::timestamptz)
+  AND (
+    $9::text = 'all'
+    OR v.resource_scope = 'all'
+    OR EXISTS (
+      SELECT 1
+      FROM killswitch_prescription_version_resources AS r
+      WHERE r.organization_id = p.organization_id
+        AND r.prescription_id = p.id
+        AND r.version = v.version
+        AND r.resource_key = ANY($10::text[])
+    )
+  )
+ORDER BY v.starts_at ASC, p.id ASC
+LIMIT 101
+`
+
+type ListCustomerKillswitchOverlapsParams struct {
+	OrganizationID            string
+	DefinitionKey             string
+	PrincipalKind             string
+	PrincipalKey              string
+	ResourceKind              string
+	ExcludeID                 uuid.NullUUID
+	DraftStartsAt             pgtype.Timestamptz
+	DraftEndsAt               pgtype.Timestamptz
+	DraftScope                string
+	DraftSelectedResourceKeys []string
+}
+
+type ListCustomerKillswitchOverlapsRow struct {
+	ID                   uuid.UUID
+	ResourceScope        string
+	StartsAt             pgtype.Timestamptz
+	ExpiresAt            pgtype.Timestamptz
+	CustomerStatus       string
+	CustomerStart        string
+	SelectedResourceKeys []string
+}
+
+func (q *Queries) ListCustomerKillswitchOverlaps(ctx context.Context, arg ListCustomerKillswitchOverlapsParams) ([]ListCustomerKillswitchOverlapsRow, error) {
+	rows, err := q.db.Query(ctx, listCustomerKillswitchOverlaps,
+		arg.OrganizationID,
+		arg.DefinitionKey,
+		arg.PrincipalKind,
+		arg.PrincipalKey,
+		arg.ResourceKind,
+		arg.ExcludeID,
+		arg.DraftStartsAt,
+		arg.DraftEndsAt,
+		arg.DraftScope,
+		arg.DraftSelectedResourceKeys,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListCustomerKillswitchOverlapsRow
+	for rows.Next() {
+		var i ListCustomerKillswitchOverlapsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.ResourceScope,
+			&i.StartsAt,
+			&i.ExpiresAt,
+			&i.CustomerStatus,
+			&i.CustomerStart,
+			&i.SelectedResourceKeys,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listCustomerKillswitches = `-- name: ListCustomerKillswitches :many
+WITH db_time AS (
+  SELECT $3::timestamptz AS now
+), current_rows AS (
+  SELECT
+    p.id, p.updated_at, p.principal_key AS user_id, v.version,
+    v.resource_scope, v.starts_at, v.expires_at,
+    CASE
+      WHEN v.state = 'inactive' THEN 'lifted'
+      WHEN v.starts_at > db_time.now THEN 'scheduled'
+      WHEN v.expires_at IS NOT NULL AND v.expires_at <= db_time.now THEN 'expired'
+      ELSE 'active'
+    END::text AS customer_status,
+    CASE WHEN v.starts_at > v.activated_at THEN 'scheduled' ELSE 'now' END::text AS customer_start,
+    ARRAY(
+      SELECT r.resource_key
+      FROM killswitch_prescription_version_resources AS r
+      WHERE r.organization_id = p.organization_id
+        AND r.prescription_id = p.id
+        AND r.version = v.version
+      ORDER BY r.resource_key
+      LIMIT 1001
+    )::text[] AS selected_resource_keys
+  FROM killswitch_prescriptions AS p
+  JOIN killswitch_prescription_versions AS v
+    ON v.organization_id = p.organization_id
+   AND v.prescription_id = p.id
+   AND v.version = p.current_version
+  CROSS JOIN db_time
+  WHERE p.organization_id = $4
+    AND p.definition_key = $5
+    AND p.principal_kind = $6
+    AND p.resource_kind = $7
+    AND ($8::text IS NULL OR p.principal_key = $8::text)
+    AND (
+      $9::timestamptz IS NULL
+      OR (p.updated_at, p.id) < ($9::timestamptz, $10::uuid)
+    )
+)
+SELECT id, updated_at, user_id, version, resource_scope, starts_at, expires_at, customer_status, customer_start, selected_resource_keys
+FROM current_rows
+WHERE $1::text IS NULL
+   OR customer_status = $1::text
+ORDER BY updated_at DESC, id DESC
+LIMIT $2
+`
+
+type ListCustomerKillswitchesParams struct {
+	CustomerStatus  pgtype.Text
+	ResultLimit     int32
+	StatusAsOf      pgtype.Timestamptz
+	OrganizationID  string
+	DefinitionKey   string
+	PrincipalKind   string
+	ResourceKind    string
+	UserID          pgtype.Text
+	CursorUpdatedAt pgtype.Timestamptz
+	CursorID        uuid.NullUUID
+}
+
+type ListCustomerKillswitchesRow struct {
+	ID                   uuid.UUID
+	UpdatedAt            pgtype.Timestamptz
+	UserID               string
+	Version              int64
+	ResourceScope        string
+	StartsAt             pgtype.Timestamptz
+	ExpiresAt            pgtype.Timestamptz
+	CustomerStatus       string
+	CustomerStart        string
+	SelectedResourceKeys []string
+}
+
+func (q *Queries) ListCustomerKillswitches(ctx context.Context, arg ListCustomerKillswitchesParams) ([]ListCustomerKillswitchesRow, error) {
+	rows, err := q.db.Query(ctx, listCustomerKillswitches,
+		arg.CustomerStatus,
+		arg.ResultLimit,
+		arg.StatusAsOf,
+		arg.OrganizationID,
+		arg.DefinitionKey,
+		arg.PrincipalKind,
+		arg.ResourceKind,
+		arg.UserID,
+		arg.CursorUpdatedAt,
+		arg.CursorID,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListCustomerKillswitchesRow
+	for rows.Next() {
+		var i ListCustomerKillswitchesRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.UpdatedAt,
+			&i.UserID,
+			&i.Version,
+			&i.ResourceScope,
+			&i.StartsAt,
+			&i.ExpiresAt,
+			&i.CustomerStatus,
+			&i.CustomerStart,
+			&i.SelectedResourceKeys,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const listDueKillswitchExpiries = `-- name: ListDueKillswitchExpiries :many
