@@ -10,9 +10,14 @@ import { StatRow, type StatRowMetric } from "@/components/stat-row";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { Stack } from "@/components/ui/Stack";
 import { Text } from "@/components/ui/Text";
+import { useProductTier } from "@/hooks/useProductTier";
 import type { PaygBillingSummary } from "@gram/client/models/components/paygbillingsummary.js";
-import { useGetPaygBillingSummary } from "@gram/client/react-query/getPaygBillingSummary.js";
-import { useEffect, useRef } from "react";
+import { useGramContext } from "@gram/client/react-query/_context.js";
+import {
+  buildGetPaygBillingSummaryQuery,
+  queryKeyGetPaygBillingSummary,
+} from "@gram/client/react-query/getPaygBillingSummary.js";
+import { useQuery } from "@tanstack/react-query";
 
 // The window Stripe leaves itself to close a cycle. Named here because it is
 // the difference between an estimate the customer can trust and one that looks
@@ -26,6 +31,10 @@ const MISSING_FIGURE = "—";
  * The pay-as-you-go cycle's billable usage and estimated invoice, shown at the
  * head of the shared usage section.
  *
+ * The tier rule lives here rather than at the call site so the billing page
+ * can hand the slot to the shared usage section on every tier without a stray
+ * Stripe read ever firing on a tier that has no cycle to estimate.
+ *
  * Nothing renders until the live Stripe subscription says there is a cycle to
  * report on. A trial, a subscription that never started, and the moments before
  * the period anchor all have no billable period — the endpoint answers those
@@ -33,47 +42,41 @@ const MISSING_FIGURE = "—";
  * turning its refusal into an error message on the billing page.
  */
 export function PaygCycleEstimate(): JSX.Element | null {
+  const productTier = useProductTier();
+
+  if (productTier !== "payg") return null;
+
+  return <PaygCycleEstimateBody />;
+}
+
+// The queries live below the tier gate so neither ever fires on another tier.
+function PaygCycleEstimateBody(): JSX.Element | null {
   const { data: subscription } = useStripeSubscription();
   const billing = canEstimatePaygInvoice(subscription, new Date());
+  const client = useGramContext();
 
-  // The shared query client throws everything but a 401/403 to the app error
-  // boundary, which would take the whole billing page down over one estimate.
-  const { data, isError, refetch } = useGetPaygBillingSummary(
-    undefined,
-    undefined,
-    {
-      enabled: billing,
-      throwOnError: false,
-    },
-  );
-
-  // A cached summary can outlive the cycle it described: at a cycle boundary
-  // the live subscription moves onto the new period while the cache still
-  // holds the prior cycle's summary. The summary's period start is the
-  // subscription's own anchor (the server copies it verbatim), so a mismatch
-  // identifies a stale summary — kept loading, and refetched once per new
-  // anchor. Once per anchor rather than while mismatched: the mismatch can
-  // also mean the SUBSCRIPTION read is the stale one, and refetching the
-  // summary until they agree would poll the endpoint in a loop.
+  // The subscription's period anchor is part of the query key: a new cycle is
+  // a new cache entry, so at a cycle boundary the prior cycle's cached summary
+  // can never render as the current one — the row shows its loading skeletons
+  // while the new cycle's summary is fetched, with no staleness bookkeeping.
+  // The summary's own period start is this same anchor (the server copies it
+  // verbatim), which is what makes the key identify the cycle.
   const anchorMs =
     subscription?.currentPeriodStart instanceof Date
       ? subscription.currentPeriodStart.getTime()
       : null;
-  const stale =
-    data !== undefined &&
-    anchorMs !== null &&
-    (!(data.periodStart instanceof Date) ||
-      data.periodStart.getTime() !== anchorMs);
-  const refetchedForAnchor = useRef<number | null>(null);
-  useEffect(() => {
-    // `refetch` runs even on a disabled query, so the billing gate has to be
-    // re-asserted here — a trial or canceled subscription holding a stale
-    // cached summary must not request the billing endpoint.
-    if (!billing || !stale || anchorMs === null) return;
-    if (refetchedForAnchor.current === anchorMs) return;
-    refetchedForAnchor.current = anchorMs;
-    void refetch();
-  }, [billing, stale, anchorMs, refetch]);
+
+  const { data, isError } = useQuery({
+    ...buildGetPaygBillingSummaryQuery(client),
+    // The generated key stays the prefix so prefix-based invalidation keeps
+    // reaching this entry.
+    queryKey: [...queryKeyGetPaygBillingSummary({}), anchorMs],
+    enabled: billing,
+    // The shared query client throws everything but a 401/403 to the app error
+    // boundary, which would take the whole billing page down over one
+    // estimate.
+    throwOnError: false,
+  });
 
   if (!billing) return null;
 
@@ -83,15 +86,10 @@ export function PaygCycleEstimate(): JSX.Element | null {
   // a missing one costs the customer nothing.
   if (isError) return null;
 
-  const summary = stale ? undefined : data;
-
   return (
     <Stack gap={3}>
-      <CycleCaption summary={summary} />
-      <StatRow
-        isLoading={summary === undefined}
-        metrics={estimateMetrics(summary)}
-      />
+      <CycleCaption summary={data} />
+      <StatRow isLoading={data === undefined} metrics={estimateMetrics(data)} />
     </Stack>
   );
 }

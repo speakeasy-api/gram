@@ -106,9 +106,22 @@ vi.mock("@gram/client/react-query/setSpendCap.js", () => ({
 vi.mock("@gram/client/react-query/getPeriodUsage.js", () => ({
   useGetPeriodUsage: () => mocks.periodUsage() as { data: undefined },
 }));
+// The estimate composes the generated query pieces itself (the cache is keyed
+// on the cycle anchor); the build spy records which tiers mount the read. The
+// query function itself stays unreachable here — the mocked subscription
+// carries no period anchor, so the estimate never enables the fetch.
 vi.mock("@gram/client/react-query/getPaygBillingSummary.js", () => ({
-  useGetPaygBillingSummary: () =>
-    mocks.paygBillingSummary() as { data: undefined; isError: boolean },
+  buildGetPaygBillingSummaryQuery: (...args: unknown[]) => {
+    mocks.paygBillingSummary(...args);
+    return {
+      queryKey: ["payg-billing-summary"],
+      queryFn: () => Promise.reject(new Error("not fetched in page tests")),
+    };
+  },
+  queryKeyGetPaygBillingSummary: () => ["payg-billing-summary"],
+}));
+vi.mock("@gram/client/react-query/_context.js", () => ({
+  useGramContext: () => ({}),
 }));
 vi.mock("@gram/client/react-query/getUsageTiers.js", () => ({
   useGetUsageTiers: (...args: unknown[]) => mocks.usageTiers(...args),
@@ -187,7 +200,8 @@ const billingEmailField = () =>
 const inferenceCapsSection = () =>
   screen.queryByRole("heading", { name: /inference caps/i });
 
-const planSection = () => screen.queryByRole("heading", { name: /^plan$/i });
+const paymentSection = () =>
+  screen.queryByRole("heading", { name: /^payment$/i });
 
 const tumUsageSection = () => screen.queryByText("tum usage");
 
@@ -238,10 +252,6 @@ describe("Billing", () => {
       refetch: vi.fn(),
     });
     mocks.periodUsage.mockReturnValue({ data: undefined });
-    mocks.paygBillingSummary.mockReturnValue({
-      data: undefined,
-      isError: false,
-    });
     const legacyTierLimits = {
       basePrice: 0,
       includedToolCalls: 0,
@@ -287,7 +297,10 @@ describe("Billing", () => {
   it("offers pay as you go to a trialing admin on the self-serve view", () => {
     renderBilling();
 
+    expect(paymentSection()).not.toBeNull();
     expect(cta()).not.toBeNull();
+    // The rates for the plan the CTA starts sit on this branch too.
+    expect(screen.getByText("Pay as you go pricing")).toBeTruthy();
   });
 
   // Trials run on the enterprise tier, which short-circuits into the TUM view
@@ -301,6 +314,9 @@ describe("Billing", () => {
     expect(cta()).not.toBeNull();
     expect(screen.getByText("Pay as you go pricing")).toBeTruthy();
     expect(screen.getByText("$0.35 per million tokens")).toBeTruthy();
+    // The pricing section states rates; the plan's product features are not
+    // one of them.
+    expect(screen.queryByText("Enterprise feature set")).toBeNull();
     expect(mocks.usageTiers).toHaveBeenCalledWith({ throwOnError: false });
   });
 
@@ -349,28 +365,29 @@ describe("Billing", () => {
     },
   );
 
-  // The plan section is where a converted organization manages its card,
+  // The payment section is where a converted organization manages its card,
   // invoices, and cancellation, so it belongs to the pay-as-you-go view only.
-  it("places the pay as you go plan on the payg view", () => {
+  it("places the subscription controls on the payg view", () => {
     mocks.productTier.mockReturnValue("payg");
     mocks.session.mockReturnValue({ trial: null });
 
     renderBilling();
 
-    expect(planSection()).not.toBeNull();
+    expect(paymentSection()).not.toBeNull();
     expect(portalButton()).not.toBeNull();
   });
 
   // The account type can read as PAYG while a product trial is still running.
-  // Checkout is what creates the subscription, so the CTA owns that view — a
-  // plan section beside it would be reporting on something that doesn't exist.
-  it("keeps a trialing payg org on the checkout CTA alone", () => {
+  // Checkout is what creates the subscription, so the payment section holds
+  // the CTA — subscription controls beside it would be reporting on something
+  // that doesn't exist.
+  it("keeps a trialing payg org's payment section on the checkout CTA", () => {
     mocks.productTier.mockReturnValue("payg");
 
     renderBilling();
 
+    expect(paymentSection()).not.toBeNull();
     expect(cta()).not.toBeNull();
-    expect(planSection()).toBeNull();
     expect(portalButton()).toBeNull();
   });
 
@@ -379,23 +396,25 @@ describe("Billing", () => {
     "base_PAID",
     "__deprecated__pro",
     "enterprise",
-  ])("shows no pay as you go plan on the %s view", (tier) => {
+  ])("shows no payment section on the converted %s view", (tier) => {
     mocks.productTier.mockReturnValue(tier);
+    mocks.session.mockReturnValue({ trial: null });
 
     renderBilling();
 
-    expect(planSection()).toBeNull();
+    expect(paymentSection()).toBeNull();
   });
 
-  // A pre-card trial converts through the checkout CTA, not the plan section:
-  // there is no subscription to manage until checkout creates one.
-  it("keeps the trialing view on the checkout CTA", () => {
+  // A pre-card trial converts through the checkout CTA, not the subscription
+  // controls: there is no subscription to manage until checkout creates one.
+  it("keeps the trialing payment section on the checkout CTA", () => {
     mocks.productTier.mockReturnValue("enterprise");
 
     renderBilling();
 
+    expect(paymentSection()).not.toBeNull();
     expect(cta()).not.toBeNull();
-    expect(planSection()).toBeNull();
+    expect(portalButton()).toBeNull();
   });
 
   it("shows no inference caps on the pre-checkout view", () => {

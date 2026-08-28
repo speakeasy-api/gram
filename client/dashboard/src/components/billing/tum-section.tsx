@@ -1,5 +1,6 @@
 import { InlineEmptyState } from "@/components/inline-empty-state";
 import { Page } from "@/components/page-layout";
+import { Button } from "@/components/ui/Button";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { Stack } from "@/components/ui/Stack";
 import { Text } from "@/components/ui/Text";
@@ -37,11 +38,55 @@ export const TumUsageSection = ({
 }: {
   estimate?: ReactNode;
 }): JSX.Element => {
-  const { data: tum } = useGetTokensUnderManagement();
+  // The shared query client throws everything but a 401/403 to the app error
+  // boundary, which would take the whole billing page — plan, caps, checkout —
+  // down whenever the usage endpoint is unavailable. The failure is handled
+  // inline instead: a retry of this one query.
+  const {
+    data: tum,
+    isError,
+    isFetching,
+    refetch,
+  } = useGetTokensUnderManagement(undefined, undefined, {
+    throwOnError: false,
+  });
   const cycles = useMemo(() => (tum ? cyclesFromTum(tum) : []), [tum]);
 
+  // Projects are fetched only to label the Project breakdown's UUID values.
+  // They load beside the usage read rather than after it, so the labels don't
+  // start a full round trip late.
+  const organization = useOrganization();
+  const { data: projectsData } = useListProjects(
+    { organizationId: organization.id },
+    undefined,
+    { throwOnError: false },
+  );
+  const projectNames = useMemo(
+    () =>
+      new Map(
+        (projectsData?.projects ?? []).map((p) => [p.id, p.name] as const),
+      ),
+    [projectsData],
+  );
+
   let body: ReactNode;
-  if (!tum) {
+  if (!tum && isError) {
+    body = (
+      <Stack direction="horizontal" align="center" gap={3}>
+        <Text muted small role="alert">
+          Couldn't load usage.
+        </Text>
+        <Button
+          variant="secondary"
+          size="sm"
+          disabled={isFetching}
+          onClick={() => void refetch()}
+        >
+          {isFetching ? "RETRYING..." : "RETRY"}
+        </Button>
+      </Stack>
+    );
+  } else if (!tum) {
     body = (
       <div className="space-y-4">
         <Skeleton className="h-4 w-1/3" />
@@ -49,21 +94,25 @@ export const TumUsageSection = ({
         <Skeleton className="h-40 w-full" />
       </div>
     );
-  } else if (!cyclesHaveUsage(cycles)) {
-    // A brand-new organization gets an explicit empty state instead of a
-    // zeroed card over an empty chart — which reads as a reporting failure
-    // rather than as "nothing yet".
+  } else if (!cyclesHaveUsage(cycles) && tum.monthlyTokenLimit == null) {
+    // An organization with nothing billed and nothing contracted gets an
+    // explicit empty state instead of a zeroed card over an empty chart —
+    // which reads as a reporting failure rather than as "nothing yet". An org
+    // with a contracted allowance keeps the explorer even at zero usage: the
+    // usage card is the only customer-facing surface that states the
+    // allowance and the cycle window.
     body = (
       <InlineEmptyState
         icon="chart-column"
-        heading="No usage recorded yet"
-        description="Once your first sessions come in, usage appears here with a per-cycle breakdown."
+        heading="No usage recorded"
+        description="No agent traffic has been observed in your recent billing cycles. Once sessions come in, usage appears here with a per-cycle breakdown."
       />
     );
   } else {
     body = (
       <TumUsageBody
         cycles={cycles}
+        projectNames={projectNames}
         monthlyLimit={tum.monthlyTokenLimit ?? null}
       />
     );
@@ -90,27 +139,14 @@ export const TumUsageSection = ({
 // The loaded usage explorer for one organization's billing cycles.
 function TumUsageBody({
   cycles,
+  projectNames,
   // The contracted monthly allowance; null when the org has no contracted cap.
   monthlyLimit,
 }: {
   cycles: BillingCycle[];
+  projectNames: Map<string, string>;
   monthlyLimit: number | null;
 }): JSX.Element | null {
-  const organization = useOrganization();
-  // Projects are fetched only to label the Project breakdown's UUID values.
-  const { data: projectsData } = useListProjects(
-    { organizationId: organization.id },
-    undefined,
-    { throwOnError: false },
-  );
-  const projectNames = useMemo(
-    () =>
-      new Map(
-        (projectsData?.projects ?? []).map((p) => [p.id, p.name] as const),
-      ),
-    [projectsData],
-  );
-
   const {
     period,
     selectedCycle,

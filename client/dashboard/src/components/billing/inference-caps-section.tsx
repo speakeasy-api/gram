@@ -187,7 +187,9 @@ export function InferenceCapsSection(): JSX.Element | null {
         <Page.Section.Title area="">Inference caps</Page.Section.Title>
         <Page.Section.Description>
           Limit what this organization can spend each month on the inference
-          Gram runs for it. Each cap is enforced on its own.
+          Gram runs for it. Each cap is enforced on its own. Caps follow the
+          calendar month rather than your billing cycle, so the spend they meter
+          isn't an invoice figure.
         </Page.Section.Description>
         <Page.Section.Body>
           {mode === "product-trial" ? (
