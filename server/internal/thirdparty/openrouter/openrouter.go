@@ -9,7 +9,9 @@ import (
 	"fmt"
 	"log/slog"
 	"math"
+	"net"
 	"net/http"
+	"net/url"
 	"slices"
 	"sort"
 	"strings"
@@ -388,11 +390,26 @@ var _ Provisioner = (*OpenRouter)(nil)
 // Option customizes an OpenRouter client without changing production defaults.
 type Option func(*OpenRouter)
 
-// WithBaseURL overrides the production OpenRouter endpoint.
-func WithBaseURL(baseURL string) Option {
-	return func(openRouter *OpenRouter) {
-		openRouter.baseURL = baseURL
+// WithTestBaseURL points OpenRouter requests at a loopback HTTP test server.
+func WithTestBaseURL(baseURL string) (Option, error) {
+	parsed, err := url.Parse(baseURL)
+	if err != nil {
+		return nil, fmt.Errorf("parse OpenRouter test base URL: %w", err)
 	}
+
+	host := parsed.Hostname()
+	ip := net.ParseIP(host)
+	if parsed.Scheme != "http" || parsed.Host == "" || (host != "localhost" && (ip == nil || !ip.IsLoopback())) {
+		return nil, fmt.Errorf("OpenRouter test base URL must use HTTP and a loopback host")
+	}
+	if parsed.User != nil || parsed.RawQuery != "" || parsed.ForceQuery || parsed.Fragment != "" || (parsed.Path != "" && parsed.Path != "/") {
+		return nil, fmt.Errorf("OpenRouter test base URL must not contain userinfo, query, fragment, or a non-root path")
+	}
+
+	parsed.Path = ""
+	return func(openRouter *OpenRouter) {
+		openRouter.baseURL = parsed.String()
+	}, nil
 }
 
 func New(logger *slog.Logger, tracerProvider trace.TracerProvider, guardianPolicy *guardian.Policy, db *pgxpool.Pool, env string, provisioningKey string, refresher KeyRefresher, featureClient *productfeatures.Client, tracking billing.Tracker, enc *encryption.Client, options ...Option) *OpenRouter {
