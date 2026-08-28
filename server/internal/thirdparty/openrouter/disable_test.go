@@ -294,9 +294,12 @@ func TestAddAPIKeyDisableCauseCanonicalizesConcurrentDifferentCauses(t *testing.
 
 	firstPatch := make(chan struct{})
 	releasePatch := make(chan struct{})
+	var once sync.Once
 	upstream.interceptPatch(func() {
-		close(firstPatch)
-		<-releasePatch
+		once.Do(func() {
+			close(firstPatch)
+			<-releasePatch
+		})
 	})
 	type addition struct {
 		change DisableCauseChange
@@ -324,7 +327,7 @@ func TestAddAPIKeyDisableCauseCanonicalizesConcurrentDifferentCauses(t *testing.
 	require.True(t, first.change.CauseChanged)
 	require.True(t, second.change.CauseChanged)
 	require.NotEqual(t, first.change.KeyAccessChanged, second.change.KeyAccessChanged)
-	require.Len(t, upstream.recorded(), 1)
+	require.Len(t, upstream.recorded(), 2)
 	row, err := queries.GetOpenRouterAPIKey(ctx, repo.GetOpenRouterAPIKeyParams{OrganizationID: orgID, KeyType: string(KeyTypeChat)})
 	require.NoError(t, err)
 	require.Equal(t, []string{string(DisableCauseAdminLock), string(DisableCauseTrialDemotion)}, row.DisableCauses)

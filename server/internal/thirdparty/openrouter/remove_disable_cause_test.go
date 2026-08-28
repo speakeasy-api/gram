@@ -130,12 +130,51 @@ func TestRemoveAPIKeyDisableCauseRecoversLegacyZeroLimit(t *testing.T) {
 	require.False(t, row.Disabled)
 }
 
+func TestAddDisableCauseReconcilesUpstreamAfterRolledBackFinalRemoval(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	orgID := "org-" + uuid.NewString()[:8]
+	provisioner, upstream, queries := newDisableTestProvisioner(t, orgID)
+	_, err := provisioner.ProvisionAPIKey(ctx, orgID, KeyTypeChat)
+	require.NoError(t, err)
+	_, err = provisioner.AddAPIKeyDisableCause(ctx, orgID, KeyTypeChat, DisableCauseAdminLock)
+	require.NoError(t, err)
+
+	conn, err := provisioner.db.Acquire(ctx)
+	require.NoError(t, err)
+	defer conn.Release()
+	tx, err := conn.Begin(ctx) //nolint:glint // this transaction only uses SQLc methods and must roll back a local mirror after the upstream call
+	require.NoError(t, err)
+	lockParams := repo.AcquireOpenRouterKeyBillingLockParams{OrganizationID: orgID, KeyType: string(KeyTypeChat)}
+	require.NoError(t, repo.New(tx).AcquireOpenRouterKeyBillingLock(ctx, lockParams))
+	_, change, err := provisioner.RemoveAPIKeyDisableCauseWithDB(ctx, tx, orgID, KeyTypeChat, DisableCauseAdminLock, nil)
+	require.NoError(t, err)
+	require.Equal(t, DisableCauseChange{CauseChanged: true, KeyAccessChanged: true}, change)
+	require.NoError(t, tx.Rollback(ctx))
+	unlocked, err := repo.New(conn).ReleaseOpenRouterKeyBillingLock(ctx, repo.ReleaseOpenRouterKeyBillingLockParams(lockParams))
+	require.NoError(t, err)
+	require.True(t, unlocked)
+
+	patchesBefore := len(upstream.recorded())
+	change, err = provisioner.AddAPIKeyDisableCause(ctx, orgID, KeyTypeChat, DisableCauseTrialDemotion)
+	require.NoError(t, err)
+	require.Equal(t, DisableCauseChange{CauseChanged: true, KeyAccessChanged: false}, change)
+	patches := upstream.recorded()[patchesBefore:]
+	require.Len(t, patches, 1)
+	require.JSONEq(t, `{"disabled":true}`, patches[0])
+	row, err := queries.GetOpenRouterAPIKey(ctx, repo.GetOpenRouterAPIKeyParams{OrganizationID: orgID, KeyType: string(KeyTypeChat)})
+	require.NoError(t, err)
+	require.Equal(t, []string{"admin_lock", "trial_demotion"}, row.DisableCauses)
+	require.True(t, row.Disabled)
+}
+
 func TestDisableCauseWithDBUsesCallerLockedConnection(t *testing.T) {
 	t.Parallel()
 
 	ctx := t.Context()
 	orgID := "org-" + uuid.NewString()[:8]
-	provisioner, _, queries := newDisableTestProvisioner(t, orgID)
+	provisioner, upstream, queries := newDisableTestProvisioner(t, orgID)
 	_, err := provisioner.ProvisionAPIKey(ctx, orgID, KeyTypeChat)
 	require.NoError(t, err)
 	conn, err := provisioner.db.Acquire(ctx)
@@ -152,6 +191,16 @@ func TestDisableCauseWithDBUsesCallerLockedConnection(t *testing.T) {
 	change, err := provisioner.AddAPIKeyDisableCauseWithDB(ctx, conn, orgID, KeyTypeChat, DisableCauseAdminLock)
 	require.NoError(t, err)
 	require.Equal(t, DisableCauseChange{CauseChanged: true, KeyAccessChanged: true}, change)
+	patchesBefore := len(upstream.recorded())
+	change, err = provisioner.AddAPIKeyDisableCauseWithDB(ctx, conn, orgID, KeyTypeChat, DisableCauseTrialDemotion)
+	require.NoError(t, err)
+	require.Equal(t, DisableCauseChange{CauseChanged: true, KeyAccessChanged: false}, change)
+	patches := upstream.recorded()[patchesBefore:]
+	require.Len(t, patches, 1)
+	require.JSONEq(t, `{"disabled":true}`, patches[0])
+	_, change, err = provisioner.RemoveAPIKeyDisableCauseWithDB(ctx, conn, orgID, KeyTypeChat, DisableCauseTrialDemotion, nil)
+	require.NoError(t, err)
+	require.Equal(t, DisableCauseChange{CauseChanged: true, KeyAccessChanged: false}, change)
 	_, change, err = provisioner.RemoveAPIKeyDisableCauseWithDB(ctx, conn, orgID, KeyTypeChat, DisableCauseAdminLock, nil)
 	require.NoError(t, err)
 	require.Equal(t, DisableCauseChange{CauseChanged: true, KeyAccessChanged: true}, change)

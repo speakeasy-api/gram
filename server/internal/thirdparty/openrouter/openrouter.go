@@ -785,16 +785,14 @@ func (o *OpenRouter) AddAPIKeyDisableCause(ctx context.Context, orgID string, ke
 			return nil
 		}
 
-		if len(key.DisableCauses) == 0 {
-			patchCtx, cancel := context.WithTimeout(ctx, upstreamKeyPatchTimeout)
-			response, patchErr := o.patchOpenRouterAPIKey(patchCtx, key.KeyHash, updateKeyRequest{Limit: nil, LimitReset: "", Disabled: new(true)})
-			cancel()
-			if patchErr != nil {
-				return fmt.Errorf("disable upstream OpenRouter API key: %w", patchErr)
-			}
-			if response.Data.Hash != key.KeyHash {
-				return errors.New("OpenRouter key identity mismatch after disable")
-			}
+		patchCtx, cancel := context.WithTimeout(ctx, upstreamKeyPatchTimeout)
+		response, patchErr := o.patchOpenRouterAPIKey(patchCtx, key.KeyHash, updateKeyRequest{Limit: nil, LimitReset: "", Disabled: new(true)})
+		cancel()
+		if patchErr != nil {
+			return fmt.Errorf("disable upstream OpenRouter API key: %w", patchErr)
+		}
+		if response.Data.Hash != key.KeyHash {
+			return errors.New("OpenRouter key identity mismatch after disable")
 		}
 
 		latest, err := keyRepo.GetOpenRouterAPIKey(ctx, repo.GetOpenRouterAPIKeyParams{OrganizationID: orgID, KeyType: string(keyType)})
@@ -848,16 +846,14 @@ func (o *OpenRouter) AddAPIKeyDisableCauseWithDB(ctx context.Context, db DBTX, o
 		return unchangedDisableCauseChange(), nil
 	}
 
-	if len(key.DisableCauses) == 0 {
-		patchCtx, cancel := context.WithTimeout(ctx, upstreamKeyPatchTimeout)
-		response, patchErr := o.patchOpenRouterAPIKey(patchCtx, key.KeyHash, updateKeyRequest{Limit: nil, LimitReset: "", Disabled: new(true)})
-		cancel()
-		if patchErr != nil {
-			return unchangedDisableCauseChange(), fmt.Errorf("disable upstream OpenRouter API key: %w", patchErr)
-		}
-		if response.Data.Hash != key.KeyHash {
-			return unchangedDisableCauseChange(), errors.New("OpenRouter key identity mismatch after disable")
-		}
+	patchCtx, cancel := context.WithTimeout(ctx, upstreamKeyPatchTimeout)
+	response, patchErr := o.patchOpenRouterAPIKey(patchCtx, key.KeyHash, updateKeyRequest{Limit: nil, LimitReset: "", Disabled: new(true)})
+	cancel()
+	if patchErr != nil {
+		return unchangedDisableCauseChange(), fmt.Errorf("disable upstream OpenRouter API key: %w", patchErr)
+	}
+	if response.Data.Hash != key.KeyHash {
+		return unchangedDisableCauseChange(), errors.New("OpenRouter key identity mismatch after disable")
 	}
 
 	latest, err := keyRepo.GetOpenRouterAPIKey(ctx, repo.GetOpenRouterAPIKeyParams{OrganizationID: orgID, KeyType: string(keyType)})
