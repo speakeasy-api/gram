@@ -1420,6 +1420,7 @@ const listOpenRouterAPIKeyDisableCausesForUpdateNowaitFixture = `-- name: ListOp
 SELECT disable_causes
 FROM openrouter_api_keys
 WHERE organization_id = $1
+  AND deleted IS FALSE
 ORDER BY key_type
 FOR UPDATE NOWAIT
 `
@@ -1559,6 +1560,27 @@ func (q *Queries) ListRiskResultsAll(ctx context.Context, arg ListRiskResultsAll
 		return nil, err
 	}
 	return items, nil
+}
+
+const lockOpenRouterAPIKeyForUpdateFixture = `-- name: LockOpenRouterAPIKeyForUpdateFixture :one
+SELECT 1
+FROM openrouter_api_keys
+WHERE organization_id = $1
+  AND key_type = $2
+FOR UPDATE
+`
+
+type LockOpenRouterAPIKeyForUpdateFixtureParams struct {
+	OrganizationID string
+	KeyType        string
+}
+
+// Test-only synchronization: holds a row lock even when the key is soft-deleted.
+func (q *Queries) LockOpenRouterAPIKeyForUpdateFixture(ctx context.Context, arg LockOpenRouterAPIKeyForUpdateFixtureParams) (int32, error) {
+	row := q.db.QueryRow(ctx, lockOpenRouterAPIKeyForUpdateFixture, arg.OrganizationID, arg.KeyType)
+	var column_1 int32
+	err := row.Scan(&column_1)
+	return column_1, err
 }
 
 const pauseDeviceIntegrationSyncsFixture = `-- name: PauseDeviceIntegrationSyncsFixture :exec
@@ -2190,6 +2212,24 @@ type SetWorkosLastEventIDFixtureParams struct {
 // get wrong while still compiling.
 func (q *Queries) SetWorkosLastEventIDFixture(ctx context.Context, arg SetWorkosLastEventIDFixtureParams) error {
 	_, err := q.db.Exec(ctx, setWorkosLastEventIDFixture, arg.WorkosLastEventID, arg.ID)
+	return err
+}
+
+const softDeleteOpenRouterAPIKeyFixture = `-- name: SoftDeleteOpenRouterAPIKeyFixture :exec
+UPDATE openrouter_api_keys
+SET deleted_at = clock_timestamp()
+WHERE organization_id = $1
+  AND key_type = $2
+`
+
+type SoftDeleteOpenRouterAPIKeyFixtureParams struct {
+	OrganizationID string
+	KeyType        string
+}
+
+// Test-only fixture: soft-deletes one classified key row.
+func (q *Queries) SoftDeleteOpenRouterAPIKeyFixture(ctx context.Context, arg SoftDeleteOpenRouterAPIKeyFixtureParams) error {
+	_, err := q.db.Exec(ctx, softDeleteOpenRouterAPIKeyFixture, arg.OrganizationID, arg.KeyType)
 	return err
 }
 

@@ -672,6 +672,31 @@ func TestRearmTrial_DoesNotRestartLoopsSequence(t *testing.T) {
 	require.Empty(t, notifier.inactive)
 }
 
+func TestOpenRouterKeyLockProbeIgnoresSoftDeletedRows(t *testing.T) {
+	t.Parallel()
+
+	ctx, _, conn, _ := newRearmService(t)
+	const orgID = "org_rearm_probe_deleted"
+	seedOrg(t, ctx, conn, orgFixture{id: orgID, name: orgID, slug: orgID, accountType: "enterprise", whitelisted: true})
+	seedOpenRouterKey(t, ctx, conn, orgID, keyFixture{keyType: openrouter.KeyTypeChat, disabled: true})
+	seedOpenRouterKey(t, ctx, conn, orgID, keyFixture{keyType: openrouter.KeyTypeInternal, disabled: true})
+	fixtures := testrepo.New(conn)
+	require.NoError(t, fixtures.SoftDeleteOpenRouterAPIKeyFixture(ctx, testrepo.SoftDeleteOpenRouterAPIKeyFixtureParams{
+		OrganizationID: orgID, KeyType: string(openrouter.KeyTypeInternal),
+	}))
+
+	deletedRowLock := testenv.BeginTx(t, ctx, conn)
+	_, err := testrepo.New(deletedRowLock).LockOpenRouterAPIKeyForUpdateFixture(ctx, testrepo.LockOpenRouterAPIKeyForUpdateFixtureParams{
+		OrganizationID: orgID, KeyType: string(openrouter.KeyTypeInternal),
+	})
+	require.NoError(t, err)
+	defer func() { require.NoError(t, deletedRowLock.Rollback(ctx)) }()
+
+	activeCauses, err := testrepo.New(conn).ListOpenRouterAPIKeyDisableCausesForUpdateNowaitFixture(ctx, orgID)
+	require.NoError(t, err, "soft-deleted key must not participate in the lock probe")
+	require.Equal(t, [][]string{{"trial_demotion"}}, activeCauses)
+}
+
 func TestRearmTrial_LocksLifecycleBeforeAllKeyLocksAndRows(t *testing.T) {
 	t.Parallel()
 

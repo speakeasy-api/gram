@@ -620,11 +620,27 @@ SELECT pg_try_advisory_lock(
     hashtextextended('openrouter-' || @key_type::text || '-billing:' || @organization_id::text, 0)
 );
 
+-- name: SoftDeleteOpenRouterAPIKeyFixture :exec
+-- Test-only fixture: soft-deletes one classified key row.
+UPDATE openrouter_api_keys
+SET deleted_at = clock_timestamp()
+WHERE organization_id = @organization_id
+  AND key_type = @key_type;
+
+-- name: LockOpenRouterAPIKeyForUpdateFixture :one
+-- Test-only synchronization: holds a row lock even when the key is soft-deleted.
+SELECT 1
+FROM openrouter_api_keys
+WHERE organization_id = @organization_id
+  AND key_type = @key_type
+FOR UPDATE;
+
 -- name: ListOpenRouterAPIKeyDisableCausesForUpdateNowaitFixture :many
 -- Test-only lock-order probe: fails immediately if any matching key row is locked.
 SELECT disable_causes
 FROM openrouter_api_keys
 WHERE organization_id = @organization_id
+  AND deleted IS FALSE
 ORDER BY key_type
 FOR UPDATE NOWAIT;
 
