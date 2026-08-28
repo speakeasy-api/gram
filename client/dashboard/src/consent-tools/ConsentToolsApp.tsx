@@ -64,6 +64,18 @@ type ToolAccessMode = "all" | "specific";
 const GENERIC_ERROR_MESSAGE = "Couldn't load this server's tools.";
 
 /**
+ * Chip labels for the group filters. Deliberately terse: all six groups have to
+ * sit on one line at the consent card's width, and the full label still names
+ * the group in the "Select all in …" control below them.
+ */
+const SHORT_GROUP_LABELS: Record<ToolAnnotation, string> = {
+  read_only: "Read",
+  destructive: "Destructive",
+  idempotent: "Idempotent",
+  open_world: "Open world",
+};
+
+/**
  * The island is an ordinary MCP client of the consent-scoped transport: the
  * official SDK performs initialize, paginated tools/list, and session
  * termination against the URL the page provided; state and CSRF ride
@@ -328,11 +340,17 @@ export function ConsentToolsApp({
     );
   }
 
-  const groups: { id: ConsentGroup; label: string; count: number }[] = [
-    { id: "all", label: "All tools", count: tools.length },
+  const groups: {
+    id: ConsentGroup;
+    label: string;
+    shortLabel: string;
+    count: number;
+  }[] = [
+    { id: "all", label: "All tools", shortLabel: "All", count: tools.length },
     ...ANNOTATION_OPTIONS.map((o) => ({
       id: o.key as ConsentGroup,
       label: o.label,
+      shortLabel: SHORT_GROUP_LABELS[o.key],
       count: groupTools(tools, o.key).length,
     })).filter((g) => g.count > 0),
     ...(groupTools(tools, "none").length > 0
@@ -340,6 +358,7 @@ export function ConsentToolsApp({
           {
             id: "none" as ConsentGroup,
             label: "No annotation",
+            shortLabel: "Other",
             count: groupTools(tools, "none").length,
           },
         ]
@@ -429,79 +448,91 @@ export function ConsentToolsApp({
         toolCount={tools.length}
       />
       {mode === "specific" && (
-        <div className="border-border grid grid-cols-[9.5rem_1fr] border">
-          <nav
-            aria-label="Tool groups"
-            className="border-border flex flex-col border-r py-1"
-          >
-            {groups.map((g) => (
-              <button
-                key={g.id}
-                type="button"
-                aria-current={nav === g.id}
-                onClick={() => setNav(g.id)}
-                className={cn(
-                  "hover:bg-accent flex cursor-pointer items-center gap-1.5 px-2.5 py-1.5 text-left text-sm",
-                  nav === g.id && "bg-accent font-medium",
-                )}
-              >
-                <span className="flex w-3.5 shrink-0 justify-center">
-                  {groupGranted(g.id) && (
-                    <Check
-                      aria-label="granted"
-                      className="text-success h-3 w-3"
-                    />
+        <div className="flex flex-col gap-2">
+          <input
+            type="search"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Search tools…"
+            aria-label="Search tools"
+            className="border-border placeholder:text-muted-foreground h-9 border px-3 text-sm outline-none focus:border-foreground"
+          />
+
+          {/* Annotation groups read as filters, not a second column: a rail
+              stole width from the tool names it was meant to help scan. */}
+          {groups.length > 1 && (
+            <div
+              role="tablist"
+              aria-label="Tool groups"
+              className="flex flex-wrap gap-1"
+            >
+              {groups.map((g) => (
+                <button
+                  key={g.id}
+                  type="button"
+                  role="tab"
+                  aria-selected={nav === g.id}
+                  onClick={() => setNav(g.id)}
+                  className={cn(
+                    // No text-* class here: cn() runs tailwind-merge, which
+                    // treats text-eyebrow as a text utility and would drop it
+                    // for any text colour added alongside — taking the mono
+                    // uppercase styling with it. Selection is carried by the
+                    // border and background instead.
+                    "text-eyebrow border-border interact:border-foreground flex cursor-pointer items-center gap-1.5 border px-2 py-1",
+                    nav === g.id && "border-foreground bg-accent",
                   )}
-                </span>
-                <span className="min-w-0 flex-1 truncate">{g.label}</span>
-                <span className="text-muted-foreground text-xs">{g.count}</span>
-              </button>
-            ))}
-          </nav>
-          <div className="flex min-w-0 flex-col">
-            <div className="border-border flex items-center justify-between border-b px-3 py-2">
-              <span className="text-sm font-medium">{groupLabel(nav)}</span>
-              <div className="flex items-center gap-3">
-                {nav !== "all" && nav !== "none" && annGrants.has(nav) && (
-                  <button
-                    type="button"
-                    role="checkbox"
-                    aria-checked={annGrants.get(nav) === "live"}
-                    onClick={() => {
-                      const next = new Map(annGrants);
-                      next.set(
-                        nav,
-                        next.get(nav) === "live" ? "snapshot" : "live",
-                      );
-                      setAnnGrants(next);
-                    }}
-                    className="text-muted-foreground flex cursor-pointer items-center gap-1.5 text-xs"
-                  >
-                    <SelectionBox checked={annGrants.get(nav) === "live"} />
-                    Include future matching tools
-                  </button>
+                >
+                  {groupGranted(g.id) && (
+                    <Check aria-label="granted" className="h-2.5 w-2.5" />
+                  )}
+                  {g.shortLabel}
+                  <span className="opacity-60">{g.count}</span>
+                </button>
+              ))}
+            </div>
+          )}
+
+          <div className="border-border flex flex-col border">
+            <div className="border-border flex items-center justify-between gap-3 border-b px-3 py-2">
+              <button
+                type="button"
+                role="checkbox"
+                aria-checked={groupGranted(nav)}
+                onClick={toggleGroupGrant}
+                className="flex cursor-pointer items-center gap-2 text-sm"
+              >
+                <SelectionBox checked={groupGranted(nav)} />
+                Select all {grouped.length}
+                {nav !== "all" && (
+                  <span className="text-muted-foreground">
+                    in {groupLabel(nav).toLowerCase()}
+                  </span>
                 )}
+              </button>
+              {nav !== "all" && nav !== "none" && annGrants.has(nav) && (
                 <button
                   type="button"
                   role="checkbox"
-                  aria-checked={groupGranted(nav)}
-                  onClick={toggleGroupGrant}
-                  className="flex cursor-pointer items-center gap-1.5 text-sm"
+                  aria-checked={annGrants.get(nav) === "live"}
+                  onClick={() => {
+                    const next = new Map(annGrants);
+                    next.set(
+                      nav,
+                      next.get(nav) === "live" ? "snapshot" : "live",
+                    );
+                    setAnnGrants(next);
+                  }}
+                  className="text-muted-foreground flex cursor-pointer items-center gap-1.5 text-xs"
                 >
-                  <SelectionBox checked={groupGranted(nav)} />
-                  All {grouped.length}
+                  <SelectionBox checked={annGrants.get(nav) === "live"} />
+                  Include future matching tools
                 </button>
-              </div>
+              )}
             </div>
-            <input
-              type="search"
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder={`Search ${groupLabel(nav).toLowerCase()}…`}
-              aria-label="Search tools"
-              className="border-border placeholder:text-muted-foreground border-b px-3 py-1.5 text-sm outline-none"
-            />
-            <div className="max-h-[300px] min-h-0 overflow-y-auto">
+            {/* A minimum height so a three-tool server does not render a
+                letterbox, and a cap so a 200-tool one stays scannable. */}
+            <div className="max-h-[19rem] min-h-[11rem] overflow-y-auto">
               {viewed.map((tool) => {
                 const viaGrant =
                   allGrant || tool.annotations.some((a) => annGrants.has(a));
@@ -525,7 +556,7 @@ export function ConsentToolsApp({
                           }
                     }
                     className={cn(
-                      "flex items-center gap-2 px-3 py-1",
+                      "flex items-center gap-2.5 px-3 py-2",
                       viaGrant
                         ? "cursor-default"
                         : "hover:bg-accent cursor-pointer",
@@ -533,26 +564,21 @@ export function ConsentToolsApp({
                   >
                     <SelectionBox checked={inScope} />
                     <span
-                      className="min-w-0 flex-1 truncate font-mono text-xs"
+                      className="min-w-0 flex-1 truncate font-mono text-sm"
                       title={tool.name}
                     >
                       {tool.name}
                     </span>
                     {!allGrant && viaGrant && (
-                      <span className="text-muted-foreground shrink-0 text-[10px]">
+                      <span className="text-eyebrow shrink-0">
                         via annotation
-                      </span>
-                    )}
-                    {!viaGrant && picked.has(tool.name) && (
-                      <span className="text-muted-foreground shrink-0 text-[10px]">
-                        picked
                       </span>
                     )}
                   </div>
                 );
               })}
               {viewed.length === 0 && (
-                <p className="text-muted-foreground px-3 py-2 text-sm">
+                <p className="text-muted-foreground px-3 py-3 text-sm">
                   {normalizedQuery === ""
                     ? "No tools in this group."
                     : "No tools match your search."}

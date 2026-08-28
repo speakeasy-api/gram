@@ -61,7 +61,7 @@ async function openPicker(user: User): Promise<void> {
   await user.click(
     await screen.findByRole("radio", { name: /Specific tools/ }),
   );
-  await screen.findByRole("button", { name: /All tools/ });
+  await screen.findByRole("tab", { name: /All/ });
 }
 
 function formFieldValues(name: string): string[] {
@@ -169,7 +169,7 @@ describe("ConsentToolsApp", () => {
     const user = userEvent.setup();
     renderApp();
     await openPicker(user);
-    await user.click(screen.getByRole("button", { name: /Read-only/ }));
+    await user.click(screen.getByRole("tab", { name: /Read/ }));
     expect(screen.queryByText("delete_thing")).toBeNull();
     // Narrowing is on the moment the mode is "specific", but browsing a group
     // grants nothing: the scope is still empty.
@@ -183,8 +183,8 @@ describe("ConsentToolsApp", () => {
     const user = userEvent.setup();
     renderApp();
     await openPicker(user);
-    await user.click(screen.getByRole("button", { name: /Read-only/ }));
-    await user.click(screen.getByRole("checkbox", { name: /All 1/ }));
+    await user.click(screen.getByRole("tab", { name: /Read/ }));
+    await user.click(screen.getByRole("checkbox", { name: /Select all 1/ }));
 
     expect(formFieldValues("tool_filtering")).toEqual(["on"]);
     expect(formFieldValues("tool_annotations_live")).toEqual(["read_only"]);
@@ -200,8 +200,8 @@ describe("ConsentToolsApp", () => {
     const user = userEvent.setup();
     renderApp();
     await openPicker(user);
-    await user.click(screen.getByRole("button", { name: /Read-only/ }));
-    await user.click(screen.getByRole("checkbox", { name: /All 1/ }));
+    await user.click(screen.getByRole("tab", { name: /Read/ }));
+    await user.click(screen.getByRole("checkbox", { name: /Select all 1/ }));
     await user.click(
       screen.getByRole("checkbox", { name: /Include future matching tools/ }),
     );
@@ -216,9 +216,9 @@ describe("ConsentToolsApp", () => {
     const user = userEvent.setup();
     renderApp();
     await openPicker(user);
-    await user.click(screen.getByRole("button", { name: /Read-only/ }));
-    await user.click(screen.getByRole("checkbox", { name: /All 1/ }));
-    await user.click(screen.getByRole("button", { name: /All tools/ }));
+    await user.click(screen.getByRole("tab", { name: /Read/ }));
+    await user.click(screen.getByRole("checkbox", { name: /Select all 1/ }));
+    await user.click(screen.getByRole("tab", { name: /All/ }));
     await user.click(screen.getByRole("checkbox", { name: /delete_thing/ }));
 
     expect(formFieldValues("tool_filtering")).toEqual(["on"]);
@@ -231,8 +231,8 @@ describe("ConsentToolsApp", () => {
     const user = userEvent.setup();
     renderApp();
     await openPicker(user);
-    await user.click(screen.getByRole("button", { name: /Read-only/ }));
-    await user.click(screen.getByRole("checkbox", { name: /All 1/ }));
+    await user.click(screen.getByRole("tab", { name: /Read/ }));
+    await user.click(screen.getByRole("checkbox", { name: /Select all 1/ }));
     const row = screen.getByRole("checkbox", { name: /get_thing/ });
     expect(row.getAttribute("aria-disabled")).toBe("true");
     await user.click(row);
@@ -253,12 +253,12 @@ describe("ConsentToolsApp", () => {
     const user = userEvent.setup();
     renderApp();
     await openPicker(user);
-    await user.click(screen.getByRole("button", { name: /Read-only/ }));
-    await user.click(screen.getByRole("checkbox", { name: /All 2/ }));
+    await user.click(screen.getByRole("tab", { name: /Read/ }));
+    await user.click(screen.getByRole("checkbox", { name: /Select all 2/ }));
     expect(formFieldValues("tool_annotations_live")).toEqual(["read_only"]);
 
-    await user.click(screen.getByRole("button", { name: /All tools/ }));
-    const allTick = screen.getByRole("checkbox", { name: /All 2/ });
+    await user.click(screen.getByRole("tab", { name: /All/ }));
+    const allTick = screen.getByRole("checkbox", { name: /Select all 2/ });
     expect(allTick.getAttribute("aria-checked")).toBe("true");
     await user.click(allTick);
 
@@ -270,8 +270,8 @@ describe("ConsentToolsApp", () => {
     const user = userEvent.setup();
     renderApp();
     await openPicker(user);
-    await user.click(screen.getByRole("button", { name: /No annotation/ }));
-    await user.click(screen.getByRole("checkbox", { name: /All 1/ }));
+    await user.click(screen.getByRole("tab", { name: /Other/ }));
+    await user.click(screen.getByRole("checkbox", { name: /Select all 1/ }));
 
     expect(formFieldValues("tool_filtering")).toEqual(["on"]);
     expect(formFieldValues("tools")).toEqual(["plain_tool"]);
