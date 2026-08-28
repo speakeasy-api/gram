@@ -230,6 +230,7 @@ export function AuthenticationSectionBody({
         <RemoteIdentityProvidersField
           associatedIssuers={associatedIssuers}
           allowAdditionalProviders={!!target.multipleProviders}
+          projectId={target.projectId}
           isLoading={
             isLoadingIssuers || isLoadingClients || probeStatus === "loading"
           }

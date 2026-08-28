@@ -58,6 +58,7 @@ function renderField(
         associatedIssuers={issuers}
         isLoading={false}
         allowAdditionalProviders={handlers.allowAdditionalProviders ?? true}
+        projectId="project-1"
         onAdd={vi.fn<() => void>()}
         onEdit={handlers.onEdit ?? vi.fn<() => void>()}
         onDelete={handlers.onDelete ?? vi.fn<() => void>()}

@@ -66,9 +66,11 @@ WHERE meta_mcp_servers.organization_id = @organization_id
 ORDER BY meta_mcp_servers.created_at DESC, meta_mcp_servers.id DESC;
 
 -- name: UpdateMetaMCPServer :one
--- Full-record replace: a null user_session_issuer_id clears the reference. A
--- null visibility preserves the stored value so callers that do not manage
--- visibility cannot re-enable a disabled gateway.
+-- The service always supplies user_session_issuer_id (an omitted payload
+-- issuer resolves to the preserved or freshly minted one), so the narg here
+-- never arrives null from production code. A null visibility preserves the
+-- stored value so callers that do not manage visibility cannot re-enable a
+-- disabled gateway.
 UPDATE meta_mcp_servers
 SET name = @name,
     user_session_issuer_id = sqlc.narg('user_session_issuer_id'),
