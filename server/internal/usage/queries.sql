@@ -162,8 +162,9 @@ RETURNING *;
 
 -- name: PrepareStripeCheckoutIntent :one
 -- Call inside the Checkout transaction after the Stripe customer is stored.
--- The row lock makes concurrent callers reuse one live intent. Once it expires,
--- a caller may replace it only while no subscription has been activated.
+-- The row lock makes concurrent callers reuse one live intent only when its
+-- lifecycle fingerprint still matches. An expired or remotely expired stale
+-- intent may be replaced only while no subscription has been activated.
 WITH locked AS (
   SELECT
       id
@@ -176,6 +177,7 @@ WITH locked AS (
         stripe_checkout_idempotency_key IS NOT NULL
         AND stripe_checkout_billing_cycle_anchor IS NOT NULL
         AND stripe_checkout_expires_at > sqlc.arg(prepared_at)::timestamptz
+        AND right(stripe_checkout_idempotency_key, length(sqlc.arg(trial_fingerprint)::text) + 1) = ':' || sqlc.arg(trial_fingerprint)::text
       ) AS reuse_existing_intent
   FROM billing_metadata
   WHERE organization_id = sqlc.arg(organization_id)::text
@@ -211,13 +213,20 @@ WITH locked AS (
   FROM locked
   WHERE metadata.id = locked.id
     AND metadata.stripe_subscription_id IS NULL
-    -- An expired intent with a known remote session rotates only after the
-    -- caller has checked that exact session and explicitly authorizes replacing
-    -- it. A sessionless intent has no remote completion race to guard.
+    -- A known expired session rotates only after the caller verifies it. A
+    -- lifecycle-stale sessionless intent rotates only after the caller expires
+    -- the recovered remote session and authorizes this exact old intent key.
     AND (
       locked.reuse_existing_intent
-      OR locked.stripe_checkout_session_id IS NULL
       OR locked.stripe_checkout_session_id = sqlc.narg(replace_expired_session_id)::text
+      OR (
+        locked.stripe_checkout_session_id IS NULL
+        AND (
+          locked.stripe_checkout_idempotency_key IS NULL
+          OR locked.stripe_checkout_expires_at <= sqlc.arg(prepared_at)::timestamptz
+          OR locked.stripe_checkout_idempotency_key = sqlc.narg(replace_lifecycle_intent_key)::text
+        )
+      )
     )
   RETURNING
       metadata.id AS billing_metadata_id

@@ -24,7 +24,7 @@ var errStripeCheckoutTrialLifecycleChanged = errors.New("trial lifecycle changed
 // convertEnterpriseTrialForCheckoutTx records the local conversion contract
 // only. Provider reconciliation is deliberately left to the caller after the
 // Stripe business transaction commits.
-func (s *Service) convertEnterpriseTrialForCheckoutTx(ctx context.Context, tx pgx.Tx, organizationID string, now time.Time, expectedTrial *stripeCheckoutTrialFingerprint, preparedTrialFingerprint string, checkoutSessionID string) (bool, error) {
+func (s *Service) convertEnterpriseTrialForCheckoutTx(ctx context.Context, tx pgx.Tx, organizationID string, expectedTrial *stripeCheckoutTrialFingerprint, preparedTrialFingerprint string, checkoutSessionID string) (bool, error) {
 	trial, err := trialsrepo.New(tx).LockTrialLifecycle(ctx, organizationID)
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
@@ -56,6 +56,7 @@ func (s *Service) convertEnterpriseTrialForCheckoutTx(ctx context.Context, tx pg
 	if !stripeCheckoutTrialMatches(expectedTrial, currentTrial) || preparedTrialFingerprint != stripeCheckoutTrialFingerprintDigest(expectedTrial) {
 		return false, errStripeCheckoutTrialLifecycleChanged
 	}
+	now := s.checkoutNow()
 	if trial.ConvertedAt.Valid || trial.DemotedAt.Valid || trial.Tier != "enterprise" || !trial.EndsAt.Valid || !trial.EndsAt.Time.After(now) {
 		return false, nil
 	}

@@ -64,6 +64,7 @@ type Service struct {
 	featureFlags    feature.Provider
 	productFeatures productFeatureCacheUpdater
 	trial           trialemails.Notifier
+	now             func() time.Time
 }
 
 type productFeatureCacheUpdater interface {
@@ -112,6 +113,7 @@ func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pg
 		featureFlags:    featureFlags,
 		productFeatures: productFeatures,
 		trial:           trialNotifier,
+		now:             time.Now,
 	}
 	service.stripeHandler = service.serviceStripeWebhookHandler
 	return service
@@ -142,6 +144,7 @@ func NewBillingOperations(logger *slog.Logger, db *pgxpool.Pool, stripeClient st
 		featureFlags:    nil,
 		productFeatures: nil,
 		trial:           nil,
+		now:             time.Now,
 	}
 }
 
