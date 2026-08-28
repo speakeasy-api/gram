@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"maps"
 	"net/url"
 	"reflect"
 	"sync"
@@ -51,6 +52,7 @@ type checkoutStripeClient struct {
 	checkoutError            error
 	afterCheckoutCreate      func()
 	expireCheckoutError      error
+	beforeCheckoutExpire     func(string)
 	expiredCheckoutIDs       []string
 	checkoutState            *stripeclient.CheckoutSessionState
 	checkoutGetErr           error
@@ -122,12 +124,19 @@ func (c *checkoutStripeClient) CreateCheckoutSession(_ context.Context, input st
 
 func (c *checkoutStripeClient) ExpireCheckoutSession(_ context.Context, id string) error {
 	c.mu.Lock()
-	defer c.mu.Unlock()
-
-	if c.expireCheckoutError != nil {
-		return c.expireCheckoutError
+	err := c.expireCheckoutError
+	hook := c.beforeCheckoutExpire
+	if err == nil {
+		c.expiredCheckoutIDs = append(c.expiredCheckoutIDs, id)
 	}
-	c.expiredCheckoutIDs = append(c.expiredCheckoutIDs, id)
+	c.mu.Unlock()
+
+	if err != nil {
+		return err
+	}
+	if hook != nil {
+		hook(id)
+	}
 	return nil
 }
 
@@ -750,6 +759,127 @@ func TestCreateStripeCheckoutFailsClosedWhenLifecycleStaleSessionExpirationFails
 	require.Equal(t, before.StripeCheckoutIdempotencyKey, after.StripeCheckoutIdempotencyKey)
 	require.Equal(t, before.StripeCheckoutExpiresAt, after.StripeCheckoutExpiresAt)
 	require.False(t, after.StripeCheckoutSessionID.Valid)
+}
+
+func TestCreateStripeCheckoutFailsClosedWhenLifecycleStaleSessionRecoveryFails(t *testing.T) {
+	t.Parallel()
+
+	ti := newStripeCheckoutTestInstance(t)
+	trialEnd := time.Now().UTC().Add(7 * 24 * time.Hour)
+	require.NoError(t, trialsrepo.New(ti.db).CreateTrial(t.Context(), trialsrepo.CreateTrialParams{
+		OrganizationID: ti.orgID, Tier: "enterprise",
+		EndsAt: pgtype.Timestamptz{Time: trialEnd, InfinityModifier: pgtype.Finite, Valid: true},
+	}))
+	ti.stripe.afterCheckoutCreate = func() {
+		ti.stripe.afterCheckoutCreate = nil
+		_, err := trialsrepo.New(ti.db).ExtendTrial(t.Context(), trialsrepo.ExtendTrialParams{OrganizationID: ti.orgID, ExtendByDays: 1})
+		require.NoError(t, err)
+	}
+	_, err := ti.service.CreateStripeCheckout(ti.adminContext(t), &gen.CreateStripeCheckoutPayload{})
+	require.Error(t, err)
+	before, err := repo.New(ti.db).GetBillingMetadata(t.Context(), ti.orgID)
+	require.NoError(t, err)
+	beforeOrganization, err := orgrepo.New(ti.db).GetOrganizationMetadata(t.Context(), ti.orgID)
+	require.NoError(t, err)
+	ti.stripe.checkoutError = errors.New("session recovery unavailable")
+
+	_, err = ti.service.CreateStripeCheckout(ti.adminContext(t), &gen.CreateStripeCheckoutPayload{})
+	require.Error(t, err)
+	requireOopsCode(t, err, oops.CodeUnavailable)
+	_, _, checkouts := ti.stripe.snapshot()
+	require.Len(t, checkouts, 2)
+	require.Equal(t, checkouts[0].IdempotencyKey, checkouts[1].IdempotencyKey)
+	require.Empty(t, ti.stripe.expiredCheckoutIDs)
+	ti.stripe.mu.Lock()
+	remoteSessionCount := len(ti.stripe.checkoutResults)
+	ti.stripe.mu.Unlock()
+	require.Equal(t, 1, remoteSessionCount)
+	after, err := repo.New(ti.db).GetBillingMetadata(t.Context(), ti.orgID)
+	require.NoError(t, err)
+	require.Equal(t, before.StripeCheckoutIdempotencyKey, after.StripeCheckoutIdempotencyKey)
+	require.Equal(t, before.StripeCheckoutExpiresAt, after.StripeCheckoutExpiresAt)
+	require.False(t, after.StripeCheckoutSessionID.Valid)
+	afterOrganization, err := orgrepo.New(ti.db).GetOrganizationMetadata(t.Context(), ti.orgID)
+	require.NoError(t, err)
+	require.Equal(t, beforeOrganization.GramAccountType, afterOrganization.GramAccountType)
+	require.Equal(t, beforeOrganization.Whitelisted, afterOrganization.Whitelisted)
+	for _, action := range []audit.Action{audit.ActionOrganizationEnterpriseTrialConverted, audit.ActionBillingMetadataCreateStripeCheckout} {
+		count, countErr := audittest.AuditLogCountByAction(t.Context(), ti.db, action)
+		require.NoError(t, countErr)
+		require.Zero(t, count)
+	}
+}
+
+func TestCreateStripeCheckoutConcurrentLifecycleRotationCreatesOneReplacement(t *testing.T) {
+	t.Parallel()
+
+	ti := newStripeCheckoutTestInstance(t)
+	trialEnd := time.Now().UTC().Add(7 * 24 * time.Hour)
+	require.NoError(t, trialsrepo.New(ti.db).CreateTrial(t.Context(), trialsrepo.CreateTrialParams{
+		OrganizationID: ti.orgID, Tier: "enterprise",
+		EndsAt: pgtype.Timestamptz{Time: trialEnd, InfinityModifier: pgtype.Finite, Valid: true},
+	}))
+	ti.stripe.afterCheckoutCreate = func() {
+		ti.stripe.afterCheckoutCreate = nil
+		_, err := trialsrepo.New(ti.db).ExtendTrial(t.Context(), trialsrepo.ExtendTrialParams{OrganizationID: ti.orgID, ExtendByDays: 1})
+		require.NoError(t, err)
+	}
+	_, err := ti.service.CreateStripeCheckout(ti.adminContext(t), &gen.CreateStripeCheckoutPayload{})
+	require.Error(t, err)
+
+	expirationArrivals := make(chan string, 2)
+	releaseExpiration := make(chan struct{})
+	ti.stripe.beforeCheckoutExpire = func(id string) {
+		expirationArrivals <- id
+		<-releaseExpiration
+	}
+	type checkoutResult struct {
+		url string
+		err error
+	}
+	results := make(chan checkoutResult, 2)
+	ctx := ti.adminContext(t)
+	for range 2 {
+		go func() {
+			url, callErr := ti.service.CreateStripeCheckout(ctx, &gen.CreateStripeCheckoutPayload{})
+			results <- checkoutResult{url: url, err: callErr}
+		}()
+	}
+	require.Equal(t, "cs_1", <-expirationArrivals)
+	require.Equal(t, "cs_1", <-expirationArrivals)
+	close(releaseExpiration)
+
+	firstResults := []checkoutResult{<-results, <-results}
+	finalURLs := make([]string, 0, 2)
+	for _, result := range firstResults {
+		if result.err != nil {
+			requireOopsCode(t, result.err, oops.CodeConflict)
+			result.url, result.err = ti.service.CreateStripeCheckout(ctx, &gen.CreateStripeCheckoutPayload{})
+		}
+		require.NoError(t, result.err)
+		finalURLs = append(finalURLs, result.url)
+	}
+	require.Equal(t, finalURLs[0], finalURLs[1])
+	require.Equal(t, "https://checkout.stripe.test/2", finalURLs[0])
+	require.NotEmpty(t, ti.stripe.expiredCheckoutIDs)
+	for _, id := range ti.stripe.expiredCheckoutIDs {
+		require.Equal(t, "cs_1", id)
+	}
+	ti.stripe.mu.Lock()
+	remoteSessions := make(map[string]checkoutStripeResult, len(ti.stripe.checkoutResults))
+	maps.Copy(remoteSessions, ti.stripe.checkoutResults)
+	ti.stripe.mu.Unlock()
+	require.Len(t, remoteSessions, 2)
+	replacementCount := 0
+	for _, result := range remoteSessions {
+		if result.id == "cs_2" {
+			replacementCount++
+		}
+	}
+	require.Equal(t, 1, replacementCount)
+	stored, err := repo.New(ti.db).GetBillingMetadata(t.Context(), ti.orgID)
+	require.NoError(t, err)
+	require.Equal(t, "cs_2", stored.StripeCheckoutSessionID.String)
 }
 
 func TestCreateStripeCheckoutUsesCurrentClockForLockedTrialActiveCheck(t *testing.T) {

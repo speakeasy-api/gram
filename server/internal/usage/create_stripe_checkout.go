@@ -7,7 +7,9 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/jackc/pgerrcode"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
 
 	gen "github.com/speakeasy-api/gram/server/gen/usage"
@@ -260,6 +262,9 @@ func (s *Service) prepareStripeCheckoutIntent(
 		StripeCustomerID: pgtype.Text{String: customerID, Valid: true},
 	})
 	if err != nil {
+		if isStripeCheckoutCASConflict(err) {
+			return preparedStripeCheckoutIntent{}, oops.E(oops.CodeConflict, err, "billing state changed while Checkout was being prepared").LogWarn(ctx, s.logger)
+		}
 		return preparedStripeCheckoutIntent{}, oops.E(oops.CodeUnexpected, err, "failed to store Stripe customer").LogError(ctx, s.logger)
 	}
 	if !stored.StripeCustomerID.Valid || stored.StripeCustomerID.String != customerID {
@@ -279,8 +284,8 @@ func (s *Service) prepareStripeCheckoutIntent(
 		ReplaceLifecycleIntentKey:        replaceLifecycleIntentKey,
 	})
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return preparedStripeCheckoutIntent{}, oops.E(oops.CodeConflict, nil, "billing state changed while Checkout was being prepared").LogWarn(ctx, s.logger)
+		if errors.Is(err, pgx.ErrNoRows) || isStripeCheckoutCASConflict(err) {
+			return preparedStripeCheckoutIntent{}, oops.E(oops.CodeConflict, err, "billing state changed while Checkout was being prepared").LogWarn(ctx, s.logger)
 		}
 		return preparedStripeCheckoutIntent{}, oops.E(oops.CodeUnexpected, err, "failed to prepare Stripe Checkout").LogError(ctx, s.logger)
 	}
@@ -297,6 +302,11 @@ func (s *Service) prepareStripeCheckoutIntent(
 		stripeCheckoutIntent: intent,
 		customerID:           customerID,
 	}, nil
+}
+
+func isStripeCheckoutCASConflict(err error) bool {
+	var pgErr *pgconn.PgError
+	return errors.As(err, &pgErr) && (pgErr.Code == pgerrcode.DeadlockDetected || pgErr.Code == pgerrcode.SerializationFailure)
 }
 
 func (s *Service) checkoutNow() time.Time {
