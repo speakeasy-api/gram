@@ -10,6 +10,7 @@ import (
 	"slices"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -55,6 +56,53 @@ type testInstance struct {
 	conn        *pgxpool.Pool
 	enc         *encryption.Client
 	provisioner *stubProvisioner
+	coordinator *stubAdminCoordinator
+}
+
+type stubAdminCoordinator struct {
+	mu        sync.Mutex
+	begin     func(context.Context, openrouterkeys.AdminReconciliationScope) error
+	complete  func(context.Context, openrouterkeys.AdminReconciliationScope) error
+	abort     func(context.Context, openrouterkeys.AdminReconciliationScope) error
+	begins    []openrouterkeys.AdminReconciliationScope
+	completes int
+	aborts    int
+}
+
+func (s *stubAdminCoordinator) Begin(ctx context.Context, scope openrouterkeys.AdminReconciliationScope) error {
+	s.mu.Lock()
+	s.begins = append(s.begins, scope)
+	begin := s.begin
+	s.mu.Unlock()
+	return begin(ctx, scope)
+}
+
+func (s *stubAdminCoordinator) CompleteAndWait(ctx context.Context, scope openrouterkeys.AdminReconciliationScope) error {
+	s.mu.Lock()
+	s.completes++
+	complete := s.complete
+	s.mu.Unlock()
+	return complete(ctx, scope)
+}
+
+func (s *stubAdminCoordinator) Abort(ctx context.Context, scope openrouterkeys.AdminReconciliationScope) error {
+	s.mu.Lock()
+	s.aborts++
+	abort := s.abort
+	s.mu.Unlock()
+	return abort(ctx, scope)
+}
+
+func (s *stubAdminCoordinator) Counts() (int, int) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.completes, s.aborts
+}
+
+func (s *stubAdminCoordinator) Begins() []openrouterkeys.AdminReconciliationScope {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return append([]openrouterkeys.AdminReconciliationScope(nil), s.begins...)
 }
 
 // stubProvisioner stands in for the OpenRouter client. Methods that mutate
@@ -75,6 +123,8 @@ type stubProvisioner struct {
 	refreshCalls     []string
 	addCauseCalls    []string
 	removeCauseCalls []string
+	reconcileErr     error
+	reconcileCalls   int
 }
 
 var _ openrouter.Provisioner = (*stubProvisioner)(nil)
@@ -211,7 +261,16 @@ func (s *stubProvisioner) removeAPIKeyDisableCause(ctx context.Context, db openr
 }
 
 func (s *stubProvisioner) ReconcileAPIKeyDisabledWithDB(context.Context, openrouter.DBTX, string, openrouter.KeyType) error {
-	return nil
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.reconcileCalls++
+	return s.reconcileErr
+}
+
+func (s *stubProvisioner) ReconcileCalls() int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.reconcileCalls
 }
 
 func (s *stubProvisioner) DisableAPIKey(ctx context.Context, orgID string, keyType openrouter.KeyType) error {
@@ -285,6 +344,16 @@ func newTestService(t *testing.T) (context.Context, *testInstance) {
 
 func newTestServiceWithProvisioner(t *testing.T, factory provisionerFactory) (context.Context, *testInstance) {
 	t.Helper()
+	return newTestServiceWithOptions(t, factory)
+}
+
+func newTestServiceWithAdminMutationTimeout(t *testing.T, timeout time.Duration) (context.Context, *testInstance) {
+	t.Helper()
+	return newTestServiceWithOptions(t, nil, openrouterkeys.WithAdminLocalMutationTimeout(timeout))
+}
+
+func newTestServiceWithOptions(t *testing.T, factory provisionerFactory, options ...openrouterkeys.ServiceOption) (context.Context, *testInstance) {
+	t.Helper()
 	ctx := t.Context()
 	logger := testenv.NewLogger(t)
 	tracerProvider := testenv.NewTracerProvider(t)
@@ -316,11 +385,19 @@ func newTestServiceWithProvisioner(t *testing.T, factory provisionerFactory) (co
 		stub = nil
 	}
 
+	reconciler := openrouterkeys.NewAdminReconciliationExecutor(logger, conn, provisioner)
+	coordinator := &stubAdminCoordinator{
+		begin:    func(context.Context, openrouterkeys.AdminReconciliationScope) error { return nil },
+		complete: reconciler.Reconcile,
+		abort:    func(context.Context, openrouterkeys.AdminReconciliationScope) error { return nil },
+	}
+
 	return ctx, &testInstance{
-		service:     openrouterkeys.NewService(logger, tracerProvider, conn, sessionManager, authzEngine, audit.NewLogger(), provisioner, enc),
+		service:     openrouterkeys.NewService(logger, tracerProvider, conn, sessionManager, authzEngine, audit.NewLogger(), provisioner, enc, coordinator, options...),
 		conn:        conn,
 		enc:         enc,
 		provisioner: stub,
+		coordinator: coordinator,
 	}
 }
 

@@ -45,16 +45,36 @@ type lockedSessionProvisioner interface {
 }
 
 type Service struct {
-	tracer      trace.Tracer
-	logger      *slog.Logger
-	db          *pgxpool.Pool
-	auth        *auth.Auth
-	audit       *audit.Logger
-	enc         *encryption.Client
-	provisioner openrouter.Provisioner
+	tracer                    trace.Tracer
+	logger                    *slog.Logger
+	db                        *pgxpool.Pool
+	auth                      *auth.Auth
+	audit                     *audit.Logger
+	enc                       *encryption.Client
+	provisioner               openrouter.Provisioner
+	coordinator               AdminMutationCoordinator
+	adminLocalMutationTimeout time.Duration
 }
 
-const keyBillingLockWaitTimeout = 5 * time.Second
+const (
+	keyBillingLockWaitTimeout = 5 * time.Second
+	// The local transaction is frozen before the Temporal crash guard's
+	// 10-second deadline, so a guard reconciliation can never race a late commit.
+	defaultAdminLocalMutationTimeout = 6 * time.Second
+	adminMutationWaitTimeout         = 6 * time.Second
+)
+
+type ServiceOption func(*Service)
+
+func WithAdminLocalMutationTimeout(timeout time.Duration) ServiceOption {
+	return func(service *Service) {
+		// Options may shorten the bound for tests, never weaken the production
+		// invariant that local commits freeze before the crash guard fires.
+		if timeout > 0 && timeout <= defaultAdminLocalMutationTimeout {
+			service.adminLocalMutationTimeout = timeout
+		}
+	}
+}
 
 var _ gen.Service = (*Service)(nil)
 var _ gen.Auther = (*Service)(nil)
@@ -68,17 +88,25 @@ func NewService(
 	auditLogger *audit.Logger,
 	provisioner openrouter.Provisioner,
 	enc *encryption.Client,
+	coordinator AdminMutationCoordinator,
+	options ...ServiceOption,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("openrouterkeys.api"))
-	return &Service{
-		tracer:      tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/openrouterkeys"),
-		logger:      logger,
-		db:          db,
-		auth:        auth.New(logger, db, sessions, authzEngine),
-		audit:       auditLogger,
-		enc:         enc,
-		provisioner: provisioner,
+	service := &Service{
+		tracer:                    tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/openrouterkeys"),
+		logger:                    logger,
+		db:                        db,
+		auth:                      auth.New(logger, db, sessions, authzEngine),
+		audit:                     auditLogger,
+		enc:                       enc,
+		provisioner:               provisioner,
+		coordinator:               coordinator,
+		adminLocalMutationTimeout: defaultAdminLocalMutationTimeout,
 	}
+	for _, option := range options {
+		option(service)
+	}
+	return service
 }
 
 func Attach(mux goahttp.Muxer, service *Service) {
@@ -189,7 +217,7 @@ func (s *Service) DisableKey(ctx context.Context, payload *gen.DisableKeyPayload
 	}
 	logger = logger.With(attr.SlogOrganizationID(payload.OrganizationID), attr.SlogOpenRouterKeyType(payload.KeyType))
 
-	if err := s.mutateAdminLock(ctx, logger, authCtx, payload.OrganizationID, payload.KeyType, true); err != nil {
+	if err := s.coordinateAdminMutation(ctx, logger, authCtx, payload.OrganizationID, payload.KeyType, true); err != nil {
 		return nil, err
 	}
 	return s.adminKeyView(ctx, logger, payload.OrganizationID, payload.KeyType)
@@ -202,10 +230,44 @@ func (s *Service) EnableKey(ctx context.Context, payload *gen.EnableKeyPayload) 
 	}
 	logger = logger.With(attr.SlogOrganizationID(payload.OrganizationID), attr.SlogOpenRouterKeyType(payload.KeyType))
 
-	if err := s.mutateAdminLock(ctx, logger, authCtx, payload.OrganizationID, payload.KeyType, false); err != nil {
+	if err := s.coordinateAdminMutation(ctx, logger, authCtx, payload.OrganizationID, payload.KeyType, false); err != nil {
 		return nil, err
 	}
 	return s.adminKeyView(ctx, logger, payload.OrganizationID, payload.KeyType)
+}
+
+func (s *Service) coordinateAdminMutation(ctx context.Context, logger *slog.Logger, authCtx *contextvalues.AuthContext, organizationID, keyType string, disable bool) error {
+	scope := AdminReconciliationScope{OrganizationID: organizationID, KeyType: keyType}
+	if err := s.coordinator.Begin(ctx, scope); err != nil {
+		return s.mapCoordinatorError(ctx, logger, err, "start durable admin reconciliation")
+	}
+
+	mutationCtx, cancelMutation := context.WithTimeout(ctx, s.adminLocalMutationTimeout)
+	mutationErr := s.mutateAdminLock(mutationCtx, logger, authCtx, organizationID, keyType, disable)
+	cancelMutation()
+	if mutationErr != nil {
+		abortCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
+		abortErr := s.coordinator.Abort(abortCtx, scope)
+		cancel()
+		if abortErr != nil {
+			logger.WarnContext(ctx, "abort admin reconciliation coordinator after local failure", attr.SlogError(abortErr))
+		}
+		return mutationErr
+	}
+
+	waitCtx, cancel := context.WithTimeout(ctx, adminMutationWaitTimeout)
+	defer cancel()
+	if err := s.coordinator.CompleteAndWait(waitCtx, scope); err != nil {
+		return s.mapCoordinatorError(ctx, logger, err, "complete durable admin reconciliation")
+	}
+	return nil
+}
+
+func (s *Service) mapCoordinatorError(ctx context.Context, logger *slog.Logger, err error, operation string) error {
+	if errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled) {
+		return oops.E(oops.CodeUnavailable, err, "another billing operation is in progress; retry shortly").LogWarn(ctx, logger)
+	}
+	return oops.E(oops.CodeUnexpected, err, "%s", operation).LogError(ctx, logger)
 }
 
 func (s *Service) mutateAdminLock(ctx context.Context, logger *slog.Logger, authCtx *contextvalues.AuthContext, organizationID, keyType string, add bool) error {
@@ -221,7 +283,11 @@ func (s *Service) mutateAdminLock(ctx context.Context, logger *slog.Logger, auth
 		if err != nil {
 			return fmt.Errorf("begin openrouter key %s transaction: %w", operation, err)
 		}
-		defer func() { _ = tx.Rollback(ctx) }()
+		defer func() {
+			rollbackCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+			defer cancel()
+			_ = tx.Rollback(rollbackCtx)
+		}()
 
 		row, err := repo.New(tx).GetOpenRouterAPIKeyForAdmin(ctx, repo.GetOpenRouterAPIKeyForAdminParams{
 			OrganizationID: organizationID,
@@ -264,9 +330,6 @@ func (s *Service) mutateAdminLock(ctx context.Context, logger *slog.Logger, auth
 		if err := tx.Commit(ctx); err != nil {
 			return fmt.Errorf("commit openrouter key %s transaction: %w", operation, err)
 		}
-		if err := provisioner.ReconcileAPIKeyDisabledWithDB(ctx, conn, organizationID, openrouter.KeyType(keyType)); err != nil {
-			return fmt.Errorf("%s openrouter key after committing admin lock: %w", operation, err)
-		}
 		return nil
 	})
 	if err == nil {
@@ -275,7 +338,7 @@ func (s *Service) mutateAdminLock(ctx context.Context, logger *slog.Logger, auth
 	if shareable, ok := errors.AsType[*oops.ShareableError](err); ok {
 		return shareable
 	}
-	if errors.Is(err, keybillinglock.ErrAcquireTimeout) {
+	if errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled) || errors.Is(err, keybillinglock.ErrAcquireTimeout) {
 		return oops.E(oops.CodeUnavailable, err, "another billing operation is in progress; retry shortly").LogWarn(ctx, logger)
 	}
 	return oops.E(oops.CodeUnexpected, err, "admin %s openrouter key", operation).LogError(ctx, logger)
