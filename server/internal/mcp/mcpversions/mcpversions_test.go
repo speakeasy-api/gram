@@ -44,6 +44,7 @@ func TestSupportedSetsAreKnownAndOrdered(t *testing.T) {
 	for _, supported := range [][]string{
 		mcpversions.SupportedHostedToolset(),
 		mcpversions.SupportedPlatformToolset(),
+		mcpversions.SupportedMetaServer(),
 	} {
 		require.NotEmpty(t, supported)
 		require.True(t, slices.IsSorted(supported), "revision identifiers are YYYY-MM-DD, so chronological order is lexical order")

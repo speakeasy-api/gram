@@ -430,6 +430,7 @@ export function GatewayMembersTab({
           )
         }
         adding={mutating}
+        projectId={metaMcpServer.projectId}
       />
 
       <Dialog
@@ -486,6 +487,7 @@ function AddMemberSheet({
   onAdd,
   onAddFromCatalog,
   adding,
+  projectId,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -494,6 +496,7 @@ function AddMemberSheet({
   onAdd: (server: McpServer) => void;
   onAddFromCatalog: () => void;
   adding: boolean;
+  projectId: string;
 }): JSX.Element {
   const [search, setSearch] = useState("");
 
@@ -532,8 +535,14 @@ function AddMemberSheet({
               placeholder="Search MCP servers..."
             />
           </div>
-          {/* The catalog install flow is page-gated on project:write. */}
-          <RequireScope scope="project:write" level="component">
+          {/* The catalog install flow is page-gated on project:write;
+              scoping to this gateway's project keeps the check exact when a
+              grant is selector-constrained to specific projects. */}
+          <RequireScope
+            scope="project:write"
+            resourceId={projectId}
+            level="component"
+          >
             <Button variant="secondary" onClick={onAddFromCatalog}>
               <Button.Text>Add from catalog</Button.Text>
             </Button>
