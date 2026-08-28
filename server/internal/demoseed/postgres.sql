@@ -663,6 +663,172 @@ BEGIN
      now() - interval '30 hours', now() - interval '6 days');
 
   ------------------------------------------------------------------
+  -- Killswitches. Six stable aggregates exercise every customer status and
+  -- the principal-first overlap/history stories. Direct SQL mirrors lifecycle
+  -- transactions: one watermark per mutation, immutable complete snapshots,
+  -- superseded predecessors, completed replay receipts, and current_version
+  -- pointing at the newest version. All resource keys are fronting server IDs.
+  ------------------------------------------------------------------
+  INSERT INTO killswitch_customer_list_watermarks
+    (organization_id, definition_key, principal_kind, resource_kind, watermark)
+  VALUES (demo_org, 'mcp_tool_execution', 'user', 'mcp_server', 8);
+
+  INSERT INTO killswitch_prescriptions
+    (id, organization_id, definition_key, principal_kind, principal_key,
+     resource_kind, current_version, created_at, updated_at)
+  VALUES
+    (demo.det_uuid('gram-demo-killswitch-active-selected'), demo_org,
+     'mcp_tool_execution', 'user', demo_user_ids[1], 'mcp_server', 1,
+     now() - interval '8 days', now() - interval '8 days'),
+    (demo.det_uuid('gram-demo-killswitch-active-all'), demo_org,
+     'mcp_tool_execution', 'user', demo_user_ids[1], 'mcp_server', 1,
+     now() - interval '7 days', now() - interval '7 days'),
+    (demo.det_uuid('gram-demo-killswitch-scheduled-all'), demo_org,
+     'mcp_tool_execution', 'user', demo_user_ids[3], 'mcp_server', 1,
+     now() - interval '1 hour', now() - interval '1 hour'),
+    (demo.det_uuid('gram-demo-killswitch-changed'), demo_org,
+     'mcp_tool_execution', 'user', demo_user_ids[2], 'mcp_server', 2,
+     now() - interval '6 days', now() - interval '2 days'),
+    (demo.det_uuid('gram-demo-killswitch-lifted'), demo_org,
+     'mcp_tool_execution', 'user', demo_user_ids[4], 'mcp_server', 2,
+     now() - interval '5 days', now() - interval '12 hours'),
+    (demo.det_uuid('gram-demo-killswitch-expired'), demo_org,
+     'mcp_tool_execution', 'user', demo_user_ids[5], 'mcp_server', 1,
+     now() - interval '4 days', now() - interval '4 days');
+
+  INSERT INTO killswitch_prescription_versions
+    (organization_id, prescription_id, version, state, resource_scope, start_mode,
+     starts_at, expires_at, activated_at, superseded_at, internal_note,
+     external_note, list_watermark, created_at)
+  VALUES
+    (demo_org, demo.det_uuid('gram-demo-killswitch-active-selected'), 1,
+     'active', 'selected', 'now', now() - interval '8 days', NULL,
+     now() - interval '8 days', NULL,
+     E'Incident containment for the fictional support workflow.\nReview after the demo investigation.',
+     E'MCP tool calls are paused for this member.\n<script>alert("demo")</script>\n**This is plain text, not Markdown.**',
+     1, now() - interval '8 days'),
+    (demo_org, demo.det_uuid('gram-demo-killswitch-active-all'), 1,
+     'active', 'all', 'now', now() - interval '7 days', NULL,
+     now() - interval '7 days', NULL,
+     'Overlapping all-server containment for the fictional support incident.',
+     'MCP tool calls are paused across all current and future servers.',
+     2, now() - interval '7 days'),
+    (demo_org, demo.det_uuid('gram-demo-killswitch-scheduled-all'), 1,
+     'active', 'all', 'at', now() + interval '2 days', now() + interval '6 days',
+     now() - interval '1 hour', NULL,
+     'Scheduled maintenance window for the fictional platform team.',
+     'MCP tool calls will be paused during scheduled maintenance.',
+     3, now() - interval '1 hour'),
+    (demo_org, demo.det_uuid('gram-demo-killswitch-changed'), 1,
+     'active', 'selected', 'now', now() - interval '6 days', NULL,
+     now() - interval '6 days', now() - interval '2 days',
+     'Initial three-server scope for the fictional reconciliation review.',
+     'MCP tool calls are paused while access is reviewed.',
+     4, now() - interval '6 days'),
+    (demo_org, demo.det_uuid('gram-demo-killswitch-changed'), 2,
+     'active', 'selected', 'now', now() - interval '2 days', NULL,
+     now() - interval '6 days', NULL,
+     'Narrowed after review; only the support server remains in scope.',
+     'MCP tool calls remain paused for the support server.',
+     5, now() - interval '2 days'),
+    (demo_org, demo.det_uuid('gram-demo-killswitch-lifted'), 1,
+     'active', 'selected', 'now', now() - interval '5 days', NULL,
+     now() - interval '5 days', now() - interval '12 hours',
+     'Temporary pause for a fictional credential review.',
+     'MCP tool calls are paused during the credential review.',
+     6, now() - interval '5 days'),
+    (demo_org, demo.det_uuid('gram-demo-killswitch-lifted'), 2,
+     'inactive', 'selected', 'now', now() - interval '5 days', NULL,
+     now() - interval '5 days', NULL,
+     'Temporary pause for a fictional credential review.',
+     'MCP tool calls are paused during the credential review.',
+     7, now() - interval '12 hours'),
+    (demo_org, demo.det_uuid('gram-demo-killswitch-expired'), 1,
+     'active', 'selected', 'now', now() - interval '4 days', now() - interval '1 day',
+     now() - interval '4 days', NULL,
+     'Bounded pause for a completed fictional operations exercise.',
+     'MCP tool calls were paused for the operations exercise.',
+     8, now() - interval '4 days');
+
+  INSERT INTO killswitch_prescription_version_resources
+    (organization_id, prescription_id, version, resource_key)
+  VALUES
+    (demo_org, demo.det_uuid('gram-demo-killswitch-active-selected'), 1,
+     demo.det_uuid('gram-demo-mcpserver-support')::text),
+    (demo_org, demo.det_uuid('gram-demo-killswitch-changed'), 1,
+     demo.det_uuid('gram-demo-mcpserver-support')::text),
+    (demo_org, demo.det_uuid('gram-demo-killswitch-changed'), 1,
+     demo.det_uuid('gram-demo-mcpserver-ops')::text),
+    (demo_org, demo.det_uuid('gram-demo-killswitch-changed'), 1,
+     demo.det_uuid('gram-demo-mcpserver-linear')::text),
+    (demo_org, demo.det_uuid('gram-demo-killswitch-changed'), 2,
+     demo.det_uuid('gram-demo-mcpserver-support')::text),
+    (demo_org, demo.det_uuid('gram-demo-killswitch-lifted'), 1,
+     demo.det_uuid('gram-demo-mcpserver-slack')::text),
+    (demo_org, demo.det_uuid('gram-demo-killswitch-lifted'), 2,
+     demo.det_uuid('gram-demo-mcpserver-slack')::text),
+    (demo_org, demo.det_uuid('gram-demo-killswitch-expired'), 1,
+     demo.det_uuid('gram-demo-mcpserver-ops')::text);
+
+  INSERT INTO killswitch_expiry_events
+    (organization_id, prescription_id, version, recorded_at)
+  VALUES (demo_org, demo.det_uuid('gram-demo-killswitch-expired'), 1,
+          now() - interval '23 hours');
+
+  INSERT INTO killswitch_operations
+    (organization_id, operation_id, actor_user_id, operation, request_hash,
+     status, response, expires_at, created_at, updated_at)
+  VALUES
+    (demo_org, demo.det_uuid('gram-demo-killswitch-operation-active-selected-v1'),
+     demo_user_ids[6], 'activate', 'sha256:' || repeat('1', 64), 'completed',
+     jsonb_build_object('response_version', 'killswitch-operation-response-v1',
+       'prescription_id', demo.det_uuid('gram-demo-killswitch-active-selected')::text,
+       'prescription_version', 1, 'state', 'active'),
+     now() + interval '22 days', now() - interval '8 days', now() - interval '8 days'),
+    (demo_org, demo.det_uuid('gram-demo-killswitch-operation-active-all-v1'),
+     demo_user_ids[6], 'activate', 'sha256:' || repeat('2', 64), 'completed',
+     jsonb_build_object('response_version', 'killswitch-operation-response-v1',
+       'prescription_id', demo.det_uuid('gram-demo-killswitch-active-all')::text,
+       'prescription_version', 1, 'state', 'active'),
+     now() + interval '23 days', now() - interval '7 days', now() - interval '7 days'),
+    (demo_org, demo.det_uuid('gram-demo-killswitch-operation-scheduled-all-v1'),
+     demo_user_ids[6], 'activate', 'sha256:' || repeat('3', 64), 'completed',
+     jsonb_build_object('response_version', 'killswitch-operation-response-v1',
+       'prescription_id', demo.det_uuid('gram-demo-killswitch-scheduled-all')::text,
+       'prescription_version', 1, 'state', 'active'),
+     now() + interval '29 days 23 hours', now() - interval '1 hour', now() - interval '1 hour'),
+    (demo_org, demo.det_uuid('gram-demo-killswitch-operation-changed-v1'),
+     demo_user_ids[6], 'activate', 'sha256:' || repeat('4', 64), 'completed',
+     jsonb_build_object('response_version', 'killswitch-operation-response-v1',
+       'prescription_id', demo.det_uuid('gram-demo-killswitch-changed')::text,
+       'prescription_version', 1, 'state', 'active'),
+     now() + interval '24 days', now() - interval '6 days', now() - interval '6 days'),
+    (demo_org, demo.det_uuid('gram-demo-killswitch-operation-changed-v2'),
+     demo_user_ids[6], 'change', 'sha256:' || repeat('5', 64), 'completed',
+     jsonb_build_object('response_version', 'killswitch-operation-response-v1',
+       'prescription_id', demo.det_uuid('gram-demo-killswitch-changed')::text,
+       'prescription_version', 2, 'state', 'active'),
+     now() + interval '28 days', now() - interval '2 days', now() - interval '2 days'),
+    (demo_org, demo.det_uuid('gram-demo-killswitch-operation-lifted-v1'),
+     demo_user_ids[6], 'activate', 'sha256:' || repeat('6', 64), 'completed',
+     jsonb_build_object('response_version', 'killswitch-operation-response-v1',
+       'prescription_id', demo.det_uuid('gram-demo-killswitch-lifted')::text,
+       'prescription_version', 1, 'state', 'active'),
+     now() + interval '25 days', now() - interval '5 days', now() - interval '5 days'),
+    (demo_org, demo.det_uuid('gram-demo-killswitch-operation-lifted-v2'),
+     demo_user_ids[6], 'deactivate', 'sha256:' || repeat('7', 64), 'completed',
+     jsonb_build_object('response_version', 'killswitch-operation-response-v1',
+       'prescription_id', demo.det_uuid('gram-demo-killswitch-lifted')::text,
+       'prescription_version', 2, 'state', 'inactive'),
+     now() + interval '29 days 12 hours', now() - interval '12 hours', now() - interval '12 hours'),
+    (demo_org, demo.det_uuid('gram-demo-killswitch-operation-expired-v1'),
+     demo_user_ids[6], 'activate', 'sha256:' || repeat('8', 64), 'completed',
+     jsonb_build_object('response_version', 'killswitch-operation-response-v1',
+       'prescription_id', demo.det_uuid('gram-demo-killswitch-expired')::text,
+       'prescription_version', 1, 'state', 'active'),
+     now() + interval '26 days', now() - interval '4 days', now() - interval '4 days');
+
+  ------------------------------------------------------------------
   -- Prompts (the Prompts page otherwise falls back to onboarding).
   ------------------------------------------------------------------
   -- engine must be 'mustache': the dashboard SDK's Engine enum is closed and
@@ -1271,6 +1437,77 @@ E'--- a/SKILL.md\n+++ b/SKILL.md\n@@ -6,4 +6,5 @@\n # Refund handling\n \n 1. Ve
           ),
           now() - interval '35 minutes');
 
+  -- Killswitch lifecycle history mirrors the transaction hook: mutation rows
+  -- carry a bounded after snapshot plus their replay operation, while expiry
+  -- carries the version and database-time deadline. Internal notes stay out of
+  -- organization-visible audit snapshots.
+  INSERT INTO audit_logs
+    (id, organization_id, project_id, actor_id, actor_type, actor_display_name,
+     action, subject_id, subject_type, after_snapshot, metadata, created_at)
+  VALUES
+    (demo.det_uuid('gram-demo-audit-killswitch-active-selected-v1'), demo_org, NULL,
+     demo_user_ids[6], 'user', demo_user_names[6], 'killswitch:activate',
+     demo.det_uuid('gram-demo-killswitch-active-selected')::text,
+     'killswitch_prescription', jsonb_build_object('version', 1, 'state', 'active'),
+     jsonb_build_object('operation', 'activate', 'operation_id',
+       demo.det_uuid('gram-demo-killswitch-operation-active-selected-v1')),
+     now() - interval '8 days'),
+    (demo.det_uuid('gram-demo-audit-killswitch-active-all-v1'), demo_org, NULL,
+     demo_user_ids[6], 'user', demo_user_names[6], 'killswitch:activate',
+     demo.det_uuid('gram-demo-killswitch-active-all')::text,
+     'killswitch_prescription', jsonb_build_object('version', 1, 'state', 'active'),
+     jsonb_build_object('operation', 'activate', 'operation_id',
+       demo.det_uuid('gram-demo-killswitch-operation-active-all-v1')),
+     now() - interval '7 days'),
+    (demo.det_uuid('gram-demo-audit-killswitch-scheduled-all-v1'), demo_org, NULL,
+     demo_user_ids[6], 'user', demo_user_names[6], 'killswitch:activate',
+     demo.det_uuid('gram-demo-killswitch-scheduled-all')::text,
+     'killswitch_prescription', jsonb_build_object('version', 1, 'state', 'active'),
+     jsonb_build_object('operation', 'activate', 'operation_id',
+       demo.det_uuid('gram-demo-killswitch-operation-scheduled-all-v1')),
+     now() - interval '1 hour'),
+    (demo.det_uuid('gram-demo-audit-killswitch-changed-v1'), demo_org, NULL,
+     demo_user_ids[6], 'user', demo_user_names[6], 'killswitch:activate',
+     demo.det_uuid('gram-demo-killswitch-changed')::text,
+     'killswitch_prescription', jsonb_build_object('version', 1, 'state', 'active'),
+     jsonb_build_object('operation', 'activate', 'operation_id',
+       demo.det_uuid('gram-demo-killswitch-operation-changed-v1')),
+     now() - interval '6 days'),
+    (demo.det_uuid('gram-demo-audit-killswitch-changed-v2'), demo_org, NULL,
+     demo_user_ids[6], 'user', demo_user_names[6], 'killswitch:change',
+     demo.det_uuid('gram-demo-killswitch-changed')::text,
+     'killswitch_prescription', jsonb_build_object('version', 2, 'state', 'active'),
+     jsonb_build_object('operation', 'change', 'operation_id',
+       demo.det_uuid('gram-demo-killswitch-operation-changed-v2')),
+     now() - interval '2 days'),
+    (demo.det_uuid('gram-demo-audit-killswitch-lifted-v1'), demo_org, NULL,
+     demo_user_ids[6], 'user', demo_user_names[6], 'killswitch:activate',
+     demo.det_uuid('gram-demo-killswitch-lifted')::text,
+     'killswitch_prescription', jsonb_build_object('version', 1, 'state', 'active'),
+     jsonb_build_object('operation', 'activate', 'operation_id',
+       demo.det_uuid('gram-demo-killswitch-operation-lifted-v1')),
+     now() - interval '5 days'),
+    (demo.det_uuid('gram-demo-audit-killswitch-lifted-v2'), demo_org, NULL,
+     demo_user_ids[6], 'user', demo_user_names[6], 'killswitch:deactivate',
+     demo.det_uuid('gram-demo-killswitch-lifted')::text,
+     'killswitch_prescription', jsonb_build_object('version', 2, 'state', 'inactive'),
+     jsonb_build_object('operation', 'deactivate', 'operation_id',
+       demo.det_uuid('gram-demo-killswitch-operation-lifted-v2')),
+     now() - interval '12 hours'),
+    (demo.det_uuid('gram-demo-audit-killswitch-expired-v1'), demo_org, NULL,
+     demo_user_ids[6], 'user', demo_user_names[6], 'killswitch:activate',
+     demo.det_uuid('gram-demo-killswitch-expired')::text,
+     'killswitch_prescription', jsonb_build_object('version', 1, 'state', 'active'),
+     jsonb_build_object('operation', 'activate', 'operation_id',
+       demo.det_uuid('gram-demo-killswitch-operation-expired-v1')),
+     now() - interval '4 days'),
+    (demo.det_uuid('gram-demo-audit-killswitch-expired-marker'), demo_org, NULL,
+     'system', 'user', 'System', 'killswitch:expire',
+     demo.det_uuid('gram-demo-killswitch-expired')::text,
+     'killswitch_prescription', NULL,
+     jsonb_build_object('version', 1, 'expired_at', now() - interval '1 day'),
+     now() - interval '23 hours');
+
   ------------------------------------------------------------------
   -- Spend rules calibrated to the seeded ClickHouse usage (top spenders in
   -- the low thousands of dollars per month) so the rules page shows one
@@ -1329,6 +1566,259 @@ E'--- a/SKILL.md\n+++ b/SKILL.md\n@@ -6,4 +6,5 @@\n # Refund handling\n \n 1. Ve
   FROM organization_user_relationships WHERE organization_id = demo_org AND deleted_at IS NULL;
   SELECT count(*) INTO tool_count
   FROM http_tool_definitions WHERE project_id = proj_a AND deleted IS FALSE;
+
+  -- Killswitch aggregate counts are exact: six headers, two successor
+  -- versions, eight complete selected snapshots, one expiry marker, and one
+  -- completed operation/audit event for every lifecycle mutation.
+  SELECT count(*) INTO stray FROM killswitch_prescriptions
+  WHERE organization_id = demo_org;
+  IF stray <> 6 THEN
+    RAISE EXCEPTION 'demo seed postflight: expected 6 killswitch prescriptions, found %', stray;
+  END IF;
+
+  SELECT count(*) INTO stray FROM killswitch_prescription_versions
+  WHERE organization_id = demo_org;
+  IF stray <> 8 THEN
+    RAISE EXCEPTION 'demo seed postflight: expected 8 killswitch versions, found %', stray;
+  END IF;
+
+  SELECT count(*) INTO stray FROM killswitch_prescription_version_resources
+  WHERE organization_id = demo_org;
+  IF stray <> 8 THEN
+    RAISE EXCEPTION 'demo seed postflight: expected 8 killswitch resource snapshots, found %', stray;
+  END IF;
+
+  SELECT count(*) INTO stray FROM killswitch_operations
+  WHERE organization_id = demo_org;
+  IF stray <> 8 THEN
+    RAISE EXCEPTION 'demo seed postflight: expected 8 killswitch operations, found %', stray;
+  END IF;
+
+  SELECT count(*) INTO stray FROM killswitch_expiry_events
+  WHERE organization_id = demo_org;
+  IF stray <> 1 THEN
+    RAISE EXCEPTION 'demo seed postflight: expected 1 killswitch expiry marker, found %', stray;
+  END IF;
+
+  SELECT count(*) INTO stray FROM killswitch_customer_list_watermarks
+  WHERE organization_id = demo_org
+    AND definition_key = 'mcp_tool_execution'
+    AND principal_kind = 'user'
+    AND resource_kind = 'mcp_server'
+    AND watermark = 8;
+  IF stray <> 1 THEN
+    RAISE EXCEPTION 'demo seed postflight: expected killswitch list watermark 8';
+  END IF;
+
+  -- current_version always names the newest immutable version. Only historical
+  -- versions are superseded, and every version retains its activation time.
+  SELECT count(*) INTO stray
+  FROM killswitch_prescriptions p
+  LEFT JOIN killswitch_prescription_versions current_v
+    ON current_v.organization_id = p.organization_id
+   AND current_v.prescription_id = p.id
+   AND current_v.version = p.current_version
+  WHERE p.organization_id = demo_org
+    AND (current_v.prescription_id IS NULL
+      OR current_v.version <> (
+        SELECT max(v.version) FROM killswitch_prescription_versions v
+        WHERE v.organization_id = p.organization_id AND v.prescription_id = p.id
+      ));
+  IF stray > 0 THEN
+    RAISE EXCEPTION 'demo seed postflight: % killswitch headers have an invalid current version', stray;
+  END IF;
+
+  SELECT count(*) INTO stray
+  FROM killswitch_prescription_versions v
+  JOIN killswitch_prescriptions p
+    ON p.organization_id = v.organization_id AND p.id = v.prescription_id
+  WHERE v.organization_id = demo_org
+    AND (v.activated_at IS NULL
+      OR (v.version = p.current_version AND v.superseded_at IS NOT NULL)
+      OR (v.version < p.current_version AND v.superseded_at IS NULL));
+  IF stray > 0 THEN
+    RAISE EXCEPTION 'demo seed postflight: % killswitch versions violate lifecycle timestamps', stray;
+  END IF;
+
+  -- An all-resource snapshot has no children. Every selected version has a
+  -- complete non-empty snapshot, including copied snapshots on lift.
+  SELECT count(*) INTO stray
+  FROM killswitch_prescription_versions v
+  LEFT JOIN LATERAL (
+    SELECT count(*) AS resource_count
+    FROM killswitch_prescription_version_resources r
+    WHERE r.organization_id = v.organization_id
+      AND r.prescription_id = v.prescription_id
+      AND r.version = v.version
+  ) resources ON TRUE
+  WHERE v.organization_id = demo_org
+    AND ((v.resource_scope = 'all' AND resources.resource_count <> 0)
+      OR (v.resource_scope = 'selected' AND resources.resource_count = 0));
+  IF stray > 0 THEN
+    RAISE EXCEPTION 'demo seed postflight: % killswitch versions have invalid resource cardinality', stray;
+  END IF;
+
+  -- Principal and resource keys are canonical records owned by this org.
+  SELECT count(*) INTO stray
+  FROM killswitch_prescriptions p
+  WHERE p.organization_id = demo_org
+    AND (p.definition_key <> 'mcp_tool_execution'
+      OR p.principal_kind <> 'user'
+      OR p.resource_kind <> 'mcp_server'
+      OR NOT EXISTS (
+        SELECT 1 FROM organization_user_relationships member
+        WHERE member.organization_id = p.organization_id
+          AND member.user_id = p.principal_key
+          AND member.deleted_at IS NULL
+      ));
+  IF stray > 0 THEN
+    RAISE EXCEPTION 'demo seed postflight: % killswitch prescriptions have an invalid principal or contract', stray;
+  END IF;
+
+  SELECT count(*) INTO stray
+  FROM killswitch_prescription_version_resources r
+  LEFT JOIN mcp_servers server ON server.id::text = r.resource_key
+  LEFT JOIN projects project ON project.id = server.project_id
+  WHERE r.organization_id = demo_org
+    AND (server.id IS NULL OR server.deleted IS TRUE
+      OR project.organization_id IS DISTINCT FROM demo_org);
+  IF stray > 0 THEN
+    RAISE EXCEPTION 'demo seed postflight: % killswitch resources are not live canonical MCP servers', stray;
+  END IF;
+
+  -- Database-time status projection: three active, one scheduled, one lifted,
+  -- and one expired current aggregate. The two Amara rows overlap because one
+  -- selected-server interval intersects one dynamic all-server interval.
+  SELECT CASE WHEN
+      count(*) FILTER (WHERE customer_status = 'active') = 3
+      AND count(*) FILTER (WHERE customer_status = 'scheduled') = 1
+      AND count(*) FILTER (WHERE customer_status = 'lifted') = 1
+      AND count(*) FILTER (WHERE customer_status = 'expired') = 1
+    THEN 0 ELSE 1 END INTO stray
+  FROM (
+    SELECT CASE
+      WHEN v.state = 'inactive' THEN 'lifted'
+      WHEN v.starts_at > clock_timestamp() THEN 'scheduled'
+      WHEN v.expires_at IS NOT NULL AND v.expires_at <= clock_timestamp() THEN 'expired'
+      ELSE 'active'
+    END AS customer_status
+    FROM killswitch_prescriptions p
+    JOIN killswitch_prescription_versions v
+      ON v.organization_id = p.organization_id
+     AND v.prescription_id = p.id
+     AND v.version = p.current_version
+    WHERE p.organization_id = demo_org
+  ) statuses;
+  IF stray > 0 THEN
+    RAISE EXCEPTION 'demo seed postflight: killswitch current status coverage changed';
+  END IF;
+
+  SELECT count(*) INTO stray
+  FROM killswitch_prescriptions p
+  JOIN killswitch_prescription_versions v
+    ON v.organization_id = p.organization_id
+   AND v.prescription_id = p.id
+   AND v.version = p.current_version
+  WHERE p.organization_id = demo_org
+    AND p.principal_key = demo_user_ids[1]
+    AND v.state = 'active'
+    AND (v.expires_at IS NULL OR clock_timestamp() < v.expires_at)
+    AND (v.resource_scope = 'all' OR EXISTS (
+      SELECT 1 FROM killswitch_prescription_version_resources r
+      WHERE r.organization_id = v.organization_id
+        AND r.prescription_id = v.prescription_id
+        AND r.version = v.version
+        AND r.resource_key = demo.det_uuid('gram-demo-mcpserver-support')::text
+    ));
+  IF stray <> 2 THEN
+    RAISE EXCEPTION 'demo seed postflight: expected 2 overlapping active killswitches, found %', stray;
+  END IF;
+
+  -- Completed replay receipts use the production response envelope, point to
+  -- the exact committed version/state, expire 30 days after claim, and belong
+  -- to a current organization member.
+  SELECT count(*) INTO stray
+  FROM killswitch_operations operation
+  LEFT JOIN killswitch_prescription_versions version
+    ON version.organization_id = operation.organization_id
+   AND version.prescription_id::text = operation.response ->> 'prescription_id'
+   AND version.version = (operation.response ->> 'prescription_version')::bigint
+  WHERE operation.organization_id = demo_org
+    AND (operation.status <> 'completed'
+      OR operation.response ->> 'response_version' <> 'killswitch-operation-response-v1'
+      OR operation.request_hash !~ '^sha256:[0-9a-f]{64}$'
+      OR operation.expires_at <> operation.created_at + interval '30 days'
+      OR version.prescription_id IS NULL
+      OR version.state <> operation.response ->> 'state'
+      OR NOT EXISTS (
+        SELECT 1 FROM organization_user_relationships member
+        WHERE member.organization_id = operation.organization_id
+          AND member.user_id = operation.actor_user_id
+          AND member.deleted_at IS NULL
+      ));
+  IF stray > 0 THEN
+    RAISE EXCEPTION 'demo seed postflight: % killswitch operation receipts are invalid', stray;
+  END IF;
+
+  -- Every mutation has one canonical audit action joined by operation_id. The
+  -- expiry marker has one separate history-only expiry event.
+  SELECT count(*) INTO stray FROM audit_logs
+  WHERE organization_id = demo_org
+    AND subject_type = 'killswitch_prescription'
+    AND action IN ('killswitch:activate', 'killswitch:change', 'killswitch:deactivate');
+  IF stray <> 8 THEN
+    RAISE EXCEPTION 'demo seed postflight: expected 8 killswitch lifecycle audits, found %', stray;
+  END IF;
+
+  SELECT count(*) INTO stray
+  FROM audit_logs event
+  LEFT JOIN killswitch_operations operation
+    ON operation.organization_id = event.organization_id
+   AND operation.operation_id::text = event.metadata ->> 'operation_id'
+  LEFT JOIN killswitch_prescription_versions version
+    ON version.organization_id = event.organization_id
+   AND version.prescription_id::text = event.subject_id
+   AND version.version = (event.after_snapshot ->> 'version')::bigint
+  WHERE event.organization_id = demo_org
+    AND event.subject_type = 'killswitch_prescription'
+    AND event.action IN ('killswitch:activate', 'killswitch:change', 'killswitch:deactivate')
+    AND (event.project_id IS NOT NULL
+      OR operation.operation_id IS NULL
+      OR event.action <> 'killswitch:' || CASE operation.operation
+        WHEN 'activate' THEN 'activate' WHEN 'change' THEN 'change'
+        WHEN 'deactivate' THEN 'deactivate' ELSE 'invalid' END
+      OR event.metadata ->> 'operation' <> operation.operation
+      OR version.prescription_id IS NULL
+      OR version.state <> event.after_snapshot ->> 'state'
+      OR operation.response ->> 'prescription_id' <> event.subject_id
+      OR operation.response ->> 'prescription_version' <> event.after_snapshot ->> 'version');
+  IF stray > 0 THEN
+    RAISE EXCEPTION 'demo seed postflight: % killswitch lifecycle audits are invalid', stray;
+  END IF;
+
+  SELECT count(*) INTO stray
+  FROM audit_logs event
+  JOIN killswitch_expiry_events expiry
+    ON expiry.organization_id = event.organization_id
+   AND expiry.prescription_id::text = event.subject_id
+   AND expiry.version = (event.metadata ->> 'version')::bigint
+  JOIN killswitch_prescription_versions version
+    ON version.organization_id = expiry.organization_id
+   AND version.prescription_id = expiry.prescription_id
+   AND version.version = expiry.version
+  WHERE event.organization_id = demo_org
+    AND event.subject_type = 'killswitch_prescription'
+    AND event.action = 'killswitch:expire'
+    AND event.project_id IS NULL
+    AND event.actor_id = 'system'
+    AND event.actor_type = 'user'
+    AND event.actor_display_name = 'System'
+    AND event.after_snapshot IS NULL
+    AND (event.metadata ->> 'expired_at')::timestamptz = version.expires_at
+    AND expiry.recorded_at > version.expires_at;
+  IF stray <> 1 THEN
+    RAISE EXCEPTION 'demo seed postflight: expected 1 matching killswitch expiry audit, found %', stray;
+  END IF;
 
   IF chat_count < bulk_chats THEN
     RAISE EXCEPTION 'demo seed postflight: expected >= % chats, found %', bulk_chats, chat_count;

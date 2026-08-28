@@ -29,6 +29,7 @@ import { usePlatformMcpDashboardVisibility } from "@/hooks/usePlatformMcpDashboa
 import { useProductFeatures } from "@gram/client/react-query/productFeatures.js";
 import { useRBAC } from "@/hooks/useRBAC";
 import { useTelemetry } from "@/contexts/Telemetry";
+import { useKillswitchAccess } from "@/hooks/useKillswitchAccess";
 
 /** Scopes that make an org-level nav item visible. */
 const orgReadOrAdmin: Scope[] = ["org:read", "org:admin"];
@@ -73,6 +74,7 @@ export function OrgSidebar({
   const isPlatformAdmin = useIsPlatformAdmin();
   const { enabled: isPlatformMcpDashboardEnabled } =
     usePlatformMcpDashboardVisibility();
+  const killswitchAccess = useKillswitchAccess();
   const isDeviceAgentEnabled =
     telemetry.isFeatureEnabled("gram-device-agent") ?? false;
   const isUserSessionsEnabled =
@@ -95,6 +97,7 @@ export function OrgSidebar({
 
   const secureActive = [
     orgRoutes.auditLogs,
+    orgRoutes.killswitch,
     orgRoutes.deviceAgent,
     orgRoutes.access,
   ].some((r) => r.active);
@@ -139,6 +142,7 @@ export function OrgSidebar({
     orgRoutes.encryptionKeys,
     orgRoutes.data,
     orgRoutes.auditLogs,
+    orgRoutes.killswitch,
     orgRoutes.deviceAgent,
     orgRoutes.access,
     orgRoutes.mcpSessions,
@@ -248,6 +252,14 @@ export function OrgSidebar({
                 Icon={(p) => <Icon {...p} name="shield-check" />}
                 items={[
                   { item: orgRoutes.auditLogs, scope: orgReadOrAdmin },
+                  ...(killswitchAccess.canAccess
+                    ? [
+                        {
+                          item: orgRoutes.killswitch,
+                          scope: "org:admin" as const,
+                        },
+                      ]
+                    : []),
                   ...(isDeviceAgentEnabled
                     ? [{ item: orgRoutes.deviceAgent, scope: orgReadOrAdmin }]
                     : []),

@@ -75,6 +75,29 @@ Connector` appears under **Inactive** with no connections. Its row menu's
     field. The organization **MCP Sessions** page shows the same five
     connections and the same two badges.
 
+11. **Killswitch list and detail (local rewritten seed only)** — Killswitch
+    management intentionally rejects demo/support sessions. Verify this contract in
+    the local organization after `mise run seed`, not through the demo-org
+    impersonation flow. Under **Secure → Killswitch**, the list shows six fictional
+    rows: three Active, one Scheduled, one Lifted, and one
+    Expired. Scope labels include both selected servers and all current/future
+    MCP servers. Filtering to Amara leaves two simultaneously effective rows
+    and preserves the principal filter in the URL; their detail overlap panels
+    identify each other. Open the changed Jonas row and confirm history narrows
+    **Acme Support Tools / Acme Ops / Linear** to **Acme Support Tools** without
+    losing the removed-server diff. Open the lifted and expired rows and confirm
+    their complete history and terminal status. On the active selected row, the
+    external message renders the newline, `<script>alert("demo")</script>`, and
+    `**This is plain text, not Markdown.**` literally: no script executes and no
+    Markdown formatting appears. Internal notes remain visible only on the
+    admin management detail/history surfaces.
+12. **Audit logs** — Killswitch history contributes nine rows: six
+    **activated**, one **changed**, one **lifted/deactivated**, and one
+    **expired**. Mutation rows name the same fictional operator and prescription
+    version as their Killswitch history entries; the expiry row is attributed to
+    **System**, follows the bounded row's deadline, and exposes no internal note
+    in the organization-visible audit snapshot.
+
 ## On failure
 
 Fix the seed SQL (see rules in `PAGES.md`), re-run `mise run seed:demo`,
