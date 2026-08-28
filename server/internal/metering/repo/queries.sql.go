@@ -7,7 +7,22 @@ package repo
 
 import (
 	"context"
+
+	"github.com/jackc/pgx/v5/pgtype"
 )
+
+const getStripeCustomerID = `-- name: GetStripeCustomerID :one
+SELECT stripe_customer_id
+FROM billing_metadata
+WHERE organization_id = $1
+`
+
+func (q *Queries) GetStripeCustomerID(ctx context.Context, organizationID string) (pgtype.Text, error) {
+	row := q.db.QueryRow(ctx, getStripeCustomerID, organizationID)
+	var stripe_customer_id pgtype.Text
+	err := row.Scan(&stripe_customer_id)
+	return stripe_customer_id, err
+}
 
 const resolveBillingUserAttributes = `-- name: ResolveBillingUserAttributes :many
 WITH inputs AS (
