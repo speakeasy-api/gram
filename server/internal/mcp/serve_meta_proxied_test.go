@@ -419,9 +419,10 @@ func TestServePublic_MetaEndpoint_PartialProviderConnectionsServe(t *testing.T) 
 
 	// Both providers are attached to the gateway, but the subject linked
 	// only member B's — the exact shape of a user who skipped one consent
-	// tile.
-	clientA := createConsentRemoteClient(t, ctx, ti.conn, projectID, orgID, "meta-partial-a", "", []uuid.UUID{sharedIssuerID})
-	_ = clientA
+	// tile. Member A's client stays attached with no token on purpose: the
+	// partial resolver must skip it, where the strict resolver would have
+	// failed the whole session.
+	createConsentRemoteClient(t, ctx, ti.conn, projectID, orgID, "meta-partial-a", "", []uuid.UUID{sharedIssuerID})
 	clientB := createConsentRemoteClient(t, ctx, ti.conn, projectID, orgID, "meta-partial-b", "", []uuid.UUID{sharedIssuerID})
 
 	subject := urn.NewUserSubject("meta-partial-user-" + uuid.NewString())

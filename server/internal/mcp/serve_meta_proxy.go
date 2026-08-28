@@ -52,24 +52,26 @@ const memberSessionCloseTimeout = 5 * time.Second
 // names its upstream — no lone-token fallback, since mcp:write can attach a
 // member pointing anywhere and a fallback would forward a sibling's
 // credential there. No match means an anonymous call, never a mismatched
-// bearer. A tunneled member records no resource, so only a lone unqualified
-// token can be its credential; several tokens fail member-scoped.
+// bearer. A tunneled member records no resource, so it routes by identity
+// instead: the token map entry keyed by the member's own derived
+// remote_session_issuer, and only when that grant is unqualified.
 func routeMetaMemberToken(tokens map[uuid.UUID]remotesessions.UpstreamToken, member metaMember, upstreamResource string) (string, error) {
 	if member.tunneledServerID.Valid {
-		// A tunneled backend records no RFC 8707 resource, so there is nothing
-		// to match a credential against. One credential is that member's by
-		// construction (matching routeUpstreamToken on the direct surface);
-		// several are unroutable, so say which situation this is rather than
-		// leaving the operator to guess at "misconfiguration".
-		if len(tokens) > 1 {
-			return "", &metaMemberError{message: fmt.Sprintf("server %q is tunneled and has no upstream identity of its own, but this session holds %d upstream credentials, so none can be matched to it; connect only the provider it needs, or reach it through its own endpoint", member.slug, len(tokens))}
+		// A tunneled backend records no RFC 8707 resource, so a lone-token
+		// heuristic would forward a sibling's bearer once partial resolution
+		// leaves gaps in the map. The map is keyed by remote_session_issuer,
+		// and the member row carries its own derived issuer precisely for
+		// this lookup (mcpserverissuersync.go), so route by exact key. A
+		// member with no derived issuer, no entry, or an entry whose grant is
+		// audience-bound to some remote upstream calls anonymously.
+		if !member.remoteSessionIssuerID.Valid {
+			return "", nil
 		}
-		for _, entry := range tokens {
-			if entry.Resource == "" {
-				return entry.Token, nil
-			}
+		entry, ok := tokens[member.remoteSessionIssuerID.UUID]
+		if !ok || entry.Resource != "" {
+			return "", nil
 		}
-		return "", nil
+		return entry.Token, nil
 	}
 
 	want := strings.TrimRight(upstreamResource, "/")

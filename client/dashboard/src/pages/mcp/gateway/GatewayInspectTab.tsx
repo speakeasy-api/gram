@@ -159,12 +159,13 @@ function InspectBody({
 
   if (needsAuth) {
     // Unconnected providers no longer reject a session (members degrade
-    // member-scoped instead), so a 401 here means the session token itself
-    // was refused.
+    // member-scoped instead). A 401 here means either the session token was
+    // refused or minting failed and the anonymous probe was denied, so the
+    // copy asserts neither.
     return (
       <Text muted small>
-        This gateway rejected the dashboard&apos;s session token. Reload to mint
-        a fresh one, or review the gateway&apos;s authentication in{" "}
+        This gateway could not authenticate the dashboard&apos;s connection.
+        Reload to try again, or review the gateway&apos;s authentication in{" "}
         <Link to={settingsHref}>Settings</Link>.
       </Text>
     );

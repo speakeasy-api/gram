@@ -42,6 +42,10 @@ type metaMember struct {
 	visibility            string
 	environmentID         uuid.NullUUID
 	toolVariationsGroupID uuid.NullUUID
+	// The member server's own derived provider issuer (see
+	// mcpserverissuersync.go). Token routing for tunneled members keys on it,
+	// so NULL or stale degrades to an anonymous call, never a wrong bearer.
+	remoteSessionIssuerID uuid.NullUUID
 }
 
 // memberStatus is the list_servers connection state. Hosted members execute
@@ -150,6 +154,7 @@ func (s *Service) resolveMetaMemberSnapshot(
 			visibility:            row.McpServerVisibility,
 			environmentID:         row.McpServerEnvironmentID,
 			toolVariationsGroupID: row.McpServerToolVariationsGroupID,
+			remoteSessionIssuerID: row.McpServerRemoteSessionIssuerID,
 		})
 	}
 
