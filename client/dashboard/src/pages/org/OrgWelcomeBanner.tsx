@@ -11,7 +11,6 @@ import { useSlugs } from "@/contexts/Sdk";
 import { useOnboardingCta } from "@/hooks/useOnboardingCta";
 import { useOrgSetupStarted } from "@/hooks/useOrgSetupStarted";
 import { useOrgWelcomeBanner } from "@/hooks/useOrgWelcomeBanner";
-import { usePlatformMcpDashboardVisibility } from "@/hooks/usePlatformMcpDashboardVisibility";
 import { useRBAC } from "@/hooks/useRBAC";
 import { getPreferredProject } from "@/lib/preferredProject";
 import { getTrialLifecycleFromDates } from "@/lib/trial-status";
@@ -70,11 +69,11 @@ export function OrgWelcomeBanner(): JSX.Element | null {
   const { hasScope } = useRBAC();
   const { setupStarted, markSetupStarted } = useOrgSetupStarted(orgSlug);
   const { eligible: canSetUpOrg } = useOnboardingCta();
-  const { enabled: platformMcpEnabled } = usePlatformMcpDashboardVisibility();
   const { data: featuresData } = useProductFeatures({
     organizationId: organization.id,
   });
   const logsEnabled = featuresData?.logsEnabled === true;
+  const platformMcpEnabled = featuresData?.platformMcpEnabled === true;
   const recordCta = useRecordPlatformMCPDashboardCtaEventMutation();
   const announcement = activeOrgHomeAnnouncement();
   const { dismissed: announcementDismissed, dismiss: dismissAnnouncement } =

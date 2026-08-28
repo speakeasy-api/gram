@@ -73,12 +73,6 @@ vi.mock("@/hooks/useProjectFavorites", () => ({
 vi.mock("@/hooks/useRBAC", () => ({
   useRBAC: () => ({ hasScope: () => true }),
 }));
-vi.mock("@/hooks/usePlatformMcpDashboardVisibility", () => ({
-  usePlatformMcpDashboardVisibility: () => ({
-    enabled: false,
-    isLoading: false,
-  }),
-}));
 vi.mock(
   "@gram/client/react-query/recordPlatformMCPDashboardCtaEvent.js",
   () => ({

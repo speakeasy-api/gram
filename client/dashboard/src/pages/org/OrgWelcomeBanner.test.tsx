@@ -55,15 +55,12 @@ vi.mock("@/hooks/useRBAC", () => ({
 vi.mock("@/hooks/useOrgWelcomeBanner", () => ({
   useOrgWelcomeBanner: () => ({ visible: true }),
 }));
-vi.mock("@/hooks/usePlatformMcpDashboardVisibility", () => ({
-  usePlatformMcpDashboardVisibility: () => ({
-    enabled: platformMcpEnabled.current,
-    isLoading: false,
-  }),
-}));
 vi.mock("@gram/client/react-query/productFeatures.js", () => ({
   useProductFeatures: () => ({
-    data: { logsEnabled: logsEnabled.current },
+    data: {
+      logsEnabled: logsEnabled.current,
+      platformMcpEnabled: platformMcpEnabled.current,
+    },
   }),
 }));
 vi.mock("@gram/client/react-query/_context.js", () => ({
