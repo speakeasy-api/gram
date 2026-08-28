@@ -367,15 +367,39 @@ BEGIN
   DELETE FROM killswitch_customer_list_watermarks WHERE organization_id = demo_org;
   DELETE FROM killswitch_prescriptions WHERE organization_id = demo_org;
 
-  -- Platform catalog registrations use NO ACTION for their component FKs,
-  -- while assistant_mcp_servers and plugin_servers RESTRICT hard server
-  -- deletion. Local users can create all three kinds of attachment, so detach
-  -- this tenant's rows before replacing its canonical servers. Other direct
-  -- mcp_servers dependents (meta members, collection attachments, metadata,
-  -- endpoints, and tool metadata) cascade. mcp_servers in turn pins its
-  -- toolset with RESTRICT, so it must still go before the toolsets delete.
+  -- Catalog registrations have both direct and transitive NO ACTION children.
+  -- Evidence pins its distribution and selected workflow; feedback also pins
+  -- selected workflows. Remove those rows first, then every project-scoped
+  -- registration child, before replacing the canonical registrations. Keep the
+  -- workflow subqueries organization-scoped so another tenant's rows cannot be
+  -- reached even if identifiers are malformed.
+  DELETE FROM platform_mcp_selected_use_evidence
+    WHERE organization_id = demo_org
+      AND (project_id = proj_a OR workflow_id IN
+        (SELECT id FROM platform_mcp_onboarding_workflows
+         WHERE organization_id = demo_org AND selected_project_id = proj_a));
+  DELETE FROM platform_mcp_feedback
+    WHERE organization_id = demo_org
+      AND (project_id = proj_a OR workflow_id IN
+        (SELECT id FROM platform_mcp_onboarding_workflows
+         WHERE organization_id = demo_org AND selected_project_id = proj_a));
+  DELETE FROM platform_mcp_onboarding_workflows
+    WHERE organization_id = demo_org AND selected_project_id = proj_a;
+  DELETE FROM platform_mcp_operation_receipts
+    WHERE organization_id = demo_org AND project_id = proj_a;
+  DELETE FROM platform_mcp_setup_handoffs
+    WHERE organization_id = demo_org AND project_id = proj_a;
+  DELETE FROM platform_mcp_readiness
+    WHERE organization_id = demo_org AND project_id = proj_a;
+  DELETE FROM platform_mcp_distributions
+    WHERE organization_id = demo_org AND project_id = proj_a;
   DELETE FROM platform_mcp_catalog_registrations
     WHERE organization_id = demo_org AND project_id = proj_a;
+
+  -- assistant_mcp_servers and plugin_servers RESTRICT hard server deletion.
+  -- Other direct mcp_servers dependents (meta members, collection attachments,
+  -- metadata, endpoints, and tool metadata) cascade. mcp_servers in turn pins
+  -- its toolset with RESTRICT, so it must still go before the toolsets delete.
   DELETE FROM assistant_mcp_servers WHERE project_id = proj_a;
   DELETE FROM plugin_servers WHERE plugin_id IN
     (SELECT id FROM plugins

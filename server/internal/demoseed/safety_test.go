@@ -91,6 +91,23 @@ func TestDemoSeedSafety(t *testing.T) {
 	require.NoError(t, demoseedtest.PlantMCPServerDependents(
 		ctx, db, otherTenantSpec.OrgID, otherTenantSpec.ProjectID(),
 	))
+
+	// A missing target server must not leave the fixture's assistant or plugin
+	// parents behind. Snapshot every table so the regression covers all orphans,
+	// not only the two parent classes that exposed the bug.
+	const noServerProjectID = "0ddba110-0000-4000-8000-0000000000ff"
+	require.NoError(t, demoseedtest.CreateProjectWithoutMCPServer(
+		ctx, db, otherTenantSpec.OrgID, noServerProjectID,
+	))
+	pgBeforeNoServer, err := demoseedtest.SnapshotPostgres(ctx, db)
+	require.NoError(t, err)
+	err = demoseedtest.PlantMCPServerDependents(ctx, db, otherTenantSpec.OrgID, noServerProjectID)
+	require.ErrorContains(t, err, "expected 1 complete dependent set, got 0")
+	pgAfterNoServer, snapshotErr := demoseedtest.SnapshotPostgres(ctx, db)
+	require.NoError(t, snapshotErr)
+	require.Equal(t, pgBeforeNoServer, pgAfterNoServer,
+		"MCP dependent fixture created orphan rows without a target server")
+
 	require.NoError(t, demoseedtest.ExecClickHouseStatements(ctx, ch, splitStatements(asOtherTenant(t, clickhouseSQL))))
 
 	demoProjects := []string{DefaultSpec().ProjectID()}
