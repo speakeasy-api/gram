@@ -73,6 +73,12 @@ actions:
     update:
       capability_key: { $ref: "#/components/schemas/KillswitchCapabilityKey" }
       status: { $ref: "#/components/schemas/KillswitchStatus" }
+  - target: $.components.schemas.KillswitchDetail.properties.history
+    update:
+      maxItems: 100
+  - target: $.components.schemas.KillswitchListResult.properties.items
+    update:
+      maxItems: 100
   - target: $.components.schemas.KillswitchSummary.properties.status
     remove: true
   - target: $.components.schemas.KillswitchSummary.properties

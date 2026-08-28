@@ -834,6 +834,59 @@ func TestServeMCP_IssuerGatedRemoteBackend_PrivateHappyPath(t *testing.T) {
 	require.Equal(t, http.MethodPost, gotMethod)
 }
 
+func TestServeMCP_IssuerGatedRemoteBackend_PrivateKillswitch(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+	require.NotEmpty(t, authCtx.UserID)
+
+	upstreamCalled := make(chan struct{}, 1)
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		upstreamCalled <- struct{}{}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"jsonrpc":"2.0","id":2,"result":{}}`))
+	}))
+	t.Cleanup(upstream.Close)
+
+	slug, mcpServer, issuerID := seedIssuerGatedRemoteMCPEndpoint(t, ctx, ti, *authCtx.ProjectID, upstream.URL, "private")
+	mcpEndpoint, err := mcpendpointsrepo.New(ti.conn).GetMCPEndpointByCustomDomainAndSlug(ctx, mcpendpointsrepo.GetMCPEndpointByCustomDomainAndSlugParams{
+		Slug:           slug,
+		CustomDomainID: uuid.NullUUID{},
+	})
+	require.NoError(t, err)
+	project, err := projectsrepo.New(ti.conn).GetProjectByID(ctx, *authCtx.ProjectID)
+	require.NoError(t, err)
+	endpoint := mcp.NewResolvedMcpEndpointFromMcpServer(&mcpEndpoint, &mcpServer, project.OrganizationID)
+	accessToken := mintIssuerGatedAccessToken(t, ctx, ti, slug, endpoint, issuerID, urn.NewUserSubject(authCtx.UserID))
+
+	err = testrepo.New(ti.conn).InsertKillswitchPrescriptionFixture(ctx, testrepo.InsertKillswitchPrescriptionFixtureParams{
+		PrescriptionID: uuid.New(),
+		OrganizationID: authCtx.ActiveOrganizationID,
+		DefinitionKey:  string(mcptoolexecution.DefinitionKeyMCPToolExecution),
+		PrincipalKind:  string(mcptoolexecution.PrincipalKindUser),
+		PrincipalKey:   authCtx.UserID,
+		ResourceKind:   string(mcptoolexecution.ResourceKindMCPServer),
+		ResourceScope:  "selected",
+		InternalNote:   "test context",
+		ExternalNote:   "Exact private proxy note.",
+		ResourceKeys:   []string{mcpServer.ID.String()},
+	})
+	require.NoError(t, err)
+
+	body := []byte(`{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"missing_tool","arguments":{}}}`)
+	rr := runHandler(t, ctx, ti, http.MethodPost, slug, bearer(accessToken), body)
+	require.Equal(t, http.StatusOK, rr.Code)
+	require.JSONEq(t, `{"jsonrpc":"2.0","id":2,"error":{"code":-32003,"message":"Exact private proxy note.","data":{"code":"mcp_tool_calls_paused"}}}`, rr.Body.String())
+	select {
+	case <-upstreamCalled:
+		t.Fatal("private killswitch rejection reached the upstream MCP server")
+	default:
+	}
+}
+
 // TestServeMCP_IssuerGated_CrossIssuerTokenRejected asserts the
 // audience-binding invariant: a bearer minted against issuer A must be
 // rejected when presented at issuer B's endpoint, even if both endpoints

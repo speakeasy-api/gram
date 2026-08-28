@@ -32,19 +32,19 @@ import {
   TupleToPrefixes,
 } from "./_types.js";
 import {
-  buildKillswitchesListMCPServersQuery,
-  KillswitchesListMCPServersQueryData,
-  prefetchKillswitchesListMCPServers,
-  queryKeyKillswitchesListMCPServers,
-} from "./killswitchesListMCPServers.core.js";
+  buildKillswitchMCPServersQuery,
+  KillswitchMCPServersQueryData,
+  prefetchKillswitchMCPServers,
+  queryKeyKillswitchMCPServers,
+} from "./killswitchMCPServers.core.js";
 export {
-  buildKillswitchesListMCPServersQuery,
-  type KillswitchesListMCPServersQueryData,
-  prefetchKillswitchesListMCPServers,
-  queryKeyKillswitchesListMCPServers,
+  buildKillswitchMCPServersQuery,
+  type KillswitchMCPServersQueryData,
+  prefetchKillswitchMCPServers,
+  queryKeyKillswitchMCPServers,
 };
 
-export type KillswitchesListMCPServersQueryError =
+export type KillswitchMCPServersQueryError =
   | ServiceError
   | GramError
   | ResponseValidationError
@@ -58,20 +58,20 @@ export type KillswitchesListMCPServersQueryError =
 /**
  * listMCPServers killswitches
  */
-export function useKillswitchesListMCPServers(
+export function useKillswitchMCPServers(
   security: KillswitchesListMCPServersSecurity,
   request?: KillswitchesListMCPServersRequest | undefined,
   options?: QueryHookOptions<
-    KillswitchesListMCPServersQueryData,
-    KillswitchesListMCPServersQueryError
+    KillswitchMCPServersQueryData,
+    KillswitchMCPServersQueryError
   >,
 ): UseQueryResult<
-  KillswitchesListMCPServersQueryData,
-  KillswitchesListMCPServersQueryError
+  KillswitchMCPServersQueryData,
+  KillswitchMCPServersQueryError
 > {
   const client = useGramContext();
   return useQuery({
-    ...buildKillswitchesListMCPServersQuery(
+    ...buildKillswitchMCPServersQuery(
       client,
       security,
       request,
@@ -84,20 +84,20 @@ export function useKillswitchesListMCPServers(
 /**
  * listMCPServers killswitches
  */
-export function useKillswitchesListMCPServersSuspense(
+export function useKillswitchMCPServersSuspense(
   security: KillswitchesListMCPServersSecurity,
   request?: KillswitchesListMCPServersRequest | undefined,
   options?: SuspenseQueryHookOptions<
-    KillswitchesListMCPServersQueryData,
-    KillswitchesListMCPServersQueryError
+    KillswitchMCPServersQueryData,
+    KillswitchMCPServersQueryError
   >,
 ): UseSuspenseQueryResult<
-  KillswitchesListMCPServersQueryData,
-  KillswitchesListMCPServersQueryError
+  KillswitchMCPServersQueryData,
+  KillswitchMCPServersQueryError
 > {
   const client = useGramContext();
   return useSuspenseQuery({
-    ...buildKillswitchesListMCPServersQuery(
+    ...buildKillswitchMCPServersQuery(
       client,
       security,
       request,
@@ -107,17 +107,17 @@ export function useKillswitchesListMCPServersSuspense(
   });
 }
 
-export function setKillswitchesListMCPServersData(
+export function setKillswitchMCPServersData(
   client: QueryClient,
   queryKeyBase: [parameters: { gramSession?: string | undefined }],
-  data: KillswitchesListMCPServersQueryData,
-): KillswitchesListMCPServersQueryData | undefined {
-  const key = queryKeyKillswitchesListMCPServers(...queryKeyBase);
+  data: KillswitchMCPServersQueryData,
+): KillswitchMCPServersQueryData | undefined {
+  const key = queryKeyKillswitchMCPServers(...queryKeyBase);
 
-  return client.setQueryData<KillswitchesListMCPServersQueryData>(key, data);
+  return client.setQueryData<KillswitchMCPServersQueryData>(key, data);
 }
 
-export function invalidateKillswitchesListMCPServers(
+export function invalidateKillswitchMCPServers(
   client: QueryClient,
   queryKeyBase: TupleToPrefixes<
     [parameters: { gramSession?: string | undefined }]
@@ -135,7 +135,7 @@ export function invalidateKillswitchesListMCPServers(
   });
 }
 
-export function invalidateAllKillswitchesListMCPServers(
+export function invalidateAllKillswitchMCPServers(
   client: QueryClient,
   filters?: Omit<InvalidateQueryFilters, "queryKey" | "predicate" | "exact">,
 ): Promise<void> {

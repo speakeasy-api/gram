@@ -23048,7 +23048,7 @@ paths:
                 name: ValidateAPIKey
     /rpc/killswitches.batchUserBadges:
         post:
-            operationId: killswitches#batchUserBadges
+            operationId: batchKillswitchUserBadges
             parameters:
                 - allowEmptyValue: true
                   description: Session header
@@ -23130,9 +23130,11 @@ paths:
             tags:
                 - killswitches
             x-speakeasy-name-override: batchUserBadges
+            x-speakeasy-react-hook:
+                name: BatchKillswitchUserBadges
     /rpc/killswitches.create:
         post:
-            operationId: killswitches#create
+            operationId: createKillswitch
             parameters:
                 - allowEmptyValue: true
                   description: Session header
@@ -23220,9 +23222,11 @@ paths:
             tags:
                 - killswitches
             x-speakeasy-name-override: create
+            x-speakeasy-react-hook:
+                name: CreateKillswitch
     /rpc/killswitches.edit:
         post:
-            operationId: killswitches#edit
+            operationId: editKillswitch
             parameters:
                 - allowEmptyValue: true
                   description: Session header
@@ -23310,9 +23314,11 @@ paths:
             tags:
                 - killswitches
             x-speakeasy-name-override: edit
+            x-speakeasy-react-hook:
+                name: EditKillswitch
     /rpc/killswitches.get:
         get:
-            operationId: killswitches#get
+            operationId: getKillswitch
             parameters:
                 - allowEmptyValue: true
                   in: query
@@ -23395,9 +23401,11 @@ paths:
             tags:
                 - killswitches
             x-speakeasy-name-override: get
+            x-speakeasy-react-hook:
+                name: Killswitch
     /rpc/killswitches.lift:
         post:
-            operationId: killswitches#lift
+            operationId: liftKillswitch
             parameters:
                 - allowEmptyValue: true
                   description: Session header
@@ -23485,9 +23493,11 @@ paths:
             tags:
                 - killswitches
             x-speakeasy-name-override: lift
+            x-speakeasy-react-hook:
+                name: LiftKillswitch
     /rpc/killswitches.list:
         get:
-            operationId: killswitches#list
+            operationId: listKillswitches
             parameters:
                 - allowEmptyValue: true
                   in: query
@@ -23606,9 +23616,11 @@ paths:
                 outputs:
                     nextCursor: $.next_cursor
                 type: cursor
+            x-speakeasy-react-hook:
+                name: Killswitches
     /rpc/killswitches.listCapabilities:
         get:
-            operationId: killswitches#listCapabilities
+            operationId: listKillswitchCapabilities
             parameters:
                 - allowEmptyValue: true
                   description: Session header
@@ -23684,9 +23696,11 @@ paths:
             tags:
                 - killswitches
             x-speakeasy-name-override: listCapabilities
+            x-speakeasy-react-hook:
+                name: KillswitchCapabilities
     /rpc/killswitches.listMCPServers:
         get:
-            operationId: killswitches#listMCPServers
+            operationId: listKillswitchMCPServers
             parameters:
                 - allowEmptyValue: true
                   description: Session header
@@ -23762,9 +23776,11 @@ paths:
             tags:
                 - killswitches
             x-speakeasy-name-override: listMCPServers
+            x-speakeasy-react-hook:
+                name: KillswitchMCPServers
     /rpc/killswitches.previewOverlaps:
         post:
-            operationId: killswitches#previewOverlaps
+            operationId: previewKillswitchOverlaps
             parameters:
                 - allowEmptyValue: true
                   description: Session header
@@ -23846,6 +23862,8 @@ paths:
             tags:
                 - killswitches
             x-speakeasy-name-override: previewOverlaps
+            x-speakeasy-react-hook:
+                name: PreviewKillswitchOverlaps
     /rpc/litellm.createInstance:
         post:
             description: Provision a LiteLLM integration for a project and return its plaintext ingestion key once. Requires org:admin.
@@ -73047,6 +73065,7 @@ components:
                     type: array
                     items:
                         $ref: '#/components/schemas/KillswitchHistoryEvent'
+                    maxItems: 100
                 history_truncated:
                     type: boolean
                 id:
@@ -73224,6 +73243,7 @@ components:
                     type: array
                     items:
                         $ref: '#/components/schemas/KillswitchSummary'
+                    maxItems: 100
                 next_cursor:
                     type: string
             required:

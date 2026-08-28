@@ -12,6 +12,36 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const advanceKillswitchCustomerListWatermark = `-- name: AdvanceKillswitchCustomerListWatermark :one
+INSERT INTO killswitch_customer_list_watermarks (
+  organization_id, definition_key, principal_kind, resource_kind, watermark
+) VALUES (
+  $1, $2, $3, $4, 1
+)
+ON CONFLICT (organization_id, definition_key, principal_kind, resource_kind)
+DO UPDATE SET watermark = killswitch_customer_list_watermarks.watermark + 1
+RETURNING watermark
+`
+
+type AdvanceKillswitchCustomerListWatermarkParams struct {
+	OrganizationID string
+	DefinitionKey  string
+	PrincipalKind  string
+	ResourceKind   string
+}
+
+func (q *Queries) AdvanceKillswitchCustomerListWatermark(ctx context.Context, arg AdvanceKillswitchCustomerListWatermarkParams) (int64, error) {
+	row := q.db.QueryRow(ctx, advanceKillswitchCustomerListWatermark,
+		arg.OrganizationID,
+		arg.DefinitionKey,
+		arg.PrincipalKind,
+		arg.ResourceKind,
+	)
+	var watermark int64
+	err := row.Scan(&watermark)
+	return watermark, err
+}
+
 const advanceKillswitchPrescriptionCurrentVersion = `-- name: AdvanceKillswitchPrescriptionCurrentVersion :execrows
 UPDATE killswitch_prescriptions
 SET current_version = $1,
@@ -112,6 +142,44 @@ func (q *Queries) BatchCustomerKillswitchUserBadges(ctx context.Context, arg Bat
 		return nil, err
 	}
 	return items, nil
+}
+
+const captureKillswitchCustomerListWatermark = `-- name: CaptureKillswitchCustomerListWatermark :one
+INSERT INTO killswitch_customer_list_watermarks (
+  organization_id, definition_key, principal_kind, resource_kind, watermark
+) VALUES (
+  $1, $2, $3, $4, 0
+)
+ON CONFLICT (organization_id, definition_key, principal_kind, resource_kind)
+DO UPDATE SET watermark = killswitch_customer_list_watermarks.watermark
+RETURNING watermark, clock_timestamp()::timestamptz AS status_as_of
+`
+
+type CaptureKillswitchCustomerListWatermarkParams struct {
+	OrganizationID string
+	DefinitionKey  string
+	PrincipalKind  string
+	ResourceKind   string
+}
+
+type CaptureKillswitchCustomerListWatermarkRow struct {
+	Watermark  int64
+	StatusAsOf pgtype.Timestamptz
+}
+
+// The no-op conflict update takes the same row lock as mutation increments. A
+// first page therefore sorts before or after every concurrent commit in this
+// bounded customer-list scope.
+func (q *Queries) CaptureKillswitchCustomerListWatermark(ctx context.Context, arg CaptureKillswitchCustomerListWatermarkParams) (CaptureKillswitchCustomerListWatermarkRow, error) {
+	row := q.db.QueryRow(ctx, captureKillswitchCustomerListWatermark,
+		arg.OrganizationID,
+		arg.DefinitionKey,
+		arg.PrincipalKind,
+		arg.ResourceKind,
+	)
+	var i CaptureKillswitchCustomerListWatermarkRow
+	err := row.Scan(&i.Watermark, &i.StatusAsOf)
+	return i, err
 }
 
 const claimKillswitchOperation = `-- name: ClaimKillswitchOperation :one
@@ -297,24 +365,28 @@ INSERT INTO killswitch_prescription_versions (
   version,
   state,
   resource_scope,
+  start_mode,
   starts_at,
   expires_at,
   activated_at,
   superseded_at,
   internal_note,
-  external_note
+  external_note,
+  list_watermark
 ) VALUES (
   $1,
   $2,
   $3,
   $4,
   $5,
-  $6,
+  $6::text,
   $7,
   $8,
-  NULL,
   $9,
-  $10
+  NULL,
+  $10,
+  $11,
+  $12
 )
 `
 
@@ -324,11 +396,13 @@ type CreateKillswitchPrescriptionVersionParams struct {
 	Version        int64
 	State          string
 	ResourceScope  string
+	StartMode      string
 	StartsAt       pgtype.Timestamptz
 	ExpiresAt      pgtype.Timestamptz
 	ActivatedAt    pgtype.Timestamptz
 	InternalNote   string
 	ExternalNote   string
+	ListWatermark  int64
 }
 
 func (q *Queries) CreateKillswitchPrescriptionVersion(ctx context.Context, arg CreateKillswitchPrescriptionVersionParams) (int64, error) {
@@ -338,11 +412,13 @@ func (q *Queries) CreateKillswitchPrescriptionVersion(ctx context.Context, arg C
 		arg.Version,
 		arg.State,
 		arg.ResourceScope,
+		arg.StartMode,
 		arg.StartsAt,
 		arg.ExpiresAt,
 		arg.ActivatedAt,
 		arg.InternalNote,
 		arg.ExternalNote,
+		arg.ListWatermark,
 	)
 	if err != nil {
 		return 0, err
@@ -574,6 +650,7 @@ SELECT
   prescription.current_version,
   version.state,
   version.resource_scope,
+  COALESCE(version.start_mode, CASE WHEN version.activated_at IS NOT NULL AND version.starts_at > version.activated_at THEN 'at' ELSE 'now' END)::text AS start_mode,
   version.starts_at,
   version.expires_at,
   version.activated_at,
@@ -613,6 +690,7 @@ type GetKillswitchCurrentPrescriptionRow struct {
 	CurrentVersion       int64
 	State                string
 	ResourceScope        string
+	StartMode            string
 	StartsAt             pgtype.Timestamptz
 	ExpiresAt            pgtype.Timestamptz
 	ActivatedAt          pgtype.Timestamptz
@@ -635,6 +713,7 @@ func (q *Queries) GetKillswitchCurrentPrescription(ctx context.Context, arg GetK
 		&i.CurrentVersion,
 		&i.State,
 		&i.ResourceScope,
+		&i.StartMode,
 		&i.StartsAt,
 		&i.ExpiresAt,
 		&i.ActivatedAt,
@@ -702,7 +781,7 @@ func (q *Queries) GetKillswitchPrescriptionIdentity(ctx context.Context, arg Get
 }
 
 const getKillswitchPrescriptionVersion = `-- name: GetKillswitchPrescriptionVersion :one
-SELECT state, resource_scope, starts_at, expires_at, activated_at, superseded_at, internal_note, external_note
+SELECT state, resource_scope, COALESCE(start_mode, CASE WHEN activated_at IS NOT NULL AND starts_at > activated_at THEN 'at' ELSE 'now' END)::text AS start_mode, starts_at, expires_at, activated_at, superseded_at, internal_note, external_note
 FROM killswitch_prescription_versions
 WHERE organization_id = $1
   AND prescription_id = $2
@@ -718,6 +797,7 @@ type GetKillswitchPrescriptionVersionParams struct {
 type GetKillswitchPrescriptionVersionRow struct {
 	State         string
 	ResourceScope string
+	StartMode     string
 	StartsAt      pgtype.Timestamptz
 	ExpiresAt     pgtype.Timestamptz
 	ActivatedAt   pgtype.Timestamptz
@@ -732,6 +812,7 @@ func (q *Queries) GetKillswitchPrescriptionVersion(ctx context.Context, arg GetK
 	err := row.Scan(
 		&i.State,
 		&i.ResourceScope,
+		&i.StartMode,
 		&i.StartsAt,
 		&i.ExpiresAt,
 		&i.ActivatedAt,
@@ -762,7 +843,7 @@ SELECT
     WHEN v.expires_at IS NOT NULL AND v.expires_at <= a.created_at THEN 'expired'
     ELSE 'active'
   END::text AS customer_status,
-  CASE WHEN v.starts_at > v.activated_at THEN 'scheduled' ELSE 'now' END::text AS customer_start,
+  CASE WHEN v.start_mode = 'at' OR (v.start_mode IS NULL AND v.activated_at IS NOT NULL AND v.starts_at > v.activated_at) THEN 'scheduled' ELSE 'now' END::text AS customer_start,
   COALESCE(a.metadata->>'operation', '')::text AS operation
 FROM audit_logs AS a
 JOIN killswitch_prescription_versions AS v
@@ -851,7 +932,7 @@ WITH db_time AS (
 SELECT
   p.id, v.resource_scope, v.starts_at, v.expires_at,
   CASE WHEN v.starts_at > db_time.now THEN 'scheduled' ELSE 'active' END::text AS customer_status,
-  CASE WHEN v.starts_at > v.activated_at THEN 'scheduled' ELSE 'now' END::text AS customer_start,
+  CASE WHEN v.start_mode = 'at' OR (v.start_mode IS NULL AND v.activated_at IS NOT NULL AND v.starts_at > v.activated_at) THEN 'scheduled' ELSE 'now' END::text AS customer_start,
   ARRAY(
     SELECT r.resource_key
     FROM killswitch_prescription_version_resources AS r
@@ -968,7 +1049,7 @@ WITH db_time AS (
       WHEN v.expires_at IS NOT NULL AND v.expires_at <= db_time.now THEN 'expired'
       ELSE 'active'
     END::text AS customer_status,
-    CASE WHEN v.starts_at > v.activated_at THEN 'scheduled' ELSE 'now' END::text AS customer_start,
+    CASE WHEN v.start_mode = 'at' OR (v.start_mode IS NULL AND v.activated_at IS NOT NULL AND v.starts_at > v.activated_at) THEN 'scheduled' ELSE 'now' END::text AS customer_start,
     ARRAY(
       SELECT r.resource_key
       FROM killswitch_prescription_version_resources AS r
@@ -981,24 +1062,22 @@ WITH db_time AS (
   FROM killswitch_prescriptions AS p
   CROSS JOIN db_time
   JOIN LATERAL (
-    SELECT snapshot.organization_id, snapshot.prescription_id, snapshot.version, snapshot.state, snapshot.resource_scope, snapshot.starts_at, snapshot.expires_at, snapshot.activated_at, snapshot.superseded_at, snapshot.internal_note, snapshot.external_note, snapshot.created_at
+    SELECT snapshot.organization_id, snapshot.prescription_id, snapshot.version, snapshot.state, snapshot.resource_scope, snapshot.start_mode, snapshot.starts_at, snapshot.expires_at, snapshot.activated_at, snapshot.superseded_at, snapshot.internal_note, snapshot.external_note, snapshot.list_watermark, snapshot.created_at
     FROM killswitch_prescription_versions AS snapshot
     WHERE snapshot.organization_id = p.organization_id
       AND snapshot.prescription_id = p.id
-      AND snapshot.created_at <= db_time.now
-      AND (snapshot.superseded_at IS NULL OR snapshot.superseded_at > db_time.now)
+      AND snapshot.list_watermark <= $4
     ORDER BY snapshot.version DESC
     LIMIT 1
   ) AS v ON TRUE
-  WHERE p.organization_id = $4
-    AND p.definition_key = $5
-    AND p.principal_kind = $6
-    AND p.resource_kind = $7
-    AND p.created_at <= db_time.now
-    AND ($8::text IS NULL OR p.principal_key = $8::text)
+  WHERE p.organization_id = $5
+    AND p.definition_key = $6
+    AND p.principal_kind = $7
+    AND p.resource_kind = $8
+    AND ($9::text IS NULL OR p.principal_key = $9::text)
     AND (
-      $9::timestamptz IS NULL
-      OR (p.created_at, p.id) < ($9::timestamptz, $10::uuid)
+      $10::timestamptz IS NULL
+      OR (p.created_at, p.id) < ($10::timestamptz, $11::uuid)
     )
 )
 SELECT id, created_at, user_id, version, resource_scope, starts_at, expires_at, customer_status, customer_start, selected_resource_keys
@@ -1010,16 +1089,17 @@ LIMIT $2
 `
 
 type ListCustomerKillswitchesParams struct {
-	CustomerStatus  pgtype.Text
-	ResultLimit     int32
-	StatusAsOf      pgtype.Timestamptz
-	OrganizationID  string
-	DefinitionKey   string
-	PrincipalKind   string
-	ResourceKind    string
-	UserID          pgtype.Text
-	CursorCreatedAt pgtype.Timestamptz
-	CursorID        uuid.NullUUID
+	CustomerStatus    pgtype.Text
+	ResultLimit       int32
+	StatusAsOf        pgtype.Timestamptz
+	SnapshotWatermark int64
+	OrganizationID    string
+	DefinitionKey     string
+	PrincipalKind     string
+	ResourceKind      string
+	UserID            pgtype.Text
+	CursorCreatedAt   pgtype.Timestamptz
+	CursorID          uuid.NullUUID
 }
 
 type ListCustomerKillswitchesRow struct {
@@ -1040,6 +1120,7 @@ func (q *Queries) ListCustomerKillswitches(ctx context.Context, arg ListCustomer
 		arg.CustomerStatus,
 		arg.ResultLimit,
 		arg.StatusAsOf,
+		arg.SnapshotWatermark,
 		arg.OrganizationID,
 		arg.DefinitionKey,
 		arg.PrincipalKind,
@@ -1136,6 +1217,7 @@ SELECT
   prescription.current_version,
   version.state,
   version.resource_scope,
+  COALESCE(version.start_mode, CASE WHEN version.activated_at IS NOT NULL AND version.starts_at > version.activated_at THEN 'at' ELSE 'now' END)::text AS start_mode,
   version.starts_at,
   version.expires_at,
   version.activated_at,
@@ -1178,6 +1260,7 @@ type ListKillswitchCurrentPrescriptionsRow struct {
 	CurrentVersion       int64
 	State                string
 	ResourceScope        string
+	StartMode            string
 	StartsAt             pgtype.Timestamptz
 	ExpiresAt            pgtype.Timestamptz
 	ActivatedAt          pgtype.Timestamptz
@@ -1206,6 +1289,7 @@ func (q *Queries) ListKillswitchCurrentPrescriptions(ctx context.Context, arg Li
 			&i.CurrentVersion,
 			&i.State,
 			&i.ResourceScope,
+			&i.StartMode,
 			&i.StartsAt,
 			&i.ExpiresAt,
 			&i.ActivatedAt,

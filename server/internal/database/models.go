@@ -1091,6 +1091,14 @@ type JsonWebKeySet struct {
 	Deleted        bool
 }
 
+type KillswitchCustomerListWatermark struct {
+	OrganizationID string
+	DefinitionKey  string
+	PrincipalKind  string
+	ResourceKind   string
+	Watermark      int64
+}
+
 type KillswitchExpiryEvent struct {
 	OrganizationID string
 	PrescriptionID uuid.UUID
@@ -1129,12 +1137,14 @@ type KillswitchPrescriptionVersion struct {
 	Version        int64
 	State          string
 	ResourceScope  string
+	StartMode      pgtype.Text
 	StartsAt       pgtype.Timestamptz
 	ExpiresAt      pgtype.Timestamptz
 	ActivatedAt    pgtype.Timestamptz
 	SupersededAt   pgtype.Timestamptz
 	InternalNote   string
 	ExternalNote   string
+	ListWatermark  int64
 	CreatedAt      pgtype.Timestamptz
 }
 

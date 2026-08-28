@@ -4316,6 +4316,9 @@ ON audit_logs (organization_id, seq DESC);
 CREATE INDEX IF NOT EXISTS audit_logs_organization_id_project_id_seq_idx
 ON audit_logs (organization_id, project_id, seq DESC);
 
+CREATE INDEX IF NOT EXISTS audit_logs_organization_subject_action_seq_idx
+ON audit_logs (organization_id, subject_type, subject_id, action, seq DESC);
+
 -- Remote MCP servers are upstream MCP endpoints that Gram proxies requests to.
 -- See https://modelcontextprotocol.io/registry/remote-servers
 CREATE TABLE IF NOT EXISTS remote_mcp_servers (
@@ -7704,6 +7707,21 @@ CREATE TABLE IF NOT EXISTS killswitch_prescriptions (
 );
 CREATE UNIQUE INDEX IF NOT EXISTS killswitch_prescriptions_organization_id_id_key ON killswitch_prescriptions (organization_id, id);
 CREATE INDEX IF NOT EXISTS killswitch_prescriptions_evaluator_idx ON killswitch_prescriptions (organization_id, definition_key, principal_kind, principal_key, resource_kind, id);
+-- Customer list pages use fixed contract dimensions and descending keyset order.
+CREATE INDEX IF NOT EXISTS killswitch_prescriptions_customer_list_idx ON killswitch_prescriptions (organization_id, definition_key, principal_kind, resource_kind, created_at DESC, id DESC);
+
+-- Customer list page-one reads serialize on one bounded scope row. Mutations
+-- increment the same row before commit, giving later pages a commit-stable
+-- watermark without retaining database snapshots or relying on wall time.
+CREATE TABLE IF NOT EXISTS killswitch_customer_list_watermarks (
+  organization_id TEXT NOT NULL,
+  definition_key TEXT NOT NULL,
+  principal_kind TEXT NOT NULL,
+  resource_kind TEXT NOT NULL,
+  watermark BIGINT NOT NULL DEFAULT 0,
+  CONSTRAINT killswitch_customer_list_watermarks_pkey PRIMARY KEY (organization_id, definition_key, principal_kind, resource_kind),
+  CONSTRAINT killswitch_customer_list_watermarks_watermark_check CHECK (watermark >= 0)
+);
 
 CREATE TABLE IF NOT EXISTS killswitch_prescription_versions (
   organization_id TEXT NOT NULL,
@@ -7711,18 +7729,23 @@ CREATE TABLE IF NOT EXISTS killswitch_prescription_versions (
   version BIGINT NOT NULL,
   state TEXT NOT NULL,
   resource_scope TEXT NOT NULL,
+  -- NULL is reserved for versions written before requested start mode was stored.
+  start_mode TEXT,
   starts_at timestamptz NOT NULL,
   expires_at timestamptz,
   activated_at timestamptz,
   superseded_at timestamptz,
   internal_note TEXT NOT NULL,
   external_note TEXT NOT NULL,
+  list_watermark BIGINT NOT NULL DEFAULT 0,
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   CONSTRAINT killswitch_prescription_versions_pkey PRIMARY KEY (prescription_id, version),
   CONSTRAINT killswitch_prescription_versions_prescription_fkey FOREIGN KEY (organization_id, prescription_id) REFERENCES killswitch_prescriptions (organization_id, id) ON DELETE CASCADE,
   CONSTRAINT killswitch_prescription_versions_version_check CHECK (version > 0),
   CONSTRAINT killswitch_prescription_versions_state_check CHECK (state <> ''),
   CONSTRAINT killswitch_prescription_versions_resource_scope_check CHECK (resource_scope IN ('all', 'selected')),
+  CONSTRAINT killswitch_prescription_versions_start_mode_check CHECK (start_mode IN ('now', 'at')),
+  CONSTRAINT killswitch_prescription_versions_list_watermark_check CHECK (list_watermark >= 0),
   CONSTRAINT killswitch_prescription_versions_interval_check CHECK (expires_at IS NULL OR expires_at > starts_at),
   CONSTRAINT killswitch_prescription_versions_external_note_check CHECK (char_length(external_note) BETWEEN 1 AND 500),
   CONSTRAINT killswitch_prescription_versions_internal_note_check CHECK (char_length(internal_note) BETWEEN 1 AND 4000)

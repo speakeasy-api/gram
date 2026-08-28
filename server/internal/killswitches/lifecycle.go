@@ -83,6 +83,7 @@ type lockedCurrent struct {
 	CurrentVersion int64
 	State          string
 	ResourceScope  string
+	StartMode      string
 	StartsAt       pgtype.Timestamptz
 	ExpiresAt      pgtype.Timestamptz
 	ActivatedAt    pgtype.Timestamptz
@@ -151,11 +152,15 @@ func (s *LifecycleService) ActivatePrescription(ctx context.Context, request Act
 		if err != nil {
 			return MutationResult{}, fmt.Errorf("create killswitch prescription header: %w", err)
 		}
+		listWatermark, err := advanceCustomerListWatermark(ctx, queries.repo, string(request.OrganizationID), string(request.Definition), string(request.PrincipalKind), string(request.ResourceKind))
+		if err != nil {
+			return MutationResult{}, err
+		}
 		if err := createVersion(ctx, queries.repo, repo.CreateKillswitchPrescriptionVersionParams{
 			OrganizationID: string(request.OrganizationID), PrescriptionID: headerID, Version: 1,
-			State: string(PrescriptionStateActive), ResourceScope: string(desired.resourceScope),
+			State: string(PrescriptionStateActive), ResourceScope: string(desired.resourceScope), StartMode: string(desired.startMode),
 			StartsAt: conv.ToPGTimestamptz(startsAt), ExpiresAt: conv.PtrToPGTimestamptz(desired.expiresAt),
-			ActivatedAt: conv.ToPGTimestamptz(transitionTime), InternalNote: desired.internalNote, ExternalNote: desired.externalNote,
+			ActivatedAt: conv.ToPGTimestamptz(transitionTime), InternalNote: desired.internalNote, ExternalNote: desired.externalNote, ListWatermark: listWatermark,
 		}, versionResourceSnapshot{keys: desired.resourceKeys}); err != nil {
 			return MutationResult{}, err
 		}
@@ -212,7 +217,7 @@ func (s *LifecycleService) ChangePrescription(ctx context.Context, request Chang
 		if !current.ActivatedAt.Valid {
 			return MutationResult{}, errors.New("active killswitch version has no activation time")
 		}
-		return transitionExisting(ctx, queries.repo, current, desired.resourceScope, versionResourceSnapshot{keys: desired.resourceKeys}, PrescriptionStateActive, startsAt, desired.expiresAt, current.ActivatedAt.Time, desired.internalNote, desired.externalNote, transitionTime)
+		return transitionExisting(ctx, queries.repo, current, desired.resourceScope, desired.startMode, versionResourceSnapshot{keys: desired.resourceKeys}, PrescriptionStateActive, startsAt, desired.expiresAt, current.ActivatedAt.Time, desired.internalNote, desired.externalNote, transitionTime)
 	})
 }
 
@@ -247,7 +252,7 @@ func (s *LifecycleService) DeactivatePrescription(ctx context.Context, request D
 		if activatedAt == nil {
 			return MutationResult{}, errors.New("active killswitch version has no activation time")
 		}
-		return transitionExisting(ctx, queries.repo, current, ResourceScope(current.ResourceScope), versionResourceSnapshot{copyFromVersion: current.CurrentVersion}, PrescriptionStateInactive, current.StartsAt.Time, optionalTime(current.ExpiresAt), *activatedAt, current.InternalNote, current.ExternalNote, transitionTime)
+		return transitionExisting(ctx, queries.repo, current, ResourceScope(current.ResourceScope), StartMode(current.StartMode), versionResourceSnapshot{copyFromVersion: current.CurrentVersion}, PrescriptionStateInactive, current.StartsAt.Time, optionalTime(current.ExpiresAt), *activatedAt, current.InternalNote, current.ExternalNote, transitionTime)
 	})
 }
 
@@ -295,7 +300,7 @@ func (s *LifecycleService) ReactivatePrescription(ctx context.Context, request R
 		if err != nil {
 			return MutationResult{}, err
 		}
-		return transitionExisting(ctx, queries.repo, current, desired.resourceScope, versionResourceSnapshot{keys: desired.resourceKeys}, PrescriptionStateActive, startsAt, desired.expiresAt, transitionTime, desired.internalNote, desired.externalNote, transitionTime)
+		return transitionExisting(ctx, queries.repo, current, desired.resourceScope, desired.startMode, versionResourceSnapshot{keys: desired.resourceKeys}, PrescriptionStateActive, startsAt, desired.expiresAt, transitionTime, desired.internalNote, desired.externalNote, transitionTime)
 	})
 }
 
@@ -380,9 +385,13 @@ func replayOperation(receipt operationReceipt, operation MutationOperation, requ
 	return MutationResult{PrescriptionID: response.PrescriptionID, Version: response.PrescriptionVersion, State: response.State, Replayed: true}, nil
 }
 
-func transitionExisting(ctx context.Context, queries *repo.Queries, current lockedCurrent, scope ResourceScope, snapshot versionResourceSnapshot, state PrescriptionState, startsAt time.Time, expiresAt *time.Time, activatedAt time.Time, internalNote, externalNote string, transitionTime time.Time) (MutationResult, error) {
+func transitionExisting(ctx context.Context, queries *repo.Queries, current lockedCurrent, scope ResourceScope, startMode StartMode, snapshot versionResourceSnapshot, state PrescriptionState, startsAt time.Time, expiresAt *time.Time, activatedAt time.Time, internalNote, externalNote string, transitionTime time.Time) (MutationResult, error) {
 	if current.SupersededAt.Valid {
 		return MutationResult{}, errors.New("current killswitch version is already superseded")
+	}
+	listWatermark, err := advanceCustomerListWatermark(ctx, queries, current.OrganizationID, current.DefinitionKey, current.PrincipalKind, current.ResourceKind)
+	if err != nil {
+		return MutationResult{}, err
 	}
 	rows, err := queries.SupersedeKillswitchPrescriptionVersion(ctx, repo.SupersedeKillswitchPrescriptionVersionParams{SupersededAt: conv.ToPGTimestamptz(transitionTime), OrganizationID: current.OrganizationID, PrescriptionID: current.ID, Version: current.CurrentVersion})
 	if err != nil {
@@ -392,7 +401,7 @@ func transitionExisting(ctx context.Context, queries *repo.Queries, current lock
 		return MutationResult{}, errors.New("supersede killswitch prescription version: expected one updated row")
 	}
 	newVersion := current.CurrentVersion + 1
-	if err := createVersion(ctx, queries, repo.CreateKillswitchPrescriptionVersionParams{OrganizationID: current.OrganizationID, PrescriptionID: current.ID, Version: newVersion, State: string(state), ResourceScope: string(scope), StartsAt: conv.ToPGTimestamptz(startsAt), ExpiresAt: conv.PtrToPGTimestamptz(expiresAt), ActivatedAt: conv.ToPGTimestamptz(activatedAt), InternalNote: internalNote, ExternalNote: externalNote}, snapshot); err != nil {
+	if err := createVersion(ctx, queries, repo.CreateKillswitchPrescriptionVersionParams{OrganizationID: current.OrganizationID, PrescriptionID: current.ID, Version: newVersion, State: string(state), ResourceScope: string(scope), StartMode: string(startMode), StartsAt: conv.ToPGTimestamptz(startsAt), ExpiresAt: conv.PtrToPGTimestamptz(expiresAt), ActivatedAt: conv.ToPGTimestamptz(activatedAt), InternalNote: internalNote, ExternalNote: externalNote, ListWatermark: listWatermark}, snapshot); err != nil {
 		return MutationResult{}, err
 	}
 	rows, err = queries.AdvanceKillswitchPrescriptionCurrentVersion(ctx, repo.AdvanceKillswitchPrescriptionCurrentVersionParams{NewVersion: newVersion, UpdatedAt: conv.ToPGTimestamptz(transitionTime), OrganizationID: current.OrganizationID, PrescriptionID: current.ID, ExpectedVersion: current.CurrentVersion})
@@ -403,6 +412,16 @@ func transitionExisting(ctx context.Context, queries *repo.Queries, current lock
 		return MutationResult{}, errors.New("killswitch current-version CAS failed after aggregate lock")
 	}
 	return MutationResult{PrescriptionID: PrescriptionID(current.ID.String()), Version: newVersion, State: state}, nil
+}
+
+func advanceCustomerListWatermark(ctx context.Context, queries *repo.Queries, organizationID, definitionKey, principalKind, resourceKind string) (int64, error) {
+	watermark, err := queries.AdvanceKillswitchCustomerListWatermark(ctx, repo.AdvanceKillswitchCustomerListWatermarkParams{
+		OrganizationID: organizationID, DefinitionKey: definitionKey, PrincipalKind: principalKind, ResourceKind: resourceKind,
+	})
+	if err != nil {
+		return 0, fmt.Errorf("advance killswitch customer list watermark: %w", err)
+	}
+	return watermark, nil
 }
 
 func createVersion(ctx context.Context, queries *repo.Queries, params repo.CreateKillswitchPrescriptionVersionParams, snapshot versionResourceSnapshot) error {
@@ -452,7 +471,11 @@ func lockCurrent(ctx context.Context, queries *repo.Queries, organizationID Orga
 	if err := validateStoredResourceScope(ResourceScope(version.ResourceScope)); err != nil {
 		return lockedCurrent{}, err
 	}
-	current := lockedCurrent{ID: header.ID, OrganizationID: header.OrganizationID, DefinitionKey: header.DefinitionKey, PrincipalKind: header.PrincipalKind, PrincipalKey: header.PrincipalKey, ResourceKind: header.ResourceKind, CurrentVersion: header.CurrentVersion, State: version.State, ResourceScope: version.ResourceScope, StartsAt: version.StartsAt, ExpiresAt: version.ExpiresAt, ActivatedAt: version.ActivatedAt, SupersededAt: version.SupersededAt, InternalNote: version.InternalNote, ExternalNote: version.ExternalNote}
+	startMode := StartMode(version.StartMode)
+	if startMode != StartModeNow && startMode != StartModeAt {
+		return lockedCurrent{}, fmt.Errorf("unknown stored killswitch start mode %q", startMode)
+	}
+	current := lockedCurrent{ID: header.ID, OrganizationID: header.OrganizationID, DefinitionKey: header.DefinitionKey, PrincipalKind: header.PrincipalKind, PrincipalKey: header.PrincipalKey, ResourceKind: header.ResourceKind, CurrentVersion: header.CurrentVersion, State: version.State, ResourceScope: version.ResourceScope, StartMode: version.StartMode, StartsAt: version.StartsAt, ExpiresAt: version.ExpiresAt, ActivatedAt: version.ActivatedAt, SupersededAt: version.SupersededAt, InternalNote: version.InternalNote, ExternalNote: version.ExternalNote}
 	return current, nil
 }
 
@@ -580,6 +603,9 @@ func (d canonicalDesiredVersion) resolvedStartsAt(databaseNow time.Time) (time.T
 			return time.Time{}, fmt.Errorf("%w: scheduled start requires a timestamp", ErrInvalidArgument)
 		}
 		startsAt = *d.startsAt
+		if !startsAt.After(databaseNow) {
+			return time.Time{}, fmt.Errorf("%w: scheduled start must be after database time", ErrInvalidArgument)
+		}
 	default:
 		return time.Time{}, fmt.Errorf("%w: invalid start mode %q", ErrInvalidArgument, d.startMode)
 	}

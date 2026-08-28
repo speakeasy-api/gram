@@ -31,15 +31,15 @@ func TestClassifyIdentityCoverage(t *testing.T) {
 		err    error
 		want   mcpmetrics.KillswitchIdentityClass
 	}{
-		{name: "active user", source: mcpidentity.AuthenticatedUser("user_01J8EXAMPLE"), result: candidates, err: nil, want: mcpmetrics.KillswitchIdentityActiveUser},
-		{name: "inactive user", source: mcpidentity.AuthenticatedUser("user_01J8EXAMPLE"), result: unsupported, err: nil, want: mcpmetrics.KillswitchIdentityInactiveUser},
-		{name: "anonymous", source: mcpidentity.Identity{Kind: mcpidentity.KindAnonymous, UserID: ""}, result: unsupported, err: nil, want: mcpmetrics.KillswitchIdentityAnonymous},
-		{name: "api key", source: mcpidentity.Identity{Kind: mcpidentity.KindAPIKey, UserID: ""}, result: unsupported, err: nil, want: mcpmetrics.KillswitchIdentityAPIKey},
-		{name: "assistant", source: mcpidentity.Identity{Kind: mcpidentity.KindAssistant, UserID: ""}, result: unsupported, err: nil, want: mcpmetrics.KillswitchIdentityAssistant},
-		{name: "chat session", source: mcpidentity.Identity{Kind: mcpidentity.KindChatSession, UserID: ""}, result: unsupported, err: nil, want: mcpmetrics.KillswitchIdentityChatSession},
+		{name: "active user", source: testIdentity(t, mcpidentity.KindUserSession, "user_01J8EXAMPLE"), result: candidates, err: nil, want: mcpmetrics.KillswitchIdentityActiveUser},
+		{name: "inactive user", source: testIdentity(t, mcpidentity.KindUserSession, "user_01J8EXAMPLE"), result: unsupported, err: nil, want: mcpmetrics.KillswitchIdentityInactiveUser},
+		{name: "anonymous", source: testIdentity(t, mcpidentity.KindAnonymous, ""), result: unsupported, err: nil, want: mcpmetrics.KillswitchIdentityAnonymous},
+		{name: "api key", source: testIdentity(t, mcpidentity.KindAPIKey, ""), result: unsupported, err: nil, want: mcpmetrics.KillswitchIdentityAPIKey},
+		{name: "assistant", source: testIdentity(t, mcpidentity.KindAssistant, ""), result: unsupported, err: nil, want: mcpmetrics.KillswitchIdentityAssistant},
+		{name: "chat session", source: testIdentity(t, mcpidentity.KindChatSession, ""), result: unsupported, err: nil, want: mcpmetrics.KillswitchIdentityChatSession},
 		{name: "no provenance", source: nil, result: zero, err: nil, want: mcpmetrics.KillswitchIdentityUnattributed},
-		{name: "unknown provenance kind", source: mcpidentity.Identity{Kind: "device", UserID: ""}, result: unsupported, err: nil, want: mcpmetrics.KillswitchIdentityUnattributed},
-		{name: "infrastructure failure", source: mcpidentity.AuthenticatedUser("user_01J8EXAMPLE"), result: zero, err: fmt.Errorf("membership lookup: %w", errors.New("closed")), want: mcpmetrics.KillswitchIdentityUnavailable},
+		{name: "opaque zero value", source: mcpidentity.Identity{}, result: unsupported, err: nil, want: mcpmetrics.KillswitchIdentityUnattributed},
+		{name: "infrastructure failure", source: testIdentity(t, mcpidentity.KindUserSession, "user_01J8EXAMPLE"), result: zero, err: fmt.Errorf("membership lookup: %w", errors.New("closed")), want: mcpmetrics.KillswitchIdentityUnavailable},
 	}
 
 	for _, tt := range tests {

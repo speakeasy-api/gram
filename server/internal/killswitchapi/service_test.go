@@ -23,15 +23,21 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
 func TestCustomerKillswitchLifecycleAndReadModels(t *testing.T) {
 	t.Parallel()
 	service, db, orgID, userID, servers := newIntegrationService(t)
 	ctx := customerContext(t, orgID, userID)
+	subjectUserID := "user_" + uuid.NewString()
+	_, err := db.Exec(t.Context(), `INSERT INTO users (id, email, display_name) VALUES ($1, $1 || '@example.test', 'Affected User')`, subjectUserID)
+	require.NoError(t, err)
+	_, err = db.Exec(t.Context(), `INSERT INTO organization_user_relationships (organization_id, user_id) VALUES ($1, $2)`, orgID, subjectUserID)
+	require.NoError(t, err)
 	endsAt := time.Now().Add(2 * time.Hour).UTC().Format(time.RFC3339Nano)
 	payload := &gen.CreatePayload{
-		OperationID: uuid.NewString(), CapabilityKey: CapabilityMCPToolCalls, UserID: userID,
+		OperationID: uuid.NewString(), CapabilityKey: CapabilityMCPToolCalls, UserID: subjectUserID,
 		Scope:        &gen.KillswitchScope{Type: "selected_servers", ServerIds: []string{servers[1].String(), servers[0].String(), servers[1].String()}},
 		Schedule:     &gen.KillswitchSchedule{Start: "now", End: "bounded", EndsAt: &endsAt},
 		ExternalNote: "  Customer message  ", InternalNote: "\n operator context \t",
@@ -65,20 +71,20 @@ func TestCustomerKillswitchLifecycleAndReadModels(t *testing.T) {
 	require.Equal(t, "Customer message", detail.History[0].ExternalNote)
 	require.Equal(t, "operator context", detail.History[0].InternalNote)
 
-	listed, err := service.List(ctx, &gen.ListPayload{UserID: &userID, Limit: new(int32(1))})
+	listed, err := service.List(ctx, &gen.ListPayload{UserID: &subjectUserID, Limit: new(int32(1))})
 	require.NoError(t, err)
 	require.Len(t, listed.Items, 1)
 	require.Equal(t, CapabilityMCPToolCalls, string(listed.Items[0].CapabilityKey))
 	require.Nil(t, listed.NextCursor)
 
-	badges, err := service.BatchUserBadges(ctx, &gen.BatchUserBadgesPayload{UserIds: []string{userID, userID, "unknown-user"}})
+	badges, err := service.BatchUserBadges(ctx, &gen.BatchUserBadgesPayload{UserIds: []string{subjectUserID, subjectUserID, "unknown-user"}})
 	require.NoError(t, err)
 	require.Len(t, badges.Badges, 2)
-	require.True(t, badgeFor(t, badges, userID).AffectedNow)
+	require.True(t, badgeFor(t, badges, subjectUserID).AffectedNow)
 	require.False(t, badgeFor(t, badges, "unknown-user").Affected)
 
 	overlaps, err := service.PreviewOverlaps(ctx, &gen.PreviewOverlapsPayload{
-		CapabilityKey: CapabilityMCPToolCalls, UserID: userID,
+		CapabilityKey: CapabilityMCPToolCalls, UserID: subjectUserID,
 		Scope:    &gen.KillswitchScope{Type: "selected_servers", ServerIds: []string{servers[0].String()}},
 		Schedule: &gen.KillswitchSchedule{Start: "now", End: "until_lifted"},
 	})
@@ -86,7 +92,7 @@ func TestCustomerKillswitchLifecycleAndReadModels(t *testing.T) {
 	require.Len(t, overlaps.Overlaps, 1)
 	require.False(t, overlaps.Truncated)
 
-	_, err = db.Exec(t.Context(), `UPDATE organization_user_relationships SET deleted_at = clock_timestamp() WHERE organization_id = $1 AND user_id = $2`, orgID, userID)
+	_, err = db.Exec(t.Context(), `UPDATE organization_user_relationships SET deleted_at = clock_timestamp() WHERE organization_id = $1 AND user_id = $2`, orgID, subjectUserID)
 	require.NoError(t, err)
 	_, err = db.Exec(t.Context(), `UPDATE mcp_servers SET deleted_at = clock_timestamp() WHERE id = ANY($1::uuid[])`, servers)
 	require.NoError(t, err)
@@ -188,6 +194,77 @@ func TestCustomerKillswitchScheduleOverlapPaginationAndStaleEdit(t *testing.T) {
 	requireServiceError(t, err, "version_conflict")
 }
 
+func TestCustomerKillswitchEditNowPreservesRequestedStartMode(t *testing.T) {
+	t.Parallel()
+	service, _, orgID, userID, _ := newIntegrationService(t)
+	ctx := customerContext(t, orgID, userID)
+	startsAt := time.Now().Add(2 * time.Hour).UTC().Truncate(time.Millisecond).Format(time.RFC3339Nano)
+
+	created, err := service.Create(ctx, &gen.CreatePayload{
+		OperationID: uuid.NewString(), CapabilityKey: CapabilityMCPToolCalls, UserID: userID,
+		Scope: &gen.KillswitchScope{Type: "all_servers"}, Schedule: &gen.KillswitchSchedule{Start: "scheduled", StartsAt: &startsAt, End: "until_lifted"},
+		ExternalNote: "message", InternalNote: "context",
+	})
+	require.NoError(t, err)
+
+	edited, err := service.Edit(ctx, &gen.EditPayload{
+		OperationID: uuid.NewString(), ID: created.ID, ExpectedVersion: created.Version,
+		Scope: &gen.KillswitchScope{Type: "all_servers"}, Schedule: &gen.KillswitchSchedule{Start: "now", End: "until_lifted"},
+		ExternalNote: "updated", InternalNote: "updated context",
+	})
+	require.NoError(t, err)
+	require.Equal(t, int64(2), edited.Version)
+
+	detail, err := service.Get(ctx, &gen.GetPayload{ID: created.ID})
+	require.NoError(t, err)
+	require.Equal(t, gen.KillswitchStatus("active"), detail.Status)
+	require.Equal(t, gen.KillswitchScheduleStart("now"), detail.Schedule.Start)
+	require.Nil(t, detail.Schedule.StartsAt)
+	require.NotEmpty(t, detail.History)
+	require.Equal(t, gen.KillswitchScheduleStart("now"), detail.History[0].Schedule.Start)
+	require.Nil(t, detail.History[0].Schedule.StartsAt)
+
+	listed, err := service.List(ctx, &gen.ListPayload{})
+	require.NoError(t, err)
+	require.Len(t, listed.Items, 1)
+	require.Equal(t, gen.KillswitchStatus("active"), listed.Items[0].Status)
+	require.Equal(t, gen.KillswitchScheduleStart("now"), listed.Items[0].Schedule.Start)
+	require.Nil(t, listed.Items[0].Schedule.StartsAt)
+}
+
+func TestCustomerCreateAndEditRequireScheduledStartAfterDatabaseTime(t *testing.T) {
+	t.Parallel()
+	service, db, orgID, userID, _ := newIntegrationService(t)
+	ctx := customerContext(t, orgID, userID)
+
+	var databaseNow time.Time
+	require.NoError(t, db.QueryRow(t.Context(), `SELECT clock_timestamp()`).Scan(&databaseNow))
+	notFuture := databaseNow.UTC().Format(time.RFC3339Nano)
+	schedule := &gen.KillswitchSchedule{Start: "scheduled", StartsAt: &notFuture, End: "until_lifted"}
+	_, err := service.Create(ctx, &gen.CreatePayload{
+		OperationID: uuid.NewString(), CapabilityKey: CapabilityMCPToolCalls, UserID: userID,
+		Scope: &gen.KillswitchScope{Type: "all_servers"}, Schedule: schedule,
+		ExternalNote: "message", InternalNote: "context",
+	})
+	requireOops(t, err, oops.CodeBadRequest)
+
+	created, err := service.Create(ctx, &gen.CreatePayload{
+		OperationID: uuid.NewString(), CapabilityKey: CapabilityMCPToolCalls, UserID: userID,
+		Scope: &gen.KillswitchScope{Type: "all_servers"}, Schedule: &gen.KillswitchSchedule{Start: "now", End: "until_lifted"},
+		ExternalNote: "message", InternalNote: "context",
+	})
+	require.NoError(t, err)
+
+	require.NoError(t, db.QueryRow(t.Context(), `SELECT clock_timestamp()`).Scan(&databaseNow))
+	notFuture = databaseNow.UTC().Format(time.RFC3339Nano)
+	_, err = service.Edit(ctx, &gen.EditPayload{
+		OperationID: uuid.NewString(), ID: created.ID, ExpectedVersion: created.Version,
+		Scope: &gen.KillswitchScope{Type: "all_servers"}, Schedule: &gen.KillswitchSchedule{Start: "scheduled", StartsAt: &notFuture, End: "until_lifted"},
+		ExternalNote: "updated", InternalNote: "updated context",
+	})
+	requireOops(t, err, oops.CodeBadRequest)
+}
+
 func TestDesiredRequiresExplicitTaggedScopeAndSchedule(t *testing.T) {
 	t.Parallel()
 	now := time.Now().UTC().Format(time.RFC3339Nano)
@@ -211,6 +288,33 @@ func TestDesiredRequiresExplicitTaggedScopeAndSchedule(t *testing.T) {
 			requireOops(t, err, oops.CodeBadRequest)
 		})
 	}
+}
+
+func TestCustomerAuthorizationUsesLiveOrgAdminGrant(t *testing.T) {
+	t.Parallel()
+
+	service, db, orgID, userID, _, engine := newIntegrationServiceWithAdmin(t, true)
+	ctx := customerContext(t, orgID, userID)
+	prepared, err := engine.PrepareContext(ctx)
+	require.NoError(t, err)
+	check := authz.Check{Scope: authz.ScopeOrgAdmin, ResourceID: orgID}
+	require.NoError(t, engine.Require(prepared, check))
+
+	_, err = service.ListCapabilities(prepared, &gen.ListCapabilitiesPayload{})
+	require.NoError(t, err)
+
+	result, err := db.Exec(t.Context(), `DELETE FROM principal_grants WHERE organization_id = $1 AND principal_urn = $2`, orgID, urn.NewPrincipal(urn.PrincipalTypeUser, userID))
+	require.NoError(t, err)
+	require.Equal(t, int64(1), result.RowsAffected())
+	// The request's prepared grants remain stale and permissive. The customer
+	// service must reload grants and observe the revocation.
+	require.NoError(t, engine.Require(prepared, check))
+	_, err = service.ListCapabilities(prepared, &gen.ListCapabilitiesPayload{})
+	requireOops(t, err, oops.CodeForbidden)
+
+	deniedService, _, deniedOrgID, deniedUserID, _, _ := newIntegrationServiceWithAdmin(t, false)
+	_, err = deniedService.ListCapabilities(customerContext(t, deniedOrgID, deniedUserID), &gen.ListCapabilitiesPayload{})
+	requireOops(t, err, oops.CodeForbidden)
 }
 
 func TestCustomerAuthorizationAndOpaqueForeignReferences(t *testing.T) {
@@ -293,20 +397,20 @@ func TestCustomerListSnapshotSurvivesMutationBetweenPages(t *testing.T) {
 
 func TestCustomerHistoryUsesEventTimeStatus(t *testing.T) {
 	t.Parallel()
-	service, _, orgID, userID, _ := newIntegrationService(t)
+	service, db, orgID, userID, _ := newIntegrationService(t)
 	ctx := customerContext(t, orgID, userID)
-	startsAt := time.Now().Add(300 * time.Millisecond).UTC()
-	startText := startsAt.Format(time.RFC3339Nano)
+	var transitionAt time.Time
+	require.NoError(t, db.QueryRow(t.Context(), `SELECT clock_timestamp() + interval '2 seconds'`).Scan(&transitionAt))
+	transitionAt = transitionAt.UTC()
+	startText := transitionAt.Format(time.RFC3339Nano)
 	created, err := service.Create(ctx, &gen.CreatePayload{
 		OperationID: uuid.NewString(), CapabilityKey: CapabilityMCPToolCalls, UserID: userID,
 		Scope: &gen.KillswitchScope{Type: "all_servers"}, Schedule: &gen.KillswitchSchedule{Start: "scheduled", StartsAt: &startText, End: "until_lifted"},
 		ExternalNote: "scheduled event", InternalNote: "scheduled event",
 	})
 	require.NoError(t, err)
-	require.Eventually(t, func() bool { return time.Now().After(startsAt.Add(100 * time.Millisecond)) }, 2*time.Second, 20*time.Millisecond)
 
-	expiresAt := time.Now().Add(300 * time.Millisecond).UTC()
-	expiresText := expiresAt.Format(time.RFC3339Nano)
+	expiresText := transitionAt.Format(time.RFC3339Nano)
 	edited, err := service.Edit(ctx, &gen.EditPayload{
 		OperationID: uuid.NewString(), ID: created.ID, ExpectedVersion: created.Version,
 		Scope: &gen.KillswitchScope{Type: "all_servers"}, Schedule: &gen.KillswitchSchedule{Start: "now", End: "bounded", EndsAt: &expiresText},
@@ -314,7 +418,11 @@ func TestCustomerHistoryUsesEventTimeStatus(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.Equal(t, int64(2), edited.Version)
-	require.Eventually(t, func() bool { return time.Now().After(expiresAt.Add(100 * time.Millisecond)) }, 2*time.Second, 20*time.Millisecond)
+	require.Eventually(t, func() bool {
+		var transitioned bool
+		err := db.QueryRow(t.Context(), `SELECT clock_timestamp() > $1`, transitionAt).Scan(&transitioned)
+		return err == nil && transitioned
+	}, 5*time.Second, 20*time.Millisecond)
 
 	detail, err := service.Get(ctx, &gen.GetPayload{ID: created.ID})
 	require.NoError(t, err)

@@ -8,7 +8,7 @@ import {
   UseMutationResult,
 } from "@tanstack/react-query";
 import { GramCore } from "../core.js";
-import { killswitchesEdit } from "../funcs/killswitchesEdit.js";
+import { killswitchesCreate } from "../funcs/killswitchesCreate.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
 import { KillswitchMutationReceipt } from "../models/components/killswitchmutationreceipt.js";
@@ -25,22 +25,22 @@ import { ResponseValidationError } from "../models/errors/responsevalidationerro
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
 import { ServiceError } from "../models/errors/serviceerror.js";
 import {
-  KillswitchesEditRequest,
-  KillswitchesEditSecurity,
-} from "../models/operations/killswitchesedit.js";
+  KillswitchesCreateRequest,
+  KillswitchesCreateSecurity,
+} from "../models/operations/killswitchescreate.js";
 import { unwrapAsync } from "../types/fp.js";
 import { useGramContext } from "./_context.js";
 import { MutationHookOptions } from "./_types.js";
 
-export type KillswitchesEditMutationVariables = {
-  security: KillswitchesEditSecurity;
-  request: KillswitchesEditRequest;
+export type CreateKillswitchMutationVariables = {
+  security: KillswitchesCreateSecurity;
+  request: KillswitchesCreateRequest;
   options?: RequestOptions;
 };
 
-export type KillswitchesEditMutationData = KillswitchMutationReceipt;
+export type CreateKillswitchMutationData = KillswitchMutationReceipt;
 
-export type KillswitchesEditMutationError =
+export type CreateKillswitchMutationError =
   | KillswitchConflict
   | ServiceError
   | GramError
@@ -53,46 +53,46 @@ export type KillswitchesEditMutationError =
   | SDKValidationError;
 
 /**
- * edit killswitches
+ * create killswitches
  */
-export function useKillswitchesEditMutation(
+export function useCreateKillswitchMutation(
   options?: MutationHookOptions<
-    KillswitchesEditMutationData,
-    KillswitchesEditMutationError,
-    KillswitchesEditMutationVariables
+    CreateKillswitchMutationData,
+    CreateKillswitchMutationError,
+    CreateKillswitchMutationVariables
   >,
 ): UseMutationResult<
-  KillswitchesEditMutationData,
-  KillswitchesEditMutationError,
-  KillswitchesEditMutationVariables
+  CreateKillswitchMutationData,
+  CreateKillswitchMutationError,
+  CreateKillswitchMutationVariables
 > {
   const client = useGramContext();
   return useMutation({
-    ...buildKillswitchesEditMutation(client, options),
+    ...buildCreateKillswitchMutation(client, options),
     ...options,
   });
 }
 
-export function mutationKeyKillswitchesEdit(): MutationKey {
-  return ["@gram/client", "killswitches", "edit"];
+export function mutationKeyCreateKillswitch(): MutationKey {
+  return ["@gram/client", "killswitches", "create"];
 }
 
-export function buildKillswitchesEditMutation(
+export function buildCreateKillswitchMutation(
   client$: GramCore,
   hookOptions?: RequestOptions,
 ): {
   mutationKey: MutationKey;
   mutationFn: (
-    variables: KillswitchesEditMutationVariables,
-  ) => Promise<KillswitchesEditMutationData>;
+    variables: CreateKillswitchMutationVariables,
+  ) => Promise<CreateKillswitchMutationData>;
 } {
   return {
-    mutationKey: mutationKeyKillswitchesEdit(),
-    mutationFn: function killswitchesEditMutationFn({
+    mutationKey: mutationKeyCreateKillswitch(),
+    mutationFn: function createKillswitchMutationFn({
       security,
       request,
       options,
-    }): Promise<KillswitchesEditMutationData> {
+    }): Promise<CreateKillswitchMutationData> {
       const mergedOptions = {
         ...hookOptions,
         ...options,
@@ -105,7 +105,7 @@ export function buildKillswitchesEditMutation(
           ),
         },
       };
-      return unwrapAsync(killswitchesEdit(
+      return unwrapAsync(killswitchesCreate(
         client$,
         security,
         request,

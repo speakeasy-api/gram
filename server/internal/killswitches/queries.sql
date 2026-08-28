@@ -239,7 +239,7 @@ WHERE organization_id = @organization_id
 FOR UPDATE;
 
 -- name: GetKillswitchPrescriptionVersion :one
-SELECT state, resource_scope, starts_at, expires_at, activated_at, superseded_at, internal_note, external_note
+SELECT state, resource_scope, COALESCE(start_mode, CASE WHEN activated_at IS NOT NULL AND starts_at > activated_at THEN 'at' ELSE 'now' END)::text AS start_mode, starts_at, expires_at, activated_at, superseded_at, internal_note, external_note
 FROM killswitch_prescription_versions
 WHERE organization_id = @organization_id
   AND prescription_id = @prescription_id
@@ -247,6 +247,29 @@ WHERE organization_id = @organization_id
 
 -- name: GetKillswitchDatabaseTime :one
 SELECT clock_timestamp()::timestamptz;
+
+-- name: CaptureKillswitchCustomerListWatermark :one
+-- The no-op conflict update takes the same row lock as mutation increments. A
+-- first page therefore sorts before or after every concurrent commit in this
+-- bounded customer-list scope.
+INSERT INTO killswitch_customer_list_watermarks (
+  organization_id, definition_key, principal_kind, resource_kind, watermark
+) VALUES (
+  @organization_id, @definition_key, @principal_kind, @resource_kind, 0
+)
+ON CONFLICT (organization_id, definition_key, principal_kind, resource_kind)
+DO UPDATE SET watermark = killswitch_customer_list_watermarks.watermark
+RETURNING watermark, clock_timestamp()::timestamptz AS status_as_of;
+
+-- name: AdvanceKillswitchCustomerListWatermark :one
+INSERT INTO killswitch_customer_list_watermarks (
+  organization_id, definition_key, principal_kind, resource_kind, watermark
+) VALUES (
+  @organization_id, @definition_key, @principal_kind, @resource_kind, 1
+)
+ON CONFLICT (organization_id, definition_key, principal_kind, resource_kind)
+DO UPDATE SET watermark = killswitch_customer_list_watermarks.watermark + 1
+RETURNING watermark;
 
 -- name: CreateKillswitchPrescriptionHeader :one
 INSERT INTO killswitch_prescriptions (
@@ -273,24 +296,28 @@ INSERT INTO killswitch_prescription_versions (
   version,
   state,
   resource_scope,
+  start_mode,
   starts_at,
   expires_at,
   activated_at,
   superseded_at,
   internal_note,
-  external_note
+  external_note,
+  list_watermark
 ) VALUES (
   @organization_id,
   @prescription_id,
   @version,
   @state,
   @resource_scope,
+  @start_mode::text,
   @starts_at,
   @expires_at,
   @activated_at,
   NULL,
   @internal_note,
-  @external_note
+  @external_note,
+  @list_watermark
 );
 
 -- name: CreateKillswitchPrescriptionVersionResources :execrows
@@ -362,6 +389,7 @@ SELECT
   prescription.current_version,
   version.state,
   version.resource_scope,
+  COALESCE(version.start_mode, CASE WHEN version.activated_at IS NOT NULL AND version.starts_at > version.activated_at THEN 'at' ELSE 'now' END)::text AS start_mode,
   version.starts_at,
   version.expires_at,
   version.activated_at,
@@ -396,6 +424,7 @@ SELECT
   prescription.current_version,
   version.state,
   version.resource_scope,
+  COALESCE(version.start_mode, CASE WHEN version.activated_at IS NOT NULL AND version.starts_at > version.activated_at THEN 'at' ELSE 'now' END)::text AS start_mode,
   version.starts_at,
   version.expires_at,
   version.activated_at,
@@ -434,7 +463,7 @@ WITH db_time AS (
       WHEN v.expires_at IS NOT NULL AND v.expires_at <= db_time.now THEN 'expired'
       ELSE 'active'
     END::text AS customer_status,
-    CASE WHEN v.starts_at > v.activated_at THEN 'scheduled' ELSE 'now' END::text AS customer_start,
+    CASE WHEN v.start_mode = 'at' OR (v.start_mode IS NULL AND v.activated_at IS NOT NULL AND v.starts_at > v.activated_at) THEN 'scheduled' ELSE 'now' END::text AS customer_start,
     ARRAY(
       SELECT r.resource_key
       FROM killswitch_prescription_version_resources AS r
@@ -451,8 +480,7 @@ WITH db_time AS (
     FROM killswitch_prescription_versions AS snapshot
     WHERE snapshot.organization_id = p.organization_id
       AND snapshot.prescription_id = p.id
-      AND snapshot.created_at <= db_time.now
-      AND (snapshot.superseded_at IS NULL OR snapshot.superseded_at > db_time.now)
+      AND snapshot.list_watermark <= @snapshot_watermark
     ORDER BY snapshot.version DESC
     LIMIT 1
   ) AS v ON TRUE
@@ -460,7 +488,6 @@ WITH db_time AS (
     AND p.definition_key = @definition_key
     AND p.principal_kind = @principal_kind
     AND p.resource_kind = @resource_kind
-    AND p.created_at <= db_time.now
     AND (sqlc.narg('user_id')::text IS NULL OR p.principal_key = sqlc.narg('user_id')::text)
     AND (
       sqlc.narg('cursor_created_at')::timestamptz IS NULL
@@ -494,7 +521,7 @@ SELECT
     WHEN v.expires_at IS NOT NULL AND v.expires_at <= a.created_at THEN 'expired'
     ELSE 'active'
   END::text AS customer_status,
-  CASE WHEN v.starts_at > v.activated_at THEN 'scheduled' ELSE 'now' END::text AS customer_start,
+  CASE WHEN v.start_mode = 'at' OR (v.start_mode IS NULL AND v.activated_at IS NOT NULL AND v.starts_at > v.activated_at) THEN 'scheduled' ELSE 'now' END::text AS customer_start,
   COALESCE(a.metadata->>'operation', '')::text AS operation
 FROM audit_logs AS a
 JOIN killswitch_prescription_versions AS v
@@ -518,7 +545,7 @@ WITH db_time AS (
 SELECT
   p.id, v.resource_scope, v.starts_at, v.expires_at,
   CASE WHEN v.starts_at > db_time.now THEN 'scheduled' ELSE 'active' END::text AS customer_status,
-  CASE WHEN v.starts_at > v.activated_at THEN 'scheduled' ELSE 'now' END::text AS customer_start,
+  CASE WHEN v.start_mode = 'at' OR (v.start_mode IS NULL AND v.activated_at IS NOT NULL AND v.starts_at > v.activated_at) THEN 'scheduled' ELSE 'now' END::text AS customer_start,
   ARRAY(
     SELECT r.resource_key
     FROM killswitch_prescription_version_resources AS r

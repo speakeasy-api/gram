@@ -32,7 +32,7 @@ func TestHostedCheckpoint_ReevaluatesAndFailsClosed(t *testing.T) {
 	recorder := &coverageRecorder{}
 	checkpoint, err := NewHostedCheckpoint(conn, testenv.NewMeterProvider(t), testenv.NewLogger(t), recorder)
 	require.NoError(t, err)
-	ctx := mcpidentity.WithIdentity(t.Context(), mcpidentity.AuthenticatedUser(userID))
+	ctx := testIdentityContext(t, mcpidentity.KindUserSession, userID)
 
 	disposition, err := checkpoint.Evaluate(ctx, orgID, source)
 	require.NoError(t, err)
@@ -71,7 +71,7 @@ func TestHostedCheckpoint_ReevaluatesAndFailsClosed(t *testing.T) {
 	_, hasNote := disposition.ExternalNote()
 	require.False(t, hasNote)
 
-	unsupportedCtx := mcpidentity.WithIdentity(t.Context(), mcpidentity.Identity{Kind: mcpidentity.KindAnonymous})
+	unsupportedCtx := testIdentityContext(t, mcpidentity.KindAnonymous, "")
 	disposition, err = checkpoint.Evaluate(unsupportedCtx, orgID, source)
 	require.NoError(t, err)
 	require.Equal(t, killswitches.TransportDispositionContinue, disposition.Kind())
@@ -106,7 +106,7 @@ func TestMCPToolExecutionEvaluationAcrossProjects(t *testing.T) {
 
 	evaluate := func(t *testing.T, userID string, serverID uuid.UUID) killswitches.EvaluationResult {
 		t.Helper()
-		candidates, err := principalAdapter.DeriveCandidates(t.Context(), organization, mcpidentity.AuthenticatedUser(userID))
+		candidates, err := principalAdapter.DeriveCandidates(t.Context(), organization, testIdentity(t, mcpidentity.KindUserSession, userID))
 		require.NoError(t, err)
 		require.Equal(t, killswitches.PrincipalCandidateResultCandidates, candidates.Kind())
 		resource, err := resourceAdapter.Derive(t.Context(), organization, ServerSource{FrontingServerID: uuid.NullUUID{UUID: serverID, Valid: true}})

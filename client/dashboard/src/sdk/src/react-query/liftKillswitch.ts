@@ -8,10 +8,10 @@ import {
   UseMutationResult,
 } from "@tanstack/react-query";
 import { GramCore } from "../core.js";
-import { killswitchesPreviewOverlaps } from "../funcs/killswitchesPreviewOverlaps.js";
+import { killswitchesLift } from "../funcs/killswitchesLift.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
-import { KillswitchPreviewOverlapsResult } from "../models/components/killswitchpreviewoverlapsresult.js";
+import { KillswitchLiftResult } from "../models/components/killswitchliftresult.js";
 import { GramError } from "../models/errors/gramerror.js";
 import {
   ConnectionError,
@@ -20,27 +20,28 @@ import {
   RequestTimeoutError,
   UnexpectedClientError,
 } from "../models/errors/httpclienterrors.js";
+import { KillswitchConflict } from "../models/errors/killswitchconflict.js";
 import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
 import { ServiceError } from "../models/errors/serviceerror.js";
 import {
-  KillswitchesPreviewOverlapsRequest,
-  KillswitchesPreviewOverlapsSecurity,
-} from "../models/operations/killswitchespreviewoverlaps.js";
+  KillswitchesLiftRequest,
+  KillswitchesLiftSecurity,
+} from "../models/operations/killswitcheslift.js";
 import { unwrapAsync } from "../types/fp.js";
 import { useGramContext } from "./_context.js";
 import { MutationHookOptions } from "./_types.js";
 
-export type KillswitchesPreviewOverlapsMutationVariables = {
-  security: KillswitchesPreviewOverlapsSecurity;
-  request: KillswitchesPreviewOverlapsRequest;
+export type LiftKillswitchMutationVariables = {
+  security: KillswitchesLiftSecurity;
+  request: KillswitchesLiftRequest;
   options?: RequestOptions;
 };
 
-export type KillswitchesPreviewOverlapsMutationData =
-  KillswitchPreviewOverlapsResult;
+export type LiftKillswitchMutationData = KillswitchLiftResult;
 
-export type KillswitchesPreviewOverlapsMutationError =
+export type LiftKillswitchMutationError =
+  | KillswitchConflict
   | ServiceError
   | GramError
   | ResponseValidationError
@@ -52,46 +53,46 @@ export type KillswitchesPreviewOverlapsMutationError =
   | SDKValidationError;
 
 /**
- * previewOverlaps killswitches
+ * lift killswitches
  */
-export function useKillswitchesPreviewOverlapsMutation(
+export function useLiftKillswitchMutation(
   options?: MutationHookOptions<
-    KillswitchesPreviewOverlapsMutationData,
-    KillswitchesPreviewOverlapsMutationError,
-    KillswitchesPreviewOverlapsMutationVariables
+    LiftKillswitchMutationData,
+    LiftKillswitchMutationError,
+    LiftKillswitchMutationVariables
   >,
 ): UseMutationResult<
-  KillswitchesPreviewOverlapsMutationData,
-  KillswitchesPreviewOverlapsMutationError,
-  KillswitchesPreviewOverlapsMutationVariables
+  LiftKillswitchMutationData,
+  LiftKillswitchMutationError,
+  LiftKillswitchMutationVariables
 > {
   const client = useGramContext();
   return useMutation({
-    ...buildKillswitchesPreviewOverlapsMutation(client, options),
+    ...buildLiftKillswitchMutation(client, options),
     ...options,
   });
 }
 
-export function mutationKeyKillswitchesPreviewOverlaps(): MutationKey {
-  return ["@gram/client", "killswitches", "previewOverlaps"];
+export function mutationKeyLiftKillswitch(): MutationKey {
+  return ["@gram/client", "killswitches", "lift"];
 }
 
-export function buildKillswitchesPreviewOverlapsMutation(
+export function buildLiftKillswitchMutation(
   client$: GramCore,
   hookOptions?: RequestOptions,
 ): {
   mutationKey: MutationKey;
   mutationFn: (
-    variables: KillswitchesPreviewOverlapsMutationVariables,
-  ) => Promise<KillswitchesPreviewOverlapsMutationData>;
+    variables: LiftKillswitchMutationVariables,
+  ) => Promise<LiftKillswitchMutationData>;
 } {
   return {
-    mutationKey: mutationKeyKillswitchesPreviewOverlaps(),
-    mutationFn: function killswitchesPreviewOverlapsMutationFn({
+    mutationKey: mutationKeyLiftKillswitch(),
+    mutationFn: function liftKillswitchMutationFn({
       security,
       request,
       options,
-    }): Promise<KillswitchesPreviewOverlapsMutationData> {
+    }): Promise<LiftKillswitchMutationData> {
       const mergedOptions = {
         ...hookOptions,
         ...options,
@@ -104,7 +105,7 @@ export function buildKillswitchesPreviewOverlapsMutation(
           ),
         },
       };
-      return unwrapAsync(killswitchesPreviewOverlaps(
+      return unwrapAsync(killswitchesLift(
         client$,
         security,
         request,

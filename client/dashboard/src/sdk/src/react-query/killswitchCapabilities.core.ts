@@ -17,10 +17,9 @@ import {
   KillswitchesListCapabilitiesSecurity,
 } from "../models/operations/killswitcheslistcapabilities.js";
 import { unwrapAsync } from "../types/fp.js";
-export type KillswitchesListCapabilitiesQueryData =
-  KillswitchListCapabilitiesResult;
+export type KillswitchCapabilitiesQueryData = KillswitchListCapabilitiesResult;
 
-export function prefetchKillswitchesListCapabilities(
+export function prefetchKillswitchCapabilities(
   queryClient: QueryClient,
   client$: GramCore,
   security: KillswitchesListCapabilitiesSecurity,
@@ -28,7 +27,7 @@ export function prefetchKillswitchesListCapabilities(
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
-    ...buildKillswitchesListCapabilitiesQuery(
+    ...buildKillswitchCapabilitiesQuery(
       client$,
       security,
       request,
@@ -37,7 +36,7 @@ export function prefetchKillswitchesListCapabilities(
   });
 }
 
-export function buildKillswitchesListCapabilitiesQuery(
+export function buildKillswitchCapabilitiesQuery(
   client$: GramCore,
   security: KillswitchesListCapabilitiesSecurity,
   request?: KillswitchesListCapabilitiesRequest | undefined,
@@ -46,15 +45,15 @@ export function buildKillswitchesListCapabilitiesQuery(
   queryKey: QueryKey;
   queryFn: (
     context: QueryFunctionContext,
-  ) => Promise<KillswitchesListCapabilitiesQueryData>;
+  ) => Promise<KillswitchCapabilitiesQueryData>;
 } {
   return {
-    queryKey: queryKeyKillswitchesListCapabilities({
+    queryKey: queryKeyKillswitchCapabilities({
       gramSession: request?.gramSession,
     }),
-    queryFn: async function killswitchesListCapabilitiesQueryFn(
+    queryFn: async function killswitchCapabilitiesQueryFn(
       ctx,
-    ): Promise<KillswitchesListCapabilitiesQueryData> {
+    ): Promise<KillswitchCapabilitiesQueryData> {
       const sig = combineSignals(
         ctx.signal,
         options?.signal,
@@ -76,7 +75,7 @@ export function buildKillswitchesListCapabilitiesQuery(
   };
 }
 
-export function queryKeyKillswitchesListCapabilities(
+export function queryKeyKillswitchCapabilities(
   parameters: { gramSession?: string | undefined },
 ): QueryKey {
   return ["@gram/client", "killswitches", "listCapabilities", parameters];

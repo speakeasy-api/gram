@@ -56,7 +56,7 @@ func (a *MCPServerResourceAdapter) Kind() killswitches.ResourceKind {
 // deliberately unsupported, not an error.
 func (a *MCPServerResourceAdapter) Canonicalize(_ killswitches.OrganizationID, input string) (killswitches.CanonicalizationResult[killswitches.ResourceKey], error) {
 	id, err := uuid.Parse(strings.TrimSpace(input))
-	if err != nil {
+	if err != nil || id == uuid.Nil {
 		return killswitches.UnsupportedCanonicalizationResult[killswitches.ResourceKey](), nil
 	}
 	result, err := killswitches.NewCanonicalizationResult(killswitches.ResourceKey(id.String()))

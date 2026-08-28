@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -14,7 +13,6 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/killswitches"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpmetrics"
-	"github.com/speakeasy-api/gram/server/internal/mcpidentity"
 )
 
 // DefaultEvaluationTimeout bounds the authoritative database lookup on the
@@ -116,56 +114,33 @@ func (c *Checkpoint) Evaluate(ctx context.Context, organizationID, mcpServerID s
 	organization := killswitches.OrganizationID(organizationID)
 	serverID, parseErr := uuid.Parse(mcpServerID)
 	resourceSource := ServerSource{FrontingServerID: uuid.NullUUID{UUID: serverID, Valid: parseErr == nil}}
-	resourceResult := killswitches.CanonicalizationResult[killswitches.ResourceKey]{}
-	resourceErr := parseErr
-	principals := killswitches.UnsupportedPrincipalCandidateResult()
-	identity, hasIdentity := mcpidentity.FromContext(ctx)
-	var principalSource any
-	var principalErr error
+	derivation := deriveCoverage(ctx, organization, c.principal, c.resource, resourceSource)
+	if parseErr != nil {
+		derivation.resourceErr = parseErr
+	}
+	derivation.record(ctx, c.recorder, mcpmetrics.KillswitchSurfacePrivateProxy)
 
-	var derivations sync.WaitGroup
-	if resourceErr == nil {
-		derivations.Go(func() {
-			resourceResult, resourceErr = c.resource.Derive(ctx, organization, resourceSource)
-		})
+	if derivation.resourceErr != nil {
+		return c.infrastructureFailure(fmt.Errorf("derive canonical mcp server: %w", derivation.resourceErr))
 	}
-	if hasIdentity {
-		principalSource = identity
-		derivations.Go(func() {
-			principals, principalErr = c.principal.DeriveCandidates(ctx, organization, identity)
-		})
-	}
-	derivations.Wait()
-	if c.recorder != nil {
-		c.recorder.RecordKillswitchIdentityCoverage(
-			ctx,
-			mcpmetrics.KillswitchSurfacePrivateProxy,
-			ClassifyPrincipalCoverage(principalSource, principals, principalErr),
-			ClassifyResourceCoverage(resourceSource, resourceResult, resourceErr),
-		)
-	}
-
-	if resourceErr != nil {
-		return c.infrastructureFailure(fmt.Errorf("derive canonical mcp server: %w", resourceErr))
-	}
-	resourceKey, supported, err := resourceResult.Key()
+	resourceKey, supported, err := derivation.resourceResult.Key()
 	if err != nil {
 		return c.infrastructureFailure(fmt.Errorf("read canonical mcp server: %w", err))
 	}
 	if !supported {
 		return c.infrastructureFailure(errors.New("covered tools/call has no canonical mcp server"))
 	}
-	if principalErr != nil {
-		return c.infrastructureFailure(fmt.Errorf("derive authenticated user: %w", principalErr))
+	if derivation.principalErr != nil {
+		return c.infrastructureFailure(fmt.Errorf("derive authenticated user: %w", derivation.principalErr))
 	}
-	if principals.Kind() == killswitches.PrincipalCandidateResultUnsupported {
+	if derivation.principalResult.Kind() == killswitches.PrincipalCandidateResultUnsupported {
 		return killswitches.NewContinueDisposition(), nil
 	}
 
 	result := c.evaluator.Evaluate(ctx, killswitches.EvaluationRequest{
 		OrganizationID:      organization,
 		DefinitionKeys:      []killswitches.DefinitionKey{DefinitionKeyMCPToolExecution},
-		PrincipalCandidates: principals.Candidates(),
+		PrincipalCandidates: derivation.principalResult.Candidates(),
 		ResourceKind:        ResourceKindMCPServer,
 		ResourceKey:         resourceKey,
 	})

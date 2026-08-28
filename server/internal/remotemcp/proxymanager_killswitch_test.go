@@ -23,6 +23,9 @@ func TestProxyManagerAttachesKillswitchToEveryPrivateBackend(t *testing.T) {
 		nil,
 	)
 
+	checkpoint := &fakeKillswitchCheckpoint{}
+	manager.killswitchCheckpoint = checkpoint
+
 	canonicalServerID := uuid.NewString()
 	remote := manager.Build(
 		logger,
@@ -76,7 +79,21 @@ func TestProxyManagerAttachesKillswitchToEveryPrivateBackend(t *testing.T) {
 		require.NotContains(t, downstream, "tools-call-otel-counter")
 		require.NotContains(t, downstream, "tools-call-killswitch")
 	}
+	publicInterceptors := append([]proxy.ToolsCallRequestInterceptor(nil), public.ToolsCallPreForwardInterceptors...)
+	publicInterceptors = append(publicInterceptors, public.ToolsCallRequestInterceptors...)
 	require.NotContains(t, append(toolsCallPreForwardInterceptorNames(public), toolsCallInterceptorNames(public)...), "tools-call-killswitch")
+	publicCounters := 0
+	for _, interceptor := range publicInterceptors {
+		counter, ok := interceptor.(*ToolsCallOTELCounterInterceptor)
+		if !ok {
+			continue
+		}
+		publicCounters++
+		require.Nil(t, counter.identityCoverage, "public calls must not record private-proxy identity coverage")
+		require.NoError(t, counter.InterceptToolsCallRequest(t.Context(), newToolsCallRequestForCounter(t, "public_tool")))
+	}
+	require.Equal(t, 1, publicCounters)
+	require.Zero(t, checkpoint.calls, "public calls must not trigger private identity/resource resolution")
 }
 
 func countInterceptorName(names []string, target string) int {

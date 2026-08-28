@@ -34,26 +34,28 @@ type CustomerListCursor struct {
 }
 
 type ListCustomerPrescriptionsRequest struct {
-	OrganizationID OrganizationID
-	Definition     DefinitionKey
-	PrincipalKind  PrincipalKind
-	ResourceKind   ResourceKind
-	PrincipalKey   *PrincipalKey
-	Status         *CustomerStatus
-	Limit          int32
-	Cursor         *CustomerListCursor
-	StatusAsOf     time.Time
+	OrganizationID    OrganizationID
+	Definition        DefinitionKey
+	PrincipalKind     PrincipalKind
+	ResourceKind      ResourceKind
+	PrincipalKey      *PrincipalKey
+	Status            *CustomerStatus
+	Limit             int32
+	Cursor            *CustomerListCursor
+	StatusAsOf        time.Time
+	SnapshotWatermark int64
 }
 
 type AuthorizedListCustomerPrescriptionsRequest struct {
-	Definition    DefinitionKey
-	PrincipalKind PrincipalKind
-	ResourceKind  ResourceKind
-	PrincipalKey  *PrincipalKey
-	Status        *CustomerStatus
-	Limit         int32
-	Cursor        *CustomerListCursor
-	StatusAsOf    time.Time
+	Definition        DefinitionKey
+	PrincipalKind     PrincipalKind
+	ResourceKind      ResourceKind
+	PrincipalKey      *PrincipalKey
+	Status            *CustomerStatus
+	Limit             int32
+	Cursor            *CustomerListCursor
+	StatusAsOf        time.Time
+	SnapshotWatermark int64
 }
 
 type CustomerListItem struct {
@@ -79,17 +81,18 @@ type customerReadService interface {
 }
 
 func (f *Facade) ListCustomerPrescriptions(ctx context.Context, request ListCustomerPrescriptionsRequest) (ListCustomerPrescriptionsResult, error) {
-	if request.OrganizationID == "" || request.Definition == "" || request.PrincipalKind == "" || request.ResourceKind == "" || request.StatusAsOf.IsZero() || request.Limit < 1 || request.Limit > MaxListPrescriptions {
+	if request.OrganizationID == "" || request.Definition == "" || request.PrincipalKind == "" || request.ResourceKind == "" || request.StatusAsOf.IsZero() || request.SnapshotWatermark < 0 || request.Limit < 1 || request.Limit > MaxListPrescriptions {
 		return ListCustomerPrescriptionsResult{}, ErrInvalidArgument
 	}
 	params := repo.ListCustomerKillswitchesParams{
-		OrganizationID: string(request.OrganizationID),
-		DefinitionKey:  string(request.Definition),
-		PrincipalKind:  string(request.PrincipalKind),
-		ResourceKind:   string(request.ResourceKind),
-		ResultLimit:    request.Limit + 1,
-		StatusAsOf:     pgtype.Timestamptz{Time: request.StatusAsOf, Valid: true, InfinityModifier: pgtype.Finite},
-		CustomerStatus: pgtype.Text{String: "", Valid: false}, UserID: pgtype.Text{String: "", Valid: false},
+		OrganizationID:    string(request.OrganizationID),
+		DefinitionKey:     string(request.Definition),
+		PrincipalKind:     string(request.PrincipalKind),
+		ResourceKind:      string(request.ResourceKind),
+		ResultLimit:       request.Limit + 1,
+		SnapshotWatermark: request.SnapshotWatermark,
+		StatusAsOf:        pgtype.Timestamptz{Time: request.StatusAsOf, Valid: true, InfinityModifier: pgtype.Finite},
+		CustomerStatus:    pgtype.Text{String: "", Valid: false}, UserID: pgtype.Text{String: "", Valid: false},
 		CursorCreatedAt: pgtype.Timestamptz{Time: time.Time{}, Valid: false, InfinityModifier: pgtype.Finite}, CursorID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 	}
 	if request.PrincipalKey != nil {

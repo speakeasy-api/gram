@@ -24,7 +24,7 @@ func ClassifyPrincipalCoverage(source any, result killswitches.PrincipalCandidat
 	if result.Kind() == killswitches.PrincipalCandidateResultCandidates {
 		return mcpmetrics.KillswitchIdentityActiveUser
 	}
-	switch identity.Kind {
+	switch identity.Kind() {
 	case mcpidentity.KindUserSession:
 		return mcpmetrics.KillswitchIdentityInactiveUser
 	case mcpidentity.KindAnonymous:

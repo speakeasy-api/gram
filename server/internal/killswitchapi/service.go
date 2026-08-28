@@ -26,6 +26,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/constants"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/killswitches"
 	"github.com/speakeasy-api/gram/server/internal/killswitches/mcptoolexecution"
 	killswitchrepo "github.com/speakeasy-api/gram/server/internal/killswitches/repo"
@@ -136,6 +137,7 @@ type listCursor struct {
 	CreatedAt string `json:"created_at"`
 	ID        string `json:"id"`
 	AsOf      string `json:"as_of"`
+	Watermark int64  `json:"watermark"`
 	Filter    string `json:"filter"`
 }
 
@@ -173,6 +175,7 @@ func (s *Service) List(ctx context.Context, payload *gen.ListPayload) (*gen.Kill
 
 	var cursor *killswitches.CustomerListCursor
 	var asOf time.Time
+	var snapshotWatermark int64
 	if payload.Cursor != nil {
 		decoded, decodeErr := decodeCursor(*payload.Cursor, filter)
 		if decodeErr != nil {
@@ -191,18 +194,26 @@ func (s *Service) List(ctx context.Context, payload *gen.ListPayload) (*gen.Kill
 			return nil, badRequest(errors.New("cursor is invalid"))
 		}
 		cursor = &killswitches.CustomerListCursor{CreatedAt: createdAt, ID: killswitches.PrescriptionID(id.String())}
+		snapshotWatermark = decoded.Watermark
 	} else {
-		dbNow, queryErr := killswitchrepo.New(s.db).GetKillswitchDatabaseTime(ctx)
-		if queryErr != nil || !dbNow.Valid {
-			return nil, mapError(fmt.Errorf("read database time: %w", queryErr))
+		snapshot, queryErr := killswitchrepo.New(s.db).CaptureKillswitchCustomerListWatermark(ctx, killswitchrepo.CaptureKillswitchCustomerListWatermarkParams{
+			OrganizationID: string(organizationID), DefinitionKey: string(mcptoolexecution.DefinitionKeyMCPToolExecution),
+			PrincipalKind: string(mcptoolexecution.PrincipalKindUser), ResourceKind: string(mcptoolexecution.ResourceKindMCPServer),
+		})
+		if queryErr != nil {
+			return nil, mapError(fmt.Errorf("capture killswitch customer list watermark: %w", queryErr))
 		}
-		asOf = dbNow.Time
+		if !snapshot.StatusAsOf.Valid {
+			return nil, mapError(errors.New("captured killswitch customer list watermark has no status time"))
+		}
+		asOf = snapshot.StatusAsOf.Time
+		snapshotWatermark = snapshot.Watermark
 	}
 
 	result, err := s.authorized.ListCustomerPrescriptions(ctx, killswitches.AuthorizedListCustomerPrescriptionsRequest{
 		Definition: mcptoolexecution.DefinitionKeyMCPToolExecution, PrincipalKind: mcptoolexecution.PrincipalKindUser,
 		ResourceKind: mcptoolexecution.ResourceKindMCPServer, PrincipalKey: principalKey, Status: status,
-		Limit: limit, Cursor: cursor, StatusAsOf: asOf,
+		Limit: limit, Cursor: cursor, StatusAsOf: asOf, SnapshotWatermark: snapshotWatermark,
 	})
 	if err != nil {
 		return nil, mapError(err)
@@ -213,7 +224,7 @@ func (s *Service) List(ctx context.Context, payload *gen.ListPayload) (*gen.Kill
 	}
 	var next *string
 	if result.NextCursor != nil {
-		encoded, encodeErr := encodeCursor(listCursor{Version: 1, CreatedAt: result.NextCursor.CreatedAt.Format(time.RFC3339Nano), ID: string(result.NextCursor.ID), AsOf: asOf.Format(time.RFC3339Nano), Filter: filter})
+		encoded, encodeErr := encodeCursor(listCursor{Version: 2, CreatedAt: result.NextCursor.CreatedAt.Format(time.RFC3339Nano), ID: string(result.NextCursor.ID), AsOf: asOf.Format(time.RFC3339Nano), Watermark: snapshotWatermark, Filter: filter})
 		if encodeErr != nil {
 			return nil, mapError(encodeErr)
 		}
@@ -233,7 +244,7 @@ func (s *Service) Get(ctx context.Context, payload *gen.GetPayload) (*gen.Killsw
 	}
 	status := currentStatus(prescription, dbNow.Time)
 	start := "now"
-	if prescription.ActivatedAt != nil && prescription.StartsAt.After(*prescription.ActivatedAt) {
+	if prescription.StartMode == killswitches.StartModeAt {
 		start = "scheduled"
 	}
 	base := summary(string(prescription.ID), string(prescription.PrincipalKey), prescription.Version, status, start, string(prescription.ResourceScope), stringsFrom(prescription.SelectedResourceKeys), prescription.StartsAt, prescription.ExpiresAt)
@@ -248,7 +259,10 @@ func (s *Service) Get(ctx context.Context, payload *gen.GetPayload) (*gen.Killsw
 	}
 	history := make([]*gen.KillswitchHistoryEvent, len(rows))
 	for i, row := range rows {
-		history[i] = historyEvent(row)
+		history[i], err = historyEvent(row)
+		if err != nil {
+			return nil, mapError(err)
+		}
 	}
 	return &gen.KillswitchDetail{
 		ID: base.ID, CapabilityKey: base.CapabilityKey, CapabilityLabel: base.CapabilityLabel, UserID: base.UserID, Version: base.Version, Status: base.Status, Scope: base.Scope, Schedule: base.Schedule,
@@ -577,7 +591,7 @@ func (s *Service) overlaps(ctx context.Context, organizationID killswitches.Orga
 	}
 	rows, err := killswitchrepo.New(s.db).ListCustomerKillswitchOverlaps(ctx, killswitchrepo.ListCustomerKillswitchOverlapsParams{
 		OrganizationID: string(organizationID), DefinitionKey: string(mcptoolexecution.DefinitionKeyMCPToolExecution), PrincipalKind: string(mcptoolexecution.PrincipalKindUser), PrincipalKey: userID, ResourceKind: string(mcptoolexecution.ResourceKindMCPServer),
-		ExcludeID: excludeID, DraftStartsAt: pgtype.Timestamptz{Time: startsAt, Valid: true}, DraftEndsAt: ptrTime(endsAt), DraftScope: string(scope), DraftSelectedResourceKeys: selected,
+		ExcludeID: excludeID, DraftStartsAt: conv.ToPGTimestamptz(startsAt), DraftEndsAt: conv.PtrToPGTimestamptz(endsAt), DraftScope: string(scope), DraftSelectedResourceKeys: selected,
 	})
 	if err != nil {
 		return nil, false, mapError(fmt.Errorf("list killswitch overlaps: %w", err))
@@ -632,18 +646,22 @@ func currentStatus(p killswitches.CurrentPrescription, now time.Time) string {
 	return "active"
 }
 
-func historyEvent(row killswitchrepo.ListCustomerKillswitchHistoryRow) *gen.KillswitchHistoryEvent {
-	action := "edited"
-	switch row.Action {
-	case "killswitch:activate":
+func historyEvent(row killswitchrepo.ListCustomerKillswitchHistoryRow) (*gen.KillswitchHistoryEvent, error) {
+	var action gen.KillswitchHistoryAction
+	switch audit.Action(row.Action) {
+	case audit.ActionKillswitchActivate:
 		action = "created"
 		if row.Operation == string(killswitches.MutationOperationReactivate) {
 			action = "restored"
 		}
-	case "killswitch:deactivate":
+	case audit.ActionKillswitchChange:
+		action = "edited"
+	case audit.ActionKillswitchDeactivate:
 		action = "lifted"
-	case "killswitch:expire":
+	case audit.ActionKillswitchExpire:
 		action = "expired"
+	default:
+		return nil, fmt.Errorf("unknown killswitch history action %q", row.Action)
 	}
 	var actorDisplayName *string
 	if row.ActorDisplayName.Valid {
@@ -654,7 +672,7 @@ func historyEvent(row killswitchrepo.ListCustomerKillswitchHistoryRow) *gen.Kill
 		actorID := row.ActorID
 		actorUserID = &actorID
 	}
-	return &gen.KillswitchHistoryEvent{Sequence: row.Seq, Version: row.Version, Action: gen.KillswitchHistoryAction(action), Status: gen.KillswitchStatus(row.CustomerStatus), Scope: outputScope(row.ResourceScope, row.SelectedResourceKeys), Schedule: outputSchedule(row.StartsAt.Time, optionalTime(row.ExpiresAt), row.CustomerStart), ExternalNote: row.ExternalNote, InternalNote: row.InternalNote, ActorUserID: actorUserID, ActorDisplayName: actorDisplayName, ChangedAt: row.CreatedAt.Time.Format(time.RFC3339Nano)}
+	return &gen.KillswitchHistoryEvent{Sequence: row.Seq, Version: row.Version, Action: action, Status: gen.KillswitchStatus(row.CustomerStatus), Scope: outputScope(row.ResourceScope, row.SelectedResourceKeys), Schedule: outputSchedule(row.StartsAt.Time, optionalTime(row.ExpiresAt), row.CustomerStart), ExternalNote: row.ExternalNote, InternalNote: row.InternalNote, ActorUserID: actorUserID, ActorDisplayName: actorDisplayName, ChangedAt: row.CreatedAt.Time.Format(time.RFC3339Nano)}, nil
 }
 
 func mutationResult(result killswitches.MutationResult) *gen.KillswitchMutationReceipt {
@@ -694,7 +712,7 @@ func decodeCursor(value, filter string) (listCursor, error) {
 		return listCursor{}, errors.New("cursor is invalid")
 	}
 	var cursor listCursor
-	if err := json.Unmarshal(data, &cursor); err != nil || cursor.Version != 1 || cursor.Filter != filter || cursor.CreatedAt == "" || cursor.ID == "" || cursor.AsOf == "" {
+	if err := json.Unmarshal(data, &cursor); err != nil || cursor.Version != 2 || cursor.Watermark < 0 || cursor.Filter != filter || cursor.CreatedAt == "" || cursor.ID == "" || cursor.AsOf == "" {
 		return listCursor{}, errors.New("cursor is invalid")
 	}
 	return cursor, nil
@@ -705,13 +723,6 @@ func optionalTime(value pgtype.Timestamptz) *time.Time {
 		return nil
 	}
 	return &value.Time
-}
-
-func ptrTime(value *time.Time) pgtype.Timestamptz {
-	if value == nil {
-		return pgtype.Timestamptz{}
-	}
-	return pgtype.Timestamptz{Time: *value, Valid: true}
 }
 
 func stringsFrom[T ~string](values []T) []string {

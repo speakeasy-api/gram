@@ -21366,6 +21366,8 @@ paths:
       tags:
         - killswitches
       x-speakeasy-name-override: batchUserBadges
+      x-speakeasy-react-hook:
+        name: BatchKillswitchUserBadges
       security:
         - session_header_Gram-Session: []
   /rpc/killswitches.create:
@@ -21456,6 +21458,8 @@ paths:
       tags:
         - killswitches
       x-speakeasy-name-override: create
+      x-speakeasy-react-hook:
+        name: CreateKillswitch
       security:
         - session_header_Gram-Session: []
   /rpc/killswitches.edit:
@@ -21546,6 +21550,8 @@ paths:
       tags:
         - killswitches
       x-speakeasy-name-override: edit
+      x-speakeasy-react-hook:
+        name: EditKillswitch
       security:
         - session_header_Gram-Session: []
   /rpc/killswitches.get:
@@ -21631,6 +21637,8 @@ paths:
       tags:
         - killswitches
       x-speakeasy-name-override: get
+      x-speakeasy-react-hook:
+        name: Killswitch
       security:
         - session_header_Gram-Session: []
   /rpc/killswitches.lift:
@@ -21721,6 +21729,8 @@ paths:
       tags:
         - killswitches
       x-speakeasy-name-override: lift
+      x-speakeasy-react-hook:
+        name: LiftKillswitch
       security:
         - session_header_Gram-Session: []
   /rpc/killswitches.list:
@@ -21833,6 +21843,8 @@ paths:
         outputs:
           nextCursor: $.next_cursor
         type: cursor
+      x-speakeasy-react-hook:
+        name: Killswitches
       security:
         - session_header_Gram-Session: []
   /rpc/killswitches.listCapabilities:
@@ -21911,6 +21923,8 @@ paths:
       tags:
         - killswitches
       x-speakeasy-name-override: listCapabilities
+      x-speakeasy-react-hook:
+        name: KillswitchCapabilities
       security:
         - session_header_Gram-Session: []
   /rpc/killswitches.listMCPServers:
@@ -21989,6 +22003,8 @@ paths:
       tags:
         - killswitches
       x-speakeasy-name-override: listMCPServers
+      x-speakeasy-react-hook:
+        name: KillswitchMCPServers
       security:
         - session_header_Gram-Session: []
   /rpc/killswitches.previewOverlaps:
@@ -22073,6 +22089,8 @@ paths:
       tags:
         - killswitches
       x-speakeasy-name-override: previewOverlaps
+      x-speakeasy-react-hook:
+        name: PreviewKillswitchOverlaps
       security:
         - session_header_Gram-Session: []
   /rpc/litellm.createInstance:
@@ -71651,6 +71669,7 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/KillswitchHistoryEvent'
+          maxItems: 100
         history_truncated:
           type: boolean
         id:
@@ -71810,6 +71829,7 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/KillswitchSummary'
+          maxItems: 100
         next_cursor:
           type: string
       required:

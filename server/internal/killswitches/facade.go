@@ -68,6 +68,7 @@ type CurrentPrescription struct {
 	Version              int64
 	State                PrescriptionState
 	ResourceScope        ResourceScope
+	StartMode            StartMode
 	SelectedResourceKeys []ResourceKey
 	StartsAt             time.Time
 	ExpiresAt            *time.Time
@@ -156,7 +157,7 @@ func (f *Facade) GetPrescription(ctx context.Context, request GetPrescriptionReq
 	return f.currentPrescription(currentPrescriptionRow{
 		id: row.ID, organizationID: row.OrganizationID, definitionKey: row.DefinitionKey,
 		principalKind: row.PrincipalKind, principalKey: row.PrincipalKey, resourceKind: row.ResourceKind,
-		currentVersion: row.CurrentVersion, state: row.State, resourceScope: row.ResourceScope,
+		currentVersion: row.CurrentVersion, state: row.State, resourceScope: row.ResourceScope, startMode: row.StartMode,
 		startsAt: row.StartsAt, expiresAt: row.ExpiresAt, activatedAt: row.ActivatedAt, supersededAt: row.SupersededAt,
 		internalNote: row.InternalNote, externalNote: row.ExternalNote,
 		selectedResourceKeys: row.SelectedResourceKeys,
@@ -205,7 +206,7 @@ func (f *Facade) ListPrescriptions(ctx context.Context, request ListPrescription
 		prescription, err := f.currentPrescription(currentPrescriptionRow{
 			id: row.ID, organizationID: row.OrganizationID, definitionKey: row.DefinitionKey,
 			principalKind: row.PrincipalKind, principalKey: row.PrincipalKey, resourceKind: row.ResourceKind,
-			currentVersion: row.CurrentVersion, state: row.State, resourceScope: row.ResourceScope,
+			currentVersion: row.CurrentVersion, state: row.State, resourceScope: row.ResourceScope, startMode: row.StartMode,
 			startsAt: row.StartsAt, expiresAt: row.ExpiresAt, activatedAt: row.ActivatedAt, supersededAt: row.SupersededAt,
 			internalNote: row.InternalNote, externalNote: row.ExternalNote, selectedResourceKeys: row.SelectedResourceKeys,
 		})
@@ -232,6 +233,7 @@ type currentPrescriptionRow struct {
 	currentVersion       int64
 	state                string
 	resourceScope        string
+	startMode            string
 	startsAt             pgtype.Timestamptz
 	expiresAt            pgtype.Timestamptz
 	activatedAt          pgtype.Timestamptz
@@ -251,6 +253,10 @@ func (f *Facade) currentPrescription(row currentPrescriptionRow) (CurrentPrescri
 		return CurrentPrescription{}, fmt.Errorf("unknown stored killswitch prescription state %q", state)
 	}
 	scope := ResourceScope(row.resourceScope)
+	startMode := StartMode(row.startMode)
+	if startMode != StartModeNow && startMode != StartModeAt {
+		return CurrentPrescription{}, fmt.Errorf("unknown stored killswitch start mode %q", startMode)
+	}
 	if err := validateStoredResourceCount(scope, int64(len(row.selectedResourceKeys))); err != nil {
 		return CurrentPrescription{}, err
 	}
@@ -262,7 +268,7 @@ func (f *Facade) currentPrescription(row currentPrescriptionRow) (CurrentPrescri
 		ID: PrescriptionID(row.id.String()), OrganizationID: OrganizationID(row.organizationID),
 		Definition: DefinitionKey(row.definitionKey), PrincipalKind: PrincipalKind(row.principalKind),
 		PrincipalKey: PrincipalKey(row.principalKey), ResourceKind: ResourceKind(row.resourceKind),
-		Version: row.currentVersion, State: state, ResourceScope: scope,
+		Version: row.currentVersion, State: state, ResourceScope: scope, StartMode: startMode,
 		SelectedResourceKeys: resourceKeys, StartsAt: *startsAt, ExpiresAt: optionalTime(row.expiresAt),
 		ActivatedAt: optionalTime(row.activatedAt), SupersededAt: optionalTime(row.supersededAt),
 		InternalNote: row.internalNote, ExternalNote: row.externalNote,

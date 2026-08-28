@@ -3617,6 +3617,9 @@ func ValidateListResponseBody(body *ListResponseBody) (err error) {
 	if body.Items == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("items", "body"))
 	}
+	if len(body.Items) > 100 {
+		err = goa.MergeErrors(err, goa.InvalidLengthError("body.items", body.Items, len(body.Items), 100, false))
+	}
 	for _, e := range body.Items {
 		if e != nil {
 			if err2 := ValidateKillswitchSummaryResponseBody(e); err2 != nil {
@@ -3664,6 +3667,9 @@ func ValidateGetResponseBody(body *GetResponseBody) (err error) {
 	}
 	if body.Schedule == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("schedule", "body"))
+	}
+	if len(body.History) > 100 {
+		err = goa.MergeErrors(err, goa.InvalidLengthError("body.history", body.History, len(body.History), 100, false))
 	}
 	for _, e := range body.History {
 		if e != nil {

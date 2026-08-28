@@ -21,19 +21,19 @@ import {
 import { unwrapAsync } from "../types/fp.js";
 import { PageIterator, unwrapResultIterator } from "../types/operations.js";
 import { pageIteratorToJSON } from "./_types.js";
-export type KillswitchesListQueryData = KillswitchesListResponse;
+export type KillswitchesQueryData = KillswitchesListResponse;
 
-export type KillswitchesListInfiniteQueryData = PageIterator<
+export type KillswitchesInfiniteQueryData = PageIterator<
   KillswitchesListResponse,
   { cursor: string }
 >;
 
-export type KillswitchesListPageParams = PageIterator<
+export type KillswitchesPageParams = PageIterator<
   KillswitchesListResponse,
   { cursor: string }
 >["~next"];
 
-export function prefetchKillswitchesList(
+export function prefetchKillswitches(
   queryClient: QueryClient,
   client$: GramCore,
   security: KillswitchesListSecurity,
@@ -41,7 +41,7 @@ export function prefetchKillswitchesList(
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
-    ...buildKillswitchesListQuery(
+    ...buildKillswitchesQuery(
       client$,
       security,
       request,
@@ -50,7 +50,7 @@ export function prefetchKillswitchesList(
   });
 }
 
-export function prefetchKillswitchesListInfinite(
+export function prefetchKillswitchesInfinite(
   queryClient: QueryClient,
   client$: GramCore,
   security: KillswitchesListSecurity,
@@ -58,31 +58,29 @@ export function prefetchKillswitchesListInfinite(
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchInfiniteQuery({
-    ...buildKillswitchesListInfiniteQuery(
+    ...buildKillswitchesInfiniteQuery(
       client$,
       security,
       request,
       options,
     ),
-    initialPageParam: undefined as KillswitchesListPageParams,
-    getNextPageParam: (previousPage: KillswitchesListInfiniteQueryData) =>
+    initialPageParam: undefined as KillswitchesPageParams,
+    getNextPageParam: (previousPage: KillswitchesInfiniteQueryData) =>
       previousPage["~next"],
   });
 }
 
-export function buildKillswitchesListQuery(
+export function buildKillswitchesQuery(
   client$: GramCore,
   security: KillswitchesListSecurity,
   request?: KillswitchesListRequest | undefined,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;
-  queryFn: (
-    context: QueryFunctionContext,
-  ) => Promise<KillswitchesListQueryData>;
+  queryFn: (context: QueryFunctionContext) => Promise<KillswitchesQueryData>;
 } {
   return {
-    queryKey: queryKeyKillswitchesList({
+    queryKey: queryKeyKillswitches({
       capabilityKey: request?.capabilityKey,
       userId: request?.userId,
       status: request?.status,
@@ -90,9 +88,9 @@ export function buildKillswitchesListQuery(
       cursor: request?.cursor,
       gramSession: request?.gramSession,
     }),
-    queryFn: async function killswitchesListQueryFn(
+    queryFn: async function killswitchesQueryFn(
       ctx,
-    ): Promise<KillswitchesListQueryData> {
+    ): Promise<KillswitchesQueryData> {
       const sig = combineSignals(
         ctx.signal,
         options?.signal,
@@ -114,7 +112,7 @@ export function buildKillswitchesListQuery(
   };
 }
 
-export function buildKillswitchesListInfiniteQuery(
+export function buildKillswitchesInfiniteQuery(
   client$: GramCore,
   security: KillswitchesListSecurity,
   request?: KillswitchesListRequest | undefined,
@@ -122,11 +120,11 @@ export function buildKillswitchesListInfiniteQuery(
 ): {
   queryKey: QueryKey;
   queryFn: (
-    context: QueryFunctionContext<QueryKey, KillswitchesListPageParams>,
-  ) => Promise<KillswitchesListInfiniteQueryData>;
+    context: QueryFunctionContext<QueryKey, KillswitchesPageParams>,
+  ) => Promise<KillswitchesInfiniteQueryData>;
 } {
   return {
-    queryKey: queryKeyKillswitchesListInfinite({
+    queryKey: queryKeyKillswitchesInfinite({
       capabilityKey: request?.capabilityKey,
       userId: request?.userId,
       status: request?.status,
@@ -134,9 +132,9 @@ export function buildKillswitchesListInfiniteQuery(
       cursor: request?.cursor,
       gramSession: request?.gramSession,
     }),
-    queryFn: async function killswitchesListQuery(
+    queryFn: async function killswitchesQuery(
       ctx,
-    ): Promise<KillswitchesListInfiniteQueryData> {
+    ): Promise<KillswitchesInfiniteQueryData> {
       const sig = combineSignals(ctx.signal, options?.fetchOptions?.signal);
       const mergedOptions = {
         ...options,
@@ -166,7 +164,7 @@ export function buildKillswitchesListInfiniteQuery(
   };
 }
 
-export function queryKeyKillswitchesList(
+export function queryKeyKillswitches(
   parameters: {
     capabilityKey?: KillswitchCapabilityKey | undefined;
     userId?: string | undefined;
@@ -179,7 +177,7 @@ export function queryKeyKillswitchesList(
   return ["@gram/client", "killswitches", "list", parameters];
 }
 
-export function queryKeyKillswitchesListInfinite(
+export function queryKeyKillswitchesInfinite(
   parameters: {
     capabilityKey?: KillswitchCapabilityKey | undefined;
     userId?: string | undefined;

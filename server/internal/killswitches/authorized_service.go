@@ -65,7 +65,10 @@ func NewAuthorizedService(generic GenericService, authorizer organizationAuthori
 	if isNilInterface(generic) || isNilInterface(authorizer) {
 		return nil, ErrInvalidArgument
 	}
-	reader, _ := generic.(customerReadService)
+	reader, ok := generic.(customerReadService)
+	if !ok || isNilInterface(reader) {
+		return nil, ErrInvalidArgument
+	}
 	return &AuthorizedService{generic: generic, customerReader: reader, authorizer: authorizer}, nil
 }
 
@@ -161,13 +164,10 @@ func (s *AuthorizedService) ListCustomerPrescriptions(ctx context.Context, reque
 	if err != nil {
 		return ListCustomerPrescriptionsResult{}, err
 	}
-	if s.customerReader == nil {
-		return ListCustomerPrescriptionsResult{}, ErrInvalidArgument
-	}
 	result, err := s.customerReader.ListCustomerPrescriptions(ctx, ListCustomerPrescriptionsRequest{
 		OrganizationID: principal.organizationID, Definition: request.Definition, PrincipalKind: request.PrincipalKind,
 		ResourceKind: request.ResourceKind, PrincipalKey: request.PrincipalKey, Status: request.Status,
-		Limit: request.Limit, Cursor: request.Cursor, StatusAsOf: request.StatusAsOf,
+		Limit: request.Limit, Cursor: request.Cursor, StatusAsOf: request.StatusAsOf, SnapshotWatermark: request.SnapshotWatermark,
 	})
 	if err != nil {
 		return ListCustomerPrescriptionsResult{}, fmt.Errorf("list authorized customer killswitches: %w", err)

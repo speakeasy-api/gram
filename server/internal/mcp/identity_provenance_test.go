@@ -52,8 +52,8 @@ func TestApplyIssuerGate_AssistantFallbackStampsAssistantProvenance(t *testing.T
 
 	identity, stamped := mcpidentity.FromContext(newCtx)
 	require.True(t, stamped, "the accepted assistant fallback must stamp provenance")
-	require.Equal(t, mcpidentity.KindAssistant, identity.Kind)
-	require.Empty(t, identity.UserID)
+	require.Equal(t, mcpidentity.KindAssistant, identity.Kind())
+	require.Empty(t, identity.UserID())
 
 	// The gate's AuthContext deliberately reads as the assistant's owning
 	// user so downstream session plumbing works — which is exactly why the
@@ -134,16 +134,16 @@ func TestTryPublicIdentityAuth_StampsCredentialProvenance(t *testing.T) {
 		assistantID := createAssistant(t, ti, authCtx, "LegacyAuth")
 		identity, stamped := authorize(t, mintAssistantToken(t, ti, authCtx, assistantID))
 		require.True(t, stamped)
-		require.Equal(t, mcpidentity.KindAssistant, identity.Kind)
-		require.Empty(t, identity.UserID)
+		require.Equal(t, mcpidentity.KindAssistant, identity.Kind())
+		require.Empty(t, identity.UserID())
 	})
 
 	t.Run("consumer-scope API key stamps api_key", func(t *testing.T) {
 		t.Parallel()
 		identity, stamped := authorize(t, ti.createTestAPIKey(ctx, t))
 		require.True(t, stamped)
-		require.Equal(t, mcpidentity.KindAPIKey, identity.Kind)
-		require.Empty(t, identity.UserID)
+		require.Equal(t, mcpidentity.KindAPIKey, identity.Kind())
+		require.Empty(t, identity.UserID())
 	})
 
 	t.Run("chat-scope API key stamps api_key", func(t *testing.T) {
@@ -157,8 +157,8 @@ func TestTryPublicIdentityAuth_StampsCredentialProvenance(t *testing.T) {
 
 		identity, stamped := authorize(t, *key.Key)
 		require.True(t, stamped)
-		require.Equal(t, mcpidentity.KindAPIKey, identity.Kind)
-		require.Empty(t, identity.UserID)
+		require.Equal(t, mcpidentity.KindAPIKey, identity.Kind())
+		require.Empty(t, identity.UserID())
 	})
 
 	t.Run("chat-session token stamps chat_session", func(t *testing.T) {
@@ -173,8 +173,8 @@ func TestTryPublicIdentityAuth_StampsCredentialProvenance(t *testing.T) {
 
 		identity, stamped := authorize(t, token)
 		require.True(t, stamped)
-		require.Equal(t, mcpidentity.KindChatSession, identity.Kind)
-		require.Empty(t, identity.UserID)
+		require.Equal(t, mcpidentity.KindChatSession, identity.Kind())
+		require.Empty(t, identity.UserID())
 	})
 
 	t.Run("rejected token stays unattributed", func(t *testing.T) {
