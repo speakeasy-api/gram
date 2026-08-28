@@ -71,21 +71,25 @@ func ToolsCallName(req *UserRequest) (string, bool) {
 }
 
 // toolsCallRequestFromUserRequest returns a ToolsCallRequest if req carries
-// exactly one JSON-RPC "tools/call" request whose params decode cleanly.
-// Anything else — notifications, responses, multiple messages, unrelated
-// methods, malformed params — returns ok=false so the typed interceptor loop
-// is skipped. Decoding failures do not abort the proxy; the request is
-// forwarded to upstream unchanged so upstream's own validation surfaces.
-func toolsCallRequestFromUserRequest(req *UserRequest) (*ToolsCallRequest, bool) {
+// exactly one JSON-RPC "tools/call" request. A recognized call retains its
+// underlying request even when params fail to decode so method-level preflight
+// enforcement can run before the proxy rejects the malformed call. Unrelated
+// methods and non-request messages return nil, nil.
+func toolsCallRequestFromUserRequest(req *UserRequest) (*ToolsCallRequest, error) {
 	if req == nil || len(req.JSONRPCMessages) != 1 {
-		return nil, false
+		return nil, nil
 	}
 	rpcReq, ok := req.JSONRPCMessages[0].(*jsonrpc.Request)
 	if !ok {
-		return nil, false
+		return nil, nil
 	}
 	if rpcReq.Method != methodToolsCall {
-		return nil, false
+		return nil, nil
+	}
+
+	call := &ToolsCallRequest{Params: nil, UserRequest: req}
+	if firstNonWhitespaceByte(rpcReq.Params) != '{' {
+		return call, fmt.Errorf("tools/call params must be a JSON object")
 	}
 
 	params := &mcp.CallToolParamsRaw{
@@ -96,10 +100,11 @@ func toolsCallRequestFromUserRequest(req *UserRequest) (*ToolsCallRequest, bool)
 		RequestState:   "",
 	}
 	if err := json.Unmarshal(rpcReq.Params, params); err != nil {
-		return nil, false
+		return call, fmt.Errorf("decode tools/call params: %w", err)
 	}
 
-	return &ToolsCallRequest{UserRequest: req, Params: params}, true
+	call.Params = params
+	return call, nil
 }
 
 // SetArguments replaces the arguments payload on a tools/call request,
