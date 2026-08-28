@@ -25,7 +25,7 @@ import type { ClientFamily } from "@gram/client/models/components/recordinstalli
 import { CopyButton } from "@/components/ui/CopyButton";
 import { Dialog } from "@/components/ui/Dialog";
 import { FeatureName } from "@gram/client/models/components/setproductfeaturerequestbody.js";
-import { Navigate, useSearchParams } from "react-router";
+import { useSearchParams } from "react-router";
 import { Page } from "@/components/page-layout";
 import {
   PlatformMCPInstallWalkthrough,
@@ -41,7 +41,6 @@ import { invalidateAllProductFeatures } from "@gram/client/react-query/productFe
 import { useDismissPlatformMCPOnboardingMutation } from "@gram/client/react-query/dismissPlatformMCPOnboarding.js";
 import { useFeaturesSetMutation } from "@gram/client/react-query/featuresSet.js";
 import { useFetcher } from "@/contexts/Fetcher";
-import { usePlatformMcpDashboardVisibility } from "@/hooks/usePlatformMcpDashboardVisibility";
 import { useOrganizationPlatformMCPOnboarding } from "@/hooks/useOrganizationPlatformMCPOnboarding";
 import { useQueryClient } from "@tanstack/react-query";
 import { useRecordPlatformMCPAgentConfigurationCopiedMutation } from "@gram/client/react-query/recordPlatformMCPAgentConfigurationCopied.js";
@@ -99,22 +98,11 @@ function platformMcpEntrySource(
   return Object.values(SourceSurface).find((surface) => surface === value);
 }
 
-export default function PlatformMCP(): JSX.Element | null {
-  const { enabled: platformMcpDashboardEnabled, isLoading } =
-    usePlatformMcpDashboardVisibility();
+export default function PlatformMCP(): JSX.Element {
   const [searchParams] = useSearchParams();
   const sourceSurface = platformMcpEntrySource(searchParams.get("entrySource"));
   const currentProjectSlug = searchParams.get("projectSlug") ?? undefined;
   const openFromCta = searchParams.get("setup") === "1" && !!sourceSurface;
-
-  // Wait for dashboard visibility to resolve before routing so an eligible
-  // organization never flashes away from a direct link.
-  if (isLoading) {
-    return null;
-  }
-  if (!platformMcpDashboardEnabled) {
-    return <Navigate to=".." replace />;
-  }
 
   return (
     <Page>
