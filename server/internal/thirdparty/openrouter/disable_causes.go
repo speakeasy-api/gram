@@ -62,11 +62,19 @@ func emptyEnterpriseTrialConversionKeyState() EnterpriseTrialConversionKeyState 
 	return EnterpriseTrialConversionKeyState{KeyType: "", MonthlyCredits: 0, Disabled: false, DisableCauses: nil}
 }
 
+var errEnterpriseTrialConversionKeyChangedConcurrently = errors.New("OpenRouter API key changed concurrently")
+
 // PrepareEnterpriseTrialConversionKeyWithDB atomically prepares one classified
 // local key for enterprise conversion. The caller owns the transaction and must
 // already hold lifecycle and per-key advisory locks; this method acquires none
 // and never contacts OpenRouter. Missing and deleted keys are safe no-ops.
 func (o *OpenRouter) PrepareEnterpriseTrialConversionKeyWithDB(ctx context.Context, db DBTX, orgID string, keyType KeyType, enterpriseFloor int64) (EnterpriseTrialConversionKeyChange, error) {
+	return o.prepareEnterpriseTrialConversionKeyWithDB(ctx, db, orgID, keyType, enterpriseFloor, nil)
+}
+
+// beforeMutationTestHook is nil in production. Deterministic tests use the
+// narrow seam to prove each CAS guard without introducing race-based tests.
+func (o *OpenRouter) prepareEnterpriseTrialConversionKeyWithDB(ctx context.Context, db DBTX, orgID string, keyType KeyType, enterpriseFloor int64, beforeMutationTestHook func(context.Context, DBTX) error) (EnterpriseTrialConversionKeyChange, error) {
 	keyType = keyType.OrDefault()
 	if err := keyType.Validate(); err != nil {
 		return EnterpriseTrialConversionKeyChange{}, fmt.Errorf("prepare OpenRouter API key for enterprise trial conversion: %w", err)
@@ -75,18 +83,40 @@ func (o *OpenRouter) PrepareEnterpriseTrialConversionKeyWithDB(ctx context.Conte
 		return EnterpriseTrialConversionKeyChange{}, errors.New("prepare OpenRouter API key for enterprise trial conversion: enterprise floor cannot be negative")
 	}
 
-	row, err := repo.New(db).PrepareEnterpriseTrialConversionKey(ctx, repo.PrepareEnterpriseTrialConversionKeyParams{
-		OrganizationID:  orgID,
-		KeyType:         string(keyType),
-		EnterpriseFloor: enterpriseFloor,
-	})
+	queries := repo.New(db)
+	snapshot, err := queries.GetOpenRouterAPIKey(ctx, repo.GetOpenRouterAPIKeyParams{OrganizationID: orgID, KeyType: string(keyType)})
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
 		return EnterpriseTrialConversionKeyChange{Exists: false, Changed: false, Before: emptyEnterpriseTrialConversionKeyState(), After: emptyEnterpriseTrialConversionKeyState()}, nil
 	case err != nil:
-		return EnterpriseTrialConversionKeyChange{}, fmt.Errorf("prepare OpenRouter API key for enterprise trial conversion: %w", err)
-	case !row.Classified:
+		return EnterpriseTrialConversionKeyChange{}, fmt.Errorf("read OpenRouter API key for enterprise trial conversion: %w", err)
+	case snapshot.DisableCauses == nil:
 		return EnterpriseTrialConversionKeyChange{}, errors.New("prepare OpenRouter API key for enterprise trial conversion: disable causes are unclassified")
+	}
+
+	if beforeMutationTestHook != nil {
+		if err := beforeMutationTestHook(ctx, db); err != nil {
+			return EnterpriseTrialConversionKeyChange{}, fmt.Errorf("prepare OpenRouter API key test hook: %w", err)
+		}
+	}
+
+	row, err := queries.PrepareEnterpriseTrialConversionKey(ctx, repo.PrepareEnterpriseTrialConversionKeyParams{
+		OrganizationID:  orgID,
+		KeyType:         string(keyType),
+		EnterpriseFloor: enterpriseFloor,
+		ExpectedKeyHash: snapshot.KeyHash,
+	})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return EnterpriseTrialConversionKeyChange{}, fmt.Errorf("prepare OpenRouter API key for enterprise trial conversion: %w", errEnterpriseTrialConversionKeyChangedConcurrently)
+	}
+	if err != nil {
+		return EnterpriseTrialConversionKeyChange{}, fmt.Errorf("prepare OpenRouter API key for enterprise trial conversion: %w", err)
+	}
+	if row.BeforeKeyHash != snapshot.KeyHash || !row.AfterKeyHash.Valid || row.AfterKeyHash.String != row.BeforeKeyHash {
+		return EnterpriseTrialConversionKeyChange{}, fmt.Errorf("prepare OpenRouter API key for enterprise trial conversion: %w", errEnterpriseTrialConversionKeyChangedConcurrently)
+	}
+	if !row.AfterMonthlyCredits.Valid || !row.AfterDisabled.Valid || row.AfterDisableCauses == nil {
+		return EnterpriseTrialConversionKeyChange{}, errors.New("prepare OpenRouter API key for enterprise trial conversion: guarded mutation returned no updated state")
 	}
 
 	before := EnterpriseTrialConversionKeyState{

@@ -267,7 +267,7 @@ func (q *Queries) LockOpenRouterKeyProvisioning(ctx context.Context, arg LockOpe
 
 const prepareEnterpriseTrialConversionKey = `-- name: PrepareEnterpriseTrialConversionKey :one
 WITH existing AS MATERIALIZED (
-  SELECT keys.key_type, keys.monthly_credits, keys.disabled, keys.disable_causes
+  SELECT keys.key_type, keys.key_hash, keys.monthly_credits, keys.disabled, keys.disable_causes
   FROM openrouter_api_keys AS keys
   WHERE keys.organization_id = $1
     AND keys.key_type = $2
@@ -275,6 +275,7 @@ WITH existing AS MATERIALIZED (
 ), desired AS (
   SELECT
     key_type,
+    key_hash,
     GREATEST(monthly_credits, $3::bigint) AS monthly_credits,
     CASE
       WHEN key_type = 'chat' THEN array_remove(array_remove(disable_causes, 'trial_demotion'), 'billing_inactive')
@@ -296,16 +297,19 @@ WITH existing AS MATERIALIZED (
   FROM desired
   WHERE keys.organization_id = $1
     AND keys.key_type = $2
+    AND keys.key_hash = desired.key_hash
+    AND keys.key_hash = $4
     AND keys.deleted IS FALSE
-    AND desired.disable_causes IS NOT NULL
-  RETURNING keys.monthly_credits, keys.disabled, keys.disable_causes
+    AND keys.disable_causes IS NOT NULL
+  RETURNING keys.key_hash, keys.monthly_credits, keys.disabled, keys.disable_causes
 )
 SELECT
   existing.key_type,
-  (existing.disable_causes IS NOT NULL)::boolean AS classified,
+  existing.key_hash AS before_key_hash,
   existing.monthly_credits AS before_monthly_credits,
   existing.disabled AS before_disabled,
   existing.disable_causes AS before_disable_causes,
+  updated.key_hash AS after_key_hash,
   updated.monthly_credits AS after_monthly_credits,
   updated.disabled AS after_disabled,
   updated.disable_causes AS after_disable_causes
@@ -317,14 +321,16 @@ type PrepareEnterpriseTrialConversionKeyParams struct {
 	OrganizationID  string
 	KeyType         string
 	EnterpriseFloor int64
+	ExpectedKeyHash string
 }
 
 type PrepareEnterpriseTrialConversionKeyRow struct {
 	KeyType              string
-	Classified           bool
+	BeforeKeyHash        string
 	BeforeMonthlyCredits int64
 	BeforeDisabled       bool
 	BeforeDisableCauses  []string
+	AfterKeyHash         pgtype.Text
 	AfterMonthlyCredits  pgtype.Int8
 	AfterDisabled        pgtype.Bool
 	AfterDisableCauses   []string
@@ -333,14 +339,20 @@ type PrepareEnterpriseTrialConversionKeyRow struct {
 // Local-only conversion preparation. The caller owns the transaction and has
 // already acquired lifecycle and per-key advisory locks in canonical order.
 func (q *Queries) PrepareEnterpriseTrialConversionKey(ctx context.Context, arg PrepareEnterpriseTrialConversionKeyParams) (PrepareEnterpriseTrialConversionKeyRow, error) {
-	row := q.db.QueryRow(ctx, prepareEnterpriseTrialConversionKey, arg.OrganizationID, arg.KeyType, arg.EnterpriseFloor)
+	row := q.db.QueryRow(ctx, prepareEnterpriseTrialConversionKey,
+		arg.OrganizationID,
+		arg.KeyType,
+		arg.EnterpriseFloor,
+		arg.ExpectedKeyHash,
+	)
 	var i PrepareEnterpriseTrialConversionKeyRow
 	err := row.Scan(
 		&i.KeyType,
-		&i.Classified,
+		&i.BeforeKeyHash,
 		&i.BeforeMonthlyCredits,
 		&i.BeforeDisabled,
 		&i.BeforeDisableCauses,
+		&i.AfterKeyHash,
 		&i.AfterMonthlyCredits,
 		&i.AfterDisabled,
 		&i.AfterDisableCauses,

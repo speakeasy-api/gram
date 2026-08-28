@@ -609,6 +609,40 @@ func (q *Queries) GetLatestTrialArmAuditIDFixture(ctx context.Context, organizat
 	return id, err
 }
 
+const getOpenRouterAPIKeyStateFixture = `-- name: GetOpenRouterAPIKeyStateFixture :one
+SELECT key_hash, monthly_credits, disabled, disable_causes, deleted
+FROM openrouter_api_keys
+WHERE organization_id = $1
+  AND key_type = $2
+`
+
+type GetOpenRouterAPIKeyStateFixtureParams struct {
+	OrganizationID string
+	KeyType        string
+}
+
+type GetOpenRouterAPIKeyStateFixtureRow struct {
+	KeyHash        string
+	MonthlyCredits int64
+	Disabled       bool
+	DisableCauses  []string
+	Deleted        bool
+}
+
+// Test-only fixture: observes guarded-mutation state, including soft-deleted rows.
+func (q *Queries) GetOpenRouterAPIKeyStateFixture(ctx context.Context, arg GetOpenRouterAPIKeyStateFixtureParams) (GetOpenRouterAPIKeyStateFixtureRow, error) {
+	row := q.db.QueryRow(ctx, getOpenRouterAPIKeyStateFixture, arg.OrganizationID, arg.KeyType)
+	var i GetOpenRouterAPIKeyStateFixtureRow
+	err := row.Scan(
+		&i.KeyHash,
+		&i.MonthlyCredits,
+		&i.Disabled,
+		&i.DisableCauses,
+		&i.Deleted,
+	)
+	return i, err
+}
+
 const getOrganizationMetadataStateFixture = `-- name: GetOrganizationMetadataStateFixture :one
 SELECT disabled_at, workos_last_event_id, whitelisted, gram_account_type, created_at, updated_at
 FROM organization_metadata

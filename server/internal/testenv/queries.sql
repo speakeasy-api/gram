@@ -598,6 +598,13 @@ SET key_hash = @key_hash
 WHERE organization_id = @organization_id
   AND key_type = @key_type;
 
+-- name: GetOpenRouterAPIKeyStateFixture :one
+-- Test-only fixture: observes guarded-mutation state, including soft-deleted rows.
+SELECT key_hash, monthly_credits, disabled, disable_causes, deleted
+FROM openrouter_api_keys
+WHERE organization_id = @organization_id
+  AND key_type = @key_type;
+
 -- name: SeedTrialArmAuditFixture :one
 -- Test-only fixture: records the immutable audit operation for a trial generation.
 INSERT INTO audit_logs (organization_id, actor_id, actor_type, action, subject_id, subject_type)

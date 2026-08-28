@@ -48,7 +48,7 @@ WHERE organization_id = @organization_id
 -- Local-only conversion preparation. The caller owns the transaction and has
 -- already acquired lifecycle and per-key advisory locks in canonical order.
 WITH existing AS MATERIALIZED (
-  SELECT keys.key_type, keys.monthly_credits, keys.disabled, keys.disable_causes
+  SELECT keys.key_type, keys.key_hash, keys.monthly_credits, keys.disabled, keys.disable_causes
   FROM openrouter_api_keys AS keys
   WHERE keys.organization_id = @organization_id
     AND keys.key_type = @key_type
@@ -56,6 +56,7 @@ WITH existing AS MATERIALIZED (
 ), desired AS (
   SELECT
     key_type,
+    key_hash,
     GREATEST(monthly_credits, @enterprise_floor::bigint) AS monthly_credits,
     CASE
       WHEN key_type = 'chat' THEN array_remove(array_remove(disable_causes, 'trial_demotion'), 'billing_inactive')
@@ -77,16 +78,19 @@ WITH existing AS MATERIALIZED (
   FROM desired
   WHERE keys.organization_id = @organization_id
     AND keys.key_type = @key_type
+    AND keys.key_hash = desired.key_hash
+    AND keys.key_hash = @expected_key_hash
     AND keys.deleted IS FALSE
-    AND desired.disable_causes IS NOT NULL
-  RETURNING keys.monthly_credits, keys.disabled, keys.disable_causes
+    AND keys.disable_causes IS NOT NULL
+  RETURNING keys.key_hash, keys.monthly_credits, keys.disabled, keys.disable_causes
 )
 SELECT
   existing.key_type,
-  (existing.disable_causes IS NOT NULL)::boolean AS classified,
+  existing.key_hash AS before_key_hash,
   existing.monthly_credits AS before_monthly_credits,
   existing.disabled AS before_disabled,
   existing.disable_causes AS before_disable_causes,
+  updated.key_hash AS after_key_hash,
   updated.monthly_credits AS after_monthly_credits,
   updated.disabled AS after_disabled,
   updated.disable_causes AS after_disable_causes
