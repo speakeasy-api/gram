@@ -538,6 +538,58 @@ func TestRegisteredTransportAdapterResolvesNeutralBehaviorMatrix(t *testing.T) {
 	}
 }
 
+func TestRegisteredTransportAdapterReceivesEffectiveFailurePolicy(t *testing.T) {
+	t.Parallel()
+
+	classified, err := NewInfrastructureFailureResultWithPolicy(errors.New("evaluation unavailable"), FailurePolicyFailClosed, InfrastructureFailureDatabase)
+	if err != nil {
+		t.Fatalf("classified failure: %v", err)
+	}
+	legacy, err := NewInfrastructureFailureResult(errors.New("evaluation unavailable"))
+	if err != nil {
+		t.Fatalf("legacy failure: %v", err)
+	}
+	tests := []struct {
+		name           string
+		result         EvaluationResult
+		suppliedPolicy FailurePolicy
+		wantPolicy     FailurePolicy
+		wantKind       TransportDispositionKind
+	}{
+		{name: "classified uses authoritative policy", result: classified, suppliedPolicy: FailurePolicyFailOpen, wantPolicy: FailurePolicyFailClosed, wantKind: TransportDispositionInfrastructureRejection},
+		{name: "legacy uses supplied policy", result: legacy, suppliedPolicy: FailurePolicyFailOpen, wantPolicy: FailurePolicyFailOpen, wantKind: TransportDispositionContinue},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			var receivedPolicy FailurePolicy
+			input := validRegistration()
+			input.TransportAdapters[0].Adapter = func(result EvaluationResult, policy FailurePolicy) (TransportDisposition, error) {
+				receivedPolicy = policy
+				return ResolveTransportDisposition(result, policy)
+			}
+			registry, err := BuildRegistry(input)
+			if err != nil {
+				t.Fatalf("build registry: %v", err)
+			}
+			adapter, ok := registry.TransportAdapter("jsonrpc")
+			if !ok {
+				t.Fatal("transport adapter not found")
+			}
+			disposition, err := adapter(test.result, test.suppliedPolicy)
+			if err != nil {
+				t.Fatalf("adapt: %v", err)
+			}
+			if receivedPolicy != test.wantPolicy {
+				t.Fatalf("adapter policy got %q, want %q", receivedPolicy, test.wantPolicy)
+			}
+			if disposition.Kind() != test.wantKind {
+				t.Fatalf("disposition got %q, want %q", disposition.Kind(), test.wantKind)
+			}
+		})
+	}
+}
+
 func TestRegisteredTransportAdapterRejectsOffMatrixDispositions(t *testing.T) {
 	t.Parallel()
 

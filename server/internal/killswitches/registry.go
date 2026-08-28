@@ -234,11 +234,11 @@ func validateCanonicalizationFixture[T ~string](
 
 func wrapTransportAdapter(key TransportAdapterKey, adapter TransportAdapter) TransportAdapter {
 	return func(result EvaluationResult, failurePolicy FailurePolicy) (TransportDisposition, error) {
-		expected, err := ResolveTransportDisposition(result, failurePolicy)
+		expected, effectivePolicy, err := resolveTransportDisposition(result, failurePolicy)
 		if err != nil {
 			return TransportDisposition{}, fmt.Errorf("transport adapter %q: %w", key, err)
 		}
-		disposition, err := adapter(result, failurePolicy)
+		disposition, err := adapter(result, effectivePolicy)
 		if err != nil {
 			return TransportDisposition{}, fmt.Errorf("transport adapter %q: %w", key, err)
 		}
