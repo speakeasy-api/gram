@@ -14,6 +14,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"strings"
 	"testing"
 	"time"
 
@@ -128,6 +129,9 @@ func TestRemoteLoginCallback_AnonymousSubject(t *testing.T) {
 
 	// Hitting HandleConsent GET through the service exercises the real
 	// card-render path (loadToolset → requireUserSessionIssuer → card build).
+	// With a single unlinked service the page has nothing left to ask, so that
+	// path ends in a redirect straight to the provider rather than a rendered
+	// page — the auto-connect this endpoint exists to perform.
 	req := httptest.NewRequest(http.MethodGet, "/mcp/"+result.Toolset.McpSlug.String+"/connect?state="+parentID, nil)
 	rctx := chi.NewRouteContext()
 	rctx.URLParams.Add("mcpSlug", result.Toolset.McpSlug.String)
@@ -135,12 +139,21 @@ func TestRemoteLoginCallback_AnonymousSubject(t *testing.T) {
 
 	w := httptest.NewRecorder()
 	require.NoError(t, ti.service.HandleConsent(w, req))
-	require.Equal(t, http.StatusOK, w.Code)
+	require.Equal(t, http.StatusSeeOther, w.Code)
+	require.True(
+		t,
+		strings.HasPrefix(w.Header().Get("Location"), idp.Issuer),
+		"auto-connect must redirect to the upstream provider, got %q",
+		w.Header().Get("Location"),
+	)
 
 	stamped, err := authnCache.Get(ctx, "authnChallenge:"+parentID)
 	require.NoError(t, err)
 	require.NotNil(t, stamped.Subject)
 	require.Equal(t, anonymousSubject, *stamped.Subject)
+	// Latched before the redirect, so a denied or failed upstream leg lands
+	// back on a page the user can act on instead of bouncing out again.
+	require.True(t, stamped.AutoConnectDone)
 
 	runRemoteLoginRoundTrip(t, ctx, ti, mgr, result, parentID, stamped.Subject, "")
 }
