@@ -54,6 +54,13 @@ type ConsentPhase =
  */
 type ConsentGroup = "all" | ToolAnnotation | "none";
 
+/**
+ * ToolAccessMode is the top-level choice above the picker: grant the server's
+ * whole tool surface, or narrow it. "all" is the pre-picker status quo and the
+ * safe default; "specific" is what reveals the picker.
+ */
+type ToolAccessMode = "all" | "specific";
+
 const GENERIC_ERROR_MESSAGE = "Couldn't load this server's tools.";
 
 /**
@@ -180,10 +187,15 @@ export function ConsentToolsApp({
 }: ConsentToolsAppProps): JSX.Element {
   const [phase, setPhase] = useState<ConsentPhase>({ name: "loading" });
   const [attemptID, setAttemptID] = useState(() => crypto.randomUUID());
-  // The grant state: "all tools" (the pre-picker status quo, and the safe
-  // default), a set of granted annotations, and individually picked names.
+  // Tool access is a two-step choice: almost nobody narrows the grant, so the
+  // picker stays behind "Specific tools" and "All tools" is the one-glance
+  // default. The mode is the only thing that sets the all-tools grant — inside
+  // the picker every control edits annotations and picks.
   // Scope = allGrant ? everything : (annotation matches ∪ picks).
-  const [allGrant, setAllGrant] = useState(true);
+  const [mode, setMode] = useState<ToolAccessMode>(
+    prefill === null ? "all" : "specific",
+  );
+  const allGrant = mode === "all";
   const [annGrants, setAnnGrants] = useState<
     ReadonlyMap<ToolAnnotation, "snapshot" | "live">
   >(new Map());
@@ -204,7 +216,7 @@ export function ConsentToolsApp({
       );
       if (cancelled) return;
       if (prefill === null) {
-        setAllGrant(true);
+        setMode("all");
         setAnnGrants(new Map());
         setPicked(new Set());
       } else {
@@ -225,7 +237,7 @@ export function ConsentToolsApp({
           grants.set(grant.name, grant.mode === "live" ? "live" : "snapshot");
         }
         setDroppedPrefillGrants(dropped);
-        setAllGrant(false);
+        setMode("specific");
         setAnnGrants(grants);
         setPicked(new Set(prefill.tools.filter((t) => known.has(t))));
       }
@@ -341,7 +353,9 @@ export function ConsentToolsApp({
       : grouped.filter((t) => t.name.toLowerCase().includes(normalizedQuery));
 
   const groupGranted = (id: ConsentGroup): boolean => {
-    if (id === "all") return allGrant;
+    if (id === "all") {
+      return tools.length > 0 && tools.every((t) => scope.has(t.name));
+    }
     if (id === "none") {
       const unlabeled = groupTools(tools, "none");
       return unlabeled.length > 0 && unlabeled.every((t) => scope.has(t.name));
@@ -349,21 +363,23 @@ export function ConsentToolsApp({
     return annGrants.has(id);
   };
 
+  // Bulk-select the tools in the current nav group by name. Used for the
+  // groups that have no annotation grant to express them: "All tools" and the
+  // unannotated bucket.
+  const toggleGroupPicks = (group: ConsentGroup) => {
+    const members = groupTools(tools, group);
+    const every = members.every((t) => picked.has(t.name));
+    const next = new Set(picked);
+    members.forEach((t) => {
+      if (every) next.delete(t.name);
+      else next.add(t.name);
+    });
+    setPicked(next);
+  };
+
   const toggleGroupGrant = () => {
-    if (nav === "all") {
-      setAllGrant((v) => !v);
-      return;
-    }
-    if (nav === "none") {
-      const unlabeled = groupTools(tools, "none");
-      const every = unlabeled.every((t) => picked.has(t.name));
-      const next = new Set(picked);
-      unlabeled.forEach((t) => {
-        if (every) next.delete(t.name);
-        else next.add(t.name);
-      });
-      setPicked(next);
-      setAllGrant(false);
+    if (nav === "all" || nav === "none") {
+      toggleGroupPicks(nav);
       return;
     }
     const next = new Map(annGrants);
@@ -372,7 +388,6 @@ export function ConsentToolsApp({
     // the server adds later are included until the user freezes the grant.
     else next.set(nav, "live");
     setAnnGrants(next);
-    setAllGrant(false);
   };
 
   const togglePick = (name: string) => {
@@ -380,7 +395,6 @@ export function ConsentToolsApp({
     if (next.has(name)) next.delete(name);
     else next.add(name);
     setPicked(next);
-    setAllGrant(false);
   };
 
   const pickedOutsideGrants = allGrant
@@ -393,139 +407,146 @@ export function ConsentToolsApp({
       ).length;
 
   return (
-    <div>
-      <div className="border-border grid grid-cols-[9.5rem_1fr] border">
-        <nav
-          aria-label="Tool groups"
-          className="border-border flex flex-col border-r py-1"
-        >
-          {groups.map((g) => (
-            <button
-              key={g.id}
-              type="button"
-              aria-current={nav === g.id}
-              onClick={() => setNav(g.id)}
-              className={cn(
-                "hover:bg-accent flex cursor-pointer items-center gap-1.5 px-2.5 py-1.5 text-left text-sm",
-                nav === g.id && "bg-accent font-medium",
-              )}
-            >
-              <span className="flex w-3.5 shrink-0 justify-center">
-                {groupGranted(g.id) && (
-                  <Check
-                    aria-label="granted"
-                    className="text-success h-3 w-3"
-                  />
+    <div className="flex flex-col gap-3">
+      <ToolAccessModeChoice
+        mode={mode}
+        onChange={setMode}
+        toolCount={tools.length}
+      />
+      {mode === "specific" && (
+        <div className="border-border grid grid-cols-[9.5rem_1fr] border">
+          <nav
+            aria-label="Tool groups"
+            className="border-border flex flex-col border-r py-1"
+          >
+            {groups.map((g) => (
+              <button
+                key={g.id}
+                type="button"
+                aria-current={nav === g.id}
+                onClick={() => setNav(g.id)}
+                className={cn(
+                  "hover:bg-accent flex cursor-pointer items-center gap-1.5 px-2.5 py-1.5 text-left text-sm",
+                  nav === g.id && "bg-accent font-medium",
                 )}
-              </span>
-              <span className="min-w-0 flex-1 truncate">{g.label}</span>
-              <span className="text-muted-foreground text-xs">{g.count}</span>
-            </button>
-          ))}
-        </nav>
-        <div className="flex min-w-0 flex-col">
-          <div className="border-border flex items-center justify-between border-b px-3 py-2">
-            <span className="text-sm font-medium">{groupLabel(nav)}</span>
-            <div className="flex items-center gap-3">
-              {nav !== "all" && nav !== "none" && annGrants.has(nav) && (
+              >
+                <span className="flex w-3.5 shrink-0 justify-center">
+                  {groupGranted(g.id) && (
+                    <Check
+                      aria-label="granted"
+                      className="text-success h-3 w-3"
+                    />
+                  )}
+                </span>
+                <span className="min-w-0 flex-1 truncate">{g.label}</span>
+                <span className="text-muted-foreground text-xs">{g.count}</span>
+              </button>
+            ))}
+          </nav>
+          <div className="flex min-w-0 flex-col">
+            <div className="border-border flex items-center justify-between border-b px-3 py-2">
+              <span className="text-sm font-medium">{groupLabel(nav)}</span>
+              <div className="flex items-center gap-3">
+                {nav !== "all" && nav !== "none" && annGrants.has(nav) && (
+                  <button
+                    type="button"
+                    role="checkbox"
+                    aria-checked={annGrants.get(nav) === "live"}
+                    onClick={() => {
+                      const next = new Map(annGrants);
+                      next.set(
+                        nav,
+                        next.get(nav) === "live" ? "snapshot" : "live",
+                      );
+                      setAnnGrants(next);
+                    }}
+                    className="text-muted-foreground flex cursor-pointer items-center gap-1.5 text-xs"
+                  >
+                    <SelectionBox checked={annGrants.get(nav) === "live"} />
+                    Include future matching tools
+                  </button>
+                )}
                 <button
                   type="button"
                   role="checkbox"
-                  aria-checked={annGrants.get(nav) === "live"}
-                  onClick={() => {
-                    const next = new Map(annGrants);
-                    next.set(
-                      nav,
-                      next.get(nav) === "live" ? "snapshot" : "live",
-                    );
-                    setAnnGrants(next);
-                  }}
-                  className="text-muted-foreground flex cursor-pointer items-center gap-1.5 text-xs"
+                  aria-checked={groupGranted(nav)}
+                  onClick={toggleGroupGrant}
+                  className="flex cursor-pointer items-center gap-1.5 text-sm"
                 >
-                  <SelectionBox checked={annGrants.get(nav) === "live"} />
-                  Include future matching tools
+                  <SelectionBox checked={groupGranted(nav)} />
+                  All {grouped.length}
                 </button>
+              </div>
+            </div>
+            <input
+              type="search"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder={`Search ${groupLabel(nav).toLowerCase()}…`}
+              aria-label="Search tools"
+              className="border-border placeholder:text-muted-foreground border-b px-3 py-1.5 text-sm outline-none"
+            />
+            <div className="max-h-[300px] min-h-0 overflow-y-auto">
+              {viewed.map((tool) => {
+                const viaGrant =
+                  allGrant || tool.annotations.some((a) => annGrants.has(a));
+                const inScope = scope.has(tool.name);
+                return (
+                  <div
+                    key={tool.name}
+                    role="checkbox"
+                    aria-checked={inScope}
+                    aria-disabled={viaGrant}
+                    tabIndex={viaGrant ? -1 : 0}
+                    onClick={viaGrant ? undefined : () => togglePick(tool.name)}
+                    onKeyDown={
+                      viaGrant
+                        ? undefined
+                        : (e) => {
+                            if (e.key === " " || e.key === "Enter") {
+                              e.preventDefault();
+                              togglePick(tool.name);
+                            }
+                          }
+                    }
+                    className={cn(
+                      "flex items-center gap-2 px-3 py-1",
+                      viaGrant
+                        ? "cursor-default"
+                        : "hover:bg-accent cursor-pointer",
+                    )}
+                  >
+                    <SelectionBox checked={inScope} />
+                    <span
+                      className="min-w-0 flex-1 truncate font-mono text-xs"
+                      title={tool.name}
+                    >
+                      {tool.name}
+                    </span>
+                    {!allGrant && viaGrant && (
+                      <span className="text-muted-foreground shrink-0 text-[10px]">
+                        via annotation
+                      </span>
+                    )}
+                    {!viaGrant && picked.has(tool.name) && (
+                      <span className="text-muted-foreground shrink-0 text-[10px]">
+                        picked
+                      </span>
+                    )}
+                  </div>
+                );
+              })}
+              {viewed.length === 0 && (
+                <p className="text-muted-foreground px-3 py-2 text-sm">
+                  {normalizedQuery === ""
+                    ? "No tools in this group."
+                    : "No tools match your search."}
+                </p>
               )}
-              <button
-                type="button"
-                role="checkbox"
-                aria-checked={groupGranted(nav)}
-                onClick={toggleGroupGrant}
-                className="flex cursor-pointer items-center gap-1.5 text-sm"
-              >
-                <SelectionBox checked={groupGranted(nav)} />
-                All {grouped.length}
-              </button>
             </div>
           </div>
-          <input
-            type="search"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder={`Search ${groupLabel(nav).toLowerCase()}…`}
-            aria-label="Search tools"
-            className="border-border placeholder:text-muted-foreground border-b px-3 py-1.5 text-sm outline-none"
-          />
-          <div className="max-h-[300px] min-h-0 overflow-y-auto">
-            {viewed.map((tool) => {
-              const viaGrant =
-                allGrant || tool.annotations.some((a) => annGrants.has(a));
-              const inScope = scope.has(tool.name);
-              return (
-                <div
-                  key={tool.name}
-                  role="checkbox"
-                  aria-checked={inScope}
-                  aria-disabled={viaGrant}
-                  tabIndex={viaGrant ? -1 : 0}
-                  onClick={viaGrant ? undefined : () => togglePick(tool.name)}
-                  onKeyDown={
-                    viaGrant
-                      ? undefined
-                      : (e) => {
-                          if (e.key === " " || e.key === "Enter") {
-                            e.preventDefault();
-                            togglePick(tool.name);
-                          }
-                        }
-                  }
-                  className={cn(
-                    "flex items-center gap-2 px-3 py-1",
-                    viaGrant
-                      ? "cursor-default"
-                      : "hover:bg-accent cursor-pointer",
-                  )}
-                >
-                  <SelectionBox checked={inScope} />
-                  <span
-                    className="min-w-0 flex-1 truncate font-mono text-xs"
-                    title={tool.name}
-                  >
-                    {tool.name}
-                  </span>
-                  {!allGrant && viaGrant && (
-                    <span className="text-muted-foreground shrink-0 text-[10px]">
-                      via annotation
-                    </span>
-                  )}
-                  {!viaGrant && picked.has(tool.name) && (
-                    <span className="text-muted-foreground shrink-0 text-[10px]">
-                      picked
-                    </span>
-                  )}
-                </div>
-              );
-            })}
-            {viewed.length === 0 && (
-              <p className="text-muted-foreground px-3 py-2 text-sm">
-                {normalizedQuery === ""
-                  ? "No tools in this group."
-                  : "No tools match your search."}
-              </p>
-            )}
-          </div>
         </div>
-      </div>
+      )}
       {phase.inventory.roleHiddenTools.count > 0 && (
         <RoleHiddenNote hidden={phase.inventory.roleHiddenTools} />
       )}
@@ -536,32 +557,32 @@ export function ConsentToolsApp({
             : `${droppedPrefillGrants} previously granted annotations no longer match any tool and were removed.`}
         </p>
       )}
-      <div className="text-muted-foreground flex flex-wrap items-center justify-between gap-x-3 gap-y-0.5 pt-1.5 text-xs">
-        <span>
-          <b className="text-foreground font-medium">{scope.size}</b> of{" "}
-          {tools.length} tools in scope on {serverName}
-          {!allGrant && annGrants.size > 0 && (
-            <>
-              {" · "}
-              {[...annGrants]
-                .map(
-                  ([a, mode]) =>
-                    groupLabel(a).toLowerCase() +
-                    (mode === "live" ? " (live)" : " (frozen)"),
-                )
-                .join(", ")}
-            </>
-          )}
-          {pickedOutsideGrants > 0 && ` · ${pickedOutsideGrants} picked`}
-        </span>
-        <span>
-          {allGrant
-            ? "Includes tools the server adds later"
-            : liveAnnotations.length > 0
+      {mode === "specific" && (
+        <div className="text-muted-foreground flex flex-wrap items-center justify-between gap-x-3 gap-y-0.5 text-xs">
+          <span>
+            <b className="text-foreground font-medium">{scope.size}</b> of{" "}
+            {tools.length} tools in scope on {serverName}
+            {annGrants.size > 0 && (
+              <>
+                {" · "}
+                {[...annGrants]
+                  .map(
+                    ([annotation, grantMode]) =>
+                      groupLabel(annotation).toLowerCase() +
+                      (grantMode === "live" ? " (live)" : " (frozen)"),
+                  )
+                  .join(", ")}
+              </>
+            )}
+            {pickedOutsideGrants > 0 && ` · ${pickedOutsideGrants} picked`}
+          </span>
+          <span>
+            {liveAnnotations.length > 0
               ? "Live grants include future matching tools"
               : "New tools require approval"}
-        </span>
-      </div>
+          </span>
+        </div>
+      )}
       <ApprovalFormFields
         formId={formId}
         inventoryID={attemptID}
@@ -570,6 +591,86 @@ export function ConsentToolsApp({
         liveAnnotations={liveAnnotations}
         tools={allGrant ? [] : [...picked].sort()}
       />
+    </div>
+  );
+}
+
+/**
+ * The top-level tool-access choice. Selecting a subset is the rare case, so the
+ * picker stays collapsed behind "Specific tools" and the default reads as one
+ * line rather than a wall of checkboxes.
+ */
+function ToolAccessModeChoice({
+  mode,
+  onChange,
+  toolCount,
+}: {
+  mode: ToolAccessMode;
+  onChange: (mode: ToolAccessMode) => void;
+  toolCount: number;
+}): JSX.Element {
+  const options: {
+    value: ToolAccessMode;
+    label: string;
+    description: string;
+  }[] = [
+    {
+      value: "all",
+      label: "All tools",
+      description:
+        toolCount === 1
+          ? "The server's single tool, plus any it adds later."
+          : `All ${toolCount} tools, plus any the server adds later.`,
+    },
+    {
+      value: "specific",
+      label: "Specific tools",
+      description: "Choose which tools this client may call.",
+    },
+  ];
+
+  return (
+    <div
+      role="radiogroup"
+      aria-label="Tool access"
+      className="border-border border"
+    >
+      {options.map((option, index) => (
+        <label
+          key={option.value}
+          className={cn(
+            "hover:bg-accent flex cursor-pointer items-start gap-2.5 px-3 py-2.5",
+            index > 0 && "border-border border-t",
+            mode === option.value && "bg-accent",
+          )}
+        >
+          <input
+            type="radio"
+            name="consent-tool-access-mode"
+            value={option.value}
+            checked={mode === option.value}
+            onChange={() => onChange(option.value)}
+            className="sr-only"
+          />
+          <span
+            aria-hidden
+            className={cn(
+              "border-border mt-0.5 flex size-3.5 shrink-0 items-center justify-center rounded-full border",
+              mode === option.value && "border-foreground",
+            )}
+          >
+            {mode === option.value && (
+              <span className="bg-foreground size-1.5 rounded-full" />
+            )}
+          </span>
+          <span className="min-w-0">
+            <span className="block text-sm font-medium">{option.label}</span>
+            <span className="text-muted-foreground block text-xs">
+              {option.description}
+            </span>
+          </span>
+        </label>
+      ))}
     </div>
   );
 }

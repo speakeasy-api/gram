@@ -43,7 +43,16 @@ import (
 //go:embed consent_template.html
 var consentTemplateHTML string
 
-var consentTemplate = template.Must(template.New("consent").Parse(consentTemplateHTML))
+// consentLogoHTML defines the "speakeasyWordmark" template. Kept in its own
+// file because it is generated from the dashboard's GramLogo component and is
+// almost entirely path data.
+//
+//go:embed consent_logo.html
+var consentLogoHTML string
+
+var consentTemplate = template.Must(
+	template.Must(template.New("consent").Parse(consentTemplateHTML)).Parse(consentLogoHTML),
+)
 
 // consentScriptData is the consent page's client-side script. It is served
 // as an external file (not inlined into the template) because the ingress
@@ -144,6 +153,12 @@ type consentTemplateData struct {
 	// ConsentToolsPrefill is the subject's stored selection serialized for
 	// the island bootstrap; empty when there is no restrictive prefill.
 	ConsentToolsPrefill string
+	// ConnectedCardCount is the number of RemoteSessionCards already linked,
+	// rendered as the "n of m connected" summary above the service list.
+	ConnectedCardCount int
+	// Styles is the compiled design-system stylesheet inlined into the
+	// document head. A build artifact, never user input.
+	Styles template.CSS
 }
 
 // sessionDurationOption is one <option> of the consent page's session length
@@ -373,14 +388,14 @@ func (s *Service) serveConsentGet(w http.ResponseWriter, r *http.Request, endpoi
 		return oops.E(oops.CodeUnexpected, err, "build remote session cards").LogError(ctx, logger)
 	}
 
-	hasConnectedCard := false
+	connectedCardCount := 0
 	autoRefreshHasSessions := false
 	// Every card already carries the organization's policy applied to its own
 	// stored preference, so the page value is on only when none of them is off.
 	everyCardAutoRefreshes := true
 	for _, c := range cards {
 		if c.Connected {
-			hasConnectedCard = true
+			connectedCardCount++
 		}
 		if c.Connected || c.Expired {
 			autoRefreshHasSessions = true
@@ -388,7 +403,21 @@ func (s *Service) serveConsentGet(w http.ResponseWriter, r *http.Request, endpoi
 		everyCardAutoRefreshes = everyCardAutoRefreshes && c.AutoRefreshChecked
 	}
 	autoRefreshOn := len(cards) > 0 && everyCardAutoRefreshes
-	consentEnabled := len(cards) == 0 || hasConnectedCard
+	consentEnabled := len(cards) == 0 || connectedCardCount > 0
+
+	// Skip the interstitial when it has nothing to ask. A server fronting a
+	// single upstream that the subject has not linked yet leaves the page with
+	// exactly one useful control, and the user already expressed intent by
+	// starting the authorization — so send them straight to the provider and
+	// let them land back here with something to approve. Multi-service pages
+	// keep the list: each provider is its own consent decision, and a silent
+	// chain of redirects through three login screens is worse than a list that
+	// shows what is being asked for.
+	if redirected, err := s.maybeAutoConnect(ctx, w, r, logger, endpoint, challengeState, cards); err != nil {
+		return err
+	} else if redirected {
+		return nil
+	}
 
 	// First-party pages mint no user session, so there is no length to pick.
 	// A lookup failure degrades to no picker rather than a failed render; the
@@ -460,6 +489,8 @@ func (s *Service) serveConsentGet(w http.ResponseWriter, r *http.Request, endpoi
 		ConsentToolsURL:         fmt.Sprintf("/%s/%s/connect/mcp", endpoint.RouteBase, endpoint.Slug),
 		ConsentToolsScriptURL:   consentToolsScriptURL,
 		ConsentToolsPrefill:     prefillAttr,
+		ConnectedCardCount:      connectedCardCount,
+		Styles:                  consentPageStyles,
 	}
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
@@ -1057,4 +1088,63 @@ func pluralize(value int, singular string) string {
 		return singular
 	}
 	return singular + "s"
+}
+
+// maybeAutoConnect sends the subject straight to the sole unlinked upstream
+// provider, reporting whether it wrote a redirect. It is a no-op unless there
+// is exactly one remote-session card, that card is unlinked, and this
+// challenge has not auto-connected before.
+//
+// The latch is persisted BEFORE redirecting and is never cleared, so every
+// path back to this page — the user denying consent upstream, the provider
+// erroring, an explicit disconnect — renders the page with its manual
+// controls instead of bouncing the user out again.
+func (s *Service) maybeAutoConnect(
+	ctx context.Context,
+	w http.ResponseWriter,
+	r *http.Request,
+	logger *slog.Logger,
+	endpoint *ResolvedMcpEndpoint,
+	challengeState AuthnChallengeState,
+	cards []remoteSessionCard,
+) (bool, error) {
+	if challengeState.AutoConnectDone || len(cards) != 1 || cards[0].Connected {
+		return false, nil
+	}
+
+	clients, err := s.remoteChallengeMgr.ListClients(ctx, endpoint.ProjectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID)
+	if err != nil {
+		return false, oops.E(oops.CodeUnexpected, err, "list remote session clients").LogError(ctx, logger)
+	}
+	var client *remotesessions.Client
+	for i := range clients {
+		if clients[i].ID.String() == cards[0].ClientID {
+			client = &clients[i]
+			break
+		}
+	}
+	if client == nil {
+		return false, nil
+	}
+
+	// Persist the latch first: a redirect the latch did not survive is an
+	// infinite bounce between this page and the provider.
+	challengeState.AutoConnectDone = true
+	if err := s.authnChallengeCache.Store(ctx, challengeState); err != nil {
+		logger.WarnContext(ctx, "persist auto-connect latch; falling back to the consent page", attr.SlogError(err))
+		return false, nil
+	}
+
+	// autoRefresh is nil: the subject has not been shown the control yet, so
+	// there is no choice to record. The page's own Connect action is what
+	// authors a stored preference.
+	challengeURL, err := s.buildRemoteConnectURL(ctx, logger, endpoint, challengeState, *client, nil)
+	if err != nil {
+		// Already logged. Render the page so the user can connect manually
+		// rather than seeing an error for a step they did not take.
+		return false, nil
+	}
+
+	http.Redirect(w, r, challengeURL, http.StatusSeeOther)
+	return true, nil
 }

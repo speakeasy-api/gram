@@ -1,0 +1,98 @@
+/* Stylesheet for the server-rendered MCP consent page
+   (server/internal/mcp/consent_template.html).
+
+   The page is Go-templated HTML served from the binary, not part of the
+   dashboard bundle, but it is a first-party Speakeasy surface and has to look
+   like one. Rather than maintain a parallel hand-written stylesheet that
+   drifts from the design system, this entry compiles the real thing: the same
+   token layer and utilities the dashboard uses, scanned against the Go
+   template so only the classes it actually references are emitted.
+
+   The build (vite.consent-page.config.ts) writes the result plus the brand
+   woff2 files into server/internal/mcp/consent_assets/page/, which the server
+   embeds. Never hand-edit the output. */
+
+@import "tailwindcss" source(none);
+
+/* Tailwind cannot infer these: the markup lives outside the dashboard package,
+   in Go template and plain-JS files. */
+@source "../../../../server/internal/mcp/consent_template.html";
+@source "../../../../server/internal/mcp/consent_logo.html";
+@source "../../../../server/internal/mcp/consent_script.js";
+
+@import "../components/ui/styles/base.css";
+@import "../components/ui/styles/utilities.css";
+
+@custom-variant dark (&:where(.dark, .dark *));
+@custom-variant interact {
+  &:hover,
+  &:focus-visible {
+    @slot;
+  }
+}
+
+/* The brand faces ship with the page rather than being pulled from a font CDN:
+   Diatype and Tobias are what make this read as Speakeasy, and a consent page
+   is the one screen where an unfamiliar-looking origin costs trust. Vite
+   rewrites these to absolute, content-hashed /mcp/consent-fonts/ URLs. */
+@font-face {
+  font-family: "Diatype";
+  src: url("../fonts/diatype/ABCDiatype-Regular.woff2") format("woff2");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Diatype";
+  src: url("../fonts/diatype/ABCDiatype-Light.woff2") format("woff2");
+  font-weight: 300;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Diatype Mono";
+  src: url("../fonts/diatype-mono/ABCDiatypeMono-Regular.woff2") format("woff2");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Tobias";
+  src: url("../fonts/tobias/Tobias-Thin.woff2") format("woff2");
+  font-weight: 100;
+  font-style: normal;
+  font-display: swap;
+}
+
+@theme {
+  --font-sans: var(--font-diatype);
+  --font-mono: var(--font-diatype-mono);
+  --font-display: var(--font-tobias);
+}
+
+@theme inline {
+  /* Square corners, matching the dashboard: no rounded-* utilities exist. */
+  --radius-*: initial;
+  --muted-foreground: var(--color-neutral-900-64);
+  --color-muted-foreground: var(--muted-foreground);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring;
+  }
+
+  html {
+    background: var(--background);
+  }
+
+  body {
+    @apply bg-background text-foreground;
+    font-family: var(--font-diatype);
+    font-weight: 300;
+  }
+
+  button {
+    cursor: pointer;
+  }
+}

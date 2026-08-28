@@ -9,6 +9,12 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// normalizeWhitespace collapses the template's formatting-driven line breaks so
+// assertions can target rendered copy rather than indentation.
+func normalizeWhitespace(html string) string {
+	return strings.Join(strings.Fields(html), " ")
+}
+
 func TestConsentTemplateCompletedFirstPartyConnectionAutoCloses(t *testing.T) {
 	t.Parallel()
 
@@ -40,7 +46,7 @@ func TestConsentTemplateCompletedFirstPartyConnectionAutoCloses(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	require.Contains(t, page.String(), "<body data-auto-close>")
+	require.Contains(t, normalizeWhitespace(page.String()), "<body class=\"bg-background text-foreground min-h-screen\" data-auto-close >")
 	require.Contains(t, page.String(), "Connection complete. This tab will close automatically.")
 	require.NotContains(t, page.String(), "When you've connected the services above")
 }
@@ -134,28 +140,19 @@ func TestConsentTemplateShowsAutoRefreshAndServiceExpiry(t *testing.T) {
 	require.Contains(t, html, "Auto refresh")
 	require.NotContains(t, html, "Keep alive")
 	require.NotContains(t, html, "About auto refresh")
-	require.Contains(t, html, `class="tooltip"`)
-	require.Contains(t, html, `tabindex="0"`)
-	require.Equal(t, 2, strings.Count(html, `role="tooltip"`))
 	require.Contains(t, normalizedHTML, "don't expire from inactivity")
 	require.Contains(t, normalizedHTML, "idle connections lapse and need reconnecting")
-	require.Contains(t, html, `aria-describedby="refresh-expiry-client-id"`)
-	require.Contains(t, html, `id="refresh-expiry-client-id"`)
-	require.NotContains(t, html, `datetime="2026-08-05T18:00:00Z"`)
-	require.NotContains(t, html, "3 hours 12 minutes")
+	// The refresh lifetime is stated inline on the card rather than hidden
+	// behind a hover tooltip, which is unreachable on touch.
+	require.Contains(t, normalizedHTML, "Renews on use. If unused, expires in")
 	require.Contains(t, html, `datetime="2026-09-05T18:00:00Z"`)
 	require.Contains(t, html, "31 days")
-	require.Contains(t, html, "✓ Auto refresh on")
-	require.Contains(t, html, "Refresh now")
-	require.Contains(t, html, `data-refresh-link`)
-
-	metaStart := strings.Index(html, `<div class="meta">`)
-	actionsStart := strings.Index(html, `<div class="remote-actions">`)
-	require.NotEqual(t, -1, metaStart)
-	require.Greater(t, actionsStart, metaStart)
-	require.NotContains(t, html[metaStart:actionsStart], "expires in")
-	require.Contains(t, html[actionsStart:], "Renews on use. If unused, this connection expires in")
+	// The access lifetime is not a connection lifetime, so it stays off the page.
+	require.NotContains(t, html, `datetime="2026-08-05T18:00:00Z"`)
+	require.NotContains(t, html, "3 hours 12 minutes")
 	require.NotContains(t, html, "Current access expires in")
+	require.Contains(t, normalizedHTML, "Connected · auto refresh on")
+	require.Contains(t, html, `data-refresh-link`)
 }
 
 func TestConsentTemplateLocksAutoRefreshWhenOrganizationRequires(t *testing.T) {
@@ -190,14 +187,14 @@ func TestConsentTemplateLocksAutoRefreshWhenOrganizationRequires(t *testing.T) {
 	html := page.String()
 	// The value is shown read-only, managed by the org — no editable control
 	// and no user-driven persistence form.
-	require.Contains(t, html, "On · Managed by your organization")
+	require.Contains(t, normalizeWhitespace(html), "On · managed by your organization")
 	require.Contains(t, html, `data-auto-refresh-managed`)
 	require.NotContains(t, html, `data-auto-refresh-select`)
 	require.NotContains(t, html, `id="auto-refresh-form"`)
 	// The per-card hidden input still carries the required "on" value so the
 	// connect action persists auto_refresh=on.
 	require.Contains(t, html, `value="on"`)
-	require.Contains(t, html, "✓ Auto refresh on")
+	require.Contains(t, normalizeWhitespace(html), "Connected · auto refresh on")
 }
 
 func TestConsentTemplateShowsAutoRefreshOffWhenOrganizationDisables(t *testing.T) {
@@ -233,15 +230,14 @@ func TestConsentTemplateShowsAutoRefreshOffWhenOrganizationDisables(t *testing.T
 	html := page.String()
 	// A disabled organization policy is stated rather than hidden, so the
 	// subject knows idle connections will lapse.
-	require.Contains(t, html, "Off · Managed by your organization")
+	require.Contains(t, normalizeWhitespace(html), "Off · managed by your organization")
 	require.Contains(t, html, `data-auto-refresh-managed`)
-	require.Contains(t, html, "Auto refresh off")
+	require.NotContains(t, normalizeWhitespace(html), "auto refresh on")
 	// Nothing to change and nothing to persist.
 	require.NotContains(t, html, `data-auto-refresh-select`)
 	require.NotContains(t, html, `id="auto-refresh-form"`)
 	// The connect action carries the organization's "off" value explicitly.
 	require.Contains(t, html, `value="off"`)
-	require.NotContains(t, html, "✓ Auto refresh on")
 }
 
 func TestConsentTemplateOmitsAutoRefreshRowWithoutRemoteSessions(t *testing.T) {
@@ -264,7 +260,7 @@ func TestConsentTemplateOmitsAutoRefreshRowWithoutRemoteSessions(t *testing.T) {
 	html := page.String()
 	// With no services to connect there is no refresh behavior to describe.
 	require.NotContains(t, html, "Auto refresh")
-	require.NotContains(t, html, "Managed by your organization")
+	require.NotContains(t, html, "managed by your organization")
 	require.NotContains(t, html, `data-auto-refresh-select`)
 }
 
@@ -299,13 +295,10 @@ func TestConsentTemplateOmitsExpiryTooltipWhenNoExpiryReported(t *testing.T) {
 	require.NoError(t, err)
 
 	html := page.String()
-	require.Contains(t, html, "Refresh now")
-	require.NotContains(t, html, `aria-describedby="refresh-expiry-client-id"`)
-	require.NotContains(t, html, `id="refresh-expiry-client-id"`)
+	require.Contains(t, html, `data-refresh-link`)
 	require.NotContains(t, html, "Renews on use")
 	require.NotContains(t, html, "The provider did not report")
-	// Only the auto-refresh tooltip remains; no expiry tooltip is rendered.
-	require.Equal(t, 1, strings.Count(html, `role="tooltip"`))
+	require.NotContains(t, html, "<time")
 }
 
 // A branded issuer renders its display name and logo; the disconnect
@@ -335,7 +328,7 @@ func TestConsentTemplateRendersIssuerBranding(t *testing.T) {
 
 	html := page.String()
 	require.Contains(t, html, "Corporate Okta")
-	require.Contains(t, html, `class="issuer-logo"`)
+	require.Contains(t, html, `data-issuer-logo`)
 	require.Contains(t, html, `src="https://app.getgram.ai/rpc/assets.serveImage?id=00000000-0000-0000-0000-000000000001"`)
 	// The logo is decorative next to the visible display name, so it must
 	// carry an explicitly empty alt.
@@ -371,7 +364,7 @@ func TestConsentTemplateOmitsLogoWhenIssuerUnbranded(t *testing.T) {
 	require.Contains(t, html, "example-issuer")
 	// The stylesheet always mentions .issuer-logo; only the element itself
 	// must be absent.
-	require.NotContains(t, html, `class="issuer-logo"`)
+	require.NotContains(t, html, `data-issuer-logo`)
 	require.Contains(t, html, `aria-label="Disconnect example-issuer"`)
 }
 
