@@ -14,6 +14,12 @@ export function identityHandoffs(
   orgRoutes: ReturnType<typeof useOrgRoutes>,
   /** The member's principal URN, when the subject has a directory row. */
   principalUrn: string | undefined,
+  /**
+   * The window the reader has open, carried onto the destinations that read
+   * the same params — landing on a different period than the panel showed
+   * makes the handoff look like it filtered to the wrong person.
+   */
+  window: URLSearchParams = new URLSearchParams(),
 ): {
   auditLogs: string;
   agentSessions: string;
@@ -30,6 +36,10 @@ export function identityHandoffs(
   const externalUserId = identity.externalUserIds[0];
   const query = (base: string, params: Record<string, string | undefined>) => {
     const search = new URLSearchParams();
+    for (const key of ["range", "from", "to", "label"]) {
+      const value = window.get(key);
+      if (value) search.set(key, value);
+    }
     for (const [key, value] of Object.entries(params)) {
       if (value) search.set(key, value);
     }
@@ -48,9 +58,12 @@ export function identityHandoffs(
     toolLogs: query(routes.logs.href(), { user: email }),
     // Costs filters by drilling rather than by query param: the email
     // dimension is a path segment on the explorer.
-    costs: email
-      ? `${routes.costs.href()}/email~${encodeURIComponent(email)}`
-      : routes.costs.href(),
+    costs: query(
+      email
+        ? `${routes.costs.href()}/email~${encodeURIComponent(email)}`
+        : routes.costs.href(),
+      {},
+    ),
     riskEvents: query(routes.riskEvents.href(), {
       user_id: externalUserId ?? email,
     }),

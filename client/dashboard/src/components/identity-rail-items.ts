@@ -5,9 +5,9 @@ import type { useOrgRoutes } from "@/routes";
  * The identity page's sub-pages, in reading order: what needs attention first,
  * then the subsystems that explain it.
  *
- * Active comes from the route table rather than from NavLink's own matching:
- * the URN segment is url-encoded, and NavLink compares the decoded pathname, so
- * the colon in `user:...` never matches.
+ * Active comes from the route table's own matcher rather than from a path
+ * comparison: the URN segment is url-encoded in the href and decoded in the
+ * location, so a literal match on the colon in `user:...` never lands.
  */
 export function identityRailItems(
   routes: ReturnType<typeof useOrgRoutes>,

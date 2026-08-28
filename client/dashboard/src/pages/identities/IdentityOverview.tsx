@@ -4,7 +4,7 @@ import { IdentitySection } from "./IdentitySection";
 import { HumanizeDateTime } from "@/lib/dates";
 import { useOrgRoutes, useRoutes } from "@/routes";
 import { Info } from "lucide-react";
-import { Link } from "react-router";
+import { Link, useLocation } from "react-router";
 import {
   IdentityPanel,
   IdentityPanelEmpty,
@@ -31,6 +31,7 @@ import {
 export default function IdentityOverview(): JSX.Element {
   const { identity, urn } = useIdentityOutlet();
   const { from, to } = useIdentityWindow();
+  const location = useLocation();
   const project = useIdentityProject();
   // Project routes resolve against the project this page is filtered to: the
   // page is org-level, so the router has no :projectSlug of its own to fill in
@@ -39,7 +40,13 @@ export default function IdentityOverview(): JSX.Element {
   const orgRoutes = useOrgRoutes();
   // No handoff on this page filters by principal, so the member list this
   // would otherwise fetch is not worth the request.
-  const handoffs = identityHandoffs(identity, routes, orgRoutes, undefined);
+  const handoffs = identityHandoffs(
+    identity,
+    routes,
+    orgRoutes,
+    undefined,
+    new URLSearchParams(location.search),
+  );
   const encodedUrn = encodeIdentityUrn(urn);
 
   const metricsQuery = useIdentityMetrics(identity, from, to);

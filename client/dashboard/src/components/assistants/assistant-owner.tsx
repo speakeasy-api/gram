@@ -1,3 +1,4 @@
+import { IdentityLink } from "@/components/identity-link";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/Avatar";
 import { SimpleTooltip } from "@/components/ui/Tooltip";
 import { Text } from "@/components/ui/Text";
@@ -65,9 +66,15 @@ export function AssistantOwner({
           className="truncate"
           title={display}
         >
-          {/* Not a link: on a card this sits inside the anchor that opens the
-              assistant, and anchors cannot nest. */}
-          {variant === "card" ? `Created by ${display}` : display}
+          {/* The card sits inside the anchor that opens the assistant, and
+              anchors cannot nest; the settings row is free to link. */}
+          {variant === "card" ? (
+            `Created by ${display}`
+          ) : (
+            <IdentityLink identifier={{ userId: member.id }}>
+              {display}
+            </IdentityLink>
+          )}
         </Text>
       </div>
     );

@@ -1,5 +1,6 @@
 import { useDateRangeFilter } from "@/components/observe/useDateRangeFilter";
 import { useOrganization, useProject, useSession } from "@/contexts/Auth";
+import { useProjectSlugForRequests } from "@/contexts/Sdk";
 import { useRBAC } from "@/hooks/useRBAC";
 import { useGramContext } from "@gram/client/react-query/_context.js";
 import { useQuery } from "@tanstack/react-query";
@@ -125,6 +126,7 @@ export function useIdentityIsKnown(identity: IdentityModel | undefined): {
 } {
   const client = useGramContext();
   const organization = useOrganization();
+  const projectSlug = useProjectSlugForRequests();
   const hasDirectoryRow = (identity?.userIds.length ?? 0) > 0;
   const identifiers = new Set(
     [...(identity?.emails ?? []), ...(identity?.externalUserIds ?? [])].map(
@@ -137,7 +139,7 @@ export function useIdentityIsKnown(identity: IdentityModel | undefined): {
   // surfaces email-keyed identities through the agent-metrics view and
   // id-keyed ones from raw logs, and the id filter matches neither.
   const query = useQuery({
-    queryKey: identityRosterQueryKey(organization.id),
+    queryKey: identityRosterQueryKey(organization.id, projectSlug),
     queryFn: () => fetchIdentityRoster(client),
     throwOnError: false,
     enabled: !!identity && !hasDirectoryRow && identifiers.size > 0,
@@ -170,14 +172,20 @@ export function useCanReadRisk(): boolean {
   return hasScope("org:admin");
 }
 
-/** Whether the identity on screen is the person reading the page. */
+/**
+ * Whether the identity on screen is the person reading the page.
+ *
+ * The directory id settles it. The address only counts for a subject with no
+ * directory row at all: another person's identity can list the viewer's
+ * address as a linked account, and treating that as "self" would render the
+ * viewer's own sessions under someone else's name.
+ */
 export function useIsSelf(identity: IdentityModel): boolean {
   const { user } = useSession();
-  return (
-    identity.userIds.includes(user.id) ||
-    identity.emails.some(
-      (email) => email.toLowerCase() === user.email.toLowerCase(),
-    )
+  if (identity.userIds.includes(user.id)) return true;
+  if (identity.userIds.length > 0) return false;
+  return identity.emails.some(
+    (email) => email.toLowerCase() === user.email.toLowerCase(),
   );
 }
 

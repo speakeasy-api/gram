@@ -1,4 +1,5 @@
 import { StatTile, StatTileGroup } from "@/components/chart/stat-tile";
+import { useLocation } from "react-router";
 import { useOrgRoutes, useRoutes } from "@/routes";
 import {
   IdentityPanel,
@@ -17,6 +18,7 @@ import {
 export default function IdentityUsage(): JSX.Element {
   const { identity } = useIdentityOutlet();
   const { from, to } = useIdentityWindow();
+  const location = useLocation();
   const project = useIdentityProject();
   // Project routes resolve against the project this page is filtered to: the
   // page is org-level, so the router has no :projectSlug of its own to fill in
@@ -25,7 +27,13 @@ export default function IdentityUsage(): JSX.Element {
   const orgRoutes = useOrgRoutes();
   // No handoff on this page filters by principal, so the member list this
   // would otherwise fetch is not worth the request.
-  const handoffs = identityHandoffs(identity, routes, orgRoutes, undefined);
+  const handoffs = identityHandoffs(
+    identity,
+    routes,
+    orgRoutes,
+    undefined,
+    new URLSearchParams(location.search),
+  );
 
   const metricsQuery = useIdentityMetrics(identity, from, to);
   const metrics = metricsQuery.data?.metrics;

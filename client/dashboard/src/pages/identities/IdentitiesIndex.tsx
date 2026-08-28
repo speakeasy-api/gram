@@ -5,6 +5,7 @@ import {
 import { StatTile, StatTileGroup } from "@/components/chart/stat-tile";
 import { defineFilters, useFilterState } from "@/components/filters";
 import { useOrganization } from "@/contexts/Auth";
+import { useProjectSlugForRequests } from "@/contexts/Sdk";
 import { Page } from "@/components/page-layout";
 import { RequireScope } from "@/components/require-scope";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/Avatar";
@@ -161,6 +162,7 @@ export default function IdentitiesIndex(): JSX.Element {
 function IdentitiesIndexContent(): JSX.Element {
   const orgRoutes = useOrgRoutes();
   const organization = useOrganization();
+  const projectSlug = useProjectSlugForRequests();
   const navigate = useNavigate();
   const client = useGramContext();
   const [search, setSearch] = useState("");
@@ -184,7 +186,7 @@ function IdentitiesIndexContent(): JSX.Element {
   // date range would make the list answer "who was active lately" — a question
   // the per-identity pages already answer, each over its own window.
   const usageQuery = useQuery({
-    queryKey: identityRosterQueryKey(organization.id),
+    queryKey: identityRosterQueryKey(organization.id, projectSlug),
     queryFn: () => fetchIdentityRoster(client),
     throwOnError: false,
   });

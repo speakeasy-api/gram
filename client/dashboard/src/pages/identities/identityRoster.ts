@@ -4,14 +4,22 @@ import type { UserSummary } from "@gram/client/models/components/usersummary.js"
 import { unwrapAsync } from "@gram/client/types/fp";
 
 /**
- * The roster reaches back further than any org has existed, so every identity
- * the telemetry knows about is listed however long ago it was last seen.
+ * Far enough back to be "everything": the agent-usage view has its own
+ * retention, so this bound is what asks for all of it rather than what defines
+ * it.
  */
 const ALL_TIME_FROM = new Date("2020-01-01T00:00:00Z");
 
-/** Per-org: switching orgs must not serve the previous org's roster. */
-export function identityRosterQueryKey(organizationId: string): string[] {
-  return ["identities", "usage", "all-time", organizationId];
+/**
+ * Keyed by org and by the project the request is made under: telemetry is
+ * per-project, so a key naming only the org would serve one project's roster
+ * for another.
+ */
+export function identityRosterQueryKey(
+  organizationId: string,
+  projectSlug: string,
+): string[] {
+  return ["identities", "usage", "all-time", organizationId, projectSlug];
 }
 
 /**

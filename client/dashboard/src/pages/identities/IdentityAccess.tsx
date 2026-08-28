@@ -1,4 +1,5 @@
 import { HumanizeDateTime } from "@/lib/dates";
+import { useLocation } from "react-router";
 import { useOrgRoutes, useRoutes } from "@/routes";
 import { useRoles } from "@gram/client/react-query/roles.js";
 import {
@@ -16,6 +17,7 @@ import {
 } from "./useIdentityQueries";
 
 export default function IdentityAccess(): JSX.Element {
+  const location = useLocation();
   const project = useIdentityProject();
   // Project routes resolve against the project this page is filtered to: the
   // page is org-level, so the router has no :projectSlug of its own to fill in
@@ -28,7 +30,13 @@ export default function IdentityAccess(): JSX.Element {
     identity,
     routes,
     orgRoutes,
-    member?.principalUrn,
+    // The same fallback the challenge query uses, so the link filters to the
+    // principal the panel counted rather than opening the whole log.
+    member?.principalUrn ??
+      (identity.workosUserId || identity.userIds[0]
+        ? `user:${identity.workosUserId ?? identity.userIds[0]}`
+        : undefined),
+    new URLSearchParams(location.search),
   );
   const rolesQuery = useRoles(undefined, undefined, { throwOnError: false });
   const challengesQuery = useIdentityChallenges(identity);
