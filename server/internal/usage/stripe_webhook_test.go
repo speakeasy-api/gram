@@ -1610,7 +1610,7 @@ func TestStripeCheckoutConvertedDemotedTrialExactReplayRepairsInternalPostCommit
 	internalSecurityUpstream.Lock()
 	defer internalSecurityUpstream.Unlock()
 	require.False(t, internalSecurityUpstream.disabled)
-	require.EqualValues(t, 23, internalSecurityUpstream.monthlyLimit)
+	require.InDelta(t, 23, internalSecurityUpstream.monthlyLimit, 0)
 	require.Equal(t, "monthly", internalSecurityUpstream.limitReset)
 	require.NotEqualValues(t, limit, internalSecurityUpstream.monthlyLimit)
 	require.NotEmpty(t, internalSecurityUpstream.patchPaths)
