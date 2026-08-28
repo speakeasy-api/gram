@@ -146,7 +146,7 @@ function MemberStatusBadge({
           className={`size-2 shrink-0 rounded-full ${STATUS_DOT_CLASS[status.variant]}`}
           aria-hidden
         />
-        <Text muted small>
+        <Text as="span" muted small>
           {status.label}
         </Text>
       </span>
