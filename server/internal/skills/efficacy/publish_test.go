@@ -484,10 +484,12 @@ func TestPublishPersistsHighConfidenceRecommendationsIdempotently(t *testing.T) 
 	evaluation := h.reserve(t, "claude-session-recommendations", "claude-code")
 	judged := okVerdict()
 	durable := []RawRecommendation{
-		{Outcome: "misleading", Note: "first durable recommendation\x00 with export GITHUB_TOKEN=ghp_R2D2C3POLuk3Skywalker1234567890ab", Confidence: "high"},
-		{Outcome: "harmful", Note: "second durable recommendation", Confidence: "high"},
+		{IssueType: "obsolete_guidance", ChangeType: "replace_obsolete_guidance", EvidenceMessageIndices: []int{2, 4}, Outcome: "misleading", Note: "first durable recommendation\x00 with export GITHUB_TOKEN=ghp_R2D2C3POLuk3Skywalker1234567890ab", Confidence: "high"},
+		{IssueType: "harmful_overconstraint", ChangeType: "relax_constraint", EvidenceMessageIndices: []int{7}, Outcome: "harmful", Note: "second durable recommendation", Confidence: "high"},
 	}
-	judged.Verdict.Recommendations = append([]RawRecommendation{{Outcome: "did_not_help", Note: "low confidence evidence", Confidence: "low"}}, durable...)
+	legacyIdentity := RawRecommendation{Outcome: durable[0].Outcome, Note: durable[0].Note, Confidence: durable[0].Confidence}
+	require.Equal(t, recommendationFeedbackID(evaluation.ID, legacyIdentity), recommendationFeedbackID(evaluation.ID, durable[0]), "v11 taxonomy and evidence do not change stable feedback ids")
+	judged.Verdict.Recommendations = append([]RawRecommendation{{IssueType: "guidance_gap", ChangeType: "add_missing_requirement", EvidenceMessageIndices: []int{2}, Outcome: "did_not_help", Note: "low confidence evidence", Confidence: "low"}}, durable...)
 	h.judge.results[SurfaceDev] = judged
 
 	failed, err := h.publisher(t, failingSink{ScoreSink: h.scores, err: errors.New("clickhouse unavailable")}).Publish(
@@ -546,7 +548,7 @@ func TestPublishSignalFailureLeavesFeedbackDurableAndStillScores(t *testing.T) {
 	h := newPublishHarness(t, "skill_efficacy_publish_signal_failure")
 	evaluation := h.reserve(t, "claude-session-signal-failure", "claude-code")
 	judged := okVerdict()
-	judged.Verdict.Recommendations = []RawRecommendation{{Outcome: "did_not_help", Note: "durable evidence", Confidence: "high"}}
+	judged.Verdict.Recommendations = []RawRecommendation{{IssueType: "guidance_gap", ChangeType: "add_missing_requirement", EvidenceMessageIndices: []int{1}, Outcome: "did_not_help", Note: "durable evidence", Confidence: "high"}}
 	h.judge.results[SurfaceDev] = judged
 	h.signaler.err = errors.New("temporal unavailable")
 

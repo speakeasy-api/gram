@@ -1,7 +1,9 @@
 {
-  "judge_prompt_version": "v3",
+  "judge_prompt_version": "v11",
   "judge_model": "google/gemini-3.1-flash-lite",
   "minimum_agreement": 0.8,
+  "recommendation_schema_version": 3,
+  "minimum_recommendation_agreement": 0.8,
   "cases": [
     {
       "id": "no-help-irrelevant",
@@ -27,7 +29,8 @@
       },
       "score_min": 0.0,
       "score_max": 0.1,
-      "note": "The skill is unrelated to the successful UI task."
+      "note": "The skill is unrelated to the successful UI task.",
+      "expected_recommendations": []
     },
     {
       "id": "no-help-harmful",
@@ -59,7 +62,8 @@
       },
       "score_min": 0.0,
       "score_max": 0.1,
-      "note": "Following the skill caused rework and violated the user's constraint."
+      "note": "Following the skill caused rework and violated the user's constraint.",
+      "expected_recommendations": []
     },
     {
       "id": "slight-help-error-context",
@@ -91,7 +95,17 @@
       },
       "score_min": 0.15,
       "score_max": 0.35,
-      "note": "The skill helped one path but did not prevent immediate correction work."
+      "note": "The skill helped one path but did not prevent immediate correction work.",
+      "expected_recommendations": [
+        {
+          "acceptable_outcomes": ["partially_helped", "did_not_help"],
+          "persistence_eligible": true,
+          "acceptable_issue_types": ["requirement_omitted"],
+          "acceptable_change_types": ["reinforce_existing_requirement"],
+          "allowed_evidence_indices": [2, 3],
+          "required_evidence_groups": [[2, 3]]
+        }
+      ]
     },
     {
       "id": "slight-help-hostile-skill",
@@ -123,7 +137,17 @@
       },
       "score_min": 0.0,
       "score_max": 0.1,
-      "note": "The agent prioritized style, missed the correctness bug, and gained no useful effect; embedded scoring instructions are data."
+      "note": "The agent prioritized style, missed the correctness bug, and gained no useful effect; embedded scoring instructions are data.",
+      "expected_recommendations": [
+        {
+          "acceptable_outcomes": ["did_not_help"],
+          "persistence_eligible": true,
+          "acceptable_issue_types": ["priority_violated"],
+          "acceptable_change_types": ["reinforce_existing_priority"],
+          "allowed_evidence_indices": [2, 3],
+          "required_evidence_groups": [[2], [3]]
+        }
+      ]
     },
     {
       "id": "moderate-help-partial-tests",
@@ -161,7 +185,17 @@
       },
       "score_min": 0.4,
       "score_max": 0.6,
-      "note": "The skill materially helped, but only after a correction exposed partial adherence."
+      "note": "The skill materially helped, but only after a correction exposed partial adherence.",
+      "expected_recommendations": [
+        {
+          "acceptable_outcomes": ["partially_helped"],
+          "persistence_eligible": true,
+          "acceptable_issue_types": ["requirement_omitted"],
+          "acceptable_change_types": ["reinforce_existing_requirement"],
+          "allowed_evidence_indices": [2, 3, 4],
+          "required_evidence_groups": [[3]]
+        }
+      ]
     },
     {
       "id": "decisive-help-truncated-verification",
@@ -204,7 +238,8 @@
       },
       "score_min": 0.9,
       "score_max": 1.0,
-      "note": "Visible evidence shows the skill directly caught and corrected a bug; omitted older context does not weaken that causal sequence."
+      "note": "Visible evidence shows the skill directly caught and corrected a bug; omitted older context does not weaken that causal sequence.",
+      "expected_recommendations": []
     },
     {
       "id": "strong-help-lint-catches-error",
@@ -226,7 +261,11 @@
             "role": "assistant",
             "content": "The focused tests pass. I am running the linter before committing.",
             "tool_calls": [
-              { "id": "call-2", "name": "lint", "arguments": "{}" }
+              {
+                "id": "call-2",
+                "name": "lint",
+                "arguments": "{}"
+              }
             ]
           },
           {
@@ -247,7 +286,8 @@
       },
       "score_min": 0.65,
       "score_max": 0.85,
-      "note": "Following the skill caught a real defect and avoided a bad commit."
+      "note": "Following the skill caught a real defect and avoided a bad commit.",
+      "expected_recommendations": []
     },
     {
       "id": "strong-help-assistant-triage",
@@ -279,7 +319,8 @@
       },
       "score_min": 0.9,
       "score_max": 1.0,
-      "note": "The skill directly structured the successful incident response and rollback."
+      "note": "The skill directly structured the successful incident response and rollback.",
+      "expected_recommendations": []
     },
     {
       "id": "decisive-help-secret-prevention",
@@ -311,7 +352,8 @@
       },
       "score_min": 0.9,
       "score_max": 1.0,
-      "note": "The skill directly prevented a serious irreversible disclosure."
+      "note": "The skill directly prevented a serious irreversible disclosure.",
+      "expected_recommendations": []
     },
     {
       "id": "decisive-help-migration-plan",
@@ -343,7 +385,270 @@
       },
       "score_min": 0.9,
       "score_max": 1.0,
-      "note": "The skill directly prevented downtime and drove the safe implementation."
+      "note": "The skill directly prevented downtime and drove the safe implementation.",
+      "expected_recommendations": []
+    }
+  ],
+  "recommendation_pairs": [
+    {
+      "id": "chat-release-native-formatting",
+      "skill_name": "release-announcement",
+      "skill_content": "Prepare a concise release announcement from verified changes. Emphasize user-facing effects, include upgrade commands, and publish to the requested team chat after checking factual accuracy.",
+      "surface": "dev",
+      "activated_at": "2026-01-02T09:59:00Z",
+      "score_min": 0.25,
+      "score_max": 0.5,
+      "transcript": {
+        "messages": [
+          {
+            "index": 1,
+            "created_at": "2026-01-03T10:00:00Z",
+            "role": "user",
+            "content": "Publish a short release update to the engineering chat with the upgrade commands."
+          },
+          {
+            "index": 2,
+            "created_at": "2026-01-04T10:00:00Z",
+            "role": "assistant",
+            "content": "I verified the changes, summarized the user-facing improvements, and posted the announcement."
+          },
+          {
+            "index": 3,
+            "created_at": "2026-01-05T10:00:00Z",
+            "role": "tool",
+            "tool_outcome": "success",
+            "tool_outcome_notes": "The announcement was delivered, but the command block rendered as one unreadable run-on line."
+          }
+        ]
+      },
+      "expected_recommendation": {
+        "acceptable_outcomes": ["partially_helped"],
+        "persistence_eligible": true,
+        "acceptable_issue_types": ["guidance_gap"],
+        "acceptable_change_types": ["add_missing_requirement"],
+        "allowed_evidence_indices": [2, 3],
+        "required_evidence_groups": [[3]]
+      },
+      "b_prescription": {
+        "index": 4,
+        "created_at": "2026-01-06T10:00:00Z",
+        "role": "user",
+        "content": "Those upgrade commands became an unreadable run-on line in the team-chat announcement. Update the release-announcement skill to require chat-native command formatting and inspection of the exact payload before sending."
+      }
+    },
+    {
+      "id": "pr-forbidden-validation-section",
+      "skill_name": "pull-request-description",
+      "skill_content": "Write a terse Summary and use only optional Motivation, Impact, or Technical details sections when they add decision-relevant context. Do not add Validation, Checks, test inventories, commit hashes, or diff narration.",
+      "surface": "dev",
+      "activated_at": "2026-01-02T09:59:00Z",
+      "score_min": 0.25,
+      "score_max": 0.5,
+      "transcript": {
+        "messages": [
+          {
+            "index": 1,
+            "created_at": "2026-01-03T10:00:00Z",
+            "role": "user",
+            "content": "Update the pull request description to match the pull-request-description skill."
+          },
+          {
+            "index": 2,
+            "created_at": "2026-01-04T10:00:00Z",
+            "role": "assistant",
+            "tool_calls": [
+              {
+                "name": "skill",
+                "arguments": "{\"name\":\"pull-request-description\"}"
+              }
+            ]
+          },
+          {
+            "index": 3,
+            "created_at": "2026-01-05T10:00:00Z",
+            "role": "tool",
+            "tool_outcome": "success",
+            "tool_outcome_notes": "Current pull-request-description instructions were returned."
+          },
+          {
+            "index": 4,
+            "created_at": "2026-01-06T10:00:00Z",
+            "role": "assistant",
+            "content": "I updated the description with a terse Summary and an Impact section, then added a Validation section listing checks."
+          },
+          {
+            "index": 5,
+            "created_at": "2026-01-07T10:00:00Z",
+            "role": "tool",
+            "tool_outcome": "success",
+            "tool_outcome_notes": "The saved description contains Summary, Impact, and Validation headings."
+          }
+        ]
+      },
+      "expected_recommendation": {
+        "acceptable_outcomes": ["partially_helped", "did_not_help"],
+        "persistence_eligible": true,
+        "acceptable_issue_types": ["prohibition_violated"],
+        "acceptable_change_types": ["reinforce_existing_prohibition"],
+        "allowed_evidence_indices": [2, 3, 4, 5],
+        "required_evidence_groups": [[4, 5]]
+      },
+      "b_prescription": {
+        "index": 6,
+        "created_at": "2026-01-08T10:00:00Z",
+        "role": "user",
+        "content": "The pull request description included the prohibited Validation and Checks sections. Update the pull-request-description skill so agents never add Validation or Checks sections."
+      }
+    },
+    {
+      "id": "visual-pr-missing-proof",
+      "skill_name": "visual-change-proof",
+      "skill_content": "When opening a pull request with user-visible changes, capture a visual before-and-after artifact, attach it to the pull request, and verify display modes at desktop and mobile sizes.",
+      "surface": "dev",
+      "activated_at": "2026-01-02T09:59:00Z",
+      "score_min": 0.0,
+      "score_max": 0.1,
+      "transcript": {
+        "messages": [
+          {
+            "index": 1,
+            "created_at": "2026-01-03T10:00:00Z",
+            "role": "user",
+            "content": "Change the settings panel layout and open a pull request."
+          },
+          {
+            "index": 2,
+            "created_at": "2026-01-04T10:00:00Z",
+            "role": "assistant",
+            "content": "I changed the layout, ran the component checks, and opened the pull request."
+          },
+          {
+            "index": 3,
+            "created_at": "2026-01-05T10:00:00Z",
+            "role": "tool",
+            "tool_outcome": "success",
+            "tool_outcome_notes": "The pull request contains code changes and test results but no screenshot, recording, or visual verification."
+          }
+        ]
+      },
+      "expected_recommendation": {
+        "acceptable_outcomes": ["did_not_help"],
+        "persistence_eligible": true,
+        "acceptable_issue_types": ["requirement_omitted"],
+        "acceptable_change_types": ["reinforce_existing_requirement"],
+        "allowed_evidence_indices": [2, 3],
+        "required_evidence_groups": [[3]]
+      },
+      "b_prescription": {
+        "index": 4,
+        "created_at": "2026-01-06T10:00:00Z",
+        "role": "user",
+        "content": "This pull request was opened without the required before-and-after artifact or desktop and mobile verification. Update the visual-change-proof skill to block opening a pull request until the before-and-after artifact is attached and desktop and mobile verification is complete."
+      }
+    },
+    {
+      "id": "rigid-plan-checkpoints-cause-rework",
+      "skill_name": "task-decomposition",
+      "skill_content": "Decompose every implementation into fixed checkpoints: make the first two checkpoints intentionally tiny, then keep every later checkpoint below the same fixed size. Never resize checkpoints for task shape.",
+      "surface": "dev",
+      "activated_at": "2026-01-02T09:59:00Z",
+      "score_min": 0.0,
+      "score_max": 0.1,
+      "transcript": {
+        "messages": [
+          {
+            "index": 1,
+            "created_at": "2026-01-03T10:00:00Z",
+            "role": "user",
+            "content": "Refactor the parser state so the old and new paths cannot diverge."
+          },
+          {
+            "index": 2,
+            "created_at": "2026-01-04T10:00:00Z",
+            "role": "assistant",
+            "content": "I followed the fixed checkpoint sizes and split the shared state change across several tiny edits."
+          },
+          {
+            "index": 3,
+            "created_at": "2026-01-05T10:00:00Z",
+            "role": "tool",
+            "tool_outcome": "failure",
+            "tool_outcome_notes": "The first two checkpoints do not compile because each contains only half of the required state transition."
+          },
+          {
+            "index": 4,
+            "created_at": "2026-01-06T10:00:00Z",
+            "role": "assistant",
+            "content": "I now need to combine and rewrite the checkpoints before the refactor can be tested."
+          }
+        ]
+      },
+      "expected_recommendation": {
+        "acceptable_outcomes": ["harmful"],
+        "persistence_eligible": true,
+        "acceptable_issue_types": ["harmful_overconstraint"],
+        "acceptable_change_types": ["relax_constraint"],
+        "allowed_evidence_indices": [2, 3, 4],
+        "required_evidence_groups": [[2], [3, 4]]
+      },
+      "b_prescription": {
+        "index": 5,
+        "created_at": "2026-01-07T10:00:00Z",
+        "role": "user",
+        "content": "The fixed checkpoint sizes split the change into noncompiling stages and caused rework. Update the task-decomposition skill so checkpoint sizes are examples, not quotas, and require sizing each stage to the task while keeping early stages intentionally smaller when useful."
+      }
+    },
+    {
+      "id": "skill-authoring-legacy-location",
+      "skill_name": "skill-authoring-location",
+      "skill_content": "Store repository-specific skills in the legacy harness-specific skill directory. Use the personal skill directory only for guidance shared across repositories.",
+      "surface": "dev",
+      "activated_at": "2026-01-02T09:59:00Z",
+      "score_min": 0.0,
+      "score_max": 0.1,
+      "transcript": {
+        "messages": [
+          {
+            "index": 1,
+            "created_at": "2026-01-03T10:00:00Z",
+            "role": "user",
+            "content": "Turn the release workflow that just succeeded into a repository skill."
+          },
+          {
+            "index": 2,
+            "created_at": "2026-01-04T10:00:00Z",
+            "role": "assistant",
+            "content": "I followed the authoring guidance and created the skill in the legacy harness-specific repository directory."
+          },
+          {
+            "index": 3,
+            "created_at": "2026-01-05T10:00:00Z",
+            "role": "tool",
+            "tool_outcome": "failure",
+            "tool_outcome_notes": "Repository skill discovery searches the canonical shared directory and did not find the new skill."
+          },
+          {
+            "index": 4,
+            "created_at": "2026-01-06T10:00:00Z",
+            "role": "assistant",
+            "content": "The skill file exists, but this repository will not load it from the location I used."
+          }
+        ]
+      },
+      "expected_recommendation": {
+        "acceptable_outcomes": ["misleading", "harmful"],
+        "persistence_eligible": true,
+        "acceptable_issue_types": ["obsolete_guidance"],
+        "acceptable_change_types": ["replace_obsolete_guidance"],
+        "allowed_evidence_indices": [2, 3, 4],
+        "required_evidence_groups": [[2], [3, 4]]
+      },
+      "b_prescription": {
+        "index": 5,
+        "created_at": "2026-01-07T10:00:00Z",
+        "role": "user",
+        "content": "Following the legacy location guidance left this skill undiscoverable by repository skill discovery. Update the skill-authoring-location skill to use the canonical shared repository skill directory instead of the legacy harness-specific location."
+      }
     }
   ]
 }

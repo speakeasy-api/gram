@@ -28,6 +28,24 @@ var roiConfidenceValues = []string{"low", "med", "high"}
 // it qualifies whether raw feedback evidence is reliable enough to retain.
 var recommendationConfidenceValues = []string{"low", "med", "high"}
 
+var recommendationIssueTypes = []string{
+	"requirement_omitted",
+	"priority_violated",
+	"guidance_gap",
+	"prohibition_violated",
+	"harmful_overconstraint",
+	"obsolete_guidance",
+}
+
+var recommendationChangeTypes = []string{
+	"reinforce_existing_requirement",
+	"reinforce_existing_priority",
+	"add_missing_requirement",
+	"reinforce_existing_prohibition",
+	"relax_constraint",
+	"replace_obsolete_guidance",
+}
+
 // verdictFlags is the sink's flags_valid CHECK domain
 // (server/clickhouse/schema.sql:958). Unknown flags are dropped.
 var verdictFlags = []string{"ignored", "misapplied", "partially_followed", "harmful"}
@@ -39,9 +57,12 @@ var recommendationOutcomes = []string{"partially_helped", "did_not_help", "misle
 // RawRecommendation is evidence the judge recommends for downstream feedback
 // handling. It is not a find/replace edit or an edit suggestion.
 type RawRecommendation struct {
-	Outcome    string `json:"outcome"`
-	Note       string `json:"note"`
-	Confidence string `json:"confidence"`
+	IssueType              string `json:"issue_type"`
+	ChangeType             string `json:"change_type"`
+	EvidenceMessageIndices []int  `json:"evidence_message_indices"`
+	Outcome                string `json:"outcome"`
+	Note                   string `json:"note"`
+	Confidence             string `json:"confidence"`
 }
 
 // Verdict is the judge's structured answer. Field names and shapes match
@@ -59,9 +80,11 @@ type Verdict struct {
 }
 
 // ParseVerdict decodes the judge's raw structured output and normalizes it.
+// Recommendation evidence must cite message indices in the shown transcript.
 // Unparseable output is a model failure: the model returned something outside
 // the contract it was given, and a retry can produce a different answer.
-func ParseVerdict(raw string) (Verdict, error) {
+func ParseVerdict(raw string, transcript Transcript) (Verdict, error) {
+
 	required := map[string]bool{
 		"score":             false,
 		"rationale":         false,
@@ -96,6 +119,9 @@ func ParseVerdict(raw string) (Verdict, error) {
 	if err := json.Unmarshal([]byte(strings.TrimSpace(raw)), &v); err != nil {
 		return Verdict{}, fmt.Errorf("parse efficacy verdict: %w: %w", ErrModelFailure, err)
 	}
+	if err := validateRecommendationEvidence(v.Recommendations, &transcript); err != nil {
+		return Verdict{}, err
+	}
 	return v.Normalize()
 }
 
@@ -111,6 +137,10 @@ func ParseVerdict(raw string) (Verdict, error) {
 func (v Verdict) Normalize() (Verdict, error) {
 	if math.IsNaN(v.Score) || math.IsInf(v.Score, 0) {
 		return Verdict{}, fmt.Errorf("efficacy verdict score is not finite: %w", ErrModelFailure)
+	}
+
+	if err := validateRecommendationEvidence(v.Recommendations, nil); err != nil {
+		return Verdict{}, err
 	}
 
 	rationale := strings.TrimSpace(v.Rationale)
@@ -133,8 +163,13 @@ func (v Verdict) Normalize() (Verdict, error) {
 	}
 
 	recommendations := make([]RawRecommendation, 0, len(v.Recommendations))
-	seenRecommendations := make(map[RawRecommendation]struct{}, len(v.Recommendations))
 	for i, recommendation := range v.Recommendations {
+		if !slices.Contains(recommendationIssueTypes, recommendation.IssueType) {
+			return Verdict{}, fmt.Errorf("efficacy verdict recommendation %d has invalid issue type %q: %w", i, recommendation.IssueType, ErrModelFailure)
+		}
+		if !slices.Contains(recommendationChangeTypes, recommendation.ChangeType) {
+			return Verdict{}, fmt.Errorf("efficacy verdict recommendation %d has invalid change type %q: %w", i, recommendation.ChangeType, ErrModelFailure)
+		}
 		if !slices.Contains(recommendationOutcomes, recommendation.Outcome) {
 			return Verdict{}, fmt.Errorf("efficacy verdict recommendation %d has invalid outcome %q: %w", i, recommendation.Outcome, ErrModelFailure)
 		}
@@ -148,11 +183,24 @@ func (v Verdict) Normalize() (Verdict, error) {
 		if len(note) > domainskills.MaxFeedbackNoteRunes {
 			note = note[:domainskills.MaxFeedbackNoteRunes]
 		}
-		normalized := RawRecommendation{Outcome: recommendation.Outcome, Note: string(note), Confidence: recommendation.Confidence}
-		if _, ok := seenRecommendations[normalized]; ok {
+		normalized := RawRecommendation{
+			IssueType:              recommendation.IssueType,
+			ChangeType:             recommendation.ChangeType,
+			EvidenceMessageIndices: slices.Clone(recommendation.EvidenceMessageIndices),
+			Outcome:                recommendation.Outcome,
+			Note:                   string(note),
+			Confidence:             recommendation.Confidence,
+		}
+		if slices.ContainsFunc(recommendations, func(existing RawRecommendation) bool {
+			return existing.IssueType == normalized.IssueType &&
+				existing.ChangeType == normalized.ChangeType &&
+				slices.Equal(existing.EvidenceMessageIndices, normalized.EvidenceMessageIndices) &&
+				existing.Outcome == normalized.Outcome &&
+				existing.Note == normalized.Note &&
+				existing.Confidence == normalized.Confidence
+		}) {
 			continue
 		}
-		seenRecommendations[normalized] = struct{}{}
 		recommendations = append(recommendations, normalized)
 	}
 
@@ -172,7 +220,7 @@ func validateRawRecommendations(raw json.RawMessage) error {
 	if err := json.Unmarshal(raw, &recommendations); err != nil {
 		return fmt.Errorf("parse efficacy verdict recommendations: %w: %w", ErrModelFailure, err)
 	}
-	required := []string{"outcome", "note", "confidence"}
+	required := []string{"issue_type", "change_type", "evidence_message_indices", "outcome", "note", "confidence"}
 	for i, recommendation := range recommendations {
 		for name, value := range recommendation {
 			if !slices.Contains(required, name) {
@@ -186,6 +234,44 @@ func validateRawRecommendations(raw json.RawMessage) error {
 			if _, ok := recommendation[name]; !ok {
 				return fmt.Errorf("parse efficacy verdict recommendation %d: missing field %q: %w", i, name, ErrModelFailure)
 			}
+		}
+	}
+	return nil
+}
+
+func validateRecommendationEvidence(recommendations []RawRecommendation, transcript *Transcript) error {
+	var shownIndices map[int]struct{}
+	if transcript != nil {
+		shownIndices = make(map[int]struct{}, len(transcript.Messages))
+		for _, message := range transcript.Messages {
+			shownIndices[message.Index] = struct{}{}
+		}
+	}
+
+	for i, recommendation := range recommendations {
+		if len(recommendation.EvidenceMessageIndices) == 0 {
+			return fmt.Errorf("efficacy verdict recommendation %d has no evidence message indices: %w", i, ErrModelFailure)
+		}
+
+		seen := make(map[int]struct{}, len(recommendation.EvidenceMessageIndices))
+		previous := 0
+		for j, index := range recommendation.EvidenceMessageIndices {
+			if index <= 0 {
+				return fmt.Errorf("efficacy verdict recommendation %d has non-positive evidence message index %d: %w", i, index, ErrModelFailure)
+			}
+			if _, ok := seen[index]; ok {
+				return fmt.Errorf("efficacy verdict recommendation %d has duplicate evidence message index %d: %w", i, index, ErrModelFailure)
+			}
+			if j > 0 && index < previous {
+				return fmt.Errorf("efficacy verdict recommendation %d has unsorted evidence message indices: %w", i, ErrModelFailure)
+			}
+			if shownIndices != nil {
+				if _, ok := shownIndices[index]; !ok {
+					return fmt.Errorf("efficacy verdict recommendation %d cites message index %d that is not shown: %w", i, index, ErrModelFailure)
+				}
+			}
+			seen[index] = struct{}{}
+			previous = index
 		}
 	}
 	return nil

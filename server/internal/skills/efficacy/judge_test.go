@@ -275,6 +275,19 @@ func TestJudgeCallTreatsUnparseableOutputAsModelFailure(t *testing.T) {
 	require.ErrorIs(t, err, ErrModelFailure)
 }
 
+func TestJudgeCallTreatsInvalidEvidenceAsModelFailure(t *testing.T) {
+	t.Parallel()
+
+	client := &mockCompletionClient{}
+	client.On("GetObjectCompletion", mock.Anything, mock.Anything).
+		Return(judgeResponse(`{"score":0.5,"rationale":"ok","est_turns_saved":null,"est_minutes_saved":null,"roi_confidence":null,"flags":[],"recommendations":[{"issue_type":"requirement_omitted","change_type":"reinforce_existing_requirement","evidence_message_indices":[2],"outcome":"did_not_help","note":"The required lint did not run.","confidence":"high"}]}`), nil).Once()
+
+	_, err := newTestJudge(t, client).call(t.Context(), testJudgeInput())
+
+	require.ErrorIs(t, err, ErrModelFailure)
+	require.NotErrorIs(t, err, ErrRetryable)
+}
+
 func TestJudgeCallTreatsEmptyContentAsModelFailure(t *testing.T) {
 	t.Parallel()
 
@@ -285,6 +298,30 @@ func TestJudgeCallTreatsEmptyContentAsModelFailure(t *testing.T) {
 	_, err := newTestJudge(t, client).call(t.Context(), testJudgeInput())
 
 	require.ErrorIs(t, err, ErrModelFailure)
+}
+
+func TestSystemPromptSuppressesPrescribedCorrectionsButAllowsComplaints(t *testing.T) {
+	t.Parallel()
+
+	require.Equal(t, "v11", JudgePromptVersion)
+
+	for _, issueType := range recommendationIssueTypes {
+		require.Contains(t, SystemPrompt, issueType)
+	}
+	for _, changeType := range recommendationChangeTypes {
+		require.Contains(t, SystemPrompt, changeType)
+	}
+	require.Contains(t, SystemPrompt, "every directly supporting message")
+	require.Contains(t, SystemPrompt, "Sort indices ascending and include each index once")
+	require.Contains(t, SystemPrompt, "Never cite omitted or nonexistent messages")
+	require.Contains(t, SystemPrompt, "user's complaint about the skill is evidence")
+	require.Contains(t, SystemPrompt, "OMIT every recommendation about that SAME problem entirely")
+	require.Contains(t, SystemPrompt, "A remedy may be prospective")
+	require.Contains(t, SystemPrompt, "user-directed skill change meant to prevent the observed same problem in future sessions counts")
+	require.Contains(t, SystemPrompt, "even if it cannot repair the current session")
+	require.Contains(t, SystemPrompt, "Do not emit even an evidence-only note about it")
+	require.Contains(t, SystemPrompt, "do not emit it when the skill still performed poorly")
+	require.Contains(t, SystemPrompt, "distinct problem for which the user did not prescribe a remedy")
 }
 
 func TestBuildJudgePromptCarriesSkillAndTranscript(t *testing.T) {
@@ -376,8 +413,23 @@ func TestVerdictSchemaIsStrictOverEveryVerdictField(t *testing.T) {
 	require.True(t, ok)
 	recommendationRequired, ok := items["required"].([]string)
 	require.True(t, ok)
-	require.ElementsMatch(t, []string{"outcome", "note", "confidence"}, recommendationRequired)
+	require.ElementsMatch(t, []string{"issue_type", "change_type", "evidence_message_indices", "outcome", "note", "confidence"}, recommendationRequired)
 	require.Len(t, recommendationProperties, len(recommendationRequired))
+	issueTypeSchema, ok := recommendationProperties["issue_type"].(map[string]any)
+	require.True(t, ok)
+	require.Equal(t, recommendationIssueTypes, issueTypeSchema["enum"])
+	changeTypeSchema, ok := recommendationProperties["change_type"].(map[string]any)
+	require.True(t, ok)
+	require.Equal(t, recommendationChangeTypes, changeTypeSchema["enum"])
+	evidenceSchema, ok := recommendationProperties["evidence_message_indices"].(map[string]any)
+	require.True(t, ok)
+	// Some structured-output providers reject minItems and uniqueItems. The
+	// transcript-aware verdict parser enforces both constraints instead.
+	require.NotContains(t, evidenceSchema, "minItems")
+	require.NotContains(t, evidenceSchema, "uniqueItems")
+	evidenceItems, ok := evidenceSchema["items"].(map[string]any)
+	require.True(t, ok)
+	require.Equal(t, "integer", evidenceItems["type"])
 	outcomeSchema, ok := recommendationProperties["outcome"].(map[string]any)
 	require.True(t, ok)
 	require.Equal(t, recommendationOutcomes, outcomeSchema["enum"])

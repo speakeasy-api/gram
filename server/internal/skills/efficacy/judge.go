@@ -36,7 +36,7 @@ const (
 	defaultJudgeTemperature = 0.0
 	// JudgePromptVersion is stored on every score row so a prompt change is
 	// visible as a break in the series rather than as a silent shift.
-	JudgePromptVersion = "v3"
+	JudgePromptVersion = "v11"
 )
 
 var (
@@ -78,10 +78,26 @@ Return a JSON object:
 - "roi_confidence": "low", "med" or "high" for the two estimates above, or null when you gave neither.
 - "flags": zero or more of "ignored" (the agent did not apply the skill), "misapplied" (it applied the skill incorrectly), "partially_followed" (it applied some of the skill), "harmful" (following the skill made the outcome worse).
 - "recommendations": zero or more raw feedback recommendations supported by distinct evidence in the transcript. These are evidence, not find/replace edits or edit suggestions. Each recommendation is an object with:
+  - "issue_type": classify the observed problem as exactly one of:
+    - "requirement_omitted": the skill states an applicable requirement, but the agent omitted it.
+    - "priority_violated": the skill states an applicable priority or order, but the agent violated it.
+    - "guidance_gap": guidance needed to avoid the observed problem is absent from the skill; do not use this when the skill already states the omitted requirement.
+    - "prohibition_violated": the skill explicitly prohibits an action, but the agent took it.
+    - "harmful_overconstraint": an existing constraint was followed but unnecessarily blocked progress or harmed the result.
+    - "obsolete_guidance": existing guidance is outdated or incorrect and needs replacement.
+  - "change_type": classify the warranted skill change as exactly one of:
+    - "reinforce_existing_requirement": clarify or strengthen an existing requirement.
+    - "reinforce_existing_priority": clarify or strengthen an existing priority or order.
+    - "add_missing_requirement": add guidance that is absent from the skill.
+    - "reinforce_existing_prohibition": clarify or strengthen an existing prohibition.
+    - "relax_constraint": narrow or remove a harmful overconstraint.
+    - "replace_obsolete_guidance": replace outdated or incorrect guidance.
+  - "evidence_message_indices": a nonempty array of positive message "index" values copied from the transcript messages actually shown. Include every directly supporting message needed for the recommendation, no indirect guesses. Sort indices ascending and include each index once. Never cite omitted or nonexistent messages.
   - "outcome": "partially_helped", "did_not_help", "misleading" or "harmful". Do not recommend positive "helped" feedback.
   - "note": a concrete explanation of the evidence for that outcome. Do not echo secrets, credentials or raw payloads.
   - "confidence": "low", "med" or "high". Use "high" only for direct, unambiguous evidence strong enough to retain as durable feedback.
-  Return an empty array when the transcript does not support a non-positive feedback recommendation.
+  Return an empty array when the shown transcript does not directly support a non-positive feedback recommendation.
+  A user's complaint about the skill is evidence and can support a recommendation when the user only describes the problem. However, if any user message explicitly prescribes a remedy for a problem, OMIT every recommendation about that SAME problem entirely. A remedy may be prospective: a user-directed skill change meant to prevent the observed same problem in future sessions counts even if it cannot repair the current session. Do not emit even an evidence-only note about it, and do not emit it when the skill still performed poorly. The prescribed remedy suppresses feedback about that problem regardless of recommendation outcome or wording. You may still recommend a distinct problem for which the user did not prescribe a remedy.
 
 Output ONLY the JSON object, no prose or markdown fences.`
 
@@ -239,7 +255,7 @@ func (j *Judge) call(ctx context.Context, in JudgeInput) (JudgeResult, error) {
 		return JudgeResult{}, fmt.Errorf("empty efficacy judge content: %w", ErrModelFailure)
 	}
 
-	verdict, err := ParseVerdict(raw)
+	verdict, err := ParseVerdict(raw, in.Transcript)
 	if err != nil {
 		return JudgeResult{}, err
 	}
@@ -314,11 +330,17 @@ func VerdictSchema() map[string]any {
 				"items": map[string]any{
 					"type": "object",
 					"properties": map[string]any{
+						"issue_type":  map[string]any{"type": "string", "enum": recommendationIssueTypes},
+						"change_type": map[string]any{"type": "string", "enum": recommendationChangeTypes},
+						"evidence_message_indices": map[string]any{
+							"type":  "array",
+							"items": map[string]any{"type": "integer"},
+						},
 						"outcome":    map[string]any{"type": "string", "enum": recommendationOutcomes},
 						"note":       map[string]any{"type": "string"},
 						"confidence": map[string]any{"type": "string", "enum": recommendationConfidenceValues},
 					},
-					"required":             []string{"outcome", "note", "confidence"},
+					"required":             []string{"issue_type", "change_type", "evidence_message_indices", "outcome", "note", "confidence"},
 					"additionalProperties": false,
 				},
 			},
