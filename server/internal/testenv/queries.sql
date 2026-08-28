@@ -125,6 +125,16 @@ UPDATE deployments_functions SET memory_mib_override = @memory_mib_override, sca
 
 -- name: GetDeploymentFunctionInfraOverrides :many
 SELECT memory_mib_override, scale_override FROM deployments_functions WHERE deployment_id = @deployment_id;
+-- name: SetOpenRouterKeyLifecycleFixture :execrows
+-- Test-only fixture for Stripe lifecycle tests.
+UPDATE openrouter_api_keys
+SET disabled = @disabled,
+    disable_causes = @disable_causes,
+    monthly_credits = @monthly_credits
+WHERE organization_id = @organization_id
+  AND key_type = @key_type
+  AND deleted IS FALSE;
+
 -- name: SeedAuditLogFixture :one
 INSERT INTO audit_logs (organization_id, actor_id, actor_type, action, subject_id, subject_type, metadata)
 VALUES (@organization_id, 'user:<USER_ID>', 'user', @action, 'subject:<SUBJECT_ID>', 'subject', jsonb_build_object('key_type', @key_type::text))

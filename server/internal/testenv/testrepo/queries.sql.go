@@ -2040,6 +2040,39 @@ func (q *Queries) SetOpenRouterAPIKeyHashFixture(ctx context.Context, arg SetOpe
 	return err
 }
 
+const setOpenRouterKeyLifecycleFixture = `-- name: SetOpenRouterKeyLifecycleFixture :execrows
+UPDATE openrouter_api_keys
+SET disabled = $1,
+    disable_causes = $2,
+    monthly_credits = $3
+WHERE organization_id = $4
+  AND key_type = $5
+  AND deleted IS FALSE
+`
+
+type SetOpenRouterKeyLifecycleFixtureParams struct {
+	Disabled       bool
+	DisableCauses  []string
+	MonthlyCredits int64
+	OrganizationID string
+	KeyType        string
+}
+
+// Test-only fixture for Stripe lifecycle tests.
+func (q *Queries) SetOpenRouterKeyLifecycleFixture(ctx context.Context, arg SetOpenRouterKeyLifecycleFixtureParams) (int64, error) {
+	result, err := q.db.Exec(ctx, setOpenRouterKeyLifecycleFixture,
+		arg.Disabled,
+		arg.DisableCauses,
+		arg.MonthlyCredits,
+		arg.OrganizationID,
+		arg.KeyType,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const setOrgWebhookConfig = `-- name: SetOrgWebhookConfig :exec
 UPDATE organization_metadata
 SET svix_app_id = $1,

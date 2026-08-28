@@ -356,7 +356,7 @@ func createOpenRouterKeyFixture(t *testing.T, db *pgxpool.Pool, keyType openrout
 func setOpenRouterKeyLifecycleFixture(t *testing.T, db *pgxpool.Pool, keyType openrouter.KeyType, disabled bool, causes []string, credits int64) {
 	t.Helper()
 
-	rows, err := repo.New(db).SetOpenRouterKeyLifecycleFixture(t.Context(), repo.SetOpenRouterKeyLifecycleFixtureParams{
+	rows, err := testrepo.New(db).SetOpenRouterKeyLifecycleFixture(t.Context(), testrepo.SetOpenRouterKeyLifecycleFixtureParams{
 		Disabled:       disabled,
 		DisableCauses:  causes,
 		MonthlyCredits: credits,

@@ -443,16 +443,6 @@ WHERE organization_id = @organization_id
   AND disable_causes IS NOT NULL
   AND deleted IS FALSE;
 
--- name: SetOpenRouterKeyLifecycleFixture :execrows
--- Test-only fixture for Stripe lifecycle tests.
-UPDATE openrouter_api_keys
-SET disabled = @disabled,
-    disable_causes = @disable_causes,
-    monthly_credits = @monthly_credits
-WHERE organization_id = @organization_id
-  AND key_type = @key_type
-  AND deleted IS FALSE;
-
 -- name: CreateStripeBillingMetadataFixture :exec
 -- Test-only fixture for webhook tests that need a Stripe customer association.
 INSERT INTO billing_metadata (organization_id, stripe_customer_id)
