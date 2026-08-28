@@ -25,6 +25,7 @@ import (
 type disableTestUpstream struct {
 	server    *httptest.Server
 	mu        sync.Mutex
+	requests  int
 	patches   []string
 	onPatch   func()
 	patchHash string
@@ -38,6 +39,13 @@ func (u *disableTestUpstream) recorded() []string {
 	defer u.mu.Unlock()
 
 	return append([]string(nil), u.patches...)
+}
+
+func (u *disableTestUpstream) requestCount() int {
+	u.mu.Lock()
+	defer u.mu.Unlock()
+
+	return u.requests
 }
 
 // interceptPatch runs fn while a patch is in flight.
@@ -73,6 +81,9 @@ func newDisableTestProvisioner(t *testing.T, orgID string) (*OpenRouter, *disabl
 
 	upstream := &disableTestUpstream{server: nil, mu: sync.Mutex{}, patches: nil, onPatch: nil, patchHash: "hash-1"}
 	upstream.server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		upstream.mu.Lock()
+		upstream.requests++
+		upstream.mu.Unlock()
 		w.Header().Set("Content-Type", "application/json")
 
 		switch r.Method {

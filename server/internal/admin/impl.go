@@ -1154,7 +1154,7 @@ func (s *Service) RearmTrial(ctx context.Context, payload *gen.RearmTrialPayload
 	defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
 
 	trials := trialsRepo.New(tx)
-	lockedTrial, err := trials.LockTrialLifecycleForRearm(ctx, payload.ID)
+	lockedTrial, err := trials.LockTrialLifecycle(ctx, payload.ID)
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
 		_ = tx.Rollback(ctx)

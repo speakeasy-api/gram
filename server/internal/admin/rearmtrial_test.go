@@ -829,7 +829,7 @@ func TestRearmTrial_LocksLifecycleBeforeAllKeyLocksAndRows(t *testing.T) {
 	seedDemotedTrial(t, ctx, conn, orgID, "enterprise")
 
 	rowLock := testenv.BeginTx(t, ctx, conn)
-	_, err := trialsRepo.New(rowLock).LockTrialLifecycleForRearm(ctx, orgID)
+	_, err := trialsRepo.New(rowLock).LockTrialLifecycle(ctx, orgID)
 	require.NoError(t, err)
 
 	rearmed := make(chan error, 1)

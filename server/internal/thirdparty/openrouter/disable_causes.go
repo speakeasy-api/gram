@@ -2,7 +2,11 @@ package openrouter
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"slices"
+
+	"github.com/jackc/pgx/v5"
 
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter/repo"
 )
@@ -38,6 +42,65 @@ type DisableCauseChange struct {
 
 func unchangedDisableCauseChange() DisableCauseChange {
 	return DisableCauseChange{CauseChanged: false, KeyAccessChanged: false}
+}
+
+type EnterpriseTrialConversionKeyState struct {
+	KeyType        KeyType
+	MonthlyCredits int64
+	Disabled       bool
+	DisableCauses  []string
+}
+
+type EnterpriseTrialConversionKeyChange struct {
+	Exists  bool
+	Changed bool
+	Before  EnterpriseTrialConversionKeyState
+	After   EnterpriseTrialConversionKeyState
+}
+
+func emptyEnterpriseTrialConversionKeyState() EnterpriseTrialConversionKeyState {
+	return EnterpriseTrialConversionKeyState{KeyType: "", MonthlyCredits: 0, Disabled: false, DisableCauses: nil}
+}
+
+// PrepareEnterpriseTrialConversionKeyWithDB atomically prepares one classified
+// local key for enterprise conversion. The caller owns the transaction and must
+// already hold lifecycle and per-key advisory locks; this method acquires none
+// and never contacts OpenRouter. Missing and deleted keys are safe no-ops.
+func (o *OpenRouter) PrepareEnterpriseTrialConversionKeyWithDB(ctx context.Context, db DBTX, orgID string, keyType KeyType, enterpriseFloor int64) (EnterpriseTrialConversionKeyChange, error) {
+	keyType = keyType.OrDefault()
+	if err := keyType.Validate(); err != nil {
+		return EnterpriseTrialConversionKeyChange{}, fmt.Errorf("prepare OpenRouter API key for enterprise trial conversion: %w", err)
+	}
+	if enterpriseFloor < 0 {
+		return EnterpriseTrialConversionKeyChange{}, errors.New("prepare OpenRouter API key for enterprise trial conversion: enterprise floor cannot be negative")
+	}
+
+	row, err := repo.New(db).PrepareEnterpriseTrialConversionKey(ctx, repo.PrepareEnterpriseTrialConversionKeyParams{
+		OrganizationID:  orgID,
+		KeyType:         string(keyType),
+		EnterpriseFloor: enterpriseFloor,
+	})
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		return EnterpriseTrialConversionKeyChange{Exists: false, Changed: false, Before: emptyEnterpriseTrialConversionKeyState(), After: emptyEnterpriseTrialConversionKeyState()}, nil
+	case err != nil:
+		return EnterpriseTrialConversionKeyChange{}, fmt.Errorf("prepare OpenRouter API key for enterprise trial conversion: %w", err)
+	case !row.Classified:
+		return EnterpriseTrialConversionKeyChange{}, errors.New("prepare OpenRouter API key for enterprise trial conversion: disable causes are unclassified")
+	}
+
+	before := EnterpriseTrialConversionKeyState{
+		KeyType: keyType, MonthlyCredits: row.BeforeMonthlyCredits, Disabled: row.BeforeDisabled, DisableCauses: row.BeforeDisableCauses,
+	}
+	after := EnterpriseTrialConversionKeyState{
+		KeyType: keyType, MonthlyCredits: row.AfterMonthlyCredits.Int64, Disabled: row.AfterDisabled.Bool, DisableCauses: row.AfterDisableCauses,
+	}
+	return EnterpriseTrialConversionKeyChange{
+		Exists:  true,
+		Changed: before.MonthlyCredits != after.MonthlyCredits || before.Disabled != after.Disabled || !slices.Equal(before.DisableCauses, after.DisableCauses),
+		Before:  before,
+		After:   after,
+	}, nil
 }
 
 // AcquireAPIKeyBillingTransactionLock serializes a caller-owned business

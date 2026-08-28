@@ -521,7 +521,7 @@ func TestDemoteExpiredTrials_LocksLifecycleBeforeAllKeysAndRows(t *testing.T) {
 	}
 
 	rowLock := testenv.BeginTx(t, ctx, ti.conn)
-	_, err := trialsrepo.New(rowLock).LockTrialLifecycleForRearm(ctx, orgID)
+	_, err := trialsrepo.New(rowLock).LockTrialLifecycle(ctx, orgID)
 	require.NoError(t, err)
 
 	demoted := make(chan error, 1)
