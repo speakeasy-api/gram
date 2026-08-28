@@ -14,7 +14,6 @@ export const PRESIDIO_CATEGORIES: RuleCategory[] = [
   "pii",
   "government_ids",
   "healthcare",
-  "off_policy",
 ];
 
 /** Categories that are currently available */
@@ -29,11 +28,11 @@ export const AVAILABLE_CATEGORIES: Set<RuleCategory> = new Set([
   "custom",
 ]);
 
-/** All rule categories in display order. off_policy renders via the
- * PRESIDIO_CATEGORIES spread — don't also list it explicitly. */
+/** All rule categories in display order. */
 export const ALL_CATEGORIES: RuleCategory[] = [
   "secrets",
   ...PRESIDIO_CATEGORIES,
+  "off_policy",
   "shadow_mcp",
   "destructive_tool",
   "cli_destructive",
