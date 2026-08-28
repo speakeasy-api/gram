@@ -2,6 +2,7 @@ package metamcp_test
 
 import (
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
@@ -14,6 +15,12 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/metamcp"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
+
+	"github.com/jackc/pgx/v5/pgtype"
+
+	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
+	remotesessionsrepo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 )
 
 func TestUpdateMetaMcpServer_RenamesAndAttachesIssuer(t *testing.T) {
@@ -162,4 +169,142 @@ func TestUpdateMetaMcpServer_ChangesVisibility(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.Equal(t, disabled, updated.Visibility)
+}
+
+// A gateway's consent wiring binds member provider clients to a specific
+// issuer, so changing the gateway's issuer must re-run member attachment
+// against the new one rather than silently orphaning every provider tile.
+func TestUpdateMetaMcpServer_RewiresProviderClientsOnIssuerChange(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	projectID := *authCtx.ProjectID
+
+	meta := seedMetaMcpServer(t, ctx, ti, "issuer rewire host")
+	require.NotNil(t, meta.UserSessionIssuerID, "create mints the gateway issuer")
+
+	rsRepo := remotesessionsrepo.New(ti.conn)
+	remoteIssuer, err := rsRepo.CreateRemoteSessionIssuer(ctx, remotesessionsrepo.CreateRemoteSessionIssuerParams{
+		ProjectID:                         conv.ToNullUUID(projectID),
+		OrganizationID:                    conv.ToPGText(authCtx.ActiveOrganizationID),
+		Slug:                              "rewire-rsi-" + uuid.NewString()[:8],
+		Issuer:                            "https://as.example.com/" + uuid.NewString(),
+		Name:                              conv.ToPGTextEmpty(""),
+		LogoAssetID:                       uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		ClientSetupDocumentationUrl:       conv.ToPGTextEmpty(""),
+		AuthorizationEndpoint:             conv.ToPGTextEmpty(""),
+		TokenEndpoint:                     conv.ToPGTextEmpty(""),
+		RevocationEndpoint:                conv.ToPGTextEmpty(""),
+		RegistrationEndpoint:              conv.ToPGTextEmpty(""),
+		JwksUri:                           conv.ToPGTextEmpty(""),
+		ServiceDocumentation:              conv.ToPGTextEmpty(""),
+		OpPolicyUri:                       conv.ToPGTextEmpty(""),
+		OpTosUri:                          conv.ToPGTextEmpty(""),
+		ScopesSupported:                   []string{},
+		GrantTypesSupported:               []string{"authorization_code"},
+		ResponseTypesSupported:            []string{"code"},
+		TokenEndpointAuthMethodsSupported: []string{"none"},
+		CodeChallengeMethodsSupported:     []string{"S256"},
+		ClientIDMetadataDocumentSupported: false,
+		Oidc:                              false,
+		Passthrough:                       false,
+	})
+	require.NoError(t, err)
+
+	client, err := rsRepo.CreateRemoteSessionClient(ctx, remotesessionsrepo.CreateRemoteSessionClientParams{
+		ProjectID:               conv.ToNullUUID(projectID),
+		OrganizationID:          conv.ToPGText(authCtx.ActiveOrganizationID),
+		RemoteSessionIssuerID:   remoteIssuer.ID,
+		ClientID:                "rewire-client",
+		ClientSecretEncrypted:   conv.ToPGTextEmpty(""),
+		ClientIDIssuedAt:        pgtype.Timestamptz{Time: time.Now(), Valid: true},
+		ClientSecretExpiresAt:   pgtype.Timestamptz{Time: time.Time{}, Valid: false},
+		TokenEndpointAuthMethod: conv.ToPGTextEmpty(""),
+		Scope:                   []string{},
+		Audience:                conv.ToPGTextEmpty(""),
+		LegacyCallbackUrl:       false,
+	})
+	require.NoError(t, err)
+
+	serverID := seedMcpServer(t, ctx, ti.conn, projectID)
+	memberServer, err := mcpserversrepo.New(ti.conn).GetMCPServerByIDAndProjectID(ctx, mcpserversrepo.GetMCPServerByIDAndProjectIDParams{
+		ID:        serverID,
+		ProjectID: projectID,
+	})
+	require.NoError(t, err)
+	require.True(t, memberServer.UserSessionIssuerID.Valid)
+	require.NoError(t, rsRepo.AttachRemoteSessionClientToUserSessionIssuer(ctx, remotesessionsrepo.AttachRemoteSessionClientToUserSessionIssuerParams{
+		RemoteSessionClientID: client.ID,
+		UserSessionIssuerID:   memberServer.UserSessionIssuerID.UUID,
+	}))
+	stamped, err := testrepo.New(ti.conn).SetMCPServerRemoteSessionIssuerFixture(ctx, testrepo.SetMCPServerRemoteSessionIssuerFixtureParams{
+		RemoteSessionIssuerID: conv.ToNullUUID(remoteIssuer.ID),
+		ID:                    serverID,
+		ProjectID:             projectID,
+	})
+	require.NoError(t, err)
+	require.Equal(t, int64(1), stamped)
+
+	boundCount := func(issuerID uuid.UUID) int {
+		rows, lerr := rsRepo.ListRemoteSessionClientsForUserSessionIssuer(ctx, remotesessionsrepo.ListRemoteSessionClientsForUserSessionIssuerParams{
+			UserSessionIssuerID: issuerID,
+			ProjectID:           conv.ToNullUUID(projectID),
+			OrganizationID:      conv.ToPGText(authCtx.ActiveOrganizationID),
+		})
+		require.NoError(t, lerr)
+		return len(rows)
+	}
+
+	_, err = ti.service.AddMetaMcpMember(ctx, &gen.AddMetaMcpMemberPayload{
+		SessionToken:     nil,
+		ApikeyToken:      nil,
+		ProjectSlugInput: nil,
+		MetaMcpServerID:  meta.ID,
+		McpServerID:      serverID.String(),
+		SortOrder:        nil,
+	})
+	require.NoError(t, err)
+	require.Equal(t, 1, boundCount(uuid.MustParse(*meta.UserSessionIssuerID)),
+		"add binds the member's client to the original issuer")
+
+	newIssuerID := seedUserSessionIssuer(t, ctx, ti.conn, projectID)
+	_, err = ti.service.UpdateMetaMcpServer(ctx, &gen.UpdateMetaMcpServerPayload{
+		SessionToken:        nil,
+		ApikeyToken:         nil,
+		ProjectSlugInput:    nil,
+		ID:                  meta.ID,
+		Name:                meta.Name,
+		UserSessionIssuerID: conv.PtrEmpty(newIssuerID.String()),
+	})
+	require.NoError(t, err)
+	require.Equal(t, 1, boundCount(newIssuerID),
+		"issuer change must re-bind member provider clients to the new issuer")
+
+	// Clearing the issuer and attaching another later wires members then too:
+	// the previously-anonymous gateway arc.
+	_, err = ti.service.UpdateMetaMcpServer(ctx, &gen.UpdateMetaMcpServerPayload{
+		SessionToken:        nil,
+		ApikeyToken:         nil,
+		ProjectSlugInput:    nil,
+		ID:                  meta.ID,
+		Name:                meta.Name,
+		UserSessionIssuerID: nil,
+	})
+	require.NoError(t, err)
+
+	thirdIssuerID := seedUserSessionIssuer(t, ctx, ti.conn, projectID)
+	_, err = ti.service.UpdateMetaMcpServer(ctx, &gen.UpdateMetaMcpServerPayload{
+		SessionToken:        nil,
+		ApikeyToken:         nil,
+		ProjectSlugInput:    nil,
+		ID:                  meta.ID,
+		Name:                meta.Name,
+		UserSessionIssuerID: conv.PtrEmpty(thirdIssuerID.String()),
+	})
+	require.NoError(t, err)
+	require.Equal(t, 1, boundCount(thirdIssuerID),
+		"gaining an issuer must wire existing members' provider clients")
 }

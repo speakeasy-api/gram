@@ -539,6 +539,54 @@ func (q *Queries) GetMetaMCPServerByIDAndProjectID(ctx context.Context, arg GetM
 	return i, err
 }
 
+const listMemberProviderIdentities = `-- name: ListMemberProviderIdentities :many
+SELECT DISTINCT s.remote_session_issuer_id, s.user_session_issuer_id
+FROM meta_mcp_server_members m
+JOIN mcp_servers s
+  ON s.id = m.mcp_server_id
+ AND s.project_id = m.project_id
+ AND s.deleted IS FALSE
+WHERE m.meta_mcp_server_id = $1
+  AND m.project_id = $2
+  AND m.deleted IS FALSE
+  AND s.remote_session_issuer_id IS NOT NULL
+  AND s.user_session_issuer_id IS NOT NULL
+ORDER BY s.remote_session_issuer_id, s.user_session_issuer_id
+`
+
+type ListMemberProviderIdentitiesParams struct {
+	MetaMcpServerID uuid.UUID
+	ProjectID       uuid.UUID
+}
+
+type ListMemberProviderIdentitiesRow struct {
+	RemoteSessionIssuerID uuid.NullUUID
+	UserSessionIssuerID   uuid.NullUUID
+}
+
+// Distinct provider identity pairs across a meta server's live members, for
+// re-running consent wiring when the gateway's issuer changes. Ordered so
+// callers take the per-remote-issuer binding locks deterministically.
+func (q *Queries) ListMemberProviderIdentities(ctx context.Context, arg ListMemberProviderIdentitiesParams) ([]ListMemberProviderIdentitiesRow, error) {
+	rows, err := q.db.Query(ctx, listMemberProviderIdentities, arg.MetaMcpServerID, arg.ProjectID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListMemberProviderIdentitiesRow
+	for rows.Next() {
+		var i ListMemberProviderIdentitiesRow
+		if err := rows.Scan(&i.RemoteSessionIssuerID, &i.UserSessionIssuerID); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listMetaMCPMembers = `-- name: ListMetaMCPMembers :many
 SELECT
     m.id,

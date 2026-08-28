@@ -339,3 +339,20 @@ WHERE l.user_session_issuer_id = @member_issuer_id
 ORDER BY c.created_at
 LIMIT 1
 ON CONFLICT DO NOTHING;
+
+-- name: ListMemberProviderIdentities :many
+-- Distinct provider identity pairs across a meta server's live members, for
+-- re-running consent wiring when the gateway's issuer changes. Ordered so
+-- callers take the per-remote-issuer binding locks deterministically.
+SELECT DISTINCT s.remote_session_issuer_id, s.user_session_issuer_id
+FROM meta_mcp_server_members m
+JOIN mcp_servers s
+  ON s.id = m.mcp_server_id
+ AND s.project_id = m.project_id
+ AND s.deleted IS FALSE
+WHERE m.meta_mcp_server_id = @meta_mcp_server_id
+  AND m.project_id = @project_id
+  AND m.deleted IS FALSE
+  AND s.remote_session_issuer_id IS NOT NULL
+  AND s.user_session_issuer_id IS NOT NULL
+ORDER BY s.remote_session_issuer_id, s.user_session_issuer_id;

@@ -267,6 +267,33 @@ func (s *Service) UpdateMetaMcpServer(ctx context.Context, payload *gen.UpdateMe
 		return nil, oops.E(oops.CodeUnexpected, err, "update meta mcp server").LogError(ctx, logger)
 	}
 
+	// Consent wiring binds member provider clients to a specific issuer, so
+	// pointing the gateway at a different issuer (or gaining one) would
+	// silently orphan every members' tiles. Re-run the member attachment
+	// against the new issuer instead of leaving that to a manual ceremony.
+	if issuerID.Valid && (!existing.UserSessionIssuerID.Valid || existing.UserSessionIssuerID.UUID != issuerID.UUID) {
+		identities, ierr := txRepo.ListMemberProviderIdentities(ctx, repo.ListMemberProviderIdentitiesParams{
+			MetaMcpServerID: serverID,
+			ProjectID:       *authCtx.ProjectID,
+		})
+		if ierr != nil {
+			return nil, oops.E(oops.CodeUnexpected, ierr, "list member provider identities").LogError(ctx, logger)
+		}
+		for _, identity := range identities {
+			if lerr := txRepo.LockRemoteSessionIssuerForClientBinding(ctx, identity.RemoteSessionIssuerID.UUID); lerr != nil {
+				return nil, oops.E(oops.CodeUnexpected, lerr, "lock remote session issuer for client binding").LogError(ctx, logger)
+			}
+			if _, aerr := txRepo.AutoAttachMemberProviderClient(ctx, repo.AutoAttachMemberProviderClientParams{
+				GatewayIssuerID: issuerID.UUID,
+				ProjectID:       *authCtx.ProjectID,
+				MemberIssuerID:  identity.UserSessionIssuerID.UUID,
+				RemoteIssuerID:  identity.RemoteSessionIssuerID.UUID,
+			}); aerr != nil {
+				return nil, oops.E(oops.CodeUnexpected, aerr, "attach member provider client").LogError(ctx, logger)
+			}
+		}
+	}
+
 	afterView := mv.BuildMetaMcpServerView(updated)
 
 	if err := s.audit.LogMetaMcpServerUpdate(ctx, dbtx, audit.LogMetaMcpServerUpdateEvent{
