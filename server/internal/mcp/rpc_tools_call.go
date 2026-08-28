@@ -169,6 +169,8 @@ func handleToolsCall(
 		metrics.RecordMCPToolCall(ctx, toolset.OrganizationID, mcpURL, params.Name)
 	}
 	if identityCoverage != nil {
+		// Only direct HandleToolsCall callers reach this recorder. Routed HTTP
+		// calls record their canonical fronting server at the hosted checkpoint.
 		identityCoverage.Record(ctx, toolset.OrganizationID, mcpmetrics.KillswitchSurfaceHosted, mcptoolexecution.ServerSource{FrontingServerID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}})
 	}
 

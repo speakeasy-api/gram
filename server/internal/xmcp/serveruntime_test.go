@@ -746,7 +746,6 @@ func TestServeMCP_IssuerGatedToolsetBackend_HappyPath(t *testing.T) {
 	require.Equal(t, http.StatusOK, rr.Code, "ServeMCP should respond 200; body=%s", rr.Body.String())
 }
 
-//nolint:glint // Integration fixture writes the three-table immutable prescription aggregate in an isolated database.
 func TestServeMCP_IssuerGatedToolsetBackend_Killswitch(t *testing.T) {
 	t.Parallel()
 
@@ -765,24 +764,18 @@ func TestServeMCP_IssuerGatedToolsetBackend_Killswitch(t *testing.T) {
 	endpoint := mcp.NewResolvedMcpEndpointFromMcpServer(&mcpEndpoint, &mcpServer, authCtx.ActiveOrganizationID)
 	accessToken := mintIssuerGatedAccessToken(t, ctx, ti, slug, endpoint, issuerID, urn.NewUserSubject(authCtx.UserID))
 
-	prescriptionID := uuid.New()
-	var databaseNow time.Time
-	require.NoError(t, ti.conn.QueryRow(ctx, "SELECT clock_timestamp()").Scan(&databaseNow))
-	_, err = ti.conn.Exec(ctx, `
-		INSERT INTO killswitch_prescriptions (id, organization_id, definition_key, principal_kind, principal_key, resource_kind, current_version)
-		VALUES ($1, $2, $3, $4, $5, $6, 1)
-	`, prescriptionID, authCtx.ActiveOrganizationID, string(mcptoolexecution.DefinitionKeyMCPToolExecution), string(mcptoolexecution.PrincipalKindUser), authCtx.UserID, string(mcptoolexecution.ResourceKindMCPServer))
-	require.NoError(t, err)
-	_, err = ti.conn.Exec(ctx, `
-		INSERT INTO killswitch_prescription_versions (
-		  organization_id, prescription_id, version, state, resource_scope, starts_at, activated_at, internal_note, external_note
-		) VALUES ($1, $2, 1, 'active', 'selected', $3, $3, 'test context', 'Exact x/mcp note.')
-	`, authCtx.ActiveOrganizationID, prescriptionID, databaseNow.Add(-time.Minute))
-	require.NoError(t, err)
-	_, err = ti.conn.Exec(ctx, `
-		INSERT INTO killswitch_prescription_version_resources (organization_id, prescription_id, version, resource_key)
-		VALUES ($1, $2, 1, $3)
-	`, authCtx.ActiveOrganizationID, prescriptionID, mcpServer.ID.String())
+	err = testrepo.New(ti.conn).InsertKillswitchPrescriptionFixture(ctx, testrepo.InsertKillswitchPrescriptionFixtureParams{
+		PrescriptionID: uuid.New(),
+		OrganizationID: authCtx.ActiveOrganizationID,
+		DefinitionKey:  string(mcptoolexecution.DefinitionKeyMCPToolExecution),
+		PrincipalKind:  string(mcptoolexecution.PrincipalKindUser),
+		PrincipalKey:   authCtx.UserID,
+		ResourceKind:   string(mcptoolexecution.ResourceKindMCPServer),
+		ResourceScope:  "selected",
+		InternalNote:   "test context",
+		ExternalNote:   "Exact x/mcp note.",
+		ResourceKeys:   []string{mcpServer.ID.String()},
+	})
 	require.NoError(t, err)
 
 	body := []byte(`{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"missing_tool","arguments":{}}}`)

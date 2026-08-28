@@ -62,7 +62,7 @@ func TestHostedCheckpoint_ReevaluatesAndFailsClosed(t *testing.T) {
 		}, observation)
 	}
 
-	_, err = conn.Exec(t.Context(), "ALTER TABLE killswitch_prescriptions RENAME TO killswitch_prescriptions_unavailable") //nolint:glint // notestingrawsql: deliberate DDL breakage forces an evaluator database failure
+	_, err = conn.Exec(t.Context(), "DROP TABLE killswitch_prescriptions CASCADE") //nolint:glint // notestingrawsql: deterministic DDL breakage in this test's isolated database forces an evaluator failure
 	require.NoError(t, err)
 
 	disposition, err = checkpoint.Evaluate(ctx, orgID, source)

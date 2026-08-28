@@ -102,7 +102,7 @@ func NewRegistration(db *pgxpool.Pool) killswitches.Registration {
 				PrincipalSource:  "Validated user-session provenance (mcpidentity), revalidated as an active organization member on every covered call.",
 				ResourceSource:   "Fronting mcp_servers.id resolved from the mcp_endpoint route, validated as a live server in a live project of the organization. Never a slug, URL, toolset, backend ID, or caller-provided value.",
 				Checkpoint:       "After trusted authentication, tenant resolution, and acting-user validation on hosted MCP tools/call dispatch.",
-				ProtectedWork:    "Loading or applying tool configuration and dispatching local, dynamic, function, platform, or external-MCP proxy execution.",
+				ProtectedWork:    "Loading or applying tool configuration, resolving protected credentials, and dispatching local, dynamic, function, platform, or external-MCP proxy execution.",
 				FailurePolicy:    killswitches.FailurePolicyFailClosed,
 				TransportAdapter: TransportAdapterHostedJSONRPC,
 				EnforcementOwner: EnforcementOwner,

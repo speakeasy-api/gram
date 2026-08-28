@@ -14,6 +14,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/killswitches/mcptoolexecution"
 	remotesessionsrepo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
@@ -62,7 +63,7 @@ func TestServePublic_HostedToolsCallKillswitch(t *testing.T) {
 		require.JSONEq(t, `{"jsonrpc":"2.0","id":3,"error":{"code":-32003,"message":"Tool calls paused for maintenance.","data":{"code":"mcp_tool_calls_paused"}}}`, response.Body.String(), toolName)
 	}
 
-	_, err = ti.conn.Exec(ctx, "ALTER TABLE killswitch_prescriptions RENAME TO killswitch_prescriptions_unavailable") //nolint:glint // notestingrawsql: deliberate DDL breakage forces an evaluator database failure
+	_, err = ti.conn.Exec(ctx, "DROP TABLE killswitch_prescriptions CASCADE") //nolint:glint // notestingrawsql: deterministic DDL breakage in this test's isolated database forces an evaluator failure
 	require.NoError(t, err)
 
 	unavailable, err := servePublicHTTP(t, ctx, ti, endpointSlug, makeToolsCallBody("missing_tool"), userToken, sessionHeaders)
@@ -104,27 +105,20 @@ func attachMissingRemoteSession(t *testing.T, ctx context.Context, ti *testInsta
 	}))
 }
 
-//nolint:glint // Integration fixture writes the three-table immutable prescription aggregate atomically in an isolated database.
 func insertHostedKillswitchPrescription(t *testing.T, ctx context.Context, ti *testInstance, organizationID, userID string, serverID uuid.UUID, externalNote string) {
 	t.Helper()
 
-	prescriptionID := uuid.New()
-	var databaseNow time.Time
-	require.NoError(t, ti.conn.QueryRow(ctx, "SELECT clock_timestamp()").Scan(&databaseNow))
-	_, err := ti.conn.Exec(ctx, `
-		INSERT INTO killswitch_prescriptions (id, organization_id, definition_key, principal_kind, principal_key, resource_kind, current_version)
-		VALUES ($1, $2, $3, $4, $5, $6, 1)
-	`, prescriptionID, organizationID, string(mcptoolexecution.DefinitionKeyMCPToolExecution), string(mcptoolexecution.PrincipalKindUser), userID, string(mcptoolexecution.ResourceKindMCPServer))
-	require.NoError(t, err)
-	_, err = ti.conn.Exec(ctx, `
-		INSERT INTO killswitch_prescription_versions (
-		  organization_id, prescription_id, version, state, resource_scope, starts_at, activated_at, internal_note, external_note
-		) VALUES ($1, $2, 1, 'active', 'selected', $3, $3, 'test context', $4)
-	`, organizationID, prescriptionID, databaseNow.Add(-time.Minute), externalNote)
-	require.NoError(t, err)
-	_, err = ti.conn.Exec(ctx, `
-		INSERT INTO killswitch_prescription_version_resources (organization_id, prescription_id, version, resource_key)
-		VALUES ($1, $2, 1, $3)
-	`, organizationID, prescriptionID, serverID.String())
+	err := testrepo.New(ti.conn).InsertKillswitchPrescriptionFixture(ctx, testrepo.InsertKillswitchPrescriptionFixtureParams{
+		PrescriptionID: uuid.New(),
+		OrganizationID: organizationID,
+		DefinitionKey:  string(mcptoolexecution.DefinitionKeyMCPToolExecution),
+		PrincipalKind:  string(mcptoolexecution.PrincipalKindUser),
+		PrincipalKey:   userID,
+		ResourceKind:   string(mcptoolexecution.ResourceKindMCPServer),
+		ResourceScope:  "selected",
+		InternalNote:   "test context",
+		ExternalNote:   externalNote,
+		ResourceKeys:   []string{serverID.String()},
+	})
 	require.NoError(t, err)
 }

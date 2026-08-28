@@ -3,6 +3,34 @@ INSERT INTO chat_messages (chat_id, project_id, role, content)
 VALUES (@chat_id, @project_id, @role, @content)
 RETURNING id;
 
+-- name: InsertKillswitchPrescriptionFixture :exec
+WITH fixture_clock AS (
+  SELECT clock_timestamp() - INTERVAL '1 hour' AS active_since
+),
+inserted_prescription AS (
+  INSERT INTO killswitch_prescriptions (
+    id, organization_id, definition_key, principal_kind, principal_key, resource_kind, current_version
+  ) VALUES (
+    @prescription_id, @organization_id, @definition_key, @principal_kind, @principal_key, @resource_kind, 1
+  )
+  RETURNING organization_id, id
+),
+inserted_version AS (
+  INSERT INTO killswitch_prescription_versions (
+    organization_id, prescription_id, version, state, resource_scope, starts_at, expires_at, activated_at, internal_note, external_note
+  )
+  SELECT organization_id, id, 1, 'active', @resource_scope, active_since, NULL, active_since, @internal_note, @external_note
+  FROM inserted_prescription
+  CROSS JOIN fixture_clock
+  RETURNING organization_id, prescription_id, version
+)
+INSERT INTO killswitch_prescription_version_resources (
+  organization_id, prescription_id, version, resource_key
+)
+SELECT organization_id, prescription_id, version, resource_key
+FROM inserted_version
+CROSS JOIN unnest(@resource_keys::text[]) AS resource(resource_key);
+
 -- name: ForceSoftDeleteChat :exec
 -- Bypasses the production SoftDeleteChat guard (which refuses to delete a chat
 -- backing a live assistant thread) so tests can wedge the database into the
