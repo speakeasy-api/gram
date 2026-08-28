@@ -34420,7 +34420,7 @@ paths:
         name: ProductFeatures
   /rpc/productFeatures.set:
     post:
-      description: Enable or disable an organization feature flag.
+      description: Enable or disable an organization feature flag. Staff-managed entitlements (such as sso and scim) additionally require a Speakeasy platform administrator; organization admins can set only the org-settable operational toggles.
       operationId: setProductFeature
       parameters:
         - allowEmptyValue: true
