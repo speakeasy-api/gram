@@ -1169,11 +1169,13 @@ func (s *Service) RearmTrial(ctx context.Context, payload *gen.RearmTrialPayload
 	}
 
 	if !lockedTrial.DemotedAt.Valid {
-		wasRearmed, auditErr := repo.New(tx).AdminHasEnterpriseTrialRearmAudit(ctx, payload.ID)
-		if auditErr != nil {
-			return nil, oops.E(oops.CodeUnexpected, auditErr, "check prior trial re-arm").LogError(ctx, logger)
+		recordedEndsAt, auditErr := repo.New(tx).AdminGetLatestEnterpriseTrialRearmEndsAt(ctx, payload.ID)
+		if auditErr != nil && !errors.Is(auditErr, pgx.ErrNoRows) {
+			return nil, oops.E(oops.CodeUnexpected, auditErr, "check prior trial re-arm generation").LogError(ctx, logger)
 		}
-		if wasRearmed && lockedTrial.EndsAt.Valid && lockedTrial.EndsAt.Time.After(time.Now()) {
+		parsedEndsAt, parseErr := time.Parse(time.RFC3339Nano, recordedEndsAt)
+		sameGeneration := auditErr == nil && parseErr == nil && lockedTrial.EndsAt.Valid && parsedEndsAt.Equal(lockedTrial.EndsAt.Time)
+		if sameGeneration && lockedTrial.EndsAt.Time.After(time.Now()) {
 			if rollbackErr := tx.Rollback(ctx); rollbackErr != nil {
 				return nil, oops.E(oops.CodeUnexpected, rollbackErr, "close trial re-arm retry transaction").LogError(ctx, logger)
 			}

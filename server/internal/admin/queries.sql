@@ -1,10 +1,13 @@
--- name: AdminHasEnterpriseTrialRearmAudit :one
-SELECT EXISTS (
-    SELECT 1
-    FROM audit_logs
-    WHERE organization_id = @organization_id
-      AND action = 'organization:enterprise_trial_rearmed'
-);
+-- name: AdminGetLatestEnterpriseTrialRearmEndsAt :one
+-- A re-arm retry is valid only for the exact lifecycle generation recorded in
+-- the latest matching audit. The organization-first index bounds this backward
+-- seq scan, while action filtering and LIMIT 1 select one candidate.
+SELECT COALESCE(metadata->>'trial_ends_at', '')::text AS trial_ends_at
+FROM audit_logs
+WHERE organization_id = @organization_id
+  AND action = 'organization:enterprise_trial_rearmed'
+ORDER BY seq DESC
+LIMIT 1;
 
 -- name: GetProjectByID :one
 SELECT id, slug

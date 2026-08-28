@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"slices"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -473,6 +474,66 @@ func TestRearmTrial_UnclassifiedKeyRollsBackLifecycleAndAllKeyChanges(t *testing
 	afterOutbox, err := testrepo.New(conn).CountPublishOutboxRows(ctx)
 	require.NoError(t, err)
 	require.Equal(t, beforeOutbox, afterOutbox)
+}
+
+func seedRearmAuditMetadata(t *testing.T, ctx context.Context, conn *pgxpool.Pool, orgID string, metadata string) {
+	t.Helper()
+	_, err := conn.Exec(ctx, `
+		INSERT INTO audit_logs (organization_id, actor_id, actor_type, action, subject_id, subject_type, metadata)
+		VALUES ($1, 'system', 'user', 'organization:enterprise_trial_rearmed', $1, 'organization', $2::jsonb)
+	`, orgID, metadata)
+	require.NoError(t, err)
+}
+
+func TestRearmTrial_HistoricalRearmAuditDoesNotAuthorizeNewActiveGenerationRetry(t *testing.T) {
+	t.Parallel()
+
+	ctx, svc, conn, upstream := newProductionRearmService(t)
+	const orgID = "org_rearm_old_generation"
+	currentEndsAt := time.Now().UTC().Add(21 * 24 * time.Hour).Truncate(time.Microsecond)
+	oldEndsAt := currentEndsAt.Add(-7 * 24 * time.Hour)
+	seedOrg(t, ctx, conn, orgFixture{id: orgID, name: orgID, slug: orgID, accountType: "enterprise", whitelisted: true})
+	seedTrial(t, ctx, conn, trialFixture{orgID: orgID, tier: "enterprise", endsAt: currentEndsAt})
+	for _, keyType := range openrouter.AllKeyTypes {
+		seedOpenRouterKey(t, ctx, conn, orgID, keyFixture{keyType: keyType, monthlyCredits: 50, disabled: false})
+	}
+	seedRearmAuditMetadata(t, ctx, conn, orgID, fmt.Sprintf(`{"trial_ends_at":%q}`, oldEndsAt.Format(time.RFC3339Nano)))
+
+	_, err := svc.RearmTrial(ctx, &gen.RearmTrialPayload{ID: orgID, Days: 14})
+	requireOopsCode(t, err, oops.CodeConflict)
+	require.Zero(t, upstream.count(), "an unrelated generation must not reconcile keys")
+	require.True(t, currentEndsAt.Equal(readTrial(t, ctx, conn, orgID).EndsAt.Time))
+}
+
+func TestRearmTrial_MalformedOrMissingRetryMetadataIsRejected(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name     string
+		metadata string
+	}{
+		{name: "missing trial end", metadata: `{}`},
+		{name: "malformed trial end", metadata: `{"trial_ends_at":"not-a-time"}`},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			ctx, svc, conn, upstream := newProductionRearmService(t)
+			orgID := "org_rearm_bad_metadata_" + strings.ReplaceAll(tt.name, " ", "_")
+			endsAt := time.Now().UTC().Add(14 * 24 * time.Hour).Truncate(time.Microsecond)
+			seedOrg(t, ctx, conn, orgFixture{id: orgID, name: orgID, slug: orgID, accountType: "enterprise", whitelisted: true})
+			seedTrial(t, ctx, conn, trialFixture{orgID: orgID, tier: "enterprise", endsAt: endsAt})
+			for _, keyType := range openrouter.AllKeyTypes {
+				seedOpenRouterKey(t, ctx, conn, orgID, keyFixture{keyType: keyType, monthlyCredits: 50, disabled: false})
+			}
+			seedRearmAuditMetadata(t, ctx, conn, orgID, tt.metadata)
+
+			_, err := svc.RearmTrial(ctx, &gen.RearmTrialPayload{ID: orgID, Days: 14})
+			requireOopsCode(t, err, oops.CodeConflict)
+			require.Zero(t, upstream.count())
+			require.True(t, endsAt.Equal(readTrial(t, ctx, conn, orgID).EndsAt.Time))
+		})
+	}
 }
 
 func TestRearmTrial_PostCommitReconcileFailureConvergesOnRequestRetry(t *testing.T) {

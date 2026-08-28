@@ -1929,7 +1929,7 @@ paths:
             tags:
                 - admin
             summary: rearmTrial admin
-            description: 'Puts a demoted enterprise trial back on: restores the organization''s account type and whitelist flag, removes only the trial-demotion block from its model provider keys, and gives the trial a fresh run of the given length counted from now. Other key protections remain in force. Retrying a committed re-arm reconciles key state without extending the trial again; a converted or independently running trial is rejected.'
+            description: 'Puts a demoted enterprise trial back on: restores the organization''s account type and whitelist flag, revives its model provider keys, and gives the trial a fresh run of the given length counted from now. Only a demoted trial can be re-armed; one that has converted or is already running is rejected.'
             operationId: adminRearmTrial
             requestBody:
                 required: true

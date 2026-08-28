@@ -158,6 +158,25 @@ func (q *Queries) AdminEnableOrganization(ctx context.Context, id string) (int64
 	return result.RowsAffected(), nil
 }
 
+const adminGetLatestEnterpriseTrialRearmEndsAt = `-- name: AdminGetLatestEnterpriseTrialRearmEndsAt :one
+SELECT COALESCE(metadata->>'trial_ends_at', '')::text AS trial_ends_at
+FROM audit_logs
+WHERE organization_id = $1
+  AND action = 'organization:enterprise_trial_rearmed'
+ORDER BY seq DESC
+LIMIT 1
+`
+
+// A re-arm retry is valid only for the exact lifecycle generation recorded in
+// the latest matching audit. The organization-first index bounds this backward
+// seq scan, while action filtering and LIMIT 1 select one candidate.
+func (q *Queries) AdminGetLatestEnterpriseTrialRearmEndsAt(ctx context.Context, organizationID string) (string, error) {
+	row := q.db.QueryRow(ctx, adminGetLatestEnterpriseTrialRearmEndsAt, organizationID)
+	var trial_ends_at string
+	err := row.Scan(&trial_ends_at)
+	return trial_ends_at, err
+}
+
 const adminGetOrganization = `-- name: AdminGetOrganization :one
 SELECT
     om.id,
@@ -375,22 +394,6 @@ func (q *Queries) AdminGetProjectDetailByID(ctx context.Context, id uuid.UUID) (
 		&i.AssistantCount,
 	)
 	return i, err
-}
-
-const adminHasEnterpriseTrialRearmAudit = `-- name: AdminHasEnterpriseTrialRearmAudit :one
-SELECT EXISTS (
-    SELECT 1
-    FROM audit_logs
-    WHERE organization_id = $1
-      AND action = 'organization:enterprise_trial_rearmed'
-)
-`
-
-func (q *Queries) AdminHasEnterpriseTrialRearmAudit(ctx context.Context, organizationID string) (bool, error) {
-	row := q.db.QueryRow(ctx, adminHasEnterpriseTrialRearmAudit, organizationID)
-	var exists bool
-	err := row.Scan(&exists)
-	return exists, err
 }
 
 const adminListOrganizationMembers = `-- name: AdminListOrganizationMembers :many
