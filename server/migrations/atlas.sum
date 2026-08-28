@@ -1,4 +1,4 @@
-h1:KPjy0bChaCkDAzjrAquPlljgUTS2CTt4osgCGYESc6Q=
+h1:E1vDPUGvAe3cK3vJkGxuuaQtEXsdBsqHADGkFEFgrVg=
 20250502122425_initial-tables.sql h1:Hu3O60/bB4fjZpUay8FzyOjw6vngp087zU+U/wVKn7k=
 20250502130852_initial-indexes.sql h1:oYbnwi9y9PPTqu7uVbSPSALhCY8XF3rv03nDfG4b7mo=
 20250502154250_relax-http-security-fields.sql h1:0+OYIDq7IHmx7CP5BChVwfpF2rOSrRDxnqawXio2EVo=
@@ -371,3 +371,4 @@ h1:KPjy0bChaCkDAzjrAquPlljgUTS2CTt4osgCGYESc6Q=
 20260826174212_add-mcp-servers-user-session-issuer-index.sql h1:bV8x2GJNJerKXp7s1VyyO0GBQygI7ZPXwSdDbhrIftE=
 20260827075204_data_export_routes.sql h1:0jz+w0IdJEIku/z1IFA4Ycpp69EcWegR4tKUJE4F6Ys=
 20260828004317_risk-pagination-indexes.sql h1:Kt04zUHm8wQchZZL6gWP/+3fknMyhlAuiMCClo6MZGQ=
+20260828093248_killswitch-management-stack.sql h1:GC8heITw77zFpBISNyEeDuLEwNpWaH30PYL0BH4IlcE=

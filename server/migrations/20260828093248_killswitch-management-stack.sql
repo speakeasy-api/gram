@@ -1,3 +1,18 @@
+-- atlas:txmode none
+
+-- Create index "audit_logs_organization_subject_action_seq_idx" to table: "audit_logs"
+CREATE INDEX CONCURRENTLY "audit_logs_organization_subject_action_seq_idx" ON "audit_logs" ("organization_id", "subject_type", "subject_id", "action", "seq" DESC);
+-- Create "killswitch_customer_list_watermarks" table
+CREATE TABLE "killswitch_customer_list_watermarks" (
+  "organization_id" text NOT NULL,
+  "definition_key" text NOT NULL,
+  "principal_kind" text NOT NULL,
+  "resource_kind" text NOT NULL,
+  "watermark" bigint NOT NULL DEFAULT 0,
+  PRIMARY KEY ("organization_id", "definition_key", "principal_kind", "resource_kind"),
+  CONSTRAINT "killswitch_customer_list_watermarks_organization_id_fkey" FOREIGN KEY ("organization_id") REFERENCES "organization_metadata" ("id") ON UPDATE NO ACTION ON DELETE CASCADE,
+  CONSTRAINT "killswitch_customer_list_watermarks_watermark_check" CHECK (watermark >= 0)
+);
 -- Create "killswitch_prescriptions" table
 CREATE TABLE "killswitch_prescriptions" (
   "id" uuid NOT NULL DEFAULT generate_uuidv7(),
@@ -17,6 +32,8 @@ CREATE TABLE "killswitch_prescriptions" (
   CONSTRAINT "killswitch_prescriptions_principal_kind_check" CHECK (principal_kind <> ''::text),
   CONSTRAINT "killswitch_prescriptions_resource_kind_check" CHECK (resource_kind <> ''::text)
 );
+-- Create index "killswitch_prescriptions_customer_list_idx" to table: "killswitch_prescriptions"
+CREATE INDEX "killswitch_prescriptions_customer_list_idx" ON "killswitch_prescriptions" ("organization_id", "definition_key", "principal_kind", "resource_kind", "created_at" DESC, "id" DESC);
 -- Create index "killswitch_prescriptions_evaluator_idx" to table: "killswitch_prescriptions"
 CREATE INDEX "killswitch_prescriptions_evaluator_idx" ON "killswitch_prescriptions" ("organization_id", "definition_key", "principal_kind", "principal_key", "resource_kind", "id");
 -- Create index "killswitch_prescriptions_organization_id_id_key" to table: "killswitch_prescriptions"
@@ -28,22 +45,28 @@ CREATE TABLE "killswitch_prescription_versions" (
   "version" bigint NOT NULL,
   "state" text NOT NULL,
   "resource_scope" text NOT NULL,
+  "start_mode" text NULL,
   "starts_at" timestamptz NOT NULL,
   "expires_at" timestamptz NULL,
   "activated_at" timestamptz NULL,
   "superseded_at" timestamptz NULL,
   "internal_note" text NOT NULL,
   "external_note" text NOT NULL,
+  "list_watermark" bigint NOT NULL DEFAULT 0,
   "created_at" timestamptz NOT NULL DEFAULT clock_timestamp(),
   PRIMARY KEY ("prescription_id", "version"),
   CONSTRAINT "killswitch_prescription_versions_prescription_fkey" FOREIGN KEY ("organization_id", "prescription_id") REFERENCES "killswitch_prescriptions" ("organization_id", "id") ON UPDATE NO ACTION ON DELETE CASCADE,
   CONSTRAINT "killswitch_prescription_versions_external_note_check" CHECK ((char_length(external_note) >= 1) AND (char_length(external_note) <= 500)),
   CONSTRAINT "killswitch_prescription_versions_internal_note_check" CHECK ((char_length(internal_note) >= 1) AND (char_length(internal_note) <= 4000)),
   CONSTRAINT "killswitch_prescription_versions_interval_check" CHECK ((expires_at IS NULL) OR (expires_at > starts_at)),
+  CONSTRAINT "killswitch_prescription_versions_list_watermark_check" CHECK (list_watermark >= 0),
   CONSTRAINT "killswitch_prescription_versions_resource_scope_check" CHECK (resource_scope = ANY (ARRAY['all'::text, 'selected'::text])),
+  CONSTRAINT "killswitch_prescription_versions_start_mode_check" CHECK (start_mode = ANY (ARRAY['now'::text, 'at'::text])),
   CONSTRAINT "killswitch_prescription_versions_state_check" CHECK (state <> ''::text),
   CONSTRAINT "killswitch_prescription_versions_version_check" CHECK (version > 0)
 );
+-- Create index "killswitch_prescription_versions_expiry_due_idx" to table: "killswitch_prescription_versions"
+CREATE INDEX "killswitch_prescription_versions_expiry_due_idx" ON "killswitch_prescription_versions" ("expires_at", "prescription_id", "version") WHERE ((state = 'active'::text) AND (expires_at IS NOT NULL) AND ((superseded_at IS NULL) OR (expires_at < superseded_at)));
 -- Create index "killswitch_prescription_versions_org_prescription_version_key" to table: "killswitch_prescription_versions"
 CREATE UNIQUE INDEX "killswitch_prescription_versions_org_prescription_version_key" ON "killswitch_prescription_versions" ("organization_id", "prescription_id", "version");
 -- Create "killswitch_expiry_events" table

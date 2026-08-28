@@ -7732,7 +7732,8 @@ CREATE TABLE IF NOT EXISTS killswitch_customer_list_watermarks (
   resource_kind TEXT NOT NULL,
   watermark BIGINT NOT NULL DEFAULT 0,
   CONSTRAINT killswitch_customer_list_watermarks_pkey PRIMARY KEY (organization_id, definition_key, principal_kind, resource_kind),
-  CONSTRAINT killswitch_customer_list_watermarks_watermark_check CHECK (watermark >= 0)
+  CONSTRAINT killswitch_customer_list_watermarks_watermark_check CHECK (watermark >= 0),
+  CONSTRAINT killswitch_customer_list_watermarks_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE
 );
 
 CREATE TABLE IF NOT EXISTS killswitch_prescription_versions (
