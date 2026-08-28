@@ -367,14 +367,19 @@ BEGIN
   DELETE FROM killswitch_customer_list_watermarks WHERE organization_id = demo_org;
   DELETE FROM killswitch_prescriptions WHERE organization_id = demo_org;
 
-  -- plugin_servers RESTRICTs the mcp_server it attaches, and adding a server
-  -- auto-attaches it to the Default plugin — so in the writable local tenant
-  -- a developer's own servers block the delete below. mcp_servers in turn
-  -- pins its toolset with RESTRICT, so it must go before the toolsets delete.
-  -- Members and both backends' endpoints cascade from mcp_servers and
-  -- meta_mcp_servers.
+  -- Platform catalog registrations use NO ACTION for their component FKs,
+  -- while assistant_mcp_servers and plugin_servers RESTRICT hard server
+  -- deletion. Local users can create all three kinds of attachment, so detach
+  -- this tenant's rows before replacing its canonical servers. Other direct
+  -- mcp_servers dependents (meta members, collection attachments, metadata,
+  -- endpoints, and tool metadata) cascade. mcp_servers in turn pins its
+  -- toolset with RESTRICT, so it must still go before the toolsets delete.
+  DELETE FROM platform_mcp_catalog_registrations
+    WHERE organization_id = demo_org AND project_id = proj_a;
+  DELETE FROM assistant_mcp_servers WHERE project_id = proj_a;
   DELETE FROM plugin_servers WHERE plugin_id IN
-    (SELECT id FROM plugins WHERE organization_id = demo_org);
+    (SELECT id FROM plugins
+     WHERE organization_id = demo_org AND project_id = proj_a);
   DELETE FROM mcp_servers WHERE project_id = proj_a;
   DELETE FROM meta_mcp_servers WHERE organization_id = demo_org;
   -- meta_mcp_servers RESTRICTs its issuer, so issuers clear after it.
