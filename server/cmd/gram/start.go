@@ -186,7 +186,11 @@ func (r localMarketplaceResolver) Resolve(ctx context.Context, token string) (ma
 			AccessToken: "",
 		}, nil
 	}
-	return r.projectRepositories.Resolve(ctx, token)
+	upstream, err := r.projectRepositories.Resolve(ctx, token)
+	if err != nil {
+		return marketplace.Upstream{}, fmt.Errorf("resolve project marketplace: %w", err)
+	}
+	return upstream, nil
 }
 
 func localPlatformMCPMarketplaceURL(serverURL string) string {
