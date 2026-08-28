@@ -132,7 +132,6 @@ type stubProvisioner struct {
 	usageLimit *int64
 
 	usageCalls       []string
-	disableCalls     []string
 	refreshCalls     []string
 	addCauseCalls    []string
 	removeCauseCalls []string
@@ -287,10 +286,6 @@ func (s *stubProvisioner) ReconcileCalls() int {
 }
 
 func (s *stubProvisioner) DisableAPIKey(ctx context.Context, orgID string, keyType openrouter.KeyType) error {
-	s.mu.Lock()
-	s.disableCalls = append(s.disableCalls, orgID+"/"+string(keyType))
-	s.mu.Unlock()
-
 	if err := orgrepo.New(s.conn).DisableOpenRouterAPIKey(ctx, orgrepo.DisableOpenRouterAPIKeyParams{
 		OrganizationID: orgID,
 		KeyType:        string(keyType),
@@ -389,7 +384,6 @@ func newTestServiceWithOptions(t *testing.T, factory provisionerFactory, options
 		usage:        0,
 		usageLimit:   nil,
 		usageCalls:   nil,
-		disableCalls: nil,
 		refreshCalls: nil,
 	}
 	var provisioner openrouter.Provisioner = stub
