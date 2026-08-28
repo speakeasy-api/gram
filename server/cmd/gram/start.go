@@ -167,6 +167,40 @@ import (
 	"github.com/speakeasy-api/gram/tunnel/route"
 )
 
+const (
+	localPlatformMCPMarketplaceToken = "local-platform-mcp-marketplace-000000000000"
+	localPlatformMCPMarketplaceOwner = "local-platform-mcp"
+	localPlatformMCPMarketplaceRepo  = "platform-mcp"
+)
+
+type localMarketplaceResolver struct {
+	projectRepositories marketplace.Resolver
+}
+
+func (r localMarketplaceResolver) Resolve(ctx context.Context, token string) (marketplace.Upstream, error) {
+	if token == localPlatformMCPMarketplaceToken {
+		return marketplace.Upstream{
+			Token:       token,
+			Owner:       localPlatformMCPMarketplaceOwner,
+			Repo:        localPlatformMCPMarketplaceRepo,
+			AccessToken: "",
+		}, nil
+	}
+	upstream, err := r.projectRepositories.Resolve(ctx, token)
+	if err != nil {
+		return marketplace.Upstream{}, fmt.Errorf("resolve project marketplace: %w", err)
+	}
+	return upstream, nil
+}
+
+func localPlatformMCPMarketplaceURL(serverURL string) string {
+	return strings.TrimRight(serverURL, "/") + marketplace.RoutePrefix + localPlatformMCPMarketplaceToken + ".git"
+}
+
+func isLocalPlatformMCPMarketplaceRoute(r *http.Request) bool {
+	return strings.HasPrefix(r.URL.Path, marketplace.RoutePrefix+localPlatformMCPMarketplaceToken+".git/")
+}
+
 // restoreLocalPluginRepositories repairs marketplace rows created before the
 // persistent local publisher existed. Current snapshots survive restarts and
 // are left untouched, preserving their embedded local API keys.
@@ -1160,12 +1194,12 @@ func newStartCommand() *cli.Command {
 			}
 
 			// Marketplace proxy routes (URL-based marketplace.json + git Smart
-			// HTTP for plugin source clones). Mounted via the outermost
-			// mux.Use middleware so /m/ and /p/ paths short-circuit the Goa
-			// mux. Public base URL is server-url by definition - the proxy
-			// lives on this server, so the plugin sources we embed in the
-			// rendered manifest must point back at it. nil when no App is
-			// configured.
+			// HTTP for plugin source clones). Mounted via the outermost mux.Use
+			// middleware so /marketplace/ paths short-circuit the Goa mux. Public
+			// base URL is server-url by definition: the proxy lives on this server,
+			// so rendered plugin sources point back at it. The GitHub proxy is nil
+			// when no App is configured; local startup still serves the dedicated
+			// Platform MCP repository and, without an App, project repositories.
 			//
 			// We wrap the proxy with the recovery middleware before mounting:
 			// the dispatch happens inside the outermost mux.Use, ahead of the
@@ -1176,6 +1210,8 @@ func newStartCommand() *cli.Command {
 				marketplaceServer      *marketplace.Server
 				localMarketplaceServer *marketplace.LocalServer
 				marketplaceRoutes      http.Handler
+				localMarketplaceRoutes http.Handler
+				localPlatformMCPFiles  map[string][]byte
 			)
 			if ghClient != nil {
 				marketplaceServer = marketplace.NewServer(
@@ -1189,6 +1225,27 @@ func newStartCommand() *cli.Command {
 				)
 			} else if platformFixture == nil {
 				logger.InfoContext(ctx, "marketplace proxy: disabled (no github app configured)")
+			}
+			if c.String("environment") == "local" {
+				localPlatformMCPFiles, err = plugins.LocalPlatformMCPFiles(
+					c.String("server-url"),
+					localPlatformMCPMarketplaceURL(c.String("server-url")),
+					fmt.Sprintf("%d", time.Now().Unix()),
+				)
+				if err != nil {
+					return fmt.Errorf("render local Platform MCP marketplace: %w", err)
+				}
+				localMarketplaceServer = marketplace.NewLocalServer(
+					localMarketplaceResolver{projectRepositories: marketplace.NewLocalDBResolver(db)},
+					func(_ context.Context, owner, repo string) (map[string][]byte, error) {
+						if owner != localPlatformMCPMarketplaceOwner || repo != localPlatformMCPMarketplaceRepo {
+							return nil, marketplace.ErrNotFound
+						}
+						return localPlatformMCPFiles, nil
+					},
+					logger,
+				)
+				localMarketplaceRoutes = middleware.NewRecovery(logger)(localMarketplaceServer.Routes())
 			}
 
 			// Hooks binary artifacts (checksum-verifying proxy in front of the
@@ -1207,12 +1264,16 @@ func newStartCommand() *cli.Command {
 						w.WriteHeader(http.StatusOK)
 						return
 					}
+					if localMarketplaceServer != nil && isLocalPlatformMCPMarketplaceRoute(r) {
+						localMarketplaceRoutes.ServeHTTP(w, r)
+						return
+					}
 					if marketplaceServer != nil && marketplaceServer.IsMarketplaceRoute(r) {
 						marketplaceRoutes.ServeHTTP(w, r)
 						return
 					}
 					if localMarketplaceServer != nil && localMarketplaceServer.IsMarketplaceRoute(r) {
-						marketplaceRoutes.ServeHTTP(w, r)
+						localMarketplaceRoutes.ServeHTTP(w, r)
 						return
 					}
 					if hooksArtifactServer.IsHooksReleaseRoute(r) {
@@ -1407,8 +1468,11 @@ func newStartCommand() *cli.Command {
 					InstallationID: 1,
 				}
 				localMarketplaceServer = marketplace.NewLocalServer(
-					marketplace.NewLocalDBResolver(db),
+					localMarketplaceResolver{projectRepositories: marketplace.NewLocalDBResolver(db)},
 					func(ctx context.Context, owner, repo string) (map[string][]byte, error) {
+						if owner == localPlatformMCPMarketplaceOwner && repo == localPlatformMCPMarketplaceRepo {
+							return localPlatformMCPFiles, nil
+						}
 						files, err := localPublisher.MainBranchFiles(ctx, owner, repo)
 						if errors.Is(err, ghclient.ErrRepoNotFound) {
 							return nil, marketplace.ErrNotFound
@@ -1420,7 +1484,7 @@ func newStartCommand() *cli.Command {
 					},
 					logger,
 				)
-				marketplaceRoutes = middleware.NewRecovery(logger)(localMarketplaceServer.Routes())
+				localMarketplaceRoutes = middleware.NewRecovery(logger)(localMarketplaceServer.Routes())
 				logger.InfoContext(ctx, "GitHub publishing for plugins: using local fixture publisher")
 				logger.InfoContext(ctx, "marketplace proxy: using local fixture repository")
 			}

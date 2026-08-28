@@ -8,6 +8,10 @@ import { PlatformMCPInstallWalkthrough } from "./platform-mcp-install-walkthroug
 vi.mock("@/components/code", () => ({
   CodeBlock: ({ children }: { children: string }) => <pre>{children}</pre>,
 }));
+vi.mock("@/lib/utils", async (importOriginal) => ({
+  ...(await importOriginal<Record<string, unknown>>()),
+  getServerURL: () => "https://localhost:8080",
+}));
 
 const MCP_URL = "https://app.example.com/mcp/platform";
 
@@ -70,9 +74,29 @@ describe("PlatformMCPInstallWalkthrough", () => {
     expect(methodButton(/Marketplace install/).disabled).toBe(false);
   });
 
-  // The public repository is the same for every organization, so the commands
-  // are fixed rather than resolved from per-organization package state.
-  it("installs a certified agent from the public marketplace", () => {
+  it("tells Claude Code users how to open OAuth explicitly", () => {
+    render(
+      <PlatformMCPInstallWalkthrough
+        initialClient="claude_code"
+        mcpUrl={MCP_URL}
+      />,
+    );
+
+    expect(screen.getByText(/Open \/mcp in Claude Code/)).toBeTruthy();
+    expect(
+      screen.getByText(/Restarting Claude Code alone may not/),
+    ).toBeTruthy();
+  });
+
+  it("makes restart conditional for an unknown agent", () => {
+    render(
+      <PlatformMCPInstallWalkthrough initialClient="other" mcpUrl={MCP_URL} />,
+    );
+
+    expect(screen.getByText(/Restart your agent if needed/)).toBeTruthy();
+  });
+
+  it("installs a certified agent from the local marketplace in development", () => {
     render(
       <PlatformMCPInstallWalkthrough
         initialClient="claude_code"
@@ -82,11 +106,31 @@ describe("PlatformMCPInstallWalkthrough", () => {
 
     expect(
       screen.getByText(
-        "/plugin marketplace add https://github.com/speakeasy-api/marketplace",
+        "/plugin marketplace add https://localhost:8080/marketplace/local-platform-mcp-marketplace-000000000000.git",
       ),
     ).toBeTruthy();
     expect(
       screen.getByText("/plugin install speakeasy@speakeasy"),
+    ).toBeTruthy();
+  });
+
+  it("clones the OpenCode package into the directory used by the copy step", () => {
+    render(
+      <PlatformMCPInstallWalkthrough
+        initialClient="opencode"
+        mcpUrl={MCP_URL}
+      />,
+    );
+
+    expect(
+      screen.getByText(
+        "git clone https://localhost:8080/marketplace/local-platform-mcp-marketplace-000000000000.git marketplace",
+      ),
+    ).toBeTruthy();
+    expect(
+      screen.getByText(
+        "cp -R marketplace/opencode-plugins/speakeasy/. ~/.config/opencode/",
+      ),
     ).toBeTruthy();
   });
 });

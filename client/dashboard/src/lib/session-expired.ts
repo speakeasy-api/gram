@@ -1,4 +1,5 @@
 import { clearStorageForLogout } from "@/lib/logout-storage";
+import { getApiBaseURL } from "@/lib/utils";
 
 /**
  * Paths that render without a session. A 401 on these is expected (auth.info
@@ -17,7 +18,10 @@ export const UNAUTHENTICATED_PATHS = [
   "/shared",
 ];
 
+const SESSION_CHECK_TIMEOUT_MS = 5_000;
+
 let redirecting = false;
+let sessionCheck: Promise<void> | null = null;
 
 /**
  * Narrows a value taken from the URL to a same-origin path.
@@ -46,27 +50,61 @@ export function safeRedirectPath(value: string | null): string | undefined {
 }
 
 /**
- * Bounce to /login after a query comes back 401. The session cookie is gone,
- * expired, or (in local dev, where the cookie is scoped to `localhost` and
- * ports are ignored) belongs to another worktree's stack. Without this, the
- * 401 throws to AuthProvider's error boundary and the user gets a dead
- * "Something went wrong" screen instead of a login page.
+ * Bounce to /login after a query comes back 401, but only after auth.info
+ * confirms the dashboard session itself is gone. Project-scoped endpoints can
+ * also return 401 when the session is valid but the requested project context
+ * is unavailable; treating those as logout creates a /login redirect loop.
  *
- * A hard navigation rather than a router navigate: it drops the React Query
- * cache built up under the dead session and re-runs the auth bootstrap.
+ * Concurrent query failures share one session check. A hard navigation after
+ * confirmed expiry drops the React Query cache built under the dead session
+ * and re-runs the auth bootstrap.
  */
-export function redirectToLoginOnUnauthorized(): void {
-  if (redirecting) return;
+export function redirectToLoginOnUnauthorized(): Promise<void> {
+  if (redirecting) return Promise.resolve();
 
   const { pathname, search } = window.location;
-  if (UNAUTHENTICATED_PATHS.some((p) => pathname.startsWith(p))) return;
-
-  redirecting = true;
-  clearStorageForLogout();
-  const target = safeRedirectPath(pathname + search);
-  if (!target) {
-    window.location.assign("/login");
-    return;
+  if (UNAUTHENTICATED_PATHS.some((p) => pathname.startsWith(p))) {
+    return Promise.resolve();
   }
-  window.location.assign(`/login?redirect=${encodeURIComponent(target)}`);
+
+  if (sessionCheck) return sessionCheck;
+
+  sessionCheck = (async () => {
+    const controller = new AbortController();
+    let timeout: ReturnType<typeof setTimeout> | undefined;
+
+    try {
+      const response = await Promise.race([
+        fetch(`${getApiBaseURL()}/rpc/auth.info`, {
+          credentials: "include",
+          headers: { Accept: "application/json" },
+          signal: controller.signal,
+        }),
+        new Promise<undefined>((resolve) => {
+          timeout = setTimeout(() => {
+            controller.abort();
+            resolve(undefined);
+          }, SESSION_CHECK_TIMEOUT_MS);
+        }),
+      ]);
+      if (response?.status !== 401) return;
+
+      redirecting = true;
+      clearStorageForLogout();
+      const target = safeRedirectPath(pathname + search);
+      if (!target) {
+        window.location.assign("/login");
+        return;
+      }
+      window.location.assign(`/login?redirect=${encodeURIComponent(target)}`);
+    } catch {
+      // A failed verification request is not proof that the session expired.
+      // Leave the user in place so a transient network error cannot log them out.
+    } finally {
+      clearTimeout(timeout);
+      sessionCheck = null;
+    }
+  })();
+
+  return sessionCheck;
 }

@@ -9,6 +9,8 @@ import (
 	"log/slog"
 	"time"
 
+	redisCache "github.com/go-redis/cache/v9"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
 	"go.opentelemetry.io/otel/trace"
@@ -106,14 +108,23 @@ func (s *Manager) Authenticate(ctx context.Context, key string) (context.Context
 	}
 
 	session, err := s.sessionCache.Get(ctx, SessionCacheKey(key))
-	if err != nil {
+	if errors.Is(err, redisCache.ErrCacheMiss) {
 		return ctx, oops.C(oops.CodeUnauthorized)
+	}
+	if err != nil {
+		return ctx, oops.E(oops.CodeUnavailable, err, "error checking auth session").LogError(ctx, s.logger)
 	}
 
 	validatedSupportAdmin := false
 	if session.SupportOrganizationID != "" {
 		user, userErr := s.userRepo.GetUser(ctx, session.UserID)
-		if userErr != nil || !validSupportSession(session, user.Admin, time.Now()) {
+		if errors.Is(userErr, pgx.ErrNoRows) {
+			return ctx, oops.C(oops.CodeUnauthorized)
+		}
+		if userErr != nil {
+			return ctx, oops.E(oops.CodeUnexpected, userErr, "error checking support session user").LogError(ctx, s.logger)
+		}
+		if !validSupportSession(session, user.Admin, time.Now()) {
 			return ctx, oops.C(oops.CodeUnauthorized)
 		}
 		validatedSupportAdmin = true
