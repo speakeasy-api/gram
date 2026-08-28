@@ -1,0 +1,29 @@
+server/internal/shadowmcp/match.go
+  s_5bb7da1b2bb48b::t_27910c420b245e 7,111-116
+server/internal/risk/policy_bypass.go
+  s_5bb7da1b2bb48b::t_66b8a507dbb4b7 294-295
+server/internal/hooks/shadow_mcp_access_test.go
+  s_5bb7da1b2bb48b::t_27910c420b245e 188-219
+server/internal/risk/policy_bypass_test.go
+  s_5bb7da1b2bb48b::t_27910c420b245e 391-423
+server/internal/shadowmcp/match_test.go
+  s_5bb7da1b2bb48b::t_27910c420b245e 129-134
+server/internal/hooks/shadow_mcp_access.go
+  s_5bb7da1b2bb48b::t_27910c420b245e 66-68
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.6",
+  "base_commit_sha": "caa6b1d1666dd095923419b5c690bf17be39c806",
+  "prompts": {},
+  "sessions": {
+    "s_5bb7da1b2bb48b": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019eb0be-3dcf-7cf1-ba40-ad162ca07261",
+        "model": "gpt-5.5"
+      },
+      "human_author": "tgmendes <tiago@speakeasy.com>"
+    }
+  }
+}

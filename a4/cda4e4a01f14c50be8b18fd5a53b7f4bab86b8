@@ -1,0 +1,80 @@
+server/internal/background/activities/risk_export/repo/db.go
+  s_4989485bd7725a::t_9eb93a667c5578 1-32
+server/.golangci.yaml
+  s_4989485bd7725a::t_440b8fda71772c 443-445
+server/cmd/gram/admin.go
+  s_4989485bd7725a::t_948f5206869c9c 215
+.changeset/risk-export-engine.md
+  s_4989485bd7725a::t_179320f27b7ad0 1-5
+server/internal/background/risk_export_coordinator.go
+  s_4989485bd7725a::t_89742c42920c7e 117-124
+  s_4989485bd7725a::t_74e7d61c6fb11f 201
+  s_4989485bd7725a::t_0156d18008d423 1-116,125-200,202-220,222-256
+  s_4989485bd7725a::t_9d909a9b90522a 221
+server/internal/background/activities/risk_export/queries.sql
+  s_4989485bd7725a::t_d97df82061589f 1-241
+server/cmd/gram/worker.go
+  s_4989485bd7725a::t_27b10b08d98c33 401
+  s_4989485bd7725a::t_2922de539a8dc9 819-820
+  s_4989485bd7725a::t_53b31569740733 135-144
+  s_4989485bd7725a::t_4088a282bc16f2 413-431
+server/internal/background/worker.go
+  s_4989485bd7725a::t_f66de8ef0a8a10 240-241
+  s_4989485bd7725a::t_611bc7af21212a 314-315
+  s_4989485bd7725a::t_74b7c33eceab91 145-146
+  s_4989485bd7725a::t_d8e42d21a36a7c 415
+  s_4989485bd7725a::t_025078e6cd11e1 351-355
+  s_4989485bd7725a::t_83d5cd998ed2d9 91-96
+  s_4989485bd7725a::t_eca94a8db891a0 198-199
+server/cmd/gram/start.go
+  s_4989485bd7725a::t_6bd1b38efb80dc 1242-1247
+  s_4989485bd7725a::t_42e82dbbffa588 489
+server/cmd/gram/streams.go
+  s_4989485bd7725a::t_652c076460a9e7 147
+server/internal/background/activities/risk_export/export.go
+  s_4989485bd7725a::t_62d0024afb0346 146,151
+  s_4989485bd7725a::t_b11fc1ce722a35 1-23,25-26,28-29,31,33-61,68-103,110-145,147-150,152-170,177-178,180-235,237-255,262-273,275-331,333-410,412-413,425,433-442,446-455,457-458,470,478-479,524-555
+  s_4989485bd7725a::t_0ef47687c38cd1 179
+  s_4989485bd7725a::t_5561790ca84ead 236,274
+  s_4989485bd7725a::t_4705429ce966a7 411,414-424,426-432,443-445,456
+  s_4989485bd7725a::t_c78f40e75e955c 27
+  s_4989485bd7725a::t_f64e26986dffac 62-67,104-109,171-176,256-261
+  s_4989485bd7725a::t_a271d4c813ec15 459-469,471-477,480-523
+  s_4989485bd7725a::t_1547f732ba8ae5 30,32
+  s_4989485bd7725a::t_6524d586eb5e0e 24
+  s_4989485bd7725a::t_5ab931df68ad59 332
+  s_4989485bd7725a::t_e925d4086599c3 556-563
+server/internal/background/activities/risk_export/export_test.go
+  s_4989485bd7725a::t_92fa7bd985c344 1-111
+server/internal/background/activities/risk_export/types.go
+  s_4989485bd7725a::t_a24bac521e5a54 1-123
+server/database/sqlc.yaml
+  s_4989485bd7725a::t_5a8bbdd12558e6 418-426
+server/internal/background/activities/risk_export/repo/models.go
+  s_4989485bd7725a::t_9eb93a667c5578 1-5
+server/cmd/gram/deps.go
+  s_4989485bd7725a::t_321322f1c0f25a 229-232
+  s_4989485bd7725a::t_81914d73fd857a 207-210
+server/internal/background/activities.go
+  s_4989485bd7725a::t_deb7b21de7a0d6 112
+  s_4989485bd7725a::t_96726598fe9ac3 324-339
+  s_4989485bd7725a::t_9a4d4dd394b0a6 27
+  s_4989485bd7725a::t_a3301f46d23973 155-156
+  s_4989485bd7725a::t_dd366f42cc4e5f 212
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.13",
+  "base_commit_sha": "a4cda4e4a01f14c50be8b18fd5a53b7f4bab86b8",
+  "prompts": {},
+  "sessions": {
+    "s_4989485bd7725a": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "7bb59add-8fa6-4747-8f8e-bd92cac33513",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Vishal Gowda <vishal@speakeasy.com>"
+    }
+  }
+}

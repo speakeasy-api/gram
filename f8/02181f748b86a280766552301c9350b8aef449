@@ -1,0 +1,21 @@
+server/internal/otel/handler_metric_relay.go
+  s_06bf1e574073ef::t_ecc103c0d65ba2 206-207
+server/internal/otel/impl_metrics_test.go
+  s_06bf1e574073ef::t_797ec54a95d2ff 101-104,107,109,129-132,135,137
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.24",
+  "base_commit_sha": "f802181f748b86a280766552301c9350b8aef449",
+  "prompts": {},
+  "sessions": {
+    "s_06bf1e574073ef": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a03986-81cb-7d02-822b-2a3781869f76",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "tgmendes <tiago@speakeasy.com>"
+    }
+  }
+}

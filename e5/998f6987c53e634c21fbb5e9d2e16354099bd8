@@ -1,0 +1,26 @@
+server/internal/risk/policy_bypass.go
+  s_e22b3b94346bf4::t_dd754850c38e81 129,313,325
+  s_e22b3b94346bf4::t_2d8bdcc696a52b 314,318-322,331
+server/design/risk/design.go
+  s_e22b3b94346bf4::t_b115cd4868dabc 673,703,733,915,1188-1194
+client/dashboard/src/pages/security/detection-rules-data.ts
+  s_e22b3b94346bf4::t_fd34bb9d22f553 281
+server/internal/risk/policy_bypass_token.go
+  s_e22b3b94346bf4::t_3116e048efaa4f 18-19,166
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.3",
+  "base_commit_sha": "e5998f6987c53e634c21fbb5e9d2e16354099bd8",
+  "prompts": {},
+  "sessions": {
+    "s_e22b3b94346bf4": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019e9385-0ca9-70d3-97f9-9fdb17029cd4",
+        "model": "gpt-5.5"
+      },
+      "human_author": "tgmendes <tiago@speakeasy.com>"
+    }
+  }
+}

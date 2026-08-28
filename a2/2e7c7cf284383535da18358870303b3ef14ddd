@@ -1,0 +1,21 @@
+server/internal/permissions/catalog.go
+  s_a5f37a1929f11b::t_5e11083d588488 18-38,136-150
+server/internal/permissions/selector.go
+  s_a5f37a1929f11b::t_5b8cc44f805959 41-43
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.8",
+  "base_commit_sha": "a22e7c7cf284383535da18358870303b3ef14ddd",
+  "prompts": {},
+  "sessions": {
+    "s_a5f37a1929f11b": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019ee04b-25b9-7e42-9e18-fe6de7ddd0f2",
+        "model": "gpt-5.5"
+      },
+      "human_author": "tgmendes <tiago@speakeasy.com>"
+    }
+  }
+}

@@ -1,0 +1,28 @@
+server/internal/chat/impl.go
+  s_3d388cbf35fcf4::t_554d0b68e4b5fd 995-1004,1006-1008
+server/internal/chat/queries.sql
+  s_3d388cbf35fcf4::t_5d7a994b588ac6 275-282
+server/internal/hooks/ingest_hooks_test.go
+  s_3d388cbf35fcf4::t_f9fd82621f1bec 1162-1164
+server/internal/chat/load_chat_test.go
+  s_3d388cbf35fcf4::t_c125de02be7571 208-283
+  s_3d388cbf35fcf4::t_abd8fd37ae9fda 6
+server/internal/chat/repo/queries.sql.go
+  s_3d388cbf35fcf4::t_adb6b4d48af145 1260-1267,1272-1274,1297
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.18",
+  "base_commit_sha": "cf7768cee21bf41a853dd6eb4f8660f76185b77b",
+  "prompts": {},
+  "sessions": {
+    "s_3d388cbf35fcf4": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "acec37c7-b1cc-4ee7-82c8-afd405d96140",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Vishal Gowda <vishal@speakeasy.com>"
+    }
+  }
+}

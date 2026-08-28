@@ -1,0 +1,32 @@
+server/internal/plugins/list_directory_audiences_test.go
+  s_5987dba16de244::t_10c382ff4de9fa 61-62,65-66,74-81,113
+server/internal/plugins/impl_test.go
+  s_5987dba16de244::t_25f16b3ffb34ee 14
+  s_5987dba16de244::t_def4e3cd72794f 854
+  s_5987dba16de244::t_10c382ff4de9fa 778-853,855-858
+  s_5987dba16de244::t_ec01f933702b8a 38,859
+server/internal/plugins/principal.go
+  s_5987dba16de244::t_aff0426f3f682c 143,147-150
+server/internal/plugins/impl.go
+  s_5987dba16de244::t_aff0426f3f682c 1202-1209,1224-1226,1239-1241
+server/internal/thirdparty/workos/queries.sql
+  s_5987dba16de244::t_aff0426f3f682c 314,334
+server/internal/thirdparty/workos/repo/queries.sql.go
+  s_5987dba16de244::t_76f56925b5b99e 432,523
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "e9cf122f6145c3f64c1e6fb980c0110204ef8801",
+  "prompts": {},
+  "sessions": {
+    "s_5987dba16de244": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a01959-19dd-7eb1-8706-1fa16b5d07e0",
+        "model": "gpt-5.6-terra"
+      },
+      "human_author": "tgmendes <tiago@speakeasy.com>"
+    }
+  }
+}

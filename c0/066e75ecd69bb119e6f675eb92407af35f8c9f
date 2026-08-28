@@ -1,0 +1,36 @@
+server/internal/authz/challenge_logger.go
+  s_eeacfc2373467e::t_9560db373ba35b 155
+server/internal/access/syncgrants_test.go
+  s_eeacfc2373467e::t_209ebbcbdafc31 47-52,56,58-60
+server/internal/authz/load_test.go
+  s_eeacfc2373467e::t_9560db373ba35b 105-108
+server/internal/authz/checks.go
+  s_eeacfc2373467e::t_9560db373ba35b 15,18,21,31
+server/internal/authz/grants.go
+  s_eeacfc2373467e::t_9560db373ba35b 338-339,349-351,369-370,385-386
+server/internal/authz/engine_test.go
+  s_eeacfc2373467e::t_209ebbcbdafc31 367-369,394-396,440-442,467-469,502-504,532-534
+server/internal/authz/access.go
+  s_eeacfc2373467e::t_9560db373ba35b 26-27
+server/internal/authz/selector.go
+  s_eeacfc2373467e::t_7b63c51f25e9b0 221-230
+  s_eeacfc2373467e::t_9560db373ba35b 16-23,103-107,109,120-121,133,146,152,163-164,211,218-219
+server/internal/authz/selector_test.go
+  s_eeacfc2373467e::t_209ebbcbdafc31 106,108,111-116,118,317
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "c0066e75ecd69bb119e6f675eb92407af35f8c9f",
+  "prompts": {},
+  "sessions": {
+    "s_eeacfc2373467e": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019e88da-37e5-7a32-b6c2-17c37ebd34cd",
+        "model": "gpt-5.5"
+      },
+      "human_author": "tgmendes <tiago@speakeasy.com>"
+    }
+  }
+}

@@ -1,0 +1,19 @@
+server/design/risk/design.go
+  s_e22b3b94346bf4::t_46685314f3efe9 609,638,669,698,727
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.3",
+  "base_commit_sha": "042499d367d483ab3d27687e9126f42259980af6",
+  "prompts": {},
+  "sessions": {
+    "s_e22b3b94346bf4": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019e9385-0ca9-70d3-97f9-9fdb17029cd4",
+        "model": "gpt-5.5"
+      },
+      "human_author": "tgmendes <tiago@speakeasy.com>"
+    }
+  }
+}

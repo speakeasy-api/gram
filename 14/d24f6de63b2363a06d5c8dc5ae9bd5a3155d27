@@ -1,0 +1,92 @@
+server/internal/authz/load.go
+  s_95d069cf52f7b4::t_50247b5f493d0c 38
+server/internal/authz/resource_grants.go
+  s_95d069cf52f7b4::t_50247b5f493d0c 274
+server/internal/access/listscopes_test.go
+  s_95d069cf52f7b4::t_13c8c0825184f4 35-41
+server/design/access/design.go
+  s_95d069cf52f7b4::t_d7036a168e5777 758,759-762
+  s_95d069cf52f7b4::t_eb6344012674da 694,708
+server/internal/authz/scopes_test.go
+  s_95d069cf52f7b4::t_e598c3235899e4 47,54,74,78,83
+  s_95d069cf52f7b4::t_d668a9a6000bc1 81,86,89-93,96,99-101
+  s_95d069cf52f7b4::t_45bbe9613769a0 1104,1121-1133,52,55-56,58-59,75,84-85,87-88,94-95,97-98
+  s_95d069cf52f7b4::t_2674cafdeffdd7 14
+  s_95d069cf52f7b4::t_9a59a540d6e42a 20
+  s_95d069cf52f7b4::t_c93ad3a8744d01 23-25,38,53,1236,1240
+  s_95d069cf52f7b4::t_57611cac3cc589 26-27,50-51,1237-1238,1241-1242
+  s_95d069cf52f7b4::t_dd1aa632eb49a4 45,49
+  s_95d069cf52f7b4::t_de5caafa1847d0 60-73,76-77,79
+  s_95d069cf52f7b4::t_35e699402e553a 82
+client/dashboard/src/pages/access/roleGrantTransform.ts
+  s_95d069cf52f7b4::t_b116be0bb7bc8e 5,34,84,87-91,97,99,121,138,140,148-151,155,158-161,163,165-167,169,195,201,223,275,277-278,294,23
+  s_95d069cf52f7b4::t_b5e318aa5d02f0 164,168
+  s_95d069cf52f7b4::t_12364ac751395b 3,15-22,24-33,76-79,81,85-86,131,134,162
+client/dashboard/src/pages/access/roundtrip.test.ts
+  s_95d069cf52f7b4::t_d5acb82ae7bf67 76,83-90,92-94,96-132,134-135,137-140,142-146,188,223,32
+  s_95d069cf52f7b4::t_eb6344012674da 68,75,95,136,141
+  s_95d069cf52f7b4::t_176c93df6df546 3,12-31,60-63,80-81,133
+server/gen/http/access/client/encode_decode.go
+  s_95d069cf52f7b4::t_ce4caf155583c1 5500,5538
+server/internal/authz/override.go
+  s_95d069cf52f7b4::t_50247b5f493d0c 31,35,61
+server/internal/authz/access.go
+  s_95d069cf52f7b4::t_ddc26ea7f21811 17-19,52-54,63
+  s_95d069cf52f7b4::t_096b9b6db1b2ec 59-60
+server/internal/authz/checks.go
+  s_95d069cf52f7b4::t_1a37ef7a5d38cc 43
+  s_95d069cf52f7b4::t_ae01e890d0d645 37-38,44-46,49
+server/internal/access/impl.go
+  s_9971e86f513595::t_908660c9f3de54 230,333,335,337,342,360,395,400,403,559,573,586,608,624,635,692,716,726,774,921,931,949,1093,1098,1101,1117,1133,1162,1167
+  s_95d069cf52f7b4::t_a52187f4cf2ba1 437,494,523
+  s_95d069cf52f7b4::t_55d58e7afe9276 225
+  s_95d069cf52f7b4::t_bb01891edb2574 241-251,255-256,260-267,269
+  s_95d069cf52f7b4::t_bc3e582a8b2bfc 257
+  s_95d069cf52f7b4::t_b8fb1c88416574 258-259
+  s_95d069cf52f7b4::t_fec77e1a498120 302,315,497-499
+server/internal/authz/grants.go
+  s_9971e86f513595::t_908660c9f3de54 281,285,293,298
+  s_95d069cf52f7b4::t_c7ce01a464bcc2 229-230
+  s_95d069cf52f7b4::t_21565ec8524457 231,528-532
+  s_95d069cf52f7b4::t_50247b5f493d0c 224,307,367
+  s_95d069cf52f7b4::t_f52bd99cb93c9f 524-526
+server/gen/http/access/server/encode_decode.go
+  s_95d069cf52f7b4::t_ce4caf155583c1 5090,5203
+client/sdk/.speakeasy/gen.lock
+  s_95d069cf52f7b4::t_ce4caf155583c1 548,926,6991,7074
+client/dashboard/src/pages/access/CreateRoleDialog.tsx
+  s_95d069cf52f7b4::t_f05c73ec683758 92,103,288,293,322,337,508,540,553
+  s_95d069cf52f7b4::t_0e647f99811542 180,437-438,441-444
+server/internal/authz/scopes.go
+  s_95d069cf52f7b4::t_61638d2da9de3f 18-19,21,23,25,27,29,31,33,35,37-38,121-122,124,126,128,130,132,134,136,138,140-141
+  s_95d069cf52f7b4::t_eb6344012674da 20,22,24,26,28,32,34,36,123,127,135,137
+  s_95d069cf52f7b4::t_828ba2da412908 30,41-47,60-84,148-168,170,175,187,191
+  s_95d069cf52f7b4::t_4596333b89cb8b 85,169
+  s_95d069cf52f7b4::t_cc81a683c6cf9d 104-107,125,129,131,133,139,144-147,171-174,188-189,192-193
+  s_95d069cf52f7b4::t_8e4818f21651d6 178-179
+  s_95d069cf52f7b4::t_1fc8dbaa53be2f 180-181
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.8",
+  "base_commit_sha": "14d24f6de63b2363a06d5c8dc5ae9bd5a3155d27",
+  "prompts": {},
+  "sessions": {
+    "s_95d069cf52f7b4": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019ecfff-79bd-7ac0-8355-76dbf61e503f",
+        "model": "gpt-5.5"
+      },
+      "human_author": "tgmendes <tiago@speakeasy.com>"
+    },
+    "s_9971e86f513595": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019ecbe4-9fbc-7a21-bc41-2031dbdd6e97",
+        "model": "gpt-5.5"
+      },
+      "human_author": "tgmendes <tiago@speakeasy.com>"
+    }
+  }
+}

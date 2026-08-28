@@ -1,0 +1,57 @@
+client/dashboard/src/pages/security/cel-match-preview.tsx
+  s_e5457925ae460d::t_7eea8c58cca2b9 1-46,50-56,59-64,66-70,72-75,77-118,121-141,143-161,163-268
+  s_e5457925ae460d::t_4e470b0dc63a39 47-49,57-58,65,71,76
+  s_e5457925ae460d::t_7d71d2df554b84 142
+  s_e5457925ae460d::t_d39a5efbe873a5 162
+  s_e5457925ae460d::t_201c49950844b9 119-120
+client/dashboard/src/pages/security/cel-field.tsx
+  s_e5457925ae460d::t_7eea8c58cca2b9 1-62,64-231
+  s_e5457925ae460d::t_3b4a0469cb7280 63
+client/dashboard/src/pages/security/use-cel-status.ts
+  s_e5457925ae460d::t_2b2e1be3d94e81 10,13-15,20,29-30,35
+  s_e5457925ae460d::t_7eea8c58cca2b9 1-9,11-12,16-19,21-28,31-34,36-41
+client/dashboard/src/pages/security/cel-monaco-editor.lazy.tsx
+  s_e5457925ae460d::t_7eea8c58cca2b9 1-12
+client/dashboard/src/pages/security/cel-monaco-editor.tsx
+  s_1e8896a2951d70::t_d948bd08ce21ff 82-86,220,239-260,282-297
+  s_5e8039f9d96e02::t_3775840e1afa48 55-56
+  s_5e8039f9d96e02::t_280f94c79f1a0f 69
+  s_e5457925ae460d::t_7eea8c58cca2b9 1-6,8-29,34-35,37-39,41-45,47-54,57-68,70,72-81,87-88,139-142,144-219,221-228,233-238,261-263,298-315,317-323,325-335,338,341-342,344-459
+  s_e5457925ae460d::t_cbf757da8f3e3f 7,30-33,36,40,46,71,89-138,143,229-232,264-281,316,324,336-337,339-340,343
+client/dashboard/src/pages/security/use-cel-engine.ts
+  s_e5457925ae460d::t_7eea8c58cca2b9 1-32
+client/dashboard/src/pages/security/cel-wasm.ts
+  s_e5457925ae460d::t_7eea8c58cca2b9 1-223
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.9",
+  "base_commit_sha": "c02124878ba0645c83fd5bfe6205b0f3914e661c",
+  "prompts": {},
+  "sessions": {
+    "s_1e8896a2951d70": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019eec3e-6bb9-7893-9caa-b28cfd2709c7",
+        "model": "gpt-5.5"
+      },
+      "human_author": "Vishal Gowda <cartmanboy1991@gmail.com>"
+    },
+    "s_5e8039f9d96e02": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "7204e23b-9892-40b9-9abd-f538d9fb898d",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Vishal Gowda <cartmanboy1991@gmail.com>"
+    },
+    "s_e5457925ae460d": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "27e802d5-8b32-4910-b9fd-7266730d92eb",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": null
+    }
+  }
+}

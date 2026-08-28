@@ -1,0 +1,27 @@
+server/internal/risk/policy_bypass.go
+  s_bfcdcec2fc12dd::t_33fd2595bec275 219-229,234-253,260,269,277,316-322,334,373-383,394,411,612-672
+server/internal/risk/policy_bypass_test.go
+  s_bfcdcec2fc12dd::t_33fd2595bec275 15-16,19,79,107-229,409,412-423,426-446
+client/dashboard/src/components/access/ApprovalRequestsContent.tsx
+  s_bfcdcec2fc12dd::t_33fd2595bec275 4-10,23-24,26,34,44,47-205,361-362,371-372,376,380-395,400-404,406-409,413-436,440-441,454-455,503-507,509-659,662,703-704,714-718,840-842,844-846,866,869-884,895-896,902,907-910,914
+server/design/risk/design.go
+  s_bfcdcec2fc12dd::t_33fd2595bec275 663,674,1198-1204
+client/dashboard/src/components/access/ApprovalRequestsContent.test.tsx
+  s_bfcdcec2fc12dd::t_33fd2595bec275 13-14,20-21,69-76,192-240,287-328,387-411,586-669,684-685,703-710,714-758
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.6",
+  "base_commit_sha": "6e8bc3ba505aa0043595e8b341be89ed08fb3d05",
+  "prompts": {},
+  "sessions": {
+    "s_bfcdcec2fc12dd": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019e978b-d153-7f13-a173-e4e397dcc332",
+        "model": "gpt-5.5"
+      },
+      "human_author": "tgmendes <tiago@speakeasy.com>"
+    }
+  }
+}

@@ -1,0 +1,19 @@
+client/dashboard/package.json
+  s_abcd520a7f90ac::t_9b831009792254 55,110-111
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.8",
+  "base_commit_sha": "f2e4fc62fd95148d9a3887faae57a30da2705f8e",
+  "prompts": {},
+  "sessions": {
+    "s_abcd520a7f90ac": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "761176aa-2da6-444d-b929-9db8bdd22ba2",
+        "model": "claude-sonnet-4-6"
+      },
+      "human_author": "Alex Martin <alex.martin@speakeasy.com>"
+    }
+  }
+}

@@ -1,0 +1,32 @@
+server/internal/chat/repo/queries.sql.go
+  s_d6640a57723ec2::t_153baca83db812 960,985,987-988,1212,1244,1246-1247,1282,1347,1349-1350,1385,1455,1457-1458,1493,1528,1530-1531,2105,2137,2139-2140,2177,2201,2219-2256,2292,2294-2295,2335,2352,2372-2409,2448,2450-2451
+server/internal/database/models.go
+  s_d6640a57723ec2::t_1c522435f615c6 353-361,365-387
+  s_d6640a57723ec2::t_7938cd359f3f9b 362-364
+server/database/schema.sql
+  s_d6640a57723ec2::t_7938cd359f3f9b 1912
+  s_d6640a57723ec2::t_9cc66b3b0959ff 1914-1918
+server/internal/chat/repo/models.go
+  s_d6640a57723ec2::t_7938cd359f3f9b 23-25
+  s_d6640a57723ec2::t_04bcb96c7e4956 14-22,26-48
+server/migrations/20260726021727_chat-messages-prompt-attachments.sql
+  s_d6640a57723ec2::t_f82b0f29b5ce5b 1-2
+server/migrations/atlas.sum
+  s_d6640a57723ec2::t_997f33a412b180 1,299
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.16",
+  "base_commit_sha": "ce649be7c021440e139e866e55472c9bbd6a8344",
+  "prompts": {},
+  "sessions": {
+    "s_d6640a57723ec2": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "810056d0-e1a2-422d-a2f9-5b0394666020",
+        "model": "claude-fable-5"
+      },
+      "human_author": null
+    }
+  }
+}

@@ -1,0 +1,36 @@
+server/internal/background/activities/risk_analysis/analyze_batch.go
+  s_e5457925ae460d::t_76940aba4b6514 198-202,230,575-588
+  s_e5457925ae460d::t_d16759477d25af 196-197
+server/design/risk/design.go
+  s_e5457925ae460d::t_76940aba4b6514 35-36,140-141
+server/internal/background/activities/risk_analysis/celadapter.go
+  s_e5457925ae460d::t_1234c6f5b76671 149-150
+  s_e5457925ae460d::t_4ec54d80aef76a 118-119,126
+  s_e5457925ae460d::t_18b2f58a2214d4 162-163
+  s_e5457925ae460d::t_76940aba4b6514 117,120-125,127-148,151-161,164-173
+server/internal/risk/impl.go
+  s_e5457925ae460d::t_76940aba4b6514 336-344,363-364,539-553,679-680,1986-1993,2344-2345,2377-2378
+server/internal/risk/queries.sql
+  s_e5457925ae460d::t_76940aba4b6514 14-15,37-38,94-95,110-111
+server/internal/risk/scanner.go
+  s_e5457925ae460d::t_163b7feb9a786d 189-190
+  s_e5457925ae460d::t_76940aba4b6514 357-367,389-390
+server/design/shared/risk.go
+  s_e5457925ae460d::t_76940aba4b6514 78-79
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.9",
+  "base_commit_sha": "827a5a405a59efe80687cbe60f99a18d3578bc7f",
+  "prompts": {},
+  "sessions": {
+    "s_e5457925ae460d": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "27e802d5-8b32-4910-b9fd-7266730d92eb",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": null
+    }
+  }
+}

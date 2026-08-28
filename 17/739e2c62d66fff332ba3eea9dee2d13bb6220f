@@ -1,0 +1,21 @@
+.changeset/cel-wasm-null-spans.md
+  s_3ca8d6dd06121b::t_4f49b78b3ab647 1-5
+client/dashboard/src/pages/security/cel-wasm.ts
+  s_3ca8d6dd06121b::t_51e9675d2c51af 185-187
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.15",
+  "base_commit_sha": "17739e2c62d66fff332ba3eea9dee2d13bb6220f",
+  "prompts": {},
+  "sessions": {
+    "s_3ca8d6dd06121b": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "3993ae8f-9efc-4555-921b-7bc2eda304f8",
+        "model": "claude-fable-5"
+      },
+      "human_author": "Vishal Gowda <vishal@speakeasy.com>"
+    }
+  }
+}

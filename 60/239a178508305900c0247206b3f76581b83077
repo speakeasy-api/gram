@@ -1,0 +1,130 @@
+server/internal/access/getrole_test.go
+  s_5ed4922f829b57::t_92fe8439b28b5c 45,54-57
+server/gen/http/cli/gram/cli.go
+  ai_agent 4802
+server/internal/access/role_manager.go
+  s_5ed4922f829b57::t_0be5b414fa99d0 188-189
+docs/rbac_for_policies.md
+  ai_agent 1-35
+client/sdk/src/models/components/listrolegrant.ts
+  ai_agent 38,55
+docs/runbooks/workos-backfill-prod-batch-summary.md
+  ai_agent 1-741
+client/sdk/src/models/components/updateroleform.ts
+  ai_agent 15,17,19,21,34-37,42,47,56,61,65,67
+server/internal/authz/engine_test.go
+  s_5ed4922f829b57::t_dd54e5a522f178 992
+  s_5ed4922f829b57::t_2c294c85cf28f9 954-956,972
+  s_5ed4922f829b57::t_464582c8e2ecee 363-371,390-398,436-444,463-471,498-506,528-536
+client/sdk/src/models/components/scopedefinition.ts
+  ai_agent 20,40
+client/sdk/.speakeasy/gen.lock
+  ai_agent 510,762,764,806,810,812,850,906,922,1048,4027,4278,4282,4310,4448
+server/gen/http/access/client/cli.go
+  ai_agent 140,142-149,177-179,181,184-194
+server/internal/authz/grants.go
+  s_5ed4922f829b57::t_2f743b46fec383 37-49
+  s_5ed4922f829b57::t_be6a8221755ae7 62-69,95
+  s_5ed4922f829b57::t_8e917166570739 209-210,309-311,320-321
+  s_5ed4922f829b57::t_180a1a91282935 251,276
+  h_2620cc60cfd1e9 26,76-89,236-248,258,540-561
+  s_5ed4922f829b57::t_1d6f9fe4111a69 312-319
+  s_5ed4922f829b57::t_5a36293aa5ade4 439
+  s_5ed4922f829b57::t_49ef1e008bf694 428,507,516
+  s_5ed4922f829b57::t_11f77f7f5d2d49 491-494,501-506,508-515,517-519,524,527,531
+  s_5ed4922f829b57::t_a473e1997ed4aa 185,217-218,293-303
+  s_5ed4922f829b57::t_55396abbd115f4 61,94
+  s_5ed4922f829b57::t_2e41d89117960b 50-60
+  s_5ed4922f829b57::t_f4fa3de75ab663 181,205,213,249
+  s_5ed4922f829b57::t_b6f888e76453a8 419-426,429-438,440-444,446,448-449,451-454,462-463,465-466,468
+  s_5ed4922f829b57::t_69e63e92bbab48 134,141,152,163
+server/gen/http/openapi3.yaml
+  ai_agent 35272,35292,38574,38644,38658,39079,41404,41408-41411,41423-41427
+client/dashboard/src/pages/access/CreateRoleDialog.tsx
+  ai_agent 418-432,630,633-634
+client/dashboard/src/pages/access/types.ts
+  ai_agent 26-31
+docs/workos_role_sync_prod_readiness.md
+  ai_agent 1-266
+server/internal/authz/scopes_test.go
+  s_5ed4922f829b57::t_89a8422b2938e7 369
+  s_5ed4922f829b57::t_aa8169bf4da39f 390-392
+  s_5ed4922f829b57::t_464d806ffa4ade 986-988,990-1010
+  s_5ed4922f829b57::t_65992ebf6f5803 335,339,355-368,370-374
+  s_5ed4922f829b57::t_fcefcf998b0fbe 377-389,393-419
+  s_5ed4922f829b57::t_1ff9f378a68176 967,973-979,981-984,1011,1015,1021
+  s_5ed4922f829b57::t_b06814d4ada745 19-37
+  s_5ed4922f829b57::t_8384c1270ac216 969-972,985,989
+  s_5ed4922f829b57::t_76aaecff2d67dc 1016-1018
+  s_5ed4922f829b57::t_cc0f1c6a50e957 188-205
+  s_5ed4922f829b57::t_09d3627825beae 7,980
+  s_5ed4922f829b57::t_911e291d00bbbc 38-49
+docs/rbac_for_policies_codex_plan.md
+  ai_agent 1-289
+server/gen/http/access/server/types.go
+  ai_agent 37-40,8698-8700,8702,8705-8715,9037-9044,9243-9244,9272-9273
+server/internal/access/listusergrants_test.go
+  ai_agent 27,49,58-59
+server/internal/access/updaterole_test.go
+  ai_agent 90
+client/sdk/src/models/components/rolegrant.ts
+  ai_agent 42
+server/internal/authz/selector_test.go
+  s_5ed4922f829b57::t_3c67d0404182da 83-120,122-125
+  s_5ed4922f829b57::t_29b476ecc88e83 82,121
+docs/rbac_policy_audiences_plan.md
+  ai_agent 1-203
+server/internal/access/repo/queries.sql.go
+  ai_agent 36-67
+client/sdk/src/models/components/selector.ts
+  ai_agent 34
+docs/rbac_for_policies_plan.md
+  ai_agent 1-449
+server/internal/access/rbac_test.go
+  s_5ed4922f829b57::t_0da24a25d2d33e 92
+  s_5ed4922f829b57::t_e9d6b2305ce796 270-275
+.speakeasy/out.openapi.yaml
+  ai_agent 34794,34814,38096,38166,38180,38601,40926,40930-40933,40945-40949
+docs/workos_sync.md
+  ai_agent 1-213
+server/gen/http/openapi3.json
+  ai_agent 1
+server/gen/access/service.go
+  ai_agent 694-697
+server/internal/access/syncgrants_test.go
+  s_5ed4922f829b57::t_3e8eefef89a3c0 27,83,86-87,102-106,147,174
+  s_5ed4922f829b57::t_6c777fd72fbe60 97
+server/internal/access/listroles_test.go
+  s_5ed4922f829b57::t_4242f442e59688 56-57,65,77-80
+server/gen/http/access/client/types.go
+  ai_agent 37-40,4938-4940,4942,4945-4955,15062-15063,15091-15092,15106-15107,15125-15126,15149-15150,15154-15155,15192-15193,15202-15203
+docs/rbac_guide.md
+  ai_agent 1-194
+server/internal/access/listscopes_test.go
+  ai_agent 20,32
+server/internal/authz/selector.go
+  s_5ed4922f829b57::t_a811699db239ec 210-212
+  s_5ed4922f829b57::t_73259138fbadeb 213-214
+  s_5ed4922f829b57::t_002455e016e546 207-209
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "60239a178508305900c0247206b3f76581b83077",
+  "prompts": {},
+  "humans": {
+    "h_2620cc60cfd1e9": {
+      "author": "tgmendes <tiago@speakeasy.com>"
+    }
+  },
+  "sessions": {
+    "s_5ed4922f829b57": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019e83e9-0aec-7901-aae4-055f8a9ba34a",
+        "model": "gpt-5.5"
+      },
+      "human_author": "tgmendes <tiago@speakeasy.com>"
+    }
+  }
+}

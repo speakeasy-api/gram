@@ -1,0 +1,17 @@
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.2",
+  "base_commit_sha": "0cd8e96d8ea574e12f9cf17b898d05b7459eba4d",
+  "prompts": {},
+  "sessions": {
+    "s_37e0ba1c864701": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "75eb1a56-8dd2-4126-bde7-9b483d40e48a",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Vishal Gowda <vishal@speakeasy.com>"
+    }
+  }
+}

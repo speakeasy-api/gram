@@ -1,0 +1,19 @@
+server/internal/skillefficacy/impl.go
+  s_664ae7d369889a::t_07b7d2e30dbcbd 279
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.24",
+  "base_commit_sha": "730b08c13d3b1403e5b05258bc66b615cc98d95c",
+  "prompts": {},
+  "sessions": {
+    "s_664ae7d369889a": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a0237f-0bfe-7680-a351-49299ea5f43e",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "tgmendes <tiago@speakeasy.com>"
+    }
+  }
+}

@@ -1,0 +1,33 @@
+server/internal/access/role_manager.go
+  s_5a92cd828d83ac::t_33edc3afe8697c 1042-1051
+  s_5a92cd828d83ac::t_0f364f5b07f4ea 117-123,687,689-693,696,698-702
+  s_5a92cd828d83ac::t_3698877f3705b6 680,688,697
+  s_5a92cd828d83ac::t_cd3c2fe611a69f 158-159,161,202,302-304,306-307,309,354
+  s_5a92cd828d83ac::t_d1e53e8e64e228 160,305,308
+server/internal/access/updaterole_test.go
+  s_5a92cd828d83ac::t_df3fab0e4585cb 17,102-131
+server/internal/authz/grant_surface.go
+  s_5a92cd828d83ac::t_0cc3a8b3ae8f7c 1-29,31-35,38-48,51-61
+  s_5a92cd828d83ac::t_3f5f0cb90d28bb 30
+  s_5a92cd828d83ac::t_b899c005bc4cc0 36-37,49-50
+server/internal/access/createrole_test.go
+  s_5a92cd828d83ac::t_55732727251198 94-112
+server/internal/authz/grant_surface_test.go
+  s_5a92cd828d83ac::t_fbdadc089f3fe4 1-34
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.7",
+  "base_commit_sha": "9faf246b40b816754f82fa54d4100fa62d1c780a",
+  "prompts": {},
+  "sessions": {
+    "s_5a92cd828d83ac": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019eb6a2-6b62-7900-969e-22cc3bd839f6",
+        "model": "gpt-5.5"
+      },
+      "human_author": null
+    }
+  }
+}

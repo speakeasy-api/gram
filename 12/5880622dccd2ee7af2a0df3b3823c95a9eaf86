@@ -1,0 +1,21 @@
+server/internal/risk/policy_bypass_evaluator.go
+  s_5a92cd828d83ac::t_6ff732e43f6936 15,81-82,96-107
+server/internal/risk/policy_bypass_test.go
+  s_5a92cd828d83ac::t_1b86046c71d540 19,192-235
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.7",
+  "base_commit_sha": "125880622dccd2ee7af2a0df3b3823c95a9eaf86",
+  "prompts": {},
+  "sessions": {
+    "s_5a92cd828d83ac": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019eb6a2-6b62-7900-969e-22cc3bd839f6",
+        "model": "gpt-5.5"
+      },
+      "human_author": "tgmendes <tiago@speakeasy.com>"
+    }
+  }
+}

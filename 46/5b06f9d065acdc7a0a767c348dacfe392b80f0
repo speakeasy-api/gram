@@ -1,0 +1,28 @@
+server/internal/access/queries.sql
+  s_1451562751221e::t_68e2c2e8778958 53,56-59,63-64,67-71
+server/internal/authz/grant_persistence_test.go
+  s_1451562751221e::t_ba6561d9dd88aa 9,17-18,21-22,25-26,32-38,40,42-65,68-73
+  s_1451562751221e::t_68e2c2e8778958 1-8,10-16,19-20,23-24,27-31,39,41,66-67,74-78
+server/internal/testenv/queries.sql
+  s_1451562751221e::t_ba6561d9dd88aa 273-285
+server/internal/access/repo/queries.sql.go
+  s_1451562751221e::t_1a1f1d8ea9eb96 597-601,611-612,1938-1941,1964
+server/internal/testenv/testrepo/queries.sql.go
+  s_1451562751221e::t_3517aa1a3f3725 13,346-373,578-600
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "465b06f9d065acdc7a0a767c348dacfe392b80f0",
+  "prompts": {},
+  "sessions": {
+    "s_1451562751221e": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019fd75a-a5d2-7b62-b482-7b7f6c0d2746",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "tgmendes <tiago@speakeasy.com>"
+    }
+  }
+}

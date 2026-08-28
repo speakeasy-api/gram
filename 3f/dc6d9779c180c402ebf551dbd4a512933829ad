@@ -1,0 +1,32 @@
+server/internal/audit/shadowmcps.go
+  s_9ea3f125eaa40a::t_b9c1f45e12f8a4 93
+  s_9ea3f125eaa40a::t_3e98b993f02193 160
+server/internal/outbox/events/catalog_test.go
+  s_9ea3f125eaa40a::t_553ad054f4e83d 28,36,38
+  s_9ea3f125eaa40a::t_2bdff6d738fa60 8,27,29-35,37,39
+server/internal/outbox/events/catalog_gen.yaml
+  s_9ea3f125eaa40a::t_aeaeb4fac8a9f1 223,225-226
+  s_9ea3f125eaa40a::t_f293669a93fee6 115,117-118
+server/internal/outbox/events/catalog_gen.go
+  s_9ea3f125eaa40a::t_f293669a93fee6 13
+  s_9ea3f125eaa40a::t_aeaeb4fac8a9f1 15
+server/internal/outbox/events/audit_log.go
+  s_9ea3f125eaa40a::t_a38cc5caf7ed10 43
+  s_9ea3f125eaa40a::t_46aa79be2b366d 44
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.6",
+  "base_commit_sha": "3fdc6d9779c180c402ebf551dbd4a512933829ad",
+  "prompts": {},
+  "sessions": {
+    "s_9ea3f125eaa40a": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019ea993-d952-7c03-8c1e-c43bcaab1de9",
+        "model": "gpt-5.5"
+      },
+      "human_author": "Alex Martin <alex.martin@speakeasy.com>"
+    }
+  }
+}

@@ -1,0 +1,19 @@
+docs/workos-sync-paths.md
+  s_aca54c230da15f::t_c49dbd69b365ce 1-502
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "701bfb6b78b58339b327b724252ed56551350443",
+  "prompts": {},
+  "sessions": {
+    "s_aca54c230da15f": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "4067999d-19c6-4b13-8cfa-7cca238178c6",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "tgmendes <tiago@speakeasy.com>"
+    }
+  }
+}

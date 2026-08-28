@@ -1,0 +1,99 @@
+.changeset/drop-risk-result-replayed.md
+  s_fc571f39c642e8::t_3f0c7227022514 1-9
+.impeccable/config.json
+  s_fc571f39c642e8::t_3f0c7227022514 1-15
+client/dashboard/src/pages/security/risk-utils.ts
+  s_fc571f39c642e8::t_3f0c7227022514 22-35
+server/internal/customdomains/health.go
+  s_fc571f39c642e8::t_3f0c7227022514 64-84
+.changeset/ais-343-judge-rationale-evidence.md
+  s_fc571f39c642e8::t_3f0c7227022514 1-5
+server/internal/hooks/skill_capture_test.go
+  s_fc571f39c642e8::t_3f0c7227022514 128-143
+server/internal/k8s/ingress_provisioner.go
+  s_fc571f39c642e8::t_3f0c7227022514 60-61,66-69
+server/internal/risk/impl.go
+  s_fc571f39c642e8::t_3f0c7227022514 1743-1762,1793-1815
+client/dashboard/src/pages/chatLogs/chatHelpers.test.ts
+  s_fc571f39c642e8::t_3f0c7227022514 106-112,139-146
+  s_fc571f39c642e8::t_59b7521fd6dfc8 147
+client/dashboard/src/pages/org/OrgAuditLogs.tsx
+  s_fc571f39c642e8::t_3f0c7227022514 209-211,277,299
+client/dashboard/src/pages/elements/Elements.tsx
+  s_fc571f39c642e8::t_3f0c7227022514 1731,1776
+client/dashboard/src/pages/security/risk-ui.tsx
+  s_fc571f39c642e8::t_3f0c7227022514 17,67-72,74,79-80,82-83,324-345,347-353,357,361,368,370-375,378-394,409,411-415,417-424,434-441
+client/dashboard/src/pages/security/RiskOverviewCategoryDetail.tsx
+  s_fc571f39c642e8::t_3f0c7227022514 27,30,301,304,351-362
+server/internal/background/activities/custom_domain_health.go
+  s_fc571f39c642e8::t_3f0c7227022514 37,200,253-263,280-291
+  s_fc571f39c642e8::t_db8506b956fc1c 292-294
+server/internal/customdomains/health_test.go
+  s_fc571f39c642e8::t_3f0c7227022514 265-302
+server/internal/customdomains/queries.sql
+  s_fc571f39c642e8::t_3f0c7227022514 136-148
+client/dashboard/src/pages/security/RiskEvents.tsx
+  s_fc571f39c642e8::t_3f0c7227022514 32-40,42,384,388,415-417,504,575,577,584-585,587-590,597
+client/dashboard/src/pages/chatLogs/chatHelpers.tsx
+  s_fc571f39c642e8::t_3f0c7227022514 13-14,39-40,42,71-74,88-97,105
+.github/scripts/impeccable-summary.mjs
+  s_fc571f39c642e8::t_3f0c7227022514 1-91
+client/dashboard/src/components/ui/multi-select.tsx
+  s_fc571f39c642e8::t_3f0c7227022514 35,61,71,515,517,533
+server/internal/hooks/ingest_hooks.go
+  s_fc571f39c642e8::t_3f0c7227022514 180,1511-1513,1515-1516,1518-1522
+server/internal/risk/chrepo_roundtrip_test.go
+  s_fc571f39c642e8::t_3f0c7227022514 29-32
+server/internal/risk/overview_ch_test.go
+  s_fc571f39c642e8::t_3f0c7227022514 86-88,190-199,217-219
+server/internal/risk/queries.sql
+  s_fc571f39c642e8::t_3f0c7227022514 1028,1035,1158
+server/internal/k8s/ingress_provisioner_test.go
+  s_fc571f39c642e8::t_3f0c7227022514 158-177
+server/internal/background/activities/custom_domain_health_test.go
+  s_fc571f39c642e8::t_3f0c7227022514 39-44,150,178,207,293,310-441,449,469,492,510
+.github/workflows/impeccable.yaml
+  s_fc571f39c642e8::t_3f0c7227022514 1-65
+.changeset/canonical-scoped-skill-names.md
+  s_fc571f39c642e8::t_3f0c7227022514 1-5
+.gitignore
+  s_fc571f39c642e8::t_3f0c7227022514 105-107
+.mise-tasks/infra/start.sh
+  s_fc571f39c642e8::t_3f0c7227022514 72-82
+server/internal/skills/reconcile.go
+  s_fc571f39c642e8::t_3f0c7227022514 104,188,190-191
+client/dashboard/src/pages/security/risk-ui.test.tsx
+  s_fc571f39c642e8::t_3f0c7227022514 1-106
+.mise-tasks/seed.mts
+  s_fc571f39c642e8::t_3f0c7227022514 634,766-771,773-776,1819-1820,1824,1837,1856,5110-5114
+client/dashboard/src/pages/org/OrgDomains.tsx
+  s_fc571f39c642e8::t_3f0c7227022514 118,123,132-145,429-432,512-546
+server/internal/skills/reconcile_test.go
+  s_fc571f39c642e8::t_3f0c7227022514 218,227,400,403,413-416
+.changeset/custom-domain-auto-disable.md
+  s_fc571f39c642e8::t_3f0c7227022514 1-6
+server/design/shared/risk.go
+  s_fc571f39c642e8::t_3f0c7227022514 286
+client/dashboard/src/pages/deployments/deployment/LogsTabContent.tsx
+  s_fc571f39c642e8::t_3f0c7227022514 77-79,808,871
+server/internal/customdomains/repo/queries.sql.go
+  s_fc571f39c642e8::t_e8d78cfd8744a1 89-114
+server/internal/risk/repo/queries.sql.go
+  s_fc571f39c642e8::t_7d2d3e664180d9 2495,2742,2749
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.18",
+  "base_commit_sha": "efd896a271895c580a68a97b0179275a677b01d5",
+  "prompts": {},
+  "sessions": {
+    "s_fc571f39c642e8": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019fa7d1-17b5-7831-ad39-8403c6daa46c",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "tgmendes <tiago@speakeasy.com>"
+    }
+  }
+}

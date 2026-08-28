@@ -1,0 +1,24 @@
+server/internal/audit/risk.go
+  s_e1c8905d8aee27::t_86ba608a33176a 24-25,58-64,231-277,280
+  s_e1c8905d8aee27::t_68a126b34c9363 278-279,281
+server/internal/risk/impl.go
+  s_e1c8905d8aee27::t_a9041f3acd82c8 2325,2375,2460,2571
+  s_e1c8905d8aee27::t_b2ec8b6c32db13 2496-2503,2515-2536,2589,2591-2604,2612-2633
+  s_e1c8905d8aee27::t_da1b31f89f1a32 2351-2374,2410,2415-2417
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "f8d2dde4c5db2cb2c05c5f889582b326158944cf",
+  "prompts": {},
+  "sessions": {
+    "s_e1c8905d8aee27": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f2ea6-167b-7023-8157-1cc24ffad2f8",
+        "model": "gpt-5.5"
+      },
+      "human_author": "Vishal Gowda <vishal@speakeasy.com>"
+    }
+  }
+}

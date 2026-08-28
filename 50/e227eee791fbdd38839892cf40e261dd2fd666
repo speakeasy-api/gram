@@ -1,0 +1,33 @@
+server/internal/authz/access.go
+  s_5a92cd828d83ac::t_021500d888ded9 57,59,66
+server/internal/authz/selector_test.go
+  s_5a92cd828d83ac::t_021500d888ded9 330,339,348
+server/internal/authz/checks.go
+  s_5a92cd828d83ac::t_021500d888ded9 23,33,36,42,45-51,54,66
+server/internal/authz/expressions_test.go
+  s_5a92cd828d83ac::t_021500d888ded9 1-181
+server/internal/authz/grants.go
+  s_5a92cd828d83ac::t_021500d888ded9 56,466
+server/internal/authz/engine.go
+  s_5a92cd828d83ac::t_021500d888ded9 208-210,538-539
+server/internal/authz/scopes_test.go
+  s_5a92cd828d83ac::t_021500d888ded9 181,192,207,222
+server/internal/authz/expressions.go
+  s_5a92cd828d83ac::t_021500d888ded9 1-220
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.7",
+  "base_commit_sha": "50e227eee791fbdd38839892cf40e261dd2fd666",
+  "prompts": {},
+  "sessions": {
+    "s_5a92cd828d83ac": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019eb6a2-6b62-7900-969e-22cc3bd839f6",
+        "model": "gpt-5.5"
+      },
+      "human_author": "tgmendes <tiago@speakeasy.com>"
+    }
+  }
+}

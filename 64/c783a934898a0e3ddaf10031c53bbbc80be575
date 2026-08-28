@@ -1,0 +1,36 @@
+server/internal/background/activities/risk_analysis/async_shadow_sampling.go
+  s_62e95995138f74::t_d533d0f5b93c6c 6-7,10,13,18-32,36-37
+server/internal/risk/finding_bq_test.go
+  s_62e95995138f74::t_630c64ba0eaed9 671,686
+server/internal/background/activities/risk_analysis/scan_prompt_injection.go
+  s_62e95995138f74::t_24cb8ff50be89e 43
+server/internal/thirdparty/posthog/posthog.go
+  s_62e95995138f74::t_1e6b4a6979c5eb 117,126-133,135-140
+server/internal/background/activities/risk_analysis/prompt_judge_batch.go
+  s_62e95995138f74::t_3a688a5c337d09 125
+server/internal/background/activities/risk_analysis/analyze_batch_test.go
+  s_62e95995138f74::t_7f158091074511 7,102
+  s_62e95995138f74::t_4b0ace09edcbba 80-84
+  s_62e95995138f74::t_efe6210e906630 8,57-79,85-101,103-104
+  s_62e95995138f74::t_78f5359e88f0ef 309-311,356-357,365-371,410-412,458-459,467-473
+  s_62e95995138f74::t_f7db8c6bdfdbe9 358-364,372,460-466,474
+  s_62e95995138f74::t_05b8b0256d70db 105
+server/internal/feature/provider.go
+  s_62e95995138f74::t_cffe43a8047993 19,47
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.14",
+  "base_commit_sha": "64c783a934898a0e3ddaf10031c53bbbc80be575",
+  "prompts": {},
+  "sessions": {
+    "s_62e95995138f74": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f6f60-6cb8-7b00-936d-c602484edc11",
+        "model": "gpt-5.5"
+      },
+      "human_author": "Vishal Gowda <vishal@speakeasy.com>"
+    }
+  }
+}

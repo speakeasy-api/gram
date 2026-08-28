@@ -1,0 +1,44 @@
+server/internal/scanners/llmjudge/judge.go
+  s_89752e5bcbf473::t_63c729aeceb109 6,22-23,29-31,56-71
+  s_89752e5bcbf473::t_8d0fe771e474fa 72-73
+server/internal/risk/scanner.go
+  s_89752e5bcbf473::t_b789cf75a4910a 94-95,110,282-283,312,460
+  s_89752e5bcbf473::t_8e1e8d022383af 641
+  s_89752e5bcbf473::t_732cfba800723d 644,654-656,682,686,694
+server/internal/risk/prompt_policy_scanner_test.go
+  s_89752e5bcbf473::t_17f8aa81fe1a7b 30,36,41
+server/internal/scanners/llmjudge/openrouter/judge.go
+  s_89752e5bcbf473::t_ab53c49bcaa2aa 104,117-120,122,129,157,169,186
+server/internal/background/activities/risk_analysis/eval_guardrail.go
+  s_89752e5bcbf473::t_ffa1243155d94d 92,100,103-105,139-140
+server/internal/scanners/llmjudge/openrouter/judge_test.go
+  s_89752e5bcbf473::t_e59c6a83c893c8 50,57,65-66,70,77,85-86,99,107-108,120,131-132,143,151,174,182
+server/internal/background/activities/risk_analysis/analyze_batch_test.go
+  s_89752e5bcbf473::t_b95cbce98a23c8 42,52
+  s_89752e5bcbf473::t_b789cf75a4910a 129,464,496,689-690,722,794
+server/internal/background/activities/risk_analysis/prompt_judge_batch.go
+  s_89752e5bcbf473::t_ed89f4addc8e17 25-29,37,49,56,86,98-103
+server/internal/risk/setup_test.go
+  s_89752e5bcbf473::t_29cd55abea7dad 110,113,115
+server/internal/risk/eval_guardrail_test.go
+  s_89752e5bcbf473::t_b5c7ef3427c760 79,89,228
+  s_89752e5bcbf473::t_fa0cef827a5be6 69,153,155,218
+  s_89752e5bcbf473::t_ae50c3fea2dd70 5,188-190
+  s_89752e5bcbf473::t_b789cf75a4910a 373
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "d156f3a5b4b7640c27abd04e44fe41f1cc134ff1",
+  "prompts": {},
+  "sessions": {
+    "s_89752e5bcbf473": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f4a84-bb70-7a53-b9b6-eb0949a88bf3",
+        "model": "gpt-5.5"
+      },
+      "human_author": "Vishal Gowda <vishal@speakeasy.com>"
+    }
+  }
+}

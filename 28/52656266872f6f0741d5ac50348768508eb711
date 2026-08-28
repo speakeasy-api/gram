@@ -1,0 +1,23 @@
+server/internal/access/createrole_test.go
+  s_5ed4922f829b57::t_af2384497d9b09 166-220
+server/internal/access/role_manager.go
+  s_5ed4922f829b57::t_e39a043d661ecd 176-177
+server/internal/access/queries.sql
+  s_5ed4922f829b57::t_5ff402efcd6627 163,181-188
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "2852656266872f6f0741d5ac50348768508eb711",
+  "prompts": {},
+  "sessions": {
+    "s_5ed4922f829b57": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019e83e9-0aec-7901-aae4-055f8a9ba34a",
+        "model": "gpt-5.5"
+      },
+      "human_author": "tgmendes <tiago@speakeasy.com>"
+    }
+  }
+}

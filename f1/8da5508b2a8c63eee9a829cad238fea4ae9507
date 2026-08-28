@@ -1,0 +1,107 @@
+server/internal/hooks/risk_scan.go
+  s_5cc1f9ecaa9d4c::t_1ea8870dcab869 88,93
+  s_5cc1f9ecaa9d4c::t_2bdc277438c818 54,66-69,75,79-82,87,89-92,94-104
+  s_5cc1f9ecaa9d4c::t_e1d107bc5c0c53 44,76,83,105
+  s_5cc1f9ecaa9d4c::t_82b556aa31717b 12,72
+  s_5cc1f9ecaa9d4c::t_387437ed69caca 135-136,175-176
+server/internal/authz/grants.go
+  s_5cc1f9ecaa9d4c::t_cbe410bd503559 441,448
+  s_5cc1f9ecaa9d4c::t_bbb69f0849492a 56-65
+  s_5cc1f9ecaa9d4c::t_0569583e09bbd7 429,434-440,442-447,449,467,471-472,474,490,494-504
+server/internal/hooks/claude_hooks.go
+  s_5cc1f9ecaa9d4c::t_82b556aa31717b 762
+server/internal/risk/policy_audience_test.go
+  s_5cc1f9ecaa9d4c::t_964788e1e35343 54-55
+  s_5cc1f9ecaa9d4c::t_ab8862ae21178f 102-145
+  s_5cc1f9ecaa9d4c::t_82b556aa31717b 1-53,56-61,63-91,93-95,97-101,146-161
+  s_5cc1f9ecaa9d4c::t_f5eafc67c7ba18 62,92,96
+server/internal/authz/selector_test.go
+  s_5cc1f9ecaa9d4c::t_080e734ea39d38 330,339,348
+server/internal/risk/scanner_test.go
+  s_5cc1f9ecaa9d4c::t_88ad175d5a18e1 16,23,88,90,102,109,111,124-138,245,247,264
+  s_5cc1f9ecaa9d4c::t_2c7df3c2e7eff1 167,211,275,302,306
+  s_5cc1f9ecaa9d4c::t_82b556aa31717b 98,120,256,259
+server/internal/authz/scopes_test.go
+  s_5cc1f9ecaa9d4c::t_7daa157284291f 258,268
+  s_5cc1f9ecaa9d4c::t_080e734ea39d38 181,192,207,222
+  s_5cc1f9ecaa9d4c::t_5714552b70ee07 229,238,241,254-255
+  s_5cc1f9ecaa9d4c::t_c7a359e4318856 230-237,239-240,242-253,256-257,259-267,269-270
+server/internal/hooks/claude_hooks_test.go
+  s_5cc1f9ecaa9d4c::t_76d976d2a37510 22,26
+  s_5cc1f9ecaa9d4c::t_82b556aa31717b 34
+  s_5cc1f9ecaa9d4c::t_f2a0dbcd02f9b9 49,51-53
+server/internal/risk/policy_bypass_evaluator.go
+  s_5cc1f9ecaa9d4c::t_7283a9e3881858 72,90
+  s_5cc1f9ecaa9d4c::t_080e734ea39d38 119,121,123
+server/internal/hooks/codex_hooks.go
+  s_5cc1f9ecaa9d4c::t_3c19f3bb385389 60-61
+server/design/risk/design.go
+  s_5cc1f9ecaa9d4c::t_82b556aa31717b 36-39,161-162
+  s_5cc1f9ecaa9d4c::t_95c63804a2c3f0 40,164
+server/internal/risk/scanner.go
+  s_5cc1f9ecaa9d4c::t_1ea8870dcab869 185,237
+  s_5cc1f9ecaa9d4c::t_82b556aa31717b 20,32,112,140,186-187,228-231,238-239,253-267
+  s_5cc1f9ecaa9d4c::t_2f3fc988d37e1f 158-162
+  s_5cc1f9ecaa9d4c::t_a838ad66de0abc 30-31,33,35-37,150,226
+  s_5cc1f9ecaa9d4c::t_6808772166bec6 157,227,252
+server/internal/background/activities/risk_analysis/analyze_batch_test.go
+  s_5cc1f9ecaa9d4c::t_82b556aa31717b 605,608
+server/internal/hooks/cursor_hooks.go
+  s_5cc1f9ecaa9d4c::t_82b556aa31717b 89
+server/internal/authz/engine.go
+  s_5cc1f9ecaa9d4c::t_0ddd5a1f79c30e 537-544
+  s_5cc1f9ecaa9d4c::t_bdcd80b05eb47a 208
+server/internal/hooks/impl.go
+  s_5cc1f9ecaa9d4c::t_82b556aa31717b 189
+  s_5cc1f9ecaa9d4c::t_d4d1d1736e5927 197
+server/design/shared/risk.go
+  s_5cc1f9ecaa9d4c::t_266e47d8f28b45 64
+  s_5cc1f9ecaa9d4c::t_82b556aa31717b 31-38,60-62,77
+server/internal/authz/access.go
+  s_5cc1f9ecaa9d4c::t_2444b525f86774 14-16,39-47,69,71,78
+client/dashboard/src/pages/security/PolicyCenter.tsx
+  s_5cc1f9ecaa9d4c::t_82b556aa31717b 49,54,59,124,289-303,413-416,489-490,515-516,538,542,610-611,626-627,646-647,871-882,1056-1063,1103-1105,1455-1458,1479-1482,1712-1718,1752-1945
+  s_5cc1f9ecaa9d4c::t_86d8263328ff1a 536-537,539-541
+server/internal/risk/impl.go
+  s_5cc1f9ecaa9d4c::t_af479be504b117 478-482,485
+  s_5cc1f9ecaa9d4c::t_88ad175d5a18e1 631
+  s_5cc1f9ecaa9d4c::t_82b556aa31717b 239-248,295,303-306,470-477,483-484,486-491,523-527,547,555-558,568,632-634,2054-2058,2060-2079,2083-2086,2088-2107
+server/internal/risk/policy_audience.go
+  s_5cc1f9ecaa9d4c::t_82b556aa31717b 1-31,33-94,112-133
+  s_5cc1f9ecaa9d4c::t_a848bf1b7011d3 32
+  s_5cc1f9ecaa9d4c::t_88ad175d5a18e1 95-111
+server/internal/background/activities/risk_analysis/setup_test.go
+  s_5cc1f9ecaa9d4c::t_82b556aa31717b 88-91
+server/internal/authz/checks.go
+  s_5cc1f9ecaa9d4c::t_e0041210fa9abf 46-48
+  s_5cc1f9ecaa9d4c::t_1ea8870dcab869 23,33,42,61
+  s_5cc1f9ecaa9d4c::t_f96c33c10705f2 41,43-44
+  s_5cc1f9ecaa9d4c::t_080e734ea39d38 36,45,49
+server/internal/risk/queries.sql
+  s_5cc1f9ecaa9d4c::t_82b556aa31717b 15,33,86,98
+server/cmd/gram/start.go
+  s_5cc1f9ecaa9d4c::t_ef56e9e2df6487 969
+server/internal/hooks/setup_test.go
+  s_5cc1f9ecaa9d4c::t_f085f97dcea223 95
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.6",
+  "base_commit_sha": "f18da5508b2a8c63eee9a829cad238fea4ae9507",
+  "prompts": {},
+  "humans": {
+    "h_2620cc60cfd1e9": {
+      "author": "tgmendes <tiago@speakeasy.com>"
+    }
+  },
+  "sessions": {
+    "s_5cc1f9ecaa9d4c": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019eb249-fed4-7522-8f02-b4f75c7d3a20",
+        "model": "gpt-5.5"
+      },
+      "human_author": "tgmendes <tiago@speakeasy.com>"
+    }
+  }
+}

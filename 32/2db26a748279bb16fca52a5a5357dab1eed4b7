@@ -1,0 +1,38 @@
+server/internal/risk/policy_bypass.go
+  s_bfcdcec2fc12dd::t_7db05ebdd212eb 6,13,187-190,219,258-261,273,312-315,343,424-436
+  ai_agent 7,523
+  s_bfcdcec2fc12dd::t_d4d0d91b9e0f06 14-15,103-109,115-116,119-120,128,147-151,214-216,237-252,264-268,330-332,340-342,344,348-350,352-353,355-359,361,363-373,384-387,391,395,399,403-405
+  s_e22b3b94346bf4::t_672373b4dd5fc1 110-112
+  s_e22b3b94346bf4::t_dd754850c38e81 139,486,498
+  s_bfcdcec2fc12dd::t_18c51992ad48b0 146,213,263,329,345-347,375,379-380
+  s_bfcdcec2fc12dd::t_a8931f145bd095 351,354,360,362,408-423
+  s_bfcdcec2fc12dd::t_cc50423d03ee82 374,376-378,381-383,455-462
+  s_bfcdcec2fc12dd::t_f9a137aa351009 388-390,392-394,396-398,400-402,406-407
+  s_bfcdcec2fc12dd::t_dae16778db8e0a 437-454,463-465
+  s_e22b3b94346bf4::t_2d8bdcc696a52b 487,491-495,504
+  s_e22b3b94346bf4::t_5878029dfad175 488
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.6",
+  "base_commit_sha": "322db26a748279bb16fca52a5a5357dab1eed4b7",
+  "prompts": {},
+  "sessions": {
+    "s_bfcdcec2fc12dd": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019e978b-d153-7f13-a173-e4e397dcc332",
+        "model": "gpt-5.5"
+      },
+      "human_author": "tgmendes <tiago@speakeasy.com>"
+    },
+    "s_e22b3b94346bf4": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019e9385-0ca9-70d3-97f9-9fdb17029cd4",
+        "model": "gpt-5.5"
+      },
+      "human_author": "tgmendes <tiago@speakeasy.com>"
+    }
+  }
+}

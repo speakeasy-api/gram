@@ -1,0 +1,19 @@
+server/internal/authz/scopes.go
+  s_5ed4922f829b57::t_cf68adfd649b76 31-63
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "f08e3a7e7e72e803e29adbe4d09318c0544dc716",
+  "prompts": {},
+  "sessions": {
+    "s_5ed4922f829b57": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019e83e9-0aec-7901-aae4-055f8a9ba34a",
+        "model": "gpt-5.5"
+      },
+      "human_author": "tgmendes <tiago@speakeasy.com>"
+    }
+  }
+}

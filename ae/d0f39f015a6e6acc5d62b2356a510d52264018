@@ -1,0 +1,190 @@
+server/internal/thirdparty/workos/queries.sql
+  s_146664733c831b::t_b9b6fed116cada 275-276,278,281-283,286-288
+  s_146664733c831b::t_f64b3f6ea6a38c 263,267-268,270-271,284-285
+  s_146664733c831b::t_00f2adc9dff5b8 255-262,264-266,269,272-274
+  s_146664733c831b::t_adfbae6bb48a42 279-280
+  s_146664733c831b::t_fa6ae9d3a73d17 297
+  s_146664733c831b::t_bebdc97d5a2718 289-296,298-308
+  s_146664733c831b::t_4bac15d438ccf0 309,311-313,315-329,331-333,335-341
+  s_146664733c831b::t_f3ed9256e15a29 310,330
+server/internal/agent/impl.go
+  s_146664733c831b::t_b9b6fed116cada 113-117,252,254
+  s_146664733c831b::t_00f2adc9dff5b8 251,253
+  s_146664733c831b::t_f14294350c24d0 36,250
+server/internal/thirdparty/workos/repo/queries.sql.go
+  s_146664733c831b::t_6e3285f0f1a4c5 468-518,520,568-611
+  s_146664733c831b::t_0a9f752b9ce687 145-191
+  s_146664733c831b::t_677d026bfaa8ef 428-431,433-467,519-522,524-565
+server/internal/agent/setup_test.go
+  s_146664733c831b::t_e58829db8ee375 231-235,242
+  s_4381c145a71162::t_db2ee561470db6 263
+  s_146664733c831b::t_19d6f592e27b36 32,213-230,236-241,243-262
+server/internal/agent/getplugins_test.go
+  s_146664733c831b::t_19d6f592e27b36 135-141,143,145-148
+  s_4381c145a71162::t_915e89e37849e6 250
+  s_146664733c831b::t_b26e0b23913e93 5,17,149-150,176-196,198-243,245-249
+  s_146664733c831b::t_d9609923efac45 7
+  s_146664733c831b::t_54256260b748a8 142
+  s_146664733c831b::t_e58829db8ee375 151-158,166,168,170-175
+  s_146664733c831b::t_f14294350c24d0 14,144,167,169,197,244
+server/internal/plugins/principal.go
+  s_146664733c831b::t_089a01ab153e79 34-35,37-41,43,45-46,132,137,158,165,167
+  s_146664733c831b::t_12f9e68beaee7c 21-22,33,36,42,44,59,63,67,81,138-140,144-146
+  s_146664733c831b::t_c559cde0dfb90c 47-57,135-136,141-142,161,169
+  s_146664733c831b::t_63982b9d6826e8 6,9,13,15,17,131,133-134,151-157,159-160,162-164,166,168,170-171
+  s_146664733c831b::t_ce2a0661a688a9 25-32,64-66,68-80,82-97,113,117
+server/internal/plugins/impl.go
+  s_146664733c831b::t_bebdc97d5a2718 59,1201,1227-1229,1242-1244,1246-1248
+  s_146664733c831b::t_6cd3a500ef709e 1179,1182,1191,1213,1217,1232,1254-1255
+  s_146664733c831b::t_63982b9d6826e8 1183-1184
+  s_146664733c831b::t_45559f35e72065 1222-1224,1237-1239,1268
+  s_146664733c831b::t_6af92ea0e76de7 1187,1190,1214,1221,1225,1230,1236,1240,1245,1259
+  s_146664733c831b::t_e341c339750868 1226,1231,1241
+  s_146664733c831b::t_2d499f1db734bd 1266-1267,1269,1280
+  s_146664733c831b::t_ef077cf656c5cb 37,1122-1123,1129-1130,1137-1138,1145-1146
+  s_146664733c831b::t_08bf844d077c96 1094,1105-1108,1118-1121,1125-1128,1131-1133,1136,1139,1144,1147
+  s_146664733c831b::t_8fa799516cd234 1216
+  s_146664733c831b::t_2b174187e0f925 1124
+  s_146664733c831b::t_f3ed9256e15a29 1109,1113
+  s_146664733c831b::t_5412c7a20d4db5 1215
+  s_146664733c831b::t_4bac15d438ccf0 1095-1104,1110-1112,1114-1117,1134-1135,1140-1143,1148-1154
+server/gen/http/plugins/client/paths.go
+  s_146664733c831b::t_1c71798ad98bb7 55-59
+server/gen/http/plugins/client/types.go
+  s_146664733c831b::t_3466963d0f2aef 233-239,2043-2224,4225-4236,5808-5976,5989-5991,6004-6006,6019-6021,6034-6036,6049-6051,8001-8016,10322-10530,10536-10555,10560-10561,13159,13162,13164-13168,13173,13176-13177
+  s_146664733c831b::t_f5c9fb4cd07ac2 10531-10535,10556-10559,13158,13160-13161,13163,13169-13172,13174-13175
+.speakeasy/out.openapi.yaml
+  s_146664733c831b::t_6f1d7ba32c722d 30936-31025
+  s_146664733c831b::t_112220a52fa611 66413-66422,70165-70189
+server/gen/http/plugins/client/encode_decode.go
+  s_146664733c831b::t_7f871a309f6640 2135-2368,4867-4873,4877,4880
+  s_146664733c831b::t_43b4cd5a88a308 4874-4876,4878-4879
+server/gen/plugins/client.go
+  s_146664733c831b::t_2e01611c38bf61 28,42,53,261-282
+server/gen/plugins/service.go
+  s_146664733c831b::t_2c44cb1d7290a3 38-39
+  s_146664733c831b::t_f232fafb59f754 109,242-255,358-368
+.changeset/expose-directory-plugin-audiences.md
+  s_146664733c831b::t_9268d9fc983f83 1-5
+server/gen/http/cli/gram/cli.go
+  s_146664733c831b::t_86e71195755f82 144,1772-1775,3892,5481-5483,7580-7582,15588,15801-15820
+server/gen/http/plugins/server/paths.go
+  s_146664733c831b::t_d29127f31b1117 55-59
+client/dashboard/src/sdk/.speakeasy/gen.lock
+  s_146664733c831b::t_fd9e8bae8588e1 354,906,1088,1727,2054-2055,6155-6163,6370-6378
+server/gen/http/plugins/server/types.go
+  s_146664733c831b::t_73b5d85806c1f2 233-239,2043-2224,4225-4236,4435-4453,5839-5978,7649,7652,7655
+  s_146664733c831b::t_d9c1962d8b8faf 7647-7648,7650-7651,7653-7654,7656
+server/internal/plugins/list_directory_audiences_test.go
+  s_146664733c831b::t_ef077cf656c5cb 99-100,105-106,111-112,117-118
+  s_146664733c831b::t_f3ed9256e15a29 93-94,96,101,107,119
+  s_146664733c831b::t_8182fd272e204d 1-16,18-25,27-37,48-54,68-73,82-90,92,98,114-116,120-121,123
+  s_146664733c831b::t_eaf95d36da24d5 38
+  s_146664733c831b::t_bf0dc0bd5af78f 39-47,55-60,63-64,67
+  s_146664733c831b::t_08bf844d077c96 17,26,91,95,97,102-104,108-110,122
+server/design/plugins/design.go
+  s_146664733c831b::t_08bf844d077c96 240-241,248,251,257-259,596-597,599-601,603-605,714-715,717
+  s_146664733c831b::t_4bac15d438ccf0 242-247,249-250,252-256,260-261,598,602,606-607,716,718
+  s_146664733c831b::t_e6beba3bd92c5a 719
+client/dashboard/src/sdk/src/sdk/plugins.ts
+  s_146664733c831b::t_eabac205fc002b 16,26,84-87,332-350
+server/gen/plugins/endpoints.go
+  s_146664733c831b::t_6878a16de19aa2 29,92,117,445-479
+server/gen/http/plugins/client/client.go
+  s_146664733c831b::t_902b5a5e8e4f75 57-60,130,365-388
+server/gen/http/openapi3.yaml
+  s_146664733c831b::t_269f7c90513554 31967-32055,67191,70946,70962,70965
+  s_146664733c831b::t_c92dba13840d4b 67190,67192-67199,70942-70945,70947-70961,70963-70964,70966
+server/gen/http/plugins/client/cli.go
+  s_146664733c831b::t_c9891aa6dc8c68 383-404
+server/gen/http/plugins/server/encode_decode.go
+  s_146664733c831b::t_6ca6a8c9426700 1998-2202,4437-4450
+server/gen/http/plugins/server/server.go
+  s_146664733c831b::t_f5d076baffd1f0 33,82,103,131,158,653-705
+client/dashboard/src/sdk/src/funcs/pluginsListAudiences.ts
+  s_146664733c831b::t_e985abef05ed71 1-205
+client/dashboard/src/sdk/src/models/components/listaudiencesresult.ts
+  s_146664733c831b::t_eed05df5316623 1-37
+client/dashboard/src/sdk/src/models/components/pluginaudience.ts
+  s_146664733c831b::t_3ac0a2992b94ef 1-78
+client/dashboard/src/sdk/src/models/operations/listaudiences.ts
+  s_146664733c831b::t_bb3626e0b3c846 1-84
+client/dashboard/src/sdk/src/react-query/audiences.core.ts
+  s_146664733c831b::t_e3ed8f0f9291c3 1-82
+client/dashboard/src/sdk/src/react-query/audiences.ts
+  s_146664733c831b::t_685988c7d9a6e5 1-143
+client/dashboard/src/pages/plugins/PluginAssignmentRow.tsx
+  s_146664733c831b::t_e1fc24d61f8192 3,20,53,58,60-65,67-73
+  s_146664733c831b::t_b4093be2559734 34-35,37-39,41
+  s_5987dba16de244::t_991a0141fbf9c3 7,30,36,40
+client/dashboard/src/pages/plugins/PluginDetail.tsx
+  s_146664733c831b::t_09632e6d6c35ec 39,94-99,214,223-226,516,544
+client/dashboard/src/pages/plugins/principals.test.ts
+  s_146664733c831b::t_0806337adb9354 2,27-32,111-121
+  s_146664733c831b::t_8d0ce6afcecf1b 7
+  s_5987dba16de244::t_faae31ac82e79b 6,122-131
+  s_5987dba16de244::t_2144e47b62619e 132
+client/dashboard/src/pages/plugins/PluginAssignmentsSheet.tsx
+  s_146664733c831b::t_6d13474a80ddc8 16,28,30,32,37,88,146-148,171,173,183-185,209,238
+  s_146664733c831b::t_75adb9b4e5cdbe 38,68-69,161
+  s_5987dba16de244::t_25c6950949f493 157
+  s_5987dba16de244::t_faae31ac82e79b 12-15,21-24,26-27,55-56,58,60-65,67,76-80,83-84,144-145,196-197,199-200,203-204,208,261-270
+  s_5987dba16de244::t_991a0141fbf9c3 25,39-51,81-82,85-87,201-202,205-207
+  s_5987dba16de244::t_85377a8b92b82b 52,54,59,68-75,171
+  s_5987dba16de244::t_83c5a3408f2153 53
+  s_5987dba16de244::t_4b781015b4d540 29,31,33-36,57,66,158-160,162-170,172-182,185-195,211-213,218-220,247-248,251-254,272-273
+  s_5987dba16de244::t_8cfb0671efd2ab 214-217
+client/dashboard/src/pages/plugins/principals.ts
+  s_146664733c831b::t_e1fc24d61f8192 3,6,21-22,24-31,41-42,59,67-70,129-132,134-136,172-176
+  s_146664733c831b::t_6d18282dc6d6fa 133
+  s_5987dba16de244::t_991a0141fbf9c3 137-143,155
+  s_5987dba16de244::t_faae31ac82e79b 71-82,144-154
+  s_5987dba16de244::t_9311de1cc89d15 156
+client/dashboard/src/pages/plugins/PluginAssignmentsList.tsx
+  s_146664733c831b::t_e1fc24d61f8192 4,22,27,43
+client/dashboard/src/components/plugin-detail-sidebar-nav.tsx
+  s_146664733c831b::t_880250b596c1a3 25,36,62,73-76,189
+client/dashboard/src/components/ui/MultiSelect/index.tsx
+  s_5987dba16de244::t_faae31ac82e79b 765-776,1075,1084
+client/dashboard/src/components/ui/MultiSelect/index.test.tsx
+  s_5987dba16de244::t_faae31ac82e79b 184-189,202-215
+  s_5987dba16de244::t_1f8083b85a54ac 190,201
+  s_5987dba16de244::t_e11110fa903132 191-200
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "aed0f39f015a6e6acc5d62b2356a510d52264018",
+  "prompts": {},
+  "humans": {
+    "h_2620cc60cfd1e9": {
+      "author": "tgmendes <tiago@speakeasy.com>"
+    }
+  },
+  "sessions": {
+    "s_146664733c831b": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a00edd-cfd5-79c0-8f97-21f359bc9f3e",
+        "model": "gpt-5.6-terra"
+      },
+      "human_author": null
+    },
+    "s_4381c145a71162": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a00eef-563f-7c70-92dc-116b98fb26fe",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "tgmendes <tiago@speakeasy.com>"
+    },
+    "s_5987dba16de244": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a01959-19dd-7eb1-8706-1fa16b5d07e0",
+        "model": "gpt-5.6-terra"
+      },
+      "human_author": "tgmendes <tiago@speakeasy.com>"
+    }
+  }
+}

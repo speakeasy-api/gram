@@ -1,0 +1,28 @@
+server/internal/hooks/cursor_test.go
+  s_e22b3b94346bf4::t_b57e4c72c11705 199-200
+server/internal/hooks/shadow_mcp_request_link.go
+  s_e22b3b94346bf4::t_46362c6654d2a4 5,9-11,52,63,74-79,136-142
+server/internal/hooks/shadow_mcp_request_link_test.go
+  s_e22b3b94346bf4::t_72958716b34f64 46,51
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.3",
+  "base_commit_sha": "b9cb18025a17000f79c752ab3f1195df7ec991d7",
+  "prompts": {},
+  "humans": {
+    "h_2620cc60cfd1e9": {
+      "author": "tgmendes <tiago@speakeasy.com>"
+    }
+  },
+  "sessions": {
+    "s_e22b3b94346bf4": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019e9385-0ca9-70d3-97f9-9fdb17029cd4",
+        "model": "gpt-5.5"
+      },
+      "human_author": "tgmendes <tiago@speakeasy.com>"
+    }
+  }
+}

@@ -1,0 +1,70 @@
+server/internal/access/listscopes_test.go
+  s_95d069cf52f7b4::t_13c8c0825184f4 35-41
+server/internal/authz/grants.go
+  s_95d069cf52f7b4::t_50247b5f493d0c 224,307,367
+  s_95d069cf52f7b4::t_a7521fc36445a9 529
+  s_95d069cf52f7b4::t_f52bd99cb93c9f 524-526,528
+client/dashboard/src/pages/access/CreateRoleDialog.tsx
+  s_95d069cf52f7b4::t_0e647f99811542 180,437-438,441-444
+server/internal/authz/override.go
+  s_95d069cf52f7b4::t_50247b5f493d0c 31,35,61
+server/internal/authz/load.go
+  s_95d069cf52f7b4::t_50247b5f493d0c 38
+client/dashboard/src/pages/access/roleGrantTransform.ts
+  s_95d069cf52f7b4::t_12364ac751395b 3,16-33,76-79,81,85-86,131,134,162
+server/design/access/design.go
+  s_95d069cf52f7b4::t_d7036a168e5777 758-761
+client/dashboard/src/pages/access/roundtrip.test.ts
+  s_95d069cf52f7b4::t_176c93df6df546 3,12-32,59-62,79-80,132
+server/internal/access/impl.go
+  s_95d069cf52f7b4::t_fec77e1a498120 302,315,497-499
+  s_95d069cf52f7b4::t_bb01891edb2574 241-251,255-256,260-267
+  s_95d069cf52f7b4::t_bc3e582a8b2bfc 257
+  s_95d069cf52f7b4::t_b8fb1c88416574 258-259
+  s_95d069cf52f7b4::t_55d58e7afe9276 225
+server/internal/authz/checks.go
+  s_95d069cf52f7b4::t_ae01e890d0d645 37-38,44-46,49
+server/internal/authz/resource_grants.go
+  s_95d069cf52f7b4::t_50247b5f493d0c 274
+server/internal/authz/access.go
+  s_95d069cf52f7b4::t_096b9b6db1b2ec 59-60
+  s_95d069cf52f7b4::t_ddc26ea7f21811 17-19,52-54,63
+server/internal/authz/scopes_test.go
+  s_95d069cf52f7b4::t_df419a54a84f6b 24
+  s_95d069cf52f7b4::t_d668a9a6000bc1 85-100
+  s_95d069cf52f7b4::t_dd1aa632eb49a4 44,48-51
+  s_95d069cf52f7b4::t_e598c3235899e4 62-75,77-78,82-84
+  s_95d069cf52f7b4::t_57611cac3cc589 1236-1237,1240-1241
+  s_95d069cf52f7b4::t_9a59a540d6e42a 20,23
+  s_95d069cf52f7b4::t_325f7288542a7d 27-28,37,52-55,1235,1239
+  s_95d069cf52f7b4::t_35e699402e553a 76,81
+server/internal/authz/scopes.go
+  s_95d069cf52f7b4::t_79585b859fa9fc 53,55-67,71-80
+  s_95d069cf52f7b4::t_84a0d8c99c6bfa 172,176
+  s_95d069cf52f7b4::t_4596333b89cb8b 54,69-70,81
+  s_95d069cf52f7b4::t_cc81a683c6cf9d 100-103,121,125,127,129,135,140-143,156-159,173-174,177-178
+  s_95d069cf52f7b4::t_6e512972358677 144-153,160-162
+  s_95d069cf52f7b4::t_1fc8dbaa53be2f 165-166
+  s_95d069cf52f7b4::t_8e4818f21651d6 163-164
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.8",
+  "base_commit_sha": "1e92a6552210cf5b15a4eff346e56bd731a38997",
+  "prompts": {},
+  "humans": {
+    "h_2620cc60cfd1e9": {
+      "author": "tgmendes <tiago@speakeasy.com>"
+    }
+  },
+  "sessions": {
+    "s_95d069cf52f7b4": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019ecfff-79bd-7ac0-8355-76dbf61e503f",
+        "model": "gpt-5.5"
+      },
+      "human_author": "tgmendes <tiago@speakeasy.com>"
+    }
+  }
+}

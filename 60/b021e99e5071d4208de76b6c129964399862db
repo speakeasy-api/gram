@@ -1,0 +1,94 @@
+server/design/risk/design.go
+  s_5cc1f9ecaa9d4c::t_82b556aa31717b 40-43,167-168
+  s_5cc1f9ecaa9d4c::t_95c63804a2c3f0 44,170
+server/internal/risk/policy_bypass_evaluator.go
+  s_5cc1f9ecaa9d4c::t_7283a9e3881858 72,90
+  s_5cc1f9ecaa9d4c::t_080e734ea39d38 119,121,123
+server/internal/risk/policy_audience.go
+  s_5cc1f9ecaa9d4c::t_82b556aa31717b 1-31,33-78,80-86,88-94,112-124,127-133
+  s_5cc1f9ecaa9d4c::t_a848bf1b7011d3 32
+  s_5cc1f9ecaa9d4c::t_88ad175d5a18e1 95,97-103,105-111
+server/internal/risk/impl.go
+  s_5cc1f9ecaa9d4c::t_82b556aa31717b 301-307,309-310,362,372-375,550-557,563-564,566-568,570-571,630-634,654,664-667,677,755-757,2192-2193,2195-2196,2198-2200,2202-2213,2216-2220,2224-2227,2229-2231,2233-2244,2247-2251
+  s_5a92cd828d83ac::t_868df5381259c1 308
+  s_5cc1f9ecaa9d4c::t_af479be504b117 558-562,565
+  s_5cc1f9ecaa9d4c::t_88ad175d5a18e1 754
+client/dashboard/src/pages/security/PolicyCenter.tsx
+  s_5cc1f9ecaa9d4c::t_82b556aa31717b 58,63,68,128,290-304,417-420,491-492,523-524,546,550,648-649,664-665,684-685,896-907,1117-1124,1172-1174,1669-1672,1693-1696,1953-1959,1993-2061,2063-2084,2086-2186
+  s_5cc1f9ecaa9d4c::t_86d8263328ff1a 544-545,547-549
+server/cmd/gram/start.go
+  s_5cc1f9ecaa9d4c::t_ef56e9e2df6487 971
+server/internal/hooks/setup_test.go
+  s_5cc1f9ecaa9d4c::t_f085f97dcea223 95
+server/internal/hooks/claude_hooks.go
+  s_5a92cd828d83ac::t_23fb53b61047c5 775
+  s_5cc1f9ecaa9d4c::t_82b556aa31717b 778
+server/internal/hooks/impl.go
+  s_5cc1f9ecaa9d4c::t_82b556aa31717b 198
+  s_5cc1f9ecaa9d4c::t_d4d1d1736e5927 206
+server/internal/background/activities/risk_analysis/analyze_batch_test.go
+  s_5cc1f9ecaa9d4c::t_82b556aa31717b 850,853
+server/internal/hooks/claude_hooks_test.go
+  s_5cc1f9ecaa9d4c::t_76d976d2a37510 28
+  s_5cc1f9ecaa9d4c::t_82b556aa31717b 36
+  s_5cc1f9ecaa9d4c::t_f2a0dbcd02f9b9 51,53-55
+  s_5a92cd828d83ac::t_0526659b24682b 347,350,354,449-450
+server/internal/hooks/codex_hooks.go
+  s_5cc1f9ecaa9d4c::t_3c19f3bb385389 62
+server/design/shared/risk.go
+  s_5cc1f9ecaa9d4c::t_82b556aa31717b 50-57,83-85
+  s_5cc1f9ecaa9d4c::t_266e47d8f28b45 87
+server/internal/authz/grants.go
+  s_5a92cd828d83ac::t_021500d888ded9 56
+  s_5cc1f9ecaa9d4c::t_bbb69f0849492a 57-64
+  s_5cc1f9ecaa9d4c::t_0569583e09bbd7 432-438,440-442,444,462,466-467,469,485,489-491
+  s_5cc1f9ecaa9d4c::t_cbe410bd503559 439,443
+server/internal/hooks/risk_scan.go
+  s_5cc1f9ecaa9d4c::t_e1d107bc5c0c53 48,80,87,109
+  s_5cc1f9ecaa9d4c::t_2bdc277438c818 70-73,79,83-86,91,93-96,98-108
+  s_5cc1f9ecaa9d4c::t_82b556aa31717b 76
+  s_5cc1f9ecaa9d4c::t_1ea8870dcab869 92,97
+server/internal/risk/queries.sql
+  s_5cc1f9ecaa9d4c::t_82b556aa31717b 16,37,92,108
+server/internal/background/activities/risk_analysis/setup_test.go
+  s_5cc1f9ecaa9d4c::t_82b556aa31717b 88-91
+server/internal/risk/policy_audience_test.go
+  s_5cc1f9ecaa9d4c::t_82b556aa31717b 1-53,56-61,63-91,93-95,97-101,146-161
+  s_5cc1f9ecaa9d4c::t_964788e1e35343 54-55
+  s_5cc1f9ecaa9d4c::t_f5eafc67c7ba18 62,92,96
+  s_5cc1f9ecaa9d4c::t_ab8862ae21178f 103-133,135-137,139-143
+server/internal/risk/scanner.go
+  s_5cc1f9ecaa9d4c::t_82b556aa31717b 21,34,116,146,254-257,264-265,279-287,291-292
+  s_5cc1f9ecaa9d4c::t_a838ad66de0abc 32-33,39-41,252
+  s_5cc1f9ecaa9d4c::t_6808772166bec6 168,253,278
+  s_5cc1f9ecaa9d4c::t_2f3fc988d37e1f 169-173
+  s_5a92cd828d83ac::t_f673db28d03d43 211-216,268-272
+  s_5cc1f9ecaa9d4c::t_1ea8870dcab869 263
+server/internal/risk/scanner_test.go
+  s_5cc1f9ecaa9d4c::t_88ad175d5a18e1 16,23,88,90,102,109,111,124-138,249,251,268
+  s_5cc1f9ecaa9d4c::t_82b556aa31717b 98,120,260,263
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.7",
+  "base_commit_sha": "60b021e99e5071d4208de76b6c129964399862db",
+  "prompts": {},
+  "sessions": {
+    "s_5a92cd828d83ac": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019eb6a2-6b62-7900-969e-22cc3bd839f6",
+        "model": "gpt-5.5"
+      },
+      "human_author": null
+    },
+    "s_5cc1f9ecaa9d4c": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019eb249-fed4-7522-8f02-b4f75c7d3a20",
+        "model": "gpt-5.5"
+      },
+      "human_author": "tgmendes <tiago@speakeasy.com>"
+    }
+  }
+}

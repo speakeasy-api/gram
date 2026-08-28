@@ -1,0 +1,44 @@
+server/internal/risk/policy_audience.go
+  s_bfcdcec2fc12dd::t_b30067219b5eb7 65-72
+  s_bfcdcec2fc12dd::t_68db79c857373d 1-64,73-123
+server/internal/hooks/cursor_hooks.go
+  s_bfcdcec2fc12dd::t_e08143f0da84ab 89
+server/internal/risk/impl.go
+  s_bfcdcec2fc12dd::t_e08143f0da84ab 245-254,301,309-312,481-506,533-537,557,565-568,578,2054-2058,2060-2079,2088-2094,2096-2115
+server/internal/hooks/codex_hooks.go
+  s_bfcdcec2fc12dd::t_e08143f0da84ab 60
+server/internal/risk/scanner.go
+  s_bfcdcec2fc12dd::t_e08143f0da84ab 20,33-36,41-43,118,146,157-168,197-199,239-250,256-258,271-286
+server/internal/hooks/claude_hooks.go
+  s_bfcdcec2fc12dd::t_e08143f0da84ab 738
+client/dashboard/src/pages/security/PolicyCenter.tsx
+  s_bfcdcec2fc12dd::t_e08143f0da84ab 14-20,60-61,66-67,123-240,409-412,431-433,471-473,496-499,521-527,542-543,562-563,584-585,669-672,765-770,887-894,907,965-972,993-1000,1017-1025,1334-1435
+server/design/risk/design.go
+  s_bfcdcec2fc12dd::t_e08143f0da84ab 36-40,161-164
+server/internal/risk/queries.sql
+  s_bfcdcec2fc12dd::t_e08143f0da84ab 15,33,72
+server/internal/hooks/risk_scan.go
+  s_bfcdcec2fc12dd::t_e08143f0da84ab 12,44,54,66-70,75-79,81,85,87,117,129-132,160,172-173
+server/internal/hooks/claude_hooks_test.go
+  s_bfcdcec2fc12dd::t_e08143f0da84ab 26-29,34
+server/internal/hooks/impl.go
+  s_bfcdcec2fc12dd::t_e08143f0da84ab 190,198
+server/design/shared/risk.go
+  s_bfcdcec2fc12dd::t_e08143f0da84ab 31-38,60-64,77
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.6",
+  "base_commit_sha": "dfce369d7395d3d3b0c7d22c10238887b553b07d",
+  "prompts": {},
+  "sessions": {
+    "s_bfcdcec2fc12dd": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019e978b-d153-7f13-a173-e4e397dcc332",
+        "model": "gpt-5.5"
+      },
+      "human_author": "tgmendes <tiago@speakeasy.com>"
+    }
+  }
+}

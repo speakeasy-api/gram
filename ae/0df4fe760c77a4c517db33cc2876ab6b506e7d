@@ -1,0 +1,45 @@
+server/internal/access/role_manager.go
+  s_5a92cd828d83ac::t_33edc3afe8697c 1026-1035
+client/dashboard/src/pages/security/PolicyCenter.tsx
+  s_5cc1f9ecaa9d4c::t_82b556aa31717b 58,63,68,128,290-304,417-420,491-492,523-524,546,550,648-649,664-665,684-685,896-907,1117-1124,1172-1174,1669-1672,1693-1696,1953-1959,1993-2061,2063-2084,2086-2186
+  s_5cc1f9ecaa9d4c::t_86d8263328ff1a 544-545,547-549
+  s_5a92cd828d83ac::t_d8a50598d5c532 2085
+client/dashboard/src/components/access/ApprovalRequestsContent.test.tsx
+  s_5a92cd828d83ac::t_2e33ed9182da44 330
+server/internal/access/listroles_test.go
+  s_5a92cd828d83ac::t_f4c76a1edbe768 49,62
+server/internal/access/listusergrants_test.go
+  s_5a92cd828d83ac::t_964c047a1e58c4 93,110,112-116
+server/design/access/design.go
+  s_5a92cd828d83ac::t_b360911ff9beb9 736,739
+server/internal/access/getrole_test.go
+  s_5a92cd828d83ac::t_7448ba32b5fea6 39
+client/dashboard/src/pages/access/roundtrip.test.ts
+  s_5a92cd828d83ac::t_dcf72c5febbeaa 14
+client/dashboard/src/components/observe/useObserveFilters.test.tsx
+  s_5a92cd828d83ac::t_a190937e6610db 59,71
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.7",
+  "base_commit_sha": "ae0df4fe760c77a4c517db33cc2876ab6b506e7d",
+  "prompts": {},
+  "sessions": {
+    "s_5a92cd828d83ac": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019eb6a2-6b62-7900-969e-22cc3bd839f6",
+        "model": "gpt-5.5"
+      },
+      "human_author": null
+    },
+    "s_5cc1f9ecaa9d4c": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019eb249-fed4-7522-8f02-b4f75c7d3a20",
+        "model": "gpt-5.5"
+      },
+      "human_author": "tgmendes <tiago@speakeasy.com>"
+    }
+  }
+}

@@ -1,0 +1,23 @@
+client/dashboard/src/components/access/ApprovalRequestsContent.test.tsx
+  s_9971e86f513595::t_10cb118ba575c7 867,883,900
+  s_9971e86f513595::t_a2b3f2e9a7cf3c 847-866,868-882,884-899,901-908
+  s_9971e86f513595::t_327902e6a38661 945,961,982
+client/dashboard/src/components/access/ApprovalRequestsContent.tsx
+  s_9971e86f513595::t_cef49ce5298dc8 403,406,418-422,425-428,431-432,435,440-441,460,543-546
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.7",
+  "base_commit_sha": "a72cdd40cb3138db8eb47ecb0de0b9eb6df871f0",
+  "prompts": {},
+  "sessions": {
+    "s_9971e86f513595": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019ecbe4-9fbc-7a21-bc41-2031dbdd6e97",
+        "model": "gpt-5.5"
+      },
+      "human_author": "tgmendes <tiago@speakeasy.com>"
+    }
+  }
+}

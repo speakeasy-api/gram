@@ -1,0 +1,25 @@
+server/database/schema.sql
+  s_06bf1e574073ef::t_b5a9741fda6d56 4096-4097,4105,4117-4119
+server/internal/database/models.go
+  s_06bf1e574073ef::t_4d507db5044040 539
+server/migrations/20260826144341_data_export_routes.sql
+  s_06bf1e574073ef::t_1d3801b0b5af27 27
+server/migrations/atlas.sum
+  s_06bf1e574073ef::t_33050913aaf917 1,370
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.24",
+  "base_commit_sha": "77625d6082fbe4dfcd09c71f3d04e45648abfade",
+  "prompts": {},
+  "sessions": {
+    "s_06bf1e574073ef": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a03986-81cb-7d02-822b-2a3781869f76",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "tgmendes <tiago@speakeasy.com>"
+    }
+  }
+}

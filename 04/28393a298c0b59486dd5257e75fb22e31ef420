@@ -1,0 +1,57 @@
+.changeset/ais-343-judge-rationale-evidence.md
+  s_71fcec355d65e3::t_516037e5933e58 1-5
+client/dashboard/src/pages/security/RiskEvents.tsx
+  s_71fcec355d65e3::t_87405c9c6150aa 581-582,584-587
+  s_71fcec355d65e3::t_23dc7d08069698 385
+  s_71fcec355d65e3::t_a6183d76f03561 32
+  s_71fcec355d65e3::t_d4184b88717990 34-36,38
+  s_71fcec355d65e3::t_8463a4916cac61 594
+  s_71fcec355d65e3::t_d1bbb03a0a4f61 499
+client/dashboard/src/pages/security/risk-ui.tsx
+  s_71fcec355d65e3::t_740f942c6bff58 368,373
+  s_71fcec355d65e3::t_a80cecb0020d01 325-326,328-332
+  s_71fcec355d65e3::t_aa73d13d9be9e5 343,345-351,355,359,366,369-372,376-379,381,396,405,407-411,421-428
+  s_71fcec355d65e3::t_38bbe8a82f31f9 380
+  s_71fcec355d65e3::t_e37f4d1c8441fa 398-402
+  s_71fcec355d65e3::t_7964ed5564e66d 404
+  s_71fcec355d65e3::t_bb55078bb4a901 406
+  s_71fcec355d65e3::t_22d55c339c52c6 67-69,71,76-77
+  s_71fcec355d65e3::t_abc1108b8839e9 333-334,336-342
+  s_71fcec355d65e3::t_4759d61e85d8d1 335
+  s_71fcec355d65e3::t_80215e629a703c 322-324,327
+  s_71fcec355d65e3::t_95621cdacc9d29 17
+client/dashboard/src/pages/chatLogs/chatHelpers.tsx
+  s_71fcec355d65e3::t_cda18db78e0cad 13
+  s_71fcec355d65e3::t_120d8b125d7688 38-39,41
+client/dashboard/src/pages/security/risk-ui.test.tsx
+  s_71fcec355d65e3::t_61e3a990018cca 23-26,31
+  s_71fcec355d65e3::t_43f1f8de50d8ff 1-22,27-30,32-59,70-86,88,90-91
+  s_71fcec355d65e3::t_087763b4c6cf9f 87,89
+  s_71fcec355d65e3::t_ff0405635563c5 60-69
+.mise-tasks/seed.mts
+  s_71fcec355d65e3::t_6f862a90ffff70 1847
+  s_71fcec355d65e3::t_2b29e851678c97 1828
+  s_71fcec355d65e3::t_4887d99a5228ef 1810-1811,1815
+client/dashboard/src/pages/security/RiskOverviewCategoryDetail.tsx
+  s_71fcec355d65e3::t_238177c095c334 304
+  s_71fcec355d65e3::t_9d8a2806e88e2c 351-362
+  s_71fcec355d65e3::t_c872d7adb7bd8c 27,30
+client/dashboard/src/pages/security/risk-utils.ts
+  s_71fcec355d65e3::t_92adb63b1ba9b0 22-36
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.18",
+  "base_commit_sha": "0428393a298c0b59486dd5257e75fb22e31ef420",
+  "prompts": {},
+  "sessions": {
+    "s_71fcec355d65e3": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "cbebd432-4070-4eab-87f8-d84d2c2ba1b0",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Vishal Gowda <vishal@speakeasy.com>"
+    }
+  }
+}

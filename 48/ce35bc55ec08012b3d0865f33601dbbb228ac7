@@ -1,0 +1,33 @@
+server/internal/database/models.go
+  s_a91391a812c908::t_24446fb66d26df 1486-1500
+server/migrations/atlas.sum
+  s_a91391a812c908::t_03d3285b8ee0ba 1,245
+server/migrations/20260704050812_risk-policy-eval-reviews.sql
+  s_a91391a812c908::t_03d3285b8ee0ba 1-25
+server/database/schema.sql
+  s_8860283851235f::t_19b5a1a508c8e0 3450-3498
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "48ce35bc55ec08012b3d0865f33601dbbb228ac7",
+  "prompts": {},
+  "sessions": {
+    "s_8860283851235f": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "a60586c7-5b1b-4e8e-952b-236346010fe1",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Vishal Gowda <vishal@speakeasy.com>"
+    },
+    "s_a91391a812c908": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f2b83-2044-7ea2-9004-601b23879900",
+        "model": "gpt-5.5"
+      },
+      "human_author": null
+    }
+  }
+}

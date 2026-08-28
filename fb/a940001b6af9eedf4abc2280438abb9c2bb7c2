@@ -1,0 +1,23 @@
+server/cmd/gram/deps.go
+  s_f561d7b4be4c6e::t_da4e963601e800 334,367-371
+server/cmd/gram/start.go
+  s_f561d7b4be4c6e::t_80d2f3fbce0fa2 477-479,600
+server/cmd/gram/worker.go
+  s_f561d7b4be4c6e::t_dab1023d6041e3 338-353
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "fba940001b6af9eedf4abc2280438abb9c2bb7c2",
+  "prompts": {},
+  "sessions": {
+    "s_f561d7b4be4c6e": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f4731-09bd-71c3-8997-73ec411b1ef0",
+        "model": "gpt-5.5"
+      },
+      "human_author": "Vishal Gowda <vishal@speakeasy.com>"
+    }
+  }
+}

@@ -1,0 +1,35 @@
+client/dashboard/src/pages/access/roleDialogState.ts
+  s_5bb7da1b2bb48b::t_22b5c23fba515a 38-44
+client/dashboard/src/pages/access/GrantDrawer.tsx
+  s_5bb7da1b2bb48b::t_22b5c23fba515a 24,270-271,343
+client/dashboard/src/pages/access/roleDialogState.test.ts
+  s_5bb7da1b2bb48b::t_22b5c23fba515a 4,72-81
+client/dashboard/src/components/access/ApprovalRequestsContent.test.tsx
+  s_5bb7da1b2bb48b::t_9c0ff2cc30ce1f 363,375,587,622,661,704,791,842-845,872,881
+client/dashboard/src/pages/security/ApprovalRequests.tsx
+  s_5bb7da1b2bb48b::t_22b5c23fba515a 25
+client/dashboard/src/components/access/ApprovalRequestsContent.tsx
+  s_5bb7da1b2bb48b::t_22b5c23fba515a 690,692,704,707,709,712,714
+  s_5bb7da1b2bb48b::t_5e0c10c134a09d 361,371,427,777-780,931,944,960
+client/dashboard/src/pages/security/ApprovalRequests.test.tsx
+  s_5bb7da1b2bb48b::t_51185fbd225d95 88,108
+  s_5bb7da1b2bb48b::t_22b5c23fba515a 55-56
+client/dashboard/src/pages/access/RolesTab.tsx
+  s_5bb7da1b2bb48b::t_22b5c23fba515a 33,161-163
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.6",
+  "base_commit_sha": "2362ad1fc96529c6d22847b194f400bab70a37b7",
+  "prompts": {},
+  "sessions": {
+    "s_5bb7da1b2bb48b": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019eb0be-3dcf-7cf1-ba40-ad162ca07261",
+        "model": "gpt-5.5"
+      },
+      "human_author": "tgmendes <tiago@speakeasy.com>"
+    }
+  }
+}

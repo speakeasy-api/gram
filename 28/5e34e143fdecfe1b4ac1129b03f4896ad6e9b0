@@ -1,0 +1,19 @@
+server/database/schema.sql
+  s_03ab56aca1fcca::t_9c0857057e765a 3007-3009,3011-3014,3017-3018
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.9",
+  "base_commit_sha": "285e34e143fdecfe1b4ac1129b03f4896ad6e9b0",
+  "prompts": {},
+  "sessions": {
+    "s_03ab56aca1fcca": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "3f03da73-b20c-48aa-ae9f-e8a382ed2821",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Vishal Gowda <cartmanboy1991@gmail.com>"
+    }
+  }
+}

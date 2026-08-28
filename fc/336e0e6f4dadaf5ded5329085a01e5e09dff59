@@ -1,0 +1,23 @@
+server/migrations/20260824101417_session-quarantines.sql
+  s_d16499501a966c::t_519487006a8860 25
+server/database/schema.sql
+  s_d16499501a966c::t_fb5dbd820bd663 5073
+server/migrations/atlas.sum
+  s_d16499501a966c::t_519487006a8860 1,363
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.24",
+  "base_commit_sha": "fc336e0e6f4dadaf5ded5329085a01e5e09dff59",
+  "prompts": {},
+  "sessions": {
+    "s_d16499501a966c": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a03341-61d8-73b1-b230-ec13908068ae",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "Vishal Gowda <vishal@speakeasy.com>"
+    }
+  }
+}

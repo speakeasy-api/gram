@@ -1,0 +1,21 @@
+server/internal/risk/queries.sql
+  s_bfcdcec2fc12dd::t_138ec83b6cd3cb 167-173,176,180,182,185-198
+server/internal/risk/impl.go
+  s_bfcdcec2fc12dd::t_138ec83b6cd3cb 635-645
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.6",
+  "base_commit_sha": "f58c4ea3ee0a9babb995bc16a27feed7f0d47803",
+  "prompts": {},
+  "sessions": {
+    "s_bfcdcec2fc12dd": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019e978b-d153-7f13-a173-e4e397dcc332",
+        "model": "gpt-5.5"
+      },
+      "human_author": "tgmendes <tiago@speakeasy.com>"
+    }
+  }
+}

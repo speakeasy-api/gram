@@ -1,0 +1,100 @@
+server/cmd/riskjudgebench/main.go
+  s_ef46b0accab4fa::t_442c4db900ad7d 51-52,57
+  s_ef46b0accab4fa::t_2c92762d0ef588 146,202,209,213,218,229
+  s_ef46b0accab4fa::t_e0311bcc4eaa1e 2,5
+  s_ef46b0accab4fa::t_d07abb917d2497 83,397-398,420
+server/internal/scanners/promptinjection/openrouter/judge.go
+  s_ef46b0accab4fa::t_e0311bcc4eaa1e 26,232-233,237,264
+  s_7505de56d7d4d6::t_ba31bc65302d7a 41
+server/internal/background/activities.go
+  s_ef46b0accab4fa::t_442c4db900ad7d 46
+  s_ef46b0accab4fa::t_2c92762d0ef588 196
+server/internal/risk/impl.go
+  s_ef46b0accab4fa::t_2c92762d0ef588 121,181,2409,2430
+  s_ef46b0accab4fa::t_442c4db900ad7d 57
+server/internal/background/activities/risk_analysis/prompt_judge_batch.go
+  s_ef46b0accab4fa::t_8a98ceebb7085f 16
+  s_ef46b0accab4fa::t_8c3ce35ff47b6f 31,33,36,48,85,105,107,110
+  s_ef46b0accab4fa::t_96872c16f53795 67
+server/internal/scanners/llmjudge/judge_test.go
+  s_ef46b0accab4fa::t_27b10d456d0733 1
+  s_7505de56d7d4d6::t_70a7fc56368e6f 3-4,6-8,14-15
+  s_ef46b0accab4fa::t_8c3ce35ff47b6f 9,12
+server/internal/scanners/llmjudge/openrouter/setup_test.go
+  s_ef46b0accab4fa::t_58023c5aca61fd 1
+server/internal/scanners/llmjudge/openrouter/judge_test.go
+  s_ef46b0accab4fa::t_58023c5aca61fd 1,57,62,76,81,97,102,117,125,139,144,169,174,269,292,315,332,368
+  s_ef46b0accab4fa::t_7e0557a794385d 19
+  s_ef46b0accab4fa::t_8cb8469a63f819 270-274,293-297,316-320,333-335,340,369-373
+  s_ef46b0accab4fa::t_d07abb917d2497 361
+server/cmd/riskjudgebench/README.md
+  s_ef46b0accab4fa::t_e0311bcc4eaa1e 5,8
+  s_ef46b0accab4fa::t_d07abb917d2497 4,42,61,98-99,106,117,123,126,128,138,142-143
+  s_ef46b0accab4fa::t_555dd71dbc87a8 41,43
+  s_ef46b0accab4fa::t_f94a1d1b0bb8b4 94
+server/internal/background/activities/risk_analysis/analyze_batch.go
+  s_ef46b0accab4fa::t_8a98ceebb7085f 31
+  s_ef46b0accab4fa::t_8c3ce35ff47b6f 48,69
+server/internal/scanners/llmjudge/openrouter/metrics.go
+  s_ef46b0accab4fa::t_58023c5aca61fd 1,30
+server/cmd/gram/start.go
+  s_ef46b0accab4fa::t_442c4db900ad7d 100
+  s_ef46b0accab4fa::t_2c92762d0ef588 1011
+server/internal/risk/scanner.go
+  s_ef46b0accab4fa::t_2c92762d0ef588 199,636,644,658,663,679,687,689
+  s_7505de56d7d4d6::t_7f8d1dc1e14184 694
+  s_ef46b0accab4fa::t_442c4db900ad7d 36
+  s_ef46b0accab4fa::t_7e0557a794385d 178
+server/internal/scanners/llmjudge/openrouter/judge.go
+  s_ef46b0accab4fa::t_7e0557a794385d 25
+  s_ef46b0accab4fa::t_d07abb917d2497 35,51,69,72-74,139,277,305,323-324,457-458
+  s_ef46b0accab4fa::t_58023c5aca61fd 2,90,101,109,120,160,183,200,221,357
+  s_ef46b0accab4fa::t_63990a0764be4e 1
+server/internal/background/activities/risk_analysis/eval_guardrail.go
+  s_ef46b0accab4fa::t_8a98ceebb7085f 15,127
+  s_ef46b0accab4fa::t_8c3ce35ff47b6f 35,49,52,100
+  s_ef46b0accab4fa::t_96872c16f53795 29,40,42,104
+server/internal/risk/prompt_policy_scanner_test.go
+  s_ef46b0accab4fa::t_07568d186bbe84 25,29,32,35,43,49-50,123-124,244-245
+  s_ef46b0accab4fa::t_e0311bcc4eaa1e 20
+server/internal/risk/eval_guardrail_test.go
+  s_ef46b0accab4fa::t_2c92762d0ef588 68,70,80,152,214,216
+  s_ef46b0accab4fa::t_e7008b03bfb42f 20
+server/internal/risk/setup_test.go
+  s_ef46b0accab4fa::t_e7008b03bfb42f 31
+  s_ef46b0accab4fa::t_2c92762d0ef588 106,110,113
+server/internal/background/activities/risk_analysis/analyze_batch_test.go
+  s_ef46b0accab4fa::t_96872c16f53795 412
+  s_ef46b0accab4fa::t_8a98ceebb7085f 30,39,42,44
+server/cmd/risk-pi-report/main.go
+  s_ef46b0accab4fa::t_2c92762d0ef588 627,632-633
+  s_ef46b0accab4fa::t_442c4db900ad7d 29
+server/internal/scanners/llmjudge/judge.go
+  s_ef46b0accab4fa::t_733c936cb88ebc 1,14-15,19,25,28,32,42,55,68-69,94,100-101
+  s_7505de56d7d4d6::t_50ce5667d99ce2 91-93
+  s_7505de56d7d4d6::t_f2c4bac3b87335 12-13,16-18,21-24,31,38,41,53,65-66
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "7bf89393b51d571e5bd06a9b8a4ed08ec29d98f0",
+  "prompts": {},
+  "sessions": {
+    "s_7505de56d7d4d6": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "f2fbbdb4-de4d-415a-933c-386b6c917a56",
+        "model": "claude-fable-5"
+      },
+      "human_author": null
+    },
+    "s_ef46b0accab4fa": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f423c-e16c-7c00-8e13-8453e257aa68",
+        "model": "gpt-5.5"
+      },
+      "human_author": null
+    }
+  }
+}

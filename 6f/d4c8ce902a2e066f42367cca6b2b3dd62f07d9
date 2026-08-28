@@ -1,0 +1,21 @@
+.mise-tasks/hooks/test.sh
+  s_328fa4953f14a5::t_9342e271afd153 49-51,53-66
+hooks/plugin-claude-test/hooks/identity.sh
+  s_328fa4953f14a5::t_7ac76375999eeb 1
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "6fd4c8ce902a2e066f42367cca6b2b3dd62f07d9",
+  "prompts": {},
+  "sessions": {
+    "s_328fa4953f14a5": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f2962-a155-77c3-a896-f68f4c6836c9",
+        "model": "gpt-5.5"
+      },
+      "human_author": "Vishal Gowda <vishal@speakeasy.com>"
+    }
+  }
+}

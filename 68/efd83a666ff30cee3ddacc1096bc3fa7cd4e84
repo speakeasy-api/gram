@@ -1,0 +1,46 @@
+server/internal/hooks/claude_hooks.go
+  s_5a92cd828d83ac::t_23fb53b61047c5 775,776-778,930
+  s_5cc1f9ecaa9d4c::t_82b556aa31717b 781
+server/internal/hooks/codex_hooks_test.go
+  s_5a92cd828d83ac::t_0ace7d2658400a 79,81-110
+server/internal/hooks/claude_hooks_test.go
+  s_5cc1f9ecaa9d4c::t_76d976d2a37510 28
+  s_5cc1f9ecaa9d4c::t_82b556aa31717b 36
+  s_5cc1f9ecaa9d4c::t_f2a0dbcd02f9b9 51,53-55
+  s_5a92cd828d83ac::t_0526659b24682b 347,350,354,449-482
+server/internal/hooks/cursor_hooks.go
+  s_5a92cd828d83ac::t_e8da46dec35136 56-59,86,94,101,112,139,149,163,168
+server/internal/hooks/risk_scan.go
+  s_5cc1f9ecaa9d4c::t_e1d107bc5c0c53 48,80,87,109
+  s_5cc1f9ecaa9d4c::t_2bdc277438c818 70-73,79,83-86,91,93-96,98-108
+  s_5cc1f9ecaa9d4c::t_82b556aa31717b 76
+  s_5cc1f9ecaa9d4c::t_1ea8870dcab869 92,97
+  s_5a92cd828d83ac::t_8e7e82424ab439 114,156
+server/internal/hooks/codex_hooks.go
+  s_5cc1f9ecaa9d4c::t_3c19f3bb385389 62
+  s_5a92cd828d83ac::t_ba60409d07fe6d 43,57,66,77,88,93,101,120,148,153
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.7",
+  "base_commit_sha": "68efd83a666ff30cee3ddacc1096bc3fa7cd4e84",
+  "prompts": {},
+  "sessions": {
+    "s_5a92cd828d83ac": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019eb6a2-6b62-7900-969e-22cc3bd839f6",
+        "model": "gpt-5.5"
+      },
+      "human_author": null
+    },
+    "s_5cc1f9ecaa9d4c": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019eb249-fed4-7522-8f02-b4f75c7d3a20",
+        "model": "gpt-5.5"
+      },
+      "human_author": "tgmendes <tiago@speakeasy.com>"
+    }
+  }
+}

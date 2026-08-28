@@ -1,0 +1,43 @@
+server/internal/authz/resource_grants_test.go
+  s_dd01a61306e904::t_cb73d78642df42 305-308,319-320
+  s_dd01a61306e904::t_8c81793c422eb7 115,321
+  s_dd01a61306e904::t_9b38ab98255a90 233-251,256-257,259,289,299,309-318
+  s_dd01a61306e904::t_c2e746eaaf87cc 322-325,340-343,352-355,370-371
+  s_dd01a61306e904::t_149a0ea9c13960 11-26,40-56,66-72,74,79
+  s_dd01a61306e904::t_743d7982ba4742 326-339,344-351,356-369,387-396,402,404
+  s_dd01a61306e904::t_a3fd083bf3db4a 94-110,176-182,199-213,216
+  s_dd01a61306e904::t_174b27592e4899 265,277,283,293
+server/internal/authz/principal.go
+  s_dd01a61306e904::t_a9d2db4d4f1098 78,80
+server/internal/authz/resource_grants.go
+  s_dd01a61306e904::t_9fa052c07a5044 127
+  s_dd01a61306e904::t_d789fcf71505b0 98,101,121,136-137,153-154,157,160-161,177-181
+  s_dd01a61306e904::t_5bcc60b1e68e44 11-12,18,35-45,47-50,185-187,191-194
+  s_dd01a61306e904::t_3ec2dd01b2c93a 143,167
+  s_dd01a61306e904::t_052c614071ae09 144-145,147,169,171
+  s_dd01a61306e904::t_4b119868544b6f 69-74,138-142,146,148,151-152,162-164,166,170,172,175-176
+  h_2620cc60cfd1e9 13-16,19-20,22-23,25-29,46,51-62,66,77-79,81-82,84-89,92-93,95-96,99-100,103-104
+  s_dd01a61306e904::t_7fd007c0e6b9f7 108
+  s_dd01a61306e904::t_98c93d9e3060eb 113-116,123,125
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.3",
+  "base_commit_sha": "3f0e2c1da2f45a1160ae0dcde060f62305055c16",
+  "prompts": {},
+  "humans": {
+    "h_2620cc60cfd1e9": {
+      "author": "tgmendes <tiago@speakeasy.com>"
+    }
+  },
+  "sessions": {
+    "s_dd01a61306e904": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019e9259-a3e7-7241-bfbc-024a709c693d",
+        "model": "gpt-5.5"
+      },
+      "human_author": "tgmendes <tiago@speakeasy.com>"
+    }
+  }
+}

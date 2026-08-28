@@ -1,0 +1,76 @@
+server/internal/authz/checks.go
+  s_5bb7da1b2bb48b::t_68d65f3a933dde 23,33
+  h_2620cc60cfd1e9 45
+server/cmd/gram/start.go
+  s_5bb7da1b2bb48b::t_488305d12e2dad 997-1015
+  s_5bb7da1b2bb48b::t_5bd45ae8672fa6 981
+server/internal/hooks/shadow_mcp_request_link.go
+  s_5bb7da1b2bb48b::t_45e9907ffa80e2 53
+server/internal/authz/access.go
+  s_5bb7da1b2bb48b::t_821865127dad22 29-35
+  s_5bb7da1b2bb48b::t_2247316c5e0d59 14-16,22-28,57,59,66
+server/internal/hooks/claude_hooks.go
+  s_5bb7da1b2bb48b::t_e17d859552e531 834
+  s_5bb7da1b2bb48b::t_c2590b579e8b28 855
+server/internal/risk/policy_bypass_evaluator.go
+  s_5bb7da1b2bb48b::t_fc6a158b61c03d 83,113
+  s_5bb7da1b2bb48b::t_b6407aa8f7296a 118
+  s_5bb7da1b2bb48b::t_0f59648c3e875a 1-22,65-66,68-73,75-82,85-112,116,119,121-147
+  s_5bb7da1b2bb48b::t_9b965680b6fb8a 84
+  s_5bb7da1b2bb48b::t_578c7b831f7e5e 32-34
+  s_5bb7da1b2bb48b::t_bddd41822b3820 120
+  h_2620cc60cfd1e9 23-31,35-64
+  s_5bb7da1b2bb48b::t_f2930714acdeb8 74,114-115,117
+  s_5bb7da1b2bb48b::t_72eeb9bd9b8d1a 67
+server/internal/hooks/shadow_mcp_access_test.go
+  s_5bb7da1b2bb48b::t_823a6c7f4c78c5 80,116-148
+server/internal/shadowmcp/access_rules.go
+  s_5bb7da1b2bb48b::t_c2590b579e8b28 105
+  s_5bb7da1b2bb48b::t_35a4e3978db411 5,7,104,106-195
+server/internal/hooks/setup_test.go
+  s_5bb7da1b2bb48b::t_e0cbb731e1e745 27,95
+  s_5bb7da1b2bb48b::t_488305d12e2dad 98-116
+server/internal/hooks/impl.go
+  s_5bb7da1b2bb48b::t_61bf68e952ec16 102,121
+  s_5bb7da1b2bb48b::t_83da4f68ff2b1e 50
+server/internal/hooks/shadow_mcp_request_link_test.go
+  s_5bb7da1b2bb48b::t_42c88af2f2fb48 95,108
+server/internal/authz/scopes_test.go
+  s_5bb7da1b2bb48b::t_b65158df961de7 173-213
+server/internal/hooks/shadow_mcp_access.go
+  s_5bb7da1b2bb48b::t_fb3b037f4e270c 58-64,66,72-73,75
+  s_5bb7da1b2bb48b::t_9186a55833681a 42,68-70
+  s_5bb7da1b2bb48b::t_d07a509921e8df 9,82,88
+  s_5bb7da1b2bb48b::t_72c1bbb75e3337 28,57
+  s_5bb7da1b2bb48b::t_c3194146896b85 65
+server/internal/shadowmcp/match.go
+  s_5bb7da1b2bb48b::t_0f59648c3e875a 22-56
+  h_2620cc60cfd1e9 101-112
+server/internal/risk/policy_bypass.go
+  s_5bb7da1b2bb48b::t_af96bbb0eb6fb9 24,545-548,551-555,557,576-582
+  s_5bb7da1b2bb48b::t_f98cb3bda55754 550
+  s_5bb7da1b2bb48b::t_42c88af2f2fb48 564
+server/internal/authz/grants.go
+  s_5bb7da1b2bb48b::t_c12ef0ace98d63 457
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.6",
+  "base_commit_sha": "497c8a306d1a85e7084e2f7179b5be47a4c1dbd0",
+  "prompts": {},
+  "humans": {
+    "h_2620cc60cfd1e9": {
+      "author": "tgmendes <tiago@speakeasy.com>"
+    }
+  },
+  "sessions": {
+    "s_5bb7da1b2bb48b": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019eb0be-3dcf-7cf1-ba40-ad162ca07261",
+        "model": "gpt-5.5"
+      },
+      "human_author": "tgmendes <tiago@speakeasy.com>"
+    }
+  }
+}

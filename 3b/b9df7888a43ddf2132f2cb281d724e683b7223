@@ -1,0 +1,33 @@
+server/internal/chat/list_chats_test.go
+  s_05724d38921fad::t_6184b10ff1f1d1 400-440
+.changeset/chat-list-last-message-date.md
+  s_05724d38921fad::t_76b126b80d6103 1-6
+client/dashboard/src/components/observe/LogsAgents.tsx
+  s_05724d38921fad::t_abca2d9dda201b 520
+client/dashboard/src/pages/chatLogs/ChatLogsTable.tsx
+  s_05724d38921fad::t_bc55193a8116d0 187-188,217-222
+client/dashboard/src/pages/chatLogs/ChatLogsTable.test.tsx
+  s_05724d38921fad::t_a458b644e385f7 67-82,85
+  s_05724d38921fad::t_3a321ab497bcb9 83-84
+server/internal/chat/queries.sql
+  s_05724d38921fad::t_bd5ebf3ab78877 88-99,101-107,110-128,131-143,229-240,242-247
+  s_05724d38921fad::t_cab5fe5822fe8a 146,153,195-228
+server/design/chat/design.go
+  s_05724d38921fad::t_bf9838ec5aece1 32,35,47
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.6",
+  "base_commit_sha": "3bb9df7888a43ddf2132f2cb281d724e683b7223",
+  "prompts": {},
+  "sessions": {
+    "s_05724d38921fad": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019ea936-4f48-76d0-b86e-31790c0e1e68",
+        "model": "gpt-5.5"
+      },
+      "human_author": "Alex Martin <alex.martin@speakeasy.com>"
+    }
+  }
+}

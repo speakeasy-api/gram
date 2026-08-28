@@ -1,0 +1,38 @@
+server/internal/hooks/cursor_test.go
+  s_67e5161625cc67::t_c9c7090121a0bb 43,49,62,69,81,85,111-126
+  s_67e5161625cc67::t_cffb51f34ccfd5 186,192,211,217
+server/internal/hooks/claude_hooks_test.go
+  s_67e5161625cc67::t_bb4975f11409a5 697-736
+  s_67e5161625cc67::t_bb88e6ecc2c846 71,74,92,95,114,118,150,153
+  s_67e5161625cc67::t_9b85103dd9a6e4 181,190,218,223,252,264,292,302,369,380,407,418,445,455
+  s_67e5161625cc67::t_767db1ccbae983 68,80-91,93-94,96-97
+server/internal/hooks/codex_hooks.go
+  s_67e5161625cc67::t_40d147e3565e25 19
+  s_67e5161625cc67::t_e0742a4139af61 45-47
+server/internal/hooks/cursor_hooks.go
+  s_67e5161625cc67::t_8fd9463d02515c 22,57-59
+  s_67e5161625cc67::t_09ac531cf4c607 60-61
+server/internal/hooks/codex_hooks_test.go
+  s_67e5161625cc67::t_74e370b2a86618 20,25,67-81
+server/internal/hooks/claude_hooks.go
+  s_67e5161625cc67::t_ae8ab0bd4cadff 557-567,671-677
+server/internal/hooks/risk_scan.go
+  s_67e5161625cc67::t_6e274ff66ae984 6-7,50-55,86-91,100,103,107,114
+  s_67e5161625cc67::t_657c60df6db146 8,101-102
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.8",
+  "base_commit_sha": "2a1a29ba572be5eb5e74a7f4b19f147137d8966d",
+  "prompts": {},
+  "sessions": {
+    "s_67e5161625cc67": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019ecfe0-9405-7441-aec9-1a4a9133f548",
+        "model": "gpt-5.5"
+      },
+      "human_author": "tgmendes <tiago@speakeasy.com>"
+    }
+  }
+}

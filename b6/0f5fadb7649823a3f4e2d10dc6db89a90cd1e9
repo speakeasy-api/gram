@@ -1,0 +1,108 @@
+server/internal/risk/celenv/descriptor_test.go
+  s_03ab56aca1fcca::t_fb06a140d31291 1-166
+server/design/risk/design.go
+  s_03ab56aca1fcca::t_e4c3eddcb097c9 1265-1267
+  s_03ab56aca1fcca::t_938639005df0ac 401-402,410,413,420-421,423
+  s_03ab56aca1fcca::t_26120cb0242aeb 1209,1211-1216,1221-1234,1237-1239,1241-1264,1270-1271,1273-1276,1278,1281-1282,1284-1287,1289
+server/internal/background/activities/risk_analysis/celadapter.go
+  s_03ab56aca1fcca::t_12fe7daece0fc6 16,39,46
+client/dashboard/src/pages/security/detection-rules-data.ts
+  s_03ab56aca1fcca::t_9990c20219ab54 208-209
+  s_03ab56aca1fcca::t_864c40f63da997 160,204
+  s_03ab56aca1fcca::t_c2c9fb460fc409 315-317,320,324
+server/internal/risk/celenv/celenv.go
+  s_03ab56aca1fcca::t_627cd45f633545 386
+  s_03ab56aca1fcca::t_e2a16c4f4e1383 397
+  s_03ab56aca1fcca::t_f314b1917f2cc7 408
+  s_03ab56aca1fcca::t_ff42113ea2bb0a 18
+  s_03ab56aca1fcca::t_a542b21ed7976f 267
+  s_03ab56aca1fcca::t_d9037690646089 13-14
+  s_03ab56aca1fcca::t_afe0906a145e32 27
+  s_03ab56aca1fcca::t_53df3169fa4430 26,33
+  s_03ab56aca1fcca::t_a0afe0636e6427 124-132,135-184,186
+  s_03ab56aca1fcca::t_2c2033e158e457 419
+  s_03ab56aca1fcca::t_5310390e20d699 362
+  s_03ab56aca1fcca::t_c5db66c40730a3 7
+  s_03ab56aca1fcca::t_bcffb4c8e7b5f5 347
+server/internal/risk/impl.go
+  s_03ab56aca1fcca::t_a278d8fa93d31d 2086-2090
+  s_03ab56aca1fcca::t_46635de14ccf96 2066
+  s_03ab56aca1fcca::t_89025aec655298 2075-2081
+  s_03ab56aca1fcca::t_7a373e8a7fa281 1413-1418,1424-1434,1436-1447,1450,1454-1469,1472-1483
+  s_03ab56aca1fcca::t_28e396a3575af8 2072
+client/dashboard/src/pages/security/cel-env.test.ts
+  s_03ab56aca1fcca::t_c664d6d5653605 1-35,44-47,49-81,86-94,96,99-112,114-120
+  s_03ab56aca1fcca::t_1f181f757a243f 48
+  s_03ab56aca1fcca::t_0a94a6888b871a 82-85,95,97-98,113
+  s_03ab56aca1fcca::t_6db98683e810bc 36-43
+client/dashboard/src/pages/security/cel-monaco-editor.tsx
+  s_03ab56aca1fcca::t_da03c245fa530b 328-330,350-358
+  s_03ab56aca1fcca::t_fc3628b76a8590 381,389-391
+  s_03ab56aca1fcca::t_1971f32a71c676 68
+  s_03ab56aca1fcca::t_6017da01b3fe0e 439
+  s_03ab56aca1fcca::t_cd8dedf49fc5d3 83-88
+  s_03ab56aca1fcca::t_4f4c493917c698 361,414-416,418-425,430-433
+  s_03ab56aca1fcca::t_c6b270219b4765 93-103
+  s_03ab56aca1fcca::t_870f6d7054e226 327
+  s_03ab56aca1fcca::t_8d293f4be3b79e 40-43,47
+  s_03ab56aca1fcca::t_798550362a66b1 190-191,196,202
+  s_03ab56aca1fcca::t_3e72d87b1a284b 293-294,297-308
+client/dashboard/src/pages/security/cel-field.tsx
+  s_03ab56aca1fcca::t_1d9b874f2b4987 7,11
+  s_03ab56aca1fcca::t_7f3d7996fc6ce6 206
+  s_03ab56aca1fcca::t_c1b824c6feeecb 124-130
+  s_03ab56aca1fcca::t_e16fc4c456f481 177,179-186
+  s_03ab56aca1fcca::t_784720aca55652 94-96,98,114
+server/internal/risk/celenv/descriptor.go
+  s_03ab56aca1fcca::t_9ab6d6dc0e89ba 119-124,126-131
+  s_03ab56aca1fcca::t_a532778714b753 242-247
+  s_03ab56aca1fcca::t_5b2bf2fc6e1139 158-160,163,165
+  s_03ab56aca1fcca::t_8471f16f0e14e4 211-212,217-219
+  s_03ab56aca1fcca::t_d2fa132525d477 97
+  s_03ab56aca1fcca::t_d84005c5d42875 248,258-259,265
+  s_03ab56aca1fcca::t_21e2fa0febbbd3 24
+  s_03ab56aca1fcca::t_b2dc6f606124cf 3-23,25-40,43-44,46,50-52,54-55,59-83,87,90-91,94-96,98-118,125,132-133,137-140,144-145,147,149-153,157,161-162,166-210,213-216,220-241,249-257,260-264,266
+  s_03ab56aca1fcca::t_3134498d971761 148
+  s_03ab56aca1fcca::t_f5bf55831a8dc9 134-136,141-143,164
+  s_03ab56aca1fcca::t_5b614858b18305 92-93
+client/dashboard/src/pages/security/PolicyCenter.tsx
+  s_03ab56aca1fcca::t_754b610363b8c7 856,860,864
+  s_03ab56aca1fcca::t_71e37daea3f382 873,877
+server/internal/risk/scanner_test.go
+  s_03ab56aca1fcca::t_3b1ef8a4a1cb87 282
+server/internal/risk/celenv/celenv_test.go
+  s_03ab56aca1fcca::t_be0aa201c017e3 41,59,86,90,99,120,146,165,183,247,265,286,339
+  s_03ab56aca1fcca::t_6b1dab0b55cad4 330
+  s_03ab56aca1fcca::t_fb7814b8cf2528 318,320,322-324,327,335
+server/internal/background/activities/risk_analysis/celadapter_test.go
+  s_03ab56aca1fcca::t_12fe7daece0fc6 37,64,83,92
+client/dashboard/src/pages/security/cel-env.ts
+  s_03ab56aca1fcca::t_2b8f7da5d81796 61
+  s_03ab56aca1fcca::t_f4c038c2677789 16-18,36-39,98-101
+  s_03ab56aca1fcca::t_adbfb7b422b83d 45-60,62-89
+  s_03ab56aca1fcca::t_ab4776b12030bf 1,4-15,19-35,40-44,90-97,102-114
+  s_03ab56aca1fcca::t_4f89abef801bf0 2
+  s_03ab56aca1fcca::t_0cd08138db42d4 3
+client/dashboard/src/pages/security/use-cel-status.ts
+  s_03ab56aca1fcca::t_e3798de3620c30 1-3,5,11-15,17-21,25-26,33-40,44-59,61
+server/internal/background/activities/risk_analysis/analyze_batch_test.go
+  s_03ab56aca1fcca::t_12fe7daece0fc6 586,651
+client/dashboard/package.json
+  s_03ab56aca1fcca::t_a3f4e93317066c 32
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.9",
+  "base_commit_sha": "b60f5fadb7649823a3f4e2d10dc6db89a90cd1e9",
+  "prompts": {},
+  "sessions": {
+    "s_03ab56aca1fcca": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "3f03da73-b20c-48aa-ae9f-e8a382ed2821",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Vishal Gowda <cartmanboy1991@gmail.com>"
+    }
+  }
+}

@@ -1,0 +1,18 @@
+client/dashboard/src/components/ui/Combobox/index.tsx
+  h_2620cc60cfd1e9 27-28,116,124-131
+client/dashboard/src/pages/data-exports/DataExports.tsx
+  h_2620cc60cfd1e9 40,89,113-116,204-207,213,219-220,222,351-352,355,401-414,432-442,444-569,572,579,584,587-590,595,621-630,661,677-696
+client/dashboard/src/pages/data-exports/RouteEditorSheet.tsx
+  h_2620cc60cfd1e9 1-183
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.0",
+  "base_commit_sha": "2558c5ad5b81aa4d5ded536c5fbbe34e29908711",
+  "prompts": {},
+  "humans": {
+    "h_2620cc60cfd1e9": {
+      "author": "tgmendes <tiago@speakeasy.com>"
+    }
+  }
+}

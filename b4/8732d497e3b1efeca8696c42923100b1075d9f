@@ -1,0 +1,89 @@
+server/database/schema.sql
+  s_03ab56aca1fcca::t_9c0857057e765a 3007-3009,3011-3014,3017-3018
+server/internal/risk/celenv/descriptor_test.go
+  s_5e8039f9d96e02::t_d0fe80c1ce00db 150,152
+server/internal/risk/celenv/descriptor.go
+  s_5e8039f9d96e02::t_d0fe80c1ce00db 116-117,148,152
+server/internal/risk/celenv/celenv_test.go
+  s_5e8039f9d96e02::t_d0fe80c1ce00db 59,86,90,99,120,146,165,183,198,215,222,232,265,330
+server/internal/risk/celenv/celenv.go
+  s_5e8039f9d96e02::t_d0fe80c1ce00db 7,13,18-23,26-30,35,66,96,108,128,269-274
+server/internal/background/activities/risk_analysis/analyze_batch_test.go
+  s_5e8039f9d96e02::t_b5a196dd603ac4 693
+  s_5e8039f9d96e02::t_08cb4e798f7f44 27
+  s_5e8039f9d96e02::t_635e0b11f42778 55-63
+server/internal/risk/impl.go
+  s_5e8039f9d96e02::t_39fac9391616a5 2083-2084
+  s_5e8039f9d96e02::t_da7f525d62eb9d 2101-2104
+  s_5e8039f9d96e02::t_c7a2fec158238a 174
+  s_5e8039f9d96e02::t_b8d444c9140b75 1834
+  s_5e8039f9d96e02::t_d9177cdef514b5 1730
+  s_5e8039f9d96e02::t_8596b0d5a473bd 2026,2030,2033,2037
+  s_5e8039f9d96e02::t_011b7391b2ddda 341,549
+  s_5e8039f9d96e02::t_d03611d56f2943 338,542
+  s_5e8039f9d96e02::t_d4aab7b3acb9bd 2048,2059,2063
+  s_5e8039f9d96e02::t_0c2e21566c6d66 98-100
+  s_5e8039f9d96e02::t_dab628141b4835 2339
+  s_5e8039f9d96e02::t_c2eea083741138 153
+  s_5e8039f9d96e02::t_427f4baedd71ad 2187
+server/design/shared/risk.go
+  s_5e8039f9d96e02::t_193c09d7c9b8ac 205
+server/internal/background/activities/risk_analysis/celadapter_test.go
+  s_5e8039f9d96e02::t_e60762211461f2 38,64-65
+  s_5e8039f9d96e02::t_d56e8e1039b80b 9
+server/internal/risk/scanner.go
+  s_5e8039f9d96e02::t_d3b703970d7a60 133
+  s_5e8039f9d96e02::t_9e2ea8d1667580 363,578-580,582,586
+  s_5e8039f9d96e02::t_d940eb6810977b 153
+  s_5e8039f9d96e02::t_2836f26f345ea9 25
+server/internal/risk/setup_test.go
+  s_5e8039f9d96e02::t_a518ab01e35692 35-41
+  s_5e8039f9d96e02::t_803a2c42f79b7b 28
+server/internal/background/activities/risk_analysis/celadapter.go
+  s_5e8039f9d96e02::t_c97b385c61dbc6 17-21
+server/internal/background/activities/risk_analysis/analyze_batch.go
+  s_5e8039f9d96e02::t_1d09f02f576df6 94
+  s_5e8039f9d96e02::t_0e2c80e193b368 200,782
+  s_5e8039f9d96e02::t_42db469de2f91e 35
+  s_5e8039f9d96e02::t_748303a51e5f3a 495
+  s_5e8039f9d96e02::t_264780759369fc 116
+server/cmd/gram/start.go
+  s_5e8039f9d96e02::t_45a293603b33e8 94
+  s_5e8039f9d96e02::t_a00434b0f25f5f 1133
+  s_5e8039f9d96e02::t_7c369b029d85a1 990-994
+server/internal/background/activities.go
+  s_5e8039f9d96e02::t_7fcfcc9557a67b 188
+  s_5e8039f9d96e02::t_11023b5d02c8ef 41
+  s_5e8039f9d96e02::t_3e2a0a61f22418 153
+server/internal/background/worker.go
+  s_5e8039f9d96e02::t_40d578b7f22825 301
+  s_5e8039f9d96e02::t_e7cf9ab99af597 253-258,260-261
+client/dashboard/src/pages/security/cel-monaco-editor.tsx
+  s_5e8039f9d96e02::t_2f9b91016fc1e3 30
+client/dashboard/package.json
+  s_5e8039f9d96e02::t_e73911b996624d 32
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.9",
+  "base_commit_sha": "b48732d497e3b1efeca8696c42923100b1075d9f",
+  "prompts": {},
+  "sessions": {
+    "s_03ab56aca1fcca": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "3f03da73-b20c-48aa-ae9f-e8a382ed2821",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Vishal Gowda <cartmanboy1991@gmail.com>"
+    },
+    "s_5e8039f9d96e02": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "7204e23b-9892-40b9-9abd-f538d9fb898d",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Vishal Gowda <cartmanboy1991@gmail.com>"
+    }
+  }
+}

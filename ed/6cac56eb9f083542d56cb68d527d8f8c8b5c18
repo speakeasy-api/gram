@@ -1,0 +1,24 @@
+server/internal/access/queries.sql
+  s_5ed4922f829b57::t_4f0949812a7b9b 187
+server/internal/access/createrole_test.go
+  s_5ed4922f829b57::t_c945feb29597f3 19
+  s_5ed4922f829b57::t_feb54b9c8daaa6 7,168,179-188
+server/internal/access/repo/queries.sql.go
+  ai_agent 40
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "ed6cac56eb9f083542d56cb68d527d8f8c8b5c18",
+  "prompts": {},
+  "sessions": {
+    "s_5ed4922f829b57": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019e83e9-0aec-7901-aae4-055f8a9ba34a",
+        "model": "gpt-5.5"
+      },
+      "human_author": "tgmendes <tiago@speakeasy.com>"
+    }
+  }
+}

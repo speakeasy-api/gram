@@ -1,0 +1,33 @@
+server/internal/authz/expressions.go
+  s_5a92cd828d83ac::t_8d0e985baa33ef 1-220
+server/internal/authz/scopes_test.go
+  s_5a92cd828d83ac::t_a45c3c36de0ebc 181,192,207,222
+server/internal/authz/selector_test.go
+  s_5a92cd828d83ac::t_a45c3c36de0ebc 330,339,348
+server/internal/authz/checks.go
+  s_5a92cd828d83ac::t_61619c9420a540 47,49-50
+  s_5a92cd828d83ac::t_a45c3c36de0ebc 36,45,54
+  s_5a92cd828d83ac::t_8d0e985baa33ef 41-44,46,48,51-53
+server/internal/authz/grants.go
+  s_5a92cd828d83ac::t_8d0e985baa33ef 56-64,432-444,490
+  s_5a92cd828d83ac::t_7338065cd9d48c 462,467-470,486
+server/internal/authz/expressions_test.go
+  s_5a92cd828d83ac::t_8d0e985baa33ef 1-16,18-27,29-110,112-128,130-147,149-152,154-171,173-176,178-181
+  s_5a92cd828d83ac::t_a45c3c36de0ebc 17,28,111,129,148,153,172,177
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.7",
+  "base_commit_sha": "3c9092e4628cf706b7ac6bccdfe7e6b5a024d59c",
+  "prompts": {},
+  "sessions": {
+    "s_5a92cd828d83ac": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019eb6a2-6b62-7900-969e-22cc3bd839f6",
+        "model": "gpt-5.5"
+      },
+      "human_author": null
+    }
+  }
+}

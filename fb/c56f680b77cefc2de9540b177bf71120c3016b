@@ -1,0 +1,47 @@
+client/dashboard/src/pages/setup/components/onboarding-stepper.tsx
+  s_e5457925ae460d::t_78ee887909220c 8-9,17-19,27,37-41,84-99,102,109-113
+client/dashboard/src/pages/security/cel-wasm.ts
+  s_e5457925ae460d::t_78ee887909220c 1-5,7-13,15-20,22-53,56-65,67-128,132-133,135-138,140-205
+  s_e5457925ae460d::t_5c8af4b04a48e0 6,14,21,54-55,66
+  s_e5457925ae460d::t_c43e8f159e25e6 129-131,134,139
+client/dashboard/src/pages/security/cel-match-preview.tsx
+  s_e5457925ae460d::t_9eec2edee4ff90 134-142
+  s_e5457925ae460d::t_78ee887909220c 1-133,143-273
+client/dashboard/src/pages/security/DetectionRules.tsx
+  s_e5457925ae460d::t_78ee887909220c 45,47-48,53,56-57,155-156,249,261,463,475,480-482,487,490,493-501,503-505,523-526,529-538,583-587,591-594,612-616,638,641,673,675,683,686,711,806,809,905,1206,1213,1222,1232,1267,1282-1288,1291-1295,1304-1305,1312,1326,1331,1350-1351,1420-1426
+client/dashboard/src/pages/security/cel-field.tsx
+  s_e5457925ae460d::t_78ee887909220c 1-93,95-224
+  s_e5457925ae460d::t_c24e4f9c65225f 94
+client/dashboard/src/pages/security/cel-monaco-editor.tsx
+  s_e5457925ae460d::t_78ee887909220c 1-429
+client/dashboard/src/pages/chatLogs/ChatDetailPanel.tsx
+  s_e5457925ae460d::t_78ee887909220c 1318-1338,1340-1348,1350-1353,1358,1374,1386,1411-1429
+client/dashboard/src/pages/security/PolicyCenter.tsx
+  s_e5457925ae460d::t_78ee887909220c 1,21-25,63-64,66-74,97-99,107-108,150-556,852-881,915-916,923,928-938,978-999,1036,1041,1044-1046,1072,1076-1080,1140-1153,1189,1206,1248,1269,1568-1629,1644,1726-1730,1733-1736,1739-1756,1758-1762,1765,1767,1769-1838,1840-1891,1968-1969,1990-1991,2015,2022-2036,2038-2070,2072-2111,2113,2115-2119,2121-2145,2147-2155,2157-2212,2214-2215,2444-2445,2457-2462,2474-2475,2487-2492,2506-2507,2519-2524,2538-2564,2569-2593,2595-2649,2653-2689,2691-2699,2701-2709,2711-2734,2736-2753,2755-2803,2805-2813,2816-2829,2831-2850,2852-2856,2858,2860-2880,2883,3439-3443,3446,3451,3465-3466,3469,3473,3479-3482,3487-3488,3490,3511-3523,3525-3555,3557-3562,3567,3570-3578,3580-3581,3585-3587,3589-3590,3594-3596,3599-3642,3645
+client/dashboard/src/pages/security/cel-monaco-editor.lazy.tsx
+  s_e5457925ae460d::t_78ee887909220c 1-12
+client/dashboard/src/pages/security/detection-rules-data.ts
+  s_e5457925ae460d::t_78ee887909220c 159-161,163-164,170-178,185,196,203-212,238,245,252,265-266,313-336
+client/dashboard/src/pages/security/policy-data.ts
+  s_e5457925ae460d::t_78ee887909220c 100-102,129-302
+client/dashboard/src/pages/security/use-cel-engine.ts
+  s_e5457925ae460d::t_78ee887909220c 1-32
+client/dashboard/src/pages/security/use-cel-status.ts
+  s_e5457925ae460d::t_78ee887909220c 1-41
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.9",
+  "base_commit_sha": "fbc56f680b77cefc2de9540b177bf71120c3016b",
+  "prompts": {},
+  "sessions": {
+    "s_e5457925ae460d": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "27e802d5-8b32-4910-b9fd-7266730d92eb",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Vishal Gowda <cartmanboy1991@gmail.com>"
+    }
+  }
+}

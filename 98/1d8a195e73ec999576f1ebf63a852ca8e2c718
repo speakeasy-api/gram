@@ -1,0 +1,86 @@
+server/internal/scanners/promptinjection/openrouter/judge.go
+  s_ef46b0accab4fa::t_e0311bcc4eaa1e 25,227-228,232,244
+server/internal/scanners/llmjudge/openrouter/judge_test.go
+  s_ef46b0accab4fa::t_58023c5aca61fd 1-18,20-269,275-292,298-315,321-332,336-339,341-360,362-368,374-398
+  s_ef46b0accab4fa::t_d07abb917d2497 361
+  s_ef46b0accab4fa::t_7e0557a794385d 19
+  s_ef46b0accab4fa::t_8cb8469a63f819 270-274,293-297,316-320,333-335,340,369-373
+server/internal/scanners/llmjudge/openrouter/metrics.go
+  s_ef46b0accab4fa::t_58023c5aca61fd 1-106
+server/internal/background/activities/risk_analysis/eval_guardrail.go
+  s_ef46b0accab4fa::t_8a98ceebb7085f 15,127
+  s_ef46b0accab4fa::t_96872c16f53795 29,40,42,104
+  s_ef46b0accab4fa::t_8c3ce35ff47b6f 35,49,52,100
+server/internal/background/activities.go
+  s_ef46b0accab4fa::t_442c4db900ad7d 45
+  s_ef46b0accab4fa::t_2c92762d0ef588 192
+server/internal/background/activities/risk_analysis/analyze_batch.go
+  s_ef46b0accab4fa::t_8c3ce35ff47b6f 48,69
+  s_ef46b0accab4fa::t_8a98ceebb7085f 31
+server/cmd/risk-pi-report/main.go
+  s_ef46b0accab4fa::t_442c4db900ad7d 26
+  s_ef46b0accab4fa::t_2c92762d0ef588 381,386-387
+server/internal/scanners/llmjudge/judge.go
+  s_ef46b0accab4fa::t_733c936cb88ebc 1,12-14,16-18,21,24-26,29-31,39-40,42,45-46,68,74-75
+server/internal/risk/eval_guardrail_test.go
+  s_ef46b0accab4fa::t_e7008b03bfb42f 20
+  s_ef46b0accab4fa::t_2c92762d0ef588 68,70,80,152,214,216
+server/internal/scanners/llmjudge/judge_test.go
+  s_ef46b0accab4fa::t_27b10d456d0733 1,5,8
+server/internal/risk/impl.go
+  s_ef46b0accab4fa::t_2c92762d0ef588 121,181,2427,2448
+  s_ef46b0accab4fa::t_442c4db900ad7d 57
+server/cmd/riskjudgebench/main.go
+  s_ef46b0accab4fa::t_d07abb917d2497 83,397-398,420
+  s_ef46b0accab4fa::t_2c92762d0ef588 146,202,209,213,218,229
+  s_ef46b0accab4fa::t_442c4db900ad7d 51-52,57
+  s_ef46b0accab4fa::t_e0311bcc4eaa1e 2,5
+server/internal/background/activities/risk_analysis/prompt_judge_batch.go
+  s_ef46b0accab4fa::t_8c3ce35ff47b6f 31,33,36,48,85,105,107,110
+  s_ef46b0accab4fa::t_8a98ceebb7085f 16
+  s_ef46b0accab4fa::t_96872c16f53795 67
+server/internal/risk/scanner.go
+  s_ef46b0accab4fa::t_2c92762d0ef588 152,556,564,578,583,595,603,605
+  s_ef46b0accab4fa::t_7e0557a794385d 131
+  s_ef46b0accab4fa::t_442c4db900ad7d 34
+server/cmd/riskjudgebench/README.md
+  s_ef46b0accab4fa::t_d07abb917d2497 4,42,61,98-99,106,117,123,126,128,138,142-143
+  s_ef46b0accab4fa::t_f94a1d1b0bb8b4 94
+  s_ef46b0accab4fa::t_555dd71dbc87a8 41,43
+  s_ef46b0accab4fa::t_e0311bcc4eaa1e 5,8
+server/internal/risk/setup_test.go
+  s_ef46b0accab4fa::t_e7008b03bfb42f 31
+  s_ef46b0accab4fa::t_2c92762d0ef588 106,110,113
+server/cmd/gram/start.go
+  s_ef46b0accab4fa::t_442c4db900ad7d 100
+  s_ef46b0accab4fa::t_2c92762d0ef588 1009
+server/internal/background/activities/risk_analysis/analyze_batch_test.go
+  s_ef46b0accab4fa::t_8a98ceebb7085f 30,39,42,44
+  s_ef46b0accab4fa::t_96872c16f53795 412
+server/internal/scanners/llmjudge/openrouter/setup_test.go
+  s_ef46b0accab4fa::t_58023c5aca61fd 1-44
+server/internal/risk/prompt_policy_scanner_test.go
+  s_ef46b0accab4fa::t_e0311bcc4eaa1e 20
+  s_ef46b0accab4fa::t_07568d186bbe84 25,29,32,35,43,49-50,123-124,244-245
+server/internal/scanners/llmjudge/openrouter/judge.go
+  s_ef46b0accab4fa::t_63990a0764be4e 1
+  s_ef46b0accab4fa::t_7e0557a794385d 25
+  s_ef46b0accab4fa::t_d07abb917d2497 35,51,69,72-74,139,277,305,323-324,457-458
+  s_ef46b0accab4fa::t_58023c5aca61fd 2-24,26-34,36-50,52-68,70-71,75-138,140-276,278-304,306-322,325-456,459-469
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "981d8a195e73ec999576f1ebf63a852ca8e2c718",
+  "prompts": {},
+  "sessions": {
+    "s_ef46b0accab4fa": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f423c-e16c-7c00-8e13-8453e257aa68",
+        "model": "gpt-5.5"
+      },
+      "human_author": "Vishal Gowda <vishal@speakeasy.com>"
+    }
+  }
+}

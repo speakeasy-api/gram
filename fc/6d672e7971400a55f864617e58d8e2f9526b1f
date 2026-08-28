@@ -1,0 +1,120 @@
+server/internal/risk/impl.go
+  s_b56e537d7da853::t_af9bb7604ce5e5 692-693
+  s_b56e537d7da853::t_a706f0550a7bf3 318
+  s_b56e537d7da853::t_5f44e9dc91b55e 2285-2294
+server/internal/background/activities/risk_analysis/batch_messages_test.go
+  s_b56e537d7da853::t_cf4fe2f7477fcf 4-5,13-21
+  s_b56e537d7da853::t_c250edd834613e 22
+server/internal/risk/prompt_policy_scanner_test.go
+  s_b56e537d7da853::t_27aadbbb930b72 64,66,69,73-80,88
+  s_b56e537d7da853::t_429aeda9279c48 184-187
+  s_b56e537d7da853::t_c1a271a57e6b4f 123,146,171,191,210,227,247
+  s_b56e537d7da853::t_6c31b8158ce137 15,20
+server/internal/background/activities/risk_analysis/analyze_batch.go
+  s_b56e537d7da853::t_054e6f89ba525d 220-222
+  s_b56e537d7da853::t_cc0117dd04cf38 247
+server/internal/background/activities/risk_analysis/backfill_detection_scopes_test.go
+  s_b56e537d7da853::t_ea5ccea8532180 1-83
+server/internal/risk/recommendedscopes/registry.go
+  s_b56e537d7da853::t_9d2b95ee322318 2,4-6
+  s_b56e537d7da853::t_fe7d0cdeb434d9 16
+  s_b56e537d7da853::t_032e1d7f3009c4 123-128
+  s_b56e537d7da853::t_1f328e21873d78 122
+server/internal/background/activities/risk_analysis/backfill_detection_scopes.go
+  s_b56e537d7da853::t_bc25dded25abf3 1-211
+server/internal/background/worker.go
+  s_b56e537d7da853::t_5010f2e07139c3 369
+  s_b56e537d7da853::t_1880036474c2b3 434
+server/database/schema.sql
+  s_b56e537d7da853::t_35d08e651e9f33 3690-3694
+server/internal/background/activities/risk_analysis/category_scopes_test.go
+  s_b56e537d7da853::t_b6ec032110a5d2 70,76
+  s_b56e537d7da853::t_a2461f7a06d304 121,134,153,169,211,303,312
+  s_b56e537d7da853::t_9c56f501970664 230,233
+  s_b56e537d7da853::t_3960084ecd9cf7 107
+server/internal/background/activities/risk_analysis/scan_account_identity_test.go
+  s_b56e537d7da853::t_92f2dcb44968da 146
+server/internal/background/activities.go
+  s_b56e537d7da853::t_a3e959d47a4647 450-457
+  s_b56e537d7da853::t_c02372137629d3 234
+  s_b56e537d7da853::t_f083afb9e6190d 102
+server/internal/background/activities/risk_analysis/backfill_detection_scopes_internal_test.go
+  s_b56e537d7da853::t_9fdf182b603fec 1-56,58-115
+  s_b56e537d7da853::t_b79ee35a7e7d82 57
+server/internal/background/risk_scope_backfill.go
+  s_b56e537d7da853::t_5c438394a22a95 1-49
+server/internal/background/activities/risk_analysis/analyze_batch_test.go
+  s_b56e537d7da853::t_193f3388254877 370
+server/internal/risk/recommendedscopes/registry_test.go
+  s_b56e537d7da853::t_10d3299ea64573 36,51-57
+  s_b56e537d7da853::t_0ebed9eb558886 68-70
+server/internal/risk/scanner_test.go
+  s_b56e537d7da853::t_9346a5cc8b944d 142-145,149-158,160,167
+  s_b56e537d7da853::t_afd02eebb53aaa 489,493
+  s_b56e537d7da853::t_91ae98709c0286 529,544,565,590,606
+server/internal/risk/scanner.go
+  s_b56e537d7da853::t_ead8d11f6b140f 287-288,291
+  s_b56e537d7da853::t_6501834e296318 462-463,475,479
+  s_b56e537d7da853::t_1cacb9af2cba3d 505-506,508
+  s_b56e537d7da853::t_a19e6e514ed1ae 319
+  s_b56e537d7da853::t_2e6229e962c424 600
+  s_b56e537d7da853::t_e04bebd81b81e4 446
+  s_b56e537d7da853::t_bd1fd5b70a6a2e 619-621
+.changeset/risk-scope-consolidation.md
+  s_b56e537d7da853::t_7c986fa5a90749 2
+  s_b56e537d7da853::t_a75a1ac8023546 1,3-6
+server/internal/background/activities/risk_analysis/category_scopes.go
+  s_b56e537d7da853::t_6eae95ebb26305 176-178,183
+  s_b56e537d7da853::t_d027e110ef95e8 100,107,112,128-130,152
+  s_b56e537d7da853::t_32fef5abc68b98 235
+server/internal/risk/eval_guardrail_test.go
+  s_b56e537d7da853::t_c041e72e8b52fb 143
+  s_b56e537d7da853::t_05d2d3ac720988 243
+  s_b56e537d7da853::t_3bfcc7518bac64 166
+server/internal/risk/detection_scopes_api_test.go
+  s_b56e537d7da853::t_a81b7de3e8315b 201
+  s_b56e537d7da853::t_6a9adf8c3c0e52 184-200,202-221
+  s_b56e537d7da853::t_34fb8ad2bb7f01 52
+server/design/risk/design.go
+  s_b56e537d7da853::t_19f4853e6a68e1 41-43
+  s_b56e537d7da853::t_f35b112bb88e0c 1365-1366
+  s_b56e537d7da853::t_997f652af69475 184-186
+  s_b56e537d7da853::t_72a99c5046440b 1351
+server/internal/background/activities/risk_analysis/eval_guardrail.go
+  s_b56e537d7da853::t_c911daae78d0e7 43-44
+server/internal/background/activities/risk_analysis/batch_scanners.go
+  s_b56e537d7da853::t_7085722b18c2f4 192
+server/internal/risk/queries.sql
+  s_b56e537d7da853::t_df3a4b9aa0d2f7 95-105
+  s_b56e537d7da853::t_c84992804ca386 83-94,106-120
+server/gen/http/cli/gram/cli.go
+  s_b56e537d7da853::t_f771481dcce3c8 13428,14409,14419
+server/gen/http/openapi3.yaml
+  s_b56e537d7da853::t_7eb0006aea6d0d 31664,45384,45419,45422,46563,46566,59510,59538,59541
+server/gen/http/risk/client/cli.go
+  s_b56e537d7da853::t_3003ceff977c12 2135
+server/gen/http/risk/client/types.go
+  s_b56e537d7da853::t_d40e99aa4fafe3 47-48,50-51,53-54,110-111,113-114,116-117,350-351,354
+server/gen/http/risk/server/types.go
+  s_b56e537d7da853::t_aa35b20ea58f05 49-50,52-53,55-56,112-113,115-116,118-119,352-353,356
+server/gen/risk/service.go
+  s_b56e537d7da853::t_b06b8d6bbfd37f 138-142,328-329,331-332,334-335,442-443,446,1278-1279,1281-1282,1284-1285
+server/internal/risk/repo/queries.sql.go
+  s_b56e537d7da853::t_af6722e2753b6b 648-650,653-655,2283-2343,3448-3474,3593-3623,3808-3814,3816,3824-3828,3833-3834
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.15",
+  "base_commit_sha": "fc6d672e7971400a55f864617e58d8e2f9526b1f",
+  "prompts": {},
+  "sessions": {
+    "s_b56e537d7da853": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "28c88414-3d38-4df1-a67c-5d0aa757ac45",
+        "model": "claude-fable-5"
+      },
+      "human_author": "Vishal Gowda <vishal@speakeasy.com>"
+    }
+  }
+}

@@ -1,0 +1,9 @@
+server/internal/risk/repo/queries.sql.go
+  ai_agent 2163-2178
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.6",
+  "base_commit_sha": "feb0fa364d9ab780a24f58d0862e1f3996b496ee",
+  "prompts": {}
+}

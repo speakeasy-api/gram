@@ -1,0 +1,20 @@
+server/internal/risk/scanner_test.go
+  s_9971e86f513595::t_7db1b69208681e 42-43,62-67,80-85,238
+  s_9971e86f513595::t_4a79f887c4b64a 8
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.7",
+  "base_commit_sha": "a3f9583343ee3ed1475f23cce3c12a1300cc0233",
+  "prompts": {},
+  "sessions": {
+    "s_9971e86f513595": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019ecbe4-9fbc-7a21-bc41-2031dbdd6e97",
+        "model": "gpt-5.5"
+      },
+      "human_author": "tgmendes <tiago@speakeasy.com>"
+    }
+  }
+}

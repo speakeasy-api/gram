@@ -1,0 +1,16 @@
+client/dashboard/src/hooks/useNavArea.ts
+  h_2620cc60cfd1e9 21
+client/dashboard/src/pages/data-exports/DataExports.tsx
+  h_2620cc60cfd1e9 435-452,510,512-541
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.0",
+  "base_commit_sha": "3c0b81550387288805c042f8f33cf8f7de338f18",
+  "prompts": {},
+  "humans": {
+    "h_2620cc60cfd1e9": {
+      "author": "tgmendes <tiago@speakeasy.com>"
+    }
+  }
+}

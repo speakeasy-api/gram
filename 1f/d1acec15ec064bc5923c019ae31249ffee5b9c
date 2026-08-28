@@ -1,0 +1,26 @@
+server/internal/scanners/promptpolicy/handler.go
+  s_62e95995138f74::t_fa94b63fbf4f06 9,48-54,63
+server/internal/scanners/async_shadow_gate.go
+  s_62e95995138f74::t_fa94b63fbf4f06 9,41,49,81,96
+server/internal/attr/conventions.go
+  s_62e95995138f74::t_fa94b63fbf4f06 304-306,1327-1340
+  s_62e95995138f74::t_051ea1b37661f0 1341
+server/internal/scanners/promptinjection/handler.go
+  s_62e95995138f74::t_fa94b63fbf4f06 9,47-53,66
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.14",
+  "base_commit_sha": "1fd1acec15ec064bc5923c019ae31249ffee5b9c",
+  "prompts": {},
+  "sessions": {
+    "s_62e95995138f74": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f6f60-6cb8-7b00-936d-c602484edc11",
+        "model": "gpt-5.5"
+      },
+      "human_author": "Vishal Gowda <vishal@speakeasy.com>"
+    }
+  }
+}

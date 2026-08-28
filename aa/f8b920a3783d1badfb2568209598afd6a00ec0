@@ -1,0 +1,31 @@
+server/internal/urn/principal.go
+  s_058bec79386ff2::t_2484d475ed8a7f 25-28
+server/internal/authz/grants.go
+  s_058bec79386ff2::t_94d74a0ffe1d6b 217-219,254-260
+client/dashboard/src/pages/access/ChallengesTab.tsx
+  s_058bec79386ff2::t_aa81fe389952ce 38,451
+server/internal/authz/principal.go
+  s_058bec79386ff2::t_b7673355d76c8d 17-20,23-24,29-30
+  s_058bec79386ff2::t_8862e070d5980f 120
+server/internal/authz/resource_grants.go
+  s_058bec79386ff2::t_e5fbb19731aaf0 53-55
+server/internal/authz/principal_test.go
+  s_058bec79386ff2::t_947473fee5c3b9 61,68-75,87
+  s_058bec79386ff2::t_62cc6b90840780 76-86,88-90
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.6",
+  "base_commit_sha": "aaf8b920a3783d1badfb2568209598afd6a00ec0",
+  "prompts": {},
+  "sessions": {
+    "s_058bec79386ff2": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019ea681-42e0-7600-a211-b5c402bb3615",
+        "model": "gpt-5.5"
+      },
+      "human_author": "tgmendes <tiago@speakeasy.com>"
+    }
+  }
+}

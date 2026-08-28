@@ -1,0 +1,52 @@
+client/dashboard/src/components/access/ApprovalRequestsContent.test.tsx
+  s_5a92cd828d83ac::t_2e33ed9182da44 331
+  s_5a92cd828d83ac::t_6044900c4af7ad 309
+client/dashboard/src/components/observe/useObserveFilters.test.tsx
+  s_5a92cd828d83ac::t_a190937e6610db 61,73
+  s_5a92cd828d83ac::t_f40aef43cf990f 41,50
+server/internal/access/role_manager.go
+  s_5a92cd828d83ac::t_33edc3afe8697c 1030-1039
+  s_5a92cd828d83ac::t_0f364f5b07f4ea 117-123,675,677-681,684,686-690
+  s_5a92cd828d83ac::t_3698877f3705b6 668,676,685
+client/dashboard/src/pages/security/PolicyCenter.tsx
+  s_5cc1f9ecaa9d4c::t_82b556aa31717b 58,63,68,128,290-304,417-420,491-492,523-524,546,550,648-649,664-665,684-685,896-907,1117-1124,1172-1174,1669-1672,1693-1696,1953-1959,1993-2061,2063-2084,2086-2186
+  s_5cc1f9ecaa9d4c::t_86d8263328ff1a 544-545,547-549
+  s_5a92cd828d83ac::t_d8a50598d5c532 2085
+  s_5a92cd828d83ac::t_377c3b18a490e4 2062
+client/dashboard/src/components/access/ApprovalRequestsContent.tsx
+  s_5a92cd828d83ac::t_45b81c5515bf0e 55,62,68,78-81,103,134,155-160
+  s_5a92cd828d83ac::t_87e51b84e102d1 418,425,437
+server/design/access/design.go
+  s_5a92cd828d83ac::t_b360911ff9beb9 736,739
+  s_5a92cd828d83ac::t_49d5817e876bd2 799,802
+client/dashboard/src/components/observe/observeFilterUtils.test.ts
+  s_5a92cd828d83ac::t_2f55ac038b479c 123,132,141
+server/internal/access/listmembers_test.go
+  s_5a92cd828d83ac::t_dc4101bcfb5af3 38,44,75,91
+client/dashboard/src/pages/team/Team.tsx
+  s_5a92cd828d83ac::t_1c49fd744401c5 504
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.7",
+  "base_commit_sha": "969d133d18fbee41136c6ca8b5f16622878f8b0f",
+  "prompts": {},
+  "sessions": {
+    "s_5a92cd828d83ac": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019eb6a2-6b62-7900-969e-22cc3bd839f6",
+        "model": "gpt-5.5"
+      },
+      "human_author": null
+    },
+    "s_5cc1f9ecaa9d4c": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019eb249-fed4-7522-8f02-b4f75c7d3a20",
+        "model": "gpt-5.5"
+      },
+      "human_author": "tgmendes <tiago@speakeasy.com>"
+    }
+  }
+}

@@ -1,0 +1,25 @@
+server/internal/risk/prompt_policy_scanner_test.go
+  s_5a92cd828d83ac::t_6692f5ef7e99ec 107,130,155,174,193,210,229
+  s_5a92cd828d83ac::t_69ca6cf3b78bb9 14,58,68,74-83
+  s_5a92cd828d83ac::t_bb0eec738923ea 22
+client/dashboard/src/components/observe/insightsEmployeesData.test.ts
+  s_5a92cd828d83ac::t_9a223e34573ee7 20
+server/internal/risk/policy_audience_test.go
+  s_5a92cd828d83ac::t_df6afdeec6b1ca 182-183,188,192,224-225,230,235,240
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.7",
+  "base_commit_sha": "d4a85c2fb37330dc0a107110c968b106af6b4b08",
+  "prompts": {},
+  "sessions": {
+    "s_5a92cd828d83ac": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019eb6a2-6b62-7900-969e-22cc3bd839f6",
+        "model": "gpt-5.5"
+      },
+      "human_author": "tgmendes <tiago@speakeasy.com>"
+    }
+  }
+}

@@ -1,0 +1,27 @@
+server/internal/risk/queries.sql
+  s_3d388cbf35fcf4::t_3c07d94a19b04e 1633-1634,1638
+server/internal/risk/finding_ch.go
+  s_3d388cbf35fcf4::t_3e78427baff144 207-208,212
+  s_3d388cbf35fcf4::t_0f19fb25e96d20 206
+  s_3d388cbf35fcf4::t_f47c983adf82fe 209-211
+server/internal/risk/finding_ch_test.go
+  s_3d388cbf35fcf4::t_026f291e7d4973 588-609
+server/internal/risk/repo/queries.sql.go
+  s_3d388cbf35fcf4::t_37c0e540ff9b17 1226,1242,1250-1251,1264
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.18",
+  "base_commit_sha": "3ab7e3376bb8d51afe6ca85333b5e4b833aed563",
+  "prompts": {},
+  "sessions": {
+    "s_3d388cbf35fcf4": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "acec37c7-b1cc-4ee7-82c8-afd405d96140",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Vishal Gowda <vishal@speakeasy.com>"
+    }
+  }
+}

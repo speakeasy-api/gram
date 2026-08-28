@@ -1,0 +1,78 @@
+client/dashboard/src/pages/security/cel-wasm.ts
+  s_e5457925ae460d::t_c08a16e0c597fd 1-75,92-96,100-112,114-184,186-193,195-199,201-223
+  s_e5457925ae460d::t_321e948fdb6c33 113
+  s_e5457925ae460d::t_577e4c4233649e 185,194,200
+  s_e5457925ae460d::t_214b62c443f88e 76-81,83-91,97-99
+  s_e5457925ae460d::t_7d6331ae7e2fc7 82
+server/internal/risk/celenv/celenv_test.go
+  s_e5457925ae460d::t_05e58957eafae3 318,320,322,324,335
+client/dashboard/src/pages/security/use-cel-engine.ts
+  s_e5457925ae460d::t_db8390d8d9c8e8 1-32
+client/dashboard/src/pages/security/cel-match-preview.tsx
+  s_e5457925ae460d::t_f535997971cc0f 1-28,37-101,108-250,254-263
+  s_e5457925ae460d::t_7d6331ae7e2fc7 29-36,102-107,251-253
+client/dashboard/src/pages/security/cel-field.tsx
+  s_e5457925ae460d::t_08e01f7bf1d09e 181
+  s_e5457925ae460d::t_27e42be69c3558 227
+  s_e5457925ae460d::t_138ba3b13281af 10,12
+  s_e5457925ae460d::t_4088a819710817 182,194,208
+  s_e5457925ae460d::t_839e18e4adec4c 8,11
+  s_e5457925ae460d::t_bb31504040fe5f 96-102,116,118,123,130
+server/internal/risk/celenv/reference.go
+  s_e5457925ae460d::t_db784edf99b7cf 61-63
+  s_e5457925ae460d::t_be504c22103416 1-60,64-92
+server/cmd/celwasm/main.go
+  s_e5457925ae460d::t_bc663917b71193 1-38,40-61,70-114
+  s_e5457925ae460d::t_43b8916a17a735 62-69
+  s_e5457925ae460d::t_01fc101840ddf6 39
+.mise-tasks/gen/celwasm.sh
+  s_e5457925ae460d::t_e8d5d636346eaa 1-24
+server/internal/risk/celenv/completion_test.go
+  s_e5457925ae460d::t_f4d8fdad673ece 1-27,29-90
+  s_e5457925ae460d::t_7d6331ae7e2fc7 28
+client/dashboard/src/pages/security/use-cel-status.ts
+  s_e5457925ae460d::t_f0c06e867fc92b 2
+  s_e5457925ae460d::t_10a36a5d8e4b22 10,12-16,29-35,38,40-41,43,45
+  s_e5457925ae460d::t_dc8f74cba951f0 18
+server/internal/risk/celenv/celenv.go
+  s_e5457925ae460d::t_29a38190f589fa 116-122,124-172,174,179-189,191-193,195-196
+.mise-tasks/gen/all.sh
+  s_e5457925ae460d::t_2fd3e933c11f54 13
+client/dashboard/src/pages/security/cel-monaco-editor.tsx
+  s_e5457925ae460d::t_8d47f3b5daf412 264-266,268-274,276-277
+  s_e5457925ae460d::t_3781e78f90e505 30-33,36,40,46
+  s_e5457925ae460d::t_9841edd900c5a7 143
+  s_e5457925ae460d::t_6b63a5f0598290 316,324
+  s_e5457925ae460d::t_4a594b3164409f 71
+  s_e5457925ae460d::t_7d6331ae7e2fc7 278-281
+  s_e5457925ae460d::t_a3b42beabd1c9a 229,231-232
+  s_e5457925ae460d::t_c11470a0ed64d5 336-337,339-340
+  s_e5457925ae460d::t_31c525e4f8f899 7
+  s_e5457925ae460d::t_89a281b3d75dbf 89-138
+server/internal/risk/celenv/reference_test.go
+  s_e5457925ae460d::t_43f07074e3b102 1-100
+client/dashboard/.gitignore
+  s_e5457925ae460d::t_70ce6f5f91fdc6 27-29
+server/cmd/celwasm/stub.go
+  s_e5457925ae460d::t_37916b4c4b6a29 1-13
+server/internal/risk/celenv/completion.go
+  s_e5457925ae460d::t_1a0f2e1edf2134 1-170
+client/dashboard/package.json
+  s_e5457925ae460d::t_d1bd6b0c642368 8-9
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.9",
+  "base_commit_sha": "aa187ca03a5c2236eed0ee51915b09400033d64d",
+  "prompts": {},
+  "sessions": {
+    "s_e5457925ae460d": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "27e802d5-8b32-4910-b9fd-7266730d92eb",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Vishal Gowda <cartmanboy1991@gmail.com>"
+    }
+  }
+}

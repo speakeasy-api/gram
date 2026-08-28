@@ -1,0 +1,20 @@
+server/internal/background/activities/risk_export/integration_test.go
+  s_4989485bd7725a::t_701ea230205617 124-138
+  s_4989485bd7725a::t_60ff78413596fd 174,222
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.2",
+  "base_commit_sha": "7fa8b1c324481876815fe6e8a8d6496ac15ffa6e",
+  "prompts": {},
+  "sessions": {
+    "s_4989485bd7725a": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "7bb59add-8fa6-4747-8f8e-bd92cac33513",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Vishal Gowda <vishal@speakeasy.com>"
+    }
+  }
+}

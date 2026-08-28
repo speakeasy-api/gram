@@ -1,0 +1,23 @@
+server/internal/scanners/promptinjection/openrouter/judge.go
+  s_d1db77e925f400::t_aa7e706a3f6faa 270-273
+  s_d1db77e925f400::t_9251a76029c8f3 247-258
+  s_d1db77e925f400::t_8503fc427f9e62 274-301,304
+  s_d1db77e925f400::t_c0a628badf7e8b 15
+  s_d1db77e925f400::t_8d71bdb8112b1e 244-246
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "0de926799d121a02b561ac3aeb1b9388b3c40200",
+  "prompts": {},
+  "sessions": {
+    "s_d1db77e925f400": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "8a5c9969-94ed-4486-a952-4a000a607815",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Vishal Gowda <vishal@speakeasy.com>"
+    }
+  }
+}

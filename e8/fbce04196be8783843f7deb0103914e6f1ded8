@@ -1,0 +1,26 @@
+server/internal/chat/list_chats_test.go
+  s_05724d38921fad::t_973b913ab2ac5b 28,430,441-470
+  s_05724d38921fad::t_e0297976c00814 485
+server/design/chat/design.go
+  s_05724d38921fad::t_76bfd1ee45f299 47-49
+client/dashboard/src/components/observe/LogsAgents.tsx
+  s_05724d38921fad::t_ede0b910a2cb9b 45
+server/internal/chat/queries.sql
+  s_05724d38921fad::t_08e965295b40c1 242-243
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.6",
+  "base_commit_sha": "e8fbce04196be8783843f7deb0103914e6f1ded8",
+  "prompts": {},
+  "sessions": {
+    "s_05724d38921fad": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019ea936-4f48-76d0-b86e-31790c0e1e68",
+        "model": "gpt-5.5"
+      },
+      "human_author": "Alex Martin <alex.martin@speakeasy.com>"
+    }
+  }
+}

@@ -1,0 +1,46 @@
+client/dashboard/src/pages/security/cel-sample.ts
+  s_3ca8d6dd06121b::t_54d0a8109308f8 98,102-104,108,110-118
+client/dashboard/src/pages/security/PolicyDetail.tsx
+  s_3ca8d6dd06121b::t_0b0349aea947eb 1737-1754
+  s_3ca8d6dd06121b::t_1a8d9be3166ae6 815-823,830
+  s_3ca8d6dd06121b::t_5dfb7e6d4b97b8 1144-1147,1158-1182
+  s_3ca8d6dd06121b::t_647ba000425a95 807-808
+client/dashboard/src/pages/security/cel-traffic-preview.tsx
+  s_3ca8d6dd06121b::t_168a82623fcc7b 78-79
+  s_3ca8d6dd06121b::t_2ab5b3b75bb9b8 97,102-103
+  s_3ca8d6dd06121b::t_0c4d902ee3c154 43-44
+  s_3ca8d6dd06121b::t_b087d78adcdf3e 114,118-120
+  s_3ca8d6dd06121b::t_47a5263ea04ab2 155,173
+  s_3ca8d6dd06121b::t_9530c9bcc5f61a 188-193
+  s_3ca8d6dd06121b::t_726e8b6f27abf4 259-260
+client/dashboard/src/pages/security/cel-examples.json
+  s_3ca8d6dd06121b::t_4bdf3aa1cda729 38
+  s_3ca8d6dd06121b::t_a96d8c8817b40c 20
+server/internal/background/activities/risk_analysis/category_scopes.go
+  s_3ca8d6dd06121b::t_9e5038273046e8 276-282
+  s_3ca8d6dd06121b::t_3fb0a9207f6677 275
+client/dashboard/src/pages/security/cel-highlight.tsx
+  s_3ca8d6dd06121b::t_135b6ccd4807e6 8-9
+server/internal/background/activities/risk_analysis/category_scopes_test.go
+  s_3ca8d6dd06121b::t_c9da8ced549036 229-247
+server/internal/risk/detection_scopes_api_test.go
+  s_3ca8d6dd06121b::t_4222349c24f9ad 147
+server/internal/risk/impl.go
+  s_3ca8d6dd06121b::t_a9cc6ab330f9d7 2344
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.15",
+  "base_commit_sha": "41bbfdc5f202b7489e9194feda08975a648deb8b",
+  "prompts": {},
+  "sessions": {
+    "s_3ca8d6dd06121b": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "3993ae8f-9efc-4555-921b-7bc2eda304f8",
+        "model": "claude-fable-5"
+      },
+      "human_author": "Vishal Gowda <vishal@speakeasy.com>"
+    }
+  }
+}

@@ -1,0 +1,320 @@
+server/migrations/20260729235455_dno643-device-agent-device-syncs.sql
+  s_fc571f39c642e8::t_c8d087b45e12ba 1-20
+server/internal/mcp/setup_test.go
+  s_fc571f39c642e8::t_c8d087b45e12ba 18,215
+server/internal/mcpmetadata/hosted_page.html.tmpl
+  s_fc571f39c642e8::t_c8d087b45e12ba 1865
+.changeset/dno643-agent-hardware-identity.md
+  s_fc571f39c642e8::t_c8d087b45e12ba 1-10
+client/dashboard/src/pages/hooks/HookSourceIcon.test.tsx
+  s_fc571f39c642e8::t_c8d087b45e12ba 1-19
+.changeset/dno643-device-level-coverage-join.md
+  s_fc571f39c642e8::t_c8d087b45e12ba 1-14
+server/internal/remotemcp/tool_disposition.go
+  s_fc571f39c642e8::t_c8d087b45e12ba 1-19
+client/dashboard/src/pages/mcp/x/tabs/toolMetadataSync.test.ts
+  s_fc571f39c642e8::t_c8d087b45e12ba 5
+client/dashboard/src/components/billing/tum-definition.tsx
+  s_fc571f39c642e8::t_c8d087b45e12ba 1-69
+server/internal/deviceintegrations/coverage_test.go
+  s_fc571f39c642e8::t_c8d087b45e12ba 16,24-30,42,47-59,108,123,136,145,165,191,207,219,232-612
+client/dashboard/src/hooks/useToolsetUrl.ts
+  s_fc571f39c642e8::t_c8d087b45e12ba 3,6,10-11,14,21,25,27,29-34,36
+client/dashboard/src/components/FeatureRequestModal.test.tsx
+  s_fc571f39c642e8::t_c8d087b45e12ba 1-96
+dev-idp-dashboard/package.json
+  s_fc571f39c642e8::t_c8d087b45e12ba 25-26
+server/database/schema.sql
+  s_fc571f39c642e8::t_c8d087b45e12ba 788-838,5368-5374
+  s_fc571f39c642e8::t_a3fd1ffb2242c2 5375-5376
+client/dashboard/src/components/FeatureRequestModal.tsx
+  s_fc571f39c642e8::t_c8d087b45e12ba 2,6,10-15,25,37,41-52,58-62,65,68,82-87,100-109,122-126
+server/design/deviceintegrations/design.go
+  s_fc571f39c642e8::t_c8d087b45e12ba 101,115,118-119,139-140,142-153,418
+.changeset/remote-mcp-tool-rbac-picker.md
+  s_fc571f39c642e8::t_c8d087b45e12ba 1-5
+client/dashboard/src/pages/collections/CollectionCard.tsx
+  s_fc571f39c642e8::t_c8d087b45e12ba 2,25,72-76,90-117,188
+.changeset/dno643-device-agent-device-syncs.md
+  s_fc571f39c642e8::t_c8d087b45e12ba 1-9
+client/dashboard/src/pages/org/device-integrations/MdmIntegrationDetail.tsx
+  s_fc571f39c642e8::t_c8d087b45e12ba 227-233,236-238
+server/cmd/gram/start.go
+  s_fc571f39c642e8::t_c8d087b45e12ba 828,839,1113,1184
+server/design/agent/design.go
+  s_fc571f39c642e8::t_c8d087b45e12ba 41-53,63-70
+client/dashboard/package.json
+  s_fc571f39c642e8::t_c8d087b45e12ba 24,28,78,80
+server/internal/customdomains/listdomains_test.go
+  s_fc571f39c642e8::t_c8d087b45e12ba 1-62
+.changeset/paginate-scored-sessions.md
+  s_fc571f39c642e8::t_c8d087b45e12ba 1-6
+.changeset/tum-definition-docs-link.md
+  s_fc571f39c642e8::t_c8d087b45e12ba 1-5
+server/internal/agent/getplugins_test.go
+  s_fc571f39c642e8::t_c8d087b45e12ba 10-11,16-21,358-533
+server/internal/feature/flags.go
+  s_fc571f39c642e8::t_c8d087b45e12ba 26-35
+server/internal/mcpmetadata/serve_install_page_test.go
+  s_fc571f39c642e8::t_c8d087b45e12ba 323-324
+client/dashboard/src/pages/access/serverMerge.test.ts
+  s_fc571f39c642e8::t_c8d087b45e12ba 20,93-110,137
+server/internal/agent/queries.sql
+  s_fc571f39c642e8::t_c8d087b45e12ba 106-131
+server/internal/mcpservers/tooldisposition.go
+  s_fc571f39c642e8::t_c8d087b45e12ba 1-144
+server/internal/remotemcp/tools_call_authz_interceptor_test.go
+  s_fc571f39c642e8::t_c8d087b45e12ba 4,66,74,92,110,127,135-212
+client/dashboard/src/pages/org/device-integrations/coverage-widgets.tsx
+  s_fc571f39c642e8::t_c8d087b45e12ba 30,39-49,69,76-83,156-167,186-192
+client/dashboard/src/pages/mcp/x/tabs/toolMetadataSync.ts
+  s_fc571f39c642e8::t_c8d087b45e12ba 7
+client/dashboard/src/pages/org/OrgApiKeys.tsx
+  s_fc571f39c642e8::t_c8d087b45e12ba 215-245
+server/internal/remotemcp/tools_list_mcp_connect_filter_interceptor_test.go
+  s_fc571f39c642e8::t_c8d087b45e12ba 4,52,60,83,106,137,158,179,185-274
+server/internal/skills/feedback/recorder.go
+  s_fc571f39c642e8::t_c8d087b45e12ba 57-58
+server/internal/database/models.go
+  s_fc571f39c642e8::t_c8d087b45e12ba 542-553
+server/internal/telemetry/repo/skill_efficacy_scores_test.go
+  s_fc571f39c642e8::t_c8d087b45e12ba 291-292,304,339,342,345-352
+client/dashboard/src/pages/access/serverMerge.ts
+  s_fc571f39c642e8::t_c8d087b45e12ba 18,39-40,43-51,67-68,90-92,126
+server/migrations/atlas.sum
+  s_fc571f39c642e8::t_c8d087b45e12ba 1,310
+client/dashboard/src/pages/access/remoteToolMetadata.test.ts
+  s_fc571f39c642e8::t_c8d087b45e12ba 1-73
+server/internal/skillefficacy/impl.go
+  s_fc571f39c642e8::t_c8d087b45e12ba 5,7,11,108-109,114-116,125-128,175-177,182-185,187-190,337,359-385
+  s_fc571f39c642e8::t_79f27e7d56d090 386
+server/internal/mcpmetadata/not_found_page.html.tmpl
+  s_fc571f39c642e8::t_c8d087b45e12ba 259,265
+server/internal/deviceintegrations/queries.sql
+  s_fc571f39c642e8::t_c8d087b45e12ba 235-236,238-241,243-261,264-265,267-284,293-334,355-382,394-400,409-423,425-427,430-446,666-671
+client/dashboard/src/pages/hooks/HookSourceIcon.tsx
+  s_fc571f39c642e8::t_c8d087b45e12ba 185-187,197-199,209-211,221-224,234-235,245-246,285,303
+server/internal/remotemcp/tool_disposition_fake_test.go
+  s_fc571f39c642e8::t_c8d087b45e12ba 1-28
+client/dashboard/src/pages/collections/install-availability.ts
+  s_fc571f39c642e8::t_c8d087b45e12ba 1-20
+server/internal/testenv/queries.sql
+  s_fc571f39c642e8::t_c8d087b45e12ba 161-168,170-175
+client/dashboard/src/pages/hooks/HooksEmptyState.tsx
+  s_fc571f39c642e8::t_c8d087b45e12ba 6,21,23,44-45,75,80,85,88-94,109-111,113-117
+client/dashboard/src/hooks/useToolMetadata.ts
+  s_fc571f39c642e8::t_c8d087b45e12ba 1-75
+server/internal/xmcp/setup_test.go
+  s_fc571f39c642e8::t_c8d087b45e12ba 157
+server/internal/deviceintegrations/impl.go
+  s_fc571f39c642e8::t_c8d087b45e12ba 33,38,74-125,141,155,664,699-703,706,714,723-735
+server/internal/platformtools/skills/feedback.go
+  s_fc571f39c642e8::t_c8d087b45e12ba 42,104-105
+client/dashboard/src/components/billing/token-usage-panel.tsx
+  s_fc571f39c642e8::t_c8d087b45e12ba 7,127
+client/dashboard/src/pages/skills/SkillInsightsSection.tsx
+  s_fc571f39c642e8::t_c8d087b45e12ba 11-15,25,45,60,159,259-317,319-320,322-399,647
+  s_fc571f39c642e8::t_dffd975565cc83 121
+  s_fc571f39c642e8::t_564de78df4e5ee 122
+server/internal/mcpservers/tooldisposition_resolver_test.go
+  s_fc571f39c642e8::t_c8d087b45e12ba 1-139
+client/dashboard/src/components/stacked-time-series-panel.tsx
+  s_fc571f39c642e8::t_c8d087b45e12ba 155
+server/internal/customdomains/impl.go
+  s_fc571f39c642e8::t_c8d087b45e12ba 10,116-140
+  s_fc571f39c642e8::t_58aa38dee9d255 141-142
+client/dashboard/src/pages/collections/install-availability.test.ts
+  s_fc571f39c642e8::t_c8d087b45e12ba 1-38
+client/dashboard/src/pages/mcp/x/tabs/RemoteMcpToolsSection.tsx
+  s_fc571f39c642e8::t_c8d087b45e12ba 24-27
+client/dashboard/src/pages/org/OrgDomains.tsx
+  s_fc571f39c642e8::t_c8d087b45e12ba 28,319,326,335
+server/internal/chat/analysis/settings.go
+  s_fc571f39c642e8::t_c8d087b45e12ba 18-27,55-57
+client/dashboard/src/components/ui/tooltip.tsx
+  s_fc571f39c642e8::t_c8d087b45e12ba 66
+pnpm-workspace.yaml
+  s_fc571f39c642e8::t_c8d087b45e12ba 17,25
+server/design/skillefficacy/design.go
+  s_fc571f39c642e8::t_c8d087b45e12ba 110,187-193,205-206,209
+server/internal/deviceintegrations/providers/providers.go
+  s_fc571f39c642e8::t_c8d087b45e12ba 120-134
+server/internal/mcpservers/impl.go
+  s_fc571f39c642e8::t_c8d087b45e12ba 57,72,85
+server/internal/skills/suggest/engine_test.go
+  s_fc571f39c642e8::t_c8d087b45e12ba 262,287
+server/internal/skills/suggest/judge.go
+  s_fc571f39c642e8::t_c8d087b45e12ba 20,31,123-124
+server/internal/telemetry/repo/skill_efficacy_scores.go
+  s_fc571f39c642e8::t_c8d087b45e12ba 56-57,133,158,165-169
+client/dashboard/src/pages/skills/SkillsList.tsx
+  s_fc571f39c642e8::t_c8d087b45e12ba 109,114
+server/internal/remotemcp/proxymanager.go
+  s_fc571f39c642e8::t_c8d087b45e12ba 42-43,64,78,176,183
+client/dashboard/src/pages/mcp/x/tabs/useSyncToolMetadata.ts
+  s_fc571f39c642e8::t_c8d087b45e12ba 12
+server/internal/remotemcp/tools_call_authz_interceptor.go
+  s_fc571f39c642e8::t_c8d087b45e12ba 23-26,29,46,49,84-94,96
+server/design/domains/design.go
+  s_fc571f39c642e8::t_c8d087b45e12ba 70-89,219-224
+  s_fc571f39c642e8::t_8fc41d7f432502 225
+server/internal/deviceintegrations/sync_test.go
+  s_fc571f39c642e8::t_c8d087b45e12ba 48
+server/internal/mcpservers/toolmetadata.go
+  s_fc571f39c642e8::t_c8d087b45e12ba 11,203-204,307-308,448-449,525-526,530-544
+  s_fc571f39c642e8::t_7d99eb70681144 545-546
+client/dashboard/src/pages/access/GrantRuleDrawerContent.tsx
+  s_fc571f39c642e8::t_c8d087b45e12ba 6-8,14,26,45,126,153-158,306-311,584,669,680,698-702,709,910-981,983-992,994-999,1001,1003-1062,1064-1126,1129-1201
+server/internal/agent/impl.go
+  s_fc571f39c642e8::t_c8d087b45e12ba 108-150,194-217
+  s_fc571f39c642e8::t_820469752c44c2 218
+.changeset/trial-readiness-polish.md
+  s_fc571f39c642e8::t_c8d087b45e12ba 1-9
+client/dashboard/src/components/billing/tum-section.tsx
+  s_fc571f39c642e8::t_c8d087b45e12ba 17,39,323
+client/dashboard/src/pages/collections/CollectionDetail.tsx
+  s_fc571f39c642e8::t_c8d087b45e12ba 7,48,328-362,424
+client/dashboard/src/pages/skills/SkillsList.page.test.tsx
+  s_fc571f39c642e8::t_c8d087b45e12ba 21-23,256
+server/internal/mcpservers/setup_test.go
+  s_fc571f39c642e8::t_c8d087b45e12ba 57,83-85,91
+server/internal/remotemcp/tools_list_mcp_connect_filter_interceptor.go
+  s_fc571f39c642e8::t_c8d087b45e12ba 25-29,32,46,49,80-88,93
+server/internal/skillefficacy/insights_test.go
+  s_fc571f39c642e8::t_c8d087b45e12ba 68,80-113,125,151,171,187,201,210,215-237,264,279,313
+server/internal/skills/feedback.go
+  s_fc571f39c642e8::t_c8d087b45e12ba 3-7
+client/dashboard/src/pages/access/remoteToolMetadata.ts
+  s_fc571f39c642e8::t_c8d087b45e12ba 1-34
+.speakeasy/out.openapi.yaml
+  s_fc571f39c642e8::t_fcc0dc8dd28e4f 4080-4097,11395,12326-12407,35638,35642,35644-35661,35745-35752,53444,53448-53456,53460,53462-53467,53495,53499,53501,53503,56906-56915,58218,58222,58226,58272,64593-64595
+client/dashboard/src/sdk/.speakeasy/gen.lock
+  s_fc571f39c642e8::t_ebaf2ad78f99ee 158,784,1503,2021-2022,4096-4098,4215,5356-5364,6356
+client/dashboard/src/sdk/src/funcs/agentGetPlugins.ts
+  s_fc571f39c642e8::t_08acd1ee02358f 115-124
+client/dashboard/src/sdk/src/funcs/domainsListDomains.ts
+  s_fc571f39c642e8::t_1c96856b74140b 1-196
+client/dashboard/src/sdk/src/funcs/skillEfficacyQueryInsights.ts
+  s_fc571f39c642e8::t_a09ad9aed32a32 32-33,38-43,57-70,88-101,116,124,128,187,199,207-208,219-221,228-232,235-281
+client/dashboard/src/sdk/src/models/components/deviceintegrationcoverage.ts
+  s_fc571f39c642e8::t_a6ee500a07a517 8,13-25,29,33,37-45,48-51,82-85,94-95,97,110-111
+client/dashboard/src/sdk/src/models/components/listcustomdomainsresult.ts
+  s_fc571f39c642e8::t_b48532d95f09f0 1-34
+client/dashboard/src/sdk/src/models/components/manageddevice.ts
+  s_fc571f39c642e8::t_3e17644e6e2773 13,18,25,30,34,38
+client/dashboard/src/sdk/src/models/components/skillefficacyinsightsresult.ts
+  s_fc571f39c642e8::t_0e2f6b24af1794 23-26,44,52
+client/dashboard/src/sdk/src/models/operations/getagentplugins.ts
+  s_fc571f39c642e8::t_eb082f506eefc4 21-28,63-64,75-76,81-82
+client/dashboard/src/sdk/src/models/operations/listdomains.ts
+  s_fc571f39c642e8::t_f04af41b8fcf1c 1-73
+client/dashboard/src/sdk/src/models/operations/listmanageddevices.ts
+  s_fc571f39c642e8::t_4d08d683ccdffc 27
+client/dashboard/src/sdk/src/models/operations/queryskillefficacyinsights.ts
+  s_fc571f39c642e8::t_b003a3d6774b19 7-13,38,41-48,59-62,103-104,120-121,145-170
+client/dashboard/src/sdk/src/react-query/agentPlugins.core.ts
+  s_fc571f39c642e8::t_51624daa297c95 52-53,80-85
+client/dashboard/src/sdk/src/react-query/agentPlugins.ts
+  s_fc571f39c642e8::t_4c7f57dd7fceca 109-116,127-132
+client/dashboard/src/sdk/src/react-query/listDomains.core.ts
+  s_fc571f39c642e8::t_295eff0ce98523 1-78
+client/dashboard/src/sdk/src/react-query/listDomains.ts
+  s_fc571f39c642e8::t_992c0a280938dc 1-138
+client/dashboard/src/sdk/src/react-query/skillEfficacyInsights.core.ts
+  s_fc571f39c642e8::t_6d8fadf545efc1 16,20-32,51-70,89-90,118-174,182-183,190-211
+client/dashboard/src/sdk/src/react-query/skillEfficacyInsights.ts
+  s_fc571f39c642e8::t_5a45ec009d17ad 6,9-11,14-15,36,38,43,46,48-50,54,57,59-61,134-219,229-230,251-252
+client/dashboard/src/sdk/src/sdk/domains.ts
+  s_fc571f39c642e8::t_640ff32b975e64 8,15,32-35,104-122
+client/dashboard/src/sdk/src/sdk/skillefficacy.ts
+  s_fc571f39c642e8::t_4cf8259c0e650a 16,24,56-59
+pnpm-lock.yaml
+  s_fc571f39c642e8::t_5edb90d6158dc0 10-11,34-35,97-98,101,104,107,109-110,113,119,122,125,128,131,134,137,140,143,146,149,152,155,158,161,164,167,170,173,176,179,182,185,188,194,197,200,203,206,224,236,242,248,251,257,259-260,263,265-266,269,272,275,278,287,290,305,323,333,363,366,381,393,396,399,402,411,414,416-417,419-420,544-545,550-551,556-557,566-567,603-604,4531-4532,6667-6668,6670,6788-6789,7856,7859,7863,7866,7870,7882,7884,7886-7889,7899,7901-7902,7908-7909,7914,7916-7920,7923,7933,7935-7937,7939-7940,7948,7950-7952,7954-7960,7964-7967,7970,7980,7982-7984,7988,7990,8188,8191-8192,8194-8196,8202,8206-8207,8209,8219,8223-8224,8403,8405,8408,8410-8413,8416,8418-8420,8423,8425,8641,8644-8645,8943,8947-8948,9040,9042,9309,9312,9317-9318,9325,9329-9330,9333,9335,9338,9352,9354-9356,9361,9363-9365,9370,9373-9382,9387,9390-9399,9404,9407-9412,9417,9420-9425,9430,9432-9434,9439,9441-9443,9448,9450-9452,9457,9459-9461,9466,9468-9474,9479,9481-9487,9492,9495-9503,9508,9511-9519,9524,9527-9535,9540,9543-9551,9556,9558-9563,9568,9570-9575,9580,9582,9586,9589-9594,9599,9602-9607,9612,9614,9618,9620,9624,9627-9637,9639-9641,9646,9649-9659,9661-9663,9668,9670,9674,9677-9682,9687,9690-9697,9702,9705-9712,9717,9719,9723,9725-9729,9734,9736-9740,9745,9748-9754,9759,9762-9768,9773,9776-9785,9790,9793-9802,9807,9809-9810,9814,9816-9818,9823,9825-9827,9832,9835-9849,9851-9853,9858,9861-9875,9877-9879,9884,9887-9897,9902,9905-9915,9920,9923-9937,9942,9945-9959,9964,9968-9979,9984,9988-9999,10004,10007-10015,10020,10023-10031,10036,10039-10050,10052-10054,10059,10062-10073,10075-10077,10082-10092,10094-10095,10100-10110,10112-10113,10118-10128,10130-10131,10136,10138-10141,10146,10148-10151,10156,10158-10160,10165,10167-10169,10174,10176-10178,10183,10185-10187,10192,10194-10197,10202,10204-10207,10212,10215-10225,10230,10233-10243,10248,10251-10260,10265,10268-10279,10284,10288-10296,10301,10305-10313,10318,10322-10339,10341-10343,10348,10352-10369,10371-10373,10378,10380-10382,10387,10389-10391,10396,10400-10410,10415,10419-10429,10434,10436-10437,10441,10444-10451,10456,10459-10466,10471,10474-10482,10487,10490-10498,10503,10506-10518,10523,10526-10538,10543,10546-10553,10558,10561-10568,10573,10576-10579,10584,10587-10590,10595,10598-10605,10610,10613-10620,10625,10628-10640,10645,10648-10660,10665,10668-10680,10685,10687,10691,10693-10695,10699,10701-10702,10706,10708-10709,10713,10715-10716,10720,10722,10726,10728,10732,10734,10738,10741,10745,10747-10748,10752,10754-10756,10761,10763-10765,10783,10792-10793,10797,10800,10961-10975,10978,10981,10983-10989,11006,11010-11011,11111,11114-11115,11117,11121,11124,11126,11129,11132-11133,11135,11137,11140-11141,11143,11145,11150,11154-11155,11170,11172,11175-11176,11180,11182-11185,11188,11191-11192,11209,11212-11214,11216,11219-11221,11223,11226-11227,11249,11261,11295,11302,11368,11372-11373,11742,11744-11746,11752,11756-11758,11797,11799,11801,11911,11913,12035,12037-12042,12709,12715-12716,13228,13230,13665,13667,13670-13671,13764,13766-13767,13769,13776-13778,13808,13811,13813-13816,14193,14196-14251,14256,14259-14314,14328,14331,14333,14335,14338,14340,14342,14345,14347,14355,14364,14373,14376-14377,14382,14384-14385,14390,14392-14394,14396-14397,14401,14403-14404,14406,14408-14410,14413,14416,14419,14422,14425,14427,14429,14432,14437,14440-14442,14446,14448-14449,14451,14492,14494,14500-14501,14503,14506,14864,14866-14867,14903,14910-14911,14996,14999-15001,15006,15008-15009,15016,15019-15020,15224,15226,15231,15233,15237,15239,15241,15243,15247,15249-15250,15254,15257,15262,15264,15266,15268,15771,15773,15777,15779,15783-15784
+server/gen/agent/service.go
+  s_fc571f39c642e8::t_b88f9ae3d6364e 85-90
+server/gen/device_integrations/service.go
+  s_fc571f39c642e8::t_fb708786fffd91 114-115,117-126,128-133,135-138,309-314,338-340,342-344
+server/gen/domains/client.go
+  s_fc571f39c642e8::t_8ba725cb68b5df 19,28,31,62-83
+server/gen/domains/endpoints.go
+  s_fc571f39c642e8::t_5c6467fab7769f 20,34,46,77-99
+server/gen/domains/service.go
+  s_fc571f39c642e8::t_50d515f18983d3 21-23,59,157-168
+server/gen/http/agent/client/cli.go
+  s_fc571f39c642e8::t_748703d5553640 16,27-38,42-43
+server/gen/http/agent/client/encode_decode.go
+  s_fc571f39c642e8::t_5bbba683cfbb1d 48-55
+server/gen/http/agent/server/encode_decode.go
+  s_fc571f39c642e8::t_5dba04979ea545 39-43,53-60,64
+server/gen/http/agent/server/types.go
+  s_fc571f39c642e8::t_f3190dbfda8acd 765,769-770
+server/gen/http/cli/gram/cli.go
+  s_fc571f39c642e8::t_9ab6c2adca321e 107,166,351-355,781-783,2238-2239,3141,4171-4173,5675,5949-5951,6876,8121-8122,8132-8133,8137,9955,9983-10000,16504-16505,16520-16521,16527
+server/gen/http/device_integrations/client/cli.go
+  s_fc571f39c642e8::t_78c894c3fb3a10 289-290
+server/gen/http/device_integrations/client/types.go
+  s_fc571f39c642e8::t_ef6616b2d4dfc7 207-208,210-219,221-226,228-231,2214-2216,2218-2220,3797-3809,4161-4163,4167-4169,4173-4175,4194-4198,6738-6739
+server/gen/http/device_integrations/server/encode_decode.go
+  s_fc571f39c642e8::t_2399d952f09dc8 1814-1815
+server/gen/http/device_integrations/server/types.go
+  s_fc571f39c642e8::t_53c6e26e0a727e 207-208,210-219,221-226,228-231,2214-2216,2218-2220,2386-2398
+server/gen/http/domains/client/cli.go
+  s_fc571f39c642e8::t_18ea43c0931ba6 33-47
+server/gen/http/domains/client/client.go
+  s_fc571f39c642e8::t_f0b1f6d2bb7f36 24-27,69,107-130
+server/gen/http/domains/client/encode_decode.go
+  s_fc571f39c642e8::t_f561e30b27ce16 251-480,1613-1639
+server/gen/http/domains/client/paths.go
+  s_fc571f39c642e8::t_80e8f416fcdff1 15-19
+server/gen/http/domains/client/types.go
+  s_fc571f39c642e8::t_035913660ab893 71-76,343-523,1435-1473,1704-1869,2738-2753,3106-3345,4546-4593
+server/gen/http/domains/server/encode_decode.go
+  s_fc571f39c642e8::t_ba61a5e8660f34 215-407,1407-1437
+server/gen/http/domains/server/paths.go
+  s_fc571f39c642e8::t_6f09a10380a556 15-19
+server/gen/http/domains/server/server.go
+  s_fc571f39c642e8::t_492e84af279eaa 23,59,67,82,96,143-195
+server/gen/http/domains/server/types.go
+  s_fc571f39c642e8::t_4ef1c298777088 71-76,343-523,1435-1473,1527-1545,1765-1904,2615-2622
+server/gen/http/openapi3.yaml
+  s_fc571f39c642e8::t_4fb6c544f74cb1 4815-4832,12043,12964-13044,36047,36051,36053-36070,36153-36160,53729,53733-53741,53745,53747-53752,53780,53784,53786,53788,57190-57199,58502,58506,58510,58556,64877-64879
+server/gen/http/skill_efficacy/client/cli.go
+  s_fc571f39c642e8::t_d5e62c1fe726d1 99,152-177,196-197
+server/gen/http/skill_efficacy/client/encode_decode.go
+  s_fc571f39c642e8::t_7e222444e6a11a 541-544
+server/gen/http/skill_efficacy/client/types.go
+  s_fc571f39c642e8::t_cc618e86501197 76-77,1079
+server/gen/http/skill_efficacy/server/encode_decode.go
+  s_fc571f39c642e8::t_ecae5afcfe2cde 476-477,518-539,551
+server/gen/http/skill_efficacy/server/types.go
+  s_fc571f39c642e8::t_8b174c3f9dc4a5 76-77,765,1245,1252-1253
+server/gen/skill_efficacy/service.go
+  s_fc571f39c642e8::t_654c19813a3e5a 72-73,75-78,98-99
+server/internal/agent/repo/queries.sql.go
+  s_fc571f39c642e8::t_d8c95de557695d 203-246
+server/internal/deviceintegrations/repo/queries.sql.go
+  s_fc571f39c642e8::t_010f44ab83344f 70-97,103,109,282-299,308-348,352,359-367,371-388,390-394,396-402,404-409,416-417,626-631,663-669,678-689,691-693,696-712,714,720-723,725,729,765-767,770
+server/internal/testenv/testrepo/queries.sql.go
+  s_fc571f39c642e8::t_fe61e8ff2dc72e 356-379,397-398,407,418,617-661
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.16",
+  "base_commit_sha": "2a960d040da6921d5c77cd08216b1fedb30d6f4f",
+  "prompts": {},
+  "humans": {
+    "h_2620cc60cfd1e9": {
+      "author": "tgmendes <tiago@speakeasy.com>"
+    }
+  },
+  "sessions": {
+    "s_fc571f39c642e8": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019fa7d1-17b5-7831-ad39-8403c6daa46c",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "tgmendes <tiago@speakeasy.com>"
+    }
+  }
+}

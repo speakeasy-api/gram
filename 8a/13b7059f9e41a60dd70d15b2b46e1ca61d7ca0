@@ -1,0 +1,25 @@
+server/internal/scanners/promptinjection/scanner_test.go
+  s_0ef87b252df3cd::t_617cd21e9422f2 147,149,155
+server/internal/background/activities/risk_analysis/analyze_batch.go
+  s_0ef87b252df3cd::t_617cd21e9422f2 83
+server/internal/scanners/promptinjection/scanner.go
+  s_0ef87b252df3cd::t_557f6bce286a51 37-44,50,55-57,62
+server/internal/risk/scanner.go
+  s_0ef87b252df3cd::t_617cd21e9422f2 156
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "8a13b7059f9e41a60dd70d15b2b46e1ca61d7ca0",
+  "prompts": {},
+  "sessions": {
+    "s_0ef87b252df3cd": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f40fd-89c3-7d33-b377-8a732ed76fb0",
+        "model": "gpt-5.5"
+      },
+      "human_author": "Vishal Gowda <vishal@speakeasy.com>"
+    }
+  }
+}

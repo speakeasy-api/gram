@@ -1,0 +1,19 @@
+server/internal/judgemessage/message.go
+  s_0ef87b252df3cd::t_fd6a58108a580b 12-23,25-27,32-38,40-41
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "894372626128da88336f5a4bb418a7921ad7d489",
+  "prompts": {},
+  "sessions": {
+    "s_0ef87b252df3cd": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f40fd-89c3-7d33-b377-8a732ed76fb0",
+        "model": "gpt-5.5"
+      },
+      "human_author": "Vishal Gowda <vishal@speakeasy.com>"
+    }
+  }
+}

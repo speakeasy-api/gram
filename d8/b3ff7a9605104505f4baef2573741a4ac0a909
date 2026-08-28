@@ -1,0 +1,69 @@
+server/design/access/design.go
+  s_95d069cf52f7b4::t_acd1e5d714a75a 694,708
+client/dashboard/src/pages/access/roleGrantTransform.ts
+  s_95d069cf52f7b4::t_2d2e1742671634 14,27-28,77-78
+  s_95d069cf52f7b4::t_43ea96d94b52fd 152,158
+  s_95d069cf52f7b4::t_b6ad502cf3a28d 15-23
+  s_95d069cf52f7b4::t_0903e086825b56 154
+server/internal/authz/expressions_bench_test.go
+  s_95d069cf52f7b4::t_c6bb0e4b6c2cc2 75,82,90,97
+  s_95d069cf52f7b4::t_acd1e5d714a75a 86,101
+server/internal/authz/override.go
+  s_95d069cf52f7b4::t_84aca22b71f6cc 31,35
+  s_95d069cf52f7b4::t_f22b747f0b1520 61
+server/internal/authz/expressions_test.go
+  s_95d069cf52f7b4::t_f1f15194f7bd43 221
+  s_95d069cf52f7b4::t_acd1e5d714a75a 108,145,167,203,227
+  s_95d069cf52f7b4::t_c6bb0e4b6c2cc2 102,139,161,197
+server/internal/authz/scopes.go
+  s_95d069cf52f7b4::t_acd1e5d714a75a 20,22,24,26,28,30,34,36,119,121,123,125,127,129,133,135,147,149,151,153,155,157,161,163
+  s_95d069cf52f7b4::t_78aa2063f2d455 140-141,143
+  s_95d069cf52f7b4::t_030b82554d4cbb 18-19,21,23,25,27,29,31-33,35,37-38,117-118,120,122,124,126,128,130-132,134,136-137,145-146,148,150,152,154,156,158-160,162,164-165
+  s_95d069cf52f7b4::t_32b9a4bd70960b 72-100
+server/internal/authz/resource_grants.go
+  s_95d069cf52f7b4::t_44484f59e8e59e 274
+server/internal/authz/expressions.go
+  s_95d069cf52f7b4::t_2c74f38e050442 34
+  s_95d069cf52f7b4::t_acd1e5d714a75a 22,214
+client/dashboard/src/pages/access/roundtrip.test.ts
+  s_95d069cf52f7b4::t_acd1e5d714a75a 42,49,69,110,115
+server/internal/authz/engine_test.go
+  s_95d069cf52f7b4::t_acd1e5d714a75a 397,421
+  s_95d069cf52f7b4::t_c6bb0e4b6c2cc2 388,412
+server/internal/authz/selector_test.go
+  s_95d069cf52f7b4::t_acd1e5d714a75a 178,180,187,189,191,206,208,228,230
+server/internal/authz/scopes_test.go
+  s_95d069cf52f7b4::t_ea52015b5176e2 449-471
+  s_95d069cf52f7b4::t_acd1e5d714a75a 45-53,83-91
+  s_95d069cf52f7b4::t_f22b747f0b1520 30
+  s_95d069cf52f7b4::t_ddc9f01b758a6e 14,20-29,31-38
+server/internal/authz/grants.go
+  s_95d069cf52f7b4::t_dc09b775aa4951 367
+  s_95d069cf52f7b4::t_0b76f65fe0b6cf 224,307
+docs/rbac.md
+  s_95d069cf52f7b4::t_c912a52a8f8088 226,229,251,289,292,304,307,311,316,339,341-343,345
+  s_95d069cf52f7b4::t_acd1e5d714a75a 322,331
+server/internal/authz/load.go
+  s_95d069cf52f7b4::t_e44401507c7105 38
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.8",
+  "base_commit_sha": "d8b3ff7a9605104505f4baef2573741a4ac0a909",
+  "prompts": {},
+  "humans": {
+    "h_2620cc60cfd1e9": {
+      "author": "tgmendes <tiago@speakeasy.com>"
+    }
+  },
+  "sessions": {
+    "s_95d069cf52f7b4": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019ecfff-79bd-7ac0-8355-76dbf61e503f",
+        "model": "gpt-5.5"
+      },
+      "human_author": "tgmendes <tiago@speakeasy.com>"
+    }
+  }
+}

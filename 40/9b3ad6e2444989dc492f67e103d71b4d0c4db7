@@ -1,0 +1,31 @@
+server/internal/modelkeys/resolver_test.go
+  s_b603d5dc860c70::t_098282d5c502e6 120
+server/internal/scanners/promptinjection/openrouter/judge.go
+  s_b603d5dc860c70::t_08d27f9a0243e8 63-64
+client/dashboard/src/pages/security/detection-rules-data.ts
+  s_b603d5dc860c70::t_e081c25981bcdc 61
+.changeset/drop-pi-classifier-references.md
+  s_b603d5dc860c70::t_d0b5bc01a4ab7f 1-6
+client/dashboard/src/pages/settings/model-key-slots.ts
+  s_b603d5dc860c70::t_d1102b01a36092 39
+client/dashboard/src/lib/insights-suggestions.ts
+  s_b603d5dc860c70::t_78b39bf5c85079 927
+server/internal/assistants/managed_assistant_instructions.txt
+  s_b603d5dc860c70::t_c5fad5b1de9e05 15
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.15",
+  "base_commit_sha": "409b3ad6e2444989dc492f67e103d71b4d0c4db7",
+  "prompts": {},
+  "sessions": {
+    "s_b603d5dc860c70": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "e7c7ce5c-5307-4be8-ae9d-198cfd811b55",
+        "model": "claude-fable-5"
+      },
+      "human_author": "Vishal Gowda <vishal@speakeasy.com>"
+    }
+  }
+}

@@ -1,0 +1,29 @@
+server/migrations/atlas.sum
+  s_4464e82f9c07a4::t_349f56a9cd3ee5 1,209
+server/migrations/20260604105904_policy-access-requests.sql
+  s_4464e82f9c07a4::t_349f56a9cd3ee5 1-40
+server/database/schema.sql
+  s_4464e82f9c07a4::t_64fa3f6504a451 2943
+  s_4464e82f9c07a4::t_e1db86c566efca 2916-2942,2944-2961
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.3",
+  "base_commit_sha": "f94d25cf70e5228139f5f5a43f10bc7492e54cdc",
+  "prompts": {},
+  "humans": {
+    "h_2620cc60cfd1e9": {
+      "author": "tgmendes <tiago@speakeasy.com>"
+    }
+  },
+  "sessions": {
+    "s_4464e82f9c07a4": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019e9236-ac4d-7440-a035-8a4766329334",
+        "model": "gpt-5.5"
+      },
+      "human_author": "tgmendes <tiago@speakeasy.com>"
+    }
+  }
+}

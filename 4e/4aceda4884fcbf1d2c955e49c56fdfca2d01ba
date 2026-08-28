@@ -1,0 +1,56 @@
+server/internal/scanners/async_scan_metrics.go
+  s_62e95995138f74::t_845440de9084a9 1-55,57-59
+  s_62e95995138f74::t_442a9f75bc1b1e 56
+server/internal/scanners/promptpolicy/judge.go
+  s_62e95995138f74::t_b548de9b3a7643 29-32
+server/internal/scanners/promptpolicy/handler.go
+  s_62e95995138f74::t_b548de9b3a7643 21-23,27-32,37-39,48,50-53
+  s_62e95995138f74::t_442a9f75bc1b1e 74
+  s_62e95995138f74::t_57e768a412e863 8-9,20,26,36,45-47,49,64,68,72-73
+server/cmd/gram/streams.go
+  s_62e95995138f74::t_e3a9be01a28645 338,341
+  s_62e95995138f74::t_f9f2b05b2614b8 42
+  s_62e95995138f74::t_1c206b7b8c5f7d 339,342
+server/internal/scanners/promptinjection/handler_test.go
+  s_62e95995138f74::t_442a9f75bc1b1e 142-159
+  s_62e95995138f74::t_0ed04cfcbe7dbb 6,195,199,203,215,234
+  s_62e95995138f74::t_b2b8a3f4973e50 204,219-228
+  s_62e95995138f74::t_6e6c22cd2ebd73 72,100,117,135
+  s_62e95995138f74::t_cab7c55f268084 5,9-10,16-17,40,68-71,77-81,98-99,105-116,118-134,136-141,160-194,196-198,200-202,205-214,216-218,229-233,235-236
+server/internal/scanners/promptpolicy/handler_test.go
+  s_62e95995138f74::t_137ff4b4a60739 62
+  s_62e95995138f74::t_b2b8a3f4973e50 225,240-249
+  s_62e95995138f74::t_ec69bfc867066d 5,9-10,16-17,41,78-81,86-90,117-120,126-137,139-155,157-162,181-215,217-219,221-223,226-235,237-239,250-254,256-257
+  s_62e95995138f74::t_6e6c22cd2ebd73 82,121,138,156
+  s_62e95995138f74::t_442a9f75bc1b1e 163-180
+  s_62e95995138f74::t_0ed04cfcbe7dbb 6,216,220,224,236,255
+server/internal/scanners/async_shadow_gate.go
+  s_62e95995138f74::t_b2b8a3f4973e50 58
+  s_62e95995138f74::t_540afa22516d6c 49,118
+  s_62e95995138f74::t_0ed04cfcbe7dbb 6,127
+  s_62e95995138f74::t_66e10c54b132db 1,5,7-8,17-21,37-48,50-57,59-62,64,68,70,72-75,79-81,86,90-97,99,101,103-117,119-126,128
+  s_62e95995138f74::t_845440de9084a9 22-36,63,65,71,76,82-85,87
+server/internal/scanners/promptinjection/handler.go
+  s_62e95995138f74::t_442a9f75bc1b1e 77
+  s_62e95995138f74::t_d1948070e32be7 21-23,27-29,37-39,47,49-52
+  s_62e95995138f74::t_b548de9b3a7643 30-32
+  s_62e95995138f74::t_083c6c739664f5 8-9,20,26,36,44-46,48,54,67,71,75-76
+server/internal/background/activities/risk_analysis/analyze_batch_test.go
+  s_62e95995138f74::t_a611693b4990d0 241,244-287,290,293-354
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.14",
+  "base_commit_sha": "4e4aceda4884fcbf1d2c955e49c56fdfca2d01ba",
+  "prompts": {},
+  "sessions": {
+    "s_62e95995138f74": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f6f60-6cb8-7b00-936d-c602484edc11",
+        "model": "gpt-5.5"
+      },
+      "human_author": "Vishal Gowda <vishal@speakeasy.com>"
+    }
+  }
+}

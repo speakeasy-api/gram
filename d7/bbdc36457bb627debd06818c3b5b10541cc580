@@ -1,0 +1,63 @@
+server/internal/otel/handler_ispan_transforms_test.go
+  s_a45598db4a4df7::t_2eb3c2d3e92ca5 103-118
+server/internal/otel/semconv.go
+  s_a45598db4a4df7::t_976d77e647380c 48,56
+  s_a45598db4a4df7::t_1f77f9ae53f6c6 21,58
+  s_a45598db4a4df7::t_95e7264aada408 43,45,49,53,57
+  s_a45598db4a4df7::t_a339c6fe4afaca 17,19-20,44,46,50-51,54-55
+  s_a45598db4a4df7::t_7ded92d20a8203 18,47
+  s_a45598db4a4df7::t_5c9c069ef0440d 52
+server/cmd/gram/streams.go
+  s_a45598db4a4df7::t_95e7264aada408 40,545-551
+server/internal/otel/enrich_directory_test.go
+  s_a45598db4a4df7::t_7473c4df000129 30,44
+  s_a45598db4a4df7::t_2eb3c2d3e92ca5 21,33-37,39
+  s_a45598db4a4df7::t_a339c6fe4afaca 31-32,38,40-41
+  s_a45598db4a4df7::t_1f77f9ae53f6c6 42
+  s_a45598db4a4df7::t_5dbfe7eff0d02b 16,43
+  s_a45598db4a4df7::t_1f0b260f4cefbc 28,51,53,64,69,81
+  s_a45598db4a4df7::t_868fb51bc228b1 18-20,22-24
+  s_a45598db4a4df7::t_19901ad9ab5191 50,62-63,75
+  s_a45598db4a4df7::t_5c9c069ef0440d 25-27
+  s_a45598db4a4df7::t_1fb76c3cb56a7c 1-15,17,29,45-49,52,54-61,65-68,70-74,76-80,82-93
+server/internal/otel/setup_test.go
+  s_a45598db4a4df7::t_19901ad9ab5191 1-39
+server/internal/otel/enrich_directory.go
+  s_a45598db4a4df7::t_2eb3c2d3e92ca5 191-194,197-199,201-202,204-206,208,210,212-216,218,220,222
+  h_2620cc60cfd1e9 30-152
+  s_a45598db4a4df7::t_868fb51bc228b1 154-158,162,166,169-170,172,183-185,187,189-190,195-196,200,203,207,209,211,217,219,221,223,225
+  s_a45598db4a4df7::t_940b450e2e575e 167
+  s_a45598db4a4df7::t_e853a23f7ff47e 237,244-246
+  s_a45598db4a4df7::t_97aeb6e8bc9fd4 186,188,224
+  s_a45598db4a4df7::t_d6c7757129f448 15
+  s_a45598db4a4df7::t_1f77f9ae53f6c6 180
+  s_a45598db4a4df7::t_7473c4df000129 168
+  s_a45598db4a4df7::t_95e7264aada408 1-14,16-29,153,159-161,163,165,171,173,175-176,178-179,181-182,226-236,238-243
+  s_a45598db4a4df7::t_a339c6fe4afaca 164,174,177
+server/internal/directory/directory_test.go
+  s_a45598db4a4df7::t_1fb76c3cb56a7c 196-218
+server/internal/otel/handler_ispan_transforms.go
+  s_a45598db4a4df7::t_2eb3c2d3e92ca5 174-186
+  s_a45598db4a4df7::t_95e7264aada408 16-17,34-35,46
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.23",
+  "base_commit_sha": "d7bbdc36457bb627debd06818c3b5b10541cc580",
+  "prompts": {},
+  "humans": {
+    "h_2620cc60cfd1e9": {
+      "author": "tgmendes <tiago@speakeasy.com>"
+    }
+  },
+  "sessions": {
+    "s_a45598db4a4df7": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a02004-6932-7dc0-8650-7782e08db883",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "tgmendes <tiago@speakeasy.com>"
+    }
+  }
+}

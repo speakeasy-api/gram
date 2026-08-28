@@ -1,0 +1,395 @@
+server/internal/background/activities/verify_custom_domain.go
+  s_3d388cbf35fcf4::t_fbe51bdc2aa75f 20,147,149-160
+client/dashboard/src/components/detail-fields.tsx
+  s_3d388cbf35fcf4::t_fbe51bdc2aa75f 1-65
+server/internal/externalcredentials/queries.sql
+  s_3d388cbf35fcf4::t_fbe51bdc2aa75f 40-47,53-54,63-64,71-72,82-83,118-119
+server/internal/customdomains/health.go
+  s_3d388cbf35fcf4::t_fbe51bdc2aa75f 1-131
+server/internal/background/activities/custom_domain_dns.go
+  s_3d388cbf35fcf4::t_fbe51bdc2aa75f 1-90
+.changeset/sync-plugin-server-names.md
+  s_3d388cbf35fcf4::t_fbe51bdc2aa75f 1-5
+server/internal/telemetry/create_log_test.go
+  s_3d388cbf35fcf4::t_fbe51bdc2aa75f 13,554-556,560-562,564-576
+.speakeasy/openapi-hooks.yaml
+  s_3d388cbf35fcf4::t_fbe51bdc2aa75f 697-698
+server/internal/background/activities/custom_domain_ingress.go
+  s_3d388cbf35fcf4::t_fbe51bdc2aa75f 46,65,139
+server/internal/telemetry/shadow_mcp_inventory_test.go
+  s_3d388cbf35fcf4::t_fbe51bdc2aa75f 778-781,798,801
+server/internal/email/templates.go
+  s_3d388cbf35fcf4::t_fbe51bdc2aa75f 34,101-105
+  s_3d388cbf35fcf4::t_9179730bb2a7c0 106
+server/cmd/gram/start.go
+  s_3d388cbf35fcf4::t_fbe51bdc2aa75f 106,122,594,1151,1225,1303-1341
+server/internal/background/worker.go
+  s_3d388cbf35fcf4::t_fbe51bdc2aa75f 8,62-100,114-151,171-209,214-252,306,346-349,443-445,570-573
+  s_3d388cbf35fcf4::t_81b10070c61f3c 574-575
+server/internal/thirdparty/gcp/gcpauth/principal.go
+  s_3d388cbf35fcf4::t_fbe51bdc2aa75f 1-13
+server/internal/k8s/ingress_provisioner.go
+  s_3d388cbf35fcf4::t_fbe51bdc2aa75f 101-102
+server/migrations/20260727135457_tunneled-mcp-servers-add-allow-public.sql
+  s_3d388cbf35fcf4::t_fbe51bdc2aa75f 1-4
+.changeset/platform-external-credentials.md
+  s_3d388cbf35fcf4::t_fbe51bdc2aa75f 1-6
+server/internal/thirdparty/gcp/gcpauth/source.go
+  s_3d388cbf35fcf4::t_fbe51bdc2aa75f 1-20
+server/internal/background/activities/verify_custom_domain_test.go
+  s_3d388cbf35fcf4::t_fbe51bdc2aa75f 206,213-214,226,283,308-363
+  s_3d388cbf35fcf4::t_76e9bb5c74807d 364
+.changeset/custom-domain-health-checks.md
+  s_3d388cbf35fcf4::t_fbe51bdc2aa75f 1-6
+.changeset/session-token-entropy.md
+  s_3d388cbf35fcf4::t_fbe51bdc2aa75f 1-5
+server/internal/oauth/wellknown/wellknown_rewrite_test.go
+  s_3d388cbf35fcf4::t_fbe51bdc2aa75f 1-34
+server/internal/plugins/queries.sql
+  s_3d388cbf35fcf4::t_fbe51bdc2aa75f 236-257
+server/internal/customdomains/queries.sql
+  s_3d388cbf35fcf4::t_fbe51bdc2aa75f 49-107
+client/dashboard/src/pages/org/external-services/tabs.ts
+  s_3d388cbf35fcf4::t_fbe51bdc2aa75f 1-28
+server/internal/thirdparty/gcp/gcpauth/doc.go
+  s_3d388cbf35fcf4::t_fbe51bdc2aa75f 1-10
+hooks/sdk/.speakeasy/gen.yaml
+  s_3d388cbf35fcf4::t_fbe51bdc2aa75f 47,64,71
+server/internal/auth/sessions/sessions.go
+  s_3d388cbf35fcf4::t_fbe51bdc2aa75f 5-6,23-41
+  s_3d388cbf35fcf4::t_0848b3012ffe4b 42
+client/dashboard/src/pages/org/external-services/tabs/SettingsTab.tsx
+  s_3d388cbf35fcf4::t_fbe51bdc2aa75f 1-166
+server/internal/externalcredentials/adminhandlers.go
+  s_3d388cbf35fcf4::t_fbe51bdc2aa75f 1-350
+server/internal/externalkeys/setup_test.go
+  s_3d388cbf35fcf4::t_fbe51bdc2aa75f 24,80
+client/dashboard/src/pages/org/external-services/ExternalCredentialDetail.tsx
+  s_3d388cbf35fcf4::t_fbe51bdc2aa75f 1-100
+client/dashboard/src/components/org-sidebar.tsx
+  s_3d388cbf35fcf4::t_fbe51bdc2aa75f 16,77,91,125,211-216
+server/internal/mcpservers/impl.go
+  s_3d388cbf35fcf4::t_fbe51bdc2aa75f 515-527
+server/internal/mcp/servepublic_clientdance_test.go
+  s_3d388cbf35fcf4::t_fbe51bdc2aa75f 558,562,565-570,609-636
+client/dashboard/src/routes.tsx
+  s_3d388cbf35fcf4::t_fbe51bdc2aa75f 65-69,911-927
+  s_3d388cbf35fcf4::t_e69d3c4dd92fea 928
+server/internal/thirdparty/gcp/gcpauth/resolver.go
+  s_3d388cbf35fcf4::t_fbe51bdc2aa75f 1-128
+server/internal/risk/overview_ch.go
+  s_3d388cbf35fcf4::t_fbe51bdc2aa75f 1-255
+server/internal/database/models.go
+  s_3d388cbf35fcf4::t_fbe51bdc2aa75f 2089-2090
+server/internal/externalcredentials/adminlistplatformexternalcredentials_test.go
+  s_3d388cbf35fcf4::t_fbe51bdc2aa75f 1-83
+server/internal/xmcp/wellknown_test.go
+  s_3d388cbf35fcf4::t_fbe51bdc2aa75f 236-240,243-245
+server/migrations/atlas.sum
+  s_3d388cbf35fcf4::t_fbe51bdc2aa75f 299
+  s_3d388cbf35fcf4::t_c64b2813d36b25 1,300
+server/internal/background/activities/custom_domain_ingress_test.go
+  s_3d388cbf35fcf4::t_fbe51bdc2aa75f 33,52,75,122,176,226,269
+.changeset/billing-relative-date-ranges.md
+  s_3d388cbf35fcf4::t_fbe51bdc2aa75f 1-5
+server/internal/thirdparty/loops/client.go
+  s_3d388cbf35fcf4::t_fbe51bdc2aa75f 43-44,88-93,105-107,120-124
+  s_3d388cbf35fcf4::t_fb7f11cb9872f8 125
+server/internal/risk/overview_ch_test.go
+  s_3d388cbf35fcf4::t_fbe51bdc2aa75f 1-247
+.changeset/calm-streams-observe.md
+  s_3d388cbf35fcf4::t_fbe51bdc2aa75f 1-2
+server/design/platformadmin/externalcredentials/design.go
+  s_3d388cbf35fcf4::t_fbe51bdc2aa75f 1-179
+server/internal/k8s/custom_domain_health_test.go
+  s_3d388cbf35fcf4::t_fbe51bdc2aa75f 1-225
+.changeset/remove-gateway-provisioner.md
+  s_3d388cbf35fcf4::t_fbe51bdc2aa75f 1-5
+server/cmd/gram/worker.go
+  s_3d388cbf35fcf4::t_fbe51bdc2aa75f 251-253,434,781-788,790-828
+server/internal/k8s/custom_domain_health.go
+  s_3d388cbf35fcf4::t_fbe51bdc2aa75f 1-170
+client/dashboard/src/pages/org/OrgDomains.tsx
+  s_3d388cbf35fcf4::t_fbe51bdc2aa75f 26,31,39,46,88-130,333-342,414-417,493-528
+server/internal/auth/impl.go
+  s_3d388cbf35fcf4::t_fbe51bdc2aa75f 280-283
+server/internal/auth/sessions/sessions_test.go
+  s_3d388cbf35fcf4::t_fbe51bdc2aa75f 1-34
+server/internal/email/template_custom_domain_unhealthy_test.go
+  s_3d388cbf35fcf4::t_fbe51bdc2aa75f 1-64
+server/internal/background/custom_domain_health.go
+  s_3d388cbf35fcf4::t_fbe51bdc2aa75f 1-209
+server/internal/k8s/stub_provisioner_test.go
+  s_3d388cbf35fcf4::t_fbe51bdc2aa75f 16
+server/internal/externalcredentials/adminrbac_test.go
+  s_3d388cbf35fcf4::t_fbe51bdc2aa75f 1-77
+server/internal/feature/flags.go
+  s_3d388cbf35fcf4::t_fbe51bdc2aa75f 28-31
+client/dashboard/src/pages/org/external-services/tabs/OverviewTab.tsx
+  s_3d388cbf35fcf4::t_fbe51bdc2aa75f 1-132
+server/design/gram.go
+  s_3d388cbf35fcf4::t_fbe51bdc2aa75f 41
+server/internal/background/activities/custom_domain_health_test.go
+  s_3d388cbf35fcf4::t_fbe51bdc2aa75f 1-444
+server/internal/risk/setup_test.go
+  s_3d388cbf35fcf4::t_fbe51bdc2aa75f 13,34,177,229,238
+server/internal/thirdparty/gcp/gcpauth/credential_test.go
+  s_3d388cbf35fcf4::t_fbe51bdc2aa75f 1-45
+server/internal/mcp/authnchallenge_well_known.go
+  s_3d388cbf35fcf4::t_fbe51bdc2aa75f 179-186,277-284,329-330
+server/internal/tunneledmcp/repo/models.go
+  s_3d388cbf35fcf4::t_fbe51bdc2aa75f 26-27
+server/internal/externalcredentials/adminupdategcpiamplatformcredential_test.go
+  s_3d388cbf35fcf4::t_fbe51bdc2aa75f 1-96
+server/internal/customdomains/setup_test.go
+  s_3d388cbf35fcf4::t_fbe51bdc2aa75f 7,40,42-43,68-71
+  s_3d388cbf35fcf4::t_fc8fdaa1aa1cf5 72-74
+server/internal/customdomains/checkhealth_test.go
+  s_3d388cbf35fcf4::t_fbe51bdc2aa75f 1-85
+server/internal/externalcredentials/impl.go
+  s_3d388cbf35fcf4::t_fbe51bdc2aa75f 18,21,23,37,42-48,52-55,65,70-76,81-85,87-99
+pystreams/tests/test_multi.py
+  s_3d388cbf35fcf4::t_fbe51bdc2aa75f 1-72
+server/internal/background/activities/custom_domain_health.go
+  s_3d388cbf35fcf4::t_fbe51bdc2aa75f 1-453
+server/internal/thirdparty/gcp/gcpauth/credential.go
+  s_3d388cbf35fcf4::t_fbe51bdc2aa75f 1-53
+server/internal/customdomains/shared.go
+  s_3d388cbf35fcf4::t_fbe51bdc2aa75f 10,19-22,24-38
+server/internal/thirdparty/gcp/gcpauth/resolver_test.go
+  s_3d388cbf35fcf4::t_fbe51bdc2aa75f 1-30
+client/dashboard/src/pages/org/external-services/providers.ts
+  s_3d388cbf35fcf4::t_fbe51bdc2aa75f 1-51
+client/dashboard/src/pages/org/external-services/ExternalServices.tsx
+  s_3d388cbf35fcf4::t_fbe51bdc2aa75f 1-316
+server/internal/oauth/wellknown/wellknown.go
+  s_3d388cbf35fcf4::t_fbe51bdc2aa75f 104-110,120,177-191,195,203-231
+  s_3d388cbf35fcf4::t_aeb9c319e92367 232-233
+server/database/schema.sql
+  s_3d388cbf35fcf4::t_fbe51bdc2aa75f 3461-3465,3499
+server/internal/externalcredentials/setup_test.go
+  s_3d388cbf35fcf4::t_fbe51bdc2aa75f 12,19,23,49-73,100-107,164-173,182
+  s_3d388cbf35fcf4::t_3e3ba580aaefd6 174-181
+server/internal/background/activities.go
+  s_3d388cbf35fcf4::t_fbe51bdc2aa75f 7,76,148,221-222,343-372
+  s_3d388cbf35fcf4::t_785afc2d3e4a36 373
+pystreams/src/pystreams/cmd/multi.py
+  s_3d388cbf35fcf4::t_fbe51bdc2aa75f 129-137
+  s_3d388cbf35fcf4::t_80e71e9667eacd 138
+server/internal/email/template_custom_domain_unhealthy.go
+  s_3d388cbf35fcf4::t_fbe51bdc2aa75f 1-23
+client/dashboard/src/elements/components/ui/time-range-picker.test.ts
+  s_3d388cbf35fcf4::t_fbe51bdc2aa75f 29,34-86,92-102
+  s_3d388cbf35fcf4::t_d43279ae2faca2 103
+.mise-tasks/seed.mts
+  s_3d388cbf35fcf4::t_fbe51bdc2aa75f 2054-2178,5002-5005
+server/internal/risk/impl.go
+  s_3d388cbf35fcf4::t_fbe51bdc2aa75f 52,127-130,170,196,224,1495-1498,1646-1654
+  s_3d388cbf35fcf4::t_3fb0aab99f9a3b 1655
+server/internal/email/service.go
+  s_3d388cbf35fcf4::t_fbe51bdc2aa75f 46-49,64
+server/internal/customdomains/impl.go
+  s_3d388cbf35fcf4::t_fbe51bdc2aa75f 5,9,50,208-241
+  s_3d388cbf35fcf4::t_9204100d7be09c 242-243
+client/dashboard/src/elements/components/ui/time-range-picker.tsx
+  s_3d388cbf35fcf4::t_fbe51bdc2aa75f 174-269,339-341
+.changeset/external-oauth-issuer.md
+  s_3d388cbf35fcf4::t_fbe51bdc2aa75f 1-5
+server/design/domains/design.go
+  s_3d388cbf35fcf4::t_fbe51bdc2aa75f 26-40,113-131
+  s_3d388cbf35fcf4::t_0cd6a3d283bd67 132
+server/internal/k8s/provisioner.go
+  s_3d388cbf35fcf4::t_fbe51bdc2aa75f 10-12,14-16,20,26,28
+go.mod
+  s_3d388cbf35fcf4::t_fbe51bdc2aa75f 206,261-262,300
+server/internal/externalcredentials/admincreategcpiamplatformcredential_test.go
+  s_3d388cbf35fcf4::t_fbe51bdc2aa75f 1-65
+server/internal/mcp/wellknown_test.go
+  s_3d388cbf35fcf4::t_fbe51bdc2aa75f 178-182,185-187
+server/internal/externalcredentials/adminverifygcpiamplatformcredential_test.go
+  s_3d388cbf35fcf4::t_fbe51bdc2aa75f 1-114
+client/dashboard/src/pages/org/external-services/CreateExternalCredentialSheet.tsx
+  s_3d388cbf35fcf4::t_fbe51bdc2aa75f 1-202
+server/internal/mcpservers/updatemcpserver_test.go
+  s_3d388cbf35fcf4::t_fbe51bdc2aa75f 451-571
+server/internal/externalcredentials/admindeletegcpiamplatformcredential_test.go
+  s_3d388cbf35fcf4::t_fbe51bdc2aa75f 1-73
+server/migrations/20260727174208_chat-content-parts.sql
+  s_3d388cbf35fcf4::t_c64b2813d36b25 1-33
+server/internal/risk/chrepo/overview.go
+  s_3d388cbf35fcf4::t_fbe51bdc2aa75f 1-218
+server/internal/customdomains/health_test.go
+  s_3d388cbf35fcf4::t_fbe51bdc2aa75f 1-264
+server/internal/plugins/generate_test.go
+  s_3d388cbf35fcf4::t_fbe51bdc2aa75f 1086-1087,1091-1093,1096,1102-1122
+  s_3d388cbf35fcf4::t_f7c2753551fad0 1123-1124
+server/internal/risk/queries.sql
+  s_3d388cbf35fcf4::t_fbe51bdc2aa75f 1582-1594
+server/internal/background/custom_domain_health_test.go
+  s_3d388cbf35fcf4::t_fbe51bdc2aa75f 1-130
+server/internal/mv/platformexternalcredential.go
+  s_3d388cbf35fcf4::t_fbe51bdc2aa75f 1-51
+server/internal/k8s/client.go
+  s_3d388cbf35fcf4::t_fbe51bdc2aa75f 16-20,29,33-37,61-65
+server/internal/attr/conventions.go
+  s_3d388cbf35fcf4::t_fbe51bdc2aa75f 206-222,1033-1055
+  s_3d388cbf35fcf4::t_ca243db850b808 1056
+server/internal/externalcredentials/admingetgcpiamplatformcredential_test.go
+  s_3d388cbf35fcf4::t_fbe51bdc2aa75f 1-65
+.speakeasy/out.openapi.yaml
+  s_3d388cbf35fcf4::t_826858c778772f 3182,3184-3185,3198,3205,3264,3266-3267,3269-3270,3272-3273,3276,3281,3292-3293,3351,3353-3354,3356-3360,3363,3368,3380-3383,3442,3444-3445,3447-3448,3450-3451,3454,3456,3458-3461,3475,3534,3536-3537,3539-3543,3552-3557,3563,3622,3624-3625,3627-3631,3634,3636,3639,3654,3713,3715-3716,3718-3722,3731-3736,3742,3801,3804,3806-3807,3809-3810,3823,3830,3889,3892,3894-3898,3900-3908,3976,3979,3981-3985,3988,3990,3993-3994,3997,3999,4001,4061,4063,4065-4066,4068-4069,4071-4072,4074-4082,4095,4154,4156-4157,4159-4163,4166-4169,4171-4172,4182-4187,4245,4247-4248,4250-4251,4253-4254,4257,4259,4262-4263,4266-4268,4270,4272-4279,4292,4351,4353-4362,4364-4365,4367-4368,4371,4373,4375,4378-4380,4382-4384,4397,4456,4458-4467,4469-4470,4472-4473,4486,4493,4552,4554-4555,4557-4558,4560-4561,4574,4581,4640,4642-4643,4645-4649,4652-4656,4658-4659,4662,4664,4666,4673,4732,4734-4735,4737-4741,4755,4812,4814,4816-4817,4819-4820,4822-4823,4843,4846-4847,4904,4906,4908-4909,4911-4912,4914-4915,4918-4921,4923,4926,4928,4930,4933,4935,4937,4944,5002,5004,5006-5007,5009-5010,5012-5013,5016,5018,5021,5042,5102,5104-5105,5107-5111,5114-5116,5118,5120-5132,5138,5140-5874,9493-9790,9794,9796-9801,9803-9810,9818-9824,9892-9893,9895,9897-9899,9901-9902,9915,9922,9979,9981,9983-9985,9987-9988,9993,10000,10056,10058-10063,10079-10084,10086-10091,10147,10150,10152-10154,10156-10157,10166-10172,10177,10180,10184-10185,10242,10244,10246-10275,10277-10278,10333-10337,10339-10341,10343-10344,10367-10368,10427,10430-10434,10451,10455-10456,10515,10518-10524,10527,10529,10532,10549-10554,10613,10616-10617,10619-10620,10640,10647,10707,10710-10711,10713-10714,10717-10719,10721,10731,10733,10735,10742,10800-10802,10804,10806-10810,10812-10813,10815-10821,10830,10832,10834-10844,10850,10857,10915-10917,10919,10921-10928,10951-10956,10962,11024,11027,11029-11033,11035-11042,11069,11131,11134,11136-11140,11168,11230,11233,11235-11236,11238-11239,11242,11244,11246,11274,11336,11339,11341-11342,11344-11345,11348-11351,11353,11388,11450,11453,11455-11459,11482-11487,11493,11555,11558,11560-11561,11563-11564,11578,11635,11637,11639-11640,11642,51224-51231,51239-51248,51263-51266,67370-67391,67597-67598
+client/dashboard/src/sdk/.speakeasy/gen.lock
+  s_3d388cbf35fcf4::t_170a11533f7278 67-72,150,1199,1228,1251,1296,1363,1488,1627,1673,1722,1749,1785,1846-1847,1988-1989,2288,2344,2353,2612-2620,2890-2900,3372-3381,4073-4084,5427-5435,6952-6962,7481-7492
+client/dashboard/src/sdk/src/funcs/adminExternalCredentialsCreateGcpIam.ts
+  s_3d388cbf35fcf4::t_801187c7fa1d0a 1-200
+client/dashboard/src/sdk/src/funcs/adminExternalCredentialsDeleteGcpIam.ts
+  s_3d388cbf35fcf4::t_c8e4ff4dbef2fc 1-198
+client/dashboard/src/sdk/src/funcs/adminExternalCredentialsGetGcpIam.ts
+  s_3d388cbf35fcf4::t_618d4b34620dc1 1-202
+client/dashboard/src/sdk/src/funcs/adminExternalCredentialsList.ts
+  s_3d388cbf35fcf4::t_89db058db8f087 1-205
+client/dashboard/src/sdk/src/funcs/adminExternalCredentialsUpdateGcpIam.ts
+  s_3d388cbf35fcf4::t_ed7a5ab077b37d 1-200
+client/dashboard/src/sdk/src/funcs/adminExternalCredentialsVerifyGcpIam.ts
+  s_3d388cbf35fcf4::t_e3440785d721f2 1-202
+client/dashboard/src/sdk/src/funcs/domainsCheckHealth.ts
+  s_3d388cbf35fcf4::t_3a844e94231b15 1-197
+client/dashboard/src/sdk/src/models/components/awsiamcredential.ts
+  s_3d388cbf35fcf4::t_b338cf78ef5daf 15,22-24,65,77-79,98
+client/dashboard/src/sdk/src/models/components/customdomain.ts
+  s_3d388cbf35fcf4::t_7c180d6592a3b2 16-23,32-43,60-63,79-82,88-92,97-99,108-109,111-113,117
+client/dashboard/src/sdk/src/models/components/gcpiamcredential.ts
+  s_3d388cbf35fcf4::t_6577af43a21102 15,22,51,71-73,89
+client/dashboard/src/sdk/src/models/components/verifyplatformcredentialresult.ts
+  s_3d388cbf35fcf4::t_862dda48923e55 1-78
+client/dashboard/src/sdk/src/models/operations/checkdomainhealth.ts
+  s_3d388cbf35fcf4::t_94ff6298f22e95 1-73
+client/dashboard/src/sdk/src/models/operations/creategcpiamplatformcredential.ts
+  s_3d388cbf35fcf4::t_e1ba4a5c4b6a8e 1-89
+client/dashboard/src/sdk/src/models/operations/deletegcpiamplatformcredential.ts
+  s_3d388cbf35fcf4::t_63393c3b27bed7 1-86
+client/dashboard/src/sdk/src/models/operations/getgcpiamplatformcredential.ts
+  s_3d388cbf35fcf4::t_edfe96892f9c07 1-83
+client/dashboard/src/sdk/src/models/operations/listexternalcredentials.ts
+  s_3d388cbf35fcf4::t_b89fce96f614d2 16,23,29,67-69,83
+client/dashboard/src/sdk/src/models/operations/listexternalkeys.ts
+  s_3d388cbf35fcf4::t_bd48a5d3b66e6f 16,23-25,31,67-69,83
+client/dashboard/src/sdk/src/models/operations/listplatformexternalcredentials.ts
+  s_3d388cbf35fcf4::t_fffc87a5015b98 1-105
+client/dashboard/src/sdk/src/models/operations/updategcpiamplatformcredential.ts
+  s_3d388cbf35fcf4::t_32c92fdd40e028 1-90
+client/dashboard/src/sdk/src/models/operations/verifygcpiamplatformcredential.ts
+  s_3d388cbf35fcf4::t_f84b6470ba253d 1-86
+client/dashboard/src/sdk/src/react-query/checkDomainHealth.ts
+  s_3d388cbf35fcf4::t_75fdaa71b6583d 1-117
+client/dashboard/src/sdk/src/react-query/createGcpIamPlatformCredential.ts
+  s_3d388cbf35fcf4::t_b752767ad089cc 1-117
+client/dashboard/src/sdk/src/react-query/deleteGcpIamPlatformCredential.ts
+  s_3d388cbf35fcf4::t_0823d8870a1214 1-116
+client/dashboard/src/sdk/src/react-query/getGcpIamPlatformCredential.core.ts
+  s_3d388cbf35fcf4::t_45aa16e69b2290 1-83
+client/dashboard/src/sdk/src/react-query/getGcpIamPlatformCredential.ts
+  s_3d388cbf35fcf4::t_685ad06420c099 1-152
+client/dashboard/src/sdk/src/react-query/listExternalCredentials.core.ts
+  s_3d388cbf35fcf4::t_0baca4c9b7aaa9 18,82
+client/dashboard/src/sdk/src/react-query/listExternalCredentials.ts
+  s_3d388cbf35fcf4::t_f9e0161693f5a2 27,121,136
+client/dashboard/src/sdk/src/react-query/listExternalKeys.core.ts
+  s_3d388cbf35fcf4::t_9e80aad5d57c75 16,82
+client/dashboard/src/sdk/src/react-query/listExternalKeys.ts
+  s_3d388cbf35fcf4::t_ccb35f250aa784 25,118,133
+client/dashboard/src/sdk/src/react-query/listPlatformExternalCredentials.core.ts
+  s_3d388cbf35fcf4::t_3a30a95d613165 1-88
+client/dashboard/src/sdk/src/react-query/listPlatformExternalCredentials.ts
+  s_3d388cbf35fcf4::t_4632566d9816d5 1-164
+client/dashboard/src/sdk/src/react-query/updateGcpIamPlatformCredential.ts
+  s_3d388cbf35fcf4::t_5d662e8b0ed84b 1-117
+client/dashboard/src/sdk/src/react-query/verifyGcpIamPlatformCredential.ts
+  s_3d388cbf35fcf4::t_5ab0a6270d5509 1-118
+client/dashboard/src/sdk/src/sdk/adminexternalcredentials.ts
+  s_3d388cbf35fcf4::t_26841c697ff36b 1-155
+client/dashboard/src/sdk/src/sdk/domains.ts
+  s_3d388cbf35fcf4::t_6a2494a3108a5e 5,14-17,41-59
+client/dashboard/src/sdk/src/sdk/sdk.ts
+  s_3d388cbf35fcf4::t_272031f89b7a7d 8,80-86
+go.sum
+  s_3d388cbf35fcf4::t_3bacb7e4901cb8 400-401,757-758
+server/gen/admin_external_credentials/client.go
+  s_3d388cbf35fcf4::t_35ef25f18e9662 1-171
+server/gen/admin_external_credentials/endpoints.go
+  s_3d388cbf35fcf4::t_217734fdefca52 1-195
+server/gen/admin_external_credentials/service.go
+  s_3d388cbf35fcf4::t_6ef476360ccc57 1-252
+server/gen/domains/client.go
+  s_3d388cbf35fcf4::t_d3d45694a6da57 21,27,32,100-121
+server/gen/domains/endpoints.go
+  s_3d388cbf35fcf4::t_9af0a2647157df 22,35,46,120-142
+server/gen/domains/service.go
+  s_3d388cbf35fcf4::t_fd2a47dd2ebcc5 25-26,56-62,95-110
+server/gen/http/admin_external_credentials/client/cli.go
+  s_3d388cbf35fcf4::t_5c616af9274a90 1-188
+server/gen/http/admin_external_credentials/client/client.go
+  s_3d388cbf35fcf4::t_1bbfa6c01dc6ec 1-226
+server/gen/http/admin_external_credentials/client/encode_decode.go
+  s_3d388cbf35fcf4::t_01abddc93b2d45 1-1437
+server/gen/http/admin_external_credentials/client/paths.go
+  s_3d388cbf35fcf4::t_6667a0c765f21b 1-38
+server/gen/http/admin_external_credentials/client/types.go
+  s_3d388cbf35fcf4::t_e71300c7669c4b 1-4029
+server/gen/http/admin_external_credentials/server/encode_decode.go
+  s_3d388cbf35fcf4::t_1a9619bcb60b23 1-1288
+server/gen/http/admin_external_credentials/server/paths.go
+  s_3d388cbf35fcf4::t_4115c6ca610802 1-38
+server/gen/http/admin_external_credentials/server/server.go
+  s_3d388cbf35fcf4::t_47dcea55c56f2d 1-427
+server/gen/http/admin_external_credentials/server/types.go
+  s_3d388cbf35fcf4::t_d3043d3efa2f87 1-2404
+server/gen/http/cli/gram/cli.go
+  s_3d388cbf35fcf4::t_ac899611dd7c35 20,105,125,765-767,1367-1392,3033,3187-3194,3589-3590,4038-4040,4461-4482,5761-5763,6183-6204,9632,9697-9714,12504-12639
+server/gen/http/domains/client/cli.go
+  s_3d388cbf35fcf4::t_cb69e4a61c408b 101-115
+server/gen/http/domains/client/client.go
+  s_3d388cbf35fcf4::t_c32c4b3424da56 32-35,67,150-173
+server/gen/http/domains/client/encode_decode.go
+  s_3d388cbf35fcf4::t_50701234db493d 706-935
+server/gen/http/domains/client/paths.go
+  s_3d388cbf35fcf4::t_d9550c901e3443 25-29
+server/gen/http/domains/client/types.go
+  s_3d388cbf35fcf4::t_bc064d32c8b97b 53-68,93-148,701-881,1305-1318,1632-1645,1805-1832,1834,1847,1849,1862,1864,1877,1879,1892,1894,1907-1909,1922-1924,1937,1939,1952,1954,1967,1969,1982-1984,1997-1999,2012-2014,2027-2029,2042-2044,2057-2226,2334-2342,2382-2438,3158-3397
+server/gen/http/domains/server/encode_decode.go
+  s_3d388cbf35fcf4::t_1caf1fa989aa4b 638-830
+server/gen/http/domains/server/paths.go
+  s_3d388cbf35fcf4::t_e7cd202a79a22f 25-29
+server/gen/http/domains/server/server.go
+  s_3d388cbf35fcf4::t_6055c5b8f51215 25,60,67,81,94,263-315
+server/gen/http/domains/server/types.go
+  s_3d388cbf35fcf4::t_4197b292e5dfd5 53-68,93-148,701-881,1275-1288,1305-1348,1800-1939,2260-2267
+server/gen/http/openapi3.yaml
+  s_3d388cbf35fcf4::t_dfbb2883280026 3927,3929-3930,3943,3950,4008,4010-4011,4013-4014,4016-4017,4020,4025,4036-4037,4094,4096-4097,4099-4103,4106,4111,4123-4126,4184,4186-4187,4189-4190,4192-4193,4196,4198,4200-4203,4217,4275,4277-4278,4280-4284,4293-4298,4304,4362,4364-4365,4367-4371,4374,4376,4379,4394,4452,4454-4455,4457-4461,4470-4475,4481,4539,4542,4544-4545,4547-4548,4561,4568,4626,4629,4631-4635,4637-4645,4712,4715,4717-4721,4724,4726,4729-4730,4733,4735,4737,4797-4798,4800-4801,4803-4804,4806-4807,4809-4817,4830,4888,4890-4891,4893-4897,4900-4903,4905-4906,4916-4921,4978,4980-4981,4983-4984,4986-4987,4990,4992,4995-4996,4999-5001,5003,5005-5012,5025,5083,5085-5094,5096-5097,5099-5100,5103,5105,5107,5110-5112,5114-5116,5129,5187,5189-5198,5200-5201,5203-5204,5217,5224,5282,5284-5285,5287-5288,5290-5291,5304,5311-5957,10351-10717,10719-10721,10723-10724,10744,10751,10808,10810,10812-10817,10833-10838,10840-10845,10901,10903,10905-10910,10912-10920,10928-10934,10936-10937,10994-10995,10997-10999,11001-11002,11025-11026,11084,11087-11091,11108,11112-11113,11171,11174-11180,11183,11185,11188,11205-11210,11268,11271-11272,11274-11275,11295,11298-11303,11361,11364-11365,11367-11368,11370-11376,11385,11387,11389,11396,11454-11457,11459-11460,11462-11466,11469-11471,11473,11483,11485,11487-11497,11499-11504,11510,11568-11571,11573-11577,11579-11580,11582-11588,11597,11599,11601,11607,11614,11672-11675,11677-11681,11683-11684,11686-11693,11720,11781,11784,11786-11790,11818,11879,11882,11884-11888,11890-11896,11923,11984,11987,11989-11990,11992-11993,11998,12003-12009,12036,12097,12100,12102-12106,12129-12134,12140,12201,12204,12206-12207,12209-12210,12224,12281-12282,12284-12285,12287,51526-51533,51541-51550,51565-51568,67671-67692,67898-67899
+server/internal/customdomains/repo/queries.sql.go
+  s_3d388cbf35fcf4::t_86c8a5ce25ff6c 201-241,277-404,462-524
+server/internal/externalcredentials/repo/queries.sql.go
+  s_3d388cbf35fcf4::t_64a8a7a3f39730 144,149-150,165-171,203-204,247-248,293-294,376-377
+server/internal/plugins/repo/queries.sql.go
+  s_3d388cbf35fcf4::t_ec04a870ec1967 1444-1486
+server/internal/risk/repo/queries.sql.go
+  s_3d388cbf35fcf4::t_6a2f7c190a8099 3470-3513
+server/internal/tunneledmcp/repo/queries.sql.go
+  s_3d388cbf35fcf4::t_b30d837a8d97ff 34,61,79,97,109,129,155,177,217,242,259,278
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.16",
+  "base_commit_sha": "4ace8e9f979cafb93be672d8941d7e6ab97550b4",
+  "prompts": {},
+  "sessions": {
+    "s_3d388cbf35fcf4": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "acec37c7-b1cc-4ee7-82c8-afd405d96140",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Vishal Gowda <vishal@speakeasy.com>"
+    }
+  }
+}

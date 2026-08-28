@@ -1,0 +1,38 @@
+server/internal/authz/grants.go
+  s_5ed4922f829b57::t_bd920c0a8c780f 97,134-137,153-156
+  s_5ed4922f829b57::t_e19b1e84dc7e7b 96,98,100,122,138-151,157
+server/internal/authz/load_test.go
+  s_5ed4922f829b57::t_0782b75590260b 46
+  s_5ed4922f829b57::t_907e0f665423c9 56,58,71,77-80,82-85,88-92
+  s_5ed4922f829b57::t_231f218aab2169 57,59-70,72-76,81,86-87
+server/internal/access/role_manager.go
+  s_5ed4922f829b57::t_b306b70a5d317d 188-189
+server/internal/access/impl.go
+  s_5ed4922f829b57::t_b7eefd5e120580 550
+server/internal/access/repo/queries.sql.go
+  ai_agent 521-550
+server/internal/authz/principal_test.go
+  s_5ed4922f829b57::t_636d33a7aa1b84 30
+server/internal/authz/principal.go
+  s_5ed4922f829b57::t_4f34702f76c06c 158-173
+server/internal/access/queries.sql
+  s_5ed4922f829b57::t_49034762d613db 41-47
+server/internal/access/createrole_test.go
+  s_5ed4922f829b57::t_f2da4079c34917 141,158-164
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "c2e0db3cf0ab8501b4161b220c4db0c02d7f27bc",
+  "prompts": {},
+  "sessions": {
+    "s_5ed4922f829b57": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019e83e9-0aec-7901-aae4-055f8a9ba34a",
+        "model": "gpt-5.5"
+      },
+      "human_author": "tgmendes <tiago@speakeasy.com>"
+    }
+  }
+}

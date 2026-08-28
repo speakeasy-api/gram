@@ -1,0 +1,31 @@
+server/internal/hooks/claude_hooks.go
+  s_bfcdcec2fc12dd::t_64b165e1f6fe50 796-798,832-838
+server/internal/hooks/shadow_mcp_access_test.go
+  s_bfcdcec2fc12dd::t_64b165e1f6fe50 10,114-149
+server/internal/hooks/setup_test.go
+  s_bfcdcec2fc12dd::t_64b165e1f6fe50 96
+server/internal/hooks/claude_hooks_test.go
+  s_bfcdcec2fc12dd::t_64b165e1f6fe50 183-185,218
+server/cmd/gram/start.go
+  s_bfcdcec2fc12dd::t_64b165e1f6fe50 996
+server/internal/hooks/impl.go
+  s_bfcdcec2fc12dd::t_64b165e1f6fe50 17,51,103,122
+server/internal/hooks/shadow_mcp_access.go
+  s_bfcdcec2fc12dd::t_64b165e1f6fe50 10,50-61,132-195
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.6",
+  "base_commit_sha": "5bc856e3eb626a13cc5da17b353787f751d75de7",
+  "prompts": {},
+  "sessions": {
+    "s_bfcdcec2fc12dd": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019e978b-d153-7f13-a173-e4e397dcc332",
+        "model": "gpt-5.5"
+      },
+      "human_author": "tgmendes <tiago@speakeasy.com>"
+    }
+  }
+}

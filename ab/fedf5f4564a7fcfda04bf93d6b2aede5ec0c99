@@ -1,0 +1,20 @@
+server/database/schema.sql
+  h_2620cc60cfd1e9 4075,4120-4123
+server/internal/database/models.go
+  h_2620cc60cfd1e9 1555
+server/migrations/20260827154837_data_exports_fanout.sql
+  h_2620cc60cfd1e9 1-8
+server/migrations/atlas.sum
+  h_2620cc60cfd1e9 1,373
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.0",
+  "base_commit_sha": "abfedf5f4564a7fcfda04bf93d6b2aede5ec0c99",
+  "prompts": {},
+  "humans": {
+    "h_2620cc60cfd1e9": {
+      "author": "tgmendes <tiago@speakeasy.com>"
+    }
+  }
+}
