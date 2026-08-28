@@ -492,6 +492,89 @@ func (q *Queries) EvaluateCurrentPrescriptions(ctx context.Context, arg Evaluate
 	return i, err
 }
 
+const getKillswitchCurrentPrescription = `-- name: GetKillswitchCurrentPrescription :one
+SELECT
+  prescription.id,
+  prescription.organization_id,
+  prescription.definition_key,
+  prescription.principal_kind,
+  prescription.principal_key,
+  prescription.resource_kind,
+  prescription.current_version,
+  version.state,
+  version.resource_scope,
+  version.starts_at,
+  version.expires_at,
+  version.activated_at,
+  version.superseded_at,
+  version.internal_note,
+  version.external_note,
+  ARRAY(
+    SELECT resource.resource_key
+    FROM killswitch_prescription_version_resources AS resource
+    WHERE resource.organization_id = prescription.organization_id
+      AND resource.prescription_id = prescription.id
+      AND resource.version = prescription.current_version
+    ORDER BY resource.resource_key
+    LIMIT 1001
+  )::text[] AS selected_resource_keys
+FROM killswitch_prescriptions AS prescription
+JOIN killswitch_prescription_versions AS version
+  ON version.organization_id = prescription.organization_id
+  AND version.prescription_id = prescription.id
+  AND version.version = prescription.current_version
+WHERE prescription.organization_id = $1
+  AND prescription.id = $2
+`
+
+type GetKillswitchCurrentPrescriptionParams struct {
+	OrganizationID string
+	PrescriptionID uuid.UUID
+}
+
+type GetKillswitchCurrentPrescriptionRow struct {
+	ID                   uuid.UUID
+	OrganizationID       string
+	DefinitionKey        string
+	PrincipalKind        string
+	PrincipalKey         string
+	ResourceKind         string
+	CurrentVersion       int64
+	State                string
+	ResourceScope        string
+	StartsAt             pgtype.Timestamptz
+	ExpiresAt            pgtype.Timestamptz
+	ActivatedAt          pgtype.Timestamptz
+	SupersededAt         pgtype.Timestamptz
+	InternalNote         string
+	ExternalNote         string
+	SelectedResourceKeys []string
+}
+
+func (q *Queries) GetKillswitchCurrentPrescription(ctx context.Context, arg GetKillswitchCurrentPrescriptionParams) (GetKillswitchCurrentPrescriptionRow, error) {
+	row := q.db.QueryRow(ctx, getKillswitchCurrentPrescription, arg.OrganizationID, arg.PrescriptionID)
+	var i GetKillswitchCurrentPrescriptionRow
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.DefinitionKey,
+		&i.PrincipalKind,
+		&i.PrincipalKey,
+		&i.ResourceKind,
+		&i.CurrentVersion,
+		&i.State,
+		&i.ResourceScope,
+		&i.StartsAt,
+		&i.ExpiresAt,
+		&i.ActivatedAt,
+		&i.SupersededAt,
+		&i.InternalNote,
+		&i.ExternalNote,
+		&i.SelectedResourceKeys,
+	)
+	return i, err
+}
+
 const getKillswitchDatabaseTime = `-- name: GetKillswitchDatabaseTime :one
 SELECT clock_timestamp()::timestamptz
 `
@@ -626,6 +709,105 @@ func (q *Queries) ListDueKillswitchExpiries(ctx context.Context, batchSize int32
 	for rows.Next() {
 		var i ListDueKillswitchExpiriesRow
 		if err := rows.Scan(&i.OrganizationID, &i.PrescriptionID, &i.Version); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listKillswitchCurrentPrescriptions = `-- name: ListKillswitchCurrentPrescriptions :many
+SELECT
+  prescription.id,
+  prescription.organization_id,
+  prescription.definition_key,
+  prescription.principal_kind,
+  prescription.principal_key,
+  prescription.resource_kind,
+  prescription.current_version,
+  version.state,
+  version.resource_scope,
+  version.starts_at,
+  version.expires_at,
+  version.activated_at,
+  version.superseded_at,
+  version.internal_note,
+  version.external_note,
+  ARRAY(
+    SELECT resource.resource_key
+    FROM killswitch_prescription_version_resources AS resource
+    WHERE resource.organization_id = prescription.organization_id
+      AND resource.prescription_id = prescription.id
+      AND resource.version = prescription.current_version
+    ORDER BY resource.resource_key
+    LIMIT 1001
+  )::text[] AS selected_resource_keys
+FROM killswitch_prescriptions AS prescription
+JOIN killswitch_prescription_versions AS version
+  ON version.organization_id = prescription.organization_id
+  AND version.prescription_id = prescription.id
+  AND version.version = prescription.current_version
+WHERE prescription.organization_id = $1
+  AND ($2::uuid IS NULL OR prescription.id > $2::uuid)
+ORDER BY prescription.id
+LIMIT $3
+`
+
+type ListKillswitchCurrentPrescriptionsParams struct {
+	OrganizationID string
+	AfterID        uuid.NullUUID
+	ResultLimit    int32
+}
+
+type ListKillswitchCurrentPrescriptionsRow struct {
+	ID                   uuid.UUID
+	OrganizationID       string
+	DefinitionKey        string
+	PrincipalKind        string
+	PrincipalKey         string
+	ResourceKind         string
+	CurrentVersion       int64
+	State                string
+	ResourceScope        string
+	StartsAt             pgtype.Timestamptz
+	ExpiresAt            pgtype.Timestamptz
+	ActivatedAt          pgtype.Timestamptz
+	SupersededAt         pgtype.Timestamptz
+	InternalNote         string
+	ExternalNote         string
+	SelectedResourceKeys []string
+}
+
+func (q *Queries) ListKillswitchCurrentPrescriptions(ctx context.Context, arg ListKillswitchCurrentPrescriptionsParams) ([]ListKillswitchCurrentPrescriptionsRow, error) {
+	rows, err := q.db.Query(ctx, listKillswitchCurrentPrescriptions, arg.OrganizationID, arg.AfterID, arg.ResultLimit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListKillswitchCurrentPrescriptionsRow
+	for rows.Next() {
+		var i ListKillswitchCurrentPrescriptionsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.OrganizationID,
+			&i.DefinitionKey,
+			&i.PrincipalKind,
+			&i.PrincipalKey,
+			&i.ResourceKind,
+			&i.CurrentVersion,
+			&i.State,
+			&i.ResourceScope,
+			&i.StartsAt,
+			&i.ExpiresAt,
+			&i.ActivatedAt,
+			&i.SupersededAt,
+			&i.InternalNote,
+			&i.ExternalNote,
+			&i.SelectedResourceKeys,
+		); err != nil {
 			return nil, err
 		}
 		items = append(items, i)

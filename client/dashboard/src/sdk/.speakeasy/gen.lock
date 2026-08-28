@@ -358,6 +358,12 @@ trackedFiles:
   src/funcs/packagesListVersions.ts: {}
   src/funcs/packagesPublish.ts: {}
   src/funcs/packagesUpdate.ts: {}
+  src/funcs/platformKillswitchesPlatformKillswitchesNumberActivatePrescription.ts: {}
+  src/funcs/platformKillswitchesPlatformKillswitchesNumberChangePrescription.ts: {}
+  src/funcs/platformKillswitchesPlatformKillswitchesNumberDeactivatePrescription.ts: {}
+  src/funcs/platformKillswitchesPlatformKillswitchesNumberGetPrescription.ts: {}
+  src/funcs/platformKillswitchesPlatformKillswitchesNumberListDefinitions.ts: {}
+  src/funcs/platformKillswitchesPlatformKillswitchesNumberListPrescriptions.ts: {}
   src/funcs/platformMcpDismissOnboarding.ts: {}
   src/funcs/platformMcpDistributeOnboardingCandidate.ts: {}
   src/funcs/platformMcpGetOnboarding.ts: {}
@@ -649,6 +655,7 @@ trackedFiles:
   src/models/components/accessmember.ts: {}
   src/models/components/acknowledgeriskpolicychallengerequestbody.ts: {}
   src/models/components/acknowledgeriskpolicychallengeresponsebody.ts: {}
+  src/models/components/activateprescriptionrequestbody.ts: {}
   src/models/components/actorattribute.ts: {}
   src/models/components/adddeploymentpackageform.ts: {}
   src/models/components/addexternalmcpform.ts: {}
@@ -703,6 +710,7 @@ trackedFiles:
   src/models/components/captureeventresult.ts: {}
   src/models/components/challengebucket.ts: {}
   src/models/components/challengeresolution.ts: {}
+  src/models/components/changeprescriptionrequestbody.ts: {}
   src/models/components/chat.ts: {}
   src/models/components/chatanalysissettings.ts: {}
   src/models/components/chatcontentpart.ts: {}
@@ -782,6 +790,7 @@ trackedFiles:
   src/models/components/cursorhookresult.ts: {}
   src/models/components/customdomain.ts: {}
   src/models/components/customdomainmcpendpoint.ts: {}
+  src/models/components/deactivateprescriptionrequestbody.ts: {}
   src/models/components/declineriskpolicychallengeresponsebody.ts: {}
   src/models/components/deleteconfigrequestbody.ts: {}
   src/models/components/deleteglobaltoolvariationresult.ts: {}
@@ -966,6 +975,7 @@ trackedFiles:
   src/models/components/listcustomdetectionrulesresult.ts: {}
   src/models/components/listcustomdomainmcpendpointsresult.ts: {}
   src/models/components/listcustomdomainsresult.ts: {}
+  src/models/components/listdefinitionsresponsebody.ts: {}
   src/models/components/listdeploymentresult.ts: {}
   src/models/components/listdeviceintegrationprovidersresult.ts: {}
   src/models/components/listdeviceintegrationschedulesresult.ts: {}
@@ -1000,6 +1010,7 @@ trackedFiles:
   src/models/components/listorganizationremotesessionsresult.ts: {}
   src/models/components/listpackagesresult.ts: {}
   src/models/components/listpluginsresult.ts: {}
+  src/models/components/listprescriptionsresponsebody.ts: {}
   src/models/components/listprojectsresult.ts: {}
   src/models/components/listprompttemplatesresult.ts: {}
   src/models/components/listregistriesresponsebody.ts: {}
@@ -1140,6 +1151,9 @@ trackedFiles:
   src/models/components/packageversion.ts: {}
   src/models/components/paygbillingsummary.ts: {}
   src/models/components/periodusage.ts: {}
+  src/models/components/platformkillswitchdefinition.ts: {}
+  src/models/components/platformkillswitchmutationresult.ts: {}
+  src/models/components/platformkillswitchprescription.ts: {}
   src/models/components/platformmcponboardingsetuphandoff.ts: {}
   src/models/components/platformmcponboardingstate.ts: {}
   src/models/components/platformtooldefinition.ts: {}
@@ -1934,6 +1948,12 @@ trackedFiles:
   src/models/operations/mintusersession.ts: {}
   src/models/operations/moveorganizationremotesessionissuer.ts: {}
   src/models/operations/pausetriggerinstance.ts: {}
+  src/models/operations/platformkillswitchesnumberactivateprescription.ts: {}
+  src/models/operations/platformkillswitchesnumberchangeprescription.ts: {}
+  src/models/operations/platformkillswitchesnumberdeactivateprescription.ts: {}
+  src/models/operations/platformkillswitchesnumbergetprescription.ts: {}
+  src/models/operations/platformkillswitchesnumberlistdefinitions.ts: {}
+  src/models/operations/platformkillswitchesnumberlistprescriptions.ts: {}
   src/models/operations/previewspendrule.ts: {}
   src/models/operations/promotemcpapprovalrequest.ts: {}
   src/models/operations/publish.ts: {}
@@ -2610,6 +2630,15 @@ trackedFiles:
   src/react-query/otelForwardingConfig.core.ts: {}
   src/react-query/otelForwardingConfig.ts: {}
   src/react-query/pauseTrigger.ts: {}
+  src/react-query/platformKillswitchesPlatformKillswitchesNumberActivatePrescription.ts: {}
+  src/react-query/platformKillswitchesPlatformKillswitchesNumberChangePrescription.ts: {}
+  src/react-query/platformKillswitchesPlatformKillswitchesNumberDeactivatePrescription.ts: {}
+  src/react-query/platformKillswitchesPlatformKillswitchesNumberGetPrescription.core.ts: {}
+  src/react-query/platformKillswitchesPlatformKillswitchesNumberGetPrescription.ts: {}
+  src/react-query/platformKillswitchesPlatformKillswitchesNumberListDefinitions.core.ts: {}
+  src/react-query/platformKillswitchesPlatformKillswitchesNumberListDefinitions.ts: {}
+  src/react-query/platformKillswitchesPlatformKillswitchesNumberListPrescriptions.core.ts: {}
+  src/react-query/platformKillswitchesPlatformKillswitchesNumberListPrescriptions.ts: {}
   src/react-query/platformMCPOnboarding.core.ts: {}
   src/react-query/platformMCPOnboarding.ts: {}
   src/react-query/plugin.core.ts: {}
@@ -3040,6 +3069,7 @@ trackedFiles:
   src/sdk/otelforwarding.ts: {}
   src/sdk/overview.ts: {}
   src/sdk/packages.ts: {}
+  src/sdk/platformkillswitches.ts: {}
   src/sdk/platformmcp.ts: {}
   src/sdk/plugins.ts: {}
   src/sdk/policies.ts: {}
@@ -7857,6 +7887,73 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+  platformKillswitches#activatePrescription:
+    speakeasy-default-platform-killswitches#activate-prescription:
+      requestBody:
+        application/json: {"external_note": "<value>", "internal_note": "<value>", "operation_id": "629cdd39-6836-4097-a97a-811a958b89a4", "organization_id": "<id>", "resource_scope": "selected", "start_mode": "now"}
+      responses:
+        "200":
+          application/json: {"prescription_id": "72cc733a-164c-435f-bec5-66a24c7112c6", "replayed": false, "state": "Arizona", "version": 971150}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+  platformKillswitches#changePrescription:
+    speakeasy-default-platform-killswitches#change-prescription:
+      requestBody:
+        application/json: {"expected_version": 984748, "external_note": "<value>", "internal_note": "<value>", "operation_id": "293fa46f-262a-4916-920b-f06d3ba97a1d", "organization_id": "<id>", "prescription_id": "ec7f5bbd-22be-4ced-a60a-e6ee0913b9aa", "resource_scope": "selected", "start_mode": "at"}
+      responses:
+        "200":
+          application/json: {"prescription_id": "f947951e-8ce8-4f05-ace8-63e85fc1468a", "replayed": true, "state": "Michigan", "version": 533195}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+  platformKillswitches#deactivatePrescription:
+    speakeasy-default-platform-killswitches#deactivate-prescription:
+      requestBody:
+        application/json: {"expected_version": 800607, "operation_id": "a4769c25-74c5-4820-9af8-fac38a66b65b", "organization_id": "<id>", "prescription_id": "0bfe14ce-a84d-441d-a478-54715ec8372d"}
+      responses:
+        "200":
+          application/json: {"prescription_id": "43461402-7bc9-4d52-99d9-c9790a323db8", "replayed": true, "state": "Michigan", "version": 614797}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+  platformKillswitches#getPrescription:
+    speakeasy-default-platform-killswitches#get-prescription:
+      parameters:
+        query:
+          organization_id: "<id>"
+          prescription_id: "c1b7df22-fea3-4e6b-bc6e-bfcac2745102"
+      responses:
+        "200":
+          application/json: {"definition": "<value>", "external_note": "<value>", "id": "917cf906-b955-4419-b763-f8d00a1c5ed6", "internal_note": "<value>", "organization_id": "<id>", "principal_key": "<value>", "principal_kind": "<value>", "resource_kind": "<value>", "resource_scope": "<value>", "selected_resource_keys": ["<value 1>", "<value 2>"], "starts_at": "2025-06-13T09:13:01.136Z", "state": "Kansas", "version": 551305}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+  platformKillswitches#listDefinitions:
+    speakeasy-default-platform-killswitches#list-definitions:
+      responses:
+        "200":
+          application/json: {"definitions": []}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+  platformKillswitches#listPrescriptions:
+    speakeasy-default-platform-killswitches#list-prescriptions:
+      parameters:
+        query:
+          organization_id: "<id>"
+      responses:
+        "200":
+          application/json: {"prescriptions": [{"definition": "<value>", "external_note": "<value>", "id": "b62ef8ef-7da2-4c23-86c5-def4d5bba2b1", "internal_note": "<value>", "organization_id": "<id>", "principal_key": "<value>", "principal_kind": "<value>", "resource_kind": "<value>", "resource_scope": "<value>", "selected_resource_keys": ["<value 1>", "<value 2>", "<value 3>"], "starts_at": "2024-01-24T19:46:09.708Z", "state": "Idaho", "version": 191198}]}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
   previewSpendRule:
     speakeasy-default-preview-spend-rule:
       requestBody:
