@@ -7,47 +7,162 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
+	"google.golang.org/protobuf/proto"
+
+	webhooksv1 "github.com/speakeasy-api/gram/infra/gen/gram/webhooks/v1"
 
 	gen "github.com/speakeasy-api/gram/server/gen/admin"
+	srv "github.com/speakeasy-api/gram/server/gen/http/admin/server"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
+	audittestrepo "github.com/speakeasy-api/gram/server/internal/audit/audittest/repo"
+	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/outbox/events"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 )
 
+func TestEnterpriseTrialConversionAuditActor_FallsBackWithoutSafeInternalID(t *testing.T) {
+	t.Parallel()
+	actor, display := enterpriseTrialConversionAuditActor(t.Context())
+	require.Equal(t, "system", actor.ID)
+	require.Equal(t, "Platform administrator", *display)
+
+	ctx := contextvalues.SetAdminAuthContext(t.Context(), &contextvalues.AdminAuthContext{OIDCSubject: "external-subject-must-not-be-actor", Email: "external@privacy.invalid", Name: "External Name"})
+	actor, display = enterpriseTrialConversionAuditActor(ctx)
+	require.Equal(t, "system", actor.ID)
+	require.Equal(t, "Platform administrator", *display)
+}
+
 func TestMarkEnterpriseTrialConverted_AuditSnapshotsAreCompleteAndPrivate(t *testing.T) {
 	t.Parallel()
 	ctx, svc, conn, provisioner := newRearmService(t)
-	orgID := "org_convert_audit"
+	const (
+		orgID            = "org_convert_audit"
+		emailSentinel    = "conversion-operator@privacy.invalid"
+		oidcSentinel     = "external-oidc-subject-privacy-sentinel"
+		workosSentinel   = "external-workos-privacy-sentinel"
+		providerSentinel = "provider-payload-privacy-sentinel"
+		promptSentinel   = "prompt-privacy-sentinel"
+		spendSentinel    = "spend-privacy-sentinel"
+	)
+	ctx = contextvalues.SetAdminAuthContext(ctx, &contextvalues.AdminAuthContext{SessionID: "internal-session-conversion-audit", Email: emailSentinel, OIDCSubject: oidcSentinel, Name: emailSentinel, HD: "privacy.invalid"})
 	endsAt := time.Now().UTC().Add(7 * 24 * time.Hour)
 	demotedAt := time.Now().UTC().Add(-time.Hour)
-	seedOrg(t, ctx, conn, orgFixture{id: orgID, name: "Conversion Fixture", slug: "conversion-fixture", accountType: "free", whitelisted: false})
+	workosID := workosSentinel
+	seedOrg(t, ctx, conn, orgFixture{id: orgID, name: promptSentinel, slug: spendSentinel, accountType: "free", workosID: &workosID, whitelisted: false})
 	seedTrial(t, ctx, conn, trialFixture{orgID: orgID, tier: "enterprise", endsAt: endsAt, demotedAt: &demotedAt})
 	for _, keyType := range openrouter.AllKeyTypes {
 		seedOpenRouterKey(t, ctx, conn, orgID, keyFixture{keyType: keyType, monthlyCredits: 7, disabled: true})
 	}
 	require.NoError(t, testrepo.New(conn).SetOpenRouterAPIKeyClassificationFixture(ctx, testrepo.SetOpenRouterAPIKeyClassificationFixtureParams{OrganizationID: orgID, KeyType: string(openrouter.KeyTypeChat), Disabled: true, DisableCauses: []string{"trial_demotion", "billing_inactive", "admin_lock"}}))
+	require.NoError(t, testrepo.New(conn).SetOpenRouterAPIKeyProviderPayloadFixture(ctx, testrepo.SetOpenRouterAPIKeyProviderPayloadFixtureParams{OrganizationID: orgID, KeyType: string(openrouter.KeyTypeChat), ProviderPayload: conv.ToPGText(providerSentinel)}))
 
-	_, err := svc.MarkEnterpriseTrialConverted(ctx, &gen.MarkEnterpriseTrialConvertedPayload{ID: orgID})
+	result, err := svc.MarkEnterpriseTrialConverted(ctx, &gen.MarkEnterpriseTrialConvertedPayload{ID: orgID})
 	require.NoError(t, err)
 	require.Equal(t, openrouter.AllKeyTypes, provisioner.reconcileAttempts)
+	responseJSON, err := json.Marshal(srv.NewMarkEnterpriseTrialConvertedResponseBody(result))
+	require.NoError(t, err)
+	var response map[string]any
+	require.NoError(t, json.Unmarshal(responseJSON, &response))
+	require.ElementsMatch(t, []string{"organization_id", "converted_at"}, mapKeys(response))
+	require.Equal(t, orgID, response["organization_id"])
+	require.NotEmpty(t, response["converted_at"])
 	record, err := audittest.LatestAuditLogByAction(ctx, conn, audit.ActionOrganizationEnterpriseTrialConverted)
 	require.NoError(t, err)
+	require.Equal(t, "internal-session-conversion-audit", record.ActorID)
+	require.Equal(t, "Platform administrator", record.ActorDisplay)
+	require.Empty(t, record.ActorSlug)
 	var metadata map[string]any
 	require.NoError(t, json.Unmarshal(record.Metadata, &metadata))
-	require.Equal(t, "platform_admin", metadata["conversion_source"])
-	for _, payload := range [][]byte{record.BeforeSnapshot, record.AfterSnapshot} {
-		var snapshot map[string]any
-		require.NoError(t, json.Unmarshal(payload, &snapshot))
-		require.Contains(t, snapshot, "organization")
-		require.Contains(t, snapshot, "trial")
-		require.Len(t, snapshot["keys"], len(openrouter.AllKeyTypes))
-		text := string(payload)
-		require.NotContains(t, text, "hash-")
-		require.NotContains(t, text, "sk-test")
-		require.NotContains(t, text, "cipher")
+	require.Equal(t, map[string]any{"conversion_source": "platform_admin"}, metadata)
+	for _, raw := range [][]byte{record.BeforeSnapshot, record.AfterSnapshot} {
+		var snapshot struct {
+			Organization map[string]any   `json:"organization"`
+			Trial        map[string]any   `json:"trial"`
+			Keys         []map[string]any `json:"keys"`
+		}
+		require.NoError(t, json.Unmarshal(raw, &snapshot))
+		require.ElementsMatch(t, []string{"account_type", "whitelisted", "disabled"}, mapKeys(snapshot.Organization))
+		require.ElementsMatch(t, []string{"tier", "ends_at", "converted_at", "demoted_at"}, mapKeys(snapshot.Trial))
+		require.Len(t, snapshot.Keys, len(openrouter.AllKeyTypes))
+		for _, key := range snapshot.Keys {
+			require.ElementsMatch(t, []string{"key_type", "disable_causes", "stored_disabled", "effective_disabled", "monthly_credits"}, mapKeys(key))
+		}
 	}
+
+	var before, after struct {
+		Keys []map[string]any `json:"keys"`
+	}
+	require.NoError(t, json.Unmarshal(record.BeforeSnapshot, &before))
+	require.NoError(t, json.Unmarshal(record.AfterSnapshot, &after))
+	chatBefore := keyAuditSnapshotByType(t, before.Keys, openrouter.KeyTypeChat)
+	chatAfter := keyAuditSnapshotByType(t, after.Keys, openrouter.KeyTypeChat)
+	internalBefore := keyAuditSnapshotByType(t, before.Keys, openrouter.KeyTypeInternal)
+	internalAfter := keyAuditSnapshotByType(t, after.Keys, openrouter.KeyTypeInternal)
+	require.Equal(t, true, chatBefore["stored_disabled"])
+	require.Equal(t, true, chatBefore["effective_disabled"])
+	require.ElementsMatch(t, []any{"trial_demotion", "billing_inactive", "admin_lock"}, chatBefore["disable_causes"])
+	require.Equal(t, true, chatAfter["stored_disabled"])
+	require.Equal(t, true, chatAfter["effective_disabled"])
+	require.Equal(t, []any{"admin_lock"}, chatAfter["disable_causes"])
+	require.Equal(t, true, internalBefore["stored_disabled"])
+	require.Equal(t, true, internalBefore["effective_disabled"])
+	require.Equal(t, false, internalAfter["stored_disabled"])
+	require.Equal(t, false, internalAfter["effective_disabled"])
+	require.Empty(t, internalAfter["disable_causes"])
+	floor, ok := openrouter.DefaultCreditLimit(orgID, "enterprise", false)
+	require.True(t, ok)
+	require.EqualValues(t, floor, chatAfter["monthly_credits"])
+	require.EqualValues(t, floor, internalAfter["monthly_credits"])
+
+	envelope, err := audittestrepo.New(conn).GetLatestOutboxPayloadByOrg(ctx, audittestrepo.GetLatestOutboxPayloadByOrgParams{OrganizationID: orgID, EventType: string(events.OrganizationEnterpriseTrialV1.EventType())})
+	require.NoError(t, err)
+	var event webhooksv1.Event
+	require.NoError(t, proto.Unmarshal(envelope, &event))
+	var payload events.AuditLogCreatedPayloadV1
+	require.NoError(t, json.Unmarshal(event.GetPayload(), &payload))
+	require.Equal(t, record.ActorID, payload.ActorID)
+	require.Equal(t, audit.SpeakeasyTeamActorLabel, payload.ActorDisplayName)
+	require.Equal(t, string(audit.ActionOrganizationEnterpriseTrialConverted), payload.Action)
+	require.NotEmpty(t, payload.BeforeSnapshot)
+	require.NotEmpty(t, payload.AfterSnapshot)
+	require.NotEmpty(t, payload.Metadata)
+
+	fullAuditRow, err := json.Marshal(map[string]any{
+		"action": record.Action, "organization_id": record.OrganizationID, "project_id": record.ProjectID,
+		"actor_id": record.ActorID, "actor_type": record.ActorType, "actor_display_name": record.ActorDisplayName, "actor_slug": record.ActorSlug,
+		"subject_id": record.SubjectID, "subject_type": record.SubjectType, "subject_display": record.SubjectDisplay, "subject_slug": record.SubjectSlug,
+		"metadata": json.RawMessage(record.Metadata), "before_snapshot": json.RawMessage(record.BeforeSnapshot), "after_snapshot": json.RawMessage(record.AfterSnapshot),
+		"acting_surface": record.ActingSurface, "acting_client_id": record.ActingClientID,
+	})
+	require.NoError(t, err)
+	for surface, data := range map[string][]byte{"audit row": fullAuditRow, "outbox envelope": envelope, "endpoint response": responseJSON} {
+		for _, forbidden := range []string{emailSentinel, oidcSentinel, workosSentinel, providerSentinel, promptSentinel, spendSentinel, "hash-", "sk-test"} {
+			require.NotContains(t, string(data), forbidden, "%s leaked %s", surface, forbidden)
+		}
+	}
+}
+
+func keyAuditSnapshotByType(t *testing.T, keys []map[string]any, keyType openrouter.KeyType) map[string]any {
+	t.Helper()
+	for _, key := range keys {
+		if key["key_type"] == string(keyType) {
+			return key
+		}
+	}
+	require.FailNow(t, "missing key audit snapshot", string(keyType))
+	return nil
+}
+
+func mapKeys(value map[string]any) []string {
+	keys := make([]string, 0, len(value))
+	for key := range value {
+		keys = append(keys, key)
+	}
+	return keys
 }
 
 func TestMarkEnterpriseTrialConverted_AuditFailureRollsBackEverything(t *testing.T) {

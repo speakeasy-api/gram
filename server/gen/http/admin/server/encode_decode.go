@@ -5052,7 +5052,7 @@ func EncodeResumeStripeSubscriptionError(encoder func(context.Context, http.Resp
 // returned by the admin markEnterpriseTrialConverted endpoint.
 func EncodeMarkEnterpriseTrialConvertedResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
 	return func(ctx context.Context, w http.ResponseWriter, v any) error {
-		res, _ := v.(*admin.AdminOrganization)
+		res, _ := v.(*admin.MarkEnterpriseTrialConvertedResult)
 		enc := encoder(ctx, w)
 		body := NewMarkEnterpriseTrialConvertedResponseBody(res)
 		w.WriteHeader(http.StatusOK)

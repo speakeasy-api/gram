@@ -89,7 +89,7 @@ type Service interface {
 	ResumeStripeSubscription(context.Context, *ResumeStripeSubscriptionPayload) (res *AdminStripeSubscription, err error)
 	// Records that an organization's enterprise trial converted to a signed
 	// contract.
-	MarkEnterpriseTrialConverted(context.Context, *MarkEnterpriseTrialConvertedPayload) (res *AdminOrganization, err error)
+	MarkEnterpriseTrialConverted(context.Context, *MarkEnterpriseTrialConvertedPayload) (res *MarkEnterpriseTrialConvertedResult, err error)
 }
 
 // Auther defines the authorization functions to be implemented by the service.
@@ -591,6 +591,15 @@ type MarkEnterpriseTrialConvertedPayload struct {
 	AdminSessionToken *string
 	// Organization ID.
 	ID string
+}
+
+// MarkEnterpriseTrialConvertedResult is the result type of the admin service
+// markEnterpriseTrialConverted method.
+type MarkEnterpriseTrialConvertedResult struct {
+	// The converted organization ID.
+	OrganizationID string
+	// The time at which the enterprise trial was recorded as converted.
+	ConvertedAt string
 }
 
 // RearmTrialPayload is the payload type of the admin service rearmTrial method.

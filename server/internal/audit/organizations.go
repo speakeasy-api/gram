@@ -399,6 +399,7 @@ type OrganizationEnterpriseTrialConversionLifecycleSnapshot struct {
 type OrganizationEnterpriseTrialConversionKeySnapshot struct {
 	KeyType           string   `json:"key_type"`
 	DisableCauses     []string `json:"disable_causes"`
+	StoredDisabled    bool     `json:"stored_disabled"`
 	EffectiveDisabled bool     `json:"effective_disabled"`
 	MonthlyCredits    int64    `json:"monthly_credits"`
 }
@@ -414,8 +415,6 @@ type LogOrganizationEnterpriseTrialConvertedEvent struct {
 	Actor            urn.Principal
 	ActorDisplayName *string
 	ActorSlug        *string
-	OrganizationName string
-	OrganizationSlug string
 	Before           OrganizationEnterpriseTrialConversionSnapshot
 	After            OrganizationEnterpriseTrialConversionSnapshot
 }
@@ -439,7 +438,7 @@ func (l *Logger) LogOrganizationEnterpriseTrialConverted(ctx context.Context, db
 		ActorID: event.Actor.ID, ActorType: string(event.Actor.Type),
 		ActorDisplayName: conv.PtrToPGTextEmpty(event.ActorDisplayName), ActorSlug: conv.PtrToPGTextEmpty(event.ActorSlug),
 		Action: string(action), SubjectID: event.OrganizationID, SubjectType: "organization",
-		SubjectDisplayName: conv.ToPGTextEmpty(event.OrganizationName), SubjectSlug: conv.ToPGTextEmpty(event.OrganizationSlug),
+		SubjectDisplayName: conv.ToPGText("Organization"), SubjectSlug: conv.ToPGTextEmpty(""),
 		Metadata: metadata, BeforeSnapshot: beforeSnapshot, AfterSnapshot: afterSnapshot,
 	}
 	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.OrganizationEnterpriseTrialV1})

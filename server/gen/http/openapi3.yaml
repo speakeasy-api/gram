@@ -1867,7 +1867,7 @@ paths:
                     content:
                         application/json:
                             schema:
-                                $ref: '#/components/schemas/AdminOrganization'
+                                $ref: '#/components/schemas/MarkEnterpriseTrialConvertedResult'
                 "400":
                     description: 'bad_request: request is invalid'
                     content:
@@ -75669,6 +75669,20 @@ components:
                     minLength: 1
             required:
                 - id
+        MarkEnterpriseTrialConvertedResult:
+            type: object
+            properties:
+                converted_at:
+                    type: string
+                    description: The time at which the enterprise trial was recorded as converted.
+                    format: date-time
+                organization_id:
+                    type: string
+                    description: The converted organization ID.
+            description: Privacy-minimal result of recording an enterprise trial conversion.
+            required:
+                - organization_id
+                - converted_at
         MarkRiskResultsFalsePositiveRequestBody:
             type: object
             properties:

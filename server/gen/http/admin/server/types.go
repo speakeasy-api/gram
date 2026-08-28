@@ -522,37 +522,10 @@ type ResumeStripeSubscriptionResponseBody struct {
 // MarkEnterpriseTrialConvertedResponseBody is the type of the "admin" service
 // "markEnterpriseTrialConverted" endpoint HTTP response body.
 type MarkEnterpriseTrialConvertedResponseBody struct {
-	// The ID of the organization
-	ID string `form:"id" json:"id" xml:"id"`
-	// The name of the organization
-	Name string `form:"name" json:"name" xml:"name"`
-	// The slug of the organization
-	Slug string `form:"slug" json:"slug" xml:"slug"`
-	// Gram account type (e.g. free, pro, payg, enterprise).
-	AccountType string `form:"account_type" json:"account_type" xml:"account_type"`
-	// WorkOS organization ID, if linked.
-	WorkosID *string `form:"workos_id,omitempty" json:"workos_id,omitempty" xml:"workos_id,omitempty"`
-	// Whether the organization is whitelisted for full access.
-	Whitelisted bool `form:"whitelisted" json:"whitelisted" xml:"whitelisted"`
-	// The time at which the organization was disabled, if any.
-	DisabledAt *string `form:"disabled_at,omitempty" json:"disabled_at,omitempty" xml:"disabled_at,omitempty"`
-	// Lifecycle state of the organization's enterprise trial.
-	TrialState *string `form:"trial_state,omitempty" json:"trial_state,omitempty" xml:"trial_state,omitempty"`
-	// The trial tier. Absent when the organization never trialled.
-	TrialTier *string `form:"trial_tier,omitempty" json:"trial_tier,omitempty" xml:"trial_tier,omitempty"`
-	// The time at which the enterprise trial ends. Absent when the organization
-	// never trialled.
-	TrialEndsAt *string `form:"trial_ends_at,omitempty" json:"trial_ends_at,omitempty" xml:"trial_ends_at,omitempty"`
-	// The time at which the trial converted to a paid plan, if any.
-	TrialConvertedAt *string `form:"trial_converted_at,omitempty" json:"trial_converted_at,omitempty" xml:"trial_converted_at,omitempty"`
-	// The time at which the organization was demoted after its trial, if any.
-	TrialDemotedAt *string `form:"trial_demoted_at,omitempty" json:"trial_demoted_at,omitempty" xml:"trial_demoted_at,omitempty"`
-	// Number of active members in the organization.
-	MemberCount int `form:"member_count" json:"member_count" xml:"member_count"`
-	// The creation date of the organization.
-	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
-	// The last update date of the organization.
-	UpdatedAt string `form:"updated_at" json:"updated_at" xml:"updated_at"`
+	// The converted organization ID.
+	OrganizationID string `form:"organization_id" json:"organization_id" xml:"organization_id"`
+	// The time at which the enterprise trial was recorded as converted.
+	ConvertedAt string `form:"converted_at" json:"converted_at" xml:"converted_at"`
 }
 
 // LoginUnauthorizedResponseBody is the type of the "admin" service "login"
@@ -5720,23 +5693,10 @@ func NewResumeStripeSubscriptionResponseBody(res *admin.AdminStripeSubscription)
 // NewMarkEnterpriseTrialConvertedResponseBody builds the HTTP response body
 // from the result of the "markEnterpriseTrialConverted" endpoint of the
 // "admin" service.
-func NewMarkEnterpriseTrialConvertedResponseBody(res *admin.AdminOrganization) *MarkEnterpriseTrialConvertedResponseBody {
+func NewMarkEnterpriseTrialConvertedResponseBody(res *admin.MarkEnterpriseTrialConvertedResult) *MarkEnterpriseTrialConvertedResponseBody {
 	body := &MarkEnterpriseTrialConvertedResponseBody{
-		ID:               res.ID,
-		Name:             res.Name,
-		Slug:             res.Slug,
-		AccountType:      res.AccountType,
-		WorkosID:         res.WorkosID,
-		Whitelisted:      res.Whitelisted,
-		DisabledAt:       res.DisabledAt,
-		TrialState:       res.TrialState,
-		TrialTier:        res.TrialTier,
-		TrialEndsAt:      res.TrialEndsAt,
-		TrialConvertedAt: res.TrialConvertedAt,
-		TrialDemotedAt:   res.TrialDemotedAt,
-		MemberCount:      res.MemberCount,
-		CreatedAt:        res.CreatedAt,
-		UpdatedAt:        res.UpdatedAt,
+		OrganizationID: res.OrganizationID,
+		ConvertedAt:    res.ConvertedAt,
 	}
 	return body
 }

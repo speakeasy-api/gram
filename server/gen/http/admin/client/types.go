@@ -513,37 +513,10 @@ type ResumeStripeSubscriptionResponseBody struct {
 // MarkEnterpriseTrialConvertedResponseBody is the type of the "admin" service
 // "markEnterpriseTrialConverted" endpoint HTTP response body.
 type MarkEnterpriseTrialConvertedResponseBody struct {
-	// The ID of the organization
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// The name of the organization
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// The slug of the organization
-	Slug *string `form:"slug,omitempty" json:"slug,omitempty" xml:"slug,omitempty"`
-	// Gram account type (e.g. free, pro, payg, enterprise).
-	AccountType *string `form:"account_type,omitempty" json:"account_type,omitempty" xml:"account_type,omitempty"`
-	// WorkOS organization ID, if linked.
-	WorkosID *string `form:"workos_id,omitempty" json:"workos_id,omitempty" xml:"workos_id,omitempty"`
-	// Whether the organization is whitelisted for full access.
-	Whitelisted *bool `form:"whitelisted,omitempty" json:"whitelisted,omitempty" xml:"whitelisted,omitempty"`
-	// The time at which the organization was disabled, if any.
-	DisabledAt *string `form:"disabled_at,omitempty" json:"disabled_at,omitempty" xml:"disabled_at,omitempty"`
-	// Lifecycle state of the organization's enterprise trial.
-	TrialState *string `form:"trial_state,omitempty" json:"trial_state,omitempty" xml:"trial_state,omitempty"`
-	// The trial tier. Absent when the organization never trialled.
-	TrialTier *string `form:"trial_tier,omitempty" json:"trial_tier,omitempty" xml:"trial_tier,omitempty"`
-	// The time at which the enterprise trial ends. Absent when the organization
-	// never trialled.
-	TrialEndsAt *string `form:"trial_ends_at,omitempty" json:"trial_ends_at,omitempty" xml:"trial_ends_at,omitempty"`
-	// The time at which the trial converted to a paid plan, if any.
-	TrialConvertedAt *string `form:"trial_converted_at,omitempty" json:"trial_converted_at,omitempty" xml:"trial_converted_at,omitempty"`
-	// The time at which the organization was demoted after its trial, if any.
-	TrialDemotedAt *string `form:"trial_demoted_at,omitempty" json:"trial_demoted_at,omitempty" xml:"trial_demoted_at,omitempty"`
-	// Number of active members in the organization.
-	MemberCount *int `form:"member_count,omitempty" json:"member_count,omitempty" xml:"member_count,omitempty"`
-	// The creation date of the organization.
-	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
-	// The last update date of the organization.
-	UpdatedAt *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
+	// The converted organization ID.
+	OrganizationID *string `form:"organization_id,omitempty" json:"organization_id,omitempty" xml:"organization_id,omitempty"`
+	// The time at which the enterprise trial was recorded as converted.
+	ConvertedAt *string `form:"converted_at,omitempty" json:"converted_at,omitempty" xml:"converted_at,omitempty"`
 }
 
 // LoginUnauthorizedResponseBody is the type of the "admin" service "login"
@@ -9428,25 +9401,12 @@ func NewResumeStripeSubscriptionGatewayError(body *ResumeStripeSubscriptionGatew
 	return v
 }
 
-// NewMarkEnterpriseTrialConvertedAdminOrganizationOK builds a "admin" service
+// NewMarkEnterpriseTrialConvertedResultOK builds a "admin" service
 // "markEnterpriseTrialConverted" endpoint result from a HTTP "OK" response.
-func NewMarkEnterpriseTrialConvertedAdminOrganizationOK(body *MarkEnterpriseTrialConvertedResponseBody) *admin.AdminOrganization {
-	v := &admin.AdminOrganization{
-		ID:               *body.ID,
-		Name:             *body.Name,
-		Slug:             *body.Slug,
-		AccountType:      *body.AccountType,
-		WorkosID:         body.WorkosID,
-		Whitelisted:      *body.Whitelisted,
-		DisabledAt:       body.DisabledAt,
-		TrialState:       body.TrialState,
-		TrialTier:        body.TrialTier,
-		TrialEndsAt:      body.TrialEndsAt,
-		TrialConvertedAt: body.TrialConvertedAt,
-		TrialDemotedAt:   body.TrialDemotedAt,
-		MemberCount:      *body.MemberCount,
-		CreatedAt:        *body.CreatedAt,
-		UpdatedAt:        *body.UpdatedAt,
+func NewMarkEnterpriseTrialConvertedResultOK(body *MarkEnterpriseTrialConvertedResponseBody) *admin.MarkEnterpriseTrialConvertedResult {
+	v := &admin.MarkEnterpriseTrialConvertedResult{
+		OrganizationID: *body.OrganizationID,
+		ConvertedAt:    *body.ConvertedAt,
 	}
 
 	return v
@@ -10310,52 +10270,14 @@ func ValidateResumeStripeSubscriptionResponseBody(body *ResumeStripeSubscription
 // ValidateMarkEnterpriseTrialConvertedResponseBody runs the validations
 // defined on MarkEnterpriseTrialConvertedResponseBody
 func ValidateMarkEnterpriseTrialConvertedResponseBody(body *MarkEnterpriseTrialConvertedResponseBody) (err error) {
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	if body.OrganizationID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("organization_id", "body"))
 	}
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	if body.ConvertedAt == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("converted_at", "body"))
 	}
-	if body.Slug == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("slug", "body"))
-	}
-	if body.AccountType == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("account_type", "body"))
-	}
-	if body.Whitelisted == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("whitelisted", "body"))
-	}
-	if body.MemberCount == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("member_count", "body"))
-	}
-	if body.CreatedAt == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("created_at", "body"))
-	}
-	if body.UpdatedAt == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("updated_at", "body"))
-	}
-	if body.DisabledAt != nil {
-		err = goa.MergeErrors(err, goa.ValidateFormat("body.disabled_at", *body.DisabledAt, goa.FormatDateTime))
-	}
-	if body.TrialState != nil {
-		if !(*body.TrialState == "none" || *body.TrialState == "running" || *body.TrialState == "ending_soon" || *body.TrialState == "expired" || *body.TrialState == "demoted" || *body.TrialState == "converted") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.trial_state", *body.TrialState, []any{"none", "running", "ending_soon", "expired", "demoted", "converted"}))
-		}
-	}
-	if body.TrialEndsAt != nil {
-		err = goa.MergeErrors(err, goa.ValidateFormat("body.trial_ends_at", *body.TrialEndsAt, goa.FormatDateTime))
-	}
-	if body.TrialConvertedAt != nil {
-		err = goa.MergeErrors(err, goa.ValidateFormat("body.trial_converted_at", *body.TrialConvertedAt, goa.FormatDateTime))
-	}
-	if body.TrialDemotedAt != nil {
-		err = goa.MergeErrors(err, goa.ValidateFormat("body.trial_demoted_at", *body.TrialDemotedAt, goa.FormatDateTime))
-	}
-	if body.CreatedAt != nil {
-		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))
-	}
-	if body.UpdatedAt != nil {
-		err = goa.MergeErrors(err, goa.ValidateFormat("body.updated_at", *body.UpdatedAt, goa.FormatDateTime))
+	if body.ConvertedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.converted_at", *body.ConvertedAt, goa.FormatDateTime))
 	}
 	return
 }

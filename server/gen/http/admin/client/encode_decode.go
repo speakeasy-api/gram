@@ -5792,7 +5792,7 @@ func DecodeMarkEnterpriseTrialConvertedResponse(decoder func(*http.Response) goa
 			if err != nil {
 				return nil, goahttp.ErrValidationError("admin", "markEnterpriseTrialConverted", err)
 			}
-			res := NewMarkEnterpriseTrialConvertedAdminOrganizationOK(&body)
+			res := NewMarkEnterpriseTrialConvertedResultOK(&body)
 			return res, nil
 		case http.StatusUnauthorized:
 			var (

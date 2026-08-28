@@ -52,7 +52,9 @@ func TestMarkEnterpriseTrialConverted_EligibilityAndIdempotencyBoundary(t *testi
 		{name: "existing organization without trial is a conflict", seedOrg: true, accountType: "enterprise", seedKey: true, wantCode: oops.CodeConflict},
 		{name: "stored trial tier is not enterprise", seedOrg: true, accountType: "enterprise", seedTrial: true, trialTier: "free", seedKey: true, wantCode: oops.CodeConflict},
 		{name: "running unconverted enterprise trial converts", seedOrg: true, accountType: "enterprise", seedTrial: true, trialTier: "enterprise", seedKey: true, wantConverted: true},
+		{name: "running undemoted trial normalizes drifted free access", seedOrg: true, accountType: "free", seedTrial: true, trialTier: "enterprise", seedKey: true, wantConverted: true},
 		{name: "demoted unconverted enterprise trial converts", seedOrg: true, accountType: "free", seedTrial: true, trialTier: "enterprise", demotedAt: &demotedAt, seedKey: true, wantConverted: true},
+		{name: "demoted trial preserves already restored enterprise access", seedOrg: true, accountType: "enterprise", seedTrial: true, trialTier: "enterprise", demotedAt: &demotedAt, seedKey: true, wantConverted: true},
 		{name: "converted enterprise organization is a valid retry", seedOrg: true, accountType: "enterprise", seedTrial: true, trialTier: "enterprise", convertedAt: &convertedAt, seedKey: true, wantValidRetry: true},
 		{name: "converted trial with free organization is incompatible", seedOrg: true, accountType: "free", seedTrial: true, trialTier: "enterprise", convertedAt: &convertedAt, seedKey: true, wantCode: oops.CodeConflict},
 	}
@@ -96,9 +98,8 @@ func TestMarkEnterpriseTrialConverted_EligibilityAndIdempotencyBoundary(t *testi
 			result, err := svc.MarkEnterpriseTrialConverted(ctx, &gen.MarkEnterpriseTrialConvertedPayload{ID: orgID})
 			if tc.wantValidRetry || tc.wantConverted {
 				require.NoError(t, err)
-				require.Equal(t, orgID, result.ID)
-				require.Equal(t, "enterprise", result.AccountType)
-				require.True(t, result.Whitelisted)
+				require.Equal(t, orgID, result.OrganizationID)
+				require.NotEmpty(t, result.ConvertedAt)
 			} else {
 				requireOopsCode(t, err, tc.wantCode)
 				if tc.wantHTTPStatus != 0 {

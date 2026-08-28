@@ -13,16 +13,18 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/billing"
+	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 	trialsRepo "github.com/speakeasy-api/gram/server/internal/trials/repo"
+	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
 // MarkEnterpriseTrialConverted atomically records an enterprise contract and
 // its complete local access policy before reconciling provider state.
-func (s *Service) MarkEnterpriseTrialConverted(ctx context.Context, payload *gen.MarkEnterpriseTrialConvertedPayload) (*gen.AdminOrganization, error) {
+func (s *Service) MarkEnterpriseTrialConverted(ctx context.Context, payload *gen.MarkEnterpriseTrialConvertedPayload) (*gen.MarkEnterpriseTrialConvertedResult, error) {
 	logger := s.logger.With(attr.SlogOrganizationID(payload.ID))
 	tx, err := s.db.Begin(ctx)
 	if err != nil {
@@ -70,7 +72,7 @@ func (s *Service) MarkEnterpriseTrialConverted(ctx context.Context, payload *gen
 		if err := s.reconcileConvertedTrialKeys(ctx, payload.ID); err != nil {
 			return nil, err
 		}
-		return s.readOrganizationAfterWrite(ctx, payload.ID, "fetch organization after enterprise trial conversion retry")
+		return enterpriseTrialConversionResult(payload.ID, trial.ConvertedAt), nil
 	}
 
 	demotedAccess := organization.AccountType == "free" && !organization.Whitelisted
@@ -103,7 +105,7 @@ func (s *Service) MarkEnterpriseTrialConverted(ctx context.Context, payload *gen
 	if err != nil || rows != 1 {
 		return nil, oops.E(oops.CodeUnexpected, err, "mark enterprise trial converted").LogError(ctx, logger)
 	}
-	restored, err := trialsRepo.New(tx).RestoreOrganizationFromTrial(ctx, trialsRepo.RestoreOrganizationFromTrialParams{OrganizationID: payload.ID, AccountType: "enterprise"})
+	_, err = trialsRepo.New(tx).RestoreOrganizationFromTrial(ctx, trialsRepo.RestoreOrganizationFromTrialParams{OrganizationID: payload.ID, AccountType: "enterprise"})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "restore organization after enterprise trial conversion").LogError(ctx, logger)
 	}
@@ -129,9 +131,9 @@ func (s *Service) MarkEnterpriseTrialConverted(ctx context.Context, payload *gen
 		Organization: audit.OrganizationEnterpriseTrialConversionOrganizationSnapshot{AccountType: "enterprise", Whitelisted: true, Disabled: organization.DisabledAt.Valid},
 		Trial:        conversionTrialAuditSnapshot(convertedTrial.Tier, convertedTrial.EndsAt, convertedTrial.ConvertedAt, convertedTrial.DemotedAt), Keys: afterKeys,
 	}
-	actor, actorDisplayName, _ := adminActor(ctx)
+	actor, actorDisplayName := enterpriseTrialConversionAuditActor(ctx)
 	if err := s.audit.LogOrganizationEnterpriseTrialConverted(ctx, tx, audit.LogOrganizationEnterpriseTrialConvertedEvent{
-		OrganizationID: payload.ID, Actor: actor, ActorDisplayName: actorDisplayName, ActorSlug: nil, OrganizationName: restored.Name, OrganizationSlug: restored.Slug, Before: before, After: after,
+		OrganizationID: payload.ID, Actor: actor, ActorDisplayName: actorDisplayName, ActorSlug: nil, Before: before, After: after,
 	}); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "log enterprise trial conversion").LogError(ctx, logger)
 	}
@@ -146,7 +148,7 @@ func (s *Service) MarkEnterpriseTrialConverted(ctx context.Context, payload *gen
 	if err := s.reconcileConvertedTrialKeys(ctx, payload.ID); err != nil {
 		return nil, err
 	}
-	return s.readOrganizationAfterWrite(ctx, payload.ID, "fetch organization after enterprise trial conversion")
+	return enterpriseTrialConversionResult(payload.ID, convertedTrial.ConvertedAt), nil
 }
 
 func (s *Service) reconcileConvertedTrialKeys(ctx context.Context, organizationID string) error {
@@ -163,7 +165,20 @@ func conversionTrialAuditSnapshot(tier string, endsAt, convertedAt, demotedAt pg
 }
 
 func conversionKeyAuditSnapshot(state openrouter.EnterpriseTrialConversionKeyState) audit.OrganizationEnterpriseTrialConversionKeySnapshot {
-	return audit.OrganizationEnterpriseTrialConversionKeySnapshot{KeyType: string(state.KeyType), DisableCauses: state.DisableCauses, EffectiveDisabled: openrouter.EffectiveDisabled(state.Disabled, state.DisableCauses), MonthlyCredits: state.MonthlyCredits}
+	return audit.OrganizationEnterpriseTrialConversionKeySnapshot{KeyType: string(state.KeyType), DisableCauses: state.DisableCauses, StoredDisabled: state.Disabled, EffectiveDisabled: openrouter.EffectiveDisabled(state.Disabled, state.DisableCauses), MonthlyCredits: state.MonthlyCredits}
+}
+
+func enterpriseTrialConversionResult(organizationID string, convertedAt pgtype.Timestamptz) *gen.MarkEnterpriseTrialConvertedResult {
+	return &gen.MarkEnterpriseTrialConvertedResult{OrganizationID: organizationID, ConvertedAt: convertedAt.Time.Format(time.RFC3339)}
+}
+
+func enterpriseTrialConversionAuditActor(ctx context.Context) (urn.Principal, *string) {
+	label := "Platform administrator"
+	authCtx, ok := contextvalues.GetAdminAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.SessionID == "" {
+		return urn.NewPrincipal(urn.PrincipalTypeUser, "system"), &label
+	}
+	return urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.SessionID), &label
 }
 
 func pgTimePtr(value pgtype.Timestamptz) *time.Time {

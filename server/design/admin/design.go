@@ -12,6 +12,17 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 )
 
+var MarkEnterpriseTrialConvertedResult = Type("MarkEnterpriseTrialConvertedResult", func() {
+	Description("Privacy-minimal result of recording an enterprise trial conversion.")
+	Required("organization_id", "converted_at")
+
+	Attribute("organization_id", String, "The converted organization ID.")
+	Attribute("converted_at", String, func() {
+		Description("The time at which the enterprise trial was recorded as converted.")
+		Format(FormatDateTime)
+	})
+})
+
 var AdminOrganization = Type("AdminOrganization", func() {
 	Description("Organization details surfaced to admin operators.")
 	Required("id", "name", "slug", "account_type", "whitelisted", "member_count", "created_at", "updated_at")
@@ -783,7 +794,7 @@ var _ = Service("admin", func() {
 			})
 		})
 
-		Result(AdminOrganization)
+		Result(MarkEnterpriseTrialConvertedResult)
 
 		HTTP(func() {
 			POST("/admin/trial.convert")

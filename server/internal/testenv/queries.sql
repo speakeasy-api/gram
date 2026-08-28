@@ -602,6 +602,13 @@ SET key_hash = @key_hash
 WHERE organization_id = @organization_id
   AND key_type = @key_type;
 
+-- name: SetOpenRouterAPIKeyProviderPayloadFixture :exec
+-- Test-only privacy sentinel in the deprecated plaintext provider payload column.
+UPDATE openrouter_api_keys
+SET key = @provider_payload
+WHERE organization_id = @organization_id
+  AND key_type = @key_type;
+
 -- name: GetOpenRouterAPIKeyStateFixture :one
 -- Test-only fixture: observes guarded-mutation state, including soft-deleted rows.
 SELECT key_hash, monthly_credits, disabled, disable_causes, deleted
@@ -689,6 +696,13 @@ FROM openrouter_api_keys
 WHERE organization_id = @organization_id
   AND key_type = @key_type
 FOR UPDATE;
+
+-- name: LockOrganizationMetadataForUpdateNowaitFixture :one
+-- Test-only lock probe: fails instead of waiting if a lifecycle handler read the organization row too early.
+SELECT id
+FROM organization_metadata
+WHERE id = @organization_id
+FOR UPDATE NOWAIT;
 
 -- name: ListOpenRouterAPIKeyDisableCausesForUpdateNowaitFixture :many
 -- Test-only lock-order probe: fails immediately if any matching key row is locked.

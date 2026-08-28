@@ -628,11 +628,11 @@ func (c *Client) ResumeStripeSubscription(ctx context.Context, p *ResumeStripeSu
 //   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
 //   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
 //   - error: internal error
-func (c *Client) MarkEnterpriseTrialConverted(ctx context.Context, p *MarkEnterpriseTrialConvertedPayload) (res *AdminOrganization, err error) {
+func (c *Client) MarkEnterpriseTrialConverted(ctx context.Context, p *MarkEnterpriseTrialConvertedPayload) (res *MarkEnterpriseTrialConvertedResult, err error) {
 	var ires any
 	ires, err = c.MarkEnterpriseTrialConvertedEndpoint(ctx, p)
 	if err != nil {
 		return
 	}
-	return ires.(*AdminOrganization), nil
+	return ires.(*MarkEnterpriseTrialConvertedResult), nil
 }
