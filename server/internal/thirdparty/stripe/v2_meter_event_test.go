@@ -128,6 +128,48 @@ func TestV2MeterEventClientClassifiesGuardianRateLimit(t *testing.T) {
 	require.Zero(t, classified.HTTPStatusCode)
 }
 
+func TestV2MeterEventClientClassifiesExhaustedHTTPRetries(t *testing.T) {
+	t.Parallel()
+
+	for _, test := range []struct {
+		name       string
+		statusCode int
+		wantClass  V2MeterEventErrorClass
+	}{
+		{name: "rate limit", statusCode: http.StatusTooManyRequests, wantClass: V2MeterEventErrorRateLimit},
+		{name: "server error", statusCode: http.StatusServiceUnavailable, wantClass: V2MeterEventErrorServer},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+
+			client := &v2MeterEventClient{
+				create: func(context.Context, *stripesdk.V2BillingMeterEventCreateParams) (*stripesdk.V2BillingMeterEvent, error) {
+					return nil, &url.Error{
+						Op:  http.MethodPost,
+						URL: "https://api.stripe.com/v2/billing/meter_events",
+						Err: &guardian.RetriesExhaustedError{
+							Method:     http.MethodPost,
+							URL:        "https://api.stripe.com/v2/billing/meter_events",
+							Attempts:   1,
+							StatusCode: test.statusCode,
+							Body:       "",
+							Err:        nil,
+						},
+					}
+				},
+			}
+
+			err := client.CreateMeterEvent(t.Context(), validV2MeterEventInput())
+			require.Error(t, err)
+			var classified *V2MeterEventError
+			require.ErrorAs(t, err, &classified)
+			require.Equal(t, test.wantClass, classified.Class)
+			require.Empty(t, classified.Code)
+			require.Equal(t, test.statusCode, classified.HTTPStatusCode)
+		})
+	}
+}
+
 func validV2MeterEventInput() V2MeterEventInput {
 	return V2MeterEventInput{
 		Identifier: "reading-id",

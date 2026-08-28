@@ -209,6 +209,15 @@ func classifyV2MeterEventError(err error) *V2MeterEventError {
 		}
 	}
 
+	if exhausted, ok := errors.AsType[*guardian.RetriesExhaustedError](err); ok && exhausted.StatusCode != 0 {
+		return &V2MeterEventError{
+			Class:          classifyV2MeterEventStatus(exhausted.StatusCode),
+			Code:           "",
+			HTTPStatusCode: exhausted.StatusCode,
+			Err:            err,
+		}
+	}
+
 	if _, ok := errors.AsType[net.Error](err); ok {
 		return &V2MeterEventError{Class: V2MeterEventErrorNetwork, Code: "", HTTPStatusCode: 0, Err: err}
 	}
