@@ -323,12 +323,11 @@ SET
     updated_at = clock_timestamp()
 WHERE id = @id;
 
--- name: LockUnconvertedEnterpriseTrialInOrganizations :one
+-- name: LockEnterpriseTrialInOrganizations :one
 SELECT organization_id
 FROM trials
 WHERE organization_id = ANY(@ids::text[])
   AND tier = 'enterprise'
-  AND converted_at IS NULL
 ORDER BY organization_id
 LIMIT 1
 FOR UPDATE;

@@ -862,10 +862,12 @@ func (s *Service) BulkUpdateAccountType(ctx context.Context, payload *gen.BulkUp
 	}
 	defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
 	queries := repo.New(tx)
-	if trialID, lockErr := queries.LockUnconvertedEnterpriseTrialInOrganizations(ctx, payload.Ids); lockErr == nil {
-		return nil, oops.E(oops.CodeConflict, nil, "organization %s has an unconverted enterprise trial; use atomic enterprise conversion", trialID)
-	} else if !errors.Is(lockErr, pgx.ErrNoRows) {
-		return nil, oops.E(oops.CodeUnexpected, lockErr, "check enterprise trials before bulk account type update").LogError(ctx, s.logger)
+	if payload.AccountType == "enterprise" {
+		if trialID, lockErr := queries.LockEnterpriseTrialInOrganizations(ctx, payload.Ids); lockErr == nil {
+			return nil, oops.E(oops.CodeConflict, nil, "organization %s has an enterprise trial; use atomic enterprise conversion", trialID)
+		} else if !errors.Is(lockErr, pgx.ErrNoRows) {
+			return nil, oops.E(oops.CodeUnexpected, lockErr, "check enterprise trials before bulk account type update").LogError(ctx, s.logger)
+		}
 	}
 
 	updated, err := queries.AdminBulkUpdateAccountType(ctx, repo.AdminBulkUpdateAccountTypeParams{
