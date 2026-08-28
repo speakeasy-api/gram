@@ -102,6 +102,11 @@ export function FilterSheet({
               <label className="text-foreground text-sm font-medium">
                 {dim.label}
               </label>
+              {dim.description && (
+                <p className="text-muted-foreground text-xs">
+                  {dim.description}
+                </p>
+              )}
               <FilterControl
                 dim={dim}
                 value={values[dim.id] ?? defaultValueForDimension(dim)}
