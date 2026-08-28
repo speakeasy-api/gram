@@ -1,6 +1,11 @@
 import { useDateRangeFilter } from "@/components/observe/useDateRangeFilter";
 import { useOrganization, useProject } from "@/contexts/Auth";
 import { useRBAC } from "@/hooks/useRBAC";
+import { telemetrySearchUsers } from "@gram/client/funcs/telemetrySearchUsers";
+import { Source } from "@gram/client/models/components/searchuserspayload.js";
+import { useGramContext } from "@gram/client/react-query/_context.js";
+import { unwrapAsync } from "@gram/client/types/fp";
+import { useQuery } from "@tanstack/react-query";
 import { useSearchParams } from "react-router";
 import type { AccessMember } from "@gram/client/models/components/accessmember.js";
 import type { IdentityModel } from "@gram/client/models/components/identitymodel.js";
@@ -107,6 +112,54 @@ export function useIdentityMetrics(
  * name would be a silent misattribution, so the panel asks for nothing rather
  * than asking for something it cannot trust.
  */
+/**
+ * Whether anything in the org has actually been seen under this identity.
+ *
+ * The resolver answers structurally: hand it any well-formed URN and it returns
+ * a subject, so a typo or a stale link renders a complete page for a person who
+ * does not exist. A directory row settles it; for everyone else the question is
+ * whether telemetry has ever recorded the identifier, which is a targeted
+ * lookup rather than the roster crawl the index does.
+ */
+export function useIdentityIsKnown(identity: IdentityModel | undefined): {
+  known: boolean;
+  isPending: boolean;
+} {
+  const client = useGramContext();
+  const hasDirectoryRow = (identity?.userIds.length ?? 0) > 0;
+  const identifiers = [
+    ...(identity?.emails ?? []),
+    ...(identity?.externalUserIds ?? []),
+  ];
+  const query = useQuery({
+    queryKey: ["identity", "seen", identifiers],
+    queryFn: async () => {
+      const result = await unwrapAsync(
+        telemetrySearchUsers(client, {
+          searchUsersPayload: {
+            filter: {
+              from: new Date("2020-01-01T00:00:00Z"),
+              to: new Date(),
+              userIds: identifiers,
+            },
+            limit: 1,
+            userType: "internal",
+            source: Source.AgentMetrics,
+          },
+        }),
+      );
+      return result.users.length > 0;
+    },
+    throwOnError: false,
+    enabled: !!identity && !hasDirectoryRow && identifiers.length > 0,
+  });
+
+  if (!identity) return { known: true, isPending: true };
+  if (hasDirectoryRow) return { known: true, isPending: false };
+  if (identifiers.length === 0) return { known: false, isPending: false };
+  return { known: query.data === true, isPending: query.isPending };
+}
+
 /**
  * Risk findings and the shadow-MCP inventory are org:admin surfaces on their
  * own pages, and their endpoints enforce that. A reader without it is shown

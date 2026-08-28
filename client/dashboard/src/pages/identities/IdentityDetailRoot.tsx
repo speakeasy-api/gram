@@ -21,14 +21,14 @@ import {
 import { Skeleton } from "@/components/ui/Skeleton";
 import { Text } from "@/components/ui/Text";
 import { getInitials } from "@/lib/initials";
-import { isNotFoundError } from "@/lib/route-errors";
+import { isBadRequestError, isNotFoundError } from "@/lib/route-errors";
 import { useOrgRoutes, useRoutes } from "@/routes";
 import type { IdentityModel } from "@gram/client/models/components/identitymodel.js";
 import { useIdentity } from "@gram/client/react-query/identity.js";
 import { ArrowLeft } from "lucide-react";
 import { Link, Navigate, Outlet, useLocation, useParams } from "react-router";
 import type { IdentityOutletContext } from "./identityRoute";
-import { useIdentityProject } from "./useIdentityQueries";
+import { useIdentityIsKnown, useIdentityProject } from "./useIdentityQueries";
 
 /** How each resolved subject kind reads in the header chip. */
 const KIND_LABELS: Record<IdentityModel["kind"], string> = {
@@ -61,6 +61,9 @@ function IdentityDetailContent(): JSX.Element {
   // Without this the recents entry is the sub-page segment ("overview"), since
   // the URN is neither an id nor long enough for the label heuristic to reject.
   useRecentLabelOverride(location.pathname, identityQuery.data?.displayName);
+  // The resolver answers any well-formed URN with a subject, so a typo renders
+  // a complete page for someone who does not exist unless we check.
+  const subject = useIdentityIsKnown(identityQuery.data);
 
   // The bare route carries no panels of its own; overview is the landing view.
   if (
@@ -75,15 +78,22 @@ function IdentityDetailContent(): JSX.Element {
     );
   }
 
+  // A URN the server rejects is a bad address the reader can see and mistype,
+  // so it reads as "not found" rather than as the app falling over.
   if (
     identityQuery.error &&
     !identityQuery.data &&
-    !isNotFoundError(identityQuery.error)
+    !isNotFoundError(identityQuery.error) &&
+    !isBadRequestError(identityQuery.error)
   ) {
     throw identityQuery.error;
   }
 
-  if (!urn || (identityQuery.error && !identityQuery.data)) {
+  if (
+    !urn ||
+    (identityQuery.error && !identityQuery.data) ||
+    (identityQuery.data && !subject.isPending && !subject.known)
+  ) {
     return (
       <Page>
         <Page.Header>
