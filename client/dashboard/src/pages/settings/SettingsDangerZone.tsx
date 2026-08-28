@@ -4,6 +4,7 @@ import { Label } from "@/components/ui/Label";
 import { SimpleTooltip } from "@/components/ui/Tooltip";
 import { Text } from "@/components/ui/Text";
 import { useOrganization, useProject } from "@/contexts/Auth";
+import { useOrgRoutes } from "@/routes";
 import { useDeleteProjectMutation } from "@gram/client/react-query/deleteProject";
 import { invalidateListProjects } from "@gram/client/react-query/listProjects";
 import { Button } from "@/components/ui/Button";
@@ -16,6 +17,7 @@ import { toast } from "sonner";
 export function SettingsDangerZone(): JSX.Element {
   const organization = useOrganization();
   const project = useProject();
+  const orgRoutes = useOrgRoutes();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
 
@@ -34,7 +36,9 @@ export function SettingsDangerZone(): JSX.Element {
         { organizationId: organization.id },
       ]);
       toast.success("Project deleted successfully");
-      void navigate(`/${organization.slug}/default/settings`);
+      // Replace so Back doesn't return to the deleted project's settings
+      // (which falls through to another project's settings).
+      void navigate(orgRoutes.home.href(), { replace: true });
     },
     onError: (error) => {
       console.error("Failed to delete project:", error);
