@@ -20,6 +20,11 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
 import { useIsPlatformAdmin } from "@/contexts/Auth";
+import {
+  causeLabels,
+  effectiveDisabled,
+  keyAction,
+} from "./openRouterKeyState";
 
 // Rows per page; also the ceiling on concurrent live usage fetches, since
 // only mounted rows request usage.
@@ -78,6 +83,7 @@ function StrictPlatformAdminGate({
 // database records current spend, and the periodic credits monitor only emits
 // metrics for alerting.
 function UsageCell({ row }: { row: AdminOpenRouterKey }): JSX.Element {
+  const disabled = effectiveDisabled(row);
   const usage = useAdminOpenRouterKeyUsage(
     {
       organizationId: row.organizationId,
@@ -85,14 +91,14 @@ function UsageCell({ row }: { row: AdminOpenRouterKey }): JSX.Element {
     },
     undefined,
     {
-      enabled: !row.disabled,
+      enabled: !disabled,
       staleTime: 5 * 60 * 1000,
       retry: false,
       throwOnError: false,
     },
   );
 
-  if (row.disabled) {
+  if (disabled) {
     return (
       <SimpleTooltip tooltip="Disabled keys are not polled for usage.">
         <Text muted small>
@@ -135,7 +141,7 @@ function KeysTable(): JSX.Element {
   const disable = useDisableAdminOpenRouterKeyMutation({
     onSuccess: (key) => {
       toast.success(
-        `Disabled the ${key.keyType} key for ${key.organizationName}.`,
+        `Admin lock added to the ${key.keyType} key for ${key.organizationName}.`,
       );
       invalidate();
     },
@@ -148,7 +154,7 @@ function KeysTable(): JSX.Element {
   const enable = useEnableAdminOpenRouterKeyMutation({
     onSuccess: (key) => {
       toast.success(
-        `Enabled the ${key.keyType} key for ${key.organizationName}.`,
+        `Admin lock removed from the ${key.keyType} key for ${key.organizationName}.`,
       );
       invalidate();
     },
@@ -184,10 +190,10 @@ function KeysTable(): JSX.Element {
     const keyType = row.keyType === "internal" ? "internal" : "chat";
     const body = { organizationId: row.organizationId, keyType } as const;
     const actions: Action[] = [];
-    if (row.disabled) {
+    if (keyAction(row.disableCauses) === "remove-admin-lock") {
       actions.push({
         icon: "play",
-        label: "Enable key",
+        label: "Remove admin lock",
         disabled: enable.isPending,
         onClick: () =>
           enable.mutate({
@@ -257,7 +263,7 @@ function KeysTable(): JSX.Element {
       header: "Status",
       width: "110px",
       render: (row) =>
-        row.disabled ? (
+        effectiveDisabled(row) ? (
           <Badge variant="destructive" background className="shrink-0">
             <Badge.Text>Disabled</Badge.Text>
           </Badge>
@@ -266,6 +272,27 @@ function KeysTable(): JSX.Element {
             <Badge.Text>Enabled</Badge.Text>
           </Badge>
         ),
+    },
+    {
+      key: "causes",
+      header: "Causes",
+      width: "180px",
+      render: (row) => {
+        const labels = causeLabels(row.disableCauses);
+        return labels.length > 0 ? (
+          <div className="space-y-1">
+            {labels.map((label) => (
+              <Text key={label} small>
+                {label}
+              </Text>
+            ))}
+          </div>
+        ) : (
+          <Text muted small>
+            —
+          </Text>
+        );
+      },
     },
     {
       key: "actions",
