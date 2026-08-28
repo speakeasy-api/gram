@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
@@ -365,6 +366,20 @@ func setOpenRouterKeyLifecycleFixture(t *testing.T, db *pgxpool.Pool, keyType op
 	})
 	require.NoError(t, err)
 	require.EqualValues(t, 1, rows)
+}
+
+func stripeLifecycleOpenRouterProvisioner(t *testing.T, db *pgxpool.Pool, baseURL string) openrouter.Provisioner {
+	t.Helper()
+
+	option, err := openrouter.WithTestBaseURL(baseURL)
+	require.NoError(t, err)
+	tracerProvider := testenv.NewTracerProvider(t)
+	guardianPolicy, err := guardian.NewUnsafePolicy(tracerProvider, []string{})
+	require.NoError(t, err)
+	return openrouter.New(
+		testenv.NewLogger(t), tracerProvider, guardianPolicy, db, "test", "provisioning_key_placeholder",
+		nil, nil, nil, testenv.NewEncryptionClient(t), option,
+	)
 }
 
 func openRouterKeyLifecycleFixture(t *testing.T, db *pgxpool.Pool, keyType openrouter.KeyType) openrouterrepo.OpenrouterApiKey {
@@ -1140,13 +1155,33 @@ func waitForStripeWebhookBlockedByPID(t *testing.T, db *pgxpool.Pool, holderPID 
 	waitForStripeWebhookWaitersBlockedByPID(t, db, holderPID, 1)
 }
 
+func waitForStripeReceiptInsertBlockedByPID(t *testing.T, db *pgxpool.Pool, holderPID int32) {
+	t.Helper()
+
+	require.Eventually(t, func() bool {
+		var blocked bool
+		err := db.QueryRow( //nolint:glint // notestingrawsql: pg_blocking_pids is a PostgreSQL test synchronization primitive unavailable to SQLc generation
+			t.Context(), `
+SELECT EXISTS (
+  SELECT 1
+  FROM pg_stat_activity AS activity
+  WHERE activity.datname = current_database()
+    AND $1 = ANY(pg_blocking_pids(activity.pid))
+    AND activity.query LIKE '%INSERT INTO stripe_webhook_receipts%'
+)
+`, holderPID).Scan(&blocked)
+		require.NoError(t, err)
+		return blocked
+	}, 2*time.Second, 10*time.Millisecond)
+}
+
 func receiveStripeWebhookStatus(t *testing.T, response <-chan int) int {
 	t.Helper()
 
 	select {
 	case status := <-response:
 		return status
-	case <-time.After(2 * time.Second):
+	case <-time.After(15 * time.Second):
 		require.FailNow(t, "timed out waiting for Stripe webhook response")
 		return 0
 	}
@@ -1724,6 +1759,141 @@ func TestStripeCheckoutConvertedDemotedTrialExactReplayRepairsInternalPostCommit
 	for _, path := range internalSecurityUpstream.patchPaths {
 		require.Equal(t, "/v1/keys/hash_placeholder_internal", path)
 	}
+}
+
+func TestStripeCheckoutLostReceiptInsertRepairsWinnerPostCommitFailure(t *testing.T) {
+	t.Parallel()
+
+	service, db := newStripeWebhookService(t, "customer_placeholder", nil)
+	configurePaygCheckout(t, service, "event_lost_insert_repair", "subscription_lost_insert_repair", "active")
+	createOpenRouterKeyFixture(t, db, openrouter.KeyTypeChat, 17)
+	setOpenRouterKeyLifecycleFixture(t, db, openrouter.KeyTypeChat, true, []string{"billing_inactive"}, 17)
+
+	const duplicateOrganizationID = "org_duplicate_placeholder"
+	require.NoError(t, orgrepo.New(db).CreateOrganizationMetadata(t.Context(), orgrepo.CreateOrganizationMetadataParams{
+		ID: duplicateOrganizationID, Name: "Duplicate Placeholder Organization", Slug: "duplicate-placeholder-organization",
+	}))
+	require.NoError(t, repo.New(db).CreateStripeBillingMetadataFixture(t.Context(), repo.CreateStripeBillingMetadataFixtureParams{
+		OrganizationID:   duplicateOrganizationID,
+		StripeCustomerID: pgtype.Text{String: "customer_duplicate_placeholder", Valid: true},
+	}))
+
+	failingUpstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPatch {
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			return
+		}
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	t.Cleanup(failingUpstream.Close)
+	service.openRouter = stripeLifecycleOpenRouterProvisioner(t, db, failingUpstream.URL)
+
+	var repairedPatches atomic.Int32
+	var repairedUpstream struct {
+		sync.Mutex
+		disabled *bool
+		limit    *float64
+	}
+	repairingUpstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPatch {
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			return
+		}
+		var patch struct {
+			Limit    *float64 `json:"limit"`
+			Disabled *bool    `json:"disabled"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&patch); err != nil {
+			http.Error(w, "invalid patch", http.StatusBadRequest)
+			return
+		}
+		repairedUpstream.Lock()
+		repairedUpstream.disabled = patch.Disabled
+		repairedUpstream.limit = patch.Limit
+		repairedUpstream.Unlock()
+		repairedPatches.Add(1)
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"data": map[string]any{"limit": 100.0, "hash": "hash_placeholder_chat"},
+		})
+	}))
+	t.Cleanup(repairingUpstream.Close)
+
+	winnerEntered := make(chan int32, 1)
+	releaseWinner := make(chan struct{})
+	originalHandler := service.stripeHandler
+	service.stripeHandler = func(ctx context.Context, logger *slog.Logger, tx pgx.Tx, organizationID string, event *stripeclient.WebhookEvent, checkout *stripeclient.CheckoutSessionState, invoice *stripeclient.InvoiceState) (stripeWebhookResult, error) {
+		result, err := originalHandler(ctx, logger, tx, organizationID, event, checkout, invoice)
+		if err != nil {
+			return stripeWebhookResult{}, err
+		}
+		var pid int32
+		if err := tx.QueryRow(ctx, `SELECT pg_backend_pid()`).Scan(&pid); err != nil { //nolint:glint // notestingrawsql: backend identity synchronizes the real PostgreSQL conflict
+			return stripeWebhookResult{}, fmt.Errorf("read winner backend PID: %w", err)
+		}
+		select {
+		case winnerEntered <- pid:
+		default:
+			return stripeWebhookResult{}, errors.New("winner backend was already reported")
+		}
+		select {
+		case <-releaseWinner:
+			return result, nil
+		case <-ctx.Done():
+			return stripeWebhookResult{}, ctx.Err()
+		}
+	}
+
+	duplicateClient := &fakeStripeWebhookClient{
+		verify: func(_ []byte, _ string) (*stripeclient.WebhookEvent, error) {
+			return &stripeclient.WebhookEvent{
+				ID: "event_lost_insert_repair", Type: "invoice.payment_failed", ObjectID: "invoice_duplicate_placeholder",
+				CustomerID: "customer_duplicate_placeholder",
+			}, nil
+		},
+		checkout: nil, checkoutError: nil, invoice: nil, invoiceError: nil,
+		checkoutCalls: atomic.Int32{}, invoiceCalls: atomic.Int32{}, verifyCalls: atomic.Int32{},
+	}
+	duplicate := *service
+	duplicate.stripeClient = duplicateClient
+	duplicate.openRouter = stripeLifecycleOpenRouterProvisioner(t, db, repairingUpstream.URL)
+
+	winnerResponse := make(chan int, 1)
+	go func() { winnerResponse <- serveStripeWebhook(service, "winner").Code }()
+	var winnerPID int32
+	select {
+	case winnerPID = <-winnerEntered:
+	case <-time.After(2 * time.Second):
+		require.FailNow(t, "timed out waiting for winner transaction")
+	}
+
+	duplicateResponse := make(chan int, 1)
+	go func() { duplicateResponse <- serveStripeWebhook(&duplicate, "duplicate").Code }()
+	waitForStripeReceiptInsertBlockedByPID(t, db, winnerPID)
+	close(releaseWinner)
+
+	require.Equal(t, http.StatusInternalServerError, receiveStripeWebhookStatus(t, winnerResponse))
+	require.Equal(t, http.StatusOK, receiveStripeWebhookStatus(t, duplicateResponse))
+	require.Equal(t, 1, stripeWebhookReceiptCount(t, db))
+	require.Equal(t, 1, organizationBillingActionIntentCount(t, db, audit.ActionOrganizationPaygActivated))
+	require.Equal(t, 1, paygSchedulingIntentCount(t, db))
+	count, err := audittest.AuditLogCountByAction(t.Context(), db, audit.ActionOrganizationPaygActivated)
+	require.NoError(t, err)
+	require.EqualValues(t, 1, count)
+	winnerClient, ok := service.stripeClient.(*fakeStripeWebhookClient)
+	require.True(t, ok)
+	require.EqualValues(t, 1, winnerClient.checkoutCalls.Load())
+	require.Zero(t, duplicateClient.checkoutCalls.Load())
+	require.EqualValues(t, 1, repairedPatches.Load())
+
+	repairedUpstream.Lock()
+	defer repairedUpstream.Unlock()
+	require.NotNil(t, repairedUpstream.disabled)
+	require.False(t, *repairedUpstream.disabled)
+	limit, ok := openrouter.AccountTypeCreditLimit("payg")
+	require.True(t, ok)
+	require.NotNil(t, repairedUpstream.limit)
+	require.InDelta(t, limit, *repairedUpstream.limit, 0)
 }
 
 func TestStripeCheckoutExactReplayRepairsPostCommitOpenRouterFailure(t *testing.T) {
