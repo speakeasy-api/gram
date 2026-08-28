@@ -647,7 +647,7 @@ describe("Overview", () => {
     },
   );
 
-  it.each(["none", "converted"] as const)(
+  it.each(["none", "converted", undefined] as const)(
     "hides the trial panel for a %s trial",
     async (trialState) => {
       mocks.getOrganization.mockResolvedValue({
@@ -689,6 +689,34 @@ describe("Overview", () => {
       screen.queryByRole("heading", { name: "Enterprise trial" }),
     ).toBeNull();
   });
+
+  it.each([
+    [
+      "enabled",
+      ORG,
+      "Every member loses access to Gram until the organization is re-enabled.",
+      "Sessions end immediately; nothing is deleted.",
+    ],
+    [
+      "disabled",
+      { ...ORG, disabled_at: "2026-02-01T00:00:00Z" },
+      "Re-enabling restores organization access for every member",
+      "Model provider keys with admin, billing, or unknown disable causes remain disabled.",
+    ],
+  ] as const)(
+    "explains the scoped impact for a %s organization in Danger zone",
+    async (_state, org, impact, causeQualification) => {
+      mocks.getOrganization.mockResolvedValue(org);
+      await renderRouteTree(routeTree, {
+        initialPath: `/organizations/${org.slug}`,
+      });
+
+      await screen.findByRole("heading", { name: "Danger zone" });
+      const danger = panelNamed("Danger zone");
+      expect(danger.textContent).toContain(impact);
+      expect(danger.textContent).toContain(causeQualification);
+    },
+  );
 
   it("scopes trial and lifecycle actions to their new panels", async () => {
     await renderRouteTree(routeTree, {
@@ -756,8 +784,18 @@ describe("Overview", () => {
 
     expect(left).toBe(danger.parentElement);
     expect(layout).toBe(trial.parentElement);
+    // jsdom does not calculate geometry. These stable slots and responsive
+    // primitives are the strongest component-level contract; browser coverage
+    // can measure the named regions at wide and narrow viewports without
+    // coupling to incidental descendants.
+    expect(layout?.dataset.slot).toBe("organization-overview");
+    expect(left?.dataset.slot).toBe("organization-overview-main");
+    expect(trial.dataset.slot).toBe("organization-overview-trial");
     expect(layout?.className).toContain("flex-wrap");
+    expect(left?.className).toContain("min-w-[min(100%,32rem)]");
     expect(left?.className).toContain("flex-[2_1_32rem]");
+    expect(trial.className).toContain("w-full");
+    expect(trial.className).toContain("max-w-80");
     expect(trial.className).toContain("flex-[1_1_16rem]");
   });
 

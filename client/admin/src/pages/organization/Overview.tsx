@@ -171,8 +171,14 @@ export function Overview({ org }: { org: AdminOrganization }): JSX.Element {
     org.trial_state === "demoted";
 
   return (
-    <div className="flex flex-wrap items-start gap-4">
-      <div className="min-w-[min(100%,32rem)] flex-[2_1_32rem] space-y-4">
+    <div
+      data-slot="organization-overview"
+      className="flex flex-wrap items-start gap-4"
+    >
+      <div
+        data-slot="organization-overview-main"
+        className="min-w-[min(100%,32rem)] flex-[2_1_32rem] space-y-4"
+      >
         <Panel title="Details" headingRef={detailsHeading}>
           <Row label="Name">
             <span className="text-sm">{org.name}</span>
@@ -282,7 +288,7 @@ export function Overview({ org }: { org: AdminOrganization }): JSX.Element {
               </p>
               <p className="text-muted-foreground mt-0.5 text-sm">
                 {org.disabled_at
-                  ? `Disabled ${fmtDateShort(org.disabled_at)}. Re-enabling restores access for every member and takes effect at once.`
+                  ? `Disabled ${fmtDateShort(org.disabled_at)}. Re-enabling restores organization access for every member and takes effect at once. Model provider keys with admin, billing, or unknown disable causes remain disabled.`
                   : "Every member loses access to Gram until the organization is re-enabled. Sessions end immediately; nothing is deleted."}
               </p>
             </div>
@@ -302,7 +308,10 @@ export function Overview({ org }: { org: AdminOrganization }): JSX.Element {
       </div>
 
       {showTrialPanel && (
-        <aside className="bg-card w-full max-w-80 flex-[1_1_16rem] rounded-lg border">
+        <aside
+          data-slot="organization-overview-trial"
+          className="bg-card w-full max-w-80 flex-[1_1_16rem] rounded-lg border"
+        >
           <h5 className="border-b px-5 py-2.5 text-sm font-semibold">
             Enterprise trial
           </h5>

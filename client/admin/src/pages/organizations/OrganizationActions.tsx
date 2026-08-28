@@ -220,11 +220,21 @@ export function OrganizationActions({
     });
   };
 
-  const runEnable = (): void => {
+  const runEnable = (from: HTMLElement | null): void => {
     enable.mutate(org.id, {
       onSuccess: () => {
         showFailure(null);
         announce(`${org.name} is enabled.`);
+        // The keyed Re-enable control is replaced by Disable when the canonical
+        // record lands. Let React commit that replacement, then restore the
+        // keyboard to the surface-owned stable destination.
+        setTimeout(() => {
+          if (from?.isConnected) {
+            from.focus();
+            return;
+          }
+          focusFallbackRef?.current?.focus();
+        });
       },
       // The one write with no dialog, so its failure is shown as well as
       // spoken. Without the banner the only account of it on the page is
@@ -354,7 +364,7 @@ export function OrganizationActions({
               aria-label={`Re-enable ${org.name}`}
               aria-busy={busy}
               className={buttonClassName}
-              onClick={runEnable}
+              onClick={(event) => runEnable(event.currentTarget)}
             >
               Re-enable
             </Button>
@@ -418,7 +428,7 @@ export function OrganizationActions({
         <DropdownMenuContent align="start">
           {showLifecycle &&
             (isDisabled ? (
-              <DropdownMenuItem onSelect={runEnable}>
+              <DropdownMenuItem onSelect={() => runEnable(null)}>
                 Re-enable
               </DropdownMenuItem>
             ) : (

@@ -1533,14 +1533,23 @@ describe("the keyboard when a dialog closes", () => {
     );
   }
 
-  it.each(["disable", "re-arm"] as const)(
+  it.each(["disable", "re-enable", "re-arm"] as const)(
     "uses the caller fallback after a successful %s replaces its opener",
     async (action) => {
-      const initialOrg = action === "disable" ? ORG : DEMOTED_ORG;
+      const initialOrg =
+        action === "disable"
+          ? ORG
+          : action === "re-enable"
+            ? DISABLED_ORG
+            : DEMOTED_ORG;
       const nextOrg = action === "disable" ? DISABLED_ORG : REARMED_ORG;
       let setOrg = (_org: AdminOrganization): void => {};
       const write =
-        action === "disable" ? mocks.disableOrganization : mocks.rearmTrial;
+        action === "disable"
+          ? mocks.disableOrganization
+          : action === "re-enable"
+            ? mocks.enableOrganization
+            : mocks.rearmTrial;
       write.mockImplementation(async () => {
         setOrg(nextOrg);
         return nextOrg;
@@ -1559,14 +1568,17 @@ describe("the keyboard when a dialog closes", () => {
           name:
             action === "disable"
               ? `Disable ${ORG.name}`
-              : `Re-arm trial for ${ORG.name}`,
+              : action === "re-enable"
+                ? `Re-enable ${ORG.name}`
+                : `Re-arm trial for ${ORG.name}`,
         }),
       );
-      await screen.findByRole("dialog");
 
       if (action === "re-arm") {
+        await screen.findByRole("dialog");
         await submitRearmDays("30");
-      } else {
+      } else if (action === "disable") {
+        await screen.findByRole("dialog");
         await act(async () => {
           fireEvent.click(screen.getByRole("button", { name: "Disable" }));
         });
