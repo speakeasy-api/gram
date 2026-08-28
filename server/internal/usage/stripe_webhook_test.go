@@ -1096,23 +1096,44 @@ func TestStripeCheckoutCompletionActivatesColdPaygOrganization(t *testing.T) {
 	require.NotContains(t, string(record.AfterSnapshot), "subscription_activation")
 }
 
-func waitForStripeWebhookLockWait(t *testing.T, db *pgxpool.Pool) {
+func postgresBackendPID(t *testing.T, tx pgx.Tx) int32 {
+	t.Helper()
+
+	var pid int32
+	err := tx.QueryRow(t.Context(), `SELECT pg_backend_pid()`).Scan(&pid) //nolint:glint // notestingrawsql: backend identity is a PostgreSQL test synchronization primitive unavailable through application SQLc queries
+	require.NoError(t, err)
+	return pid
+}
+
+func waitForStripeWebhookBlockedByPID(t *testing.T, db *pgxpool.Pool, holderPID int32) {
 	t.Helper()
 
 	require.Eventually(t, func() bool {
 		var waiting bool
-		err := db.QueryRow(t.Context(), `
+		err := db.QueryRow( //nolint:glint // notestingrawsql: pg_blocking_pids is a PostgreSQL test synchronization primitive unavailable to SQLc generation
+			t.Context(), `
 SELECT EXISTS (
   SELECT 1
-  FROM pg_locks AS locks
-  JOIN pg_stat_activity AS activity ON activity.pid = locks.pid
+  FROM pg_stat_activity AS activity
   WHERE activity.datname = current_database()
-    AND locks.granted IS FALSE
+    AND $1 = ANY(pg_blocking_pids(activity.pid))
 )
-`).Scan(&waiting) //nolint:glint // notestingrawsql: pg_locks is a PostgreSQL catalog view unavailable to SQLc generation
+`, holderPID).Scan(&waiting)
 		require.NoError(t, err)
 		return waiting
 	}, 2*time.Second, 10*time.Millisecond)
+}
+
+func receiveStripeWebhookStatus(t *testing.T, response <-chan int) int {
+	t.Helper()
+
+	select {
+	case status := <-response:
+		return status
+	case <-time.After(2 * time.Second):
+		require.FailNow(t, "timed out waiting for Stripe webhook response")
+		return 0
+	}
 }
 
 func TestStripeCheckoutLocksConvertedTrialBeforeOpenRouterKeys(t *testing.T) {
@@ -1124,17 +1145,18 @@ func TestStripeCheckoutLocksConvertedTrialBeforeOpenRouterKeys(t *testing.T) {
 	_, err := trialsrepo.New(db).MarkTrialConverted(t.Context(), stripeWebhookOrganizationID)
 	require.NoError(t, err)
 
-	trialTx, err := db.Begin(t.Context())
+	trialTx, err := db.Begin(t.Context()) //nolint:glint // notestingrawsql: the test must hold a trial-row transaction open while the webhook blocks
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = trialTx.Rollback(context.Background()) })
+	trialHolderPID := postgresBackendPID(t, trialTx)
 	_, err = trialsrepo.New(trialTx).LockTrialLifecycleForRearm(t.Context(), stripeWebhookOrganizationID)
 	require.NoError(t, err)
 
 	response := make(chan int, 1)
 	go func() { response <- serveStripeWebhook(service, "convert").Code }()
-	waitForStripeWebhookLockWait(t, db)
+	waitForStripeWebhookBlockedByPID(t, db, trialHolderPID)
 
-	probeTx, err := db.Begin(t.Context())
+	probeTx, err := db.Begin(t.Context()) //nolint:glint // notestingrawsql: the probe transaction proves the chat advisory lock remains available
 	require.NoError(t, err)
 	probeCtx, cancel := context.WithTimeout(t.Context(), 500*time.Millisecond)
 	defer cancel()
@@ -1144,7 +1166,7 @@ func TestStripeCheckoutLocksConvertedTrialBeforeOpenRouterKeys(t *testing.T) {
 	}))
 	require.NoError(t, probeTx.Rollback(t.Context()))
 	require.NoError(t, trialTx.Rollback(t.Context()))
-	require.Equal(t, http.StatusOK, <-response)
+	require.Equal(t, http.StatusOK, receiveStripeWebhookStatus(t, response))
 }
 
 func TestStripeCheckoutAcquiresOpenRouterLocksInAllKeyTypesOrder(t *testing.T) {
@@ -1154,9 +1176,10 @@ func TestStripeCheckoutAcquiresOpenRouterLocksInAllKeyTypesOrder(t *testing.T) {
 	configurePaygCheckout(t, service, "event_key_lock_order", "subscription_key_lock_order", "active")
 	require.Equal(t, []openrouter.KeyType{openrouter.KeyTypeChat, openrouter.KeyTypeInternal}, openrouter.AllKeyTypes)
 
-	chatTx, err := db.Begin(t.Context())
+	chatTx, err := db.Begin(t.Context()) //nolint:glint // notestingrawsql: the test must hold the first advisory lock while the webhook blocks
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = chatTx.Rollback(context.Background()) })
+	chatHolderPID := postgresBackendPID(t, chatTx)
 	require.NoError(t, repo.New(chatTx).AcquireOpenRouterBillingLock(t.Context(), repo.AcquireOpenRouterBillingLockParams{
 		KeyType:        string(openrouter.KeyTypeChat),
 		OrganizationID: stripeWebhookOrganizationID,
@@ -1164,9 +1187,9 @@ func TestStripeCheckoutAcquiresOpenRouterLocksInAllKeyTypesOrder(t *testing.T) {
 
 	response := make(chan int, 1)
 	go func() { response <- serveStripeWebhook(service, "activate").Code }()
-	waitForStripeWebhookLockWait(t, db)
+	waitForStripeWebhookBlockedByPID(t, db, chatHolderPID)
 
-	probeTx, err := db.Begin(t.Context())
+	probeTx, err := db.Begin(t.Context()) //nolint:glint // notestingrawsql: the probe transaction proves the internal advisory lock remains available
 	require.NoError(t, err)
 	probeCtx, cancel := context.WithTimeout(t.Context(), 500*time.Millisecond)
 	defer cancel()
@@ -1176,10 +1199,10 @@ func TestStripeCheckoutAcquiresOpenRouterLocksInAllKeyTypesOrder(t *testing.T) {
 	}))
 	require.NoError(t, probeTx.Rollback(t.Context()))
 	require.NoError(t, chatTx.Rollback(t.Context()))
-	require.Equal(t, http.StatusOK, <-response)
+	require.Equal(t, http.StatusOK, receiveStripeWebhookStatus(t, response))
 }
 
-func TestStripeCheckoutConversionReplacesOnlyTrialDemotionCauses(t *testing.T) {
+func TestStripeCheckoutConversionReplacesTrialAndBillingCausesIndependently(t *testing.T) {
 	t.Parallel()
 
 	service, db := newStripeWebhookService(t, "customer_placeholder", nil)
@@ -1187,7 +1210,7 @@ func TestStripeCheckoutConversionReplacesOnlyTrialDemotionCauses(t *testing.T) {
 	createDemotedEnterpriseTrialFixture(t, db)
 	createOpenRouterKeyFixture(t, db, openrouter.KeyTypeChat, 41)
 	createOpenRouterKeyFixture(t, db, openrouter.KeyTypeInternal, 59)
-	setOpenRouterKeyLifecycleFixture(t, db, openrouter.KeyTypeChat, true, []string{"admin_lock", "trial_demotion", "billing_inactive"}, 41)
+	setOpenRouterKeyLifecycleFixture(t, db, openrouter.KeyTypeChat, true, []string{"admin_lock", "trial_demotion", "billing_inactive", "policy_hold"}, 41)
 	setOpenRouterKeyLifecycleFixture(t, db, openrouter.KeyTypeInternal, true, []string{"admin_lock", "trial_demotion"}, 59)
 
 	require.Equal(t, http.StatusOK, serveStripeWebhook(service, "convert").Code)
@@ -1195,11 +1218,93 @@ func TestStripeCheckoutConversionReplacesOnlyTrialDemotionCauses(t *testing.T) {
 	require.Equal(t, 1, stripeWebhookReceiptCount(t, db))
 
 	chat := openRouterKeyLifecycleFixture(t, db, openrouter.KeyTypeChat)
-	require.Equal(t, []string{"admin_lock", "billing_inactive"}, chat.DisableCauses)
+	require.Equal(t, []string{"admin_lock", "policy_hold"}, chat.DisableCauses)
 	require.True(t, chat.Disabled)
+	limit, ok := openrouter.AccountTypeCreditLimit("payg")
+	require.True(t, ok)
+	require.EqualValues(t, limit, chat.MonthlyCredits)
 	internal := openRouterKeyLifecycleFixture(t, db, openrouter.KeyTypeInternal)
 	require.Equal(t, []string{"admin_lock"}, internal.DisableCauses)
 	require.True(t, internal.Disabled)
+}
+
+func TestStripeCheckoutConversionRecoversBillingWithoutAdminLock(t *testing.T) {
+	t.Parallel()
+
+	service, db := newStripeWebhookService(t, "customer_placeholder", nil)
+	configurePaygCheckout(t, service, "event_conversion_billing_only", "subscription_conversion_billing_only", "active")
+	createDemotedEnterpriseTrialFixture(t, db)
+	createOpenRouterKeyFixture(t, db, openrouter.KeyTypeChat, 17)
+	createOpenRouterKeyFixture(t, db, openrouter.KeyTypeInternal, 23)
+	setOpenRouterKeyLifecycleFixture(t, db, openrouter.KeyTypeChat, true, []string{"trial_demotion", "billing_inactive"}, 17)
+	setOpenRouterKeyLifecycleFixture(t, db, openrouter.KeyTypeInternal, true, []string{"trial_demotion", "security_hold"}, 23)
+
+	require.Equal(t, http.StatusOK, serveStripeWebhook(service, "convert").Code)
+
+	chat := openRouterKeyLifecycleFixture(t, db, openrouter.KeyTypeChat)
+	require.Empty(t, chat.DisableCauses)
+	require.False(t, chat.Disabled)
+	limit, ok := openrouter.AccountTypeCreditLimit("payg")
+	require.True(t, ok)
+	require.EqualValues(t, limit, chat.MonthlyCredits)
+	internal := openRouterKeyLifecycleFixture(t, db, openrouter.KeyTypeInternal)
+	require.Equal(t, []string{"security_hold"}, internal.DisableCauses)
+	require.True(t, internal.Disabled)
+	require.EqualValues(t, 23, internal.MonthlyCredits)
+}
+
+func TestStripeCheckoutConversionRefreshesCurrentPaygCapWhenBillingCauseIsAbsent(t *testing.T) {
+	t.Parallel()
+
+	service, db := newStripeWebhookService(t, "customer_placeholder", nil)
+	configurePaygCheckout(t, service, "event_conversion_cap_refresh", "subscription_conversion_cap_refresh", "active")
+	createDemotedEnterpriseTrialFixture(t, db)
+	createOpenRouterKeyFixture(t, db, openrouter.KeyTypeChat, 29)
+	createOpenRouterKeyFixture(t, db, openrouter.KeyTypeInternal, 31)
+	setOpenRouterKeyLifecycleFixture(t, db, openrouter.KeyTypeChat, true, []string{"admin_lock", "trial_demotion"}, 29)
+	setOpenRouterKeyLifecycleFixture(t, db, openrouter.KeyTypeInternal, true, []string{"trial_demotion"}, 31)
+
+	require.Equal(t, http.StatusOK, serveStripeWebhook(service, "convert").Code)
+
+	chat := openRouterKeyLifecycleFixture(t, db, openrouter.KeyTypeChat)
+	require.Equal(t, []string{"admin_lock"}, chat.DisableCauses)
+	require.True(t, chat.Disabled)
+	limit, ok := openrouter.AccountTypeCreditLimit("payg")
+	require.True(t, ok)
+	require.EqualValues(t, limit, chat.MonthlyCredits)
+	internal := openRouterKeyLifecycleFixture(t, db, openrouter.KeyTypeInternal)
+	require.Empty(t, internal.DisableCauses)
+	require.False(t, internal.Disabled)
+	require.EqualValues(t, 31, internal.MonthlyCredits)
+}
+
+func TestStripeCheckoutConvertedTrialAuditFailureRollsBackLifecycleAndReceipt(t *testing.T) {
+	t.Parallel()
+
+	service, db := newStripeWebhookService(t, "customer_placeholder", nil)
+	configurePaygCheckout(t, service, "event_conversion_rollback", "subscription_conversion_rollback", "active")
+	service.auditLogger = nil
+	createDemotedEnterpriseTrialFixture(t, db)
+	createOpenRouterKeyFixture(t, db, openrouter.KeyTypeChat, 37)
+	createOpenRouterKeyFixture(t, db, openrouter.KeyTypeInternal, 43)
+	setOpenRouterKeyLifecycleFixture(t, db, openrouter.KeyTypeChat, true, []string{"admin_lock", "trial_demotion", "billing_inactive"}, 37)
+	setOpenRouterKeyLifecycleFixture(t, db, openrouter.KeyTypeInternal, true, []string{"trial_demotion"}, 43)
+
+	require.Equal(t, http.StatusInternalServerError, serveStripeWebhook(service, "convert").Code)
+
+	trial, err := trialsrepo.New(db).GetTrial(t.Context(), stripeWebhookOrganizationID)
+	require.NoError(t, err)
+	require.False(t, trial.ConvertedAt.Valid)
+	chat := openRouterKeyLifecycleFixture(t, db, openrouter.KeyTypeChat)
+	require.Equal(t, []string{"admin_lock", "trial_demotion", "billing_inactive"}, chat.DisableCauses)
+	require.True(t, chat.Disabled)
+	require.EqualValues(t, 37, chat.MonthlyCredits)
+	internal := openRouterKeyLifecycleFixture(t, db, openrouter.KeyTypeInternal)
+	require.Equal(t, []string{"trial_demotion"}, internal.DisableCauses)
+	require.True(t, internal.Disabled)
+	require.EqualValues(t, 43, internal.MonthlyCredits)
+	require.Zero(t, stripeWebhookReceiptCount(t, db))
+	require.Zero(t, organizationBillingActionIntentCount(t, db, audit.ActionOrganizationPaygActivated))
 }
 
 func TestStripeCheckoutRecoveryRemovesOnlyBillingCauseAndRefreshesCurrentPaygCap(t *testing.T) {
@@ -1499,7 +1604,7 @@ func TestStripeSubscriptionDeletionLocksOnlyChatLifecycle(t *testing.T) {
 	configurePaygSubscriptionDeletion(t, service, "event_chat_lock_only", "subscription_current", "subscription_current")
 	createOpenRouterKeyFixture(t, db, openrouter.KeyTypeChat, 321)
 
-	lockTx, err := db.Begin(t.Context())
+	lockTx, err := db.Begin(t.Context()) //nolint:glint // notestingrawsql: the test must hold the unrelated advisory lock while deletion proceeds
 	require.NoError(t, err)
 	require.NoError(t, repo.New(lockTx).AcquireOpenRouterBillingLock(t.Context(), repo.AcquireOpenRouterBillingLockParams{
 		KeyType:        string(openrouter.KeyTypeInternal),

@@ -594,7 +594,8 @@ func (s *Service) activatePaygCheckout(ctx context.Context, tx pgx.Tx, organizat
 				return stripeWebhookResult{}, fmt.Errorf("replace demoted trial OpenRouter %s key lifecycle: %w", keyType, err)
 			}
 		}
-	} else if err := recoverPaygOpenRouterChatKeyTx(ctx, tx, organizationID); err != nil {
+	}
+	if err := recoverPaygOpenRouterChatKeyTx(ctx, tx, organizationID); err != nil {
 		return stripeWebhookResult{}, fmt.Errorf("recover PAYG OpenRouter chat key billing: %w", err)
 	}
 
