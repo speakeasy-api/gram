@@ -87,13 +87,27 @@ func (s *Service) handleStripeWebhook(w http.ResponseWriter, r *http.Request) er
 		logger.WarnContext(ctx, "skipping Stripe webhook event without a customer")
 		return nil
 	}
-	received, err := repo.New(s.db).StripeWebhookReceiptExists(ctx, event.ID)
-	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "failed to check Stripe webhook receipt").LogError(ctx, logger)
-	}
-	if received {
-		logger.InfoContext(ctx, "skipping duplicate Stripe webhook event")
+	receipt, err := repo.New(s.db).GetStripeWebhookReceipt(ctx, event.ID)
+	if err == nil {
+		if receipt.EventType != event.Type {
+			return oops.E(oops.CodeUnexpected, nil, "Stripe webhook receipt type does not match replayed event").LogError(ctx, logger)
+		}
+		logger.InfoContext(ctx, "repairing duplicate Stripe lifecycle event from committed state")
+		switch event.Type {
+		case "checkout.session.completed":
+			err = RepairPaygOpenRouterChatKey(ctx, logger, s.db, s.openRouter, receipt.OrganizationID, openrouter.KeyDesiredStateEnabled)
+		case "customer.subscription.deleted":
+			err = RepairPaygOpenRouterChatKey(ctx, logger, s.db, s.openRouter, receipt.OrganizationID, openrouter.KeyDesiredStateDisabled)
+		default:
+			return nil
+		}
+		if err != nil {
+			return oops.E(oops.CodeUnexpected, err, "failed to repair replayed Stripe lifecycle event").LogError(ctx, logger)
+		}
 		return nil
+	}
+	if !errors.Is(err, pgx.ErrNoRows) {
+		return oops.E(oops.CodeUnexpected, err, "failed to check Stripe webhook receipt").LogError(ctx, logger)
 	}
 	if event.Type == "invoice.created" {
 		_, err := repo.New(s.db).GetBillingMetadataOrganizationByStripeCustomerID(ctx, pgtype.Text{String: event.CustomerID, Valid: true})

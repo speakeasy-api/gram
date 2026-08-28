@@ -30,6 +30,22 @@ func (q *Queries) AcquireOpenRouterBillingLock(ctx context.Context, arg AcquireO
 	return err
 }
 
+const acquireOpenRouterBillingSessionLock = `-- name: AcquireOpenRouterBillingSessionLock :exec
+SELECT pg_advisory_lock(
+    hashtextextended('openrouter-' || $1::text || '-billing:' || $2::text, 0)
+)
+`
+
+type AcquireOpenRouterBillingSessionLockParams struct {
+	KeyType        string
+	OrganizationID string
+}
+
+func (q *Queries) AcquireOpenRouterBillingSessionLock(ctx context.Context, arg AcquireOpenRouterBillingSessionLockParams) error {
+	_, err := q.db.Exec(ctx, acquireOpenRouterBillingSessionLock, arg.KeyType, arg.OrganizationID)
+	return err
+}
+
 const acquireStripeSubscriptionActivationLock = `-- name: AcquireStripeSubscriptionActivationLock :exec
 SELECT pg_advisory_xact_lock(hashtextextended($1, 0))
 `
@@ -964,6 +980,46 @@ func (q *Queries) GetPaygInvoiceIdentity(ctx context.Context, organizationID str
 	return i, err
 }
 
+const getPaygOpenRouterChatLifecycleProjection = `-- name: GetPaygOpenRouterChatLifecycleProjection :one
+SELECT
+    organization_metadata.gram_account_type
+  , billing_metadata.stripe_subscription_id
+FROM organization_metadata
+LEFT JOIN billing_metadata
+  ON billing_metadata.organization_id = organization_metadata.id
+WHERE organization_metadata.id = $1
+`
+
+type GetPaygOpenRouterChatLifecycleProjectionRow struct {
+	GramAccountType      string
+	StripeSubscriptionID pgtype.Text
+}
+
+func (q *Queries) GetPaygOpenRouterChatLifecycleProjection(ctx context.Context, organizationID string) (GetPaygOpenRouterChatLifecycleProjectionRow, error) {
+	row := q.db.QueryRow(ctx, getPaygOpenRouterChatLifecycleProjection, organizationID)
+	var i GetPaygOpenRouterChatLifecycleProjectionRow
+	err := row.Scan(&i.GramAccountType, &i.StripeSubscriptionID)
+	return i, err
+}
+
+const getStripeWebhookReceipt = `-- name: GetStripeWebhookReceipt :one
+SELECT organization_id, event_type
+FROM stripe_webhook_receipts
+WHERE stripe_event_id = $1
+`
+
+type GetStripeWebhookReceiptRow struct {
+	OrganizationID string
+	EventType      string
+}
+
+func (q *Queries) GetStripeWebhookReceipt(ctx context.Context, stripeEventID string) (GetStripeWebhookReceiptRow, error) {
+	row := q.db.QueryRow(ctx, getStripeWebhookReceipt, stripeEventID)
+	var i GetStripeWebhookReceiptRow
+	err := row.Scan(&i.OrganizationID, &i.EventType)
+	return i, err
+}
+
 const getTUMMeterReportTotals = `-- name: GetTUMMeterReportTotals :one
 SELECT
     COALESCE(SUM(delta_tokens) FILTER (WHERE delivery_state = 'confirmed'), 0)::bigint AS confirmed_tokens
@@ -1880,6 +1936,24 @@ func (q *Queries) RecoverPaygOpenRouterChatKey(ctx context.Context, arg RecoverP
 	return result.RowsAffected(), nil
 }
 
+const releaseOpenRouterBillingSessionLock = `-- name: ReleaseOpenRouterBillingSessionLock :one
+SELECT pg_advisory_unlock(
+    hashtextextended('openrouter-' || $1::text || '-billing:' || $2::text, 0)
+) AS unlocked
+`
+
+type ReleaseOpenRouterBillingSessionLockParams struct {
+	KeyType        string
+	OrganizationID string
+}
+
+func (q *Queries) ReleaseOpenRouterBillingSessionLock(ctx context.Context, arg ReleaseOpenRouterBillingSessionLockParams) (bool, error) {
+	row := q.db.QueryRow(ctx, releaseOpenRouterBillingSessionLock, arg.KeyType, arg.OrganizationID)
+	var unlocked bool
+	err := row.Scan(&unlocked)
+	return unlocked, err
+}
+
 const setOpenRouterAPIKeyCreatedAtFixture = `-- name: SetOpenRouterAPIKeyCreatedAtFixture :exec
 UPDATE openrouter_api_keys
 SET created_at = $1
@@ -2022,21 +2096,6 @@ func (q *Queries) StoreStripeCustomer(ctx context.Context, arg StoreStripeCustom
 		&i.UpdatedAt,
 	)
 	return i, err
-}
-
-const stripeWebhookReceiptExists = `-- name: StripeWebhookReceiptExists :one
-SELECT EXISTS (
-    SELECT 1
-    FROM stripe_webhook_receipts
-    WHERE stripe_event_id = $1
-) AS received
-`
-
-func (q *Queries) StripeWebhookReceiptExists(ctx context.Context, stripeEventID string) (bool, error) {
-	row := q.db.QueryRow(ctx, stripeWebhookReceiptExists, stripeEventID)
-	var received bool
-	err := row.Scan(&received)
-	return received, err
 }
 
 const tryInsertStripeWebhookReceipt = `-- name: TryInsertStripeWebhookReceipt :one

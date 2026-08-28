@@ -296,12 +296,10 @@ WITH inserted AS (
 )
 SELECT EXISTS (SELECT 1 FROM inserted) AS inserted;
 
--- name: StripeWebhookReceiptExists :one
-SELECT EXISTS (
-    SELECT 1
-    FROM stripe_webhook_receipts
-    WHERE stripe_event_id = @stripe_event_id
-) AS received;
+-- name: GetStripeWebhookReceipt :one
+SELECT organization_id, event_type
+FROM stripe_webhook_receipts
+WHERE stripe_event_id = @stripe_event_id;
 
 -- name: AcquireStripeSubscriptionActivationLock :exec
 -- Serializes distinct Stripe events that refer to the same subscription.
@@ -313,6 +311,25 @@ SELECT pg_advisory_xact_lock(hashtextextended(@stripe_subscription_id, 0));
 SELECT pg_advisory_xact_lock(
     hashtextextended('openrouter-' || @key_type::text || '-billing:' || @organization_id::text, 0)
 );
+
+-- name: AcquireOpenRouterBillingSessionLock :exec
+SELECT pg_advisory_lock(
+    hashtextextended('openrouter-' || @key_type::text || '-billing:' || @organization_id::text, 0)
+);
+
+-- name: ReleaseOpenRouterBillingSessionLock :one
+SELECT pg_advisory_unlock(
+    hashtextextended('openrouter-' || @key_type::text || '-billing:' || @organization_id::text, 0)
+) AS unlocked;
+
+-- name: GetPaygOpenRouterChatLifecycleProjection :one
+SELECT
+    organization_metadata.gram_account_type
+  , billing_metadata.stripe_subscription_id
+FROM organization_metadata
+LEFT JOIN billing_metadata
+  ON billing_metadata.organization_id = organization_metadata.id
+WHERE organization_metadata.id = @organization_id;
 
 -- name: GetPaygActivationState :one
 SELECT

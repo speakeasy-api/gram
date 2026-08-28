@@ -46,6 +46,7 @@ type fakeStripeWebhookClient struct {
 	checkoutError error
 	invoice       *stripeclient.InvoiceState
 	invoiceError  error
+	checkoutCalls atomic.Int32
 	invoiceCalls  atomic.Int32
 	verifyCalls   atomic.Int32
 }
@@ -61,6 +62,7 @@ func (f *fakeStripeWebhookClient) CreateCheckoutSession(context.Context, stripec
 }
 
 func (f *fakeStripeWebhookClient) GetCheckoutSession(context.Context, string) (*stripeclient.CheckoutSessionState, error) {
+	f.checkoutCalls.Add(1)
 	return f.checkout, f.checkoutError
 }
 
@@ -200,6 +202,7 @@ func newStripeWebhookService(t *testing.T, customerID string, handler stripeWebh
 		db:            db,
 		stripeClient:  client,
 		stripeHandler: handler,
+		openRouter:    openrouter.NewDevelopment("test-key"),
 	}, db
 }
 
@@ -1479,6 +1482,66 @@ func TestStripeCheckoutExactReplaySkipsCurrentStateRetrieval(t *testing.T) {
 	require.Equal(t, 1, paygSchedulingIntentCount(t, service.db))
 }
 
+func TestStripeCheckoutExactReplayRepairsPostCommitOpenRouterFailure(t *testing.T) {
+	t.Parallel()
+
+	service, db := newStripeWebhookService(t, "customer_placeholder", nil)
+	configurePaygCheckout(t, service, "event_repair_replay", "subscription_repair_replay", "active")
+	createOpenRouterKeyFixture(t, db, openrouter.KeyTypeChat, 17)
+	setOpenRouterKeyLifecycleFixture(t, db, openrouter.KeyTypeChat, true, []string{"billing_inactive"}, 17)
+
+	var patches atomic.Int32
+	var failPatches atomic.Bool
+	failPatches.Store(true)
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPatch {
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			return
+		}
+		patches.Add(1)
+		if failPatches.Load() {
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"data": map[string]any{"limit": 100.0, "hash": "hash_placeholder_chat"},
+		})
+	}))
+	t.Cleanup(upstream.Close)
+	option, err := openrouter.WithTestBaseURL(upstream.URL)
+	require.NoError(t, err)
+	tracerProvider := testenv.NewTracerProvider(t)
+	guardianPolicy, err := guardian.NewUnsafePolicy(tracerProvider, []string{})
+	require.NoError(t, err)
+	service.openRouter = openrouter.New(
+		testenv.NewLogger(t), tracerProvider, guardianPolicy, db, "test", "provisioning_key_placeholder",
+		nil, nil, nil, testenv.NewEncryptionClient(t), option,
+	)
+
+	require.Equal(t, http.StatusInternalServerError, serveStripeWebhook(service, "first").Code)
+	failedPatchAttempts := patches.Load()
+	require.Positive(t, failedPatchAttempts)
+	failPatches.Store(false)
+	client, ok := service.stripeClient.(*fakeStripeWebhookClient)
+	require.True(t, ok)
+	require.EqualValues(t, 1, client.checkoutCalls.Load())
+	client.checkoutError = errors.New("exact replay must not fetch Stripe checkout state")
+
+	require.Equal(t, http.StatusOK, serveStripeWebhook(service, "exact replay").Code)
+	require.Greater(t, patches.Load(), failedPatchAttempts)
+	require.EqualValues(t, 1, client.checkoutCalls.Load())
+	require.Equal(t, 1, stripeWebhookReceiptCount(t, db))
+	require.Equal(t, 1, organizationBillingActionIntentCount(t, db, audit.ActionOrganizationPaygActivated))
+
+	chat := openRouterKeyLifecycleFixture(t, db, openrouter.KeyTypeChat)
+	limit, ok := openrouter.AccountTypeCreditLimit("payg")
+	require.True(t, ok)
+	require.EqualValues(t, limit, chat.MonthlyCredits)
+	require.Empty(t, chat.DisableCauses)
+	require.False(t, chat.Disabled)
+}
+
 func TestStripeCheckoutAuditFailureRollsBackActivationAndSchedulingIntent(t *testing.T) {
 	t.Parallel()
 
@@ -1700,6 +1763,120 @@ func TestStripeSubscriptionDeletionPostCommitReconcileFailurePreservesDurableInt
 	require.True(t, sawCommittedIntent.Load())
 	require.Equal(t, 1, stripeWebhookReceiptCount(t, db))
 	require.Equal(t, 1, organizationBillingActionIntentCount(t, db, audit.ActionOrganizationPaygDeactivated))
+}
+
+func TestStripeSubscriptionDeletionExactReplayRepairsPostCommitOpenRouterFailure(t *testing.T) {
+	t.Parallel()
+
+	service, db := newStripeWebhookService(t, "customer_placeholder", nil)
+	metrics := configurePaygSubscriptionDeletion(t, service, "event_deletion_repair_replay", "subscription_current", "subscription_current")
+	createOpenRouterKeyFixture(t, db, openrouter.KeyTypeChat, 321)
+
+	var patches atomic.Int32
+	var failPatches atomic.Bool
+	failPatches.Store(true)
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPatch {
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			return
+		}
+		patches.Add(1)
+		if failPatches.Load() {
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"data": map[string]any{"limit": 321.0, "hash": "hash_placeholder_chat"},
+		})
+	}))
+	t.Cleanup(upstream.Close)
+	option, err := openrouter.WithTestBaseURL(upstream.URL)
+	require.NoError(t, err)
+	tracerProvider := testenv.NewTracerProvider(t)
+	guardianPolicy, err := guardian.NewUnsafePolicy(tracerProvider, []string{})
+	require.NoError(t, err)
+	service.openRouter = openrouter.New(
+		testenv.NewLogger(t), tracerProvider, guardianPolicy, db, "test", "provisioning_key_placeholder",
+		nil, nil, nil, testenv.NewEncryptionClient(t), option,
+	)
+
+	require.Equal(t, http.StatusInternalServerError, serveStripeWebhook(service, "first").Code)
+	failedPatchAttempts := patches.Load()
+	require.Positive(t, failedPatchAttempts)
+	failPatches.Store(false)
+
+	require.Equal(t, http.StatusOK, serveStripeWebhook(service, "exact replay").Code)
+	require.Greater(t, patches.Load(), failedPatchAttempts)
+	require.EqualValues(t, 1, metrics.subscriptionLosses.Load())
+	require.Equal(t, 1, stripeWebhookReceiptCount(t, db))
+	require.Equal(t, 1, organizationBillingActionIntentCount(t, db, audit.ActionOrganizationPaygDeactivated))
+	chat := openRouterKeyLifecycleFixture(t, db, openrouter.KeyTypeChat)
+	require.True(t, chat.Disabled)
+	require.Equal(t, []string{"billing_inactive"}, chat.DisableCauses)
+}
+
+func TestStripeSubscriptionDeletionReplayCannotOverrideLaterConversion(t *testing.T) {
+	t.Parallel()
+
+	service, db := newStripeWebhookService(t, "customer_placeholder", nil)
+	metrics := configurePaygSubscriptionDeletion(t, service, "event_loss_before_conversion", "subscription_old", "subscription_old")
+	client, ok := service.stripeClient.(*fakeStripeWebhookClient)
+	require.True(t, ok)
+	deletedEvent := client.verify
+	createOpenRouterKeyFixture(t, db, openrouter.KeyTypeChat, 73)
+
+	var patches atomic.Int32
+	var failPatches atomic.Bool
+	failPatches.Store(true)
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPatch {
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			return
+		}
+		patches.Add(1)
+		if failPatches.Load() {
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"data": map[string]any{"limit": 100.0, "hash": "hash_placeholder_chat"},
+		})
+	}))
+	t.Cleanup(upstream.Close)
+	option, err := openrouter.WithTestBaseURL(upstream.URL)
+	require.NoError(t, err)
+	tracerProvider := testenv.NewTracerProvider(t)
+	guardianPolicy, err := guardian.NewUnsafePolicy(tracerProvider, []string{})
+	require.NoError(t, err)
+	service.openRouter = openrouter.New(
+		testenv.NewLogger(t), tracerProvider, guardianPolicy, db, "test", "provisioning_key_placeholder",
+		nil, nil, nil, testenv.NewEncryptionClient(t), option,
+	)
+
+	require.Equal(t, http.StatusInternalServerError, serveStripeWebhook(service, "loss").Code)
+	require.Positive(t, patches.Load())
+	failPatches.Store(false)
+
+	configurePaygCheckout(t, service, "event_conversion_after_loss", "subscription_replacement", "active")
+	require.Equal(t, http.StatusOK, serveStripeWebhook(service, "conversion").Code)
+	patchesAfterConversion := patches.Load()
+	client.verify = deletedEvent
+	require.Equal(t, http.StatusOK, serveStripeWebhook(service, "stale exact loss replay").Code)
+	require.Equal(t, patchesAfterConversion, patches.Load())
+
+	require.EqualValues(t, 1, metrics.subscriptionLosses.Load())
+	require.Equal(t, 2, stripeWebhookReceiptCount(t, db))
+	metadata, err := repo.New(db).GetBillingMetadata(t.Context(), stripeWebhookOrganizationID)
+	require.NoError(t, err)
+	require.Equal(t, "subscription_replacement", metadata.StripeSubscriptionID.String)
+	chat := openRouterKeyLifecycleFixture(t, db, openrouter.KeyTypeChat)
+	limit, ok := openrouter.AccountTypeCreditLimit("payg")
+	require.True(t, ok)
+	require.EqualValues(t, limit, chat.MonthlyCredits)
+	require.Empty(t, chat.DisableCauses)
+	require.False(t, chat.Disabled)
 }
 
 func TestStripeSubscriptionDeletionDeactivatesCurrentPaygBillingAtomically(t *testing.T) {
