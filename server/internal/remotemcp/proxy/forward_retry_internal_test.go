@@ -54,17 +54,18 @@ func TestForwardRequestWithRetryClosesBodyOnRetryerError(t *testing.T) {
 		UpstreamResponseRetryer: func(_ context.Context, _ *http.Response) (*UpstreamResponseRetry, error) {
 			return nil, retryerErr
 		},
-		UserRequestInterceptors:           nil,
-		InitializeRequestInterceptors:     nil,
-		RemoteMessageInterceptors:         nil,
-		ToolsCallRequestInterceptors:      nil,
-		ToolsCallResponseInterceptors:     nil,
-		ToolsListRequestInterceptors:      nil,
-		ToolsListResponseInterceptors:     nil,
-		ResourcesReadRequestInterceptors:  nil,
-		ResourcesReadResponseInterceptors: nil,
-		ResourcesListRequestInterceptors:  nil,
-		ResourcesListResponseInterceptors: nil,
+		UserRequestObservationInterceptors: nil,
+		UserRequestInterceptors:            nil,
+		InitializeRequestInterceptors:      nil,
+		RemoteMessageInterceptors:          nil,
+		ToolsCallRequestInterceptors:       nil,
+		ToolsCallResponseInterceptors:      nil,
+		ToolsListRequestInterceptors:       nil,
+		ToolsListResponseInterceptors:      nil,
+		ResourcesReadRequestInterceptors:   nil,
+		ResourcesReadResponseInterceptors:  nil,
+		ResourcesListRequestInterceptors:   nil,
+		ResourcesListResponseInterceptors:  nil,
 	}
 
 	req := httptest.NewRequest(http.MethodPost, "http://gram.local/mcp", nil)

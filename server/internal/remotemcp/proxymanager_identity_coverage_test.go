@@ -29,7 +29,7 @@ func TestProxyBuildOption_ToolsCallIdentityCoverage(t *testing.T) {
 		)
 	}
 	hasUserInterceptor := func(p *proxy.Proxy, name string) bool {
-		for _, interceptor := range p.UserRequestInterceptors {
+		for _, interceptor := range p.UserRequestObservationInterceptors {
 			if interceptor != nil && interceptor.Name() == name {
 				return true
 			}
