@@ -96,7 +96,6 @@ var _ = Service("platformKillswitches", func() {
 	declareLifecycleErrors()
 	declareUnavailable()
 	HTTP(func() {
-		shared.DeclareHTTPErrorResponses()
 		Response("operation_conflict", StatusConflict, func() { ContentType("application/json") })
 		Response("version_conflict", StatusConflict, func() { ContentType("application/json") })
 		Response(string(oops.CodeUnavailable), StatusServiceUnavailable, func() { ContentType("application/json") })
@@ -197,7 +196,7 @@ var _ = Service("platformKillswitches", func() {
 		Result(func() {
 			Required("prescriptions")
 			Attribute("prescriptions", ArrayOf(Prescription))
-			Attribute("next_after_id", String, func() { Format(FormatUUID) })
+			Attribute("next_after_id", String, "Cursor for the next page; empty when exhausted.")
 		})
 		HTTP(func() {
 			GET("/rpc/platformKillswitches.listPrescriptions")

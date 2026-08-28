@@ -135,7 +135,8 @@ type ListPrescriptionsPayload struct {
 // service listPrescriptions method.
 type ListPrescriptionsResult struct {
 	Prescriptions []*PlatformKillswitchPrescription
-	NextAfterID   *string
+	// Cursor for the next page; empty when exhausted.
+	NextAfterID *string
 }
 
 type PlatformKillswitchDefinition struct {

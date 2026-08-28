@@ -13,6 +13,9 @@ import {
 } from "./platformkillswitchprescription.js";
 
 export type ListPrescriptionsResponseBody = {
+  /**
+   * Cursor for the next page; empty when exhausted.
+   */
   nextAfterId?: string | undefined;
   prescriptions: Array<PlatformKillswitchPrescription>;
 };

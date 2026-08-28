@@ -7894,9 +7894,9 @@ examples:
       responses:
         "200":
           application/json: {"prescription_id": "72cc733a-164c-435f-bec5-66a24c7112c6", "replayed": false, "state": "Arizona", "version": 971150}
-        "400":
+        "409":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
-        "500":
+        "503":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
   platformKillswitches#changePrescription:
     speakeasy-default-platform-killswitches#change-prescription:
@@ -7905,9 +7905,9 @@ examples:
       responses:
         "200":
           application/json: {"prescription_id": "f947951e-8ce8-4f05-ace8-63e85fc1468a", "replayed": true, "state": "Michigan", "version": 533195}
-        "400":
+        "409":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
-        "500":
+        "503":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
   platformKillswitches#deactivatePrescription:
     speakeasy-default-platform-killswitches#deactivate-prescription:
@@ -7916,9 +7916,9 @@ examples:
       responses:
         "200":
           application/json: {"prescription_id": "43461402-7bc9-4d52-99d9-c9790a323db8", "replayed": true, "state": "Michigan", "version": 614797}
-        "400":
+        "409":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
-        "500":
+        "503":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
   platformKillswitches#getPrescription:
     speakeasy-default-platform-killswitches#get-prescription:
@@ -7929,18 +7929,18 @@ examples:
       responses:
         "200":
           application/json: {"definition": "<value>", "external_note": "<value>", "id": "917cf906-b955-4419-b763-f8d00a1c5ed6", "internal_note": "<value>", "organization_id": "<id>", "principal_key": "<value>", "principal_kind": "<value>", "resource_kind": "<value>", "resource_scope": "<value>", "selected_resource_keys": ["<value 1>", "<value 2>"], "starts_at": "2025-06-13T09:13:01.136Z", "state": "Kansas", "version": 551305}
-        "400":
+        "409":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
-        "500":
+        "503":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
   platformKillswitches#listDefinitions:
     speakeasy-default-platform-killswitches#list-definitions:
       responses:
         "200":
           application/json: {"definitions": []}
-        "400":
+        "409":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
-        "500":
+        "503":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
   platformKillswitches#listPrescriptions:
     speakeasy-default-platform-killswitches#list-prescriptions:
@@ -7950,9 +7950,9 @@ examples:
       responses:
         "200":
           application/json: {"prescriptions": [{"definition": "<value>", "external_note": "<value>", "id": "b62ef8ef-7da2-4c23-86c5-def4d5bba2b1", "internal_note": "<value>", "organization_id": "<id>", "principal_key": "<value>", "principal_kind": "<value>", "resource_kind": "<value>", "resource_scope": "<value>", "selected_resource_keys": ["<value 1>", "<value 2>", "<value 3>"], "starts_at": "2024-01-24T19:46:09.708Z", "state": "Idaho", "version": 191198}]}
-        "400":
+        "409":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
-        "500":
+        "503":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
   previewSpendRule:
     speakeasy-default-preview-spend-rule:
