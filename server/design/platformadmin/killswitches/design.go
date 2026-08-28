@@ -96,6 +96,7 @@ var _ = Service("platformKillswitches", func() {
 	declareLifecycleErrors()
 	declareUnavailable()
 	HTTP(func() {
+		shared.DeclareHTTPErrorResponses()
 		Response("operation_conflict", StatusConflict, func() { ContentType("application/json") })
 		Response("version_conflict", StatusConflict, func() { ContentType("application/json") })
 		Response(string(oops.CodeUnavailable), StatusServiceUnavailable, func() { ContentType("application/json") })

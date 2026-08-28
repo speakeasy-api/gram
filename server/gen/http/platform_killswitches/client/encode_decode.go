@@ -55,8 +55,18 @@ func EncodeListDefinitionsRequest(encoder func(*http.Request) goahttp.Encoder) f
 // the platformKillswitches listDefinitions endpoint. restoreBody controls
 // whether the response body should be restored after having been read.
 // DecodeListDefinitionsResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
 //   - "operation_conflict" (type *goa.ServiceError): http.StatusConflict
 //   - "version_conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
 //   - "unavailable" (type *goa.ServiceError): http.StatusServiceUnavailable
 //   - error: internal error
 func DecodeListDefinitionsResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
@@ -89,9 +99,79 @@ func DecodeListDefinitionsResponse(decoder func(*http.Response) goahttp.Decoder,
 			}
 			res := NewListDefinitionsResultOK(&body)
 			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body ListDefinitionsUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("platformKillswitches", "listDefinitions", err)
+			}
+			err = ValidateListDefinitionsUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("platformKillswitches", "listDefinitions", err)
+			}
+			return nil, NewListDefinitionsUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body ListDefinitionsForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("platformKillswitches", "listDefinitions", err)
+			}
+			err = ValidateListDefinitionsForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("platformKillswitches", "listDefinitions", err)
+			}
+			return nil, NewListDefinitionsForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body ListDefinitionsBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("platformKillswitches", "listDefinitions", err)
+			}
+			err = ValidateListDefinitionsBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("platformKillswitches", "listDefinitions", err)
+			}
+			return nil, NewListDefinitionsBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body ListDefinitionsNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("platformKillswitches", "listDefinitions", err)
+			}
+			err = ValidateListDefinitionsNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("platformKillswitches", "listDefinitions", err)
+			}
+			return nil, NewListDefinitionsNotFound(&body)
 		case http.StatusConflict:
 			en := resp.Header.Get("goa-error")
 			switch en {
+			case "conflict":
+				var (
+					body ListDefinitionsConflictResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("platformKillswitches", "listDefinitions", err)
+				}
+				err = ValidateListDefinitionsConflictResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("platformKillswitches", "listDefinitions", err)
+				}
+				return nil, NewListDefinitionsConflict(&body)
 			case "operation_conflict":
 				var (
 					body ListDefinitionsOperationConflictResponseBody
@@ -124,6 +204,83 @@ func DecodeListDefinitionsResponse(decoder func(*http.Response) goahttp.Decoder,
 				body, _ := io.ReadAll(resp.Body)
 				return nil, goahttp.ErrInvalidResponse("platformKillswitches", "listDefinitions", resp.StatusCode, string(body))
 			}
+		case http.StatusUnsupportedMediaType:
+			var (
+				body ListDefinitionsUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("platformKillswitches", "listDefinitions", err)
+			}
+			err = ValidateListDefinitionsUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("platformKillswitches", "listDefinitions", err)
+			}
+			return nil, NewListDefinitionsUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body ListDefinitionsInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("platformKillswitches", "listDefinitions", err)
+			}
+			err = ValidateListDefinitionsInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("platformKillswitches", "listDefinitions", err)
+			}
+			return nil, NewListDefinitionsInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body ListDefinitionsInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("platformKillswitches", "listDefinitions", err)
+				}
+				err = ValidateListDefinitionsInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("platformKillswitches", "listDefinitions", err)
+				}
+				return nil, NewListDefinitionsInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body ListDefinitionsUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("platformKillswitches", "listDefinitions", err)
+				}
+				err = ValidateListDefinitionsUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("platformKillswitches", "listDefinitions", err)
+				}
+				return nil, NewListDefinitionsUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("platformKillswitches", "listDefinitions", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body ListDefinitionsGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("platformKillswitches", "listDefinitions", err)
+			}
+			err = ValidateListDefinitionsGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("platformKillswitches", "listDefinitions", err)
+			}
+			return nil, NewListDefinitionsGatewayError(&body)
 		case http.StatusServiceUnavailable:
 			var (
 				body ListDefinitionsUnavailableResponseBody
@@ -185,8 +342,18 @@ func EncodeActivatePrescriptionRequest(encoder func(*http.Request) goahttp.Encod
 // by the platformKillswitches activatePrescription endpoint. restoreBody
 // controls whether the response body should be restored after having been read.
 // DecodeActivatePrescriptionResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
 //   - "operation_conflict" (type *goa.ServiceError): http.StatusConflict
 //   - "version_conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
 //   - "unavailable" (type *goa.ServiceError): http.StatusServiceUnavailable
 //   - error: internal error
 func DecodeActivatePrescriptionResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
@@ -219,9 +386,79 @@ func DecodeActivatePrescriptionResponse(decoder func(*http.Response) goahttp.Dec
 			}
 			res := NewActivatePrescriptionPlatformKillswitchMutationResultOK(&body)
 			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body ActivatePrescriptionUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("platformKillswitches", "activatePrescription", err)
+			}
+			err = ValidateActivatePrescriptionUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("platformKillswitches", "activatePrescription", err)
+			}
+			return nil, NewActivatePrescriptionUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body ActivatePrescriptionForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("platformKillswitches", "activatePrescription", err)
+			}
+			err = ValidateActivatePrescriptionForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("platformKillswitches", "activatePrescription", err)
+			}
+			return nil, NewActivatePrescriptionForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body ActivatePrescriptionBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("platformKillswitches", "activatePrescription", err)
+			}
+			err = ValidateActivatePrescriptionBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("platformKillswitches", "activatePrescription", err)
+			}
+			return nil, NewActivatePrescriptionBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body ActivatePrescriptionNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("platformKillswitches", "activatePrescription", err)
+			}
+			err = ValidateActivatePrescriptionNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("platformKillswitches", "activatePrescription", err)
+			}
+			return nil, NewActivatePrescriptionNotFound(&body)
 		case http.StatusConflict:
 			en := resp.Header.Get("goa-error")
 			switch en {
+			case "conflict":
+				var (
+					body ActivatePrescriptionConflictResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("platformKillswitches", "activatePrescription", err)
+				}
+				err = ValidateActivatePrescriptionConflictResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("platformKillswitches", "activatePrescription", err)
+				}
+				return nil, NewActivatePrescriptionConflict(&body)
 			case "operation_conflict":
 				var (
 					body ActivatePrescriptionOperationConflictResponseBody
@@ -254,6 +491,83 @@ func DecodeActivatePrescriptionResponse(decoder func(*http.Response) goahttp.Dec
 				body, _ := io.ReadAll(resp.Body)
 				return nil, goahttp.ErrInvalidResponse("platformKillswitches", "activatePrescription", resp.StatusCode, string(body))
 			}
+		case http.StatusUnsupportedMediaType:
+			var (
+				body ActivatePrescriptionUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("platformKillswitches", "activatePrescription", err)
+			}
+			err = ValidateActivatePrescriptionUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("platformKillswitches", "activatePrescription", err)
+			}
+			return nil, NewActivatePrescriptionUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body ActivatePrescriptionInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("platformKillswitches", "activatePrescription", err)
+			}
+			err = ValidateActivatePrescriptionInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("platformKillswitches", "activatePrescription", err)
+			}
+			return nil, NewActivatePrescriptionInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body ActivatePrescriptionInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("platformKillswitches", "activatePrescription", err)
+				}
+				err = ValidateActivatePrescriptionInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("platformKillswitches", "activatePrescription", err)
+				}
+				return nil, NewActivatePrescriptionInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body ActivatePrescriptionUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("platformKillswitches", "activatePrescription", err)
+				}
+				err = ValidateActivatePrescriptionUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("platformKillswitches", "activatePrescription", err)
+				}
+				return nil, NewActivatePrescriptionUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("platformKillswitches", "activatePrescription", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body ActivatePrescriptionGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("platformKillswitches", "activatePrescription", err)
+			}
+			err = ValidateActivatePrescriptionGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("platformKillswitches", "activatePrescription", err)
+			}
+			return nil, NewActivatePrescriptionGatewayError(&body)
 		case http.StatusServiceUnavailable:
 			var (
 				body ActivatePrescriptionUnavailableResponseBody
@@ -315,8 +629,18 @@ func EncodeChangePrescriptionRequest(encoder func(*http.Request) goahttp.Encoder
 // the platformKillswitches changePrescription endpoint. restoreBody controls
 // whether the response body should be restored after having been read.
 // DecodeChangePrescriptionResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
 //   - "operation_conflict" (type *goa.ServiceError): http.StatusConflict
 //   - "version_conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
 //   - "unavailable" (type *goa.ServiceError): http.StatusServiceUnavailable
 //   - error: internal error
 func DecodeChangePrescriptionResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
@@ -349,9 +673,79 @@ func DecodeChangePrescriptionResponse(decoder func(*http.Response) goahttp.Decod
 			}
 			res := NewChangePrescriptionPlatformKillswitchMutationResultOK(&body)
 			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body ChangePrescriptionUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("platformKillswitches", "changePrescription", err)
+			}
+			err = ValidateChangePrescriptionUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("platformKillswitches", "changePrescription", err)
+			}
+			return nil, NewChangePrescriptionUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body ChangePrescriptionForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("platformKillswitches", "changePrescription", err)
+			}
+			err = ValidateChangePrescriptionForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("platformKillswitches", "changePrescription", err)
+			}
+			return nil, NewChangePrescriptionForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body ChangePrescriptionBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("platformKillswitches", "changePrescription", err)
+			}
+			err = ValidateChangePrescriptionBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("platformKillswitches", "changePrescription", err)
+			}
+			return nil, NewChangePrescriptionBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body ChangePrescriptionNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("platformKillswitches", "changePrescription", err)
+			}
+			err = ValidateChangePrescriptionNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("platformKillswitches", "changePrescription", err)
+			}
+			return nil, NewChangePrescriptionNotFound(&body)
 		case http.StatusConflict:
 			en := resp.Header.Get("goa-error")
 			switch en {
+			case "conflict":
+				var (
+					body ChangePrescriptionConflictResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("platformKillswitches", "changePrescription", err)
+				}
+				err = ValidateChangePrescriptionConflictResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("platformKillswitches", "changePrescription", err)
+				}
+				return nil, NewChangePrescriptionConflict(&body)
 			case "operation_conflict":
 				var (
 					body ChangePrescriptionOperationConflictResponseBody
@@ -384,6 +778,83 @@ func DecodeChangePrescriptionResponse(decoder func(*http.Response) goahttp.Decod
 				body, _ := io.ReadAll(resp.Body)
 				return nil, goahttp.ErrInvalidResponse("platformKillswitches", "changePrescription", resp.StatusCode, string(body))
 			}
+		case http.StatusUnsupportedMediaType:
+			var (
+				body ChangePrescriptionUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("platformKillswitches", "changePrescription", err)
+			}
+			err = ValidateChangePrescriptionUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("platformKillswitches", "changePrescription", err)
+			}
+			return nil, NewChangePrescriptionUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body ChangePrescriptionInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("platformKillswitches", "changePrescription", err)
+			}
+			err = ValidateChangePrescriptionInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("platformKillswitches", "changePrescription", err)
+			}
+			return nil, NewChangePrescriptionInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body ChangePrescriptionInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("platformKillswitches", "changePrescription", err)
+				}
+				err = ValidateChangePrescriptionInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("platformKillswitches", "changePrescription", err)
+				}
+				return nil, NewChangePrescriptionInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body ChangePrescriptionUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("platformKillswitches", "changePrescription", err)
+				}
+				err = ValidateChangePrescriptionUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("platformKillswitches", "changePrescription", err)
+				}
+				return nil, NewChangePrescriptionUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("platformKillswitches", "changePrescription", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body ChangePrescriptionGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("platformKillswitches", "changePrescription", err)
+			}
+			err = ValidateChangePrescriptionGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("platformKillswitches", "changePrescription", err)
+			}
+			return nil, NewChangePrescriptionGatewayError(&body)
 		case http.StatusServiceUnavailable:
 			var (
 				body ChangePrescriptionUnavailableResponseBody
@@ -446,8 +917,18 @@ func EncodeDeactivatePrescriptionRequest(encoder func(*http.Request) goahttp.Enc
 // restoreBody controls whether the response body should be restored after
 // having been read.
 // DecodeDeactivatePrescriptionResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
 //   - "operation_conflict" (type *goa.ServiceError): http.StatusConflict
 //   - "version_conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
 //   - "unavailable" (type *goa.ServiceError): http.StatusServiceUnavailable
 //   - error: internal error
 func DecodeDeactivatePrescriptionResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
@@ -480,9 +961,79 @@ func DecodeDeactivatePrescriptionResponse(decoder func(*http.Response) goahttp.D
 			}
 			res := NewDeactivatePrescriptionPlatformKillswitchMutationResultOK(&body)
 			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body DeactivatePrescriptionUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("platformKillswitches", "deactivatePrescription", err)
+			}
+			err = ValidateDeactivatePrescriptionUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("platformKillswitches", "deactivatePrescription", err)
+			}
+			return nil, NewDeactivatePrescriptionUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body DeactivatePrescriptionForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("platformKillswitches", "deactivatePrescription", err)
+			}
+			err = ValidateDeactivatePrescriptionForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("platformKillswitches", "deactivatePrescription", err)
+			}
+			return nil, NewDeactivatePrescriptionForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body DeactivatePrescriptionBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("platformKillswitches", "deactivatePrescription", err)
+			}
+			err = ValidateDeactivatePrescriptionBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("platformKillswitches", "deactivatePrescription", err)
+			}
+			return nil, NewDeactivatePrescriptionBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body DeactivatePrescriptionNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("platformKillswitches", "deactivatePrescription", err)
+			}
+			err = ValidateDeactivatePrescriptionNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("platformKillswitches", "deactivatePrescription", err)
+			}
+			return nil, NewDeactivatePrescriptionNotFound(&body)
 		case http.StatusConflict:
 			en := resp.Header.Get("goa-error")
 			switch en {
+			case "conflict":
+				var (
+					body DeactivatePrescriptionConflictResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("platformKillswitches", "deactivatePrescription", err)
+				}
+				err = ValidateDeactivatePrescriptionConflictResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("platformKillswitches", "deactivatePrescription", err)
+				}
+				return nil, NewDeactivatePrescriptionConflict(&body)
 			case "operation_conflict":
 				var (
 					body DeactivatePrescriptionOperationConflictResponseBody
@@ -515,6 +1066,83 @@ func DecodeDeactivatePrescriptionResponse(decoder func(*http.Response) goahttp.D
 				body, _ := io.ReadAll(resp.Body)
 				return nil, goahttp.ErrInvalidResponse("platformKillswitches", "deactivatePrescription", resp.StatusCode, string(body))
 			}
+		case http.StatusUnsupportedMediaType:
+			var (
+				body DeactivatePrescriptionUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("platformKillswitches", "deactivatePrescription", err)
+			}
+			err = ValidateDeactivatePrescriptionUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("platformKillswitches", "deactivatePrescription", err)
+			}
+			return nil, NewDeactivatePrescriptionUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body DeactivatePrescriptionInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("platformKillswitches", "deactivatePrescription", err)
+			}
+			err = ValidateDeactivatePrescriptionInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("platformKillswitches", "deactivatePrescription", err)
+			}
+			return nil, NewDeactivatePrescriptionInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body DeactivatePrescriptionInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("platformKillswitches", "deactivatePrescription", err)
+				}
+				err = ValidateDeactivatePrescriptionInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("platformKillswitches", "deactivatePrescription", err)
+				}
+				return nil, NewDeactivatePrescriptionInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body DeactivatePrescriptionUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("platformKillswitches", "deactivatePrescription", err)
+				}
+				err = ValidateDeactivatePrescriptionUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("platformKillswitches", "deactivatePrescription", err)
+				}
+				return nil, NewDeactivatePrescriptionUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("platformKillswitches", "deactivatePrescription", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body DeactivatePrescriptionGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("platformKillswitches", "deactivatePrescription", err)
+			}
+			err = ValidateDeactivatePrescriptionGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("platformKillswitches", "deactivatePrescription", err)
+			}
+			return nil, NewDeactivatePrescriptionGatewayError(&body)
 		case http.StatusServiceUnavailable:
 			var (
 				body DeactivatePrescriptionUnavailableResponseBody
@@ -576,8 +1204,18 @@ func EncodeGetPrescriptionRequest(encoder func(*http.Request) goahttp.Encoder) f
 // the platformKillswitches getPrescription endpoint. restoreBody controls
 // whether the response body should be restored after having been read.
 // DecodeGetPrescriptionResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
 //   - "operation_conflict" (type *goa.ServiceError): http.StatusConflict
 //   - "version_conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
 //   - "unavailable" (type *goa.ServiceError): http.StatusServiceUnavailable
 //   - error: internal error
 func DecodeGetPrescriptionResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
@@ -610,9 +1248,79 @@ func DecodeGetPrescriptionResponse(decoder func(*http.Response) goahttp.Decoder,
 			}
 			res := NewGetPrescriptionPlatformKillswitchPrescriptionOK(&body)
 			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body GetPrescriptionUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("platformKillswitches", "getPrescription", err)
+			}
+			err = ValidateGetPrescriptionUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("platformKillswitches", "getPrescription", err)
+			}
+			return nil, NewGetPrescriptionUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body GetPrescriptionForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("platformKillswitches", "getPrescription", err)
+			}
+			err = ValidateGetPrescriptionForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("platformKillswitches", "getPrescription", err)
+			}
+			return nil, NewGetPrescriptionForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body GetPrescriptionBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("platformKillswitches", "getPrescription", err)
+			}
+			err = ValidateGetPrescriptionBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("platformKillswitches", "getPrescription", err)
+			}
+			return nil, NewGetPrescriptionBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body GetPrescriptionNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("platformKillswitches", "getPrescription", err)
+			}
+			err = ValidateGetPrescriptionNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("platformKillswitches", "getPrescription", err)
+			}
+			return nil, NewGetPrescriptionNotFound(&body)
 		case http.StatusConflict:
 			en := resp.Header.Get("goa-error")
 			switch en {
+			case "conflict":
+				var (
+					body GetPrescriptionConflictResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("platformKillswitches", "getPrescription", err)
+				}
+				err = ValidateGetPrescriptionConflictResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("platformKillswitches", "getPrescription", err)
+				}
+				return nil, NewGetPrescriptionConflict(&body)
 			case "operation_conflict":
 				var (
 					body GetPrescriptionOperationConflictResponseBody
@@ -645,6 +1353,83 @@ func DecodeGetPrescriptionResponse(decoder func(*http.Response) goahttp.Decoder,
 				body, _ := io.ReadAll(resp.Body)
 				return nil, goahttp.ErrInvalidResponse("platformKillswitches", "getPrescription", resp.StatusCode, string(body))
 			}
+		case http.StatusUnsupportedMediaType:
+			var (
+				body GetPrescriptionUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("platformKillswitches", "getPrescription", err)
+			}
+			err = ValidateGetPrescriptionUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("platformKillswitches", "getPrescription", err)
+			}
+			return nil, NewGetPrescriptionUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body GetPrescriptionInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("platformKillswitches", "getPrescription", err)
+			}
+			err = ValidateGetPrescriptionInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("platformKillswitches", "getPrescription", err)
+			}
+			return nil, NewGetPrescriptionInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body GetPrescriptionInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("platformKillswitches", "getPrescription", err)
+				}
+				err = ValidateGetPrescriptionInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("platformKillswitches", "getPrescription", err)
+				}
+				return nil, NewGetPrescriptionInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body GetPrescriptionUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("platformKillswitches", "getPrescription", err)
+				}
+				err = ValidateGetPrescriptionUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("platformKillswitches", "getPrescription", err)
+				}
+				return nil, NewGetPrescriptionUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("platformKillswitches", "getPrescription", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body GetPrescriptionGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("platformKillswitches", "getPrescription", err)
+			}
+			err = ValidateGetPrescriptionGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("platformKillswitches", "getPrescription", err)
+			}
+			return nil, NewGetPrescriptionGatewayError(&body)
 		case http.StatusServiceUnavailable:
 			var (
 				body GetPrescriptionUnavailableResponseBody
@@ -711,8 +1496,18 @@ func EncodeListPrescriptionsRequest(encoder func(*http.Request) goahttp.Encoder)
 // the platformKillswitches listPrescriptions endpoint. restoreBody controls
 // whether the response body should be restored after having been read.
 // DecodeListPrescriptionsResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
 //   - "operation_conflict" (type *goa.ServiceError): http.StatusConflict
 //   - "version_conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
 //   - "unavailable" (type *goa.ServiceError): http.StatusServiceUnavailable
 //   - error: internal error
 func DecodeListPrescriptionsResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
@@ -745,9 +1540,79 @@ func DecodeListPrescriptionsResponse(decoder func(*http.Response) goahttp.Decode
 			}
 			res := NewListPrescriptionsResultOK(&body)
 			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body ListPrescriptionsUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("platformKillswitches", "listPrescriptions", err)
+			}
+			err = ValidateListPrescriptionsUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("platformKillswitches", "listPrescriptions", err)
+			}
+			return nil, NewListPrescriptionsUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body ListPrescriptionsForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("platformKillswitches", "listPrescriptions", err)
+			}
+			err = ValidateListPrescriptionsForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("platformKillswitches", "listPrescriptions", err)
+			}
+			return nil, NewListPrescriptionsForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body ListPrescriptionsBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("platformKillswitches", "listPrescriptions", err)
+			}
+			err = ValidateListPrescriptionsBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("platformKillswitches", "listPrescriptions", err)
+			}
+			return nil, NewListPrescriptionsBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body ListPrescriptionsNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("platformKillswitches", "listPrescriptions", err)
+			}
+			err = ValidateListPrescriptionsNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("platformKillswitches", "listPrescriptions", err)
+			}
+			return nil, NewListPrescriptionsNotFound(&body)
 		case http.StatusConflict:
 			en := resp.Header.Get("goa-error")
 			switch en {
+			case "conflict":
+				var (
+					body ListPrescriptionsConflictResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("platformKillswitches", "listPrescriptions", err)
+				}
+				err = ValidateListPrescriptionsConflictResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("platformKillswitches", "listPrescriptions", err)
+				}
+				return nil, NewListPrescriptionsConflict(&body)
 			case "operation_conflict":
 				var (
 					body ListPrescriptionsOperationConflictResponseBody
@@ -780,6 +1645,83 @@ func DecodeListPrescriptionsResponse(decoder func(*http.Response) goahttp.Decode
 				body, _ := io.ReadAll(resp.Body)
 				return nil, goahttp.ErrInvalidResponse("platformKillswitches", "listPrescriptions", resp.StatusCode, string(body))
 			}
+		case http.StatusUnsupportedMediaType:
+			var (
+				body ListPrescriptionsUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("platformKillswitches", "listPrescriptions", err)
+			}
+			err = ValidateListPrescriptionsUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("platformKillswitches", "listPrescriptions", err)
+			}
+			return nil, NewListPrescriptionsUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body ListPrescriptionsInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("platformKillswitches", "listPrescriptions", err)
+			}
+			err = ValidateListPrescriptionsInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("platformKillswitches", "listPrescriptions", err)
+			}
+			return nil, NewListPrescriptionsInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body ListPrescriptionsInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("platformKillswitches", "listPrescriptions", err)
+				}
+				err = ValidateListPrescriptionsInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("platformKillswitches", "listPrescriptions", err)
+				}
+				return nil, NewListPrescriptionsInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body ListPrescriptionsUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("platformKillswitches", "listPrescriptions", err)
+				}
+				err = ValidateListPrescriptionsUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("platformKillswitches", "listPrescriptions", err)
+				}
+				return nil, NewListPrescriptionsUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("platformKillswitches", "listPrescriptions", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body ListPrescriptionsGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("platformKillswitches", "listPrescriptions", err)
+			}
+			err = ValidateListPrescriptionsGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("platformKillswitches", "listPrescriptions", err)
+			}
+			return nil, NewListPrescriptionsGatewayError(&body)
 		case http.StatusServiceUnavailable:
 			var (
 				body ListPrescriptionsUnavailableResponseBody
