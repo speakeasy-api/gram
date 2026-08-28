@@ -81,8 +81,8 @@ func TestReserve_ScopedByClient(t *testing.T) {
 
 	guard, _ := newTestGuard(t, time.Hour)
 
-	first := Key{Issuer: t.Name(), Client: "client-one", ID: "shared-jti"}
-	second := Key{Issuer: t.Name(), Client: "client-two", ID: "shared-jti"}
+	first := Key{Issuer: t.Name(), Party: "client-one", ID: "shared-jti"}
+	second := Key{Issuer: t.Name(), Party: "client-two", ID: "shared-jti"}
 
 	claimed, err := guard.Reserve(t.Context(), first, time.Now().Add(time.Minute))
 	require.NoError(t, err)
@@ -100,8 +100,8 @@ func TestReserve_ScopedByIssuer(t *testing.T) {
 
 	guard, _ := newTestGuard(t, time.Hour)
 
-	first := Key{Issuer: t.Name() + "-issuer-one", Client: "client", ID: "shared-jti"}
-	second := Key{Issuer: t.Name() + "-issuer-two", Client: "client", ID: "shared-jti"}
+	first := Key{Issuer: t.Name() + "-issuer-one", Party: "client", ID: "shared-jti"}
+	second := Key{Issuer: t.Name() + "-issuer-two", Party: "client", ID: "shared-jti"}
 
 	claimed, err := guard.Reserve(t.Context(), first, time.Now().Add(time.Minute))
 	require.NoError(t, err)
@@ -112,16 +112,63 @@ func TestReserve_ScopedByIssuer(t *testing.T) {
 	require.True(t, claimed, "another issuer's identical jti must not be treated as a replay")
 }
 
-// Length-prefixed hashing keeps the three parts distinguishable. Without it
-// these two keys would encode identically and one client could burn the
-// other's identifiers.
+// Length-prefixed hashing keeps the parts distinguishable. Without it these
+// two keys would encode identically and one client could burn the other's
+// identifiers.
 func TestKey_PunctuationCannotCollide(t *testing.T) {
 	t.Parallel()
 
-	split := Key{Issuer: "iss", Client: "a:b", ID: "c"}
-	shifted := Key{Issuer: "iss", Client: "a", ID: "b:c"}
+	split := Key{Issuer: "iss", Party: "a:b", ID: "c"}
+	shifted := Key{Issuer: "iss", Party: "a", ID: "b:c"}
 
 	require.NotEqual(t, split.storageKey(), shifted.storageKey())
+}
+
+// The same property across the Party/Subject boundary. This is why Subject is
+// a part of its own rather than something a caller folds into Party: a
+// workload's external subject is attacker-influenced and colon-heavy — a
+// GitHub Actions sub reads `repo:org/name:ref:refs/heads/main` — so a caller
+// concatenating the two would reintroduce exactly the collision the length
+// prefixes exist to close.
+func TestKey_SubjectCannotCollideWithParty(t *testing.T) {
+	t.Parallel()
+
+	split := Key{Issuer: "iss", Party: "a:b", Subject: "c", ID: "jti"}
+	shifted := Key{Issuer: "iss", Party: "a", Subject: "b:c", ID: "jti"}
+
+	require.NotEqual(t, split.storageKey(), shifted.storageKey())
+}
+
+// Two workloads vouched for by one issuer must not share a keyspace. A jti is
+// unique per issuer, never per workload, so without Subject in the key the
+// first workload to present an identifier would burn it for the second.
+func TestReserve_ScopedBySubject(t *testing.T) {
+	t.Parallel()
+
+	guard, _ := newTestGuard(t, time.Hour)
+
+	first := Key{Issuer: t.Name(), Party: "issuer-ref", Subject: "workload-one", ID: "shared-jti"}
+	second := Key{Issuer: t.Name(), Party: "issuer-ref", Subject: "workload-two", ID: "shared-jti"}
+
+	claimed, err := guard.Reserve(t.Context(), first, time.Now().Add(time.Minute))
+	require.NoError(t, err)
+	require.True(t, claimed)
+
+	claimed, err = guard.Reserve(t.Context(), second, time.Now().Add(time.Minute))
+	require.NoError(t, err)
+	require.True(t, claimed, "another workload's identical jti must not be treated as a replay")
+}
+
+// An empty Subject is legitimate — a client assertion has no second identity
+// to name — so it must not be refused the way the required parts are.
+func TestReserve_EmptySubjectAccepted(t *testing.T) {
+	t.Parallel()
+
+	guard, _ := newTestGuard(t, time.Hour)
+
+	claimed, err := guard.Reserve(t.Context(), Key{Issuer: t.Name(), Party: "client", Subject: "", ID: "jti"}, time.Now().Add(time.Minute))
+	require.NoError(t, err)
+	require.True(t, claimed)
 }
 
 // A hold window that has already passed must still produce a real expiry.
@@ -192,12 +239,12 @@ func TestReserve_RejectsIncompleteKey(t *testing.T) {
 
 	guard, _ := newTestGuard(t, time.Hour)
 
-	_, err := guard.Reserve(t.Context(), Key{Issuer: "iss", Client: "client", ID: ""}, time.Now().Add(time.Minute))
+	_, err := guard.Reserve(t.Context(), Key{Issuer: "iss", Party: "client", ID: ""}, time.Now().Add(time.Minute))
 	require.Error(t, err, "an assertion with no jti must not be reservable")
 
-	_, err = guard.Reserve(t.Context(), Key{Issuer: "", Client: "client", ID: "jti"}, time.Now().Add(time.Minute))
+	_, err = guard.Reserve(t.Context(), Key{Issuer: "", Party: "client", ID: "jti"}, time.Now().Add(time.Minute))
 	require.Error(t, err)
 
-	_, err = guard.Reserve(t.Context(), Key{Issuer: "iss", Client: "", ID: "jti"}, time.Now().Add(time.Minute))
+	_, err = guard.Reserve(t.Context(), Key{Issuer: "iss", Party: "", ID: "jti"}, time.Now().Add(time.Minute))
 	require.Error(t, err)
 }

@@ -209,7 +209,7 @@ func TestVerify_OneHourLifetimeAccepted(t *testing.T) {
 
 	s := newSigner(t, testKeyID)
 	claims := validClaims()
-	claims.Expiry = jwt.NewNumericDate(time.Now().Add(clientauth.MaxLifetime))
+	claims.Expiry = jwt.NewNumericDate(time.Now().Add(clientauth.DefaultMaxLifetime))
 
 	_, err := newVerifier(t).Verify(t.Context(), assertionFor(s.sign(t, claims)), expectationFor(t, s))
 	require.NoError(t, err)
@@ -325,8 +325,12 @@ func TestVerify_ReplayScopedToClient(t *testing.T) {
 	otherClaims.Issuer = otherClientID
 	otherClaims.Subject = otherClientID
 
-	expect := expectationFor(t, second)
-	expect.ClientID = otherClientID
+	expect := clientauth.ClientExpectation(
+		otherClientID,
+		second.source(t),
+		t.Name(),
+		clientauth.Audiences{Issuer: testIssuer, Endpoint: testTokenURL},
+	)
 	_, err = verifier.Verify(t.Context(), assertionFor(second.sign(t, otherClaims)), expect)
 	require.NoError(t, err, "another client reusing the same jti is not a replay")
 }
@@ -383,12 +387,87 @@ func TestVerify_MisconfiguredExpectationRejected(t *testing.T) {
 	_, err = verifier.Verify(t.Context(), assertionFor(assertion), noReplayIssuer)
 	requireRejected(t, err, clientauth.ReasonVerifierMisconfigured)
 
-	// An empty ClientID would otherwise be satisfied by an assertion that
-	// simply omits iss and sub.
-	noClientID := expectationFor(t, s)
-	noClientID.ClientID = ""
-	_, err = verifier.Verify(t.Context(), assertionFor(assertion), noClientID)
+	noReplayParty := expectationFor(t, s)
+	noReplayParty.ReplayParty = ""
+	_, err = verifier.Verify(t.Context(), assertionFor(assertion), noReplayParty)
 	requireRejected(t, err, clientauth.ReasonVerifierMisconfigured)
+
+	// An empty Issuer or Subject would otherwise be satisfied by an
+	// assertion that simply omits that claim.
+	noIssuer := expectationFor(t, s)
+	noIssuer.Issuer = ""
+	_, err = verifier.Verify(t.Context(), assertionFor(assertion), noIssuer)
+	requireRejected(t, err, clientauth.ReasonVerifierMisconfigured)
+
+	noSubject := expectationFor(t, s)
+	noSubject.Subject = ""
+	_, err = verifier.Verify(t.Context(), assertionFor(assertion), noSubject)
+	requireRejected(t, err, clientauth.ReasonVerifierMisconfigured)
+}
+
+// A guard sized for the default bound cannot serve an expectation that lets
+// assertions live longer: the reservation would lapse while the assertion
+// still verifies, and Guard.Reserve clamps the hold silently rather than
+// complaining. Refused per request, since the bound is only known then.
+func TestVerify_LifetimeBeyondGuardHoldRejected(t *testing.T) {
+	t.Parallel()
+
+	s := newSigner(t, testKeyID)
+	verifier := newVerifier(t)
+
+	expect := expectationFor(t, s)
+	expect.MaxLifetime = 8 * time.Hour
+
+	_, err := verifier.Verify(t.Context(), assertionFor(s.sign(t, validClaims())), expect)
+	requireRejected(t, err, clientauth.ReasonVerifierMisconfigured)
+}
+
+// The per-expectation bound is what the exp ceiling is measured against, not
+// the package default. A workload profile that permits a longer lifetime must
+// accept an assertion the client bound would have rejected — this is the
+// Kubernetes case, where expirationSeconds is routinely past an hour.
+func TestVerify_ExpectationLifetimeWidensTheCeiling(t *testing.T) {
+	t.Parallel()
+
+	s := newSigner(t, testKeyID)
+
+	claims := validClaims()
+	claims.Expiry = jwt.NewNumericDate(time.Now().Add(3 * time.Hour))
+	assertion := assertionFor(s.sign(t, claims))
+
+	// The default client bound rejects it for lifetime, not for anything else.
+	_, err := newVerifier(t).Verify(t.Context(), assertion, expectationFor(t, s))
+	requireRejected(t, err, clientauth.ReasonLifetimeTooLong)
+
+	// A guard sized for the longer bound, and an expectation carrying it,
+	// accepts the same assertion.
+	client, err := infra.NewRedisClient(t, 0)
+	require.NoError(t, err)
+	lifetime := 4 * time.Hour
+	guard, err := replay.NewRedisGuard(client, string(testenv.NewCacheSuffix(t, "long")), clientauth.ReplayHoldFor(lifetime))
+	require.NoError(t, err)
+	verifier, err := clientauth.NewVerifier(newKeyResolver(t, client), guard)
+	require.NoError(t, err)
+
+	expect := expectationFor(t, s)
+	expect.MaxLifetime = lifetime
+	_, err = verifier.Verify(t.Context(), assertion, expect)
+	require.NoError(t, err)
+}
+
+// iss and sub are matched separately, so an assertion satisfying one and not
+// the other is still rejected. A workload's two values differ, so nothing may
+// collapse them into a single comparison.
+func TestVerify_SubjectMustMatchIndependentlyOfIssuer(t *testing.T) {
+	t.Parallel()
+
+	s := newSigner(t, testKeyID)
+
+	claims := validClaims()
+	claims.Subject = "someone-else"
+
+	_, err := newVerifier(t).Verify(t.Context(), assertionFor(s.sign(t, claims)), expectationFor(t, s))
+	requireRejected(t, err, clientauth.ReasonSubjectMismatch)
 }
 
 // A guard whose cap is shorter than the window an assertion stays acceptable
@@ -400,7 +479,7 @@ func TestNewVerifier_RejectsShortReplayHold(t *testing.T) {
 	client, err := infra.NewRedisClient(t, 0)
 	require.NoError(t, err)
 
-	short, err := replay.NewRedisGuard(client, string(testenv.NewCacheSuffix(t, "short")), clientauth.MaxReplayHold-time.Second)
+	short, err := replay.NewRedisGuard(client, string(testenv.NewCacheSuffix(t, "short")), clientauth.DefaultMaxReplayHold-time.Second)
 	require.NoError(t, err)
 
 	_, err = clientauth.NewVerifier(newKeyResolver(t, client), short)
@@ -414,7 +493,7 @@ func TestNewVerifier_RejectsShortReplayHold(t *testing.T) {
 func TestMaxReplayHold_CoversAcceptanceWindow(t *testing.T) {
 	t.Parallel()
 
-	require.GreaterOrEqual(t, clientauth.MaxReplayHold, clientauth.MaxLifetime+2*clientauth.MaxSkew)
+	require.GreaterOrEqual(t, clientauth.DefaultMaxReplayHold, clientauth.DefaultMaxLifetime+2*clientauth.MaxSkew)
 }
 
 // An assertion presented without its type parameter is a malformed request,
@@ -507,7 +586,7 @@ func TestVerify_ReplayStoreOutageRefuses(t *testing.T) {
 	// A client pointed at nothing: every command fails at dial time.
 	dead := redis.NewClient(&redis.Options{Addr: "127.0.0.1:1", DialTimeout: 100 * time.Millisecond, MaxRetries: -1})
 	t.Cleanup(func() { _ = dead.Close() })
-	guard, err := replay.NewRedisGuard(dead, string(testenv.NewCacheSuffix(t, "outage")), clientauth.MaxReplayHold)
+	guard, err := replay.NewRedisGuard(dead, string(testenv.NewCacheSuffix(t, "outage")), clientauth.DefaultMaxReplayHold)
 	require.NoError(t, err)
 	verifier, err := clientauth.NewVerifier(newKeyResolver(t, live), guard)
 	require.NoError(t, err)
