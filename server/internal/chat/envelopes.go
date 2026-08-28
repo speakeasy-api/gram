@@ -40,7 +40,7 @@ var leadingEnvelopeRE = regexp.MustCompile(`(?s)^(?:` +
 	`|\s*<notification>.*?</notification>\s*` +
 	"|\\s*Delivery: (?:to send a message, use the `message` tool\\.|Final assistant text is not automatically delivered in this run\\.[^\\n]*|No visible reply is delivered automatically in this run[^\\n]*)\\s*" +
 	"|\\s*[^\\n]* \\(untrusted[^)\\n]*\\):\\n```json\\n.*?\\n```\\s*" +
-	`|\s*[^\n]* \(untrusted(?:, chronological[^)\n]*|, for context)\):\n(?:(?:#\S+ )?\d{4}-\d{2}-\d{2} \d{2}:\d{2}(?::\d{2})?(?: [A-Z]{1,5})? )(?:\[reply target\] )?(?:->#\S+ )?[^\n]*: [^\n]*(?:\n|$))*\s*` +
+	`|\s*[^\n]* \(untrusted(?:, chronological[^)\n]*|, for context)\):\n(?:(?:#\S+ )?\d{4}-\d{2}-\d{2} \d{2}:\d{2}(?::\d{2})?(?: [A-Z]{1,5})? (?:\[reply target\] )?(?:->#\S+ )?[^\n]*: [^\n]*(?:\n|$))*\s*` +
 	`)+`)
 
 // StripLeadingEnvelopes removes any leading harness framing so downstream LLM
