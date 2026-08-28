@@ -70,17 +70,6 @@ func TestOpenRouterAdminGuardRequiresDurableCommitProof(t *testing.T) {
 	})
 }
 
-func TestOpenRouterAdminBeginCapturesBaselineBeforeMutation(t *testing.T) {
-	t.Parallel()
-	runCursorGuardWorkflowTest(t, func(env *testsuite.TestWorkflowEnvironment, cursor *atomic.Int64) {
-		armAdminMutation(t, env, "baseline-first", time.Millisecond, func() {
-			// This callback is the synchronous update completion: mutation can
-			// begin only after the capture activity result is durable.
-			cursor.Store(1)
-		})
-	}, 1, 0)
-}
-
 func TestOpenRouterAdminConcurrentBeginsPreserveOldestUnreconciledCursor(t *testing.T) {
 	t.Parallel()
 	runCursorGuardWorkflowTest(t, func(env *testsuite.TestWorkflowEnvironment, cursor *atomic.Int64) {

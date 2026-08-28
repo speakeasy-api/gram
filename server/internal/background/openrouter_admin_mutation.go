@@ -38,9 +38,13 @@ func OpenRouterAdminReconciliationWorkflow(ctx workflow.Context, scope openroute
 }
 
 func openRouterAdminReconciliationWorkflow(ctx workflow.Context, scope openrouterkeys.AdminReconciliationScope, guardDelay time.Duration) error {
-	activityOptions := workflow.ActivityOptions{
+	reconcileActivityOptions := workflow.ActivityOptions{
 		StartToCloseTimeout: 30 * time.Second,
 		RetryPolicy:         &temporal.RetryPolicy{InitialInterval: time.Second, MaximumInterval: time.Minute, BackoffCoefficient: 2},
+	}
+	captureActivityOptions := reconcileActivityOptions
+	captureActivityOptions.RetryPolicy = &temporal.RetryPolicy{
+		InitialInterval: time.Second, MaximumInterval: time.Minute, BackoffCoefficient: 2, MaximumAttempts: 3,
 	}
 	abort := workflow.GetSignalChannel(ctx, OpenRouterAdminAbortSignal)
 	wake := workflow.NewBufferedChannel(ctx, 100)
@@ -48,10 +52,11 @@ func openRouterAdminReconciliationWorkflow(ctx workflow.Context, scope openroute
 	var hasCursor bool
 	var generation int64
 	armed := false
+	terminal := false
 
 	capture := func(callCtx workflow.Context) (int64, error) {
 		var captured int64
-		callActivityCtx := workflow.WithActivityOptions(callCtx, activityOptions)
+		callActivityCtx := workflow.WithActivityOptions(callCtx, captureActivityOptions)
 		if err := workflow.ExecuteActivity(callActivityCtx, OpenRouterAdminCaptureCursorActivityName, scope).Get(callCtx, &captured); err != nil {
 			return 0, err
 		}
@@ -60,7 +65,7 @@ func openRouterAdminReconciliationWorkflow(ctx workflow.Context, scope openroute
 	reconcile := func(callCtx workflow.Context, baseline int64) (int64, error) {
 		checkpoint := openrouterkeys.AdminReconciliationCheckpoint{Scope: scope, Cursor: baseline}
 		var advanced int64
-		callActivityCtx := workflow.WithActivityOptions(callCtx, activityOptions)
+		callActivityCtx := workflow.WithActivityOptions(callCtx, reconcileActivityOptions)
 		if err := workflow.ExecuteActivity(callActivityCtx, OpenRouterAdminReconcileActivityName, checkpoint).Get(callCtx, &advanced); err != nil {
 			return 0, err
 		}
@@ -70,6 +75,7 @@ func openRouterAdminReconciliationWorkflow(ctx workflow.Context, scope openroute
 	if err := workflow.SetUpdateHandler(ctx, OpenRouterAdminBeginUpdate, func(handlerCtx workflow.Context) error {
 		captured, err := capture(handlerCtx)
 		if err != nil {
+			wake.Send(handlerCtx, nil)
 			return err
 		}
 		if !hasCursor || captured < cursor {
@@ -114,8 +120,17 @@ func openRouterAdminReconciliationWorkflow(ctx workflow.Context, scope openroute
 		if !armed {
 			selector := workflow.NewSelector(ctx)
 			selector.AddReceive(wake, func(channel workflow.ReceiveChannel, _ bool) { channel.Receive(ctx, nil) })
-			selector.AddReceive(abort, func(channel workflow.ReceiveChannel, _ bool) { channel.Receive(ctx, nil) })
+			selector.AddReceive(abort, func(channel workflow.ReceiveChannel, _ bool) {
+				channel.Receive(ctx, nil)
+				terminal = true
+			})
 			selector.Select(ctx)
+			if terminal {
+				if err := workflow.Await(ctx, func() bool { return workflow.AllHandlersFinished(ctx) }); err != nil {
+					return fmt.Errorf("await aborted OpenRouter admin handlers: %w", err)
+				}
+				return nil
+			}
 			if !armed {
 				if err := workflow.Await(ctx, func() bool { return workflow.AllHandlersFinished(ctx) }); err != nil {
 					return fmt.Errorf("await idle OpenRouter admin handlers: %w", err)
@@ -138,11 +153,18 @@ func openRouterAdminReconciliationWorkflow(ctx workflow.Context, scope openroute
 		})
 		selector.AddReceive(abort, func(channel workflow.ReceiveChannel, _ bool) {
 			channel.Receive(ctx, nil)
+			terminal = true
 			woken = true
 		})
 		selector.Select(ctx)
 		if woken {
 			cancelTimer()
+			if terminal {
+				if err := workflow.Await(ctx, func() bool { return workflow.AllHandlersFinished(ctx) }); err != nil {
+					return fmt.Errorf("await aborted OpenRouter admin handlers: %w", err)
+				}
+				return nil
+			}
 			continue
 		}
 

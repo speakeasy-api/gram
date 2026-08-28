@@ -203,10 +203,12 @@ func TestDisableCauseWithDBUsesCallerLockedConnection(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, DisableCauseChange{CauseChanged: true, KeyAccessChanged: true}, change)
 	require.Empty(t, upstream.recorded()[patchesBefore:], "all local mutations stay upstream-free")
+	expected, err := queries.GetOpenRouterAPIKey(ctx, repo.GetOpenRouterAPIKeyParams{OrganizationID: orgID, KeyType: string(KeyTypeChat)})
+	require.NoError(t, err)
 	require.NoError(t, provisioner.ReconcileAPIKeyDisabledWithDB(ctx, conn, orgID, KeyTypeChat))
 	patches := upstream.recorded()[patchesBefore:]
 	require.Len(t, patches, 1)
-	require.JSONEq(t, `{"disabled":false,"limit":5,"limit_reset":"monthly"}`, patches[0])
+	require.JSONEq(t, fmt.Sprintf(`{"disabled":false,"limit":%d,"limit_reset":"monthly"}`, expected.MonthlyCredits), patches[0])
 	row, err := queries.GetOpenRouterAPIKey(ctx, repo.GetOpenRouterAPIKeyParams{OrganizationID: orgID, KeyType: string(KeyTypeChat)})
 	require.NoError(t, err)
 	require.Empty(t, row.DisableCauses)

@@ -45,9 +45,10 @@ func TestTemporalOpenRouterAdminCoordinatorUsesAcknowledgedPayloadFreeUpdates(t 
 	options := mock.MatchedBy(func(options client.StartWorkflowOptions) bool {
 		return options.ID == workflowID && options.TaskQueue == "test" && options.WorkflowIDReusePolicy == enums.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE && options.WorkflowIDConflictPolicy == enums.WORKFLOW_ID_CONFLICT_POLICY_USE_EXISTING
 	})
-	temporalClient.On("NewWithStartWorkflowOperation", options, mock.Anything, scope).Return((client.WithStartWorkflowOperation)(nil)).Twice()
-	beginOptions := payloadFreeUpdateOptions(OpenRouterAdminBeginUpdate)
-	completeOptions := payloadFreeUpdateOptions(OpenRouterAdminCompleteUpdate)
+	start := &adminCoordinatorStartOperation{}
+	temporalClient.On("NewWithStartWorkflowOperation", options, mock.Anything, scope).Return(start).Twice()
+	beginOptions := payloadFreeUpdateOptions(OpenRouterAdminBeginUpdate, start)
+	completeOptions := payloadFreeUpdateOptions(OpenRouterAdminCompleteUpdate, start)
 	temporalClient.On("UpdateWithStartWorkflow", mock.Anything, beginOptions).Return(&adminCoordinatorUpdateHandle{}, nil).Once()
 	temporalClient.On("UpdateWithStartWorkflow", mock.Anything, completeOptions).Return(&adminCoordinatorUpdateHandle{}, nil).Once()
 	coordinator := &TemporalOpenRouterAdminCoordinator{TemporalEnv: tenv.NewEnvironment(temporalClient, "test", "test")}
@@ -61,16 +62,17 @@ func TestTemporalOpenRouterAdminCoordinatorTimeoutIsNotSuccess(t *testing.T) {
 	t.Parallel()
 	scope := openrouterkeys.AdminReconciliationScope{OrganizationID: "organization_placeholder", KeyType: "chat"}
 	temporalClient := &temporalmocks.Client{}
-	temporalClient.On("NewWithStartWorkflowOperation", mock.Anything, mock.Anything, scope).Return((client.WithStartWorkflowOperation)(nil)).Once()
-	temporalClient.On("UpdateWithStartWorkflow", mock.Anything, payloadFreeUpdateOptions(OpenRouterAdminCompleteUpdate)).Return(&adminCoordinatorUpdateHandle{err: context.DeadlineExceeded}, nil).Once()
+	start := &adminCoordinatorStartOperation{}
+	temporalClient.On("NewWithStartWorkflowOperation", mock.Anything, mock.Anything, scope).Return(start).Once()
+	temporalClient.On("UpdateWithStartWorkflow", mock.Anything, payloadFreeUpdateOptions(OpenRouterAdminCompleteUpdate, start)).Return(&adminCoordinatorUpdateHandle{err: context.DeadlineExceeded}, nil).Once()
 	coordinator := &TemporalOpenRouterAdminCoordinator{TemporalEnv: tenv.NewEnvironment(temporalClient, "test", "test")}
 	require.ErrorIs(t, coordinator.CompleteAndWait(t.Context(), scope), context.DeadlineExceeded)
 	temporalClient.AssertExpectations(t)
 }
 
-func payloadFreeUpdateOptions(name string) any {
+func payloadFreeUpdateOptions(name string, start client.WithStartWorkflowOperation) any {
 	return mock.MatchedBy(func(options client.UpdateWithStartWorkflowOptions) bool {
-		return options.StartWorkflowOperation == nil && options.UpdateOptions.UpdateName == name && options.UpdateOptions.WaitForStage == client.WorkflowUpdateStageAccepted && len(options.UpdateOptions.Args) == 0
+		return start != nil && options.StartWorkflowOperation == start && options.UpdateOptions.UpdateName == name && options.UpdateOptions.WaitForStage == client.WorkflowUpdateStageAccepted && len(options.UpdateOptions.Args) == 0
 	})
 }
 
@@ -108,6 +110,12 @@ func TestOpenRouterAdminReconciliationRetriesTransientAndStopsPermanent(t *testi
 			require.Equal(t, tc.want, attempts.Load())
 		})
 	}
+}
+
+type adminCoordinatorStartOperation struct{}
+
+func (*adminCoordinatorStartOperation) Get(context.Context) (client.WorkflowRun, error) {
+	return nil, nil
 }
 
 type adminCoordinatorUpdateHandle struct{ err error }
