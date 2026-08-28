@@ -131,12 +131,12 @@ second project that the default browser seed intentionally does not retain.
    Use an external client (or the named Go test below), not the browser clock, to
    prove that it blocks nothing before PostgreSQL time reaches the start.
 4. **J4 — Turn off MCP tool calls on A, B, and C.** In one server-picker action,
-   select A/B/C across at least two projects. Confirm the applied summary says
-   three servers, **Now**, and **Until lifted**, then submit once. Confirm one
-   active **MCP tool calls · 3 servers** row, not three rows, and inspect one
-   complete three-server version-one snapshot. The Go acceptance test below is
-   authoritative for the atomic prescription/version, cross-project resources,
-   and matching activation audit entry.
+   select A/B/C from the servers retained by the browser seed. Confirm the
+   applied summary says three servers, **Now**, and **Until lifted**, then submit
+   once. Confirm one active **MCP tool calls · 3 servers** row, not three rows,
+   and inspect one complete three-server version-one snapshot. The Go acceptance
+   test below is authoritative for the atomic prescription/version, the
+   cross-project resource split, and matching activation audit entry.
 5. **J5 — Start from one server's sessions.** On **MCP server · Clients and
    Sessions**, choose **New killswitch…** from Alex's actions. Confirm **Who:
    Alex** and **MCP tool calls** are fixed, neither coverage option is selected,

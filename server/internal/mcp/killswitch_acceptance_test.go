@@ -403,10 +403,14 @@ func databaseNow(t *testing.T, db *pgxpool.Pool) time.Time {
 func waitForDatabaseTime(t *testing.T, db *pgxpool.Pool, target time.Time) {
 	t.Helper()
 	queries := killswitchrepo.New(db)
+	timeout := 12 * time.Second
+	if remaining := target.Sub(databaseNow(t, db)); remaining > 0 {
+		timeout += remaining
+	}
 	require.Eventually(t, func() bool {
 		now, err := queries.GetKillswitchDatabaseTime(t.Context())
 		return err == nil && now.Valid && !now.Time.Before(target)
-	}, 12*time.Second, 25*time.Millisecond, "database time did not reach %s", target.Format(time.RFC3339Nano))
+	}, timeout, 25*time.Millisecond, "database time did not reach %s", target.Format(time.RFC3339Nano))
 }
 
 func requireUserSessionActive(t *testing.T, f *killswitchAcceptanceFixture, target killswitchAcceptanceTarget) {
@@ -798,7 +802,7 @@ func TestKillswitchAcceptanceFutureStartDynamicAllUsesDatabaseTime(t *testing.T)
 	existingSession := f.initialize(t, existing)
 	existingBefore := f.call(t, existing, makeToolsCallBody("missing_tool"), existingSession)
 
-	starts := databaseNow(t, f.ti.conn).Add(5 * time.Second)
+	starts := databaseNow(t, f.ti.conn).Add(30 * time.Second)
 	startsAt := starts.Format(time.RFC3339Nano)
 	created := f.create(t, ctx, uuid.New(), &gen.KillswitchScope{Type: "all_servers"}, &gen.KillswitchSchedule{
 		Start: "scheduled", StartsAt: &startsAt, End: "until_lifted",
