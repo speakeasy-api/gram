@@ -192,6 +192,15 @@ func handleToolsList(
 			Tools: tools,
 		},
 		serverIdentity: serverInfoHostedToolset,
+		// Caller-varying unconditionally, on five independent axes: the
+		// per-tool authorization filter above, the Gram-Mode header selecting
+		// static or dynamic tools, the session's consent-screen tool
+		// selection, the ?tags= filter, and — for toolsets holding external
+		// MCP proxy tools — the upstream listing buildToolListEntries makes
+		// with the caller's own MCP-* header configuration and OAuth token.
+		// Only the first is gated on server visibility, so a public server is
+		// no more shareable than a private one.
+		cacheHints: cacheHintsCallerVarying,
 	}
 
 	bs, err := json.Marshal(result)

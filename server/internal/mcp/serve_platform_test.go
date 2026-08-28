@@ -352,6 +352,13 @@ func TestServePlatformToolset_PlatformMCPReadVariantListsTools(t *testing.T) {
 	// The assistant only ever acts in its own project, so the project the
 	// policy supplies is not advertised as an argument for a model to choose.
 	require.NotContains(t, body, `"project_id"`, "project arguments are injected, not requested")
+
+	// The catalogue is narrowed by the active organization's product features
+	// and embeds that organization's project in each tool, so it is never
+	// shareable with another caller.
+	var envelope map[string]json.RawMessage
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &envelope))
+	requireCacheHints(t, envelope["result"], "private")
 }
 
 func TestServePlatformToolset_PlatformMCPReadLegacyVariantRejected(t *testing.T) {

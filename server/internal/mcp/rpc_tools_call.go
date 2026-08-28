@@ -458,6 +458,7 @@ func handleToolsCall(
 			ID:             req.ID,
 			Result:         json.RawMessage(rw.body.Bytes()),
 			serverIdentity: serverInfoHostedToolset,
+			cacheHints:     nil,
 		})
 		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "failed to serialize MCP result").LogError(ctx, logger)
@@ -479,6 +480,7 @@ func handleToolsCall(
 			IsError:           rw.statusCode < 200 || rw.statusCode >= 300,
 		},
 		serverIdentity: serverInfoHostedToolset,
+		cacheHints:     nil,
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to serialize tools/call result").LogError(ctx, logger)

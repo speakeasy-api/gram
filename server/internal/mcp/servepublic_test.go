@@ -465,6 +465,23 @@ func TestServePublic_BatchRequestRejected(t *testing.T) {
 	require.Contains(t, err.Error(), "batch requests are not supported")
 }
 
+// requireCacheHints asserts the caching members MCP 2026-07-28 requires on a
+// cacheable result. The members are read as pointers so an absent member fails
+// rather than decoding to a zero that happens to match the expected TTL.
+func requireCacheHints(t *testing.T, rawResult json.RawMessage, wantScope string) {
+	t.Helper()
+
+	var hints struct {
+		TTLMs      *int    `json:"ttlMs"`
+		CacheScope *string `json:"cacheScope"`
+	}
+	require.NoError(t, json.Unmarshal(rawResult, &hints))
+	require.NotNil(t, hints.TTLMs, "result carries no ttlMs")
+	require.NotNil(t, hints.CacheScope, "result carries no cacheScope")
+	require.Zero(t, *hints.TTLMs)
+	require.Equal(t, wantScope, *hints.CacheScope)
+}
+
 // servePublicToolsRequest issues a POST to /mcp/{slug} with an optional raw
 // query string (e.g. "tags=alpha,beta") and returns the recorder. Unlike
 // servePublicHTTP it threads a query string onto the URL so ?tags= filtering

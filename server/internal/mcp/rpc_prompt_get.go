@@ -73,6 +73,7 @@ func handlePromptsGet(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool
 			Messages:    []promptMessage{{Role: "user", Content: content}},
 		},
 		serverIdentity: serverInfoHostedToolset,
+		cacheHints:     nil,
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to serialize prompts/get result").LogError(ctx, logger)

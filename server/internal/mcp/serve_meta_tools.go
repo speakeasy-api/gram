@@ -519,6 +519,7 @@ func marshalMetaToolCallResult(ctx context.Context, logger *slog.Logger, id mcpj
 			IsError:           false,
 		},
 		serverIdentity: serverInfoMetaServer,
+		cacheHints:     nil,
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to serialize tools/call response").LogError(ctx, logger)
@@ -547,6 +548,7 @@ func marshalMetaToolError(ctx context.Context, logger *slog.Logger, id mcpjsonrp
 			IsError:           true,
 		},
 		serverIdentity: serverInfoMetaServer,
+		cacheHints:     nil,
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to serialize tools/call response").LogError(ctx, logger)
