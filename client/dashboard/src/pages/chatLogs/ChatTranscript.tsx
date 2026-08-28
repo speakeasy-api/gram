@@ -76,6 +76,7 @@ import {
   RiskBadge,
 } from "./chatRisk";
 import {
+  getMatchStrings,
   distinctRiskCount,
   resultsAreSensitive,
   useRowReveal,
@@ -360,6 +361,16 @@ function HarnessContextDisclosure({
   revealed?: boolean;
 }) {
   const [open, setOpen] = useState(false);
+  // Only findings whose match lives in the envelope belong here; a body match
+  // would otherwise be repeated as an out-of-text "Flagged value" — it is
+  // already highlighted in the message body below.
+  const envelopeResults = useMemo(
+    () =>
+      (results ?? []).filter((r) =>
+        getMatchStrings([r]).some((m) => envelope.includes(m)),
+      ),
+    [results, envelope],
+  );
   return (
     <Collapsible open={open} onOpenChange={setOpen} className="mb-1.5">
       <CollapsibleTrigger className="text-muted-foreground hover:text-foreground inline-flex items-center gap-1 text-xs">
@@ -371,10 +382,10 @@ function HarnessContextDisclosure({
         Harness context
       </CollapsibleTrigger>
       <CollapsibleContent className="text-muted-foreground mt-1 border-l-2 pl-2 font-mono text-xs whitespace-pre-wrap">
-        {results && results.length > 0 ? (
+        {envelopeResults.length > 0 ? (
           <HighlightedMessageText
             text={envelope}
-            results={results}
+            results={envelopeResults}
             revealed={revealed}
           />
         ) : (
