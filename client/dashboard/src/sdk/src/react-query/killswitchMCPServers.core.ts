@@ -17,10 +17,9 @@ import {
   KillswitchesListMCPServersSecurity,
 } from "../models/operations/killswitcheslistmcpservers.js";
 import { unwrapAsync } from "../types/fp.js";
-export type KillswitchesListMCPServersQueryData =
-  KillswitchListMCPServersResult;
+export type KillswitchMCPServersQueryData = KillswitchListMCPServersResult;
 
-export function prefetchKillswitchesListMCPServers(
+export function prefetchKillswitchMCPServers(
   queryClient: QueryClient,
   client$: GramCore,
   security: KillswitchesListMCPServersSecurity,
@@ -28,7 +27,7 @@ export function prefetchKillswitchesListMCPServers(
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
-    ...buildKillswitchesListMCPServersQuery(
+    ...buildKillswitchMCPServersQuery(
       client$,
       security,
       request,
@@ -37,7 +36,7 @@ export function prefetchKillswitchesListMCPServers(
   });
 }
 
-export function buildKillswitchesListMCPServersQuery(
+export function buildKillswitchMCPServersQuery(
   client$: GramCore,
   security: KillswitchesListMCPServersSecurity,
   request?: KillswitchesListMCPServersRequest | undefined,
@@ -46,15 +45,15 @@ export function buildKillswitchesListMCPServersQuery(
   queryKey: QueryKey;
   queryFn: (
     context: QueryFunctionContext,
-  ) => Promise<KillswitchesListMCPServersQueryData>;
+  ) => Promise<KillswitchMCPServersQueryData>;
 } {
   return {
-    queryKey: queryKeyKillswitchesListMCPServers({
+    queryKey: queryKeyKillswitchMCPServers({
       gramSession: request?.gramSession,
     }),
-    queryFn: async function killswitchesListMCPServersQueryFn(
+    queryFn: async function killswitchMCPServersQueryFn(
       ctx,
-    ): Promise<KillswitchesListMCPServersQueryData> {
+    ): Promise<KillswitchMCPServersQueryData> {
       const sig = combineSignals(
         ctx.signal,
         options?.signal,
@@ -76,7 +75,7 @@ export function buildKillswitchesListMCPServersQuery(
   };
 }
 
-export function queryKeyKillswitchesListMCPServers(
+export function queryKeyKillswitchMCPServers(
   parameters: { gramSession?: string | undefined },
 ): QueryKey {
   return ["@gram/client", "killswitches", "listMCPServers", parameters];

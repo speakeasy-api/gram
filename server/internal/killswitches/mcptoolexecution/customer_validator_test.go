@@ -31,22 +31,46 @@ func TestCustomerLifecycleValidatorLocksLivenessUpdatesUntilCommit(t *testing.T)
 	})
 	require.NoError(t, err)
 
+	userConn, err := db.Acquire(t.Context())
+	require.NoError(t, err)
+	defer userConn.Release()
+	serverConn, err := db.Acquire(t.Context())
+	require.NoError(t, err)
+	defer serverConn.Release()
+
+	started := make(chan string, 2)
 	userUpdate := make(chan error, 1)
 	serverUpdate := make(chan error, 1)
 	go func() {
-		_, updateErr := db.Exec(t.Context(), `UPDATE organization_user_relationships SET deleted_at = clock_timestamp() WHERE organization_id = $1 AND user_id = $2`, orgID, userID)
+		started <- "user"
+		_, updateErr := userConn.Exec(t.Context(), `UPDATE organization_user_relationships SET deleted_at = clock_timestamp() WHERE organization_id = $1 AND user_id = $2`, orgID, userID)
 		userUpdate <- updateErr
 	}()
 	go func() {
-		_, updateErr := db.Exec(t.Context(), `UPDATE mcp_servers SET deleted_at = clock_timestamp() WHERE id = $1`, serverID)
+		started <- "server"
+		_, updateErr := serverConn.Exec(t.Context(), `UPDATE mcp_servers SET deleted_at = clock_timestamp() WHERE id = $1`, serverID)
 		serverUpdate <- updateErr
 	}()
 
+	for range 2 {
+		select {
+		case <-started:
+		case <-time.After(2 * time.Second):
+			t.Fatal("soft-delete goroutine did not start")
+		}
+	}
+	for name, pid := range map[string]uint32{"user": userConn.Conn().PgConn().PID(), "server": serverConn.Conn().PgConn().PID()} {
+		require.Eventually(t, func() bool {
+			var waiting bool
+			err := db.QueryRow(t.Context(), `SELECT COALESCE(wait_event_type = 'Lock', false) FROM pg_stat_activity WHERE pid = $1`, pid).Scan(&waiting)
+			return err == nil && waiting
+		}, 2*time.Second, 10*time.Millisecond, "%s soft delete never reached the row lock", name)
+	}
 	for name, result := range map[string]<-chan error{"user": userUpdate, "server": serverUpdate} {
 		select {
 		case updateErr := <-result:
 			require.Failf(t, "liveness update did not wait", "%s update completed before lifecycle commit: %v", name, updateErr)
-		case <-time.After(150 * time.Millisecond):
+		default:
 		}
 	}
 	require.NoError(t, tx.Commit(t.Context()))

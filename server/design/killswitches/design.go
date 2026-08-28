@@ -80,7 +80,7 @@ var Detail = Type("KillswitchDetail", func() {
 	Required("external_note", "internal_note", "history", "history_truncated")
 	Attribute("external_note", String)
 	Attribute("internal_note", String)
-	Attribute("history", ArrayOf(HistoryEvent))
+	Attribute("history", ArrayOf(HistoryEvent), func() { MaxLength(100) })
 	Attribute("history_truncated", Boolean)
 })
 
@@ -176,7 +176,7 @@ var ListMCPServersResult = Type("KillswitchListMCPServersResult", func() {
 
 var ListResult = Type("KillswitchListResult", func() {
 	Required("items")
-	Attribute("items", ArrayOf(Summary))
+	Attribute("items", ArrayOf(Summary), func() { MaxLength(100) })
 	Attribute("next_cursor", String)
 })
 
@@ -242,21 +242,27 @@ var _ = Service("killswitches", func() {
 	})
 
 	Method("listCapabilities", func() {
+		Meta("openapi:operationId", "listKillswitchCapabilities")
 		Meta("openapi:extension:x-speakeasy-name-override", "listCapabilities")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "KillswitchCapabilities"}`)
 		Payload(func() { security.SessionPayload() })
 		Result(ListCapabilitiesResult)
 		HTTP(func() { GET("/rpc/killswitches.listCapabilities"); security.SessionHeader(); Response(StatusOK) })
 	})
 
 	Method("listMCPServers", func() {
+		Meta("openapi:operationId", "listKillswitchMCPServers")
 		Meta("openapi:extension:x-speakeasy-name-override", "listMCPServers")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "KillswitchMCPServers"}`)
 		Payload(func() { security.SessionPayload() })
 		Result(ListMCPServersResult)
 		HTTP(func() { GET("/rpc/killswitches.listMCPServers"); security.SessionHeader(); Response(StatusOK) })
 	})
 
 	Method("list", func() {
+		Meta("openapi:operationId", "listKillswitches")
 		Meta("openapi:extension:x-speakeasy-name-override", "list")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "Killswitches"}`)
 		Payload(func() {
 			security.SessionPayload()
 			Attribute("capability_key", CapabilityKey)
@@ -280,7 +286,9 @@ var _ = Service("killswitches", func() {
 	})
 
 	Method("get", func() {
+		Meta("openapi:operationId", "getKillswitch")
 		Meta("openapi:extension:x-speakeasy-name-override", "get")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "Killswitch"}`)
 		Payload(func() {
 			security.SessionPayload()
 			Attribute("id", String, func() { Format(FormatUUID) })
@@ -291,7 +299,9 @@ var _ = Service("killswitches", func() {
 	})
 
 	Method("create", func() {
+		Meta("openapi:operationId", "createKillswitch")
 		Meta("openapi:extension:x-speakeasy-name-override", "create")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "CreateKillswitch"}`)
 		declareOperationConflict()
 		Payload(func() {
 			security.SessionPayload()
@@ -308,7 +318,9 @@ var _ = Service("killswitches", func() {
 	})
 
 	Method("edit", func() {
+		Meta("openapi:operationId", "editKillswitch")
 		Meta("openapi:extension:x-speakeasy-name-override", "edit")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "EditKillswitch"}`)
 		declareMutationErrors()
 		Payload(func() {
 			security.SessionPayload()
@@ -326,7 +338,9 @@ var _ = Service("killswitches", func() {
 	})
 
 	Method("lift", func() {
+		Meta("openapi:operationId", "liftKillswitch")
 		Meta("openapi:extension:x-speakeasy-name-override", "lift")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "LiftKillswitch"}`)
 		declareMutationErrors()
 		Payload(func() {
 			security.SessionPayload()
@@ -344,7 +358,9 @@ var _ = Service("killswitches", func() {
 	})
 
 	Method("previewOverlaps", func() {
+		Meta("openapi:operationId", "previewKillswitchOverlaps")
 		Meta("openapi:extension:x-speakeasy-name-override", "previewOverlaps")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "PreviewKillswitchOverlaps"}`)
 		Payload(func() {
 			security.SessionPayload()
 			Extend(PreviewOverlapsForm)
@@ -359,7 +375,9 @@ var _ = Service("killswitches", func() {
 	})
 
 	Method("batchUserBadges", func() {
+		Meta("openapi:operationId", "batchKillswitchUserBadges")
 		Meta("openapi:extension:x-speakeasy-name-override", "batchUserBadges")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "BatchKillswitchUserBadges"}`)
 		Payload(func() {
 			security.SessionPayload()
 			Extend(BatchUserBadgesForm)

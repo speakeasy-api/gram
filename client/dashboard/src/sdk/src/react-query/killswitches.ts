@@ -42,29 +42,29 @@ import {
   TupleToPrefixes,
 } from "./_types.js";
 import {
-  buildKillswitchesListInfiniteQuery,
-  buildKillswitchesListQuery,
-  KillswitchesListInfiniteQueryData,
-  KillswitchesListPageParams,
-  KillswitchesListQueryData,
-  prefetchKillswitchesList,
-  prefetchKillswitchesListInfinite,
-  queryKeyKillswitchesList,
-  queryKeyKillswitchesListInfinite,
-} from "./killswitchesList.core.js";
+  buildKillswitchesInfiniteQuery,
+  buildKillswitchesQuery,
+  KillswitchesInfiniteQueryData,
+  KillswitchesPageParams,
+  KillswitchesQueryData,
+  prefetchKillswitches,
+  prefetchKillswitchesInfinite,
+  queryKeyKillswitches,
+  queryKeyKillswitchesInfinite,
+} from "./killswitches.core.js";
 export {
-  buildKillswitchesListInfiniteQuery,
-  buildKillswitchesListQuery,
-  type KillswitchesListInfiniteQueryData,
-  type KillswitchesListPageParams,
-  type KillswitchesListQueryData,
-  prefetchKillswitchesList,
-  prefetchKillswitchesListInfinite,
-  queryKeyKillswitchesList,
-  queryKeyKillswitchesListInfinite,
+  buildKillswitchesInfiniteQuery,
+  buildKillswitchesQuery,
+  type KillswitchesInfiniteQueryData,
+  type KillswitchesPageParams,
+  type KillswitchesQueryData,
+  prefetchKillswitches,
+  prefetchKillswitchesInfinite,
+  queryKeyKillswitches,
+  queryKeyKillswitchesInfinite,
 };
 
-export type KillswitchesListQueryError =
+export type KillswitchesQueryError =
   | ServiceError
   | GramError
   | ResponseValidationError
@@ -78,17 +78,14 @@ export type KillswitchesListQueryError =
 /**
  * list killswitches
  */
-export function useKillswitchesList(
+export function useKillswitches(
   security: KillswitchesListSecurity,
   request?: KillswitchesListRequest | undefined,
-  options?: QueryHookOptions<
-    KillswitchesListQueryData,
-    KillswitchesListQueryError
-  >,
-): UseQueryResult<KillswitchesListQueryData, KillswitchesListQueryError> {
+  options?: QueryHookOptions<KillswitchesQueryData, KillswitchesQueryError>,
+): UseQueryResult<KillswitchesQueryData, KillswitchesQueryError> {
   const client = useGramContext();
   return useQuery({
-    ...buildKillswitchesListQuery(
+    ...buildKillswitchesQuery(
       client,
       security,
       request,
@@ -101,20 +98,17 @@ export function useKillswitchesList(
 /**
  * list killswitches
  */
-export function useKillswitchesListSuspense(
+export function useKillswitchesSuspense(
   security: KillswitchesListSecurity,
   request?: KillswitchesListRequest | undefined,
   options?: SuspenseQueryHookOptions<
-    KillswitchesListQueryData,
-    KillswitchesListQueryError
+    KillswitchesQueryData,
+    KillswitchesQueryError
   >,
-): UseSuspenseQueryResult<
-  KillswitchesListQueryData,
-  KillswitchesListQueryError
-> {
+): UseSuspenseQueryResult<KillswitchesQueryData, KillswitchesQueryError> {
   const client = useGramContext();
   return useSuspenseQuery({
-    ...buildKillswitchesListQuery(
+    ...buildKillswitchesQuery(
       client,
       security,
       request,
@@ -127,26 +121,26 @@ export function useKillswitchesListSuspense(
 /**
  * list killswitches
  */
-export function useKillswitchesListInfinite(
+export function useKillswitchesInfinite(
   security: KillswitchesListSecurity,
   request?: KillswitchesListRequest | undefined,
   options?: InfiniteQueryHookOptions<
-    KillswitchesListInfiniteQueryData,
-    KillswitchesListQueryError
+    KillswitchesInfiniteQueryData,
+    KillswitchesQueryError
   >,
 ): UseInfiniteQueryResult<
-  InfiniteData<KillswitchesListInfiniteQueryData, KillswitchesListPageParams>,
-  KillswitchesListQueryError
+  InfiniteData<KillswitchesInfiniteQueryData, KillswitchesPageParams>,
+  KillswitchesQueryError
 > {
   const client = useGramContext();
   return useInfiniteQuery<
-    KillswitchesListInfiniteQueryData,
-    KillswitchesListQueryError,
-    InfiniteData<KillswitchesListInfiniteQueryData, KillswitchesListPageParams>,
+    KillswitchesInfiniteQueryData,
+    KillswitchesQueryError,
+    InfiniteData<KillswitchesInfiniteQueryData, KillswitchesPageParams>,
     QueryKey,
-    KillswitchesListPageParams
+    KillswitchesPageParams
   >({
-    ...buildKillswitchesListInfiniteQuery(
+    ...buildKillswitchesInfiniteQuery(
       client,
       security,
       request,
@@ -161,26 +155,26 @@ export function useKillswitchesListInfinite(
 /**
  * list killswitches
  */
-export function useKillswitchesListInfiniteSuspense(
+export function useKillswitchesInfiniteSuspense(
   security: KillswitchesListSecurity,
   request?: KillswitchesListRequest | undefined,
   options?: SuspenseInfiniteQueryHookOptions<
-    KillswitchesListInfiniteQueryData,
-    KillswitchesListQueryError
+    KillswitchesInfiniteQueryData,
+    KillswitchesQueryError
   >,
 ): UseSuspenseInfiniteQueryResult<
-  InfiniteData<KillswitchesListInfiniteQueryData, KillswitchesListPageParams>,
-  KillswitchesListQueryError
+  InfiniteData<KillswitchesInfiniteQueryData, KillswitchesPageParams>,
+  KillswitchesQueryError
 > {
   const client = useGramContext();
   return useSuspenseInfiniteQuery<
-    KillswitchesListInfiniteQueryData,
-    KillswitchesListQueryError,
-    InfiniteData<KillswitchesListInfiniteQueryData, KillswitchesListPageParams>,
+    KillswitchesInfiniteQueryData,
+    KillswitchesQueryError,
+    InfiniteData<KillswitchesInfiniteQueryData, KillswitchesPageParams>,
     QueryKey,
-    KillswitchesListPageParams
+    KillswitchesPageParams
   >({
-    ...buildKillswitchesListInfiniteQuery(
+    ...buildKillswitchesInfiniteQuery(
       client,
       security,
       request,
@@ -192,7 +186,7 @@ export function useKillswitchesListInfiniteSuspense(
   });
 }
 
-export function setKillswitchesListData(
+export function setKillswitchesData(
   client: QueryClient,
   queryKeyBase: [
     parameters: {
@@ -204,14 +198,14 @@ export function setKillswitchesListData(
       gramSession?: string | undefined;
     },
   ],
-  data: KillswitchesListQueryData,
-): KillswitchesListQueryData | undefined {
-  const key = queryKeyKillswitchesList(...queryKeyBase);
+  data: KillswitchesQueryData,
+): KillswitchesQueryData | undefined {
+  const key = queryKeyKillswitches(...queryKeyBase);
 
-  return client.setQueryData<KillswitchesListQueryData>(key, data);
+  return client.setQueryData<KillswitchesQueryData>(key, data);
 }
 
-export function invalidateKillswitchesList(
+export function invalidateKillswitches(
   client: QueryClient,
   queryKeyBase: TupleToPrefixes<
     [parameters: {
@@ -231,7 +225,7 @@ export function invalidateKillswitchesList(
   });
 }
 
-export function invalidateAllKillswitchesList(
+export function invalidateAllKillswitches(
   client: QueryClient,
   filters?: Omit<InvalidateQueryFilters, "queryKey" | "predicate" | "exact">,
 ): Promise<void> {

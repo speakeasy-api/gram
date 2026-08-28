@@ -11,11 +11,14 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
+	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/killswitches"
 	"github.com/speakeasy-api/gram/server/internal/killswitches/mcptoolexecution"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
+	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
+	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
 var infra *testenv.Environment
@@ -33,13 +36,13 @@ func TestMain(m *testing.M) {
 	os.Exit(code)
 }
 
-type allowAdmin struct{}
-
-func (allowAdmin) RequireUserOrganizationScope(context.Context, string, string, authz.Scope) error {
-	return nil
+func newIntegrationService(t *testing.T) (*Service, *pgxpool.Pool, string, string, []uuid.UUID) {
+	t.Helper()
+	service, db, orgID, userID, servers, _ := newIntegrationServiceWithAdmin(t, true)
+	return service, db, orgID, userID, servers
 }
 
-func newIntegrationService(t *testing.T) (*Service, *pgxpool.Pool, string, string, []uuid.UUID) {
+func newIntegrationServiceWithAdmin(t *testing.T, grantAdmin bool) (*Service, *pgxpool.Pool, string, string, []uuid.UUID, *authz.Engine) {
 	t.Helper()
 	db, err := infra.CloneTestDatabase(t, "killswitchapi_"+uuid.NewString()[:8])
 	require.NoError(t, err)
@@ -51,6 +54,14 @@ func newIntegrationService(t *testing.T) (*Service, *pgxpool.Pool, string, strin
 	require.NoError(t, err)
 	_, err = db.Exec(t.Context(), `INSERT INTO organization_user_relationships (organization_id, user_id) VALUES ($1, $2)`, orgID, userID)
 	require.NoError(t, err)
+	if grantAdmin {
+		selectors, selectorErr := authz.NewSelector(authz.ScopeOrgAdmin, orgID).MarshalJSON()
+		require.NoError(t, selectorErr)
+		_, grantErr := accessrepo.New(db).UpsertPrincipalGrant(t.Context(), accessrepo.UpsertPrincipalGrantParams{
+			OrganizationID: orgID, PrincipalUrn: urn.NewPrincipal(urn.PrincipalTypeUser, userID), Scope: string(authz.ScopeOrgAdmin), Selectors: selectors,
+		})
+		require.NoError(t, grantErr)
+	}
 	var projectID uuid.UUID
 	require.NoError(t, db.QueryRow(t.Context(), `INSERT INTO projects (name, slug, organization_id) VALUES ('project', $1, $2) RETURNING id`, "p-"+uuid.NewString()[:12], orgID).Scan(&projectID))
 	servers := make([]uuid.UUID, 2)
@@ -66,13 +77,14 @@ func newIntegrationService(t *testing.T) (*Service, *pgxpool.Pool, string, strin
 	require.NoError(t, err)
 	facade, err := killswitches.NewFacade(lifecycle)
 	require.NoError(t, err)
-	authorized, err := killswitches.NewAuthorizedService(facade, allowAdmin{})
+	authzEngine := authz.NewEngine(testenv.NewLogger(t), db, func(context.Context, string) (bool, error) { return false, nil }, workos.NewStubClient())
+	authorized, err := killswitches.NewAuthorizedService(facade, authzEngine)
 	require.NoError(t, err)
 	user, ok := registry.PrincipalAdapter(mcptoolexecution.PrincipalKindUser)
 	require.True(t, ok)
 	server, ok := registry.ResourceAdapter(mcptoolexecution.ResourceKindMCPServer)
 	require.True(t, ok)
-	return &Service{db: db, authorized: authorized, user: user, server: server}, db, orgID, userID, servers
+	return &Service{db: db, authorized: authorized, user: user, server: server}, db, orgID, userID, servers, authzEngine
 }
 
 func insertForeignServer(t *testing.T, db *pgxpool.Pool) uuid.UUID {

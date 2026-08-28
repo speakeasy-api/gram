@@ -32,19 +32,19 @@ import {
   TupleToPrefixes,
 } from "./_types.js";
 import {
-  buildKillswitchesListCapabilitiesQuery,
-  KillswitchesListCapabilitiesQueryData,
-  prefetchKillswitchesListCapabilities,
-  queryKeyKillswitchesListCapabilities,
-} from "./killswitchesListCapabilities.core.js";
+  buildKillswitchCapabilitiesQuery,
+  KillswitchCapabilitiesQueryData,
+  prefetchKillswitchCapabilities,
+  queryKeyKillswitchCapabilities,
+} from "./killswitchCapabilities.core.js";
 export {
-  buildKillswitchesListCapabilitiesQuery,
-  type KillswitchesListCapabilitiesQueryData,
-  prefetchKillswitchesListCapabilities,
-  queryKeyKillswitchesListCapabilities,
+  buildKillswitchCapabilitiesQuery,
+  type KillswitchCapabilitiesQueryData,
+  prefetchKillswitchCapabilities,
+  queryKeyKillswitchCapabilities,
 };
 
-export type KillswitchesListCapabilitiesQueryError =
+export type KillswitchCapabilitiesQueryError =
   | ServiceError
   | GramError
   | ResponseValidationError
@@ -58,20 +58,20 @@ export type KillswitchesListCapabilitiesQueryError =
 /**
  * listCapabilities killswitches
  */
-export function useKillswitchesListCapabilities(
+export function useKillswitchCapabilities(
   security: KillswitchesListCapabilitiesSecurity,
   request?: KillswitchesListCapabilitiesRequest | undefined,
   options?: QueryHookOptions<
-    KillswitchesListCapabilitiesQueryData,
-    KillswitchesListCapabilitiesQueryError
+    KillswitchCapabilitiesQueryData,
+    KillswitchCapabilitiesQueryError
   >,
 ): UseQueryResult<
-  KillswitchesListCapabilitiesQueryData,
-  KillswitchesListCapabilitiesQueryError
+  KillswitchCapabilitiesQueryData,
+  KillswitchCapabilitiesQueryError
 > {
   const client = useGramContext();
   return useQuery({
-    ...buildKillswitchesListCapabilitiesQuery(
+    ...buildKillswitchCapabilitiesQuery(
       client,
       security,
       request,
@@ -84,20 +84,20 @@ export function useKillswitchesListCapabilities(
 /**
  * listCapabilities killswitches
  */
-export function useKillswitchesListCapabilitiesSuspense(
+export function useKillswitchCapabilitiesSuspense(
   security: KillswitchesListCapabilitiesSecurity,
   request?: KillswitchesListCapabilitiesRequest | undefined,
   options?: SuspenseQueryHookOptions<
-    KillswitchesListCapabilitiesQueryData,
-    KillswitchesListCapabilitiesQueryError
+    KillswitchCapabilitiesQueryData,
+    KillswitchCapabilitiesQueryError
   >,
 ): UseSuspenseQueryResult<
-  KillswitchesListCapabilitiesQueryData,
-  KillswitchesListCapabilitiesQueryError
+  KillswitchCapabilitiesQueryData,
+  KillswitchCapabilitiesQueryError
 > {
   const client = useGramContext();
   return useSuspenseQuery({
-    ...buildKillswitchesListCapabilitiesQuery(
+    ...buildKillswitchCapabilitiesQuery(
       client,
       security,
       request,
@@ -107,17 +107,17 @@ export function useKillswitchesListCapabilitiesSuspense(
   });
 }
 
-export function setKillswitchesListCapabilitiesData(
+export function setKillswitchCapabilitiesData(
   client: QueryClient,
   queryKeyBase: [parameters: { gramSession?: string | undefined }],
-  data: KillswitchesListCapabilitiesQueryData,
-): KillswitchesListCapabilitiesQueryData | undefined {
-  const key = queryKeyKillswitchesListCapabilities(...queryKeyBase);
+  data: KillswitchCapabilitiesQueryData,
+): KillswitchCapabilitiesQueryData | undefined {
+  const key = queryKeyKillswitchCapabilities(...queryKeyBase);
 
-  return client.setQueryData<KillswitchesListCapabilitiesQueryData>(key, data);
+  return client.setQueryData<KillswitchCapabilitiesQueryData>(key, data);
 }
 
-export function invalidateKillswitchesListCapabilities(
+export function invalidateKillswitchCapabilities(
   client: QueryClient,
   queryKeyBase: TupleToPrefixes<
     [parameters: { gramSession?: string | undefined }]
@@ -135,7 +135,7 @@ export function invalidateKillswitchesListCapabilities(
   });
 }
 
-export function invalidateAllKillswitchesListCapabilities(
+export function invalidateAllKillswitchCapabilities(
   client: QueryClient,
   filters?: Omit<InvalidateQueryFilters, "queryKey" | "predicate" | "exact">,
 ): Promise<void> {

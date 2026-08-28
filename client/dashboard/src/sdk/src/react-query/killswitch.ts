@@ -32,19 +32,19 @@ import {
   TupleToPrefixes,
 } from "./_types.js";
 import {
-  buildKillswitchesGetQuery,
-  KillswitchesGetQueryData,
-  prefetchKillswitchesGet,
-  queryKeyKillswitchesGet,
-} from "./killswitchesGet.core.js";
+  buildKillswitchQuery,
+  KillswitchQueryData,
+  prefetchKillswitch,
+  queryKeyKillswitch,
+} from "./killswitch.core.js";
 export {
-  buildKillswitchesGetQuery,
-  type KillswitchesGetQueryData,
-  prefetchKillswitchesGet,
-  queryKeyKillswitchesGet,
+  buildKillswitchQuery,
+  type KillswitchQueryData,
+  prefetchKillswitch,
+  queryKeyKillswitch,
 };
 
-export type KillswitchesGetQueryError =
+export type KillswitchQueryError =
   | ServiceError
   | GramError
   | ResponseValidationError
@@ -58,17 +58,14 @@ export type KillswitchesGetQueryError =
 /**
  * get killswitches
  */
-export function useKillswitchesGet(
+export function useKillswitch(
   security: KillswitchesGetSecurity,
   request: KillswitchesGetRequest,
-  options?: QueryHookOptions<
-    KillswitchesGetQueryData,
-    KillswitchesGetQueryError
-  >,
-): UseQueryResult<KillswitchesGetQueryData, KillswitchesGetQueryError> {
+  options?: QueryHookOptions<KillswitchQueryData, KillswitchQueryError>,
+): UseQueryResult<KillswitchQueryData, KillswitchQueryError> {
   const client = useGramContext();
   return useQuery({
-    ...buildKillswitchesGetQuery(
+    ...buildKillswitchQuery(
       client,
       security,
       request,
@@ -81,17 +78,14 @@ export function useKillswitchesGet(
 /**
  * get killswitches
  */
-export function useKillswitchesGetSuspense(
+export function useKillswitchSuspense(
   security: KillswitchesGetSecurity,
   request: KillswitchesGetRequest,
-  options?: SuspenseQueryHookOptions<
-    KillswitchesGetQueryData,
-    KillswitchesGetQueryError
-  >,
-): UseSuspenseQueryResult<KillswitchesGetQueryData, KillswitchesGetQueryError> {
+  options?: SuspenseQueryHookOptions<KillswitchQueryData, KillswitchQueryError>,
+): UseSuspenseQueryResult<KillswitchQueryData, KillswitchQueryError> {
   const client = useGramContext();
   return useSuspenseQuery({
-    ...buildKillswitchesGetQuery(
+    ...buildKillswitchQuery(
       client,
       security,
       request,
@@ -101,17 +95,17 @@ export function useKillswitchesGetSuspense(
   });
 }
 
-export function setKillswitchesGetData(
+export function setKillswitchData(
   client: QueryClient,
   queryKeyBase: [parameters: { id: string; gramSession?: string | undefined }],
-  data: KillswitchesGetQueryData,
-): KillswitchesGetQueryData | undefined {
-  const key = queryKeyKillswitchesGet(...queryKeyBase);
+  data: KillswitchQueryData,
+): KillswitchQueryData | undefined {
+  const key = queryKeyKillswitch(...queryKeyBase);
 
-  return client.setQueryData<KillswitchesGetQueryData>(key, data);
+  return client.setQueryData<KillswitchQueryData>(key, data);
 }
 
-export function invalidateKillswitchesGet(
+export function invalidateKillswitch(
   client: QueryClient,
   queryKeyBase: TupleToPrefixes<
     [parameters: { id: string; gramSession?: string | undefined }]
@@ -124,7 +118,7 @@ export function invalidateKillswitchesGet(
   });
 }
 
-export function invalidateAllKillswitchesGet(
+export function invalidateAllKillswitch(
   client: QueryClient,
   filters?: Omit<InvalidateQueryFilters, "queryKey" | "predicate" | "exact">,
 ): Promise<void> {

@@ -72,6 +72,18 @@ func (s *genericServiceStub) ListPrescriptions(_ context.Context, request ListPr
 	return ListPrescriptionsResult{Prescriptions: []CurrentPrescription{{OrganizationID: request.OrganizationID}}}, s.err
 }
 
+func (s *genericServiceStub) ListCustomerPrescriptions(context.Context, ListCustomerPrescriptionsRequest) (ListCustomerPrescriptionsResult, error) {
+	return ListCustomerPrescriptionsResult{}, s.err
+}
+
+type lifecycleOnlyStub struct{ GenericService }
+
+func TestNewAuthorizedServiceRequiresCustomerReadService(t *testing.T) {
+	t.Parallel()
+	_, err := NewAuthorizedService(&lifecycleOnlyStub{GenericService: &genericServiceStub{}}, &authorizerStub{})
+	require.ErrorIs(t, err, ErrInvalidArgument)
+}
+
 type authorizationCheck struct {
 	organizationID string
 	userID         string

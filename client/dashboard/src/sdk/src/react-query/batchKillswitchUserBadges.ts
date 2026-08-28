@@ -31,16 +31,16 @@ import { unwrapAsync } from "../types/fp.js";
 import { useGramContext } from "./_context.js";
 import { MutationHookOptions } from "./_types.js";
 
-export type KillswitchesBatchUserBadgesMutationVariables = {
+export type BatchKillswitchUserBadgesMutationVariables = {
   security: KillswitchesBatchUserBadgesSecurity;
   request: KillswitchesBatchUserBadgesRequest;
   options?: RequestOptions;
 };
 
-export type KillswitchesBatchUserBadgesMutationData =
+export type BatchKillswitchUserBadgesMutationData =
   KillswitchBatchUserBadgesResult;
 
-export type KillswitchesBatchUserBadgesMutationError =
+export type BatchKillswitchUserBadgesMutationError =
   | ServiceError
   | GramError
   | ResponseValidationError
@@ -54,44 +54,44 @@ export type KillswitchesBatchUserBadgesMutationError =
 /**
  * batchUserBadges killswitches
  */
-export function useKillswitchesBatchUserBadgesMutation(
+export function useBatchKillswitchUserBadgesMutation(
   options?: MutationHookOptions<
-    KillswitchesBatchUserBadgesMutationData,
-    KillswitchesBatchUserBadgesMutationError,
-    KillswitchesBatchUserBadgesMutationVariables
+    BatchKillswitchUserBadgesMutationData,
+    BatchKillswitchUserBadgesMutationError,
+    BatchKillswitchUserBadgesMutationVariables
   >,
 ): UseMutationResult<
-  KillswitchesBatchUserBadgesMutationData,
-  KillswitchesBatchUserBadgesMutationError,
-  KillswitchesBatchUserBadgesMutationVariables
+  BatchKillswitchUserBadgesMutationData,
+  BatchKillswitchUserBadgesMutationError,
+  BatchKillswitchUserBadgesMutationVariables
 > {
   const client = useGramContext();
   return useMutation({
-    ...buildKillswitchesBatchUserBadgesMutation(client, options),
+    ...buildBatchKillswitchUserBadgesMutation(client, options),
     ...options,
   });
 }
 
-export function mutationKeyKillswitchesBatchUserBadges(): MutationKey {
+export function mutationKeyBatchKillswitchUserBadges(): MutationKey {
   return ["@gram/client", "killswitches", "batchUserBadges"];
 }
 
-export function buildKillswitchesBatchUserBadgesMutation(
+export function buildBatchKillswitchUserBadgesMutation(
   client$: GramCore,
   hookOptions?: RequestOptions,
 ): {
   mutationKey: MutationKey;
   mutationFn: (
-    variables: KillswitchesBatchUserBadgesMutationVariables,
-  ) => Promise<KillswitchesBatchUserBadgesMutationData>;
+    variables: BatchKillswitchUserBadgesMutationVariables,
+  ) => Promise<BatchKillswitchUserBadgesMutationData>;
 } {
   return {
-    mutationKey: mutationKeyKillswitchesBatchUserBadges(),
-    mutationFn: function killswitchesBatchUserBadgesMutationFn({
+    mutationKey: mutationKeyBatchKillswitchUserBadges(),
+    mutationFn: function batchKillswitchUserBadgesMutationFn({
       security,
       request,
       options,
-    }): Promise<KillswitchesBatchUserBadgesMutationData> {
+    }): Promise<BatchKillswitchUserBadgesMutationData> {
       const mergedOptions = {
         ...hookOptions,
         ...options,

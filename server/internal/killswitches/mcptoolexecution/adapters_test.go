@@ -2,6 +2,7 @@ package mcptoolexecution
 
 import (
 	"context"
+	"strings"
 	"testing"
 	"time"
 
@@ -10,7 +11,63 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/killswitches"
 	"github.com/speakeasy-api/gram/server/internal/mcpidentity"
+	"github.com/speakeasy-api/gram/server/internal/urn"
 )
+
+func TestAuthenticatedUserAdapterCanonicalizeUsesSessionSubjectByteLimit(t *testing.T) {
+	t.Parallel()
+
+	adapter := NewAuthenticatedUserPrincipalAdapter(nil)
+	tests := []struct {
+		name      string
+		input     string
+		supported bool
+	}{
+		{name: "ASCII at byte limit", input: strings.Repeat("a", urn.MaxSessionSubjectIDLength), supported: true},
+		{name: "ASCII over byte limit", input: strings.Repeat("a", urn.MaxSessionSubjectIDLength+1), supported: false},
+		{name: "multibyte at byte limit", input: strings.Repeat("é", urn.MaxSessionSubjectIDLength/2), supported: true},
+		{name: "multibyte over byte limit", input: strings.Repeat("é", urn.MaxSessionSubjectIDLength/2+1), supported: false},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			result, err := adapter.Canonicalize("org", test.input)
+			require.NoError(t, err)
+			key, supported, err := result.Key()
+			require.NoError(t, err)
+			require.Equal(t, test.supported, supported)
+			if supported {
+				require.Equal(t, killswitches.PrincipalKey(test.input), key)
+				_, err = urn.NewUserSubject(test.input).MarshalText()
+				require.NoError(t, err)
+			} else {
+				_, err = urn.NewUserSubject(test.input).MarshalText()
+				require.ErrorIs(t, err, urn.ErrInvalid)
+			}
+		})
+	}
+}
+
+func TestMCPServerAdapterCanonicalizeRejectsNilUUID(t *testing.T) {
+	t.Parallel()
+
+	adapter := NewMCPServerResourceAdapter(nil)
+	for _, input := range []string{uuid.Nil.String(), "  " + uuid.Nil.String() + "  "} {
+		result, err := adapter.Canonicalize("org", input)
+		require.NoError(t, err)
+		_, supported, err := result.Key()
+		require.NoError(t, err)
+		require.False(t, supported)
+	}
+
+	id := uuid.New()
+	result, err := adapter.Canonicalize("org", strings.ToUpper(id.String()))
+	require.NoError(t, err)
+	key, supported, err := result.Key()
+	require.NoError(t, err)
+	require.True(t, supported)
+	require.Equal(t, killswitches.ResourceKey(id.String()), key)
+}
 
 func TestAuthenticatedUserAdapterDeriveCandidates(t *testing.T) {
 	t.Parallel()
@@ -37,7 +94,7 @@ func TestAuthenticatedUserAdapterDeriveCandidates(t *testing.T) {
 	insertUser(t, conn, crossOrgUser, nil)
 	insertMembership(t, conn, otherOrg, crossOrgUser, nil)
 
-	result, err := adapter.DeriveCandidates(t.Context(), organization, mcpidentity.AuthenticatedUser(activeUser))
+	result, err := adapter.DeriveCandidates(t.Context(), organization, testIdentity(t, mcpidentity.KindUserSession, activeUser))
 	require.NoError(t, err)
 	require.Equal(t, killswitches.PrincipalCandidateResultCandidates, result.Kind())
 	require.Equal(t, []killswitches.PrincipalCandidate{{Kind: PrincipalKindUser, Key: killswitches.PrincipalKey(activeUser)}}, result.Candidates())
@@ -48,17 +105,17 @@ func TestAuthenticatedUserAdapterDeriveCandidates(t *testing.T) {
 		"cross-tenant member": crossOrgUser,
 		"unknown user":        "user_" + uuid.NewString(),
 	} {
-		result, err := adapter.DeriveCandidates(t.Context(), organization, mcpidentity.AuthenticatedUser(userID))
+		result, err := adapter.DeriveCandidates(t.Context(), organization, testIdentity(t, mcpidentity.KindUserSession, userID))
 		require.NoError(t, err, name)
 		require.Equal(t, killswitches.PrincipalCandidateResultUnsupported, result.Kind(), name)
 		require.Empty(t, result.Candidates(), name)
 	}
 
 	for name, identity := range map[string]mcpidentity.Identity{
-		"anonymous":    {Kind: mcpidentity.KindAnonymous, UserID: ""},
-		"api key":      {Kind: mcpidentity.KindAPIKey, UserID: ""},
-		"assistant":    {Kind: mcpidentity.KindAssistant, UserID: ""},
-		"chat session": {Kind: mcpidentity.KindChatSession, UserID: ""},
+		"anonymous":    testIdentity(t, mcpidentity.KindAnonymous, ""),
+		"api key":      testIdentity(t, mcpidentity.KindAPIKey, ""),
+		"assistant":    testIdentity(t, mcpidentity.KindAssistant, ""),
+		"chat session": testIdentity(t, mcpidentity.KindChatSession, ""),
 	} {
 		result, err := adapter.DeriveCandidates(t.Context(), organization, identity)
 		require.NoError(t, err, name)
@@ -69,20 +126,20 @@ func TestAuthenticatedUserAdapterDeriveCandidates(t *testing.T) {
 	// authoritative claims, unknown provenance — are never quietly promoted.
 	_, err = adapter.DeriveCandidates(t.Context(), organization, activeUser)
 	require.Error(t, err)
-	_, err = adapter.DeriveCandidates(t.Context(), organization, mcpidentity.AuthenticatedUser(""))
+	_, err = adapter.DeriveCandidates(t.Context(), organization, mcpidentity.Identity{})
 	require.Error(t, err)
-	_, err = adapter.DeriveCandidates(t.Context(), organization, mcpidentity.AuthenticatedUser(" "+activeUser))
+	_, err = adapter.DeriveCandidates(t.Context(), organization, testIdentity(t, mcpidentity.KindUserSession, " "+activeUser))
 	require.Error(t, err)
-	_, err = adapter.DeriveCandidates(t.Context(), organization, mcpidentity.Identity{Kind: "device", UserID: "user_x"})
+	_, err = adapter.DeriveCandidates(t.Context(), organization, mcpidentity.Identity{})
 	require.Error(t, err)
-	_, err = adapter.DeriveCandidates(t.Context(), "", mcpidentity.AuthenticatedUser(activeUser))
+	_, err = adapter.DeriveCandidates(t.Context(), "", testIdentity(t, mcpidentity.KindUserSession, activeUser))
 	require.Error(t, err)
 
 	// A membership lookup failure is an infrastructure error, never an
 	// unsupported classification and never a candidate.
 	canceled, cancel := context.WithCancel(t.Context())
 	cancel()
-	_, err = adapter.DeriveCandidates(canceled, organization, mcpidentity.AuthenticatedUser(activeUser))
+	_, err = adapter.DeriveCandidates(canceled, organization, testIdentity(t, mcpidentity.KindUserSession, activeUser))
 	require.Error(t, err)
 }
 

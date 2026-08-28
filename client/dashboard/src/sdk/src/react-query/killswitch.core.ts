@@ -17,9 +17,9 @@ import {
   KillswitchesGetSecurity,
 } from "../models/operations/killswitchesget.js";
 import { unwrapAsync } from "../types/fp.js";
-export type KillswitchesGetQueryData = KillswitchDetail;
+export type KillswitchQueryData = KillswitchDetail;
 
-export function prefetchKillswitchesGet(
+export function prefetchKillswitch(
   queryClient: QueryClient,
   client$: GramCore,
   security: KillswitchesGetSecurity,
@@ -27,7 +27,7 @@ export function prefetchKillswitchesGet(
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
-    ...buildKillswitchesGetQuery(
+    ...buildKillswitchQuery(
       client$,
       security,
       request,
@@ -36,23 +36,23 @@ export function prefetchKillswitchesGet(
   });
 }
 
-export function buildKillswitchesGetQuery(
+export function buildKillswitchQuery(
   client$: GramCore,
   security: KillswitchesGetSecurity,
   request: KillswitchesGetRequest,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;
-  queryFn: (context: QueryFunctionContext) => Promise<KillswitchesGetQueryData>;
+  queryFn: (context: QueryFunctionContext) => Promise<KillswitchQueryData>;
 } {
   return {
-    queryKey: queryKeyKillswitchesGet({
+    queryKey: queryKeyKillswitch({
       id: request.id,
       gramSession: request.gramSession,
     }),
-    queryFn: async function killswitchesGetQueryFn(
+    queryFn: async function killswitchQueryFn(
       ctx,
-    ): Promise<KillswitchesGetQueryData> {
+    ): Promise<KillswitchQueryData> {
       const sig = combineSignals(
         ctx.signal,
         options?.signal,
@@ -74,7 +74,7 @@ export function buildKillswitchesGetQuery(
   };
 }
 
-export function queryKeyKillswitchesGet(
+export function queryKeyKillswitch(
   parameters: { id: string; gramSession?: string | undefined },
 ): QueryKey {
   return ["@gram/client", "killswitches", "get", parameters];

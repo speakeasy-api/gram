@@ -143,6 +143,7 @@ type Service struct {
 	assistantTokens         *assistanttokens.Manager
 	sessions                *sessions.Manager
 	identityResolver        IdentityResolver
+	identityValidator       *mcpidentity.ValidatorBoundary
 	chatSessionsManager     *chatsessions.Manager
 	externalmcpRepo         *externalmcp_repo.Queries
 	deploymentsRepo         *deployments_repo.Queries
@@ -438,6 +439,7 @@ func NewService(
 		),
 		sessionClientInfo:  sessionclientinfo.NewStore(redisClient, 0),
 		identityResolver:   identityResolver,
+		identityValidator:  mcpidentity.NewValidatorBoundary(),
 		userSessionSigner:  userSessionSigner,
 		remoteChallengeMgr: remoteChallengeMgr,
 		remoteProxyManager: remoteProxyManager,
@@ -1566,7 +1568,7 @@ func (s *Service) authenticateToken(ctx context.Context, token string, oauthReso
 	}
 
 	if authorizedCtx, _, err := s.assistantTokens.Authorize(ctx, token); err == nil {
-		return mcpidentity.WithIdentity(authorizedCtx, mcpidentity.Identity{Kind: mcpidentity.KindAssistant, UserID: ""}), nil
+		return s.identityValidator.StampAssistant(authorizedCtx), nil
 	}
 
 	var err error
@@ -1580,7 +1582,7 @@ func (s *Service) authenticateToken(ctx context.Context, token string, oauthReso
 
 	ctx, err = s.auth.Authorize(ctx, token, &sc)
 	if err == nil {
-		return mcpidentity.WithIdentity(ctx, mcpidentity.Identity{Kind: mcpidentity.KindAPIKey, UserID: ""}), nil
+		return s.identityValidator.StampAPIKey(ctx), nil
 	}
 
 	// Strategy 3: Try API key authentication (chat scope fallback)
@@ -1591,13 +1593,13 @@ func (s *Service) authenticateToken(ctx context.Context, token string, oauthReso
 	}
 	ctx, err = s.auth.Authorize(ctx, token, &sc)
 	if err == nil {
-		return mcpidentity.WithIdentity(ctx, mcpidentity.Identity{Kind: mcpidentity.KindAPIKey, UserID: ""}), nil
+		return s.identityValidator.StampAPIKey(ctx), nil
 	}
 
 	// Strategy 4: Try Chat Sessions Token authentication
 	ctx, err = s.chatSessionsManager.Authorize(ctx, token)
 	if err == nil {
-		return mcpidentity.WithIdentity(ctx, mcpidentity.Identity{Kind: mcpidentity.KindChatSession, UserID: ""}), nil
+		return s.identityValidator.StampChatSession(ctx), nil
 	}
 
 	return ctx, oops.E(oops.CodeUnauthorized, errors.New("failed to authorize token using any strategy"), "failed to authorize").LogWarn(ctx, s.logger, attr.SlogToolsetID(oauthResourceID.String()))

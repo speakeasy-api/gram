@@ -52,7 +52,7 @@ CROSS JOIN LATERAL (
     AND prescription.principal_key = principal_candidate.principal_key
     AND prescription.resource_kind = @resource_kind
     AND version.state = 'active'
-    AND version.starts_at <= evaluation_clock.database_now
+    AND (version.starts_at IS NULL OR version.starts_at <= evaluation_clock.database_now)
     AND (version.expires_at IS NULL OR version.expires_at > evaluation_clock.database_now)
     AND (
       version.resource_scope = 'all'
@@ -71,7 +71,7 @@ CROSS JOIN LATERAL (
     )
   ORDER BY
     resource_scope_rank,
-    version.starts_at DESC,
+    COALESCE(version.starts_at, version.activated_at) DESC NULLS LAST,
     version.activated_at DESC NULLS LAST,
     prescription.id ASC
   LIMIT 1
@@ -80,7 +80,7 @@ ORDER BY
   definition_candidate.definition_rank,
   matched.resource_scope_rank,
   principal_candidate.principal_rank,
-  matched.starts_at DESC,
+  COALESCE(matched.starts_at, matched.activated_at) DESC NULLS LAST,
   matched.activated_at DESC NULLS LAST,
   matched.prescription_id ASC
 LIMIT 1;
@@ -423,18 +423,18 @@ LIMIT @result_limit;
 
 -- name: ListCustomerKillswitches :many
 WITH db_time AS (
-  SELECT @status_as_of::timestamptz AS now
+  SELECT clock_timestamp() AS now
 ), current_rows AS (
   SELECT
     p.id, p.created_at, p.principal_key AS user_id, v.version,
-    v.resource_scope, v.starts_at, v.expires_at,
+    v.resource_scope, COALESCE(v.starts_at, v.activated_at) AS starts_at, v.expires_at,
     CASE
       WHEN v.state = 'inactive' THEN 'lifted'
-      WHEN v.starts_at > db_time.now THEN 'scheduled'
+      WHEN v.starts_at IS NOT NULL AND v.starts_at > db_time.now THEN 'scheduled'
       WHEN v.expires_at IS NOT NULL AND v.expires_at <= db_time.now THEN 'expired'
       ELSE 'active'
     END::text AS customer_status,
-    CASE WHEN v.starts_at > v.activated_at THEN 'scheduled' ELSE 'now' END::text AS customer_start,
+    CASE WHEN v.starts_at IS NULL THEN 'now' ELSE 'scheduled' END::text AS customer_start,
     ARRAY(
       SELECT r.resource_key
       FROM killswitch_prescription_version_resources AS r
@@ -446,21 +446,14 @@ WITH db_time AS (
     )::text[] AS selected_resource_keys
   FROM killswitch_prescriptions AS p
   CROSS JOIN db_time
-  JOIN LATERAL (
-    SELECT snapshot.*
-    FROM killswitch_prescription_versions AS snapshot
-    WHERE snapshot.organization_id = p.organization_id
-      AND snapshot.prescription_id = p.id
-      AND snapshot.created_at <= db_time.now
-      AND (snapshot.superseded_at IS NULL OR snapshot.superseded_at > db_time.now)
-    ORDER BY snapshot.version DESC
-    LIMIT 1
-  ) AS v ON TRUE
+  JOIN killswitch_prescription_versions AS v
+    ON v.organization_id = p.organization_id
+    AND v.prescription_id = p.id
+    AND v.version = p.current_version
   WHERE p.organization_id = @organization_id
     AND p.definition_key = @definition_key
     AND p.principal_kind = @principal_kind
     AND p.resource_kind = @resource_kind
-    AND p.created_at <= db_time.now
     AND (sqlc.narg('user_id')::text IS NULL OR p.principal_key = sqlc.narg('user_id')::text)
     AND (
       sqlc.narg('cursor_created_at')::timestamptz IS NULL
@@ -477,7 +470,7 @@ LIMIT @result_limit;
 -- name: ListCustomerKillswitchHistory :many
 SELECT
   a.seq, a.action, a.actor_id, a.actor_type, a.actor_display_name, a.created_at,
-  v.version, v.state, v.resource_scope, v.starts_at, v.expires_at,
+  v.version, v.state, v.resource_scope, COALESCE(v.starts_at, v.activated_at) AS starts_at, v.expires_at,
   v.internal_note, v.external_note,
   ARRAY(
     SELECT r.resource_key
@@ -490,11 +483,11 @@ SELECT
   )::text[] AS selected_resource_keys,
   CASE
     WHEN v.state = 'inactive' THEN 'lifted'
-    WHEN v.starts_at > a.created_at THEN 'scheduled'
+    WHEN v.starts_at IS NOT NULL AND v.starts_at > a.created_at THEN 'scheduled'
     WHEN v.expires_at IS NOT NULL AND v.expires_at <= a.created_at THEN 'expired'
     ELSE 'active'
   END::text AS customer_status,
-  CASE WHEN v.starts_at > v.activated_at THEN 'scheduled' ELSE 'now' END::text AS customer_start,
+  CASE WHEN v.starts_at IS NULL THEN 'now' ELSE 'scheduled' END::text AS customer_start,
   COALESCE(a.metadata->>'operation', '')::text AS operation
 FROM audit_logs AS a
 JOIN killswitch_prescription_versions AS v
@@ -516,9 +509,9 @@ WITH db_time AS (
   SELECT clock_timestamp() AS now
 )
 SELECT
-  p.id, v.resource_scope, v.starts_at, v.expires_at,
-  CASE WHEN v.starts_at > db_time.now THEN 'scheduled' ELSE 'active' END::text AS customer_status,
-  CASE WHEN v.starts_at > v.activated_at THEN 'scheduled' ELSE 'now' END::text AS customer_start,
+  p.id, v.resource_scope, COALESCE(v.starts_at, v.activated_at) AS starts_at, v.expires_at,
+  CASE WHEN v.starts_at IS NOT NULL AND v.starts_at > db_time.now THEN 'scheduled' ELSE 'active' END::text AS customer_status,
+  CASE WHEN v.starts_at IS NULL THEN 'now' ELSE 'scheduled' END::text AS customer_start,
   ARRAY(
     SELECT r.resource_key
     FROM killswitch_prescription_version_resources AS r
@@ -543,7 +536,7 @@ WHERE p.organization_id = @organization_id
   AND (v.expires_at IS NULL OR db_time.now < v.expires_at)
   AND (sqlc.narg('exclude_id')::uuid IS NULL OR p.id <> sqlc.narg('exclude_id')::uuid)
   AND @draft_starts_at::timestamptz < COALESCE(v.expires_at, 'infinity'::timestamptz)
-  AND v.starts_at < COALESCE(sqlc.narg('draft_ends_at')::timestamptz, 'infinity'::timestamptz)
+  AND COALESCE(v.starts_at, v.activated_at) < COALESCE(sqlc.narg('draft_ends_at')::timestamptz, 'infinity'::timestamptz)
   AND (
     @draft_scope::text = 'all'
     OR v.resource_scope = 'all'
@@ -556,7 +549,7 @@ WHERE p.organization_id = @organization_id
         AND r.resource_key = ANY(@draft_selected_resource_keys::text[])
     )
   )
-ORDER BY v.starts_at ASC, p.id ASC
+ORDER BY COALESCE(v.starts_at, v.activated_at) ASC, p.id ASC
 LIMIT 101;
 
 -- name: BatchCustomerKillswitchUserBadges :many
@@ -570,10 +563,10 @@ SELECT
   requested.user_id::text AS user_id,
   CAST(COALESCE(bool_or(
     v.state = 'active'
-    AND v.starts_at <= db_time.now
+    AND (v.starts_at IS NULL OR v.starts_at <= db_time.now)
     AND (v.expires_at IS NULL OR db_time.now < v.expires_at)
   ), false) AS boolean) AS affected_now,
-  CAST(COALESCE(bool_or(v.state = 'active' AND v.starts_at > db_time.now), false) AS boolean) AS scheduled
+  CAST(COALESCE(bool_or(v.state = 'active' AND v.starts_at IS NOT NULL AND v.starts_at > db_time.now), false) AS boolean) AS scheduled
 FROM requested
 CROSS JOIN db_time
 LEFT JOIN killswitch_prescriptions AS p

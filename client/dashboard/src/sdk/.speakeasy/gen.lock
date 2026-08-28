@@ -27,7 +27,7 @@ features:
     responseFormat: 0.3.0
     retries: 2.83.1
     sdkHooks: 0.4.0
-    unions: 2.86.4
+    unions: 2.86.5
     uploadStreams: 0.1.1
 trackedFiles:
   FUNCTIONS.md: {}
@@ -2233,6 +2233,7 @@ trackedFiles:
   src/react-query/auditLogFacets.ts: {}
   src/react-query/auditLogs.core.ts: {}
   src/react-query/auditLogs.ts: {}
+  src/react-query/batchKillswitchUserBadges.ts: {}
   src/react-query/builtinExclusions.core.ts: {}
   src/react-query/builtinExclusions.ts: {}
   src/react-query/cancelStripeSubscription.ts: {}
@@ -2283,6 +2284,7 @@ trackedFiles:
   src/react-query/createGlobalRemoteSessionIssuer.ts: {}
   src/react-query/createGlobalToolVariationGroup.ts: {}
   src/react-query/createJsonWebKeySet.ts: {}
+  src/react-query/createKillswitch.ts: {}
   src/react-query/createLiteLLMInstance.ts: {}
   src/react-query/createMcpApprovalRequest.ts: {}
   src/react-query/createMcpEndpoint.ts: {}
@@ -2372,6 +2374,7 @@ trackedFiles:
   src/react-query/dismissSkillSuggestion.ts: {}
   src/react-query/distributePlatformMCPOnboardingCandidate.ts: {}
   src/react-query/distributeSkill.ts: {}
+  src/react-query/editKillswitch.ts: {}
   src/react-query/enableAdminOpenRouterKey.ts: {}
   src/react-query/enableWebhooks.ts: {}
   src/react-query/ensureManagedAssistant.ts: {}
@@ -2528,21 +2531,17 @@ trackedFiles:
   src/react-query/integrationsIntegrationsNumberGet.core.ts: {}
   src/react-query/integrationsIntegrationsNumberGet.ts: {}
   src/react-query/interruptAssistantTurn.ts: {}
-  src/react-query/killswitchesBatchUserBadges.ts: {}
-  src/react-query/killswitchesCreate.ts: {}
-  src/react-query/killswitchesEdit.ts: {}
-  src/react-query/killswitchesGet.core.ts: {}
-  src/react-query/killswitchesGet.ts: {}
-  src/react-query/killswitchesLift.ts: {}
-  src/react-query/killswitchesList.core.ts: {}
-  src/react-query/killswitchesList.ts: {}
-  src/react-query/killswitchesListCapabilities.core.ts: {}
-  src/react-query/killswitchesListCapabilities.ts: {}
-  src/react-query/killswitchesListMCPServers.core.ts: {}
-  src/react-query/killswitchesListMCPServers.ts: {}
-  src/react-query/killswitchesPreviewOverlaps.ts: {}
+  src/react-query/killswitch.core.ts: {}
+  src/react-query/killswitch.ts: {}
+  src/react-query/killswitchCapabilities.core.ts: {}
+  src/react-query/killswitchCapabilities.ts: {}
+  src/react-query/killswitchMCPServers.core.ts: {}
+  src/react-query/killswitchMCPServers.ts: {}
+  src/react-query/killswitches.core.ts: {}
+  src/react-query/killswitches.ts: {}
   src/react-query/latestDeployment.core.ts: {}
   src/react-query/latestDeployment.ts: {}
+  src/react-query/liftKillswitch.ts: {}
   src/react-query/listAPIKeys.core.ts: {}
   src/react-query/listAPIKeys.ts: {}
   src/react-query/listAllowedOrigins.core.ts: {}
@@ -2716,6 +2715,7 @@ trackedFiles:
   src/react-query/pluginsDownloadObservabilityPlugin.ts: {}
   src/react-query/pluginsDownloadPluginPackage.core.ts: {}
   src/react-query/pluginsDownloadPluginPackage.ts: {}
+  src/react-query/previewKillswitchOverlaps.ts: {}
   src/react-query/productFeatures.core.ts: {}
   src/react-query/productFeatures.ts: {}
   src/react-query/project.core.ts: {}

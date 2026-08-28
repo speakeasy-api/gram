@@ -1,66 +1,59 @@
 package mcp
 
 import (
+	"context"
 	"testing"
+	"time"
 
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/mcpidentity"
+	"github.com/speakeasy-api/gram/server/internal/sessiontokens"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
-// TestIdentityForSessionSubject pins the provenance mapping the issuer gate
-// stamps after credential validation: only a concrete user subject yields
-// authoritative acting-user provenance, and a user subject with no ID yields
-// none at all.
-func TestIdentityForSessionSubject(t *testing.T) {
+type provenanceNeverRevoked struct{}
+
+func (provenanceNeverRevoked) IsTokenRevoked(context.Context, string) (bool, error) {
+	return false, nil
+}
+
+func validatedSessionProof(t *testing.T, subject urn.SessionSubject) sessiontokens.ValidatedSession {
+	t.Helper()
+	signer := sessiontokens.NewSigner("mcp-provenance-test-secret")
+	token, _, err := signer.Mint(sessiontokens.MintParams{Subject: subject, Audience: "mcp-test", Issuer: "mcp-test", Lifetime: time.Hour})
+	require.NoError(t, err)
+	proof, err := signer.ValidateBearer(t.Context(), token, "mcp-test", provenanceNeverRevoked{})
+	require.NoError(t, err)
+	return proof
+}
+
+// TestIdentityForValidatedSession pins the provenance mapping after bearer
+// validation: only a concrete validated user session yields an acting user.
+func TestIdentityForValidatedSession(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
-		name    string
-		subject urn.SessionSubject
-		want    mcpidentity.Identity
-		stamped bool
+		name     string
+		subject  urn.SessionSubject
+		wantKind mcpidentity.Kind
+		wantUser string
 	}{
-		{
-			name:    "concrete user is authoritative",
-			subject: urn.NewUserSubject("user_01J8EXAMPLE"),
-			want:    mcpidentity.AuthenticatedUser("user_01J8EXAMPLE"),
-			stamped: true,
-		},
-		{
-			name:    "user subject without an ID stamps nothing",
-			subject: urn.SessionSubject{Kind: urn.SessionSubjectKindUser, ID: ""},
-			want:    mcpidentity.Identity{Kind: "", UserID: ""},
-			stamped: false,
-		},
-		{
-			name:    "api key never carries an acting user",
-			subject: urn.SessionSubject{Kind: urn.SessionSubjectKindAPIKey, ID: "key_01J8EXAMPLE"},
-			want:    mcpidentity.Identity{Kind: mcpidentity.KindAPIKey, UserID: ""},
-			stamped: true,
-		},
-		{
-			name:    "anonymous never carries an acting user",
-			subject: urn.SessionSubject{Kind: urn.SessionSubjectKindAnonymous, ID: ""},
-			want:    mcpidentity.Identity{Kind: mcpidentity.KindAnonymous, UserID: ""},
-			stamped: true,
-		},
-		{
-			name:    "unknown subject kind stamps nothing",
-			subject: urn.SessionSubject{Kind: "device", ID: "dev_01J8EXAMPLE"},
-			want:    mcpidentity.Identity{Kind: "", UserID: ""},
-			stamped: false,
-		},
+		{name: "concrete user is authoritative", subject: urn.NewUserSubject("user_01J8EXAMPLE"), wantKind: mcpidentity.KindUserSession, wantUser: "user_01J8EXAMPLE"},
+		{name: "api key never carries an acting user", subject: urn.NewAPIKeySubject(uuid.MustParse("11111111-1111-1111-1111-111111111111")), wantKind: mcpidentity.KindAPIKey},
+		{name: "anonymous never carries an acting user", subject: urn.NewAnonymousSubject("session_01J8EXAMPLE"), wantKind: mcpidentity.KindAnonymous},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			got, stamped := identityForSessionSubject(tt.subject)
-			require.Equal(t, tt.stamped, stamped)
-			require.Equal(t, tt.want, got)
+			ctx := mcpidentity.NewValidatorBoundary().StampValidatedSession(t.Context(), validatedSessionProof(t, tt.subject))
+			got, stamped := mcpidentity.FromContext(ctx)
+			require.True(t, stamped)
+			require.Equal(t, tt.wantKind, got.Kind())
+			require.Equal(t, tt.wantUser, got.UserID())
 		})
 	}
 }

@@ -40,7 +40,7 @@ func TestIdentityCoverageCheckpoint_RevalidatesEachCall(t *testing.T) {
 
 	recorder := &coverageRecorder{}
 	checkpoint := NewIdentityCoverageCheckpoint(conn, recorder)
-	ctx := mcpidentity.WithIdentity(t.Context(), mcpidentity.AuthenticatedUser(userID))
+	ctx := testIdentityContext(t, mcpidentity.KindUserSession, userID)
 	source := ServerSource{FrontingServerID: uuid.NullUUID{UUID: serverID, Valid: true}}
 
 	checkpoint.Record(ctx, orgID, mcpmetrics.KillswitchSurfaceHosted, source)
@@ -80,13 +80,13 @@ func TestIdentityCoverageCheckpoint_UsesOnlyStampedProvenance(t *testing.T) {
 
 	checkpoint.Record(t.Context(), orgID, mcpmetrics.KillswitchSurfacePrivateProxy, source)
 	checkpoint.Record(
-		mcpidentity.WithIdentity(t.Context(), mcpidentity.Identity{Kind: mcpidentity.KindAnonymous}),
+		testIdentityContext(t, mcpidentity.KindAnonymous, ""),
 		orgID,
 		mcpmetrics.KillswitchSurfacePrivateProxy,
 		source,
 	)
 	checkpoint.Record(
-		mcpidentity.WithIdentity(t.Context(), mcpidentity.Identity{Kind: mcpidentity.KindAPIKey}),
+		testIdentityContext(t, mcpidentity.KindAPIKey, ""),
 		orgID,
 		mcpmetrics.KillswitchSurfacePrivateProxy,
 		source,
