@@ -285,7 +285,7 @@ func TestServePublic_MetaEndpoint_ExecuteTool_AmbiguousCredentialMakesNoCall(t *
 	rpc := executeMetaTool(t, ti, metaSlug, bearer, "member--ping")
 	text, isError := metaToolResultText(t, rpc)
 	require.True(t, isError, "an ambiguous credential map must fail the member call")
-	require.Contains(t, text, "not configured unambiguously")
+	require.Contains(t, text, "recorded for the same upstream", "the message must name the duplication, not just report misconfiguration")
 	require.Zero(t, upstream.requests.Load(), "no call may be made when the credential is ambiguous")
 }
 

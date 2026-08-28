@@ -56,8 +56,13 @@ const memberSessionCloseTimeout = 5 * time.Second
 // token can be its credential; several tokens fail member-scoped.
 func routeMetaMemberToken(tokens map[uuid.UUID]remotesessions.UpstreamToken, member metaMember, upstreamResource string) (string, error) {
 	if member.tunneledServerID.Valid {
+		// A tunneled backend records no RFC 8707 resource, so there is nothing
+		// to match a credential against. One credential is that member's by
+		// construction (matching routeUpstreamToken on the direct surface);
+		// several are unroutable, so say which situation this is rather than
+		// leaving the operator to guess at "misconfiguration".
 		if len(tokens) > 1 {
-			return "", &metaMemberError{message: fmt.Sprintf("server %q upstream credentials are not configured unambiguously for this meta MCP", member.slug)}
+			return "", &metaMemberError{message: fmt.Sprintf("server %q is tunneled and has no upstream identity of its own, but this session holds %d upstream credentials, so none can be matched to it; connect only the provider it needs, or reach it through its own endpoint", member.slug, len(tokens))}
 		}
 		for _, entry := range tokens {
 			if entry.Resource == "" {
@@ -85,7 +90,9 @@ func routeMetaMemberToken(tokens map[uuid.UUID]remotesessions.UpstreamToken, mem
 	case 1:
 		return matched, nil
 	default:
-		return "", &metaMemberError{message: fmt.Sprintf("server %q upstream credentials are not configured unambiguously for this meta MCP", member.slug)}
+		// Several credentials claim the same upstream, so forwarding any one
+		// would be a guess. Name the duplication rather than the symptom.
+		return "", &metaMemberError{message: fmt.Sprintf("server %q has %d upstream credentials recorded for the same upstream, so none can be chosen; disconnect the duplicates from this gateway's sign-in and reconnect once", member.slug, found)}
 	}
 }
 
