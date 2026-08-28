@@ -5,7 +5,7 @@ import { NuqsAdapter } from "nuqs/adapters/react-router/v8";
 import { Toaster } from "@/components/ui/Sonner";
 import { ConfigProvider } from "@/components/ui/context/ConfigContext";
 import { TooltipProvider } from "@/components/ui/Tooltip";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import {
   BrowserRouter,
   Route,
@@ -22,10 +22,13 @@ import {
   pageLabel,
   recordVisit,
   RECENTS_LABEL_OVERRIDE_EVENT,
+  removeVisitsMatching,
+  shouldRemoveRestrictedRecents,
 } from "./components/command-palette/recentlyVisited";
 import { useIsPlatformAdmin, useUser } from "./contexts/Auth";
 import { useProjectNavRoutes } from "./hooks/useProjectNavRoutes";
 import { useRBAC } from "./hooks/useRBAC";
+import { useKillswitchAccess } from "./hooks/useKillswitchAccess";
 import { AuthProvider, ProjectProvider } from "./contexts/AuthProvider.tsx";
 import { useCommandPalette } from "./contexts/CommandPalette";
 import type { CommandAction } from "./contexts/CommandPalette";
@@ -147,6 +150,7 @@ const RouteProvider = () => {
   const location = useLocation();
   const projectNavRoutes = useProjectNavRoutes();
   const { hasAnyScope } = useRBAC();
+  const killswitchAccess = useKillswitchAccess();
   // RouteProvider is inside AuthProvider, so reuse the already-fetched session
   // instead of issuing another auth.info request.
   const recentsUserId = useUser().id || undefined;
@@ -187,6 +191,33 @@ const RouteProvider = () => {
     return () => window.removeEventListener("keydown", onKey);
   }, [isPlatformAdmin, goToPlatformAdmin, location, navigate]);
 
+  useEffect(() => {
+    if (
+      !shouldRemoveRestrictedRecents({
+        canAccess: killswitchAccess.canAccess,
+        isLoading: killswitchAccess.isLoading,
+      }) ||
+      !recentsUserId
+    )
+      return;
+    const killswitchHref = orgRoutes.killswitch.href();
+    removeVisitsMatching(
+      recentsUserId,
+      orgSlug,
+      projectSlug,
+      (entry) =>
+        entry.href === killswitchHref ||
+        entry.href.startsWith(`${killswitchHref}/`),
+    );
+  }, [
+    killswitchAccess.canAccess,
+    killswitchAccess.isLoading,
+    recentsUserId,
+    orgRoutes.killswitch,
+    orgSlug,
+    projectSlug,
+  ]);
+
   // Record the visited page for the command palette's "Recently Visited"
   // section. Stored client-side (localStorage), scoped per workspace.
   // matchesCurrent uses exact segment counts, so the active top-level route is
@@ -199,6 +230,7 @@ const RouteProvider = () => {
     // recentsUserId is a dependency, so the effect re-runs (and records the
     // current page) as soon as the session loads.
     if (!recentsUserId) return;
+    if (orgRoutes.killswitch.active && !killswitchAccess.canAccess) return;
     const active =
       Object.values(routes).find((r) => r.active && !r.external) ??
       Object.values(orgRoutes).find((r) => r.active && !r.external);
@@ -242,6 +274,7 @@ const RouteProvider = () => {
     recentsUserId,
     orgSlug,
     projectSlug,
+    killswitchAccess.canAccess,
   ]);
 
   // Register command palette navigation actions. Project "Pages" mirror the
@@ -271,7 +304,9 @@ const RouteProvider = () => {
     const showPlatformAdmin = import.meta.env.DEV || isPlatformAdmin;
     const paletteOrgRoutes = Object.fromEntries(
       Object.entries(orgRoutes).filter(
-        ([, route]) => showPlatformAdmin || !route.url.startsWith("platform-"),
+        ([key, route]) =>
+          (showPlatformAdmin || !route.url.startsWith("platform-")) &&
+          (key !== "killswitch" || killswitchAccess.canAccess),
       ),
     );
     const orgActions = routesToNavActions(
@@ -292,6 +327,7 @@ const RouteProvider = () => {
     projectSlug,
     hasAnyScope,
     isPlatformAdmin,
+    killswitchAccess.canAccess,
     addActions,
     removeActions,
   ]);
@@ -424,10 +460,23 @@ const routesWithSubroutes = (routes: AppRoute[]) => {
       <Route
         key={item.title}
         path={item.url}
-        element={item.component ? <item.component /> : null}
+        element={
+          item.component ? (
+            <Suspense fallback={<div className="p-8 text-sm">Loading…</div>}>
+              <item.component />
+            </Suspense>
+          ) : null
+        }
       >
         {item.indexComponent && (
-          <Route index element={<item.indexComponent />} />
+          <Route
+            index
+            element={
+              <Suspense fallback={<div className="p-8 text-sm">Loading…</div>}>
+                <item.indexComponent />
+              </Suspense>
+            }
+          />
         )}
         {/* Check for any children routes stored on this item */}
         {routesWithSubroutes(

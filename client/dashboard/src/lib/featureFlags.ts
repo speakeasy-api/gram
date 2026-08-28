@@ -8,6 +8,7 @@ export const FEATURE_FLAGS = {
   externalMcpUserSessions: "onboard-external-mcp-to-user-sessions",
   functions: "gram-functions",
   gatewayEndpoints: "gram-gateway-endpoints",
+  killswitches: "gram-killswitches",
   headlessModeSwitcher: "headless-mode-switcher",
   mcpResearch: "gram-mcp-research",
   newCostsPage: "gram-new-costs-page",

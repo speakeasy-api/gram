@@ -145,6 +145,20 @@ import {
   ToolBuilderPage,
 } from "./pages/toolBuilder/ToolBuilder";
 
+const Killswitches = React.lazy(() =>
+  import("./pages/killswitch/Killswitches").then((module) => ({
+    default: module.default,
+  })),
+);
+const KillswitchesRoot = React.lazy(() =>
+  import("./pages/killswitch/Killswitches").then((module) => ({
+    default: module.KillswitchesRoot,
+  })),
+);
+const KillswitchDetail = React.lazy(
+  () => import("./pages/killswitch/KillswitchDetail"),
+);
+
 type AppRouteBasic = {
   title: string;
   url: string;
@@ -1168,6 +1182,20 @@ const ORG_ROUTE_STRUCTURE = {
     url: "audit-logs",
     icon: "history",
     component: OrgAuditLogs,
+  },
+  killswitch: {
+    title: "Killswitch",
+    url: "killswitch",
+    icon: "shield-off",
+    component: KillswitchesRoot,
+    indexComponent: Killswitches,
+    subPages: {
+      detail: {
+        title: "Killswitch detail",
+        url: ":killswitchId",
+        component: KillswitchDetail,
+      },
+    },
   },
   mcpSessions: {
     title: "MCP Sessions",
