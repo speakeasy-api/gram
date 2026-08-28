@@ -188,7 +188,7 @@ func TestRiskPolicyMutationHandlersCreateUpdateReplayAndRedact(t *testing.T) {
 	}
 	_, promptCreated, err := handlers.CreatePolicy(ctx, nil, promptInput)
 	require.NoError(t, err)
-	candidates, err := riskrepo.New(conn).ListRiskPolicyCreateCandidates(ctx, riskrepo.ListRiskPolicyCreateCandidatesParams{ProjectID: project.ID, Name: "Policy", PolicyType: "standard"})
+	candidates, err := riskrepo.New(conn).ListRiskPolicyCreateCandidates(ctx, riskrepo.ListRiskPolicyCreateCandidatesParams{ProjectID: project.ID, Name: "Renamed", PolicyType: "standard"})
 	require.NoError(t, err)
 	require.Len(t, candidates, 1)
 	require.Equal(t, policyID, candidates[0].ID, "create convergence narrows by project, name, and policy type")
