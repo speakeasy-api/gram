@@ -207,8 +207,12 @@ func newStripeWebhookService(t *testing.T, customerID string, handler stripeWebh
 }
 
 func serveStripeWebhook(service *Service, body string) *httptest.ResponseRecorder {
+	return serveStripeWebhookWithContext(context.Background(), service, body)
+}
+
+func serveStripeWebhookWithContext(ctx context.Context, service *Service, body string) *httptest.ResponseRecorder {
 	recorder := httptest.NewRecorder()
-	request := httptest.NewRequest(http.MethodPost, "/rpc/stripe.webhook", strings.NewReader(body))
+	request := httptest.NewRequest(http.MethodPost, "/rpc/stripe.webhook", strings.NewReader(body)).WithContext(ctx)
 	request.Header.Set("Stripe-Signature", "signature_placeholder")
 	oops.ErrHandle(service.logger, service.handleStripeWebhook).ServeHTTP(recorder, request)
 	return recorder
@@ -1108,23 +1112,32 @@ func postgresBackendPID(t *testing.T, tx pgx.Tx) int32 {
 	return pid
 }
 
-func waitForStripeWebhookBlockedByPID(t *testing.T, db *pgxpool.Pool, holderPID int32) {
+func waitForStripeWebhookWaitersBlockedByPID(t *testing.T, db *pgxpool.Pool, holderPID int32, count int) []int32 {
 	t.Helper()
 
+	var waiterPIDs []int32
 	require.Eventually(t, func() bool {
-		var waiting bool
-		err := db.QueryRow( //nolint:glint // notestingrawsql: pg_blocking_pids is a PostgreSQL test synchronization primitive unavailable to SQLc generation
+		rows, err := db.Query( //nolint:glint // notestingrawsql: pg_blocking_pids is a PostgreSQL test synchronization primitive unavailable to SQLc generation
 			t.Context(), `
-SELECT EXISTS (
-  SELECT 1
-  FROM pg_stat_activity AS activity
-  WHERE activity.datname = current_database()
-    AND $1 = ANY(pg_blocking_pids(activity.pid))
-)
-`, holderPID).Scan(&waiting)
+SELECT activity.pid
+FROM pg_stat_activity AS activity
+WHERE activity.datname = current_database()
+  AND $1 = ANY(pg_blocking_pids(activity.pid))
+ORDER BY activity.pid
+`, holderPID)
+		if err != nil {
+			return false
+		}
+		waiterPIDs, err = pgx.CollectRows(rows, pgx.RowTo[int32])
 		require.NoError(t, err)
-		return waiting
+		return len(waiterPIDs) == count
 	}, 2*time.Second, 10*time.Millisecond)
+	return waiterPIDs
+}
+
+func waitForStripeWebhookBlockedByPID(t *testing.T, db *pgxpool.Pool, holderPID int32) {
+	t.Helper()
+	waitForStripeWebhookWaitersBlockedByPID(t, db, holderPID, 1)
 }
 
 func receiveStripeWebhookStatus(t *testing.T, response <-chan int) int {
@@ -1203,6 +1216,100 @@ func TestStripeCheckoutAcquiresOpenRouterLocksInAllKeyTypesOrder(t *testing.T) {
 	require.NoError(t, probeTx.Rollback(t.Context()))
 	require.NoError(t, chatTx.Rollback(t.Context()))
 	require.Equal(t, http.StatusOK, receiveStripeWebhookStatus(t, response))
+}
+
+func TestStripeSubscriptionDeletionAcquiresEveryOpenRouterLockInOrder(t *testing.T) {
+	t.Parallel()
+
+	service, db := newStripeWebhookService(t, "customer_placeholder", nil)
+	configurePaygSubscriptionDeletion(t, service, "event_deletion_key_order", "subscription_key_order", "subscription_key_order")
+	service.stripeHandler = service.serviceStripeWebhookHandler
+	require.Equal(t, []openrouter.KeyType{openrouter.KeyTypeChat, openrouter.KeyTypeInternal}, openrouter.AllKeyTypes)
+
+	internalTx, err := db.Begin(t.Context()) //nolint:glint // notestingrawsql: the targeted backend holds the second canonical advisory lock
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = internalTx.Rollback(context.Background()) })
+	internalHolderPID := postgresBackendPID(t, internalTx)
+	require.NoError(t, repo.New(internalTx).AcquireOpenRouterBillingLock(t.Context(), repo.AcquireOpenRouterBillingLockParams{
+		KeyType:        string(openrouter.KeyTypeInternal),
+		OrganizationID: stripeWebhookOrganizationID,
+	}))
+
+	requestCtx, cancelRequest := context.WithTimeout(t.Context(), 5*time.Second)
+	defer cancelRequest()
+	response := make(chan int, 1)
+	go func() { response <- serveStripeWebhookWithContext(requestCtx, service, "delete").Code }()
+	waitForStripeWebhookBlockedByPID(t, db, internalHolderPID)
+
+	probeTx, err := db.Begin(t.Context()) //nolint:glint // notestingrawsql: the probe proves deletion retained the first lock while waiting for the second
+	require.NoError(t, err)
+	probeCtx, cancelProbe := context.WithTimeout(t.Context(), 500*time.Millisecond)
+	probeErr := repo.New(probeTx).AcquireOpenRouterBillingLock(probeCtx, repo.AcquireOpenRouterBillingLockParams{
+		KeyType:        string(openrouter.KeyTypeChat),
+		OrganizationID: stripeWebhookOrganizationID,
+	})
+	cancelProbe()
+	_ = probeTx.Rollback(t.Context())
+	require.ErrorIs(t, probeErr, context.DeadlineExceeded)
+
+	require.NoError(t, internalTx.Rollback(t.Context()))
+	require.Equal(t, http.StatusOK, receiveStripeWebhookStatus(t, response))
+}
+
+func TestReplacementCheckoutAndPriorSubscriptionDeletionAcquireOpenRouterBeforeBilling(t *testing.T) {
+	t.Parallel()
+
+	deletionService, db := newStripeWebhookService(t, "customer_placeholder", nil)
+	configurePaygSubscriptionDeletion(t, deletionService, "event_prior_deletion", "subscription_prior", "subscription_prior")
+	deletionService.stripeHandler = deletionService.serviceStripeWebhookHandler
+	createOpenRouterKeyFixture(t, db, openrouter.KeyTypeChat, 100)
+	createOpenRouterKeyFixture(t, db, openrouter.KeyTypeInternal, 100)
+
+	checkoutService := *deletionService
+	checkoutService.stripeClient = &fakeStripeWebhookClient{}
+	configurePaygCheckout(t, &checkoutService, "event_replacement_checkout", "subscription_replacement", "active")
+
+	holderTx, err := db.Begin(t.Context()) //nolint:glint // notestingrawsql: the test queues both lifecycle transactions behind one targeted backend
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = holderTx.Rollback(context.Background()) })
+	holderPID := postgresBackendPID(t, holderTx)
+	require.NoError(t, repo.New(holderTx).AcquireOpenRouterBillingLock(t.Context(), repo.AcquireOpenRouterBillingLockParams{
+		KeyType:        string(openrouter.KeyTypeChat),
+		OrganizationID: stripeWebhookOrganizationID,
+	}))
+
+	requestCtx, cancelRequests := context.WithTimeout(t.Context(), 5*time.Second)
+	defer cancelRequests()
+	deletionResponse := make(chan int, 1)
+	go func() {
+		deletionResponse <- serveStripeWebhookWithContext(requestCtx, deletionService, "delete prior").Code
+	}()
+	deletionWaiter := waitForStripeWebhookWaitersBlockedByPID(t, db, holderPID, 1)
+
+	checkoutResponse := make(chan int, 1)
+	go func() {
+		checkoutResponse <- serveStripeWebhookWithContext(requestCtx, &checkoutService, "replace").Code
+	}()
+	waiters := waitForStripeWebhookWaitersBlockedByPID(t, db, holderPID, 2)
+	require.Contains(t, waiters, deletionWaiter[0])
+
+	probeTx, err := db.Begin(t.Context()) //nolint:glint // notestingrawsql: availability of the canonical next lock is the ordering assertion
+	require.NoError(t, err)
+	probeCtx, cancel := context.WithTimeout(t.Context(), 500*time.Millisecond)
+	probeErr := repo.New(probeTx).LockBillingMetadataOrganization(probeCtx, stripeWebhookOrganizationID)
+	cancel()
+	_ = probeTx.Rollback(t.Context())
+
+	require.NoError(t, holderTx.Rollback(t.Context()))
+	deletionStatus := receiveStripeWebhookStatus(t, deletionResponse)
+	checkoutStatus := receiveStripeWebhookStatus(t, checkoutResponse)
+	require.NoError(t, probeErr, "billing lock must remain available while both lifecycle transactions wait for OpenRouter")
+	require.Equal(t, http.StatusOK, deletionStatus)
+	require.Equal(t, http.StatusOK, checkoutStatus)
+
+	metadata, err := repo.New(db).GetBillingMetadata(t.Context(), stripeWebhookOrganizationID)
+	require.NoError(t, err)
+	require.Equal(t, "subscription_replacement", metadata.StripeSubscriptionID.String)
 }
 
 func TestStripeCheckoutConversionReplacesTrialAndBillingCausesIndependently(t *testing.T) {
@@ -1797,38 +1904,6 @@ func TestStripeSubscriptionDeletionAddsOnlyBillingInactiveCause(t *testing.T) {
 	require.EqualValues(t, 321, chat.MonthlyCredits)
 }
 
-func TestStripeSubscriptionDeletionLocksOnlyChatLifecycle(t *testing.T) {
-	t.Parallel()
-
-	service, db := newStripeWebhookService(t, "customer_placeholder", nil)
-	configurePaygSubscriptionDeletion(t, service, "event_chat_lock_only", "subscription_current", "subscription_current")
-	createOpenRouterKeyFixture(t, db, openrouter.KeyTypeChat, 321)
-
-	internalLockTx, err := db.Begin(t.Context()) //nolint:glint // notestingrawsql: the test must hold the unrelated advisory lock while deletion proceeds
-	require.NoError(t, err)
-	t.Cleanup(func() { _ = internalLockTx.Rollback(context.Background()) })
-	require.NoError(t, repo.New(internalLockTx).AcquireOpenRouterBillingLock(t.Context(), repo.AcquireOpenRouterBillingLockParams{
-		KeyType:        string(openrouter.KeyTypeInternal),
-		OrganizationID: stripeWebhookOrganizationID,
-	}))
-
-	chatLockTx, err := db.Begin(t.Context()) //nolint:glint // notestingrawsql: the test uses the relevant advisory lock to synchronize with the webhook backend
-	require.NoError(t, err)
-	t.Cleanup(func() { _ = chatLockTx.Rollback(context.Background()) })
-	chatHolderPID := postgresBackendPID(t, chatLockTx)
-	require.NoError(t, repo.New(chatLockTx).AcquireOpenRouterBillingLock(t.Context(), repo.AcquireOpenRouterBillingLockParams{
-		KeyType:        string(openrouter.KeyTypeChat),
-		OrganizationID: stripeWebhookOrganizationID,
-	}))
-
-	response := make(chan int, 1)
-	go func() { response <- serveStripeWebhook(service, "deactivate").Code }()
-	waitForStripeWebhookBlockedByPID(t, db, chatHolderPID)
-	require.NoError(t, chatLockTx.Rollback(t.Context()))
-	require.Equal(t, http.StatusOK, receiveStripeWebhookStatus(t, response))
-	require.NoError(t, internalLockTx.Rollback(t.Context()))
-}
-
 func TestStripeSubscriptionDeletionRejectsUnclassifiedKeyAndRollsBackAtomically(t *testing.T) {
 	t.Parallel()
 
@@ -2014,6 +2089,69 @@ func TestStripeSubscriptionDeletionReplayCannotOverrideLaterConversion(t *testin
 	require.EqualValues(t, limit, chat.MonthlyCredits)
 	require.Empty(t, chat.DisableCauses)
 	require.False(t, chat.Disabled)
+}
+
+func TestConvertedDemotedTrialSubscriptionLossWinsBeforeDelayedActivationReconcile(t *testing.T) {
+	t.Parallel()
+
+	service, db := newStripeWebhookService(t, "customer_placeholder", nil)
+	configurePaygCheckout(t, service, "event_converted_before_loss", "subscription_converted_before_loss", "active")
+	createDemotedEnterpriseTrialFixture(t, db)
+	createOpenRouterKeyFixture(t, db, openrouter.KeyTypeChat, 41)
+	createOpenRouterKeyFixture(t, db, openrouter.KeyTypeInternal, 59)
+	setOpenRouterKeyLifecycleFixture(t, db, openrouter.KeyTypeChat, true, []string{"admin_lock", "trial_demotion"}, 41)
+	setOpenRouterKeyLifecycleFixture(t, db, openrouter.KeyTypeInternal, true, []string{"trial_demotion", "security_hold"}, 59)
+
+	require.Equal(t, http.StatusOK, serveStripeWebhook(service, "convert").Code)
+	trial, err := trialsrepo.New(db).GetTrial(t.Context(), stripeWebhookOrganizationID)
+	require.NoError(t, err)
+	require.True(t, trial.ConvertedAt.Valid)
+	require.True(t, trial.DemotedAt.Valid)
+
+	configurePaygSubscriptionDeletion(t, service, "event_loss_before_activation_wakeup", "subscription_converted_before_loss", "subscription_converted_before_loss")
+	service.stripeHandler = service.serviceStripeWebhookHandler
+	require.Equal(t, http.StatusOK, serveStripeWebhook(service, "lose subscription").Code)
+
+	var patches atomic.Int32
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodPatch {
+			patches.Add(1)
+		}
+		hash := strings.TrimPrefix(r.URL.Path, "/v1/keys/")
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{"data": map[string]any{"hash": hash, "limit": 100.0}})
+	}))
+	t.Cleanup(upstream.Close)
+	option, err := openrouter.WithTestBaseURL(upstream.URL)
+	require.NoError(t, err)
+	tracerProvider := testenv.NewTracerProvider(t)
+	guardianPolicy, err := guardian.NewUnsafePolicy(tracerProvider, []string{})
+	require.NoError(t, err)
+	production := openrouter.New(
+		testenv.NewLogger(t), tracerProvider, guardianPolicy, db, "test", "provisioning_key_placeholder",
+		nil, nil, nil, testenv.NewEncryptionClient(t), option,
+	)
+	require.NoError(t, RepairPaygOpenRouterChatKey(
+		t.Context(), testenv.NewLogger(t), db, production, stripeWebhookOrganizationID, openrouter.KeyDesiredStateEnabled,
+	))
+
+	metadata, err := repo.New(db).GetBillingMetadata(t.Context(), stripeWebhookOrganizationID)
+	require.NoError(t, err)
+	require.False(t, metadata.StripeSubscriptionID.Valid)
+	organization, err := orgrepo.New(db).GetOrganizationMetadata(t.Context(), stripeWebhookOrganizationID)
+	require.NoError(t, err)
+	require.Equal(t, "free", organization.GramAccountType)
+	chat := openRouterKeyLifecycleFixture(t, db, openrouter.KeyTypeChat)
+	require.Equal(t, []string{"admin_lock", "billing_inactive"}, chat.DisableCauses)
+	require.True(t, chat.Disabled)
+	paygLimit, ok := openrouter.AccountTypeCreditLimit("payg")
+	require.True(t, ok)
+	require.EqualValues(t, paygLimit, chat.MonthlyCredits)
+	internal := openRouterKeyLifecycleFixture(t, db, openrouter.KeyTypeInternal)
+	require.Equal(t, []string{"security_hold"}, internal.DisableCauses)
+	require.True(t, internal.Disabled)
+	require.EqualValues(t, 59, internal.MonthlyCredits)
+	require.Zero(t, patches.Load(), "delayed activation must not patch over committed subscription loss")
 }
 
 func TestStripeSubscriptionDeletionDeactivatesCurrentPaygBillingAtomically(t *testing.T) {

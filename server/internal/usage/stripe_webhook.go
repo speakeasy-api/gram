@@ -156,6 +156,9 @@ func (s *Service) handleStripeWebhook(w http.ResponseWriter, r *http.Request) er
 		}
 	}
 
+	// Resolve routing identity without taking a row lock. The lifecycle handler
+	// validates the customer and subscription again from GetPaygActivationState
+	// after all canonical advisory locks have been acquired.
 	organizationID, err := queries.GetBillingMetadataOrganizationByStripeCustomerID(ctx, pgtype.Text{String: event.CustomerID, Valid: true})
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
@@ -165,14 +168,6 @@ func (s *Service) handleStripeWebhook(w http.ResponseWriter, r *http.Request) er
 		return oops.E(oops.CodeUnexpected, err, "failed to resolve Stripe webhook customer").LogError(ctx, logger)
 	}
 
-	if event.Type == "checkout.session.completed" && checkoutEligible {
-		// Serialize Stripe activation with legacy billing-metadata writes. Without
-		// this shared lock, a writer can read the old anchor, wait on the row lock,
-		// and overwrite the newly activated Stripe anchor after the webhook commits.
-		if err := queries.LockBillingMetadataOrganization(ctx, organizationID); err != nil {
-			return oops.E(oops.CodeUnexpected, err, "failed to lock billing metadata organization").LogError(ctx, logger)
-		}
-	}
 	if event.Type == "checkout.session.completed" && checkoutEligible {
 		trialQueries := trialsrepo.New(tx)
 		_, err := trialQueries.LockTrialLifecycleForRearm(ctx, organizationID)
@@ -187,20 +182,21 @@ func (s *Service) handleStripeWebhook(w http.ResponseWriter, r *http.Request) er
 		}
 	}
 
-	// Trial demotion locks the trial row before it takes the platform-key
-	// locks. Checkout must use the same order so a conversion racing the hourly
-	// sweep cannot deadlock on the inverse trials-row/key-lock sequence.
-	switch {
-	case event.Type == "checkout.session.completed" && checkoutEligible:
+	// Lifecycle transactions use one deployment-safe order even when replacement
+	// checkout and prior-subscription deletion hold different subscription locks:
+	// trial row when applicable, every OpenRouter key advisory lock, then billing
+	// and key rows. Trial demotion follows the same trial/key prefix.
+	if (event.Type == "checkout.session.completed" && checkoutEligible) || event.Type == "customer.subscription.deleted" {
 		if err := acquireOpenRouterBillingLocks(ctx, queries, organizationID); err != nil {
 			return oops.E(oops.CodeUnexpected, err, "failed to lock OpenRouter billing state").LogError(ctx, logger)
 		}
-	case event.Type == "customer.subscription.deleted":
-		if err := queries.AcquireOpenRouterBillingLock(ctx, repo.AcquireOpenRouterBillingLockParams{
-			KeyType:        string(openrouter.KeyTypeChat),
-			OrganizationID: organizationID,
-		}); err != nil {
-			return oops.E(oops.CodeUnexpected, err, "failed to lock OpenRouter chat billing state").LogError(ctx, logger)
+	}
+
+	if event.Type == "checkout.session.completed" && checkoutEligible {
+		// Serialize Stripe activation with legacy billing-metadata writes only after
+		// OpenRouter locks. This keeps all lifecycle paths advisory-before-row ordered.
+		if err := queries.LockBillingMetadataOrganization(ctx, organizationID); err != nil {
+			return oops.E(oops.CodeUnexpected, err, "failed to lock billing metadata organization").LogError(ctx, logger)
 		}
 	}
 
