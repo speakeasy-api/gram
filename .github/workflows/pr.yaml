@@ -2132,23 +2132,26 @@ jobs:
             docker tag "${{ steps.apko.outputs.image }}-amd64" "$TAG"
           done
 
-      - name: "[DEV] Push images"
-        if: github.event.pull_request.user.login != 'dependabot[bot]'
-        env:
-          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN_DEV }}
-        run: |
-          set -x
-          fly auth docker
-          docker push --all-tags "${{ steps.flyCreateDev.outputs.flyAppRegistry }}"
+      - parallel:
+          - name: "[DEV] Push images"
+            if: github.event.pull_request.user.login != 'dependabot[bot]'
+            env:
+              DOCKER_CONFIG: ${{ runner.temp }}/docker-dev
+              FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN_DEV }}
+            run: |
+              mkdir -p "$DOCKER_CONFIG"
+              fly auth docker
+              docker push --all-tags "${{ steps.flyCreateDev.outputs.flyAppRegistry }}"
 
-      - name: "[PROD] Push images"
-        if: github.event.pull_request.user.login != 'dependabot[bot]'
-        env:
-          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN_PROD }}
-        run: |
-          set -x
-          fly auth docker
-          docker push --all-tags "${{ steps.flyCreateProd.outputs.flyAppRegistry }}"
+          - name: "[PROD] Push images"
+            if: github.event.pull_request.user.login != 'dependabot[bot]'
+            env:
+              DOCKER_CONFIG: ${{ runner.temp }}/docker-prod
+              FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN_PROD }}
+            run: |
+              mkdir -p "$DOCKER_CONFIG"
+              fly auth docker
+              docker push --all-tags "${{ steps.flyCreateProd.outputs.flyAppRegistry }}"
 
       - name: Prune aube store
         if: success()
