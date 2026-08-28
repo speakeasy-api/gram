@@ -28,16 +28,15 @@ import (
 // "#id 2026-08-27 13:51:33 EDT [reply target] ->#id sender: text"; a row
 // must open with the #id and/or timestamp marker (each followed by its
 // separator) and carry a "sender: " later, which bounds the paragraph so a
-// human line right after it survives. An optional "[Thu 2026-08-27 13:51 EDT]"
-// timestamp stamps the head of the whole text; it is only removed when an
-// envelope element follows, so a human message that opens with a
-// timestamp-shaped bracket is left alone. The hooks relay strips all of this
+// human line right after it survives. OpenClaw also stamps every turn with a
+// leading "[Thu 2026-08-27 13:51 EDT] " that always carries a short zone name;
+// a human line that opens with a date-time bracket but no zone is not the
+// stamp and is left alone. The hooks relay strips all of this
 // before ingest on current installs; this covers turns stored before it did
 // and any install still bootstrapping an older hooks binary.
-var leadingEnvelopeRE = regexp.MustCompile(`(?s)^` +
-	`(?:\s*\[(?:Mon|Tue|Wed|Thu|Fri|Sat|Sun) \d{4}-\d{2}-\d{2} \d{2}:\d{2}[^\]\n]*\] *)?` +
-	`(?:` +
-	`\s*<message-context>.*?</message-context>\s*` +
+var leadingEnvelopeRE = regexp.MustCompile(`(?s)^(?:` +
+	`\s*\[(?:Mon|Tue|Wed|Thu|Fri|Sat|Sun) \d{4}-\d{2}-\d{2} \d{2}:\d{2}(?::\d{2})? [A-Z]{1,5}(?:[+-]\d{1,2}(?::\d{2})?)?\] *` +
+	`|\s*<message-context>.*?</message-context>\s*` +
 	`|\s*<notification>.*?</notification>\s*` +
 	"|\\s*Delivery: (?:to send a message, use the `message` tool\\.|Final assistant text is not automatically delivered in this run\\.[^\\n]*|No visible reply is delivered automatically in this run[^\\n]*)\\s*" +
 	"|\\s*[^\\n]* \\(untrusted[^)\\n]*\\):\\n```json\\n.*?\\n```\\s*" +

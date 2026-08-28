@@ -141,3 +141,10 @@ func TestStripLeadingEnvelopesKeepsTimestampPhraseAfterOpenClawHistory(t *testin
 	input := "Chat history since last reply (untrusted, for context):\n#1 2026-08-27 13:51:33 EDT alice: hi\n2026-08-27 standup: can you continue"
 	require.Equal(t, "2026-08-27 standup: can you continue", chat.StripLeadingEnvelopes(input))
 }
+
+func TestStripLeadingEnvelopesRemovesOpenClawStampOnPlainTurn(t *testing.T) {
+	t.Parallel()
+
+	require.Equal(t, "hello", chat.StripLeadingEnvelopes("[Thu 2026-08-27 13:51 EDT] hello"))
+	require.Equal(t, "hello", chat.StripLeadingEnvelopes("[Thu 2026-08-27 13:51:33 GMT+5:30] hello"))
+}

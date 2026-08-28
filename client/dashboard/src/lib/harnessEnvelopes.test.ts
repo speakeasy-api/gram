@@ -21,7 +21,19 @@ describe("stripLeadingEnvelopes", () => {
     ).toBe("@Bot what does this command do");
   });
 
-  it("strips the timestamp and delivery hint only when an envelope follows", () => {
+  it("strips OpenClaw's zone-bearing stamp on a plain turn but not a human bracket", () => {
+    expect(stripLeadingEnvelopes("[Thu 2026-08-27 13:51 EDT] hello")).toBe(
+      "hello",
+    );
+    expect(
+      stripLeadingEnvelopes("[Thu 2026-08-27 13:51:33 GMT+5:30] hello"),
+    ).toBe("hello");
+    expect(
+      stripLeadingEnvelopes("[Mon 2024-05-01 09:30] could we move the sync?"),
+    ).toBe("[Mon 2024-05-01 09:30] could we move the sync?");
+  });
+
+  it("strips the timestamp and delivery hint ahead of an envelope", () => {
     expect(
       stripLeadingEnvelopes(
         `[Thu 2026-08-27 13:51 EDT] Delivery: to send a message, use the \`message\` tool.\n\n${conversationInfo}\n\nping`,
