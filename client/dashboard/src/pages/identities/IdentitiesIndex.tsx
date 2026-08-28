@@ -9,7 +9,8 @@ import { Page } from "@/components/page-layout";
 import { RequireScope } from "@/components/require-scope";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/Avatar";
 import { Badge } from "@/components/ui/Badge";
-import { Column, Table } from "@/components/ui/Table";
+import { Column, type SortDescriptor, Table } from "@/components/ui/Table";
+import { sortTableData } from "@/components/ui/Table/sorting";
 import { Text } from "@/components/ui/Text";
 import { getInitials } from "@/lib/initials";
 import { encodeIdentityUrn } from "@/lib/identity-urn";
@@ -23,7 +24,7 @@ import { useRoles } from "@gram/client/react-query/roles.js";
 import { unwrapAsync } from "@gram/client/types/fp";
 import { useQuery } from "@tanstack/react-query";
 import { Bot, CircleHelp } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Navigate, Outlet, useNavigate } from "react-router";
 import {
   identityKindOf,
@@ -49,6 +50,10 @@ export function IdentitiesIndexRedirect(): JSX.Element {
 // the telemetry knows about is listed however long ago it was last seen.
 const ALL_TIME_FROM = new Date("2020-01-01T00:00:00Z");
 
+// The roster is one merged list held in memory, so it pages here rather than
+// at either source.
+const PAGE_SIZE = 50;
+
 const IDENTITY_FILTERS = defineFilters([
   { id: "kind", label: "Kind", kind: "multiselect", pinned: true },
 ]);
@@ -56,6 +61,82 @@ const IDENTITY_FILTERS = defineFilters([
 const KIND_OPTIONS = (["person", "unknown", "agent"] as IdentityKind[]).map(
   (kind) => ({ value: kind, label: IDENTITY_KIND_LABELS[kind] }),
 );
+
+const IDENTITY_COLUMNS: Column<Employee>[] = [
+  {
+    key: "identity",
+    header: "Identity",
+    width: "1.6fr",
+    sortable: true,
+    sortValue: (identity) => identity.name.toLowerCase(),
+    render: (identity) => <IdentityCell identity={identity} />,
+  },
+  {
+    key: "kind",
+    header: "Kind",
+    width: "140px",
+    sortable: true,
+    sortValue: (identity) => IDENTITY_KIND_LABELS[identityKindOf(identity)],
+    render: (identity) => {
+      const kind = identityKindOf(identity);
+      return (
+        <Badge variant={kind === "person" ? "neutral" : "information"}>
+          {IDENTITY_KIND_LABELS[kind]}
+        </Badge>
+      );
+    },
+  },
+  {
+    key: "status",
+    header: "Enrollment",
+    width: "150px",
+    sortable: true,
+    sortValue: (identity) => identity.status,
+    render: (identity) => (
+      <Text muted small className="truncate">
+        {identity.status === "enrolled" ? "Enrolled" : "Not enrolled"}
+      </Text>
+    ),
+  },
+  {
+    key: "role",
+    header: "Roles",
+    width: "1fr",
+    render: (identity) => (
+      <Text muted small className="truncate">
+        {identityKindOf(identity) !== "person"
+          ? "—"
+          : identity.role === "Unknown"
+            ? "None"
+            : identity.role}
+      </Text>
+    ),
+  },
+  {
+    key: "lastActivity",
+    header: "Last activity",
+    width: "200px",
+    sortable: true,
+    sortValue: (identity) => identity.lastActivityTimestamp ?? 0,
+    render: (identity) => (
+      <Text muted small className="truncate">
+        {identity.lastActivity}
+      </Text>
+    ),
+  },
+  {
+    key: "tokens",
+    header: "Tokens",
+    width: "120px",
+    sortable: true,
+    sortValue: (identity) => identity.tokenCount,
+    render: (identity) => (
+      <Text small className="tabular-nums">
+        {identity.tokenCount.toLocaleString()}
+      </Text>
+    ),
+  },
+];
 
 export default function IdentitiesIndex(): JSX.Element {
   return (
@@ -78,6 +159,11 @@ function IdentitiesIndexContent(): JSX.Element {
   const navigate = useNavigate();
   const client = useGramContext();
   const [search, setSearch] = useState("");
+  const [sort, setSort] = useState<SortDescriptor | null>({
+    id: "lastActivity",
+    direction: "desc",
+  });
+  const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
   const { values, setValue, clearValue, clearAll } =
     useFilterState(IDENTITY_FILTERS);
 
@@ -140,71 +226,16 @@ function IdentitiesIndexContent(): JSX.Element {
     });
   }, [identities, search, kindKey]);
 
-  const columns: Column<Employee>[] = [
-    {
-      key: "identity",
-      header: "Identity",
-      width: "1.6fr",
-      render: (identity) => <IdentityCell identity={identity} />,
-    },
-    {
-      key: "kind",
-      header: "Kind",
-      width: "140px",
-      render: (identity) => {
-        const kind = identityKindOf(identity);
-        return (
-          <Badge variant={kind === "person" ? "neutral" : "information"}>
-            {IDENTITY_KIND_LABELS[kind]}
-          </Badge>
-        );
-      },
-    },
-    {
-      key: "status",
-      header: "Enrollment",
-      width: "150px",
-      render: (identity) => (
-        <Text muted small className="truncate">
-          {identity.status === "enrolled" ? "Enrolled" : "Not enrolled"}
-        </Text>
-      ),
-    },
-    {
-      key: "role",
-      header: "Roles",
-      width: "1fr",
-      render: (identity) => (
-        <Text muted small className="truncate">
-          {identityKindOf(identity) !== "person"
-            ? "—"
-            : identity.role === "Unknown"
-              ? "None"
-              : identity.role}
-        </Text>
-      ),
-    },
-    {
-      key: "lastActivity",
-      header: "Last activity",
-      width: "200px",
-      render: (identity) => (
-        <Text muted small className="truncate">
-          {identity.lastActivity}
-        </Text>
-      ),
-    },
-    {
-      key: "tokens",
-      header: "Tokens",
-      width: "120px",
-      render: (identity) => (
-        <Text small className="tabular-nums">
-          {identity.tokenCount.toLocaleString()}
-        </Text>
-      ),
-    },
-  ];
+  const sortedRows = useMemo(
+    () => sortTableData(rows, IDENTITY_COLUMNS, sort) as Employee[],
+    [rows, sort],
+  );
+  // Any change to what is being listed starts the list over: keeping a deep
+  // scroll position across a new filter shows the reader page four of
+  // something they have not seen page one of.
+  useEffect(() => {
+    setVisibleCount(PAGE_SIZE);
+  }, [search, kindKey, sort]);
 
   return (
     <Page.Section>
@@ -262,8 +293,14 @@ function IdentitiesIndexContent(): JSX.Element {
           />
         </Page.Toolbar>
         <Table
-          columns={columns}
-          data={rows}
+          columns={IDENTITY_COLUMNS}
+          data={sortedRows.slice(0, visibleCount)}
+          sort={sort}
+          onSortChange={setSort}
+          hasMore={visibleCount < sortedRows.length}
+          onLoadMore={async () => {
+            setVisibleCount((count) => count + PAGE_SIZE);
+          }}
           rowKey={(row) => row.id}
           onRowClick={(row) =>
             void navigate(
