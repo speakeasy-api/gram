@@ -106,7 +106,7 @@ export function MoreActions({
       <DropdownMenuContent
         align="end"
         onCloseAutoFocus={(e) => {
-          e.preventDefault();
+          if (triggerLoading) e.preventDefault();
         }}
       >
         {actions.map((action, index) => (
