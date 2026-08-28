@@ -1802,6 +1802,10 @@ jobs:
         run: aube run build:consent
         working-directory: client/dashboard
 
+      - name: Rebuild committed consent page assets
+        run: aube run build:consent-page
+        working-directory: client/dashboard
+
       - name: Check for dirty files
         run: mise run git:porcelain
 

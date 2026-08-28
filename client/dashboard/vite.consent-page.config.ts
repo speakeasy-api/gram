@@ -20,9 +20,13 @@ export default defineConfig({
     },
   },
   build: {
+    // A sibling of consent_assets/, never a subdirectory of it: the island
+    // build (vite.consent.config.ts) empties that directory, so nesting these
+    // assets inside it means `build:consent` silently deletes them and the Go
+    // embed stops compiling.
     outDir: path.resolve(
       __dirname,
-      "../../server/internal/mcp/consent_assets/page",
+      "../../server/internal/mcp/consent_page_assets",
     ),
     emptyOutDir: true,
     sourcemap: false,

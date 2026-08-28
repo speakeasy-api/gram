@@ -21,7 +21,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 )
 
-//go:embed consent_assets/page
+//go:embed consent_page_assets
 var consentPageAssets embed.FS
 
 // consentPageStyles is the compiled stylesheet, inlined into the template's
@@ -30,7 +30,7 @@ var consentPageAssets embed.FS
 // add a round-trip before first paint. template.CSS because the content is a
 // build artifact, not user input.
 var consentPageStyles = func() template.CSS {
-	data, err := consentPageAssets.ReadFile("consent_assets/page/consent-page.css")
+	data, err := consentPageAssets.ReadFile("consent_page_assets/consent-page.css")
 	if err != nil {
 		panic(fmt.Sprintf("read embedded consent page stylesheet: %v", err))
 	}
@@ -55,7 +55,7 @@ func (s *Service) ServeConsentFont(w http.ResponseWriter, r *http.Request) error
 		return nil
 	}
 
-	data, err := consentPageAssets.ReadFile("consent_assets/page/" + name)
+	data, err := consentPageAssets.ReadFile("consent_page_assets/" + name)
 	if err != nil {
 		w.WriteHeader(http.StatusNotFound)
 		return nil
@@ -73,7 +73,7 @@ func (s *Service) ServeConsentFont(w http.ResponseWriter, r *http.Request) error
 // consentPageFontNames lists the embedded font files, for the test that keeps
 // the stylesheet's @font-face urls and the embedded assets in step.
 func consentPageFontNames() ([]string, error) {
-	entries, err := fs.ReadDir(consentPageAssets, "consent_assets/page")
+	entries, err := fs.ReadDir(consentPageAssets, "consent_page_assets")
 	if err != nil {
 		return nil, fmt.Errorf("read embedded consent page assets: %w", err)
 	}

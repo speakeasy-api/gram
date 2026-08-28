@@ -148,7 +148,7 @@ func TestConsentPagePreview(t *testing.T) {
 	fonts, err := consentPageFontNames()
 	require.NoError(t, err)
 	for _, name := range fonts {
-		data, err := consentPageAssets.ReadFile("consent_assets/page/" + name)
+		data, err := consentPageAssets.ReadFile("consent_page_assets/" + name)
 		require.NoError(t, err)
 		require.NoError(t, os.WriteFile(filepath.Join(fontDir, name), data, 0o600))
 	}
