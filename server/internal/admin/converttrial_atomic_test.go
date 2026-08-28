@@ -41,15 +41,20 @@ func TestMarkEnterpriseTrialConverted_AuditSnapshotsAreCompleteAndPrivate(t *tes
 		emailSentinel    = "conversion-operator@privacy.invalid"
 		oidcSentinel     = "external-oidc-subject-privacy-sentinel"
 		workosSentinel   = "external-workos-privacy-sentinel"
+		nameSentinel     = "organization-name-privacy-sentinel"
+		slugSentinel     = "organization-slug-privacy-sentinel"
 		providerSentinel = "provider-payload-privacy-sentinel"
 		promptSentinel   = "prompt-privacy-sentinel"
-		spendSentinel    = "spend-privacy-sentinel"
+		spendSentinel    = "313131.313131"
 	)
 	ctx = contextvalues.SetAdminAuthContext(ctx, &contextvalues.AdminAuthContext{SessionID: sessionSentinel, Email: emailSentinel, OIDCSubject: oidcSentinel, Name: emailSentinel, HD: "privacy.invalid"})
 	endsAt := time.Now().UTC().Add(7 * 24 * time.Hour)
 	demotedAt := time.Now().UTC().Add(-time.Hour)
 	workosID := workosSentinel
-	seedOrg(t, ctx, conn, orgFixture{id: orgID, name: promptSentinel, slug: spendSentinel, accountType: "free", workosID: &workosID, whitelisted: false})
+	seedOrg(t, ctx, conn, orgFixture{id: orgID, name: nameSentinel, slug: slugSentinel, accountType: "free", workosID: &workosID, whitelisted: false})
+	projectID := seedProject(t, ctx, conn, orgID, "conversion-privacy")
+	require.NoError(t, testrepo.New(conn).SeedPromptTemplatePrivacyFixture(ctx, testrepo.SeedPromptTemplatePrivacyFixtureParams{ProjectID: projectID, Prompt: promptSentinel}))
+	require.NoError(t, testrepo.New(conn).SeedOpenRouterSpendPrivacyFixture(ctx, testrepo.SeedOpenRouterSpendPrivacyFixtureParams{OrganizationID: orgID, SpendUsd: spendSentinel}))
 	seedTrial(t, ctx, conn, trialFixture{orgID: orgID, tier: "enterprise", endsAt: endsAt, demotedAt: &demotedAt})
 	for _, keyType := range openrouter.AllKeyTypes {
 		seedOpenRouterKey(t, ctx, conn, orgID, keyFixture{keyType: keyType, monthlyCredits: 7, disabled: true})
@@ -57,7 +62,8 @@ func TestMarkEnterpriseTrialConverted_AuditSnapshotsAreCompleteAndPrivate(t *tes
 	require.NoError(t, testrepo.New(conn).SetOpenRouterAPIKeyClassificationFixture(ctx, testrepo.SetOpenRouterAPIKeyClassificationFixtureParams{OrganizationID: orgID, KeyType: string(openrouter.KeyTypeChat), Disabled: true, DisableCauses: []string{"trial_demotion", "billing_inactive", "admin_lock"}}))
 	require.NoError(t, testrepo.New(conn).SetOpenRouterAPIKeyProviderPayloadFixture(ctx, testrepo.SetOpenRouterAPIKeyProviderPayloadFixtureParams{OrganizationID: orgID, KeyType: string(openrouter.KeyTypeChat), ProviderPayload: conv.ToPGText(providerSentinel)}))
 
-	result, err := svc.MarkEnterpriseTrialConverted(ctx, &gen.MarkEnterpriseTrialConvertedPayload{ID: orgID})
+	payloadSessionToken := sessionSentinel
+	result, err := svc.MarkEnterpriseTrialConverted(ctx, &gen.MarkEnterpriseTrialConvertedPayload{ID: orgID, AdminSessionToken: &payloadSessionToken})
 	require.NoError(t, err)
 	require.Equal(t, openrouter.AllKeyTypes, provisioner.reconcileAttempts)
 	responseJSON, err := json.Marshal(srv.NewMarkEnterpriseTrialConvertedResponseBody(result))
@@ -137,7 +143,7 @@ func TestMarkEnterpriseTrialConverted_AuditSnapshotsAreCompleteAndPrivate(t *tes
 	})
 	require.NoError(t, err)
 	for surface, data := range map[string][]byte{"audit row": fullAuditRow, "outbox envelope": envelope, "endpoint response": responseJSON} {
-		for _, forbidden := range []string{sessionSentinel, emailSentinel, oidcSentinel, workosSentinel, providerSentinel, promptSentinel, spendSentinel, "hash-", "sk-test"} {
+		for _, forbidden := range []string{sessionSentinel, emailSentinel, oidcSentinel, workosSentinel, nameSentinel, slugSentinel, providerSentinel, promptSentinel, spendSentinel, "hash-", "sk-test"} {
 			require.NotContains(t, string(data), forbidden, "%s leaked %s", surface, forbidden)
 		}
 	}

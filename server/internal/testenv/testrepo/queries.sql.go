@@ -1826,6 +1826,21 @@ func (q *Queries) SeedCapturedAgentChatMessageFixture(ctx context.Context, arg S
 	return id, err
 }
 
+const seedOpenRouterSpendPrivacyFixture = `-- name: SeedOpenRouterSpendPrivacyFixture :exec
+INSERT INTO openrouter_spend_daily (organization_id, key_type, day, spend_usd)
+VALUES ($1, 'chat', CURRENT_DATE, $2::text::numeric)
+`
+
+type SeedOpenRouterSpendPrivacyFixtureParams struct {
+	OrganizationID string
+	SpendUsd       string
+}
+
+func (q *Queries) SeedOpenRouterSpendPrivacyFixture(ctx context.Context, arg SeedOpenRouterSpendPrivacyFixtureParams) error {
+	_, err := q.db.Exec(ctx, seedOpenRouterSpendPrivacyFixture, arg.OrganizationID, arg.SpendUsd)
+	return err
+}
+
 const seedOpenRouterSpendRangeFixture = `-- name: SeedOpenRouterSpendRangeFixture :exec
 INSERT INTO openrouter_spend_daily (organization_id, key_type, day, spend_usd)
 SELECT
@@ -1877,6 +1892,21 @@ func (q *Queries) SeedOutboxEntry(ctx context.Context, arg SeedOutboxEntryParams
 	var id int64
 	err := row.Scan(&id)
 	return id, err
+}
+
+const seedPromptTemplatePrivacyFixture = `-- name: SeedPromptTemplatePrivacyFixture :exec
+INSERT INTO prompt_templates (tool_urn, project_id, history_id, name, prompt, kind)
+VALUES ('tools:privacy-fixture', $1, generate_uuidv7(), 'Privacy fixture', $2, 'prompt')
+`
+
+type SeedPromptTemplatePrivacyFixtureParams struct {
+	ProjectID uuid.UUID
+	Prompt    string
+}
+
+func (q *Queries) SeedPromptTemplatePrivacyFixture(ctx context.Context, arg SeedPromptTemplatePrivacyFixtureParams) error {
+	_, err := q.db.Exec(ctx, seedPromptTemplatePrivacyFixture, arg.ProjectID, arg.Prompt)
+	return err
 }
 
 const seedPublishOutboxRow = `-- name: SeedPublishOutboxRow :one

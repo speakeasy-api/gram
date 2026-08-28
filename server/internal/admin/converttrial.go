@@ -27,8 +27,8 @@ func (s *Service) MarkEnterpriseTrialConverted(ctx context.Context, payload *gen
 	return s.markEnterpriseTrialConverted(ctx, payload.ID)
 }
 
-// markEnterpriseTrialConverted is the single transaction coordinator shared by
-// both admin mutation surfaces. Callers must not start a transaction around it.
+// markEnterpriseTrialConverted is the dedicated operation's transaction
+// coordinator. Generic organization updates must never call it.
 func (s *Service) markEnterpriseTrialConverted(ctx context.Context, organizationID string) (*gen.MarkEnterpriseTrialConvertedResult, error) {
 	payload := &gen.MarkEnterpriseTrialConvertedPayload{ID: organizationID, AdminSessionToken: nil}
 	logger := s.logger.With(attr.SlogOrganizationID(payload.ID))

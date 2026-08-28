@@ -2,6 +2,7 @@ package admin
 
 import (
 	"net/http"
+	"strings"
 	"testing"
 	"time"
 
@@ -10,6 +11,7 @@ import (
 
 	gen "github.com/speakeasy-api/gram/server/gen/admin"
 	srv "github.com/speakeasy-api/gram/server/gen/http/admin/server"
+	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
@@ -27,22 +29,60 @@ func TestMarkEnterpriseTrialConvertedRequestBody_RequiresOrganizationIDOnly(t *t
 	require.Error(t, srv.ValidateMarkEnterpriseTrialConvertedRequestBody(&srv.MarkEnterpriseTrialConvertedRequestBody{ID: new(string)}))
 }
 
-func TestUpdateOrganization_EnterpriseTrialDelegatesToAtomicConversion(t *testing.T) {
+func TestUpdateOrganization_RejectsEnterpriseTrialConversionAndRetryWithoutSideEffects(t *testing.T) {
 	t.Parallel()
-	ctx, svc, conn, _ := newRearmService(t)
-	orgID := "org_update_conversion_delegate"
-	demotedAt := time.Now().UTC().Add(-time.Hour)
-	seedOrg(t, ctx, conn, orgFixture{id: orgID, name: orgID, slug: orgID, accountType: "free", whitelisted: false})
-	seedTrial(t, ctx, conn, trialFixture{orgID: orgID, tier: "enterprise", endsAt: demotedAt, demotedAt: &demotedAt})
-	for _, keyType := range openrouter.AllKeyTypes {
-		seedOpenRouterKey(t, ctx, conn, orgID, keyFixture{keyType: keyType, monthlyCredits: 7, disabled: true})
+	convertedAt := time.Now().UTC().Add(-time.Hour)
+	tests := []struct {
+		name        string
+		accountType string
+		whitelisted bool
+		convertedAt *time.Time
+	}{
+		{name: "unconverted eligible trial", accountType: "free", whitelisted: false},
+		{name: "compatible converted trial retry", accountType: "enterprise", whitelisted: true, convertedAt: &convertedAt},
 	}
-	enterprise, whitelisted := "enterprise", true
-	result, err := svc.UpdateOrganization(ctx, &gen.UpdateOrganizationPayload{ID: orgID, AccountType: &enterprise, Whitelisted: &whitelisted})
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			ctx, svc, conn, provisioner := newRearmService(t)
+			orgID := "org_update_conversion_reject_" + strings.ReplaceAll(tc.name, " ", "_")
+			seedOrg(t, ctx, conn, orgFixture{id: orgID, name: orgID, slug: orgID, accountType: tc.accountType, whitelisted: tc.whitelisted})
+			seedTrial(t, ctx, conn, trialFixture{orgID: orgID, tier: "enterprise", endsAt: time.Now().UTC().Add(time.Hour), convertedAt: tc.convertedAt})
+			beforeOrg := readOrgState(t, ctx, conn, orgID)
+			beforeTrial := readTrial(t, ctx, conn, orgID)
+			beforeOutbox, err := testrepo.New(conn).CountPublishOutboxRows(ctx)
+			require.NoError(t, err)
+
+			enterprise, whitelisted := "enterprise", true
+			result, err := svc.UpdateOrganization(ctx, &gen.UpdateOrganizationPayload{ID: orgID, AccountType: &enterprise, Whitelisted: &whitelisted})
+			require.Nil(t, result)
+			requireOopsCode(t, err, oops.CodeConflict)
+			require.ErrorContains(t, err, "MarkEnterpriseTrialConverted")
+			require.Equal(t, beforeOrg, readOrgState(t, ctx, conn, orgID))
+			require.Equal(t, beforeTrial, readTrial(t, ctx, conn, orgID))
+			require.Empty(t, provisioner.reconcileAttempts)
+			auditCount, err := audittest.AuditLogCountByAction(ctx, conn, audit.ActionOrganizationEnterpriseTrialConverted)
+			require.NoError(t, err)
+			require.Zero(t, auditCount)
+			afterOutbox, err := testrepo.New(conn).CountPublishOutboxRows(ctx)
+			require.NoError(t, err)
+			require.Equal(t, beforeOutbox, afterOutbox)
+		})
+	}
+}
+
+func TestUpdateOrganization_AllowsUnrelatedEnterpriseTrialAdministration(t *testing.T) {
+	t.Parallel()
+	ctx, svc, conn, provisioner := newRearmService(t)
+	orgID := "org_update_trial_unrelated"
+	seedOrg(t, ctx, conn, orgFixture{id: orgID, name: orgID, slug: orgID, accountType: "free", whitelisted: false})
+	seedTrial(t, ctx, conn, trialFixture{orgID: orgID, tier: "enterprise", endsAt: time.Now().UTC().Add(time.Hour)})
+	pro := "pro"
+	result, err := svc.UpdateOrganization(ctx, &gen.UpdateOrganizationPayload{ID: orgID, AccountType: &pro})
 	require.NoError(t, err)
-	require.Equal(t, "enterprise", result.AccountType)
-	require.True(t, result.Whitelisted)
-	require.True(t, readTrial(t, ctx, conn, orgID).ConvertedAt.Valid)
+	require.Equal(t, "pro", result.AccountType)
+	require.False(t, readTrial(t, ctx, conn, orgID).ConvertedAt.Valid)
+	require.Empty(t, provisioner.reconcileAttempts)
 }
 
 func TestMarkEnterpriseTrialConverted_EligibilityAndIdempotencyBoundary(t *testing.T) {

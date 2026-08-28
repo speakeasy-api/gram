@@ -697,6 +697,14 @@ WHERE organization_id = @organization_id
   AND key_type = @key_type
 FOR UPDATE;
 
+-- name: SeedOpenRouterSpendPrivacyFixture :exec
+INSERT INTO openrouter_spend_daily (organization_id, key_type, day, spend_usd)
+VALUES (@organization_id, 'chat', CURRENT_DATE, sqlc.arg('spend_usd')::text::numeric);
+
+-- name: SeedPromptTemplatePrivacyFixture :exec
+INSERT INTO prompt_templates (tool_urn, project_id, history_id, name, prompt, kind)
+VALUES ('tools:privacy-fixture', @project_id, generate_uuidv7(), 'Privacy fixture', @prompt, 'prompt');
+
 -- name: LockOrganizationMetadataForUpdateNowaitFixture :one
 -- Test-only lock probe: fails instead of waiting if a lifecycle handler read the organization row too early.
 SELECT id

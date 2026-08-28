@@ -824,11 +824,16 @@ func (s *Service) UpdateOrganization(ctx context.Context, payload *gen.UpdateOrg
 	if payload.AccountType != nil && *payload.AccountType == "enterprise" {
 		trial, trialErr := trialsRepo.New(s.db).GetTrial(ctx, payload.ID)
 		switch {
-		case trialErr == nil && trial.Tier == "enterprise" && !trial.ConvertedAt.Valid:
-			if _, err := s.markEnterpriseTrialConverted(ctx, payload.ID); err != nil {
-				return nil, err
+		case trialErr == nil && trial.Tier == "enterprise":
+			organization, orgErr := repo.New(s.db).AdminGetOrganization(ctx, repo.AdminGetOrganizationParams{ID: payload.ID, AllowSlug: false})
+			if orgErr != nil {
+				return nil, oops.E(oops.CodeUnexpected, orgErr, "check organization before enterprise trial update").LogError(ctx, s.logger)
 			}
-			return s.readOrganizationAfterWrite(ctx, payload.ID, "fetch organization after enterprise trial conversion")
+			compatibleConvertedRetry := trial.ConvertedAt.Valid && organization.AccountType == "enterprise" && organization.Whitelisted
+			eligibleUnconverted := !trial.ConvertedAt.Valid && ((organization.AccountType == "free" && !organization.Whitelisted) || (organization.AccountType == "enterprise" && organization.Whitelisted))
+			if compatibleConvertedRetry || eligibleUnconverted {
+				return nil, oops.E(oops.CodeConflict, nil, "enterprise trial conversion and retries require MarkEnterpriseTrialConverted")
+			}
 		case trialErr != nil && !errors.Is(trialErr, pgx.ErrNoRows):
 			return nil, oops.E(oops.CodeUnexpected, trialErr, "check enterprise trial before organization update").LogError(ctx, s.logger)
 		}
