@@ -1491,15 +1491,35 @@ func TestStripeCheckoutConvertedDemotedTrialExactReplayRepairsInternalPostCommit
 	createOpenRouterKeyFixture(t, db, openrouter.KeyTypeChat, 17)
 	createOpenRouterKeyFixture(t, db, openrouter.KeyTypeInternal, 23)
 	setOpenRouterKeyLifecycleFixture(t, db, openrouter.KeyTypeChat, true, []string{"admin_lock", "trial_demotion", "billing_inactive"}, 17)
-	setOpenRouterKeyLifecycleFixture(t, db, openrouter.KeyTypeInternal, true, []string{"trial_demotion", "security_hold"}, 23)
+	setOpenRouterKeyLifecycleFixture(t, db, openrouter.KeyTypeInternal, true, []string{"trial_demotion"}, 23)
 
 	var chatPatches atomic.Int32
 	var internalPatches atomic.Int32
+	var internalSecurityUpstream struct {
+		sync.Mutex
+		disabled     bool
+		monthlyLimit float64
+		limitReset   string
+		patchPaths   []string
+	}
+	internalSecurityUpstream.disabled = true
+	internalSecurityUpstream.monthlyLimit = 23
+	internalSecurityUpstream.limitReset = "monthly"
 	var failInternal atomic.Bool
 	failInternal.Store(true)
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPatch {
 			w.WriteHeader(http.StatusMethodNotAllowed)
+			return
+		}
+
+		var patch struct {
+			Limit      *float64 `json:"limit"`
+			LimitReset string   `json:"limit_reset"`
+			Disabled   *bool    `json:"disabled"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&patch); err != nil {
+			http.Error(w, "invalid patch", http.StatusBadRequest)
 			return
 		}
 
@@ -1509,10 +1529,22 @@ func TestStripeCheckoutConvertedDemotedTrialExactReplayRepairsInternalPostCommit
 			chatPatches.Add(1)
 		case "hash_placeholder_internal":
 			internalPatches.Add(1)
+			internalSecurityUpstream.Lock()
+			internalSecurityUpstream.patchPaths = append(internalSecurityUpstream.patchPaths, r.URL.Path)
+			internalSecurityUpstream.Unlock()
 			if failInternal.Load() {
 				w.WriteHeader(http.StatusInternalServerError)
 				return
 			}
+			internalSecurityUpstream.Lock()
+			if patch.Disabled != nil {
+				internalSecurityUpstream.disabled = *patch.Disabled
+			}
+			if patch.Limit != nil {
+				internalSecurityUpstream.monthlyLimit = *patch.Limit
+				internalSecurityUpstream.limitReset = patch.LimitReset
+			}
+			internalSecurityUpstream.Unlock()
 		default:
 			w.WriteHeader(http.StatusNotFound)
 			return
@@ -1549,8 +1581,8 @@ func TestStripeCheckoutConvertedDemotedTrialExactReplayRepairsInternalPostCommit
 	require.True(t, ok)
 	require.EqualValues(t, limit, chat.MonthlyCredits)
 	internal := openRouterKeyLifecycleFixture(t, db, openrouter.KeyTypeInternal)
-	require.Equal(t, []string{"security_hold"}, internal.DisableCauses)
-	require.True(t, internal.Disabled)
+	require.Empty(t, internal.DisableCauses)
+	require.False(t, internal.Disabled)
 	require.EqualValues(t, 23, internal.MonthlyCredits)
 
 	failInternal.Store(false)
@@ -1571,9 +1603,20 @@ func TestStripeCheckoutConvertedDemotedTrialExactReplayRepairsInternalPostCommit
 	require.True(t, chat.Disabled)
 	require.EqualValues(t, limit, chat.MonthlyCredits)
 	internal = openRouterKeyLifecycleFixture(t, db, openrouter.KeyTypeInternal)
-	require.Equal(t, []string{"security_hold"}, internal.DisableCauses)
-	require.True(t, internal.Disabled)
+	require.Empty(t, internal.DisableCauses)
+	require.False(t, internal.Disabled)
 	require.EqualValues(t, 23, internal.MonthlyCredits)
+
+	internalSecurityUpstream.Lock()
+	defer internalSecurityUpstream.Unlock()
+	require.False(t, internalSecurityUpstream.disabled)
+	require.EqualValues(t, 23, internalSecurityUpstream.monthlyLimit)
+	require.Equal(t, "monthly", internalSecurityUpstream.limitReset)
+	require.NotEqualValues(t, limit, internalSecurityUpstream.monthlyLimit)
+	require.NotEmpty(t, internalSecurityUpstream.patchPaths)
+	for _, path := range internalSecurityUpstream.patchPaths {
+		require.Equal(t, "/v1/keys/hash_placeholder_internal", path)
+	}
 }
 
 func TestStripeCheckoutExactReplayRepairsPostCommitOpenRouterFailure(t *testing.T) {
