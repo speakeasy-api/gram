@@ -4,7 +4,6 @@ export const FEATURE_FLAGS = {
   deploymentsPage: "gram-deployments-page",
   deviceAgent: "gram-device-agent",
   deviceIntegrations: "gram-device-integrations",
-  enterpriseTrials: "enterprise-trials",
   experimentalChat: "gram-experimental-chat",
   externalMcpUserSessions: "onboard-external-mcp-to-user-sessions",
   functions: "gram-functions",
