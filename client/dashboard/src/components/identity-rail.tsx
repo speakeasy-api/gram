@@ -1,11 +1,12 @@
 import { cn } from "@/lib/utils";
 import * as React from "react";
-import { NavLink } from "react-router";
+import { Link } from "react-router";
 
 export type IdentityRailItem = {
   key: string;
   title: string;
   href: string;
+  active: boolean;
 };
 
 /**
@@ -28,23 +29,23 @@ export function IdentityRail({
       aria-label="This identity"
       className={cn("flex flex-col gap-1", className)}
     >
-      <p className="text-eyebrow mb-2">This identity</p>
+      <p className="text-eyebrow mb-2 pl-3">This identity</p>
       {items.map((item) => (
-        <NavLink
+        <Link
           key={item.key}
           to={item.href}
-          end
-          className={({ isActive }) =>
-            cn(
-              "border-l px-3 py-1.5 text-sm transition-colors",
-              isActive
-                ? "border-foreground text-foreground font-medium"
-                : "border-border text-muted-foreground hover:text-foreground hover:border-foreground/40",
-            )
-          }
+          aria-current={item.active ? "page" : undefined}
+          className={cn(
+            "border-l-2 px-3 py-1.5 text-sm transition-colors",
+            item.active
+              ? // The open section lifts off the recessed ground onto the card
+                // surface the panels beside it use.
+                "bg-card border-foreground text-foreground"
+              : "border-border text-muted-foreground hover:text-foreground hover:border-foreground/40",
+          )}
         >
           {item.title}
-        </NavLink>
+        </Link>
       ))}
     </nav>
   );

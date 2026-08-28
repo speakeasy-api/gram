@@ -100,19 +100,22 @@ function IdentityDetailContent(): JSX.Element {
           }
         />
       </Page.Header>
-      <Page.Body fullWidth className="gap-0">
-        <div className="mx-auto w-full max-w-[1270px] flex-1 px-8 py-8">
+      <Page.Body fullWidth fullHeight noPadding className="gap-0">
+        {/* The person runs the full width of the body: they are the subject of
+            the page, not a column in it. */}
+        <div className="bg-card border-border border-b px-8 py-6">
           <IdentityHeader identity={identity} />
-          {/* Rail beside the content, not in the app sidebar: the reader keeps
-              the project nav they arrived with. */}
-          <div className="flex gap-10">
-            <IdentityRail
-              items={identityRailItems(routes, encodedUrn ?? "")}
-              className="sticky top-8 hidden w-44 shrink-0 self-start lg:flex"
-            />
-            <div className="min-w-0 flex-1">
-              <Outlet context={context} />
-            </div>
+        </div>
+        {/* Rail beside the content, not in the app sidebar: the reader keeps
+            the project nav they arrived with. The recessed ground separates
+            the navigation from the panels, which carry the card surface. */}
+        <div className="bg-background flex min-h-0 flex-1 gap-8 px-8 py-8">
+          <IdentityRail
+            items={identityRailItems(routes, encodedUrn ?? "")}
+            className="sticky top-8 hidden w-44 shrink-0 self-start lg:flex"
+          />
+          <div className="min-w-0 flex-1">
+            <Outlet context={context} />
           </div>
         </div>
       </Page.Body>
@@ -148,7 +151,7 @@ function IdentityHeader({
     .join(" · ");
 
   return (
-    <div className="border-border mb-8 flex flex-col gap-4 border-b pb-6">
+    <div className="flex flex-col gap-4">
       <div className="flex items-start justify-between gap-4">
         <div className="flex min-w-0 items-center gap-4">
           <Avatar className="size-12">
