@@ -593,6 +593,11 @@ func (s *Service) AddMetaMcpMember(ctx context.Context, payload *gen.AddMetaMcpM
 	// bind that client to the gateway's issuer so consent offers the member's
 	// provider without a manual attach ceremony.
 	if meta.UserSessionIssuerID.Valid && server.RemoteSessionIssuerID.Valid && server.UserSessionIssuerID.Valid {
+		// No DB constraint enforces one client per (issuer, upstream); every
+		// client-binding writer serializes on this advisory lock instead.
+		if lerr := txRepo.LockRemoteSessionIssuerForClientBinding(ctx, server.RemoteSessionIssuerID.UUID); lerr != nil {
+			return nil, oops.E(oops.CodeUnexpected, lerr, "lock remote session issuer for client binding").LogError(ctx, logger)
+		}
 		attached, aerr := txRepo.AutoAttachMemberProviderClient(ctx, repo.AutoAttachMemberProviderClientParams{
 			GatewayIssuerID: meta.UserSessionIssuerID.UUID,
 			ProjectID:       *authCtx.ProjectID,

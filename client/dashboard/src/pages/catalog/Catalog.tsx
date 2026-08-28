@@ -23,6 +23,7 @@ import { Stack } from "@/components/ui/Stack";
 import { SearchXIcon } from "lucide-react";
 import { useMemo, useState } from "react";
 import { Outlet, useNavigate, useSearchParams } from "react-router";
+import { toast } from "sonner";
 import {
   useFilterState as useDimensionFilters,
   type FilterValue,
@@ -73,9 +74,11 @@ function CatalogInner() {
   const attachToGatewayId = searchParams.get("attachToGateway");
 
   const attachInstalledToGateway = async (result: {
+    status: "succeeded" | "failed";
     completedMcpServerIds?: string[];
   }) => {
     if (!attachToGatewayId) return;
+    let attachFailures = 0;
     for (const mcpServerId of result.completedMcpServerIds ?? []) {
       try {
         await client.metaMcp.addMember({
@@ -86,10 +89,22 @@ function CatalogInner() {
         });
       } catch (err) {
         console.error("failed to attach installed server to gateway", err);
+        attachFailures += 1;
       }
     }
     await invalidateAllMetaMcpMembers(queryClient);
-    void navigate(routes.mcp.gateway.members.href(attachToGatewayId));
+    if (attachFailures > 0) {
+      toast.error(
+        attachFailures === 1
+          ? "An installed server could not be added to the gateway. Add it from the gateway's Members tab."
+          : `${attachFailures} installed servers could not be added to the gateway. Add them from the gateway's Members tab.`,
+      );
+    }
+    // Redirect only when everything worked; otherwise stay so the dialog's
+    // per-server results (and the toast above) remain visible.
+    if (result.status === "succeeded" && attachFailures === 0) {
+      void navigate(routes.mcp.gateway.members.href(attachToGatewayId));
+    }
   };
 
   // Category + sort stay page state (no UI to change category today; sort is the

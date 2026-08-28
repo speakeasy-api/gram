@@ -247,7 +247,7 @@ function InspectBody({
               {data.servers.length < configuredMembers && (
                 <Text muted className="text-xs">
                   {hasIssuer
-                    ? `${configuredMembers - data.servers.length} of ${configuredMembers} configured members aren't served to you. Private members need mcp:connect on the member server (Team Access on its page), and disabled, unproxied, or slugless members are never served.`
+                    ? `${configuredMembers - data.servers.length} of ${configuredMembers} configured members aren't served to you. Private members need mcp:connect on their backing resource (the member server for proxied members, the backing toolset for hosted members), and disabled, unproxied, or slugless members are never served.`
                     : `${configuredMembers - data.servers.length} of ${configuredMembers} configured members aren't served. This gateway has no sign-in attached, so every caller — including this tab — is anonymous and private members are hidden. Attach an issuer under Settings → Authentication.`}
                 </Text>
               )}

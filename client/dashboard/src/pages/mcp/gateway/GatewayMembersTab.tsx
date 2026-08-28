@@ -532,9 +532,12 @@ function AddMemberSheet({
               placeholder="Search MCP servers..."
             />
           </div>
-          <Button variant="secondary" onClick={onAddFromCatalog}>
-            <Button.Text>Add from catalog</Button.Text>
-          </Button>
+          {/* The catalog install flow is page-gated on project:write. */}
+          <RequireScope scope="project:write" level="component">
+            <Button variant="secondary" onClick={onAddFromCatalog}>
+              <Button.Text>Add from catalog</Button.Text>
+            </Button>
+          </RequireScope>
         </div>
 
         <div className="flex-1 space-y-2 overflow-y-auto px-6 py-4">
