@@ -3,6 +3,7 @@ import {
   SettingsSection,
 } from "@/components/detail/settings-section";
 import { RequireScope } from "@/components/require-scope";
+import { Alert } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
 import { Dialog } from "@/components/ui/Dialog";
 import {
@@ -98,34 +99,33 @@ function ProjectNameForm({
         name: updatedProject.name,
         slug: updatedProject.slug,
       });
+      setSlugWarningOpen(false);
       setPendingSlugChange(null);
 
-      if (slugChanged) {
-        queryClient.setQueriesData<SessionInfoResponse>(
-          { queryKey: ["@gram/client", "auth", "info"] },
-          (session) =>
-            session
-              ? {
-                  ...session,
-                  result: {
-                    ...session.result,
-                    organizations: session.result.organizations.map((org) => ({
-                      ...org,
-                      projects: org.projects.map((cachedProject) =>
-                        cachedProject.id === project.id
-                          ? {
-                              ...cachedProject,
-                              name: updatedProject.name,
-                              slug: updatedProject.slug,
-                            }
-                          : cachedProject,
-                      ),
-                    })),
-                  },
-                }
-              : session,
-        );
-      }
+      queryClient.setQueriesData<SessionInfoResponse>(
+        { queryKey: ["@gram/client", "auth", "info"] },
+        (session) =>
+          session
+            ? {
+                ...session,
+                result: {
+                  ...session.result,
+                  organizations: session.result.organizations.map((org) => ({
+                    ...org,
+                    projects: org.projects.map((cachedProject) =>
+                      cachedProject.id === project.id
+                        ? {
+                            ...cachedProject,
+                            name: updatedProject.name,
+                            slug: updatedProject.slug,
+                          }
+                        : cachedProject,
+                    ),
+                  })),
+                },
+              }
+            : session,
+      );
 
       await Promise.allSettled([
         organization.refetch(),
@@ -194,9 +194,11 @@ function ProjectNameForm({
                     data-invalid={error || update.isError ? true : undefined}
                     className="max-w-md"
                   >
-                    <FieldLabel htmlFor={field.name}>Project name</FieldLabel>
+                    <FieldLabel htmlFor="project-display-name">
+                      Project name
+                    </FieldLabel>
                     <Input
-                      id={field.name}
+                      id="project-display-name"
                       name={field.name}
                       value={field.state.value}
                       onChange={(value) => {
@@ -207,10 +209,16 @@ function ProjectNameForm({
                       disabled={update.isPending}
                       maxLength={PROJECT_NAME_MAX_LENGTH}
                       aria-invalid={Boolean(error || update.isError)}
+                      aria-describedby={
+                        error || update.isError
+                          ? "project-display-name-error"
+                          : undefined
+                      }
                     />
-                    {error && <FieldError>{error}</FieldError>}
-                    {update.isError && (
-                      <FieldError>{update.error.message}</FieldError>
+                    {(error || update.isError) && (
+                      <FieldError id="project-display-name-error">
+                        {error ?? update.error?.message}
+                      </FieldError>
                     )}
                   </Field>
                 );
@@ -230,9 +238,9 @@ function ProjectNameForm({
                     data-invalid={error || update.isError ? true : undefined}
                     className="max-w-md"
                   >
-                    <FieldLabel htmlFor={field.name}>Project slug</FieldLabel>
+                    <FieldLabel htmlFor="project-slug">Project slug</FieldLabel>
                     <Input
-                      id={field.name}
+                      id="project-slug"
                       name={field.name}
                       value={field.state.value}
                       onChange={(value) => {
@@ -243,15 +251,24 @@ function ProjectNameForm({
                       disabled={update.isPending || isDefaultProject}
                       maxLength={PROJECT_SLUG_MAX_LENGTH}
                       aria-invalid={Boolean(error || update.isError)}
+                      aria-describedby={
+                        [
+                          isDefaultProject ? "project-slug-description" : null,
+                          error || update.isError ? "project-slug-error" : null,
+                        ]
+                          .filter(Boolean)
+                          .join(" ") || undefined
+                      }
                     />
                     {isDefaultProject && (
-                      <FieldDescription>
+                      <FieldDescription id="project-slug-description">
                         The default project slug cannot be changed.
                       </FieldDescription>
                     )}
-                    {error && <FieldError>{error}</FieldError>}
-                    {update.isError && (
-                      <FieldError>{update.error.message}</FieldError>
+                    {(error || update.isError) && (
+                      <FieldError id="project-slug-error">
+                        {error ?? update.error?.message}
+                      </FieldError>
                     )}
                   </Field>
                 );
@@ -297,6 +314,11 @@ function ProjectNameForm({
               update them to use <strong>{pendingSlugChange?.slug}</strong>.
             </Dialog.Description>
           </Dialog.Header>
+          {update.isError && (
+            <Alert variant="error" dismissible={false}>
+              {update.error.message}
+            </Alert>
+          )}
           <Dialog.Footer>
             <Button
               variant="tertiary"
