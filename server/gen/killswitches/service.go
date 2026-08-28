@@ -155,6 +155,7 @@ type KillswitchHistoryEvent struct {
 type KillswitchLiftResult struct {
 	Result            *KillswitchMutationReceipt
 	RemainingOverlaps []*KillswitchOverlap
+	Truncated         bool
 }
 
 // KillswitchListCapabilitiesResult is the result type of the killswitches
@@ -203,7 +204,8 @@ type KillswitchOverlapStatus string
 // KillswitchPreviewOverlapsResult is the result type of the killswitches
 // service previewOverlaps method.
 type KillswitchPreviewOverlapsResult struct {
-	Overlaps []*KillswitchOverlap
+	Overlaps  []*KillswitchOverlap
+	Truncated bool
 }
 
 type KillswitchSchedule struct {

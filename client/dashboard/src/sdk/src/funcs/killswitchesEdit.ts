@@ -13,9 +13,9 @@ import { RequestOptions } from "../lib/sdks.js";
 import { resolveSecurity } from "../lib/security.js";
 import { pathToFunc } from "../lib/url.js";
 import {
-  KillswitchPreviewOverlapsResult,
-  KillswitchPreviewOverlapsResult$inboundSchema,
-} from "../models/components/killswitchpreviewoverlapsresult.js";
+  KillswitchMutationReceipt,
+  KillswitchMutationReceipt$inboundSchema,
+} from "../models/components/killswitchmutationreceipt.js";
 import { GramError } from "../models/errors/gramerror.js";
 import {
   ConnectionError,
@@ -24,6 +24,10 @@ import {
   RequestTimeoutError,
   UnexpectedClientError,
 } from "../models/errors/httpclienterrors.js";
+import {
+  KillswitchConflict,
+  KillswitchConflict$inboundSchema,
+} from "../models/errors/killswitchconflict.js";
 import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
 import {
@@ -31,24 +35,25 @@ import {
   ServiceError$inboundSchema,
 } from "../models/errors/serviceerror.js";
 import {
-  KillswitchesNumberPreviewOverlapsRequest,
-  KillswitchesNumberPreviewOverlapsRequest$outboundSchema,
-  KillswitchesNumberPreviewOverlapsSecurity,
-} from "../models/operations/killswitchesnumberpreviewoverlaps.js";
+  KillswitchesEditRequest,
+  KillswitchesEditRequest$outboundSchema,
+  KillswitchesEditSecurity,
+} from "../models/operations/killswitchesedit.js";
 import { APICall, APIPromise } from "../types/async.js";
 import { Result } from "../types/fp.js";
 
 /**
- * previewOverlaps killswitches
+ * edit killswitches
  */
-export function killswitchesKillswitchesNumberPreviewOverlaps(
+export function killswitchesEdit(
   client: GramCore,
-  request: KillswitchesNumberPreviewOverlapsRequest,
-  security?: KillswitchesNumberPreviewOverlapsSecurity | undefined,
+  security: KillswitchesEditSecurity,
+  request: KillswitchesEditRequest,
   options?: RequestOptions,
 ): APIPromise<
   Result<
-    KillswitchPreviewOverlapsResult,
+    KillswitchMutationReceipt,
+    | KillswitchConflict
     | ServiceError
     | GramError
     | ResponseValidationError
@@ -62,21 +67,22 @@ export function killswitchesKillswitchesNumberPreviewOverlaps(
 > {
   return new APIPromise($do(
     client,
-    request,
     security,
+    request,
     options,
   ));
 }
 
 async function $do(
   client: GramCore,
-  request: KillswitchesNumberPreviewOverlapsRequest,
-  security?: KillswitchesNumberPreviewOverlapsSecurity | undefined,
+  security: KillswitchesEditSecurity,
+  request: KillswitchesEditRequest,
   options?: RequestOptions,
 ): Promise<
   [
     Result<
-      KillswitchPreviewOverlapsResult,
+      KillswitchMutationReceipt,
+      | KillswitchConflict
       | ServiceError
       | GramError
       | ResponseValidationError
@@ -92,19 +98,18 @@ async function $do(
 > {
   const parsed = safeParse(
     request,
-    (value) =>
-      z.parse(KillswitchesNumberPreviewOverlapsRequest$outboundSchema, value),
+    (value) => z.parse(KillswitchesEditRequest$outboundSchema, value),
     "Input validation failed",
   );
   if (!parsed.ok) {
     return [parsed, { status: "invalid" }];
   }
   const payload = parsed.value;
-  const body = encodeJSON("body", payload.KillswitchPreviewOverlapsRequest, {
+  const body = encodeJSON("body", payload.KillswitchEditRequest, {
     explode: true,
   });
 
-  const path = pathToFunc("/rpc/killswitches.previewOverlaps")();
+  const path = pathToFunc("/rpc/killswitches.edit")();
 
   const headers = new Headers(compactMap({
     "Content-Type": "application/json",
@@ -128,7 +133,7 @@ async function $do(
   const context = {
     options: client._options,
     baseURL: options?.serverURL ?? client._baseURL ?? "",
-    operationID: "killswitches#previewOverlaps",
+    operationID: "killswitchesEdit",
     oAuth2Scopes: null,
 
     resolvedSecurity: requestSecurity,
@@ -172,7 +177,8 @@ async function $do(
   };
 
   const [result] = await M.match<
-    KillswitchPreviewOverlapsResult,
+    KillswitchMutationReceipt,
+    | KillswitchConflict
     | ServiceError
     | GramError
     | ResponseValidationError
@@ -183,7 +189,8 @@ async function $do(
     | UnexpectedClientError
     | SDKValidationError
   >(
-    M.json(200, KillswitchPreviewOverlapsResult$inboundSchema),
+    M.json(200, KillswitchMutationReceipt$inboundSchema),
+    M.jsonErr(409, KillswitchConflict$inboundSchema),
     M.jsonErr([400, 401, 403, 404, 415, 422], ServiceError$inboundSchema),
     M.jsonErr([500, 502, 503], ServiceError$inboundSchema),
     M.fail("4XX"),

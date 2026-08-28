@@ -31,20 +31,20 @@ import {
   ServiceError$inboundSchema,
 } from "../models/errors/serviceerror.js";
 import {
-  KillswitchesNumberBatchUserBadgesRequest,
-  KillswitchesNumberBatchUserBadgesRequest$outboundSchema,
-  KillswitchesNumberBatchUserBadgesSecurity,
-} from "../models/operations/killswitchesnumberbatchuserbadges.js";
+  KillswitchesBatchUserBadgesRequest,
+  KillswitchesBatchUserBadgesRequest$outboundSchema,
+  KillswitchesBatchUserBadgesSecurity,
+} from "../models/operations/killswitchesbatchuserbadges.js";
 import { APICall, APIPromise } from "../types/async.js";
 import { Result } from "../types/fp.js";
 
 /**
  * batchUserBadges killswitches
  */
-export function killswitchesKillswitchesNumberBatchUserBadges(
+export function killswitchesBatchUserBadges(
   client: GramCore,
-  request: KillswitchesNumberBatchUserBadgesRequest,
-  security?: KillswitchesNumberBatchUserBadgesSecurity | undefined,
+  security: KillswitchesBatchUserBadgesSecurity,
+  request: KillswitchesBatchUserBadgesRequest,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -62,16 +62,16 @@ export function killswitchesKillswitchesNumberBatchUserBadges(
 > {
   return new APIPromise($do(
     client,
-    request,
     security,
+    request,
     options,
   ));
 }
 
 async function $do(
   client: GramCore,
-  request: KillswitchesNumberBatchUserBadgesRequest,
-  security?: KillswitchesNumberBatchUserBadgesSecurity | undefined,
+  security: KillswitchesBatchUserBadgesSecurity,
+  request: KillswitchesBatchUserBadgesRequest,
   options?: RequestOptions,
 ): Promise<
   [
@@ -93,7 +93,7 @@ async function $do(
   const parsed = safeParse(
     request,
     (value) =>
-      z.parse(KillswitchesNumberBatchUserBadgesRequest$outboundSchema, value),
+      z.parse(KillswitchesBatchUserBadgesRequest$outboundSchema, value),
     "Input validation failed",
   );
   if (!parsed.ok) {
@@ -128,7 +128,7 @@ async function $do(
   const context = {
     options: client._options,
     baseURL: options?.serverURL ?? client._baseURL ?? "",
-    operationID: "killswitches#batchUserBadges",
+    operationID: "killswitchesBatchUserBadges",
     oAuth2Scopes: null,
 
     resolvedSecurity: requestSecurity,

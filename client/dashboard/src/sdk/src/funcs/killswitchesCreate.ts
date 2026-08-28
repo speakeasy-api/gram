@@ -4,7 +4,7 @@
 
 import * as z from "zod/v4-mini";
 import { GramCore } from "../core.js";
-import { encodeSimple } from "../lib/encodings.js";
+import { encodeJSON, encodeSimple } from "../lib/encodings.js";
 import { matchStatusCode } from "../lib/http.js";
 import * as M from "../lib/matchers.js";
 import { compactMap } from "../lib/primitives.js";
@@ -13,9 +13,9 @@ import { RequestOptions } from "../lib/sdks.js";
 import { resolveSecurity } from "../lib/security.js";
 import { pathToFunc } from "../lib/url.js";
 import {
-  KillswitchListMCPServersResult,
-  KillswitchListMCPServersResult$inboundSchema,
-} from "../models/components/killswitchlistmcpserversresult.js";
+  KillswitchMutationReceipt,
+  KillswitchMutationReceipt$inboundSchema,
+} from "../models/components/killswitchmutationreceipt.js";
 import { GramError } from "../models/errors/gramerror.js";
 import {
   ConnectionError,
@@ -24,6 +24,10 @@ import {
   RequestTimeoutError,
   UnexpectedClientError,
 } from "../models/errors/httpclienterrors.js";
+import {
+  KillswitchConflict,
+  KillswitchConflict$inboundSchema,
+} from "../models/errors/killswitchconflict.js";
 import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
 import {
@@ -31,24 +35,25 @@ import {
   ServiceError$inboundSchema,
 } from "../models/errors/serviceerror.js";
 import {
-  KillswitchesNumberListMCPServersRequest,
-  KillswitchesNumberListMCPServersRequest$outboundSchema,
-  KillswitchesNumberListMCPServersSecurity,
-} from "../models/operations/killswitchesnumberlistmcpservers.js";
+  KillswitchesCreateRequest,
+  KillswitchesCreateRequest$outboundSchema,
+  KillswitchesCreateSecurity,
+} from "../models/operations/killswitchescreate.js";
 import { APICall, APIPromise } from "../types/async.js";
 import { Result } from "../types/fp.js";
 
 /**
- * listMCPServers killswitches
+ * create killswitches
  */
-export function killswitchesKillswitchesNumberListMCPServers(
+export function killswitchesCreate(
   client: GramCore,
-  request?: KillswitchesNumberListMCPServersRequest | undefined,
-  security?: KillswitchesNumberListMCPServersSecurity | undefined,
+  security: KillswitchesCreateSecurity,
+  request: KillswitchesCreateRequest,
   options?: RequestOptions,
 ): APIPromise<
   Result<
-    KillswitchListMCPServersResult,
+    KillswitchMutationReceipt,
+    | KillswitchConflict
     | ServiceError
     | GramError
     | ResponseValidationError
@@ -62,21 +67,22 @@ export function killswitchesKillswitchesNumberListMCPServers(
 > {
   return new APIPromise($do(
     client,
-    request,
     security,
+    request,
     options,
   ));
 }
 
 async function $do(
   client: GramCore,
-  request?: KillswitchesNumberListMCPServersRequest | undefined,
-  security?: KillswitchesNumberListMCPServersSecurity | undefined,
+  security: KillswitchesCreateSecurity,
+  request: KillswitchesCreateRequest,
   options?: RequestOptions,
 ): Promise<
   [
     Result<
-      KillswitchListMCPServersResult,
+      KillswitchMutationReceipt,
+      | KillswitchConflict
       | ServiceError
       | GramError
       | ResponseValidationError
@@ -92,24 +98,23 @@ async function $do(
 > {
   const parsed = safeParse(
     request,
-    (value) =>
-      z.parse(
-        z.optional(KillswitchesNumberListMCPServersRequest$outboundSchema),
-        value,
-      ),
+    (value) => z.parse(KillswitchesCreateRequest$outboundSchema, value),
     "Input validation failed",
   );
   if (!parsed.ok) {
     return [parsed, { status: "invalid" }];
   }
   const payload = parsed.value;
-  const body = null;
+  const body = encodeJSON("body", payload.KillswitchCreateRequest, {
+    explode: true,
+  });
 
-  const path = pathToFunc("/rpc/killswitches.listMCPServers")();
+  const path = pathToFunc("/rpc/killswitches.create")();
 
   const headers = new Headers(compactMap({
+    "Content-Type": "application/json",
     Accept: "application/json",
-    "Gram-Session": encodeSimple("Gram-Session", payload?.["Gram-Session"], {
+    "Gram-Session": encodeSimple("Gram-Session", payload["Gram-Session"], {
       explode: false,
       charEncoding: "none",
     }),
@@ -128,7 +133,7 @@ async function $do(
   const context = {
     options: client._options,
     baseURL: options?.serverURL ?? client._baseURL ?? "",
-    operationID: "killswitches#listMCPServers",
+    operationID: "killswitchesCreate",
     oAuth2Scopes: null,
 
     resolvedSecurity: requestSecurity,
@@ -142,7 +147,7 @@ async function $do(
 
   const requestRes = client._createRequest(context, {
     security: requestSecurity,
-    method: "GET",
+    method: "POST",
     baseURL: options?.serverURL,
     path: path,
     headers: headers,
@@ -172,7 +177,8 @@ async function $do(
   };
 
   const [result] = await M.match<
-    KillswitchListMCPServersResult,
+    KillswitchMutationReceipt,
+    | KillswitchConflict
     | ServiceError
     | GramError
     | ResponseValidationError
@@ -183,7 +189,8 @@ async function $do(
     | UnexpectedClientError
     | SDKValidationError
   >(
-    M.json(200, KillswitchListMCPServersResult$inboundSchema),
+    M.json(200, KillswitchMutationReceipt$inboundSchema),
+    M.jsonErr(409, KillswitchConflict$inboundSchema),
     M.jsonErr([400, 401, 403, 404, 415, 422], ServiceError$inboundSchema),
     M.jsonErr([500, 502, 503], ServiceError$inboundSchema),
     M.fail("4XX"),

@@ -253,15 +253,15 @@ trackedFiles:
   src/funcs/keysList.ts: {}
   src/funcs/keysRevokeById.ts: {}
   src/funcs/keysValidate.ts: {}
-  src/funcs/killswitchesKillswitchesNumberBatchUserBadges.ts: {}
-  src/funcs/killswitchesKillswitchesNumberCreate.ts: {}
-  src/funcs/killswitchesKillswitchesNumberEdit.ts: {}
-  src/funcs/killswitchesKillswitchesNumberGet.ts: {}
-  src/funcs/killswitchesKillswitchesNumberLift.ts: {}
-  src/funcs/killswitchesKillswitchesNumberList.ts: {}
-  src/funcs/killswitchesKillswitchesNumberListCapabilities.ts: {}
-  src/funcs/killswitchesKillswitchesNumberListMCPServers.ts: {}
-  src/funcs/killswitchesKillswitchesNumberPreviewOverlaps.ts: {}
+  src/funcs/killswitchesBatchUserBadges.ts: {}
+  src/funcs/killswitchesCreate.ts: {}
+  src/funcs/killswitchesEdit.ts: {}
+  src/funcs/killswitchesGet.ts: {}
+  src/funcs/killswitchesLift.ts: {}
+  src/funcs/killswitchesList.ts: {}
+  src/funcs/killswitchesListCapabilities.ts: {}
+  src/funcs/killswitchesListMCPServers.ts: {}
+  src/funcs/killswitchesPreviewOverlaps.ts: {}
   src/funcs/litellmCreateInstance.ts: {}
   src/funcs/litellmIngestGuardrail.ts: {}
   src/funcs/litellmListInstances.ts: {}
@@ -1855,15 +1855,15 @@ trackedFiles:
   src/models/operations/ingestlitellmguardrail.ts: {}
   src/models/operations/integrationsnumberget.ts: {}
   src/models/operations/interruptassistantturn.ts: {}
-  src/models/operations/killswitchesnumberbatchuserbadges.ts: {}
-  src/models/operations/killswitchesnumbercreate.ts: {}
-  src/models/operations/killswitchesnumberedit.ts: {}
-  src/models/operations/killswitchesnumberget.ts: {}
-  src/models/operations/killswitchesnumberlift.ts: {}
-  src/models/operations/killswitchesnumberlist.ts: {}
-  src/models/operations/killswitchesnumberlistcapabilities.ts: {}
-  src/models/operations/killswitchesnumberlistmcpservers.ts: {}
-  src/models/operations/killswitchesnumberpreviewoverlaps.ts: {}
+  src/models/operations/killswitchesbatchuserbadges.ts: {}
+  src/models/operations/killswitchescreate.ts: {}
+  src/models/operations/killswitchesedit.ts: {}
+  src/models/operations/killswitchesget.ts: {}
+  src/models/operations/killswitcheslift.ts: {}
+  src/models/operations/killswitcheslist.ts: {}
+  src/models/operations/killswitcheslistcapabilities.ts: {}
+  src/models/operations/killswitcheslistmcpservers.ts: {}
+  src/models/operations/killswitchespreviewoverlaps.ts: {}
   src/models/operations/listadminopenrouterkeys.ts: {}
   src/models/operations/listaiintegrationschedules.ts: {}
   src/models/operations/listallowedorigins.ts: {}
@@ -2528,19 +2528,19 @@ trackedFiles:
   src/react-query/integrationsIntegrationsNumberGet.core.ts: {}
   src/react-query/integrationsIntegrationsNumberGet.ts: {}
   src/react-query/interruptAssistantTurn.ts: {}
-  src/react-query/killswitchesKillswitchesNumberBatchUserBadges.ts: {}
-  src/react-query/killswitchesKillswitchesNumberCreate.ts: {}
-  src/react-query/killswitchesKillswitchesNumberEdit.ts: {}
-  src/react-query/killswitchesKillswitchesNumberGet.core.ts: {}
-  src/react-query/killswitchesKillswitchesNumberGet.ts: {}
-  src/react-query/killswitchesKillswitchesNumberLift.ts: {}
-  src/react-query/killswitchesKillswitchesNumberList.core.ts: {}
-  src/react-query/killswitchesKillswitchesNumberList.ts: {}
-  src/react-query/killswitchesKillswitchesNumberListCapabilities.core.ts: {}
-  src/react-query/killswitchesKillswitchesNumberListCapabilities.ts: {}
-  src/react-query/killswitchesKillswitchesNumberListMCPServers.core.ts: {}
-  src/react-query/killswitchesKillswitchesNumberListMCPServers.ts: {}
-  src/react-query/killswitchesKillswitchesNumberPreviewOverlaps.ts: {}
+  src/react-query/killswitchesBatchUserBadges.ts: {}
+  src/react-query/killswitchesCreate.ts: {}
+  src/react-query/killswitchesEdit.ts: {}
+  src/react-query/killswitchesGet.core.ts: {}
+  src/react-query/killswitchesGet.ts: {}
+  src/react-query/killswitchesLift.ts: {}
+  src/react-query/killswitchesList.core.ts: {}
+  src/react-query/killswitchesList.ts: {}
+  src/react-query/killswitchesListCapabilities.core.ts: {}
+  src/react-query/killswitchesListCapabilities.ts: {}
+  src/react-query/killswitchesListMCPServers.core.ts: {}
+  src/react-query/killswitchesListMCPServers.ts: {}
+  src/react-query/killswitchesPreviewOverlaps.ts: {}
   src/react-query/latestDeployment.core.ts: {}
   src/react-query/latestDeployment.ts: {}
   src/react-query/listAPIKeys.core.ts: {}
@@ -6504,7 +6504,7 @@ examples:
         application/json: {"expected_version": 775049, "id": "de034cad-4128-4cf5-a1ba-5f31743c45b7", "operation_id": "0bfca1b9-857a-422e-8fff-fc7e00bb8e41"}
       responses:
         "200":
-          application/json: {"remaining_overlaps": [{"id": "0787149a-0e86-4cf3-be4c-365e9d02994c", "schedule": {"start": "now", "end": "until_lifted"}, "scope": {"type": "selected_servers", "server_ids": ["de034cad-4128-4cf5-a1ba-5f31743c45b7", "0bfca1b9-857a-422e-8fff-fc7e00bb8e41", "f0787149-a0e8-46cf-b3e4-c365e9d02994"]}, "status": "active"}], "result": {"id": "1d594cb6-260b-485e-ba89-1fd8d90362d6", "replayed": true, "version": 745460}}
+          application/json: {"remaining_overlaps": [{"id": "0787149a-0e86-4cf3-be4c-365e9d02994c", "schedule": {"start": "now", "end": "until_lifted"}, "scope": {"type": "selected_servers", "server_ids": ["de034cad-4128-4cf5-a1ba-5f31743c45b7", "0bfca1b9-857a-422e-8fff-fc7e00bb8e41", "f0787149-a0e8-46cf-b3e4-c365e9d02994"]}, "status": "active"}], "result": {"id": "1d594cb6-260b-485e-ba89-1fd8d90362d6", "replayed": true, "version": 745460}, "truncated": false}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":
@@ -6544,11 +6544,111 @@ examples:
         application/json: {"schedule": {"start": "scheduled", "starts_at": "2026-12-17T12:51:31.525Z", "end": "bounded", "ends_at": "2024-06-15T04:40:42.247Z"}, "scope": {"type": "all_servers"}, "user_id": "<id>", "capability_key": "mcp_tool_calls"}
       responses:
         "200":
-          application/json: {"overlaps": []}
+          application/json: {"overlaps": [], "truncated": false}
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+  killswitchesBatchUserBadges:
+    speakeasy-default-killswitches-batch-user-badges:
+      requestBody:
+        application/json: {"user_ids": []}
+      responses:
+        "200":
+          application/json: {"badges": []}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+  killswitchesCreate:
+    speakeasy-default-killswitches-create:
+      requestBody:
+        application/json: {"external_note": "<value>", "internal_note": "<value>", "operation_id": "c2bef8ac-c98a-4b89-8a32-cd62272034a3", "schedule": {"start": "now", "end": "bounded", "ends_at": "2024-06-16T19:43:19.564Z"}, "scope": {"type": "all_servers"}, "user_id": "<id>", "capability_key": "mcp_tool_calls"}
+      responses:
+        "200":
+          application/json: {"id": "2b497ff0-1441-454e-b4e8-5d3eb1b5584a", "replayed": false, "version": 597942}
+        "409":
+          application/json: {"message": "<value>", "name": "version_conflict"}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+  killswitchesEdit:
+    speakeasy-default-killswitches-edit:
+      requestBody:
+        application/json: {"expected_version": 294160, "external_note": "<value>", "id": "72b9f701-155a-4e33-8576-4bb37672ac79", "internal_note": "<value>", "operation_id": "fc513b63-a23e-488e-bed6-e06db8ab4fd5", "schedule": {"start": "scheduled", "starts_at": "2025-08-29T21:30:18.965Z", "end": "until_lifted"}, "scope": {"type": "all_servers"}}
+      responses:
+        "200":
+          application/json: {"id": "90947f38-2994-4c16-88bf-4e0384d11dc3", "replayed": false, "version": 499176}
+        "409":
+          application/json: {"message": "<value>", "name": "version_conflict"}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+  killswitchesGet:
+    speakeasy-default-killswitches-get:
+      parameters:
+        query:
+          id: "3aa7d685-0777-47f3-91a3-7e54b72bb4d4"
+      responses:
+        "200":
+          application/json: {"capability_label": "<value>", "external_note": "<value>", "history": [{"changed_at": "2026-11-13T17:48:28.615Z", "external_note": "<value>", "internal_note": "<value>", "schedule": {"start": "scheduled", "starts_at": "2024-07-14T20:01:43.318Z", "end": "bounded", "ends_at": "2024-12-09T21:55:27.033Z"}, "scope": {"type": "all_servers"}, "sequence": 611499, "version": 588073, "action": "edited", "status": "lifted"}], "history_truncated": true, "id": "96cba4a4-4e8e-481f-9de0-55e7582031cf", "internal_note": "<value>", "schedule": {"start": "scheduled", "starts_at": "2026-08-16T09:15:15.373Z", "end": "until_lifted"}, "scope": {"type": "selected_servers", "server_ids": ["e101a803-c388-4b8e-86e8-b208cc2fe968", "b76dda33-4e69-476a-a1a0-8d6b66db304f", "e6814a5d-f85f-4e5d-b290-0e27fe059054"]}, "user_id": "<id>", "version": 28275, "capability_key": "mcp_tool_calls", "status": "active"}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+  killswitchesLift:
+    speakeasy-default-killswitches-lift:
+      requestBody:
+        application/json: {"expected_version": 195979, "id": "95e486c0-61ba-4f35-a650-c22013dd43a9", "operation_id": "76c0f962-1fe4-42fd-95db-82545984a2b7"}
+      responses:
+        "200":
+          application/json: {"remaining_overlaps": [{"id": "430e6077-2990-42a1-a7a8-a77c3c767f9f", "schedule": {"start": "scheduled", "starts_at": "2025-10-27T12:03:57.259Z", "end": "until_lifted"}, "scope": {"type": "selected_servers", "server_ids": []}, "status": "active"}], "result": {"id": "776bd50a-d8b5-4dc3-bf7b-c192fb4ada35", "replayed": true, "version": 723426}, "truncated": false}
+        "409":
+          application/json: {"message": "<value>", "name": "operation_conflict"}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+  killswitchesList:
+    speakeasy-default-killswitches-list:
+      responses:
+        "200":
+          application/json: {"items": []}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+  killswitchesListCapabilities:
+    speakeasy-default-killswitches-list-capabilities:
+      responses:
+        "200":
+          application/json: {"capabilities": [{"label": "<value>", "key": "mcp_tool_calls"}], "coming_soon": []}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+  killswitchesListMCPServers:
+    speakeasy-default-killswitches-list-MCP-servers:
+      responses:
+        "200":
+          application/json: {"servers": []}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+  killswitchesPreviewOverlaps:
+    speakeasy-default-killswitches-preview-overlaps:
+      requestBody:
+        application/json: {"schedule": {"start": "now", "end": "bounded", "ends_at": "2026-09-27T02:17:57.903Z"}, "scope": {"type": "selected_servers", "server_ids": ["6db68204-4ca9-42cc-8f49-93e367971ed1", "bbb07b6c-a818-483a-a076-b5712d1ff133"]}, "user_id": "<id>", "capability_key": "mcp_tool_calls"}
+      responses:
+        "200":
+          application/json: {"overlaps": [], "truncated": false}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
   listAIIntegrationSchedules:
     speakeasy-default-list-AI-integration-schedules:
       parameters:

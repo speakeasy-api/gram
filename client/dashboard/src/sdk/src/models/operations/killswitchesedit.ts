@@ -10,11 +10,11 @@ import {
   KillswitchEditRequest$outboundSchema,
 } from "../components/killswitcheditrequest.js";
 
-export type KillswitchesNumberEditSecurity = {
-  sessionHeaderGramSession?: string | undefined;
+export type KillswitchesEditSecurity = {
+  sessionHeaderGramSession: string;
 };
 
-export type KillswitchesNumberEditRequest = {
+export type KillswitchesEditRequest = {
   /**
    * Session header
    */
@@ -23,17 +23,17 @@ export type KillswitchesNumberEditRequest = {
 };
 
 /** @internal */
-export type KillswitchesNumberEditSecurity$Outbound = {
-  "session_header_Gram-Session"?: string | undefined;
+export type KillswitchesEditSecurity$Outbound = {
+  "session_header_Gram-Session": string;
 };
 
 /** @internal */
-export const KillswitchesNumberEditSecurity$outboundSchema: z.ZodMiniType<
-  KillswitchesNumberEditSecurity$Outbound,
-  KillswitchesNumberEditSecurity
+export const KillswitchesEditSecurity$outboundSchema: z.ZodMiniType<
+  KillswitchesEditSecurity$Outbound,
+  KillswitchesEditSecurity
 > = z.pipe(
   z.object({
-    sessionHeaderGramSession: z.optional(z.string()),
+    sessionHeaderGramSession: z.string(),
   }),
   z.transform((v) => {
     return remap$(v, {
@@ -42,26 +42,24 @@ export const KillswitchesNumberEditSecurity$outboundSchema: z.ZodMiniType<
   }),
 );
 
-export function killswitchesNumberEditSecurityToJSON(
-  killswitchesNumberEditSecurity: KillswitchesNumberEditSecurity,
+export function killswitchesEditSecurityToJSON(
+  killswitchesEditSecurity: KillswitchesEditSecurity,
 ): string {
   return JSON.stringify(
-    KillswitchesNumberEditSecurity$outboundSchema.parse(
-      killswitchesNumberEditSecurity,
-    ),
+    KillswitchesEditSecurity$outboundSchema.parse(killswitchesEditSecurity),
   );
 }
 
 /** @internal */
-export type KillswitchesNumberEditRequest$Outbound = {
+export type KillswitchesEditRequest$Outbound = {
   "Gram-Session"?: string | undefined;
   KillswitchEditRequest: KillswitchEditRequest$Outbound;
 };
 
 /** @internal */
-export const KillswitchesNumberEditRequest$outboundSchema: z.ZodMiniType<
-  KillswitchesNumberEditRequest$Outbound,
-  KillswitchesNumberEditRequest
+export const KillswitchesEditRequest$outboundSchema: z.ZodMiniType<
+  KillswitchesEditRequest$Outbound,
+  KillswitchesEditRequest
 > = z.pipe(
   z.object({
     gramSession: z.optional(z.string()),
@@ -75,12 +73,10 @@ export const KillswitchesNumberEditRequest$outboundSchema: z.ZodMiniType<
   }),
 );
 
-export function killswitchesNumberEditRequestToJSON(
-  killswitchesNumberEditRequest: KillswitchesNumberEditRequest,
+export function killswitchesEditRequestToJSON(
+  killswitchesEditRequest: KillswitchesEditRequest,
 ): string {
   return JSON.stringify(
-    KillswitchesNumberEditRequest$outboundSchema.parse(
-      killswitchesNumberEditRequest,
-    ),
+    KillswitchesEditRequest$outboundSchema.parse(killswitchesEditRequest),
   );
 }

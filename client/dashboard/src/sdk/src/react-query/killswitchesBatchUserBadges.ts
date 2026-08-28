@@ -8,10 +8,10 @@ import {
   UseMutationResult,
 } from "@tanstack/react-query";
 import { GramCore } from "../core.js";
-import { killswitchesKillswitchesNumberEdit } from "../funcs/killswitchesKillswitchesNumberEdit.js";
+import { killswitchesBatchUserBadges } from "../funcs/killswitchesBatchUserBadges.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
-import { KillswitchMutationReceipt } from "../models/components/killswitchmutationreceipt.js";
+import { KillswitchBatchUserBadgesResult } from "../models/components/killswitchbatchuserbadgesresult.js";
 import { GramError } from "../models/errors/gramerror.js";
 import {
   ConnectionError,
@@ -20,29 +20,27 @@ import {
   RequestTimeoutError,
   UnexpectedClientError,
 } from "../models/errors/httpclienterrors.js";
-import { KillswitchConflict } from "../models/errors/killswitchconflict.js";
 import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
 import { ServiceError } from "../models/errors/serviceerror.js";
 import {
-  KillswitchesNumberEditRequest,
-  KillswitchesNumberEditSecurity,
-} from "../models/operations/killswitchesnumberedit.js";
+  KillswitchesBatchUserBadgesRequest,
+  KillswitchesBatchUserBadgesSecurity,
+} from "../models/operations/killswitchesbatchuserbadges.js";
 import { unwrapAsync } from "../types/fp.js";
 import { useGramContext } from "./_context.js";
 import { MutationHookOptions } from "./_types.js";
 
-export type KillswitchesKillswitchesNumberEditMutationVariables = {
-  request: KillswitchesNumberEditRequest;
-  security?: KillswitchesNumberEditSecurity | undefined;
+export type KillswitchesBatchUserBadgesMutationVariables = {
+  security: KillswitchesBatchUserBadgesSecurity;
+  request: KillswitchesBatchUserBadgesRequest;
   options?: RequestOptions;
 };
 
-export type KillswitchesKillswitchesNumberEditMutationData =
-  KillswitchMutationReceipt;
+export type KillswitchesBatchUserBadgesMutationData =
+  KillswitchBatchUserBadgesResult;
 
-export type KillswitchesKillswitchesNumberEditMutationError =
-  | KillswitchConflict
+export type KillswitchesBatchUserBadgesMutationError =
   | ServiceError
   | GramError
   | ResponseValidationError
@@ -54,46 +52,46 @@ export type KillswitchesKillswitchesNumberEditMutationError =
   | SDKValidationError;
 
 /**
- * edit killswitches
+ * batchUserBadges killswitches
  */
-export function useKillswitchesKillswitchesNumberEditMutation(
+export function useKillswitchesBatchUserBadgesMutation(
   options?: MutationHookOptions<
-    KillswitchesKillswitchesNumberEditMutationData,
-    KillswitchesKillswitchesNumberEditMutationError,
-    KillswitchesKillswitchesNumberEditMutationVariables
+    KillswitchesBatchUserBadgesMutationData,
+    KillswitchesBatchUserBadgesMutationError,
+    KillswitchesBatchUserBadgesMutationVariables
   >,
 ): UseMutationResult<
-  KillswitchesKillswitchesNumberEditMutationData,
-  KillswitchesKillswitchesNumberEditMutationError,
-  KillswitchesKillswitchesNumberEditMutationVariables
+  KillswitchesBatchUserBadgesMutationData,
+  KillswitchesBatchUserBadgesMutationError,
+  KillswitchesBatchUserBadgesMutationVariables
 > {
   const client = useGramContext();
   return useMutation({
-    ...buildKillswitchesKillswitchesNumberEditMutation(client, options),
+    ...buildKillswitchesBatchUserBadgesMutation(client, options),
     ...options,
   });
 }
 
-export function mutationKeyKillswitchesKillswitchesNumberEdit(): MutationKey {
-  return ["@gram/client", "killswitches", "killswitchesNumberEdit"];
+export function mutationKeyKillswitchesBatchUserBadges(): MutationKey {
+  return ["@gram/client", "killswitches", "batchUserBadges"];
 }
 
-export function buildKillswitchesKillswitchesNumberEditMutation(
+export function buildKillswitchesBatchUserBadgesMutation(
   client$: GramCore,
   hookOptions?: RequestOptions,
 ): {
   mutationKey: MutationKey;
   mutationFn: (
-    variables: KillswitchesKillswitchesNumberEditMutationVariables,
-  ) => Promise<KillswitchesKillswitchesNumberEditMutationData>;
+    variables: KillswitchesBatchUserBadgesMutationVariables,
+  ) => Promise<KillswitchesBatchUserBadgesMutationData>;
 } {
   return {
-    mutationKey: mutationKeyKillswitchesKillswitchesNumberEdit(),
-    mutationFn: function killswitchesKillswitchesNumberEditMutationFn({
-      request,
+    mutationKey: mutationKeyKillswitchesBatchUserBadges(),
+    mutationFn: function killswitchesBatchUserBadgesMutationFn({
       security,
+      request,
       options,
-    }): Promise<KillswitchesKillswitchesNumberEditMutationData> {
+    }): Promise<KillswitchesBatchUserBadgesMutationData> {
       const mergedOptions = {
         ...hookOptions,
         ...options,
@@ -106,10 +104,10 @@ export function buildKillswitchesKillswitchesNumberEditMutation(
           ),
         },
       };
-      return unwrapAsync(killswitchesKillswitchesNumberEdit(
+      return unwrapAsync(killswitchesBatchUserBadges(
         client$,
-        request,
         security,
+        request,
         mergedOptions,
       ));
     },

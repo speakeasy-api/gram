@@ -8,53 +8,51 @@ import {
   QueryKey,
 } from "@tanstack/react-query";
 import { GramCore } from "../core.js";
-import { killswitchesKillswitchesNumberGet } from "../funcs/killswitchesKillswitchesNumberGet.js";
+import { killswitchesGet } from "../funcs/killswitchesGet.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
 import { KillswitchDetail } from "../models/components/killswitchdetail.js";
 import {
-  KillswitchesNumberGetRequest,
-  KillswitchesNumberGetSecurity,
-} from "../models/operations/killswitchesnumberget.js";
+  KillswitchesGetRequest,
+  KillswitchesGetSecurity,
+} from "../models/operations/killswitchesget.js";
 import { unwrapAsync } from "../types/fp.js";
-export type KillswitchesKillswitchesNumberGetQueryData = KillswitchDetail;
+export type KillswitchesGetQueryData = KillswitchDetail;
 
-export function prefetchKillswitchesKillswitchesNumberGet(
+export function prefetchKillswitchesGet(
   queryClient: QueryClient,
   client$: GramCore,
-  request: KillswitchesNumberGetRequest,
-  security?: KillswitchesNumberGetSecurity | undefined,
+  security: KillswitchesGetSecurity,
+  request: KillswitchesGetRequest,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
-    ...buildKillswitchesKillswitchesNumberGetQuery(
+    ...buildKillswitchesGetQuery(
       client$,
-      request,
       security,
+      request,
       options,
     ),
   });
 }
 
-export function buildKillswitchesKillswitchesNumberGetQuery(
+export function buildKillswitchesGetQuery(
   client$: GramCore,
-  request: KillswitchesNumberGetRequest,
-  security?: KillswitchesNumberGetSecurity | undefined,
+  security: KillswitchesGetSecurity,
+  request: KillswitchesGetRequest,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;
-  queryFn: (
-    context: QueryFunctionContext,
-  ) => Promise<KillswitchesKillswitchesNumberGetQueryData>;
+  queryFn: (context: QueryFunctionContext) => Promise<KillswitchesGetQueryData>;
 } {
   return {
-    queryKey: queryKeyKillswitchesKillswitchesNumberGet({
+    queryKey: queryKeyKillswitchesGet({
       id: request.id,
       gramSession: request.gramSession,
     }),
-    queryFn: async function killswitchesKillswitchesNumberGetQueryFn(
+    queryFn: async function killswitchesGetQueryFn(
       ctx,
-    ): Promise<KillswitchesKillswitchesNumberGetQueryData> {
+    ): Promise<KillswitchesGetQueryData> {
       const sig = combineSignals(
         ctx.signal,
         options?.signal,
@@ -66,18 +64,18 @@ export function buildKillswitchesKillswitchesNumberGetQuery(
         signal: sig,
       };
 
-      return unwrapAsync(killswitchesKillswitchesNumberGet(
+      return unwrapAsync(killswitchesGet(
         client$,
-        request,
         security,
+        request,
         mergedOptions,
       ));
     },
   };
 }
 
-export function queryKeyKillswitchesKillswitchesNumberGet(
+export function queryKeyKillswitchesGet(
   parameters: { id: string; gramSession?: string | undefined },
 ): QueryKey {
-  return ["@gram/client", "killswitches", "killswitchesNumberGet", parameters];
+  return ["@gram/client", "killswitches", "get", parameters];
 }
