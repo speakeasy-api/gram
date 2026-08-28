@@ -31,7 +31,11 @@ func TestCatalogV1IsDeterministicAndClosed(t *testing.T) {
 	require.NotContains(t, catalog.DetectionScopeCategories, string(categories.CategoryPromptPolicy))
 	require.Empty(t, catalog.PromptInjectionRules)
 	require.NotNil(t, catalog.PromptInjectionRules)
+	require.NotContains(t, catalog.PresidioEntities, "HARMFUL_CONTENT_REQUEST")
 	require.NotContains(t, catalog.PresidioEntities, "PERSON")
+	require.NotContains(t, catalog.PresidioEntities, "POLICY_VIOLATION")
+	require.NotContains(t, catalog.PresidioEntities, "TOPIC_BOUNDARY_VIOLATION")
+	require.NotContains(t, catalog.PresidioEntities, "UNAUTHORIZED_ACTION")
 	require.NotContains(t, catalog.PresidioEntities, "US_DRIVER_LICENSE")
 	require.NotContains(t, catalog.DisabledRules, PresidioDeadLetterRule)
 	require.Contains(t, catalog.DisabledRules, accountidentity.RulePersonalAccount)
@@ -72,7 +76,7 @@ func TestCatalogV1IsDeterministicAndClosed(t *testing.T) {
 
 	fingerprint, err := Fingerprint(catalog)
 	require.NoError(t, err)
-	require.Equal(t, "sha256:d366234fc66d987da986ec481f8c46fab9165c77de0c308a546f49336aa64155", fingerprint)
+	require.Equal(t, "sha256:812dd2f822a6964e1195b7562fbba38a90664b8b7dcb12c78a1580c749988ae5", fingerprint)
 	require.True(t, strings.HasPrefix(fingerprint, "sha256:"))
 	require.Len(t, fingerprint, len("sha256:")+64)
 
