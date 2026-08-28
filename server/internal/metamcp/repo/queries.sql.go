@@ -228,7 +228,7 @@ VALUES (
     $4,
     $5
 )
-RETURNING id, organization_id, project_id, user_session_issuer_id, name, visibility, created_at, updated_at, deleted_at, deleted
+RETURNING id, organization_id, project_id, user_session_issuer_id, name, visibility, network_access_mode, created_at, updated_at, deleted_at, deleted
 `
 
 type CreateMetaMCPServerParams struct {
@@ -255,6 +255,7 @@ func (q *Queries) CreateMetaMCPServer(ctx context.Context, arg CreateMetaMCPServ
 		&i.UserSessionIssuerID,
 		&i.Name,
 		&i.Visibility,
+		&i.NetworkAccessMode,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -417,7 +418,7 @@ WHERE id = $1
   AND organization_id = $2
   AND project_id = $3
   AND deleted IS FALSE
-RETURNING id, organization_id, project_id, user_session_issuer_id, name, visibility, created_at, updated_at, deleted_at, deleted
+RETURNING id, organization_id, project_id, user_session_issuer_id, name, visibility, network_access_mode, created_at, updated_at, deleted_at, deleted
 `
 
 type DeleteMetaMCPServerParams struct {
@@ -436,6 +437,7 @@ func (q *Queries) DeleteMetaMCPServer(ctx context.Context, arg DeleteMetaMCPServ
 		&i.UserSessionIssuerID,
 		&i.Name,
 		&i.Visibility,
+		&i.NetworkAccessMode,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -528,7 +530,7 @@ func (q *Queries) GetMetaMCPMember(ctx context.Context, arg GetMetaMCPMemberPara
 }
 
 const getMetaMCPServer = `-- name: GetMetaMCPServer :one
-SELECT id, organization_id, project_id, user_session_issuer_id, name, visibility, created_at, updated_at, deleted_at, deleted
+SELECT id, organization_id, project_id, user_session_issuer_id, name, visibility, network_access_mode, created_at, updated_at, deleted_at, deleted
 FROM meta_mcp_servers
 WHERE id = $1
   AND organization_id = $2
@@ -552,6 +554,7 @@ func (q *Queries) GetMetaMCPServer(ctx context.Context, arg GetMetaMCPServerPara
 		&i.UserSessionIssuerID,
 		&i.Name,
 		&i.Visibility,
+		&i.NetworkAccessMode,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -561,7 +564,7 @@ func (q *Queries) GetMetaMCPServer(ctx context.Context, arg GetMetaMCPServerPara
 }
 
 const getMetaMCPServerByIDAndProjectID = `-- name: GetMetaMCPServerByIDAndProjectID :one
-SELECT id, organization_id, project_id, user_session_issuer_id, name, visibility, created_at, updated_at, deleted_at, deleted
+SELECT id, organization_id, project_id, user_session_issuer_id, name, visibility, network_access_mode, created_at, updated_at, deleted_at, deleted
 FROM meta_mcp_servers
 WHERE id = $1
   AND project_id = $2
@@ -586,6 +589,7 @@ func (q *Queries) GetMetaMCPServerByIDAndProjectID(ctx context.Context, arg GetM
 		&i.UserSessionIssuerID,
 		&i.Name,
 		&i.Visibility,
+		&i.NetworkAccessMode,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -782,7 +786,7 @@ func (q *Queries) ListMetaMCPMembersForRemoteSessionIssuer(ctx context.Context, 
 }
 
 const listMetaMCPServers = `-- name: ListMetaMCPServers :many
-SELECT meta_mcp_servers.id, meta_mcp_servers.organization_id, meta_mcp_servers.project_id, meta_mcp_servers.user_session_issuer_id, meta_mcp_servers.name, meta_mcp_servers.visibility, meta_mcp_servers.created_at, meta_mcp_servers.updated_at, meta_mcp_servers.deleted_at, meta_mcp_servers.deleted,
+SELECT meta_mcp_servers.id, meta_mcp_servers.organization_id, meta_mcp_servers.project_id, meta_mcp_servers.user_session_issuer_id, meta_mcp_servers.name, meta_mcp_servers.visibility, meta_mcp_servers.network_access_mode, meta_mcp_servers.created_at, meta_mcp_servers.updated_at, meta_mcp_servers.deleted_at, meta_mcp_servers.deleted,
        (SELECT count(*)
         FROM meta_mcp_server_members AS mm
         WHERE mm.meta_mcp_server_id = meta_mcp_servers.id
@@ -820,6 +824,7 @@ func (q *Queries) ListMetaMCPServers(ctx context.Context, arg ListMetaMCPServers
 			&i.MetaMcpServer.UserSessionIssuerID,
 			&i.MetaMcpServer.Name,
 			&i.MetaMcpServer.Visibility,
+			&i.MetaMcpServer.NetworkAccessMode,
 			&i.MetaMcpServer.CreatedAt,
 			&i.MetaMcpServer.UpdatedAt,
 			&i.MetaMcpServer.DeletedAt,
@@ -969,7 +974,7 @@ func (q *Queries) LockMetaMCPMember(ctx context.Context, arg LockMetaMCPMemberPa
 }
 
 const lockMetaMCPServer = `-- name: LockMetaMCPServer :one
-SELECT id, organization_id, project_id, user_session_issuer_id, name, visibility, created_at, updated_at, deleted_at, deleted
+SELECT id, organization_id, project_id, user_session_issuer_id, name, visibility, network_access_mode, created_at, updated_at, deleted_at, deleted
 FROM meta_mcp_servers
 WHERE id = $1
   AND organization_id = $2
@@ -994,6 +999,7 @@ func (q *Queries) LockMetaMCPServer(ctx context.Context, arg LockMetaMCPServerPa
 		&i.UserSessionIssuerID,
 		&i.Name,
 		&i.Visibility,
+		&i.NetworkAccessMode,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -1069,7 +1075,7 @@ WHERE id = $4
   AND organization_id = $5
   AND project_id = $6
   AND deleted IS FALSE
-RETURNING id, organization_id, project_id, user_session_issuer_id, name, visibility, created_at, updated_at, deleted_at, deleted
+RETURNING id, organization_id, project_id, user_session_issuer_id, name, visibility, network_access_mode, created_at, updated_at, deleted_at, deleted
 `
 
 type UpdateMetaMCPServerParams struct {
@@ -1103,6 +1109,7 @@ func (q *Queries) UpdateMetaMCPServer(ctx context.Context, arg UpdateMetaMCPServ
 		&i.UserSessionIssuerID,
 		&i.Name,
 		&i.Visibility,
+		&i.NetworkAccessMode,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
