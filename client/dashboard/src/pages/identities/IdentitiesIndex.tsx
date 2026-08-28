@@ -48,7 +48,14 @@ export function IdentitiesIndexRedirect(): JSX.Element {
 const PAGE_SIZE = 50;
 
 const IDENTITY_FILTERS = defineFilters([
-  { id: "kind", label: "Kind", kind: "multiselect", pinned: true },
+  {
+    id: "kind",
+    label: "Kind",
+    kind: "multiselect",
+    pinned: true,
+    description:
+      "A directory member, an address we cannot attribute to one, or an id an agent reported for itself.",
+  },
 ]);
 
 const KIND_OPTIONS = (["person", "unknown", "agent"] as IdentityKind[]).map(
