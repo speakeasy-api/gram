@@ -8,43 +8,23 @@ import {
   isUserSessionIssuerWired,
   mustConvertOAuthBeforePrivate,
   toolsetAuthSurface,
-  toolsetConvertAction,
 } from "./toolsetAuthSurface";
 
 describe("toolsetAuthSurface", () => {
-  it("shows the unchanged legacy UI when the flag is off, regardless of state", () => {
-    expect(
-      toolsetAuthSurface({
-        flagEnabled: false,
-        userSessionIssuerWired: true,
-        oauthParadigm: "external",
-      }),
-    ).toBe("legacy-only");
-    expect(
-      toolsetAuthSurface({
-        flagEnabled: false,
-        userSessionIssuerWired: false,
-        oauthParadigm: null,
-      }),
-    ).toBe("legacy-only");
-  });
-
   it("shows the manage surface once a user_session_issuer is wired", () => {
     expect(
       toolsetAuthSurface({
-        flagEnabled: true,
         userSessionIssuerWired: true,
         oauthParadigm: null,
       }),
     ).toBe("manage");
   });
 
-  it("prefers the manage surface over leftover legacy config", () => {
+  it("always prefers the manage surface over leftover legacy config", () => {
     // Wired toolsets keep their inert external OAuth config; the wired issuer
     // is what gates the serve path, so it wins the tiebreak.
     expect(
       toolsetAuthSurface({
-        flagEnabled: true,
         userSessionIssuerWired: true,
         oauthParadigm: "external",
       }),
@@ -55,7 +35,6 @@ describe("toolsetAuthSurface", () => {
     for (const oauthParadigm of ["external"] as const) {
       expect(
         toolsetAuthSurface({
-          flagEnabled: true,
           userSessionIssuerWired: false,
           oauthParadigm,
         }),
@@ -66,21 +45,10 @@ describe("toolsetAuthSurface", () => {
   it("shows the attach surface when nothing is configured", () => {
     expect(
       toolsetAuthSurface({
-        flagEnabled: true,
         userSessionIssuerWired: false,
         oauthParadigm: null,
       }),
     ).toBe("attach");
-  });
-});
-
-describe("toolsetConvertAction", () => {
-  it("routes external OAuth through the attach sheet", () => {
-    expect(toolsetConvertAction("external")).toBe("attach-sheet");
-  });
-
-  it("offers no convert path without a legacy paradigm", () => {
-    expect(toolsetConvertAction(null)).toBeNull();
   });
 });
 
@@ -137,7 +105,6 @@ describe("mustConvertOAuthBeforePrivate", () => {
     for (const oauthParadigm of ["external"] as const) {
       expect(
         mustConvertOAuthBeforePrivate({
-          flagEnabled: true,
           mcpIsPublic: true,
           userSessionIssuerWired: false,
           oauthParadigm,
@@ -146,21 +113,9 @@ describe("mustConvertOAuthBeforePrivate", () => {
     }
   });
 
-  it("keeps today's silent clear when the flag is off (no convert path)", () => {
-    expect(
-      mustConvertOAuthBeforePrivate({
-        flagEnabled: false,
-        mcpIsPublic: true,
-        userSessionIssuerWired: false,
-        oauthParadigm: "external",
-      }),
-    ).toBe(false);
-  });
-
   it("allows the flip once a user session issuer is wired (leftover config is inert)", () => {
     expect(
       mustConvertOAuthBeforePrivate({
-        flagEnabled: true,
         mcpIsPublic: true,
         userSessionIssuerWired: true,
         oauthParadigm: "external",
@@ -171,7 +126,6 @@ describe("mustConvertOAuthBeforePrivate", () => {
   it("does not block without OAuth config or when already private", () => {
     expect(
       mustConvertOAuthBeforePrivate({
-        flagEnabled: true,
         mcpIsPublic: true,
         userSessionIssuerWired: false,
         oauthParadigm: null,
@@ -179,7 +133,6 @@ describe("mustConvertOAuthBeforePrivate", () => {
     ).toBe(false);
     expect(
       mustConvertOAuthBeforePrivate({
-        flagEnabled: true,
         mcpIsPublic: false,
         userSessionIssuerWired: false,
         oauthParadigm: "external",
