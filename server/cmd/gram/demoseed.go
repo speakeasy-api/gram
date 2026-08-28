@@ -93,15 +93,12 @@ func newDemoSeedCommand() *cli.Command {
 			// demo org — as in production, it is reached through auth.enterDemo,
 			// not the org switcher.
 			//
-			// The developer's own org goes first: it is the one that lifts the
-			// BookDemo gate, so a demo-org failure (ClickHouse is the flaky
-			// half locally) leaves a usable environment behind.
+			// The developer's own org goes first, fixtures included: it is the
+			// one that lifts the BookDemo gate, so a demo-org failure
+			// (ClickHouse is the flaky half locally) leaves a usable
+			// environment behind.
 			if err := demoseed.Run(ctx, logger, db, ch, blob, demoseed.LocalSpec()); err != nil {
 				return fmt.Errorf("apply seed: %w", err)
-			}
-
-			if err := demoseed.Run(ctx, logger, db, ch, blob, demoseed.DefaultSpec()); err != nil {
-				return fmt.Errorf("apply demo org seed: %w", err)
 			}
 
 			// A missing or unreachable cache is not fatal: the fixtures just
@@ -127,11 +124,19 @@ func newDemoSeedCommand() *cli.Command {
 				observed[name] = os.Getenv(name)
 			}
 
-			return demoseed.RunLocalFixtures(ctx, logger, db, blob, redisClient, demoseed.LocalFixturesOptions{
+			if err := demoseed.RunLocalFixtures(ctx, logger, db, blob, redisClient, demoseed.LocalFixturesOptions{
 				DeveloperEmail: c.String("local-user-email"),
 				Environment:    c.String("environment"),
 				ObservedEnv:    observed,
-			})
+			}); err != nil {
+				return fmt.Errorf("apply local fixtures: %w", err)
+			}
+
+			if err := demoseed.Run(ctx, logger, db, ch, blob, demoseed.DefaultSpec()); err != nil {
+				return fmt.Errorf("apply demo org seed: %w", err)
+			}
+
+			return nil
 		},
 	}
 }
