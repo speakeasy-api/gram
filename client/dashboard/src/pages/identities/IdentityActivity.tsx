@@ -5,13 +5,15 @@ import {
   IdentityPanelEmpty,
   IdentityPanelRow,
 } from "./IdentityPanel";
+import { identityHandoffs } from "./identityHandoffs";
 import { useIdentityOutlet } from "./identityRoute";
 import { IdentitySection } from "./IdentitySection";
 import {
-  useIdentityProject,
-  useIdentityAuditLogs,
   useCanReadOthersChats,
+  useIdentityAuditLogs,
   useIdentityChats,
+  useIdentityMember,
+  useIdentityProject,
   useIdentityWindow,
 } from "./useIdentityQueries";
 
@@ -24,6 +26,13 @@ export default function IdentityActivity(): JSX.Element {
   // and every handoff would otherwise resolve to a path with the slug missing.
   const routes = useRoutes({ projectSlug: project.slug });
   const orgRoutes = useOrgRoutes();
+  const { member } = useIdentityMember(identity);
+  const handoffs = identityHandoffs(
+    identity,
+    routes,
+    orgRoutes,
+    member?.principalUrn,
+  );
 
   const auditQuery = useIdentityAuditLogs(identity);
   const chatsQuery = useIdentityChats(identity, from, to, 20);
@@ -41,7 +50,7 @@ export default function IdentityActivity(): JSX.Element {
         <IdentityPanel
           title="Audit trail"
           handoffLabel="Audit Logs"
-          handoffHref={orgRoutes.auditLogs.href()}
+          handoffHref={handoffs.auditLogs}
           footer={
             // Audit logs key on the Gram user id, so a subject with no
             // directory row has nothing here even when it has telemetry.
@@ -77,7 +86,7 @@ export default function IdentityActivity(): JSX.Element {
         <IdentityPanel
           title="Chat sessions"
           handoffLabel="Agent Sessions"
-          handoffHref={routes.agentSessions.href()}
+          handoffHref={handoffs.agentSessions}
           footer={
             chatsQuery.data
               ? `${chatsQuery.data.total ?? chats.length} session${

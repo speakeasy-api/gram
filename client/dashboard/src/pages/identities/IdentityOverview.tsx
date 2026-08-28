@@ -11,16 +11,18 @@ import {
   IdentityPanelRow,
 } from "./IdentityPanel";
 import { encodeIdentityUrn } from "@/lib/identity-urn";
+import { identityHandoffs } from "./identityHandoffs";
 import { useIdentityOutlet } from "./identityRoute";
 import {
-  useIdentityProject,
-  useIdentityAuditLogs,
-  useIdentityChallenges,
   useCanReadOthersChats,
   useCanReadRisk,
+  useIdentityAuditLogs,
+  useIdentityChallenges,
   useIdentityChats,
   useIdentityDevices,
+  useIdentityMember,
   useIdentityMetrics,
+  useIdentityProject,
   useIdentityRisk,
   useIdentityShadowServers,
   useIdentityWindow,
@@ -35,6 +37,13 @@ export default function IdentityOverview(): JSX.Element {
   // and every handoff would otherwise resolve to a path with the slug missing.
   const routes = useRoutes({ projectSlug: project.slug });
   const orgRoutes = useOrgRoutes();
+  const { member } = useIdentityMember(identity);
+  const handoffs = identityHandoffs(
+    identity,
+    routes,
+    orgRoutes,
+    member?.principalUrn,
+  );
   const encodedUrn = encodeIdentityUrn(urn);
 
   const metricsQuery = useIdentityMetrics(identity, from, to);
@@ -202,7 +211,7 @@ export default function IdentityOverview(): JSX.Element {
           <IdentityPanel
             title="Recent activity"
             handoffLabel="Audit Logs"
-            handoffHref={orgRoutes.auditLogs.href()}
+            handoffHref={handoffs.auditLogs}
             footer={
               logs.length > 0
                 ? `Actor filtered to ${identity.displayName}`
@@ -230,7 +239,7 @@ export default function IdentityOverview(): JSX.Element {
           <IdentityPanel
             title="Recent chats"
             handoffLabel="Agent Sessions"
-            handoffHref={routes.agentSessions.href()}
+            handoffHref={handoffs.agentSessions}
             footer={
               chatsQuery.data
                 ? `${chatsQuery.data.total ?? chats.length} session${

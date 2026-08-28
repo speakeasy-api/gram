@@ -10,12 +10,14 @@ import {
   IdentityPanelEmpty,
   IdentityPanelRow,
 } from "./IdentityPanel";
+import { identityHandoffs } from "./identityHandoffs";
 import { useIdentityOutlet } from "./identityRoute";
 import { IdentitySection } from "./IdentitySection";
 import {
-  useIdentityProject,
   useCanReadRisk,
   useIdentityChallenges,
+  useIdentityMember,
+  useIdentityProject,
   useIdentityRisk,
   useIdentityShadowServers,
   useIdentityWindow,
@@ -31,6 +33,13 @@ export default function IdentitySecurity(): JSX.Element {
   // and every handoff would otherwise resolve to a path with the slug missing.
   const routes = useRoutes({ projectSlug: project.slug });
   const orgRoutes = useOrgRoutes();
+  const { member } = useIdentityMember(identity);
+  const handoffs = identityHandoffs(
+    identity,
+    routes,
+    orgRoutes,
+    member?.principalUrn,
+  );
 
   const riskQuery = useIdentityRisk(identity, from, to);
   const challengesQuery = useIdentityChallenges(identity);
@@ -64,7 +73,7 @@ export default function IdentitySecurity(): JSX.Element {
         <IdentityPanel
           title="Risk findings"
           handoffLabel="Risk Events"
-          handoffHref={routes.riskEvents.href()}
+          handoffHref={handoffs.riskEvents}
           footer={
             matchedOn > 0
               ? `Matched on ${matchedOn} identifier${matchedOn === 1 ? "" : "s"}`
@@ -91,7 +100,7 @@ export default function IdentitySecurity(): JSX.Element {
         <IdentityPanel
           title="Findings by rule"
           handoffLabel="Risk Events"
-          handoffHref={routes.riskEvents.href()}
+          handoffHref={handoffs.riskEvents}
         >
           {rules.length === 0 ? (
             <IdentityPanelEmpty>
@@ -118,7 +127,7 @@ export default function IdentitySecurity(): JSX.Element {
         <IdentityPanel
           title="Shadow MCP servers"
           handoffLabel="Shadow MCP"
-          handoffHref={routes.shadowMCP.href()}
+          handoffHref={handoffs.shadowMcp}
           footer="Servers this person reached, not the project-wide inventory."
         >
           {shadowServers.length === 0 ? (
@@ -145,7 +154,7 @@ export default function IdentitySecurity(): JSX.Element {
         <IdentityPanel
           title="Denied authorization challenges"
           handoffLabel="Roles & Permissions"
-          handoffHref={orgRoutes.access.href()}
+          handoffHref={handoffs.challenges}
           footer={
             denied.length > 0
               ? `${denied.filter((c) => !c.resolvedAt).length} still unresolved`

@@ -1,13 +1,18 @@
 import { HumanizeDateTime } from "@/lib/dates";
-import { useOrgRoutes } from "@/routes";
+import { useOrgRoutes, useRoutes } from "@/routes";
 import {
   IdentityPanel,
   IdentityPanelEmpty,
   IdentityPanelRow,
 } from "./IdentityPanel";
+import { identityHandoffs } from "./identityHandoffs";
 import { useIdentityOutlet } from "./identityRoute";
 import { IdentitySection } from "./IdentitySection";
-import { useIdentityDevices } from "./useIdentityQueries";
+import {
+  useIdentityDevices,
+  useIdentityMember,
+  useIdentityProject,
+} from "./useIdentityQueries";
 
 /** How each coverage bucket reads, and whether it is worth flagging. */
 const COVERAGE: Record<string, { label: string; flag: boolean }> = {
@@ -21,8 +26,20 @@ const COVERAGE: Record<string, { label: string; flag: boolean }> = {
 };
 
 export default function IdentityDevices(): JSX.Element {
+  const project = useIdentityProject();
+  // Project routes resolve against the project this page is filtered to: the
+  // page is org-level, so the router has no :projectSlug of its own to fill in
+  // and every handoff would otherwise resolve to a path with the slug missing.
+  const routes = useRoutes({ projectSlug: project.slug });
   const { identity } = useIdentityOutlet();
   const orgRoutes = useOrgRoutes();
+  const { member } = useIdentityMember(identity);
+  const handoffs = identityHandoffs(
+    identity,
+    routes,
+    orgRoutes,
+    member?.principalUrn,
+  );
   const devicesQuery = useIdentityDevices(identity);
   const devices = devicesQuery.data?.result.devices ?? [];
 
@@ -34,7 +51,7 @@ export default function IdentityDevices(): JSX.Element {
       <IdentityPanel
         title="Managed devices"
         handoffLabel="Device Agent"
-        handoffHref={orgRoutes.deviceAgent.href()}
+        handoffHref={handoffs.deviceAgent}
         footer={
           // Devices match on the id OR on the MDM-reported email, because a
           // device only carries a user id when that email resolved.

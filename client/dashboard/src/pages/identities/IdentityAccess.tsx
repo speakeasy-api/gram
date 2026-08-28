@@ -1,19 +1,35 @@
 import { HumanizeDateTime } from "@/lib/dates";
-import { useOrgRoutes } from "@/routes";
+import { useOrgRoutes, useRoutes } from "@/routes";
 import { useRoles } from "@gram/client/react-query/roles.js";
 import {
   IdentityPanel,
   IdentityPanelEmpty,
   IdentityPanelRow,
 } from "./IdentityPanel";
+import { identityHandoffs } from "./identityHandoffs";
 import { useIdentityOutlet } from "./identityRoute";
 import { IdentitySection } from "./IdentitySection";
-import { useIdentityChallenges, useIdentityMember } from "./useIdentityQueries";
+import {
+  useIdentityChallenges,
+  useIdentityMember,
+  useIdentityProject,
+} from "./useIdentityQueries";
 
 export default function IdentityAccess(): JSX.Element {
+  const project = useIdentityProject();
+  // Project routes resolve against the project this page is filtered to: the
+  // page is org-level, so the router has no :projectSlug of its own to fill in
+  // and every handoff would otherwise resolve to a path with the slug missing.
+  const routes = useRoutes({ projectSlug: project.slug });
   const { identity } = useIdentityOutlet();
   const orgRoutes = useOrgRoutes();
   const { member } = useIdentityMember(identity);
+  const handoffs = identityHandoffs(
+    identity,
+    routes,
+    orgRoutes,
+    member?.principalUrn,
+  );
   const rolesQuery = useRoles(undefined, undefined, { throwOnError: false });
   const challengesQuery = useIdentityChallenges(identity);
 
@@ -35,7 +51,7 @@ export default function IdentityAccess(): JSX.Element {
         <IdentityPanel
           title="Roles"
           handoffLabel="Roles & Permissions"
-          handoffHref={orgRoutes.access.href()}
+          handoffHref={handoffs.challenges}
           footer={
             member ? undefined : "No org member row resolves to this identity."
           }
@@ -58,7 +74,7 @@ export default function IdentityAccess(): JSX.Element {
         <IdentityPanel
           title="Authorization challenges"
           handoffLabel="Roles & Permissions"
-          handoffHref={orgRoutes.access.href()}
+          handoffHref={handoffs.challenges}
           footer={
             challenges.length > 0
               ? `${denied.length} denied of ${challenges.length} recorded`

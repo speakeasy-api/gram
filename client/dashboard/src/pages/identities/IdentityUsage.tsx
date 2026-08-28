@@ -1,13 +1,15 @@
 import { StatTile, StatTileGroup } from "@/components/chart/stat-tile";
-import { useRoutes } from "@/routes";
+import { useOrgRoutes, useRoutes } from "@/routes";
 import {
   IdentityPanel,
   IdentityPanelEmpty,
   IdentityPanelRow,
 } from "./IdentityPanel";
+import { identityHandoffs } from "./identityHandoffs";
 import { useIdentityOutlet } from "./identityRoute";
 import { IdentitySection } from "./IdentitySection";
 import {
+  useIdentityMember,
   useIdentityMetrics,
   useIdentityProject,
   useIdentityWindow,
@@ -21,6 +23,14 @@ export default function IdentityUsage(): JSX.Element {
   // page is org-level, so the router has no :projectSlug of its own to fill in
   // and every handoff would otherwise resolve to a path with the slug missing.
   const routes = useRoutes({ projectSlug: project.slug });
+  const orgRoutes = useOrgRoutes();
+  const { member } = useIdentityMember(identity);
+  const handoffs = identityHandoffs(
+    identity,
+    routes,
+    orgRoutes,
+    member?.principalUrn,
+  );
 
   const metricsQuery = useIdentityMetrics(identity, from, to);
   const metrics = metricsQuery.data?.metrics;
@@ -68,7 +78,7 @@ export default function IdentityUsage(): JSX.Element {
           <IdentityPanel
             title="Top tools"
             handoffLabel="Tool Logs"
-            handoffHref={routes.logs.href()}
+            handoffHref={handoffs.toolLogs}
             footer={
               tools.length > 8 ? `Top 8 of ${tools.length} tools` : undefined
             }
@@ -98,7 +108,7 @@ export default function IdentityUsage(): JSX.Element {
           <IdentityPanel
             title="Models"
             handoffLabel="Costs"
-            handoffHref={routes.costs.href()}
+            handoffHref={handoffs.costs}
           >
             {models.length === 0 ? (
               <IdentityPanelEmpty>
