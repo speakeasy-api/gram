@@ -2,11 +2,18 @@ package openrouterkeys_test
 
 import (
 	"context"
+	"encoding/json"
+	"log/slog"
+	"net/http"
+	"net/http/httptest"
+	"reflect"
 	"testing"
 	"time"
+	"unsafe"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
+	"go.opentelemetry.io/otel/trace"
 
 	gen "github.com/speakeasy-api/gram/server/gen/admin_open_router_keys"
 	"github.com/speakeasy-api/gram/server/internal/audit"
@@ -15,6 +22,8 @@ import (
 	activitiesrepo "github.com/speakeasy-api/gram/server/internal/background/activities/repo"
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/encryption"
+	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	orgmetarepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
@@ -205,6 +214,77 @@ func TestEnableKey_ReinstatesWithRecordedLimit(t *testing.T) {
 	after, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionOpenRouterAPIKeyEnable)
 	require.NoError(t, err)
 	require.Equal(t, before+1, after)
+}
+
+func TestEnableKey_RealOpenRouterCompletesOnLockedSession(t *testing.T) {
+	t.Parallel()
+
+	type patchRequest struct {
+		method string
+		path   string
+		limit  float64
+		err    error
+	}
+	patches := make(chan patchRequest, 1)
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var body struct {
+			Limit float64 `json:"limit"`
+		}
+		err := json.NewDecoder(r.Body).Decode(&body)
+		patches <- patchRequest{method: r.Method, path: r.URL.Path, limit: body.Limit, err: err}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"data":{"limit":7,"hash":"hash-enablereal"}}`))
+	}))
+	t.Cleanup(upstream.Close)
+
+	ctx, ti := newTestServiceWithProvisioner(t, func(logger *slog.Logger, tracerProvider trace.TracerProvider, conn *pgxpool.Pool, enc *encryption.Client) openrouter.Provisioner {
+		policy, err := guardian.NewUnsafePolicy(tracerProvider, nil)
+		require.NoError(t, err)
+		realProvisioner := openrouter.New(logger, tracerProvider, policy, conn, "test", "provisioning-key", nil, nil, nil, enc)
+		setOpenRouterBaseURL(t, realProvisioner, upstream.URL)
+		return realProvisioner
+	})
+	adminCtx := withAdmin(t, ctx)
+	orgID := seedKey(t, ctx, ti, "enablereal", "chat", "sk-or-enable-real")
+	require.NoError(t, orgrepo.New(ti.conn).UpdateOpenRouterKeyMonthlyCredits(ctx, orgrepo.UpdateOpenRouterKeyMonthlyCreditsParams{
+		OrganizationID: orgID,
+		KeyType:        string(openrouter.KeyTypeChat),
+		MonthlyCredits: 7,
+	}))
+	require.NoError(t, orgrepo.New(ti.conn).DisableOpenRouterAPIKey(ctx, orgrepo.DisableOpenRouterAPIKeyParams{
+		OrganizationID: orgID,
+		KeyType:        string(openrouter.KeyTypeChat),
+	}))
+	before, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionOpenRouterAPIKeyEnable)
+	require.NoError(t, err)
+
+	boundedCtx, cancel := context.WithTimeout(adminCtx, time.Second)
+	defer cancel()
+	view, err := ti.service.EnableKey(boundedCtx, &gen.EnableKeyPayload{
+		OrganizationID: orgID,
+		KeyType:        string(openrouter.KeyTypeChat),
+	})
+	require.NoError(t, err)
+	require.False(t, view.Disabled)
+	require.EqualValues(t, 7, view.MonthlyCredits)
+	patch := <-patches
+	require.NoError(t, patch.err)
+	require.Equal(t, http.MethodPatch, patch.method)
+	require.Equal(t, "/v1/keys/hash-enablereal", patch.path)
+	require.InDelta(t, 7, patch.limit, 0)
+
+	after, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionOpenRouterAPIKeyEnable)
+	require.NoError(t, err)
+	require.Equal(t, before+1, after)
+}
+
+// setOpenRouterBaseURL keeps the integration test on the real OpenRouter
+// implementation while directing only its HTTP edge to the deterministic fake.
+func setOpenRouterBaseURL(t *testing.T, provisioner *openrouter.OpenRouter, baseURL string) {
+	t.Helper()
+	field := reflect.ValueOf(provisioner).Elem().FieldByName("baseURL")
+	require.True(t, field.IsValid())
+	reflect.NewAt(field.Type(), unsafe.Pointer(field.UnsafeAddr())).Elem().SetString(baseURL)
 }
 
 func TestEnableKey_ReinstatesLegacyZeroSecurityKeyAtPaygPolicy(t *testing.T) {

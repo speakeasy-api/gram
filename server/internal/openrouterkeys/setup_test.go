@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"log/slog"
 	"os"
 	"sync"
 	"testing"
@@ -11,6 +12,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
+	"go.opentelemetry.io/otel/trace"
 
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/authz"
@@ -76,6 +78,14 @@ func (s *stubProvisioner) ProvisionAPIKey(ctx context.Context, orgID string, key
 }
 
 func (s *stubProvisioner) RefreshAPIKeyLimit(ctx context.Context, orgID string, keyType openrouter.KeyType, limit *int) (int, error) {
+	return s.refreshAPIKeyLimit(ctx, s.conn, orgID, keyType, limit)
+}
+
+func (s *stubProvisioner) RefreshAPIKeyLimitWithDB(ctx context.Context, db openrouter.DBTX, orgID string, keyType openrouter.KeyType, limit *int) (int, error) {
+	return s.refreshAPIKeyLimit(ctx, db, orgID, keyType, limit)
+}
+
+func (s *stubProvisioner) refreshAPIKeyLimit(ctx context.Context, db openrouter.DBTX, orgID string, keyType openrouter.KeyType, limit *int) (int, error) {
 	s.mu.Lock()
 	s.refreshCalls = append(s.refreshCalls, orgID+"/"+string(keyType))
 	s.mu.Unlock()
@@ -84,14 +94,14 @@ func (s *stubProvisioner) RefreshAPIKeyLimit(ctx context.Context, orgID string, 
 	if limit != nil {
 		keyLimit = *limit
 	}
-	key, err := orgrepo.New(s.conn).GetOpenRouterAPIKey(ctx, orgrepo.GetOpenRouterAPIKeyParams{
+	key, err := orgrepo.New(db).GetOpenRouterAPIKey(ctx, orgrepo.GetOpenRouterAPIKeyParams{
 		OrganizationID: orgID,
 		KeyType:        string(keyType),
 	})
 	if err != nil {
 		return 0, fmt.Errorf("stub refresh read: %w", err)
 	}
-	if _, err := orgrepo.New(s.conn).UpdateOpenRouterKey(ctx, orgrepo.UpdateOpenRouterKeyParams{
+	if _, err := orgrepo.New(db).UpdateOpenRouterKey(ctx, orgrepo.UpdateOpenRouterKeyParams{
 		OrganizationID: orgID,
 		KeyType:        string(keyType),
 		MonthlyCredits: int64(keyLimit),
@@ -151,7 +161,14 @@ func (s *stubProvisioner) RefreshCalls() []string {
 	return append([]string(nil), s.refreshCalls...)
 }
 
+type provisionerFactory func(*slog.Logger, trace.TracerProvider, *pgxpool.Pool, *encryption.Client) openrouter.Provisioner
+
 func newTestService(t *testing.T) (context.Context, *testInstance) {
+	t.Helper()
+	return newTestServiceWithProvisioner(t, nil)
+}
+
+func newTestServiceWithProvisioner(t *testing.T, factory provisionerFactory) (context.Context, *testInstance) {
 	t.Helper()
 	ctx := t.Context()
 	logger := testenv.NewLogger(t)
@@ -168,7 +185,7 @@ func newTestService(t *testing.T) (context.Context, *testInstance) {
 	authzEngine := authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
 
 	enc := testenv.NewEncryptionClient(t)
-	provisioner := &stubProvisioner{
+	stub := &stubProvisioner{
 		mu:           sync.Mutex{},
 		conn:         conn,
 		usage:        0,
@@ -177,12 +194,17 @@ func newTestService(t *testing.T) (context.Context, *testInstance) {
 		disableCalls: nil,
 		refreshCalls: nil,
 	}
+	var provisioner openrouter.Provisioner = stub
+	if factory != nil {
+		provisioner = factory(logger, tracerProvider, conn, enc)
+		stub = nil
+	}
 
 	return ctx, &testInstance{
 		service:     openrouterkeys.NewService(logger, tracerProvider, conn, sessionManager, authzEngine, audit.NewLogger(), provisioner, enc),
 		conn:        conn,
 		enc:         enc,
-		provisioner: provisioner,
+		provisioner: stub,
 	}
 }
 
