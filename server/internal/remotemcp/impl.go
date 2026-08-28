@@ -117,8 +117,7 @@ func (s *Service) CreateServer(ctx context.Context, payload *gen.CreateServerPay
 		TransportType: payload.TransportType,
 	})
 	if err != nil {
-		var shareableErr *oops.ShareableError
-		if errors.As(err, &shareableErr) {
+		if shareableErr, ok := errors.AsType[*oops.ShareableError](err); ok {
 			return nil, shareableErr.LogError(ctx, logger)
 		}
 		return nil, oops.E(oops.CodeUnexpected, err, "create remote MCP server").LogError(ctx, logger)
@@ -147,8 +146,7 @@ func (s *Service) CreateServerAndMcpServer(ctx context.Context, payload *gen.Cre
 		TransportType: payload.TransportType,
 	})
 	if err != nil {
-		var shareableErr *oops.ShareableError
-		if errors.As(err, &shareableErr) {
+		if shareableErr, ok := errors.AsType[*oops.ShareableError](err); ok {
 			return nil, shareableErr.LogError(ctx, logger)
 		}
 		return nil, oops.E(oops.CodeUnexpected, err, "provision remote MCP server").LogError(ctx, logger)

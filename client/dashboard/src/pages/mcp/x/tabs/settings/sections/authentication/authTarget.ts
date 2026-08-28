@@ -1,9 +1,12 @@
 import { useSdkClient } from "@/contexts/Sdk";
 import type { Toolset } from "@/lib/toolTypes";
 import type { McpServer } from "@gram/client/models/components/mcpserver.js";
+import type { MetaMcpServer } from "@gram/client/models/components/metamcpserver.js";
 import { invalidateAllGetMcpServer } from "@gram/client/react-query/getMcpServer.js";
+import { invalidateAllGetMetaMcpServer } from "@gram/client/react-query/getMetaMcpServer.js";
 import { invalidateAllListToolsets } from "@gram/client/react-query/listToolsets.js";
 import { invalidateAllMcpServers } from "@gram/client/react-query/mcpServers.js";
+import { invalidateAllMetaMcpServers } from "@gram/client/react-query/metaMcpServers.js";
 import { invalidateAllToolset } from "@gram/client/react-query/toolset.js";
 import type { QueryClient } from "@tanstack/react-query";
 import { useMemo } from "react";
@@ -71,5 +74,36 @@ export function useToolsetAuthTarget(toolset: Toolset): AuthTarget {
       },
     }),
     [client, toolset],
+  );
+}
+
+export function useMetaMcpAuthTarget(
+  metaMcpServer: MetaMcpServer,
+  slugSeed: string,
+): AuthTarget {
+  const client = useSdkClient();
+
+  return useMemo(
+    () => ({
+      slug: slugSeed,
+      userSessionIssuerId: metaMcpServer.userSessionIssuerId ?? null,
+      linkUserSessionIssuer: async (userSessionIssuerId: string) => {
+        // update is a full-record replace, so the name rides along.
+        await client.metaMcp.update({
+          updateMetaMcpServerForm: {
+            id: metaMcpServer.id,
+            name: metaMcpServer.name,
+            userSessionIssuerId,
+          },
+        });
+      },
+      invalidate: async (queryClient: QueryClient) => {
+        await Promise.all([
+          invalidateAllGetMetaMcpServer(queryClient, { refetchType: "all" }),
+          invalidateAllMetaMcpServers(queryClient, { refetchType: "all" }),
+        ]);
+      },
+    }),
+    [client, metaMcpServer, slugSeed],
   );
 }

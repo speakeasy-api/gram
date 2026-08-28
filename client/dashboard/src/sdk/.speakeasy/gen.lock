@@ -2,14 +2,14 @@ lockVersion: 2.0.0
 id: f77ef720-de44-40b6-8dc1-f16f936ef992
 management:
   docVersion: 0.0.1
-  speakeasyVersion: 1.791.1
-  generationVersion: 2.926.2
+  speakeasyVersion: 1.796.1
+  generationVersion: 2.933.0
   releaseVersion: 0.33.8
 features:
   typescript:
     additionalDependencies: 0.1.0
     constsAndDefaults: 0.1.14
-    core: 3.31.4
+    core: 3.31.6
     defaultEnabledRetries: 0.1.0
     devContainers: 2.90.1
     downloadStreams: 0.1.1
@@ -235,6 +235,7 @@ trackedFiles:
   src/funcs/hooksServerNamesUpsertServerNameOverride.ts: {}
   src/funcs/hooksSkillFeedback.ts: {}
   src/funcs/hooksUploadSkillContent.ts: {}
+  src/funcs/identityResolve.ts: {}
   src/funcs/instancesGetBySlug.ts: {}
   src/funcs/integrationsIntegrationsNumberGet.ts: {}
   src/funcs/integrationsList.ts: {}
@@ -389,17 +390,14 @@ trackedFiles:
   src/funcs/pluginsDeletePlugin.ts: {}
   src/funcs/pluginsDownloadCodexInstallScript.ts: {}
   src/funcs/pluginsDownloadObservabilityPlugin.ts: {}
-  src/funcs/pluginsDownloadPlatformMCPPlugin.ts: {}
   src/funcs/pluginsDownloadPluginPackage.ts: {}
   src/funcs/pluginsGetMarketplaceSettings.ts: {}
-  src/funcs/pluginsGetPlatformMCPPackageStatus.ts: {}
   src/funcs/pluginsGetPlugin.ts: {}
   src/funcs/pluginsGetPublishStatus.ts: {}
   src/funcs/pluginsListAudiences.ts: {}
   src/funcs/pluginsListPlugins.ts: {}
   src/funcs/pluginsPublishPlugins.ts: {}
   src/funcs/pluginsRemovePluginServer.ts: {}
-  src/funcs/pluginsRepairPlatformMCPPackage.ts: {}
   src/funcs/pluginsSetPluginAssignments.ts: {}
   src/funcs/pluginsUpdateMarketplaceSettings.ts: {}
   src/funcs/pluginsUpdatePlugin.ts: {}
@@ -946,6 +944,8 @@ trackedFiles:
   src/models/components/hooktracesummary.ts: {}
   src/models/components/hookusagedata.ts: {}
   src/models/components/httptooldefinition.ts: {}
+  src/models/components/identitydirectory.ts: {}
+  src/models/components/identitymodel.ts: {}
   src/models/components/inferencespendcap.ts: {}
   src/models/components/inforesponsebody.ts: {}
   src/models/components/ingesthookresult.ts: {}
@@ -1198,7 +1198,6 @@ trackedFiles:
   src/models/components/platformkillswitchprescription.ts: {}
   src/models/components/platformmcponboardingsetuphandoff.ts: {}
   src/models/components/platformmcponboardingstate.ts: {}
-  src/models/components/platformmcppackagestatusresult.ts: {}
   src/models/components/platformtooldefinition.ts: {}
   src/models/components/plugin.ts: {}
   src/models/components/pluginassignment.ts: {}
@@ -1720,7 +1719,6 @@ trackedFiles:
   src/models/operations/distributeskill.ts: {}
   src/models/operations/downloadcodexinstallscript.ts: {}
   src/models/operations/downloadobservabilityplugin.ts: {}
-  src/models/operations/downloadplatformmcpplugin.ts: {}
   src/models/operations/downloadpluginpackage.ts: {}
   src/models/operations/enableadminopenrouterkey.ts: {}
   src/models/operations/enablewebhooks.ts: {}
@@ -1795,7 +1793,6 @@ trackedFiles:
   src/models/operations/getpaygbillingsummary.ts: {}
   src/models/operations/getperiodusage.ts: {}
   src/models/operations/getplatformmcponboarding.ts: {}
-  src/models/operations/getplatformmcppackagestatus.ts: {}
   src/models/operations/getplugin.ts: {}
   src/models/operations/getproductfeatures.ts: {}
   src/models/operations/getproject.ts: {}
@@ -2042,10 +2039,10 @@ trackedFiles:
   src/models/operations/rendertemplate.ts: {}
   src/models/operations/rendertemplatebyid.ts: {}
   src/models/operations/repairplatformmcponboardingpublication.ts: {}
-  src/models/operations/repairplatformmcppackage.ts: {}
   src/models/operations/reportagentsessionmoved.ts: {}
   src/models/operations/requestaccess.ts: {}
   src/models/operations/resolvechallenge.ts: {}
+  src/models/operations/resolveidentity.ts: {}
   src/models/operations/resolveshadowmcpinventoryrequest.ts: {}
   src/models/operations/restoreskillversion.ts: {}
   src/models/operations/resumestripesubscription.ts: {}
@@ -2523,6 +2520,8 @@ trackedFiles:
   src/react-query/hooksServerNamesUpsertServerNameOverride.ts: {}
   src/react-query/hooksSkillFeedback.ts: {}
   src/react-query/hooksUploadSkillContent.ts: {}
+  src/react-query/identity.core.ts: {}
+  src/react-query/identity.ts: {}
   src/react-query/index.ts:
     id: 9e975471aa65
     pristine_git_object: ee9cacb2ccb4e0631e0e1fcf4e467454534d2b35
@@ -2706,8 +2705,6 @@ trackedFiles:
   src/react-query/platformKillswitchesPlatformKillswitchesNumberListPrescriptions.ts: {}
   src/react-query/platformMCPOnboarding.core.ts: {}
   src/react-query/platformMCPOnboarding.ts: {}
-  src/react-query/platformMCPPackageStatus.core.ts: {}
-  src/react-query/platformMCPPackageStatus.ts: {}
   src/react-query/plugin.core.ts: {}
   src/react-query/plugin.ts: {}
   src/react-query/plugins.core.ts: {}
@@ -2716,8 +2713,6 @@ trackedFiles:
   src/react-query/pluginsDownloadCodexInstallScript.ts: {}
   src/react-query/pluginsDownloadObservabilityPlugin.core.ts: {}
   src/react-query/pluginsDownloadObservabilityPlugin.ts: {}
-  src/react-query/pluginsDownloadPlatformMCPPlugin.core.ts: {}
-  src/react-query/pluginsDownloadPlatformMCPPlugin.ts: {}
   src/react-query/pluginsDownloadPluginPackage.core.ts: {}
   src/react-query/pluginsDownloadPluginPackage.ts: {}
   src/react-query/previewKillswitchOverlaps.ts: {}
@@ -2774,7 +2769,6 @@ trackedFiles:
   src/react-query/renderTemplateByID.core.ts: {}
   src/react-query/renderTemplateByID.ts: {}
   src/react-query/repairPlatformMCPOnboardingPublication.ts: {}
-  src/react-query/repairPlatformMCPPackage.ts: {}
   src/react-query/reportAgentSessionMoved.ts: {}
   src/react-query/requestAccess.ts: {}
   src/react-query/resolveChallenge.ts: {}
@@ -3118,6 +3112,7 @@ trackedFiles:
   src/sdk/gramrules.ts: {}
   src/sdk/hooks.ts: {}
   src/sdk/hooksservernames.ts: {}
+  src/sdk/identity.ts: {}
   src/sdk/instances.ts: {}
   src/sdk/integrations.ts: {}
   src/sdk/jsonwebkeysets.ts: {}
@@ -8320,6 +8315,8 @@ examples:
         query:
           skill_ids: ["<value 1>"]
           limit: 20
+          include_session_cost: true
+          include_regression_signal: true
       requestBody:
         application/json: {"skill_ids": ["<value 1>"]}
       responses:
@@ -8642,6 +8639,18 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+  resolveIdentity:
+    speakeasy-default-resolve-identity:
+      parameters:
+        query:
+          urn: "user:user_01abc"
+      responses:
+        "200":
+          application/json: {"canonical_urn": "<value>", "directory": {"groups": []}, "display_name": "Bradley.Schoen", "emails": [], "external_user_ids": ["<value 1>", "<value 2>"], "kind": "agent", "user_ids": []}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
   resolveShadowMCPInventoryRequest:
     speakeasy-default-resolve-shadow-MCP-inventory-request:
       requestBody:

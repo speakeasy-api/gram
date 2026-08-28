@@ -24,6 +24,7 @@ export const MCP_FILTER_OPTIONS: OptionsById = {
   source: [
     { value: "catalog", label: "Catalog" },
     { value: "custom", label: "Custom" },
+    { value: "gateway", label: "Gateway" },
     { value: "remote", label: "Remote URL" },
     { value: "tunneled", label: "Tunneled" },
     { value: "unproxied", label: "Unproxied" },
@@ -33,8 +34,15 @@ export const MCP_FILTER_OPTIONS: OptionsById = {
 };
 
 export interface McpFacets {
-  status: "public" | "private" | "disabled";
-  source: "catalog" | "custom" | "remote" | "tunneled" | "unproxied";
+  /** Absent for gateways, which have no visibility; an active status filter excludes them. */
+  status?: "public" | "private" | "disabled";
+  source:
+    | "catalog"
+    | "custom"
+    | "gateway"
+    | "remote"
+    | "tunneled"
+    | "unproxied";
   /** IDs of the plugins this server is a member of. */
   pluginIds: string[];
 }
@@ -115,12 +123,17 @@ export function mcpServerFacets(
   };
 }
 
+export function gatewayFacets(): McpFacets {
+  return { source: "gateway", pluginIds: [] };
+}
+
 export function matchesMcpFilters(
   facets: McpFacets,
   values: FilterValues<typeof MCP_FILTERS>,
 ): boolean {
   return (
-    (values.status.length === 0 || values.status.includes(facets.status)) &&
+    (values.status.length === 0 ||
+      (facets.status !== undefined && values.status.includes(facets.status))) &&
     (values.source.length === 0 || values.source.includes(facets.source)) &&
     // A server matches if it belongs to *any* of the selected plugins.
     (values.plugins.length === 0 ||

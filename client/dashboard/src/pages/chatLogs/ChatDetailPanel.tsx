@@ -797,7 +797,8 @@ function SubViewBar({ title, onBack }: { title: string; onBack: () => void }) {
 }
 
 // SessionLinksSection lists session-lineage edges touching this chat: moves
-// out of it ("Moved to …") and moves that produced it ("Derived from …").
+// and recalls out of it ("Moved to …", "Recalled into …") and moves that
+// produced it ("Derived from …").
 // Presence-gated — chats with no edges render nothing, so there is no feature
 // flag and no empty state.
 function SessionLinksSection({
@@ -873,15 +874,25 @@ function SessionLinksSection({
           ),
         )}
         {outbound.map((link, i) =>
-          row(
-            `out-${i}-${link.createdAt.toISOString()}`,
-            <>Moved to {formatPlatform(link.targetHarness)}</>,
-            link.createdAt,
-            hop(link.childChatId, link.childCaptured),
-            link.childCaptured
-              ? (link.childTitle ?? undefined)
-              : "not yet captured",
-          ),
+          // Recall edges never carry a child chat (the continuation is
+          // unknowable at recall time), so there is nothing to hop to and
+          // "not yet captured" would wrongly imply one is expected.
+          link.kind === "recall"
+            ? row(
+                `out-${i}-${link.createdAt.toISOString()}`,
+                <>Recalled into a later session</>,
+                link.createdAt,
+                undefined,
+              )
+            : row(
+                `out-${i}-${link.createdAt.toISOString()}`,
+                <>Moved to {formatPlatform(link.targetHarness)}</>,
+                link.createdAt,
+                hop(link.childChatId, link.childCaptured),
+                link.childCaptured
+                  ? (link.childTitle ?? undefined)
+                  : "not yet captured",
+              ),
         )}
       </div>
     </div>

@@ -564,6 +564,7 @@ JOIN remote_mcp_servers r
 WHERE m.meta_mcp_server_id = $1
   AND m.project_id = $2
   AND m.deleted IS FALSE
+  AND s.slug IS NOT NULL
   AND s.remote_session_issuer_id = $3
 ORDER BY m.sort_order, m.created_at, m.id
 `
@@ -611,12 +612,16 @@ func (q *Queries) ListMetaMCPMembersForRemoteSessionIssuer(ctx context.Context, 
 }
 
 const listMetaMCPServers = `-- name: ListMetaMCPServers :many
-SELECT id, organization_id, project_id, user_session_issuer_id, name, visibility, created_at, updated_at, deleted_at, deleted
+SELECT meta_mcp_servers.id, meta_mcp_servers.organization_id, meta_mcp_servers.project_id, meta_mcp_servers.user_session_issuer_id, meta_mcp_servers.name, meta_mcp_servers.visibility, meta_mcp_servers.created_at, meta_mcp_servers.updated_at, meta_mcp_servers.deleted_at, meta_mcp_servers.deleted,
+       (SELECT count(*)
+        FROM meta_mcp_server_members AS mm
+        WHERE mm.meta_mcp_server_id = meta_mcp_servers.id
+          AND mm.deleted IS FALSE) AS member_count
 FROM meta_mcp_servers
-WHERE organization_id = $1
-  AND project_id = $2
-  AND deleted IS FALSE
-ORDER BY created_at DESC, id DESC
+WHERE meta_mcp_servers.organization_id = $1
+  AND meta_mcp_servers.project_id = $2
+  AND meta_mcp_servers.deleted IS FALSE
+ORDER BY meta_mcp_servers.created_at DESC, meta_mcp_servers.id DESC
 `
 
 type ListMetaMCPServersParams struct {
@@ -624,26 +629,32 @@ type ListMetaMCPServersParams struct {
 	ProjectID      uuid.UUID
 }
 
-func (q *Queries) ListMetaMCPServers(ctx context.Context, arg ListMetaMCPServersParams) ([]MetaMcpServer, error) {
+type ListMetaMCPServersRow struct {
+	MetaMcpServer MetaMcpServer
+	MemberCount   int64
+}
+
+func (q *Queries) ListMetaMCPServers(ctx context.Context, arg ListMetaMCPServersParams) ([]ListMetaMCPServersRow, error) {
 	rows, err := q.db.Query(ctx, listMetaMCPServers, arg.OrganizationID, arg.ProjectID)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []MetaMcpServer
+	var items []ListMetaMCPServersRow
 	for rows.Next() {
-		var i MetaMcpServer
+		var i ListMetaMCPServersRow
 		if err := rows.Scan(
-			&i.ID,
-			&i.OrganizationID,
-			&i.ProjectID,
-			&i.UserSessionIssuerID,
-			&i.Name,
-			&i.Visibility,
-			&i.CreatedAt,
-			&i.UpdatedAt,
-			&i.DeletedAt,
-			&i.Deleted,
+			&i.MetaMcpServer.ID,
+			&i.MetaMcpServer.OrganizationID,
+			&i.MetaMcpServer.ProjectID,
+			&i.MetaMcpServer.UserSessionIssuerID,
+			&i.MetaMcpServer.Name,
+			&i.MetaMcpServer.Visibility,
+			&i.MetaMcpServer.CreatedAt,
+			&i.MetaMcpServer.UpdatedAt,
+			&i.MetaMcpServer.DeletedAt,
+			&i.MetaMcpServer.Deleted,
+			&i.MemberCount,
 		); err != nil {
 			return nil, err
 		}
@@ -661,13 +672,21 @@ SELECT
     m.mcp_server_id,
     m.sort_order,
     s.name AS mcp_server_name,
-    s.slug AS mcp_server_slug
+    s.slug AS mcp_server_slug,
+    s.visibility AS mcp_server_visibility,
+    s.toolset_id AS mcp_server_toolset_id,
+    s.remote_mcp_server_id AS mcp_server_remote_mcp_server_id,
+    s.tunneled_mcp_server_id AS mcp_server_tunneled_mcp_server_id,
+    s.unproxied_mcp_server_id AS mcp_server_unproxied_mcp_server_id,
+    s.environment_id AS mcp_server_environment_id,
+    s.tool_variations_group_id AS mcp_server_tool_variations_group_id
 FROM meta_mcp_server_members m
 JOIN mcp_servers s
   ON s.id = m.mcp_server_id
  AND s.project_id = m.project_id
  AND s.deleted IS FALSE
  AND s.visibility <> 'disabled'
+ AND s.slug IS NOT NULL
 WHERE m.meta_mcp_server_id = $1
   AND m.project_id = $2
   AND m.deleted IS FALSE
@@ -680,17 +699,28 @@ type ListServableMetaMCPMembersParams struct {
 }
 
 type ListServableMetaMCPMembersRow struct {
-	ID            uuid.UUID
-	McpServerID   uuid.UUID
-	SortOrder     int32
-	McpServerName pgtype.Text
-	McpServerSlug pgtype.Text
+	ID                             uuid.UUID
+	McpServerID                    uuid.UUID
+	SortOrder                      int32
+	McpServerName                  pgtype.Text
+	McpServerSlug                  pgtype.Text
+	McpServerVisibility            string
+	McpServerToolsetID             uuid.NullUUID
+	McpServerRemoteMcpServerID     uuid.NullUUID
+	McpServerTunneledMcpServerID   uuid.NullUUID
+	McpServerUnproxiedMcpServerID  uuid.NullUUID
+	McpServerEnvironmentID         uuid.NullUUID
+	McpServerToolVariationsGroupID uuid.NullUUID
 }
 
 // Serving-path variant of ListMetaMCPMembers: additionally hides members
 // whose server is disabled, matching the resolution path's rule that a
-// disabled server does not exist for unauthenticated callers. The dashboard
-// listing keeps the unfiltered query so admins still see disabled members.
+// disabled server does not exist for unauthenticated callers, and members
+// whose server has no slug (legacy pre-2026-05 rows), which the qualified
+// serverslug--toolname contract cannot address. The dashboard listing keeps
+// the unfiltered query so admins still see every member. Carries the backend
+// and dispatch columns the gateway runtime needs to classify and execute
+// against each member.
 func (q *Queries) ListServableMetaMCPMembers(ctx context.Context, arg ListServableMetaMCPMembersParams) ([]ListServableMetaMCPMembersRow, error) {
 	rows, err := q.db.Query(ctx, listServableMetaMCPMembers, arg.MetaMcpServerID, arg.ProjectID)
 	if err != nil {
@@ -706,6 +736,13 @@ func (q *Queries) ListServableMetaMCPMembers(ctx context.Context, arg ListServab
 			&i.SortOrder,
 			&i.McpServerName,
 			&i.McpServerSlug,
+			&i.McpServerVisibility,
+			&i.McpServerToolsetID,
+			&i.McpServerRemoteMcpServerID,
+			&i.McpServerTunneledMcpServerID,
+			&i.McpServerUnproxiedMcpServerID,
+			&i.McpServerEnvironmentID,
+			&i.McpServerToolVariationsGroupID,
 		); err != nil {
 			return nil, err
 		}

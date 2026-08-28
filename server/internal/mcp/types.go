@@ -102,6 +102,7 @@ func (m *McpInputs) toInternal() *mcpInputs {
 		// version, so they resolve to the unversioned default.
 		toolVariationsGroupID: nil,
 		mcpServerID:           nil,
+		skipProxyTools:        false,
 		tags:                  nil,
 		protocolVersion:       mcpversions.Resolve("", mcpversions.SupportedHostedToolset()),
 		toolSelection:         nil,

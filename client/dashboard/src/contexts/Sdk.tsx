@@ -1,15 +1,16 @@
-import { handleError } from "@/lib/errors";
+import { QueryCache, QueryClient } from "@tanstack/react-query";
+import { createContext, useContext } from "react";
 import {
   isGramSessionUnauthorizedError,
   isSessionInfoQueryKey,
   isUnauthorizedError,
 } from "@/lib/route-errors";
-import { redirectToLoginOnUnauthorized } from "@/lib/session-expired";
+import { useLocation, useParams } from "react-router";
+
 import { Gram } from "@gram/client";
 import { GramError } from "@gram/client/models/errors/gramerror.js";
-import { QueryCache, QueryClient } from "@tanstack/react-query";
-import { createContext, useContext } from "react";
-import { useLocation, useParams } from "react-router";
+import { handleError } from "@/lib/errors";
+import { redirectToLoginOnUnauthorized } from "@/lib/session-expired";
 
 // SdkProvider cannot call useIsPlatformAdmin() directly because it wraps AuthProvider
 // (AuthProvider needs QueryClientProvider which SdkProvider supplies). Instead,
@@ -51,7 +52,7 @@ const createQueryClient = () =>
           isGramSessionUnauthorizedError(error) &&
           !isSessionInfoQueryKey(query.queryKey)
         ) {
-          redirectToLoginOnUnauthorized();
+          void redirectToLoginOnUnauthorized();
         }
       },
     }),

@@ -78,6 +78,42 @@ func TestParseCursorHookEvent(t *testing.T) {
 	}
 }
 
+func TestParseCopilotHookEvent(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		raw      string
+		expected HookEvent
+		ok       bool
+	}{
+		{raw: "sessionStart", expected: HookEventSessionStart, ok: true},
+		{raw: "sessionEnd", expected: HookEventSessionEnd, ok: true},
+		{raw: "userPromptSubmitted", expected: HookEventUserPromptSubmit, ok: true},
+		{raw: "preToolUse", expected: HookEventPreToolUse, ok: true},
+		{raw: "postToolUse", expected: HookEventPostToolUse, ok: true},
+		{raw: "postToolUseFailure", expected: HookEventPostToolUseFailure, ok: true},
+		{raw: "permissionRequest", expected: HookEventPermissionRequest, ok: true},
+		{raw: "agentStop", expected: HookEventStop, ok: true},
+		{raw: "subagentStop", expected: HookEventSubagentStop, ok: true},
+		{raw: "notification", expected: HookEventNotification, ok: true},
+		// Copilot events with no canonical equivalent stay unmapped so they
+		// fall through to the canonical Event.Type.
+		{raw: "preCompact", expected: HookEventUnknown, ok: false},
+		{raw: "subagentStart", expected: HookEventUnknown, ok: false},
+		{raw: "unknown", expected: HookEventUnknown, ok: false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.raw, func(t *testing.T) {
+			t.Parallel()
+
+			event, ok := parseCopilotHookEvent(tt.raw)
+			assert.Equal(t, tt.expected, event)
+			assert.Equal(t, tt.ok, ok)
+		})
+	}
+}
+
 func TestParseOpencodeHookEvent(t *testing.T) {
 	t.Parallel()
 

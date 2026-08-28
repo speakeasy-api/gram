@@ -557,6 +557,53 @@ SELECT blob_url, consumed_at
 FROM session_handoff_links
 WHERE token = @token;
 
+-- name: SeedCapturedAgentChatFixture :one
+-- Test-only fixture: inserts the chat row a captured agent session hangs off,
+-- with the harness-native session id stored as external_chat_id and an
+-- optional personal/team account attribution.
+INSERT INTO chats (id, project_id, organization_id, user_id, external_chat_id, title, cwd, user_account_id)
+VALUES (@id, @project_id, @organization_id, @user_id, sqlc.narg(external_chat_id), @title, sqlc.narg(cwd), sqlc.narg(user_account_id))
+RETURNING id;
+
+-- name: SeedCapturedAgentChatMessageFixture :one
+-- Test-only fixture: inserts a captured transcript row with the full recall
+-- shape — generation, tool_calls, capture source, asset offload marker, and
+-- risk-analysis completion — at a deterministic created_at.
+INSERT INTO chat_messages (chat_id, project_id, role, content, generation, tool_calls, source, content_asset_url, risk_analyzed_at, created_at)
+VALUES (@chat_id, @project_id, @role, @content, @generation, sqlc.narg(tool_calls), sqlc.narg(source), sqlc.narg(content_asset_url), sqlc.narg(risk_analyzed_at), @created_at)
+RETURNING id;
+
+-- name: SeedUserAccountFixture :one
+-- Test-only fixture: inserts a minimal provider account row so chats can be
+-- attributed to a team or personal account.
+INSERT INTO user_accounts (organization_id, external_account_uuid, account_type)
+VALUES (@organization_id, @external_account_uuid, @account_type)
+RETURNING id;
+
+-- name: SeedRiskPolicyFixture :one
+-- Test-only fixture: inserts an enabled standard risk policy.
+INSERT INTO risk_policies (project_id, organization_id, name, sources, version)
+VALUES (@project_id, @organization_id, @name, @sources, 1)
+RETURNING id;
+
+-- name: SeedRiskResultFixture :one
+-- Test-only fixture: records one open finding against a chat message, with the
+-- primary span mirrored into the spans JSONB set.
+INSERT INTO risk_results (project_id, organization_id, risk_policy_id, risk_policy_version, chat_message_id, source, found, rule_id, match, start_pos, end_pos, spans)
+VALUES (@project_id, @organization_id, @risk_policy_id, 1, @chat_message_id, @source, TRUE, @rule_id, @match, @start_pos, @end_pos, sqlc.narg(spans))
+RETURNING id;
+
+-- name: GetChatSessionLinkByParentFixture :one
+-- Test-only inspection of a recorded session-lineage edge from its parent end.
+SELECT kind, child_chat_id, parent_session_id, target_harness, organization_id, project_id
+FROM chat_session_links
+WHERE parent_chat_id = @parent_chat_id;
+
+-- name: CountChatSessionLinksByKindFixture :one
+SELECT COUNT(*)
+FROM chat_session_links
+WHERE parent_chat_id = @parent_chat_id
+  AND kind = @kind;
 -- name: ForceSoftDeleteRemoteSessionIssuerFixture :exec
 -- Tombstones a remote session issuer regardless of its clients. Production
 -- deletes refuse while a live client references it, so this is the only way to

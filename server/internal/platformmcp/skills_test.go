@@ -618,7 +618,7 @@ func TestSkillsToolsAreDeclaredWithAndWithoutTheirDependencies(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
 
-			_, registrar := newServer(nil, nil, nil, "", nil, nil, nil, nil, test.build(), nil, nil, CatalogDescriptor{})
+			_, registrar := newServer(nil, nil, nil, "", nil, nil, nil, nil, test.build(), nil, nil, nil, CatalogDescriptor{})
 
 			registered := make(map[string]Descriptor, len(wanted))
 			for _, descriptor := range registrar.Descriptors() {

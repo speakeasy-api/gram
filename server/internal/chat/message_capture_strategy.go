@@ -386,6 +386,7 @@ func buildAssistantRows(
 		content = ""
 	}
 	base := repo.CreateChatMessageParams{
+		ID:               uuid.Nil,
 		Replayed:         false,
 		CreatedAt:        conv.PtrToPGTimestamptz(nil),
 		ChatID:           request.ChatID,

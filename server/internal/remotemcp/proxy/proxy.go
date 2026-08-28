@@ -660,8 +660,7 @@ func (p *Proxy) Post(w http.ResponseWriter, r *http.Request) (err error) {
 	//nolint:bodyclose // Body is closed via the defer below; linter can't trace the close across the forwardRequest helper.
 	upstreamReq, upstreamResp, err := p.forwardRequestWithRetry(ctx, r, userReq.BodyReader, validateUpstreamRequest)
 	if err != nil {
-		var rejection *RejectError
-		if errors.As(err, &rejection) {
+		if rejection, ok := errors.AsType[*RejectError](err); ok {
 			responseBytes = p.writeRejection(ctx, w, span, userReqID, rejection)
 			return nil
 		}
@@ -1552,8 +1551,7 @@ func (p *Proxy) dispatchInterceptorError(
 	err error,
 	responseBytes *int64,
 ) error {
-	var mutErr *MutationError
-	if errors.As(err, &mutErr) {
+	if _, ok := errors.AsType[*MutationError](err); ok {
 		return oops.E(oops.CodeUnexpected, err, "proxy interceptor mutation failure").LogError(ctx, p.Logger)
 	}
 	*responseBytes = p.writeRejection(ctx, w, span, id, err)

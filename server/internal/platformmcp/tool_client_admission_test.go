@@ -13,7 +13,7 @@ import (
 func TestSetClientAdmissionRequiresConfirmationAndAValidMode(t *testing.T) {
 	t.Parallel()
 
-	_, registrar := newServer(nil, nil, nil, "", nil, nil, nil, nil, nil, nil, nil, CatalogDescriptor{})
+	_, registrar := newServer(nil, nil, nil, "", nil, nil, nil, nil, nil, nil, nil, nil, CatalogDescriptor{})
 	descriptors := registrar.For(AudienceAssistant)
 	var found bool
 	for _, descriptor := range descriptors {

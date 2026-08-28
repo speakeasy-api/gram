@@ -32,11 +32,8 @@ type Server struct {
 	SetPluginAssignments        http.Handler
 	ListAudiences               http.Handler
 	DownloadPluginPackage       http.Handler
-	DownloadPlatformMCPPlugin   http.Handler
 	DownloadObservabilityPlugin http.Handler
 	DownloadCodexInstallScript  http.Handler
-	GetPlatformMCPPackageStatus http.Handler
-	RepairPlatformMCPPackage    http.Handler
 	GetPublishStatus            http.Handler
 	PublishPlugins              http.Handler
 	GetMarketplaceSettings      http.Handler
@@ -81,11 +78,8 @@ func New(
 			{"SetPluginAssignments", "PUT", "/rpc/plugins.setPluginAssignments"},
 			{"ListAudiences", "GET", "/rpc/plugins.listAudiences"},
 			{"DownloadPluginPackage", "GET", "/rpc/plugins.downloadPluginPackage"},
-			{"DownloadPlatformMCPPlugin", "GET", "/rpc/plugins.downloadPlatformMCPPlugin"},
 			{"DownloadObservabilityPlugin", "GET", "/rpc/plugins.downloadObservabilityPlugin"},
 			{"DownloadCodexInstallScript", "GET", "/rpc/plugins.downloadCodexInstallScript"},
-			{"GetPlatformMCPPackageStatus", "GET", "/rpc/plugins.getPlatformMCPPackageStatus"},
-			{"RepairPlatformMCPPackage", "POST", "/rpc/plugins.repairPlatformMCPPackage"},
 			{"GetPublishStatus", "GET", "/rpc/plugins.getPublishStatus"},
 			{"PublishPlugins", "POST", "/rpc/plugins.publishPlugins"},
 			{"GetMarketplaceSettings", "GET", "/rpc/plugins.getMarketplaceSettings"},
@@ -102,11 +96,8 @@ func New(
 		SetPluginAssignments:        NewSetPluginAssignmentsHandler(e.SetPluginAssignments, mux, decoder, encoder, errhandler, formatter),
 		ListAudiences:               NewListAudiencesHandler(e.ListAudiences, mux, decoder, encoder, errhandler, formatter),
 		DownloadPluginPackage:       NewDownloadPluginPackageHandler(e.DownloadPluginPackage, mux, decoder, encoder, errhandler, formatter),
-		DownloadPlatformMCPPlugin:   NewDownloadPlatformMCPPluginHandler(e.DownloadPlatformMCPPlugin, mux, decoder, encoder, errhandler, formatter),
 		DownloadObservabilityPlugin: NewDownloadObservabilityPluginHandler(e.DownloadObservabilityPlugin, mux, decoder, encoder, errhandler, formatter),
 		DownloadCodexInstallScript:  NewDownloadCodexInstallScriptHandler(e.DownloadCodexInstallScript, mux, decoder, encoder, errhandler, formatter),
-		GetPlatformMCPPackageStatus: NewGetPlatformMCPPackageStatusHandler(e.GetPlatformMCPPackageStatus, mux, decoder, encoder, errhandler, formatter),
-		RepairPlatformMCPPackage:    NewRepairPlatformMCPPackageHandler(e.RepairPlatformMCPPackage, mux, decoder, encoder, errhandler, formatter),
 		GetPublishStatus:            NewGetPublishStatusHandler(e.GetPublishStatus, mux, decoder, encoder, errhandler, formatter),
 		PublishPlugins:              NewPublishPluginsHandler(e.PublishPlugins, mux, decoder, encoder, errhandler, formatter),
 		GetMarketplaceSettings:      NewGetMarketplaceSettingsHandler(e.GetMarketplaceSettings, mux, decoder, encoder, errhandler, formatter),
@@ -130,11 +121,8 @@ func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.SetPluginAssignments = m(s.SetPluginAssignments)
 	s.ListAudiences = m(s.ListAudiences)
 	s.DownloadPluginPackage = m(s.DownloadPluginPackage)
-	s.DownloadPlatformMCPPlugin = m(s.DownloadPlatformMCPPlugin)
 	s.DownloadObservabilityPlugin = m(s.DownloadObservabilityPlugin)
 	s.DownloadCodexInstallScript = m(s.DownloadCodexInstallScript)
-	s.GetPlatformMCPPackageStatus = m(s.GetPlatformMCPPackageStatus)
-	s.RepairPlatformMCPPackage = m(s.RepairPlatformMCPPackage)
 	s.GetPublishStatus = m(s.GetPublishStatus)
 	s.PublishPlugins = m(s.PublishPlugins)
 	s.GetMarketplaceSettings = m(s.GetMarketplaceSettings)
@@ -157,11 +145,8 @@ func Mount(mux goahttp.Muxer, h *Server) {
 	MountSetPluginAssignmentsHandler(mux, h.SetPluginAssignments)
 	MountListAudiencesHandler(mux, h.ListAudiences)
 	MountDownloadPluginPackageHandler(mux, h.DownloadPluginPackage)
-	MountDownloadPlatformMCPPluginHandler(mux, h.DownloadPlatformMCPPlugin)
 	MountDownloadObservabilityPluginHandler(mux, h.DownloadObservabilityPlugin)
 	MountDownloadCodexInstallScriptHandler(mux, h.DownloadCodexInstallScript)
-	MountGetPlatformMCPPackageStatusHandler(mux, h.GetPlatformMCPPackageStatus)
-	MountRepairPlatformMCPPackageHandler(mux, h.RepairPlatformMCPPackage)
 	MountGetPublishStatusHandler(mux, h.GetPublishStatus)
 	MountPublishPluginsHandler(mux, h.PublishPlugins)
 	MountGetMarketplaceSettingsHandler(mux, h.GetMarketplaceSettings)
@@ -791,95 +776,6 @@ func NewDownloadPluginPackageHandler(
 	})
 }
 
-// MountDownloadPlatformMCPPluginHandler configures the mux to serve the
-// "plugins" service "downloadPlatformMCPPlugin" endpoint.
-func MountDownloadPlatformMCPPluginHandler(mux goahttp.Muxer, h http.Handler) {
-	f, ok := h.(http.HandlerFunc)
-	if !ok {
-		f = func(w http.ResponseWriter, r *http.Request) {
-			h.ServeHTTP(w, r)
-		}
-	}
-	mux.Handle("GET", "/rpc/plugins.downloadPlatformMCPPlugin", f)
-}
-
-// NewDownloadPlatformMCPPluginHandler creates a HTTP handler which loads the
-// HTTP request and calls the "plugins" service "downloadPlatformMCPPlugin"
-// endpoint.
-func NewDownloadPlatformMCPPluginHandler(
-	endpoint goa.Endpoint,
-	mux goahttp.Muxer,
-	decoder func(*http.Request) goahttp.Decoder,
-	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
-	errhandler func(context.Context, http.ResponseWriter, error),
-	formatter func(ctx context.Context, err error) goahttp.Statuser,
-) http.Handler {
-	var (
-		decodeRequest  = DecodeDownloadPlatformMCPPluginRequest(mux, decoder)
-		encodeResponse = EncodeDownloadPlatformMCPPluginResponse(encoder)
-		encodeError    = EncodeDownloadPlatformMCPPluginError(encoder, formatter)
-	)
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
-		ctx = context.WithValue(ctx, goa.MethodKey, "downloadPlatformMCPPlugin")
-		ctx = context.WithValue(ctx, goa.ServiceKey, "plugins")
-		payload, err := decodeRequest(r)
-		if err != nil {
-			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
-				errhandler(ctx, w, err)
-			}
-			return
-		}
-		res, err := endpoint(ctx, payload)
-		if err != nil {
-			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
-				errhandler(ctx, w, err)
-			}
-			return
-		}
-		o := res.(*plugins.DownloadPlatformMCPPluginResponseData)
-		defer o.Body.Close()
-		if wt, ok := o.Body.(io.WriterTo); ok {
-			if err := encodeResponse(ctx, w, o.Result); err != nil {
-				if errhandler != nil {
-					errhandler(ctx, w, err)
-				}
-				return
-			}
-			n, err := wt.WriteTo(w)
-			if err != nil {
-				if n == 0 {
-					if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
-						errhandler(ctx, w, err)
-					}
-				} else {
-					http.NewResponseController(w).Flush()
-					panic(http.ErrAbortHandler) // too late to write an error
-				}
-			}
-			return
-		}
-		// handle immediate read error like a returned error
-		buf := bufio.NewReader(o.Body)
-		if _, err := buf.Peek(1); err != nil && err != io.EOF {
-			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
-				errhandler(ctx, w, err)
-			}
-			return
-		}
-		if err := encodeResponse(ctx, w, o.Result); err != nil {
-			if errhandler != nil {
-				errhandler(ctx, w, err)
-			}
-			return
-		}
-		if _, err := io.Copy(w, buf); err != nil {
-			http.NewResponseController(w).Flush()
-			panic(http.ErrAbortHandler) // too late to write an error
-		}
-	})
-}
-
 // MountDownloadObservabilityPluginHandler configures the mux to serve the
 // "plugins" service "downloadObservabilityPlugin" endpoint.
 func MountDownloadObservabilityPluginHandler(mux goahttp.Muxer, h http.Handler) {
@@ -1054,114 +950,6 @@ func NewDownloadCodexInstallScriptHandler(
 		if _, err := io.Copy(w, buf); err != nil {
 			http.NewResponseController(w).Flush()
 			panic(http.ErrAbortHandler) // too late to write an error
-		}
-	})
-}
-
-// MountGetPlatformMCPPackageStatusHandler configures the mux to serve the
-// "plugins" service "getPlatformMCPPackageStatus" endpoint.
-func MountGetPlatformMCPPackageStatusHandler(mux goahttp.Muxer, h http.Handler) {
-	f, ok := h.(http.HandlerFunc)
-	if !ok {
-		f = func(w http.ResponseWriter, r *http.Request) {
-			h.ServeHTTP(w, r)
-		}
-	}
-	mux.Handle("GET", "/rpc/plugins.getPlatformMCPPackageStatus", f)
-}
-
-// NewGetPlatformMCPPackageStatusHandler creates a HTTP handler which loads the
-// HTTP request and calls the "plugins" service "getPlatformMCPPackageStatus"
-// endpoint.
-func NewGetPlatformMCPPackageStatusHandler(
-	endpoint goa.Endpoint,
-	mux goahttp.Muxer,
-	decoder func(*http.Request) goahttp.Decoder,
-	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
-	errhandler func(context.Context, http.ResponseWriter, error),
-	formatter func(ctx context.Context, err error) goahttp.Statuser,
-) http.Handler {
-	var (
-		decodeRequest  = DecodeGetPlatformMCPPackageStatusRequest(mux, decoder)
-		encodeResponse = EncodeGetPlatformMCPPackageStatusResponse(encoder)
-		encodeError    = EncodeGetPlatformMCPPackageStatusError(encoder, formatter)
-	)
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
-		ctx = context.WithValue(ctx, goa.MethodKey, "getPlatformMCPPackageStatus")
-		ctx = context.WithValue(ctx, goa.ServiceKey, "plugins")
-		payload, err := decodeRequest(r)
-		if err != nil {
-			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
-				errhandler(ctx, w, err)
-			}
-			return
-		}
-		res, err := endpoint(ctx, payload)
-		if err != nil {
-			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
-				errhandler(ctx, w, err)
-			}
-			return
-		}
-		if err := encodeResponse(ctx, w, res); err != nil {
-			if errhandler != nil {
-				errhandler(ctx, w, err)
-			}
-		}
-	})
-}
-
-// MountRepairPlatformMCPPackageHandler configures the mux to serve the
-// "plugins" service "repairPlatformMCPPackage" endpoint.
-func MountRepairPlatformMCPPackageHandler(mux goahttp.Muxer, h http.Handler) {
-	f, ok := h.(http.HandlerFunc)
-	if !ok {
-		f = func(w http.ResponseWriter, r *http.Request) {
-			h.ServeHTTP(w, r)
-		}
-	}
-	mux.Handle("POST", "/rpc/plugins.repairPlatformMCPPackage", f)
-}
-
-// NewRepairPlatformMCPPackageHandler creates a HTTP handler which loads the
-// HTTP request and calls the "plugins" service "repairPlatformMCPPackage"
-// endpoint.
-func NewRepairPlatformMCPPackageHandler(
-	endpoint goa.Endpoint,
-	mux goahttp.Muxer,
-	decoder func(*http.Request) goahttp.Decoder,
-	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
-	errhandler func(context.Context, http.ResponseWriter, error),
-	formatter func(ctx context.Context, err error) goahttp.Statuser,
-) http.Handler {
-	var (
-		decodeRequest  = DecodeRepairPlatformMCPPackageRequest(mux, decoder)
-		encodeResponse = EncodeRepairPlatformMCPPackageResponse(encoder)
-		encodeError    = EncodeRepairPlatformMCPPackageError(encoder, formatter)
-	)
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
-		ctx = context.WithValue(ctx, goa.MethodKey, "repairPlatformMCPPackage")
-		ctx = context.WithValue(ctx, goa.ServiceKey, "plugins")
-		payload, err := decodeRequest(r)
-		if err != nil {
-			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
-				errhandler(ctx, w, err)
-			}
-			return
-		}
-		res, err := endpoint(ctx, payload)
-		if err != nil {
-			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
-				errhandler(ctx, w, err)
-			}
-			return
-		}
-		if err := encodeResponse(ctx, w, res); err != nil {
-			if errhandler != nil {
-				errhandler(ctx, w, err)
-			}
 		}
 	})
 }

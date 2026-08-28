@@ -82,6 +82,8 @@ type CreateMetaMcpServerResponseBody struct {
 	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
 	// When the meta MCP server was last updated
 	UpdatedAt string `form:"updated_at" json:"updated_at" xml:"updated_at"`
+	// The number of live members. Only populated by listMetaMcpServers.
+	MemberCount *int `form:"member_count,omitempty" json:"member_count,omitempty" xml:"member_count,omitempty"`
 }
 
 // GetMetaMcpServerResponseBody is the type of the "metaMcp" service
@@ -104,6 +106,8 @@ type GetMetaMcpServerResponseBody struct {
 	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
 	// When the meta MCP server was last updated
 	UpdatedAt string `form:"updated_at" json:"updated_at" xml:"updated_at"`
+	// The number of live members. Only populated by listMetaMcpServers.
+	MemberCount *int `form:"member_count,omitempty" json:"member_count,omitempty" xml:"member_count,omitempty"`
 }
 
 // ListMetaMcpServersResponseBody is the type of the "metaMcp" service
@@ -132,6 +136,8 @@ type UpdateMetaMcpServerResponseBody struct {
 	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
 	// When the meta MCP server was last updated
 	UpdatedAt string `form:"updated_at" json:"updated_at" xml:"updated_at"`
+	// The number of live members. Only populated by listMetaMcpServers.
+	MemberCount *int `form:"member_count,omitempty" json:"member_count,omitempty" xml:"member_count,omitempty"`
 }
 
 // ListMetaMcpMembersResponseBody is the type of the "metaMcp" service
@@ -1864,6 +1870,8 @@ type MetaMcpServerResponseBody struct {
 	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
 	// When the meta MCP server was last updated
 	UpdatedAt string `form:"updated_at" json:"updated_at" xml:"updated_at"`
+	// The number of live members. Only populated by listMetaMcpServers.
+	MemberCount *int `form:"member_count,omitempty" json:"member_count,omitempty" xml:"member_count,omitempty"`
 }
 
 // MetaMcpMemberResponseBody is used to define fields on response body types.
@@ -1892,6 +1900,7 @@ func NewCreateMetaMcpServerResponseBody(res *types.MetaMcpServer) *CreateMetaMcp
 		Visibility:          string(res.Visibility),
 		CreatedAt:           res.CreatedAt,
 		UpdatedAt:           res.UpdatedAt,
+		MemberCount:         res.MemberCount,
 	}
 	return body
 }
@@ -1908,6 +1917,7 @@ func NewGetMetaMcpServerResponseBody(res *types.MetaMcpServer) *GetMetaMcpServer
 		Visibility:          string(res.Visibility),
 		CreatedAt:           res.CreatedAt,
 		UpdatedAt:           res.UpdatedAt,
+		MemberCount:         res.MemberCount,
 	}
 	return body
 }
@@ -1943,6 +1953,7 @@ func NewUpdateMetaMcpServerResponseBody(res *types.MetaMcpServer) *UpdateMetaMcp
 		Visibility:          string(res.Visibility),
 		CreatedAt:           res.CreatedAt,
 		UpdatedAt:           res.UpdatedAt,
+		MemberCount:         res.MemberCount,
 	}
 	return body
 }

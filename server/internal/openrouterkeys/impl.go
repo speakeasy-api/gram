@@ -207,8 +207,7 @@ func (s *Service) DisableKey(ctx context.Context, payload *gen.DisableKeyPayload
 		return nil
 	})
 	if err != nil {
-		var shareable *oops.ShareableError
-		if errors.As(err, &shareable) {
+		if shareable, ok := errors.AsType[*oops.ShareableError](err); ok {
 			return nil, shareable
 		}
 		if errors.Is(err, keybillinglock.ErrAcquireTimeout) {
@@ -266,8 +265,7 @@ func (s *Service) EnableKey(ctx context.Context, payload *gen.EnableKeyPayload) 
 		return nil
 	})
 	if err != nil {
-		var shareable *oops.ShareableError
-		if errors.As(err, &shareable) {
+		if shareable, ok := errors.AsType[*oops.ShareableError](err); ok {
 			return nil, shareable
 		}
 		if errors.Is(err, keybillinglock.ErrAcquireTimeout) {

@@ -36,14 +36,10 @@ const (
 	FlagRiskFindingAnalytics Flag = "risk-finding-analytics"
 	FlagRiskAsyncScanShadow  Flag = "risk-async-scan-shadow"
 
-	// FlagPlatformMCP controls the engineering rollout of Platform MCP. The
-	// durable platform_mcp product feature remains the organization-admin opt-in
-	// once this release flag permits access.
-	FlagPlatformMCP Flag = "platform-mcp"
-	// FlagPlatformMCPDashboard controls dashboard discovery and onboarding for
-	// Platform MCP. It is presentation-only; runtime authorization requires
-	// FlagPlatformMCP and the durable organization product feature.
-	FlagPlatformMCPDashboard Flag = "platform-mcp-dashboard"
+	// FlagPlatformMCPRiskMutations is the exact-project kill switch for risk
+	// policy and exclusion writes exposed through Platform MCP. It is evaluated
+	// at invocation time and fails closed when absent, disabled, or indeterminate.
+	FlagPlatformMCPRiskMutations Flag = "platform-mcp-risk-mutations"
 
 	// FlagAssistantPlatformMCP grants a project's managed (dashboard)
 	// assistant the Platform MCP read toolset — the "platform" platform

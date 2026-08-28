@@ -1,12 +1,13 @@
-import { useToolset } from "@/hooks/toolTypes";
-import { useListMCPCatalog } from "@/pages/catalog/hooks";
 import {
   PulseMcpAuthType,
   extractAuthType,
   isPulseMcpServer,
 } from "@/pages/catalog/hooks/serverMetadata";
+
 import { useLatestDeployment } from "@gram/client/react-query/latestDeployment.js";
+import { useListMCPCatalog } from "@/pages/catalog/hooks";
 import { useMemo } from "react";
+import { useToolset } from "@/hooks/toolTypes";
 
 export const useCatalogIconMap = (): Map<string, string> => {
   const { data: catalogData } = useListMCPCatalog();
@@ -21,11 +22,9 @@ export const useCatalogIconMap = (): Map<string, string> => {
 };
 
 const useCatalogAuthMap = (enabled = true): Map<string, PulseMcpAuthType> => {
-  const { data: catalogData } = useListMCPCatalog(
-    undefined,
-    undefined,
+  const { data: catalogData } = useListMCPCatalog(undefined, undefined, {
     enabled,
-  );
+  });
 
   return useMemo(() => {
     const result = new Map<string, PulseMcpAuthType>();

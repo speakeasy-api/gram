@@ -73,8 +73,7 @@ func (m *MockServer) handleGetOrCreateApp(w http.ResponseWriter, r *http.Request
 	out, created, err := m.GetOrCreateApp(ctx, &inp)
 	if err != nil {
 		code := http.StatusInternalServerError
-		var httpErr *HTTPStatusError
-		if errors.As(err, &httpErr) {
+		if httpErr, ok := errors.AsType[*HTTPStatusError](err); ok {
 			code = httpErr.Code
 		}
 		http.Error(w, err.Error(), code)
@@ -120,8 +119,7 @@ func (m *MockServer) handleMessageCreate(w http.ResponseWriter, r *http.Request)
 	out, err := m.CreateMessage(ctx, r.PathValue("appID"), &inp)
 	if err != nil {
 		code := http.StatusInternalServerError
-		var httpErr *HTTPStatusError
-		if errors.As(err, &httpErr) {
+		if httpErr, ok := errors.AsType[*HTTPStatusError](err); ok {
 			code = httpErr.Code
 		}
 		http.Error(w, err.Error(), code)
@@ -151,8 +149,7 @@ func (m *MockServer) handleAppPortalAccessCreate(w http.ResponseWriter, r *http.
 	out, err := m.CreateAppPortalSession(ctx, appID)
 	if err != nil {
 		code := http.StatusInternalServerError
-		var httpErr *HTTPStatusError
-		if errors.As(err, &httpErr) {
+		if httpErr, ok := errors.AsType[*HTTPStatusError](err); ok {
 			code = httpErr.Code
 		}
 		http.Error(w, err.Error(), code)

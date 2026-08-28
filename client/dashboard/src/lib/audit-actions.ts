@@ -36,6 +36,7 @@ export const AUDIT_ACTIONS = [
   "chat_session:access",
   "chat_session:handoff_export",
   "chat_session:move",
+  "chat_session:recall",
   "custom_domains:create",
   "custom_domains:delete",
   "custom_domains:update",
@@ -331,6 +332,8 @@ export function staticActionPhrase(action: AuditAction): string {
       return "exported chat session handoff";
     case "chat_session:move":
       return "moved chat session";
+    case "chat_session:recall":
+      return "recalled chat session";
 
     case "custom_domains:create":
       return "added custom domain";

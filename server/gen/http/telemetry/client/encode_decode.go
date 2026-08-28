@@ -8170,6 +8170,7 @@ func unmarshalUserAccountResponseBodyToTelemetryUserAccount(v *UserAccountRespon
 	}
 	res := &telemetry.UserAccount{
 		ID:               v.ID,
+		UserID:           v.UserID,
 		Provider:         *v.Provider,
 		Email:            v.Email,
 		AccountType:      v.AccountType,

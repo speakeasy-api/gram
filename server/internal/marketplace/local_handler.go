@@ -126,8 +126,7 @@ func (s *LocalServer) handleUploadPack(w http.ResponseWriter, r *http.Request) {
 	}
 	body, err := io.ReadAll(http.MaxBytesReader(w, io.NopCloser(bodyReader), maxUploadPackRequestBytes))
 	if err != nil {
-		var maxBytesErr *http.MaxBytesError
-		if errors.As(err, &maxBytesErr) {
+		if _, ok := errors.AsType[*http.MaxBytesError](err); ok {
 			http.Error(w, "request body too large", http.StatusRequestEntityTooLarge)
 			return
 		}
@@ -328,8 +327,7 @@ func runLocalUploadPack(ctx context.Context, repo string, advertise bool, reques
 	}
 	output, err := cmd.Output()
 	if err != nil {
-		var exitErr *exec.ExitError
-		if errors.As(err, &exitErr) {
+		if exitErr, ok := errors.AsType[*exec.ExitError](err); ok {
 			return nil, fmt.Errorf("git upload-pack: %w: %s", err, strings.TrimSpace(string(exitErr.Stderr)))
 		}
 		return nil, fmt.Errorf("git upload-pack: %w", err)

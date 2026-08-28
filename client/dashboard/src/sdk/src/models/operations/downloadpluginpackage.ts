@@ -17,7 +17,7 @@ export type DownloadPluginPackageSecurity = {
 /**
  * Target platform to download plugins for.
  */
-export const DownloadPluginPackageQueryParamPlatform = {
+export const QueryParamPlatform = {
   Claude: "claude",
   Cursor: "cursor",
   Codex: "codex",
@@ -26,9 +26,7 @@ export const DownloadPluginPackageQueryParamPlatform = {
 /**
  * Target platform to download plugins for.
  */
-export type DownloadPluginPackageQueryParamPlatform = ClosedEnum<
-  typeof DownloadPluginPackageQueryParamPlatform
->;
+export type QueryParamPlatform = ClosedEnum<typeof QueryParamPlatform>;
 
 export type DownloadPluginPackageRequest = {
   /**
@@ -38,7 +36,7 @@ export type DownloadPluginPackageRequest = {
   /**
    * Target platform to download plugins for.
    */
-  platform: DownloadPluginPackageQueryParamPlatform;
+  platform: QueryParamPlatform;
   /**
    * Session header
    */
@@ -88,10 +86,9 @@ export function downloadPluginPackageSecurityToJSON(
 }
 
 /** @internal */
-export const DownloadPluginPackageQueryParamPlatform$outboundSchema:
-  z.ZodMiniEnum<typeof DownloadPluginPackageQueryParamPlatform> = z.enum(
-    DownloadPluginPackageQueryParamPlatform,
-  );
+export const QueryParamPlatform$outboundSchema: z.ZodMiniEnum<
+  typeof QueryParamPlatform
+> = z.enum(QueryParamPlatform);
 
 /** @internal */
 export type DownloadPluginPackageRequest$Outbound = {
@@ -108,7 +105,7 @@ export const DownloadPluginPackageRequest$outboundSchema: z.ZodMiniType<
 > = z.pipe(
   z.object({
     pluginId: z.string(),
-    platform: DownloadPluginPackageQueryParamPlatform$outboundSchema,
+    platform: QueryParamPlatform$outboundSchema,
     gramSession: z.optional(z.string()),
     gramProject: z.optional(z.string()),
   }),

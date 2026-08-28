@@ -44,7 +44,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/modelkeys"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	orgRepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
-	"github.com/speakeasy-api/gram/server/internal/platformmcp"
 	"github.com/speakeasy-api/gram/server/internal/platformmcp/localfixture"
 	"github.com/speakeasy-api/gram/server/internal/platformtools"
 	platformtoolsruntime "github.com/speakeasy-api/gram/server/internal/platformtools/runtime"
@@ -485,14 +484,9 @@ func newWorkerCommand() *cli.Command {
 
 			productFeatures := productfeatures.NewClient(logger, tracerProvider, db, redisClient)
 			var pluginPublisher *plugins.Service
-			platformAdmission := platformmcp.NewAdmissionChecker(
-				productFeatures,
-				featureFlags,
-				platformmcp.NewPostgresNewModelEligibility(db),
-			)
 			if pluginsGitHub != nil {
 				logger.InfoContext(ctx, "GitHub publishing for plugins: enabled")
-				pluginPublisher = plugins.NewPublisher(logger, db, auditLogger, pluginsGitHub, c.String("environment"), c.String("server-url"), featureFlags, platformAdmission)
+				pluginPublisher = plugins.NewPublisher(logger, db, auditLogger, pluginsGitHub, c.String("environment"), c.String("server-url"), featureFlags)
 			} else {
 				logger.InfoContext(ctx, "GitHub publishing for plugins: disabled")
 			}
@@ -836,6 +830,7 @@ func newWorkerCommand() *cli.Command {
 					RequestRate:        ratelimit.Rate{Tokens: 0, Interval: 0, Burst: 0},
 					MaxRequestLifetime: 0,
 				},
+				mcp.MetaRuntimeConfig{MemberCallTimeout: 0},
 			)
 			if err != nil {
 				return fmt.Errorf("initialize MCP service: %w", err)

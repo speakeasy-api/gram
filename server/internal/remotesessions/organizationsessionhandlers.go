@@ -211,8 +211,7 @@ func (s *Service) RefreshSession(ctx context.Context, payload *orgsessionsgen.Re
 	if err != nil {
 		// Operator-actionable failures carry a public-safe reason; surface it so
 		// the admin sees why the refresh failed instead of a generic error.
-		var refreshErr *TokenRefreshError
-		if errors.As(err, &refreshErr) {
+		if refreshErr, ok := errors.AsType[*TokenRefreshError](err); ok {
 			return nil, oops.E(oops.CodeBadRequest, err, "Unable to refresh: %s", refreshErr.Reason).LogWarn(ctx, logger)
 		}
 		return nil, oops.E(oops.CodeUnexpected, err, "refresh organization admin remote session").LogError(ctx, logger)

@@ -165,7 +165,7 @@ func newTestService(t *testing.T) (context.Context, *testInstance) {
 		InitializeRate:     ratelimit.Rate{Tokens: 0, Interval: 0, Burst: 0},
 		RequestRate:        ratelimit.Rate{Tokens: 0, Interval: 0, Burst: 0},
 		MaxRequestLifetime: 0,
-	})
+	}, mcp.MetaRuntimeConfig{MemberCallTimeout: 0})
 	require.NoError(t, err)
 
 	svc := xmcp.NewService(logger, conn, enc, mcpService)

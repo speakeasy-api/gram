@@ -189,6 +189,7 @@ func (s *LifecycleMetadataService) Update(ctx context.Context, principal Princip
 		InputHash:            inputHash,
 		Status:               receiptStatusPending,
 		ResultCode:           pgtype.Text{String: "", Valid: false},
+		ResultPayload:        nil,
 		ExpiresAt:            pgtype.Timestamptz{Time: s.now().Add(receiptLifetime), InfinityModifier: pgtype.Finite, Valid: true},
 	})
 	if err != nil {
@@ -208,6 +209,7 @@ func (s *LifecycleMetadataService) Update(ctx context.Context, principal Princip
 		RegistrationID: uuid.NullUUID{UUID: registrationID, Valid: true},
 		Status:         receiptStatusSucceeded,
 		ResultCode:     conv.ToPGText(receiptResultMetadataUpdated),
+		ResultPayload:  nil,
 		ID:             receipt.ID,
 		OrganizationID: principal.OrganizationID,
 	})

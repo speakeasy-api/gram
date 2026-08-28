@@ -3162,11 +3162,19 @@ func toolCallExprsFor(eventSource string) toolCallExpressions {
 			key:       "tool_name",
 		}
 	}
+	// Default: both arms, same shape as the employee data-flow graph — hook
+	// tool events (which carry account attribution) plus Gram MCP tool spans
+	// (which do not). Counting only the spans zeroed the employee page's tool
+	// calls whenever an account scope was applied, while the data-flow graph
+	// beside it still showed the hook-attributed calls.
+	hookArm := "event_source = 'hook' AND tool_name != '' AND toString(attributes.gram.hook.event)"
+	gramArm := "event_source != 'hook' AND startsWith(gram_urn, 'tools:')"
+	httpStatus := "toInt32OrZero(toString(attributes.http.response.status_code))"
 	return toolCallExpressions{
-		isCall:    "startsWith(gram_urn, 'tools:')",
-		isSuccess: "startsWith(gram_urn, 'tools:') AND toInt32OrZero(toString(attributes.http.response.status_code)) >= 200 AND toInt32OrZero(toString(attributes.http.response.status_code)) < 300",
-		isFailure: "startsWith(gram_urn, 'tools:') AND toInt32OrZero(toString(attributes.http.response.status_code)) >= 400",
-		key:       "gram_urn",
+		isCall:    "((" + hookArm + " IN ('PostToolUse', 'PostToolUseFailure')) OR (" + gramArm + "))",
+		isSuccess: "((" + hookArm + " = 'PostToolUse') OR (" + gramArm + " AND " + httpStatus + " >= 200 AND " + httpStatus + " < 300))",
+		isFailure: "((" + hookArm + " = 'PostToolUseFailure') OR (" + gramArm + " AND " + httpStatus + " >= 400))",
+		key:       "if(event_source = 'hook', tool_name, gram_urn)",
 	}
 }
 
