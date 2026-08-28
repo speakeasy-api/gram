@@ -87,6 +87,56 @@ func TestPrivateCheckpointDualDefinitionMatrixAndNextCall(t *testing.T) {
 	}
 }
 
+func TestAIAccessLifecyclePersistsExactMCPIdentity(t *testing.T) {
+	t.Parallel()
+
+	conn, orgID := newTestDatabase(t, "ks_ai_access_lifecycle")
+	registry, err := NewRegistry(conn)
+	require.NoError(t, err)
+	lifecycle, err := killswitches.NewLifecycleService(conn, registry, NewCustomerLifecycleValidator(), nil)
+	require.NoError(t, err)
+	facade, err := killswitches.NewFacade(lifecycle)
+	require.NoError(t, err)
+
+	userID := "user_" + uuid.NewString()
+	insertUser(t, conn, userID, nil)
+	insertMembership(t, conn, orgID, userID, nil)
+	projectID := insertProject(t, conn, orgID, "ai-lifecycle", nil)
+	serverID := insertMCPServer(t, conn, orgID, projectID, nil)
+
+	activated, err := lifecycle.ActivatePrescription(t.Context(), killswitches.ActivatePrescriptionRequest{
+		MutationContext: killswitches.MutationContext{
+			OrganizationID:   killswitches.OrganizationID(orgID),
+			ActorUserID:      userID,
+			ActorDisplayName: "Test operator",
+			OperationID:      uuid.New(),
+		},
+		Definition:     DefinitionKeyAIAccess,
+		PrincipalKind:  PrincipalKindUser,
+		PrincipalInput: userID,
+		ResourceKind:   ResourceKindMCPServer,
+		Desired: killswitches.DesiredVersionInput{
+			ResourceScope:          killswitches.ResourceScopeSelected,
+			SelectedResourceInputs: []string{serverID.String()},
+			StartMode:              killswitches.StartModeNow,
+			InternalNote:           "test incident context",
+			ExternalNote:           "AI access paused.",
+		},
+	})
+	require.NoError(t, err)
+
+	persisted, err := facade.GetPrescription(t.Context(), killswitches.GetPrescriptionRequest{
+		OrganizationID: killswitches.OrganizationID(orgID),
+		PrescriptionID: activated.PrescriptionID,
+	})
+	require.NoError(t, err)
+	require.Equal(t, DefinitionKeyAIAccess, persisted.Definition)
+	require.Equal(t, PrincipalKindUser, persisted.PrincipalKind)
+	require.Equal(t, killswitches.PrincipalKey(userID), persisted.PrincipalKey)
+	require.Equal(t, ResourceKindMCPServer, persisted.ResourceKind)
+	require.Equal(t, []killswitches.ResourceKey{killswitches.ResourceKey(serverID.String())}, persisted.SelectedResourceKeys)
+}
+
 func TestEvaluatorHasNoImplicitCapabilityHierarchy(t *testing.T) {
 	t.Parallel()
 
