@@ -48,7 +48,6 @@ import {
   EXCLUDED_TAG_KEY,
   MCPToolFilterScopesPanel,
 } from "@/pages/mcp/MCPToolFilterScopesPanel";
-import { ONBOARD_EXTERNAL_MCP_TO_USER_SESSIONS_FLAG } from "@/lib/externalMcpUserSessions";
 import {
   getOAuthParadigm,
   isUserSessionIssuerWired,
@@ -607,10 +606,6 @@ export function MCPStatusDropdown({
     const needsConvertBlock =
       status === "private" &&
       mustConvertOAuthBeforePrivate({
-        flagEnabled:
-          telemetry.isFeatureEnabled(
-            ONBOARD_EXTERNAL_MCP_TO_USER_SESSIONS_FLAG,
-          ) ?? false,
         mcpIsPublic: toolset.mcpIsPublic ?? false,
         userSessionIssuerWired: isUserSessionIssuerWired(toolset),
         oauthParadigm: getOAuthParadigm(toolset),

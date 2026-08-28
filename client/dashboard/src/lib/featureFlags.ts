@@ -5,7 +5,6 @@ export const FEATURE_FLAGS = {
   deviceAgent: "gram-device-agent",
   deviceIntegrations: "gram-device-integrations",
   experimentalChat: "gram-experimental-chat",
-  externalMcpUserSessions: "onboard-external-mcp-to-user-sessions",
   functions: "gram-functions",
   gatewayEndpoints: "gram-gateway-endpoints",
   headlessModeSwitcher: "headless-mode-switcher",
