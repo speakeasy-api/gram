@@ -105,42 +105,6 @@ func (q *Queries) ClaimKillswitchOperation(ctx context.Context, arg ClaimKillswi
 	return operation_id, err
 }
 
-const completeKillswitchExpiryEvent = `-- name: CompleteKillswitchExpiryEvent :one
-WITH inserted_event AS (
-  INSERT INTO killswitch_expiry_events (
-    organization_id,
-    prescription_id,
-    version
-  ) VALUES (
-    $1,
-    $2,
-    $3
-  )
-  ON CONFLICT (prescription_id, version) DO NOTHING
-  RETURNING 1
-)
-UPDATE killswitch_prescription_versions AS version_row
-SET expiry_event_recorded_at = clock_timestamp()
-WHERE version_row.organization_id = $1
-  AND version_row.prescription_id = $2
-  AND version_row.version = $3
-  AND version_row.expiry_event_recorded_at IS NULL
-RETURNING EXISTS (SELECT 1 FROM inserted_event) AS event_inserted
-`
-
-type CompleteKillswitchExpiryEventParams struct {
-	OrganizationID string
-	PrescriptionID uuid.UUID
-	Version        int64
-}
-
-func (q *Queries) CompleteKillswitchExpiryEvent(ctx context.Context, arg CompleteKillswitchExpiryEventParams) (bool, error) {
-	row := q.db.QueryRow(ctx, completeKillswitchExpiryEvent, arg.OrganizationID, arg.PrescriptionID, arg.Version)
-	var event_inserted bool
-	err := row.Scan(&event_inserted)
-	return event_inserted, err
-}
-
 const completeKillswitchOperation = `-- name: CompleteKillswitchOperation :execrows
 UPDATE killswitch_operations
 SET status = 'completed',
@@ -630,8 +594,13 @@ FROM killswitch_prescription_versions
 WHERE state = 'active'
   AND expires_at IS NOT NULL
   AND expires_at <= statement_timestamp()
-  AND expiry_event_recorded_at IS NULL
   AND (superseded_at IS NULL OR expires_at < superseded_at)
+  AND NOT EXISTS (
+    SELECT 1
+    FROM killswitch_expiry_events AS marker
+    WHERE marker.prescription_id = killswitch_prescription_versions.prescription_id
+      AND marker.version = killswitch_prescription_versions.version
+  )
 ORDER BY expires_at, prescription_id, version
 LIMIT $1
 `
@@ -776,7 +745,7 @@ func (q *Queries) LockKillswitchPrescriptionCurrent(ctx context.Context, arg Loc
 }
 
 const lockKillswitchVersionForExpiry = `-- name: LockKillswitchVersionForExpiry :one
-SELECT state, expires_at, superseded_at, expiry_event_recorded_at, clock_timestamp()::timestamptz AS database_now
+SELECT state, expires_at, superseded_at, clock_timestamp()::timestamptz AS database_now
 FROM killswitch_prescription_versions
 WHERE organization_id = $1
   AND prescription_id = $2
@@ -791,11 +760,10 @@ type LockKillswitchVersionForExpiryParams struct {
 }
 
 type LockKillswitchVersionForExpiryRow struct {
-	State                 string
-	ExpiresAt             pgtype.Timestamptz
-	SupersededAt          pgtype.Timestamptz
-	ExpiryEventRecordedAt pgtype.Timestamptz
-	DatabaseNow           pgtype.Timestamptz
+	State        string
+	ExpiresAt    pgtype.Timestamptz
+	SupersededAt pgtype.Timestamptz
+	DatabaseNow  pgtype.Timestamptz
 }
 
 func (q *Queries) LockKillswitchVersionForExpiry(ctx context.Context, arg LockKillswitchVersionForExpiryParams) (LockKillswitchVersionForExpiryRow, error) {
@@ -805,10 +773,36 @@ func (q *Queries) LockKillswitchVersionForExpiry(ctx context.Context, arg LockKi
 		&i.State,
 		&i.ExpiresAt,
 		&i.SupersededAt,
-		&i.ExpiryEventRecordedAt,
 		&i.DatabaseNow,
 	)
 	return i, err
+}
+
+const recordKillswitchExpiryEvent = `-- name: RecordKillswitchExpiryEvent :execrows
+INSERT INTO killswitch_expiry_events (
+  organization_id,
+  prescription_id,
+  version
+) VALUES (
+  $1,
+  $2,
+  $3
+)
+ON CONFLICT (prescription_id, version) DO NOTHING
+`
+
+type RecordKillswitchExpiryEventParams struct {
+	OrganizationID string
+	PrescriptionID uuid.UUID
+	Version        int64
+}
+
+func (q *Queries) RecordKillswitchExpiryEvent(ctx context.Context, arg RecordKillswitchExpiryEventParams) (int64, error) {
+	result, err := q.db.Exec(ctx, recordKillswitchExpiryEvent, arg.OrganizationID, arg.PrescriptionID, arg.Version)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const supersedeKillswitchPrescriptionVersion = `-- name: SupersedeKillswitchPrescriptionVersion :execrows

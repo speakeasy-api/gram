@@ -50,17 +50,6 @@ func markerExists(t *testing.T, conn *pgxpool.Pool, prescriptionID PrescriptionI
 	return count > 0
 }
 
-func expiryEventRecorded(t *testing.T, conn *pgxpool.Pool, orgID string, prescriptionID PrescriptionID, version int64) bool {
-	t.Helper()
-	var recordedAt *time.Time
-	require.NoError(t, conn.QueryRow(t.Context(), `
-		SELECT expiry_event_recorded_at
-		FROM killswitch_prescription_versions
-		WHERE organization_id = $1 AND prescription_id = $2 AND version = $3
-	`, orgID, string(prescriptionID), version).Scan(&recordedAt))
-	return recordedAt != nil
-}
-
 func TestExpirySweepRecordsOnlyGenuinelyExpiredVersions(t *testing.T) {
 	t.Parallel()
 
@@ -85,8 +74,6 @@ func TestExpirySweepRecordsOnlyGenuinelyExpiredVersions(t *testing.T) {
 
 	require.True(t, markerExists(t, conn, dueCurrent))
 	require.True(t, markerExists(t, conn, expiredThenSuperseded), "a delayed sweep still records a version that expired before being superseded")
-	require.True(t, expiryEventRecorded(t, conn, orgID, dueCurrent, 1))
-	require.True(t, expiryEventRecorded(t, conn, orgID, expiredThenSuperseded, 1))
 	for name, prescription := range map[string]PrescriptionID{
 		"superseded before expiry":   supersededBeforeExpiry,
 		"expiry equals supersession": expiryEqualsSupersession,
@@ -134,17 +121,16 @@ func TestExpirySweepDoesNotAlterEffectiveState(t *testing.T) {
 	require.Equal(t, int64(1), result.Recorded)
 
 	var state string
-	var supersededAt, expiryEventRecordedAt *time.Time
+	var supersededAt *time.Time
 	var currentVersion int64
 	require.NoError(t, conn.QueryRow(t.Context(), `
-		SELECT version.state, version.superseded_at, version.expiry_event_recorded_at, prescription.current_version
+		SELECT version.state, version.superseded_at, prescription.current_version
 		FROM killswitch_prescription_versions AS version
 		JOIN killswitch_prescriptions AS prescription ON prescription.id = version.prescription_id
 		WHERE version.prescription_id = $1
-	`, string(prescription)).Scan(&state, &supersededAt, &expiryEventRecordedAt, &currentVersion))
+	`, string(prescription)).Scan(&state, &supersededAt, &currentVersion))
 	require.Equal(t, "active", state, "expiry recording never rewrites version state; enforcement expires at query time")
 	require.Nil(t, supersededAt)
-	require.NotNil(t, expiryEventRecordedAt)
 	require.Equal(t, int64(1), currentVersion)
 }
 
@@ -173,7 +159,6 @@ func TestExpiryConcurrentSweepsRecordExactlyOnce(t *testing.T) {
 	}
 	require.Equal(t, int64(1), total, "concurrent sweeps must record one expiry exactly once")
 	require.True(t, markerExists(t, conn, prescription))
-	require.True(t, expiryEventRecorded(t, conn, orgID, prescription, 1))
 	require.Equal(t, 1, countExpiryMarkers(t, conn, orgID))
 	require.Len(t, listAuditRows(t, conn, orgID), 1)
 	require.Len(t, listOutboxMessages(t, conn, orgID), 1)
@@ -229,7 +214,6 @@ func TestExpirySweepSerializesWithLifecycleHeaderLock(t *testing.T) {
 		require.FailNow(t, "expiry recording did not resume after the lifecycle transaction committed")
 	}
 	require.Zero(t, countExpiryMarkers(t, conn, orgID))
-	require.False(t, expiryEventRecorded(t, conn, orgID, prescription, 1))
 	require.Empty(t, listAuditRows(t, conn, orgID))
 	require.Empty(t, listOutboxMessages(t, conn, orgID))
 }
@@ -238,7 +222,7 @@ func TestExpiryRetryRecovery(t *testing.T) {
 	t.Parallel()
 
 	conn, orgID := newLifecycleDatabase(t, "killswitch_expiry_retry")
-	prescription := insertVersionRow(t, conn, orgID, "active", "clock_timestamp() - interval '1 hour'", "NULL")
+	insertVersionRow(t, conn, orgID, "active", "clock_timestamp() - interval '1 hour'", "NULL")
 
 	maintenance := NewMaintenanceService(conn, audit.NewLogger())
 	maintenance.beforeExpiryCommit = func(context.Context) error { return errors.New("forced pre-commit failure") }
@@ -246,7 +230,6 @@ func TestExpiryRetryRecovery(t *testing.T) {
 	_, err := maintenance.RecordDueExpiries(t.Context(), 100)
 	require.ErrorContains(t, err, "forced pre-commit failure")
 	require.Zero(t, countExpiryMarkers(t, conn, orgID), "a failed attempt rolls back its marker")
-	require.False(t, expiryEventRecorded(t, conn, orgID, prescription, 1), "a failed attempt rolls back its completion marker")
 	require.Empty(t, listAuditRows(t, conn, orgID), "a failed attempt rolls back its audit row")
 	require.Empty(t, listOutboxMessages(t, conn, orgID), "a failed attempt rolls back its outbox row")
 
@@ -254,7 +237,6 @@ func TestExpiryRetryRecovery(t *testing.T) {
 	result, err := maintenance.RecordDueExpiries(t.Context(), 100)
 	require.NoError(t, err)
 	require.Equal(t, ExpiryBatchResult{Candidates: 1, Recorded: 1}, result, "a retry after rollback records the expiry once")
-	require.True(t, expiryEventRecorded(t, conn, orgID, prescription, 1))
 
 	result, err = maintenance.RecordDueExpiries(t.Context(), 100)
 	require.NoError(t, err)
@@ -262,25 +244,6 @@ func TestExpiryRetryRecovery(t *testing.T) {
 	require.Equal(t, 1, countExpiryMarkers(t, conn, orgID))
 	require.Len(t, listAuditRows(t, conn, orgID), 1)
 	require.Len(t, listOutboxMessages(t, conn, orgID), 1)
-}
-
-func TestExpirySweepRepairsExistingEventCompletionMarker(t *testing.T) {
-	t.Parallel()
-
-	conn, orgID := newLifecycleDatabase(t, "killswitch_expiry_marker_repair")
-	prescription := insertVersionRow(t, conn, orgID, "active", "clock_timestamp() - interval '1 hour'", "NULL")
-	_, err := conn.Exec(t.Context(), `
-		INSERT INTO killswitch_expiry_events (organization_id, prescription_id, version)
-		VALUES ($1, $2, 1)
-	`, orgID, string(prescription))
-	require.NoError(t, err)
-
-	result, err := NewMaintenanceService(conn, audit.NewLogger()).RecordDueExpiries(t.Context(), 100)
-	require.NoError(t, err)
-	require.Equal(t, ExpiryBatchResult{Candidates: 1, Recorded: 0}, result)
-	require.True(t, expiryEventRecorded(t, conn, orgID, prescription, 1))
-	require.Empty(t, listAuditRows(t, conn, orgID))
-	require.Empty(t, listOutboxMessages(t, conn, orgID))
 }
 
 func insertOperationReceipt(t *testing.T, conn *pgxpool.Pool, orgID, expiresAtSQL string) uuid.UUID {

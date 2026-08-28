@@ -22,8 +22,9 @@ const (
 
 // MaintenanceService owns the privileged cross-organization killswitch
 // maintenance transactions: version-specific expiry history and operation
-// receipt retention. Query-time database state stays authoritative for
-// enforcement; the expiry transaction only marks its audit history as emitted.
+// receipt retention. It records history only; query-time database state stays
+// authoritative for enforcement, and no method here mutates prescription
+// headers or versions.
 type MaintenanceService struct {
 	db          *pgxpool.Pool
 	auditLogger *audit.Logger
@@ -101,22 +102,24 @@ func (s *MaintenanceService) recordExpiry(ctx context.Context, candidate repo.Li
 		return 0, nil
 	}
 
-	eventInserted, err := queries.CompleteKillswitchExpiryEvent(ctx, repo.CompleteKillswitchExpiryEventParams(candidate))
+	rows, err := queries.RecordKillswitchExpiryEvent(ctx, repo.RecordKillswitchExpiryEventParams(candidate))
 	if err != nil {
-		return 0, fmt.Errorf("complete killswitch expiry event: %w", err)
+		return 0, fmt.Errorf("record killswitch expiry event: %w", err)
 	}
-	if eventInserted {
-		actorDisplayName := maintenanceActorDisplayName
-		if err := s.auditLogger.LogKillswitchExpire(ctx, tx, audit.LogKillswitchExpireEvent{
-			OrganizationID:   candidate.OrganizationID,
-			Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, maintenanceActorUserID),
-			ActorDisplayName: &actorDisplayName,
-			PrescriptionURN:  urn.NewKillswitchPrescription(candidate.PrescriptionID),
-			Version:          candidate.Version,
-			ExpiredAt:        locked.ExpiresAt.Time.UTC(),
-		}); err != nil {
-			return 0, fmt.Errorf("audit killswitch expiry: %w", err)
-		}
+	if rows != 1 {
+		return 0, nil
+	}
+
+	actorDisplayName := maintenanceActorDisplayName
+	if err := s.auditLogger.LogKillswitchExpire(ctx, tx, audit.LogKillswitchExpireEvent{
+		OrganizationID:   candidate.OrganizationID,
+		Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, maintenanceActorUserID),
+		ActorDisplayName: &actorDisplayName,
+		PrescriptionURN:  urn.NewKillswitchPrescription(candidate.PrescriptionID),
+		Version:          candidate.Version,
+		ExpiredAt:        locked.ExpiresAt.Time.UTC(),
+	}); err != nil {
+		return 0, fmt.Errorf("audit killswitch expiry: %w", err)
 	}
 
 	if s.beforeExpiryCommit != nil {
@@ -127,14 +130,11 @@ func (s *MaintenanceService) recordExpiry(ctx context.Context, candidate repo.Li
 	if err := tx.Commit(ctx); err != nil {
 		return 0, fmt.Errorf("commit killswitch expiry transaction: %w", err)
 	}
-	if eventInserted {
-		return 1, nil
-	}
-	return 0, nil
+	return 1, nil
 }
 
 func expiryEligible(locked repo.LockKillswitchVersionForExpiryRow) bool {
-	if PrescriptionState(locked.State) != PrescriptionStateActive || locked.ExpiryEventRecordedAt.Valid {
+	if PrescriptionState(locked.State) != PrescriptionStateActive {
 		return false
 	}
 	if !locked.ExpiresAt.Valid || !locked.DatabaseNow.Valid || locked.ExpiresAt.Time.After(locked.DatabaseNow.Time) {

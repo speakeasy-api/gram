@@ -309,18 +309,18 @@ func TestKillswitchExpiryDiscoveryIndexMatchesEligibilityAndOrder(t *testing.T) 
 	)
 	require.NoError(t, conn.QueryRow(t.Context(), `
 		SELECT ARRAY(
-			SELECT pg_get_indexdef(indexrelid, position, true)
-			FROM generate_series(1, indnkeyatts) AS position
+			SELECT pg_get_indexdef(index_metadata.indexrelid, position, true)
+			FROM generate_series(1, index_metadata.indnkeyatts) AS position
 			ORDER BY position
-		), pg_get_expr(indpred, indrelid), access_method.amname
-		FROM pg_index
-		JOIN pg_class index_class ON index_class.oid = indexrelid
-		JOIN pg_am access_method ON access_method.oid = index_class.relam
-		WHERE indexrelid = 'killswitch_prescription_versions_expiry_due_idx'::regclass
+		), pg_get_expr(index_metadata.indpred, index_metadata.indrelid), access_method.amname
+		FROM pg_index AS index_metadata
+		JOIN pg_class AS index_relation ON index_relation.oid = index_metadata.indexrelid
+		JOIN pg_am AS access_method ON access_method.oid = index_relation.relam
+		WHERE index_metadata.indexrelid = 'killswitch_prescription_versions_expiry_due_idx'::regclass
 	`).Scan(&indexColumns, &indexPredicate, &indexAccessMethod))
 	require.Equal(t, []string{"expires_at", "prescription_id", "version"}, indexColumns)
-	require.Equal(t, "((state = 'active'::text) AND (expires_at IS NOT NULL) AND (expiry_event_recorded_at IS NULL) AND ((superseded_at IS NULL) OR (expires_at < superseded_at)))", indexPredicate)
 	require.Equal(t, "btree", indexAccessMethod)
+	require.Equal(t, "((state = 'active'::text) AND (expires_at IS NOT NULL) AND ((superseded_at IS NULL) OR (expires_at < superseded_at)))", indexPredicate)
 }
 
 func insertOrganization(t *testing.T, conn *pgxpool.Pool, organizationID string) {

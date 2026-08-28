@@ -7727,7 +7727,6 @@ CREATE TABLE IF NOT EXISTS killswitch_prescription_versions (
   expires_at timestamptz,
   activated_at timestamptz,
   superseded_at timestamptz,
-  expiry_event_recorded_at timestamptz,
   internal_note TEXT NOT NULL,
   external_note TEXT NOT NULL,
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
@@ -7741,10 +7740,10 @@ CREATE TABLE IF NOT EXISTS killswitch_prescription_versions (
   CONSTRAINT killswitch_prescription_versions_internal_note_check CHECK (char_length(internal_note) BETWEEN 1 AND 4000)
 );
 CREATE UNIQUE INDEX IF NOT EXISTS killswitch_prescription_versions_org_prescription_version_key ON killswitch_prescription_versions (organization_id, prescription_id, version);
--- Privileged cross-organization expiry discovery: the maintenance sweep scans pending
--- due versions globally ordered by expires_at, prescription_id, and version, so the index
+-- Privileged cross-organization expiry discovery: the maintenance sweep scans due
+-- versions globally ordered by expires_at, prescription_id, and version, so the index
 -- deliberately does not lead with organization_id.
-CREATE INDEX IF NOT EXISTS killswitch_prescription_versions_expiry_due_idx ON killswitch_prescription_versions (expires_at, prescription_id, version) WHERE state = 'active' AND expires_at IS NOT NULL AND expiry_event_recorded_at IS NULL AND (superseded_at IS NULL OR expires_at < superseded_at);
+CREATE INDEX IF NOT EXISTS killswitch_prescription_versions_expiry_due_idx ON killswitch_prescription_versions (expires_at, prescription_id, version) WHERE state = 'active' AND expires_at IS NOT NULL AND (superseded_at IS NULL OR expires_at < superseded_at);
 
 CREATE TABLE IF NOT EXISTS killswitch_prescription_version_resources (
   organization_id TEXT NOT NULL,
