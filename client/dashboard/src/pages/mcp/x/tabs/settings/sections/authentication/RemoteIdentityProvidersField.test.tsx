@@ -46,13 +46,19 @@ function issuer(overrides: Partial<RemoteSessionIssuer> = {}) {
 
 function renderField(
   issuers: RemoteSessionIssuer[],
-  handlers: { onEdit?: () => void; onDelete?: () => void } = {},
+  handlers: {
+    onEdit?: () => void;
+    onDelete?: () => void;
+    allowAdditionalProviders?: boolean;
+  } = {},
 ) {
   return render(
     <MemoryRouter>
       <RemoteIdentityProvidersField
         associatedIssuers={issuers}
         isLoading={false}
+        allowAdditionalProviders={handlers.allowAdditionalProviders ?? true}
+        projectId="project-1"
         onAdd={vi.fn<() => void>()}
         onEdit={handlers.onEdit ?? vi.fn<() => void>()}
         onDelete={handlers.onDelete ?? vi.fn<() => void>()}
@@ -69,6 +75,26 @@ describe("RemoteIdentityProvidersField", () => {
   afterEach(() => {
     cleanup();
     vi.clearAllMocks();
+  });
+
+  // The gateway (meta MCP) case attaches one provider per member vendor, so
+  // the add action must survive past the first attachment.
+  it("keeps Attach Provider available once providers exist", () => {
+    renderField([issuer()]);
+
+    expect(
+      screen.getByRole("button", { name: /attach provider/i }),
+    ).toBeTruthy();
+  });
+
+  // Remote/tunneled servers have exactly one upstream: once it is attached,
+  // no further attach may be offered.
+  it("hides Attach Provider for single-upstream targets once a provider exists", () => {
+    renderField([issuer()], { allowAdditionalProviders: false });
+
+    expect(
+      screen.queryByRole("button", { name: /attach provider/i }),
+    ).toBeNull();
   });
 
   it("links the provider name to its detail page", () => {

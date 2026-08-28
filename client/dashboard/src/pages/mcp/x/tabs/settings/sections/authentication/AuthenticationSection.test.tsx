@@ -349,6 +349,7 @@ describe("AuthenticationSectionBody", () => {
 
 const remoteTargetWithSessionIssuer: AuthTarget = {
   slug: "remote-server",
+  projectId: "project-1",
   userSessionIssuerId: "user-session-issuer",
   remoteMcpServerId: "remote-mcp-server",
   invalidate: vi.fn(),

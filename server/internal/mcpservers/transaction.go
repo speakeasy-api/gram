@@ -51,7 +51,7 @@ func CreateMCPServerInTransaction(ctx context.Context, tx pgx.Tx, auditLogger *a
 
 	issuerID := uuid.NullUUID{UUID: uuid.Nil, Valid: false}
 	if input.RemoteMCPServerID.Valid || input.TunneledMCPServerID.Valid {
-		issuerID, err = mintServerUserSessionIssuer(ctx, tx, input.OrganizationID, input.ProjectID, slug)
+		issuerID, err = MintServerUserSessionIssuer(ctx, tx, input.OrganizationID, input.ProjectID, slug)
 		if err != nil {
 			return repo.McpServer{}, fmt.Errorf("mint MCP server issuer: %w", err)
 		}

@@ -259,10 +259,31 @@ func (s *Service) handleMetaExecuteToolCall(
 		Params:  params,
 	}
 
-	return handleToolsCall(ctx, logger, s.metrics, s.authz, s.guardianPolicy, s.db, s.env,
+	body, err := handleToolsCall(ctx, logger, s.metrics, s.authz, s.guardianPolicy, s.db, s.env,
 		inputs, syntheticReq, s.toolProxy, s.billingTracker, s.billingRepository, &s.toolsetCache,
 		s.telemLogger, s.vectorToolStore, s.temporal, s.mcpMetadataRepo, s.auditLogger,
 		s.platformExtras, s.sessionClientInfo)
+	if err != nil {
+		// A member's execution failure must degrade that member, not the
+		// call: on a multi-member gateway an aborted JSON-RPC call reads as
+		// a gateway fault. Internal faults — unexpected errors and server
+		// invariant violations — keep the error envelope. The innermost
+		// shareable message carries the actionable cause (every
+		// ShareableError public is written to be client-safe).
+		if shareable, ok := errors.AsType[*oops.ShareableError](err); ok &&
+			shareable.Code != oops.CodeUnexpected && shareable.Code != oops.CodeInvariantViolation {
+			deepest := shareable
+			for inner := errors.Unwrap(error(deepest)); inner != nil; inner = errors.Unwrap(inner) {
+				if innerShareable, ok := errors.AsType[*oops.ShareableError](inner); ok {
+					deepest = innerShareable
+				}
+			}
+			return marshalMetaToolError(ctx, logger, req.ID,
+				fmt.Sprintf("server %q failed to execute %q: %s", member.slug, toolName, deepest.Error()))
+		}
+		return nil, err
+	}
+	return body, nil
 }
 
 // memberCatalog is one hosted member's described tool inventory.

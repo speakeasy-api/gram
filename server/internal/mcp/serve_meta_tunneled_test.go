@@ -122,6 +122,6 @@ func TestServePublic_MetaEndpoint_ExecuteTool_TunneledMemberForwardsLoneToken(t 
 	rpc = executeMetaTool(t, ti, metaSlug, bearer, "member-tunnel--ping")
 	text, isError = metaToolResultText(t, rpc)
 	require.True(t, isError, "an ambiguous credential map must fail the tunneled member call")
-	require.Contains(t, text, "not configured unambiguously")
+	require.Contains(t, text, "no upstream identity of its own", "the message must explain why a tunneled member cannot match a credential")
 	require.Equal(t, forwardsBefore, gateway.forwardCount(), "the failed call must not produce any tunnel forward")
 }
