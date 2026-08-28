@@ -9,7 +9,7 @@
    template so only the classes it actually references are emitted.
 
    The build (vite.consent-page.config.ts) writes the result plus the brand
-   woff2 files into server/internal/mcp/consent_assets/page/, which the server
+   woff2 files into server/internal/mcp/consent_page_assets/, which the server
    embeds. Never hand-edit the output. */
 
 @import "tailwindcss" source(none);
