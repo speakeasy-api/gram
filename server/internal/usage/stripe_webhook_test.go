@@ -1604,24 +1604,29 @@ func TestStripeSubscriptionDeletionLocksOnlyChatLifecycle(t *testing.T) {
 	configurePaygSubscriptionDeletion(t, service, "event_chat_lock_only", "subscription_current", "subscription_current")
 	createOpenRouterKeyFixture(t, db, openrouter.KeyTypeChat, 321)
 
-	lockTx, err := db.Begin(t.Context()) //nolint:glint // notestingrawsql: the test must hold the unrelated advisory lock while deletion proceeds
+	internalLockTx, err := db.Begin(t.Context()) //nolint:glint // notestingrawsql: the test must hold the unrelated advisory lock while deletion proceeds
 	require.NoError(t, err)
-	require.NoError(t, repo.New(lockTx).AcquireOpenRouterBillingLock(t.Context(), repo.AcquireOpenRouterBillingLockParams{
+	t.Cleanup(func() { _ = internalLockTx.Rollback(context.Background()) })
+	require.NoError(t, repo.New(internalLockTx).AcquireOpenRouterBillingLock(t.Context(), repo.AcquireOpenRouterBillingLockParams{
 		KeyType:        string(openrouter.KeyTypeInternal),
+		OrganizationID: stripeWebhookOrganizationID,
+	}))
+
+	chatLockTx, err := db.Begin(t.Context()) //nolint:glint // notestingrawsql: the test uses the relevant advisory lock to synchronize with the webhook backend
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = chatLockTx.Rollback(context.Background()) })
+	chatHolderPID := postgresBackendPID(t, chatLockTx)
+	require.NoError(t, repo.New(chatLockTx).AcquireOpenRouterBillingLock(t.Context(), repo.AcquireOpenRouterBillingLockParams{
+		KeyType:        string(openrouter.KeyTypeChat),
 		OrganizationID: stripeWebhookOrganizationID,
 	}))
 
 	response := make(chan int, 1)
 	go func() { response <- serveStripeWebhook(service, "deactivate").Code }()
-	select {
-	case status := <-response:
-		require.Equal(t, http.StatusOK, status)
-		require.NoError(t, lockTx.Rollback(t.Context()))
-	case <-time.After(time.Second):
-		require.NoError(t, lockTx.Rollback(t.Context()))
-		status := <-response
-		require.Failf(t, "subscription deletion waited for Security inference lock", "status after releasing unrelated lock: %d", status)
-	}
+	waitForStripeWebhookBlockedByPID(t, db, chatHolderPID)
+	require.NoError(t, chatLockTx.Rollback(t.Context()))
+	require.Equal(t, http.StatusOK, receiveStripeWebhookStatus(t, response))
+	require.NoError(t, internalLockTx.Rollback(t.Context()))
 }
 
 func TestStripeSubscriptionDeletionRejectsUnclassifiedKeyAndRollsBackAtomically(t *testing.T) {
