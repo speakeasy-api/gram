@@ -12,9 +12,10 @@ type OpenRouterKeyState = {
 export function causeLabels(
   causes: readonly string[] | null | undefined,
 ): string[] {
-  return (causes ?? []).map(
-    (cause) =>
-      DISABLE_CAUSE_LABELS[cause as keyof typeof DISABLE_CAUSE_LABELS] ?? cause,
+  return (causes ?? []).map((cause) =>
+    Object.hasOwn(DISABLE_CAUSE_LABELS, cause)
+      ? DISABLE_CAUSE_LABELS[cause as keyof typeof DISABLE_CAUSE_LABELS]
+      : cause,
   );
 }
 

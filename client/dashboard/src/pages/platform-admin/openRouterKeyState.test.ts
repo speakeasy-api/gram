@@ -16,6 +16,11 @@ describe("OpenRouter key state", () => {
       "Billing inactive",
       "future_cause",
     ]);
+    expect(causeLabels(["toString", "constructor", "__proto__"])).toEqual([
+      "toString",
+      "constructor",
+      "__proto__",
+    ]);
     expect(causeLabels(undefined)).toEqual([]);
   });
 
