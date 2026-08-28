@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { stripLeadingEnvelopes } from "./harnessEnvelopes";
+import {
+  splitLeadingEnvelopes,
+  stripLeadingEnvelopes,
+} from "./harnessEnvelopes";
 
 const conversationInfo =
   'Conversation info (untrusted metadata):\n```json\n{\n  "chat_id": "channel:42",\n  "sender": {\n    "name": "Example User"\n  },\n  "was_mentioned": true\n}\n```';
@@ -72,5 +75,17 @@ describe("stripLeadingEnvelopes", () => {
     expect(stripLeadingEnvelopes("  indented paste\n")).toBe(
       "  indented paste\n",
     );
+  });
+
+  it("splits the envelope off so the transcript can fold it", () => {
+    const { envelope, body } = splitLeadingEnvelopes(
+      `${conversationInfo}\n\nping`,
+    );
+    expect(envelope.trim()).toBe(conversationInfo);
+    expect(body).toBe("ping");
+    expect(splitLeadingEnvelopes("plain")).toEqual({
+      envelope: "",
+      body: "plain",
+    });
   });
 });

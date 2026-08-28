@@ -6,7 +6,10 @@ import {
   type ToolCall,
   type TraceEntryType,
 } from "./traceEntries";
-import { stripLeadingEnvelopes } from "@/lib/harnessEnvelopes";
+import {
+  splitLeadingEnvelopes,
+  stripLeadingEnvelopes,
+} from "@/lib/harnessEnvelopes";
 
 type MessageEntryType = Extract<
   TraceEntryType,
@@ -20,6 +23,30 @@ function cleanMessageText(raw: string): string {
   return stripLeadingEnvelopes(raw)
     .replace(/[ \t]+$/gm, "")
     .trim();
+}
+
+/** Joined text of a message's text parts; "" for content with no text. */
+function joinedTextParts(content: unknown): string {
+  if (typeof content === "string") return content;
+  if (!Array.isArray(content)) return "";
+  return content
+    .map((part) =>
+      part &&
+      typeof part === "object" &&
+      "text" in part &&
+      typeof (part as { text: unknown }).text === "string"
+        ? (part as { text: string }).text
+        : "",
+    )
+    .filter(Boolean)
+    .join("\n");
+}
+
+/** The harness envelope a user turn opened with (`<message-context>`,
+ * OpenClaw's inbound metadata, …), for the collapsed disclosure the transcript
+ * renders above the human text. "" when the turn has none. */
+export function messageEnvelope(content: unknown): string {
+  return splitLeadingEnvelopes(joinedTextParts(content)).envelope.trim();
 }
 
 /** Render-time plain text of a message's content (string, multimodal text
@@ -196,11 +223,22 @@ function hasTextContent(content: unknown): boolean {
 
 /** A message with nothing left once the leading harness envelope is stripped —
  * machine plumbing, so its row is hidden instead of rendered as an empty
- * bubble. Only applies to plain string content (arrays go through
- * hasTextContent). */
+ * bubble. A part array counts only when every part is text; a row carrying
+ * media (image, audio, …) is always shown. */
 function hasNoVisibleText(content: unknown): boolean {
-  if (typeof content !== "string") return false;
-  return stripLeadingEnvelopes(content).trim().length === 0;
+  if (typeof content === "string") {
+    return stripLeadingEnvelopes(content).trim().length === 0;
+  }
+  if (!Array.isArray(content) || content.length === 0) return false;
+  const allText = content.every(
+    (part) =>
+      !!part &&
+      typeof part === "object" &&
+      "text" in part &&
+      typeof (part as { text: unknown }).text === "string",
+  );
+  if (!allText) return false;
+  return stripLeadingEnvelopes(joinedTextParts(content)).trim().length === 0;
 }
 
 /**

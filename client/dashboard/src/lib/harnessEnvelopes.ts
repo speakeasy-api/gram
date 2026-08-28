@@ -29,8 +29,22 @@ const ENVELOPE = [
 ].join("|");
 const LEADING_ENVELOPE_RE = new RegExp(`^(?:${ENVELOPE})+`, "i");
 
+/** Splits a persisted user turn into the leading harness envelope and the
+ * human-authored body. `envelope` is "" when there is none, and `body` is then
+ * the input unchanged. */
+export function splitLeadingEnvelopes(text: string): {
+  envelope: string;
+  body: string;
+} {
+  const match = LEADING_ENVELOPE_RE.exec(text);
+  if (!match) return { envelope: "", body: text };
+  return { envelope: match[0], body: text.slice(match[0].length) };
+}
+
 /** Removes leading harness envelopes from a persisted user turn for display.
- * Text with no envelope is returned unchanged. */
+ * Text with no envelope is returned unchanged. The envelope is not lost — the
+ * transcript folds it into a collapsed disclosure via `splitLeadingEnvelopes`,
+ * so a spoofed envelope inside a prompt stays inspectable. */
 export function stripLeadingEnvelopes(text: string): string {
-  return text.replace(LEADING_ENVELOPE_RE, "");
+  return splitLeadingEnvelopes(text).body;
 }
