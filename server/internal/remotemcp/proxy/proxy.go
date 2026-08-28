@@ -527,11 +527,28 @@ func (p *Proxy) Post(w http.ResponseWriter, r *http.Request) (err error) {
 	initializeReq, _ := initializeRequestFromUserRequest(userReq)
 	recordRequestedProtocolVersion(span, initializeReq)
 
+	if err := p.runUserRequestInterceptors(ctx, userReq); err != nil {
+		return p.dispatchInterceptorError(ctx, w, span, userReqID, err, &responseBytes)
+	}
+
+	toolsCallReq, toolsCallDecodeErr := toolsCallRequestFromUserRequest(userReq)
+	toolsCallPreflightReq := toolsCallReq
+	if toolsCallPreflightReq == nil && p.StrictToolSelection && len(p.ToolsCallPreForwardInterceptors) > 0 && hasTopLevelJSONRPCMethod(userReq.body, methodToolsCall) {
+		toolsCallPreflightReq = &ToolsCallRequest{Params: nil, UserRequest: userReq}
+	}
+	if toolsCallPreflightReq != nil && len(p.ToolsCallPreForwardInterceptors) > 0 {
+		if err := p.runToolsCallPreForwardInterceptors(ctx, toolsCallPreflightReq); err != nil {
+			return p.dispatchInterceptorError(ctx, w, span, userReqID, err, &responseBytes)
+		}
+	}
+
 	// Strict sessions authorize from the decoded message but forward the
 	// original bytes, so the two must be unambiguously the same: exactly one
 	// parsed message per POST (an empty body would pass every per-message
 	// check vacuously yet still be forwarded authenticated) and no JSON that
 	// a first-wins parser would read differently than Go's last-wins decoder.
+	// Run tools/call method preflight first so ambiguous calls cannot bypass
+	// transport-level policy evaluation.
 	if p.StrictToolSelection {
 		if len(userReq.JSONRPCMessages) != 1 {
 			responseBytes = p.writeRejection(ctx, w, span, userReqID, &RejectError{
@@ -551,25 +568,12 @@ func (p *Proxy) Post(w http.ResponseWriter, r *http.Request) (err error) {
 		}
 	}
 
-	if err := p.runUserRequestInterceptors(ctx, userReq); err != nil {
-		return p.dispatchInterceptorError(ctx, w, span, userReqID, err, &responseBytes)
-	}
-
-	// Typed per-RPC dispatch runs after the generic chain so generic
-	// observability (audit logs, request counters) covers every request
-	// even when a typed interceptor rejects it. The decoded views are nil
-	// for any request whose method does not match — the corresponding typed
-	// loop is skipped in that case. At most one of the three is non-nil for
-	// a given request.
+	// Typed per-RPC dispatch runs after the generic chain, method preflight,
+	// and strict validation. The decoded views are nil for any request whose
+	// method does not match — the corresponding typed loop is skipped in that
+	// case. At most one of the three is non-nil for a given request.
 	if initializeReq != nil {
 		if err := p.runInitializeRequestInterceptors(ctx, initializeReq); err != nil {
-			return p.dispatchInterceptorError(ctx, w, span, userReqID, err, &responseBytes)
-		}
-	}
-
-	toolsCallReq, toolsCallDecodeErr := toolsCallRequestFromUserRequest(userReq)
-	if toolsCallReq != nil && len(p.ToolsCallPreForwardInterceptors) > 0 {
-		if err := p.runToolsCallPreForwardInterceptors(ctx, toolsCallReq); err != nil {
 			return p.dispatchInterceptorError(ctx, w, span, userReqID, err, &responseBytes)
 		}
 	}
