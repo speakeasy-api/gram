@@ -1,6 +1,9 @@
 package replay
 
 import (
+	"crypto/sha256"
+	"encoding/base64"
+	"strconv"
 	"sync"
 	"testing"
 	"time"
@@ -137,6 +140,27 @@ func TestKey_SubjectCannotCollideWithParty(t *testing.T) {
 	shifted := Key{Issuer: "iss", Party: "a", Subject: "b:c", ID: "jti"}
 
 	require.NotEqual(t, split.storageKey(), shifted.storageKey())
+}
+
+// A key with no Subject must hash exactly as it did before Subject existed.
+// Replicas running different builds share this keyspace during a rolling
+// deploy, so moving client-assertion keys would orphan every hold already
+// taken and let a spent assertion be spent again against a newer replica.
+// The legacy encoding is spelled out here rather than referenced, so a change
+// to storageKey has to confront it.
+func TestKey_EmptySubjectPreservesLegacyEncoding(t *testing.T) {
+	t.Parallel()
+
+	sum := sha256.New()
+	for _, part := range []string{"iss", "client", "jti"} {
+		sum.Write([]byte(strconv.Itoa(len(part))))
+		sum.Write([]byte(":"))
+		sum.Write([]byte(part))
+	}
+	legacy := base64.RawURLEncoding.EncodeToString(sum.Sum(nil))
+
+	got := Key{Issuer: "iss", Party: "client", Subject: "", ID: "jti"}.storageKey()
+	require.Equal(t, legacy, got, "client assertion keys must not move")
 }
 
 // Two workloads vouched for by one issuer must not share a keyspace. A jti is

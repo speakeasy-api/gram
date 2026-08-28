@@ -122,6 +122,26 @@ func (e Expectation) validate() error {
 	if e.MaxLifetime < 0 {
 		return reject(ReasonVerifierMisconfigured, "assertion lifetime bound is negative")
 	}
+	// A bound large enough to overflow its own replay hold would wrap to a
+	// negative duration, which compares below every guard cap and so would
+	// pass the check in Verify that exists to catch exactly this.
+	if e.MaxLifetime > 0 && ReplayHoldFor(e.MaxLifetime) < e.MaxLifetime {
+		return reject(ReasonVerifierMisconfigured, "assertion lifetime bound overflows its replay hold")
+	}
+	// iss == sub is the client profile, whose ceiling is fixed by the
+	// mainstream profiles rather than chosen per endpoint. Enforced here so
+	// the bound cannot be widened for a client by assembling the struct
+	// directly instead of through ClientExpectation.
+	if e.Issuer == e.Subject && e.MaxLifetime > DefaultMaxLifetime {
+		return reject(ReasonVerifierMisconfigured, "client assertion lifetime bound exceeds %s", DefaultMaxLifetime)
+	}
+	// iss != sub is a workload, where one issuer vouches for many subjects.
+	// Without the subject in the replay scope they share one keyspace, and
+	// the first to spend a jti makes every other workload's assertion
+	// carrying it fail as a replay.
+	if e.Issuer != e.Subject && e.ReplaySubject == "" {
+		return reject(ReasonVerifierMisconfigured, "no replay subject configured for this workload")
+	}
 	return nil
 }
 

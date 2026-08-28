@@ -2,6 +2,7 @@ package clientauth_test
 
 import (
 	"encoding/json"
+	"math"
 	"strings"
 	"testing"
 	"time"
@@ -405,6 +406,51 @@ func TestVerify_MisconfiguredExpectationRejected(t *testing.T) {
 	requireRejected(t, err, clientauth.ReasonVerifierMisconfigured)
 }
 
+// A bound big enough to overflow its replay hold wraps negative, and a
+// negative hold compares below every guard cap — so it would slip past the
+// check in Verify that exists to catch an unservable bound.
+func TestVerify_LifetimeOverflowingReplayHoldRejected(t *testing.T) {
+	t.Parallel()
+
+	s := newSigner(t, testKeyID)
+
+	expect := expectationFor(t, s)
+	expect.MaxLifetime = math.MaxInt64
+
+	_, err := newVerifier(t).Verify(t.Context(), assertionFor(s.sign(t, validClaims())), expect)
+	requireRejected(t, err, clientauth.ReasonVerifierMisconfigured)
+}
+
+// The client ceiling is fixed by the mainstream profiles, so assembling the
+// struct directly must not be a way around what ClientExpectation sets.
+func TestVerify_ClientProfileCannotWidenItsLifetime(t *testing.T) {
+	t.Parallel()
+
+	s := newSigner(t, testKeyID)
+
+	expect := expectationFor(t, s)
+	expect.MaxLifetime = clientauth.DefaultMaxLifetime + time.Hour
+
+	_, err := newVerifier(t).Verify(t.Context(), assertionFor(s.sign(t, validClaims())), expect)
+	requireRejected(t, err, clientauth.ReasonVerifierMisconfigured)
+}
+
+// A workload's issuer vouches for many subjects. Leaving the subject out of
+// the replay scope puts them all in one keyspace, where the first to spend a
+// jti makes every other workload's assertion carrying it fail as a replay.
+func TestVerify_WorkloadWithoutReplaySubjectRejected(t *testing.T) {
+	t.Parallel()
+
+	s := newSigner(t, testKeyID)
+
+	expect := expectationFor(t, s)
+	expect.Subject = "workload-one"
+	expect.ReplaySubject = ""
+
+	_, err := newVerifier(t).Verify(t.Context(), assertionFor(s.sign(t, validClaims())), expect)
+	requireRejected(t, err, clientauth.ReasonVerifierMisconfigured)
+}
+
 // A guard sized for the default bound cannot serve an expectation that lets
 // assertions live longer: the reservation would lapse while the assertion
 // still verifies, and Guard.Reserve clamps the hold silently rather than
@@ -412,13 +458,22 @@ func TestVerify_MisconfiguredExpectationRejected(t *testing.T) {
 func TestVerify_LifetimeBeyondGuardHoldRejected(t *testing.T) {
 	t.Parallel()
 
+	const workloadSubject = "workload-one"
+
 	s := newSigner(t, testKeyID)
 	verifier := newVerifier(t)
 
+	claims := validClaims()
+	claims.Subject = workloadSubject
+
+	// A workload, so the bound is legitimately raisable and this exercises
+	// the guard-hold check rather than the client ceiling.
 	expect := expectationFor(t, s)
+	expect.Subject = workloadSubject
+	expect.ReplaySubject = workloadSubject
 	expect.MaxLifetime = 8 * time.Hour
 
-	_, err := verifier.Verify(t.Context(), assertionFor(s.sign(t, validClaims())), expect)
+	_, err := verifier.Verify(t.Context(), assertionFor(s.sign(t, claims)), expect)
 	requireRejected(t, err, clientauth.ReasonVerifierMisconfigured)
 }
 
@@ -429,14 +484,24 @@ func TestVerify_LifetimeBeyondGuardHoldRejected(t *testing.T) {
 func TestVerify_ExpectationLifetimeWidensTheCeiling(t *testing.T) {
 	t.Parallel()
 
+	const workloadSubject = "repo:example/api:environment:prod"
+
 	s := newSigner(t, testKeyID)
 
+	// A workload assertion: iss is the platform, sub is the machine, and the
+	// exp sits past the client ceiling the way a Kubernetes projected token's
+	// does.
 	claims := validClaims()
+	claims.Subject = workloadSubject
 	claims.Expiry = jwt.NewNumericDate(time.Now().Add(3 * time.Hour))
 	assertion := assertionFor(s.sign(t, claims))
 
-	// The default client bound rejects it for lifetime, not for anything else.
-	_, err := newVerifier(t).Verify(t.Context(), assertion, expectationFor(t, s))
+	workload := expectationFor(t, s)
+	workload.Subject = workloadSubject
+	workload.ReplaySubject = workloadSubject
+
+	// Under the default bound it is rejected for lifetime, nothing else.
+	_, err := newVerifier(t).Verify(t.Context(), assertion, workload)
 	requireRejected(t, err, clientauth.ReasonLifetimeTooLong)
 
 	// A guard sized for the longer bound, and an expectation carrying it,
@@ -449,9 +514,8 @@ func TestVerify_ExpectationLifetimeWidensTheCeiling(t *testing.T) {
 	verifier, err := clientauth.NewVerifier(newKeyResolver(t, client), guard)
 	require.NoError(t, err)
 
-	expect := expectationFor(t, s)
-	expect.MaxLifetime = lifetime
-	_, err = verifier.Verify(t.Context(), assertion, expect)
+	workload.MaxLifetime = lifetime
+	_, err = verifier.Verify(t.Context(), assertion, workload)
 	require.NoError(t, err)
 }
 

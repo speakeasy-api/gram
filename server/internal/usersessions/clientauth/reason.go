@@ -35,11 +35,15 @@ const (
 	// verify under the resolved key.
 	ReasonSignatureInvalid Reason = "assertion_signature_invalid"
 
-	// ReasonSubjectMismatch reports an iss or sub that is not what the
-	// expectation named: for a client assertion, both must be the client_id
-	// the request is authenticating, as RFC 7523 §3 requires; for a
-	// workload assertion, iss must be the trusted issuer and sub the
-	// admitted external subject.
+	// ReasonSubjectMismatch reports an iss or sub that is missing, or not
+	// the value required of it.
+	//
+	// UnverifiedClientID requires only that the two be present and equal,
+	// having no expectation to compare them against yet. Verify checks each
+	// against the expectation: for a client assertion both must be the
+	// client_id being authenticated, as RFC 7523 §3 requires; for a workload
+	// assertion iss must be the trusted issuer and sub the admitted external
+	// subject.
 	ReasonSubjectMismatch Reason = "assertion_subject_mismatch"
 
 	// ReasonAudienceMismatch reports an aud naming neither this endpoint's issuer

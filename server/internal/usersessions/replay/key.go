@@ -53,9 +53,28 @@ type Key struct {
 // own rather than folded into Party by the caller. Hashing then bounds the
 // result, which matters because every part but Issuer arrives from outside
 // and a CIMD client_id is a URL that may run to kilobytes.
+//
+// An empty Subject contributes no part at all, rather than a zero-length
+// one. Two replicas running different builds share this keyspace during a
+// rolling deploy, so a key whose parts have not changed must hash the same
+// under both: emitting a "0:" segment for the absent Subject would move
+// every client-assertion key at once, orphaning the holds already taken and
+// letting an assertion spent against one replica be spent again against
+// another for as long as the original hold had left to run.
+//
+// Omitting it stays injective because the encoding is self-delimiting — a
+// length, a colon, then exactly that many bytes — so a three-part sequence
+// cannot decode as a four-part one however the values are punctuated.
 func (k Key) storageKey() string {
+	parts := make([]string, 0, 4)
+	parts = append(parts, k.Issuer, k.Party)
+	if k.Subject != "" {
+		parts = append(parts, k.Subject)
+	}
+	parts = append(parts, k.ID)
+
 	sum := sha256.New()
-	for _, part := range []string{k.Issuer, k.Party, k.Subject, k.ID} {
+	for _, part := range parts {
 		sum.Write([]byte(strconv.Itoa(len(part))))
 		sum.Write([]byte(":"))
 		sum.Write([]byte(part))
