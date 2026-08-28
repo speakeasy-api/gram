@@ -1643,6 +1643,25 @@ func (q *Queries) RecreateTrialGenerationFixture(ctx context.Context, arg Recrea
 	return err
 }
 
+const redemoteTrialLifecycleFixture = `-- name: RedemoteTrialLifecycleFixture :exec
+WITH demoted_trial AS (
+    UPDATE trials
+    SET ends_at = clock_timestamp() - interval '1 day',
+        demoted_at = clock_timestamp(),
+        updated_at = clock_timestamp()
+    WHERE organization_id = $1
+)
+UPDATE organization_metadata
+SET gram_account_type = 'free', whitelisted = FALSE
+WHERE id = $1
+`
+
+// Test-only fixture: starts another demotion/re-arm cycle in the same generation.
+func (q *Queries) RedemoteTrialLifecycleFixture(ctx context.Context, organizationID string) error {
+	_, err := q.db.Exec(ctx, redemoteTrialLifecycleFixture, organizationID)
+	return err
+}
+
 const scrubDeploymentFunctionMachineSpecs = `-- name: ScrubDeploymentFunctionMachineSpecs :exec
 UPDATE deployments_functions SET memory_mib = NULL, scale = NULL WHERE deployment_id = $1
 `
@@ -1940,6 +1959,17 @@ func (q *Queries) SeedTrialArmAuditFixture(ctx context.Context, organizationID s
 	var id string
 	err := row.Scan(&id)
 	return id, err
+}
+
+const seedTrialDemotionAuditFixture = `-- name: SeedTrialDemotionAuditFixture :exec
+INSERT INTO audit_logs (organization_id, actor_id, actor_type, action, subject_id, subject_type)
+VALUES ($1, 'system', 'user', 'organization:enterprise_trial_demoted', $1, 'organization')
+`
+
+// Test-only fixture: records the committed demotion boundary for a retry cycle.
+func (q *Queries) SeedTrialDemotionAuditFixture(ctx context.Context, organizationID string) error {
+	_, err := q.db.Exec(ctx, seedTrialDemotionAuditFixture, organizationID)
+	return err
 }
 
 const seedUnrelatedAuditHistoryFixture = `-- name: SeedUnrelatedAuditHistoryFixture :exec

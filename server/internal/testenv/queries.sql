@@ -604,6 +604,24 @@ INSERT INTO audit_logs (organization_id, actor_id, actor_type, action, subject_i
 VALUES (@organization_id, 'system', 'user', 'organization:enterprise_trial_armed', @organization_id, 'organization')
 RETURNING id::text;
 
+-- name: SeedTrialDemotionAuditFixture :exec
+-- Test-only fixture: records the committed demotion boundary for a retry cycle.
+INSERT INTO audit_logs (organization_id, actor_id, actor_type, action, subject_id, subject_type)
+VALUES (@organization_id, 'system', 'user', 'organization:enterprise_trial_demoted', @organization_id, 'organization');
+
+-- name: RedemoteTrialLifecycleFixture :exec
+-- Test-only fixture: starts another demotion/re-arm cycle in the same generation.
+WITH demoted_trial AS (
+    UPDATE trials
+    SET ends_at = clock_timestamp() - interval '1 day',
+        demoted_at = clock_timestamp(),
+        updated_at = clock_timestamp()
+    WHERE organization_id = @organization_id
+)
+UPDATE organization_metadata
+SET gram_account_type = 'free', whitelisted = FALSE
+WHERE id = @organization_id;
+
 -- name: GetLatestTrialArmAuditIDFixture :one
 -- Test-only fixture: reads the arm operation selected by the production ordering.
 SELECT id::text

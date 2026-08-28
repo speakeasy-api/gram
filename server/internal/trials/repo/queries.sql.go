@@ -285,7 +285,7 @@ func (q *Queries) ListExpiredTrials(ctx context.Context) ([]string, error) {
 }
 
 const lockTrialLifecycleForRearm = `-- name: LockTrialLifecycleForRearm :one
-SELECT tier, ends_at, converted_at, demoted_at, created_at
+SELECT tier, ends_at, converted_at, demoted_at
 FROM trials
 WHERE organization_id = $1
 FOR UPDATE
@@ -296,7 +296,6 @@ type LockTrialLifecycleForRearmRow struct {
 	EndsAt      pgtype.Timestamptz
 	ConvertedAt pgtype.Timestamptz
 	DemotedAt   pgtype.Timestamptz
-	CreatedAt   pgtype.Timestamptz
 }
 
 // Lifecycle operations lock this row before taking OpenRouter advisory locks.
@@ -308,7 +307,6 @@ func (q *Queries) LockTrialLifecycleForRearm(ctx context.Context, organizationID
 		&i.EndsAt,
 		&i.ConvertedAt,
 		&i.DemotedAt,
-		&i.CreatedAt,
 	)
 	return i, err
 }

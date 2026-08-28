@@ -261,6 +261,7 @@ func seedDemotedTrial(t *testing.T, ctx context.Context, conn *pgxpool.Pool, org
 	seedOrg(t, ctx, conn, orgFixture{id: orgID, name: orgID + " Name", slug: orgID + "-slug", accountType: "free", whitelisted: false})
 	seedTrial(t, ctx, conn, trialFixture{orgID: orgID, tier: tier, endsAt: endsAt, demotedAt: &demotedAt})
 	seedArmAudit(t, ctx, conn, orgID)
+	require.NoError(t, testrepo.New(conn).SeedTrialDemotionAuditFixture(ctx, orgID))
 	seedOpenRouterKey(t, ctx, conn, orgID, keyFixture{keyType: openrouter.KeyTypeChat, monthlyCredits: 50, disabled: true})
 	seedOpenRouterKey(t, ctx, conn, orgID, keyFixture{keyType: openrouter.KeyTypeInternal, monthlyCredits: 37, disabled: true})
 	classifyRearmKey(t, ctx, conn, orgID, openrouter.KeyTypeChat, []string{string(openrouter.DisableCauseTrialDemotion)})
@@ -533,7 +534,7 @@ func seedRearmAuditMetadata(t *testing.T, ctx context.Context, conn *pgxpool.Poo
 	require.NoError(t, err)
 }
 
-func TestRearmTrial_HistoricalRearmAuditDoesNotAuthorizeNewActiveGenerationRetry(t *testing.T) {
+func TestRearmTrial_PriorCycleRearmAuditDoesNotAuthorizeCurrentCycleRetry(t *testing.T) {
 	t.Parallel()
 
 	ctx, svc, conn, upstream := newProductionRearmService(t)
@@ -544,8 +545,10 @@ func TestRearmTrial_HistoricalRearmAuditDoesNotAuthorizeNewActiveGenerationRetry
 	for _, keyType := range openrouter.AllKeyTypes {
 		seedOpenRouterKey(t, ctx, conn, orgID, keyFixture{keyType: keyType, monthlyCredits: 50, disabled: false})
 	}
-	seedArmAudit(t, ctx, conn, orgID)
-	seedRearmAuditMetadata(t, ctx, conn, orgID, `{"arm_operation_id":"00000000-0000-0000-0000-000000000001"}`)
+	armOperationID := seedArmAudit(t, ctx, conn, orgID)
+	require.NoError(t, testrepo.New(conn).SeedTrialDemotionAuditFixture(ctx, orgID))
+	seedRearmAuditMetadata(t, ctx, conn, orgID, fmt.Sprintf(`{"arm_operation_id":%q}`, armOperationID))
+	require.NoError(t, testrepo.New(conn).SeedTrialDemotionAuditFixture(ctx, orgID))
 
 	_, err := svc.RearmTrial(ctx, &gen.RearmTrialPayload{ID: orgID, Days: 14})
 	requireOopsCode(t, err, oops.CodeConflict)
@@ -575,6 +578,7 @@ func TestRearmTrial_MalformedOrMissingRetryMetadataIsRejected(t *testing.T) {
 				seedOpenRouterKey(t, ctx, conn, orgID, keyFixture{keyType: keyType, monthlyCredits: 50, disabled: false})
 			}
 			seedArmAudit(t, ctx, conn, orgID)
+			require.NoError(t, testrepo.New(conn).SeedTrialDemotionAuditFixture(ctx, orgID))
 			seedRearmAuditMetadata(t, ctx, conn, orgID, tt.metadata)
 
 			_, err := svc.RearmTrial(ctx, &gen.RearmTrialPayload{ID: orgID, Days: 14})
@@ -609,6 +613,7 @@ func TestRearmTrial_AmbiguousRetryAuditIsRejected(t *testing.T) {
 	seedOrg(t, ctx, conn, orgFixture{id: orgID, name: orgID, slug: orgID, accountType: "enterprise", whitelisted: true})
 	seedTrial(t, ctx, conn, trialFixture{orgID: orgID, tier: "enterprise", endsAt: endsAt})
 	armOperationID := seedArmAudit(t, ctx, conn, orgID)
+	require.NoError(t, testrepo.New(conn).SeedTrialDemotionAuditFixture(ctx, orgID))
 	metadata := fmt.Sprintf(`{"arm_operation_id":%q}`, armOperationID)
 	seedRearmAuditMetadata(t, ctx, conn, orgID, metadata)
 	seedRearmAuditMetadata(t, ctx, conn, orgID, metadata)
@@ -694,6 +699,37 @@ func TestRearmTrial_RecreatedGenerationWithSameCreatedAtRejectsStaleRetry(t *tes
 	_, err = svc.RearmTrial(ctx, &gen.RearmTrialPayload{ID: orgID, Days: 14})
 	requireOopsCode(t, err, oops.CodeConflict)
 	require.Equal(t, requestsBeforeRetry, upstream.count(), "a stale generation must not reconcile keys")
+}
+
+func TestRearmTrial_RetryUsesOnlyCurrentDemotionCycle(t *testing.T) {
+	t.Parallel()
+
+	ctx, svc, conn, upstream := newProductionRearmService(t)
+	const orgID = "org_rearm_current_demotion_cycle"
+	seedDemotedTrial(t, ctx, conn, orgID, "enterprise")
+
+	_, err := svc.RearmTrial(ctx, &gen.RearmTrialPayload{ID: orgID, Days: 14})
+	require.NoError(t, err)
+	firstCyclePatches := upstream.count()
+	require.Positive(t, firstCyclePatches)
+
+	require.NoError(t, testrepo.New(conn).RedemoteTrialLifecycleFixture(ctx, orgID))
+	require.NoError(t, testrepo.New(conn).SeedTrialDemotionAuditFixture(ctx, orgID))
+	for _, keyType := range openrouter.AllKeyTypes {
+		classifyRearmKey(t, ctx, conn, orgID, keyType, []string{string(openrouter.DisableCauseTrialDemotion)})
+	}
+
+	upstream.setFail(true)
+	_, err = svc.RearmTrial(ctx, &gen.RearmTrialPayload{ID: orgID, Days: 14})
+	requireOopsCode(t, err, oops.CodeGatewayError)
+	failedCyclePatches := upstream.count()
+	require.Greater(t, failedCyclePatches, firstCyclePatches)
+	require.False(t, readTrial(t, ctx, conn, orgID).DemotedAt.Valid, "re-arm commit must survive its post-commit reconciliation failure")
+
+	upstream.setFail(false)
+	_, err = svc.RearmTrial(ctx, &gen.RearmTrialPayload{ID: orgID, Days: 14})
+	require.NoError(t, err)
+	require.Greater(t, upstream.count(), failedCyclePatches, "retry must reconcile the committed current cycle")
 }
 
 func TestRearmTrial_RestoresTheOrganizationAndRevivesEveryKey(t *testing.T) {

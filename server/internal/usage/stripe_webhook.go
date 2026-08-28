@@ -445,7 +445,7 @@ func recoverPaygOpenRouterChatKeyTx(ctx context.Context, tx pgx.Tx, organization
 	disableCauses := slices.DeleteFunc(slices.Clone(key.DisableCauses), func(cause string) bool {
 		return cause == string(openrouter.DisableCauseBillingInactive)
 	})
-	stateChanged := len(disableCauses) != len(key.DisableCauses) || key.MonthlyCredits != int64(limit) || key.Disabled != (len(disableCauses) > 0)
+	stateChanged := key.MonthlyCredits != int64(limit) || key.Disabled != (len(disableCauses) > 0)
 	rows, err := repo.New(tx).RecoverPaygOpenRouterChatKey(ctx, repo.RecoverPaygOpenRouterChatKeyParams{
 		MonthlyCredits: int64(limit),
 		OrganizationID: organizationID,
