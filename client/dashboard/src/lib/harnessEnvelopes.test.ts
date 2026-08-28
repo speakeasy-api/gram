@@ -55,6 +55,14 @@ describe("stripLeadingEnvelopes", () => {
     ).toBe("summarize the thread");
   });
 
+  it("does not treat a hash-tagged human line as a history row", () => {
+    expect(
+      stripLeadingEnvelopes(
+        "Chat history since last reply (untrusted, for context):\n#1 2026-08-27 13:51:33 EDT alice: hi\n#note can: continue",
+      ),
+    ).toBe("#note can: continue");
+  });
+
   it("keeps a human line right after a history block", () => {
     expect(
       stripLeadingEnvelopes(

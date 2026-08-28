@@ -26,9 +26,9 @@ import (
 // headers over a ```json fence (Conversation info, Sender, Reply target, …),
 // and chat-history / chat-window paragraphs whose rows are
 // "#id 2026-08-27 13:51:33 EDT [reply target] ->#id sender: text"; a row
-// must open with the #id and/or timestamp marker (each followed by its
-// separator) and carry a "sender: " later, which bounds the paragraph so a
-// human line right after it survives. OpenClaw also stamps every turn with a
+// must carry the timestamp (after an optional #id) and a "sender: " later,
+// which bounds the paragraph so a human line right after it — even
+// "#note can: continue" — survives. OpenClaw also stamps every turn with a
 // leading "[Thu 2026-08-27 13:51 EDT] " that always carries a short zone name;
 // a human line that opens with a date-time bracket but no zone is not the
 // stamp and is left alone. The hooks relay strips all of this
@@ -40,7 +40,7 @@ var leadingEnvelopeRE = regexp.MustCompile(`(?s)^(?:` +
 	`|\s*<notification>.*?</notification>\s*` +
 	"|\\s*Delivery: (?:to send a message, use the `message` tool\\.|Final assistant text is not automatically delivered in this run\\.[^\\n]*|No visible reply is delivered automatically in this run[^\\n]*)\\s*" +
 	"|\\s*[^\\n]* \\(untrusted[^)\\n]*\\):\\n```json\\n.*?\\n```\\s*" +
-	`|\s*[^\n]* \(untrusted(?:, chronological[^)\n]*|, for context)\):\n(?:(?:#\S+ (?:\d{4}-\d{2}-\d{2} \d{2}:\d{2}(?::\d{2})?(?: [A-Z]{1,5})? )?|\d{4}-\d{2}-\d{2} \d{2}:\d{2}(?::\d{2})?(?: [A-Z]{1,5})? )(?:\[reply target\] )?(?:->#\S+ )?[^\n]*: [^\n]*(?:\n|$))*\s*` +
+	`|\s*[^\n]* \(untrusted(?:, chronological[^)\n]*|, for context)\):\n(?:(?:#\S+ )?\d{4}-\d{2}-\d{2} \d{2}:\d{2}(?::\d{2})?(?: [A-Z]{1,5})? )(?:\[reply target\] )?(?:->#\S+ )?[^\n]*: [^\n]*(?:\n|$))*\s*` +
 	`)+`)
 
 // StripLeadingEnvelopes removes any leading harness framing so downstream LLM

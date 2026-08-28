@@ -12,13 +12,14 @@
 //   Telegram): a "Delivery: …" hint line, "<Label> (untrusted…):" headers over a
 //   ```json fence (Conversation info, Sender, Reply target, …), and
 //   chat-history / chat-window paragraphs whose rows are
-//   "#id 2026-08-27 13:51:33 EDT [reply target] ->#id sender: text". OpenClaw
+//   "#id 2026-08-27 13:51:33 EDT [reply target] ->#id sender: text" — a row
+//   always carries the timestamp, so "#note can: continue" is not one. OpenClaw
 //   also stamps every turn with a leading "[Thu 2026-08-27 13:51 EDT] " that
 //   always carries a short zone name; a human date-time bracket without a
 //   zone is not the stamp and is left alone.
 const STAMP = String.raw`\s*\[(?:Mon|Tue|Wed|Thu|Fri|Sat|Sun) \d{4}-\d{2}-\d{2} \d{2}:\d{2}(?::\d{2})? [A-Z]{1,5}(?:[+-]\d{1,2}(?::\d{2})?)?\] *`;
 const ROW_TIME = String.raw`\d{4}-\d{2}-\d{2} \d{2}:\d{2}(?::\d{2})?(?: [A-Z]{1,5})? `;
-const HISTORY_ROW = String.raw`(?:#\S+ (?:${ROW_TIME})?|${ROW_TIME})(?:\[reply target\] )?(?:->#\S+ )?[^\n]*: [^\n]*(?:\n|$)`;
+const HISTORY_ROW = String.raw`(?:#\S+ ${ROW_TIME}|${ROW_TIME})(?:\[reply target\] )?(?:->#\S+ )?[^\n]*: [^\n]*(?:\n|$)`;
 const ENVELOPE = [
   STAMP,
   String.raw`\s*<message-context>[\s\S]*?<\/message-context>\s*`,
