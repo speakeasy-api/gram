@@ -351,6 +351,14 @@ func PlantMCPServerDependents(ctx context.Context, db *pgxpool.Pool, orgID, proj
 				$2::uuid, registration.id, clock_timestamp() + interval '1 day'
 			FROM registration
 			RETURNING id
+		), milestone AS (
+			INSERT INTO platform_mcp_onboarding_milestones (
+				organization_id, milestone, project_id, mcp_key, attempt_id
+			)
+			SELECT $1, 'registration_succeeded', $2::uuid,
+				'reseed-safety:reseed-safety-server', registration.id
+			FROM registration
+			RETURNING id
 		), distribution AS (
 			INSERT INTO platform_mcp_distributions (
 				organization_id, project_id, registration_id, default_plugin_id, plugin_id,
@@ -381,7 +389,7 @@ func PlantMCPServerDependents(ctx context.Context, db *pgxpool.Pool, orgID, proj
 			distribution.version, workflow.id, 'reseed_safety_tool', 'productivity',
 			clock_timestamp()
 		FROM distribution CROSS JOIN workflow CROSS JOIN receipt CROSS JOIN feedback
-			CROSS JOIN assistant_attachment`, orgID, projectID)
+			CROSS JOIN assistant_attachment CROSS JOIN milestone`, orgID, projectID)
 	if err != nil {
 		return fmt.Errorf("plant MCP server dependents: %w", err)
 	}
@@ -389,6 +397,23 @@ func PlantMCPServerDependents(ctx context.Context, db *pgxpool.Pool, orgID, proj
 		return fmt.Errorf("plant MCP server dependents: expected 1 complete dependent set, got %d", tag.RowsAffected())
 	}
 	return nil
+}
+
+// CountReseedSafetyProjectMilestones returns the number of project-scoped
+// onboarding milestones planted by PlantMCPServerDependents.
+func CountReseedSafetyProjectMilestones(ctx context.Context, db *pgxpool.Pool, orgID, projectID string) (int, error) {
+	var count int
+	err := db.QueryRow(ctx, `
+		SELECT count(*)
+		FROM platform_mcp_onboarding_milestones
+		WHERE organization_id = $1
+		  AND project_id = $2::uuid
+		  AND milestone = 'registration_succeeded'
+		  AND mcp_key = 'reseed-safety:reseed-safety-server'`, orgID, projectID).Scan(&count)
+	if err != nil {
+		return 0, fmt.Errorf("count reseed safety project milestones: %w", err)
+	}
+	return count, nil
 }
 
 // CreateProjectWithoutMCPServer adds a project used to prove the dependent

@@ -91,6 +91,12 @@ func TestDemoSeedSafety(t *testing.T) {
 	require.NoError(t, demoseedtest.PlantMCPServerDependents(
 		ctx, db, otherTenantSpec.OrgID, otherTenantSpec.ProjectID(),
 	))
+	milestoneCount, err := demoseedtest.CountReseedSafetyProjectMilestones(
+		ctx, db, otherTenantSpec.OrgID, otherTenantSpec.ProjectID(),
+	)
+	require.NoError(t, err)
+	require.Equal(t, 1, milestoneCount,
+		"MCP dependent fixture must plant one project-scoped onboarding milestone")
 
 	// A missing target server must not leave the fixture's assistant or plugin
 	// parents behind. Snapshot every table so the regression covers all orphans,
@@ -136,12 +142,24 @@ func TestDemoSeedSafety(t *testing.T) {
 	require.NoError(t, err)
 
 	requirePostgresRowsPreserved(t, pgBefore, pgAfter1)
+	milestoneCount, err = demoseedtest.CountReseedSafetyProjectMilestones(
+		ctx, db, otherTenantSpec.OrgID, otherTenantSpec.ProjectID(),
+	)
+	require.NoError(t, err)
+	require.Equal(t, 1, milestoneCount,
+		"demo seed modified or deleted another tenant's onboarding milestone")
 	requireNoLeakIntoOtherTenants(t, addedRows(pgBefore, pgAfter1), fixtureUUIDs)
 	requireClickHouseOutsideUnchanged(t, chBefore, chAfter1)
 
 	// Plant stray demo-scope rows: the next run must clean them up, restoring
 	// the exact per-table counts of the first run.
 	require.NoError(t, demoseedtest.TamperDemoRows(ctx, db, ch, constants.DemoOrganizationID, DefaultSpec().ProjectID()))
+	milestoneCount, err = demoseedtest.CountReseedSafetyProjectMilestones(
+		ctx, db, constants.DemoOrganizationID, DefaultSpec().ProjectID(),
+	)
+	require.NoError(t, err)
+	require.Equal(t, 1, milestoneCount,
+		"demo tamper fixture must plant one project-scoped onboarding milestone")
 
 	// Second real seed run.
 	require.NoError(t, Run(ctx, logger, db, ch, blob, DefaultSpec()))
@@ -152,6 +170,18 @@ func TestDemoSeedSafety(t *testing.T) {
 	require.NoError(t, err)
 
 	requirePostgresRowsPreserved(t, pgBefore, pgAfter2)
+	milestoneCount, err = demoseedtest.CountReseedSafetyProjectMilestones(
+		ctx, db, otherTenantSpec.OrgID, otherTenantSpec.ProjectID(),
+	)
+	require.NoError(t, err)
+	require.Equal(t, 1, milestoneCount,
+		"demo reseed modified or deleted another tenant's onboarding milestone")
+	milestoneCount, err = demoseedtest.CountReseedSafetyProjectMilestones(
+		ctx, db, constants.DemoOrganizationID, DefaultSpec().ProjectID(),
+	)
+	require.NoError(t, err)
+	require.Zero(t, milestoneCount,
+		"demo reseed did not clean up the project-scoped onboarding milestone")
 	requireNoLeakIntoOtherTenants(t, addedRows(pgBefore, pgAfter2), fixtureUUIDs)
 	requireClickHouseOutsideUnchanged(t, chBefore, chAfter2)
 

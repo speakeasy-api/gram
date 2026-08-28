@@ -383,6 +383,8 @@ BEGIN
       AND (project_id = proj_a OR workflow_id IN
         (SELECT id FROM platform_mcp_onboarding_workflows
          WHERE organization_id = demo_org AND selected_project_id = proj_a));
+  DELETE FROM platform_mcp_onboarding_milestones
+    WHERE organization_id = demo_org AND project_id = proj_a;
   DELETE FROM platform_mcp_onboarding_workflows
     WHERE organization_id = demo_org AND selected_project_id = proj_a;
   DELETE FROM platform_mcp_operation_receipts
