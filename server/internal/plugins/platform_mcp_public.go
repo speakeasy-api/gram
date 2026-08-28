@@ -47,6 +47,23 @@ func PublicPlatformMCPFiles(serverURL string, version string) (map[string][]byte
 		return nil, fmt.Errorf("public marketplace server URL must be https, got %q", serverURL)
 	}
 
+	return platformMCPMarketplaceFiles(serverURL, PublicMarketplaceRepoURL, version)
+}
+
+// LocalPlatformMCPFiles renders the same first-party marketplace against the
+// local server. Unlike the public artifact, local development may deliberately
+// use HTTP, so callers must keep this output on the local-only Git server.
+func LocalPlatformMCPFiles(serverURL, marketplaceRepoURL string) (map[string][]byte, error) {
+	if strings.TrimSpace(serverURL) == "" {
+		return nil, fmt.Errorf("server URL is required")
+	}
+	if strings.TrimSpace(marketplaceRepoURL) == "" {
+		return nil, fmt.Errorf("marketplace repository URL is required")
+	}
+	return platformMCPMarketplaceFiles(serverURL, marketplaceRepoURL, "")
+}
+
+func platformMCPMarketplaceFiles(serverURL, marketplaceRepoURL, version string) (map[string][]byte, error) {
 	cfg := GenerateConfig{
 		OrgName:          publicMarketplaceDisplayName,
 		OrgEmail:         publicMarketplaceOwnerEmail,
@@ -70,7 +87,7 @@ func PublicPlatformMCPFiles(serverURL string, version string) (map[string][]byte
 	if err := generatePublicMarketplaceManifests(files, cfg); err != nil {
 		return nil, err
 	}
-	files["README.md"] = publicMarketplaceReadme()
+	files["README.md"] = publicMarketplaceReadme(marketplaceRepoURL)
 	files["LICENSE"] = []byte(publicMarketplaceLicense)
 	return files, nil
 }
@@ -165,7 +182,7 @@ func generatePublicMarketplaceManifests(files map[string][]byte, cfg GenerateCon
 	return nil
 }
 
-func publicMarketplaceReadme() []byte {
+func publicMarketplaceReadme(marketplaceRepoURL string) []byte {
 	var b strings.Builder
 	b.WriteString("# " + platformMCPDisplayName + "\n\n")
 	b.WriteString(platformMCPDescription + "\n\n")
@@ -178,25 +195,29 @@ func publicMarketplaceReadme() []byte {
 
 	b.WriteString("## Claude Code\n\n")
 	b.WriteString("```\n")
-	b.WriteString("/plugin marketplace add " + PublicMarketplaceRepoURL + "\n")
+	b.WriteString("/plugin marketplace add " + marketplaceRepoURL + "\n")
 	b.WriteString("/plugin install " + platformMCPPluginName + "@" + PublicMarketplaceName + "\n")
 	b.WriteString("```\n\n")
 
 	b.WriteString("## Codex\n\n")
 	b.WriteString("```\n")
-	b.WriteString("codex plugin marketplace add " + PublicMarketplaceRepoURL + "\n")
+	b.WriteString("codex plugin marketplace add " + marketplaceRepoURL + "\n")
 	b.WriteString("```\n\n")
 	b.WriteString("Then open `/plugins` and install `" + platformMCPCodexPluginName + "`.\n\n")
 
 	b.WriteString("## Cursor\n\n")
 	b.WriteString("In the Cursor dashboard for a team you administer, go to Settings → Plugins → Import and paste:\n\n")
 	b.WriteString("```\n")
-	b.WriteString(PublicMarketplaceRepoURL + "\n")
+	b.WriteString(marketplaceRepoURL + "\n")
 	b.WriteString("```\n\n")
 
 	b.WriteString("## Other agents\n\n")
 	b.WriteString("`opencode-plugins/` and `agent-plugins/` carry the same server in the OpenCode and portable ")
-	b.WriteString("Agent Plugins formats. Clone this repository or download an archive from GitHub and point your ")
+	if marketplaceRepoURL == PublicMarketplaceRepoURL {
+		b.WriteString("Agent Plugins formats. Clone this repository or download an archive from GitHub and point your ")
+	} else {
+		b.WriteString("Agent Plugins formats. Clone this repository and point your ")
+	}
 	b.WriteString("agent at the directory for your format.\n")
 	return []byte(b.String())
 }

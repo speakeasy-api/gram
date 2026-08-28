@@ -90,7 +90,12 @@ export function DistributeServersStep({
 
   // The catalog is small and returned in a single response, so we fetch the
   // whole list once and search/filter it client-side (no cursor pagination).
-  const { data, isLoading } = useListMCPCatalog();
+  const {
+    data,
+    isLoading,
+    isError: catalogLoadFailed,
+    refetch: refetchCatalog,
+  } = useListMCPCatalog();
   const { data: publishStatus } = usePublishStatus();
 
   // Default-plugin membership: map its mcp_server-backed entries through their
@@ -430,6 +435,23 @@ export function DistributeServersStep({
             <div className="flex items-center justify-center py-12">
               <Loader2 className="text-muted-foreground h-6 w-6 animate-spin" />
             </div>
+          ) : catalogLoadFailed ? (
+            <div
+              role="alert"
+              className="border-destructive/20 mt-3 flex items-center justify-between gap-3 border p-3"
+            >
+              <p className="text-destructive text-sm">
+                Couldn't load MCP servers. Check that this project exists and
+                that you have access to it.
+              </p>
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => void refetchCatalog()}
+              >
+                <Button.Text>Retry</Button.Text>
+              </Button>
+            </div>
           ) : matchedServers.length === 0 ? (
             <p className="text-muted-foreground mt-3 text-sm">
               {query
@@ -503,7 +525,7 @@ export function DistributeServersStep({
             </button>
           )}
 
-          {!isLoading && (
+          {!isLoading && !catalogLoadFailed && (
             <p className="text-muted-foreground mt-4 text-xs leading-relaxed">
               Only servers that support OAuth dynamic client registration (DCR)
               are shown here — Speakeasy can configure these automatically. More

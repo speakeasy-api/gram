@@ -2,11 +2,23 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, render, screen } from "@testing-library/react";
 
 import { PlatformMCPInstallWalkthrough } from "./platform-mcp-install-walkthrough";
+import { platformMCPMarketplaceRepoURL } from "./platform-mcp-marketplace";
 
 // The real CodeBlock reads theme config from a provider this unit test has no
 // reason to mount; the snippet text is what the assertions are about.
 vi.mock("@/components/code", () => ({
   CodeBlock: ({ children }: { children: string }) => <pre>{children}</pre>,
+}));
+vi.mock("@/lib/utils", async (importOriginal) => ({
+  ...(await importOriginal<Record<string, unknown>>()),
+  getServerURL: () => "https://localhost:8080",
+}));
+vi.mock("./platform-mcp-marketplace", () => ({
+  platformMCPMarketplaceRepoURL: vi.fn((isDevelopment = true) =>
+    isDevelopment
+      ? "https://localhost:8080/marketplace/local-platform-mcp-marketplace-000000000000.git"
+      : "https://github.com/speakeasy-api/marketplace",
+  ),
 }));
 
 const MCP_URL = "https://app.example.com/mcp/platform";
@@ -70,9 +82,32 @@ describe("PlatformMCPInstallWalkthrough", () => {
     expect(methodButton(/Marketplace install/).disabled).toBe(false);
   });
 
-  // The public repository is the same for every organization, so the commands
-  // are fixed rather than resolved from per-organization package state.
-  it("installs a certified agent from the public marketplace", () => {
+  it("tells Claude Code users how to open OAuth explicitly", () => {
+    render(
+      <PlatformMCPInstallWalkthrough
+        initialClient="claude_code"
+        mcpUrl={MCP_URL}
+      />,
+    );
+
+    expect(screen.getByText(/Open \/mcp in Claude Code/)).toBeTruthy();
+    expect(
+      screen.getByText(/Restarting Claude Code alone may not/),
+    ).toBeTruthy();
+  });
+
+  it("makes restart conditional for an unknown agent", () => {
+    render(
+      <PlatformMCPInstallWalkthrough initialClient="other" mcpUrl={MCP_URL} />,
+    );
+
+    expect(screen.getByText(/Restart your agent if needed/)).toBeTruthy();
+  });
+
+  it("installs a certified agent from the local marketplace in development", () => {
+    vi.mocked(platformMCPMarketplaceRepoURL).mockReturnValueOnce(
+      "https://localhost:8080/marketplace/local-platform-mcp-marketplace-000000000000.git",
+    );
     render(
       <PlatformMCPInstallWalkthrough
         initialClient="claude_code"
@@ -82,7 +117,7 @@ describe("PlatformMCPInstallWalkthrough", () => {
 
     expect(
       screen.getByText(
-        "/plugin marketplace add https://github.com/speakeasy-api/marketplace",
+        "/plugin marketplace add https://localhost:8080/marketplace/local-platform-mcp-marketplace-000000000000.git",
       ),
     ).toBeTruthy();
     expect(

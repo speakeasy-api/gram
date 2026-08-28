@@ -90,3 +90,19 @@ func TestPublicPlatformMCPFilesRequiresServerURL(t *testing.T) {
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "invalid Platform MCP server URL")
 }
+
+func TestLocalPlatformMCPFilesTargetsLocalServer(t *testing.T) {
+	t.Parallel()
+
+	const marketplaceRepoURL = "http://localhost:8080/marketplace/local-platform-mcp-marketplace-000000000000.git"
+	files, err := LocalPlatformMCPFiles("http://localhost:8080", marketplaceRepoURL)
+	require.NoError(t, err)
+	require.Contains(t, string(files["speakeasy/.mcp.json"]), "http://localhost:8080/platform-mcp")
+	require.Contains(t, string(files["README.md"]), "/plugin marketplace add "+marketplaceRepoURL)
+
+	var claude marketplaceManifest
+	require.NoError(t, json.Unmarshal(files[".claude-plugin/marketplace.json"], &claude))
+	require.Equal(t, PublicMarketplaceName, claude.Name)
+	require.Len(t, claude.Plugins, 1)
+	require.Equal(t, platformMCPPluginName, claude.Plugins[0].Name)
+}
