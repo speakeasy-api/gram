@@ -40,7 +40,9 @@ func TestCreateMetaMcpServer_Success(t *testing.T) {
 	require.Equal(t, "my gateway", result.Name)
 	require.Equal(t, authCtx.ActiveOrganizationID, result.OrganizationID)
 	require.Equal(t, authCtx.ProjectID.String(), result.ProjectID)
-	require.Nil(t, result.UserSessionIssuerID)
+	// A gateway without sign-in is a trap (anonymous callers, no member
+	// credentials), so omitting the issuer mints a dedicated one.
+	require.NotNil(t, result.UserSessionIssuerID)
 
 	afterCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionMetaMcpServerCreate)
 	require.NoError(t, err)

@@ -7,6 +7,9 @@ import { Text } from "@/components/ui/Text";
 import { useViewMode } from "@/components/ui/ViewToggle/use-view-mode";
 import { useProject } from "@/contexts/Auth";
 import { AddServerDialog } from "@/pages/catalog/AddServerDialog";
+import { useSdkClient } from "@/contexts/Sdk";
+import { invalidateAllMetaMcpMembers } from "@gram/client/react-query/metaMcpMembers.js";
+import { useQueryClient } from "@tanstack/react-query";
 import { CommandBar } from "@/pages/catalog/CommandBar";
 import {
   type PulseMCPServer,
@@ -19,7 +22,7 @@ import { Button } from "@/components/ui/Button";
 import { Stack } from "@/components/ui/Stack";
 import { SearchXIcon } from "lucide-react";
 import { useMemo, useState } from "react";
-import { Outlet } from "react-router";
+import { Outlet, useNavigate, useSearchParams } from "react-router";
 import {
   useFilterState as useDimensionFilters,
   type FilterValue,
@@ -61,6 +64,33 @@ function CatalogInner() {
   const routes = useRoutes();
   const project = useProject();
   const [searchQuery, setSearchQuery] = useState("");
+  const client = useSdkClient();
+  const queryClient = useQueryClient();
+  const navigate = useNavigate();
+  // Deep link from a gateway's Add member sheet: servers installed here get
+  // attached to that gateway as members, and the flow returns to it.
+  const [searchParams] = useSearchParams();
+  const attachToGatewayId = searchParams.get("attachToGateway");
+
+  const attachInstalledToGateway = async (result: {
+    completedMcpServerIds?: string[];
+  }) => {
+    if (!attachToGatewayId) return;
+    for (const mcpServerId of result.completedMcpServerIds ?? []) {
+      try {
+        await client.metaMcp.addMember({
+          addMetaMcpMemberForm: {
+            metaMcpServerId: attachToGatewayId,
+            mcpServerId,
+          },
+        });
+      } catch (err) {
+        console.error("failed to attach installed server to gateway", err);
+      }
+    }
+    await invalidateAllMetaMcpMembers(queryClient);
+    void navigate(routes.mcp.gateway.members.href(attachToGatewayId));
+  };
 
   // Category + sort stay page state (no UI to change category today; sort is the
   // SortDropdown). The five granular filters now run through the unified filter
@@ -266,6 +296,11 @@ function CatalogInner() {
             clearSelection();
           }
         }}
+        onInstallFinished={
+          attachToGatewayId
+            ? (result) => void attachInstalledToGateway(result)
+            : undefined
+        }
       />
       <CommandBar
         selectedCount={selectedServers.size}

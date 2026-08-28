@@ -105,6 +105,7 @@ export function GatewayInspectTab({
           error={error}
           hasUrl={!!connectUrl}
           configuredMembers={rows.length}
+          hasIssuer={!!metaMcpServer.userSessionIssuerId}
           connectUrl={connectUrl}
           headers={headers}
           onRetry={refetch}
@@ -123,6 +124,7 @@ function InspectBody({
   error,
   hasUrl,
   configuredMembers,
+  hasIssuer,
   connectUrl,
   headers,
   onRetry,
@@ -135,6 +137,7 @@ function InspectBody({
   error: Error | null;
   hasUrl: boolean;
   configuredMembers: number;
+  hasIssuer: boolean;
   connectUrl: string | undefined;
   headers: Record<string, string> | undefined;
   onRetry: () => void;
@@ -238,7 +241,9 @@ function InspectBody({
               />
               {data.servers.length < configuredMembers && (
                 <Text muted className="text-xs">
-                  {`${configuredMembers - data.servers.length} of ${configuredMembers} configured members aren't served to you. Private members need mcp:connect, and members with no gateway dispatch path are excluded.`}
+                  {hasIssuer
+                    ? `${configuredMembers - data.servers.length} of ${configuredMembers} configured members aren't served to you. Private members need mcp:connect on the member server (Team Access on its page), and disabled, unproxied, or slugless members are never served.`
+                    : `${configuredMembers - data.servers.length} of ${configuredMembers} configured members aren't served. This gateway has no sign-in attached, so every caller — including this tab — is anonymous and private members are hidden. Attach an issuer under Settings → Authentication.`}
                 </Text>
               )}
             </div>

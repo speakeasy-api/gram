@@ -29,6 +29,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	customdomainsrepo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
 	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
+	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/metamcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
@@ -115,6 +116,16 @@ func (s *Service) CreateMetaMcpServer(ctx context.Context, payload *gen.CreateMe
 
 	if err := s.lockIssuerReference(ctx, txRepo, *authCtx.ProjectID, issuerID); err != nil {
 		return nil, err
+	}
+
+	// A gateway without sign-in serves everyone anonymously, which hides
+	// every private member and can hold no member credentials — a trap, not
+	// a use case. Mint a dedicated issuer when the caller supplies none.
+	if !issuerID.Valid {
+		issuerID, err = mcpservers.MintServerUserSessionIssuer(ctx, dbtx, authCtx.ActiveOrganizationID, *authCtx.ProjectID, payload.Name)
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "mint meta mcp issuer").LogError(ctx, logger)
+		}
 	}
 
 	created, err := txRepo.CreateMetaMCPServer(ctx, repo.CreateMetaMCPServerParams{
@@ -575,6 +586,27 @@ func (s *Service) AddMetaMcpMember(ctx context.Context, payload *gen.AddMetaMcpM
 			return nil, oops.E(oops.CodeConflict, err, "mcp server is already a member of this meta mcp server").LogError(ctx, logger)
 		}
 		return nil, oops.E(oops.CodeUnexpected, err, "add meta mcp member").LogError(ctx, logger)
+	}
+
+	// Best-effort consent wiring: when both sides have the identity pieces —
+	// the gateway an issuer, the member a stamped upstream AS with a client —
+	// bind that client to the gateway's issuer so consent offers the member's
+	// provider without a manual attach ceremony.
+	if meta.UserSessionIssuerID.Valid && server.RemoteSessionIssuerID.Valid && server.UserSessionIssuerID.Valid {
+		attached, aerr := txRepo.AutoAttachMemberProviderClient(ctx, repo.AutoAttachMemberProviderClientParams{
+			GatewayIssuerID: meta.UserSessionIssuerID.UUID,
+			ProjectID:       *authCtx.ProjectID,
+			MemberIssuerID:  server.UserSessionIssuerID.UUID,
+			RemoteIssuerID:  server.RemoteSessionIssuerID.UUID,
+		})
+		if aerr != nil {
+			return nil, oops.E(oops.CodeUnexpected, aerr, "attach member provider client").LogError(ctx, logger)
+		}
+		if attached > 0 {
+			logger.InfoContext(ctx, "attached member provider client to meta mcp issuer",
+				attr.SlogMetaMcpServerID(meta.ID.String()),
+				attr.SlogMcpServerID(server.ID.String()))
+		}
 	}
 
 	if err := s.audit.LogMetaMcpMemberAdd(ctx, dbtx, audit.LogMetaMcpMemberEvent{

@@ -19,6 +19,7 @@ import { Text } from "@/components/ui/Text";
 import { useSdkClient } from "@/contexts/Sdk";
 import { mcpServerRouteParam } from "@/lib/sources";
 import { useRoutes } from "@/routes";
+import { useNavigate } from "react-router";
 import type { McpServer } from "@gram/client/models/components/mcpserver.js";
 import type { MetaMcpServer } from "@gram/client/models/components/metamcpserver.js";
 import { invalidateAllMetaMcpMembers } from "@gram/client/react-query/metaMcpMembers.js";
@@ -194,6 +195,8 @@ export function GatewayMembersTab({
 }: {
   metaMcpServer: MetaMcpServer;
 }): JSX.Element {
+  const routes = useRoutes();
+  const navigate = useNavigate();
   const client = useSdkClient();
   const queryClient = useQueryClient();
   const { rows, isLoading, servers } = useGatewayMemberRows(metaMcpServer.id);
@@ -419,6 +422,13 @@ export function GatewayMembersTab({
         servers={servers}
         memberServerIds={new Set(rows.map((row) => row.member.mcpServerId))}
         onAdd={(server) => void handleAdd(server)}
+        onAddFromCatalog={() =>
+          void navigate(
+            routes.sources.addFromCatalog.href() +
+              "?attachToGateway=" +
+              metaMcpServer.id,
+          )
+        }
         adding={mutating}
       />
 
@@ -474,6 +484,7 @@ function AddMemberSheet({
   servers,
   memberServerIds,
   onAdd,
+  onAddFromCatalog,
   adding,
 }: {
   open: boolean;
@@ -481,6 +492,7 @@ function AddMemberSheet({
   servers: McpServer[];
   memberServerIds: Set<string>;
   onAdd: (server: McpServer) => void;
+  onAddFromCatalog: () => void;
   adding: boolean;
 }): JSX.Element {
   const [search, setSearch] = useState("");
@@ -512,12 +524,17 @@ function AddMemberSheet({
           </SheetDescription>
         </SheetHeader>
 
-        <div className="px-6 pt-4">
-          <SearchBar
-            value={search}
-            onChange={setSearch}
-            placeholder="Search MCP servers..."
-          />
+        <div className="flex items-center gap-2 px-6 pt-4">
+          <div className="flex-1">
+            <SearchBar
+              value={search}
+              onChange={setSearch}
+              placeholder="Search MCP servers..."
+            />
+          </div>
+          <Button variant="secondary" onClick={onAddFromCatalog}>
+            <Button.Text>Add from catalog</Button.Text>
+          </Button>
         </div>
 
         <div className="flex-1 space-y-2 overflow-y-auto px-6 py-4">
