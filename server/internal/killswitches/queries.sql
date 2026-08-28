@@ -420,3 +420,179 @@ WHERE prescription.organization_id = @organization_id
   AND (sqlc.narg('after_id')::uuid IS NULL OR prescription.id > sqlc.narg('after_id')::uuid)
 ORDER BY prescription.id
 LIMIT @result_limit;
+
+-- name: ListCustomerKillswitches :many
+WITH db_time AS (
+  SELECT @status_as_of::timestamptz AS now
+), current_rows AS (
+  SELECT
+    p.id, p.updated_at, p.principal_key AS user_id, v.version,
+    v.resource_scope, v.starts_at, v.expires_at,
+    CASE
+      WHEN v.state = 'inactive' THEN 'lifted'
+      WHEN v.starts_at > db_time.now THEN 'scheduled'
+      WHEN v.expires_at IS NOT NULL AND v.expires_at <= db_time.now THEN 'expired'
+      ELSE 'active'
+    END::text AS customer_status,
+    CASE WHEN v.starts_at > v.activated_at THEN 'scheduled' ELSE 'now' END::text AS customer_start,
+    ARRAY(
+      SELECT r.resource_key
+      FROM killswitch_prescription_version_resources AS r
+      WHERE r.organization_id = p.organization_id
+        AND r.prescription_id = p.id
+        AND r.version = v.version
+      ORDER BY r.resource_key
+      LIMIT 1001
+    )::text[] AS selected_resource_keys
+  FROM killswitch_prescriptions AS p
+  JOIN killswitch_prescription_versions AS v
+    ON v.organization_id = p.organization_id
+   AND v.prescription_id = p.id
+   AND v.version = p.current_version
+  CROSS JOIN db_time
+  WHERE p.organization_id = @organization_id
+    AND p.definition_key = @definition_key
+    AND p.principal_kind = @principal_kind
+    AND p.resource_kind = @resource_kind
+    AND (sqlc.narg('user_id')::text IS NULL OR p.principal_key = sqlc.narg('user_id')::text)
+    AND (
+      sqlc.narg('cursor_updated_at')::timestamptz IS NULL
+      OR (p.updated_at, p.id) < (sqlc.narg('cursor_updated_at')::timestamptz, sqlc.narg('cursor_id')::uuid)
+    )
+)
+SELECT *
+FROM current_rows
+WHERE sqlc.narg('customer_status')::text IS NULL
+   OR customer_status = sqlc.narg('customer_status')::text
+ORDER BY updated_at DESC, id DESC
+LIMIT @result_limit;
+
+-- name: ListCustomerKillswitchHistory :many
+SELECT
+  a.seq, a.action, a.actor_id, a.actor_type, a.actor_display_name, a.created_at,
+  v.version, v.state, v.resource_scope, v.starts_at, v.expires_at,
+  v.internal_note, v.external_note,
+  ARRAY(
+    SELECT r.resource_key
+    FROM killswitch_prescription_version_resources AS r
+    WHERE r.organization_id = v.organization_id
+      AND r.prescription_id = v.prescription_id
+      AND r.version = v.version
+    ORDER BY r.resource_key
+    LIMIT 1001
+  )::text[] AS selected_resource_keys,
+  CASE
+    WHEN v.state = 'inactive' THEN 'lifted'
+    WHEN v.starts_at > clock_timestamp() THEN 'scheduled'
+    WHEN v.expires_at IS NOT NULL AND v.expires_at <= clock_timestamp() THEN 'expired'
+    ELSE 'active'
+  END::text AS customer_status,
+  CASE WHEN v.starts_at > v.activated_at THEN 'scheduled' ELSE 'now' END::text AS customer_start,
+  COALESCE(a.metadata->>'operation', '')::text AS operation
+FROM audit_logs AS a
+JOIN killswitch_prescription_versions AS v
+  ON v.organization_id = a.organization_id
+ AND v.prescription_id = @prescription_id
+ AND v.version = COALESCE(
+   (a.after_snapshot->>'version')::bigint,
+   (a.metadata->>'version')::bigint
+ )
+WHERE a.organization_id = @organization_id
+  AND a.subject_type = 'killswitch_prescription'
+  AND a.subject_id = @prescription_id::text
+  AND a.action IN ('killswitch:activate', 'killswitch:change', 'killswitch:deactivate', 'killswitch:expire')
+ORDER BY a.seq DESC
+LIMIT @result_limit;
+
+-- name: ListCustomerKillswitchOverlaps :many
+WITH db_time AS (
+  SELECT clock_timestamp() AS now
+)
+SELECT
+  p.id, v.resource_scope, v.starts_at, v.expires_at,
+  CASE WHEN v.starts_at > db_time.now THEN 'scheduled' ELSE 'active' END::text AS customer_status,
+  CASE WHEN v.starts_at > v.activated_at THEN 'scheduled' ELSE 'now' END::text AS customer_start,
+  ARRAY(
+    SELECT r.resource_key
+    FROM killswitch_prescription_version_resources AS r
+    WHERE r.organization_id = p.organization_id
+      AND r.prescription_id = p.id
+      AND r.version = v.version
+    ORDER BY r.resource_key
+    LIMIT 1001
+  )::text[] AS selected_resource_keys
+FROM killswitch_prescriptions AS p
+JOIN killswitch_prescription_versions AS v
+  ON v.organization_id = p.organization_id
+ AND v.prescription_id = p.id
+ AND v.version = p.current_version
+CROSS JOIN db_time
+WHERE p.organization_id = @organization_id
+  AND p.definition_key = @definition_key
+  AND p.principal_kind = @principal_kind
+  AND p.principal_key = @principal_key
+  AND p.resource_kind = @resource_kind
+  AND v.state = 'active'
+  AND (v.expires_at IS NULL OR db_time.now < v.expires_at)
+  AND (sqlc.narg('exclude_id')::uuid IS NULL OR p.id <> sqlc.narg('exclude_id')::uuid)
+  AND @draft_starts_at::timestamptz < COALESCE(v.expires_at, 'infinity'::timestamptz)
+  AND v.starts_at < COALESCE(sqlc.narg('draft_ends_at')::timestamptz, 'infinity'::timestamptz)
+  AND (
+    @draft_scope::text = 'all'
+    OR v.resource_scope = 'all'
+    OR EXISTS (
+      SELECT 1
+      FROM killswitch_prescription_version_resources AS r
+      WHERE r.organization_id = p.organization_id
+        AND r.prescription_id = p.id
+        AND r.version = v.version
+        AND r.resource_key = ANY(@draft_selected_resource_keys::text[])
+    )
+  )
+ORDER BY v.starts_at ASC, p.id ASC
+LIMIT 101;
+
+-- name: BatchCustomerKillswitchUserBadges :many
+WITH db_time AS (
+  SELECT clock_timestamp() AS now
+), requested AS (
+  SELECT requested_input.user_id::text AS user_id
+  FROM unnest(@user_ids::text[]) AS requested_input(user_id)
+)
+SELECT
+  requested.user_id::text AS user_id,
+  EXISTS (
+    SELECT 1
+    FROM killswitch_prescriptions AS p
+    JOIN killswitch_prescription_versions AS v
+      ON v.organization_id = p.organization_id
+     AND v.prescription_id = p.id
+     AND v.version = p.current_version
+    CROSS JOIN db_time
+    WHERE p.organization_id = @organization_id
+      AND p.definition_key = @definition_key
+      AND p.principal_kind = @principal_kind
+      AND p.principal_key = requested.user_id
+      AND p.resource_kind = @resource_kind
+      AND v.state = 'active'
+      AND v.starts_at <= db_time.now
+      AND (v.expires_at IS NULL OR db_time.now < v.expires_at)
+  ) AS affected_now,
+  EXISTS (
+    SELECT 1
+    FROM killswitch_prescriptions AS p
+    JOIN killswitch_prescription_versions AS v
+      ON v.organization_id = p.organization_id
+     AND v.prescription_id = p.id
+     AND v.version = p.current_version
+    CROSS JOIN db_time
+    WHERE p.organization_id = @organization_id
+      AND p.definition_key = @definition_key
+      AND p.principal_kind = @principal_kind
+      AND p.principal_key = requested.user_id
+      AND p.resource_kind = @resource_kind
+      AND v.state = 'active'
+      AND v.starts_at > db_time.now
+  ) AS scheduled
+FROM requested
+ORDER BY requested.user_id;

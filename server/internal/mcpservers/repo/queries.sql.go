@@ -768,6 +768,43 @@ func (q *Queries) ListMCPServersForTelemetryByProjectID(ctx context.Context, pro
 	return items, nil
 }
 
+const lockLiveMCPServersInOrganization = `-- name: LockLiveMCPServersInOrganization :many
+SELECT m.id
+FROM mcp_servers AS m
+JOIN projects AS p ON p.id = m.project_id
+WHERE m.id = ANY($1::uuid[])
+  AND p.organization_id = $2
+  AND m.deleted IS FALSE
+  AND p.deleted IS FALSE
+ORDER BY m.id
+FOR KEY SHARE OF m, p
+`
+
+type LockLiveMCPServersInOrganizationParams struct {
+	Ids            []uuid.UUID
+	OrganizationID string
+}
+
+func (q *Queries) LockLiveMCPServersInOrganization(ctx context.Context, arg LockLiveMCPServersInOrganizationParams) ([]uuid.UUID, error) {
+	rows, err := q.db.Query(ctx, lockLiveMCPServersInOrganization, arg.Ids, arg.OrganizationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []uuid.UUID
+	for rows.Next() {
+		var id uuid.UUID
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const lockMCPServerByIDAndProjectID = `-- name: LockMCPServerByIDAndProjectID :one
 SELECT id, project_id, name, slug, environment_id, user_session_issuer_id, remote_session_issuer_id, remote_mcp_server_id, tunneled_mcp_server_id, toolset_id, unproxied_mcp_server_id, tool_variations_group_id, visibility, created_at, updated_at, deleted_at, deleted
 FROM mcp_servers

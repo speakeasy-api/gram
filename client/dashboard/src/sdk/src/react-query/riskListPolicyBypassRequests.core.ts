@@ -15,7 +15,7 @@ import { ListRiskPolicyBypassRequestsResult } from "../models/components/listris
 import {
   ListRiskPolicyBypassRequestsRequest,
   ListRiskPolicyBypassRequestsSecurity,
-  Status,
+  QueryParamStatus,
 } from "../models/operations/listriskpolicybypassrequests.js";
 import { unwrapAsync } from "../types/fp.js";
 export type RiskListPolicyBypassRequestsQueryData =
@@ -84,7 +84,7 @@ export function buildRiskListPolicyBypassRequestsQuery(
 export function queryKeyRiskListPolicyBypassRequests(
   parameters: {
     policyId?: string | undefined;
-    status?: Status | undefined;
+    status?: QueryParamStatus | undefined;
     gramKey?: string | undefined;
     gramSession?: string | undefined;
     gramProject?: string | undefined;

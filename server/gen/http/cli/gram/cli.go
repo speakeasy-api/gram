@@ -48,6 +48,7 @@ import (
 	integrationsc "github.com/speakeasy-api/gram/server/gen/http/integrations/client"
 	jsonwebkeysetsc "github.com/speakeasy-api/gram/server/gen/http/json_web_key_sets/client"
 	keysc "github.com/speakeasy-api/gram/server/gen/http/keys/client"
+	killswitchesc "github.com/speakeasy-api/gram/server/gen/http/killswitches/client"
 	litellmc "github.com/speakeasy-api/gram/server/gen/http/litellm/client"
 	mcpapprovalc "github.com/speakeasy-api/gram/server/gen/http/mcp_approval/client"
 	mcpendpointsc "github.com/speakeasy-api/gram/server/gen/http/mcp_endpoints/client"
@@ -132,6 +133,7 @@ func UsageCommands() []string {
 		"integrations (get|list)",
 		"json-web-key-sets (create-set|update-set|list-sets|get-set|delete-set|list-keys|publish-key|activate-key|retire-key|revoke-key)",
 		"keys (create-key|list-keys|revoke-key|verify-key)",
+		"killswitches (list-capabilities|list-mcp-servers|list|get|create|edit|lift|preview-overlaps|batch-user-badges)",
 		"litellm (create-instance|list-instances|rotate-instance-key|revoke-instance|ingest|traces)",
 		"mcp-approval (list-requests|get-request|ensure-server-review|create-request|promote|refresh-evidence|start-research|record-decision)",
 		"mcp-endpoints (create-mcp-endpoint|get-mcp-endpoint|list-mcp-endpoints|update-mcp-endpoint|check-mcp-endpoint-slug-availability|delete-mcp-endpoint)",
@@ -1366,6 +1368,46 @@ func ParseEndpoint(
 
 		keysVerifyKeyFlags           = flag.NewFlagSet("verify-key", flag.ExitOnError)
 		keysVerifyKeyApikeyTokenFlag = keysVerifyKeyFlags.String("apikey-token", "", "")
+
+		killswitchesFlags = flag.NewFlagSet("killswitches", flag.ContinueOnError)
+
+		killswitchesListCapabilitiesFlags            = flag.NewFlagSet("list-capabilities", flag.ExitOnError)
+		killswitchesListCapabilitiesSessionTokenFlag = killswitchesListCapabilitiesFlags.String("session-token", "", "")
+
+		killswitchesListMCPServersFlags            = flag.NewFlagSet("list-mcp-servers", flag.ExitOnError)
+		killswitchesListMCPServersSessionTokenFlag = killswitchesListMCPServersFlags.String("session-token", "", "")
+
+		killswitchesListFlags             = flag.NewFlagSet("list", flag.ExitOnError)
+		killswitchesListCapabilityKeyFlag = killswitchesListFlags.String("capability-key", "", "")
+		killswitchesListUserIDFlag        = killswitchesListFlags.String("user-id", "", "")
+		killswitchesListStatusFlag        = killswitchesListFlags.String("status", "", "")
+		killswitchesListLimitFlag         = killswitchesListFlags.String("limit", "", "")
+		killswitchesListCursorFlag        = killswitchesListFlags.String("cursor", "", "")
+		killswitchesListSessionTokenFlag  = killswitchesListFlags.String("session-token", "", "")
+
+		killswitchesGetFlags            = flag.NewFlagSet("get", flag.ExitOnError)
+		killswitchesGetIDFlag           = killswitchesGetFlags.String("id", "REQUIRED", "")
+		killswitchesGetSessionTokenFlag = killswitchesGetFlags.String("session-token", "", "")
+
+		killswitchesCreateFlags            = flag.NewFlagSet("create", flag.ExitOnError)
+		killswitchesCreateBodyFlag         = killswitchesCreateFlags.String("body", "REQUIRED", "")
+		killswitchesCreateSessionTokenFlag = killswitchesCreateFlags.String("session-token", "", "")
+
+		killswitchesEditFlags            = flag.NewFlagSet("edit", flag.ExitOnError)
+		killswitchesEditBodyFlag         = killswitchesEditFlags.String("body", "REQUIRED", "")
+		killswitchesEditSessionTokenFlag = killswitchesEditFlags.String("session-token", "", "")
+
+		killswitchesLiftFlags            = flag.NewFlagSet("lift", flag.ExitOnError)
+		killswitchesLiftBodyFlag         = killswitchesLiftFlags.String("body", "REQUIRED", "")
+		killswitchesLiftSessionTokenFlag = killswitchesLiftFlags.String("session-token", "", "")
+
+		killswitchesPreviewOverlapsFlags            = flag.NewFlagSet("preview-overlaps", flag.ExitOnError)
+		killswitchesPreviewOverlapsBodyFlag         = killswitchesPreviewOverlapsFlags.String("body", "REQUIRED", "")
+		killswitchesPreviewOverlapsSessionTokenFlag = killswitchesPreviewOverlapsFlags.String("session-token", "", "")
+
+		killswitchesBatchUserBadgesFlags            = flag.NewFlagSet("batch-user-badges", flag.ExitOnError)
+		killswitchesBatchUserBadgesBodyFlag         = killswitchesBatchUserBadgesFlags.String("body", "REQUIRED", "")
+		killswitchesBatchUserBadgesSessionTokenFlag = killswitchesBatchUserBadgesFlags.String("session-token", "", "")
 
 		litellmFlags = flag.NewFlagSet("litellm", flag.ContinueOnError)
 
@@ -4028,6 +4070,17 @@ func ParseEndpoint(
 	keysRevokeKeyFlags.Usage = keysRevokeKeyUsage
 	keysVerifyKeyFlags.Usage = keysVerifyKeyUsage
 
+	killswitchesFlags.Usage = killswitchesUsage
+	killswitchesListCapabilitiesFlags.Usage = killswitchesListCapabilitiesUsage
+	killswitchesListMCPServersFlags.Usage = killswitchesListMCPServersUsage
+	killswitchesListFlags.Usage = killswitchesListUsage
+	killswitchesGetFlags.Usage = killswitchesGetUsage
+	killswitchesCreateFlags.Usage = killswitchesCreateUsage
+	killswitchesEditFlags.Usage = killswitchesEditUsage
+	killswitchesLiftFlags.Usage = killswitchesLiftUsage
+	killswitchesPreviewOverlapsFlags.Usage = killswitchesPreviewOverlapsUsage
+	killswitchesBatchUserBadgesFlags.Usage = killswitchesBatchUserBadgesUsage
+
 	litellmFlags.Usage = litellmUsage
 	litellmCreateInstanceFlags.Usage = litellmCreateInstanceUsage
 	litellmListInstancesFlags.Usage = litellmListInstancesUsage
@@ -4616,6 +4669,8 @@ func ParseEndpoint(
 			svcf = jsonWebKeySetsFlags
 		case "keys":
 			svcf = keysFlags
+		case "killswitches":
+			svcf = killswitchesFlags
 		case "litellm":
 			svcf = litellmFlags
 		case "mcp-approval":
@@ -5499,6 +5554,37 @@ func ParseEndpoint(
 
 			case "verify-key":
 				epf = keysVerifyKeyFlags
+
+			}
+
+		case "killswitches":
+			switch epn {
+			case "list-capabilities":
+				epf = killswitchesListCapabilitiesFlags
+
+			case "list-mcp-servers":
+				epf = killswitchesListMCPServersFlags
+
+			case "list":
+				epf = killswitchesListFlags
+
+			case "get":
+				epf = killswitchesGetFlags
+
+			case "create":
+				epf = killswitchesCreateFlags
+
+			case "edit":
+				epf = killswitchesEditFlags
+
+			case "lift":
+				epf = killswitchesLiftFlags
+
+			case "preview-overlaps":
+				epf = killswitchesPreviewOverlapsFlags
+
+			case "batch-user-badges":
+				epf = killswitchesBatchUserBadgesFlags
 
 			}
 
@@ -7750,6 +7836,37 @@ func ParseEndpoint(
 			case "verify-key":
 				endpoint = c.VerifyKey()
 				data, err = keysc.BuildVerifyKeyPayload(*keysVerifyKeyApikeyTokenFlag)
+			}
+		case "killswitches":
+			c := killswitchesc.NewClient(scheme, host, doer, enc, dec, restore)
+			switch epn {
+			case "list-capabilities":
+				endpoint = c.ListCapabilities()
+				data, err = killswitchesc.BuildListCapabilitiesPayload(*killswitchesListCapabilitiesSessionTokenFlag)
+			case "list-mcp-servers":
+				endpoint = c.ListMCPServers()
+				data, err = killswitchesc.BuildListMCPServersPayload(*killswitchesListMCPServersSessionTokenFlag)
+			case "list":
+				endpoint = c.List()
+				data, err = killswitchesc.BuildListPayload(*killswitchesListCapabilityKeyFlag, *killswitchesListUserIDFlag, *killswitchesListStatusFlag, *killswitchesListLimitFlag, *killswitchesListCursorFlag, *killswitchesListSessionTokenFlag)
+			case "get":
+				endpoint = c.Get()
+				data, err = killswitchesc.BuildGetPayload(*killswitchesGetIDFlag, *killswitchesGetSessionTokenFlag)
+			case "create":
+				endpoint = c.Create()
+				data, err = killswitchesc.BuildCreatePayload(*killswitchesCreateBodyFlag, *killswitchesCreateSessionTokenFlag)
+			case "edit":
+				endpoint = c.Edit()
+				data, err = killswitchesc.BuildEditPayload(*killswitchesEditBodyFlag, *killswitchesEditSessionTokenFlag)
+			case "lift":
+				endpoint = c.Lift()
+				data, err = killswitchesc.BuildLiftPayload(*killswitchesLiftBodyFlag, *killswitchesLiftSessionTokenFlag)
+			case "preview-overlaps":
+				endpoint = c.PreviewOverlaps()
+				data, err = killswitchesc.BuildPreviewOverlapsPayload(*killswitchesPreviewOverlapsBodyFlag, *killswitchesPreviewOverlapsSessionTokenFlag)
+			case "batch-user-badges":
+				endpoint = c.BatchUserBadges()
+				data, err = killswitchesc.BuildBatchUserBadgesPayload(*killswitchesBatchUserBadgesBodyFlag, *killswitchesBatchUserBadgesSessionTokenFlag)
 			}
 		case "litellm":
 			c := litellmc.NewClient(scheme, host, doer, enc, dec, restore)
@@ -14529,6 +14646,209 @@ func keysVerifyKeyUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "keys verify-key --apikey-token \"abc123\"")
+}
+
+// killswitchesUsage displays the usage of the killswitches command and its
+// subcommands.
+func killswitchesUsage() {
+	fmt.Fprintln(os.Stderr, `Manage MCP tool-call killswitches for users in the active organization. Requires an ordinary live organization-administrator session.`)
+	fmt.Fprintf(os.Stderr, "Usage:\n    %s [globalflags] killswitches COMMAND [flags]\n\n", os.Args[0])
+	fmt.Fprintln(os.Stderr, "COMMAND:")
+	fmt.Fprintln(os.Stderr, `    list-capabilities: ListCapabilities implements listCapabilities.`)
+	fmt.Fprintln(os.Stderr, `    list-mcp-servers: ListMCPServers implements listMCPServers.`)
+	fmt.Fprintln(os.Stderr, `    list: List implements list.`)
+	fmt.Fprintln(os.Stderr, `    get: Get implements get.`)
+	fmt.Fprintln(os.Stderr, `    create: Create implements create.`)
+	fmt.Fprintln(os.Stderr, `    edit: Edit implements edit.`)
+	fmt.Fprintln(os.Stderr, `    lift: Lift implements lift.`)
+	fmt.Fprintln(os.Stderr, `    preview-overlaps: PreviewOverlaps implements previewOverlaps.`)
+	fmt.Fprintln(os.Stderr, `    batch-user-badges: BatchUserBadges implements batchUserBadges.`)
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Additional help:")
+	fmt.Fprintf(os.Stderr, "    %s killswitches COMMAND --help\n", os.Args[0])
+}
+func killswitchesListCapabilitiesUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] killswitches list-capabilities", os.Args[0])
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `ListCapabilities implements listCapabilities.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "killswitches list-capabilities --session-token \"abc123\"")
+}
+
+func killswitchesListMCPServersUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] killswitches list-mcp-servers", os.Args[0])
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `ListMCPServers implements listMCPServers.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "killswitches list-mcp-servers --session-token \"abc123\"")
+}
+
+func killswitchesListUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] killswitches list", os.Args[0])
+	fmt.Fprint(os.Stderr, " -capability-key STRING")
+	fmt.Fprint(os.Stderr, " -user-id STRING")
+	fmt.Fprint(os.Stderr, " -status STRING")
+	fmt.Fprint(os.Stderr, " -limit INT32")
+	fmt.Fprint(os.Stderr, " -cursor STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `List implements list.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -capability-key STRING: `)
+	fmt.Fprintln(os.Stderr, `    -user-id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -status STRING: `)
+	fmt.Fprintln(os.Stderr, `    -limit INT32: `)
+	fmt.Fprintln(os.Stderr, `    -cursor STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "killswitches list --capability-key \"mcp_tool_calls\" --user-id \"abc123\" --status \"scheduled\" --limit 2 --cursor \"abc123\" --session-token \"abc123\"")
+}
+
+func killswitchesGetUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] killswitches get", os.Args[0])
+	fmt.Fprint(os.Stderr, " -id STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Get implements get.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "killswitches get --id \"550e8400-e29b-41d4-a716-446655440000\" --session-token \"abc123\"")
+}
+
+func killswitchesCreateUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] killswitches create", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Create implements create.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "killswitches create --body '{\n      \"capability_key\": \"mcp_tool_calls\",\n      \"external_note\": \"aaa\",\n      \"internal_note\": \"aaa\",\n      \"operation_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"schedule\": {\n         \"end\": \"bounded\",\n         \"ends_at\": \"1970-01-01T00:00:01Z\",\n         \"start\": \"scheduled\",\n         \"starts_at\": \"1970-01-01T00:00:01Z\"\n      },\n      \"scope\": {\n         \"server_ids\": [\n            \"550e8400-e29b-41d4-a716-446655440000\",\n            \"550e8400-e29b-41d4-a716-446655440000\",\n            \"550e8400-e29b-41d4-a716-446655440000\"\n         ],\n         \"type\": \"selected_servers\"\n      },\n      \"user_id\": \"abc123\"\n   }' --session-token \"abc123\"")
+}
+
+func killswitchesEditUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] killswitches edit", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Edit implements edit.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "killswitches edit --body '{\n      \"expected_version\": 1,\n      \"external_note\": \"aaa\",\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"internal_note\": \"aaa\",\n      \"operation_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"schedule\": {\n         \"end\": \"bounded\",\n         \"ends_at\": \"1970-01-01T00:00:01Z\",\n         \"start\": \"scheduled\",\n         \"starts_at\": \"1970-01-01T00:00:01Z\"\n      },\n      \"scope\": {\n         \"server_ids\": [\n            \"550e8400-e29b-41d4-a716-446655440000\",\n            \"550e8400-e29b-41d4-a716-446655440000\",\n            \"550e8400-e29b-41d4-a716-446655440000\"\n         ],\n         \"type\": \"selected_servers\"\n      }\n   }' --session-token \"abc123\"")
+}
+
+func killswitchesLiftUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] killswitches lift", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Lift implements lift.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "killswitches lift --body '{\n      \"expected_version\": 1,\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"operation_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }' --session-token \"abc123\"")
+}
+
+func killswitchesPreviewOverlapsUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] killswitches preview-overlaps", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `PreviewOverlaps implements previewOverlaps.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "killswitches preview-overlaps --body '{\n      \"capability_key\": \"mcp_tool_calls\",\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"schedule\": {\n         \"end\": \"bounded\",\n         \"ends_at\": \"1970-01-01T00:00:01Z\",\n         \"start\": \"scheduled\",\n         \"starts_at\": \"1970-01-01T00:00:01Z\"\n      },\n      \"scope\": {\n         \"server_ids\": [\n            \"550e8400-e29b-41d4-a716-446655440000\",\n            \"550e8400-e29b-41d4-a716-446655440000\",\n            \"550e8400-e29b-41d4-a716-446655440000\"\n         ],\n         \"type\": \"selected_servers\"\n      },\n      \"user_id\": \"abc123\"\n   }' --session-token \"abc123\"")
+}
+
+func killswitchesBatchUserBadgesUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] killswitches batch-user-badges", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `BatchUserBadges implements batchUserBadges.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "killswitches batch-user-badges --body '{\n      \"user_ids\": [\n         \"abc123\",\n         \"abc123\"\n      ]\n   }' --session-token \"abc123\"")
 }
 
 // litellmUsage displays the usage of the litellm command and its subcommands.
