@@ -37,7 +37,7 @@ export function useProjectGuideProgress(): {
     projectSlug,
   );
 
-  const catalogQuery = useListMCPCatalog(undefined, undefined, true);
+  const catalogQuery = useListMCPCatalog();
 
   const {
     data: serversData,
