@@ -87,6 +87,17 @@ WHERE project_id = @project_id
   AND deleted IS FALSE
 ORDER BY created_at DESC;
 
+-- name: ListRiskPolicyCreateCandidates :many
+-- Platform MCP create convergence narrows by the stable public identity before
+-- loading sensitive policy definitions for exact canonical comparison.
+SELECT *
+FROM risk_policies
+WHERE project_id = @project_id
+  AND name = @name
+  AND policy_type = @policy_type
+  AND deleted IS FALSE
+ORDER BY id;
+
 -- name: ListRiskPoliciesPage :many
 -- Platform MCP keyset page. The existing unbounded query remains the Goa
 -- compatibility path.

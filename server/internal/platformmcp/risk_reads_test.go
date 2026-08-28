@@ -57,8 +57,11 @@ func (s *stubRiskPolicies) ListPage(_ context.Context, _ string, _ uuid.UUID, cu
 	return s.policies, nil
 }
 
-func (s *stubRiskPolicies) Get(_ context.Context, _, _ uuid.UUID) (policycore.Policy, error) {
-	return s.policy, s.getErr
+func (s *stubRiskPolicies) loadDetail(_ context.Context, _, _ uuid.UUID) (policycore.Policy, string, error) {
+	if s.getErr != nil {
+		return policycore.Policy{}, "", fmt.Errorf("load test risk policy detail: %w", s.getErr)
+	}
+	return s.policy, "opaque-version", nil
 }
 
 type stubRiskExclusions struct {
@@ -71,7 +74,7 @@ func (s *stubRiskExclusions) ListPage(_ context.Context, _ uuid.UUID, _ uuid.Nul
 	return s.exclusions, nil
 }
 
-func testRiskReadService(t *testing.T, projects riskProjectResolver, policies riskPolicyReader, exclusions riskExclusionReader) *RiskReadService {
+func testRiskReadService(t *testing.T, projects riskProjectResolver, policies *stubRiskPolicies, exclusions riskExclusionReader) *RiskReadService {
 	t.Helper()
 	catalog, err := policycatalog.Build()
 	require.NoError(t, err)
@@ -82,7 +85,8 @@ func testRiskReadService(t *testing.T, projects riskProjectResolver, policies ri
 	return &RiskReadService{
 		projects: projects, policies: policies, exclusions: exclusions,
 		cursor: cursor, catalog: catalog, catalogFingerprint: fingerprint,
-		redactionKey: []byte("0123456789abcdef0123456789abcdef"),
+		redactionKey:     []byte("0123456789abcdef0123456789abcdef"),
+		loadPolicyDetail: policies.loadDetail,
 	}
 }
 
@@ -152,6 +156,7 @@ func TestRiskReadProjectionsOmitSensitivePolicyFields(t *testing.T) {
 	require.Equal(t, &prompt, output.Policy.Prompt)
 	require.Empty(t, output.Policy.ApprovedEmailDomains)
 	require.NotNil(t, output.Policy.ApprovedEmailDomains)
+	require.Equal(t, "opaque-version", output.Policy.Version)
 	require.Empty(t, output.Policy.Action)
 	require.ElementsMatch(t, []string{"custom_rules", "model_config", "raw_scope", "targeted_audience", "unknown_detector_value", "unsupported_action"}, output.Policy.Compatibility.UnsupportedFields)
 

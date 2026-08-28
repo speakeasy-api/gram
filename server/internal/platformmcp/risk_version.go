@@ -1,6 +1,7 @@
 package platformmcp
 
 import (
+	"context"
 	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/base64"
@@ -9,8 +10,11 @@ import (
 	"fmt"
 	"slices"
 
+	"github.com/speakeasy-api/gram/server/internal/authz"
+	approvalrepo "github.com/speakeasy-api/gram/server/internal/mcpapproval/repo"
 	"github.com/speakeasy-api/gram/server/internal/risk/exclusioncore"
 	"github.com/speakeasy-api/gram/server/internal/risk/policycore"
+	riskrepo "github.com/speakeasy-api/gram/server/internal/risk/repo"
 )
 
 const riskVersionCodecVersion = 1
@@ -161,6 +165,77 @@ func compareStrings(a, b string) int {
 	default:
 		return 0
 	}
+}
+
+// riskPolicyVersionState loads every grant-backed part of a policy definition
+// from the same database snapshot as the policy row. Sensitive URLs, principals,
+// selectors, and standing decisions contribute only to the HMAC and are never
+// returned. Mutation validation requests the enforcement lock before any of
+// those reads; repeatable-read projections already have one stable snapshot.
+func riskPolicyVersionState(ctx context.Context, db riskrepo.DBTX, policy policycore.Policy, lockEnforcement bool) (RiskPolicyVersionState, error) {
+	state := RiskPolicyVersionState{Policy: policy, AnalyzerConfig: nil, AllowedURLGrants: []RiskPolicyVersionGrant{}, BlockedURLGrants: []RiskPolicyVersionGrant{}, StandingDecisionState: []string{}}
+	approvalQueries := approvalrepo.New(db)
+	if lockEnforcement {
+		if err := approvalQueries.LockProjectEnforcementState(ctx, policy.ProjectID.String()); err != nil {
+			return RiskPolicyVersionState{}, fmt.Errorf("lock risk policy enforcement state: %w", err)
+		}
+	}
+	row, err := riskrepo.New(db).GetRiskPolicy(ctx, riskrepo.GetRiskPolicyParams{ID: policy.ID, ProjectID: policy.ProjectID})
+	if err != nil {
+		return RiskPolicyVersionState{}, fmt.Errorf("load risk policy version row: %w", err)
+	}
+	audience, err := policycore.New(db).AudiencePrincipalURNs(ctx, row.OrganizationID, row.ID.String())
+	if err != nil {
+		return RiskPolicyVersionState{}, fmt.Errorf("load risk policy version audience: %w", err)
+	}
+	state.Policy = policycore.Project(row, audience, nil)
+	state.AnalyzerConfig = row.AnalyzerConfig
+	allowedGrants, err := riskPolicyVersionURLGrants(ctx, db, state.Policy, authz.ScopeRiskPolicyBypass)
+	if err != nil {
+		return RiskPolicyVersionState{}, err
+	}
+	blockedGrants, err := riskPolicyVersionURLGrants(ctx, db, state.Policy, authz.ScopeRiskPolicyBlock)
+	if err != nil {
+		return RiskPolicyVersionState{}, err
+	}
+	state.AllowedURLGrants = allowedGrants
+	state.BlockedURLGrants = blockedGrants
+	standing, err := approvalQueries.ListStandingServerDecisionsForProject(ctx, state.Policy.ProjectID)
+	if err != nil {
+		return RiskPolicyVersionState{}, fmt.Errorf("load risk policy standing decisions: %w", err)
+	}
+	for _, decision := range standing {
+		encoded, err := json.Marshal(struct {
+			ID         string   `json:"id"`
+			TargetKey  string   `json:"target_key"`
+			Decision   string   `json:"decision"`
+			Principals []string `json:"principals"`
+		}{ID: decision.ID.String(), TargetKey: decision.TargetKey, Decision: decision.Decision, Principals: sortedStrings(decision.GrantedPrincipalUrns)})
+		if err != nil {
+			return RiskPolicyVersionState{}, fmt.Errorf("encode risk policy standing decision: %w", err)
+		}
+		state.StandingDecisionState = append(state.StandingDecisionState, string(encoded))
+	}
+	return state, nil
+}
+
+func riskPolicyVersionURLGrants(ctx context.Context, db riskrepo.DBTX, policy policycore.Policy, scope authz.Scope) ([]RiskPolicyVersionGrant, error) {
+	grants, err := authz.ListGrantsForResource(ctx, db, authz.Resource{OrganizationID: policy.OrganizationID, Scope: scope, ResourceID: policy.ID.String()})
+	if err != nil {
+		return nil, fmt.Errorf("load risk policy version grants: %w", err)
+	}
+	state := make([]RiskPolicyVersionGrant, 0, len(grants))
+	for _, grant := range grants {
+		if grant.Selector[authz.SelectorKeyServerURL] == "" {
+			continue
+		}
+		selector, err := grant.Selector.MarshalJSON()
+		if err != nil {
+			return nil, fmt.Errorf("encode risk policy version grant selector: %w", err)
+		}
+		state = append(state, RiskPolicyVersionGrant{PrincipalURN: grant.PrincipalUrn, Selector: selector})
+	}
+	return state, nil
 }
 
 func (c *riskVersionCodec) encode(kind string, state any) (string, error) {

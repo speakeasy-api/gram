@@ -6,14 +6,31 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/jackc/pgx/v5/pgxpool"
+
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/risk/policybypass"
 	"github.com/speakeasy-api/gram/server/internal/risk/policycore"
 	"github.com/speakeasy-api/gram/server/internal/risk/repo"
 )
 
 type policyMutationAuditor struct {
 	logger *audit.Logger
+}
+
+// NewPolicyMutationCore composes the shared risk policy command for non-Goa
+// adapters. It preserves the same audit, approval, URL-grant, signal, and cache
+// dependencies used by the dashboard service.
+func NewPolicyMutationCore(db *pgxpool.Pool, auditLogger *audit.Logger, approvals policycore.ApprovalCoordinator, signaler policycore.PolicySignaler, cacheInvalidator policycore.PolicyCacheInvalidator) *policycore.Core {
+	return policycore.New(db, policycore.MutationDependencies{
+		Transactor:       db,
+		Auditor:          policyMutationAuditor{logger: auditLogger},
+		Approvals:        approvals,
+		ReconcileURLs:    policycore.ReconcilePolicyURLs(policybypass.ReconcilePolicyURLs),
+		Signaler:         signaler,
+		CacheInvalidator: cacheInvalidator,
+	})
 }
 
 func (a policyMutationAuditor) LogPolicyCreate(ctx context.Context, db repo.DBTX, event policycore.CreateAuditEvent) error {

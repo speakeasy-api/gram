@@ -41,6 +41,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
+	"github.com/speakeasy-api/gram/server/internal/risk"
+	"github.com/speakeasy-api/gram/server/internal/risk/policycore"
 	"github.com/speakeasy-api/gram/server/internal/sessiontokens"
 	tenv "github.com/speakeasy-api/gram/server/internal/temporal"
 )
@@ -70,6 +72,9 @@ type platformMCPConfig struct {
 	PluginPublisher        *plugins.Service
 	TemporalEnv            *tenv.Environment
 	Skills                 platformmcp.SkillsManagement
+	RiskPolicyApprovals    policycore.ApprovalCoordinator
+	RiskPolicySignaler     policycore.PolicySignaler
+	RiskPolicyCache        policycore.PolicyCacheInvalidator
 	// Telemetry is the Gram-owned ClickHouse read model the diagnostics tools
 	// answer from. Nil disables them rather than serving an empty answer, which
 	// a caller would read as "nothing is wrong".
@@ -309,6 +314,14 @@ func configureLocalFixturePlatformMCP(ctx context.Context, config platformMCPCon
 	if err != nil {
 		return AssistantSurface{}, fmt.Errorf("create local Platform MCP risk mutation controls: %w", err)
 	}
+	riskMutations, err := platformmcp.NewRiskPolicyMutationHandlers(
+		config.DB,
+		riskMutationControls,
+		risk.NewPolicyMutationCore(config.DB, config.AuditLogger, config.RiskPolicyApprovals, config.RiskPolicySignaler, config.RiskPolicyCache),
+	)
+	if err != nil {
+		return AssistantSurface{}, fmt.Errorf("create local Platform MCP risk policy mutations: %w", err)
+	}
 	runtime := platformmcp.NewRuntimeWithRiskMutations(
 		config.Logger,
 		authenticator,
@@ -331,7 +344,7 @@ func configureLocalFixturePlatformMCP(ctx context.Context, config platformMCPCon
 		diagnostics,
 		pluginInventory,
 		sessionRecall,
-		&platformmcp.RiskMutationHandlers{Controls: riskMutationControls},
+		riskMutations,
 		fixtureConfig.CatalogDescriptor(),
 	).WithOAuthTelemetry(oauthTelemetry)
 	oauth.Attach(config.Mux)
@@ -625,6 +638,14 @@ func configureBrowserPlatformMCP(ctx context.Context, config platformMCPConfig) 
 	if err != nil {
 		return AssistantSurface{}, fmt.Errorf("create browser Platform MCP risk mutation controls: %w", err)
 	}
+	riskMutations, err := platformmcp.NewRiskPolicyMutationHandlers(
+		config.DB,
+		riskMutationControls,
+		risk.NewPolicyMutationCore(config.DB, config.AuditLogger, config.RiskPolicyApprovals, config.RiskPolicySignaler, config.RiskPolicyCache),
+	)
+	if err != nil {
+		return AssistantSurface{}, fmt.Errorf("create browser Platform MCP risk policy mutations: %w", err)
+	}
 	runtime := platformmcp.NewRuntimeWithRiskMutations(
 		config.Logger,
 		authenticator,
@@ -644,7 +665,7 @@ func configureBrowserPlatformMCP(ctx context.Context, config platformMCPConfig) 
 		diagnostics,
 		pluginInventory,
 		sessionRecall,
-		&platformmcp.RiskMutationHandlers{Controls: riskMutationControls},
+		riskMutations,
 		platformmcp.CatalogDescriptor{},
 	).WithOAuthTelemetry(oauthTelemetry)
 	oauth.Attach(config.Mux)
