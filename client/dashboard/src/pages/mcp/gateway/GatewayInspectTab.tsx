@@ -158,9 +158,14 @@ function InspectBody({
   }
 
   if (needsAuth) {
+    // The common cause is an unconnected upstream provider, not a broken
+    // issuer: a session needs every attached provider connected, so one
+    // missing grant rejects the whole session.
     return (
       <Text muted small>
-        This gateway rejected the dashboard&apos;s session. Check its issuer in{" "}
+        This gateway rejected the dashboard&apos;s session. Every attached
+        identity provider must be connected before it will serve — connect them
+        from the gateway&apos;s sign-in page, or review its providers in{" "}
         <Link to={settingsHref}>Settings</Link>.
       </Text>
     );
