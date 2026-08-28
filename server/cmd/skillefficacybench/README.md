@@ -37,6 +37,6 @@ running silently.
 
 ## Current result
 
-The initial `v2` gate run on 2026-07-22 used the production
-`google/gemini-3.1-flash-lite` model with three runs per case. It reached 90%
-case agreement and 86.7% run agreement with no errors, passing the 80% beta gate.
+The `v3` gate run on 2026-08-28 used the production
+`google/gemini-3.1-flash-lite` model with three runs per case. It reached 80%
+case agreement and 80% run agreement with no errors, passing the 80% beta gate.

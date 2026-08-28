@@ -5,6 +5,8 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"slices"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -17,6 +19,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	chatrepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/scanners"
+	"github.com/speakeasy-api/gram/server/internal/scanners/gitleaks"
 	domainskills "github.com/speakeasy-api/gram/server/internal/skills"
 	"github.com/speakeasy-api/gram/server/internal/skills/repo"
 	telemetryrepo "github.com/speakeasy-api/gram/server/internal/telemetry/repo"
@@ -61,6 +65,8 @@ const sinkFailureClass = "skill efficacy score sink failure"
 
 const recommendationSinkFailureClass = "skill efficacy recommendation sink failure"
 
+const recommendationRedaction = "<redacted>"
+
 const validationFailureClass = "skill efficacy row validation failure"
 
 // TranscriptSource reads one chat's messages a page at a time, newest first.
@@ -87,6 +93,10 @@ type SuggestionSignaler interface {
 	Signal(ctx context.Context, projectID, skillID uuid.UUID) error
 }
 
+type recommendationScanner interface {
+	Scan(ctx context.Context, content string) ([]scanners.Finding, error)
+}
+
 // PublishResult reports what one publication pass did with the reserved
 // evaluations it was handed.
 type PublishResult struct {
@@ -110,13 +120,14 @@ type PublishResult struct {
 
 // Publisher judges reserved evaluations and publishes their scores.
 type Publisher struct {
-	logger   *slog.Logger
-	tracer   trace.Tracer
-	db       *pgxpool.Pool
-	chats    TranscriptSource
-	scores   ScoreSink
-	judge    JudgeClient
-	signaler SuggestionSignaler
+	logger                *slog.Logger
+	tracer                trace.Tracer
+	db                    *pgxpool.Pool
+	chats                 TranscriptSource
+	scores                ScoreSink
+	judge                 JudgeClient
+	signaler              SuggestionSignaler
+	recommendationScanner recommendationScanner
 	// evaluationTimeout is publishEvaluationTimeout, held on the struct so a test
 	// can shorten the bound it is asserting on.
 	evaluationTimeout time.Duration
@@ -125,14 +136,15 @@ type Publisher struct {
 // NewPublisher constructs a Publisher.
 func NewPublisher(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, scores ScoreSink, judge JudgeClient, signaler SuggestionSignaler) *Publisher {
 	return &Publisher{
-		logger:            logger.With(attr.SlogComponent("skill-efficacy-publisher")),
-		tracer:            tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/skills/efficacy"),
-		db:                db,
-		chats:             chatrepo.New(db),
-		scores:            scores,
-		judge:             judge,
-		signaler:          signaler,
-		evaluationTimeout: publishEvaluationTimeout,
+		logger:                logger.With(attr.SlogComponent("skill-efficacy-publisher")),
+		tracer:                tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/skills/efficacy"),
+		db:                    db,
+		chats:                 chatrepo.New(db),
+		scores:                scores,
+		judge:                 judge,
+		signaler:              signaler,
+		recommendationScanner: gitleaks.NewScanner(),
+		evaluationTimeout:     publishEvaluationTimeout,
 	}
 }
 
@@ -481,11 +493,17 @@ func (p *Publisher) publishOne(ctx context.Context, projectID uuid.UUID, claimTo
 }
 
 func (p *Publisher) persistRecommendations(ctx context.Context, projectID uuid.UUID, input repo.GetSkillEfficacyJudgeInputsRow, recommendations []RawRecommendation) error {
-	highConfidence := make([]int, 0, len(recommendations))
-	for position, recommendation := range recommendations {
-		if recommendation.Confidence == "high" {
-			highConfidence = append(highConfidence, position)
+	highConfidence := make([]RawRecommendation, 0, len(recommendations))
+	for _, recommendation := range recommendations {
+		if recommendation.Confidence != "high" {
+			continue
 		}
+		note, err := sanitizeRecommendationNote(ctx, p.recommendationScanner, recommendation.Note)
+		if err != nil {
+			return fmt.Errorf("sanitize skill efficacy recommendation: %w", err)
+		}
+		recommendation.Note = note
+		highConfidence = append(highConfidence, recommendation)
 	}
 	if len(highConfidence) == 0 {
 		return nil
@@ -503,9 +521,8 @@ func (p *Publisher) persistRecommendations(ctx context.Context, projectID uuid.U
 	}
 
 	queries := repo.New(tx)
-	for _, position := range highConfidence {
-		recommendation := recommendations[position]
-		id := uuid.NewSHA1(input.ID, fmt.Appendf(nil, "skill-efficacy-recommendation:%d", position))
+	for _, recommendation := range highConfidence {
+		id := recommendationFeedbackID(input.ID, recommendation)
 		_, err := queries.CreateSkillFeedback(ctx, repo.CreateSkillFeedbackParams{
 			ID:             uuid.NullUUID{UUID: id, Valid: true},
 			ProjectID:      projectID,
@@ -515,7 +532,7 @@ func (p *Publisher) persistRecommendations(ctx context.Context, projectID uuid.U
 			Source:         string(source),
 			Outcome:        recommendation.Outcome,
 			Note:           conv.ToPGText(recommendation.Note),
-			SessionID:      conv.ToPGText(input.ChatID.String()),
+			SessionID:      conv.ToPGText(input.SessionID),
 			UserID:         pgtype.Text{String: "", Valid: false},
 			UserEmail:      pgtype.Text{String: "", Valid: false},
 		})
@@ -540,6 +557,42 @@ func (p *Publisher) persistRecommendations(ctx context.Context, projectID uuid.U
 	}
 
 	return nil
+}
+
+func sanitizeRecommendationNote(ctx context.Context, scanner recommendationScanner, note string) (string, error) {
+	note = strings.ReplaceAll(note, "\x00", `\u0000`)
+	findings, err := scanner.Scan(ctx, note)
+	if err != nil {
+		return "", fmt.Errorf("scan recommendation note for secrets: %w", err)
+	}
+	slices.SortFunc(findings, func(a, b scanners.Finding) int {
+		return a.StartPos - b.StartPos
+	})
+
+	var sanitized strings.Builder
+	sanitized.Grow(len(note))
+	cursor := 0
+	for _, finding := range findings {
+		if finding.StartPos < 0 || finding.StartPos > finding.EndPos || finding.EndPos > len(note) || note[finding.StartPos:finding.EndPos] != finding.Match {
+			return "", errors.New("secret scanner returned an invalid recommendation span")
+		}
+		if finding.EndPos <= cursor {
+			continue
+		}
+		if finding.StartPos >= cursor {
+			sanitized.WriteString(note[cursor:finding.StartPos])
+			sanitized.WriteString(recommendationRedaction)
+		}
+		cursor = finding.EndPos
+	}
+	sanitized.WriteString(note[cursor:])
+
+	return conv.TruncateString(sanitized.String(), domainskills.MaxFeedbackNoteRunes), nil
+}
+
+func recommendationFeedbackID(evaluationID uuid.UUID, recommendation RawRecommendation) uuid.UUID {
+	name := strings.Join([]string{"skill-efficacy-recommendation", recommendation.Outcome, recommendation.Note, recommendation.Confidence}, "\x00")
+	return uuid.NewSHA1(evaluationID, []byte(name))
 }
 
 // loadTranscript renders one chat's transcript, reusing a rendering this pass

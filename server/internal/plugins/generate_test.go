@@ -2542,6 +2542,7 @@ func TestGenerateMCPFilesEmitsDistributedSkills(t *testing.T) {
 		"cursor": cursorPluginRoot + "/engineering-tools-cursor/mcp.json",
 		"codex":  "engineering-tools-codex/.mcp.json",
 	} {
+		require.Contains(t, files, mcpPath, platform)
 		require.NotContains(t, string(files[mcpPath]), "speakeasy-skill-feedback", platform)
 	}
 	for path := range files {

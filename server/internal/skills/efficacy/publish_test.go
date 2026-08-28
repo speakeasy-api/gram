@@ -483,11 +483,11 @@ func TestPublishPersistsHighConfidenceRecommendationsIdempotently(t *testing.T) 
 	h := newPublishHarness(t, "skill_efficacy_publish_recommendations")
 	evaluation := h.reserve(t, "claude-session-recommendations", "claude-code")
 	judged := okVerdict()
-	judged.Verdict.Recommendations = []RawRecommendation{
-		{Outcome: "did_not_help", Note: "low confidence evidence", Confidence: "low"},
-		{Outcome: "misleading", Note: "first durable recommendation", Confidence: "high"},
+	durable := []RawRecommendation{
+		{Outcome: "misleading", Note: "first durable recommendation\x00 with export GITHUB_TOKEN=ghp_R2D2C3POLuk3Skywalker1234567890ab", Confidence: "high"},
 		{Outcome: "harmful", Note: "second durable recommendation", Confidence: "high"},
 	}
+	judged.Verdict.Recommendations = append([]RawRecommendation{{Outcome: "did_not_help", Note: "low confidence evidence", Confidence: "low"}}, durable...)
 	h.judge.results[SurfaceDev] = judged
 
 	failed, err := h.publisher(t, failingSink{ScoreSink: h.scores, err: errors.New("clickhouse unavailable")}).Publish(
@@ -498,6 +498,8 @@ func TestPublishPersistsHighConfidenceRecommendationsIdempotently(t *testing.T) 
 	require.Empty(t, h.publishedIDs(t, evaluation))
 	require.Equal(t, [][2]uuid.UUID{{h.fixture.projectID, evaluation.SkillID}}, h.signaler.calls)
 
+	judged.Verdict.Recommendations = []RawRecommendation{durable[1], durable[0]}
+	h.judge.results[SurfaceDev] = judged
 	retry, err := h.publisher(t, h.scores).Publish(t.Context(), h.fixture.projectID, evaluation.ClaimToken, []uuid.UUID{evaluation.ID}, nil)
 	require.NoError(t, err)
 	require.Equal(t, 1, retry.Scored)
@@ -517,20 +519,25 @@ func TestPublishPersistsHighConfidenceRecommendationsIdempotently(t *testing.T) 
 		feedbackByID[stored.ID] = stored
 	}
 
-	for position, expected := range judged.Verdict.Recommendations {
-		if expected.Confidence != "high" {
-			continue
+	for _, expected := range durable {
+		if expected.Outcome == "misleading" {
+			expected.Note = `first durable recommendation\u0000 with export GITHUB_TOKEN=<redacted>`
 		}
-		expectedID := uuid.NewSHA1(evaluation.ID, fmt.Appendf(nil, "skill-efficacy-recommendation:%d", position))
-		stored, ok := feedbackByID[expectedID]
+		stored, ok := feedbackByID[recommendationFeedbackID(evaluation.ID, expected)]
 		require.True(t, ok)
 		require.Equal(t, evaluation.SkillVersionID, stored.SkillVersionID.UUID)
 		require.Equal(t, string(domainskills.FeedbackSourceDev), stored.Source)
 		require.Equal(t, expected.Outcome, stored.Outcome)
 		require.Equal(t, expected.Note, stored.Note.String)
-		require.Equal(t, evaluation.ChatID.String(), stored.SessionID.String)
+		require.Equal(t, evaluation.SessionID, stored.SessionID.String)
 		require.False(t, stored.UserID.Valid)
 		require.False(t, stored.UserEmail.Valid)
+		if expected.Outcome == "misleading" {
+			require.Contains(t, stored.Note.String, "first durable recommendation", "redaction preserves actionable evidence")
+			require.Contains(t, stored.Note.String, `\u0000`)
+			require.Contains(t, stored.Note.String, recommendationRedaction)
+			require.NotContains(t, stored.Note.String, "ghp_R2D2C3POLuk3Skywalker1234567890ab")
+		}
 	}
 }
 

@@ -383,7 +383,7 @@ func TestVerdictSchemaIsStrictOverEveryVerdictField(t *testing.T) {
 	require.Equal(t, recommendationOutcomes, outcomeSchema["enum"])
 	confidenceSchema, ok := recommendationProperties["confidence"].(map[string]any)
 	require.True(t, ok)
-	require.Equal(t, roiConfidenceValues, confidenceSchema["enum"])
+	require.Equal(t, recommendationConfidenceValues, confidenceSchema["enum"])
 	require.Contains(t, SystemPrompt, "These are evidence, not find/replace edits or edit suggestions.")
 }
 
