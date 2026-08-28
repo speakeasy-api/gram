@@ -3,6 +3,8 @@ package mcp_test
 import (
 	"context"
 	"net/http"
+	"net/http/httptest"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -35,10 +37,24 @@ func TestServePublic_HostedToolsCallKillswitch(t *testing.T) {
 	userToken := mintIssuerBearerForEndpointSubject(t, ctx, ti, endpointSlug, mcpServer, authCtx.ActiveOrganizationID, urn.NewUserSubject(authCtx.UserID))
 	sessionHeaders := map[string]string{"Mcp-Session-Id": "same-session"}
 
+	var downstreamCalls atomic.Int32
+	sentinel := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		downstreamCalls.Add(1)
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"result":"sentinel-ok"}`))
+	}))
+	t.Cleanup(sentinel.Close)
+	fixture := &killswitchAcceptanceFixture{ti: ti, management: nil, auth: authCtx}
+	fixture.addHostedSentinelTool(t, ctx, toolset, "sentinel", sentinel.URL)
+
 	before, err := servePublicHTTP(t, ctx, ti, endpointSlug, makeToolsCallBody("missing_tool"), userToken, sessionHeaders)
 	require.NoError(t, err)
 	require.Equal(t, http.StatusOK, before.Code)
 	require.NotContains(t, before.Body.String(), "mcp_tool_calls_paused")
+	sentinelBefore, err := servePublicHTTP(t, ctx, ti, endpointSlug, makeToolsCallBody("sentinel"), userToken, sessionHeaders)
+	require.NoError(t, err)
+	require.Contains(t, sentinelBefore.Body.String(), "sentinel-ok")
+	require.Equal(t, int32(1), downstreamCalls.Load())
 
 	note := "Tool calls paused for maintenance."
 	insertHostedKillswitchPrescription(t, ctx, ti, authCtx.ActiveOrganizationID, authCtx.UserID, mcpServer.ID, note)
@@ -56,21 +72,23 @@ func TestServePublic_HostedToolsCallKillswitch(t *testing.T) {
 
 	attachMissingRemoteSession(t, ctx, ti, *authCtx.ProjectID, authCtx.ActiveOrganizationID, issuerID)
 
-	for _, toolName := range []string{"missing_tool", "search_tools", "describe_tools", "execute_tool"} {
+	for _, toolName := range []string{"sentinel", "missing_tool", "search_tools", "describe_tools", "execute_tool"} {
 		response, err := servePublicHTTP(t, ctx, ti, endpointSlug, makeToolsCallBody(toolName), userToken, sessionHeaders)
 		require.NoError(t, err, toolName)
 		require.Equal(t, http.StatusOK, response.Code, toolName)
 		require.JSONEq(t, `{"jsonrpc":"2.0","id":3,"error":{"code":-32003,"message":"Tool calls paused for maintenance.","data":{"code":"mcp_tool_calls_paused"}}}`, response.Body.String(), toolName)
 	}
+	require.Equal(t, int32(1), downstreamCalls.Load(), "matched denials must stop before the configured HTTP tool")
 
 	_, err = ti.conn.Exec(ctx, "DROP TABLE killswitch_prescriptions CASCADE") //nolint:glint // notestingrawsql: deterministic DDL breakage in this test's isolated database forces an evaluator failure
 	require.NoError(t, err)
 
-	unavailable, err := servePublicHTTP(t, ctx, ti, endpointSlug, makeToolsCallBody("missing_tool"), userToken, sessionHeaders)
+	unavailable, err := servePublicHTTP(t, ctx, ti, endpointSlug, makeToolsCallBody("sentinel"), userToken, sessionHeaders)
 	require.NoError(t, err)
 	require.JSONEq(t, `{"jsonrpc":"2.0","id":3,"error":{"code":-32603,"message":"Internal error"}}`, unavailable.Body.String())
 	require.NotContains(t, unavailable.Body.String(), note)
 	require.NotContains(t, unavailable.Body.String(), "mcp_tool_calls_paused")
+	require.Equal(t, int32(1), downstreamCalls.Load(), "fail-closed infrastructure rejection must stop before the configured HTTP tool")
 }
 
 func attachMissingRemoteSession(t *testing.T, ctx context.Context, ti *testInstance, projectID uuid.UUID, organizationID string, userSessionIssuerID uuid.UUID) {
