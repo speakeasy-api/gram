@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"net/http"
+	"net/http/httptest"
 	"net/url"
 	"testing"
 	"time"
@@ -12,6 +13,7 @@ import (
 	stripesdk "github.com/stripe/stripe-go/v85"
 
 	"github.com/speakeasy-api/gram/server/internal/guardian"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
 func TestV2MeterEventClientBuildsStripeRequest(t *testing.T) {
@@ -128,46 +130,59 @@ func TestV2MeterEventClientClassifiesGuardianRateLimit(t *testing.T) {
 	require.Zero(t, classified.HTTPStatusCode)
 }
 
-func TestV2MeterEventClientClassifiesExhaustedHTTPRetries(t *testing.T) {
+func TestV2MeterEventClientPreservesStripeRateLimitCodeAfterGuardianRetries(t *testing.T) {
 	t.Parallel()
 
-	for _, test := range []struct {
-		name       string
-		statusCode int
-		wantClass  V2MeterEventErrorClass
-	}{
-		{name: "rate limit", statusCode: http.StatusTooManyRequests, wantClass: V2MeterEventErrorRateLimit},
-		{name: "server error", statusCode: http.StatusServiceUnavailable, wantClass: V2MeterEventErrorServer},
-	} {
-		t.Run(test.name, func(t *testing.T) {
-			t.Parallel()
+	client := newV2MeterEventClientForResponse(t, http.StatusTooManyRequests, `{
+		"error": {
+			"type": "rate_limit",
+			"code": "meter_event_rate_limit",
+			"message": "too many requests"
+		}
+	}`)
 
-			client := &v2MeterEventClient{
-				create: func(context.Context, *stripesdk.V2BillingMeterEventCreateParams) (*stripesdk.V2BillingMeterEvent, error) {
-					return nil, &url.Error{
-						Op:  http.MethodPost,
-						URL: "https://api.stripe.com/v2/billing/meter_events",
-						Err: &guardian.RetriesExhaustedError{
-							Method:     http.MethodPost,
-							URL:        "https://api.stripe.com/v2/billing/meter_events",
-							Attempts:   1,
-							StatusCode: test.statusCode,
-							Body:       "",
-							Err:        nil,
-						},
-					}
-				},
-			}
+	err := client.CreateMeterEvent(t.Context(), validV2MeterEventInput())
+	require.Error(t, err)
+	var classified *V2MeterEventError
+	require.ErrorAs(t, err, &classified)
+	require.Equal(t, V2MeterEventErrorRateLimit, classified.Class)
+	require.Equal(t, "meter_event_rate_limit", classified.Code)
+	require.Equal(t, http.StatusTooManyRequests, classified.HTTPStatusCode)
+}
 
-			err := client.CreateMeterEvent(t.Context(), validV2MeterEventInput())
-			require.Error(t, err)
-			var classified *V2MeterEventError
-			require.ErrorAs(t, err, &classified)
-			require.Equal(t, test.wantClass, classified.Class)
-			require.Empty(t, classified.Code)
-			require.Equal(t, test.statusCode, classified.HTTPStatusCode)
-		})
-	}
+func TestV2MeterEventClientPreservesStripeServerCodeAfterGuardianRetries(t *testing.T) {
+	t.Parallel()
+
+	client := newV2MeterEventClientForResponse(t, http.StatusServiceUnavailable, `{
+		"error": {
+			"code": "api_unavailable",
+			"message": "temporarily unavailable"
+		}
+	}`)
+
+	err := client.CreateMeterEvent(t.Context(), validV2MeterEventInput())
+	require.Error(t, err)
+	var classified *V2MeterEventError
+	require.ErrorAs(t, err, &classified)
+	require.Equal(t, V2MeterEventErrorServer, classified.Class)
+	require.Equal(t, "api_unavailable", classified.Code)
+	require.Equal(t, http.StatusServiceUnavailable, classified.HTTPStatusCode)
+}
+
+func newV2MeterEventClientForResponse(t *testing.T, statusCode int, body string) V2MeterEventClient {
+	t.Helper()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.Header().Set("Retry-After", "0")
+		w.WriteHeader(statusCode)
+		_, _ = w.Write([]byte(body))
+	}))
+	t.Cleanup(server.Close)
+
+	guardianPolicy, err := guardian.NewUnsafePolicy(testenv.NewTracerProvider(t), nil)
+	require.NoError(t, err)
+	return newV2MeterEventClient(guardianPolicy, "sk_test_placeholder", server.URL)
 }
 
 func validV2MeterEventInput() V2MeterEventInput {

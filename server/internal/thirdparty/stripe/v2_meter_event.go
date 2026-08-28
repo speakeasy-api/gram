@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/hashicorp/go-retryablehttp"
 	stripesdk "github.com/stripe/stripe-go/v85"
 
 	"github.com/speakeasy-api/gram/server/internal/guardian"
@@ -88,9 +89,16 @@ type v2MeterEventClient struct {
 
 // NewV2MeterEventClient creates a Stripe v2 meter-event client using the repository HTTP policy.
 func NewV2MeterEventClient(guardianPolicy *guardian.Policy, apiKey string) V2MeterEventClient {
+	return newV2MeterEventClient(guardianPolicy, apiKey, stripesdk.APIURL)
+}
+
+func newV2MeterEventClient(guardianPolicy *guardian.Policy, apiKey, apiURL string) V2MeterEventClient {
 	retries := guardian.DefaultRetryConfig()
 	retries.WaitMax = 10 * time.Second
 	retries.MaxAttempts = 1
+	// Stripe must receive the final HTTP response so its v2 client can decode
+	// the provider error code after Guardian exhausts retries.
+	retries.ErrorHandler = retryablehttp.PassthroughErrorHandler
 	httpClient := guardianPolicy.PooledClient(
 		guardian.WithRetryConfig(retries),
 		guardian.WithResilience("stripe-meter-events", guardian.ResilienceConfig{
@@ -107,6 +115,7 @@ func NewV2MeterEventClient(guardianPolicy *guardian.Policy, apiKey string) V2Met
 
 	backendConfig := new(stripesdk.BackendConfig)
 	backendConfig.HTTPClient = httpClient
+	backendConfig.URL = stripesdk.String(apiURL)
 	// Guardian owns retries so the two retry layers cannot amplify each other.
 	backendConfig.MaxNetworkRetries = stripesdk.Int64(0)
 	backends := stripesdk.NewBackendsWithConfig(backendConfig)
@@ -205,15 +214,6 @@ func classifyV2MeterEventError(err error) *V2MeterEventError {
 			Class:          classifyV2MeterEventStatus(stripeErr.HTTPStatusCode),
 			Code:           string(stripeErr.Code),
 			HTTPStatusCode: stripeErr.HTTPStatusCode,
-			Err:            err,
-		}
-	}
-
-	if exhausted, ok := errors.AsType[*guardian.RetriesExhaustedError](err); ok && exhausted.StatusCode != 0 {
-		return &V2MeterEventError{
-			Class:          classifyV2MeterEventStatus(exhausted.StatusCode),
-			Code:           "",
-			HTTPStatusCode: exhausted.StatusCode,
 			Err:            err,
 		}
 	}
