@@ -14,7 +14,7 @@ import {
   organizationsListQuery,
   organizationsStatsQuery,
 } from "@/lib/adminQueries";
-import { GramAdminError } from "@/lib/gramAdminApi";
+import { GramAdminError, type AdminOrganization } from "@/lib/gramAdminApi";
 import { routeTree } from "@/routeTree.gen";
 import { anOrganization } from "@/test/fixtures";
 import { renderRouteTree } from "@/test/harness";
@@ -784,16 +784,17 @@ describe("Overview", () => {
     });
   });
 
-  it("locks every conversion exit and duplicate submission while pending", async () => {
-    let settle!: (value: {
-      organization_id: string;
-      converted_at: string;
-    }) => void;
-    mocks.markEnterpriseTrialConverted.mockReturnValue(
-      new Promise((resolve) => {
-        settle = resolve;
-      }),
-    );
+  it("keeps the whole operation visibly locked after POST success until canonical reconciliation settles", async () => {
+    const converted = {
+      ...ORG,
+      trial_state: "converted" as const,
+      trial_converted_at: "2026-03-08T12:34:56Z",
+    };
+    let settleRefresh!: (value: AdminOrganization) => void;
+    const refresh = new Promise<AdminOrganization>((resolve) => {
+      settleRefresh = resolve;
+    });
+    mocks.getOrganization.mockResolvedValueOnce(ORG).mockReturnValue(refresh);
     await renderRouteTree(routeTree, {
       initialPath: `/organizations/${ORG.slug}`,
     });
@@ -808,28 +809,38 @@ describe("Overview", () => {
     });
     fireEvent.click(submit);
     fireEvent.click(submit);
-    await waitFor(() =>
-      expect(mocks.markEnterpriseTrialConverted).toHaveBeenCalled(),
-    );
+    await waitFor(() => expect(mocks.getOrganization).toHaveBeenCalledTimes(2));
 
-    expect(payloadOf(mocks.markEnterpriseTrialConverted)).toEqual({
-      id: ORG.id,
-    });
+    expect(mocks.markEnterpriseTrialConverted).toHaveBeenCalledTimes(1);
     expect(isDisabled(submit)).toBe(true);
     expect(
       isDisabled(within(dialog).getByRole("button", { name: "Cancel" })),
     ).toBe(true);
     expect(isDisabled(opener)).toBe(true);
+    expect(within(dialog).queryByRole("button", { name: "Close" })).toBeNull();
+    fireEvent.keyDown(document, { key: "Escape" });
+    const overlay = document.querySelector('[data-slot="dialog-overlay"]');
+    if (!(overlay instanceof HTMLElement))
+      throw new Error("dialog has no overlay");
+    fireEvent.pointerDown(overlay);
+    fireEvent.click(overlay);
     fireEvent.click(submit);
+    expect(screen.getByRole("dialog")).toBe(dialog);
     expect(mocks.markEnterpriseTrialConverted).toHaveBeenCalledTimes(1);
 
-    settle({ organization_id: ORG.id, converted_at: "2026-03-08T12:34:56Z" });
+    settleRefresh(converted);
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    expect(document.activeElement).toBe(
+      screen.getByRole("heading", { name: "Details" }),
+    );
   });
 
   it.each([
-    [409, "Conflict"],
-    [404, "Not Found"],
+    [400, "Bad Request"],
+    [401, "Unauthorized"],
     [403, "Forbidden"],
+    [404, "Not Found"],
+    [422, "Unprocessable Entity"],
   ] as const)(
     "closes and restores the opener for a pre-commit %s error",
     async (status, label) => {
@@ -858,6 +869,111 @@ describe("Overview", () => {
       expect(liveRegion().textContent).toContain(label);
     },
   );
+
+  it("treats a stale concurrent 409 as potentially committed, locks through truth reconciliation, and retries idempotently", async () => {
+    const converted = {
+      ...ORG,
+      account_type: "enterprise",
+      whitelisted: true,
+      trial_state: "converted" as const,
+      trial_converted_at: "2026-03-08T12:34:56Z",
+    };
+    let settleRefresh!: (value: AdminOrganization) => void;
+    const refresh = new Promise<AdminOrganization>((resolve) => {
+      settleRefresh = resolve;
+    });
+    mocks.getOrganization
+      .mockResolvedValueOnce(ORG)
+      .mockImplementation((idOrSlug: string) =>
+        idOrSlug === ORG.slug ? refresh : Promise.resolve(converted),
+      );
+    mocks.markEnterpriseTrialConverted
+      .mockRejectedValueOnce(
+        new GramAdminError(
+          409,
+          { message: "converted access is not normalized" },
+          "gram admin 409 Conflict",
+        ),
+      )
+      .mockResolvedValueOnce({
+        organization_id: ORG.id,
+        converted_at: converted.trial_converted_at,
+      });
+    const qc = new QueryClient({
+      defaultOptions: {
+        queries: { retry: false },
+        mutations: { retry: false },
+      },
+    });
+    qc.setQueryData(organizationsListQuery().queryKey, {
+      organizations: [ORG],
+      next_cursor: undefined,
+    });
+    const invalidate = vi.spyOn(qc, "invalidateQueries");
+    await renderRouteTree(routeTree, {
+      initialPath: `/organizations/${ORG.slug}`,
+      queryClient: qc,
+    });
+    invalidate.mockClear();
+
+    fireEvent.click(
+      await screen.findByRole("button", {
+        name: `Mark ${ORG.name} as converted`,
+      }),
+    );
+    fireEvent.click(
+      within(await screen.findByRole("dialog")).getByRole("button", {
+        name: "Mark as converted",
+      }),
+    );
+
+    const dialog = await screen.findByRole("dialog");
+    const retry = await within(dialog).findByRole("button", { name: "Retry" });
+    expect(dialog.textContent).toContain("may already be recorded");
+    expect(isDisabled(retry)).toBe(true);
+    expect(
+      isDisabled(within(dialog).getByRole("button", { name: "Cancel" })),
+    ).toBe(true);
+    fireEvent.keyDown(document, { key: "Escape" });
+    const overlay = document.querySelector('[data-slot="dialog-overlay"]');
+    if (!(overlay instanceof HTMLElement))
+      throw new Error("dialog has no overlay");
+    fireEvent.pointerDown(overlay);
+    fireEvent.click(overlay);
+    fireEvent.click(retry);
+    expect(screen.getByRole("dialog")).toBe(dialog);
+    expect(mocks.markEnterpriseTrialConverted).toHaveBeenCalledTimes(1);
+
+    settleRefresh(converted);
+    await waitFor(() => expect(isDisabled(retry)).toBe(false));
+    expect(
+      screen.queryByRole("heading", { name: "Enterprise trial" }),
+    ).toBeNull();
+    const invalidatedKeys = invalidate.mock.calls.map(
+      ([filters]) => filters?.queryKey,
+    );
+    expect(invalidatedKeys).toContainEqual(organizationsListQuery().queryKey);
+    expect(invalidatedKeys).toContainEqual(["gram-admin-organization"]);
+    expect(invalidatedKeys).toContainEqual(organizationsStatsQuery.queryKey);
+    expect(invalidatedKeys).toContainEqual(
+      organizationActivityQuery(ORG.id).queryKey,
+    );
+    expect(qc.getQueryData(organizationQuery(ORG.id).queryKey)).toEqual(
+      converted,
+    );
+    expect(qc.getQueryData(organizationsListQuery().queryKey)).toEqual({
+      organizations: [ORG],
+      next_cursor: undefined,
+    });
+
+    fireEvent.click(retry);
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    expect(mocks.markEnterpriseTrialConverted).toHaveBeenCalledTimes(2);
+    expect(liveRegion().textContent).toContain("marked as converted");
+    expect(document.activeElement).toBe(
+      screen.getByRole("heading", { name: "Details" }),
+    );
+  });
 
   it("keeps an ambiguous post-commit error open, refetches truth, and safely retries after the panel unmounts", async () => {
     const converted = {

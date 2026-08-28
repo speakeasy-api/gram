@@ -451,6 +451,28 @@ describe("the organization write endpoints", () => {
     });
   });
 
+  it("reports a conversion 401 in place without starting login", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        new Response(JSON.stringify({ message: "admin session expired" }), {
+          status: 401,
+          headers: { "Content-Type": "application/json" },
+        }),
+      ),
+    );
+    const before = window.location.href;
+
+    await expect(
+      markEnterpriseTrialConverted({ id: ORG.id }),
+    ).rejects.toMatchObject({
+      status: 401,
+      message: expect.stringContaining("gram admin 401"),
+      body: { message: "admin session expired" },
+    });
+    expect(window.location.href).toBe(before);
+  });
+
   it("posts the id to the disable path", async () => {
     const fetch = stubFetch();
 

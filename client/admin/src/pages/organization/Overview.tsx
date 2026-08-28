@@ -23,6 +23,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
+import { useOnUnmount } from "@/hooks/useOnUnmount";
 import { ACCOUNT_TYPE_OPTIONS, isAccountType } from "@/lib/accountTypes";
 import {
   cancelOrganizationFetches,
@@ -125,6 +126,7 @@ export function Overview({ org }: { org: AdminOrganization }): JSX.Element {
   const { announce, showFailure } = useWriteReport();
   const [conversionOpen, setConversionOpen] = useState(false);
   const [conversionUncertain, setConversionUncertain] = useState(false);
+  const [conversionPending, setConversionPending] = useState(false);
 
   // Where the keyboard goes when the dialog closes. `useConfirmDialog` has no
   // `DialogTrigger`, so Radix's own restore drops focus on `document.body`.
@@ -133,7 +135,10 @@ export function Overview({ org }: { org: AdminOrganization }): JSX.Element {
   const detailsHeading = useRef<HTMLHeadingElement>(null);
   const conversionControl = useRef<HTMLButtonElement>(null);
   const conversionFocusAfterClose = useRef<"opener" | "details">("opener");
-  const conversionRunning = useRef(false);
+  const mounted = useRef(true);
+  useOnUnmount(() => {
+    mounted.current = false;
+  });
 
   const conversionMut = useMutation({
     mutationFn: () => markEnterpriseTrialConverted({ id: org.id }),
@@ -162,20 +167,29 @@ export function Overview({ org }: { org: AdminOrganization }): JSX.Element {
   };
 
   const convert = async (): Promise<void> => {
-    if (conversionRunning.current) return;
-    conversionRunning.current = true;
+    if (conversionPending) return;
+    setConversionPending(true);
     showFailure(null);
     try {
       await conversionMut.mutateAsync();
       await refreshConversionTruth();
+      if (!mounted.current) return;
       setConversionUncertain(false);
       closeConversion("details");
       announce(`${org.name} marked as converted.`);
     } catch (error) {
+      // Goa payload validation, admin auth, lookup, and provider preparation
+      // all fail before the conversion transaction commits. A 409 is excluded:
+      // the server also uses it when converted_at is already committed but the
+      // organization access snapshot is incompatible.
       const preCommit =
         error instanceof GramAdminError &&
-        error.status >= 400 &&
-        error.status < 500;
+        (error.status === 400 ||
+          error.status === 401 ||
+          error.status === 403 ||
+          error.status === 404 ||
+          error.status === 422);
+      if (!mounted.current) return;
       if (preCommit) {
         const text = `Could not mark ${org.name} as converted: ${errorMessage(error)}`;
         announce(text);
@@ -194,7 +208,7 @@ export function Overview({ org }: { org: AdminOrganization }): JSX.Element {
         // Retry remains available when canonical truth cannot be loaded.
       }
     } finally {
-      conversionRunning.current = false;
+      if (mounted.current) setConversionPending(false);
     }
   };
 
@@ -307,7 +321,7 @@ export function Overview({ org }: { org: AdminOrganization }): JSX.Element {
           <Row label="Account type">
             <Select
               value={org.account_type}
-              disabled={mut.isPending || conversionMut.isPending}
+              disabled={mut.isPending || conversionPending}
               onValueChange={(v) => {
                 void commit(
                   { account_type: v },
@@ -340,7 +354,7 @@ export function Overview({ org }: { org: AdminOrganization }): JSX.Element {
             <Switch
               ref={whitelistedControl}
               checked={org.whitelisted}
-              disabled={mut.isPending || conversionMut.isPending}
+              disabled={mut.isPending || conversionPending}
               onCheckedChange={(v) => {
                 void commit(
                   { whitelisted: v },
@@ -419,7 +433,7 @@ export function Overview({ org }: { org: AdminOrganization }): JSX.Element {
               <Button
                 ref={conversionControl}
                 size="sm"
-                disabled={conversionMut.isPending}
+                disabled={conversionPending}
                 aria-label={`Mark ${org.name} as converted`}
                 onClick={() => {
                   setConversionUncertain(false);
@@ -436,11 +450,11 @@ export function Overview({ org }: { org: AdminOrganization }): JSX.Element {
       <Dialog
         open={conversionOpen}
         onOpenChange={(open) => {
-          if (!open && !conversionMut.isPending) closeConversion("opener");
+          if (!open && !conversionPending) closeConversion("opener");
         }}
       >
         <DialogContent
-          showCloseButton={!conversionMut.isPending}
+          showCloseButton={!conversionPending}
           onCloseAutoFocus={(event) => event.preventDefault()}
         >
           <DialogHeader>
@@ -463,14 +477,14 @@ export function Overview({ org }: { org: AdminOrganization }): JSX.Element {
             <Button
               variant="ghost"
               size="sm"
-              disabled={conversionMut.isPending}
+              disabled={conversionPending}
               onClick={() => closeConversion("opener")}
             >
               Cancel
             </Button>
             <Button
               size="sm"
-              disabled={conversionMut.isPending}
+              disabled={conversionPending}
               onClick={() => void convert()}
             >
               {conversionUncertain ? "Retry" : "Mark as converted"}

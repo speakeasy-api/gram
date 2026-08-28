@@ -400,7 +400,7 @@ export type MarkEnterpriseTrialConvertedResult = {
 export function markEnterpriseTrialConverted(
   body: OrganizationRequest,
 ): Promise<MarkEnterpriseTrialConvertedResult> {
-  return gramAdminFetch<MarkEnterpriseTrialConvertedResult>(
+  return gramAdminMutation<MarkEnterpriseTrialConvertedResult>(
     "/admin/trial.convert",
     {
       method: "POST",
