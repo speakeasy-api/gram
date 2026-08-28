@@ -20,10 +20,11 @@ import { useGramContext } from "@gram/client/react-query/_context.js";
 import { useMembers } from "@gram/client/react-query/members.js";
 import { useRoles } from "@gram/client/react-query/roles.js";
 import { useQuery } from "@tanstack/react-query";
-import { Bot, CircleHelp } from "lucide-react";
+import { Bot } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { Navigate, Outlet, useLocation, useNavigate } from "react-router";
 import {
+  identityHasAccount,
   identityKindOf,
   identityUrnForEmployee,
   IDENTITY_KIND_LABELS,
@@ -59,13 +60,14 @@ const IDENTITY_FILTERS = defineFilters([
     label: "Kind",
     kind: "multiselect",
     pinned: true,
-    description: "Humans and agents.",
+    description: "People and agents.",
   },
 ]);
 
-const KIND_OPTIONS = (["person", "unknown", "agent"] as IdentityKind[]).map(
-  (kind) => ({ value: kind, label: IDENTITY_KIND_LABELS[kind] }),
-);
+const KIND_OPTIONS = (["person", "agent"] as IdentityKind[]).map((kind) => ({
+  value: kind,
+  label: IDENTITY_KIND_LABELS[kind],
+}));
 
 const IDENTITY_COLUMNS: Column<Employee>[] = [
   {
@@ -201,12 +203,11 @@ function IdentitiesIndexContent(): JSX.Element {
   );
 
   const counts = useMemo(() => {
-    const tally = { enrolled: 0, unknown: 0, agent: 0 };
+    const tally = { enrolled: 0, noAccount: 0, agent: 0 };
     for (const identity of identities) {
       if (identity.status === "enrolled") tally.enrolled += 1;
-      const kind = identityKindOf(identity);
-      if (kind === "unknown") tally.unknown += 1;
-      if (kind === "agent") tally.agent += 1;
+      if (!identityHasAccount(identity)) tally.noAccount += 1;
+      if (identityKindOf(identity) === "agent") tally.agent += 1;
     }
     return tally;
   }, [identities]);
@@ -248,7 +249,7 @@ function IdentitiesIndexContent(): JSX.Element {
       <Page.Section.Title>Identities</Page.Section.Title>
       <Page.Section.Description>
         {rows.length} of {identities.length} — every person and agent the
-        platform knows about, whether or not they have been active.
+        platform knows about, account here or not.
       </Page.Section.Description>
       <Page.Section.Body>
         <StatTileGroup>
@@ -267,10 +268,10 @@ function IdentitiesIndexContent(): JSX.Element {
             icon="circle-check"
           />
           <StatTile
-            title="Unattributed"
-            value={counts.unknown}
+            title="No account"
+            value={counts.noAccount}
             format="compact"
-            tone={counts.unknown > 0 ? "warning" : "neutral"}
+            tone={counts.noAccount > 0 ? "warning" : "neutral"}
             icon="circle-help"
           />
           <StatTile
@@ -327,29 +328,42 @@ function IdentitiesIndexContent(): JSX.Element {
  * agent id gets a bot — the row should say what sort of thing it is before the
  * reader gets to the Kind column.
  */
+/**
+ * Initials for a person whose only name is an address: getInitials splits on
+ * spaces, which yields a single letter for `ana.vidal@…`. Read the local part
+ * instead so an address-only person still gets a real monogram.
+ */
+function personInitials(name: string): string {
+  if (!name.includes("@")) return getInitials(name);
+  const local = name.slice(0, name.indexOf("@"));
+  return getInitials(local.replace(/[._-]+/g, " "));
+}
+
 function IdentityCell({ identity }: { identity: Employee }): JSX.Element {
-  const kind = identityKindOf(identity);
-  const secondary = kind === "person" ? identity.email : identity.name;
+  const isAgent = identityKindOf(identity) === "agent";
+  const hasAccount = identityHasAccount(identity);
+  // A person with no member row has only their address, which is already the
+  // name; repeating it underneath would be noise.
+  const secondary = identity.email === identity.name ? "" : identity.email;
 
   return (
     <div className="flex min-w-0 items-center gap-3">
       <Avatar className="size-8">
-        {kind === "person" && identity.photoUrl && (
+        {identity.photoUrl && (
           <AvatarImage src={identity.photoUrl} alt={identity.name} />
         )}
         <AvatarFallback className="text-[11px] font-medium">
-          {kind === "person" ? (
-            getInitials(identity.name)
-          ) : kind === "agent" ? (
-            <Bot className="size-4" />
-          ) : (
-            <CircleHelp className="size-4" />
-          )}
+          {isAgent ? <Bot className="size-4" /> : personInitials(identity.name)}
         </AvatarFallback>
       </Avatar>
       <div className="flex min-w-0 flex-col">
-        <Text className="truncate font-medium">{identity.name}</Text>
-        {kind === "person" && secondary && (
+        <div className="flex min-w-0 items-center gap-2">
+          <Text className="truncate font-medium">{identity.name}</Text>
+          {!isAgent && !hasAccount && (
+            <Badge variant="neutral">No account</Badge>
+          )}
+        </div>
+        {secondary && (
           <Text muted small className="truncate text-xs">
             {secondary}
           </Text>

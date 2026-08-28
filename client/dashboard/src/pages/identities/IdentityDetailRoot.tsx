@@ -32,12 +32,31 @@ import type { IdentityOutletContext } from "./identityRoute";
 import { useIdentityIsKnown, useIdentityProject } from "./useIdentityQueries";
 
 /** How each resolved subject kind reads in the header chip. */
-const KIND_LABELS: Record<IdentityModel["kind"], string> = {
-  user: "Person",
-  apikey: "API key",
-  agent: "Agent",
-  unattributed: "Unattributed",
-};
+/**
+ * How the subject reads in the header.
+ *
+ * An address the directory does not know still belongs to a person, so it is
+ * labelled as one; that they hold no account here is said separately, beside
+ * the label, rather than by calling them a different kind of thing.
+ */
+function kindLabel(identity: IdentityModel): string {
+  switch (identity.kind) {
+    case "user":
+      return "Person";
+    case "apikey":
+      return "API key";
+    case "agent":
+      return "Agent";
+    case "unattributed":
+      // An address is someone's; a bare agent id may name no one.
+      return identity.emails.length > 0 ? "Person" : "Agent";
+  }
+}
+
+/** True for a subject with activity here but no member record. */
+function hasNoAccount(identity: IdentityModel): boolean {
+  return identity.kind === "unattributed" && identity.emails.length > 0;
+}
 
 export default function IdentityDetailRoot(): JSX.Element {
   return (
@@ -219,7 +238,10 @@ function IdentityHeader({
                   {primaryEmail}
                 </Text>
               )}
-              <Badge variant="neutral">{KIND_LABELS[identity.kind]}</Badge>
+              <Badge variant="neutral">{kindLabel(identity)}</Badge>
+              {hasNoAccount(identity) && (
+                <Badge variant="neutral">No account</Badge>
+              )}
             </div>
           </div>
         </div>
