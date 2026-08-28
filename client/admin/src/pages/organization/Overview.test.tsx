@@ -665,6 +665,27 @@ describe("Overview", () => {
     },
   );
 
+  it.each(["none", undefined] as const)(
+    "keeps no-trial facts in Details for a %s trial state",
+    async (trialState) => {
+      mocks.getOrganization.mockResolvedValue({
+        ...ORG,
+        trial_state: trialState,
+      });
+      await renderRouteTree(routeTree, {
+        initialPath: `/organizations/${ORG.slug}`,
+      });
+
+      await screen.findByRole("heading", { name: "Details" });
+      const details = panelNamed("Details");
+      expect(within(details).getByText("No trial")).toBeTruthy();
+      expect(screen.getAllByText("No trial")).toHaveLength(1);
+      expect(
+        screen.queryByRole("heading", { name: "Enterprise trial" }),
+      ).toBeNull();
+    },
+  );
+
   it("keeps converted trial facts in Details without showing the side panel", async () => {
     const convertedAt = "2026-08-20T00:00:00Z";
     mocks.getOrganization.mockResolvedValue({
