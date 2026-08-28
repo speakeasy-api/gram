@@ -27,7 +27,7 @@ import { keepPreviousData } from "@tanstack/react-query";
 import { Shield } from "lucide-react";
 import { useCallback, useEffect, useMemo, type ReactNode } from "react";
 import { Link, Outlet, useLocation } from "react-router";
-import { useRoutes } from "@/routes";
+import { useOrgRoutes, useRoutes } from "@/routes";
 import {
   formatDateRangeLabel,
   useDateRangeFilter,
@@ -155,6 +155,7 @@ function NoPoliciesEmptyState() {
 
 function SecurityOverviewContent() {
   const routes = useRoutes();
+  const orgRoutes = useOrgRoutes();
   const location = useLocation();
   const {
     dateRange,
@@ -267,7 +268,7 @@ function SecurityOverviewContent() {
       // Bars lead to the person's identity page, where these findings sit
       // beside their access, spend and devices.
       const href = user.externalUserId
-        ? `${routes.identities.overview.href(
+        ? `${orgRoutes.identities.detail.overview.href(
             encodeIdentityUrn(`external:${user.externalUserId}`),
           )}${location.search}`
         : undefined;
@@ -278,7 +279,7 @@ function SecurityOverviewContent() {
         href,
       };
     });
-  }, [overview?.topUsers, routes.identities, location.search]);
+  }, [overview?.topUsers, orgRoutes.identities, location.search]);
 
   if (overviewQuery.error) {
     return (

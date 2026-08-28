@@ -5,7 +5,7 @@ import {
 import { Page } from "@/components/page-layout";
 import { RequireScope } from "@/components/require-scope";
 import { encodeIdentityUrn } from "@/lib/identity-urn";
-import { useRoutes } from "@/routes";
+import { useOrgRoutes } from "@/routes";
 import { type DateRangePreset } from "@/elements";
 import { TimeRangePicker } from "@/components/DashboardTimeRangePicker";
 import { useRiskOverview } from "@gram/client/react-query/riskOverview.js";
@@ -41,7 +41,7 @@ export default function RiskOverviewUsersIndex(): JSX.Element {
 }
 
 function RiskOverviewUsersIndexContent() {
-  const routes = useRoutes();
+  const orgRoutes = useOrgRoutes();
   const location = useLocation();
   const {
     dateRange,
@@ -105,7 +105,7 @@ function RiskOverviewUsersIndexContent() {
               // user view: one person's findings, spend and access now hang
               // off a single page.
               const href = u.externalUserId
-                ? `${routes.identities.overview.href(
+                ? `${orgRoutes.identities.detail.overview.href(
                     encodeIdentityUrn(`external:${u.externalUserId}`),
                   )}${location.search}`
                 : null;

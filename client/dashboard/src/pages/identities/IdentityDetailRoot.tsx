@@ -10,16 +10,23 @@ import {
 } from "@/components/route-not-found-state";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/Avatar";
 import { Badge } from "@/components/ui/Badge";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/Select";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { Text } from "@/components/ui/Text";
-import { useProject } from "@/contexts/Auth";
 import { getInitials } from "@/lib/initials";
 import { isNotFoundError } from "@/lib/route-errors";
-import { useRoutes } from "@/routes";
+import { useOrgRoutes } from "@/routes";
 import type { IdentityModel } from "@gram/client/models/components/identitymodel.js";
 import { useIdentity } from "@gram/client/react-query/identity.js";
 import { Navigate, Outlet, useLocation, useParams } from "react-router";
 import type { IdentityOutletContext } from "./identityRoute";
+import { useIdentityProject } from "./useIdentityQueries";
 
 /** How each resolved subject kind reads in the header chip. */
 const KIND_LABELS: Record<IdentityModel["kind"], string> = {
@@ -40,7 +47,7 @@ export default function IdentityDetailRoot(): JSX.Element {
 function IdentityDetailContent(): JSX.Element {
   const { identityUrn: encodedUrn } = useParams<{ identityUrn: string }>();
   const urn = encodedUrn ? decodeURIComponent(encodedUrn) : "";
-  const routes = useRoutes();
+  const orgRoutes = useOrgRoutes();
   const location = useLocation();
 
   const identityQuery = useIdentity({ urn }, undefined, {
@@ -49,9 +56,15 @@ function IdentityDetailContent(): JSX.Element {
   });
 
   // The bare route carries no panels of its own; overview is the landing view.
-  if (encodedUrn && location.pathname === routes.identities.href(encodedUrn)) {
+  if (
+    encodedUrn &&
+    location.pathname === orgRoutes.identities.href(encodedUrn)
+  ) {
     return (
-      <Navigate to={routes.identities.overview.href(encodedUrn)} replace />
+      <Navigate
+        to={orgRoutes.identities.detail.overview.href(encodedUrn)}
+        replace
+      />
     );
   }
 
@@ -74,9 +87,9 @@ function IdentityDetailContent(): JSX.Element {
             title="Identity not found"
             description="No activity in this organization resolves to that identifier."
             action={
-              <routes.employees.Link>
-                <SecondaryRouteAction>Back to people</SecondaryRouteAction>
-              </routes.employees.Link>
+              <orgRoutes.identities.Link>
+                <SecondaryRouteAction>Back to identities</SecondaryRouteAction>
+              </orgRoutes.identities.Link>
             }
           />
         </Page.Body>
@@ -111,7 +124,7 @@ function IdentityDetailContent(): JSX.Element {
             the navigation from the panels, which carry the card surface. */}
         <div className="bg-background flex min-h-0 flex-1 gap-8 px-8 py-8">
           <IdentityRail
-            items={identityRailItems(routes, encodedUrn ?? "")}
+            items={identityRailItems(orgRoutes, encodedUrn ?? "")}
             className="sticky top-8 hidden w-44 shrink-0 self-start lg:flex"
           />
           <div className="min-w-0 flex-1">
@@ -128,7 +141,7 @@ function IdentityHeader({
 }: {
   identity: IdentityModel;
 }): JSX.Element {
-  const project = useProject();
+  const project = useIdentityProject();
   const {
     dateRange,
     customRange,
@@ -175,9 +188,22 @@ function IdentityHeader({
           </div>
         </div>
         <div className="flex shrink-0 items-center gap-2">
-          <Text variant="small" muted>
-            {project.name}
-          </Text>
+          {/* Usage, cost and risk are recorded per project, so the project is a
+              filter on an org-level page rather than part of its address. */}
+          {project.options.length > 1 && (
+            <Select value={project.slug} onValueChange={project.setSlug}>
+              <SelectTrigger className="h-9 w-[180px]">
+                <SelectValue placeholder="Project" />
+              </SelectTrigger>
+              <SelectContent>
+                {project.options.map((option) => (
+                  <SelectItem key={option.slug} value={option.slug}>
+                    {option.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
           <TimeRangePicker
             preset={customRange ? null : dateRange}
             customRange={customRange}

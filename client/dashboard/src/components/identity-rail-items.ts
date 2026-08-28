@@ -1,5 +1,5 @@
 import type { IdentityRailItem } from "@/components/identity-rail";
-import type { useRoutes } from "@/routes";
+import type { useOrgRoutes } from "@/routes";
 
 /**
  * The identity page's sub-pages, in reading order: what needs attention first,
@@ -10,10 +10,10 @@ import type { useRoutes } from "@/routes";
  * the colon in `user:...` never matches.
  */
 export function identityRailItems(
-  routes: ReturnType<typeof useRoutes>,
+  routes: ReturnType<typeof useOrgRoutes>,
   encodedUrn: string,
 ): IdentityRailItem[] {
-  const detail = routes.identities;
+  const detail = routes.identities.detail;
   return [
     {
       key: "overview",

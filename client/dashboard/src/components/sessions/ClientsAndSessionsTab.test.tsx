@@ -232,7 +232,9 @@ describe("ClientsAndSessionsTab", () => {
     // not repeated — this tab is already scoped to one.
     expect(screen.getByText(/1 provider/)).toBeDefined();
 
-    fireEvent.click(screen.getByText("Ada Lovelace"));
+    // Not the person's name — that is a link to their profile now, so the
+    // row is opened from anywhere else on it.
+    fireEvent.click(screen.getByRole("button", { expanded: false }));
 
     expect(screen.getAllByText("Test Client").length).toBeGreaterThan(0);
   });
@@ -324,7 +326,9 @@ describe("ClientsAndSessionsTab", () => {
 
     renderTab(<ClientsAndSessionsTab issuerId="issuer-1" />);
 
-    fireEvent.click(screen.getByText("Ada Lovelace"));
+    // The person's name is a link to their profile; the row opens from
+    // anywhere else on it.
+    fireEvent.click(screen.getByRole("button", { expanded: false }));
     fireEvent.click(screen.getByText("Revoke connection"));
     fireEvent.click(screen.getByText("Confirm session revoke"));
 

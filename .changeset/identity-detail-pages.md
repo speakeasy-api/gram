@@ -2,4 +2,4 @@
 "dashboard": patch
 ---
 
-Add a single profile page per person, resolved from any identifier a subsystem records activity under. The page leads with what needs attention and carries its own rail to Access, Usage, Security, Cost, Devices and Activity, each its own route. Person references across the dashboard now link to it, and surfaces where someone is the subject — the cost profile, employee detail, the risk user view — carry an explicit "View user profile" link.
+Add Identities as an org-level section: an index of everyone the organization has seen — directory members, the addresses behind unattributed activity, and the agents that reported for themselves, each with its own affordance — and a page per person that gathers their access, usage, security, cost, devices and activity from every subsystem. Person references across the dashboard link to it, and surfaces where someone is the subject carry an explicit "View user profile" link. Employee Enrollment folds into the index; its old URL redirects.

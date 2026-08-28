@@ -48,6 +48,14 @@ vi.mock("react-router", () => ({
 
 vi.mock("@/routes", () => ({
   useRoutes: mocks.useRoutes,
+  // The user column links to the org-level identity page.
+  useOrgRoutes: () => ({
+    identities: {
+      detail: {
+        overview: { href: (urn: string) => `/identities/${urn}/overview` },
+      },
+    },
+  }),
 }));
 
 vi.mock("@/components/page-layout", () => {

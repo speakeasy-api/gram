@@ -71,7 +71,7 @@ export default function IdentityOverview(): JSX.Element {
         .map((c) => c.category)
         .join(", "),
       trailing: "Security",
-      href: routes.identities.security.href(encodedUrn),
+      href: orgRoutes.identities.detail.security.href(encodedUrn),
     },
     shadowServers.length > 0 && {
       key: "shadow",
@@ -80,7 +80,7 @@ export default function IdentityOverview(): JSX.Element {
       }`,
       detail: shadowServers[0]?.urlHost,
       trailing: "Security",
-      href: routes.identities.security.href(encodedUrn),
+      href: orgRoutes.identities.detail.security.href(encodedUrn),
     },
     deniedChallenges.length > 0 && {
       key: "challenges",
@@ -92,7 +92,7 @@ export default function IdentityOverview(): JSX.Element {
         .map((c) => c.scope)
         .join(", "),
       trailing: "Access",
-      href: routes.identities.access.href(encodedUrn),
+      href: orgRoutes.identities.detail.access.href(encodedUrn),
     },
     staleDevices.length > 0 && {
       key: "devices",
@@ -101,7 +101,7 @@ export default function IdentityOverview(): JSX.Element {
       } without an active agent`,
       detail: staleDevices[0]?.hostname ?? staleDevices[0]?.serialNumber,
       trailing: "Devices",
-      href: routes.identities.devices.href(encodedUrn),
+      href: orgRoutes.identities.detail.devices.href(encodedUrn),
     },
   ];
   const attention = attentionCandidates.filter(
