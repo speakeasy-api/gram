@@ -188,7 +188,7 @@ describe("Overview conversion without DialogTrigger restoration", () => {
         screen.queryByRole("heading", { name: "Enterprise trial" }),
       ).toBeNull(),
     );
-    expect(announce).toHaveBeenCalledWith(`${ORG.name} marked as converted.`);
+    expect(announce).not.toHaveBeenCalled();
 
     await finishClosingDialog();
     await settleBrowserFocus();

@@ -1,6 +1,8 @@
 import { useRef, useState, type JSX, type Ref } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useParams } from "@tanstack/react-router";
+import { LoaderCircle } from "lucide-react";
+import { toast } from "sonner";
 
 import { useConfirmDialog } from "@/components/ConfirmDialog";
 import { CopyValue } from "@/components/CopyValue";
@@ -102,6 +104,31 @@ function canMarkEnterpriseTrialConverted(org: AdminOrganization): boolean {
   );
 }
 
+function conversionConfirmation(org: AdminOrganization): string {
+  let description =
+    "This action ends the enterprise trial and prevents automatic demotion. Use this action only after the enterprise contract is confirmed.";
+  if (org.trial_state === "expired") {
+    description =
+      "The trial period has ended, but demotion is not complete. This action prevents demotion and keeps enterprise access.";
+  } else if (org.trial_state === "demoted") {
+    description =
+      "This action records the enterprise contract and restores enterprise access. Model provider keys with an admin lock or billing restriction remain disabled.";
+  }
+  if (org.disabled_at) {
+    description += " The organization remains disabled after conversion.";
+  }
+  return description;
+}
+
+function conversionSuccessDescription(org: AdminOrganization): string {
+  const access = org.disabled_at
+    ? "The organization remains disabled."
+    : org.trial_state === "demoted"
+      ? "Enterprise access was restored."
+      : "Enterprise access remains active.";
+  return `${access} Conversion details are available on the Activity page.`;
+}
+
 // The view reads the record from the same query the layout above it reads, so
 // the two hold one answer per render. A file route renders through `<Outlet/>`
 // and cannot be handed a prop.
@@ -134,6 +161,7 @@ export function Overview({ org }: { org: AdminOrganization }): JSX.Element {
   const whitelistedControl = useRef<HTMLButtonElement>(null);
   const detailsHeading = useRef<HTMLHeadingElement>(null);
   const conversionControl = useRef<HTMLButtonElement>(null);
+  const conversionContext = useRef(org);
   const conversionFocusAfterClose = useRef<"opener" | "details">("opener");
   const mounted = useRef(true);
   useOnUnmount(() => {
@@ -181,6 +209,9 @@ export function Overview({ org }: { org: AdminOrganization }): JSX.Element {
 
   const convert = async (): Promise<void> => {
     if (conversionPending) return;
+    const successDescription = conversionSuccessDescription(
+      conversionContext.current,
+    );
     setConversionPending(true);
     showFailure(null);
     try {
@@ -189,7 +220,9 @@ export function Overview({ org }: { org: AdminOrganization }): JSX.Element {
       if (!mounted.current) return;
       setConversionUncertain(false);
       closeConversion("details");
-      announce(`${org.name} marked as converted.`);
+      toast.success("Trial marked as converted", {
+        description: successDescription,
+      });
     } catch (error) {
       // Goa payload validation, admin auth, lookup, and provider preparation
       // all fail before the conversion transaction commits. A 409 is excluded:
@@ -449,6 +482,7 @@ export function Overview({ org }: { org: AdminOrganization }): JSX.Element {
                 disabled={conversionPending}
                 aria-label={`Mark ${org.name} as converted`}
                 onClick={() => {
+                  conversionContext.current = org;
                   setConversionUncertain(false);
                   setConversionOpen(true);
                 }}
@@ -471,12 +505,9 @@ export function Overview({ org }: { org: AdminOrganization }): JSX.Element {
           onCloseAutoFocus={restoreConversionFocusFromDialog}
         >
           <DialogHeader>
-            <DialogTitle>Mark {org.name} as converted?</DialogTitle>
+            <DialogTitle>Mark trial as converted?</DialogTitle>
             <DialogDescription>
-              This records a signed enterprise conversion, normalizes enterprise
-              access and runtime settings, and reconciles model provider keys
-              according to each key’s disable causes. Keys disabled for admin,
-              billing, or unknown causes remain disabled.
+              {conversionConfirmation(conversionContext.current)}
             </DialogDescription>
           </DialogHeader>
           {conversionUncertain && (
@@ -498,9 +529,23 @@ export function Overview({ org }: { org: AdminOrganization }): JSX.Element {
             <Button
               size="sm"
               disabled={conversionPending}
+              aria-busy={conversionPending}
               onClick={() => void convert()}
             >
-              {conversionUncertain ? "Retry" : "Mark as converted"}
+              {conversionPending ? (
+                <>
+                  <LoaderCircle
+                    data-slot="conversion-spinner"
+                    aria-hidden="true"
+                    className="animate-spin"
+                  />
+                  Marking as converted…
+                </>
+              ) : conversionUncertain ? (
+                "Retry"
+              ) : (
+                "Mark as converted"
+              )}
             </Button>
           </DialogFooter>
         </DialogContent>

@@ -27,6 +27,11 @@ const mocks = vi.hoisted(() => ({
   getOrganizationStats: vi.fn(),
   updateOrganization: vi.fn(),
   markEnterpriseTrialConverted: vi.fn(),
+  toastSuccess: vi.fn(),
+}));
+
+vi.mock("sonner", () => ({
+  toast: { success: mocks.toastSuccess },
 }));
 
 vi.mock("@/lib/gramAdminApi", async (importOriginal) => {
@@ -141,6 +146,7 @@ beforeEach(() => {
   mocks.getOrganizationStats.mockReset();
   mocks.updateOrganization.mockReset();
   mocks.markEnterpriseTrialConverted.mockReset();
+  mocks.toastSuccess.mockReset();
   mocks.markEnterpriseTrialConverted.mockResolvedValue({
     organization_id: ORG.id,
     converted_at: "2026-03-08T12:34:56Z",
@@ -683,30 +689,58 @@ describe("Overview", () => {
     },
   );
 
-  it("explains the signed conversion and cause-aware reconciliation without promising every key is enabled", async () => {
-    await renderRouteTree(routeTree, {
-      initialPath: `/organizations/${ORG.slug}`,
-    });
+  it.each([
+    [
+      "running",
+      ORG,
+      "This action ends the enterprise trial and prevents automatic demotion. Use this action only after the enterprise contract is confirmed.",
+      undefined,
+    ],
+    [
+      "ending soon",
+      { ...ORG, trial_state: "ending_soon" as const },
+      "This action ends the enterprise trial and prevents automatic demotion. Use this action only after the enterprise contract is confirmed.",
+      undefined,
+    ],
+    [
+      "expired",
+      { ...ORG, trial_state: "expired" as const },
+      "The trial period has ended, but demotion is not complete. This action prevents demotion and keeps enterprise access.",
+      undefined,
+    ],
+    [
+      "demoted",
+      { ...ORG, trial_state: "demoted" as const },
+      "This action records the enterprise contract and restores enterprise access. Model provider keys with an admin lock or billing restriction remain disabled.",
+      undefined,
+    ],
+    [
+      "disabled",
+      { ...ORG, disabled_at: "2026-03-01T00:00:00Z" },
+      "This action ends the enterprise trial and prevents automatic demotion. Use this action only after the enterprise contract is confirmed.",
+      "The organization remains disabled after conversion.",
+    ],
+  ] as const)(
+    "renders AGE-3149 confirmation copy for a %s trial",
+    async (_case, org, stateCopy, disabledCopy) => {
+      mocks.getOrganization.mockResolvedValue(org);
+      await renderRouteTree(routeTree, {
+        initialPath: `/organizations/${ORG.slug}`,
+      });
 
-    fireEvent.click(
-      await screen.findByRole("button", {
-        name: `Mark ${ORG.name} as converted`,
-      }),
-    );
-    const dialog = await screen.findByRole("dialog");
-    expect(within(dialog).getByRole("heading").textContent).toBe(
-      `Mark ${ORG.name} as converted?`,
-    );
-    expect(dialog.textContent).toContain("signed enterprise conversion");
-    expect(dialog.textContent).toContain(
-      "normalizes enterprise access and runtime settings",
-    );
-    expect(dialog.textContent).toContain(
-      "according to each key’s disable causes",
-    );
-    expect(dialog.textContent).toContain("remain disabled");
-    expect(dialog.textContent).not.toContain("all keys will be enabled");
-  });
+      fireEvent.click(
+        await screen.findByRole("button", {
+          name: `Mark ${org.name} as converted`,
+        }),
+      );
+      const dialog = await screen.findByRole("dialog");
+      expect(within(dialog).getByRole("heading").textContent).toBe(
+        "Mark trial as converted?",
+      );
+      expect(dialog.textContent).toContain(stateCopy);
+      if (disabledCopy) expect(dialog.textContent).toContain(disabledCopy);
+    },
+  );
 
   it("returns focus to the conversion opener when the operator cancels", async () => {
     await renderRouteTree(routeTree, {
@@ -784,6 +818,72 @@ describe("Overview", () => {
     });
   });
 
+  it.each([
+    [
+      "running",
+      ORG,
+      "Enterprise access remains active. Conversion details are available on the Activity page.",
+    ],
+    [
+      "ending soon",
+      { ...ORG, trial_state: "ending_soon" as const },
+      "Enterprise access remains active. Conversion details are available on the Activity page.",
+    ],
+    [
+      "expired",
+      { ...ORG, trial_state: "expired" as const },
+      "Enterprise access remains active. Conversion details are available on the Activity page.",
+    ],
+    [
+      "demoted",
+      { ...ORG, trial_state: "demoted" as const },
+      "Enterprise access was restored. Conversion details are available on the Activity page.",
+    ],
+    [
+      "disabled",
+      {
+        ...ORG,
+        trial_state: "demoted" as const,
+        disabled_at: "2026-03-01T00:00:00Z",
+      },
+      "The organization remains disabled. Conversion details are available on the Activity page.",
+    ],
+  ] as const)(
+    "shows AGE-3149 conversion success feedback for a %s trial",
+    async (_case, org, description) => {
+      const converted = {
+        ...org,
+        account_type: "enterprise",
+        whitelisted: true,
+        trial_state: "converted" as const,
+        trial_converted_at: "2026-03-08T12:34:56Z",
+      };
+      mocks.getOrganization.mockImplementation((idOrSlug: string) =>
+        Promise.resolve(idOrSlug === ORG.id ? converted : org),
+      );
+      await renderRouteTree(routeTree, {
+        initialPath: `/organizations/${ORG.slug}`,
+      });
+
+      fireEvent.click(
+        await screen.findByRole("button", {
+          name: `Mark ${org.name} as converted`,
+        }),
+      );
+      fireEvent.click(
+        within(await screen.findByRole("dialog")).getByRole("button", {
+          name: "Mark as converted",
+        }),
+      );
+
+      await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+      expect(mocks.toastSuccess).toHaveBeenCalledWith(
+        "Trial marked as converted",
+        { description },
+      );
+    },
+  );
+
   it("keeps the whole operation visibly locked after POST success until canonical reconciliation settles", async () => {
     const converted = {
       ...ORG,
@@ -812,7 +912,14 @@ describe("Overview", () => {
     await waitFor(() => expect(mocks.getOrganization).toHaveBeenCalledTimes(2));
 
     expect(mocks.markEnterpriseTrialConverted).toHaveBeenCalledTimes(1);
-    expect(isDisabled(submit)).toBe(true);
+    const pendingSubmit = within(dialog).getByRole("button", {
+      name: "Marking as converted…",
+    });
+    expect(isDisabled(pendingSubmit)).toBe(true);
+    expect(pendingSubmit.getAttribute("aria-busy")).toBe("true");
+    expect(
+      pendingSubmit.querySelector('[data-slot="conversion-spinner"]'),
+    ).toBeTruthy();
     expect(
       isDisabled(within(dialog).getByRole("button", { name: "Cancel" })),
     ).toBe(true);
@@ -867,6 +974,7 @@ describe("Overview", () => {
       await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
       expect(document.activeElement).toBe(opener);
       expect(liveRegion().textContent).toContain(label);
+      expect(mocks.toastSuccess).not.toHaveBeenCalled();
     },
   );
 
@@ -928,9 +1036,12 @@ describe("Overview", () => {
     );
 
     const dialog = await screen.findByRole("dialog");
-    const retry = await within(dialog).findByRole("button", { name: "Retry" });
+    const pendingRetry = await within(dialog).findByRole("button", {
+      name: "Marking as converted…",
+    });
     expect(dialog.textContent).toContain("may already be recorded");
-    expect(isDisabled(retry)).toBe(true);
+    expect(isDisabled(pendingRetry)).toBe(true);
+    expect(pendingRetry.getAttribute("aria-busy")).toBe("true");
     expect(
       isDisabled(within(dialog).getByRole("button", { name: "Cancel" })),
     ).toBe(true);
@@ -940,12 +1051,13 @@ describe("Overview", () => {
       throw new Error("dialog has no overlay");
     fireEvent.pointerDown(overlay);
     fireEvent.click(overlay);
-    fireEvent.click(retry);
+    fireEvent.click(pendingRetry);
     expect(screen.getByRole("dialog")).toBe(dialog);
     expect(mocks.markEnterpriseTrialConverted).toHaveBeenCalledTimes(1);
 
     settleRefresh(converted);
-    await waitFor(() => expect(isDisabled(retry)).toBe(false));
+    const retry = await within(dialog).findByRole("button", { name: "Retry" });
+    expect(isDisabled(retry)).toBe(false);
     expect(
       screen.queryByRole("heading", { name: "Enterprise trial" }),
     ).toBeNull();
@@ -969,20 +1081,21 @@ describe("Overview", () => {
     fireEvent.click(retry);
     await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
     expect(mocks.markEnterpriseTrialConverted).toHaveBeenCalledTimes(2);
-    expect(liveRegion().textContent).toContain("marked as converted");
+    expect(mocks.toastSuccess).toHaveBeenCalledTimes(1);
     expect(document.activeElement).toBe(
       screen.getByRole("heading", { name: "Details" }),
     );
   });
 
   it("keeps an ambiguous post-commit error open, refetches truth, and safely retries after the panel unmounts", async () => {
+    const original = { ...ORG, trial_state: "demoted" as const };
     const converted = {
-      ...ORG,
+      ...original,
       trial_state: "converted" as const,
       trial_converted_at: "2026-03-08T12:34:56Z",
     };
     mocks.getOrganization
-      .mockResolvedValueOnce(ORG)
+      .mockResolvedValueOnce(original)
       .mockResolvedValue(converted);
     mocks.markEnterpriseTrialConverted
       .mockRejectedValueOnce(new Error("provider unavailable"))
@@ -1008,6 +1121,9 @@ describe("Overview", () => {
     await waitFor(() => {
       expect(dialog.textContent).toContain("may already be recorded");
       expect(liveRegion().textContent).toContain("may already be recorded");
+      expect(dialog.textContent).toContain(
+        "records the enterprise contract and restores enterprise access",
+      );
       expect(
         screen.queryByRole("heading", { name: "Enterprise trial" }),
       ).toBeNull();
@@ -1019,7 +1135,7 @@ describe("Overview", () => {
     expect(document.activeElement).toBe(
       screen.getByRole("heading", { name: "Details" }),
     );
-    expect(liveRegion().textContent).toContain("marked as converted");
+    expect(mocks.toastSuccess).toHaveBeenCalledTimes(1);
   });
 
   it.each(["running", "ending_soon", "expired", "demoted"] as const)(
