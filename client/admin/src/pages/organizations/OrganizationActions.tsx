@@ -178,8 +178,8 @@ export function OrganizationActions({
   // `DialogTrigger`, and these dialogs have none: its `onCloseAutoFocus`
   // cancels FocusScope's own restore and then focuses `triggerRef.current`,
   // which is null here, so without this every close drops the keyboard onto
-  // `document.body`. One handler covers all five exits: success, Escape,
-  // Cancel, the backdrop and the X.
+  // `document.body`. The close handler also schedules an app-owned restore,
+  // because browser smoke proved controlled unmount can skip that Radix hook.
   const openedFrom = useRef<HTMLElement | null>(null);
 
   const openDialog = (dialog: OpenDialog, from: HTMLElement | null): void => {
@@ -192,24 +192,39 @@ export function OrganizationActions({
     setOpen(dialog);
   };
 
-  const restoreFocus = (event: Event): void => {
-    const control = openedFrom.current;
+  const focusOrigin = (control: HTMLElement | null): boolean => {
     if (control?.isConnected) {
-      event.preventDefault();
       control.focus();
-      return;
+      return true;
     }
 
     const fallback = focusFallbackRef?.current;
-    if (!fallback?.isConnected) return;
-    event.preventDefault();
+    if (!fallback?.isConnected) return false;
     fallback.focus();
+    return true;
+  };
+
+  const restoreAfterCommit = (control: HTMLElement | null): void => {
+    // The controlled dialog can unmount without Radix firing close-autofocus in
+    // a browser. Restore after React disconnects the dialog control instead of
+    // relying on DialogTrigger behavior these dialogs do not have.
+    setTimeout(() => focusOrigin(control));
+  };
+
+  const closeDialog = (): void => {
+    const control = openedFrom.current;
+    setOpen(undefined);
+    restoreAfterCommit(control);
+  };
+
+  const restoreFocus = (event: Event): void => {
+    if (focusOrigin(openedFrom.current)) event.preventDefault();
   };
 
   const runDisable = (): void => {
     disable.mutate(org.id, {
       onSuccess: () => {
-        setOpen(undefined);
+        closeDialog();
         showFailure(null);
         announce(`${org.name} is disabled.`);
       },
@@ -226,15 +241,9 @@ export function OrganizationActions({
         showFailure(null);
         announce(`${org.name} is enabled.`);
         // The keyed Re-enable control is replaced by Disable when the canonical
-        // record lands. Let React commit that replacement, then restore the
-        // keyboard to the surface-owned stable destination.
-        setTimeout(() => {
-          if (from?.isConnected) {
-            from.focus();
-            return;
-          }
-          focusFallbackRef?.current?.focus();
-        });
+        // record lands. Restore to it if it survived, or to the surface-owned
+        // stable destination after React commits the replacement.
+        restoreAfterCommit(from);
       },
       // The one write with no dialog, so its failure is shown as well as
       // spoken. Without the banner the only account of it on the page is
@@ -252,7 +261,7 @@ export function OrganizationActions({
       { id: org.id, days },
       {
         onSuccess: () => {
-          setOpen(undefined);
+          closeDialog();
           showFailure(null);
           announce(`${org.name} trial extended by ${dayCount(days)}.`);
         },
@@ -267,7 +276,7 @@ export function OrganizationActions({
       { id: org.id, days },
       {
         onSuccess: () => {
-          setOpen(undefined);
+          closeDialog();
           showFailure(null);
           announce(`${org.name} trial re-armed for ${dayCount(days)}.`);
         },
@@ -284,7 +293,7 @@ export function OrganizationActions({
           org={org}
           pending={disable.isPending}
           failure={disable.error}
-          onCancel={() => setOpen(undefined)}
+          onCancel={closeDialog}
           onCloseAutoFocus={restoreFocus}
           onConfirm={runDisable}
         />
@@ -304,7 +313,7 @@ export function OrganizationActions({
           failureLead={extendFailureLead}
           pending={extend.isPending}
           failure={extend.error}
-          onCancel={() => setOpen(undefined)}
+          onCancel={closeDialog}
           onCloseAutoFocus={restoreFocus}
           onSubmit={runExtend}
         />
@@ -323,7 +332,7 @@ export function OrganizationActions({
           failureLead={rearmFailureLead}
           pending={rearm.isPending}
           failure={rearm.error}
-          onCancel={() => setOpen(undefined)}
+          onCancel={closeDialog}
           onCloseAutoFocus={restoreFocus}
           onSubmit={runRearm}
         />
