@@ -86,6 +86,12 @@ func New(db repo.DBTX, mutations ...MutationDependencies) *Core {
 	return core
 }
 
+// PageCursor identifies one exclusion in deterministic keyset order.
+type PageCursor struct {
+	CreatedAt time.Time
+	ID        uuid.UUID
+}
+
 // List returns a project's exclusions, optionally filtered to one policy.
 func (c *Core) List(ctx context.Context, projectID uuid.UUID, policyID uuid.NullUUID) ([]Exclusion, error) {
 	rows, err := c.queries.ListRiskExclusionsByProject(ctx, repo.ListRiskExclusionsByProjectParams{
@@ -94,6 +100,30 @@ func (c *Core) List(ctx context.Context, projectID uuid.UUID, policyID uuid.Null
 	})
 	if err != nil {
 		return nil, fmt.Errorf("list risk exclusions: %w", err)
+	}
+	out := make([]Exclusion, 0, len(rows))
+	for _, row := range rows {
+		out = append(out, Project(row))
+	}
+	return out, nil
+}
+
+// ListPage returns at most limit+1 exclusions in deterministic keyset order.
+func (c *Core) ListPage(ctx context.Context, projectID uuid.UUID, policyID uuid.NullUUID, cursor *PageCursor, limit int32) ([]Exclusion, error) {
+	params := repo.ListRiskExclusionsByProjectPageParams{
+		ProjectID:       projectID,
+		RiskPolicyID:    policyID,
+		CursorCreatedAt: pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: pgtype.Finite, Valid: false},
+		CursorID:        uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		PageLimit:       limit + 1,
+	}
+	if cursor != nil {
+		params.CursorCreatedAt = pgtype.Timestamptz{Time: cursor.CreatedAt, InfinityModifier: pgtype.Finite, Valid: true}
+		params.CursorID = uuid.NullUUID{UUID: cursor.ID, Valid: true}
+	}
+	rows, err := c.queries.ListRiskExclusionsByProjectPage(ctx, params)
+	if err != nil {
+		return nil, fmt.Errorf("list risk exclusions page: %w", err)
 	}
 	out := make([]Exclusion, 0, len(rows))
 	for _, row := range rows {

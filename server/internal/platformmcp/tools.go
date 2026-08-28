@@ -175,6 +175,11 @@ func newServer(reader Reader, catalog Catalog, registrations *RegistrationServic
 	reg := newRegistrar(server)
 
 	registerReadTools(reg, reader, cursorKeyMaterial)
+	if postgresReader, ok := reader.(*PostgresReader); ok {
+		registerRiskTools(reg, postgresReader.riskReads)
+	} else {
+		registerUnavailableRiskTools(reg)
+	}
 	registerSetupResources(reg, setupResources, time.Now)
 	if registrations == nil || !registrations.budgets.Docs.valid() {
 		registerUnavailableSearchDocsTool(reg)

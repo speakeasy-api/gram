@@ -1,0 +1,312 @@
+//nolint:exhaustruct // MCP SDK manifests and JSON schemas rely on documented zero-value optional fields.
+package platformmcp
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"maps"
+
+	"github.com/google/jsonschema-go/jsonschema"
+	"github.com/modelcontextprotocol/go-sdk/mcp"
+
+	"github.com/speakeasy-api/gram/server/internal/risk/policycatalog"
+)
+
+func registerRiskTools(reg *Registrar, risk *RiskReadService) {
+	if risk == nil || !risk.valid() {
+		registerUnavailableRiskTools(reg)
+		return
+	}
+	addTool(reg, &mcp.Tool{
+		Name:        "list_risk_policies",
+		Title:       "List Risk Policies",
+		Description: "List bounded, privacy-safe risk policy summaries in an exact project or the organization's literal default project.",
+		Annotations: readOnlyAnnotations(),
+		InputSchema: riskListSchema(false),
+	}, ToolMeta{Audiences: bothAudiences, ProjectScope: ProjectScopeDefaultable}, func(ctx context.Context, _ *mcp.CallToolRequest, input ListRiskPoliciesInput) (*mcp.CallToolResult, ListRiskPoliciesOutput, error) {
+		return riskReadToolCall(ctx, func(principal Principal) (ListRiskPoliciesOutput, error) {
+			return risk.ListPolicies(ctx, principal, input)
+		})
+	})
+	addTool(reg, &mcp.Tool{
+		Name:        "get_risk_policy",
+		Title:       "Get Risk Policy",
+		Description: "Read one risk policy from an exact project or the organization's literal default project, with closed compatibility metadata.",
+		Annotations: readOnlyAnnotations(),
+		InputSchema: riskGetPolicySchema(),
+	}, ToolMeta{Audiences: bothAudiences, ProjectScope: ProjectScopeDefaultable}, func(ctx context.Context, _ *mcp.CallToolRequest, input GetRiskPolicyInput) (*mcp.CallToolResult, GetRiskPolicyOutput, error) {
+		return riskReadToolCall(ctx, func(principal Principal) (GetRiskPolicyOutput, error) {
+			return risk.GetPolicy(ctx, principal, input)
+		})
+	})
+	addTool(reg, &mcp.Tool{
+		Name:        "list_risk_exclusions",
+		Title:       "List Risk Exclusions",
+		Description: "List bounded, privacy-safe risk exclusions in an exact project or the organization's literal default project. Exact and legacy regex values are never returned.",
+		Annotations: readOnlyAnnotations(),
+		InputSchema: riskListSchema(true),
+	}, ToolMeta{Audiences: bothAudiences, ProjectScope: ProjectScopeDefaultable}, func(ctx context.Context, _ *mcp.CallToolRequest, input ListRiskExclusionsInput) (*mcp.CallToolResult, ListRiskExclusionsOutput, error) {
+		return riskReadToolCall(ctx, func(principal Principal) (ListRiskExclusionsOutput, error) {
+			return risk.ListExclusions(ctx, principal, input)
+		})
+	})
+	registerRiskMutationStubs(reg, risk.catalog, true)
+}
+
+func registerUnavailableRiskTools(reg *Registrar) {
+	registerUnavailableRiskToolsWithCatalog(reg, policycatalog.Build)
+}
+
+func registerUnavailableRiskToolsWithCatalog(reg *Registrar, buildCatalog func() (policycatalog.Catalog, error)) {
+	for _, tool := range []struct {
+		name, title, description string
+		schema                   *jsonschema.Schema
+	}{
+		{"list_risk_policies", "List Risk Policies", "List risk policy summaries. Risk reads are unavailable in this deployment.", riskListSchema(false)},
+		{"get_risk_policy", "Get Risk Policy", "Read one risk policy. Risk reads are unavailable in this deployment.", riskGetPolicySchema()},
+		{"list_risk_exclusions", "List Risk Exclusions", "List risk exclusions. Risk reads are unavailable in this deployment.", riskListSchema(true)},
+	} {
+		addTool(reg, &mcp.Tool{Name: tool.name, Title: tool.title, Description: tool.description, Annotations: readOnlyAnnotations(), InputSchema: tool.schema}, ToolMeta{Audiences: bothAudiences, ProjectScope: ProjectScopeDefaultable}, unavailableTool("risk_reads"))
+	}
+	catalog, err := buildCatalog()
+	registerRiskMutationStubs(reg, catalog, err == nil)
+}
+
+func registerRiskMutationStubs(reg *Registrar, catalog policycatalog.Catalog, catalogAvailable bool) {
+	createPolicySchema := fallbackCreateRiskPolicySchema()
+	updatePolicySchema := fallbackUpdateRiskPolicySchema()
+	createExclusionSchema := fallbackCreateRiskExclusionSchema()
+	if catalogAvailable {
+		createPolicySchema = createRiskPolicySchema(catalog)
+		updatePolicySchema = updateRiskPolicySchema(catalog)
+		createExclusionSchema = createRiskExclusionSchema(catalog)
+	}
+	for _, tool := range []struct {
+		name, title, description string
+		schema                   *jsonschema.Schema
+	}{
+		{"create_risk_policy", "Create Risk Policy", "Create a risk policy in an explicit project. Risk mutations are not enabled in this rollout.", createPolicySchema},
+		{"update_risk_policy", "Update Risk Policy", "Patch a risk policy in an explicit project using an opaque expected version. Risk mutations are not enabled in this rollout.", updatePolicySchema},
+		{"create_risk_exclusion", "Create Risk Exclusion", "Create a non-regex risk exclusion in an explicit project. Risk mutations are not enabled in this rollout.", createExclusionSchema},
+		{"update_risk_exclusion", "Update Risk Exclusion", "Enable or disable one risk exclusion without changing its definition. Risk mutations are not enabled in this rollout.", updateRiskExclusionSchema()},
+	} {
+		addTool(reg, &mcp.Tool{Name: tool.name, Title: tool.title, Description: tool.description, InputSchema: tool.schema}, ToolMeta{Audiences: bothAudiences, ProjectScope: ProjectScopeExplicit}, unavailableTool("risk_mutations"))
+	}
+}
+
+func riskReadToolCall[Out any](ctx context.Context, call func(principal Principal) (Out, error)) (*mcp.CallToolResult, Out, error) {
+	var zero Out
+	principal, err := principalFromToolContext(ctx)
+	if err != nil {
+		return nil, zero, err
+	}
+	output, err := call(principal)
+	if err == nil {
+		return nil, output, nil
+	}
+	var refusal featureUnavailableResult
+	switch {
+	case errors.Is(err, ErrRiskReadInvalid), errors.Is(err, ErrRiskCursorInvalid):
+		refusal = featureUnavailableResult{Code: "invalid_request", Feature: "risk_reads", Message: "The risk read input or cursor is invalid. Re-read the tool schema and restart pagination."}
+	case errors.Is(err, ErrRiskReadNotFound):
+		refusal = featureUnavailableResult{Code: "not_found", Feature: "risk_reads", Message: "The requested project or risk resource is not available to this organization."}
+	case errors.Is(err, ErrUnavailable):
+		refusal = featureUnavailableResult{Code: unavailableCode, Feature: "risk_reads", Message: "Risk reads are temporarily unavailable."}
+	default:
+		return nil, zero, err
+	}
+	content, marshalErr := json.Marshal(refusal)
+	if marshalErr != nil {
+		return nil, zero, fmt.Errorf("encode risk read refusal: %w", marshalErr)
+	}
+	return &mcp.CallToolResult{Content: []mcp.Content{&mcp.TextContent{Text: string(content)}}, IsError: true}, zero, nil
+}
+
+func riskListSchema(withPolicy bool) *jsonschema.Schema {
+	properties := map[string]*jsonschema.Schema{
+		"cursor": {Type: "string", Description: "Opaque cursor returned by the previous page."},
+		"limit":  {Type: "integer", Minimum: new(float64(1)), Maximum: new(float64(riskReadPageSize)), Description: "Page size; defaults to 50 and cannot exceed 50."},
+	}
+	if withPolicy {
+		properties["policy_id"] = uuidSchema("Optional exact policy ID filter.")
+	}
+	return projectSelectorSchema(properties, nil)
+}
+
+func riskGetPolicySchema() *jsonschema.Schema {
+	return projectSelectorSchema(map[string]*jsonschema.Schema{
+		"policy_id": uuidSchema("Exact policy ID to read."),
+	}, []string{"policy_id"})
+}
+
+func createRiskPolicySchema(catalog policycatalog.Catalog) *jsonschema.Schema {
+	standard := riskPolicyCreateCommonProperties(catalog)
+	standard["policy_type"] = constSchema("standard")
+	standard["sources"] = arraySchema(catalogEnumSchema(catalog, catalog.Sources), 1, true)
+	standard["presidio_entities"] = arraySchema(catalogEnumSchema(catalog, catalog.PresidioEntities), 0, true)
+	standard["presidio_score_threshold"] = &jsonschema.Schema{Type: "number", Minimum: new(float64(0)), Maximum: new(float64(1))}
+	standard["prompt_injection_rules"] = arraySchema(catalogEnumSchema(catalog, catalog.PromptInjectionRules), 0, true)
+	standard["disabled_rules"] = arraySchema(catalogEnumSchema(catalog, catalog.DisabledRules), 0, true)
+	standard["approved_email_domains"] = boundedArraySchema(stringSchema("Canonical email domain.", 1, 253), 0, 50, true)
+	standard["detection_scopes"] = detectionScopesSchema(catalog)
+
+	prompt := riskPolicyCreateCommonProperties(catalog)
+	prompt["policy_type"] = constSchema("prompt_based")
+	prompt["prompt"] = stringSchema("Prompt-policy instruction; never logged or placed in receipts.", 1, 4000)
+	return &jsonschema.Schema{Type: "object", OneOf: []*jsonschema.Schema{
+		closedObject(standard, []string{"project_slug", "policy_type", "name", "enabled", "sources", "idempotency_key"}),
+		closedObject(prompt, []string{"project_slug", "policy_type", "name", "enabled", "prompt", "idempotency_key"}),
+	}}
+}
+
+func updateRiskPolicySchema(catalog policycatalog.Catalog) *jsonschema.Schema {
+	patch := closedObject(map[string]*jsonschema.Schema{
+		"name":                     stringSchema("Policy name.", 1, 100),
+		"enabled":                  {Type: "boolean"},
+		"action":                   catalogEnumSchema(catalog, catalog.Actions),
+		"score":                    {Type: "number", Minimum: new(0.1), Maximum: new(float64(10))},
+		"prompt":                   stringSchema("Replacement prompt-policy instruction.", 1, 4000),
+		"message_types":            arraySchema(catalogEnumSchema(catalog, catalog.PolicyMessageTypes), 0, true),
+		"sources":                  arraySchema(catalogEnumSchema(catalog, catalog.Sources), 0, true),
+		"presidio_entities":        arraySchema(catalogEnumSchema(catalog, catalog.PresidioEntities), 0, true),
+		"presidio_score_threshold": {Type: "number", Minimum: new(float64(0)), Maximum: new(float64(1))},
+		"prompt_injection_rules":   arraySchema(catalogEnumSchema(catalog, catalog.PromptInjectionRules), 0, true),
+		"disabled_rules":           arraySchema(catalogEnumSchema(catalog, catalog.DisabledRules), 0, true),
+		"approved_email_domains":   boundedArraySchema(stringSchema("Canonical email domain.", 1, 253), 0, 50, true),
+		"detection_scopes":         detectionScopesSchema(catalog),
+		"user_message":             stringSchema("Optional user-facing enforcement message.", 0, 500),
+	}, nil)
+	patch.MinProperties = new(1)
+	return closedObject(map[string]*jsonschema.Schema{
+		"project_slug": stringSchema("Exact project slug; writes never default a project.", 1, 0), "policy_id": uuidSchema("Exact policy ID."),
+		"expected_version": stringSchema("Opaque version returned by get_risk_policy.", 1, 0), "idempotency_key": stringSchema("Caller replay key.", 1, 128), "patch": patch,
+	}, []string{"project_slug", "policy_id", "expected_version", "idempotency_key", "patch"})
+}
+
+func createRiskExclusionSchema(catalog policycatalog.Catalog) *jsonschema.Schema {
+	common := func(matchType string, matchValue *jsonschema.Schema) map[string]*jsonschema.Schema {
+		return map[string]*jsonschema.Schema{
+			"project_slug": stringSchema("Exact project slug; writes never default a project.", 1, 0), "policy_id": uuidSchema("Optional policy binding."),
+			"match_type": constSchema(matchType), "match_value": matchValue,
+			"enabled": {Type: "boolean"}, "idempotency_key": stringSchema("Caller replay key.", 1, 128),
+		}
+	}
+	exact := common("exact", stringSchema("Exact match value; never returned or logged.", 1, 256))
+	exact["rule_id_filter"] = catalogEnumSchema(catalog, catalog.DisabledRules)
+	exact["source_filter"] = catalogEnumSchema(catalog, catalog.Sources)
+	ruleID := common("rule_id", catalogEnumSchema(catalog, catalog.DisabledRules))
+	ruleID["source_filter"] = catalogEnumSchema(catalog, catalog.Sources)
+	source := common("source", catalogEnumSchema(catalog, catalog.Sources))
+	source["rule_id_filter"] = catalogEnumSchema(catalog, catalog.DisabledRules)
+	entityType := common("entity_type", catalogEnumSchema(catalog, catalog.PresidioEntities))
+	entityType["source_filter"] = constSchema("presidio")
+
+	required := []string{"project_slug", "match_type", "match_value", "enabled", "idempotency_key"}
+	return &jsonschema.Schema{Type: "object", OneOf: []*jsonschema.Schema{
+		closedObject(exact, required),
+		closedObject(ruleID, required),
+		closedObject(source, required),
+		closedObject(entityType, required),
+	}}
+}
+
+func updateRiskExclusionSchema() *jsonschema.Schema {
+	return closedObject(map[string]*jsonschema.Schema{
+		"project_slug": stringSchema("Exact project slug; writes never default a project.", 1, 0), "exclusion_id": uuidSchema("Exact exclusion ID."),
+		"enabled": {Type: "boolean"}, "expected_version": stringSchema("Opaque version returned by list_risk_exclusions.", 1, 0),
+		"idempotency_key": stringSchema("Caller replay key.", 1, 128),
+	}, []string{"project_slug", "exclusion_id", "enabled", "expected_version", "idempotency_key"})
+}
+
+func riskPolicyCreateCommonProperties(catalog policycatalog.Catalog) map[string]*jsonschema.Schema {
+	return map[string]*jsonschema.Schema{
+		"project_slug":    stringSchema("Exact project slug; writes never default a project.", 1, 0),
+		"name":            stringSchema("Policy name.", 1, 100),
+		"enabled":         {Type: "boolean"},
+		"action":          catalogEnumSchema(catalog, catalog.Actions),
+		"score":           {Type: "number", Minimum: new(0.1), Maximum: new(float64(10))},
+		"message_types":   arraySchema(catalogEnumSchema(catalog, catalog.PolicyMessageTypes), 1, true),
+		"user_message":    stringSchema("Optional user-facing enforcement message.", 0, 500),
+		"idempotency_key": stringSchema("Caller key retained for 24-hour replay safety.", 1, 128),
+	}
+}
+
+func fallbackCreateRiskPolicySchema() *jsonschema.Schema {
+	return createRiskPolicySchema(policycatalog.Catalog{})
+}
+
+func fallbackUpdateRiskPolicySchema() *jsonschema.Schema {
+	return updateRiskPolicySchema(policycatalog.Catalog{})
+}
+
+func fallbackCreateRiskExclusionSchema() *jsonschema.Schema {
+	return createRiskExclusionSchema(policycatalog.Catalog{})
+}
+
+func detectionScopesSchema(catalog policycatalog.Catalog) *jsonschema.Schema {
+	scope := closedObject(map[string]*jsonschema.Schema{
+		"category":      catalogEnumSchema(catalog, catalog.DetectionScopeCategories),
+		"message_types": arraySchema(catalogEnumSchema(catalog, catalog.PolicyMessageTypes), 1, true),
+	}, []string{"category", "message_types"})
+	return arraySchema(scope, 0, true)
+}
+
+func projectSelectorSchema(common map[string]*jsonschema.Schema, required []string) *jsonschema.Schema {
+	properties := make(map[string]*jsonschema.Schema, len(common)+2)
+	maps.Copy(properties, common)
+	properties["project_id"] = uuidSchema("Optional exact project ID. Omit both project selectors to use the literal default project.")
+	properties["project_slug"] = stringSchema("Optional exact project slug. Omit both project selectors to use the literal default project.", 1, 128)
+	schema := closedObject(properties, required)
+	schema.Not = &jsonschema.Schema{Required: []string{"project_id", "project_slug"}}
+	return schema
+}
+
+func closedObject(properties map[string]*jsonschema.Schema, required []string) *jsonschema.Schema {
+	return &jsonschema.Schema{Type: "object", Properties: properties, Required: required, AdditionalProperties: &jsonschema.Schema{Not: &jsonschema.Schema{}}}
+}
+
+func stringSchema(description string, minLength, maxLength int) *jsonschema.Schema {
+	schema := &jsonschema.Schema{Type: "string", Description: description}
+	if minLength > 0 {
+		schema.MinLength = new(minLength)
+	}
+	if maxLength > 0 {
+		schema.MaxLength = new(maxLength)
+	}
+	return schema
+}
+
+func uuidSchema(description string) *jsonschema.Schema {
+	return &jsonschema.Schema{Type: "string", Format: "uuid", Description: description}
+}
+func catalogEnumSchema(catalog policycatalog.Catalog, values []string) *jsonschema.Schema {
+	if catalog.Schema == "" {
+		return stringSchema("Pinned catalog value.", 1, 256)
+	}
+	return enumSchema(values...)
+}
+
+func enumSchema(values ...string) *jsonschema.Schema {
+	enum := make([]any, len(values))
+	for i, value := range values {
+		enum[i] = value
+	}
+	return &jsonschema.Schema{Type: "string", Enum: enum}
+}
+func constSchema(value string) *jsonschema.Schema {
+	constant := any(value)
+	return &jsonschema.Schema{Type: "string", Const: &constant}
+}
+func arraySchema(items *jsonschema.Schema, minItems int, unique bool) *jsonschema.Schema {
+	return boundedArraySchema(items, minItems, 0, unique)
+}
+
+func boundedArraySchema(items *jsonschema.Schema, minItems, maxItems int, unique bool) *jsonschema.Schema {
+	schema := &jsonschema.Schema{Type: "array", Items: items, MinItems: new(minItems), UniqueItems: unique}
+	if maxItems > 0 {
+		schema.MaxItems = new(maxItems)
+	}
+	return schema
+}
