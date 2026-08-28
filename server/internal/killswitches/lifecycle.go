@@ -49,6 +49,7 @@ type versionResourceSnapshot struct {
 }
 
 type operationReceipt struct {
+	actorUserID string
 	operation   string
 	requestHash string
 	status      string
@@ -313,7 +314,7 @@ func (s *LifecycleService) executeMutation(ctx context.Context, mutation Mutatio
 		return MutationResult{}, err
 	}
 	if !fresh {
-		return replayOperation(receipt, operation, requestHash)
+		return replayOperation(receipt, mutation.ActorUserID, operation, requestHash)
 	}
 
 	result, err := apply(mutationQueries{repo: queries, restricted: restricted})
@@ -354,7 +355,7 @@ func claimOperation(ctx context.Context, queries *repo.Queries, mutation Mutatio
 		}
 		locked, err := queries.LockKillswitchOperation(ctx, repo.LockKillswitchOperationParams{OrganizationID: string(mutation.OrganizationID), OperationID: mutation.OperationID})
 		if err == nil {
-			return operationReceipt{operation: locked.Operation, requestHash: locked.RequestHash, status: locked.Status, response: locked.Response}, false, nil
+			return operationReceipt{actorUserID: locked.ActorUserID, operation: locked.Operation, requestHash: locked.RequestHash, status: locked.Status, response: locked.Response}, false, nil
 		}
 		if !errors.Is(err, pgx.ErrNoRows) {
 			return operationReceipt{}, false, fmt.Errorf("lock killswitch operation: %w", err)
@@ -363,8 +364,8 @@ func claimOperation(ctx context.Context, queries *repo.Queries, mutation Mutatio
 	return operationReceipt{}, false, fmt.Errorf("%w: operation receipt changed during reclaim", ErrOperationUnavailable)
 }
 
-func replayOperation(receipt operationReceipt, operation MutationOperation, requestHash string) (MutationResult, error) {
-	if receipt.operation != string(operation) || receipt.requestHash != requestHash {
+func replayOperation(receipt operationReceipt, actorUserID string, operation MutationOperation, requestHash string) (MutationResult, error) {
+	if receipt.actorUserID != actorUserID || receipt.operation != string(operation) || receipt.requestHash != requestHash {
 		return MutationResult{}, ErrOperationConflict
 	}
 	if receipt.status != operationStatusCompleted || len(receipt.response) == 0 {

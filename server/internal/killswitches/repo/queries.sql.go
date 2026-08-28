@@ -597,7 +597,7 @@ func (q *Queries) ListKillswitchPrescriptionVersionResources(ctx context.Context
 }
 
 const lockKillswitchOperation = `-- name: LockKillswitchOperation :one
-SELECT operation, request_hash, status, response
+SELECT actor_user_id, operation, request_hash, status, response
 FROM killswitch_operations
 WHERE organization_id = $1
   AND operation_id = $2
@@ -610,6 +610,7 @@ type LockKillswitchOperationParams struct {
 }
 
 type LockKillswitchOperationRow struct {
+	ActorUserID string
 	Operation   string
 	RequestHash string
 	Status      string
@@ -620,6 +621,7 @@ func (q *Queries) LockKillswitchOperation(ctx context.Context, arg LockKillswitc
 	row := q.db.QueryRow(ctx, lockKillswitchOperation, arg.OrganizationID, arg.OperationID)
 	var i LockKillswitchOperationRow
 	err := row.Scan(
+		&i.ActorUserID,
 		&i.Operation,
 		&i.RequestHash,
 		&i.Status,

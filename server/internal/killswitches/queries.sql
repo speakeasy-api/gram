@@ -139,7 +139,7 @@ WHERE killswitch_operations.expires_at <= EXCLUDED.created_at
 RETURNING operation_id;
 
 -- name: LockKillswitchOperation :one
-SELECT operation, request_hash, status, response
+SELECT actor_user_id, operation, request_hash, status, response
 FROM killswitch_operations
 WHERE organization_id = @organization_id
   AND operation_id = @operation_id

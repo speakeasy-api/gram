@@ -353,6 +353,9 @@ func TestAdapterResultContracts(t *testing.T) {
 	if _, err := NewCanonicalizationResult(PrincipalKey("")); err == nil {
 		t.Fatal("empty canonical principal key accepted")
 	}
+	if _, err := NewCanonicalizationResult(ResourceKey(strings.Repeat("é", maxIdentifierBytes/2+1))); err == nil {
+		t.Fatal("oversized canonical resource key accepted")
+	}
 	if _, supported, err := UnsupportedCanonicalizationResult[PrincipalKey]().Key(); err != nil || supported {
 		t.Fatalf("unsupported canonicalization supported=%v err=%v", supported, err)
 	}

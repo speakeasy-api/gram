@@ -83,16 +83,18 @@ func validateLifecycleTransactionSQL(sql string) error {
 	}
 	first := keywords[0]
 	second := keywords[1]
-	third := keywords[2]
-	fourth := keywords[3]
-	fifth := keywords[4]
 	switch first {
 	case "ABORT", "BEGIN", "COMMIT", "END", "RELEASE", "ROLLBACK", "SAVEPOINT":
 		return fmt.Errorf("%w: transaction-control statement %s is not allowed", errLifecycleTransactionQueryRejected, first)
-	case "PREPARE", "SET":
-		if second == "TRANSACTION" ||
-			(first == "SET" && second == "SESSION" && third == "CHARACTERISTICS" && fourth == "AS" && fifth == "TRANSACTION") {
+	case "DISCARD", "RESET":
+		return fmt.Errorf("%w: session-state statement %s is not allowed", errLifecycleTransactionQueryRejected, first)
+	case "PREPARE":
+		if second == "TRANSACTION" {
 			return fmt.Errorf("%w: transaction-control statement %s is not allowed", errLifecycleTransactionQueryRejected, first)
+		}
+	case "SET":
+		if second != "LOCAL" && second != "CONSTRAINTS" {
+			return fmt.Errorf("%w: session-state statement %s is not allowed", errLifecycleTransactionQueryRejected, first)
 		}
 	case "START":
 		return fmt.Errorf("%w: transaction-control statement START is not allowed", errLifecycleTransactionQueryRejected)
@@ -100,8 +102,8 @@ func validateLifecycleTransactionSQL(sql string) error {
 	return nil
 }
 
-func lifecycleSQLKeywords(sql string) ([5]string, error) {
-	var keywords [5]string
+func lifecycleSQLKeywords(sql string) ([2]string, error) {
+	var keywords [2]string
 	keywordCount := 0
 	hasContent := false
 	terminated := false

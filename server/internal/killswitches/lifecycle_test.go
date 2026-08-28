@@ -160,6 +160,11 @@ func TestLifecycleReplayConflictAndBoundedReceipt(t *testing.T) {
 	require.True(t, replayed.Replayed)
 	require.Equal(t, result.PrescriptionID, replayed.PrescriptionID)
 
+	crossActor := retry
+	crossActor.ActorUserID = "user:other"
+	_, err = service.ActivatePrescription(t.Context(), crossActor)
+	require.ErrorIs(t, err, ErrOperationConflict, "operation replay is bound to the actor that claimed it")
+
 	conflict := retry
 	conflict.Desired.InternalNote = "different"
 	_, err = service.ActivatePrescription(t.Context(), conflict)
