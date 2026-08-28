@@ -517,10 +517,14 @@ func (s *Service) executeProxiedMemberTool(
 		return nil, oops.E(oops.CodeUnexpected, err, "dial meta MCP member").LogError(ctx, logger)
 	}
 
+	// The caller's _meta stays on our side of the wire: WireMeta is a lossy
+	// observability parse (re-serializing it emits empty/null fields that
+	// strict vendors reject with 400), and the per-call handshake already
+	// declares this proxy's identity and protocol version to the upstream.
 	upstreamResult, rpcErr, err := s.callProxiedMember(ctx, logger, build, member, "tools/call", toolsCallParams{
 		Name:      toolName,
 		Arguments: arguments,
-		Meta:      memberWireMeta(meta),
+		Meta:      nil,
 	})
 	if err != nil {
 		if memberErr, ok := errors.AsType[*metaMemberError](err); ok {
@@ -547,18 +551,6 @@ func (s *Service) executeProxiedMemberTool(
 		return nil, oops.E(oops.CodeUnexpected, err, "serialize member tool result").LogError(ctx, logger)
 	}
 	return bs, nil
-}
-
-// memberWireMeta rewrites the client's declared protocol version to the one
-// this upstream hop actually speaks, so the forwarded _meta cannot contradict
-// the member session's handshake; the rest of _meta rides along.
-func memberWireMeta(meta *mcprequests.WireMeta) *mcprequests.WireMeta {
-	if meta == nil || meta.ProtocolVersion == metaMemberUpstreamProtocolVersion {
-		return meta
-	}
-	m := *meta
-	m.ProtocolVersion = metaMemberUpstreamProtocolVersion
-	return &m
 }
 
 // maxProxiedListPages bounds cursor-following on a member's tools/list.

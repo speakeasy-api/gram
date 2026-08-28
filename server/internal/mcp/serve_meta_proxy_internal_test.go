@@ -8,7 +8,6 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
-	"github.com/speakeasy-api/gram/server/internal/mcp/mcprequests"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp/proxy"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 )
@@ -116,18 +115,4 @@ func TestMemberSessionClose_DetachedContext(t *testing.T) {
 	}
 	sess.close(canceled)
 	require.NoError(t, buildCtxErr, "the session DELETE must not be built on the expired call context")
-}
-
-// The forwarded _meta declares the upstream hop's own protocol version, never
-// the client's, so it cannot contradict the member handshake.
-func TestMemberWireMeta_ProtocolVersionRewrite(t *testing.T) {
-	t.Parallel()
-
-	require.Nil(t, memberWireMeta(nil))
-
-	meta := &mcprequests.WireMeta{ProtocolVersion: "2026-07-28", ClientInfo: &mcprequests.WireClientInfo{Name: "c", Version: "1"}, Capabilities: nil}
-	got := memberWireMeta(meta)
-	require.Equal(t, metaMemberUpstreamProtocolVersion, got.ProtocolVersion)
-	require.Equal(t, meta.ClientInfo, got.ClientInfo)
-	require.Equal(t, "2026-07-28", meta.ProtocolVersion, "the caller's _meta must not be mutated")
 }

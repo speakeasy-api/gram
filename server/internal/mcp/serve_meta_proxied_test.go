@@ -8,13 +8,16 @@
 package mcp_test
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"net/http/httputil"
 	"net/url"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -253,6 +256,69 @@ func TestServePublic_MetaEndpoint_ExecuteTool_ForwardsEachMembersOwnBearer(t *te
 	require.False(t, isError, "member B execute_tool must succeed")
 	require.Equal(t, "Bearer token-member-b", upstreamB.capturedAuth(),
 		"member B's upstream must receive exactly member B's bearer and never A's")
+}
+
+// A caller's _meta must not reach a proxied member: WireMeta re-serializes
+// lossily (empty/null fields) and strict vendors reject the result with 400.
+// Regression for a real-client failure — MCP clients attach _meta routinely.
+func TestServePublic_MetaEndpoint_ExecuteTool_DropsCallerMetaUpstream(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+	projectID := *authCtx.ProjectID
+	orgID := authCtx.ActiveOrganizationID
+
+	sharedIssuerID := createUserSessionIssuer(t, ctx, ti.conn, projectID)
+	metaSlug := "meta-nometa-e2e-" + uuid.NewString()[:8]
+	meta := createMetaMcpEndpoint(t, ctx, ti.conn, projectID, orgID, metaSlug, sharedIssuerID)
+
+	upstream := newRecordingUpstream(t, "ping")
+	var bodies sync.Map
+	var bodyIdx atomic.Int64
+	target, perr := url.Parse(upstream.url)
+	require.NoError(t, perr)
+	reverse := httputil.NewSingleHostReverseProxy(target)
+	recorder := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		raw, rerr := io.ReadAll(r.Body)
+		if rerr != nil {
+			http.Error(w, rerr.Error(), http.StatusInternalServerError)
+			return
+		}
+		bodies.Store(bodyIdx.Add(1), string(raw))
+		r.Body = io.NopCloser(bytes.NewReader(raw))
+		reverse.ServeHTTP(w, r)
+	}))
+	t.Cleanup(recorder.Close)
+	seedMetaMemberWithUpstream(t, ctx, ti.conn, projectID, meta.ID, "Member", "member-nometa", 0, recorder.URL)
+
+	subject := urn.NewUserSubject("meta-nometa-user-" + uuid.NewString())
+	bearer := mintMetaIssuerBearer(t, ti, metaSlug, sharedIssuerID, subject)
+
+	body := makeMetaRPCBody(t, "tools/call", map[string]any{
+		"_meta":     map[string]any{"progressToken": 1, "claudecode/toolUseId": "toolu_regression"},
+		"name":      "execute_tool",
+		"arguments": map[string]any{"name": "member-nometa--ping", "arguments": map[string]any{}},
+	})
+	resp, err := servePublicHTTP(t, context.Background(), ti, metaSlug, body, bearer, nil)
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, resp.Code, "execute_tool response: %s", resp.Body.String())
+	text, isError := metaToolResultText(t, decodeRPCResponse(t, resp))
+	require.False(t, isError, "execute_tool with caller _meta must succeed: %s", text)
+	require.Contains(t, text, "pong from ping")
+
+	seen := 0
+	bodies.Range(func(_, v any) bool {
+		seen++
+		body, isString := v.(string)
+		require.True(t, isString)
+		require.NotContains(t, body, `"_meta"`,
+			"no upstream request may carry a _meta object")
+		return true
+	})
+	require.Positive(t, seen, "the upstream recorder must have observed requests")
 }
 
 // An ambiguous credential map — two stored tokens claiming one member's
