@@ -13,7 +13,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/billing"
-	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
@@ -25,6 +24,13 @@ import (
 // MarkEnterpriseTrialConverted atomically records an enterprise contract and
 // its complete local access policy before reconciling provider state.
 func (s *Service) MarkEnterpriseTrialConverted(ctx context.Context, payload *gen.MarkEnterpriseTrialConvertedPayload) (*gen.MarkEnterpriseTrialConvertedResult, error) {
+	return s.markEnterpriseTrialConverted(ctx, payload.ID)
+}
+
+// markEnterpriseTrialConverted is the single transaction coordinator shared by
+// both admin mutation surfaces. Callers must not start a transaction around it.
+func (s *Service) markEnterpriseTrialConverted(ctx context.Context, organizationID string) (*gen.MarkEnterpriseTrialConvertedResult, error) {
+	payload := &gen.MarkEnterpriseTrialConvertedPayload{ID: organizationID, AdminSessionToken: nil}
 	logger := s.logger.With(attr.SlogOrganizationID(payload.ID))
 	tx, err := s.db.Begin(ctx)
 	if err != nil {
@@ -41,11 +47,6 @@ func (s *Service) MarkEnterpriseTrialConverted(ctx context.Context, payload *gen
 		return nil, oops.E(oops.CodeUnexpected, err, "lock enterprise trial conversion lifecycle").LogError(ctx, logger)
 	}
 
-	if trial.Tier != "enterprise" {
-		_ = tx.Rollback(ctx)
-		return nil, oops.E(oops.CodeConflict, nil, "organization has no enterprise trial to convert")
-	}
-
 	// The lifecycle row is always first, followed by every key advisory lock in
 	// canonical order, before any organization or key row is read.
 	for _, keyType := range openrouter.AllKeyTypes {
@@ -54,7 +55,20 @@ func (s *Service) MarkEnterpriseTrialConverted(ctx context.Context, payload *gen
 		}
 	}
 
-	organization, err := repo.New(tx).AdminGetOrganization(ctx, repo.AdminGetOrganizationParams{ID: payload.ID, AllowSlug: false})
+	queries := repo.New(tx)
+	if _, err := queries.LockOrganizationMetadata(ctx, payload.ID); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, oops.E(oops.CodeNotFound, err, "organization not found")
+		}
+		return nil, oops.E(oops.CodeUnexpected, err, "lock organization metadata for enterprise trial conversion").LogError(ctx, logger)
+	}
+
+	if trial.Tier != "enterprise" {
+		_ = tx.Rollback(ctx)
+		return nil, oops.E(oops.CodeConflict, nil, "organization has no enterprise trial to convert")
+	}
+
+	organization, err := queries.AdminGetOrganization(ctx, repo.AdminGetOrganizationParams{ID: payload.ID, AllowSlug: false})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "read organization for enterprise trial conversion").LogError(ctx, logger)
 	}
@@ -69,6 +83,9 @@ func (s *Service) MarkEnterpriseTrialConverted(ctx context.Context, payload *gen
 			return nil, oops.E(oops.CodeUnexpected, err, "close enterprise trial conversion retry transaction").LogError(ctx, logger)
 		}
 		s.updateTrialFeatureCache(ctx, payload.ID)
+		if err := s.trial.TrialInactive(ctx, payload.ID); err != nil {
+			logger.WarnContext(ctx, "failed to stop enterprise trial notifications on conversion retry", attr.SlogError(err))
+		}
 		if err := s.reconcileConvertedTrialKeys(ctx, payload.ID); err != nil {
 			return nil, err
 		}
@@ -131,7 +148,7 @@ func (s *Service) MarkEnterpriseTrialConverted(ctx context.Context, payload *gen
 		Organization: audit.OrganizationEnterpriseTrialConversionOrganizationSnapshot{AccountType: "enterprise", Whitelisted: true, Disabled: organization.DisabledAt.Valid},
 		Trial:        conversionTrialAuditSnapshot(convertedTrial.Tier, convertedTrial.EndsAt, convertedTrial.ConvertedAt, convertedTrial.DemotedAt), Keys: afterKeys,
 	}
-	actor, actorDisplayName := enterpriseTrialConversionAuditActor(ctx)
+	actor, actorDisplayName := enterpriseTrialConversionAuditActor()
 	if err := s.audit.LogOrganizationEnterpriseTrialConverted(ctx, tx, audit.LogOrganizationEnterpriseTrialConvertedEvent{
 		OrganizationID: payload.ID, Actor: actor, ActorDisplayName: actorDisplayName, ActorSlug: nil, Before: before, After: after,
 	}); err != nil {
@@ -172,13 +189,13 @@ func enterpriseTrialConversionResult(organizationID string, convertedAt pgtype.T
 	return &gen.MarkEnterpriseTrialConvertedResult{OrganizationID: organizationID, ConvertedAt: convertedAt.Time.Format(time.RFC3339)}
 }
 
-func enterpriseTrialConversionAuditActor(ctx context.Context) (urn.Principal, *string) {
+// enterpriseTrialConversionAuditActor deliberately uses the established system
+// principal. Every identifier available in the admin auth context is either an
+// external identity or a bearer credential and must not enter audit storage or
+// its transactional outbox payload.
+func enterpriseTrialConversionAuditActor() (urn.Principal, *string) {
 	label := "Platform administrator"
-	authCtx, ok := contextvalues.GetAdminAuthContext(ctx)
-	if !ok || authCtx == nil || authCtx.SessionID == "" {
-		return urn.NewPrincipal(urn.PrincipalTypeUser, "system"), &label
-	}
-	return urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.SessionID), &label
+	return urn.NewPrincipal(urn.PrincipalTypeUser, "system"), &label
 }
 
 func pgTimePtr(value pgtype.Timestamptz) *time.Time {

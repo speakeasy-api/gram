@@ -33,6 +33,20 @@ func postBulk(t *testing.T, ctx context.Context, svc *Service, body string) (*ge
 	return svc.BulkUpdateAccountType(ctx, payload)
 }
 
+func TestBulkUpdateAccountType_RejectsEnterpriseTrialBatchAtomically(t *testing.T) {
+	t.Parallel()
+	ctx, svc, conn := newTestAdminService(t)
+	trialID, ordinaryID := "org_bulk_enterprise_trial", "org_bulk_ordinary"
+	seedOrg(t, ctx, conn, orgFixture{id: trialID, name: trialID, slug: trialID, accountType: "free"})
+	seedTrial(t, ctx, conn, trialFixture{orgID: trialID, tier: "enterprise", endsAt: time.Now().UTC().Add(time.Hour)})
+	seedOrg(t, ctx, conn, orgFixture{id: ordinaryID, name: ordinaryID, slug: ordinaryID, accountType: "free"})
+
+	_, err := svc.BulkUpdateAccountType(ctx, &gen.BulkUpdateAccountTypePayload{Ids: []string{ordinaryID, trialID}, AccountType: "enterprise"})
+	require.ErrorContains(t, err, "enterprise trial")
+	require.Equal(t, "free", readOrgState(t, ctx, conn, trialID).GramAccountType)
+	require.Equal(t, "free", readOrgState(t, ctx, conn, ordinaryID).GramAccountType, "batch must not partially update before conflict")
+}
+
 func TestBulkUpdateAccountType_WritesOnlyTheListedIDs(t *testing.T) {
 	t.Parallel()
 

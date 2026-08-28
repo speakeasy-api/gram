@@ -116,6 +116,14 @@ WHERE id = sqlc.arg('id_or_slug')::text
 ORDER BY (id = sqlc.arg('id_or_slug')::text) DESC
 LIMIT 1;
 
+-- name: LockOrganizationMetadata :one
+-- Conversion locks this row only after lifecycle and key advisory locks, before
+-- reading eligibility or snapshot data that a concurrent admin update can change.
+SELECT id
+FROM organization_metadata
+WHERE id = @id
+FOR UPDATE;
+
 -- name: AdminListOrganizations :many
 -- Two paging modes share this query. A caller that supplies no sort key gets the
 -- cursor walk it always had: the sort ladder collapses to all-NULL and the
@@ -314,6 +322,16 @@ SET
     whitelisted = COALESCE(sqlc.narg('whitelisted')::boolean, whitelisted),
     updated_at = clock_timestamp()
 WHERE id = @id;
+
+-- name: LockUnconvertedEnterpriseTrialInOrganizations :one
+SELECT organization_id
+FROM trials
+WHERE organization_id = ANY(@ids::text[])
+  AND tier = 'enterprise'
+  AND converted_at IS NULL
+ORDER BY organization_id
+LIMIT 1
+FOR UPDATE;
 
 -- name: AdminBulkUpdateAccountType :many
 -- One statement rather than a loop, so every id is matched against one snapshot.

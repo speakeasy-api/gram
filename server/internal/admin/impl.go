@@ -821,6 +821,19 @@ func (s *Service) UpdateOrganization(ctx context.Context, payload *gen.UpdateOrg
 		return nil, oops.E(oops.CodeInvalid, nil, "account_type must be one of %s, got %q", strings.Join(constants.AccountTypes, ", "), *payload.AccountType)
 	}
 
+	if payload.AccountType != nil && *payload.AccountType == "enterprise" {
+		trial, trialErr := trialsRepo.New(s.db).GetTrial(ctx, payload.ID)
+		switch {
+		case trialErr == nil && trial.Tier == "enterprise" && !trial.ConvertedAt.Valid:
+			if _, err := s.markEnterpriseTrialConverted(ctx, payload.ID); err != nil {
+				return nil, err
+			}
+			return s.readOrganizationAfterWrite(ctx, payload.ID, "fetch organization after enterprise trial conversion")
+		case trialErr != nil && !errors.Is(trialErr, pgx.ErrNoRows):
+			return nil, oops.E(oops.CodeUnexpected, trialErr, "check enterprise trial before organization update").LogError(ctx, s.logger)
+		}
+	}
+
 	queries := repo.New(s.db)
 	if err := queries.AdminUpdateOrganization(ctx, repo.AdminUpdateOrganizationParams{
 		ID:          payload.ID,
@@ -846,12 +859,27 @@ func (s *Service) BulkUpdateAccountType(ctx context.Context, payload *gen.BulkUp
 		return nil, oops.E(oops.CodeInvalid, nil, "account_type must be one of %s, got %q", strings.Join(constants.AccountTypes, ", "), payload.AccountType)
 	}
 
-	updated, err := repo.New(s.db).AdminBulkUpdateAccountType(ctx, repo.AdminBulkUpdateAccountTypeParams{
+	tx, err := s.db.Begin(ctx)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "begin bulk account type update").LogError(ctx, s.logger)
+	}
+	defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
+	queries := repo.New(tx)
+	if trialID, lockErr := queries.LockUnconvertedEnterpriseTrialInOrganizations(ctx, payload.Ids); lockErr == nil {
+		return nil, oops.E(oops.CodeConflict, nil, "organization %s has an unconverted enterprise trial; use atomic enterprise conversion", trialID)
+	} else if !errors.Is(lockErr, pgx.ErrNoRows) {
+		return nil, oops.E(oops.CodeUnexpected, lockErr, "check enterprise trials before bulk account type update").LogError(ctx, s.logger)
+	}
+
+	updated, err := queries.AdminBulkUpdateAccountType(ctx, repo.AdminBulkUpdateAccountTypeParams{
 		AccountType: payload.AccountType,
 		Ids:         payload.Ids,
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "bulk update account type").LogError(ctx, s.logger)
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "commit bulk account type update").LogError(ctx, s.logger)
 	}
 
 	written := make(map[string]struct{}, len(updated))

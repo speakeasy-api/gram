@@ -26,14 +26,10 @@ import (
 
 func TestEnterpriseTrialConversionAuditActor_FallsBackWithoutSafeInternalID(t *testing.T) {
 	t.Parallel()
-	actor, display := enterpriseTrialConversionAuditActor(t.Context())
+	actor, display := enterpriseTrialConversionAuditActor()
 	require.Equal(t, "system", actor.ID)
 	require.Equal(t, "Platform administrator", *display)
 
-	ctx := contextvalues.SetAdminAuthContext(t.Context(), &contextvalues.AdminAuthContext{OIDCSubject: "external-subject-must-not-be-actor", Email: "external@privacy.invalid", Name: "External Name"})
-	actor, display = enterpriseTrialConversionAuditActor(ctx)
-	require.Equal(t, "system", actor.ID)
-	require.Equal(t, "Platform administrator", *display)
 }
 
 func TestMarkEnterpriseTrialConverted_AuditSnapshotsAreCompleteAndPrivate(t *testing.T) {
@@ -41,6 +37,7 @@ func TestMarkEnterpriseTrialConverted_AuditSnapshotsAreCompleteAndPrivate(t *tes
 	ctx, svc, conn, provisioner := newRearmService(t)
 	const (
 		orgID            = "org_convert_audit"
+		sessionSentinel  = "bearer-session-token-privacy-sentinel"
 		emailSentinel    = "conversion-operator@privacy.invalid"
 		oidcSentinel     = "external-oidc-subject-privacy-sentinel"
 		workosSentinel   = "external-workos-privacy-sentinel"
@@ -48,7 +45,7 @@ func TestMarkEnterpriseTrialConverted_AuditSnapshotsAreCompleteAndPrivate(t *tes
 		promptSentinel   = "prompt-privacy-sentinel"
 		spendSentinel    = "spend-privacy-sentinel"
 	)
-	ctx = contextvalues.SetAdminAuthContext(ctx, &contextvalues.AdminAuthContext{SessionID: "internal-session-conversion-audit", Email: emailSentinel, OIDCSubject: oidcSentinel, Name: emailSentinel, HD: "privacy.invalid"})
+	ctx = contextvalues.SetAdminAuthContext(ctx, &contextvalues.AdminAuthContext{SessionID: sessionSentinel, Email: emailSentinel, OIDCSubject: oidcSentinel, Name: emailSentinel, HD: "privacy.invalid"})
 	endsAt := time.Now().UTC().Add(7 * 24 * time.Hour)
 	demotedAt := time.Now().UTC().Add(-time.Hour)
 	workosID := workosSentinel
@@ -72,7 +69,7 @@ func TestMarkEnterpriseTrialConverted_AuditSnapshotsAreCompleteAndPrivate(t *tes
 	require.NotEmpty(t, response["converted_at"])
 	record, err := audittest.LatestAuditLogByAction(ctx, conn, audit.ActionOrganizationEnterpriseTrialConverted)
 	require.NoError(t, err)
-	require.Equal(t, "internal-session-conversion-audit", record.ActorID)
+	require.Equal(t, "system", record.ActorID)
 	require.Equal(t, "Platform administrator", record.ActorDisplay)
 	require.Empty(t, record.ActorSlug)
 	var metadata map[string]any
@@ -140,7 +137,7 @@ func TestMarkEnterpriseTrialConverted_AuditSnapshotsAreCompleteAndPrivate(t *tes
 	})
 	require.NoError(t, err)
 	for surface, data := range map[string][]byte{"audit row": fullAuditRow, "outbox envelope": envelope, "endpoint response": responseJSON} {
-		for _, forbidden := range []string{emailSentinel, oidcSentinel, workosSentinel, providerSentinel, promptSentinel, spendSentinel, "hash-", "sk-test"} {
+		for _, forbidden := range []string{sessionSentinel, emailSentinel, oidcSentinel, workosSentinel, providerSentinel, promptSentinel, spendSentinel, "hash-", "sk-test"} {
 			require.NotContains(t, string(data), forbidden, "%s leaked %s", surface, forbidden)
 		}
 	}
@@ -233,6 +230,8 @@ func TestMarkEnterpriseTrialConverted_PostCommitFailureRetryConverges(t *testing
 		seedOpenRouterKey(t, ctx, conn, orgID, keyFixture{keyType: keyType, monthlyCredits: 7, disabled: true})
 	}
 	provisioner.failOn, provisioner.failAfter, provisioner.failWith = openrouter.KeyTypeInternal, 1, errors.New("provider unavailable")
+	notifier := &fakeTrialNotifier{inactiveErr: errors.New("notification cleanup unavailable")}
+	svc.trial = notifier
 
 	_, err := svc.MarkEnterpriseTrialConverted(ctx, &gen.MarkEnterpriseTrialConvertedPayload{ID: orgID})
 	requireOopsCode(t, err, oops.CodeUnexpected)
@@ -241,10 +240,13 @@ func TestMarkEnterpriseTrialConverted_PostCommitFailureRetryConverges(t *testing
 	require.NoError(t, err)
 	require.EqualValues(t, 1, count)
 
+	require.Equal(t, []string{orgID}, notifier.inactive)
 	provisioner.failWith = nil
+	notifier.inactiveErr = nil
 	_, err = svc.MarkEnterpriseTrialConverted(ctx, &gen.MarkEnterpriseTrialConvertedPayload{ID: orgID})
 	require.NoError(t, err)
 	count, err = audittest.AuditLogCountByAction(ctx, conn, audit.ActionOrganizationEnterpriseTrialConverted)
 	require.NoError(t, err)
 	require.EqualValues(t, 1, count)
+	require.Equal(t, []string{orgID, orgID}, notifier.inactive, "valid retries must reattempt transient TrialInactive cleanup")
 }
