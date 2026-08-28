@@ -7,10 +7,15 @@ package mcp
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/base64"
 	"errors"
 	"fmt"
+	"strconv"
 	"sync"
 	"time"
+
+	"golang.org/x/sync/singleflight"
 
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	remotesessions_repo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
@@ -84,13 +89,27 @@ func newWorkloadIssuerLookup(db remotesessions_repo.DBTX) workloadIssuerLookup {
 type workloadIssuerAdmission struct {
 	lookup workloadIssuerLookup
 	misses *workloadIssuerMissCache
+
+	// inflight collapses concurrent resolutions of one key onto a single
+	// lookup. The miss cache alone only bounds the *sustained* cost of a
+	// repeated unknown issuer: a burst arriving together all passes the
+	// cache read before any of them records a miss, so without this each
+	// one still costs a query.
+	inflight singleflight.Group
 }
 
 func newWorkloadIssuerAdmission(lookup workloadIssuerLookup) *workloadIssuerAdmission {
 	return &workloadIssuerAdmission{
-		lookup: lookup,
-		misses: newWorkloadIssuerMissCache(workloadIssuerMissEntries, workloadIssuerMissTTL),
+		lookup:   lookup,
+		misses:   newWorkloadIssuerMissCache(workloadIssuerMissEntries, workloadIssuerMissTTL),
+		inflight: singleflight.Group{},
 	}
+}
+
+// workloadIssuerResolution is what one admitted lookup produced, carried
+// through singleflight so every sharer of a call sees the same row.
+type workloadIssuerResolution struct {
+	row *remotesessions_repo.RemoteSessionIssuer
 }
 
 // admit resolves issuerURL to the trusted issuer row it names, or reports
@@ -108,34 +127,51 @@ func (a *workloadIssuerAdmission) admit(ctx context.Context, endpoint *ResolvedM
 		return nil, errWorkloadIssuerUntrusted
 	}
 
-	row, found, err := a.lookup(ctx, endpoint, issuerURL)
-	switch {
-	case errors.Is(err, remotesessions.ErrIssuerURLInvalid):
-		// Not an issuer identifier at all, so no row could ever describe it.
-		// Remembered like any other miss: a malformed iss is the cheapest
-		// thing for a flood to carry.
-		a.misses.remember(key)
-		return nil, fmt.Errorf("%w: %w", errWorkloadIssuerUntrusted, err)
-	case err != nil:
-		// A database failure is not evidence about this issuer. Never
-		// remembered — caching an outage would keep rejecting a legitimate
-		// workload after the store recovered.
-		return nil, fmt.Errorf("resolve workload issuer: %w", err)
-	case !found:
-		a.misses.remember(key)
-		return nil, errWorkloadIssuerUntrusted
+	resolved, err, _ := a.inflight.Do(key, func() (any, error) {
+		row, found, lookupErr := a.lookup(ctx, endpoint, issuerURL)
+		switch {
+		case errors.Is(lookupErr, remotesessions.ErrIssuerURLInvalid):
+			// Not an issuer identifier at all, so no row could ever describe
+			// it. Remembered like any other miss: a malformed iss is the
+			// cheapest thing for a flood to carry.
+			a.misses.remember(key)
+			return nil, fmt.Errorf("%w: %w", errWorkloadIssuerUntrusted, lookupErr)
+		case lookupErr != nil:
+			// A database failure is not evidence about this issuer. Never
+			// remembered — caching an outage would keep rejecting a
+			// legitimate workload after the store recovered.
+			return nil, fmt.Errorf("resolve workload issuer: %w", lookupErr)
+		case !found:
+			a.misses.remember(key)
+			return nil, errWorkloadIssuerUntrusted
+		}
+		return workloadIssuerResolution{row: row}, nil
+	})
+	if err != nil {
+		return nil, err
 	}
 
-	return row, nil
+	resolution, ok := resolved.(workloadIssuerResolution)
+	if !ok {
+		return nil, fmt.Errorf("resolve workload issuer: unexpected resolution %T", resolved)
+	}
+	return resolution.row, nil
 }
 
-// workloadIssuerMissKey scopes a remembered miss to one endpoint and one
-// spelling of one issuer.
+// workloadIssuerMissKey identifies one remembered miss.
 //
-// Per endpoint, because trust is per endpoint: the same issuer may be trusted
-// on one MCP server and unknown on another, and a miss cached across them
-// would let one endpoint's rejection deny another endpoint's legitimate
-// workload.
+// The rule this has to satisfy: two calls share a key exactly when they would
+// share a lookup result. Narrower and a rejection gets served to a request
+// that would have resolved; wider only fragments the cache. So the key is
+// precisely the inputs the lookup consumes — the tenancy it resolves under,
+// and the spelling it resolves.
+//
+// Tenancy is the organization and project, NOT the user session issuer. An
+// mcp_servers row references its issuer through a single-column foreign key
+// with no project pinning (unlike meta_mcp_servers, which is composite), so
+// one user session issuer can back endpoints in different projects. Keying on
+// the issuer alone would let a miss recorded under one project's tenancy deny
+// a project-tier trusted issuer in another.
 //
 // Keyed on the supplied spelling rather than a canonical form, which is the
 // non-obvious half. Lookup matches a closed set of spellings that includes the
@@ -143,10 +179,22 @@ func (a *workloadIssuerAdmission) admit(ctx context.Context, endpoint *ResolvedM
 // share a result: a row stored as https://IDP.example.com is found by a
 // request spelling it that way and missed by one spelling it in lowercase.
 // Collapsing those onto one key would let the missing spelling's rejection be
-// served to the spelling that would have matched. The cost is that punctuation
-// variants each take an entry, which is what the entry cap is for.
+// served to the spelling that would have matched.
+//
+// Hashed, and length-prefixed for the same reason replay.Key is: the issuer
+// spelling arrives in an unauthenticated request under no length bound, so
+// storing it verbatim would let a flood of long distinct URLs occupy far more
+// than the entry count suggests. A digest makes every entry the same size, so
+// the entry cap is a true memory bound rather than a count of unbounded
+// strings.
 func workloadIssuerMissKey(endpoint *ResolvedMcpEndpoint, issuerURL string) string {
-	return endpoint.UserSessionIssuerID.String() + "\x00" + issuerURL
+	sum := sha256.New()
+	for _, part := range []string{endpoint.OrganizationID, endpoint.ProjectID.String(), issuerURL} {
+		sum.Write([]byte(strconv.Itoa(len(part))))
+		sum.Write([]byte(":"))
+		sum.Write([]byte(part))
+	}
+	return base64.RawURLEncoding.EncodeToString(sum.Sum(nil))
 }
 
 // workloadIssuerMissCache remembers recently rejected issuers, bounded in both
