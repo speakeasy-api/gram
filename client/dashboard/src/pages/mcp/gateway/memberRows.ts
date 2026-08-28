@@ -99,6 +99,9 @@ export function memberBackendKind(
   server: McpServer | undefined,
 ): MemberBackendKind {
   if (!server) return undefined;
+  // Unproxied trumps any backend id, matching classifyMemberServer: such a
+  // member is not gateway-dispatchable, so naming a kind would mislead.
+  if (server.unproxiedMcpServerId) return undefined;
   if (server.toolsetId) return "hosted";
   if (server.tunneledMcpServerId) return "tunneled";
   if (server.remoteMcpServerId) return "remote";

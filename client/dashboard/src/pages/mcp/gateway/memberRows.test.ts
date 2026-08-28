@@ -176,6 +176,14 @@ describe("memberBackendKind", () => {
     expect(memberBackendKind(undefined)).toBeUndefined();
   });
 
+  it("treats unproxied as kindless even when a backend id is present", () => {
+    expect(
+      memberBackendKind(
+        server({ unproxiedMcpServerId: "u-1", toolsetId: "ts-1" }),
+      ),
+    ).toBeUndefined();
+  });
+
   it("prefers hosted, then tunneled, over remote when multiple ids are set", () => {
     expect(
       memberBackendKind(
