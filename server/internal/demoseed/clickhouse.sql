@@ -157,6 +157,99 @@ FROM (
   FROM numbers(180)
 );
 
+-- An agent that reports only an id for itself, and no address at all. The
+-- Identities roster classifies a subject by what it can be keyed on, so
+-- without this the demo org has no Agent row to show. Surfaced from the raw
+-- logs rather than the agent-metrics view, which is keyed by email. Cleaned up
+-- by the same project-scoped telemetry_logs delete as every other row here.
+INSERT INTO telemetry_logs
+  (time_unix_nano, observed_time_unix_nano, severity_text, body, trace_id,
+   attributes, resource_attributes, gram_project_id, gram_urn, service_name)
+SELECT
+  nano,
+  nano,
+  'INFO',
+  concat('Tool call: ', tool_name),
+  lower(hex(MD5(concat('gram-demo-unattributed-', toString(i))))),
+  concat(
+    '{"gram.tool.urn":"tools:http:acme:', tool_name, '"',
+    ',"gram.tool.name":"', tool_name, '"',
+    ',"gram.toolset.slug":"acme-support-tools"',
+    ',"http.response.status_code":200',
+    ',"http.server.request.duration":0.42',
+    ',"gram.project.id":"', toString(proj), '"',
+    concat(',"user.id":"', actor, '"'),
+    ',"gram.hook.source":"codex"}'
+  ),
+  '{"gram.deployment.id":"demo-seed"}',
+  proj,
+  concat('tools:http:acme:', tool_name),
+  'gram-mcp-gateway'
+FROM (
+  SELECT
+    number + 1 AS i,
+    toUUID('dec0de00-0000-4000-a000-000000000001') AS proj,
+    'svc-nightly-triage' AS actor,
+    arrayElement(['search_logs', 'get_metrics', 'fetch_traces', 'check_health'],
+                 1 + (cityHash64('unattr', number) % 4)) AS tool_name,
+    toDateTime64(toStartOfDay(now()), 9)
+      - toIntervalDay(1 + (number % 6)) + toIntervalHour(9 + (number % 8)) AS ts0,
+    toUnixTimestamp64Nano(ts0) AS nano
+  FROM numbers(12)
+);
+
+-- A person the directory has never heard of: an address that matches no
+-- member, so the roster can show an Unattributed row beside the members and
+-- the agent. It has to be an api_request row rather than a tool call because
+-- the agent-metrics view only admits the agent surfaces, and that view is what
+-- the roster reads for email-keyed identities.
+INSERT INTO telemetry_logs
+  (time_unix_nano, observed_time_unix_nano, severity_text, body, trace_id,
+   attributes, resource_attributes, gram_project_id, gram_urn, service_name,
+   gram_chat_id)
+SELECT
+  nano,
+  nano,
+  'INFO',
+  'claude_code.api_request',
+  lower(hex(MD5(concat('gram-demo-unattributed-api-', toString(i))))),
+  concat(
+    '{"prompt.id":"demo-unattributed-prompt-', toString(i), '"',
+    ',"event.name":"api_request"',
+    ',"input_tokens":', toString(2200 + (i * 37) % 900),
+    ',"output_tokens":', toString(180 + (i * 11) % 220),
+    ',"cache_read_tokens":', toString(9000 + (i * 53) % 4000),
+    ',"cache_creation_tokens":600',
+    ',"cost_usd":0.1841',
+    ',"model":"claude-sonnet-4-6"',
+    ',"query_source":"user"',
+    ',"gen_ai.conversation.id":"', chat_id, '"',
+    ',"gram.project.id":"', toString(proj), '"',
+    ',"user.email":"', actor, '"',
+    ',"gram.external_user.id":"', actor, '"',
+    ',"gram.hook.source":"claude-code"}'
+  ),
+  '{"gram.deployment.id":"demo-seed"}',
+  proj,
+  'claude-code:otel:logs',
+  'claude-code',
+  chat_id
+FROM (
+  SELECT
+    number + 1 AS i,
+    toUUID('dec0de00-0000-4000-a000-000000000001') AS proj,
+    -- In the demo domain so the tenant rewrite reaches it, but deliberately
+    -- not one of the seeded members: that mismatch is the whole point.
+    'ana.vidal@demo.getgram.ai' AS actor,
+    lower(hex(MD5(concat('gram-demo-unattributed-chat-', toString(number + 1))))) AS ch,
+    concat(substring(ch, 1, 8), '-', substring(ch, 9, 4), '-5', substring(ch, 14, 3), '-8',
+           substring(ch, 18, 3), '-', substring(ch, 21, 12)) AS chat_id,
+    toDateTime64(toStartOfDay(now()), 9)
+      - toIntervalDay(1 + (number % 5)) + toIntervalHour(10 + (number % 6)) AS ts0,
+    toUnixTimestamp64Nano(ts0) AS nano
+  FROM numbers(12)
+);
+
 -- Claude provenance (odd chats): one claude_code.api_request row per turn.
 -- prompt.id demo-prompt-<i>-<turn> joins the Postgres user messages; the
 -- skill/agent/mcp attribution keys light up the Costs Skills/Subagents/MCP

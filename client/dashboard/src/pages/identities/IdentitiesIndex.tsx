@@ -15,13 +15,9 @@ import { Text } from "@/components/ui/Text";
 import { getInitials } from "@/lib/initials";
 import { encodeIdentityUrn } from "@/lib/identity-urn";
 import { useOrgRoutes } from "@/routes";
-import { telemetrySearchUsers } from "@gram/client/funcs/telemetrySearchUsers";
-import { Source } from "@gram/client/models/components/searchuserspayload.js";
-import type { UserSummary } from "@gram/client/models/components/usersummary.js";
 import { useGramContext } from "@gram/client/react-query/_context.js";
 import { useMembers } from "@gram/client/react-query/members.js";
 import { useRoles } from "@gram/client/react-query/roles.js";
-import { unwrapAsync } from "@gram/client/types/fp";
 import { useQuery } from "@tanstack/react-query";
 import { Bot, CircleHelp } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
@@ -32,6 +28,7 @@ import {
   IDENTITY_KIND_LABELS,
   type IdentityKind,
 } from "./identityKind";
+import { fetchIdentityRoster, identityRosterQueryKey } from "./identityRoster";
 
 export function IdentitiesRoot(): JSX.Element {
   return <Outlet />;
@@ -45,10 +42,6 @@ export function IdentitiesIndexRedirect(): JSX.Element {
   const orgRoutes = useOrgRoutes();
   return <Navigate to={orgRoutes.identities.href()} replace />;
 }
-
-// The roster reaches back further than any org has existed, so every identity
-// the telemetry knows about is listed however long ago it was last seen.
-const ALL_TIME_FROM = new Date("2020-01-01T00:00:00Z");
 
 // The roster is one merged list held in memory, so it pages here rather than
 // at either source.
@@ -179,8 +172,8 @@ function IdentitiesIndexContent(): JSX.Element {
   // date range would make the list answer "who was active lately" — a question
   // the per-identity pages already answer, each over its own window.
   const usageQuery = useQuery({
-    queryKey: ["identities", "usage", "all-time", organization.id],
-    queryFn: () => fetchIdentityUsage(client, ALL_TIME_FROM, new Date()),
+    queryKey: identityRosterQueryKey(organization.id),
+    queryFn: () => fetchIdentityRoster(client),
     throwOnError: false,
   });
 
@@ -360,35 +353,4 @@ function IdentityCell({ identity }: { identity: Employee }): JSX.Element {
       </div>
     </div>
   );
-}
-
-async function fetchIdentityUsage(
-  client: Parameters<typeof telemetrySearchUsers>[0],
-  from: Date,
-  to: Date,
-): Promise<UserSummary[]> {
-  const users: UserSummary[] = [];
-  let cursor: string | undefined;
-
-  do {
-    const result = await unwrapAsync(
-      telemetrySearchUsers(client, {
-        searchUsersPayload: {
-          cursor,
-          filter: { from, to },
-          limit: 1000,
-          sort: "desc",
-          userType: "internal",
-          // The pre-aggregated agent-usage view: this list renders identity,
-          // last activity and token totals, all of which it already holds.
-          source: Source.AgentMetrics,
-        },
-      }),
-    );
-
-    users.push(...result.users);
-    cursor = result.nextCursor;
-  } while (cursor);
-
-  return users;
 }

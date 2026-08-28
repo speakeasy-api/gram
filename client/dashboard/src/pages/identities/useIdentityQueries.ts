@@ -1,11 +1,9 @@
 import { useDateRangeFilter } from "@/components/observe/useDateRangeFilter";
 import { useOrganization, useProject } from "@/contexts/Auth";
 import { useRBAC } from "@/hooks/useRBAC";
-import { telemetrySearchUsers } from "@gram/client/funcs/telemetrySearchUsers";
-import { Source } from "@gram/client/models/components/searchuserspayload.js";
 import { useGramContext } from "@gram/client/react-query/_context.js";
-import { unwrapAsync } from "@gram/client/types/fp";
 import { useQuery } from "@tanstack/react-query";
+import { fetchIdentityRoster, identityRosterQueryKey } from "./identityRoster";
 import { useSearchParams } from "react-router";
 import type { AccessMember } from "@gram/client/models/components/accessmember.js";
 import type { IdentityModel } from "@gram/client/models/components/identitymodel.js";
@@ -126,38 +124,35 @@ export function useIdentityIsKnown(identity: IdentityModel | undefined): {
   isPending: boolean;
 } {
   const client = useGramContext();
+  const organization = useOrganization();
   const hasDirectoryRow = (identity?.userIds.length ?? 0) > 0;
-  const identifiers = [
-    ...(identity?.emails ?? []),
-    ...(identity?.externalUserIds ?? []),
-  ];
+  const identifiers = new Set(
+    [...(identity?.emails ?? []), ...(identity?.externalUserIds ?? [])].map(
+      (value) => value.toLowerCase(),
+    ),
+  );
+  // The same roster the index lists, under the same query key, so this is a
+  // cache hit whenever the reader arrived from there and one fetch otherwise.
+  // Asking searchUsers for the identifier directly does not work: the roster
+  // surfaces email-keyed identities through the agent-metrics view and
+  // id-keyed ones from raw logs, and the id filter matches neither.
   const query = useQuery({
-    queryKey: ["identity", "seen", identifiers],
-    queryFn: async () => {
-      const result = await unwrapAsync(
-        telemetrySearchUsers(client, {
-          searchUsersPayload: {
-            filter: {
-              from: new Date("2020-01-01T00:00:00Z"),
-              to: new Date(),
-              userIds: identifiers,
-            },
-            limit: 1,
-            userType: "internal",
-            source: Source.AgentMetrics,
-          },
-        }),
-      );
-      return result.users.length > 0;
-    },
+    queryKey: identityRosterQueryKey(organization.id),
+    queryFn: () => fetchIdentityRoster(client),
     throwOnError: false,
-    enabled: !!identity && !hasDirectoryRow && identifiers.length > 0,
+    enabled: !!identity && !hasDirectoryRow && identifiers.size > 0,
   });
 
   if (!identity) return { known: true, isPending: true };
   if (hasDirectoryRow) return { known: true, isPending: false };
-  if (identifiers.length === 0) return { known: false, isPending: false };
-  return { known: query.data === true, isPending: query.isPending };
+  if (identifiers.size === 0) return { known: false, isPending: false };
+  if (query.isPending) return { known: false, isPending: true };
+  return {
+    known: (query.data ?? []).some((summary) =>
+      identifiers.has((summary.userEmail || summary.userId).toLowerCase()),
+    ),
+    isPending: false,
+  };
 }
 
 /**
