@@ -82,6 +82,36 @@ func TestTargetPolicyRemovesProjectSelectorExclusionFromAssistantSchema(t *testi
 	require.NotContains(t, schema, "not", "project-only exclusion must not reject every assistant call after injection fields are hidden")
 }
 
+func TestTargetPolicyPreservesNonProjectSelectorExclusion(t *testing.T) {
+	t.Parallel()
+
+	tool := Tool{descriptor: platformmcp.Descriptor{
+		Name:        "list_risk_policies",
+		InputSchema: []byte(`{"type":"object","properties":{"project_id":{"type":"string"},"cursor":{"type":"string"}},"not":{"required":["cursor"]}}`),
+		Meta:        platformmcp.ToolMeta{ProjectScope: platformmcp.ProjectScopeDefaultable},
+	}}
+
+	var schema map[string]any
+	require.NoError(t, json.Unmarshal(tool.assistantInputSchema(), &schema))
+	not, ok := schema["not"].(map[string]any)
+	require.True(t, ok)
+	require.Equal(t, []any{"cursor"}, not["required"])
+}
+
+func TestTargetPolicyRemovesPropertiesOnlyProjectExclusion(t *testing.T) {
+	t.Parallel()
+
+	tool := Tool{descriptor: platformmcp.Descriptor{
+		Name:        "list_risk_policies",
+		InputSchema: []byte(`{"type":"object","properties":{"project_id":{"type":"string"},"cursor":{"type":"string"}},"not":{"properties":{"project_id":{"const":"forbidden"}}}}`),
+		Meta:        platformmcp.ToolMeta{ProjectScope: platformmcp.ProjectScopeDefaultable},
+	}}
+
+	var schema map[string]any
+	require.NoError(t, json.Unmarshal(tool.assistantInputSchema(), &schema))
+	require.NotContains(t, schema, "not")
+}
+
 func TestTargetPolicyHandlesOneOfProjectSelectors(t *testing.T) {
 	t.Parallel()
 

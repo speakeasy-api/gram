@@ -100,6 +100,7 @@ func TestRiskReadCursorBindingAndPagination(t *testing.T) {
 		{organizationID: "<ORG_ID>"},
 		{organizationID: "<ORG_ID>"},
 		{organizationID: "<ORG_ID>"},
+		{organizationID: "<ORG_ID>"},
 	}}
 	policyStub := &stubRiskPolicies{policies: policies}
 	service := testRiskReadService(t, projectStub, policyStub, &stubRiskExclusions{})

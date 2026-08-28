@@ -228,11 +228,63 @@ func hideProjectFields(schema map[string]any) {
 		}
 	}
 	if nested, ok := schema["not"].(map[string]any); ok {
+		projectConstraint := schemaReferencesProjectFields(nested)
 		hideProjectFields(nested)
-		if required, ok := nested["required"].([]any); ok && len(required) == 0 {
+		if projectConstraint && !schemaHasConstraints(nested) {
 			delete(schema, "not")
 		}
 	}
+}
+
+func schemaReferencesProjectFields(schema map[string]any) bool {
+	properties, _ := schema["properties"].(map[string]any)
+	for _, field := range []string{"project_slug", "project_id"} {
+		if _, ok := properties[field]; ok {
+			return true
+		}
+	}
+	if required, ok := schema["required"].([]any); ok {
+		for _, value := range required {
+			name, _ := value.(string)
+			if name == "project_slug" || name == "project_id" {
+				return true
+			}
+		}
+	}
+	for _, keyword := range []string{"oneOf", "anyOf", "allOf"} {
+		branches, _ := schema[keyword].([]any)
+		for _, branch := range branches {
+			if nested, ok := branch.(map[string]any); ok && schemaReferencesProjectFields(nested) {
+				return true
+			}
+		}
+	}
+	if nested, ok := schema["not"].(map[string]any); ok {
+		return schemaReferencesProjectFields(nested)
+	}
+	return false
+}
+
+func schemaHasConstraints(schema map[string]any) bool {
+	for keyword, value := range schema {
+		switch typed := value.(type) {
+		case []any:
+			if len(typed) > 0 {
+				return true
+			}
+		case map[string]any:
+			if len(typed) > 0 {
+				return true
+			}
+		case nil:
+			continue
+		default:
+			if keyword != "required" || typed != nil {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // projectFields reports which project arguments a tool declares, including in
