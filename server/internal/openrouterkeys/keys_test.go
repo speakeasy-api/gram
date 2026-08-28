@@ -6,10 +6,9 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
-	"reflect"
+	"sync"
 	"testing"
 	"time"
-	"unsafe"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
@@ -226,23 +225,28 @@ func TestEnableKey_RealOpenRouterCompletesOnLockedSession(t *testing.T) {
 		err    error
 	}
 	patches := make(chan patchRequest, 1)
+	releasePatch := make(chan struct{})
+	var releasePatchOnce sync.Once
+	release := func() { releasePatchOnce.Do(func() { close(releasePatch) }) }
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var body struct {
 			Limit float64 `json:"limit"`
 		}
 		err := json.NewDecoder(r.Body).Decode(&body)
 		patches <- patchRequest{method: r.Method, path: r.URL.Path, limit: body.Limit, err: err}
+		<-releasePatch
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write([]byte(`{"data":{"limit":7,"hash":"hash-enablereal"}}`))
 	}))
 	t.Cleanup(upstream.Close)
+	// Cleanup runs in LIFO order, releasing a blocked handler before httptest
+	// waits for active connections to finish.
+	t.Cleanup(release)
 
 	ctx, ti := newTestServiceWithProvisioner(t, func(logger *slog.Logger, tracerProvider trace.TracerProvider, conn *pgxpool.Pool, enc *encryption.Client) openrouter.Provisioner {
 		policy, err := guardian.NewUnsafePolicy(tracerProvider, nil)
 		require.NoError(t, err)
-		realProvisioner := openrouter.New(logger, tracerProvider, policy, conn, "test", "provisioning-key", nil, nil, nil, enc)
-		setOpenRouterBaseURL(t, realProvisioner, upstream.URL)
-		return realProvisioner
+		return openrouter.New(logger, tracerProvider, policy, conn, "test", "provisioning-key", nil, nil, nil, enc, openrouter.WithBaseURL(upstream.URL))
 	})
 	adminCtx := withAdmin(t, ctx)
 	orgID := seedKey(t, ctx, ti, "enablereal", "chat", "sk-or-enable-real")
@@ -260,31 +264,44 @@ func TestEnableKey_RealOpenRouterCompletesOnLockedSession(t *testing.T) {
 
 	boundedCtx, cancel := context.WithTimeout(adminCtx, time.Second)
 	defer cancel()
-	view, err := ti.service.EnableKey(boundedCtx, &gen.EnableKeyPayload{
-		OrganizationID: orgID,
-		KeyType:        string(openrouter.KeyTypeChat),
-	})
-	require.NoError(t, err)
-	require.False(t, view.Disabled)
-	require.EqualValues(t, 7, view.MonthlyCredits)
-	patch := <-patches
+	type enableResult struct {
+		view *gen.AdminOpenRouterKey
+		err  error
+	}
+	results := make(chan enableResult, 1)
+	go func() {
+		view, err := ti.service.EnableKey(boundedCtx, &gen.EnableKeyPayload{
+			OrganizationID: orgID,
+			KeyType:        string(openrouter.KeyTypeChat),
+		})
+		results <- enableResult{view: view, err: err}
+	}()
+
+	var patch patchRequest
+	select {
+	case patch = <-patches:
+	case <-time.After(time.Second):
+		require.FailNow(t, "OpenRouter PATCH was not intercepted")
+	}
 	require.NoError(t, patch.err)
 	require.Equal(t, http.MethodPatch, patch.method)
 	require.Equal(t, "/v1/keys/hash-enablereal", patch.path)
 	require.InDelta(t, 7, patch.limit, 0)
+	release()
+
+	var result enableResult
+	select {
+	case result = <-results:
+	case <-time.After(time.Second):
+		require.FailNow(t, "admin enable did not complete after the PATCH response was released")
+	}
+	require.NoError(t, result.err)
+	require.False(t, result.view.Disabled)
+	require.EqualValues(t, 7, result.view.MonthlyCredits)
 
 	after, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionOpenRouterAPIKeyEnable)
 	require.NoError(t, err)
 	require.Equal(t, before+1, after)
-}
-
-// setOpenRouterBaseURL keeps the integration test on the real OpenRouter
-// implementation while directing only its HTTP edge to the deterministic fake.
-func setOpenRouterBaseURL(t *testing.T, provisioner *openrouter.OpenRouter, baseURL string) {
-	t.Helper()
-	field := reflect.ValueOf(provisioner).Elem().FieldByName("baseURL")
-	require.True(t, field.IsValid())
-	reflect.NewAt(field.Type(), unsafe.Pointer(field.UnsafeAddr())).Elem().SetString(baseURL)
 }
 
 func TestEnableKey_ReinstatesLegacyZeroSecurityKeyAtPaygPolicy(t *testing.T) {

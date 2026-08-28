@@ -6,6 +6,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"os"
+	"strings"
 	"testing"
 
 	"github.com/jackc/pgx/v5/pgconn"
@@ -93,6 +95,54 @@ func TestOpenRouterDisableCausesBlockedLogIsCategorizedAndPrivacySafe(t *testing
 			require.NotContains(t, line, "postgres://")
 		})
 	}
+}
+
+func TestRunbookProductionManualOverrideCommandMatchesParserContract(t *testing.T) {
+	t.Parallel()
+
+	runbook, err := os.ReadFile("OPENROUTER_DISABLE_CAUSES_MIGRATION.md")
+	require.NoError(t, err)
+
+	var command string
+	for _, section := range strings.Split(string(runbook), "```sh")[1:] {
+		block, _, _ := strings.Cut(section, "```")
+		if strings.Contains(block, "-manual-override") {
+			command = block
+			break
+		}
+	}
+	require.NotEmpty(t, command, "runbook must include a shell command for manual override")
+	require.Contains(t, command, `cat "$PROTECTED_OVERRIDE_FILE" |`)
+	for _, required := range []string{
+		"-manual-override",
+		"-environment=production",
+		"-confirm-environment=production",
+		"-confirm-production=production",
+		"-confirm-manual-override",
+	} {
+		require.Contains(t, command, required)
+	}
+
+	words := strings.Fields(strings.ReplaceAll(command, "\\\n", " "))
+	subcommand := -1
+	for i, word := range words {
+		if word == "openrouter-disable-causes" {
+			subcommand = i
+			break
+		}
+	}
+	require.NotEqual(t, -1, subcommand)
+	_, err = parseOpenRouterDisableCausesFlags(words[subcommand+1:], func(key string) string {
+		switch key {
+		case "GRAM_DATABASE_URL":
+			return "postgres://test"
+		case "GRAM_OPENROUTER_DISABLE_CAUSES_OVERRIDE_TOKEN":
+			return "protected"
+		default:
+			return ""
+		}
+	})
+	require.NoError(t, err, "documented production manual override flags must remain accepted by the parser")
 }
 
 func TestDocumentedOpenRouterDisableCausesModesParse(t *testing.T) {
