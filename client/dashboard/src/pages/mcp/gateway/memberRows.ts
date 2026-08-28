@@ -87,3 +87,20 @@ export function planReorder(
 export function nextSortOrder(members: MetaMcpMember[]): number {
   return members.reduce((max, m) => Math.max(max, m.sortOrder + 1), 0);
 }
+
+/**
+ * Display-only backend kind. Finer-grained than MemberClassification:
+ * "proxied" splits into the remote/tunneled story the operator actually
+ * configured, without disturbing the classification logic serving depends on.
+ */
+export type MemberBackendKind = "hosted" | "remote" | "tunneled" | undefined;
+
+export function memberBackendKind(
+  server: McpServer | undefined,
+): MemberBackendKind {
+  if (!server) return undefined;
+  if (server.toolsetId) return "hosted";
+  if (server.tunneledMcpServerId) return "tunneled";
+  if (server.remoteMcpServerId) return "remote";
+  return undefined;
+}

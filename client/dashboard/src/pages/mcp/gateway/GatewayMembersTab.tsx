@@ -25,12 +25,23 @@ import type { MetaMcpServer } from "@gram/client/models/components/metamcpserver
 import { invalidateAllMetaMcpMembers } from "@gram/client/react-query/metaMcpMembers.js";
 
 import { useQueryClient } from "@tanstack/react-query";
-import { ArrowDown, ArrowUp, Loader2, Plus, Trash2 } from "lucide-react";
+import {
+  ArrowDown,
+  ArrowUp,
+  Cable,
+  Globe,
+  Loader2,
+  Network,
+  Plus,
+  Server,
+  Trash2,
+} from "lucide-react";
 import { useMemo, useState } from "react";
 import { Link } from "react-router";
 import { toast } from "sonner";
 import {
   classifyMemberServer,
+  memberBackendKind,
   nextSortOrder,
   planReorder,
   type MemberClassification,
@@ -46,6 +57,33 @@ const CLASSIFICATION_LABEL: Record<MemberClassification, string> = {
   slugless: "No slug",
   unknown: "Unknown",
 };
+
+// The gateway's whole point is heterogeneous members behind one URL, so the
+// backend column names each member's actual kind rather than a flat
+// hosted/proxied split.
+const BACKEND_KIND_PRESENTATION = {
+  hosted: { label: "Hosted", Icon: Server },
+  remote: { label: "Remote", Icon: Globe },
+  tunneled: { label: "Tunneled", Icon: Cable },
+} as const;
+
+function BackendKindTag({ row }: { row: MemberRow }): JSX.Element {
+  const kind = memberBackendKind(row.server);
+  if (!kind) {
+    return (
+      <Text muted small>
+        {CLASSIFICATION_LABEL[row.classification]}
+      </Text>
+    );
+  }
+  const { label, Icon } = BACKEND_KIND_PRESENTATION[kind];
+  return (
+    <span className="text-muted-foreground inline-flex items-center gap-1.5 font-mono text-xs tracking-wide uppercase">
+      <Icon className="size-3.5" aria-hidden />
+      {label}
+    </span>
+  );
+}
 
 // Status is backend-attested only, and each state says why: a badge reading
 // "Unknown" with no explanation reads as broken rather than as work the
@@ -86,6 +124,15 @@ const STATUS_BY_CLASSIFICATION: Record<
   },
 };
 
+// A filled green dot for attested health, a hollow ring for "unobserved",
+// amber for excluded: quieter than boxed uppercase badges, and "Unknown"
+// stops reading as broken.
+const STATUS_DOT_CLASS: Record<"success" | "neutral" | "warning", string> = {
+  success: "bg-emerald-500",
+  neutral: "border-muted-foreground/60 border bg-transparent",
+  warning: "bg-amber-500",
+};
+
 function MemberStatusBadge({
   classification,
 }: {
@@ -94,9 +141,15 @@ function MemberStatusBadge({
   const status = STATUS_BY_CLASSIFICATION[classification];
   return (
     <SimpleTooltip tooltip={status.why}>
-      <Badge variant={status.variant}>
-        <Badge.Text>{status.label}</Badge.Text>
-      </Badge>
+      <span className="inline-flex cursor-default items-center gap-2">
+        <span
+          className={`size-2 shrink-0 rounded-full ${STATUS_DOT_CLASS[status.variant]}`}
+          aria-hidden
+        />
+        <Text muted small>
+          {status.label}
+        </Text>
+      </span>
     </SimpleTooltip>
   );
 }
@@ -109,7 +162,7 @@ function MemberNameCell({ row }: { row: MemberRow }): JSX.Element {
     <div className="flex min-w-0 items-center gap-2.5">
       <SourceMcpIcon
         mcpServerId={row.member.mcpServerId}
-        className="size-5 shrink-0 object-contain"
+        className="size-6 shrink-0 object-contain"
       />
       <div className="flex min-w-0 flex-col">
         {row.server ? (
@@ -149,11 +202,7 @@ export function MembersStatusTable({
     {
       key: "backend",
       header: "Backend",
-      render: (row) => (
-        <Text muted small>
-          {CLASSIFICATION_LABEL[row.classification]}
-        </Text>
-      ),
+      render: (row) => <BackendKindTag row={row} />,
       width: "140px",
     },
     {
@@ -175,8 +224,13 @@ export function MembersStatusTable({
       <Table.Header columns={columns} />
       {rows.length === 0 ? (
         <Table.NoResultsMessage>
-          <div className="px-4 py-6 text-center">
-            No members yet. Add MCP servers from the Members tab.
+          <div className="flex flex-col items-center gap-2 px-4 py-10 text-center">
+            <Network className="text-muted-foreground/50 size-8" aria-hidden />
+            <Text className="font-medium">No members yet</Text>
+            <Text muted small>
+              Front your first MCP server through this gateway from the Members
+              tab.
+            </Text>
           </div>
         </Table.NoResultsMessage>
       ) : (
@@ -322,11 +376,7 @@ export function GatewayMembersTab({
     {
       key: "backend",
       header: "Backend",
-      render: (row) => (
-        <Text muted small>
-          {CLASSIFICATION_LABEL[row.classification]}
-        </Text>
-      ),
+      render: (row) => <BackendKindTag row={row} />,
       width: "140px",
     },
     {

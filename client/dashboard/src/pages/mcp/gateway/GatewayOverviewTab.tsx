@@ -47,7 +47,10 @@ export function GatewayOverviewTab({
         <Page.Section.Body>
           <div className="flex flex-col gap-6">
             {mcpUrl ? (
-              <div className="border-border bg-card flex items-center gap-2 border px-3 py-2">
+              <div className="border-border bg-muted/30 flex items-center gap-3 border px-4 py-3">
+                <span className="border-border bg-background text-muted-foreground shrink-0 border px-1.5 py-0.5 font-mono text-[10px] tracking-widest uppercase">
+                  mcp
+                </span>
                 <Text className="min-w-0 flex-1 truncate font-mono text-sm">
                   {mcpUrl}
                 </Text>
