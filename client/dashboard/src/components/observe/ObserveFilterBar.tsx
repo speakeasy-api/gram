@@ -108,6 +108,7 @@ const ACCOUNT_TYPE_DIMENSION: FilterDimension = {
   label: "Account type",
   kind: "select",
   allLabel: "All",
+  description: "Usage on personal accounts versus team-managed ones.",
 };
 const STATUS_DIMENSION: FilterDimension = {
   id: "status",
