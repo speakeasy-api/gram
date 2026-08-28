@@ -93,6 +93,7 @@ type TrialKeyReviver interface {
 	ReinstateAPIKeyLimit(ctx context.Context, orgID string, keyType openrouter.KeyType, limit *int) (int, error)
 	ReinstateAPIKeyLimitWithDB(ctx context.Context, db openrouter.DBTX, orgID string, keyType openrouter.KeyType, limit *int) (int, error)
 	RemoveAPIKeyDisableCauseWithDB(ctx context.Context, db openrouter.DBTX, orgID string, keyType openrouter.KeyType, cause openrouter.DisableCause, limit *int) (int, openrouter.DisableCauseChange, error)
+	PrepareEnterpriseTrialConversionKeyWithDB(ctx context.Context, db openrouter.DBTX, orgID string, keyType openrouter.KeyType, enterpriseFloor int64) (openrouter.EnterpriseTrialConversionKeyChange, error)
 	ReconcileAPIKeyDisabled(ctx context.Context, orgID string, keyType openrouter.KeyType) error
 }
 
@@ -139,6 +140,10 @@ func (TrialKeysUnavailable) ReinstateAPIKeyLimitWithDB(context.Context, openrout
 
 func (TrialKeysUnavailable) RemoveAPIKeyDisableCauseWithDB(context.Context, openrouter.DBTX, string, openrouter.KeyType, openrouter.DisableCause, *int) (int, openrouter.DisableCauseChange, error) {
 	return 0, openrouter.DisableCauseChange{}, ErrOpenRouterUnavailable
+}
+
+func (TrialKeysUnavailable) PrepareEnterpriseTrialConversionKeyWithDB(context.Context, openrouter.DBTX, string, openrouter.KeyType, int64) (openrouter.EnterpriseTrialConversionKeyChange, error) {
+	return openrouter.EnterpriseTrialConversionKeyChange{}, ErrOpenRouterUnavailable
 }
 
 func (TrialKeysUnavailable) ReconcileAPIKeyDisabled(context.Context, string, openrouter.KeyType) error {

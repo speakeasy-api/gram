@@ -45,14 +45,14 @@ func TestMarkEnterpriseTrialConverted_EligibilityAndIdempotencyBoundary(t *testi
 		seedKey        bool
 		wantCode       oops.Code
 		wantHTTPStatus int
-		wantNotImpl    bool
+		wantConverted  bool
 		wantValidRetry bool
 	}{
 		{name: "absent organization is private not found", wantCode: oops.CodeNotFound, wantHTTPStatus: http.StatusNotFound},
 		{name: "existing organization without trial is a conflict", seedOrg: true, accountType: "enterprise", seedKey: true, wantCode: oops.CodeConflict},
 		{name: "stored trial tier is not enterprise", seedOrg: true, accountType: "enterprise", seedTrial: true, trialTier: "free", seedKey: true, wantCode: oops.CodeConflict},
-		{name: "running unconverted enterprise trial is eligible", seedOrg: true, accountType: "enterprise", seedTrial: true, trialTier: "enterprise", seedKey: true, wantCode: oops.CodeUnexpected, wantNotImpl: true},
-		{name: "demoted unconverted enterprise trial is eligible", seedOrg: true, accountType: "free", seedTrial: true, trialTier: "enterprise", demotedAt: &demotedAt, seedKey: true, wantCode: oops.CodeUnexpected, wantNotImpl: true},
+		{name: "running unconverted enterprise trial converts", seedOrg: true, accountType: "enterprise", seedTrial: true, trialTier: "enterprise", seedKey: true, wantConverted: true},
+		{name: "demoted unconverted enterprise trial converts", seedOrg: true, accountType: "free", seedTrial: true, trialTier: "enterprise", demotedAt: &demotedAt, seedKey: true, wantConverted: true},
 		{name: "converted enterprise organization is a valid retry", seedOrg: true, accountType: "enterprise", seedTrial: true, trialTier: "enterprise", convertedAt: &convertedAt, seedKey: true, wantValidRetry: true},
 		{name: "converted trial with free organization is incompatible", seedOrg: true, accountType: "free", seedTrial: true, trialTier: "enterprise", convertedAt: &convertedAt, seedKey: true, wantCode: oops.CodeConflict},
 	}
@@ -82,19 +82,23 @@ func TestMarkEnterpriseTrialConverted_EligibilityAndIdempotencyBoundary(t *testi
 			if tc.seedOrg {
 				beforeOrg = readOrgState(t, ctx, conn, orgID)
 			}
-			var beforeTrial any
+			var beforeTrial *trialsRepo.Trial
 			if tc.seedTrial {
-				beforeTrial = readTrial(t, ctx, conn, orgID)
+				trial := readTrial(t, ctx, conn, orgID)
+				beforeTrial = &trial
 			}
-			var beforeKey any
+			var beforeKey *orrepo.OpenrouterApiKey
 			if tc.seedKey {
-				beforeKey = readOpenRouterKey(t, ctx, conn, orgID, openrouter.KeyTypeChat)
+				key := readOpenRouterKey(t, ctx, conn, orgID, openrouter.KeyTypeChat)
+				beforeKey = &key
 			}
 
 			result, err := svc.MarkEnterpriseTrialConverted(ctx, &gen.MarkEnterpriseTrialConvertedPayload{ID: orgID})
-			if tc.wantValidRetry {
+			if tc.wantValidRetry || tc.wantConverted {
 				require.NoError(t, err)
 				require.Equal(t, orgID, result.ID)
+				require.Equal(t, "enterprise", result.AccountType)
+				require.True(t, result.Whitelisted)
 			} else {
 				requireOopsCode(t, err, tc.wantCode)
 				if tc.wantHTTPStatus != 0 {
@@ -102,13 +106,16 @@ func TestMarkEnterpriseTrialConverted_EligibilityAndIdempotencyBoundary(t *testi
 					require.ErrorAs(t, err, &publicErr)
 					require.Equal(t, tc.wantHTTPStatus, publicErr.HTTPStatus(ctx))
 				}
-				if tc.wantNotImpl {
-					require.ErrorContains(t, err, "not implemented")
-				}
 			}
 
 			if tc.seedOrg {
-				require.Equal(t, beforeOrg, readOrgState(t, ctx, conn, orgID))
+				if tc.wantConverted {
+					org := readOrgState(t, ctx, conn, orgID)
+					require.Equal(t, "enterprise", org.GramAccountType)
+					require.True(t, org.Whitelisted)
+				} else {
+					require.Equal(t, beforeOrg, readOrgState(t, ctx, conn, orgID))
+				}
 			} else {
 				_, orgErr := svc.GetOrganization(ctx, &gen.GetOrganizationPayload{IDOrSlug: orgID})
 				requireOopsCode(t, orgErr, oops.CodeNotFound)
@@ -118,18 +125,48 @@ func TestMarkEnterpriseTrialConverted_EligibilityAndIdempotencyBoundary(t *testi
 				require.ErrorIs(t, keyErr, pgx.ErrNoRows)
 			}
 			if tc.seedTrial {
-				require.Equal(t, beforeTrial, readTrial(t, ctx, conn, orgID))
+				if tc.wantConverted {
+					trial := readTrial(t, ctx, conn, orgID)
+					require.True(t, trial.ConvertedAt.Valid)
+					require.Equal(t, beforeTrial.EndsAt, trial.EndsAt)
+					require.Equal(t, beforeTrial.DemotedAt, trial.DemotedAt)
+				} else {
+					require.Equal(t, *beforeTrial, readTrial(t, ctx, conn, orgID))
+				}
 			}
 			if tc.seedKey {
-				require.Equal(t, beforeKey, readOpenRouterKey(t, ctx, conn, orgID, openrouter.KeyTypeChat), "complete persisted key state must remain unchanged")
+				if tc.wantConverted {
+					key := readOpenRouterKey(t, ctx, conn, orgID, openrouter.KeyTypeChat)
+					floor, ok := openrouter.DefaultCreditLimit(orgID, "enterprise", false)
+					require.True(t, ok)
+					require.GreaterOrEqual(t, key.MonthlyCredits, int64(floor))
+					require.Empty(t, key.DisableCauses)
+					require.False(t, key.Disabled)
+				} else {
+					afterKey := readOpenRouterKey(t, ctx, conn, orgID, openrouter.KeyTypeChat)
+					afterKey.UpdatedAt = beforeKey.UpdatedAt
+					require.Equal(t, *beforeKey, afterKey, "retry reconciliation may only refresh bookkeeping timestamps")
+				}
 			}
 			afterAudit, err := audittest.AuditLogCount(ctx, conn)
 			require.NoError(t, err)
-			require.Equal(t, beforeAudit, afterAudit)
+			if tc.wantConverted {
+				require.Equal(t, beforeAudit+1, afterAudit)
+			} else {
+				require.Equal(t, beforeAudit, afterAudit)
+			}
 			afterOutbox, err := testrepo.New(conn).CountPublishOutboxRows(ctx)
 			require.NoError(t, err)
-			require.Equal(t, beforeOutbox, afterOutbox)
-			require.Empty(t, provisioner.revivals, "eligibility boundary must not perform provider HTTP")
+			if tc.wantConverted {
+				require.Equal(t, beforeOutbox+1, afterOutbox)
+			} else {
+				require.Equal(t, beforeOutbox, afterOutbox)
+			}
+			if tc.wantConverted || tc.wantValidRetry {
+				require.Equal(t, openrouter.AllKeyTypes, provisioner.reconcileAttempts)
+			} else {
+				require.Empty(t, provisioner.revivals, "rejected conversion must not perform provider HTTP")
+			}
 		})
 	}
 }

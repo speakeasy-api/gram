@@ -54,6 +54,10 @@ func (o *Development) RemoveAPIKeyDisableCauseWithDB(context.Context, DBTX, stri
 	return 0, unchangedDisableCauseChange(), nil
 }
 
+func (o *Development) PrepareEnterpriseTrialConversionKeyWithDB(ctx context.Context, db DBTX, orgID string, keyType KeyType, floor int64) (EnterpriseTrialConversionKeyChange, error) {
+	return new(OpenRouter).PrepareEnterpriseTrialConversionKeyWithDB(ctx, db, orgID, keyType, floor)
+}
+
 func (o *Development) ReconcileAPIKeyDisabled(context.Context, string, KeyType) error {
 	return nil
 }
