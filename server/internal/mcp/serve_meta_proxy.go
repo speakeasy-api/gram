@@ -535,6 +535,7 @@ func (s *Service) executeProxiedMemberTool(
 		Result: upstreamResult,
 		// The result's _meta identity stays the member's, as on hosted.
 		serverIdentity: serverInfo{Name: member.slug, Version: "0.0.0"},
+		cacheHints:     nil,
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "serialize member tool result").LogError(ctx, logger)
