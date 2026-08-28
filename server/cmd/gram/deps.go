@@ -595,6 +595,10 @@ func newStripeMeterEventClient(
 	guardianPolicy *guardian.Policy,
 	c *cli.Context,
 ) (stripeclient.V2MeterEventClient, error) {
+	if !c.Bool(stripeTUMMeterStreamingFlagName) {
+		return stripeclient.NewNoopV2MeterEventClient(), nil
+	}
+
 	apiKey := c.String("stripe-api-key")
 	switch {
 	case stripeclient.IsConfigured(apiKey):

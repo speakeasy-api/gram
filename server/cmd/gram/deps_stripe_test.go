@@ -132,8 +132,9 @@ func TestNewStripeMeterEventClientLocalWithoutAPIKeyUsesNoop(t *testing.T) {
 	client, err := newStripeMeterEventClient(
 		guardian.NewDefaultPolicy(testenv.NewTracerProvider(t)),
 		newStripeCLIContext(t, map[string]string{
-			"environment":    "local",
-			"stripe-api-key": "unset",
+			"environment":                   "local",
+			"stripe-api-key":                "unset",
+			stripeTUMMeterStreamingFlagName: "true",
 		}),
 	)
 	require.NoError(t, err)
@@ -146,12 +147,27 @@ func TestNewStripeMeterEventClientLocalWithAPIKeyUsesRealClient(t *testing.T) {
 	client, err := newStripeMeterEventClient(
 		guardian.NewDefaultPolicy(testenv.NewTracerProvider(t)),
 		newStripeCLIContext(t, map[string]string{
-			"environment":    "local",
-			"stripe-api-key": "sk_test_placeholder",
+			"environment":                   "local",
+			"stripe-api-key":                "sk_test_placeholder",
+			stripeTUMMeterStreamingFlagName: "true",
 		}),
 	)
 	require.NoError(t, err)
 	require.ErrorContains(t, client.CreateMeterEvent(t.Context(), stripeclient.V2MeterEventInput{}), "identifier is required")
+}
+
+func TestNewStripeMeterEventClientStreamingDisabledUsesNoop(t *testing.T) {
+	t.Parallel()
+
+	client, err := newStripeMeterEventClient(
+		guardian.NewDefaultPolicy(testenv.NewTracerProvider(t)),
+		newStripeCLIContext(t, map[string]string{
+			"environment":    "prod",
+			"stripe-api-key": "unset",
+		}),
+	)
+	require.NoError(t, err)
+	require.NoError(t, client.CreateMeterEvent(t.Context(), stripeclient.V2MeterEventInput{}))
 }
 
 func TestNewStripeMeterEventClientNonLocalWithoutAPIKeyFails(t *testing.T) {
@@ -160,8 +176,9 @@ func TestNewStripeMeterEventClientNonLocalWithoutAPIKeyFails(t *testing.T) {
 	client, err := newStripeMeterEventClient(
 		guardian.NewDefaultPolicy(testenv.NewTracerProvider(t)),
 		newStripeCLIContext(t, map[string]string{
-			"environment":    "prod",
-			"stripe-api-key": "unset",
+			"environment":                   "prod",
+			"stripe-api-key":                "unset",
+			stripeTUMMeterStreamingFlagName: "true",
 		}),
 	)
 	require.Nil(t, client)
