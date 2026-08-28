@@ -2132,23 +2132,54 @@ jobs:
             docker tag "${{ steps.apko.outputs.image }}-amd64" "$TAG"
           done
 
-      - name: "[DEV] Push images"
-        if: github.event.pull_request.user.login != 'dependabot[bot]'
-        env:
-          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN_DEV }}
-        run: |
-          set -x
-          fly auth docker
-          docker push --all-tags "${{ steps.flyCreateDev.outputs.flyAppRegistry }}"
+      - parallel:
+          - name: "[DEV] Push images"
+            if: github.event.pull_request.user.login != 'dependabot[bot]'
+            env:
+              DOCKER_CONFIG: ${{ runner.temp }}/docker-dev
+              FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN_DEV }}
+              CURRENT_TAGS: ${{ steps.meta.outputs.tags }}
+              FLY_APP_REGISTRY: ${{ steps.flyCreateDev.outputs.flyAppRegistry }}
+            run: |
+              set -euo pipefail
+              mkdir -p "$DOCKER_CONFIG"
+              fly auth docker
 
-      - name: "[PROD] Push images"
-        if: github.event.pull_request.user.login != 'dependabot[bot]'
-        env:
-          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN_PROD }}
-        run: |
-          set -x
-          fly auth docker
-          docker push --all-tags "${{ steps.flyCreateProd.outputs.flyAppRegistry }}"
+              matched=false
+              while IFS= read -r tag; do
+                [[ "$tag" == "$FLY_APP_REGISTRY":* ]] || continue
+                docker push "$tag"
+                matched=true
+              done <<< "$CURRENT_TAGS"
+
+              if [[ "$matched" != true ]]; then
+                echo "::error::No current image tags matched $FLY_APP_REGISTRY"
+                exit 1
+              fi
+
+          - name: "[PROD] Push images"
+            if: github.event.pull_request.user.login != 'dependabot[bot]'
+            env:
+              DOCKER_CONFIG: ${{ runner.temp }}/docker-prod
+              FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN_PROD }}
+              CURRENT_TAGS: ${{ steps.meta.outputs.tags }}
+              FLY_APP_REGISTRY: ${{ steps.flyCreateProd.outputs.flyAppRegistry }}
+            run: |
+              set -euo pipefail
+              mkdir -p "$DOCKER_CONFIG"
+              fly auth docker
+
+              matched=false
+              while IFS= read -r tag; do
+                [[ "$tag" == "$FLY_APP_REGISTRY":* ]] || continue
+                docker push "$tag"
+                matched=true
+              done <<< "$CURRENT_TAGS"
+
+              if [[ "$matched" != true ]]; then
+                echo "::error::No current image tags matched $FLY_APP_REGISTRY"
+                exit 1
+              fi
 
       - name: Prune aube store
         if: success()
