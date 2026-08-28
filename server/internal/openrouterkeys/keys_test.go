@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -402,7 +403,15 @@ func TestEnableKey_RealOpenRouterCompletesOnLockedSession(t *testing.T) {
 	require.NoError(t, patch.err)
 	require.Equal(t, http.MethodPatch, patch.method)
 	require.Equal(t, "/v1/keys/hash-enablereal", patch.path)
-	require.InDelta(t, 0, patch.limit, 0, "admin enable passes a nil limit when removing admin_lock")
+	require.InDelta(t, 7, patch.limit, 0, "reconciliation reapplies the durable local limit")
+
+	// The durable local intent and its audit/outbox record must commit before
+	// reconciliation waits on OpenRouter. A crash or ambiguous HTTP result can
+	// then be retried without losing the requested admin state.
+	require.Empty(t, readDisableCauses(t, ctx, ti, orgID, string(openrouter.KeyTypeChat)))
+	committedAudit, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionOpenRouterAPIKeyEnable)
+	require.NoError(t, err)
+	require.Equal(t, before+1, committedAudit)
 	release()
 
 	var result enableResult
@@ -854,6 +863,160 @@ func TestAdminViewExposesFutureDisableCausesWithoutChangingCompatibilityBoolean(
 	require.NotNil(t, found)
 	require.True(t, found.Disabled)
 	require.Equal(t, []string{"future_cause"}, found.DisableCauses)
+}
+
+func TestAdminCauseUpstreamFailureCommitsAndRetryReconciles(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		name          string
+		initialCauses []string
+		action        audit.Action
+		wantDisabled  bool
+		call          func(context.Context, *testInstance, string) (*gen.AdminOpenRouterKey, error)
+	}{
+		{
+			name: "disable", initialCauses: []string{}, action: audit.ActionOpenRouterAPIKeyDisable, wantDisabled: true,
+			call: func(ctx context.Context, ti *testInstance, orgID string) (*gen.AdminOpenRouterKey, error) {
+				return ti.service.DisableKey(ctx, &gen.DisableKeyPayload{OrganizationID: orgID, KeyType: "chat"})
+			},
+		},
+		{
+			name: "enable", initialCauses: []string{"admin_lock"}, action: audit.ActionOpenRouterAPIKeyEnable, wantDisabled: false,
+			call: func(ctx context.Context, ti *testInstance, orgID string) (*gen.AdminOpenRouterKey, error) {
+				return ti.service.EnableKey(ctx, &gen.EnableKeyPayload{OrganizationID: orgID, KeyType: "chat"})
+			},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			var mu sync.Mutex
+			attempts := 0
+			failUpstream := true
+			var disabledRequests []bool
+			upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				var body struct {
+					Disabled bool `json:"disabled"`
+				}
+				require.NoError(t, json.NewDecoder(r.Body).Decode(&body))
+				mu.Lock()
+				attempts++
+				shouldFail := failUpstream
+				disabledRequests = append(disabledRequests, body.Disabled)
+				mu.Unlock()
+				if shouldFail {
+					http.Error(w, "provider unavailable", http.StatusServiceUnavailable)
+					return
+				}
+				w.Header().Set("Content-Type", "application/json")
+				_ = json.NewEncoder(w).Encode(map[string]any{"data": map[string]any{"hash": strings.TrimPrefix(r.URL.Path, "/v1/keys/")}})
+			}))
+			t.Cleanup(upstream.Close)
+
+			ctx, ti := newRealOpenRouterTestService(t, upstream.URL)
+			adminCtx := withAdmin(t, ctx)
+			secret := "sk-or-reconcile-" + tc.name
+			orgID := seedKey(t, ctx, ti, "reconcile-"+tc.name, "chat", secret)
+			setDisableCauses(t, ctx, ti, orgID, "chat", tc.initialCauses)
+			auditBefore := auditCount(t, ctx, ti, tc.action)
+			outboxBefore := outboxCount(t, ctx, ti)
+
+			_, err := tc.call(adminCtx, ti, orgID)
+			requireOopsCode(t, err, oops.CodeUnexpected)
+			mu.Lock()
+			failUpstream = false
+			failedAttempts := attempts
+			mu.Unlock()
+			require.NotContains(t, err.Error(), secret)
+			row, readErr := orgrepo.New(ti.conn).GetOpenRouterAPIKey(ctx, orgrepo.GetOpenRouterAPIKeyParams{OrganizationID: orgID, KeyType: "chat"})
+			require.NoError(t, readErr)
+			require.Equal(t, tc.wantDisabled, openrouter.EffectiveDisabled(row.Disabled, row.DisableCauses))
+			require.Equal(t, auditBefore+1, auditCount(t, ctx, ti, tc.action))
+			require.Equal(t, outboxBefore+1, outboxCount(t, ctx, ti))
+
+			view, err := tc.call(adminCtx, ti, orgID)
+			require.NoError(t, err)
+			require.Equal(t, tc.wantDisabled, view.Disabled)
+			require.Equal(t, auditBefore+1, auditCount(t, ctx, ti, tc.action), "retry must not duplicate audit")
+			require.Equal(t, outboxBefore+1, outboxCount(t, ctx, ti), "retry must not duplicate outbox")
+
+			mu.Lock()
+			defer mu.Unlock()
+			require.GreaterOrEqual(t, failedAttempts, 1)
+			require.Equal(t, failedAttempts+1, attempts)
+			for _, disabled := range disabledRequests {
+				require.Equal(t, tc.wantDisabled, disabled)
+			}
+		})
+	}
+}
+
+func TestAdminCauseReconcileUsesReplacementHashAndOverlappingDesiredState(t *testing.T) {
+	t.Parallel()
+
+	var mu sync.Mutex
+	failUpstream := true
+	var paths []string
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var body struct {
+			Disabled bool `json:"disabled"`
+		}
+		require.NoError(t, json.NewDecoder(r.Body).Decode(&body))
+		require.True(t, body.Disabled, "billing_inactive keeps the replacement key disabled after admin enable")
+		mu.Lock()
+		paths = append(paths, r.URL.Path)
+		shouldFail := failUpstream
+		mu.Unlock()
+		if shouldFail {
+			// The provider accepted and applied the idempotent request, but a
+			// gateway timeout leaves the caller unable to know that result.
+			http.Error(w, "ambiguous result", http.StatusGatewayTimeout)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{"data": map[string]any{"hash": "replacement-hash"}})
+	}))
+	t.Cleanup(upstream.Close)
+
+	ctx, ti := newRealOpenRouterTestService(t, upstream.URL)
+	adminCtx := withAdmin(t, ctx)
+	orgID := seedKey(t, ctx, ti, "replacement", "chat", "sk-or-replacement-secret")
+	setDisableCauses(t, ctx, ti, orgID, "chat", []string{"admin_lock", "billing_inactive"})
+
+	_, err := ti.service.EnableKey(adminCtx, &gen.EnableKeyPayload{OrganizationID: orgID, KeyType: "chat"})
+	requireOopsCode(t, err, oops.CodeUnexpected)
+	mu.Lock()
+	failUpstream = false
+	failedAttempts := len(paths)
+	mu.Unlock()
+	require.Equal(t, []string{"billing_inactive"}, readDisableCauses(t, ctx, ti, orgID, "chat"))
+	require.NoError(t, testrepo.New(ti.conn).SetOpenRouterAPIKeyHashFixture(ctx, testrepo.SetOpenRouterAPIKeyHashFixtureParams{
+		OrganizationID: orgID, KeyType: "chat", KeyHash: "replacement-hash",
+	}))
+
+	view, err := ti.service.EnableKey(adminCtx, &gen.EnableKeyPayload{OrganizationID: orgID, KeyType: "chat"})
+	require.NoError(t, err)
+	require.True(t, view.Disabled)
+	require.Equal(t, []string{"billing_inactive"}, view.DisableCauses)
+	mu.Lock()
+	defer mu.Unlock()
+	require.GreaterOrEqual(t, failedAttempts, 1)
+	for _, path := range paths[:failedAttempts] {
+		require.Equal(t, "/v1/keys/hash-replacement", path)
+	}
+	require.Equal(t, "/v1/keys/replacement-hash", paths[len(paths)-1])
+}
+
+func newRealOpenRouterTestService(t *testing.T, baseURL string) (context.Context, *testInstance) {
+	t.Helper()
+	return newTestServiceWithProvisioner(t, func(logger *slog.Logger, tracerProvider trace.TracerProvider, conn *pgxpool.Pool, enc *encryption.Client) openrouter.Provisioner {
+		policy, err := guardian.NewUnsafePolicy(tracerProvider, nil)
+		require.NoError(t, err)
+		testBaseURL, err := openrouter.WithTestBaseURL(baseURL)
+		require.NoError(t, err)
+		return openrouter.New(logger, tracerProvider, policy, conn, "test", "provisioning-secret", nil, nil, nil, enc, testBaseURL)
+	})
 }
 
 func setDisableCauses(t *testing.T, ctx context.Context, ti *testInstance, orgID, keyType string, causes []string) {

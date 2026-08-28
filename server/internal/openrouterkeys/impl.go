@@ -41,6 +41,7 @@ import (
 type lockedSessionProvisioner interface {
 	AddAPIKeyDisableCauseWithDB(context.Context, openrouter.DBTX, string, openrouter.KeyType, openrouter.DisableCause) (openrouter.DisableCauseChange, error)
 	RemoveAPIKeyDisableCauseWithDB(context.Context, openrouter.DBTX, string, openrouter.KeyType, openrouter.DisableCause, *int) (int, openrouter.DisableCauseChange, error)
+	ReconcileAPIKeyDisabledWithDB(context.Context, openrouter.DBTX, string, openrouter.KeyType) error
 }
 
 type Service struct {
@@ -235,34 +236,36 @@ func (s *Service) mutateAdminLock(ctx context.Context, logger *slog.Logger, auth
 			return fmt.Errorf("%s openrouter key: disable causes are unclassified", operation)
 		}
 
-		hasAdminLock := slices.Contains(row.DisableCauses, string(openrouter.DisableCauseAdminLock))
-		if hasAdminLock == add {
-			return nil
-		}
-
 		provisioner, ok := s.provisioner.(lockedSessionProvisioner)
 		if !ok {
 			return fmt.Errorf("%s openrouter key: provisioner cannot use the locked database session", operation)
 		}
 
-		var change openrouter.DisableCauseChange
-		if add {
-			change, err = provisioner.AddAPIKeyDisableCauseWithDB(ctx, tx, organizationID, openrouter.KeyType(keyType), openrouter.DisableCauseAdminLock)
-		} else {
-			_, change, err = provisioner.RemoveAPIKeyDisableCauseWithDB(ctx, tx, organizationID, openrouter.KeyType(keyType), openrouter.DisableCauseAdminLock, nil)
-		}
-		if err != nil {
-			return fmt.Errorf("%s openrouter key admin lock: %w", operation, err)
-		}
-		if !change.CauseChanged {
-			return fmt.Errorf("%s openrouter key admin lock: cause did not change after locked preflight", operation)
+		hasAdminLock := slices.Contains(row.DisableCauses, string(openrouter.DisableCauseAdminLock))
+		if hasAdminLock != add {
+			var change openrouter.DisableCauseChange
+			if add {
+				change, err = provisioner.AddAPIKeyDisableCauseWithDB(ctx, tx, organizationID, openrouter.KeyType(keyType), openrouter.DisableCauseAdminLock)
+			} else {
+				_, change, err = provisioner.RemoveAPIKeyDisableCauseWithDB(ctx, tx, organizationID, openrouter.KeyType(keyType), openrouter.DisableCauseAdminLock, nil)
+			}
+			if err != nil {
+				return fmt.Errorf("%s openrouter key admin lock: %w", operation, err)
+			}
+			if !change.CauseChanged {
+				return fmt.Errorf("%s openrouter key admin lock: cause did not change after locked preflight", operation)
+			}
+
+			if err := s.logKeyAction(ctx, tx, authCtx, organizationID, keyType, action); err != nil {
+				return err
+			}
 		}
 
-		if err := s.logKeyAction(ctx, tx, authCtx, organizationID, keyType, action); err != nil {
-			return err
-		}
 		if err := tx.Commit(ctx); err != nil {
 			return fmt.Errorf("commit openrouter key %s transaction: %w", operation, err)
+		}
+		if err := provisioner.ReconcileAPIKeyDisabledWithDB(ctx, conn, organizationID, openrouter.KeyType(keyType)); err != nil {
+			return fmt.Errorf("%s openrouter key after committing admin lock: %w", operation, err)
 		}
 		return nil
 	})

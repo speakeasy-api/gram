@@ -210,6 +210,10 @@ func (s *stubProvisioner) removeAPIKeyDisableCause(ctx context.Context, db openr
 	return keyLimit, openrouter.DisableCauseChange{CauseChanged: true, KeyAccessChanged: accessChanged}, nil
 }
 
+func (s *stubProvisioner) ReconcileAPIKeyDisabledWithDB(context.Context, openrouter.DBTX, string, openrouter.KeyType) error {
+	return nil
+}
+
 func (s *stubProvisioner) DisableAPIKey(ctx context.Context, orgID string, keyType openrouter.KeyType) error {
 	s.mu.Lock()
 	s.disableCalls = append(s.disableCalls, orgID+"/"+string(keyType))

@@ -195,15 +195,18 @@ func TestDisableCauseWithDBUsesCallerLockedConnection(t *testing.T) {
 	change, err = provisioner.AddAPIKeyDisableCauseWithDB(ctx, conn, orgID, KeyTypeChat, DisableCauseTrialDemotion)
 	require.NoError(t, err)
 	require.Equal(t, DisableCauseChange{CauseChanged: true, KeyAccessChanged: false}, change)
-	patches := upstream.recorded()[patchesBefore:]
-	require.Len(t, patches, 1)
-	require.JSONEq(t, `{"disabled":true}`, patches[0])
+	require.Empty(t, upstream.recorded()[patchesBefore:], "durable local mutations must not contact upstream before commit")
 	_, change, err = provisioner.RemoveAPIKeyDisableCauseWithDB(ctx, conn, orgID, KeyTypeChat, DisableCauseTrialDemotion, nil)
 	require.NoError(t, err)
 	require.Equal(t, DisableCauseChange{CauseChanged: true, KeyAccessChanged: false}, change)
 	_, change, err = provisioner.RemoveAPIKeyDisableCauseWithDB(ctx, conn, orgID, KeyTypeChat, DisableCauseAdminLock, nil)
 	require.NoError(t, err)
 	require.Equal(t, DisableCauseChange{CauseChanged: true, KeyAccessChanged: true}, change)
+	require.Empty(t, upstream.recorded()[patchesBefore:], "all local mutations stay upstream-free")
+	require.NoError(t, provisioner.ReconcileAPIKeyDisabledWithDB(ctx, conn, orgID, KeyTypeChat))
+	patches := upstream.recorded()[patchesBefore:]
+	require.Len(t, patches, 1)
+	require.JSONEq(t, `{"disabled":false,"limit":5,"limit_reset":"monthly"}`, patches[0])
 	row, err := queries.GetOpenRouterAPIKey(ctx, repo.GetOpenRouterAPIKeyParams{OrganizationID: orgID, KeyType: string(KeyTypeChat)})
 	require.NoError(t, err)
 	require.Empty(t, row.DisableCauses)
@@ -259,6 +262,24 @@ func TestRemoveAPIKeyDisableCauseUsesCanonicalDistinctCauses(t *testing.T) {
 		require.False(t, row.Disabled)
 		require.Equal(t, before.MonthlyCredits, row.MonthlyCredits)
 	})
+}
+
+func TestReconcileAPIKeyDisabledWithDBNullFailsClosed(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	orgID := "org-" + uuid.NewString()[:8]
+	provisioner, upstream, _ := newDisableTestProvisioner(t, orgID)
+	_, err := provisioner.ProvisionAPIKey(ctx, orgID, KeyTypeChat)
+	require.NoError(t, err)
+	require.NoError(t, testrepo.New(provisioner.db).SetOpenRouterAPIKeyClassificationFixture(ctx, testrepo.SetOpenRouterAPIKeyClassificationFixtureParams{
+		OrganizationID: orgID, KeyType: string(KeyTypeChat), Disabled: true, DisableCauses: nil,
+	}))
+	patchesBefore := len(upstream.recorded())
+
+	err = provisioner.ReconcileAPIKeyDisabledWithDB(ctx, provisioner.db, orgID, KeyTypeChat)
+	require.ErrorContains(t, err, "disable causes are unclassified")
+	require.Len(t, upstream.recorded(), patchesBefore)
 }
 
 func TestRemoveAPIKeyDisableCauseMissingAndUnclassifiedFailClosed(t *testing.T) {
