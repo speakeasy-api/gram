@@ -176,7 +176,11 @@ function IdentitiesIndexContent(): JSX.Element {
       width: "1fr",
       render: (identity) => (
         <Text muted small className="truncate">
-          {identityKindOf(identity) === "person" ? identity.role : "—"}
+          {identityKindOf(identity) !== "person"
+            ? "—"
+            : identity.role === "Unknown"
+              ? "None"
+              : identity.role}
         </Text>
       ),
     },

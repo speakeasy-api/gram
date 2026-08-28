@@ -125,8 +125,8 @@ export default function IdentityOverview(): JSX.Element {
           <Info className="mt-0.5 size-3.5 shrink-0" />
           <Text variant="small" muted className="text-xs">
             Panels here show this person&rsquo;s slice and nothing more. Every{" "}
-            <strong className="font-medium">Open in</strong> leaves for the
-            existing page, pre-filtered to them.
+            <strong className="font-medium">Open in</strong> leaves for the page
+            that owns the data.
           </Text>
         </div>
 

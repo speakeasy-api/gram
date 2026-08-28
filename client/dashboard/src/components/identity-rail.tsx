@@ -26,14 +26,14 @@ export function IdentityRail({
 }): React.JSX.Element {
   return (
     <nav aria-label="This identity" className={cn("flex flex-col", className)}>
-      <p className="text-eyebrow mb-2 pl-3">This identity</p>
+      <p className="text-eyebrow mb-2 hidden pl-3 lg:block">This identity</p>
       {items.map((item) => (
         <Link
           key={item.key}
           to={item.href}
           aria-current={item.active ? "page" : undefined}
           className={cn(
-            "border-l-2 px-3 py-1.5 text-sm transition-colors",
+            "shrink-0 border-b-2 px-3 py-1.5 text-sm whitespace-nowrap transition-colors lg:border-b-0 lg:border-l-2",
             item.active
               ? // The open section lifts off the recessed ground. In dark
                 // mode --card is the ground itself, so the lighter --accent

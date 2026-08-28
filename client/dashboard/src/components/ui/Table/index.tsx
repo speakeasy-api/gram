@@ -837,23 +837,25 @@ function NoResultsMessage({
   className,
   children,
 }: PropsWithChildrenAndClassName) {
+  // A row, not a bare div: this renders inside <tbody>, and anything else is
+  // invalid markup that React reports as a hydration error.
   const Wrapper = ({ children, className }: PropsWithChildrenAndClassName) => (
-    <div
+    <tr
       className={cn(
         "[grid-column:1/-1] grid [grid-template-columns:subgrid]",
         className,
       )}
     >
       {children}
-    </div>
+    </tr>
   );
 
   // Padded to the same inset as a data cell: the message sits in the grid
   // where a row would, so flush-left text reads as a broken row.
   const ContentWrapper = ({ children }: PropsWithChildren) => (
-    <div className="text-muted-foreground [grid-column:1/-1] px-4 py-6 text-sm">
+    <td className="text-muted-foreground [grid-column:1/-1] px-4 py-6 text-sm">
       {children}
-    </div>
+    </td>
   );
 
   return (
