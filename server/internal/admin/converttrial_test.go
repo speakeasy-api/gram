@@ -39,7 +39,9 @@ func TestUpdateOrganization_RejectsEnterpriseTrialConversionAndRetryWithoutSideE
 		convertedAt *time.Time
 	}{
 		{name: "unconverted eligible trial", accountType: "free", whitelisted: false},
+		{name: "unconverted incompatible staged trial", accountType: "free", whitelisted: true},
 		{name: "compatible converted trial retry", accountType: "enterprise", whitelisted: true, convertedAt: &convertedAt},
+		{name: "incompatible converted trial", accountType: "free", whitelisted: false, convertedAt: &convertedAt},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -69,6 +71,49 @@ func TestUpdateOrganization_RejectsEnterpriseTrialConversionAndRetryWithoutSideE
 			require.Equal(t, beforeOutbox, afterOutbox)
 		})
 	}
+}
+
+func TestUpdateOrganization_StagedWhitelistCannotBypassDedicatedConversion(t *testing.T) {
+	t.Parallel()
+	ctx, svc, conn, provisioner := newRearmService(t)
+	orgID := "org_update_staged_bypass"
+	seedOrg(t, ctx, conn, orgFixture{id: orgID, name: orgID, slug: orgID, accountType: "free", whitelisted: false})
+	seedTrial(t, ctx, conn, trialFixture{orgID: orgID, tier: "enterprise", endsAt: time.Now().UTC().Add(time.Hour)})
+	for _, keyType := range openrouter.AllKeyTypes {
+		seedOpenRouterKey(t, ctx, conn, orgID, keyFixture{keyType: keyType, monthlyCredits: 7, disabled: true})
+	}
+
+	whitelisted := true
+	first, err := svc.UpdateOrganization(ctx, &gen.UpdateOrganizationPayload{ID: orgID, Whitelisted: &whitelisted})
+	require.NoError(t, err)
+	require.True(t, first.Whitelisted)
+	trialBefore := readTrial(t, ctx, conn, orgID)
+	keysBefore := make(map[openrouter.KeyType]orrepo.OpenrouterApiKey, len(openrouter.AllKeyTypes))
+	for _, keyType := range openrouter.AllKeyTypes {
+		keysBefore[keyType] = readOpenRouterKey(t, ctx, conn, orgID, keyType)
+	}
+	outboxBefore, err := testrepo.New(conn).CountPublishOutboxRows(ctx)
+	require.NoError(t, err)
+
+	enterprise := "enterprise"
+	second, err := svc.UpdateOrganization(ctx, &gen.UpdateOrganizationPayload{ID: orgID, AccountType: &enterprise})
+	require.Nil(t, second)
+	requireOopsCode(t, err, oops.CodeConflict)
+	require.ErrorContains(t, err, "MarkEnterpriseTrialConverted")
+	state := readOrgState(t, ctx, conn, orgID)
+	require.Equal(t, "free", state.GramAccountType)
+	require.True(t, state.Whitelisted, "the allowed first request remains, but the enterprise account-type write must not occur")
+	require.Equal(t, trialBefore, readTrial(t, ctx, conn, orgID))
+	for _, keyType := range openrouter.AllKeyTypes {
+		require.Equal(t, keysBefore[keyType], readOpenRouterKey(t, ctx, conn, orgID, keyType))
+	}
+	require.Empty(t, provisioner.reconcileAttempts)
+	auditCount, err := audittest.AuditLogCountByAction(ctx, conn, audit.ActionOrganizationEnterpriseTrialConverted)
+	require.NoError(t, err)
+	require.Zero(t, auditCount)
+	outboxAfter, err := testrepo.New(conn).CountPublishOutboxRows(ctx)
+	require.NoError(t, err)
+	require.Equal(t, outboxBefore, outboxAfter)
 }
 
 func TestUpdateOrganization_AllowsUnrelatedEnterpriseTrialAdministration(t *testing.T) {
