@@ -13,7 +13,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/openrouterkeys"
 )
 
-func runAbortWorkflow(t *testing.T, abortOnAccept bool) (int32, int32) {
+func runAbortWorkflow(t *testing.T) (int32, int32) {
 	t.Helper()
 	var suite testsuite.WorkflowTestSuite
 	env := suite.NewTestWorkflowEnvironment()
@@ -29,17 +29,13 @@ func runAbortWorkflow(t *testing.T, abortOnAccept bool) (int32, int32) {
 	env.RegisterDelayedCallback(func() {
 		env.UpdateWorkflow(OpenRouterAdminBeginUpdate, "begin", &testsuite.TestUpdateCallback{
 			OnReject: func(err error) { require.NoError(t, err) },
-			OnAccept: func() {
-				if abortOnAccept {
-					env.SignalWorkflow(OpenRouterAdminAbortSignal, nil)
-				}
-			},
-			OnComplete: func(_ any, err error) {
+			OnAccept: func() {},
+			OnComplete: func(result any, err error) {
 				require.NoError(t, err)
+				token, ok := result.(int64)
+				require.True(t, ok)
 				completed.Add(1)
-				if !abortOnAccept {
-					env.SignalWorkflow(OpenRouterAdminAbortSignal, nil)
-				}
+				env.SignalWorkflow(OpenRouterAdminAbortSignal, token)
 			},
 		})
 	}, time.Millisecond)
@@ -50,17 +46,13 @@ func runAbortWorkflow(t *testing.T, abortOnAccept bool) (int32, int32) {
 
 func TestOpenRouterAdminAbortIsTerminalWithoutGuardReconcile(t *testing.T) {
 	t.Parallel()
-	reconciles, completed := runAbortWorkflow(t, false)
+	reconciles, completed := runAbortWorkflow(t)
 	require.Zero(t, reconciles)
 	require.EqualValues(t, 1, completed)
 }
 
-func TestOpenRouterAdminAbortCloseRaceFinishesAcceptedHandlerAndFreshRunWorks(t *testing.T) {
+func TestOpenRouterAdminAbortClosureAllowsFreshRun(t *testing.T) {
 	t.Parallel()
-	reconciles, completed := runAbortWorkflow(t, true)
-	require.Zero(t, reconciles)
-	require.EqualValues(t, 1, completed)
-
 	attempts, err := runCaptureFailureWorkflow(t, 0)
 	require.NoError(t, err)
 	require.EqualValues(t, 1, attempts)

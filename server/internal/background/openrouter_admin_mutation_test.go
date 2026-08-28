@@ -47,13 +47,16 @@ func TestTemporalOpenRouterAdminCoordinatorUsesAcknowledgedPayloadFreeUpdates(t 
 	})
 	start := &adminCoordinatorStartOperation{}
 	temporalClient.On("NewWithStartWorkflowOperation", options, mock.Anything, scope).Return(start).Twice()
-	beginOptions := payloadFreeUpdateOptions(OpenRouterAdminBeginUpdate, start)
-	completeOptions := payloadFreeUpdateOptions(OpenRouterAdminCompleteUpdate, start)
-	temporalClient.On("UpdateWithStartWorkflow", mock.Anything, beginOptions).Return(&adminCoordinatorUpdateHandle{}, nil).Once()
+	const token = int64(42)
+	beginOptions := updateWithStartOptions(OpenRouterAdminBeginUpdate, start)
+	completeOptions := updateWithStartOptions(OpenRouterAdminCompleteUpdate, start, token)
+	temporalClient.On("UpdateWithStartWorkflow", mock.Anything, beginOptions).Return(&adminCoordinatorUpdateHandle{result: token}, nil).Once()
 	temporalClient.On("UpdateWithStartWorkflow", mock.Anything, completeOptions).Return(&adminCoordinatorUpdateHandle{}, nil).Once()
 	coordinator := &TemporalOpenRouterAdminCoordinator{TemporalEnv: tenv.NewEnvironment(temporalClient, "test", "test")}
-	require.NoError(t, coordinator.Begin(t.Context(), scope))
-	require.NoError(t, coordinator.CompleteAndWait(t.Context(), scope), "Complete acknowledges its own update instead of following an idle workflow run")
+	gotToken, err := coordinator.Begin(t.Context(), scope)
+	require.NoError(t, err)
+	require.Equal(t, token, gotToken)
+	require.NoError(t, coordinator.CompleteAndWait(t.Context(), scope, gotToken), "Complete acknowledges its own update instead of following an idle workflow run")
 	temporalClient.AssertNotCalled(t, "SignalWithStartWorkflow", mock.Anything, workflowID, "complete", mock.Anything)
 	temporalClient.AssertExpectations(t)
 }
@@ -64,15 +67,23 @@ func TestTemporalOpenRouterAdminCoordinatorTimeoutIsNotSuccess(t *testing.T) {
 	temporalClient := &temporalmocks.Client{}
 	start := &adminCoordinatorStartOperation{}
 	temporalClient.On("NewWithStartWorkflowOperation", mock.Anything, mock.Anything, scope).Return(start).Once()
-	temporalClient.On("UpdateWithStartWorkflow", mock.Anything, payloadFreeUpdateOptions(OpenRouterAdminCompleteUpdate, start)).Return(&adminCoordinatorUpdateHandle{err: context.DeadlineExceeded}, nil).Once()
+	temporalClient.On("UpdateWithStartWorkflow", mock.Anything, updateWithStartOptions(OpenRouterAdminCompleteUpdate, start, int64(42))).Return(&adminCoordinatorUpdateHandle{err: context.DeadlineExceeded}, nil).Once()
 	coordinator := &TemporalOpenRouterAdminCoordinator{TemporalEnv: tenv.NewEnvironment(temporalClient, "test", "test")}
-	require.ErrorIs(t, coordinator.CompleteAndWait(t.Context(), scope), context.DeadlineExceeded)
+	require.ErrorIs(t, coordinator.CompleteAndWait(t.Context(), scope, 42), context.DeadlineExceeded)
 	temporalClient.AssertExpectations(t)
 }
 
-func payloadFreeUpdateOptions(name string, start client.WithStartWorkflowOperation) any {
+func updateWithStartOptions(name string, start client.WithStartWorkflowOperation, args ...any) any {
 	return mock.MatchedBy(func(options client.UpdateWithStartWorkflowOptions) bool {
-		return start != nil && options.StartWorkflowOperation == start && options.UpdateOptions.UpdateName == name && options.UpdateOptions.WaitForStage == client.WorkflowUpdateStageAccepted && len(options.UpdateOptions.Args) == 0
+		if start == nil || options.StartWorkflowOperation != start || options.UpdateOptions.UpdateName != name || options.UpdateOptions.WaitForStage != client.WorkflowUpdateStageAccepted || len(options.UpdateOptions.Args) != len(args) {
+			return false
+		}
+		for i := range args {
+			if options.UpdateOptions.Args[i] != args[i] {
+				return false
+			}
+		}
+		return true
 	})
 }
 
@@ -118,9 +129,17 @@ func (*adminCoordinatorStartOperation) Get(context.Context) (client.WorkflowRun,
 	return nil, nil
 }
 
-type adminCoordinatorUpdateHandle struct{ err error }
+type adminCoordinatorUpdateHandle struct {
+	err    error
+	result int64
+}
 
-func (*adminCoordinatorUpdateHandle) WorkflowID() string               { return "workflow" }
-func (*adminCoordinatorUpdateHandle) RunID() string                    { return "run" }
-func (*adminCoordinatorUpdateHandle) UpdateID() string                 { return "update" }
-func (h *adminCoordinatorUpdateHandle) Get(context.Context, any) error { return h.err }
+func (*adminCoordinatorUpdateHandle) WorkflowID() string { return "workflow" }
+func (*adminCoordinatorUpdateHandle) RunID() string      { return "run" }
+func (*adminCoordinatorUpdateHandle) UpdateID() string   { return "update" }
+func (h *adminCoordinatorUpdateHandle) Get(_ context.Context, value any) error {
+	if result, ok := value.(*int64); ok {
+		*result = h.result
+	}
+	return h.err
+}

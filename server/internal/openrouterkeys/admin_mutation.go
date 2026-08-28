@@ -31,10 +31,14 @@ type AdminReconciliationCheckpoint struct {
 	Cursor int64                    `json:"cursor"`
 }
 
+// AdminMutationToken is a non-sensitive integer identifying one accepted
+// mutation without expanding the privacy-bounded reconciliation scope.
+type AdminMutationToken = int64
+
 type AdminMutationCoordinator interface {
-	Begin(context.Context, AdminReconciliationScope) error
-	CompleteAndWait(context.Context, AdminReconciliationScope) error
-	Abort(context.Context, AdminReconciliationScope) error
+	Begin(context.Context, AdminReconciliationScope) (AdminMutationToken, error)
+	CompleteAndWait(context.Context, AdminReconciliationScope, AdminMutationToken) error
+	Abort(context.Context, AdminReconciliationScope, AdminMutationToken) error
 }
 
 type ambiguousAdminMutationCommitError struct{ cause error }

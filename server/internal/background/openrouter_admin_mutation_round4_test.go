@@ -25,7 +25,7 @@ func completeAdminMutation(t *testing.T, env *testsuite.TestWorkflowEnvironment,
 					completed.Add(1)
 				}
 			},
-		})
+		}, int64(1))
 	}, delay)
 }
 

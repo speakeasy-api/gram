@@ -60,34 +60,41 @@ type testInstance struct {
 }
 
 type stubAdminCoordinator struct {
-	mu        sync.Mutex
-	begin     func(context.Context, openrouterkeys.AdminReconciliationScope) error
-	complete  func(context.Context, openrouterkeys.AdminReconciliationScope) error
-	abort     func(context.Context, openrouterkeys.AdminReconciliationScope) error
-	begins    []openrouterkeys.AdminReconciliationScope
-	completes int
-	aborts    int
+	mu             sync.Mutex
+	begin          func(context.Context, openrouterkeys.AdminReconciliationScope) error
+	complete       func(context.Context, openrouterkeys.AdminReconciliationScope) error
+	abort          func(context.Context, openrouterkeys.AdminReconciliationScope) error
+	begins         []openrouterkeys.AdminReconciliationScope
+	completes      int
+	aborts         int
+	nextToken      int64
+	completeTokens []int64
+	abortTokens    []int64
 }
 
-func (s *stubAdminCoordinator) Begin(ctx context.Context, scope openrouterkeys.AdminReconciliationScope) error {
+func (s *stubAdminCoordinator) Begin(ctx context.Context, scope openrouterkeys.AdminReconciliationScope) (int64, error) {
 	s.mu.Lock()
 	s.begins = append(s.begins, scope)
+	s.nextToken++
+	token := s.nextToken
 	begin := s.begin
 	s.mu.Unlock()
-	return begin(ctx, scope)
+	return token, begin(ctx, scope)
 }
 
-func (s *stubAdminCoordinator) CompleteAndWait(ctx context.Context, scope openrouterkeys.AdminReconciliationScope) error {
+func (s *stubAdminCoordinator) CompleteAndWait(ctx context.Context, scope openrouterkeys.AdminReconciliationScope, token int64) error {
 	s.mu.Lock()
 	s.completes++
+	s.completeTokens = append(s.completeTokens, token)
 	complete := s.complete
 	s.mu.Unlock()
 	return complete(ctx, scope)
 }
 
-func (s *stubAdminCoordinator) Abort(ctx context.Context, scope openrouterkeys.AdminReconciliationScope) error {
+func (s *stubAdminCoordinator) Abort(ctx context.Context, scope openrouterkeys.AdminReconciliationScope, token int64) error {
 	s.mu.Lock()
 	s.aborts++
+	s.abortTokens = append(s.abortTokens, token)
 	abort := s.abort
 	s.mu.Unlock()
 	return abort(ctx, scope)
@@ -97,6 +104,12 @@ func (s *stubAdminCoordinator) Counts() (int, int) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return s.completes, s.aborts
+}
+
+func (s *stubAdminCoordinator) Tokens() ([]int64, []int64) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return append([]int64(nil), s.completeTokens...), append([]int64(nil), s.abortTokens...)
 }
 
 func (s *stubAdminCoordinator) Begins() []openrouterkeys.AdminReconciliationScope {

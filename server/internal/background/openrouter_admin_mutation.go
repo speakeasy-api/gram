@@ -48,11 +48,10 @@ func openRouterAdminReconciliationWorkflow(ctx workflow.Context, scope openroute
 	}
 	abort := workflow.GetSignalChannel(ctx, OpenRouterAdminAbortSignal)
 	wake := workflow.NewBufferedChannel(ctx, 100)
-	var cursor int64
-	var hasCursor bool
+	operations := map[int64]int64{}
 	var generation int64
-	armed := false
-	terminal := false
+	var lastToken int64
+	var pendingClose bool
 
 	capture := func(callCtx workflow.Context) (int64, error) {
 		var captured int64
@@ -72,72 +71,80 @@ func openRouterAdminReconciliationWorkflow(ctx workflow.Context, scope openroute
 		return advanced, nil
 	}
 
-	if err := workflow.SetUpdateHandler(ctx, OpenRouterAdminBeginUpdate, func(handlerCtx workflow.Context) error {
+	if err := workflow.SetUpdateHandler(ctx, OpenRouterAdminBeginUpdate, func(handlerCtx workflow.Context) (int64, error) {
 		captured, err := capture(handlerCtx)
 		if err != nil {
 			wake.Send(handlerCtx, nil)
-			return err
+			return 0, err
 		}
-		if !hasCursor || captured < cursor {
-			cursor, hasCursor = captured, true
+		token := workflow.Now(handlerCtx).UnixNano()
+		if token <= lastToken {
+			token = lastToken + 1
 		}
-		armed = true
+		lastToken = token
+		operations[token] = captured
+		pendingClose = false
 		generation++
 		wake.Send(handlerCtx, nil)
-		return nil
+		return token, nil
 	}); err != nil {
 		return fmt.Errorf("register OpenRouter admin Begin update: %w", err)
 	}
-	if err := workflow.SetUpdateHandler(ctx, OpenRouterAdminCompleteUpdate, func(handlerCtx workflow.Context) error {
-		if !hasCursor {
-			// A Complete update can win Update-With-Start after the predecessor's
-			// guard already reconciled and closed. Without that predecessor's Begin
-			// baseline there is no bounded commit proof left to inspect. Keep the
-			// successor alive for one guard window so concurrent Complete updates
-			// are acknowledged without starting a chain of idle runs.
-			armed = true
+	if err := workflow.SetUpdateHandler(ctx, OpenRouterAdminCompleteUpdate, func(handlerCtx workflow.Context, token int64) error {
+		baseline, ok := operations[token]
+		if !ok {
+			// A retry can reach a successor after the operation's workflow closed.
+			// Without its Begin baseline there is no bounded commit proof to inspect.
+			pendingClose = true
 			generation++
 			wake.Send(handlerCtx, nil)
 			return nil
 		}
-		armed = true
 		generation++
 		wake.Send(handlerCtx, nil)
 
-		advanced, err := reconcile(handlerCtx, cursor)
-		if err != nil {
+		if _, err := reconcile(handlerCtx, baseline); err != nil {
 			return err
 		}
-		if advanced > cursor {
-			cursor = advanced
-		}
+		delete(operations, token)
+		pendingClose = false
+		generation++
+		wake.Send(handlerCtx, nil)
 		return nil
 	}); err != nil {
 		return fmt.Errorf("register OpenRouter admin Complete update: %w", err)
 	}
 
+	receiveAbort := func(channel workflow.ReceiveChannel) {
+		var token int64
+		channel.Receive(ctx, &token)
+		if _, ok := operations[token]; ok {
+			delete(operations, token)
+			generation++
+		}
+	}
+	oldestCursor := func() (int64, bool) {
+		var oldest int64
+		found := false
+		for _, cursor := range operations {
+			if !found || cursor < oldest {
+				oldest, found = cursor, true
+			}
+		}
+		return oldest, found
+	}
+
 	for {
-		if !armed {
+		if len(operations) == 0 && !pendingClose {
 			selector := workflow.NewSelector(ctx)
 			selector.AddReceive(wake, func(channel workflow.ReceiveChannel, _ bool) { channel.Receive(ctx, nil) })
-			selector.AddReceive(abort, func(channel workflow.ReceiveChannel, _ bool) {
-				channel.Receive(ctx, nil)
-				terminal = true
-			})
+			selector.AddReceive(abort, func(channel workflow.ReceiveChannel, _ bool) { receiveAbort(channel) })
 			selector.Select(ctx)
-			if terminal {
-				if err := workflow.Await(ctx, func() bool { return workflow.AllHandlersFinished(ctx) }); err != nil {
-					return fmt.Errorf("await aborted OpenRouter admin handlers: %w", err)
-				}
-				return nil
+			if err := workflow.Await(ctx, func() bool { return workflow.AllHandlersFinished(ctx) }); err != nil {
+				return fmt.Errorf("await idle OpenRouter admin handlers: %w", err)
 			}
-			if !armed {
-				if err := workflow.Await(ctx, func() bool { return workflow.AllHandlersFinished(ctx) }); err != nil {
-					return fmt.Errorf("await idle OpenRouter admin handlers: %w", err)
-				}
-				if !armed {
-					return nil
-				}
+			if len(operations) == 0 && !pendingClose {
+				return nil
 			}
 		}
 
@@ -152,17 +159,16 @@ func openRouterAdminReconciliationWorkflow(ctx workflow.Context, scope openroute
 			woken = true
 		})
 		selector.AddReceive(abort, func(channel workflow.ReceiveChannel, _ bool) {
-			channel.Receive(ctx, nil)
-			terminal = true
+			receiveAbort(channel)
 			woken = true
 		})
 		selector.Select(ctx)
 		if woken {
 			cancelTimer()
-			if terminal {
-				if err := workflow.Await(ctx, func() bool { return workflow.AllHandlersFinished(ctx) }); err != nil {
-					return fmt.Errorf("await aborted OpenRouter admin handlers: %w", err)
-				}
+			if err := workflow.Await(ctx, func() bool { return workflow.AllHandlersFinished(ctx) }); err != nil {
+				return fmt.Errorf("await updated OpenRouter admin handlers: %w", err)
+			}
+			if len(operations) == 0 && !pendingClose {
 				return nil
 			}
 			continue
@@ -174,15 +180,12 @@ func openRouterAdminReconciliationWorkflow(ctx workflow.Context, scope openroute
 		if generation != guardGeneration {
 			continue
 		}
-		if !hasCursor {
+		baseline, ok := oldestCursor()
+		if !ok {
 			return nil
 		}
-		advanced, err := reconcile(ctx, cursor)
-		if err != nil {
+		if _, err := reconcile(ctx, baseline); err != nil {
 			return err
-		}
-		if !hasCursor || advanced > cursor {
-			cursor, hasCursor = advanced, true
 		}
 		if err := workflow.Await(ctx, func() bool { return workflow.AllHandlersFinished(ctx) }); err != nil {
 			return fmt.Errorf("await reconciled OpenRouter admin handlers: %w", err)
@@ -235,15 +238,19 @@ type TemporalOpenRouterAdminCoordinator struct{ TemporalEnv *tenv.Environment }
 
 var _ openrouterkeys.AdminMutationCoordinator = (*TemporalOpenRouterAdminCoordinator)(nil)
 
-func (c *TemporalOpenRouterAdminCoordinator) Begin(ctx context.Context, scope openrouterkeys.AdminReconciliationScope) error {
-	return c.updateWithStart(ctx, scope, OpenRouterAdminBeginUpdate)
+func (c *TemporalOpenRouterAdminCoordinator) Begin(ctx context.Context, scope openrouterkeys.AdminReconciliationScope) (int64, error) {
+	var token int64
+	if err := c.updateWithStart(ctx, scope, OpenRouterAdminBeginUpdate, &token); err != nil {
+		return 0, err
+	}
+	return token, nil
 }
 
-func (c *TemporalOpenRouterAdminCoordinator) CompleteAndWait(ctx context.Context, scope openrouterkeys.AdminReconciliationScope) error {
-	return c.updateWithStart(ctx, scope, OpenRouterAdminCompleteUpdate)
+func (c *TemporalOpenRouterAdminCoordinator) CompleteAndWait(ctx context.Context, scope openrouterkeys.AdminReconciliationScope, token int64) error {
+	return c.updateWithStart(ctx, scope, OpenRouterAdminCompleteUpdate, nil, token)
 }
 
-func (c *TemporalOpenRouterAdminCoordinator) updateWithStart(ctx context.Context, scope openrouterkeys.AdminReconciliationScope, updateName string) error {
+func (c *TemporalOpenRouterAdminCoordinator) updateWithStart(ctx context.Context, scope openrouterkeys.AdminReconciliationScope, updateName string, result any, args ...any) error {
 	workflowID := OpenRouterAdminReconciliationWorkflowID(scope)
 	startCtx, cancel := context.WithTimeout(ctx, openRouterAdminStartTimeout)
 	defer cancel()
@@ -257,22 +264,23 @@ func (c *TemporalOpenRouterAdminCoordinator) updateWithStart(ctx context.Context
 		UpdateOptions: client.UpdateWorkflowOptions{
 			UpdateName:   updateName,
 			WaitForStage: client.WorkflowUpdateStageAccepted,
+			Args:         args,
 		},
 	})
 	if err != nil {
 		return fmt.Errorf("accept OpenRouter admin %s update: %w", updateName, err)
 	}
-	if err := handle.Get(ctx, nil); err != nil {
+	if err := handle.Get(ctx, result); err != nil {
 		return fmt.Errorf("complete OpenRouter admin %s update: %w", updateName, err)
 	}
 	return nil
 }
 
-func (c *TemporalOpenRouterAdminCoordinator) Abort(ctx context.Context, scope openrouterkeys.AdminReconciliationScope) error {
+func (c *TemporalOpenRouterAdminCoordinator) Abort(ctx context.Context, scope openrouterkeys.AdminReconciliationScope, token int64) error {
 	workflowID := OpenRouterAdminReconciliationWorkflowID(scope)
 	startCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), openRouterAdminStartTimeout)
 	defer cancel()
-	_, err := c.TemporalEnv.Client().SignalWithStartWorkflow(startCtx, workflowID, OpenRouterAdminAbortSignal, nil, client.StartWorkflowOptions{
+	_, err := c.TemporalEnv.Client().SignalWithStartWorkflow(startCtx, workflowID, OpenRouterAdminAbortSignal, token, client.StartWorkflowOptions{
 		ID: workflowID, TaskQueue: string(c.TemporalEnv.Queue()),
 		WorkflowIDReusePolicy:    enums.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE,
 		WorkflowIDConflictPolicy: enums.WORKFLOW_ID_CONFLICT_POLICY_USE_EXISTING,

@@ -242,7 +242,8 @@ func (s *Service) coordinateAdminMutation(ctx context.Context, logger *slog.Logg
 	scope := AdminReconciliationScope{OrganizationID: organizationID, KeyType: keyType}
 	mutationCtx, cancelMutation := context.WithTimeout(ctx, s.adminLocalMutationTimeout)
 	defer cancelMutation()
-	if err := s.coordinator.Begin(mutationCtx, scope); err != nil {
+	token, err := s.coordinator.Begin(mutationCtx, scope)
+	if err != nil {
 		return s.mapCoordinatorError(ctx, logger, err, "start durable admin reconciliation")
 	}
 
@@ -250,7 +251,7 @@ func (s *Service) coordinateAdminMutation(ctx context.Context, logger *slog.Logg
 	if mutationErr != nil {
 		if _, ok := errors.AsType[*ambiguousAdminMutationCommitError](mutationErr); ok {
 			completeCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), adminMutationWaitTimeout)
-			completeErr := s.coordinator.CompleteAndWait(completeCtx, scope)
+			completeErr := s.coordinator.CompleteAndWait(completeCtx, scope, token)
 			cancel()
 			if completeErr != nil {
 				logger.WarnContext(ctx, "complete admin reconciliation coordinator after ambiguous commit", attr.SlogError(completeErr))
@@ -258,7 +259,7 @@ func (s *Service) coordinateAdminMutation(ctx context.Context, logger *slog.Logg
 			return mutationErr
 		}
 		abortCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
-		abortErr := s.coordinator.Abort(abortCtx, scope)
+		abortErr := s.coordinator.Abort(abortCtx, scope, token)
 		cancel()
 		if abortErr != nil {
 			logger.WarnContext(ctx, "abort admin reconciliation coordinator after local failure", attr.SlogError(abortErr))
@@ -268,7 +269,7 @@ func (s *Service) coordinateAdminMutation(ctx context.Context, logger *slog.Logg
 
 	waitCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), adminMutationWaitTimeout)
 	defer cancel()
-	if err := s.coordinator.CompleteAndWait(waitCtx, scope); err != nil {
+	if err := s.coordinator.CompleteAndWait(waitCtx, scope, token); err != nil {
 		return s.mapCoordinatorError(ctx, logger, err, "complete durable admin reconciliation")
 	}
 	return nil
