@@ -3,6 +3,7 @@ import { Button } from "@/components/ui/Button";
 import { InstallSteps, type InstallStep } from "@/components/install-steps";
 import { Text } from "@/components/ui/Text";
 import type { ClientFamily } from "@gram/client/models/components/recordinstallintentrequestbody.js";
+import { platformMCPMarketplaceRepoURL } from "./platform-mcp-marketplace";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 type PlatformMCPInstallClient = {
@@ -35,7 +36,7 @@ const PLATFORM_MCP_INSTALL_CLIENTS: PlatformMCPInstallClient[] = [
   {
     id: "opencode",
     label: "OpenCode",
-    description: "Copy the OpenCode package out of the public repository",
+    description: "Copy the OpenCode package out of the marketplace repository",
   },
   {
     id: "other",
@@ -46,14 +47,16 @@ const PLATFORM_MCP_INSTALL_CLIENTS: PlatformMCPInstallClient[] = [
 
 export type PlatformMCPInstallMethod = "marketplace" | "manual";
 
-const PLATFORM_MCP_PLUGIN_NAME = "platform-mcp";
+// The plugin name and the MCP server name are what an agent concatenates into
+// the label beside every tool call — Claude Code renders
+// "plugin:speakeasy:platform". These mirror the generated packages in
+// server/internal/plugins/generate.go; the Cursor and Codex packages keep a
+// client suffix because all package roots share one repository.
+const PLATFORM_MCP_PLUGIN_NAME = "speakeasy";
+const PLATFORM_MCP_SERVER_NAME = "platform";
+const PLATFORM_MCP_CURSOR_PLUGIN_NAME = "speakeasy-cursor";
+const PLATFORM_MCP_CODEX_PLUGIN_NAME = "speakeasy-codex";
 
-// Platform MCP ships from one public repository for every organization. It
-// carries no credentials and no organization identity — access is decided at
-// OAuth time — so the marketplace coordinates are fixed rather than resolved
-// per organization.
-const PUBLIC_MARKETPLACE_REPO_URL =
-  "https://github.com/speakeasy-api/marketplace";
 const PUBLIC_MARKETPLACE_NAME = "speakeasy";
 
 // Whether a reviewed plugin package exists for this agent at all. Both packaged
@@ -73,13 +76,13 @@ type PlatformMCPInstallWalkthroughProps = {
 
 function manualConfig(client: ClientFamily, mcpUrl: string): string {
   if (client === "codex") {
-    return `[mcp_servers.${PLATFORM_MCP_PLUGIN_NAME}]\nurl = "${mcpUrl}"`;
+    return `[mcp_servers.${PLATFORM_MCP_SERVER_NAME}]\nurl = "${mcpUrl}"`;
   }
   if (client === "opencode") {
     return JSON.stringify(
       {
         mcp: {
-          [PLATFORM_MCP_PLUGIN_NAME]: {
+          [PLATFORM_MCP_SERVER_NAME]: {
             type: "remote",
             url: mcpUrl,
             enabled: true,
@@ -93,7 +96,7 @@ function manualConfig(client: ClientFamily, mcpUrl: string): string {
   return JSON.stringify(
     {
       mcpServers: {
-        [PLATFORM_MCP_PLUGIN_NAME]: {
+        [PLATFORM_MCP_SERVER_NAME]: {
           type: "http",
           url: mcpUrl,
         },
@@ -116,9 +119,9 @@ function manualSteps(client: ClientFamily, mcpUrl: string): InstallStep[] {
           language: "json",
         },
         {
-          title: "Restart your Claude Code session",
+          title: "Connect Platform MCP and complete sign-in",
           description:
-            "Open a new Claude Code session under your account, use Platform MCP, and complete AI Control Plane browser authorization when prompted.",
+            "Open /mcp in Claude Code, select Platform MCP, and choose Authenticate. Restarting Claude Code alone may not open the sign-in page.",
         },
       ];
     case "claude_cowork":
@@ -146,9 +149,9 @@ function manualSteps(client: ClientFamily, mcpUrl: string): InstallStep[] {
           language: "toml",
         },
         {
-          title: "Restart Codex and complete OAuth",
+          title: "Open Codex and complete sign-in",
           description:
-            "Start a new Codex CLI session under your account, use Platform MCP, and complete AI Control Plane browser authorization when prompted.",
+            "Start a Codex CLI session, ask it to list your Speakeasy projects, and complete AI Control Plane browser authorization when prompted. Restart Codex first if it does not see Platform MCP.",
         },
       ];
     case "cursor":
@@ -161,9 +164,9 @@ function manualSteps(client: ClientFamily, mcpUrl: string): InstallStep[] {
           language: "json",
         },
         {
-          title: "Restart Cursor and complete OAuth",
+          title: "Open Cursor and complete sign-in",
           description:
-            "Open a new Cursor agent session under your account, use Platform MCP, and complete AI Control Plane browser authorization when prompted.",
+            "Open a Cursor agent session, ask it to list your Speakeasy projects, and complete AI Control Plane browser authorization when prompted. Restart Cursor first if it does not see Platform MCP.",
         },
       ];
     case "other":
@@ -176,9 +179,9 @@ function manualSteps(client: ClientFamily, mcpUrl: string): InstallStep[] {
           language: "json",
         },
         {
-          title: "Restart your agent and complete OAuth",
+          title: "Open your agent and complete sign-in",
           description:
-            "Start a new session under your account, use Platform MCP, and complete AI Control Plane browser authorization when prompted.",
+            "Restart your agent if needed, then ask it to list your Speakeasy projects. Complete AI Control Plane browser authorization when prompted.",
         },
       ];
     case "opencode":
@@ -191,15 +194,17 @@ function manualSteps(client: ClientFamily, mcpUrl: string): InstallStep[] {
           language: "json",
         },
         {
-          title: "Restart OpenCode and complete OAuth",
+          title: "Open OpenCode and complete sign-in",
           description:
-            "Start a new OpenCode session under your account, use Platform MCP, and complete AI Control Plane browser authorization when prompted.",
+            "Start an OpenCode session, ask it to list your Speakeasy projects, and complete AI Control Plane browser authorization when prompted. Restart OpenCode first if it does not see Platform MCP.",
         },
       ];
   }
 }
 
 function marketplaceSteps(client: ClientFamily): InstallStep[] {
+  const marketplaceURL = platformMCPMarketplaceRepoURL();
+
   if (client === "claude_cowork") {
     return [
       {
@@ -208,10 +213,10 @@ function marketplaceSteps(client: ClientFamily): InstallStep[] {
           "Sign in to Claude.ai with your organization-admin account and open Organization Settings → Plugins.",
       },
       {
-        title: "Sync the Speakeasy marketplace from GitHub",
+        title: "Sync the Speakeasy marketplace repository",
         description:
-          "Choose Add plugin → Sync from GitHub and select this repository. It is public, so no GitHub App authorization is required.",
-        code: PUBLIC_MARKETPLACE_REPO_URL,
+          "Choose Add plugin → Sync from GitHub and enter this repository URL.",
+        code: platformMCPMarketplaceRepoURL(false),
         language: "text",
       },
       {
@@ -235,20 +240,20 @@ function marketplaceSteps(client: ClientFamily): InstallStep[] {
         title: "Import the Speakeasy marketplace into Cursor",
         description:
           "Open the Cursor dashboard for the team you administer, go to Settings → Plugins → Import, and paste this repository URL.",
-        code: PUBLIC_MARKETPLACE_REPO_URL,
+        code: platformMCPMarketplaceRepoURL(false),
         language: "text",
       },
       {
         title: "Install Platform MCP for your account",
         description:
           "Find Platform MCP in the imported marketplace and install it for your Cursor account. Do not require it for the whole team unless your organization has made that separate rollout decision.",
-        code: "platform-mcp-cursor",
+        code: PLATFORM_MCP_CURSOR_PLUGIN_NAME,
         language: "text",
       },
       {
-        title: "Restart Cursor and complete OAuth",
+        title: "Open Cursor and complete sign-in",
         description:
-          "Open a new Cursor agent session, use Platform MCP, and complete AI Control Plane browser authorization when prompted.",
+          "Open a Cursor agent session, ask it to list your Speakeasy projects, and complete AI Control Plane browser authorization when prompted. Restart Cursor first if it does not see Platform MCP.",
       },
     ];
   }
@@ -259,18 +264,17 @@ function marketplaceSteps(client: ClientFamily): InstallStep[] {
         title: "Add the Speakeasy marketplace to Codex",
         description:
           "Run this in the Codex CLI profile where you want Platform MCP. This package contains no Observability hooks or hook approvals.",
-        code: `codex plugin marketplace add ${PUBLIC_MARKETPLACE_REPO_URL}`,
+        code: `codex plugin marketplace add ${marketplaceURL}`,
       },
       {
         title: "Install the Platform MCP package",
-        description:
-          "Open /plugins, find platform-mcp-codex in the Speakeasy marketplace, and install it for your account. ChatGPT Codex and the Codex CLI must each be verified separately; the Codex IDE extension remains a manual recovery path until certified.",
+        description: `Open /plugins, find ${PLATFORM_MCP_CODEX_PLUGIN_NAME} in the Speakeasy marketplace, and install it for your account. ChatGPT Codex and the Codex CLI must each be verified separately; the Codex IDE extension remains a manual recovery path until certified.`,
         code: "codex /plugins",
       },
       {
-        title: "Restart Codex and complete OAuth",
+        title: "Open Codex and complete sign-in",
         description:
-          "Start a new Codex session, use Platform MCP, and complete AI Control Plane browser authorization when prompted.",
+          "Start a Codex session, ask it to list your Speakeasy projects, and complete AI Control Plane browser authorization when prompted. Restart Codex first if it does not see Platform MCP.",
       },
     ];
   }
@@ -280,19 +284,19 @@ function marketplaceSteps(client: ClientFamily): InstallStep[] {
       {
         title: "Clone the Speakeasy marketplace repository",
         description:
-          "OpenCode has no marketplace importer, so copy the package out of the public repository instead.",
-        code: `git clone ${PUBLIC_MARKETPLACE_REPO_URL}`,
+          "OpenCode has no marketplace importer, so copy the package out of the repository instead.",
+        code: `git clone ${marketplaceURL} marketplace`,
       },
       {
         title: "Copy the OpenCode package into your config directory",
         description:
-          "Copy opencode-plugins/platform-mcp into ~/.config/opencode for your account, or into .opencode for one repository. This installs both the loader and the reviewed skill path.",
-        code: `cp -R platform-mcp/opencode-plugins/${PLATFORM_MCP_PLUGIN_NAME}/. ~/.config/opencode/`,
+          "Copy opencode-plugins/speakeasy into ~/.config/opencode for your account, or into .opencode for one repository. This installs both the loader and the reviewed skill path.",
+        code: `cp -R marketplace/opencode-plugins/${PLATFORM_MCP_PLUGIN_NAME}/. ~/.config/opencode/`,
       },
       {
-        title: "Restart OpenCode and complete OAuth",
+        title: "Open OpenCode and complete sign-in",
         description:
-          "Start a new OpenCode session under your account, use Platform MCP, and complete AI Control Plane browser authorization when prompted.",
+          "Start an OpenCode session, ask it to list your Speakeasy projects, and complete AI Control Plane browser authorization when prompted. Restart OpenCode first if it does not see Platform MCP.",
       },
     ];
   }
@@ -302,7 +306,7 @@ function marketplaceSteps(client: ClientFamily): InstallStep[] {
       title: "Add the marketplace to your Claude Code install",
       description:
         "Run this command in the Claude Code environment where you want to use Platform MCP. It registers the Speakeasy marketplace for your local Claude Code profile.",
-      code: `/plugin marketplace add ${PUBLIC_MARKETPLACE_REPO_URL}`,
+      code: `/plugin marketplace add ${marketplaceURL}`,
     },
     {
       title: "Install Platform MCP for your profile",
@@ -311,9 +315,9 @@ function marketplaceSteps(client: ClientFamily): InstallStep[] {
       code: `/plugin install ${PLATFORM_MCP_PLUGIN_NAME}@${PUBLIC_MARKETPLACE_NAME}`,
     },
     {
-      title: "Restart your Claude Code session and complete OAuth",
+      title: "Connect Platform MCP and complete sign-in",
       description:
-        "Open a new Claude Code session under your account, use Platform MCP, and complete AI Control Plane browser authorization when prompted.",
+        "Open /mcp in Claude Code, select Platform MCP, and choose Authenticate. Restarting Claude Code alone may not open the sign-in page.",
     },
   ];
 }

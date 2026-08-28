@@ -1,16 +1,16 @@
+import { ArrowRight, ChevronRight } from "lucide-react";
+
+import { AGENT_PROVIDERS } from "@/components/agent-providers/agent-providers";
 import { AgentProviderIcon } from "@/components/agent-providers/AgentProviderIcon";
-import {
-  AGENT_PROVIDERS,
-  agentProvidersForSurface,
-} from "@/components/agent-providers/agent-providers";
+import { Button } from "@/components/ui/Button";
+import type { ClientFamily } from "@gram/client/models/components/recordinstallintentrequestbody.js";
 import { GramIcon } from "@/components/gram-logo/variants/icon";
 import { ModeSwitchStarfield } from "@/components/mode-switch-starfield";
-import { RequireScope } from "@/components/require-scope";
-import { Button } from "@/components/ui/Button";
-import { SourceSurface } from "@gram/client/models/components/startonboardingrequestbody.js";
-import { ArrowRight, ChevronRight } from "lucide-react";
-import { useState } from "react";
 import { PlatformMCPOnboardingContent } from "./PlatformMCP";
+import { RequireScope } from "@/components/require-scope";
+import { SourceSurface } from "@gram/client/models/components/startonboardingrequestbody.js";
+import { useOrgRoutes } from "@/routes";
+import { useState } from "react";
 
 // The agents the Platform MCP walkthrough supports, with the same brand marks
 // and copy the setup wizard uses, and a catch-all last. The catch-all is
@@ -18,9 +18,11 @@ import { PlatformMCPOnboardingContent } from "./PlatformMCP";
 // also drives the marketplace install dialog, which has per-agent plugin
 // instructions an uncertified agent has no answer for.
 const AGENTS = [
-  ...agentProvidersForSurface("plugins").filter(
-    (provider) => provider.available,
-  ),
+  { id: "claude" as const, ...AGENT_PROVIDERS.claude },
+  { id: "claude-cowork" as const, ...AGENT_PROVIDERS["claude-cowork"] },
+  { id: "codex" as const, ...AGENT_PROVIDERS.codex },
+  { id: "cursor" as const, ...AGENT_PROVIDERS.cursor },
+  { id: "opencode" as const, ...AGENT_PROVIDERS.opencode },
   { id: "other" as const, ...AGENT_PROVIDERS.other },
 ];
 
@@ -29,6 +31,21 @@ const STEPS = [
   { index: "02", label: "Run one command" },
   { index: "03", label: "Approve access" },
 ];
+
+function clientFamilyForAgent(agentID: string): ClientFamily {
+  switch (agentID) {
+    case "claude":
+      return "claude_code";
+    case "claude-cowork":
+      return "claude_cowork";
+    case "codex":
+    case "cursor":
+    case "opencode":
+      return agentID;
+    default:
+      return "other";
+  }
+}
 
 /**
  * What headless mode shows below the strip: no page chrome, no breadcrumb bar,
@@ -47,8 +64,17 @@ export function HeadlessContent(): JSX.Element {
 }
 
 function HeadlessHero(): JSX.Element {
+  const orgRoutes = useOrgRoutes();
   const [setupOpen, setSetupOpen] = useState(false);
-  const openSetup = () => setSetupOpen(true);
+  const [selectedAgent, setSelectedAgent] = useState<ClientFamily>();
+  const openSetup = () => {
+    setSelectedAgent(undefined);
+    setSetupOpen(true);
+  };
+  const openSetupForAgent = (client: ClientFamily) => {
+    setSelectedAgent(client);
+    setSetupOpen(true);
+  };
 
   return (
     <div className="bg-surface-tertiary-fixed-dark relative flex min-h-full w-full justify-center px-8 pt-20 pb-16">
@@ -125,7 +151,9 @@ function HeadlessHero(): JSX.Element {
               <li key={agent.id}>
                 <button
                   type="button"
-                  onClick={openSetup}
+                  onClick={() =>
+                    openSetupForAgent(clientFamilyForAgent(agent.id))
+                  }
                   className="border-neutral-softest group flex w-full items-center gap-4 border-b px-5 py-3 text-left transition-colors last:border-b-0 hover:bg-white/10"
                 >
                   {/* The vendor marks clash out of the box — an orange
@@ -185,6 +213,8 @@ function HeadlessHero(): JSX.Element {
         setupOpen={setupOpen}
         onSetupOpenChange={setSetupOpen}
         initialSourceSurface={SourceSurface.PlatformMcpSettings}
+        initialClient={selectedAgent}
+        onSetupComplete={() => orgRoutes.home.goTo()}
       />
     </div>
   );

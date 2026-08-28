@@ -1375,6 +1375,8 @@ func (s *Service) DownloadObservabilityPlugin(ctx context.Context, payload *gen.
 		filename = "observability-codex"
 	case "opencode":
 		filename = "observability-opencode"
+	case "copilot":
+		filename = "observability-copilot"
 	case "openclaw":
 		filename = "observability-openclaw"
 	}

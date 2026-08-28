@@ -9,7 +9,7 @@ import (
 
 var OnboardingState = Type("PlatformMCPOnboardingState", func() {
 	Description("Safe, session-authenticated Platform MCP onboarding projection. It contains no provider URLs, credentials, OAuth values, setup handoffs, or internal resource identifiers.")
-	Attribute("enabled", Boolean, "Whether the active organization currently passes the Platform MCP capability and rollout gates.")
+	Attribute("enabled", Boolean, "Whether the active organization currently has the Platform MCP product feature enabled.")
 	Attribute("stage", String, "Current server-derived onboarding stage.", func() {
 		Enum("not_started", "install_instructions", "authorized", "connection_ready")
 	})

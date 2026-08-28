@@ -180,6 +180,9 @@ type Service struct {
 	tunnelManager      *tunnelManager
 	// Nil when no Redis was wired; every public tunneled request then fails closed.
 	tunnelPublic *tunnelPublicRuntime
+
+	// metaRuntime bounds the gateway's per-member upstream work.
+	metaRuntime MetaRuntimeConfig
 }
 
 // oauthTokenInputs is one upstream OAuth access token collected during MCP
@@ -260,6 +263,10 @@ type mcpInputs struct {
 	// toolVariationsGroupID is the effective variation group resolved per
 	// request (mcp_servers, then toolsets, then nil for the project default).
 	toolVariationsGroupID *uuid.UUID
+	// skipProxyTools drops external-MCP passthrough tools from dispatch.
+	// The meta surface sets it: those tools are hidden from its describe
+	// catalog, so execute must not reach them through the hosted path either.
+	skipProxyTools bool
 	// mcpServerID is the fronting mcp_servers row id when the request arrived
 	// via an mcp_endpoint. Nil on the legacy toolset-by-slug path and for
 	// internal (agent-workflow) callers, which have no fronting server.
@@ -321,6 +328,7 @@ func NewService(
 	tunnelGatewayCIDRs []string,
 	redisClient *redis.Client,
 	tunnelPublicConfig TunnelPublicConfig,
+	metaRuntimeConfig MetaRuntimeConfig,
 ) *Service {
 	tracer := tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/mcp")
 	meter := meterProvider.Meter("github.com/speakeasy-api/gram/server/internal/mcp")
@@ -419,6 +427,7 @@ func NewService(
 		remoteProxyManager: remoteProxyManager,
 		tunnelManager:      newTunnelManager(tunnelRoutes, tunnelForwardToken, remoteProxyManager, tunnelGatewayCIDRs),
 		tunnelPublic:       newTunnelPublicRuntime(redisClient, tunnelPublicConfig),
+		metaRuntime:        metaRuntimeConfig.withDefaults(),
 	}
 }
 
@@ -1022,6 +1031,7 @@ func (s *Service) ServeToolsetResolved(w http.ResponseWriter, r *http.Request, t
 		apiKeyID:              apiKeyID,
 		toolVariationsGroupID: toolVariationsGroupID,
 		mcpServerID:           mcpServerID,
+		skipProxyTools:        false,
 		tags:                  tags,
 		protocolVersion:       mcpversions.Resolve(mcprequests.DeclaredProtocolVersion(r.Header.Get(mcpversions.HTTPHeader), req.Params), mcpversions.SupportedHostedToolset()),
 		toolSelection:         callerToolSelection,

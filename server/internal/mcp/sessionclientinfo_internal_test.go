@@ -64,6 +64,7 @@ func newClientIdentityFixture(t *testing.T) (*fakeClientInfoStore, *mcpInputs) {
 		apiKeyID:              "",
 		toolVariationsGroupID: nil,
 		mcpServerID:           nil,
+		skipProxyTools:        false,
 		tags:                  nil,
 		protocolVersion:       mcpversions.Resolve("", mcpversions.SupportedHostedToolset()),
 	}

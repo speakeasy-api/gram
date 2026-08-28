@@ -564,6 +564,7 @@ func (s *ComplianceImportService) buildExternalMessageRows(ctx context.Context, 
 		}
 
 		rows = append(rows, chatrepo.CreateExternalChatMessageParams{
+			ID:                uuid.Nil,
 			ChatID:            chatID,
 			Role:              msg.Role,
 			ProjectID:         cfg.ProjectID,

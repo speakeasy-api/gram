@@ -35,40 +35,47 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/platformmcp"
 	"github.com/speakeasy-api/gram/server/internal/platformmcp/localfixture"
 	"github.com/speakeasy-api/gram/server/internal/platformmcp/remotesessionprovider"
+	platformrepo "github.com/speakeasy-api/gram/server/internal/platformmcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/platformmcp/setupcorpus"
 	"github.com/speakeasy-api/gram/server/internal/plugins"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
+	"github.com/speakeasy-api/gram/server/internal/risk"
+	"github.com/speakeasy-api/gram/server/internal/risk/policycore"
 	"github.com/speakeasy-api/gram/server/internal/sessiontokens"
 	tenv "github.com/speakeasy-api/gram/server/internal/temporal"
 )
 
 type platformMCPConfig struct {
-	Logger                 *slog.Logger
-	MeterProvider          metric.MeterProvider
-	TracerProvider         trace.TracerProvider
-	Mux                    goahttp.Muxer
-	DB                     *pgxpool.Pool
-	Redis                  *redis.Client
-	ServerURL              *url.URL
-	DashboardURL           *url.URL
-	Environment            string
-	JWTSigningKey          string
-	ProductFeatures        *productfeatures.Client
-	FeatureFlags           feature.Provider
-	Authz                  *authz.Engine
-	Encryption             *encryption.Client
-	Identity               *identity.Resolver
-	Sessions               *sessions.Manager
-	Registry               *externalmcp.RegistryClient
-	Catalog                *externalmcp.CatalogService
-	GuardianPolicy         *guardian.Policy
-	RemoteChallengeManager *remotesessions.ChallengeManager
-	AuditLogger            *audit.Logger
-	PluginPublisher        *plugins.Service
-	TemporalEnv            *tenv.Environment
-	Skills                 platformmcp.SkillsManagement
+	Logger                  *slog.Logger
+	MeterProvider           metric.MeterProvider
+	TracerProvider          trace.TracerProvider
+	Mux                     goahttp.Muxer
+	DB                      *pgxpool.Pool
+	Redis                   *redis.Client
+	ServerURL               *url.URL
+	DashboardURL            *url.URL
+	Environment             string
+	JWTSigningKey           string
+	ProductFeatures         *productfeatures.Client
+	FeatureFlags            feature.Provider
+	Authz                   *authz.Engine
+	Encryption              *encryption.Client
+	Identity                *identity.Resolver
+	Sessions                *sessions.Manager
+	Registry                *externalmcp.RegistryClient
+	Catalog                 *externalmcp.CatalogService
+	GuardianPolicy          *guardian.Policy
+	RemoteChallengeManager  *remotesessions.ChallengeManager
+	AuditLogger             *audit.Logger
+	PluginPublisher         *plugins.Service
+	TemporalEnv             *tenv.Environment
+	Skills                  platformmcp.SkillsManagement
+	RiskPolicyApprovals     policycore.ApprovalCoordinator
+	RiskPolicySignaler      policycore.PolicySignaler
+	RiskPolicyCache         policycore.PolicyCacheInvalidator
+	RiskExclusionReconciler risk.RiskExclusionReconciler
 	// Telemetry is the Gram-owned ClickHouse read model the diagnostics tools
 	// answer from. Nil disables them rather than serving an empty answer, which
 	// a caller would read as "nothing is wrong".
@@ -77,6 +84,10 @@ type platformMCPConfig struct {
 	// what a project overview's active-user count measures. Shared with the
 	// telemetry service so both surfaces answer from the same source.
 	SessionCapture platformmcp.FeatureChecker
+	// SessionPortability gates the session-recall tools (list_my_sessions /
+	// continue_session). Sibling of SessionCapture: capture records sessions,
+	// portability serves them back as redacted handoff digests.
+	SessionPortability platformmcp.FeatureChecker
 	// TelemetryDrilldown is the row-level half of the same read model. Nil
 	// withholds the drill-down tools while leaving the overview-first entry
 	// points serving.
@@ -118,11 +129,7 @@ func configureLocalFixturePlatformMCP(ctx context.Context, config platformMCPCon
 		return AssistantSurface{}, fmt.Errorf("clear local Platform MCP fixture registry cache: %w", err)
 	}
 
-	gate := platformmcp.NewOrganizationGate(
-		config.ProductFeatures,
-		config.FeatureFlags,
-		platformmcp.NewPostgresOrganizationSlugResolver(config.DB),
-	)
+	gate := platformmcp.NewOrganizationGate(config.ProductFeatures)
 	authorizer := platformmcp.NewLiveOrgAdminAuthorizer(config.DB, config.Authz)
 	oauthTelemetry := platformmcp.NewOAuthTelemetry(config.Logger, config.MeterProvider)
 	oauthStore := platformmcp.NewPostgresOAuthStore(config.DB).WithTelemetry(oauthTelemetry)
@@ -205,6 +212,10 @@ func configureLocalFixturePlatformMCP(ctx context.Context, config platformMCPCon
 		},
 		Skills:            newBudget(platformmcp.SkillsConnectionLimitName, platformmcp.SkillsOrganizationLimitName),
 		LifecycleMetadata: newBudget(platformmcp.LifecycleConnectionLimitName, platformmcp.LifecycleOrganizationLimitName),
+		RiskMutations: platformmcp.OperationBudget{
+			Connection:   ratelimit.New(limitStore, platformmcp.RiskMutationConnectionLimitName, ratelimit.PerMinute(platformmcp.RiskMutationsPerConnectionPerMinute), ratelimit.WithMetrics(config.MeterProvider)),
+			Organization: ratelimit.New(limitStore, platformmcp.RiskMutationOrganizationLimitName, ratelimit.PerMinute(platformmcp.RiskMutationsPerOrganizationPerMinute), ratelimit.WithMetrics(config.MeterProvider)),
+		},
 		// Diagnostics are read-only aggregate queries an administrator runs
 		// while investigating, so they are metered well above the shared
 		// five-per-minute mutation budget.
@@ -216,12 +227,18 @@ func configureLocalFixturePlatformMCP(ctx context.Context, config platformMCPCon
 			Connection:   ratelimit.New(limitStore, platformmcp.PluginsConnectionLimitName, ratelimit.PerMinute(platformmcp.PluginQueriesPerConnectionPerMinute), ratelimit.WithMetrics(config.MeterProvider)),
 			Organization: ratelimit.New(limitStore, platformmcp.PluginsOrganizationLimitName, ratelimit.PerMinute(platformmcp.PluginQueriesPerOrganizationPerMinute), ratelimit.WithMetrics(config.MeterProvider)),
 		},
-		// Metered separately and lower: this is the only read that reaches
-		// personal data, so exhausting it must not be possible by spending the
-		// ordinary diagnostic allowance.
+		// Metered separately and lower: personal-data reads (this and session
+		// recall below, each on its own budget) must not be fundable by
+		// spending the ordinary diagnostic allowance.
 		SensitiveDiagnostics: platformmcp.OperationBudget{
 			Connection:   ratelimit.New(limitStore, platformmcp.SensitiveDiagnosticsConnectionLimitName, ratelimit.PerMinute(platformmcp.SensitiveDiagnosticQueriesPerConnectionPerMinute), ratelimit.WithMetrics(config.MeterProvider)),
 			Organization: ratelimit.New(limitStore, platformmcp.SensitiveDiagnosticsOrganizationLimitName, ratelimit.PerMinute(platformmcp.SensitiveDiagnosticQueriesPerOrganizationPerMinute), ratelimit.WithMetrics(config.MeterProvider)),
+		},
+		// Session recall serves whole-transcript digests, so it is metered on
+		// its own low allowance that no other budget can fund.
+		SensitiveSessionRecall: platformmcp.OperationBudget{
+			Connection:   ratelimit.New(limitStore, platformmcp.SessionRecallConnectionLimitName, ratelimit.PerMinute(platformmcp.SessionRecallsPerConnectionPerMinute), ratelimit.WithMetrics(config.MeterProvider)),
+			Organization: ratelimit.New(limitStore, platformmcp.SessionRecallOrganizationLimitName, ratelimit.PerMinute(platformmcp.SessionRecallsPerOrganizationPerMinute), ratelimit.WithMetrics(config.MeterProvider)),
 		},
 		// The second drill-down cap: what a connection may accumulate over ten
 		// minutes, rather than how often it may call. Both buckets refill over
@@ -244,6 +261,7 @@ func configureLocalFixturePlatformMCP(ctx context.Context, config platformMCPCon
 		return AssistantSurface{}, errors.New("local Platform MCP operation budgets are incomplete")
 	}
 	telemetry := platformmcp.NewLifecycleTelemetry(config.Logger, config.MeterProvider)
+	riskTelemetry := platformmcp.NewRiskTelemetry(config.Logger, config.MeterProvider)
 	readiness := platformmcp.NewReadinessService(
 		store,
 		registrationGate,
@@ -293,7 +311,21 @@ func configureLocalFixturePlatformMCP(ctx context.Context, config platformMCPCon
 	platformReader := platformmcp.NewPostgresReader(config.Logger, config.DB)
 	diagnostics := platformmcp.NewDiagnosticsService(config.DB, config.Telemetry, config.SessionCapture, platformReader, readiness, budgets.Diagnostics).
 		WithDrilldown(config.TelemetryDrilldown, config.JWTSigningKey, budgets.SensitiveDiagnostics, budgets.DrilldownVolume, platformmcp.NewPostgresDrilldownAuditor(config.DB))
-	runtime := platformmcp.NewRuntimeWithLifecycle(
+	sessionRecall := platformmcp.NewSessionRecallService(config.Logger, config.DB, platformrepo.New(config.DB), audit.NewLogger(), config.SessionPortability, budgets.SensitiveSessionRecall)
+	riskMutationControls, err := platformmcp.NewRiskMutationControls(config.DB, config.FeatureFlags, platformmcp.NewPostgresOrganizationSlugResolver(config.DB), budgets.RiskMutations, config.JWTSigningKey)
+	if err != nil {
+		return AssistantSurface{}, fmt.Errorf("create local Platform MCP risk mutation controls: %w", err)
+	}
+	riskMutations, err := platformmcp.NewRiskMutationHandlers(
+		config.DB,
+		riskMutationControls,
+		risk.NewPolicyMutationCore(config.DB, config.AuditLogger, config.RiskPolicyApprovals, config.RiskPolicySignaler, config.RiskPolicyCache),
+		risk.NewExclusionMutationCore(config.Logger, config.DB, config.AuditLogger, config.RiskExclusionReconciler, config.JWTSigningKey),
+	)
+	if err != nil {
+		return AssistantSurface{}, fmt.Errorf("create local Platform MCP risk policy mutations: %w", err)
+	}
+	runtime := platformmcp.NewRuntimeWithRiskMutations(
 		config.Logger,
 		authenticator,
 		gate,
@@ -314,8 +346,10 @@ func configureLocalFixturePlatformMCP(ctx context.Context, config platformMCPCon
 		skillAuthoring,
 		diagnostics,
 		pluginInventory,
+		sessionRecall,
+		riskMutations,
 		fixtureConfig.CatalogDescriptor(),
-	).WithOAuthTelemetry(oauthTelemetry)
+	).WithOAuthTelemetry(oauthTelemetry).WithRiskTelemetry(riskTelemetry)
 	oauth.Attach(config.Mux)
 	platformmcp.NewDashboardSetupHTTP(dashboardSetupStarter, config.Sessions).Attach(config.Mux)
 	platformmcp.AttachManagement(config.Mux, platformmcp.NewManagementService(config.Logger, config.TracerProvider, config.DB, config.Sessions, config.Authz, gate, authorizer, config.ServerURL.JoinPath("platform-mcp").String(), registrations, readiness, distributions, config.JWTSigningKey, catalog))
@@ -453,11 +487,7 @@ func loadBrowserPlatformMCPCatalogDescriptors(ctx context.Context, catalog *exte
 }
 
 func configureBrowserPlatformMCP(ctx context.Context, config platformMCPConfig) (AssistantSurface, error) {
-	gate := platformmcp.NewOrganizationGate(
-		config.ProductFeatures,
-		config.FeatureFlags,
-		platformmcp.NewPostgresOrganizationSlugResolver(config.DB),
-	)
+	gate := platformmcp.NewOrganizationGate(config.ProductFeatures)
 	authorizer := platformmcp.NewLiveOrgAdminAuthorizer(config.DB, config.Authz)
 	oauthTelemetry := platformmcp.NewOAuthTelemetry(config.Logger, config.MeterProvider)
 	oauthStore := platformmcp.NewPostgresOAuthStore(config.DB).WithTelemetry(oauthTelemetry)
@@ -519,6 +549,10 @@ func configureBrowserPlatformMCP(ctx context.Context, config platformMCPConfig) 
 		},
 		Skills:            newBudget(platformmcp.SkillsConnectionLimitName, platformmcp.SkillsOrganizationLimitName),
 		LifecycleMetadata: newBudget(platformmcp.LifecycleConnectionLimitName, platformmcp.LifecycleOrganizationLimitName),
+		RiskMutations: platformmcp.OperationBudget{
+			Connection:   ratelimit.New(limitStore, platformmcp.RiskMutationConnectionLimitName, ratelimit.PerMinute(platformmcp.RiskMutationsPerConnectionPerMinute), ratelimit.WithMetrics(config.MeterProvider)),
+			Organization: ratelimit.New(limitStore, platformmcp.RiskMutationOrganizationLimitName, ratelimit.PerMinute(platformmcp.RiskMutationsPerOrganizationPerMinute), ratelimit.WithMetrics(config.MeterProvider)),
+		},
 		// Diagnostics are read-only aggregate queries an administrator runs
 		// while investigating, so they are metered well above the shared
 		// five-per-minute mutation budget.
@@ -530,12 +564,18 @@ func configureBrowserPlatformMCP(ctx context.Context, config platformMCPConfig) 
 			Connection:   ratelimit.New(limitStore, platformmcp.PluginsConnectionLimitName, ratelimit.PerMinute(platformmcp.PluginQueriesPerConnectionPerMinute), ratelimit.WithMetrics(config.MeterProvider)),
 			Organization: ratelimit.New(limitStore, platformmcp.PluginsOrganizationLimitName, ratelimit.PerMinute(platformmcp.PluginQueriesPerOrganizationPerMinute), ratelimit.WithMetrics(config.MeterProvider)),
 		},
-		// Metered separately and lower: this is the only read that reaches
-		// personal data, so exhausting it must not be possible by spending the
-		// ordinary diagnostic allowance.
+		// Metered separately and lower: personal-data reads (this and session
+		// recall below, each on its own budget) must not be fundable by
+		// spending the ordinary diagnostic allowance.
 		SensitiveDiagnostics: platformmcp.OperationBudget{
 			Connection:   ratelimit.New(limitStore, platformmcp.SensitiveDiagnosticsConnectionLimitName, ratelimit.PerMinute(platformmcp.SensitiveDiagnosticQueriesPerConnectionPerMinute), ratelimit.WithMetrics(config.MeterProvider)),
 			Organization: ratelimit.New(limitStore, platformmcp.SensitiveDiagnosticsOrganizationLimitName, ratelimit.PerMinute(platformmcp.SensitiveDiagnosticQueriesPerOrganizationPerMinute), ratelimit.WithMetrics(config.MeterProvider)),
+		},
+		// Session recall serves whole-transcript digests, so it is metered on
+		// its own low allowance that no other budget can fund.
+		SensitiveSessionRecall: platformmcp.OperationBudget{
+			Connection:   ratelimit.New(limitStore, platformmcp.SessionRecallConnectionLimitName, ratelimit.PerMinute(platformmcp.SessionRecallsPerConnectionPerMinute), ratelimit.WithMetrics(config.MeterProvider)),
+			Organization: ratelimit.New(limitStore, platformmcp.SessionRecallOrganizationLimitName, ratelimit.PerMinute(platformmcp.SessionRecallsPerOrganizationPerMinute), ratelimit.WithMetrics(config.MeterProvider)),
 		},
 		// The second drill-down cap: what a connection may accumulate over ten
 		// minutes, rather than how often it may call. Both buckets refill over
@@ -558,6 +598,7 @@ func configureBrowserPlatformMCP(ctx context.Context, config platformMCPConfig) 
 		return AssistantSurface{}, errors.New("platform MCP operation budgets are incomplete")
 	}
 	telemetry := platformmcp.NewLifecycleTelemetry(config.Logger, config.MeterProvider)
+	riskTelemetry := platformmcp.NewRiskTelemetry(config.Logger, config.MeterProvider)
 	readiness := platformmcp.NewReadinessService(
 		store,
 		registrationGate,
@@ -596,7 +637,21 @@ func configureBrowserPlatformMCP(ctx context.Context, config platformMCPConfig) 
 	platformReader := platformmcp.NewPostgresReader(config.Logger, config.DB)
 	diagnostics := platformmcp.NewDiagnosticsService(config.DB, config.Telemetry, config.SessionCapture, platformReader, readiness, budgets.Diagnostics).
 		WithDrilldown(config.TelemetryDrilldown, config.JWTSigningKey, budgets.SensitiveDiagnostics, budgets.DrilldownVolume, platformmcp.NewPostgresDrilldownAuditor(config.DB))
-	runtime := platformmcp.NewRuntimeWithLifecycle(
+	sessionRecall := platformmcp.NewSessionRecallService(config.Logger, config.DB, platformrepo.New(config.DB), audit.NewLogger(), config.SessionPortability, budgets.SensitiveSessionRecall)
+	riskMutationControls, err := platformmcp.NewRiskMutationControls(config.DB, config.FeatureFlags, platformmcp.NewPostgresOrganizationSlugResolver(config.DB), budgets.RiskMutations, config.JWTSigningKey)
+	if err != nil {
+		return AssistantSurface{}, fmt.Errorf("create browser Platform MCP risk mutation controls: %w", err)
+	}
+	riskMutations, err := platformmcp.NewRiskMutationHandlers(
+		config.DB,
+		riskMutationControls,
+		risk.NewPolicyMutationCore(config.DB, config.AuditLogger, config.RiskPolicyApprovals, config.RiskPolicySignaler, config.RiskPolicyCache),
+		risk.NewExclusionMutationCore(config.Logger, config.DB, config.AuditLogger, config.RiskExclusionReconciler, config.JWTSigningKey),
+	)
+	if err != nil {
+		return AssistantSurface{}, fmt.Errorf("create browser Platform MCP risk policy mutations: %w", err)
+	}
+	runtime := platformmcp.NewRuntimeWithRiskMutations(
 		config.Logger,
 		authenticator,
 		gate,
@@ -614,8 +669,10 @@ func configureBrowserPlatformMCP(ctx context.Context, config platformMCPConfig) 
 		skillAuthoring,
 		diagnostics,
 		pluginInventory,
+		sessionRecall,
+		riskMutations,
 		platformmcp.CatalogDescriptor{},
-	).WithOAuthTelemetry(oauthTelemetry)
+	).WithOAuthTelemetry(oauthTelemetry).WithRiskTelemetry(riskTelemetry)
 	oauth.Attach(config.Mux)
 	platformmcp.NewDashboardSetupHTTP(dashboardSetupStarter, config.Sessions).Attach(config.Mux)
 	platformmcp.AttachManagement(config.Mux, platformmcp.NewManagementService(config.Logger, config.TracerProvider, config.DB, config.Sessions, config.Authz, gate, authorizer, config.ServerURL.JoinPath("platform-mcp").String(), registrations, readiness, distributions, config.JWTSigningKey, catalog))

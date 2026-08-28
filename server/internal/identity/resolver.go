@@ -214,8 +214,8 @@ func (r *Resolver) ExpandUserID(ctx context.Context, orgID, userID string) Subje
 func (r *Resolver) completeSubject(ctx context.Context, orgID string, subject *Subject) {
 	r.appendLinkedAccountEmails(ctx, orgID, subject)
 
-	subject.Emails = dedupeNonEmpty(subject.Emails)
-	subject.UserIDs = dedupeNonEmpty(subject.UserIDs)
+	subject.Emails = conv.DedupeNonEmpty(subject.Emails)
+	subject.UserIDs = conv.DedupeNonEmpty(subject.UserIDs)
 }
 
 // accountOwner returns the single Gram user who linked an AI provider account
@@ -235,7 +235,7 @@ func (r *Resolver) accountOwner(ctx context.Context, orgID string, emails []stri
 	for _, account := range accounts {
 		owners = append(owners, conv.FromPGTextOrEmpty[string](account.UserID))
 	}
-	owners = dedupeNonEmpty(owners)
+	owners = conv.DedupeNonEmpty(owners)
 	if len(owners) != 1 {
 		return "", false
 	}
@@ -362,7 +362,7 @@ func (r *Resolver) Resolve(ctx context.Context, orgID string, subjectURN urn.Ide
 
 	// Every address the person is known by is a candidate external user id:
 	// agents report whichever address the local tool was configured with.
-	record.ExternalUserIDs = dedupeNonEmpty(append(record.ExternalUserIDs, record.Emails...))
+	record.ExternalUserIDs = conv.DedupeNonEmpty(append(record.ExternalUserIDs, record.Emails...))
 
 	attached := false
 	if userID := record.GramUserID(); userID != "" {
@@ -462,32 +462,4 @@ func firstActive(rows []usersRepo.User) (usersRepo.User, bool) {
 	var none usersRepo.User
 
 	return none, false
-}
-
-// dedupeNonEmpty drops blanks and repeats while keeping first-seen order, so
-// that the directory identifier stays first and GramUserID and PrimaryEmail
-// are deterministic.
-//
-// Dropping blanks is the load-bearing half: a directory row with no email
-// would otherwise put "" in the identity, and matching lower(user_email) = ”
-// would sweep in every email-less row in the project — everyone else's hook
-// rows.
-func dedupeNonEmpty(values []string) []string {
-	if len(values) == 0 {
-		return nil
-	}
-
-	seen := make(map[string]struct{}, len(values))
-	result := make([]string, 0, len(values))
-	for _, value := range values {
-		if value == "" {
-			continue
-		}
-		if _, ok := seen[value]; ok {
-			continue
-		}
-		seen[value] = struct{}{}
-		result = append(result, value)
-	}
-	return result
 }

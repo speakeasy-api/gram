@@ -88,7 +88,7 @@ func TestManagedAssistantUsersToolsExposesCatalog(t *testing.T) {
 func TestManagedAssistantRiskToolsExposesCatalog(t *testing.T) {
 	t.Parallel()
 
-	got := toolNames(ManagedAssistantRiskTools(nil))
+	got := toolNames(ManagedAssistantRiskTools(nil, "test-redaction-key"))
 	require.ElementsMatch(t, []string{
 		"platform_list_risk_policies",
 		"platform_list_risk_results_for_agent",
@@ -111,7 +111,7 @@ func TestManagedAssistantToolNamesFitProviderLimit(t *testing.T) {
 
 	const maxNameLen = 40
 
-	tools := ManagedAssistantRiskTools(nil)
+	tools := ManagedAssistantRiskTools(nil, "test-redaction-key")
 	tools = append(tools, ManagedAssistantLogsTools(nil)...)
 	tools = append(tools, ManagedAssistantChatsTools(nil)...)
 	tools = append(tools, ManagedAssistantUsersTools(nil)...)

@@ -316,6 +316,7 @@ var MetaMcpServer = Type("MetaMcpServer", func() {
 		Description("When the meta MCP server was last updated")
 		Format(FormatDateTime)
 	})
+	Attribute("member_count", Int, "The number of live members. Only populated by listMetaMcpServers.")
 
 	Required("id", "organization_id", "project_id", "name", "visibility", "created_at", "updated_at")
 })

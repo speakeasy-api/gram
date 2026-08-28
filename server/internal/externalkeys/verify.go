@@ -167,6 +167,7 @@ func (s *Service) resolveVerifyIdentity(ctx context.Context, logger *slog.Logger
 		Present:                   row.CredentialID.Valid,
 		ImpersonateServiceAccount: row.ImpersonateServiceAccount.String,
 		HasWifConfig:              row.WifPoolID.Valid || row.WifProviderID.Valid || row.WifProjectNumber.Valid,
+		SkipProjectVerification:   row.SkipProjectVerification.Bool,
 	})
 	if err != nil {
 		return credential, "", "", oops.E(oops.CodeUnexpected, err, "cannot verify this key right now, try again shortly").LogError(ctx, logger)

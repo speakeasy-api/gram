@@ -17,14 +17,18 @@ import (
 // "mintUserSession" endpoint HTTP request body.
 type MintUserSessionRequestBody struct {
 	// Bind the JWT to this toolset's /mcp/{slug} audience. Mutually exclusive with
-	// mcp_server_id; exactly one must be set. Must be issuer-gated and live in the
-	// caller's project.
+	// the other targets; exactly one must be set. Must be issuer-gated and live in
+	// the caller's project.
 	ToolsetID *string `form:"toolset_id,omitempty" json:"toolset_id,omitempty" xml:"toolset_id,omitempty"`
 	// Bind the JWT to this remote MCP server's user_session_issuer audience (the
 	// /x/mcp convention, since remote servers have no toolset). Mutually exclusive
-	// with toolset_id; exactly one must be set. Must be issuer-gated and live in
-	// the caller's project.
+	// with the other targets; exactly one must be set. Must be issuer-gated and
+	// live in the caller's project.
 	McpServerID *string `form:"mcp_server_id,omitempty" json:"mcp_server_id,omitempty" xml:"mcp_server_id,omitempty"`
+	// Bind the JWT to this meta MCP server's user_session_issuer audience.
+	// Mutually exclusive with the other targets; exactly one must be set. Must be
+	// issuer-gated and live in the caller's project.
+	MetaMcpServerID *string `form:"meta_mcp_server_id,omitempty" json:"meta_mcp_server_id,omitempty" xml:"meta_mcp_server_id,omitempty"`
 }
 
 // ListUserSessionsResponseBody is the type of the "userSessions" service
@@ -917,8 +921,9 @@ type UserSessionFacetOptionResponseBody struct {
 // of the "mintUserSession" endpoint of the "userSessions" service.
 func NewMintUserSessionRequestBody(p *usersessions.MintUserSessionPayload) *MintUserSessionRequestBody {
 	body := &MintUserSessionRequestBody{
-		ToolsetID:   p.ToolsetID,
-		McpServerID: p.McpServerID,
+		ToolsetID:       p.ToolsetID,
+		McpServerID:     p.McpServerID,
+		MetaMcpServerID: p.MetaMcpServerID,
 	}
 	return body
 }

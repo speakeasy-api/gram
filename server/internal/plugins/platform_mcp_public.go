@@ -6,7 +6,7 @@ import (
 )
 
 // PublicMarketplaceName is the marketplace identifier users type when
-// installing a first-party plugin (`platform-mcp@speakeasy`). It is fixed: the
+// installing a first-party plugin (`speakeasy@speakeasy`). It is fixed: the
 // public repository is a single global artifact, not an org-derived one, and it
 // is the umbrella every first-party plugin is published under so registering it
 // once carries future plugins too.
@@ -18,6 +18,13 @@ const PublicMarketplaceRepoURL = "https://github.com/speakeasy-api/marketplace"
 const publicMarketplaceDisplayName = "Speakeasy"
 
 const publicMarketplaceOwnerEmail = "support@speakeasy.com"
+
+type platformMCPMarketplaceMode string
+
+const (
+	platformMCPMarketplacePublic platformMCPMarketplaceMode = "public"
+	platformMCPMarketplaceLocal  platformMCPMarketplaceMode = "local"
+)
 
 // PublicPlatformMCPFiles renders the complete file tree of the public
 // speakeasy-api/marketplace repository: the five per-client Platform MCP
@@ -47,6 +54,26 @@ func PublicPlatformMCPFiles(serverURL string, version string) (map[string][]byte
 		return nil, fmt.Errorf("public marketplace server URL must be https, got %q", serverURL)
 	}
 
+	return platformMCPMarketplaceFiles(serverURL, PublicMarketplaceRepoURL, version, platformMCPMarketplacePublic)
+}
+
+// LocalPlatformMCPFiles renders the same first-party marketplace against the
+// local server. Unlike the public artifact, local development may deliberately
+// use HTTP, so callers must keep this output on the local-only Git server.
+func LocalPlatformMCPFiles(serverURL, marketplaceRepoURL, version string) (map[string][]byte, error) {
+	if strings.TrimSpace(serverURL) == "" {
+		return nil, fmt.Errorf("server URL is required")
+	}
+	if strings.TrimSpace(marketplaceRepoURL) == "" {
+		return nil, fmt.Errorf("marketplace repository URL is required")
+	}
+	if strings.TrimSpace(version) == "" {
+		return nil, fmt.Errorf("version is required")
+	}
+	return platformMCPMarketplaceFiles(serverURL, marketplaceRepoURL, version, platformMCPMarketplaceLocal)
+}
+
+func platformMCPMarketplaceFiles(serverURL, marketplaceRepoURL, version string, mode platformMCPMarketplaceMode) (map[string][]byte, error) {
 	cfg := GenerateConfig{
 		OrgName:          publicMarketplaceDisplayName,
 		OrgEmail:         publicMarketplaceOwnerEmail,
@@ -70,7 +97,7 @@ func PublicPlatformMCPFiles(serverURL string, version string) (map[string][]byte
 	if err := generatePublicMarketplaceManifests(files, cfg); err != nil {
 		return nil, err
 	}
-	files["README.md"] = publicMarketplaceReadme()
+	files["README.md"] = platformMCPMarketplaceReadme(marketplaceRepoURL, mode)
 	files["LICENSE"] = []byte(publicMarketplaceLicense)
 	return files, nil
 }
@@ -131,9 +158,9 @@ func generatePublicMarketplaceManifests(files map[string][]byte, cfg GenerateCon
 		Owner:    owner,
 		Metadata: &marketplaceMetadata{PluginRoot: cursorPluginRoot},
 		Plugins: []marketplaceEntry{{
-			Name:        "platform-mcp-cursor",
+			Name:        platformMCPCursorPluginName,
 			DisplayName: "", // Cursor carries the display name in its own plugin.json.
-			Source:      "platform-mcp-cursor",
+			Source:      platformMCPCursorPluginName,
 			Description: platformMCPDescription,
 		}},
 	})
@@ -146,7 +173,7 @@ func generatePublicMarketplaceManifests(files map[string][]byte, cfg GenerateCon
 		Name:      PublicMarketplaceName,
 		Interface: codexInterface{DisplayName: platformMCPDisplayName, ShortDescription: platformMCPDescription},
 		Plugins: []codexMarketplaceEntry{{
-			Name: "platform-mcp-codex",
+			Name: platformMCPCodexPluginName,
 			Source: codexMarketplaceSource{
 				Source: "local",
 				Path:   "./" + platformMCPCodexPluginRoot,
@@ -165,38 +192,48 @@ func generatePublicMarketplaceManifests(files map[string][]byte, cfg GenerateCon
 	return nil
 }
 
-func publicMarketplaceReadme() []byte {
+func platformMCPMarketplaceReadme(marketplaceRepoURL string, mode platformMCPMarketplaceMode) []byte {
 	var b strings.Builder
 	b.WriteString("# " + platformMCPDisplayName + "\n\n")
 	b.WriteString(platformMCPDescription + "\n\n")
-	b.WriteString("This repository is Speakeasy's public plugin marketplace. Registering it once makes every ")
-	b.WriteString("plugin Speakeasy publishes available in your agent, including ones added later. It contains no ")
-	b.WriteString("credentials: plugins authenticate against your organization through OAuth on first use, and ")
-	b.WriteString("installing one grants no access on its own.\n\n")
-	b.WriteString("It currently ships [Platform MCP](https://www.speakeasy.com/product/gram).\n\n")
-	b.WriteString("> **Auto-generated.** Every file here is rendered from the Speakeasy control plane and replaced on each release. Manual edits are discarded.\n\n")
+	if mode == platformMCPMarketplacePublic {
+		b.WriteString("This repository is Speakeasy's public plugin marketplace. Registering it once makes every ")
+		b.WriteString("plugin Speakeasy publishes available in your agent, including ones added later. It contains no ")
+		b.WriteString("credentials: plugins authenticate against your organization through OAuth on first use, and ")
+		b.WriteString("installing one grants no access on its own.\n\n")
+		b.WriteString("It currently ships [Platform MCP](https://www.speakeasy.com/product/gram).\n\n")
+		b.WriteString("> **Auto-generated.** Every file here is rendered from the Speakeasy control plane and replaced on each release. Manual edits are discarded.\n\n")
+	} else {
+		b.WriteString("This repository is generated by the local Gram server for development. It contains no credentials; ")
+		b.WriteString("plugins authenticate through local Platform MCP OAuth on first use, and installing one grants no access on its own.\n\n")
+		b.WriteString("> **Local development only.** Restarting Gram regenerates these files. Manual edits are discarded.\n\n")
+	}
 
 	b.WriteString("## Claude Code\n\n")
 	b.WriteString("```\n")
-	b.WriteString("/plugin marketplace add " + PublicMarketplaceRepoURL + "\n")
+	b.WriteString("/plugin marketplace add " + marketplaceRepoURL + "\n")
 	b.WriteString("/plugin install " + platformMCPPluginName + "@" + PublicMarketplaceName + "\n")
 	b.WriteString("```\n\n")
 
 	b.WriteString("## Codex\n\n")
 	b.WriteString("```\n")
-	b.WriteString("codex plugin marketplace add " + PublicMarketplaceRepoURL + "\n")
+	b.WriteString("codex plugin marketplace add " + marketplaceRepoURL + "\n")
 	b.WriteString("```\n\n")
-	b.WriteString("Then open `/plugins` and install `platform-mcp-codex`.\n\n")
+	b.WriteString("Then open `/plugins` and install `" + platformMCPCodexPluginName + "`.\n\n")
 
 	b.WriteString("## Cursor\n\n")
 	b.WriteString("In the Cursor dashboard for a team you administer, go to Settings → Plugins → Import and paste:\n\n")
 	b.WriteString("```\n")
-	b.WriteString(PublicMarketplaceRepoURL + "\n")
+	b.WriteString(marketplaceRepoURL + "\n")
 	b.WriteString("```\n\n")
 
 	b.WriteString("## Other agents\n\n")
 	b.WriteString("`opencode-plugins/` and `agent-plugins/` carry the same server in the OpenCode and portable ")
-	b.WriteString("Agent Plugins formats. Clone this repository or download an archive from GitHub and point your ")
+	if mode == platformMCPMarketplacePublic {
+		b.WriteString("Agent Plugins formats. Clone this repository or download an archive from GitHub and point your ")
+	} else {
+		b.WriteString("Agent Plugins formats. Clone this repository and point your ")
+	}
 	b.WriteString("agent at the directory for your format.\n")
 	return []byte(b.String())
 }

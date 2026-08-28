@@ -1128,8 +1128,7 @@ func writeOAuthError(w http.ResponseWriter, status int, code, description string
 }
 
 func writeRequestOAuthError(w http.ResponseWriter, status int, err error) {
-	var oauthError *oauthwire.Error
-	if errors.As(err, &oauthError) {
+	if oauthError, ok := errors.AsType[*oauthwire.Error](err); ok {
 		writeOAuthError(w, status, oauthError.Code, oauthError.Description)
 		return
 	}

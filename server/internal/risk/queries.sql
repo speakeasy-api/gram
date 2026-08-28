@@ -87,6 +87,34 @@ WHERE project_id = @project_id
   AND deleted IS FALSE
 ORDER BY created_at DESC;
 
+-- name: ListRiskPolicyCreateCandidates :many
+-- Platform MCP create convergence narrows by the stable public identity before
+-- loading sensitive policy definitions for exact canonical comparison.
+SELECT *
+FROM risk_policies
+WHERE project_id = @project_id
+  AND name = @name
+  AND policy_type = @policy_type
+  AND deleted IS FALSE
+ORDER BY id;
+
+-- name: ListRiskPoliciesPage :many
+-- Platform MCP keyset page. The existing unbounded query remains the Goa
+-- compatibility path.
+SELECT *
+FROM risk_policies
+WHERE project_id = @project_id
+  AND deleted IS FALSE
+  AND (
+    sqlc.narg(cursor_created_at)::timestamptz IS NULL
+    OR (created_at, id) < (
+      sqlc.narg(cursor_created_at)::timestamptz,
+      sqlc.narg(cursor_id)::uuid
+    )
+  )
+ORDER BY created_at DESC, id DESC
+LIMIT @page_limit;
+
 -- name: ListEnabledRiskPoliciesByProject :many
 SELECT *
 FROM risk_policies
@@ -1529,6 +1557,19 @@ WHERE id = @id
   AND project_id = @project_id
   AND deleted IS FALSE;
 
+-- name: GetRiskExclusionForUpdate :one
+SELECT *
+FROM risk_exclusions
+WHERE id = @id
+  AND project_id = @project_id
+  AND deleted IS FALSE
+FOR UPDATE;
+
+-- name: LockRiskExclusionMutations :exec
+-- Serialize exclusion writes per project. Regex limits span rows and include the
+-- empty global scope, so row locks alone cannot protect the count-and-write.
+SELECT pg_advisory_xact_lock(hashtextextended('risk-exclusion:' || @project_id::text, 0));
+
 -- name: GetRiskExclusionForReconcile :one
 -- Fetches an exclusion regardless of deleted/enabled state so the reconcile
 -- sweep can decide whether to apply (enabled) or only reverse (deleted/disabled).
@@ -1549,6 +1590,24 @@ WHERE project_id = @project_id
   AND (sqlc.narg(risk_policy_id)::uuid IS NULL OR risk_policy_id = sqlc.narg(risk_policy_id))
 ORDER BY created_at DESC;
 
+-- name: ListRiskExclusionsByProjectPage :many
+-- Platform MCP keyset page. The existing unbounded query remains the Goa
+-- compatibility path.
+SELECT *
+FROM risk_exclusions
+WHERE project_id = @project_id
+  AND deleted IS FALSE
+  AND (sqlc.narg(risk_policy_id)::uuid IS NULL OR risk_policy_id = sqlc.narg(risk_policy_id))
+  AND (
+    sqlc.narg(cursor_created_at)::timestamptz IS NULL
+    OR (created_at, id) < (
+      sqlc.narg(cursor_created_at)::timestamptz,
+      sqlc.narg(cursor_id)::uuid
+    )
+  )
+ORDER BY created_at DESC, id DESC
+LIMIT @page_limit;
+
 -- name: ListEnabledExclusionsForPolicy :many
 -- Exclusions that apply when analyzing/enforcing a given policy: the policy's
 -- own plus every global one. Used to build the going-forward ExclusionSet.
@@ -1562,14 +1621,16 @@ ORDER BY created_at;
 
 -- name: CountEnabledRegexExclusionsInScope :one
 -- Enforces the per-scope regex cap. Counts enabled regex exclusions sharing the
--- same scope (same risk_policy_id, treating NULL/global as its own bucket).
+-- same scope (same risk_policy_id, treating NULL/global as its own bucket),
+-- optionally excluding the row currently being updated.
 SELECT COUNT(*)::BIGINT
 FROM risk_exclusions
 WHERE project_id = @project_id
   AND match_type = 'regex'
   AND enabled IS TRUE
   AND deleted IS FALSE
-  AND risk_policy_id IS NOT DISTINCT FROM sqlc.narg(risk_policy_id);
+  AND risk_policy_id IS NOT DISTINCT FROM sqlc.narg(risk_policy_id)
+  AND (sqlc.narg(exclude_id)::uuid IS NULL OR id <> sqlc.narg(exclude_id));
 
 -- name: UpdateRiskExclusion :one
 UPDATE risk_exclusions

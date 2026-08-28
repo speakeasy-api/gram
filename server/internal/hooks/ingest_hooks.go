@@ -1364,7 +1364,10 @@ func telemetryHookEventName(payload *gen.IngestPayload) string {
 	raw := strings.TrimSpace(conv.PtrValOr(payload.Source.RawEventName, ""))
 	if raw != "" {
 		var parse func(string) (HookEvent, bool)
-		switch strings.TrimSpace(payload.Source.Adapter) {
+		// Lowercased like every other adapter check on this path, so a case
+		// variant resolves the same raw vocabulary instead of silently
+		// falling through to the canonical map.
+		switch strings.ToLower(strings.TrimSpace(payload.Source.Adapter)) {
 		case "claude":
 			parse = parseClaudeHookEvent
 		case "cursor":
@@ -1373,6 +1376,8 @@ func telemetryHookEventName(payload *gen.IngestPayload) string {
 			parse = parseCodexHookEvent
 		case "opencode":
 			parse = parseOpencodeHookEvent
+		case "copilot":
+			parse = parseCopilotHookEvent
 		}
 		if parse != nil {
 			if event, ok := parse(raw); ok {
@@ -1427,6 +1432,7 @@ func (s *Service) persistCanonicalConversationEvent(ctx context.Context, payload
 	}
 	baseMsg := func(role, content string) chatRepo.CreateChatMessageParams {
 		return chatRepo.CreateChatMessageParams{
+			ID:               uuid.Nil,
 			ChatID:           sessionIDToUUID(sessionID),
 			ProjectID:        *authCtx.ProjectID,
 			Role:             role,

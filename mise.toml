@@ -16,12 +16,12 @@ pin = true
 "github:speakeasy-api/openapi" = "1.24.0"
 # Keep in sync with speakeasyVersion in .speakeasy/workflow.yaml, otherwise the
 # installed version and the version generation runs on can mismatch.
-"github:speakeasy-api/speakeasy" = "1.791.1"
+"github:speakeasy-api/speakeasy" = "1.796.1"
 "github:FiloSottile/mkcert" = "1.4.4"
 apko = "1.2.31"
 flyctl = "0.4.77"
-go = "1.26.5"
-golangci-lint = "2.12.2"
+go = "1.27.0"
+golangci-lint = "2.13.1"
 gomigrate = "4.19.1"
 gum = "0.17.0"
 jq = "1.8.2"
@@ -46,9 +46,7 @@ aube = "1.38.1"
 watchexec = "2.5.1"
 uv = "0.12.1"
 yq = "4.53.3"
-# hk ≥1.47 fails to evaluate the json.Parser usage in hk.pkl
-# ("unknown method 'parse'"); keep 1.46.0 until hk.pkl is ported.
-hk = "1.46.0"
+hk = "1.56.1"
 pkl = "0.32.1"
 "github:temporalio/cli" = "1.8.2"
 "github:pb33f/openapi-changes" = "0.2.10"

@@ -251,8 +251,8 @@ func (c *Client) acquireFeatureCacheLocks(ctx context.Context, organizationID st
 	release := func() {
 		unlockCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
 		defer cancel()
-		for i := len(acquired) - 1; i >= 0; i-- {
-			params := acquired[i]
+		for _, params := range slices.Backward(acquired) {
+
 			unlocked, unlockErr := queries.ReleaseFeatureCacheLock(unlockCtx, repo.ReleaseFeatureCacheLockParams(params))
 			if unlockErr != nil || !unlocked {
 				c.logger.ErrorContext(unlockCtx, "failed to release feature cache lock",

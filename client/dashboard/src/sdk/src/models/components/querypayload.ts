@@ -48,6 +48,7 @@ export type GroupBy = ClosedEnum<typeof GroupBy>;
 export const QueryPayloadSortBy = {
   TotalCost: "total_cost",
   TotalTokens: "total_tokens",
+  LlmTokens: "llm_tokens",
   TotalInputTokens: "total_input_tokens",
   TotalOutputTokens: "total_output_tokens",
   CacheReadInputTokens: "cache_read_input_tokens",

@@ -31,8 +31,7 @@ var _ containerEngine = (*dockerCLIEngine)(nil)
 func (d *dockerCLIEngine) exec(ctx context.Context, args ...string) (string, error) {
 	out, err := exec.CommandContext(ctx, "docker", args...).Output() //nolint:gosec // fixed docker binary; args are engine-constructed, never raw user input
 	if err != nil {
-		var exitErr *exec.ExitError
-		if errors.As(err, &exitErr) {
+		if exitErr, ok := errors.AsType[*exec.ExitError](err); ok {
 			return "", fmt.Errorf("docker %s: %w: %s", args[0], err, strings.TrimSpace(string(exitErr.Stderr)))
 		}
 		return "", fmt.Errorf("docker %s: %w", args[0], err)

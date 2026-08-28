@@ -232,7 +232,7 @@ func (s *Service) scheduleDefaultServerIcon(ctx context.Context, projectID, mcpS
 	if !ids.UnproxiedMcpServerID.Valid && !ids.RemoteMcpServerID.Valid {
 		return
 	}
-	bgCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 30*time.Second) //nolint:gosec // cancel is deferred inside the detached goroutine below
+	bgCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 30*time.Second)
 	logger := s.logger.With(attr.SlogProjectID(projectID.String()))
 	go func() {
 		defer cancel()

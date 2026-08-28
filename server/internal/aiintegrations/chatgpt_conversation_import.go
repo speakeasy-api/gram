@@ -389,6 +389,7 @@ func (src *chatgptConversationSource) writeFile(ctx context.Context, file codexa
 		}
 
 		rows = append(rows, chatrepo.CreateExternalChatMessageParams{
+			ID:                uuid.Nil,
 			ChatID:            src.chatIDs[event.Conversation.ID],
 			Role:              role,
 			ProjectID:         src.cfg.ProjectID,

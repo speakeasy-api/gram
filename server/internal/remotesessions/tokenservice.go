@@ -192,8 +192,7 @@ func (m *ChallengeManager) resolveUpstreamToken(
 		// the user id is what lets "how many users are affected" be answered,
 		// since a client id is one row per provider connection, not per user.
 		reason := "upstream token refresh failed"
-		var refreshErr *TokenRefreshError
-		if errors.As(err, &refreshErr) {
+		if refreshErr, ok := errors.AsType[*TokenRefreshError](err); ok {
 			reason = refreshErr.Reason
 		}
 		args := []any{
@@ -202,8 +201,7 @@ func (m *ChallengeManager) resolveUpstreamToken(
 			attr.SlogOAuthFailureReason(reason),
 			attr.SlogError(err),
 		}
-		var failure *RefreshError
-		if errors.As(err, &failure) {
+		if failure, ok := errors.AsType[*RefreshError](err); ok {
 			args = append(args, attr.SlogOAuthIssuer(failure.IssuerURL), attr.SlogOutcome(string(failure.Outcome)))
 		}
 		if subject.Kind == urn.SessionSubjectKindUser {

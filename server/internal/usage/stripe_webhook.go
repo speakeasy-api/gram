@@ -49,8 +49,7 @@ func (s *Service) handleStripeWebhook(w http.ResponseWriter, r *http.Request) er
 	r.Body = http.MaxBytesReader(w, r.Body, maxStripeWebhookBodyBytes)
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
-		var maxBytesErr *http.MaxBytesError
-		if errors.As(err, &maxBytesErr) {
+		if _, ok := errors.AsType[*http.MaxBytesError](err); ok {
 			return oops.E(oops.CodeRequestTooLarge, err, "Stripe webhook body is too large").LogWarn(ctx, s.logger)
 		}
 		return oops.E(oops.CodeBadRequest, err, "invalid Stripe webhook body").LogWarn(ctx, s.logger)
