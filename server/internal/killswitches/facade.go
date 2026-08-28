@@ -9,6 +9,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/speakeasy-api/gram/server/internal/killswitches/repo"
 )
@@ -81,7 +82,7 @@ type CurrentPrescription struct {
 type Facade struct {
 	lifecycle *LifecycleService
 	registry  *Registry
-	queries   *repo.Queries
+	db        *pgxpool.Pool
 }
 
 var _ GenericService = (*Facade)(nil)
@@ -90,7 +91,7 @@ func NewFacade(lifecycle *LifecycleService) (*Facade, error) {
 	if lifecycle == nil {
 		return nil, ErrInvalidArgument
 	}
-	return &Facade{lifecycle: lifecycle, registry: lifecycle.registry, queries: repo.New(lifecycle.db)}, nil
+	return &Facade{lifecycle: lifecycle, registry: lifecycle.registry, db: lifecycle.db}, nil
 }
 
 func (f *Facade) ListDefinitions(_ context.Context) ([]Definition, error) {
@@ -141,7 +142,8 @@ func (f *Facade) GetPrescription(ctx context.Context, request GetPrescriptionReq
 	if err != nil {
 		return CurrentPrescription{}, err
 	}
-	row, err := f.queries.GetKillswitchCurrentPrescription(ctx, repo.GetKillswitchCurrentPrescriptionParams{
+	queries := repo.New(f.db)
+	row, err := queries.GetKillswitchCurrentPrescription(ctx, repo.GetKillswitchCurrentPrescriptionParams{
 		OrganizationID: string(request.OrganizationID),
 		PrescriptionID: prescriptionID,
 	})
@@ -162,6 +164,7 @@ func (f *Facade) GetPrescription(ctx context.Context, request GetPrescriptionReq
 }
 
 func (f *Facade) ListPrescriptions(ctx context.Context, request ListPrescriptionsRequest) (ListPrescriptionsResult, error) {
+	queries := repo.New(f.db)
 	if err := validateIdentifier("organization ID", string(request.OrganizationID)); err != nil {
 		return ListPrescriptionsResult{}, fmt.Errorf("%w: %w", ErrInvalidArgument, err)
 	}
@@ -179,13 +182,13 @@ func (f *Facade) ListPrescriptions(ctx context.Context, request ListPrescription
 			return ListPrescriptionsResult{}, err
 		}
 		afterID = uuid.NullUUID{UUID: parsed, Valid: true}
-		if _, err := f.queries.GetKillswitchCurrentPrescription(ctx, repo.GetKillswitchCurrentPrescriptionParams{OrganizationID: string(request.OrganizationID), PrescriptionID: parsed}); errors.Is(err, pgx.ErrNoRows) {
+		if _, err := queries.GetKillswitchCurrentPrescription(ctx, repo.GetKillswitchCurrentPrescriptionParams{OrganizationID: string(request.OrganizationID), PrescriptionID: parsed}); errors.Is(err, pgx.ErrNoRows) {
 			return ListPrescriptionsResult{}, ErrPrescriptionNotFound
 		} else if err != nil {
 			return ListPrescriptionsResult{}, fmt.Errorf("validate killswitch prescription cursor: %w", err)
 		}
 	}
-	rows, err := f.queries.ListKillswitchCurrentPrescriptions(ctx, repo.ListKillswitchCurrentPrescriptionsParams{
+	rows, err := queries.ListKillswitchCurrentPrescriptions(ctx, repo.ListKillswitchCurrentPrescriptionsParams{
 		OrganizationID: string(request.OrganizationID),
 		AfterID:        afterID,
 		ResultLimit:    limit + 1,

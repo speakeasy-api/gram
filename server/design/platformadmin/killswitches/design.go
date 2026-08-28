@@ -207,5 +207,6 @@ var _ = Service("platformKillswitches", func() {
 			security.SessionHeader()
 			Response(StatusOK)
 		})
+		Meta("openapi:extension:x-speakeasy-pagination", `{"type":"cursor","inputs":[{"name":"after_id","in":"parameters","type":"cursor"}],"outputs":{"nextCursor":"$.next_after_id"}}`)
 	})
 })

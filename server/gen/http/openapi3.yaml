@@ -33750,107 +33750,115 @@ paths:
                 - session_header_Gram-Session: []
     /rpc/platformKillswitches.listPrescriptions:
         get:
-            tags:
-                - platformKillswitches
-            summary: listPrescriptions platformKillswitches
             operationId: platformKillswitches#listPrescriptions
             parameters:
-                - name: organization_id
+                - allowEmptyValue: true
                   in: query
-                  allowEmptyValue: true
+                  name: organization_id
                   required: true
                   schema:
                     type: string
-                - name: limit
+                - allowEmptyValue: true
                   in: query
-                  allowEmptyValue: true
+                  name: limit
                   schema:
-                    type: integer
                     format: int32
-                    minimum: 1
                     maximum: 100
-                - name: after_id
+                    minimum: 1
+                    type: integer
+                - allowEmptyValue: true
                   in: query
-                  allowEmptyValue: true
+                  name: after_id
                   schema:
-                    type: string
                     format: uuid
-                - name: Gram-Session
-                  in: header
-                  description: Session header
-                  allowEmptyValue: true
-                  schema:
                     type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
                     description: Session header
+                    type: string
             responses:
                 "200":
-                    description: OK response.
                     content:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/ListPrescriptionsResponseBody'
+                    description: OK response.
                 "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
                     description: 'bad_request: request is invalid'
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
                 "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
                     description: 'unauthorized: unauthorized access'
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
                 "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
                     description: 'forbidden: permission denied'
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
                 "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
                     description: 'not_found: resource not found'
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
                 "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
                     description: 'version_conflict: The prescription changed after the supplied expected version.'
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
                 "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
                     description: 'unsupported_media: unsupported media type'
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
                 "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
                     description: 'invalid: request contains one or more invalidation fields'
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
                 "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
                     description: 'unexpected: an unexpected error occurred'
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
                 "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
                     description: 'gateway_error: an unexpected error occurred'
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
                 "503":
-                    description: 'unavailable: service temporarily unavailable'
                     content:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/Error'
+                    description: 'unavailable: service temporarily unavailable'
             security:
                 - session_header_Gram-Session: []
+            summary: listPrescriptions platformKillswitches
+            tags:
+                - platformKillswitches
+            x-speakeasy-pagination:
+                inputs:
+                    - in: parameters
+                      name: after_id
+                      type: cursor
+                outputs:
+                    nextCursor: $.next_after_id
+                type: cursor
     /rpc/platformMcp.dismissOnboarding:
         post:
             description: Dismiss the optional current user's Platform MCP onboarding workflow without changing organization setup or project resources.

@@ -8,12 +8,19 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 
+	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
+	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
+	"github.com/speakeasy-api/gram/server/internal/urn"
+	usersrepo "github.com/speakeasy-api/gram/server/internal/users/repo"
 )
 
 type genericServiceStub struct {
@@ -65,13 +72,19 @@ func (s *genericServiceStub) ListPrescriptions(_ context.Context, request ListPr
 	return ListPrescriptionsResult{Prescriptions: []CurrentPrescription{{OrganizationID: request.OrganizationID}}}, s.err
 }
 
-type authorizerStub struct {
-	err    error
-	checks []authz.Check
+type authorizationCheck struct {
+	organizationID string
+	userID         string
+	scope          authz.Scope
 }
 
-func (a *authorizerStub) Require(_ context.Context, checks ...authz.Check) error {
-	a.checks = append(a.checks, checks...)
+type authorizerStub struct {
+	err    error
+	checks []authorizationCheck
+}
+
+func (a *authorizerStub) RequireUserOrganizationScope(_ context.Context, organizationID, userID string, scope authz.Scope) error {
+	a.checks = append(a.checks, authorizationCheck{organizationID: organizationID, userID: userID, scope: scope})
 	return a.err
 }
 
@@ -100,7 +113,7 @@ func TestAuthorizedServiceDerivesTenantAndActorForAllSixMethods(t *testing.T) {
 	require.Equal(t, []string{"list-definitions", "activate", "change", "deactivate", "get", "list"}, generic.calls)
 	require.Len(t, authorizer.checks, 6)
 	for _, check := range authorizer.checks {
-		require.Equal(t, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceID: "org_trusted"}, check)
+		require.Equal(t, authorizationCheck{organizationID: "org_trusted", userID: "user_trusted", scope: authz.ScopeOrgAdmin}, check)
 	}
 	require.Equal(t, OrganizationID("org_trusted"), generic.activate.OrganizationID)
 	require.Equal(t, "user_trusted", generic.activate.ActorUserID)
@@ -109,6 +122,50 @@ func TestAuthorizedServiceDerivesTenantAndActorForAllSixMethods(t *testing.T) {
 	require.Equal(t, "user_trusted", generic.deactivate.ActorUserID)
 	require.Equal(t, GetPrescriptionRequest{OrganizationID: "org_trusted", PrescriptionID: prescriptionID}, generic.get)
 	require.Equal(t, ListPrescriptionsRequest{OrganizationID: "org_trusted", Limit: 12}, generic.list)
+}
+
+func TestAuthorizedServiceRejectsAdminRevokedAfterContextPreparation(t *testing.T) {
+	t.Parallel()
+
+	conn, organizationID := newLifecycleDatabase(t, "killswitch_authorized_revocation")
+	userID := "user_" + uuid.NewString()
+	_, err := usersrepo.New(conn).UpsertUser(t.Context(), usersrepo.UpsertUserParams{
+		ID: userID, Email: userID + "@example.com", DisplayName: userID, PhotoUrl: pgtype.Text{}, Admin: false,
+	})
+	require.NoError(t, err)
+	_, err = orgrepo.New(conn).UpsertOrganizationUserRelationship(t.Context(), orgrepo.UpsertOrganizationUserRelationshipParams{
+		OrganizationID: organizationID, UserID: pgtype.Text{String: userID, Valid: true},
+	})
+	require.NoError(t, err)
+	selectors, err := authz.NewSelector(authz.ScopeOrgAdmin, organizationID).MarshalJSON()
+	require.NoError(t, err)
+	principal := urn.NewPrincipal(urn.PrincipalTypeUser, userID)
+	grant, err := accessrepo.New(conn).UpsertPrincipalGrant(t.Context(), accessrepo.UpsertPrincipalGrantParams{
+		OrganizationID: organizationID, PrincipalUrn: principal, Scope: string(authz.ScopeOrgAdmin), Selectors: selectors,
+	})
+	require.NoError(t, err)
+
+	ctx := validatedCustomerContext(t, organizationID, userID, "admin@example.com")
+	engine := authz.NewEngine(testenv.NewLogger(t), conn, func(context.Context, string) (bool, error) { return false, nil }, workos.NewStubClient())
+	ctx, err = engine.PrepareContext(ctx)
+	require.NoError(t, err)
+	check := authz.Check{Scope: authz.ScopeOrgAdmin, ResourceID: organizationID}
+	require.NoError(t, engine.Require(ctx, check))
+
+	deleted, err := accessrepo.New(conn).DeletePrincipalGrant(t.Context(), accessrepo.DeletePrincipalGrantParams{
+		ID: grant.ID, OrganizationID: organizationID,
+	})
+	require.NoError(t, err)
+	require.Equal(t, int64(1), deleted)
+	// The prepared context is stale, so only live authorization can observe revocation.
+	require.NoError(t, engine.Require(ctx, check))
+
+	generic := &genericServiceStub{}
+	service, err := NewAuthorizedService(generic, engine)
+	require.NoError(t, err)
+	_, err = service.ListDefinitions(ctx)
+	requireOopsCode(t, err, oops.CodeForbidden)
+	require.Empty(t, generic.calls)
 }
 
 func TestAuthorizedServiceRejectsCredentialAndBypassMatrixAcrossAllMethods(t *testing.T) {

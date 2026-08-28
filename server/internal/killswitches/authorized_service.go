@@ -49,7 +49,7 @@ type AuthorizedListPrescriptionsRequest struct {
 }
 
 type organizationAuthorizer interface {
-	Require(context.Context, ...authz.Check) error
+	RequireUserOrganizationScope(context.Context, string, string, authz.Scope) error
 }
 
 // AuthorizedService is the customer-only adapter around GenericService. It
@@ -189,8 +189,7 @@ func (s *AuthorizedService) requireCustomerAdmin(ctx context.Context) (customerP
 	if authCtx.ActiveOrganizationID == constants.DemoOrganizationID {
 		return customerPrincipal{}, oops.C(oops.CodeForbidden)
 	}
-	check := authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}
-	if err := s.authorizer.Require(ctx, check); err != nil {
+	if err := s.authorizer.RequireUserOrganizationScope(ctx, authCtx.ActiveOrganizationID, authCtx.UserID, authz.ScopeOrgAdmin); err != nil {
 		return customerPrincipal{}, fmt.Errorf("authorize killswitch customer administrator: %w", err)
 	}
 	return customerPrincipal{organizationID: OrganizationID(authCtx.ActiveOrganizationID), userID: authCtx.UserID, email: strings.TrimSpace(*authCtx.Email)}, nil
