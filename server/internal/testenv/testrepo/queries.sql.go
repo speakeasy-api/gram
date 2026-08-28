@@ -952,6 +952,64 @@ func (q *Queries) InsertDeviceAgentSyncFixture(ctx context.Context, arg InsertDe
 	return err
 }
 
+const insertKillswitchPrescriptionFixture = `-- name: InsertKillswitchPrescriptionFixture :exec
+WITH fixture_clock AS (
+  SELECT clock_timestamp() - INTERVAL '1 hour' AS active_since
+),
+inserted_prescription AS (
+  INSERT INTO killswitch_prescriptions (
+    id, organization_id, definition_key, principal_kind, principal_key, resource_kind, current_version
+  ) VALUES (
+    $2, $3, $4, $5, $6, $7, 1
+  )
+  RETURNING organization_id, id
+),
+inserted_version AS (
+  INSERT INTO killswitch_prescription_versions (
+    organization_id, prescription_id, version, state, resource_scope, starts_at, expires_at, activated_at, internal_note, external_note
+  )
+  SELECT organization_id, id, 1, 'active', $8, active_since, NULL, active_since, $9, $10
+  FROM inserted_prescription
+  CROSS JOIN fixture_clock
+  RETURNING organization_id, prescription_id, version
+)
+INSERT INTO killswitch_prescription_version_resources (
+  organization_id, prescription_id, version, resource_key
+)
+SELECT organization_id, prescription_id, version, resource_key
+FROM inserted_version
+CROSS JOIN unnest($1::text[]) AS resource(resource_key)
+`
+
+type InsertKillswitchPrescriptionFixtureParams struct {
+	ResourceKeys   []string
+	PrescriptionID uuid.UUID
+	OrganizationID string
+	DefinitionKey  string
+	PrincipalKind  string
+	PrincipalKey   string
+	ResourceKind   string
+	ResourceScope  string
+	InternalNote   string
+	ExternalNote   string
+}
+
+func (q *Queries) InsertKillswitchPrescriptionFixture(ctx context.Context, arg InsertKillswitchPrescriptionFixtureParams) error {
+	_, err := q.db.Exec(ctx, insertKillswitchPrescriptionFixture,
+		arg.ResourceKeys,
+		arg.PrescriptionID,
+		arg.OrganizationID,
+		arg.DefinitionKey,
+		arg.PrincipalKind,
+		arg.PrincipalKey,
+		arg.ResourceKind,
+		arg.ResourceScope,
+		arg.InternalNote,
+		arg.ExternalNote,
+	)
+	return err
+}
+
 const insertLegacyDenyPrincipalGrantFixture = `-- name: InsertLegacyDenyPrincipalGrantFixture :exec
 INSERT INTO principal_grants (organization_id, principal_urn, scope, effect, selectors)
 VALUES ($1, $2, $3, 'deny', $4)

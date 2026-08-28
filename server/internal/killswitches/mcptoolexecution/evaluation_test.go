@@ -8,6 +8,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/killswitches"
+	"github.com/speakeasy-api/gram/server/internal/mcp/mcpmetrics"
 	"github.com/speakeasy-api/gram/server/internal/mcpidentity"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
@@ -18,6 +19,64 @@ import (
 // selected-one, selected-many (cross-project), and dynamic all-server
 // matching — including a server created after the all-server activation,
 // without materializing the organization's server list.
+func TestHostedCheckpoint_ReevaluatesAndFailsClosed(t *testing.T) {
+	t.Parallel()
+
+	conn, orgID := newTestDatabase(t, "ks_hosted_checkpoint")
+	userID := "user_" + uuid.NewString()
+	insertUser(t, conn, userID, nil)
+	insertMembership(t, conn, orgID, userID, nil)
+	projectID := insertProject(t, conn, orgID, "hosted-checkpoint", nil)
+	serverID := insertMCPServer(t, conn, orgID, projectID, nil)
+	source := ServerSource{FrontingServerID: uuid.NullUUID{UUID: serverID, Valid: true}}
+	recorder := &coverageRecorder{}
+	checkpoint, err := NewHostedCheckpoint(conn, testenv.NewMeterProvider(t), testenv.NewLogger(t), recorder)
+	require.NoError(t, err)
+	ctx := mcpidentity.WithIdentity(t.Context(), mcpidentity.AuthenticatedUser(userID))
+
+	disposition, err := checkpoint.Evaluate(ctx, orgID, source)
+	require.NoError(t, err)
+	require.Equal(t, killswitches.TransportDispositionContinue, disposition.Kind())
+
+	note := "Exact operator note."
+	insertPrescription(t, conn, orgID, prescriptionFixture{
+		ID:           uuid.New(),
+		PrincipalKey: userID,
+		Scope:        "selected",
+		Resources:    []string{serverID.String()},
+		ExternalNote: note,
+	})
+
+	disposition, err = checkpoint.Evaluate(ctx, orgID, source)
+	require.NoError(t, err)
+	require.Equal(t, killswitches.TransportDispositionMatchedDenial, disposition.Kind())
+	gotNote, ok := disposition.ExternalNote()
+	require.True(t, ok)
+	require.Equal(t, note, gotNote)
+	require.Len(t, recorder.observations, 2)
+	for _, observation := range recorder.observations {
+		require.Equal(t, coverageObservation{
+			surface:  mcpmetrics.KillswitchSurfaceHosted,
+			identity: mcpmetrics.KillswitchIdentityActiveUser,
+			resource: mcpmetrics.KillswitchResourceCanonicalServer,
+		}, observation)
+	}
+
+	_, err = conn.Exec(t.Context(), "DROP TABLE killswitch_prescriptions CASCADE") //nolint:glint // notestingrawsql: deterministic DDL breakage in this test's isolated database forces an evaluator failure
+	require.NoError(t, err)
+
+	disposition, err = checkpoint.Evaluate(ctx, orgID, source)
+	require.NoError(t, err)
+	require.Equal(t, killswitches.TransportDispositionInfrastructureRejection, disposition.Kind())
+	_, hasNote := disposition.ExternalNote()
+	require.False(t, hasNote)
+
+	unsupportedCtx := mcpidentity.WithIdentity(t.Context(), mcpidentity.Identity{Kind: mcpidentity.KindAnonymous})
+	disposition, err = checkpoint.Evaluate(unsupportedCtx, orgID, source)
+	require.NoError(t, err)
+	require.Equal(t, killswitches.TransportDispositionContinue, disposition.Kind())
+}
+
 func TestMCPToolExecutionEvaluationAcrossProjects(t *testing.T) {
 	t.Parallel()
 	conn, orgID := newTestDatabase(t, "ks_mcp_evaluation")

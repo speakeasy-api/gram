@@ -285,8 +285,21 @@ func mintIssuerBearerForEndpoint(
 	organizationID string,
 ) string {
 	t.Helper()
+	return mintIssuerBearerForEndpointSubject(t, ctx, ti, slug, mcpServer, organizationID, urn.NewAnonymousSubject(uuid.NewString()))
+}
 
-	require.True(t, mcpServer.UserSessionIssuerID.Valid, "remote-backed seeds always carry an issuer")
+func mintIssuerBearerForEndpointSubject(
+	t *testing.T,
+	ctx context.Context,
+	ti *testInstance,
+	slug string,
+	mcpServer mcpserversrepo.McpServer,
+	organizationID string,
+	subject urn.SessionSubject,
+) string {
+	t.Helper()
+
+	require.True(t, mcpServer.UserSessionIssuerID.Valid, "endpoint must carry an issuer")
 	mcpEndpoint, err := mcpendpointsrepo.New(ti.conn).GetMCPEndpointByCustomDomainAndSlug(ctx, mcpendpointsrepo.GetMCPEndpointByCustomDomainAndSlugParams{
 		Slug:           slug,
 		CustomDomainID: uuid.NullUUID{},
@@ -318,7 +331,7 @@ func mintIssuerBearerForEndpoint(
 		RedirectURI:         redirectURI,
 		CodeChallenge:       codeChallenge,
 		CodeChallengeMethod: "S256",
-		Subject:             urn.NewAnonymousSubject(uuid.NewString()),
+		Subject:             subject,
 		// Simulate a tampered consent value; token minting must clamp this to
 		// the issuer's one-hour maximum asserted below.
 		DesiredSessionDurationHours: 10_000,

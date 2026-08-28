@@ -1051,7 +1051,7 @@ func newStartCommand() *cli.Command {
 				}
 			}
 
-			mcpService := mcp.NewService(
+			mcpService, err := mcp.NewService(
 				logger,
 				tracerProvider,
 				meterProvider,
@@ -1097,6 +1097,9 @@ func newStartCommand() *cli.Command {
 					MaxRequestLifetime: 0,
 				},
 			)
+			if err != nil {
+				return fmt.Errorf("initialize MCP service: %w", err)
+			}
 
 			chatClient := chat.NewAgenticChatClient(
 				logger,
