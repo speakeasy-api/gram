@@ -4117,10 +4117,10 @@ CREATE TABLE IF NOT EXISTS data_export_routes (
   CONSTRAINT data_export_routes_destination_tenant_fkey FOREIGN KEY (organization_id, project_id, otel_destination_id) REFERENCES otel_destinations (organization_id, project_id, id) ON DELETE RESTRICT
 );
 
--- One source can fan out to multiple destinations, while the same destination
--- can appear at most once for that source.
-CREATE UNIQUE INDEX IF NOT EXISTS data_export_routes_project_source_destination_key
-  ON data_export_routes (project_id, data_source, otel_destination_id)
+-- Each project can configure at most one non-deleted route per data source.
+-- Disabled routes still reserve the source until they are deleted.
+CREATE UNIQUE INDEX IF NOT EXISTS data_export_routes_project_source_key
+  ON data_export_routes (project_id, data_source)
   WHERE deleted IS FALSE;
 
 -- AI integration configs: encrypted provider credentials and activation
