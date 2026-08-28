@@ -128,6 +128,7 @@ func clearPrescriptions(t *testing.T, conn *pgxpool.Pool, organizationID string)
 
 type prescriptionFixture struct {
 	ID            uuid.UUID
+	DefinitionKey killswitches.DefinitionKey
 	PrincipalKey  string
 	PrincipalKind killswitches.PrincipalKind
 	Scope         string
@@ -135,8 +136,8 @@ type prescriptionFixture struct {
 	ExternalNote  string
 }
 
-// insertPrescription creates an immediately active mcp_tool_execution
-// prescription with the concrete user principal and mcp_server resource kind.
+// insertPrescription creates an immediately active prescription with the
+// concrete user principal and mcp_server resource kind.
 func insertPrescription(t *testing.T, conn *pgxpool.Pool, organizationID string, fixture prescriptionFixture) {
 	t.Helper()
 
@@ -144,10 +145,14 @@ func insertPrescription(t *testing.T, conn *pgxpool.Pool, organizationID string,
 	if kind == "" {
 		kind = PrincipalKindUser
 	}
+	definitionKey := fixture.DefinitionKey
+	if definitionKey == "" {
+		definitionKey = DefinitionKeyMCPToolExecution
+	}
 	err := testrepo.New(conn).InsertKillswitchPrescriptionFixture(t.Context(), testrepo.InsertKillswitchPrescriptionFixtureParams{
 		PrescriptionID: fixture.ID,
 		OrganizationID: organizationID,
-		DefinitionKey:  string(DefinitionKeyMCPToolExecution),
+		DefinitionKey:  string(definitionKey),
 		PrincipalKind:  string(kind),
 		PrincipalKey:   fixture.PrincipalKey,
 		ResourceKind:   string(ResourceKindMCPServer),
