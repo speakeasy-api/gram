@@ -141,6 +141,13 @@ FROM previous
 WHERE trials.organization_id = previous.organization_id
 RETURNING previous.ends_at AS previous_ends_at, trials.ends_at;
 
+-- name: LockTrialLifecycleForRearm :one
+-- Lifecycle operations lock this row before taking OpenRouter advisory locks.
+SELECT tier, ends_at, converted_at, demoted_at
+FROM trials
+WHERE organization_id = @organization_id
+FOR UPDATE;
+
 -- name: RearmTrial :one
 -- Operator-initiated reinstatement of a demoted trial. Returns the tier the
 -- trial grants, which the handler writes back onto the organization.

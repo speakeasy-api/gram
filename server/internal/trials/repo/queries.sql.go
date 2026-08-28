@@ -284,6 +284,33 @@ func (q *Queries) ListExpiredTrials(ctx context.Context) ([]string, error) {
 	return items, nil
 }
 
+const lockTrialLifecycleForRearm = `-- name: LockTrialLifecycleForRearm :one
+SELECT tier, ends_at, converted_at, demoted_at
+FROM trials
+WHERE organization_id = $1
+FOR UPDATE
+`
+
+type LockTrialLifecycleForRearmRow struct {
+	Tier        string
+	EndsAt      pgtype.Timestamptz
+	ConvertedAt pgtype.Timestamptz
+	DemotedAt   pgtype.Timestamptz
+}
+
+// Lifecycle operations lock this row before taking OpenRouter advisory locks.
+func (q *Queries) LockTrialLifecycleForRearm(ctx context.Context, organizationID string) (LockTrialLifecycleForRearmRow, error) {
+	row := q.db.QueryRow(ctx, lockTrialLifecycleForRearm, organizationID)
+	var i LockTrialLifecycleForRearmRow
+	err := row.Scan(
+		&i.Tier,
+		&i.EndsAt,
+		&i.ConvertedAt,
+		&i.DemotedAt,
+	)
+	return i, err
+}
+
 const markTrialConverted = `-- name: MarkTrialConverted :execrows
 UPDATE trials
 SET converted_at = clock_timestamp(),

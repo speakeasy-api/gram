@@ -61,9 +61,11 @@ type Service interface {
 	// so both writers converge on one row.
 	CreateOrganization(context.Context, *CreateOrganizationPayload) (res *AdminOrganization, err error)
 	// Puts a demoted enterprise trial back on: restores the organization's account
-	// type and whitelist flag, revives its model provider keys, and gives the
-	// trial a fresh run of the given length counted from now. Only a demoted trial
-	// can be re-armed; one that has converted or is already running is rejected.
+	// type and whitelist flag, removes only the trial-demotion block from its
+	// model provider keys, and gives the trial a fresh run of the given length
+	// counted from now. Other key protections remain in force. Retrying a
+	// committed re-arm reconciles key state without extending the trial again; a
+	// converted or independently running trial is rejected.
 	RearmTrial(context.Context, *RearmTrialPayload) (res *AdminOrganization, err error)
 	// Returns platform-wide organization counts for the strip above the
 	// organizations list. Every figure counts the whole platform: none of them

@@ -5,11 +5,16 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"math"
+	"net/http"
+	"net/http/httptest"
+	"slices"
 	"sync"
 	"testing"
 	"time"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
@@ -21,6 +26,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/outbox/events"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
@@ -68,6 +74,45 @@ func (p *rearmProvisioner) ReinstateAPIKeyLimit(ctx context.Context, orgID strin
 
 func (p *rearmProvisioner) ReinstateAPIKeyLimitWithDB(ctx context.Context, _ openrouter.DBTX, orgID string, keyType openrouter.KeyType, limit *int) (int, error) {
 	return p.refreshAPIKeyLimit(ctx, orgID, keyType, limit)
+}
+
+func (p *rearmProvisioner) RemoveAPIKeyDisableCauseWithDB(ctx context.Context, db openrouter.DBTX, orgID string, keyType openrouter.KeyType, cause openrouter.DisableCause, limit *int) (int, openrouter.DisableCauseChange, error) {
+	q := orrepo.New(db)
+	row, err := q.GetOpenRouterAPIKey(ctx, orrepo.GetOpenRouterAPIKeyParams{OrganizationID: orgID, KeyType: string(keyType)})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return 0, openrouter.DisableCauseChange{}, nil
+	}
+	if err != nil {
+		return 0, openrouter.DisableCauseChange{}, err
+	}
+	if row.DisableCauses == nil {
+		return 0, openrouter.DisableCauseChange{}, errors.New("unclassified key")
+	}
+	if !slices.Contains(row.DisableCauses, string(cause)) {
+		return int(row.MonthlyCredits), openrouter.DisableCauseChange{}, nil
+	}
+	accessChanged := len(row.DisableCauses) == 1
+	keyLimit := int(row.MonthlyCredits)
+	if accessChanged && limit != nil {
+		keyLimit = *limit
+	}
+	_, err = q.RemoveOpenRouterAPIKeyDisableCause(ctx, orrepo.RemoveOpenRouterAPIKeyDisableCauseParams{
+		OrganizationID: orgID, KeyType: string(keyType), KeyHash: row.KeyHash, DisableCause: string(cause),
+		MonthlyCredits: int64(keyLimit), UpdateMonthlyCredits: accessChanged && int64(keyLimit) != row.MonthlyCredits,
+	})
+	return keyLimit, openrouter.DisableCauseChange{CauseChanged: true, KeyAccessChanged: accessChanged}, err
+}
+
+func (p *rearmProvisioner) ReconcileAPIKeyDisabled(ctx context.Context, orgID string, keyType openrouter.KeyType) error {
+	row, err := orrepo.New(p.conn).GetOpenRouterAPIKey(ctx, orrepo.GetOpenRouterAPIKeyParams{OrganizationID: orgID, KeyType: string(keyType)})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	_, err = p.refreshAPIKeyLimit(ctx, orgID, keyType, conv.PtrEmpty(int(row.MonthlyCredits)))
+	return err
 }
 
 func (p *rearmProvisioner) refreshAPIKeyLimit(ctx context.Context, orgID string, keyType openrouter.KeyType, limit *int) (int, error) {
@@ -179,9 +224,9 @@ func seedOpenRouterKey(t *testing.T, ctx context.Context, conn *pgxpool.Pool, or
 	require.NoError(t, err)
 
 	if f.disabled {
-		require.NoError(t, keys.DisableOpenRouterAPIKey(ctx, orrepo.DisableOpenRouterAPIKeyParams{
-			OrganizationID: orgID,
-			KeyType:        string(f.keyType),
+		require.NoError(t, testrepo.New(conn).SetOpenRouterAPIKeyClassificationFixture(ctx, testrepo.SetOpenRouterAPIKeyClassificationFixtureParams{
+			OrganizationID: orgID, KeyType: string(f.keyType), Disabled: true,
+			DisableCauses: []string{string(openrouter.DisableCauseTrialDemotion)},
 		}))
 	}
 }
@@ -211,6 +256,8 @@ func seedDemotedTrial(t *testing.T, ctx context.Context, conn *pgxpool.Pool, org
 	seedTrial(t, ctx, conn, trialFixture{orgID: orgID, tier: tier, endsAt: endsAt, demotedAt: &demotedAt})
 	seedOpenRouterKey(t, ctx, conn, orgID, keyFixture{keyType: openrouter.KeyTypeChat, monthlyCredits: 50, disabled: true})
 	seedOpenRouterKey(t, ctx, conn, orgID, keyFixture{keyType: openrouter.KeyTypeInternal, monthlyCredits: 37, disabled: true})
+	classifyRearmKey(t, ctx, conn, orgID, openrouter.KeyTypeChat, []string{string(openrouter.DisableCauseTrialDemotion)})
+	classifyRearmKey(t, ctx, conn, orgID, openrouter.KeyTypeInternal, []string{string(openrouter.DisableCauseTrialDemotion)})
 
 	return endsAt
 }
@@ -235,6 +282,232 @@ func seedDisabledTrialRuntimeFeatures(t *testing.T, ctx context.Context, svc *Se
 	}
 }
 
+type rearmUpstream struct {
+	mu      sync.Mutex
+	patches []string
+	fail    bool
+}
+
+func (u *rearmUpstream) record(body string) {
+	u.mu.Lock()
+	defer u.mu.Unlock()
+	u.patches = append(u.patches, body)
+}
+
+func (u *rearmUpstream) setFail(fail bool) {
+	u.mu.Lock()
+	defer u.mu.Unlock()
+	u.fail = fail
+}
+
+func (u *rearmUpstream) count() int {
+	u.mu.Lock()
+	defer u.mu.Unlock()
+	return len(u.patches)
+}
+
+func newProductionRearmService(t *testing.T) (context.Context, *Service, *pgxpool.Pool, *rearmUpstream) {
+	t.Helper()
+
+	ctx, svc, conn := newTestAdminService(t)
+	upstream := &rearmUpstream{}
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		require.Equal(t, http.MethodPatch, r.Method)
+		body, err := io.ReadAll(r.Body)
+		require.NoError(t, err)
+		upstream.record(string(body))
+		upstream.mu.Lock()
+		fail := upstream.fail
+		upstream.mu.Unlock()
+		if fail {
+			w.WriteHeader(http.StatusServiceUnavailable)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		hash := r.URL.Path[len("/v1/keys/"):]
+		require.NoError(t, json.NewEncoder(w).Encode(map[string]any{"data": map[string]any{"hash": hash, "limit": 50}}))
+	}))
+	t.Cleanup(server.Close)
+
+	policy, err := guardian.NewUnsafePolicy(testenv.NewTracerProvider(t), []string{})
+	require.NoError(t, err)
+	option, err := openrouter.WithTestBaseURL(server.URL)
+	require.NoError(t, err)
+	svc.openRouter = openrouter.New(
+		testenv.NewLogger(t), testenv.NewTracerProvider(t), policy, conn, "test", "provisioning-key",
+		nil, nil, nil, testenv.NewEncryptionClient(t), option,
+	)
+
+	return ctx, svc, conn, upstream
+}
+
+func classifyRearmKey(t *testing.T, ctx context.Context, conn *pgxpool.Pool, orgID string, keyType openrouter.KeyType, causes []string) {
+	t.Helper()
+	require.NoError(t, testrepo.New(conn).SetOpenRouterAPIKeyClassificationFixture(ctx, testrepo.SetOpenRouterAPIKeyClassificationFixtureParams{
+		OrganizationID: orgID, KeyType: string(keyType), Disabled: len(causes) > 0, DisableCauses: causes,
+	}))
+}
+
+func TestRearmTrial_RemovesOnlyTrialDemotionForBothKeyTypes(t *testing.T) {
+	t.Parallel()
+
+	ctx, svc, conn, upstream := newProductionRearmService(t)
+	const orgID = "org_rearm_causes"
+	seedDemotedTrial(t, ctx, conn, orgID, "enterprise")
+	for _, keyType := range openrouter.AllKeyTypes {
+		classifyRearmKey(t, ctx, conn, orgID, keyType, []string{string(openrouter.DisableCauseTrialDemotion)})
+	}
+
+	_, err := svc.RearmTrial(ctx, &gen.RearmTrialPayload{ID: orgID, Days: 14})
+	require.NoError(t, err)
+
+	for _, keyType := range openrouter.AllKeyTypes {
+		row := readOpenRouterKey(t, ctx, conn, orgID, keyType)
+		require.Empty(t, row.DisableCauses)
+		require.False(t, row.Disabled)
+		require.EqualValues(t, 50, row.MonthlyCredits, "last-cause removal restores active-trial policy for %s", keyType)
+	}
+	require.Equal(t, len(openrouter.AllKeyTypes), upstream.count())
+	entry, err := audittest.LatestAuditLogByAction(ctx, conn, audit.ActionOrganizationEnterpriseTrialRearmed)
+	require.NoError(t, err)
+	var metadata map[string]any
+	require.NoError(t, json.Unmarshal(entry.Metadata, &metadata))
+	require.Equal(t, true, metadata["key_access_changed"])
+}
+
+func TestRearmTrial_PreservesLayeredProtectionAndCaps(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name  string
+		cause openrouter.DisableCause
+		limit int64
+	}{
+		{name: "admin lock preserves zero cap", cause: openrouter.DisableCauseAdminLock, limit: 0},
+		{name: "billing inactive preserves cap", cause: openrouter.DisableCauseBillingInactive, limit: 23},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			ctx, svc, conn, upstream := newProductionRearmService(t)
+			orgID := "org_rearm_layered_" + string(tt.cause)
+			seedDemotedTrial(t, ctx, conn, orgID, "enterprise")
+			for _, keyType := range openrouter.AllKeyTypes {
+				classifyRearmKey(t, ctx, conn, orgID, keyType, []string{string(tt.cause), string(openrouter.DisableCauseTrialDemotion)})
+				row := readOpenRouterKey(t, ctx, conn, orgID, keyType)
+				_, err := orrepo.New(conn).UpdateOpenRouterKey(ctx, orrepo.UpdateOpenRouterKeyParams{OrganizationID: orgID, KeyType: string(keyType), KeyHash: row.KeyHash, MonthlyCredits: tt.limit, Reinstate: false})
+				require.NoError(t, err)
+			}
+
+			_, err := svc.RearmTrial(ctx, &gen.RearmTrialPayload{ID: orgID, Days: 14})
+			require.NoError(t, err)
+			for _, keyType := range openrouter.AllKeyTypes {
+				row := readOpenRouterKey(t, ctx, conn, orgID, keyType)
+				require.Equal(t, []string{string(tt.cause)}, row.DisableCauses)
+				require.True(t, row.Disabled)
+				require.Equal(t, tt.limit, row.MonthlyCredits)
+			}
+			require.Zero(t, upstream.count(), "a remaining cause must keep protected local state without HTTP")
+		})
+	}
+}
+
+func TestRearmTrial_AbsentCauseHasNoKeySideEffectOrInventedAccessAudit(t *testing.T) {
+	t.Parallel()
+
+	ctx, svc, conn, upstream := newProductionRearmService(t)
+	const orgID = "org_rearm_absent_cause"
+	seedDemotedTrial(t, ctx, conn, orgID, "enterprise")
+	for _, keyType := range openrouter.AllKeyTypes {
+		classifyRearmKey(t, ctx, conn, orgID, keyType, []string{string(openrouter.DisableCauseAdminLock)})
+	}
+
+	_, err := svc.RearmTrial(ctx, &gen.RearmTrialPayload{ID: orgID, Days: 14})
+	require.NoError(t, err)
+	require.Zero(t, upstream.count())
+	for _, keyType := range openrouter.AllKeyTypes {
+		row := readOpenRouterKey(t, ctx, conn, orgID, keyType)
+		require.Equal(t, []string{string(openrouter.DisableCauseAdminLock)}, row.DisableCauses)
+		require.True(t, row.Disabled)
+	}
+
+	entry, err := audittest.LatestAuditLogByAction(ctx, conn, audit.ActionOrganizationEnterpriseTrialRearmed)
+	require.NoError(t, err)
+	var metadata map[string]any
+	require.NoError(t, json.Unmarshal(entry.Metadata, &metadata))
+	require.Equal(t, false, metadata["key_access_changed"])
+}
+
+func TestRearmTrial_UnclassifiedKeyRollsBackLifecycleAndAllKeyChanges(t *testing.T) {
+	t.Parallel()
+
+	ctx, svc, conn, upstream := newProductionRearmService(t)
+	const orgID = "org_rearm_null_causes"
+	seedDemotedTrial(t, ctx, conn, orgID, "enterprise")
+	seedDisabledTrialRuntimeFeatures(t, ctx, svc, conn, orgID)
+	classifyRearmKey(t, ctx, conn, orgID, openrouter.KeyTypeChat, []string{string(openrouter.DisableCauseTrialDemotion)})
+	classifyRearmKey(t, ctx, conn, orgID, openrouter.KeyTypeInternal, nil)
+	beforeTrial := readTrial(t, ctx, conn, orgID)
+	beforeAudit, err := audittest.AuditLogCountByAction(ctx, conn, audit.ActionOrganizationEnterpriseTrialRearmed)
+	require.NoError(t, err)
+	beforeOutbox, err := testrepo.New(conn).CountPublishOutboxRows(ctx)
+	require.NoError(t, err)
+
+	_, err = svc.RearmTrial(ctx, &gen.RearmTrialPayload{ID: orgID, Days: 14})
+	requireOopsCode(t, err, oops.CodeUnexpected)
+	require.Zero(t, upstream.count(), "no HTTP belongs inside the transaction or after rollback")
+	afterTrial := readTrial(t, ctx, conn, orgID)
+	require.Equal(t, beforeTrial.DemotedAt, afterTrial.DemotedAt)
+	require.Equal(t, beforeTrial.EndsAt, afterTrial.EndsAt)
+	require.Equal(t, []string{string(openrouter.DisableCauseTrialDemotion)}, readOpenRouterKey(t, ctx, conn, orgID, openrouter.KeyTypeChat).DisableCauses)
+	require.Nil(t, readOpenRouterKey(t, ctx, conn, orgID, openrouter.KeyTypeInternal).DisableCauses)
+	require.Equal(t, "free", readOrgState(t, ctx, conn, orgID).GramAccountType)
+	for _, feature := range productfeatures.TrialRuntimeFeatures {
+		enabled, featureErr := svc.productFeatures.IsFeatureEnabled(ctx, orgID, feature)
+		require.NoError(t, featureErr)
+		require.False(t, enabled)
+	}
+	afterAudit, err := audittest.AuditLogCountByAction(ctx, conn, audit.ActionOrganizationEnterpriseTrialRearmed)
+	require.NoError(t, err)
+	require.Equal(t, beforeAudit, afterAudit)
+	afterOutbox, err := testrepo.New(conn).CountPublishOutboxRows(ctx)
+	require.NoError(t, err)
+	require.Equal(t, beforeOutbox, afterOutbox)
+}
+
+func TestRearmTrial_PostCommitReconcileFailureConvergesOnRequestRetry(t *testing.T) {
+	t.Parallel()
+
+	ctx, svc, conn, upstream := newProductionRearmService(t)
+	const orgID = "org_rearm_reconcile_retry"
+	seedDemotedTrial(t, ctx, conn, orgID, "enterprise")
+	upstream.setFail(true)
+	beforeAudit, err := audittest.AuditLogCountByAction(ctx, conn, audit.ActionOrganizationEnterpriseTrialRearmed)
+	require.NoError(t, err)
+	beforeOutbox, err := testrepo.New(conn).CountPublishOutboxRows(ctx)
+	require.NoError(t, err)
+
+	_, err = svc.RearmTrial(ctx, &gen.RearmTrialPayload{ID: orgID, Days: 14})
+	requireOopsCode(t, err, oops.CodeGatewayError)
+	require.False(t, readTrial(t, ctx, conn, orgID).DemotedAt.Valid, "the local transaction commits before HTTP reconciliation")
+	for _, keyType := range openrouter.AllKeyTypes {
+		require.Empty(t, readOpenRouterKey(t, ctx, conn, orgID, keyType).DisableCauses)
+	}
+
+	committedEndsAt := readTrial(t, ctx, conn, orgID).EndsAt
+	upstream.setFail(false)
+	result, err := svc.RearmTrial(ctx, &gen.RearmTrialPayload{ID: orgID, Days: 365})
+	require.NoError(t, err)
+	require.Equal(t, orgID, result.ID)
+	require.Equal(t, committedEndsAt, readTrial(t, ctx, conn, orgID).EndsAt, "retry must not replay the lifecycle window")
+	afterAudit, err := audittest.AuditLogCountByAction(ctx, conn, audit.ActionOrganizationEnterpriseTrialRearmed)
+	require.NoError(t, err)
+	require.Equal(t, beforeAudit+1, afterAudit, "retry must not invent another lifecycle audit event")
+	afterOutbox, err := testrepo.New(conn).CountPublishOutboxRows(ctx)
+	require.NoError(t, err)
+	require.Equal(t, beforeOutbox+1, afterOutbox, "retry must not invent another lifecycle outbox event")
+}
+
 func TestRearmTrial_RestoresTheOrganizationAndRevivesEveryKey(t *testing.T) {
 	t.Parallel()
 
@@ -251,7 +524,7 @@ func TestRearmTrial_RestoresTheOrganizationAndRevivesEveryKey(t *testing.T) {
 	require.Len(t, provisioner.revivals, len(openrouter.AllKeyTypes))
 	require.Equal(t, map[openrouter.KeyType]*int{
 		openrouter.KeyTypeChat:     conv.PtrEmpty(50),
-		openrouter.KeyTypeInternal: conv.PtrEmpty(37),
+		openrouter.KeyTypeInternal: conv.PtrEmpty(50),
 	}, provisioner.revivedLimits(), "every key type the demotion disables must come back up on its own ceiling")
 	require.False(t, readOpenRouterKey(t, ctx, conn, "org_rearm", openrouter.KeyTypeChat).Disabled)
 	require.False(t, readOpenRouterKey(t, ctx, conn, "org_rearm", openrouter.KeyTypeInternal).Disabled)
@@ -299,6 +572,123 @@ func TestRearmTrial_DoesNotRestartLoopsSequence(t *testing.T) {
 	require.Empty(t, notifier.inactive)
 }
 
+func TestRearmTrial_LocksLifecycleBeforeAllKeyLocksAndRows(t *testing.T) {
+	t.Parallel()
+
+	ctx, svc, conn, _ := newProductionRearmService(t)
+	const orgID = "org_rearm_lock_order"
+	seedDemotedTrial(t, ctx, conn, orgID, "enterprise")
+
+	rowLock := testenv.BeginTx(t, ctx, conn)
+	_, err := rowLock.Exec(ctx, `SELECT 1 FROM trials WHERE organization_id = $1 FOR UPDATE`, orgID)
+	require.NoError(t, err)
+
+	rearmed := make(chan error, 1)
+	go func() {
+		_, callErr := svc.RearmTrial(ctx, &gen.RearmTrialPayload{ID: orgID, Days: 14})
+		rearmed <- callErr
+	}()
+
+	waitCtx, cancelWait := context.WithTimeout(ctx, 2*time.Second)
+	defer cancelWait()
+	requireAdminCondition(t, waitCtx, conn, func(check context.Context) (bool, error) {
+		var blocked bool
+		err := conn.QueryRow(check, `
+			SELECT EXISTS (
+				SELECT 1 FROM pg_stat_activity
+				WHERE datname = current_database()
+				  AND state = 'active'
+				  AND wait_event_type = 'Lock'
+				  AND query LIKE '%SELECT tier, ends_at, converted_at, demoted_at%'
+			)
+		`).Scan(&blocked)
+		return blocked, err
+	}, "re-arm did not block on the lifecycle row")
+
+	probe, err := conn.Acquire(ctx)
+	require.NoError(t, err)
+	defer probe.Release()
+	for _, keyType := range openrouter.AllKeyTypes {
+		var acquired bool
+		require.NoError(t, probe.QueryRow(ctx, `SELECT pg_try_advisory_lock(hashtextextended('openrouter-' || $1::text || '-billing:' || $2::text, 0))`, string(keyType), orgID).Scan(&acquired))
+		require.Truef(t, acquired, "%s lock must remain available while lifecycle is blocked", keyType)
+		var unlocked bool
+		require.NoError(t, probe.QueryRow(ctx, `SELECT pg_advisory_unlock(hashtextextended('openrouter-' || $1::text || '-billing:' || $2::text, 0))`, string(keyType), orgID).Scan(&unlocked))
+		require.True(t, unlocked)
+	}
+
+	internalLock, err := conn.Acquire(ctx)
+	require.NoError(t, err)
+	defer internalLock.Release()
+	_, err = internalLock.Exec(ctx, `SELECT pg_advisory_lock(hashtextextended('openrouter-' || $1::text || '-billing:' || $2::text, 0))`, string(openrouter.KeyTypeInternal), orgID)
+	require.NoError(t, err)
+	internalHeld := true
+	defer func() {
+		if internalHeld {
+			_, _ = internalLock.Exec(context.WithoutCancel(ctx), `SELECT pg_advisory_unlock(hashtextextended('openrouter-' || $1::text || '-billing:' || $2::text, 0))`, string(openrouter.KeyTypeInternal), orgID)
+		}
+	}()
+
+	require.NoError(t, rowLock.Commit(ctx))
+	chatCtx, cancelChat := context.WithTimeout(ctx, 2*time.Second)
+	defer cancelChat()
+	requireAdminCondition(t, chatCtx, conn, func(check context.Context) (bool, error) {
+		var acquired bool
+		err := probe.QueryRow(check, `SELECT pg_try_advisory_lock(hashtextextended('openrouter-' || $1::text || '-billing:' || $2::text, 0))`, string(openrouter.KeyTypeChat), orgID).Scan(&acquired)
+		if err != nil || !acquired {
+			return !acquired, err
+		}
+		var unlocked bool
+		err = probe.QueryRow(check, `SELECT pg_advisory_unlock(hashtextextended('openrouter-' || $1::text || '-billing:' || $2::text, 0))`, string(openrouter.KeyTypeChat), orgID).Scan(&unlocked)
+		return false, err
+	}, "chat lock was not acquired before the blocked internal lock")
+
+	keyProbe := testenv.BeginTx(t, ctx, conn)
+	rows, err := keyProbe.Query(ctx, `SELECT disable_causes FROM openrouter_api_keys WHERE organization_id = $1 ORDER BY key_type FOR UPDATE NOWAIT`, orgID)
+	require.NoError(t, err, "key rows must remain unlocked until every advisory lock is held")
+	count := 0
+	for rows.Next() {
+		count++
+		var causes []string
+		require.NoError(t, rows.Scan(&causes))
+		require.Equal(t, []string{string(openrouter.DisableCauseTrialDemotion)}, causes)
+	}
+	require.NoError(t, rows.Err())
+	rows.Close()
+	require.Equal(t, len(openrouter.AllKeyTypes), count)
+	require.NoError(t, keyProbe.Rollback(ctx))
+
+	var unlocked bool
+	require.NoError(t, internalLock.QueryRow(ctx, `SELECT pg_advisory_unlock(hashtextextended('openrouter-' || $1::text || '-billing:' || $2::text, 0))`, string(openrouter.KeyTypeInternal), orgID).Scan(&unlocked))
+	require.True(t, unlocked)
+	internalHeld = false
+
+	select {
+	case err := <-rearmed:
+		require.NoError(t, err)
+	case <-time.After(3 * time.Second):
+		require.FailNow(t, "re-arm did not finish after releasing locks")
+	}
+}
+
+func requireAdminCondition(t *testing.T, ctx context.Context, _ *pgxpool.Pool, condition func(context.Context) (bool, error), message string) {
+	t.Helper()
+	ticker := time.NewTicker(10 * time.Millisecond)
+	defer ticker.Stop()
+	for {
+		met, err := condition(ctx)
+		require.NoError(t, err)
+		if met {
+			return
+		}
+		select {
+		case <-ctx.Done():
+			require.FailNow(t, message, ctx.Err().Error())
+		case <-ticker.C:
+		}
+	}
+}
+
 // MarkTrialDemoted only demotes an already-past ends_at, so a re-arm that
 // cleared the stamp and left the date would be re-demoted on the next sweep.
 // The trial here ended 100 days ago, so a date computed from it is still past.
@@ -330,67 +720,6 @@ func TestRearmTrial_MovesEndsAtIntoTheFuture(t *testing.T) {
 	require.NoError(t, err, "a re-armed trial must be extendable")
 }
 
-// The fake reads through the pool, so while the handler's transaction is open
-// the organization must still read free and the trial must still read demoted.
-func TestRearmTrial_RevivesKeysBeforeTheRestoreCommits(t *testing.T) {
-	t.Parallel()
-
-	ctx, svc, conn, provisioner := newRearmService(t)
-	seedDemotedTrial(t, ctx, conn, "org_rearm_order", "enterprise")
-
-	_, err := svc.RearmTrial(ctx, &gen.RearmTrialPayload{ID: "org_rearm_order", Days: 14})
-	require.NoError(t, err)
-
-	require.Len(t, provisioner.revivals, len(openrouter.AllKeyTypes))
-	for _, revival := range provisioner.revivals {
-		require.Equal(t, "free", revival.accountTypeSeen,
-			"the %s key must come back up before the restore commits, or a failure leaves a running trial with dead keys", revival.keyType)
-		require.True(t, revival.demotedSeen,
-			"the %s key must come back up while the trial still reads demoted", revival.keyType)
-	}
-}
-
-// The failure lands on the second key type, so the first is already back up.
-func TestRearmTrial_KeyRevivalFailureLeavesTheOrganizationDemoted(t *testing.T) {
-	t.Parallel()
-
-	ctx, svc, conn := newTestAdminService(t)
-	provisioner := &rearmProvisioner{
-		conn:      conn,
-		mu:        sync.Mutex{},
-		revivals:  nil,
-		failOn:    openrouter.KeyTypeInternal,
-		failAfter: 0,
-		failWith:  errors.New("openrouter is down"),
-	}
-	svc.openRouter = provisioner
-
-	seededEndsAt := seedDemotedTrial(t, ctx, conn, "org_rearm_fail", "enterprise")
-	auditsBefore, err := audittest.AuditLogCountByAction(ctx, conn, audit.ActionOrganizationEnterpriseTrialRearmed)
-	require.NoError(t, err)
-
-	_, err = svc.RearmTrial(ctx, &gen.RearmTrialPayload{ID: "org_rearm_fail", Days: 14})
-	requireOopsCode(t, err, oops.CodeGatewayError)
-
-	after := readTrial(t, ctx, conn, "org_rearm_fail")
-	require.True(t, after.DemotedAt.Valid, "a failed re-arm must leave the trial demoted")
-	require.WithinDuration(t, seededEndsAt, after.EndsAt.Time, time.Second, "a failed re-arm must not move ends_at")
-
-	state := readOrgState(t, ctx, conn, "org_rearm_fail")
-	require.Equal(t, "free", state.GramAccountType, "a failed re-arm must not restore the account type")
-	require.False(t, state.Whitelisted)
-
-	auditsAfter, err := audittest.AuditLogCountByAction(ctx, conn, audit.ActionOrganizationEnterpriseTrialRearmed)
-	require.NoError(t, err)
-	require.Equal(t, auditsBefore, auditsAfter, "a failed re-arm must not claim one happened")
-
-	require.False(t, readOpenRouterKey(t, ctx, conn, "org_rearm_fail", openrouter.KeyTypeChat).Disabled,
-		"a revived key must survive the rollback, which is what makes a retry cheap")
-	require.True(t, readOpenRouterKey(t, ctx, conn, "org_rearm_fail", openrouter.KeyTypeInternal).Disabled)
-}
-
-// Walks the guard's whole eight-row state space. The demoted-and-not-expired
-// row is unreachable today, and is here because the query does not test ends_at.
 func TestRearmTrial_OnlyADemotedTrialCanBeRearmed(t *testing.T) {
 	t.Parallel()
 
@@ -605,7 +934,7 @@ func TestRearmTrial_ReleasesRejectedTransactionBeforeClassificationLookup(t *tes
 func TestRearmTrial_OrganizationWithNoKeysSucceeds(t *testing.T) {
 	t.Parallel()
 
-	ctx, svc, conn, provisioner := newRearmService(t)
+	ctx, svc, conn, _ := newProductionRearmService(t)
 
 	orgID := "org_rearm_nokeys"
 	endsAt := time.Now().UTC().Add(-10 * 24 * time.Hour)
@@ -618,9 +947,12 @@ func TestRearmTrial_OrganizationWithNoKeysSucceeds(t *testing.T) {
 	_, err := svc.RearmTrial(ctx, &gen.RearmTrialPayload{ID: orgID, Days: 14})
 	require.NoError(t, err, "an organization with no key of a type must still be re-armable")
 
-	//nolint:exhaustive // the absent key type is the assertion: it must not appear
-	require.Equal(t, map[openrouter.KeyType]*int{openrouter.KeyTypeChat: conv.PtrEmpty(50)}, provisioner.revivedLimits(),
-		"a key type the organization has no row for must not be refreshed")
+	chat := readOpenRouterKey(t, ctx, conn, orgID, openrouter.KeyTypeChat)
+	require.Empty(t, chat.DisableCauses)
+	require.False(t, chat.Disabled)
+	require.EqualValues(t, 50, chat.MonthlyCredits)
+	_, err = orrepo.New(conn).GetOpenRouterAPIKey(ctx, orrepo.GetOpenRouterAPIKeyParams{OrganizationID: orgID, KeyType: string(openrouter.KeyTypeInternal)})
+	require.ErrorIs(t, err, pgx.ErrNoRows, "missing key types remain safe and absent")
 
 	state := readOrgState(t, ctx, conn, orgID)
 	require.Equal(t, "enterprise", state.GramAccountType)
@@ -632,7 +964,7 @@ func TestRearmTrial_OrganizationWithNoKeysSucceeds(t *testing.T) {
 func TestRearmTrial_OrganizationWithOnlyAnInternalKeySucceeds(t *testing.T) {
 	t.Parallel()
 
-	ctx, svc, conn, provisioner := newRearmService(t)
+	ctx, svc, conn, _ := newProductionRearmService(t)
 
 	orgID := "org_rearm_internal_only"
 	endsAt := time.Now().UTC().Add(-10 * 24 * time.Hour)
@@ -644,10 +976,12 @@ func TestRearmTrial_OrganizationWithOnlyAnInternalKeySucceeds(t *testing.T) {
 	_, err := svc.RearmTrial(ctx, &gen.RearmTrialPayload{ID: orgID, Days: 14})
 	require.NoError(t, err)
 
-	//nolint:exhaustive // the absent key type is the assertion: it must not appear
-	require.Equal(t, map[openrouter.KeyType]*int{openrouter.KeyTypeInternal: conv.PtrEmpty(37)}, provisioner.revivedLimits(),
-		"a key that follows an absent one must still come back up")
-	require.False(t, readOpenRouterKey(t, ctx, conn, orgID, openrouter.KeyTypeInternal).Disabled)
+	internal := readOpenRouterKey(t, ctx, conn, orgID, openrouter.KeyTypeInternal)
+	require.Empty(t, internal.DisableCauses)
+	require.False(t, internal.Disabled)
+	require.EqualValues(t, 50, internal.MonthlyCredits)
+	_, err = orrepo.New(conn).GetOpenRouterAPIKey(ctx, orrepo.GetOpenRouterAPIKeyParams{OrganizationID: orgID, KeyType: string(openrouter.KeyTypeChat)})
+	require.ErrorIs(t, err, pgx.ErrNoRows, "a missing first key must not stop processing the second")
 }
 
 // A live key needs no round trip, which is what makes retrying a re-arm cheap.
@@ -668,87 +1002,10 @@ func TestRearmTrial_AlreadyEnabledKeyIsLeftAlone(t *testing.T) {
 	require.NoError(t, err)
 
 	//nolint:exhaustive // the omitted key type is the assertion: it was already live
-	require.Equal(t, map[openrouter.KeyType]*int{openrouter.KeyTypeInternal: conv.PtrEmpty(37)}, provisioner.revivedLimits(),
-		"an already-enabled key needs no upstream round trip")
+	require.Equal(t, map[openrouter.KeyType]*int{openrouter.KeyTypeInternal: conv.PtrEmpty(50)}, provisioner.revivedLimits(),
+		"only the key carrying trial_demotion needs reconciliation")
 	require.False(t, readOpenRouterKey(t, ctx, conn, orgID, openrouter.KeyTypeChat).Disabled)
 	require.False(t, readOpenRouterKey(t, ctx, conn, orgID, openrouter.KeyTypeInternal).Disabled)
-}
-
-// A key minted before the ceiling column existed records none, so its revival
-// resolves one from the pool: pre-commit that reads a free organization and
-// answers the free-tier allowance. Nothing else corrects it on a schedule.
-func TestRearmTrial_ZeroCeilingKeyIsRecappedAfterTheRestoreCommits(t *testing.T) {
-	t.Parallel()
-
-	ctx, svc, conn, provisioner := newRearmService(t)
-
-	orgID := "org_rearm_zero_ceiling"
-	endsAt := time.Now().UTC().Add(-10 * 24 * time.Hour)
-	demotedAt := time.Now().UTC().Add(-9 * 24 * time.Hour)
-	seedOrg(t, ctx, conn, orgFixture{id: orgID, name: orgID, slug: orgID, accountType: "free", whitelisted: false})
-	seedTrial(t, ctx, conn, trialFixture{orgID: orgID, tier: "enterprise", endsAt: endsAt, demotedAt: &demotedAt})
-	seedOpenRouterKey(t, ctx, conn, orgID, keyFixture{keyType: openrouter.KeyTypeChat, monthlyCredits: 0, disabled: true})
-	seedOpenRouterKey(t, ctx, conn, orgID, keyFixture{keyType: openrouter.KeyTypeInternal, monthlyCredits: 37, disabled: true})
-
-	_, err := svc.RearmTrial(ctx, &gen.RearmTrialPayload{ID: orgID, Days: 14})
-	require.NoError(t, err)
-
-	var chat, internal []keyRevival
-	for _, r := range provisioner.revivals {
-		if r.keyType == openrouter.KeyTypeChat {
-			chat = append(chat, r)
-			continue
-		}
-		internal = append(internal, r)
-	}
-
-	// A second ask for this row would overwrite a ceiling raised by hand.
-	require.Len(t, internal, 1, "a key with a recorded ceiling must not be asked twice")
-	require.Equal(t, conv.PtrEmpty(37), internal[0].limit)
-
-	require.Len(t, chat, 2, "a key with no recorded ceiling must be asked again after the commit")
-	require.Nil(t, chat[0].limit, "the first ask has no ceiling to pass")
-	require.Equal(t, "free", chat[0].accountTypeSeen, "the first ask runs before the restore commits")
-	require.True(t, chat[0].demotedSeen)
-
-	require.Nil(t, chat[1].limit, "the second ask resolves the ceiling rather than passing the stale one")
-	require.Equal(t, "enterprise", chat[1].accountTypeSeen, "the second ask must see the committed restore, or it resolves the same free-tier ceiling again")
-	require.False(t, chat[1].demotedSeen, "the second ask must see the trial running, or defaultLimitForOrg misses it")
-
-	require.False(t, readOpenRouterKey(t, ctx, conn, orgID, openrouter.KeyTypeChat).Disabled)
-}
-
-// The re-arm is already committed, so an error here would misreport it.
-func TestRearmTrial_RecapFailureStillReportsSuccess(t *testing.T) {
-	t.Parallel()
-
-	ctx, svc, conn, provisioner := newRearmService(t)
-
-	orgID := "org_rearm_recap_fails"
-	endsAt := time.Now().UTC().Add(-10 * 24 * time.Hour)
-	demotedAt := time.Now().UTC().Add(-9 * 24 * time.Hour)
-	seedOrg(t, ctx, conn, orgFixture{id: orgID, name: orgID, slug: orgID, accountType: "free", whitelisted: false})
-	seedTrial(t, ctx, conn, trialFixture{orgID: orgID, tier: "enterprise", endsAt: endsAt, demotedAt: &demotedAt})
-	seedOpenRouterKey(t, ctx, conn, orgID, keyFixture{keyType: openrouter.KeyTypeChat, monthlyCredits: 0, disabled: true})
-
-	// Failing every call would abort at the revival and never reach the recap.
-	provisioner.failAfter = 1
-	provisioner.failWith = errors.New("openrouter is down")
-
-	res, err := svc.RearmTrial(ctx, &gen.RearmTrialPayload{ID: orgID, Days: 14})
-	require.NoError(t, err, "a failed recap must not report the committed re-arm as failed")
-	require.Equal(t, orgID, res.ID)
-
-	// Without this the test passes on an implementation that never recaps.
-	require.Len(t, provisioner.revivals, 2, "the recap must have been attempted")
-	failed := provisioner.revivals[1]
-	require.Nil(t, failed.limit)
-	require.Equal(t, "enterprise", failed.accountTypeSeen, "the swallowed failure must be the post-commit ask")
-
-	state := readOrgState(t, ctx, conn, orgID)
-	require.Equal(t, "enterprise", state.GramAccountType)
-	require.True(t, state.Whitelisted)
-	require.False(t, readTrial(t, ctx, conn, orgID).DemotedAt.Valid)
 }
 
 func TestRearmTrial_WritesAnAuditEntry(t *testing.T) {
@@ -989,25 +1246,6 @@ func TestRearmTrial_TouchesOnlyTheTargetRow(t *testing.T) {
 
 // A half-failed re-arm ends with the operator pressing the button again. The
 // second call must be a conflict, or re-arm becomes an unbounded extend.
-func TestRearmTrial_IsIdempotentAcrossARetry(t *testing.T) {
-	t.Parallel()
-
-	ctx, svc, conn, _ := newRearmService(t)
-	seedDemotedTrial(t, ctx, conn, "org_rearm_twice", "enterprise")
-
-	_, err := svc.RearmTrial(ctx, &gen.RearmTrialPayload{ID: "org_rearm_twice", Days: 14})
-	require.NoError(t, err)
-	first := readTrial(t, ctx, conn, "org_rearm_twice")
-
-	_, err = svc.RearmTrial(ctx, &gen.RearmTrialPayload{ID: "org_rearm_twice", Days: 365})
-	requireOopsCode(t, err, oops.CodeConflict)
-
-	second := readTrial(t, ctx, conn, "org_rearm_twice")
-	require.Equal(t, first.EndsAt.Time, second.EndsAt.Time,
-		"a second re-arm must not move a trial that is already running")
-	require.Equal(t, first.UpdatedAt.Time, second.UpdatedAt.Time)
-}
-
 func TestRearmTrial_RestoresADisabledOrganizationsTrialWithoutEnablingIt(t *testing.T) {
 	t.Parallel()
 

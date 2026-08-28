@@ -377,6 +377,22 @@ func (q *Queries) AdminGetProjectDetailByID(ctx context.Context, id uuid.UUID) (
 	return i, err
 }
 
+const adminHasEnterpriseTrialRearmAudit = `-- name: AdminHasEnterpriseTrialRearmAudit :one
+SELECT EXISTS (
+    SELECT 1
+    FROM audit_logs
+    WHERE organization_id = $1
+      AND action = 'organization:enterprise_trial_rearmed'
+)
+`
+
+func (q *Queries) AdminHasEnterpriseTrialRearmAudit(ctx context.Context, organizationID string) (bool, error) {
+	row := q.db.QueryRow(ctx, adminHasEnterpriseTrialRearmAudit, organizationID)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
+}
+
 const adminListOrganizationMembers = `-- name: AdminListOrganizationMembers :many
 SELECT
     u.id,

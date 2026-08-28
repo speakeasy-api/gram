@@ -1,3 +1,11 @@
+-- name: AdminHasEnterpriseTrialRearmAudit :one
+SELECT EXISTS (
+    SELECT 1
+    FROM audit_logs
+    WHERE organization_id = @organization_id
+      AND action = 'organization:enterprise_trial_rearmed'
+);
+
 -- name: GetProjectByID :one
 SELECT id, slug
 FROM projects

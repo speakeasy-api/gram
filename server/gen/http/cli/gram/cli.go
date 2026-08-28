@@ -11128,7 +11128,7 @@ func adminUsage() {
 	fmt.Fprintln(os.Stderr, `    list-organizations: Lists organizations for admin operations with optional search and filters.`)
 	fmt.Fprintln(os.Stderr, `    extend-trial: Extends a running enterprise trial by adding days to its current end date. Only a running trial can be extended: one that has converted, has been demoted, or has already expired is rejected rather than re-armed.`)
 	fmt.Fprintln(os.Stderr, `    create-organization: Creates an organization in WorkOS and in Gram, so an operator does not have to leave the admin app for the WorkOS dashboard. The organization starts with no members, is not whitelisted, and gets no trial. Idempotent against the WorkOS organization webhook: the Gram ID is derived from the WorkOS ID, so both writers converge on one row.`)
-	fmt.Fprintln(os.Stderr, `    rearm-trial: Puts a demoted enterprise trial back on: restores the organization's account type and whitelist flag, revives its model provider keys, and gives the trial a fresh run of the given length counted from now. Only a demoted trial can be re-armed; one that has converted or is already running is rejected.`)
+	fmt.Fprintln(os.Stderr, `    rearm-trial: Puts a demoted enterprise trial back on: restores the organization's account type and whitelist flag, removes only the trial-demotion block from its model provider keys, and gives the trial a fresh run of the given length counted from now. Other key protections remain in force. Retrying a committed re-arm reconciles key state without extending the trial again; a converted or independently running trial is rejected.`)
 	fmt.Fprintln(os.Stderr, `    get-organization-stats: Returns platform-wide organization counts for the strip above the organizations list. Every figure counts the whole platform: none of them narrows to the caller's list filters, so the strip does not move when an operator filters.`)
 	fmt.Fprintln(os.Stderr, `    get-inference-keys: Returns the configured state of every materialized platform-managed OpenRouter key for an organization.`)
 	fmt.Fprintln(os.Stderr, `    set-inference-key-monthly-limit: Sets the monthly limit for one materialized platform-managed OpenRouter key.`)
@@ -11478,7 +11478,7 @@ func adminRearmTrialUsage() {
 
 	// Description
 	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Puts a demoted enterprise trial back on: restores the organization's account type and whitelist flag, revives its model provider keys, and gives the trial a fresh run of the given length counted from now. Only a demoted trial can be re-armed; one that has converted or is already running is rejected.`)
+	fmt.Fprintln(os.Stderr, `Puts a demoted enterprise trial back on: restores the organization's account type and whitelist flag, removes only the trial-demotion block from its model provider keys, and gives the trial a fresh run of the given length counted from now. Other key protections remain in force. Retrying a committed re-arm reconciles key state without extending the trial again; a converted or independently running trial is rejected.`)
 
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -body JSON: `)

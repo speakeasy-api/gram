@@ -392,16 +392,18 @@ type LogOrganizationEnterpriseTrialRearmedEvent struct {
 	OrganizationName string
 	OrganizationSlug string
 
-	AccountType string
-	TrialEndsAt time.Time
+	AccountType      string
+	TrialEndsAt      time.Time
+	KeyAccessChanged bool
 }
 
 func (l *Logger) LogOrganizationEnterpriseTrialRearmed(ctx context.Context, dbtx repo.DBTX, event LogOrganizationEnterpriseTrialRearmedEvent) error {
 	action := ActionOrganizationEnterpriseTrialRearmed
 
 	metadata, err := marshalAuditPayload(map[string]any{
-		"account_type":  event.AccountType,
-		"trial_ends_at": event.TrialEndsAt,
+		"account_type":       event.AccountType,
+		"trial_ends_at":      event.TrialEndsAt,
+		"key_access_changed": event.KeyAccessChanged,
 	})
 	if err != nil {
 		return fmt.Errorf("marshal %s metadata: %w", action, err)
