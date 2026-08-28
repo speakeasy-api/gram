@@ -7,6 +7,7 @@ import {
   type FormEvent,
   type JSX,
   type ReactNode,
+  type RefObject,
 } from "react";
 
 import { Button } from "@/components/ui/button";
@@ -42,7 +43,6 @@ import {
 import { calendarDate, dayISO, dayOf, trialEndDay } from "@/lib/trialDates";
 import { fmtDateShort } from "@/lib/utils";
 
-import { PEEK_PANEL_ID } from "./PeekPanel";
 import {
   canExtendTrial,
   canRearmTrial,
@@ -108,8 +108,8 @@ export function WriteReportProvider({
 type OpenDialog = "disable" | "extend" | "rearm";
 
 /**
- * Disable, re-enable, extend and re-arm, wherever the record is on screen: the
- * row menu, the peek panel footer and the record header.
+ * Disable, re-enable, extend and re-arm wherever organization actions are
+ * reused: the row menu, the peek panel footer and the overview panels.
  *
  * One component for all of them, because they are the same actions against the
  * same record: two implementations would be two answers to "can this trial be
@@ -123,17 +123,22 @@ export function OrganizationActions({
   layout,
   actions = "all",
   buttonClassName,
+  focusFallbackRef,
 }: {
   org: AdminOrganization;
   layout: "menu" | "buttons";
-  // Which of the record's actions this instance draws. The record shows two
-  // bars at once: lifecycle in the header, the trial's own resolution in the
-  // callout beside the deadline it acts on. `all` is every other surface.
+  // Which of the organization's actions this instance draws. The overview
+  // separates lifecycle actions into Danger zone and trial actions into the
+  // Enterprise trial panel. `all` keeps the row menu and peek footer complete.
   actions?: "all" | "lifecycle" | "trial";
   // For a surface that is not the page's own background. A stock outline
   // button brings the page's border and fill with it, which inside a toned
   // panel reads as a control belonging to something else.
   buttonClassName?: string;
+  // A stable destination owned by the surface drawing these actions. Used when
+  // a successful mutation replaces the disconnected control that opened the
+  // dialog. Menu triggers remain their own stable destination.
+  focusFallbackRef?: RefObject<HTMLElement | null>;
 }): JSX.Element {
   const { announce, showFailure } = useContext(WriteReportContext);
   const [open, setOpen] = useState<OpenDialog>();
@@ -165,6 +170,7 @@ export function OrganizationActions({
   // different answer from a buttons caller passing the same `actions`.
   const showLifecycle = actions !== "trial";
   const showExtend = actions !== "lifecycle" && canExtendTrial(org);
+  const showRearm = actions !== "lifecycle" && canRearmTrial(org);
 
   const menuTrigger = useRef<HTMLButtonElement>(null);
 
@@ -194,15 +200,10 @@ export function OrganizationActions({
       return;
     }
 
-    // A re-armed record is running rather than demoted, so the bar takes the
-    // Re-arm button down and mounts an Extend button in a sibling slot rather
-    // than reusing the node. The peek panel is already focusable, so the
-    // keyboard goes there. Nothing to fall back to on any other surface.
-    if (layout !== "buttons") return;
-    const panel = document.getElementById(PEEK_PANEL_ID);
-    if (!panel) return;
+    const fallback = focusFallbackRef?.current;
+    if (!fallback?.isConnected) return;
     event.preventDefault();
-    panel.focus();
+    fallback.focus();
   };
 
   const runDisable = (): void => {
@@ -306,7 +307,7 @@ export function OrganizationActions({
           // Everything the write does, because an operator who reads "days" and
           // expects only a new date has been told less than half of it. The
           // gate is what the whitelist flag is called outside the schema.
-          description="Restores the account type, brings the model provider keys back, and takes the organization out from behind the book-a-demo gate. The trial then runs for the days below, counted from now rather than from the date the old one ended."
+          description="Restores the account type, removes the trial disable cause from model provider keys, and takes the organization out from behind the book-a-demo gate. Keys with admin, billing, or unknown causes remain disabled. The trial then runs for the days below, counted from now rather than from the date the old one ended."
           submitLabel="Re-arm"
           pendingLabel="Re-arming..."
           failureLead={rearmFailureLead}
@@ -347,6 +348,7 @@ export function OrganizationActions({
         {showLifecycle &&
           (isDisabled ? (
             <Button
+              key="re-enable"
               variant="outline"
               size="xs"
               aria-label={`Re-enable ${org.name}`}
@@ -358,6 +360,7 @@ export function OrganizationActions({
             </Button>
           ) : (
             <Button
+              key="disable"
               variant="outline"
               size="xs"
               aria-label={`Disable ${org.name}`}
@@ -380,7 +383,7 @@ export function OrganizationActions({
             Extend trial
           </Button>
         )}
-        {canRearmTrial(org) && (
+        {showRearm && (
           <Button
             variant="outline"
             size="xs"
@@ -441,7 +444,7 @@ export function OrganizationActions({
               Extend trial
             </DropdownMenuItem>
           )}
-          {canRearmTrial(org) && (
+          {showRearm && (
             <DropdownMenuItem
               onSelect={() => openDialog("rearm", menuTrigger.current)}
             >
