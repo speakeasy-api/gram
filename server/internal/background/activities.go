@@ -48,6 +48,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/functions"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/k8s"
+	"github.com/speakeasy-api/gram/server/internal/killswitches"
 	mcpapprovaladvisories "github.com/speakeasy-api/gram/server/internal/mcpapproval/advisories"
 	mcpapprovalcatalog "github.com/speakeasy-api/gram/server/internal/mcpapproval/catalog"
 	"github.com/speakeasy-api/gram/server/internal/mcpapproval/domainmeta"
@@ -163,6 +164,7 @@ type Activities struct {
 	cancelAssistantsSubscription    *activities.CancelAssistantsSubscription
 	outboxRelay                     *outbox_relay.Relay
 	outboxGC                        *outbox_relay.GC
+	killswitchMaintenance           *killswitches.MaintenanceService
 	publishOutbox                   *publish_outbox.Relay
 	pluginPublisher                 *activities.PluginPublisher
 	sessionQuarantineReassert       *activities.SessionQuarantineReassert
@@ -425,6 +427,7 @@ func NewActivities(
 		cancelAssistantsSubscription:    activities.NewCancelAssistantsSubscription(logger, billingRepo),
 		outboxRelay:                     outbox_relay.New(logger, tracerProvider, db, svixClient),
 		outboxGC:                        outbox_relay.NewGC(logger, meterProvider, db),
+		killswitchMaintenance:           killswitches.NewMaintenanceService(db, auditLogger),
 		publishOutbox:                   publish_outbox.New(logger, tracerProvider, meterProvider, db, publishers.Outbox),
 		pluginPublisher:                 activities.NewPluginPublisher(logger, db, pluginPublisher),
 		sessionQuarantineReassert:       activities.NewSessionQuarantineReassert(logger, db, cacheAdapter),
@@ -938,6 +941,26 @@ func (a *Activities) GCPublishOutboxDeadLetters(ctx context.Context, cutoff time
 	n, err := a.publishOutbox.DeleteDeadLetters(ctx, cutoff, batchSize)
 	if err != nil {
 		return 0, fmt.Errorf("gc publish outbox dead letters: %w", err)
+	}
+	return n, nil
+}
+
+// RecordDueKillswitchExpiries and CleanupExpiredKillswitchOperations take only
+// a batch size and return only aggregate counts: killswitch identifiers,
+// notes, and tenant data stay inside the database-backed maintenance
+// transactions and never enter Temporal history.
+func (a *Activities) RecordDueKillswitchExpiries(ctx context.Context, batchSize int32) (killswitches.ExpiryBatchResult, error) {
+	result, err := a.killswitchMaintenance.RecordDueExpiries(ctx, batchSize)
+	if err != nil {
+		return result, fmt.Errorf("record due killswitch expiries: %w", err)
+	}
+	return result, nil
+}
+
+func (a *Activities) CleanupExpiredKillswitchOperations(ctx context.Context, batchSize int32) (int64, error) {
+	n, err := a.killswitchMaintenance.CleanupExpiredOperationsGlobal(ctx, batchSize)
+	if err != nil {
+		return n, fmt.Errorf("cleanup expired killswitch operations: %w", err)
 	}
 	return n, nil
 }

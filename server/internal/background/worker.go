@@ -486,6 +486,9 @@ func NewTemporalWorker(
 	temporalWorker.RegisterActivity(activities.FilterNoopOutboxEvents)
 	temporalWorker.RegisterActivity(activities.RelayOutboxEvents)
 	temporalWorker.RegisterActivity(activities.GCOutboxProcessedRows)
+	// Killswitch maintenance activities
+	temporalWorker.RegisterActivity(activities.RecordDueKillswitchExpiries)
+	temporalWorker.RegisterActivity(activities.CleanupExpiredKillswitchOperations)
 	// Publish outbox relay activities
 	temporalWorker.RegisterActivity(activities.DrainPublishOutbox)
 	temporalWorker.RegisterActivity(activities.GCPublishOutboxDeadLetters)
@@ -609,6 +612,8 @@ func NewTemporalWorker(
 	// Outbox -> Relay workflow and GC
 	temporalWorker.RegisterWorkflow(ProcessOutboxWorkflow)
 	temporalWorker.RegisterWorkflow(OutboxGCWorkflow)
+	// Killswitch expiry history and receipt retention
+	temporalWorker.RegisterWorkflow(KillswitchMaintenanceWorkflow)
 	// Publish outbox -> Pub/Sub workflow and dead letter GC
 	temporalWorker.RegisterWorkflow(PublishOutboxWorkflow)
 	temporalWorker.RegisterWorkflow(PublishOutboxGCWorkflow)
@@ -727,6 +732,10 @@ func (w *Workers) registerSchedules(ctx context.Context) {
 
 	if err := AddOutboxGCSchedule(ctx, env); err != nil {
 		logger.ErrorContext(ctx, "failed to add outbox gc schedule", attr.SlogError(err))
+	}
+
+	if err := AddKillswitchMaintenanceSchedule(ctx, env); err != nil {
+		logger.ErrorContext(ctx, "failed to add killswitch maintenance schedule", attr.SlogError(err))
 	}
 
 	if err := AddPublishOutboxSchedule(ctx, env); err != nil {

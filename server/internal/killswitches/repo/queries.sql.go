@@ -343,6 +343,34 @@ func (q *Queries) DeleteExpiredKillswitchOperations(ctx context.Context, arg Del
 	return result.RowsAffected(), nil
 }
 
+const deleteExpiredKillswitchOperationsGlobal = `-- name: DeleteExpiredKillswitchOperationsGlobal :execrows
+WITH expired AS (
+  SELECT organization_id, operation_id
+  FROM killswitch_operations
+  WHERE expires_at <= statement_timestamp()
+  ORDER BY expires_at, organization_id, operation_id
+  FOR UPDATE SKIP LOCKED
+  LIMIT $1
+)
+DELETE FROM killswitch_operations AS operation
+USING expired
+WHERE operation.organization_id = expired.organization_id
+  AND operation.operation_id = expired.operation_id
+`
+
+// Privileged cross-organization retention cleanup for the maintenance sweep.
+// Receipts are deleted strictly by their database-anchored expires_at; replay
+// validity is decided by the claim query, never by cleanup timing. The STABLE
+// statement_timestamp() keeps the expires_at comparison plannable as an index
+// bound.
+func (q *Queries) DeleteExpiredKillswitchOperationsGlobal(ctx context.Context, batchSize int32) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteExpiredKillswitchOperationsGlobal, batchSize)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const evaluateCurrentPrescriptions = `-- name: EvaluateCurrentPrescriptions :one
 WITH evaluation_clock AS MATERIALIZED (
   SELECT clock_timestamp() AS database_now
@@ -560,6 +588,54 @@ func (q *Queries) GetKillswitchPrescriptionVersion(ctx context.Context, arg GetK
 	return i, err
 }
 
+const listDueKillswitchExpiries = `-- name: ListDueKillswitchExpiries :many
+SELECT organization_id, prescription_id, version
+FROM killswitch_prescription_versions
+WHERE state = 'active'
+  AND expires_at IS NOT NULL
+  AND expires_at <= statement_timestamp()
+  AND (superseded_at IS NULL OR expires_at < superseded_at)
+  AND NOT EXISTS (
+    SELECT 1
+    FROM killswitch_expiry_events AS marker
+    WHERE marker.prescription_id = killswitch_prescription_versions.prescription_id
+      AND marker.version = killswitch_prescription_versions.version
+  )
+ORDER BY expires_at, prescription_id, version
+LIMIT $1
+`
+
+type ListDueKillswitchExpiriesRow struct {
+	OrganizationID string
+	PrescriptionID uuid.UUID
+	Version        int64
+}
+
+// Privileged cross-organization discovery for the maintenance sweep. Killswitch
+// maintenance deliberately spans tenants; every subsequent mutation is
+// requalified by the candidate's organization_id under a row lock. The STABLE
+// statement_timestamp() keeps the expires_at comparison plannable as an index
+// bound; per-candidate eligibility is re-decided under the row lock.
+func (q *Queries) ListDueKillswitchExpiries(ctx context.Context, batchSize int32) ([]ListDueKillswitchExpiriesRow, error) {
+	rows, err := q.db.Query(ctx, listDueKillswitchExpiries, batchSize)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListDueKillswitchExpiriesRow
+	for rows.Next() {
+		var i ListDueKillswitchExpiriesRow
+		if err := rows.Scan(&i.OrganizationID, &i.PrescriptionID, &i.Version); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listKillswitchPrescriptionVersionResources = `-- name: ListKillswitchPrescriptionVersionResources :many
 SELECT resource_key
 FROM killswitch_prescription_version_resources
@@ -666,6 +742,67 @@ func (q *Queries) LockKillswitchPrescriptionCurrent(ctx context.Context, arg Loc
 		&i.CurrentVersion,
 	)
 	return i, err
+}
+
+const lockKillswitchVersionForExpiry = `-- name: LockKillswitchVersionForExpiry :one
+SELECT state, expires_at, superseded_at, clock_timestamp()::timestamptz AS database_now
+FROM killswitch_prescription_versions
+WHERE organization_id = $1
+  AND prescription_id = $2
+  AND version = $3
+FOR UPDATE
+`
+
+type LockKillswitchVersionForExpiryParams struct {
+	OrganizationID string
+	PrescriptionID uuid.UUID
+	Version        int64
+}
+
+type LockKillswitchVersionForExpiryRow struct {
+	State        string
+	ExpiresAt    pgtype.Timestamptz
+	SupersededAt pgtype.Timestamptz
+	DatabaseNow  pgtype.Timestamptz
+}
+
+func (q *Queries) LockKillswitchVersionForExpiry(ctx context.Context, arg LockKillswitchVersionForExpiryParams) (LockKillswitchVersionForExpiryRow, error) {
+	row := q.db.QueryRow(ctx, lockKillswitchVersionForExpiry, arg.OrganizationID, arg.PrescriptionID, arg.Version)
+	var i LockKillswitchVersionForExpiryRow
+	err := row.Scan(
+		&i.State,
+		&i.ExpiresAt,
+		&i.SupersededAt,
+		&i.DatabaseNow,
+	)
+	return i, err
+}
+
+const recordKillswitchExpiryEvent = `-- name: RecordKillswitchExpiryEvent :execrows
+INSERT INTO killswitch_expiry_events (
+  organization_id,
+  prescription_id,
+  version
+) VALUES (
+  $1,
+  $2,
+  $3
+)
+ON CONFLICT (prescription_id, version) DO NOTHING
+`
+
+type RecordKillswitchExpiryEventParams struct {
+	OrganizationID string
+	PrescriptionID uuid.UUID
+	Version        int64
+}
+
+func (q *Queries) RecordKillswitchExpiryEvent(ctx context.Context, arg RecordKillswitchExpiryEventParams) (int64, error) {
+	result, err := q.db.Exec(ctx, recordKillswitchExpiryEvent, arg.OrganizationID, arg.PrescriptionID, arg.Version)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const supersedeKillswitchPrescriptionVersion = `-- name: SupersedeKillswitchPrescriptionVersion :execrows
