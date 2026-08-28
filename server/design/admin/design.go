@@ -769,4 +769,27 @@ var _ = Service("admin", func() {
 		HTTP(func() { POST("/admin/organization.resumeStripeSubscription"); Response(StatusOK) })
 		Meta("openapi:operationId", "adminResumeStripeSubscription")
 	})
+
+	Method("markEnterpriseTrialConverted", func() {
+		Description("Records that an organization's enterprise trial converted to a signed contract.")
+
+		Payload(func() {
+			security.AdminAuthPayload()
+			Required("id")
+			Meta("openapi:typename", "MarkEnterpriseTrialConvertedRequestBody")
+
+			Attribute("id", String, "Organization ID.", func() {
+				MinLength(1)
+			})
+		})
+
+		Result(AdminOrganization)
+
+		HTTP(func() {
+			POST("/admin/trial.convert")
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "adminMarkEnterpriseTrialConverted")
+	})
 })
