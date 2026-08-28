@@ -462,7 +462,7 @@ export function ConsentToolsApp({
               stole width from the tool names it was meant to help scan. */}
           {groups.length > 1 && (
             <div
-              role="tablist"
+              role="group"
               aria-label="Tool groups"
               className="flex flex-wrap gap-1"
             >
@@ -470,8 +470,11 @@ export function ConsentToolsApp({
                 <button
                   key={g.id}
                   type="button"
-                  role="tab"
-                  aria-selected={nav === g.id}
+                  // Filter buttons rather than a tablist: these narrow the list
+                  // below rather than swapping panels, and a tablist without a
+                  // linked tabpanel and arrow-key navigation is a half-built
+                  // pattern for assistive technology.
+                  aria-pressed={nav === g.id}
                   onClick={() => setNav(g.id)}
                   className={cn(
                     // No text-* class here: cn() runs tailwind-merge, which
