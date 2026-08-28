@@ -52,6 +52,10 @@ export function subjectHref(log: AuditLog, orgSlug: string): string | null {
       return `/${orgSlug}/access/roles?editRole=${log.subjectId}`;
     case "access_member":
       return `/${orgSlug}/access/members`;
+    case "killswitch_prescription":
+      // The stable prescription id is sufficient. Do not fetch detail while
+      // formatting the feed, which could expose private notes or create N+1s.
+      return log.subjectId ? `/${orgSlug}/killswitch/${log.subjectId}` : null;
     case "mcp_collection":
       return log.subjectSlug
         ? `/${orgSlug}/collections/${log.subjectSlug}`

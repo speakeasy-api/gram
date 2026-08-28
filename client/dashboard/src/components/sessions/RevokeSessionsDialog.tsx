@@ -1,4 +1,5 @@
 import { useEffect } from "react";
+import { Link } from "react-router";
 import { useMutation } from "@tanstack/react-query";
 
 import { Button } from "@/components/ui/Button";
@@ -10,10 +11,13 @@ export function RevokeSessionsDialog({
   open,
   onOpenChange,
   onRevoked,
+  newKillswitchHref,
 }: {
   sessionIds: string[];
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  /** Only supplied when the group identifies one exact canonical user. */
+  newKillswitchHref?: string;
   /** Reports the ids that were successfully revoked so the caller can clear them. */
   onRevoked: (succeededIds: string[]) => void;
 }): JSX.Element {
@@ -65,11 +69,24 @@ export function RevokeSessionsDialog({
             Revoke {count} session{count === 1 ? "" : "s"}?
           </Dialog.Title>
           <Dialog.Description>
-            This immediately invalidates{" "}
-            {count === 1 ? "this session" : "these sessions"}. The affected
-            clients will need to re-authenticate.
+            This immediately ends{" "}
+            {count === 1 ? "this session" : "these sessions"}, but clients can
+            authenticate and reconnect. A killswitch is separate: it blocks
+            matching MCP tool calls without ending sessions. Revocation never
+            creates or lifts a killswitch.
           </Dialog.Description>
         </Dialog.Header>
+        {newKillswitchHref && (
+          <div className="space-y-1">
+            <Button variant="secondary" size="sm" asChild>
+              <Link to={newKillswitchHref}>New killswitch…</Link>
+            </Button>
+            <p className="text-muted-foreground text-xs">
+              This separate action blocks matching tool calls; it does not
+              revoke or prevent connections.
+            </p>
+          </div>
+        )}
         {failedCount > 0 && (
           <p className="text-destructive text-sm">
             {failedCount} session{failedCount === 1 ? "" : "s"} couldn&apos;t be

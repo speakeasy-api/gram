@@ -177,7 +177,10 @@ export default function MCPServerDetails(): JSX.Element {
         return (
           mcpServer && (
             <RequireScope scope="project:read" level="page">
-              <ClientsAndSessionsTab issuerId={mcpServer.userSessionIssuerId} />
+              <ClientsAndSessionsTab
+                issuerId={mcpServer.userSessionIssuerId}
+                originatingMcpServerId={mcpServer.id}
+              />
             </RequireScope>
           )
         );

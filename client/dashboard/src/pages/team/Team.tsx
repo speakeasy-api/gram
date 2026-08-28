@@ -72,6 +72,12 @@ import { cn } from "@/lib/utils";
 import { getIdentityTint } from "@/components/gradient-colors";
 import type { AccessMember } from "@gram/client/models/components/accessmember.js";
 import { ChangeRoleDialog } from "@/pages/access/ChangeRoleDialog";
+import { KillswitchUserBadgeLink } from "@/components/killswitch/KillswitchUserBadgeLink";
+import {
+  killswitchStatusHref,
+  useKillswitchUserBadges,
+} from "@/components/killswitch/KillswitchUserStatus";
+import { getMemberKillswitchMenuModel } from "./team-member-killswitch-menu";
 
 /**
  * Everything from TeamInner's scope that the member actions menu needs,
@@ -83,6 +89,8 @@ type MemberMenuDeps = {
   adminCount: number;
   adminRoleId: string | undefined;
   challengesHref: string;
+  killswitchHref: string;
+  canUseKillswitch: boolean;
   navigate: ReturnType<typeof useNavigate>;
   roleIdsByUserId: Map<string, string[]>;
   scimManaged: boolean;
@@ -95,10 +103,13 @@ type MemberMenuModel = {
   accessMember: AccessMember | undefined;
   canRemove: boolean;
   openChallenges: () => void;
+  openKillswitch: () => void;
   openManageRoles: () => void;
+  openViewKillswitches: () => void;
   openRemove: () => void;
   scimManaged: boolean;
   showChallenges: boolean;
+  showKillswitch: boolean;
   showManageRoles: boolean;
 };
 
@@ -112,6 +123,10 @@ function getMemberMenuModel(
   deps: MemberMenuDeps,
 ): MemberMenuModel {
   const memberRoleIds = deps.roleIdsByUserId.get(member.userId) ?? [];
+  const killswitchMenu = getMemberKillswitchMenuModel(
+    deps.killswitchHref,
+    member.userId,
+  );
   const isLastAdmin =
     deps.adminRoleId != null &&
     memberRoleIds.includes(deps.adminRoleId) &&
@@ -141,6 +156,12 @@ function getMemberMenuModel(
         );
       }, 0);
     },
+    openKillswitch: () => {
+      void deps.navigate(killswitchMenu.newHref);
+    },
+    openViewKillswitches: () => {
+      void deps.navigate(killswitchMenu.viewHref);
+    },
     openManageRoles: () => {
       if (!accessMember) return;
       void setTimeout(() => deps.setChangingMember(accessMember), 0);
@@ -150,6 +171,7 @@ function getMemberMenuModel(
     },
     scimManaged: deps.scimManaged,
     showChallenges: true,
+    showKillswitch: deps.canUseKillswitch,
     showManageRoles: true,
   };
 }
@@ -171,7 +193,8 @@ function MemberRowContextMenu({
   const model = getMemberMenuModel(member, deps);
   const hasManageRoles =
     model.showManageRoles && (model.scimManaged || model.accessMember != null);
-  const hasItemsAbove = hasManageRoles || model.showChallenges;
+  const hasItemsAbove =
+    hasManageRoles || model.showChallenges || model.showKillswitch;
 
   if (!hasItemsAbove && !model.canRemove) {
     return <>{children}</>;
@@ -197,6 +220,16 @@ function MemberRowContextMenu({
           <ContextMenuItem onSelect={model.openChallenges}>
             View challenges
           </ContextMenuItem>
+        )}
+        {model.showKillswitch && (
+          <>
+            <ContextMenuItem onSelect={model.openViewKillswitches}>
+              View killswitches
+            </ContextMenuItem>
+            <ContextMenuItem onSelect={model.openKillswitch}>
+              New killswitch…
+            </ContextMenuItem>
+          </>
         )}
         {model.canRemove && (
           <>
@@ -276,6 +309,9 @@ function TeamInner() {
   const visibleMembers = members.slice(
     safePage * MEMBERS_PAGE_SIZE,
     (safePage + 1) * MEMBERS_PAGE_SIZE,
+  );
+  const killswitchBadges = useKillswitchUserBadges(
+    visibleMembers.map((member) => member.userId),
   );
   const invites = invitesData?.invitations ?? [];
   const roles = rolesData?.roles ?? [];
@@ -499,6 +535,8 @@ function TeamInner() {
     adminCount,
     adminRoleId,
     challengesHref: orgRoutes.access.challenges.href(),
+    killswitchHref: orgRoutes.killswitch.href(),
+    canUseKillswitch: killswitchBadges.canAccess,
     navigate,
     roleIdsByUserId,
     scimManaged: Boolean(organization.scimEnabled),
@@ -534,9 +572,21 @@ function TeamInner() {
             </div>
           )}
           <Stack direction="vertical" gap={0}>
-            <Text variant="body" className="font-medium">
-              {member.name}
-            </Text>
+            <div className="flex flex-wrap items-center gap-2">
+              <Text variant="body" className="font-medium">
+                {member.name}
+              </Text>
+              <KillswitchUserBadgeLink
+                badge={killswitchBadges.badges.get(member.userId)}
+                unavailable={killswitchBadges.unavailableUserIds.has(
+                  member.userId,
+                )}
+                href={killswitchStatusHref(
+                  orgRoutes.killswitch.href(),
+                  member.userId,
+                )}
+              />
+            </div>
             <Text variant="body" className="text-muted-foreground text-sm">
               {member.email}
             </Text>
@@ -621,6 +671,7 @@ function TeamInner() {
             <DropdownMenuTrigger asChild>
               <button
                 type="button"
+                aria-label={`Actions for ${member.name}`}
                 className={cn(
                   "text-muted-foreground hover:bg-accent hover:text-foreground flex h-8 w-8 cursor-pointer items-center justify-center transition-colors",
                 )}
@@ -651,6 +702,16 @@ function TeamInner() {
                 <DropdownMenuItem onSelect={model.openChallenges}>
                   View challenges
                 </DropdownMenuItem>
+              )}
+              {model.showKillswitch && (
+                <>
+                  <DropdownMenuItem onSelect={model.openViewKillswitches}>
+                    View killswitches
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onSelect={model.openKillswitch}>
+                    New killswitch…
+                  </DropdownMenuItem>
+                </>
               )}
               {model.canRemove && (
                 <>
@@ -871,6 +932,7 @@ function TeamInner() {
 
   return (
     <>
+      {killswitchBadges.loader}
       <ResourceListPage
         title="Team Members"
         description={`Manage who has access to ${organization.name}`}

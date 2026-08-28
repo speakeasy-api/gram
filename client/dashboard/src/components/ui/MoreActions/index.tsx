@@ -25,11 +25,14 @@ export type Action = {
 export function MoreActions({
   actions,
   triggerLabel,
+  triggerAriaLabel,
   triggerLoading,
   triggerStyle,
 }: {
   actions: Action[];
   triggerLabel?: string;
+  /** Accessible name for an icon-only trigger. */
+  triggerAriaLabel?: string;
   /** Shows a spinner in place of the trigger's kebab icon and disables it —
    * for an async action (e.g. an AI suggestion) already in flight from a
    * previous click. Only meaningful alongside `triggerLabel`. */
@@ -77,18 +80,13 @@ export function MoreActions({
             size="sm"
             className="mx-[-4px] h-8 w-8 p-0"
             style={triggerStyle}
+            aria-label={triggerAriaLabel ?? "Open menu"}
           >
             <Icon name="ellipsis-vertical" className="size-4" />
-            <span className="sr-only">Open menu</span>
           </Button>
         )}
       </DropdownMenuTrigger>
-      <DropdownMenuContent
-        align="end"
-        onCloseAutoFocus={(e) => {
-          e.preventDefault();
-        }}
-      >
+      <DropdownMenuContent align="end">
         {actions.map((action, index) => (
           <DropdownMenuItem
             key={index}

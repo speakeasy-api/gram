@@ -20,6 +20,14 @@ import type { KillswitchSummary } from "@gram/client/models/components/killswitc
 import { Link, Outlet, useSearchParams } from "react-router";
 import { useEffect, useMemo, useState } from "react";
 import { FeatureRequestModal } from "@/components/FeatureRequestModal";
+import { mcpSessionsUserHref } from "@/components/killswitch/KillswitchUserStatus";
+import {
+  cleanKillswitchCreateRoute,
+  MCP_TOOL_CALLS_CAPABILITY,
+  openKillswitchCreateRoute,
+  parseKillswitchCreateRoute,
+  type KillswitchCreateContext,
+} from "@/components/killswitch/killswitch-routing";
 import { KillswitchEditorSheet } from "./KillswitchEditorSheet";
 import {
   draftToSchedule,
@@ -69,7 +77,8 @@ export default function Killswitches(): JSX.Element {
   const routes = useOrgRoutes();
   const queryClient = useQueryClient();
   const [params, setParams] = useSearchParams();
-  const [editorOpen, setEditorOpen] = useState(false);
+  const createRoute = parseKillswitchCreateRoute(params);
+  const editorOpen = createRoute.open;
   const [requestOpen, setRequestOpen] = useState(false);
   const userId = params.get("user") || undefined;
   const statusParam = params.get("status");
@@ -78,7 +87,7 @@ export default function Killswitches(): JSX.Element {
     : undefined;
   const capabilityParam = params.get("capability");
   const capabilityKey =
-    capabilityParam === "mcp_tool_calls"
+    capabilityParam === MCP_TOOL_CALLS_CAPABILITY
       ? (capabilityParam as KillswitchCapabilityKey)
       : undefined;
 
@@ -101,6 +110,29 @@ export default function Killswitches(): JSX.Element {
   const capabilities = capabilitiesQuery.data?.capabilities ?? EMPTY;
   const comingSoon = capabilitiesQuery.data?.comingSoon ?? EMPTY;
   const servers = serversQuery.data?.servers ?? EMPTY;
+  const contextualUserId = createRoute.context?.userId;
+  const contextualCapability = createRoute.context?.capabilityKey;
+  const contextualServerId = createRoute.context?.originatingMcpServerId;
+  const createContext: KillswitchCreateContext | undefined =
+    editorOpen &&
+    contextualUserId != null &&
+    members.some((member) => member.id === contextualUserId)
+      ? {
+          userId: contextualUserId,
+          capabilityKey:
+            contextualCapability === MCP_TOOL_CALLS_CAPABILITY &&
+            capabilities.some(
+              (capability) => capability.key === contextualCapability,
+            )
+              ? MCP_TOOL_CALLS_CAPABILITY
+              : undefined,
+          originatingMcpServerId:
+            contextualServerId != null &&
+            servers.some((server) => server.id === contextualServerId)
+              ? contextualServerId
+              : undefined,
+        }
+      : undefined;
   const memberNames = useMemo(
     () => new Map(members.map((member) => [member.id, member.name])),
     [members],
@@ -110,8 +142,12 @@ export default function Killswitches(): JSX.Element {
     [servers],
   );
   const readError = listQuery.error ?? membersQuery.error ?? serversQuery.error;
-  const editorCatalogError = capabilitiesQuery.error;
-  const editorCatalogLoading = capabilitiesQuery.isLoading;
+  const editorCatalogError =
+    capabilitiesQuery.error ?? membersQuery.error ?? serversQuery.error;
+  const editorCatalogLoading =
+    capabilitiesQuery.isLoading ||
+    membersQuery.isLoading ||
+    serversQuery.isLoading;
   const refetchList = listQuery.refetch;
 
   useEffect(() => {
@@ -120,6 +156,24 @@ export default function Killswitches(): JSX.Element {
     const timer = window.setTimeout(() => void refetchList(), delay);
     return () => window.clearTimeout(timer);
   }, [items, refetchList]);
+
+  const setEditorOpen = (open: boolean) => {
+    if (open) {
+      setParams((current) => openKillswitchCreateRoute(current));
+    } else {
+      setParams((current) => cleanKillswitchCreateRoute(current), {
+        replace: true,
+      });
+    }
+  };
+
+  const retryEditorCatalog = () => {
+    const retries: Promise<unknown>[] = [];
+    if (capabilitiesQuery.error) retries.push(capabilitiesQuery.refetch());
+    if (membersQuery.error) retries.push(membersQuery.refetch());
+    if (serversQuery.error) retries.push(serversQuery.refetch());
+    void Promise.allSettled(retries);
+  };
 
   const setFilter = (key: string, value: string) => {
     setParams((current) => {
@@ -136,7 +190,7 @@ export default function Killswitches(): JSX.Element {
       request: {
         killswitchPreviewOverlapsRequest: {
           userId: draft.userId,
-          capabilityKey: "mcp_tool_calls",
+          capabilityKey: MCP_TOOL_CALLS_CAPABILITY,
           scope: draftToScope(draft),
           schedule: draftToSchedule(draft),
         },
@@ -149,7 +203,7 @@ export default function Killswitches(): JSX.Element {
       request: {
         killswitchCreateRequest: {
           userId: draft.userId,
-          capabilityKey: "mcp_tool_calls",
+          capabilityKey: MCP_TOOL_CALLS_CAPABILITY,
           scope: draftToScope(draft),
           schedule: draftToSchedule(draft),
           externalNote: draft.externalNote,
@@ -222,7 +276,7 @@ export default function Killswitches(): JSX.Element {
             onChange={(event) => setFilter("capability", event.target.value)}
           >
             <option value="">All capabilities</option>
-            <option value="mcp_tool_calls">MCP tool calls</option>
+            <option value={MCP_TOOL_CALLS_CAPABILITY}>MCP tool calls</option>
           </select>
         </label>
       </div>
@@ -318,7 +372,7 @@ export default function Killswitches(): JSX.Element {
               <Button
                 size="sm"
                 variant="secondary"
-                onClick={() => void capabilitiesQuery.refetch()}
+                onClick={retryEditorCatalog}
               >
                 Try again
               </Button>
@@ -331,6 +385,7 @@ export default function Killswitches(): JSX.Element {
           open={editorOpen}
           onOpenChange={setEditorOpen}
           mode="create"
+          createContext={createContext}
           members={members}
           servers={servers}
           capabilities={capabilities}
@@ -338,6 +393,9 @@ export default function Killswitches(): JSX.Element {
           onPreview={preview}
           onSubmit={create}
           onView={(id) => routes.killswitch.detail.goTo(id)}
+          mcpSessionsHref={(userId) =>
+            mcpSessionsUserHref(routes.mcpSessions.href(), userId)
+          }
         />
       )}
       <FeatureRequestModal

@@ -253,6 +253,7 @@ function UserSessionsInner(): JSX.Element {
         grouping={grouping}
         canRevoke={canRevoke}
         onRevoked={() => void refetch()}
+        killswitchContext={{ capabilityKey: "mcp_tool_calls" }}
         project={
           selectedProjectId
             ? { slug: projectSlug, id: selectedProjectId }
@@ -266,7 +267,7 @@ function UserSessionsInner(): JSX.Element {
     <ResourceListPage
       scope="org:read"
       title="MCP Sessions"
-      description="Every connection Gram brokers: what an agent connects through, the MCP server it reaches, and the upstream provider Gram holds credentials for on that person's behalf. Revoke a connection to immediately cut off access."
+      description="Every connection Gram brokers. Revoking ends current sessions immediately, but clients can authenticate and reconnect. A killswitch is a separate action that blocks matching MCP tool calls without ending sessions; revocation never creates or lifts one."
     >
       <div className="space-y-8">
         {/* `Page.Section` stacks two `mb-6`s under the description, which reads

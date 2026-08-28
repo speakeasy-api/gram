@@ -1,4 +1,5 @@
 import { FeatureRequestModal } from "@/components/FeatureRequestModal";
+import type { KillswitchCreateContext } from "@/components/killswitch/killswitch-routing";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
 import { Dialog } from "@/components/ui/Dialog";
@@ -20,6 +21,7 @@ import type { KillswitchMCPServer } from "@gram/client/models/components/killswi
 import type { KillswitchMutationReceipt } from "@gram/client/models/components/killswitchmutationreceipt.js";
 import type { KillswitchPreviewOverlapsResult } from "@gram/client/models/components/killswitchpreviewoverlapsresult.js";
 import { useMemo, useRef, useState } from "react";
+import { Link } from "react-router";
 import {
   conflictName,
   draftToSchedule,
@@ -46,6 +48,7 @@ type Props = {
   capabilitiesError?: unknown;
   onRetryCapabilities?: () => void;
   initial?: KillswitchDetail;
+  createContext?: KillswitchCreateContext;
   onPreview: (draft: EditorDraft) => Promise<KillswitchPreviewOverlapsResult>;
   onSubmit: (
     draft: EditorDraft,
@@ -54,6 +57,7 @@ type Props = {
   ) => Promise<KillswitchMutationReceipt>;
   onRefreshConflict?: () => Promise<KillswitchDetail>;
   onView?: (id: string) => void;
+  mcpSessionsHref?: (userId: string) => string;
 };
 
 function concurrentChanges(
@@ -77,11 +81,14 @@ function toLocalInput(value: Date): string {
   return local.toISOString().slice(0, 16);
 }
 
-function initialDraft(initial?: KillswitchDetail): EditorDraft {
+function initialDraft(
+  initial?: KillswitchDetail,
+  createContext?: KillswitchCreateContext,
+): EditorDraft {
   if (!initial) {
     return {
-      userId: "",
-      capabilityKey: "",
+      userId: createContext?.userId ?? "",
+      capabilityKey: createContext?.capabilityKey ?? "",
       scopeType: "",
       serverIds: [],
       startType: "now",
@@ -120,7 +127,7 @@ export function KillswitchEditorSheet(props: Props): JSX.Element {
     <Sheet open={props.open} onOpenChange={props.onOpenChange}>
       {props.open && (
         <EditorContents
-          key={`${props.mode}-${props.initial?.id ?? "new"}`}
+          key={`${props.mode}-${props.initial?.id ?? "new"}-${props.createContext?.userId ?? ""}-${props.createContext?.capabilityKey ?? ""}-${props.createContext?.originatingMcpServerId ?? ""}`}
           {...props}
         />
       )}
@@ -139,12 +146,16 @@ function EditorContents({
   capabilitiesError,
   onRetryCapabilities,
   initial,
+  createContext,
   onPreview,
   onSubmit,
   onRefreshConflict,
   onView,
+  mcpSessionsHref,
 }: Props): JSX.Element {
-  const [draft, setDraft] = useState<EditorDraft>(() => initialDraft(initial));
+  const [draft, setDraft] = useState<EditorDraft>(() =>
+    initialDraft(initial, createContext),
+  );
   const [errors, setErrors] = useState<DraftErrors>({});
   const [operationId, setOperationId] = useState(newOperationId);
   const [expectedVersion, setExpectedVersion] = useState(initial?.version);
@@ -200,6 +211,30 @@ function EditorContents({
     setPreviewFingerprint("");
     setMutationError(undefined);
     setStale(false);
+    setOperationId(newOperationId());
+  };
+
+  const selectScope = (scopeType: EditorDraft["scopeType"]) => {
+    setDraft((current) => ({
+      ...current,
+      scopeType,
+      serverIds:
+        scopeType === "all_servers"
+          ? []
+          : current.serverIds.length > 0
+            ? current.serverIds
+            : createContext?.originatingMcpServerId
+              ? [createContext.originatingMcpServerId]
+              : [],
+    }));
+    setErrors((current) => ({
+      ...current,
+      scopeType: undefined,
+      serverIds: undefined,
+    }));
+    setPreview(undefined);
+    setPreviewFingerprint("");
+    setMutationError(undefined);
     setOperationId(newOperationId());
   };
 
@@ -304,7 +339,10 @@ function EditorContents({
               variant="secondary"
               onClick={() => {
                 const retainedUser = draft.userId;
-                setDraft({ ...initialDraft(), userId: retainedUser });
+                setDraft({
+                  ...initialDraft(undefined, createContext),
+                  userId: retainedUser,
+                });
                 setReceipt(undefined);
                 setOperationId(newOperationId());
                 setPreview(undefined);
@@ -314,6 +352,13 @@ function EditorContents({
             </Button>
           )}
           <Button onClick={() => onView?.(receipt.id)}>View killswitch</Button>
+          {mcpSessionsHref && (
+            <Button variant="secondary" asChild>
+              <Link to={mcpSessionsHref(draft.userId)}>
+                View this member in MCP Sessions
+              </Link>
+            </Button>
+          )}
         </div>
       </SheetContent>
     );
@@ -335,8 +380,11 @@ function EditorContents({
         <div ref={formRef} className="space-y-7 px-4 pb-4">
           <fieldset className="space-y-3">
             <legend className="font-medium">Who</legend>
-            {mode === "edit" ? (
-              <p>{member?.name ?? "Deleted member"}</p>
+            {mode === "edit" || createContext ? (
+              <p>
+                {member?.name ?? "Deleted member"}
+                {member?.email ? ` — ${member.email}` : ""}
+              </p>
             ) : (
               <select
                 aria-label="Team member"
@@ -447,7 +495,7 @@ function EditorContents({
                 name="scope"
                 aria-invalid={Boolean(errors.scopeType)}
                 checked={draft.scopeType === "all_servers"}
-                onChange={() => update("scopeType", "all_servers")}
+                onChange={() => selectScope("all_servers")}
               />
               <span>
                 <strong>All MCP servers</strong>
@@ -463,7 +511,7 @@ function EditorContents({
                 name="scope"
                 aria-invalid={Boolean(errors.scopeType || errors.serverIds)}
                 checked={draft.scopeType === "selected_servers"}
-                onChange={() => update("scopeType", "selected_servers")}
+                onChange={() => selectScope("selected_servers")}
               />
               <span>
                 <strong>Selected servers</strong>
