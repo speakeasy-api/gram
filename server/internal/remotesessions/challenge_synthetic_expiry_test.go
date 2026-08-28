@@ -137,9 +137,17 @@ func TestRemoteLoginCallback_StandardRefreshExpirationFields(t *testing.T) {
 	require.NoError(t, err)
 	state := states[env.clientID]
 	require.True(t, state.CanRefresh)
+	// The two deadlines stay apart rather than collapsing to the earliest.
+	// They behave oppositely — using the session postpones the refresh idle
+	// timeout, while nothing moves the authorization lifetime — so the consent
+	// page states them separately and suppresses only the idle one when auto
+	// refresh is renewing the session.
 	require.NotNil(t, state.RefreshExpiresAt)
-	require.WithinDuration(t, before.Add(time.Hour), *state.RefreshExpiresAt, time.Minute,
-		"the consent tooltip must show the earliest known renewal deadline")
+	require.WithinDuration(t, before.Add(2*time.Hour), *state.RefreshExpiresAt, time.Minute,
+		"refresh expiry is the refresh token's own idle deadline")
+	require.NotNil(t, state.AuthorizationExpiresAt)
+	require.WithinDuration(t, before.Add(time.Hour), *state.AuthorizationExpiresAt, time.Minute,
+		"authorization expiry is the absolute end of the grant")
 }
 
 // syntheticExpiryEnv is the materialized state after a remote-login round trip
