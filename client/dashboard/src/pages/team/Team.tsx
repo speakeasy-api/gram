@@ -1,3 +1,4 @@
+import { IdentityLink } from "@/components/identity-link";
 import { useIdentityHrefBuilder } from "@/lib/useIdentityHref";
 import { AnyField } from "@/components/moon/any-field";
 import { InputField } from "@/components/moon/input-field";
@@ -755,25 +756,27 @@ function TeamInner() {
         if (!inviter) return <span className="text-muted-foreground">—</span>;
         return (
           <SimpleTooltip tooltip={inviter.email}>
-            {inviter.photoUrl ? (
-              <img
-                src={inviter.photoUrl}
-                alt={inviter.name}
-                className="h-7 w-7 rounded-full"
-              />
-            ) : (
-              <div
-                className="flex h-7 w-7 items-center justify-center rounded-full text-xs font-medium"
-                style={getIdentityTint(inviter.id)}
-              >
-                {inviter.name
-                  .split(" ")
-                  .map((n) => n[0])
-                  .join("")
-                  .toUpperCase()
-                  .slice(0, 2)}
-              </div>
-            )}
+            <IdentityLink identifier={{ userId: inviter.userId }}>
+              {inviter.photoUrl ? (
+                <img
+                  src={inviter.photoUrl}
+                  alt={inviter.name}
+                  className="h-7 w-7 rounded-full"
+                />
+              ) : (
+                <div
+                  className="flex h-7 w-7 items-center justify-center rounded-full text-xs font-medium"
+                  style={getIdentityTint(inviter.id)}
+                >
+                  {inviter.name
+                    .split(" ")
+                    .map((n) => n[0])
+                    .join("")
+                    .toUpperCase()
+                    .slice(0, 2)}
+                </div>
+              )}
+            </IdentityLink>
           </SimpleTooltip>
         );
       },

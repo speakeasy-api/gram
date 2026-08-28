@@ -1,3 +1,5 @@
+import { IdentityLink } from "@/components/identity-link";
+import { identityRefForUserKey } from "@/lib/identity-urn";
 import { InsightsConfig } from "@/components/insights-dock";
 import { INSIGHTS_SUGGESTIONS } from "@/lib/insights-suggestions";
 import { TabbedPage } from "@/components/page-templates";
@@ -1009,7 +1011,9 @@ function PolicyCenterContent() {
       width: "1fr",
       render: (row) => (
         <span className="text-muted-foreground text-sm">
-          {row.userId || "Unknown user"}
+          <IdentityLink identifier={identityRefForUserKey(row.userId)}>
+            {row.userId || "Unknown user"}
+          </IdentityLink>
         </span>
       ),
     },

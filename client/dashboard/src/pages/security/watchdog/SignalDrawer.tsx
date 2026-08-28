@@ -1,3 +1,4 @@
+import { IdentityLink } from "@/components/identity-link";
 import { Avatar, AvatarFallback } from "@/components/ui/Avatar";
 import { Button } from "@/components/ui/Button";
 import { Icon } from "@/components/ui/Icon";
@@ -488,7 +489,23 @@ export function SignalDrawer({
                                   </Avatar>
                                   <div className="min-w-0 flex-1">
                                     <Text small className="truncate">
-                                      {user.email}
+                                      {/* Risk keys on the reported agent id
+                                          when it has one; the address is the
+                                          fallback. */}
+                                      <IdentityLink
+                                        identifier={
+                                          user.externalUserId
+                                            ? {
+                                                externalUserId:
+                                                  user.externalUserId,
+                                              }
+                                            : user.email
+                                              ? { email: user.email }
+                                              : null
+                                        }
+                                      >
+                                        {user.email}
+                                      </IdentityLink>
                                     </Text>
                                     {user.team && (
                                       <Text small muted className="truncate">

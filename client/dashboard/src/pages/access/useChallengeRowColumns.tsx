@@ -223,14 +223,16 @@ export function useChallengeRowColumns(
           return (
             <Tooltip>
               <TooltipTrigger asChild>
-                <Avatar className="h-7 w-7">
-                  {member?.photoUrl && (
-                    <AvatarImage src={member.photoUrl} alt={display} />
-                  )}
-                  <AvatarFallback className="text-[10px]">
-                    {getInitials(display)}
-                  </AvatarFallback>
-                </Avatar>
+                <IdentityLink identifier={{ userId }}>
+                  <Avatar className="h-7 w-7">
+                    {member?.photoUrl && (
+                      <AvatarImage src={member.photoUrl} alt={display} />
+                    )}
+                    <AvatarFallback className="text-[10px]">
+                      {getInitials(display)}
+                    </AvatarFallback>
+                  </Avatar>
+                </IdentityLink>
               </TooltipTrigger>
               <TooltipContent>{display}</TooltipContent>
             </Tooltip>
