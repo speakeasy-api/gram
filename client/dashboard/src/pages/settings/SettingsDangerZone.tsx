@@ -40,8 +40,6 @@ export function SettingsDangerZone(): JSX.Element {
           Project <strong>{project.name}</strong> deleted successfully
         </>,
       );
-      // Replace so Back doesn't return to the deleted project's settings
-      // (which falls through to another project's settings).
       void navigate(orgRoutes.home.href(), { replace: true });
     },
     onError: (error) => {
