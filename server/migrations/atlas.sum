@@ -1,4 +1,4 @@
-h1:b6BZzmk1M3aTButACZaLsQktFY031K4b09hlTJCrW3Q=
+h1:/TZ6U2XcrA/EVl1x7RxQ2JVSZKMXikDb7LTHTF9R600=
 20250502122425_initial-tables.sql h1:Hu3O60/bB4fjZpUay8FzyOjw6vngp087zU+U/wVKn7k=
 20250502130852_initial-indexes.sql h1:oYbnwi9y9PPTqu7uVbSPSALhCY8XF3rv03nDfG4b7mo=
 20250502154250_relax-http-security-fields.sql h1:0+OYIDq7IHmx7CP5BChVwfpF2rOSrRDxnqawXio2EVo=
@@ -374,6 +374,6 @@ h1:b6BZzmk1M3aTButACZaLsQktFY031K4b09hlTJCrW3Q=
 20260828092510_data_exports_fanout.sql h1:qObwb6bsBowCBl4kdIM+xv+QuTDJ1velUTNWleNk5q8=
 20260828101442_data_export_routes_single_destination.sql h1:Tz5KBmcarW1pNl/D4MR7TA5m/+PnZn5IDk8bQkeniVQ=
 20260828145942_dno-974-durable-killswitch-prescriptions.sql h1:qPmCeNHQURcvp4RrbtPz9t+vs8iyLy0B5LPcEgO2ejY=
-20260828160030_openrouter-api-keys-add-disable-causes.sql h1:1hF4D4dA4tWljTWfOVHfRFNBi4+Rklb5Ia4XU8UH2m0=
-20260828181110_dno-978-killswitch-expiry-discovery-index.sql h1:3GuCzvbUJkIWIMNfOl+cvdrZbpfzPtyzwr78zvE46vU=
-20260829131739_dno-983-killswitch-review-fixes.sql h1:oC34wCeeVhHymAly3U1m1obC/TSgDxJdDjEwCmn6pr0=
+20260828181110_dno-978-killswitch-expiry-discovery-index.sql h1:O4HoCdj2hCOhQHKbtzOJIza01sNlC+1mD+frDob19f8=
+20260829131739_dno-983-killswitch-review-fixes.sql h1:t5J2SbzQwB8YWbJ6hz1wpMvbzxGn9URFT+lJe+9x1MQ=
+20260829222004_openrouter-api-keys-add-disable-causes.sql h1:aY46q4PFvjI52Gs25EhX0vKD3cv/3YUhBzI/7DVIl7A=
