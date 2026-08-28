@@ -534,7 +534,20 @@ func (s *Service) ApplyIssuerGate(
 	// endpoint's oauth2 schemes downstream) or fails with ErrNoValidToken
 	// when any attached remote session is missing or invalid — which the
 	// user resolves by re-linking via {routeBase}/{slug}/connect.
+	//
+	// Meta MCP endpoints resolve partially instead: their member dispatch
+	// routes each credential by its recorded resource, so an unconnected
+	// provider degrades that one member while the rest of the session
+	// serves. The all-or-nothing challenge stays for direct endpoints,
+	// whose toolset dispatch has no per-upstream routing (AIS-152).
 	var upstreamTokens map[uuid.UUID]remotesessions.UpstreamToken
+	if subject != nil && endpoint.MetaMcpServerID.Valid {
+		tokens, rerr := s.remoteChallengeMgr.ResolveAvailableAccessTokens(newCtx, endpoint.ProjectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID, *subject)
+		if rerr != nil {
+			return ctx, nil, nil, oops.E(oops.CodeUnexpected, rerr, "resolve remote session").LogError(newCtx, s.logger)
+		}
+		return newCtx, tokens, toolSelection, nil
+	}
 	if subject != nil {
 		tokens, rerr := s.remoteChallengeMgr.ResolveAccessTokens(newCtx, endpoint.ProjectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID, *subject)
 		switch {

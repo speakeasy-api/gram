@@ -158,14 +158,13 @@ function InspectBody({
   }
 
   if (needsAuth) {
-    // The common cause is an unconnected upstream provider, not a broken
-    // issuer: a session needs every attached provider connected, so one
-    // missing grant rejects the whole session.
+    // Unconnected providers no longer reject a session (members degrade
+    // member-scoped instead), so a 401 here means the session token itself
+    // was refused.
     return (
       <Text muted small>
-        This gateway rejected the dashboard&apos;s session. Every attached
-        identity provider must be connected before it will serve — connect them
-        from the gateway&apos;s sign-in page, or review its providers in{" "}
+        This gateway rejected the dashboard&apos;s session token. Reload to mint
+        a fresh one, or review the gateway&apos;s authentication in{" "}
         <Link to={settingsHref}>Settings</Link>.
       </Text>
     );
