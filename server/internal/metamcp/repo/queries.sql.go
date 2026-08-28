@@ -998,9 +998,11 @@ type UpdateMetaMCPServerParams struct {
 	ProjectID           uuid.UUID
 }
 
-// Full-record replace: a null user_session_issuer_id clears the reference. A
-// null visibility preserves the stored value so callers that do not manage
-// visibility cannot re-enable a disabled gateway.
+// The service always supplies user_session_issuer_id (an omitted payload
+// issuer resolves to the preserved or freshly minted one), so the narg here
+// never arrives null from production code. A null visibility preserves the
+// stored value so callers that do not manage visibility cannot re-enable a
+// disabled gateway.
 func (q *Queries) UpdateMetaMCPServer(ctx context.Context, arg UpdateMetaMCPServerParams) (MetaMcpServer, error) {
 	row := q.db.QueryRow(ctx, updateMetaMCPServer,
 		arg.Name,
