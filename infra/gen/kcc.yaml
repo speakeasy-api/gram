@@ -1080,10 +1080,6 @@ pubsub:
     name: gram-metering-v1-meter-reading-stripe-exporter
     spec:
       ackDeadlineSeconds: 60
-      deadLetterPolicy:
-        deadLetterTopicRef:
-          name: gram-metering-v1-meter-reading-stripe-exporter-dlq
-        maxDeliveryAttempts: 10
       messageRetentionDuration: 2678400s
       retainAckedMessages: true
       retryPolicy:
@@ -1419,12 +1415,6 @@ pubsub:
       managed_by: proto-pubsub-orchestrator
       proto_message: gram-metering-v1-meter-reading-ch-writer
     name: gram-metering-v1-meter-reading-ch-writer-dlq
-    spec: {}
-  - labels:
-      dlq_for: gram-metering-v1-meter-reading-stripe-exporter
-      managed_by: proto-pubsub-orchestrator
-      proto_message: gram-metering-v1-meter-reading-stripe-exporter
-    name: gram-metering-v1-meter-reading-stripe-exporter-dlq
     spec: {}
   - labels:
       managed_by: proto-pubsub-orchestrator
