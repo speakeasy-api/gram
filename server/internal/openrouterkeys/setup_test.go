@@ -63,7 +63,8 @@ type testInstance struct {
 type stubProvisioner struct {
 	mu sync.Mutex
 
-	conn *pgxpool.Pool
+	logger *slog.Logger
+	conn   *pgxpool.Pool
 
 	// usage and usageLimit are returned by GetKeyUsage.
 	usage      float64
@@ -165,8 +166,16 @@ func (s *stubProvisioner) RemoveAPIKeyDisableCause(ctx context.Context, orgID st
 		}
 	}
 	keyLimit := int(key.MonthlyCredits)
-	if accessChanged && limit != nil {
-		keyLimit = *limit
+	if accessChanged {
+		if limit != nil {
+			keyLimit = *limit
+		} else if key.MonthlyCredits == 0 {
+			org, orgErr := orgmetarepo.New(s.conn).GetOrganizationMetadata(ctx, orgID)
+			if orgErr != nil {
+				return 0, openrouter.DisableCauseChange{}, fmt.Errorf("stub remove disable cause organization read: %w", orgErr)
+			}
+			keyLimit, _ = openrouter.ResolveDefaultCreditLimit(ctx, s.logger, s.conn, orgID, billing.Tier(org.GramAccountType))
+		}
 	}
 	if _, err := queries.RemoveOpenRouterAPIKeyDisableCause(ctx, orgrepo.RemoveOpenRouterAPIKeyDisableCauseParams{
 		OrganizationID: orgID, KeyType: string(keyType), KeyHash: key.KeyHash, DisableCause: string(cause),
@@ -251,6 +260,7 @@ func newTestServiceWithProvisioner(t *testing.T, factory provisionerFactory) (co
 	enc := testenv.NewEncryptionClient(t)
 	stub := &stubProvisioner{
 		mu:           sync.Mutex{},
+		logger:       logger,
 		conn:         conn,
 		usage:        0,
 		usageLimit:   nil,

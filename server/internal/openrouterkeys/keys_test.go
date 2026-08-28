@@ -113,6 +113,44 @@ func TestStubProvisionerDisableCausesMirrorLocalState(t *testing.T) {
 	require.Equal(t, openrouter.DisableCauseChange{}, change)
 }
 
+func TestStubProvisionerRemoveLastDisableCauseRestoresOrganizationDefault(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	orgID := seedKey(t, ctx, ti, "stub-default-limit", string(openrouter.KeyTypeChat), "sk-or-stub-default-limit")
+	require.NoError(t, orgmetarepo.New(ti.conn).SetAccountType(ctx, orgmetarepo.SetAccountTypeParams{
+		GramAccountType: string(billing.TierPayg),
+		ID:              orgID,
+	}))
+	require.NoError(t, orgrepo.New(ti.conn).UpdateOpenRouterKeyMonthlyCredits(ctx, orgrepo.UpdateOpenRouterKeyMonthlyCreditsParams{
+		OrganizationID: orgID,
+		KeyType:        string(openrouter.KeyTypeChat),
+		MonthlyCredits: 0,
+	}))
+	require.NoError(t, testrepo.New(ti.conn).SetOpenRouterAPIKeyClassificationFixture(ctx, testrepo.SetOpenRouterAPIKeyClassificationFixtureParams{
+		OrganizationID: orgID,
+		KeyType:        string(openrouter.KeyTypeChat),
+		Disabled:       true,
+		DisableCauses:  []string{string(openrouter.DisableCauseAdminLock)},
+	}))
+
+	expected, ok := openrouter.ResolveDefaultCreditLimit(ctx, testenv.NewLogger(t), ti.conn, orgID, billing.TierPayg)
+	require.True(t, ok)
+	limit, change, err := ti.provisioner.RemoveAPIKeyDisableCause(ctx, orgID, openrouter.KeyTypeChat, openrouter.DisableCauseAdminLock, nil)
+	require.NoError(t, err)
+	require.Equal(t, expected, limit)
+	require.Equal(t, openrouter.DisableCauseChange{CauseChanged: true, KeyAccessChanged: true}, change)
+
+	row, err := orgrepo.New(ti.conn).GetOpenRouterAPIKey(ctx, orgrepo.GetOpenRouterAPIKeyParams{
+		OrganizationID: orgID,
+		KeyType:        string(openrouter.KeyTypeChat),
+	})
+	require.NoError(t, err)
+	require.EqualValues(t, expected, row.MonthlyCredits)
+	require.Empty(t, row.DisableCauses)
+	require.False(t, row.Disabled)
+}
+
 func TestListKeys_RequiresPlatformAdmin(t *testing.T) {
 	t.Parallel()
 
