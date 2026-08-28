@@ -27,4 +27,6 @@ type MetaMcpServer struct {
 	CreatedAt string
 	// When the meta MCP server was last updated
 	UpdatedAt string
+	// The number of live members. Only populated by listMetaMcpServers.
+	MemberCount *int
 }

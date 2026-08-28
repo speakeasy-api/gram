@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"time"
 
 	"github.com/speakeasy-api/agenthooks"
 	"github.com/speakeasy-api/gram/hooks/sdk/models/components"
@@ -256,8 +257,19 @@ func (r *Relay) send(ctx context.Context, c creds, payload components.IngestRequ
 }
 
 // evaluate delivers a gating event and resolves the block decision under the
-// ratchet and the org's fail-open posture.
+// ratchet and the org's fail-open posture, bounded by gateSendBudget so the
+// verdict beats the provider-side gate deadline.
 func (r *Relay) evaluate(ctx context.Context, typed any) verdict {
+	start := time.Now()
+	ctx, cancel := context.WithTimeout(ctx, gateSendBudget)
+	defer cancel()
+	v := r.gateVerdict(ctx, typed)
+	r.debugf("gate event=%s elapsed_ms=%d block=%v",
+		agenthooks.EventOf(typed).NativeName, time.Since(start).Milliseconds(), v.block)
+	return v
+}
+
+func (r *Relay) gateVerdict(ctx context.Context, typed any) verdict {
 	res, state := r.deliver(ctx, typed)
 	switch state {
 	case stateNeverAuthed:

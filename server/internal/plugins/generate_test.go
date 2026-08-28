@@ -13,10 +13,10 @@ import (
 	"net/http/httptest"
 	"os"
 	"os/exec"
+	"path"
 	"path/filepath"
 	"regexp"
 	"runtime"
-	"slices"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -26,6 +26,7 @@ import (
 
 	"github.com/BurntSushi/toml"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/plugins/naming"
 	"github.com/stretchr/testify/require"
 )
 
@@ -60,316 +61,6 @@ func TestGeneratePluginWithCustomDomainURL(t *testing.T) {
 
 	server := mcpConfig.MCPServers["custom-server"]
 	require.Equal(t, "https://mcp.acme.com/mcp/my-slug", server.URL, "custom domain URL must be preserved verbatim in generated config")
-}
-
-func TestGeneratePluginPackagesIncludesPlatformMCPOnlyWhenEnabled(t *testing.T) {
-	t.Parallel()
-	cfg := GenerateConfig{
-		OrgName:            "Acme Corp",
-		OrgEmail:           "admin@example.com",
-		ServerURL:          "https://app.getgram.ai///",
-		APIKey:             "gram_consumer_secret",
-		HooksAPIKey:        "gram_hooks_secret",
-		ProjectSlug:        "tenant-project-sentinel",
-		PlatformMCPEnabled: true,
-	}
-
-	files, err := GeneratePluginPackages(fingerprintTestPlugins(), cfg)
-	require.NoError(t, err)
-
-	var meta claudePluginMeta
-	require.NoError(t, json.Unmarshal(files["platform-mcp/.claude-plugin/plugin.json"], &meta))
-	require.Equal(t, platformMCPPluginName, meta.Name)
-	require.Equal(t, platformMCPDisplayName, meta.DisplayName)
-	require.Equal(t, platformMCPDescription, meta.Description)
-	require.Equal(t, "Speakeasy", meta.Author.Name)
-	require.Nil(t, meta.UserConfig, "Platform MCP must not request tenant credentials")
-
-	var mcpConfig claudeMCPConfig
-	require.NoError(t, json.Unmarshal(files["platform-mcp/.mcp.json"], &mcpConfig))
-	require.Equal(t, map[string]claudeMCPServer{
-		platformMCPServerName: {
-			Type: "http",
-			URL:  "https://app.getgram.ai/platform-mcp",
-		},
-	}, mcpConfig.MCPServers)
-
-	platformSkills, err := loadPlatformMCPSkills()
-	require.NoError(t, err)
-	require.NotEmpty(t, platformSkills)
-	for name, skill := range platformSkills {
-		paths := []string{
-			"platform-mcp/skills/" + name + "/SKILL.md",
-			"cursor-plugins/platform-mcp-cursor/skills/" + name + "/SKILL.md",
-			"platform-mcp-codex/skills/" + name + "/SKILL.md",
-			"opencode-plugins/platform-mcp/" + platformMCPPluginName + "/skills/" + name + "/SKILL.md",
-			platformMCPAgentPluginRoot + "/skills/" + name + "/SKILL.md",
-		}
-		for _, packagePath := range paths {
-			require.Equal(t, skill, files[packagePath], "missing or changed Platform MCP skill %q at %s", name, packagePath)
-		}
-		require.NotContains(t, string(skill), "Gram", "distributed skill %q exposes the internal codename", name)
-	}
-
-	claudeSkill := files["platform-mcp/skills/add-mcp-from-catalog/SKILL.md"]
-	require.Contains(t, string(claudeSkill), "register_catalog_mcp")
-	require.Contains(t, string(claudeSkill), "add-mcp-from-remote-url", "the catalogue skill routes raw URLs to the remote URL workflow")
-	require.Contains(t, string(claudeSkill), "get_mcp_readiness")
-	require.Contains(t, string(claudeSkill), "attach_platform_mcp_identity_provider")
-	require.Contains(t, string(claudeSkill), "distribute_mcp_to_plugin")
-	require.Contains(t, string(claudeSkill), "send_platform_mcp_feedback")
-	require.NotContains(t, string(claudeSkill), "register_platform_mcp_for_project", "the shipped skill must name only canonical tools")
-	require.NotContains(t, string(claudeSkill), "add_platform_mcp_to_default_plugin", "exact-plugin distribution remains rollout-gated")
-	require.Contains(t, string(claudeSkill), "For a managed project assistant, call `get_mcp_readiness` without `force`", "assistants must not be instructed to force connection-bound readiness probes")
-	require.Contains(t, string(claudeSkill), "get_mcp_client_admission")
-	require.Contains(t, string(claudeSkill), "set_mcp_client_admission")
-	require.Contains(t, string(claudeSkill), "`confirmed: true`", "an admission mode change is confirmed before it is written")
-
-	remoteURLSkill := files["platform-mcp/skills/add-mcp-from-remote-url/SKILL.md"]
-	require.Contains(t, string(remoteURLSkill), "inspect_mcp_candidate")
-	require.Contains(t, string(remoteURLSkill), "register_remote_mcp")
-	require.Contains(t, string(remoteURLSkill), "get_mcp_readiness")
-	require.Contains(t, string(remoteURLSkill), "attach_platform_mcp_identity_provider")
-	require.NotContains(t, string(remoteURLSkill), "get_platform_mcp_onboarding_status", "the shipped skill must name only canonical tools")
-	require.NotContains(t, string(remoteURLSkill), "add_platform_mcp_to_default_plugin", "exact-plugin distribution remains rollout-gated")
-	require.Contains(t, string(remoteURLSkill), "For an external Platform MCP client, call `get_mcp_readiness`", "managed assistants must stop after their dashboard handoff")
-	require.Contains(t, string(remoteURLSkill), "get_mcp_client_admission")
-	require.Contains(t, string(remoteURLSkill), "set_mcp_client_admission")
-	require.NotContains(t, string(remoteURLSkill), "probe_remote_mcp", "the shipped skill must name only our registered tools")
-	require.NotContains(t, string(remoteURLSkill), "register_remote_mcp_for_project", "the shipped skill must name only our registered tools")
-
-	var agentManifest agentPluginManifest
-	require.NoError(t, json.Unmarshal(files[platformMCPAgentPluginRoot+"/plugin.json"], &agentManifest))
-	require.Equal(t, platformMCPPluginName, agentManifest.Name)
-	require.Equal(t, "Speakeasy", agentManifest.Author.Name)
-	var agentMCP agentMCPConfig
-	require.NoError(t, json.Unmarshal(files[platformMCPAgentPluginRoot+"/mcp.json"], &agentMCP))
-	require.Equal(t, "https://app.getgram.ai/platform-mcp", agentMCP.MCPServers[platformMCPServerName].URL)
-	require.Equal(t, claudeSkill, files[platformMCPAgentPluginRoot+"/skills/add-mcp-from-catalog/SKILL.md"])
-	require.Equal(t, remoteURLSkill, files[platformMCPAgentPluginRoot+"/skills/add-mcp-from-remote-url/SKILL.md"])
-
-	platformPrefixes := []string{
-		"platform-mcp/",
-		"cursor-plugins/platform-mcp-cursor/",
-		"platform-mcp-codex/",
-		"opencode-plugins/platform-mcp/",
-		"agent-plugins/" + platformMCPPluginName + "/",
-	}
-	for path, content := range files {
-		if slices.ContainsFunc(platformPrefixes, func(prefix string) bool { return strings.HasPrefix(path, prefix) }) {
-			require.NotContains(t, string(content), cfg.APIKey)
-			require.NotContains(t, string(content), cfg.HooksAPIKey)
-			require.NotContains(t, string(content), cfg.ProjectSlug)
-			require.NotContains(t, string(content), cfg.OrgName)
-			require.NotContains(t, string(content), cfg.OrgEmail)
-			require.NotContains(t, path, "hooks/")
-			require.NotContains(t, string(content), skillFeedbackMCPServerName)
-		}
-	}
-
-	require.Contains(t, string(files["README.md"]), "## "+platformMCPDisplayName)
-	require.Contains(t, string(files["README.md"]), "`"+platformMCPPluginName+"`")
-	require.NotContains(t, strings.ToLower(string(files["README.md"])), "aicp")
-
-	var claude marketplaceManifest
-	require.NoError(t, json.Unmarshal(files[".claude-plugin/marketplace.json"], &claude))
-	require.Len(t, claude.Plugins, len(fingerprintTestPlugins())+2)
-	require.Equal(t, "acme-corp-observability", claude.Plugins[0].Name)
-	require.Equal(t, marketplaceEntry{
-		Name:        platformMCPPluginName,
-		DisplayName: platformMCPDisplayName,
-		Source:      "./platform-mcp",
-		Description: platformMCPDescription,
-	}, claude.Plugins[1])
-
-	var cursor marketplaceManifest
-	require.NoError(t, json.Unmarshal(files[".cursor-plugin/marketplace.json"], &cursor))
-	require.Contains(t, cursor.Plugins, marketplaceEntry{
-		Name:        "platform-mcp-cursor",
-		Source:      "platform-mcp-cursor",
-		Description: platformMCPDescription,
-	})
-
-	var codex codexMarketplaceManifest
-	require.NoError(t, json.Unmarshal(files[".agents/plugins/marketplace.json"], &codex))
-	require.Contains(t, codex.Plugins, codexMarketplaceEntry{
-		Name: "platform-mcp-codex",
-		Source: codexMarketplaceSource{
-			Source: "local",
-			Path:   "./platform-mcp-codex",
-		},
-		Policy: codexMarketplacePolicy{Installation: "AVAILABLE", Authentication: "ON_USE"},
-	})
-
-	cfg.PlatformMCPEnabled = false
-	withoutPlatform, err := GeneratePluginPackages(fingerprintTestPlugins(), cfg)
-	require.NoError(t, err)
-	for path := range withoutPlatform {
-		require.NotContains(t, path, platformMCPPluginRoot)
-		require.NotContains(t, path, platformMCPPluginName)
-	}
-}
-
-func TestCarryPlatformMCPSubtreeAcceptsB1AndFullNativeLayouts(t *testing.T) {
-	t.Parallel()
-
-	cfg := GenerateConfig{ServerURL: "https://app.getgram.ai", Version: "42"}
-	allFiles, err := generatePlatformMCPFiles(cfg)
-	require.NoError(t, err)
-
-	b1Files := make(map[string][]byte)
-	for filePath, content := range allFiles {
-		if strings.HasPrefix(filePath, platformMCPPluginRoot+"/") || strings.HasPrefix(filePath, platformMCPAgentPluginRoot+"/") {
-			b1Files[filePath] = content
-		}
-	}
-	carried := make(map[string][]byte)
-	intact, nativeClientsAvailable := carryPlatformMCPSubtree(carried, b1Files)
-	require.True(t, intact)
-	require.False(t, nativeClientsAvailable)
-	require.Equal(t, b1Files, carried)
-
-	carried = make(map[string][]byte)
-	intact, nativeClientsAvailable = carryPlatformMCPSubtree(carried, allFiles)
-	require.True(t, intact)
-	require.True(t, nativeClientsAvailable)
-	require.Equal(t, allFiles, carried)
-
-	partialNative := maps.Clone(allFiles)
-	delete(partialNative, platformMCPCodexPluginRoot+"/.mcp.json")
-	carried = make(map[string][]byte)
-	intact, nativeClientsAvailable = carryPlatformMCPSubtree(carried, partialNative)
-	require.True(t, intact)
-	require.False(t, nativeClientsAvailable)
-	require.NotContains(t, carried, platformMCPCursorPluginRoot+"/.cursor-plugin/plugin.json")
-	require.NotContains(t, carried, platformMCPOpenCodePluginRoot+"/plugin/"+platformMCPPluginName+".ts")
-}
-
-func TestCarryPlatformMCPSubtreeAcceptsLegacyAgentPluginLayout(t *testing.T) {
-	t.Parallel()
-
-	cfg := GenerateConfig{ServerURL: "https://app.getgram.ai", Version: "42"}
-	current, err := generatePlatformMCPFiles(cfg)
-	require.NoError(t, err)
-
-	legacy := remapPlatformMCPFilesToLegacyLayout(current)
-	require.NotContains(t, legacy, platformMCPAgentPluginRoot+"/plugin.json")
-	require.Contains(t, legacy, platformMCPLegacyAgentPluginRoot+"/plugin.json")
-	require.Contains(t, legacy, platformMCPOpenCodePluginRoot+"/plugin/"+platformMCPLegacyPluginName+".ts")
-
-	carried := make(map[string][]byte)
-	intact, nativeClientsAvailable := carryPlatformMCPSubtree(carried, legacy)
-	require.True(t, intact)
-	require.True(t, nativeClientsAvailable)
-	require.Equal(t, legacy, carried)
-
-	b1Legacy := make(map[string][]byte)
-	for filePath, content := range legacy {
-		if strings.HasPrefix(filePath, platformMCPPluginRoot+"/") || strings.HasPrefix(filePath, platformMCPLegacyAgentPluginRoot+"/") {
-			b1Legacy[filePath] = content
-		}
-	}
-	carried = make(map[string][]byte)
-	intact, nativeClientsAvailable = carryPlatformMCPSubtree(carried, b1Legacy)
-	require.True(t, intact)
-	require.False(t, nativeClientsAvailable)
-	require.Equal(t, b1Legacy, carried)
-
-	// A B1-only repair of this layout must hash the Agent Plugin bytes that
-	// were actually preserved, not only the Claude package.
-	withAgent := platformMCPFingerprintFromFiles(b1Legacy)
-	withoutAgent := maps.Clone(b1Legacy)
-	delete(withoutAgent, platformMCPLegacyAgentPluginRoot+"/plugin.json")
-	require.NotEqual(t, withAgent, platformMCPFingerprintFromFiles(withoutAgent))
-}
-
-// remapPlatformMCPFilesToLegacyLayout rewrites only the Agent Plugin directory
-// and the OpenCode identifier so already-published repositories can be
-// reconstructed in tests. Claude, Cursor, Codex, and the OpenCode package root
-// stay on their current paths.
-func remapPlatformMCPFilesToLegacyLayout(files map[string][]byte) map[string][]byte {
-	legacy := make(map[string][]byte, len(files))
-	for filePath, content := range files {
-		legacy[remapPlatformMCPPathToLegacyLayout(filePath)] = content
-	}
-	return legacy
-}
-
-func remapPlatformMCPPathToLegacyLayout(filePath string) string {
-	currentAgentPrefix := platformMCPAgentPluginRoot + "/"
-	legacyAgentPrefix := platformMCPLegacyAgentPluginRoot + "/"
-	if rest, ok := strings.CutPrefix(filePath, currentAgentPrefix); ok {
-		return legacyAgentPrefix + rest
-	}
-
-	currentOpenCodePlugin := platformMCPOpenCodePluginRoot + "/plugin/" + platformMCPPluginName + ".ts"
-	if filePath == currentOpenCodePlugin {
-		return platformMCPOpenCodePluginRoot + "/plugin/" + platformMCPLegacyPluginName + ".ts"
-	}
-
-	currentOpenCodeIDPrefix := platformMCPOpenCodePluginRoot + "/" + platformMCPPluginName + "/"
-	legacyOpenCodeIDPrefix := platformMCPOpenCodePluginRoot + "/" + platformMCPLegacyPluginName + "/"
-	if rest, ok := strings.CutPrefix(filePath, currentOpenCodeIDPrefix); ok {
-		return legacyOpenCodeIDPrefix + rest
-	}
-	return filePath
-}
-
-func TestGeneratePlatformMCPPluginPackageDirectDownloadsShareDefinition(t *testing.T) {
-	t.Parallel()
-
-	packages := make(map[string]map[string][]byte)
-	for _, platform := range []string{"claude", "cursor", "codex", "opencode", "agent-plugin"} {
-		files, err := GeneratePlatformMCPPluginPackage("https://app.getgram.ai/", "42", platform)
-		require.NoError(t, err, platform)
-		packages[platform] = files
-	}
-
-	platformSkills, err := loadPlatformMCPSkills()
-	require.NoError(t, err)
-	for name, skill := range platformSkills {
-		paths := map[string]string{
-			"claude":       "skills/" + name + "/SKILL.md",
-			"cursor":       "skills/" + name + "/SKILL.md",
-			"codex":        "skills/" + name + "/SKILL.md",
-			"opencode":     platformMCPPluginName + "/skills/" + name + "/SKILL.md",
-			"agent-plugin": "skills/" + name + "/SKILL.md",
-		}
-		for platform, packagePath := range paths {
-			require.Equal(t, skill, packages[platform][packagePath], "missing or changed %s direct-download skill %q", platform, name)
-		}
-	}
-	for platform, files := range packages {
-		for path, content := range files {
-			require.NotContains(t, path, "hooks/", platform)
-			require.NotContains(t, string(content), "GRAM_API_KEY", platform)
-			require.NotContains(t, string(content), skillFeedbackMCPServerName, platform)
-		}
-	}
-
-	_, err = GeneratePlatformMCPPluginPackage("https://app.getgram.ai", "42", "unsupported")
-	require.ErrorContains(t, err, "unsupported Platform MCP platform")
-}
-
-func TestGeneratePluginPackagesRejectsInvalidPlatformMCPServerURL(t *testing.T) {
-	t.Parallel()
-
-	for _, serverURL := range []string{
-		"",
-		"localhost:8080",
-		"https:///missing-host",
-		"ftp://example.com",
-		"https://user:password@example.com",
-		"https://example.com?query=value",
-		"https://example.com#fragment",
-	} {
-		_, err := GeneratePluginPackages(fingerprintTestPlugins(), GenerateConfig{
-			OrgName:            "Acme Corp",
-			ServerURL:          serverURL,
-			PlatformMCPEnabled: true,
-		})
-		require.ErrorContains(t, err, "invalid Platform MCP server URL", serverURL)
-	}
 }
 
 func TestGeneratePluginPackagesProducesExpectedFiles(t *testing.T) {
@@ -1201,6 +892,71 @@ func TestGenerateMarketplaceManifestUsesMarketplaceNameOverride(t *testing.T) {
 	require.Equal(t, "acme-custom", codexManifest.Name)
 }
 
+// TestGenerateCopilotMarketplaceManifest pins the two things Copilot resolves
+// an entry by. It probes marketplace.json before .claude-plugin/marketplace.json,
+// so the root file must exist or Copilot silently falls through to Claude's
+// entries and loads the Claude packages (whose `"matcher": ""` hooks are a
+// validation error that discards the whole hook config). And it looks the
+// installed package up by the entry name, so every entry name must equal the
+// name inside that package's own plugin.json.
+func TestGenerateCopilotMarketplaceManifest(t *testing.T) {
+	t.Parallel()
+	plugins := []PluginInfo{{
+		Name:        "Engineering Tools",
+		Slug:        "engineering-tools",
+		Description: "Eng MCP servers.",
+		Servers: []PluginServerInfo{{
+			DisplayName: "eng",
+			Policy:      "required",
+			MCPURL:      "https://example.com/mcp",
+			IsPublic:    true,
+		}},
+	}}
+	cfg := GenerateConfig{
+		OrgName:          "Acme Corp",
+		ServerURL:        "https://app.getgram.ai",
+		HooksAPIKey:      "hk_test",
+		IsDefaultProject: true,
+	}
+
+	files, err := GeneratePluginPackages(plugins, cfg)
+	require.NoError(t, err)
+
+	var copilot marketplaceManifest
+	require.NoError(t, json.Unmarshal(files["marketplace.json"], &copilot))
+	require.Equal(t, resolveMarketplaceName(cfg), copilot.Name)
+	// owner is a required field in Copilot's marketplace schema; an absent one
+	// fails `copilot plugin marketplace add` outright.
+	require.Equal(t, "Acme Corp", copilot.Owner.Name)
+	require.Len(t, copilot.Plugins, 2)
+
+	// Every source must resolve to a directory the generator actually wrote, and
+	// its plugin.json name must equal the entry name.
+	for _, entry := range copilot.Plugins {
+		dir := strings.TrimPrefix(entry.Source, "./")
+		raw, ok := files[path.Join(dir, "plugin.json")]
+		require.True(t, ok, "entry %q points at %q, which has no plugin.json", entry.Name, entry.Source)
+		var meta struct {
+			Name string `json:"name"`
+		}
+		require.NoError(t, json.Unmarshal(raw, &meta))
+		require.Equal(t, entry.Name, meta.Name)
+	}
+
+	require.Equal(t, CopilotObservabilitySlug(cfg), copilot.Plugins[0].Name)
+	require.Equal(t, "engineering-tools", copilot.Plugins[1].Name)
+	require.Equal(t, "./agent-plugins/engineering-tools", copilot.Plugins[1].Source)
+
+	// No hooks key: no observability package is generated, so no entry for it.
+	cfg.HooksAPIKey = ""
+	withoutHooks, err := GeneratePluginPackages(plugins, cfg)
+	require.NoError(t, err)
+	var bare marketplaceManifest
+	require.NoError(t, json.Unmarshal(withoutHooks["marketplace.json"], &bare))
+	require.Len(t, bare.Plugins, 1)
+	require.Equal(t, "engineering-tools", bare.Plugins[0].Name)
+}
+
 func TestGenerateMarketplaceManifestScopesNonDefaultProject(t *testing.T) {
 	t.Parallel()
 	plugins := []PluginInfo{{Name: "A", Slug: "a"}}
@@ -1364,6 +1120,73 @@ func TestGenerateCursorObservabilityPluginRegistersBootstrapCommands(t *testing.
 			require.Nil(t, parsed.Hooks[event][0].FailClosed, "observational event %q must not fail closed", event)
 		}
 	}
+}
+
+func TestGenerateCopilotObservabilityPluginRegistersBootstrapCommands(t *testing.T) {
+	t.Parallel()
+	cfg := GenerateConfig{
+		OrgName:     "Acme",
+		ServerURL:   "https://app.getgram.ai",
+		HooksAPIKey: "gram_local_secret_xyz",
+	}
+	files, err := GeneratePluginPackages(nil, cfg)
+	require.NoError(t, err)
+
+	root := CopilotObservabilitySlug(cfg)
+	hooksJSON := files[root+"/hooks/hooks.json"]
+	require.NotNil(t, hooksJSON, "copilot observability hooks/hooks.json missing")
+	require.NotNil(t, files[root+"/plugin.json"], "copilot plugin.json must sit at the package root")
+	require.NotNil(t, files[root+"/hooks/bootstrap.ps1"], "copilot ships the PowerShell bootstrapper its powershell entries invoke")
+
+	var parsed copilotHooksConfig
+	require.NoError(t, json.Unmarshal(hooksJSON, &parsed))
+	require.Equal(t, 1, parsed.Version)
+	require.Len(t, parsed.Hooks, len(CopilotObservabilityHookEvents))
+
+	for _, event := range CopilotObservabilityHookEvents {
+		entries, ok := parsed.Hooks[event]
+		require.True(t, ok, "event %q must be registered in hooks.json or Copilot will silently drop it", event)
+		require.Len(t, entries, 1)
+
+		timeoutSeconds := 60
+		if event == "sessionStart" {
+			timeoutSeconds = 330
+		}
+		require.Equal(t, "command", entries[0].Type)
+		require.Equal(t, timeoutSeconds, entries[0].TimeoutSec, "Copilot's own default is 30s")
+		require.Equal(t,
+			fmt.Sprintf(`bash "$COPILOT_PLUGIN_ROOT/hooks/bootstrap.sh" --config="$COPILOT_PLUGIN_ROOT/speakeasy.json" agenthooks run --provider=copilot --timeout=%ds`, timeoutSeconds),
+			entries[0].Bash,
+		)
+		// A Windows machine with no bash fails preToolUse, which Copilot
+		// fail-closes: every tool call denied, not merely lost telemetry.
+		require.Equal(t, copilotHooksPowerShellCommand(timeoutSeconds), entries[0].PowerShell,
+			"every entry needs a powershell counterpart")
+		require.Contains(t, entries[0].PowerShell, "bootstrap.ps1")
+	}
+}
+
+// An empty matcher is fatal to the whole hook config — see
+// package-format.md#copilot-observability. Assert on the raw bytes: the failure
+// mode leaves no other trace.
+func TestGenerateCopilotObservabilityPluginEmitsNoMatcherKey(t *testing.T) {
+	t.Parallel()
+	cfg := GenerateConfig{
+		OrgName:     "Acme",
+		ServerURL:   "https://app.getgram.ai",
+		HooksAPIKey: "gram_local_secret_xyz",
+	}
+	files, err := GenerateObservabilityPluginPackage(cfg, "copilot")
+	require.NoError(t, err)
+
+	hooksJSON, ok := files["hooks/hooks.json"]
+	require.True(t, ok, "copilot package must ship hooks/hooks.json")
+	require.NotContains(t, string(hooksJSON), "matcher", "an empty matcher discards the whole plugin's hook config")
+
+	// Copilot parses <root>/hooks.json and <root>/hooks/hooks.json both, so
+	// shipping both registers every hook twice.
+	_, ok = files["hooks.json"]
+	require.False(t, ok, "a root hooks.json would double-register every hook")
 }
 
 func TestGenerateCodexObservabilityPluginHooksJSONIncludesBootstrapCommands(t *testing.T) {
@@ -1858,6 +1681,7 @@ func TestCarryHooksSubtreeIsLayoutIndependent(t *testing.T) {
 		prefixes[1] + "hooks/hook.sh":                []byte("v14 cursor"),
 		prefixes[2] + "hooks/hook.sh":                []byte("v14 codex"),
 		prefixes[3] + "plugin/agenthooks.ts":         []byte("v14 opencode"),
+		prefixes[4] + "hooks/hooks.json":             []byte("v14 copilot"),
 		"some-mcp-plugin/.claude-plugin/plugin.json": []byte("{}"),
 	}
 
@@ -1865,7 +1689,7 @@ func TestCarryHooksSubtreeIsLayoutIndependent(t *testing.T) {
 	carriedOrg, carried := carryHooksSubtree(dst, published, []byte(`{"org_name":"Acme"}`), "Renamed Since Publish")
 	require.True(t, carried)
 	require.Equal(t, "Acme", carriedOrg)
-	require.Len(t, dst, 5)
+	require.Len(t, dst, 6)
 	require.Equal(t, []byte("v14 claude"), dst[prefixes[0]+"hooks/hook.sh"])
 	require.NotContains(t, dst, "some-mcp-plugin/.claude-plugin/plugin.json")
 
@@ -2056,7 +1880,7 @@ func TestGeneratedHookScriptsAreValidBash(t *testing.T) {
 		ServerURL:   "https://app.getgram.ai",
 		HooksAPIKey: "gram_local_secret_xyz",
 	}
-	for _, platform := range []string{"claude", "cursor", "codex", "opencode", "openclaw"} {
+	for _, platform := range []string{"claude", "cursor", "codex", "opencode", "copilot", "openclaw"} {
 		files, err := GenerateObservabilityPluginPackage(cfg, platform)
 		require.NoError(t, err)
 		for name, content := range files {
@@ -2150,6 +1974,15 @@ func TestGenerateOpenClawObservabilityPluginPackage(t *testing.T) {
 	// the strip logic itself, not just the call site.
 	if !strings.Contains(string(shim), "const event = slimEvent(hook, rawEvent)") {
 		t.Error("every hook payload must pass through slimEvent")
+	}
+	// The gate budget chain (5s relay < ~9s daemon < 10s shim) collapses if
+	// this drifts: a slower shim wall would let gates stall the agent, a
+	// faster one would race the relay's fail-closed verdict.
+	if !strings.Contains(string(shim), "const GATE_TIMEOUT_MS = { before_tool_call: 10000, before_agent_run: 10000 }") {
+		t.Error("gate timeout must stay at the 10s budget")
+	}
+	if !strings.Contains(string(shim), "const FAIL_CLOSED = true") {
+		t.Error("gates must fail closed when the daemon is unreachable")
 	}
 	if !strings.Contains(string(shim), `if (hook === "agent_end" || hook === "before_agent_run") {`) {
 		t.Error("slimEvent must target the history-bearing hooks")
@@ -2615,23 +2448,6 @@ func TestMCPFingerprintsIsStableAcrossCalls(t *testing.T) {
 	require.Equal(t, first, second, "same plugins + config must produce the same fingerprints")
 }
 
-func TestMCPFingerprintsIsolatesPlatformMCP(t *testing.T) {
-	t.Parallel()
-	cfg := GenerateConfig{OrgName: "Acme Corp", ServerURL: "https://app.getgram.ai", ProjectSlug: "default"}
-
-	withoutPlatform, err := MCPFingerprints(fingerprintTestPlugins(), cfg)
-	require.NoError(t, err)
-
-	cfg.PlatformMCPEnabled = true
-	withPlatform, err := MCPFingerprints(fingerprintTestPlugins(), cfg)
-	require.NoError(t, err)
-
-	require.Equal(t, withoutPlatform["engineering-tools"], withPlatform["engineering-tools"], "Platform MCP must not churn customer plugin fingerprints")
-	require.NotEqual(t, withoutPlatform[mcpSharedFingerprintKey], withPlatform[mcpSharedFingerprintKey], "shared marketplace files list the Platform package and must change with it")
-	require.Contains(t, withPlatform, mcpPlatformFingerprintKey)
-	require.True(t, strings.HasPrefix(withPlatform[mcpPlatformFingerprintKey], "sha256:"))
-}
-
 func TestMCPFingerprintsIgnoresPerPublishFields(t *testing.T) {
 	t.Parallel()
 	plugins := fingerprintTestPlugins()
@@ -2894,4 +2710,47 @@ func TestMCPFingerprintsChangeWithDistributedSkills(t *testing.T) {
 	require.NotEqual(t, base["plugin-a"], withSkill["plugin-a"], "distributing a skill must change the plugin's fingerprint")
 	require.NotEqual(t, withSkill["plugin-a"], withNewVersion["plugin-a"], "a new resolved skill version must change the plugin's fingerprint")
 	require.Equal(t, base["plugin-b"], withSkill["plugin-b"], "plugins not carrying the skill must be untouched")
+}
+
+// TestCopilotObservabilitySlugMatchesDeviceAgentCandidate pins the cross-repo
+// naming contract. The plugin policy the device agent fetches is tool-agnostic:
+// it carries naming.ObservabilitySlug(org) and nothing Copilot-specific. The
+// agent's core/copilot resolver therefore probes "<policy slug>-copilot"
+// against this manifest, exactly as it probes "-cursor" and "-codex". If this
+// suffix ever drifts the agent resolves nothing, registers the marketplace,
+// enables no plugin and reports no error — a silent enforcement no-op.
+func TestCopilotObservabilitySlugMatchesDeviceAgentCandidate(t *testing.T) {
+	t.Parallel()
+	for _, orgName := range []string{"Acme Corp", "acme", "Ünïcode & Co."} {
+		cfg := GenerateConfig{OrgName: orgName}
+		require.Equal(t, naming.ObservabilitySlug(orgName)+"-copilot", CopilotObservabilitySlug(cfg),
+			"device agent probes <policy slug>-copilot for org %q", orgName)
+	}
+	// HooksOrgName pins the slug to the published subtree across a rename, the
+	// same way the other platforms' slugs do.
+	renamed := GenerateConfig{OrgName: "New Name", HooksOrgName: "Old Name"}
+	require.Equal(t, naming.ObservabilitySlug("Old Name")+"-copilot", CopilotObservabilitySlug(renamed))
+}
+
+// TestDogfoodPluginFilesIncludesCopilot guards the interaction the dogfood
+// renderer's comment calls out: the manifest sweep deletes every path under a
+// vendor subdirectory, and Copilot's plugin.json is the one that sits at the
+// package root. Sweeping it would leave `copilot --plugin-dir plugin-copilot`
+// with nothing to load.
+func TestDogfoodPluginFilesIncludesCopilot(t *testing.T) {
+	t.Parallel()
+	files, err := DogfoodPluginFiles()
+	require.NoError(t, err)
+
+	pluginJSON, ok := files["plugin-copilot/plugin.json"]
+	require.True(t, ok, "plugin-copilot/plugin.json swept away; copilot --plugin-dir cannot load the package")
+	var meta copilotPluginMeta
+	require.NoError(t, json.Unmarshal(pluginJSON, &meta))
+	require.Equal(t, "plugin-copilot", meta.Name)
+
+	var cfg copilotHooksConfig
+	require.NoError(t, json.Unmarshal(files["plugin-copilot/hooks/hooks.json"], &cfg))
+	require.Len(t, cfg.Hooks, len(CopilotObservabilityHookEvents))
+	require.NotEmpty(t, files["plugin-copilot/hooks/bootstrap.sh"])
+	require.NotEmpty(t, files["plugin-copilot/hooks/bootstrap.ps1"])
 }

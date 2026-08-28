@@ -186,4 +186,17 @@ func TestOnboardingServiceValidatesClientFamily(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.Equal(t, string(OnboardingClientOpencode), workflow.ClientFamily)
+
+	// The catch-all is a real client family, not a rejected one: an install on
+	// an uncertified agent is recorded as itself rather than mislabelled as a
+	// certified agent or dropped from the workflow entirely.
+	_, err = service.RecordInstallIntent(ctx, principal.OrganizationID, principal.UserID, OnboardingClientOther)
+	require.NoError(t, err)
+
+	workflow, err = platformrepo.New(conn).GetActivePlatformMCPOnboardingWorkflow(ctx, platformrepo.GetActivePlatformMCPOnboardingWorkflowParams{
+		OrganizationID:       principal.OrganizationID,
+		InitiatingSubjectUrn: userSubjectURN(principal.UserID),
+	})
+	require.NoError(t, err)
+	require.Equal(t, string(OnboardingClientOther), workflow.ClientFamily)
 }

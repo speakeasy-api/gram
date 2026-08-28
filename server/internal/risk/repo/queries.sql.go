@@ -348,17 +348,20 @@ WHERE project_id = $1
   AND enabled IS TRUE
   AND deleted IS FALSE
   AND risk_policy_id IS NOT DISTINCT FROM $2
+  AND ($3::uuid IS NULL OR id <> $3)
 `
 
 type CountEnabledRegexExclusionsInScopeParams struct {
 	ProjectID    uuid.UUID
 	RiskPolicyID uuid.NullUUID
+	ExcludeID    uuid.NullUUID
 }
 
 // Enforces the per-scope regex cap. Counts enabled regex exclusions sharing the
-// same scope (same risk_policy_id, treating NULL/global as its own bucket).
+// same scope (same risk_policy_id, treating NULL/global as its own bucket),
+// optionally excluding the row currently being updated.
 func (q *Queries) CountEnabledRegexExclusionsInScope(ctx context.Context, arg CountEnabledRegexExclusionsInScopeParams) (int64, error) {
-	row := q.db.QueryRow(ctx, countEnabledRegexExclusionsInScope, arg.ProjectID, arg.RiskPolicyID)
+	row := q.db.QueryRow(ctx, countEnabledRegexExclusionsInScope, arg.ProjectID, arg.RiskPolicyID, arg.ExcludeID)
 	var column_1 int64
 	err := row.Scan(&column_1)
 	return column_1, err
@@ -2023,6 +2026,41 @@ func (q *Queries) GetRiskExclusionForReconcile(ctx context.Context, arg GetRiskE
 	return i, err
 }
 
+const getRiskExclusionForUpdate = `-- name: GetRiskExclusionForUpdate :one
+SELECT id, project_id, organization_id, risk_policy_id, match_type, match_value, rule_id_filter, source_filter, enabled, created_at, updated_at, deleted_at, deleted
+FROM risk_exclusions
+WHERE id = $1
+  AND project_id = $2
+  AND deleted IS FALSE
+FOR UPDATE
+`
+
+type GetRiskExclusionForUpdateParams struct {
+	ID        uuid.UUID
+	ProjectID uuid.UUID
+}
+
+func (q *Queries) GetRiskExclusionForUpdate(ctx context.Context, arg GetRiskExclusionForUpdateParams) (RiskExclusion, error) {
+	row := q.db.QueryRow(ctx, getRiskExclusionForUpdate, arg.ID, arg.ProjectID)
+	var i RiskExclusion
+	err := row.Scan(
+		&i.ID,
+		&i.ProjectID,
+		&i.OrganizationID,
+		&i.RiskPolicyID,
+		&i.MatchType,
+		&i.MatchValue,
+		&i.RuleIDFilter,
+		&i.SourceFilter,
+		&i.Enabled,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
 const getRiskOverviewFindingCounts = `-- name: GetRiskOverviewFindingCounts :one
 SELECT
     COUNT(*)::BIGINT AS findings
@@ -2377,6 +2415,7 @@ SELECT
     b.project_id,
     b.reason,
     b.tool_name,
+    b.provider,
     b.feedback,
     b.created_at,
     b.user_id,
@@ -2406,6 +2445,7 @@ type GetToolCallBlockRow struct {
 	ProjectID  uuid.UUID
 	Reason     string
 	ToolName   pgtype.Text
+	Provider   string
 	Feedback   pgtype.Text
 	CreatedAt  pgtype.Timestamptz
 	UserID     string
@@ -2430,6 +2470,7 @@ func (q *Queries) GetToolCallBlock(ctx context.Context, arg GetToolCallBlockPara
 		&i.ProjectID,
 		&i.Reason,
 		&i.ToolName,
+		&i.Provider,
 		&i.Feedback,
 		&i.CreatedAt,
 		&i.UserID,
@@ -3176,6 +3217,73 @@ func (q *Queries) ListRiskExclusionsByProject(ctx context.Context, arg ListRiskE
 	return items, nil
 }
 
+const listRiskExclusionsByProjectPage = `-- name: ListRiskExclusionsByProjectPage :many
+SELECT id, project_id, organization_id, risk_policy_id, match_type, match_value, rule_id_filter, source_filter, enabled, created_at, updated_at, deleted_at, deleted
+FROM risk_exclusions
+WHERE project_id = $1
+  AND deleted IS FALSE
+  AND ($2::uuid IS NULL OR risk_policy_id = $2)
+  AND (
+    $3::timestamptz IS NULL
+    OR (created_at, id) < (
+      $3::timestamptz,
+      $4::uuid
+    )
+  )
+ORDER BY created_at DESC, id DESC
+LIMIT $5
+`
+
+type ListRiskExclusionsByProjectPageParams struct {
+	ProjectID       uuid.UUID
+	RiskPolicyID    uuid.NullUUID
+	CursorCreatedAt pgtype.Timestamptz
+	CursorID        uuid.NullUUID
+	PageLimit       int32
+}
+
+// Platform MCP keyset page. The existing unbounded query remains the Goa
+// compatibility path.
+func (q *Queries) ListRiskExclusionsByProjectPage(ctx context.Context, arg ListRiskExclusionsByProjectPageParams) ([]RiskExclusion, error) {
+	rows, err := q.db.Query(ctx, listRiskExclusionsByProjectPage,
+		arg.ProjectID,
+		arg.RiskPolicyID,
+		arg.CursorCreatedAt,
+		arg.CursorID,
+		arg.PageLimit,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []RiskExclusion
+	for rows.Next() {
+		var i RiskExclusion
+		if err := rows.Scan(
+			&i.ID,
+			&i.ProjectID,
+			&i.OrganizationID,
+			&i.RiskPolicyID,
+			&i.MatchType,
+			&i.MatchValue,
+			&i.RuleIDFilter,
+			&i.SourceFilter,
+			&i.Enabled,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.DeletedAt,
+			&i.Deleted,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listRiskOverviewTimeSeriesFindings = `-- name: ListRiskOverviewTimeSeriesFindings :many
 WITH buckets AS (
   SELECT generate_series(
@@ -3469,6 +3577,85 @@ func (q *Queries) ListRiskPolicies(ctx context.Context, projectID uuid.UUID) ([]
 	return items, nil
 }
 
+const listRiskPoliciesPage = `-- name: ListRiskPoliciesPage :many
+SELECT id, project_id, organization_id, enabled, name, policy_type, sources, presidio_entities, analyzer_config, prompt_injection_rules, disabled_rules, custom_rule_ids, message_types, scope_include, scope_exempt, action, audience_type, shadow_mcp_disposition, auto_name, user_message, prompt, model_config, score, version, created_at, updated_at, deleted_at, deleted
+FROM risk_policies
+WHERE project_id = $1
+  AND deleted IS FALSE
+  AND (
+    $2::timestamptz IS NULL
+    OR (created_at, id) < (
+      $2::timestamptz,
+      $3::uuid
+    )
+  )
+ORDER BY created_at DESC, id DESC
+LIMIT $4
+`
+
+type ListRiskPoliciesPageParams struct {
+	ProjectID       uuid.UUID
+	CursorCreatedAt pgtype.Timestamptz
+	CursorID        uuid.NullUUID
+	PageLimit       int32
+}
+
+// Platform MCP keyset page. The existing unbounded query remains the Goa
+// compatibility path.
+func (q *Queries) ListRiskPoliciesPage(ctx context.Context, arg ListRiskPoliciesPageParams) ([]RiskPolicy, error) {
+	rows, err := q.db.Query(ctx, listRiskPoliciesPage,
+		arg.ProjectID,
+		arg.CursorCreatedAt,
+		arg.CursorID,
+		arg.PageLimit,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []RiskPolicy
+	for rows.Next() {
+		var i RiskPolicy
+		if err := rows.Scan(
+			&i.ID,
+			&i.ProjectID,
+			&i.OrganizationID,
+			&i.Enabled,
+			&i.Name,
+			&i.PolicyType,
+			&i.Sources,
+			&i.PresidioEntities,
+			&i.AnalyzerConfig,
+			&i.PromptInjectionRules,
+			&i.DisabledRules,
+			&i.CustomRuleIds,
+			&i.MessageTypes,
+			&i.ScopeInclude,
+			&i.ScopeExempt,
+			&i.Action,
+			&i.AudienceType,
+			&i.ShadowMcpDisposition,
+			&i.AutoName,
+			&i.UserMessage,
+			&i.Prompt,
+			&i.ModelConfig,
+			&i.Score,
+			&i.Version,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.DeletedAt,
+			&i.Deleted,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listRiskPolicyBypassRequests = `-- name: ListRiskPolicyBypassRequests :many
 SELECT id, organization_id, project_id, risk_policy_id, target_kind, target_label, target_key, target_dimensions, requester_user_id, requester_email, note, status, decided_by, granted_principal_urns, decided_at, created_at, updated_at, deleted_at, deleted
 FROM risk_policy_bypass_requests
@@ -3516,6 +3703,73 @@ func (q *Queries) ListRiskPolicyBypassRequests(ctx context.Context, arg ListRisk
 			&i.DecidedBy,
 			&i.GrantedPrincipalUrns,
 			&i.DecidedAt,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.DeletedAt,
+			&i.Deleted,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listRiskPolicyCreateCandidates = `-- name: ListRiskPolicyCreateCandidates :many
+SELECT id, project_id, organization_id, enabled, name, policy_type, sources, presidio_entities, analyzer_config, prompt_injection_rules, disabled_rules, custom_rule_ids, message_types, scope_include, scope_exempt, action, audience_type, shadow_mcp_disposition, auto_name, user_message, prompt, model_config, score, version, created_at, updated_at, deleted_at, deleted
+FROM risk_policies
+WHERE project_id = $1
+  AND name = $2
+  AND policy_type = $3
+  AND deleted IS FALSE
+ORDER BY id
+`
+
+type ListRiskPolicyCreateCandidatesParams struct {
+	ProjectID  uuid.UUID
+	Name       string
+	PolicyType string
+}
+
+// Platform MCP create convergence narrows by the stable public identity before
+// loading sensitive policy definitions for exact canonical comparison.
+func (q *Queries) ListRiskPolicyCreateCandidates(ctx context.Context, arg ListRiskPolicyCreateCandidatesParams) ([]RiskPolicy, error) {
+	rows, err := q.db.Query(ctx, listRiskPolicyCreateCandidates, arg.ProjectID, arg.Name, arg.PolicyType)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []RiskPolicy
+	for rows.Next() {
+		var i RiskPolicy
+		if err := rows.Scan(
+			&i.ID,
+			&i.ProjectID,
+			&i.OrganizationID,
+			&i.Enabled,
+			&i.Name,
+			&i.PolicyType,
+			&i.Sources,
+			&i.PresidioEntities,
+			&i.AnalyzerConfig,
+			&i.PromptInjectionRules,
+			&i.DisabledRules,
+			&i.CustomRuleIds,
+			&i.MessageTypes,
+			&i.ScopeInclude,
+			&i.ScopeExempt,
+			&i.Action,
+			&i.AudienceType,
+			&i.ShadowMcpDisposition,
+			&i.AutoName,
+			&i.UserMessage,
+			&i.Prompt,
+			&i.ModelConfig,
+			&i.Score,
+			&i.Version,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.DeletedAt,
@@ -4442,6 +4696,17 @@ func (q *Queries) ListUserEmailsByIDs(ctx context.Context, arg ListUserEmailsByI
 		return nil, err
 	}
 	return items, nil
+}
+
+const lockRiskExclusionMutations = `-- name: LockRiskExclusionMutations :exec
+SELECT pg_advisory_xact_lock(hashtextextended('risk-exclusion:' || $1::text, 0))
+`
+
+// Serialize exclusion writes per project. Regex limits span rows and include the
+// empty global scope, so row locks alone cannot protect the count-and-write.
+func (q *Queries) LockRiskExclusionMutations(ctx context.Context, projectID string) error {
+	_, err := q.db.Exec(ctx, lockRiskExclusionMutations, projectID)
+	return err
 }
 
 const lockRiskPolicyMutations = `-- name: LockRiskPolicyMutations :exec
@@ -5528,7 +5793,7 @@ WHERE tool_call_blocks.id = $3
       AND our.deleted_at IS NULL
   )
 RETURNING tool_call_blocks.id, tool_call_blocks.project_id, tool_call_blocks.reason, tool_call_blocks.tool_name,
-  tool_call_blocks.feedback, tool_call_blocks.created_at,
+  tool_call_blocks.provider, tool_call_blocks.feedback, tool_call_blocks.created_at,
   COALESCE((SELECT rp.name FROM risk_policies rp WHERE rp.id = tool_call_blocks.risk_policy_id AND rp.deleted IS FALSE), '')::text AS policy_name
 `
 
@@ -5544,6 +5809,7 @@ type UpdateToolCallBlockFeedbackRow struct {
 	ProjectID  uuid.UUID
 	Reason     string
 	ToolName   pgtype.Text
+	Provider   string
 	Feedback   pgtype.Text
 	CreatedAt  pgtype.Timestamptz
 	PolicyName string
@@ -5565,6 +5831,7 @@ func (q *Queries) UpdateToolCallBlockFeedback(ctx context.Context, arg UpdateToo
 		&i.ProjectID,
 		&i.Reason,
 		&i.ToolName,
+		&i.Provider,
 		&i.Feedback,
 		&i.CreatedAt,
 		&i.PolicyName,

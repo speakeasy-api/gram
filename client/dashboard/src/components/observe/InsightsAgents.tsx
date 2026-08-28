@@ -6,6 +6,7 @@ import { useSeriesColors } from "@/components/chart/useSeriesColors";
 import { formatChartZoomRangeLabel } from "@/components/chart/chartUtils";
 import { useChartZoom } from "@/components/chart/useChartZoom";
 import { buildAgentTokenTimeSeriesChartData } from "@/components/observe/agentTokenTimeSeriesChartData";
+import { foldSummariesForMembers } from "@/components/observe/insightsEmployeesData";
 import { ReleaseStageBadge } from "@/components/release-stage-badge";
 import { formatCompact } from "@/lib/format";
 import { StatTile, StatTileGroup } from "@/components/chart/stat-tile";
@@ -155,6 +156,7 @@ const COST_FILTERS = defineFilters([
     label: "Account type",
     kind: "select",
     allLabel: "All",
+    description: "Usage on personal accounts versus team-managed ones.",
   },
 ]);
 
@@ -283,7 +285,17 @@ export function InsightsAgentsContent(): JSX.Element {
     throwOnError: false,
   });
 
-  const users = useMemo(() => usersQuery.data ?? [], [usersQuery.data]);
+  // One person's rows can come back as several summaries (work email,
+  // personal account email, bare user id); fold them to one summary per
+  // member so nobody renders as multiple rows or inflates the active count.
+  const users = useMemo(
+    () =>
+      foldSummariesForMembers(
+        membersData?.members ?? [],
+        usersQuery.data ?? [],
+      ),
+    [membersData, usersQuery.data],
+  );
   const roleUsage = useMemo(
     () => roleUsageQuery.data ?? [],
     [roleUsageQuery.data],

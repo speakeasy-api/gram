@@ -170,13 +170,14 @@ func (e *Engine) run(ctx context.Context, in RunInput, force bool) (Result, erro
 		versionIDs = append(versionIDs, base.PredecessorVersionID.String())
 	}
 	buckets, err := e.insights.QuerySkillInsights(ctx, telemetryrepo.QuerySkillInsightsParams{
-		OrganizationID:  project.OrganizationID,
-		ProjectID:       in.ProjectID.String(),
-		SkillIDs:        []string{in.SkillID.String()},
-		SkillVersionIDs: versionIDs,
-		From:            now.Add(-e.config.TrendWindow),
-		To:              now,
-		IntervalSeconds: int64(e.config.TrendWindow.Seconds()),
+		OrganizationID:      project.OrganizationID,
+		ProjectID:           in.ProjectID.String(),
+		SkillIDs:            []string{in.SkillID.String()},
+		SkillVersionIDs:     versionIDs,
+		From:                now.Add(-e.config.TrendWindow),
+		To:                  now,
+		IntervalSeconds:     int64(e.config.TrendWindow.Seconds()),
+		IncludeSessionUsage: false,
 	})
 	if err != nil {
 		return Result{}, fmt.Errorf("query suggestion skill insights: %w", err)

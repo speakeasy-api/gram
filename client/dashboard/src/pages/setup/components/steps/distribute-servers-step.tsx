@@ -60,6 +60,39 @@ function serverKey(server: PulseMCPServer): string {
   return `${server.registryId}-${server.registrySpecifier}`;
 }
 
+function CatalogErrorBanner({
+  mode,
+  onRetry,
+}: {
+  mode: "initial" | "refetch";
+  onRetry: () => void;
+}): JSX.Element {
+  const initial = mode === "initial";
+  return (
+    <div
+      role="alert"
+      className={cn(
+        "mt-3 flex items-center justify-between gap-3 border p-3",
+        initial ? "border-destructive/20" : "border-warning/20",
+      )}
+    >
+      <p
+        className={cn(
+          "text-sm",
+          initial ? "text-destructive" : "text-muted-foreground",
+        )}
+      >
+        {initial
+          ? "Couldn't load MCP servers. Check that this project exists and that you have access to it."
+          : "We couldn't refresh MCP servers. Showing the last available results."}
+      </p>
+      <Button variant="secondary" size="sm" onClick={onRetry}>
+        <Button.Text>Retry</Button.Text>
+      </Button>
+    </div>
+  );
+}
+
 type DrawerStep = "adding" | "done";
 
 export function DistributeServersStep({
@@ -90,7 +123,12 @@ export function DistributeServersStep({
 
   // The catalog is small and returned in a single response, so we fetch the
   // whole list once and search/filter it client-side (no cursor pagination).
-  const { data, isLoading } = useListMCPCatalog();
+  const {
+    data,
+    isLoading,
+    isError: catalogLoadFailed,
+    refetch: refetchCatalog,
+  } = useListMCPCatalog(undefined, undefined, { throwOnError: false });
   const { data: publishStatus } = usePublishStatus();
 
   // Default-plugin membership: map its mcp_server-backed entries through their
@@ -142,6 +180,9 @@ export function DistributeServersStep({
     [distributedUrls],
   );
 
+  const catalogHasData = data !== undefined;
+  const catalogInitialLoadFailed = catalogLoadFailed && !catalogHasData;
+  const catalogRefetchFailed = catalogLoadFailed && catalogHasData;
   const servers = useMemo(
     () => (data?.servers as PulseMCPServer[]) ?? [],
     [data],
@@ -426,10 +467,22 @@ export function DistributeServersStep({
             />
           </div>
 
+          {catalogRefetchFailed && (
+            <CatalogErrorBanner
+              mode="refetch"
+              onRetry={() => void refetchCatalog().catch(() => undefined)}
+            />
+          )}
+
           {isLoading ? (
             <div className="flex items-center justify-center py-12">
               <Loader2 className="text-muted-foreground h-6 w-6 animate-spin" />
             </div>
+          ) : catalogInitialLoadFailed ? (
+            <CatalogErrorBanner
+              mode="initial"
+              onRetry={() => void refetchCatalog().catch(() => undefined)}
+            />
           ) : matchedServers.length === 0 ? (
             <p className="text-muted-foreground mt-3 text-sm">
               {query
@@ -503,7 +556,7 @@ export function DistributeServersStep({
             </button>
           )}
 
-          {!isLoading && (
+          {!isLoading && !catalogInitialLoadFailed && (
             <p className="text-muted-foreground mt-4 text-xs leading-relaxed">
               Only servers that support OAuth dynamic client registration (DCR)
               are shown here — Speakeasy can configure these automatically. More

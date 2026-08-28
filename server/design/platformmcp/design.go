@@ -9,7 +9,7 @@ import (
 
 var OnboardingState = Type("PlatformMCPOnboardingState", func() {
 	Description("Safe, session-authenticated Platform MCP onboarding projection. It contains no provider URLs, credentials, OAuth values, setup handoffs, or internal resource identifiers.")
-	Attribute("enabled", Boolean, "Whether the active organization currently passes the Platform MCP capability and rollout gates.")
+	Attribute("enabled", Boolean, "Whether the active organization currently has the Platform MCP product feature enabled.")
 	Attribute("stage", String, "Current server-derived onboarding stage.", func() {
 		Enum("not_started", "install_instructions", "authorized", "connection_ready")
 	})
@@ -121,7 +121,7 @@ var _ = Service("platformMcp", func() {
 		Description("Record a selected manual-install client family for the current user's Platform MCP workflow.")
 		Payload(func() {
 			Attribute("client_family", String, "Manual-install client family.", func() {
-				Enum("claude_code", "claude_cowork", "codex", "cursor", "opencode")
+				Enum("claude_code", "claude_cowork", "codex", "cursor", "opencode", "other")
 			})
 			Required("client_family")
 			security.SessionPayload()

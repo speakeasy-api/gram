@@ -179,7 +179,7 @@ func (s *LifecycleVisibilityService) update(ctx context.Context, principal Princ
 	if server.Visibility != from || !hmac.Equal([]byte(lifecycleMetadataVersion(s.key, server.ID.String(), server.ProjectID.String(), lifecycleMCPDisplayName(server), server.Slug.String, server.Visibility)), []byte(input.ExpectedVersion)) {
 		return UpdateMCPVisibilityResult{}, ErrRegistrationConflict
 	}
-	receipt, err := q.CreatePlatformMCPOperationReceipt(ctx, platformrepo.CreatePlatformMCPOperationReceiptParams{OrganizationID: principal.OrganizationID, ProjectID: project.ID, RegistrationID: uuid.NullUUID{UUID: registrationID, Valid: true}, ConnectionID: connectionID, ConnectionGeneration: generation, UserID: conv.ToPGText(principal.UserID), ActingSurface: conv.ToPGText(string(principal.surface())), Operation: operation, IdempotencyKey: input.IdempotencyKey, InputHash: inputHash, Status: receiptStatusPending, ResultCode: pgtype.Text{String: "", Valid: false}, ExpiresAt: pgtype.Timestamptz{Time: s.now().Add(receiptLifetime), InfinityModifier: pgtype.Finite, Valid: true}})
+	receipt, err := q.CreatePlatformMCPOperationReceipt(ctx, platformrepo.CreatePlatformMCPOperationReceiptParams{OrganizationID: principal.OrganizationID, ProjectID: project.ID, RegistrationID: uuid.NullUUID{UUID: registrationID, Valid: true}, ConnectionID: connectionID, ConnectionGeneration: generation, UserID: conv.ToPGText(principal.UserID), ActingSurface: conv.ToPGText(string(principal.surface())), Operation: operation, IdempotencyKey: input.IdempotencyKey, InputHash: inputHash, Status: receiptStatusPending, ResultCode: pgtype.Text{String: "", Valid: false}, ResultPayload: nil, ExpiresAt: pgtype.Timestamptz{Time: s.now().Add(receiptLifetime), InfinityModifier: pgtype.Finite, Valid: true}})
 	if err != nil {
 		return UpdateMCPVisibilityResult{}, fmt.Errorf("create platform mcp visibility receipt: %w", err)
 	}
@@ -187,7 +187,7 @@ func (s *LifecycleVisibilityService) update(ctx context.Context, principal Princ
 	if err != nil {
 		return UpdateMCPVisibilityResult{}, fmt.Errorf("update platform mcp visibility: %w", err)
 	}
-	completed, err := q.CompletePlatformMCPOperationReceipt(ctx, platformrepo.CompletePlatformMCPOperationReceiptParams{RegistrationID: uuid.NullUUID{UUID: registrationID, Valid: true}, Status: receiptStatusSucceeded, ResultCode: conv.ToPGText(to), ID: receipt.ID, OrganizationID: principal.OrganizationID})
+	completed, err := q.CompletePlatformMCPOperationReceipt(ctx, platformrepo.CompletePlatformMCPOperationReceiptParams{RegistrationID: uuid.NullUUID{UUID: registrationID, Valid: true}, Status: receiptStatusSucceeded, ResultCode: conv.ToPGText(to), ResultPayload: nil, ID: receipt.ID, OrganizationID: principal.OrganizationID})
 	if err != nil {
 		return UpdateMCPVisibilityResult{}, fmt.Errorf("complete platform mcp visibility receipt: %w", err)
 	}

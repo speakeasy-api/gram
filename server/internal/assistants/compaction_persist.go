@@ -136,6 +136,7 @@ func (s *ServiceCore) RecordCompactedGeneration(ctx context.Context, projectID, 
 		}
 		empty := pgtype.Text{String: "", Valid: false}
 		params = append(params, chatrepo.CreateChatMessageParams{
+			ID:               uuid.Nil,
 			Replayed:         false,
 			CreatedAt:        conv.PtrToPGTimestamptz(nil),
 			ChatID:           threadRow.ChatID,

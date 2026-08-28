@@ -147,6 +147,84 @@ func (l *Logger) LogChatSessionMove(ctx context.Context, dbtx repo.DBTX, event L
 	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.ChatSessionV1})
 }
 
+const ActionChatSessionRecall Action = "chat_session:recall"
+
+type LogChatSessionRecallEvent struct {
+	OrganizationID string
+	ProjectID      uuid.UUID
+
+	Actor urn.Principal
+
+	ChatSessionURN urn.ChatSession
+	ChatTitle      string
+	// OwnerUserID mirrors LogChatSessionAccessEvent: auxiliary context naming
+	// whose session was recalled, not the audit subject.
+	OwnerUserID string //nolint:glint // owner user id is auxiliary context, not the audit subject (which is ChatSessionURN)
+
+	// SourceSessionID is the native harness session id the recalled chat was
+	// captured from, when known.
+	SourceSessionID string //nolint:glint // native harness session id, not a Gram resource with a URN
+
+	// The remaining fields describe the digest that was served — counts and
+	// sizes only. Like the handoff-export event this entry records that content
+	// left, not what it said.
+	RedactToolPayloads bool
+	FindingsMasked     int
+	UnanalyzedMessages int
+	DigestBytes        int
+	TurnsIncluded      int
+	TurnsDropped       int
+}
+
+// LogChatSessionRecall records that a captured agent session was recalled as a
+// redacted handoff digest so work can continue in another harness (session
+// portability). The digest itself never lands in the audit log — the entry is
+// deliberately content-free. Callers record the recall's lineage edge
+// (chat_session_links) in the same transaction and pass that dbtx here so the
+// edge and the governance record commit together.
+func (l *Logger) LogChatSessionRecall(ctx context.Context, dbtx repo.DBTX, event LogChatSessionRecallEvent) error {
+	action := ActionChatSessionRecall
+
+	meta := map[string]any{
+		"redact_tool_payloads": event.RedactToolPayloads,
+		"findings_masked":      event.FindingsMasked,
+		"unanalyzed_messages":  event.UnanalyzedMessages,
+		"digest_bytes":         event.DigestBytes,
+		"turns_included":       event.TurnsIncluded,
+		"turns_dropped":        event.TurnsDropped,
+	}
+	if event.SourceSessionID != "" {
+		meta["source_session_id"] = event.SourceSessionID
+	}
+	metadata, err := marshalAuditPayload(meta)
+	if err != nil {
+		return fmt.Errorf("marshal %s metadata: %w", action, err)
+	}
+
+	entry := repo.InsertAuditLogParams{
+		OrganizationID: event.OrganizationID,
+		ProjectID:      uuid.NullUUID{UUID: event.ProjectID, Valid: event.ProjectID != uuid.Nil},
+
+		ActorID:          event.Actor.ID,
+		ActorType:        string(event.Actor.Type),
+		ActorDisplayName: conv.ToPGTextEmpty(""),
+		ActorSlug:        conv.ToPGTextEmpty(""),
+
+		Action: string(action),
+
+		SubjectID:          event.ChatSessionURN.ID.String(),
+		SubjectType:        string(subjectTypeChatSession),
+		SubjectDisplayName: conv.ToPGTextEmpty(event.ChatTitle),
+		SubjectSlug:        conv.ToPGTextEmpty(event.OwnerUserID),
+
+		BeforeSnapshot: nil,
+		AfterSnapshot:  nil,
+		Metadata:       metadata,
+	}
+
+	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.ChatSessionV1})
+}
+
 const ActionChatSessionHandoffExport Action = "chat_session:handoff_export"
 
 type LogChatSessionHandoffExportEvent struct {

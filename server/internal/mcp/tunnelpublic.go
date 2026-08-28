@@ -267,8 +267,7 @@ func (s *Service) serveTunneledPublicInit(
 		}
 
 		if err := rt.sessions.Reserve(ctx, tunnelID, mcpServerID, sid); err != nil {
-			var capErr *tunnelsessions.CapacityError
-			if errors.As(err, &capErr) {
+			if capErr, ok := errors.AsType[*tunnelsessions.CapacityError](err); ok {
 				w.Header().Set("Retry-After", strconv.Itoa(int(capErr.RetryAfter.Seconds())+1))
 				return oops.E(oops.CodeRateLimitExceeded, nil, "this MCP server is at its anonymous session capacity").LogWarn(ctx, logger)
 			}

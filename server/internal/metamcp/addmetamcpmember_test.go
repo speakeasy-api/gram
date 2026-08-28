@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/meta_mcp"
@@ -15,6 +16,9 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/remotemcp/remotemcptest"
+	remotemcprepo "github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
+	unproxiedmcprepo "github.com/speakeasy-api/gram/server/internal/unproxiedmcp/repo"
 )
 
 func seedMetaMcpServer(t *testing.T, ctx context.Context, ti *testInstance, name string) *types.MetaMcpServer {
@@ -201,9 +205,6 @@ func TestAddMetaMcpMember_AllowsDistinctBackends(t *testing.T) {
 		}),
 		seedMcpServerFronting(t, ctx, ti.conn, *authCtx.ProjectID, mcpserversrepo.CreateMCPServerParams{
 			ToolsetID: conv.ToNullUUID(seedToolsetBackend(t, ctx, ti.conn, authCtx.ActiveOrganizationID, *authCtx.ProjectID)),
-		}),
-		seedMcpServerFronting(t, ctx, ti.conn, *authCtx.ProjectID, mcpserversrepo.CreateMCPServerParams{
-			UnproxiedMcpServerID: conv.ToNullUUID(seedUnproxiedBackend(t, ctx, ti.conn, *authCtx.ProjectID)),
 		}),
 	}
 
@@ -414,4 +415,100 @@ func TestAddMetaMcpMember_ConcurrentDuplicateAdds(t *testing.T) {
 	}
 	require.Equal(t, 1, successes)
 	require.Equal(t, 1, conflicts)
+}
+
+// Attach-time validation: the gateway addresses members by qualified
+// serverslug--toolname, so a slugless server can never be reached.
+func TestAddMetaMcpMember_RejectsSluglessServer(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	meta := seedMetaMcpServer(t, ctx, ti, "slugless host")
+
+	remote := remotemcptest.SeedServer(t, ctx, ti.conn, remotemcprepo.CreateServerParams{
+		ProjectID:     *authCtx.ProjectID,
+		TransportType: "streamable-http",
+		Url:           "https://test.example.com/mcp/" + uuid.NewString(),
+	})
+	issuerID := seedUserSessionIssuer(t, ctx, ti.conn, *authCtx.ProjectID)
+	serverID, err := uuid.NewV7()
+	require.NoError(t, err)
+	server, err := mcpserversrepo.New(ti.conn).CreateMCPServer(ctx, mcpserversrepo.CreateMCPServerParams{
+		ID:                  serverID,
+		ProjectID:           *authCtx.ProjectID,
+		Name:                conv.ToPGText("slugless legacy server"),
+		Slug:                pgtype.Text{String: "", Valid: false},
+		EnvironmentID:       uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		UserSessionIssuerID: uuid.NullUUID{UUID: issuerID, Valid: true},
+		RemoteMcpServerID:   uuid.NullUUID{UUID: remote.ID, Valid: true},
+		ToolsetID:           uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		Visibility:          "private",
+	})
+	require.NoError(t, err)
+
+	_, err = ti.service.AddMetaMcpMember(ctx, &gen.AddMetaMcpMemberPayload{
+		SessionToken:     nil,
+		ApikeyToken:      nil,
+		ProjectSlugInput: nil,
+		MetaMcpServerID:  meta.ID,
+		McpServerID:      server.ID.String(),
+		SortOrder:        nil,
+	})
+	requireOopsCode(t, err, oops.CodeInvalid)
+	require.ErrorContains(t, err, "no slug")
+}
+
+// Unproxied backends have no gateway-side dispatch path.
+func TestAddMetaMcpMember_RejectsUnproxiedServer(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	meta := seedMetaMcpServer(t, ctx, ti, "unproxied host")
+
+	unproxiedID, err := uuid.NewV7()
+	require.NoError(t, err)
+	unproxied, err := unproxiedmcprepo.New(ti.conn).CreateServer(ctx, unproxiedmcprepo.CreateServerParams{
+		ID:          unproxiedID,
+		ProjectID:   *authCtx.ProjectID,
+		Name:        conv.ToPGText("unproxied server"),
+		Slug:        conv.ToPGText("unproxied-" + uuid.NewString()[:8]),
+		Url:         "https://unproxied.example.com/mcp",
+		Description: pgtype.Text{String: "", Valid: false},
+	})
+	require.NoError(t, err)
+
+	serverID, err := uuid.NewV7()
+	require.NoError(t, err)
+	server, err := mcpserversrepo.New(ti.conn).CreateMCPServer(ctx, mcpserversrepo.CreateMCPServerParams{
+		ID:                   serverID,
+		ProjectID:            *authCtx.ProjectID,
+		Name:                 conv.ToPGText("unproxied frontend"),
+		Slug:                 conv.ToPGText("unproxied-frontend-" + uuid.NewString()[:8]),
+		EnvironmentID:        uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		UserSessionIssuerID:  uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		RemoteMcpServerID:    uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		UnproxiedMcpServerID: uuid.NullUUID{UUID: unproxied.ID, Valid: true},
+		ToolsetID:            uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		Visibility:           "private",
+	})
+	require.NoError(t, err)
+
+	_, err = ti.service.AddMetaMcpMember(ctx, &gen.AddMetaMcpMemberPayload{
+		SessionToken:     nil,
+		ApikeyToken:      nil,
+		ProjectSlugInput: nil,
+		MetaMcpServerID:  meta.ID,
+		McpServerID:      server.ID.String(),
+		SortOrder:        nil,
+	})
+	requireOopsCode(t, err, oops.CodeInvalid)
+	require.ErrorContains(t, err, "unproxied")
 }

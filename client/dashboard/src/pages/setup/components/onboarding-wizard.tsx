@@ -2,7 +2,6 @@ import { useCallback, useEffect, useMemo } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router";
 import { useOnboardingStatus } from "@gram/client/react-query/onboardingStatus";
 import { usePublishStatus } from "@gram/client/react-query/publishStatus";
-import { usePlatformMcpDashboardVisibility } from "@/hooks/usePlatformMcpDashboardVisibility";
 import { useOrgSetupStarted } from "@/hooks/useOrgSetupStarted";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { OnboardingHeader } from "./onboarding-header";
@@ -81,25 +80,16 @@ export function SetupWizard(): JSX.Element {
     markSetupStarted();
   }, [markSetupStarted]);
 
-  const {
-    enabled: platformMcpDashboardEnabled,
-    isLoading: isPlatformMcpDashboardLoading,
-  } = usePlatformMcpDashboardVisibility();
   const setupProjectSlug = searchParams.get("projectSlug") ?? undefined;
   const setupPath = searchParams.get("setupPath");
-  const usesPlatformMcpPath =
-    platformMcpDashboardEnabled && setupPath === "platform-mcp";
-  const steps = useMemo(() => {
-    if (!platformMcpDashboardEnabled) {
-      return [...CORE_STEPS, CONFIGURE_POLICIES_STEP];
-    }
-
-    if (usesPlatformMcpPath) {
-      return [...CORE_STEPS, PLATFORM_MCP_STEP, CONFIGURE_POLICIES_STEP];
-    }
-
-    return [...CORE_STEPS, CONFIGURE_POLICIES_STEP, PLATFORM_MCP_STEP];
-  }, [platformMcpDashboardEnabled, usesPlatformMcpPath]);
+  const usesPlatformMcpPath = setupPath === "platform-mcp";
+  const steps = useMemo(
+    () =>
+      usesPlatformMcpPath
+        ? [...CORE_STEPS, PLATFORM_MCP_STEP, CONFIGURE_POLICIES_STEP]
+        : [...CORE_STEPS, CONFIGURE_POLICIES_STEP, PLATFORM_MCP_STEP],
+    [usesPlatformMcpPath],
+  );
 
   // All steps are accessible — SSO and DSYNC are both skippable.
   const maxAllowedStep = steps.length - 1;
@@ -116,10 +106,7 @@ export function SetupWizard(): JSX.Element {
     useOnboardingStatus();
   const { data: publishStatus, isLoading: isPublishStatusLoading } =
     usePublishStatus();
-  const statusLoading =
-    isOnboardingStatusLoading ||
-    isPublishStatusLoading ||
-    isPlatformMcpDashboardLoading;
+  const statusLoading = isOnboardingStatusLoading || isPublishStatusLoading;
 
   useEffect(() => {
     if (stepSlug) return;
@@ -230,8 +217,7 @@ export function SetupWizard(): JSX.Element {
   // flight), keep the page shell visible with skeletons rather than briefly
   // mounting step 0. The resume-step useEffect above will set the slug as soon
   // as the queries resolve (or error, which falls back to step 0).
-  const resolvingResume =
-    isPlatformMcpDashboardLoading || (!stepSlug && statusLoading);
+  const resolvingResume = !stepSlug && statusLoading;
 
   const startPlatformMcpPath = useCallback(() => {
     setSearchParams(
@@ -293,9 +279,7 @@ export function SetupWizard(): JSX.Element {
             onComplete={completeCurrentStep}
             onSkip={completeCurrentStep}
             onBack={goBack}
-            onSetupPlatformMCP={
-              platformMcpDashboardEnabled ? startPlatformMcpPath : undefined
-            }
+            onSetupPlatformMCP={startPlatformMcpPath}
           />
         );
       case "configure-policies":

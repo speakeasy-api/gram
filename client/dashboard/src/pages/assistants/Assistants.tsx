@@ -32,6 +32,7 @@ import { MouseEvent, useMemo, useState } from "react";
 import { Outlet } from "react-router";
 
 import { AssistantsAuditLog } from "./AssistantAuditLog";
+import { assistantAttachedServerSlugs } from "./assistantServers";
 import { TriggersPanel } from "../triggers/Triggers";
 
 const TOP_LEVEL_TABS = ["assistants", "triggers", "audit"] as const;
@@ -225,7 +226,8 @@ function AssistantIcon() {
 const MAX_VISIBLE_TOOLSETS = 3;
 
 function AssistantToolsets({ assistant }: { assistant: Assistant }) {
-  if (assistant.toolsets.length === 0) {
+  const slugs = assistantAttachedServerSlugs(assistant);
+  if (slugs.length === 0) {
     return (
       <div className="flex items-center gap-1.5">
         <Boxes className="text-muted-foreground/70 size-3.5 shrink-0" />
@@ -236,21 +238,21 @@ function AssistantToolsets({ assistant }: { assistant: Assistant }) {
     );
   }
 
-  const visible = assistant.toolsets.slice(0, MAX_VISIBLE_TOOLSETS);
-  const overflow = assistant.toolsets.length - visible.length;
+  const visible = slugs.slice(0, MAX_VISIBLE_TOOLSETS);
+  const overflow = slugs.length - visible.length;
 
   return (
     <div className="flex min-w-0 items-center gap-1.5">
       <Boxes className="text-muted-foreground/70 size-3.5 shrink-0" />
       <div className="flex min-w-0 flex-wrap items-center gap-1">
-        {visible.map((toolset) => (
+        {visible.map((slug, index) => (
           <Badge
-            key={toolset.toolsetSlug}
+            key={`${index}:${slug}`}
             variant="neutral"
             className="max-w-[10rem]"
-            title={toolset.toolsetSlug}
+            title={slug}
           >
-            <span className="min-w-0 truncate">{toolset.toolsetSlug}</span>
+            <span className="min-w-0 truncate">{slug}</span>
           </Badge>
         ))}
         {overflow > 0 && <Badge variant="neutral">+{overflow}</Badge>}

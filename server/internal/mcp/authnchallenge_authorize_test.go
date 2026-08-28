@@ -362,3 +362,78 @@ func createPrivateIssuerGatedToolset(
 
 	return toolset, issuer
 }
+
+// RFC 8707 §2 rejection is a post-redirect outcome: the redirect_uri has
+// already been matched against the registered set, so the client learns about
+// it by 302 carrying invalid_target, never inline.
+func TestAuthorize_MismatchedResourceRejectedByRedirect(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPServiceWithIdentityResolver(t, &mockIdentityResolver{})
+	toolset, _, client := seedPrivateToolsetWithIssuer(t, ctx, ti)
+	mcpSlug := toolset.McpSlug.String
+
+	advertisedIssuer, _ := fetchAdvertisedIssuer(t, ctx, ti, mcpSlug)
+
+	q := url.Values{}
+	q.Set("response_type", "code")
+	q.Set("client_id", client.ClientID)
+	q.Set("redirect_uri", client.RedirectUris[0])
+	q.Set("state", "client-state")
+	q.Set("code_challenge", "challenge")
+	q.Set("code_challenge_method", "S256")
+	q.Set("resource", "https://someone-else.example.com/mcp/"+mcpSlug)
+	req := httptest.NewRequest(http.MethodGet, "/mcp/"+mcpSlug+"/authorize?"+q.Encode(), nil)
+
+	rctx := chi.NewRouteContext()
+	rctx.URLParams.Add("mcpSlug", mcpSlug)
+	req = req.WithContext(context.WithValue(ctx, chi.RouteCtxKey, rctx))
+
+	w := httptest.NewRecorder()
+	require.NoError(t, ti.service.HandleAuthorize(w, req))
+	require.Equal(t, http.StatusFound, w.Code, "a trusted redirect_uri means errors go back by redirect")
+
+	loc, err := url.Parse(w.Header().Get("Location"))
+	require.NoError(t, err)
+	require.Equal(t, "invalid_target", loc.Query().Get("error"))
+	require.Equal(t, "client-state", loc.Query().Get("state"))
+	require.Equal(t, advertisedIssuer, loc.Query().Get("iss"))
+}
+
+// The value a conformant client sends is the one it read from the
+// protected-resource metadata, so echoing that back must start the flow.
+func TestAuthorize_MatchingResourceStartsFlow(t *testing.T) {
+	t.Parallel()
+
+	idpURL, err := url.Parse("https://idp.example.test/authorize")
+	require.NoError(t, err)
+
+	ctx, ti := newTestMCPServiceWithIdentityResolver(t, &mockIdentityResolver{buildAuthURLResult: idpURL})
+	toolset, _, client := seedPrivateToolsetWithIssuer(t, ctx, ti)
+	mcpSlug := toolset.McpSlug.String
+
+	advertisedIssuer, _ := fetchAdvertisedIssuer(t, ctx, ti, mcpSlug)
+
+	q := url.Values{}
+	q.Set("response_type", "code")
+	q.Set("client_id", client.ClientID)
+	q.Set("redirect_uri", client.RedirectUris[0])
+	q.Set("state", "client-state")
+	q.Set("code_challenge", "challenge")
+	q.Set("code_challenge_method", "S256")
+	q.Set("resource", advertisedIssuer)
+	req := httptest.NewRequest(http.MethodGet, "/mcp/"+mcpSlug+"/authorize?"+q.Encode(), nil)
+
+	rctx := chi.NewRouteContext()
+	rctx.URLParams.Add("mcpSlug", mcpSlug)
+	req = req.WithContext(context.WithValue(ctx, chi.RouteCtxKey, rctx))
+
+	w := httptest.NewRecorder()
+	require.NoError(t, ti.service.HandleAuthorize(w, req))
+	require.Equal(t, http.StatusFound, w.Code)
+
+	loc, err := url.Parse(w.Header().Get("Location"))
+	require.NoError(t, err)
+	require.Empty(t, loc.Query().Get("error"), "matching resource must not be rejected")
+	require.Equal(t, idpURL.Host, loc.Host, "a matching resource must carry the flow on to the IDP")
+}

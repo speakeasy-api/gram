@@ -468,16 +468,18 @@ func DecodeQueryInsightsRequest(mux goahttp.Muxer, decoder func(*http.Request) g
 	return func(r *http.Request) (*skillefficacy.QueryInsightsPayload, error) {
 		var payload *skillefficacy.QueryInsightsPayload
 		var (
-			skillIds              []string
-			from                  *string
-			to                    *string
-			includeVersions       *bool
-			includeScoredSessions *bool
-			cursor                *string
-			limit                 int
-			sessionToken          *string
-			projectSlugInput      *string
-			err                   error
+			skillIds                []string
+			from                    *string
+			to                      *string
+			includeVersions         *bool
+			includeScoredSessions   *bool
+			includeSessionCost      *bool
+			includeRegressionSignal *bool
+			cursor                  *string
+			limit                   int
+			sessionToken            *string
+			projectSlugInput        *string
+			err                     error
 		)
 		qp := r.URL.Query()
 		skillIds = qp["skill_ids"]
@@ -515,6 +517,26 @@ func DecodeQueryInsightsRequest(mux goahttp.Muxer, decoder func(*http.Request) g
 				includeScoredSessions = &v
 			}
 		}
+		{
+			includeSessionCostRaw := qp.Get("include_session_cost")
+			if includeSessionCostRaw != "" {
+				v, err2 := strconv.ParseBool(includeSessionCostRaw)
+				if err2 != nil {
+					err = goa.MergeErrors(err, goa.InvalidFieldTypeError("include_session_cost", includeSessionCostRaw, "boolean"))
+				}
+				includeSessionCost = &v
+			}
+		}
+		{
+			includeRegressionSignalRaw := qp.Get("include_regression_signal")
+			if includeRegressionSignalRaw != "" {
+				v, err2 := strconv.ParseBool(includeRegressionSignalRaw)
+				if err2 != nil {
+					err = goa.MergeErrors(err, goa.InvalidFieldTypeError("include_regression_signal", includeRegressionSignalRaw, "boolean"))
+				}
+				includeRegressionSignal = &v
+			}
+		}
 		cursorRaw := qp.Get("cursor")
 		if cursorRaw != "" {
 			cursor = &cursorRaw
@@ -548,7 +570,7 @@ func DecodeQueryInsightsRequest(mux goahttp.Muxer, decoder func(*http.Request) g
 		if err != nil {
 			return payload, err
 		}
-		payload = NewQueryInsightsPayload(skillIds, from, to, includeVersions, includeScoredSessions, cursor, limit, sessionToken, projectSlugInput)
+		payload = NewQueryInsightsPayload(skillIds, from, to, includeVersions, includeScoredSessions, includeSessionCost, includeRegressionSignal, cursor, limit, sessionToken, projectSlugInput)
 		if payload.SessionToken != nil {
 			if strings.Contains(*payload.SessionToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")

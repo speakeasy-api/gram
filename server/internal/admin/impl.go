@@ -1156,8 +1156,7 @@ func (s *Service) RearmTrial(ctx context.Context, payload *gen.RearmTrialPayload
 		return result, nil
 	}
 
-	var shareable *oops.ShareableError
-	if errors.As(err, &shareable) {
+	if shareable, ok := errors.AsType[*oops.ShareableError](err); ok {
 		return nil, shareable
 	}
 	if errors.Is(err, keybillinglock.ErrAcquireTimeout) {

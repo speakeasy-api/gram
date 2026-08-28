@@ -5147,6 +5147,10 @@ CREATE INDEX IF NOT EXISTS risk_policies_project_id_audience_type_idx
 ON risk_policies (project_id, audience_type)
 WHERE deleted IS FALSE;
 
+CREATE INDEX IF NOT EXISTS risk_policies_project_id_created_at_id_idx
+ON risk_policies (project_id, created_at DESC, id DESC)
+WHERE deleted IS FALSE;
+
 -- Durable session quarantine state for hook-ingest enforcement. Active rows
 -- open a Redis-backed session circuit until an org admin releases them.
 CREATE TABLE IF NOT EXISTS session_quarantines (
@@ -5261,6 +5265,14 @@ CREATE TABLE IF NOT EXISTS risk_exclusions (
 
 CREATE INDEX IF NOT EXISTS risk_exclusions_project_policy_idx
 ON risk_exclusions (project_id, risk_policy_id)
+WHERE deleted IS FALSE;
+
+CREATE INDEX IF NOT EXISTS risk_exclusions_project_id_created_at_id_idx
+ON risk_exclusions (project_id, created_at DESC, id DESC)
+WHERE deleted IS FALSE;
+
+CREATE INDEX IF NOT EXISTS risk_exclusions_project_id_risk_policy_id_created_at_id_idx
+ON risk_exclusions (project_id, risk_policy_id, created_at DESC, id DESC)
 WHERE deleted IS FALSE;
 
 -- Individual findings produced by scanning a chat message against a risk policy.
@@ -7720,7 +7732,8 @@ CREATE TABLE IF NOT EXISTS killswitch_customer_list_watermarks (
   resource_kind TEXT NOT NULL,
   watermark BIGINT NOT NULL DEFAULT 0,
   CONSTRAINT killswitch_customer_list_watermarks_pkey PRIMARY KEY (organization_id, definition_key, principal_kind, resource_kind),
-  CONSTRAINT killswitch_customer_list_watermarks_watermark_check CHECK (watermark >= 0)
+  CONSTRAINT killswitch_customer_list_watermarks_watermark_check CHECK (watermark >= 0),
+  CONSTRAINT killswitch_customer_list_watermarks_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE
 );
 
 CREATE TABLE IF NOT EXISTS killswitch_prescription_versions (
