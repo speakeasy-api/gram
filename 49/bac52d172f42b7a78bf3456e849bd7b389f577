@@ -1,0 +1,22 @@
+client/dashboard/src/components/write-only-header-row.tsx
+  h_2620cc60cfd1e9 1-66
+client/dashboard/src/pages/data-exports/DataExports.tsx
+  h_2620cc60cfd1e9 14,17,36,44-49,171,176-181,184,194,199,217,221,229-231,233,236,263,265,272,275,310
+client/dashboard/src/pages/data-exports/DestinationEditorSheet.tsx
+  h_2620cc60cfd1e9 17,28,105-106,195-213,232-250,252-261,298-369
+client/dashboard/src/pages/data-exports/RouteEditorSheet.tsx
+  h_2620cc60cfd1e9 22,98,103,110
+client/dashboard/src/pages/org/OtelForwardingSection.tsx
+  h_2620cc60cfd1e9 1,238
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.0",
+  "base_commit_sha": "49bac52d172f42b7a78bf3456e849bd7b389f577",
+  "prompts": {},
+  "humans": {
+    "h_2620cc60cfd1e9": {
+      "author": "tgmendes <tiago@speakeasy.com>"
+    }
+  }
+}
