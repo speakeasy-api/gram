@@ -499,7 +499,7 @@ export function SignalDrawer({
                                                 externalUserId:
                                                   user.externalUserId,
                                               }
-                                            : user.email
+                                            : user.email.includes("@")
                                               ? { email: user.email }
                                               : null
                                         }

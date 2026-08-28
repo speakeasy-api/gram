@@ -21,7 +21,7 @@ import { useRoles } from "@gram/client/react-query/roles.js";
 import { useQuery } from "@tanstack/react-query";
 import { Bot, CircleHelp } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
-import { Navigate, Outlet, useNavigate } from "react-router";
+import { Navigate, Outlet, useLocation, useNavigate } from "react-router";
 import {
   identityKindOf,
   identityUrnForEmployee,
@@ -40,7 +40,12 @@ export function IdentitiesRoot(): JSX.Element {
  */
 export function IdentitiesIndexRedirect(): JSX.Element {
   const orgRoutes = useOrgRoutes();
-  return <Navigate to={orgRoutes.identities.href()} replace />;
+  const location = useLocation();
+  // Carry the query string: a link from a dashboard widget picks the window,
+  // and dropping it lands the reader on a different period than they chose.
+  return (
+    <Navigate to={`${orgRoutes.identities.href()}${location.search}`} replace />
+  );
 }
 
 // The roster is one merged list held in memory, so it pages here rather than

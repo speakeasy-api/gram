@@ -21,6 +21,7 @@ import {
 import { Skeleton } from "@/components/ui/Skeleton";
 import { Text } from "@/components/ui/Text";
 import { getInitials } from "@/lib/initials";
+import { encodeIdentityUrn } from "@/lib/identity-urn";
 import { isBadRequestError, isNotFoundError } from "@/lib/route-errors";
 import { useOrgRoutes, useRoutes } from "@/routes";
 import type { IdentityModel } from "@gram/client/models/components/identitymodel.js";
@@ -49,8 +50,10 @@ export default function IdentityDetailRoot(): JSX.Element {
 }
 
 function IdentityDetailContent(): JSX.Element {
-  const { identityUrn: encodedUrn } = useParams<{ identityUrn: string }>();
-  const urn = encodedUrn ? decodeURIComponent(encodedUrn) : "";
+  // useParams hands back the decoded segment already; decoding it again would
+  // corrupt an identifier that legitimately contains a percent escape.
+  const { identityUrn: urn = "" } = useParams<{ identityUrn: string }>();
+  const encodedUrn = urn ? encodeIdentityUrn(urn) : undefined;
   const orgRoutes = useOrgRoutes();
   const location = useLocation();
 
