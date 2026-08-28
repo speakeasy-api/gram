@@ -351,7 +351,7 @@ function InspectCard({
       </div>
       {/* A member catalog runs to dozens of tools; cap the body so one card
           can't push the rest of the page out of view. */}
-      <div className="border-primary/60 bg-muted/20 max-h-[30lh] overflow-auto border-l-2 px-4 py-3">
+      <div className="border-primary/60 bg-muted/20 max-h-[32rem] overflow-auto border-l-2 px-4 py-3">
         {children}
       </div>
     </div>
