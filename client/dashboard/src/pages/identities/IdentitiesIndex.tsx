@@ -247,8 +247,8 @@ function IdentitiesIndexContent(): JSX.Element {
     <Page.Section>
       <Page.Section.Title>Identities</Page.Section.Title>
       <Page.Section.Description>
-        {rows.length} of {identities.length} — every person and agent whose
-        activity flows through the platform.
+        {rows.length} of {identities.length} — every person and agent the
+        platform knows about, whether or not they have been active.
       </Page.Section.Description>
       <Page.Section.Body>
         <StatTileGroup>
