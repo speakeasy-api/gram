@@ -604,30 +604,20 @@ func (s *Service) GetRemoteSessionIssuer(ctx context.Context, payload *gen.GetRe
 			return nil, err
 		}
 
-		canonical, err := parseCanonicalIssuerURL(*payload.Issuer)
-		if err != nil {
-			return nil, oops.E(oops.CodeBadRequest, err, "%s", err.Error()).LogError(ctx, logger)
-		}
-
 		// Both inherited tiers are in scope: an organization-level or platform
 		// issuer describing this upstream is one the project may attach its own
 		// client to, so it counts as found.
-		candidates, err := repo.New(s.db).ListRemoteSessionIssuersByIssuerURL(ctx, repo.ListRemoteSessionIssuersByIssuerURLParams{
-			Issuers:               canonical.matchCandidates(),
-			ProjectID:             uuid.NullUUID{UUID: *authCtx.ProjectID, Valid: true},
-			IncludeOrganizational: true,
-			OrganizationID:        conv.ToPGText(authCtx.ActiveOrganizationID),
-			IncludeGlobal:         true,
+		match, found, err := ResolveIssuerByURL(ctx, s.db, IssuerLookup{
+			IssuerURL:      *payload.Issuer,
+			ProjectID:      *authCtx.ProjectID,
+			OrganizationID: authCtx.ActiveOrganizationID,
 		})
-		if err != nil {
+		switch {
+		case errors.Is(err, ErrIssuerURLInvalid):
+			return nil, oops.E(oops.CodeBadRequest, err, "%s", err.Error()).LogError(ctx, logger)
+		case err != nil:
 			return nil, oops.E(oops.CodeUnexpected, err, "list remote session issuers by issuer url").LogError(ctx, logger)
-		}
-
-		// Unlike id and slug, an issuer URL can match several rows: duplicates
-		// across tiers are legitimate by design. Precedence decides which one the
-		// project should use.
-		match, found := resolveIssuerByPrecedence(candidates)
-		if !found {
+		case !found:
 			return nil, oops.E(oops.CodeNotFound, nil, "remote session issuer not found").LogWarn(ctx, logger)
 		}
 		issuer = match
