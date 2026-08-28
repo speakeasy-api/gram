@@ -20,7 +20,7 @@ import {
   useRecentlyVisited,
   useRecentsUserId,
 } from "./recentlyVisited";
-import { ResourceResults } from "./ResourceResults";
+import { PeopleResults, ResourceResults } from "./ResourceResults";
 
 // Speakeasy brand spectrum — the same brand-language gradient the Project
 // Assistant uses. Rendered as a thin hairline at the top of the palette so the
@@ -250,6 +250,9 @@ export function CommandPalette(): JSX.Element {
         {isOpen && inProject && (
           <ResourceResults onNavigate={closeAndReset} query={trimmedQuery} />
         )}
+
+        {/* People are org-scoped, so they are offered from either shell. */}
+        {isOpen && <PeopleResults onNavigate={closeAndReset} />}
 
         {/* Searching: Ask AI drops below the results so the closest match keeps
             the auto-selected highlight, while the "Ask AI: …" fallback stays

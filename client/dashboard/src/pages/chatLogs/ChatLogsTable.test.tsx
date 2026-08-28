@@ -55,6 +55,17 @@ vi.mock("@gram/client/react-query/listChats.js", () => ({
   invalidateAllListChats: vi.fn(),
 }));
 
+vi.mock("@/hooks/useRBAC", () => ({
+  useRBAC: () => ({
+    hasScope: () => true,
+    hasAnyScope: () => true,
+    hasAllScopes: () => true,
+    isLoading: false,
+    grants: [],
+    error: null,
+  }),
+}));
+
 vi.mock("@/contexts/Auth", () => ({
   // The owner cell links to the identity page, which reads the project to
   // scope that link to.

@@ -1,7 +1,18 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { MemberFacepile } from "./member-facepile";
+
+vi.mock("@/hooks/useRBAC", () => ({
+  useRBAC: () => ({
+    hasScope: () => true,
+    hasAnyScope: () => true,
+    hasAllScopes: () => true,
+    isLoading: false,
+    grants: [],
+    error: null,
+  }),
+}));
 
 afterEach(cleanup);
 

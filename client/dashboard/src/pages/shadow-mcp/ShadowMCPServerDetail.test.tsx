@@ -46,6 +46,17 @@ vi.mock("react-router", () => ({
   useLocation: () => ({ pathname: "/acme/projects/default/shadow-mcp" }),
 }));
 
+vi.mock("@/hooks/useRBAC", () => ({
+  useRBAC: () => ({
+    hasScope: () => true,
+    hasAnyScope: () => true,
+    hasAllScopes: () => true,
+    isLoading: false,
+    grants: [],
+    error: null,
+  }),
+}));
+
 vi.mock("@/routes", () => ({
   useRoutes: mocks.useRoutes,
   // The user column links to the org-level identity page.

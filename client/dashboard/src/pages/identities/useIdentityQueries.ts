@@ -107,6 +107,16 @@ export function useIdentityMetrics(
  * name would be a silent misattribution, so the panel asks for nothing rather
  * than asking for something it cannot trust.
  */
+/**
+ * Risk findings and the shadow-MCP inventory are org:admin surfaces on their
+ * own pages, and their endpoints enforce that. A reader without it is shown
+ * nothing rather than an empty panel that reads as "no findings".
+ */
+export function useCanReadRisk(): boolean {
+  const { hasScope } = useRBAC();
+  return hasScope("org:admin");
+}
+
 export function useCanReadOthersChats(): boolean {
   const { hasScope } = useRBAC();
   return hasScope("chat:read");
@@ -152,13 +162,14 @@ export function useIdentityRisk(
   to: Date,
 ): ReturnType<typeof useRiskUserBreakdown> {
   const { slug: gramProject } = useIdentityProject();
+  const canReadRisk = useCanReadRisk();
   const externalUserId = identity.externalUserIds[0];
   return useRiskUserBreakdown(
     { externalUserId: externalUserId ?? "", from, to, gramProject },
     undefined,
     {
       ...OFF,
-      enabled: !!externalUserId,
+      enabled: canReadRisk && !!externalUserId,
     },
   );
 }
@@ -204,13 +215,14 @@ export function useIdentityShadowServers(
   limit = 10,
 ): ReturnType<typeof useShadowMCPInventoryServersForUser> {
   const project = useIdentityProject();
+  const canReadRisk = useCanReadRisk();
   // Shadow MCP attributes usage to whatever the client reported, which is an
   // address for some agents and an agent-side id for others — pass both sets.
   const userKeys = [...identity.emails, ...identity.externalUserIds];
   return useShadowMCPInventoryServersForUser(
     { projectId: project.id, userKeys, limit },
     undefined,
-    { ...OFF, enabled: userKeys.length > 0 },
+    { ...OFF, enabled: canReadRisk && userKeys.length > 0 },
   );
 }
 

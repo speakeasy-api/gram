@@ -14,6 +14,7 @@ import { useIdentityOutlet } from "./identityRoute";
 import { IdentitySection } from "./IdentitySection";
 import {
   useIdentityProject,
+  useCanReadRisk,
   useIdentityChallenges,
   useIdentityRisk,
   useIdentityShadowServers,
@@ -21,6 +22,7 @@ import {
 } from "./useIdentityQueries";
 
 export default function IdentitySecurity(): JSX.Element {
+  const canReadRisk = useCanReadRisk();
   const { identity } = useIdentityOutlet();
   const { from, to } = useIdentityWindow();
   const project = useIdentityProject();
@@ -48,11 +50,15 @@ export default function IdentitySecurity(): JSX.Element {
   return (
     <IdentitySection
       title="Security"
-      meta={`${findings} finding${findings === 1 ? "" : "s"} · ${
-        denied.length
-      } denied · ${shadowServers.length} shadow server${
-        shadowServers.length === 1 ? "" : "s"
-      }`}
+      meta={
+        canReadRisk
+          ? `${findings} finding${findings === 1 ? "" : "s"} · ${
+              denied.length
+            } denied · ${shadowServers.length} shadow server${
+              shadowServers.length === 1 ? "" : "s"
+            }`
+          : `${denied.length} denied challenge${denied.length === 1 ? "" : "s"}`
+      }
     >
       <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
         <IdentityPanel

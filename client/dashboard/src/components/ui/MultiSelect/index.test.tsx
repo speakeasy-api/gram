@@ -11,6 +11,17 @@ vi.mock("@/components/ui/Icon", () => ({
 import { MultiSelect } from "@/components/ui/MultiSelect";
 import { MemberFacepile } from "@/components/member-facepile";
 
+vi.mock("@/hooks/useRBAC", () => ({
+  useRBAC: () => ({
+    hasScope: () => true,
+    hasAnyScope: () => true,
+    hasAllScopes: () => true,
+    isLoading: false,
+    grants: [],
+    error: null,
+  }),
+}));
+
 // This vitest project does not enable `globals`, so RTL's automatic cleanup is
 // not registered. Without this, mounted popovers accumulate across tests.
 afterEach(cleanup);

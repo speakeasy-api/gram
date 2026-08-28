@@ -1,5 +1,6 @@
 import { encodeIdentityUrn, identityUrnFor } from "@/lib/identity-urn";
 import type { IdentityRef } from "@/lib/identity-urn";
+import { useRBAC } from "@/hooks/useRBAC";
 import { useOrgRoutes } from "@/routes";
 
 /**
@@ -12,8 +13,13 @@ export function useIdentityHrefBuilder(): (
   identifier: IdentityRef | null | undefined,
 ) => string | null {
   const orgRoutes = useOrgRoutes();
+  // A reader without org:read only reaches "Access restricted", so they get
+  // the name as plain text rather than a link that cannot go anywhere. One
+  // check here covers every call site.
+  const { hasAnyScope, isLoading } = useRBAC();
+  const canOpenIdentities = isLoading || hasAnyScope(["org:read", "org:admin"]);
   return (identifier) =>
-    identifier
+    identifier && canOpenIdentities
       ? orgRoutes.identities.detail.overview.href(
           encodeIdentityUrn(identityUrnFor(identifier)),
         )

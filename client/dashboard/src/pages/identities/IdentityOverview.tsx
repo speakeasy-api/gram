@@ -17,6 +17,7 @@ import {
   useIdentityAuditLogs,
   useIdentityChallenges,
   useCanReadOthersChats,
+  useCanReadRisk,
   useIdentityChats,
   useIdentityDevices,
   useIdentityMetrics,
@@ -39,6 +40,7 @@ export default function IdentityOverview(): JSX.Element {
   const metricsQuery = useIdentityMetrics(identity, from, to);
   const chatsQuery = useIdentityChats(identity, from, to);
   const canReadOthersChats = useCanReadOthersChats();
+  const canReadRisk = useCanReadRisk();
   const auditQuery = useIdentityAuditLogs(identity);
   const riskQuery = useIdentityRisk(identity, from, to);
   const challengesQuery = useIdentityChallenges(identity);
@@ -178,13 +180,15 @@ export default function IdentityOverview(): JSX.Element {
             tone="information"
             icon="message-square"
           />
-          <StatTile
-            title="Findings"
-            value={findings}
-            format="compact"
-            tone={findings > 0 ? "destructive" : "neutral"}
-            icon="flag"
-          />
+          {canReadRisk && (
+            <StatTile
+              title="Findings"
+              value={findings}
+              format="compact"
+              tone={findings > 0 ? "destructive" : "neutral"}
+              icon="flag"
+            />
+          )}
           <StatTile
             title="Devices"
             value={devices.length}
