@@ -2153,7 +2153,7 @@ jobs:
               done <<< "$CURRENT_TAGS"
 
               if [[ "$matched" != true ]]; then
-                echo "::error::No current image tags matched $FLY_APP_REGISTRY" >&2
+                echo "::error::No current image tags matched $FLY_APP_REGISTRY"
                 exit 1
               fi
 
@@ -2177,7 +2177,7 @@ jobs:
               done <<< "$CURRENT_TAGS"
 
               if [[ "$matched" != true ]]; then
-                echo "::error::No current image tags matched $FLY_APP_REGISTRY" >&2
+                echo "::error::No current image tags matched $FLY_APP_REGISTRY"
                 exit 1
               fi
 
