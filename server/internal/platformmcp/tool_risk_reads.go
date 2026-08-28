@@ -276,6 +276,9 @@ func riskReadToolCall[Out any](ctx context.Context, telemetry RiskTelemetry, too
 		return nil, zero, err
 	}
 	event.Outcome = refusal.Code
+	if errors.Is(err, ErrUnavailable) {
+		event.Outcome = "unavailable"
+	}
 	content, marshalErr := json.Marshal(refusal)
 	if marshalErr != nil {
 		event.Outcome = "unavailable"

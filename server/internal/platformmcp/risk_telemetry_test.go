@@ -83,6 +83,17 @@ func TestRiskToolWrappersRecordTypedOutcomes(t *testing.T) {
 	require.Len(t, recorder.events, 1)
 	require.Equal(t, "invalid_request", recorder.events[0].Outcome)
 
+	result, _, err := riskReadToolCall(ctx, recorder, "list_risk_policies", func(Principal) (ListRiskPoliciesOutput, error) {
+		return ListRiskPoliciesOutput{}, ErrUnavailable
+	})
+	require.NoError(t, err)
+	require.True(t, result.IsError)
+	require.Len(t, recorder.events, 2)
+	require.Equal(t, "unavailable", recorder.events[1].Outcome)
+	text, ok := result.Content[0].(*mcp.TextContent)
+	require.True(t, ok)
+	require.Contains(t, text.Text, `"code":"feature_unavailable"`, "telemetry classification must not change the client refusal contract")
+
 	reg := newRegistrar(newTestMCPServer())
 	reg.withRiskTelemetry(recorder)
 	wrapped := instrumentRiskMutation(reg, "create_risk_exclusion", func(context.Context, *mcp.CallToolRequest, map[string]any) (*mcp.CallToolResult, CreateRiskExclusionToolOutput, error) {
@@ -93,10 +104,10 @@ func TestRiskToolWrappersRecordTypedOutcomes(t *testing.T) {
 	})
 	_, _, err = wrapped(ctx, nil, map[string]any{})
 	require.NoError(t, err)
-	require.Len(t, recorder.events, 2)
-	require.Equal(t, "succeeded", recorder.events[1].Outcome)
-	require.Equal(t, riskTelemetryReceiptReplay, recorder.events[1].Replay)
-	require.Equal(t, riskTelemetryScheduled, recorder.events[1].Reconciliation)
+	require.Len(t, recorder.events, 3)
+	require.Equal(t, "succeeded", recorder.events[2].Outcome)
+	require.Equal(t, riskTelemetryReceiptReplay, recorder.events[2].Replay)
+	require.Equal(t, riskTelemetryScheduled, recorder.events[2].Reconciliation)
 }
 
 func TestRiskTelemetryRejectsUnboundedDimensions(t *testing.T) {
