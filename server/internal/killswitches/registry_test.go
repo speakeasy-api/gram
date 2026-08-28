@@ -353,6 +353,9 @@ func TestAdapterResultContracts(t *testing.T) {
 	if _, err := NewCanonicalizationResult(PrincipalKey("")); err == nil {
 		t.Fatal("empty canonical principal key accepted")
 	}
+	if _, err := NewCanonicalizationResult(ResourceKey(strings.Repeat("é", maxIdentifierBytes/2+1))); err == nil {
+		t.Fatal("oversized canonical resource key accepted")
+	}
 	if _, supported, err := UnsupportedCanonicalizationResult[PrincipalKey]().Key(); err != nil || supported {
 		t.Fatalf("unsupported canonicalization supported=%v err=%v", supported, err)
 	}
@@ -535,6 +538,58 @@ func TestRegisteredTransportAdapterResolvesNeutralBehaviorMatrix(t *testing.T) {
 	}
 	if _, err := adapter(noMatch, FailurePolicy("other")); err == nil {
 		t.Fatal("invalid failure policy accepted")
+	}
+}
+
+func TestRegisteredTransportAdapterReceivesEffectiveFailurePolicy(t *testing.T) {
+	t.Parallel()
+
+	classified, err := NewInfrastructureFailureResultWithPolicy(errors.New("evaluation unavailable"), FailurePolicyFailClosed, InfrastructureFailureDatabase)
+	if err != nil {
+		t.Fatalf("classified failure: %v", err)
+	}
+	legacy, err := NewInfrastructureFailureResult(errors.New("evaluation unavailable"))
+	if err != nil {
+		t.Fatalf("legacy failure: %v", err)
+	}
+	tests := []struct {
+		name           string
+		result         EvaluationResult
+		suppliedPolicy FailurePolicy
+		wantPolicy     FailurePolicy
+		wantKind       TransportDispositionKind
+	}{
+		{name: "classified uses authoritative policy", result: classified, suppliedPolicy: FailurePolicyFailOpen, wantPolicy: FailurePolicyFailClosed, wantKind: TransportDispositionInfrastructureRejection},
+		{name: "legacy uses supplied policy", result: legacy, suppliedPolicy: FailurePolicyFailOpen, wantPolicy: FailurePolicyFailOpen, wantKind: TransportDispositionContinue},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			var receivedPolicy FailurePolicy
+			input := validRegistration()
+			input.TransportAdapters[0].Adapter = func(result EvaluationResult, policy FailurePolicy) (TransportDisposition, error) {
+				receivedPolicy = policy
+				return ResolveTransportDisposition(result, policy)
+			}
+			registry, err := BuildRegistry(input)
+			if err != nil {
+				t.Fatalf("build registry: %v", err)
+			}
+			adapter, ok := registry.TransportAdapter("jsonrpc")
+			if !ok {
+				t.Fatal("transport adapter not found")
+			}
+			disposition, err := adapter(test.result, test.suppliedPolicy)
+			if err != nil {
+				t.Fatalf("adapt: %v", err)
+			}
+			if receivedPolicy != test.wantPolicy {
+				t.Fatalf("adapter policy got %q, want %q", receivedPolicy, test.wantPolicy)
+			}
+			if disposition.Kind() != test.wantKind {
+				t.Fatalf("disposition got %q, want %q", disposition.Kind(), test.wantKind)
+			}
+		})
 	}
 }
 

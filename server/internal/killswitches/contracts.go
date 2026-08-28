@@ -165,6 +165,23 @@ type PrincipalCandidate struct {
 	Key  PrincipalKey
 }
 
+const (
+	// MaxEvaluationDefinitionCandidates bounds server-controlled definition precedence input.
+	MaxEvaluationDefinitionCandidates = 16
+	// MaxEvaluationPrincipalCandidates bounds server-controlled principal specificity input.
+	MaxEvaluationPrincipalCandidates = 16
+)
+
+// EvaluationRequest contains ordered, canonical, server-derived candidates for one protected resource.
+// Definition and principal order are the authoritative precedence used by the evaluator.
+type EvaluationRequest struct {
+	OrganizationID      OrganizationID
+	DefinitionKeys      []DefinitionKey
+	PrincipalCandidates []PrincipalCandidate
+	ResourceKind        ResourceKind
+	ResourceKey         ResourceKey
+}
+
 // PrincipalCandidateResultKind identifies a successful or deliberately unsupported derivation.
 type PrincipalCandidateResultKind string
 
@@ -301,12 +318,25 @@ const (
 // EvaluationResult is an immutable transport-neutral evaluation result. Its zero value is
 // invalid; use one of its constructors.
 type EvaluationResult struct {
-	kind              EvaluationResultKind
-	prescriptionID    PrescriptionID
-	externalNote      string
-	noMatchReason     NoMatchReason
-	infrastructureErr error
+	kind                      EvaluationResultKind
+	prescriptionID            PrescriptionID
+	externalNote              string
+	noMatchReason             NoMatchReason
+	infrastructureErr         error
+	failurePolicy             FailurePolicy
+	infrastructureFailureKind InfrastructureFailureKind
 }
+
+// InfrastructureFailureKind distinguishes bounded evaluator failure classes without exposing data.
+type InfrastructureFailureKind string
+
+const (
+	InfrastructureFailureInvalidRequest     InfrastructureFailureKind = "invalid_request"
+	InfrastructureFailureParentCancellation InfrastructureFailureKind = "parent_cancellation"
+	InfrastructureFailureTimeout            InfrastructureFailureKind = "timeout"
+	InfrastructureFailureDatabase           InfrastructureFailureKind = "database"
+	InfrastructureFailureDataIntegrity      InfrastructureFailureKind = "data_integrity"
+)
 
 // NewMatchResult constructs a matched result with customer-safe denial language.
 func NewMatchResult(prescriptionID PrescriptionID, externalNote string) (EvaluationResult, error) {
@@ -319,11 +349,13 @@ func NewMatchResult(prescriptionID PrescriptionID, externalNote string) (Evaluat
 		return EvaluationResult{}, fmt.Errorf("external note: %w", err)
 	}
 	return EvaluationResult{
-		kind:              EvaluationResultMatch,
-		prescriptionID:    *canonicalID,
-		externalNote:      note,
-		noMatchReason:     "",
-		infrastructureErr: nil,
+		kind:                      EvaluationResultMatch,
+		prescriptionID:            *canonicalID,
+		externalNote:              note,
+		noMatchReason:             "",
+		infrastructureErr:         nil,
+		failurePolicy:             "",
+		infrastructureFailureKind: "",
 	}, nil
 }
 
@@ -333,11 +365,13 @@ func NewNoMatchResult(reason NoMatchReason) (EvaluationResult, error) {
 		return EvaluationResult{}, fmt.Errorf("invalid no-match reason %q", reason)
 	}
 	return EvaluationResult{
-		kind:              EvaluationResultNoMatch,
-		prescriptionID:    "",
-		externalNote:      "",
-		noMatchReason:     reason,
-		infrastructureErr: nil,
+		kind:                      EvaluationResultNoMatch,
+		prescriptionID:            "",
+		externalNote:              "",
+		noMatchReason:             reason,
+		infrastructureErr:         nil,
+		failurePolicy:             "",
+		infrastructureFailureKind: "",
 	}, nil
 }
 
@@ -347,12 +381,32 @@ func NewInfrastructureFailureResult(cause error) (EvaluationResult, error) {
 		return EvaluationResult{}, errors.New("infrastructure failure cause is required")
 	}
 	return EvaluationResult{
-		kind:              EvaluationResultInfrastructureFailure,
-		prescriptionID:    "",
-		externalNote:      "",
-		noMatchReason:     "",
-		infrastructureErr: cause,
+		kind:                      EvaluationResultInfrastructureFailure,
+		prescriptionID:            "",
+		externalNote:              "",
+		noMatchReason:             "",
+		infrastructureErr:         cause,
+		failurePolicy:             "",
+		infrastructureFailureKind: "",
 	}, nil
+}
+
+// NewInfrastructureFailureResultWithPolicy constructs a classified infrastructure failure and
+// retains the effective policy for the complete ordered definition candidate set.
+func NewInfrastructureFailureResultWithPolicy(cause error, policy FailurePolicy, failureKind InfrastructureFailureKind) (EvaluationResult, error) {
+	result, err := NewInfrastructureFailureResult(cause)
+	if err != nil {
+		return EvaluationResult{}, err
+	}
+	if policy != FailurePolicyFailOpen && policy != FailurePolicyFailClosed {
+		return EvaluationResult{}, fmt.Errorf("invalid failure policy %q", policy)
+	}
+	if !validInfrastructureFailureKind(failureKind) {
+		return EvaluationResult{}, fmt.Errorf("invalid infrastructure failure kind %q", failureKind)
+	}
+	result.failurePolicy = policy
+	result.infrastructureFailureKind = failureKind
+	return result, nil
 }
 
 // Kind returns the result discriminator.
@@ -379,6 +433,25 @@ func (r EvaluationResult) InfrastructureError() error {
 		return nil
 	}
 	return r.infrastructureErr
+}
+
+// FailurePolicy returns evaluator-selected policy information for a match or infrastructure failure.
+func (r EvaluationResult) FailurePolicy() (FailurePolicy, bool) {
+	return r.failurePolicy, r.failurePolicy == FailurePolicyFailOpen || r.failurePolicy == FailurePolicyFailClosed
+}
+
+// InfrastructureFailureKind returns the bounded class only for a classified infrastructure failure.
+func (r EvaluationResult) InfrastructureFailureKind() (InfrastructureFailureKind, bool) {
+	return r.infrastructureFailureKind, r.kind == EvaluationResultInfrastructureFailure && validInfrastructureFailureKind(r.infrastructureFailureKind)
+}
+
+func validInfrastructureFailureKind(kind InfrastructureFailureKind) bool {
+	switch kind {
+	case InfrastructureFailureInvalidRequest, InfrastructureFailureParentCancellation, InfrastructureFailureTimeout, InfrastructureFailureDatabase, InfrastructureFailureDataIntegrity:
+		return true
+	default:
+		return false
+	}
 }
 
 // TransportDispositionKind identifies the neutral action selected before concrete transport mapping.
@@ -441,36 +514,54 @@ type TransportAdapterRegistration struct {
 
 // ResolveTransportDisposition applies the shared transport-neutral evaluation matrix.
 func ResolveTransportDisposition(result EvaluationResult, failurePolicy FailurePolicy) (TransportDisposition, error) {
+	disposition, _, err := resolveTransportDisposition(result, failurePolicy)
+	return disposition, err
+}
+
+func resolveTransportDisposition(result EvaluationResult, suppliedPolicy FailurePolicy) (TransportDisposition, FailurePolicy, error) {
 	if err := validateEvaluationResult(result); err != nil {
-		return TransportDisposition{}, err
+		return TransportDisposition{}, "", err
 	}
-	if failurePolicy != FailurePolicyFailOpen && failurePolicy != FailurePolicyFailClosed {
-		return TransportDisposition{}, fmt.Errorf("invalid failure policy %q", failurePolicy)
+	failurePolicy, err := effectiveFailurePolicy(result, suppliedPolicy)
+	if err != nil {
+		return TransportDisposition{}, "", err
 	}
 
 	switch result.kind {
 	case EvaluationResultMatch:
-		return NewMatchedDenialDisposition(result.externalNote)
+		disposition, err := NewMatchedDenialDisposition(result.externalNote)
+		return disposition, failurePolicy, err
 	case EvaluationResultNoMatch:
-		return NewContinueDisposition(), nil
+		return NewContinueDisposition(), failurePolicy, nil
 	case EvaluationResultInfrastructureFailure:
 		if failurePolicy == FailurePolicyFailOpen {
-			return NewContinueDisposition(), nil
+			return NewContinueDisposition(), failurePolicy, nil
 		}
-		return NewInfrastructureRejectionDisposition(), nil
+		return NewInfrastructureRejectionDisposition(), failurePolicy, nil
 	default:
-		return TransportDisposition{}, errors.New("invalid evaluation result")
+		return TransportDisposition{}, "", errors.New("invalid evaluation result")
 	}
+}
+
+func effectiveFailurePolicy(result EvaluationResult, suppliedPolicy FailurePolicy) (FailurePolicy, error) {
+	if suppliedPolicy != FailurePolicyFailOpen && suppliedPolicy != FailurePolicyFailClosed {
+		return "", fmt.Errorf("invalid failure policy %q", suppliedPolicy)
+	}
+	if authoritativePolicy, ok := result.FailurePolicy(); ok {
+		return authoritativePolicy, nil
+	}
+	return suppliedPolicy, nil
 }
 
 func validateEvaluationResult(result EvaluationResult) error {
 	switch result.kind {
 	case EvaluationResultMatch:
-		if result.prescriptionID == "" || result.externalNote == "" || result.noMatchReason != "" || result.infrastructureErr != nil {
+		hasPolicy := result.failurePolicy == FailurePolicyFailOpen || result.failurePolicy == FailurePolicyFailClosed
+		if result.prescriptionID == "" || result.externalNote == "" || result.noMatchReason != "" || result.infrastructureErr != nil || (result.failurePolicy != "" && !hasPolicy) || result.infrastructureFailureKind != "" {
 			return errors.New("invalid match evaluation result")
 		}
 	case EvaluationResultNoMatch:
-		if result.prescriptionID != "" || result.externalNote != "" || result.infrastructureErr != nil {
+		if result.prescriptionID != "" || result.externalNote != "" || result.infrastructureErr != nil || result.failurePolicy != "" || result.infrastructureFailureKind != "" {
 			return errors.New("invalid no-match evaluation result")
 		}
 		if result.noMatchReason != NoMatchReasonNoPrescription && result.noMatchReason != NoMatchReasonUnsupportedIdentity && result.noMatchReason != NoMatchReasonUnsupportedResource {
@@ -478,6 +569,10 @@ func validateEvaluationResult(result EvaluationResult) error {
 		}
 	case EvaluationResultInfrastructureFailure:
 		if result.prescriptionID != "" || result.externalNote != "" || result.noMatchReason != "" || isNilInterface(result.infrastructureErr) {
+			return errors.New("invalid infrastructure-failure evaluation result")
+		}
+		hasPolicy := result.failurePolicy == FailurePolicyFailOpen || result.failurePolicy == FailurePolicyFailClosed
+		if (result.failurePolicy != "" && !hasPolicy) || (result.infrastructureFailureKind != "" && !validInfrastructureFailureKind(result.infrastructureFailureKind)) || (hasPolicy != (result.infrastructureFailureKind != "")) {
 			return errors.New("invalid infrastructure-failure evaluation result")
 		}
 	default:

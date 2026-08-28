@@ -9,7 +9,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestLifecycleTransactionQueriesRejectTransactionControlAndMultipleStatements(t *testing.T) {
+func TestLifecycleTransactionQueriesRejectTransactionControlSessionStateAndMultipleStatements(t *testing.T) {
 	t.Parallel()
 
 	tests := []string{
@@ -24,6 +24,10 @@ func TestLifecycleTransactionQueriesRejectTransactionControlAndMultipleStatement
 		"PREPARE /* split keyword */ TRANSACTION 'prepared_change'",
 		"SET TRANSACTION ISOLATION LEVEL SERIALIZABLE",
 		"SET SESSION /* split phrase */ CHARACTERISTICS AS TRANSACTION READ ONLY",
+		"SET search_path = attacker",
+		"SET ROLE attacker",
+		"RESET statement_timeout",
+		"DISCARD ALL",
 		"SELECT 1; COMMIT",
 		"SELECT ';'; ROLLBACK",
 		"SELECT $body$; COMMIT$body$; SELECT 2",
@@ -76,6 +80,10 @@ func TestLifecycleTransactionQueriesAllowSingleDomainStatements(t *testing.T) {
 	queries := lifecycleTransactionQueries{db: delegate}
 	_, err := queries.Exec(t.Context(), "/* domain write */ INSERT INTO audit_events (payload) VALUES ('semi;colon');")
 	require.NoError(t, err)
+	_, err = queries.Exec(t.Context(), "SET LOCAL statement_timeout = '1s'")
+	require.NoError(t, err)
+	_, err = queries.Exec(t.Context(), "SET CONSTRAINTS ALL DEFERRED")
+	require.NoError(t, err)
 	rows, err := queries.Query(t.Context(), `SELECT E'escaped\'quote;still-string' -- trailing comment`)
 	require.NoError(t, err)
 	if rows != nil {
@@ -83,7 +91,7 @@ func TestLifecycleTransactionQueriesAllowSingleDomainStatements(t *testing.T) {
 	}
 	err = queries.QueryRow(t.Context(), "SELECT $body$BEGIN; COMMIT;$body$; /* trailing */").Scan()
 	require.NoError(t, err)
-	require.Equal(t, 3, delegate.calls)
+	require.Equal(t, 5, delegate.calls)
 }
 
 type rewritingLifecycleQuery struct {

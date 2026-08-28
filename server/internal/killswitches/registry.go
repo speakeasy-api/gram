@@ -12,6 +12,9 @@ import (
 	"unicode/utf8"
 )
 
+// All killswitch identifiers share a bounded storage contract; this also keeps composite B-tree tuples small.
+const maxIdentifierBytes = 255
+
 // Registration contains all code-owned contracts finalized into a Registry. Registered adapter
 // implementations are retained behind interfaces because they cannot be deep-copied. They must
 // therefore be immutable, return a stable Kind, and be safe for concurrent use after registration.
@@ -234,11 +237,11 @@ func validateCanonicalizationFixture[T ~string](
 
 func wrapTransportAdapter(key TransportAdapterKey, adapter TransportAdapter) TransportAdapter {
 	return func(result EvaluationResult, failurePolicy FailurePolicy) (TransportDisposition, error) {
-		expected, err := ResolveTransportDisposition(result, failurePolicy)
+		expected, effectivePolicy, err := resolveTransportDisposition(result, failurePolicy)
 		if err != nil {
 			return TransportDisposition{}, fmt.Errorf("transport adapter %q: %w", key, err)
 		}
-		disposition, err := adapter(result, failurePolicy)
+		disposition, err := adapter(result, effectivePolicy)
 		if err != nil {
 			return TransportDisposition{}, fmt.Errorf("transport adapter %q: %w", key, err)
 		}
@@ -669,6 +672,9 @@ func validateUniqueIdentifiers[T comparable](label string, values []T, stringify
 func validateIdentifier(label, value string) error {
 	if !utf8.ValidString(value) {
 		return fmt.Errorf("%s must be valid UTF-8", label)
+	}
+	if len(value) > maxIdentifierBytes {
+		return fmt.Errorf("%s must not exceed %d bytes", label, maxIdentifierBytes)
 	}
 	if strings.TrimSpace(value) == "" {
 		return fmt.Errorf("%s is required", label)
