@@ -126,3 +126,8 @@ func CancelStripeSubscriptionAdminPath() string {
 func ResumeStripeSubscriptionAdminPath() string {
 	return "/admin/organization.resumeStripeSubscription"
 }
+
+// StartTrialAdminPath returns the URL path to the admin service startTrial HTTP endpoint.
+func StartTrialAdminPath() string {
+	return "/admin/trial.start"
+}

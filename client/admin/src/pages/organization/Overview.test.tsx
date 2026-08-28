@@ -173,6 +173,9 @@ describe("Overview", () => {
     // who sees "Free trial ends" reads a date no organization ever earned.
     expect(screen.queryByText("Free trial started")).toBeNull();
     expect(screen.queryByText("Free trial ends")).toBeNull();
+    expect(
+      screen.queryByRole("button", { name: `Start trial for ${ORG.name}` }),
+    ).toBeNull();
   });
 
   it("keeps No trial visible for an organization that never trialled", async () => {
@@ -186,7 +189,47 @@ describe("Overview", () => {
     });
 
     await screen.findByText("Trial");
-    expect(valueBeside("Trial").textContent).toBe("No trial");
+    const trial = valueBeside("Trial");
+    // The field is the control: "No trial" is the button, not a caption beside
+    // a separate Start trial action.
+    expect(
+      within(trial).getByRole("button", { name: `Start trial for ${ORG.name}` })
+        .textContent,
+    ).toBe("No trial");
+  });
+
+  it("offers Restart trial beside an expired trial that has not been demoted", async () => {
+    mocks.getOrganization.mockResolvedValue({
+      ...ORG,
+      trial_state: "expired",
+    });
+    await renderRouteTree(routeTree, {
+      initialPath: `/organizations/${ORG.slug}`,
+    });
+
+    await screen.findByText("Trial");
+    expect(within(valueBeside("Trial")).getByText("Expired")).toBeTruthy();
+    expect(
+      screen.getByRole("button", { name: `Restart trial for ${ORG.name}` }),
+    ).toBeTruthy();
+  });
+
+  it("keeps Start trial off a disabled organization that never trialled", async () => {
+    mocks.getOrganization.mockResolvedValue({
+      ...ORG,
+      trial_state: "none",
+      trial_ends_at: undefined,
+      disabled_at: "2026-03-04T00:00:00Z",
+    });
+    await renderRouteTree(routeTree, {
+      initialPath: `/organizations/${ORG.slug}`,
+    });
+
+    await screen.findByText("Trial");
+    expect(within(valueBeside("Trial")).getByText("No trial")).toBeTruthy();
+    expect(
+      screen.queryByRole("button", { name: `Start trial for ${ORG.name}` }),
+    ).toBeNull();
   });
 
   it("reads a date as the server's day, not the reader's", async () => {

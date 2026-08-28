@@ -20,11 +20,13 @@ import {
   enableOrganization,
   extendTrial,
   rearmTrial,
+  startTrial,
   type AdminOrganization,
   type BulkUpdateAccountTypeRequest,
   type BulkUpdateAccountTypeResult,
   type ExtendTrialRequest,
   type RearmTrialRequest,
+  type StartTrialRequest,
   type TrialState,
 } from "@/lib/gramAdminApi";
 
@@ -95,6 +97,24 @@ export function canRearmTrial(org: AdminOrganization): boolean {
   );
 }
 
+// The two states the server will start. A running trial is extend's job, a
+// demoted one is re-arm's, and a converted one has become a contract. An
+// organization that never trialled, or whose trial has expired without the
+// sweeper demoting it yet, is the grant this action exists for.
+const STARTABLE_TRIAL_STATES: ReadonlySet<TrialState> = new Set([
+  "none",
+  "expired",
+]);
+
+// Not for a disabled organization, for the reason canExtendTrial gives.
+export function canStartTrial(org: AdminOrganization): boolean {
+  return (
+    !org.disabled_at &&
+    org.trial_state !== undefined &&
+    STARTABLE_TRIAL_STATES.has(org.trial_state)
+  );
+}
+
 type OrganizationWrite<TVariables> = UseMutationResult<
   AdminOrganization,
   Error,
@@ -109,16 +129,16 @@ function finishOrganizationWrite(
   invalidateOrganizationActivity(qc, org.id);
 }
 
-// All four writes answer with the organization in its new state and put it in
+// All five writes answer with the organization in its new state and put it in
 // the cache the same way, so the list and the peek repaint from the response.
 // Their audited activity is invalidated from the same success path so an open
 // Activity view includes the new event.
 //
-// All four drop the reads already in flight first. React Query awaits
+// All five drop the reads already in flight first. React Query awaits
 // `onMutate` before it sends the request, so the stale fetch is cancelled
 // before the write leaves rather than racing it home.
 //
-// A write that fails replaces none of what it cancelled, so all four ask for
+// A write that fails replaces none of what it cancelled, so all five ask for
 // the totals again on that path. The row needs nothing: it was never repainted.
 export function useDisableOrganization(): OrganizationWrite<string> {
   const qc = useQueryClient();
@@ -176,6 +196,16 @@ export function useRearmTrial(): OrganizationWrite<RearmTrialRequest> {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (body: RearmTrialRequest) => rearmTrial(body),
+    onMutate: () => cancelOrganizationFetches(qc),
+    onSuccess: (org) => finishOrganizationWrite(qc, org),
+    onError: () => invalidateOrganizationStats(qc),
+  });
+}
+
+export function useStartTrial(): OrganizationWrite<StartTrialRequest> {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: StartTrialRequest) => startTrial(body),
     onMutate: () => cancelOrganizationFetches(qc),
     onSuccess: (org) => finishOrganizationWrite(qc, org),
     onError: () => invalidateOrganizationStats(qc),

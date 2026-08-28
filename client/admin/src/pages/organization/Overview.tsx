@@ -5,6 +5,8 @@ import { useParams } from "@tanstack/react-router";
 import { useConfirmDialog } from "@/components/ConfirmDialog";
 import { CopyValue } from "@/components/CopyValue";
 import { TrialFacts } from "@/pages/organization/TrialFacts";
+import { OrganizationActions } from "@/pages/organizations/OrganizationActions";
+import { canStartTrial } from "@/pages/organizations/rowActions";
 import {
   Select,
   SelectContent,
@@ -66,6 +68,37 @@ function Group({
 
 function yesNo(v: boolean): string {
   return v ? "yes" : "no";
+}
+
+function TrialField({ org }: { org: AdminOrganization }): JSX.Element {
+  const startable = canStartTrial(org);
+  const neverTrialled =
+    org.trial_state === "none" || org.trial_state === undefined;
+
+  if (startable && neverTrialled) {
+    return (
+      <OrganizationActions
+        org={org}
+        layout="buttons"
+        actions="trial"
+        fieldTrigger
+      />
+    );
+  }
+
+  return (
+    <div className="flex flex-wrap items-start justify-between gap-3">
+      <TrialFacts org={org} />
+      {startable ? (
+        <OrganizationActions
+          org={org}
+          layout="buttons"
+          actions="trial"
+          fieldTrigger
+        />
+      ) : null}
+    </div>
+  );
 }
 
 // The view reads the record from the same query the layout above it reads, so
@@ -222,7 +255,7 @@ export function Overview({ org }: { org: AdminOrganization }): JSX.Element {
           </Select>
         </Row>
         <Row label="Trial">
-          <TrialFacts org={org} />
+          <TrialField org={org} />
         </Row>
       </Group>
 

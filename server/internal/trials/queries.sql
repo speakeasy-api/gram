@@ -160,6 +160,50 @@ WHERE organization_id = @organization_id
   AND converted_at IS NULL
 RETURNING tier, ends_at;
 
+-- name: StartTrial :one
+-- Operator-initiated grant of a new enterprise trial. Inserts when the
+-- organization has never trialled, or resets an expired (not converted, not
+-- demoted, already-past ends_at) trial to a fresh runway counted from now.
+--
+-- Demoted trials are re-arm's job: they also need keys revived and the account
+-- type restored from a stamp this statement would not see. Running trials are
+-- extend's job. Converted trials have become a contract.
+--
+-- ends_at is measured from now rather than from a previous date: an expired
+-- trial's old ends_at is already past, and adding days to it can leave a row
+-- the next sweep demotes again.
+--
+-- The organization row is locked first so a missing id and a blocked trial
+-- state both come back as zero rows; the handler tells those apart the same
+-- way extend and re-arm do. The trial row is locked when it exists so a
+-- concurrent conversion or demotion cannot be overwritten once this statement
+-- unblocks.
+WITH org AS (
+    SELECT organization_metadata.id
+    FROM organization_metadata
+    WHERE organization_metadata.id = @organization_id
+    FOR UPDATE
+), existing AS (
+    SELECT trials.organization_id, trials.converted_at, trials.demoted_at, trials.ends_at
+    FROM trials
+    WHERE trials.organization_id = @organization_id
+    FOR UPDATE
+)
+INSERT INTO trials (organization_id, tier, ends_at)
+SELECT org.id, @tier, clock_timestamp() + make_interval(days => @start_for_days::int)
+FROM org
+LEFT JOIN existing ON existing.organization_id = org.id
+WHERE existing.organization_id IS NULL
+   OR (
+        existing.converted_at IS NULL
+        AND existing.demoted_at IS NULL
+        AND existing.ends_at <= clock_timestamp()
+   )
+ON CONFLICT (organization_id) DO UPDATE
+SET ends_at = EXCLUDED.ends_at,
+    updated_at = clock_timestamp()
+RETURNING tier, ends_at;
+
 -- name: RestoreOrganizationFromTrial :one
 -- Undoes DemoteOrganizationToFree's two writes. whitelisted is set
 -- unconditionally because demotion cleared it and the signup arming path never

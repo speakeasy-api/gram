@@ -768,3 +768,41 @@ func BuildResumeStripeSubscriptionPayload(adminResumeStripeSubscriptionBody stri
 
 	return v, nil
 }
+
+// BuildStartTrialPayload builds the payload for the admin startTrial endpoint
+// from CLI flags.
+func BuildStartTrialPayload(adminStartTrialBody string, adminStartTrialAdminSessionToken string) (*admin.StartTrialPayload, error) {
+	var err error
+	var body StartTrialRequestBody
+	{
+		err = json.Unmarshal([]byte(adminStartTrialBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"days\": 2,\n      \"id\": \"aa\"\n   }'")
+		}
+		if utf8.RuneCountInString(body.ID) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.id", body.ID, utf8.RuneCountInString(body.ID), 1, true))
+		}
+		if body.Days < 1 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.days", body.Days, 1, true))
+		}
+		if body.Days > 365 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.days", body.Days, 365, false))
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var adminSessionToken *string
+	{
+		if adminStartTrialAdminSessionToken != "" {
+			adminSessionToken = &adminStartTrialAdminSessionToken
+		}
+	}
+	v := &admin.StartTrialPayload{
+		ID:   body.ID,
+		Days: body.Days,
+	}
+	v.AdminSessionToken = adminSessionToken
+
+	return v, nil
+}

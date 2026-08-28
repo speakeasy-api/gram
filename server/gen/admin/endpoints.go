@@ -40,6 +40,7 @@ type Endpoints struct {
 	GetStripeSubscription       goa.Endpoint
 	CancelStripeSubscription    goa.Endpoint
 	ResumeStripeSubscription    goa.Endpoint
+	StartTrial                  goa.Endpoint
 }
 
 // NewEndpoints wraps the methods of the "admin" service with endpoints.
@@ -71,6 +72,7 @@ func NewEndpoints(s Service) *Endpoints {
 		GetStripeSubscription:       NewGetStripeSubscriptionEndpoint(s, a.APIKeyAuth),
 		CancelStripeSubscription:    NewCancelStripeSubscriptionEndpoint(s, a.APIKeyAuth),
 		ResumeStripeSubscription:    NewResumeStripeSubscriptionEndpoint(s, a.APIKeyAuth),
+		StartTrial:                  NewStartTrialEndpoint(s, a.APIKeyAuth),
 	}
 }
 
@@ -100,6 +102,7 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.GetStripeSubscription = m(e.GetStripeSubscription)
 	e.CancelStripeSubscription = m(e.CancelStripeSubscription)
 	e.ResumeStripeSubscription = m(e.ResumeStripeSubscription)
+	e.StartTrial = m(e.StartTrial)
 }
 
 // NewLoginEndpoint returns an endpoint function that calls the method "login"
@@ -609,5 +612,28 @@ func NewResumeStripeSubscriptionEndpoint(s Service, authAPIKeyFn security.AuthAP
 			return nil, err
 		}
 		return s.ResumeStripeSubscription(ctx, p)
+	}
+}
+
+// NewStartTrialEndpoint returns an endpoint function that calls the method
+// "startTrial" of service "admin".
+func NewStartTrialEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*StartTrialPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "admin_auth",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.AdminSessionToken != nil {
+			key = *p.AdminSessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.StartTrial(ctx, p)
 	}
 }
