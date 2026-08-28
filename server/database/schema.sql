@@ -1583,6 +1583,65 @@ CREATE UNIQUE INDEX IF NOT EXISTS custom_domains_organization_id_key
 ON custom_domains (organization_id)
 WHERE deleted IS FALSE;
 
+-- Tenant-qualified target for resources that pin a custom domain by id. Hard
+-- deletion remains blocked until the referencing ingress is explicitly detached.
+CREATE UNIQUE INDEX IF NOT EXISTS custom_domains_organization_id_id_key
+ON custom_domains (organization_id, id);
+
+-- Organization-scoped desired and observed state for one private-network ingress.
+-- The Tailscale Kubernetes operator owns node state; Gram persists only stable
+-- resource identities needed to reconcile and clean up provider resources.
+CREATE TABLE IF NOT EXISTS network_ingresses (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  organization_id TEXT NOT NULL,
+  provider TEXT NOT NULL,
+  hostname TEXT NOT NULL,
+  endpoint_namespace_kind TEXT NOT NULL,
+  custom_domain_id uuid,
+  enabled boolean NOT NULL DEFAULT true,
+  identity_required boolean NOT NULL DEFAULT false,
+  -- Provider-specific credential document encrypted by the application. The
+  -- selected provider adapter owns its plaintext shape; APIs expose only
+  -- configured/not-configured state.
+  credentials_encrypted TEXT,
+  attestor_namespace TEXT NOT NULL,
+  attestor_service_account TEXT NOT NULL,
+  provider_resources JSONB NOT NULL DEFAULT '{}'::jsonb,
+  status TEXT NOT NULL DEFAULT 'pending',
+  dns_name TEXT,
+  last_error TEXT,
+  health_checked_at timestamptz,
+  connected_since timestamptz,
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  deleted_at timestamptz,
+  deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
+
+  CONSTRAINT network_ingresses_pkey PRIMARY KEY (id),
+  CONSTRAINT network_ingresses_organization_id_custom_domain_id_fkey FOREIGN KEY (organization_id, custom_domain_id) REFERENCES custom_domains (organization_id, id) ON DELETE NO ACTION
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS network_ingresses_organization_id_key
+ON network_ingresses (organization_id)
+WHERE deleted IS FALSE;
+
+CREATE UNIQUE INDEX IF NOT EXISTS network_ingresses_attestor_namespace_service_account_key
+ON network_ingresses (attestor_namespace, attestor_service_account)
+WHERE deleted IS FALSE;
+
+CREATE INDEX IF NOT EXISTS network_ingresses_dns_name_idx
+ON network_ingresses (dns_name)
+WHERE deleted IS FALSE AND dns_name IS NOT NULL;
+
+-- Supports the tenant-qualified foreign key for both active rows and tombstones.
+CREATE INDEX IF NOT EXISTS network_ingresses_organization_id_custom_domain_id_idx
+ON network_ingresses (organization_id, custom_domain_id);
+
+CREATE INDEX IF NOT EXISTS network_ingresses_custom_domain_id_idx
+ON network_ingresses (custom_domain_id)
+WHERE deleted IS FALSE AND custom_domain_id IS NOT NULL;
+
 -- External OAuth Server Metadata (RFC 8414 compliant)
 -- For direct external OAuth provider connections
 CREATE TABLE IF NOT EXISTS external_oauth_server_metadata (
@@ -4795,6 +4854,9 @@ CREATE TABLE IF NOT EXISTS mcp_servers (
   -- variations for runtime modifications.
   tool_variations_group_id uuid,
   visibility TEXT NOT NULL CHECK (visibility <> ''),
+  -- NULL is the expand-phase representation of public_only. Allowed values are
+  -- validated in application code so adding a mode does not require a migration.
+  network_access_mode TEXT,
 
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
@@ -4868,6 +4930,9 @@ CREATE TABLE IF NOT EXISTS meta_mcp_servers (
   -- Values are validated in application code. Defaults to the closed state so
   -- existing rows require an authenticated caller.
   visibility TEXT NOT NULL DEFAULT 'private',
+  -- NULL is the expand-phase representation of public_only. Allowed values are
+  -- validated in application code so adding a mode does not require a migration.
+  network_access_mode TEXT,
 
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
