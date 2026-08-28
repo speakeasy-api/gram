@@ -13,7 +13,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
-func TestAuthenticateSessionCacheFailureIsUnexpected(t *testing.T) {
+func TestAuthenticateSessionCacheFailureIsUnavailable(t *testing.T) {
 	t.Parallel()
 
 	redisClient := redis.NewClient(&redis.Options{
@@ -39,6 +39,6 @@ func TestAuthenticateSessionCacheFailureIsUnexpected(t *testing.T) {
 	require.Error(t, err)
 	var oopsErr *oops.ShareableError
 	require.ErrorAs(t, err, &oopsErr)
-	require.Equal(t, oops.CodeUnexpected, oopsErr.Code)
+	require.Equal(t, oops.CodeUnavailable, oopsErr.Code)
 	require.NotErrorIs(t, err, redis.Nil)
 }

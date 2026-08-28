@@ -112,7 +112,7 @@ func (s *Manager) Authenticate(ctx context.Context, key string) (context.Context
 		return ctx, oops.C(oops.CodeUnauthorized)
 	}
 	if err != nil {
-		return ctx, oops.E(oops.CodeUnexpected, err, "error checking auth session").LogError(ctx, s.logger)
+		return ctx, oops.E(oops.CodeUnavailable, err, "error checking auth session").LogError(ctx, s.logger)
 	}
 
 	validatedSupportAdmin := false

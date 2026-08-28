@@ -1,4 +1,5 @@
 import { useCallback, useMemo } from "react";
+import { useProjectSlugForRequests, useSdkClient } from "@/contexts/Sdk";
 
 import { ExternalMCPServerEntry } from "@gram/client/models/components/externalmcpserverentry.js";
 import { ExternalMCPTool } from "@gram/client/models/components/externalmcptool.js";
@@ -6,7 +7,6 @@ import { normalizeRemoteUrl } from "@/pages/catalog/remotes";
 import { queryKeyListMCPCatalog } from "@gram/client/react-query/listMCPCatalog.js";
 import { useQuery } from "@tanstack/react-query";
 import { useRemoteMcpServers } from "@gram/client/react-query/remoteMcpServers.js";
-import { useSdkClient } from "@/contexts/Sdk";
 
 interface ServerMeta {
   "com.pulsemcp/server"?: {
@@ -56,16 +56,19 @@ function useListMCPCatalogImpl(
   options?: CatalogQueryOptions,
 ) {
   const client = useSdkClient();
+  const projectSlug = useProjectSlugForRequests();
 
   return useQuery({
     queryKey: queryKeyListMCPCatalog({
       search: search || undefined,
       registryId: registryId || undefined,
+      gramProject: projectSlug,
     }),
     queryFn: async () =>
       client.mcpRegistries.listCatalog({
         search: search || undefined,
         registryId: registryId || undefined,
+        gramProject: projectSlug,
       }),
     staleTime: 5 * 60 * 1000, // 5 minutes - won't refetch if data is fresh
     enabled: options?.enabled ?? true,
