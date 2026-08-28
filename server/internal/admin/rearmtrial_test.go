@@ -260,6 +260,7 @@ func seedDemotedTrial(t *testing.T, ctx context.Context, conn *pgxpool.Pool, org
 	// id, name and slug all differ, so an assertion on one cannot pass on another.
 	seedOrg(t, ctx, conn, orgFixture{id: orgID, name: orgID + " Name", slug: orgID + "-slug", accountType: "free", whitelisted: false})
 	seedTrial(t, ctx, conn, trialFixture{orgID: orgID, tier: tier, endsAt: endsAt, demotedAt: &demotedAt})
+	seedArmAudit(t, ctx, conn, orgID)
 	seedOpenRouterKey(t, ctx, conn, orgID, keyFixture{keyType: openrouter.KeyTypeChat, monthlyCredits: 50, disabled: true})
 	seedOpenRouterKey(t, ctx, conn, orgID, keyFixture{keyType: openrouter.KeyTypeInternal, monthlyCredits: 37, disabled: true})
 	classifyRearmKey(t, ctx, conn, orgID, openrouter.KeyTypeChat, []string{string(openrouter.DisableCauseTrialDemotion)})
@@ -509,6 +510,20 @@ func TestRearmTrial_UnclassifiedKeyRollsBackLifecycleAndAllKeyChanges(t *testing
 	require.Equal(t, beforeOutbox, afterOutbox)
 }
 
+func seedArmAudit(t *testing.T, ctx context.Context, conn *pgxpool.Pool, orgID string) string {
+	t.Helper()
+	operationID, err := testrepo.New(conn).SeedTrialArmAuditFixture(ctx, orgID)
+	require.NoError(t, err)
+	return operationID
+}
+
+func latestArmAuditID(t *testing.T, ctx context.Context, conn *pgxpool.Pool, orgID string) string {
+	t.Helper()
+	operationID, err := testrepo.New(conn).GetLatestTrialArmAuditIDFixture(ctx, orgID)
+	require.NoError(t, err)
+	return operationID
+}
+
 func seedRearmAuditMetadata(t *testing.T, ctx context.Context, conn *pgxpool.Pool, orgID string, metadata string) {
 	t.Helper()
 	err := testrepo.New(conn).SeedRearmAuditMetadataFixture(ctx, testrepo.SeedRearmAuditMetadataFixtureParams{
@@ -529,9 +544,8 @@ func TestRearmTrial_HistoricalRearmAuditDoesNotAuthorizeNewActiveGenerationRetry
 	for _, keyType := range openrouter.AllKeyTypes {
 		seedOpenRouterKey(t, ctx, conn, orgID, keyFixture{keyType: keyType, monthlyCredits: 50, disabled: false})
 	}
-	currentGeneration := readTrial(t, ctx, conn, orgID).CreatedAt.Time
-	staleGeneration := currentGeneration.Add(-time.Hour)
-	seedRearmAuditMetadata(t, ctx, conn, orgID, fmt.Sprintf(`{"trial_generation_created_at":%q}`, staleGeneration.Format(time.RFC3339Nano)))
+	seedArmAudit(t, ctx, conn, orgID)
+	seedRearmAuditMetadata(t, ctx, conn, orgID, `{"arm_operation_id":"00000000-0000-0000-0000-000000000001"}`)
 
 	_, err := svc.RearmTrial(ctx, &gen.RearmTrialPayload{ID: orgID, Days: 14})
 	requireOopsCode(t, err, oops.CodeConflict)
@@ -546,8 +560,8 @@ func TestRearmTrial_MalformedOrMissingRetryMetadataIsRejected(t *testing.T) {
 		name     string
 		metadata string
 	}{
-		{name: "missing trial generation", metadata: `{}`},
-		{name: "malformed trial generation", metadata: `{"trial_generation_created_at":"not-a-time"}`},
+		{name: "missing arm operation", metadata: `{}`},
+		{name: "malformed arm operation", metadata: `{"arm_operation_id":"not-a-uuid"}`},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -560,6 +574,7 @@ func TestRearmTrial_MalformedOrMissingRetryMetadataIsRejected(t *testing.T) {
 			for _, keyType := range openrouter.AllKeyTypes {
 				seedOpenRouterKey(t, ctx, conn, orgID, keyFixture{keyType: keyType, monthlyCredits: 50, disabled: false})
 			}
+			seedArmAudit(t, ctx, conn, orgID)
 			seedRearmAuditMetadata(t, ctx, conn, orgID, tt.metadata)
 
 			_, err := svc.RearmTrial(ctx, &gen.RearmTrialPayload{ID: orgID, Days: 14})
@@ -568,6 +583,40 @@ func TestRearmTrial_MalformedOrMissingRetryMetadataIsRejected(t *testing.T) {
 			require.True(t, endsAt.Equal(readTrial(t, ctx, conn, orgID).EndsAt.Time))
 		})
 	}
+}
+
+func TestRearmTrial_MissingArmAuditIsRejected(t *testing.T) {
+	t.Parallel()
+
+	ctx, svc, conn, upstream := newProductionRearmService(t)
+	const orgID = "org_rearm_missing_arm_audit"
+	endsAt := time.Now().UTC().Add(14 * 24 * time.Hour).Truncate(time.Microsecond)
+	seedOrg(t, ctx, conn, orgFixture{id: orgID, name: orgID, slug: orgID, accountType: "enterprise", whitelisted: true})
+	seedTrial(t, ctx, conn, trialFixture{orgID: orgID, tier: "enterprise", endsAt: endsAt})
+	seedRearmAuditMetadata(t, ctx, conn, orgID, `{"arm_operation_id":"00000000-0000-0000-0000-000000000001"}`)
+
+	_, err := svc.RearmTrial(ctx, &gen.RearmTrialPayload{ID: orgID, Days: 14})
+	requireOopsCode(t, err, oops.CodeConflict)
+	require.Zero(t, upstream.count())
+}
+
+func TestRearmTrial_AmbiguousRetryAuditIsRejected(t *testing.T) {
+	t.Parallel()
+
+	ctx, svc, conn, upstream := newProductionRearmService(t)
+	const orgID = "org_rearm_ambiguous_audit"
+	endsAt := time.Now().UTC().Add(14 * 24 * time.Hour).Truncate(time.Microsecond)
+	seedOrg(t, ctx, conn, orgFixture{id: orgID, name: orgID, slug: orgID, accountType: "enterprise", whitelisted: true})
+	seedTrial(t, ctx, conn, trialFixture{orgID: orgID, tier: "enterprise", endsAt: endsAt})
+	armOperationID := seedArmAudit(t, ctx, conn, orgID)
+	metadata := fmt.Sprintf(`{"arm_operation_id":%q}`, armOperationID)
+	seedRearmAuditMetadata(t, ctx, conn, orgID, metadata)
+	seedRearmAuditMetadata(t, ctx, conn, orgID, metadata)
+
+	_, err := svc.RearmTrial(ctx, &gen.RearmTrialPayload{ID: orgID, Days: 14})
+	requireOopsCode(t, err, oops.CodeConflict)
+	require.Zero(t, upstream.count())
+	require.True(t, endsAt.Equal(readTrial(t, ctx, conn, orgID).EndsAt.Time))
 }
 
 func TestRearmTrial_PostCommitReconcileFailureConvergesOnRequestRetry(t *testing.T) {
@@ -590,6 +639,14 @@ func TestRearmTrial_PostCommitReconcileFailureConvergesOnRequestRetry(t *testing
 	}
 
 	committedEndsAt := readTrial(t, ctx, conn, orgID).EndsAt
+	rearmAudit, err := audittest.LatestAuditLogByAction(ctx, conn, audit.ActionOrganizationEnterpriseTrialRearmed)
+	require.NoError(t, err)
+	var retryMetadata struct {
+		ArmOperationID string `json:"arm_operation_id"`
+	}
+	require.NoError(t, json.Unmarshal(rearmAudit.Metadata, &retryMetadata))
+	require.Equal(t, latestArmAuditID(t, ctx, conn, orgID), retryMetadata.ArmOperationID)
+
 	_, err = svc.ExtendTrial(ctx, &gen.ExtendTrialPayload{ID: orgID, Days: 2})
 	require.NoError(t, err)
 	extendedEndsAt := readTrial(t, ctx, conn, orgID).EndsAt
@@ -606,6 +663,37 @@ func TestRearmTrial_PostCommitReconcileFailureConvergesOnRequestRetry(t *testing
 	afterOutbox, err := testrepo.New(conn).CountPublishOutboxRows(ctx)
 	require.NoError(t, err)
 	require.Equal(t, beforeOutbox+2, afterOutbox, "extension and initial re-arm each emit once; retry must not emit")
+}
+
+func TestRearmTrial_RecreatedGenerationWithSameCreatedAtRejectsStaleRetry(t *testing.T) {
+	t.Parallel()
+
+	ctx, svc, conn, upstream := newProductionRearmService(t)
+	const orgID = "org_rearm_recreated_generation"
+	seedDemotedTrial(t, ctx, conn, orgID, "enterprise")
+	upstream.setFail(true)
+
+	_, err := svc.RearmTrial(ctx, &gen.RearmTrialPayload{ID: orgID, Days: 14})
+	requireOopsCode(t, err, oops.CodeGatewayError)
+	committed := readTrial(t, ctx, conn, orgID)
+	staleArmOperationID := latestArmAuditID(t, ctx, conn, orgID)
+
+	err = testrepo.New(conn).RecreateTrialGenerationFixture(ctx, testrepo.RecreateTrialGenerationFixtureParams{
+		TargetOrganizationID: orgID,
+		Tier:                 "enterprise",
+		CreatedAt:            committed.CreatedAt,
+		EndsAt:               committed.EndsAt,
+	})
+	require.NoError(t, err)
+	currentArmOperationID := seedArmAudit(t, ctx, conn, orgID)
+	require.NotEqual(t, staleArmOperationID, currentArmOperationID)
+	require.Equal(t, committed.CreatedAt, readTrial(t, ctx, conn, orgID).CreatedAt, "fixture must hold timestamp precision constant")
+
+	requestsBeforeRetry := upstream.count()
+	upstream.setFail(false)
+	_, err = svc.RearmTrial(ctx, &gen.RearmTrialPayload{ID: orgID, Days: 14})
+	requireOopsCode(t, err, oops.CodeConflict)
+	require.Equal(t, requestsBeforeRetry, upstream.count(), "a stale generation must not reconcile keys")
 }
 
 func TestRearmTrial_RestoresTheOrganizationAndRevivesEveryKey(t *testing.T) {
@@ -828,6 +916,7 @@ func TestRearmTrial_MovesEndsAtIntoTheFuture(t *testing.T) {
 	demotedAt := time.Now().UTC().Add(-99 * 24 * time.Hour)
 	seedOrg(t, ctx, conn, orgFixture{id: orgID, name: orgID, slug: orgID, accountType: "free", whitelisted: false})
 	seedTrial(t, ctx, conn, trialFixture{orgID: orgID, endsAt: longExpired, demotedAt: &demotedAt})
+	seedArmAudit(t, ctx, conn, orgID)
 
 	_, err := svc.RearmTrial(ctx, &gen.RearmTrialPayload{ID: orgID, Days: 3})
 	require.NoError(t, err)
@@ -891,6 +980,7 @@ func TestRearmTrial_OnlyADemotedTrialCanBeRearmed(t *testing.T) {
 
 		seedOrg(t, ctx, conn, orgFixture{id: tc.orgID, name: tc.orgID, slug: tc.orgID, accountType: "free", whitelisted: false})
 		seedTrial(t, ctx, conn, f)
+		seedArmAudit(t, ctx, conn, tc.orgID)
 	}
 
 	for _, tc := range cases {
@@ -1067,6 +1157,7 @@ func TestRearmTrial_OrganizationWithNoKeysSucceeds(t *testing.T) {
 	demotedAt := time.Now().UTC().Add(-9 * 24 * time.Hour)
 	seedOrg(t, ctx, conn, orgFixture{id: orgID, name: orgID, slug: orgID, accountType: "free", whitelisted: false})
 	seedTrial(t, ctx, conn, trialFixture{orgID: orgID, endsAt: endsAt, demotedAt: &demotedAt})
+	seedArmAudit(t, ctx, conn, orgID)
 
 	seedOpenRouterKey(t, ctx, conn, orgID, keyFixture{keyType: openrouter.KeyTypeChat, monthlyCredits: 50, disabled: true})
 
@@ -1097,6 +1188,7 @@ func TestRearmTrial_OrganizationWithOnlyAnInternalKeySucceeds(t *testing.T) {
 	demotedAt := time.Now().UTC().Add(-9 * 24 * time.Hour)
 	seedOrg(t, ctx, conn, orgFixture{id: orgID, name: orgID, slug: orgID, accountType: "free", whitelisted: false})
 	seedTrial(t, ctx, conn, trialFixture{orgID: orgID, endsAt: endsAt, demotedAt: &demotedAt})
+	seedArmAudit(t, ctx, conn, orgID)
 	seedOpenRouterKey(t, ctx, conn, orgID, keyFixture{keyType: openrouter.KeyTypeInternal, monthlyCredits: 37, disabled: true})
 
 	_, err := svc.RearmTrial(ctx, &gen.RearmTrialPayload{ID: orgID, Days: 14})
@@ -1121,6 +1213,7 @@ func TestRearmTrial_AlreadyEnabledKeyIsLeftAlone(t *testing.T) {
 	demotedAt := time.Now().UTC().Add(-9 * 24 * time.Hour)
 	seedOrg(t, ctx, conn, orgFixture{id: orgID, name: orgID, slug: orgID, accountType: "free", whitelisted: false})
 	seedTrial(t, ctx, conn, trialFixture{orgID: orgID, endsAt: endsAt, demotedAt: &demotedAt})
+	seedArmAudit(t, ctx, conn, orgID)
 	seedOpenRouterKey(t, ctx, conn, orgID, keyFixture{keyType: openrouter.KeyTypeChat, monthlyCredits: 50, disabled: false})
 	seedOpenRouterKey(t, ctx, conn, orgID, keyFixture{keyType: openrouter.KeyTypeInternal, monthlyCredits: 37, disabled: true})
 
@@ -1384,6 +1477,7 @@ func TestRearmTrial_RestoresADisabledOrganizationsTrialWithoutEnablingIt(t *test
 	demotedAt := time.Now().UTC().Add(-9 * 24 * time.Hour)
 	seedOrg(t, ctx, conn, orgFixture{id: orgID, name: orgID, slug: orgID, accountType: "free", disabledAt: &disabledAt})
 	seedTrial(t, ctx, conn, trialFixture{orgID: orgID, endsAt: endsAt, demotedAt: &demotedAt})
+	seedArmAudit(t, ctx, conn, orgID)
 
 	_, err := svc.RearmTrial(ctx, &gen.RearmTrialPayload{ID: orgID, Days: 14})
 	require.NoError(t, err)

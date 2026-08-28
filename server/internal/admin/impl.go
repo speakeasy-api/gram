@@ -1168,13 +1168,15 @@ func (s *Service) RearmTrial(ctx context.Context, payload *gen.RearmTrialPayload
 		return nil, s.rejectTrialChange(ctx, logger, payload.ID, "look up organization after unrearmed trial", "organization has no demoted enterprise trial to re-arm")
 	}
 
+	retryOperations, auditErr := repo.New(tx).AdminGetEnterpriseTrialRetryOperationIDs(ctx, payload.ID)
+	if auditErr != nil {
+		return nil, oops.E(oops.CodeUnexpected, auditErr, "check trial generation audit operations").LogError(ctx, logger)
+	}
+	armOperationID, armErr := uuid.Parse(retryOperations.ArmOperationID)
+	rearmArmOperationID, rearmErr := uuid.Parse(retryOperations.RearmArmOperationID)
+
 	if !lockedTrial.DemotedAt.Valid {
-		recordedGeneration, auditErr := repo.New(tx).AdminGetLatestEnterpriseTrialRearmGeneration(ctx, payload.ID)
-		if auditErr != nil && !errors.Is(auditErr, pgx.ErrNoRows) {
-			return nil, oops.E(oops.CodeUnexpected, auditErr, "check prior trial re-arm generation").LogError(ctx, logger)
-		}
-		parsedGeneration, parseErr := time.Parse(time.RFC3339Nano, recordedGeneration)
-		sameGeneration := auditErr == nil && parseErr == nil && parsedGeneration.Equal(lockedTrial.CreatedAt.Time)
+		sameGeneration := armErr == nil && rearmErr == nil && armOperationID == rearmArmOperationID && retryOperations.MatchingRearmCount == 1
 		if sameGeneration && lockedTrial.EndsAt.Valid && lockedTrial.EndsAt.Time.After(time.Now()) {
 			if rollbackErr := tx.Rollback(ctx); rollbackErr != nil {
 				return nil, oops.E(oops.CodeUnexpected, rollbackErr, "close trial re-arm retry transaction").LogError(ctx, logger)
@@ -1188,6 +1190,10 @@ func (s *Service) RearmTrial(ctx context.Context, payload *gen.RearmTrialPayload
 
 		_ = tx.Rollback(ctx)
 		return nil, s.rejectTrialChange(ctx, logger, payload.ID, "look up organization after unrearmed trial", "organization has no demoted enterprise trial to re-arm")
+	}
+	if armErr != nil {
+		_ = tx.Rollback(ctx)
+		return nil, s.rejectTrialChange(ctx, logger, payload.ID, "look up organization after unaudited trial", "organization trial generation has no valid arm operation")
 	}
 
 	// The lifecycle row is locked first. Every transaction advisory lock then
@@ -1236,7 +1242,7 @@ func (s *Service) RearmTrial(ctx context.Context, payload *gen.RearmTrialPayload
 	if err := s.audit.LogOrganizationEnterpriseTrialRearmed(ctx, tx, audit.LogOrganizationEnterpriseTrialRearmedEvent{
 		OrganizationID: payload.ID, Actor: actor, ActorDisplayName: actorDisplayName, ActorSlug: nil,
 		OrganizationName: organization.Name, OrganizationSlug: organization.Slug, AccountType: rearmed.Tier,
-		TrialEndsAt: rearmed.EndsAt.Time, TrialGenerationCreatedAt: lockedTrial.CreatedAt.Time, KeyAccessChanged: keyAccessChanged,
+		TrialEndsAt: rearmed.EndsAt.Time, ArmAuditOperation: armOperationID.String(), KeyAccessChanged: keyAccessChanged,
 	}); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "log trial re-arm").LogError(ctx, logger)
 	}

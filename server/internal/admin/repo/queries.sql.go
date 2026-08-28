@@ -158,23 +158,57 @@ func (q *Queries) AdminEnableOrganization(ctx context.Context, id string) (int64
 	return result.RowsAffected(), nil
 }
 
-const adminGetLatestEnterpriseTrialRearmGeneration = `-- name: AdminGetLatestEnterpriseTrialRearmGeneration :one
-SELECT COALESCE(metadata->>'trial_generation_created_at', '')::text AS trial_generation_created_at
-FROM audit_logs
-WHERE organization_id = $1
-  AND action = 'organization:enterprise_trial_rearmed'
-ORDER BY seq DESC
-LIMIT 1
+const adminGetEnterpriseTrialRetryOperationIDs = `-- name: AdminGetEnterpriseTrialRetryOperationIDs :one
+WITH latest_arm AS (
+    SELECT armed.id, armed.seq
+    FROM audit_logs AS armed
+    WHERE armed.organization_id = $1
+      AND armed.project_id IS NULL
+      AND armed.action = 'organization:enterprise_trial_armed'
+      AND armed.subject_id = $1
+      AND armed.subject_type = 'organization'
+    ORDER BY armed.seq DESC, armed.id DESC
+    LIMIT 1
+), latest_rearm AS (
+    SELECT rearmed.metadata->>'arm_operation_id' AS arm_operation_id
+    FROM audit_logs AS rearmed
+    WHERE rearmed.organization_id = $1
+      AND rearmed.project_id IS NULL
+      AND rearmed.action = 'organization:enterprise_trial_rearmed'
+      AND rearmed.subject_id = $1
+      AND rearmed.subject_type = 'organization'
+    ORDER BY rearmed.seq DESC, rearmed.id DESC
+    LIMIT 1
+)
+SELECT
+    COALESCE((SELECT id::text FROM latest_arm), '')::text AS arm_operation_id,
+    COALESCE((SELECT arm_operation_id FROM latest_rearm), '')::text AS rearm_arm_operation_id,
+    (
+        SELECT count(*)
+        FROM audit_logs AS rearmed
+        JOIN latest_arm ON rearmed.metadata->>'arm_operation_id' = latest_arm.id::text
+        WHERE rearmed.organization_id = $1
+          AND rearmed.project_id IS NULL
+          AND rearmed.action = 'organization:enterprise_trial_rearmed'
+          AND rearmed.subject_id = $1
+          AND rearmed.subject_type = 'organization'
+    )::bigint AS matching_rearm_count
 `
 
-// A post-commit retry is valid only for the immutable trial-row generation
-// recorded in the latest matching audit. Extensions intentionally change ends_at
-// without creating a new generation.
-func (q *Queries) AdminGetLatestEnterpriseTrialRearmGeneration(ctx context.Context, organizationID string) (string, error) {
-	row := q.db.QueryRow(ctx, adminGetLatestEnterpriseTrialRearmGeneration, organizationID)
-	var trial_generation_created_at string
-	err := row.Scan(&trial_generation_created_at)
-	return trial_generation_created_at, err
+type AdminGetEnterpriseTrialRetryOperationIDsRow struct {
+	ArmOperationID      string
+	RearmArmOperationID string
+	MatchingRearmCount  int64
+}
+
+// The arm audit id is the immutable generation token. Every production trial
+// creation writes exactly one arm audit in the creation transaction; extension
+// writes neither. seq orders generations; id breaks any equal-seq tie.
+func (q *Queries) AdminGetEnterpriseTrialRetryOperationIDs(ctx context.Context, targetOrganizationID string) (AdminGetEnterpriseTrialRetryOperationIDsRow, error) {
+	row := q.db.QueryRow(ctx, adminGetEnterpriseTrialRetryOperationIDs, targetOrganizationID)
+	var i AdminGetEnterpriseTrialRetryOperationIDsRow
+	err := row.Scan(&i.ArmOperationID, &i.RearmArmOperationID, &i.MatchingRearmCount)
+	return i, err
 }
 
 const adminGetOrganization = `-- name: AdminGetOrganization :one

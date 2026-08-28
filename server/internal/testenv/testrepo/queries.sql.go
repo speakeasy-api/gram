@@ -592,6 +592,23 @@ func (q *Queries) GetDeviceIntegrationSyncPushDigests(ctx context.Context, devic
 	return items, nil
 }
 
+const getLatestTrialArmAuditIDFixture = `-- name: GetLatestTrialArmAuditIDFixture :one
+SELECT id::text
+FROM audit_logs
+WHERE organization_id = $1
+  AND action = 'organization:enterprise_trial_armed'
+ORDER BY seq DESC, id DESC
+LIMIT 1
+`
+
+// Test-only fixture: reads the arm operation selected by the production ordering.
+func (q *Queries) GetLatestTrialArmAuditIDFixture(ctx context.Context, organizationID string) (string, error) {
+	row := q.db.QueryRow(ctx, getLatestTrialArmAuditIDFixture, organizationID)
+	var id string
+	err := row.Scan(&id)
+	return id, err
+}
+
 const getOrganizationMetadataStateFixture = `-- name: GetOrganizationMetadataStateFixture :one
 SELECT disabled_at, workos_last_event_id, whitelisted, gram_account_type, created_at, updated_at
 FROM organization_metadata
@@ -1597,6 +1614,35 @@ func (q *Queries) PauseDeviceIntegrationSyncsFixture(ctx context.Context, device
 	return err
 }
 
+const recreateTrialGenerationFixture = `-- name: RecreateTrialGenerationFixture :exec
+WITH deleted AS (
+    DELETE FROM trials AS doomed
+    WHERE doomed.organization_id = $4
+    RETURNING doomed.organization_id
+)
+INSERT INTO trials (organization_id, tier, created_at, ends_at)
+SELECT deleted.organization_id, $1, $2, $3
+FROM deleted
+`
+
+type RecreateTrialGenerationFixtureParams struct {
+	Tier                 string
+	CreatedAt            pgtype.Timestamptz
+	EndsAt               pgtype.Timestamptz
+	TargetOrganizationID string
+}
+
+// Test-only fixture: replaces a trial while preserving timestamp precision.
+func (q *Queries) RecreateTrialGenerationFixture(ctx context.Context, arg RecreateTrialGenerationFixtureParams) error {
+	_, err := q.db.Exec(ctx, recreateTrialGenerationFixture,
+		arg.Tier,
+		arg.CreatedAt,
+		arg.EndsAt,
+		arg.TargetOrganizationID,
+	)
+	return err
+}
+
 const scrubDeploymentFunctionMachineSpecs = `-- name: ScrubDeploymentFunctionMachineSpecs :exec
 UPDATE deployments_functions SET memory_mib = NULL, scale = NULL WHERE deployment_id = $1
 `
@@ -1878,6 +1924,20 @@ func (q *Queries) SeedRiskResultFixture(ctx context.Context, arg SeedRiskResultF
 		arg.Spans,
 	)
 	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
+}
+
+const seedTrialArmAuditFixture = `-- name: SeedTrialArmAuditFixture :one
+INSERT INTO audit_logs (organization_id, actor_id, actor_type, action, subject_id, subject_type)
+VALUES ($1, 'system', 'user', 'organization:enterprise_trial_armed', $1, 'organization')
+RETURNING id::text
+`
+
+// Test-only fixture: records the immutable audit operation for a trial generation.
+func (q *Queries) SeedTrialArmAuditFixture(ctx context.Context, organizationID string) (string, error) {
+	row := q.db.QueryRow(ctx, seedTrialArmAuditFixture, organizationID)
+	var id string
 	err := row.Scan(&id)
 	return id, err
 }

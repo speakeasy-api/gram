@@ -598,10 +598,36 @@ SET key_hash = @key_hash
 WHERE organization_id = @organization_id
   AND key_type = @key_type;
 
+-- name: SeedTrialArmAuditFixture :one
+-- Test-only fixture: records the immutable audit operation for a trial generation.
+INSERT INTO audit_logs (organization_id, actor_id, actor_type, action, subject_id, subject_type)
+VALUES (@organization_id, 'system', 'user', 'organization:enterprise_trial_armed', @organization_id, 'organization')
+RETURNING id::text;
+
+-- name: GetLatestTrialArmAuditIDFixture :one
+-- Test-only fixture: reads the arm operation selected by the production ordering.
+SELECT id::text
+FROM audit_logs
+WHERE organization_id = @organization_id
+  AND action = 'organization:enterprise_trial_armed'
+ORDER BY seq DESC, id DESC
+LIMIT 1;
+
 -- name: SeedRearmAuditMetadataFixture :exec
 -- Test-only fixture: seeds a historical re-arm audit with caller-provided metadata.
 INSERT INTO audit_logs (organization_id, actor_id, actor_type, action, subject_id, subject_type, metadata)
 VALUES (@organization_id, 'system', 'user', 'organization:enterprise_trial_rearmed', @organization_id, 'organization', @metadata::jsonb);
+
+-- name: RecreateTrialGenerationFixture :exec
+-- Test-only fixture: replaces a trial while preserving timestamp precision.
+WITH deleted AS (
+    DELETE FROM trials AS doomed
+    WHERE doomed.organization_id = @target_organization_id
+    RETURNING doomed.organization_id
+)
+INSERT INTO trials (organization_id, tier, created_at, ends_at)
+SELECT deleted.organization_id, @tier, @created_at, @ends_at
+FROM deleted;
 
 -- name: IsQueryBlockedOnLockFixture :one
 -- Test-only synchronization: reports whether a matching active query is waiting on a lock.

@@ -1,13 +1,41 @@
--- name: AdminGetLatestEnterpriseTrialRearmGeneration :one
--- A post-commit retry is valid only for the immutable trial-row generation
--- recorded in the latest matching audit. Extensions intentionally change ends_at
--- without creating a new generation.
-SELECT COALESCE(metadata->>'trial_generation_created_at', '')::text AS trial_generation_created_at
-FROM audit_logs
-WHERE organization_id = @organization_id
-  AND action = 'organization:enterprise_trial_rearmed'
-ORDER BY seq DESC
-LIMIT 1;
+-- name: AdminGetEnterpriseTrialRetryOperationIDs :one
+-- The arm audit id is the immutable generation token. Every production trial
+-- creation writes exactly one arm audit in the creation transaction; extension
+-- writes neither. seq orders generations; id breaks any equal-seq tie.
+WITH latest_arm AS (
+    SELECT armed.id, armed.seq
+    FROM audit_logs AS armed
+    WHERE armed.organization_id = @target_organization_id
+      AND armed.project_id IS NULL
+      AND armed.action = 'organization:enterprise_trial_armed'
+      AND armed.subject_id = @target_organization_id
+      AND armed.subject_type = 'organization'
+    ORDER BY armed.seq DESC, armed.id DESC
+    LIMIT 1
+), latest_rearm AS (
+    SELECT rearmed.metadata->>'arm_operation_id' AS arm_operation_id
+    FROM audit_logs AS rearmed
+    WHERE rearmed.organization_id = @target_organization_id
+      AND rearmed.project_id IS NULL
+      AND rearmed.action = 'organization:enterprise_trial_rearmed'
+      AND rearmed.subject_id = @target_organization_id
+      AND rearmed.subject_type = 'organization'
+    ORDER BY rearmed.seq DESC, rearmed.id DESC
+    LIMIT 1
+)
+SELECT
+    COALESCE((SELECT id::text FROM latest_arm), '')::text AS arm_operation_id,
+    COALESCE((SELECT arm_operation_id FROM latest_rearm), '')::text AS rearm_arm_operation_id,
+    (
+        SELECT count(*)
+        FROM audit_logs AS rearmed
+        JOIN latest_arm ON rearmed.metadata->>'arm_operation_id' = latest_arm.id::text
+        WHERE rearmed.organization_id = @target_organization_id
+          AND rearmed.project_id IS NULL
+          AND rearmed.action = 'organization:enterprise_trial_rearmed'
+          AND rearmed.subject_id = @target_organization_id
+          AND rearmed.subject_type = 'organization'
+    )::bigint AS matching_rearm_count;
 
 -- name: GetProjectByID :one
 SELECT id, slug
