@@ -242,8 +242,8 @@ function ProjectGuideContent({
 
   return (
     <GuideCanvas homeHref={routes.home.href()}>
-      <section className="border-border bg-card mx-auto flex w-full max-w-[1200px] flex-col overflow-hidden border shadow-sm">
-        <header className="border-border flex items-end gap-3.5 border-b px-6 py-4">
+      <section className="border-border bg-card mx-auto flex w-full xl:w-[80%] 2xl:w-[75%] xl:min-w-[70rem] flex-col overflow-hidden border shadow-sm">
+        <header className="border-border flex items-end gap-3.5 border-b px-8 pt-6 pb-5">
           <div>
             <h5 className="text-eyebrow">Guided Journey</h5>
             <h2 className="text-display-xs">
@@ -264,7 +264,7 @@ function ProjectGuideContent({
             </div>
           )}
         </header>
-        <div className="flex flex-col md:flex-row">
+        <div className="flex flex-col xl:flex-row">
           {PROJECT_GUIDE_JOURNEYS.map((journey) => {
             const status = statusByJourney[journey.id];
             const isSelected = selected === journey.id;
@@ -592,8 +592,8 @@ function ProjectGuideStepContent({
   }
 
   return (
-    <div className="grid min-w-0 gap-3 pt-3">
-      <p className="text-muted-foreground max-w-md text-body-sm">
+    <div className="grid min-w-0 gap-3 pt-4 pl-7">
+      <p className="text-muted-foreground max-w-lg text-body-sm">
         {journey.stepBlurbs[step]}
       </p>
       <SecretStepBody
@@ -1321,7 +1321,7 @@ function GuideCanvas({
         </Link>
       </header>
       <div className="relative z-10 min-h-0 flex-1 overflow-y-auto">
-        <div className="flex min-h-full w-full items-center justify-center p-4 sm:p-8">
+        <div className="flex min-h-full w-full items-start justify-center px-4 pb-4 pt-[10vh] sm:px-8 sm:pb-8">
           {children}
         </div>
       </div>
@@ -1365,7 +1365,7 @@ function JourneyChoice({
       className="flex h-full w-full flex-col text-left"
     >
       <JourneyGraphic journey={journey} status={status} />
-      <span className="border-border bg-background flex flex-col gap-2 border-t p-6 transition-all hover:bg-card hover:shadow-inner">
+      <span className="border-border bg-background flex flex-col gap-2 border-t px-10 py-8 transition-all hover:bg-card hover:shadow-inner">
         <span className="flex items-center gap-2.5">
           {journey.steps.map((step, index) => (
             <span
@@ -1386,7 +1386,7 @@ function JourneyChoice({
           <span className="text-eyebrow text-disabled">{progressLabel}</span>
         </span>
         <span className="text-xl leading-tight">{journey.title}</span>
-        <span className="text-muted-foreground text-sm leading-relaxed">
+        <span className="text-muted-foreground text-sm leading-relaxed max-w-lg">
           {journey.win}
         </span>
         <span className="flex items-center gap-3 pt-1">
@@ -1475,37 +1475,39 @@ function JourneyGraphic({
     <span
       data-testid={`project-guide-graphic-${journey.id}`}
       data-animated={animated}
-      className="flex min-h-96 flex-col items-center justify-center px-16 pt-10 pb-8"
+      className="flex min-h-96 w-full flex-col items-center justify-center px-16 py-22"
     >
-      {plates.map((plate, index) => (
-        <span key={plate.zone} className="flex w-full flex-col items-center">
-          <JourneyGraphicPlate
-            key={plate.zone}
-            accent={fixture.accent}
-            active={active}
-            animated={animated}
-            index={index}
-            plate={plate}
-          />
-          {index < 2 && (
-            <JourneyGraphicPipe
-              key={`${plate.zone}-pipe`}
+      <span className="mx-auto flex w-full max-w-[38rem] flex-col items-center">
+        {plates.map((plate, index) => (
+          <span key={plate.zone} className="flex w-full flex-col items-center">
+            <JourneyGraphicPlate
+              key={plate.zone}
               accent={fixture.accent}
               active={active}
               animated={animated}
-              label={
-                isMcp
-                  ? index === 0
-                    ? "request path"
-                    : "governed route"
-                  : index === 0
-                    ? "prompt flow"
-                    : "policy boundary"
-              }
+              index={index}
+              plate={plate}
             />
-          )}
-        </span>
-      ))}
+            {index < 2 && (
+              <JourneyGraphicPipe
+                key={`${plate.zone}-pipe`}
+                accent={fixture.accent}
+                active={active}
+                animated={animated}
+                label={
+                  isMcp
+                    ? index === 0
+                      ? "request path"
+                      : "governed route"
+                    : index === 0
+                      ? "prompt flow"
+                      : "policy boundary"
+                }
+              />
+            )}
+          </span>
+        ))}
+      </span>
     </span>
   );
 }
@@ -1816,7 +1818,7 @@ function JourneySpine({
       aria-label={`Switch to ${journey.title}`}
       aria-controls={controlsId}
       aria-expanded="false"
-      className="flex h-full w-full flex-col items-center gap-3.5 py-4 hover:bg-card/60"
+      className="flex h-full w-full flex-col items-center gap-3.5 py-6 hover:bg-card/60"
     >
       <span
         aria-hidden="true"

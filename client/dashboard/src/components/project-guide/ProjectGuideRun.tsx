@@ -110,7 +110,7 @@ export function ProjectGuideRun({
         data-testid="project-guide-run"
         data-display-state={displayState}
       >
-        <div className="border-border bg-background flex items-center gap-3 border-b px-6 py-3">
+        <div className="border-border bg-background flex items-center gap-3 border-b px-8 py-5">
           <span
             aria-hidden="true"
             className="size-2.5"
@@ -125,10 +125,10 @@ export function ProjectGuideRun({
             {completedSteps.length} of {journey.steps.length} done
           </span>
         </div>
-        <div className="relative min-w-0">
+        <div className="grid min-w-0 lg:grid-cols-[minmax(0,1fr)_minmax(0,50%)] 2xl:grid-cols-[minmax(0,1fr)_minmax(0,40%)]">
           <ol
             aria-label={`${journey.id === "third-party-mcp" ? "Journey A" : "Journey B"} steps`}
-            className="min-w-0 lg:mr-[480px]"
+            className="min-w-0"
           >
             {journey.steps.map((step, index) => {
               const complete = completedSteps.includes(index);
@@ -138,7 +138,7 @@ export function ProjectGuideRun({
                   key={step}
                   aria-current={current ? "step" : undefined}
                   className={cn(
-                    "border-neutral-softest min-w-0 border-b border-r-[3px] py-5 pl-6 pr-5",
+                    "border-neutral-softest min-w-0 border-b border-r-[3px] py-6 px-8",
                     current && "min-h-48",
                     current && "border-r-foreground",
                   )}
@@ -152,7 +152,7 @@ export function ProjectGuideRun({
                     </span>
                     <span
                       className={cn(
-                        "text-sm leading-tight",
+                        "text-base leading-tight",
                         current && "text-xl",
                         !current && !complete && "text-muted-foreground",
                       )}
@@ -203,7 +203,7 @@ export function ProjectGuideRun({
           </ol>
           <aside
             aria-label={`${journey.id === "third-party-mcp" ? "Journey A" : "Journey B"} run panel`}
-            className="border-border bg-card flex min-w-0 flex-col border-l px-6 py-5 lg:absolute lg:inset-y-0 lg:right-0 lg:min-h-0 lg:w-[480px] lg:overflow-hidden"
+            className="bg-card flex min-w-0 flex-col px-6 py-5 lg:min-h-0 lg:overflow-hidden"
           >
             <div className="flex items-baseline gap-3 px-4 py-3 border border-neutral-softest bg-muted/80">
               <span className="text-eyebrow" style={{ color: fixture.accent }}>
