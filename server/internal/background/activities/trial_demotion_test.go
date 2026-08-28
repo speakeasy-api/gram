@@ -3,6 +3,7 @@ package activities_test
 import (
 	"context"
 	"errors"
+	"fmt"
 	"slices"
 	"testing"
 	"time"
@@ -56,7 +57,11 @@ func (n *recordingTrialNotifier) TrialInactive(_ context.Context, organizationID
 var _ openrouter.Provisioner = (*trialProvisioner)(nil)
 
 func (p *trialProvisioner) AddAPIKeyDisableCauseWithDB(ctx context.Context, db openrouter.DBTX, orgID string, keyType openrouter.KeyType, cause openrouter.DisableCause) (openrouter.DisableCauseChange, error) {
-	return p.local.AddAPIKeyDisableCauseWithDB(ctx, db, orgID, keyType, cause)
+	change, err := p.local.AddAPIKeyDisableCauseWithDB(ctx, db, orgID, keyType, cause)
+	if err != nil {
+		return change, fmt.Errorf("add OpenRouter API key disable cause: %w", err)
+	}
+	return change, nil
 }
 
 func (p *trialProvisioner) ReconcileAPIKeyDisabled(_ context.Context, orgID string, keyType openrouter.KeyType) error {
@@ -152,11 +157,12 @@ func materializeTrialKey(t *testing.T, ctx context.Context, ti *trialTestInstanc
 		MonthlyCredits: 100,
 	})
 	require.NoError(t, err)
-	_, err = ti.conn.Exec(ctx, `
-		UPDATE openrouter_api_keys
-		SET disable_causes = $3::text[], disabled = COALESCE(cardinality($3::text[]) > 0, TRUE)
-		WHERE organization_id = $1 AND key_type = $2
-	`, orgID, string(keyType), causes)
+	err = testrepo.New(ti.conn).SetOpenRouterAPIKeyClassificationFixture(ctx, testrepo.SetOpenRouterAPIKeyClassificationFixtureParams{
+		OrganizationID: orgID,
+		KeyType:        string(keyType),
+		DisableCauses:  causes,
+		Disabled:       causes == nil || len(causes) > 0,
+	})
 	require.NoError(t, err)
 }
 
@@ -458,7 +464,7 @@ func TestDemoteExpiredTrials_LocksLifecycleBeforeAllKeysAndRows(t *testing.T) {
 	}
 
 	rowLock := testenv.BeginTx(t, ctx, ti.conn)
-	_, err := rowLock.Exec(ctx, `SELECT 1 FROM trials WHERE organization_id = $1 FOR UPDATE`, orgID)
+	_, err := trialsrepo.New(rowLock).LockTrialLifecycleForRearm(ctx, orgID)
 	require.NoError(t, err)
 
 	demoted := make(chan error, 1)
@@ -467,29 +473,21 @@ func TestDemoteExpiredTrials_LocksLifecycleBeforeAllKeysAndRows(t *testing.T) {
 	waitCtx, cancelWait := context.WithTimeout(ctx, 2*time.Second)
 	defer cancelWait()
 	requireCondition(t, waitCtx, func() (bool, error) {
-		var blocked bool
-		err := ti.conn.QueryRow(waitCtx, `
-			SELECT EXISTS (
-				SELECT 1 FROM pg_stat_activity
-				WHERE datname = current_database()
-				  AND state = 'active'
-				  AND wait_event_type = 'Lock'
-				  AND query LIKE '%UPDATE trials%'
-			)
-		`).Scan(&blocked)
-		return blocked, err
+		blocked, err := testrepo.New(ti.conn).IsQueryBlockedOnLockFixture(waitCtx, "%UPDATE trials%")
+		if err != nil {
+			return false, fmt.Errorf("check blocked trial demotion query: %w", err)
+		}
+		return blocked, nil
 	}, "demotion did not block on the trial row")
 
 	probe, err := ti.conn.Acquire(ctx)
 	require.NoError(t, err)
 	defer probe.Release()
 	for _, keyType := range openrouter.AllKeyTypes {
-		var acquired bool
-		require.NoError(t, probe.QueryRow(ctx, `
-			SELECT pg_try_advisory_lock(
-				hashtextextended('openrouter-' || $1::text || '-billing:' || $2::text, 0)
-			)
-		`, string(keyType), orgID).Scan(&acquired))
+		acquired, err := testrepo.New(probe).TryAcquireOpenRouterKeyBillingLockFixture(ctx, testrepo.TryAcquireOpenRouterKeyBillingLockFixtureParams{
+			KeyType: string(keyType), OrganizationID: orgID,
+		})
+		require.NoError(t, err)
 		require.Truef(t, acquired, "%s lock must remain acquirable while the trial row is blocked", keyType)
 		unlocked, unlockErr := activitiesrepo.New(probe).ReleaseOpenRouterKeyBillingLock(ctx, activitiesrepo.ReleaseOpenRouterKeyBillingLockParams{OrganizationID: orgID, KeyType: string(keyType)})
 		require.NoError(t, unlockErr)
@@ -514,18 +512,18 @@ func TestDemoteExpiredTrials_LocksLifecycleBeforeAllKeysAndRows(t *testing.T) {
 	chatHeldCtx, cancelChatHeld := context.WithTimeout(ctx, 2*time.Second)
 	defer cancelChatHeld()
 	requireCondition(t, chatHeldCtx, func() (bool, error) {
-		var acquired bool
-		err := probe.QueryRow(chatHeldCtx, `
-			SELECT pg_try_advisory_lock(
-				hashtextextended('openrouter-' || $1::text || '-billing:' || $2::text, 0)
-			)
-		`, string(openrouter.KeyTypeChat), orgID).Scan(&acquired)
-		if err != nil || !acquired {
-			return !acquired, err
+		acquired, err := testrepo.New(probe).TryAcquireOpenRouterKeyBillingLockFixture(chatHeldCtx, testrepo.TryAcquireOpenRouterKeyBillingLockFixtureParams{
+			KeyType: string(openrouter.KeyTypeChat), OrganizationID: orgID,
+		})
+		if err != nil {
+			return false, fmt.Errorf("probe chat billing lock: %w", err)
+		}
+		if !acquired {
+			return true, nil
 		}
 		unlocked, unlockErr := activitiesrepo.New(probe).ReleaseOpenRouterKeyBillingLock(chatHeldCtx, activitiesrepo.ReleaseOpenRouterKeyBillingLockParams{OrganizationID: orgID, KeyType: string(openrouter.KeyTypeChat)})
 		if unlockErr != nil {
-			return false, unlockErr
+			return false, fmt.Errorf("release chat billing lock probe: %w", unlockErr)
 		}
 		if !unlocked {
 			return false, errors.New("probe chat lock was not released")
@@ -534,24 +532,12 @@ func TestDemoteExpiredTrials_LocksLifecycleBeforeAllKeysAndRows(t *testing.T) {
 	}, "chat lock was not acquired before the blocked internal lock")
 
 	keyProbe := testenv.BeginTx(t, ctx, ti.conn)
-	rows, err := keyProbe.Query(ctx, `
-		SELECT disable_causes
-		FROM openrouter_api_keys
-		WHERE organization_id = $1
-		ORDER BY key_type
-		FOR UPDATE NOWAIT
-	`, orgID)
+	causesByKey, err := testrepo.New(keyProbe).ListOpenRouterAPIKeyDisableCausesForUpdateNowaitFixture(ctx, orgID)
 	require.NoError(t, err, "key rows must remain unlocked until every advisory lock is held")
-	keyRows := 0
-	for rows.Next() {
-		keyRows++
-		var causes []string
-		require.NoError(t, rows.Scan(&causes))
+	for _, causes := range causesByKey {
 		require.Empty(t, causes, "trial_demotion must not be written before the internal lock is acquired")
 	}
-	require.NoError(t, rows.Err())
-	require.Equal(t, len(openrouter.AllKeyTypes), keyRows)
-	rows.Close()
+	require.Len(t, causesByKey, len(openrouter.AllKeyTypes))
 	require.NoError(t, keyProbe.Rollback(ctx))
 
 	unlocked, err := activitiesrepo.New(internalLockConn).ReleaseOpenRouterKeyBillingLock(ctx, activitiesrepo.ReleaseOpenRouterKeyBillingLockParams(internalParams))

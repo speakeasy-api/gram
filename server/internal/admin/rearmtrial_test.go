@@ -24,6 +24,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	audittestrepo "github.com/speakeasy-api/gram/server/internal/audit/audittest/repo"
+	activitiesrepo "github.com/speakeasy-api/gram/server/internal/background/activities/repo"
 	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
@@ -84,7 +85,7 @@ func (p *rearmProvisioner) RemoveAPIKeyDisableCauseWithDB(ctx context.Context, d
 		return 0, openrouter.DisableCauseChange{}, nil
 	}
 	if err != nil {
-		return 0, openrouter.DisableCauseChange{}, err
+		return 0, openrouter.DisableCauseChange{}, fmt.Errorf("get OpenRouter API key: %w", err)
 	}
 	if row.DisableCauses == nil {
 		return 0, openrouter.DisableCauseChange{}, errors.New("unclassified key")
@@ -101,7 +102,11 @@ func (p *rearmProvisioner) RemoveAPIKeyDisableCauseWithDB(ctx context.Context, d
 		OrganizationID: orgID, KeyType: string(keyType), KeyHash: row.KeyHash, DisableCause: string(cause),
 		MonthlyCredits: int64(keyLimit), UpdateMonthlyCredits: accessChanged && int64(keyLimit) != row.MonthlyCredits,
 	})
-	return keyLimit, openrouter.DisableCauseChange{CauseChanged: true, KeyAccessChanged: accessChanged}, err
+	change := openrouter.DisableCauseChange{CauseChanged: true, KeyAccessChanged: accessChanged}
+	if err != nil {
+		return keyLimit, change, fmt.Errorf("remove OpenRouter API key disable cause: %w", err)
+	}
+	return keyLimit, change, nil
 }
 
 func (p *rearmProvisioner) ReconcileAPIKeyDisabled(ctx context.Context, orgID string, keyType openrouter.KeyType) error {
@@ -110,7 +115,7 @@ func (p *rearmProvisioner) ReconcileAPIKeyDisabled(ctx context.Context, orgID st
 		return nil
 	}
 	if err != nil {
-		return err
+		return fmt.Errorf("get OpenRouter API key for reconciliation: %w", err)
 	}
 	_, err = p.refreshAPIKeyLimit(ctx, orgID, keyType, conv.PtrEmpty(int(row.MonthlyCredits)))
 	return err
@@ -284,15 +289,30 @@ func seedDisabledTrialRuntimeFeatures(t *testing.T, ctx context.Context, svc *Se
 }
 
 type rearmUpstream struct {
-	mu      sync.Mutex
-	patches []string
-	fail    bool
+	mu         sync.Mutex
+	patches    []string
+	fail       bool
+	handlerErr error
 }
 
 func (u *rearmUpstream) record(body string) {
 	u.mu.Lock()
 	defer u.mu.Unlock()
 	u.patches = append(u.patches, body)
+}
+
+func (u *rearmUpstream) recordHandlerError(err error) {
+	u.mu.Lock()
+	defer u.mu.Unlock()
+	if u.handlerErr == nil {
+		u.handlerErr = err
+	}
+}
+
+func (u *rearmUpstream) getHandlerError() error {
+	u.mu.Lock()
+	defer u.mu.Unlock()
+	return u.handlerErr
 }
 
 func (u *rearmUpstream) setFail(fail bool) {
@@ -313,9 +333,17 @@ func newProductionRearmService(t *testing.T) (context.Context, *Service, *pgxpoo
 	ctx, svc, conn := newTestAdminService(t)
 	upstream := &rearmUpstream{}
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		require.Equal(t, http.MethodPatch, r.Method)
+		if r.Method != http.MethodPatch {
+			upstream.recordHandlerError(fmt.Errorf("unexpected request method: %s", r.Method))
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			return
+		}
 		body, err := io.ReadAll(r.Body)
-		require.NoError(t, err)
+		if err != nil {
+			upstream.recordHandlerError(fmt.Errorf("read request body: %w", err))
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
 		upstream.record(string(body))
 		upstream.mu.Lock()
 		fail := upstream.fail
@@ -326,9 +354,14 @@ func newProductionRearmService(t *testing.T) (context.Context, *Service, *pgxpoo
 		}
 		w.Header().Set("Content-Type", "application/json")
 		hash := r.URL.Path[len("/v1/keys/"):]
-		require.NoError(t, json.NewEncoder(w).Encode(map[string]any{"data": map[string]any{"hash": hash, "limit": 50}}))
+		if err := json.NewEncoder(w).Encode(map[string]any{"data": map[string]any{"hash": hash, "limit": 50}}); err != nil {
+			upstream.recordHandlerError(fmt.Errorf("encode response: %w", err))
+		}
 	}))
-	t.Cleanup(server.Close)
+	t.Cleanup(func() {
+		server.Close()
+		require.NoError(t, upstream.getHandlerError())
+	})
 
 	policy, err := guardian.NewUnsafePolicy(testenv.NewTracerProvider(t), []string{})
 	require.NoError(t, err)
@@ -478,10 +511,10 @@ func TestRearmTrial_UnclassifiedKeyRollsBackLifecycleAndAllKeyChanges(t *testing
 
 func seedRearmAuditMetadata(t *testing.T, ctx context.Context, conn *pgxpool.Pool, orgID string, metadata string) {
 	t.Helper()
-	_, err := conn.Exec(ctx, `
-		INSERT INTO audit_logs (organization_id, actor_id, actor_type, action, subject_id, subject_type, metadata)
-		VALUES ($1, 'system', 'user', 'organization:enterprise_trial_rearmed', $1, 'organization', $2::jsonb)
-	`, orgID, metadata)
+	err := testrepo.New(conn).SeedRearmAuditMetadataFixture(ctx, testrepo.SeedRearmAuditMetadataFixtureParams{
+		OrganizationID: orgID,
+		Metadata:       []byte(metadata),
+	})
 	require.NoError(t, err)
 }
 
@@ -641,7 +674,7 @@ func TestRearmTrial_LocksLifecycleBeforeAllKeyLocksAndRows(t *testing.T) {
 	seedDemotedTrial(t, ctx, conn, orgID, "enterprise")
 
 	rowLock := testenv.BeginTx(t, ctx, conn)
-	_, err := rowLock.Exec(ctx, `SELECT 1 FROM trials WHERE organization_id = $1 FOR UPDATE`, orgID)
+	_, err := trialsRepo.New(rowLock).LockTrialLifecycleForRearm(ctx, orgID)
 	require.NoError(t, err)
 
 	rearmed := make(chan error, 1)
@@ -653,40 +686,39 @@ func TestRearmTrial_LocksLifecycleBeforeAllKeyLocksAndRows(t *testing.T) {
 	waitCtx, cancelWait := context.WithTimeout(ctx, 2*time.Second)
 	defer cancelWait()
 	requireAdminCondition(t, waitCtx, conn, func(check context.Context) (bool, error) {
-		var blocked bool
-		err := conn.QueryRow(check, `
-			SELECT EXISTS (
-				SELECT 1 FROM pg_stat_activity
-				WHERE datname = current_database()
-				  AND state = 'active'
-				  AND wait_event_type = 'Lock'
-				  AND query LIKE '%SELECT tier, ends_at, converted_at, demoted_at%'
-			)
-		`).Scan(&blocked)
-		return blocked, err
+		blocked, err := testrepo.New(conn).IsQueryBlockedOnLockFixture(check, "%SELECT tier, ends_at, converted_at, demoted_at%")
+		if err != nil {
+			return false, fmt.Errorf("check blocked trial re-arm query: %w", err)
+		}
+		return blocked, nil
 	}, "re-arm did not block on the lifecycle row")
 
 	probe, err := conn.Acquire(ctx)
 	require.NoError(t, err)
 	defer probe.Release()
 	for _, keyType := range openrouter.AllKeyTypes {
-		var acquired bool
-		require.NoError(t, probe.QueryRow(ctx, `SELECT pg_try_advisory_lock(hashtextextended('openrouter-' || $1::text || '-billing:' || $2::text, 0))`, string(keyType), orgID).Scan(&acquired))
+		acquired, err := testrepo.New(probe).TryAcquireOpenRouterKeyBillingLockFixture(ctx, testrepo.TryAcquireOpenRouterKeyBillingLockFixtureParams{
+			KeyType: string(keyType), OrganizationID: orgID,
+		})
+		require.NoError(t, err)
 		require.Truef(t, acquired, "%s lock must remain available while lifecycle is blocked", keyType)
-		var unlocked bool
-		require.NoError(t, probe.QueryRow(ctx, `SELECT pg_advisory_unlock(hashtextextended('openrouter-' || $1::text || '-billing:' || $2::text, 0))`, string(keyType), orgID).Scan(&unlocked))
+		unlocked, err := activitiesrepo.New(probe).ReleaseOpenRouterKeyBillingLock(ctx, activitiesrepo.ReleaseOpenRouterKeyBillingLockParams{
+			OrganizationID: orgID, KeyType: string(keyType),
+		})
+		require.NoError(t, err)
 		require.True(t, unlocked)
 	}
 
 	internalLock, err := conn.Acquire(ctx)
 	require.NoError(t, err)
 	defer internalLock.Release()
-	_, err = internalLock.Exec(ctx, `SELECT pg_advisory_lock(hashtextextended('openrouter-' || $1::text || '-billing:' || $2::text, 0))`, string(openrouter.KeyTypeInternal), orgID)
+	internalParams := activitiesrepo.AcquireOpenRouterKeyBillingLockParams{OrganizationID: orgID, KeyType: string(openrouter.KeyTypeInternal)}
+	err = activitiesrepo.New(internalLock).AcquireOpenRouterKeyBillingLock(ctx, internalParams)
 	require.NoError(t, err)
 	internalHeld := true
 	defer func() {
 		if internalHeld {
-			_, _ = internalLock.Exec(context.WithoutCancel(ctx), `SELECT pg_advisory_unlock(hashtextextended('openrouter-' || $1::text || '-billing:' || $2::text, 0))`, string(openrouter.KeyTypeInternal), orgID)
+			_, _ = activitiesrepo.New(internalLock).ReleaseOpenRouterKeyBillingLock(context.WithoutCancel(ctx), activitiesrepo.ReleaseOpenRouterKeyBillingLockParams(internalParams))
 		}
 	}()
 
@@ -694,33 +726,35 @@ func TestRearmTrial_LocksLifecycleBeforeAllKeyLocksAndRows(t *testing.T) {
 	chatCtx, cancelChat := context.WithTimeout(ctx, 2*time.Second)
 	defer cancelChat()
 	requireAdminCondition(t, chatCtx, conn, func(check context.Context) (bool, error) {
-		var acquired bool
-		err := probe.QueryRow(check, `SELECT pg_try_advisory_lock(hashtextextended('openrouter-' || $1::text || '-billing:' || $2::text, 0))`, string(openrouter.KeyTypeChat), orgID).Scan(&acquired)
-		if err != nil || !acquired {
-			return !acquired, err
+		acquired, err := testrepo.New(probe).TryAcquireOpenRouterKeyBillingLockFixture(check, testrepo.TryAcquireOpenRouterKeyBillingLockFixtureParams{
+			KeyType: string(openrouter.KeyTypeChat), OrganizationID: orgID,
+		})
+		if err != nil {
+			return false, fmt.Errorf("probe chat billing lock: %w", err)
 		}
-		var unlocked bool
-		err = probe.QueryRow(check, `SELECT pg_advisory_unlock(hashtextextended('openrouter-' || $1::text || '-billing:' || $2::text, 0))`, string(openrouter.KeyTypeChat), orgID).Scan(&unlocked)
-		return false, err
+		if !acquired {
+			return true, nil
+		}
+		_, err = activitiesrepo.New(probe).ReleaseOpenRouterKeyBillingLock(check, activitiesrepo.ReleaseOpenRouterKeyBillingLockParams{
+			OrganizationID: orgID, KeyType: string(openrouter.KeyTypeChat),
+		})
+		if err != nil {
+			return false, fmt.Errorf("release chat billing lock probe: %w", err)
+		}
+		return false, nil
 	}, "chat lock was not acquired before the blocked internal lock")
 
 	keyProbe := testenv.BeginTx(t, ctx, conn)
-	rows, err := keyProbe.Query(ctx, `SELECT disable_causes FROM openrouter_api_keys WHERE organization_id = $1 ORDER BY key_type FOR UPDATE NOWAIT`, orgID)
+	causesByKey, err := testrepo.New(keyProbe).ListOpenRouterAPIKeyDisableCausesForUpdateNowaitFixture(ctx, orgID)
 	require.NoError(t, err, "key rows must remain unlocked until every advisory lock is held")
-	count := 0
-	for rows.Next() {
-		count++
-		var causes []string
-		require.NoError(t, rows.Scan(&causes))
+	for _, causes := range causesByKey {
 		require.Equal(t, []string{string(openrouter.DisableCauseTrialDemotion)}, causes)
 	}
-	require.NoError(t, rows.Err())
-	rows.Close()
-	require.Equal(t, len(openrouter.AllKeyTypes), count)
+	require.Len(t, causesByKey, len(openrouter.AllKeyTypes))
 	require.NoError(t, keyProbe.Rollback(ctx))
 
-	var unlocked bool
-	require.NoError(t, internalLock.QueryRow(ctx, `SELECT pg_advisory_unlock(hashtextextended('openrouter-' || $1::text || '-billing:' || $2::text, 0))`, string(openrouter.KeyTypeInternal), orgID).Scan(&unlocked))
+	unlocked, err := activitiesrepo.New(internalLock).ReleaseOpenRouterKeyBillingLock(ctx, activitiesrepo.ReleaseOpenRouterKeyBillingLockParams(internalParams))
+	require.NoError(t, err)
 	require.True(t, unlocked)
 	internalHeld = false
 

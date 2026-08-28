@@ -97,7 +97,7 @@ func (d *DemoteExpiredTrials) Demote(ctx context.Context, args DemoteExpiredTria
 	// canonical order before any key-row access, retaining them until commit.
 	for _, keyType := range openrouter.AllKeyTypes {
 		if err := openrouter.AcquireAPIKeyBillingTransactionLock(ctx, dbtx, args.OrganizationID, keyType); err != nil {
-			return err
+			return fmt.Errorf("acquire OpenRouter %s key billing lock: %w", keyType, err)
 		}
 	}
 

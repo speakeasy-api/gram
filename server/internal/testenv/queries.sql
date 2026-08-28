@@ -588,6 +588,36 @@ SET key_hash = @key_hash
 WHERE organization_id = @organization_id
   AND key_type = @key_type;
 
+-- name: SeedRearmAuditMetadataFixture :exec
+-- Test-only fixture: seeds a historical re-arm audit with caller-provided metadata.
+INSERT INTO audit_logs (organization_id, actor_id, actor_type, action, subject_id, subject_type, metadata)
+VALUES (@organization_id, 'system', 'user', 'organization:enterprise_trial_rearmed', @organization_id, 'organization', @metadata::jsonb);
+
+-- name: IsQueryBlockedOnLockFixture :one
+-- Test-only synchronization: reports whether a matching active query is waiting on a lock.
+SELECT EXISTS (
+    SELECT 1
+    FROM pg_catalog.pg_stat_activity
+    WHERE datname = current_database()
+      AND state = 'active'
+      AND wait_event_type = 'Lock'
+      AND query LIKE @query_pattern::text
+);
+
+-- name: TryAcquireOpenRouterKeyBillingLockFixture :one
+-- Test-only non-blocking probe of the production OpenRouter billing lock key.
+SELECT pg_try_advisory_lock(
+    hashtextextended('openrouter-' || @key_type::text || '-billing:' || @organization_id::text, 0)
+);
+
+-- name: ListOpenRouterAPIKeyDisableCausesForUpdateNowaitFixture :many
+-- Test-only lock-order probe: fails immediately if any matching key row is locked.
+SELECT disable_causes
+FROM openrouter_api_keys
+WHERE organization_id = @organization_id
+ORDER BY key_type
+FOR UPDATE NOWAIT;
+
 -- name: SeedOpenRouterSpendRangeFixture :exec
 -- Test-only fixture: records one exact daily spend amount across an inclusive
 -- UTC date range.

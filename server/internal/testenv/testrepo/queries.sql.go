@@ -1195,6 +1195,25 @@ func (q *Queries) InstallOpenRouterAdminDisableAuditFailureFixture(ctx context.C
 	return err
 }
 
+const isQueryBlockedOnLockFixture = `-- name: IsQueryBlockedOnLockFixture :one
+SELECT EXISTS (
+    SELECT 1
+    FROM pg_catalog.pg_stat_activity
+    WHERE datname = current_database()
+      AND state = 'active'
+      AND wait_event_type = 'Lock'
+      AND query LIKE $1::text
+)
+`
+
+// Test-only synchronization: reports whether a matching active query is waiting on a lock.
+func (q *Queries) IsQueryBlockedOnLockFixture(ctx context.Context, queryPattern string) (bool, error) {
+	row := q.db.QueryRow(ctx, isQueryBlockedOnLockFixture, queryPattern)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
+}
+
 const listDeploymentFunctionsResources = `-- name: ListDeploymentFunctionsResources :many
 SELECT id, resource_urn, project_id, deployment_id, function_id, runtime, name, description, uri, title, mime_type, variables, meta, created_at, updated_at, deleted_at, deleted
 FROM function_resource_definitions
@@ -1390,6 +1409,35 @@ func (q *Queries) ListDeviceAgentDeviceSyncsFixture(ctx context.Context, organiz
 			return nil, err
 		}
 		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listOpenRouterAPIKeyDisableCausesForUpdateNowaitFixture = `-- name: ListOpenRouterAPIKeyDisableCausesForUpdateNowaitFixture :many
+SELECT disable_causes
+FROM openrouter_api_keys
+WHERE organization_id = $1
+ORDER BY key_type
+FOR UPDATE NOWAIT
+`
+
+// Test-only lock-order probe: fails immediately if any matching key row is locked.
+func (q *Queries) ListOpenRouterAPIKeyDisableCausesForUpdateNowaitFixture(ctx context.Context, organizationID string) ([][]string, error) {
+	rows, err := q.db.Query(ctx, listOpenRouterAPIKeyDisableCausesForUpdateNowaitFixture, organizationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items [][]string
+	for rows.Next() {
+		var disable_causes []string
+		if err := rows.Scan(&disable_causes); err != nil {
+			return nil, err
+		}
+		items = append(items, disable_causes)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err
@@ -1729,6 +1777,22 @@ func (q *Queries) SeedPublishOutboxRow(ctx context.Context, arg SeedPublishOutbo
 	var i SeedPublishOutboxRowRow
 	err := row.Scan(&i.ID, &i.PublicID)
 	return i, err
+}
+
+const seedRearmAuditMetadataFixture = `-- name: SeedRearmAuditMetadataFixture :exec
+INSERT INTO audit_logs (organization_id, actor_id, actor_type, action, subject_id, subject_type, metadata)
+VALUES ($1, 'system', 'user', 'organization:enterprise_trial_rearmed', $1, 'organization', $2::jsonb)
+`
+
+type SeedRearmAuditMetadataFixtureParams struct {
+	OrganizationID string
+	Metadata       []byte
+}
+
+// Test-only fixture: seeds a historical re-arm audit with caller-provided metadata.
+func (q *Queries) SeedRearmAuditMetadataFixture(ctx context.Context, arg SeedRearmAuditMetadataFixtureParams) error {
+	_, err := q.db.Exec(ctx, seedRearmAuditMetadataFixture, arg.OrganizationID, arg.Metadata)
+	return err
 }
 
 const seedRiskPolicyFixture = `-- name: SeedRiskPolicyFixture :one
@@ -2094,6 +2158,25 @@ type SetWorkosLastEventIDFixtureParams struct {
 func (q *Queries) SetWorkosLastEventIDFixture(ctx context.Context, arg SetWorkosLastEventIDFixtureParams) error {
 	_, err := q.db.Exec(ctx, setWorkosLastEventIDFixture, arg.WorkosLastEventID, arg.ID)
 	return err
+}
+
+const tryAcquireOpenRouterKeyBillingLockFixture = `-- name: TryAcquireOpenRouterKeyBillingLockFixture :one
+SELECT pg_try_advisory_lock(
+    hashtextextended('openrouter-' || $1::text || '-billing:' || $2::text, 0)
+)
+`
+
+type TryAcquireOpenRouterKeyBillingLockFixtureParams struct {
+	KeyType        string
+	OrganizationID string
+}
+
+// Test-only non-blocking probe of the production OpenRouter billing lock key.
+func (q *Queries) TryAcquireOpenRouterKeyBillingLockFixture(ctx context.Context, arg TryAcquireOpenRouterKeyBillingLockFixtureParams) (bool, error) {
+	row := q.db.QueryRow(ctx, tryAcquireOpenRouterKeyBillingLockFixture, arg.KeyType, arg.OrganizationID)
+	var pg_try_advisory_lock bool
+	err := row.Scan(&pg_try_advisory_lock)
+	return pg_try_advisory_lock, err
 }
 
 const updateChatMessageCreatedAt = `-- name: UpdateChatMessageCreatedAt :exec
