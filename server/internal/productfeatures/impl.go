@@ -76,42 +76,52 @@ func Attach(mux goahttp.Muxer, service *Service) {
 	)
 }
 
-func (s *Service) authorizeOrganization(ctx context.Context, organizationID string, scope authz.Scope) (*contextvalues.AuthContext, string, error) {
+// authorizeOrganization returns the organization metadata row when it had to
+// read one to verify a cross-organization request, and nil for the active-org
+// path, so callers that need the row can skip a second lookup.
+func (s *Service) authorizeOrganization(ctx context.Context, organizationID string, scope authz.Scope) (*contextvalues.AuthContext, string, *orgrepo.OrganizationMetadatum, error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil {
-		return nil, "", oops.C(oops.CodeUnauthorized)
+		return nil, "", nil, oops.C(oops.CodeUnauthorized)
 	}
 
 	if organizationID == "" {
-		return nil, "", oops.C(oops.CodeUnauthorized)
+		return nil, "", nil, oops.C(oops.CodeUnauthorized)
 	}
 
 	if organizationID == authCtx.ActiveOrganizationID {
 		check := authz.Check{Scope: scope, ResourceKind: "", ResourceID: organizationID, Dimensions: nil}
 		if err := s.authz.Require(ctx, check); err != nil {
-			return nil, "", fmt.Errorf("require %s: %w", scope, err)
+			return nil, "", nil, fmt.Errorf("require %s: %w", scope, err)
 		}
-		return authCtx, organizationID, nil
+		return authCtx, organizationID, nil, nil
 	}
 
 	if err := s.authz.RequireUserOrganizationScope(ctx, organizationID, authCtx.UserID, scope); err != nil {
-		return nil, "", fmt.Errorf("require %s for requested organization: %w", scope, err)
+		return nil, "", nil, fmt.Errorf("require %s for requested organization: %w", scope, err)
 	}
 
-	if _, err := orgrepo.New(s.db).GetOrganizationMetadata(ctx, organizationID); err != nil {
+	org, err := orgrepo.New(s.db).GetOrganizationMetadata(ctx, organizationID)
+	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, "", oops.E(oops.CodeNotFound, err, "organization not found")
+			return nil, "", nil, oops.E(oops.CodeNotFound, err, "organization not found")
 		}
-		return nil, "", oops.E(oops.CodeUnexpected, err, "get organization metadata").LogError(ctx, s.logger, attr.SlogOrganizationID(organizationID))
+		return nil, "", nil, oops.E(oops.CodeUnexpected, err, "get organization metadata").LogError(ctx, s.logger, attr.SlogOrganizationID(organizationID))
 	}
 
-	return authCtx, organizationID, nil
+	return authCtx, organizationID, &org, nil
 }
 
 func (s *Service) SetProductFeature(ctx context.Context, payload *gen.SetProductFeaturePayload) error {
-	authCtx, orgID, err := s.authorizeOrganization(ctx, payload.OrganizationID, authz.ScopeOrgAdmin)
+	authCtx, orgID, org, err := s.authorizeOrganization(ctx, payload.OrganizationID, authz.ScopeOrgAdmin)
 	if err != nil {
 		return err
+	}
+
+	// Disabling skills is a silent no-op (skills are always on), so it stays
+	// available to org admins and resolves before the staff-only gate below.
+	if payload.FeatureName == string(FeatureSkills) && !payload.Enabled {
+		return nil
 	}
 
 	// Staff-managed entitlements (SSO, SCIM, ...) must not be self-granted by
@@ -120,10 +130,6 @@ func (s *Service) SetProductFeature(ctx context.Context, payload *gen.SetProduct
 		if _, _, err := auth.RequirePlatformAdmin(ctx, s.logger); err != nil {
 			return err
 		}
-	}
-
-	if payload.FeatureName == string(FeatureSkills) && !payload.Enabled {
-		return nil
 	}
 
 	lockConn, releaseFeatureLock, err := s.featureClient.acquireFeatureCacheLocks(ctx, orgID, []Feature{Feature(payload.FeatureName)})
@@ -178,26 +184,14 @@ func (s *Service) SetProductFeature(ctx context.Context, payload *gen.SetProduct
 	}
 
 	if changed {
-		org, err := orgrepo.New(dbtx).GetOrganizationMetadata(ctx, orgID)
-		if err != nil {
-			return oops.E(oops.CodeUnexpected, err, "read organization for feature toggle audit event").LogError(ctx, s.logger, attr.SlogOrganizationID(orgID))
-		}
-		// Fail-open governs whether blocking policies are enforced during a
-		// control-plane outage, so it keeps a dedicated audit action that makes
-		// posture changes distinguishable from ordinary feature toggles.
-		if payload.FeatureName == string(FeatureHooksFailOpen) {
-			if err := s.audit.LogOrganizationHooksFailOpenToggled(ctx, dbtx, audit.LogOrganizationHooksFailOpenToggledEvent{
-				OrganizationID:   orgID,
-				Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
-				ActorDisplayName: authCtx.Email,
-				ActorSlug:        nil,
-				OrganizationName: org.Name,
-				OrganizationSlug: org.Slug,
-				FailOpenEnabled:  payload.Enabled,
-			}); err != nil {
-				return oops.E(oops.CodeUnexpected, err, "record hooks fail-open audit event").LogError(ctx, s.logger, attr.SlogOrganizationID(orgID))
+		if org == nil {
+			row, err := orgrepo.New(dbtx).GetOrganizationMetadata(ctx, orgID)
+			if err != nil {
+				return oops.E(oops.CodeUnexpected, err, "read organization for feature toggle audit event").LogError(ctx, s.logger, attr.SlogOrganizationID(orgID))
 			}
-		} else if err := s.audit.LogOrganizationProductFeatureToggled(ctx, dbtx, audit.LogOrganizationProductFeatureToggledEvent{
+			org = &row
+		}
+		if err := s.audit.LogOrganizationProductFeatureToggled(ctx, dbtx, audit.LogOrganizationProductFeatureToggledEvent{
 			OrganizationID:   orgID,
 			Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
 			ActorDisplayName: authCtx.Email,
@@ -221,7 +215,7 @@ func (s *Service) SetProductFeature(ctx context.Context, payload *gen.SetProduct
 }
 
 func (s *Service) SetRemoteSessionAutoRefreshPolicy(ctx context.Context, payload *gen.SetRemoteSessionAutoRefreshPolicyPayload) error {
-	_, orgID, err := s.authorizeOrganization(ctx, payload.OrganizationID, authz.ScopeOrgAdmin)
+	_, orgID, _, err := s.authorizeOrganization(ctx, payload.OrganizationID, authz.ScopeOrgAdmin)
 	if err != nil {
 		return err
 	}
@@ -300,7 +294,7 @@ func (s *Service) SetRemoteSessionAutoRefreshPolicy(ctx context.Context, payload
 }
 
 func (s *Service) GetProductFeatures(ctx context.Context, payload *gen.GetProductFeaturesPayload) (*gen.GetProductFeaturesResult, error) {
-	_, orgID, err := s.authorizeOrganization(ctx, payload.OrganizationID, authz.ScopeOrgRead)
+	_, orgID, _, err := s.authorizeOrganization(ctx, payload.OrganizationID, authz.ScopeOrgRead)
 	if err != nil {
 		return nil, err
 	}

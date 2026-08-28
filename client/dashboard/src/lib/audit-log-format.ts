@@ -148,14 +148,14 @@ function recordString(value: unknown, key: string): string | undefined {
   return typeof field === "string" && field !== "" ? field : undefined;
 }
 
-function formatRoleSlug(roleSlug: string): string {
-  return roleSlug.replace(/[-_]/g, " ");
+function humanizeSlug(slug: string): string {
+  return slug.replace(/[-_]/g, " ");
 }
 
 function describeInvitation(log: AuditLog): string | undefined {
   if (log.action === "organization_invitation:create") {
     const role = recordString(log.metadata, "role_slug");
-    return role ? `sent ${formatRoleSlug(role)} invite to` : undefined;
+    return role ? `sent ${humanizeSlug(role)} invite to` : undefined;
   }
 
   if (log.action === "organization_invitation:update_role") {
@@ -166,14 +166,24 @@ function describeInvitation(log: AuditLog): string | undefined {
       recordString(log.afterSnapshot, "RoleSlug") ??
       recordString(log.afterSnapshot, "role_slug");
     if (before && after && before !== after) {
-      return `changed invite role from ${formatRoleSlug(before)} to ${formatRoleSlug(after)} for`;
+      return `changed invite role from ${humanizeSlug(before)} to ${humanizeSlug(after)} for`;
     }
     if (after) {
-      return `changed invite role to ${formatRoleSlug(after)} for`;
+      return `changed invite role to ${humanizeSlug(after)} for`;
     }
   }
 
   return undefined;
+}
+
+function describeProductFeatureToggle(log: AuditLog): string | undefined {
+  const feature = recordString(log.metadata, "feature_name");
+  if (!feature) return undefined;
+  const verb =
+    log.action === "organization:product_feature_enabled"
+      ? "enabled"
+      : "disabled";
+  return `${verb} the ${humanizeSlug(feature)} feature for`;
 }
 
 const IRREGULAR_PAST_TENSE: Record<string, string> = {
@@ -281,6 +291,11 @@ export function renderVerb(log: AuditLog): string {
     case "organization_invitation:create":
     case "organization_invitation:update_role":
       return describeInvitation(log) ?? staticActionPhrase(log.action);
+    case "organization:product_feature_enabled":
+    case "organization:product_feature_disabled":
+      return (
+        describeProductFeatureToggle(log) ?? staticActionPhrase(log.action)
+      );
   }
 
   return isAuditAction(log.action)

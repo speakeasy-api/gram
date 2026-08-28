@@ -222,6 +222,20 @@ func TestProductFeaturesService_SetProductFeatureSSODeniedForOrgAdmin(t *testing
 	require.False(t, enabled, "denied toggle must not write the feature row")
 }
 
+// Disabling skills is a documented silent no-op (skills are always on), so it
+// must stay reachable for org admins instead of tripping the staff-only gate.
+func TestProductFeaturesService_SetProductFeatureSkillsDisableNoopForOrgAdmin(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestProductFeaturesService(t)
+
+	err := ti.service.SetProductFeature(ctx, &gen.SetProductFeaturePayload{
+		OrganizationID: requestedOrganizationID(ctx),
+		FeatureName:    string(productfeatures.FeatureSkills),
+		Enabled:        false,
+	})
+	require.NoError(t, err)
+}
+
 func TestProductFeaturesService_SetProductFeatureSSOAllowedForPlatformAdmin(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestProductFeaturesService(t)

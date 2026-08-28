@@ -16,7 +16,7 @@ func TestToolsetsService_AddExternalOAuthServer_AuditLog(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestToolsetsService(t)
-	ctx = withProAccount(t, ctx)
+	ctx = withAccountType(t, ctx, "pro")
 	toolset := createMinimalPublicToolset(t, ctx, ti, "Audit External OAuth Toolset")
 
 	beforeCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionToolsetAttachExternalOAuth)
@@ -64,7 +64,7 @@ func TestToolsetsService_AddExternalOAuthServer_FreeTierDenied(t *testing.T) {
 
 	ctx, ti := newTestToolsetsService(t)
 	toolset := createMinimalPublicToolset(t, ctx, ti, "Free Tier External OAuth Toolset")
-	freeCtx := withFreeAccount(t, ctx)
+	freeCtx := withAccountType(t, ctx, "free")
 
 	_, err := ti.service.AddExternalOAuthServer(freeCtx, &gen.AddExternalOAuthServerPayload{
 		SessionToken: nil,
@@ -91,7 +91,7 @@ func TestToolsetsService_AddExternalOAuthServer_PrivateToolset_NoAuditLog(t *tes
 	t.Parallel()
 
 	ctx, ti := newTestToolsetsService(t)
-	ctx = withProAccount(t, ctx)
+	ctx = withAccountType(t, ctx, "pro")
 	toolset := createMinimalPrivateToolset(t, ctx, ti, "Private External OAuth Toolset")
 
 	beforeCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionToolsetAttachExternalOAuth)

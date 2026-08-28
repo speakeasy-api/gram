@@ -470,32 +470,22 @@ func createFunctionsDeploymentWithResources(t *testing.T, ctx context.Context, t
 	return dep
 }
 
-func withProAccount(t *testing.T, ctx context.Context) context.Context {
+// withAccountType returns a context whose auth context is a copy carrying the
+// given account type. The stub billing repository reports every org as pro
+// during authentication, so tier-specific paths are only reachable through
+// this override. The auth context is copied because contexts share the
+// underlying pointer; mutating it in place would retier every context derived
+// from ctx.
+func withAccountType(t *testing.T, ctx context.Context, accountType string) context.Context {
 	t.Helper()
 
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 
-	authCtx.AccountType = "pro"
+	clone := *authCtx
+	clone.AccountType = accountType
 
-	return contextvalues.SetAuthContext(ctx, authCtx)
-}
-
-// withFreeAccount returns a context whose account type is "free". The stub
-// billing repository reports every org as pro during authentication, so
-// free-tier denial paths are only reachable through this override. The auth
-// context is copied because contexts share the underlying pointer; mutating
-// it in place would downgrade every context derived from ctx.
-func withFreeAccount(t *testing.T, ctx context.Context) context.Context {
-	t.Helper()
-
-	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	require.True(t, ok)
-
-	freeAuthCtx := *authCtx
-	freeAuthCtx.AccountType = "free"
-
-	return contextvalues.SetAuthContext(ctx, &freeAuthCtx)
+	return contextvalues.SetAuthContext(ctx, &clone)
 }
 
 func createMinimalPrivateToolset(t *testing.T, ctx context.Context, ti *testInstance, name string) *types.Toolset {

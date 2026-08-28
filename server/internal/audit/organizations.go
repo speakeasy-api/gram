@@ -231,55 +231,15 @@ func (l *Logger) LogOrganizationWebhooksToggled(ctx context.Context, dbtx repo.D
 	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.OrganizationWebhooksV1})
 }
 
-type LogOrganizationHooksFailOpenToggledEvent struct {
-	OrganizationID string
-
-	Actor            urn.Principal
-	ActorDisplayName *string
-	ActorSlug        *string
-
-	OrganizationName string
-	OrganizationSlug string
-
-	FailOpenEnabled bool
-}
-
-func (l *Logger) LogOrganizationHooksFailOpenToggled(ctx context.Context, dbtx repo.DBTX, event LogOrganizationHooksFailOpenToggledEvent) error {
-	var action Action
-	if event.FailOpenEnabled {
-		action = ActionOrganizationHooksFailOpenEnabled
-	} else {
-		action = ActionOrganizationHooksFailOpenDisabled
-	}
-
-	entry := repo.InsertAuditLogParams{
-		OrganizationID: event.OrganizationID,
-		ProjectID:      uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-
-		ActorID:          event.Actor.ID,
-		ActorType:        string(event.Actor.Type),
-		ActorDisplayName: conv.PtrToPGTextEmpty(event.ActorDisplayName),
-		ActorSlug:        conv.PtrToPGTextEmpty(event.ActorSlug),
-
-		Action: string(action),
-
-		SubjectID:          event.OrganizationID,
-		SubjectType:        "organization",
-		SubjectDisplayName: conv.ToPGTextEmpty(event.OrganizationName),
-		SubjectSlug:        conv.ToPGTextEmpty(event.OrganizationSlug),
-
-		Metadata:       nil,
-		BeforeSnapshot: nil,
-		AfterSnapshot:  nil,
-	}
-
-	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.OrganizationHooksFailOpenV1})
-}
+// hooksFailOpenFeatureName mirrors productfeatures.FeatureHooksFailOpen,
+// which this package cannot import without a cycle.
+const hooksFailOpenFeatureName = "hooks_fail_open"
 
 // LogOrganizationProductFeatureToggledEvent records a productFeatures.set
-// change for every feature except hooks_fail_open, which keeps its dedicated
-// action so security-posture changes stay distinguishable. The toggled
-// feature's name is carried in metadata under "feature_name".
+// change. The toggled feature's name is carried in metadata under
+// "feature_name", except for hooks_fail_open, which keeps its dedicated
+// action (and no metadata) so security-posture changes stay distinguishable
+// from ordinary feature toggles.
 type LogOrganizationProductFeatureToggledEvent struct {
 	OrganizationID string
 
@@ -295,18 +255,20 @@ type LogOrganizationProductFeatureToggledEvent struct {
 }
 
 func (l *Logger) LogOrganizationProductFeatureToggled(ctx context.Context, dbtx repo.DBTX, event LogOrganizationProductFeatureToggledEvent) error {
-	var action Action
-	if event.FeatureEnabled {
-		action = ActionOrganizationProductFeatureEnabled
+	action := conv.Ternary(event.FeatureEnabled, ActionOrganizationProductFeatureEnabled, ActionOrganizationProductFeatureDisabled)
+	outboxEvent := events.OrganizationProductFeatureV1
+	var metadata []byte
+	if event.FeatureName == hooksFailOpenFeatureName {
+		action = conv.Ternary(event.FeatureEnabled, ActionOrganizationHooksFailOpenEnabled, ActionOrganizationHooksFailOpenDisabled)
+		outboxEvent = events.OrganizationHooksFailOpenV1
 	} else {
-		action = ActionOrganizationProductFeatureDisabled
-	}
-
-	metadata, err := marshalAuditPayload(map[string]any{
-		"feature_name": event.FeatureName,
-	})
-	if err != nil {
-		return fmt.Errorf("marshal %s metadata: %w", action, err)
+		var err error
+		metadata, err = marshalAuditPayload(map[string]any{
+			"feature_name": event.FeatureName,
+		})
+		if err != nil {
+			return fmt.Errorf("marshal %s metadata: %w", action, err)
+		}
 	}
 
 	entry := repo.InsertAuditLogParams{
@@ -330,7 +292,7 @@ func (l *Logger) LogOrganizationProductFeatureToggled(ctx context.Context, dbtx 
 		AfterSnapshot:  nil,
 	}
 
-	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.OrganizationProductFeatureV1})
+	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: outboxEvent})
 }
 
 type DeviceAgentConfigurationSnapshot struct {
