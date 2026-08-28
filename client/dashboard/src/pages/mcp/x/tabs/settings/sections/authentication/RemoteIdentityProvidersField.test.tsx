@@ -71,6 +71,16 @@ describe("RemoteIdentityProvidersField", () => {
     vi.clearAllMocks();
   });
 
+  // The gateway (meta MCP) case attaches one provider per member vendor, so
+  // the add action must survive past the first attachment.
+  it("keeps Attach Provider available once providers exist", () => {
+    renderField([issuer()]);
+
+    expect(
+      screen.getByRole("button", { name: /attach provider/i }),
+    ).toBeTruthy();
+  });
+
   it("links the provider name to its detail page", () => {
     renderField([issuer()]);
 

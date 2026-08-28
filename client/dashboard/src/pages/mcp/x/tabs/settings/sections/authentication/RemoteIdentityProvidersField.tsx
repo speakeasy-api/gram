@@ -59,6 +59,14 @@ export function RemoteIdentityProvidersField({
             onDelete={() => onDelete(issuer)}
           />
         ))}
+        <RequireScope scope="mcp:write" level="component">
+          <Button variant="secondary" onClick={onAdd}>
+            <Button.LeftIcon>
+              <Plus className="size-4" />
+            </Button.LeftIcon>
+            <Button.Text>Attach Provider</Button.Text>
+          </Button>
+        </RequireScope>
       </div>
     );
   }
