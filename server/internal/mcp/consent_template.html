@@ -85,11 +85,12 @@
                     >Connected{{if .AutoRefreshChecked}} · auto refresh
                     on{{end}}</span
                   >
-                  {{/* Stated inline rather than behind a hover tooltip, which
-                  is invisible on touch — but only when nothing is renewing the
-                  session, since auto refresh is what stops an idle lapse. The
-                  figure is the provider's earliest reported deadline, not a
-                  guarantee, and many providers report none at all. */}}
+                  {{/* Two different deadlines, stated differently. The idle
+                  timeout is what auto refresh exists to defeat, so it is only
+                  worth raising when nothing is renewing the session. The
+                  authorization lifetime is absolute — refreshing does not move
+                  it — so it always applies. Both are the provider's report
+                  rather than a guarantee, and many providers give neither. */}}
                   {{if and .RefreshExpiresIn (not .AutoRefreshChecked)}}
                   <span class="text-xs text-muted-foreground"
                     >Provider reports it lapsing in
@@ -97,6 +98,14 @@
                       >{{.RefreshExpiresIn}}</time
                     >
                     without use.</span
+                  >
+                  {{end}} {{if .AuthorizationExpiresIn}}
+                  <span class="text-xs text-muted-foreground"
+                    >Access ends in
+                    <time datetime="{{.AuthorizationExpiresAt}}"
+                      >{{.AuthorizationExpiresIn}}</time
+                    >
+                    regardless of refresh.</span
                   >
                   {{end}} {{else if .Expired}}
                   <span class="text-xs text-default-warning"

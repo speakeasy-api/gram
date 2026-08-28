@@ -117,16 +117,18 @@ func TestConsentTemplateShowsAutoRefreshAndServiceExpiry(t *testing.T) {
 		SubjectDisplay: "user@example.com",
 		ScriptURL:      "/mcp/consent-page-test.js",
 		RemoteSessionCards: []remoteSessionCard{{
-			ClientID:           "client-id",
-			IssuerSlug:         "example-issuer",
-			Connected:          true,
-			Expired:            false,
-			CanRefresh:         true,
-			AccessExpiresAt:    "2026-08-05T18:00:00Z",
-			AccessExpiresIn:    "3 hours 12 minutes",
-			RefreshExpiresAt:   "2026-09-05T18:00:00Z",
-			RefreshExpiresIn:   "31 days",
-			AutoRefreshChecked: true,
+			ClientID:               "client-id",
+			IssuerSlug:             "example-issuer",
+			Connected:              true,
+			Expired:                false,
+			CanRefresh:             true,
+			AccessExpiresAt:        "2026-08-05T18:00:00Z",
+			AccessExpiresIn:        "3 hours 12 minutes",
+			RefreshExpiresAt:       "2026-09-05T18:00:00Z",
+			RefreshExpiresIn:       "31 days",
+			AuthorizationExpiresAt: "2026-12-05T18:00:00Z",
+			AuthorizationExpiresIn: "120 days",
+			AutoRefreshChecked:     true,
 		}},
 		ConsentEnabled:         true,
 		AutoRefreshPolicy:      autoRefreshUserControlled,
@@ -146,6 +148,10 @@ func TestConsentTemplateShowsAutoRefreshAndServiceExpiry(t *testing.T) {
 	// stops an idle lapse — so the lapse notice must not appear alongside it.
 	require.NotContains(t, normalizedHTML, "lapsing in")
 	require.NotContains(t, html, `datetime="2026-09-05T18:00:00Z"`)
+	// The absolute grant deadline survives that suppression: refreshing does
+	// not move it, so auto refresh being on says nothing about it.
+	require.Contains(t, normalizedHTML, "Access ends in")
+	require.Contains(t, html, `datetime="2026-12-05T18:00:00Z"`)
 	// The access lifetime is not a connection lifetime, so it stays off the page.
 	require.NotContains(t, html, `datetime="2026-08-05T18:00:00Z"`)
 	require.NotContains(t, html, "3 hours 12 minutes")

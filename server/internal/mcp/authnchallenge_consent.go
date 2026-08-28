@@ -211,6 +211,12 @@ type remoteSessionCard struct {
 	AccessExpiresIn  string
 	RefreshExpiresAt string
 	RefreshExpiresIn string
+	// AuthorizationExpiresAt is the absolute end of the grant, which no amount
+	// of background refreshing extends — unlike the refresh idle timeout above,
+	// which is exactly what auto refresh prevents. The page states the two
+	// differently for that reason.
+	AuthorizationExpiresAt string
+	AuthorizationExpiresIn string
 	// AutoRefreshChecked is the effective auto-refresh value for this card:
 	// the stored preference when the organization lets subjects choose,
 	// otherwise the organization's own policy value.
@@ -892,16 +898,19 @@ func shouldAutoCloseFirstParty(firstParty bool, cards []remoteSessionCard) bool 
 // consentDurationPresets are the session-length choices offered on the
 // consent page, largest first. The issuer's maximum is inserted when not
 // already present, and anything above the maximum is dropped.
-var consentDurationPresets = []sessionDurationOption{
-	{Hours: 90 * 24, Label: "90 days", Selected: false},
-	{Hours: 60 * 24, Label: "60 days", Selected: false},
-	{Hours: 30 * 24, Label: "30 days", Selected: false},
-	{Hours: 14 * 24, Label: "2 weeks", Selected: false},
-	{Hours: 7 * 24, Label: "1 week", Selected: false},
-	{Hours: 3 * 24, Label: "3 days", Selected: false},
-	{Hours: 24, Label: "1 day", Selected: false},
-	{Hours: 12, Label: "12 hours", Selected: false},
-	{Hours: 1, Label: "1 hour", Selected: false},
+var consentDurationPresets = []struct {
+	Hours int
+	Label string
+}{
+	{Hours: 90 * 24, Label: "90 days"},
+	{Hours: 60 * 24, Label: "60 days"},
+	{Hours: 30 * 24, Label: "30 days"},
+	{Hours: 14 * 24, Label: "2 weeks"},
+	{Hours: 7 * 24, Label: "1 week"},
+	{Hours: 3 * 24, Label: "3 days"},
+	{Hours: 24, Label: "1 day"},
+	{Hours: 12, Label: "12 hours"},
+	{Hours: 1, Label: "1 hour"},
 }
 
 // formatDurationHours renders a whole-hour count the way the presets do.
@@ -1052,20 +1061,28 @@ func (s *Service) buildRemoteSessionCards(
 			refreshExpiresAt = state.RefreshExpiresAt.UTC().Format(time.RFC3339)
 			refreshExpiresIn = formatTimeRemaining(renderedAt, *state.RefreshExpiresAt)
 		}
+		authorizationExpiresAt := ""
+		authorizationExpiresIn := ""
+		if state.AuthorizationExpiresAt != nil {
+			authorizationExpiresAt = state.AuthorizationExpiresAt.UTC().Format(time.RFC3339)
+			authorizationExpiresIn = formatTimeRemaining(renderedAt, *state.AuthorizationExpiresAt)
+		}
 		issuerDisplay, issuerLogoURL := issuerCardBranding(c, s.serverURL)
 		cards = append(cards, remoteSessionCard{
-			ClientID:           c.ID.String(),
-			IssuerSlug:         c.IssuerSlug,
-			IssuerDisplay:      issuerDisplay,
-			IssuerLogoURL:      issuerLogoURL,
-			Connected:          state.Status == remotesessions.RemoteSessionActive,
-			Expired:            state.Status == remotesessions.RemoteSessionExpired,
-			CanRefresh:         state.CanRefresh,
-			AccessExpiresAt:    accessExpiresAt,
-			AccessExpiresIn:    accessExpiresIn,
-			RefreshExpiresAt:   refreshExpiresAt,
-			RefreshExpiresIn:   refreshExpiresIn,
-			AutoRefreshChecked: checked,
+			ClientID:               c.ID.String(),
+			IssuerSlug:             c.IssuerSlug,
+			IssuerDisplay:          issuerDisplay,
+			IssuerLogoURL:          issuerLogoURL,
+			Connected:              state.Status == remotesessions.RemoteSessionActive,
+			Expired:                state.Status == remotesessions.RemoteSessionExpired,
+			CanRefresh:             state.CanRefresh,
+			AccessExpiresAt:        accessExpiresAt,
+			AccessExpiresIn:        accessExpiresIn,
+			RefreshExpiresAt:       refreshExpiresAt,
+			RefreshExpiresIn:       refreshExpiresIn,
+			AuthorizationExpiresAt: authorizationExpiresAt,
+			AuthorizationExpiresIn: authorizationExpiresIn,
+			AutoRefreshChecked:     checked,
 		})
 	}
 	return cards, nil
