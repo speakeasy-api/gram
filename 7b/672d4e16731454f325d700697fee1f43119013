@@ -1,0 +1,31 @@
+server/internal/guardian/policy.go
+  s_a9fa778de4444e::t_43b709e763f8ef 145,192-200,349-353
+server/internal/remotemcp/proxy/errors.go
+  s_a9fa778de4444e::t_43b709e763f8ef 6-7,34-45
+  s_a9fa778de4444e::t_b92d32e7a65d3d 46
+server/internal/mcp/tunnel_manager.go
+  s_a9fa778de4444e::t_43b709e763f8ef 6,21-22,108,110
+server/internal/mcp/servepublic_tunneled_test.go
+  s_a9fa778de4444e::t_c0f2fff0309900 7,144-147,209-212,361-390
+  s_a9fa778de4444e::t_23f40e2d6fc74d 391-392
+server/internal/mcp/tunnelpublic.go
+  s_a9fa778de4444e::t_43b709e763f8ef 531,533,570-575
+server/internal/remotemcp/proxy/errors_test.go
+  s_a9fa778de4444e::t_c0f2fff0309900 1-49
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.0",
+  "base_commit_sha": "7b672d4e16731454f325d700697fee1f43119013",
+  "prompts": {},
+  "sessions": {
+    "s_a9fa778de4444e": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a04e68-a1c1-7492-8871-115b470a46ed",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "Vishal Gowda <vishal@speakeasy.com>"
+    }
+  }
+}
