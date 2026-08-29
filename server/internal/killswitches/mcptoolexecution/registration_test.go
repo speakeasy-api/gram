@@ -6,6 +6,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/hooks/delegation"
 	"github.com/speakeasy-api/gram/server/internal/killswitches"
 )
 
@@ -13,6 +14,13 @@ import (
 // a complete, fail-closed registry: registry construction validates the
 // canonicalization fixtures and the coverage inventory, so a green build here
 // is the startup-validation guarantee.
+func TestHookSurfaceRejectsUnknownBinding(t *testing.T) {
+	t.Parallel()
+
+	_, err := hookSurface(delegation.Binding{Provider: "unknown", Event: "unknown"})
+	require.ErrorContains(t, err, "has no registered surface")
+}
+
 func TestMCPToolExecutionRegistration(t *testing.T) {
 	t.Parallel()
 

@@ -83,7 +83,12 @@ const (
 // NewRegistration assembles the complete code-owned MCP registration. The database is used by the adapters at evaluation and
 // validation time only; fixture validation during registry construction is
 // pure.
-func NewRegistration(db *pgxpool.Pool) killswitches.Registration {
+func NewRegistration(db *pgxpool.Pool) (killswitches.Registration, error) {
+	hookContracts, err := hookCoverageContracts()
+	if err != nil {
+		return killswitches.Registration{}, fmt.Errorf("build hook coverage contracts: %w", err)
+	}
+
 	return killswitches.Registration{
 		Definitions: []killswitches.Definition{
 			{
@@ -184,8 +189,8 @@ func NewRegistration(db *pgxpool.Pool) killswitches.Registration {
 				EnforcementOwner: EnforcementOwner,
 				IdentityContract: IdentityContractKeyAuthenticatedUserAIResource,
 			},
-		}, hookCoverageContracts()...),
-	}
+		}, hookContracts...),
+	}, nil
 }
 
 // HookCoverageVersionContract is the checked-in version boundary for DNO-989.
@@ -203,12 +208,16 @@ var HookCoverageVersionContract = struct {
 	TestedPlatforms:       []string{"macOS 26.5.2 arm64"},
 }
 
-func hookCoverageContracts() []killswitches.CoverageContract {
+func hookCoverageContracts() ([]killswitches.CoverageContract, error) {
 	bindings := delegation.ApprovedBindings()
 	result := make([]killswitches.CoverageContract, 0, len(bindings))
 	for _, binding := range bindings {
+		surface, err := hookSurface(binding)
+		if err != nil {
+			return nil, err
+		}
 		result = append(result, killswitches.CoverageContract{
-			Definition: DefinitionKeyAIAccess, Surface: hookSurface(binding),
+			Definition: DefinitionKeyAIAccess, Surface: surface,
 			PrincipalSource: "Gram-signed hooks-acting-user.v1 assertion minted only after session-authenticated PKCE enrollment and per-invocation Ed25519 proof; active organization membership is revalidated at mint and ingest.",
 			ResourceSource:  "Code-registered hook_activity resource " + binding.ResourceKey + " derived from the assertion-bound provider and exact native event.",
 			Checkpoint:      "Unified /rpc/hooks.ingest before quarantine, spend, risk, persistence, or the native client resumes the prompt/tool action.",
@@ -217,27 +226,31 @@ func hookCoverageContracts() []killswitches.CoverageContract {
 			EnforcementOwner: EnforcementOwner, IdentityContract: IdentityContractKeyAuthenticatedUserAIResource,
 		})
 	}
-	return result
+	return result, nil
 }
 
-func hookSurface(binding delegation.Binding) killswitches.Surface {
+func hookSurface(binding delegation.Binding) (killswitches.Surface, error) {
 	switch {
 	case binding.Provider == delegation.ProviderClaude && binding.Event == delegation.EventUserPromptSubmit:
-		return SurfaceClaudeUserPromptSubmit
+		return SurfaceClaudeUserPromptSubmit, nil
 	case binding.Provider == delegation.ProviderClaude && binding.Event == delegation.EventPreToolUse:
-		return SurfaceClaudePreToolUse
+		return SurfaceClaudePreToolUse, nil
 	case binding.Provider == delegation.ProviderCodex && binding.Event == delegation.EventUserPromptSubmit:
-		return SurfaceCodexUserPromptSubmit
+		return SurfaceCodexUserPromptSubmit, nil
 	case binding.Provider == delegation.ProviderCodex && binding.Event == delegation.EventPreToolUse:
-		return SurfaceCodexPreToolUse
+		return SurfaceCodexPreToolUse, nil
 	default:
-		panic("approved hook binding has no registered surface")
+		return "", fmt.Errorf("approved hook binding %s/%s has no registered surface", binding.Provider, binding.Event)
 	}
 }
 
 // NewRegistry builds and validates the finalized MCP registry.
 func NewRegistry(db *pgxpool.Pool) (*killswitches.Registry, error) {
-	registry, err := killswitches.BuildRegistry(NewRegistration(db))
+	registration, err := NewRegistration(db)
+	if err != nil {
+		return nil, fmt.Errorf("assemble MCP kill-switch registration: %w", err)
+	}
+	registry, err := killswitches.BuildRegistry(registration)
 	if err != nil {
 		return nil, fmt.Errorf("build MCP kill-switch registry: %w", err)
 	}

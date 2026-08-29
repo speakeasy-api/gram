@@ -3,6 +3,7 @@ package hooksacting
 import (
 	"crypto/ed25519"
 	"crypto/rand"
+	"strings"
 	"testing"
 	"time"
 
@@ -10,7 +11,19 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/hooks/delegation"
+	"github.com/speakeasy-api/gram/server/internal/urn"
 )
+
+func TestMintRefreshRejectsInvalidUserSubject(t *testing.T) {
+	t.Parallel()
+	publicKey, _, err := ed25519.GenerateKey(rand.Reader)
+	require.NoError(t, err)
+	signer, err := NewSigner("test-secret")
+	require.NoError(t, err)
+
+	_, err = signer.MintRefresh(strings.Repeat("u", urn.MaxSessionSubjectIDLength+1), "org-1", publicKey)
+	require.ErrorContains(t, err, "invalid hooks acting-user subject")
+}
 
 func TestSignerProofBoundDelegationAndBindings(t *testing.T) {
 	t.Parallel()

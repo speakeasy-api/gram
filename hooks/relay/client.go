@@ -29,10 +29,13 @@ const perAttemptTime = 10 * time.Second
 // verdict.
 const sendBudget = 45 * time.Second
 
-// gateSendBudget bounds the synchronous verdict exchange for gating events.
-// The chain is 5s network < the openclaw daemon's ~9s gate deadline < the
-// shim's 10s wall: a fail-closed block must land before an upstream deadline
-// expires and dissolves it into an allow. Observes keep the full sendBudget.
+// gateMintBudget gives proof minting a separate allowance so it cannot consume
+// the ingest hop's deadline on governed checkpoints.
+const gateMintBudget = 2 * time.Second
+
+// gateSendBudget bounds the ingest hop for gating events. Together with the
+// governed mint allowance, the 7s exchange stays below the openclaw daemon's
+// ~9s gate deadline and the shim's 10s wall. Observes keep sendBudget.
 const gateSendBudget = 5 * time.Second
 
 // skillUploadBudget bounds the content upload that runs inline after a

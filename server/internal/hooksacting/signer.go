@@ -100,6 +100,10 @@ func (s *Signer) MintRefresh(userID, organizationID string, publicKey ed25519.Pu
 	if s == nil || strings.TrimSpace(userID) == "" || strings.TrimSpace(organizationID) == "" || len(publicKey) != ed25519.PublicKeySize {
 		return "", errors.New("valid user, organization, and Ed25519 public key are required")
 	}
+	subject, err := urn.ParseSessionSubject(urn.NewUserSubject(userID).String())
+	if err != nil {
+		return "", fmt.Errorf("invalid hooks acting-user subject: %w", err)
+	}
 	now := s.now().UTC().Truncate(time.Second)
 	jti, err := randomID()
 	if err != nil {
@@ -107,7 +111,7 @@ func (s *Signer) MintRefresh(userID, organizationID string, publicKey ed25519.Pu
 	}
 	claims := refreshClaims{
 		RegisteredClaims: jwt.RegisteredClaims{
-			Issuer: delegation.RefreshIssuer, Subject: urn.NewUserSubject(userID).String(),
+			Issuer: delegation.RefreshIssuer, Subject: subject.String(),
 			Audience: jwt.ClaimStrings{delegation.RefreshAudience}, ID: jti,
 			IssuedAt: jwt.NewNumericDate(now), NotBefore: jwt.NewNumericDate(now),
 			ExpiresAt: jwt.NewNumericDate(now.Add(RefreshLifetime)),

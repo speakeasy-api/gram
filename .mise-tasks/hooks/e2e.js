@@ -269,7 +269,7 @@ async function provisionHooksAuth(serverURL, session, projectSlug, rootDir) {
       `server_url=${serverURL}`,
       `api_key=${redeemed.access_token}`,
       `project=${projectSlug}`,
-      `email=${redeemed.user_email}`,
+      `email=${session.userEmail}`,
       `org=${redeemed.organization_id}`,
       `delegation_refresh_token=${redeemed.delegation_refresh_token}`,
       `proof_private_key=${encodedPrivateKey}`,
@@ -3302,7 +3302,9 @@ async function runAIAccessSuite(args) {
           checkpoint.name === "prompt"
             ? outputProvesNativePromptDenial(provider, res, note) &&
               !outputHasAssistantMarker(res, successMarker)
-            : denialIndex >= 0 && toolIndex < 0;
+            : denialIndex >= 0 &&
+              toolIndex < 0 &&
+              !outputHasAssistantMarker(res, successMarker);
         const denialEnforced =
           res.exitCode === 0 && !res.timedOut && serverDenied && clientDenied;
         checks.push({

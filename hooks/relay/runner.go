@@ -205,8 +205,10 @@ func (r *Relay) deliver(ctx context.Context, typed any) (ingestResult, authState
 	binding, governed := governedHookBindingOf(typed)
 	assertion := ""
 	if governed {
+		mintCtx, cancel := context.WithTimeout(ctx, gateMintBudget)
 		var err error
-		assertion, err = r.mintActingUserAssertion(ctx, c, binding, idemKey)
+		assertion, err = r.mintActingUserAssertion(mintCtx, c, binding, idemKey)
+		cancel()
 		if err != nil {
 			r.debugf("event=%s acting-user-delegation=failed", agenthooks.EventOf(typed).NativeName)
 			state := stateReady
@@ -222,7 +224,13 @@ func (r *Relay) deliver(ctx context.Context, typed any) (ingestResult, authState
 			return ingestResult{statusCode: http.StatusOK, decision: decision{Decision: "deny", Reason: "ai_access_identity_unavailable", Message: actingIdentityFailureMessage}}, state
 		}
 	}
-	res := r.send(ctx, c, payload, idemKey, assertion, backfilled)
+	sendCtx := ctx
+	cancelSend := func() {}
+	if governed {
+		sendCtx, cancelSend = context.WithTimeout(ctx, gateSendBudget)
+	}
+	res := r.send(sendCtx, c, payload, idemKey, assertion, backfilled)
+	cancelSend()
 	finalCreds := c
 	state := stateReady
 	r.debugf("event=%s type=%s server=%s authfile=%s status=%d denied=%t", agenthooks.EventOf(typed).NativeName, payload.Event.Type, r.cfg.ServerURL, authFilePath(), res.statusCode, res.decision.denied())
@@ -287,11 +295,14 @@ func (r *Relay) send(ctx context.Context, c creds, payload components.IngestRequ
 }
 
 // evaluate delivers a gating event and resolves the block decision under the
-// ratchet and the org's fail-open posture, bounded by gateSendBudget so the
-// verdict beats the provider-side gate deadline.
+// ratchet and the org's fail-open posture before the provider-side deadline.
 func (r *Relay) evaluate(ctx context.Context, typed any) verdict {
 	start := time.Now()
-	ctx, cancel := context.WithTimeout(ctx, gateSendBudget)
+	budget := gateSendBudget
+	if _, governed := governedHookBindingOf(typed); governed {
+		budget += gateMintBudget
+	}
+	ctx, cancel := context.WithTimeout(ctx, budget)
 	defer cancel()
 	v := r.gateVerdict(ctx, typed)
 	r.debugf("gate event=%s elapsed_ms=%d block=%v",

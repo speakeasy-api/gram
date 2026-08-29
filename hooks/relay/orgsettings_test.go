@@ -355,8 +355,9 @@ func TestUnchangedRecentOrgSettingsSkipRewrite(t *testing.T) {
 	require.Equal(t, before, after, "a recently confirmed unchanged value must skip the rewrite")
 }
 
-// TestFailOpenEnvOverride: the escape hatch works with no cache file at all.
-func TestFailOpenEnvOverride(t *testing.T) {
+// TestFailOpenEnvOverrideDoesNotBypassGovernedTool verifies the legacy
+// override cannot authorize a governed tool without proof-bound identity.
+func TestFailOpenEnvOverrideDoesNotBypassGovernedTool(t *testing.T) {
 	shrinkRetryBudget(t)
 	fs := newFakeServer(t, func(components.IngestRequestBody) (int, decision) {
 		return http.StatusServiceUnavailable, decision{Decision: "", Reason: "", Message: ""}
@@ -400,9 +401,9 @@ func TestStaleCacheIsNotAColdStart(t *testing.T) {
 	require.Contains(t, string(res.Stdout), `"permissionDecision":"deny"`, "stale cache must not fail open")
 }
 
-// TestGateBudgetBeatsHangingServer: a hanging control plane must resolve the
-// gate within gateSendBudget — fail-closed here (posture cached) — instead of
-// riding the full sendBudget past the provider-side deadline.
+// TestGateBudgetBeatsHangingServer: a hanging governed ingest must resolve
+// within gateSendBudget — fail-closed here — instead of riding the full
+// sendBudget past the provider-side deadline.
 func TestGateBudgetBeatsHangingServer(t *testing.T) {
 	shrinkRetryBudget(t)
 	release := make(chan struct{})
