@@ -48,10 +48,18 @@ func TestSignerProofBoundDelegationAndBindings(t *testing.T) {
 	expiresIn, err := signer.AssertionExpiresIn(assertion)
 	require.NoError(t, err)
 	require.Equal(t, int(AssertionLifetime.Seconds()), expiresIn)
+	signer.now = func() time.Time { return now.Add(500 * time.Millisecond) }
+	expiresIn, err = signer.AssertionExpiresIn(assertion)
+	require.NoError(t, err)
+	require.Equal(t, 29, expiresIn)
 	signer.now = func() time.Time { return now.Add(10 * time.Second) }
 	expiresIn, err = signer.AssertionExpiresIn(assertion)
 	require.NoError(t, err)
 	require.Equal(t, 20, expiresIn)
+	signer.now = func() time.Time { return now.Add(29*time.Second + 500*time.Millisecond) }
+	expiresIn, err = signer.AssertionExpiresIn(assertion)
+	require.NoError(t, err)
+	require.Zero(t, expiresIn)
 	signer.now = func() time.Time { return now }
 
 	verified, err := signer.VerifyAssertion(assertion, AssertionBinding{OrganizationID: "org-1", Provider: req.Provider, Event: req.Event, SessionID: req.SessionID, IdempotencyKey: req.IdempotencyKey})

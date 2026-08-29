@@ -26,7 +26,8 @@ const (
 	aiAccessIdentityFailureMessage  = delegation.IdentityFailureMessage
 	aiAccessEvaluatorFailureMessage = "Speakeasy could not confirm the current AI access policy. Try again."
 	aiAccessDenialCacheTTL          = 10 * time.Minute
-	aiAccessEvaluationLeaseTTL      = 10 * time.Second
+	aiAccessEvaluationTimeout       = 5 * time.Second
+	aiAccessEvaluationLeaseTTL      = aiAccessEvaluationTimeout + 5*time.Second
 	aiAccessEvaluationPollInterval  = 10 * time.Millisecond
 )
 

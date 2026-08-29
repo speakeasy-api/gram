@@ -278,7 +278,9 @@ func (s *Service) ingest(ctx context.Context, payload *gen.IngestPayload) (res *
 							aiDecision = cachedDecision
 						}
 					default:
-						aiDecision = s.aiAccess.EvaluateVerified(ctx, verified)
+						evaluationCtx, cancelEvaluation := context.WithTimeout(ctx, aiAccessEvaluationTimeout)
+						aiDecision = s.aiAccess.EvaluateVerified(evaluationCtx, verified)
+						cancelEvaluation()
 						aiDecision = s.publishHookAIAccessDenial(ctx, payload, authCtx.ActiveOrganizationID, verified.principalKey, aiDecision)
 						released, releaseErr := release()
 						if (releaseErr != nil || !released) && !aiDecision.deny {

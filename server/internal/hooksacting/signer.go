@@ -233,7 +233,7 @@ func (s *Signer) AssertionExpiresIn(raw string) (int, error) {
 	if remaining <= 0 {
 		return 0, errors.New("acting-user assertion is expired")
 	}
-	return int((remaining + time.Second - 1) / time.Second), nil
+	return int(remaining / time.Second), nil
 }
 
 func (s *Signer) parse(raw, issuer, audience string, lifetime time.Duration, key []byte, claims jwt.Claims, registered *jwt.RegisteredClaims) error {

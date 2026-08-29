@@ -485,7 +485,7 @@ func (s *Service) consumeMintNonce(ctx context.Context, identity hooksacting.Ref
 	if err := json.Unmarshal([]byte(storedRaw), &stored); err != nil || stored.Fingerprint != record.Fingerprint || stored.Assertion == "" {
 		return "", errors.New("conflicting or invalid mint nonce replay")
 	}
-	if _, err := s.actingSigner.AssertionExpiresIn(stored.Assertion); err == nil {
+	if expiresIn, err := s.actingSigner.AssertionExpiresIn(stored.Assertion); err == nil && expiresIn > 0 {
 		return stored.Assertion, nil
 	}
 	storedRaw, err = refreshMintNonceScript.Run(ctx, s.redis, []string{mintNonceKeyNamespace + hex.EncodeToString(replayKeyHash[:])}, storedRaw, string(raw)).Text()
