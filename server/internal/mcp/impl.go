@@ -1524,7 +1524,7 @@ func (s *Service) TryPublicIdentityAuth(ctx context.Context, r *http.Request, is
 // id is decorative.
 //
 // Each successful strategy stamps its mcpidentity provenance here, at the
-// point of credential validation: assistant tokens are KindAssistant, API
+// point of credential validation: assistant tokens are delegated-user or KindAssistant, API
 // keys (either scope) are KindAPIKey, and chat-session tokens are
 // KindChatSession. None of these credentials proves an acting Gram user, so
 // none stamps KindUserSession — even though every strategy populates an
@@ -1537,6 +1537,9 @@ func (s *Service) authenticateToken(ctx context.Context, token string, oauthReso
 	}
 
 	if authorizedCtx, _, err := s.assistantTokens.Authorize(ctx, token); err == nil {
+		if identity, ok := mcpidentity.FromContext(authorizedCtx); ok && identity.Kind() == mcpidentity.KindDelegatedUser {
+			return authorizedCtx, nil
+		}
 		return s.identityValidator.StampAssistant(authorizedCtx), nil
 	}
 

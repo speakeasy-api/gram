@@ -14,6 +14,8 @@ import (
 	"github.com/stretchr/testify/require"
 
 	assistantsrepo "github.com/speakeasy-api/gram/server/internal/assistants/repo"
+	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/mcpidentity"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
@@ -332,6 +334,66 @@ func TestCheckRevocation_cacheRespectsTTL(t *testing.T) {
 		}
 		assert.Equal(c, oops.CodeUnauthorized, se.Code)
 	}, 10*time.Second, 10*time.Millisecond)
+}
+
+//nolint:glint // Direct SQL models membership revocation in this package-local fixture.
+func TestAuthorizeDelegatedUserRevalidatesMembershipAndNeverSubstitutesOwner(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t, "tokens_delegated_user")
+	ctx := t.Context()
+	_, err := f.conn.Exec(ctx, `INSERT INTO organization_metadata (id, name, slug) VALUES ('org-test', 'Org', 'org-test') ON CONFLICT (id) DO NOTHING`)
+	require.NoError(t, err)
+	_, err = f.conn.Exec(ctx, `INSERT INTO users (id, email, display_name) VALUES ('acting-user', 'acting@example.test', 'Acting User')`)
+	require.NoError(t, err)
+	_, err = f.conn.Exec(ctx, `INSERT INTO organization_user_relationships (organization_id, user_id) VALUES ('org-test', 'acting-user')`)
+	require.NoError(t, err)
+
+	manager := New("test-secret", f.conn, nil)
+	token, err := manager.Generate(GenerateInput{OrgID: "org-test", ProjectID: f.projectID, UserID: "acting-user", SessionID: "session-current", AssistantID: f.assistantID, ThreadID: f.threadID, TTL: time.Minute})
+	require.NoError(t, err)
+	authorized, claims, err := manager.Authorize(ctx, token)
+	require.NoError(t, err)
+	require.Equal(t, "session-current", claims.SessionID)
+	authContext, ok := contextvalues.GetAuthContext(authorized)
+	require.True(t, ok)
+	require.Equal(t, "acting-user", authContext.UserID)
+	identity, ok := mcpidentity.FromContext(authorized)
+	require.True(t, ok)
+	require.Equal(t, mcpidentity.KindDelegatedUser, identity.Kind())
+
+	_, err = f.conn.Exec(ctx, `UPDATE organization_user_relationships SET deleted_at = clock_timestamp() WHERE organization_id = 'org-test' AND user_id = 'acting-user'`)
+	require.NoError(t, err)
+	_, _, err = manager.Authorize(ctx, token)
+	requireUnauthorized(t, err)
+
+	autonomous, err := manager.Generate(GenerateInput{OrgID: "org-test", ProjectID: f.projectID, UserID: "", SessionID: "", AssistantID: f.assistantID, ThreadID: f.threadID, TTL: time.Minute})
+	require.NoError(t, err)
+	authorized, _, err = manager.Authorize(ctx, autonomous)
+	require.NoError(t, err, "autonomous credentials retain management reachability")
+	authContext, ok = contextvalues.GetAuthContext(authorized)
+	require.True(t, ok)
+	require.Empty(t, authContext.UserID, "creator must not be substituted")
+	identity, ok = mcpidentity.FromContext(authorized)
+	require.True(t, ok)
+	require.Equal(t, mcpidentity.KindAssistant, identity.Kind())
+}
+
+func TestAuthorizeRejectsIncompleteTamperedAndExpiredDelegation(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t, "tokens_invalid_delegation")
+	manager := New("test-secret", f.conn, nil)
+	partial, err := manager.Generate(GenerateInput{OrgID: "org-test", ProjectID: f.projectID, UserID: "", SessionID: "orphan-session", AssistantID: f.assistantID, ThreadID: f.threadID, TTL: time.Minute})
+	require.NoError(t, err)
+	_, _, err = manager.Authorize(t.Context(), partial)
+	requireUnauthorized(t, err)
+	_, err = manager.Validate(partial + "tampered")
+	requireUnauthorized(t, err)
+	expired, err := manager.Generate(GenerateInput{OrgID: "org-test", ProjectID: f.projectID, AssistantID: f.assistantID, ThreadID: f.threadID, TTL: time.Millisecond})
+	require.NoError(t, err)
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		_, validateErr := manager.Validate(expired)
+		assert.Error(c, validateErr)
+	}, 2*time.Second, 10*time.Millisecond)
 }
 
 func requireUnauthorized(t *testing.T, err error) {

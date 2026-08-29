@@ -191,6 +191,7 @@ func (s *Service) handleCreateMCPAuthFlow(w http.ResponseWriter, r *http.Request
 		OrgID:             claims.OrgID,
 		ProjectID:         projectID,
 		UserID:            claims.UserID,
+		SessionID:         claims.SessionID,
 		AssistantID:       principal.AssistantID,
 		ThreadID:          threadID,
 		AttemptID:         attemptID,

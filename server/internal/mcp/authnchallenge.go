@@ -496,13 +496,9 @@ func (s *Service) authenticateIssuerGate(
 		// belongs to the endpoint's project — otherwise a token minted
 		// in project A could resolve a remote_session linked under
 		// the same user in project B.
-		if assistCtx, claims, aerr := s.assistantTokens.Authorize(ctx, authToken); aerr == nil && claims.ProjectID == endpoint.ProjectID.String() {
+		if assistCtx, claims, aerr := s.assistantTokens.Authorize(ctx, authToken); aerr == nil && claims.ProjectID == endpoint.ProjectID.String() && claims.SessionID != "" {
 			ssubj := urn.NewUserSubject(claims.UserID)
-			// The subject reads as a user so downstream session plumbing
-			// works, but the credential was an assistant-runtime token: its
-			// provenance stays KindAssistant and must never be treated as an
-			// authoritative acting user.
-			newCtx, subject = s.identityValidator.StampAssistant(assistCtx), &ssubj
+			newCtx, subject = assistCtx, &ssubj
 		}
 	}
 	if subject == nil {

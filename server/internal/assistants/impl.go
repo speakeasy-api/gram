@@ -236,6 +236,9 @@ func (s *Service) SendMessage(ctx context.Context, payload *gen.SendMessagePaylo
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
+	if !contextvalues.HasValidatedGramSession(ctx) || contextvalues.IsLegacyImpersonatedSession(ctx) || authCtx.SessionID == nil || *authCtx.SessionID == "" || authCtx.UserID == "" {
+		return nil, oops.E(oops.CodeForbidden, nil, "assistant turns require a validated current user session").LogError(ctx, s.logger)
+	}
 	// Sending a message is gated on project:read: it does not mutate project
 	// configuration, and viewers must be able to talk to a project's assistants.
 	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectRead, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
@@ -246,11 +249,6 @@ func (s *Service) SendMessage(ctx context.Context, payload *gen.SendMessagePaylo
 			return nil, err
 		}
 	}
-	// Messages are sent as the calling user, so a user identity is required.
-	if authCtx.UserID == "" {
-		return nil, oops.E(oops.CodeUnauthorized, nil, "sending a message requires a user identity").LogError(ctx, s.logger)
-	}
-
 	assistantID, err := uuid.Parse(payload.AssistantID)
 	if err != nil {
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid assistant id").LogError(ctx, s.logger)
@@ -320,7 +318,7 @@ func (s *Service) SendMessage(ctx context.Context, payload *gen.SendMessagePaylo
 		return nil, oops.E(oops.CodeBadRequest, nil, "message text is required when no attachments are sent")
 	}
 
-	result, err := s.core.SendDashboardMessage(ctx, *authCtx.ProjectID, assistantID, authCtx.UserID, chatID, payload.Message, idempotencyKey, skillIDs, attachments)
+	result, err := s.core.SendDashboardMessage(ctx, *authCtx.ProjectID, assistantID, authCtx.UserID, *authCtx.SessionID, chatID, payload.Message, idempotencyKey, skillIDs, attachments)
 	if err != nil {
 		if errors.Is(err, ErrAssistantTurnSkillContextTooLarge) {
 			return nil, oops.E(oops.CodeBadRequest, err, "selected skill context is too large").LogError(ctx, s.logger)

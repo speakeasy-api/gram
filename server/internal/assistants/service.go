@@ -130,6 +130,7 @@ const (
 )
 
 var errAssistantValidation = errors.New("assistant validation")
+var errAssistantDelegationUnavailable = errors.New("assistant current-user delegation unavailable")
 
 func assistantValidationError(format string, args ...any) error {
 	return fmt.Errorf("%w: %s", errAssistantValidation, fmt.Sprintf(format, args...))
@@ -2624,7 +2625,7 @@ func (s *ServiceCore) ProcessThreadEvents(ctx context.Context, projectID, thread
 			// other pending event on the thread is drained on the warm runtime
 			// instead of waiting out the warm timer; the failed event is no
 			// longer claimable, so this cannot loop on it.
-			if errors.Is(runErr, ErrCompletionFailed) || errors.Is(runErr, ErrHistoryCorrupted) {
+			if errors.Is(runErr, ErrCompletionFailed) || errors.Is(runErr, ErrHistoryCorrupted) || errors.Is(runErr, errAssistantDelegationUnavailable) {
 				s.emitAssistantTelemetry(turnCtx, assistant, thread, &runtimeRecord, &event, "event_terminal", "assistant event failed at completion provider", "ERROR", runErr)
 				if err := s.failEvent(ctx, thread.ProjectID, event.ID, runErr); err != nil {
 					return ProcessThreadEventsResult{}, err
@@ -2748,12 +2749,14 @@ func (s *ServiceCore) processEventTurn(
 
 	mcpServers := s.currentRuntimeMCPServers(ctx, assistant)
 
-	prompt, actorUserID := "", assistant.CreatedByUserID
+	delegation, err := turnActingForDelegation(assistant, thread, event, time.Now().UTC())
+	if err != nil {
+		return nil, errors.Join(errAssistantDelegationUnavailable, err)
+	}
+	prompt := ""
 	var inputParts []runtimeContentPart
-	if mcpAuthPrompt, ok := decodeMCPAuthTurn(ctx, s.logger, event); ok {
-		// MCP auth resumption is a system event with no human sender — act as
-		// the assistant's creator.
-		prompt = mcpAuthPrompt
+	if _, ok := decodeMCPAuthTurn(ctx, s.logger, event); ok {
+		return nil, errors.Join(errAssistantDelegationUnavailable, errors.New("MCP authorization callbacks are autonomous system work"))
 	} else {
 		adapter, err := getSourceAdapter(thread.SourceKind)
 		if err != nil {
@@ -2763,7 +2766,6 @@ func (s *ServiceCore) processEventTurn(
 		if err != nil {
 			return nil, fmt.Errorf("decode assistant turn: %w", err)
 		}
-		actorUserID = turnUserID(assistant, thread, event)
 		// Best-effort: files attached to the triggering message ride along as
 		// vision/text content. Failures degrade to the metadata-only turn.
 		switch thread.SourceKind {
@@ -2777,7 +2779,7 @@ func (s *ServiceCore) processEventTurn(
 	if err != nil {
 		return nil, err
 	}
-	turnToken, err := s.MintThreadScopedRuntimeToken(assistant, thread.ID, actorUserID)
+	turnToken, err := s.MintThreadScopedRuntimeToken(assistant, thread.ID, delegation)
 	if err != nil {
 		return nil, err
 	}
@@ -2865,20 +2867,28 @@ func (s *ServiceCore) assistantToolsVariant(ctx context.Context, projectID uuid.
 	return feature.AssistantToolsVariant(variant)
 }
 
-// turnUserID returns the Gram user whose identity a turn should act under.
-// Dashboard turns carry a Gram user id on the event payload (the sender), so
-// MCP calls, audit attribution, and per-user RBAC reflect the actual sender
-// rather than the assistant's creator. Other sources either don't carry a
-// Gram user identity (cron/wake) or carry an external one (Slack), so they
-// fall back to the creator.
-func turnUserID(assistant assistantRecord, thread assistantThreadRecord, event assistantThreadEventRecord) string {
-	if thread.SourceKind == sourceKindDashboard {
-		var payload dashboardEventPayload
-		if err := json.Unmarshal(event.NormalizedPayloadJSON, &payload); err == nil && payload.UserID != "" {
-			return payload.UserID
-		}
+func turnActingForDelegation(assistant assistantRecord, thread assistantThreadRecord, event assistantThreadEventRecord, now time.Time) (actingForDelegation, error) {
+	if thread.SourceKind != sourceKindDashboard {
+		return actingForDelegation{}, fmt.Errorf("source %q is autonomous and has no current Gram user", thread.SourceKind)
 	}
-	return assistant.CreatedByUserID
+	var payload dashboardEventPayload
+	if err := json.Unmarshal(event.NormalizedPayloadJSON, &payload); err != nil {
+		return actingForDelegation{}, fmt.Errorf("decode dashboard delegation: %w", err)
+	}
+	d := payload.ActingFor
+	if d == nil || d.Kind != actingForDelegationKindUserSession || d.UserID == "" || d.SessionID == "" {
+		return actingForDelegation{}, errors.New("dashboard turn has no concrete user-session delegation")
+	}
+	if d.UserID != payload.UserID || d.OrganizationID != assistant.OrganizationID {
+		return actingForDelegation{}, errors.New("dashboard delegation tenant or user mismatch")
+	}
+	if d.IssuedAt.IsZero() || d.ExpiresAt.IsZero() || !d.ExpiresAt.Equal(d.IssuedAt.Add(assistantRuntimeTokenTTL)) || now.Before(d.IssuedAt.Add(-time.Minute)) || !now.Before(d.ExpiresAt) {
+		return actingForDelegation{}, errors.New("dashboard delegation is expired or malformed")
+	}
+	if event.CreatedAt.Before(d.IssuedAt.Add(-time.Minute)) || event.CreatedAt.After(d.IssuedAt.Add(time.Minute)) {
+		return actingForDelegation{}, errors.New("dashboard delegation issuance does not match the event")
+	}
+	return *d, nil
 }
 
 func (s *ServiceCore) startProcessingLeaseHeartbeat(
@@ -2931,14 +2941,19 @@ func (s *ServiceCore) touchProcessingLease(ctx context.Context, projectID, runti
 // downstream, so platform tools that key on the calling thread (wake,
 // memory, telemetry) keep working under the v2 single-VM-per-assistant
 // runtime — the VM is shared but the auth identity is per-thread.
-func (s *ServiceCore) MintThreadScopedRuntimeToken(assistant assistantRecord, threadID uuid.UUID, userID string) (string, error) {
+func (s *ServiceCore) MintThreadScopedRuntimeToken(assistant assistantRecord, threadID uuid.UUID, delegation actingForDelegation) (string, error) {
+	ttl := time.Until(delegation.ExpiresAt)
+	if ttl <= 0 || ttl > assistantRuntimeTokenTTL {
+		return "", errors.New("assistant delegation is outside its valid lifetime")
+	}
 	token, err := s.assistantTokens.Generate(assistanttokens.GenerateInput{
 		OrgID:       assistant.OrganizationID,
 		ProjectID:   assistant.ProjectID,
-		UserID:      userID,
+		UserID:      delegation.UserID,
+		SessionID:   delegation.SessionID,
 		AssistantID: assistant.ID,
 		ThreadID:    threadID,
-		TTL:         assistantRuntimeTokenTTL,
+		TTL:         ttl,
 	})
 	if err != nil {
 		return "", fmt.Errorf("generate assistant execution token: %w", err)

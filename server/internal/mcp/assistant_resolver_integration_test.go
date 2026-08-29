@@ -127,9 +127,9 @@ func TestServePublic_AssistantTokenResolvesOwnerRemoteSessionToUpstream(t *testi
 	}
 	require.Equal(t, int64(1), coveragePoints[attribute.NewSet(
 		attr.McpKillswitchSurface(mcpmetrics.KillswitchSurfaceHosted),
-		attr.McpKillswitchIdentityClass(mcpmetrics.KillswitchIdentityAssistant),
+		attr.McpKillswitchIdentityClass(mcpmetrics.KillswitchIdentityActiveUser),
 		attr.McpKillswitchResourceClass(mcpmetrics.KillswitchResourceLegacyNoServer),
-	)], "production legacy tools/call dispatch must report low coverage and assistant provenance without inferring an acting user")
+	)], "production legacy tools/call dispatch must report the validated delegated user and low resource coverage")
 }
 
 func TestServePublic_AssistantTokenWithoutRemoteSessionChallenges(t *testing.T) {
@@ -211,6 +211,7 @@ func mintAssistantBearerForOwner(
 		OrgID:       authCtx.ActiveOrganizationID,
 		ProjectID:   *authCtx.ProjectID,
 		UserID:      authCtx.UserID,
+		SessionID:   "session-test",
 		AssistantID: assistant.ID,
 		ThreadID:    uuid.Nil,
 		TTL:         time.Hour,

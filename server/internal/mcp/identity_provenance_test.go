@@ -23,12 +23,10 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
-// TestApplyIssuerGate_AssistantFallbackStampsAssistantProvenance drives the
-// issuer gate's accepted assistant-runtime fallback end to end and proves the
-// returned context carries KindAssistant provenance with no user ID — never
-// KindUserSession — even though the fallback mints a user-shaped session
-// subject and a user-shaped AuthContext for downstream plumbing.
-func TestApplyIssuerGate_AssistantFallbackStampsAssistantProvenance(t *testing.T) {
+// TestApplyIssuerGate_AssistantFallbackStampsDelegatedUserProvenance drives
+// the accepted assistant-runtime fallback and proves the signed current-user
+// delegation remains authoritative through MCP authentication.
+func TestApplyIssuerGate_AssistantFallbackStampsDelegatedUserProvenance(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestMCPService(t)
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
@@ -52,13 +50,9 @@ func TestApplyIssuerGate_AssistantFallbackStampsAssistantProvenance(t *testing.T
 
 	identity, stamped := mcpidentity.FromContext(newCtx)
 	require.True(t, stamped, "the accepted assistant fallback must stamp provenance")
-	require.Equal(t, mcpidentity.KindAssistant, identity.Kind())
-	require.Empty(t, identity.UserID())
+	require.Equal(t, mcpidentity.KindDelegatedUser, identity.Kind())
+	require.Equal(t, authCtx.UserID, identity.UserID())
 
-	// The gate's AuthContext deliberately reads as the assistant's owning
-	// user so downstream session plumbing works — which is exactly why the
-	// provenance stamp, not the subject shape, is the enforcement-grade
-	// signal that this caller is not an acting user.
 	gateAuthCtx, ok := contextvalues.GetAuthContext(newCtx)
 	require.True(t, ok)
 	require.Equal(t, authCtx.UserID, gateAuthCtx.UserID)
@@ -85,6 +79,7 @@ func TestApplyIssuerGate_RejectedAssistantTokenStampsNothing(t *testing.T) {
 		OrgID:       authCtx.ActiveOrganizationID,
 		ProjectID:   otherProject.ID,
 		UserID:      authCtx.UserID,
+		SessionID:   "session-test",
 		AssistantID: assistantID,
 		ThreadID:    uuid.Nil,
 		TTL:         time.Hour,
@@ -129,13 +124,13 @@ func TestTryPublicIdentityAuth_StampsCredentialProvenance(t *testing.T) {
 		return mcpidentity.FromContext(authedCtx)
 	}
 
-	t.Run("assistant token stamps assistant", func(t *testing.T) {
+	t.Run("assistant token preserves delegated user", func(t *testing.T) {
 		t.Parallel()
 		assistantID := createAssistant(t, ti, authCtx, "LegacyAuth")
 		identity, stamped := authorize(t, mintAssistantToken(t, ti, authCtx, assistantID))
 		require.True(t, stamped)
-		require.Equal(t, mcpidentity.KindAssistant, identity.Kind())
-		require.Empty(t, identity.UserID())
+		require.Equal(t, mcpidentity.KindDelegatedUser, identity.Kind())
+		require.Equal(t, authCtx.UserID, identity.UserID())
 	})
 
 	t.Run("consumer-scope API key stamps api_key", func(t *testing.T) {

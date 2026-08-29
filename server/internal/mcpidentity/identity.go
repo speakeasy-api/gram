@@ -33,9 +33,13 @@ const (
 	// key's creator or owner is not an acting user.
 	KindAPIKey Kind = "api_key"
 
-	// KindAssistant marks a validated assistant-runtime token. Its user claim
-	// attributes the assistant's work but is not an authoritative acting-user
-	// proof for enforcement.
+	// KindDelegatedUser marks a validated assistant-runtime token carrying a
+	// server-issued, tenant-bound delegation from a concrete user session.
+	KindDelegatedUser Kind = "delegated_user"
+
+	// KindAssistant marks a validated assistant-runtime token without an
+	// authoritative current-user delegation. Owner and creator fields never
+	// promote this kind to a user.
 	KindAssistant Kind = "assistant"
 
 	// KindChatSession marks a validated chat-session token minted for an
@@ -56,8 +60,8 @@ type Identity struct {
 // Kind returns the validated credential class.
 func (i Identity) Kind() Kind { return i.kind }
 
-// UserID returns the concrete Gram user ID for KindUserSession and is empty
-// for every other credential class.
+// UserID returns the concrete Gram user ID for user-session and delegated-
+// user provenance and is empty for every other credential class.
 func (i Identity) UserID() string { return i.userID }
 
 // ValidatorBoundary is the capability held by the MCP credential validators.
@@ -105,7 +109,17 @@ func (b *ValidatorBoundary) StampValidatedSession(ctx context.Context, session s
 	}
 }
 
-// StampAssistant records an accepted assistant-runtime credential.
+// StampDelegatedUser records an accepted assistant-runtime credential whose
+// signed claims were issued from a validated concrete user session.
+func (b *ValidatorBoundary) StampDelegatedUser(ctx context.Context, userID string) context.Context {
+	if userID == "" {
+		return ctx
+	}
+	return b.withIdentity(ctx, KindDelegatedUser, userID)
+}
+
+// StampAssistant records an accepted assistant-runtime credential without a
+// current-user delegation.
 func (b *ValidatorBoundary) StampAssistant(ctx context.Context) context.Context {
 	return b.withIdentity(ctx, KindAssistant, "")
 }

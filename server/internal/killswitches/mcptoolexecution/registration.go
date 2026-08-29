@@ -35,9 +35,17 @@ const (
 	// keys are fronting mcp_servers row IDs.
 	ResourceKindMCPServer killswitches.ResourceKind = "mcp_server"
 
+	// ResourceKindAssistant is the canonical assistant-runtime namespace; keys
+	// are organization-owned assistants.id values.
+	ResourceKindAssistant killswitches.ResourceKind = "assistant"
+
 	// IdentityContractKeyAuthenticatedUserMCPServer pairs the authoritative
 	// user principal with the canonical mcp_server resource.
 	IdentityContractKeyAuthenticatedUserMCPServer killswitches.IdentityContractKey = "authenticated_user_mcp_server"
+
+	// IdentityContractKeyActingUserAIResource binds current-user provenance
+	// to the canonical resource checked at each AI boundary.
+	IdentityContractKeyActingUserAIResource killswitches.IdentityContractKey = "acting_user_ai_resource"
 
 	// SurfaceHostedToolsCall is hosted MCP tools/call dispatch.
 	SurfaceHostedToolsCall killswitches.Surface = "mcp_hosted_tools_call"
@@ -46,6 +54,9 @@ const (
 	// tools/call forwarding.
 	SurfacePrivateProxyToolsCall killswitches.Surface = "mcp_private_proxy_tools_call"
 
+	SurfaceAssistantModelCall   killswitches.Surface = "assistant_runtime_model_call"
+	SurfaceAssistantMCPToolCall killswitches.Surface = "assistant_runtime_mcp_tool_call"
+
 	// TransportAdapterHostedJSONRPC keys the hosted JSON-RPC transport
 	// mapping owned by the hosted dispatch checkpoint.
 	TransportAdapterHostedJSONRPC killswitches.TransportAdapterKey = "mcp_hosted_jsonrpc"
@@ -53,6 +64,7 @@ const (
 	// TransportAdapterPrivateProxyJSONRPC keys the private-proxy JSON-RPC
 	// transport mapping owned by the forwarding checkpoint.
 	TransportAdapterPrivateProxyJSONRPC killswitches.TransportAdapterKey = "mcp_private_proxy_jsonrpc"
+	TransportAdapterAssistantRuntime    killswitches.TransportAdapterKey = "assistant_runtime"
 
 	// DefaultExternalNote is the editable customer-safe starting value for
 	// new MCP tool-execution prescriptions. It never leaks framework vocabulary.
@@ -87,32 +99,32 @@ func NewRegistration(db *pgxpool.Pool) killswitches.Registration {
 			{
 				Key:                 DefinitionKeyAIAccess,
 				PrincipalKinds:      []killswitches.PrincipalKind{PrincipalKindUser},
-				ResourceKinds:       []killswitches.ResourceKind{ResourceKindMCPServer},
+				ResourceKinds:       []killswitches.ResourceKind{ResourceKindMCPServer, ResourceKindAssistant},
 				FailurePolicy:       killswitches.FailurePolicyFailClosed,
 				DefaultExternalNote: DefaultAIAccessExternalNote,
 				EnforcementOwner:    EnforcementOwner,
-				IdentityContract:    IdentityContractKeyAuthenticatedUserMCPServer,
-				Surfaces:            []killswitches.Surface{SurfaceHostedToolsCall, SurfacePrivateProxyToolsCall},
-				TransportAdapters:   []killswitches.TransportAdapterKey{TransportAdapterHostedJSONRPC, TransportAdapterPrivateProxyJSONRPC},
+				IdentityContract:    IdentityContractKeyActingUserAIResource,
+				Surfaces:            []killswitches.Surface{SurfaceHostedToolsCall, SurfacePrivateProxyToolsCall, SurfaceAssistantModelCall, SurfaceAssistantMCPToolCall},
+				TransportAdapters:   []killswitches.TransportAdapterKey{TransportAdapterHostedJSONRPC, TransportAdapterPrivateProxyJSONRPC, TransportAdapterAssistantRuntime},
 			},
 		},
-		IdentityContracts: []killswitches.IdentityContract{{
-			Key:            IdentityContractKeyAuthenticatedUserMCPServer,
-			PrincipalKinds: []killswitches.PrincipalKind{PrincipalKindUser},
-			ResourceKinds:  []killswitches.ResourceKind{ResourceKindMCPServer},
-		}},
+		IdentityContracts: []killswitches.IdentityContract{
+			{Key: IdentityContractKeyAuthenticatedUserMCPServer, PrincipalKinds: []killswitches.PrincipalKind{PrincipalKindUser}, ResourceKinds: []killswitches.ResourceKind{ResourceKindMCPServer}},
+			{Key: IdentityContractKeyActingUserAIResource, PrincipalKinds: []killswitches.PrincipalKind{PrincipalKindUser}, ResourceKinds: []killswitches.ResourceKind{ResourceKindMCPServer, ResourceKindAssistant}},
+		},
 		PrincipalAdapters: []killswitches.PrincipalAdapterRegistration{{
 			Adapter:  NewAuthenticatedUserPrincipalAdapter(db),
 			Fixtures: principalFixtures(),
 		}},
-		ResourceAdapters: []killswitches.ResourceAdapterRegistration{{
-			Adapter:  NewMCPServerResourceAdapter(db),
-			Fixtures: resourceFixtures(),
-		}},
-		Surfaces: []killswitches.Surface{SurfaceHostedToolsCall, SurfacePrivateProxyToolsCall},
+		ResourceAdapters: []killswitches.ResourceAdapterRegistration{
+			{Adapter: NewMCPServerResourceAdapter(db), Fixtures: resourceFixtures()},
+			{Adapter: NewAssistantResourceAdapter(db), Fixtures: assistantResourceFixtures()},
+		},
+		Surfaces: []killswitches.Surface{SurfaceHostedToolsCall, SurfacePrivateProxyToolsCall, SurfaceAssistantModelCall, SurfaceAssistantMCPToolCall},
 		TransportAdapters: []killswitches.TransportAdapterRegistration{
 			{Key: TransportAdapterHostedJSONRPC, Adapter: killswitches.ResolveTransportDisposition},
 			{Key: TransportAdapterPrivateProxyJSONRPC, Adapter: killswitches.ResolveTransportDisposition},
+			{Key: TransportAdapterAssistantRuntime, Adapter: killswitches.ResolveTransportDisposition},
 		},
 		Coverage: []killswitches.CoverageContract{
 			{
@@ -145,11 +157,11 @@ func NewRegistration(db *pgxpool.Pool) killswitches.Registration {
 				PrincipalSource:  "Validated user-session provenance (mcpidentity), revalidated as an active organization member on every covered call.",
 				ResourceSource:   "Fronting mcp_servers.id resolved from the mcp_endpoint route and validated as a live server in a live project of the organization.",
 				Checkpoint:       "The shared MCP checkpoint after trusted authentication, tenant resolution, and acting-user validation on hosted MCP tools/call dispatch.",
-				ProtectedWork:    "The same hosted MCP tools/call work protected by mcp_tool_execution; no non-MCP AI surface is claimed.",
+				ProtectedWork:    "The same hosted MCP tools/call work protected by mcp_tool_execution.",
 				FailurePolicy:    killswitches.FailurePolicyFailClosed,
 				TransportAdapter: TransportAdapterHostedJSONRPC,
 				EnforcementOwner: EnforcementOwner,
-				IdentityContract: IdentityContractKeyAuthenticatedUserMCPServer,
+				IdentityContract: IdentityContractKeyActingUserAIResource,
 			},
 			{
 				Definition:       DefinitionKeyAIAccess,
@@ -157,11 +169,27 @@ func NewRegistration(db *pgxpool.Pool) killswitches.Registration {
 				PrincipalSource:  "Validated user-session provenance (mcpidentity), revalidated as an active organization member on every covered call.",
 				ResourceSource:   "Fronting mcp_servers.id resolved from the mcp_endpoint route and validated as a live server in a live project of the organization.",
 				Checkpoint:       "The shared MCP checkpoint after trusted authentication, tenant resolution, and acting-user validation on private proxied or remote MCP tools/call forwarding.",
-				ProtectedWork:    "The same private MCP tools/call work protected by mcp_tool_execution; no non-MCP AI surface is claimed.",
+				ProtectedWork:    "The same private MCP tools/call work protected by mcp_tool_execution.",
 				FailurePolicy:    killswitches.FailurePolicyFailClosed,
 				TransportAdapter: TransportAdapterPrivateProxyJSONRPC,
 				EnforcementOwner: EnforcementOwner,
-				IdentityContract: IdentityContractKeyAuthenticatedUserMCPServer,
+				IdentityContract: IdentityContractKeyActingUserAIResource,
+			},
+			{
+				Definition: DefinitionKeyAIAccess, Surface: SurfaceAssistantModelCall,
+				PrincipalSource: "Signed assistant-runtime delegation issued only from a validated concrete Gram user session; active same-organization membership is revalidated for every model call.",
+				ResourceSource:  "assistants.id from the validated runtime principal, revalidated as an active assistant owned by the token organization.",
+				Checkpoint:      "After assistant token validation and before each external model request, including compaction.",
+				ProtectedWork:   "Assistant-runner model requests only. Management, audit, platform administration, and break-glass paths are excluded.",
+				FailurePolicy:   killswitches.FailurePolicyFailClosed, TransportAdapter: TransportAdapterAssistantRuntime, EnforcementOwner: EnforcementOwner, IdentityContract: IdentityContractKeyActingUserAIResource,
+			},
+			{
+				Definition: DefinitionKeyAIAccess, Surface: SurfaceAssistantMCPToolCall,
+				PrincipalSource: "The same signed current-user delegation carried by the assistant token and revalidated for every MCP tools/call.",
+				ResourceSource:  "Active assistants.id from the validated runtime principal; the MCP checkpoint separately evaluates the canonical mcp_server.",
+				Checkpoint:      "Immediately before each covered hosted or private MCP tools/call side effect.",
+				ProtectedWork:   "Assistant-originated hosted and private MCP tools/call only. Native runner filesystem and bun tools are deliberately not claimed.",
+				FailurePolicy:   killswitches.FailurePolicyFailClosed, TransportAdapter: TransportAdapterAssistantRuntime, EnforcementOwner: EnforcementOwner, IdentityContract: IdentityContractKeyActingUserAIResource,
 			},
 		},
 	}
