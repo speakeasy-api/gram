@@ -398,11 +398,12 @@ type OrganizationEnterpriseTrialConversionLifecycleSnapshot struct {
 }
 
 type OrganizationEnterpriseTrialConversionKeySnapshot struct {
-	KeyType           string `json:"key_type"`
-	StoredDisabled    bool   `json:"stored_disabled"`
-	EffectiveDisabled bool   `json:"effective_disabled"`
-	KeyAccessChanged  bool   `json:"key_access_changed"`
-	MonthlyCredits    int64  `json:"monthly_credits"`
+	KeyType           string   `json:"key_type"`
+	DisableCauses     []string `json:"disable_causes"`
+	StoredDisabled    bool     `json:"stored_disabled"`
+	EffectiveDisabled bool     `json:"effective_disabled"`
+	KeyAccessChanged  bool     `json:"key_access_changed"`
+	MonthlyCredits    int64    `json:"monthly_credits"`
 }
 
 type OrganizationEnterpriseTrialConversionSnapshot struct {
