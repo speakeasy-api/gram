@@ -229,6 +229,12 @@ type ResolveAgentSessionStorageAttributesRow struct {
 	ChatOwnerRoleSlugs        []string
 }
 
+// PERFORMANCE NOTE: Any pull request that modifies this query must include query-performance
+// evidence in its description, including EXPLAIN (ANALYZE, BUFFERS) output at the configured
+// maximum subscriber batch size. Profile only against a local database seeded with
+// production-like counts for chats, users, directory profiles, groups, memberships, and roles;
+// include both direct-user and email-fallback matches. Run ANALYZE after seeding and warm the
+// query once before recording repeated measurements.
 func (q *Queries) ResolveAgentSessionStorageAttributes(ctx context.Context, arg ResolveAgentSessionStorageAttributesParams) ([]ResolveAgentSessionStorageAttributesRow, error) {
 	rows, err := q.db.Query(ctx, resolveAgentSessionStorageAttributes,
 		arg.ProjectIds,
