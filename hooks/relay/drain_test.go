@@ -3,9 +3,12 @@ package relay
 import (
 	"bytes"
 	"context"
+	"crypto/ed25519"
+	"crypto/rand"
 	"encoding/json"
 	"errors"
 	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -54,6 +57,18 @@ func seedSpoolEntryWithConfig(t *testing.T, serverURL string, age time.Duration,
 	require.NoError(t, err)
 	require.NoError(t, os.WriteFile(filepath.Join(dir, spoolFileName(time.Now().Add(-age))), b, 0o600))
 	return key
+}
+
+func makeSpoolEntryGoverned(t *testing.T, name string) {
+	t.Helper()
+	entry := readSpoolEntry(t, name)
+	event := delegation.EventPreToolUse
+	entry.Envelope.Source.RawEventName = &event
+	entry.Envelope.Event.Type = components.TypeToolRequested
+	b, err := json.Marshal(entry)
+	require.NoError(t, err)
+	dir := filepath.Join(os.Getenv("XDG_STATE_HOME"), "gram", "hooks", "spool")
+	require.NoError(t, os.WriteFile(filepath.Join(dir, name), b, 0o600))
 }
 
 func drainEnv(t *testing.T) {
@@ -314,6 +329,71 @@ func TestDrainUsesConfigOrgKeyFallback(t *testing.T) {
 	fs.mu.Lock()
 	defer fs.mu.Unlock()
 	require.Equal(t, "org-key-1", fs.headers[0].Get("Gram-Key"))
+}
+
+// A transport fallback must not discard the proof enrollment needed to mint
+// assertions for later governed entries in the same deployment backlog.
+func TestDrainOrgFallbackPreservesProofForLaterGovernedEntry(t *testing.T) {
+	setSpoolStateHome(t)
+	t.Setenv("GRAM_HOOKS_API_KEY", "")
+	requests := 0
+	fs := newFakeServer(t, func(components.IngestRequestBody) (int, decision) {
+		requests++
+		if requests == 1 {
+			return http.StatusUnauthorized, decision{}
+		}
+		return http.StatusOK, decision{Decision: "allow"}
+	})
+	authFile := filepath.Join(t.TempDir(), "hooks-auth.env")
+	t.Setenv("GRAM_HOOKS_AUTH_FILE", authFile)
+	_, privateKey, err := ed25519.GenerateKey(rand.Reader)
+	require.NoError(t, err)
+	require.NoError(t, writeAuth(creds{ServerURL: fs.URL, APIKey: "cached-key", Project: "default", Org: "", RefreshToken: "refresh", ProofPrivateKey: delegation.EncodePrivateKey(privateKey), ContractVersion: delegation.ContractVersion, Source: credCache}))
+	cfgPath := filepath.Join(t.TempDir(), "speakeasy.json")
+	require.NoError(t, os.WriteFile(cfgPath, []byte(`{"server_url":"`+fs.URL+`","project":"default","hooks_api_key":"org-key"}`), 0o600))
+	seedSpoolEntryWithConfig(t, fs.URL, 2*time.Hour, "ungoverned", cfgPath)
+	seedSpoolEntryWithConfig(t, fs.URL, time.Hour, "governed", cfgPath)
+	files := spoolFiles(t)
+	require.Len(t, files, 2)
+	makeSpoolEntryGoverned(t, files[1])
+
+	summary := Drain(t.Context())
+	require.Equal(t, DrainSummary{Replayed: 2, Remaining: 0}, summary)
+	require.Equal(t, 3, fs.count(), "cached rejection, org fallback, then governed replay")
+	fs.mu.Lock()
+	defer fs.mu.Unlock()
+	require.Equal(t, "org-key", fs.headers[2].Get("Gram-Key"))
+	require.NotEmpty(t, fs.headers[2].Get("X-Gram-Acting-User"))
+}
+
+func TestDrainAbortsOnMintFailure(t *testing.T) {
+	setSpoolStateHome(t)
+	t.Setenv("GRAM_HOOKS_API_KEY", "")
+	ingestRequests := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/rpc/cliAuth.delegateHooksActingUser" {
+			w.WriteHeader(http.StatusServiceUnavailable)
+			return
+		}
+		ingestRequests++
+		w.WriteHeader(http.StatusOK)
+	}))
+	t.Cleanup(server.Close)
+	authFile := filepath.Join(t.TempDir(), "hooks-auth.env")
+	t.Setenv("GRAM_HOOKS_AUTH_FILE", authFile)
+	_, privateKey, err := ed25519.GenerateKey(rand.Reader)
+	require.NoError(t, err)
+	require.NoError(t, writeAuth(creds{ServerURL: server.URL, APIKey: "cached-key", Project: "default", Org: "", RefreshToken: "refresh", ProofPrivateKey: delegation.EncodePrivateKey(privateKey), ContractVersion: delegation.ContractVersion, Source: credCache}))
+	seedSpoolEntry(t, server.URL, time.Hour, "governed")
+	files := spoolFiles(t)
+	require.Len(t, files, 1)
+	makeSpoolEntryGoverned(t, files[0])
+
+	summary := Drain(t.Context())
+	require.True(t, summary.Aborted)
+	require.Equal(t, 1, summary.Remaining)
+	require.Zero(t, summary.Skipped)
+	require.Zero(t, ingestRequests)
 }
 
 // TestMaybeSpawnDrainAfterRecovery drives the real provider path: sends fail

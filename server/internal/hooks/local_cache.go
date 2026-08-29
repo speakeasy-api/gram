@@ -194,3 +194,31 @@ func (c *localSessionCache) SetIfAbsent(ctx context.Context, key string, value a
 	}
 	return stored, nil
 }
+
+// AcquireLease preserves distributed evaluation coordination through the local
+// session metadata wrapper.
+func (c *localSessionCache) AcquireLease(ctx context.Context, key, owner string, ttl time.Duration) (bool, error) {
+	leases, ok := c.Cache.(cache.LeaseCache)
+	if !ok {
+		return false, errors.New("underlying cache does not support leases")
+	}
+	acquired, err := leases.AcquireLease(ctx, key, owner, ttl)
+	if err != nil {
+		return false, fmt.Errorf("acquire cache lease: %w", err)
+	}
+	return acquired, nil
+}
+
+// ReleaseLeaseIfOwner preserves ownership-safe lease release through the local
+// session metadata wrapper.
+func (c *localSessionCache) ReleaseLeaseIfOwner(ctx context.Context, key, owner string) (bool, error) {
+	leases, ok := c.Cache.(cache.LeaseCache)
+	if !ok {
+		return false, errors.New("underlying cache does not support leases")
+	}
+	released, err := leases.ReleaseLeaseIfOwner(ctx, key, owner)
+	if err != nil {
+		return false, fmt.Errorf("release cache lease: %w", err)
+	}
+	return released, nil
+}

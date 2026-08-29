@@ -198,6 +198,36 @@ func TestIngest_NoCredentialsFailsOpen(t *testing.T) {
 	require.Equal(t, "allow", result.Decision)
 }
 
+func TestIngest_NoCredentialsGovernedShapeTamperingFailsClosed(t *testing.T) {
+	t.Parallel()
+
+	_, ti := newTestHooksService(t)
+	for name, mutate := range map[string]func(*gen.IngestPayload){
+		"recognized raw event with malformed canonical type": func(payload *gen.IngestPayload) {
+			payload.Event.Type = "message.created"
+		},
+		"acting-user governed type with stripped raw event": func(payload *gen.IngestPayload) {
+			payload.Source.RawEventName = nil
+			assertion, contract := "assertion", delegation.ContractVersion
+			payload.ActingUserAssertion = &assertion
+			payload.ActingUserContractVersion = &contract
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			payload := canonicalIngestPayload(delegation.ProviderClaude, "prompt.submitted", "tampered-"+uuid.NewString())
+			event := delegation.EventUserPromptSubmit
+			payload.Source.RawEventName = &event
+			mutate(payload)
+
+			result, err := ti.service.Ingest(t.Context(), payload)
+			require.NoError(t, err)
+			require.Equal(t, "deny", result.Decision)
+			require.Equal(t, "ai_access_identity_unavailable", *result.Reason)
+		})
+	}
+}
+
 func TestIngest_NoCredentialsReplayAndBackfillCannotBypassAIAccess(t *testing.T) {
 	t.Parallel()
 

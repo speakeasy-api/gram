@@ -74,15 +74,16 @@ func (l *loginFlow) Run(ctx context.Context, force bool) error {
 	if l.cfg.ConfigError != "" {
 		return fmt.Errorf("cannot read plugin config at %q (%s); reinstall the Speakeasy hooks plugin", l.cfg.ConfigPath, l.cfg.ConfigError)
 	}
+	// Validate the destination before the already-configured fast path. An env
+	// key must not turn an insecure non-loopback deployment into a successful
+	// no-op when every send would refuse that destination.
+	if insecureServerURL(l.cfg.ServerURL) {
+		return fmt.Errorf("refusing insecure Gram server URL %q; use https:// (or an http://localhost dev server)", l.cfg.ServerURL)
+	}
 	if c, ok := resolveAuth(l.cfg); ok && !force {
 		if c.Source == credEnv || (!reauthNeeded() && c.Source != credOrg && delegationReady(c)) {
 			return nil
 		}
-	}
-	// A key minted for a plaintext non-loopback server would be refused by
-	// every send; don't open a browser to it in the first place.
-	if insecureServerURL(l.cfg.ServerURL) {
-		return fmt.Errorf("refusing insecure Gram server URL %q; use https:// (or an http://localhost dev server)", l.cfg.ServerURL)
 	}
 	if !l.cfg.BrowserLogin {
 		return errors.New("browser sign-in is disabled for this organization; set GRAM_HOOKS_API_KEY to a hooks-scoped key")

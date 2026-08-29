@@ -80,12 +80,35 @@ func governedHook(payload *gen.IngestPayload) (provider, event string, governed 
 		return "", "", false
 	}
 	provider = strings.ToLower(strings.TrimSpace(payload.Source.Adapter))
-	event = strings.TrimSpace(conv.PtrValOr(payload.Source.RawEventName, ""))
-	return provider, event, delegation.Approved(provider, event)
+	rawEvent := strings.TrimSpace(conv.PtrValOr(payload.Source.RawEventName, ""))
+	if delegation.Approved(provider, rawEvent) {
+		return provider, rawEvent, true
+	}
+	// A different native event may legitimately normalize to the same canonical
+	// type. It remains outside this checkpoint unless the request carries
+	// acting-user material, which only governed delivery should have. Once that
+	// evidence exists, malformed/stripped binding fields must fail closed.
+	governanceEvidence := strings.TrimSpace(conv.PtrValOr(payload.ActingUserAssertion, "")) != "" ||
+		strings.TrimSpace(conv.PtrValOr(payload.ActingUserContractVersion, "")) != ""
+	if !governanceEvidence {
+		return "", "", false
+	}
+	if payload.Event == nil {
+		return provider, rawEvent, true
+	}
+	switch strings.TrimSpace(payload.Event.Type) {
+	case "prompt.submitted":
+		event = delegation.EventUserPromptSubmit
+	case "tool.requested":
+		event = delegation.EventPreToolUse
+	default:
+		return provider, rawEvent, true
+	}
+	return provider, event, true
 }
 
 func validGovernedHookPayload(payload *gen.IngestPayload, event string) bool {
-	if payload == nil || payload.Event == nil {
+	if payload == nil || payload.Event == nil || payload.Source == nil || strings.TrimSpace(conv.PtrValOr(payload.Source.RawEventName, "")) != event {
 		return false
 	}
 	canonicalType := strings.TrimSpace(payload.Event.Type)

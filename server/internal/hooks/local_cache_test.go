@@ -32,6 +32,28 @@ func TestLocalSessionCache_PreservesConditionalWrites(t *testing.T) {
 	require.Equal(t, "first", value)
 }
 
+func TestLocalSessionCache_PreservesLeases(t *testing.T) {
+	t.Parallel()
+	_, ti := newTestHooksService(t)
+	localCache := NewLocalSessionCache(cache.NewRedisCacheAdapter(ti.redisClient), ti.conn)
+	leases, ok := localCache.(cache.LeaseCache)
+	require.True(t, ok)
+
+	key := "lease-key:" + uuid.NewString()
+	acquired, err := leases.AcquireLease(t.Context(), key, "owner-1", time.Minute)
+	require.NoError(t, err)
+	require.True(t, acquired)
+	acquired, err = leases.AcquireLease(t.Context(), key, "owner-2", time.Minute)
+	require.NoError(t, err)
+	require.False(t, acquired)
+	released, err := leases.ReleaseLeaseIfOwner(t.Context(), key, "owner-2")
+	require.NoError(t, err)
+	require.False(t, released)
+	released, err = leases.ReleaseLeaseIfOwner(t.Context(), key, "owner-1")
+	require.NoError(t, err)
+	require.True(t, released)
+}
+
 func TestLocalSessionCache_FallbackIncludesOrganizationUser(t *testing.T) {
 	t.Parallel()
 

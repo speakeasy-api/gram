@@ -64,8 +64,8 @@ const (
 	mintNonceKeyNamespace = "cliauth:hooks-mint-nonce:v1:"
 
 	// Keep a proof replay record for the full interval in which the same signed
-	// request can be accepted. Exact retries then return the original assertion,
-	// even after that assertion expires, instead of extending its authority.
+	// request can be accepted. Exact retries reuse a live assertion and may
+	// replace an expired one without extending the replay-record window.
 	mintReplayTTL = 2*hooksacting.ProofClockSkew + hooksacting.AssertionLifetime
 
 	// pkceMethodS256 is the only PKCE challenge method this flow accepts.
@@ -102,6 +102,24 @@ if existing then
 end
 redis.call("SET", KEYS[1], ARGV[1], "PX", ARGV[2])
 return ARGV[1]
+`)
+
+// refreshMintNonceScript replaces one unusable assertion only when the exact
+// replay record is still current, preserving the original replay TTL.
+var refreshMintNonceScript = redis.NewScript(`
+local existing = redis.call("GET", KEYS[1])
+if not existing then
+  return ""
+end
+if existing ~= ARGV[1] then
+  return existing
+end
+local ttl = redis.call("PTTL", KEYS[1])
+if ttl <= 0 then
+  return ""
+end
+redis.call("SET", KEYS[1], ARGV[2], "PX", ttl)
+return ARGV[2]
 `)
 
 type Service struct {
@@ -466,6 +484,16 @@ func (s *Service) consumeMintNonce(ctx context.Context, identity hooksacting.Ref
 	var stored mintReplayRecord
 	if err := json.Unmarshal([]byte(storedRaw), &stored); err != nil || stored.Fingerprint != record.Fingerprint || stored.Assertion == "" {
 		return "", errors.New("conflicting or invalid mint nonce replay")
+	}
+	if _, err := s.actingSigner.AssertionExpiresIn(stored.Assertion); err == nil {
+		return stored.Assertion, nil
+	}
+	storedRaw, err = refreshMintNonceScript.Run(ctx, s.redis, []string{mintNonceKeyNamespace + hex.EncodeToString(replayKeyHash[:])}, storedRaw, string(raw)).Text()
+	if err != nil {
+		return "", fmt.Errorf("refresh hooks mint replay assertion: %w", err)
+	}
+	if err := json.Unmarshal([]byte(storedRaw), &stored); err != nil || stored.Fingerprint != record.Fingerprint || stored.Assertion == "" {
+		return "", errors.New("conflicting or invalid refreshed mint nonce replay")
 	}
 	return stored.Assertion, nil
 }

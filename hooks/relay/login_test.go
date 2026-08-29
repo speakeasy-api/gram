@@ -167,6 +167,13 @@ func TestLoginWithExplicitEnvironmentKeyIsAlreadyConfigured(t *testing.T) {
 	require.NoError(t, NewRelay(cfg).Login(t.Context(), false))
 }
 
+func TestLoginWithEnvironmentKeyRejectsInsecureServer(t *testing.T) {
+	t.Setenv("GRAM_HOOKS_AUTH_FILE", filepath.Join(t.TempDir(), "hooks-auth.env"))
+	t.Setenv("GRAM_HOOKS_API_KEY", "explicit-key")
+	cfg := Config{ServerURL: "http://gram.example.test", ProjectSlug: "default", OrgID: "", HooksAPIKey: "", BrowserLogin: false, Nonblocking: false, DebugLog: "", ConfigPath: "", ConfigError: ""}
+	require.ErrorContains(t, NewRelay(cfg).Login(t.Context(), false), "refusing insecure Gram server URL")
+}
+
 func TestLoginDisabledPointsToManualKey(t *testing.T) {
 	t.Setenv("GRAM_HOOKS_AUTH_FILE", filepath.Join(t.TempDir(), "hooks-auth.env"))
 	t.Setenv("GRAM_HOOKS_API_KEY", "")

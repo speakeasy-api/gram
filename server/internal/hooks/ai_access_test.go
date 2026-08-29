@@ -255,8 +255,47 @@ func TestHookAIAccessExclusionsReplayAndBackfillRequireSignedObservationalBindin
 		signed.Replayed = &flags.replayed
 		result, err = ti.service.Ingest(ctx, signed)
 		require.NoError(t, err, name)
-		require.Equal(t, "allow", result.Decision, name)
+		require.Equal(t, "deny", result.Decision, name)
+		require.Equal(t, "ai_access_observational", *result.Reason, name)
 	}
+	require.Empty(t, evaluator.requests)
+}
+
+func TestHookAIAccessObservationalMarkerTamperingFailsClosed(t *testing.T) {
+	t.Parallel()
+	noMatch, err := killswitches.NewNoMatchResult(killswitches.NoMatchReasonNoPrescription)
+	require.NoError(t, err)
+	ctx, ti, evaluator, signer, privateKey := setupHookAIAccess(t, noMatch)
+
+	liveAssertion := signedHookPayload(t, ctx, signer, privateKey, delegation.ProviderClaude, delegation.EventPreToolUse, false)
+	replayed := true
+	liveAssertion.Replayed = &replayed
+	result, err := ti.service.Ingest(ctx, liveAssertion)
+	require.NoError(t, err)
+	require.Equal(t, "deny", result.Decision)
+	require.Equal(t, "ai_access_identity_unavailable", *result.Reason)
+
+	observationalAssertion := signedHookPayload(t, ctx, signer, privateKey, delegation.ProviderClaude, delegation.EventPreToolUse, true)
+	result, err = ti.service.Ingest(ctx, observationalAssertion)
+	require.NoError(t, err)
+	require.Equal(t, "deny", result.Decision)
+	require.Equal(t, "ai_access_identity_unavailable", *result.Reason)
+
+	observationalAssertion = signedHookPayload(t, ctx, signer, privateKey, delegation.ProviderClaude, delegation.EventPreToolUse, true)
+	observationalAssertion.Replayed = &replayed
+	observationalAssertion.Source.RawEventName = nil
+	result, err = ti.service.Ingest(ctx, observationalAssertion)
+	require.NoError(t, err)
+	require.Equal(t, "deny", result.Decision)
+	require.Equal(t, "ai_access_identity_unavailable", *result.Reason)
+
+	observationalAssertion = signedHookPayload(t, ctx, signer, privateKey, delegation.ProviderClaude, delegation.EventPreToolUse, true)
+	observationalAssertion.Replayed = &replayed
+	observationalAssertion.Source.Adapter = "cursor"
+	result, err = ti.service.Ingest(ctx, observationalAssertion)
+	require.NoError(t, err)
+	require.Equal(t, "deny", result.Decision)
+	require.Equal(t, "ai_access_identity_unavailable", *result.Reason)
 	require.Empty(t, evaluator.requests)
 }
 

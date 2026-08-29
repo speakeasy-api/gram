@@ -6,6 +6,7 @@ import (
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"testing"
 	"time"
 
@@ -82,6 +83,30 @@ func TestDelegateHooksActingUserRequiresCurrentMembershipAndProof(t *testing.T) 
 		require.NoError(collect, ttlErr)
 		require.Less(collect, ttlAfterRetry, ttlBeforeRetry, "retry must not extend nonce expiry")
 	}, time.Second, 10*time.Millisecond)
+
+	// A replay record outlives its short assertion. An exact request may
+	// replace an unusable stored assertion without resetting that record's TTL.
+	storedRaw, err := ti.redis.Get(ctx, nonceKey).Bytes()
+	require.NoError(t, err)
+	var staleRecord map[string]any
+	require.NoError(t, json.Unmarshal(storedRaw, &staleRecord))
+	staleRecord["assertion"] = "expired-assertion"
+	storedRaw, err = json.Marshal(staleRecord)
+	require.NoError(t, err)
+	ttlBeforeRefresh, err := ti.redis.PTTL(ctx, nonceKey).Result()
+	require.NoError(t, err)
+	require.NoError(t, ti.redis.Set(ctx, nonceKey, storedRaw, ttlBeforeRefresh).Err())
+	require.EventuallyWithT(t, func(collect *assert.CollectT) {
+		refreshed, refreshErr := ti.service.DelegateHooksActingUser(ctx, payload)
+		require.NoError(collect, refreshErr)
+		if refreshErr == nil {
+			require.NotEqual(collect, "expired-assertion", refreshed.Assertion)
+			require.Positive(collect, refreshed.ExpiresIn)
+		}
+	}, time.Second, 10*time.Millisecond)
+	ttlAfterRefresh, err := ti.redis.PTTL(ctx, nonceKey).Result()
+	require.NoError(t, err)
+	require.Less(t, ttlAfterRefresh, ttlBeforeRefresh, "assertion refresh must not extend nonce expiry")
 
 	conflictRequest := request
 	conflictRequest.IdempotencyKey = uuid.NewString()

@@ -142,10 +142,12 @@ func drainSpool(ctx context.Context, dir string) DrainSummary {
 		}
 		assertion := ""
 		if binding, governed := governedReplayBinding(entry); governed {
-			assertion, err = mintActingUserAssertion(ctx, entry.ServerURL, a.c, binding, entry.IdempotencyKey)
+			assertion, err = mintActingUserAssertion(ctx, entry.ServerURL, a.proof, binding, entry.IdempotencyKey)
 			if err != nil {
-				s.Skipped++
-				continue
+				// Mint failures are not event failures. Preserve this entry and
+				// chronological ordering; a later run can retry after recovery.
+				s.Aborted = true
+				break
 			}
 		}
 		res := cl.sendWithAssertion(ctx, a.c, entry.Envelope, entry.IdempotencyKey, assertion, entry.Backfilled)
@@ -161,11 +163,11 @@ func drainSpool(ctx context.Context, dir string) DrainSummary {
 				res = cl.sendWithAssertion(ctx, org, entry.Envelope, entry.IdempotencyKey, assertion, entry.Backfilled)
 				if !res.authRejected {
 					replayCreds = org
-					auths[key] = drainAuth{c: org, ok: true, orgKey: a.orgKey}
+					auths[key] = drainAuth{c: org, proof: a.proof, ok: true, orgKey: a.orgKey}
 				}
 			}
 			if res.authRejected {
-				auths[key] = drainAuth{c: creds{ServerURL: "", APIKey: "", Project: "", Email: "", Org: "", Source: credEnv}, ok: false, orgKey: ""}
+				auths[key] = drainAuth{c: creds{ServerURL: "", APIKey: "", Project: "", Email: "", Org: "", Source: credEnv}, proof: creds{}, ok: false, orgKey: ""}
 				s.Skipped++
 				continue
 			}
@@ -349,8 +351,9 @@ func rawPresent(m json.RawMessage) bool {
 }
 
 type drainAuth struct {
-	c  creds
-	ok bool
+	c     creds
+	proof creds
+	ok    bool
 	// orgKey is the config file's shared key, kept aside for the
 	// auth-rejection fallback (mirroring deliver's org retry).
 	orgKey string
@@ -374,7 +377,7 @@ func resolveDrainAuth(entry spoolEntry, key string, memo map[string]drainAuth) d
 	if a, ok := memo[key]; ok {
 		return a
 	}
-	a := drainAuth{c: creds{ServerURL: "", APIKey: "", Project: "", Email: "", Org: "", Source: credEnv}, ok: false, orgKey: ""}
+	a := drainAuth{c: creds{ServerURL: "", APIKey: "", Project: "", Email: "", Org: "", Source: credEnv}, proof: creds{}, ok: false, orgKey: ""}
 	if !insecureServerURL(entry.ServerURL) {
 		cfg := Config{ServerURL: entry.ServerURL, SiteURL: "", ProjectSlug: entry.ProjectSlug, OrgID: entry.OrgID, HooksAPIKey: "", BrowserLogin: false, Nonblocking: false, DebugLog: "", ConfigPath: entry.ConfigPath, ConfigError: ""}
 		if entry.ConfigPath != "" {
@@ -385,12 +388,15 @@ func resolveDrainAuth(entry spoolEntry, key string, memo map[string]drainAuth) d
 		}
 		a.orgKey = cfg.HooksAPIKey
 		a.c, a.ok = resolveAuth(cfg)
+		if a.ok && a.c.Source == credCache {
+			a.proof = a.c
+		}
 		if a.ok && a.c.Source == credEnv {
 			if envURL := strings.TrimRight(strings.TrimSpace(os.Getenv("GRAM_HOOKS_SERVER_URL")), "/"); envURL != "" && envURL != entry.ServerURL {
 				// The env key belongs to the env-named deployment; resolve
 				// this entry from the cache or org key instead.
 				if cached, ok := readCachedAuth(cfg); ok {
-					a.c, a.ok = cached, true
+					a.c, a.proof, a.ok = cached, cached, true
 				} else if cfg.HooksAPIKey != "" {
 					a.c, a.ok = creds{ServerURL: cfg.ServerURL, APIKey: cfg.HooksAPIKey, Project: cfg.ProjectSlug, Email: "", Org: cfg.OrgID, Source: credOrg}, true
 				} else {

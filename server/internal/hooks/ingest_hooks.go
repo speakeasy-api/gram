@@ -193,8 +193,8 @@ func (s *Service) ingest(ctx context.Context, payload *gen.IngestPayload) (res *
 			attr.SlogHookSource(source),
 			attr.SlogHookEvent(eventType),
 		)
-		_, event, governed := governedHook(payload)
-		if governed && validGovernedHookPayload(payload, event) {
+		_, _, governed := governedHook(payload)
+		if governed {
 			return &AuthenticatedIngestResult{
 				Result: canonicalDenyResultWithReason("ai_access_identity_unavailable", aiAccessIdentityFailureMessage),
 				Actor:  ResolvedActor{UserID: "", Email: ""},
@@ -230,6 +230,7 @@ func (s *Service) ingest(ctx context.Context, payload *gen.IngestPayload) (res *
 	}
 
 	var aiDecision hookAIAccessDecision
+	observationalGoverned := false
 	_, governedEvent, isGoverned := governedHook(payload)
 	if isGoverned {
 		switch {
@@ -261,7 +262,11 @@ func (s *Service) ingest(ctx context.Context, payload *gen.IngestPayload) (res *
 				verified, failure := s.aiAccess.Verify(ctx, payload, authCtx)
 				if failure.deny {
 					aiDecision = failure
-				} else if !verified.observational {
+				} else if verified.observational {
+					// Replay/backfill delivery is telemetry-only. Its signed marker
+					// excludes policy evaluation but can never authorize live work.
+					observationalGoverned = true
+				} else {
 					release, cachedDecision, cachedPrincipal, cached, coordinationFailed := s.awaitHookAIAccessEvaluation(ctx, payload, authCtx.ActiveOrganizationID)
 					switch {
 					case coordinationFailed:
@@ -287,7 +292,7 @@ func (s *Service) ingest(ctx context.Context, payload *gen.IngestPayload) (res *
 	blockReason, userReason := "", ""
 	if aiDecision.deny {
 		blockReason, userReason = aiDecision.reason, aiDecision.message
-	} else {
+	} else if !observationalGoverned {
 		blockReason, userReason = s.evaluateCanonicalHook(ctx, payload, authCtx, actor, timestamp)
 	}
 	skillCapture, observed, observationErr := s.recordSkillActivation(ctx, payload, authCtx, actor, timestamp, blockReason)
@@ -343,6 +348,12 @@ func (s *Service) ingest(ctx context.Context, payload *gen.IngestPayload) (res *
 	if blockReason != "" {
 		return &AuthenticatedIngestResult{
 			Result: withBlockEffect(blockEffects, s.withOrgSettings(ctx, authCtx.ActiveOrganizationID, canonicalDenyResultWithReason(aiDecision.reason, userReason), skillCapture)),
+			Actor:  ResolvedActor(actor),
+		}, nil
+	}
+	if observationalGoverned {
+		return &AuthenticatedIngestResult{
+			Result: s.withOrgSettings(ctx, authCtx.ActiveOrganizationID, canonicalDenyResultWithReason("ai_access_observational", "Recorded hook delivery cannot authorize an AI action."), skillCapture),
 			Actor:  ResolvedActor(actor),
 		}, nil
 	}
