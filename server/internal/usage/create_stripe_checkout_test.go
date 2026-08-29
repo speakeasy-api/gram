@@ -990,7 +990,7 @@ func TestCreateStripeCheckoutFirstConversionIsAtomicAndReceiptReplayIsIdempotent
 	ti := newStripeCheckoutTestInstance(t)
 	provisioner := &checkoutLifecycleProvisioner{Development: openrouter.NewDevelopment(""), db: ti.db, organizationID: ti.orgID}
 	ti.service.openRouter = provisioner
-	trialEnd := time.Now().UTC().Add(7 * 24 * time.Hour)
+	trialEnd := time.Now().UTC().Add(8 * 24 * time.Hour)
 	require.NoError(t, trialsrepo.New(ti.db).CreateTrial(t.Context(), trialsrepo.CreateTrialParams{
 		OrganizationID: ti.orgID,
 		Tier:           "enterprise",
