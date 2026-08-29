@@ -178,9 +178,9 @@ func classifyHTTPError(ctx context.Context, status int, header http.Header, body
 		if looksLikeContentPolicy(strings.TrimSpace(string(body))) {
 			return &HTTPError{StatusCode: status, Err: ErrContentPolicy}
 		}
-		return &HTTPError{StatusCode: status}
+		return &HTTPError{StatusCode: status, Err: nil}
 	default:
-		return &HTTPError{StatusCode: status}
+		return &HTTPError{StatusCode: status, Err: nil}
 	}
 }
 
