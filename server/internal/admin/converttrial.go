@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/mail"
+	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -243,10 +245,18 @@ func enterpriseTrialConversionResult(organizationID string, convertedAt pgtype.T
 
 func enterpriseTrialConversionAuditActor(ctx context.Context) (urn.Principal, *string) {
 	actor, displayName, operatorEmail := adminActor(ctx)
-	if displayName != nil && operatorEmail != nil && *displayName == *operatorEmail {
-		displayName = nil
+	if displayName == nil {
+		return actor, nil
 	}
-	return actor, displayName
+
+	normalized := strings.TrimSpace(*displayName)
+	if operatorEmail != nil && strings.EqualFold(normalized, strings.TrimSpace(*operatorEmail)) {
+		return actor, nil
+	}
+	if address, err := mail.ParseAddress(normalized); err == nil && strings.Contains(address.Address, "@") {
+		return actor, nil
+	}
+	return actor, &normalized
 }
 
 func pgTimePtr(value pgtype.Timestamptz) *time.Time {

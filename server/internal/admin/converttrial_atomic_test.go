@@ -32,15 +32,32 @@ func TestEnterpriseTrialConversionAuditActor_FallsBackWithoutSafeInternalID(t *t
 	require.Nil(t, display)
 }
 
-func TestEnterpriseTrialConversionAuditActor_DoesNotUseEmailAsDisplayName(t *testing.T) {
+func TestEnterpriseTrialConversionAuditActor_UsesOnlySafeHumanDisplayNames(t *testing.T) {
 	t.Parallel()
-	ctx := contextvalues.SetAdminAuthContext(t.Context(), &contextvalues.AdminAuthContext{
-		OIDCSubject: "staff-subject",
-		Email:       "staff@example.test",
-	})
-	actor, display := enterpriseTrialConversionAuditActor(ctx)
-	require.Equal(t, "staff-subject", actor.ID)
-	require.Nil(t, display)
+	tests := []struct {
+		name        string
+		authName    string
+		email       string
+		wantDisplay *string
+	}{
+		{name: "email fallback", email: "staff@example.test"},
+		{name: "email with different casing and surrounding whitespace", authName: "  Staff@Example.Test  ", email: "staff@example.test"},
+		{name: "arbitrary email-shaped name", authName: "alias@other.example", email: "staff@example.test"},
+		{name: "valid human name is normalized", authName: "  Staff Operator  ", email: "staff@example.test", wantDisplay: new("Staff Operator")},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			ctx := contextvalues.SetAdminAuthContext(t.Context(), &contextvalues.AdminAuthContext{
+				OIDCSubject: "staff-subject",
+				Name:        tt.authName,
+				Email:       tt.email,
+			})
+			actor, display := enterpriseTrialConversionAuditActor(ctx)
+			require.Equal(t, "staff-subject", actor.ID)
+			require.Equal(t, tt.wantDisplay, display)
+		})
+	}
 }
 
 func TestConversionTrialAuditSnapshot_CanonicalStatus(t *testing.T) {
