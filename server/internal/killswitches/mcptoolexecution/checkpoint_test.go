@@ -53,7 +53,7 @@ func TestCheckpointEvaluatesEveryCoveredCallWithRealEvaluator(t *testing.T) {
 	projectB := insertProject(t, conn, orgID, "checkpoint-b", nil)
 	serverA := insertMCPServer(t, conn, orgID, projectA, nil)
 	serverB := insertMCPServer(t, conn, orgID, projectB, nil)
-	ctx := mcpidentity.WithIdentity(t.Context(), mcpidentity.AuthenticatedUser(userID))
+	ctx := testIdentityContext(t, mcpidentity.KindUserSession, userID)
 
 	evaluate := func(serverID uuid.UUID) killswitches.TransportDisposition {
 		t.Helper()
@@ -120,7 +120,7 @@ func TestCheckpointPreservesUnsupportedIdentityAndFailsClosedOnCoverageFailure(t
 
 	// API-key provenance is deliberately unsupported and never becomes a
 	// concrete user when the covered route has its canonical resource.
-	apiKeyCtx := mcpidentity.WithIdentity(t.Context(), mcpidentity.Identity{Kind: mcpidentity.KindAPIKey})
+	apiKeyCtx := testIdentityContext(t, mcpidentity.KindAPIKey, "")
 	disposition, err := checkpoint.Evaluate(apiKeyCtx, orgID, serverID.String())
 	require.NoError(t, err)
 	require.Equal(t, killswitches.TransportDispositionContinue, disposition.Kind())
@@ -136,7 +136,7 @@ func TestCheckpointPreservesUnsupportedIdentityAndFailsClosedOnCoverageFailure(t
 	userID := "user_" + uuid.NewString()
 	insertUser(t, conn, userID, nil)
 	insertMembership(t, conn, orgID, userID, nil)
-	userCtx := mcpidentity.WithIdentity(t.Context(), mcpidentity.AuthenticatedUser(userID))
+	userCtx := testIdentityContext(t, mcpidentity.KindUserSession, userID)
 	disposition, err = checkpoint.Evaluate(userCtx, orgID, "")
 	require.Error(t, err)
 	require.Equal(t, killswitches.TransportDispositionInfrastructureRejection, disposition.Kind())
@@ -198,7 +198,7 @@ func TestCheckpointBoundsAllIdentityAndResourceResolution(t *testing.T) {
 		failurePolicy: killswitches.FailurePolicyFailClosed,
 		timeout:       20 * time.Millisecond,
 	}
-	ctx := mcpidentity.WithIdentity(t.Context(), mcpidentity.AuthenticatedUser("user_example"))
+	ctx := testIdentityContext(t, mcpidentity.KindUserSession, "user_example")
 	started := time.Now()
 	disposition, err := checkpoint.Evaluate(ctx, "org_example", uuid.NewString())
 	require.ErrorIs(t, err, context.DeadlineExceeded)
@@ -223,7 +223,7 @@ func TestCheckpointReturnsEvaluatorInfrastructureFailureWithoutMatch(t *testing.
 	insertMembership(t, conn, orgID, userID, nil)
 	projectID := insertProject(t, conn, orgID, "evaluator-failure", nil)
 	serverID := insertMCPServer(t, conn, orgID, projectID, nil)
-	ctx := mcpidentity.WithIdentity(t.Context(), mcpidentity.AuthenticatedUser(userID))
+	ctx := testIdentityContext(t, mcpidentity.KindUserSession, userID)
 
 	disposition, err := checkpoint.Evaluate(ctx, orgID, serverID.String())
 	require.ErrorIs(t, err, cause)

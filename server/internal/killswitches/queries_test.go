@@ -39,6 +39,7 @@ type evaluationFixture struct {
 	Version        int64
 	State          string
 	Scope          string
+	Immediate      bool
 	StartsAt       time.Time
 	ExpiresAt      *time.Time
 	ActivatedAt    *time.Time
@@ -91,6 +92,11 @@ func TestEvaluateCurrentPrescriptionsIntegration(t *testing.T) {
 	row, err := evaluate([]string{"user"}, []string{"user:dynamic"}, []string{"block-tools"}, "tool:created-after-activation")
 	require.NoError(t, err)
 	require.Equal(t, "Dynamic all.", row.ExternalNote)
+
+	insert(evaluationFixture{ID: evaluationUUID(24), DefinitionKey: "block-tools", PrincipalKind: "user", PrincipalKey: "user:immediate", Version: 1, State: "active", Scope: "selected", Immediate: true, ExpiresAt: &activeUntil, ActivatedAt: &activated, ExternalNote: "Immediate.", Resources: []string{"tool:immediate"}})
+	row, err = evaluate([]string{"user"}, []string{"user:immediate"}, []string{"block-tools"}, "tool:immediate")
+	require.NoError(t, err)
+	require.Equal(t, "Immediate.", row.ExternalNote)
 
 	insert(evaluationFixture{ID: evaluationUUID(4), DefinitionKey: "block-tools", PrincipalKind: "user", PrincipalKey: "user:scope", Version: 1, State: "active", Scope: "all", StartsAt: past, ExpiresAt: &activeUntil, ActivatedAt: &newerActivation, ExternalNote: "All fallback."})
 	insert(evaluationFixture{ID: evaluationUUID(5), DefinitionKey: "block-tools", PrincipalKind: "user", PrincipalKey: "user:scope", Version: 1, State: "active", Scope: "selected", StartsAt: older, ExpiresAt: &activeUntil, ActivatedAt: &activated, ExternalNote: "Exact selected note.", Resources: []string{"tool:scope"}})
@@ -276,7 +282,7 @@ func TestKillswitchEvaluationIntervalUsesExactDatabaseTimeBoundaries(t *testing.
 	require.ErrorIs(t, err, pgx.ErrNoRows)
 	require.Contains(t, capture.query, "WITH evaluation_clock AS MATERIALIZED")
 	require.Equal(t, 1, strings.Count(capture.query, "clock_timestamp()"))
-	require.Contains(t, capture.query, "version.starts_at <= evaluation_clock.database_now")
+	require.Contains(t, capture.query, "version.starts_at IS NULL OR version.starts_at <= evaluation_clock.database_now")
 	require.Contains(t, capture.query, "version.expires_at > evaluation_clock.database_now")
 
 	var startsAtBoundaryMatches, expiresAtBoundaryMatches bool
@@ -309,11 +315,15 @@ func insertEvaluationFixture(t *testing.T, conn repo.DBTX, fixture evaluationFix
 
 func insertEvaluationVersion(t *testing.T, conn repo.DBTX, fixture evaluationFixture) {
 	t.Helper()
+	var startsAt any = fixture.StartsAt
+	if fixture.Immediate {
+		startsAt = nil
+	}
 	_, err := conn.Exec(t.Context(), `
 		INSERT INTO killswitch_prescription_versions (
 		  organization_id, prescription_id, version, state, resource_scope, starts_at, expires_at, activated_at, internal_note, external_note
 		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'private fixture note', $9)
-	`, fixture.OrganizationID, fixture.ID, fixture.Version, fixture.State, fixture.Scope, fixture.StartsAt, fixture.ExpiresAt, fixture.ActivatedAt, fixture.ExternalNote)
+	`, fixture.OrganizationID, fixture.ID, fixture.Version, fixture.State, fixture.Scope, startsAt, fixture.ExpiresAt, fixture.ActivatedAt, fixture.ExternalNote)
 	require.NoError(t, err)
 	for _, resource := range fixture.Resources {
 		_, err = conn.Exec(t.Context(), `

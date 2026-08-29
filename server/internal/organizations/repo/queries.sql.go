@@ -1057,6 +1057,29 @@ func (q *Queries) ListPendingInvitations(ctx context.Context, organizationID str
 	return items, nil
 }
 
+const lockActiveOrganizationUser = `-- name: LockActiveOrganizationUser :one
+SELECT our.user_id
+FROM organization_user_relationships AS our
+JOIN users AS u ON u.id = our.user_id
+WHERE our.user_id = $1
+  AND our.organization_id = $2
+  AND our.deleted_at IS NULL
+  AND u.deleted_at IS NULL
+FOR SHARE OF our, u
+`
+
+type LockActiveOrganizationUserParams struct {
+	UserID         pgtype.Text
+	OrganizationID string
+}
+
+func (q *Queries) LockActiveOrganizationUser(ctx context.Context, arg LockActiveOrganizationUserParams) (pgtype.Text, error) {
+	row := q.db.QueryRow(ctx, lockActiveOrganizationUser, arg.UserID, arg.OrganizationID)
+	var user_id pgtype.Text
+	err := row.Scan(&user_id)
+	return user_id, err
+}
+
 const lockOrganizationSlug = `-- name: LockOrganizationSlug :exec
 SELECT pg_advisory_xact_lock(hashtext($1))
 `

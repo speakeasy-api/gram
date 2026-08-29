@@ -10,7 +10,6 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/speakeasy-api/gram/server/internal/killswitches"
-	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 )
 
 // ErrServerNotInOrganization reports that a resolved fronting server is not a
@@ -75,10 +74,7 @@ func (a *MCPServerResourceAdapter) ValidateCurrentOrganization(ctx context.Conte
 	if err != nil || id.String() != string(key) || organizationID == "" {
 		return false, nil
 	}
-	live, err := mcpserversrepo.New(a.db).HasLiveMCPServerInOrganization(ctx, mcpserversrepo.HasLiveMCPServerInOrganizationParams{
-		ID:             id,
-		OrganizationID: string(organizationID),
-	})
+	live, err := ValidateLiveMCPServersInOrganization(ctx, a.db, organizationID, []killswitches.ResourceKey{key})
 	if err != nil {
 		return false, fmt.Errorf("check live mcp server ownership: %w", err)
 	}
@@ -102,10 +98,7 @@ func (a *MCPServerResourceAdapter) Derive(ctx context.Context, organizationID ki
 		return killswitches.CanonicalizationResult[killswitches.ResourceKey]{}, fmt.Errorf("organization ID is required")
 	}
 
-	live, err := mcpserversrepo.New(a.db).HasLiveMCPServerInOrganization(ctx, mcpserversrepo.HasLiveMCPServerInOrganizationParams{
-		ID:             src.FrontingServerID.UUID,
-		OrganizationID: string(organizationID),
-	})
+	live, err := ValidateLiveMCPServersInOrganization(ctx, a.db, organizationID, []killswitches.ResourceKey{killswitches.ResourceKey(src.FrontingServerID.UUID.String())})
 	if err != nil {
 		return killswitches.CanonicalizationResult[killswitches.ResourceKey]{}, fmt.Errorf("validate live mcp server ownership: %w", err)
 	}

@@ -12,11 +12,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/killswitches"
 	"github.com/speakeasy-api/gram/server/internal/mcpidentity"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
+	"github.com/speakeasy-api/gram/server/internal/urn"
 )
-
-// maxUserKeyRunes bounds canonical user keys; users.id is unbounded TEXT and
-// stored kill-switch keys must stay bounded.
-const maxUserKeyRunes = 512
 
 // AuthenticatedUserPrincipalAdapter canonicalizes concrete Gram user
 // principals and derives candidates only from authoritative user-session
@@ -97,10 +94,11 @@ func (a *AuthenticatedUserPrincipalAdapter) DeriveCandidates(ctx context.Context
 		return killswitches.PrincipalCandidateResult{}, fmt.Errorf("organization ID is required")
 	}
 
-	switch identity.Kind {
+	switch identity.Kind() {
 	case mcpidentity.KindUserSession:
-		key, canonical := canonicalUserKey(identity.UserID)
-		if !canonical || string(key) != identity.UserID {
+		userID := identity.UserID()
+		key, canonical := canonicalUserKey(userID)
+		if !canonical || string(key) != userID {
 			return killswitches.PrincipalCandidateResult{}, fmt.Errorf("authoritative user provenance carries a non-canonical user ID")
 		}
 		member, err := a.ValidateCurrentOrganization(ctx, organizationID, key)
@@ -118,7 +116,7 @@ func (a *AuthenticatedUserPrincipalAdapter) DeriveCandidates(ctx context.Context
 	case mcpidentity.KindAnonymous, mcpidentity.KindAPIKey, mcpidentity.KindAssistant, mcpidentity.KindChatSession:
 		return killswitches.UnsupportedPrincipalCandidateResult(), nil
 	default:
-		return killswitches.PrincipalCandidateResult{}, fmt.Errorf("unknown identity provenance kind %q", identity.Kind)
+		return killswitches.PrincipalCandidateResult{}, fmt.Errorf("unknown identity provenance kind %q", identity.Kind())
 	}
 }
 
@@ -127,7 +125,7 @@ func canonicalUserKey(input string) (killswitches.PrincipalKey, bool) {
 		return "", false
 	}
 	trimmed := strings.TrimSpace(input)
-	if trimmed == "" || utf8.RuneCountInString(trimmed) > maxUserKeyRunes {
+	if trimmed == "" || len(trimmed) > urn.MaxSessionSubjectIDLength {
 		return "", false
 	}
 	for _, r := range trimmed {
