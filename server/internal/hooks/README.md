@@ -38,7 +38,7 @@ Generated hooks translate that response into the local provider response shape.
 
 `ai_access` enforcement is limited to live Claude Code and Codex `UserPromptSubmit` and `PreToolUse` events sent through unified ingest by a relay implementing `hooks-acting-user.v1`. It excludes `PermissionRequest`, replayed or backfilled activity, legacy endpoints, and all other providers and events. No released relay version is claimed until the proof-bound relay ships.
 
-The external real-client E2E suite (not checked into this repository) records its exact binaries in its generated `artifacts/ai-access-versions.json`. On macOS 26.5.2 arm64, the validated development relay reported `speakeasy-hooks dev`; the native clients were Claude Code 2.1.250 and Codex CLI 0.150.1. These are tested versions and platform details, not minimum supported-version claims. Without valid browser-session enrollment and per-invocation proof, a covered live action fails closed with the identity-verification denial.
+The checked-in real-client E2E suite writes its exact binaries to the run's generated `artifacts/ai-access-versions.json`; runtime artifacts are not committed. On macOS 26.5.2 arm64, the validated development relay reported `speakeasy-hooks dev`; the native clients were Claude Code 2.1.250 and Codex CLI 0.150.1. These are tested versions and platform details, not minimum supported-version claims. Without valid browser-session enrollment and per-invocation proof, a covered live action fails closed with the identity-verification denial.
 
 ## Legacy Compatibility
 
