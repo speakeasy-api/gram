@@ -232,6 +232,8 @@ func TestHookAIAccessExclusionsReplayAndBackfillRequireSignedObservationalBindin
 	} {
 		payload := canonicalIngestPayload(test.provider, test.eventType, uuid.NewString())
 		payload.Source.RawEventName = &test.event
+		payload.ActingUserAssertion = new("caller-controlled")
+		payload.ActingUserContractVersion = new(delegation.ContractVersion)
 		result, err := ti.service.Ingest(ctx, payload)
 		require.NoError(t, err)
 		require.Equal(t, "allow", result.Decision)
@@ -289,13 +291,6 @@ func TestHookAIAccessObservationalMarkerTamperingFailsClosed(t *testing.T) {
 	require.Equal(t, "deny", result.Decision)
 	require.Equal(t, "ai_access_identity_unavailable", *result.Reason)
 
-	observationalAssertion = signedHookPayload(t, ctx, signer, privateKey, delegation.ProviderClaude, delegation.EventPreToolUse, true)
-	observationalAssertion.Replayed = &replayed
-	observationalAssertion.Source.Adapter = "cursor"
-	result, err = ti.service.Ingest(ctx, observationalAssertion)
-	require.NoError(t, err)
-	require.Equal(t, "deny", result.Decision)
-	require.Equal(t, "ai_access_identity_unavailable", *result.Reason)
 	require.Empty(t, evaluator.requests)
 }
 

@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -144,8 +145,16 @@ func drainSpool(ctx context.Context, dir string) DrainSummary {
 		if binding, governed := governedReplayBinding(entry); governed {
 			assertion, err = mintActingUserAssertion(ctx, entry.ServerURL, a.proof, binding, entry.IdempotencyKey)
 			if err != nil {
-				// Mint failures are not event failures. Preserve this entry and
-				// chronological ordering; a later run can retry after recovery.
+				if errors.Is(err, errProofBoundEnrollmentRequired) {
+					s.Skipped++
+					continue
+				}
+				if errors.Is(err, errDelegationReauthRequired) {
+					forgetAuth()
+					markReauthNeeded()
+				}
+				// Transient mint failures are not event failures. Preserve this
+				// entry and chronological ordering for a later drain.
 				s.Aborted = true
 				break
 			}

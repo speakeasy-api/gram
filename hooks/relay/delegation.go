@@ -18,7 +18,10 @@ import (
 
 const actingIdentityFailureMessage = delegation.IdentityFailureMessage
 
-var errDelegationReauthRequired = errors.New("hooks delegation enrollment must be refreshed")
+var (
+	errDelegationReauthRequired     = errors.New("hooks delegation enrollment must be refreshed")
+	errProofBoundEnrollmentRequired = errors.New("proof-bound hooks enrollment is required")
+)
 
 type governedBinding struct {
 	provider      string
@@ -64,7 +67,7 @@ func (r *Relay) mintActingUserAssertion(ctx context.Context, credentials creds, 
 
 func mintActingUserAssertion(ctx context.Context, serverURL string, credentials creds, binding governedBinding, idempotencyKey string) (string, error) {
 	if credentials.Source != credCache || credentials.ContractVersion != delegation.ContractVersion || credentials.RefreshToken == "" || credentials.ProofPrivateKey == "" {
-		return "", errors.New("proof-bound hooks enrollment is required")
+		return "", errProofBoundEnrollmentRequired
 	}
 	privateKey, err := delegation.ParsePrivateKey(credentials.ProofPrivateKey)
 	if err != nil {

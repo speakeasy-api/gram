@@ -396,6 +396,64 @@ func TestDrainAbortsOnMintFailure(t *testing.T) {
 	require.Zero(t, ingestRequests)
 }
 
+func TestDrainSkipsGovernedEntryWithoutProofAndContinues(t *testing.T) {
+	drainEnv(t)
+	fs := newFakeServer(t, nil)
+	seedSpoolEntry(t, fs.URL, 2*time.Hour, "governed")
+	seedSpoolEntry(t, fs.URL, time.Hour, "ordinary")
+	files := spoolFiles(t)
+	require.Len(t, files, 2)
+	makeSpoolEntryGoverned(t, files[0])
+
+	summary := Drain(t.Context())
+
+	require.Equal(t, 1, summary.Replayed)
+	require.Equal(t, 1, summary.Skipped)
+	require.Equal(t, 1, summary.Remaining)
+	require.False(t, summary.Aborted)
+	require.Equal(t, 1, fs.count())
+}
+
+func TestDrainMintAuthRejectionRequiresReauth(t *testing.T) {
+	for _, test := range []struct {
+		name   string
+		status int
+	}{
+		{name: "unauthorized", status: http.StatusUnauthorized},
+		{name: "forbidden", status: http.StatusForbidden},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			setSpoolStateHome(t)
+			t.Setenv("GRAM_HOOKS_API_KEY", "")
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if r.URL.Path == "/rpc/cliAuth.delegateHooksActingUser" {
+					w.WriteHeader(test.status)
+					return
+				}
+				w.WriteHeader(http.StatusOK)
+			}))
+			t.Cleanup(server.Close)
+			authFile := filepath.Join(t.TempDir(), "hooks-auth.env")
+			t.Setenv("GRAM_HOOKS_AUTH_FILE", authFile)
+			_, privateKey, err := ed25519.GenerateKey(rand.Reader)
+			require.NoError(t, err)
+			require.NoError(t, writeAuth(creds{ServerURL: server.URL, APIKey: "cached-key", Project: "default", Org: "", RefreshToken: "refresh", ProofPrivateKey: delegation.EncodePrivateKey(privateKey), ContractVersion: delegation.ContractVersion, Source: credCache}))
+			seedSpoolEntry(t, server.URL, time.Hour, "governed")
+			files := spoolFiles(t)
+			require.Len(t, files, 1)
+			makeSpoolEntryGoverned(t, files[0])
+
+			summary := Drain(t.Context())
+
+			require.True(t, summary.Aborted)
+			require.Equal(t, 1, summary.Remaining)
+			_, err = os.Stat(authFile)
+			require.ErrorIs(t, err, os.ErrNotExist)
+			require.True(t, reauthNeeded())
+		})
+	}
+}
+
 // TestMaybeSpawnDrainAfterRecovery drives the real provider path: sends fail
 // against a dead server (payloads spool), the server comes back, and the
 // next successful send spawns exactly one detached drain — debounced across

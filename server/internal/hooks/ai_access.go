@@ -87,27 +87,16 @@ func governedHook(payload *gen.IngestPayload) (provider, event string, governed 
 	if delegation.Approved(provider, rawEvent) {
 		return provider, rawEvent, true
 	}
-	// A different native event may legitimately normalize to the same canonical
-	// type. It remains outside this checkpoint unless the request carries
-	// acting-user material, which only governed delivery should have. Once that
-	// evidence exists, malformed/stripped binding fields must fail closed.
+	// Acting-user material only indicates a stripped governed binding when the
+	// provider is covered and the raw event is absent. Out-of-scope callers must
+	// not be able to expand the checkpoint's denial surface.
+	coveredProvider := provider == delegation.ProviderClaude || provider == delegation.ProviderCodex
 	governanceEvidence := strings.TrimSpace(conv.PtrValOr(payload.ActingUserAssertion, "")) != "" ||
 		strings.TrimSpace(conv.PtrValOr(payload.ActingUserContractVersion, "")) != ""
-	if !governanceEvidence {
+	if !coveredProvider || rawEvent != "" || !governanceEvidence {
 		return "", "", false
 	}
-	if payload.Event == nil {
-		return provider, rawEvent, true
-	}
-	switch strings.TrimSpace(payload.Event.Type) {
-	case "prompt.submitted":
-		event = delegation.EventUserPromptSubmit
-	case "tool.requested":
-		event = delegation.EventPreToolUse
-	default:
-		return provider, rawEvent, true
-	}
-	return provider, event, true
+	return provider, rawEvent, true
 }
 
 func validGovernedHookPayload(payload *gen.IngestPayload, event string) bool {
@@ -331,7 +320,9 @@ func (s *Service) awaitHookAIAccessEvaluation(ctx context.Context, payload *gen.
 				return nil, hookAIAccessDecision{}, "", false, true
 			}
 			return func() (bool, error) {
-				return leases.ReleaseLeaseIfOwner(context.WithoutCancel(ctx), leaseKey, owner)
+				releaseCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), aiAccessDenialPublicationTimeout)
+				defer cancel()
+				return leases.ReleaseLeaseIfOwner(releaseCtx, leaseKey, owner)
 			}, hookAIAccessDecision{}, "", false, false
 		}
 		timer := time.NewTimer(aiAccessEvaluationPollInterval)

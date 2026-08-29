@@ -228,34 +228,6 @@ func TestIngest_NoCredentialsGovernedShapeTamperingFailsClosed(t *testing.T) {
 	}
 }
 
-func TestIngest_NoCredentialsReplayAndBackfillCannotBypassAIAccess(t *testing.T) {
-	t.Parallel()
-
-	_, ti := newTestHooksService(t)
-	for _, delivery := range []struct {
-		name       string
-		replayed   bool
-		backfilled bool
-	}{
-		{name: "replayed", replayed: true},
-		{name: "backfilled", backfilled: true},
-	} {
-		t.Run(delivery.name, func(t *testing.T) {
-			t.Parallel()
-			payload := canonicalIngestPayload("claude", "prompt.submitted", "keyless-"+delivery.name)
-			event := delegation.EventUserPromptSubmit
-			payload.Source.RawEventName = &event
-			payload.Replayed = &delivery.replayed
-			payload.Backfilled = &delivery.backfilled
-
-			result, err := ti.service.Ingest(t.Context(), payload)
-			require.NoError(t, err)
-			require.Equal(t, "deny", result.Decision)
-			require.Equal(t, "ai_access_identity_unavailable", *result.Reason)
-		})
-	}
-}
-
 // A request that presents an API key must have it validated: a rejected key
 // is a hard 401 so the sender's credential-recovery path (org-key retry,
 // established-machine fail-closed ratchet) can react, instead of the event

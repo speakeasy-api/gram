@@ -64,7 +64,7 @@ func TestSpoolCapturesUnreachableSend(t *testing.T) {
 	require.Len(t, names, 1, "an unreachable send must spool exactly one entry")
 
 	entry := readSpoolEntry(t, names[0])
-	require.Equal(t, 2, entry.V, "backfill-aware writers must use a version old drains skip")
+	require.Equal(t, spoolEntryVersion, entry.V, "backfill-aware writers must use a version old drains skip")
 	require.NotEmpty(t, entry.IdempotencyKey, "replay needs the original send's idempotency key")
 	require.Equal(t, cfg.ServerURL, entry.ServerURL)
 	require.Equal(t, "org-1", entry.OrgID)

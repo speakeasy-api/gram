@@ -356,7 +356,7 @@ func TestUnchangedRecentOrgSettingsSkipRewrite(t *testing.T) {
 }
 
 // TestFailOpenEnvOverrideDoesNotBypassGovernedTool verifies the legacy
-// override cannot authorize a governed tool without proof-bound identity.
+// override cannot fail open a governed tool when delivery fails.
 func TestFailOpenEnvOverrideDoesNotBypassGovernedTool(t *testing.T) {
 	shrinkRetryBudget(t)
 	fs := newFakeServer(t, func(components.IngestRequestBody) (int, decision) {
