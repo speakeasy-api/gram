@@ -87,6 +87,7 @@ func TestChatMessageWriterMetersStoredTextAndToolCalls(t *testing.T) {
 			CreatedAt:        pgtype.Timestamptz{},
 		},
 		UserEmail: "reported@example.test",
+		Provider:  "openai",
 	}}
 	written, err := writer.Write(ctx, ti.projectID, writes)
 	require.NoError(t, err)
@@ -103,6 +104,7 @@ func TestChatMessageWriterMetersStoredTextAndToolCalls(t *testing.T) {
 	require.Equal(t, map[string]string{
 		metering.AttributeChatID:                chatID.String(),
 		metering.AttributeModel:                 "gpt-5",
+		metering.AttributeProvider:              "openai",
 		metering.AttributeHookSource:            "codex",
 		metering.AttributeMessageUserID:         messageUserID,
 		metering.AttributeMessageExternalUserID: "provider-user-123",
@@ -155,6 +157,7 @@ func TestChatMessageWriterMetersExternalMessageOnceAtStorageTime(t *testing.T) {
 			CreatedAt:         conv.ToPGTimestamptz(historical),
 		},
 		UserEmail: "imported@example.test",
+		Provider:  "openai",
 	}
 	before := time.Now().UTC()
 	written, err := writer.WriteExternal(ctx, ti.projectID, []chat.ExternalMessageWrite{param})
@@ -173,6 +176,7 @@ func TestChatMessageWriterMetersExternalMessageOnceAtStorageTime(t *testing.T) {
 	require.Equal(t, map[string]string{
 		metering.AttributeChatID:                chatID.String(),
 		metering.AttributeModel:                 "imported-model",
+		metering.AttributeProvider:              "openai",
 		metering.AttributeHookSource:            "chatgpt",
 		metering.AttributeMessageExternalUserID: "opaque-provider-user-456",
 		metering.AttributeMessageUserEmail:      "imported@example.test",

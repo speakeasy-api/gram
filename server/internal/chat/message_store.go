@@ -38,6 +38,9 @@ type MessageWrite struct {
 
 	// UserEmail is the email explicitly observed for the message actor.
 	UserEmail string
+
+	// Provider is the AI provider explicitly reported by ingestion.
+	Provider string
 }
 
 // ExternalMessageWrite pairs persisted imported message parameters with producer-only provenance.
@@ -47,6 +50,9 @@ type ExternalMessageWrite struct {
 
 	// UserEmail is the email explicitly observed for the imported message actor.
 	UserEmail string
+
+	// Provider is the AI provider explicitly reported by ingestion.
+	Provider string
 }
 
 // ChatMessageWriter is the only sanctioned way to persist chat messages.
@@ -236,6 +242,7 @@ type meterMessageInput struct {
 	content               string
 	toolCalls             []byte
 	model                 pgtype.Text
+	provider              string
 	source                pgtype.Text
 	messageUserID         pgtype.Text
 	messageExternalUserID pgtype.Text
@@ -275,6 +282,7 @@ func (w *ChatMessageWriter) meterMessage(ctx context.Context, input meterMessage
 	if input.model.Valid {
 		setReadingAttribute(&attributes, metering.AttributeModel, input.model.String)
 	}
+	setReadingAttribute(&attributes, metering.AttributeProvider, input.provider)
 	if input.source.Valid {
 		setReadingAttribute(&attributes, metering.AttributeHookSource, CanonicalSource(input.source.String))
 	}
@@ -326,6 +334,7 @@ func (w *ChatMessageWriter) meterMessages(
 			content:               param.Content,
 			toolCalls:             param.ToolCalls,
 			model:                 param.Model,
+			provider:              write.Provider,
 			source:                param.Source,
 			messageUserID:         param.UserID,
 			messageExternalUserID: param.ExternalUserID,
@@ -565,6 +574,7 @@ func (w *ChatMessageWriter) WriteExternal(ctx context.Context, projectID uuid.UU
 			content:               param.Content,
 			toolCalls:             param.ToolCalls,
 			model:                 param.Model,
+			provider:              write.Provider,
 			source:                param.Source,
 			messageUserID:         param.UserID,
 			messageExternalUserID: param.ExternalUserID,

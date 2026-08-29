@@ -428,7 +428,12 @@ func buildAssistantRows(
 	only.CompletionTokens = completionTokens
 	only.TotalTokens = totalTokens
 
-	return []MessageWrite{{Params: only, UserEmail: request.UserEmail}}
+	return []MessageWrite{{
+		Params:    only,
+		UserEmail: request.UserEmail,
+		// The completion payload does not report a provider; model names are not provider identity.
+		Provider: "",
+	}}
 }
 
 // firstInvalidToolCall mirrors the runner's normalize_history validation:

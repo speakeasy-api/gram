@@ -2993,6 +2993,7 @@ func prepareMessages(ctx context.Context, logger *slog.Logger, assetStorage asse
 				Generation:       row.generation,
 			},
 			UserEmail: row.userEmail,
+			Provider:  "",
 		}
 	}
 

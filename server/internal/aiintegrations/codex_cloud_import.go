@@ -489,6 +489,7 @@ func (src *codexCloudSource) writeFile(ctx context.Context, file codexapi.LogFil
 				CreatedAt:   conv.ToPGTimestamptz(admittedAt[i]),
 			},
 			UserEmail: event.Actor.UserEmail,
+			Provider:  codexProviderOpenAI,
 		})
 	}
 	if len(rows) == 0 {

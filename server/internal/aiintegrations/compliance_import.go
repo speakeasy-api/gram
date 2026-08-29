@@ -593,6 +593,7 @@ func (s *ComplianceImportService) buildExternalMessageRows(ctx context.Context, 
 				CreatedAt:         conv.ToPGTimestamptz(createdAt),
 			},
 			UserEmail: page.User.EmailAddress,
+			Provider:  anthropicAnalyticsProviderTag,
 		})
 	}
 	return rows, nil

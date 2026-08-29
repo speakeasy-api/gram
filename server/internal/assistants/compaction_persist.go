@@ -166,6 +166,7 @@ func (s *ServiceCore) RecordCompactedGeneration(ctx context.Context, projectID, 
 				Generation:       nextGen,
 			},
 			UserEmail: "",
+			Provider:  "",
 		})
 	}
 

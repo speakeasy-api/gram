@@ -374,7 +374,11 @@ func (s *Service) insertMessageWithFallbackUpsertResult(
 		return false, err
 	}
 
-	write := chat.MessageWrite{Params: msgParams, UserEmail: metadata.UserEmail}
+	write := chat.MessageWrite{
+		Params:    msgParams,
+		UserEmail: metadata.UserEmail,
+		Provider:  metadata.Provider,
+	}
 	writeMessage := func() (int64, error) {
 		if msgParams.MessageID.Valid && strings.HasPrefix(msgParams.MessageID.String, agentPromptCorrelationPrefix) {
 			n, writeErr := s.writer.WriteCorrelated(ctx, projectID, write, msgParams.MessageID.String)
@@ -537,7 +541,11 @@ func (s *Service) insertUncorrelatedAgentPrompt(
 	if err != nil {
 		return false, fmt.Errorf("upsert claude code session: %w", err)
 	}
-	writes := []chat.MessageWrite{{Params: msgParams, UserEmail: metadata.UserEmail}}
+	writes := []chat.MessageWrite{{
+		Params:    msgParams,
+		UserEmail: metadata.UserEmail,
+		Provider:  metadata.Provider,
+	}}
 	n, err := s.writer.WriteInTx(ctx, tx, writes)
 	if err != nil {
 		return false, fmt.Errorf("insert uncorrelated agent prompt: %w", err)

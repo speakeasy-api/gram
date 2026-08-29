@@ -421,6 +421,7 @@ func (src *chatgptConversationSource) writeFile(ctx context.Context, file codexa
 				CreatedAt:   conv.ToPGTimestamptz(createdAt),
 			},
 			UserEmail: event.Actor.UserEmail,
+			Provider:  codexProviderOpenAI,
 		})
 	}
 	if fallbacks := src.timestampFallbacks() - fallbacksBefore; fallbacks > 0 {

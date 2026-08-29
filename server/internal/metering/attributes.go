@@ -6,6 +6,9 @@ const AttributeChatID = "chat_id"
 // AttributeModel identifies the model that produced or received the message.
 const AttributeModel = "model"
 
+// AttributeProvider identifies the AI provider explicitly reported by ingestion.
+const AttributeProvider = "provider"
+
 // AttributeHookSource identifies the canonical agent source.
 const AttributeHookSource = "hook_source"
 
