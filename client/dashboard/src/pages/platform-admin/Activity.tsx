@@ -48,6 +48,7 @@ type SafeSnapshot = {
     disabled?: unknown;
   };
   trial?: {
+    status?: unknown;
     tier?: unknown;
     ends_at?: unknown;
     converted_at?: unknown;
@@ -58,6 +59,7 @@ type SafeSnapshot = {
     disable_causes?: unknown;
     stored_disabled?: unknown;
     effective_disabled?: unknown;
+    key_access_changed?: unknown;
     monthly_credits?: unknown;
   }>;
   trial_ends_at?: unknown;
@@ -351,6 +353,10 @@ function SafeMetadata({
   const safe = pickDefined(metadata, [
     "conversion_source",
     "tier",
+    "account_type",
+    "previous_account_type",
+    "extended_by_days",
+    "key_access_changed",
     "trial_starts_at",
     "trial_ends_at",
     "previous_trial_ends_at",
@@ -370,9 +376,28 @@ function TrialFacts({
   after?: SafeSnapshot;
 }): JSX.Element {
   const facts: Array<[string, ReactNode]> = [];
-  const beforeEnd = before?.trial?.ends_at ?? before?.trial_ends_at;
-  const afterEnd = after?.trial?.ends_at ?? after?.trial_ends_at;
-  const tier = after?.trial?.tier ?? before?.trial?.tier;
+  const beforeEnd = firstRecorded(
+    before?.trial?.ends_at,
+    before?.trial_ends_at,
+    log.metadata?.previous_trial_ends_at,
+  );
+  const afterEnd = firstRecorded(
+    after?.trial?.ends_at,
+    after?.trial_ends_at,
+    log.metadata?.trial_ends_at,
+  );
+  const tier = firstRecorded(
+    after?.trial?.tier,
+    before?.trial?.tier,
+    log.metadata?.tier,
+    log.metadata?.account_type,
+    log.metadata?.previous_account_type,
+  );
+  const keyAccessChanged = firstRecorded(
+    log.metadata?.key_access_changed,
+    snapshotKeyAccessChanged(after),
+    snapshotKeyAccessChanged(before),
+  );
   let title = "Enterprise trial updated";
   switch (log.action) {
     case "organization:enterprise_trial_armed":
@@ -403,6 +428,7 @@ function TrialFacts({
       title = "Enterprise trial ended";
       facts.push(
         ["Ended", formatFactDate(after?.trial?.demoted_at ?? log.created_at)],
+        ["Trial end", formatFactDate(afterEnd)],
         ["Tier", recorded(tier)],
       );
       break;
@@ -417,6 +443,13 @@ function TrialFacts({
         ["Tier", recorded(tier)],
       );
       break;
+  }
+  if (
+    log.action === "organization:enterprise_trial_rearmed" ||
+    log.action === "organization:enterprise_trial_demoted" ||
+    log.action === "organization:enterprise_trial_converted"
+  ) {
+    facts.push(["Key access changed", yesNo(keyAccessChanged)]);
   }
   for (const key of allKeyTypes(before, after)) {
     const oldAccess = keyAccess(before, key);
@@ -509,6 +542,7 @@ function snapshotDiffs(
     before?.organization?.disabled,
     after?.organization?.disabled,
   );
+  addDiff(rows, "Trial status", before?.trial?.status, after?.trial?.status);
   addDiff(rows, "Trial tier", before?.trial?.tier, after?.trial?.tier);
   addDiff(
     rows,
@@ -552,6 +586,12 @@ function snapshotDiffs(
     );
     addDiff(
       rows,
+      `Key access changed (${keyType})`,
+      beforeKey?.key_access_changed,
+      afterKey?.key_access_changed,
+    );
+    addDiff(
+      rows,
       `Disable causes (${keyType})`,
       beforeKey?.disable_causes,
       afterKey?.disable_causes,
@@ -577,6 +617,7 @@ function safeSnapshot(value: unknown): SafeSnapshot | undefined {
     : undefined;
   const trial = isRecord(value.trial)
     ? pickDefined(value.trial, [
+        "status",
         "tier",
         "ends_at",
         "converted_at",
@@ -592,6 +633,7 @@ function safeSnapshot(value: unknown): SafeSnapshot | undefined {
             "disable_causes",
             "stored_disabled",
             "effective_disabled",
+            "key_access_changed",
             "monthly_credits",
           ]),
         )
@@ -667,6 +709,25 @@ function nonempty(value: unknown): string | undefined {
   return typeof value === "string" && value.trim() !== ""
     ? value.trim()
     : undefined;
+}
+
+function firstRecorded(...values: unknown[]): unknown {
+  return values.find(
+    (value) => value !== undefined && value !== null && value !== "",
+  );
+}
+
+function snapshotKeyAccessChanged(
+  snapshot?: SafeSnapshot,
+): boolean | undefined {
+  const values = (snapshot?.keys ?? [])
+    .map((key) => key.key_access_changed)
+    .filter((value): value is boolean => typeof value === "boolean");
+  return values.length === 0 ? undefined : values.some(Boolean);
+}
+
+function yesNo(value: unknown): string {
+  return typeof value === "boolean" ? (value ? "Yes" : "No") : "Not recorded";
 }
 
 function recorded(value: unknown): string {

@@ -27,7 +27,7 @@ function jsonResponse(body: unknown, status = 200): Response {
   });
 }
 
-function renderActivity({ throwOnError = false } = {}): void {
+function renderActivity({ throwOnError = false } = {}): QueryClient {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false, throwOnError } },
   });
@@ -41,6 +41,7 @@ function renderActivity({ throwOnError = false } = {}): void {
   render(<OrganizationActivity organizationId="<ORG_ID>" />, {
     wrapper: Wrapper,
   });
+  return client;
 }
 
 afterEach(() => {
@@ -142,6 +143,55 @@ describe("organization activity pagination query", () => {
     window.removeEventListener("unhandledrejection", unhandledRejection);
   });
 
+  it.each([
+    { name: "empty", cachedLogs: [] },
+    {
+      name: "nonempty",
+      cachedLogs: [{ ...baseLog, id: "cached", action: "project:update" }],
+    },
+  ])(
+    "keeps cached $name data visible through a failed refetch and retries successfully",
+    async ({ cachedLogs }) => {
+      const refreshed = {
+        ...baseLog,
+        id: "refreshed",
+        action: "organization:enterprise_trial_armed",
+        metadata: { trial_ends_at: "2026-09-08T12:00:00Z" },
+      };
+      const fetchMock = vi
+        .fn()
+        .mockResolvedValueOnce(jsonResponse({ logs: cachedLogs }))
+        .mockResolvedValueOnce(
+          jsonResponse({ message: "private failure" }, 500),
+        )
+        .mockResolvedValueOnce(jsonResponse({ logs: [refreshed] }));
+      vi.stubGlobal("fetch", fetchMock);
+      const client = renderActivity();
+
+      if (cachedLogs.length === 0) {
+        await screen.findByText("No activity yet.");
+      } else {
+        await screen.findByTestId("activity-cached");
+      }
+      await client.invalidateQueries({
+        queryKey: ["platform-admin", "organization-activity", "<ORG_ID>"],
+      });
+
+      expect(
+        await screen.findByText("Activity could not be refreshed."),
+      ).toBeDefined();
+      if (cachedLogs.length === 0) {
+        expect(screen.getByText("No activity yet.")).toBeDefined();
+      } else {
+        expect(screen.getByTestId("activity-cached")).toBeDefined();
+      }
+      fireEvent.click(screen.getByRole("button", { name: "Retry refresh" }));
+
+      expect(await screen.findByTestId("activity-refreshed")).toBeDefined();
+      expect(screen.queryByText("Activity could not be refreshed.")).toBeNull();
+      expect(fetchMock).toHaveBeenCalledTimes(3);
+    },
+  );
   it("guards rapid clicks and retries a rejected page without losing or duplicating rows", async () => {
     let resolveRejectedPage!: (response: Response) => void;
     const rejectedPage = new Promise<Response>((resolve) => {

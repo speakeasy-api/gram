@@ -189,7 +189,7 @@ describe("organization activity slice C", () => {
     expect(extendedDetails?.open).toBe(false);
   });
 
-  it("renders compact allowlisted trial facts and records missing legacy values", () => {
+  it("renders exact facts from all five lifecycle payload contracts and legacy missing data", () => {
     setQuery([
       {
         logs: [
@@ -197,62 +197,156 @@ describe("organization activity slice C", () => {
             ...baseLog,
             id: "armed",
             action: "organization:enterprise_trial_armed",
-            after_snapshot: {
-              trial: { tier: "enterprise", ends_at: "2026-09-08T12:00:00Z" },
-              keys: [{ key_type: "chat", effective_disabled: false }],
-            },
+            metadata: { trial_ends_at: "2026-09-08T12:00:00Z" },
           },
           {
             ...baseLog,
             id: "extended",
             action: "organization:enterprise_trial_extended",
-            before_snapshot: { trial: { ends_at: "2026-09-08T12:00:00Z" } },
-            after_snapshot: { trial: { ends_at: "2026-09-22T12:00:00Z" } },
+            metadata: {
+              extended_by_days: 14,
+              previous_trial_ends_at: "2026-09-08T12:00:00Z",
+              trial_ends_at: "2026-09-22T12:00:00Z",
+            },
+            before_snapshot: { trial_ends_at: "2026-09-08T12:00:00Z" },
+            after_snapshot: { trial_ends_at: "2026-09-22T12:00:00Z" },
           },
           {
             ...baseLog,
             id: "rearmed",
             action: "organization:enterprise_trial_rearmed",
+            metadata: {
+              account_type: "enterprise",
+              trial_ends_at: "2026-09-08T12:00:00Z",
+              arm_operation_id: "<OPERATION_ID>",
+              key_access_changed: true,
+            },
           },
           {
             ...baseLog,
             id: "demoted",
             action: "organization:enterprise_trial_demoted",
-            before_snapshot: {
-              keys: [{ key_type: "chat", effective_disabled: false }],
-            },
-            after_snapshot: {
-              trial: { demoted_at: "2026-08-25T12:00:00Z" },
-              keys: [{ key_type: "chat", effective_disabled: true }],
+            metadata: {
+              previous_account_type: "enterprise",
+              trial_ends_at: "2026-08-25T12:00:00Z",
+              key_access_changed: false,
             },
           },
           {
             ...baseLog,
             id: "converted",
             action: "organization:enterprise_trial_converted",
-            metadata: { conversion_source: "stripe_checkout" },
-            after_snapshot: { trial: { converted_at: "2026-08-25T12:00:00Z" } },
+            metadata: {
+              conversion_source: "stripe_checkout",
+              key_access_changed: true,
+            },
+            before_snapshot: {
+              organization: {
+                account_type: "enterprise",
+                whitelisted: true,
+                disabled: false,
+              },
+              trial: {
+                status: "running",
+                tier: "enterprise",
+                ends_at: "2026-09-08T12:00:00Z",
+                converted_at: null,
+                demoted_at: null,
+              },
+              keys: [
+                {
+                  key_type: "chat",
+                  stored_disabled: true,
+                  effective_disabled: true,
+                  key_access_changed: true,
+                  monthly_credits: 50,
+                },
+              ],
+            },
+            after_snapshot: {
+              organization: {
+                account_type: "enterprise",
+                whitelisted: true,
+                disabled: false,
+              },
+              trial: {
+                status: "converted",
+                tier: "enterprise",
+                ends_at: "2026-09-08T12:00:00Z",
+                converted_at: "2026-08-25T12:00:00Z",
+                demoted_at: null,
+              },
+              keys: [
+                {
+                  key_type: "chat",
+                  stored_disabled: false,
+                  effective_disabled: false,
+                  key_access_changed: true,
+                  monthly_credits: 50,
+                },
+              ],
+            },
+          },
+          {
+            ...baseLog,
+            id: "legacy",
+            action: "organization:enterprise_trial_armed",
           },
         ],
       },
     ]);
     render(<OrganizationActivity organizationId="<ORG_ID>" />);
-    const armed = screen.getByTestId("activity-armed");
-    expect(within(armed).getByText("Enterprise trial started")).toBeDefined();
-    expect(armed.textContent).toContain("Tierenterprise");
-    expect(armed.textContent).toContain("Trial end");
-    expect(armed.textContent).toContain("Key access (chat)Enabled");
+    expect(
+      within(screen.getByTestId("activity-armed")).getByText(
+        "Enterprise trial started",
+      ),
+    ).toBeDefined();
+    expect(screen.getByTestId("activity-armed").textContent).toContain(
+      "Trial endTuesday, September 8, 2026 at 12:00:00 PM UTC",
+    );
+    expect(screen.getByTestId("activity-armed").textContent).toContain(
+      "TierNot recorded",
+    );
     expect(screen.getByTestId("activity-extended").textContent).toContain(
-      "Previous trial end",
+      "Previous trial endTuesday, September 8, 2026 at 12:00:00 PM UTC",
+    );
+    expect(
+      within(screen.getByTestId("activity-extended")).getByText(
+        "Enterprise trial extended",
+      ),
+    ).toBeDefined();
+    expect(screen.getByTestId("activity-extended").textContent).toContain(
+      "New trial endTuesday, September 22, 2026 at 12:00:00 PM UTC",
     );
     expect(screen.getByTestId("activity-rearmed").textContent).toContain(
-      "Not recorded",
+      "Tierenterprise",
+    );
+    expect(screen.getByTestId("activity-rearmed").textContent).toContain(
+      "Key access changedYes",
     );
     expect(screen.getByTestId("activity-demoted").textContent).toContain(
-      "Key access (chat)Enabled → Disabled",
+      "Trial endTuesday, August 25, 2026 at 12:00:00 PM UTC",
+    );
+    expect(screen.getByTestId("activity-demoted").textContent).toContain(
+      "Tierenterprise",
+    );
+    expect(screen.getByTestId("activity-demoted").textContent).toContain(
+      "Key access changedNo",
     );
     expect(screen.getByTestId("activity-converted").textContent).toContain(
       "Conversion methodStripe checkout",
+    );
+    expect(screen.getByTestId("activity-converted").textContent).toContain(
+      "Tierenterprise",
+    );
+    expect(screen.getByTestId("activity-converted").textContent).toContain(
+      "Key access changedYes",
+    );
+    expect(screen.getByTestId("activity-legacy").textContent).toContain(
+      "Trial endNot recorded",
+    );
+    expect(screen.getByTestId("activity-legacy").textContent).toContain(
+      "TierNot recorded",
     );
   });
 
@@ -273,12 +367,14 @@ describe("organization activity slice C", () => {
             metadata: {
               conversion_source: "platform_admin",
               tier: "enterprise",
+              key_access_changed: true,
               prompt: "private prompt",
               spend: 1234,
               provider_payload: { token: "provider-secret" },
               identity_id: "identity-secret",
             },
             before_snapshot: {
+              trial: { status: "running" },
               organization: {
                 account_type: "",
                 whitelisted: null,
@@ -290,11 +386,13 @@ describe("organization activity slice C", () => {
                   key_type: "chat",
                   disable_causes: [],
                   effective_disabled: false,
+                  key_access_changed: false,
                   hash: "hash-secret",
                 },
               ],
             },
             after_snapshot: {
+              trial: { status: "converted" },
               organization: {
                 account_type: "enterprise",
                 whitelisted: true,
@@ -305,6 +403,7 @@ describe("organization activity slice C", () => {
                   key_type: "chat",
                   disable_causes: ["trial_demotion"],
                   effective_disabled: true,
+                  key_access_changed: true,
                   monthly_credits: 50,
                 },
               ],
@@ -322,6 +421,9 @@ describe("organization activity slice C", () => {
       "dashboard",
       "platform_admin",
       "enterprise",
+      "key_access_changed",
+      "running",
+      "converted",
       '""',
       "null",
       "[]",
@@ -348,6 +450,8 @@ describe("organization activity slice C", () => {
       within(item).getByRole("region", { name: "Raw diff" }),
     ).toBeDefined();
     expect(item.textContent).toContain("account_type");
+    expect(item.textContent).toContain('"status":"running"');
+    expect(item.textContent).toContain('"key_access_changed":false');
     expect(item.textContent).not.toContain("sk-secret");
     expect(item.textContent).not.toContain("hash-secret");
   });
