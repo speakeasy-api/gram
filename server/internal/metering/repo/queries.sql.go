@@ -39,90 +39,124 @@ WITH inputs AS (
     AND c.project_id = i.project_id
     AND c.organization_id = i.organization_id
     AND c.deleted IS FALSE
-), principals AS (
-  SELECT ordinality, organization_id, 'message_user'::text AS principal_kind, message_user_id AS user_id
-  FROM scoped_chats
-  WHERE message_user_id IS NOT NULL
-  UNION ALL
-  SELECT ordinality, organization_id, 'chat_owner'::text AS principal_kind, chat_owner_user_id AS user_id
-  FROM scoped_chats
-  WHERE chat_owner_user_id IS NOT NULL
-), identities AS (
+), principal_refs AS (
   SELECT
-      principal.ordinality
-    , principal.principal_kind
-    , u.email AS account_email
+      scoped.ordinality, scoped.organization_id, scoped.project_id, scoped.chat_id, scoped.message_user_id, scoped.chat_owner_user_id, scoped.chat_owner_external_user_id
+    , 'message_user'::text AS principal_kind
+    , scoped.message_user_id AS principal_user_id
+  FROM scoped_chats scoped
+  UNION ALL
+  SELECT
+      scoped.ordinality, scoped.organization_id, scoped.project_id, scoped.chat_id, scoped.message_user_id, scoped.chat_owner_user_id, scoped.chat_owner_external_user_id
+    , 'chat_owner'::text AS principal_kind
+    , scoped.chat_owner_user_id AS principal_user_id
+  FROM scoped_chats scoped
+)
+SELECT
+    refs.ordinality::bigint AS ordinality
+  , refs.organization_id::text AS organization_id
+  , refs.project_id::uuid AS project_id
+  , refs.chat_id::uuid AS chat_id
+  , COALESCE(refs.message_user_id, '')::text AS message_user_id
+  , COALESCE(MAX(identity.account_email) FILTER (WHERE refs.principal_kind = 'message_user'), '')::text AS message_user_account_email
+  , COALESCE(MAX(identity.division_name) FILTER (WHERE refs.principal_kind = 'message_user'), '')::text AS message_user_division_name
+  , COALESCE(MAX(identity.department_name) FILTER (WHERE refs.principal_kind = 'message_user'), '')::text AS message_user_department_name
+  , COALESCE(MAX(identity.directory_match) FILTER (WHERE refs.principal_kind = 'message_user'), '')::text AS message_user_directory_match
+  , COALESCE(MAX(identity.role_slugs::text) FILTER (WHERE refs.principal_kind = 'message_user'), '{}')::text[] AS message_user_role_slugs
+  , COALESCE(refs.chat_owner_user_id, '')::text AS chat_owner_user_id
+  , COALESCE(refs.chat_owner_external_user_id, '')::text AS chat_owner_external_user_id
+  , COALESCE(MAX(identity.account_email) FILTER (WHERE refs.principal_kind = 'chat_owner'), '')::text AS chat_owner_user_email
+  , COALESCE(MAX(identity.division_name) FILTER (WHERE refs.principal_kind = 'chat_owner'), '')::text AS chat_owner_division_name
+  , COALESCE(MAX(identity.department_name) FILTER (WHERE refs.principal_kind = 'chat_owner'), '')::text AS chat_owner_department_name
+  , COALESCE(MAX(identity.directory_match) FILTER (WHERE refs.principal_kind = 'chat_owner'), '')::text AS chat_owner_directory_match
+  , COALESCE(MAX(identity.role_slugs::text) FILTER (WHERE refs.principal_kind = 'chat_owner'), '{}')::text[] AS chat_owner_role_slugs
+FROM principal_refs refs
+LEFT JOIN LATERAL (
+  SELECT
+      u.email AS account_email
     , NULLIF(BTRIM(directory_user.attributes ->> 'division_name'), '') AS division_name
     , NULLIF(BTRIM(directory_user.attributes ->> 'department_name'), '') AS department_name
     , directory_user.match_method AS directory_match
     , COALESCE(role_slugs.role_slugs, '{}'::text[])::text[] AS role_slugs
-  FROM principals principal
-  INNER JOIN organization_user_relationships membership
-    ON membership.organization_id = principal.organization_id
-    AND membership.user_id = principal.user_id
-    AND membership.deleted IS FALSE
+  FROM organization_user_relationships membership
   INNER JOIN users u
     ON u.id = membership.user_id
     AND u.deleted_at IS NULL
   LEFT JOIN LATERAL (
-    SELECT
-        d.attributes
-      , CASE WHEN d.user_id = u.id THEN 'user_id'::text ELSE 'email'::text END AS match_method
-    FROM directory_users d
-    WHERE d.organization_id = principal.organization_id
-      AND d.deleted IS FALSE
-      AND d.workos_deleted IS FALSE
-      AND (d.user_id = u.id OR LOWER(d.email) = LOWER(u.email))
-    ORDER BY (d.user_id = u.id) DESC, d.created_at
+    SELECT candidate.attributes, candidate.match_method
+    FROM (
+      SELECT
+          d.attributes
+        , 'user_id'::text AS match_method
+        , 0 AS match_priority
+        , d.created_at
+        , d.id
+      FROM directory_users d
+      WHERE d.organization_id = refs.organization_id
+        AND d.user_id = u.id
+        AND d.user_id IS NOT NULL
+        AND d.deleted IS FALSE
+        AND d.workos_deleted IS FALSE
+      UNION ALL
+      SELECT
+          d.attributes
+        , 'email'::text AS match_method
+        , 1 AS match_priority
+        , d.created_at
+        , d.id
+      FROM directory_users d
+      WHERE d.organization_id = refs.organization_id
+        AND LOWER(d.email) = LOWER(u.email)
+        AND d.deleted IS FALSE
+        AND d.workos_deleted IS FALSE
+    ) candidate
+    ORDER BY candidate.match_priority, candidate.created_at, candidate.id
     LIMIT 1
   ) directory_user ON TRUE
   LEFT JOIN LATERAL (
-    SELECT ARRAY_AGG(DISTINCT role_slug ORDER BY role_slug) AS role_slugs
+    SELECT ARRAY_AGG(DISTINCT active_role.role_slug ORDER BY active_role.role_slug) AS role_slugs
     FROM (
       SELECT COALESCE(organization_role.workos_slug, global_role.workos_slug) AS role_slug
-      FROM organization_role_assignments assignment
+      FROM (
+        SELECT assignment.role_urn
+        FROM organization_role_assignments assignment
+        WHERE assignment.organization_id = refs.organization_id
+          AND assignment.user_id = u.id
+          AND assignment.user_id IS NOT NULL
+          AND assignment.deleted_at IS NULL
+        UNION
+        SELECT assignment.role_urn
+        FROM organization_role_assignments assignment
+        WHERE assignment.organization_id = refs.organization_id
+          AND u.workos_id IS NOT NULL
+          AND assignment.workos_user_id = u.workos_id
+          AND assignment.deleted_at IS NULL
+      ) assignment
       LEFT JOIN organization_roles organization_role
         ON assignment.role_urn = 'role:organization:' || organization_role.id::text
-        AND organization_role.organization_id = assignment.organization_id
+        AND organization_role.organization_id = refs.organization_id
         AND organization_role.deleted IS FALSE
         AND organization_role.workos_deleted IS FALSE
       LEFT JOIN global_roles global_role
         ON assignment.role_urn = 'role:global:' || global_role.id::text
         AND global_role.deleted IS FALSE
         AND global_role.workos_deleted IS FALSE
-      WHERE assignment.organization_id = principal.organization_id
-        AND (assignment.user_id = u.id OR (u.workos_id IS NOT NULL AND assignment.workos_user_id = u.workos_id))
-        AND assignment.deleted_at IS NULL
-    ) active_roles
-    WHERE role_slug IS NOT NULL
+    ) active_role
+    WHERE active_role.role_slug IS NOT NULL
   ) role_slugs ON TRUE
-)
-SELECT
-    scoped.ordinality::bigint AS ordinality
-  , scoped.organization_id::text AS organization_id
-  , scoped.project_id::uuid AS project_id
-  , scoped.chat_id::uuid AS chat_id
-  , COALESCE(scoped.message_user_id, '')::text AS message_user_id
-  , COALESCE(message_identity.account_email, '')::text AS message_user_account_email
-  , COALESCE(message_identity.division_name, '')::text AS message_user_division_name
-  , COALESCE(message_identity.department_name, '')::text AS message_user_department_name
-  , COALESCE(message_identity.directory_match, '')::text AS message_user_directory_match
-  , COALESCE(message_identity.role_slugs, '{}'::text[])::text[] AS message_user_role_slugs
-  , COALESCE(scoped.chat_owner_user_id, '')::text AS chat_owner_user_id
-  , COALESCE(scoped.chat_owner_external_user_id, '')::text AS chat_owner_external_user_id
-  , COALESCE(owner_identity.account_email, '')::text AS chat_owner_user_email
-  , COALESCE(owner_identity.division_name, '')::text AS chat_owner_division_name
-  , COALESCE(owner_identity.department_name, '')::text AS chat_owner_department_name
-  , COALESCE(owner_identity.directory_match, '')::text AS chat_owner_directory_match
-  , COALESCE(owner_identity.role_slugs, '{}'::text[])::text[] AS chat_owner_role_slugs
-FROM scoped_chats scoped
-LEFT JOIN identities message_identity
-  ON message_identity.ordinality = scoped.ordinality
-  AND message_identity.principal_kind = 'message_user'
-LEFT JOIN identities owner_identity
-  ON owner_identity.ordinality = scoped.ordinality
-  AND owner_identity.principal_kind = 'chat_owner'
-ORDER BY scoped.ordinality
+  WHERE membership.organization_id = refs.organization_id
+    AND membership.user_id = refs.principal_user_id
+    AND membership.deleted IS FALSE
+) identity ON TRUE
+GROUP BY
+    refs.ordinality
+  , refs.organization_id
+  , refs.project_id
+  , refs.chat_id
+  , refs.message_user_id
+  , refs.chat_owner_user_id
+  , refs.chat_owner_external_user_id
+ORDER BY refs.ordinality
 `
 
 type ResolveAgentSessionStorageAttributesParams struct {
