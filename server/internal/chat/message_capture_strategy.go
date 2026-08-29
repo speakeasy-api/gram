@@ -273,6 +273,7 @@ func buildPendingRows(
 			chatID:           request.ChatID,
 			userID:           userID,
 			externalUserID:   externalUserID,
+			userEmail:        request.UserEmail,
 			messageID:        "",
 			toolCallID:       toolCallID,
 			role:             openrouter.GetRole(msg),
@@ -378,7 +379,7 @@ func buildAssistantRows(
 	toolCallsJSON []byte,
 	origin, userAgent, ipAddress string,
 	generation int32,
-) []repo.CreateChatMessageParams {
+) []MessageWrite {
 	// Whitespace-only content is treated as no text; preserving invisible
 	// assistant narrative around tool calls does not add useful replay context.
 	content := response.Content
@@ -427,7 +428,7 @@ func buildAssistantRows(
 	only.CompletionTokens = completionTokens
 	only.TotalTokens = totalTokens
 
-	return []repo.CreateChatMessageParams{only}
+	return []MessageWrite{{Params: only, UserEmail: request.UserEmail}}
 }
 
 // firstInvalidToolCall mirrors the runner's normalize_history validation:
@@ -538,7 +539,7 @@ func (s *ChatMessageCaptureStrategy) resolveSession(ctx context.Context, raw ope
 
 // flushTurnAtomically writes the pending user rows and the assistant rows in
 // a single transaction so the turn lands as a unit.
-func (s *ChatMessageCaptureStrategy) flushTurnAtomically(ctx context.Context, projectID uuid.UUID, pending []chatMessageRow, assistants []repo.CreateChatMessageParams) error {
+func (s *ChatMessageCaptureStrategy) flushTurnAtomically(ctx context.Context, projectID uuid.UUID, pending []chatMessageRow, assistants []MessageWrite) error {
 	if err := s.writer.WriteTurn(ctx, projectID, pending, assistants); err != nil {
 		s.logger.ErrorContext(ctx, "failed to flush chat turn", attr.SlogError(err))
 		return fmt.Errorf("flush chat turn: %w", err)

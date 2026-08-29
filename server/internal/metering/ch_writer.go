@@ -2,17 +2,18 @@ package metering
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log/slog"
 	"maps"
 	"time"
 
 	"github.com/google/uuid"
-
 	meteringv1 "github.com/speakeasy-api/gram/infra/gen/gram/metering/v1"
 	"github.com/speakeasy-api/gram/infra/pkg/gcp"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/metering/chrepo"
+	meteringrepo "github.com/speakeasy-api/gram/server/internal/metering/repo"
 	"github.com/speakeasy-api/gram/server/internal/streams"
 )
 
@@ -24,14 +25,16 @@ type ReadingInserter interface {
 // MeterReadingCHWriter validates Pub/Sub readings and writes them to ClickHouse.
 type MeterReadingCHWriter struct {
 	logger        *slog.Logger
+	db            meteringrepo.DBTX
 	inserter      ReadingInserter
 	writesEnabled bool
 }
 
 // NewMeterReadingCHWriter creates a ClickHouse workload reading subscriber.
-func NewMeterReadingCHWriter(logger *slog.Logger, inserter ReadingInserter, writesEnabled bool) *MeterReadingCHWriter {
+func NewMeterReadingCHWriter(logger *slog.Logger, db meteringrepo.DBTX, inserter ReadingInserter, writesEnabled bool) *MeterReadingCHWriter {
 	return &MeterReadingCHWriter{
 		logger:        logger.With(attr.SlogComponent("meter-reading-ch-writer")),
+		db:            db,
 		inserter:      inserter,
 		writesEnabled: writesEnabled,
 	}
@@ -73,8 +76,140 @@ func (w *MeterReadingCHWriter) HandleBatch(ctx context.Context, messages []*mete
 		rows = append(rows, row)
 	}
 
+	if err := w.enrichAgentSessionStorageRows(ctx, rows); err != nil {
+		return err
+	}
 	if err := w.inserter.InsertReadings(ctx, rows); err != nil {
 		return fmt.Errorf("insert meter readings: %w", err)
+	}
+	return nil
+}
+
+type agentSessionStorageLookupKey struct {
+	organizationID string
+	projectID      uuid.UUID
+	chatID         uuid.UUID
+	messageUserID  string
+}
+
+var consumerOwnedAgentSessionAttributes = [...]string{
+	AttributeMessageUserAccountEmail,
+	AttributeMessageUserDivisionName,
+	AttributeMessageUserDepartmentName,
+	AttributeMessageUserDirectoryMatch,
+	AttributeMessageUserRBACRoles,
+	AttributeChatOwnerUserID,
+	AttributeChatOwnerExternalUserID,
+	AttributeChatOwnerUserEmail,
+	AttributeChatOwnerDivisionName,
+	AttributeChatOwnerDepartmentName,
+	AttributeChatOwnerDirectoryMatch,
+	AttributeChatOwnerRBACRoles,
+}
+
+func setResolvedAttribute(attributes map[string]string, key string, value string) {
+	if value != "" {
+		attributes[key] = value
+	}
+}
+
+func (w *MeterReadingCHWriter) enrichAgentSessionStorageRows(ctx context.Context, rows []chrepo.ReadingRow) error {
+	keys := make([]agentSessionStorageLookupKey, 0)
+	seen := make(map[agentSessionStorageLookupKey]struct{})
+	rowKeys := make(map[uuid.UUID]agentSessionStorageLookupKey)
+
+	for i := range rows {
+		row := &rows[i]
+		if row.MeterID != string(MeterAgentSessionStorage) || row.CorrectsReadingID != nil {
+			continue
+		}
+		rawChatID := row.Attributes[AttributeChatID]
+		if rawChatID == "" {
+			continue
+		}
+		for _, key := range consumerOwnedAgentSessionAttributes {
+			delete(row.Attributes, key)
+		}
+		chatID, err := uuid.Parse(rawChatID)
+		if err != nil || chatID == uuid.Nil {
+			continue
+		}
+		lookupKey := agentSessionStorageLookupKey{
+			organizationID: row.OrganizationID,
+			projectID:      row.ProjectID,
+			chatID:         chatID,
+			messageUserID:  row.Attributes[AttributeMessageUserID],
+		}
+		rowKeys[row.ID] = lookupKey
+		if _, duplicate := seen[lookupKey]; duplicate {
+			continue
+		}
+		seen[lookupKey] = struct{}{}
+		keys = append(keys, lookupKey)
+	}
+	if len(keys) == 0 {
+		return nil
+	}
+
+	params := meteringrepo.ResolveAgentSessionStorageAttributesParams{
+		ProjectIds:      make([]uuid.UUID, len(keys)),
+		ChatIds:         make([]uuid.UUID, len(keys)),
+		MessageUserIds:  make([]string, len(keys)),
+		OrganizationIds: make([]string, len(keys)),
+	}
+	for i, key := range keys {
+		params.OrganizationIds[i] = key.organizationID
+		params.ProjectIds[i] = key.projectID
+		params.ChatIds[i] = key.chatID
+		params.MessageUserIds[i] = key.messageUserID
+	}
+
+	resolvedRows, err := meteringrepo.New(w.db).ResolveAgentSessionStorageAttributes(ctx, params)
+	if err != nil {
+		return fmt.Errorf("resolve agent session storage attributes: %w", err)
+	}
+	resolved := make(map[agentSessionStorageLookupKey]map[string]string, len(resolvedRows))
+	for _, result := range resolvedRows {
+		key := agentSessionStorageLookupKey{
+			organizationID: result.OrganizationID,
+			projectID:      result.ProjectID,
+			chatID:         result.ChatID,
+			messageUserID:  result.MessageUserID,
+		}
+		attributes := make(map[string]string)
+		setResolvedAttribute(attributes, AttributeMessageUserAccountEmail, result.MessageUserAccountEmail)
+		setResolvedAttribute(attributes, AttributeMessageUserDivisionName, result.MessageUserDivisionName)
+		setResolvedAttribute(attributes, AttributeMessageUserDepartmentName, result.MessageUserDepartmentName)
+		setResolvedAttribute(attributes, AttributeMessageUserDirectoryMatch, result.MessageUserDirectoryMatch)
+		if len(result.MessageUserRoleSlugs) > 0 {
+			rolesJSON, err := json.Marshal(result.MessageUserRoleSlugs)
+			if err != nil {
+				return fmt.Errorf("marshal message user roles: %w", err)
+			}
+			setResolvedAttribute(attributes, AttributeMessageUserRBACRoles, string(rolesJSON))
+		}
+		setResolvedAttribute(attributes, AttributeChatOwnerUserID, result.ChatOwnerUserID)
+		setResolvedAttribute(attributes, AttributeChatOwnerExternalUserID, result.ChatOwnerExternalUserID)
+		setResolvedAttribute(attributes, AttributeChatOwnerUserEmail, result.ChatOwnerUserEmail)
+		setResolvedAttribute(attributes, AttributeChatOwnerDivisionName, result.ChatOwnerDivisionName)
+		setResolvedAttribute(attributes, AttributeChatOwnerDepartmentName, result.ChatOwnerDepartmentName)
+		setResolvedAttribute(attributes, AttributeChatOwnerDirectoryMatch, result.ChatOwnerDirectoryMatch)
+		if len(result.ChatOwnerRoleSlugs) > 0 {
+			rolesJSON, err := json.Marshal(result.ChatOwnerRoleSlugs)
+			if err != nil {
+				return fmt.Errorf("marshal chat owner roles: %w", err)
+			}
+			setResolvedAttribute(attributes, AttributeChatOwnerRBACRoles, string(rolesJSON))
+		}
+		resolved[key] = attributes
+	}
+
+	for i := range rows {
+		key, ok := rowKeys[rows[i].ID]
+		if !ok {
+			continue
+		}
+		maps.Copy(rows[i].Attributes, resolved[key])
 	}
 	return nil
 }

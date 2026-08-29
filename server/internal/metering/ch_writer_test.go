@@ -7,12 +7,17 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/proto"
 
 	meteringv1 "github.com/speakeasy-api/gram/infra/gen/gram/metering/v1"
+	chatrepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/metering"
 	"github.com/speakeasy-api/gram/server/internal/metering/chrepo"
+	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
@@ -24,6 +29,22 @@ type captureReadingInserter struct {
 func (c *captureReadingInserter) InsertReadings(_ context.Context, rows []chrepo.ReadingRow) error {
 	c.rows = append(c.rows, rows...)
 	return c.err
+}
+
+type failingMeteringDB struct {
+	err error
+}
+
+func (f failingMeteringDB) Exec(context.Context, string, ...any) (pgconn.CommandTag, error) {
+	return pgconn.NewCommandTag(""), f.err
+}
+
+func (f failingMeteringDB) Query(context.Context, string, ...any) (pgx.Rows, error) {
+	return nil, f.err
+}
+
+func (f failingMeteringDB) QueryRow(context.Context, string, ...any) pgx.Row {
+	return nil
 }
 
 func usageMessage(t *testing.T, input metering.UsageInput) (*meteringv1.MeterReading, metering.Reading) {
@@ -101,7 +122,7 @@ func TestMeterReadingCHWriterSkipsPoisonAndDeduplicatesBatch(t *testing.T) {
 	require.True(t, ok)
 	invalid.SetId("not-a-uuid")
 	capture := &captureReadingInserter{rows: nil, err: nil}
-	writer := metering.NewMeterReadingCHWriter(testenv.NewLogger(t), capture, true)
+	writer := metering.NewMeterReadingCHWriter(testenv.NewLogger(t), nil, capture, true)
 
 	require.NoError(t, writer.HandleBatch(t.Context(), []*meteringv1.MeterReading{nil, invalid, valid, updated, valid, refreshed}, nil))
 	require.Len(t, capture.rows, 1)
@@ -126,7 +147,7 @@ func TestMeterReadingCHWriterPropagatesInsertFailure(t *testing.T) {
 		Attributes:  nil,
 	})
 	capture := &captureReadingInserter{rows: nil, err: errors.New("clickhouse unavailable")}
-	writer := metering.NewMeterReadingCHWriter(testenv.NewLogger(t), capture, true)
+	writer := metering.NewMeterReadingCHWriter(testenv.NewLogger(t), nil, capture, true)
 	require.Error(t, writer.HandleBatch(t.Context(), []*meteringv1.MeterReading{message}, nil))
 }
 
@@ -169,7 +190,7 @@ func TestMeterReadingCHWriterRedeliveryConvergesAndPreservesAdjustment(t *testin
 		Source:            "test",
 		Attributes:        nil,
 	})
-	writer := metering.NewMeterReadingCHWriter(testenv.NewLogger(t), chrepo.New(conn), true)
+	writer := metering.NewMeterReadingCHWriter(testenv.NewLogger(t), nil, chrepo.New(conn), true)
 	require.NoError(t, writer.HandleBatch(t.Context(), []*meteringv1.MeterReading{newerEvent}, nil))
 	require.NoError(t, writer.HandleBatch(t.Context(), []*meteringv1.MeterReading{staleEvent}, nil))
 
@@ -204,4 +225,299 @@ func TestMeterReadingCHWriterRedeliveryConvergesAndPreservesAdjustment(t *testin
 	`, scope.OrganizationID(), projectID, string(metering.MeterAgentSessionStorage)).Scan(&count, &net))
 	require.Equal(t, uint64(2), count)
 	require.Equal(t, int64(6), net)
+}
+
+func TestMeterReadingCHWriterEnrichesMessageUserAndChatOwnerIndependently(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+	conn, organizationID := newMeteringPostgres(t)
+	project, err := projectsrepo.New(conn).CreateProject(ctx, projectsrepo.CreateProjectParams{
+		Name:           "Metering Enrichment Project",
+		Slug:           "metering-enrichment-" + uuid.NewString()[:8],
+		OrganizationID: organizationID,
+	})
+	require.NoError(t, err)
+
+	messageUserID := "message-user-" + uuid.NewString()
+	ownerUserID := "owner-user-" + uuid.NewString()
+	seedMeteringUser(t, conn, organizationID, messageUserID, "message-account@example.test", "Message Division", "Message Department", true)
+	seedMeteringUser(t, conn, organizationID, ownerUserID, "owner-account@example.test", "Owner Division", "Owner Department", false)
+	seedMeteringRole(t, conn, organizationID, messageUserID, "zeta-message", false)
+	seedMeteringRole(t, conn, organizationID, messageUserID, "alpha-message", true)
+	seedMeteringRole(t, conn, organizationID, ownerUserID, "member-owner", false)
+	seedMeteringRole(t, conn, organizationID, ownerUserID, "admin-owner", true)
+
+	chatID := uuid.New()
+	_, err = chatrepo.New(conn).UpsertChat(ctx, chatrepo.UpsertChatParams{
+		ID:             chatID,
+		ProjectID:      project.ID,
+		OrganizationID: organizationID,
+		UserID:         conv.ToPGText(ownerUserID),
+		ExternalUserID: conv.ToPGText("owner-provider-id"),
+		Title:          conv.ToPGText("Independent identities"),
+	})
+	require.NoError(t, err)
+
+	now := time.Now().UTC()
+	attributes := map[string]string{
+		metering.AttributeChatID:                    chatID.String(),
+		metering.AttributeModel:                     "gpt-5",
+		metering.AttributeHookSource:                "codex",
+		metering.AttributeMessageUserID:             messageUserID,
+		metering.AttributeMessageExternalUserID:     "opaque-message-provider-id",
+		metering.AttributeMessageUserEmail:          "reported-message@example.test",
+		metering.AttributeMessageUserAccountEmail:   "stale-message@example.test",
+		metering.AttributeChatOwnerUserEmail:        "stale-owner@example.test",
+		metering.AttributeChatOwnerExternalUserID:   "stale-owner-provider-id",
+		metering.AttributeMessageUserDepartmentName: "Stale Message Department",
+		metering.AttributeChatOwnerDepartmentName:   "Stale Owner Department",
+		metering.AttributeMessageUserDirectoryMatch: "stale",
+		metering.AttributeChatOwnerDirectoryMatch:   "stale",
+		metering.AttributeMessageUserRBACRoles:      `["stale"]`,
+		metering.AttributeChatOwnerRBACRoles:        `["stale"]`,
+		metering.AttributeMessageUserDivisionName:   "Stale Message Division",
+		metering.AttributeChatOwnerDivisionName:     "Stale Owner Division",
+		metering.AttributeChatOwnerUserID:           "stale-owner-user",
+	}
+	message, _ := usageMessage(t, metering.UsageInput{
+		Meter:       metering.AgentSessionStorage(),
+		Scope:       metering.ProjectScope(organizationID, project.ID),
+		OperationID: "chat_message:" + uuid.NewString(),
+		Value:       9,
+		OccurredAt:  now,
+		ProducedAt:  now,
+		Source:      "chat_message_writer",
+		Attributes:  attributes,
+	})
+	capture := &captureReadingInserter{rows: nil, err: nil}
+	writer := metering.NewMeterReadingCHWriter(testenv.NewLogger(t), conn, capture)
+
+	require.NoError(t, writer.HandleBatch(ctx, []*meteringv1.MeterReading{message}, nil))
+	require.Equal(t, "stale-owner@example.test", message.GetAttributes()[metering.AttributeChatOwnerUserEmail])
+	require.NotContains(t, message.GetAttributes(), "codec")
+	require.Len(t, capture.rows, 1)
+	require.Equal(t, map[string]string{
+		"codec":                                     string(metering.MeasurementTiktokenO200kBase),
+		metering.AttributeChatID:                    chatID.String(),
+		metering.AttributeModel:                     "gpt-5",
+		metering.AttributeHookSource:                "codex",
+		metering.AttributeMessageUserID:             messageUserID,
+		metering.AttributeMessageExternalUserID:     "opaque-message-provider-id",
+		metering.AttributeMessageUserEmail:          "reported-message@example.test",
+		metering.AttributeMessageUserAccountEmail:   "message-account@example.test",
+		metering.AttributeMessageUserDivisionName:   "Message Division",
+		metering.AttributeMessageUserDepartmentName: "Message Department",
+		metering.AttributeMessageUserDirectoryMatch: "user_id",
+		metering.AttributeMessageUserRBACRoles:      `["alpha-message","zeta-message"]`,
+		metering.AttributeChatOwnerUserID:           ownerUserID,
+		metering.AttributeChatOwnerExternalUserID:   "owner-provider-id",
+		metering.AttributeChatOwnerUserEmail:        "owner-account@example.test",
+		metering.AttributeChatOwnerDivisionName:     "Owner Division",
+		metering.AttributeChatOwnerDepartmentName:   "Owner Department",
+		metering.AttributeChatOwnerDirectoryMatch:   "email",
+		metering.AttributeChatOwnerRBACRoles:        `["admin-owner","member-owner"]`,
+	}, capture.rows[0].Attributes)
+}
+
+func TestMeterReadingCHWriterPreservesIdentityBoundaries(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+	conn, organizationID := newMeteringPostgres(t)
+	project, err := projectsrepo.New(conn).CreateProject(ctx, projectsrepo.CreateProjectParams{
+		Name:           "Metering Boundaries Project",
+		Slug:           "metering-boundaries-" + uuid.NewString()[:8],
+		OrganizationID: organizationID,
+	})
+	require.NoError(t, err)
+	otherProject, err := projectsrepo.New(conn).CreateProject(ctx, projectsrepo.CreateProjectParams{
+		Name:           "Other Metering Project",
+		Slug:           "other-metering-" + uuid.NewString()[:8],
+		OrganizationID: organizationID,
+	})
+	require.NoError(t, err)
+
+	ownerOnlyUserID := "owner-only-" + uuid.NewString()
+	seedMeteringUser(t, conn, organizationID, ownerOnlyUserID, "owner-only@example.test", "Owner Only Division", "Owner Only Department", true)
+	seedMeteringRole(t, conn, organizationID, ownerOnlyUserID, "owner-only-role", false)
+	sameUserID := "same-user-" + uuid.NewString()
+	seedMeteringUser(t, conn, organizationID, sameUserID, "same-user@example.test", "Same Division", "Same Department", true)
+	seedMeteringRole(t, conn, organizationID, sameUserID, "same-role", false)
+	plainUserID := "plain-user-" + uuid.NewString()
+	seedMeteringAccount(t, conn, organizationID, plainUserID, "plain-user@example.test")
+
+	createChat := func(chatID uuid.UUID, projectID uuid.UUID, ownerUserID string) {
+		t.Helper()
+		_, createErr := chatrepo.New(conn).UpsertChat(ctx, chatrepo.UpsertChatParams{
+			ID:             chatID,
+			ProjectID:      projectID,
+			OrganizationID: organizationID,
+			UserID:         conv.ToPGTextEmpty(ownerUserID),
+			ExternalUserID: conv.ToPGTextEmpty(""),
+			Title:          conv.ToPGText("Boundary chat"),
+		})
+		require.NoError(t, createErr)
+	}
+	ownerOnlyChatID := uuid.New()
+	sameUserChatID := uuid.New()
+	anonymousChatID := uuid.New()
+	plainUserChatID := uuid.New()
+	foreignChatID := uuid.New()
+	deletedChatID := uuid.New()
+	createChat(ownerOnlyChatID, project.ID, ownerOnlyUserID)
+	createChat(sameUserChatID, project.ID, sameUserID)
+	createChat(anonymousChatID, project.ID, "")
+	createChat(plainUserChatID, project.ID, plainUserID)
+	createChat(foreignChatID, otherProject.ID, ownerOnlyUserID)
+	createChat(deletedChatID, project.ID, ownerOnlyUserID)
+	deleted, err := chatrepo.New(conn).SoftDeleteChat(ctx, chatrepo.SoftDeleteChatParams{ProjectID: project.ID, ID: deletedChatID})
+	require.NoError(t, err)
+	require.True(t, deleted.Deleted)
+
+	now := time.Now().UTC()
+	newMessage := func(operationID string, attributes map[string]string) *meteringv1.MeterReading {
+		t.Helper()
+		message, _ := usageMessage(t, metering.UsageInput{
+			Meter:       metering.AgentSessionStorage(),
+			Scope:       metering.ProjectScope(organizationID, project.ID),
+			OperationID: operationID,
+			Value:       1,
+			OccurredAt:  now,
+			ProducedAt:  now,
+			Source:      "chat_message_writer",
+			Attributes:  attributes,
+		})
+		return message
+	}
+	messages := []*meteringv1.MeterReading{
+		newMessage("owner-only", map[string]string{
+			metering.AttributeChatID:     ownerOnlyChatID.String(),
+			metering.AttributeModel:      "owner-only-model",
+			metering.AttributeHookSource: "codex",
+		}),
+		newMessage("same-user", map[string]string{
+			metering.AttributeChatID:        sameUserChatID.String(),
+			metering.AttributeMessageUserID: sameUserID,
+		}),
+		newMessage("explicit-email", map[string]string{
+			metering.AttributeChatID:                anonymousChatID.String(),
+			metering.AttributeModel:                 "anonymous-model",
+			metering.AttributeHookSource:            "chatgpt",
+			metering.AttributeMessageExternalUserID: "opaque-provider-id",
+			metering.AttributeMessageUserEmail:      "observed-only@example.test",
+		}),
+		newMessage("anonymous", map[string]string{
+			metering.AttributeChatID:     anonymousChatID.String(),
+			metering.AttributeModel:      "anonymous-model",
+			metering.AttributeHookSource: "codex",
+		}),
+		newMessage("no-directory-or-roles", map[string]string{
+			metering.AttributeChatID:        plainUserChatID.String(),
+			metering.AttributeMessageUserID: plainUserID,
+		}),
+		newMessage("tenant-mismatch", map[string]string{
+			metering.AttributeChatID:                  foreignChatID.String(),
+			metering.AttributeModel:                   "foreign-model",
+			metering.AttributeMessageUserAccountEmail: "stale@example.test",
+			metering.AttributeChatOwnerUserID:         "stale-owner",
+		}),
+		newMessage("deleted-chat", map[string]string{
+			metering.AttributeChatID:               deletedChatID.String(),
+			metering.AttributeHookSource:           "deleted-source",
+			metering.AttributeChatOwnerUserEmail:   "stale-owner@example.test",
+			metering.AttributeMessageUserRBACRoles: `["stale"]`,
+		}),
+	}
+	capture := &captureReadingInserter{rows: nil, err: nil}
+	writer := metering.NewMeterReadingCHWriter(testenv.NewLogger(t), conn, capture)
+
+	require.NoError(t, writer.HandleBatch(ctx, messages, nil))
+	require.Len(t, capture.rows, len(messages))
+	rows := make(map[string]chrepo.ReadingRow, len(capture.rows))
+	for _, row := range capture.rows {
+		rows[row.OperationID] = row
+	}
+
+	ownerOnly := rows["owner-only"].Attributes
+	require.Equal(t, ownerOnlyUserID, ownerOnly[metering.AttributeChatOwnerUserID])
+	require.Equal(t, "owner-only@example.test", ownerOnly[metering.AttributeChatOwnerUserEmail])
+	require.Equal(t, "Owner Only Division", ownerOnly[metering.AttributeChatOwnerDivisionName])
+	require.Equal(t, `["owner-only-role"]`, ownerOnly[metering.AttributeChatOwnerRBACRoles])
+	require.NotContains(t, ownerOnly, metering.AttributeMessageUserID)
+	require.NotContains(t, ownerOnly, metering.AttributeMessageUserAccountEmail)
+	require.NotContains(t, ownerOnly, metering.AttributeMessageUserDirectoryMatch)
+	require.NotContains(t, ownerOnly, metering.AttributeMessageUserRBACRoles)
+
+	sameUser := rows["same-user"].Attributes
+	require.Equal(t, sameUserID, sameUser[metering.AttributeMessageUserID])
+	require.Equal(t, sameUserID, sameUser[metering.AttributeChatOwnerUserID])
+	require.Equal(t, "same-user@example.test", sameUser[metering.AttributeMessageUserAccountEmail])
+	require.Equal(t, "same-user@example.test", sameUser[metering.AttributeChatOwnerUserEmail])
+	require.Equal(t, "Same Division", sameUser[metering.AttributeMessageUserDivisionName])
+	require.Equal(t, "Same Division", sameUser[metering.AttributeChatOwnerDivisionName])
+	require.Equal(t, `["same-role"]`, sameUser[metering.AttributeMessageUserRBACRoles])
+	require.Equal(t, `["same-role"]`, sameUser[metering.AttributeChatOwnerRBACRoles])
+
+	require.Equal(t, map[string]string{
+		"codec":                                 string(metering.MeasurementTiktokenO200kBase),
+		metering.AttributeChatID:                anonymousChatID.String(),
+		metering.AttributeModel:                 "anonymous-model",
+		metering.AttributeHookSource:            "chatgpt",
+		metering.AttributeMessageExternalUserID: "opaque-provider-id",
+		metering.AttributeMessageUserEmail:      "observed-only@example.test",
+	}, rows["explicit-email"].Attributes)
+	require.Equal(t, map[string]string{
+		"codec":                      string(metering.MeasurementTiktokenO200kBase),
+		metering.AttributeChatID:     anonymousChatID.String(),
+		metering.AttributeModel:      "anonymous-model",
+		metering.AttributeHookSource: "codex",
+	}, rows["anonymous"].Attributes)
+
+	plain := rows["no-directory-or-roles"].Attributes
+	require.Equal(t, plainUserID, plain[metering.AttributeMessageUserID])
+	require.Equal(t, plainUserID, plain[metering.AttributeChatOwnerUserID])
+	require.Equal(t, "plain-user@example.test", plain[metering.AttributeMessageUserAccountEmail])
+	require.Equal(t, "plain-user@example.test", plain[metering.AttributeChatOwnerUserEmail])
+	require.NotContains(t, plain, metering.AttributeMessageUserDirectoryMatch)
+	require.NotContains(t, plain, metering.AttributeChatOwnerDirectoryMatch)
+	require.NotContains(t, plain, metering.AttributeMessageUserRBACRoles)
+	require.NotContains(t, plain, metering.AttributeChatOwnerRBACRoles)
+
+	require.Equal(t, map[string]string{
+		"codec":                  string(metering.MeasurementTiktokenO200kBase),
+		metering.AttributeChatID: foreignChatID.String(),
+		metering.AttributeModel:  "foreign-model",
+	}, rows["tenant-mismatch"].Attributes)
+	require.Equal(t, map[string]string{
+		"codec":                      string(metering.MeasurementTiktokenO200kBase),
+		metering.AttributeChatID:     deletedChatID.String(),
+		metering.AttributeHookSource: "deleted-source",
+	}, rows["deleted-chat"].Attributes)
+}
+
+func TestMeterReadingCHWriterRetriesPostgresFailureBeforeClickHouseInsert(t *testing.T) {
+	t.Parallel()
+	now := time.Now().UTC()
+	message, _ := usageMessage(t, metering.UsageInput{
+		Meter:       metering.AgentSessionStorage(),
+		Scope:       metering.ProjectScope("org-"+uuid.NewString(), uuid.New()),
+		OperationID: "chat_message:" + uuid.NewString(),
+		Value:       1,
+		OccurredAt:  now,
+		ProducedAt:  now,
+		Source:      "chat_message_writer",
+		Attributes: map[string]string{
+			metering.AttributeChatID: uuid.NewString(),
+		},
+	})
+	capture := &captureReadingInserter{rows: nil, err: nil}
+	writer := metering.NewMeterReadingCHWriter(
+		testenv.NewLogger(t),
+		failingMeteringDB{err: errors.New("postgres unavailable")},
+		capture,
+	)
+
+	err := writer.HandleBatch(t.Context(), []*meteringv1.MeterReading{message}, nil)
+
+	require.ErrorContains(t, err, "resolve agent session storage attributes")
+	require.Empty(t, capture.rows)
 }

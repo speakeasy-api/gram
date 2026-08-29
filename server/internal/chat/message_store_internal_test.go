@@ -35,7 +35,7 @@ func TestReadingsForMessagesLogsAndSkipsMeteringFailure(t *testing.T) {
 		logger,
 		"org-"+uuid.NewString(),
 		projectID,
-		[]repo.CreateChatMessageParams{param},
+		[]MessageWrite{{Params: param, UserEmail: ""}},
 		time.Now().UTC(),
 	)
 

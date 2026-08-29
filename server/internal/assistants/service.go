@@ -3462,16 +3462,16 @@ func (s *ServiceCore) selfHealCorruptHistory(ctx context.Context, chatID uuid.UU
 		Generation:       nextGen,
 	}
 
-	rows := make([]chatrepo.CreateChatMessageParams, 0, len(userMessages)+1)
+	rows := make([]chat.MessageWrite, 0, len(userMessages)+1)
 	notice := base
 	notice.Content = fmt.Sprintf(selfHealRecoveryNoticeTemplate, len(userMessages), selfHealUserMessageMaxLen)
-	rows = append(rows, notice)
+	rows = append(rows, chat.MessageWrite{Params: notice, UserEmail: ""})
 	for _, m := range userMessages {
 		row := base
 		row.Content = conv.TruncateString(m.Content, selfHealUserMessageMaxLen)
 		row.UserID = m.UserID
 		row.ExternalUserID = m.ExternalUserID
-		rows = append(rows, row)
+		rows = append(rows, chat.MessageWrite{Params: row, UserEmail: ""})
 	}
 
 	if _, err := s.chatWriter.Write(ctx, projectID, rows); err != nil {
