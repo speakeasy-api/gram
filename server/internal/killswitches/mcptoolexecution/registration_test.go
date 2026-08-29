@@ -62,6 +62,7 @@ func TestMCPCoverageInventory(t *testing.T) {
 	hosted, ok := registry.Coverage(DefinitionKeyMCPToolExecution, SurfaceHostedToolsCall)
 	require.True(t, ok)
 	require.Equal(t, TransportAdapterHostedJSONRPC, hosted.TransportAdapter)
+	require.Contains(t, hosted.ProtectedWork, "resolving protected credentials")
 
 	proxy, ok := registry.Coverage(DefinitionKeyMCPToolExecution, SurfacePrivateProxyToolsCall)
 	require.True(t, ok)

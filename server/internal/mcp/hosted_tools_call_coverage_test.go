@@ -8,7 +8,6 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/otel/attribute"
 	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
-	"go.opentelemetry.io/otel/sdk/metric/metricdata"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
@@ -41,21 +40,7 @@ func TestHostedMalformedToolsCall_RecordsCoverageAtMethodBoundary(t *testing.T) 
 	_, err = servePublicHTTP(t, ctx, ti, endpointSlug, body, "", nil)
 	require.NoError(t, err)
 
-	var rm metricdata.ResourceMetrics
-	require.NoError(t, reader.Collect(t.Context(), &rm))
-	coveragePoints := map[attribute.Set]int64{}
-	for _, scope := range rm.ScopeMetrics {
-		for _, metric := range scope.Metrics {
-			if metric.Name != mcpmetrics.InstrumentMCPToolCallKillswitchIdentity {
-				continue
-			}
-			sum, ok := metric.Data.(metricdata.Sum[int64])
-			require.True(t, ok)
-			for _, point := range sum.DataPoints {
-				coveragePoints[point.Attributes] = point.Value
-			}
-		}
-	}
+	coveragePoints := collectKillswitchCoverage(t, reader)
 	require.Equal(t, map[attribute.Set]int64{
 		attribute.NewSet(
 			attr.McpKillswitchSurface(mcpmetrics.KillswitchSurfaceHosted),

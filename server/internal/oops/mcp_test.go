@@ -72,6 +72,7 @@ func TestMCPError_MarshalJSON(t *testing.T) {
 		ID:      mcpjsonrpc.NumberID(1),
 		Code:    MCPCodeMethodNotFound,
 		Message: "tools/unknown: Method not found",
+		Data:    nil,
 	}
 
 	data, marshalErr := json.Marshal(err)
@@ -88,6 +89,11 @@ func TestMCPError_MarshalJSON(t *testing.T) {
 	require.InDelta(t, -32601, errorBody["code"], 0)
 	require.Equal(t, "tools/unknown: Method not found", errorBody["message"])
 	require.NotContains(t, errorBody, "data")
+
+	err.Data = &MCPErrorData{Code: MCPErrorDataCode("typed_code")}
+	data, marshalErr = json.Marshal(err)
+	require.NoError(t, marshalErr)
+	require.JSONEq(t, `{"jsonrpc":"2.0","id":1,"error":{"code":-32601,"message":"tools/unknown: Method not found","data":{"code":"typed_code"}}}`, string(data))
 }
 
 func TestCodeMCPCode(t *testing.T) {
@@ -136,7 +142,7 @@ func TestNewMCPErrorFromCause(t *testing.T) {
 	t.Run("returns_existing_mcp_error", func(t *testing.T) {
 		t.Parallel()
 
-		existing := &MCPError{Code: MCPCodeMethodNotFound, Message: "missing"}
+		existing := &MCPError{ID: mcpjsonrpc.ID{Number: 0, String: ""}, Code: MCPCodeMethodNotFound, Message: "missing", Data: nil}
 		err := NewMCPErrorFromCause(id, existing)
 
 		require.Same(t, existing, err)
