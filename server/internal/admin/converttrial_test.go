@@ -267,7 +267,8 @@ func TestMarkEnterpriseTrialConverted_EligibilityAndIdempotencyBoundary(t *testi
 				require.Equal(t, beforeOutbox, afterOutbox)
 			}
 			if tc.wantConverted || tc.wantValidRetry {
-				require.Equal(t, openrouter.AllKeyTypes, provisioner.reconcileAttempts)
+				require.Empty(t, provisioner.reconcileAttempts, "conversion must not use disabled-only reconciliation")
+				require.Equal(t, openrouter.AllKeyTypes, provisioner.conversionPolicyAttempts)
 			} else {
 				require.Empty(t, provisioner.revivals, "rejected conversion must not perform provider HTTP")
 			}

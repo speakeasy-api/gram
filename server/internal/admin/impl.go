@@ -95,6 +95,7 @@ type TrialKeyReviver interface {
 	RemoveAPIKeyDisableCauseWithDB(ctx context.Context, db openrouter.DBTX, orgID string, keyType openrouter.KeyType, cause openrouter.DisableCause, limit *int) (int, openrouter.DisableCauseChange, error)
 	PrepareEnterpriseTrialConversionKeyWithDB(ctx context.Context, db openrouter.DBTX, orgID string, keyType openrouter.KeyType, enterpriseFloor int64) (openrouter.EnterpriseTrialConversionKeyChange, error)
 	ReconcileAPIKeyDisabled(ctx context.Context, orgID string, keyType openrouter.KeyType) error
+	ReconcileAPIKeyConversionPolicy(ctx context.Context, orgID string, keyType openrouter.KeyType) error
 }
 
 type OpenRouterSpendCapScheduler interface {
@@ -147,6 +148,10 @@ func (TrialKeysUnavailable) PrepareEnterpriseTrialConversionKeyWithDB(context.Co
 }
 
 func (TrialKeysUnavailable) ReconcileAPIKeyDisabled(context.Context, string, openrouter.KeyType) error {
+	return ErrOpenRouterUnavailable
+}
+
+func (TrialKeysUnavailable) ReconcileAPIKeyConversionPolicy(context.Context, string, openrouter.KeyType) error {
 	return ErrOpenRouterUnavailable
 }
 

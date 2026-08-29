@@ -65,7 +65,8 @@ func TestMarkEnterpriseTrialConverted_AuditSnapshotsAreCompleteAndPrivate(t *tes
 	payloadSessionToken := sessionSentinel
 	result, err := svc.MarkEnterpriseTrialConverted(ctx, &gen.MarkEnterpriseTrialConvertedPayload{ID: orgID, AdminSessionToken: &payloadSessionToken})
 	require.NoError(t, err)
-	require.Equal(t, openrouter.AllKeyTypes, provisioner.reconcileAttempts)
+	require.Empty(t, provisioner.reconcileAttempts, "conversion must not use disabled-only reconciliation")
+	require.Equal(t, openrouter.AllKeyTypes, provisioner.conversionPolicyAttempts)
 	responseJSON, err := json.Marshal(srv.NewMarkEnterpriseTrialConvertedResponseBody(result))
 	require.NoError(t, err)
 	var response map[string]any
@@ -255,4 +256,6 @@ func TestMarkEnterpriseTrialConverted_PostCommitFailureRetryConverges(t *testing
 	require.NoError(t, err)
 	require.EqualValues(t, 1, count)
 	require.Equal(t, []string{orgID, orgID}, notifier.inactive, "valid retries must reattempt transient TrialInactive cleanup")
+	require.Empty(t, provisioner.reconcileAttempts, "conversion must not use disabled-only reconciliation")
+	require.Equal(t, append(append([]openrouter.KeyType{}, openrouter.AllKeyTypes...), openrouter.AllKeyTypes...), provisioner.conversionPolicyAttempts, "valid retry must repeat complete conversion-policy reconciliation")
 }

@@ -55,9 +55,10 @@ type keyRevival struct {
 type rearmProvisioner struct {
 	conn *pgxpool.Pool
 
-	mu                sync.Mutex
-	revivals          []keyRevival
-	reconcileAttempts []openrouter.KeyType
+	mu                       sync.Mutex
+	revivals                 []keyRevival
+	reconcileAttempts        []openrouter.KeyType
+	conversionPolicyAttempts []openrouter.KeyType
 
 	failOn openrouter.KeyType
 	// failAfter is how a test reaches the post-commit recap.
@@ -123,6 +124,17 @@ func (p *rearmProvisioner) ReconcileAPIKeyDisabled(ctx context.Context, orgID st
 	p.mu.Lock()
 	p.reconcileAttempts = append(p.reconcileAttempts, keyType)
 	p.mu.Unlock()
+	return p.reconcileAPIKey(ctx, orgID, keyType)
+}
+
+func (p *rearmProvisioner) ReconcileAPIKeyConversionPolicy(ctx context.Context, orgID string, keyType openrouter.KeyType) error {
+	p.mu.Lock()
+	p.conversionPolicyAttempts = append(p.conversionPolicyAttempts, keyType)
+	p.mu.Unlock()
+	return p.reconcileAPIKey(ctx, orgID, keyType)
+}
+
+func (p *rearmProvisioner) reconcileAPIKey(ctx context.Context, orgID string, keyType openrouter.KeyType) error {
 	row, err := orrepo.New(p.conn).GetOpenRouterAPIKey(ctx, orrepo.GetOpenRouterAPIKeyParams{OrganizationID: orgID, KeyType: string(keyType)})
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil

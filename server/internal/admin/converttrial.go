@@ -209,7 +209,7 @@ func (s *Service) markEnterpriseTrialConverted(ctx context.Context, organization
 
 func (s *Service) reconcileConvertedTrialKeys(ctx context.Context, organizationID string) error {
 	for _, keyType := range openrouter.AllKeyTypes {
-		if err := s.openRouter.ReconcileAPIKeyDisabled(ctx, organizationID, keyType); err != nil {
+		if err := s.openRouter.ReconcileAPIKeyConversionPolicy(ctx, organizationID, keyType); err != nil {
 			return oops.E(oops.CodeUnexpected, err, "reconcile openrouter %s key after enterprise trial conversion", keyType).LogError(ctx, s.logger)
 		}
 	}

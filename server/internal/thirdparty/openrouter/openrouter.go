@@ -968,6 +968,19 @@ func (o *OpenRouter) removeAPIKeyDisableCauseWithDB(ctx context.Context, db DBTX
 	return keyLimit, DisableCauseChange{CauseChanged: true, KeyAccessChanged: accessChanged}, nil
 }
 
+// ReconcileAPIKeyConversionPolicy projects both the persisted monthly limit and
+// effective disabled state from committed local state. It serializes with key
+// replacement and billing mutations so retries always reconcile one current key.
+func (o *OpenRouter) ReconcileAPIKeyConversionPolicy(ctx context.Context, orgID string, keyType KeyType) error {
+	keyType = keyType.OrDefault()
+	if err := keyType.Validate(); err != nil {
+		return fmt.Errorf("reconcile OpenRouter API key conversion policy: %w", err)
+	}
+	return o.withOpenRouterKeyBillingLock(ctx, orgID, keyType, func(conn *pgxpool.Conn) error {
+		return o.reconcileAPIKeyPolicyWithDB(ctx, conn, orgID, keyType, true)
+	})
+}
+
 // ReconcileAPIKeyDisabled serializes reconciliation with key replacement and
 // every compliant billing mutation before reading committed desired state.
 func (o *OpenRouter) ReconcileAPIKeyDisabled(ctx context.Context, orgID string, keyType KeyType) error {
@@ -990,6 +1003,10 @@ func (o *OpenRouter) ReconcileAPIKeyDisabledWithDB(ctx context.Context, db DBTX,
 		return fmt.Errorf("reconcile OpenRouter API key disabled state: %w", err)
 	}
 
+	return o.reconcileAPIKeyPolicyWithDB(ctx, db, orgID, keyType, false)
+}
+
+func (o *OpenRouter) reconcileAPIKeyPolicyWithDB(ctx context.Context, db DBTX, orgID string, keyType KeyType, includeLimitWhileDisabled bool) error {
 	key, err := repo.New(db).GetOpenRouterAPIKey(ctx, repo.GetOpenRouterAPIKeyParams{
 		OrganizationID: orgID,
 		KeyType:        string(keyType),
@@ -1005,7 +1022,7 @@ func (o *OpenRouter) ReconcileAPIKeyDisabledWithDB(ctx context.Context, db DBTX,
 
 	disabled := EffectiveDisabled(key.Disabled, key.DisableCauses)
 	patch := updateKeyRequest{Disabled: &disabled, Limit: nil, LimitReset: ""}
-	if !disabled && key.MonthlyCredits > 0 {
+	if (!disabled || includeLimitWhileDisabled) && key.MonthlyCredits > 0 {
 		creditLimit := float64(key.MonthlyCredits)
 		patch.Limit = &creditLimit
 		patch.LimitReset = "monthly"

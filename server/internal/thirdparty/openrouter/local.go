@@ -62,6 +62,10 @@ func (o *Development) ReconcileAPIKeyDisabled(context.Context, string, KeyType) 
 	return nil
 }
 
+func (o *Development) ReconcileAPIKeyConversionPolicy(context.Context, string, KeyType) error {
+	return nil
+}
+
 func (o *Development) DisableAPIKey(ctx context.Context, orgID string, keyType KeyType) error {
 	return nil
 }
