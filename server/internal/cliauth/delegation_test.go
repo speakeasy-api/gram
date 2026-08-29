@@ -106,7 +106,7 @@ func TestDelegateHooksActingUserRequiresCurrentMembershipAndProof(t *testing.T) 
 	}, time.Second, 10*time.Millisecond)
 	ttlAfterRefresh, err := ti.redis.PTTL(ctx, nonceKey).Result()
 	require.NoError(t, err)
-	require.Less(t, ttlAfterRefresh, ttlBeforeRefresh, "assertion refresh must not extend nonce expiry")
+	require.LessOrEqual(t, ttlAfterRefresh, ttlBeforeRefresh, "assertion refresh must not extend nonce expiry")
 
 	conflictRequest := request
 	conflictRequest.IdempotencyKey = uuid.NewString()
