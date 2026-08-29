@@ -33,6 +33,7 @@ func TestClassifyIdentityCoverage(t *testing.T) {
 	}{
 		{name: "active user", source: testIdentity(t, mcpidentity.KindUserSession, "user_01J8EXAMPLE"), result: candidates, err: nil, want: mcpmetrics.KillswitchIdentityActiveUser},
 		{name: "inactive user", source: testIdentity(t, mcpidentity.KindUserSession, "user_01J8EXAMPLE"), result: unsupported, err: nil, want: mcpmetrics.KillswitchIdentityInactiveUser},
+		{name: "inactive delegated user", source: testIdentity(t, mcpidentity.KindDelegatedUser, "user_01J8EXAMPLE"), result: unsupported, err: nil, want: mcpmetrics.KillswitchIdentityInactiveUser},
 		{name: "anonymous", source: testIdentity(t, mcpidentity.KindAnonymous, ""), result: unsupported, err: nil, want: mcpmetrics.KillswitchIdentityAnonymous},
 		{name: "api key", source: testIdentity(t, mcpidentity.KindAPIKey, ""), result: unsupported, err: nil, want: mcpmetrics.KillswitchIdentityAPIKey},
 		{name: "assistant", source: testIdentity(t, mcpidentity.KindAssistant, ""), result: unsupported, err: nil, want: mcpmetrics.KillswitchIdentityAssistant},

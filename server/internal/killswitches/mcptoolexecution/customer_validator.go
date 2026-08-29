@@ -45,6 +45,9 @@ func (customerLifecycleValidator) ValidateCurrent(ctx context.Context, dbtx kill
 	if batch.Resources == nil {
 		return nil
 	}
+	if len(batch.Resources.Keys) == 0 {
+		return fmt.Errorf("%w: resource is required", killswitches.ErrInvalidReference)
+	}
 	ids, ok := canonicalResourceIDs(batch.Resources.Keys)
 	if !ok {
 		return fmt.Errorf("%w: resource is not available", killswitches.ErrInvalidReference)
