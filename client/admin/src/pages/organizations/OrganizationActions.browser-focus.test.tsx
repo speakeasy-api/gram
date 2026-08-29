@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { AdminOrganization } from "@/lib/gramAdminApi";
@@ -72,7 +72,7 @@ afterEach(cleanup);
 
 describe("OrganizationActions without DialogTrigger restoration", () => {
   it.each(["Cancel", "Escape"] as const)(
-    "restores the connected opener after %s disconnects the focused dialog control",
+    "immediately restores the connected opener after %s disconnects the focused dialog control",
     async (exit) => {
       await renderWithApp(<OrganizationActions org={ORG} layout="buttons" />);
       const opener = screen.getByRole("button", {
@@ -87,8 +87,8 @@ describe("OrganizationActions without DialogTrigger restoration", () => {
       if (exit === "Cancel") fireEvent.click(cancel);
       else fireEvent.keyDown(dialog, { key: "Escape" });
 
-      await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
-      await waitFor(() => expect(document.activeElement).toBe(opener));
+      expect(screen.queryByRole("dialog")).toBeNull();
+      expect(document.activeElement).toBe(opener);
       expect(document.activeElement).not.toBe(document.body);
     },
   );

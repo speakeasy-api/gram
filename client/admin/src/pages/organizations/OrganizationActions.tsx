@@ -9,6 +9,7 @@ import {
   type ReactNode,
   type RefObject,
 } from "react";
+import { flushSync } from "react-dom";
 
 import { Button } from "@/components/ui/button";
 import { Calendar } from "@/components/ui/calendar";
@@ -211,10 +212,18 @@ export function OrganizationActions({
     setTimeout(() => focusOrigin(control));
   };
 
-  const closeDialog = (): void => {
+  const closeAfterWrite = (): void => {
     const control = openedFrom.current;
     setOpen(undefined);
     restoreAfterCommit(control);
+  };
+
+  const cancelDialog = (): void => {
+    const control = openedFrom.current;
+    // Cancellation leaves the opener in place. Commit the dialog removal now,
+    // then restore focus before the event can expose document.body as a stop.
+    flushSync(() => setOpen(undefined));
+    focusOrigin(control);
   };
 
   const restoreFocus = (event: Event): void => {
@@ -224,7 +233,7 @@ export function OrganizationActions({
   const runDisable = (): void => {
     disable.mutate(org.id, {
       onSuccess: () => {
-        closeDialog();
+        closeAfterWrite();
         showFailure(null);
         announce(`${org.name} is disabled.`);
       },
@@ -261,7 +270,7 @@ export function OrganizationActions({
       { id: org.id, days },
       {
         onSuccess: () => {
-          closeDialog();
+          closeAfterWrite();
           showFailure(null);
           announce(`${org.name} trial extended by ${dayCount(days)}.`);
         },
@@ -276,7 +285,7 @@ export function OrganizationActions({
       { id: org.id, days },
       {
         onSuccess: () => {
-          closeDialog();
+          closeAfterWrite();
           showFailure(null);
           announce(`${org.name} trial re-armed for ${dayCount(days)}.`);
         },
@@ -293,7 +302,7 @@ export function OrganizationActions({
           org={org}
           pending={disable.isPending}
           failure={disable.error}
-          onCancel={closeDialog}
+          onCancel={cancelDialog}
           onCloseAutoFocus={restoreFocus}
           onConfirm={runDisable}
         />
@@ -313,7 +322,7 @@ export function OrganizationActions({
           failureLead={extendFailureLead}
           pending={extend.isPending}
           failure={extend.error}
-          onCancel={closeDialog}
+          onCancel={cancelDialog}
           onCloseAutoFocus={restoreFocus}
           onSubmit={runExtend}
         />
@@ -332,7 +341,7 @@ export function OrganizationActions({
           failureLead={rearmFailureLead}
           pending={rearm.isPending}
           failure={rearm.error}
-          onCancel={closeDialog}
+          onCancel={cancelDialog}
           onCloseAutoFocus={restoreFocus}
           onSubmit={runRearm}
         />
