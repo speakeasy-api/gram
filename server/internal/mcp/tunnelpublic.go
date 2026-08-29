@@ -528,8 +528,9 @@ func (s *Service) serveTunneledPublicSession(
 	)
 	// Redirects won't work across a tunnel boundary; disable.
 	p.DisableRedirects = true
+	p.GuardianClientOptions = []guardian.ClientOption{guardian.WithDialTimeout(tunnelGatewayDialTimeout)}
 	if len(m.gatewayCIDRs) > 0 {
-		p.GuardianClientOptions = []guardian.ClientOption{guardian.WithAllowedCIDRBlocks(m.gatewayCIDRs...)}
+		p.GuardianClientOptions = append(p.GuardianClientOptions, guardian.WithAllowedCIDRBlocks(m.gatewayCIDRs...))
 	}
 
 	isDelete := r.Method == http.MethodDelete
@@ -566,6 +567,12 @@ func (s *Service) serveTunneledPublicSession(
 	}
 
 	if err := serveProxyBackend(w, r, p); err != nil {
+		if proxy.IsDeadPeerDialError(err) {
+			if delErr := rt.sessions.Delete(ctx, tunnelID, mcpServerID, sid); delErr != nil {
+				logger.ErrorContext(ctx, "drop anonymous tunnel session for dead gateway", attr.SlogError(delErr))
+			}
+			return oops.E(oops.CodeNotFound, tunnelsessions.ErrNotFound, "session not found").LogWarn(ctx, logger.With(attr.SlogErrorMessage("recorded tunnel gateway is unreachable")))
+		}
 		return fmt.Errorf("serve public tunneled session: %w", err)
 	}
 	return nil

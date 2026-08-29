@@ -142,6 +142,7 @@ type httpClientOptions struct {
 	retryConfig       *RetryConfig
 	resolver          *net.Resolver
 	allowedCIDRBlocks []*net.IPNet
+	dialTimeout       time.Duration
 	resilience        *resilienceOptions
 }
 
@@ -184,6 +185,15 @@ func WithAllowedCIDRBlocks(cidrs ...string) func(*httpClientOptions) {
 			if block, err := parseCIDR(cidr); err == nil {
 				o.allowedCIDRBlocks = append(o.allowedCIDRBlocks, block)
 			}
+		}
+	}
+}
+
+// WithDialTimeout bounds only the TCP connect phase for this client.
+func WithDialTimeout(timeout time.Duration) func(*httpClientOptions) {
+	return func(o *httpClientOptions) {
+		if timeout > 0 {
+			o.dialTimeout = timeout
 		}
 	}
 }
@@ -336,7 +346,11 @@ func (p *Policy) clientWithBaseTransport(transport *http.Transport, options ...f
 	if len(opts.allowedCIDRBlocks) > 0 {
 		dialOpts = append(dialOpts, WithDialerAllowedCIDRBlocks(opts.allowedCIDRBlocks))
 	}
-	transport.DialContext = p.Dialer(dialOpts...).DialContext
+	dialer := p.Dialer(dialOpts...)
+	if opts.dialTimeout > 0 {
+		dialer.Timeout = opts.dialTimeout
+	}
+	transport.DialContext = dialer.DialContext
 
 	// Merge into any existing transport TLS config rather than replacing
 	// it, so a future option that sets client certificates or pinning is
