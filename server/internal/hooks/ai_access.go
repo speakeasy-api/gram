@@ -23,12 +23,14 @@ import (
 )
 
 const (
-	aiAccessIdentityFailureMessage  = delegation.IdentityFailureMessage
-	aiAccessEvaluatorFailureMessage = "Speakeasy could not confirm the current AI access policy. Try again."
-	aiAccessDenialCacheTTL          = 10 * time.Minute
-	aiAccessEvaluationTimeout       = 5 * time.Second
-	aiAccessEvaluationLeaseTTL      = aiAccessEvaluationTimeout + 5*time.Second
-	aiAccessEvaluationPollInterval  = 10 * time.Millisecond
+	aiAccessIdentityFailureMessage   = delegation.IdentityFailureMessage
+	aiAccessEvaluatorFailureMessage  = "Speakeasy could not confirm the current AI access policy. Try again."
+	aiAccessDenialCacheTTL           = 10 * time.Minute
+	aiAccessEvaluationTimeout        = 5 * time.Second
+	aiAccessDenialPublicationTimeout = 2 * time.Second
+	aiAccessEvaluationLeaseSlack     = 5 * time.Second
+	aiAccessEvaluationLeaseTTL       = aiAccessEvaluationTimeout + aiAccessDenialPublicationTimeout + aiAccessEvaluationLeaseSlack
+	aiAccessEvaluationPollInterval   = 10 * time.Millisecond
 )
 
 type hookAIAccessEvaluator interface {

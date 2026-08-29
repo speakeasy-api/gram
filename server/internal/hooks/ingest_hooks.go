@@ -281,7 +281,9 @@ func (s *Service) ingest(ctx context.Context, payload *gen.IngestPayload) (res *
 						evaluationCtx, cancelEvaluation := context.WithTimeout(ctx, aiAccessEvaluationTimeout)
 						aiDecision = s.aiAccess.EvaluateVerified(evaluationCtx, verified)
 						cancelEvaluation()
-						aiDecision = s.publishHookAIAccessDenial(ctx, payload, authCtx.ActiveOrganizationID, verified.principalKey, aiDecision)
+						publicationCtx, cancelPublication := context.WithTimeout(ctx, aiAccessDenialPublicationTimeout)
+						aiDecision = s.publishHookAIAccessDenial(publicationCtx, payload, authCtx.ActiveOrganizationID, verified.principalKey, aiDecision)
+						cancelPublication()
 						released, releaseErr := release()
 						if (releaseErr != nil || !released) && !aiDecision.deny {
 							aiDecision = evaluatorFailureDecision()
