@@ -79,7 +79,7 @@ func (c *Client) IsFeatureEnabled(ctx context.Context, organizationID string, fe
 		}
 
 		enabled = res
-		c.storeFeatureCache(ctx, organizationID, feature, enabled, "failed to cache feature flag state")
+		_ = c.storeFeatureCache(ctx, organizationID, feature, enabled, "failed to cache feature flag state")
 		return nil
 	})
 	if err != nil {
@@ -140,7 +140,7 @@ func (c *Client) SetFeatureEnabled(ctx context.Context, organizationID string, f
 		if err := setFeatureEnabled(ctx, repo.New(conn), organizationID, feature, enabled); err != nil {
 			return err
 		}
-		c.storeFeatureCache(ctx, organizationID, feature, enabled, "failed to update feature flag cache")
+		_ = c.storeFeatureCache(ctx, organizationID, feature, enabled, "failed to update feature flag cache")
 		return nil
 	})
 }
@@ -169,8 +169,8 @@ func (c *Client) SetRemoteSessionAutoRefreshEnabled(ctx context.Context, organiz
 			return fmt.Errorf("commit remote session auto-refresh update: %w", err)
 		}
 
-		c.storeFeatureCache(ctx, organizationID, FeatureRemoteSessionAutoRefreshEnforced, false, "failed to update feature flag cache")
-		c.storeFeatureCache(ctx, organizationID, FeatureRemoteSessionAutoRefresh, enabled, "failed to update feature flag cache")
+		_ = c.storeFeatureCache(ctx, organizationID, FeatureRemoteSessionAutoRefreshEnforced, false, "failed to update feature flag cache")
+		_ = c.storeFeatureCache(ctx, organizationID, FeatureRemoteSessionAutoRefresh, enabled, "failed to update feature flag cache")
 		return nil
 	})
 }
@@ -215,7 +215,7 @@ func (c *Client) storeFeatureCache(ctx context.Context, organizationID string, f
 			attr.SlogOrganizationID(organizationID),
 			attr.SlogProductFeatureName(string(feature)),
 		)
-		return err
+		return fmt.Errorf("store feature cache entry: %w", err)
 	}
 	return nil
 }

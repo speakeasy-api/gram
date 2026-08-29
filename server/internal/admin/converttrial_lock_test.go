@@ -403,16 +403,10 @@ func TestMarkEnterpriseTrialConverted_SerializesRuntimeFeatureWritesThroughCache
 			written <- lockErr
 			return
 		}
-		defer q.ReleaseFeatureCacheLock(context.WithoutCancel(ctx), featurerepo.ReleaseFeatureCacheLockParams(params)) //nolint:errcheck
-		tx, txErr := featureWriter.Begin(ctx)
-		if txErr == nil {
-			_, txErr = featurerepo.New(tx).DeleteFeature(ctx, featurerepo.DeleteFeatureParams{OrganizationID: orgID, FeatureName: string(feature)})
-		}
-		if txErr == nil {
-			txErr = tx.Commit(ctx)
-		} else if tx != nil {
-			_ = tx.Rollback(ctx)
-		}
+		defer func() {
+			_, _ = q.ReleaseFeatureCacheLock(context.WithoutCancel(ctx), featurerepo.ReleaseFeatureCacheLockParams(params))
+		}()
+		_, txErr := q.DeleteFeature(ctx, featurerepo.DeleteFeatureParams{OrganizationID: orgID, FeatureName: string(feature)})
 		if txErr == nil {
 			txErr = svc.productFeatures.UpdateFeatureCacheUnderLock(ctx, featureWriter, orgID, feature)
 		}

@@ -192,7 +192,7 @@ func (s *Service) SetProductFeature(ctx context.Context, payload *gen.SetProduct
 		return oops.E(oops.CodeUnexpected, err, "commit feature flag change").LogError(ctx, s.logger, attr.SlogOrganizationID(orgID))
 	}
 
-	s.featureClient.storeFeatureCache(ctx, orgID, Feature(payload.FeatureName), payload.Enabled, "failed to cache feature flag state")
+	_ = s.featureClient.storeFeatureCache(ctx, orgID, Feature(payload.FeatureName), payload.Enabled, "failed to cache feature flag state")
 
 	return nil
 }
@@ -270,7 +270,7 @@ func (s *Service) SetRemoteSessionAutoRefreshPolicy(ctx context.Context, payload
 		{feature: FeatureRemoteSessionAutoRefresh, enabled: visible},
 		{feature: FeatureRemoteSessionAutoRefreshEnforced, enabled: enforced},
 	} {
-		s.featureClient.storeFeatureCache(ctx, orgID, state.feature, state.enabled, "failed to cache remote session refresh policy")
+		_ = s.featureClient.storeFeatureCache(ctx, orgID, state.feature, state.enabled, "failed to cache remote session refresh policy")
 	}
 
 	return nil
