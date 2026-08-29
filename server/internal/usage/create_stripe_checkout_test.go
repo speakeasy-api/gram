@@ -761,6 +761,81 @@ func TestCreateStripeCheckoutFailsClosedWhenLifecycleStaleSessionExpirationFails
 	require.False(t, after.StripeCheckoutSessionID.Valid)
 }
 
+func TestExpireLifecycleStaleCheckoutSessionAcceptsConcurrentExpiration(t *testing.T) {
+	t.Parallel()
+
+	ti := newStripeCheckoutTestInstance(t)
+	now := time.Date(2026, time.August, 14, 12, 0, 0, 0, time.UTC)
+	staleIntent := stripeCheckoutIntent{
+		idempotencyKey:     "checkout-session:org:1:2:old-lifecycle",
+		billingCycleAnchor: now.Add(7 * 24 * time.Hour),
+		expiresAt:          now.Add(4 * time.Hour),
+	}
+	metadata := repo.BillingMetadatum{
+		StripeCheckoutIdempotencyKey:     pgtype.Text{String: staleIntent.idempotencyKey, Valid: true},
+		StripeCheckoutBillingCycleAnchor: finiteTimestamptz(staleIntent.billingCycleAnchor),
+		StripeCheckoutExpiresAt:          finiteTimestamptz(staleIntent.expiresAt),
+		StripeCheckoutSessionID:          pgtype.Text{String: "cs_stale", Valid: true},
+	}
+	ti.stripe.expireCheckoutError = errors.New("already expired")
+	ti.stripe.checkoutState = &stripeclient.CheckoutSessionState{
+		ID: "cs_stale", Status: "expired", CustomerID: "cus_test",
+	}
+
+	replaceKey, err := ti.service.expireLifecycleStaleCheckoutSession(
+		t.Context(), metadata, "cus_test", ti.orgID, ti.orgSlug, "https://example.test/billing",
+		stripeCheckoutIntent{idempotencyKey: "checkout-session:org:3:4:new-lifecycle"}, now,
+	)
+	require.NoError(t, err)
+	require.Equal(t, pgtype.Text{String: staleIntent.idempotencyKey, Valid: true}, replaceKey)
+}
+
+func TestExpireLifecycleStaleCheckoutSessionRejectsUnconfirmedConcurrentExpiration(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name     string
+		state    *stripeclient.CheckoutSessionState
+		queryErr error
+	}{
+		{name: "open", state: &stripeclient.CheckoutSessionState{ID: "cs_stale", Status: "open", CustomerID: "cus_test"}},
+		{name: "complete", state: &stripeclient.CheckoutSessionState{ID: "cs_stale", Status: "complete", CustomerID: "cus_test"}},
+		{name: "subscription attached", state: &stripeclient.CheckoutSessionState{ID: "cs_stale", Status: "expired", CustomerID: "cus_test", SubscriptionID: "sub_1"}},
+		{name: "mismatched customer", state: &stripeclient.CheckoutSessionState{ID: "cs_stale", Status: "expired", CustomerID: "cus_other"}},
+		{name: "mismatched session", state: &stripeclient.CheckoutSessionState{ID: "cs_other", Status: "expired", CustomerID: "cus_test"}},
+		{name: "unverifiable", queryErr: errors.New("query unavailable")},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+
+			ti := newStripeCheckoutTestInstance(t)
+			now := time.Date(2026, time.August, 14, 12, 0, 0, 0, time.UTC)
+			staleIntent := stripeCheckoutIntent{
+				idempotencyKey:     "checkout-session:org:1:2:old-lifecycle",
+				billingCycleAnchor: now.Add(7 * 24 * time.Hour),
+				expiresAt:          now.Add(4 * time.Hour),
+			}
+			metadata := repo.BillingMetadatum{
+				StripeCheckoutIdempotencyKey:     pgtype.Text{String: staleIntent.idempotencyKey, Valid: true},
+				StripeCheckoutBillingCycleAnchor: finiteTimestamptz(staleIntent.billingCycleAnchor),
+				StripeCheckoutExpiresAt:          finiteTimestamptz(staleIntent.expiresAt),
+				StripeCheckoutSessionID:          pgtype.Text{String: "cs_stale", Valid: true},
+			}
+			ti.stripe.expireCheckoutError = errors.New("expiration failed")
+			ti.stripe.checkoutState = test.state
+			ti.stripe.checkoutGetErr = test.queryErr
+
+			_, err := ti.service.expireLifecycleStaleCheckoutSession(
+				t.Context(), metadata, "cus_test", ti.orgID, ti.orgSlug, "https://example.test/billing",
+				stripeCheckoutIntent{idempotencyKey: "checkout-session:org:3:4:new-lifecycle"}, now,
+			)
+			require.Error(t, err)
+			requireOopsCode(t, err, oops.CodeUnavailable)
+		})
+	}
+}
+
 func TestCreateStripeCheckoutFailsClosedWhenLifecycleStaleSessionRecoveryFails(t *testing.T) {
 	t.Parallel()
 
@@ -1167,6 +1242,44 @@ func TestPrepareStripeCheckoutIntentReusesAcrossMidnightAndRotatesAfterExpiry(t 
 	require.NoError(t, err)
 	require.Equal(t, replacementProposal, replacement.stripeCheckoutIntent)
 	require.NotEqual(t, first.idempotencyKey, replacement.idempotencyKey)
+}
+
+func TestPrepareStripeCheckoutIntentReplacesAttachedLifecycleStaleIntentBeforeLocalExpiry(t *testing.T) {
+	t.Parallel()
+
+	ti := newStripeCheckoutTestInstance(t)
+	now := time.Date(2026, time.August, 14, 12, 0, 0, 0, time.UTC)
+	stale := stripeCheckoutIntent{
+		idempotencyKey:     "checkout-session:org:1:2:old-lifecycle",
+		billingCycleAnchor: now.Add(7 * 24 * time.Hour),
+		expiresAt:          now.Add(4 * time.Hour),
+	}
+	prepared, err := ti.service.prepareStripeCheckoutIntent(
+		t.Context(), ti.orgID, "cus_test", now, stale, pgtype.Text{}, pgtype.Text{},
+	)
+	require.NoError(t, err)
+	_, err = repo.New(ti.db).FinalizeStripeCheckoutIntent(t.Context(), repo.FinalizeStripeCheckoutIntentParams{
+		StripeCheckoutSessionID:          "cs_attached",
+		OrganizationID:                   ti.orgID,
+		StripeCustomerID:                 "cus_test",
+		StripeCheckoutIdempotencyKey:     prepared.idempotencyKey,
+		StripeCheckoutBillingCycleAnchor: finiteTimestamptz(prepared.billingCycleAnchor),
+		StripeCheckoutTrialEnd:           optionalTimestamptz(prepared.trialEnd),
+		StripeCheckoutExpiresAt:          finiteTimestamptz(prepared.expiresAt),
+	})
+	require.NoError(t, err)
+
+	replacement := stripeCheckoutIntent{
+		idempotencyKey:     "checkout-session:org:3:4:new-lifecycle",
+		billingCycleAnchor: now.Add(8 * 24 * time.Hour),
+		expiresAt:          now.Add(5 * time.Hour),
+	}
+	rotated, err := ti.service.prepareStripeCheckoutIntent(
+		t.Context(), ti.orgID, "cus_test", now.Add(time.Minute), replacement, pgtype.Text{},
+		pgtype.Text{String: stale.idempotencyKey, Valid: true},
+	)
+	require.NoError(t, err)
+	require.Equal(t, replacement, rotated.stripeCheckoutIntent)
 }
 
 func TestCreateStripeCheckoutDoesNotRotateCompletedExpiredSession(t *testing.T) {

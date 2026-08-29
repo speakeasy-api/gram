@@ -352,7 +352,10 @@ func (s *Service) expireLifecycleStaleCheckoutSession(
 		return pgtype.Text{}, oops.E(oops.CodeUnavailable, nil, "Stripe Checkout expiration is unavailable").LogWarn(ctx, s.logger)
 	}
 	if err := expirer.ExpireCheckoutSession(ctx, sessionID); err != nil {
-		return pgtype.Text{}, oops.E(oops.CodeUnavailable, err, "failed to expire the previous Stripe Checkout session").LogWarn(ctx, s.logger)
+		state, retrieveErr := s.stripeClient.GetCheckoutSession(ctx, sessionID)
+		if retrieveErr != nil || state == nil || state.ID != sessionID || state.CustomerID != customerID || state.Status != "expired" || state.SubscriptionID != "" {
+			return pgtype.Text{}, oops.E(oops.CodeUnavailable, err, "failed to expire the previous Stripe Checkout session").LogWarn(ctx, s.logger)
+		}
 	}
 	return pgtype.Text{String: staleIntent.idempotencyKey, Valid: true}, nil
 }

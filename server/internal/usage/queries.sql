@@ -214,17 +214,17 @@ WITH locked AS (
   WHERE metadata.id = locked.id
     AND metadata.stripe_subscription_id IS NULL
     -- A known expired session rotates only after the caller verifies it. A
-    -- lifecycle-stale sessionless intent rotates only after the caller expires
-    -- the recovered remote session and authorizes this exact old intent key.
+    -- lifecycle-stale intent rotates only after the caller expires its remote
+    -- session and authorizes this exact old intent key.
     AND (
       locked.reuse_existing_intent
       OR locked.stripe_checkout_session_id = sqlc.narg(replace_expired_session_id)::text
+      OR locked.stripe_checkout_idempotency_key = sqlc.narg(replace_lifecycle_intent_key)::text
       OR (
         locked.stripe_checkout_session_id IS NULL
         AND (
           locked.stripe_checkout_idempotency_key IS NULL
           OR locked.stripe_checkout_expires_at <= sqlc.arg(prepared_at)::timestamptz
-          OR locked.stripe_checkout_idempotency_key = sqlc.narg(replace_lifecycle_intent_key)::text
         )
       )
     )
