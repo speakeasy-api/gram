@@ -288,7 +288,7 @@ func TestChatMessageWriterRejectsExternalChatOwnedByAnotherProject(t *testing.T)
 	require.Empty(t, meterMessages(t, ti))
 }
 
-func TestChatMessageWriterDoesNotMeterCorrelatedPromotion(t *testing.T) {
+func TestChatMessageWriterUpdatesCorrelatedPromotionReading(t *testing.T) {
 	t.Parallel()
 	ti := newTestChatService(t)
 	ctx := initSessionCtx(t, ti)
@@ -324,18 +324,54 @@ func TestChatMessageWriterDoesNotMeterCorrelatedPromotion(t *testing.T) {
 		Replayed:         false,
 		CreatedAt:        pgtype.Timestamptz{},
 	}
-	written, err := writer.WriteCorrelated(ctx, ti.projectID, chat.MessageWrite{Params: base, UserEmail: ""}, base.MessageID.String)
+	written, err := writer.WriteCorrelated(ctx, ti.projectID, chat.MessageWrite{
+		Params:       base,
+		UserEmail:    "proxy-observed@example.test",
+		Provider:     "openai",
+		HookHostname: "",
+		AccountType:  "",
+		BillingMode:  "",
+	}, base.MessageID.String)
 	require.NoError(t, err)
 	require.Equal(t, int64(1), written)
-	require.Len(t, meterMessages(t, ti), 1)
+	initialReadings := meterMessages(t, ti)
+	require.Len(t, initialReadings, 1)
 
 	promoted := base
 	promoted.ID = uuid.Nil
+	promoted.Content = "Native hook content must not replace the persisted correlated prompt when metering"
 	promoted.Source = conv.ToPGText("codex")
-	written, err = writer.WriteCorrelated(ctx, ti.projectID, chat.MessageWrite{Params: promoted, UserEmail: ""}, promoted.MessageID.String)
+	written, err = writer.WriteCorrelated(ctx, ti.projectID, chat.MessageWrite{
+		Params:       promoted,
+		UserEmail:    "native-observed@example.test",
+		Provider:     "openai",
+		HookHostname: "workstation.example.test",
+		AccountType:  "team",
+		BillingMode:  "metered",
+	}, promoted.MessageID.String)
 	require.NoError(t, err)
 	require.Equal(t, int64(1), written)
-	require.Len(t, meterMessages(t, ti), 1)
+
+	expectedValue, err := stokens.NewCodec().Count(ctx, base.Content)
+	require.NoError(t, err)
+	incomingValue, err := stokens.NewCodec().Count(ctx, promoted.Content)
+	require.NoError(t, err)
+	require.NotEqual(t, expectedValue, incomingValue)
+
+	readings := meterMessages(t, ti)
+	require.Len(t, readings, 2)
+	require.Equal(t, initialReadings[0].GetId(), readings[1].GetId())
+	require.Equal(t, initialReadings[0].GetOperationId(), readings[1].GetOperationId())
+	require.Equal(t, int64(expectedValue), readings[1].GetValue())
+	require.Equal(t, map[string]string{
+		metering.AttributeChatID:           chatID.String(),
+		metering.AttributeProvider:         "openai",
+		metering.AttributeHookSource:       "codex",
+		metering.AttributeHookHostname:     "workstation.example.test",
+		metering.AttributeAccountType:      "team",
+		metering.AttributeBillingMode:      "metered",
+		metering.AttributeMessageUserEmail: "native-observed@example.test",
+	}, readings[1].GetAttributes())
 }
 
 func TestChatMessageWriterWriteInTxRollsBackMessageAndReading(t *testing.T) {

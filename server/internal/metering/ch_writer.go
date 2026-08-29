@@ -24,30 +24,24 @@ type ReadingInserter interface {
 
 // MeterReadingCHWriter validates Pub/Sub readings and writes them to ClickHouse.
 type MeterReadingCHWriter struct {
-	logger        *slog.Logger
-	db            meteringrepo.DBTX
-	inserter      ReadingInserter
-	writesEnabled bool
+	logger   *slog.Logger
+	db       meteringrepo.DBTX
+	inserter ReadingInserter
 }
 
 // NewMeterReadingCHWriter creates a ClickHouse workload reading subscriber.
-func NewMeterReadingCHWriter(logger *slog.Logger, db meteringrepo.DBTX, inserter ReadingInserter, writesEnabled bool) *MeterReadingCHWriter {
+func NewMeterReadingCHWriter(logger *slog.Logger, db meteringrepo.DBTX, inserter ReadingInserter) *MeterReadingCHWriter {
 	return &MeterReadingCHWriter{
-		logger:        logger.With(attr.SlogComponent("meter-reading-ch-writer")),
-		db:            db,
-		inserter:      inserter,
-		writesEnabled: writesEnabled,
+		logger:   logger.With(attr.SlogComponent("meter-reading-ch-writer")),
+		db:       db,
+		inserter: inserter,
 	}
 }
 
 var _ streams.BatchHandler[*meteringv1.MeterReading] = (*MeterReadingCHWriter)(nil)
 
-// HandleBatch acknowledges messages without insertion when ClickHouse writes are disabled.
+// HandleBatch validates, enriches, and inserts a batch of meter readings.
 func (w *MeterReadingCHWriter) HandleBatch(ctx context.Context, messages []*meteringv1.MeterReading, _ []gcp.MessageMetadata) error {
-	if !w.writesEnabled {
-		return nil
-	}
-
 	insertedAt := time.Now().UTC()
 	rows := make([]chrepo.ReadingRow, 0, len(messages))
 	received := make(map[uuid.UUID]int, len(messages))

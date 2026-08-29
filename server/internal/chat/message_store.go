@@ -500,10 +500,6 @@ func (w *ChatMessageWriter) WriteCorrelated(ctx context.Context, projectID uuid.
 	if err != nil {
 		return 0, fmt.Errorf("get project organization id: %w", err)
 	}
-	readings, err := w.meterMessages(ctx, w.logger, organizationID, projectID, writes, occurredAt)
-	if err != nil {
-		return 0, err
-	}
 
 	tx, err := w.db.Begin(ctx)
 	if err != nil {
@@ -515,7 +511,7 @@ func (w *ChatMessageWriter) WriteCorrelated(ctx context.Context, projectID uuid.
 		return 0, err
 	}
 
-	storedID, err := repo.New(tx).UpsertCorrelatedChatMessage(ctx, repo.UpsertCorrelatedChatMessageParams{
+	stored, err := repo.New(tx).UpsertCorrelatedChatMessage(ctx, repo.UpsertCorrelatedChatMessageParams{
 		ID:                param.ID,
 		ChatID:            param.ChatID,
 		Role:              param.Role,
@@ -550,10 +546,19 @@ func (w *ChatMessageWriter) WriteCorrelated(ctx context.Context, projectID uuid.
 	if err != nil {
 		return 0, fmt.Errorf("upsert correlated chat message: %w", err)
 	}
-	if storedID == param.ID {
-		if err := metering.Enqueue(ctx, tx, readings); err != nil {
-			return 0, fmt.Errorf("enqueue correlated chat message reading: %w", err)
-		}
+	writes[0].Params.ID = stored.ID
+	writes[0].Params.Content = stored.Content
+	writes[0].Params.ToolCalls = stored.ToolCalls
+	writes[0].Params.Model = stored.Model
+	writes[0].Params.UserID = stored.UserID
+	writes[0].Params.ExternalUserID = stored.ExternalUserID
+	writes[0].Params.Source = stored.Source
+	readings, err := w.meterMessages(ctx, w.logger, organizationID, projectID, writes, occurredAt)
+	if err != nil {
+		return 0, err
+	}
+	if err := metering.Enqueue(ctx, tx, readings); err != nil {
+		return 0, fmt.Errorf("enqueue correlated chat message reading: %w", err)
 	}
 	if err := tx.Commit(ctx); err != nil {
 		return 0, fmt.Errorf("commit correlated chat message transaction: %w", err)

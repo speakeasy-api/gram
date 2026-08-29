@@ -122,7 +122,7 @@ func TestMeterReadingCHWriterSkipsPoisonAndDeduplicatesBatch(t *testing.T) {
 	require.True(t, ok)
 	invalid.SetId("not-a-uuid")
 	capture := &captureReadingInserter{rows: nil, err: nil}
-	writer := metering.NewMeterReadingCHWriter(testenv.NewLogger(t), nil, capture, true)
+	writer := metering.NewMeterReadingCHWriter(testenv.NewLogger(t), nil, capture)
 
 	require.NoError(t, writer.HandleBatch(t.Context(), []*meteringv1.MeterReading{nil, invalid, valid, updated, valid, refreshed}, nil))
 	require.Len(t, capture.rows, 1)
@@ -147,7 +147,7 @@ func TestMeterReadingCHWriterPropagatesInsertFailure(t *testing.T) {
 		Attributes:  nil,
 	})
 	capture := &captureReadingInserter{rows: nil, err: errors.New("clickhouse unavailable")}
-	writer := metering.NewMeterReadingCHWriter(testenv.NewLogger(t), nil, capture, true)
+	writer := metering.NewMeterReadingCHWriter(testenv.NewLogger(t), nil, capture)
 	require.Error(t, writer.HandleBatch(t.Context(), []*meteringv1.MeterReading{message}, nil))
 }
 
@@ -190,7 +190,7 @@ func TestMeterReadingCHWriterRedeliveryConvergesAndPreservesAdjustment(t *testin
 		Source:            "test",
 		Attributes:        nil,
 	})
-	writer := metering.NewMeterReadingCHWriter(testenv.NewLogger(t), nil, chrepo.New(conn), true)
+	writer := metering.NewMeterReadingCHWriter(testenv.NewLogger(t), nil, chrepo.New(conn))
 	require.NoError(t, writer.HandleBatch(t.Context(), []*meteringv1.MeterReading{newerEvent}, nil))
 	require.NoError(t, writer.HandleBatch(t.Context(), []*meteringv1.MeterReading{staleEvent}, nil))
 
@@ -704,11 +704,7 @@ func TestMeterReadingCHWriterRetriesPostgresFailureBeforeClickHouseInsert(t *tes
 		},
 	})
 	capture := &captureReadingInserter{rows: nil, err: nil}
-	writer := metering.NewMeterReadingCHWriter(
-		testenv.NewLogger(t),
-		failingMeteringDB{err: errors.New("postgres unavailable")},
-		capture,
-	)
+	writer := metering.NewMeterReadingCHWriter(testenv.NewLogger(t), failingMeteringDB{err: errors.New("postgres unavailable")}, capture)
 
 	err := writer.HandleBatch(t.Context(), []*meteringv1.MeterReading{message}, nil)
 
