@@ -20,6 +20,7 @@ func TestProofOfPossessionBindsEveryInvocationField(t *testing.T) {
 
 	mutations := []func(*delegation.MintRequest){
 		func(v *delegation.MintRequest) { v.RefreshToken = "other" },
+		func(v *delegation.MintRequest) { v.ContractVersion = "other" },
 		func(v *delegation.MintRequest) { v.Provider = delegation.ProviderCodex },
 		func(v *delegation.MintRequest) { v.Event = delegation.EventUserPromptSubmit },
 		func(v *delegation.MintRequest) { v.SessionID = "other" },

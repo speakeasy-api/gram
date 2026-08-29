@@ -7,7 +7,7 @@ The hooks service supports two hook generations:
 
 ## Unified Ingest
 
-`/rpc/hooks.ingest` is the stable backend contract for hooks. It uses `Gram-Key` and `Gram-Project` with the `hooks` key scope for transport authentication. Source-reported user fields are not authoritative. Approved live `ai_access` checkpoints additionally require a short-lived, proof-bound acting-user assertion and revalidate active organization membership.
+`/rpc/hooks.ingest` is the stable backend contract for hooks. It uses `Gram-Key` and `Gram-Project` with the `hooks` key scope for transport authentication. Source-reported user fields are not authoritative for the covered `ai_access` acting-user identity, though they can influence attribution and other policy decisions. Approved live `ai_access` checkpoints additionally require a short-lived, proof-bound acting-user assertion and revalidate active organization membership.
 
 The payload is feature-first:
 
