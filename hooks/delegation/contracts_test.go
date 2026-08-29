@@ -35,6 +35,16 @@ func TestProofOfPossessionBindsEveryInvocationField(t *testing.T) {
 	}
 }
 
+func TestVerifyRejectsMalformedPublicKey(t *testing.T) {
+	_, privateKey, err := ed25519.GenerateKey(rand.Reader)
+	require.NoError(t, err)
+	req := delegation.MintRequest{RefreshToken: "refresh", ContractVersion: delegation.ContractVersion, Provider: delegation.ProviderClaude, Event: delegation.EventPreToolUse, SessionID: "session", IdempotencyKey: "invocation", SignedAt: 123, Nonce: "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"}
+	req.Signature, err = delegation.Sign(privateKey, req)
+	require.NoError(t, err)
+
+	require.EqualError(t, delegation.Verify(ed25519.PublicKey{1}, req), "invalid Ed25519 public key")
+}
+
 func TestNewNonceIsRandomAndCanonical(t *testing.T) {
 	first, err := delegation.NewNonce()
 	require.NoError(t, err)

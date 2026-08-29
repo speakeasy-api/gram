@@ -194,8 +194,8 @@ func (s *Service) ingest(ctx context.Context, payload *gen.IngestPayload) (res *
 			attr.SlogHookSource(source),
 			attr.SlogHookEvent(eventType),
 		)
-		_, _, governed := governedHook(payload)
-		if governed {
+		_, event, governed := governedHook(payload)
+		if governed && validLiveGovernedHook(payload, event) {
 			return &AuthenticatedIngestResult{
 				Result: canonicalDenyResultWithReason("ai_access_identity_unavailable", aiAccessIdentityFailureMessage),
 				Actor:  ResolvedActor{UserID: "", Email: ""},
@@ -231,8 +231,8 @@ func (s *Service) ingest(ctx context.Context, payload *gen.IngestPayload) (res *
 	}
 
 	var aiDecision hookAIAccessDecision
-	_, _, isGoverned := governedHook(payload)
-	if isGoverned {
+	_, governedEvent, isGoverned := governedHook(payload)
+	if isGoverned && validLiveGovernedHook(payload, governedEvent) {
 		if s.aiAccess == nil {
 			aiDecision = evaluatorFailureDecision()
 		} else {

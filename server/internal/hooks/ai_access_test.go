@@ -60,7 +60,7 @@ func signedGovernedPayload(t *testing.T, ctx context.Context, signer *hooksactin
 	payload := canonicalIngestPayload(provider, eventType, sessionID)
 	payload.Source.RawEventName = &event
 	payload.IdempotencyKey = &idempotencyKey
-	payload.ActingUserContractVersion = ptr(delegation.ContractVersion)
+	payload.ActingUserContractVersion = new(delegation.ContractVersion)
 
 	publicKey, ok := privateKey.Public().(ed25519.PublicKey)
 	require.True(t, ok)
@@ -183,7 +183,7 @@ func TestHookAIAccessRejectsCrossTenantSpoofAndInactiveMembership(t *testing.T) 
 	require.Empty(t, evaluator.requests, "inactive membership never becomes an evaluator candidate")
 }
 
-func TestHookAIAccessExclusionsAndSpoofedDeliveryMarkersNeverEvaluate(t *testing.T) {
+func TestHookAIAccessExclusionsReplayAndBackfillNeverEvaluate(t *testing.T) {
 	t.Parallel()
 	noMatch, err := killswitches.NewNoMatchResult(killswitches.NoMatchReasonNoPrescription)
 	require.NoError(t, err)
@@ -191,12 +191,11 @@ func TestHookAIAccessExclusionsAndSpoofedDeliveryMarkersNeverEvaluate(t *testing
 	cases := []struct {
 		provider, event, eventType string
 		backfilled, replayed       bool
-		wantDecision               string
 	}{
-		{delegation.ProviderCodex, "PermissionRequest", "tool.requested", false, false, "allow"},
-		{"cursor", delegation.EventPreToolUse, "tool.requested", false, false, "allow"},
-		{delegation.ProviderClaude, delegation.EventUserPromptSubmit, "prompt.submitted", true, false, "deny"},
-		{delegation.ProviderCodex, delegation.EventPreToolUse, "tool.requested", false, true, "deny"},
+		{delegation.ProviderCodex, "PermissionRequest", "tool.requested", false, false},
+		{"cursor", delegation.EventPreToolUse, "tool.requested", false, false},
+		{delegation.ProviderClaude, delegation.EventUserPromptSubmit, "prompt.submitted", true, false},
+		{delegation.ProviderCodex, delegation.EventPreToolUse, "tool.requested", false, true},
 	}
 	for _, test := range cases {
 		payload := canonicalIngestPayload(test.provider, test.eventType, uuid.NewString())
@@ -205,10 +204,7 @@ func TestHookAIAccessExclusionsAndSpoofedDeliveryMarkersNeverEvaluate(t *testing
 		payload.Replayed = &test.replayed
 		result, err := ti.service.Ingest(ctx, payload)
 		require.NoError(t, err)
-		require.Equal(t, test.wantDecision, result.Decision)
-		if test.wantDecision == "deny" {
-			require.Equal(t, "ai_access_identity_unavailable", *result.Reason)
-		}
+		require.Equal(t, "allow", result.Decision)
 	}
 	require.Empty(t, evaluator.requests)
 }
@@ -339,7 +335,7 @@ func TestHookDenialCacheKeyScopesTenantAndInvocationBindings(t *testing.T) {
 	idempotencyKey := "same-idempotency"
 	payload.Source.RawEventName = &event
 	payload.IdempotencyKey = &idempotencyKey
-	payload.ActingUserContractVersion = ptr(delegation.ContractVersion)
+	payload.ActingUserContractVersion = new(delegation.ContractVersion)
 	payload.ActingUserAssertion = new("assertion-one")
 	baseline, ok := hookDenialCacheKey(payload, "org-one")
 	require.True(t, ok)

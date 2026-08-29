@@ -18,6 +18,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/hooks/delegation"
 	riskv1 "github.com/speakeasy-api/gram/infra/gen/gram/risk/v1"
 	gen "github.com/speakeasy-api/gram/server/gen/hooks"
 	"github.com/speakeasy-api/gram/server/internal/attr"
@@ -195,6 +196,33 @@ func TestIngest_NoCredentialsFailsOpen(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, result)
 	require.Equal(t, "allow", result.Decision)
+}
+
+func TestIngest_NoCredentialsReplayAndBackfillBypassAIAccess(t *testing.T) {
+	t.Parallel()
+
+	_, ti := newTestHooksService(t)
+	for _, delivery := range []struct {
+		name       string
+		replayed   bool
+		backfilled bool
+	}{
+		{name: "replayed", replayed: true},
+		{name: "backfilled", backfilled: true},
+	} {
+		t.Run(delivery.name, func(t *testing.T) {
+			t.Parallel()
+			payload := canonicalIngestPayload("claude", "prompt.submitted", "keyless-"+delivery.name)
+			event := delegation.EventUserPromptSubmit
+			payload.Source.RawEventName = &event
+			payload.Replayed = &delivery.replayed
+			payload.Backfilled = &delivery.backfilled
+
+			result, err := ti.service.Ingest(t.Context(), payload)
+			require.NoError(t, err)
+			require.Equal(t, "allow", result.Decision)
+		})
+	}
 }
 
 // A request that presents an API key must have it validated: a rejected key

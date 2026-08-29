@@ -185,6 +185,9 @@ func Sign(key ed25519.PrivateKey, req MintRequest) (string, error) {
 }
 
 func Verify(key ed25519.PublicKey, req MintRequest) error {
+	if len(key) != ed25519.PublicKeySize {
+		return errors.New("invalid Ed25519 public key")
+	}
 	message, err := ProofMessage(req)
 	if err != nil {
 		return err

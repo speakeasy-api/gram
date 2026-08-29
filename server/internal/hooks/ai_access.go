@@ -215,17 +215,6 @@ func (c *HookAIAccessCheckpoint) EvaluateVerified(ctx context.Context, verified 
 	}
 }
 
-func (c *HookAIAccessCheckpoint) Evaluate(ctx context.Context, payload *gen.IngestPayload, authCtx *contextvalues.AuthContext) hookAIAccessDecision {
-	verified, failure := c.Verify(ctx, payload, authCtx)
-	if failure.governed || failure.deny {
-		return failure
-	}
-	if _, _, governed := governedHook(payload); !governed {
-		return hookAIAccessDecision{governed: false, deny: false, reason: "", message: ""}
-	}
-	return c.EvaluateVerified(ctx, verified)
-}
-
 type cachedHookDenial struct {
 	PrincipalKey killswitches.PrincipalKey `json:"principal_key"`
 	Reason       string                    `json:"reason"`
