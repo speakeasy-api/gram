@@ -37,19 +37,24 @@ func TestMain(m *testing.M) {
 	os.Exit(code)
 }
 
-func newMeteringPostgres(t *testing.T) (*pgxpool.Pool, string) {
+func seedMeteringOrganization(t *testing.T, conn *pgxpool.Pool, organizationID string) {
 	t.Helper()
-	conn, err := infra.CloneTestDatabase(t, "metering_"+strings.ReplaceAll(uuid.NewString(), "-", ""))
-	require.NoError(t, err)
-
-	organizationID := "org_" + uuid.NewString()
-	_, err = orgrepo.New(conn).UpsertOrganizationMetadata(t.Context(), orgrepo.UpsertOrganizationMetadataParams{
+	_, err := orgrepo.New(conn).UpsertOrganizationMetadata(t.Context(), orgrepo.UpsertOrganizationMetadataParams{
 		ID:       organizationID,
 		Name:     "Metering Test Organization",
 		Slug:     organizationID,
 		WorkosID: conv.PtrToPGText(conv.PtrEmpty("workos-" + organizationID)),
 	})
 	require.NoError(t, err)
+}
+
+func newMeteringPostgres(t *testing.T) (*pgxpool.Pool, string) {
+	t.Helper()
+	conn, err := infra.CloneTestDatabase(t, "metering_"+strings.ReplaceAll(uuid.NewString(), "-", ""))
+	require.NoError(t, err)
+
+	organizationID := "org_" + uuid.NewString()
+	seedMeteringOrganization(t, conn, organizationID)
 	return conn, organizationID
 }
 func seedMeteringAccount(t *testing.T, conn *pgxpool.Pool, organizationID, userID, email string) {
@@ -70,25 +75,22 @@ func seedMeteringAccount(t *testing.T, conn *pgxpool.Pool, organizationID, userI
 	require.NoError(t, err)
 }
 
-func seedMeteringUser(t *testing.T, conn *pgxpool.Pool, organizationID, userID, email, division, department string, linkDirectoryByUserID bool) {
+func seedMeteringDirectoryUser(t *testing.T, conn *pgxpool.Pool, organizationID, userID, email, division, department string, linkByUserID bool) {
 	t.Helper()
-	ctx := t.Context()
-	seedMeteringAccount(t, conn, organizationID, userID, email)
-
 	attributes, err := json.Marshal(map[string]string{
 		"division_name":   division,
 		"department_name": department,
 	})
 	require.NoError(t, err)
 	directoryUserID := pgtype.Text{}
-	if linkDirectoryByUserID {
+	if linkByUserID {
 		directoryUserID = conv.ToPGText(userID)
 	}
 	now := conv.ToPGTimestamptz(time.Now().UTC())
-	_, err = directoryrepo.New(conn).UpsertDirectoryUser(ctx, directoryrepo.UpsertDirectoryUserParams{
+	_, err = directoryrepo.New(conn).UpsertDirectoryUser(t.Context(), directoryrepo.UpsertDirectoryUserParams{
 		OrganizationID:        organizationID,
 		UserID:                directoryUserID,
-		WorkosDirectoryUserID: "directory-" + userID,
+		WorkosDirectoryUserID: "directory-" + uuid.NewString(),
 		Email:                 conv.ToPGText(email),
 		Attributes:            attributes,
 		WorkosCreatedAt:       now,
@@ -97,6 +99,12 @@ func seedMeteringUser(t *testing.T, conn *pgxpool.Pool, organizationID, userID, 
 		RestoreDeleted:        true,
 	})
 	require.NoError(t, err)
+}
+
+func seedMeteringUser(t *testing.T, conn *pgxpool.Pool, organizationID, userID, email, division, department string, linkDirectoryByUserID bool) {
+	t.Helper()
+	seedMeteringAccount(t, conn, organizationID, userID, email)
+	seedMeteringDirectoryUser(t, conn, organizationID, userID, email, division, department, linkDirectoryByUserID)
 }
 
 func seedMeteringRole(t *testing.T, conn *pgxpool.Pool, organizationID, userID, slug string, global bool) {

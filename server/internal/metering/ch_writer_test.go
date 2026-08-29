@@ -494,6 +494,144 @@ func TestMeterReadingCHWriterPreservesIdentityBoundaries(t *testing.T) {
 	}, rows["deleted-chat"].Attributes)
 }
 
+func TestMeterReadingCHWriterDoesNotEnrichAcrossOrganizations(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+	conn, organizationID := newMeteringPostgres(t)
+	foreignOrganizationID := "org_" + uuid.NewString()
+	seedMeteringOrganization(t, conn, foreignOrganizationID)
+
+	project, err := projectsrepo.New(conn).CreateProject(ctx, projectsrepo.CreateProjectParams{
+		Name:           "Local Tenant Project",
+		Slug:           "local-tenant-" + uuid.NewString()[:8],
+		OrganizationID: organizationID,
+	})
+	require.NoError(t, err)
+	foreignProject, err := projectsrepo.New(conn).CreateProject(ctx, projectsrepo.CreateProjectParams{
+		Name:           "Foreign Tenant Project",
+		Slug:           "foreign-tenant-" + uuid.NewString()[:8],
+		OrganizationID: foreignOrganizationID,
+	})
+	require.NoError(t, err)
+
+	localUserID := "local-user-" + uuid.NewString()
+	localEmail := "local-user-" + uuid.NewString() + "@example.test"
+	seedMeteringAccount(t, conn, organizationID, localUserID, localEmail)
+	seedMeteringRole(t, conn, organizationID, localUserID, "local-role", false)
+	seedMeteringDirectoryUser(t, conn, foreignOrganizationID, localUserID, localEmail, "Foreign Division", "Foreign Department", false)
+	seedMeteringRole(t, conn, foreignOrganizationID, localUserID, "foreign-local-role", false)
+
+	foreignUserID := "foreign-user-" + uuid.NewString()
+	foreignEmail := "foreign-user-" + uuid.NewString() + "@example.test"
+	seedMeteringUser(t, conn, foreignOrganizationID, foreignUserID, foreignEmail, "Foreign User Division", "Foreign User Department", true)
+	seedMeteringRole(t, conn, foreignOrganizationID, foreignUserID, "foreign-user-role", false)
+
+	localChatID := uuid.New()
+	_, err = chatrepo.New(conn).UpsertChat(ctx, chatrepo.UpsertChatParams{
+		ID:             localChatID,
+		ProjectID:      project.ID,
+		OrganizationID: organizationID,
+		UserID:         conv.ToPGText(localUserID),
+		ExternalUserID: conv.ToPGText("local-owner-external"),
+		Title:          conv.ToPGText("Local tenant chat"),
+	})
+	require.NoError(t, err)
+	foreignChatID := uuid.New()
+	_, err = chatrepo.New(conn).UpsertChat(ctx, chatrepo.UpsertChatParams{
+		ID:             foreignChatID,
+		ProjectID:      foreignProject.ID,
+		OrganizationID: foreignOrganizationID,
+		UserID:         conv.ToPGText(foreignUserID),
+		ExternalUserID: conv.ToPGText("foreign-owner-external"),
+		Title:          conv.ToPGText("Foreign tenant chat"),
+	})
+	require.NoError(t, err)
+
+	now := time.Now().UTC()
+	newMessage := func(operationID string, scope metering.Scope, attributes map[string]string) *meteringv1.MeterReading {
+		t.Helper()
+		message, _ := usageMessage(t, metering.UsageInput{
+			Meter:       metering.AgentSessionStorage(),
+			Scope:       scope,
+			OperationID: operationID,
+			Value:       1,
+			OccurredAt:  now,
+			ProducedAt:  now,
+			Source:      "chat_message_writer",
+			Attributes:  attributes,
+		})
+		return message
+	}
+	messages := []*meteringv1.MeterReading{
+		newMessage("foreign-chat", metering.ProjectScope(organizationID, project.ID), map[string]string{
+			metering.AttributeChatID:                  foreignChatID.String(),
+			metering.AttributeModel:                   "foreign-chat-model",
+			metering.AttributeMessageUserID:           foreignUserID,
+			metering.AttributeMessageUserAccountEmail: foreignEmail,
+			metering.AttributeChatOwnerUserEmail:      foreignEmail,
+			metering.AttributeMessageUserRBACRoles:    `["foreign-user-role"]`,
+		}),
+		newMessage("foreign-project", metering.ProjectScope(organizationID, foreignProject.ID), map[string]string{
+			metering.AttributeChatID:     foreignChatID.String(),
+			metering.AttributeHookSource: "foreign-project-source",
+		}),
+		newMessage("foreign-message-user", metering.ProjectScope(organizationID, project.ID), map[string]string{
+			metering.AttributeChatID:        localChatID.String(),
+			metering.AttributeMessageUserID: foreignUserID,
+		}),
+		newMessage("local-principals", metering.ProjectScope(organizationID, project.ID), map[string]string{
+			metering.AttributeChatID:        localChatID.String(),
+			metering.AttributeMessageUserID: localUserID,
+		}),
+	}
+
+	capture := &captureReadingInserter{rows: nil, err: nil}
+	writer := metering.NewMeterReadingCHWriter(testenv.NewLogger(t), conn, capture)
+	require.NoError(t, writer.HandleBatch(ctx, messages, nil))
+	require.Len(t, capture.rows, len(messages))
+
+	rows := make(map[string]chrepo.ReadingRow, len(capture.rows))
+	for _, row := range capture.rows {
+		rows[row.OperationID] = row
+	}
+
+	require.Equal(t, map[string]string{
+		"codec":                         string(metering.MeasurementTiktokenO200kBase),
+		metering.AttributeChatID:        foreignChatID.String(),
+		metering.AttributeModel:         "foreign-chat-model",
+		metering.AttributeMessageUserID: foreignUserID,
+	}, rows["foreign-chat"].Attributes)
+	require.Equal(t, map[string]string{
+		"codec":                      string(metering.MeasurementTiktokenO200kBase),
+		metering.AttributeChatID:     foreignChatID.String(),
+		metering.AttributeHookSource: "foreign-project-source",
+	}, rows["foreign-project"].Attributes)
+
+	foreignMessageUser := rows["foreign-message-user"].Attributes
+	require.Equal(t, foreignUserID, foreignMessageUser[metering.AttributeMessageUserID])
+	require.NotContains(t, foreignMessageUser, metering.AttributeMessageUserAccountEmail)
+	require.NotContains(t, foreignMessageUser, metering.AttributeMessageUserDivisionName)
+	require.NotContains(t, foreignMessageUser, metering.AttributeMessageUserDepartmentName)
+	require.NotContains(t, foreignMessageUser, metering.AttributeMessageUserDirectoryMatch)
+	require.NotContains(t, foreignMessageUser, metering.AttributeMessageUserRBACRoles)
+	require.Equal(t, localUserID, foreignMessageUser[metering.AttributeChatOwnerUserID])
+	require.Equal(t, localEmail, foreignMessageUser[metering.AttributeChatOwnerUserEmail])
+	require.Equal(t, "local-owner-external", foreignMessageUser[metering.AttributeChatOwnerExternalUserID])
+	require.Equal(t, `["local-role"]`, foreignMessageUser[metering.AttributeChatOwnerRBACRoles])
+	require.NotContains(t, foreignMessageUser, metering.AttributeChatOwnerDirectoryMatch)
+
+	localPrincipals := rows["local-principals"].Attributes
+	require.Equal(t, localEmail, localPrincipals[metering.AttributeMessageUserAccountEmail])
+	require.Equal(t, localEmail, localPrincipals[metering.AttributeChatOwnerUserEmail])
+	require.Equal(t, `["local-role"]`, localPrincipals[metering.AttributeMessageUserRBACRoles])
+	require.Equal(t, `["local-role"]`, localPrincipals[metering.AttributeChatOwnerRBACRoles])
+	require.NotContains(t, localPrincipals, metering.AttributeMessageUserDivisionName)
+	require.NotContains(t, localPrincipals, metering.AttributeMessageUserDepartmentName)
+	require.NotContains(t, localPrincipals, metering.AttributeMessageUserDirectoryMatch)
+	require.NotContains(t, localPrincipals, metering.AttributeChatOwnerDivisionName)
+	require.NotContains(t, localPrincipals, metering.AttributeChatOwnerDepartmentName)
+	require.NotContains(t, localPrincipals, metering.AttributeChatOwnerDirectoryMatch)
+}
 func TestMeterReadingCHWriterRetriesPostgresFailureBeforeClickHouseInsert(t *testing.T) {
 	t.Parallel()
 	now := time.Now().UTC()
