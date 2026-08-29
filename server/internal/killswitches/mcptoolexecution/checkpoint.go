@@ -123,13 +123,6 @@ func (c *Checkpoint) Evaluate(ctx context.Context, organizationID, mcpServerID s
 	ctx, cancel := context.WithTimeout(ctx, c.timeout)
 	defer cancel()
 
-	if principal, ok := contextvalues.GetAssistantPrincipal(ctx); ok {
-		disposition, err := c.assistant.Evaluate(ctx, organizationID, principal.AssistantID)
-		if err != nil || disposition.Kind() != killswitches.TransportDispositionContinue {
-			return disposition, err
-		}
-	}
-
 	organization := killswitches.OrganizationID(organizationID)
 	serverID, parseErr := uuid.Parse(mcpServerID)
 	resourceSource := ServerSource{FrontingServerID: uuid.NullUUID{UUID: serverID, Valid: parseErr == nil}}
@@ -148,6 +141,12 @@ func (c *Checkpoint) Evaluate(ctx context.Context, organizationID, mcpServerID s
 	}
 	if !supported {
 		return c.infrastructureFailure(errors.New("covered tools/call has no canonical mcp server"))
+	}
+	if principal, ok := contextvalues.GetAssistantPrincipal(ctx); ok {
+		disposition, err := c.assistant.Evaluate(ctx, organizationID, principal.AssistantID)
+		if err != nil || disposition.Kind() != killswitches.TransportDispositionContinue {
+			return disposition, err
+		}
 	}
 	if derivation.principalErr != nil {
 		return c.infrastructureFailure(fmt.Errorf("derive authenticated user: %w", derivation.principalErr))
@@ -178,11 +177,15 @@ func (c *Checkpoint) Evaluate(ctx context.Context, organizationID, mcpServerID s
 }
 
 func (c *Checkpoint) infrastructureFailure(cause error) (killswitches.TransportDisposition, error) {
+	return infrastructureFailure(c.transport, c.failurePolicy, cause)
+}
+
+func infrastructureFailure(transport killswitches.TransportAdapter, policy killswitches.FailurePolicy, cause error) (killswitches.TransportDisposition, error) {
 	result, err := killswitches.NewInfrastructureFailureResult(cause)
 	if err != nil {
 		return killswitches.NewInfrastructureRejectionDisposition(), errors.Join(cause, err)
 	}
-	disposition, err := c.transport(result, c.failurePolicy)
+	disposition, err := transport(result, policy)
 	if err != nil {
 		return killswitches.NewInfrastructureRejectionDisposition(), errors.Join(cause, err)
 	}

@@ -1279,13 +1279,24 @@ func TestProcessEventTurnRejectsAutonomousAndSystemWorkWithoutOwnerSubstitution(
 	require.NoError(t, err)
 	assistant.CreatedByUserID = "owner-must-not-be-used"
 	runtime := assistantRuntimeRecord{ID: uuid.New(), AssistantID: assistantID, ProjectID: projectID, Backend: runtimeBackendFlyIO}
+	now := time.Now().UTC()
+	callbackPayload, err := json.Marshal(struct {
+		mcpAuthEventPayload
+		UserID    string               `json:"user_id"`
+		ActingFor *actingForDelegation `json:"acting_for"`
+	}{
+		mcpAuthEventPayload: mcpAuthEventPayload{GramEventKind: mcpAuthEventKind, Status: mcpAuthStatusSuccess},
+		UserID:              "callback-user",
+		ActingFor:           &actingForDelegation{Kind: actingForDelegationKindUserSession, OrganizationID: assistant.OrganizationID, UserID: "callback-user", SessionID: uuid.NewString(), IssuedAt: now, ExpiresAt: now.Add(assistantRuntimeTokenTTL)},
+	})
+	require.NoError(t, err)
 
 	for _, test := range []struct {
 		name, source string
 		payload      []byte
 	}{
 		{name: "external source", source: sourceKindSlack, payload: []byte(`{"event_type":"message","text":"hello"}`)},
-		{name: "MCP callback", source: sourceKindDashboard, payload: []byte(`{"gram_event_kind":"assistant_mcp_auth","status":"success"}`)},
+		{name: "MCP callback", source: sourceKindDashboard, payload: callbackPayload},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			thread := assistantThreadRecord{ID: threadID, AssistantID: assistantID, ProjectID: projectID, CorrelationID: "corr-1", SourceKind: test.source}

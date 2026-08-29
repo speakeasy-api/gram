@@ -447,6 +447,14 @@ FROM assistants
 WHERE id = @assistant_id
   AND deleted IS FALSE;
 
+-- name: GetActiveAssistantInOrganization :one
+SELECT id
+FROM assistants
+WHERE id = @assistant_id
+  AND organization_id = @organization_id
+  AND status = 'active'
+  AND deleted IS FALSE;
+
 -- name: GetManagedAssistantByProject :one
 -- Resolves a project's platform-managed assistant (powers the AI Insights
 -- sidebar) through the project_managed_assistants mapping. Returns no rows

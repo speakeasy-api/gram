@@ -70,6 +70,11 @@ func TestAssistantCheckpointRejectsMissingAndCrossTenantDelegationWithoutMatchNo
 	`, projectID, orgID).Scan(&assistantID)
 	require.NoError(t, err)
 	checkpoint, err := NewAssistantCheckpoint(conn, time.Second, testenv.NewMeterProvider(t), testenv.NewLogger(t))
+	otherOrgID := "org-other"
+	otherUserID := "user-other"
+	insertOrganization(t, conn, otherOrgID)
+	insertUser(t, conn, otherUserID, nil)
+	insertMembership(t, conn, otherOrgID, otherUserID, nil)
 	require.NoError(t, err)
 
 	for _, test := range []struct {

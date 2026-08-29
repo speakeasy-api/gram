@@ -108,13 +108,5 @@ func (c *AssistantCheckpoint) Evaluate(ctx context.Context, organizationID strin
 }
 
 func (c *AssistantCheckpoint) infrastructureFailure(cause error) (killswitches.TransportDisposition, error) {
-	result, err := killswitches.NewInfrastructureFailureResult(cause)
-	if err != nil {
-		return killswitches.NewInfrastructureRejectionDisposition(), errors.Join(cause, err)
-	}
-	disposition, err := c.transport(result, c.failurePolicy)
-	if err != nil {
-		return killswitches.NewInfrastructureRejectionDisposition(), errors.Join(cause, err)
-	}
-	return disposition, cause
+	return infrastructureFailure(c.transport, c.failurePolicy, cause)
 }

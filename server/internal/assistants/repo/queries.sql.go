@@ -897,6 +897,27 @@ func (q *Queries) FailAssistantThreadEvent(ctx context.Context, arg FailAssistan
 	return err
 }
 
+const getActiveAssistantInOrganization = `-- name: GetActiveAssistantInOrganization :one
+SELECT id
+FROM assistants
+WHERE id = $1
+  AND organization_id = $2
+  AND status = 'active'
+  AND deleted IS FALSE
+`
+
+type GetActiveAssistantInOrganizationParams struct {
+	AssistantID    uuid.UUID
+	OrganizationID string
+}
+
+func (q *Queries) GetActiveAssistantInOrganization(ctx context.Context, arg GetActiveAssistantInOrganizationParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, getActiveAssistantInOrganization, arg.AssistantID, arg.OrganizationID)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
+}
+
 const getActiveAssistantRuntimeByThreadID = `-- name: GetActiveAssistantRuntimeByThreadID :one
 SELECT id, assistant_thread_id, assistant_id, project_id, backend, state, warm_until, lease_owner, last_heartbeat_at, backend_metadata_json, ended_at, runtime_version, created_at, updated_at, deleted_at, deleted, ended FROM assistant_runtimes
 WHERE assistant_thread_id = $1

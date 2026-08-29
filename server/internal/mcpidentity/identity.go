@@ -21,9 +21,8 @@ import (
 type Kind string
 
 const (
-	// KindUserSession marks a validated Gram user-session token whose subject
-	// is a concrete user. This is the only kind that identifies an
-	// authoritative acting user.
+	// KindUserSession marks a directly validated Gram user-session token
+	// whose subject is a concrete authoritative acting user.
 	KindUserSession Kind = "user_session"
 
 	// KindAnonymous marks a validated session whose subject is anonymous.

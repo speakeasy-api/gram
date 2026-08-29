@@ -51,14 +51,16 @@ func (a *AssistantResourceAdapter) ValidateCurrentOrganization(ctx context.Conte
 	if err != nil || id == uuid.Nil || id.String() != string(key) || organizationID == "" {
 		return false, nil
 	}
-	row, err := assistantrepo.New(a.db).GetAssistantForDispatch(ctx, id)
+	_, err = assistantrepo.New(a.db).GetActiveAssistantInOrganization(ctx, assistantrepo.GetActiveAssistantInOrganizationParams{
+		AssistantID: id, OrganizationID: string(organizationID),
+	})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return false, nil
 		}
 		return false, fmt.Errorf("load assistant resource: %w", err)
 	}
-	return row.OrganizationID == string(organizationID) && row.Status == "active", nil
+	return true, nil
 }
 
 func (a *AssistantResourceAdapter) Derive(ctx context.Context, organizationID killswitches.OrganizationID, source any) (killswitches.CanonicalizationResult[killswitches.ResourceKey], error) {

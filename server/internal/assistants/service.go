@@ -2626,7 +2626,11 @@ func (s *ServiceCore) ProcessThreadEvents(ctx context.Context, projectID, thread
 			// instead of waiting out the warm timer; the failed event is no
 			// longer claimable, so this cannot loop on it.
 			if errors.Is(runErr, ErrCompletionFailed) || errors.Is(runErr, ErrHistoryCorrupted) || errors.Is(runErr, errAssistantDelegationUnavailable) {
-				s.emitAssistantTelemetry(turnCtx, assistant, thread, &runtimeRecord, &event, "event_terminal", "assistant event failed at completion provider", "ERROR", runErr)
+				message := "assistant event failed at completion provider"
+				if errors.Is(runErr, errAssistantDelegationUnavailable) {
+					message = "assistant event rejected without current-user delegation"
+				}
+				s.emitAssistantTelemetry(turnCtx, assistant, thread, &runtimeRecord, &event, "event_terminal", message, "ERROR", runErr)
 				if err := s.failEvent(ctx, thread.ProjectID, event.ID, runErr); err != nil {
 					return ProcessThreadEventsResult{}, err
 				}
@@ -2942,7 +2946,11 @@ func (s *ServiceCore) touchProcessingLease(ctx context.Context, projectID, runti
 // memory, telemetry) keep working under the v2 single-VM-per-assistant
 // runtime — the VM is shared but the auth identity is per-thread.
 func (s *ServiceCore) MintThreadScopedRuntimeToken(assistant assistantRecord, threadID uuid.UUID, delegation actingForDelegation) (string, error) {
-	ttl := time.Until(delegation.ExpiresAt)
+	reference := time.Now()
+	if delegation.IssuedAt.After(reference) {
+		reference = delegation.IssuedAt
+	}
+	ttl := delegation.ExpiresAt.Sub(reference)
 	if ttl <= 0 || ttl > assistantRuntimeTokenTTL {
 		return "", errors.New("assistant delegation is outside its valid lifetime")
 	}

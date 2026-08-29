@@ -36,8 +36,9 @@ type Claims struct {
 	OrgID     string `json:"org_id"`
 	ProjectID string `json:"project_id"`
 	// UserID and SessionID are present together only for a server-issued
-	// delegation from a validated current user session. Missing values classify
-	// the token as autonomous; owner or creator fields are never substituted.
+	// delegation from a validated current-user session. SessionID is an opaque
+	// delegation identifier, never the session bearer. UserID-only legacy tokens
+	// remain assistant credentials; owner or creator fields are never substituted.
 	UserID      string `json:"user_id,omitempty"`
 	SessionID   string `json:"delegating_session_id,omitempty"`
 	AssistantID string `json:"assistant_id"`
@@ -54,7 +55,6 @@ type MCPAuthFlowInput struct {
 	OrgID       string
 	ProjectID   uuid.UUID
 	UserID      string
-	SessionID   string
 	AssistantID uuid.UUID
 	ThreadID    uuid.UUID
 	// AttemptID uniquely identifies one authorization attempt.
@@ -76,7 +76,6 @@ type MCPAuthFlowClaims struct {
 	OrgID             string `json:"org_id"`
 	ProjectID         string `json:"project_id"`
 	UserID            string `json:"user_id,omitempty"`
-	SessionID         string `json:"delegating_session_id,omitempty"`
 	AssistantID       string `json:"assistant_id"`
 	ThreadID          string `json:"thread_id"`
 	FlowID            string `json:"flow_id"`
@@ -176,7 +175,6 @@ func (m *Manager) GenerateMCPAuthFlow(input MCPAuthFlowInput) (string, error) {
 		OrgID:             input.OrgID,
 		ProjectID:         input.ProjectID.String(),
 		UserID:            input.UserID,
-		SessionID:         input.SessionID,
 		AssistantID:       input.AssistantID.String(),
 		ThreadID:          input.ThreadID.String(),
 		FlowID:            input.FlowID,
@@ -216,7 +214,6 @@ func (m *Manager) ValidateMCPAuthFlow(tokenString string) (*MCPAuthFlowClaims, e
 		OrgID:             "",
 		ProjectID:         "",
 		UserID:            "",
-		SessionID:         "",
 		AssistantID:       "",
 		ThreadID:          "",
 		FlowID:            "",

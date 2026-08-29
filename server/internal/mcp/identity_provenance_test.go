@@ -106,8 +106,8 @@ func TestApplyIssuerGate_RejectedAssistantTokenStampsNothing(t *testing.T) {
 // TestTryPublicIdentityAuth_StampsCredentialProvenance pins the provenance
 // class each legacy authenticateToken strategy stamps at credential
 // validation: assistant tokens, API keys of either accepted scope, and
-// chat-session tokens. None of them may claim an acting user, and a token
-// every strategy rejects leaves the context unattributed.
+// chat-session tokens. Only delegated assistant tokens may carry an acting
+// user, and a token every strategy rejects leaves the context unattributed.
 func TestTryPublicIdentityAuth_StampsCredentialProvenance(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestMCPService(t)

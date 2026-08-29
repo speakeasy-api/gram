@@ -81,13 +81,6 @@ func NewHostedCheckpoint(db *pgxpool.Pool, meterProvider metric.MeterProvider, l
 // Evaluate revalidates principal membership and server ownership on every call.
 // Unsupported identities and resources remain outside M2 and continue unchanged.
 func (c *HostedCheckpoint) Evaluate(ctx context.Context, organizationID string, resourceSource ServerSource) (killswitches.TransportDisposition, error) {
-	if principal, ok := contextvalues.GetAssistantPrincipal(ctx); ok {
-		disposition, err := c.assistant.Evaluate(ctx, organizationID, principal.AssistantID)
-		if err != nil || disposition.Kind() != killswitches.TransportDispositionContinue {
-			return disposition, err
-		}
-	}
-
 	organization := killswitches.OrganizationID(organizationID)
 	evaluationCtx, cancel := context.WithTimeout(ctx, hostedEvaluatorTimeout)
 	defer cancel()
@@ -117,6 +110,12 @@ func (c *HostedCheckpoint) Evaluate(ctx context.Context, organizationID string, 
 	}
 	if derivation.resourceErr != nil {
 		return c.infrastructureRejection(ctx, derivation.resourceErr)
+	}
+	if principal, ok := contextvalues.GetAssistantPrincipal(ctx); ok {
+		disposition, err := c.assistant.Evaluate(evaluationCtx, organizationID, principal.AssistantID)
+		if err != nil || disposition.Kind() != killswitches.TransportDispositionContinue {
+			return disposition, err
+		}
 	}
 
 	result := c.evaluator.Evaluate(evaluationCtx, killswitches.EvaluationRequest{

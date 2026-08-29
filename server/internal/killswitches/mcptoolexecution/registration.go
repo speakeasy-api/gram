@@ -1,12 +1,11 @@
 // Package mcptoolexecution registers the MCP kill-switch contracts: the
 // fail-closed `mcp_tool_execution` and internal `ai_access` definitions, the
 // authoritative concrete-user principal adapter, the canonical
-// organization-owned `mcp_server` resource adapter, and the coverage inventory
-// for the hosted and private-proxy MCP tools/call surfaces.
+// organization-owned MCP server and assistant resource adapters, and coverage
+// for assistant model work plus hosted and private-proxy MCP tools/call.
 //
-// Registration declares the contracts consumed by both MCP checkpoints. The
-// internal ai_access definition is not exposed through customer management or
-// used to claim coverage for planned non-MCP surfaces.
+// Registration declares the contracts consumed by assistant and MCP
+// checkpoints. The internal ai_access definition is not customer-managed.
 package mcptoolexecution
 
 import (
@@ -23,8 +22,8 @@ const (
 	// tools/call execution.
 	DefinitionKeyMCPToolExecution killswitches.DefinitionKey = "mcp_tool_execution"
 
-	// DefinitionKeyAIAccess is the internal broad AI-access capability. Its
-	// currently verified coverage is limited to authenticated MCP tools/call.
+	// DefinitionKeyAIAccess governs assistant model work and each governed MCP
+	// tools/call performed for a validated delegated user.
 	DefinitionKeyAIAccess killswitches.DefinitionKey = "ai_access"
 
 	// PrincipalKindUser is the concrete Gram user principal namespace; keys

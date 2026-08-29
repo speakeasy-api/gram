@@ -380,6 +380,9 @@ type DashboardSendResult struct {
 // — a fresh one is minted so the ingest still succeeds, but callers that want
 // retry-safe dedupe should pass a stable key.
 func (s *ServiceCore) SendDashboardMessage(ctx context.Context, projectID, assistantID uuid.UUID, userID, sessionID string, chatID uuid.UUID, text, idempotencyKey string, skillIDs []uuid.UUID, attachments []DashboardAttachmentInput) (DashboardSendResult, error) {
+	if userID == "" || sessionID == "" {
+		return DashboardSendResult{}, errAssistantDelegationUnavailable
+	}
 	assistant, err := s.GetAssistant(ctx, projectID, assistantID)
 	if err != nil {
 		return DashboardSendResult{}, err
@@ -441,7 +444,7 @@ func (s *ServiceCore) SendDashboardMessage(ctx context.Context, projectID, assis
 		UserID: userID,
 		ActingFor: actingForDelegation{
 			Kind: actingForDelegationKindUserSession, OrganizationID: assistant.OrganizationID,
-			UserID: userID, SessionID: sessionID, IssuedAt: now, ExpiresAt: now.Add(assistantRuntimeTokenTTL),
+			UserID: userID, SessionID: uuid.NewString(), IssuedAt: now, ExpiresAt: now.Add(assistantRuntimeTokenTTL),
 		},
 		CorrelationID:  correlationID,
 		IdempotencyKey: idempotencyKey,
