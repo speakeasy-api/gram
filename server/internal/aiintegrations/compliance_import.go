@@ -592,8 +592,11 @@ func (s *ComplianceImportService) buildExternalMessageRows(ctx context.Context, 
 				Generation:        0,
 				CreatedAt:         conv.ToPGTimestamptz(createdAt),
 			},
-			UserEmail: page.User.EmailAddress,
-			Provider:  anthropicAnalyticsProviderTag,
+			UserEmail:    page.User.EmailAddress,
+			Provider:     anthropicAnalyticsProviderTag,
+			HookHostname: "",
+			AccountType:  complianceAccountTypeTeam,
+			BillingMode:  cfg.BillingMode,
 		})
 	}
 	return rows, nil

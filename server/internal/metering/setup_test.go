@@ -75,30 +75,101 @@ func seedMeteringAccount(t *testing.T, conn *pgxpool.Pool, organizationID, userI
 	require.NoError(t, err)
 }
 
-func seedMeteringDirectoryUser(t *testing.T, conn *pgxpool.Pool, organizationID, userID, email, division, department string, linkByUserID bool) {
+func upsertMeteringDirectoryUser(
+	t *testing.T,
+	conn *pgxpool.Pool,
+	organizationID, userID, email string,
+	attributes map[string]string,
+	linkByUserID bool,
+) (uuid.UUID, string) {
 	t.Helper()
-	attributes, err := json.Marshal(map[string]string{
-		"division_name":   division,
-		"department_name": department,
-	})
+	encodedAttributes, err := json.Marshal(attributes)
 	require.NoError(t, err)
 	directoryUserID := pgtype.Text{}
 	if linkByUserID {
 		directoryUserID = conv.ToPGText(userID)
 	}
+	workosDirectoryUserID := "directory-" + uuid.NewString()
 	now := conv.ToPGTimestamptz(time.Now().UTC())
-	_, err = directoryrepo.New(conn).UpsertDirectoryUser(t.Context(), directoryrepo.UpsertDirectoryUserParams{
+	id, err := directoryrepo.New(conn).UpsertDirectoryUser(t.Context(), directoryrepo.UpsertDirectoryUserParams{
 		OrganizationID:        organizationID,
 		UserID:                directoryUserID,
-		WorkosDirectoryUserID: "directory-" + uuid.NewString(),
+		WorkosDirectoryUserID: workosDirectoryUserID,
 		Email:                 conv.ToPGText(email),
-		Attributes:            attributes,
+		Attributes:            encodedAttributes,
 		WorkosCreatedAt:       now,
 		WorkosUpdatedAt:       now,
 		WorkosLastEventID:     pgtype.Text{},
 		RestoreDeleted:        true,
 	})
 	require.NoError(t, err)
+	return id, workosDirectoryUserID
+}
+
+func seedMeteringDirectoryUser(t *testing.T, conn *pgxpool.Pool, organizationID, userID, email, division, department string, linkByUserID bool) {
+	t.Helper()
+	upsertMeteringDirectoryUser(t, conn, organizationID, userID, email, map[string]string{
+		"division_name":   division,
+		"department_name": department,
+	}, linkByUserID)
+}
+
+type meteringDirectoryFacets struct {
+	DivisionName   string
+	DepartmentName string
+	JobTitle       string
+	EmployeeType   string
+	CostCenterName string
+	Groups         []string
+}
+
+func seedMeteringFacetUser(
+	t *testing.T,
+	conn *pgxpool.Pool,
+	organizationID, userID, email string,
+	facets meteringDirectoryFacets,
+	linkDirectoryByUserID bool,
+) {
+	t.Helper()
+	seedMeteringAccount(t, conn, organizationID, userID, email)
+	directoryUserID, workosDirectoryUserID := upsertMeteringDirectoryUser(
+		t,
+		conn,
+		organizationID,
+		userID,
+		email,
+		map[string]string{
+			"division_name":    facets.DivisionName,
+			"department_name":  facets.DepartmentName,
+			"job_title":        facets.JobTitle,
+			"employee_type":    facets.EmployeeType,
+			"cost_center_name": facets.CostCenterName,
+		},
+		linkDirectoryByUserID,
+	)
+	now := conv.ToPGTimestamptz(time.Now().UTC())
+	queries := directoryrepo.New(conn)
+	for _, name := range facets.Groups {
+		workosDirectoryGroupID := "group-" + uuid.NewString()
+		directoryGroupID, err := queries.UpsertDirectoryGroup(t.Context(), directoryrepo.UpsertDirectoryGroupParams{
+			OrganizationID:         organizationID,
+			WorkosDirectoryGroupID: workosDirectoryGroupID,
+			Name:                   name,
+			Attributes:             []byte(`{}`),
+			WorkosCreatedAt:        now,
+			WorkosUpdatedAt:        now,
+			WorkosLastEventID:      pgtype.Text{},
+		})
+		require.NoError(t, err)
+		_, err = queries.OpenDirectoryUserGroupMembership(t.Context(), directoryrepo.OpenDirectoryUserGroupMembershipParams{
+			DirectoryUserID:        directoryUserID,
+			DirectoryGroupID:       directoryGroupID,
+			WorkosDirectoryUserID:  workosDirectoryUserID,
+			WorkosDirectoryGroupID: workosDirectoryGroupID,
+			WorkosCreatedAt:        now,
+		})
+		require.NoError(t, err)
+	}
 }
 
 func seedMeteringUser(t *testing.T, conn *pgxpool.Pool, organizationID, userID, email, division, department string, linkDirectoryByUserID bool) {

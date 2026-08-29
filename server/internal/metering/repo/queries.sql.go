@@ -61,6 +61,10 @@ SELECT
   , COALESCE(MAX(identity.account_email) FILTER (WHERE refs.principal_kind = 'message_user'), '')::text AS message_user_account_email
   , COALESCE(MAX(identity.division_name) FILTER (WHERE refs.principal_kind = 'message_user'), '')::text AS message_user_division_name
   , COALESCE(MAX(identity.department_name) FILTER (WHERE refs.principal_kind = 'message_user'), '')::text AS message_user_department_name
+  , COALESCE(MAX(identity.job_title) FILTER (WHERE refs.principal_kind = 'message_user'), '')::text AS message_user_job_title
+  , COALESCE(MAX(identity.employee_type) FILTER (WHERE refs.principal_kind = 'message_user'), '')::text AS message_user_employee_type
+  , COALESCE(MAX(identity.cost_center_name) FILTER (WHERE refs.principal_kind = 'message_user'), '')::text AS message_user_cost_center_name
+  , COALESCE(MAX(identity.group_names::text) FILTER (WHERE refs.principal_kind = 'message_user'), '{}')::text[] AS message_user_group_names
   , COALESCE(MAX(identity.directory_match) FILTER (WHERE refs.principal_kind = 'message_user'), '')::text AS message_user_directory_match
   , COALESCE(MAX(identity.role_slugs::text) FILTER (WHERE refs.principal_kind = 'message_user'), '{}')::text[] AS message_user_role_slugs
   , COALESCE(refs.chat_owner_user_id, '')::text AS chat_owner_user_id
@@ -68,6 +72,10 @@ SELECT
   , COALESCE(MAX(identity.account_email) FILTER (WHERE refs.principal_kind = 'chat_owner'), '')::text AS chat_owner_user_email
   , COALESCE(MAX(identity.division_name) FILTER (WHERE refs.principal_kind = 'chat_owner'), '')::text AS chat_owner_division_name
   , COALESCE(MAX(identity.department_name) FILTER (WHERE refs.principal_kind = 'chat_owner'), '')::text AS chat_owner_department_name
+  , COALESCE(MAX(identity.job_title) FILTER (WHERE refs.principal_kind = 'chat_owner'), '')::text AS chat_owner_job_title
+  , COALESCE(MAX(identity.employee_type) FILTER (WHERE refs.principal_kind = 'chat_owner'), '')::text AS chat_owner_employee_type
+  , COALESCE(MAX(identity.cost_center_name) FILTER (WHERE refs.principal_kind = 'chat_owner'), '')::text AS chat_owner_cost_center_name
+  , COALESCE(MAX(identity.group_names::text) FILTER (WHERE refs.principal_kind = 'chat_owner'), '{}')::text[] AS chat_owner_group_names
   , COALESCE(MAX(identity.directory_match) FILTER (WHERE refs.principal_kind = 'chat_owner'), '')::text AS chat_owner_directory_match
   , COALESCE(MAX(identity.role_slugs::text) FILTER (WHERE refs.principal_kind = 'chat_owner'), '{}')::text[] AS chat_owner_role_slugs
 FROM principal_refs refs
@@ -76,6 +84,10 @@ LEFT JOIN LATERAL (
       u.email AS account_email
     , NULLIF(BTRIM(directory_user.attributes ->> 'division_name'), '') AS division_name
     , NULLIF(BTRIM(directory_user.attributes ->> 'department_name'), '') AS department_name
+    , NULLIF(BTRIM(directory_user.attributes ->> 'job_title'), '') AS job_title
+    , NULLIF(BTRIM(directory_user.attributes ->> 'employee_type'), '') AS employee_type
+    , NULLIF(BTRIM(directory_user.attributes ->> 'cost_center_name'), '') AS cost_center_name
+    , COALESCE(directory_groups.group_names, '{}'::text[])::text[] AS group_names
     , directory_user.match_method AS directory_match
     , COALESCE(role_slugs.role_slugs, '{}'::text[])::text[] AS role_slugs
   FROM organization_user_relationships membership
@@ -83,7 +95,7 @@ LEFT JOIN LATERAL (
     ON u.id = membership.user_id
     AND u.deleted_at IS NULL
   LEFT JOIN LATERAL (
-    SELECT candidate.attributes, candidate.match_method
+    SELECT candidate.id, candidate.attributes, candidate.match_method
     FROM (
       SELECT
           d.attributes
@@ -113,6 +125,17 @@ LEFT JOIN LATERAL (
     ORDER BY candidate.match_priority, candidate.created_at, candidate.id
     LIMIT 1
   ) directory_user ON TRUE
+  LEFT JOIN LATERAL (
+    SELECT ARRAY_AGG(DISTINCT dg.name ORDER BY dg.name) AS group_names
+    FROM directory_user_group_memberships membership
+    INNER JOIN directory_groups dg
+      ON dg.id = membership.directory_group_id
+      AND dg.organization_id = refs.organization_id
+      AND dg.deleted IS FALSE
+      AND dg.workos_deleted IS FALSE
+    WHERE membership.directory_user_id = directory_user.id
+      AND membership.deleted IS FALSE
+  ) directory_groups ON TRUE
   LEFT JOIN LATERAL (
     SELECT ARRAY_AGG(DISTINCT active_role.role_slug ORDER BY active_role.role_slug) AS role_slugs
     FROM (
@@ -175,6 +198,10 @@ type ResolveAgentSessionStorageAttributesRow struct {
 	MessageUserAccountEmail   string
 	MessageUserDivisionName   string
 	MessageUserDepartmentName string
+	MessageUserJobTitle       string
+	MessageUserEmployeeType   string
+	MessageUserCostCenterName string
+	MessageUserGroupNames     []string
 	MessageUserDirectoryMatch string
 	MessageUserRoleSlugs      []string
 	ChatOwnerUserID           string
@@ -182,6 +209,10 @@ type ResolveAgentSessionStorageAttributesRow struct {
 	ChatOwnerUserEmail        string
 	ChatOwnerDivisionName     string
 	ChatOwnerDepartmentName   string
+	ChatOwnerJobTitle         string
+	ChatOwnerEmployeeType     string
+	ChatOwnerCostCenterName   string
+	ChatOwnerGroupNames       []string
 	ChatOwnerDirectoryMatch   string
 	ChatOwnerRoleSlugs        []string
 }
@@ -209,6 +240,10 @@ func (q *Queries) ResolveAgentSessionStorageAttributes(ctx context.Context, arg 
 			&i.MessageUserAccountEmail,
 			&i.MessageUserDivisionName,
 			&i.MessageUserDepartmentName,
+			&i.MessageUserJobTitle,
+			&i.MessageUserEmployeeType,
+			&i.MessageUserCostCenterName,
+			&i.MessageUserGroupNames,
 			&i.MessageUserDirectoryMatch,
 			&i.MessageUserRoleSlugs,
 			&i.ChatOwnerUserID,
@@ -216,6 +251,10 @@ func (q *Queries) ResolveAgentSessionStorageAttributes(ctx context.Context, arg 
 			&i.ChatOwnerUserEmail,
 			&i.ChatOwnerDivisionName,
 			&i.ChatOwnerDepartmentName,
+			&i.ChatOwnerJobTitle,
+			&i.ChatOwnerEmployeeType,
+			&i.ChatOwnerCostCenterName,
+			&i.ChatOwnerGroupNames,
 			&i.ChatOwnerDirectoryMatch,
 			&i.ChatOwnerRoleSlugs,
 		); err != nil {

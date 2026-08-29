@@ -41,6 +41,15 @@ type MessageWrite struct {
 
 	// Provider is the AI provider explicitly reported by ingestion.
 	Provider string
+
+	// HookHostname is the device hostname explicitly reported by hook ingestion.
+	HookHostname string
+
+	// AccountType is the AI account classification reported for the session.
+	AccountType string
+
+	// BillingMode is the AI account billing mode resolved for the session.
+	BillingMode string
 }
 
 // ExternalMessageWrite pairs persisted imported message parameters with producer-only provenance.
@@ -53,6 +62,15 @@ type ExternalMessageWrite struct {
 
 	// Provider is the AI provider explicitly reported by ingestion.
 	Provider string
+
+	// HookHostname is the device hostname explicitly reported by hook ingestion.
+	HookHostname string
+
+	// AccountType is the AI account classification reported for the imported session.
+	AccountType string
+
+	// BillingMode is the AI account billing mode declared for the import.
+	BillingMode string
 }
 
 // ChatMessageWriter is the only sanctioned way to persist chat messages.
@@ -244,6 +262,9 @@ type meterMessageInput struct {
 	model                 pgtype.Text
 	provider              string
 	source                pgtype.Text
+	hookHostname          string
+	accountType           string
+	billingMode           string
 	messageUserID         pgtype.Text
 	messageExternalUserID pgtype.Text
 	messageUserEmail      string
@@ -286,6 +307,9 @@ func (w *ChatMessageWriter) meterMessage(ctx context.Context, input meterMessage
 	if input.source.Valid {
 		setReadingAttribute(&attributes, metering.AttributeHookSource, CanonicalSource(input.source.String))
 	}
+	setReadingAttribute(&attributes, metering.AttributeHookHostname, input.hookHostname)
+	setReadingAttribute(&attributes, metering.AttributeAccountType, input.accountType)
+	setReadingAttribute(&attributes, metering.AttributeBillingMode, input.billingMode)
 	if input.messageUserID.Valid {
 		setReadingAttribute(&attributes, metering.AttributeMessageUserID, input.messageUserID.String)
 	}
@@ -336,6 +360,9 @@ func (w *ChatMessageWriter) meterMessages(
 			model:                 param.Model,
 			provider:              write.Provider,
 			source:                param.Source,
+			hookHostname:          write.HookHostname,
+			accountType:           write.AccountType,
+			billingMode:           write.BillingMode,
 			messageUserID:         param.UserID,
 			messageExternalUserID: param.ExternalUserID,
 			messageUserEmail:      write.UserEmail,
@@ -576,6 +603,9 @@ func (w *ChatMessageWriter) WriteExternal(ctx context.Context, projectID uuid.UU
 			model:                 param.Model,
 			provider:              write.Provider,
 			source:                param.Source,
+			hookHostname:          write.HookHostname,
+			accountType:           write.AccountType,
+			billingMode:           write.BillingMode,
 			messageUserID:         param.UserID,
 			messageExternalUserID: param.ExternalUserID,
 			messageUserEmail:      write.UserEmail,

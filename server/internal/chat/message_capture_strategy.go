@@ -432,7 +432,10 @@ func buildAssistantRows(
 		Params:    only,
 		UserEmail: request.UserEmail,
 		// The completion payload does not report a provider; model names are not provider identity.
-		Provider: "",
+		Provider:     "",
+		HookHostname: "",
+		AccountType:  "",
+		BillingMode:  "",
 	}}
 }
 

@@ -86,8 +86,11 @@ func TestChatMessageWriterMetersStoredTextAndToolCalls(t *testing.T) {
 			Replayed:         false,
 			CreatedAt:        pgtype.Timestamptz{},
 		},
-		UserEmail: "reported@example.test",
-		Provider:  "openai",
+		UserEmail:    "reported@example.test",
+		Provider:     "openai",
+		HookHostname: "workstation.example.test",
+		AccountType:  "team",
+		BillingMode:  "metered",
 	}}
 	written, err := writer.Write(ctx, ti.projectID, writes)
 	require.NoError(t, err)
@@ -106,6 +109,9 @@ func TestChatMessageWriterMetersStoredTextAndToolCalls(t *testing.T) {
 		metering.AttributeModel:                 "gpt-5",
 		metering.AttributeProvider:              "openai",
 		metering.AttributeHookSource:            "codex",
+		metering.AttributeHookHostname:          "workstation.example.test",
+		metering.AttributeAccountType:           "team",
+		metering.AttributeBillingMode:           "metered",
 		metering.AttributeMessageUserID:         messageUserID,
 		metering.AttributeMessageExternalUserID: "provider-user-123",
 		metering.AttributeMessageUserEmail:      "reported@example.test",
@@ -156,8 +162,11 @@ func TestChatMessageWriterMetersExternalMessageOnceAtStorageTime(t *testing.T) {
 			Generation:        0,
 			CreatedAt:         conv.ToPGTimestamptz(historical),
 		},
-		UserEmail: "imported@example.test",
-		Provider:  "openai",
+		UserEmail:    "imported@example.test",
+		Provider:     "openai",
+		HookHostname: "",
+		AccountType:  "team",
+		BillingMode:  "flat_rate",
 	}
 	before := time.Now().UTC()
 	written, err := writer.WriteExternal(ctx, ti.projectID, []chat.ExternalMessageWrite{param})
@@ -178,6 +187,8 @@ func TestChatMessageWriterMetersExternalMessageOnceAtStorageTime(t *testing.T) {
 		metering.AttributeModel:                 "imported-model",
 		metering.AttributeProvider:              "openai",
 		metering.AttributeHookSource:            "chatgpt",
+		metering.AttributeAccountType:           "team",
+		metering.AttributeBillingMode:           "flat_rate",
 		metering.AttributeMessageExternalUserID: "opaque-provider-user-456",
 		metering.AttributeMessageUserEmail:      "imported@example.test",
 	}, message.GetAttributes())

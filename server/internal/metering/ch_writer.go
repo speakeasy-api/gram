@@ -96,6 +96,10 @@ var consumerOwnedAgentSessionAttributes = [...]string{
 	AttributeMessageUserAccountEmail,
 	AttributeMessageUserDivisionName,
 	AttributeMessageUserDepartmentName,
+	AttributeMessageUserJobTitle,
+	AttributeMessageUserEmployeeType,
+	AttributeMessageUserCostCenterName,
+	AttributeMessageUserDirectoryGroups,
 	AttributeMessageUserDirectoryMatch,
 	AttributeMessageUserRBACRoles,
 	AttributeChatOwnerUserID,
@@ -103,6 +107,10 @@ var consumerOwnedAgentSessionAttributes = [...]string{
 	AttributeChatOwnerUserEmail,
 	AttributeChatOwnerDivisionName,
 	AttributeChatOwnerDepartmentName,
+	AttributeChatOwnerJobTitle,
+	AttributeChatOwnerEmployeeType,
+	AttributeChatOwnerCostCenterName,
+	AttributeChatOwnerDirectoryGroups,
 	AttributeChatOwnerDirectoryMatch,
 	AttributeChatOwnerRBACRoles,
 }
@@ -111,6 +119,18 @@ func setResolvedAttribute(attributes map[string]string, key string, value string
 	if value != "" {
 		attributes[key] = value
 	}
+}
+
+func setResolvedStringSliceAttribute(attributes map[string]string, key string, values []string) error {
+	if len(values) == 0 {
+		return nil
+	}
+	encoded, err := json.Marshal(values)
+	if err != nil {
+		return fmt.Errorf("marshal %s: %w", key, err)
+	}
+	setResolvedAttribute(attributes, key, string(encoded))
+	return nil
 }
 
 func (w *MeterReadingCHWriter) enrichAgentSessionStorageRows(ctx context.Context, rows []chrepo.ReadingRow) error {
@@ -180,26 +200,30 @@ func (w *MeterReadingCHWriter) enrichAgentSessionStorageRows(ctx context.Context
 		setResolvedAttribute(attributes, AttributeMessageUserAccountEmail, result.MessageUserAccountEmail)
 		setResolvedAttribute(attributes, AttributeMessageUserDivisionName, result.MessageUserDivisionName)
 		setResolvedAttribute(attributes, AttributeMessageUserDepartmentName, result.MessageUserDepartmentName)
+		setResolvedAttribute(attributes, AttributeMessageUserJobTitle, result.MessageUserJobTitle)
+		setResolvedAttribute(attributes, AttributeMessageUserEmployeeType, result.MessageUserEmployeeType)
+		setResolvedAttribute(attributes, AttributeMessageUserCostCenterName, result.MessageUserCostCenterName)
+		if err := setResolvedStringSliceAttribute(attributes, AttributeMessageUserDirectoryGroups, result.MessageUserGroupNames); err != nil {
+			return err
+		}
 		setResolvedAttribute(attributes, AttributeMessageUserDirectoryMatch, result.MessageUserDirectoryMatch)
-		if len(result.MessageUserRoleSlugs) > 0 {
-			rolesJSON, err := json.Marshal(result.MessageUserRoleSlugs)
-			if err != nil {
-				return fmt.Errorf("marshal message user roles: %w", err)
-			}
-			setResolvedAttribute(attributes, AttributeMessageUserRBACRoles, string(rolesJSON))
+		if err := setResolvedStringSliceAttribute(attributes, AttributeMessageUserRBACRoles, result.MessageUserRoleSlugs); err != nil {
+			return err
 		}
 		setResolvedAttribute(attributes, AttributeChatOwnerUserID, result.ChatOwnerUserID)
 		setResolvedAttribute(attributes, AttributeChatOwnerExternalUserID, result.ChatOwnerExternalUserID)
 		setResolvedAttribute(attributes, AttributeChatOwnerUserEmail, result.ChatOwnerUserEmail)
 		setResolvedAttribute(attributes, AttributeChatOwnerDivisionName, result.ChatOwnerDivisionName)
 		setResolvedAttribute(attributes, AttributeChatOwnerDepartmentName, result.ChatOwnerDepartmentName)
+		setResolvedAttribute(attributes, AttributeChatOwnerJobTitle, result.ChatOwnerJobTitle)
+		setResolvedAttribute(attributes, AttributeChatOwnerEmployeeType, result.ChatOwnerEmployeeType)
+		setResolvedAttribute(attributes, AttributeChatOwnerCostCenterName, result.ChatOwnerCostCenterName)
+		if err := setResolvedStringSliceAttribute(attributes, AttributeChatOwnerDirectoryGroups, result.ChatOwnerGroupNames); err != nil {
+			return err
+		}
 		setResolvedAttribute(attributes, AttributeChatOwnerDirectoryMatch, result.ChatOwnerDirectoryMatch)
-		if len(result.ChatOwnerRoleSlugs) > 0 {
-			rolesJSON, err := json.Marshal(result.ChatOwnerRoleSlugs)
-			if err != nil {
-				return fmt.Errorf("marshal chat owner roles: %w", err)
-			}
-			setResolvedAttribute(attributes, AttributeChatOwnerRBACRoles, string(rolesJSON))
+		if err := setResolvedStringSliceAttribute(attributes, AttributeChatOwnerRBACRoles, result.ChatOwnerRoleSlugs); err != nil {
+			return err
 		}
 		resolved[key] = attributes
 	}
