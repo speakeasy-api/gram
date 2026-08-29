@@ -3,6 +3,7 @@ package admin
 import (
 	"context"
 	"errors"
+	"fmt"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -44,12 +45,15 @@ func (s *Service) markEnterpriseTrialConverted(ctx context.Context, organization
 		}
 	}
 	defer releaseFeatures()
-	refreshFeatureCache := func() {
+	refreshFeatureCache := func() error {
+		cacheCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+		defer cancel()
 		for _, feature := range productfeatures.TrialRuntimeFeatures {
-			if cacheErr := s.productFeatures.UpdateFeatureCacheUnderLock(ctx, lockConn, payload.ID, feature); cacheErr != nil {
-				logger.WarnContext(ctx, "failed to refresh enterprise runtime feature cache", attr.SlogError(cacheErr), attr.SlogProductFeatureName(string(feature)))
+			if cacheErr := s.productFeatures.UpdateFeatureCacheUnderLock(cacheCtx, lockConn, payload.ID, feature); cacheErr != nil {
+				return fmt.Errorf("refresh %s cache: %w", feature, cacheErr)
 			}
 		}
+		return nil
 	}
 
 	tx, err := lockConn.Begin(ctx)
@@ -109,7 +113,10 @@ func (s *Service) markEnterpriseTrialConverted(ctx context.Context, organization
 		if err := tx.Rollback(ctx); err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "close enterprise trial conversion retry transaction").LogError(ctx, logger)
 		}
-		refreshFeatureCache()
+		if err := refreshFeatureCache(); err != nil {
+			releaseFeatures()
+			return nil, oops.E(oops.CodeUnexpected, err, "refresh enterprise runtime feature cache after conversion retry").LogError(ctx, logger)
+		}
 		releaseFeatures()
 		if err := s.trial.TrialInactive(ctx, payload.ID); err != nil {
 			logger.WarnContext(ctx, "failed to stop enterprise trial notifications on conversion retry", attr.SlogError(err))
@@ -186,7 +193,10 @@ func (s *Service) markEnterpriseTrialConverted(ctx context.Context, organization
 		return nil, oops.E(oops.CodeUnexpected, err, "commit enterprise trial conversion").LogError(ctx, logger)
 	}
 
-	refreshFeatureCache()
+	if err := refreshFeatureCache(); err != nil {
+		releaseFeatures()
+		return nil, oops.E(oops.CodeUnexpected, err, "refresh enterprise runtime feature cache after conversion").LogError(ctx, logger)
+	}
 	releaseFeatures()
 	if err := s.trial.TrialInactive(ctx, payload.ID); err != nil {
 		logger.WarnContext(ctx, "failed to stop enterprise trial notifications after conversion", attr.SlogError(err))

@@ -197,11 +197,13 @@ func (c *Client) UpdateFeatureCacheUnderLock(ctx context.Context, conn *pgxpool.
 	if err != nil {
 		return fmt.Errorf("reload feature cache state: %w", err)
 	}
-	c.storeFeatureCache(ctx, organizationID, feature, enabled, "failed to update feature flag cache")
+	if err := c.storeFeatureCache(ctx, organizationID, feature, enabled, "failed to update feature flag cache"); err != nil {
+		return fmt.Errorf("store feature cache state: %w", err)
+	}
 	return nil
 }
 
-func (c *Client) storeFeatureCache(ctx context.Context, organizationID string, feature Feature, enabled bool, message string) {
+func (c *Client) storeFeatureCache(ctx context.Context, organizationID string, feature Feature, enabled bool, message string) error {
 	cacheEntry := FeatureCache{
 		OrganizationID: organizationID,
 		Feature:        feature,
@@ -213,7 +215,9 @@ func (c *Client) storeFeatureCache(ctx context.Context, organizationID string, f
 			attr.SlogOrganizationID(organizationID),
 			attr.SlogProductFeatureName(string(feature)),
 		)
+		return err
 	}
+	return nil
 }
 
 func setFeatureEnabled(ctx context.Context, queries *repo.Queries, organizationID string, feature Feature, enabled bool) error {

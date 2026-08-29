@@ -5,11 +5,14 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net"
+	"sync"
 	"testing"
 	"time"
 
 	"github.com/jackc/pgerrcode"
 	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/redis/go-redis/v9"
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/admin"
@@ -25,6 +28,36 @@ import (
 	orrepo "github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter/repo"
 	trialsRepo "github.com/speakeasy-api/gram/server/internal/trials/repo"
 )
+
+type cancelOnRedisSetHook struct {
+	cancel func()
+	once   sync.Once
+	called chan struct{}
+}
+
+func (h *cancelOnRedisSetHook) DialHook(next redis.DialHook) redis.DialHook {
+	return func(ctx context.Context, network, addr string) (net.Conn, error) {
+		return next(ctx, network, addr)
+	}
+}
+
+func (h *cancelOnRedisSetHook) ProcessHook(next redis.ProcessHook) redis.ProcessHook {
+	return func(ctx context.Context, cmd redis.Cmder) error {
+		if cmd.Name() == "set" {
+			h.once.Do(func() {
+				h.cancel()
+				close(h.called)
+			})
+		}
+		return next(ctx, cmd)
+	}
+}
+
+func (h *cancelOnRedisSetHook) ProcessPipelineHook(next redis.ProcessPipelineHook) redis.ProcessPipelineHook {
+	return func(ctx context.Context, cmds []redis.Cmder) error {
+		return next(ctx, cmds)
+	}
+}
 
 func TestMarkEnterpriseTrialConverted_LocksLifecycleThenAllKeysBeforeRowReads(t *testing.T) {
 	t.Parallel()
@@ -172,6 +205,107 @@ func TestMarkEnterpriseTrialConverted_LocksLifecycleThenAllKeysBeforeRowReads(t 
 	}
 	require.NoError(t, json.Unmarshal(record.AfterSnapshot, &after))
 	require.True(t, after.Organization.Whitelisted, "audit snapshot must describe conversion state under the organization lock")
+}
+
+func TestMarkEnterpriseTrialConverted_CancellationDuringPostCommitCacheRefreshDoesNotLeaveStaleCache(t *testing.T) {
+	t.Parallel()
+	ctx, svc, conn, _ := newProductionRearmService(t)
+	const orgID = "org_convert_cache_cancel"
+	demotedAt := time.Now().UTC().Add(-time.Hour)
+	seedOrg(t, ctx, conn, orgFixture{id: orgID, name: orgID, slug: orgID, accountType: "free", whitelisted: false})
+	seedTrial(t, ctx, conn, trialFixture{orgID: orgID, tier: "enterprise", endsAt: demotedAt, demotedAt: &demotedAt})
+	for _, keyType := range openrouter.AllKeyTypes {
+		seedOpenRouterKey(t, ctx, conn, orgID, keyFixture{keyType: keyType, monthlyCredits: 7, disabled: true})
+	}
+
+	redisClient, err := infra.NewRedisClient(t, 0)
+	require.NoError(t, err)
+	for _, feature := range productfeatures.TrialRuntimeFeatures {
+		key := productfeatures.FeatureCacheKey(orgID, feature) + ":"
+		require.NoError(t, redisClient.Del(ctx, key).Err())
+	}
+	requestCtx, cancelRequest := context.WithCancel(ctx)
+	hook := &cancelOnRedisSetHook{cancel: cancelRequest, called: make(chan struct{})}
+	redisClient.AddHook(hook)
+	svc.productFeatures = productfeatures.NewClient(testenv.NewLogger(t), testenv.NewTracerProvider(t), conn, redisClient)
+
+	converted := make(chan error, 1)
+	go func() {
+		_, callErr := svc.MarkEnterpriseTrialConverted(requestCtx, &gen.MarkEnterpriseTrialConvertedPayload{ID: orgID})
+		converted <- callErr
+	}()
+
+	select {
+	case <-hook.called:
+	case <-time.After(3 * time.Second):
+		require.FailNow(t, "conversion never attempted its post-commit cache refresh")
+	}
+	select {
+	case <-converted:
+	case <-time.After(3 * time.Second):
+		require.FailNow(t, "conversion did not return after request cancellation")
+	}
+
+	for _, feature := range productfeatures.TrialRuntimeFeatures {
+		key := productfeatures.FeatureCacheKey(orgID, feature) + ":"
+		exists, existsErr := redisClient.Exists(ctx, key).Result()
+		require.NoError(t, existsErr)
+		require.Equalf(t, int64(1), exists, "%s cache entry was not safely refreshed after durable commit", feature)
+		enabled, cacheErr := svc.productFeatures.IsFeatureEnabled(ctx, orgID, feature)
+		require.NoError(t, cacheErr)
+		require.Truef(t, enabled, "%s cache entry did not match committed state", feature)
+	}
+}
+
+func TestMarkEnterpriseTrialConverted_RetryCancellationDuringCacheRefreshDoesNotLeaveStaleCache(t *testing.T) {
+	t.Parallel()
+	ctx, svc, conn, _ := newProductionRearmService(t)
+	const orgID = "org_convert_retry_cache_cancel"
+	convertedAt := time.Now().UTC().Add(-time.Hour)
+	seedOrg(t, ctx, conn, orgFixture{id: orgID, name: orgID, slug: orgID, accountType: "enterprise", whitelisted: true})
+	seedTrial(t, ctx, conn, trialFixture{orgID: orgID, tier: "enterprise", endsAt: convertedAt, convertedAt: &convertedAt})
+	for _, feature := range productfeatures.TrialRuntimeFeatures {
+		_, err := featurerepo.New(conn).EnableFeature(ctx, featurerepo.EnableFeatureParams{OrganizationID: orgID, FeatureName: string(feature)})
+		require.NoError(t, err)
+	}
+
+	redisClient, err := infra.NewRedisClient(t, 0)
+	require.NoError(t, err)
+	for _, feature := range productfeatures.TrialRuntimeFeatures {
+		key := productfeatures.FeatureCacheKey(orgID, feature) + ":"
+		require.NoError(t, redisClient.Del(ctx, key).Err())
+	}
+	requestCtx, cancelRequest := context.WithCancel(ctx)
+	hook := &cancelOnRedisSetHook{cancel: cancelRequest, called: make(chan struct{})}
+	redisClient.AddHook(hook)
+	svc.productFeatures = productfeatures.NewClient(testenv.NewLogger(t), testenv.NewTracerProvider(t), conn, redisClient)
+
+	retried := make(chan error, 1)
+	go func() {
+		_, callErr := svc.MarkEnterpriseTrialConverted(requestCtx, &gen.MarkEnterpriseTrialConvertedPayload{ID: orgID})
+		retried <- callErr
+	}()
+
+	select {
+	case <-hook.called:
+	case <-time.After(3 * time.Second):
+		require.FailNow(t, "conversion retry never attempted its cache refresh")
+	}
+	select {
+	case <-retried:
+	case <-time.After(3 * time.Second):
+		require.FailNow(t, "conversion retry did not return after request cancellation")
+	}
+
+	for _, feature := range productfeatures.TrialRuntimeFeatures {
+		key := productfeatures.FeatureCacheKey(orgID, feature) + ":"
+		exists, existsErr := redisClient.Exists(ctx, key).Result()
+		require.NoError(t, existsErr)
+		require.Equalf(t, int64(1), exists, "%s cache entry was not safely refreshed on retry", feature)
+		enabled, cacheErr := svc.productFeatures.IsFeatureEnabled(ctx, orgID, feature)
+		require.NoError(t, cacheErr)
+		require.Truef(t, enabled, "%s retry cache entry did not match durable state", feature)
+	}
 }
 
 func TestMarkEnterpriseTrialConverted_MissingKeyWaitsForProvisioningAndReReads(t *testing.T) {
