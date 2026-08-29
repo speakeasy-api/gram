@@ -143,12 +143,12 @@ func (w *MeterReadingCHWriter) enrichAgentSessionStorageRows(ctx context.Context
 		if row.MeterID != string(MeterAgentSessionStorage) || row.CorrectsReadingID != nil {
 			continue
 		}
+		for _, key := range consumerOwnedAgentSessionAttributes {
+			delete(row.Attributes, key)
+		}
 		rawChatID := row.Attributes[AttributeChatID]
 		if rawChatID == "" {
 			continue
-		}
-		for _, key := range consumerOwnedAgentSessionAttributes {
-			delete(row.Attributes, key)
 		}
 		chatID, err := uuid.Parse(rawChatID)
 		if err != nil || chatID == uuid.Nil {

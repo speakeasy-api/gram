@@ -79,7 +79,7 @@ func upsertMeteringDirectoryUser(
 	t *testing.T,
 	conn *pgxpool.Pool,
 	organizationID, userID, email string,
-	attributes map[string]string,
+	attributes any,
 	linkByUserID bool,
 ) (uuid.UUID, string) {
 	t.Helper()

@@ -240,8 +240,13 @@ func TestMeterReadingCHWriterEnrichesMessageUserAndChatOwnerIndependently(t *tes
 
 	messageUserID := "message-user-" + uuid.NewString()
 	ownerUserID := "owner-user-" + uuid.NewString()
-	seedMeteringUser(t, conn, organizationID, messageUserID, "message-account@example.test", "Message Division", "Message Department", true)
+	seedMeteringAccount(t, conn, organizationID, messageUserID, "message-account@example.test")
+	seedMeteringDirectoryUser(t, conn, organizationID, messageUserID, "message-account@example.test", "Stale Message Division", "Stale Message Department", true)
+	seedMeteringDirectoryUser(t, conn, organizationID, messageUserID, "message-account@example.test", "Message Division", "Message Department", true)
 	seedMeteringUser(t, conn, organizationID, ownerUserID, "owner-account@example.test", "Owner Division", "Owner Department", false)
+	emailCollisionUserID := "email-collision-user-" + uuid.NewString()
+	seedMeteringAccount(t, conn, organizationID, emailCollisionUserID, "email-collision-account@example.test")
+	seedMeteringDirectoryUser(t, conn, organizationID, emailCollisionUserID, "owner-account@example.test", "Wrong Owner Division", "Wrong Owner Department", true)
 	seedMeteringRole(t, conn, organizationID, messageUserID, "zeta-message", false)
 	seedMeteringRole(t, conn, organizationID, messageUserID, "alpha-message", true)
 	seedMeteringRole(t, conn, organizationID, ownerUserID, "member-owner", false)
@@ -344,6 +349,18 @@ func TestMeterReadingCHWriterPreservesIdentityBoundaries(t *testing.T) {
 	seedMeteringRole(t, conn, organizationID, sameUserID, "same-role", false)
 	plainUserID := "plain-user-" + uuid.NewString()
 	seedMeteringAccount(t, conn, organizationID, plainUserID, "plain-user@example.test")
+	upsertMeteringDirectoryUser(t, conn, organizationID, plainUserID, "plain-user@example.test", map[string]any{
+		"division_name":    42,
+		"department_name":  true,
+		"job_title":        map[string]string{"invalid": "object"},
+		"employee_type":    []string{"invalid", "array"},
+		"cost_center_name": nil,
+	}, true)
+	ambiguousUserID := "ambiguous-user-" + uuid.NewString()
+	ambiguousEmail := "ambiguous-user@example.test"
+	seedMeteringAccount(t, conn, organizationID, ambiguousUserID, ambiguousEmail)
+	seedMeteringDirectoryUser(t, conn, organizationID, ambiguousUserID, ambiguousEmail, "First Ambiguous Division", "First Ambiguous Department", false)
+	seedMeteringDirectoryUser(t, conn, organizationID, ambiguousUserID, ambiguousEmail, "Second Ambiguous Division", "Second Ambiguous Department", false)
 
 	createChat := func(chatID uuid.UUID, projectID uuid.UUID, ownerUserID string) {
 		t.Helper()
@@ -361,12 +378,14 @@ func TestMeterReadingCHWriterPreservesIdentityBoundaries(t *testing.T) {
 	sameUserChatID := uuid.New()
 	anonymousChatID := uuid.New()
 	plainUserChatID := uuid.New()
+	ambiguousChatID := uuid.New()
 	foreignChatID := uuid.New()
 	deletedChatID := uuid.New()
 	createChat(ownerOnlyChatID, project.ID, ownerOnlyUserID)
 	createChat(sameUserChatID, project.ID, sameUserID)
 	createChat(anonymousChatID, project.ID, "")
 	createChat(plainUserChatID, project.ID, plainUserID)
+	createChat(ambiguousChatID, project.ID, ambiguousUserID)
 	createChat(foreignChatID, otherProject.ID, ownerOnlyUserID)
 	createChat(deletedChatID, project.ID, ownerOnlyUserID)
 	deleted, err := chatrepo.New(conn).SoftDeleteChat(ctx, chatrepo.SoftDeleteChatParams{ProjectID: project.ID, ID: deletedChatID})
@@ -414,6 +433,10 @@ func TestMeterReadingCHWriterPreservesIdentityBoundaries(t *testing.T) {
 			metering.AttributeChatID:        plainUserChatID.String(),
 			metering.AttributeMessageUserID: plainUserID,
 		}),
+		newMessage("ambiguous-email", map[string]string{
+			metering.AttributeChatID:        ambiguousChatID.String(),
+			metering.AttributeMessageUserID: ambiguousUserID,
+		}),
 		newMessage("tenant-mismatch", map[string]string{
 			metering.AttributeChatID:                  foreignChatID.String(),
 			metering.AttributeModel:                   "foreign-model",
@@ -425,6 +448,13 @@ func TestMeterReadingCHWriterPreservesIdentityBoundaries(t *testing.T) {
 			metering.AttributeHookSource:           "deleted-source",
 			metering.AttributeChatOwnerUserEmail:   "stale-owner@example.test",
 			metering.AttributeMessageUserRBACRoles: `["stale"]`,
+		}),
+		newMessage("missing-chat-id", map[string]string{
+			metering.AttributeModel:                    "missing-chat-model",
+			metering.AttributeMessageUserAccountEmail:  "stale@example.test",
+			metering.AttributeMessageUserJobTitle:      "Stale Job",
+			metering.AttributeChatOwnerUserID:          "stale-owner",
+			metering.AttributeChatOwnerDirectoryGroups: `["stale"]`,
 		}),
 	}
 	capture := &captureReadingInserter{rows: nil, err: nil}
@@ -477,10 +507,32 @@ func TestMeterReadingCHWriterPreservesIdentityBoundaries(t *testing.T) {
 	require.Equal(t, plainUserID, plain[metering.AttributeChatOwnerUserID])
 	require.Equal(t, "plain-user@example.test", plain[metering.AttributeMessageUserAccountEmail])
 	require.Equal(t, "plain-user@example.test", plain[metering.AttributeChatOwnerUserEmail])
-	require.NotContains(t, plain, metering.AttributeMessageUserDirectoryMatch)
-	require.NotContains(t, plain, metering.AttributeChatOwnerDirectoryMatch)
+	require.Equal(t, "user_id", plain[metering.AttributeMessageUserDirectoryMatch])
+	require.Equal(t, "user_id", plain[metering.AttributeChatOwnerDirectoryMatch])
+	for _, key := range []string{
+		metering.AttributeMessageUserDivisionName,
+		metering.AttributeMessageUserDepartmentName,
+		metering.AttributeMessageUserJobTitle,
+		metering.AttributeMessageUserEmployeeType,
+		metering.AttributeMessageUserCostCenterName,
+		metering.AttributeChatOwnerDivisionName,
+		metering.AttributeChatOwnerDepartmentName,
+		metering.AttributeChatOwnerJobTitle,
+		metering.AttributeChatOwnerEmployeeType,
+		metering.AttributeChatOwnerCostCenterName,
+	} {
+		require.NotContains(t, plain, key)
+	}
 	require.NotContains(t, plain, metering.AttributeMessageUserRBACRoles)
 	require.NotContains(t, plain, metering.AttributeChatOwnerRBACRoles)
+	require.Equal(t, map[string]string{
+		"codec":                                   string(metering.MeasurementTiktokenO200kBase),
+		metering.AttributeChatID:                  ambiguousChatID.String(),
+		metering.AttributeMessageUserID:           ambiguousUserID,
+		metering.AttributeMessageUserAccountEmail: ambiguousEmail,
+		metering.AttributeChatOwnerUserID:         ambiguousUserID,
+		metering.AttributeChatOwnerUserEmail:      ambiguousEmail,
+	}, rows["ambiguous-email"].Attributes)
 
 	require.Equal(t, map[string]string{
 		"codec":                  string(metering.MeasurementTiktokenO200kBase),
@@ -492,6 +544,10 @@ func TestMeterReadingCHWriterPreservesIdentityBoundaries(t *testing.T) {
 		metering.AttributeChatID:     deletedChatID.String(),
 		metering.AttributeHookSource: "deleted-source",
 	}, rows["deleted-chat"].Attributes)
+	require.Equal(t, map[string]string{
+		"codec":                 string(metering.MeasurementTiktokenO200kBase),
+		metering.AttributeModel: "missing-chat-model",
+	}, rows["missing-chat-id"].Attributes)
 }
 
 func TestMeterReadingCHWriterDoesNotEnrichAcrossOrganizations(t *testing.T) {

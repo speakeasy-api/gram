@@ -82,11 +82,11 @@ FROM principal_refs refs
 LEFT JOIN LATERAL (
   SELECT
       u.email AS account_email
-    , NULLIF(BTRIM(directory_user.attributes ->> 'division_name'), '') AS division_name
-    , NULLIF(BTRIM(directory_user.attributes ->> 'department_name'), '') AS department_name
-    , NULLIF(BTRIM(directory_user.attributes ->> 'job_title'), '') AS job_title
-    , NULLIF(BTRIM(directory_user.attributes ->> 'employee_type'), '') AS employee_type
-    , NULLIF(BTRIM(directory_user.attributes ->> 'cost_center_name'), '') AS cost_center_name
+    , NULLIF(BTRIM(CASE WHEN jsonb_typeof(directory_user.attributes -> 'division_name') = 'string' THEN directory_user.attributes ->> 'division_name' END), '') AS division_name
+    , NULLIF(BTRIM(CASE WHEN jsonb_typeof(directory_user.attributes -> 'department_name') = 'string' THEN directory_user.attributes ->> 'department_name' END), '') AS department_name
+    , NULLIF(BTRIM(CASE WHEN jsonb_typeof(directory_user.attributes -> 'job_title') = 'string' THEN directory_user.attributes ->> 'job_title' END), '') AS job_title
+    , NULLIF(BTRIM(CASE WHEN jsonb_typeof(directory_user.attributes -> 'employee_type') = 'string' THEN directory_user.attributes ->> 'employee_type' END), '') AS employee_type
+    , NULLIF(BTRIM(CASE WHEN jsonb_typeof(directory_user.attributes -> 'cost_center_name') = 'string' THEN directory_user.attributes ->> 'cost_center_name' END), '') AS cost_center_name
     , COALESCE(directory_groups.group_names, '{}'::text[])::text[] AS group_names
     , directory_user.match_method AS directory_match
     , COALESCE(role_slugs.role_slugs, '{}'::text[])::text[] AS role_slugs
@@ -101,7 +101,8 @@ LEFT JOIN LATERAL (
           d.attributes
         , 'user_id'::text AS match_method
         , 0 AS match_priority
-        , d.created_at
+        , d.workos_updated_at
+        , d.updated_at
         , d.id
       FROM directory_users d
       WHERE d.organization_id = refs.organization_id
@@ -111,18 +112,29 @@ LEFT JOIN LATERAL (
         AND d.workos_deleted IS FALSE
       UNION ALL
       SELECT
-          d.attributes
+          email_candidate.attributes
         , 'email'::text AS match_method
         , 1 AS match_priority
-        , d.created_at
-        , d.id
-      FROM directory_users d
-      WHERE d.organization_id = refs.organization_id
-        AND LOWER(d.email) = LOWER(u.email)
-        AND d.deleted IS FALSE
-        AND d.workos_deleted IS FALSE
+        , email_candidate.workos_updated_at
+        , email_candidate.updated_at
+        , email_candidate.id
+      FROM (
+        SELECT
+            d.attributes
+          , d.workos_updated_at
+          , d.updated_at
+          , d.id
+          , COUNT(*) OVER () AS candidate_count
+        FROM directory_users d
+        WHERE d.organization_id = refs.organization_id
+          AND LOWER(d.email) = LOWER(u.email)
+          AND d.user_id IS NULL
+          AND d.deleted IS FALSE
+          AND d.workos_deleted IS FALSE
+      ) email_candidate
+      WHERE email_candidate.candidate_count = 1
     ) candidate
-    ORDER BY candidate.match_priority, candidate.created_at, candidate.id
+    ORDER BY candidate.match_priority, candidate.workos_updated_at DESC, candidate.updated_at DESC, candidate.id
     LIMIT 1
   ) directory_user ON TRUE
   LEFT JOIN LATERAL (
