@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useLayoutEffect, useRef } from "react";
 import { useLocation } from "react-router";
 
 /**
@@ -12,7 +12,9 @@ export function useTabScrollReset(
 ): React.RefObject<HTMLDivElement | null> {
   const ref = useRef<HTMLDivElement>(null);
   const { hash } = useLocation();
-  useEffect(() => {
+  // Layout effect: resetting after paint would flash the old offset for a
+  // frame when the incoming tab is tall enough to keep it.
+  useLayoutEffect(() => {
     // In-page anchors (e.g. settings section hashes) win over the reset.
     if (hash) return;
     ref.current?.closest("[data-page-scroll]")?.scrollTo({ top: 0 });

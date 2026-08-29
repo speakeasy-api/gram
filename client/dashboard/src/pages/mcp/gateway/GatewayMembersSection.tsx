@@ -276,7 +276,11 @@ export function GatewayMembersSection({
             render: (row) => {
               const index = indexByMemberId.get(row.member.id) ?? 0;
               return (
-                <RequireScope scope="mcp:write" level="component">
+                <RequireScope
+                  scope="mcp:write"
+                  resourceId={metaMcpServer.id}
+                  level="component"
+                >
                   <div className="flex items-center gap-1">
                     <Button
                       variant="tertiary"
@@ -333,7 +337,11 @@ export function GatewayMembersSection({
       header: "",
       width: "64px",
       render: (row) => (
-        <RequireScope scope="mcp:write" level="component">
+        <RequireScope
+          scope="mcp:write"
+          resourceId={metaMcpServer.id}
+          level="component"
+        >
           <Button
             variant="destructive-secondary"
             size="sm"
@@ -364,7 +372,11 @@ export function GatewayMembersSection({
           upstream health lands with the proxied runtime.
         </Page.Section.Description>
         <Page.Section.CTA>
-          <RequireScope scope="mcp:write" level="component">
+          <RequireScope
+            scope="mcp:write"
+            resourceId={metaMcpServer.id}
+            level="component"
+          >
             <Button size="sm" onClick={() => setAddOpen(true)}>
               <Button.LeftIcon>
                 <Plus />
@@ -386,7 +398,11 @@ export function GatewayMembersSection({
                       No members yet. A gateway with no members exposes its four
                       tools but has nothing to route to.
                     </Text>
-                    <RequireScope scope="mcp:write" level="component">
+                    <RequireScope
+                      scope="mcp:write"
+                      resourceId={metaMcpServer.id}
+                      level="component"
+                    >
                       <Button
                         variant="secondary"
                         size="sm"
