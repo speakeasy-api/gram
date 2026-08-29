@@ -49,7 +49,7 @@ afterEach(() => {
 });
 
 describe("organization activity pagination query", () => {
-  it("continues past a filtered page before declaring the feed empty", async () => {
+  it("keeps unrelated activity and loads the next page in place", async () => {
     const fetchMock = vi
       .fn()
       .mockResolvedValueOnce(
@@ -78,7 +78,10 @@ describe("organization activity pagination query", () => {
     expect(screen.queryByText("No activity yet.")).toBeNull();
     fireEvent.click(loadOlder);
 
-    expect(await screen.findByText("armed enterprise trial")).toBeDefined();
+    expect(await screen.findByText("started enterprise trial")).toBeDefined();
+    expect(
+      screen.getAllByTestId(/^activity-/).map((item) => item.dataset.testid),
+    ).toEqual(["activity-other", "activity-trial"]);
     expect(fetchMock).toHaveBeenNthCalledWith(
       2,
       expect.stringContaining("cursor=older-page"),
@@ -185,7 +188,7 @@ describe("organization activity pagination query", () => {
         name: "Older activity could not be loaded.",
       }),
     ).toBeDefined();
-    expect(screen.getByText("armed enterprise trial")).toBeDefined();
+    expect(screen.getByText("started enterprise trial")).toBeDefined();
     fireEvent.click(
       screen.getByRole("button", { name: "Retry older activity" }),
     );
@@ -193,8 +196,8 @@ describe("organization activity pagination query", () => {
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(3));
     const items = await screen.findAllByTestId(/^activity-/);
     expect(items.map((item) => item.dataset.testid)).toEqual([
-      "activity-newer",
       "activity-boundary",
+      "activity-newer",
     ]);
     expect(fetchMock.mock.calls.slice(1).map(([url]) => String(url))).toEqual([
       expect.stringContaining("cursor=page-2"),

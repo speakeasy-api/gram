@@ -80,6 +80,7 @@ describe("organization trial activity", () => {
         ...baseLog,
         id: "manual",
         action: "organization:enterprise_trial_converted",
+        actor_id: "staff",
         actor_display_name: "Platform administrator",
         metadata: { conversion_source: "platform_admin" },
       },
@@ -93,7 +94,7 @@ describe("organization trial activity", () => {
 
     render(<OrganizationActivity organizationId="org-current" />);
 
-    expect(screen.getByText("armed enterprise trial")).toBeDefined();
+    expect(screen.getByText("started enterprise trial")).toBeDefined();
     expect(screen.getByText("extended enterprise trial")).toBeDefined();
     expect(screen.getByText("rearmed enterprise trial")).toBeDefined();
     expect(screen.getByText("demoted enterprise trial")).toBeDefined();
@@ -101,12 +102,17 @@ describe("organization trial activity", () => {
     expect(
       screen.getByText("converted enterprise trial through checkout"),
     ).toBeDefined();
-    expect(screen.getByText("Platform administrator")).toBeDefined();
+    expect(screen.getAllByText("Platform administrator")[0]).toBeDefined();
     expect(screen.getAllByText("System").length).toBeGreaterThan(0);
 
-    fireEvent.click(screen.getAllByText("Details")[0]!);
+    const armedArticle = screen.getByTestId("activity-armed");
+    const armedDetails = within(armedArticle)
+      .getByText("Details")
+      .closest("details");
+    fireEvent.click(within(armedArticle).getByText("Details"));
+    expect(armedDetails?.open).toBe(true);
     expect(
-      screen.getByText("organization:enterprise_trial_armed"),
+      within(armedArticle).getByText("organization:enterprise_trial_armed"),
     ).toBeDefined();
   });
 
@@ -173,14 +179,11 @@ describe("organization trial activity", () => {
     render(<OrganizationActivity organizationId="org-current" />);
     const item = screen.getByTestId("activity-converted");
     expect(within(item).getByText("Account type")).toBeDefined();
-    expect(within(item).getByText("free → enterprise")).toBeDefined();
+    expect(within(item).getByText('"free" → "enterprise"')).toBeDefined();
     expect(within(item).getByText("Monthly cap (chat)")).toBeDefined();
     expect(within(item).getByText("7 → 50")).toBeDefined();
-    expect(
-      within(item).getByText("Account type").closest("dl")?.className,
-    ).toContain("grid-cols-1");
-    expect(within(item).getByText("free → enterprise").className).toContain(
-      "break-words",
+    expect(within(item).getByText('"free" → "enterprise"').className).toContain(
+      "break-all",
     );
     expect(item.textContent).not.toContain("private@example.test");
     expect(item.textContent).not.toContain("hash-secret");
@@ -189,7 +192,7 @@ describe("organization trial activity", () => {
     expect(item.textContent).not.toContain("provider_payload");
   });
 
-  it("orders newest first, deduplicates page boundaries, and fetches each next page once", () => {
+  it("preserves fetched order, deduplicates page boundaries, and fetches each next page once", () => {
     const older = {
       ...baseLog,
       id: "older",
@@ -216,8 +219,8 @@ describe("organization trial activity", () => {
     render(<OrganizationActivity organizationId="org-current" />);
     const items = screen.getAllByTestId(/^activity-/);
     expect(items.map((item) => item.dataset.testid)).toEqual([
-      "activity-newer",
       "activity-older",
+      "activity-newer",
     ]);
     fireEvent.click(
       screen.getByRole("button", { name: "Load older activity" }),

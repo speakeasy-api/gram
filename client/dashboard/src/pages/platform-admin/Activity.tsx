@@ -1,9 +1,28 @@
 import { Button } from "@/components/ui/Button";
 import { useInfiniteQuery } from "@tanstack/react-query";
-import { useCallback, useEffect, useRef } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
 import { AdminSection } from "./AdminSection";
 
-const TRIAL_ACTION_PREFIX = "organization:enterprise_trial_";
+const TRIAL_ACTIONS = new Set([
+  "organization:enterprise_trial_armed",
+  "organization:enterprise_trial_extended",
+  "organization:enterprise_trial_rearmed",
+  "organization:enterprise_trial_demoted",
+  "organization:enterprise_trial_converted",
+]);
+
+const UTC_DATE_TIME = new Intl.DateTimeFormat("en-US", {
+  dateStyle: "full",
+  timeStyle: "long",
+  timeZone: "UTC",
+});
 
 type ActivityLog = {
   id: string;
@@ -11,6 +30,9 @@ type ActivityLog = {
   actor_display_name?: string;
   actor_id: string;
   actor_type: string;
+  acting_surface?: string;
+  subject_display_name?: string;
+  subject_type?: string;
   created_at: string;
   metadata?: Record<string, unknown>;
   before_snapshot?: unknown;
@@ -21,27 +43,32 @@ type ActivityPage = { logs: ActivityLog[]; next_cursor?: string };
 
 type SafeSnapshot = {
   organization?: {
-    account_type?: string;
-    whitelisted?: boolean;
-    disabled?: boolean;
+    account_type?: unknown;
+    whitelisted?: unknown;
+    disabled?: unknown;
   };
   trial?: {
-    tier?: string;
-    ends_at?: string | null;
-    converted_at?: string | null;
-    demoted_at?: string | null;
+    tier?: unknown;
+    ends_at?: unknown;
+    converted_at?: unknown;
+    demoted_at?: unknown;
   };
   keys?: Array<{
-    key_type?: string;
-    disable_causes?: string[];
-    stored_disabled?: boolean;
-    effective_disabled?: boolean;
-    monthly_credits?: number;
+    key_type?: unknown;
+    disable_causes?: unknown;
+    stored_disabled?: unknown;
+    effective_disabled?: unknown;
+    monthly_credits?: unknown;
   }>;
-  trial_ends_at?: string;
+  trial_ends_at?: unknown;
 };
 
-type DiffRow = { label: string; before: string; after: string };
+type DiffRow = {
+  label: string;
+  field: string;
+  before: unknown;
+  after: unknown;
+};
 
 export function OrganizationActivity({
   organizationId,
@@ -118,27 +145,37 @@ export function OrganizationActivity({
   const byID = new Map<string, ActivityLog>();
   for (const page of query.data?.pages ?? []) {
     for (const log of page.logs) {
-      if (log.action.startsWith(TRIAL_ACTION_PREFIX) && !byID.has(log.id))
-        byID.set(log.id, log);
+      if (!byID.has(log.id)) byID.set(log.id, log);
     }
   }
-  const logs = [...byID.values()].sort((left, right) => {
-    const byTime = Date.parse(right.created_at) - Date.parse(left.created_at);
-    return byTime === 0 ? right.id.localeCompare(left.id) : byTime;
-  });
-
-  if (logs.length === 0 && !query.hasNextPage)
-    return (
-      <p className="px-4 py-3 text-sm text-muted-foreground">
-        No activity yet.
-      </p>
-    );
+  const logs = [...byID.values()];
 
   return (
     <div className="divide-y">
+      {logs.length === 0 && !query.hasNextPage && (
+        <p className="px-4 py-3 text-sm text-muted-foreground">
+          No activity yet.
+        </p>
+      )}
       {logs.map((log) => (
         <ActivityItem key={log.id} log={log} />
       ))}
+      {query.isRefetchError && (
+        <div
+          role="alert"
+          className="flex flex-wrap items-center gap-3 px-4 py-3 text-sm"
+        >
+          <span>Activity could not be refreshed.</span>
+          <Button
+            size="sm"
+            variant="secondary"
+            disabled={query.isRefetching}
+            onClick={() => void query.refetch()}
+          >
+            {query.isRefetching ? "Retrying refresh…" : "Retry refresh"}
+          </Button>
+        </div>
+      )}
       {query.isFetchNextPageError && (
         <div
           role="alert"
@@ -192,7 +229,16 @@ export function OrganizationActivitySection({
 }
 
 function ActivityItem({ log }: { log: ActivityLog }): JSX.Element {
-  const diffs = snapshotDiffs(log.before_snapshot, log.after_snapshot);
+  const before = useMemo(
+    () => safeSnapshot(log.before_snapshot),
+    [log.before_snapshot],
+  );
+  const after = useMemo(
+    () => safeSnapshot(log.after_snapshot),
+    [log.after_snapshot],
+  );
+  const diffs = snapshotDiffs(before, after);
+  const [showRaw, setShowRaw] = useState(false);
   return (
     <article
       className="space-y-2 px-4 py-3 text-sm"
@@ -210,30 +256,200 @@ function ActivityItem({ log }: { log: ActivityLog }): JSX.Element {
           {formatDate(log.created_at)}
         </time>
       </div>
-      {diffs.length > 0 && (
-        <dl className="grid grid-cols-1 gap-x-4 gap-y-1 rounded-md bg-muted/40 px-3 py-2 text-xs sm:grid-cols-[minmax(8rem,auto)_1fr]">
-          {diffs.map((diff) => (
-            <div className="contents" key={diff.label}>
-              <dt className="text-muted-foreground">{diff.label}</dt>
-              <dd className="min-w-0 break-words">
-                {diff.before} → {diff.after}
-              </dd>
-            </div>
-          ))}
-        </dl>
+      {TRIAL_ACTIONS.has(log.action) && (
+        <TrialFacts log={log} before={before} after={after} />
       )}
       <details className="text-xs text-muted-foreground">
         <summary className="cursor-pointer">Details</summary>
-        <code className="break-all">{log.action}</code>
+        <div className="mt-2 space-y-2">
+          <code className="break-all">{log.action}</code>
+          <dl className="grid gap-2 sm:grid-cols-3">
+            <Detail label="Actor">{actorLabel(log)}</Detail>
+            <Detail label="Subject">
+              {nonempty(log.subject_display_name) ??
+                log.subject_type ??
+                "Organization"}
+            </Detail>
+            <Detail label="Acting surface">
+              {nonempty(log.acting_surface) ?? "Not recorded"}
+            </Detail>
+          </dl>
+          <SafeMetadata metadata={log.metadata} />
+          {diffs.length > 0 &&
+            (showRaw ? (
+              <section aria-label="Raw diff" role="region">
+                <button type="button" onClick={() => setShowRaw(false)}>
+                  View structured diff
+                </button>
+                <div className="grid gap-2 sm:grid-cols-2">
+                  <JsonDetail label="Before snapshot" value={before} />
+                  <JsonDetail label="After snapshot" value={after} />
+                </div>
+              </section>
+            ) : (
+              <section aria-label="Changed fields">
+                <dl className="grid gap-1 rounded-md bg-muted/40 px-3 py-2">
+                  {diffs.map((diff) => (
+                    <div
+                      className="grid grid-cols-[minmax(8rem,auto)_1fr] gap-2"
+                      key={diff.field}
+                    >
+                      <dt>{diff.label}</dt>
+                      <dd className="break-all">
+                        {displayValue(diff.before)} → {displayValue(diff.after)}
+                      </dd>
+                    </div>
+                  ))}
+                </dl>
+                <button type="button" onClick={() => setShowRaw(true)}>
+                  View raw diff
+                </button>
+              </section>
+            ))}
+        </div>
       </details>
     </article>
+  );
+}
+
+function Detail({
+  label,
+  children,
+}: {
+  label: string;
+  children: ReactNode;
+}): JSX.Element {
+  return (
+    <div>
+      <dt>{label}</dt>
+      <dd className="break-all text-foreground">{children}</dd>
+    </div>
+  );
+}
+
+function JsonDetail({
+  label,
+  value,
+}: {
+  label: string;
+  value: unknown;
+}): JSX.Element {
+  return (
+    <div>
+      <p>{label}</p>
+      <pre className="whitespace-pre-wrap break-all">{safeJson(value)}</pre>
+    </div>
+  );
+}
+
+function SafeMetadata({
+  metadata,
+}: {
+  metadata?: Record<string, unknown>;
+}): JSX.Element | null {
+  if (!metadata) return null;
+  const safe = pickDefined(metadata, [
+    "conversion_source",
+    "tier",
+    "trial_starts_at",
+    "trial_ends_at",
+    "previous_trial_ends_at",
+  ]);
+  return Object.keys(safe).length === 0 ? null : (
+    <JsonDetail label="Metadata" value={safe} />
+  );
+}
+
+function TrialFacts({
+  log,
+  before,
+  after,
+}: {
+  log: ActivityLog;
+  before?: SafeSnapshot;
+  after?: SafeSnapshot;
+}): JSX.Element {
+  const facts: Array<[string, ReactNode]> = [];
+  const beforeEnd = before?.trial?.ends_at ?? before?.trial_ends_at;
+  const afterEnd = after?.trial?.ends_at ?? after?.trial_ends_at;
+  const tier = after?.trial?.tier ?? before?.trial?.tier;
+  let title = "Enterprise trial updated";
+  switch (log.action) {
+    case "organization:enterprise_trial_armed":
+      title = "Enterprise trial started";
+      facts.push(
+        ["Started", formatFactDate(log.created_at)],
+        ["Trial end", formatFactDate(afterEnd)],
+        ["Tier", recorded(tier)],
+      );
+      break;
+    case "organization:enterprise_trial_extended":
+      title = "Enterprise trial extended";
+      facts.push(
+        ["Previous trial end", formatFactDate(beforeEnd)],
+        ["New trial end", formatFactDate(afterEnd)],
+        ["Tier", recorded(tier)],
+      );
+      break;
+    case "organization:enterprise_trial_rearmed":
+      title = "Enterprise trial restarted";
+      facts.push(
+        ["Restarted", formatFactDate(log.created_at)],
+        ["Trial end", formatFactDate(afterEnd)],
+        ["Tier", recorded(tier)],
+      );
+      break;
+    case "organization:enterprise_trial_demoted":
+      title = "Enterprise trial ended";
+      facts.push(
+        ["Ended", formatFactDate(after?.trial?.demoted_at ?? log.created_at)],
+        ["Tier", recorded(tier)],
+      );
+      break;
+    case "organization:enterprise_trial_converted":
+      title = "Enterprise trial converted";
+      facts.push(
+        [
+          "Converted",
+          formatFactDate(after?.trial?.converted_at ?? log.created_at),
+        ],
+        ["Conversion method", conversionMethod(log)],
+        ["Tier", recorded(tier)],
+      );
+      break;
+  }
+  for (const key of allKeyTypes(before, after)) {
+    const oldAccess = keyAccess(before, key);
+    const newAccess = keyAccess(after, key);
+    facts.push([
+      `Key access (${key})`,
+      oldAccess === newAccess || oldAccess === "Not recorded"
+        ? newAccess
+        : `${oldAccess} → ${newAccess}`,
+    ]);
+  }
+  return (
+    <section
+      className="rounded-md bg-muted/40 px-3 py-2 text-xs"
+      aria-label={title}
+    >
+      <h3 className="mb-1 font-medium text-foreground">{title}</h3>
+      <dl className="grid gap-x-4 gap-y-1 sm:grid-cols-2">
+        {facts.map(([label, value]) => (
+          <div className="contents" key={label}>
+            <dt>{label}</dt>
+            <dd className="break-words text-foreground">{value}</dd>
+          </div>
+        ))}
+      </dl>
+    </section>
   );
 }
 
 function activityPhrase(log: ActivityLog): string {
   switch (log.action) {
     case "organization:enterprise_trial_armed":
-      return "armed enterprise trial";
+      return "started enterprise trial";
     case "organization:enterprise_trial_extended":
       return "extended enterprise trial";
     case "organization:enterprise_trial_rearmed":
@@ -245,7 +461,7 @@ function activityPhrase(log: ActivityLog): string {
         ? "converted enterprise trial through checkout"
         : "marked enterprise trial converted";
     default:
-      return "updated enterprise trial";
+      return "updated organization";
   }
 }
 
@@ -256,23 +472,23 @@ function conversionSource(log: ActivityLog): string | undefined {
 }
 
 function actorLabel(log: ActivityLog): string {
-  if (log.action === "organization:enterprise_trial_converted") {
-    return conversionSource(log) === "stripe_checkout"
-      ? "System"
-      : "Platform administrator";
-  }
   if (
-    log.actor_id === "system" ||
-    log.actor_type === "system" ||
-    log.actor_display_name === "System"
+    log.action === "organization:enterprise_trial_converted" &&
+    conversionSource(log) === "stripe_checkout"
   )
-    return "System";
-  return "Platform administrator";
+    return "Stripe";
+  if (log.actor_id === "system" || log.actor_type === "system") return "System";
+  const displayName = nonempty(log.actor_display_name);
+  if (displayName) return displayName;
+  return log.action === "organization:enterprise_trial_armed"
+    ? "Unknown user"
+    : "Speakeasy Team";
 }
 
-function snapshotDiffs(beforeValue: unknown, afterValue: unknown): DiffRow[] {
-  const before = safeSnapshot(beforeValue);
-  const after = safeSnapshot(afterValue);
+function snapshotDiffs(
+  before: SafeSnapshot | undefined,
+  after: SafeSnapshot | undefined,
+): DiffRow[] {
   if (!before && !after) return [];
   const rows: DiffRow[] = [];
   addDiff(
@@ -353,41 +569,40 @@ function snapshotDiffs(beforeValue: unknown, afterValue: unknown): DiffRow[] {
 function safeSnapshot(value: unknown): SafeSnapshot | undefined {
   if (!isRecord(value)) return undefined;
   const organization = isRecord(value.organization)
-    ? {
-        account_type: stringValue(value.organization.account_type),
-        whitelisted: booleanValue(value.organization.whitelisted),
-        disabled: booleanValue(value.organization.disabled),
-      }
+    ? pickDefined(value.organization, [
+        "account_type",
+        "whitelisted",
+        "disabled",
+      ])
     : undefined;
   const trial = isRecord(value.trial)
-    ? {
-        tier: stringValue(value.trial.tier),
-        ends_at: nullableString(value.trial.ends_at),
-        converted_at: nullableString(value.trial.converted_at),
-        demoted_at: nullableString(value.trial.demoted_at),
-      }
+    ? pickDefined(value.trial, [
+        "tier",
+        "ends_at",
+        "converted_at",
+        "demoted_at",
+      ])
     : undefined;
   const keys = Array.isArray(value.keys)
-    ? value.keys.filter(isRecord).map((key) => ({
-        key_type: stringValue(key.key_type),
-        disable_causes: Array.isArray(key.disable_causes)
-          ? key.disable_causes.filter(
-              (cause): cause is string => typeof cause === "string",
-            )
-          : undefined,
-        stored_disabled: booleanValue(key.stored_disabled),
-        effective_disabled: booleanValue(key.effective_disabled),
-        monthly_credits:
-          typeof key.monthly_credits === "number"
-            ? key.monthly_credits
-            : undefined,
-      }))
+    ? value.keys
+        .filter(isRecord)
+        .map((key) =>
+          pickDefined(key, [
+            "key_type",
+            "disable_causes",
+            "stored_disabled",
+            "effective_disabled",
+            "monthly_credits",
+          ]),
+        )
     : undefined;
   return {
     organization,
     trial,
     keys,
-    trial_ends_at: stringValue(value.trial_ends_at),
+    ...(value.trial_ends_at !== undefined
+      ? { trial_ends_at: safeValue(value.trial_ends_at) }
+      : {}),
   };
 }
 
@@ -398,37 +613,106 @@ function addDiff(
   after: unknown,
 ): void {
   if (before === undefined && after === undefined) return;
-  const beforeText = displayValue(before);
-  const afterText = displayValue(after);
-  if (beforeText !== afterText)
-    rows.push({ label, before: beforeText, after: afterText });
+  if (safeJson(before) !== safeJson(after))
+    rows.push({
+      label,
+      field: label.toLowerCase().replaceAll(" ", "_"),
+      before,
+      after,
+    });
 }
 
 function displayValue(value: unknown): string {
-  if (value === undefined || value === null) return "—";
-  if (Array.isArray(value))
-    return value.length === 0 ? "none" : value.join(", ");
-  if (
-    typeof value === "string" ||
-    typeof value === "number" ||
-    typeof value === "boolean"
-  )
-    return String(value);
-  return "—";
+  if (value === undefined) return "(missing)";
+  return safeJson(value);
 }
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
-function stringValue(value: unknown): string | undefined {
-  return typeof value === "string" ? value : undefined;
+
+function safeValue(value: unknown): unknown {
+  if (
+    value === null ||
+    typeof value === "string" ||
+    typeof value === "number" ||
+    typeof value === "boolean"
+  )
+    return value;
+  if (Array.isArray(value))
+    return value.map(safeValue).filter((item) => item !== undefined);
+  return undefined;
 }
-function nullableString(value: unknown): string | null | undefined {
-  return value === null ? null : stringValue(value);
+
+function pickDefined(
+  source: Record<string, unknown>,
+  fields: string[],
+): Record<string, unknown> {
+  const result: Record<string, unknown> = {};
+  for (const field of fields) {
+    if (source[field] !== undefined) result[field] = safeValue(source[field]);
+  }
+  return result;
 }
-function booleanValue(value: unknown): boolean | undefined {
-  return typeof value === "boolean" ? value : undefined;
+
+function safeJson(value: unknown): string {
+  if (value === undefined) return "(missing)";
+  try {
+    return JSON.stringify(value) ?? "[unserializable]";
+  } catch {
+    return "[unserializable]";
+  }
 }
+
+function nonempty(value: unknown): string | undefined {
+  return typeof value === "string" && value.trim() !== ""
+    ? value.trim()
+    : undefined;
+}
+
+function recorded(value: unknown): string {
+  if (value === undefined || value === null || value === "")
+    return "Not recorded";
+  return typeof value === "string" ||
+    typeof value === "number" ||
+    typeof value === "boolean"
+    ? String(value)
+    : safeJson(value);
+}
+
+function formatFactDate(value: unknown): string {
+  return typeof value === "string" ? formatDate(value) : "Not recorded";
+}
+
+function conversionMethod(log: ActivityLog): string {
+  const source = conversionSource(log);
+  if (!source) return "Not recorded";
+  if (source === "stripe_checkout") return "Stripe checkout";
+  if (source === "platform_admin" || source === "admin") return "Manual";
+  return source;
+}
+
+function allKeyTypes(before?: SafeSnapshot, after?: SafeSnapshot): string[] {
+  const values = [...(before?.keys ?? []), ...(after?.keys ?? [])]
+    .map((key) => key.key_type)
+    .filter((value): value is string => typeof value === "string");
+  return [...new Set(values)];
+}
+
+function keyAccess(
+  snapshot: SafeSnapshot | undefined,
+  keyType: string,
+): string {
+  const key = snapshot?.keys?.find((item) => item.key_type === keyType);
+  return typeof key?.effective_disabled === "boolean"
+    ? key.effective_disabled
+      ? "Disabled"
+      : "Enabled"
+    : "Not recorded";
+}
+
 function formatDate(value: string): string {
   const date = new Date(value);
-  return Number.isNaN(date.valueOf()) ? "Unknown time" : date.toLocaleString();
+  return Number.isNaN(date.valueOf())
+    ? "Unknown time"
+    : UTC_DATE_TIME.format(date);
 }
