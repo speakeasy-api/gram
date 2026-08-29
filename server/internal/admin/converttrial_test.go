@@ -136,6 +136,7 @@ func TestMarkEnterpriseTrialConverted_EligibilityAndIdempotencyBoundary(t *testi
 	now := time.Now().UTC().Truncate(time.Microsecond)
 	demotedAt := now.Add(-24 * time.Hour)
 	convertedAt := now.Add(-time.Hour)
+	disabledAt := now.Add(-2 * time.Hour)
 
 	tests := []struct {
 		name           string
@@ -145,6 +146,8 @@ func TestMarkEnterpriseTrialConverted_EligibilityAndIdempotencyBoundary(t *testi
 		trialTier      string
 		convertedAt    *time.Time
 		demotedAt      *time.Time
+		endsAt         time.Time
+		disabledAt     *time.Time
 		seedKey        bool
 		wantCode       oops.Code
 		wantHTTPStatus int
@@ -154,8 +157,11 @@ func TestMarkEnterpriseTrialConverted_EligibilityAndIdempotencyBoundary(t *testi
 		{name: "absent organization is private not found", wantCode: oops.CodeNotFound, wantHTTPStatus: http.StatusNotFound},
 		{name: "existing organization without trial is a conflict", seedOrg: true, accountType: "enterprise", seedKey: true, wantCode: oops.CodeConflict},
 		{name: "stored trial tier is not enterprise", seedOrg: true, accountType: "enterprise", seedTrial: true, trialTier: "free", seedKey: true, wantCode: oops.CodeConflict},
-		{name: "running unconverted enterprise trial converts", seedOrg: true, accountType: "enterprise", seedTrial: true, trialTier: "enterprise", seedKey: true, wantConverted: true},
-		{name: "running undemoted trial normalizes drifted free access", seedOrg: true, accountType: "free", seedTrial: true, trialTier: "enterprise", seedKey: true, wantConverted: true},
+		{name: "running unconverted enterprise trial converts", seedOrg: true, accountType: "enterprise", seedTrial: true, trialTier: "enterprise", endsAt: now.Add(8 * 24 * time.Hour), seedKey: true, wantConverted: true},
+		{name: "ending-soon unconverted enterprise trial converts", seedOrg: true, accountType: "enterprise", seedTrial: true, trialTier: "enterprise", endsAt: now.Add(24 * time.Hour), seedKey: true, wantConverted: true},
+		{name: "expired undemoted enterprise trial converts", seedOrg: true, accountType: "enterprise", seedTrial: true, trialTier: "enterprise", endsAt: now.Add(-time.Hour), seedKey: true, wantConverted: true},
+		{name: "running undemoted trial normalizes drifted free access", seedOrg: true, accountType: "free", seedTrial: true, trialTier: "enterprise", endsAt: now.Add(8 * 24 * time.Hour), seedKey: true, wantConverted: true},
+		{name: "disabled organization converts without being enabled", seedOrg: true, accountType: "enterprise", disabledAt: &disabledAt, seedTrial: true, trialTier: "enterprise", endsAt: now.Add(8 * 24 * time.Hour), seedKey: true, wantConverted: true},
 		{name: "demoted unconverted enterprise trial converts", seedOrg: true, accountType: "free", seedTrial: true, trialTier: "enterprise", demotedAt: &demotedAt, seedKey: true, wantConverted: true},
 		{name: "demoted trial preserves already restored enterprise access", seedOrg: true, accountType: "enterprise", seedTrial: true, trialTier: "enterprise", demotedAt: &demotedAt, seedKey: true, wantConverted: true},
 		{name: "converted enterprise organization is a valid retry", seedOrg: true, accountType: "enterprise", seedTrial: true, trialTier: "enterprise", convertedAt: &convertedAt, seedKey: true, wantValidRetry: true},
@@ -169,10 +175,14 @@ func TestMarkEnterpriseTrialConverted_EligibilityAndIdempotencyBoundary(t *testi
 			ctx, svc, conn, provisioner := newRearmService(t)
 			orgID := "org_convert_boundary_" + string(rune('a'+i))
 			if tc.seedOrg {
-				seedOrg(t, ctx, conn, orgFixture{id: orgID, name: orgID, slug: orgID, accountType: tc.accountType, whitelisted: tc.accountType == "enterprise"})
+				seedOrg(t, ctx, conn, orgFixture{id: orgID, name: orgID, slug: orgID, accountType: tc.accountType, whitelisted: tc.accountType == "enterprise", disabledAt: tc.disabledAt})
 			}
 			if tc.seedTrial {
-				seedTrial(t, ctx, conn, trialFixture{orgID: orgID, tier: tc.trialTier, endsAt: now.Add(7 * 24 * time.Hour), convertedAt: tc.convertedAt, demotedAt: tc.demotedAt})
+				endsAt := tc.endsAt
+				if endsAt.IsZero() {
+					endsAt = now.Add(7 * 24 * time.Hour)
+				}
+				seedTrial(t, ctx, conn, trialFixture{orgID: orgID, tier: tc.trialTier, endsAt: endsAt, convertedAt: tc.convertedAt, demotedAt: tc.demotedAt})
 			}
 			if tc.seedKey {
 				require.True(t, tc.seedOrg, "an OpenRouter key requires an organization")
@@ -217,6 +227,10 @@ func TestMarkEnterpriseTrialConverted_EligibilityAndIdempotencyBoundary(t *testi
 					org := readOrgState(t, ctx, conn, orgID)
 					require.Equal(t, "enterprise", org.GramAccountType)
 					require.True(t, org.Whitelisted)
+					if tc.disabledAt != nil {
+						require.True(t, org.DisabledAt.Valid)
+						require.True(t, tc.disabledAt.Equal(org.DisabledAt.Time))
+					}
 				} else {
 					require.Equal(t, beforeOrg, readOrgState(t, ctx, conn, orgID))
 				}

@@ -390,6 +390,7 @@ type OrganizationEnterpriseTrialConversionOrganizationSnapshot struct {
 }
 
 type OrganizationEnterpriseTrialConversionLifecycleSnapshot struct {
+	Status      string     `json:"status"`
 	Tier        string     `json:"tier"`
 	EndsAt      *time.Time `json:"ends_at"`
 	ConvertedAt *time.Time `json:"converted_at"`
@@ -397,11 +398,11 @@ type OrganizationEnterpriseTrialConversionLifecycleSnapshot struct {
 }
 
 type OrganizationEnterpriseTrialConversionKeySnapshot struct {
-	KeyType           string   `json:"key_type"`
-	DisableCauses     []string `json:"disable_causes"`
-	StoredDisabled    bool     `json:"stored_disabled"`
-	EffectiveDisabled bool     `json:"effective_disabled"`
-	MonthlyCredits    int64    `json:"monthly_credits"`
+	KeyType           string `json:"key_type"`
+	StoredDisabled    bool   `json:"stored_disabled"`
+	EffectiveDisabled bool   `json:"effective_disabled"`
+	KeyAccessChanged  bool   `json:"key_access_changed"`
+	MonthlyCredits    int64  `json:"monthly_credits"`
 }
 
 type OrganizationEnterpriseTrialConversionSnapshot struct {
@@ -421,7 +422,7 @@ type LogOrganizationEnterpriseTrialConvertedEvent struct {
 
 func (l *Logger) LogOrganizationEnterpriseTrialConverted(ctx context.Context, dbtx repo.DBTX, event LogOrganizationEnterpriseTrialConvertedEvent) error {
 	action := ActionOrganizationEnterpriseTrialConverted
-	metadata, err := marshalAuditPayload(map[string]any{"conversion_source": "platform_admin"})
+	metadata, err := marshalAuditPayload(map[string]any{"conversion_source": "admin"})
 	if err != nil {
 		return fmt.Errorf("marshal %s metadata: %w", action, err)
 	}

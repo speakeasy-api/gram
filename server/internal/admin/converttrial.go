@@ -172,18 +172,20 @@ func (s *Service) markEnterpriseTrialConverted(ctx context.Context, organization
 	beforeKeys := make([]audit.OrganizationEnterpriseTrialConversionKeySnapshot, 0, len(keyChanges))
 	afterKeys := make([]audit.OrganizationEnterpriseTrialConversionKeySnapshot, 0, len(keyChanges))
 	for _, change := range keyChanges {
-		beforeKeys = append(beforeKeys, conversionKeyAuditSnapshot(change.Before))
-		afterKeys = append(afterKeys, conversionKeyAuditSnapshot(change.After))
+		accessChanged := openrouter.EffectiveDisabled(change.Before.Disabled, change.Before.DisableCauses) != openrouter.EffectiveDisabled(change.After.Disabled, change.After.DisableCauses)
+		beforeKeys = append(beforeKeys, conversionKeyAuditSnapshot(change.Before, accessChanged))
+		afterKeys = append(afterKeys, conversionKeyAuditSnapshot(change.After, accessChanged))
 	}
+	snapshotTime := time.Now().UTC()
 	before := audit.OrganizationEnterpriseTrialConversionSnapshot{
 		Organization: audit.OrganizationEnterpriseTrialConversionOrganizationSnapshot{AccountType: organization.AccountType, Whitelisted: organization.Whitelisted, Disabled: organization.DisabledAt.Valid},
-		Trial:        conversionTrialAuditSnapshot(trial.Tier, trial.EndsAt, trial.ConvertedAt, trial.DemotedAt), Keys: beforeKeys,
+		Trial:        conversionTrialAuditSnapshot(trial.Tier, trial.EndsAt, trial.ConvertedAt, trial.DemotedAt, snapshotTime), Keys: beforeKeys,
 	}
 	after := audit.OrganizationEnterpriseTrialConversionSnapshot{
 		Organization: audit.OrganizationEnterpriseTrialConversionOrganizationSnapshot{AccountType: "enterprise", Whitelisted: true, Disabled: organization.DisabledAt.Valid},
-		Trial:        conversionTrialAuditSnapshot(convertedTrial.Tier, convertedTrial.EndsAt, convertedTrial.ConvertedAt, convertedTrial.DemotedAt), Keys: afterKeys,
+		Trial:        conversionTrialAuditSnapshot(convertedTrial.Tier, convertedTrial.EndsAt, convertedTrial.ConvertedAt, convertedTrial.DemotedAt, snapshotTime), Keys: afterKeys,
 	}
-	actor, actorDisplayName := enterpriseTrialConversionAuditActor()
+	actor, actorDisplayName := enterpriseTrialConversionAuditActor(ctx)
 	if err := s.audit.LogOrganizationEnterpriseTrialConverted(ctx, tx, audit.LogOrganizationEnterpriseTrialConvertedEvent{
 		OrganizationID: payload.ID, Actor: actor, ActorDisplayName: actorDisplayName, ActorSlug: nil, Before: before, After: after,
 	}); err != nil {
@@ -216,25 +218,35 @@ func (s *Service) reconcileConvertedTrialKeys(ctx context.Context, organizationI
 	return nil
 }
 
-func conversionTrialAuditSnapshot(tier string, endsAt, convertedAt, demotedAt pgtype.Timestamptz) audit.OrganizationEnterpriseTrialConversionLifecycleSnapshot {
-	return audit.OrganizationEnterpriseTrialConversionLifecycleSnapshot{Tier: tier, EndsAt: pgTimePtr(endsAt), ConvertedAt: pgTimePtr(convertedAt), DemotedAt: pgTimePtr(demotedAt)}
+func conversionTrialAuditSnapshot(tier string, endsAt, convertedAt, demotedAt pgtype.Timestamptz, now time.Time) audit.OrganizationEnterpriseTrialConversionLifecycleSnapshot {
+	status := "running"
+	switch {
+	case convertedAt.Valid:
+		status = "converted"
+	case demotedAt.Valid:
+		status = "demoted"
+	case !endsAt.Time.After(now):
+		status = "expired"
+	case !endsAt.Time.After(now.Add(7 * 24 * time.Hour)):
+		status = "ending_soon"
+	}
+	return audit.OrganizationEnterpriseTrialConversionLifecycleSnapshot{Status: status, Tier: tier, EndsAt: pgTimePtr(endsAt), ConvertedAt: pgTimePtr(convertedAt), DemotedAt: pgTimePtr(demotedAt)}
 }
 
-func conversionKeyAuditSnapshot(state openrouter.EnterpriseTrialConversionKeyState) audit.OrganizationEnterpriseTrialConversionKeySnapshot {
-	return audit.OrganizationEnterpriseTrialConversionKeySnapshot{KeyType: string(state.KeyType), DisableCauses: state.DisableCauses, StoredDisabled: state.Disabled, EffectiveDisabled: openrouter.EffectiveDisabled(state.Disabled, state.DisableCauses), MonthlyCredits: state.MonthlyCredits}
+func conversionKeyAuditSnapshot(state openrouter.EnterpriseTrialConversionKeyState, accessChanged bool) audit.OrganizationEnterpriseTrialConversionKeySnapshot {
+	return audit.OrganizationEnterpriseTrialConversionKeySnapshot{KeyType: string(state.KeyType), StoredDisabled: state.Disabled, EffectiveDisabled: openrouter.EffectiveDisabled(state.Disabled, state.DisableCauses), KeyAccessChanged: accessChanged, MonthlyCredits: state.MonthlyCredits}
 }
 
 func enterpriseTrialConversionResult(organizationID string, convertedAt pgtype.Timestamptz) *gen.MarkEnterpriseTrialConvertedResult {
 	return &gen.MarkEnterpriseTrialConvertedResult{OrganizationID: organizationID, ConvertedAt: convertedAt.Time.Format(time.RFC3339)}
 }
 
-// enterpriseTrialConversionAuditActor deliberately uses the established system
-// principal. Every identifier available in the admin auth context is either an
-// external identity or a bearer credential and must not enter audit storage or
-// its transactional outbox payload.
-func enterpriseTrialConversionAuditActor() (urn.Principal, *string) {
-	label := "Platform administrator"
-	return urn.NewPrincipal(urn.PrincipalTypeUser, "system"), &label
+func enterpriseTrialConversionAuditActor(ctx context.Context) (urn.Principal, *string) {
+	actor, displayName, operatorEmail := adminActor(ctx)
+	if displayName != nil && operatorEmail != nil && *displayName == *operatorEmail {
+		displayName = nil
+	}
+	return actor, displayName
 }
 
 func pgTimePtr(value pgtype.Timestamptz) *time.Time {

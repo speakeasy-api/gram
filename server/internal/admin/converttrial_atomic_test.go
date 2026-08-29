@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/proto"
 
@@ -26,10 +27,48 @@ import (
 
 func TestEnterpriseTrialConversionAuditActor_FallsBackWithoutSafeInternalID(t *testing.T) {
 	t.Parallel()
-	actor, display := enterpriseTrialConversionAuditActor()
+	actor, display := enterpriseTrialConversionAuditActor(t.Context())
 	require.Equal(t, "system", actor.ID)
-	require.Equal(t, "Platform administrator", *display)
+	require.Nil(t, display)
+}
 
+func TestEnterpriseTrialConversionAuditActor_DoesNotUseEmailAsDisplayName(t *testing.T) {
+	t.Parallel()
+	ctx := contextvalues.SetAdminAuthContext(t.Context(), &contextvalues.AdminAuthContext{
+		OIDCSubject: "staff-subject",
+		Email:       "staff@example.test",
+	})
+	actor, display := enterpriseTrialConversionAuditActor(ctx)
+	require.Equal(t, "staff-subject", actor.ID)
+	require.Nil(t, display)
+}
+
+func TestConversionTrialAuditSnapshot_CanonicalStatus(t *testing.T) {
+	t.Parallel()
+	now := time.Now().UTC()
+	valid := func(value time.Time) pgtype.Timestamptz {
+		return pgtype.Timestamptz{Time: value, Valid: true}
+	}
+	tests := []struct {
+		name        string
+		endsAt      time.Time
+		convertedAt pgtype.Timestamptz
+		demotedAt   pgtype.Timestamptz
+		want        string
+	}{
+		{name: "running", endsAt: now.Add(8 * 24 * time.Hour), want: "running"},
+		{name: "ending soon", endsAt: now.Add(24 * time.Hour), want: "ending_soon"},
+		{name: "expired undemoted", endsAt: now.Add(-time.Hour), want: "expired"},
+		{name: "demoted takes precedence over dates", endsAt: now.Add(-time.Hour), demotedAt: valid(now.Add(-2 * time.Hour)), want: "demoted"},
+		{name: "converted takes precedence over demotion", endsAt: now.Add(-time.Hour), convertedAt: valid(now), demotedAt: valid(now.Add(-2 * time.Hour)), want: "converted"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			snapshot := conversionTrialAuditSnapshot("enterprise", valid(tt.endsAt), tt.convertedAt, tt.demotedAt, now)
+			require.Equal(t, tt.want, snapshot.Status)
+		})
+	}
 }
 
 func TestMarkEnterpriseTrialConverted_AuditSnapshotsAreCompleteAndPrivate(t *testing.T) {
@@ -39,6 +78,7 @@ func TestMarkEnterpriseTrialConverted_AuditSnapshotsAreCompleteAndPrivate(t *tes
 		orgID            = "org_convert_audit"
 		sessionSentinel  = "bearer-session-token-privacy-sentinel"
 		emailSentinel    = "conversion-operator@privacy.invalid"
+		operatorName     = "Conversion Operator"
 		oidcSentinel     = "external-oidc-subject-privacy-sentinel"
 		workosSentinel   = "external-workos-privacy-sentinel"
 		nameSentinel     = "organization-name-privacy-sentinel"
@@ -47,7 +87,7 @@ func TestMarkEnterpriseTrialConverted_AuditSnapshotsAreCompleteAndPrivate(t *tes
 		promptSentinel   = "prompt-privacy-sentinel"
 		spendSentinel    = "313131.313131"
 	)
-	ctx = contextvalues.SetAdminAuthContext(ctx, &contextvalues.AdminAuthContext{SessionID: sessionSentinel, Email: emailSentinel, OIDCSubject: oidcSentinel, Name: emailSentinel, HD: "privacy.invalid"})
+	ctx = contextvalues.SetAdminAuthContext(ctx, &contextvalues.AdminAuthContext{SessionID: sessionSentinel, Email: emailSentinel, OIDCSubject: oidcSentinel, Name: operatorName, HD: "privacy.invalid"})
 	endsAt := time.Now().UTC().Add(7 * 24 * time.Hour)
 	demotedAt := time.Now().UTC().Add(-time.Hour)
 	workosID := workosSentinel
@@ -76,12 +116,12 @@ func TestMarkEnterpriseTrialConverted_AuditSnapshotsAreCompleteAndPrivate(t *tes
 	require.NotEmpty(t, response["converted_at"])
 	record, err := audittest.LatestAuditLogByAction(ctx, conn, audit.ActionOrganizationEnterpriseTrialConverted)
 	require.NoError(t, err)
-	require.Equal(t, "system", record.ActorID)
-	require.Equal(t, "Platform administrator", record.ActorDisplay)
+	require.Equal(t, oidcSentinel, record.ActorID)
+	require.Equal(t, operatorName, record.ActorDisplay)
 	require.Empty(t, record.ActorSlug)
 	var metadata map[string]any
 	require.NoError(t, json.Unmarshal(record.Metadata, &metadata))
-	require.Equal(t, map[string]any{"conversion_source": "platform_admin"}, metadata)
+	require.Equal(t, map[string]any{"conversion_source": "admin"}, metadata)
 	for _, raw := range [][]byte{record.BeforeSnapshot, record.AfterSnapshot} {
 		var snapshot struct {
 			Organization map[string]any   `json:"organization"`
@@ -90,33 +130,38 @@ func TestMarkEnterpriseTrialConverted_AuditSnapshotsAreCompleteAndPrivate(t *tes
 		}
 		require.NoError(t, json.Unmarshal(raw, &snapshot))
 		require.ElementsMatch(t, []string{"account_type", "whitelisted", "disabled"}, mapKeys(snapshot.Organization))
-		require.ElementsMatch(t, []string{"tier", "ends_at", "converted_at", "demoted_at"}, mapKeys(snapshot.Trial))
+		require.ElementsMatch(t, []string{"status", "tier", "ends_at", "converted_at", "demoted_at"}, mapKeys(snapshot.Trial))
 		require.Len(t, snapshot.Keys, len(openrouter.AllKeyTypes))
 		for _, key := range snapshot.Keys {
-			require.ElementsMatch(t, []string{"key_type", "disable_causes", "stored_disabled", "effective_disabled", "monthly_credits"}, mapKeys(key))
+			require.ElementsMatch(t, []string{"key_type", "stored_disabled", "effective_disabled", "key_access_changed", "monthly_credits"}, mapKeys(key))
+			require.NotContains(t, key, "disable_causes")
 		}
 	}
 
 	var before, after struct {
-		Keys []map[string]any `json:"keys"`
+		Trial map[string]any   `json:"trial"`
+		Keys  []map[string]any `json:"keys"`
 	}
 	require.NoError(t, json.Unmarshal(record.BeforeSnapshot, &before))
 	require.NoError(t, json.Unmarshal(record.AfterSnapshot, &after))
+	require.Equal(t, "demoted", before.Trial["status"])
+	require.Equal(t, "converted", after.Trial["status"])
 	chatBefore := keyAuditSnapshotByType(t, before.Keys, openrouter.KeyTypeChat)
 	chatAfter := keyAuditSnapshotByType(t, after.Keys, openrouter.KeyTypeChat)
 	internalBefore := keyAuditSnapshotByType(t, before.Keys, openrouter.KeyTypeInternal)
 	internalAfter := keyAuditSnapshotByType(t, after.Keys, openrouter.KeyTypeInternal)
 	require.Equal(t, true, chatBefore["stored_disabled"])
 	require.Equal(t, true, chatBefore["effective_disabled"])
-	require.ElementsMatch(t, []any{"trial_demotion", "billing_inactive", "admin_lock"}, chatBefore["disable_causes"])
+	require.Equal(t, false, chatBefore["key_access_changed"])
 	require.Equal(t, true, chatAfter["stored_disabled"])
 	require.Equal(t, true, chatAfter["effective_disabled"])
-	require.Equal(t, []any{"admin_lock"}, chatAfter["disable_causes"])
+	require.Equal(t, false, chatAfter["key_access_changed"])
 	require.Equal(t, true, internalBefore["stored_disabled"])
 	require.Equal(t, true, internalBefore["effective_disabled"])
+	require.Equal(t, true, internalBefore["key_access_changed"])
 	require.Equal(t, false, internalAfter["stored_disabled"])
 	require.Equal(t, false, internalAfter["effective_disabled"])
-	require.Empty(t, internalAfter["disable_causes"])
+	require.Equal(t, true, internalAfter["key_access_changed"])
 	floor, ok := openrouter.DefaultCreditLimit(orgID, "enterprise", false)
 	require.True(t, ok)
 	require.EqualValues(t, floor, chatAfter["monthly_credits"])
@@ -144,7 +189,7 @@ func TestMarkEnterpriseTrialConverted_AuditSnapshotsAreCompleteAndPrivate(t *tes
 	})
 	require.NoError(t, err)
 	for surface, data := range map[string][]byte{"audit row": fullAuditRow, "outbox envelope": envelope, "endpoint response": responseJSON} {
-		for _, forbidden := range []string{sessionSentinel, emailSentinel, oidcSentinel, workosSentinel, nameSentinel, slugSentinel, providerSentinel, promptSentinel, spendSentinel, "hash-", "sk-test"} {
+		for _, forbidden := range []string{sessionSentinel, emailSentinel, workosSentinel, nameSentinel, slugSentinel, providerSentinel, promptSentinel, spendSentinel, "hash-", "sk-test"} {
 			require.NotContains(t, string(data), forbidden, "%s leaked %s", surface, forbidden)
 		}
 	}
