@@ -176,7 +176,7 @@ func checkoutOptionalTimesEqual(left, right *time.Time) bool {
 }
 
 func checkoutConversionTrialSnapshot(tier string, endsAt, convertedAt, demotedAt pgtype.Timestamptz, now time.Time) audit.OrganizationEnterpriseTrialConversionLifecycleSnapshot {
-	status := "active"
+	status := "running"
 	switch {
 	case convertedAt.Valid:
 		status = "converted"

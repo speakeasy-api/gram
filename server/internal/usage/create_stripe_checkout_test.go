@@ -1020,7 +1020,7 @@ func TestCreateStripeCheckoutFirstConversionIsAtomicAndReceiptReplayIsIdempotent
 	}
 	require.NoError(t, json.Unmarshal(record.BeforeSnapshot, &before))
 	require.NoError(t, json.Unmarshal(record.AfterSnapshot, &after))
-	require.Equal(t, "active", before.Trial["status"])
+	require.Equal(t, "running", before.Trial["status"])
 	require.Equal(t, "converted", after.Trial["status"])
 	require.Empty(t, before.Keys)
 	require.Empty(t, after.Keys)
