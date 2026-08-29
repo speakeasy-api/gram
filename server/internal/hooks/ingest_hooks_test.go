@@ -201,7 +201,6 @@ func TestIngest_NoCredentialsFailsOpen(t *testing.T) {
 func TestIngest_NoCredentialsGovernedShapeTamperingFailsClosed(t *testing.T) {
 	t.Parallel()
 
-	_, ti := newTestHooksService(t)
 	for name, mutate := range map[string]func(*gen.IngestPayload){
 		"recognized raw event with malformed canonical type": func(payload *gen.IngestPayload) {
 			payload.Event.Type = "message.created"
@@ -215,6 +214,7 @@ func TestIngest_NoCredentialsGovernedShapeTamperingFailsClosed(t *testing.T) {
 	} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
+			_, ti := newTestHooksService(t)
 			payload := canonicalIngestPayload(delegation.ProviderClaude, "prompt.submitted", "tampered-"+uuid.NewString())
 			event := delegation.EventUserPromptSubmit
 			payload.Source.RawEventName = &event

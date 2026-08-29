@@ -2,7 +2,6 @@ package cache
 
 import (
 	"context"
-	"errors"
 	"time"
 )
 
@@ -24,12 +23,12 @@ func (s *noopCache) DeleteByPrefix(ctx context.Context, prefix string) error {
 
 // Get implements [Cache].
 func (s *noopCache) Get(ctx context.Context, key string, value any) error {
-	return errors.New("no cache entry for key")
+	return ErrCacheMiss
 }
 
 // GetAndDelete implements [Cache].
 func (s *noopCache) GetAndDelete(ctx context.Context, key string, value any) error {
-	return errors.New("no cache entry for key")
+	return ErrCacheMiss
 }
 
 // ListAppend implements [Cache].

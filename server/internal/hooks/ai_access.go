@@ -9,7 +9,6 @@ import (
 	"strings"
 	"time"
 
-	redisCache "github.com/go-redis/cache/v9"
 	"github.com/google/uuid"
 
 	"github.com/speakeasy-api/gram/hooks/delegation"
@@ -276,7 +275,7 @@ func (s *Service) cachedHookAIAccessDenial(ctx context.Context, payload *gen.Ing
 	}
 	var cached cachedHookDenial
 	if err := s.cache.Get(ctx, key, &cached); err != nil {
-		if errors.Is(err, redisCache.ErrCacheMiss) {
+		if errors.Is(err, cache.ErrCacheMiss) {
 			return hookAIAccessDecision{}, "", hookDenialCacheMiss
 		}
 		return hookAIAccessDecision{}, "", hookDenialCacheFailure

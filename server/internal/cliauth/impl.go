@@ -428,15 +428,15 @@ func (s *Service) DelegateHooksActingUser(ctx context.Context, payload *gen.Dele
 	if err != nil {
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
-	// Verify proof of private-key possession before spending a database query
-	// on current membership. The assertion is not returned unless that later
-	// authoritative check succeeds.
-	assertion, err := s.actingSigner.MintAssertion(identity, request)
+	assertion, err := mintAssertionAfterMembership(
+		identity,
+		request,
+		s.actingSigner.MintAssertion,
+		func() (bool, error) {
+			return s.hasActiveMembership(ctx, identity.UserID, identity.OrganizationID)
+		},
+	)
 	if err != nil {
-		return nil, oops.C(oops.CodeUnauthorized)
-	}
-	active, err := s.hasActiveMembership(ctx, identity.UserID, identity.OrganizationID)
-	if err != nil || !active {
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 	assertion, err = s.consumeMintNonce(ctx, identity, request, assertion)
@@ -448,6 +448,29 @@ func (s *Service) DelegateHooksActingUser(ctx context.Context, payload *gen.Dele
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 	return &gen.DelegateHooksActingUserResult{Assertion: assertion, ExpiresIn: expiresIn}, nil
+}
+
+func mintAssertionAfterMembership(
+	identity hooksacting.RefreshIdentity,
+	request delegation.MintRequest,
+	mintAssertion func(hooksacting.RefreshIdentity, delegation.MintRequest) (string, error),
+	hasActiveMembership func() (bool, error),
+) (string, error) {
+	// Verify proof of private-key possession before spending a database query.
+	// Discard this assertion because membership verification can outlive it.
+	if _, err := mintAssertion(identity, request); err != nil {
+		return "", err
+	}
+	active, err := hasActiveMembership()
+	if err != nil {
+		return "", err
+	}
+	if !active {
+		return "", errors.New("inactive organization membership")
+	}
+	// Mint after the authoritative membership check so the candidate written to
+	// a new or expired exact-replay record starts with its full usable lifetime.
+	return mintAssertion(identity, request)
 }
 
 func (s *Service) hasActiveMembership(ctx context.Context, userID, organizationID string) (bool, error) {

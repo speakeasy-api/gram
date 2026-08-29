@@ -71,6 +71,20 @@ func makeSpoolEntryGoverned(t *testing.T, name string) {
 	require.NoError(t, os.WriteFile(filepath.Join(dir, name), b, 0o600))
 }
 
+func seedGovernedSpoolEntry(t *testing.T, serverURL string, age time.Duration, configPath string) string {
+	t.Helper()
+	authFile := filepath.Join(t.TempDir(), "hooks-auth.env")
+	t.Setenv("GRAM_HOOKS_AUTH_FILE", authFile)
+	_, privateKey, err := ed25519.GenerateKey(rand.Reader)
+	require.NoError(t, err)
+	require.NoError(t, writeAuth(creds{ServerURL: serverURL, APIKey: "cached-key", Project: "default", Org: "", RefreshToken: "refresh", ProofPrivateKey: delegation.EncodePrivateKey(privateKey), ContractVersion: delegation.ContractVersion, Source: credCache}))
+	seedSpoolEntryWithConfig(t, serverURL, age, "governed", configPath)
+	files := spoolFiles(t)
+	require.NotEmpty(t, files)
+	makeSpoolEntryGoverned(t, files[len(files)-1])
+	return authFile
+}
+
 func drainEnv(t *testing.T) {
 	t.Helper()
 	setSpoolStateHome(t)
@@ -344,18 +358,11 @@ func TestDrainOrgFallbackPreservesProofForLaterGovernedEntry(t *testing.T) {
 		}
 		return http.StatusOK, decision{Decision: "allow"}
 	})
-	authFile := filepath.Join(t.TempDir(), "hooks-auth.env")
-	t.Setenv("GRAM_HOOKS_AUTH_FILE", authFile)
-	_, privateKey, err := ed25519.GenerateKey(rand.Reader)
-	require.NoError(t, err)
-	require.NoError(t, writeAuth(creds{ServerURL: fs.URL, APIKey: "cached-key", Project: "default", Org: "", RefreshToken: "refresh", ProofPrivateKey: delegation.EncodePrivateKey(privateKey), ContractVersion: delegation.ContractVersion, Source: credCache}))
 	cfgPath := filepath.Join(t.TempDir(), "speakeasy.json")
 	require.NoError(t, os.WriteFile(cfgPath, []byte(`{"server_url":"`+fs.URL+`","project":"default","hooks_api_key":"org-key"}`), 0o600))
 	seedSpoolEntryWithConfig(t, fs.URL, 2*time.Hour, "ungoverned", cfgPath)
-	seedSpoolEntryWithConfig(t, fs.URL, time.Hour, "governed", cfgPath)
-	files := spoolFiles(t)
-	require.Len(t, files, 2)
-	makeSpoolEntryGoverned(t, files[1])
+	seedGovernedSpoolEntry(t, fs.URL, time.Hour, cfgPath)
+	require.Len(t, spoolFiles(t), 2)
 
 	summary := Drain(t.Context())
 	require.Equal(t, DrainSummary{Replayed: 2, Remaining: 0}, summary)
@@ -379,15 +386,8 @@ func TestDrainAbortsOnMintFailure(t *testing.T) {
 		w.WriteHeader(http.StatusOK)
 	}))
 	t.Cleanup(server.Close)
-	authFile := filepath.Join(t.TempDir(), "hooks-auth.env")
-	t.Setenv("GRAM_HOOKS_AUTH_FILE", authFile)
-	_, privateKey, err := ed25519.GenerateKey(rand.Reader)
-	require.NoError(t, err)
-	require.NoError(t, writeAuth(creds{ServerURL: server.URL, APIKey: "cached-key", Project: "default", Org: "", RefreshToken: "refresh", ProofPrivateKey: delegation.EncodePrivateKey(privateKey), ContractVersion: delegation.ContractVersion, Source: credCache}))
-	seedSpoolEntry(t, server.URL, time.Hour, "governed")
-	files := spoolFiles(t)
-	require.Len(t, files, 1)
-	makeSpoolEntryGoverned(t, files[0])
+	seedGovernedSpoolEntry(t, server.URL, time.Hour, "")
+	require.Len(t, spoolFiles(t), 1)
 
 	summary := Drain(t.Context())
 	require.True(t, summary.Aborted)
@@ -433,21 +433,14 @@ func TestDrainMintAuthRejectionRequiresReauth(t *testing.T) {
 				w.WriteHeader(http.StatusOK)
 			}))
 			t.Cleanup(server.Close)
-			authFile := filepath.Join(t.TempDir(), "hooks-auth.env")
-			t.Setenv("GRAM_HOOKS_AUTH_FILE", authFile)
-			_, privateKey, err := ed25519.GenerateKey(rand.Reader)
-			require.NoError(t, err)
-			require.NoError(t, writeAuth(creds{ServerURL: server.URL, APIKey: "cached-key", Project: "default", Org: "", RefreshToken: "refresh", ProofPrivateKey: delegation.EncodePrivateKey(privateKey), ContractVersion: delegation.ContractVersion, Source: credCache}))
-			seedSpoolEntry(t, server.URL, time.Hour, "governed")
-			files := spoolFiles(t)
-			require.Len(t, files, 1)
-			makeSpoolEntryGoverned(t, files[0])
+			authFile := seedGovernedSpoolEntry(t, server.URL, time.Hour, "")
+			require.Len(t, spoolFiles(t), 1)
 
 			summary := Drain(t.Context())
 
 			require.True(t, summary.Aborted)
 			require.Equal(t, 1, summary.Remaining)
-			_, err = os.Stat(authFile)
+			_, err := os.Stat(authFile)
 			require.ErrorIs(t, err, os.ErrNotExist)
 			require.True(t, reauthNeeded())
 		})

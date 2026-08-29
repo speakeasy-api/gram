@@ -24,6 +24,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/hooksacting"
 	"github.com/speakeasy-api/gram/server/internal/killswitches"
 	"github.com/speakeasy-api/gram/server/internal/killswitches/mcptoolexecution"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
 type failingDenialReadCache struct{ cache.Cache }
@@ -411,6 +412,29 @@ func TestHookAIAccessCachesOnlyMatchedExternalNoteDenials(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "allow", retried.Decision, "evaluator failures must never be cached")
 	require.Len(t, evaluator.requests, 4)
+}
+
+func TestCachedHookAIAccessDenialRecognizesRepositoryCacheMiss(t *testing.T) {
+	t.Parallel()
+
+	for name, newCache := range map[string]func() cache.Cache{
+		"noop":      func() cache.Cache { return cache.NoopCache },
+		"in-memory": testenv.NewMemoryCache,
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			noMatch, err := killswitches.NewNoMatchResult(killswitches.NoMatchReasonNoPrescription)
+			require.NoError(t, err)
+			ctx, ti, _, signer, privateKey := setupHookAIAccess(t, noMatch)
+			payload := signedGovernedPayload(t, ctx, signer, privateKey, delegation.ProviderClaude, delegation.EventPreToolUse)
+			authCtx, ok := contextvalues.GetAuthContext(ctx)
+			require.True(t, ok)
+			ti.service.cache = newCache()
+
+			_, _, status := ti.service.cachedHookAIAccessDenial(ctx, payload, authCtx.ActiveOrganizationID)
+			require.Equal(t, hookDenialCacheMiss, status)
+		})
+	}
 }
 
 func TestHookAIAccessDuplicateFailsClosedWhenDenialCacheReadFails(t *testing.T) {

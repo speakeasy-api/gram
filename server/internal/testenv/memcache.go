@@ -31,7 +31,7 @@ func (m *memoryCache) Get(ctx context.Context, key string, value any) error {
 	defer m.mu.Unlock()
 	raw, ok := m.entries[key]
 	if !ok {
-		return errors.New("no cache entry for key")
+		return cache.ErrCacheMiss
 	}
 	if err := json.Unmarshal(raw, value); err != nil {
 		return errors.New("unmarshal cache entry: " + err.Error())
@@ -48,7 +48,7 @@ func (m *memoryCache) GetAndDelete(ctx context.Context, key string, value any) e
 	delete(m.entries, key)
 	m.mu.Unlock()
 	if !ok {
-		return errors.New("no cache entry for key")
+		return cache.ErrCacheMiss
 	}
 	if err := json.Unmarshal(raw, value); err != nil {
 		return errors.New("unmarshal cache entry: " + err.Error())

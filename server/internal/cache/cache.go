@@ -7,8 +7,13 @@ import (
 	"log/slog"
 	"time"
 
+	redisCache "github.com/go-redis/cache/v9"
+
 	"github.com/speakeasy-api/gram/server/internal/attr"
 )
+
+// ErrCacheMiss is returned when a cache key has no stored value.
+var ErrCacheMiss = redisCache.ErrCacheMiss
 
 type Suffix string
 
