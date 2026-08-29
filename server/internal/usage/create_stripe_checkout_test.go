@@ -1282,6 +1282,70 @@ func TestPrepareStripeCheckoutIntentReplacesAttachedLifecycleStaleIntentBeforeLo
 	require.Equal(t, replacement, rotated.stripeCheckoutIntent)
 }
 
+func TestPrepareStripeCheckoutIntentRejectsUnauthorizedAttachedLifecycleReplacement(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name           string
+		replaceKey     string
+		subscriptionID string
+	}{
+		{name: "mismatched lifecycle intent key", replaceKey: "checkout-session:org:wrong:lifecycle:key"},
+		{name: "attached subscription", replaceKey: "checkout-session:org:1:2:old-lifecycle", subscriptionID: "sub_attached"},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+
+			ti := newStripeCheckoutTestInstance(t)
+			now := time.Date(2026, time.August, 14, 12, 0, 0, 0, time.UTC)
+			stale := stripeCheckoutIntent{
+				idempotencyKey:     "checkout-session:org:1:2:old-lifecycle",
+				billingCycleAnchor: now.Add(7 * 24 * time.Hour),
+				expiresAt:          now.Add(4 * time.Hour),
+			}
+			prepared, err := ti.service.prepareStripeCheckoutIntent(
+				t.Context(), ti.orgID, "cus_test", now, stale, pgtype.Text{}, pgtype.Text{},
+			)
+			require.NoError(t, err)
+			_, err = repo.New(ti.db).FinalizeStripeCheckoutIntent(t.Context(), repo.FinalizeStripeCheckoutIntentParams{
+				StripeCheckoutSessionID:          "cs_attached",
+				OrganizationID:                   ti.orgID,
+				StripeCustomerID:                 "cus_test",
+				StripeCheckoutIdempotencyKey:     prepared.idempotencyKey,
+				StripeCheckoutBillingCycleAnchor: finiteTimestamptz(prepared.billingCycleAnchor),
+				StripeCheckoutTrialEnd:           optionalTimestamptz(prepared.trialEnd),
+				StripeCheckoutExpiresAt:          finiteTimestamptz(prepared.expiresAt),
+			})
+			require.NoError(t, err)
+			if test.subscriptionID != "" {
+				require.NoError(t, repo.New(ti.db).SetStripeSubscriptionFixture(t.Context(), repo.SetStripeSubscriptionFixtureParams{
+					StripeSubscriptionID: pgtype.Text{String: test.subscriptionID, Valid: true},
+					OrganizationID:       ti.orgID,
+				}))
+			}
+			before, err := repo.New(ti.db).GetBillingMetadata(t.Context(), ti.orgID)
+			require.NoError(t, err)
+
+			replacement := stripeCheckoutIntent{
+				idempotencyKey:     "checkout-session:org:3:4:new-lifecycle",
+				billingCycleAnchor: now.Add(8 * 24 * time.Hour),
+				expiresAt:          now.Add(5 * time.Hour),
+			}
+			_, err = ti.service.prepareStripeCheckoutIntent(
+				t.Context(), ti.orgID, "cus_test", now.Add(time.Minute), replacement, pgtype.Text{},
+				pgtype.Text{String: test.replaceKey, Valid: true},
+			)
+			require.Error(t, err)
+			requireOopsCode(t, err, oops.CodeConflict)
+
+			after, err := repo.New(ti.db).GetBillingMetadata(t.Context(), ti.orgID)
+			require.NoError(t, err)
+			require.Equal(t, before, after)
+		})
+	}
+}
+
 func TestCreateStripeCheckoutDoesNotRotateCompletedExpiredSession(t *testing.T) {
 	t.Parallel()
 
