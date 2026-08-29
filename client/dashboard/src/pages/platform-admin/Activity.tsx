@@ -56,7 +56,6 @@ type SafeSnapshot = {
   };
   keys?: Array<{
     key_type?: unknown;
-    disable_causes?: unknown;
     stored_disabled?: unknown;
     effective_disabled?: unknown;
     key_access_changed?: unknown;
@@ -592,12 +591,6 @@ function snapshotDiffs(
     );
     addDiff(
       rows,
-      `Disable causes (${keyType})`,
-      beforeKey?.disable_causes,
-      afterKey?.disable_causes,
-    );
-    addDiff(
-      rows,
       `Monthly cap (${keyType})`,
       beforeKey?.monthly_credits,
       afterKey?.monthly_credits,
@@ -630,7 +623,6 @@ function safeSnapshot(value: unknown): SafeSnapshot | undefined {
         .map((key) =>
           pickDefined(key, [
             "key_type",
-            "disable_causes",
             "stored_disabled",
             "effective_disabled",
             "key_access_changed",

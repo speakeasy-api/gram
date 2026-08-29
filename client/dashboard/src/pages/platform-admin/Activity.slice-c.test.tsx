@@ -426,7 +426,6 @@ describe("organization activity slice C", () => {
       "converted",
       '""',
       "null",
-      "[]",
       "false",
       "(missing) → 50",
     ])
@@ -443,12 +442,15 @@ describe("organization activity slice C", () => {
       "hash-secret",
     ])
       expect(item.textContent).not.toContain(secret);
+    expect.soft(item.textContent).not.toContain("Disable causes");
+    expect.soft(item.textContent).not.toContain("trial_demotion");
     fireEvent.click(
       within(item).getByRole("button", { name: "View raw diff" }),
     );
-    expect(
-      within(item).getByRole("region", { name: "Raw diff" }),
-    ).toBeDefined();
+    const rawDiff = within(item).getByRole("region", { name: "Raw diff" });
+    expect(rawDiff).toBeDefined();
+    expect.soft(rawDiff.textContent).not.toContain("disable_causes");
+    expect.soft(rawDiff.textContent).not.toContain("trial_demotion");
     expect(item.textContent).toContain("account_type");
     expect(item.textContent).toContain('"status":"running"');
     expect(item.textContent).toContain('"key_access_changed":false');
