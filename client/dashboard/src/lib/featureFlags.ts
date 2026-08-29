@@ -8,6 +8,7 @@ export const FEATURE_FLAGS = {
   functions: "gram-functions",
   gatewayEndpoints: "gram-gateway-endpoints",
   headlessModeSwitcher: "headless-mode-switcher",
+  killswitches: "gram-killswitches",
   mcpResearch: "gram-mcp-research",
   newCostsPage: "gram-new-costs-page",
   paygSelfServeBilling: "gram-payg-self-serve-billing",

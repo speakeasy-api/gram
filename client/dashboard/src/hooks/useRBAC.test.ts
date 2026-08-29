@@ -1,3 +1,4 @@
+import { queryKeyGrants } from "@gram/client/react-query/grants.js";
 import { describe, expect, it } from "vitest";
 import {
   exclusionScopesForScope,
@@ -7,6 +8,16 @@ import {
   selectorMatches,
   selectorMatchesStrict,
 } from "./useRBAC";
+
+describe("grants query key", () => {
+  it("isolates effective grants by session", () => {
+    const first = queryKeyGrants({ gramSession: "session-first" });
+    const second = queryKeyGrants({ gramSession: "session-second" });
+
+    expect(first).not.toEqual(second);
+    expect(first.at(-1)).toEqual({ gramSession: "session-first" });
+  });
+});
 
 describe("resourceKindForScope", () => {
   it("returns 'project' for project scopes", () => {

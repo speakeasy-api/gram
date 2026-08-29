@@ -1,4 +1,4 @@
-import { useIsPlatformAdmin } from "@/contexts/Auth";
+import { useIsPlatformAdmin, useSession } from "@/contexts/Auth";
 import { Scope } from "@gram/client/models/components/rolegrant.js";
 import { useGrants } from "@gram/client/react-query/grants.js";
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -156,6 +156,7 @@ export function hasScopeInProject(
  */
 function useRBACImpl() {
   const isAdmin = useIsPlatformAdmin();
+  const session = useSession();
 
   // Re-render when the toolbar changes scopes in localStorage.
   const [, setOverrideVersion] = useState(0);
@@ -169,10 +170,14 @@ function useRBACImpl() {
   // Always fetch grants so we can detect a broken org membership (404/403) and
   // show a recovery prompt via MembershipSyncGuard. throwOnError is disabled
   // so the error doesn't crash the app; it's surfaced via `error` instead.
-  const { data, isLoading, error } = useGrants(undefined, undefined, {
-    staleTime: 30_000,
-    throwOnError: false,
-  });
+  const { data, isLoading, error } = useGrants(
+    { gramSession: session.session },
+    undefined,
+    {
+      staleTime: 30_000,
+      throwOnError: false,
+    },
+  );
 
   // The toolbar event re-renders this hook; query invalidation refreshes the grants.
   const grants = useMemo(() => {
