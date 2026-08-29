@@ -180,19 +180,25 @@ func (c *Client) SetRemoteSessionAutoRefreshEnabled(ctx context.Context, organiz
 // the feature flag from a code path that bypasses this client.
 func (c *Client) UpdateFeatureCache(ctx context.Context, organizationID string, feature Feature, _ bool) {
 	if err := c.withFeatureCacheLock(ctx, organizationID, feature, func(conn *pgxpool.Conn) error {
-		enabled, err := repo.New(conn).IsFeatureEnabled(ctx, repo.IsFeatureEnabledParams{
-			OrganizationID: organizationID, FeatureName: string(feature),
-		})
-		if err != nil {
-			return fmt.Errorf("reload feature cache state: %w", err)
-		}
-		c.storeFeatureCache(ctx, organizationID, feature, enabled, "failed to update feature flag cache")
-		return nil
+		return c.UpdateFeatureCacheUnderLock(ctx, conn, organizationID, feature)
 	}); err != nil {
 		c.logger.WarnContext(ctx, "failed to refresh feature flag cache",
 			attr.SlogError(err), attr.SlogOrganizationID(organizationID), attr.SlogProductFeatureName(string(feature)),
 		)
 	}
+}
+
+// UpdateFeatureCacheUnderLock refreshes one cache entry using the connection
+// that holds its feature lock. Callers must already hold that lock.
+func (c *Client) UpdateFeatureCacheUnderLock(ctx context.Context, conn *pgxpool.Conn, organizationID string, feature Feature) error {
+	enabled, err := repo.New(conn).IsFeatureEnabled(ctx, repo.IsFeatureEnabledParams{
+		OrganizationID: organizationID, FeatureName: string(feature),
+	})
+	if err != nil {
+		return fmt.Errorf("reload feature cache state: %w", err)
+	}
+	c.storeFeatureCache(ctx, organizationID, feature, enabled, "failed to update feature flag cache")
+	return nil
 }
 
 func (c *Client) storeFeatureCache(ctx context.Context, organizationID string, feature Feature, enabled bool, message string) {
@@ -236,6 +242,13 @@ func (c *Client) withFeatureCacheLocks(ctx context.Context, organizationID strin
 	}
 	defer release()
 	return fn(conn)
+}
+
+// AcquireFeatureCacheLocks acquires the same canonical, sorted advisory locks
+// used by feature mutations. The caller must begin its transaction on the
+// returned connection and hold the locks through commit and cache refresh.
+func (c *Client) AcquireFeatureCacheLocks(ctx context.Context, organizationID string, features []Feature) (*pgxpool.Conn, func(), error) {
+	return c.acquireFeatureCacheLocks(ctx, organizationID, features)
 }
 
 func (c *Client) acquireFeatureCacheLocks(ctx context.Context, organizationID string, features []Feature) (*pgxpool.Conn, func(), error) {

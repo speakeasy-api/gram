@@ -151,6 +151,27 @@ func AcquireAPIKeyBillingTransactionLock(ctx context.Context, db DBTX, orgID str
 	return nil
 }
 
+// AcquireAPIKeyProvisioningTransactionLock serializes missing-row decisions
+// with first-time provisioning. Lifecycle operations acquire their lifecycle
+// row first, then every billing lock in AllKeyTypes order, then every
+// provisioning lock in AllKeyTypes order, before reading key rows. A first-time
+// provisioner acquires only its provisioning lock before re-reading the row.
+// This single order prevents stale inserts without introducing a lock cycle.
+func AcquireAPIKeyProvisioningTransactionLock(ctx context.Context, db DBTX, orgID string, keyType KeyType) error {
+	keyType = keyType.OrDefault()
+	if err := keyType.Validate(); err != nil {
+		return fmt.Errorf("acquire OpenRouter API key provisioning transaction lock: %w", err)
+	}
+
+	if err := repo.New(db).LockOpenRouterKeyProvisioning(ctx, repo.LockOpenRouterKeyProvisioningParams{
+		OrganizationID: orgID,
+		KeyType:        string(keyType),
+	}); err != nil {
+		return fmt.Errorf("acquire OpenRouter %s key provisioning transaction lock: %w", keyType, err)
+	}
+	return nil
+}
+
 // EffectiveDisabled preserves legacy access for rows that have not been
 // classified yet. Once disable_causes is non-NULL, the cause set is
 // authoritative even if the rollout mirror has drifted.

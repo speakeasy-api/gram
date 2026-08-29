@@ -32,7 +32,27 @@ func (s *Service) MarkEnterpriseTrialConverted(ctx context.Context, payload *gen
 func (s *Service) markEnterpriseTrialConverted(ctx context.Context, organizationID string) (*gen.MarkEnterpriseTrialConvertedResult, error) {
 	payload := &gen.MarkEnterpriseTrialConvertedPayload{ID: organizationID, AdminSessionToken: nil}
 	logger := s.logger.With(attr.SlogOrganizationID(payload.ID))
-	tx, err := s.db.Begin(ctx)
+	lockConn, releaseFeatureLocks, err := s.productFeatures.AcquireFeatureCacheLocks(ctx, payload.ID, productfeatures.TrialRuntimeFeatures)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "lock enterprise runtime features").LogError(ctx, logger)
+	}
+	featureLocksReleased := false
+	releaseFeatures := func() {
+		if !featureLocksReleased {
+			releaseFeatureLocks()
+			featureLocksReleased = true
+		}
+	}
+	defer releaseFeatures()
+	refreshFeatureCache := func() {
+		for _, feature := range productfeatures.TrialRuntimeFeatures {
+			if cacheErr := s.productFeatures.UpdateFeatureCacheUnderLock(ctx, lockConn, payload.ID, feature); cacheErr != nil {
+				logger.WarnContext(ctx, "failed to refresh enterprise runtime feature cache", attr.SlogError(cacheErr), attr.SlogProductFeatureName(string(feature)))
+			}
+		}
+	}
+
+	tx, err := lockConn.Begin(ctx)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "begin enterprise trial conversion transaction").LogError(ctx, logger)
 	}
@@ -42,16 +62,23 @@ func (s *Service) markEnterpriseTrialConverted(ctx context.Context, organization
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
 		_ = tx.Rollback(ctx)
+		releaseFeatures()
 		return nil, s.rejectTrialChange(ctx, logger, payload.ID, "look up organization without enterprise trial", "organization has no enterprise trial to convert")
 	case err != nil:
 		return nil, oops.E(oops.CodeUnexpected, err, "lock enterprise trial conversion lifecycle").LogError(ctx, logger)
 	}
 
-	// The lifecycle row is always first, followed by every key advisory lock in
-	// canonical order, before any organization or key row is read.
+	// Inside the feature-lock envelope, the lifecycle row is first, followed
+	// by every billing lock and then every provisioning lock in canonical key
+	// order, before any organization or key row is read.
 	for _, keyType := range openrouter.AllKeyTypes {
 		if err := openrouter.AcquireAPIKeyBillingTransactionLock(ctx, tx, payload.ID, keyType); err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "lock openrouter %s key for enterprise trial conversion", keyType).LogError(ctx, logger)
+		}
+	}
+	for _, keyType := range openrouter.AllKeyTypes {
+		if err := openrouter.AcquireAPIKeyProvisioningTransactionLock(ctx, tx, payload.ID, keyType); err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "lock openrouter %s key provisioning for enterprise trial conversion", keyType).LogError(ctx, logger)
 		}
 	}
 
@@ -82,7 +109,8 @@ func (s *Service) markEnterpriseTrialConverted(ctx context.Context, organization
 		if err := tx.Rollback(ctx); err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "close enterprise trial conversion retry transaction").LogError(ctx, logger)
 		}
-		s.updateTrialFeatureCache(ctx, payload.ID)
+		refreshFeatureCache()
+		releaseFeatures()
 		if err := s.trial.TrialInactive(ctx, payload.ID); err != nil {
 			logger.WarnContext(ctx, "failed to stop enterprise trial notifications on conversion retry", attr.SlogError(err))
 		}
@@ -158,7 +186,8 @@ func (s *Service) markEnterpriseTrialConverted(ctx context.Context, organization
 		return nil, oops.E(oops.CodeUnexpected, err, "commit enterprise trial conversion").LogError(ctx, logger)
 	}
 
-	s.updateTrialFeatureCache(ctx, payload.ID)
+	refreshFeatureCache()
+	releaseFeatures()
 	if err := s.trial.TrialInactive(ctx, payload.ID); err != nil {
 		logger.WarnContext(ctx, "failed to stop enterprise trial notifications after conversion", attr.SlogError(err))
 	}

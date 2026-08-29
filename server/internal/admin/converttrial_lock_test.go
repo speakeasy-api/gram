@@ -16,9 +16,13 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	activitiesrepo "github.com/speakeasy-api/gram/server/internal/background/activities/repo"
+	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/productfeatures"
+	featurerepo "github.com/speakeasy-api/gram/server/internal/productfeatures/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
+	orrepo "github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter/repo"
 	trialsRepo "github.com/speakeasy-api/gram/server/internal/trials/repo"
 )
 
@@ -168,4 +172,144 @@ func TestMarkEnterpriseTrialConverted_LocksLifecycleThenAllKeysBeforeRowReads(t 
 	}
 	require.NoError(t, json.Unmarshal(record.AfterSnapshot, &after))
 	require.True(t, after.Organization.Whitelisted, "audit snapshot must describe conversion state under the organization lock")
+}
+
+func TestMarkEnterpriseTrialConverted_MissingKeyWaitsForProvisioningAndReReads(t *testing.T) {
+	t.Parallel()
+	ctx, svc, conn, _ := newProductionRearmService(t)
+	const orgID = "org_convert_missing_key_race"
+	demotedAt := time.Now().UTC().Add(-time.Hour)
+	seedOrg(t, ctx, conn, orgFixture{id: orgID, name: orgID, slug: orgID, accountType: "free", whitelisted: false})
+	seedTrial(t, ctx, conn, trialFixture{orgID: orgID, tier: "enterprise", endsAt: demotedAt, demotedAt: &demotedAt})
+	seedOpenRouterKey(t, ctx, conn, orgID, keyFixture{keyType: openrouter.KeyTypeInternal, monthlyCredits: 7, disabled: true})
+
+	provisioning := testenv.BeginTx(t, ctx, conn)
+	keys := orrepo.New(provisioning)
+	require.NoError(t, keys.LockOpenRouterKeyProvisioning(ctx, orrepo.LockOpenRouterKeyProvisioningParams{
+		OrganizationID: orgID, KeyType: string(openrouter.KeyTypeChat),
+	}))
+
+	converted := make(chan error, 1)
+	go func() {
+		_, err := svc.MarkEnterpriseTrialConverted(ctx, &gen.MarkEnterpriseTrialConvertedPayload{ID: orgID})
+		converted <- err
+	}()
+
+	waitCtx, cancelWait := context.WithTimeout(ctx, 2*time.Second)
+	defer cancelWait()
+	requireAdminCondition(t, waitCtx, conn, func(check context.Context) (bool, error) {
+		return testrepo.New(conn).IsQueryBlockedOnLockFixture(check, "%LockOpenRouterKeyProvisioning%")
+	}, "conversion did not wait for in-flight first-time key provisioning")
+
+	ciphertext, err := testenv.NewEncryptionClient(t).Encrypt([]byte("sk-test-racing-provisioner"))
+	require.NoError(t, err)
+	_, err = keys.CreateOpenRouterAPIKey(ctx, orrepo.CreateOpenRouterAPIKeyParams{
+		OrganizationID: orgID,
+		KeyType:        string(openrouter.KeyTypeChat),
+		KeyEncrypted:   conv.ToPGText(ciphertext),
+		KeyHash:        "hash-racing-provisioner",
+		MonthlyCredits: 7,
+	})
+	require.NoError(t, err)
+	require.NoError(t, provisioning.Commit(ctx))
+
+	select {
+	case err = <-converted:
+		require.NoError(t, err)
+	case <-time.After(3 * time.Second):
+		require.FailNow(t, "conversion did not resume after provisioning committed")
+	}
+
+	key := readOpenRouterKey(t, ctx, conn, orgID, openrouter.KeyTypeChat)
+	floor, ok := openrouter.DefaultCreditLimit(orgID, "enterprise", false)
+	require.True(t, ok)
+	require.GreaterOrEqual(t, key.MonthlyCredits, int64(floor), "conversion must re-read and promote the newly provisioned key")
+}
+
+func TestMarkEnterpriseTrialConverted_SerializesRuntimeFeatureWritesThroughCacheRefresh(t *testing.T) {
+	t.Parallel()
+	ctx, svc, conn, _ := newProductionRearmService(t)
+	const orgID = "org_convert_feature_race"
+	demotedAt := time.Now().UTC().Add(-time.Hour)
+	seedOrg(t, ctx, conn, orgFixture{id: orgID, name: orgID, slug: orgID, accountType: "free", whitelisted: false})
+	seedTrial(t, ctx, conn, trialFixture{orgID: orgID, tier: "enterprise", endsAt: demotedAt, demotedAt: &demotedAt})
+	for _, keyType := range openrouter.AllKeyTypes {
+		seedOpenRouterKey(t, ctx, conn, orgID, keyFixture{keyType: keyType, monthlyCredits: 7, disabled: true})
+	}
+
+	keyBlocker, err := conn.Acquire(ctx)
+	require.NoError(t, err)
+	defer keyBlocker.Release()
+	internalLock := activitiesrepo.AcquireOpenRouterKeyBillingLockParams{OrganizationID: orgID, KeyType: string(openrouter.KeyTypeInternal)}
+	require.NoError(t, activitiesrepo.New(keyBlocker).AcquireOpenRouterKeyBillingLock(ctx, internalLock))
+	defer func() {
+		_, _ = activitiesrepo.New(keyBlocker).ReleaseOpenRouterKeyBillingLock(context.WithoutCancel(ctx), activitiesrepo.ReleaseOpenRouterKeyBillingLockParams(internalLock))
+	}()
+
+	converted := make(chan error, 1)
+	go func() {
+		_, callErr := svc.MarkEnterpriseTrialConverted(ctx, &gen.MarkEnterpriseTrialConvertedPayload{ID: orgID})
+		converted <- callErr
+	}()
+	waitCtx, cancelWait := context.WithTimeout(ctx, 2*time.Second)
+	defer cancelWait()
+	requireAdminCondition(t, waitCtx, conn, func(check context.Context) (bool, error) {
+		return testrepo.New(conn).IsQueryBlockedOnLockFixture(check, "%AcquireOpenRouterBillingLock%")
+	}, "conversion did not reach the key lock after acquiring feature locks")
+
+	featureWriter, err := conn.Acquire(ctx)
+	require.NoError(t, err)
+	defer featureWriter.Release()
+	feature := productfeatures.FeatureLogs
+	written := make(chan error, 1)
+	go func() {
+		q := featurerepo.New(featureWriter)
+		params := featurerepo.AcquireFeatureCacheLockParams{OrganizationID: orgID, FeatureName: string(feature)}
+		if lockErr := q.AcquireFeatureCacheLock(ctx, params); lockErr != nil {
+			written <- lockErr
+			return
+		}
+		defer q.ReleaseFeatureCacheLock(context.WithoutCancel(ctx), featurerepo.ReleaseFeatureCacheLockParams(params)) //nolint:errcheck
+		tx, txErr := featureWriter.Begin(ctx)
+		if txErr == nil {
+			_, txErr = featurerepo.New(tx).DeleteFeature(ctx, featurerepo.DeleteFeatureParams{OrganizationID: orgID, FeatureName: string(feature)})
+		}
+		if txErr == nil {
+			txErr = tx.Commit(ctx)
+		} else if tx != nil {
+			_ = tx.Rollback(ctx)
+		}
+		if txErr == nil {
+			txErr = svc.productFeatures.UpdateFeatureCacheUnderLock(ctx, featureWriter, orgID, feature)
+		}
+		written <- txErr
+	}()
+
+	featureWait, cancelFeatureWait := context.WithTimeout(ctx, 2*time.Second)
+	defer cancelFeatureWait()
+	requireAdminCondition(t, featureWait, conn, func(check context.Context) (bool, error) {
+		return testrepo.New(conn).IsQueryBlockedOnLockFixture(check, "%AcquireFeatureCacheLock%")
+	}, "overlapping feature disable was not serialized behind conversion")
+
+	unlocked, err := activitiesrepo.New(keyBlocker).ReleaseOpenRouterKeyBillingLock(ctx, activitiesrepo.ReleaseOpenRouterKeyBillingLockParams(internalLock))
+	require.NoError(t, err)
+	require.True(t, unlocked)
+	select {
+	case err = <-converted:
+		require.NoError(t, err)
+	case <-time.After(3 * time.Second):
+		require.FailNow(t, "conversion did not finish")
+	}
+	select {
+	case err = <-written:
+		require.NoError(t, err)
+	case <-time.After(3 * time.Second):
+		require.FailNow(t, "queued feature disable did not finish")
+	}
+	enabled, err := featurerepo.New(conn).IsFeatureEnabled(ctx, featurerepo.IsFeatureEnabledParams{OrganizationID: orgID, FeatureName: string(feature)})
+	require.NoError(t, err)
+	require.False(t, enabled, "later-completed disable must not be overwritten by conversion")
+	cached, err := svc.productFeatures.IsFeatureEnabled(ctx, orgID, feature)
+	require.NoError(t, err)
+	require.False(t, cached, "later-completed disable must own the final cache value")
 }
