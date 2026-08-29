@@ -10,9 +10,17 @@ import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
 export type RedeemResponseBody = {
   /**
-   * The raw gram_ API key, carrying the [agent,hooks] scopes. Returned exactly once.
+   * The raw gram_ API key, carrying [agent_user] and, for proof-bound relay enrollment, [hooks]. Returned exactly once.
    */
   accessToken: string;
+  /**
+   * Server-signed refresh credential bound to the enrolled Ed25519 public key. It cannot mint an assertion without proof of the private key.
+   */
+  delegationRefreshToken?: string | undefined;
+  /**
+   * Organization bound by the authenticated enrollment session. Present for proof-bound hook enrollment.
+   */
+  organizationId?: string | undefined;
   /**
    * Slug of the project the key is scoped to.
    */
@@ -30,12 +38,16 @@ export const RedeemResponseBody$inboundSchema: z.ZodMiniType<
 > = z.pipe(
   z.object({
     access_token: z.string(),
+    delegation_refresh_token: z.optional(z.string()),
+    organization_id: z.optional(z.string()),
     project_slug: z.string(),
     user_email: z.string(),
   }),
   z.transform((v) => {
     return remap$(v, {
       "access_token": "accessToken",
+      "delegation_refresh_token": "delegationRefreshToken",
+      "organization_id": "organizationId",
       "project_slug": "projectSlug",
       "user_email": "userEmail",
     });

@@ -24,6 +24,11 @@ type AuthorizeRequestBody struct {
 	// Optional project slug to scope the minted key to. Defaults to the org's
 	// default (first) project when omitted.
 	ProjectSlug *string `form:"project_slug,omitempty" json:"project_slug,omitempty" xml:"project_slug,omitempty"`
+	// Optional base64url Ed25519 public key. When present, redeem also returns a
+	// proof-bound hooks delegation refresh credential.
+	ProofPublicKey *string `form:"proof_public_key,omitempty" json:"proof_public_key,omitempty" xml:"proof_public_key,omitempty"`
+	// Required hooks acting-user contract version when proof_public_key is present.
+	DelegationContractVersion *string `form:"delegation_contract_version,omitempty" json:"delegation_contract_version,omitempty" xml:"delegation_contract_version,omitempty"`
 }
 
 // RedeemRequestBody is the type of the "cliAuth" service "redeem" endpoint
@@ -34,6 +39,21 @@ type RedeemRequestBody struct {
 	// The PKCE code verifier whose base64url(sha256(...)) equals the stored
 	// code_challenge.
 	CodeVerifier *string `form:"code_verifier,omitempty" json:"code_verifier,omitempty" xml:"code_verifier,omitempty"`
+}
+
+// DelegateHooksActingUserRequestBody is the type of the "cliAuth" service
+// "delegateHooksActingUser" endpoint HTTP request body.
+type DelegateHooksActingUserRequestBody struct {
+	RefreshToken    *string `form:"refresh_token,omitempty" json:"refresh_token,omitempty" xml:"refresh_token,omitempty"`
+	ContractVersion *string `form:"contract_version,omitempty" json:"contract_version,omitempty" xml:"contract_version,omitempty"`
+	Provider        *string `form:"provider,omitempty" json:"provider,omitempty" xml:"provider,omitempty"`
+	Event           *string `form:"event,omitempty" json:"event,omitempty" xml:"event,omitempty"`
+	SessionID       *string `form:"session_id,omitempty" json:"session_id,omitempty" xml:"session_id,omitempty"`
+	IdempotencyKey  *string `form:"idempotency_key,omitempty" json:"idempotency_key,omitempty" xml:"idempotency_key,omitempty"`
+	SignedAt        *int64  `form:"signed_at,omitempty" json:"signed_at,omitempty" xml:"signed_at,omitempty"`
+	// Cryptographically random, single-use base64url mint nonce and assertion JTI.
+	Nonce     *string `form:"nonce,omitempty" json:"nonce,omitempty" xml:"nonce,omitempty"`
+	Signature *string `form:"signature,omitempty" json:"signature,omitempty" xml:"signature,omitempty"`
 }
 
 // AuthorizeResponseBody is the type of the "cliAuth" service "authorize"
@@ -49,13 +69,26 @@ type AuthorizeResponseBody struct {
 // RedeemResponseBody is the type of the "cliAuth" service "redeem" endpoint
 // HTTP response body.
 type RedeemResponseBody struct {
-	// The raw gram_ API key, carrying the [agent,hooks] scopes. Returned exactly
-	// once.
+	// The raw gram_ API key, carrying [agent_user] and, for proof-bound relay
+	// enrollment, [hooks]. Returned exactly once.
 	AccessToken string `form:"access_token" json:"access_token" xml:"access_token"`
 	// Email of the user the key was minted for.
 	UserEmail string `form:"user_email" json:"user_email" xml:"user_email"`
 	// Slug of the project the key is scoped to.
 	ProjectSlug string `form:"project_slug" json:"project_slug" xml:"project_slug"`
+	// Organization bound by the authenticated enrollment session. Present for
+	// proof-bound hook enrollment.
+	OrganizationID *string `form:"organization_id,omitempty" json:"organization_id,omitempty" xml:"organization_id,omitempty"`
+	// Server-signed refresh credential bound to the enrolled Ed25519 public key.
+	// It cannot mint an assertion without proof of the private key.
+	DelegationRefreshToken *string `form:"delegation_refresh_token,omitempty" json:"delegation_refresh_token,omitempty" xml:"delegation_refresh_token,omitempty"`
+}
+
+// DelegateHooksActingUserResponseBody is the type of the "cliAuth" service
+// "delegateHooksActingUser" endpoint HTTP response body.
+type DelegateHooksActingUserResponseBody struct {
+	Assertion string `form:"assertion" json:"assertion" xml:"assertion"`
+	ExpiresIn int    `form:"expires_in" json:"expires_in" xml:"expires_in"`
 }
 
 // AuthorizeUnauthorizedResponseBody is the type of the "cliAuth" service
@@ -418,6 +451,196 @@ type RedeemGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// DelegateHooksActingUserUnauthorizedResponseBody is the type of the "cliAuth"
+// service "delegateHooksActingUser" endpoint HTTP response body for the
+// "unauthorized" error.
+type DelegateHooksActingUserUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DelegateHooksActingUserForbiddenResponseBody is the type of the "cliAuth"
+// service "delegateHooksActingUser" endpoint HTTP response body for the
+// "forbidden" error.
+type DelegateHooksActingUserForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DelegateHooksActingUserBadRequestResponseBody is the type of the "cliAuth"
+// service "delegateHooksActingUser" endpoint HTTP response body for the
+// "bad_request" error.
+type DelegateHooksActingUserBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DelegateHooksActingUserNotFoundResponseBody is the type of the "cliAuth"
+// service "delegateHooksActingUser" endpoint HTTP response body for the
+// "not_found" error.
+type DelegateHooksActingUserNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DelegateHooksActingUserConflictResponseBody is the type of the "cliAuth"
+// service "delegateHooksActingUser" endpoint HTTP response body for the
+// "conflict" error.
+type DelegateHooksActingUserConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DelegateHooksActingUserUnsupportedMediaResponseBody is the type of the
+// "cliAuth" service "delegateHooksActingUser" endpoint HTTP response body for
+// the "unsupported_media" error.
+type DelegateHooksActingUserUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DelegateHooksActingUserInvalidResponseBody is the type of the "cliAuth"
+// service "delegateHooksActingUser" endpoint HTTP response body for the
+// "invalid" error.
+type DelegateHooksActingUserInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DelegateHooksActingUserInvariantViolationResponseBody is the type of the
+// "cliAuth" service "delegateHooksActingUser" endpoint HTTP response body for
+// the "invariant_violation" error.
+type DelegateHooksActingUserInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DelegateHooksActingUserUnexpectedResponseBody is the type of the "cliAuth"
+// service "delegateHooksActingUser" endpoint HTTP response body for the
+// "unexpected" error.
+type DelegateHooksActingUserUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DelegateHooksActingUserGatewayErrorResponseBody is the type of the "cliAuth"
+// service "delegateHooksActingUser" endpoint HTTP response body for the
+// "gateway_error" error.
+type DelegateHooksActingUserGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
 // NewAuthorizeResponseBody builds the HTTP response body from the result of
 // the "authorize" endpoint of the "cliAuth" service.
 func NewAuthorizeResponseBody(res *cliauth.AuthorizeResult) *AuthorizeResponseBody {
@@ -432,9 +655,22 @@ func NewAuthorizeResponseBody(res *cliauth.AuthorizeResult) *AuthorizeResponseBo
 // "redeem" endpoint of the "cliAuth" service.
 func NewRedeemResponseBody(res *cliauth.RedeemResult) *RedeemResponseBody {
 	body := &RedeemResponseBody{
-		AccessToken: res.AccessToken,
-		UserEmail:   res.UserEmail,
-		ProjectSlug: res.ProjectSlug,
+		AccessToken:            res.AccessToken,
+		UserEmail:              res.UserEmail,
+		ProjectSlug:            res.ProjectSlug,
+		OrganizationID:         res.OrganizationID,
+		DelegationRefreshToken: res.DelegationRefreshToken,
+	}
+	return body
+}
+
+// NewDelegateHooksActingUserResponseBody builds the HTTP response body from
+// the result of the "delegateHooksActingUser" endpoint of the "cliAuth"
+// service.
+func NewDelegateHooksActingUserResponseBody(res *cliauth.DelegateHooksActingUserResult) *DelegateHooksActingUserResponseBody {
+	body := &DelegateHooksActingUserResponseBody{
+		Assertion: res.Assertion,
+		ExpiresIn: res.ExpiresIn,
 	}
 	return body
 }
@@ -719,12 +955,164 @@ func NewRedeemGatewayErrorResponseBody(res *goa.ServiceError) *RedeemGatewayErro
 	return body
 }
 
+// NewDelegateHooksActingUserUnauthorizedResponseBody builds the HTTP response
+// body from the result of the "delegateHooksActingUser" endpoint of the
+// "cliAuth" service.
+func NewDelegateHooksActingUserUnauthorizedResponseBody(res *goa.ServiceError) *DelegateHooksActingUserUnauthorizedResponseBody {
+	body := &DelegateHooksActingUserUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDelegateHooksActingUserForbiddenResponseBody builds the HTTP response
+// body from the result of the "delegateHooksActingUser" endpoint of the
+// "cliAuth" service.
+func NewDelegateHooksActingUserForbiddenResponseBody(res *goa.ServiceError) *DelegateHooksActingUserForbiddenResponseBody {
+	body := &DelegateHooksActingUserForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDelegateHooksActingUserBadRequestResponseBody builds the HTTP response
+// body from the result of the "delegateHooksActingUser" endpoint of the
+// "cliAuth" service.
+func NewDelegateHooksActingUserBadRequestResponseBody(res *goa.ServiceError) *DelegateHooksActingUserBadRequestResponseBody {
+	body := &DelegateHooksActingUserBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDelegateHooksActingUserNotFoundResponseBody builds the HTTP response body
+// from the result of the "delegateHooksActingUser" endpoint of the "cliAuth"
+// service.
+func NewDelegateHooksActingUserNotFoundResponseBody(res *goa.ServiceError) *DelegateHooksActingUserNotFoundResponseBody {
+	body := &DelegateHooksActingUserNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDelegateHooksActingUserConflictResponseBody builds the HTTP response body
+// from the result of the "delegateHooksActingUser" endpoint of the "cliAuth"
+// service.
+func NewDelegateHooksActingUserConflictResponseBody(res *goa.ServiceError) *DelegateHooksActingUserConflictResponseBody {
+	body := &DelegateHooksActingUserConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDelegateHooksActingUserUnsupportedMediaResponseBody builds the HTTP
+// response body from the result of the "delegateHooksActingUser" endpoint of
+// the "cliAuth" service.
+func NewDelegateHooksActingUserUnsupportedMediaResponseBody(res *goa.ServiceError) *DelegateHooksActingUserUnsupportedMediaResponseBody {
+	body := &DelegateHooksActingUserUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDelegateHooksActingUserInvalidResponseBody builds the HTTP response body
+// from the result of the "delegateHooksActingUser" endpoint of the "cliAuth"
+// service.
+func NewDelegateHooksActingUserInvalidResponseBody(res *goa.ServiceError) *DelegateHooksActingUserInvalidResponseBody {
+	body := &DelegateHooksActingUserInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDelegateHooksActingUserInvariantViolationResponseBody builds the HTTP
+// response body from the result of the "delegateHooksActingUser" endpoint of
+// the "cliAuth" service.
+func NewDelegateHooksActingUserInvariantViolationResponseBody(res *goa.ServiceError) *DelegateHooksActingUserInvariantViolationResponseBody {
+	body := &DelegateHooksActingUserInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDelegateHooksActingUserUnexpectedResponseBody builds the HTTP response
+// body from the result of the "delegateHooksActingUser" endpoint of the
+// "cliAuth" service.
+func NewDelegateHooksActingUserUnexpectedResponseBody(res *goa.ServiceError) *DelegateHooksActingUserUnexpectedResponseBody {
+	body := &DelegateHooksActingUserUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDelegateHooksActingUserGatewayErrorResponseBody builds the HTTP response
+// body from the result of the "delegateHooksActingUser" endpoint of the
+// "cliAuth" service.
+func NewDelegateHooksActingUserGatewayErrorResponseBody(res *goa.ServiceError) *DelegateHooksActingUserGatewayErrorResponseBody {
+	body := &DelegateHooksActingUserGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
 // NewAuthorizePayload builds a cliAuth service authorize endpoint payload.
 func NewAuthorizePayload(body *AuthorizeRequestBody, sessionToken *string) *cliauth.AuthorizePayload {
 	v := &cliauth.AuthorizePayload{
-		CodeChallenge:       *body.CodeChallenge,
-		CodeChallengeMethod: *body.CodeChallengeMethod,
-		ProjectSlug:         body.ProjectSlug,
+		CodeChallenge:             *body.CodeChallenge,
+		CodeChallengeMethod:       *body.CodeChallengeMethod,
+		ProjectSlug:               body.ProjectSlug,
+		ProofPublicKey:            body.ProofPublicKey,
+		DelegationContractVersion: body.DelegationContractVersion,
 	}
 	v.SessionToken = sessionToken
 
@@ -736,6 +1124,24 @@ func NewRedeemPayload(body *RedeemRequestBody) *cliauth.RedeemPayload {
 	v := &cliauth.RedeemPayload{
 		Code:         *body.Code,
 		CodeVerifier: *body.CodeVerifier,
+	}
+
+	return v
+}
+
+// NewDelegateHooksActingUserPayload builds a cliAuth service
+// delegateHooksActingUser endpoint payload.
+func NewDelegateHooksActingUserPayload(body *DelegateHooksActingUserRequestBody) *cliauth.DelegateHooksActingUserPayload {
+	v := &cliauth.DelegateHooksActingUserPayload{
+		RefreshToken:    *body.RefreshToken,
+		ContractVersion: *body.ContractVersion,
+		Provider:        *body.Provider,
+		Event:           *body.Event,
+		SessionID:       *body.SessionID,
+		IdempotencyKey:  *body.IdempotencyKey,
+		SignedAt:        *body.SignedAt,
+		Nonce:           *body.Nonce,
+		Signature:       *body.Signature,
 	}
 
 	return v
@@ -765,6 +1171,24 @@ func ValidateAuthorizeRequestBody(body *AuthorizeRequestBody) (err error) {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.code_challenge_method", *body.CodeChallengeMethod, []any{"S256"}))
 		}
 	}
+	if body.ProofPublicKey != nil {
+		err = goa.MergeErrors(err, goa.ValidatePattern("body.proof_public_key", *body.ProofPublicKey, "^[A-Za-z0-9_-]{43}$"))
+	}
+	if body.ProofPublicKey != nil {
+		if utf8.RuneCountInString(*body.ProofPublicKey) < 43 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.proof_public_key", *body.ProofPublicKey, utf8.RuneCountInString(*body.ProofPublicKey), 43, true))
+		}
+	}
+	if body.ProofPublicKey != nil {
+		if utf8.RuneCountInString(*body.ProofPublicKey) > 43 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.proof_public_key", *body.ProofPublicKey, utf8.RuneCountInString(*body.ProofPublicKey), 43, false))
+		}
+	}
+	if body.DelegationContractVersion != nil {
+		if !(*body.DelegationContractVersion == "hooks-acting-user.v1") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.delegation_contract_version", *body.DelegationContractVersion, []any{"hooks-acting-user.v1"}))
+		}
+	}
 	return
 }
 
@@ -784,6 +1208,105 @@ func ValidateRedeemRequestBody(body *RedeemRequestBody) (err error) {
 	if body.CodeVerifier != nil {
 		if utf8.RuneCountInString(*body.CodeVerifier) > 128 {
 			err = goa.MergeErrors(err, goa.InvalidLengthError("body.code_verifier", *body.CodeVerifier, utf8.RuneCountInString(*body.CodeVerifier), 128, false))
+		}
+	}
+	return
+}
+
+// ValidateDelegateHooksActingUserRequestBody runs the validations defined on
+// DelegateHooksActingUserRequestBody
+func ValidateDelegateHooksActingUserRequestBody(body *DelegateHooksActingUserRequestBody) (err error) {
+	if body.RefreshToken == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("refresh_token", "body"))
+	}
+	if body.ContractVersion == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("contract_version", "body"))
+	}
+	if body.Provider == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("provider", "body"))
+	}
+	if body.Event == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("event", "body"))
+	}
+	if body.SessionID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("session_id", "body"))
+	}
+	if body.IdempotencyKey == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("idempotency_key", "body"))
+	}
+	if body.SignedAt == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("signed_at", "body"))
+	}
+	if body.Nonce == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("nonce", "body"))
+	}
+	if body.Signature == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("signature", "body"))
+	}
+	if body.RefreshToken != nil {
+		if utf8.RuneCountInString(*body.RefreshToken) > 4096 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.refresh_token", *body.RefreshToken, utf8.RuneCountInString(*body.RefreshToken), 4096, false))
+		}
+	}
+	if body.ContractVersion != nil {
+		if !(*body.ContractVersion == "hooks-acting-user.v1") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.contract_version", *body.ContractVersion, []any{"hooks-acting-user.v1"}))
+		}
+	}
+	if body.Provider != nil {
+		if !(*body.Provider == "claude" || *body.Provider == "codex") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.provider", *body.Provider, []any{"claude", "codex"}))
+		}
+	}
+	if body.Event != nil {
+		if !(*body.Event == "UserPromptSubmit" || *body.Event == "PreToolUse") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.event", *body.Event, []any{"UserPromptSubmit", "PreToolUse"}))
+		}
+	}
+	if body.SessionID != nil {
+		if utf8.RuneCountInString(*body.SessionID) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.session_id", *body.SessionID, utf8.RuneCountInString(*body.SessionID), 1, true))
+		}
+	}
+	if body.SessionID != nil {
+		if utf8.RuneCountInString(*body.SessionID) > 512 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.session_id", *body.SessionID, utf8.RuneCountInString(*body.SessionID), 512, false))
+		}
+	}
+	if body.IdempotencyKey != nil {
+		if utf8.RuneCountInString(*body.IdempotencyKey) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.idempotency_key", *body.IdempotencyKey, utf8.RuneCountInString(*body.IdempotencyKey), 1, true))
+		}
+	}
+	if body.IdempotencyKey != nil {
+		if utf8.RuneCountInString(*body.IdempotencyKey) > 512 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.idempotency_key", *body.IdempotencyKey, utf8.RuneCountInString(*body.IdempotencyKey), 512, false))
+		}
+	}
+	if body.Nonce != nil {
+		err = goa.MergeErrors(err, goa.ValidatePattern("body.nonce", *body.Nonce, "^[A-Za-z0-9_-]{43}$"))
+	}
+	if body.Nonce != nil {
+		if utf8.RuneCountInString(*body.Nonce) < 43 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.nonce", *body.Nonce, utf8.RuneCountInString(*body.Nonce), 43, true))
+		}
+	}
+	if body.Nonce != nil {
+		if utf8.RuneCountInString(*body.Nonce) > 43 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.nonce", *body.Nonce, utf8.RuneCountInString(*body.Nonce), 43, false))
+		}
+	}
+	if body.Signature != nil {
+		err = goa.MergeErrors(err, goa.ValidatePattern("body.signature", *body.Signature, "^[A-Za-z0-9_-]{86}$"))
+	}
+	if body.Signature != nil {
+		if utf8.RuneCountInString(*body.Signature) < 86 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.signature", *body.Signature, utf8.RuneCountInString(*body.Signature), 86, true))
+		}
+	}
+	if body.Signature != nil {
+		if utf8.RuneCountInString(*body.Signature) > 86 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.signature", *body.Signature, utf8.RuneCountInString(*body.Signature), 86, false))
 		}
 	}
 	return

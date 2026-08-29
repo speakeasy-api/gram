@@ -139,7 +139,7 @@ func drainSpool(ctx context.Context, dir string) DrainSummary {
 			cl = newReplayClient(entry.ServerURL)
 			clients[entry.ServerURL] = cl
 		}
-		res := cl.send(ctx, a.c, entry.Envelope, entry.IdempotencyKey)
+		res := cl.sendWithAssertion(ctx, a.c, entry.Envelope, entry.IdempotencyKey, "", entry.Backfilled)
 		replayCreds := a.c
 		if res.authRejected {
 			// A rejected credential is machine state, not event state — the
@@ -149,7 +149,7 @@ func drainSpool(ctx context.Context, dir string) DrainSummary {
 			// deployment's remaining entries. Never delete on auth rejection.
 			if a.c.Source == credCache && a.orgKey != "" {
 				org := creds{ServerURL: entry.ServerURL, APIKey: a.orgKey, Project: entry.ProjectSlug, Email: "", Org: entry.OrgID, Source: credOrg}
-				res = cl.send(ctx, org, entry.Envelope, entry.IdempotencyKey)
+				res = cl.sendWithAssertion(ctx, org, entry.Envelope, entry.IdempotencyKey, "", entry.Backfilled)
 				if !res.authRejected {
 					replayCreds = org
 					auths[key] = drainAuth{c: org, ok: true, orgKey: a.orgKey}
@@ -463,10 +463,10 @@ func (r *Relay) maybeSpawnDrain() {
 // finishExchange runs the spool bookkeeping for a final exchange result: an
 // unsent payload is kept for replay; a healthy exchange flushes any backlog
 // via a detached drain.
-func (r *Relay) finishExchange(idemKey string, payload components.IngestRequestBody, res ingestResult) {
+func (r *Relay) finishExchange(idemKey string, payload components.IngestRequestBody, backfilled bool, res ingestResult) {
 	switch {
 	case res.unsent():
-		r.spoolUnsent(idemKey, payload)
+		r.spoolUnsent(idemKey, payload, backfilled)
 	case res.accepted():
 		r.maybeSpawnDrain()
 	}

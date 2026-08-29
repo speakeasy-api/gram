@@ -102,8 +102,8 @@ func TestIngestWithoutEffectsLeavesOrgSettings(t *testing.T) {
 	require.True(t, got.FailOpen)
 }
 
-// TestServerErrorFailsOpenWithCachedSetting is the feature's core case: a 5xx
-// with a cached fail-open choice lets the gating event through.
+// TestServerErrorFailsOpenWithCachedSetting proves a governed live tool remains
+// fail closed even when the legacy cached posture says fail open.
 func TestServerErrorFailsOpenWithCachedSetting(t *testing.T) {
 	shrinkRetryBudget(t)
 	fs := newFakeServer(t, func(components.IngestRequestBody) (int, decision) {
@@ -115,7 +115,7 @@ func TestServerErrorFailsOpenWithCachedSetting(t *testing.T) {
 	res := invoke(t, cfg, agenthooks.ProviderClaudeCode, "claude/pre_tool_use.json")
 
 	require.Equal(t, 0, res.ExitCode)
-	require.Equal(t, "{}", string(bytes.TrimSpace(res.Stdout)))
+	require.Contains(t, string(bytes.TrimSpace(res.Stdout)), `"permissionDecision":"deny"`)
 }
 
 // TestServerErrorBlocksWhenCachedFailClosed: an explicit fail-closed choice
@@ -141,7 +141,7 @@ func TestUnreachableFailsOpenWithCachedSetting(t *testing.T) {
 	writeOrgSettings(cfg, true)
 	fs.Close()
 
-	res := invoke(t, cfg, agenthooks.ProviderClaudeCode, "claude/pre_tool_use.json")
+	res := invoke(t, cfg, agenthooks.ProviderClaudeCode, "claude/permission_request.json")
 
 	require.Equal(t, 0, res.ExitCode)
 	require.Equal(t, "{}", string(bytes.TrimSpace(res.Stdout)))
@@ -184,9 +184,10 @@ func TestEnvKeyRejectionStaysClosedDespiteFailOpen(t *testing.T) {
 		return http.StatusUnauthorized, decision{Decision: "", Reason: "", Message: ""}
 	})
 	cfg := authedConfig(t, fs.URL)
+	t.Setenv("GRAM_HOOKS_API_KEY", "rejected-explicit-key")
 	writeOrgSettings(cfg, true)
 
-	res := invoke(t, cfg, agenthooks.ProviderClaudeCode, "claude/pre_tool_use.json")
+	res := invoke(t, cfg, agenthooks.ProviderClaudeCode, "claude/permission_request.json")
 
 	require.Contains(t, string(res.Stdout), `"permissionDecision":"deny"`)
 	require.Contains(t, string(res.Stdout), "GRAM_HOOKS_API_KEY")
@@ -207,7 +208,7 @@ func TestCachedKeyRejectionRatchetUnchangedByFailOpen(t *testing.T) {
 	cfg := Config{ServerURL: fs.URL, ProjectSlug: "default", OrgID: "", HooksAPIKey: "", BrowserLogin: false, Nonblocking: false, DebugLog: "", ConfigPath: "", ConfigError: ""}
 	writeOrgSettings(cfg, true)
 
-	res := invoke(t, cfg, agenthooks.ProviderClaudeCode, "claude/pre_tool_use.json")
+	res := invoke(t, cfg, agenthooks.ProviderClaudeCode, "claude/permission_request.json")
 
 	require.Contains(t, string(res.Stdout), `"permissionDecision":"deny"`, "a rejected credential must fail closed regardless of fail-open")
 	_, statErr := os.Stat(authFile)
@@ -312,7 +313,7 @@ func TestAgedOrgSettingsWithinMaxAgeStillApply(t *testing.T) {
 	seedOrgSettings(t, cfg, true, orgSettingsMaxAge-time.Hour)
 	fs.Close()
 
-	res := invoke(t, cfg, agenthooks.ProviderClaudeCode, "claude/pre_tool_use.json")
+	res := invoke(t, cfg, agenthooks.ProviderClaudeCode, "claude/permission_request.json")
 
 	require.Equal(t, 0, res.ExitCode)
 	require.Equal(t, "{}", string(bytes.TrimSpace(res.Stdout)))
@@ -366,7 +367,7 @@ func TestFailOpenEnvOverride(t *testing.T) {
 	res := invoke(t, cfg, agenthooks.ProviderClaudeCode, "claude/pre_tool_use.json")
 
 	require.Equal(t, 0, res.ExitCode)
-	require.Equal(t, "{}", string(bytes.TrimSpace(res.Stdout)))
+	require.Contains(t, string(bytes.TrimSpace(res.Stdout)), `"permissionDecision":"deny"`)
 }
 
 // TestColdStartNoCacheFailsOpen: a machine that has never cached an org
@@ -381,7 +382,7 @@ func TestColdStartNoCacheFailsOpen(t *testing.T) {
 	res := invoke(t, cfg, agenthooks.ProviderClaudeCode, "claude/pre_tool_use.json")
 
 	require.Equal(t, 0, res.ExitCode)
-	require.Equal(t, "{}", string(bytes.TrimSpace(res.Stdout)))
+	require.Contains(t, string(bytes.TrimSpace(res.Stdout)), `"permissionDecision":"deny"`)
 }
 
 // TestStaleCacheIsNotAColdStart: a present-but-expired posture keeps the
@@ -411,7 +412,9 @@ func TestGateBudgetBeatsHangingServer(t *testing.T) {
 		return http.StatusServiceUnavailable, decision{Decision: "", Reason: "", Message: ""}
 	})
 	cfg := authedConfig(t, fs.URL)
-	seedOrgSettings(t, cfg, false, time.Minute)
+	cfg.Nonblocking = true
+	t.Setenv("GRAM_HOOKS_FAIL_OPEN", "1")
+	seedOrgSettings(t, cfg, true, time.Minute)
 
 	start := time.Now()
 	res := invoke(t, cfg, agenthooks.ProviderClaudeCode, "claude/pre_tool_use.json")

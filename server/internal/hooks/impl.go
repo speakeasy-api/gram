@@ -74,6 +74,7 @@ type Service struct {
 	piScanner       *promptinjection.Scanner
 	policyBypass    *risk.PolicyBypassEvaluator
 	spendGate       *spendrules.Gate
+	aiAccess        *HookAIAccessCheckpoint
 	shadowMCPClient *shadowmcp.Client
 	writer          *chat.ChatMessageWriter
 	// efficacySignaler is optional: when nil, hook paths record exactly as
@@ -259,6 +260,7 @@ func NewService(
 	piScanner *promptinjection.Scanner,
 	policyBypass *risk.PolicyBypassEvaluator,
 	spendGate *spendrules.Gate,
+	aiAccess *HookAIAccessCheckpoint,
 	shadowMCPClient *shadowmcp.Client,
 	writer *chat.ChatMessageWriter,
 	efficacySignaler efficacy.Signaler,
@@ -288,6 +290,7 @@ func NewService(
 		piScanner:          piScanner,
 		policyBypass:       policyBypass,
 		spendGate:          spendGate,
+		aiAccess:           aiAccess,
 		shadowMCPClient:    shadowMCPClient,
 		writer:             writer,
 		efficacySignaler:   efficacySignaler,

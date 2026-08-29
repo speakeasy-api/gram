@@ -1,12 +1,11 @@
 // Package mcptoolexecution registers the MCP kill-switch contracts: the
 // fail-closed `mcp_tool_execution` and internal `ai_access` definitions, the
 // authoritative concrete-user principal adapter, the canonical
-// organization-owned `mcp_server` resource adapter, and the coverage inventory
-// for the hosted and private-proxy MCP tools/call surfaces.
+// organization-owned resource adapters, and the coverage inventory for hosted
+// and private-proxy MCP tools/call plus approved live Claude/Codex hook activity.
 //
-// Registration declares the contracts consumed by both MCP checkpoints. The
-// internal ai_access definition is not exposed through customer management or
-// used to claim coverage for planned non-MCP surfaces.
+// Registration declares the contracts consumed by the MCP and hook checkpoints.
+// The internal ai_access definition is not exposed through customer management.
 package mcptoolexecution
 
 import (
@@ -15,6 +14,7 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/speakeasy-api/gram/hooks/delegation"
 	"github.com/speakeasy-api/gram/server/internal/killswitches"
 )
 
@@ -24,7 +24,8 @@ const (
 	DefinitionKeyMCPToolExecution killswitches.DefinitionKey = "mcp_tool_execution"
 
 	// DefinitionKeyAIAccess is the internal broad AI-access capability. Its
-	// currently verified coverage is limited to authenticated MCP tools/call.
+	// verified coverage is limited to authenticated MCP tools/call and the
+	// explicitly registered live Claude/Codex hook surfaces below.
 	DefinitionKeyAIAccess killswitches.DefinitionKey = "ai_access"
 
 	// PrincipalKindUser is the concrete Gram user principal namespace; keys
@@ -35,9 +36,15 @@ const (
 	// keys are fronting mcp_servers row IDs.
 	ResourceKindMCPServer killswitches.ResourceKind = "mcp_server"
 
-	// IdentityContractKeyAuthenticatedUserMCPServer pairs the authoritative
-	// user principal with the canonical mcp_server resource.
+	// IdentityContractKeyAuthenticatedUserMCPServer is the unchanged DNO-988
+	// contract pairing an authoritative user with an MCP server.
 	IdentityContractKeyAuthenticatedUserMCPServer killswitches.IdentityContractKey = "authenticated_user_mcp_server"
+
+	// IdentityContractKeyAuthenticatedUserAIResource is the additive ai_access
+	// contract spanning existing MCP servers and governed native hook activity.
+	IdentityContractKeyAuthenticatedUserAIResource killswitches.IdentityContractKey = "authenticated_user_ai_resource"
+
+	ResourceKindHookActivity killswitches.ResourceKind = "hook_activity"
 
 	// SurfaceHostedToolsCall is hosted MCP tools/call dispatch.
 	SurfaceHostedToolsCall killswitches.Surface = "mcp_hosted_tools_call"
@@ -53,6 +60,12 @@ const (
 	// TransportAdapterPrivateProxyJSONRPC keys the private-proxy JSON-RPC
 	// transport mapping owned by the forwarding checkpoint.
 	TransportAdapterPrivateProxyJSONRPC killswitches.TransportAdapterKey = "mcp_private_proxy_jsonrpc"
+	TransportAdapterHookNative          killswitches.TransportAdapterKey = "hooks_native_deny"
+
+	SurfaceClaudeUserPromptSubmit killswitches.Surface = "hooks_claude_live_user_prompt_submit"
+	SurfaceClaudePreToolUse       killswitches.Surface = "hooks_claude_live_pre_tool_use"
+	SurfaceCodexUserPromptSubmit  killswitches.Surface = "hooks_codex_live_user_prompt_submit"
+	SurfaceCodexPreToolUse        killswitches.Surface = "hooks_codex_live_pre_tool_use"
 
 	// DefaultExternalNote is the editable customer-safe starting value for
 	// new MCP tool-execution prescriptions. It never leaks framework vocabulary.
@@ -87,34 +100,42 @@ func NewRegistration(db *pgxpool.Pool) killswitches.Registration {
 			{
 				Key:                 DefinitionKeyAIAccess,
 				PrincipalKinds:      []killswitches.PrincipalKind{PrincipalKindUser},
-				ResourceKinds:       []killswitches.ResourceKind{ResourceKindMCPServer},
+				ResourceKinds:       []killswitches.ResourceKind{ResourceKindMCPServer, ResourceKindHookActivity},
 				FailurePolicy:       killswitches.FailurePolicyFailClosed,
 				DefaultExternalNote: DefaultAIAccessExternalNote,
 				EnforcementOwner:    EnforcementOwner,
-				IdentityContract:    IdentityContractKeyAuthenticatedUserMCPServer,
-				Surfaces:            []killswitches.Surface{SurfaceHostedToolsCall, SurfacePrivateProxyToolsCall},
-				TransportAdapters:   []killswitches.TransportAdapterKey{TransportAdapterHostedJSONRPC, TransportAdapterPrivateProxyJSONRPC},
+				IdentityContract:    IdentityContractKeyAuthenticatedUserAIResource,
+				Surfaces:            []killswitches.Surface{SurfaceHostedToolsCall, SurfacePrivateProxyToolsCall, SurfaceClaudeUserPromptSubmit, SurfaceClaudePreToolUse, SurfaceCodexUserPromptSubmit, SurfaceCodexPreToolUse},
+				TransportAdapters:   []killswitches.TransportAdapterKey{TransportAdapterHostedJSONRPC, TransportAdapterPrivateProxyJSONRPC, TransportAdapterHookNative},
 			},
 		},
-		IdentityContracts: []killswitches.IdentityContract{{
-			Key:            IdentityContractKeyAuthenticatedUserMCPServer,
-			PrincipalKinds: []killswitches.PrincipalKind{PrincipalKindUser},
-			ResourceKinds:  []killswitches.ResourceKind{ResourceKindMCPServer},
-		}},
+		IdentityContracts: []killswitches.IdentityContract{
+			{
+				Key:            IdentityContractKeyAuthenticatedUserMCPServer,
+				PrincipalKinds: []killswitches.PrincipalKind{PrincipalKindUser},
+				ResourceKinds:  []killswitches.ResourceKind{ResourceKindMCPServer},
+			},
+			{
+				Key:            IdentityContractKeyAuthenticatedUserAIResource,
+				PrincipalKinds: []killswitches.PrincipalKind{PrincipalKindUser},
+				ResourceKinds:  []killswitches.ResourceKind{ResourceKindMCPServer, ResourceKindHookActivity},
+			},
+		},
 		PrincipalAdapters: []killswitches.PrincipalAdapterRegistration{{
 			Adapter:  NewAuthenticatedUserPrincipalAdapter(db),
 			Fixtures: principalFixtures(),
 		}},
-		ResourceAdapters: []killswitches.ResourceAdapterRegistration{{
-			Adapter:  NewMCPServerResourceAdapter(db),
-			Fixtures: resourceFixtures(),
-		}},
-		Surfaces: []killswitches.Surface{SurfaceHostedToolsCall, SurfacePrivateProxyToolsCall},
+		ResourceAdapters: []killswitches.ResourceAdapterRegistration{
+			{Adapter: NewMCPServerResourceAdapter(db), Fixtures: resourceFixtures()},
+			{Adapter: HookActivityResourceAdapter{}, Fixtures: hookResourceFixtures()},
+		},
+		Surfaces: []killswitches.Surface{SurfaceHostedToolsCall, SurfacePrivateProxyToolsCall, SurfaceClaudeUserPromptSubmit, SurfaceClaudePreToolUse, SurfaceCodexUserPromptSubmit, SurfaceCodexPreToolUse},
 		TransportAdapters: []killswitches.TransportAdapterRegistration{
 			{Key: TransportAdapterHostedJSONRPC, Adapter: killswitches.ResolveTransportDisposition},
 			{Key: TransportAdapterPrivateProxyJSONRPC, Adapter: killswitches.ResolveTransportDisposition},
+			{Key: TransportAdapterHookNative, Adapter: killswitches.ResolveTransportDisposition},
 		},
-		Coverage: []killswitches.CoverageContract{
+		Coverage: append([]killswitches.CoverageContract{
 			{
 				Definition:       DefinitionKeyMCPToolExecution,
 				Surface:          SurfaceHostedToolsCall,
@@ -149,7 +170,7 @@ func NewRegistration(db *pgxpool.Pool) killswitches.Registration {
 				FailurePolicy:    killswitches.FailurePolicyFailClosed,
 				TransportAdapter: TransportAdapterHostedJSONRPC,
 				EnforcementOwner: EnforcementOwner,
-				IdentityContract: IdentityContractKeyAuthenticatedUserMCPServer,
+				IdentityContract: IdentityContractKeyAuthenticatedUserAIResource,
 			},
 			{
 				Definition:       DefinitionKeyAIAccess,
@@ -161,9 +182,56 @@ func NewRegistration(db *pgxpool.Pool) killswitches.Registration {
 				FailurePolicy:    killswitches.FailurePolicyFailClosed,
 				TransportAdapter: TransportAdapterPrivateProxyJSONRPC,
 				EnforcementOwner: EnforcementOwner,
-				IdentityContract: IdentityContractKeyAuthenticatedUserMCPServer,
+				IdentityContract: IdentityContractKeyAuthenticatedUserAIResource,
 			},
-		},
+		}, hookCoverageContracts()...),
+	}
+}
+
+// HookCoverageVersionContract is the checked-in version boundary for DNO-989.
+// No already-released relay is claimed: v1 first exists in the next release.
+// Native versions list only clients substantiated by the real-client E2E suite.
+var HookCoverageVersionContract = struct {
+	ContractVersion       string
+	ReleasedRelayVersions []string
+	TestedNativeVersions  []string
+	TestedPlatforms       []string
+}{
+	ContractVersion:       delegation.ContractVersion,
+	ReleasedRelayVersions: []string{},
+	TestedNativeVersions:  []string{"Claude Code 2.1.250", "Codex CLI 0.150.1"},
+	TestedPlatforms:       []string{"macOS 26.5.2 arm64"},
+}
+
+func hookCoverageContracts() []killswitches.CoverageContract {
+	bindings := delegation.ApprovedBindings()
+	result := make([]killswitches.CoverageContract, 0, len(bindings))
+	for _, binding := range bindings {
+		result = append(result, killswitches.CoverageContract{
+			Definition: DefinitionKeyAIAccess, Surface: hookSurface(binding),
+			PrincipalSource: "Gram-signed hooks-acting-user.v1 assertion minted only after session-authenticated PKCE enrollment and per-invocation Ed25519 proof; active organization membership is revalidated at mint and ingest.",
+			ResourceSource:  "Code-registered hook_activity resource " + binding.ResourceKey + " derived from the assertion-bound provider and exact native event.",
+			Checkpoint:      "Unified /rpc/hooks.ingest before quarantine, spend, risk, persistence, or the native client resumes the prompt/tool action.",
+			ProtectedWork:   "Only live " + binding.Event + " from " + binding.Provider + "; PermissionRequest, backfill, replay, legacy endpoints, and every other provider/event are excluded.",
+			FailurePolicy:   killswitches.FailurePolicyFailClosed, TransportAdapter: TransportAdapterHookNative,
+			EnforcementOwner: EnforcementOwner, IdentityContract: IdentityContractKeyAuthenticatedUserAIResource,
+		})
+	}
+	return result
+}
+
+func hookSurface(binding delegation.Binding) killswitches.Surface {
+	switch {
+	case binding.Provider == delegation.ProviderClaude && binding.Event == delegation.EventUserPromptSubmit:
+		return SurfaceClaudeUserPromptSubmit
+	case binding.Provider == delegation.ProviderClaude && binding.Event == delegation.EventPreToolUse:
+		return SurfaceClaudePreToolUse
+	case binding.Provider == delegation.ProviderCodex && binding.Event == delegation.EventUserPromptSubmit:
+		return SurfaceCodexUserPromptSubmit
+	case binding.Provider == delegation.ProviderCodex && binding.Event == delegation.EventPreToolUse:
+		return SurfaceCodexPreToolUse
+	default:
+		panic("approved hook binding has no registered surface")
 	}
 }
 

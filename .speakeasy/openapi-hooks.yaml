@@ -39,6 +39,27 @@ paths:
           schema:
             description: Set when the event is redelivered from a device's offline spool after control-plane downtime, under its original Idempotency-Key and occurred_at.
             type: boolean
+        - allowEmptyValue: true
+          description: True only for a synthetic prompt recovered after its live checkpoint; backfilled prompts are observational and never governed.
+          in: header
+          name: X-Gram-Backfilled
+          schema:
+            description: True only for a synthetic prompt recovered after its live checkpoint; backfilled prompts are observational and never governed.
+            type: boolean
+        - allowEmptyValue: true
+          description: Opaque Gram-signed, proof-minted acting-user assertion for one governed live invocation.
+          in: header
+          name: X-Gram-Acting-User
+          schema:
+            description: Opaque Gram-signed, proof-minted acting-user assertion for one governed live invocation.
+            type: string
+        - allowEmptyValue: true
+          description: Exact acting-user delegation contract used by the assertion.
+          in: header
+          name: X-Gram-Acting-User-Contract
+          schema:
+            description: Exact acting-user delegation contract used by the assertion.
+            type: string
       requestBody:
         content:
           application/json:
@@ -783,7 +804,7 @@ tags:
   - name: chatSessions
     description: Manages chat session tokens for client-side authentication
   - name: cliAuth
-    description: Interactive device-agent enrollment via a PKCE one-time-code exchange. authorize (dashboard session) mints a short-lived code bound to a PKCE challenge; redeem (no auth — the code+verifier pair is the credential) exchanges it once for a per-user [agent,hooks] API key.
+    description: Interactive device-agent enrollment via a PKCE one-time-code exchange. authorize (dashboard session) mints a short-lived code bound to a PKCE challenge; redeem (no auth — the code+verifier pair is the credential) exchanges it once for a per-user [agent_user] API key. Proof-bound hooks relay enrollment also grants [hooks].
   - name: deployments
     description: Manages deployments of tools from upstream sources.
   - name: deviceIntegrations

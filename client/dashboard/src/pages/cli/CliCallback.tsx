@@ -1,4 +1,7 @@
-import { CodeChallengeMethod } from "@gram/client/models/components/authorizerequestbody.js";
+import {
+  CodeChallengeMethod,
+  DelegationContractVersion,
+} from "@gram/client/models/components/authorizerequestbody.js";
 import { useCliAuthAuthorizeMutation } from "@gram/client/react-query/cliAuthAuthorize";
 import { useCreateAPIKeyMutation } from "@gram/client/react-query/createAPIKey";
 import { useEffect, useState, useRef } from "react";
@@ -17,6 +20,8 @@ interface CliCallbackProps {
    */
   codeChallenge?: string | null;
   codeChallengeMethod?: string | null;
+  proofPublicKey?: string | null;
+  delegationContractVersion?: string | null;
   /**
    * How the credentials travel to the local callback. "post" submits them as
    * an auto-submitted form body (Apple-style form_post) so the API key never
@@ -44,6 +49,8 @@ export default function CliCallback(props: CliCallbackProps): JSX.Element {
     organizationId,
     codeChallenge,
     codeChallengeMethod,
+    proofPublicKey,
+    delegationContractVersion,
     callbackMethod,
   } = props;
   const { session, status } = useSessionData();
@@ -102,8 +109,10 @@ export default function CliCallback(props: CliCallbackProps): JSX.Element {
         codeChallenge,
         codeChallengeMethod,
         selectedProjectSlug,
+        proofPublicKey,
+        delegationContractVersion,
       )
-        .then((code) => transmitCode(localCallbackUrl, code))
+        .then((code) => transmitKey(localCallbackUrl, callbackMethod, { code }))
         .catch((err) => {
           setError(
             err instanceof Error ? err.message : "Failed to authorize device",
@@ -147,6 +156,8 @@ export default function CliCallback(props: CliCallbackProps): JSX.Element {
     isPkceFlow,
     codeChallenge,
     codeChallengeMethod,
+    proofPublicKey,
+    delegationContractVersion,
   ]);
 
   if (error) {
@@ -309,10 +320,18 @@ async function authorizePkceCode(
   codeChallenge: string | null | undefined,
   codeChallengeMethod: string | null | undefined,
   projectSlug: string | null,
+  proofPublicKey: string | null | undefined,
+  delegationContractVersion: string | null | undefined,
 ): Promise<string> {
   if (!codeChallenge) throw new Error("Missing code_challenge parameter");
   if (codeChallengeMethod !== CodeChallengeMethod.S256) {
     throw new Error("Unsupported code_challenge_method (only S256 is allowed)");
+  }
+  if (
+    delegationContractVersion != null &&
+    delegationContractVersion !== DelegationContractVersion.HooksActingUserV1
+  ) {
+    throw new Error("Unsupported hooks delegation contract version");
   }
 
   const result = await authorize({
@@ -322,17 +341,12 @@ async function authorizePkceCode(
         codeChallenge,
         codeChallengeMethod: CodeChallengeMethod.S256,
         projectSlug: projectSlug ?? undefined,
+        proofPublicKey: proofPublicKey ?? undefined,
+        delegationContractVersion: delegationContractVersion ?? undefined,
       },
     },
   });
   if (!result.code) throw new Error("No code returned from server");
 
   return result.code;
-}
-
-async function transmitCode(callbackUrl: string, code: string): Promise<void> {
-  const url = new URL(callbackUrl);
-  url.searchParams.set("code", code);
-
-  window.location.replace(url.toString());
 }

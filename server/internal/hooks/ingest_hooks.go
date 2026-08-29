@@ -20,6 +20,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/hookevents"
 	"github.com/speakeasy-api/gram/server/internal/hooks/repo"
+	"github.com/speakeasy-api/gram/server/internal/killswitches"
 	"github.com/speakeasy-api/gram/server/internal/message"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
@@ -193,6 +194,13 @@ func (s *Service) ingest(ctx context.Context, payload *gen.IngestPayload) (res *
 			attr.SlogHookSource(source),
 			attr.SlogHookEvent(eventType),
 		)
+		_, _, governed := governedHook(payload)
+		if governed {
+			return &AuthenticatedIngestResult{
+				Result: canonicalDenyResultWithReason("ai_access_identity_unavailable", aiAccessIdentityFailureMessage),
+				Actor:  ResolvedActor{UserID: "", Email: ""},
+			}, nil
+		}
 		return &AuthenticatedIngestResult{
 			Result: canonicalAllowResult(),
 			Actor:  ResolvedActor{UserID: "", Email: ""},
@@ -217,11 +225,47 @@ func (s *Service) ingest(ctx context.Context, payload *gen.IngestPayload) (res *
 	)
 	logger.InfoContext(ctx, "unified hook received", attr.SlogEvent("hooks_ingest"))
 
-	if !s.claimHookIdempotency(ctx, conv.PtrValOr(payload.IdempotencyKey, ""), replayed) {
+	duplicate := !s.claimHookIdempotency(ctx, conv.PtrValOr(payload.IdempotencyKey, ""), replayed)
+	if duplicate {
 		ctx = withHookDuplicate(ctx)
 	}
 
-	blockReason, userReason := s.evaluateCanonicalHook(ctx, payload, authCtx, actor, timestamp)
+	var aiDecision hookAIAccessDecision
+	_, _, isGoverned := governedHook(payload)
+	if isGoverned {
+		if s.aiAccess == nil {
+			aiDecision = evaluatorFailureDecision()
+		} else {
+			var cachedDecision hookAIAccessDecision
+			var cachedPrincipal killswitches.PrincipalKey
+			cached := false
+			if duplicate {
+				cachedDecision, cachedPrincipal, cached = s.cachedHookAIAccessDenial(ctx, payload, authCtx.ActiveOrganizationID)
+			}
+			if cached {
+				_, failure := s.aiAccess.VerifyCached(ctx, payload, authCtx, cachedPrincipal)
+				if failure.deny {
+					aiDecision = failure
+				} else {
+					aiDecision = cachedDecision
+				}
+			} else {
+				verified, failure := s.aiAccess.Verify(ctx, payload, authCtx)
+				if failure.deny {
+					aiDecision = failure
+				} else {
+					aiDecision = s.aiAccess.EvaluateVerified(ctx, verified)
+					aiDecision = s.publishHookAIAccessDenial(ctx, payload, authCtx.ActiveOrganizationID, verified.principalKey, aiDecision)
+				}
+			}
+		}
+	}
+	blockReason, userReason := "", ""
+	if aiDecision.deny {
+		blockReason, userReason = aiDecision.reason, aiDecision.message
+	} else {
+		blockReason, userReason = s.evaluateCanonicalHook(ctx, payload, authCtx, actor, timestamp)
+	}
 	skillCapture, observed, observationErr := s.recordSkillActivation(ctx, payload, authCtx, actor, timestamp, blockReason)
 	if observationErr != nil {
 		logger.WarnContext(ctx, "failed to record skill activation",
@@ -274,7 +318,7 @@ func (s *Service) ingest(ctx context.Context, payload *gen.IngestPayload) (res *
 	s.captureMCPAttribution(context.WithoutCancel(ctx), payload, authCtx)
 	if blockReason != "" {
 		return &AuthenticatedIngestResult{
-			Result: withBlockEffect(blockEffects, s.withOrgSettings(ctx, authCtx.ActiveOrganizationID, canonicalDenyResult(userReason), skillCapture)),
+			Result: withBlockEffect(blockEffects, s.withOrgSettings(ctx, authCtx.ActiveOrganizationID, canonicalDenyResultWithReason(aiDecision.reason, userReason), skillCapture)),
 			Actor:  ResolvedActor(actor),
 		}, nil
 	}
@@ -1934,11 +1978,13 @@ func canonicalAllowResult() *gen.IngestHookResult {
 	}
 }
 
-func canonicalDenyResult(message string) *gen.IngestHookResult {
+func canonicalDenyResultWithReason(reason, message string) *gen.IngestHookResult {
 	if strings.TrimSpace(message) == "" {
 		message = "Request denied by Speakeasy policy."
 	}
-	reason := "policy_denied"
+	if strings.TrimSpace(reason) == "" {
+		reason = "policy_denied"
+	}
 	return &gen.IngestHookResult{
 		Decision: "deny",
 		Reason:   &reason,

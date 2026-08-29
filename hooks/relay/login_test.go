@@ -2,8 +2,10 @@ package relay
 
 import (
 	"context"
+	"encoding/json"
 	"html"
 	"net/http"
+	"net/http/httptest"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -13,7 +15,30 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
+
+	"github.com/speakeasy-api/gram/hooks/delegation"
 )
+
+// TestRelayCredentialClientRejectsRedirects protects both PKCE redemption and
+// assertion minting from forwarding proof-bound credentials to another origin.
+func TestRelayCredentialClientRejectsRedirects(t *testing.T) {
+	reachedSink := false
+	sink := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
+		reachedSink = true
+	}))
+	t.Cleanup(sink.Close)
+	redirect := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Location", sink.URL)
+		w.WriteHeader(http.StatusTemporaryRedirect)
+	}))
+	t.Cleanup(redirect.Close)
+
+	response, err := newRelayHTTPClient(time.Second).Post(redirect.URL, "application/json", strings.NewReader(`{"credential":"secret"}`))
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = response.Body.Close() })
+	require.Equal(t, http.StatusTemporaryRedirect, response.StatusCode)
+	require.False(t, reachedSink, "credential-bearing requests must never follow redirects")
+}
 
 // forceInteractiveEnv clears the signals loginViable treats as non-interactive
 // (CI runners set CI and have no display) so the sign-in flow runs under test.
@@ -50,6 +75,16 @@ func TestLoginRoundtrip(t *testing.T) {
 	t.Setenv("GRAM_HOOKS_API_KEY", "")
 	forceInteractiveEnv(t)
 
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		require.Equal(t, "/rpc/cliAuth.redeem", r.URL.Path)
+		var body map[string]string
+		require.NoError(t, json.NewDecoder(r.Body).Decode(&body))
+		require.Equal(t, "one-time-code", body["code"])
+		require.NotEmpty(t, body["code_verifier"])
+		_ = json.NewEncoder(w).Encode(delegation.RedeemResponse{AccessToken: "minted-key-123", RefreshToken: "proof-bound-refresh", OrganizationID: "org-9", ProjectSlug: "acme", UserEmail: "dev@example.com"})
+	}))
+	t.Cleanup(server.Close)
+
 	orig := openBrowser
 	t.Cleanup(func() { openBrowser = orig })
 	openBrowser = func(target string) {
@@ -57,24 +92,19 @@ func TestLoginRoundtrip(t *testing.T) {
 		callback := u.Query().Get("cli_callback_url")
 		require.Equal(t, "hooks", u.Query().Get("key_scope"))
 		require.Equal(t, "post", u.Query().Get("callback_method"))
+		require.Equal(t, delegation.ContractVersion, u.Query().Get("delegation_contract_version"))
+		require.NotEmpty(t, u.Query().Get("proof_public_key"))
 		cb, err := url.Parse(callback)
-		if err != nil {
-			return
-		}
-		form := url.Values{}
-		form.Set("api_key", "minted-key-123")
-		form.Set("project", "acme")
-		form.Set("email", "dev@example.com")
-		form.Set("organization_id", "org-9")
+		require.NoError(t, err)
 		go func() {
-			resp, err := http.PostForm(cb.String(), form)
+			resp, err := http.PostForm(cb.String(), url.Values{"code": {"one-time-code"}})
 			if err == nil {
 				_ = resp.Body.Close()
 			}
 		}()
 	}
 
-	cfg := Config{ServerURL: "https://app.example.test", ProjectSlug: "acme", OrgID: "org-9", HooksAPIKey: "", BrowserLogin: true, Nonblocking: false, DebugLog: "", ConfigPath: "", ConfigError: ""}
+	cfg := Config{ServerURL: server.URL, SiteURL: "https://app.example.test", ProjectSlug: "acme", OrgID: "org-9", BrowserLogin: true}
 	ctx, cancel := context.WithTimeout(context.Background(), 12*time.Second)
 	defer cancel()
 	require.NoError(t, NewRelay(cfg).Login(ctx, true))
@@ -85,16 +115,19 @@ func TestLoginRoundtrip(t *testing.T) {
 	require.Equal(t, "acme", values["project"])
 	require.Equal(t, "dev@example.com", values["email"])
 	require.Equal(t, "org-9", values["org"])
-	require.Equal(t, "https://app.example.test", values["server_url"])
+	require.Equal(t, server.URL, values["server_url"])
+	require.Equal(t, "proof-bound-refresh", values["delegation_refresh_token"])
+	require.Equal(t, delegation.ContractVersion, values["delegation_contract_version"])
+	require.NotEmpty(t, values["proof_private_key"])
 	require.True(t, authEstablished())
 }
 
-// TestLoginLegacyGETRoundtrip keeps compatibility with dashboards released
-// before callback_method=post, which append credentials to the callback URL.
-func TestLoginLegacyGETRoundtrip(t *testing.T) {
+// TestLoginRejectsLegacyCredentialCallback proves self-reported callback
+// identity cannot replace the session-authenticated PKCE code.
+func TestLoginRejectsLegacyCredentialCallback(t *testing.T) {
 	authFile := filepath.Join(t.TempDir(), "hooks-auth.env")
 	t.Setenv("GRAM_HOOKS_AUTH_FILE", authFile)
-	t.Setenv("GRAM_HOOKS_LOGIN_TIMEOUT_SECONDS", "10")
+	t.Setenv("GRAM_HOOKS_LOGIN_TIMEOUT_SECONDS", "1")
 	t.Setenv("GRAM_HOOKS_API_KEY", "")
 	forceInteractiveEnv(t)
 
@@ -119,12 +152,11 @@ func TestLoginLegacyGETRoundtrip(t *testing.T) {
 	}
 
 	cfg := Config{ServerURL: "https://app.example.test", ProjectSlug: "acme", OrgID: "", HooksAPIKey: "", BrowserLogin: true, Nonblocking: false, DebugLog: "", ConfigPath: "", ConfigError: ""}
-	require.NoError(t, NewRelay(cfg).Login(t.Context(), true))
-
+	err := NewRelay(cfg).Login(t.Context(), true)
+	require.ErrorContains(t, err, "timed out waiting for browser sign-in")
 	values, err := readAuthFile(authFile)
 	require.NoError(t, err)
-	require.Equal(t, "legacy-key", values["api_key"])
-	require.Equal(t, "legacy-project", values["project"])
+	require.Empty(t, values)
 }
 
 func TestLoginDisabledPointsToManualKey(t *testing.T) {

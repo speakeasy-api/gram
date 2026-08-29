@@ -13748,7 +13748,7 @@ paths:
             x-speakeasy-name-override: revoke
     /rpc/cliAuth.authorize:
         post:
-            description: Mint a short-lived one-time code bound to a PKCE code_challenge, on behalf of the authenticated dashboard user. Resolves the target project (given slug, else the org's default/first project) and records {user, org, project, scopes:[agent,hooks], challenge} against the code with a ~5 minute TTL. Requires a member-available session (org:read); NOT org-admin. Refused (403) while impersonating an organization or user, or without membership in the active org.
+            description: Mint a short-lived one-time code bound to a PKCE code_challenge, on behalf of the authenticated dashboard user. Resolves the target project (given slug, else the org's default/first project) and records {user, org, project, scopes, challenge} against the code with a ~5 minute TTL. The ordinary scope is [agent_user]; proof-bound hooks relay enrollment adds [hooks]. Requires a member-available session (org:read); NOT org-admin. Refused (403) while impersonating an organization or user, or without membership in the active org.
             operationId: cliAuthAuthorize
             parameters:
                 - allowEmptyValue: true
@@ -13833,7 +13833,7 @@ paths:
             x-speakeasy-name-override: authorize
     /rpc/cliAuth.redeem:
         post:
-            description: 'Exchange a one-time code plus its PKCE code_verifier for a freshly minted per-user [agent,hooks] API key. No session or API-key auth: proving knowledge of the code_verifier that matches the stored challenge IS the credential. The code is single-use — consumed atomically on lookup — so any missing/expired/already-consumed code or PKCE mismatch returns 401. The raw key is returned exactly once and never again.'
+            description: 'Exchange a one-time code plus its PKCE code_verifier for a freshly minted per-user [agent_user] API key, with [hooks] added for proof-bound relay enrollment. No session or API-key auth: proving knowledge of the code_verifier that matches the stored challenge IS the credential. The code is single-use — consumed atomically on lookup — so any missing/expired/already-consumed code or PKCE mismatch returns 401. The raw key is returned exactly once and never again.'
             operationId: cliAuthRedeem
             requestBody:
                 content:
@@ -20869,6 +20869,27 @@ paths:
                   schema:
                     description: Set when the event is redelivered from a device's offline spool after control-plane downtime, under its original Idempotency-Key and occurred_at.
                     type: boolean
+                - allowEmptyValue: true
+                  description: True only for a synthetic prompt recovered after its live checkpoint; backfilled prompts are observational and never governed.
+                  in: header
+                  name: X-Gram-Backfilled
+                  schema:
+                    description: True only for a synthetic prompt recovered after its live checkpoint; backfilled prompts are observational and never governed.
+                    type: boolean
+                - allowEmptyValue: true
+                  description: Opaque Gram-signed, proof-minted acting-user assertion for one governed live invocation.
+                  in: header
+                  name: X-Gram-Acting-User
+                  schema:
+                    description: Opaque Gram-signed, proof-minted acting-user assertion for one governed live invocation.
+                    type: string
+                - allowEmptyValue: true
+                  description: Exact acting-user delegation contract used by the assertion.
+                  in: header
+                  name: X-Gram-Acting-User-Contract
+                  schema:
+                    description: Exact acting-user delegation contract used by the assertion.
+                    type: string
             requestBody:
                 content:
                     application/json:
@@ -64795,9 +64816,20 @@ components:
                     description: PKCE challenge method. Only S256 is supported.
                     enum:
                         - S256
+                delegation_contract_version:
+                    type: string
+                    description: Required hooks acting-user contract version when proof_public_key is present.
+                    enum:
+                        - hooks-acting-user.v1
                 project_slug:
                     type: string
                     description: Optional project slug to scope the minted key to. Defaults to the org's default (first) project when omitted.
+                proof_public_key:
+                    type: string
+                    description: Optional base64url Ed25519 public key. When present, redeem also returns a proof-bound hooks delegation refresh credential.
+                    pattern: ^[A-Za-z0-9_-]{43}$
+                    minLength: 43
+                    maxLength: 43
             required:
                 - code_challenge
                 - code_challenge_method
@@ -78688,7 +78720,13 @@ components:
             properties:
                 access_token:
                     type: string
-                    description: The raw gram_ API key, carrying the [agent,hooks] scopes. Returned exactly once.
+                    description: The raw gram_ API key, carrying [agent_user] and, for proof-bound relay enrollment, [hooks]. Returned exactly once.
+                delegation_refresh_token:
+                    type: string
+                    description: Server-signed refresh credential bound to the enrolled Ed25519 public key. It cannot mint an assertion without proof of the private key.
+                organization_id:
+                    type: string
+                    description: Organization bound by the authenticated enrollment session. Present for proof-bound hook enrollment.
                 project_slug:
                     type: string
                     description: Slug of the project the key is scoped to.
@@ -89329,7 +89367,7 @@ tags:
     - name: chatSessions
       description: Manages chat session tokens for client-side authentication
     - name: cliAuth
-      description: Interactive device-agent enrollment via a PKCE one-time-code exchange. authorize (dashboard session) mints a short-lived code bound to a PKCE challenge; redeem (no auth — the code+verifier pair is the credential) exchanges it once for a per-user [agent,hooks] API key.
+      description: Interactive device-agent enrollment via a PKCE one-time-code exchange. authorize (dashboard session) mints a short-lived code bound to a PKCE challenge; redeem (no auth — the code+verifier pair is the credential) exchanges it once for a per-user [agent_user] API key. Proof-bound hooks relay enrollment also grants [hooks].
     - name: deployments
       description: Manages deployments of tools from upstream sources.
     - name: deviceIntegrations

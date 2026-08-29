@@ -2,6 +2,7 @@ package hooks
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -178,4 +179,18 @@ func (c *localSessionCache) Set(ctx context.Context, key string, value any, ttl 
 		return fmt.Errorf("set in cache: %w", err)
 	}
 	return nil
+}
+
+// SetIfAbsent preserves conditional-write support through the local metadata
+// fallback wrapper. Governance outcomes rely on first-writer-wins semantics.
+func (c *localSessionCache) SetIfAbsent(ctx context.Context, key string, value any, ttl time.Duration) (bool, error) {
+	conditional, ok := c.Cache.(cache.ConditionalCache)
+	if !ok {
+		return false, errors.New("underlying cache does not support conditional writes")
+	}
+	stored, err := conditional.SetIfAbsent(ctx, key, value, ttl)
+	if err != nil {
+		return false, fmt.Errorf("set if absent in cache: %w", err)
+	}
+	return stored, nil
 }

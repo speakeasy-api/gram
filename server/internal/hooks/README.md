@@ -7,7 +7,7 @@ The hooks service supports two hook generations:
 
 ## Unified Ingest
 
-`/rpc/hooks.ingest` is the stable backend contract for hooks. It is authenticated only with `Gram-Key` and `Gram-Project` using the `hooks` key scope. The backend attributes all events to the authenticated token owner from `AuthContext`; source-reported user fields are not used for identity.
+`/rpc/hooks.ingest` is the stable backend contract for hooks. It uses `Gram-Key` and `Gram-Project` with the `hooks` key scope for transport authentication. Source-reported user fields are not authoritative. Approved live `ai_access` checkpoints additionally require a short-lived, proof-bound acting-user assertion and revalidate active organization membership.
 
 The payload is feature-first:
 
@@ -33,6 +33,12 @@ or:
 ```
 
 Generated hooks translate that response into the local provider response shape.
+
+## AI Access Enforcement Coverage
+
+`ai_access` enforcement is limited to live Claude Code and Codex `UserPromptSubmit` and `PreToolUse` events sent through unified ingest by a relay implementing `hooks-acting-user.v1`. It excludes `PermissionRequest`, replayed or backfilled activity, legacy endpoints, and all other providers and events. No released relay version is claimed until the proof-bound relay ships.
+
+The real-client E2E suite records its exact binaries in `artifacts/ai-access-versions.json`. On macOS 26.5.2 arm64, the validated development relay reported `speakeasy-hooks dev`; the native clients were Claude Code 2.1.250 and Codex CLI 0.150.1. These are tested versions and platform details, not minimum supported-version claims. Without valid browser-session enrollment and per-invocation proof, a covered live action fails closed with the identity-verification denial.
 
 ## Legacy Compatibility
 

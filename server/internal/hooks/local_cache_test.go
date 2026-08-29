@@ -13,6 +13,25 @@ import (
 	projectsRepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 )
 
+func TestLocalSessionCache_PreservesConditionalWrites(t *testing.T) {
+	t.Parallel()
+	_, ti := newTestHooksService(t)
+	localCache := NewLocalSessionCache(cache.NewRedisCacheAdapter(ti.redisClient), ti.conn)
+	conditional, ok := localCache.(cache.ConditionalCache)
+	require.True(t, ok)
+
+	key := "conditional-key:" + uuid.NewString()
+	stored, err := conditional.SetIfAbsent(t.Context(), key, "first", time.Minute)
+	require.NoError(t, err)
+	require.True(t, stored)
+	stored, err = conditional.SetIfAbsent(t.Context(), key, "second", time.Minute)
+	require.NoError(t, err)
+	require.False(t, stored)
+	var value string
+	require.NoError(t, localCache.Get(t.Context(), key, &value))
+	require.Equal(t, "first", value)
+}
+
 func TestLocalSessionCache_FallbackIncludesOrganizationUser(t *testing.T) {
 	t.Parallel()
 

@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/speakeasy-api/gram/hooks/delegation"
 	sdk "github.com/speakeasy-api/gram/hooks/sdk"
 	"github.com/speakeasy-api/gram/hooks/sdk/models/apierrors"
 	"github.com/speakeasy-api/gram/hooks/sdk/models/components"
@@ -107,18 +108,22 @@ type client struct {
 	replayed bool
 }
 
+func newRelayHTTPClient(timeout time.Duration) *http.Client {
+	return &http.Client{
+		Timeout:   timeout,
+		Transport: &deviceTransport{base: http.DefaultTransport},
+		CheckRedirect: func(_ *http.Request, _ []*http.Request) error {
+			return http.ErrUseLastResponse
+		},
+	}
+}
+
 func newClient(serverURL string) *client {
 	return &client{
 		budget: sendBudget,
 		sdk: sdk.New(
 			sdk.WithServerURL(strings.TrimRight(serverURL, "/")),
-			sdk.WithClient(&http.Client{
-				Timeout:   perAttemptTime,
-				Transport: &deviceTransport{base: http.DefaultTransport},
-				CheckRedirect: func(_ *http.Request, _ []*http.Request) error {
-					return http.ErrUseLastResponse
-				},
-			}),
+			sdk.WithClient(newRelayHTTPClient(perAttemptTime)),
 			// Retries cover connection errors and 429/5xx; the SDK rewinds the
 			// request body per attempt, so the Idempotency-Key header minted in
 			// send is reused across redeliveries. The elapsed cap keeps the
@@ -192,18 +197,32 @@ func (cl *client) uploadSkillContent(ctx context.Context, c creds, rawSHA256, co
 // original key, and the server dedupes it against any partially delivered
 // original.
 func (cl *client) send(ctx context.Context, c creds, body components.IngestRequestBody, idemKey string) ingestResult {
+	return cl.sendWithAssertion(ctx, c, body, idemKey, "", false)
+}
+
+func (cl *client) sendWithAssertion(ctx context.Context, c creds, body components.IngestRequestBody, idemKey, actingUserAssertion string, backfilled bool) ingestResult {
 	ctx, cancel := context.WithTimeout(ctx, cl.budget)
 	defer cancel()
 
 	req := operations.IngestHookEventRequest{
-		GramKey:        new(c.APIKey),
-		GramProject:    nil,
-		IdempotencyKey: new(idemKey),
-		XGramReplayed:  nil,
-		Body:           body,
+		GramKey:                 new(c.APIKey),
+		GramProject:             nil,
+		IdempotencyKey:          new(idemKey),
+		XGramReplayed:           nil,
+		XGramBackfilled:         nil,
+		XGramActingUser:         nil,
+		XGramActingUserContract: nil,
+		Body:                    body,
 	}
 	if cl.replayed {
 		req.XGramReplayed = new(true)
+	}
+	if backfilled {
+		req.XGramBackfilled = new(true)
+	}
+	if actingUserAssertion != "" {
+		req.XGramActingUser = new(actingUserAssertion)
+		req.XGramActingUserContract = new(delegation.ContractVersion)
 	}
 	if c.Project != "" {
 		req.GramProject = new(c.Project)

@@ -694,7 +694,7 @@ func TestIngest_InferredSkillEmitsDerivedTelemetryRow(t *testing.T) {
 
 	timestamp := time.Now().UTC().Add(-time.Minute).Truncate(time.Second)
 	occurredAt := timestamp.Format(time.RFC3339Nano)
-	raw := "PreToolUse"
+	raw := "ObservedPreToolUse"
 	toolName := "Bash"
 	toolID := "call_skill_read"
 	payload := canonicalIngestPayload("codex", "tool.requested", "codex-skill-session")
@@ -777,7 +777,7 @@ func TestIngest_SkillRowSurvivesToolIOScrub(t *testing.T) {
 
 	timestamp := time.Now().UTC().Add(-time.Minute).Truncate(time.Second)
 	occurredAt := timestamp.Format(time.RFC3339Nano)
-	raw := "PreToolUse"
+	raw := "ObservedPreToolUse"
 	toolName := "Bash"
 	toolID := "call_scrubbed_skill_read"
 	payload := canonicalIngestPayload("codex", "tool.requested", "codex-scrubbed-skill-session")

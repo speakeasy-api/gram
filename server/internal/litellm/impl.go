@@ -173,11 +173,14 @@ func (s *Service) ingestRequest(ctx context.Context, payload *gen.IngestPayload,
 	}
 
 	hookPayload := &hooksgen.IngestPayload{
-		ApikeyToken:      nil,
-		ProjectSlugInput: nil,
-		Replayed:         nil,
-		SchemaVersion:    "hook.ingest.v1",
-		IdempotencyKey:   &idempotencyKey,
+		ApikeyToken:               nil,
+		ProjectSlugInput:          nil,
+		Replayed:                  nil,
+		Backfilled:                nil,
+		ActingUserAssertion:       nil,
+		ActingUserContractVersion: nil,
+		SchemaVersion:             "hook.ingest.v1",
+		IdempotencyKey:            &idempotencyKey,
 		Source: &hooksgen.HookIngestSource{
 			Adapter:        "litellm",
 			AdapterVersion: conv.PtrEmpty(version),
@@ -303,11 +306,14 @@ func (s *Service) ingestResponse(ctx context.Context, payload *gen.IngestPayload
 	idempotencyKey := "litellm:" + callID + ":response"
 	role := "assistant"
 	hookPayload := &hooksgen.IngestPayload{
-		ApikeyToken:      nil,
-		ProjectSlugInput: nil,
-		Replayed:         nil,
-		SchemaVersion:    "hook.ingest.v1",
-		IdempotencyKey:   &idempotencyKey,
+		ApikeyToken:               nil,
+		ProjectSlugInput:          nil,
+		Replayed:                  nil,
+		Backfilled:                nil,
+		ActingUserAssertion:       nil,
+		ActingUserContractVersion: nil,
+		SchemaVersion:             "hook.ingest.v1",
+		IdempotencyKey:            &idempotencyKey,
 		Source: &hooksgen.HookIngestSource{
 			Adapter:        "litellm",
 			AdapterVersion: conv.PtrEmpty(version),

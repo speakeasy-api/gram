@@ -3,7 +3,7 @@
 //MISE dir="{{ config_root }}"
 //USAGE flag "--project <slug>" default="default" help="Project slug to test against."
 //USAGE flag "--providers <list>" default="claude,cursor,codex,opencode,copilot" help="Comma-separated providers to drive: claude,cursor,codex,opencode,copilot."
-//USAGE flag "--suites <list>" default="capture,shadow-mcp,ratchet" help="Comma-separated feature suites to run: capture,shadow-mcp,ratchet."
+//USAGE flag "--suites <list>" default="capture,shadow-mcp,ratchet" help="Comma-separated feature suites to run: capture,shadow-mcp,ratchet,ai-access."
 //USAGE flag "--timeout-seconds <seconds>" default="180" help="Timeout per provider scenario."
 //USAGE flag "--poll-seconds <seconds>" default="90" help="How long to poll Gram telemetry and database evidence."
 //USAGE flag "--keep-artifacts" help="Keep the temp workspace and built plugin artifacts."
@@ -22,7 +22,6 @@ import { pathToFileURL } from "node:url";
 import { intro, log, outro } from "@clack/prompts";
 import { GramCore } from "#gram/client/core.js";
 import { authInfo } from "#gram/client/funcs/authInfo.js";
-import { keysCreate } from "#gram/client/funcs/keysCreate.js";
 const VALID_PROVIDERS = new Set([
   "claude",
   "cursor",
@@ -30,7 +29,7 @@ const VALID_PROVIDERS = new Set([
   "opencode",
   "copilot",
 ]);
-const VALID_SUITES = new Set(["capture", "shadow-mcp", "ratchet"]);
+const VALID_SUITES = new Set(["capture", "shadow-mcp", "ratchet", "ai-access"]);
 const SOURCE_ALIASES = {
   claude: ["claude", "claude-code"],
   cursor: ["cursor"],
@@ -78,7 +77,19 @@ function parseArgs(argv) {
   }
   for (const s of suites) {
     if (!VALID_SUITES.has(s)) {
-      throw new Error(`Unsupported suite "${s}". Use capture,shadow-mcp.`);
+      throw new Error(
+        `Unsupported suite "${s}". Use capture,shadow-mcp,ratchet,ai-access.`,
+      );
+    }
+  }
+  if (suites.includes("ai-access")) {
+    const unsupported = providers.filter(
+      (provider) => provider !== "claude" && provider !== "codex",
+    );
+    if (unsupported.length > 0) {
+      throw new Error(
+        `Suite ai-access supports only claude,codex; unsupported: ${unsupported.join(",")}`,
+      );
     }
   }
   return {
@@ -184,36 +195,90 @@ async function getSessionInfo(serverURL, projectSlug) {
     userEmail: session.userEmail,
   };
 }
-// provisionHooksAuth mints a hooks-scoped API key and writes it to a cache
-// file in the run's temp dir. Every provider spawn points GRAM_HOOKS_AUTH_FILE
-// at it so runs never depend on ambient credentials from the developer's
-// ~/.config/gram/hooks-auth.env — that ambient fallback is exactly how an
-// unauthenticatable plugin once passed E2E locally.
+// provisionHooksAuth performs the same session-authenticated PKCE exchange
+// as a real relay login and enrolls an Ed25519 proof key. Governed Claude/Codex
+// actions must never be exercised with a bare API key fixture.
 async function provisionHooksAuth(serverURL, session, projectSlug, rootDir) {
-  const gram = new GramCore({ serverURL });
-  const keyRes = await keysCreate(
-    gram,
-    {
-      createKeyForm: { name: `hooks-e2e-${Date.now()}`, scopes: ["hooks"] },
-    },
-    { sessionHeaderGramSession: session.sessionId },
-  );
-  if (!keyRes.ok) {
-    fail(`keys.create failed: ${JSON.stringify(keyRes.error)}`);
+  const verifier = crypto.randomBytes(48).toString("base64url");
+  const challenge = crypto
+    .createHash("sha256")
+    .update(verifier)
+    .digest("base64url");
+  const { publicKey, privateKey } = crypto.generateKeyPairSync("ed25519");
+  const publicJWK = publicKey.export({ format: "jwk" });
+  const privateJWK = privateKey.export({ format: "jwk" });
+  if (!publicJWK.x || !privateJWK.d) {
+    fail("Node did not export the Ed25519 proof key as JWK");
   }
+  const authorizeRes = await fetchOrFail(
+    new URL("/rpc/cliAuth.authorize", serverURL),
+    {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "gram-session": session.sessionId,
+      },
+      body: JSON.stringify({
+        code_challenge: challenge,
+        code_challenge_method: "S256",
+        project_slug: projectSlug,
+        proof_public_key: publicJWK.x,
+        delegation_contract_version: "hooks-acting-user.v1",
+      }),
+    },
+    "authorize proof-bound hooks enrollment",
+  );
+  if (!authorizeRes.ok) {
+    fail(
+      `cliAuth.authorize failed (${authorizeRes.status}): ${await authorizeRes.text()}`,
+    );
+  }
+  const authorized = await authorizeRes.json();
+  const redeemRes = await fetchOrFail(
+    new URL("/rpc/cliAuth.redeem", serverURL),
+    {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ code: authorized.code, code_verifier: verifier }),
+    },
+    "redeem proof-bound hooks enrollment",
+  );
+  if (!redeemRes.ok) {
+    fail(
+      `cliAuth.redeem failed (${redeemRes.status}): ${await redeemRes.text()}`,
+    );
+  }
+  const redeemed = await redeemRes.json();
+  if (
+    !redeemed.access_token ||
+    !redeemed.delegation_refresh_token ||
+    !redeemed.organization_id
+  ) {
+    fail("cliAuth.redeem omitted proof-bound hooks credentials");
+  }
+  // Go's ed25519.PrivateKey is the 32-byte seed followed by the 32-byte public
+  // key. JWK exports those components separately.
+  const encodedPrivateKey = Buffer.concat([
+    Buffer.from(privateJWK.d, "base64url"),
+    Buffer.from(publicJWK.x, "base64url"),
+  ]).toString("base64url");
   const authFile = path.join(rootDir, "hooks-auth.env");
   await fs.writeFile(
     authFile,
     [
       `server_url=${serverURL}`,
-      `api_key=${keyRes.value.key}`,
+      `api_key=${redeemed.access_token}`,
       `project=${projectSlug}`,
-      `email=${session.userEmail}`,
+      `email=${redeemed.user_email}`,
+      `org=${redeemed.organization_id}`,
+      `delegation_refresh_token=${redeemed.delegation_refresh_token}`,
+      `proof_private_key=${encodedPrivateKey}`,
+      "delegation_contract_version=hooks-acting-user.v1",
       "",
     ].join("\n"),
     { mode: 0o600 },
   );
-  return { authFile, key: keyRes.value.key };
+  return { authFile, key: redeemed.access_token };
 }
 function psqlArgs(sql) {
   const databaseURL = process.env.GRAM_DATABASE_URL;
@@ -423,16 +488,20 @@ async function runProcess(command, args, opts = {}) {
 // session_capture gates hook ingest; logs gates telemetry_logs writes; skills
 // enables content capture. Keep metadata-only disabled so the E2E exercises
 // the upload path.
-async function setProductFeature(serverURL, sessionId, featureName, enabled) {
+async function setProductFeature(serverURL, session, featureName, enabled) {
   const res = await fetchOrFail(
     `${serverURL}/rpc/productFeatures.set`,
     {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "Gram-Session": sessionId,
+        "Gram-Session": session.sessionId,
       },
-      body: JSON.stringify({ feature_name: featureName, enabled }),
+      body: JSON.stringify({
+        organization_id: session.organizationId,
+        feature_name: featureName,
+        enabled,
+      }),
     },
     `set ${featureName}=${enabled}`,
   );
@@ -459,12 +528,12 @@ async function enableSessionCapture(serverURL, session) {
   try {
     await setProductFeature(
       serverURL,
-      session.sessionId,
+      session,
       "skill_capture_metadata_only",
       false,
     );
     for (const feature of ["session_capture", "logs", "skills"]) {
-      await setProductFeature(serverURL, session.sessionId, feature, true);
+      await setProductFeature(serverURL, session, feature, true);
     }
   } catch (err) {
     await restoreSessionCapture(serverURL, session, previous);
@@ -484,7 +553,7 @@ async function restoreSessionCapture(serverURL, session, previousFeatures) {
     try {
       await setProductFeature(
         serverURL,
-        session.sessionId,
+        session,
         feature,
         previous.has(feature),
       );
@@ -519,6 +588,39 @@ async function buildHookBinary(artifactsDir) {
   ]);
   hookBinaryPath = binary;
   return binary;
+}
+function exactVersionOutput(result, label) {
+  const output = [result.stdout, result.stderr]
+    .filter((value) => value.trim() !== "")
+    .join("\n")
+    .trim();
+  if (output === "") {
+    fail(`${label} returned an empty version`);
+  }
+  return { command: result.command, output };
+}
+async function reportAIAccessVersions(args) {
+  const relayBinary = await buildHookBinary(args.artifactsDir);
+  const relay = exactVersionOutput(
+    await runChecked(relayBinary, ["version"]),
+    "built relay",
+  );
+  const clients = {};
+  for (const provider of args.providers) {
+    const result =
+      provider === "codex"
+        ? await runChecked(await resolveCodexBinary(), ["--version"], {
+            env: args.codexEnv,
+          })
+        : await runChecked("claude", ["--version"]);
+    clients[provider] = exactVersionOutput(result, `${provider} client`);
+  }
+  const versions = { relay, clients };
+  await fs.writeFile(
+    path.join(args.artifactsDir, "ai-access-versions.json"),
+    `${JSON.stringify(versions, null, 2)}\n`,
+  );
+  log.info(`ai-access exact versions: ${JSON.stringify(versions)}`);
 }
 async function buildProviderPlugin(args) {
   // Codex has no plugin layout for hooks: the config installs directly into
@@ -2222,6 +2324,58 @@ function extractRiskPolicyBypassToken(res) {
 function commandOutput(res) {
   return `${res.stdout}\n${res.stderr}`;
 }
+function jsonLines(text) {
+  const values = [];
+  for (const line of text.split(/\r?\n/)) {
+    const trimmed = line.trim();
+    if (!trimmed) continue;
+    try {
+      values.push(JSON.parse(trimmed));
+    } catch {
+      // Provider stderr is not consistently JSON.
+    }
+  }
+  return values;
+}
+function outputHasAssistantMarker(res, marker) {
+  return jsonLines(res.stdout).some((value) => {
+    if (value?.type === "assistant") {
+      return JSON.stringify(value).includes(marker);
+    }
+    return (
+      value?.type === "item.completed" &&
+      value?.item?.type === "agent_message" &&
+      String(value.item.text ?? "").includes(marker)
+    );
+  });
+}
+function outputProvesNativePromptDenial(provider, res, note) {
+  const values = jsonLines(res.stdout);
+  if (provider === "claude") {
+    return values.some(
+      (value) =>
+        value?.type === "system" &&
+        value?.subtype === "informational" &&
+        value?.prevent_continuation === true &&
+        String(value.content ?? "").includes(note),
+    );
+  }
+  if (provider === "codex") {
+    const completedWithoutModel = values.some(
+      (value) =>
+        value?.type === "turn.completed" &&
+        value?.usage?.input_tokens === 0 &&
+        value?.usage?.output_tokens === 0,
+    );
+    const startedWork = values.some(
+      (value) =>
+        value?.item?.type === "agent_message" ||
+        value?.item?.type === "command_execution",
+    );
+    return completedWithoutModel && !startedWork;
+  }
+  return false;
+}
 function outputHasFinalMarker(res, marker, verdict) {
   const target = `GRAM_HOOKS_E2E_${verdict} ${marker}`;
   for (const line of res.stdout.split(/\r?\n/)) {
@@ -2833,7 +2987,7 @@ async function runSkillUploadControlSuite(args) {
 
     await setProductFeature(
       args.serverURL,
-      args.session.sessionId,
+      args.session,
       "skill_capture_metadata_only",
       true,
     );
@@ -2888,7 +3042,7 @@ async function runSkillUploadControlSuite(args) {
       cleanups.push(
         setProductFeature(
           args.serverURL,
-          args.session.sessionId,
+          args.session,
           "skill_capture_metadata_only",
           false,
         ),
@@ -2919,6 +3073,205 @@ function providerEnv(provider, args) {
   }
   return undefined;
 }
+async function prepareAIAccessInput(workdir, runId, provider) {
+  const marker = `GRAM_HOOKS_E2E_TOOL ${runId} ${provider}`;
+  await fs.writeFile(path.join(workdir, `input-${runId}.txt`), `${marker}\n`);
+  return marker;
+}
+async function installAIAccessPrescription(args, resourceKey, externalNote) {
+  const prescriptionId = crypto.randomUUID();
+  const sql = `
+    WITH actor AS (
+      SELECT u.id
+      FROM users u
+      JOIN organization_user_relationships our ON our.user_id = u.id
+      WHERE our.organization_id = '${sqlString(args.session.organizationId)}'
+        AND our.deleted_at IS NULL
+        AND u.email = '${sqlString(args.session.userEmail)}'
+      LIMIT 1
+    ), inserted AS (
+      INSERT INTO killswitch_prescriptions
+        (id, organization_id, definition_key, principal_kind, principal_key, resource_kind, current_version)
+      SELECT '${sqlString(prescriptionId)}'::uuid, '${sqlString(args.session.organizationId)}', 'ai_access', 'user', actor.id, 'hook_activity', 1
+      FROM actor
+      RETURNING id
+    ), versioned AS (
+      INSERT INTO killswitch_prescription_versions
+        (organization_id, prescription_id, version, state, resource_scope, start_mode, starts_at, expires_at, activated_at, internal_note, external_note)
+      SELECT '${sqlString(args.session.organizationId)}', id, 1, 'active', 'selected', 'now', clock_timestamp(), clock_timestamp() + interval '10 minutes', clock_timestamp(),
+             'hooks ai-access E2E ${sqlString(args.runId)}', '${sqlString(externalNote)}'
+      FROM inserted
+      RETURNING prescription_id
+    ), resources AS (
+      INSERT INTO killswitch_prescription_version_resources
+        (organization_id, prescription_id, version, resource_key)
+      SELECT '${sqlString(args.session.organizationId)}', prescription_id, 1, '${sqlString(resourceKey)}'
+      FROM versioned
+      RETURNING 1
+    )
+    SELECT count(*) FROM resources;
+  `;
+  const installed = await runProcess("psql", psqlArgs(sql));
+  if (installed.exitCode !== 0 || installed.stdout.trim() !== "1") {
+    fail(
+      `failed to install ai_access E2E prescription:\n${installed.stderr || installed.stdout}`,
+    );
+  }
+  return async () => {
+    const cleanup = await runProcess(
+      "psql",
+      psqlArgs(
+        `DELETE FROM killswitch_prescriptions WHERE organization_id = '${sqlString(args.session.organizationId)}' AND id = '${sqlString(prescriptionId)}'::uuid;`,
+      ),
+    );
+    if (cleanup.exitCode !== 0) {
+      throw new Error(
+        `failed to remove ai_access E2E prescription: ${cleanup.stderr || cleanup.stdout}`,
+      );
+    }
+  };
+}
+
+async function runAIAccessSuite(args) {
+  const checks = [];
+  const commandResults = [];
+  for (const provider of args.providers) {
+    const allowRunId = `${args.runId}-ai-allow`;
+    const allowToolMarker = await prepareAIAccessInput(
+      args.workdir,
+      allowRunId,
+      provider,
+    );
+    log.info(`${provider}: running ai-access allow scenario`);
+    const allowed = await runProviderScenario({
+      provider,
+      pluginDir: args.pluginDirs.get(provider),
+      workdir: args.workdir,
+      runId: allowRunId,
+      scenario: "success",
+      env: providerEnv(provider, args),
+      timeoutMs: args.timeoutSeconds * 1000,
+    });
+    commandResults.push(allowed);
+    await writeCommandArtifacts(
+      args.artifactsDir,
+      provider,
+      "ai-access-allow",
+      allowed,
+    );
+    const allowMarker = `GRAM_HOOKS_E2E_OK ${allowRunId} ${provider} success`;
+    const allowOutput = `${allowed.stdout}\n${allowed.stderr}`;
+    const allowPassed =
+      allowed.exitCode === 0 &&
+      !allowed.timedOut &&
+      allowOutput.includes(allowToolMarker) &&
+      outputHasAssistantMarker(allowed, allowMarker);
+    checks.push({
+      provider,
+      feature: "ai-access-allow",
+      status: allowPassed ? "PASS" : "FAIL",
+      detail: allowPassed
+        ? "native prompt and tool checkpoints allowed with no matching policy"
+        : `allow scenario failed or omitted marker (exit=${allowed.exitCode}, timedOut=${allowed.timedOut})`,
+    });
+    for (const checkpoint of [
+      {
+        name: "prompt",
+        event: "UserPromptSubmit",
+        resource: `${provider}:user_prompt_submit`,
+      },
+      {
+        name: "tool",
+        event: "PreToolUse",
+        resource: `${provider}:pre_tool_use`,
+      },
+    ]) {
+      const denialRunId = `${args.runId}-ai-${checkpoint.name}`;
+      const toolMarker = await prepareAIAccessInput(
+        args.workdir,
+        denialRunId,
+        provider,
+      );
+      const successMarker = `GRAM_HOOKS_E2E_OK ${denialRunId} ${provider} success`;
+      const note = `GRAM_HOOKS_AI_ACCESS_DENY ${args.runId} ${provider} ${checkpoint.name}`;
+      const cleanup = await installAIAccessPrescription(
+        args,
+        checkpoint.resource,
+        note,
+      );
+      try {
+        log.info(
+          `${provider}: running ai-access ${checkpoint.name} denial scenario`,
+        );
+        const deniedSince = BigInt(Date.now()) * 1000000n;
+        const res = await runProviderScenario({
+          provider,
+          pluginDir: args.pluginDirs.get(provider),
+          workdir: args.workdir,
+          runId: denialRunId,
+          scenario: "success",
+          env: providerEnv(provider, args),
+          timeoutMs: args.timeoutSeconds * 1000,
+        });
+        commandResults.push(res);
+        await writeCommandArtifacts(
+          args.artifactsDir,
+          provider,
+          `ai-access-${checkpoint.name}-deny`,
+          res,
+        );
+        const output = commandOutput(res);
+        const denialIndex = output.indexOf(note);
+        const successIndex = output.indexOf(successMarker);
+        const toolIndex = output.indexOf(toolMarker);
+        const expectedEvent =
+          checkpoint.name === "prompt" ? "prompt.submitted" : "tool.requested";
+        const evidence = await poll(
+          Date.now() + args.pollSeconds * 1000,
+          () => listHookEvidence(args.session.projectId, provider, deniedSince),
+          (rows) =>
+            rows.some(
+              (row) =>
+                row.event === expectedEvent &&
+                String(row.block_reason ?? "").trim() !== "",
+            ),
+        );
+        const serverDenied = evidence.some(
+          (row) =>
+            row.event === expectedEvent &&
+            String(row.block_reason ?? "").trim() !== "",
+        );
+        const clientDenied =
+          checkpoint.name === "prompt"
+            ? outputProvesNativePromptDenial(provider, res, note) &&
+              !outputHasAssistantMarker(res, successMarker)
+            : denialIndex >= 0 && toolIndex < 0;
+        const denialEnforced =
+          res.exitCode === 0 && !res.timedOut && serverDenied && clientDenied;
+        checks.push({
+          provider,
+          feature: `ai-access-${checkpoint.event}`,
+          status: denialEnforced ? "PASS" : "FAIL",
+          detail: denialEnforced
+            ? `server denial produced native client enforcement at live ${checkpoint.event}`
+            : `denial proof invalid (server=${serverDenied}, client=${clientDenied}, denial=${denialIndex}, success=${successIndex}, tool=${toolIndex}, exit=${res.exitCode})`,
+        });
+      } finally {
+        await cleanup();
+      }
+    }
+  }
+  if (checks.length === 0) {
+    checks.push({
+      provider: "n/a",
+      feature: "ai-access",
+      status: "FAIL",
+      detail: "select --providers claude,codex for this suite",
+    });
+  }
+  return { checks, commandResults };
+}
+
 async function runCaptureSuite(args) {
   const commandResults = [];
   const skillFixturesByProvider = new Map();
@@ -3521,6 +3874,9 @@ async function main() {
       hookKey: hooksAuth.key,
       startedUnixNano,
     };
+    if (args.suites.includes("ai-access")) {
+      await reportAIAccessVersions(suiteArgs);
+    }
     if (args.suites.includes("capture")) {
       const result = await runCaptureSuite(suiteArgs);
       allChecks.push(...result.checks);
@@ -3528,6 +3884,11 @@ async function main() {
     }
     if (args.suites.includes("shadow-mcp")) {
       const result = await runShadowMCPSuite(suiteArgs);
+      allChecks.push(...result.checks);
+      commandResults.push(...result.commandResults);
+    }
+    if (args.suites.includes("ai-access")) {
+      const result = await runAIAccessSuite(suiteArgs);
       allChecks.push(...result.checks);
       commandResults.push(...result.commandResults);
     }

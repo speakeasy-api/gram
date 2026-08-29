@@ -7,6 +7,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/speakeasy-api/gram/hooks/delegation"
 )
 
 // credSource records where the effective hooks key came from, which governs
@@ -23,12 +25,15 @@ const (
 
 // creds is the resolved credential used to authenticate an ingest request.
 type creds struct {
-	ServerURL string
-	APIKey    string
-	Project   string
-	Email     string
-	Org       string
-	Source    credSource
+	ServerURL       string
+	APIKey          string
+	Project         string
+	Email           string
+	Org             string
+	RefreshToken    string
+	ProofPrivateKey string
+	ContractVersion string
+	Source          credSource
 }
 
 // authFilePath returns the hooks credential cache location: the
@@ -87,12 +92,15 @@ func readCachedAuth(cfg Config) (creds, bool) {
 		return creds{}, false
 	}
 	c := creds{
-		ServerURL: values["server_url"],
-		APIKey:    values["api_key"],
-		Project:   values["project"],
-		Email:     values["email"],
-		Org:       values["org"],
-		Source:    credCache,
+		ServerURL:       values["server_url"],
+		APIKey:          values["api_key"],
+		Project:         values["project"],
+		Email:           values["email"],
+		Org:             values["org"],
+		RefreshToken:    values["delegation_refresh_token"],
+		ProofPrivateKey: values["proof_private_key"],
+		ContractVersion: values["delegation_contract_version"],
+		Source:          credCache,
 	}
 	if c.APIKey == "" || !sameDeployment(c.ServerURL, c.Org, cfg.ServerURL, cfg.OrgID) {
 		return creds{}, false
@@ -117,6 +125,14 @@ func sameDeployment(gotURL, gotOrg, wantURL, wantOrg string) bool {
 // a different product surface (MCP access) and must not silently authenticate
 // hook telemetry. The second return is false when the machine holds no
 // credential.
+func delegationReady(c creds) bool {
+	if c.Source != credCache || c.ContractVersion != delegation.ContractVersion || strings.TrimSpace(c.RefreshToken) == "" {
+		return false
+	}
+	_, err := delegation.ParsePrivateKey(c.ProofPrivateKey)
+	return err == nil
+}
+
 func resolveAuth(cfg Config) (creds, bool) {
 	apiKey := strings.TrimSpace(os.Getenv("GRAM_HOOKS_API_KEY"))
 	if apiKey != "" {
@@ -155,14 +171,14 @@ func resolveAuth(cfg Config) (creds, bool) {
 // callback must not be able to inject extra keys. Embedded "=" is fine — the
 // parser splits on the first one only.
 func writeAuth(c creds) error {
-	for _, v := range []string{c.ServerURL, c.APIKey, c.Project, c.Email, c.Org} {
+	for _, v := range []string{c.ServerURL, c.APIKey, c.Project, c.Email, c.Org, c.RefreshToken, c.ProofPrivateKey, c.ContractVersion} {
 		if strings.ContainsAny(v, "\r\n") {
 			return fmt.Errorf("credential value contains a line break")
 		}
 	}
 
-	body := fmt.Sprintf("server_url=%s\napi_key=%s\nproject=%s\nemail=%s\norg=%s\n",
-		c.ServerURL, c.APIKey, c.Project, c.Email, c.Org)
+	body := fmt.Sprintf("server_url=%s\napi_key=%s\nproject=%s\nemail=%s\norg=%s\ndelegation_refresh_token=%s\nproof_private_key=%s\ndelegation_contract_version=%s\n",
+		c.ServerURL, c.APIKey, c.Project, c.Email, c.Org, c.RefreshToken, c.ProofPrivateKey, c.ContractVersion)
 	if err := atomicWriteCacheFile(authFilePath(), []byte(body)); err != nil {
 		return err
 	}

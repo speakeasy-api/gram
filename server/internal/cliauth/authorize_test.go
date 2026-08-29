@@ -1,6 +1,10 @@
 package cliauth_test
 
 import (
+	"context"
+	"crypto/ed25519"
+	"crypto/rand"
+	"encoding/json"
 	"strings"
 	"testing"
 
@@ -8,6 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	mockidp "github.com/speakeasy-api/gram/dev-idp/pkg/testidp"
+	"github.com/speakeasy-api/gram/hooks/delegation"
 	gen "github.com/speakeasy-api/gram/server/gen/cli_auth"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/constants"
@@ -39,6 +44,74 @@ func TestAuthorize_MemberSessionSucceeds(t *testing.T) {
 	require.True(t, strings.HasPrefix(redeemed.AccessToken, "gram_local_"))
 	require.Equal(t, mockidp.MockUserEmail, redeemed.UserEmail)
 	require.NotEmpty(t, redeemed.ProjectSlug)
+}
+
+func TestRedeem_InvalidProofEnrollmentDoesNotCreateOrphanAPIKey(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+	verifier, challenge := pkcePair(t)
+	publicKey, _, err := ed25519.GenerateKey(rand.Reader)
+	require.NoError(t, err)
+	encodedPublicKey := delegation.EncodePublicKey(publicKey)
+	contractVersion := delegation.ContractVersion
+	authorized, err := ti.service.Authorize(ctx, &gen.AuthorizePayload{
+		CodeChallenge: challenge, CodeChallengeMethod: "S256",
+		ProofPublicKey: &encodedPublicKey, DelegationContractVersion: &contractVersion,
+	})
+	require.NoError(t, err)
+
+	var before int
+	require.NoError(t, ti.conn.QueryRow(ctx, `SELECT count(*) FROM api_keys`).Scan(&before)) //nolint:glint // notestingrawsql: bounded integration assertion verifies no orphan side effect
+	key := "cliauth:code:" + authorized.Code
+	raw, err := ti.redis.Get(ctx, key).Bytes()
+	require.NoError(t, err)
+	var record map[string]any
+	require.NoError(t, json.Unmarshal(raw, &record))
+	record["proof_public_key"] = "invalid"
+	raw, err = json.Marshal(record)
+	require.NoError(t, err)
+	require.NoError(t, ti.redis.Set(ctx, key, raw, 0).Err())
+
+	_, err = ti.service.Redeem(ctx, &gen.RedeemPayload{Code: authorized.Code, CodeVerifier: verifier})
+	requireOopsCode(t, err, oops.CodeUnauthorized)
+	var after int
+	require.NoError(t, ti.conn.QueryRow(ctx, `SELECT count(*) FROM api_keys`).Scan(&after)) //nolint:glint // notestingrawsql: bounded integration assertion verifies no orphan side effect
+	require.Equal(t, before, after, "refresh validation must precede the API-key side effect")
+}
+
+func TestAuthorize_RejectsStaleSessionMembership(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	authCtx.UserID = "removed-user-" + uuid.NewString()
+
+	_, challenge := pkcePair(t)
+	_, err := ti.service.Authorize(ctx, &gen.AuthorizePayload{CodeChallenge: challenge, CodeChallengeMethod: "S256"})
+	requireOopsCode(t, err, oops.CodeForbidden)
+}
+
+func TestRedeem_RevalidatesMembershipAfterAtomicConsume(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+	verifier, challenge := pkcePair(t)
+	authorized, err := ti.service.Authorize(ctx, &gen.AuthorizePayload{CodeChallenge: challenge, CodeChallengeMethod: "S256"})
+	require.NoError(t, err)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	_, err = ti.conn.Exec(ctx, `UPDATE organization_user_relationships SET deleted_at = clock_timestamp() WHERE organization_id = $1 AND user_id = $2`, authCtx.ActiveOrganizationID, authCtx.UserID) //nolint:glint // notestingrawsql: isolated integration fixture must simulate membership removal
+	require.NoError(t, err)
+	t.Cleanup(func() {
+		_, restoreErr := ti.conn.Exec(context.Background(), `UPDATE organization_user_relationships SET deleted_at = NULL WHERE organization_id = $1 AND user_id = $2`, authCtx.ActiveOrganizationID, authCtx.UserID) //nolint:glint // notestingrawsql: restore isolated membership fixture during cleanup
+		require.NoError(t, restoreErr)
+	})
+
+	_, err = ti.service.Redeem(ctx, &gen.RedeemPayload{Code: authorized.Code, CodeVerifier: verifier})
+	requireOopsCode(t, err, oops.CodeUnauthorized)
+	_, err = ti.conn.Exec(ctx, `UPDATE organization_user_relationships SET deleted_at = NULL WHERE organization_id = $1 AND user_id = $2`, authCtx.ActiveOrganizationID, authCtx.UserID) //nolint:glint // notestingrawsql: isolated integration fixture restores membership to test consumed-code replay
+	require.NoError(t, err)
+	_, err = ti.service.Redeem(ctx, &gen.RedeemPayload{Code: authorized.Code, CodeVerifier: verifier})
+	requireOopsCode(t, err, oops.CodeUnauthorized)
 }
 
 // An admin impersonating the active org via a support session is refused.

@@ -421,16 +421,20 @@ var _ = Service("hooks", func() {
 	Method("ingest", func() {
 		Description("Feature-first unified endpoint for hook events from supported coding assistants.")
 
-		// Gram-Key + Gram-Project are OPTIONAL: hook senders must stay
-		// non-blocking for machines that never signed in. A request with no
-		// key is acknowledged without processing (fail open); a request that
-		// presents a key gets it validated and receives a 401 on rejection so
-		// the sender's credential-recovery path can react.
+		// Gram-Key + Gram-Project remain optional for observational and legacy
+		// events: a request with no key is acknowledged without processing. The
+		// approved live Claude/Codex prompt and tool checkpoints are the exception
+		// and fail closed unless the relay supplies verified acting-user identity.
+		// A presented but rejected key still receives a 401 so the sender's
+		// credential-recovery path can react.
 		Payload(func() {
 			Extend(IngestHookPayload)
 			Attribute("apikey_token", String, "Optional API key for plugin-driven attribution.")
 			Attribute("project_slug_input", String, "Optional project slug for plugin-driven attribution.")
 			Attribute("replayed", Boolean, "Set when the event is redelivered from a device's offline spool after control-plane downtime, under its original Idempotency-Key and occurred_at.")
+			Attribute("backfilled", Boolean, "True only for a synthetic prompt recovered after its live checkpoint; backfilled prompts are observational and never governed.")
+			Attribute("acting_user_assertion", String, "Opaque Gram-signed, proof-minted acting-user assertion for one governed live invocation.")
+			Attribute("acting_user_contract_version", String, "Exact acting-user delegation contract used by the assertion.")
 		})
 
 		Result(IngestHookResult)
@@ -441,6 +445,9 @@ var _ = Service("hooks", func() {
 			Header("project_slug_input:Gram-Project")
 			Header("idempotency_key:Idempotency-Key")
 			Header("replayed:X-Gram-Replayed")
+			Header("backfilled:X-Gram-Backfilled")
+			Header("acting_user_assertion:X-Gram-Acting-User")
+			Header("acting_user_contract_version:X-Gram-Acting-User-Contract")
 		})
 
 		Meta("openapi:operationId", "ingestHookEvent")

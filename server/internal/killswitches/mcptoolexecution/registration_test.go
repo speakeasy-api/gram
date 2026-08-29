@@ -35,10 +35,10 @@ func TestMCPToolExecutionRegistration(t *testing.T) {
 	require.True(t, ok)
 	require.Equal(t, killswitches.FailurePolicyFailClosed, aiDefinition.FailurePolicy)
 	require.Equal(t, []killswitches.PrincipalKind{PrincipalKindUser}, aiDefinition.PrincipalKinds)
-	require.Equal(t, []killswitches.ResourceKind{ResourceKindMCPServer}, aiDefinition.ResourceKinds)
-	require.Equal(t, IdentityContractKeyAuthenticatedUserMCPServer, aiDefinition.IdentityContract)
-	require.Equal(t, []killswitches.Surface{SurfaceHostedToolsCall, SurfacePrivateProxyToolsCall}, aiDefinition.Surfaces)
-	require.Equal(t, []killswitches.TransportAdapterKey{TransportAdapterHostedJSONRPC, TransportAdapterPrivateProxyJSONRPC}, aiDefinition.TransportAdapters)
+	require.ElementsMatch(t, []killswitches.ResourceKind{ResourceKindMCPServer, ResourceKindHookActivity}, aiDefinition.ResourceKinds)
+	require.Equal(t, IdentityContractKeyAuthenticatedUserAIResource, aiDefinition.IdentityContract)
+	require.ElementsMatch(t, []killswitches.Surface{SurfaceHostedToolsCall, SurfacePrivateProxyToolsCall, SurfaceClaudeUserPromptSubmit, SurfaceClaudePreToolUse, SurfaceCodexUserPromptSubmit, SurfaceCodexPreToolUse}, aiDefinition.Surfaces)
+	require.ElementsMatch(t, []killswitches.TransportAdapterKey{TransportAdapterHostedJSONRPC, TransportAdapterPrivateProxyJSONRPC, TransportAdapterHookNative}, aiDefinition.TransportAdapters)
 	require.Equal(t, DefaultAIAccessExternalNote, aiDefinition.DefaultExternalNote)
 	require.NotEqual(t, definition.DefaultExternalNote, aiDefinition.DefaultExternalNote)
 	require.Equal(t, EnforcementOwner, aiDefinition.EnforcementOwner)
@@ -61,19 +61,23 @@ func TestMCPCoverageInventory(t *testing.T) {
 	require.NoError(t, err)
 
 	inventory := registry.CoverageInventory()
-	require.Len(t, inventory, 4)
+	require.Len(t, inventory, 8)
 	coverageByDefinition := map[killswitches.DefinitionKey][]killswitches.Surface{}
 	for _, contract := range inventory {
 		coverageByDefinition[contract.Definition] = append(coverageByDefinition[contract.Definition], contract.Surface)
 		require.Equal(t, killswitches.FailurePolicyFailClosed, contract.FailurePolicy)
-		require.Equal(t, IdentityContractKeyAuthenticatedUserMCPServer, contract.IdentityContract)
+		if contract.Definition == DefinitionKeyAIAccess {
+			require.Equal(t, IdentityContractKeyAuthenticatedUserAIResource, contract.IdentityContract)
+		} else {
+			require.Equal(t, IdentityContractKeyAuthenticatedUserMCPServer, contract.IdentityContract)
+		}
 		require.NotEmpty(t, contract.PrincipalSource)
 		require.NotEmpty(t, contract.ResourceSource)
 		require.NotEmpty(t, contract.Checkpoint)
 		require.NotEmpty(t, contract.ProtectedWork)
 	}
 	require.Equal(t, []killswitches.Surface{SurfaceHostedToolsCall, SurfacePrivateProxyToolsCall}, coverageByDefinition[DefinitionKeyMCPToolExecution])
-	require.Equal(t, []killswitches.Surface{SurfaceHostedToolsCall, SurfacePrivateProxyToolsCall}, coverageByDefinition[DefinitionKeyAIAccess])
+	require.ElementsMatch(t, []killswitches.Surface{SurfaceHostedToolsCall, SurfacePrivateProxyToolsCall, SurfaceClaudeUserPromptSubmit, SurfaceClaudePreToolUse, SurfaceCodexUserPromptSubmit, SurfaceCodexPreToolUse}, coverageByDefinition[DefinitionKeyAIAccess])
 
 	hosted, ok := registry.Coverage(DefinitionKeyMCPToolExecution, SurfaceHostedToolsCall)
 	require.True(t, ok)
@@ -90,10 +94,15 @@ func TestMCPCoverageInventory(t *testing.T) {
 	aiProxy, ok := registry.Coverage(DefinitionKeyAIAccess, SurfacePrivateProxyToolsCall)
 	require.True(t, ok)
 	require.Equal(t, TransportAdapterPrivateProxyJSONRPC, aiProxy.TransportAdapter)
-	for _, excludedSurface := range []killswitches.Surface{"killswitch_management", "audit_read", "platform_break_glass", "hooks", "litellm", "hosted_inference", "assistant_runtime"} {
+	for _, excludedSurface := range []killswitches.Surface{"killswitch_management", "audit_read", "platform_break_glass", "hooks", "litellm", "hosted_inference", "assistant_runtime", "hooks_permission_request", "hooks_backfill"} {
 		_, covered := registry.Coverage(DefinitionKeyAIAccess, excludedSurface)
 		require.False(t, covered, string(excludedSurface))
 	}
+
+	require.Equal(t, "hooks-acting-user.v1", HookCoverageVersionContract.ContractVersion)
+	require.Empty(t, HookCoverageVersionContract.ReleasedRelayVersions, "no already-released relay implements the proof contract")
+	require.Equal(t, []string{"Claude Code 2.1.250", "Codex CLI 0.150.1"}, HookCoverageVersionContract.TestedNativeVersions)
+	require.Equal(t, []string{"macOS 26.5.2 arm64"}, HookCoverageVersionContract.TestedPlatforms)
 
 	excluded := ExcludedMCPSurfaces()
 	names := make([]string, 0, len(excluded))
@@ -130,7 +139,7 @@ func TestMCPToolExecutionTransportAdaptersFailClosed(t *testing.T) {
 	failure, err := killswitches.NewInfrastructureFailureResult(errors.New("database unavailable"))
 	require.NoError(t, err)
 
-	for _, key := range []killswitches.TransportAdapterKey{TransportAdapterHostedJSONRPC, TransportAdapterPrivateProxyJSONRPC} {
+	for _, key := range []killswitches.TransportAdapterKey{TransportAdapterHostedJSONRPC, TransportAdapterPrivateProxyJSONRPC, TransportAdapterHookNative} {
 		adapter, ok := registry.TransportAdapter(key)
 		require.True(t, ok, string(key))
 

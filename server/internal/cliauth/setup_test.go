@@ -11,6 +11,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/redis/go-redis/v9"
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
@@ -19,6 +20,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/cliauth"
+	"github.com/speakeasy-api/gram/server/internal/hooksacting"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
@@ -49,6 +51,7 @@ type testInstance struct {
 	service        *cliauth.Service
 	conn           *pgxpool.Pool
 	sessionManager *sessions.Manager
+	redis          *redis.Client
 }
 
 // newTestService wires a cliauth.Service over test Postgres + Redis and returns
@@ -69,6 +72,8 @@ func newTestService(t *testing.T) (context.Context, *testInstance) {
 
 	ctx := authztest.InitAuthContext(t, t.Context(), conn, sessionManager)
 	authzEngine := authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
+	actingSigner, err := hooksacting.NewSigner("test-hooks-acting-secret")
+	require.NoError(t, err)
 
 	svc := cliauth.NewService(
 		logger,
@@ -77,6 +82,7 @@ func newTestService(t *testing.T) (context.Context, *testInstance) {
 		sessionManager,
 		authzEngine,
 		redisClient,
+		actingSigner,
 		"local",
 	)
 
@@ -84,6 +90,7 @@ func newTestService(t *testing.T) (context.Context, *testInstance) {
 		service:        svc,
 		conn:           conn,
 		sessionManager: sessionManager,
+		redis:          redisClient,
 	}
 }
 

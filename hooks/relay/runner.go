@@ -2,8 +2,10 @@ package relay
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"hash/fnv"
+	"net/http"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -66,10 +68,14 @@ func (r *Relay) Login(ctx context.Context, force bool) error {
 // NewRunner constructs the agenthooks Runner: gating events (prompt.submitted,
 // tool.requested) POST synchronously and honor deny; MCP inventory also waits
 // for delivery so agenthooks can order it before the first related tool call.
-// Handler failures fail open — a broken hook must never wedge the agent — and
-// the credential ratchet governs the unauthenticated case.
+// Handler failures fail open for observational and legacy events. Governed
+// Claude/Codex live prompt and tool checkpoints return native denials for every
+// missing or malformed verdict, independent of legacy fail-open settings.
 func NewRunner(cfg Config) *agenthooks.Runner {
-	r := NewRelay(cfg)
+	return newRunner(NewRelay(cfg))
+}
+
+func newRunner(r *Relay) *agenthooks.Runner {
 	runner := agenthooks.New(agenthooks.WithPolicy(agenthooks.Policy{
 		Fail:            agenthooks.FailOpen,
 		Unsupported:     agenthooks.Degrade,
@@ -168,6 +174,10 @@ func (r *Relay) deliver(ctx context.Context, typed any) (ingestResult, authState
 	}
 
 	payload := buildEnvelope(typed, hostname())
+	backfilled := false
+	if prompt, ok := typed.(*agenthooks.PromptEvent); ok {
+		backfilled = prompt.Backfilled
+	}
 	resolvedSkill := resolveActivatedSkill(typed, &payload)
 	if resolvedSkill != nil {
 		if resolvedSkill.rawSHA256 != "" {
@@ -192,7 +202,27 @@ func (r *Relay) deliver(ctx context.Context, typed any) (ingestResult, authState
 	// the spooled copy a later drain replays. The server stores at most one
 	// event per key, so every redelivery path is safe.
 	idemKey := newIdempotencyToken()
-	res := r.send(ctx, c, payload, idemKey)
+	binding, governed := governedHookBindingOf(typed)
+	assertion := ""
+	if governed {
+		var err error
+		assertion, err = r.mintActingUserAssertion(ctx, c, binding, idemKey)
+		if err != nil {
+			r.debugf("event=%s acting-user-delegation=failed", agenthooks.EventOf(typed).NativeName)
+			state := stateReady
+			if errors.Is(err, errDelegationReauthRequired) {
+				forgetAuth()
+				markReauthNeeded()
+				state = stateReauthNeeded
+			}
+			// Preserve telemetry for later observational replay while returning a
+			// native fail-closed denial now. Replayed events are explicitly outside
+			// governance, so this cache can never authorize protected work.
+			r.finishExchange(idemKey, payload, backfilled, ingestResult{statusCode: 0})
+			return ingestResult{statusCode: http.StatusOK, decision: decision{Decision: "deny", Reason: "ai_access_identity_unavailable", Message: actingIdentityFailureMessage}}, state
+		}
+	}
+	res := r.send(ctx, c, payload, idemKey, assertion, backfilled)
 	finalCreds := c
 	state := stateReady
 	r.debugf("event=%s type=%s server=%s authfile=%s status=%d denied=%t", agenthooks.EventOf(typed).NativeName, payload.Event.Type, r.cfg.ServerURL, authFilePath(), res.statusCode, res.decision.denied())
@@ -206,13 +236,13 @@ func (r *Relay) deliver(ctx context.Context, typed any) (ingestResult, authState
 		}
 	}
 	if res.authRejected && c.Source == credCache && !disableLocalAuth() {
-		// A rejected personal cache is forgotten. When the published plugin has
-		// a shared org key, replay the same event through it so a stale personal
-		// key does not interrupt telemetry or policy enforcement.
+		// A rejected personal cache is always forgotten. Governed work must not
+		// retry through the shared organization key because that would discard
+		// the proof-bound acting-user identity.
 		forgetAuth()
 		markReauthNeeded()
 		state = stateReauthNeeded
-		if r.cfg.HooksAPIKey != "" {
+		if !governed && r.cfg.HooksAPIKey != "" {
 			if c.Email != "" {
 				payload.Source.UserEmail = new(c.Email)
 			}
@@ -225,7 +255,7 @@ func (r *Relay) deliver(ctx context.Context, typed any) (ingestResult, authState
 				Source:    credOrg,
 			}
 			finalCreds = orgCreds
-			res = r.send(ctx, orgCreds, payload, idemKey)
+			res = r.send(ctx, orgCreds, payload, idemKey, "", backfilled)
 			state = stateReady
 			r.debugf("event=%s auth-retry=org status=%d denied=%t", agenthooks.EventOf(typed).NativeName, res.statusCode, res.decision.denied())
 		}
@@ -234,7 +264,7 @@ func (r *Relay) deliver(ctx context.Context, typed any) (ingestResult, authState
 	// kept for replay, a healthy exchange flushes any backlog, and a
 	// definitive 4xx does neither — the server answered, and would reject a
 	// replay identically.
-	r.finishExchange(idemKey, payload, res)
+	r.finishExchange(idemKey, payload, backfilled, res)
 	if res.accepted() || res.unsent() {
 		commitPromptAttachmentHighWater(promptAttachmentAdvance)
 	}
@@ -248,8 +278,8 @@ func (r *Relay) deliver(ctx context.Context, typed any) (ingestResult, authState
 // org-settings effects the server returned into the local cache. Every
 // successful exchange — gating or fire-and-forget — refreshes the offline
 // copy failOpenAllowed consults during control-plane downtime.
-func (r *Relay) send(ctx context.Context, c creds, payload components.IngestRequestBody, idemKey string) ingestResult {
-	res := r.client.send(ctx, c, payload, idemKey)
+func (r *Relay) send(ctx context.Context, c creds, payload components.IngestRequestBody, idemKey, actingUserAssertion string, backfilled bool) ingestResult {
+	res := r.client.sendWithAssertion(ctx, c, payload, idemKey, actingUserAssertion, backfilled)
 	if res.statusCode >= 200 && res.statusCode < 300 && res.failOpen != nil {
 		writeOrgSettings(r.cfg, *res.failOpen)
 	}
@@ -271,20 +301,30 @@ func (r *Relay) evaluate(ctx context.Context, typed any) verdict {
 
 func (r *Relay) gateVerdict(ctx context.Context, typed any) verdict {
 	res, state := r.deliver(ctx, typed)
+	_, governed := governedHookBindingOf(typed)
 	switch state {
 	case stateNeverAuthed:
+		if governed {
+			return verdict{block: true, message: actingIdentityFailureMessage, nudge: false, blockEffect: nil}
+		}
 		// A broken config suppresses the nudge: sign-in cannot recover an
 		// unknown deployment identity, only a reinstall can.
 		return verdict{block: false, message: "", nudge: r.cfg.ConfigError == "", blockEffect: nil}
 	case stateBroken:
+		if governed {
+			return verdict{block: true, message: actingIdentityFailureMessage, nudge: false, blockEffect: nil}
+		}
 		msg := res.decision.Message
 		if msg == "" {
 			msg = brokenAuthMessage
 		}
 		return verdict{block: true, message: msg, nudge: false, blockEffect: nil}
 	case stateReauthNeeded:
-		// Tool events fail closed on the rejection (or its memory); prompt
-		// handlers honor nudge and fail open instead.
+		if governed {
+			return verdict{block: true, message: actingIdentityFailureMessage, nudge: false, blockEffect: nil}
+		}
+		// Ungoverned tool events fail closed on the rejection (or its memory);
+		// legacy prompt handlers may still carry the reconnect nudge.
 		msg := reauthNeededMessage
 		if res.statusCode != 0 {
 			msg = httpMessage(res)
@@ -318,7 +358,7 @@ func (r *Relay) gateVerdict(ctx context.Context, typed any) verdict {
 	// stays fail closed — in particular a 401/403 on an env- or org-sourced
 	// key lands here as stateReady, and honoring fail-open for it would turn
 	// a broken credential into an enforcement bypass.
-	if (res.statusCode == 0 || res.statusCode >= 500) && failOpenAllowed(r.cfg) {
+	if !governed && (res.statusCode == 0 || res.statusCode >= 500) && failOpenAllowed(r.cfg) {
 		r.debugf("event=%s fail-open engaged status=%d", agenthooks.EventOf(typed).NativeName, res.statusCode)
 		return verdict{block: false, message: "", nudge: false, blockEffect: nil}
 	}
@@ -426,8 +466,8 @@ func (r *Relay) onStop(ctx context.Context, e *agenthooks.StopEvent) (agenthooks
 // session.started telemetry. Viability guards and the attempt cooldown keep
 // the browser from nagging.
 func (r *Relay) onSessionStart(ctx context.Context, e *agenthooks.SessionStartEvent) (agenthooks.SessionStartDecision, error) {
-	_, cached := readCachedAuth(r.cfg)
-	if r.cfg.BrowserLogin && strings.TrimSpace(os.Getenv("GRAM_HOOKS_API_KEY")) == "" && !cached {
+	cachedAuth, cached := readCachedAuth(r.cfg)
+	if r.cfg.BrowserLogin && strings.TrimSpace(os.Getenv("GRAM_HOOKS_API_KEY")) == "" && (!cached || !delegationReady(cachedAuth)) {
 		r.login.tryInteractive(ctx)
 	}
 	r.deliver(ctx, e)
