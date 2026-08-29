@@ -20,7 +20,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/hookevents"
 	"github.com/speakeasy-api/gram/server/internal/hooks/repo"
-	"github.com/speakeasy-api/gram/server/internal/killswitches"
 	"github.com/speakeasy-api/gram/server/internal/message"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
@@ -195,7 +194,7 @@ func (s *Service) ingest(ctx context.Context, payload *gen.IngestPayload) (res *
 			attr.SlogHookEvent(eventType),
 		)
 		_, event, governed := governedHook(payload)
-		if governed && validLiveGovernedHook(payload, event) {
+		if governed && validGovernedHookPayload(payload, event) {
 			return &AuthenticatedIngestResult{
 				Result: canonicalDenyResultWithReason("ai_access_identity_unavailable", aiAccessIdentityFailureMessage),
 				Actor:  ResolvedActor{UserID: "", Email: ""},
@@ -232,30 +231,55 @@ func (s *Service) ingest(ctx context.Context, payload *gen.IngestPayload) (res *
 
 	var aiDecision hookAIAccessDecision
 	_, governedEvent, isGoverned := governedHook(payload)
-	if isGoverned && validLiveGovernedHook(payload, governedEvent) {
-		if s.aiAccess == nil {
+	if isGoverned {
+		switch {
+		case !validGovernedHookPayload(payload, governedEvent):
+			aiDecision = identityFailureDecision()
+		case s.aiAccess == nil:
 			aiDecision = evaluatorFailureDecision()
-		} else {
-			var cachedDecision hookAIAccessDecision
-			var cachedPrincipal killswitches.PrincipalKey
-			cached := false
-			if duplicate {
-				cachedDecision, cachedPrincipal, cached = s.cachedHookAIAccessDenial(ctx, payload, authCtx.ActiveOrganizationID)
-			}
-			if cached {
-				_, failure := s.aiAccess.VerifyCached(ctx, payload, authCtx, cachedPrincipal)
-				if failure.deny {
-					aiDecision = failure
-				} else {
-					aiDecision = cachedDecision
+		default:
+			observational := conv.PtrValOr(payload.Replayed, false) || conv.PtrValOr(payload.Backfilled, false)
+			resolved := false
+			if duplicate && !observational {
+				cachedDecision, cachedPrincipal, status := s.cachedHookAIAccessDenial(ctx, payload, authCtx.ActiveOrganizationID)
+				switch status {
+				case hookDenialCacheHit:
+					_, failure := s.aiAccess.VerifyCached(ctx, payload, authCtx, cachedPrincipal)
+					if failure.deny {
+						aiDecision = failure
+					} else {
+						aiDecision = cachedDecision
+					}
+					resolved = true
+				case hookDenialCacheFailure:
+					aiDecision = evaluatorFailureDecision()
+					resolved = true
+				case hookDenialCacheMiss:
 				}
-			} else {
+			}
+			if !resolved {
 				verified, failure := s.aiAccess.Verify(ctx, payload, authCtx)
 				if failure.deny {
 					aiDecision = failure
-				} else {
-					aiDecision = s.aiAccess.EvaluateVerified(ctx, verified)
-					aiDecision = s.publishHookAIAccessDenial(ctx, payload, authCtx.ActiveOrganizationID, verified.principalKey, aiDecision)
+				} else if !verified.observational {
+					release, cachedDecision, cachedPrincipal, cached, coordinationFailed := s.awaitHookAIAccessEvaluation(ctx, payload, authCtx.ActiveOrganizationID)
+					switch {
+					case coordinationFailed:
+						aiDecision = evaluatorFailureDecision()
+					case cached:
+						if cachedPrincipal != verified.principalKey {
+							aiDecision = identityFailureDecision()
+						} else {
+							aiDecision = cachedDecision
+						}
+					default:
+						aiDecision = s.aiAccess.EvaluateVerified(ctx, verified)
+						aiDecision = s.publishHookAIAccessDenial(ctx, payload, authCtx.ActiveOrganizationID, verified.principalKey, aiDecision)
+						released, releaseErr := release()
+						if (releaseErr != nil || !released) && !aiDecision.deny {
+							aiDecision = evaluatorFailureDecision()
+						}
+					}
 				}
 			}
 		}

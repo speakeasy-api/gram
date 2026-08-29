@@ -111,7 +111,7 @@ func BuildDelegateHooksActingUserPayload(cliAuthDelegateHooksActingUserBody stri
 	{
 		err = json.Unmarshal([]byte(cliAuthDelegateHooksActingUserBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"contract_version\": \"hooks-acting-user.v1\",\n      \"event\": \"PreToolUse\",\n      \"idempotency_key\": \"aa\",\n      \"nonce\": \"aaa\",\n      \"provider\": \"codex\",\n      \"refresh_token\": \"aaa\",\n      \"session_id\": \"aa\",\n      \"signature\": \"aaa\",\n      \"signed_at\": 1\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"contract_version\": \"hooks-acting-user.v1\",\n      \"event\": \"PreToolUse\",\n      \"idempotency_key\": \"aa\",\n      \"nonce\": \"aaa\",\n      \"observational\": false,\n      \"provider\": \"codex\",\n      \"refresh_token\": \"aaa\",\n      \"session_id\": \"aa\",\n      \"signature\": \"aaa\",\n      \"signed_at\": 1\n   }'")
 		}
 		if utf8.RuneCountInString(body.RefreshToken) > 4096 {
 			err = goa.MergeErrors(err, goa.InvalidLengthError("body.refresh_token", body.RefreshToken, utf8.RuneCountInString(body.RefreshToken), 4096, false))
@@ -162,6 +162,7 @@ func BuildDelegateHooksActingUserPayload(cliAuthDelegateHooksActingUserBody stri
 		Event:           body.Event,
 		SessionID:       body.SessionID,
 		IdempotencyKey:  body.IdempotencyKey,
+		Observational:   body.Observational,
 		SignedAt:        body.SignedAt,
 		Nonce:           body.Nonce,
 		Signature:       body.Signature,

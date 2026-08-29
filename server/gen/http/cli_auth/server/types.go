@@ -50,7 +50,10 @@ type DelegateHooksActingUserRequestBody struct {
 	Event           *string `form:"event,omitempty" json:"event,omitempty" xml:"event,omitempty"`
 	SessionID       *string `form:"session_id,omitempty" json:"session_id,omitempty" xml:"session_id,omitempty"`
 	IdempotencyKey  *string `form:"idempotency_key,omitempty" json:"idempotency_key,omitempty" xml:"idempotency_key,omitempty"`
-	SignedAt        *int64  `form:"signed_at,omitempty" json:"signed_at,omitempty" xml:"signed_at,omitempty"`
+	// Binds an offline replay or synthetic backfill as observational rather than
+	// live governed work.
+	Observational *bool  `form:"observational,omitempty" json:"observational,omitempty" xml:"observational,omitempty"`
+	SignedAt      *int64 `form:"signed_at,omitempty" json:"signed_at,omitempty" xml:"signed_at,omitempty"`
 	// Cryptographically random, single-use base64url mint nonce and assertion JTI.
 	Nonce     *string `form:"nonce,omitempty" json:"nonce,omitempty" xml:"nonce,omitempty"`
 	Signature *string `form:"signature,omitempty" json:"signature,omitempty" xml:"signature,omitempty"`
@@ -1139,6 +1142,7 @@ func NewDelegateHooksActingUserPayload(body *DelegateHooksActingUserRequestBody)
 		Event:           *body.Event,
 		SessionID:       *body.SessionID,
 		IdempotencyKey:  *body.IdempotencyKey,
+		Observational:   body.Observational,
 		SignedAt:        *body.SignedAt,
 		Nonce:           *body.Nonce,
 		Signature:       *body.Signature,

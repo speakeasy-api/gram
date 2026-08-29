@@ -12392,7 +12392,7 @@ func cliAuthDelegateHooksActingUserUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "cli-auth delegate-hooks-acting-user --body '{\n      \"contract_version\": \"hooks-acting-user.v1\",\n      \"event\": \"PreToolUse\",\n      \"idempotency_key\": \"aa\",\n      \"nonce\": \"aaa\",\n      \"provider\": \"codex\",\n      \"refresh_token\": \"aaa\",\n      \"session_id\": \"aa\",\n      \"signature\": \"aaa\",\n      \"signed_at\": 1\n   }'")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "cli-auth delegate-hooks-acting-user --body '{\n      \"contract_version\": \"hooks-acting-user.v1\",\n      \"event\": \"PreToolUse\",\n      \"idempotency_key\": \"aa\",\n      \"nonce\": \"aaa\",\n      \"observational\": false,\n      \"provider\": \"codex\",\n      \"refresh_token\": \"aaa\",\n      \"session_id\": \"aa\",\n      \"signature\": \"aaa\",\n      \"signed_at\": 1\n   }'")
 }
 
 // deploymentsUsage displays the usage of the deployments command and its

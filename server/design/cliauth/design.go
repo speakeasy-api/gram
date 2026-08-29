@@ -107,6 +107,7 @@ var _ = Service("cliAuth", func() {
 			Attribute("event", String, func() { Enum("UserPromptSubmit", "PreToolUse") })
 			Attribute("session_id", String, func() { MinLength(1); MaxLength(512) })
 			Attribute("idempotency_key", String, func() { MinLength(1); MaxLength(512) })
+			Attribute("observational", Boolean, "Binds an offline replay or synthetic backfill as observational rather than live governed work.")
 			Attribute("signed_at", Int64)
 			Attribute("nonce", String, "Cryptographically random, single-use base64url mint nonce and assertion JTI.", func() { MinLength(43); MaxLength(43); Pattern("^[A-Za-z0-9_-]{43}$") })
 			Attribute("signature", String, func() { MinLength(86); MaxLength(86); Pattern("^[A-Za-z0-9_-]{86}$") })

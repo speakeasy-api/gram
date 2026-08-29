@@ -1402,6 +1402,7 @@ async function runProviderScenario(args) {
       { cwd: args.workdir, env: args.env, timeoutMs: args.timeoutMs },
     );
     res.provider = args.provider;
+    res.sessionId = sessionId;
     return res;
   }
   if (args.provider === "cursor") {
@@ -1480,7 +1481,22 @@ async function runProviderScenario(args) {
     { cwd: args.workdir, env: args.env, timeoutMs: args.timeoutMs },
   );
   res.provider = args.provider;
+  res.sessionId = codexSessionId(res);
   return res;
+}
+function codexSessionId(res) {
+  for (const line of String(res.stdout ?? "").split("\n")) {
+    try {
+      const event = JSON.parse(line);
+      const sessionId = event.thread_id ?? event.session_id;
+      if (typeof sessionId === "string" && sessionId.trim() !== "") {
+        return sessionId.trim();
+      }
+    } catch {
+      // Non-JSON provider output is ignored.
+    }
+  }
+  return "";
 }
 async function runProviderShadowMCPScenario(args) {
   const prompt = shadowMCPPrompt(args);
@@ -1735,6 +1751,7 @@ async function listHookEvidence(projectId, provider, sinceUnixNano) {
       toString(attributes.gram.hook.event) AS event,
       tool_name,
       toString(hook_block_reason) AS block_reason,
+      toString(attributes.gen_ai.conversation.id) AS session_id,
       toString(attributes) AS attrs
     FROM telemetry_logs
     WHERE gram_project_id = '${sqlString(projectId)}'
@@ -3143,6 +3160,7 @@ async function runAIAccessSuite(args) {
       provider,
     );
     log.info(`${provider}: running ai-access allow scenario`);
+    const allowedSince = BigInt(Date.now()) * 1000000n;
     const allowed = await runProviderScenario({
       provider,
       pluginDir: args.pluginDirs.get(provider),
@@ -3161,11 +3179,44 @@ async function runAIAccessSuite(args) {
     );
     const allowMarker = `GRAM_HOOKS_E2E_OK ${allowRunId} ${provider} success`;
     const allowOutput = `${allowed.stdout}\n${allowed.stderr}`;
+    const allowSessionId = String(allowed.sessionId ?? "").trim();
+    const allowEvidence = allowSessionId
+      ? await poll(
+          Date.now() + args.pollSeconds * 1000,
+          () =>
+            listHookEvidence(args.session.projectId, provider, allowedSince),
+          (rows) =>
+            rows.some(
+              (row) =>
+                row.session_id === allowSessionId &&
+                row.event === "prompt.submitted",
+            ) &&
+            rows.some(
+              (row) =>
+                row.session_id === allowSessionId &&
+                row.event === "tool.requested" &&
+                String(row.tool_name ?? "").trim() !== "",
+            ),
+        )
+      : [];
+    const allowPersisted =
+      allowSessionId !== "" &&
+      allowEvidence.some(
+        (row) =>
+          row.session_id === allowSessionId && row.event === "prompt.submitted",
+      ) &&
+      allowEvidence.some(
+        (row) =>
+          row.session_id === allowSessionId &&
+          row.event === "tool.requested" &&
+          String(row.tool_name ?? "").trim() !== "",
+      );
     const allowPassed =
       allowed.exitCode === 0 &&
       !allowed.timedOut &&
       allowOutput.includes(allowToolMarker) &&
-      outputHasAssistantMarker(allowed, allowMarker);
+      outputHasAssistantMarker(allowed, allowMarker) &&
+      allowPersisted;
     checks.push({
       provider,
       feature: "ai-access-allow",
@@ -3226,18 +3277,24 @@ async function runAIAccessSuite(args) {
         const toolIndex = output.indexOf(toolMarker);
         const expectedEvent =
           checkpoint.name === "prompt" ? "prompt.submitted" : "tool.requested";
-        const evidence = await poll(
-          Date.now() + args.pollSeconds * 1000,
-          () => listHookEvidence(args.session.projectId, provider, deniedSince),
-          (rows) =>
-            rows.some(
-              (row) =>
-                row.event === expectedEvent &&
-                String(row.block_reason ?? "").trim() !== "",
-            ),
-        );
+        const denialSessionId = String(res.sessionId ?? "").trim();
+        const evidence = denialSessionId
+          ? await poll(
+              Date.now() + args.pollSeconds * 1000,
+              () =>
+                listHookEvidence(args.session.projectId, provider, deniedSince),
+              (rows) =>
+                rows.some(
+                  (row) =>
+                    row.session_id === denialSessionId &&
+                    row.event === expectedEvent &&
+                    String(row.block_reason ?? "").trim() !== "",
+                ),
+            )
+          : [];
         const serverDenied = evidence.some(
           (row) =>
+            row.session_id === denialSessionId &&
             row.event === expectedEvent &&
             String(row.block_reason ?? "").trim() !== "",
         );

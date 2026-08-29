@@ -47,6 +47,7 @@ type delegationClaims struct {
 	Event           string `json:"event"`
 	SessionID       string `json:"session_id"`
 	IdempotencyKey  string `json:"idempotency_key"`
+	Observational   bool   `json:"observational,omitempty"`
 	KeyID           string `json:"kid"`
 }
 
@@ -65,6 +66,7 @@ type AssertionIdentity struct {
 	Event          string
 	SessionID      string
 	IdempotencyKey string
+	Observational  bool
 	KeyID          string
 }
 
@@ -74,6 +76,7 @@ type AssertionBinding struct {
 	Event          string
 	SessionID      string
 	IdempotencyKey string
+	Observational  bool
 }
 
 func NewSigner(secret string) (*Signer, error) {
@@ -150,7 +153,9 @@ func (s *Signer) MintAssertion(identity RefreshIdentity, req delegation.MintRequ
 	if s == nil {
 		return "", errors.New("credential signer is required")
 	}
-	if req.ContractVersion != delegation.ContractVersion || !delegation.Approved(req.Provider, req.Event) || strings.TrimSpace(req.SessionID) == "" || strings.TrimSpace(req.IdempotencyKey) == "" || !delegation.ValidNonce(req.Nonce) {
+	if req.ContractVersion != delegation.ContractVersion || !delegation.Approved(req.Provider, req.Event) ||
+		req.SessionID == "" || req.SessionID != strings.TrimSpace(req.SessionID) ||
+		req.IdempotencyKey == "" || req.IdempotencyKey != strings.TrimSpace(req.IdempotencyKey) || !delegation.ValidNonce(req.Nonce) {
 		return "", errors.New("invalid governed hook binding")
 	}
 	now := s.now().UTC().Truncate(time.Second)
@@ -169,7 +174,7 @@ func (s *Signer) MintAssertion(identity RefreshIdentity, req delegation.MintRequ
 		},
 		ContractVersion: delegation.ContractVersion, OrganizationID: identity.OrganizationID,
 		Provider: req.Provider, Event: req.Event, SessionID: req.SessionID,
-		IdempotencyKey: req.IdempotencyKey, KeyID: identity.KeyID,
+		IdempotencyKey: req.IdempotencyKey, Observational: req.Observational, KeyID: identity.KeyID,
 	}
 	signed, err := jwt.NewWithClaims(jwt.SigningMethodHS256, claims).SignedString(s.assertionKey)
 	if err != nil {
@@ -192,6 +197,7 @@ func (s *Signer) VerifyAssertion(raw string, expected AssertionBinding) (Asserti
 		Event:           "",
 		SessionID:       "",
 		IdempotencyKey:  "",
+		Observational:   false,
 		KeyID:           "",
 	}
 	if err := s.parse(raw, delegation.AssertionIssuer, delegation.AssertionAudience, AssertionLifetime, s.assertionKey, &claims, &claims.RegisteredClaims); err != nil {
@@ -201,10 +207,29 @@ func (s *Signer) VerifyAssertion(raw string, expected AssertionBinding) (Asserti
 	if err != nil || claims.ContractVersion != delegation.ContractVersion || claims.KeyID == "" {
 		return AssertionIdentity{}, errors.New("invalid acting-user assertion claims")
 	}
-	if claims.OrganizationID != expected.OrganizationID || claims.Provider != expected.Provider || claims.Event != expected.Event || claims.SessionID != expected.SessionID || claims.IdempotencyKey != expected.IdempotencyKey {
+	if claims.OrganizationID != expected.OrganizationID || claims.Provider != expected.Provider || claims.Event != expected.Event || claims.SessionID != expected.SessionID || claims.IdempotencyKey != expected.IdempotencyKey || claims.Observational != expected.Observational {
 		return AssertionIdentity{}, errors.New("acting-user assertion binding mismatch")
 	}
-	return AssertionIdentity{UserID: userID, OrganizationID: claims.OrganizationID, Provider: claims.Provider, Event: claims.Event, SessionID: claims.SessionID, IdempotencyKey: claims.IdempotencyKey, KeyID: claims.KeyID}, nil
+	return AssertionIdentity{UserID: userID, OrganizationID: claims.OrganizationID, Provider: claims.Provider, Event: claims.Event, SessionID: claims.SessionID, IdempotencyKey: claims.IdempotencyKey, Observational: claims.Observational, KeyID: claims.KeyID}, nil
+}
+
+// AssertionExpiresIn returns the usable whole-second lifetime of a valid assertion.
+func (s *Signer) AssertionExpiresIn(raw string) (int, error) {
+	if s == nil {
+		return 0, errors.New("credential verifier is required")
+	}
+	claims := delegationClaims{
+		RegisteredClaims: jwt.RegisteredClaims{Issuer: "", Subject: "", Audience: nil, ExpiresAt: nil, NotBefore: nil, IssuedAt: nil, ID: ""}, ContractVersion: "", OrganizationID: "", Provider: "", Event: "",
+		SessionID: "", IdempotencyKey: "", Observational: false, KeyID: "",
+	}
+	if err := s.parse(raw, delegation.AssertionIssuer, delegation.AssertionAudience, AssertionLifetime, s.assertionKey, &claims, &claims.RegisteredClaims); err != nil {
+		return 0, err
+	}
+	remaining := claims.ExpiresAt.Sub(s.now())
+	if remaining <= 0 {
+		return 0, errors.New("acting-user assertion is expired")
+	}
+	return int((remaining + time.Second - 1) / time.Second), nil
 }
 
 func (s *Signer) parse(raw, issuer, audience string, lifetime time.Duration, key []byte, claims jwt.Claims, registered *jwt.RegisteredClaims) error {

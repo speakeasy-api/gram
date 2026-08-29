@@ -32,6 +32,14 @@ func TestSignerProofBoundDelegationAndBindings(t *testing.T) {
 	require.NoError(t, err)
 	assertion, err := signer.MintAssertion(identity, req)
 	require.NoError(t, err)
+	expiresIn, err := signer.AssertionExpiresIn(assertion)
+	require.NoError(t, err)
+	require.Equal(t, int(AssertionLifetime.Seconds()), expiresIn)
+	signer.now = func() time.Time { return now.Add(10 * time.Second) }
+	expiresIn, err = signer.AssertionExpiresIn(assertion)
+	require.NoError(t, err)
+	require.Equal(t, 20, expiresIn)
+	signer.now = func() time.Time { return now }
 
 	verified, err := signer.VerifyAssertion(assertion, AssertionBinding{OrganizationID: "org-1", Provider: req.Provider, Event: req.Event, SessionID: req.SessionID, IdempotencyKey: req.IdempotencyKey})
 	require.NoError(t, err)
@@ -42,6 +50,7 @@ func TestSignerProofBoundDelegationAndBindings(t *testing.T) {
 		{OrganizationID: "org-1", Provider: delegation.ProviderCodex, Event: req.Event, SessionID: req.SessionID, IdempotencyKey: req.IdempotencyKey},
 		{OrganizationID: "org-1", Provider: req.Provider, Event: req.Event, SessionID: "other", IdempotencyKey: req.IdempotencyKey},
 		{OrganizationID: "org-1", Provider: req.Provider, Event: req.Event, SessionID: req.SessionID, IdempotencyKey: "other"},
+		{OrganizationID: "org-1", Provider: req.Provider, Event: req.Event, SessionID: req.SessionID, IdempotencyKey: req.IdempotencyKey, Observational: true},
 	} {
 		_, err := signer.VerifyAssertion(assertion, binding)
 		require.Error(t, err)
@@ -162,4 +171,21 @@ func TestSignerRejectsStaleAndSpoofedProof(t *testing.T) {
 	require.NoError(t, err)
 	_, err = signer.MintAssertion(identity, req)
 	require.Error(t, err)
+
+	for name, mutate := range map[string]func(*delegation.MintRequest){
+		"session whitespace":     func(r *delegation.MintRequest) { r.SessionID = " session " },
+		"idempotency whitespace": func(r *delegation.MintRequest) { r.IdempotencyKey = " idempotency " },
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			canonical := req
+			canonical.SignedAt = now.Unix()
+			mutate(&canonical)
+			signature, signErr := delegation.Sign(privateKey, canonical)
+			require.NoError(t, signErr)
+			canonical.Signature = signature
+			_, mintErr := signer.MintAssertion(identity, canonical)
+			require.Error(t, mintErr)
+		})
+	}
 }

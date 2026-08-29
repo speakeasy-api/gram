@@ -3,9 +3,13 @@ package hooks
 import (
 	"context"
 	"crypto/ed25519"
-	"crypto/hmac"
+	"crypto/hkdf"
 	"crypto/rand"
 	"crypto/sha256"
+	"errors"
+	"fmt"
+	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -15,11 +19,39 @@ import (
 
 	"github.com/speakeasy-api/gram/hooks/delegation"
 	gen "github.com/speakeasy-api/gram/server/gen/hooks"
+	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/hooksacting"
 	"github.com/speakeasy-api/gram/server/internal/killswitches"
 	"github.com/speakeasy-api/gram/server/internal/killswitches/mcptoolexecution"
 )
+
+type failingDenialReadCache struct{ cache.Cache }
+
+func (c failingDenialReadCache) Get(ctx context.Context, key string, value any) error {
+	if strings.HasPrefix(key, "hook:ai-access:denial:v1:") {
+		return errors.New("denial cache unavailable")
+	}
+	if err := c.Cache.Get(ctx, key, value); err != nil {
+		return fmt.Errorf("get fallback cache entry: %w", err)
+	}
+	return nil
+}
+
+type blockingHookEvaluator struct {
+	result  killswitches.EvaluationResult
+	started chan struct{}
+	release chan struct{}
+	calls   atomic.Int32
+}
+
+func (e *blockingHookEvaluator) Evaluate(_ context.Context, _ killswitches.EvaluationRequest) killswitches.EvaluationResult {
+	if e.calls.Add(1) == 1 {
+		close(e.started)
+	}
+	<-e.release
+	return e.result
+}
 
 type recordingHookEvaluator struct {
 	result   killswitches.EvaluationResult
@@ -49,6 +81,11 @@ func setupHookAIAccess(t *testing.T, result killswitches.EvaluationResult) (cont
 
 func signedGovernedPayload(t *testing.T, ctx context.Context, signer *hooksacting.Signer, privateKey ed25519.PrivateKey, provider, event string) *gen.IngestPayload {
 	t.Helper()
+	return signedHookPayload(t, ctx, signer, privateKey, provider, event, false)
+}
+
+func signedHookPayload(t *testing.T, ctx context.Context, signer *hooksacting.Signer, privateKey ed25519.PrivateKey, provider, event string, observational bool) *gen.IngestPayload {
+	t.Helper()
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 	idempotencyKey := uuid.NewString()
@@ -68,7 +105,7 @@ func signedGovernedPayload(t *testing.T, ctx context.Context, signer *hooksactin
 	require.NoError(t, err)
 	identity, err := signer.VerifyRefresh(refresh)
 	require.NoError(t, err)
-	request := delegation.MintRequest{RefreshToken: refresh, ContractVersion: delegation.ContractVersion, Provider: provider, Event: event, SessionID: sessionID, IdempotencyKey: idempotencyKey, SignedAt: time.Now().Unix(), Nonce: "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"}
+	request := delegation.MintRequest{RefreshToken: refresh, ContractVersion: delegation.ContractVersion, Provider: provider, Event: event, SessionID: sessionID, IdempotencyKey: idempotencyKey, Observational: observational, SignedAt: time.Now().Unix(), Nonce: "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"}
 	request.Signature, err = delegation.Sign(privateKey, request)
 	require.NoError(t, err)
 	assertion, err := signer.MintAssertion(identity, request)
@@ -183,28 +220,42 @@ func TestHookAIAccessRejectsCrossTenantSpoofAndInactiveMembership(t *testing.T) 
 	require.Empty(t, evaluator.requests, "inactive membership never becomes an evaluator candidate")
 }
 
-func TestHookAIAccessExclusionsReplayAndBackfillNeverEvaluate(t *testing.T) {
+func TestHookAIAccessExclusionsReplayAndBackfillRequireSignedObservationalBinding(t *testing.T) {
 	t.Parallel()
 	noMatch, err := killswitches.NewNoMatchResult(killswitches.NoMatchReasonNoPrescription)
 	require.NoError(t, err)
-	ctx, ti, evaluator, _, _ := setupHookAIAccess(t, noMatch)
-	cases := []struct {
-		provider, event, eventType string
-		backfilled, replayed       bool
-	}{
-		{delegation.ProviderCodex, "PermissionRequest", "tool.requested", false, false},
-		{"cursor", delegation.EventPreToolUse, "tool.requested", false, false},
-		{delegation.ProviderClaude, delegation.EventUserPromptSubmit, "prompt.submitted", true, false},
-		{delegation.ProviderCodex, delegation.EventPreToolUse, "tool.requested", false, true},
-	}
-	for _, test := range cases {
+	ctx, ti, evaluator, signer, privateKey := setupHookAIAccess(t, noMatch)
+
+	for _, test := range []struct{ provider, event, eventType string }{
+		{delegation.ProviderCodex, "PermissionRequest", "tool.requested"},
+		{"cursor", delegation.EventPreToolUse, "tool.requested"},
+	} {
 		payload := canonicalIngestPayload(test.provider, test.eventType, uuid.NewString())
 		payload.Source.RawEventName = &test.event
-		payload.Backfilled = &test.backfilled
-		payload.Replayed = &test.replayed
 		result, err := ti.service.Ingest(ctx, payload)
 		require.NoError(t, err)
 		require.Equal(t, "allow", result.Decision)
+	}
+
+	for name, flags := range map[string]struct{ backfilled, replayed bool }{
+		"backfilled": {backfilled: true},
+		"replayed":   {replayed: true},
+	} {
+		unsigned := canonicalIngestPayload(delegation.ProviderClaude, "prompt.submitted", uuid.NewString())
+		event := delegation.EventUserPromptSubmit
+		unsigned.Source.RawEventName = &event
+		unsigned.Backfilled = &flags.backfilled
+		unsigned.Replayed = &flags.replayed
+		result, err := ti.service.Ingest(ctx, unsigned)
+		require.NoError(t, err, name)
+		require.Equal(t, "ai_access_identity_unavailable", *result.Reason, name)
+
+		signed := signedHookPayload(t, ctx, signer, privateKey, delegation.ProviderClaude, event, true)
+		signed.Backfilled = &flags.backfilled
+		signed.Replayed = &flags.replayed
+		result, err = ti.service.Ingest(ctx, signed)
+		require.NoError(t, err, name)
+		require.Equal(t, "allow", result.Decision, name)
 	}
 	require.Empty(t, evaluator.requests)
 }
@@ -328,6 +379,60 @@ func TestHookAIAccessCachesOnlyMatchedExternalNoteDenials(t *testing.T) {
 	require.Len(t, evaluator.requests, 4)
 }
 
+func TestHookAIAccessDuplicateFailsClosedWhenDenialCacheReadFails(t *testing.T) {
+	t.Parallel()
+	match, err := killswitches.NewMatchResult(killswitches.PrescriptionID(uuid.NewString()), "Stable denial.")
+	require.NoError(t, err)
+	ctx, ti, evaluator, signer, privateKey := setupHookAIAccess(t, match)
+	payload := signedGovernedPayload(t, ctx, signer, privateKey, delegation.ProviderClaude, delegation.EventPreToolUse)
+	first, err := ti.service.Ingest(ctx, payload)
+	require.NoError(t, err)
+	require.Equal(t, "Stable denial.", *first.Message)
+
+	ti.service.cache = failingDenialReadCache{Cache: ti.service.cache}
+	duplicate, err := ti.service.Ingest(ctx, payload)
+	require.NoError(t, err)
+	require.Equal(t, "ai_access_evaluator_unavailable", *duplicate.Reason)
+	require.Len(t, evaluator.requests, 1, "a cache backend error must not re-evaluate into allow")
+}
+
+func TestHookAIAccessConcurrentDuplicateWaitsForFirstDenial(t *testing.T) {
+	t.Parallel()
+	match, err := killswitches.NewMatchResult(killswitches.PrescriptionID(uuid.NewString()), "Concurrent denial.")
+	require.NoError(t, err)
+	ctx, ti, _, signer, privateKey := setupHookAIAccess(t, match)
+	blocking := &blockingHookEvaluator{result: match, started: make(chan struct{}), release: make(chan struct{})}
+	ti.service.aiAccess.evaluator = blocking
+	payload := signedGovernedPayload(t, ctx, signer, privateKey, delegation.ProviderCodex, delegation.EventPreToolUse)
+
+	type outcome struct {
+		result *gen.IngestHookResult
+		err    error
+	}
+	results := make(chan outcome, 2)
+	go func() {
+		result, err := ti.service.Ingest(ctx, payload)
+		results <- outcome{result: result, err: err}
+	}()
+	<-blocking.started
+	go func() {
+		result, err := ti.service.Ingest(ctx, payload)
+		results <- outcome{result: result, err: err}
+	}()
+	select {
+	case early := <-results:
+		require.Failf(t, "duplicate returned before first decision", "result=%+v err=%v", early.result, early.err)
+	case <-time.After(100 * time.Millisecond):
+	}
+	close(blocking.release)
+	for range 2 {
+		got := <-results
+		require.NoError(t, got.err)
+		require.Equal(t, "Concurrent denial.", *got.result.Message)
+	}
+	require.Equal(t, int32(1), blocking.calls.Load())
+}
+
 func TestHookDenialCacheKeyScopesTenantAndInvocationBindings(t *testing.T) {
 	t.Parallel()
 	payload := canonicalIngestPayload(delegation.ProviderClaude, "tool.requested", "session-one")
@@ -374,12 +479,9 @@ func staleSignedAssertion(t *testing.T, payload *gen.IngestPayload, authCtx *con
 		"ver": delegation.ContractVersion, "org": authCtx.ActiveOrganizationID, "provider": payload.Source.Adapter, "event": *payload.Source.RawEventName,
 		"session_id": canonicalSessionID(payload), "idempotency_key": *payload.IdempotencyKey, "kid": "stale-key",
 	}
-	mac := hmac.New(sha256.New, []byte("test-hooks-acting-user-secret"))
-	_, _ = mac.Write([]byte("hooks/acting-user-assertion/v1"))
-	raw, err := jwt.NewWithClaims(jwt.SigningMethodHS256, claims).SignedString(mac.Sum(nil))
+	key, err := hkdf.Key(sha256.New, []byte("test-hooks-acting-user-secret"), nil, "hooks/acting-user-assertion/v1", sha256.Size)
+	require.NoError(t, err)
+	raw, err := jwt.NewWithClaims(jwt.SigningMethodHS256, claims).SignedString(key)
 	require.NoError(t, err)
 	return raw
 }
-
-//go:fix inline
-func ptr(value string) *string { return new(value) }

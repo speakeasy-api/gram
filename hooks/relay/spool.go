@@ -35,7 +35,8 @@ import (
 const (
 	// spoolEntryVersion versions the on-disk entry schema; drain skips
 	// versions it doesn't understand rather than guessing.
-	spoolEntryVersion = 1
+	spoolEntryVersion = 2
+	spoolEntryV1      = 1
 
 	// spoolMaxAge expires entries that were never drained (a laptop shelved
 	// mid-outage). Mirrors the org-settings cache's 14d ceiling: events

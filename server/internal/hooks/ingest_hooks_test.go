@@ -198,7 +198,7 @@ func TestIngest_NoCredentialsFailsOpen(t *testing.T) {
 	require.Equal(t, "allow", result.Decision)
 }
 
-func TestIngest_NoCredentialsReplayAndBackfillBypassAIAccess(t *testing.T) {
+func TestIngest_NoCredentialsReplayAndBackfillCannotBypassAIAccess(t *testing.T) {
 	t.Parallel()
 
 	_, ti := newTestHooksService(t)
@@ -220,7 +220,8 @@ func TestIngest_NoCredentialsReplayAndBackfillBypassAIAccess(t *testing.T) {
 
 			result, err := ti.service.Ingest(t.Context(), payload)
 			require.NoError(t, err)
-			require.Equal(t, "allow", result.Decision)
+			require.Equal(t, "deny", result.Decision)
+			require.Equal(t, "ai_access_identity_unavailable", *result.Reason)
 		})
 	}
 }

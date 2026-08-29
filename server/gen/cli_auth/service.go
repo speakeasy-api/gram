@@ -101,7 +101,10 @@ type DelegateHooksActingUserPayload struct {
 	Event           string
 	SessionID       string
 	IdempotencyKey  string
-	SignedAt        int64
+	// Binds an offline replay or synthetic backfill as observational rather than
+	// live governed work.
+	Observational *bool
+	SignedAt      int64
 	// Cryptographically random, single-use base64url mint nonce and assertion JTI.
 	Nonce     string
 	Signature string

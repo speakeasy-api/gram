@@ -404,7 +404,7 @@ func (s *Service) DelegateHooksActingUser(ctx context.Context, payload *gen.Dele
 	request := delegation.MintRequest{
 		RefreshToken: payload.RefreshToken, ContractVersion: payload.ContractVersion,
 		Provider: payload.Provider, Event: payload.Event, SessionID: payload.SessionID,
-		IdempotencyKey: payload.IdempotencyKey, SignedAt: payload.SignedAt, Nonce: payload.Nonce, Signature: payload.Signature,
+		IdempotencyKey: payload.IdempotencyKey, Observational: conv.PtrValOr(payload.Observational, false), SignedAt: payload.SignedAt, Nonce: payload.Nonce, Signature: payload.Signature,
 	}
 	identity, err := s.actingSigner.VerifyRefresh(request.RefreshToken)
 	if err != nil {
@@ -425,7 +425,11 @@ func (s *Service) DelegateHooksActingUser(ctx context.Context, payload *gen.Dele
 	if err != nil {
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
-	return &gen.DelegateHooksActingUserResult{Assertion: assertion, ExpiresIn: int(hooksacting.AssertionLifetime.Seconds())}, nil
+	expiresIn, err := s.actingSigner.AssertionExpiresIn(assertion)
+	if err != nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+	return &gen.DelegateHooksActingUserResult{Assertion: assertion, ExpiresIn: expiresIn}, nil
 }
 
 func (s *Service) hasActiveMembership(ctx context.Context, userID, organizationID string) (bool, error) {

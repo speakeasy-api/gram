@@ -120,11 +120,9 @@ func sameDeployment(gotURL, gotOrg, wantURL, wantOrg string) bool {
 	return gotURL == wantURL && (wantOrg == "" || gotOrg == "" || gotOrg == wantOrg)
 }
 
-// resolveAuth returns the effective credential: an explicit env key wins over
-// the cache. Only GRAM_HOOKS_API_KEY is honored — the generic GRAM_API_KEY is
-// a different product surface (MCP access) and must not silently authenticate
-// hook telemetry. The second return is false when the machine holds no
-// credential.
+// delegationReady reports whether a cached credential can mint proof-bound
+// acting-user assertions. Environment and shared organization keys remain valid
+// for observational telemetry but can never satisfy this check.
 func delegationReady(c creds) bool {
 	if c.Source != credCache || c.ContractVersion != delegation.ContractVersion || strings.TrimSpace(c.RefreshToken) == "" {
 		return false
@@ -133,6 +131,11 @@ func delegationReady(c creds) bool {
 	return err == nil
 }
 
+// resolveAuth returns the effective credential: an explicit env key wins over
+// the cache. Only GRAM_HOOKS_API_KEY is honored — the generic GRAM_API_KEY is
+// a different product surface (MCP access) and must not silently authenticate
+// hook telemetry. The second return is false when the machine holds no
+// credential.
 func resolveAuth(cfg Config) (creds, bool) {
 	apiKey := strings.TrimSpace(os.Getenv("GRAM_HOOKS_API_KEY"))
 	if apiKey != "" {

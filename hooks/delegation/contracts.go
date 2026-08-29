@@ -42,6 +42,7 @@ type MintRequest struct {
 	Event           string `json:"event"`
 	SessionID       string `json:"session_id"`
 	IdempotencyKey  string `json:"idempotency_key"`
+	Observational   bool   `json:"observational,omitempty"`
 	SignedAt        int64  `json:"signed_at"`
 	Nonce           string `json:"nonce"`
 	Signature       string `json:"signature"`
@@ -114,6 +115,7 @@ func ProofMessage(req MintRequest) ([]byte, error) {
 		Event           string `json:"event"`
 		SessionID       string `json:"session_id"`
 		IdempotencyKey  string `json:"idempotency_key"`
+		Observational   bool   `json:"observational"`
 		SignedAt        int64  `json:"signed_at"`
 		Nonce           string `json:"nonce"`
 	}{
@@ -123,6 +125,7 @@ func ProofMessage(req MintRequest) ([]byte, error) {
 		Event:           req.Event,
 		SessionID:       req.SessionID,
 		IdempotencyKey:  req.IdempotencyKey,
+		Observational:   req.Observational,
 		SignedAt:        req.SignedAt,
 		Nonce:           req.Nonce,
 	}

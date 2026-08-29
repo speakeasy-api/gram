@@ -25,6 +25,7 @@ func TestProofOfPossessionBindsEveryInvocationField(t *testing.T) {
 		func(v *delegation.MintRequest) { v.Event = delegation.EventUserPromptSubmit },
 		func(v *delegation.MintRequest) { v.SessionID = "other" },
 		func(v *delegation.MintRequest) { v.IdempotencyKey = "other" },
+		func(v *delegation.MintRequest) { v.Observational = true },
 		func(v *delegation.MintRequest) { v.SignedAt++ },
 		func(v *delegation.MintRequest) { v.Nonce = "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB" },
 	}

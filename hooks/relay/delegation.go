@@ -21,21 +21,22 @@ const actingIdentityFailureMessage = delegation.IdentityFailureMessage
 var errDelegationReauthRequired = errors.New("hooks delegation enrollment must be refreshed")
 
 type governedBinding struct {
-	provider  string
-	event     string
-	sessionID string
+	provider      string
+	event         string
+	sessionID     string
+	observational bool
 }
 
-// governedHookBinding names only the explicitly approved live native events.
-// Backfilled prompts, PermissionRequest, other providers, and observational
-// events never enter the delegation or ai_access path.
+// governedHookBindingOf names the explicitly approved native event shapes.
+// Backfilled prompts carry a proof-bound observational marker so they remain
+// outside ai_access without trusting a caller-controlled transport header.
 func governedHookBindingOf(typed any) (governedBinding, bool) {
 	base := agenthooks.EventOf(typed)
 	provider := adapterSlug(base.Provider)
 	var event string
-	switch value := typed.(type) {
+	switch typed.(type) {
 	case *agenthooks.PromptEvent:
-		if value.Backfilled || base.NativeName != delegation.EventUserPromptSubmit {
+		if base.NativeName != delegation.EventUserPromptSubmit {
 			return governedBinding{}, false
 		}
 		event = delegation.EventUserPromptSubmit
@@ -50,10 +51,18 @@ func governedHookBindingOf(typed any) (governedBinding, bool) {
 	if !delegation.Approved(provider, event) {
 		return governedBinding{}, false
 	}
-	return governedBinding{provider: provider, event: event, sessionID: base.Session.ID}, true
+	observational := false
+	if prompt, ok := typed.(*agenthooks.PromptEvent); ok {
+		observational = prompt.Backfilled
+	}
+	return governedBinding{provider: provider, event: event, sessionID: base.Session.ID, observational: observational}, true
 }
 
 func (r *Relay) mintActingUserAssertion(ctx context.Context, credentials creds, binding governedBinding, idempotencyKey string) (string, error) {
+	return mintActingUserAssertion(ctx, r.cfg.ServerURL, credentials, binding, idempotencyKey)
+}
+
+func mintActingUserAssertion(ctx context.Context, serverURL string, credentials creds, binding governedBinding, idempotencyKey string) (string, error) {
 	if credentials.Source != credCache || credentials.ContractVersion != delegation.ContractVersion || credentials.RefreshToken == "" || credentials.ProofPrivateKey == "" {
 		return "", errors.New("proof-bound hooks enrollment is required")
 	}
@@ -68,7 +77,7 @@ func (r *Relay) mintActingUserAssertion(ctx context.Context, credentials creds, 
 	request := delegation.MintRequest{
 		RefreshToken: credentials.RefreshToken, ContractVersion: delegation.ContractVersion,
 		Provider: binding.provider, Event: binding.event, SessionID: binding.sessionID,
-		IdempotencyKey: idempotencyKey, SignedAt: time.Now().Unix(),
+		IdempotencyKey: idempotencyKey, Observational: binding.observational, SignedAt: time.Now().Unix(),
 		Nonce: nonce,
 	}
 	request.Signature, err = delegation.Sign(privateKey, request)
@@ -79,7 +88,7 @@ func (r *Relay) mintActingUserAssertion(ctx context.Context, credentials creds, 
 	if err != nil {
 		return "", err
 	}
-	httpRequest, err := http.NewRequestWithContext(ctx, http.MethodPost, strings.TrimRight(r.cfg.ServerURL, "/")+"/rpc/cliAuth.delegateHooksActingUser", bytes.NewReader(body))
+	httpRequest, err := http.NewRequestWithContext(ctx, http.MethodPost, strings.TrimRight(serverURL, "/")+"/rpc/cliAuth.delegateHooksActingUser", bytes.NewReader(body))
 	if err != nil {
 		return "", err
 	}

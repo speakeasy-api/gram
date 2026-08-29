@@ -9,6 +9,9 @@ import (
 	"strings"
 	"time"
 
+	redisCache "github.com/go-redis/cache/v9"
+	"github.com/google/uuid"
+
 	"github.com/speakeasy-api/gram/hooks/delegation"
 	gen "github.com/speakeasy-api/gram/server/gen/hooks"
 	"github.com/speakeasy-api/gram/server/internal/cache"
@@ -23,6 +26,8 @@ const (
 	aiAccessIdentityFailureMessage  = delegation.IdentityFailureMessage
 	aiAccessEvaluatorFailureMessage = "Speakeasy could not confirm the current AI access policy. Try again."
 	aiAccessDenialCacheTTL          = 10 * time.Minute
+	aiAccessEvaluationLeaseTTL      = 10 * time.Second
+	aiAccessEvaluationPollInterval  = 10 * time.Millisecond
 )
 
 type hookAIAccessEvaluator interface {
@@ -79,8 +84,8 @@ func governedHook(payload *gen.IngestPayload) (provider, event string, governed 
 	return provider, event, delegation.Approved(provider, event)
 }
 
-func validLiveGovernedHook(payload *gen.IngestPayload, event string) bool {
-	if payload == nil || payload.Event == nil || conv.PtrValOr(payload.Replayed, false) || conv.PtrValOr(payload.Backfilled, false) {
+func validGovernedHookPayload(payload *gen.IngestPayload, event string) bool {
+	if payload == nil || payload.Event == nil {
 		return false
 	}
 	canonicalType := strings.TrimSpace(payload.Event.Type)
@@ -92,6 +97,7 @@ type verifiedHookAIAccess struct {
 	organizationID killswitches.OrganizationID
 	principalKey   killswitches.PrincipalKey
 	resourceKey    killswitches.ResourceKey
+	observational  bool
 }
 
 func identityFailureDecision() hookAIAccessDecision {
@@ -114,7 +120,7 @@ func (c *HookAIAccessCheckpoint) Verify(ctx context.Context, payload *gen.Ingest
 	if c == nil || authCtx == nil || strings.TrimSpace(authCtx.ActiveOrganizationID) == "" || payload == nil {
 		return verifiedHookAIAccess{}, identityFailureDecision()
 	}
-	if !validLiveGovernedHook(payload, event) {
+	if !validGovernedHookPayload(payload, event) {
 		return verifiedHookAIAccess{}, identityFailureDecision()
 	}
 	assertion := strings.TrimSpace(conv.PtrValOr(payload.ActingUserAssertion, ""))
@@ -124,8 +130,9 @@ func (c *HookAIAccessCheckpoint) Verify(ctx context.Context, payload *gen.Ingest
 	if assertion == "" || contract != delegation.ContractVersion || sessionID == "" || idempotencyKey == "" {
 		return verifiedHookAIAccess{}, identityFailureDecision()
 	}
+	observational := conv.PtrValOr(payload.Replayed, false) || conv.PtrValOr(payload.Backfilled, false)
 	verified, err := c.verifier.VerifyAssertion(assertion, hooksacting.AssertionBinding{
-		OrganizationID: authCtx.ActiveOrganizationID, Provider: provider, Event: event, SessionID: sessionID, IdempotencyKey: idempotencyKey,
+		OrganizationID: authCtx.ActiveOrganizationID, Provider: provider, Event: event, SessionID: sessionID, IdempotencyKey: idempotencyKey, Observational: observational,
 	})
 	if err != nil {
 		return verifiedHookAIAccess{}, identityFailureDecision()
@@ -139,7 +146,7 @@ func (c *HookAIAccessCheckpoint) Verify(ctx context.Context, payload *gen.Ingest
 	if err != nil || !supported {
 		return verifiedHookAIAccess{}, identityFailureDecision()
 	}
-	return c.revalidate(ctx, organizationID, principalKey, provider, event)
+	return c.revalidate(ctx, organizationID, principalKey, provider, event, observational)
 }
 
 // VerifyCached revalidates current membership and resource ownership for an
@@ -153,15 +160,15 @@ func (c *HookAIAccessCheckpoint) VerifyCached(ctx context.Context, payload *gen.
 	if !governed {
 		return verifiedHookAIAccess{}, hookAIAccessDecision{}
 	}
-	if c == nil || authCtx == nil || strings.TrimSpace(authCtx.ActiveOrganizationID) == "" || principalKey == "" || !validLiveGovernedHook(payload, event) {
+	if c == nil || authCtx == nil || strings.TrimSpace(authCtx.ActiveOrganizationID) == "" || principalKey == "" || !validGovernedHookPayload(payload, event) || conv.PtrValOr(payload.Replayed, false) || conv.PtrValOr(payload.Backfilled, false) {
 		return verifiedHookAIAccess{}, identityFailureDecision()
 	}
 	organizationID := killswitches.OrganizationID(authCtx.ActiveOrganizationID)
-	return c.revalidate(ctx, organizationID, principalKey, provider, event)
+	return c.revalidate(ctx, organizationID, principalKey, provider, event, false)
 }
 
 //nolint:exhaustruct // Empty outcomes intentionally encode identity and evaluator failure branches.
-func (c *HookAIAccessCheckpoint) revalidate(ctx context.Context, organizationID killswitches.OrganizationID, principalKey killswitches.PrincipalKey, provider, event string) (verifiedHookAIAccess, hookAIAccessDecision) {
+func (c *HookAIAccessCheckpoint) revalidate(ctx context.Context, organizationID killswitches.OrganizationID, principalKey killswitches.PrincipalKey, provider, event string, observational bool) (verifiedHookAIAccess, hookAIAccessDecision) {
 	active, err := c.principal.ValidateCurrentOrganization(ctx, organizationID, principalKey)
 	if err != nil {
 		return verifiedHookAIAccess{}, evaluatorFailureDecision()
@@ -169,11 +176,7 @@ func (c *HookAIAccessCheckpoint) revalidate(ctx context.Context, organizationID 
 	if !active {
 		return verifiedHookAIAccess{}, identityFailureDecision()
 	}
-	resourceInput, ok := delegation.ResourceKey(provider, event)
-	if !ok {
-		return verifiedHookAIAccess{}, identityFailureDecision()
-	}
-	canonicalResource, err := c.resource.Canonicalize(organizationID, resourceInput)
+	canonicalResource, err := c.resource.Derive(ctx, organizationID, mcptoolexecution.HookActivitySource{Provider: provider, Event: event})
 	if err != nil {
 		return verifiedHookAIAccess{}, evaluatorFailureDecision()
 	}
@@ -188,7 +191,7 @@ func (c *HookAIAccessCheckpoint) revalidate(ctx context.Context, organizationID 
 	if !current {
 		return verifiedHookAIAccess{}, identityFailureDecision()
 	}
-	return verifiedHookAIAccess{organizationID: organizationID, principalKey: principalKey, resourceKey: resourceKey}, hookAIAccessDecision{}
+	return verifiedHookAIAccess{organizationID: organizationID, principalKey: principalKey, resourceKey: resourceKey, observational: observational}, hookAIAccessDecision{}
 }
 
 func (c *HookAIAccessCheckpoint) EvaluateVerified(ctx context.Context, verified verifiedHookAIAccess) hookAIAccessDecision {
@@ -242,17 +245,77 @@ func hookDenialCacheKey(payload *gen.IngestPayload, organizationID string) (stri
 	return "hook:ai-access:denial:v1:" + hex.EncodeToString(digest.Sum(nil)), true
 }
 
+type hookDenialCacheStatus uint8
+
+const (
+	hookDenialCacheMiss hookDenialCacheStatus = iota
+	hookDenialCacheHit
+	hookDenialCacheFailure
+)
+
 //nolint:exhaustruct // Empty decisions intentionally represent cache misses in this state machine.
-func (s *Service) cachedHookAIAccessDenial(ctx context.Context, payload *gen.IngestPayload, organizationID string) (hookAIAccessDecision, killswitches.PrincipalKey, bool) {
+func (s *Service) cachedHookAIAccessDenial(ctx context.Context, payload *gen.IngestPayload, organizationID string) (hookAIAccessDecision, killswitches.PrincipalKey, hookDenialCacheStatus) {
 	key, ok := hookDenialCacheKey(payload, organizationID)
 	if !ok {
-		return hookAIAccessDecision{}, "", false
+		return hookAIAccessDecision{}, "", hookDenialCacheMiss
 	}
 	var cached cachedHookDenial
-	if err := s.cache.Get(ctx, key, &cached); err != nil || cached.PrincipalKey == "" || cached.Reason != "ai_access_denied" || strings.TrimSpace(cached.Message) == "" {
-		return hookAIAccessDecision{}, "", false
+	if err := s.cache.Get(ctx, key, &cached); err != nil {
+		if errors.Is(err, redisCache.ErrCacheMiss) {
+			return hookAIAccessDecision{}, "", hookDenialCacheMiss
+		}
+		return hookAIAccessDecision{}, "", hookDenialCacheFailure
 	}
-	return hookAIAccessDecision{governed: true, deny: true, reason: cached.Reason, message: cached.Message}, cached.PrincipalKey, true
+	if cached.PrincipalKey == "" || cached.Reason != "ai_access_denied" || strings.TrimSpace(cached.Message) == "" {
+		return hookAIAccessDecision{}, "", hookDenialCacheFailure
+	}
+	return hookAIAccessDecision{governed: true, deny: true, reason: cached.Reason, message: cached.Message}, cached.PrincipalKey, hookDenialCacheHit
+}
+
+//nolint:exhaustruct // Empty decisions encode cache and lease state-machine branches.
+func (s *Service) awaitHookAIAccessEvaluation(ctx context.Context, payload *gen.IngestPayload, organizationID string) (func() (bool, error), hookAIAccessDecision, killswitches.PrincipalKey, bool, bool) {
+	key, ok := hookDenialCacheKey(payload, organizationID)
+	leases, supported := s.cache.(cache.LeaseCache)
+	if !ok || !supported {
+		return nil, hookAIAccessDecision{}, "", false, true
+	}
+	leaseKey := key + ":evaluation"
+	owner := uuid.NewString()
+	for {
+		cached, principal, status := s.cachedHookAIAccessDenial(ctx, payload, organizationID)
+		switch status {
+		case hookDenialCacheHit:
+			return nil, cached, principal, true, false
+		case hookDenialCacheFailure:
+			return nil, hookAIAccessDecision{}, "", false, true
+		case hookDenialCacheMiss:
+		}
+		acquired, err := leases.AcquireLease(ctx, leaseKey, owner, aiAccessEvaluationLeaseTTL)
+		if err != nil {
+			return nil, hookAIAccessDecision{}, "", false, true
+		}
+		if acquired {
+			cached, principal, status = s.cachedHookAIAccessDenial(ctx, payload, organizationID)
+			if status == hookDenialCacheHit {
+				_, _ = leases.ReleaseLeaseIfOwner(ctx, leaseKey, owner)
+				return nil, cached, principal, true, false
+			}
+			if status == hookDenialCacheFailure {
+				_, _ = leases.ReleaseLeaseIfOwner(ctx, leaseKey, owner)
+				return nil, hookAIAccessDecision{}, "", false, true
+			}
+			return func() (bool, error) {
+				return leases.ReleaseLeaseIfOwner(context.WithoutCancel(ctx), leaseKey, owner)
+			}, hookAIAccessDecision{}, "", false, false
+		}
+		timer := time.NewTimer(aiAccessEvaluationPollInterval)
+		select {
+		case <-ctx.Done():
+			timer.Stop()
+			return nil, hookAIAccessDecision{}, "", false, true
+		case <-timer.C:
+		}
+	}
 }
 
 func (s *Service) publishHookAIAccessDenial(ctx context.Context, payload *gen.IngestPayload, organizationID string, principalKey killswitches.PrincipalKey, decision hookAIAccessDecision) hookAIAccessDecision {

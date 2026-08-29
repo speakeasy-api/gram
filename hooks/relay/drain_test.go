@@ -15,6 +15,7 @@ import (
 	"github.com/speakeasy-api/agenthooks"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/hooks/delegation"
 	"github.com/speakeasy-api/gram/hooks/sdk/models/components"
 )
 
@@ -187,6 +188,46 @@ func TestDrainExpiresStaleEntriesWithoutSending(t *testing.T) {
 	require.Equal(t, 1, s.Expired)
 	require.Zero(t, fs.count(), "expired entries must never reach the server")
 	require.Empty(t, spoolFiles(t))
+}
+
+func TestGovernedReplayBindingIsObservational(t *testing.T) {
+	event := delegation.EventPreToolUse
+	sessionID := "session-replay"
+	entry := spoolEntry{
+		V: spoolEntryVersion,
+		Envelope: components.IngestRequestBody{
+			Source:  components.HookIngestSource{Adapter: delegation.ProviderClaude, RawEventName: &event},
+			Session: &components.HookIngestSession{ID: &sessionID},
+			Event:   components.HookIngestEvent{Type: components.TypeToolRequested},
+		},
+	}
+	binding, ok := governedReplayBinding(entry)
+	require.True(t, ok)
+	require.True(t, binding.observational)
+	require.Equal(t, sessionID, binding.sessionID)
+}
+
+func TestDrainReadsVersionOneEntries(t *testing.T) {
+	drainEnv(t)
+	fs := newFakeServer(t, nil)
+	seedSpoolEntry(t, fs.URL, time.Hour, "sess-v1")
+	names := spoolFiles(t)
+	require.Len(t, names, 1)
+	dir := filepath.Join(os.Getenv("XDG_STATE_HOME"), "gram", "hooks", "spool")
+	path := filepath.Join(dir, names[0])
+	b, err := os.ReadFile(path)
+	require.NoError(t, err)
+	var raw map[string]any
+	require.NoError(t, json.Unmarshal(b, &raw))
+	raw["v"] = spoolEntryV1
+	b, err = json.Marshal(raw)
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(path, b, 0o600))
+
+	s := Drain(t.Context())
+	require.Equal(t, 1, s.Replayed)
+	require.Zero(t, s.Remaining)
+	require.Equal(t, 1, fs.count())
 }
 
 // TestDrainSkipsNewerSchemaEntries: an entry written by a newer binary is

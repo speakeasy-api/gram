@@ -14,6 +14,13 @@ import (
 // is independently bound by the assertion and evaluation request.
 type HookActivityResourceAdapter struct{}
 
+// HookActivitySource is provider/event context produced after acting-user
+// assertion verification. Derive intentionally rejects bare resource strings.
+type HookActivitySource struct {
+	Provider string
+	Event    string
+}
+
 func (HookActivityResourceAdapter) Kind() killswitches.ResourceKind { return ResourceKindHookActivity }
 
 func (HookActivityResourceAdapter) Canonicalize(_ killswitches.OrganizationID, input string) (killswitches.CanonicalizationResult[killswitches.ResourceKey], error) {
@@ -32,7 +39,11 @@ func (a HookActivityResourceAdapter) ValidateCurrentOrganization(_ context.Conte
 }
 
 func (a HookActivityResourceAdapter) Derive(_ context.Context, organizationID killswitches.OrganizationID, source any) (killswitches.CanonicalizationResult[killswitches.ResourceKey], error) {
-	key, ok := source.(string)
+	activity, ok := source.(HookActivitySource)
+	if !ok {
+		return killswitches.UnsupportedCanonicalizationResult[killswitches.ResourceKey](), nil
+	}
+	key, ok := delegation.ResourceKey(activity.Provider, activity.Event)
 	if !ok {
 		return killswitches.UnsupportedCanonicalizationResult[killswitches.ResourceKey](), nil
 	}

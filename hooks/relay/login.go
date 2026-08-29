@@ -74,8 +74,10 @@ func (l *loginFlow) Run(ctx context.Context, force bool) error {
 	if l.cfg.ConfigError != "" {
 		return fmt.Errorf("cannot read plugin config at %q (%s); reinstall the Speakeasy hooks plugin", l.cfg.ConfigPath, l.cfg.ConfigError)
 	}
-	if c, ok := resolveAuth(l.cfg); ok && !force && !reauthNeeded() && c.Source != credOrg && delegationReady(c) {
-		return nil
+	if c, ok := resolveAuth(l.cfg); ok && !force {
+		if c.Source == credEnv || (!reauthNeeded() && c.Source != credOrg && delegationReady(c)) {
+			return nil
+		}
 	}
 	// A key minted for a plaintext non-loopback server would be refused by
 	// every send; don't open a browser to it in the first place.

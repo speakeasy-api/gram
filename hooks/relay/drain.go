@@ -15,6 +15,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/speakeasy-api/gram/hooks/delegation"
 	"github.com/speakeasy-api/gram/hooks/sdk/models/components"
 )
 
@@ -123,7 +124,7 @@ func drainSpool(ctx context.Context, dir string) DrainSummary {
 			s.Skipped++
 			continue
 		}
-		if entry.V != spoolEntryVersion {
+		if entry.V != spoolEntryV1 && entry.V != spoolEntryVersion {
 			// A newer binary wrote it — not this one's to interpret or delete.
 			s.Skipped++
 			continue
@@ -139,7 +140,15 @@ func drainSpool(ctx context.Context, dir string) DrainSummary {
 			cl = newReplayClient(entry.ServerURL)
 			clients[entry.ServerURL] = cl
 		}
-		res := cl.sendWithAssertion(ctx, a.c, entry.Envelope, entry.IdempotencyKey, "", entry.Backfilled)
+		assertion := ""
+		if binding, governed := governedReplayBinding(entry); governed {
+			assertion, err = mintActingUserAssertion(ctx, entry.ServerURL, a.c, binding, entry.IdempotencyKey)
+			if err != nil {
+				s.Skipped++
+				continue
+			}
+		}
+		res := cl.sendWithAssertion(ctx, a.c, entry.Envelope, entry.IdempotencyKey, assertion, entry.Backfilled)
 		replayCreds := a.c
 		if res.authRejected {
 			// A rejected credential is machine state, not event state — the
@@ -149,7 +158,7 @@ func drainSpool(ctx context.Context, dir string) DrainSummary {
 			// deployment's remaining entries. Never delete on auth rejection.
 			if a.c.Source == credCache && a.orgKey != "" {
 				org := creds{ServerURL: entry.ServerURL, APIKey: a.orgKey, Project: entry.ProjectSlug, Email: "", Org: entry.OrgID, Source: credOrg}
-				res = cl.sendWithAssertion(ctx, org, entry.Envelope, entry.IdempotencyKey, "", entry.Backfilled)
+				res = cl.sendWithAssertion(ctx, org, entry.Envelope, entry.IdempotencyKey, assertion, entry.Backfilled)
 				if !res.authRejected {
 					replayCreds = org
 					auths[key] = drainAuth{c: org, ok: true, orgKey: a.orgKey}
@@ -190,6 +199,22 @@ func drainSpool(ctx context.Context, dir string) DrainSummary {
 	}
 	s.Remaining = len(listSpoolEntries(dir))
 	return s
+}
+
+func governedReplayBinding(entry spoolEntry) (governedBinding, bool) {
+	provider := strings.ToLower(strings.TrimSpace(entry.Envelope.Source.Adapter))
+	if entry.Envelope.Source.RawEventName == nil || entry.Envelope.Session == nil || entry.Envelope.Session.ID == nil {
+		return governedBinding{}, false
+	}
+	event := strings.TrimSpace(*entry.Envelope.Source.RawEventName)
+	sessionID := strings.TrimSpace(*entry.Envelope.Session.ID)
+	canonicalType := string(entry.Envelope.Event.Type)
+	validShape := (event == delegation.EventUserPromptSubmit && canonicalType == "prompt.submitted") ||
+		(event == delegation.EventPreToolUse && canonicalType == "tool.requested")
+	if sessionID == "" || !validShape || !delegation.Approved(provider, event) {
+		return governedBinding{}, false
+	}
+	return governedBinding{provider: provider, event: event, sessionID: sessionID, observational: true}, true
 }
 
 func replayedSkill(entry spoolEntry) *resolvedSkill {

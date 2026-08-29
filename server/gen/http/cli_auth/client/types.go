@@ -48,7 +48,10 @@ type DelegateHooksActingUserRequestBody struct {
 	Event           string `form:"event" json:"event" xml:"event"`
 	SessionID       string `form:"session_id" json:"session_id" xml:"session_id"`
 	IdempotencyKey  string `form:"idempotency_key" json:"idempotency_key" xml:"idempotency_key"`
-	SignedAt        int64  `form:"signed_at" json:"signed_at" xml:"signed_at"`
+	// Binds an offline replay or synthetic backfill as observational rather than
+	// live governed work.
+	Observational *bool `form:"observational,omitempty" json:"observational,omitempty" xml:"observational,omitempty"`
+	SignedAt      int64 `form:"signed_at" json:"signed_at" xml:"signed_at"`
 	// Cryptographically random, single-use base64url mint nonce and assertion JTI.
 	Nonce     string `form:"nonce" json:"nonce" xml:"nonce"`
 	Signature string `form:"signature" json:"signature" xml:"signature"`
@@ -672,6 +675,7 @@ func NewDelegateHooksActingUserRequestBody(p *cliauth.DelegateHooksActingUserPay
 		Event:           p.Event,
 		SessionID:       p.SessionID,
 		IdempotencyKey:  p.IdempotencyKey,
+		Observational:   p.Observational,
 		SignedAt:        p.SignedAt,
 		Nonce:           p.Nonce,
 		Signature:       p.Signature,
