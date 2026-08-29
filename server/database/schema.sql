@@ -4316,6 +4316,12 @@ ON audit_logs (organization_id, seq DESC);
 CREATE INDEX IF NOT EXISTS audit_logs_organization_id_project_id_seq_idx
 ON audit_logs (organization_id, project_id, seq DESC);
 
+CREATE INDEX IF NOT EXISTS audit_logs_organization_subject_action_seq_idx
+ON audit_logs (organization_id, subject_type, subject_id, action, seq DESC);
+
+CREATE INDEX IF NOT EXISTS audit_logs_organization_subject_seq_idx
+ON audit_logs (organization_id, subject_id, seq DESC);
+
 -- Remote MCP servers are upstream MCP endpoints that Gram proxies requests to.
 -- See https://modelcontextprotocol.io/registry/remote-servers
 CREATE TABLE IF NOT EXISTS remote_mcp_servers (
@@ -7716,6 +7722,8 @@ CREATE TABLE IF NOT EXISTS killswitch_prescriptions (
 );
 CREATE UNIQUE INDEX IF NOT EXISTS killswitch_prescriptions_organization_id_id_key ON killswitch_prescriptions (organization_id, id);
 CREATE INDEX IF NOT EXISTS killswitch_prescriptions_evaluator_idx ON killswitch_prescriptions (organization_id, definition_key, principal_kind, principal_key, resource_kind, id);
+-- Customer list pages use fixed contract dimensions and descending keyset order.
+CREATE INDEX IF NOT EXISTS killswitch_prescriptions_customer_list_idx ON killswitch_prescriptions (organization_id, definition_key, principal_kind, resource_kind, created_at DESC, id DESC);
 
 CREATE TABLE IF NOT EXISTS killswitch_prescription_versions (
   organization_id TEXT NOT NULL,
@@ -7723,7 +7731,8 @@ CREATE TABLE IF NOT EXISTS killswitch_prescription_versions (
   version BIGINT NOT NULL,
   state TEXT NOT NULL,
   resource_scope TEXT NOT NULL,
-  starts_at timestamptz NOT NULL,
+  -- NULL means the prescription starts immediately; a value is an explicit schedule.
+  starts_at timestamptz,
   expires_at timestamptz,
   activated_at timestamptz,
   superseded_at timestamptz,
@@ -7735,7 +7744,7 @@ CREATE TABLE IF NOT EXISTS killswitch_prescription_versions (
   CONSTRAINT killswitch_prescription_versions_version_check CHECK (version > 0),
   CONSTRAINT killswitch_prescription_versions_state_check CHECK (state <> ''),
   CONSTRAINT killswitch_prescription_versions_resource_scope_check CHECK (resource_scope IN ('all', 'selected')),
-  CONSTRAINT killswitch_prescription_versions_interval_check CHECK (expires_at IS NULL OR expires_at > starts_at),
+  CONSTRAINT killswitch_prescription_versions_interval_check CHECK (expires_at IS NULL OR starts_at IS NULL OR expires_at > starts_at),
   CONSTRAINT killswitch_prescription_versions_external_note_check CHECK (char_length(external_note) BETWEEN 1 AND 500),
   CONSTRAINT killswitch_prescription_versions_internal_note_check CHECK (char_length(internal_note) BETWEEN 1 AND 4000)
 );
