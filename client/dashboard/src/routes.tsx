@@ -135,6 +135,7 @@ import PolicyDetail, { PolicyNew } from "./pages/security/PolicyDetail";
 import DetectionRules from "./pages/security/DetectionRules";
 import Team from "./pages/team/Team";
 import SourceDetails from "./pages/sources/SourceDetails";
+import { KillswitchesRoot } from "./pages/killswitch/KillswitchesRoot";
 import {
   AddFromCatalogGate,
   SourcesPage,
@@ -145,6 +146,15 @@ import {
   ToolBuilderNew,
   ToolBuilderPage,
 } from "./pages/toolBuilder/ToolBuilder";
+
+const Killswitches = React.lazy(() =>
+  import("./pages/killswitch/Killswitches").then((module) => ({
+    default: module.default,
+  })),
+);
+const KillswitchDetail = React.lazy(
+  () => import("./pages/killswitch/KillswitchDetail"),
+);
 
 type AppRouteBasic = {
   title: string;
@@ -1174,6 +1184,20 @@ const ORG_ROUTE_STRUCTURE = {
     url: "audit-logs",
     icon: "history",
     component: OrgAuditLogs,
+  },
+  killswitch: {
+    title: "Killswitch",
+    url: "killswitch",
+    icon: "shield-off",
+    component: KillswitchesRoot,
+    indexComponent: Killswitches,
+    subPages: {
+      detail: {
+        title: "Killswitch detail",
+        url: ":killswitchId",
+        component: KillswitchDetail,
+      },
+    },
   },
   mcpSessions: {
     title: "MCP Sessions",
