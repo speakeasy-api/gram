@@ -1,5 +1,5 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { MoreActions } from ".";
 
 describe("MoreActions", () => {
@@ -14,5 +14,40 @@ describe("MoreActions", () => {
     fireEvent.keyDown(item, { key: "Escape" });
 
     await waitFor(() => expect(document.activeElement).toBe(trigger));
+  });
+
+  it("waits to restore focus until loading and disabled are both false", () => {
+    const { rerender } = render(
+      <MoreActions
+        actions={[{ label: "Inspect", onClick: () => {} }]}
+        triggerLoading
+        triggerDisabled
+      />,
+    );
+    const trigger = screen.getByRole("button", {
+      name: "Action in progress",
+    });
+    const focus = vi.spyOn(trigger, "focus");
+
+    rerender(
+      <MoreActions
+        actions={[{ label: "Inspect", onClick: () => {} }]}
+        triggerLoading={false}
+        triggerDisabled
+      />,
+    );
+
+    expect(focus).not.toHaveBeenCalled();
+
+    rerender(
+      <MoreActions
+        actions={[{ label: "Inspect", onClick: () => {} }]}
+        triggerLoading={false}
+        triggerDisabled={false}
+      />,
+    );
+
+    expect(focus).toHaveBeenCalledTimes(1);
+    expect(document.activeElement).toBe(trigger);
   });
 });

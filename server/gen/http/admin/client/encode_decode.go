@@ -5808,10 +5808,17 @@ func unmarshalAdminOrganizationResponseBodyToAdminAdminOrganization(v *AdminOrga
 // *AdminInferenceKeyResponse.
 func unmarshalAdminInferenceKeyResponseToAdminAdminInferenceKey(v *AdminInferenceKeyResponse) *admin.AdminInferenceKey {
 	res := &admin.AdminInferenceKey{
-		KeyType:        *v.KeyType,
-		CreditsUsed:    *v.CreditsUsed,
-		MonthlyCredits: *v.MonthlyCredits,
-		Disabled:       *v.Disabled,
+		KeyType:                 *v.KeyType,
+		CreditsUsed:             *v.CreditsUsed,
+		MonthlyCredits:          *v.MonthlyCredits,
+		Disabled:                *v.Disabled,
+		DisableCausesClassified: *v.DisableCausesClassified,
+	}
+	if v.DisableCauses != nil {
+		res.DisableCauses = make([]string, len(v.DisableCauses))
+		for i, val := range v.DisableCauses {
+			res.DisableCauses[i] = val
+		}
 	}
 
 	return res

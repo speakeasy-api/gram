@@ -5060,6 +5060,11 @@ type AdminInferenceKeyResponse struct {
 	CreditsUsed    float64 `form:"credits_used" json:"credits_used" xml:"credits_used"`
 	MonthlyCredits int64   `form:"monthly_credits" json:"monthly_credits" xml:"monthly_credits"`
 	Disabled       bool    `form:"disabled" json:"disabled" xml:"disabled"`
+	// Active internal disable causes. Omitted for legacy unclassified rows.
+	DisableCauses []string `form:"disable_causes,omitempty" json:"disable_causes,omitempty" xml:"disable_causes,omitempty"`
+	// Whether disable_causes is classified, including an explicitly empty cause
+	// set.
+	DisableCausesClassified bool `form:"disable_causes_classified" json:"disable_causes_classified" xml:"disable_causes_classified"`
 }
 
 // AdminInferenceSpendMonthResponse is used to define fields on response body

@@ -189,7 +189,9 @@ var AdminInferenceKey = Type("AdminInferenceKey", func() {
 	Attribute("credits_used", Float64, "Credits spent this month in USD.")
 	Attribute("monthly_credits", Int64)
 	Attribute("disabled", Boolean)
-	Required("key_type", "credits_used", "monthly_credits", "disabled")
+	Attribute("disable_causes", ArrayOf(String), "Active internal disable causes. Omitted for legacy unclassified rows.")
+	Attribute("disable_causes_classified", Boolean, "Whether disable_causes is classified, including an explicitly empty cause set.")
+	Required("key_type", "credits_used", "monthly_credits", "disabled", "disable_causes_classified")
 })
 
 var AdminInferenceKeyLimit = Type("AdminInferenceKeyLimit", func() {

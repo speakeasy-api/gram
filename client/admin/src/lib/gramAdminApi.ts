@@ -527,11 +527,20 @@ export function listOrganizationMembers(
   );
 }
 
-export type AdminInferenceKey = {
+type AdminInferenceKeyResponse = {
   key_type: string;
   credits_used: number;
   monthly_credits: number;
   disabled: boolean;
+  disable_causes?: string[];
+  disable_causes_classified: boolean;
+};
+
+export type AdminInferenceKey = Omit<
+  AdminInferenceKeyResponse,
+  "disable_causes"
+> & {
+  disable_causes: string[] | null;
 };
 
 export type AdminOrganizationFeatures = {
@@ -641,13 +650,19 @@ export function setOrganizationChatAnalysisSetting(input: {
   );
 }
 
-export function getInferenceKeys(
+export async function getInferenceKeys(
   organizationID: string,
 ): Promise<AdminInferenceKey[]> {
   const qs = toSearchParams({ organization_id: organizationID });
-  return gramAdminFetch<AdminInferenceKey[]>(
+  const keys = await gramAdminFetch<AdminInferenceKeyResponse[]>(
     `/admin/organization.inferenceKeys?${qs}`,
   );
+  return keys.map((key) => ({
+    ...key,
+    disable_causes: key.disable_causes_classified
+      ? (key.disable_causes ?? [])
+      : null,
+  }));
 }
 
 export type AdminInferenceKeyType = "chat" | "internal";

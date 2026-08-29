@@ -49,13 +49,25 @@ export function MoreActions({
   const [isOpen, setIsOpen] = useState(false);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const wasTriggerLoading = useRef(false);
+  const pendingFocusRestore = useRef(false);
 
   useEffect(() => {
     if (wasTriggerLoading.current && !triggerLoading) {
-      triggerRef.current?.focus();
+      pendingFocusRestore.current = true;
     }
     wasTriggerLoading.current = triggerLoading === true;
-  }, [triggerLoading]);
+
+    const trigger = triggerRef.current;
+    if (
+      pendingFocusRestore.current &&
+      !triggerLoading &&
+      !triggerDisabled &&
+      trigger
+    ) {
+      trigger.focus();
+      pendingFocusRestore.current = false;
+    }
+  }, [triggerDisabled, triggerLoading]);
 
   const wrapOnClick =
     (onClick: () => void) => (e: React.MouseEvent<HTMLDivElement>) => {

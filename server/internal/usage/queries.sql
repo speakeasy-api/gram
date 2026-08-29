@@ -113,7 +113,11 @@ FROM latest_months
 ORDER BY period_start;
 
 -- name: ListMaterializedOpenRouterInferenceKeys :many
-SELECT key_type, monthly_credits, (CASE WHEN disable_causes IS NULL THEN disabled ELSE cardinality(disable_causes) > 0 END)::boolean AS disabled
+SELECT key_type
+  , monthly_credits
+  , (CASE WHEN disable_causes IS NULL THEN disabled ELSE cardinality(disable_causes) > 0 END)::boolean AS disabled
+  , disable_causes
+  , (disable_causes IS NOT NULL)::boolean AS disable_causes_classified
 FROM openrouter_api_keys
 WHERE organization_id = @organization_id
   AND key_type = ANY(@key_types::text[])

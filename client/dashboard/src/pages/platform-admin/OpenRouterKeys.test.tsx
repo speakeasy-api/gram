@@ -15,8 +15,9 @@ import type { AdminOpenRouterKey } from "@gram/client/models/components/adminope
 type MutationOptions = {
   onSuccess: (
     key: Pick<AdminOpenRouterKey, "keyType" | "organizationName">,
-  ) => void;
+  ) => void | Promise<void>;
   onError: (error: unknown) => void;
+  onSettled: () => void;
 };
 
 const mocks = vi.hoisted(() => ({
@@ -179,14 +180,18 @@ describe("PlatformAdminOpenRouterKeys", () => {
     mocks.enablePending = false;
   });
 
-  function renderPage(): QueryClient {
+  function renderPage(): {
+    queryClient: QueryClient;
+    rerenderPage: () => void;
+  } {
     const queryClient = new QueryClient();
-    render(
+    const page = () => (
       <QueryClientProvider client={queryClient}>
         <PlatformAdminOpenRouterKeys />
-      </QueryClientProvider>,
+      </QueryClientProvider>
     );
-    return queryClient;
+    const { rerender } = render(page());
+    return { queryClient, rerenderPage: () => rerender(page()) };
   }
 
   function openRowActions(testId: string): void {
@@ -252,8 +257,8 @@ describe("PlatformAdminOpenRouterKeys", () => {
     expect(classifiedEmpty.queryByText("Unclassified legacy state")).toBeNull();
   });
 
-  it("locks row actions while a mutation is pending and restores trigger focus", () => {
-    renderPage();
+  it("keeps stale row actions closed and restores focus only after settlement is usable", async () => {
+    const { rerenderPage } = renderPage();
     const activeTrigger = within(
       screen.getByTestId("automatic-cause"),
     ).getByRole("button", { name: "Open menu" });
@@ -262,6 +267,7 @@ describe("PlatformAdminOpenRouterKeys", () => {
     ).getByRole("button", { name: "Open menu" });
 
     openRowActions("automatic-cause");
+    mocks.disablePending = true;
     fireEvent.click(screen.getByRole("menuitem", { name: "Disable key" }));
 
     expect(activeTrigger.getAttribute("aria-busy")).toBe("true");
@@ -270,15 +276,46 @@ describe("PlatformAdminOpenRouterKeys", () => {
     expect((oppositeTrigger as HTMLButtonElement).disabled).toBe(true);
     expect(mocks.enableMutate).not.toHaveBeenCalled();
 
-    act(() => mocks.disableOptions?.onError(new Error("disable failed")));
+    const focus = vi.spyOn(activeTrigger, "focus");
+    let finishInvalidation!: () => void;
+    mocks.invalidate.mockReturnValueOnce(
+      new Promise<void>((resolve) => {
+        finishInvalidation = resolve;
+      }),
+    );
+    let success!: Promise<void>;
+    act(() => {
+      success = Promise.resolve(
+        mocks.disableOptions?.onSuccess({
+          keyType: "chat",
+          organizationName: "Automatic cause",
+        }),
+      );
+    });
+
+    expect(activeTrigger.getAttribute("aria-busy")).toBe("true");
+    fireEvent.click(oppositeTrigger);
+    expect(screen.queryByRole("menuitem")).toBeNull();
+
+    finishInvalidation();
+    await act(async () => success);
+    expect(activeTrigger.getAttribute("aria-busy")).toBe("true");
+
+    act(() => mocks.disableOptions?.onSettled());
     expect(activeTrigger.getAttribute("aria-busy")).toBe("false");
+    expect((activeTrigger as HTMLButtonElement).disabled).toBe(true);
+    expect(focus).not.toHaveBeenCalled();
+
+    mocks.disablePending = false;
+    rerenderPage();
     expect((activeTrigger as HTMLButtonElement).disabled).toBe(false);
     expect((oppositeTrigger as HTMLButtonElement).disabled).toBe(false);
+    expect(focus).toHaveBeenCalledTimes(1);
     expect(document.activeElement).toBe(activeTrigger);
   });
 
-  it("uses generated cause-specific mutations and preserves refetch and errors", () => {
-    const queryClient = renderPage();
+  it("uses generated cause-specific mutations and preserves refetch and errors", async () => {
+    const { queryClient } = renderPage();
     openRowActions("automatic-cause");
     fireEvent.click(screen.getByRole("menuitem", { name: "Disable key" }));
     expect(mocks.disableMutate).toHaveBeenCalledWith({
@@ -290,12 +327,13 @@ describe("PlatformAdminOpenRouterKeys", () => {
       },
     });
 
-    act(() =>
+    await act(async () =>
       mocks.disableOptions?.onSuccess({
         keyType: "chat",
         organizationName: "Automatic cause",
       }),
     );
+    act(() => mocks.disableOptions?.onSettled());
     expect(mocks.toastSuccess).toHaveBeenCalledWith(
       "Admin lock added to the chat key for Automatic cause.",
     );
@@ -314,12 +352,13 @@ describe("PlatformAdminOpenRouterKeys", () => {
       },
     });
 
-    act(() =>
+    await act(async () =>
       mocks.enableOptions?.onSuccess({
         keyType: "internal",
         organizationName: "Combined causes",
       }),
     );
+    act(() => mocks.enableOptions?.onSettled());
     expect(mocks.toastSuccess).toHaveBeenCalledWith(
       "Admin lock removed from the internal key for Combined causes.",
     );
@@ -329,14 +368,20 @@ describe("PlatformAdminOpenRouterKeys", () => {
     fireEvent.click(
       screen.getByRole("menuitem", { name: "Remove admin lock" }),
     );
-    act(() => mocks.enableOptions?.onError(new Error("remove failed")));
+    act(() => {
+      mocks.enableOptions?.onError(new Error("remove failed"));
+      mocks.enableOptions?.onSettled();
+    });
     expect(mocks.toastError).toHaveBeenCalledWith("remove failed");
 
     openRowActions("combined-causes");
     fireEvent.click(
       screen.getByRole("menuitem", { name: "Remove admin lock" }),
     );
-    act(() => mocks.enableOptions?.onError("non-error rejection"));
+    act(() => {
+      mocks.enableOptions?.onError("non-error rejection");
+      mocks.enableOptions?.onSettled();
+    });
     expect(mocks.toastError).toHaveBeenLastCalledWith(
       "Failed to remove admin lock",
     );

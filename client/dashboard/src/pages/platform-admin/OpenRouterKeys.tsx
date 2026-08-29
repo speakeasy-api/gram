@@ -135,39 +135,35 @@ function KeysTable(): JSX.Element {
   const [search, setSearch] = useState("");
   const [pendingKey, setPendingKey] = useState<string | null>(null);
 
-  const invalidate = () => {
-    void invalidateAllAdminOpenRouterKeys(queryClient);
-  };
+  const invalidate = () => invalidateAllAdminOpenRouterKeys(queryClient);
 
   const disable = useDisableAdminOpenRouterKeyMutation({
-    onSuccess: (key) => {
+    onSuccess: async (key) => {
       toast.success(
         `Admin lock added to the ${key.keyType} key for ${key.organizationName}.`,
       );
-      invalidate();
-      setPendingKey(null);
+      await invalidate();
     },
     onError: (err) => {
       toast.error(
         err instanceof Error ? err.message : "Failed to disable the key",
       );
-      setPendingKey(null);
     },
+    onSettled: () => setPendingKey(null),
   });
   const enable = useEnableAdminOpenRouterKeyMutation({
-    onSuccess: (key) => {
+    onSuccess: async (key) => {
       toast.success(
         `Admin lock removed from the ${key.keyType} key for ${key.organizationName}.`,
       );
-      invalidate();
-      setPendingKey(null);
+      await invalidate();
     },
     onError: (err) => {
       toast.error(
         err instanceof Error ? err.message : "Failed to remove admin lock",
       );
-      setPendingKey(null);
     },
+    onSettled: () => setPendingKey(null),
   });
 
   const keys = useMemo(() => {
