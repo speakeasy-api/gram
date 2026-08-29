@@ -43,7 +43,7 @@ describe("LiftKillswitchDialog", () => {
     );
 
     expect(screen.getByText("Access may remain blocked")).not.toBeNull();
-    expect(screen.getByText(/All MCP servers/)).not.toBeNull();
+    expect(screen.getByText(/All MCP servers.*\(Active\)/)).not.toBeNull();
     expect(
       screen.getByText("Additional overlapping Killswitches are not shown."),
     ).not.toBeNull();

@@ -155,12 +155,18 @@ export function scopeLabel(
 export function serverDiff(
   before: KillswitchScope,
   after: KillswitchScope,
-  allServerIds: readonly string[] = [],
+  allServerIds?: readonly string[],
 ): { added: string[]; unchanged: string[]; removed: string[] } | null {
   if (after.type !== "selected_servers") return null;
 
   const beforeIds =
-    before.type === "all_servers" ? [...allServerIds] : before.serverIds;
+    before.type === "all_servers"
+      ? allServerIds === undefined
+        ? null
+        : [...allServerIds]
+      : before.serverIds;
+  if (beforeIds === null) return null;
+
   const previous = new Set(beforeIds);
   const next = new Set(after.serverIds);
   return {

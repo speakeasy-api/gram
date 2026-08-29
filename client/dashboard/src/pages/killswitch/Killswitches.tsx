@@ -63,17 +63,25 @@ export default function Killswitches(): JSX.Element {
 
   const listQuery = useKillswitchesInfinite(
     security,
-    { userId, status, capabilityKey, limit: 25 },
+    { userId, status, capabilityKey, limit: 25, gramSession: session.session },
     { initialPageParam: undefined, throwOnError: false },
   );
-  const membersQuery = useMembers(undefined, security, { throwOnError: false });
-  const capabilitiesQuery = useKillswitchCapabilities(security, undefined, {
-    enabled: editorOpen,
+  const membersQuery = useMembers({ gramSession: session.session }, security, {
     throwOnError: false,
   });
-  const serversQuery = useKillswitchMCPServers(security, undefined, {
-    throwOnError: false,
-  });
+  const capabilitiesQuery = useKillswitchCapabilities(
+    security,
+    { gramSession: session.session },
+    {
+      enabled: editorOpen,
+      throwOnError: false,
+    },
+  );
+  const serversQuery = useKillswitchMCPServers(
+    security,
+    { gramSession: session.session },
+    { throwOnError: false },
+  );
   const createMutation = useCreateKillswitchMutation();
   const previewMutation = usePreviewKillswitchOverlapsMutation();
 

@@ -210,6 +210,12 @@ describe("killswitch view model", () => {
       serverDiff(
         { type: "all_servers" },
         { type: "selected_servers", serverIds: ["a"] },
+      ),
+    ).toBeNull();
+    expect(
+      serverDiff(
+        { type: "all_servers" },
+        { type: "selected_servers", serverIds: ["a"] },
         ["a", "b"],
       ),
     ).toEqual({ added: [], unchanged: ["a"], removed: ["b"] });

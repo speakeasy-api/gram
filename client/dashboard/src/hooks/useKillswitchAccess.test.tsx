@@ -40,7 +40,7 @@ beforeEach(() => {
   mocks.rbac.isLoading = false;
   mocks.rbac.hasScope.mockReturnValue(true);
   mocks.featureFlags.status = "ready";
-  mocks.isFeatureEnabled.mockReturnValue(true);
+  mocks.isFeatureEnabled.mockReset().mockReturnValue(true);
   mocks.scopeOverrideHeader = null;
 });
 
@@ -59,16 +59,20 @@ describe("useKillswitchAccess", () => {
     },
   );
 
-  it.each(["error", "ready"] as const)(
-    "fails hidden when rollout state is %s and the flag is unavailable",
-    (status) => {
-      mocks.featureFlags.status = status;
-      mocks.isFeatureEnabled.mockReturnValue(undefined);
-      expect(
-        renderHook(() => useKillswitchAccess()).result.current.reason,
-      ).toBe("rollout");
-    },
-  );
+  it("fails hidden when loading rollout state fails", () => {
+    mocks.featureFlags.status = "error";
+    expect(renderHook(() => useKillswitchAccess()).result.current.reason).toBe(
+      "rollout",
+    );
+    expect(mocks.isFeatureEnabled).not.toHaveBeenCalled();
+  });
+
+  it("fails hidden when rollout is ready but the flag is unavailable", () => {
+    mocks.isFeatureEnabled.mockReturnValue(undefined);
+    expect(renderHook(() => useKillswitchAccess()).result.current.reason).toBe(
+      "rollout",
+    );
+  });
 
   it("gates the shared demo before loading access state", () => {
     mocks.session.organization.slug = DEMO_ORG_SLUG;

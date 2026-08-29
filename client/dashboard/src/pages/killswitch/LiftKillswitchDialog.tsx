@@ -1,6 +1,7 @@
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
 import { Dialog } from "@/components/ui/Dialog";
+import { capitalize } from "@/lib/utils";
 import type { KillswitchOverlap } from "@gram/client/models/components/killswitchoverlap.js";
 import { useEffect, useRef, useState } from "react";
 import {
@@ -111,7 +112,8 @@ export function LiftKillswitchDialog({
                 {overlaps.map((overlap) => (
                   <li key={overlap.id}>
                     {scopeLabel(overlap.scope, serverNames)} —{" "}
-                    {scheduleLabel(overlap.schedule)} ({overlap.status})
+                    {scheduleLabel(overlap.schedule)} (
+                    {capitalize(overlap.status)})
                   </li>
                 ))}
               </ul>

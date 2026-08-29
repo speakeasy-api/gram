@@ -91,19 +91,27 @@ export default function KillswitchDetail(): JSX.Element {
   const [authorityBlocked, setAuthorityBlocked] = useState(false);
   const detailQuery = useKillswitch(
     security,
-    { id: killswitchId },
+    { id: killswitchId, gramSession: session.session },
     {
       throwOnError: false,
     },
   );
-  const membersQuery = useMembers(undefined, security, { throwOnError: false });
-  const capabilitiesQuery = useKillswitchCapabilities(security, undefined, {
-    enabled: editOpen,
+  const membersQuery = useMembers({ gramSession: session.session }, security, {
     throwOnError: false,
   });
-  const serversQuery = useKillswitchMCPServers(security, undefined, {
-    throwOnError: false,
-  });
+  const capabilitiesQuery = useKillswitchCapabilities(
+    security,
+    { gramSession: session.session },
+    {
+      enabled: editOpen,
+      throwOnError: false,
+    },
+  );
+  const serversQuery = useKillswitchMCPServers(
+    security,
+    { gramSession: session.session },
+    { throwOnError: false },
+  );
   const editMutation = useEditKillswitchMutation();
   const liftMutation = useLiftKillswitchMutation();
   const overlapMutation = usePreviewKillswitchOverlapsMutation();

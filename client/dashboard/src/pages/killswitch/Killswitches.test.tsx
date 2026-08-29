@@ -31,8 +31,11 @@ const dependencies = vi.hoisted(() => ({
   refetchMembers: vi.fn(),
   refetchServers: vi.fn(),
   refetchCapabilities: vi.fn(),
+  membersRequest: undefined as unknown,
   membersOptions: undefined as unknown,
+  capabilityRequest: undefined as unknown,
   capabilityOptions: undefined as unknown,
+  serverRequest: undefined as unknown,
   serverOptions: undefined as unknown,
   create: vi.fn(),
   editorProps: undefined as Record<string, unknown> | undefined,
@@ -54,6 +57,7 @@ vi.mock("@tanstack/react-query", async (importOriginal) => ({
 }));
 vi.mock("@gram/client/react-query/members.js", () => ({
   useMembers: (...args: unknown[]) => {
+    dependencies.membersRequest = args[0];
     dependencies.membersOptions = args[2];
     return {
       data: {
@@ -80,6 +84,7 @@ vi.mock("@gram/client/react-query/killswitches.js", () => ({
 }));
 vi.mock("@gram/client/react-query/killswitchCapabilities.js", () => ({
   useKillswitchCapabilities: (...args: unknown[]) => {
+    dependencies.capabilityRequest = args[1];
     dependencies.capabilityOptions = args[2];
     return {
       data: { capabilities: [], comingSoon: [] },
@@ -91,6 +96,7 @@ vi.mock("@gram/client/react-query/killswitchCapabilities.js", () => ({
 }));
 vi.mock("@gram/client/react-query/killswitchMCPServers.js", () => ({
   useKillswitchMCPServers: (...args: unknown[]) => {
+    dependencies.serverRequest = args[1];
     dependencies.serverOptions = args[2];
     return {
       data: { servers: [] },
@@ -170,6 +176,32 @@ describe("KillswitchesRoot", () => {
 });
 
 describe("Killswitches list", () => {
+  it("scopes every cached query by session", () => {
+    listHook.mockReturnValue({
+      data: { pages: [{ result: { items: [] } }] },
+      error: null,
+      isLoading: false,
+      hasNextPage: false,
+      isFetchingNextPage: false,
+      refetch: vi.fn(),
+      fetchNextPage: vi.fn(),
+    });
+    render(
+      <MemoryRouter initialEntries={["/acme/killswitch"]}>
+        <Routes>
+          <Route path=":orgSlug/killswitch" element={<Killswitches />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    expect(listHook.mock.calls.at(-1)?.[1]).toEqual(
+      expect.objectContaining({ gramSession: "session" }),
+    );
+    expect(dependencies.membersRequest).toEqual({ gramSession: "session" });
+    expect(dependencies.capabilityRequest).toEqual({ gramSession: "session" });
+    expect(dependencies.serverRequest).toEqual({ gramSession: "session" });
+  });
+
   it("retries every list dependency that can make rows inaccurate", async () => {
     const refetchList = vi.fn().mockResolvedValue(undefined);
     dependencies.membersError = new Error("members unavailable");

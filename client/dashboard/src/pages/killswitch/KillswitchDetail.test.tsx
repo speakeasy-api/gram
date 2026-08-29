@@ -23,9 +23,13 @@ const mocks = vi.hoisted(() => ({
   refetchDetail: vi.fn(),
   edit: vi.fn(),
   lift: vi.fn(),
+  detailRequest: undefined as unknown,
   detailOptions: undefined as unknown,
+  membersRequest: undefined as unknown,
   membersOptions: undefined as unknown,
+  capabilityRequest: undefined as unknown,
   capabilityOptions: undefined as unknown,
+  serverRequest: undefined as unknown,
   serverOptions: undefined as unknown,
   editorProps: undefined as Record<string, unknown> | undefined,
   liftProps: undefined as Record<string, unknown> | undefined,
@@ -49,6 +53,7 @@ vi.mock("@tanstack/react-query", async (importOriginal) => ({
 }));
 vi.mock("@gram/client/react-query/members.js", () => ({
   useMembers: (...args: unknown[]) => {
+    mocks.membersRequest = args[0];
     mocks.membersOptions = args[2];
     return {
       data: mocks.catalogDataAvailable ? { members: [] } : undefined,
@@ -60,6 +65,7 @@ vi.mock("@gram/client/react-query/members.js", () => ({
 }));
 vi.mock("@gram/client/react-query/killswitch.js", () => ({
   useKillswitch: (...args: unknown[]) => {
+    mocks.detailRequest = args[1];
     mocks.detailOptions = args[2];
     return {
       data: mocks.detail,
@@ -76,6 +82,7 @@ vi.mock("@gram/client/react-query/killswitches.js", () => ({
 }));
 vi.mock("@gram/client/react-query/killswitchCapabilities.js", () => ({
   useKillswitchCapabilities: (...args: unknown[]) => {
+    mocks.capabilityRequest = args[1];
     mocks.capabilityOptions = args[2];
     return {
       data: { capabilities: [], comingSoon: [] },
@@ -87,6 +94,7 @@ vi.mock("@gram/client/react-query/killswitchCapabilities.js", () => ({
 }));
 vi.mock("@gram/client/react-query/killswitchMCPServers.js", () => ({
   useKillswitchMCPServers: (...args: unknown[]) => {
+    mocks.serverRequest = args[1];
     mocks.serverOptions = args[2];
     return {
       data: mocks.catalogDataAvailable ? { servers: [] } : undefined,
@@ -151,9 +159,13 @@ beforeEach(() => {
     result: { id: "ks-1", version: 2, replayed: false },
     truncated: false,
   });
+  mocks.detailRequest = undefined;
   mocks.detailOptions = undefined;
+  mocks.membersRequest = undefined;
   mocks.membersOptions = undefined;
+  mocks.capabilityRequest = undefined;
   mocks.capabilityOptions = undefined;
+  mocks.serverRequest = undefined;
   mocks.serverOptions = undefined;
   mocks.editorProps = undefined;
   mocks.liftProps = undefined;
@@ -345,13 +357,20 @@ describe("KillswitchDetail", () => {
     expect(screen.queryByText("Deleted member")).toBeNull();
   });
 
-  it("loads the capability catalog only for editing without failing read detail", async () => {
+  it("scopes cached reads by session and loads capabilities only for editing", async () => {
     mocks.detail = activeDetail();
     mocks.capabilitiesError = new Error("catalog edit failed");
     renderDetail();
     expect(
       screen.getByRole("heading", { name: "MCP tool calls" }),
     ).not.toBeNull();
+    expect(mocks.detailRequest).toEqual({
+      id: "ks-1",
+      gramSession: "session",
+    });
+    expect(mocks.membersRequest).toEqual({ gramSession: "session" });
+    expect(mocks.capabilityRequest).toEqual({ gramSession: "session" });
+    expect(mocks.serverRequest).toEqual({ gramSession: "session" });
     expect(mocks.detailOptions).toEqual({ throwOnError: false });
     expect(mocks.membersOptions).toEqual({ throwOnError: false });
     expect(mocks.serverOptions).toEqual({ throwOnError: false });
@@ -890,7 +909,7 @@ describe("KillswitchDetail", () => {
     );
   });
 
-  it("renders scope-mode transitions and omits edit diffs for expiry events", () => {
+  it("omits unverifiable all-server diffs and expiry diffs", () => {
     const baseEvent = {
       actorUserId: "actor-1",
       changedAt: new Date("2030-01-01T00:00:00Z"),
@@ -947,7 +966,7 @@ describe("KillswitchDetail", () => {
         /Scope changed from all MCP servers to selected servers/,
       ),
     ).not.toBeNull();
-    expect(screen.getAllByText(/^Added:/)).toHaveLength(1);
+    expect(screen.queryByText(/^Added:/)).toBeNull();
   });
 
   it("shows a dedicated read-error state", () => {
