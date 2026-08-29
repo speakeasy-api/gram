@@ -11,6 +11,7 @@ import (
 	"go.opentelemetry.io/otel/metric"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/killswitches"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpmetrics"
 )
@@ -20,6 +21,7 @@ const hostedEvaluatorTimeout = 2 * time.Second
 // HostedCheckpoint authoritatively evaluates the ordered MCP and AI-access
 // kill switches before hosted tools/call configuration or execution work begins.
 type HostedCheckpoint struct {
+	assistant     *AssistantCheckpoint
 	principal     killswitches.PrincipalAdapter
 	resource      killswitches.ResourceAdapter
 	evaluator     evaluator
@@ -59,7 +61,13 @@ func NewHostedCheckpoint(db *pgxpool.Pool, meterProvider metric.MeterProvider, l
 		return nil, fmt.Errorf("construct evaluator: %w", err)
 	}
 
+	assistant, err := newAssistantCheckpoint(registry, eval, hostedEvaluatorTimeout)
+	if err != nil {
+		return nil, err
+	}
+
 	return &HostedCheckpoint{
+		assistant:     assistant,
 		principal:     principal,
 		resource:      resource,
 		evaluator:     eval,
@@ -102,6 +110,12 @@ func (c *HostedCheckpoint) Evaluate(ctx context.Context, organizationID string, 
 	}
 	if derivation.resourceErr != nil {
 		return c.infrastructureRejection(ctx, derivation.resourceErr)
+	}
+	if principal, ok := contextvalues.GetAssistantPrincipal(ctx); ok {
+		disposition, err := c.assistant.Evaluate(evaluationCtx, organizationID, principal.AssistantID)
+		if err != nil || disposition.Kind() != killswitches.TransportDispositionContinue {
+			return disposition, err
+		}
 	}
 
 	result := c.evaluator.Evaluate(evaluationCtx, killswitches.EvaluationRequest{

@@ -11,6 +11,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.opentelemetry.io/otel/metric"
 
+	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/killswitches"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpmetrics"
 )
@@ -31,6 +32,7 @@ type evaluator interface {
 // covered tools/call, then performs an authoritative evaluation. It holds no
 // per-call decision cache.
 type Checkpoint struct {
+	assistant     *AssistantCheckpoint
 	principal     killswitches.PrincipalAdapter
 	resource      killswitches.ResourceAdapter
 	evaluator     evaluator
@@ -81,7 +83,13 @@ func newCheckpoint(registry *killswitches.Registry, evaluation evaluator, timeou
 		return nil, errors.New("private proxy coverage contract is not registered")
 	}
 
+	assistant, err := newAssistantCheckpoint(registry, evaluation, timeout)
+	if err != nil {
+		return nil, err
+	}
+
 	return &Checkpoint{
+		assistant:     assistant,
 		principal:     principal,
 		resource:      resource,
 		evaluator:     evaluation,
@@ -134,6 +142,12 @@ func (c *Checkpoint) Evaluate(ctx context.Context, organizationID, mcpServerID s
 	if !supported {
 		return c.infrastructureFailure(errors.New("covered tools/call has no canonical mcp server"))
 	}
+	if principal, ok := contextvalues.GetAssistantPrincipal(ctx); ok {
+		disposition, err := c.assistant.Evaluate(ctx, organizationID, principal.AssistantID)
+		if err != nil || disposition.Kind() != killswitches.TransportDispositionContinue {
+			return disposition, err
+		}
+	}
 	if derivation.principalErr != nil {
 		return c.infrastructureFailure(fmt.Errorf("derive authenticated user: %w", derivation.principalErr))
 	}
@@ -163,11 +177,15 @@ func (c *Checkpoint) Evaluate(ctx context.Context, organizationID, mcpServerID s
 }
 
 func (c *Checkpoint) infrastructureFailure(cause error) (killswitches.TransportDisposition, error) {
+	return infrastructureFailure(c.transport, c.failurePolicy, cause)
+}
+
+func infrastructureFailure(transport killswitches.TransportAdapter, policy killswitches.FailurePolicy, cause error) (killswitches.TransportDisposition, error) {
 	result, err := killswitches.NewInfrastructureFailureResult(cause)
 	if err != nil {
 		return killswitches.NewInfrastructureRejectionDisposition(), errors.Join(cause, err)
 	}
-	disposition, err := c.transport(result, c.failurePolicy)
+	disposition, err := transport(result, policy)
 	if err != nil {
 		return killswitches.NewInfrastructureRejectionDisposition(), errors.Join(cause, err)
 	}

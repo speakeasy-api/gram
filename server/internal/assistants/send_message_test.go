@@ -18,6 +18,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/authztest"
 	bgtriggers "github.com/speakeasy-api/gram/server/internal/background/triggers"
+	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	hooksrepo "github.com/speakeasy-api/gram/server/internal/hooks/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	projectsRepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
@@ -71,6 +72,19 @@ func (f *fakeDashboardIngestor) IngestDirect(ctx context.Context, instanceID uui
 		return nil, nil
 	}
 	return &bgtriggers.Task{}, nil
+}
+
+func TestSendMessageRequiresValidatedCurrentUserSession(t *testing.T) {
+	t.Parallel()
+	svc, ctx, projectID, _ := newRBACServiceWithConn(t, "assistants_send_message_session_required")
+	ctx = authztest.WithExactGrants(t, ctx, projectReadGrant(projectID))
+	authContext, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	withoutSession := *authContext
+	withoutSession.SessionID = nil
+	ctx = contextvalues.SetAuthContext(t.Context(), &withoutSession)
+	_, err := svc.SendMessage(ctx, &gen.SendMessagePayload{AssistantID: uuid.NewString(), Message: "hello"})
+	requireOopsCode(t, err, oops.CodeForbidden)
 }
 
 func TestSendMessageEnqueues(t *testing.T) {

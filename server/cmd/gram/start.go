@@ -1012,6 +1012,10 @@ func newStartCommand() *cli.Command {
 			}
 
 			assistantTokenManager := assistanttokens.New(c.String(usersessions.JWTSigningKeyFlag), db, authzEngine)
+			assistantAIAccessCheckpoint, err := mcptoolexecution.NewAssistantCheckpoint(db, mcptoolexecution.DefaultEvaluationTimeout, meterProvider, logger)
+			if err != nil {
+				return fmt.Errorf("initialize assistant AI-access checkpoint: %w", err)
+			}
 			assistantRuntime, err := newAssistantRuntime(ctx, logger, tracerProvider, c, guardianPolicy, db, serverURL)
 			if err != nil {
 				return err
@@ -1154,7 +1158,8 @@ func newStartCommand() *cli.Command {
 			)
 			contextWindowResolver := openrouter.NewContextWindowResolver(logger, guardianPolicy, cache.NewRedisCacheAdapter(redisClient))
 			chatService := chat.NewService(logger, tracerProvider, db, sessionManager, chatSessionsManager, openRouter, chatClient, contextWindowResolver, posthogClient, telemSvc, assetStorage, authzEngine, assistantTokenManager, billingRepo, auditLogger).
-				WithTurnStream(turnStream)
+				WithTurnStream(turnStream).
+				WithAssistantAIAccessCheckpoint(assistantAIAccessCheckpoint)
 			assistantsCore := assistants.NewServiceCore(logger, tracerProvider, meterProvider, db, guardianPolicy, encryptionClient, assistantRuntime, slackClient, assistantTokenManager, serverURL, telemLogger, contextWindowResolver, auditLogger)
 			assistantsCore.SetWakeCanceller(triggerApp)
 			assistantsCore.SetDashboardIngestor(triggerApp)

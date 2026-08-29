@@ -47,6 +47,8 @@ func testIdentityContext(t *testing.T, kind mcpidentity.Kind, userID string) con
 		return boundary.StampAPIKey(t.Context())
 	case mcpidentity.KindAssistant:
 		return boundary.StampAssistant(t.Context())
+	case mcpidentity.KindDelegatedUser:
+		return boundary.StampDelegatedUser(t.Context(), userID)
 	case mcpidentity.KindChatSession:
 		return boundary.StampChatSession(t.Context())
 	default:

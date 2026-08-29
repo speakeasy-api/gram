@@ -491,7 +491,7 @@ func newRBACServiceWithConn(t *testing.T, dbName string) (*Service, context.Cont
 	}
 
 	sessionID := "session-test"
-	ctx := contextvalues.SetAuthContext(t.Context(), &contextvalues.AuthContext{
+	authContext := &contextvalues.AuthContext{
 		ActiveOrganizationID:  "org-test",
 		UserID:                "user-test",
 		ExternalUserID:        "",
@@ -506,7 +506,8 @@ func newRBACServiceWithConn(t *testing.T, dbName string) (*Service, context.Cont
 		ProjectSlug:           &projectSlug,
 		APIKeyScopes:          nil,
 		IsAdmin:               false,
-	})
+	}
+	ctx := contextvalues.WithValidatedGramSession(t.Context(), authContext, false)
 
 	return service, ctx, projectID, conn
 }

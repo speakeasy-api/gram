@@ -45,12 +45,26 @@ func (customerLifecycleValidator) ValidateCurrent(ctx context.Context, dbtx kill
 	if batch.Resources == nil {
 		return nil
 	}
-	if batch.Resources.Kind != ResourceKindMCPServer {
-		return fmt.Errorf("%w: unsupported server reference", killswitches.ErrInvalidReference)
-	}
 	ids, ok := canonicalResourceIDs(batch.Resources.Keys)
 	if !ok {
-		return fmt.Errorf("%w: server is not available", killswitches.ErrInvalidReference)
+		return fmt.Errorf("%w: resource is not available", killswitches.ErrInvalidReference)
+	}
+	if batch.Resources.Kind == ResourceKindAssistant {
+		rows, err := dbtx.Query(ctx, `SELECT id FROM assistants WHERE id = ANY($1::uuid[]) AND organization_id = $2 AND status = 'active' AND deleted IS FALSE ORDER BY id FOR UPDATE`, ids, string(batch.OrganizationID))
+		if err != nil {
+			return fmt.Errorf("lock current organization assistants: %w", err)
+		}
+		locked, err := pgx.CollectRows(rows, pgx.RowTo[uuid.UUID])
+		if err != nil {
+			return fmt.Errorf("read current organization assistants: %w", err)
+		}
+		if len(locked) != len(ids) {
+			return fmt.Errorf("%w: one or more assistants are not available", killswitches.ErrInvalidReference)
+		}
+		return nil
+	}
+	if batch.Resources.Kind != ResourceKindMCPServer {
+		return fmt.Errorf("%w: unsupported resource reference", killswitches.ErrInvalidReference)
 	}
 	locked, err := mcpserversrepo.New(dbtx).LockLiveMCPServersInOrganization(ctx, mcpserversrepo.LockLiveMCPServersInOrganizationParams{
 		Ids: ids, OrganizationID: string(batch.OrganizationID),

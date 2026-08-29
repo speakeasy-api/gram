@@ -95,7 +95,7 @@ func (a *AuthenticatedUserPrincipalAdapter) DeriveCandidates(ctx context.Context
 	}
 
 	switch identity.Kind() {
-	case mcpidentity.KindUserSession:
+	case mcpidentity.KindUserSession, mcpidentity.KindDelegatedUser:
 		userID := identity.UserID()
 		key, canonical := canonicalUserKey(userID)
 		if !canonical || string(key) != userID {

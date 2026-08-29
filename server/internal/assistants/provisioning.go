@@ -325,6 +325,7 @@ func assistantRecordFromManagedRow(row assistantrepo.GetManagedAssistantByProjec
 type dashboardIngestPayload struct {
 	Text           string                      `json:"text"`
 	UserID         string                      `json:"user_id"`
+	ActingFor      actingForDelegation         `json:"acting_for"`
 	CorrelationID  string                      `json:"correlation_id"`
 	IdempotencyKey string                      `json:"idempotency_key"`
 	SkillContext   []dashboardTurnSkillContext `json:"skill_context,omitempty"`
@@ -378,7 +379,10 @@ type DashboardSendResult struct {
 // returned), or an existing chat id to continue it. idempotencyKey may be empty
 // — a fresh one is minted so the ingest still succeeds, but callers that want
 // retry-safe dedupe should pass a stable key.
-func (s *ServiceCore) SendDashboardMessage(ctx context.Context, projectID, assistantID uuid.UUID, userID string, chatID uuid.UUID, text, idempotencyKey string, skillIDs []uuid.UUID, attachments []DashboardAttachmentInput) (DashboardSendResult, error) {
+func (s *ServiceCore) SendDashboardMessage(ctx context.Context, projectID, assistantID uuid.UUID, userID, sessionID string, chatID uuid.UUID, text, idempotencyKey string, skillIDs []uuid.UUID, attachments []DashboardAttachmentInput) (DashboardSendResult, error) {
+	if userID == "" || sessionID == "" {
+		return DashboardSendResult{}, errAssistantDelegationUnavailable
+	}
 	assistant, err := s.GetAssistant(ctx, projectID, assistantID)
 	if err != nil {
 		return DashboardSendResult{}, err
@@ -434,9 +438,14 @@ func (s *ServiceCore) SendDashboardMessage(ctx context.Context, projectID, assis
 	if idempotencyKey == "" {
 		idempotencyKey = uuid.NewString()
 	}
+	now := time.Now().UTC()
 	payload, err := json.Marshal(dashboardIngestPayload{
-		Text:           text,
-		UserID:         userID,
+		Text:   text,
+		UserID: userID,
+		ActingFor: actingForDelegation{
+			Kind: actingForDelegationKindUserSession, OrganizationID: assistant.OrganizationID,
+			UserID: userID, SessionID: uuid.NewString(), IssuedAt: now, ExpiresAt: now.Add(assistantRuntimeTokenTTL),
+		},
 		CorrelationID:  correlationID,
 		IdempotencyKey: idempotencyKey,
 		SkillContext:   skillContext,
@@ -446,7 +455,7 @@ func (s *ServiceCore) SendDashboardMessage(ctx context.Context, projectID, assis
 		return DashboardSendResult{}, fmt.Errorf("marshal dashboard message: %w", err)
 	}
 
-	task, err := s.dashboardIngestor.IngestDirect(ctx, instanceID, payload, time.Now().UTC())
+	task, err := s.dashboardIngestor.IngestDirect(ctx, instanceID, payload, now)
 	if err != nil {
 		return DashboardSendResult{}, fmt.Errorf("ingest dashboard message: %w", err)
 	}

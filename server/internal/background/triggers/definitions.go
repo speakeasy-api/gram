@@ -147,6 +147,7 @@ func (dashboardTriggerConfig) Filter(_ any) (bool, error) { return true, nil }
 type dashboardTriggerEvent struct {
 	Text           string          `json:"text" cel:"text"`
 	UserID         string          `json:"user_id,omitempty" cel:"user_id"`
+	ActingFor      json.RawMessage `json:"acting_for,omitempty"`
 	CorrelationID  string          `json:"correlation_id,omitempty" cel:"correlation_id"`
 	IdempotencyKey string          `json:"idempotency_key,omitempty" cel:"idempotency_key"`
 	SkillContext   json.RawMessage `json:"skill_context,omitempty"`

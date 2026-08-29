@@ -50,6 +50,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/killswitches"
+	"github.com/speakeasy-api/gram/server/internal/killswitches/mcptoolexecution"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -63,24 +65,29 @@ import (
 var _ gen.Service = (*Service)(nil)
 var _ gen.Auther = (*Service)(nil)
 
+type assistantAIAccessCheckpoint interface {
+	Evaluate(context.Context, string, uuid.UUID) (killswitches.TransportDisposition, error)
+}
+
 type Service struct {
-	auth             *auth.Auth
-	authz            *authz.Engine
-	db               *pgxpool.Pool
-	repo             *repo.Queries
-	tracer           trace.Tracer
-	openRouter       openrouter.Provisioner
-	completionClient openrouter.CompletionClient
-	contextWindow    *openrouter.ContextWindowResolver
-	logger           *slog.Logger
-	sessions         *sessions.Manager
-	chatSessions     *chatsessions.Manager
-	assistantTokens  *assistanttokens.Manager
-	assetStorage     assets.BlobStore
-	posthog          *posthog.Posthog
-	telemetryService *telemetry.Service
-	billingRepo      billing.Repository
-	audit            *audit.Logger
+	auth              *auth.Auth
+	authz             *authz.Engine
+	db                *pgxpool.Pool
+	repo              *repo.Queries
+	tracer            trace.Tracer
+	openRouter        openrouter.Provisioner
+	completionClient  openrouter.CompletionClient
+	contextWindow     *openrouter.ContextWindowResolver
+	logger            *slog.Logger
+	sessions          *sessions.Manager
+	chatSessions      *chatsessions.Manager
+	assistantTokens   *assistanttokens.Manager
+	assistantAIAccess assistantAIAccessCheckpoint
+	assetStorage      assets.BlobStore
+	posthog           *posthog.Posthog
+	telemetryService  *telemetry.Service
+	billingRepo       billing.Repository
+	audit             *audit.Logger
 	// turnStream carries assistant turn frames to dashboard subscribers. Nil
 	// disables streaming — turns still complete and the dashboard falls back
 	// to loading the reply once it lands.
@@ -90,6 +97,11 @@ type Service struct {
 // WithTurnStream enables streaming assistant turn frames to subscribers.
 func (s *Service) WithTurnStream(stream *TurnStream) *Service {
 	s.turnStream = stream
+	return s
+}
+
+func (s *Service) WithAssistantAIAccessCheckpoint(checkpoint *mcptoolexecution.AssistantCheckpoint) *Service {
+	s.assistantAIAccess = checkpoint
 	return s
 }
 
@@ -113,24 +125,25 @@ func NewService(
 	logger = logger.With(attr.SlogComponent("chat"))
 
 	return &Service{
-		auth:             auth.New(logger, db, sessions, authzEngine),
-		authz:            authzEngine,
-		db:               db,
-		sessions:         sessions,
-		chatSessions:     chatSessions,
-		assistantTokens:  assistantTokens,
-		logger:           logger,
-		repo:             repo.New(db),
-		tracer:           tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/chat"),
-		openRouter:       openRouter,
-		completionClient: completionClient,
-		contextWindow:    contextWindow,
-		assetStorage:     assetStorage,
-		posthog:          posthog,
-		telemetryService: telemetryService,
-		billingRepo:      billingRepo,
-		audit:            auditLogger,
-		turnStream:       nil, // opt in via WithTurnStream
+		auth:              auth.New(logger, db, sessions, authzEngine),
+		authz:             authzEngine,
+		db:                db,
+		sessions:          sessions,
+		chatSessions:      chatSessions,
+		assistantTokens:   assistantTokens,
+		assistantAIAccess: nil,
+		logger:            logger,
+		repo:              repo.New(db),
+		tracer:            tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/chat"),
+		openRouter:        openRouter,
+		completionClient:  completionClient,
+		contextWindow:     contextWindow,
+		assetStorage:      assetStorage,
+		posthog:           posthog,
+		telemetryService:  telemetryService,
+		billingRepo:       billingRepo,
+		audit:             auditLogger,
+		turnStream:        nil, // opt in via WithTurnStream
 	}
 }
 
@@ -1549,6 +1562,19 @@ func (s *Service) HandleCompletion(w http.ResponseWriter, r *http.Request) error
 	ctx, authCtx, keySlot, err := s.directAuthorize(r.Context(), r)
 	if err != nil {
 		return err
+	}
+
+	if principal, isAssistant := contextvalues.GetAssistantPrincipal(ctx); isAssistant {
+		if s.assistantAIAccess == nil {
+			return oops.E(oops.CodeUnavailable, nil, "assistant AI access is temporarily unavailable")
+		}
+		disposition, evaluationErr := s.assistantAIAccess.Evaluate(ctx, authCtx.ActiveOrganizationID, principal.AssistantID)
+		if note, denied := disposition.ExternalNote(); denied {
+			return oops.E(oops.CodeForbidden, nil, "%s", note)
+		}
+		if evaluationErr != nil || disposition.Kind() == killswitches.TransportDispositionInfrastructureRejection {
+			return oops.E(oops.CodeUnavailable, evaluationErr, "assistant AI access is temporarily unavailable").LogError(ctx, s.logger)
+		}
 	}
 
 	if err := s.checkCreditBalance(ctx, authCtx.ActiveOrganizationID, authCtx.AccountType); err != nil {
