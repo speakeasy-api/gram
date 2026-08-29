@@ -1013,9 +1013,17 @@ func TestCreateStripeCheckoutFirstConversionIsAtomicAndReceiptReplayIsIdempotent
 	require.Equal(t, "System", record.ActorDisplay)
 	metadata, err := audittest.DecodeAuditData(record.Metadata)
 	require.NoError(t, err)
-	require.Equal(t, "stripe_checkout", metadata["conversion_source"])
-	require.NotEmpty(t, record.BeforeSnapshot)
-	require.NotEmpty(t, record.AfterSnapshot)
+	require.Equal(t, map[string]any{"conversion_source": "stripe_checkout", "key_access_changed": false}, metadata)
+	var before, after struct {
+		Trial map[string]any   `json:"trial"`
+		Keys  []map[string]any `json:"keys"`
+	}
+	require.NoError(t, json.Unmarshal(record.BeforeSnapshot, &before))
+	require.NoError(t, json.Unmarshal(record.AfterSnapshot, &after))
+	require.Equal(t, "active", before.Trial["status"])
+	require.Equal(t, "converted", after.Trial["status"])
+	require.Empty(t, before.Keys)
+	require.Empty(t, after.Keys)
 	require.Equal(t, []bool{true, true}, provisioner.reconciledAfterCommit)
 
 	envelope, err := audittestrepo.New(ti.db).GetLatestOutboxPayloadByOrg(t.Context(), audittestrepo.GetLatestOutboxPayloadByOrgParams{
@@ -1038,6 +1046,122 @@ func TestCreateStripeCheckoutFirstConversionIsAtomicAndReceiptReplayIsIdempotent
 	conversionCount, err := audittest.AuditLogCountByAction(t.Context(), ti.db, audit.ActionOrganizationEnterpriseTrialConverted)
 	require.NoError(t, err)
 	require.EqualValues(t, 1, conversionCount)
+}
+
+func TestCreateStripeCheckoutConversionAuditCapturesAccessChangesPrivately(t *testing.T) {
+	t.Parallel()
+
+	ti := newStripeCheckoutTestInstance(t)
+	ti.service.openRouter = &checkoutLifecycleProvisioner{Development: openrouter.NewDevelopment(""), db: ti.db, organizationID: ti.orgID}
+	require.NoError(t, trialsrepo.New(ti.db).CreateTrial(t.Context(), trialsrepo.CreateTrialParams{
+		OrganizationID: ti.orgID,
+		Tier:           "enterprise",
+		EndsAt:         pgtype.Timestamptz{Time: time.Now().UTC().Add(7 * 24 * time.Hour), InfinityModifier: pgtype.Finite, Valid: true},
+	}))
+	createStripeCheckoutAuditKey(t, ti, openrouter.KeyTypeChat, 11, true, []string{"trial_demotion"})
+	createStripeCheckoutAuditKey(t, ti, openrouter.KeyTypeInternal, 13, true, []string{"admin_lock", "trial_demotion"})
+
+	_, err := ti.service.CreateStripeCheckout(ti.adminContext(t), &gen.CreateStripeCheckoutPayload{})
+	require.NoError(t, err)
+
+	record, err := audittest.LatestAuditLogByAction(t.Context(), ti.db, audit.ActionOrganizationEnterpriseTrialConverted)
+	require.NoError(t, err)
+	metadata, err := audittest.DecodeAuditData(record.Metadata)
+	require.NoError(t, err)
+	require.Equal(t, map[string]any{"conversion_source": "stripe_checkout", "key_access_changed": true}, metadata)
+
+	var before, after struct {
+		Keys []map[string]any `json:"keys"`
+	}
+	require.NoError(t, json.Unmarshal(record.BeforeSnapshot, &before))
+	require.NoError(t, json.Unmarshal(record.AfterSnapshot, &after))
+	for _, keys := range [][]map[string]any{before.Keys, after.Keys} {
+		for _, key := range keys {
+			require.ElementsMatch(t, []string{"key_type", "stored_disabled", "effective_disabled", "key_access_changed", "monthly_credits"}, stripeCheckoutAuditMapKeys(key))
+			require.NotContains(t, key, "disable_causes")
+		}
+	}
+
+	chatBefore := stripeCheckoutAuditKeyByType(t, before.Keys, openrouter.KeyTypeChat)
+	chatAfter := stripeCheckoutAuditKeyByType(t, after.Keys, openrouter.KeyTypeChat)
+	require.Equal(t, true, chatBefore["effective_disabled"])
+	require.Equal(t, false, chatAfter["effective_disabled"])
+	require.Equal(t, true, chatBefore["key_access_changed"])
+	require.Equal(t, true, chatAfter["key_access_changed"])
+
+	internalBefore := stripeCheckoutAuditKeyByType(t, before.Keys, openrouter.KeyTypeInternal)
+	internalAfter := stripeCheckoutAuditKeyByType(t, after.Keys, openrouter.KeyTypeInternal)
+	require.Equal(t, true, internalBefore["effective_disabled"])
+	require.Equal(t, true, internalAfter["effective_disabled"])
+	require.Equal(t, false, internalBefore["key_access_changed"])
+	require.Equal(t, false, internalAfter["key_access_changed"])
+}
+
+func TestCreateStripeCheckoutConversionAuditTreatsLimitOnlyChangeAsUnchangedAccess(t *testing.T) {
+	t.Parallel()
+
+	ti := newStripeCheckoutTestInstance(t)
+	ti.service.openRouter = &checkoutLifecycleProvisioner{Development: openrouter.NewDevelopment(""), db: ti.db, organizationID: ti.orgID}
+	require.NoError(t, trialsrepo.New(ti.db).CreateTrial(t.Context(), trialsrepo.CreateTrialParams{
+		OrganizationID: ti.orgID,
+		Tier:           "enterprise",
+		EndsAt:         pgtype.Timestamptz{Time: time.Now().UTC().Add(7 * 24 * time.Hour), InfinityModifier: pgtype.Finite, Valid: true},
+	}))
+	createStripeCheckoutAuditKey(t, ti, openrouter.KeyTypeChat, 17, false, []string{})
+
+	_, err := ti.service.CreateStripeCheckout(ti.adminContext(t), &gen.CreateStripeCheckoutPayload{})
+	require.NoError(t, err)
+
+	record, err := audittest.LatestAuditLogByAction(t.Context(), ti.db, audit.ActionOrganizationEnterpriseTrialConverted)
+	require.NoError(t, err)
+	metadata, err := audittest.DecodeAuditData(record.Metadata)
+	require.NoError(t, err)
+	require.Equal(t, map[string]any{"conversion_source": "stripe_checkout", "key_access_changed": false}, metadata)
+	var before, after struct {
+		Keys []map[string]any `json:"keys"`
+	}
+	require.NoError(t, json.Unmarshal(record.BeforeSnapshot, &before))
+	require.NoError(t, json.Unmarshal(record.AfterSnapshot, &after))
+	chatBefore := stripeCheckoutAuditKeyByType(t, before.Keys, openrouter.KeyTypeChat)
+	chatAfter := stripeCheckoutAuditKeyByType(t, after.Keys, openrouter.KeyTypeChat)
+	require.Equal(t, false, chatBefore["effective_disabled"])
+	require.Equal(t, false, chatAfter["effective_disabled"])
+	require.Equal(t, false, chatBefore["key_access_changed"])
+	require.Equal(t, false, chatAfter["key_access_changed"])
+	require.NotEqual(t, chatBefore["monthly_credits"], chatAfter["monthly_credits"])
+}
+
+func createStripeCheckoutAuditKey(t *testing.T, ti *stripeCheckoutTestInstance, keyType openrouter.KeyType, credits int64, disabled bool, causes []string) {
+	t.Helper()
+	_, err := openrouterrepo.New(ti.db).CreateOpenRouterAPIKey(t.Context(), openrouterrepo.CreateOpenRouterAPIKeyParams{
+		OrganizationID: ti.orgID,
+		KeyType:        string(keyType),
+		KeyEncrypted:   pgtype.Text{Valid: false},
+		KeyHash:        "",
+		MonthlyCredits: credits,
+	})
+	require.NoError(t, err)
+	_, err = ti.db.Exec(t.Context(), `UPDATE openrouter_api_keys SET disabled = $1, disable_causes = $2 WHERE organization_id = $3 AND key_type = $4`, disabled, causes, ti.orgID, string(keyType))
+	require.NoError(t, err)
+}
+
+func stripeCheckoutAuditKeyByType(t *testing.T, keys []map[string]any, keyType openrouter.KeyType) map[string]any {
+	t.Helper()
+	for _, key := range keys {
+		if key["key_type"] == string(keyType) {
+			return key
+		}
+	}
+	require.FailNow(t, "missing conversion audit key snapshot", "key type: %s", keyType)
+	return nil
+}
+
+func stripeCheckoutAuditMapKeys(value map[string]any) []string {
+	keys := make([]string, 0, len(value))
+	for key := range value {
+		keys = append(keys, key)
+	}
+	return keys
 }
 
 func TestCreateStripeCheckoutConversionAuditFailureRollsBackBusinessState(t *testing.T) {

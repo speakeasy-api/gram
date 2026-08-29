@@ -116,23 +116,26 @@ func (s *Service) convertEnterpriseTrialForCheckoutTx(ctx context.Context, tx pg
 
 	beforeKeys := make([]audit.OrganizationEnterpriseTrialConversionKeySnapshot, 0, len(keyChanges))
 	afterKeys := make([]audit.OrganizationEnterpriseTrialConversionKeySnapshot, 0, len(keyChanges))
+	keyAccessChanged := false
 	for _, change := range keyChanges {
-		beforeKeys = append(beforeKeys, checkoutConversionKeySnapshot(change.Before))
-		afterKeys = append(afterKeys, checkoutConversionKeySnapshot(change.After))
+		accessChanged := openrouter.EffectiveDisabled(change.Before.Disabled, change.Before.DisableCauses) != openrouter.EffectiveDisabled(change.After.Disabled, change.After.DisableCauses)
+		keyAccessChanged = keyAccessChanged || accessChanged
+		beforeKeys = append(beforeKeys, checkoutConversionKeySnapshot(change.Before, accessChanged))
+		afterKeys = append(afterKeys, checkoutConversionKeySnapshot(change.After, accessChanged))
 	}
 	before := audit.OrganizationEnterpriseTrialConversionSnapshot{
 		Organization: audit.OrganizationEnterpriseTrialConversionOrganizationSnapshot{AccountType: organization.AccountType, Whitelisted: organization.Whitelisted, Disabled: organization.DisabledAt.Valid},
-		Trial:        checkoutConversionTrialSnapshot(trial.Tier, trial.EndsAt, trial.ConvertedAt, trial.DemotedAt),
+		Trial:        checkoutConversionTrialSnapshot(trial.Tier, trial.EndsAt, trial.ConvertedAt, trial.DemotedAt, now),
 		Keys:         beforeKeys,
 	}
 	after := audit.OrganizationEnterpriseTrialConversionSnapshot{
 		Organization: audit.OrganizationEnterpriseTrialConversionOrganizationSnapshot{AccountType: "enterprise", Whitelisted: true, Disabled: organization.DisabledAt.Valid},
-		Trial:        checkoutConversionTrialSnapshot(convertedTrial.Tier, convertedTrial.EndsAt, convertedTrial.ConvertedAt, convertedTrial.DemotedAt),
+		Trial:        checkoutConversionTrialSnapshot(convertedTrial.Tier, convertedTrial.EndsAt, convertedTrial.ConvertedAt, convertedTrial.DemotedAt, now),
 		Keys:         afterKeys,
 	}
 	actorLabel := "System"
 	if err := s.auditLogger.LogOrganizationEnterpriseTrialConverted(ctx, tx, audit.LogOrganizationEnterpriseTrialConvertedEvent{
-		OrganizationID: organizationID, ConversionSource: "stripe_checkout",
+		OrganizationID: organizationID, ConversionSource: "stripe_checkout", KeyAccessChanged: &keyAccessChanged,
 		Actor: urn.NewPrincipal(urn.PrincipalTypeUser, "system"), ActorDisplayName: &actorLabel, ActorSlug: nil,
 		Before: before, After: after,
 	}); err != nil {
@@ -172,14 +175,25 @@ func checkoutOptionalTimesEqual(left, right *time.Time) bool {
 	return left.Equal(*right)
 }
 
-func checkoutConversionTrialSnapshot(tier string, endsAt, convertedAt, demotedAt pgtype.Timestamptz) audit.OrganizationEnterpriseTrialConversionLifecycleSnapshot {
-	return audit.OrganizationEnterpriseTrialConversionLifecycleSnapshot{Tier: tier, EndsAt: checkoutPGTimePtr(endsAt), ConvertedAt: checkoutPGTimePtr(convertedAt), DemotedAt: checkoutPGTimePtr(demotedAt)}
+func checkoutConversionTrialSnapshot(tier string, endsAt, convertedAt, demotedAt pgtype.Timestamptz, now time.Time) audit.OrganizationEnterpriseTrialConversionLifecycleSnapshot {
+	status := "active"
+	switch {
+	case convertedAt.Valid:
+		status = "converted"
+	case demotedAt.Valid:
+		status = "demoted"
+	case !endsAt.Time.After(now):
+		status = "expired"
+	case !endsAt.Time.After(now.Add(7 * 24 * time.Hour)):
+		status = "ending_soon"
+	}
+	return audit.OrganizationEnterpriseTrialConversionLifecycleSnapshot{Status: status, Tier: tier, EndsAt: checkoutPGTimePtr(endsAt), ConvertedAt: checkoutPGTimePtr(convertedAt), DemotedAt: checkoutPGTimePtr(demotedAt)}
 }
 
-func checkoutConversionKeySnapshot(state openrouter.EnterpriseTrialConversionKeyState) audit.OrganizationEnterpriseTrialConversionKeySnapshot {
+func checkoutConversionKeySnapshot(state openrouter.EnterpriseTrialConversionKeyState, accessChanged bool) audit.OrganizationEnterpriseTrialConversionKeySnapshot {
 	return audit.OrganizationEnterpriseTrialConversionKeySnapshot{
-		KeyType: string(state.KeyType), DisableCauses: state.DisableCauses, StoredDisabled: state.Disabled,
-		EffectiveDisabled: openrouter.EffectiveDisabled(state.Disabled, state.DisableCauses), MonthlyCredits: state.MonthlyCredits,
+		KeyType: string(state.KeyType), StoredDisabled: state.Disabled,
+		EffectiveDisabled: openrouter.EffectiveDisabled(state.Disabled, state.DisableCauses), KeyAccessChanged: accessChanged, MonthlyCredits: state.MonthlyCredits,
 	}
 }
 
