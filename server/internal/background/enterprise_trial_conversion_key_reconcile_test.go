@@ -5,6 +5,7 @@ import (
 	"errors"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
@@ -24,9 +25,14 @@ func TestEnterpriseTrialConversionKeyReconcileWorkflowRetriesCurrentStateProject
 	var suite testsuite.WorkflowTestSuite
 	env := suite.NewTestWorkflowEnvironment()
 	var attempts atomic.Int32
-	env.RegisterActivityWithOptions(func(_ context.Context, args activities.ReconcileEnterpriseTrialConversionKeysArgs) error {
+	var attemptBudget atomic.Int64
+	startedAt := env.Now()
+	env.RegisterActivityWithOptions(func(ctx context.Context, args activities.ReconcileEnterpriseTrialConversionKeysArgs) error {
 		require.Equal(t, "organization_placeholder", args.OrganizationID)
-		if attempts.Add(1) < 6 {
+		deadline, ok := ctx.Deadline()
+		require.True(t, ok)
+		attemptBudget.Store(int64(time.Until(deadline)))
+		if attempts.Add(1) < 10 {
 			return errors.New("upstream unavailable")
 		}
 		return nil
@@ -34,7 +40,9 @@ func TestEnterpriseTrialConversionKeyReconcileWorkflowRetriesCurrentStateProject
 
 	env.ExecuteWorkflow(EnterpriseTrialConversionKeyReconcileWorkflow, EnterpriseTrialConversionKeyReconcileParams{OrganizationID: "organization_placeholder"})
 	require.NoError(t, env.GetWorkflowError())
-	require.EqualValues(t, 6, attempts.Load())
+	require.EqualValues(t, 10, attempts.Load())
+	require.GreaterOrEqual(t, time.Duration(attemptBudget.Load()), 50*time.Second, "attempt deadline must cover two 20-second provider calls plus DB and lock overhead")
+	require.Equal(t, 243*time.Minute, env.Now().Sub(startedAt), "transient retries must exponentially back off to a bounded cadence")
 }
 
 func TestScheduleEnterpriseTrialConversionKeyReconciliationDedupesEventReplay(t *testing.T) {

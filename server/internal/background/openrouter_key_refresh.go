@@ -256,8 +256,12 @@ func (w *OpenRouterKeyRefresher) ScheduleEnterpriseTrialConversionKeyReconciliat
 
 func EnterpriseTrialConversionKeyReconcileWorkflow(ctx workflow.Context, params EnterpriseTrialConversionKeyReconcileParams) error {
 	ctx = workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
-		StartToCloseTimeout: 30 * time.Second,
-		RetryPolicy:         &temporal.RetryPolicy{},
+		StartToCloseTimeout: time.Minute,
+		RetryPolicy: &temporal.RetryPolicy{
+			InitialInterval:    time.Minute,
+			BackoffCoefficient: 2,
+			MaximumInterval:    time.Hour,
+		},
 	})
 	var a *Activities
 	if err := workflow.ExecuteActivity(ctx, a.ReconcileEnterpriseTrialConversionKeys, activities.ReconcileEnterpriseTrialConversionKeysArgs{OrganizationID: params.OrganizationID}).Get(ctx, nil); err != nil {

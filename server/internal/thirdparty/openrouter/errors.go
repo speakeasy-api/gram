@@ -12,6 +12,40 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 )
 
+// HTTPError carries the status of a non-successful OpenRouter response without
+// retaining the response body, which may contain customer data.
+type HTTPError struct {
+	StatusCode int
+	Err        error
+}
+
+func (e *HTTPError) Error() string {
+	if e.Err != nil {
+		return fmt.Sprintf("OpenRouter API error (status %d), response body omitted: %v", e.StatusCode, e.Err)
+	}
+	return fmt.Sprintf("OpenRouter API error (status %d), response body omitted", e.StatusCode)
+}
+
+func (e *HTTPError) Unwrap() error {
+	return e.Err
+}
+
+// ErrAPIKeyIdentityMismatch is returned when OpenRouter acknowledges a key
+// mutation for a different key than the one Gram requested. Repeating the same
+// mutation cannot safely repair that invariant violation.
+var ErrAPIKeyIdentityMismatch = errors.New("openrouter: upstream API key identity mismatch")
+
+// IsPermanentError reports deterministic provider responses and key identity
+// invariant violations. Transport errors, 408/429 responses, and 5xx responses
+// remain retryable.
+func IsPermanentError(err error) bool {
+	if errors.Is(err, ErrAPIKeyIdentityMismatch) {
+		return true
+	}
+	var httpErr *HTTPError
+	return errors.As(err, &httpErr) && httpErr.StatusCode >= http.StatusBadRequest && httpErr.StatusCode < http.StatusInternalServerError && httpErr.StatusCode != http.StatusRequestTimeout && httpErr.StatusCode != http.StatusTooManyRequests
+}
+
 // ErrInsufficientCredits is returned when OpenRouter rejects a request with
 // status 402: the org has exhausted its credit balance or requested more
 // tokens than the remaining balance can fund.
@@ -121,9 +155,9 @@ func classifyHTTPError(ctx context.Context, status int, header http.Header, body
 			attr.OpenRouterRateLimitReset(header.Get("X-RateLimit-Reset")),
 			attr.OpenRouterRetryAfter(header.Get("Retry-After")),
 		)
-		return fmt.Errorf("OpenRouter API error (status %d), response body omitted: %w", status, ErrRateLimited)
+		return &HTTPError{StatusCode: status, Err: ErrRateLimited}
 	case http.StatusPaymentRequired:
-		return fmt.Errorf("OpenRouter API error (status %d), response body omitted: %w", status, ErrInsufficientCredits)
+		return &HTTPError{StatusCode: status, Err: ErrInsufficientCredits}
 	case http.StatusBadRequest, http.StatusUnprocessableEntity:
 		// 400/422 is the strongest "request body is the problem" signal, but
 		// it also covers non-history bad params (invalid model, malformed
@@ -132,9 +166,9 @@ func classifyHTTPError(ctx context.Context, status int, header http.Header, body
 		// real history. Require BOTH the status code and a corruption-shaped
 		// body before opting into self-heal.
 		if looksLikeHistoryCorruption(strings.TrimSpace(string(body))) {
-			return fmt.Errorf("OpenRouter API error (status %d), response body omitted: %w", status, ErrHistoryCorruptionCandidate)
+			return &HTTPError{StatusCode: status, Err: ErrHistoryCorruptionCandidate}
 		}
-		return fmt.Errorf("OpenRouter API error (status %d), response body omitted: %w", status, ErrBadRequest)
+		return &HTTPError{StatusCode: status, Err: ErrBadRequest}
 	case http.StatusForbidden:
 		// 403 is overloaded: a missing or unentitled key, an org policy block,
 		// and a provider moderation refusal all land here. Only the last one is
@@ -142,11 +176,11 @@ func classifyHTTPError(ctx context.Context, status int, header http.Header, body
 		// so require a content-shaped body before spending the caller's attempt
 		// budget on it.
 		if looksLikeContentPolicy(strings.TrimSpace(string(body))) {
-			return fmt.Errorf("OpenRouter API error (status %d), response body omitted: %w", status, ErrContentPolicy)
+			return &HTTPError{StatusCode: status, Err: ErrContentPolicy}
 		}
-		return fmt.Errorf("OpenRouter API error (status %d), response body omitted", status)
+		return &HTTPError{StatusCode: status}
 	default:
-		return fmt.Errorf("OpenRouter API error (status %d), response body omitted", status)
+		return &HTTPError{StatusCode: status}
 	}
 }
 

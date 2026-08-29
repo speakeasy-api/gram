@@ -1035,7 +1035,7 @@ func (o *OpenRouter) reconcileAPIKeyPolicyWithDB(ctx context.Context, db DBTX, o
 		return fmt.Errorf("reconcile upstream OpenRouter API key disabled state: %w", patchErr)
 	}
 	if response.Data.Hash != key.KeyHash {
-		return errors.New("reconcile OpenRouter API key disabled state: upstream key identity changed")
+		return fmt.Errorf("reconcile OpenRouter API key disabled state: upstream key identity changed: %w", ErrAPIKeyIdentityMismatch)
 	}
 
 	return nil
@@ -1408,7 +1408,7 @@ func (o *OpenRouter) patchOpenRouterAPIKey(ctx context.Context, keyHash string, 
 	})
 
 	if resp.StatusCode != http.StatusOK {
-		return nil, errors.New("failed to update OpenRouter API key limit: " + resp.Status)
+		return nil, fmt.Errorf("failed to update OpenRouter API key limit: %w", classifyHTTPError(ctx, resp.StatusCode, resp.Header, nil))
 	}
 
 	var response keyResponse
