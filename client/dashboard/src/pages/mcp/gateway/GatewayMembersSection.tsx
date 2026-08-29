@@ -31,7 +31,6 @@ import {
   Cable,
   Globe,
   Loader2,
-  Network,
   Plus,
   Server,
   Trash2,
@@ -185,66 +184,8 @@ function MemberNameCell({ row }: { row: MemberRow }): JSX.Element {
   );
 }
 
-/** Read-only members table shared by the Overview tab. */
-export function MembersStatusTable({
-  rows,
-  isLoading,
-}: {
-  rows: MemberRow[];
-  isLoading: boolean;
-}): JSX.Element {
-  const columns: Column<MemberRow>[] = [
-    {
-      key: "server",
-      header: "Server",
-      render: (row) => <MemberNameCell row={row} />,
-    },
-    {
-      key: "backend",
-      header: "Backend",
-      render: (row) => <BackendKindTag row={row} />,
-      width: "140px",
-    },
-    {
-      key: "status",
-      header: "Status",
-      render: (row) => (
-        <MemberStatusBadge classification={row.classification} />
-      ),
-      width: "140px",
-    },
-  ];
-
-  if (isLoading) {
-    return <SkeletonTable />;
-  }
-
-  return (
-    <Table columns={columns}>
-      <Table.Header columns={columns} />
-      {rows.length === 0 ? (
-        <Table.NoResultsMessage>
-          <div className="flex flex-col items-center gap-2 px-4 py-10 text-center">
-            <Network className="text-muted-foreground/50 size-8" aria-hidden />
-            <Text className="font-medium">No members yet</Text>
-            <Text muted small>
-              Front your first MCP server through this gateway from the Members
-              tab.
-            </Text>
-          </div>
-        </Table.NoResultsMessage>
-      ) : (
-        <Table.Body
-          columns={columns}
-          data={rows}
-          rowKey={(row) => row.member.id}
-        />
-      )}
-    </Table>
-  );
-}
-
-export function GatewayMembersTab({
+/** Member management (list, reorder, add, remove) rendered on the Overview tab. */
+export function GatewayMembersSection({
   metaMcpServer,
 }: {
   metaMcpServer: MetaMcpServer;
@@ -412,10 +353,15 @@ export function GatewayMembersTab({
   return (
     <>
       <Page.Section>
-        <Page.Section.Title>Members</Page.Section.Title>
+        {/* Section heading under the Overview page title: no eyebrow, smaller
+            serif. */}
+        <Page.Section.Title area="" className="text-display-xs">
+          Members
+        </Page.Section.Title>
         <Page.Section.Description>
           The MCP servers this gateway fronts, in the order agents see them in
-          list_servers.
+          list_servers. Status reflects what the backend can attest; live
+          upstream health lands with the proxied runtime.
         </Page.Section.Description>
         <Page.Section.CTA>
           <RequireScope scope="mcp:write" level="component">

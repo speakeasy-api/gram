@@ -4,15 +4,12 @@ import {
   StatTileSkeleton,
 } from "@/components/chart/stat-tile";
 import { Page } from "@/components/page-layout";
-import { Button } from "@/components/ui/Button";
 import { CopyButton } from "@/components/ui/CopyButton";
 import { Text } from "@/components/ui/Text";
 import { useResolvedMcpServerUrl } from "@/hooks/useToolsetUrl";
-import { useRoutes } from "@/routes";
 import type { McpEndpoint } from "@gram/client/models/components/mcpendpoint.js";
 import type { MetaMcpServer } from "@gram/client/models/components/metamcpserver.js";
-import { ArrowRight } from "lucide-react";
-import { MembersStatusTable } from "./GatewayMembersTab";
+import { GatewayMembersSection } from "./GatewayMembersSection";
 import { useGatewayMemberRows } from "./useGatewayMemberRows";
 
 export function GatewayOverviewTab({
@@ -24,7 +21,6 @@ export function GatewayOverviewTab({
   endpoints: McpEndpoint[];
   isLoadingEndpoints: boolean;
 }): JSX.Element {
-  const routes = useRoutes();
   const { mcpUrl } = useResolvedMcpServerUrl(endpoints, isLoadingEndpoints);
   const { rows, isLoading } = useGatewayMemberRows(metaMcpServer.id);
 
@@ -110,30 +106,7 @@ export function GatewayOverviewTab({
         </Page.Section.Body>
       </Page.Section>
 
-      <Page.Section>
-        <Page.Section.Title area="" className="text-display-xs">
-          Members
-        </Page.Section.Title>
-        <Page.Section.CTA>
-          <Button
-            variant="secondary"
-            size="sm"
-            onClick={() => routes.mcp.gateway.members.goTo(metaMcpServer.id)}
-          >
-            <Button.Text>Manage members</Button.Text>
-            <Button.RightIcon>
-              <ArrowRight className="size-4" />
-            </Button.RightIcon>
-          </Button>
-        </Page.Section.CTA>
-        <Page.Section.Description>
-          The order agents see in list_servers. Status reflects what the backend
-          can attest; live upstream health lands with the proxied runtime.
-        </Page.Section.Description>
-        <Page.Section.Body>
-          <MembersStatusTable rows={rows} isLoading={isLoading} />
-        </Page.Section.Body>
-      </Page.Section>
+      <GatewayMembersSection metaMcpServer={metaMcpServer} />
     </>
   );
 }

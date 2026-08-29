@@ -53,6 +53,7 @@ import {
   isUserSessionIssuerWired,
   mustConvertOAuthBeforePrivate,
 } from "./toolsetAuthSurface";
+import { useTabScrollReset } from "@/hooks/useTabScrollReset";
 import { useRoutes } from "@/routes";
 import { GramError } from "@gram/client/models/errors/gramerror.js";
 import { useExportMcpMetadataMutation } from "@gram/client/react-query/exportMcpMetadata.js";
@@ -277,6 +278,7 @@ function MCPDetailPageContent({
   const location = useLocation();
 
   const activeTab = activeTabFromPath(location.pathname, toolsetSlug);
+  const tabContentRef = useTabScrollReset(activeTab ?? undefined);
 
   if (!activeTab) {
     const initialTab = initialTabFromHash(window.location.hash);
@@ -297,7 +299,10 @@ function MCPDetailPageContent({
       </Page.Header>
       <Page.Body fullWidth className="gap-0">
         {/* Name, status, URL, and Playground live in the sidebar header now */}
-        <div className="mx-auto w-full max-w-[1270px] flex-1">
+        <div
+          ref={tabContentRef}
+          className="mx-auto w-full max-w-[1270px] flex-1"
+        >
           {renderMcpDetailTabContent(activeTab, toolset)}
         </div>
       </Page.Body>

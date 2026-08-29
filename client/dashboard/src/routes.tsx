@@ -529,6 +529,9 @@ const ROUTE_STRUCTURE = {
             title: "Gateway Overview",
             url: "overview",
           },
+          // Legacy URL: member management moved onto the Overview tab, and
+          // GatewayDetails redirects unknown tab segments there. Kept so old
+          // links keep resolving to the gateway page.
           members: {
             title: "Gateway Members",
             url: "members",
