@@ -94,7 +94,7 @@ func TestMeterReadingCHWriterSkipsPoisonAndDeduplicatesBatch(t *testing.T) {
 	require.True(t, ok)
 	invalid.SetId("not-a-uuid")
 	capture := &captureReadingInserter{rows: nil, err: nil}
-	writer := metering.NewMeterReadingCHWriter(testenv.NewLogger(t), capture)
+	writer := metering.NewMeterReadingCHWriter(testenv.NewLogger(t), capture, true)
 
 	require.NoError(t, writer.HandleBatch(t.Context(), []*meteringv1.MeterReading{nil, invalid, valid, valid}, nil))
 	require.Len(t, capture.rows, 1)
@@ -117,7 +117,7 @@ func TestMeterReadingCHWriterPropagatesInsertFailure(t *testing.T) {
 		Attributes:  nil,
 	})
 	capture := &captureReadingInserter{rows: nil, err: errors.New("clickhouse unavailable")}
-	writer := metering.NewMeterReadingCHWriter(testenv.NewLogger(t), capture)
+	writer := metering.NewMeterReadingCHWriter(testenv.NewLogger(t), capture, true)
 	require.Error(t, writer.HandleBatch(t.Context(), []*meteringv1.MeterReading{message}, nil))
 }
 
@@ -151,7 +151,7 @@ func TestMeterReadingCHWriterRedeliveryConvergesAndPreservesAdjustment(t *testin
 		Source:            "test",
 		Attributes:        nil,
 	})
-	writer := metering.NewMeterReadingCHWriter(testenv.NewLogger(t), chrepo.New(conn))
+	writer := metering.NewMeterReadingCHWriter(testenv.NewLogger(t), chrepo.New(conn), true)
 	require.NoError(t, writer.HandleBatch(t.Context(), []*meteringv1.MeterReading{usageEvent}, nil))
 	require.NoError(t, writer.HandleBatch(t.Context(), []*meteringv1.MeterReading{usageEvent}, nil))
 	require.NoError(t, writer.HandleBatch(t.Context(), []*meteringv1.MeterReading{adjustmentEvent}, nil))
