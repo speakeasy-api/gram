@@ -47,7 +47,7 @@ func (w *MeterReadingCHWriter) HandleBatch(ctx context.Context, messages []*mete
 
 	insertedAt := time.Now().UTC()
 	rows := make([]chrepo.ReadingRow, 0, len(messages))
-	seen := make(map[uuid.UUID]struct{}, len(messages))
+	received := make(map[uuid.UUID]int, len(messages))
 
 	for _, message := range messages {
 		row, reason := meterReadingRow(message, insertedAt)
@@ -62,10 +62,14 @@ func (w *MeterReadingCHWriter) HandleBatch(ctx context.Context, messages []*mete
 			)
 			continue
 		}
-		if _, duplicate := seen[row.ID]; duplicate {
+		if priorIndex, duplicate := received[row.ID]; duplicate {
+			if !row.ProducedAt.After(rows[priorIndex].ProducedAt) {
+				continue
+			}
+			rows[priorIndex] = row
 			continue
 		}
-		seen[row.ID] = struct{}{}
+		received[row.ID] = len(rows)
 		rows = append(rows, row)
 	}
 
@@ -175,6 +179,7 @@ func meterReadingRow(message *meteringv1.MeterReading, insertedAt time.Time) (ch
 		Unit:              string(definition.unit),
 		Value:             message.GetValue(),
 		OccurredAt:        occurredAt,
+		ProducedAt:        producedAt,
 		InsertedAt:        insertedAt,
 		CorrectsReadingID: correctsReadingID,
 		Attributes:        attributes,

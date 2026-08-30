@@ -89,6 +89,10 @@ func TestMeterReadingCHWriterSkipsPoisonAndDeduplicatesBatch(t *testing.T) {
 		Attributes:  nil,
 	}
 	valid, reading := usageMessage(t, input)
+	updatedInput := input
+	updatedInput.ProducedAt = now.Add(time.Second)
+	updatedInput.Attributes = map[string]string{"revision": "native-promotion"}
+	updated, _ := usageMessage(t, updatedInput)
 	cloned := proto.Clone(valid)
 	invalid, ok := cloned.(*meteringv1.MeterReading)
 	require.True(t, ok)
@@ -96,11 +100,13 @@ func TestMeterReadingCHWriterSkipsPoisonAndDeduplicatesBatch(t *testing.T) {
 	capture := &captureReadingInserter{rows: nil, err: nil}
 	writer := metering.NewMeterReadingCHWriter(testenv.NewLogger(t), capture, true)
 
-	require.NoError(t, writer.HandleBatch(t.Context(), []*meteringv1.MeterReading{nil, invalid, valid, valid}, nil))
+	require.NoError(t, writer.HandleBatch(t.Context(), []*meteringv1.MeterReading{nil, invalid, valid, updated, valid}, nil))
 	require.Len(t, capture.rows, 1)
 	require.Equal(t, reading.ID(), capture.rows[0].ID)
 	require.Equal(t, input.Value, capture.rows[0].Value)
 	require.Equal(t, string(metering.MeasurementTiktokenO200kBase), capture.rows[0].Attributes["codec"])
+	require.Equal(t, "native-promotion", capture.rows[0].Attributes["revision"])
+	require.Equal(t, updatedInput.ProducedAt, capture.rows[0].ProducedAt)
 }
 
 func TestMeterReadingCHWriterPropagatesInsertFailure(t *testing.T) {
@@ -128,7 +134,7 @@ func TestMeterReadingCHWriterRedeliveryConvergesAndPreservesAdjustment(t *testin
 	definition := metering.AgentSessionStorage()
 	scope := metering.ProjectScope("org-"+uuid.NewString(), uuid.New())
 	now := time.Now().UTC()
-	usageInput := metering.UsageInput{
+	staleInput := metering.UsageInput{
 		Meter:       definition,
 		Scope:       scope,
 		OperationID: "chat_message:" + uuid.NewString(),
@@ -136,30 +142,58 @@ func TestMeterReadingCHWriterRedeliveryConvergesAndPreservesAdjustment(t *testin
 		OccurredAt:  now,
 		ProducedAt:  now,
 		Source:      "test",
-		Attributes:  nil,
+		Attributes:  map[string]string{"attribution": "stale"},
 	}
-	usageEvent, usage := usageMessage(t, usageInput)
+	staleEvent, usage := usageMessage(t, staleInput)
+	newerInput := staleInput
+	newerInput.ProducedAt = now.Add(time.Second)
+	newerInput.Attributes = map[string]string{"attribution": "newer"}
+	newerEvent, newerUsage := usageMessage(t, newerInput)
+	require.Equal(t, usage.ID(), newerUsage.ID())
+	equalVersionInput := newerInput
+	equalVersionInput.Attributes = map[string]string{"attribution": "refreshed"}
+	equalVersionEvent, equalVersionUsage := usageMessage(t, equalVersionInput)
+	require.Equal(t, usage.ID(), equalVersionUsage.ID())
 	adjustmentEvent, _ := adjustmentMessage(t, metering.AdjustmentInput{
 		Meter:             definition,
 		Scope:             scope,
-		OperationID:       usageInput.OperationID + ":adjustment",
+		OperationID:       staleInput.OperationID + ":adjustment",
 		Value:             -5,
 		OccurredAt:        now,
-		ProducedAt:        now.Add(time.Second),
+		ProducedAt:        now.Add(2 * time.Second),
 		CorrectsReadingID: usage.ID(),
 		Reason:            "source_reconciliation",
 		Source:            "test",
 		Attributes:        nil,
 	})
 	writer := metering.NewMeterReadingCHWriter(testenv.NewLogger(t), chrepo.New(conn), true)
-	require.NoError(t, writer.HandleBatch(t.Context(), []*meteringv1.MeterReading{usageEvent}, nil))
-	require.NoError(t, writer.HandleBatch(t.Context(), []*meteringv1.MeterReading{usageEvent}, nil))
+	require.NoError(t, writer.HandleBatch(t.Context(), []*meteringv1.MeterReading{newerEvent}, nil))
+	require.NoError(t, writer.HandleBatch(t.Context(), []*meteringv1.MeterReading{staleEvent}, nil))
+
+	projectID, ok := scope.ProjectID()
+	require.True(t, ok)
+	var storedProducedAt time.Time
+	var attributes map[string]string
+	require.NoError(t, conn.QueryRow(t.Context(), `
+		SELECT produced_at, attributes
+		FROM billing_meter_readings FINAL
+		WHERE organization_id = ? AND project_id = ? AND meter_id = ? AND id = ?
+	`, scope.OrganizationID(), projectID, string(metering.MeterAgentSessionStorage), usage.ID()).Scan(&storedProducedAt, &attributes))
+	require.Equal(t, newerInput.ProducedAt, storedProducedAt)
+	require.Equal(t, "newer", attributes["attribution"])
+
+	require.NoError(t, writer.HandleBatch(t.Context(), []*meteringv1.MeterReading{equalVersionEvent}, nil))
 	require.NoError(t, writer.HandleBatch(t.Context(), []*meteringv1.MeterReading{adjustmentEvent}, nil))
+	require.NoError(t, conn.QueryRow(t.Context(), `
+		SELECT produced_at, attributes
+		FROM billing_meter_readings FINAL
+		WHERE organization_id = ? AND project_id = ? AND meter_id = ? AND id = ?
+	`, scope.OrganizationID(), projectID, string(metering.MeterAgentSessionStorage), usage.ID()).Scan(&storedProducedAt, &attributes))
+	require.Equal(t, equalVersionInput.ProducedAt, storedProducedAt)
+	require.Equal(t, "refreshed", attributes["attribution"])
 
 	var count uint64
 	var net int64
-	projectID, ok := scope.ProjectID()
-	require.True(t, ok)
 	require.NoError(t, conn.QueryRow(t.Context(), `
 		SELECT count(), sum(value)
 		FROM billing_meter_readings FINAL
