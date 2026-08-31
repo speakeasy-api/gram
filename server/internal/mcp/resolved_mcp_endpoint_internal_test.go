@@ -91,6 +91,24 @@ func TestValidateRefAllowsLegacyMissingBackendIDs(t *testing.T) {
 	require.NoError(t, endpoint.ValidateRef(EndpointRef{McpSlug: "my-server"}))
 }
 
+func TestEndpointRefPinsBridgedToolset(t *testing.T) {
+	t.Parallel()
+
+	toolsetID := uuid.New()
+	endpoint := &ResolvedMcpEndpoint{
+		Slug:        "my-server",
+		RouteBase:   "x/mcp",
+		McpServerID: uuid.NullUUID{UUID: uuid.New(), Valid: true},
+		ToolsetID:   uuid.NullUUID{UUID: toolsetID, Valid: true},
+	}
+	ref := endpoint.EndpointRef("https://platform.example.com")
+	require.Equal(t, endpoint.McpServerID, ref.McpServerID)
+	require.Equal(t, endpoint.ToolsetID, ref.ToolsetID)
+
+	endpoint.ToolsetID = uuid.NullUUID{UUID: uuid.New(), Valid: true}
+	require.ErrorIs(t, endpoint.ValidateRef(ref), errToolsetEndpointMismatch)
+}
+
 func TestValidateRefRejectsBackendSwap(t *testing.T) {
 	t.Parallel()
 

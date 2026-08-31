@@ -202,10 +202,6 @@ func (e *ResolvedMcpEndpoint) ConsentURL(baseURL, stateID string) (string, error
 // rebuild the consent redirect without re-deriving the origin.
 func (e *ResolvedMcpEndpoint) EndpointRef(baseURL string) EndpointRef {
 	isPublic := e.IsPublic
-	toolsetID := uuid.NullUUID{UUID: uuid.Nil, Valid: false}
-	if !e.McpServerID.Valid && !e.MetaMcpServerID.Valid {
-		toolsetID = e.ToolsetID
-	}
 	return EndpointRef{
 		BaseURL:         baseURL,
 		RouteBase:       e.RouteBase,
@@ -213,7 +209,7 @@ func (e *ResolvedMcpEndpoint) EndpointRef(baseURL string) EndpointRef {
 		CustomDomainID:  e.CustomDomainID,
 		McpServerID:     e.McpServerID,
 		MetaMcpServerID: e.MetaMcpServerID,
-		ToolsetID:       toolsetID,
+		ToolsetID:       e.ToolsetID,
 		IsPublic:        &isPublic,
 	}
 }
@@ -310,19 +306,18 @@ func (e *ResolvedMcpEndpoint) ValidateRef(ref EndpointRef) error {
 	if ref.IsPublic != nil && e.IsPublic != *ref.IsPublic {
 		return errToolsetEndpointMismatch
 	}
-	// Modern states pin their primary backend identity. Server/meta-backed
-	// endpoints are identified by those rows even when a server delegates to a
-	// toolset; only direct-toolset endpoints pin ToolsetID. States carrying no
+	// Modern states pin the owning server/meta row and, when present, the
+	// delegated toolset. A legacy direct-toolset ref can intentionally survive a
+	// migration to a server-backed endpoint only when slug, issuer, visibility,
+	// route, domain, and the exact toolset all still match. States carrying no
 	// backend ID retain TTL-bounded compatibility with pre-field cached values.
-	switch {
-	case ref.McpServerID.Valid || ref.MetaMcpServerID.Valid:
+	if ref.McpServerID.Valid || ref.MetaMcpServerID.Valid {
 		if e.McpServerID != ref.McpServerID || e.MetaMcpServerID != ref.MetaMcpServerID {
 			return errToolsetEndpointMismatch
 		}
-	case ref.ToolsetID.Valid:
-		if e.McpServerID.Valid || e.MetaMcpServerID.Valid || e.ToolsetID != ref.ToolsetID {
-			return errToolsetEndpointMismatch
-		}
+	}
+	if ref.ToolsetID.Valid && e.ToolsetID != ref.ToolsetID {
+		return errToolsetEndpointMismatch
 	}
 	// The route surface is part of the endpoint's identity: the same slug can
 	// resolve on both /mcp and /x/mcp, and the RFC 9207 `iss` on every

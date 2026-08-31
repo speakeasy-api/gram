@@ -80,7 +80,18 @@ func TestWellKnownPrivateOnlyEndpointDoesNotFallBack(t *testing.T) {
 	toolsetsRepo := toolsetsrepo.New(ti.conn)
 	sharedSlug := "wellknown-private-only-" + uuid.NewString()[:8]
 	endpointToolset := createPublicMCPToolset(t, ctx, toolsetsRepo, authCtx, "endpoint-"+uuid.NewString()[:8])
-	createPublicMCPToolset(t, ctx, toolsetsRepo, authCtx, sharedSlug)
+	legacy := oauthtest.CreateExternalOAuthToolset(t, ctx, ti.conn, authCtx, oauthtest.ExternalOAuthToolsetOpts{
+		Slug: sharedSlug, IsPublic: true,
+	})
+	_, err := toolsetsRepo.UpdateToolset(ctx, toolsetsrepo.UpdateToolsetParams{
+		Name: legacy.Toolset.Name, Description: legacy.Toolset.Description,
+		DefaultEnvironmentSlug: legacy.Toolset.DefaultEnvironmentSlug,
+		McpSlug:                pgtype.Text{String: sharedSlug, Valid: true},
+		McpIsPublic:            true, McpEnabled: true,
+		CustomDomainID: uuid.NullUUID{}, ToolSelectionMode: "",
+		Slug: legacy.Toolset.Slug, ProjectID: legacy.Toolset.ProjectID,
+	})
+	require.NoError(t, err)
 	server := createToolsetMcpEndpoint(t, ctx, ti.conn, *authCtx.ProjectID, endpointToolset.ID, sharedSlug, "public", uuid.NullUUID{}, uuid.Nil)
 	rows, err := testrepo.New(ti.conn).SetMCPServerNetworkAccessModeFixture(ctx, testrepo.SetMCPServerNetworkAccessModeFixtureParams{
 		NetworkAccessMode: pgtype.Text{String: string(networkaccess.ModePrivateOnly), Valid: true},

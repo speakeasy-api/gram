@@ -12,6 +12,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/mcpendpoints"
+	metamcprepo "github.com/speakeasy-api/gram/server/internal/metamcp/repo"
+	"github.com/speakeasy-api/gram/server/internal/metamcp/visibility"
 	"github.com/speakeasy-api/gram/server/internal/networkaccess"
 	"github.com/speakeasy-api/gram/server/internal/requestorigin"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
@@ -132,6 +134,51 @@ func TestResolveWrongOrganizationIsAuthoritativeDenial(t *testing.T) {
 	require.False(t, result.Allowed)
 }
 
+func TestResolveDisabledServersDenyEverySurface(t *testing.T) {
+	t.Parallel()
+
+	for _, backend := range []string{"generic", "meta"} {
+		t.Run(backend, func(t *testing.T) {
+			t.Parallel()
+			ctx, ti := newTestService(t)
+			authCtx, ok := contextvalues.GetAuthContext(ctx)
+			require.True(t, ok)
+			slug := authCtx.OrganizationSlug + "-disabled-" + backend
+
+			var mcpServerID, metaMcpServerID *string
+			if backend == "generic" {
+				id := seedMcpServerWithMode(t, ctx, ti.conn, *authCtx.ProjectID, "disabled", networkaccess.ModeDual).String()
+				mcpServerID = &id
+			} else {
+				meta, err := metamcprepo.New(ti.conn).CreateMetaMCPServer(ctx, metamcprepo.CreateMetaMCPServerParams{
+					OrganizationID: authCtx.ActiveOrganizationID, ProjectID: *authCtx.ProjectID,
+					Name: "disabled meta", UserSessionIssuerID: uuid.NullUUID{},
+					Visibility: visibility.Disabled, NetworkAccessMode: networkaccess.Storage(networkaccess.ModeDual),
+				})
+				require.NoError(t, err)
+				id := meta.ID.String()
+				metaMcpServerID = &id
+			}
+			_, err := ti.service.CreateMcpEndpoint(ctx, &gen.CreateMcpEndpointPayload{
+				SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil,
+				CustomDomainID: nil, McpServerID: mcpServerID, MetaMcpServerID: metaMcpServerID,
+				Slug: types.McpEndpointSlug(slug),
+			})
+			require.NoError(t, err)
+
+			for _, surface := range []networkaccess.Surface{networkaccess.SurfacePublic, networkaccess.SurfacePrivate} {
+				result, err := mcpendpoints.Resolve(ctx, ti.conn, testenv.NewLogger(t), mcpendpoints.ResolutionInput{
+					Slug: slug, NamespaceKind: mcpendpoints.NamespacePlatform,
+					CustomDomainID: uuid.NullUUID{}, ExpectedOrganization: authCtx.ActiveOrganizationID, Surface: surface,
+				})
+				require.NoError(t, err)
+				require.True(t, result.Found)
+				require.False(t, result.Allowed)
+			}
+		})
+	}
+}
+
 func TestResolveUnknownStoredModeDeniesEverySurface(t *testing.T) {
 	t.Parallel()
 
@@ -165,6 +212,38 @@ func TestResolveUnknownStoredModeDeniesEverySurface(t *testing.T) {
 			require.True(t, result.Found)
 			require.False(t, result.Allowed)
 		})
+	}
+}
+
+func TestResolveMetaUnknownStoredModeDeniesEverySurface(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	metaID := seedMetaMcpServerWithMode(t, ctx, ti, *authCtx.ProjectID, networkaccess.ModeDual)
+	slug := authCtx.OrganizationSlug + "-meta-unknown"
+	_, err := ti.service.CreateMcpEndpoint(ctx, &gen.CreateMcpEndpointPayload{
+		SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil,
+		CustomDomainID: nil, McpServerID: nil, MetaMcpServerID: conv.PtrEmpty(metaID.String()),
+		Slug: types.McpEndpointSlug(slug),
+	})
+	require.NoError(t, err)
+	rows, err := testrepo.New(ti.conn).SetMetaMCPServerNetworkAccessModeFixture(ctx, testrepo.SetMetaMCPServerNetworkAccessModeFixtureParams{
+		NetworkAccessMode: pgtype.Text{String: "future_mode", Valid: true}, ID: metaID,
+		OrganizationID: authCtx.ActiveOrganizationID, ProjectID: *authCtx.ProjectID,
+	})
+	require.NoError(t, err)
+	require.EqualValues(t, 1, rows)
+
+	for _, surface := range []networkaccess.Surface{networkaccess.SurfacePublic, networkaccess.SurfacePrivate} {
+		result, err := mcpendpoints.Resolve(ctx, ti.conn, testenv.NewLogger(t), mcpendpoints.ResolutionInput{
+			Slug: slug, NamespaceKind: mcpendpoints.NamespacePlatform, CustomDomainID: uuid.NullUUID{},
+			ExpectedOrganization: authCtx.ActiveOrganizationID, Surface: surface,
+		})
+		require.NoError(t, err)
+		require.True(t, result.Found)
+		require.False(t, result.Allowed)
 	}
 }
 
