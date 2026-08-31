@@ -215,6 +215,92 @@ func TestMCPSecurity_CoversEveryMCPJSONRPCRoute(t *testing.T) {
 	}
 }
 
+// The OAuth callbacks and hashed browser assets registered directly under
+// /mcp/ and /x/mcp/ sit in the same one-segment shape as a slug, so the
+// original predicate read them as MCP endpoints and origin-checked them.
+//
+// A callback is reached by the browser following the upstream IdP's redirect,
+// which is cross-site by construction and, being a top-level navigation,
+// carries no Origin header at all. That combination is precisely what
+// CrossOriginProtection refuses, so remote-login and IdP-backed authorization
+// flows terminated in a 403 in production. The request shape asserted here is
+// the one observed in those rejections.
+func TestMCPSecurity_AllowsOAuthCallbackNavigation(t *testing.T) {
+	t.Parallel()
+
+	for _, path := range []string{
+		"/mcp/idp_callback",
+		"/mcp/remote_login_callback",
+		"/x/mcp/idp_callback",
+		"/x/mcp/remote_login_callback",
+	} {
+		t.Run(path, func(t *testing.T) {
+			t.Parallel()
+
+			req := httptest.NewRequest(http.MethodGet, "https://app.getgram.ai"+path+"?code=abc&state=xyz", nil)
+			req.Header.Set("Sec-Fetch-Site", "cross-site")
+			req.Header.Set("Sec-Fetch-Mode", "navigate")
+
+			rec, reached := serveMCPSecurity(t, req)
+
+			require.True(t, reached, "the OAuth callback must survive the IdP's cross-site redirect")
+			require.Equal(t, http.StatusOK, rec.Code)
+		})
+	}
+}
+
+// The consent and install scripts are content-hashed assets, not JSON-RPC
+// endpoints. A slug cannot collide with them because constants.SlugPattern
+// admits no dot.
+func TestMCPSecurity_AllowsHashedBrowserAssets(t *testing.T) {
+	t.Parallel()
+
+	for _, path := range []string{
+		"/mcp/install-page-9f86d081.js",
+		"/mcp/consent-page-9f86d081.js",
+		"/mcp/consent-tools-9f86d081.js",
+	} {
+		t.Run(path, func(t *testing.T) {
+			t.Parallel()
+
+			req := httptest.NewRequest(http.MethodGet, "https://app.getgram.ai"+path, nil)
+			req.Header.Set("Sec-Fetch-Site", "cross-site")
+			req.Header.Set("Sec-Fetch-Mode", "no-cors")
+
+			_, reached := serveMCPSecurity(t, req)
+
+			require.True(t, reached, "a hashed browser asset is not an MCP endpoint")
+		})
+	}
+}
+
+// Exempting the callbacks by name must not hand an attacker a way to shed the
+// origin check. Only the exact static segments chi resolves ahead of
+// {mcpSlug} are excluded, and only on the two prefixes that register them.
+func TestMCPSecurity_StillCoversSlugsResemblingCallbacks(t *testing.T) {
+	t.Parallel()
+
+	for _, path := range []string{
+		"/mcp/idp_callback_service",
+		"/mcp/my-remote_login_callback",
+		"/platform/mcp/idp_callback",
+		"/platform/mcp/remote_login_callback",
+	} {
+		t.Run(path, func(t *testing.T) {
+			t.Parallel()
+
+			req := mcpPost(path)
+			req.Header.Set("Sec-Fetch-Site", "cross-site")
+			req.Header.Set("Origin", hostileOrigin)
+
+			rec, reached := serveMCPSecurity(t, req)
+
+			require.False(t, reached)
+			require.Equal(t, http.StatusForbidden, rec.Code)
+		})
+	}
+}
+
 // The OAuth, metadata, and install routes share the /mcp/ prefix but are not
 // JSON-RPC endpoints; they have their own browser-facing flows.
 func TestMCPSecurity_IgnoresNonJSONRPCRoutes(t *testing.T) {
@@ -224,8 +310,11 @@ func TestMCPSecurity_IgnoresNonJSONRPCRoutes(t *testing.T) {
 		"/mcp/petstore/token",
 		"/mcp/petstore/register",
 		"/mcp/petstore/connect",
+		"/mcp/petstore/remote_login_callback",
+		"/mcp/petstore/idp_callback",
 		"/platform-mcp/authorize",
 		"/platform-mcp/token",
+		"/platform-mcp/idp_callback",
 		"/platform-mcp/provider-setup",
 		"/rpc/chatSessions.create",
 	} {

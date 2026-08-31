@@ -56,6 +56,11 @@ func MCPProtocolVersionTelemetry(next http.Handler) http.Handler {
 // this middleware is registered via goa's Muxer.Use, which delegates to chi's
 // Router.Use and therefore runs before routing.
 //
+// Segment shape alone is not enough, though: several static routes are
+// registered directly beside /mcp/{mcpSlug} and occupy the same one-segment
+// shape without being MCP endpoints. Those are excluded by name — see
+// isSlugSiblingRoute.
+//
 // The shapes matched here are the MCP JSON-RPC routes the server registers. A
 // new MCP route that does not match one of them is served uninstrumented, with
 // no failure to signal it.
@@ -69,12 +74,17 @@ func isMCPJSONRPCEndpoint(path string) bool {
 	case "mcp":
 		// /mcp/{mcpSlug} — the hosted toolset endpoint. A further slash means
 		// an OAuth or metadata sub-route, not the MCP endpoint itself.
-		return tail != "" && !strings.Contains(tail, "/")
-	case "x", "platform":
-		// /x/mcp/{slug} (toolset-backed, remote-backed, and tunneled) and
-		// /platform/mcp/{toolsetSlug}.
+		return isEndpointSlug(tail) && !isSlugSiblingRoute(tail)
+	case "x":
+		// /x/mcp/{slug} — toolset-backed, remote-backed, and tunneled. Carries
+		// the same OAuth callback siblings as /mcp/ (internal/xmcp/service.go).
 		slug, ok := strings.CutPrefix(tail, "mcp/")
-		return ok && slug != "" && !strings.Contains(slug, "/")
+		return ok && isEndpointSlug(slug) && !isSlugSiblingRoute(slug)
+	case "platform":
+		// /platform/mcp/{toolsetSlug}. Nothing static is registered beside it,
+		// so every one-segment tail here really is a slug.
+		slug, ok := strings.CutPrefix(tail, "mcp/")
+		return ok && isEndpointSlug(slug)
 	case "platform-mcp":
 		// POST /platform-mcp is Gram's own platform MCP server
 		// (internal/platformmcp), served by the go-sdk's Streamable HTTP
@@ -87,4 +97,46 @@ func isMCPJSONRPCEndpoint(path string) bool {
 	default:
 		return false
 	}
+}
+
+// isEndpointSlug reports whether seg is a single non-empty path segment, the
+// shape an MCP endpoint slug occupies. A further slash means a sub-route.
+func isEndpointSlug(seg string) bool {
+	return seg != "" && !strings.Contains(seg, "/")
+}
+
+// isSlugSiblingRoute reports whether seg names a static route registered
+// directly under /mcp/ or /x/mcp/ rather than an endpoint slug.
+//
+// chi resolves a static pattern ahead of a parameterized one, so these paths
+// always reach their own handler and never the MCP endpoint handler. This
+// middleware runs before routing, however, and sees only the path, where a
+// static one-segment route is indistinguishable from a slug by shape alone.
+//
+// Getting this wrong is not merely a telemetry gap, because MCPSecurity shares
+// this predicate. A misclassified OAuth callback gets origin-checked, and the
+// browser navigation returning from an upstream IdP carries
+// Sec-Fetch-Site: cross-site by construction — it is a redirect arriving from
+// the IdP's own origin, with no Origin header, which is exactly the shape
+// CrossOriginProtection refuses. That is a 403 in the middle of every
+// remote-login and IdP-backed authorization flow, which is what shipping the
+// original predicate did to production.
+func isSlugSiblingRoute(seg string) bool {
+	switch seg {
+	// GET /mcp/idp_callback and GET /x/mcp/idp_callback: the upstream IdP
+	// redirects the browser here to complete an authorization code exchange.
+	case "idp_callback":
+		return true
+	// GET /mcp/remote_login_callback and GET /x/mcp/remote_login_callback: the
+	// same, for the remote-session login flow that writes remote_sessions.
+	case "remote_login_callback":
+		return true
+	}
+
+	// /mcp/install-page-{hash}.js, /mcp/consent-page-{hash}.js and
+	// /mcp/consent-tools-{hash}.js are content-hashed browser assets. No slug
+	// can collide with them: constants.SlugPattern is ^[a-z0-9_-]{1,128}$,
+	// which admits no dot, so the suffix alone settles it and new hashed
+	// assets need no update here.
+	return strings.HasSuffix(seg, ".js")
 }
