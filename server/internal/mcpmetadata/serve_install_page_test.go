@@ -1956,12 +1956,35 @@ func TestServeInstallPage_DisabledServerBackend_ReturnsNotFound(t *testing.T) {
 	t.Parallel()
 	ctx, testInstance := newTestMCPMetadataService(t)
 
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
 	mcpSlug := "disabled-install-" + uuid.New().String()[:8]
 	createMcpServerWithEndpoint(t, ctx, testInstance, mcpServerFixtureOptions{
 		name:         "Disabled Server",
 		visibility:   mcpservers.VisibilityDisabled,
 		endpointSlug: mcpSlug,
 	})
+
+	// A public legacy toolset shares the slug; a wrongly-falling-through
+	// legacy lookup would render it instead of the not-found page.
+	toolset, err := testInstance.toolsetRepo.CreateToolset(ctx, toolsets_repo.CreateToolsetParams{
+		OrganizationID:         authCtx.ActiveOrganizationID,
+		ProjectID:              *authCtx.ProjectID,
+		Name:                   "Shadowing Legacy Toolset",
+		Slug:                   "legacy-" + mcpSlug,
+		McpSlug:                conv.ToPGText(mcpSlug),
+		Description:            conv.ToPGText("must not shadow the disabled wrapper"),
+		DefaultEnvironmentSlug: pgtype.Text{String: "", Valid: false},
+		McpEnabled:             true,
+	})
+	require.NoError(t, err)
+	require.NoError(t, toolsets_repo.New(testInstance.conn).SetToolsetMCPPublicByID(ctx, toolsets_repo.SetToolsetMCPPublicByIDParams{
+		McpIsPublic: true,
+		ID:          toolset.ID,
+		ProjectID:   toolset.ProjectID,
+	}))
 
 	req := httptest.NewRequest("GET", "/mcp/"+mcpSlug+"/install", nil)
 	rctx := chi.NewRouteContext()
@@ -1972,4 +1995,5 @@ func TestServeInstallPage_DisabledServerBackend_ReturnsNotFound(t *testing.T) {
 	require.NoError(t, testInstance.service.ServeInstallPage(rr, req))
 	assert.Equal(t, http.StatusNotFound, rr.Code)
 	assert.Contains(t, rr.Body.String(), "Server Not Found")
+	assert.NotContains(t, rr.Body.String(), "Shadowing Legacy Toolset")
 }
