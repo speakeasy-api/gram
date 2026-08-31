@@ -324,14 +324,21 @@ func vendorFaviconURL(scheme, host string) string {
 	)
 }
 
+// grantResourceID is the RBAC resource id for an mcp_servers row: the backing
+// toolset id when toolset-backed, else the row id. These are the ids the
+// serving path checks and the ids role-grant selectors name, so keying
+// management checks on them makes server-scoped grants effective here too.
+func grantResourceID(id uuid.UUID, toolsetID uuid.NullUUID) string {
+	if toolsetID.Valid {
+		return toolsetID.UUID.String()
+	}
+	return id.String()
+}
+
 func (s *Service) GetMcpServer(ctx context.Context, payload *gen.GetMcpServerPayload) (*types.McpServer, error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
 		return nil, oops.C(oops.CodeUnauthorized)
-	}
-
-	if err := s.authz.Require(ctx, authz.MCPCheck(authz.ScopeMCPRead, authCtx.ProjectID.String(), authCtx.ProjectID.String())); err != nil {
-		return nil, err
 	}
 
 	idProvided := payload.ID != nil && *payload.ID != ""
@@ -367,6 +374,10 @@ func (s *Service) GetMcpServer(ctx context.Context, payload *gen.GetMcpServerPay
 			return nil, oops.E(oops.CodeNotFound, err, "mcp server not found").LogError(ctx, s.logger)
 		}
 		return nil, oops.E(oops.CodeUnexpected, err, "get mcp server").LogError(ctx, s.logger)
+	}
+
+	if err := s.authz.Require(ctx, authz.MCPCheck(authz.ScopeMCPRead, grantResourceID(server.ID, server.ToolsetID), authCtx.ProjectID.String())); err != nil {
+		return nil, err
 	}
 
 	return mv.BuildMcpServerView(server), nil
@@ -378,10 +389,6 @@ func (s *Service) ListToolFilters(ctx context.Context, payload *gen.ListToolFilt
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.authz.Require(ctx, authz.MCPCheck(authz.ScopeMCPRead, authCtx.ProjectID.String(), authCtx.ProjectID.String())); err != nil {
-		return nil, err
-	}
-
 	idProvided := payload.ID != nil && *payload.ID != ""
 	slugProvided := payload.Slug != nil && *payload.Slug != ""
 	if !idProvided && !slugProvided {
@@ -415,6 +422,10 @@ func (s *Service) ListToolFilters(ctx context.Context, payload *gen.ListToolFilt
 			return nil, oops.E(oops.CodeNotFound, err, "mcp server not found").LogError(ctx, s.logger)
 		}
 		return nil, oops.E(oops.CodeUnexpected, err, "get mcp server").LogError(ctx, s.logger)
+	}
+
+	if err := s.authz.Require(ctx, authz.MCPCheck(authz.ScopeMCPRead, grantResourceID(server.ID, server.ToolsetID), authCtx.ProjectID.String())); err != nil {
+		return nil, err
 	}
 
 	// Only toolset-backed servers expose a tool list to filter. Remote-backed
@@ -471,10 +482,6 @@ func (s *Service) ListMcpServers(ctx context.Context, payload *gen.ListMcpServer
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.authz.Require(ctx, authz.MCPCheck(authz.ScopeMCPRead, authCtx.ProjectID.String(), authCtx.ProjectID.String())); err != nil {
-		return nil, err
-	}
-
 	logger := s.logger.With(attr.SlogProjectID(authCtx.ProjectID.String()))
 
 	remoteMcpServerID, err := conv.PtrToNullUUID(payload.RemoteMcpServerID)
@@ -508,7 +515,26 @@ func (s *Service) ListMcpServers(ctx context.Context, payload *gen.ListMcpServer
 		return nil, oops.E(oops.CodeUnexpected, err, "list mcp servers").LogError(ctx, logger)
 	}
 
-	return &gen.ListMcpServersResult{McpServers: mv.BuildMcpServerListView(servers)}, nil
+	checks := make([]authz.Check, len(servers))
+	for i, server := range servers {
+		checks[i] = authz.MCPCheck(authz.ScopeMCPRead, grantResourceID(server.ID, server.ToolsetID), authCtx.ProjectID.String())
+	}
+	allowedIDs, err := s.authz.Filter(ctx, checks)
+	if err != nil {
+		return nil, err
+	}
+	allowedSet := make(map[string]struct{}, len(allowedIDs))
+	for _, id := range allowedIDs {
+		allowedSet[id] = struct{}{}
+	}
+	allowed := make([]repo.McpServer, 0, len(allowedIDs))
+	for _, server := range servers {
+		if _, ok := allowedSet[grantResourceID(server.ID, server.ToolsetID)]; ok {
+			allowed = append(allowed, server)
+		}
+	}
+
+	return &gen.ListMcpServersResult{McpServers: mv.BuildMcpServerListView(allowed)}, nil
 }
 
 func (s *Service) ListMcpServersForOrg(ctx context.Context, payload *gen.ListMcpServersForOrgPayload) (*gen.ListMcpServersResult, error) {
@@ -535,10 +561,6 @@ func (s *Service) UpdateMcpServer(ctx context.Context, payload *gen.UpdateMcpSer
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
 		return nil, oops.C(oops.CodeUnauthorized)
-	}
-
-	if err := s.authz.Require(ctx, authz.MCPCheck(authz.ScopeMCPWrite, authCtx.ProjectID.String(), authCtx.ProjectID.String())); err != nil {
-		return nil, err
 	}
 
 	logger := s.logger.With(attr.SlogProjectID(authCtx.ProjectID.String()))
@@ -585,6 +607,12 @@ func (s *Service) UpdateMcpServer(ctx context.Context, payload *gen.UpdateMcpSer
 			return nil, oops.E(oops.CodeNotFound, err, "mcp server not found").LogError(ctx, logger)
 		}
 		return nil, oops.E(oops.CodeUnexpected, err, "get mcp server").LogError(ctx, logger)
+	}
+
+	// Authorization keys on the row as it exists, not the backing the payload
+	// may switch it to.
+	if err := s.authz.Require(ctx, authz.MCPCheck(authz.ScopeMCPWrite, grantResourceID(existing.ID, existing.ToolsetID), authCtx.ProjectID.String())); err != nil {
+		return nil, err
 	}
 
 	// Only gate on staff when the unproxied backend reference is actually
@@ -782,10 +810,6 @@ func (s *Service) DeleteMcpServer(ctx context.Context, payload *gen.DeleteMcpSer
 		return oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.authz.Require(ctx, authz.MCPCheck(authz.ScopeMCPWrite, authCtx.ProjectID.String(), authCtx.ProjectID.String())); err != nil {
-		return err
-	}
-
 	logger := s.logger.With(attr.SlogProjectID(authCtx.ProjectID.String()))
 
 	serverID, err := uuid.Parse(payload.ID)
@@ -818,14 +842,19 @@ func (s *Service) DeleteMcpServer(ctx context.Context, payload *gen.DeleteMcpSer
 	}); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "lock mcp endpoints").LogError(ctx, logger)
 	}
-	if _, err := txRepo.LockMCPServerByIDAndProjectID(ctx, repo.LockMCPServerByIDAndProjectIDParams{
+	locked, err := txRepo.LockMCPServerByIDAndProjectID(ctx, repo.LockMCPServerByIDAndProjectIDParams{
 		ID:        serverID,
 		ProjectID: *authCtx.ProjectID,
-	}); err != nil {
+	})
+	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return oops.E(oops.CodeNotFound, err, "mcp server not found").LogError(ctx, logger)
 		}
 		return oops.E(oops.CodeUnexpected, err, "lock mcp server").LogError(ctx, logger)
+	}
+
+	if err := s.authz.Require(ctx, authz.MCPCheck(authz.ScopeMCPWrite, grantResourceID(locked.ID, locked.ToolsetID), authCtx.ProjectID.String())); err != nil {
+		return err
 	}
 	// Post-server-lock read is the authoritative root set: the server FOR SHARE in root selection means no new root can commit past this point, and rows here carry pre-delete is_domain_root.
 	rootEndpoints, err := mcpendpointsrepo.New(dbtx).LockMCPEndpointsByMCPServerID(ctx, mcpendpointsrepo.LockMCPEndpointsByMCPServerIDParams{
