@@ -60,6 +60,7 @@ func isSkippedRequestHeader(name string) bool {
 		"sec-fetch-dest",
 		"sec-fetch-mode",
 		"sec-fetch-site",
+		"sec-fetch-user",
 		"te",
 		"trailer",
 		"transfer-encoding",

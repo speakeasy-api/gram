@@ -11,31 +11,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 )
 
-// simpleRequestContentTypes are the three media types a browser can send on a
-// cross-origin POST without triggering a CORS preflight (the Fetch spec's
-// "CORS-safelisted request-header" set for Content-Type). A JSON-RPC body sent
-// under one of these reaches an MCP handler having never been preflighted, so
-// on the surfaces whose only protection was the preflight it bypassed the
-// check entirely.
-//
-// This is deliberately a denylist of the bypass vector rather than an
-// allowlist of application/json. Requiring application/json would reject
-// conforming non-browser callers for no real gain: `curl -d @body.json` with
-// no -H sends application/x-www-form-urlencoded, and a bare POST with no
-// Content-Type at all is common in hand-rolled integrations.
-//
-// An absent Content-Type is allowed even though a browser CAN produce one
-// un-preflighted (fetch with a Uint8Array or a type-less Blob body sends no
-// Content-Type). That case is covered by the Origin check above, which is the
-// real control here; this check is defence in depth for the pre-Sec-Fetch-Site
-// browsers that the Origin check falls back to Host comparison for. Rejecting
-// an absent header would break real clients to close nothing.
-var simpleRequestContentTypes = map[string]struct{}{
-	"text/plain":                        {},
-	"multipart/form-data":               {},
-	"application/x-www-form-urlencoded": {},
-}
-
 // MCPSecurity enforces the MCP Streamable HTTP transport's browser-facing
 // security requirements on the MCP JSON-RPC endpoints: Origin validation
 // (2025-11-25 and 2026-07-28 both make this a MUST, answered with 403) and
@@ -99,24 +74,48 @@ func MCPSecurity(logger *slog.Logger, trustedOrigins []string) (func(http.Handle
 			}
 
 			if !chatSessionOriginTrusted(r.Context()) {
-				if err := protection.Check(r); err != nil {
+				if err := protection.Check(originCheckProbe(r)); err != nil {
 					logMCPSecurityRejection(r, logger, "cross_origin", err.Error())
 					http.Error(w, "forbidden: cross-origin request rejected", http.StatusForbidden)
 					return
 				}
 			}
 
-			if r.Method == http.MethodPost {
-				if mediaType, ok := disallowedRequestMediaType(r.Header.Get("Content-Type")); ok {
-					logMCPSecurityRejection(r, logger, "content_type", mediaType)
-					http.Error(w, "unsupported media type: send MCP requests as application/json", http.StatusUnsupportedMediaType)
-					return
-				}
+			if r.Method == http.MethodPost && !isJSONRequest(r.Header.Get("Content-Type")) {
+				logMCPSecurityRejection(r, logger, "content_type", r.Header.Get("Content-Type"))
+				http.Error(w, "Content-Type must be 'application/json'", http.StatusUnsupportedMediaType)
+				return
 			}
 
 			next.ServeHTTP(w, r)
 		})
 	}, nil
+}
+
+// originCheckProbe returns the request CrossOriginProtection should judge.
+//
+// Check exempts GET and HEAD as "safe methods", on the reasoning that a safe
+// method performs no state change. That does not hold for MCP: GET on a
+// Streamable HTTP endpoint opens the standalone SSE stream, and against a
+// proxy-backed server it establishes a session upstream. The spec's Origin
+// MUST is not scoped to a method either, so a cross-site GET is exactly the
+// DNS-rebinding shape the requirement exists to refuse.
+//
+// Check reads only the method, Sec-Fetch-Site, Origin, and Host, so presenting
+// GET and HEAD under POST semantics applies the identical origin logic without
+// reimplementing it. The copy is shallow and the headers are read-only in
+// Check. OPTIONS is left alone: a preflight must be answerable, and one never
+// reaches this middleware anyway because CORSMiddleware and chatSessionsCORS
+// both answer OPTIONS before calling next.
+func originCheckProbe(r *http.Request) *http.Request {
+	switch r.Method {
+	case http.MethodGet, http.MethodHead:
+		probe := *r
+		probe.Method = http.MethodPost
+		return &probe
+	default:
+		return r
+	}
 }
 
 // normalizeOrigin reduces a configured URL to the bare scheme://host form
@@ -132,32 +131,42 @@ func normalizeOrigin(raw string) (string, error) {
 	if parsed.Scheme == "" || parsed.Host == "" {
 		return "", fmt.Errorf("trusted origin %q needs a scheme and host", raw)
 	}
-	return parsed.Scheme + "://" + parsed.Host, nil
+
+	// AddTrustedOrigin compares the configured string to the Origin header
+	// byte for byte, and a browser sends a lowercased host with the scheme's
+	// default port omitted. A flag set to "https://APP.getgram.ai" or
+	// "https://app.getgram.ai:443" would otherwise register an origin nothing
+	// can ever match, silently dropping the exemption.
+	scheme := strings.ToLower(parsed.Scheme)
+	host := strings.ToLower(parsed.Host)
+	if (scheme == "https" && strings.HasSuffix(host, ":443")) ||
+		(scheme == "http" && strings.HasSuffix(host, ":80")) {
+		host = host[:strings.LastIndex(host, ":")]
+	}
+
+	return scheme + "://" + host, nil
 }
 
-// disallowedRequestMediaType reports whether a Content-Type header names one
-// of the CORS-simple media types, returning the media type for telemetry. An
-// empty header is allowed (see simpleRequestContentTypes).
+// isJSONRequest reports whether a Content-Type header names application/json,
+// ignoring parameters such as "; charset=utf-8".
 //
-// A header Go cannot parse falls back to the bare type token rather than being
-// waved through. Fetch's CORS-safelist check uses a more lenient MIME parser
-// than mime.ParseMediaType, so values Go rejects — "text/plain;;",
-// "multipart/form-data; boundary=", a duplicated charset parameter — are still
-// sent un-preflighted by a browser and would otherwise walk straight past this
-// check.
-func disallowedRequestMediaType(header string) (string, bool) {
-	if strings.TrimSpace(header) == "" {
-		return "", false
-	}
-
+// This matches modelcontextprotocol/go-sdk, whose Streamable HTTP handler
+// rejects any POST whose base media type is not application/json with 415
+// (streamable.go:388). That handler already serves Gram's own /platform-mcp
+// endpoint, so anything laxer here would leave the hosted MCP surfaces more
+// permissive than one we already ship.
+//
+// An absent or unparseable header fails closed. Every conforming MCP client
+// sends application/json (the go-sdk client sets it unconditionally), so a
+// request without it is not a client this transport supports. Rejecting it
+// also closes the CORS-simple-request bypass, where a JSON-RPC body sent as
+// text/plain reaches a handler having never been preflighted.
+func isJSONRequest(header string) bool {
 	mediaType, _, err := mime.ParseMediaType(header)
 	if err != nil {
-		bare, _, _ := strings.Cut(header, ";")
-		mediaType = strings.ToLower(strings.TrimSpace(bare))
+		return false
 	}
-
-	_, disallowed := simpleRequestContentTypes[mediaType]
-	return mediaType, disallowed
+	return mediaType == "application/json"
 }
 
 // logMCPSecurityRejection records a rejection with enough context to tell an

@@ -2,6 +2,7 @@ package middleware
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -146,7 +147,7 @@ func TestChatSessionsCORS_GramKeyEchoesOriginOnConsumingRoutes(t *testing.T) {
 
 	for _, path := range []string{
 		"/rpc/chatSessions.create",
-		"/rpc/chat.list",
+		"/rpc/chat.load",
 		"/chat/completions",
 		"/chat/turnstream",
 	} {
@@ -161,6 +162,82 @@ func TestChatSessionsCORS_GramKeyEchoesOriginOnConsumingRoutes(t *testing.T) {
 
 			require.True(t, reached)
 			require.Equal(t, elementsOrigin, rec.Header().Get("Access-Control-Allow-Origin"))
+		})
+	}
+}
+
+// loadChat is the only chat method declaring security.ByKey, so the rest of
+// the /rpc/chat.* family must not hand out credentialed CORS for a key that
+// was never consulted.
+func TestChatSessionsCORS_GramKeyDoesNotEchoOriginOnNonConsumingChatRoutes(t *testing.T) {
+	t.Parallel()
+
+	for _, path := range []string{
+		"/rpc/chat.list",
+		"/rpc/chat.delete",
+		"/rpc/chat.summarize",
+	} {
+		t.Run(path, func(t *testing.T) {
+			t.Parallel()
+
+			req := httptest.NewRequest(http.MethodPost, "https://app.getgram.ai"+path, strings.NewReader("{}"))
+			req.Header.Set(constants.APIKeyHeader, "gram_key_whatever")
+			req.Header.Set("Origin", hostileOrigin)
+
+			rec, reached, _ := serveChatSessionCORS(t, stubChatSessionValidator{audience: nil, invalidToken: false, err: nil}, req)
+
+			require.True(t, reached)
+			require.Empty(t, rec.Header().Get("Access-Control-Allow-Origin"))
+		})
+	}
+}
+
+// A validator fault is a server fault, not an auth failure: the caller must
+// see 500 and the handler must not run.
+func TestChatSessionsCORS_ValidatorErrorIsInternalError(t *testing.T) {
+	t.Parallel()
+
+	validator := stubChatSessionValidator{audience: nil, invalidToken: false, err: errors.New("redis unavailable")}
+
+	rec, reached, _ := serveChatSessionCORS(t, validator, elementsMCPRequest())
+
+	require.False(t, reached)
+	require.Equal(t, http.StatusInternalServerError, rec.Code)
+}
+
+// Browsers omit Origin on same-origin GET/HEAD, so the audience check falls
+// back to comparing Host. That fallback is what stops a stripped Origin from
+// bypassing the audience claim, so both outcomes are pinned.
+func TestChatSessionsCORS_HostFallbackWhenOriginAbsent(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name       string
+		host       string
+		audience   []string
+		wantStatus int
+		wantReach  bool
+	}{
+		{name: "host matches audience", host: "app.getgram.ai", audience: []string{"https://app.getgram.ai"}, wantStatus: http.StatusOK, wantReach: true},
+		{name: "host matches http audience", host: "app.getgram.ai", audience: []string{"http://app.getgram.ai"}, wantStatus: http.StatusOK, wantReach: true},
+		{name: "host does not match", host: "app.getgram.ai", audience: []string{"https://docs.customer.com"}, wantStatus: http.StatusForbidden, wantReach: false},
+		{name: "empty audience", host: "app.getgram.ai", audience: nil, wantStatus: http.StatusForbidden, wantReach: false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			req := httptest.NewRequest(http.MethodGet, "https://app.getgram.ai/mcp/petstore", nil)
+			req.Host = tt.host
+			req.Header.Set(constants.ChatSessionsTokenHeader, "a-chat-session-token")
+
+			validator := stubChatSessionValidator{audience: tt.audience, invalidToken: false, err: nil}
+			rec, reached, originTrusted := serveChatSessionCORS(t, validator, req)
+
+			require.Equal(t, tt.wantStatus, rec.Code)
+			require.Equal(t, tt.wantReach, reached)
+			require.Equal(t, tt.wantReach, originTrusted, "trust marker must track the audience decision")
 		})
 	}
 }

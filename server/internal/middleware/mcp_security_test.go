@@ -150,17 +150,40 @@ func TestMCPSecurity_RejectsCrossSiteDelete(t *testing.T) {
 	require.Equal(t, http.StatusForbidden, rec.Code)
 }
 
-// GET opens the Streamable HTTP SSE stream. The stdlib treats safe methods as
-// always allowed, so this is knowingly not covered — documented here so the
-// gap is visible rather than assumed closed.
-func TestMCPSecurity_AllowsCrossSiteGetAsSafeMethod(t *testing.T) {
+// GET opens the Streamable HTTP SSE stream, and against a proxy-backed server
+// establishes a session upstream. The spec's Origin MUST is not method-scoped,
+// so safe-method exemption does not apply here.
+func TestMCPSecurity_RejectsCrossSiteGet(t *testing.T) {
 	t.Parallel()
 
 	req := httptest.NewRequest(http.MethodGet, "https://app.getgram.ai/mcp/petstore", nil)
 	req.Header.Set("Sec-Fetch-Site", "cross-site")
 	req.Header.Set("Origin", hostileOrigin)
 
+	rec, reached := serveMCPSecurity(t, req)
+
+	require.False(t, reached, "a cross-site SSE GET must not open a stream")
+	require.Equal(t, http.StatusForbidden, rec.Code)
+}
+
+func TestMCPSecurity_AllowsSameOriginGet(t *testing.T) {
+	t.Parallel()
+
+	req := httptest.NewRequest(http.MethodGet, "https://app.getgram.ai/mcp/petstore", nil)
+	req.Header.Set("Sec-Fetch-Site", "same-origin")
+	req.Header.Set("Origin", gramOrigin)
+
 	_, reached := serveMCPSecurity(t, req)
+
+	require.True(t, reached)
+}
+
+// A native client polling the SSE stream sends no browser fetch metadata and
+// must keep working.
+func TestMCPSecurity_AllowsNonBrowserGet(t *testing.T) {
+	t.Parallel()
+
+	_, reached := serveMCPSecurity(t, httptest.NewRequest(http.MethodGet, "https://app.getgram.ai/mcp/petstore", nil))
 
 	require.True(t, reached)
 }
@@ -228,6 +251,10 @@ func TestMCPSecurity_ContentType(t *testing.T) {
 		contentType string
 		wantStatus  int
 	}{
+		{name: "json", contentType: "application/json", wantStatus: http.StatusOK},
+		{name: "json with charset", contentType: "application/json; charset=utf-8", wantStatus: http.StatusOK},
+		{name: "json uppercase", contentType: "APPLICATION/JSON", wantStatus: http.StatusOK},
+
 		// The CORS-simple set: these reach a handler without a preflight, so
 		// they are how the Origin check would be routed around.
 		{name: "text/plain", contentType: "text/plain", wantStatus: http.StatusUnsupportedMediaType},
@@ -235,20 +262,12 @@ func TestMCPSecurity_ContentType(t *testing.T) {
 		{name: "form urlencoded", contentType: "application/x-www-form-urlencoded", wantStatus: http.StatusUnsupportedMediaType},
 		{name: "multipart", contentType: "multipart/form-data; boundary=x", wantStatus: http.StatusUnsupportedMediaType},
 
-		// Fetch safelists these without a preflight, but mime.ParseMediaType
-		// rejects them. Falling back to the bare type token keeps them closed.
-		{name: "text/plain empty params", contentType: "text/plain;;", wantStatus: http.StatusUnsupportedMediaType},
-		{name: "text/plain bare param", contentType: "text/plain; x", wantStatus: http.StatusUnsupportedMediaType},
-		{name: "text/plain duplicate charset", contentType: "text/plain; charset=utf-8; charset=iso-8859-1", wantStatus: http.StatusUnsupportedMediaType},
-		{name: "multipart empty boundary", contentType: "multipart/form-data; boundary=", wantStatus: http.StatusUnsupportedMediaType},
-		{name: "uppercase text/plain", contentType: "TEXT/PLAIN", wantStatus: http.StatusUnsupportedMediaType},
-
-		// Everything else passes. Requiring application/json outright would
-		// reject conforming non-browser clients for no security gain.
-		{name: "json", contentType: "application/json", wantStatus: http.StatusOK},
-		{name: "json with charset", contentType: "application/json; charset=utf-8", wantStatus: http.StatusOK},
-		{name: "absent", contentType: "", wantStatus: http.StatusOK},
-		{name: "unparseable non-safelisted", contentType: "application/json;;", wantStatus: http.StatusOK},
+		// Absent and unparseable fail closed. Every conforming MCP client
+		// sends application/json.
+		{name: "absent", contentType: "", wantStatus: http.StatusUnsupportedMediaType},
+		{name: "unparseable", contentType: "text/plain;;", wantStatus: http.StatusUnsupportedMediaType},
+		{name: "json unparseable params", contentType: "application/json;;", wantStatus: http.StatusUnsupportedMediaType},
+		{name: "json-rpc", contentType: "application/json-rpc", wantStatus: http.StatusUnsupportedMediaType},
 	}
 
 	for _, tt := range tests {
@@ -279,38 +298,47 @@ func TestMCPSecurity_ContentTypeOnlyCheckedForPost(t *testing.T) {
 	require.True(t, reached)
 }
 
+// A browser sends a lowercased host and omits the scheme's default port, so a
+// flag carrying either would register an origin nothing can match.
+func TestMCPSecurity_CanonicalizesTrustedOrigins(t *testing.T) {
+	t.Parallel()
+
+	for _, configured := range []string{
+		"https://APP.getgram.ai",
+		"https://app.getgram.ai:443",
+		"https://app.getgram.ai/",
+	} {
+		t.Run(configured, func(t *testing.T) {
+			t.Parallel()
+
+			mw, err := MCPSecurity(testenv.NewLogger(t), []string{configured})
+			require.NoError(t, err)
+
+			reached := false
+			handler := mw(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				reached = true
+				w.WriteHeader(http.StatusOK)
+			}))
+
+			req := httptest.NewRequest(http.MethodPost, "https://mcp.customer.com/mcp/petstore", strings.NewReader("{}"))
+			req.Header.Set("Content-Type", "application/json")
+			req.Header.Set("Sec-Fetch-Site", "cross-site")
+			req.Header.Set("Origin", gramOrigin)
+
+			rec := httptest.NewRecorder()
+			handler.ServeHTTP(rec, req)
+
+			require.True(t, reached, "configured origin %q must match the browser's Origin header", configured)
+		})
+	}
+}
+
 func TestMCPSecurity_RejectsInvalidTrustedOrigin(t *testing.T) {
 	t.Parallel()
 
 	_, err := MCPSecurity(testenv.NewLogger(t), []string{"app.getgram.ai"})
 
 	require.Error(t, err, "an origin without a scheme must fail at construction, not silently at runtime")
-}
-
-// server-url and site-url are ordinary URL flags elsewhere and may carry a
-// trailing slash; AddTrustedOrigin rejects any path, so an unnormalized value
-// would refuse to boot the server.
-func TestMCPSecurity_NormalizesTrustedOrigins(t *testing.T) {
-	t.Parallel()
-
-	mw, err := MCPSecurity(testenv.NewLogger(t), []string{"https://app.getgram.ai/"})
-	require.NoError(t, err)
-
-	reached := false
-	handler := mw(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		reached = true
-		w.WriteHeader(http.StatusOK)
-	}))
-
-	req := httptest.NewRequest(http.MethodPost, "https://mcp.customer.com/mcp/petstore", strings.NewReader("{}"))
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Sec-Fetch-Site", "cross-site")
-	req.Header.Set("Origin", gramOrigin)
-
-	rec := httptest.NewRecorder()
-	handler.ServeHTTP(rec, req)
-
-	require.True(t, reached, "a trailing slash in the flag must still yield a usable trusted origin")
 }
 
 func TestMCPSecurity_SkipsEmptyTrustedOrigins(t *testing.T) {

@@ -25,6 +25,11 @@ var chatSessionsAllowedRoutes = []string{
 // /rpc/chatSessions.create before any chat session exists, and the chat routes
 // accept the key directly (see chat.Service.Authorize).
 //
+// /rpc/chat.load rather than the whole /rpc/chat. family: loadChat is the only
+// chat method declaring security.ByKey (design/chat/design.go), so the other
+// twelve /rpc/chat.* routes would be handing out credentialed CORS on
+// responses no API key was consulted for.
+//
 // This is deliberately an allowlist rather than "every chatSessionsAllowedRoutes
 // entry". The /mcp prefix in that list also covers /mcp/{slug} and the OAuth
 // sub-routes (/token, /register, /authorize, /connect), none of which read
@@ -38,7 +43,7 @@ var chatSessionsAllowedRoutes = []string{
 var gramKeyCORSRoutes = []string{
 	"/chat/completions",
 	"/chat/turnstream",
-	"/rpc/chat.",
+	"/rpc/chat.load",
 	"/rpc/chatSessions.",
 }
 
