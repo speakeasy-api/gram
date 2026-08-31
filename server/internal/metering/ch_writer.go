@@ -23,22 +23,28 @@ type ReadingInserter interface {
 
 // MeterReadingCHWriter validates Pub/Sub readings and writes them to ClickHouse.
 type MeterReadingCHWriter struct {
-	logger   *slog.Logger
-	inserter ReadingInserter
+	logger        *slog.Logger
+	inserter      ReadingInserter
+	writesEnabled bool
 }
 
 // NewMeterReadingCHWriter creates a ClickHouse workload reading subscriber.
-func NewMeterReadingCHWriter(logger *slog.Logger, inserter ReadingInserter) *MeterReadingCHWriter {
+func NewMeterReadingCHWriter(logger *slog.Logger, inserter ReadingInserter, writesEnabled bool) *MeterReadingCHWriter {
 	return &MeterReadingCHWriter{
-		logger:   logger.With(attr.SlogComponent("meter-reading-ch-writer")),
-		inserter: inserter,
+		logger:        logger.With(attr.SlogComponent("meter-reading-ch-writer")),
+		inserter:      inserter,
+		writesEnabled: writesEnabled,
 	}
 }
 
 var _ streams.BatchHandler[*meteringv1.MeterReading] = (*MeterReadingCHWriter)(nil)
 
-// HandleBatch acknowledges malformed poison messages and retries ClickHouse failures.
+// HandleBatch acknowledges messages without insertion when ClickHouse writes are disabled.
 func (w *MeterReadingCHWriter) HandleBatch(ctx context.Context, messages []*meteringv1.MeterReading, _ []gcp.MessageMetadata) error {
+	if !w.writesEnabled {
+		return nil
+	}
+
 	insertedAt := time.Now().UTC()
 	rows := make([]chrepo.ReadingRow, 0, len(messages))
 	seen := make(map[uuid.UUID]struct{}, len(messages))

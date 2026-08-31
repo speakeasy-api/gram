@@ -120,7 +120,7 @@ func TestChatStorageReadingPipelineToClickHouse(t *testing.T) {
 
 	clickhouseConn, err := infra.NewClickhouseClient(t)
 	require.NoError(t, err)
-	chWriter := metering.NewMeterReadingCHWriter(testenv.NewLogger(t), meteringchrepo.New(clickhouseConn))
+	chWriter := metering.NewMeterReadingCHWriter(testenv.NewLogger(t), meteringchrepo.New(clickhouseConn), true)
 	require.NoError(t, chWriter.HandleBatch(ctx, []*meteringv1.MeterReading{message}, nil))
 	require.NoError(t, chWriter.HandleBatch(ctx, []*meteringv1.MeterReading{message}, nil))
 
