@@ -1,7 +1,82 @@
+server/design/shared/networkaccess.go
+  h_9630b74bdac540 1-9
+server/internal/mcpservers/lifecycle.go
+  h_9630b74bdac540 11,19,36,159-166,178-179
+server/internal/mcp/authnchallenge_test.go
+  h_9630b74bdac540 33,696-698
+server/internal/mcp/wellknown_test.go
+  h_9630b74bdac540 30,380-382
+server/internal/mcp/authnchallenge_authorize_test.go
+  h_9630b74bdac540 21,48-51,130-132
+server/internal/metamcp/setup_test.go
+  h_9630b74bdac540 26,86
+server/internal/mcpservers/impl.go
+  h_9630b74bdac540 47,76,94,110,163-170,192,613-620,666,789-818,820
+server/internal/mv/metamcpserver.go
+  h_9630b74bdac540 8,21
+server/internal/networkaccess/mode_test.go
+  h_9630b74bdac540 1-35
+server/internal/metamcp/createmetamcpserver_test.go
+  h_9630b74bdac540 6,17,48,50-54,61-73
+server/internal/metamcp/impl.go
+  h_9630b74bdac540 6,38,55,69,81,115-121,151,287-291,294,300-301,369-390
+server/cmd/gram/start.go
+  h_9630b74bdac540 103,127,845-846,1570,1573
+server/internal/xmcp/wellknown_test.go
+  h_9630b74bdac540 32,344-347,465-467
+server/internal/testenv/queries.sql
+  h_9630b74bdac540 641-658
+server/internal/metamcp/updatemetamcpserver_test.go
+  h_9630b74bdac540 8,19,22,133-176
+server/internal/mcpservers/transaction.go
+  h_9630b74bdac540 13,27,62-69,83
+server/internal/mcp/authnchallenge.go
+  h_9630b74bdac540 43,429-431,433
+server/internal/mcpservers/createmcpserver_test.go
+  h_9630b74bdac540 15,58,60-64,71-105
+server/internal/mcpmetadata/serve_install_page_test.go
+  h_9630b74bdac540 34,624-627,640,710-714,718,726-727,1886-1888
+server/internal/mcpservers/updatemcpserver_test.go
+  h_9630b74bdac540 9,19,23,80-129
+server/design/mcpservers/design.go
+  h_9630b74bdac540 399,430,470,480
+server/internal/mcpservers/remote_materializer.go
+  h_9630b74bdac540 12,43
+server/internal/customdomains/middleware_test.go
+  h_9630b74bdac540 18,81-82,91-92,182-183,188-199,201-210,218-219,268-270,285-288,404
+server/internal/mcpmetadata/impl.go
+  h_9630b74bdac540 60,1513-1515,1520-1521,1528-1529,1531,1533,1535
+server/internal/requestorigin/origin_test.go
+  h_9630b74bdac540 1-56
+server/internal/mcp/impl.go
+  h_9630b74bdac540 837
+server/internal/remotemcp/provisioning.go
+  h_9630b74bdac540 21,102
+server/internal/mv/mcpserver.go
+  h_9630b74bdac540 9,28
+server/internal/mcpservers/queries.sql
+  h_9630b74bdac540 14-15,29-30,130,186-189
+server/internal/requestorigin/origin.go
+  h_9630b74bdac540 1-86
+server/design/metamcp/design.go
+  h_9630b74bdac540 272,291,313,324
+server/internal/mcpservers/setup_test.go
+  h_9630b74bdac540 27,98
+server/internal/metamcp/queries.sql
+  h_9630b74bdac540 18-19,26-27,80-83
+server/internal/networkaccess/mode.go
+  h_9630b74bdac540 1-88
+server/internal/customdomains/middleware.go
+  h_9630b74bdac540 9,11,17,23-24,29-30,32-39,42-45,49,55-63,94-99
 ---
 {
   "schema_version": "authorship/3.0.0",
   "git_ai_version": "1.5.2",
   "base_commit_sha": "31131a9dc46daaa8539d0dfbf9054928e402c9ed",
-  "prompts": {}
+  "prompts": {},
+  "humans": {
+    "h_9630b74bdac540": {
+      "author": "Tristan Cartledge <tristan@speakeasyapi.dev>"
+    }
+  }
 }
