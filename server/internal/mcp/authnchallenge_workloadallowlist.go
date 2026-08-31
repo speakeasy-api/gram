@@ -44,6 +44,14 @@ const (
 	// realistic working set — an organization trusts tens of issuers, not
 	// thousands — with headroom.
 	workloadIssuerMissEntries = 4096
+
+	// workloadIssuerLookupTimeout bounds one admission lookup.
+	//
+	// The lookup runs detached from the caller's context, so nothing else
+	// bounds it. Generous for a single indexed read, and deliberately far
+	// short of the pool's 60s statement timeout, which is a backstop against
+	// a runaway query rather than a delay any caller should wait out.
+	workloadIssuerLookupTimeout = 5 * time.Second
 )
 
 // errWorkloadIssuerUntrusted reports an assertion whose iss names no issuer
@@ -53,6 +61,35 @@ const (
 // meant for us: a CI provider's issuer mints valid tokens for every job on
 // its platform. This is where "genuinely signed" stops being enough.
 var errWorkloadIssuerUntrusted = errors.New("issuer is not trusted by this endpoint")
+
+// workloadIssuerMissReason records why an issuer was rejected, so a repeat
+// served from the cache answers with the same taxonomy the original did.
+// Without it a caller mapping a malformed iss to 400 and an unknown one to
+// 401 would return a different status for the same input depending on whether
+// a cache entry happened to be live.
+//
+// The reason is stored, but the parse error's detail is not: that text is
+// derived from an unauthenticated, unbounded value, and keeping it would put
+// an attacker-sized string back into an entry the cap is supposed to bound.
+// The sentinel survives; the prose does not.
+type workloadIssuerMissReason uint8
+
+const (
+	// workloadIssuerMissUnknown: a well-formed issuer no tier-visible row
+	// describes.
+	workloadIssuerMissUnknown workloadIssuerMissReason = iota
+	// workloadIssuerMissMalformed: not an issuer identifier at all, so no row
+	// could ever describe it.
+	workloadIssuerMissMalformed
+)
+
+// err renders the rejection this reason stands for.
+func (r workloadIssuerMissReason) err() error {
+	if r == workloadIssuerMissMalformed {
+		return fmt.Errorf("%w: %w", errWorkloadIssuerUntrusted, remotesessions.ErrIssuerURLInvalid)
+	}
+	return errWorkloadIssuerUntrusted
+}
 
 // workloadIssuerLookup resolves an assertion's iss to the trusted issuer row
 // an endpoint admits it under, reporting false when no tier-visible row
@@ -123,18 +160,35 @@ type workloadIssuerResolution struct {
 // possible request would still cost a query.
 func (a *workloadIssuerAdmission) admit(ctx context.Context, endpoint *ResolvedMcpEndpoint, issuerURL string) (*remotesessions_repo.RemoteSessionIssuer, error) {
 	key := workloadIssuerMissKey(endpoint, issuerURL)
-	if a.misses.seen(key) {
-		return nil, errWorkloadIssuerUntrusted
+	if reason, ok := a.misses.seen(key); ok {
+		return nil, reason.err()
 	}
 
 	resolved, err, _ := a.inflight.Do(key, func() (any, error) {
-		row, found, lookupErr := a.lookup(ctx, endpoint, issuerURL)
+		// Re-check under the flight. A caller that read the cache before a
+		// flight recorded its miss arrives here after that flight has ended,
+		// and without this would start a redundant lookup — the same
+		// double-check botFrameworkAuthenticator.remoteKeySet carries.
+		if reason, ok := a.misses.seen(key); ok {
+			return nil, reason.err()
+		}
+
+		// The flight runs under whichever caller opened it, so a leader that
+		// goes away would otherwise hand context.Canceled to everyone sharing
+		// its lookup. On a grant reachable without credentials that matters
+		// on its own: an abandoned request would fail a legitimate one
+		// resolving the same issuer. Detached instead — values carry through,
+		// cancellation does not — which makes the timeout the only bound.
+		lookupCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), workloadIssuerLookupTimeout)
+		defer cancel()
+
+		row, found, lookupErr := a.lookup(lookupCtx, endpoint, issuerURL)
 		switch {
 		case errors.Is(lookupErr, remotesessions.ErrIssuerURLInvalid):
 			// Not an issuer identifier at all, so no row could ever describe
 			// it. Remembered like any other miss: a malformed iss is the
 			// cheapest thing for a flood to carry.
-			a.misses.remember(key)
+			a.misses.remember(key, workloadIssuerMissMalformed)
 			return nil, fmt.Errorf("%w: %w", errWorkloadIssuerUntrusted, lookupErr)
 		case lookupErr != nil:
 			// A database failure is not evidence about this issuer. Never
@@ -142,7 +196,7 @@ func (a *workloadIssuerAdmission) admit(ctx context.Context, endpoint *ResolvedM
 			// legitimate workload after the store recovered.
 			return nil, fmt.Errorf("resolve workload issuer: %w", lookupErr)
 		case !found:
-			a.misses.remember(key)
+			a.misses.remember(key, workloadIssuerMissUnknown)
 			return nil, errWorkloadIssuerUntrusted
 		}
 		return workloadIssuerResolution{row: row}, nil
@@ -197,12 +251,20 @@ func workloadIssuerMissKey(endpoint *ResolvedMcpEndpoint, issuerURL string) stri
 	return base64.RawURLEncoding.EncodeToString(sum.Sum(nil))
 }
 
+// workloadIssuerMissEntry is one remembered rejection: when it lapses, and
+// what it was. Both fields are fixed size, so an entry costs the same whatever
+// issuer produced it.
+type workloadIssuerMissEntry struct {
+	expiry time.Time
+	reason workloadIssuerMissReason
+}
+
 // workloadIssuerMissCache remembers recently rejected issuers, bounded in both
 // entries and age.
 type workloadIssuerMissCache struct {
 	mu sync.Mutex
-	// expiries maps a key to the instant its entry lapses.
-	expiries map[string]time.Time
+	// entries maps a key to the rejection it holds.
+	entries map[string]workloadIssuerMissEntry
 	// order records insertion order so a full cache can evict its oldest
 	// entry. Insertion order rather than recency: an entry is worth keeping
 	// for as long as the flood that created it lasts, and refreshing on every
@@ -215,49 +277,52 @@ type workloadIssuerMissCache struct {
 func newWorkloadIssuerMissCache(maxEntries int, ttl time.Duration) *workloadIssuerMissCache {
 	return &workloadIssuerMissCache{
 		mu:         sync.Mutex{},
-		expiries:   make(map[string]time.Time),
+		entries:    make(map[string]workloadIssuerMissEntry),
 		order:      make([]string, 0, maxEntries),
 		maxEntries: maxEntries,
 		ttl:        ttl,
 	}
 }
 
-// seen reports whether key was rejected recently enough for the answer to
-// still stand. A lapsed entry is dropped rather than reported, so an issuer
-// added since is looked up again.
-func (c *workloadIssuerMissCache) seen(key string) bool {
+// seen reports the rejection held for key, if one was recorded recently
+// enough for the answer to still stand. A lapsed entry is dropped rather than
+// reported, so an issuer added since is looked up again.
+func (c *workloadIssuerMissCache) seen(key string) (workloadIssuerMissReason, bool) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	expiry, ok := c.expiries[key]
+	entry, ok := c.entries[key]
 	if !ok {
-		return false
+		return workloadIssuerMissUnknown, false
 	}
-	if !time.Now().Before(expiry) {
+	if !time.Now().Before(entry.expiry) {
 		c.drop(key)
-		return false
+		return workloadIssuerMissUnknown, false
 	}
-	return true
+	return entry.reason, true
 }
 
-// remember records key as rejected, evicting to stay within the entry bound.
-func (c *workloadIssuerMissCache) remember(key string) {
+// remember records key as rejected for reason, evicting to stay within the
+// entry bound.
+func (c *workloadIssuerMissCache) remember(key string, reason workloadIssuerMissReason) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	if _, exists := c.expiries[key]; exists {
-		// Already held: refreshing the expiry would let a caller keep one
-		// entry alive forever by repeating it, which is the pinning the
-		// insertion-ordered eviction avoids.
+	if existing, exists := c.entries[key]; exists && time.Now().Before(existing.expiry) {
+		// Held and still live: refreshing the expiry would let a caller keep
+		// one entry alive forever by repeating it, which is the pinning the
+		// insertion-ordered eviction avoids. A lapsed entry is not held in
+		// this sense — it is a fresh miss that happens to collide with a
+		// corpse, and falls through to be recorded as one.
 		return
 	}
 
 	c.evictExpiredLocked()
-	for len(c.expiries) >= c.maxEntries && len(c.order) > 0 {
+	for len(c.entries) >= c.maxEntries && len(c.order) > 0 {
 		c.drop(c.order[0])
 	}
 
-	c.expiries[key] = time.Now().Add(c.ttl)
+	c.entries[key] = workloadIssuerMissEntry{expiry: time.Now().Add(c.ttl), reason: reason}
 	c.order = append(c.order, key)
 }
 
@@ -267,18 +332,18 @@ func (c *workloadIssuerMissCache) evictExpiredLocked() {
 	now := time.Now()
 	live := c.order[:0]
 	for _, key := range c.order {
-		if expiry, ok := c.expiries[key]; ok && now.Before(expiry) {
+		if entry, ok := c.entries[key]; ok && now.Before(entry.expiry) {
 			live = append(live, key)
 			continue
 		}
-		delete(c.expiries, key)
+		delete(c.entries, key)
 	}
 	c.order = live
 }
 
 // drop removes one key from both the map and the insertion order.
 func (c *workloadIssuerMissCache) drop(key string) {
-	delete(c.expiries, key)
+	delete(c.entries, key)
 	for i, held := range c.order {
 		if held == key {
 			c.order = append(c.order[:i], c.order[i+1:]...)
