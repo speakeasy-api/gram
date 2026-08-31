@@ -11,6 +11,41 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const getAdminMutationAuditCursorSince = `-- name: GetAdminMutationAuditCursorSince :one
+SELECT COALESCE((
+  SELECT seq
+  FROM audit_logs
+  WHERE organization_id = $1
+    AND seq > $2
+    AND seq <= $3
+    AND action IN ('openrouter-key:disable', 'openrouter-key:enable')
+    AND metadata->>'key_type' = $4::text
+  ORDER BY seq DESC
+  LIMIT 1
+), 0)::bigint AS cursor
+`
+
+type GetAdminMutationAuditCursorSinceParams struct {
+	OrganizationID string
+	Baseline       int64
+	Target         int64
+	KeyType        string
+}
+
+// Residual action and metadata predicates are evaluated only inside the
+// organization/sequence range captured by Begin and reconciliation.
+func (q *Queries) GetAdminMutationAuditCursorSince(ctx context.Context, arg GetAdminMutationAuditCursorSinceParams) (int64, error) {
+	row := q.db.QueryRow(ctx, getAdminMutationAuditCursorSince,
+		arg.OrganizationID,
+		arg.Baseline,
+		arg.Target,
+		arg.KeyType,
+	)
+	var cursor int64
+	err := row.Scan(&cursor)
+	return cursor, err
+}
+
 const getOpenRouterAPIKeyForAdmin = `-- name: GetOpenRouterAPIKeyForAdmin :one
 SELECT
     k.organization_id,
@@ -20,6 +55,7 @@ SELECT
     k.key_type,
     k.monthly_credits,
     (CASE WHEN k.disable_causes IS NULL THEN k.disabled ELSE cardinality(k.disable_causes) > 0 END)::boolean AS disabled,
+    k.disable_causes,
     k.created_at,
     k.updated_at
 FROM openrouter_api_keys k
@@ -42,6 +78,7 @@ type GetOpenRouterAPIKeyForAdminRow struct {
 	KeyType          string
 	MonthlyCredits   int64
 	Disabled         bool
+	DisableCauses    []string
 	CreatedAt        pgtype.Timestamptz
 	UpdatedAt        pgtype.Timestamptz
 }
@@ -57,10 +94,28 @@ func (q *Queries) GetOpenRouterAPIKeyForAdmin(ctx context.Context, arg GetOpenRo
 		&i.KeyType,
 		&i.MonthlyCredits,
 		&i.Disabled,
+		&i.DisableCauses,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
 	return i, err
+}
+
+const getOrganizationAuditCursor = `-- name: GetOrganizationAuditCursor :one
+SELECT COALESCE((
+  SELECT seq
+  FROM audit_logs
+  WHERE organization_id = $1
+  ORDER BY seq DESC
+  LIMIT 1
+), 0)::bigint AS cursor
+`
+
+func (q *Queries) GetOrganizationAuditCursor(ctx context.Context, organizationID string) (int64, error) {
+	row := q.db.QueryRow(ctx, getOrganizationAuditCursor, organizationID)
+	var cursor int64
+	err := row.Scan(&cursor)
+	return cursor, err
 }
 
 const listOpenRouterAPIKeysForAdmin = `-- name: ListOpenRouterAPIKeysForAdmin :many
@@ -72,6 +127,7 @@ SELECT
     k.key_type,
     k.monthly_credits,
     (CASE WHEN k.disable_causes IS NULL THEN k.disabled ELSE cardinality(k.disable_causes) > 0 END)::boolean AS disabled,
+    k.disable_causes,
     k.created_at,
     k.updated_at
 FROM openrouter_api_keys k
@@ -88,6 +144,7 @@ type ListOpenRouterAPIKeysForAdminRow struct {
 	KeyType          string
 	MonthlyCredits   int64
 	Disabled         bool
+	DisableCauses    []string
 	CreatedAt        pgtype.Timestamptz
 	UpdatedAt        pgtype.Timestamptz
 }
@@ -112,6 +169,7 @@ func (q *Queries) ListOpenRouterAPIKeysForAdmin(ctx context.Context) ([]ListOpen
 			&i.KeyType,
 			&i.MonthlyCredits,
 			&i.Disabled,
+			&i.DisableCauses,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 		); err != nil {

@@ -10,6 +10,7 @@ import (
 	"slices"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -55,6 +56,66 @@ type testInstance struct {
 	conn        *pgxpool.Pool
 	enc         *encryption.Client
 	provisioner *stubProvisioner
+	coordinator *stubAdminCoordinator
+}
+
+type stubAdminCoordinator struct {
+	mu             sync.Mutex
+	begin          func(context.Context, openrouterkeys.AdminReconciliationScope) error
+	complete       func(context.Context, openrouterkeys.AdminReconciliationScope) error
+	abort          func(context.Context, openrouterkeys.AdminReconciliationScope) error
+	begins         []openrouterkeys.AdminReconciliationScope
+	completes      int
+	aborts         int
+	nextToken      int64
+	completeTokens []int64
+	abortTokens    []int64
+}
+
+func (s *stubAdminCoordinator) Begin(ctx context.Context, scope openrouterkeys.AdminReconciliationScope) (int64, error) {
+	s.mu.Lock()
+	s.begins = append(s.begins, scope)
+	s.nextToken++
+	token := s.nextToken
+	begin := s.begin
+	s.mu.Unlock()
+	return token, begin(ctx, scope)
+}
+
+func (s *stubAdminCoordinator) CompleteAndWait(ctx context.Context, scope openrouterkeys.AdminReconciliationScope, token int64) error {
+	s.mu.Lock()
+	s.completes++
+	s.completeTokens = append(s.completeTokens, token)
+	complete := s.complete
+	s.mu.Unlock()
+	return complete(ctx, scope)
+}
+
+func (s *stubAdminCoordinator) Abort(ctx context.Context, scope openrouterkeys.AdminReconciliationScope, token int64) error {
+	s.mu.Lock()
+	s.aborts++
+	s.abortTokens = append(s.abortTokens, token)
+	abort := s.abort
+	s.mu.Unlock()
+	return abort(ctx, scope)
+}
+
+func (s *stubAdminCoordinator) Counts() (int, int) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.completes, s.aborts
+}
+
+func (s *stubAdminCoordinator) Tokens() ([]int64, []int64) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return append([]int64(nil), s.completeTokens...), append([]int64(nil), s.abortTokens...)
+}
+
+func (s *stubAdminCoordinator) Begins() []openrouterkeys.AdminReconciliationScope {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return append([]openrouterkeys.AdminReconciliationScope(nil), s.begins...)
 }
 
 // stubProvisioner stands in for the OpenRouter client. Methods that mutate
@@ -70,9 +131,13 @@ type stubProvisioner struct {
 	usage      float64
 	usageLimit *int64
 
-	usageCalls   []string
-	disableCalls []string
-	refreshCalls []string
+	usageCalls       []string
+	disableCalls     []string
+	refreshCalls     []string
+	addCauseCalls    []string
+	removeCauseCalls []string
+	reconcileErr     error
+	reconcileCalls   int
 }
 
 var _ openrouter.Provisioner = (*stubProvisioner)(nil)
@@ -118,7 +183,19 @@ func (s *stubProvisioner) refreshAPIKeyLimit(ctx context.Context, db openrouter.
 }
 
 func (s *stubProvisioner) AddAPIKeyDisableCause(ctx context.Context, orgID string, keyType openrouter.KeyType, cause openrouter.DisableCause) (openrouter.DisableCauseChange, error) {
-	queries := orgrepo.New(s.conn)
+	return s.addAPIKeyDisableCause(ctx, s.conn, orgID, keyType, cause)
+}
+
+func (s *stubProvisioner) AddAPIKeyDisableCauseWithDB(ctx context.Context, db openrouter.DBTX, orgID string, keyType openrouter.KeyType, cause openrouter.DisableCause) (openrouter.DisableCauseChange, error) {
+	return s.addAPIKeyDisableCause(ctx, db, orgID, keyType, cause)
+}
+
+func (s *stubProvisioner) addAPIKeyDisableCause(ctx context.Context, db openrouter.DBTX, orgID string, keyType openrouter.KeyType, cause openrouter.DisableCause) (openrouter.DisableCauseChange, error) {
+	s.mu.Lock()
+	s.addCauseCalls = append(s.addCauseCalls, orgID+"/"+string(keyType)+"/"+string(cause))
+	s.mu.Unlock()
+
+	queries := orgrepo.New(db)
 	key, err := queries.GetOpenRouterAPIKey(ctx, orgrepo.GetOpenRouterAPIKeyParams{OrganizationID: orgID, KeyType: string(keyType)})
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
@@ -141,11 +218,23 @@ func (s *stubProvisioner) AddAPIKeyDisableCause(ctx context.Context, orgID strin
 }
 
 func (s *stubProvisioner) RemoveAPIKeyDisableCause(ctx context.Context, orgID string, keyType openrouter.KeyType, cause openrouter.DisableCause, limit *int) (int, openrouter.DisableCauseChange, error) {
+	return s.removeAPIKeyDisableCause(ctx, s.conn, orgID, keyType, cause, limit)
+}
+
+func (s *stubProvisioner) RemoveAPIKeyDisableCauseWithDB(ctx context.Context, db openrouter.DBTX, orgID string, keyType openrouter.KeyType, cause openrouter.DisableCause, limit *int) (int, openrouter.DisableCauseChange, error) {
+	return s.removeAPIKeyDisableCause(ctx, db, orgID, keyType, cause, limit)
+}
+
+func (s *stubProvisioner) removeAPIKeyDisableCause(ctx context.Context, db openrouter.DBTX, orgID string, keyType openrouter.KeyType, cause openrouter.DisableCause, limit *int) (int, openrouter.DisableCauseChange, error) {
+	s.mu.Lock()
+	s.removeCauseCalls = append(s.removeCauseCalls, orgID+"/"+string(keyType)+"/"+string(cause))
+	s.mu.Unlock()
+
 	if limit != nil && *limit <= 0 {
 		return 0, openrouter.DisableCauseChange{}, errors.New("remove OpenRouter API key disable cause: monthly credits must be positive")
 	}
 
-	queries := orgrepo.New(s.conn)
+	queries := orgrepo.New(db)
 	key, err := queries.GetOpenRouterAPIKey(ctx, orgrepo.GetOpenRouterAPIKeyParams{OrganizationID: orgID, KeyType: string(keyType)})
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
@@ -166,16 +255,14 @@ func (s *stubProvisioner) RemoveAPIKeyDisableCause(ctx context.Context, orgID st
 		}
 	}
 	keyLimit := int(key.MonthlyCredits)
-	if accessChanged {
-		if limit != nil {
-			keyLimit = *limit
-		} else if key.MonthlyCredits == 0 {
-			org, orgErr := orgmetarepo.New(s.conn).GetOrganizationMetadata(ctx, orgID)
-			if orgErr != nil {
-				return 0, openrouter.DisableCauseChange{}, fmt.Errorf("stub remove disable cause organization read: %w", orgErr)
-			}
-			keyLimit, _ = openrouter.ResolveDefaultCreditLimit(ctx, s.logger, s.conn, orgID, billing.Tier(org.GramAccountType))
+	if accessChanged && limit != nil {
+		keyLimit = *limit
+	} else if accessChanged && key.MonthlyCredits == 0 {
+		org, orgErr := orgmetarepo.New(db).GetOrganizationMetadata(ctx, orgID)
+		if orgErr != nil {
+			return 0, openrouter.DisableCauseChange{}, fmt.Errorf("stub remove disable cause organization read: %w", orgErr)
 		}
+		keyLimit, _ = openrouter.ResolveDefaultCreditLimit(ctx, s.logger, db, org.ID, billing.Tier(org.GramAccountType))
 	}
 	if _, err := queries.RemoveOpenRouterAPIKeyDisableCause(ctx, orgrepo.RemoveOpenRouterAPIKeyDisableCauseParams{
 		OrganizationID: orgID, KeyType: string(keyType), KeyHash: key.KeyHash, DisableCause: string(cause),
@@ -184,6 +271,19 @@ func (s *stubProvisioner) RemoveAPIKeyDisableCause(ctx context.Context, orgID st
 		return 0, openrouter.DisableCauseChange{}, fmt.Errorf("stub remove disable cause write: %w", err)
 	}
 	return keyLimit, openrouter.DisableCauseChange{CauseChanged: true, KeyAccessChanged: accessChanged}, nil
+}
+
+func (s *stubProvisioner) ReconcileAPIKeyDisabledWithDB(context.Context, openrouter.DBTX, string, openrouter.KeyType) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.reconcileCalls++
+	return s.reconcileErr
+}
+
+func (s *stubProvisioner) ReconcileCalls() int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.reconcileCalls
 }
 
 func (s *stubProvisioner) DisableAPIKey(ctx context.Context, orgID string, keyType openrouter.KeyType) error {
@@ -234,6 +334,20 @@ func (s *stubProvisioner) RefreshCalls() []string {
 	return append([]string(nil), s.refreshCalls...)
 }
 
+func (s *stubProvisioner) AddCauseCalls() []string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	return append([]string(nil), s.addCauseCalls...)
+}
+
+func (s *stubProvisioner) RemoveCauseCalls() []string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	return append([]string(nil), s.removeCauseCalls...)
+}
+
 type provisionerFactory func(*slog.Logger, trace.TracerProvider, *pgxpool.Pool, *encryption.Client) openrouter.Provisioner
 
 func newTestService(t *testing.T) (context.Context, *testInstance) {
@@ -242,6 +356,16 @@ func newTestService(t *testing.T) (context.Context, *testInstance) {
 }
 
 func newTestServiceWithProvisioner(t *testing.T, factory provisionerFactory) (context.Context, *testInstance) {
+	t.Helper()
+	return newTestServiceWithOptions(t, factory)
+}
+
+func newTestServiceWithAdminMutationTimeout(t *testing.T, timeout time.Duration) (context.Context, *testInstance) {
+	t.Helper()
+	return newTestServiceWithOptions(t, nil, openrouterkeys.WithAdminLocalMutationTimeout(timeout))
+}
+
+func newTestServiceWithOptions(t *testing.T, factory provisionerFactory, options ...openrouterkeys.ServiceOption) (context.Context, *testInstance) {
 	t.Helper()
 	ctx := t.Context()
 	logger := testenv.NewLogger(t)
@@ -274,11 +398,19 @@ func newTestServiceWithProvisioner(t *testing.T, factory provisionerFactory) (co
 		stub = nil
 	}
 
+	reconciler := openrouterkeys.NewAdminReconciliationExecutor(logger, conn, provisioner)
+	coordinator := &stubAdminCoordinator{
+		begin:    func(context.Context, openrouterkeys.AdminReconciliationScope) error { return nil },
+		complete: reconciler.Reconcile,
+		abort:    func(context.Context, openrouterkeys.AdminReconciliationScope) error { return nil },
+	}
+
 	return ctx, &testInstance{
-		service:     openrouterkeys.NewService(logger, tracerProvider, conn, sessionManager, authzEngine, audit.NewLogger(), provisioner, enc),
+		service:     openrouterkeys.NewService(logger, tracerProvider, conn, sessionManager, authzEngine, audit.NewLogger(), provisioner, enc, coordinator, options...),
 		conn:        conn,
 		enc:         enc,
 		provisioner: stub,
+		coordinator: coordinator,
 	}
 }
 

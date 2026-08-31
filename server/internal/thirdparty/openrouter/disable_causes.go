@@ -1,6 +1,9 @@
 package openrouter
 
-import "fmt"
+import (
+	"context"
+	"fmt"
+)
 
 type DisableCause string
 
@@ -17,6 +20,13 @@ func (c DisableCause) Validate() error {
 	default:
 		return fmt.Errorf("unknown OpenRouter disable cause %q", c)
 	}
+}
+
+// DisableStateReconciler is the narrow idempotent boundary used by durable
+// retry orchestration. Reconciliation always derives desired state from the
+// committed local row; callers never pass key material or an upstream target.
+type DisableStateReconciler interface {
+	ReconcileAPIKeyDisabled(context.Context, string, KeyType) error
 }
 
 type DisableCauseChange struct {
