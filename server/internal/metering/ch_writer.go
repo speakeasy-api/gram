@@ -63,7 +63,7 @@ func (w *MeterReadingCHWriter) HandleBatch(ctx context.Context, messages []*mete
 			continue
 		}
 		if priorIndex, duplicate := received[row.ID]; duplicate {
-			if !row.ProducedAt.After(rows[priorIndex].ProducedAt) {
+			if row.ProducedAt.Before(rows[priorIndex].ProducedAt) {
 				continue
 			}
 			rows[priorIndex] = row

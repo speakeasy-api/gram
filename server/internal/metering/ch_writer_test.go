@@ -93,6 +93,9 @@ func TestMeterReadingCHWriterSkipsPoisonAndDeduplicatesBatch(t *testing.T) {
 	updatedInput.ProducedAt = now.Add(time.Second)
 	updatedInput.Attributes = map[string]string{"revision": "native-promotion"}
 	updated, _ := usageMessage(t, updatedInput)
+	refreshedInput := updatedInput
+	refreshedInput.Attributes = map[string]string{"revision": "refreshed"}
+	refreshed, _ := usageMessage(t, refreshedInput)
 	cloned := proto.Clone(valid)
 	invalid, ok := cloned.(*meteringv1.MeterReading)
 	require.True(t, ok)
@@ -100,12 +103,12 @@ func TestMeterReadingCHWriterSkipsPoisonAndDeduplicatesBatch(t *testing.T) {
 	capture := &captureReadingInserter{rows: nil, err: nil}
 	writer := metering.NewMeterReadingCHWriter(testenv.NewLogger(t), capture, true)
 
-	require.NoError(t, writer.HandleBatch(t.Context(), []*meteringv1.MeterReading{nil, invalid, valid, updated, valid}, nil))
+	require.NoError(t, writer.HandleBatch(t.Context(), []*meteringv1.MeterReading{nil, invalid, valid, updated, valid, refreshed}, nil))
 	require.Len(t, capture.rows, 1)
 	require.Equal(t, reading.ID(), capture.rows[0].ID)
 	require.Equal(t, input.Value, capture.rows[0].Value)
 	require.Equal(t, string(metering.MeasurementTiktokenO200kBase), capture.rows[0].Attributes["codec"])
-	require.Equal(t, "native-promotion", capture.rows[0].Attributes["revision"])
+	require.Equal(t, "refreshed", capture.rows[0].Attributes["revision"])
 	require.Equal(t, updatedInput.ProducedAt, capture.rows[0].ProducedAt)
 }
 
