@@ -33,7 +33,6 @@ import (
 	"github.com/redis/go-redis/v9"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
-	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/mcp/tunnelrouting"
 	"github.com/speakeasy-api/gram/server/internal/mcp/tunnelsessions"
 	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
@@ -528,10 +527,7 @@ func (s *Service) serveTunneledPublicSession(
 	)
 	// Redirects won't work across a tunnel boundary; disable.
 	p.DisableRedirects = true
-	p.GuardianClientOptions = []guardian.ClientOption{guardian.WithDialTimeout(tunnelGatewayDialTimeout)}
-	if len(m.gatewayCIDRs) > 0 {
-		p.GuardianClientOptions = append(p.GuardianClientOptions, guardian.WithAllowedCIDRBlocks(m.gatewayCIDRs...))
-	}
+	p.GuardianClientOptions = m.guardianClientOptions()
 
 	isDelete := r.Method == http.MethodDelete
 	p.UpstreamResponseInterceptor = func(ctx context.Context, resp *http.Response) error {

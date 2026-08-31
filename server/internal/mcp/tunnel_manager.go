@@ -105,9 +105,16 @@ func (m *tunnelManager) buildProxy(
 	p.UpstreamResponseRetryer = tunnelrouting.Retryer(m.routes, tunnelID, addr, clientAffinityKey, m.forwardToken)
 	// Redirects won't work across a tunnel boundary; disable.
 	p.DisableRedirects = true
-	p.GuardianClientOptions = []guardian.ClientOption{guardian.WithDialTimeout(tunnelGatewayDialTimeout)}
-	if len(m.gatewayCIDRs) > 0 {
-		p.GuardianClientOptions = append(p.GuardianClientOptions, guardian.WithAllowedCIDRBlocks(m.gatewayCIDRs...))
-	}
+	p.GuardianClientOptions = m.guardianClientOptions()
 	return p, nil
+}
+
+// guardianClientOptions builds the shared client options for dialing tunnel
+// gateways.
+func (m *tunnelManager) guardianClientOptions() []guardian.ClientOption {
+	opts := []guardian.ClientOption{guardian.WithDialTimeout(tunnelGatewayDialTimeout)}
+	if len(m.gatewayCIDRs) > 0 {
+		opts = append(opts, guardian.WithAllowedCIDRBlocks(m.gatewayCIDRs...))
+	}
+	return opts
 }
