@@ -3,6 +3,7 @@ package instances
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -13,8 +14,12 @@ import (
 	"time"
 
 	customdomainsRepo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
+	"github.com/speakeasy-api/gram/server/internal/mcpendpoints"
+	mcpendpointsRepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
+	mcpserversRepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	tm "github.com/speakeasy-api/gram/server/internal/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -180,18 +185,26 @@ func (s *Service) GetInstance(ctx context.Context, payload *gen.GetInstanceForm)
 		}
 	}
 
-	baseURL := s.serverURL.String()
-	if toolset.CustomDomainID != nil {
-		customDomain, err := s.customDomainsRepo.GetCustomDomainByID(ctx, uuid.MustParse(*toolset.CustomDomainID))
-		if err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "failed to get custom domain").LogError(ctx, s.logger)
-		}
-		baseURL = fmt.Sprintf("https://%s", customDomain.Domain)
-	}
-
-	// modern gram toolsets always have an MCP slug
+	// The hosted server URL comes from the mcp_servers wrapper's primary
+	// endpoint when one exists; the toolset's own mcp_slug/custom_domain_id
+	// columns only decide for legacy toolsets that have no wrapper yet.
 	mcpServers := make([]*gen.InstanceMcpServer, 0)
-	if toolset.McpSlug != nil {
+	wrapperURL, err := s.resolveWrapperMCPURL(ctx, toolset, *authCtx.ProjectID)
+	if err != nil {
+		return nil, err
+	}
+	switch {
+	case wrapperURL != "":
+		mcpServers = append(mcpServers, &gen.InstanceMcpServer{URL: wrapperURL})
+	case toolset.McpSlug != nil:
+		baseURL := s.serverURL.String()
+		if toolset.CustomDomainID != nil {
+			customDomain, err := s.customDomainsRepo.GetCustomDomainByID(ctx, uuid.MustParse(*toolset.CustomDomainID))
+			if err != nil {
+				return nil, oops.E(oops.CodeUnexpected, err, "failed to get custom domain").LogError(ctx, s.logger)
+			}
+			baseURL = fmt.Sprintf("https://%s", customDomain.Domain)
+		}
 		mcpServers = append(mcpServers, &gen.InstanceMcpServer{
 			URL: fmt.Sprintf("%s/mcp/%s", baseURL, string(*toolset.McpSlug)),
 		})
@@ -208,6 +221,54 @@ func (s *Service) GetInstance(ctx context.Context, payload *gen.GetInstanceForm)
 		PromptTemplates:              promptTemplates,
 		McpServers:                   mcpServers,
 	}, nil
+}
+
+// resolveWrapperMCPURL builds the toolset's hosted MCP URL from its
+// mcp_servers wrapper's primary endpoint. Returns "" (no error) when the
+// toolset has no wrapper or the wrapper has no endpoints, in which case the
+// caller falls back to the legacy toolset-column-derived URL.
+func (s *Service) resolveWrapperMCPURL(ctx context.Context, toolset *types.Toolset, projectID uuid.UUID) (string, error) {
+	toolsetID, err := uuid.Parse(toolset.ID)
+	if err != nil {
+		return "", oops.E(oops.CodeUnexpected, err, "parse toolset id").LogError(ctx, s.logger)
+	}
+
+	wrapper, err := mcpserversRepo.New(s.db).GetMCPServerByToolsetID(ctx, mcpserversRepo.GetMCPServerByToolsetIDParams{
+		ToolsetID: toolsetID,
+		ProjectID: projectID,
+	})
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		return "", nil
+	case err != nil:
+		return "", oops.E(oops.CodeUnexpected, err, "load mcp server for toolset").LogError(ctx, s.logger)
+	}
+
+	endpoints, err := mcpendpointsRepo.New(s.db).ListMCPEndpointsByMCPServerID(ctx, mcpendpointsRepo.ListMCPEndpointsByMCPServerIDParams{
+		ProjectID:   projectID,
+		McpServerID: wrapper.ID,
+	})
+	if err != nil {
+		return "", oops.E(oops.CodeUnexpected, err, "list mcp server endpoints").LogError(ctx, s.logger)
+	}
+
+	primary := mcpendpoints.PrimaryEndpoint(endpoints)
+	if primary == nil {
+		return "", nil
+	}
+
+	if primary.CustomDomainID.Valid {
+		customDomain, err := s.customDomainsRepo.GetCustomDomainByID(ctx, primary.CustomDomainID.UUID)
+		if err != nil {
+			return "", oops.E(oops.CodeUnexpected, err, "failed to get custom domain").LogError(ctx, s.logger)
+		}
+		if primary.IsDomainRoot.Valid && primary.IsDomainRoot.Bool {
+			return fmt.Sprintf("https://%s", customDomain.Domain), nil
+		}
+		return fmt.Sprintf("https://%s/mcp/%s", customDomain.Domain, primary.Slug), nil
+	}
+
+	return fmt.Sprintf("%s/mcp/%s", s.serverURL.String(), primary.Slug), nil
 }
 
 func (s *Service) ExecuteInstanceTool(w http.ResponseWriter, r *http.Request) error {

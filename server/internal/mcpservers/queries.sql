@@ -34,6 +34,11 @@ SELECT *
 FROM mcp_servers
 WHERE id = @id AND project_id = @project_id AND deleted IS FALSE;
 
+-- name: GetMCPServerByToolsetID :one
+SELECT *
+FROM mcp_servers
+WHERE toolset_id = @toolset_id::uuid AND project_id = @project_id AND deleted IS FALSE;
+
 -- name: LockMCPServerByIDAndProjectID :one
 SELECT *
 FROM mcp_servers

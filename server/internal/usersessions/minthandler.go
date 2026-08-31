@@ -16,7 +16,9 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	customdomainsrepo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcpaccess"
+	"github.com/speakeasy-api/gram/server/internal/mcpendpoints"
 	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	metamcprepo "github.com/speakeasy-api/gram/server/internal/metamcp/repo"
@@ -181,10 +183,15 @@ func (s *Service) MintUserSession(ctx context.Context, payload *gen.MintUserSess
 	}, nil
 }
 
-// resolveToolsetMintTarget binds the JWT to a toolset's /mcp/{slug} audience
-// (urn.NewToolset). The iss claim is descriptive only — the gate validates
-// audience, not issuer — but matching what /token emits keeps minted JWTs
-// indistinguishable in audit trails.
+// resolveToolsetMintTarget binds the JWT for a toolset-addressed mint. When
+// the toolset has an mcp_servers wrapper, the wrapper governs the mint exactly
+// as if the caller had passed its mcp_server_id — issuer-URN audience, RBAC
+// against the wrapper id, issuer URL from the wrapper's primary endpoint — so
+// both addressing arms produce one kind of session while the representations
+// coexist. Without a wrapper the legacy binding applies: the toolset's
+// /mcp/{mcp_slug} issuer URL and the toolset-URN audience. The iss claim is
+// descriptive only — the gate validates audience, not issuer — but matching
+// what /token emits keeps minted JWTs indistinguishable in audit trails.
 func (s *Service) resolveToolsetMintTarget(ctx context.Context, toolsetIDStr string, projectID uuid.UUID) (*mintTarget, error) {
 	toolsetID, err := uuid.Parse(toolsetIDStr)
 	if err != nil {
@@ -200,6 +207,19 @@ func (s *Service) resolveToolsetMintTarget(ctx context.Context, toolsetIDStr str
 		return nil, oops.E(oops.CodeNotFound, err, "toolset not found").LogError(ctx, s.logger)
 	case err != nil:
 		return nil, oops.E(oops.CodeUnexpected, err, "load toolset").LogError(ctx, s.logger)
+	}
+
+	wrapper, err := mcpserversrepo.New(s.db).GetMCPServerByToolsetID(ctx, mcpserversrepo.GetMCPServerByToolsetIDParams{
+		ToolsetID: toolset.ID,
+		ProjectID: projectID,
+	})
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		// No wrapper: legacy toolset binding below.
+	case err != nil:
+		return nil, oops.E(oops.CodeUnexpected, err, "load mcp server for toolset").LogError(ctx, s.logger)
+	default:
+		return s.serverMintTarget(ctx, &wrapper, projectID)
 	}
 
 	if !toolset.UserSessionIssuerID.Valid {
@@ -223,12 +243,10 @@ func (s *Service) resolveToolsetMintTarget(ctx context.Context, toolsetIDStr str
 	}, nil
 }
 
-// resolveServerMintTarget binds the JWT to a remote MCP server's
-// user_session_issuer audience (urn.NewUserSessionIssuer, the /x/mcp
-// convention). Remote servers carry no toolset — the
-// mcp_servers_backend_exclusivity_check constraint makes toolset_id and
-// remote_mcp_server_id mutually exclusive — and the /x/mcp runtime validates
-// bearer audience against the issuer URN (see NewResolvedMcpEndpointFromMcpServer).
+// resolveServerMintTarget binds the JWT to an mcp_server's user_session_issuer
+// audience (urn.NewUserSessionIssuer) — any issuer-gated backend, hosted
+// (toolset-backed) servers included. The runtime validates bearer audience
+// against the issuer URN (see NewResolvedMcpEndpointFromMcpServer).
 func (s *Service) resolveServerMintTarget(ctx context.Context, serverIDStr string, projectID uuid.UUID) (*mintTarget, error) {
 	serverID, err := uuid.Parse(serverIDStr)
 	if err != nil {
@@ -246,16 +264,20 @@ func (s *Service) resolveServerMintTarget(ctx context.Context, serverIDStr strin
 		return nil, oops.E(oops.CodeUnexpected, err, "load mcp server").LogError(ctx, s.logger)
 	}
 
+	return s.serverMintTarget(ctx, &server, projectID)
+}
+
+// serverMintTarget is the shared mint binding for an already-loaded
+// mcp_servers row, used by both addressing arms (mcp_server_id directly, and
+// toolset_id resolving to its wrapper).
+func (s *Service) serverMintTarget(ctx context.Context, server *mcpserversrepo.McpServer, projectID uuid.UUID) (*mintTarget, error) {
 	if !server.UserSessionIssuerID.Valid {
 		return nil, oops.E(oops.CodeBadRequest, nil, "mcp server is not issuer-gated; minting a user-session JWT is only meaningful for issuer-gated servers").LogError(ctx, s.logger)
 	}
-	if server.Slug.String == "" {
-		return nil, oops.E(oops.CodeInvariantViolation, nil, "issuer-gated mcp server has no slug").LogError(ctx, s.logger)
-	}
 
-	issuerURL, err := url.JoinPath(s.serverURL, "x", "mcp", server.Slug.String)
+	issuerURL, err := s.serverMintIssuerURL(ctx, server, projectID)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "build issuer URL").LogError(ctx, s.logger)
+		return nil, err
 	}
 
 	return &mintTarget{
@@ -265,6 +287,54 @@ func (s *Service) resolveServerMintTarget(ctx context.Context, serverIDStr strin
 		resourceID: server.ID.String(),
 		logAttr:    attr.SlogMcpServerID(server.ID.String()),
 	}, nil
+}
+
+// serverMintIssuerURL builds the descriptive iss claim for a server-bound
+// mint from the server's primary endpoint — custom-domain endpoints on their
+// own host (bare when domain-root), platform endpoints under serverURL. A
+// server with no endpoint rows falls back to the legacy /x/mcp/{slug} shape
+// so pre-endpoint servers keep minting.
+func (s *Service) serverMintIssuerURL(ctx context.Context, server *mcpserversrepo.McpServer, projectID uuid.UUID) (string, error) {
+	endpoints, err := mcpendpointsrepo.New(s.db).ListMCPEndpointsByMCPServerID(ctx, mcpendpointsrepo.ListMCPEndpointsByMCPServerIDParams{
+		ProjectID:   projectID,
+		McpServerID: server.ID,
+	})
+	if err != nil {
+		return "", oops.E(oops.CodeUnexpected, err, "list mcp server endpoints").LogError(ctx, s.logger)
+	}
+
+	primary := mcpendpoints.PrimaryEndpoint(endpoints)
+	if primary == nil {
+		if server.Slug.String == "" {
+			return "", oops.E(oops.CodeInvariantViolation, nil, "issuer-gated mcp server has no addressable endpoint or slug").LogError(ctx, s.logger)
+		}
+		issuerURL, err := url.JoinPath(s.serverURL, "x", "mcp", server.Slug.String)
+		if err != nil {
+			return "", oops.E(oops.CodeUnexpected, err, "build issuer URL").LogError(ctx, s.logger)
+		}
+		return issuerURL, nil
+	}
+
+	if primary.CustomDomainID.Valid {
+		domain, err := customdomainsrepo.New(s.db).GetCustomDomainByID(ctx, primary.CustomDomainID.UUID)
+		if err != nil {
+			return "", oops.E(oops.CodeUnexpected, err, "load custom domain for mint issuer URL").LogError(ctx, s.logger)
+		}
+		if primary.IsDomainRoot.Valid && primary.IsDomainRoot.Bool {
+			return "https://" + domain.Domain, nil
+		}
+		issuerURL, err := url.JoinPath("https://"+domain.Domain, "mcp", primary.Slug)
+		if err != nil {
+			return "", oops.E(oops.CodeUnexpected, err, "build issuer URL").LogError(ctx, s.logger)
+		}
+		return issuerURL, nil
+	}
+
+	issuerURL, err := url.JoinPath(s.serverURL, "mcp", primary.Slug)
+	if err != nil {
+		return "", oops.E(oops.CodeUnexpected, err, "build issuer URL").LogError(ctx, s.logger)
+	}
+	return issuerURL, nil
 }
 
 // resolveMetaServerMintTarget binds the JWT to a meta MCP server's
