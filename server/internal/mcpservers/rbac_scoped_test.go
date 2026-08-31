@@ -128,6 +128,20 @@ func TestGetMcpServer_RBAC_ToolsetScopedGrantAllows(t *testing.T) {
 	require.Equal(t, server.ID, fetched.ID)
 }
 
+func TestGetMcpServer_RBAC_RowIdGrantDeniedOnToolsetBackedServer(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	server, _ := createToolsetBackedServerFixture(t, ctx, ti, "scoped row-id denied")
+
+	// A toolset-backed server's grant id is its toolset id, so a grant naming
+	// the raw row id must not authorize it — the inverse of the toolset branch.
+	scoped := withExactAuthzGrants(t, ctx, ti.conn, authz.NewGrant(authz.ScopeMCPRead, server.ID))
+
+	_, err := getMcpServerByID(scoped, ti, server.ID)
+	requireOopsCode(t, err, oops.CodeForbidden)
+}
+
 func TestListMcpServers_RBAC_FiltersToGrantedServers(t *testing.T) {
 	t.Parallel()
 

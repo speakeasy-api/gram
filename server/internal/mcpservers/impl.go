@@ -335,6 +335,26 @@ func grantResourceID(id uuid.UUID, toolsetID uuid.NullUUID) string {
 	return id.String()
 }
 
+// requireServerWriteUnlocked rejects a caller lacking mcp:write on the server
+// before the mutation transaction takes any FOR UPDATE locks, so an
+// unauthorized member cannot contend server-lifecycle locks. It keys on a
+// non-locking read; UpdateMcpServer/DeleteMcpServer re-check against the
+// locked row, which is authoritative if the backing changes concurrently.
+func (s *Service) requireServerWriteUnlocked(ctx context.Context, serverID uuid.UUID, projectID uuid.UUID, logger *slog.Logger) error {
+	server, err := repo.New(s.db).GetMCPServerByIDAndProjectID(ctx, repo.GetMCPServerByIDAndProjectIDParams{
+		ID:        serverID,
+		ProjectID: projectID,
+	})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return oops.E(oops.CodeNotFound, err, "mcp server not found").LogError(ctx, logger)
+		}
+		return oops.E(oops.CodeUnexpected, err, "get mcp server").LogError(ctx, logger)
+	}
+
+	return s.authz.Require(ctx, authz.MCPCheck(authz.ScopeMCPWrite, grantResourceID(server.ID, server.ToolsetID), projectID.String()))
+}
+
 func (s *Service) GetMcpServer(ctx context.Context, payload *gen.GetMcpServerPayload) (*types.McpServer, error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
@@ -585,6 +605,10 @@ func (s *Service) UpdateMcpServer(ctx context.Context, payload *gen.UpdateMcpSer
 		return nil, oops.E(oops.CodeInvalid, err, "invalid mcp server").LogError(ctx, logger)
 	}
 
+	if err := s.requireServerWriteUnlocked(ctx, serverID, *authCtx.ProjectID, logger); err != nil {
+		return nil, err
+	}
+
 	dbtx, err := s.db.Begin(ctx)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "begin transaction").LogError(ctx, logger)
@@ -815,6 +839,10 @@ func (s *Service) DeleteMcpServer(ctx context.Context, payload *gen.DeleteMcpSer
 	serverID, err := uuid.Parse(payload.ID)
 	if err != nil {
 		return oops.E(oops.CodeBadRequest, err, "invalid mcp server id").LogError(ctx, logger)
+	}
+
+	if err := s.requireServerWriteUnlocked(ctx, serverID, *authCtx.ProjectID, logger); err != nil {
+		return err
 	}
 
 	dbtx, err := s.db.Begin(ctx)
