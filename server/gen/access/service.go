@@ -53,6 +53,12 @@ type Service interface {
 	// Review the latest pending Shadow MCP URL request and resolve all pending
 	// requests for that URL.
 	ResolveShadowMCPInventoryRequest(context.Context, *ResolveShadowMCPInventoryRequestPayload) (res *ShadowMCPInventoryURLState, err error)
+	// List AI tools detected on enrolled devices by device-agent AI scans,
+	// aggregated per detection target across the organization. Org-scoped —
+	// detections attach to devices and enrolled users, not projects. Requires an
+	// org admin session. Display names and categories are decorated from the
+	// Speakeasy-owned detection target registry at read time.
+	ListAIDetections(context.Context, *ListAIDetectionsPayload) (res *ListAIDetectionsResult, err error)
 	// Request access to a scope by sending an email notification to organization
 	// administrators.
 	RequestAccess(context.Context, *RequestAccessPayload) (res *RequestAccessResult, err error)
@@ -88,7 +94,33 @@ const ServiceName = "access"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [19]string{"listRoles", "getRole", "createRole", "updateRole", "deleteRole", "listScopes", "listMembers", "listGrants", "updateMemberRoles", "listShadowMCPInventory", "getShadowMCPInventoryServer", "updateShadowMCPInventoryServerName", "listShadowMCPInventoryUsers", "listShadowMCPInventoryServersForUser", "resolveShadowMCPInventoryRequest", "requestAccess", "listChallenges", "listChallengeBuckets", "resolveChallenge"}
+var MethodNames = [20]string{"listRoles", "getRole", "createRole", "updateRole", "deleteRole", "listScopes", "listMembers", "listGrants", "updateMemberRoles", "listShadowMCPInventory", "getShadowMCPInventoryServer", "updateShadowMCPInventoryServerName", "listShadowMCPInventoryUsers", "listShadowMCPInventoryServersForUser", "resolveShadowMCPInventoryRequest", "listAIDetections", "requestAccess", "listChallenges", "listChallengeBuckets", "resolveChallenge"}
+
+// One AI detection target aggregated across an organization's device-agent
+// scan reports.
+type AIDetection struct {
+	// Registry id of the detected AI tool (e.g. claude-code, ollama).
+	TargetID string
+	// Human-readable name from the detection target registry. Targets the registry
+	// no longer knows fall back to their id.
+	DisplayName string
+	// Detection target category: harness (an AI coding tool) or local_model (a
+	// local model runtime). From the registry when the target is still registered,
+	// otherwise as recorded at detection time.
+	Category string
+	// Distinct enrolled users this tool was detected for.
+	UserCount int64
+	// Distinct devices, by hardware serial, this tool was detected on. Devices
+	// that report no serial are not counted.
+	DeviceCount int64
+	// Detection signals observed for this target across all reports: installed
+	// and/or running.
+	Signals []string
+	// When this tool was first detected anywhere in the organization.
+	FirstSeen string
+	// When this tool was most recently detected.
+	LastSeen string
+}
 
 // AccessMember is the result type of the access service updateMemberRoles
 // method.
@@ -263,6 +295,24 @@ type GetShadowMCPInventoryServerPayload struct {
 	// Shadow MCP server slug to inspect.
 	ServerSlug   string
 	SessionToken *string
+}
+
+// ListAIDetectionsPayload is the payload type of the access service
+// listAIDetections method.
+type ListAIDetectionsPayload struct {
+	// Filter to detection targets of one category.
+	Category *string
+	// Filter to detections attributed to active members of this SCIM directory
+	// group. A group with no active members yields an empty list.
+	DirectoryGroupID *string
+	SessionToken     *string
+}
+
+// ListAIDetectionsResult is the result type of the access service
+// listAIDetections method.
+type ListAIDetectionsResult struct {
+	// Detected AI tools aggregated per target, most recently seen first.
+	Detections []*AIDetection
 }
 
 // ListChallengeBucketsPayload is the payload type of the access service

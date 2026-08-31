@@ -163,6 +163,23 @@ func (s *Service) ListActiveGroups(ctx context.Context, organizationID string) (
 	return groups, nil
 }
 
+// ListActiveGroupMemberEmails returns the normalized (lowercased) emails of
+// the active members of one active directory group. A missing group or a
+// group with no members both yield an empty slice.
+func (s *Service) ListActiveGroupMemberEmails(ctx context.Context, organizationID string, groupID uuid.UUID) ([]string, error) {
+	emails, err := repo.New(s.db).ListActiveDirectoryGroupMemberEmails(ctx, repo.ListActiveDirectoryGroupMemberEmailsParams{
+		DirectoryGroupID: groupID,
+		OrganizationID:   organizationID,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("list active directory group member emails: %w", err)
+	}
+	if emails == nil {
+		emails = []string{}
+	}
+	return emails, nil
+}
+
 // ListActiveAttributeValues returns active, non-null directory attribute
 // values and their distinct member counts for an organization.
 func (s *Service) ListActiveAttributeValues(ctx context.Context, organizationID string) ([]AttributeValueSummary, error) {
