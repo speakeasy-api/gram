@@ -871,6 +871,9 @@ function NameSection({
   update: UpdateTunneledMcpMutation;
 }) {
   const [draft, setDraft] = useState(tunneledMcpServer.name);
+  // The mutation is shared with the other sections, so its error would
+  // otherwise surface under whichever field the user did not touch.
+  const [error, setError] = useState<string>();
 
   useEffect(() => {
     setDraft(tunneledMcpServer.name);
@@ -883,7 +886,7 @@ function NameSection({
 
   const handleSave = async () => {
     try {
-      await update.mutateAsync({
+      const saved = await update.mutateAsync({
         request: {
           updateTunneledMcpServerForm: {
             id: tunneledMcpServer.id,
@@ -891,6 +894,8 @@ function NameSection({
           },
         },
       });
+      setDraft(saved.name);
+      setError(undefined);
       await Promise.all([
         invalidateAllGetTunneledMcpServer(queryClient, {
           refetchType: "all",
@@ -898,9 +903,10 @@ function NameSection({
         invalidateAllTunneledMcpServers(queryClient, { refetchType: "all" }),
       ]);
       toast.success("Tunneled MCP name updated");
-    } catch (error) {
+    } catch (err) {
       const message =
-        error instanceof Error ? error.message : "Failed to update name";
+        err instanceof Error ? err.message : "Failed to update name";
+      setError(message);
       toast.error(message);
     }
   };
@@ -919,9 +925,9 @@ function NameSection({
           onChange={(value) => setDraft(value)}
           placeholder="Internal MCP server"
         />
-        {update.isError && (
+        {error !== undefined && (
           <Alert variant="error" dismissible={false}>
-            {update.error.message}
+            {error}
           </Alert>
         )}
         <Stack direction="horizontal" gap={2}>
@@ -954,6 +960,9 @@ function ResourceIdentifierSection({
 }) {
   const stored = tunneledMcpServer.resourceIdentifier ?? "";
   const [draft, setDraft] = useState(stored);
+  // The mutation is shared with the other sections, so its error would
+  // otherwise surface under whichever field the user did not touch.
+  const [error, setError] = useState<string>();
 
   useEffect(() => {
     setDraft(stored);
@@ -961,13 +970,14 @@ function ResourceIdentifierSection({
 
   const queryClient = useQueryClient();
 
+  const cleared = draft.trim() === "";
   const dirty = draft.trim() !== stored;
   const saveDisabled = !dirty || update.isPending;
 
   const handleSave = async () => {
     try {
       // An empty string clears the identifier back to unset.
-      await update.mutateAsync({
+      const saved = await update.mutateAsync({
         request: {
           updateTunneledMcpServerForm: {
             id: tunneledMcpServer.id,
@@ -976,18 +986,25 @@ function ResourceIdentifierSection({
           },
         },
       });
+      // Adopt the stored form the server normalized to. Refetching alone
+      // leaves the draft dirty whenever normalization is a no-op server-side.
+      setDraft(saved.resourceIdentifier ?? "");
+      setError(undefined);
       await Promise.all([
         invalidateAllGetTunneledMcpServer(queryClient, {
           refetchType: "all",
         }),
         invalidateAllTunneledMcpServers(queryClient, { refetchType: "all" }),
       ]);
-      toast.success("Resource identifier updated");
-    } catch (error) {
+      toast.success(
+        cleared ? "Resource identifier cleared" : "Resource identifier updated",
+      );
+    } catch (err) {
       const message =
-        error instanceof Error
-          ? error.message
+        err instanceof Error
+          ? err.message
           : "Failed to update resource identifier";
+      setError(message);
       toast.error(message);
     }
   };
@@ -1011,9 +1028,9 @@ function ResourceIdentifierSection({
           onChange={(value) => setDraft(value)}
           placeholder="https://mcp.internal.example.com/mcp"
         />
-        {update.isError && (
+        {error !== undefined && (
           <Alert variant="error" dismissible={false}>
-            {update.error.message}
+            {error}
           </Alert>
         )}
         <Stack direction="horizontal" gap={2}>
