@@ -1,8 +1,9 @@
-// The direct-surface consent derivation for tunneled backends: a client whose
-// attached MCP server is tunneled derives the tunneled server's recorded
-// resource identifier as its RFC 8707 resource (AIM-151), exactly as a
-// remote-backed client derives the remote URL. A tunneled server recording no
-// identifier derives nothing, minting unqualified grants.
+// The direct-surface consent derivation and tunneled backends: a tunneled
+// server never contributes an RFC 8707 resource, whether or not it records an
+// identifier (AIM-151). Its credentials route by the server's own derived
+// remote_session_issuer and accept an unqualified grant, so stamping the
+// identifier here would buy no routing — and would let an issuer fronting
+// both kinds read as ambiguous, unqualifying a sibling remote server's grants.
 
 package remotesessions_test
 
@@ -62,7 +63,7 @@ func seedTunneledMCPServerForIssuer(t *testing.T, ctx context.Context, ti *testI
 	require.NoError(t, err)
 }
 
-func TestFallbackResourceForClient_DerivesTunneledResourceIdentifier(t *testing.T) {
+func TestFallbackResourceForClient_TunneledServerDerivesNothing(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestService(t)
@@ -76,12 +77,17 @@ func TestFallbackResourceForClient_DerivesTunneledResourceIdentifier(t *testing.
 	clientID, _ := seedActiveClient(t, ctx, ti.conn, *authCtx.ProjectID, userIssuerID, authCtx.ActiveOrganizationID, "rsi-tunnel-rid")
 	seedTunneledMCPServerForIssuer(t, ctx, ti, userIssuerID, "tunnel-rid-mcp", "https://tunneled.internal/mcp")
 
+	// The grant stays unqualified, which is what the tunneled routing path
+	// accepts under the server's own issuer key.
 	resource, err := mgr.FallbackResourceForClient(ctx, clientID)
 	require.NoError(t, err)
-	require.Equal(t, "https://tunneled.internal/mcp", resource)
+	require.Empty(t, resource)
 }
 
-func TestFallbackResourceForClient_TunneledWithoutIdentifierDerivesNothing(t *testing.T) {
+// Recording an identifier on a tunneled server must not disturb a remote
+// server that shares its issuer: the remote grant stays qualified to its own
+// URL rather than collapsing to an ambiguous, unqualified derivation.
+func TestFallbackResourceForClient_TunneledIdentifierLeavesRemoteSiblingQualified(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestService(t)
@@ -91,11 +97,13 @@ func TestFallbackResourceForClient_TunneledWithoutIdentifierDerivesNothing(t *te
 
 	mgr := newResolveManager(t, ti.conn, testenv.NewEncryptionClient(t))
 
-	userIssuerID := createUserSessionIssuer(t, ctx, ti.conn, "usi-tunnel-norid")
-	clientID, _ := seedActiveClient(t, ctx, ti.conn, *authCtx.ProjectID, userIssuerID, authCtx.ActiveOrganizationID, "rsi-tunnel-norid")
-	seedTunneledMCPServerForIssuer(t, ctx, ti, userIssuerID, "tunnel-norid-mcp", "")
+	userIssuerID := createUserSessionIssuer(t, ctx, ti.conn, "usi-tunnel-mixed")
+	clientID, _ := seedActiveClient(t, ctx, ti.conn, *authCtx.ProjectID, userIssuerID, authCtx.ActiveOrganizationID, "rsi-tunnel-mixed")
+	seedRemoteMCPServerForIssuer(t, ctx, ti, userIssuerID, "mixed-remote-mcp", "https://remote.example.com/mcp")
+	seedTunneledMCPServerForIssuer(t, ctx, ti, userIssuerID, "mixed-tunnel-mcp", "https://tunneled.internal/mcp")
 
 	resource, err := mgr.FallbackResourceForClient(ctx, clientID)
 	require.NoError(t, err)
-	require.Empty(t, resource)
+	require.Equal(t, "https://remote.example.com/mcp", resource,
+		"a tunneled sibling's identifier must not make the derivation ambiguous")
 }
