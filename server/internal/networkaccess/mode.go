@@ -38,11 +38,25 @@ func Effective(value pgtype.Text) Mode {
 	}
 	mode, err := Parse(value.String)
 	if err != nil {
-		// Unknown persisted values must never make an older binary reopen the
-		// public surface during a rolling deploy or after bad data is written.
-		return ModePrivateOnly
+		// Unknown persisted values must deny every surface during a rolling
+		// deploy or after bad data is written.
+		return ""
 	}
 	return mode
+}
+
+// ParseRequested parses an optional API mode and preserves fallback when the
+// field is omitted. T keeps this adapter shared without coupling the policy
+// package to generated API types.
+func ParseRequested[T ~string](requested *T, fallback Mode) (Mode, error) {
+	if requested == nil {
+		return fallback, nil
+	}
+	mode, err := Parse(string(*requested))
+	if err != nil {
+		return "", fmt.Errorf("parse requested network access mode: %w", err)
+	}
+	return mode, nil
 }
 
 // Storage maps public_only to NULL for expand compatibility with existing

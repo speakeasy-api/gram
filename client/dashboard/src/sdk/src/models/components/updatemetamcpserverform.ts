@@ -36,7 +36,7 @@ export type UpdateMetaMcpServerFormVisibility = ClosedEnum<
 >;
 
 /**
- * Form for updating a meta MCP server. Omitting user_session_issuer_id preserves the stored issuer (one is minted if the gateway has none); omitting visibility preserves the stored value.
+ * Form for updating a meta MCP server. Omitting user_session_issuer_id preserves the stored issuer (one is minted if the gateway has none); omitting visibility or network_access_mode preserves the respective stored value.
  */
 export type UpdateMetaMcpServerForm = {
   /**
