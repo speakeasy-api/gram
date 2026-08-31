@@ -451,3 +451,79 @@ func seedIssuerInProject(t *testing.T, ctx context.Context, conn *pgxpool.Pool, 
 	require.NoError(t, err)
 	return issuer.ID
 }
+
+// siblingProject is a second project in the caller's OWN organization, holding
+// a complete issuer subtree. It is the boundary the organization-tier
+// predicate has to keep: that predicate reads
+//
+//	project_id = @project_id OR (project_id IS NULL AND organization_id = @organization_id)
+//
+// and every row written today carries BOTH columns, so the project_id IS NULL
+// guard is the only thing confining the second arm to genuine
+// organization-tier rows. Drop it and the arm matches this project's rows too,
+// which is a cross-project read on the listings and a cross-project write on
+// the revoke and delete paths.
+type siblingProject struct {
+	projectID  uuid.UUID
+	issuerID   uuid.UUID
+	issuerSlug string
+	clientID   uuid.UUID
+	sessionID  uuid.UUID
+	consentID  uuid.UUID
+	cimdID     uuid.UUID
+	subject    urn.SessionSubject
+}
+
+// seedSiblingProject builds that project and fills it with one of every row
+// that hangs off an issuer. The children take their tenancy from the issuer
+// inside SQL, so seeding through the issuer is what makes them the sibling
+// project's rows rather than the caller's.
+func seedSiblingProject(t *testing.T, ctx context.Context, ti *testInstance, slug string) siblingProject {
+	t.Helper()
+
+	projectID := createSiblingProject(t, ctx, ti.conn, slug)
+	issuerSlug := slug + "-issuer"
+	issuerID := seedIssuerInProject(t, ctx, ti.conn, projectID, issuerSlug)
+	subject := urn.NewUserSubject(slug + "-subject")
+
+	client, err := seedUserSessionClient(t, ctx, ti.conn, issuerID, slug+"-client")
+	require.NoError(t, err)
+
+	session, err := seedUserSessionForClient(t, ctx, ti.conn, issuerID, client.ID, subject)
+	require.NoError(t, err)
+
+	consent, err := seedUserSessionConsent(t, ctx, ti.conn, client.ID, subject)
+	require.NoError(t, err)
+
+	cimd, err := repo.New(ti.conn).CreateUserSessionIssuerCimdClient(ctx, repo.CreateUserSessionIssuerCimdClientParams{
+		ProjectID:           projectID,
+		ClientIDMetadataUri: "https://" + slug + ".example.com/client",
+		UserSessionIssuerID: issuerID,
+	})
+	require.NoError(t, err)
+
+	return siblingProject{
+		projectID:  projectID,
+		issuerID:   issuerID,
+		issuerSlug: issuerSlug,
+		clientID:   client.ID,
+		sessionID:  session.ID,
+		consentID:  consent.ID,
+		cimdID:     cimd.ID,
+		subject:    subject,
+	}
+}
+
+// requireSiblingIssuerLive re-reads the sibling project's issuer under its own
+// project id. A mutation that leaked across the boundary soft-deletes the row,
+// so this is what turns a silent cross-project write into a failure.
+func requireSiblingIssuerLive(t *testing.T, ctx context.Context, ti *testInstance, sp siblingProject) {
+	t.Helper()
+
+	_, err := repo.New(ti.conn).GetUserSessionIssuerByID(ctx, repo.GetUserSessionIssuerByIDParams{
+		ID:             sp.issuerID,
+		ProjectID:      sp.projectID,
+		OrganizationID: "",
+	})
+	require.NoError(t, err, "sibling project's issuer must survive the caller's mutation")
+}

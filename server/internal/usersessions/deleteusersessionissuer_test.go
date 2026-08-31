@@ -309,3 +309,19 @@ func TestDeleteUserSessionIssuer_ConflictWithLiveMetaMcpServer(t *testing.T) {
 	})
 	require.NoError(t, err)
 }
+
+func TestDeleteUserSessionIssuer_SiblingProjectNotFound(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	sp := seedSiblingProject(t, ctx, ti, "delete-iss-sibling")
+
+	err := ti.service.DeleteUserSessionIssuer(ctx, &gen.DeleteUserSessionIssuerPayload{
+		ID:               sp.issuerID.String(),
+		SessionToken:     nil,
+		ApikeyToken:      nil,
+		ProjectSlugInput: nil,
+	})
+	requireOopsCode(t, err, oops.CodeNotFound)
+	requireSiblingIssuerLive(t, ctx, ti, sp)
+}
