@@ -449,6 +449,9 @@ func (m *ChallengeManager) validateAndRefresh(
 
 	hasRefresh := hasRefreshToken(sess)
 
+	// The skew and its refresh-grant condition are pinned by
+	// accessTokenUsable's unit tests; they cover this path only while the
+	// deadline check stays on the shared predicate rather than inlined.
 	if accessTokenUsable(sess, now) {
 		plain, err := m.enc.Decrypt(sess.AccessTokenEncrypted)
 		if err != nil {

@@ -83,35 +83,6 @@ func TestRemoteLoginCallback_JWTAccessToken_RefreshesOnceExpPasses(t *testing.T)
 	require.WithinDuration(t, rotatedExp, session.AccessExpiresAt.Time, time.Second)
 }
 
-func TestRemoteLoginCallback_JWTAccessToken_RefreshesInsideExpirySkew(t *testing.T) {
-	t.Parallel()
-
-	// exp is still ahead of the clock but inside the skew window, so the first
-	// resolution must refresh rather than forward a token that would expire
-	// mid-request.
-	initial := mintJWTAccessToken(t, time.Now().Add(remotesessions.AccessTokenExpirySkew/2))
-	rotated := mintJWTAccessToken(t, time.Now().Add(24*time.Hour))
-	var refreshCount atomic.Int64
-	ctx, env := newSyntheticExpiryEnv(t, "jwt-skew", func(w http.ResponseWriter, r *http.Request) {
-		_ = r.ParseForm()
-		w.Header().Set("Content-Type", "application/json")
-		if r.Form.Get("grant_type") == "refresh_token" {
-			refreshCount.Add(1)
-			_, _ = w.Write([]byte(jwtProviderTokenBody(rotated, "refresh-rotated")))
-			return
-		}
-		_, _ = w.Write([]byte(jwtProviderTokenBody(initial, "refresh-initial")))
-	})
-
-	require.True(t, env.session.AccessExpiresAt.Valid)
-	require.True(t, env.session.AccessExpiresAt.Time.After(time.Now()), "fixture must still be ahead of the clock")
-
-	resolved, err := env.mgr.ResolveAccessToken(ctx, env.clientID, env.subject, "")
-	require.NoError(t, err)
-	require.Equal(t, rotated, resolved)
-	require.Equal(t, int64(1), refreshCount.Load())
-}
-
 func TestRemoteLoginCallback_JWTAccessToken_PastExpWithRefreshToken_RefreshesOnFirstUse(t *testing.T) {
 	t.Parallel()
 
