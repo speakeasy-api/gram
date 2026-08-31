@@ -12,46 +12,94 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-const checkSlugAvailability = `-- name: CheckSlugAvailability :one
+const checkUnifiedSlugAvailability = `-- name: CheckUnifiedSlugAvailability :one
 SELECT (
   $1::uuid IS NULL
   OR EXISTS (
     SELECT 1
-    FROM custom_domains
-    WHERE id = $1::uuid
-      AND organization_id = $2
-      AND deleted IS FALSE
+    FROM custom_domains cd
+    WHERE cd.id = $1::uuid
+      AND cd.organization_id = $2
+      AND cd.deleted IS FALSE
   )
 ) AND NOT EXISTS (
   SELECT 1
-  FROM mcp_endpoints
-  WHERE slug = $3
-    AND custom_domain_id IS NOT DISTINCT FROM $1::uuid
-    AND deleted IS FALSE
+  FROM mcp_endpoints e
+  WHERE e.slug = $3
+    AND e.custom_domain_id IS NOT DISTINCT FROM $1::uuid
+    AND e.deleted IS FALSE
+    AND (
+      $4::uuid IS NULL
+      OR NOT EXISTS (
+        SELECT 1
+        FROM mcp_servers s
+        WHERE s.id = e.mcp_server_id
+          AND s.toolset_id = $4::uuid
+      )
+    )
+) AND NOT EXISTS (
+  SELECT 1
+  FROM toolsets t
+  WHERE t.mcp_slug = $3
+    AND t.custom_domain_id IS NOT DISTINCT FROM $1::uuid
+    AND t.deleted IS FALSE
+    AND (
+      $4::uuid IS NULL
+      OR t.id <> $4::uuid
+    )
+    AND (
+      $5::uuid IS NULL
+      OR NOT EXISTS (
+        SELECT 1
+        FROM mcp_servers s
+        WHERE s.id = $5::uuid
+          AND s.toolset_id = t.id
+      )
+    )
 )
 `
 
-type CheckSlugAvailabilityParams struct {
-	CustomDomainID uuid.NullUUID
-	OrganizationID string
-	Slug           string
+type CheckUnifiedSlugAvailabilityParams struct {
+	CustomDomainID     uuid.NullUUID
+	OrganizationID     string
+	Slug               string
+	ExcludeToolsetID   uuid.NullUUID
+	ExcludeMcpServerID uuid.NullUUID
 }
 
-// Returns true when the slug is available for an mcp_endpoint in the given
-// uniqueness namespace. Platform-domain endpoints (custom_domain_id IS NULL)
-// and custom-domain endpoints live in separate namespaces enforced by partial
-// unique indexes; this query mirrors that scoping by treating NULL as a valid
-// match value via IS NOT DISTINCT FROM. Soft-deleted rows are ignored. The
-// slug-existence check is intentionally not project-scoped because the
-// uniqueness indexes it mirrors span all projects within their namespace.
+// Returns true when the slug is available in the given uniqueness namespace
+// across BOTH tables that can hold a live MCP address: mcp_endpoints.slug and
+// toolsets.mcp_slug. The runtime resolves mcp_endpoints first and falls back
+// to toolsets.mcp_slug, so for as long as both representations coexist a slug
+// taken by either table would collide at serve time. Platform-domain
+// addresses (custom_domain_id IS NULL) and custom-domain addresses live in
+// separate namespaces enforced by partial unique indexes on each table; this
+// query mirrors that scoping by treating NULL as a valid match value via
+// IS NOT DISTINCT FROM. Soft-deleted rows are ignored. The slug-existence
+// checks are intentionally not project-scoped because the uniqueness indexes
+// they mirror span all projects within their namespace.
 //
 // When custom_domain_id is supplied, the domain must also belong to the
 // caller's organization. Foreign or unknown domains short-circuit to
 // "unavailable" (returns false) so callers can't probe slug-existence under
 // domains they don't own. organization_id is ignored on the platform-domain
 // branch (custom_domain_id IS NULL).
-func (q *Queries) CheckSlugAvailability(ctx context.Context, arg CheckSlugAvailabilityParams) (pgtype.Bool, error) {
-	row := q.db.QueryRow(ctx, checkSlugAvailability, arg.CustomDomainID, arg.OrganizationID, arg.Slug)
+//
+// Owner exclusions, for a hosted (toolset-backed) server whose address is
+// mirrored in both tables:
+//   - exclude_toolset_id: the toolset whose own slug is being validated. Its
+//     toolsets row and any mcp_endpoints rows of its wrapping mcp_servers row
+//     do not count against it.
+//   - exclude_mcp_server_id: the mcp_servers row whose endpoint slug is being
+//     validated. The toolset backing that server does not count against it.
+func (q *Queries) CheckUnifiedSlugAvailability(ctx context.Context, arg CheckUnifiedSlugAvailabilityParams) (pgtype.Bool, error) {
+	row := q.db.QueryRow(ctx, checkUnifiedSlugAvailability,
+		arg.CustomDomainID,
+		arg.OrganizationID,
+		arg.Slug,
+		arg.ExcludeToolsetID,
+		arg.ExcludeMcpServerID,
+	)
 	var column_1 pgtype.Bool
 	err := row.Scan(&column_1)
 	return column_1, err

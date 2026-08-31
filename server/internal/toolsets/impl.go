@@ -34,6 +34,7 @@ import (
 	deploymentsRepo "github.com/speakeasy-api/gram/server/internal/deployments/repo"
 	environmentsRepo "github.com/speakeasy-api/gram/server/internal/environments/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
+	"github.com/speakeasy-api/gram/server/internal/mcpendpoints"
 	mcpmetadataRepo "github.com/speakeasy-api/gram/server/internal/mcpmetadata/repo"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/mv"
@@ -445,17 +446,32 @@ func (s *Service) UpdateToolset(ctx context.Context, payload *gen.UpdateToolsetP
 
 			// Check slug uniqueness on the platform domain only (no custom domain).
 			// Custom domains have a separate namespace so the same slug can exist on both.
-			mcpToolset, mcpToolsetErr := tr.GetToolsetByPlatformMcpSlug(ctx, conv.ToPGText(conv.ToLower(*payload.McpSlug)))
-			if mcpToolsetErr == nil && mcpToolset.ID != existingToolset.ID {
+			available, err := mcpendpoints.CheckSlugAvailable(ctx, dbtx, mcpendpoints.SlugAvailabilityCheck{
+				Slug:               conv.ToLower(*payload.McpSlug),
+				CustomDomainID:     uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+				OrganizationID:     authCtx.ActiveOrganizationID,
+				ExcludeToolsetID:   uuid.NullUUID{UUID: existingToolset.ID, Valid: true},
+				ExcludeMcpServerID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+			})
+			if err != nil {
+				return nil, oops.E(oops.CodeUnexpected, err, "check mcp slug availability").LogError(ctx, logger)
+			}
+			if !available {
 				return nil, oops.E(oops.CodeConflict, nil, "this slug is already taken")
 			}
 			updateParams.McpSlug = conv.ToPGText(conv.ToLower(*payload.McpSlug))
 		} else {
-			mcpToolset, mcpToolsetErr := tr.GetToolsetByMcpSlugAndCustomDomain(ctx, repo.GetToolsetByMcpSlugAndCustomDomainParams{
-				McpSlug:        conv.ToPGText(conv.ToLower(*payload.McpSlug)),
-				CustomDomainID: uuid.NullUUID{UUID: uuid.MustParse(*toolsetDomainID), Valid: true},
+			available, err := mcpendpoints.CheckSlugAvailable(ctx, dbtx, mcpendpoints.SlugAvailabilityCheck{
+				Slug:               conv.ToLower(*payload.McpSlug),
+				CustomDomainID:     uuid.NullUUID{UUID: uuid.MustParse(*toolsetDomainID), Valid: true},
+				OrganizationID:     authCtx.ActiveOrganizationID,
+				ExcludeToolsetID:   uuid.NullUUID{UUID: existingToolset.ID, Valid: true},
+				ExcludeMcpServerID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 			})
-			if mcpToolsetErr == nil && mcpToolset.ID != existingToolset.ID {
+			if err != nil {
+				return nil, oops.E(oops.CodeUnexpected, err, "check mcp slug availability").LogError(ctx, logger)
+			}
+			if !available {
 				return nil, oops.E(oops.CodeConflict, nil, "this slug is already taken")
 			}
 			updateParams.McpSlug = conv.ToPGText(conv.ToLower(*payload.McpSlug))
@@ -875,8 +891,27 @@ func (s *Service) CloneToolset(ctx context.Context, payload *gen.CloneToolsetPay
 }
 
 func (s *Service) CheckMCPSlugAvailability(ctx context.Context, payload *gen.CheckMCPSlugAvailabilityPayload) (bool, error) {
-	//nolint:wrapcheck // Wrapping adds no value here
-	return s.repo.CheckMCPSlugAvailability(ctx, conv.ToPGText(conv.ToLower(payload.Slug)))
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil {
+		return false, oops.C(oops.CodeUnauthorized)
+	}
+
+	// Wire contract is inverted from the method name: true means the slug is
+	// TAKEN. Callers predate the unified namespace and normalize client-side,
+	// so the legacy semantics are preserved while the probe itself now spans
+	// toolsets.mcp_slug and mcp_endpoints.slug on the platform scope.
+	available, err := mcpendpoints.CheckSlugAvailable(ctx, s.db, mcpendpoints.SlugAvailabilityCheck{
+		Slug:               conv.ToLower(payload.Slug),
+		CustomDomainID:     uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		OrganizationID:     authCtx.ActiveOrganizationID,
+		ExcludeToolsetID:   uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		ExcludeMcpServerID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+	})
+	if err != nil {
+		return false, oops.E(oops.CodeUnexpected, err, "check mcp slug availability").LogError(ctx, s.logger)
+	}
+
+	return !available, nil
 }
 
 func (s *Service) AddExternalOAuthServer(ctx context.Context, payload *gen.AddExternalOAuthServerPayload) (*types.Toolset, error) {

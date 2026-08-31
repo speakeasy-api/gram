@@ -114,35 +114,75 @@ SET
 WHERE id = @id AND project_id = @project_id AND deleted IS FALSE
 RETURNING *;
 
--- name: CheckSlugAvailability :one
--- Returns true when the slug is available for an mcp_endpoint in the given
--- uniqueness namespace. Platform-domain endpoints (custom_domain_id IS NULL)
--- and custom-domain endpoints live in separate namespaces enforced by partial
--- unique indexes; this query mirrors that scoping by treating NULL as a valid
--- match value via IS NOT DISTINCT FROM. Soft-deleted rows are ignored. The
--- slug-existence check is intentionally not project-scoped because the
--- uniqueness indexes it mirrors span all projects within their namespace.
+-- name: CheckUnifiedSlugAvailability :one
+-- Returns true when the slug is available in the given uniqueness namespace
+-- across BOTH tables that can hold a live MCP address: mcp_endpoints.slug and
+-- toolsets.mcp_slug. The runtime resolves mcp_endpoints first and falls back
+-- to toolsets.mcp_slug, so for as long as both representations coexist a slug
+-- taken by either table would collide at serve time. Platform-domain
+-- addresses (custom_domain_id IS NULL) and custom-domain addresses live in
+-- separate namespaces enforced by partial unique indexes on each table; this
+-- query mirrors that scoping by treating NULL as a valid match value via
+-- IS NOT DISTINCT FROM. Soft-deleted rows are ignored. The slug-existence
+-- checks are intentionally not project-scoped because the uniqueness indexes
+-- they mirror span all projects within their namespace.
 --
 -- When custom_domain_id is supplied, the domain must also belong to the
 -- caller's organization. Foreign or unknown domains short-circuit to
 -- "unavailable" (returns false) so callers can't probe slug-existence under
 -- domains they don't own. organization_id is ignored on the platform-domain
 -- branch (custom_domain_id IS NULL).
+--
+-- Owner exclusions, for a hosted (toolset-backed) server whose address is
+-- mirrored in both tables:
+--   * exclude_toolset_id: the toolset whose own slug is being validated. Its
+--     toolsets row and any mcp_endpoints rows of its wrapping mcp_servers row
+--     do not count against it.
+--   * exclude_mcp_server_id: the mcp_servers row whose endpoint slug is being
+--     validated. The toolset backing that server does not count against it.
 SELECT (
   sqlc.narg('custom_domain_id')::uuid IS NULL
   OR EXISTS (
     SELECT 1
-    FROM custom_domains
-    WHERE id = sqlc.narg('custom_domain_id')::uuid
-      AND organization_id = @organization_id
-      AND deleted IS FALSE
+    FROM custom_domains cd
+    WHERE cd.id = sqlc.narg('custom_domain_id')::uuid
+      AND cd.organization_id = @organization_id
+      AND cd.deleted IS FALSE
   )
 ) AND NOT EXISTS (
   SELECT 1
-  FROM mcp_endpoints
-  WHERE slug = @slug
-    AND custom_domain_id IS NOT DISTINCT FROM sqlc.narg('custom_domain_id')::uuid
-    AND deleted IS FALSE
+  FROM mcp_endpoints e
+  WHERE e.slug = @slug
+    AND e.custom_domain_id IS NOT DISTINCT FROM sqlc.narg('custom_domain_id')::uuid
+    AND e.deleted IS FALSE
+    AND (
+      sqlc.narg('exclude_toolset_id')::uuid IS NULL
+      OR NOT EXISTS (
+        SELECT 1
+        FROM mcp_servers s
+        WHERE s.id = e.mcp_server_id
+          AND s.toolset_id = sqlc.narg('exclude_toolset_id')::uuid
+      )
+    )
+) AND NOT EXISTS (
+  SELECT 1
+  FROM toolsets t
+  WHERE t.mcp_slug = @slug
+    AND t.custom_domain_id IS NOT DISTINCT FROM sqlc.narg('custom_domain_id')::uuid
+    AND t.deleted IS FALSE
+    AND (
+      sqlc.narg('exclude_toolset_id')::uuid IS NULL
+      OR t.id <> sqlc.narg('exclude_toolset_id')::uuid
+    )
+    AND (
+      sqlc.narg('exclude_mcp_server_id')::uuid IS NULL
+      OR NOT EXISTS (
+        SELECT 1
+        FROM mcp_servers s
+        WHERE s.id = sqlc.narg('exclude_mcp_server_id')::uuid
+          AND s.toolset_id = t.id
+      )
+    )
 );
 
 -- name: SoftDeleteMCPEndpointsByMCPServerID :many
