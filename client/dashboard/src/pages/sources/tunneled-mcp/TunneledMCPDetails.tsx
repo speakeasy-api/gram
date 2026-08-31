@@ -1034,7 +1034,14 @@ function ResourceIdentifierSection({
           </Alert>
         )}
         <Stack direction="horizontal" gap={2}>
-          <RequireScope scope="mcp:write" level="component">
+          {/* Scoped to this source's project, matching the project-scoped
+              mcp:write check UpdateServer runs — an unscoped gate would
+              enable Save for a grant held on some other project. */}
+          <RequireScope
+            scope="mcp:write"
+            resourceId={tunneledMcpServer.projectId}
+            level="component"
+          >
             <Button
               variant="primary"
               disabled={saveDisabled}
