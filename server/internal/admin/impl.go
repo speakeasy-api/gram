@@ -29,7 +29,7 @@ import (
 	auditrepo "github.com/speakeasy-api/gram/server/internal/audit/repo"
 	"github.com/speakeasy-api/gram/server/internal/auth/orgslug"
 	"github.com/speakeasy-api/gram/server/internal/authz"
-	"github.com/speakeasy-api/gram/server/internal/background/activities/keybillinglock"
+	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/chat/analysis"
 	"github.com/speakeasy-api/gram/server/internal/constants"
@@ -44,7 +44,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/supporthandoff"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
-	orrepo "github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter/repo"
 	"github.com/speakeasy-api/gram/server/internal/trialemails"
 	trialsRepo "github.com/speakeasy-api/gram/server/internal/trials/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -86,11 +85,15 @@ type BillingOperations interface {
 	SetStripeSubscriptionCancelAtPeriodEndForOrganization(context.Context, string, usage.BillingActor, bool) (*usage.StripeSubscription, error)
 }
 
-// TrialKeyReviver is the OpenRouter surface a trial re-arm needs.
+// TrialKeyReviver is the OpenRouter surface used by admin key operations and
+// trial lifecycle replacement. The WithDB removal records local desired state
+// only; reconciliation happens after the business transaction commits.
 type TrialKeyReviver interface {
 	RefreshAPIKeyLimit(ctx context.Context, orgID string, keyType openrouter.KeyType, limit *int) (int, error)
 	ReinstateAPIKeyLimit(ctx context.Context, orgID string, keyType openrouter.KeyType, limit *int) (int, error)
 	ReinstateAPIKeyLimitWithDB(ctx context.Context, db openrouter.DBTX, orgID string, keyType openrouter.KeyType, limit *int) (int, error)
+	RemoveAPIKeyDisableCauseWithDB(ctx context.Context, db openrouter.DBTX, orgID string, keyType openrouter.KeyType, cause openrouter.DisableCause, limit *int) (int, openrouter.DisableCauseChange, error)
+	ReconcileAPIKeyDisabled(ctx context.Context, orgID string, keyType openrouter.KeyType) error
 }
 
 type OpenRouterSpendCapScheduler interface {
@@ -119,8 +122,6 @@ func (ChatAnalysisTriggerUnavailable) Signal(context.Context, uuid.UUID) error {
 	return ErrChatAnalysisTriggerUnavailable
 }
 
-const keyBillingLockWaitTimeout = 5 * time.Second
-
 // TrialKeysUnavailable lets the admin server boot without OpenRouter.
 type TrialKeysUnavailable struct{}
 
@@ -134,6 +135,14 @@ func (TrialKeysUnavailable) ReinstateAPIKeyLimit(context.Context, string, openro
 
 func (TrialKeysUnavailable) ReinstateAPIKeyLimitWithDB(context.Context, openrouter.DBTX, string, openrouter.KeyType, *int) (int, error) {
 	return 0, ErrOpenRouterUnavailable
+}
+
+func (TrialKeysUnavailable) RemoveAPIKeyDisableCauseWithDB(context.Context, openrouter.DBTX, string, openrouter.KeyType, openrouter.DisableCause, *int) (int, openrouter.DisableCauseChange, error) {
+	return 0, openrouter.DisableCauseChange{}, ErrOpenRouterUnavailable
+}
+
+func (TrialKeysUnavailable) ReconcileAPIKeyDisabled(context.Context, string, openrouter.KeyType) error {
+	return ErrOpenRouterUnavailable
 }
 
 func (TrialKeysUnavailable) GetCreditsUsed(context.Context, string, openrouter.KeyType) (float64, int, error) {
@@ -1131,71 +1140,13 @@ func (s *Service) CreateOrganization(ctx context.Context, payload *gen.CreateOrg
 	return s.readOrganizationAfterWrite(ctx, org.ID, "fetch organization after create")
 }
 
-// RearmTrial puts a demoted enterprise trial back on.
-//
-// The keys come back up before the restore commits, deliberately not mirroring
-// the demotion's ordering: a partial failure must leave the organization
-// demoted with live keys, never a running trial with dead ones.
+// RearmTrial atomically replaces trial_demotion with the active-trial key policy.
 func (s *Service) RearmTrial(ctx context.Context, payload *gen.RearmTrialPayload) (*gen.AdminOrganization, error) {
-	// Defence in depth against a non-HTTP caller: the design's bounds are
-	// generated into the request decoder alone. Keep this on the wide
-	// payload.Days, above the int32 narrowing, or 1<<32 + 1 truncates into range.
 	if payload.Days < constants.MinTrialRearmDays || payload.Days > constants.MaxTrialRearmDays {
 		return nil, oops.E(oops.CodeInvalid, nil, "days must be between %d and %d", constants.MinTrialRearmDays, constants.MaxTrialRearmDays)
 	}
 
 	logger := s.logger.With(attr.SlogOrganizationID(payload.ID))
-	lockedKeys := make(map[openrouter.KeyType]*pgxpool.Conn, len(openrouter.AllKeyTypes))
-	var result *gen.AdminOrganization
-	err := s.withTrialKeyBillingLocks(ctx, logger, payload.ID, openrouter.AllKeyTypes, lockedKeys, func() error {
-		var lockedErr error
-		result, lockedErr = s.rearmTrialLocked(ctx, logger, payload, lockedKeys)
-		return lockedErr
-	})
-	if err == nil {
-		return result, nil
-	}
-
-	if shareable, ok := errors.AsType[*oops.ShareableError](err); ok {
-		return nil, shareable
-	}
-	if errors.Is(err, keybillinglock.ErrAcquireTimeout) {
-		return nil, oops.E(oops.CodeUnavailable, err, "another billing operation is in progress; retry shortly").LogWarn(ctx, logger)
-	}
-	return nil, oops.E(oops.CodeUnexpected, err, "lock inference keys for trial re-arm").LogError(ctx, logger)
-}
-
-func (s *Service) withTrialKeyBillingLocks(
-	ctx context.Context,
-	logger *slog.Logger,
-	organizationID string,
-	keyTypes []openrouter.KeyType,
-	locked map[openrouter.KeyType]*pgxpool.Conn,
-	operation func() error,
-) error {
-	if len(keyTypes) == 0 {
-		return operation()
-	}
-
-	keyType := keyTypes[0]
-	err := keybillinglock.WithAcquireTimeout(ctx, logger, s.db, organizationID, keyType, keyBillingLockWaitTimeout, func(conn *pgxpool.Conn) error {
-		locked[keyType] = conn
-		defer delete(locked, keyType)
-		return s.withTrialKeyBillingLocks(ctx, logger, organizationID, keyTypes[1:], locked, operation)
-	})
-	if err != nil {
-		return fmt.Errorf("hold OpenRouter %s key billing lock for trial re-arm: %w", keyType, err)
-	}
-	return nil
-}
-
-func (s *Service) rearmTrialLocked(
-	ctx context.Context,
-	logger *slog.Logger,
-	payload *gen.RearmTrialPayload,
-	lockedKeys map[openrouter.KeyType]*pgxpool.Conn,
-) (*gen.AdminOrganization, error) {
-
 	tx, err := s.db.Begin(ctx)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "begin trial re-arm transaction").LogError(ctx, logger)
@@ -1203,50 +1154,95 @@ func (s *Service) rearmTrialLocked(
 	defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
 
 	trials := trialsRepo.New(tx)
-
-	rearmed, err := trials.RearmTrial(ctx, trialsRepo.RearmTrialParams{
-		OrganizationID: payload.ID,
-		RearmForDays:   conv.SafeInt32(payload.Days),
-	})
+	lockedTrial, err := trials.LockTrialLifecycleForRearm(ctx, payload.ID)
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
-		// rejectTrialChange reads on the pool, so this connection goes back
-		// before it asks for a second one. The deferred rollback is idempotent.
 		_ = tx.Rollback(ctx)
-		return nil, s.rejectTrialChange(ctx, logger, payload.ID,
-			"look up organization after unrearmed trial",
-			"organization has no demoted enterprise trial to re-arm")
+		return nil, s.rejectTrialChange(ctx, logger, payload.ID, "look up organization after unrearmed trial", "organization has no demoted enterprise trial to re-arm")
 	case err != nil:
-		return nil, oops.E(oops.CodeUnexpected, err, "re-arm trial").LogError(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "lock trial lifecycle for re-arm").LogError(ctx, logger)
 	}
 
-	uncapped, err := s.reviveTrialKeys(ctx, logger, lockedKeys, payload.ID)
+	if lockedTrial.ConvertedAt.Valid {
+		_ = tx.Rollback(ctx)
+		return nil, s.rejectTrialChange(ctx, logger, payload.ID, "look up organization after unrearmed trial", "organization has no demoted enterprise trial to re-arm")
+	}
+
+	retryOperations, auditErr := repo.New(tx).AdminGetEnterpriseTrialRetryOperationIDs(ctx, payload.ID)
+	if auditErr != nil {
+		return nil, oops.E(oops.CodeUnexpected, auditErr, "check trial generation audit operations").LogError(ctx, logger)
+	}
+	armOperationID, armErr := uuid.Parse(retryOperations.ArmOperationID)
+	rearmArmOperationID, rearmErr := uuid.Parse(retryOperations.RearmArmOperationID)
+
+	if !lockedTrial.DemotedAt.Valid {
+		sameGeneration := armErr == nil && rearmErr == nil && armOperationID == rearmArmOperationID && retryOperations.MatchingRearmCount == 1
+		if sameGeneration && lockedTrial.EndsAt.Valid && lockedTrial.EndsAt.Time.After(time.Now()) {
+			if rollbackErr := tx.Rollback(ctx); rollbackErr != nil {
+				return nil, oops.E(oops.CodeUnexpected, rollbackErr, "close trial re-arm retry transaction").LogError(ctx, logger)
+			}
+			s.updateTrialFeatureCache(ctx, payload.ID)
+			if err := s.reconcileRearmedTrialKeys(ctx, logger, payload.ID, openrouter.AllKeyTypes); err != nil {
+				return nil, err
+			}
+			return s.readOrganizationAfterWrite(ctx, payload.ID, "fetch organization after trial re-arm retry")
+		}
+
+		_ = tx.Rollback(ctx)
+		return nil, s.rejectTrialChange(ctx, logger, payload.ID, "look up organization after unrearmed trial", "organization has no demoted enterprise trial to re-arm")
+	}
+	if armErr != nil {
+		_ = tx.Rollback(ctx)
+		return nil, s.rejectTrialChange(ctx, logger, payload.ID, "look up organization after unaudited trial", "organization trial generation has no valid arm operation")
+	}
+
+	// The lifecycle row is locked first. Every transaction advisory lock then
+	// follows in canonical order before any key-row access.
+	for _, keyType := range openrouter.AllKeyTypes {
+		if err := openrouter.AcquireAPIKeyBillingTransactionLock(ctx, tx, payload.ID, keyType); err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "lock openrouter %s key for trial re-arm", keyType).LogError(ctx, logger)
+		}
+	}
+
+	rearmed, err := trials.RearmTrial(ctx, trialsRepo.RearmTrialParams{OrganizationID: payload.ID, RearmForDays: conv.SafeInt32(payload.Days)})
 	if err != nil {
-		return nil, err
+		return nil, oops.E(oops.CodeUnexpected, err, "re-arm locked trial").LogError(ctx, logger)
 	}
 
-	organization, err := trials.RestoreOrganizationFromTrial(ctx, trialsRepo.RestoreOrganizationFromTrialParams{
-		OrganizationID: payload.ID,
-		AccountType:    rearmed.Tier,
-	})
+	desiredLimit, ok := openrouter.DefaultCreditLimit(payload.ID, billing.Tier(rearmed.Tier), true)
+	if !ok || desiredLimit <= 0 {
+		return nil, oops.E(oops.CodeUnexpected, nil, "trial tier %q has no OpenRouter credit policy", rearmed.Tier).LogError(ctx, logger)
+	}
+
+	reconcile := make([]openrouter.KeyType, 0, len(openrouter.AllKeyTypes))
+	keyAccessChanged := false
+	for _, keyType := range openrouter.AllKeyTypes {
+		_, change, removeErr := s.openRouter.RemoveAPIKeyDisableCauseWithDB(ctx, tx, payload.ID, keyType, openrouter.DisableCauseTrialDemotion, &desiredLimit)
+		switch {
+		case errors.Is(removeErr, ErrOpenRouterUnavailable):
+			return nil, oops.E(oops.CodeInvalid, removeErr, "this server cannot update model provider key lifecycle state")
+		case removeErr != nil:
+			return nil, oops.E(oops.CodeUnexpected, removeErr, "remove trial demotion cause from openrouter %s key", keyType).LogError(ctx, logger)
+		}
+		keyAccessChanged = keyAccessChanged || change.KeyAccessChanged
+		if change.KeyAccessChanged {
+			reconcile = append(reconcile, keyType)
+		}
+	}
+
+	organization, err := trials.RestoreOrganizationFromTrial(ctx, trialsRepo.RestoreOrganizationFromTrialParams{OrganizationID: payload.ID, AccountType: rearmed.Tier})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "restore organization from trial").LogError(ctx, logger)
 	}
-
 	if err := productfeatures.SetTrialRuntimeFeaturesTx(ctx, tx, payload.ID, true); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "restore trial runtime features").LogError(ctx, logger)
 	}
 
 	actor, actorDisplayName, operatorEmail := adminActor(ctx)
 	if err := s.audit.LogOrganizationEnterpriseTrialRearmed(ctx, tx, audit.LogOrganizationEnterpriseTrialRearmedEvent{
-		OrganizationID:   payload.ID,
-		Actor:            actor,
-		ActorDisplayName: actorDisplayName,
-		ActorSlug:        nil,
-		OrganizationName: organization.Name,
-		OrganizationSlug: organization.Slug,
-		AccountType:      rearmed.Tier,
-		TrialEndsAt:      rearmed.EndsAt.Time,
+		OrganizationID: payload.ID, Actor: actor, ActorDisplayName: actorDisplayName, ActorSlug: nil,
+		OrganizationName: organization.Name, OrganizationSlug: organization.Slug, AccountType: rearmed.Tier,
+		TrialEndsAt: rearmed.EndsAt.Time, ArmAuditOperation: armOperationID.String(), KeyAccessChanged: keyAccessChanged,
 	}); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "log trial re-arm").LogError(ctx, logger)
 	}
@@ -1255,91 +1251,27 @@ func (s *Service) rearmTrialLocked(
 		return nil, oops.E(oops.CodeUnexpected, err, "commit trial re-arm").LogError(ctx, logger)
 	}
 
-	s.recapRevivedKeys(ctx, logger, lockedKeys, payload.ID, uncapped)
-	for _, feature := range productfeatures.TrialRuntimeFeatures {
-		s.productFeatures.UpdateFeatureCache(ctx, payload.ID, feature, true)
+	s.updateTrialFeatureCache(ctx, payload.ID)
+	if err := s.reconcileRearmedTrialKeys(ctx, logger, payload.ID, reconcile); err != nil {
+		return nil, err
 	}
-
-	// Speakeasy-only, and the only place the email meets the entry's subject.
-	logger.InfoContext(ctx, "re-armed enterprise trial",
-		attr.SlogAuthUserEmail(conv.PtrValOr(operatorEmail, "unknown")),
-	)
-
+	logger.InfoContext(ctx, "re-armed enterprise trial", attr.SlogAuthUserEmail(conv.PtrValOr(operatorEmail, "unknown")))
 	return s.readOrganizationAfterWrite(ctx, payload.ID, "fetch organization after trial re-arm")
 }
 
-// reviveTrialKeys brings every platform key the organization holds back up, and
-// returns the types revived at a pre-commit ceiling, for recapRevivedKeys.
-//
-// Shaped like openrouterkeys.EnableKey rather than the demotion's blind loop:
-// DisableAPIKey no-ops on a missing key row, RefreshAPIKeyLimit errors on one.
-//
-// The caller holds both per-key session locks through commit. Key revival uses
-// those locked sessions but stays outside the organization transaction, so a
-// later rollback leaves the org demoted with live keys instead of exposing an
-// admitted trial whose keys are still disabled.
-func (s *Service) reviveTrialKeys(ctx context.Context, logger *slog.Logger, lockedKeys map[openrouter.KeyType]*pgxpool.Conn, organizationID string) ([]openrouter.KeyType, error) {
-	var uncapped []openrouter.KeyType
-
-	for _, keyType := range openrouter.AllKeyTypes {
-		conn := lockedKeys[keyType]
-		if conn == nil {
-			return nil, oops.E(oops.CodeUnexpected, nil, "missing openrouter %s key lock", keyType).LogError(ctx, logger)
-		}
-		row, err := orrepo.New(conn).GetOpenRouterAPIKey(ctx, orrepo.GetOpenRouterAPIKeyParams{
-			OrganizationID: organizationID,
-			KeyType:        string(keyType),
-		})
-		switch {
-		case errors.Is(err, pgx.ErrNoRows):
-			continue
-		case err != nil:
-			return nil, oops.E(oops.CodeUnexpected, err, "read openrouter %s key", keyType).LogError(ctx, logger)
-		case !row.Disabled:
-			continue
-		}
-
-		// The ceiling recorded on the row, not the policy default: a trial
-		// key is minted well below that default. A zero resolves from the
-		// pre-commit free-tier projection and is corrected after commit.
-		if row.MonthlyCredits == 0 {
-			uncapped = append(uncapped, keyType)
-		}
-		limit := conv.PtrEmpty(int(row.MonthlyCredits))
-		_, err = s.openRouter.ReinstateAPIKeyLimitWithDB(ctx, conn, organizationID, keyType, limit)
-		switch {
-		case errors.Is(err, ErrOpenRouterUnavailable):
-			return nil, oops.E(oops.CodeInvalid, err, "this server cannot revive model provider keys: it is missing either the OpenRouter provisioning key or a usable encryption key. The server log says which at startup")
-		case err != nil:
-			return nil, oops.E(oops.CodeGatewayError, err, "revive openrouter %s key", keyType).LogError(ctx, logger)
-		}
+func (s *Service) updateTrialFeatureCache(ctx context.Context, organizationID string) {
+	for _, feature := range productfeatures.TrialRuntimeFeatures {
+		s.productFeatures.UpdateFeatureCache(ctx, organizationID, feature, true)
 	}
-
-	return uncapped, nil
 }
 
-// recapRevivedKeys puts the trial's own ceiling on the keys reviveTrialKeys
-// could only revive at the free-tier one. It must run after the commit, because
-// a nil limit resolves from the now-committed organization tier.
-//
-// A failure is logged and swallowed: the re-arm is already durable, so an error
-// here would report an armed trial as unarmed.
-func (s *Service) recapRevivedKeys(ctx context.Context, logger *slog.Logger, lockedKeys map[openrouter.KeyType]*pgxpool.Conn, organizationID string, keyTypes []openrouter.KeyType) {
+func (s *Service) reconcileRearmedTrialKeys(ctx context.Context, logger *slog.Logger, organizationID string, keyTypes []openrouter.KeyType) error {
 	for _, keyType := range keyTypes {
-		conn := lockedKeys[keyType]
-		if conn == nil {
-			logger.ErrorContext(ctx, "re-armed trial key kept the free-tier allowance: missing key lock",
-				attr.SlogOpenRouterKeyType(string(keyType)),
-			)
-			continue
-		}
-		if _, err := s.openRouter.ReinstateAPIKeyLimitWithDB(ctx, conn, organizationID, keyType, nil); err != nil {
-			logger.ErrorContext(ctx, "re-armed trial key kept the free-tier allowance: refresh it from the platform admin key page",
-				attr.SlogError(err),
-				attr.SlogOpenRouterKeyType(string(keyType)),
-			)
+		if err := s.openRouter.ReconcileAPIKeyDisabled(ctx, organizationID, keyType); err != nil {
+			return oops.E(oops.CodeGatewayError, err, "reconcile openrouter %s key after trial re-arm", keyType).LogError(ctx, logger)
 		}
 	}
+	return nil
 }
 
 // adminActor identifies the operator behind an admin-app write. An admin session

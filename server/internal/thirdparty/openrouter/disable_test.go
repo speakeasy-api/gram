@@ -416,8 +416,8 @@ func TestDisableAPIKey_IsIdempotent(t *testing.T) {
 	require.True(t, row.Disabled)
 }
 
-// An organization that never provisioned a key of this type has nothing to
-// lock down, and the sweeper must not fail on it.
+// A missing key is already effectively disabled, so disabling it is a no-op
+// and must not issue an upstream mutation.
 func TestDisableAPIKey_NoKeyIsNoop(t *testing.T) {
 	t.Parallel()
 
@@ -429,8 +429,8 @@ func TestDisableAPIKey_NoKeyIsNoop(t *testing.T) {
 	require.Empty(t, upstream.recorded())
 }
 
-// Sales reinstate a demoted organization by raising its limit, so the refresh
-// path has to clear the flag on both sides.
+// Refreshing a classified key updates its limit without discarding the causes
+// that still determine whether it is disabled.
 func TestRefreshAPIKeyLimit_PreservesClassifiedDisableCauses(t *testing.T) {
 	t.Parallel()
 

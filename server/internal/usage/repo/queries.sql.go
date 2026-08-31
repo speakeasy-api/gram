@@ -30,6 +30,22 @@ func (q *Queries) AcquireOpenRouterBillingLock(ctx context.Context, arg AcquireO
 	return err
 }
 
+const acquireOpenRouterBillingSessionLock = `-- name: AcquireOpenRouterBillingSessionLock :exec
+SELECT pg_advisory_lock(
+    hashtextextended('openrouter-' || $1::text || '-billing:' || $2::text, 0)
+)
+`
+
+type AcquireOpenRouterBillingSessionLockParams struct {
+	KeyType        string
+	OrganizationID string
+}
+
+func (q *Queries) AcquireOpenRouterBillingSessionLock(ctx context.Context, arg AcquireOpenRouterBillingSessionLockParams) error {
+	_, err := q.db.Exec(ctx, acquireOpenRouterBillingSessionLock, arg.KeyType, arg.OrganizationID)
+	return err
+}
+
 const acquireStripeSubscriptionActivationLock = `-- name: AcquireStripeSubscriptionActivationLock :exec
 SELECT pg_advisory_xact_lock(hashtextextended($1, 0))
 `
@@ -964,6 +980,46 @@ func (q *Queries) GetPaygInvoiceIdentity(ctx context.Context, organizationID str
 	return i, err
 }
 
+const getPaygOpenRouterChatLifecycleProjection = `-- name: GetPaygOpenRouterChatLifecycleProjection :one
+SELECT
+    organization_metadata.gram_account_type
+  , billing_metadata.stripe_subscription_id
+FROM organization_metadata
+LEFT JOIN billing_metadata
+  ON billing_metadata.organization_id = organization_metadata.id
+WHERE organization_metadata.id = $1
+`
+
+type GetPaygOpenRouterChatLifecycleProjectionRow struct {
+	GramAccountType      string
+	StripeSubscriptionID pgtype.Text
+}
+
+func (q *Queries) GetPaygOpenRouterChatLifecycleProjection(ctx context.Context, organizationID string) (GetPaygOpenRouterChatLifecycleProjectionRow, error) {
+	row := q.db.QueryRow(ctx, getPaygOpenRouterChatLifecycleProjection, organizationID)
+	var i GetPaygOpenRouterChatLifecycleProjectionRow
+	err := row.Scan(&i.GramAccountType, &i.StripeSubscriptionID)
+	return i, err
+}
+
+const getStripeWebhookReceipt = `-- name: GetStripeWebhookReceipt :one
+SELECT organization_id, event_type
+FROM stripe_webhook_receipts
+WHERE stripe_event_id = $1
+`
+
+type GetStripeWebhookReceiptRow struct {
+	OrganizationID string
+	EventType      string
+}
+
+func (q *Queries) GetStripeWebhookReceipt(ctx context.Context, stripeEventID string) (GetStripeWebhookReceiptRow, error) {
+	row := q.db.QueryRow(ctx, getStripeWebhookReceipt, stripeEventID)
+	var i GetStripeWebhookReceiptRow
+	err := row.Scan(&i.OrganizationID, &i.EventType)
+	return i, err
+}
+
 const getTUMMeterReportTotals = `-- name: GetTUMMeterReportTotals :one
 SELECT
     COALESCE(SUM(delta_tokens) FILTER (WHERE delivery_state = 'confirmed'), 0)::bigint AS confirmed_tokens
@@ -1839,6 +1895,65 @@ func (q *Queries) PrepareStripeCheckoutIntent(ctx context.Context, arg PrepareSt
 	return i, err
 }
 
+const recoverPaygOpenRouterChatKey = `-- name: RecoverPaygOpenRouterChatKey :execrows
+UPDATE openrouter_api_keys
+SET disable_causes = ARRAY(
+      SELECT cause
+      FROM unnest(array_remove(disable_causes, 'billing_inactive')) AS causes(cause)
+      GROUP BY cause
+      ORDER BY CASE cause
+        WHEN 'admin_lock' THEN 1
+        WHEN 'trial_demotion' THEN 2
+        WHEN 'billing_inactive' THEN 3
+        ELSE 4
+      END, cause
+    ),
+    disabled = cardinality(array_remove(disable_causes, 'billing_inactive')) > 0,
+    monthly_credits = $1,
+    updated_at = CASE
+      WHEN 'billing_inactive' = ANY(disable_causes) OR monthly_credits != $1
+        THEN GREATEST(clock_timestamp(), updated_at + INTERVAL '1 microsecond')
+      ELSE updated_at
+    END
+WHERE organization_id = $2
+  AND key_type = 'chat'
+  AND key_hash = $3
+  AND disable_causes IS NOT NULL
+  AND deleted IS FALSE
+`
+
+type RecoverPaygOpenRouterChatKeyParams struct {
+	MonthlyCredits int64
+	OrganizationID string
+	KeyHash        string
+}
+
+func (q *Queries) RecoverPaygOpenRouterChatKey(ctx context.Context, arg RecoverPaygOpenRouterChatKeyParams) (int64, error) {
+	result, err := q.db.Exec(ctx, recoverPaygOpenRouterChatKey, arg.MonthlyCredits, arg.OrganizationID, arg.KeyHash)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const releaseOpenRouterBillingSessionLock = `-- name: ReleaseOpenRouterBillingSessionLock :one
+SELECT pg_advisory_unlock(
+    hashtextextended('openrouter-' || $1::text || '-billing:' || $2::text, 0)
+) AS unlocked
+`
+
+type ReleaseOpenRouterBillingSessionLockParams struct {
+	KeyType        string
+	OrganizationID string
+}
+
+func (q *Queries) ReleaseOpenRouterBillingSessionLock(ctx context.Context, arg ReleaseOpenRouterBillingSessionLockParams) (bool, error) {
+	row := q.db.QueryRow(ctx, releaseOpenRouterBillingSessionLock, arg.KeyType, arg.OrganizationID)
+	var unlocked bool
+	err := row.Scan(&unlocked)
+	return unlocked, err
+}
+
 const setOpenRouterAPIKeyCreatedAtFixture = `-- name: SetOpenRouterAPIKeyCreatedAtFixture :exec
 UPDATE openrouter_api_keys
 SET created_at = $1
@@ -1948,21 +2063,6 @@ func (q *Queries) StoreStripeCustomer(ctx context.Context, arg StoreStripeCustom
 		&i.UpdatedAt,
 	)
 	return i, err
-}
-
-const stripeWebhookReceiptExists = `-- name: StripeWebhookReceiptExists :one
-SELECT EXISTS (
-    SELECT 1
-    FROM stripe_webhook_receipts
-    WHERE stripe_event_id = $1
-) AS received
-`
-
-func (q *Queries) StripeWebhookReceiptExists(ctx context.Context, stripeEventID string) (bool, error) {
-	row := q.db.QueryRow(ctx, stripeWebhookReceiptExists, stripeEventID)
-	var received bool
-	err := row.Scan(&received)
-	return received, err
 }
 
 const tryInsertStripeWebhookReceipt = `-- name: TryInsertStripeWebhookReceipt :one

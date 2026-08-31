@@ -54,6 +54,10 @@ func (o *Development) RemoveAPIKeyDisableCauseWithDB(context.Context, DBTX, stri
 	return 0, unchangedDisableCauseChange(), nil
 }
 
+func (o *Development) ReconcileAPIKeyDisabled(context.Context, string, KeyType) error {
+	return nil
+}
+
 func (o *Development) DisableAPIKey(ctx context.Context, orgID string, keyType KeyType) error {
 	return nil
 }

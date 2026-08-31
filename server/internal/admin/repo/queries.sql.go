@@ -158,6 +158,64 @@ func (q *Queries) AdminEnableOrganization(ctx context.Context, id string) (int64
 	return result.RowsAffected(), nil
 }
 
+const adminGetEnterpriseTrialRetryOperationIDs = `-- name: AdminGetEnterpriseTrialRetryOperationIDs :one
+WITH latest_arm AS (
+    SELECT armed.id, armed.seq
+    FROM audit_logs AS armed
+    WHERE armed.organization_id = $1
+      AND armed.project_id IS NULL
+      AND armed.action = 'organization:enterprise_trial_armed'
+      AND armed.subject_id = $1
+      AND armed.subject_type = 'organization'
+    ORDER BY armed.seq DESC, armed.id DESC
+    LIMIT 1
+), latest_demotion AS (
+    SELECT demoted.id, demoted.seq
+    FROM audit_logs AS demoted
+    JOIN latest_arm ON (demoted.seq, demoted.id) > (latest_arm.seq, latest_arm.id)
+    WHERE demoted.organization_id = $1
+      AND demoted.project_id IS NULL
+      AND demoted.action = 'organization:enterprise_trial_demoted'
+      AND demoted.subject_id = $1
+      AND demoted.subject_type = 'organization'
+    ORDER BY demoted.seq DESC, demoted.id DESC
+    LIMIT 1
+), current_rearms AS (
+    SELECT rearmed.id, rearmed.seq, rearmed.metadata->>'arm_operation_id' AS arm_operation_id
+    FROM audit_logs AS rearmed
+    JOIN latest_demotion ON (rearmed.seq, rearmed.id) > (latest_demotion.seq, latest_demotion.id)
+    WHERE rearmed.organization_id = $1
+      AND rearmed.project_id IS NULL
+      AND rearmed.action = 'organization:enterprise_trial_rearmed'
+      AND rearmed.subject_id = $1
+      AND rearmed.subject_type = 'organization'
+)
+SELECT
+    COALESCE((SELECT id::text FROM latest_arm), '')::text AS arm_operation_id,
+    COALESCE((SELECT arm_operation_id FROM current_rearms ORDER BY seq DESC, id DESC LIMIT 1), '')::text AS rearm_arm_operation_id,
+    (
+        SELECT count(*)
+        FROM current_rearms
+        JOIN latest_arm ON current_rearms.arm_operation_id = latest_arm.id::text
+    )::bigint AS matching_rearm_count
+`
+
+type AdminGetEnterpriseTrialRetryOperationIDsRow struct {
+	ArmOperationID      string
+	RearmArmOperationID string
+	MatchingRearmCount  int64
+}
+
+// The arm audit id is the immutable generation token. Every production trial
+// creation writes exactly one arm audit in the creation transaction; extension
+// writes neither. seq orders generations; id breaks any equal-seq tie.
+func (q *Queries) AdminGetEnterpriseTrialRetryOperationIDs(ctx context.Context, targetOrganizationID string) (AdminGetEnterpriseTrialRetryOperationIDsRow, error) {
+	row := q.db.QueryRow(ctx, adminGetEnterpriseTrialRetryOperationIDs, targetOrganizationID)
+	var i AdminGetEnterpriseTrialRetryOperationIDsRow
+	err := row.Scan(&i.ArmOperationID, &i.RearmArmOperationID, &i.MatchingRearmCount)
+	return i, err
+}
+
 const adminGetOrganization = `-- name: AdminGetOrganization :one
 SELECT
     om.id,
