@@ -2992,11 +2992,12 @@ func prepareMessages(ctx context.Context, logger *slog.Logger, assetStorage asse
 				ContentHash:      nil,
 				Generation:       row.generation,
 			},
-			UserEmail:    row.userEmail,
-			Provider:     "",
-			HookHostname: "",
-			AccountType:  "",
-			BillingMode:  "",
+			BillingUserID: row.userID,
+			UserEmail:     row.userEmail,
+			Provider:      "",
+			HookHostname:  "",
+			AccountType:   "",
+			BillingMode:   "",
 		}
 	}
 

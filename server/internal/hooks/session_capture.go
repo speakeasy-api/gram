@@ -375,12 +375,13 @@ func (s *Service) insertMessageWithFallbackUpsertResult(
 	}
 
 	write := chat.MessageWrite{
-		Params:       msgParams,
-		UserEmail:    metadata.UserEmail,
-		Provider:     metadata.Provider,
-		HookHostname: metadata.Hostname,
-		AccountType:  metadata.AccountType,
-		BillingMode:  metadata.BillingMode,
+		Params:        msgParams,
+		BillingUserID: metadata.UserID,
+		UserEmail:     metadata.UserEmail,
+		Provider:      metadata.Provider,
+		HookHostname:  metadata.Hostname,
+		AccountType:   metadata.AccountType,
+		BillingMode:   metadata.BillingMode,
 	}
 	writeMessage := func() (int64, error) {
 		if msgParams.MessageID.Valid && strings.HasPrefix(msgParams.MessageID.String, agentPromptCorrelationPrefix) {
@@ -545,12 +546,13 @@ func (s *Service) insertUncorrelatedAgentPrompt(
 		return false, fmt.Errorf("upsert claude code session: %w", err)
 	}
 	writes := []chat.MessageWrite{{
-		Params:       msgParams,
-		UserEmail:    metadata.UserEmail,
-		Provider:     metadata.Provider,
-		HookHostname: metadata.Hostname,
-		AccountType:  metadata.AccountType,
-		BillingMode:  metadata.BillingMode,
+		Params:        msgParams,
+		BillingUserID: metadata.UserID,
+		UserEmail:     metadata.UserEmail,
+		Provider:      metadata.Provider,
+		HookHostname:  metadata.Hostname,
+		AccountType:   metadata.AccountType,
+		BillingMode:   metadata.BillingMode,
 	}}
 	n, err := s.writer.WriteInTx(ctx, tx, writes)
 	if err != nil {

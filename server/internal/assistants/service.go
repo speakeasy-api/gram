@@ -3409,6 +3409,15 @@ func (s *ServiceCore) selfHealCorruptHistory(ctx context.Context, chatID uuid.UU
 		return fmt.Errorf("self-heal: chat writer not configured")
 	}
 
+	chatRow, err := chatrepo.New(s.db).GetChat(ctx, chatrepo.GetChatParams{
+		ID:        chatID,
+		ProjectID: projectID,
+	})
+	if err != nil {
+		return fmt.Errorf("self-heal: load chat: %w", err)
+	}
+	billingUserID := conv.FromPGTextOrEmpty[string](chatRow.UserID)
+
 	messages, err := chatrepo.New(s.db).ListLatestGenerationChatMessages(ctx, chatrepo.ListLatestGenerationChatMessagesParams{
 		ChatID:    chatID,
 		ProjectID: projectID,
@@ -3466,7 +3475,7 @@ func (s *ServiceCore) selfHealCorruptHistory(ctx context.Context, chatID uuid.UU
 	notice := base
 	notice.Content = fmt.Sprintf(selfHealRecoveryNoticeTemplate, len(userMessages), selfHealUserMessageMaxLen)
 	rows = append(rows, chat.MessageWrite{
-		Params: notice, UserEmail: "", Provider: "", HookHostname: "", AccountType: "", BillingMode: "",
+		Params: notice, BillingUserID: billingUserID, UserEmail: "", Provider: "", HookHostname: "", AccountType: "", BillingMode: "",
 	})
 	for _, m := range userMessages {
 		row := base
@@ -3474,7 +3483,7 @@ func (s *ServiceCore) selfHealCorruptHistory(ctx context.Context, chatID uuid.UU
 		row.UserID = m.UserID
 		row.ExternalUserID = m.ExternalUserID
 		rows = append(rows, chat.MessageWrite{
-			Params: row, UserEmail: "", Provider: "", HookHostname: "", AccountType: "", BillingMode: "",
+			Params: row, BillingUserID: billingUserID, UserEmail: "", Provider: "", HookHostname: "", AccountType: "", BillingMode: "",
 		})
 	}
 

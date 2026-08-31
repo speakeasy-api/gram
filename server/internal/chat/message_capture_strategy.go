@@ -429,8 +429,9 @@ func buildAssistantRows(
 	only.TotalTokens = totalTokens
 
 	return []MessageWrite{{
-		Params:    only,
-		UserEmail: request.UserEmail,
+		Params:        only,
+		BillingUserID: request.UserID,
+		UserEmail:     request.UserEmail,
 		// The completion payload does not report a provider; model names are not provider identity.
 		Provider:     "",
 		HookHostname: "",

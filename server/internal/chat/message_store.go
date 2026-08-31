@@ -36,6 +36,9 @@ type MessageWrite struct {
 	// Params contains the SQLc parameters persisted for the message.
 	Params repo.CreateChatMessageParams
 
+	// BillingUserID is the Gram user to whom this feature explicitly allocates usage.
+	BillingUserID string
+
 	// UserEmail is the email explicitly observed for the message actor.
 	UserEmail string
 
@@ -56,6 +59,9 @@ type MessageWrite struct {
 type ExternalMessageWrite struct {
 	// Params contains the SQLc parameters persisted for the imported message.
 	Params repo.CreateExternalChatMessageParams
+
+	// BillingUserID is the Gram user to whom this import explicitly allocates usage.
+	BillingUserID string
 
 	// UserEmail is the email explicitly observed for the imported message actor.
 	UserEmail string
@@ -265,6 +271,7 @@ type meterMessageInput struct {
 	hookHostname          string
 	accountType           string
 	billingMode           string
+	billingUserID         string
 	messageUserID         pgtype.Text
 	messageExternalUserID pgtype.Text
 	messageUserEmail      string
@@ -310,6 +317,7 @@ func (w *ChatMessageWriter) meterMessage(ctx context.Context, input meterMessage
 	setReadingAttribute(&attributes, metering.AttributeHookHostname, input.hookHostname)
 	setReadingAttribute(&attributes, metering.AttributeAccountType, input.accountType)
 	setReadingAttribute(&attributes, metering.AttributeBillingMode, input.billingMode)
+	setReadingAttribute(&attributes, metering.AttributeBillingUserID, input.billingUserID)
 	if input.messageUserID.Valid {
 		setReadingAttribute(&attributes, metering.AttributeMessageUserID, input.messageUserID.String)
 	}
@@ -363,6 +371,7 @@ func (w *ChatMessageWriter) meterMessages(
 			hookHostname:          write.HookHostname,
 			accountType:           write.AccountType,
 			billingMode:           write.BillingMode,
+			billingUserID:         write.BillingUserID,
 			messageUserID:         param.UserID,
 			messageExternalUserID: param.ExternalUserID,
 			messageUserEmail:      write.UserEmail,
@@ -611,6 +620,7 @@ func (w *ChatMessageWriter) WriteExternal(ctx context.Context, projectID uuid.UU
 			hookHostname:          write.HookHostname,
 			accountType:           write.AccountType,
 			billingMode:           write.BillingMode,
+			billingUserID:         write.BillingUserID,
 			messageUserID:         param.UserID,
 			messageExternalUserID: param.ExternalUserID,
 			messageUserEmail:      write.UserEmail,

@@ -57,6 +57,7 @@ func TestChatMessageWriterMetersStoredTextAndToolCalls(t *testing.T) {
 
 	toolCalls := []byte(`[{"function":{"name":"lookup","arguments":"{\"city\":\"Paris\"}"}}]`)
 	messageUserID := uuid.NewString()
+	billingUserID := uuid.NewString()
 	writes := []chat.MessageWrite{{
 		Params: repo.CreateChatMessageParams{
 			ID:               uuid.Nil,
@@ -86,11 +87,12 @@ func TestChatMessageWriterMetersStoredTextAndToolCalls(t *testing.T) {
 			Replayed:         false,
 			CreatedAt:        pgtype.Timestamptz{},
 		},
-		UserEmail:    "reported@example.test",
-		Provider:     "openai",
-		HookHostname: "workstation.example.test",
-		AccountType:  "team",
-		BillingMode:  "metered",
+		BillingUserID: billingUserID,
+		UserEmail:     "reported@example.test",
+		Provider:      "openai",
+		HookHostname:  "workstation.example.test",
+		AccountType:   "team",
+		BillingMode:   "metered",
 	}}
 	written, err := writer.Write(ctx, ti.projectID, writes)
 	require.NoError(t, err)
@@ -112,6 +114,7 @@ func TestChatMessageWriterMetersStoredTextAndToolCalls(t *testing.T) {
 		metering.AttributeHookHostname:          "workstation.example.test",
 		metering.AttributeAccountType:           "team",
 		metering.AttributeBillingMode:           "metered",
+		metering.AttributeBillingUserID:         billingUserID,
 		metering.AttributeMessageUserID:         messageUserID,
 		metering.AttributeMessageExternalUserID: "provider-user-123",
 		metering.AttributeMessageUserEmail:      "reported@example.test",
@@ -133,6 +136,7 @@ func TestChatMessageWriterMetersExternalMessageOnceAtStorageTime(t *testing.T) {
 	t.Cleanup(func() { _ = shutdown(context.WithoutCancel(t.Context())) })
 
 	historical := time.Date(2024, time.January, 2, 3, 4, 5, 0, time.UTC)
+	billingUserID := uuid.NewString()
 	param := chat.ExternalMessageWrite{
 		Params: repo.CreateExternalChatMessageParams{
 			ID:                uuid.Nil,
@@ -162,11 +166,12 @@ func TestChatMessageWriterMetersExternalMessageOnceAtStorageTime(t *testing.T) {
 			Generation:        0,
 			CreatedAt:         conv.ToPGTimestamptz(historical),
 		},
-		UserEmail:    "imported@example.test",
-		Provider:     "openai",
-		HookHostname: "",
-		AccountType:  "team",
-		BillingMode:  "flat_rate",
+		BillingUserID: billingUserID,
+		UserEmail:     "imported@example.test",
+		Provider:      "openai",
+		HookHostname:  "",
+		AccountType:   "team",
+		BillingMode:   "flat_rate",
 	}
 	before := time.Now().UTC()
 	written, err := writer.WriteExternal(ctx, ti.projectID, []chat.ExternalMessageWrite{param})
@@ -189,6 +194,7 @@ func TestChatMessageWriterMetersExternalMessageOnceAtStorageTime(t *testing.T) {
 		metering.AttributeHookSource:            "chatgpt",
 		metering.AttributeAccountType:           "team",
 		metering.AttributeBillingMode:           "flat_rate",
+		metering.AttributeBillingUserID:         billingUserID,
 		metering.AttributeMessageExternalUserID: "opaque-provider-user-456",
 		metering.AttributeMessageUserEmail:      "imported@example.test",
 	}, message.GetAttributes())
@@ -295,6 +301,7 @@ func TestChatMessageWriterUpdatesCorrelatedPromotionReading(t *testing.T) {
 	chatID := seedChat(t, ctx, ti, "u", "", "metered correlated message")
 	writer, shutdown := chat.NewChatMessageWriter(testenv.NewLogger(t), ti.conn, assetstest.NewTestBlobStore(t))
 	t.Cleanup(func() { _ = shutdown(context.WithoutCancel(t.Context())) })
+	billingUserID := uuid.NewString()
 
 	base := repo.CreateChatMessageParams{
 		ID:               uuid.Nil,
@@ -325,12 +332,13 @@ func TestChatMessageWriterUpdatesCorrelatedPromotionReading(t *testing.T) {
 		CreatedAt:        pgtype.Timestamptz{},
 	}
 	written, err := writer.WriteCorrelated(ctx, ti.projectID, chat.MessageWrite{
-		Params:       base,
-		UserEmail:    "proxy-observed@example.test",
-		Provider:     "openai",
-		HookHostname: "",
-		AccountType:  "",
-		BillingMode:  "",
+		Params:        base,
+		BillingUserID: billingUserID,
+		UserEmail:     "proxy-observed@example.test",
+		Provider:      "openai",
+		HookHostname:  "",
+		AccountType:   "",
+		BillingMode:   "",
 	}, base.MessageID.String)
 	require.NoError(t, err)
 	require.Equal(t, int64(1), written)
@@ -342,12 +350,13 @@ func TestChatMessageWriterUpdatesCorrelatedPromotionReading(t *testing.T) {
 	promoted.Content = "Native hook content must not replace the persisted correlated prompt when metering"
 	promoted.Source = conv.ToPGText("codex")
 	written, err = writer.WriteCorrelated(ctx, ti.projectID, chat.MessageWrite{
-		Params:       promoted,
-		UserEmail:    "native-observed@example.test",
-		Provider:     "openai",
-		HookHostname: "workstation.example.test",
-		AccountType:  "team",
-		BillingMode:  "metered",
+		Params:        promoted,
+		BillingUserID: billingUserID,
+		UserEmail:     "native-observed@example.test",
+		Provider:      "openai",
+		HookHostname:  "workstation.example.test",
+		AccountType:   "team",
+		BillingMode:   "metered",
 	}, promoted.MessageID.String)
 	require.NoError(t, err)
 	require.Equal(t, int64(1), written)
@@ -370,6 +379,7 @@ func TestChatMessageWriterUpdatesCorrelatedPromotionReading(t *testing.T) {
 		metering.AttributeHookHostname:     "workstation.example.test",
 		metering.AttributeAccountType:      "team",
 		metering.AttributeBillingMode:      "metered",
+		metering.AttributeBillingUserID:    billingUserID,
 		metering.AttributeMessageUserEmail: "native-observed@example.test",
 	}, readings[1].GetAttributes())
 }

@@ -7,78 +7,30 @@ package repo
 
 import (
 	"context"
-
-	"github.com/google/uuid"
 )
 
-const resolveAgentSessionStorageAttributes = `-- name: ResolveAgentSessionStorageAttributes :many
+const resolveBillingUserAttributes = `-- name: ResolveBillingUserAttributes :many
 WITH inputs AS (
   SELECT
       input.ordinality
     , input.organization_id
-    , ($1::uuid[])[input.ordinality] AS project_id
-    , ($2::uuid[])[input.ordinality] AS chat_id
-    , NULLIF(($3::text[])[input.ordinality], '') AS message_user_id
-  FROM UNNEST($4::text[]) WITH ORDINALITY AS input(organization_id, ordinality)
-), scoped_chats AS (
-  SELECT
-      i.ordinality
-    , i.organization_id
-    , i.project_id
-    , i.chat_id
-    , i.message_user_id
-    , c.user_id AS chat_owner_user_id
-    , c.external_user_id AS chat_owner_external_user_id
-  FROM inputs i
-  INNER JOIN projects p
-    ON p.id = i.project_id
-    AND p.organization_id = i.organization_id
-    AND p.deleted IS FALSE
-  INNER JOIN chats c
-    ON c.id = i.chat_id
-    AND c.project_id = i.project_id
-    AND c.organization_id = i.organization_id
-    AND c.deleted IS FALSE
-), principal_refs AS (
-  SELECT
-      scoped.ordinality, scoped.organization_id, scoped.project_id, scoped.chat_id, scoped.message_user_id, scoped.chat_owner_user_id, scoped.chat_owner_external_user_id
-    , 'message_user'::text AS principal_kind
-    , scoped.message_user_id AS principal_user_id
-  FROM scoped_chats scoped
-  UNION ALL
-  SELECT
-      scoped.ordinality, scoped.organization_id, scoped.project_id, scoped.chat_id, scoped.message_user_id, scoped.chat_owner_user_id, scoped.chat_owner_external_user_id
-    , 'chat_owner'::text AS principal_kind
-    , scoped.chat_owner_user_id AS principal_user_id
-  FROM scoped_chats scoped
+    , ($1::text[])[input.ordinality] AS billing_user_id
+  FROM UNNEST($2::text[]) WITH ORDINALITY AS input(organization_id, ordinality)
 )
 SELECT
-    refs.ordinality::bigint AS ordinality
-  , refs.organization_id::text AS organization_id
-  , refs.project_id::uuid AS project_id
-  , refs.chat_id::uuid AS chat_id
-  , COALESCE(refs.message_user_id, '')::text AS message_user_id
-  , COALESCE(MAX(identity.account_email) FILTER (WHERE refs.principal_kind = 'message_user'), '')::text AS message_user_account_email
-  , COALESCE(MAX(identity.division_name) FILTER (WHERE refs.principal_kind = 'message_user'), '')::text AS message_user_division_name
-  , COALESCE(MAX(identity.department_name) FILTER (WHERE refs.principal_kind = 'message_user'), '')::text AS message_user_department_name
-  , COALESCE(MAX(identity.job_title) FILTER (WHERE refs.principal_kind = 'message_user'), '')::text AS message_user_job_title
-  , COALESCE(MAX(identity.employee_type) FILTER (WHERE refs.principal_kind = 'message_user'), '')::text AS message_user_employee_type
-  , COALESCE(MAX(identity.cost_center_name) FILTER (WHERE refs.principal_kind = 'message_user'), '')::text AS message_user_cost_center_name
-  , COALESCE(MAX(identity.group_names::text) FILTER (WHERE refs.principal_kind = 'message_user'), '{}')::text[] AS message_user_group_names
-  , COALESCE(MAX(identity.directory_match) FILTER (WHERE refs.principal_kind = 'message_user'), '')::text AS message_user_directory_match
-  , COALESCE(MAX(identity.role_slugs::text) FILTER (WHERE refs.principal_kind = 'message_user'), '{}')::text[] AS message_user_role_slugs
-  , COALESCE(refs.chat_owner_user_id, '')::text AS chat_owner_user_id
-  , COALESCE(refs.chat_owner_external_user_id, '')::text AS chat_owner_external_user_id
-  , COALESCE(MAX(identity.account_email) FILTER (WHERE refs.principal_kind = 'chat_owner'), '')::text AS chat_owner_user_email
-  , COALESCE(MAX(identity.division_name) FILTER (WHERE refs.principal_kind = 'chat_owner'), '')::text AS chat_owner_division_name
-  , COALESCE(MAX(identity.department_name) FILTER (WHERE refs.principal_kind = 'chat_owner'), '')::text AS chat_owner_department_name
-  , COALESCE(MAX(identity.job_title) FILTER (WHERE refs.principal_kind = 'chat_owner'), '')::text AS chat_owner_job_title
-  , COALESCE(MAX(identity.employee_type) FILTER (WHERE refs.principal_kind = 'chat_owner'), '')::text AS chat_owner_employee_type
-  , COALESCE(MAX(identity.cost_center_name) FILTER (WHERE refs.principal_kind = 'chat_owner'), '')::text AS chat_owner_cost_center_name
-  , COALESCE(MAX(identity.group_names::text) FILTER (WHERE refs.principal_kind = 'chat_owner'), '{}')::text[] AS chat_owner_group_names
-  , COALESCE(MAX(identity.directory_match) FILTER (WHERE refs.principal_kind = 'chat_owner'), '')::text AS chat_owner_directory_match
-  , COALESCE(MAX(identity.role_slugs::text) FILTER (WHERE refs.principal_kind = 'chat_owner'), '{}')::text[] AS chat_owner_role_slugs
-FROM principal_refs refs
+    input.ordinality::bigint AS ordinality
+  , input.organization_id::text AS organization_id
+  , input.billing_user_id::text AS billing_user_id
+  , COALESCE(identity.account_email, '')::text AS billing_user_account_email
+  , COALESCE(identity.division_name, '')::text AS billing_user_division_name
+  , COALESCE(identity.department_name, '')::text AS billing_user_department_name
+  , COALESCE(identity.job_title, '')::text AS billing_user_job_title
+  , COALESCE(identity.employee_type, '')::text AS billing_user_employee_type
+  , COALESCE(identity.cost_center_name, '')::text AS billing_user_cost_center_name
+  , COALESCE(identity.group_names, '{}')::text[] AS billing_user_group_names
+  , COALESCE(identity.directory_match, '')::text AS billing_user_directory_match
+  , COALESCE(identity.role_slugs, '{}')::text[] AS billing_user_role_slugs
+FROM inputs input
 LEFT JOIN LATERAL (
   SELECT
       u.email AS account_email
@@ -105,7 +57,7 @@ LEFT JOIN LATERAL (
         , d.updated_at
         , d.id
       FROM directory_users d
-      WHERE d.organization_id = refs.organization_id
+      WHERE d.organization_id = input.organization_id
         AND d.user_id = u.id
         AND d.user_id IS NOT NULL
         AND d.deleted IS FALSE
@@ -126,7 +78,7 @@ LEFT JOIN LATERAL (
           , d.id
           , COUNT(*) OVER () AS candidate_count
         FROM directory_users d
-        WHERE d.organization_id = refs.organization_id
+        WHERE d.organization_id = input.organization_id
           AND LOWER(d.email) = LOWER(u.email)
           AND d.user_id IS NULL
           AND d.deleted IS FALSE
@@ -142,7 +94,7 @@ LEFT JOIN LATERAL (
     FROM directory_user_group_memberships membership
     INNER JOIN directory_groups dg
       ON dg.id = membership.directory_group_id
-      AND dg.organization_id = refs.organization_id
+      AND dg.organization_id = input.organization_id
       AND dg.deleted IS FALSE
       AND dg.workos_deleted IS FALSE
     WHERE membership.directory_user_id = directory_user.id
@@ -155,21 +107,21 @@ LEFT JOIN LATERAL (
       FROM (
         SELECT assignment.role_urn
         FROM organization_role_assignments assignment
-        WHERE assignment.organization_id = refs.organization_id
+        WHERE assignment.organization_id = input.organization_id
           AND assignment.user_id = u.id
           AND assignment.user_id IS NOT NULL
           AND assignment.deleted_at IS NULL
         UNION
         SELECT assignment.role_urn
         FROM organization_role_assignments assignment
-        WHERE assignment.organization_id = refs.organization_id
+        WHERE assignment.organization_id = input.organization_id
           AND u.workos_id IS NOT NULL
           AND assignment.workos_user_id = u.workos_id
           AND assignment.deleted_at IS NULL
       ) assignment
       LEFT JOIN organization_roles organization_role
         ON assignment.role_urn = 'role:organization:' || organization_role.id::text
-        AND organization_role.organization_id = refs.organization_id
+        AND organization_role.organization_id = input.organization_id
         AND organization_role.deleted IS FALSE
         AND organization_role.workos_deleted IS FALSE
       LEFT JOIN global_roles global_role
@@ -179,102 +131,61 @@ LEFT JOIN LATERAL (
     ) active_role
     WHERE active_role.role_slug IS NOT NULL
   ) role_slugs ON TRUE
-  WHERE membership.organization_id = refs.organization_id
-    AND membership.user_id = refs.principal_user_id
+  WHERE membership.organization_id = input.organization_id
+    AND membership.user_id = input.billing_user_id
     AND membership.deleted IS FALSE
 ) identity ON TRUE
-GROUP BY
-    refs.ordinality
-  , refs.organization_id
-  , refs.project_id
-  , refs.chat_id
-  , refs.message_user_id
-  , refs.chat_owner_user_id
-  , refs.chat_owner_external_user_id
-ORDER BY refs.ordinality
+ORDER BY input.ordinality
 `
 
-type ResolveAgentSessionStorageAttributesParams struct {
-	ProjectIds      []uuid.UUID
-	ChatIds         []uuid.UUID
-	MessageUserIds  []string
+type ResolveBillingUserAttributesParams struct {
+	BillingUserIds  []string
 	OrganizationIds []string
 }
 
-type ResolveAgentSessionStorageAttributesRow struct {
+type ResolveBillingUserAttributesRow struct {
 	Ordinality                int64
 	OrganizationID            string
-	ProjectID                 uuid.UUID
-	ChatID                    uuid.UUID
-	MessageUserID             string
-	MessageUserAccountEmail   string
-	MessageUserDivisionName   string
-	MessageUserDepartmentName string
-	MessageUserJobTitle       string
-	MessageUserEmployeeType   string
-	MessageUserCostCenterName string
-	MessageUserGroupNames     []string
-	MessageUserDirectoryMatch string
-	MessageUserRoleSlugs      []string
-	ChatOwnerUserID           string
-	ChatOwnerExternalUserID   string
-	ChatOwnerUserEmail        string
-	ChatOwnerDivisionName     string
-	ChatOwnerDepartmentName   string
-	ChatOwnerJobTitle         string
-	ChatOwnerEmployeeType     string
-	ChatOwnerCostCenterName   string
-	ChatOwnerGroupNames       []string
-	ChatOwnerDirectoryMatch   string
-	ChatOwnerRoleSlugs        []string
+	BillingUserID             string
+	BillingUserAccountEmail   string
+	BillingUserDivisionName   string
+	BillingUserDepartmentName string
+	BillingUserJobTitle       string
+	BillingUserEmployeeType   string
+	BillingUserCostCenterName string
+	BillingUserGroupNames     []string
+	BillingUserDirectoryMatch string
+	BillingUserRoleSlugs      []string
 }
 
 // PERFORMANCE NOTE: Any pull request that modifies this query must include query-performance
 // evidence in its description, including EXPLAIN (ANALYZE, BUFFERS) output at the configured
 // maximum subscriber batch size. Profile only against a local database seeded with
-// production-like counts for chats, users, directory profiles, groups, memberships, and roles;
+// production-like counts for users, directory profiles, groups, memberships, and roles;
 // include both direct-user and email-fallback matches. Run ANALYZE after seeding and warm the
 // query once before recording repeated measurements.
-func (q *Queries) ResolveAgentSessionStorageAttributes(ctx context.Context, arg ResolveAgentSessionStorageAttributesParams) ([]ResolveAgentSessionStorageAttributesRow, error) {
-	rows, err := q.db.Query(ctx, resolveAgentSessionStorageAttributes,
-		arg.ProjectIds,
-		arg.ChatIds,
-		arg.MessageUserIds,
-		arg.OrganizationIds,
-	)
+func (q *Queries) ResolveBillingUserAttributes(ctx context.Context, arg ResolveBillingUserAttributesParams) ([]ResolveBillingUserAttributesRow, error) {
+	rows, err := q.db.Query(ctx, resolveBillingUserAttributes, arg.BillingUserIds, arg.OrganizationIds)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []ResolveAgentSessionStorageAttributesRow
+	var items []ResolveBillingUserAttributesRow
 	for rows.Next() {
-		var i ResolveAgentSessionStorageAttributesRow
+		var i ResolveBillingUserAttributesRow
 		if err := rows.Scan(
 			&i.Ordinality,
 			&i.OrganizationID,
-			&i.ProjectID,
-			&i.ChatID,
-			&i.MessageUserID,
-			&i.MessageUserAccountEmail,
-			&i.MessageUserDivisionName,
-			&i.MessageUserDepartmentName,
-			&i.MessageUserJobTitle,
-			&i.MessageUserEmployeeType,
-			&i.MessageUserCostCenterName,
-			&i.MessageUserGroupNames,
-			&i.MessageUserDirectoryMatch,
-			&i.MessageUserRoleSlugs,
-			&i.ChatOwnerUserID,
-			&i.ChatOwnerExternalUserID,
-			&i.ChatOwnerUserEmail,
-			&i.ChatOwnerDivisionName,
-			&i.ChatOwnerDepartmentName,
-			&i.ChatOwnerJobTitle,
-			&i.ChatOwnerEmployeeType,
-			&i.ChatOwnerCostCenterName,
-			&i.ChatOwnerGroupNames,
-			&i.ChatOwnerDirectoryMatch,
-			&i.ChatOwnerRoleSlugs,
+			&i.BillingUserID,
+			&i.BillingUserAccountEmail,
+			&i.BillingUserDivisionName,
+			&i.BillingUserDepartmentName,
+			&i.BillingUserJobTitle,
+			&i.BillingUserEmployeeType,
+			&i.BillingUserCostCenterName,
+			&i.BillingUserGroupNames,
+			&i.BillingUserDirectoryMatch,
+			&i.BillingUserRoleSlugs,
 		); err != nil {
 			return nil, err
 		}

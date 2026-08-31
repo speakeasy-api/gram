@@ -165,11 +165,12 @@ func (s *ServiceCore) RecordCompactedGeneration(ctx context.Context, projectID, 
 				ContentHash:      nil,
 				Generation:       nextGen,
 			},
-			UserEmail:    "",
-			Provider:     "",
-			HookHostname: "",
-			AccountType:  chatRow.AccountType,
-			BillingMode:  "",
+			BillingUserID: conv.FromPGTextOrEmpty[string](chatRow.UserID),
+			UserEmail:     "",
+			Provider:      "",
+			HookHostname:  "",
+			AccountType:   chatRow.AccountType,
+			BillingMode:   "",
 		})
 	}
 

@@ -43,18 +43,8 @@ func TestChatStorageReadingPipelineToClickHouse(t *testing.T) {
 		CostCenterName: "Pipeline Message Cost Center",
 		Groups:         []string{"zeta-message-group", "alpha-message-group"},
 	}, true)
-	seedMeteringFacetUser(t, conn, organizationID, ownerUserID, "pipeline-owner-account@example.test", meteringDirectoryFacets{
-		DivisionName:   "Pipeline Owner Division",
-		DepartmentName: "Pipeline Owner Department",
-		JobTitle:       "Pipeline Owner Job",
-		EmployeeType:   "Pipeline Owner Employee Type",
-		CostCenterName: "Pipeline Owner Cost Center",
-		Groups:         []string{"zeta-owner-group", "alpha-owner-group"},
-	}, true)
 	seedMeteringRole(t, conn, organizationID, messageUserID, "zeta-pipeline", false)
 	seedMeteringRole(t, conn, organizationID, messageUserID, "alpha-pipeline", true)
-	seedMeteringRole(t, conn, organizationID, ownerUserID, "member-owner-pipeline", false)
-	seedMeteringRole(t, conn, organizationID, ownerUserID, "admin-owner-pipeline", true)
 
 	chatID := uuid.New()
 	_, err = chatrepo.New(conn).UpsertChat(ctx, chatrepo.UpsertChatParams{
@@ -98,11 +88,12 @@ func TestChatStorageReadingPipelineToClickHouse(t *testing.T) {
 			Replayed:         false,
 			CreatedAt:        pgtype.Timestamptz{},
 		},
-		UserEmail:    "pipeline-observed@example.test",
-		Provider:     "openai",
-		HookHostname: "pipeline-host.example.test",
-		AccountType:  "team",
-		BillingMode:  "metered",
+		BillingUserID: messageUserID,
+		UserEmail:     "pipeline-observed@example.test",
+		Provider:      "openai",
+		HookHostname:  "pipeline-host.example.test",
+		AccountType:   "team",
+		BillingMode:   "metered",
 	}}
 	written, err := writer.Write(ctx, project.ID, writes)
 	require.NoError(t, err)
@@ -133,6 +124,7 @@ func TestChatStorageReadingPipelineToClickHouse(t *testing.T) {
 		metering.AttributeHookHostname:          "pipeline-host.example.test",
 		metering.AttributeAccountType:           "team",
 		metering.AttributeBillingMode:           "metered",
+		metering.AttributeBillingUserID:         messageUserID,
 		metering.AttributeMessageUserID:         messageUserID,
 		metering.AttributeMessageExternalUserID: "pipeline-message-provider-id",
 		metering.AttributeMessageUserEmail:      "pipeline-observed@example.test",
@@ -186,26 +178,16 @@ func TestChatStorageReadingPipelineToClickHouse(t *testing.T) {
 		metering.AttributeMessageUserID:              messageUserID,
 		metering.AttributeMessageExternalUserID:      "pipeline-message-provider-id",
 		metering.AttributeMessageUserEmail:           "pipeline-observed@example.test",
-		metering.AttributeMessageUserAccountEmail:    "pipeline-message-account@example.test",
-		metering.AttributeMessageUserDivisionName:    "Pipeline Message Division",
-		metering.AttributeMessageUserDepartmentName:  "Pipeline Message Department",
-		metering.AttributeMessageUserJobTitle:        "Pipeline Message Job",
-		metering.AttributeMessageUserEmployeeType:    "Pipeline Message Employee Type",
-		metering.AttributeMessageUserCostCenterName:  "Pipeline Message Cost Center",
-		metering.AttributeMessageUserDirectoryGroups: `["alpha-message-group","zeta-message-group"]`,
-		metering.AttributeMessageUserDirectoryMatch:  "user_id",
-		metering.AttributeMessageUserRBACRoles:       `["alpha-pipeline","zeta-pipeline"]`,
-		metering.AttributeChatOwnerUserID:            ownerUserID,
-		metering.AttributeChatOwnerExternalUserID:    "pipeline-owner-provider-id",
-		metering.AttributeChatOwnerUserEmail:         "pipeline-owner-account@example.test",
-		metering.AttributeChatOwnerDivisionName:      "Pipeline Owner Division",
-		metering.AttributeChatOwnerDepartmentName:    "Pipeline Owner Department",
-		metering.AttributeChatOwnerJobTitle:          "Pipeline Owner Job",
-		metering.AttributeChatOwnerEmployeeType:      "Pipeline Owner Employee Type",
-		metering.AttributeChatOwnerCostCenterName:    "Pipeline Owner Cost Center",
-		metering.AttributeChatOwnerDirectoryGroups:   `["alpha-owner-group","zeta-owner-group"]`,
-		metering.AttributeChatOwnerDirectoryMatch:    "user_id",
-		metering.AttributeChatOwnerRBACRoles:         `["admin-owner-pipeline","member-owner-pipeline"]`,
+		metering.AttributeBillingUserID:              messageUserID,
+		metering.AttributeBillingUserAccountEmail:    "pipeline-message-account@example.test",
+		metering.AttributeBillingUserDivisionName:    "Pipeline Message Division",
+		metering.AttributeBillingUserDepartmentName:  "Pipeline Message Department",
+		metering.AttributeBillingUserJobTitle:        "Pipeline Message Job",
+		metering.AttributeBillingUserEmployeeType:    "Pipeline Message Employee Type",
+		metering.AttributeBillingUserCostCenterName:  "Pipeline Message Cost Center",
+		metering.AttributeBillingUserDirectoryGroups: `["alpha-message-group","zeta-message-group"]`,
+		metering.AttributeBillingUserDirectoryMatch:  "user_id",
+		metering.AttributeBillingUserRBACRoles:       `["alpha-pipeline","zeta-pipeline"]`,
 	}, attributes)
 	for _, genericKey := range []string{
 		"user_id",

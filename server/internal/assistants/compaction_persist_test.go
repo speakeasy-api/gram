@@ -128,6 +128,7 @@ func TestRecordCompactedGenerationWritesNewGeneration(t *testing.T) {
 		reading := &meteringv1.MeterReading{}
 		require.NoError(t, proto.Unmarshal(row.Message, reading))
 		require.Equal(t, "personal", reading.GetAttributes()[metering.AttributeAccountType])
+		require.Equal(t, ownerUserID, reading.GetAttributes()[metering.AttributeBillingUserID])
 		require.NotContains(t, reading.GetAttributes(), metering.AttributeMessageUserID)
 		require.NotContains(t, reading.GetAttributes(), metering.AttributeMessageExternalUserID)
 	}

@@ -70,7 +70,7 @@ func (w *MeterReadingCHWriter) HandleBatch(ctx context.Context, messages []*mete
 		rows = append(rows, row)
 	}
 
-	if err := w.enrichAgentSessionStorageRows(ctx, rows); err != nil {
+	if err := w.enrichBillingUsers(ctx, rows); err != nil {
 		return err
 	}
 	if err := w.inserter.InsertReadings(ctx, rows); err != nil {
@@ -79,34 +79,21 @@ func (w *MeterReadingCHWriter) HandleBatch(ctx context.Context, messages []*mete
 	return nil
 }
 
-type agentSessionStorageLookupKey struct {
+type billingUserLookupKey struct {
 	organizationID string
-	projectID      uuid.UUID
-	chatID         uuid.UUID
-	messageUserID  string
+	userID         string
 }
 
-var consumerOwnedAgentSessionAttributes = [...]string{
-	AttributeMessageUserAccountEmail,
-	AttributeMessageUserDivisionName,
-	AttributeMessageUserDepartmentName,
-	AttributeMessageUserJobTitle,
-	AttributeMessageUserEmployeeType,
-	AttributeMessageUserCostCenterName,
-	AttributeMessageUserDirectoryGroups,
-	AttributeMessageUserDirectoryMatch,
-	AttributeMessageUserRBACRoles,
-	AttributeChatOwnerUserID,
-	AttributeChatOwnerExternalUserID,
-	AttributeChatOwnerUserEmail,
-	AttributeChatOwnerDivisionName,
-	AttributeChatOwnerDepartmentName,
-	AttributeChatOwnerJobTitle,
-	AttributeChatOwnerEmployeeType,
-	AttributeChatOwnerCostCenterName,
-	AttributeChatOwnerDirectoryGroups,
-	AttributeChatOwnerDirectoryMatch,
-	AttributeChatOwnerRBACRoles,
+var consumerOwnedBillingUserAttributes = [...]string{
+	AttributeBillingUserAccountEmail,
+	AttributeBillingUserDivisionName,
+	AttributeBillingUserDepartmentName,
+	AttributeBillingUserJobTitle,
+	AttributeBillingUserEmployeeType,
+	AttributeBillingUserCostCenterName,
+	AttributeBillingUserDirectoryGroups,
+	AttributeBillingUserDirectoryMatch,
+	AttributeBillingUserRBACRoles,
 }
 
 func setResolvedAttribute(attributes map[string]string, key string, value string) {
@@ -127,32 +114,24 @@ func setResolvedStringSliceAttribute(attributes map[string]string, key string, v
 	return nil
 }
 
-func (w *MeterReadingCHWriter) enrichAgentSessionStorageRows(ctx context.Context, rows []chrepo.ReadingRow) error {
-	keys := make([]agentSessionStorageLookupKey, 0)
-	seen := make(map[agentSessionStorageLookupKey]struct{})
-	rowKeys := make(map[uuid.UUID]agentSessionStorageLookupKey)
+func (w *MeterReadingCHWriter) enrichBillingUsers(ctx context.Context, rows []chrepo.ReadingRow) error {
+	keys := make([]billingUserLookupKey, 0)
+	seen := make(map[billingUserLookupKey]struct{})
+	rowKeys := make(map[uuid.UUID]billingUserLookupKey)
 
 	for i := range rows {
 		row := &rows[i]
-		if row.MeterID != string(MeterAgentSessionStorage) || row.CorrectsReadingID != nil {
-			continue
-		}
-		for _, key := range consumerOwnedAgentSessionAttributes {
+		for _, key := range consumerOwnedBillingUserAttributes {
 			delete(row.Attributes, key)
 		}
-		rawChatID := row.Attributes[AttributeChatID]
-		if rawChatID == "" {
+
+		billingUserID := row.Attributes[AttributeBillingUserID]
+		if billingUserID == "" {
 			continue
 		}
-		chatID, err := uuid.Parse(rawChatID)
-		if err != nil || chatID == uuid.Nil {
-			continue
-		}
-		lookupKey := agentSessionStorageLookupKey{
+		lookupKey := billingUserLookupKey{
 			organizationID: row.OrganizationID,
-			projectID:      row.ProjectID,
-			chatID:         chatID,
-			messageUserID:  row.Attributes[AttributeMessageUserID],
+			userID:         billingUserID,
 		}
 		rowKeys[row.ID] = lookupKey
 		if _, duplicate := seen[lookupKey]; duplicate {
@@ -165,58 +144,37 @@ func (w *MeterReadingCHWriter) enrichAgentSessionStorageRows(ctx context.Context
 		return nil
 	}
 
-	params := meteringrepo.ResolveAgentSessionStorageAttributesParams{
-		ProjectIds:      make([]uuid.UUID, len(keys)),
-		ChatIds:         make([]uuid.UUID, len(keys)),
-		MessageUserIds:  make([]string, len(keys)),
+	params := meteringrepo.ResolveBillingUserAttributesParams{
 		OrganizationIds: make([]string, len(keys)),
+		BillingUserIds:  make([]string, len(keys)),
 	}
 	for i, key := range keys {
 		params.OrganizationIds[i] = key.organizationID
-		params.ProjectIds[i] = key.projectID
-		params.ChatIds[i] = key.chatID
-		params.MessageUserIds[i] = key.messageUserID
+		params.BillingUserIds[i] = key.userID
 	}
 
-	resolvedRows, err := meteringrepo.New(w.db).ResolveAgentSessionStorageAttributes(ctx, params)
+	resolvedRows, err := meteringrepo.New(w.db).ResolveBillingUserAttributes(ctx, params)
 	if err != nil {
-		return fmt.Errorf("resolve agent session storage attributes: %w", err)
+		return fmt.Errorf("resolve billing user attributes: %w", err)
 	}
-	resolved := make(map[agentSessionStorageLookupKey]map[string]string, len(resolvedRows))
+	resolved := make(map[billingUserLookupKey]map[string]string, len(resolvedRows))
 	for _, result := range resolvedRows {
-		key := agentSessionStorageLookupKey{
+		key := billingUserLookupKey{
 			organizationID: result.OrganizationID,
-			projectID:      result.ProjectID,
-			chatID:         result.ChatID,
-			messageUserID:  result.MessageUserID,
+			userID:         result.BillingUserID,
 		}
 		attributes := make(map[string]string)
-		setResolvedAttribute(attributes, AttributeMessageUserAccountEmail, result.MessageUserAccountEmail)
-		setResolvedAttribute(attributes, AttributeMessageUserDivisionName, result.MessageUserDivisionName)
-		setResolvedAttribute(attributes, AttributeMessageUserDepartmentName, result.MessageUserDepartmentName)
-		setResolvedAttribute(attributes, AttributeMessageUserJobTitle, result.MessageUserJobTitle)
-		setResolvedAttribute(attributes, AttributeMessageUserEmployeeType, result.MessageUserEmployeeType)
-		setResolvedAttribute(attributes, AttributeMessageUserCostCenterName, result.MessageUserCostCenterName)
-		if err := setResolvedStringSliceAttribute(attributes, AttributeMessageUserDirectoryGroups, result.MessageUserGroupNames); err != nil {
+		setResolvedAttribute(attributes, AttributeBillingUserAccountEmail, result.BillingUserAccountEmail)
+		setResolvedAttribute(attributes, AttributeBillingUserDivisionName, result.BillingUserDivisionName)
+		setResolvedAttribute(attributes, AttributeBillingUserDepartmentName, result.BillingUserDepartmentName)
+		setResolvedAttribute(attributes, AttributeBillingUserJobTitle, result.BillingUserJobTitle)
+		setResolvedAttribute(attributes, AttributeBillingUserEmployeeType, result.BillingUserEmployeeType)
+		setResolvedAttribute(attributes, AttributeBillingUserCostCenterName, result.BillingUserCostCenterName)
+		if err := setResolvedStringSliceAttribute(attributes, AttributeBillingUserDirectoryGroups, result.BillingUserGroupNames); err != nil {
 			return err
 		}
-		setResolvedAttribute(attributes, AttributeMessageUserDirectoryMatch, result.MessageUserDirectoryMatch)
-		if err := setResolvedStringSliceAttribute(attributes, AttributeMessageUserRBACRoles, result.MessageUserRoleSlugs); err != nil {
-			return err
-		}
-		setResolvedAttribute(attributes, AttributeChatOwnerUserID, result.ChatOwnerUserID)
-		setResolvedAttribute(attributes, AttributeChatOwnerExternalUserID, result.ChatOwnerExternalUserID)
-		setResolvedAttribute(attributes, AttributeChatOwnerUserEmail, result.ChatOwnerUserEmail)
-		setResolvedAttribute(attributes, AttributeChatOwnerDivisionName, result.ChatOwnerDivisionName)
-		setResolvedAttribute(attributes, AttributeChatOwnerDepartmentName, result.ChatOwnerDepartmentName)
-		setResolvedAttribute(attributes, AttributeChatOwnerJobTitle, result.ChatOwnerJobTitle)
-		setResolvedAttribute(attributes, AttributeChatOwnerEmployeeType, result.ChatOwnerEmployeeType)
-		setResolvedAttribute(attributes, AttributeChatOwnerCostCenterName, result.ChatOwnerCostCenterName)
-		if err := setResolvedStringSliceAttribute(attributes, AttributeChatOwnerDirectoryGroups, result.ChatOwnerGroupNames); err != nil {
-			return err
-		}
-		setResolvedAttribute(attributes, AttributeChatOwnerDirectoryMatch, result.ChatOwnerDirectoryMatch)
-		if err := setResolvedStringSliceAttribute(attributes, AttributeChatOwnerRBACRoles, result.ChatOwnerRoleSlugs); err != nil {
+		setResolvedAttribute(attributes, AttributeBillingUserDirectoryMatch, result.BillingUserDirectoryMatch)
+		if err := setResolvedStringSliceAttribute(attributes, AttributeBillingUserRBACRoles, result.BillingUserRoleSlugs); err != nil {
 			return err
 		}
 		resolved[key] = attributes

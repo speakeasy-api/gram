@@ -13,11 +13,8 @@ import (
 	"google.golang.org/protobuf/proto"
 
 	meteringv1 "github.com/speakeasy-api/gram/infra/gen/gram/metering/v1"
-	chatrepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
-	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/metering"
 	"github.com/speakeasy-api/gram/server/internal/metering/chrepo"
-	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
@@ -227,234 +224,168 @@ func TestMeterReadingCHWriterRedeliveryConvergesAndPreservesAdjustment(t *testin
 	require.Equal(t, int64(6), net)
 }
 
-func TestMeterReadingCHWriterEnrichesMessageUserAndChatOwnerIndependently(t *testing.T) {
+func TestMeterReadingCHWriterEnrichesBillingUserAndPreservesMessageProvenance(t *testing.T) {
 	t.Parallel()
 	ctx := t.Context()
 	conn, organizationID := newMeteringPostgres(t)
-	project, err := projectsrepo.New(conn).CreateProject(ctx, projectsrepo.CreateProjectParams{
-		Name:           "Metering Enrichment Project",
-		Slug:           "metering-enrichment-" + uuid.NewString()[:8],
-		OrganizationID: organizationID,
-	})
-	require.NoError(t, err)
+
+	billingUserID := "billing-user-" + uuid.NewString()
+	billingEmail := "billing-user@example.test"
+	seedMeteringFacetUser(t, conn, organizationID, billingUserID, billingEmail, meteringDirectoryFacets{
+		DivisionName:   "Billing Division",
+		DepartmentName: "Billing Department",
+		JobTitle:       "Billing Job",
+		EmployeeType:   "Billing Employee Type",
+		CostCenterName: "Billing Cost Center",
+		Groups:         []string{"zeta-billing-group", "alpha-billing-group"},
+	}, true)
+	seedMeteringRole(t, conn, organizationID, billingUserID, "zeta-billing-role", false)
+	seedMeteringRole(t, conn, organizationID, billingUserID, "alpha-billing-role", true)
 
 	messageUserID := "message-user-" + uuid.NewString()
-	ownerUserID := "owner-user-" + uuid.NewString()
-	seedMeteringAccount(t, conn, organizationID, messageUserID, "message-account@example.test")
-	seedMeteringDirectoryUser(t, conn, organizationID, messageUserID, "message-account@example.test", "Stale Message Division", "Stale Message Department", true)
-	seedMeteringDirectoryUser(t, conn, organizationID, messageUserID, "message-account@example.test", "Message Division", "Message Department", true)
-	seedMeteringUser(t, conn, organizationID, ownerUserID, "owner-account@example.test", "Owner Division", "Owner Department", false)
-	emailCollisionUserID := "email-collision-user-" + uuid.NewString()
-	seedMeteringAccount(t, conn, organizationID, emailCollisionUserID, "email-collision-account@example.test")
-	seedMeteringDirectoryUser(t, conn, organizationID, emailCollisionUserID, "owner-account@example.test", "Wrong Owner Division", "Wrong Owner Department", true)
-	seedMeteringRole(t, conn, organizationID, messageUserID, "zeta-message", false)
-	seedMeteringRole(t, conn, organizationID, messageUserID, "alpha-message", true)
-	seedMeteringRole(t, conn, organizationID, ownerUserID, "member-owner", false)
-	seedMeteringRole(t, conn, organizationID, ownerUserID, "admin-owner", true)
-
-	chatID := uuid.New()
-	_, err = chatrepo.New(conn).UpsertChat(ctx, chatrepo.UpsertChatParams{
-		ID:             chatID,
-		ProjectID:      project.ID,
-		OrganizationID: organizationID,
-		UserID:         conv.ToPGText(ownerUserID),
-		ExternalUserID: conv.ToPGText("owner-provider-id"),
-		Title:          conv.ToPGText("Independent identities"),
-	})
-	require.NoError(t, err)
-
 	now := time.Now().UTC()
+	scope := metering.ProjectScope(organizationID, uuid.New())
 	attributes := map[string]string{
-		metering.AttributeChatID:                    chatID.String(),
-		metering.AttributeModel:                     "gpt-5",
-		metering.AttributeHookSource:                "codex",
-		metering.AttributeMessageUserID:             messageUserID,
-		metering.AttributeMessageExternalUserID:     "opaque-message-provider-id",
-		metering.AttributeMessageUserEmail:          "reported-message@example.test",
-		metering.AttributeMessageUserAccountEmail:   "stale-message@example.test",
-		metering.AttributeChatOwnerUserEmail:        "stale-owner@example.test",
-		metering.AttributeChatOwnerExternalUserID:   "stale-owner-provider-id",
-		metering.AttributeMessageUserDepartmentName: "Stale Message Department",
-		metering.AttributeChatOwnerDepartmentName:   "Stale Owner Department",
-		metering.AttributeMessageUserDirectoryMatch: "stale",
-		metering.AttributeChatOwnerDirectoryMatch:   "stale",
-		metering.AttributeMessageUserRBACRoles:      `["stale"]`,
-		metering.AttributeChatOwnerRBACRoles:        `["stale"]`,
-		metering.AttributeMessageUserDivisionName:   "Stale Message Division",
-		metering.AttributeChatOwnerDivisionName:     "Stale Owner Division",
-		metering.AttributeChatOwnerUserID:           "stale-owner-user",
+		metering.AttributeChatID:                     uuid.NewString(),
+		metering.AttributeBillingUserID:              billingUserID,
+		metering.AttributeMessageUserID:              messageUserID,
+		metering.AttributeMessageExternalUserID:      "opaque-message-provider-id",
+		metering.AttributeMessageUserEmail:           "observed-message@example.test",
+		metering.AttributeBillingUserAccountEmail:    "stale@example.test",
+		metering.AttributeBillingUserDivisionName:    "Stale Division",
+		metering.AttributeBillingUserDepartmentName:  "Stale Department",
+		metering.AttributeBillingUserJobTitle:        "Stale Job",
+		metering.AttributeBillingUserEmployeeType:    "Stale Employee Type",
+		metering.AttributeBillingUserCostCenterName:  "Stale Cost Center",
+		metering.AttributeBillingUserDirectoryGroups: `["stale"]`,
+		metering.AttributeBillingUserDirectoryMatch:  "stale",
+		metering.AttributeBillingUserRBACRoles:       `["stale"]`,
 	}
-	message, _ := usageMessage(t, metering.UsageInput{
+	usageMessage, usage := usageMessage(t, metering.UsageInput{
 		Meter:       metering.AgentSessionStorage(),
-		Scope:       metering.ProjectScope(organizationID, project.ID),
-		OperationID: "chat_message:" + uuid.NewString(),
+		Scope:       scope,
+		OperationID: "billing-user-usage",
 		Value:       9,
 		OccurredAt:  now,
 		ProducedAt:  now,
 		Source:      "chat_message_writer",
 		Attributes:  attributes,
 	})
+	adjustmentMessage, _ := adjustmentMessage(t, metering.AdjustmentInput{
+		Meter:             metering.AgentSessionStorage(),
+		Scope:             scope,
+		OperationID:       "billing-user-adjustment",
+		Value:             -2,
+		OccurredAt:        now,
+		ProducedAt:        now,
+		CorrectsReadingID: usage.ID(),
+		Reason:            "source_reconciliation",
+		Source:            "chat_message_writer",
+		Attributes: map[string]string{
+			metering.AttributeBillingUserID:           billingUserID,
+			metering.AttributeBillingUserAccountEmail: "spoofed@example.test",
+		},
+	})
 	capture := &captureReadingInserter{rows: nil, err: nil}
 	writer := metering.NewMeterReadingCHWriter(testenv.NewLogger(t), conn, capture)
 
-	require.NoError(t, writer.HandleBatch(ctx, []*meteringv1.MeterReading{message}, nil))
-	require.Equal(t, "stale-owner@example.test", message.GetAttributes()[metering.AttributeChatOwnerUserEmail])
-	require.NotContains(t, message.GetAttributes(), "codec")
-	require.Len(t, capture.rows, 1)
-	require.Equal(t, map[string]string{
-		"codec":                                     string(metering.MeasurementTiktokenO200kBase),
-		metering.AttributeChatID:                    chatID.String(),
-		metering.AttributeModel:                     "gpt-5",
-		metering.AttributeHookSource:                "codex",
-		metering.AttributeMessageUserID:             messageUserID,
-		metering.AttributeMessageExternalUserID:     "opaque-message-provider-id",
-		metering.AttributeMessageUserEmail:          "reported-message@example.test",
-		metering.AttributeMessageUserAccountEmail:   "message-account@example.test",
-		metering.AttributeMessageUserDivisionName:   "Message Division",
-		metering.AttributeMessageUserDepartmentName: "Message Department",
-		metering.AttributeMessageUserDirectoryMatch: "user_id",
-		metering.AttributeMessageUserRBACRoles:      `["alpha-message","zeta-message"]`,
-		metering.AttributeChatOwnerUserID:           ownerUserID,
-		metering.AttributeChatOwnerExternalUserID:   "owner-provider-id",
-		metering.AttributeChatOwnerUserEmail:        "owner-account@example.test",
-		metering.AttributeChatOwnerDivisionName:     "Owner Division",
-		metering.AttributeChatOwnerDepartmentName:   "Owner Department",
-		metering.AttributeChatOwnerDirectoryMatch:   "email",
-		metering.AttributeChatOwnerRBACRoles:        `["admin-owner","member-owner"]`,
-	}, capture.rows[0].Attributes)
+	require.NoError(t, writer.HandleBatch(ctx, []*meteringv1.MeterReading{usageMessage, adjustmentMessage}, nil))
+	require.Equal(t, "stale@example.test", usageMessage.GetAttributes()[metering.AttributeBillingUserAccountEmail])
+	require.Len(t, capture.rows, 2)
+	rows := make(map[string]chrepo.ReadingRow, len(capture.rows))
+	for _, row := range capture.rows {
+		rows[row.OperationID] = row
+	}
+
+	usageAttributes := rows["billing-user-usage"].Attributes
+	require.Equal(t, billingUserID, usageAttributes[metering.AttributeBillingUserID])
+	require.Equal(t, messageUserID, usageAttributes[metering.AttributeMessageUserID])
+	require.Equal(t, "opaque-message-provider-id", usageAttributes[metering.AttributeMessageExternalUserID])
+	require.Equal(t, "observed-message@example.test", usageAttributes[metering.AttributeMessageUserEmail])
+	require.Equal(t, billingEmail, usageAttributes[metering.AttributeBillingUserAccountEmail])
+	require.Equal(t, "Billing Division", usageAttributes[metering.AttributeBillingUserDivisionName])
+	require.Equal(t, "Billing Department", usageAttributes[metering.AttributeBillingUserDepartmentName])
+	require.Equal(t, "Billing Job", usageAttributes[metering.AttributeBillingUserJobTitle])
+	require.Equal(t, "Billing Employee Type", usageAttributes[metering.AttributeBillingUserEmployeeType])
+	require.Equal(t, "Billing Cost Center", usageAttributes[metering.AttributeBillingUserCostCenterName])
+	require.Equal(t, `["alpha-billing-group","zeta-billing-group"]`, usageAttributes[metering.AttributeBillingUserDirectoryGroups])
+	require.Equal(t, "user_id", usageAttributes[metering.AttributeBillingUserDirectoryMatch])
+	require.Equal(t, `["alpha-billing-role","zeta-billing-role"]`, usageAttributes[metering.AttributeBillingUserRBACRoles])
+
+	adjustmentAttributes := rows["billing-user-adjustment"].Attributes
+	require.Equal(t, billingUserID, adjustmentAttributes[metering.AttributeBillingUserID])
+	require.Equal(t, billingEmail, adjustmentAttributes[metering.AttributeBillingUserAccountEmail])
+	require.Equal(t, "Billing Division", adjustmentAttributes[metering.AttributeBillingUserDivisionName])
+	require.Equal(t, `["alpha-billing-role","zeta-billing-role"]`, adjustmentAttributes[metering.AttributeBillingUserRBACRoles])
 }
 
-func TestMeterReadingCHWriterPreservesIdentityBoundaries(t *testing.T) {
+func TestMeterReadingCHWriterPreservesBillingUserIdentityBoundaries(t *testing.T) {
 	t.Parallel()
 	ctx := t.Context()
 	conn, organizationID := newMeteringPostgres(t)
-	project, err := projectsrepo.New(conn).CreateProject(ctx, projectsrepo.CreateProjectParams{
-		Name:           "Metering Boundaries Project",
-		Slug:           "metering-boundaries-" + uuid.NewString()[:8],
-		OrganizationID: organizationID,
-	})
-	require.NoError(t, err)
-	otherProject, err := projectsrepo.New(conn).CreateProject(ctx, projectsrepo.CreateProjectParams{
-		Name:           "Other Metering Project",
-		Slug:           "other-metering-" + uuid.NewString()[:8],
-		OrganizationID: organizationID,
-	})
-	require.NoError(t, err)
 
-	ownerOnlyUserID := "owner-only-" + uuid.NewString()
-	seedMeteringUser(t, conn, organizationID, ownerOnlyUserID, "owner-only@example.test", "Owner Only Division", "Owner Only Department", true)
-	seedMeteringRole(t, conn, organizationID, ownerOnlyUserID, "owner-only-role", false)
-	sameUserID := "same-user-" + uuid.NewString()
-	seedMeteringUser(t, conn, organizationID, sameUserID, "same-user@example.test", "Same Division", "Same Department", true)
-	seedMeteringRole(t, conn, organizationID, sameUserID, "same-role", false)
-	plainUserID := "plain-user-" + uuid.NewString()
-	seedMeteringAccount(t, conn, organizationID, plainUserID, "plain-user@example.test")
-	upsertMeteringDirectoryUser(t, conn, organizationID, plainUserID, "plain-user@example.test", map[string]any{
+	directUserID := "direct-user-" + uuid.NewString()
+	seedMeteringUser(t, conn, organizationID, directUserID, "direct@example.test", "Direct Division", "Direct Department", true)
+
+	emailUserID := "email-user-" + uuid.NewString()
+	seedMeteringUser(t, conn, organizationID, emailUserID, "email@example.test", "Email Division", "Email Department", false)
+
+	ambiguousUserID := "ambiguous-user-" + uuid.NewString()
+	ambiguousEmail := "ambiguous@example.test"
+	seedMeteringAccount(t, conn, organizationID, ambiguousUserID, ambiguousEmail)
+	seedMeteringDirectoryUser(t, conn, organizationID, ambiguousUserID, ambiguousEmail, "First Division", "First Department", false)
+	seedMeteringDirectoryUser(t, conn, organizationID, ambiguousUserID, ambiguousEmail, "Second Division", "Second Department", false)
+
+	malformedUserID := "malformed-user-" + uuid.NewString()
+	seedMeteringAccount(t, conn, organizationID, malformedUserID, "malformed@example.test")
+	upsertMeteringDirectoryUser(t, conn, organizationID, malformedUserID, "malformed@example.test", map[string]any{
 		"division_name":    42,
 		"department_name":  true,
 		"job_title":        map[string]string{"invalid": "object"},
 		"employee_type":    []string{"invalid", "array"},
 		"cost_center_name": nil,
 	}, true)
-	ambiguousUserID := "ambiguous-user-" + uuid.NewString()
-	ambiguousEmail := "ambiguous-user@example.test"
-	seedMeteringAccount(t, conn, organizationID, ambiguousUserID, ambiguousEmail)
-	seedMeteringDirectoryUser(t, conn, organizationID, ambiguousUserID, ambiguousEmail, "First Ambiguous Division", "First Ambiguous Department", false)
-	seedMeteringDirectoryUser(t, conn, organizationID, ambiguousUserID, ambiguousEmail, "Second Ambiguous Division", "Second Ambiguous Department", false)
-
-	createChat := func(chatID uuid.UUID, projectID uuid.UUID, ownerUserID string) {
-		t.Helper()
-		_, createErr := chatrepo.New(conn).UpsertChat(ctx, chatrepo.UpsertChatParams{
-			ID:             chatID,
-			ProjectID:      projectID,
-			OrganizationID: organizationID,
-			UserID:         conv.ToPGTextEmpty(ownerUserID),
-			ExternalUserID: conv.ToPGTextEmpty(""),
-			Title:          conv.ToPGText("Boundary chat"),
-		})
-		require.NoError(t, createErr)
-	}
-	ownerOnlyChatID := uuid.New()
-	sameUserChatID := uuid.New()
-	anonymousChatID := uuid.New()
-	plainUserChatID := uuid.New()
-	ambiguousChatID := uuid.New()
-	foreignChatID := uuid.New()
-	deletedChatID := uuid.New()
-	createChat(ownerOnlyChatID, project.ID, ownerOnlyUserID)
-	createChat(sameUserChatID, project.ID, sameUserID)
-	createChat(anonymousChatID, project.ID, "")
-	createChat(plainUserChatID, project.ID, plainUserID)
-	createChat(ambiguousChatID, project.ID, ambiguousUserID)
-	createChat(foreignChatID, otherProject.ID, ownerOnlyUserID)
-	createChat(deletedChatID, project.ID, ownerOnlyUserID)
-	deleted, err := chatrepo.New(conn).SoftDeleteChat(ctx, chatrepo.SoftDeleteChatParams{ProjectID: project.ID, ID: deletedChatID})
-	require.NoError(t, err)
-	require.True(t, deleted.Deleted)
 
 	now := time.Now().UTC()
 	newMessage := func(operationID string, attributes map[string]string) *meteringv1.MeterReading {
 		t.Helper()
 		message, _ := usageMessage(t, metering.UsageInput{
 			Meter:       metering.AgentSessionStorage(),
-			Scope:       metering.ProjectScope(organizationID, project.ID),
+			Scope:       metering.ProjectScope(organizationID, uuid.New()),
 			OperationID: operationID,
 			Value:       1,
 			OccurredAt:  now,
 			ProducedAt:  now,
-			Source:      "chat_message_writer",
+			Source:      "test",
 			Attributes:  attributes,
 		})
 		return message
 	}
 	messages := []*meteringv1.MeterReading{
-		newMessage("owner-only", map[string]string{
-			metering.AttributeChatID:     ownerOnlyChatID.String(),
-			metering.AttributeModel:      "owner-only-model",
-			metering.AttributeHookSource: "codex",
+		newMessage("direct", map[string]string{
+			metering.AttributeBillingUserID: directUserID,
 		}),
-		newMessage("same-user", map[string]string{
-			metering.AttributeChatID:        sameUserChatID.String(),
-			metering.AttributeMessageUserID: sameUserID,
+		newMessage("email", map[string]string{
+			metering.AttributeBillingUserID: emailUserID,
 		}),
-		newMessage("explicit-email", map[string]string{
-			metering.AttributeChatID:                anonymousChatID.String(),
-			metering.AttributeModel:                 "anonymous-model",
-			metering.AttributeHookSource:            "chatgpt",
-			metering.AttributeMessageExternalUserID: "opaque-provider-id",
-			metering.AttributeMessageUserEmail:      "observed-only@example.test",
+		newMessage("ambiguous", map[string]string{
+			metering.AttributeBillingUserID:             ambiguousUserID,
+			metering.AttributeBillingUserDirectoryMatch: "spoofed",
 		}),
-		newMessage("anonymous", map[string]string{
-			metering.AttributeChatID:     anonymousChatID.String(),
-			metering.AttributeModel:      "anonymous-model",
-			metering.AttributeHookSource: "codex",
+		newMessage("malformed", map[string]string{
+			metering.AttributeBillingUserID:             malformedUserID,
+			metering.AttributeBillingUserDivisionName:   "spoofed",
+			metering.AttributeBillingUserDepartmentName: "spoofed",
 		}),
-		newMessage("no-directory-or-roles", map[string]string{
-			metering.AttributeChatID:        plainUserChatID.String(),
-			metering.AttributeMessageUserID: plainUserID,
+		newMessage("unresolved", map[string]string{
+			metering.AttributeBillingUserID:           "missing-" + uuid.NewString(),
+			metering.AttributeBillingUserAccountEmail: "spoofed@example.test",
+			metering.AttributeBillingUserRBACRoles:    `["spoofed"]`,
 		}),
-		newMessage("ambiguous-email", map[string]string{
-			metering.AttributeChatID:        ambiguousChatID.String(),
-			metering.AttributeMessageUserID: ambiguousUserID,
-		}),
-		newMessage("tenant-mismatch", map[string]string{
-			metering.AttributeChatID:                  foreignChatID.String(),
-			metering.AttributeModel:                   "foreign-model",
-			metering.AttributeMessageUserAccountEmail: "stale@example.test",
-			metering.AttributeChatOwnerUserID:         "stale-owner",
-		}),
-		newMessage("deleted-chat", map[string]string{
-			metering.AttributeChatID:               deletedChatID.String(),
-			metering.AttributeHookSource:           "deleted-source",
-			metering.AttributeChatOwnerUserEmail:   "stale-owner@example.test",
-			metering.AttributeMessageUserRBACRoles: `["stale"]`,
-		}),
-		newMessage("missing-chat-id", map[string]string{
-			metering.AttributeModel:                    "missing-chat-model",
-			metering.AttributeMessageUserAccountEmail:  "stale@example.test",
-			metering.AttributeMessageUserJobTitle:      "Stale Job",
-			metering.AttributeChatOwnerUserID:          "stale-owner",
-			metering.AttributeChatOwnerDirectoryGroups: `["stale"]`,
+		newMessage("absent", map[string]string{
+			metering.AttributeMessageUserEmail:           "observed@example.test",
+			metering.AttributeBillingUserAccountEmail:    "spoofed@example.test",
+			metering.AttributeBillingUserDirectoryGroups: `["spoofed"]`,
 		}),
 	}
 	capture := &captureReadingInserter{rows: nil, err: nil}
@@ -467,226 +398,111 @@ func TestMeterReadingCHWriterPreservesIdentityBoundaries(t *testing.T) {
 		rows[row.OperationID] = row
 	}
 
-	ownerOnly := rows["owner-only"].Attributes
-	require.Equal(t, ownerOnlyUserID, ownerOnly[metering.AttributeChatOwnerUserID])
-	require.Equal(t, "owner-only@example.test", ownerOnly[metering.AttributeChatOwnerUserEmail])
-	require.Equal(t, "Owner Only Division", ownerOnly[metering.AttributeChatOwnerDivisionName])
-	require.Equal(t, `["owner-only-role"]`, ownerOnly[metering.AttributeChatOwnerRBACRoles])
-	require.NotContains(t, ownerOnly, metering.AttributeMessageUserID)
-	require.NotContains(t, ownerOnly, metering.AttributeMessageUserAccountEmail)
-	require.NotContains(t, ownerOnly, metering.AttributeMessageUserDirectoryMatch)
-	require.NotContains(t, ownerOnly, metering.AttributeMessageUserRBACRoles)
+	direct := rows["direct"].Attributes
+	require.Equal(t, "direct@example.test", direct[metering.AttributeBillingUserAccountEmail])
+	require.Equal(t, "Direct Division", direct[metering.AttributeBillingUserDivisionName])
+	require.Equal(t, "user_id", direct[metering.AttributeBillingUserDirectoryMatch])
 
-	sameUser := rows["same-user"].Attributes
-	require.Equal(t, sameUserID, sameUser[metering.AttributeMessageUserID])
-	require.Equal(t, sameUserID, sameUser[metering.AttributeChatOwnerUserID])
-	require.Equal(t, "same-user@example.test", sameUser[metering.AttributeMessageUserAccountEmail])
-	require.Equal(t, "same-user@example.test", sameUser[metering.AttributeChatOwnerUserEmail])
-	require.Equal(t, "Same Division", sameUser[metering.AttributeMessageUserDivisionName])
-	require.Equal(t, "Same Division", sameUser[metering.AttributeChatOwnerDivisionName])
-	require.Equal(t, `["same-role"]`, sameUser[metering.AttributeMessageUserRBACRoles])
-	require.Equal(t, `["same-role"]`, sameUser[metering.AttributeChatOwnerRBACRoles])
+	email := rows["email"].Attributes
+	require.Equal(t, "email@example.test", email[metering.AttributeBillingUserAccountEmail])
+	require.Equal(t, "Email Division", email[metering.AttributeBillingUserDivisionName])
+	require.Equal(t, "email", email[metering.AttributeBillingUserDirectoryMatch])
 
-	require.Equal(t, map[string]string{
-		"codec":                                 string(metering.MeasurementTiktokenO200kBase),
-		metering.AttributeChatID:                anonymousChatID.String(),
-		metering.AttributeModel:                 "anonymous-model",
-		metering.AttributeHookSource:            "chatgpt",
-		metering.AttributeMessageExternalUserID: "opaque-provider-id",
-		metering.AttributeMessageUserEmail:      "observed-only@example.test",
-	}, rows["explicit-email"].Attributes)
-	require.Equal(t, map[string]string{
-		"codec":                      string(metering.MeasurementTiktokenO200kBase),
-		metering.AttributeChatID:     anonymousChatID.String(),
-		metering.AttributeModel:      "anonymous-model",
-		metering.AttributeHookSource: "codex",
-	}, rows["anonymous"].Attributes)
+	ambiguous := rows["ambiguous"].Attributes
+	require.Equal(t, ambiguousUserID, ambiguous[metering.AttributeBillingUserID])
+	require.Equal(t, ambiguousEmail, ambiguous[metering.AttributeBillingUserAccountEmail])
+	require.NotContains(t, ambiguous, metering.AttributeBillingUserDivisionName)
+	require.NotContains(t, ambiguous, metering.AttributeBillingUserDirectoryMatch)
 
-	plain := rows["no-directory-or-roles"].Attributes
-	require.Equal(t, plainUserID, plain[metering.AttributeMessageUserID])
-	require.Equal(t, plainUserID, plain[metering.AttributeChatOwnerUserID])
-	require.Equal(t, "plain-user@example.test", plain[metering.AttributeMessageUserAccountEmail])
-	require.Equal(t, "plain-user@example.test", plain[metering.AttributeChatOwnerUserEmail])
-	require.Equal(t, "user_id", plain[metering.AttributeMessageUserDirectoryMatch])
-	require.Equal(t, "user_id", plain[metering.AttributeChatOwnerDirectoryMatch])
-	for _, key := range []string{
-		metering.AttributeMessageUserDivisionName,
-		metering.AttributeMessageUserDepartmentName,
-		metering.AttributeMessageUserJobTitle,
-		metering.AttributeMessageUserEmployeeType,
-		metering.AttributeMessageUserCostCenterName,
-		metering.AttributeChatOwnerDivisionName,
-		metering.AttributeChatOwnerDepartmentName,
-		metering.AttributeChatOwnerJobTitle,
-		metering.AttributeChatOwnerEmployeeType,
-		metering.AttributeChatOwnerCostCenterName,
-	} {
-		require.NotContains(t, plain, key)
-	}
-	require.NotContains(t, plain, metering.AttributeMessageUserRBACRoles)
-	require.NotContains(t, plain, metering.AttributeChatOwnerRBACRoles)
-	require.Equal(t, map[string]string{
-		"codec":                                   string(metering.MeasurementTiktokenO200kBase),
-		metering.AttributeChatID:                  ambiguousChatID.String(),
-		metering.AttributeMessageUserID:           ambiguousUserID,
-		metering.AttributeMessageUserAccountEmail: ambiguousEmail,
-		metering.AttributeChatOwnerUserID:         ambiguousUserID,
-		metering.AttributeChatOwnerUserEmail:      ambiguousEmail,
-	}, rows["ambiguous-email"].Attributes)
+	malformed := rows["malformed"].Attributes
+	require.Equal(t, "malformed@example.test", malformed[metering.AttributeBillingUserAccountEmail])
+	require.Equal(t, "user_id", malformed[metering.AttributeBillingUserDirectoryMatch])
+	require.NotContains(t, malformed, metering.AttributeBillingUserDivisionName)
+	require.NotContains(t, malformed, metering.AttributeBillingUserDepartmentName)
+	require.NotContains(t, malformed, metering.AttributeBillingUserJobTitle)
+	require.NotContains(t, malformed, metering.AttributeBillingUserEmployeeType)
+	require.NotContains(t, malformed, metering.AttributeBillingUserCostCenterName)
 
-	require.Equal(t, map[string]string{
-		"codec":                  string(metering.MeasurementTiktokenO200kBase),
-		metering.AttributeChatID: foreignChatID.String(),
-		metering.AttributeModel:  "foreign-model",
-	}, rows["tenant-mismatch"].Attributes)
-	require.Equal(t, map[string]string{
-		"codec":                      string(metering.MeasurementTiktokenO200kBase),
-		metering.AttributeChatID:     deletedChatID.String(),
-		metering.AttributeHookSource: "deleted-source",
-	}, rows["deleted-chat"].Attributes)
-	require.Equal(t, map[string]string{
-		"codec":                 string(metering.MeasurementTiktokenO200kBase),
-		metering.AttributeModel: "missing-chat-model",
-	}, rows["missing-chat-id"].Attributes)
+	unresolved := rows["unresolved"].Attributes
+	require.Contains(t, unresolved, metering.AttributeBillingUserID)
+	require.NotContains(t, unresolved, metering.AttributeBillingUserAccountEmail)
+	require.NotContains(t, unresolved, metering.AttributeBillingUserRBACRoles)
+
+	absent := rows["absent"].Attributes
+	require.Equal(t, "observed@example.test", absent[metering.AttributeMessageUserEmail])
+	require.NotContains(t, absent, metering.AttributeBillingUserAccountEmail)
+	require.NotContains(t, absent, metering.AttributeBillingUserDirectoryGroups)
 }
 
-func TestMeterReadingCHWriterDoesNotEnrichAcrossOrganizations(t *testing.T) {
+func TestMeterReadingCHWriterDoesNotEnrichBillingUserAcrossOrganizations(t *testing.T) {
 	t.Parallel()
 	ctx := t.Context()
 	conn, organizationID := newMeteringPostgres(t)
 	foreignOrganizationID := "org_" + uuid.NewString()
 	seedMeteringOrganization(t, conn, foreignOrganizationID)
 
-	project, err := projectsrepo.New(conn).CreateProject(ctx, projectsrepo.CreateProjectParams{
-		Name:           "Local Tenant Project",
-		Slug:           "local-tenant-" + uuid.NewString()[:8],
-		OrganizationID: organizationID,
-	})
-	require.NoError(t, err)
-	foreignProject, err := projectsrepo.New(conn).CreateProject(ctx, projectsrepo.CreateProjectParams{
-		Name:           "Foreign Tenant Project",
-		Slug:           "foreign-tenant-" + uuid.NewString()[:8],
-		OrganizationID: foreignOrganizationID,
-	})
-	require.NoError(t, err)
-
 	localUserID := "local-user-" + uuid.NewString()
-	localEmail := "local-user-" + uuid.NewString() + "@example.test"
+	localEmail := "local@example.test"
 	seedMeteringAccount(t, conn, organizationID, localUserID, localEmail)
 	seedMeteringRole(t, conn, organizationID, localUserID, "local-role", false)
-	seedMeteringDirectoryUser(t, conn, foreignOrganizationID, localUserID, localEmail, "Foreign Division", "Foreign Department", false)
-	seedMeteringRole(t, conn, foreignOrganizationID, localUserID, "foreign-local-role", false)
+	seedMeteringDirectoryUser(t, conn, foreignOrganizationID, localUserID, localEmail, "Foreign Division", "Foreign Department", true)
+	seedMeteringRole(t, conn, foreignOrganizationID, localUserID, "foreign-role", false)
 
 	foreignUserID := "foreign-user-" + uuid.NewString()
-	foreignEmail := "foreign-user-" + uuid.NewString() + "@example.test"
+	foreignEmail := "foreign@example.test"
 	seedMeteringUser(t, conn, foreignOrganizationID, foreignUserID, foreignEmail, "Foreign User Division", "Foreign User Department", true)
-	seedMeteringRole(t, conn, foreignOrganizationID, foreignUserID, "foreign-user-role", false)
-
-	localChatID := uuid.New()
-	_, err = chatrepo.New(conn).UpsertChat(ctx, chatrepo.UpsertChatParams{
-		ID:             localChatID,
-		ProjectID:      project.ID,
-		OrganizationID: organizationID,
-		UserID:         conv.ToPGText(localUserID),
-		ExternalUserID: conv.ToPGText("local-owner-external"),
-		Title:          conv.ToPGText("Local tenant chat"),
-	})
-	require.NoError(t, err)
-	foreignChatID := uuid.New()
-	_, err = chatrepo.New(conn).UpsertChat(ctx, chatrepo.UpsertChatParams{
-		ID:             foreignChatID,
-		ProjectID:      foreignProject.ID,
-		OrganizationID: foreignOrganizationID,
-		UserID:         conv.ToPGText(foreignUserID),
-		ExternalUserID: conv.ToPGText("foreign-owner-external"),
-		Title:          conv.ToPGText("Foreign tenant chat"),
-	})
-	require.NoError(t, err)
 
 	now := time.Now().UTC()
-	newMessage := func(operationID string, scope metering.Scope, attributes map[string]string) *meteringv1.MeterReading {
+	newMessage := func(operationID, scopeOrganizationID string, billingUserID string) *meteringv1.MeterReading {
 		t.Helper()
 		message, _ := usageMessage(t, metering.UsageInput{
 			Meter:       metering.AgentSessionStorage(),
-			Scope:       scope,
+			Scope:       metering.ProjectScope(scopeOrganizationID, uuid.New()),
 			OperationID: operationID,
 			Value:       1,
 			OccurredAt:  now,
 			ProducedAt:  now,
-			Source:      "chat_message_writer",
-			Attributes:  attributes,
+			Source:      "test",
+			Attributes: map[string]string{
+				metering.AttributeBillingUserID:             billingUserID,
+				metering.AttributeBillingUserAccountEmail:   "spoofed@example.test",
+				metering.AttributeBillingUserDivisionName:   "Spoofed Division",
+				metering.AttributeBillingUserDirectoryMatch: "spoofed",
+			},
 		})
 		return message
 	}
 	messages := []*meteringv1.MeterReading{
-		newMessage("foreign-chat", metering.ProjectScope(organizationID, project.ID), map[string]string{
-			metering.AttributeChatID:                  foreignChatID.String(),
-			metering.AttributeModel:                   "foreign-chat-model",
-			metering.AttributeMessageUserID:           foreignUserID,
-			metering.AttributeMessageUserAccountEmail: foreignEmail,
-			metering.AttributeChatOwnerUserEmail:      foreignEmail,
-			metering.AttributeMessageUserRBACRoles:    `["foreign-user-role"]`,
-		}),
-		newMessage("foreign-project", metering.ProjectScope(organizationID, foreignProject.ID), map[string]string{
-			metering.AttributeChatID:     foreignChatID.String(),
-			metering.AttributeHookSource: "foreign-project-source",
-		}),
-		newMessage("foreign-message-user", metering.ProjectScope(organizationID, project.ID), map[string]string{
-			metering.AttributeChatID:        localChatID.String(),
-			metering.AttributeMessageUserID: foreignUserID,
-		}),
-		newMessage("local-principals", metering.ProjectScope(organizationID, project.ID), map[string]string{
-			metering.AttributeChatID:        localChatID.String(),
-			metering.AttributeMessageUserID: localUserID,
-		}),
+		newMessage("local-user", organizationID, localUserID),
+		newMessage("foreign-user-in-local-org", organizationID, foreignUserID),
+		newMessage("foreign-user-in-foreign-org", foreignOrganizationID, foreignUserID),
 	}
-
 	capture := &captureReadingInserter{rows: nil, err: nil}
 	writer := metering.NewMeterReadingCHWriter(testenv.NewLogger(t), conn, capture)
+
 	require.NoError(t, writer.HandleBatch(ctx, messages, nil))
 	require.Len(t, capture.rows, len(messages))
-
 	rows := make(map[string]chrepo.ReadingRow, len(capture.rows))
 	for _, row := range capture.rows {
 		rows[row.OperationID] = row
 	}
 
-	require.Equal(t, map[string]string{
-		"codec":                         string(metering.MeasurementTiktokenO200kBase),
-		metering.AttributeChatID:        foreignChatID.String(),
-		metering.AttributeModel:         "foreign-chat-model",
-		metering.AttributeMessageUserID: foreignUserID,
-	}, rows["foreign-chat"].Attributes)
-	require.Equal(t, map[string]string{
-		"codec":                      string(metering.MeasurementTiktokenO200kBase),
-		metering.AttributeChatID:     foreignChatID.String(),
-		metering.AttributeHookSource: "foreign-project-source",
-	}, rows["foreign-project"].Attributes)
+	local := rows["local-user"].Attributes
+	require.Equal(t, localEmail, local[metering.AttributeBillingUserAccountEmail])
+	require.Equal(t, `["local-role"]`, local[metering.AttributeBillingUserRBACRoles])
+	require.NotContains(t, local, metering.AttributeBillingUserDivisionName)
+	require.NotContains(t, local, metering.AttributeBillingUserDirectoryMatch)
 
-	foreignMessageUser := rows["foreign-message-user"].Attributes
-	require.Equal(t, foreignUserID, foreignMessageUser[metering.AttributeMessageUserID])
-	require.NotContains(t, foreignMessageUser, metering.AttributeMessageUserAccountEmail)
-	require.NotContains(t, foreignMessageUser, metering.AttributeMessageUserDivisionName)
-	require.NotContains(t, foreignMessageUser, metering.AttributeMessageUserDepartmentName)
-	require.NotContains(t, foreignMessageUser, metering.AttributeMessageUserDirectoryMatch)
-	require.NotContains(t, foreignMessageUser, metering.AttributeMessageUserRBACRoles)
-	require.Equal(t, localUserID, foreignMessageUser[metering.AttributeChatOwnerUserID])
-	require.Equal(t, localEmail, foreignMessageUser[metering.AttributeChatOwnerUserEmail])
-	require.Equal(t, "local-owner-external", foreignMessageUser[metering.AttributeChatOwnerExternalUserID])
-	require.Equal(t, `["local-role"]`, foreignMessageUser[metering.AttributeChatOwnerRBACRoles])
-	require.NotContains(t, foreignMessageUser, metering.AttributeChatOwnerDirectoryMatch)
+	foreignInLocal := rows["foreign-user-in-local-org"].Attributes
+	require.Equal(t, foreignUserID, foreignInLocal[metering.AttributeBillingUserID])
+	require.NotContains(t, foreignInLocal, metering.AttributeBillingUserAccountEmail)
+	require.NotContains(t, foreignInLocal, metering.AttributeBillingUserDivisionName)
+	require.NotContains(t, foreignInLocal, metering.AttributeBillingUserDirectoryMatch)
 
-	localPrincipals := rows["local-principals"].Attributes
-	require.Equal(t, localEmail, localPrincipals[metering.AttributeMessageUserAccountEmail])
-	require.Equal(t, localEmail, localPrincipals[metering.AttributeChatOwnerUserEmail])
-	require.Equal(t, `["local-role"]`, localPrincipals[metering.AttributeMessageUserRBACRoles])
-	require.Equal(t, `["local-role"]`, localPrincipals[metering.AttributeChatOwnerRBACRoles])
-	require.NotContains(t, localPrincipals, metering.AttributeMessageUserDivisionName)
-	require.NotContains(t, localPrincipals, metering.AttributeMessageUserDepartmentName)
-	require.NotContains(t, localPrincipals, metering.AttributeMessageUserDirectoryMatch)
-	require.NotContains(t, localPrincipals, metering.AttributeChatOwnerDivisionName)
-	require.NotContains(t, localPrincipals, metering.AttributeChatOwnerDepartmentName)
-	require.NotContains(t, localPrincipals, metering.AttributeChatOwnerDirectoryMatch)
+	foreign := rows["foreign-user-in-foreign-org"].Attributes
+	require.Equal(t, foreignEmail, foreign[metering.AttributeBillingUserAccountEmail])
+	require.Equal(t, "Foreign User Division", foreign[metering.AttributeBillingUserDivisionName])
+	require.Equal(t, "user_id", foreign[metering.AttributeBillingUserDirectoryMatch])
 }
 
 func TestMeterReadingCHWriterAbortsBeforeClickHouseInsertOnPostgresFailure(t *testing.T) {
@@ -701,7 +517,8 @@ func TestMeterReadingCHWriterAbortsBeforeClickHouseInsertOnPostgresFailure(t *te
 		ProducedAt:  now,
 		Source:      "chat_message_writer",
 		Attributes: map[string]string{
-			metering.AttributeChatID: uuid.NewString(),
+			metering.AttributeChatID:        uuid.NewString(),
+			metering.AttributeBillingUserID: "billing-user-" + uuid.NewString(),
 		},
 	})
 	capture := &captureReadingInserter{rows: nil, err: nil}
@@ -709,6 +526,6 @@ func TestMeterReadingCHWriterAbortsBeforeClickHouseInsertOnPostgresFailure(t *te
 
 	err := writer.HandleBatch(t.Context(), []*meteringv1.MeterReading{message}, nil)
 
-	require.ErrorContains(t, err, "resolve agent session storage attributes")
+	require.ErrorContains(t, err, "resolve billing user attributes")
 	require.Empty(t, capture.rows)
 }
