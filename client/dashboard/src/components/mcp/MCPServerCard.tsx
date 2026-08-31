@@ -35,6 +35,7 @@ export function MCPServerCard({
 
   const mcpEnabled = server.visibility !== "disabled";
   const mcpIsPublic = server.visibility === "public";
+  const mcpIsUpstream = server.visibility === "upstream";
   // Unproxied servers are never proxied, so an endpoint count would always
   // read 0 and imply something's broken. Surface the backend kind instead.
   const isUnproxied = !!server.unproxiedMcpServerId;
@@ -77,6 +78,7 @@ export function MCPServerCard({
             <MCPStatusIndicator
               mcpEnabled={mcpEnabled}
               mcpIsPublic={mcpIsPublic}
+              mcpIsUpstream={mcpIsUpstream}
             />
             {activityStatus && (
               <MCPActivityIndicator

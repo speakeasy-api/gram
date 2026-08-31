@@ -7,15 +7,16 @@ import { remap as remap$ } from "../../lib/primitives.js";
 import { ClosedEnum } from "../../types/enums.js";
 
 /**
- * The visibility of an MCP server
+ * Who authenticates an inbound MCP client, and therefore whether and how the server is served. `disabled`: nothing is served. `private`: Gram, against a Gram API key, dashboard session, or user session issuer, with mcp:connect enforced. `public`: nobody, so the server is served anonymously. `upstream`: the server's own upstream authorization server, whose metadata Gram advertises and to which the inbound bearer is forwarded unchanged; Gram validates nothing and mints no session. `upstream` requires a hosted (toolset) backend, a remote session issuer, and no user session issuer.
  */
 export const UpdateMcpServerFormVisibility = {
   Disabled: "disabled",
   Private: "private",
   Public: "public",
+  Upstream: "upstream",
 } as const;
 /**
- * The visibility of an MCP server
+ * Who authenticates an inbound MCP client, and therefore whether and how the server is served. `disabled`: nothing is served. `private`: Gram, against a Gram API key, dashboard session, or user session issuer, with mcp:connect enforced. `public`: nobody, so the server is served anonymously. `upstream`: the server's own upstream authorization server, whose metadata Gram advertises and to which the inbound bearer is forwarded unchanged; Gram validates nothing and mints no session. `upstream` requires a hosted (toolset) backend, a remote session issuer, and no user session issuer.
  */
 export type UpdateMcpServerFormVisibility = ClosedEnum<
   typeof UpdateMcpServerFormVisibility
@@ -58,7 +59,7 @@ export type UpdateMcpServerForm = {
    */
   unproxiedMcpServerId?: string | undefined;
   /**
-   * The visibility of an MCP server
+   * Who authenticates an inbound MCP client, and therefore whether and how the server is served. `disabled`: nothing is served. `private`: Gram, against a Gram API key, dashboard session, or user session issuer, with mcp:connect enforced. `public`: nobody, so the server is served anonymously. `upstream`: the server's own upstream authorization server, whose metadata Gram advertises and to which the inbound bearer is forwarded unchanged; Gram validates nothing and mints no session. `upstream` requires a hosted (toolset) backend, a remote session issuer, and no user session issuer.
    */
   visibility: UpdateMcpServerFormVisibility;
 };
