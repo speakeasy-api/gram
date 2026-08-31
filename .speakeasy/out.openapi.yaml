@@ -62304,6 +62304,14 @@ components:
           type: number
           description: Credits spent this month in USD.
           format: double
+        disable_causes:
+          type: array
+          items:
+            type: string
+          description: Active internal disable causes. Omitted for legacy unclassified rows.
+        disable_causes_classified:
+          type: boolean
+          description: Whether disable_causes is classified, including an explicitly empty cause set.
         disabled:
           type: boolean
         key_type:
@@ -62317,6 +62325,7 @@ components:
         - credits_used
         - monthly_credits
         - disabled
+        - disable_causes_classified
     AdminInferenceKeyLimit:
       type: object
       properties:

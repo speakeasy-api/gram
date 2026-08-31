@@ -104,6 +104,14 @@ func TestGetInferenceKeysUsesCanonicalOrganizationIDAndReturnsConfiguredState(t 
 		OrganizationID: "org_inference", KeyType: "internal", KeyEncrypted: pgtype.Text{}, KeyHash: "hash-internal", MonthlyCredits: 50,
 	})
 	require.NoError(t, err)
+	_, err = openRouterRepo.AddOpenRouterAPIKeyDisableCause(ctx, orrepo.AddOpenRouterAPIKeyDisableCauseParams{
+		OrganizationID: "org_inference", KeyType: "chat", KeyHash: "hash-chat", DisableCause: "admin_lock",
+	})
+	require.NoError(t, err)
+	_, err = openRouterRepo.AddOpenRouterAPIKeyDisableCause(ctx, orrepo.AddOpenRouterAPIKeyDisableCauseParams{
+		OrganizationID: "org_inference", KeyType: "chat", KeyHash: "hash-chat", DisableCause: "future_policy",
+	})
+	require.NoError(t, err)
 	err = openRouterRepo.DisableOpenRouterAPIKey(ctx, orrepo.DisableOpenRouterAPIKeyParams{
 		OrganizationID: "org_inference", KeyType: "internal",
 	})
@@ -112,8 +120,8 @@ func TestGetInferenceKeysUsesCanonicalOrganizationIDAndReturnsConfiguredState(t 
 	result, err := svc.GetInferenceKeys(ctx, &gen.GetInferenceKeysPayload{OrganizationID: "org_inference"})
 	require.NoError(t, err)
 	require.Equal(t, []*gen.AdminInferenceKey{
-		{KeyType: "chat", CreditsUsed: 42.75, MonthlyCredits: 100, Disabled: false},
-		{KeyType: "internal", CreditsUsed: 12.5, MonthlyCredits: 50, Disabled: true},
+		{KeyType: "chat", CreditsUsed: 42.75, MonthlyCredits: 100, Disabled: true, DisableCauses: []string{"admin_lock", "future_policy"}, DisableCausesClassified: true},
+		{KeyType: "internal", CreditsUsed: 12.5, MonthlyCredits: 50, Disabled: true, DisableCauses: nil, DisableCausesClassified: false},
 	}, result)
 }
 
@@ -150,7 +158,7 @@ func TestGetInferenceKeysOmitsUnsupportedAndAbsentKeys(t *testing.T) {
 	result, err := svc.GetInferenceKeys(ctx, &gen.GetInferenceKeysPayload{OrganizationID: "org_inference_filtered"})
 	require.NoError(t, err)
 	require.Equal(t, []*gen.AdminInferenceKey{
-		{KeyType: "chat", CreditsUsed: 7.25, MonthlyCredits: 100, Disabled: false},
+		{KeyType: "chat", CreditsUsed: 7.25, MonthlyCredits: 100, Disabled: false, DisableCauses: []string{}, DisableCausesClassified: true},
 	}, result)
 
 }

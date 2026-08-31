@@ -130,6 +130,11 @@ type AdminInferenceKey struct {
 	CreditsUsed    float64
 	MonthlyCredits int64
 	Disabled       bool
+	// Active internal disable causes. Omitted for legacy unclassified rows.
+	DisableCauses []string
+	// Whether disable_causes is classified, including an explicitly empty cause
+	// set.
+	DisableCausesClassified bool
 }
 
 // AdminInferenceKeyLimit is the result type of the admin service

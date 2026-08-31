@@ -5051,6 +5051,11 @@ type AdminInferenceKeyResponse struct {
 	CreditsUsed    *float64 `form:"credits_used,omitempty" json:"credits_used,omitempty" xml:"credits_used,omitempty"`
 	MonthlyCredits *int64   `form:"monthly_credits,omitempty" json:"monthly_credits,omitempty" xml:"monthly_credits,omitempty"`
 	Disabled       *bool    `form:"disabled,omitempty" json:"disabled,omitempty" xml:"disabled,omitempty"`
+	// Active internal disable causes. Omitted for legacy unclassified rows.
+	DisableCauses []string `form:"disable_causes,omitempty" json:"disable_causes,omitempty" xml:"disable_causes,omitempty"`
+	// Whether disable_causes is classified, including an explicitly empty cause
+	// set.
+	DisableCausesClassified *bool `form:"disable_causes_classified,omitempty" json:"disable_causes_classified,omitempty" xml:"disable_causes_classified,omitempty"`
 }
 
 // AdminInferenceSpendMonthResponse is used to define fields on response body
@@ -15823,6 +15828,9 @@ func ValidateAdminInferenceKeyResponse(body *AdminInferenceKeyResponse) (err err
 	}
 	if body.Disabled == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("disabled", "body"))
+	}
+	if body.DisableCausesClassified == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("disable_causes_classified", "body"))
 	}
 	return
 }

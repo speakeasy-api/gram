@@ -1178,7 +1178,11 @@ func (q *Queries) ListFinalizedBillingCycleStarts(ctx context.Context, organizat
 }
 
 const listMaterializedOpenRouterInferenceKeys = `-- name: ListMaterializedOpenRouterInferenceKeys :many
-SELECT key_type, monthly_credits, (CASE WHEN disable_causes IS NULL THEN disabled ELSE cardinality(disable_causes) > 0 END)::boolean AS disabled
+SELECT key_type
+  , monthly_credits
+  , (CASE WHEN disable_causes IS NULL THEN disabled ELSE cardinality(disable_causes) > 0 END)::boolean AS disabled
+  , disable_causes
+  , (disable_causes IS NOT NULL)::boolean AS disable_causes_classified
 FROM openrouter_api_keys
 WHERE organization_id = $1
   AND key_type = ANY($2::text[])
@@ -1192,9 +1196,11 @@ type ListMaterializedOpenRouterInferenceKeysParams struct {
 }
 
 type ListMaterializedOpenRouterInferenceKeysRow struct {
-	KeyType        string
-	MonthlyCredits int64
-	Disabled       bool
+	KeyType                 string
+	MonthlyCredits          int64
+	Disabled                bool
+	DisableCauses           []string
+	DisableCausesClassified bool
 }
 
 func (q *Queries) ListMaterializedOpenRouterInferenceKeys(ctx context.Context, arg ListMaterializedOpenRouterInferenceKeysParams) ([]ListMaterializedOpenRouterInferenceKeysRow, error) {
@@ -1206,7 +1212,13 @@ func (q *Queries) ListMaterializedOpenRouterInferenceKeys(ctx context.Context, a
 	var items []ListMaterializedOpenRouterInferenceKeysRow
 	for rows.Next() {
 		var i ListMaterializedOpenRouterInferenceKeysRow
-		if err := rows.Scan(&i.KeyType, &i.MonthlyCredits, &i.Disabled); err != nil {
+		if err := rows.Scan(
+			&i.KeyType,
+			&i.MonthlyCredits,
+			&i.Disabled,
+			&i.DisableCauses,
+			&i.DisableCausesClassified,
+		); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
