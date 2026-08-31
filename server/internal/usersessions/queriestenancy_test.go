@@ -26,8 +26,17 @@ import (
 //
 // That is not something review reliably catches across ~50 near-identical
 // predicates, and it is not something the compiler or sqlc can catch at all.
-// This test catches it, and catches a new queries.sql that joins these tables
-// without scoping them at all.
+// This test catches it, in every queries.sql under internal/ rather than a
+// fixed list, so a package that starts joining these tables is covered as soon
+// as it does.
+//
+// What it deliberately does NOT catch is a query that scopes these tables by
+// nothing at all. Many do so legitimately: the public OAuth surface carries no
+// project header and treats the issuer id as the authoritative scope, which
+// GetUserSessionClientByClientID and IssuerAdmitsCimdClientURI both say in as
+// many words. Telling those apart from an accidental omission needs a
+// judgement this test cannot make, so it checks the shape of a tenancy
+// predicate that is present rather than the presence of one.
 
 // tenancyScopedTables are the five tables that carry the project/organization
 // tier pair. A predicate on any other table's project_id is none of this
@@ -56,6 +65,14 @@ var tenancyExemptQueries = map[string]string{
 	"SetUserSessionIssuerCIMDAdmissionMode": "test-only fixture that targets one known project-tier row",
 	"SetUserSessionIssuerOrganizationID":    "test-only fixture that targets one known project-tier row",
 }
+
+// organizationRHS pins what the guard may compare the organization to: the
+// caller's own @organization_id parameter, or a correlated organization column
+// from a table already scoped in the same query (IsPlatformMCPNewModelEligible
+// compares to projects.organization_id, which the surrounding join has already
+// pinned to the caller). Without this the guard would accept any right-hand
+// side at all, so `organization_id = @some_other_org` would read as scoped.
+const organizationRHS = `organization_id\s*=\s*(?:@organization_id\b|\w+\.organization_id\b)`
 
 // bindPattern captures the table bindings a block establishes: FROM, JOIN,
 // UPDATE, INTO and USING, plus comma-separated table lists. An unaliased table
@@ -178,14 +195,14 @@ func unguardedAliases(body string) []tableAlias {
 		// without it, alias "s" matches the "s." at the end of "iss.".
 		q := `\b` + regexp.QuoteMeta(alias) + `\.`
 		scoped := regexp.MustCompile(q + `project_id\s*=\s*@project_id`).MatchString(body)
-		guarded := regexp.MustCompile(q + `project_id IS NULL AND ` + q + `organization_id\s*=`).MatchString(body)
+		guarded := regexp.MustCompile(q + `project_id IS NULL AND ` + q + organizationRHS).MatchString(body)
 
 		// A table bound without an alias may also be written bare. Go's regexp
 		// has no lookbehind, so the bare spelling gets an explicit boundary
 		// check rather than a prefix pattern.
 		if alias == table {
 			scoped = scoped || matchesBare(body, `project_id\s*=\s*@project_id`)
-			guarded = guarded || matchesBare(body, `project_id IS NULL AND organization_id\s*=`)
+			guarded = guarded || matchesBare(body, `project_id IS NULL AND `+organizationRHS)
 		}
 
 		if scoped && !guarded {
