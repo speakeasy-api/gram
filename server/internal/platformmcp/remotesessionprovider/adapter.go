@@ -160,6 +160,8 @@ func (a *Adapter) BeginSetup(ctx context.Context, request platformmcp.ProviderSe
 		Subject:             &subject,
 		McpSlug:             request.MCPSlug,
 		RouteBase:           "mcp",
+		McpServerID:         uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		MetaMcpServerID:     uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 		FinalRedirectURI:    descriptor.ProviderSetupCompletionURL,
 		Resource:            descriptor.Resource,
 		AutoRefresh:         nil,

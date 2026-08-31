@@ -28,12 +28,16 @@ func (s *Service) validateRemoteLoginPrivateAuthority(ctx context.Context, state
 	}
 	switch {
 	case result.Server != nil:
-		if !result.Server.UserSessionIssuerID.Valid || result.Server.UserSessionIssuerID.UUID != state.UserSessionIssuerID {
-			return fmt.Errorf("private MCP endpoint issuer changed")
+		if (state.McpServerID.Valid && result.Server.ID != state.McpServerID.UUID) ||
+			state.MetaMcpServerID.Valid ||
+			!result.Server.UserSessionIssuerID.Valid || result.Server.UserSessionIssuerID.UUID != state.UserSessionIssuerID {
+			return fmt.Errorf("private MCP endpoint backend or issuer changed")
 		}
 	case result.MetaServer != nil:
-		if !result.MetaServer.UserSessionIssuerID.Valid || result.MetaServer.UserSessionIssuerID.UUID != state.UserSessionIssuerID {
-			return fmt.Errorf("private MCP endpoint issuer changed")
+		if state.McpServerID.Valid ||
+			(state.MetaMcpServerID.Valid && result.MetaServer.ID != state.MetaMcpServerID.UUID) ||
+			!result.MetaServer.UserSessionIssuerID.Valid || result.MetaServer.UserSessionIssuerID.UUID != state.UserSessionIssuerID {
+			return fmt.Errorf("private MCP endpoint backend or issuer changed")
 		}
 	default:
 		return fmt.Errorf("private MCP endpoint backend is unavailable")
