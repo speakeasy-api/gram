@@ -231,8 +231,29 @@ func (f *ProxyManager) BuildTarget(
 	// private — because the property is Gram's own envelope rather than
 	// anything scoped to an identity or a risk policy. It is a no-op for
 	// the arguments that don't carry it.
+	// Whether server-level RBAC applies, decided once by switch rather than by
+	// four separate comparisons against private. The comparisons read as "not
+	// private, so skip RBAC", which silently grants any future visibility the
+	// public treatment. BuildTarget cannot return an error, so an unrecognised
+	// value takes the deny-by-default arm: attaching the interceptors makes a
+	// caller with no grants unable to invoke anything, which is the safe way to
+	// be wrong here.
+	//
+	// Upstream skips RBAC deliberately, not by fall-through: its callers
+	// authenticate against the upstream authorization server, so Gram holds no
+	// grants to consult and the tools/list filter would empty the catalog.
+	// Unreachable today — upstream is hosted-only and this manager serves
+	// proxied backends — so this is defense in depth.
+	enforceServerRBAC := true
+	switch visibility {
+	case mcpservers.VisibilityPrivate:
+		enforceServerRBAC = true
+	case mcpservers.VisibilityPublic, mcpservers.VisibilityUpstream:
+		enforceServerRBAC = false
+	}
+
 	toolsCallPreForwardInterceptors := []proxy.ToolsCallRequestInterceptor(nil)
-	if visibility == mcpservers.VisibilityPrivate {
+	if enforceServerRBAC {
 		// Private calls use a method-level preflight so even malformed params
 		// reach the checkpoint before any downstream typed or upstream work.
 		checkpoint := f.killswitchCheckpoint
@@ -250,14 +271,14 @@ func (f *ProxyManager) BuildTarget(
 		NewToolsCallStripToolsetIDInterceptor(logger),
 		clickHouseLogInterceptor,
 	}
-	if visibility == mcpservers.VisibilityPrivate {
+	if enforceServerRBAC {
 		toolsCallReqInterceptors = append(toolsCallReqInterceptors,
 			NewToolsCallAuthzInterceptor(f.authz, f.toolDispositions, identity.McpServerID, projectID, logger),
 		)
 	}
 
 	toolsListRespInterceptors := []proxy.ToolsListResponseInterceptor{}
-	if visibility == mcpservers.VisibilityPrivate {
+	if enforceServerRBAC {
 		toolsListRespInterceptors = append(toolsListRespInterceptors,
 			NewToolsListMCPConnectFilterInterceptor(f.authz, f.toolDispositions, identity.McpServerID, projectID, logger),
 		)
@@ -277,7 +298,7 @@ func (f *ProxyManager) BuildTarget(
 	// the proxy interceptor surface is in place so they can attach later
 	// without touching the proxy package again.
 	userRequestObservationInterceptors := make([]proxy.UserRequestInterceptor, 0, 3)
-	if options.recordIdentityCoverage && visibility != mcpservers.VisibilityPrivate {
+	if options.recordIdentityCoverage && !enforceServerRBAC {
 		userRequestObservationInterceptors = append(userRequestObservationInterceptors, NewToolsCallIdentityCoverageInterceptor(f.identityCoverage, identity, organizationID))
 	}
 	userRequestObservationInterceptors = append(userRequestObservationInterceptors,

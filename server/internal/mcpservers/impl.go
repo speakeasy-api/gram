@@ -170,6 +170,12 @@ func (s *Service) CreateMcpServer(ctx context.Context, payload *gen.CreateMcpSer
 		return nil, oops.E(oops.CodeInvalid, err, "invalid mcp server").LogWarn(ctx, logger)
 	}
 
+	// Create never writes a user session issuer, so the NULL half of the rule
+	// holds by construction here; the backend half does not.
+	if err := verifyUpstreamAuthorization(string(payload.Visibility), ids.ToolsetID, uuid.NullUUID{UUID: uuid.Nil, Valid: false}); err != nil {
+		return nil, oops.E(oops.CodeInvalid, err, "invalid mcp server").LogWarn(ctx, logger)
+	}
+
 	server, err := CreateMCPServerInTransaction(ctx, dbtx, s.audit, MCPServerTransactionInput{
 		OrganizationID:        authCtx.ActiveOrganizationID,
 		ProjectID:             *authCtx.ProjectID,
@@ -728,6 +734,13 @@ func (s *Service) UpdateMcpServer(ctx context.Context, payload *gen.UpdateMcpSer
 		return nil, oops.E(oops.CodeInvalid, err, "invalid mcp server").LogWarn(ctx, logger)
 	}
 
+	// Same reason as the consent check above: the update query COALESCEs unset
+	// references, so only the post-update row says which backend and issuer the
+	// server actually ended up with.
+	if err := verifyUpstreamAuthorization(updated.Visibility, updated.ToolsetID, updated.UserSessionIssuerID); err != nil {
+		return nil, oops.E(oops.CodeInvalid, err, "invalid mcp server").LogWarn(ctx, logger)
+	}
+
 	afterView := mv.BuildMcpServerView(updated)
 
 	// A server that was just enabled is publishable if it already has an
@@ -1218,6 +1231,37 @@ func verifyTunneledPublicConsent(ctx context.Context, dbtx pgx.Tx, projectID uui
 	}
 	if !source.AllowPublic {
 		return fmt.Errorf("tunneled MCP servers cannot be public until the tunnel source enables public serving")
+	}
+	return nil
+}
+
+// verifyUpstreamAuthorization enforces the two states an `upstream` server may
+// not hold. Both are checked here rather than by a CHECK constraint, because
+// mcp_servers_remote_session_issuer_id_fkey is ON DELETE SET NULL and the
+// project/organization cascades that hard-delete remote_session_issuers would
+// trip such a constraint mid-teardown.
+//
+// Hosted (toolset) backend only: the serve path forwards the inbound bearer as
+// a token input, which only the hosted path does. Proxied backends fail closed
+// at dispatch, but rejecting the write is the smaller and clearer failure.
+//
+// user_session_issuer_id must be NULL, and this is load-bearing rather than
+// stylistic. ResyncMCPServerRemoteSessionIssuers matches
+// `WHERE s.user_session_issuer_id = resolved.user_session_issuer_id`, and SQL
+// NULL never equals anything, so a NULL there is the only thing that keeps the
+// resync from silently reassigning or nulling the remote_session_issuer_id
+// naming the issuer whose metadata the well-known documents serve. A server
+// that was both `upstream` and issuer-gated would advertise one authorization
+// server while forwarding bearers to another.
+func verifyUpstreamAuthorization(visibility string, toolsetID, userSessionIssuerID uuid.NullUUID) error {
+	if visibility != VisibilityUpstream {
+		return nil
+	}
+	if !toolsetID.Valid {
+		return fmt.Errorf("only toolset-backed MCP servers can serve direct upstream authorization")
+	}
+	if userSessionIssuerID.Valid {
+		return fmt.Errorf("MCP servers serving direct upstream authorization cannot also be gated by a user session issuer")
 	}
 	return nil
 }

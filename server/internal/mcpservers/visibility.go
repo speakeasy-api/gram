@@ -10,4 +10,5 @@ const (
 	VisibilityPublic   = visibility.Public
 	VisibilityPrivate  = visibility.Private
 	VisibilityDisabled = visibility.Disabled
+	VisibilityUpstream = visibility.Upstream
 )
