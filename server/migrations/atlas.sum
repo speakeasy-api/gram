@@ -1,4 +1,4 @@
-h1:2w/Ajbac4XM4CO712uj4TNnf0LYamPpaXlooyBehh1Q=
+h1:bBiI5RXBclQfbYpTx9GonVyJlwCtvKQdSR6dANDJz2c=
 20250502122425_initial-tables.sql h1:Hu3O60/bB4fjZpUay8FzyOjw6vngp087zU+U/wVKn7k=
 20250502130852_initial-indexes.sql h1:oYbnwi9y9PPTqu7uVbSPSALhCY8XF3rv03nDfG4b7mo=
 20250502154250_relax-http-security-fields.sql h1:0+OYIDq7IHmx7CP5BChVwfpF2rOSrRDxnqawXio2EVo=
@@ -378,3 +378,4 @@ h1:2w/Ajbac4XM4CO712uj4TNnf0LYamPpaXlooyBehh1Q=
 20260829131739_dno-983-killswitch-review-fixes.sql h1:t5J2SbzQwB8YWbJ6hz1wpMvbzxGn9URFT+lJe+9x1MQ=
 20260829222004_openrouter-api-keys-add-disable-causes.sql h1:aY46q4PFvjI52Gs25EhX0vKD3cv/3YUhBzI/7DVIl7A=
 20260831170736_tunneled-mcp-server-resource-identifier.sql h1:knIZQZflX4azED7sFXe+uPiJJexkH2eTDfteUGnaKXg=
+20260831182126_aim-78-remote-session-client-jwks.sql h1:s39s09GZ0Zjh20gDECQj9ZmkSOsXZsHxpADmdM8uRrI=
