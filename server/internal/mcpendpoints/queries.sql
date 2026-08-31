@@ -115,33 +115,16 @@ WHERE id = @id AND project_id = @project_id AND deleted IS FALSE
 RETURNING *;
 
 -- name: CheckUnifiedSlugAvailability :one
--- Returns true when the slug is available in the given uniqueness namespace
--- across BOTH tables that can hold a live MCP address: mcp_endpoints.slug and
--- toolsets.mcp_slug. The runtime resolves mcp_endpoints first and falls back
--- to toolsets.mcp_slug, so for as long as both representations coexist a slug
--- taken by either table would collide at serve time. Platform-domain
--- addresses (custom_domain_id IS NULL) and custom-domain addresses live in
--- separate namespaces enforced by partial unique indexes on each table; this
--- query mirrors that scoping by treating NULL as a valid match value via
--- IS NOT DISTINCT FROM. Soft-deleted rows are ignored. The slug-existence
--- checks are intentionally not project-scoped because the uniqueness indexes
--- they mirror span all projects within their namespace.
---
--- When custom_domain_id is supplied, the domain must also belong to the
--- caller's organization. Foreign or unknown domains short-circuit to
--- "unavailable" (returns false) so callers can't probe slug-existence under
--- domains they don't own. organization_id is ignored on the platform-domain
--- branch (custom_domain_id IS NULL).
---
--- Owner exclusions, for a hosted (toolset-backed) server whose address is
--- mirrored in both tables:
---   * exclude_toolset_id: the toolset whose own slug is being validated. Its
---     toolsets row and any mcp_endpoints rows of its wrapping mcp_servers row
---     do not count against it.
---   * exclude_mcp_server_id: the mcp_servers row whose endpoint slug is being
---     validated. The toolset backing that server does not count against it.
+-- True when no live mcp_endpoints.slug or toolsets.mcp_slug holds the slug in
+-- the namespace (platform when custom_domain_id is NULL, else that domain).
+-- Not project-scoped, mirroring the partial unique indexes. Owner exclusions:
+-- exclude_toolset_id discounts that toolset's row and its wrapper's endpoints;
+-- exclude_mcp_server_id discounts the toolset backing that server. Unless
+-- skip_domain_check, a supplied domain must be live and owned by
+-- organization_id or the result is false (blocks probing foreign domains).
 SELECT (
-  sqlc.narg('custom_domain_id')::uuid IS NULL
+  @skip_domain_check::boolean
+  OR sqlc.narg('custom_domain_id')::uuid IS NULL
   OR EXISTS (
     SELECT 1
     FROM custom_domains cd
@@ -184,6 +167,12 @@ SELECT (
       )
     )
 );
+
+-- name: LockSlugScope :exec
+-- Serializes competing claims on one (namespace, slug) address for the rest of
+-- the caller's transaction; the per-table unique indexes cannot see
+-- cross-table collisions.
+SELECT pg_advisory_xact_lock(hashtextextended('mcp_slug:' || @scope_key::text, 0));
 
 -- name: SoftDeleteMCPEndpointsByMCPServerID :many
 -- Soft-delete all endpoints that point at a given mcp server. Used when the

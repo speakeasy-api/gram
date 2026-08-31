@@ -437,44 +437,49 @@ func (s *Service) UpdateToolset(ctx context.Context, payload *gen.UpdateToolsetP
 		toolsetDomainID = payload.CustomDomainID
 	}
 
-	if payload.McpSlug != nil && *payload.McpSlug != "" {
+	slugChanged := payload.McpSlug != nil && *payload.McpSlug != ""
+	domainChanged := updateParams.CustomDomainID.Valid &&
+		(!existingToolset.CustomDomainID.Valid || existingToolset.CustomDomainID.UUID != updateParams.CustomDomainID.UUID)
+	slug := existingToolset.McpSlug.String
+	if slugChanged {
+		slug = conv.ToLower(*payload.McpSlug)
+	}
+
+	// Probe whenever the effective (slug, domain) address changes: a domain
+	// change alone re-scopes the existing slug and can collide there too.
+	if slug != "" && (slugChanged || domainChanged) {
+		domainID := uuid.NullUUID{UUID: uuid.Nil, Valid: false}
 		// Slugs on the platform domain (no custom domain, or free accounts) must be prefixed with the org slug
 		if toolsetDomainID == nil || authCtx.AccountType == "free" {
-			if !strings.HasPrefix(conv.ToLower(*payload.McpSlug), authCtx.OrganizationSlug+"-") {
+			if !strings.HasPrefix(slug, authCtx.OrganizationSlug+"-") {
 				return nil, oops.E(oops.CodeBadRequest, nil, "mcp slug must be prefixed with the org slug for free accounts")
 			}
-
-			// Check slug uniqueness on the platform domain only (no custom domain).
-			// Custom domains have a separate namespace so the same slug can exist on both.
-			available, err := mcpendpoints.CheckSlugAvailable(ctx, dbtx, mcpendpoints.SlugAvailabilityCheck{
-				Slug:               conv.ToLower(*payload.McpSlug),
-				CustomDomainID:     uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-				OrganizationID:     authCtx.ActiveOrganizationID,
-				ExcludeToolsetID:   uuid.NullUUID{UUID: existingToolset.ID, Valid: true},
-				ExcludeMcpServerID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-			})
-			if err != nil {
-				return nil, oops.E(oops.CodeUnexpected, err, "check mcp slug availability").LogError(ctx, logger)
-			}
-			if !available {
-				return nil, oops.E(oops.CodeConflict, nil, "this slug is already taken")
-			}
-			updateParams.McpSlug = conv.ToPGText(conv.ToLower(*payload.McpSlug))
 		} else {
-			available, err := mcpendpoints.CheckSlugAvailable(ctx, dbtx, mcpendpoints.SlugAvailabilityCheck{
-				Slug:               conv.ToLower(*payload.McpSlug),
-				CustomDomainID:     uuid.NullUUID{UUID: uuid.MustParse(*toolsetDomainID), Valid: true},
-				OrganizationID:     authCtx.ActiveOrganizationID,
-				ExcludeToolsetID:   uuid.NullUUID{UUID: existingToolset.ID, Valid: true},
-				ExcludeMcpServerID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-			})
-			if err != nil {
-				return nil, oops.E(oops.CodeUnexpected, err, "check mcp slug availability").LogError(ctx, logger)
-			}
-			if !available {
-				return nil, oops.E(oops.CodeConflict, nil, "this slug is already taken")
-			}
-			updateParams.McpSlug = conv.ToPGText(conv.ToLower(*payload.McpSlug))
+			domainID = uuid.NullUUID{UUID: uuid.MustParse(*toolsetDomainID), Valid: true}
+		}
+
+		if err := mcpendpoints.LockSlugScope(ctx, dbtx, domainID, slug); err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "lock mcp slug scope").LogError(ctx, logger)
+		}
+		// The scope is the toolset's own domain or the org's verified one, so
+		// the ownership guard is skipped: a soft-deleted domain must not block
+		// renames within its scope.
+		available, err := mcpendpoints.CheckSlugAvailable(ctx, dbtx, mcpendpoints.SlugAvailabilityCheck{
+			Slug:                     slug,
+			CustomDomainID:           domainID,
+			OrganizationID:           authCtx.ActiveOrganizationID,
+			ExcludeToolsetID:         uuid.NullUUID{UUID: existingToolset.ID, Valid: true},
+			ExcludeMcpServerID:       uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+			SkipDomainOwnershipCheck: true,
+		})
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "check mcp slug availability").LogError(ctx, logger)
+		}
+		if !available {
+			return nil, oops.E(oops.CodeConflict, nil, "this slug is already taken")
+		}
+		if slugChanged {
+			updateParams.McpSlug = conv.ToPGText(slug)
 		}
 	}
 
@@ -896,22 +901,14 @@ func (s *Service) CheckMCPSlugAvailability(ctx context.Context, payload *gen.Che
 		return false, oops.C(oops.CodeUnauthorized)
 	}
 
-	// Wire contract is inverted from the method name: true means the slug is
-	// TAKEN. Callers predate the unified namespace and normalize client-side,
-	// so the legacy semantics are preserved while the probe itself now spans
-	// toolsets.mcp_slug and mcp_endpoints.slug on the platform scope.
-	available, err := mcpendpoints.CheckSlugAvailable(ctx, s.db, mcpendpoints.SlugAvailabilityCheck{
-		Slug:               conv.ToLower(payload.Slug),
-		CustomDomainID:     uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-		OrganizationID:     authCtx.ActiveOrganizationID,
-		ExcludeToolsetID:   uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-		ExcludeMcpServerID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-	})
+	// Inverted wire contract: true means TAKEN, in any scope, matching the
+	// pre-unification semantics this deprecated inline check always had.
+	taken, err := s.repo.CheckMCPSlugAvailability(ctx, conv.ToPGText(conv.ToLower(payload.Slug)))
 	if err != nil {
 		return false, oops.E(oops.CodeUnexpected, err, "check mcp slug availability").LogError(ctx, s.logger)
 	}
 
-	return !available, nil
+	return taken.Bool, nil
 }
 
 func (s *Service) AddExternalOAuthServer(ctx context.Context, payload *gen.AddExternalOAuthServerPayload) (*types.Toolset, error) {

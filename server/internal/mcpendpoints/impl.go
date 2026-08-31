@@ -165,17 +165,18 @@ func (s *Service) CreateMcpEndpoint(ctx context.Context, payload *gen.CreateMcpE
 		return nil, oops.E(oops.CodeInvalid, err, "invalid mcp endpoint").LogError(ctx, logger)
 	}
 
-	// The unique indexes only guard against other mcp_endpoints rows; a live
-	// toolsets.mcp_slug in the same scope would still shadow or be shadowed by
-	// this endpoint at serve time, so availability is checked across both
-	// tables. The backing toolset of the target server is its own address and
-	// does not count.
+	if err := LockSlugScope(ctx, dbtx, customDomainID, slug); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "lock mcp endpoint slug scope").LogError(ctx, logger)
+	}
+	// Availability spans toolsets.mcp_slug too; the target server's own
+	// backing toolset does not count.
 	available, err := CheckSlugAvailable(ctx, dbtx, SlugAvailabilityCheck{
-		Slug:               slug,
-		CustomDomainID:     customDomainID,
-		OrganizationID:     authCtx.ActiveOrganizationID,
-		ExcludeToolsetID:   uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-		ExcludeMcpServerID: mcpServerID,
+		Slug:                     slug,
+		CustomDomainID:           customDomainID,
+		OrganizationID:           authCtx.ActiveOrganizationID,
+		ExcludeToolsetID:         uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		ExcludeMcpServerID:       mcpServerID,
+		SkipDomainOwnershipCheck: false,
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "check mcp endpoint slug availability").LogError(ctx, logger)
@@ -514,17 +515,19 @@ func (s *Service) UpdateMcpEndpoint(ctx context.Context, payload *gen.UpdateMcpE
 		return nil, oops.E(oops.CodeInvalid, err, "invalid mcp endpoint").LogError(ctx, logger)
 	}
 
-	// Availability spans toolsets.mcp_slug too (the unique indexes only cover
-	// other mcp_endpoints rows). Only an actual address change is probed: an
-	// unchanged (domain, slug) pair is this row's own live address and would
-	// otherwise collide with itself through a mirrored toolset slug.
+	// Only an actual address change is probed: an unchanged (domain, slug)
+	// pair would collide with itself through a mirrored toolset slug.
 	if slug != existing.Slug || customDomainID != existing.CustomDomainID {
+		if err := LockSlugScope(ctx, dbtx, customDomainID, slug); err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "lock mcp endpoint slug scope").LogError(ctx, logger)
+		}
 		available, err := CheckSlugAvailable(ctx, dbtx, SlugAvailabilityCheck{
-			Slug:               slug,
-			CustomDomainID:     customDomainID,
-			OrganizationID:     authCtx.ActiveOrganizationID,
-			ExcludeToolsetID:   uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-			ExcludeMcpServerID: mcpServerID,
+			Slug:                     slug,
+			CustomDomainID:           customDomainID,
+			OrganizationID:           authCtx.ActiveOrganizationID,
+			ExcludeToolsetID:         uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+			ExcludeMcpServerID:       mcpServerID,
+			SkipDomainOwnershipCheck: false,
 		})
 		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "check mcp endpoint slug availability").LogError(ctx, logger)
@@ -616,18 +619,15 @@ func (s *Service) CheckMcpEndpointSlugAvailability(ctx context.Context, payload 
 		return false, oops.E(oops.CodeBadRequest, err, "invalid custom_domain_id").LogError(ctx, logger)
 	}
 
-	// The query folds in a custom-domain ownership check: when
-	// custom_domain_id is supplied and not owned by the caller's organization,
-	// the result short-circuits to false ("unavailable"). This closes a
-	// slug-enumeration leak under foreign domains without exposing a separate
-	// error code, which the dashboard wouldn't differentiate from "taken"
-	// anyway.
+	// A foreign or unknown domain reads as "unavailable" so slugs can't be
+	// probed under domains the caller doesn't own.
 	available, err := CheckSlugAvailable(ctx, s.db, SlugAvailabilityCheck{
-		Slug:               string(payload.Slug),
-		CustomDomainID:     customDomainID,
-		OrganizationID:     authCtx.ActiveOrganizationID,
-		ExcludeToolsetID:   uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-		ExcludeMcpServerID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		Slug:                     string(payload.Slug),
+		CustomDomainID:           customDomainID,
+		OrganizationID:           authCtx.ActiveOrganizationID,
+		ExcludeToolsetID:         uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		ExcludeMcpServerID:       uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		SkipDomainOwnershipCheck: false,
 	})
 	if err != nil {
 		return false, oops.E(oops.CodeUnexpected, err, "check mcp endpoint slug availability").LogError(ctx, logger)
