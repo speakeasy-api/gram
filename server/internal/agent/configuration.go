@@ -37,12 +37,13 @@ var forbiddenDeviceAgentConfigurationKeys = map[string]struct{}{
 // while any other stored key is preserved so a server that predates a setting
 // cannot delete it on behalf of a client that never saw it.
 var knownDeviceAgentConfigurationKeys = map[string]struct{}{
-	"platforms":             {},
-	"update_channel":        {},
-	"auto_update":           {},
-	"pinned_target":         {},
-	"blocked_versions":      {},
-	"sync_interval_seconds": {},
+	"platforms":                {},
+	"update_channel":           {},
+	"auto_update":              {},
+	"pinned_target":            {},
+	"blocked_versions":         {},
+	"sync_interval_seconds":    {},
+	"ai_scan_interval_seconds": {},
 }
 
 // platformAdminOnlyDeviceAgentConfigurationKeys are Speakeasy-internal
@@ -131,16 +132,19 @@ func validateDeviceAgentConfiguration(config map[string]any) ([]byte, error) {
 		}
 	}
 
-	if value, ok := config["sync_interval_seconds"]; ok {
-		seconds, valid := integerValue(value)
-		if !valid || seconds < minSyncIntervalSeconds || seconds > maxSyncIntervalSeconds {
-			return nil, oops.E(
-				oops.CodeInvalid,
-				nil,
-				"sync_interval_seconds must be a whole number between %d and %d",
-				minSyncIntervalSeconds,
-				maxSyncIntervalSeconds,
-			)
+	for _, key := range []string{"sync_interval_seconds", "ai_scan_interval_seconds"} {
+		if value, ok := config[key]; ok {
+			seconds, valid := integerValue(value)
+			if !valid || seconds < minSyncIntervalSeconds || seconds > maxSyncIntervalSeconds {
+				return nil, oops.E(
+					oops.CodeInvalid,
+					nil,
+					"%s must be a whole number between %d and %d",
+					key,
+					minSyncIntervalSeconds,
+					maxSyncIntervalSeconds,
+				)
+			}
 		}
 	}
 
