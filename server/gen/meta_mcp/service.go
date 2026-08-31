@@ -94,6 +94,8 @@ type CreateMetaMcpServerPayload struct {
 	// The visibility of the gateway. Defaults to private, which requires callers
 	// to authenticate.
 	Visibility *types.MetaMcpServerVisibility
+	// The allowed network surfaces. Omit to default to public_only.
+	NetworkAccessMode *types.NetworkAccessMode
 }
 
 // DeleteMetaMcpServerPayload is the payload type of the metaMcp service
@@ -183,6 +185,8 @@ type UpdateMetaMcpServerPayload struct {
 	UserSessionIssuerID *string
 	// The visibility of the gateway. Omit to leave it unchanged.
 	Visibility *types.MetaMcpServerVisibility
+	// The allowed network surfaces. Omit to preserve the stored mode.
+	NetworkAccessMode *types.NetworkAccessMode
 }
 
 // MakeUnauthorized builds a goa.ServiceError from an error.

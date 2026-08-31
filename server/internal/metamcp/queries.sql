@@ -15,14 +15,16 @@ INSERT INTO meta_mcp_servers (
     project_id,
     name,
     user_session_issuer_id,
-    visibility
+    visibility,
+    network_access_mode
 )
 VALUES (
     @organization_id,
     @project_id,
     @name,
     sqlc.narg('user_session_issuer_id'),
-    @visibility
+    @visibility,
+    sqlc.narg('network_access_mode')
 )
 RETURNING *;
 
@@ -75,6 +77,10 @@ UPDATE meta_mcp_servers
 SET name = @name,
     user_session_issuer_id = sqlc.narg('user_session_issuer_id'),
     visibility = COALESCE(sqlc.narg('visibility'), visibility),
+    network_access_mode = CASE
+        WHEN @network_access_mode_set::boolean THEN sqlc.narg('network_access_mode')
+        ELSE network_access_mode
+    END,
     updated_at = clock_timestamp()
 WHERE id = @id
   AND organization_id = @organization_id

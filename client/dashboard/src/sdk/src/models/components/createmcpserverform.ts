@@ -7,6 +7,19 @@ import { remap as remap$ } from "../../lib/primitives.js";
 import { ClosedEnum } from "../../types/enums.js";
 
 /**
+ * The network surfaces through which a Gram-hosted MCP server may be reached.
+ */
+export const NetworkAccessMode = {
+  PublicOnly: "public_only",
+  Dual: "dual",
+  PrivateOnly: "private_only",
+} as const;
+/**
+ * The network surfaces through which a Gram-hosted MCP server may be reached.
+ */
+export type NetworkAccessMode = ClosedEnum<typeof NetworkAccessMode>;
+
+/**
  * The visibility of an MCP server
  */
 export const CreateMcpServerFormVisibility = {
@@ -34,6 +47,10 @@ export type CreateMcpServerForm = {
    */
   name: string;
   /**
+   * The network surfaces through which a Gram-hosted MCP server may be reached.
+   */
+  networkAccessMode?: NetworkAccessMode | undefined;
+  /**
    * The ID of the remote MCP server to use as the backend
    */
   remoteMcpServerId?: string | undefined;
@@ -60,6 +77,11 @@ export type CreateMcpServerForm = {
 };
 
 /** @internal */
+export const NetworkAccessMode$outboundSchema: z.ZodMiniEnum<
+  typeof NetworkAccessMode
+> = z.enum(NetworkAccessMode);
+
+/** @internal */
 export const CreateMcpServerFormVisibility$outboundSchema: z.ZodMiniEnum<
   typeof CreateMcpServerFormVisibility
 > = z.enum(CreateMcpServerFormVisibility);
@@ -68,6 +90,7 @@ export const CreateMcpServerFormVisibility$outboundSchema: z.ZodMiniEnum<
 export type CreateMcpServerForm$Outbound = {
   environment_id?: string | undefined;
   name: string;
+  network_access_mode?: string | undefined;
   remote_mcp_server_id?: string | undefined;
   tool_variations_group_id?: string | undefined;
   toolset_id?: string | undefined;
@@ -84,6 +107,7 @@ export const CreateMcpServerForm$outboundSchema: z.ZodMiniType<
   z.object({
     environmentId: z.optional(z.string()),
     name: z.string(),
+    networkAccessMode: z.optional(NetworkAccessMode$outboundSchema),
     remoteMcpServerId: z.optional(z.string()),
     toolVariationsGroupId: z.optional(z.string()),
     toolsetId: z.optional(z.string()),
@@ -94,6 +118,7 @@ export const CreateMcpServerForm$outboundSchema: z.ZodMiniType<
   z.transform((v) => {
     return remap$(v, {
       environmentId: "environment_id",
+      networkAccessMode: "network_access_mode",
       remoteMcpServerId: "remote_mcp_server_id",
       toolVariationsGroupId: "tool_variations_group_id",
       toolsetId: "toolset_id",
