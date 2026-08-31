@@ -131,6 +131,7 @@ type Activities struct {
 	refreshOpenRouterKey            *activities.RefreshOpenRouterKey
 	setOpenRouterSpendCap           *activities.SetOpenRouterSpendCap
 	reconcilePaygOpenRouterChatKey  *activities.ReconcilePaygOpenRouterChatKey
+	reconcileTrialConversionKeys    *activities.ReconcileEnterpriseTrialConversionKeys
 	transitionDeployment            *activities.TransitionDeployment
 	validateDeployment              *activities.ValidateDeployment
 	verifyCustomDomain              *activities.VerifyCustomDomain
@@ -361,6 +362,8 @@ func NewActivities(
 		skillSuggestionAnalyzer = activities.NewSkillSuggestionAnalyzer(db, engine, &TemporalSkillSuggestionSignaler{TemporalEnv: temporalEnv, Logger: logger, StartDelay: 0})
 	}
 
+	conversionPolicyReconciler, _ := openrouterProvisioner.(activities.ConversionPolicyReconciler)
+
 	return &Activities{
 		db:                              db,
 		temporalEnv:                     temporalEnv,
@@ -394,6 +397,7 @@ func NewActivities(
 		refreshOpenRouterKey:            activities.NewRefreshOpenRouterKey(logger, db, openrouterProvisioner),
 		setOpenRouterSpendCap:           activities.NewSetOpenRouterSpendCap(logger, db, openrouterProvisioner, auditLogger, cacheAdapter),
 		reconcilePaygOpenRouterChatKey:  activities.NewReconcilePaygOpenRouterChatKey(logger, db, openrouterProvisioner),
+		reconcileTrialConversionKeys:    activities.NewReconcileEnterpriseTrialConversionKeys(logger, conversionPolicyReconciler),
 		transitionDeployment:            activities.NewTransitionDeployment(logger, db),
 		validateDeployment:              activities.NewValidateDeployment(logger, db, billingRepo),
 		verifyCustomDomain:              activities.NewVerifyCustomDomain(logger, db, auditLogger, expectedTargetCNAME, expectedARecords),
@@ -568,6 +572,10 @@ func (a *Activities) SetOpenRouterSpendCap(ctx context.Context, input activities
 
 func (a *Activities) ReconcilePaygOpenRouterChatKey(ctx context.Context, input activities.ReconcilePaygOpenRouterChatKeyArgs) error {
 	return a.reconcilePaygOpenRouterChatKey.Do(ctx, input)
+}
+
+func (a *Activities) ReconcileEnterpriseTrialConversionKeys(ctx context.Context, input activities.ReconcileEnterpriseTrialConversionKeysArgs) error {
+	return a.reconcileTrialConversionKeys.Do(ctx, input)
 }
 
 func (a *Activities) VerifyCustomDomain(ctx context.Context, input activities.VerifyCustomDomainArgs) (activities.VerifyCustomDomainResult, error) {

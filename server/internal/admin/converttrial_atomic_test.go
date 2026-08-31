@@ -138,7 +138,7 @@ func TestMarkEnterpriseTrialConverted_AuditSnapshotsAreCompleteAndPrivate(t *tes
 	require.Empty(t, record.ActorSlug)
 	var metadata map[string]any
 	require.NoError(t, json.Unmarshal(record.Metadata, &metadata))
-	require.Equal(t, map[string]any{"conversion_source": "admin"}, metadata)
+	require.Equal(t, map[string]any{"conversion_source": "admin", "key_access_changed": true}, metadata)
 	for _, raw := range [][]byte{record.BeforeSnapshot, record.AfterSnapshot} {
 		var snapshot struct {
 			Organization map[string]any   `json:"organization"`

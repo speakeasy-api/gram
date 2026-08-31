@@ -173,8 +173,10 @@ func (s *Service) markEnterpriseTrialConverted(ctx context.Context, organization
 
 	beforeKeys := make([]audit.OrganizationEnterpriseTrialConversionKeySnapshot, 0, len(keyChanges))
 	afterKeys := make([]audit.OrganizationEnterpriseTrialConversionKeySnapshot, 0, len(keyChanges))
+	keyAccessChanged := false
 	for _, change := range keyChanges {
 		accessChanged := openrouter.EffectiveDisabled(change.Before.Disabled, change.Before.DisableCauses) != openrouter.EffectiveDisabled(change.After.Disabled, change.After.DisableCauses)
+		keyAccessChanged = keyAccessChanged || accessChanged
 		beforeKeys = append(beforeKeys, conversionKeyAuditSnapshot(change.Before, accessChanged))
 		afterKeys = append(afterKeys, conversionKeyAuditSnapshot(change.After, accessChanged))
 	}
@@ -189,7 +191,7 @@ func (s *Service) markEnterpriseTrialConverted(ctx context.Context, organization
 	}
 	actor, actorDisplayName := enterpriseTrialConversionAuditActor(ctx)
 	if err := s.audit.LogOrganizationEnterpriseTrialConverted(ctx, tx, audit.LogOrganizationEnterpriseTrialConvertedEvent{
-		OrganizationID: payload.ID, Actor: actor, ActorDisplayName: actorDisplayName, ActorSlug: nil, Before: before, After: after,
+		OrganizationID: payload.ID, ConversionSource: "admin", KeyAccessChanged: &keyAccessChanged, Actor: actor, ActorDisplayName: actorDisplayName, ActorSlug: nil, Before: before, After: after,
 	}); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "log enterprise trial conversion").LogError(ctx, logger)
 	}

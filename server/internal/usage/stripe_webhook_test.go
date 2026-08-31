@@ -1069,6 +1069,7 @@ func TestStripeCheckoutCompletionActivatesColdPaygOrganization(t *testing.T) {
 		preparedAt,
 		newStripeCheckoutIntent(stripeWebhookOrganizationID, preparedAt, nil),
 		pgtype.Text{String: "", Valid: false},
+		pgtype.Text{String: "", Valid: false},
 	)
 	require.NoError(t, err)
 
@@ -1528,6 +1529,7 @@ func TestStripeCheckoutCompletionRestoresDemotedTrialRuntimeFeatures(t *testing.
 		"customer_placeholder",
 		preparedAt,
 		newStripeCheckoutIntent(stripeWebhookOrganizationID, preparedAt, nil),
+		pgtype.Text{String: "", Valid: false},
 		pgtype.Text{String: "", Valid: false},
 	)
 	require.NoError(t, err)

@@ -1,7 +1,11 @@
 package openrouter
 
 import (
+	"encoding/json"
 	"fmt"
+	"io"
+	"net/http"
+	"net/http/httptest"
 	"sync"
 	"testing"
 
@@ -218,6 +222,69 @@ func TestReconcileAPIKeyConversionPolicyPinsLimitAndEffectiveDisabledState(t *te
 			require.Equal(t, tt.disableCauses, after.DisableCauses, "reconciliation must preserve every disable cause")
 		})
 	}
+}
+
+func TestReconcileAPIKeyConversionPolicyRetryReadsNewCommittedPolicy(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	orgID := "org-" + uuid.NewString()[:8]
+	provisioner, _, queries := newDisableTestProvisioner(t, orgID)
+	_, err := provisioner.ProvisionAPIKey(ctx, orgID, KeyTypeChat)
+	require.NoError(t, err)
+	initialKey, err := queries.GetOpenRouterAPIKey(ctx, repo.GetOpenRouterAPIKeyParams{OrganizationID: orgID, KeyType: string(KeyTypeChat)})
+	require.NoError(t, err)
+
+	var mu sync.Mutex
+	patches := make([]string, 0, 2)
+	fail := true
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPatch {
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			return
+		}
+		raw, readErr := io.ReadAll(r.Body)
+		if readErr != nil {
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+		mu.Lock()
+		patches = append(patches, string(raw))
+		failRequest := fail
+		mu.Unlock()
+		if failRequest {
+			http.Error(w, "upstream unavailable", http.StatusServiceUnavailable)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{"data": map[string]any{"hash": "hash-1"}})
+	}))
+	t.Cleanup(upstream.Close)
+	provisioner.baseURL = upstream.URL
+
+	require.ErrorContains(t, provisioner.ReconcileAPIKeyConversionPolicy(ctx, orgID, KeyTypeChat), "reconcile upstream OpenRouter API key disabled state")
+	mu.Lock()
+	failedProjectionPatches := len(patches)
+	fail = false
+	mu.Unlock()
+	require.Positive(t, failedProjectionPatches)
+
+	rows, err := testrepo.New(provisioner.db).SetOpenRouterKeyLifecycleFixture(ctx, testrepo.SetOpenRouterKeyLifecycleFixtureParams{
+		OrganizationID: orgID, KeyType: string(KeyTypeChat), Disabled: false,
+		DisableCauses: []string{string(DisableCauseAdminLock)}, MonthlyCredits: 42,
+	})
+	require.NoError(t, err)
+	require.EqualValues(t, 1, rows)
+	require.NoError(t, provisioner.ReconcileAPIKeyConversionPolicy(ctx, orgID, KeyTypeChat))
+
+	mu.Lock()
+	gotPatches := append([]string(nil), patches...)
+	mu.Unlock()
+	require.Len(t, gotPatches, failedProjectionPatches+1)
+	for _, patch := range gotPatches[:failedProjectionPatches] {
+		require.JSONEq(t, fmt.Sprintf(`{"disabled":false,"limit":%d,"limit_reset":"monthly"}`, initialKey.MonthlyCredits), patch)
+	}
+	require.JSONEq(t, `{"disabled":true,"limit":42,"limit_reset":"monthly"}`, gotPatches[failedProjectionPatches])
 }
 
 func TestDisableCauseWithDBUsesCallerLockedConnection(t *testing.T) {

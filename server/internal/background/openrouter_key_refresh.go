@@ -227,6 +227,49 @@ func PaygOpenRouterChatKeyReconcileWorkflow(ctx workflow.Context, params Reconci
 	return nil
 }
 
+type EnterpriseTrialConversionKeyReconcileParams struct {
+	OrganizationID string
+}
+
+func (w *OpenRouterKeyRefresher) ScheduleEnterpriseTrialConversionKeyReconciliation(ctx context.Context, eventID, orgID string) error {
+	if eventID == "" {
+		return errors.New("outbox event ID is required")
+	}
+	if orgID == "" {
+		return errors.New("organization ID is required")
+	}
+	_, err := w.TemporalEnv.Client().ExecuteWorkflow(ctx, client.StartWorkflowOptions{
+		ID:                    fmt.Sprintf("v1:openrouter-key-reconcile:enterprise-trial-conversion:%s", eventID),
+		TaskQueue:             string(w.TemporalEnv.Queue()),
+		WorkflowIDReusePolicy: enums.WORKFLOW_ID_REUSE_POLICY_REJECT_DUPLICATE,
+	}, EnterpriseTrialConversionKeyReconcileWorkflow, EnterpriseTrialConversionKeyReconcileParams{OrganizationID: orgID})
+	var alreadyStarted *serviceerror.WorkflowExecutionAlreadyStarted
+	switch {
+	case errors.As(err, &alreadyStarted):
+		return nil
+	case err != nil:
+		return fmt.Errorf("start enterprise trial conversion key reconciliation workflow: %w", err)
+	default:
+		return nil
+	}
+}
+
+func EnterpriseTrialConversionKeyReconcileWorkflow(ctx workflow.Context, params EnterpriseTrialConversionKeyReconcileParams) error {
+	ctx = workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
+		StartToCloseTimeout: time.Minute,
+		RetryPolicy: &temporal.RetryPolicy{
+			InitialInterval:    time.Minute,
+			BackoffCoefficient: 2,
+			MaximumInterval:    time.Hour,
+		},
+	})
+	var a *Activities
+	if err := workflow.ExecuteActivity(ctx, a.ReconcileEnterpriseTrialConversionKeys, activities.ReconcileEnterpriseTrialConversionKeysArgs{OrganizationID: params.OrganizationID}).Get(ctx, nil); err != nil {
+		return fmt.Errorf("reconcile enterprise trial conversion keys: %w", err)
+	}
+	return nil
+}
+
 // Called by your service to start (or restart) the workflow
 func ExecuteOpenrouterKeyRefreshWorkflow(ctx context.Context, temporalEnv *tenv.Environment, params OpenRouterKeyRefreshParams) (client.WorkflowRun, error) {
 	// A typoed key type must fail here, before the terminate-if-running id
