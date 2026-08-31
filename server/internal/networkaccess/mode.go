@@ -38,9 +38,10 @@ func Effective(value pgtype.Text) Mode {
 	}
 	mode, err := Parse(value.String)
 	if err != nil {
-		// Unknown persisted values must deny every surface during a rolling
-		// deploy or after bad data is written.
-		return ""
+		// Views must stay inside the published API enum. Serving paths use
+		// EffectiveValidated and deny unknown values rather than relying on this
+		// restrictive representation.
+		return ModePrivateOnly
 	}
 	return mode
 }
