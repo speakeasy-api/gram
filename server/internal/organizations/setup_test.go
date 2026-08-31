@@ -131,12 +131,16 @@ type testInstance struct {
 	orgs    *MockOrganizationProvider
 	loops   *MockLoopsClient
 	trial   *fakeTrialNotifier
+	posthog *fakeOnboardingTelemetry
 	svixSrv *svixtest.MockServer
 }
 
 type fakeTrialNotifier struct {
-	adminAddedErr error
-	adminAdded    []adminAddedNotification
+	mu              sync.Mutex
+	trialStartedErr error
+	trialStarted    []string
+	adminAddedErr   error
+	adminAdded      []adminAddedNotification
 }
 
 type adminAddedNotification struct {
@@ -144,11 +148,16 @@ type adminAddedNotification struct {
 	userID         string
 }
 
-func (f *fakeTrialNotifier) TrialStarted(context.Context, string) error {
-	return nil
+func (f *fakeTrialNotifier) TrialStarted(_ context.Context, organizationID string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.trialStarted = append(f.trialStarted, organizationID)
+	return f.trialStartedErr
 }
 
 func (f *fakeTrialNotifier) AdminAdded(_ context.Context, organizationID, userID string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
 	f.adminAdded = append(f.adminAdded, adminAddedNotification{organizationID: organizationID, userID: userID})
 	return f.adminAddedErr
 }
@@ -157,10 +166,50 @@ func (f *fakeTrialNotifier) TrialInactive(context.Context, string) error {
 	return nil
 }
 
+type capturedOnboardingEvent struct {
+	eventName  string
+	distinctID string
+	properties map[string]any
+}
+
+type fakeOnboardingTelemetry struct {
+	mu          sync.Mutex
+	captureErr  error
+	identifyErr error
+	events      []capturedOnboardingEvent
+	identified  []capturedOnboardingEvent
+}
+
+func (f *fakeOnboardingTelemetry) CaptureEvent(_ context.Context, eventName, distinctID string, properties map[string]any) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.events = append(f.events, capturedOnboardingEvent{eventName: eventName, distinctID: distinctID, properties: properties})
+	return f.captureErr
+}
+
+func (f *fakeOnboardingTelemetry) IdentifyUser(_ context.Context, distinctID string, properties map[string]any) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.identified = append(f.identified, capturedOnboardingEvent{distinctID: distinctID, properties: properties})
+	return f.identifyErr
+}
+
 func newTestOrganizationsService(t *testing.T) (context.Context, *testInstance) {
 	t.Helper()
 
-	return newTestOrganizationsServiceWithFeatures(t, enabledFeatures())
+	return newTestOrganizationsServiceWithOptions(t, enabledFeatures(), productfeatures.SeedEnterpriseTrialBundleTx, stubUserProvisioner{})
+}
+
+func newTestOrganizationsServiceWithTrialBundleSeeder(t *testing.T, trialBundleSeeder auth.EnterpriseTrialBundleSeeder) (context.Context, *testInstance) {
+	t.Helper()
+
+	return newTestOrganizationsServiceWithOptions(t, enabledFeatures(), trialBundleSeeder, stubUserProvisioner{})
+}
+
+func newTestOrganizationsServiceWithInviteIdentityProvider(t *testing.T, invite organizations.InviteIdentityProvider) (context.Context, *testInstance) {
+	t.Helper()
+
+	return newTestOrganizationsServiceWithOptions(t, enabledFeatures(), productfeatures.SeedEnterpriseTrialBundleTx, invite)
 }
 
 // newTestOrganizationsServiceRBAC creates a service instance whose feature
@@ -174,6 +223,12 @@ func newTestOrganizationsServiceRBAC(t *testing.T) (context.Context, *testInstan
 }
 
 func newTestOrganizationsServiceWithFeatures(t *testing.T, features orgFeatureStub) (context.Context, *testInstance) {
+	t.Helper()
+
+	return newTestOrganizationsServiceWithOptions(t, features, productfeatures.SeedEnterpriseTrialBundleTx, stubUserProvisioner{})
+}
+
+func newTestOrganizationsServiceWithOptions(t *testing.T, features orgFeatureStub, trialBundleSeeder auth.EnterpriseTrialBundleSeeder, invite organizations.InviteIdentityProvider) (context.Context, *testInstance) {
 	t.Helper()
 
 	ctx := t.Context()
@@ -215,13 +270,15 @@ func newTestOrganizationsServiceWithFeatures(t *testing.T, features orgFeatureSt
 	require.NoError(t, err)
 
 	trialNotifier := &fakeTrialNotifier{}
-	svc := organizations.NewService(logger, tracerProvider, conn, sessionManager, orgs, stubUserProvisioner{}, features, nil, authzEngine, nil, trialNotifier, "http://localhost:35291", "http://localhost:5173", auditLogger, svixClient)
+	posthog := &fakeOnboardingTelemetry{}
+	svc := organizations.NewService(logger, tracerProvider, conn, sessionManager, orgs, invite, features, nil, authzEngine, nil, trialNotifier, trialBundleSeeder, posthog, "http://localhost:35291", "http://localhost:5173", auditLogger, svixClient)
 
 	return ctx, &testInstance{
 		service: svc,
 		conn:    conn,
 		orgs:    orgs,
 		trial:   trialNotifier,
+		posthog: posthog,
 		svixSrv: svixSrv,
 	}
 }
@@ -271,7 +328,7 @@ func newTestOrganizationsServiceWithEmail(t *testing.T) (context.Context, *testI
 		"team_invite": "team-invite-test-id",
 	}), true)
 	trialNotifier := &fakeTrialNotifier{}
-	svc := organizations.NewService(logger, tracerProvider, conn, sessionManager, orgs, stubUserProvisioner{}, enabledFeatures(), nil, authzEngine, emailService, trialNotifier, "http://localhost:35291", "http://localhost:5173", auditLogger, svixClient)
+	svc := organizations.NewService(logger, tracerProvider, conn, sessionManager, orgs, stubUserProvisioner{}, enabledFeatures(), nil, authzEngine, emailService, trialNotifier, productfeatures.SeedEnterpriseTrialBundleTx, nil, "http://localhost:35291", "http://localhost:5173", auditLogger, svixClient)
 
 	return ctx, &testInstance{
 		service: svc,

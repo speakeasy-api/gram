@@ -691,6 +691,30 @@ func (q *Queries) HasOrganizationUserRelationship(ctx context.Context, arg HasOr
 	return exists, err
 }
 
+const hasOtherActiveOrganizationUsers = `-- name: HasOtherActiveOrganizationUsers :one
+SELECT EXISTS (
+    SELECT 1
+    FROM organization_user_relationships AS relationship
+    JOIN users ON users.id = relationship.user_id
+    WHERE relationship.organization_id = $1
+      AND relationship.deleted_at IS NULL
+      AND users.deleted_at IS NULL
+      AND users.id <> $2
+)
+`
+
+type HasOtherActiveOrganizationUsersParams struct {
+	OrganizationID string
+	UserID         string
+}
+
+func (q *Queries) HasOtherActiveOrganizationUsers(ctx context.Context, arg HasOtherActiveOrganizationUsersParams) (bool, error) {
+	row := q.db.QueryRow(ctx, hasOtherActiveOrganizationUsers, arg.OrganizationID, arg.UserID)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
+}
+
 const linkRelationshipsToUser = `-- name: LinkRelationshipsToUser :exec
 WITH pending_relationships AS (
     SELECT
@@ -1078,6 +1102,38 @@ func (q *Queries) LockActiveOrganizationUser(ctx context.Context, arg LockActive
 	var user_id pgtype.Text
 	err := row.Scan(&user_id)
 	return user_id, err
+}
+
+const lockOrganizationForInviteAcceptance = `-- name: LockOrganizationForInviteAcceptance :one
+SELECT id, name, slug, gram_account_type, workos_id, workos_updated_at, workos_last_event_id, svix_app_id, webhooks_enabled, whitelisted, free_trial_started_at, free_trial_ends_at, scim_enabled, sso_enabled, created_at, updated_at, disabled_at
+FROM organization_metadata
+WHERE id = $1
+FOR UPDATE
+`
+
+func (q *Queries) LockOrganizationForInviteAcceptance(ctx context.Context, id string) (OrganizationMetadatum, error) {
+	row := q.db.QueryRow(ctx, lockOrganizationForInviteAcceptance, id)
+	var i OrganizationMetadatum
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.Slug,
+		&i.GramAccountType,
+		&i.WorkosID,
+		&i.WorkosUpdatedAt,
+		&i.WorkosLastEventID,
+		&i.SvixAppID,
+		&i.WebhooksEnabled,
+		&i.Whitelisted,
+		&i.FreeTrialStartedAt,
+		&i.FreeTrialEndsAt,
+		&i.ScimEnabled,
+		&i.SsoEnabled,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DisabledAt,
+	)
+	return i, err
 }
 
 const lockOrganizationSlug = `-- name: LockOrganizationSlug :exec

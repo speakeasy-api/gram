@@ -50,6 +50,7 @@ import (
 	telemrepo "github.com/speakeasy-api/gram/server/internal/telemetry/repo"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	"github.com/speakeasy-api/gram/server/internal/trialemails"
+	trialsrepo "github.com/speakeasy-api/gram/server/internal/trials/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	userrepo "github.com/speakeasy-api/gram/server/internal/users/repo"
 	svix "github.com/svix/svix-webhooks/go"
@@ -86,6 +87,11 @@ type orgFeatureChecker interface {
 	IsFeatureEnabledUncached(ctx context.Context, organizationID string, feature productfeatures.Feature) (bool, error)
 }
 
+type onboardingTelemetry interface {
+	CaptureEvent(ctx context.Context, eventName string, distinctID string, eventProperties map[string]any) error
+	IdentifyUser(ctx context.Context, distinctID string, properties map[string]any) error
+}
+
 // HookEventReader is the subset of the telemetry repo used by the onboarding
 // wizard's verifyOnboardingHooksSetup poll. Decoupled from a concrete repo so
 // tests can stub it.
@@ -95,51 +101,55 @@ type HookEventReader interface {
 }
 
 type Service struct {
-	logger    *slog.Logger
-	tracer    trace.Tracer
-	db        *pgxpool.Pool
-	auth      *auth.Auth
-	authz     *authz.Engine
-	sessions  *sessions.Manager
-	orgs      OrganizationProvider
-	invite    InviteIdentityProvider
-	features  orgFeatureChecker
-	hooks     HookEventReader // optional; nil disables verifyOnboardingHooksSetup
-	email     *email.Service
-	trial     trialemails.Notifier
-	serverURL string // API server URL; used to build invite links
-	siteURL   string // frontend URL; used for post-callback browser redirects
-	audit     *audit.Logger
-	svix      *svix.Svix
+	logger            *slog.Logger
+	tracer            trace.Tracer
+	db                *pgxpool.Pool
+	auth              *auth.Auth
+	authz             *authz.Engine
+	sessions          *sessions.Manager
+	orgs              OrganizationProvider
+	invite            InviteIdentityProvider
+	features          orgFeatureChecker
+	hooks             HookEventReader // optional; nil disables verifyOnboardingHooksSetup
+	email             *email.Service
+	trial             trialemails.Notifier
+	trialBundleSeeder auth.EnterpriseTrialBundleSeeder
+	posthog           onboardingTelemetry
+	serverURL         string // API server URL; used to build invite links
+	siteURL           string // frontend URL; used for post-callback browser redirects
+	audit             *audit.Logger
+	svix              *svix.Svix
 }
 
 var _ gen.Service = (*Service)(nil)
 
 var _ gen.Auther = (*Service)(nil)
 
-func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessionMgr *sessions.Manager, orgs OrganizationProvider, invite InviteIdentityProvider, features orgFeatureChecker, hooks HookEventReader, authzEngine *authz.Engine, emailService *email.Service, trialNotifier trialemails.Notifier, serverURL string, siteURL string, auditLogger *audit.Logger, svix *svix.Svix) *Service {
+func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessionMgr *sessions.Manager, orgs OrganizationProvider, invite InviteIdentityProvider, features orgFeatureChecker, hooks HookEventReader, authzEngine *authz.Engine, emailService *email.Service, trialNotifier trialemails.Notifier, trialBundleSeeder auth.EnterpriseTrialBundleSeeder, posthog onboardingTelemetry, serverURL string, siteURL string, auditLogger *audit.Logger, svix *svix.Svix) *Service {
 	logger = logger.With(attr.SlogComponent("organizations"))
 	if trialNotifier == nil {
 		trialNotifier = trialemails.NoopNotifier{}
 	}
 
 	return &Service{
-		logger:    logger,
-		tracer:    tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/organizations"),
-		db:        db,
-		auth:      auth.New(logger, db, sessionMgr, authzEngine),
-		authz:     authzEngine,
-		sessions:  sessionMgr,
-		orgs:      orgs,
-		invite:    invite,
-		features:  features,
-		hooks:     hooks,
-		email:     emailService,
-		trial:     trialNotifier,
-		serverURL: serverURL,
-		siteURL:   siteURL,
-		audit:     auditLogger,
-		svix:      svix,
+		logger:            logger,
+		tracer:            tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/organizations"),
+		db:                db,
+		auth:              auth.New(logger, db, sessionMgr, authzEngine),
+		authz:             authzEngine,
+		sessions:          sessionMgr,
+		orgs:              orgs,
+		invite:            invite,
+		features:          features,
+		hooks:             hooks,
+		email:             emailService,
+		trial:             trialNotifier,
+		trialBundleSeeder: trialBundleSeeder,
+		posthog:           posthog,
+		serverURL:         serverURL,
+		siteURL:           siteURL,
+		audit:             auditLogger,
+		svix:              svix,
 	}
 }
 
@@ -1378,6 +1388,113 @@ func dbInvitationToGen(row *orgrepo.OrganizationInvitation, inviterUserID *strin
 	}
 }
 
+var errInvitationAcceptanceRace = errors.New("invitation is no longer pending")
+
+func (s *Service) acceptInvitationTx(ctx context.Context, invite orgrepo.OrganizationInvitation, gramUserID, workosUserID, workosMembershipID string) (orgrepo.OrganizationMetadatum, bool, error) {
+	tx, err := s.db.Begin(ctx)
+	if err != nil {
+		return orgrepo.OrganizationMetadatum{}, false, fmt.Errorf("begin invite acceptance transaction: %w", err)
+	}
+	defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
+
+	repo := orgrepo.New(tx)
+	org, err := repo.LockOrganizationForInviteAcceptance(ctx, invite.OrganizationID)
+	if err != nil {
+		return orgrepo.OrganizationMetadatum{}, false, fmt.Errorf("lock invite organization: %w", err)
+	}
+
+	hasOtherActiveUsers, err := repo.HasOtherActiveOrganizationUsers(ctx, orgrepo.HasOtherActiveOrganizationUsersParams{
+		OrganizationID: invite.OrganizationID,
+		UserID:         gramUserID,
+	})
+	if err != nil {
+		return orgrepo.OrganizationMetadatum{}, false, fmt.Errorf("check for other active organization users: %w", err)
+	}
+
+	eligibleInviter := false
+	inviterEmail := ""
+	if invite.InviterUserID.Valid {
+		inviter, inviterErr := userrepo.New(tx).LockUserForPlatformAdminCheck(ctx, invite.InviterUserID.String)
+		if inviterErr == nil {
+			eligibleInviter = inviter.Admin && !inviter.DeletedAt.Valid
+			inviterEmail = inviter.Email
+		} else if !errors.Is(inviterErr, pgx.ErrNoRows) {
+			return orgrepo.OrganizationMetadatum{}, false, fmt.Errorf("get invitation creator: %w", inviterErr)
+		}
+	}
+
+	hasLifecycle := true
+	if _, err := trialsrepo.New(tx).GetTrial(ctx, invite.OrganizationID); errors.Is(err, pgx.ErrNoRows) {
+		hasLifecycle = false
+	} else if err != nil {
+		return orgrepo.OrganizationMetadatum{}, false, fmt.Errorf("get trial lifecycle: %w", err)
+	}
+
+	if _, err := repo.UpsertOrganizationUserRelationship(ctx, orgrepo.UpsertOrganizationUserRelationshipParams{
+		OrganizationID: invite.OrganizationID,
+		UserID:         conv.ToPGText(gramUserID),
+	}); err != nil {
+		return orgrepo.OrganizationMetadatum{}, false, fmt.Errorf("create organization user relationship: %w", err)
+	}
+
+	if invite.RoleSlug.Valid {
+		if err := repo.SyncUserOrganizationRoleAssignments(ctx, orgrepo.SyncUserOrganizationRoleAssignmentsParams{
+			OrganizationID:     invite.OrganizationID,
+			WorkosUserID:       workosUserID,
+			WorkosRoleSlugs:    []string{invite.RoleSlug.String},
+			UserID:             conv.ToPGText(gramUserID),
+			WorkosMembershipID: conv.ToPGText(workosMembershipID),
+			WorkosUpdatedAt:    pgtype.Timestamptz{Time: time.Now(), InfinityModifier: pgtype.Finite, Valid: true},
+			WorkosLastEventID:  pgtype.Text{},
+		}); err != nil {
+			return orgrepo.OrganizationMetadatum{}, false, fmt.Errorf("sync invitation role assignments: %w", err)
+		}
+	}
+
+	trialArmed := !hasOtherActiveUsers && eligibleInviter && !hasLifecycle
+	if trialArmed {
+		if s.trialBundleSeeder == nil {
+			return orgrepo.OrganizationMetadatum{}, false, errors.New("enterprise trial bundle seeder is not configured")
+		}
+		if err := auth.ArmEnterpriseTrialTx(ctx, tx, org, invite.InviterUserID.String, inviterEmail, s.trialBundleSeeder, s.audit); err != nil {
+			return orgrepo.OrganizationMetadatum{}, false, fmt.Errorf("arm invitation enterprise trial: %w", err)
+		}
+	}
+
+	rowsAffected, err := repo.AcceptInvitation(ctx, invite.ID)
+	if err != nil {
+		return orgrepo.OrganizationMetadatum{}, false, fmt.Errorf("accept invitation: %w", err)
+	}
+	if rowsAffected == 0 {
+		return orgrepo.OrganizationMetadatum{}, false, errInvitationAcceptanceRace
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return orgrepo.OrganizationMetadatum{}, false, fmt.Errorf("commit invite acceptance transaction: %w", err)
+	}
+
+	return org, trialArmed, nil
+}
+
+func (s *Service) capturePlatformAdminInviteTelemetry(ctx context.Context, email string, org orgrepo.OrganizationMetadatum) {
+	if s.posthog == nil {
+		return
+	}
+	properties := map[string]any{
+		"action":            "new_org_created",
+		"created_via":       "platform_admin_invite",
+		"company_name":      org.Name,
+		"organization_id":   org.ID,
+		"organization_slug": org.Slug,
+	}
+	if err := s.posthog.CaptureEvent(ctx, "onboarding_event", email, properties); err != nil {
+		s.logger.ErrorContext(ctx, "failed to capture platform admin invite onboarding event", attr.SlogError(err), attr.SlogOrganizationID(org.ID))
+	}
+	if err := s.posthog.IdentifyUser(ctx, email, map[string]any{"created_via": "platform_admin_invite"}); err != nil {
+		s.logger.ErrorContext(ctx, "failed to set platform admin invite created_via person property", attr.SlogError(err), attr.SlogOrganizationID(org.ID))
+	}
+}
+
 // handleInviteCallback processes Gram invite-token links. Flow: invitee clicks
 // the Gram invite link, we validate the invite token, authenticate the invitee
 // with a server-created WorkOS Magic Auth code, verify the email, accept the
@@ -1490,17 +1607,6 @@ func (s *Service) handleInviteCallback(w http.ResponseWriter, r *http.Request) {
 	)
 	span.AddEvent("invite.callback.user_provisioned", trace.WithAttributes(attr.UserID(gramUserID)))
 
-	if _, err := repo.UpsertOrganizationUserRelationship(ctx, orgrepo.UpsertOrganizationUserRelationshipParams{
-		OrganizationID: invite.OrganizationID,
-		UserID:         conv.ToPGText(gramUserID),
-	}); err != nil {
-		s.logger.ErrorContext(ctx, "invite callback: failed to create org membership", attr.SlogError(err))
-		span.RecordError(err)
-		redirectError("failed to join organization")
-		return
-	}
-	span.AddEvent("invite.callback.org_membership_created")
-
 	// Create the WorkOS organization membership so ListMembers returns the
 	// invited user with the correct role.
 	var workosMembershipID string
@@ -1520,54 +1626,36 @@ func (s *Service) handleInviteCallback(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// Eagerly sync role assignments so the invited user gets RBAC grants
-	// immediately. The background sync job will eventually do this too, but
-	// it isn't running in all environments yet.
-	if invite.RoleSlug.Valid {
-		if err := repo.SyncUserOrganizationRoleAssignments(ctx, orgrepo.SyncUserOrganizationRoleAssignmentsParams{
-			OrganizationID:     invite.OrganizationID,
-			WorkosUserID:       idpUser.Sub,
-			WorkosRoleSlugs:    []string{invite.RoleSlug.String},
-			UserID:             conv.ToPGText(gramUserID),
-			WorkosMembershipID: conv.ToPGText(workosMembershipID),
-			WorkosUpdatedAt:    pgtype.Timestamptz{Time: time.Now(), InfinityModifier: pgtype.Finite, Valid: true},
-			WorkosLastEventID:  pgtype.Text{String: "", Valid: false},
-		}); err != nil {
-			s.logger.WarnContext(ctx, "invite callback: failed to sync role assignments", attr.SlogError(err))
-			span.RecordError(err)
-		} else {
-			span.AddEvent("invite.callback.rbac_synced", trace.WithAttributes(
-				attr.OrganizationInviteRoleSlug(invite.RoleSlug.String),
-			))
-		}
-	}
-
-	// Accept the invite AFTER all provisioning succeeds. This ensures a
-	// transient failure in user creation or org membership doesn't burn the
-	// invite — the invitee can retry. The WHERE clause guards against a
-	// concurrent revoke or expiry winning the race.
-	rowsAffected, err := repo.AcceptInvitation(ctx, invite.ID)
+	org, trialArmed, err := s.acceptInvitationTx(ctx, invite, gramUserID, idpUser.Sub, workosMembershipID)
 	if err != nil {
+		if workosMembershipID != "" {
+			if deleteErr := s.orgs.DeleteOrganizationMembership(ctx, workosMembershipID); deleteErr != nil {
+				s.logger.ErrorContext(ctx, "invite callback: failed to compensate WorkOS membership", attr.SlogError(deleteErr), attr.SlogOrganizationID(invite.OrganizationID))
+				span.RecordError(deleteErr)
+			}
+		}
+		if errors.Is(err, errInvitationAcceptanceRace) {
+			s.logger.WarnContext(ctx, "invite callback: invite was revoked or expired before acceptance")
+			span.AddEvent("invite.callback.acceptance_race_lost")
+			redirectError("invite already used, revoked, or expired")
+			return
+		}
 		s.logger.ErrorContext(ctx, "invite callback: failed to accept invitation", attr.SlogError(err))
+		span.RecordError(err)
 		redirectError("failed to accept invite")
 		return
 	}
-	if rowsAffected == 0 {
-		s.logger.WarnContext(ctx, "invite callback: invite was revoked or expired before acceptance")
-		span.AddEvent("invite.callback.acceptance_race_lost")
-		redirectError("invite already used, revoked, or expired")
-		return
-	}
+	span.AddEvent("invite.callback.org_membership_created")
 	span.AddEvent("invite.callback.invitation_accepted")
 
-	if invite.RoleSlug.Valid && invite.RoleSlug.String == authz.SystemRoleAdmin {
+	if trialArmed {
+		if err := s.trial.TrialStarted(ctx, invite.OrganizationID); err != nil {
+			s.logger.ErrorContext(ctx, "invite callback: failed to notify trial started", attr.SlogError(err), attr.SlogOrganizationID(invite.OrganizationID))
+		}
+		s.capturePlatformAdminInviteTelemetry(ctx, inviteeEmail, org)
+	} else if invite.RoleSlug.Valid && invite.RoleSlug.String == authz.SystemRoleAdmin {
 		if err := s.trial.AdminAdded(ctx, invite.OrganizationID, gramUserID); err != nil {
-			s.logger.ErrorContext(ctx, "invite callback: failed to notify trial admin added",
-				attr.SlogError(err),
-				attr.SlogOrganizationID(invite.OrganizationID),
-				attr.SlogUserID(gramUserID),
-				attr.SlogOrganizationInviteID(invite.ID.String()),
-			)
+			s.logger.ErrorContext(ctx, "invite callback: failed to notify trial admin added", attr.SlogError(err), attr.SlogOrganizationID(invite.OrganizationID), attr.SlogUserID(gramUserID), attr.SlogOrganizationInviteID(invite.ID.String()))
 		}
 	}
 

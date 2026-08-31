@@ -127,6 +127,24 @@ func (stubUserProvisioner) UpsertUserFromIDP(_ context.Context, idpUser *identit
 	return idpUser.Sub, nil
 }
 
+type inviteTestIdentity struct {
+	gramUserID   string
+	workosUserID string
+}
+
+type testInviteIdentityProvider struct {
+	identities map[string]inviteTestIdentity
+}
+
+func (p testInviteIdentityProvider) AuthenticateWithMagicAuth(_ context.Context, email string) (*identity.IDPUserInfo, error) {
+	invitee := p.identities[email]
+	return &identity.IDPUserInfo{Sub: invitee.workosUserID, Email: email, Name: "Invitee"}, nil
+}
+
+func (p testInviteIdentityProvider) UpsertUserFromIDP(_ context.Context, idpUser *identity.IDPUserInfo) (string, error) {
+	return p.identities[idpUser.Email].gramUserID, nil
+}
+
 // MockLoopsClient implements loops.Client for testing email send paths.
 type MockLoopsClient struct {
 	mock.Mock

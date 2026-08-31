@@ -44,6 +44,23 @@ SELECT *
 FROM organization_metadata
 WHERE id = @id;
 
+-- name: LockOrganizationForInviteAcceptance :one
+SELECT *
+FROM organization_metadata
+WHERE id = @id
+FOR UPDATE;
+
+-- name: HasOtherActiveOrganizationUsers :one
+SELECT EXISTS (
+    SELECT 1
+    FROM organization_user_relationships AS relationship
+    JOIN users ON users.id = relationship.user_id
+    WHERE relationship.organization_id = @organization_id
+      AND relationship.deleted_at IS NULL
+      AND users.deleted_at IS NULL
+      AND users.id <> @user_id
+);
+
 -- name: GetOrganizationMetadataBySlug :one
 SELECT *
 FROM organization_metadata
