@@ -311,7 +311,7 @@ func (s *CatalogIdentityProviderAttachmentService) createAndAttachClient(ctx con
 	bound, err := q.ListRemoteSessionClientsByProjectIDForUserSessionIssuer(ctx, remotesessionsrepo.ListRemoteSessionClientsByProjectIDForUserSessionIssuerParams{
 		ProjectID:             project.ID,
 		UserSessionIssuerID:   userSessionIssuerID,
-		OrganizationID:        conv.ToPGText(principal.OrganizationID),
+		OrganizationID:        principal.OrganizationID,
 		RemoteSessionIssuerID: uuid.NullUUID{UUID: issuerID, Valid: true},
 		Cursor:                uuid.NullUUID{},
 		LimitValue:            2,

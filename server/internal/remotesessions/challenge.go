@@ -644,7 +644,7 @@ func (m *ChallengeManager) HandleRemoteLoginCallback(w http.ResponseWriter, r *h
 	clientRow, err := queries.GetRemoteSessionClientByID(ctx, remotesessions_repo.GetRemoteSessionClientByIDParams{
 		ID:             state.RemoteSessionClientID,
 		ProjectID:      state.ProjectID,
-		OrganizationID: conv.ToPGText(state.OrganizationID),
+		OrganizationID: state.OrganizationID,
 	})
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "load remote session client").LogError(ctx, logger)
