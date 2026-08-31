@@ -209,7 +209,6 @@ var TunneledMcpCreateServerForm = Type("CreateTunneledMcpServerForm", func() {
 	Description("Form for creating a new tunneled MCP server source")
 
 	Attribute("name", String, "Human-readable display name for the tunneled MCP server")
-	Attribute("resource_identifier", String, "RFC 9728 protected resource identifier of the tunneled server, used only for exact-match credential routing and never dialed by Gram")
 	Required("name")
 })
 

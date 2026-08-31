@@ -19,8 +19,8 @@ WHERE projects.organization_id = @organization_id
   AND tunneled_mcp_servers.deleted IS FALSE;
 
 -- name: CreateServer :one
-INSERT INTO tunneled_mcp_servers (id, project_id, name, key_hash, key_prefix, resource_identifier)
-VALUES (@id, @project_id, @name, @key_hash, @key_prefix, sqlc.narg('resource_identifier'))
+INSERT INTO tunneled_mcp_servers (id, project_id, name, key_hash, key_prefix)
+VALUES (@id, @project_id, @name, @key_hash, @key_prefix)
 RETURNING *;
 
 -- name: ListServersByProjectID :many

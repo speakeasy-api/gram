@@ -29,18 +29,17 @@ func (q *Queries) CountActiveServersByOrganizationID(ctx context.Context, organi
 }
 
 const createServer = `-- name: CreateServer :one
-INSERT INTO tunneled_mcp_servers (id, project_id, name, key_hash, key_prefix, resource_identifier)
-VALUES ($1, $2, $3, $4, $5, $6)
+INSERT INTO tunneled_mcp_servers (id, project_id, name, key_hash, key_prefix)
+VALUES ($1, $2, $3, $4, $5)
 RETURNING id, project_id, name, key_hash, key_prefix, status, allow_public, agent_version, resource_identifier, last_seen_at, created_at, updated_at, deleted_at, deleted
 `
 
 type CreateServerParams struct {
-	ID                 uuid.UUID
-	ProjectID          uuid.UUID
-	Name               string
-	KeyHash            string
-	KeyPrefix          string
-	ResourceIdentifier pgtype.Text
+	ID        uuid.UUID
+	ProjectID uuid.UUID
+	Name      string
+	KeyHash   string
+	KeyPrefix string
 }
 
 func (q *Queries) CreateServer(ctx context.Context, arg CreateServerParams) (TunneledMcpServer, error) {
@@ -50,7 +49,6 @@ func (q *Queries) CreateServer(ctx context.Context, arg CreateServerParams) (Tun
 		arg.Name,
 		arg.KeyHash,
 		arg.KeyPrefix,
-		arg.ResourceIdentifier,
 	)
 	var i TunneledMcpServer
 	err := row.Scan(

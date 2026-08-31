@@ -106,8 +106,8 @@ func TestRouteUpstreamToken_NoResourceQualifiedIssuerEntryIsAnonymous(t *testing
 func TestRouteUpstreamToken_NoResourceNoIssuerIsAnonymous(t *testing.T) {
 	t.Parallel()
 
-	// Several credentials against a resourceless backend used to fail closed;
-	// with identity routing available the correct degradation is anonymous.
+	// A backend with neither a resource to match nor an issuer to key on has
+	// nothing to route by, so it calls anonymously rather than guessing.
 	token, err := routeUpstreamToken(t.Context(), testenv.NewLogger(t), map[uuid.UUID]remotesessions.UpstreamToken{
 		uuid.New(): {Token: "token-a", Resource: "https://a.example.com/mcp", RemoteSessionClientID: uuid.New()},
 		uuid.New(): {Token: "token-b", Resource: "https://b.example.com/mcp", RemoteSessionClientID: uuid.New()},
@@ -128,6 +128,45 @@ func TestRouteUpstreamToken_TunneledIssuerBacksUnmatchedResource(t *testing.T) {
 	}, "https://tunneled.internal/mcp", uuid.NullUUID{UUID: issuerID, Valid: true})
 	require.NoError(t, err)
 	require.Equal(t, "own-token", token)
+}
+
+func TestRouteUpstreamToken_TunneledIdentifierMatchesItsOwnGrant(t *testing.T) {
+	t.Parallel()
+
+	issuerID := uuid.New()
+	token, err := routeUpstreamToken(t.Context(), testenv.NewLogger(t), map[uuid.UUID]remotesessions.UpstreamToken{
+		issuerID: {Token: "own-token", Resource: "https://tunneled.internal/mcp/", RemoteSessionClientID: uuid.New()},
+	}, "https://tunneled.internal/mcp", uuid.NullUUID{UUID: issuerID, Valid: true})
+	require.NoError(t, err)
+	require.Equal(t, "own-token", token)
+}
+
+func TestRouteUpstreamToken_TunneledIdentifierNeverSelectsAcrossIssuers(t *testing.T) {
+	t.Parallel()
+
+	// A tunneled backend's dial target is its tunnel, not the resource its
+	// identifier names, so a sibling credential that happens to match must
+	// never be forwarded — an operator with mcp:write chooses the identifier
+	// and could otherwise point it at a sibling's audience to harvest it.
+	issuerID := uuid.New()
+	token, err := routeUpstreamToken(t.Context(), testenv.NewLogger(t), map[uuid.UUID]remotesessions.UpstreamToken{
+		uuid.New(): {Token: "sibling-token", Resource: "https://api.vendor.com/mcp", RemoteSessionClientID: uuid.New()},
+	}, "https://api.vendor.com/mcp", uuid.NullUUID{UUID: issuerID, Valid: true})
+	require.NoError(t, err)
+	require.Empty(t, token)
+}
+
+func TestRouteUpstreamToken_TunneledGrantQualifiedElsewhereIsAnonymous(t *testing.T) {
+	t.Parallel()
+
+	// The backend's own issuer holds a grant audience-bound to some other
+	// upstream — a shared authorization server. It belongs to that upstream.
+	issuerID := uuid.New()
+	token, err := routeUpstreamToken(t.Context(), testenv.NewLogger(t), map[uuid.UUID]remotesessions.UpstreamToken{
+		issuerID: {Token: "own-token", Resource: "https://a.example.com/mcp", RemoteSessionClientID: uuid.New()},
+	}, "https://tunneled.internal/mcp", uuid.NullUUID{UUID: issuerID, Valid: true})
+	require.NoError(t, err)
+	require.Empty(t, token)
 }
 
 func TestRouteUpstreamToken_MultipleEntriesRoutesByResource(t *testing.T) {

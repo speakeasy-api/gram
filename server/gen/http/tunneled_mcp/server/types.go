@@ -18,9 +18,6 @@ import (
 type CreateServerRequestBody struct {
 	// Human-readable display name for the tunneled MCP server
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// RFC 9728 protected resource identifier of the tunneled server, used only for
-	// exact-match credential routing and never dialed by Gram
-	ResourceIdentifier *string `form:"resource_identifier,omitempty" json:"resource_identifier,omitempty" xml:"resource_identifier,omitempty"`
 }
 
 // UpdateServerRequestBody is the type of the "tunneledMcp" service
@@ -2607,8 +2604,7 @@ func NewDeleteServerGatewayErrorResponseBody(res *goa.ServiceError) *DeleteServe
 // payload.
 func NewCreateServerPayload(body *CreateServerRequestBody, sessionToken *string, apikeyToken *string, projectSlugInput *string) *tunneledmcp.CreateServerPayload {
 	v := &tunneledmcp.CreateServerPayload{
-		Name:               *body.Name,
-		ResourceIdentifier: body.ResourceIdentifier,
+		Name: *body.Name,
 	}
 	v.SessionToken = sessionToken
 	v.ApikeyToken = apikeyToken

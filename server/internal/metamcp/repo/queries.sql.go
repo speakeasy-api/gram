@@ -788,7 +788,8 @@ SELECT
     s.unproxied_mcp_server_id AS mcp_server_unproxied_mcp_server_id,
     s.environment_id AS mcp_server_environment_id,
     s.tool_variations_group_id AS mcp_server_tool_variations_group_id,
-    s.remote_session_issuer_id AS mcp_server_remote_session_issuer_id
+    s.remote_session_issuer_id AS mcp_server_remote_session_issuer_id,
+    COALESCE(t.resource_identifier, '')::text AS tunneled_resource_identifier
 FROM meta_mcp_server_members m
 JOIN mcp_servers s
   ON s.id = m.mcp_server_id
@@ -796,6 +797,10 @@ JOIN mcp_servers s
  AND s.deleted IS FALSE
  AND s.visibility <> 'disabled'
  AND s.slug IS NOT NULL
+LEFT JOIN tunneled_mcp_servers t
+  ON t.id = s.tunneled_mcp_server_id
+ AND t.project_id = m.project_id
+ AND t.deleted IS FALSE
 WHERE m.meta_mcp_server_id = $1
   AND m.project_id = $2
   AND m.deleted IS FALSE
@@ -821,6 +826,7 @@ type ListServableMetaMCPMembersRow struct {
 	McpServerEnvironmentID         uuid.NullUUID
 	McpServerToolVariationsGroupID uuid.NullUUID
 	McpServerRemoteSessionIssuerID uuid.NullUUID
+	TunneledResourceIdentifier     string
 }
 
 // Serving-path variant of ListMetaMCPMembers: additionally hides members
@@ -830,7 +836,10 @@ type ListServableMetaMCPMembersRow struct {
 // serverslug--toolname contract cannot address. The dashboard listing keeps
 // the unfiltered query so admins still see every member. Carries the backend
 // and dispatch columns the gateway runtime needs to classify and execute
-// against each member.
+// against each member, including a tunneled member's recorded resource
+// identifier so credential routing needs no second read per dial. A member
+// whose tunneled source is soft-deleted reads as no identifier and routes
+// anonymously; the dial then fails member-scoped on the missing tunnel.
 func (q *Queries) ListServableMetaMCPMembers(ctx context.Context, arg ListServableMetaMCPMembersParams) ([]ListServableMetaMCPMembersRow, error) {
 	rows, err := q.db.Query(ctx, listServableMetaMCPMembers, arg.MetaMcpServerID, arg.ProjectID)
 	if err != nil {
@@ -854,6 +863,7 @@ func (q *Queries) ListServableMetaMCPMembers(ctx context.Context, arg ListServab
 			&i.McpServerEnvironmentID,
 			&i.McpServerToolVariationsGroupID,
 			&i.McpServerRemoteSessionIssuerID,
+			&i.TunneledResourceIdentifier,
 		); err != nil {
 			return nil, err
 		}

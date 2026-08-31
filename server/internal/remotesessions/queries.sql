@@ -1736,8 +1736,8 @@ SELECT DISTINCT
     COALESCE(rms.url, tms.resource_identifier, '')::text AS url
 FROM mcp_servers AS m
 JOIN projects AS p ON p.id = m.project_id
-LEFT JOIN remote_mcp_servers AS rms ON rms.id = m.remote_mcp_server_id AND rms.deleted IS FALSE
-LEFT JOIN tunneled_mcp_servers AS tms ON tms.id = m.tunneled_mcp_server_id AND tms.deleted IS FALSE
+LEFT JOIN remote_mcp_servers AS rms ON rms.id = m.remote_mcp_server_id AND rms.project_id = m.project_id AND rms.deleted IS FALSE
+LEFT JOIN tunneled_mcp_servers AS tms ON tms.id = m.tunneled_mcp_server_id AND tms.project_id = m.project_id AND tms.deleted IS FALSE
 WHERE m.deleted IS FALSE
   AND m.user_session_issuer_id IN (
       SELECT link.user_session_issuer_id

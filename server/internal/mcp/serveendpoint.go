@@ -263,24 +263,28 @@ func (s *Service) serveResolvedMCPEndpoint(
 // unmatched credential is never forwarded regardless of how few there are.
 //
 // tunneledIssuerID is a tunneled backend's own derived remote_session_issuer
-// (invalid for remote backends). It routes by identity what resource matching
-// cannot: a tunneled backend with no recorded resource identifier, and grants
-// minted against a tunneled backend's issuer before its identifier was
-// recorded. In both cases the map entry keyed by that issuer is forwarded
-// only when its grant is unqualified — a resource-qualified grant is
-// audience-bound to the upstream it names.
+// (invalid for remote backends). A tunneled backend is routed by that identity
+// alone rather than by scanning recorded resources: its dial target is the
+// tunnel, decoupled from whatever resource its identifier claims, so an
+// operator-supplied identifier colliding with a sibling's upstream would
+// otherwise deliver that sibling's bearer into the tunnel. A remote backend's
+// routing key is the URL the proxy dials, so matching across the map returns
+// each credential to the audience it names.
 //
-// A backend with no resource and no issuer entry calls anonymously; an
-// unmatched or ambiguous resource fails closed so a mismatched bearer is
-// never forwarded.
+// A tunneled backend with no usable entry calls anonymously; an unmatched or
+// ambiguous resource on a remote backend fails closed so a mismatched bearer
+// is never forwarded.
 func routeUpstreamToken(ctx context.Context, logger *slog.Logger, tokens map[uuid.UUID]remotesessions.UpstreamToken, upstreamResource string, tunneledIssuerID uuid.NullUUID) (string, error) {
 	want := strings.TrimRight(upstreamResource, "/")
 	if len(tokens) == 0 {
 		return "", nil
 	}
 
+	if tunneledIssuerID.Valid {
+		return tunneledIssuerToken(tokens, tunneledIssuerID, want), nil
+	}
 	if want == "" {
-		return tunneledIssuerToken(tokens, tunneledIssuerID), nil
+		return "", nil
 	}
 
 	var match string
@@ -301,9 +305,6 @@ func routeUpstreamToken(ctx context.Context, logger *slog.Logger, tokens map[uui
 		return "", routeFailClosed(ctx, logger, "duplicate_resource", tokens, upstreamResource,
 			fmt.Sprintf("%d of %d resolved remote_session tokens match the backend's upstream resource", found, len(tokens)))
 	}
-	if token := tunneledIssuerToken(tokens, tunneledIssuerID); token != "" {
-		return token, nil
-	}
 	// Distinguish routing failures by cause: legacy grants minted before
 	// the resource column vs genuinely unmatched credentials.
 	reason := "no_match"
@@ -314,18 +315,28 @@ func routeUpstreamToken(ctx context.Context, logger *slog.Logger, tokens map[uui
 		fmt.Sprintf("0 of %d resolved remote_session tokens match the backend's upstream resource", len(tokens)))
 }
 
-// tunneledIssuerToken returns the unqualified token keyed by a tunneled
-// backend's own derived remote_session_issuer, or "" when there is none.
-// The same identity rule backs routeMetaMemberToken and hostedMemberTokens.
-func tunneledIssuerToken(tokens map[uuid.UUID]remotesessions.UpstreamToken, issuerID uuid.NullUUID) string {
+// tunneledIssuerToken selects a tunneled backend's bearer from the entry keyed
+// by its own derived remote_session_issuer. The grant is accepted when it is
+// unqualified — the backend records no resource identifier, or the grant was
+// minted before it did — or when it names the identifier passed as want. A
+// grant audience-bound elsewhere, a missing entry, and a backend with no
+// derived issuer all yield "" for an anonymous call. hostedMemberTokens
+// applies the same identity rule to hosted members.
+func tunneledIssuerToken(tokens map[uuid.UUID]remotesessions.UpstreamToken, issuerID uuid.NullUUID, want string) string {
 	if !issuerID.Valid {
 		return ""
 	}
 	entry, ok := tokens[issuerID.UUID]
-	if !ok || entry.Resource != "" {
+	switch {
+	case !ok:
+		return ""
+	case entry.Resource == "":
+		return entry.Token
+	case want != "" && strings.TrimRight(entry.Resource, "/") == want:
+		return entry.Token
+	default:
 		return ""
 	}
-	return entry.Token
 }
 
 // tunneledBackendIssuer yields the identity routeUpstreamToken routes a
@@ -353,9 +364,9 @@ func (e *upstreamRoutingError) Error() string {
 }
 
 // routeFailClosed emits the one structured line per fail-closed routing
-// outcome — so legacy-NULL, unmatched, duplicate, and resourceless-backend
-// causes are distinguishable in aggregate — and returns the typed error. Call
-// sites do not log it again.
+// outcome — so legacy-NULL, unmatched, and duplicate causes are
+// distinguishable in aggregate — and returns the typed error. Call sites do
+// not log it again.
 func routeFailClosed(ctx context.Context, logger *slog.Logger, reason string, tokens map[uuid.UUID]remotesessions.UpstreamToken, upstreamResource, detail string) error {
 	recorded := make([]string, 0, len(tokens))
 	for _, entry := range tokens {

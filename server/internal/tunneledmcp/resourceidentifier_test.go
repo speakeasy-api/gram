@@ -12,28 +12,23 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 )
 
-// strPtr builds the optional-string payload fields the tri-state form takes.
-//
-//go:fix inline
-func strPtr(s string) *string { return new(s) }
-
-func TestCreateServerRecordsResourceIdentifier(t *testing.T) {
+func TestCreateServerRecordsNoResourceIdentifier(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestService(t)
 	authCtx := requireAuthContext(t, ctx)
 	writeCtx := authztest.WithExactGrants(t, ctx, projectScopedMCPGrant(authz.ScopeMCPWrite, *authCtx.ProjectID))
 
+	// The identifier is only knowable once the tunnel is up, so creation
+	// records none and the update form is the only way to set it.
 	result, err := ti.service.CreateServer(writeCtx, &gen.CreateServerPayload{
-		SessionToken:       nil,
-		ApikeyToken:        nil,
-		ProjectSlugInput:   nil,
-		Name:               "with-identifier",
-		ResourceIdentifier: new("https://tunneled.internal/mcp/"),
+		SessionToken:     nil,
+		ApikeyToken:      nil,
+		ProjectSlugInput: nil,
+		Name:             "without-identifier",
 	})
 	require.NoError(t, err)
-	require.Equal(t, "https://tunneled.internal/mcp", conv.PtrValOr(result.Server.ResourceIdentifier, ""),
-		"the identifier is stored without a trailing slash")
+	require.Nil(t, result.Server.ResourceIdentifier)
 }
 
 func TestUpdateServerResourceIdentifierTriState(t *testing.T) {
@@ -84,6 +79,29 @@ func TestUpdateServerResourceIdentifierTriState(t *testing.T) {
 	require.Nil(t, updated.ResourceIdentifier)
 }
 
+// A trailing slash is syntax in a path and data in a query, so only the path
+// is trimmed — otherwise one server would read as two routing identities.
+func TestUpdateServerResourceIdentifierTrimsPathOnly(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	authCtx := requireAuthContext(t, ctx)
+	server := seedTunneledMcpServer(t, ctx, ti.conn, *authCtx.ProjectID)
+	writeCtx := authztest.WithExactGrants(t, ctx, projectScopedMCPGrant(authz.ScopeMCPWrite, *authCtx.ProjectID))
+
+	updated, err := ti.service.UpdateServer(writeCtx, &gen.UpdateServerPayload{
+		SessionToken:       nil,
+		ApikeyToken:        nil,
+		ProjectSlugInput:   nil,
+		ID:                 server.ID.String(),
+		Name:               server.Name,
+		AllowPublic:        nil,
+		ResourceIdentifier: new("https://tunneled.internal/mcp/?tenant=a/"),
+	})
+	require.NoError(t, err)
+	require.Equal(t, "https://tunneled.internal/mcp?tenant=a/", conv.PtrValOr(updated.ResourceIdentifier, ""))
+}
+
 func TestUpdateServerRejectsInvalidResourceIdentifier(t *testing.T) {
 	t.Parallel()
 
@@ -97,6 +115,9 @@ func TestUpdateServerRejectsInvalidResourceIdentifier(t *testing.T) {
 		"ftp://tunneled.internal/mcp",        // wrong scheme
 		"https:///mcp",                       // no host
 		"https://tunneled.internal/mcp#frag", // fragment (RFC 8707)
+		"https://tunneled.internal/mcp#",     // bare fragment delimiter
+		"/",                                  // normalizes to nothing: an error, not a silent clear
+		"   x   ",                            // whitespace-padded garbage is not a clear either
 	} {
 		_, err := ti.service.UpdateServer(writeCtx, &gen.UpdateServerPayload{
 			SessionToken:       nil,

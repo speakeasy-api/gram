@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
@@ -30,14 +31,24 @@ func seedTunneledMCPServerForIssuer(t *testing.T, ctx context.Context, ti *testI
 	require.NotNil(t, authCtx.ProjectID)
 
 	tunneled, err := tunneledmcprepo.New(ti.conn).CreateServer(ctx, tunneledmcprepo.CreateServerParams{
-		ID:                 uuid.New(),
-		ProjectID:          *authCtx.ProjectID,
-		Name:               slug,
-		KeyHash:            "hash-" + slug,
-		KeyPrefix:          "pfx",
-		ResourceIdentifier: conv.ToPGTextEmpty(resourceIdentifier),
+		ID:        uuid.New(),
+		ProjectID: *authCtx.ProjectID,
+		Name:      slug,
+		KeyHash:   "hash-" + slug,
+		KeyPrefix: "pfx",
 	})
 	require.NoError(t, err)
+	// The identifier is recorded after creation, once the tunnel is up.
+	if resourceIdentifier != "" {
+		_, err = tunneledmcprepo.New(ti.conn).UpdateServer(ctx, tunneledmcprepo.UpdateServerParams{
+			ID:                 tunneled.ID,
+			ProjectID:          *authCtx.ProjectID,
+			Name:               slug,
+			AllowPublic:        pgtype.Bool{Bool: false, Valid: false},
+			ResourceIdentifier: conv.ToPGText(resourceIdentifier),
+		})
+		require.NoError(t, err)
+	}
 
 	_, err = mcpserversrepo.New(ti.conn).CreateMCPServer(ctx, mcpserversrepo.CreateMCPServerParams{
 		ID:                  uuid.New(),

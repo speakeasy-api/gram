@@ -63,9 +63,6 @@ type CreateServerPayload struct {
 	ProjectSlugInput *string
 	// Human-readable display name for the tunneled MCP server
 	Name string
-	// RFC 9728 protected resource identifier of the tunneled server, used only for
-	// exact-match credential routing and never dialed by Gram
-	ResourceIdentifier *string
 }
 
 // CreateTunneledMcpServerResult is the result type of the tunneledMcp service

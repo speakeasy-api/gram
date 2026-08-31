@@ -166,9 +166,9 @@ func TestMetaMCPCredentials_EachMemberSelectsItsOwnCredential(t *testing.T) {
 	require.NotContains(t, resources, "https://aim87-select-unknown.example.com/mcp")
 }
 
-// The same meta MCP unstamped records unqualified grants, and routeUpstreamToken
-// — untouched by this change — then serves no member at all. The negative that
-// gives the positive above its meaning, and the pre-backfill state.
+// The same meta MCP unstamped records unqualified grants, which the routers
+// then serve to no remote member at all. The negative that gives the positive
+// above its meaning, and the pre-backfill state.
 func TestMetaMCPCredentials_UnstampedGrantsFailClosedForEveryMember(t *testing.T) {
 	t.Parallel()
 
@@ -182,8 +182,8 @@ func TestMetaMCPCredentials_UnstampedGrantsFailClosedForEveryMember(t *testing.T
 	tokens := gw.resolveTokens(t, ctx)
 	require.Len(t, tokens, 3)
 
-	// Several credentials, all unqualified: the selection rule (exact match,
-	// lone-token fallback only for a single credential) serves none of them.
+	// Several credentials, all unqualified: exact-match selection serves none
+	// of them to a remote member, however few there are.
 	for _, member := range gw.members {
 		require.Empty(t, tokenFor(t, tokens, member.clientID).Resource,
 			"member %s must not hold a qualified credential", member.upstreamURL)

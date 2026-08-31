@@ -96,13 +96,15 @@ func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.A
 }
 
 // normalizeResourceIdentifier canonicalizes a resource identifier from a
-// management payload: an absolute http(s) URI without a fragment (RFC 8707),
-// stored without a trailing slash. Empty input stays empty (meaning unset or
-// clear, per the calling form's semantics). The value names a host inside the
-// customer's network and is never dialed, so it is deliberately not checked
-// against the outbound URL policy that would refuse private hosts.
+// management payload: an absolute http(s) URI carrying no fragment at all
+// (RFC 8707), stored with any trailing slash trimmed from its path so one
+// server is one routing identity. Blank input stays blank, meaning unset or
+// clear per the calling form's semantics; anything else that is not a usable
+// identifier is an error rather than a silent clear. The value names a host
+// inside the customer's network and is never dialed, so it is deliberately
+// not checked against the outbound URL policy that refuses private hosts.
 func normalizeResourceIdentifier(raw string) (string, error) {
-	trimmed := strings.TrimRight(strings.TrimSpace(raw), "/")
+	trimmed := strings.TrimSpace(raw)
 	if trimmed == "" {
 		return "", nil
 	}
@@ -110,10 +112,13 @@ func normalizeResourceIdentifier(raw string) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("parse resource identifier: %w", err)
 	}
-	if (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" || u.Fragment != "" {
+	// A bare "#" parses to an empty Fragment, so the raw string decides.
+	if (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" || strings.Contains(trimmed, "#") {
 		return "", errors.New("resource identifier must be an absolute http(s) URI without a fragment")
 	}
-	return trimmed, nil
+	// Trim the path only: a trailing slash inside a query is data, not syntax.
+	u.Path = strings.TrimRight(u.Path, "/")
+	return u.String(), nil
 }
 
 func (s *Service) CreateServer(ctx context.Context, payload *gen.CreateServerPayload) (*gen.CreateTunneledMcpServerResult, error) {
@@ -130,15 +135,6 @@ func (s *Service) CreateServer(ctx context.Context, payload *gen.CreateServerPay
 	name := strings.TrimSpace(payload.Name)
 	if name == "" {
 		return nil, oops.E(oops.CodeBadRequest, nil, "name must be non-empty").LogWarn(ctx, logger)
-	}
-
-	var resourceIdentifier pgtype.Text
-	if payload.ResourceIdentifier != nil {
-		normalized, nerr := normalizeResourceIdentifier(*payload.ResourceIdentifier)
-		if nerr != nil {
-			return nil, oops.E(oops.CodeBadRequest, nerr, "invalid resource identifier").LogWarn(ctx, logger)
-		}
-		resourceIdentifier = conv.ToPGTextEmpty(normalized)
 	}
 
 	serverID, err := uuid.NewV7()
@@ -175,12 +171,11 @@ func (s *Service) CreateServer(ctx context.Context, payload *gen.CreateServerPay
 	}
 
 	server, err := txRepo.CreateServer(ctx, repo.CreateServerParams{
-		ID:                 serverID,
-		ProjectID:          *authCtx.ProjectID,
-		Name:               name,
-		KeyHash:            issuedKey.Hash,
-		KeyPrefix:          issuedKey.Prefix,
-		ResourceIdentifier: resourceIdentifier,
+		ID:        serverID,
+		ProjectID: *authCtx.ProjectID,
+		Name:      name,
+		KeyHash:   issuedKey.Hash,
+		KeyPrefix: issuedKey.Prefix,
 	})
 	if err != nil {
 		var pgErr *pgconn.PgError

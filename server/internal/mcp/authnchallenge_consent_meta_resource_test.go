@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
@@ -162,14 +163,24 @@ func createTunneledMetaMember(t *testing.T, ctx context.Context, conn *pgxpool.P
 	t.Helper()
 
 	tunneled, err := tunneledmcp_repo.New(conn).CreateServer(ctx, tunneledmcp_repo.CreateServerParams{
-		ID:                 uuid.New(),
-		ProjectID:          projectID,
-		Name:               slug,
-		KeyHash:            "hash-" + slug,
-		KeyPrefix:          "pfx",
-		ResourceIdentifier: conv.ToPGTextEmpty(resourceIdentifier),
+		ID:        uuid.New(),
+		ProjectID: projectID,
+		Name:      slug,
+		KeyHash:   "hash-" + slug,
+		KeyPrefix: "pfx",
 	})
 	require.NoError(t, err)
+	// The identifier is recorded after creation, once the tunnel is up.
+	if resourceIdentifier != "" {
+		_, err = tunneledmcp_repo.New(conn).UpdateServer(ctx, tunneledmcp_repo.UpdateServerParams{
+			ID:                 tunneled.ID,
+			ProjectID:          projectID,
+			Name:               slug,
+			AllowPublic:        pgtype.Bool{Bool: false, Valid: false},
+			ResourceIdentifier: conv.ToPGText(resourceIdentifier),
+		})
+		require.NoError(t, err)
+	}
 
 	mcpServer, err := mcpservers_repo.New(conn).CreateMCPServer(ctx, mcpservers_repo.CreateMCPServerParams{
 		ID:                  uuid.New(),
@@ -624,6 +635,10 @@ func TestServeConsentAction_MetaMCPConnectTunneledMemberWithoutIdentifierSendsNo
 	issuerID := clientRemoteIssuerID(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, clientID)
 
 	createTunneledMetaMember(t, ctx, fx.ti.conn, fx.projectID, metaServerID, "aim87-tunnel-member", "", conv.ToNullUUID(issuerID), 0)
+	// A derivable per-client resource exists, so an omitted one proves the
+	// claim happened and suppressed it — without this the assertion would
+	// hold even if the tunneled member stopped claiming altogether.
+	attachConsentRemoteMcpServer(t, ctx, fx.ti.conn, fx.projectID, fx.shared, "aim87-tunnel-fallback", "https://fallback.example.com/mcp")
 
 	loc := postConnectAction(t, fx, clientID)
 	_, hasResource := loc.Query()["resource"]
