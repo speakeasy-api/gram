@@ -294,17 +294,46 @@ func (e *ResolvedMcpEndpoint) RootURL(baseURL string) (string, error) {
 // here so a future model with multiple addresses per endpoint can
 // expand the check to "the stored ref is in the endpoint's address
 // set" without churning callers.
-func (e *ResolvedMcpEndpoint) ValidateChallenge(ctx context.Context, ref EndpointRef, issuerID uuid.UUID) error {
+func (e *ResolvedMcpEndpoint) validateChallengeRef(ref EndpointRef, issuerID uuid.UUID) error {
 	if e.UserSessionIssuerID != issuerID {
-		return errToolsetEndpointMismatch
-	}
-	if err := ref.Authority.ValidateRequest(ctx); err != nil {
 		return errToolsetEndpointMismatch
 	}
 	return e.ValidateRef(ref)
 }
 
-func (e *ResolvedMcpEndpoint) ValidateGrant(ctx context.Context, db *pgxpool.Pool, ref EndpointRef, issuerID uuid.UUID, baseURL string) error {
+// ValidateChallenge validates a continuation that must arrive on its mint-time
+// request surface. Callers that can perform side effects must separately run
+// ValidateLiveChallenge before consuming single-use state.
+func (e *ResolvedMcpEndpoint) ValidateChallenge(ctx context.Context, ref EndpointRef, issuerID uuid.UUID) error {
+	if err := e.validateChallengeRef(ref, issuerID); err != nil {
+		return err
+	}
+	if err := ref.Authority.ValidateRequest(ctx); err != nil {
+		return errToolsetEndpointMismatch
+	}
+	return nil
+}
+
+func (e *ResolvedMcpEndpoint) ValidateLiveChallenge(ctx context.Context, db *pgxpool.Pool, ref EndpointRef) error {
+	if err := ref.Authority.ValidateLive(ctx, db); err != nil {
+		return fmt.Errorf("validate live endpoint authority: %w", err)
+	}
+	return nil
+}
+
+// ValidateGlobalChallenge is for deployment-global callbacks that recover the
+// mint-time surface from state rather than the callback request itself.
+func (e *ResolvedMcpEndpoint) ValidateGlobalChallenge(ctx context.Context, db *pgxpool.Pool, ref EndpointRef, issuerID uuid.UUID) error {
+	if err := e.validateChallengeRef(ref, issuerID); err != nil {
+		return err
+	}
+	if err := ref.Authority.ValidateLive(ctx, db); err != nil {
+		return fmt.Errorf("validate global endpoint authority: %w", err)
+	}
+	return nil
+}
+
+func (e *ResolvedMcpEndpoint) ValidateGrant(ctx context.Context, ref EndpointRef, issuerID uuid.UUID, baseURL string) error {
 	if err := e.ValidateChallenge(ctx, ref, issuerID); err != nil {
 		return err
 	}
@@ -313,9 +342,6 @@ func (e *ResolvedMcpEndpoint) ValidateGrant(ctx context.Context, db *pgxpool.Poo
 			return errToolsetEndpointMismatch
 		}
 	} else if err := ref.Authority.ValidateBaseURL(baseURL); err != nil {
-		return errToolsetEndpointMismatch
-	}
-	if err := ref.Authority.ValidateLive(ctx, db); err != nil {
 		return errToolsetEndpointMismatch
 	}
 	return nil

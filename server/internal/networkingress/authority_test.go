@@ -169,7 +169,9 @@ func TestGetLiveNetworkIngressAuthorityReturnsPinnedFields(t *testing.T) {
 	ingressID := uuid.New()
 	domainID := uuid.NullUUID{UUID: uuid.New(), Valid: true}
 	row := &authorityRow{values: []any{ingressID, "org_123", NamespaceCustomDomain, domainID, pgtype.Text{String: "private.example.ts.net", Valid: true}}}
-	got, err := repo.New(authorityDB{row: row}).GetLiveNetworkIngressAuthority(t.Context(), ingressID)
+	got, err := repo.New(authorityDB{row: row}).GetLiveNetworkIngressAuthority(t.Context(), repo.GetLiveNetworkIngressAuthorityParams{
+		ID: ingressID, OrganizationID: "org_123",
+	})
 	require.NoError(t, err)
 	require.Equal(t, ingressID, got.ID)
 	require.Equal(t, "org_123", got.OrganizationID)
@@ -200,6 +202,15 @@ func (r *authorityRow) Scan(dest ...any) error {
 	*dest[3].(*uuid.NullUUID) = r.values[3].(uuid.NullUUID) //nolint:forcetypeassert // fixed sqlc scan contract
 	*dest[4].(*pgtype.Text) = r.values[4].(pgtype.Text)     //nolint:forcetypeassert // fixed sqlc scan contract
 	return nil
+}
+
+func TestPrivateBaseURLCanonicalizesIPv6(t *testing.T) {
+	t.Parallel()
+
+	got, err := canonicalPrivateBaseURL("https://[2001:DB8::1]")
+	require.NoError(t, err)
+	require.Equal(t, "https://[2001:db8::1]", got)
+	require.Equal(t, "https://[2001:db8::1]", expectedBaseURL(pgtype.Text{String: "2001:db8::1", Valid: true}))
 }
 
 func TestValidateNamespaceFailsClosed(t *testing.T) {
