@@ -120,6 +120,15 @@ func TestMCPProtocolVersionTelemetryMatchesRegisteredRoutes(t *testing.T) {
 				"route %q resolved to %q, which the middleware does not match for %s", pattern, path, method)
 		}
 	}
+
+	// Gram's own platform MCP server carries no slug, so routePathForSlug
+	// cannot derive it, and the constant cannot be imported: internal/platformmcp
+	// imports this package, so referencing platformmcp.Path here would be an
+	// import cycle. Keep this literal in lockstep with it. Registered for POST
+	// only (see cmd/gram/platform_mcp.go), hence no verb cross-product.
+	got := recordSpanForRequest(t, http.MethodPost, "/platform-mcp", mcpversions.Version20250618)
+	require.Equal(t, mcpversions.Version20250618, got[string(attr.McpNegotiatedProtocolVersionKey)],
+		"/platform-mcp is an MCP JSON-RPC endpoint and must be matched")
 }
 
 func TestMCPProtocolVersionTelemetryIgnoresOAuthSubRoutes(t *testing.T) {
@@ -133,6 +142,10 @@ func TestMCPProtocolVersionTelemetryIgnoresOAuthSubRoutes(t *testing.T) {
 		"/mcp/my-server/authorize",
 		"/mcp/my-server/connect",
 		"/mcp/my-server/install",
+		"/platform-mcp/authorize",
+		"/platform-mcp/token",
+		"/platform-mcp/provider-setup",
+		"/platform-mcp/local-fixture/mcp",
 	} {
 		got := recordSpanForRequest(t, http.MethodPost, path, mcpversions.Version20250618)
 		require.NotContains(t, got, string(attr.McpNegotiatedProtocolVersionKey), "path %s", path)
