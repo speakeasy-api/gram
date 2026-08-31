@@ -13,10 +13,7 @@ import { usePublishStatus } from "@gram/client/react-query/publishStatus";
 import { ExternalLink, Plus, Sparkles } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Link } from "react-router";
-import {
-  AgentProviderIcon,
-  VSCodeIcon,
-} from "@/components/agent-providers/AgentProviderIcon";
+import { AgentProviderIcon } from "@/components/agent-providers/AgentProviderIcon";
 import {
   ACTIVE_AGENT_PROVIDER_IDS,
   agentProvidersForSurface,
@@ -513,11 +510,7 @@ export function HooksSetupDialog({
                     "hover:border-border cursor-not-allowed opacity-50 hover:bg-transparent",
                 )}
               >
-                {p.id === "copilot" ? (
-                  <VSCodeIcon className="size-5" />
-                ) : (
-                  <AgentProviderIcon source={p.iconSource} className="size-5" />
-                )}
+                <AgentProviderIcon source={p.iconSource} className="size-5" />
                 {p.name}
                 {!p.available && (
                   <span className="text-muted-foreground ml-1 text-[10px] tracking-wide uppercase">

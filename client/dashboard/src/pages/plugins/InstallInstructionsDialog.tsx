@@ -27,10 +27,7 @@ import {
 } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
-import {
-  AgentProviderIcon,
-  VSCodeIcon,
-} from "@/components/agent-providers/AgentProviderIcon";
+import { AgentProviderIcon } from "@/components/agent-providers/AgentProviderIcon";
 import { agentProvidersForSurface } from "@/components/agent-providers/agent-providers";
 
 const COWORK_DOCS_URL =
@@ -1081,14 +1078,10 @@ export function InstallInstructionsDialog({
                       )}
                     >
                       <div className="bg-secondary flex h-10 w-10 items-center justify-center">
-                        {p.id === "copilot" ? (
-                          <VSCodeIcon className="size-5" />
-                        ) : (
-                          <AgentProviderIcon
-                            source={p.iconSource}
-                            className="size-5"
-                          />
-                        )}
+                        <AgentProviderIcon
+                          source={p.iconSource}
+                          className="size-5"
+                        />
                       </div>
                       <span className="text-sm font-medium">{p.name}</span>
                       {!p.available && (
