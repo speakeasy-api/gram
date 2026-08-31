@@ -1,0 +1,34 @@
+server/internal/mcp/authnchallenge_consent.go
+  h_9630b74bdac540 658
+server/internal/mcp/servepublic_mcpendpoint_test.go
+  h_9630b74bdac540 503-504,557
+server/internal/mcp/resolved_mcp_endpoint_internal_test.go
+  h_9630b74bdac540 94-111
+server/internal/mcp/authnchallenge_idp_callback.go
+  h_9630b74bdac540 84,86
+server/internal/mcpmetadata/serve_install_page_test.go
+  h_9630b74bdac540 1906-1907,1939
+server/internal/mcp/authnchallenge_token_test.go
+  h_9630b74bdac540 19,21,102-165
+server/internal/mcpendpoints/resolve_policy_test.go
+  h_9630b74bdac540 15-16,137-181,218-242,244-246
+server/internal/mcp/wellknown_test.go
+  h_9630b74bdac540 83-94
+server/internal/mcp/authnchallenge_token.go
+  h_9630b74bdac540 283-286,288,311,315-326,370
+server/internal/mcp/resolved_mcp_endpoint.go
+  h_9630b74bdac540 211,308-311,313,317-319
+server/internal/mcpmetadata/impl.go
+  h_9630b74bdac540 1032-1035
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "55bffc7eb6e02442037b17273251d39bc78337d0",
+  "prompts": {},
+  "humans": {
+    "h_9630b74bdac540": {
+      "author": "Tristan Cartledge <tristan@speakeasyapi.dev>"
+    }
+  }
+}
