@@ -27,7 +27,10 @@ import {
 } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
-import { AgentProviderIcon } from "@/components/agent-providers/AgentProviderIcon";
+import {
+  AgentProviderIcon,
+  VSCodeIcon,
+} from "@/components/agent-providers/AgentProviderIcon";
 import { agentProvidersForSurface } from "@/components/agent-providers/agent-providers";
 
 const COWORK_DOCS_URL =
@@ -791,13 +794,39 @@ export function CopilotInstallContent(): JSX.Element {
 
   return (
     <div className="min-w-0 space-y-6">
-      {/* ── Quick install ─────────────────────────────────────────────────── */}
       <div>
-        <h3 className="mb-2 text-sm font-semibold">Quick install</h3>
+        <h3 className="mb-2 text-sm font-semibold">
+          GitHub Copilot in VS Code
+        </h3>
         <p className="text-muted-foreground mb-3 text-sm">
-          Download the Gram observability plugin as a ZIP. It includes a
-          hooks-scoped API key, an explicit Copilot CLI registration, and VS
-          Code registration metadata for managed installation.
+          Download the Gram observability plugin as a ZIP for managed
+          deployment. It includes a hooks-scoped API key and registration
+          metadata that tells your managed installer to create the VS Code hook
+          file.
+        </p>
+        <Button
+          variant="secondary"
+          size="sm"
+          disabled={isDownloading}
+          onClick={() => void handleDownloadPlugin()}
+          className="inline-flex items-center gap-2"
+        >
+          <Download className="size-4" />
+          {isDownloading ? "Downloading…" : "Download Plugin"}
+        </Button>
+        <p className="text-muted-foreground mt-2 text-xs">
+          Deploy the package through your managed installer, then reload VS
+          Code.
+        </p>
+      </div>
+
+      <div className="border-t" />
+
+      <div>
+        <h3 className="mb-2 text-sm font-semibold">Copilot CLI</h3>
+        <p className="text-muted-foreground mb-3 text-sm">
+          To use the same observability plugin with Copilot CLI, download the
+          ZIP, extract it, and load the plugin directory explicitly.
         </p>
         <Button
           variant="secondary"
@@ -820,17 +849,18 @@ export function CopilotInstallContent(): JSX.Element {
 
       <div className="border-t" />
 
-      {/* ── Caveats ───────────────────────────────────────────────────────── */}
       <div className="space-y-3">
         <p className="text-muted-foreground text-xs font-semibold tracking-wide uppercase">
           Before you install
         </p>
         <p className="text-muted-foreground text-sm">
-          VS Code hook support is a preview. Its managed registration uses the{" "}
+          VS Code uses the{" "}
           <span className="text-foreground font-medium">vscode-copilot</span>{" "}
-          codec. The plugin registration remains explicitly{" "}
+          codec, while Copilot CLI uses{" "}
           <span className="text-foreground font-medium">copilot-cli</span>, so
-          the two wire and response formats never get conflated.
+          each runtime receives the correct wire and response format. Do not add
+          separate, overlapping hook registrations for both runtimes in the same
+          workspace; each event may fire twice.
         </p>
         <p className="text-muted-foreground text-sm">
           Copilot stops running a tool's hook chain at the first deny. If
@@ -1051,10 +1081,14 @@ export function InstallInstructionsDialog({
                       )}
                     >
                       <div className="bg-secondary flex h-10 w-10 items-center justify-center">
-                        <AgentProviderIcon
-                          source={p.iconSource}
-                          className="size-5"
-                        />
+                        {p.id === "copilot" ? (
+                          <VSCodeIcon className="size-5" />
+                        ) : (
+                          <AgentProviderIcon
+                            source={p.iconSource}
+                            className="size-5"
+                          />
+                        )}
                       </div>
                       <span className="text-sm font-medium">{p.name}</span>
                       {!p.available && (
