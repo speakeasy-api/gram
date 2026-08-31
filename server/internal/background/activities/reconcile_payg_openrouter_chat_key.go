@@ -94,7 +94,13 @@ func (r *ReconcilePaygOpenRouterChatKey) reconcileLocked(ctx context.Context, co
 		if err != nil {
 			return fmt.Errorf("read PAYG Other inference key: %w", err)
 		}
-		if !key.Disabled {
+		if key.DisableCauses != nil && openrouter.EffectiveDisabled(key.Disabled, key.DisableCauses) {
+			// Wave B cannot remove billing_inactive without also risking unrelated
+			// classified causes. Leave classified lockdowns untouched until the
+			// cause-aware activation path lands.
+			return nil
+		}
+		if !openrouter.EffectiveDisabled(key.Disabled, key.DisableCauses) {
 			if key.MonthlyCredits == int64(limit) {
 				return nil
 			}
@@ -161,7 +167,7 @@ func (r *ReconcilePaygOpenRouterChatKey) reenableSecurityLocked(ctx context.Cont
 		OrganizationID: organizationID,
 		KeyType:        string(openrouter.KeyTypeInternal),
 	})
-	if errors.Is(err, pgx.ErrNoRows) || (err == nil && !key.Disabled) {
+	if errors.Is(err, pgx.ErrNoRows) || (err == nil && !openrouter.EffectiveDisabled(key.Disabled, key.DisableCauses)) {
 		return nil
 	}
 	if err != nil {

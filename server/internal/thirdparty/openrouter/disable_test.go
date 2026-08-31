@@ -1,12 +1,14 @@
 package openrouter
 
 import (
+	"context"
 	"encoding/json"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -16,14 +18,16 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	orgRepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter/repo"
 )
 
 type disableTestUpstream struct {
-	server  *httptest.Server
-	mu      sync.Mutex
-	patches []string
-	onPatch func()
+	server    *httptest.Server
+	mu        sync.Mutex
+	patches   []string
+	onPatch   func()
+	patchHash string
 }
 
 // recorded returns the raw patch bodies. They stay raw because the field a
@@ -44,6 +48,12 @@ func (u *disableTestUpstream) interceptPatch(fn func()) {
 	u.onPatch = fn
 }
 
+func (u *disableTestUpstream) respondWithPatchHash(hash string) {
+	u.mu.Lock()
+	defer u.mu.Unlock()
+	u.patchHash = hash
+}
+
 func newDisableTestProvisioner(t *testing.T, orgID string) (*OpenRouter, *disableTestUpstream, *repo.Queries) {
 	t.Helper()
 
@@ -61,7 +71,7 @@ func newDisableTestProvisioner(t *testing.T, orgID string) (*OpenRouter, *disabl
 	})
 	require.NoError(t, err)
 
-	upstream := &disableTestUpstream{server: nil, mu: sync.Mutex{}, patches: nil, onPatch: nil}
+	upstream := &disableTestUpstream{server: nil, mu: sync.Mutex{}, patches: nil, onPatch: nil, patchHash: "hash-1"}
 	upstream.server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 
@@ -81,6 +91,7 @@ func newDisableTestProvisioner(t *testing.T, orgID string) (*OpenRouter, *disabl
 			upstream.mu.Lock()
 			upstream.patches = append(upstream.patches, string(raw))
 			onPatch := upstream.onPatch
+			patchHash := upstream.patchHash
 			upstream.mu.Unlock()
 
 			if onPatch != nil {
@@ -88,7 +99,7 @@ func newDisableTestProvisioner(t *testing.T, orgID string) (*OpenRouter, *disabl
 			}
 
 			_ = json.NewEncoder(w).Encode(map[string]any{
-				"data": map[string]any{"limit": 100.0, "hash": "hash-1"},
+				"data": map[string]any{"limit": 100.0, "hash": patchHash},
 			})
 		default:
 			w.WriteHeader(http.StatusNotFound)
@@ -103,6 +114,220 @@ func newDisableTestProvisioner(t *testing.T, orgID string) (*OpenRouter, *disabl
 	provisioner.baseURL = upstream.server.URL
 
 	return provisioner, upstream, repo.New(conn)
+}
+
+func TestEffectiveDisabledCompatibility(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name          string
+		legacy        bool
+		disableCauses []string
+		want          bool
+	}{
+		{name: "unclassified enabled", legacy: false, disableCauses: nil, want: false},
+		{name: "unclassified disabled", legacy: true, disableCauses: nil, want: true},
+		{name: "classified empty ignores stale legacy disabled", legacy: true, disableCauses: []string{}, want: false},
+		{name: "classified cause ignores stale legacy enabled", legacy: false, disableCauses: []string{"trial_demotion"}, want: true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			require.Equal(t, tt.want, EffectiveDisabled(tt.legacy, tt.disableCauses))
+		})
+	}
+}
+
+func TestProvisionAPIKeyInitializesClassifiedEnabledRow(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	orgID := "org-" + uuid.NewString()[:8]
+	provisioner, _, queries := newDisableTestProvisioner(t, orgID)
+
+	_, err := provisioner.ProvisionAPIKey(ctx, orgID, KeyTypeChat)
+	require.NoError(t, err)
+
+	row, err := queries.GetOpenRouterAPIKey(ctx, repo.GetOpenRouterAPIKeyParams{OrganizationID: orgID, KeyType: string(KeyTypeChat)})
+	require.NoError(t, err)
+	require.NotNil(t, row.DisableCauses)
+	require.Empty(t, row.DisableCauses)
+}
+
+func TestProvisionAPIKeyUsesClassifiedEffectiveState(t *testing.T) {
+	t.Parallel()
+
+	t.Run("empty causes override stale legacy disabled", func(t *testing.T) {
+		t.Parallel()
+		ctx := t.Context()
+		orgID := "org-" + uuid.NewString()[:8]
+		provisioner, _, _ := newDisableTestProvisioner(t, orgID)
+
+		wantKey, err := provisioner.ProvisionAPIKey(ctx, orgID, KeyTypeChat)
+		require.NoError(t, err)
+		err = testrepo.New(provisioner.db).SetOpenRouterAPIKeyClassificationFixture(ctx, testrepo.SetOpenRouterAPIKeyClassificationFixtureParams{OrganizationID: orgID, KeyType: string(KeyTypeChat), Disabled: true, DisableCauses: []string{}})
+		require.NoError(t, err)
+
+		gotKey, err := provisioner.ProvisionAPIKey(ctx, orgID, KeyTypeChat)
+		require.NoError(t, err)
+		require.Equal(t, wantKey, gotKey)
+	})
+
+	t.Run("causes override stale legacy enabled", func(t *testing.T) {
+		t.Parallel()
+		ctx := t.Context()
+		orgID := "org-" + uuid.NewString()[:8]
+		provisioner, _, _ := newDisableTestProvisioner(t, orgID)
+
+		_, err := provisioner.ProvisionAPIKey(ctx, orgID, KeyTypeChat)
+		require.NoError(t, err)
+		err = testrepo.New(provisioner.db).SetOpenRouterAPIKeyClassificationFixture(ctx, testrepo.SetOpenRouterAPIKeyClassificationFixtureParams{OrganizationID: orgID, KeyType: string(KeyTypeChat), Disabled: false, DisableCauses: []string{"trial_demotion"}})
+		require.NoError(t, err)
+
+		_, err = provisioner.ProvisionAPIKey(ctx, orgID, KeyTypeChat)
+		require.ErrorIs(t, err, ErrPlatformKeyDisabled)
+	})
+}
+
+func TestAddAPIKeyDisableCauseRejectsMismatchedUpstreamIdentityWithoutLocalWrite(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	orgID := "org-" + uuid.NewString()[:8]
+	provisioner, upstream, queries := newDisableTestProvisioner(t, orgID)
+	_, err := provisioner.ProvisionAPIKey(ctx, orgID, KeyTypeChat)
+	require.NoError(t, err)
+	upstream.respondWithPatchHash("different-hash")
+
+	_, err = provisioner.AddAPIKeyDisableCause(ctx, orgID, KeyTypeChat, DisableCauseAdminLock)
+	require.ErrorContains(t, err, "identity mismatch")
+
+	row, err := queries.GetOpenRouterAPIKey(ctx, repo.GetOpenRouterAPIKeyParams{OrganizationID: orgID, KeyType: string(KeyTypeChat)})
+	require.NoError(t, err)
+	require.False(t, row.Disabled)
+	require.Empty(t, row.DisableCauses)
+}
+
+func TestAddAPIKeyDisableCauseRejectsRotationAfterValidUpstreamResponse(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	orgID := "org-" + uuid.NewString()[:8]
+	provisioner, upstream, queries := newDisableTestProvisioner(t, orgID)
+	_, err := provisioner.ProvisionAPIKey(ctx, orgID, KeyTypeChat)
+	require.NoError(t, err)
+	upstream.interceptPatch(func() {
+		_, updateErr := queries.UpdateOpenRouterKey(ctx, repo.UpdateOpenRouterKeyParams{
+			MonthlyCredits: 100, KeyHash: "rotated-hash", Reinstate: false,
+			OrganizationID: orgID, KeyType: string(KeyTypeChat),
+		})
+		require.NoError(t, updateErr)
+	})
+
+	_, err = provisioner.AddAPIKeyDisableCause(ctx, orgID, KeyTypeChat, DisableCauseAdminLock)
+	require.ErrorContains(t, err, "changed concurrently")
+
+	row, err := queries.GetOpenRouterAPIKey(ctx, repo.GetOpenRouterAPIKeyParams{OrganizationID: orgID, KeyType: string(KeyTypeChat)})
+	require.NoError(t, err)
+	require.Equal(t, "rotated-hash", row.KeyHash)
+	require.Empty(t, row.DisableCauses)
+}
+
+func TestAddAPIKeyDisableCauseSerializesConcurrentSameCause(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	orgID := "org-" + uuid.NewString()[:8]
+	provisioner, upstream, queries := newDisableTestProvisioner(t, orgID)
+	_, err := provisioner.ProvisionAPIKey(ctx, orgID, KeyTypeChat)
+	require.NoError(t, err)
+
+	firstPatch := make(chan struct{})
+	releasePatch := make(chan struct{})
+	var once sync.Once
+	upstream.interceptPatch(func() {
+		once.Do(func() {
+			close(firstPatch)
+			<-releasePatch
+		})
+	})
+
+	results := make(chan DisableCauseChange, 2)
+	errs := make(chan error, 2)
+	go func() {
+		result, addErr := provisioner.AddAPIKeyDisableCause(ctx, orgID, KeyTypeChat, DisableCauseAdminLock)
+		results <- result
+		errs <- addErr
+	}()
+	<-firstPatch
+	go func() {
+		result, addErr := provisioner.AddAPIKeyDisableCause(ctx, orgID, KeyTypeChat, DisableCauseAdminLock)
+		results <- result
+		errs <- addErr
+	}()
+	var releaseOnce sync.Once
+	release := func() { releaseOnce.Do(func() { close(releasePatch) }) }
+	t.Cleanup(release)
+	require.Never(t, func() bool { return len(upstream.recorded()) > 1 }, 50*time.Millisecond, 5*time.Millisecond)
+	release()
+
+	require.NoError(t, <-errs)
+	require.NoError(t, <-errs)
+	first, second := <-results, <-results
+	require.NotEqual(t, first.CauseChanged, second.CauseChanged)
+	require.NotEqual(t, first.KeyAccessChanged, second.KeyAccessChanged)
+	require.Len(t, upstream.recorded(), 1)
+	row, err := queries.GetOpenRouterAPIKey(ctx, repo.GetOpenRouterAPIKeyParams{OrganizationID: orgID, KeyType: string(KeyTypeChat)})
+	require.NoError(t, err)
+	require.Equal(t, []string{string(DisableCauseAdminLock)}, row.DisableCauses)
+}
+
+func TestAddAPIKeyDisableCauseCanonicalizesConcurrentDifferentCauses(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	orgID := "org-" + uuid.NewString()[:8]
+	provisioner, upstream, queries := newDisableTestProvisioner(t, orgID)
+	_, err := provisioner.ProvisionAPIKey(ctx, orgID, KeyTypeChat)
+	require.NoError(t, err)
+
+	firstPatch := make(chan struct{})
+	releasePatch := make(chan struct{})
+	upstream.interceptPatch(func() {
+		close(firstPatch)
+		<-releasePatch
+	})
+	type addition struct {
+		change DisableCauseChange
+		err    error
+	}
+	results := make(chan addition, 2)
+	go func() {
+		change, addErr := provisioner.AddAPIKeyDisableCause(ctx, orgID, KeyTypeChat, DisableCauseTrialDemotion)
+		results <- addition{change: change, err: addErr}
+	}()
+	<-firstPatch
+	go func() {
+		change, addErr := provisioner.AddAPIKeyDisableCause(ctx, orgID, KeyTypeChat, DisableCauseAdminLock)
+		results <- addition{change: change, err: addErr}
+	}()
+	var releaseOnce sync.Once
+	release := func() { releaseOnce.Do(func() { close(releasePatch) }) }
+	t.Cleanup(release)
+	require.Never(t, func() bool { return len(upstream.recorded()) > 1 }, 50*time.Millisecond, 5*time.Millisecond)
+	release()
+
+	first, second := <-results, <-results
+	require.NoError(t, first.err)
+	require.NoError(t, second.err)
+	require.True(t, first.change.CauseChanged)
+	require.True(t, second.change.CauseChanged)
+	require.NotEqual(t, first.change.KeyAccessChanged, second.change.KeyAccessChanged)
+	require.Len(t, upstream.recorded(), 1)
+	row, err := queries.GetOpenRouterAPIKey(ctx, repo.GetOpenRouterAPIKeyParams{OrganizationID: orgID, KeyType: string(KeyTypeChat)})
+	require.NoError(t, err)
+	require.Equal(t, []string{string(DisableCauseAdminLock), string(DisableCauseTrialDemotion)}, row.DisableCauses)
 }
 
 func TestDisableAPIKey_DisablesKeyUpstream(t *testing.T) {
@@ -203,6 +428,133 @@ func TestDisableAPIKey_NoKeyIsNoop(t *testing.T) {
 
 // Sales reinstate a demoted organization by raising its limit, so the refresh
 // path has to clear the flag on both sides.
+func TestRefreshAPIKeyLimit_PreservesClassifiedDisableCauses(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name          string
+		disabled      bool
+		disableCauses []string
+	}{
+		{name: "admin and trial", disabled: true, disableCauses: []string{"admin_lock", "trial_demotion"}},
+		{name: "stale false admin and billing", disabled: false, disableCauses: []string{"admin_lock", "billing_inactive"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			ctx := t.Context()
+			orgID := "org-" + uuid.NewString()[:8]
+			provisioner, upstream, queries := newDisableTestProvisioner(t, orgID)
+			_, err := provisioner.ProvisionAPIKey(ctx, orgID, KeyTypeInternal)
+			require.NoError(t, err)
+			require.NoError(t, testrepo.New(provisioner.db).SetOpenRouterAPIKeyClassificationFixture(ctx, testrepo.SetOpenRouterAPIKeyClassificationFixtureParams{
+				OrganizationID: orgID,
+				KeyType:        string(KeyTypeInternal),
+				Disabled:       tt.disabled,
+				DisableCauses:  tt.disableCauses,
+			}))
+
+			limit := 42
+			refreshed, err := provisioner.RefreshAPIKeyLimit(ctx, orgID, KeyTypeInternal, &limit)
+			require.NoError(t, err)
+			require.Equal(t, 42, refreshed)
+
+			patches := upstream.recorded()
+			require.Len(t, patches, 1)
+			require.JSONEq(t, `{"limit":42,"limit_reset":"monthly"}`, patches[0])
+
+			row, err := queries.GetOpenRouterAPIKey(ctx, repo.GetOpenRouterAPIKeyParams{
+				OrganizationID: orgID,
+				KeyType:        string(KeyTypeInternal),
+			})
+			require.NoError(t, err)
+			require.Equal(t, tt.disabled, row.Disabled)
+			require.Equal(t, tt.disableCauses, row.DisableCauses)
+			require.Equal(t, int64(42), row.MonthlyCredits)
+		})
+	}
+}
+
+func TestReinstateAPIKeyLimit_DoesNotEnableAfterLegacyClassificationWins(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	orgID := "org-" + uuid.NewString()[:8]
+	provisioner, upstream, _ := newDisableTestProvisioner(t, orgID)
+	_, err := provisioner.ProvisionAPIKey(ctx, orgID, KeyTypeInternal)
+	require.NoError(t, err)
+	require.NoError(t, testrepo.New(provisioner.db).SetOpenRouterAPIKeyClassificationFixture(ctx, testrepo.SetOpenRouterAPIKeyClassificationFixtureParams{
+		OrganizationID: orgID, KeyType: string(KeyTypeInternal), Disabled: true, DisableCauses: nil,
+	}))
+
+	classifier := testenv.BeginTx(t, ctx, provisioner.db)
+	require.NoError(t, repo.New(classifier).AcquireOpenRouterBillingLock(ctx, repo.AcquireOpenRouterBillingLockParams{
+		OrganizationID: orgID, KeyType: string(KeyTypeInternal),
+	}))
+
+	patchStarted := make(chan struct{})
+	releasePatch := make(chan struct{})
+	var patchOnce sync.Once
+	upstream.interceptPatch(func() {
+		patchOnce.Do(func() { close(patchStarted) })
+		<-releasePatch
+	})
+
+	refreshDone := make(chan error, 1)
+	go func() {
+		_, refreshErr := provisioner.ReinstateAPIKeyLimit(ctx, orgID, KeyTypeInternal, nil)
+		refreshDone <- refreshErr
+	}()
+
+	select {
+	case <-patchStarted:
+		// The legacy implementation reads before joining the classifier's lock.
+	case <-time.After(150 * time.Millisecond):
+	}
+	require.NoError(t, testrepo.New(classifier).SetOpenRouterAPIKeyClassificationFixture(ctx, testrepo.SetOpenRouterAPIKeyClassificationFixtureParams{
+		OrganizationID: orgID, KeyType: string(KeyTypeInternal), Disabled: true, DisableCauses: []string{string(DisableCauseAdminLock)},
+	}))
+	require.NoError(t, classifier.Commit(ctx))
+
+	select {
+	case <-patchStarted:
+	case <-time.After(time.Second):
+		require.FailNow(t, "reinstate did not reach upstream after classification committed")
+	}
+	close(releasePatch)
+	require.NoError(t, <-refreshDone)
+
+	patches := upstream.recorded()
+	require.Len(t, patches, 1)
+	require.JSONEq(t, `{"limit":5,"limit_reset":"monthly"}`, patches[0],
+		"a classified cause must prevent the stale legacy read from enabling upstream")
+}
+
+func TestReinstateAPIKeyLimitWithDB_ReentersTransactionBillingLock(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	orgID := "org-" + uuid.NewString()[:8]
+	provisioner, _, _ := newDisableTestProvisioner(t, orgID)
+	_, err := provisioner.ProvisionAPIKey(ctx, orgID, KeyTypeInternal)
+	require.NoError(t, err)
+	require.NoError(t, testrepo.New(provisioner.db).SetOpenRouterAPIKeyClassificationFixture(ctx, testrepo.SetOpenRouterAPIKeyClassificationFixtureParams{
+		OrganizationID: orgID, KeyType: string(KeyTypeInternal), Disabled: true, DisableCauses: nil,
+	}))
+
+	tx := testenv.BeginTx(t, ctx, provisioner.db)
+	require.NoError(t, repo.New(tx).AcquireOpenRouterBillingLock(ctx, repo.AcquireOpenRouterBillingLockParams{
+		OrganizationID: orgID, KeyType: string(KeyTypeInternal),
+	}))
+
+	callCtx, cancel := context.WithTimeout(ctx, 2*time.Second)
+	defer cancel()
+	_, err = provisioner.ReinstateAPIKeyLimitWithDB(callCtx, tx, orgID, KeyTypeInternal, nil)
+	require.NoError(t, err)
+	require.NoError(t, tx.Commit(ctx))
+}
+
 func TestRefreshAPIKeyLimit_ReinstatesDisabledKey(t *testing.T) {
 	t.Parallel()
 

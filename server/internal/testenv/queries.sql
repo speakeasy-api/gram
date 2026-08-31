@@ -546,6 +546,14 @@ UPDATE openrouter_api_keys
 SET created_at = @created_at
 WHERE organization_id = @organization_id;
 
+-- name: SetOpenRouterAPIKeyClassificationFixture :exec
+-- Test-only fixture: creates compatibility states that production writes reject.
+UPDATE openrouter_api_keys
+SET disabled = @disabled,
+    disable_causes = @disable_causes::text[]
+WHERE organization_id = @organization_id
+  AND key_type = @key_type;
+
 -- name: SeedOpenRouterSpendRangeFixture :exec
 -- Test-only fixture: records one exact daily spend amount across an inclusive
 -- UTC date range.

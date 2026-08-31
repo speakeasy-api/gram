@@ -2,11 +2,17 @@ package openrouterkeys_test
 
 import (
 	"context"
+	"encoding/json"
+	"log/slog"
+	"net/http"
+	"net/http/httptest"
+	"sync"
 	"testing"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
+	"go.opentelemetry.io/otel/trace"
 
 	gen "github.com/speakeasy-api/gram/server/gen/admin_open_router_keys"
 	"github.com/speakeasy-api/gram/server/internal/audit"
@@ -15,9 +21,12 @@ import (
 	activitiesrepo "github.com/speakeasy-api/gram/server/internal/background/activities/repo"
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/encryption"
+	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	orgmetarepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter/repo"
 	trialsrepo "github.com/speakeasy-api/gram/server/internal/trials/repo"
@@ -55,6 +64,31 @@ func TestListKeys_ReturnsSeededKeys(t *testing.T) {
 	require.Equal(t, "chat", found.KeyType)
 	require.Equal(t, int64(5), found.MonthlyCredits)
 	require.False(t, found.Disabled)
+}
+
+func TestListKeysUsesEffectiveDisabledCompatibility(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	adminCtx := withAdmin(t, ctx)
+	classifiedEnabled := seedKey(t, ctx, ti, "compat-enabled", "chat", "sk-or-compat-enabled")
+	classifiedDisabled := seedKey(t, ctx, ti, "compat-disabled", "internal", "sk-or-compat-disabled")
+	fixtures := testrepo.New(ti.conn)
+	require.NoError(t, fixtures.SetOpenRouterAPIKeyClassificationFixture(ctx, testrepo.SetOpenRouterAPIKeyClassificationFixtureParams{OrganizationID: classifiedEnabled, KeyType: string(openrouter.KeyTypeChat), Disabled: true, DisableCauses: []string{}}))
+	require.NoError(t, fixtures.SetOpenRouterAPIKeyClassificationFixture(ctx, testrepo.SetOpenRouterAPIKeyClassificationFixtureParams{OrganizationID: classifiedDisabled, KeyType: "internal", Disabled: false, DisableCauses: []string{"trial_demotion"}}))
+
+	res, err := ti.service.ListKeys(adminCtx, &gen.ListKeysPayload{SessionToken: nil})
+	require.NoError(t, err)
+	states := make(map[string]bool)
+	for _, key := range res.Keys {
+		states[key.OrganizationID] = key.Disabled
+	}
+	enabled, enabledPresent := states[classifiedEnabled]
+	require.True(t, enabledPresent, "classified enabled fixture must be returned")
+	require.False(t, enabled)
+	disabled, disabledPresent := states[classifiedDisabled]
+	require.True(t, disabledPresent, "classified disabled fixture must be returned")
+	require.True(t, disabled)
 }
 
 func TestGetKeyUsage_DecryptsStoredCiphertext(t *testing.T) {
@@ -175,6 +209,97 @@ func TestEnableKey_ReinstatesWithRecordedLimit(t *testing.T) {
 	require.NoError(t, err)
 	require.False(t, view.Disabled)
 	require.EqualValues(t, recordedLimit, view.MonthlyCredits, "recorded ceiling must be kept on reinstatement")
+
+	after, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionOpenRouterAPIKeyEnable)
+	require.NoError(t, err)
+	require.Equal(t, before+1, after)
+}
+
+func TestEnableKey_RealOpenRouterCompletesOnLockedSession(t *testing.T) {
+	t.Parallel()
+
+	type patchRequest struct {
+		method string
+		path   string
+		limit  float64
+		err    error
+	}
+	patches := make(chan patchRequest, 1)
+	releasePatch := make(chan struct{})
+	var releasePatchOnce sync.Once
+	release := func() { releasePatchOnce.Do(func() { close(releasePatch) }) }
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var body struct {
+			Limit float64 `json:"limit"`
+		}
+		err := json.NewDecoder(r.Body).Decode(&body)
+		patches <- patchRequest{method: r.Method, path: r.URL.Path, limit: body.Limit, err: err}
+		<-releasePatch
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"data":{"limit":7,"hash":"hash-enablereal"}}`))
+	}))
+	t.Cleanup(upstream.Close)
+	// Cleanup runs in LIFO order, releasing a blocked handler before httptest
+	// waits for active connections to finish.
+	t.Cleanup(release)
+
+	ctx, ti := newTestServiceWithProvisioner(t, func(logger *slog.Logger, tracerProvider trace.TracerProvider, conn *pgxpool.Pool, enc *encryption.Client) openrouter.Provisioner {
+		policy, err := guardian.NewUnsafePolicy(tracerProvider, nil)
+		require.NoError(t, err)
+		testBaseURL, err := openrouter.WithTestBaseURL(upstream.URL)
+		require.NoError(t, err)
+		return openrouter.New(logger, tracerProvider, policy, conn, "test", "provisioning-key", nil, nil, nil, enc, testBaseURL)
+	})
+	adminCtx := withAdmin(t, ctx)
+	orgID := seedKey(t, ctx, ti, "enablereal", "chat", "sk-or-enable-real")
+	require.NoError(t, orgrepo.New(ti.conn).UpdateOpenRouterKeyMonthlyCredits(ctx, orgrepo.UpdateOpenRouterKeyMonthlyCreditsParams{
+		OrganizationID: orgID,
+		KeyType:        string(openrouter.KeyTypeChat),
+		MonthlyCredits: 7,
+	}))
+	require.NoError(t, orgrepo.New(ti.conn).DisableOpenRouterAPIKey(ctx, orgrepo.DisableOpenRouterAPIKeyParams{
+		OrganizationID: orgID,
+		KeyType:        string(openrouter.KeyTypeChat),
+	}))
+	before, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionOpenRouterAPIKeyEnable)
+	require.NoError(t, err)
+
+	boundedCtx, cancel := context.WithTimeout(adminCtx, time.Second)
+	defer cancel()
+	type enableResult struct {
+		view *gen.AdminOpenRouterKey
+		err  error
+	}
+	results := make(chan enableResult, 1)
+	go func() {
+		view, err := ti.service.EnableKey(boundedCtx, &gen.EnableKeyPayload{
+			OrganizationID: orgID,
+			KeyType:        string(openrouter.KeyTypeChat),
+		})
+		results <- enableResult{view: view, err: err}
+	}()
+
+	var patch patchRequest
+	select {
+	case patch = <-patches:
+	case <-time.After(time.Second):
+		require.FailNow(t, "OpenRouter PATCH was not intercepted")
+	}
+	require.NoError(t, patch.err)
+	require.Equal(t, http.MethodPatch, patch.method)
+	require.Equal(t, "/v1/keys/hash-enablereal", patch.path)
+	require.InDelta(t, 7, patch.limit, 0)
+	release()
+
+	var result enableResult
+	select {
+	case result = <-results:
+	case <-time.After(time.Second):
+		require.FailNow(t, "admin enable did not complete after the PATCH response was released")
+	}
+	require.NoError(t, result.err)
+	require.False(t, result.view.Disabled)
+	require.EqualValues(t, 7, result.view.MonthlyCredits)
 
 	after, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionOpenRouterAPIKeyEnable)
 	require.NoError(t, err)

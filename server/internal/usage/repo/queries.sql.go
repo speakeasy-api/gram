@@ -513,6 +513,21 @@ func (q *Queries) DeactivatePaygOrganization(ctx context.Context, organizationID
 const disablePaygOpenRouterChatKey = `-- name: DisablePaygOpenRouterChatKey :exec
 UPDATE openrouter_api_keys
 SET disabled = TRUE,
+    disable_causes = CASE
+      WHEN disable_causes IS NULL THEN NULL
+      WHEN 'billing_inactive' = ANY(disable_causes) THEN disable_causes
+      ELSE ARRAY(
+        SELECT cause
+        FROM unnest(array_append(disable_causes, 'billing_inactive')) AS causes(cause)
+        GROUP BY cause
+        ORDER BY CASE cause
+          WHEN 'admin_lock' THEN 1
+          WHEN 'trial_demotion' THEN 2
+          WHEN 'billing_inactive' THEN 3
+          ELSE 4
+        END
+      )
+    END,
     updated_at = clock_timestamp()
 WHERE organization_id = $1
   AND key_type = 'chat'
@@ -742,7 +757,7 @@ func (q *Queries) GetEnabledServerCount(ctx context.Context, organizationID stri
 }
 
 const getMaterializedOpenRouterInferenceKey = `-- name: GetMaterializedOpenRouterInferenceKey :one
-SELECT key_type, disabled
+SELECT key_type, (CASE WHEN disable_causes IS NULL THEN disabled ELSE cardinality(disable_causes) > 0 END)::boolean AS disabled
 FROM openrouter_api_keys
 WHERE organization_id = $1
   AND key_type = $2
@@ -1107,7 +1122,7 @@ func (q *Queries) ListFinalizedBillingCycleStarts(ctx context.Context, organizat
 }
 
 const listMaterializedOpenRouterInferenceKeys = `-- name: ListMaterializedOpenRouterInferenceKeys :many
-SELECT key_type, monthly_credits, disabled
+SELECT key_type, monthly_credits, (CASE WHEN disable_causes IS NULL THEN disabled ELSE cardinality(disable_causes) > 0 END)::boolean AS disabled
 FROM openrouter_api_keys
 WHERE organization_id = $1
   AND key_type = ANY($2::text[])

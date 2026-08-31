@@ -39,6 +39,10 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
+type lockedSessionProvisioner interface {
+	RefreshAPIKeyLimitWithDB(context.Context, openrouter.DBTX, string, openrouter.KeyType, *int) (int, error)
+}
+
 type Service struct {
 	tracer      trace.Tracer
 	logger      *slog.Logger
@@ -258,7 +262,11 @@ func (s *Service) EnableKey(ctx context.Context, payload *gen.EnableKeyPayload) 
 				return oops.E(oops.CodeUnexpected, fmt.Errorf("no OpenRouter credit policy for account type %q", row.GramAccountType), "enable openrouter key").LogError(ctx, logger)
 			}
 		}
-		if _, err := s.provisioner.RefreshAPIKeyLimit(ctx, payload.OrganizationID, openrouter.KeyType(payload.KeyType), &limit); err != nil {
+		dbProvisioner, ok := s.provisioner.(lockedSessionProvisioner)
+		if !ok {
+			return oops.E(oops.CodeUnexpected, errors.New("OpenRouter key provisioner cannot use the locked database session"), "enable openrouter key").LogError(ctx, logger)
+		}
+		if _, err := dbProvisioner.RefreshAPIKeyLimitWithDB(ctx, conn, payload.OrganizationID, openrouter.KeyType(payload.KeyType), &limit); err != nil {
 			return oops.E(oops.CodeUnexpected, err, "enable openrouter key").LogError(ctx, logger)
 		}
 		changed = true

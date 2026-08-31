@@ -18,6 +18,7 @@ import (
 	activitiesrepo "github.com/speakeasy-api/gram/server/internal/background/activities/repo"
 	organizationsrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 	openrouterrepo "github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -115,6 +116,33 @@ func setupPaygChatKeyReconciler(t *testing.T, accountType string, subscriptionID
 	provisioner := &mockPaygChatKeyProvisioner{Mock: mock.Mock{}}
 	reconciler := activities.NewReconcilePaygOpenRouterChatKey(testenv.NewLogger(t), db, provisioner)
 	return reconciler, provisioner, db, organizationID
+}
+
+func TestReconcilePaygOpenRouterChatKeyDoesNotReinstateClassifiedKey(t *testing.T) {
+	t.Parallel()
+
+	reconciler, provisioner, db, organizationID := setupPaygChatKeyReconciler(t, "payg", pgtype.Text{String: "subscription_placeholder", Valid: true})
+	createPaygReconcilerKey(t, db, organizationID, openrouter.KeyTypeChat, 50)
+	require.NoError(t, testrepo.New(db).SetOpenRouterAPIKeyClassificationFixture(t.Context(), testrepo.SetOpenRouterAPIKeyClassificationFixtureParams{
+		OrganizationID: organizationID,
+		KeyType:        string(openrouter.KeyTypeChat),
+		Disabled:       false,
+		DisableCauses:  []string{"admin_lock", "billing_inactive"},
+	}))
+
+	require.NoError(t, reconciler.Do(t.Context(), activities.ReconcilePaygOpenRouterChatKeyArgs{
+		OrganizationID: organizationID,
+		DesiredState:   openrouter.KeyDesiredStateEnabled,
+	}))
+	provisioner.AssertNotCalled(t, "RefreshAPIKeyLimit", mock.Anything, mock.Anything, mock.Anything, mock.Anything)
+
+	row, err := openrouterrepo.New(db).GetOpenRouterAPIKey(t.Context(), openrouterrepo.GetOpenRouterAPIKeyParams{
+		OrganizationID: organizationID,
+		KeyType:        string(openrouter.KeyTypeChat),
+	})
+	require.NoError(t, err)
+	require.False(t, row.Disabled, "the stale rollout mirror must remain untouched")
+	require.Equal(t, []string{"admin_lock", "billing_inactive"}, row.DisableCauses)
 }
 
 func createPaygReconcilerKey(t *testing.T, db openrouterrepo.DBTX, organizationID string, keyType openrouter.KeyType, monthlyCredits int64) {
