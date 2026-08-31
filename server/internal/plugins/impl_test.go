@@ -91,19 +91,6 @@ func distributeTestSkill(t *testing.T, ctx context.Context, ti *testInstance, pl
 	require.NoError(t, err)
 }
 
-// skillFeedbackHooksKey reads the hooks key from a feature plugin's bundled
-// speakeasy.json — the deployment identity the stdio feedback server runs with.
-func skillFeedbackHooksKey(t *testing.T, files map[string][]byte, configPath string) string {
-	t.Helper()
-	require.Contains(t, files, configPath)
-	var config struct {
-		HooksAPIKey string `json:"hooks_api_key"`
-	}
-	require.NoError(t, json.Unmarshal(files[configPath], &config))
-	require.NotEmpty(t, config.HooksAPIKey)
-	return config.HooksAPIKey
-}
-
 func (m *mockGitHubPublisher) CreateRepo(_ context.Context, _ int64, _, _ string, _ bool) error {
 	m.createRepoCalled = true
 	return m.createRepoErr
@@ -1721,7 +1708,7 @@ func TestPluginsService_PublishPlugins_CreatesAPIKeyWithCorrectScope(t *testing.
 		}
 	}
 	require.Equal(t, 1, mcpKeyCount)
-	require.Equal(t, 1, hooksKeyCount, "MCP and hooks generation must share one hooks candidate")
+	require.Equal(t, 1, hooksKeyCount, "observability generation must mint one hooks key")
 	require.NotNil(t, mcpKey, "expected a plugins-mcp-* API key")
 	require.Contains(t, mcpKey.Scopes, "consumer")
 	require.True(t, strings.HasPrefix(mcpKey.KeyPrefix, "gram_local_"))
@@ -1736,10 +1723,8 @@ func TestPluginsService_PublishPlugins_CreatesAPIKeyWithCorrectScope(t *testing.
 	require.Contains(t, string(mcpJSON), "gram_local_")
 	require.NotContains(t, string(mcpJSON), "user_config")
 
-	feedbackKey := skillFeedbackHooksKey(t, mock.lastPushedFiles, "key-test/speakeasy.json")
-	require.Contains(t, feedbackKey, hooksKey.KeyPrefix)
-	require.NotContains(t, feedbackKey, mcpKey.KeyPrefix)
-	require.Contains(t, string(mcpJSON), "hooks/bootstrap.sh")
+	require.NotContains(t, string(mcpJSON), "speakeasy-skill-feedback")
+	require.NotContains(t, string(mcpJSON), "hooks/bootstrap.sh")
 	require.NotContains(t, string(mcpJSON), hooksKey.KeyPrefix, "the hooks key must not leak into the MCP config")
 
 	claudeObservability, _ := orgObservabilitySlugs(t, ctx, ti)
@@ -1747,7 +1732,8 @@ func TestPluginsService_PublishPlugins_CreatesAPIKeyWithCorrectScope(t *testing.
 		HooksAPIKey string `json:"hooks_api_key"`
 	}
 	require.NoError(t, json.Unmarshal(mock.lastPushedFiles[claudeObservability+"/speakeasy.json"], &hooksConfig))
-	require.Equal(t, hooksConfig.HooksAPIKey, feedbackKey, "MCP and hooks generation must reuse one hooks key")
+	require.Contains(t, hooksConfig.HooksAPIKey, hooksKey.KeyPrefix)
+	require.NotContains(t, hooksConfig.HooksAPIKey, mcpKey.KeyPrefix)
 }
 
 func TestPluginsService_PublishPlugins_RePublishCreatesAdditionalKey(t *testing.T) {
@@ -2622,7 +2608,6 @@ func TestPluginsService_PublishProject_MCPChangeCarriesHooksVerbatim(t *testing.
 
 	hooksBefore := hooksFilesOf(mock.lastPushedFiles)
 	require.NotEmpty(t, hooksBefore, "first publish must emit hooks files")
-	feedbackKeyBefore := skillFeedbackHooksKey(t, mock.lastPushedFiles, "carry-hooks/speakeasy.json")
 	orgID := publishOrgID(t, ctx, ti.conn, *authCtx.ProjectID)
 	hooksKeysBefore := countPluginHooksKeys(t, ctx, ti.conn, orgID)
 
@@ -2644,8 +2629,7 @@ func TestPluginsService_PublishProject_MCPChangeCarriesHooksVerbatim(t *testing.
 
 	hooksAfter := hooksFilesOf(mock.lastPushedFiles)
 	require.Equal(t, hooksBefore, hooksAfter, "hooks subtree must be carried verbatim across an MCP-only publish")
-	require.Equal(t, hooksKeysBefore+1, countPluginHooksKeys(t, ctx, ti.conn, orgID), "MCP regeneration with distributed skills mints one new hooks key")
-	require.NotEqual(t, feedbackKeyBefore, skillFeedbackHooksKey(t, mock.lastPushedFiles, "carry-hooks/speakeasy.json"), "regenerated MCP must use its fresh hooks key")
+	require.Equal(t, hooksKeysBefore, countPluginHooksKeys(t, ctx, ti.conn, orgID), "MCP regeneration must not mint a hooks key")
 }
 
 // phasedRolloutFixture creates a published project and rewinds its stored hooks

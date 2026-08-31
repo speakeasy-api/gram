@@ -1162,6 +1162,7 @@ func (q *Queries) CreateSkillEditSuggestionWatermark(ctx context.Context, arg Cr
 
 const createSkillFeedback = `-- name: CreateSkillFeedback :one
 INSERT INTO skill_feedback (
+  id,
   project_id,
   skill_id,
   skill_version_id,
@@ -1173,21 +1174,25 @@ INSERT INTO skill_feedback (
   user_id,
   user_email
 ) VALUES (
-  $1,
-  $2::uuid,
+  COALESCE($1::uuid, generate_uuidv7()),
+  $2,
   $3::uuid,
-  $4,
+  $4::uuid,
   $5,
   $6,
-  $7::text,
+  $7,
   $8::text,
   $9::text,
-  $10::text
+  $10::text,
+  $11::text
 )
+ON CONFLICT (project_id, id) DO UPDATE
+SET id = EXCLUDED.id
 RETURNING id, project_id, skill_id, skill_version_id, skill_name, source, outcome, note, session_id, user_id, user_email, reviewed_at, created_at
 `
 
 type CreateSkillFeedbackParams struct {
+	ID             uuid.NullUUID
 	ProjectID      uuid.UUID
 	SkillID        uuid.NullUUID
 	SkillVersionID uuid.NullUUID
@@ -1202,6 +1207,7 @@ type CreateSkillFeedbackParams struct {
 
 func (q *Queries) CreateSkillFeedback(ctx context.Context, arg CreateSkillFeedbackParams) (SkillFeedback, error) {
 	row := q.db.QueryRow(ctx, createSkillFeedback,
+		arg.ID,
 		arg.ProjectID,
 		arg.SkillID,
 		arg.SkillVersionID,
