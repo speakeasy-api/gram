@@ -272,6 +272,11 @@ func (s *CatalogIdentityProviderAttachmentService) ensureIssuer(ctx context.Cont
 		ClientIDMetadataDocumentSupported: metadata.ClientIDMetadataDocumentSupported,
 		Oidc:                              false,
 		Passthrough:                       false,
+		// The endpoints above come from this same document, so the snapshot
+		// cannot disagree with them, and it carries the OIDC extension fields
+		// the typed columns drop. Nil is fine: the issuer reconstructs its
+		// well-known document from those columns until a refresh captures one.
+		Metadata: metadata.Metadata,
 	})
 	if err != nil {
 		return remotesessionsrepo.RemoteSessionIssuer{}, fmt.Errorf("create discovered identity provider: %w", err)

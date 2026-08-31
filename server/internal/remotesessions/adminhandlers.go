@@ -142,6 +142,10 @@ func (s *Service) CreateGlobalIssuer(ctx context.Context, payload *adminrsgen.Cr
 		ClientIDMetadataDocumentSupported: conv.PtrValOr(payload.ClientIDMetadataDocumentSupported, false),
 		Oidc:                              conv.PtrValOr(payload.Oidc, false),
 		Passthrough:                       conv.PtrValOr(payload.Passthrough, false),
+		// Create does not discover, so it has no document to snapshot. The
+		// column is filled by the first refresh, and by callers that already
+		// hold a discovery document (see platformmcp's attachment).
+		Metadata: nil,
 	})
 	if err != nil {
 		if isGlobalRemoteSessionIssuerSlugConflict(err) {
@@ -487,7 +491,7 @@ func (s *Service) FetchGlobalIssuerMetadata(ctx context.Context, payload *adminr
 		return nil, oops.E(oops.CodeBadRequest, nil, "invalid issuer url").LogError(ctx, logger)
 	}
 
-	doc, warnings, err := discoverIssuerMetadata(ctx, s.policy, issuerURL)
+	doc, _, warnings, err := discoverIssuerMetadata(ctx, s.policy, issuerURL)
 	if err != nil {
 		return nil, mapDiscoveryError(ctx, logger, err, oops.CodeBadRequest)
 	}
