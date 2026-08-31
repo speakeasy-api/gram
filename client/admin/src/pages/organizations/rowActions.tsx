@@ -10,6 +10,7 @@ import {
   cancelOrganizationFetches,
   invalidateOrganizations,
   invalidateOrganizationActivity,
+  invalidateOrganizationDetails,
   invalidateOrganizationStats,
   organizationQuery,
   writeOrganizationToCache,
@@ -106,13 +107,15 @@ function finishOrganizationWrite(
   org: AdminOrganization,
 ): void {
   writeOrganizationToCache(qc, org);
+  invalidateOrganizationDetails(qc, org);
   invalidateOrganizationActivity(qc, org.id);
 }
 
 // All four writes answer with the organization in its new state and put it in
-// the cache the same way, so the list and the peek repaint from the response.
-// Their audited activity is invalidated from the same success path so an open
-// Activity view includes the new event.
+// the cache the same way, so the list and the peek repaint immediately. The
+// detail is then invalidated for a canonical refetch, and audited activity is
+// invalidated from the same success path so an open Activity view includes the
+// new event.
 //
 // All four drop the reads already in flight first. React Query awaits
 // `onMutate` before it sends the request, so the stale fetch is cancelled

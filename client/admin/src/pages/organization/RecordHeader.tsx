@@ -10,7 +10,6 @@ import {
 } from "@/lib/gramAdminApi";
 import { LEAVES_THE_APP } from "@/lib/impersonation";
 import { fmtDateShort } from "@/lib/utils";
-import { OrganizationActions } from "@/pages/organizations/OrganizationActions";
 
 // Ends the fact it follows rather than starting the next one, so a meta line
 // that wraps never opens a line with a separator.
@@ -67,9 +66,6 @@ export function RecordHeader({ org }: { org: AdminOrganization }): JSX.Element {
             <span className="sr-only">{LEAVES_THE_APP}</span>
           </Button>
         </form>
-        {/* Lifecycle only. The action that resolves the trial belongs beside
-            the deadline it acts on, in the callout. */}
-        <OrganizationActions org={org} layout="buttons" actions="lifecycle" />
       </div>
     </div>
   );
