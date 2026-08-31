@@ -14,6 +14,7 @@ import { Skeleton } from "@/components/ui/Skeleton";
 import BookDemo from "@/pages/demo/BookDemo";
 import SwitchOrg from "@/pages/demo/SwitchOrg";
 import { getTrialLifecycleFromDates } from "@/lib/trial-status";
+import { isGramSessionUnauthorizedError } from "@/lib/route-errors";
 import { useQueryClient } from "@tanstack/react-query";
 import { Loader2 } from "lucide-react";
 import { useIsPlatformAdminRef } from "@/contexts/Sdk";
@@ -127,7 +128,7 @@ const AuthHandler = ({ children }: { children: React.ReactNode }) => {
     ? encodeURIComponent(location.pathname + location.search + location.hash)
     : undefined;
 
-  if (error || !session || !session.session) {
+  if (isGramSessionUnauthorizedError(error) || !session || !session.session) {
     if (portableRedirect) {
       return <Navigate to={`/login?redirect=${portableRedirect}`} replace />;
     }
