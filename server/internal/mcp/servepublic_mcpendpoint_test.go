@@ -529,13 +529,8 @@ func TestServePublic_McpEndpoint_UnknownVisibility_DoesNotServe(t *testing.T) {
 	require.Equal(t, oops.CodeNotFound, oopsErr.Code)
 }
 
-// TestServePublic_PlatformDomain_DoesNotResolveCustomDomainEndpoint
-// regression-guards the platform-only resolution semantic: a
-// custom-domain-scoped mcp_endpoint must not resolve for a request
-// arriving on the platform domain, even when the slug matches and no
-// legacy toolset claims the slug. Asymmetric to the toolsets fallback
-// path, which DOES allow platform requests to resolve custom-domain
-// toolsets (see loadToolset docstring).
+// A private-only endpoint owns its slug on the public surface and must not
+// fall through to an unrelated legacy toolset with the same slug.
 func TestServePublic_PrivateOnlyEndpointDoesNotFallBackToLegacyToolset(t *testing.T) {
 	t.Parallel()
 
@@ -588,6 +583,13 @@ func TestLoadResolvedMcpEndpointPrivateOnlyDoesNotFallBack(t *testing.T) {
 	require.Equal(t, oops.CodeNotFound, shareErr.Code)
 }
 
+// TestServePublic_PlatformDomain_DoesNotResolveCustomDomainEndpoint
+// regression-guards the platform-only resolution semantic: a
+// custom-domain-scoped mcp_endpoint must not resolve for a request
+// arriving on the platform domain, even when the slug matches and no
+// legacy toolset claims the slug. Asymmetric to the toolsets fallback
+// path, which DOES allow platform requests to resolve custom-domain
+// toolsets (see loadToolset docstring).
 func TestServePublic_PlatformDomain_DoesNotResolveCustomDomainEndpoint(t *testing.T) {
 	t.Parallel()
 

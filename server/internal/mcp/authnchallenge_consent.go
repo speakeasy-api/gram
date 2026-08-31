@@ -700,7 +700,7 @@ func (s *Service) serveConsentPost(w http.ResponseWriter, r *http.Request, endpo
 		return oops.E(oops.CodeUnexpected, err, "generate authorization code").LogError(ctx, logger)
 	}
 
-	grantEndpoint := endpoint.EndpointRef(challengeState.mintOriginOr(s.serverURL.String()))
+	grantEndpoint := endpoint.EndpointRef(challengeState.mintOriginOr(s.BaseURLForRequest(r)))
 	grant := UserSessionGrant{
 		Code:                        code,
 		FlowID:                      challengeState.FlowID,

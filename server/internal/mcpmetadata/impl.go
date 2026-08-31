@@ -1028,9 +1028,10 @@ func (s *Service) ServeInstallPage(w http.ResponseWriter, r *http.Request) error
 	return s.renderRemoteMcpInstallPage(ctx, w, ic, metadataRecord)
 }
 
-// resolveInstallContext resolves mcp_endpoints → mcp_server first, mirroring
-// mcp.ServePublic: only a true address miss falls back to the legacy
-// toolsets.mcp_slug lookup; an unavailable address is terminal (AIS-633).
+// resolveInstallContext tries the mcp_endpoints → mcp_server resolution path
+// first, then falls back to the legacy toolsets.mcp_slug lookup only for a
+// plain namespace miss. Policy denials are authoritative 404s and never fall
+// through to an unrelated legacy toolset.
 func (s *Service) resolveInstallContext(ctx context.Context, mcpSlug string) (*installContext, error) {
 	endpoint, server, metaServer, err := mcpendpoints.BySlugAndCustomDomain(ctx, s.db, s.logger, mcpSlug)
 	switch {

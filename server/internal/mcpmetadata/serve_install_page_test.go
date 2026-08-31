@@ -1905,11 +1905,8 @@ func TestServeInstallPage_CustomDomain_RootEndpointRendersBareDomainURL(t *testi
 	require.NotContains(t, body, "https://root-install.example.com/mcp/", "root endpoint installs do not use the /mcp path")
 }
 
-// TestServeInstallPage_MetaBackedEndpoint_ReturnsNotFound verifies that a
-// meta-MCP-backed endpoint's install page is an authoritative 404 (AGE-3299
-// will add a real page): the response is the rendered not-found page rather
-// than a 500, and the slug must not fall through to an unrelated legacy
-// toolset sharing the same mcp_slug.
+// A private-only endpoint is an authoritative 404 on the public install
+// surface and cannot fall through to a legacy toolset sharing its slug.
 func TestServeInstallPage_PrivateOnlyEndpointDoesNotFallBack(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestMCPMetadataService(t)
@@ -1941,6 +1938,11 @@ func TestServeInstallPage_PrivateOnlyEndpointDoesNotFallBack(t *testing.T) {
 	require.NotContains(t, rr.Body.String(), "Legacy Install Fallback")
 }
 
+// TestServeInstallPage_MetaBackedEndpoint_ReturnsNotFound verifies that a
+// meta-MCP-backed endpoint's install page is an authoritative 404 (AGE-3299
+// will add a real page): the response is the rendered not-found page rather
+// than a 500, and the slug must not fall through to an unrelated legacy
+// toolset sharing the same mcp_slug.
 func TestServeInstallPage_MetaBackedEndpoint_ReturnsNotFound(t *testing.T) {
 	t.Parallel()
 	ctx, testInstance := newTestMCPMetadataService(t)
