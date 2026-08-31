@@ -899,12 +899,18 @@ func (s *ServiceCore) resolveMcpServerRefsForWrite(
 		// Reject servers the runtime cannot reach so a bad attach fails the
 		// write instead of silently vanishing from reads and dispatch:
 		// tunnelled backends have no /mcp serving path, disabled servers 404
-		// there, and without a Gram-hosted endpoint there is no URL to build.
+		// there, upstream servers authenticate inbound clients against their
+		// own authorization server and the runtime sends no Authorization
+		// header at all (see the dispatch loop below, which sets only
+		// Gram-Environment), so every call would 401, and without a
+		// Gram-hosted endpoint there is no URL to build.
 		switch {
 		case row.Tunneled:
 			return nil, assistantValidationError("mcp server %q is tunnel-backed and cannot be attached to an assistant", row.Slug.String)
 		case row.Visibility == visibility.Disabled:
 			return nil, assistantValidationError("mcp server %q is disabled", row.Slug.String)
+		case row.Visibility == visibility.Upstream:
+			return nil, assistantValidationError("mcp server %q requires upstream authorization and cannot be attached to an assistant", row.Slug.String)
 		case !row.HasGramEndpoint:
 			return nil, assistantValidationError("mcp server %q has no Gram-hosted MCP endpoint", row.Slug.String)
 		}
@@ -3204,6 +3210,15 @@ func resolveAssistantMCPServers(ctx context.Context, logger *slog.Logger, server
 		}
 		if m.Visibility == visibility.Disabled {
 			logger.WarnContext(ctx, "skipping disabled assistant mcp server",
+				attr.SlogMcpServerID(m.MCPServerID.String()),
+			)
+			continue
+		}
+		// Attach rejects these, but visibility is mutable afterwards, so a
+		// server can become upstream while already attached. Dispatch sends no
+		// Authorization header, so dialling it would 401 every turn.
+		if m.Visibility == visibility.Upstream {
+			logger.WarnContext(ctx, "skipping assistant mcp server that requires upstream authorization",
 				attr.SlogMcpServerID(m.MCPServerID.String()),
 			)
 			continue
