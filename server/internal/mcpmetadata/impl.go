@@ -932,6 +932,9 @@ func (ic *installContext) isPublic() bool {
 	if ic.toolset != nil {
 		return ic.toolset.McpIsPublic
 	}
+	// Deliberately false for upstream: the page is reachable without a Gram
+	// identity, but the server is not open, so it must not render as needing no
+	// credential at all. resolveSecurityMode reports OAuth for it instead.
 	return ic.mcpServer != nil && ic.mcpServer.Visibility == mcpservers.VisibilityPublic
 }
 
@@ -1716,10 +1719,15 @@ func (s *Service) loadToolsetFromContextAndSlug(ctx context.Context, mcpSlug str
 // which gates OAuth on UserSessionIssuerID.Valid from both sources. server is
 // nil when the install is not mcp_server-backed.
 func (s *Service) resolveSecurityMode(toolset *toolsets_repo.Toolset, server *mcpservers_repo.McpServer) securityMode {
+	// An upstream server is OAuth-protected even though it carries no issuer of
+	// Gram's: the authorization server is the upstream's. Without this the
+	// install page would tell the user to paste a Gram API key for a server
+	// whose only accepted credential is an upstream bearer.
 	oauthRequired := toolset.OauthProxyServerID.Valid ||
 		toolset.ExternalOauthServerID.Valid ||
 		toolset.UserSessionIssuerID.Valid ||
-		(server != nil && server.UserSessionIssuerID.Valid)
+		(server != nil && server.UserSessionIssuerID.Valid) ||
+		(server != nil && server.Visibility == mcpservers.VisibilityUpstream)
 	if oauthRequired {
 		return securityModeOAuth
 	}

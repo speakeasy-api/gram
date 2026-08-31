@@ -837,6 +837,13 @@ type hostedServing struct {
 	// the legacy path.
 	isPublic bool
 
+	// upstreamAuthorized: wrapper visibility == 'upstream'. The server's own
+	// upstream authorization server authenticates inbound clients, so Gram
+	// forwards the bearer without validating it, mints no session, and holds
+	// no grants to enforce. Never set on the legacy path, which has no wrapper
+	// to say so.
+	upstreamAuthorized bool
+
 	// runInToolsetGate: run the in-toolset issuer gate (legacy path only; the
 	// wrapper path gates pre-dispatch).
 	runInToolsetGate bool
@@ -863,6 +870,7 @@ type hostedServing struct {
 func hostedServingFromToolset(toolset *toolsets_repo.Toolset) *hostedServing {
 	return &hostedServing{
 		isPublic:              toolset.McpIsPublic,
+		upstreamAuthorized:    false,
 		runInToolsetGate:      toolset.UserSessionIssuerID.Valid,
 		callerGated:           false,
 		rbacResourceID:        toolset.ID,
@@ -891,6 +899,11 @@ func hostedServingFromToolset(toolset *toolsets_repo.Toolset) *hostedServing {
 // carries no policy; the in-toolset gate below populates it for legacy-path
 // callers.
 func (s *Service) serveToolsetResolved(w http.ResponseWriter, r *http.Request, toolset *toolsets_repo.Toolset, mcpSlug, mcpRouteBase string, cfg *hostedServing, extraUpstreamTokens map[uuid.UUID]remotesessions.UpstreamToken, callerToolSelection *toolfilter.SessionSelection, pendingIssuerGate *issuerGateAuthentication) error {
+	// The wrapper's own authorization server authenticates the caller, so every
+	// gate below that keys on the toolset's OAuth columns yields to it. This is
+	// orthogonal to cfg.isPublic: an upstream server is not open, it simply
+	// does not authenticate anyone against Gram.
+	upstreamAuthorized := cfg.upstreamAuthorized
 	ctx := r.Context()
 	var err error
 
@@ -926,7 +939,10 @@ func (s *Service) serveToolsetResolved(w http.ResponseWriter, r *http.Request, t
 	//
 	// Private MCPs still enforce identity auth at this level since that's user
 	// identity, not per-tool security.
-	oauthRequired := toolset.ExternalOauthServerID.Valid
+	// Sole input to whether the 401 below carries WWW-Authenticate. False for an
+	// upstream server would mean a bare 401, leaving an MCP client with no way
+	// to discover the authorization server it is meant to authenticate against.
+	oauthRequired := toolset.ExternalOauthServerID.Valid || upstreamAuthorized
 
 	// Issuer-gated path is fully separate from the legacy switch below: try
 	// validating a user-session JWT; on success stamp ctx and skip the legacy
@@ -987,6 +1003,19 @@ func (s *Service) serveToolsetResolved(w http.ResponseWriter, r *http.Request, t
 
 	if !runInToolsetGate && !callerAlreadyGated {
 		switch {
+		case upstreamAuthorized:
+			// Identical to the external-OAuth branch below, and deliberately
+			// not gated on cfg.isPublic: the fronting server's
+			// visibility already decided that nobody authenticates against
+			// Gram here, and a backing toolset left non-public would otherwise
+			// fall through to the 404 further down.
+			if authToken != "" {
+				tokenInputs = append(tokenInputs, oauthTokenInputs{
+					securityKeys:          []string{},
+					remoteSessionIssuerID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+					Token:                 authToken,
+				})
+			}
 		case cfg.isPublic && toolset.ExternalOauthServerID.Valid:
 			// External OAuth server flow — collect token if present
 			if authToken != "" {
@@ -1038,15 +1067,21 @@ func (s *Service) serveToolsetResolved(w http.ResponseWriter, r *http.Request, t
 		// so they get public access without environment/secrets
 	}
 
-	if !cfg.isPublic && !authenticated {
+	// An upstream server's callers are authenticated by the upstream, so they
+	// are legitimately unauthenticated as far as Gram is concerned. Without the
+	// guard a server served as non-public 404s them, which reads to an MCP
+	// client as "no such server" rather than "authenticate first".
+	if !upstreamAuthorized && !cfg.isPublic && !authenticated {
 		return oops.C(oops.CodeNotFound)
 	}
 
 	if authenticated {
 		// Private MCPs require mcp:connect on the specific server (the
 		// wrapper's id when one fronts the request, else the toolset's).
-		// Public MCPs are open to everyone — no RBAC enforcement.
-		if !cfg.isPublic {
+		// Public MCPs are open to everyone — no RBAC enforcement, and neither
+		// are upstream ones: Gram holds no grants for a principal it never
+		// authenticated.
+		if !upstreamAuthorized && !cfg.isPublic {
 			// Ensure grants are loaded — not all auth strategies in authenticateToken
 			// go through auth.Authorize (which calls PrepareContext). This is a no-op
 			// if grants are already in context.
@@ -1180,7 +1215,7 @@ func (s *Service) serveToolsetResolved(w http.ResponseWriter, r *http.Request, t
 	// Check security schemes before dispatching any RPC — including initialize.
 	// Some MCP clients (e.g. Claude Desktop) require 401 on initialize to trigger
 	// their OAuth flow, so we can't defer this to individual RPC handlers.
-	satisfied, err := s.checkToolsetSecurity(ctx, toolset, cfg.isPublic, mcpInputs)
+	satisfied, err := s.checkToolsetSecurity(ctx, toolset, cfg.isPublic, upstreamAuthorized, mcpInputs)
 	if err != nil {
 		return err
 	}
@@ -1271,8 +1306,10 @@ func (s *Service) respondMCPError(ctx context.Context, w http.ResponseWriter, id
 // request environment satisfies at least one scheme. Returns true if satisfied
 // (or if the toolset has no security requirements). isPublic is the effective
 // publicness the request is served under (wrapper visibility when a wrapper
-// fronts it), not necessarily the toolset's own flag.
-func (s *Service) checkToolsetSecurity(ctx context.Context, toolset *toolsets_repo.Toolset, isPublic bool, payload *mcpInputs) (bool, error) {
+// fronts it), not necessarily the toolset's own flag. upstreamAuthorized is
+// the wrapper serving direct upstream authorization, which is neither public
+// nor Gram-authenticated.
+func (s *Service) checkToolsetSecurity(ctx context.Context, toolset *toolsets_repo.Toolset, isPublic, upstreamAuthorized bool, payload *mcpInputs) (bool, error) {
 	projectID := mv.ProjectID(payload.projectID)
 	// Security-scheme detection must see the full, unfiltered toolset, so this
 	// always uses the project-default variation group (nil) regardless of any
@@ -1289,7 +1326,10 @@ func (s *Service) checkToolsetSecurity(ctx context.Context, toolset *toolsets_re
 		// OAuth at the server level (proxy or external). If so, require the
 		// user to have provided a token — otherwise the 401 + WWW-Authenticate
 		// must be sent so MCP clients can initiate the OAuth flow.
-		oauthRequired := isPublic && (toolset.ExternalOauthServerID.Valid || toolset.OauthProxyServerID.Valid)
+		// upstreamAuthorized stands alone rather than being conjoined with
+		// isPublic: the fronting wrapper already answered who authenticates the
+		// caller, and neither flag below gets to veto it.
+		oauthRequired := upstreamAuthorized || (isPublic && (toolset.ExternalOauthServerID.Valid || toolset.OauthProxyServerID.Valid))
 		if oauthRequired {
 			for _, t := range payload.oauthTokenInputs {
 				if t.Token != "" {

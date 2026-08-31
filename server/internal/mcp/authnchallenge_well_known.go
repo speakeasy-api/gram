@@ -27,10 +27,13 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpmetrics"
 	"github.com/speakeasy-api/gram/server/internal/mcpendpoints"
 	mcpendpoints_repo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
+	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	mcpservers_repo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	metamcp_repo "github.com/speakeasy-api/gram/server/internal/metamcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/oauth/wellknown"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
+	remotesessions_repo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	toolsets_repo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	"github.com/speakeasy-api/gram/server/internal/usersessions"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/cimd/admission"
@@ -257,6 +260,26 @@ func (s *Service) ServeWellKnownProtectedResourceForServer(
 		return s.ServeGetProtectedResource(w, r, endpoint)
 	}
 
+	// Upstream servers advertise the Gram URL the request arrived at, exactly as
+	// the toolset external-OAuth branch does. The authorization-server document
+	// served from that URL is the upstream's, so a client following this
+	// pointer lands on the upstream's endpoints. Taken before the backend
+	// switch, and before the legacy toolset resolver, which keys on
+	// external_oauth_server_id and would 404 a converted server.
+	if authMode, _ := mcpservers.ResolveAuthorizationMode(mcpServer); authMode == mcpservers.AuthorizationModeUpstream {
+		resourceURL, err := url.JoinPath(s.BaseURLForRequest(r), routeBase, mcpEndpoint.Slug)
+		if err != nil {
+			return oops.E(oops.CodeUnexpected, err, "build resource URL").LogError(ctx, logger)
+		}
+		return writeOAuthProtectedResourceMetadataResponse(ctx, logger, w, r, &wellknown.OAuthProtectedResourceMetadata{
+			Resource:               resourceURL,
+			AuthorizationServers:   []string{resourceURL},
+			ScopesSupported:        nil,
+			BearerMethodsSupported: supportedBearerMethods,
+			ResourceDocumentation:  "",
+		})
+	}
+
 	switch {
 	case mcpServer.RemoteMcpServerID.Valid:
 		return oops.E(oops.CodeNotFound, nil, "no OAuth configuration found")
@@ -301,6 +324,19 @@ func (s *Service) ServeWellKnownAuthorizationServerForServer(
 			return fmt.Errorf("build resolved mcp endpoint: %w", err)
 		}
 		return s.ServeGetAuthorizationServer(w, r, endpoint)
+	}
+
+	// An upstream server's authorization server is its own, named by
+	// remote_session_issuer_id, so this branch is taken before the backend
+	// switch: which backend fronts it does not change whose metadata is served.
+	// ResolveAuthorizationMode has already refused an upstream row that is not
+	// hosted or that carries a user session issuer.
+	if authMode, _ := mcpservers.ResolveAuthorizationMode(mcpServer); authMode == mcpservers.AuthorizationModeUpstream {
+		resourceURL, err := url.JoinPath(s.BaseURLForRequest(r), routeBase, mcpEndpoint.Slug)
+		if err != nil {
+			return oops.E(oops.CodeUnexpected, err, "build resource URL").LogError(ctx, logger)
+		}
+		return s.serveUpstreamAuthorizationServer(ctx, w, r, logger, mcpEndpoint.ProjectID, mcpServer.RemoteSessionIssuerID.UUID, resourceURL)
 	}
 
 	switch {
@@ -348,6 +384,66 @@ func (s *Service) loadToolsetForServer(ctx context.Context, logger *slog.Logger,
 		return nil, oops.E(oops.CodeUnexpected, err, "load toolset").LogError(ctx, logger)
 	}
 	return &toolset, nil
+}
+
+// serveUpstreamAuthorizationServer writes the RFC 8414 document for an
+// `upstream` MCP server: the authorization server it names in
+// remote_session_issuer_id, re-served from Gram's URL.
+//
+// The caller has already established the mode, so a missing or unreadable
+// issuer row here is a broken invariant rather than a configuration the client
+// should be told about, and it 404s.
+func (s *Service) serveUpstreamAuthorizationServer(ctx context.Context, w http.ResponseWriter, r *http.Request, logger *slog.Logger, projectID, remoteSessionIssuerID uuid.UUID, resourceURL string) error {
+	logger = logger.With(attr.SlogRemoteSessionIssuerID(remoteSessionIssuerID.String()))
+
+	// The FK cannot qualify tenancy, so the read must. An mcp_server may name a
+	// project, organization, or platform issuer, and all three tiers are opened
+	// here because any of them is a legitimate choice for this server; the
+	// project and organization arms are what stop it resolving another tenant's
+	// row that happens to share the id.
+	project, err := projectsrepo.New(s.db).GetProjectByID(ctx, projectID)
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		return oops.E(oops.CodeNotFound, err, "no OAuth configuration found").LogWarn(ctx, logger)
+	case err != nil:
+		return oops.E(oops.CodeUnexpected, err, "load mcp server project").LogError(ctx, logger)
+	}
+
+	issuer, err := remotesessions_repo.New(s.db).GetRemoteSessionIssuerByID(ctx, remotesessions_repo.GetRemoteSessionIssuerByIDParams{
+		ID:                    remoteSessionIssuerID,
+		ProjectID:             uuid.NullUUID{UUID: projectID, Valid: true},
+		IncludeOrganizational: true,
+		OrganizationID:        conv.ToPGText(project.OrganizationID),
+		IncludeGlobal:         true,
+	})
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		return oops.E(oops.CodeNotFound, err, "no OAuth configuration found").LogWarn(ctx, logger)
+	case err != nil:
+		return oops.E(oops.CodeUnexpected, err, "load remote session issuer").LogError(ctx, logger)
+	}
+
+	result, fromSnapshot, err := wellknown.ResolveOAuthServerMetadataFromRemoteSessionIssuer(wellknown.RemoteSessionIssuerMetadata{
+		AuthorizationEndpoint:         conv.FromPGTextOrEmpty[string](issuer.AuthorizationEndpoint),
+		TokenEndpoint:                 conv.FromPGTextOrEmpty[string](issuer.TokenEndpoint),
+		RegistrationEndpoint:          conv.FromPGTextOrEmpty[string](issuer.RegistrationEndpoint),
+		ScopesSupported:               issuer.ScopesSupported,
+		ResponseTypesSupported:        issuer.ResponseTypesSupported,
+		GrantTypesSupported:           issuer.GrantTypesSupported,
+		CodeChallengeMethodsSupported: issuer.CodeChallengeMethodsSupported,
+		Snapshot:                      issuer.Metadata,
+	}, resourceURL)
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "failed to resolve upstream OAuth server metadata").LogError(ctx, logger)
+	}
+	if !fromSnapshot {
+		// Serviceable but degraded: the reconstruction drops whatever OIDC
+		// extension fields this issuer advertises that Gram does not model.
+		// Refreshing the issuer captures a snapshot and resolves it.
+		logger.WarnContext(ctx, "serving upstream authorization server metadata reconstructed from typed columns; issuer has no captured discovery document")
+	}
+
+	return writeOAuthServerMetadataResponse(ctx, logger, w, r, result)
 }
 
 // serveLegacyToolsetProtectedResource resolves and writes RFC 9728

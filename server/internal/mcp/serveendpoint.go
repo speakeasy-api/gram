@@ -140,7 +140,23 @@ func (s *Service) serveResolvedMCPEndpoint(
 
 	logger = logger.With(attr.SlogMcpServerID(mcpServer.ID.String()))
 
-	issuerGated := mcpServer.UserSessionIssuerID.Valid
+	// Derived before any dispatch so an incoherent row is refused once, here,
+	// rather than reaching a backend that would have to decide what it meant.
+	authMode, authModeRejection := mcpservers.ResolveAuthorizationMode(mcpServer)
+	if authMode == mcpservers.AuthorizationModeInvalid {
+		// Not found rather than a code that distinguishes the cause: an
+		// unauthenticated caller learns nothing about a misconfigured server,
+		// and the operator's signal is the log line, not the response.
+		logger.ErrorContext(ctx, "refusing to serve mcp server with an incoherent authorization configuration",
+			attr.SlogError(errors.New(authModeRejection)),
+		)
+		return oops.E(oops.CodeNotFound, nil, "mcp server not found")
+	}
+	if authMode == mcpservers.AuthorizationModeUpstream {
+		logger = logger.With(attr.SlogRemoteSessionIssuerID(mcpServer.RemoteSessionIssuerID.UUID.String()))
+	}
+
+	issuerGated := authMode == mcpservers.AuthorizationModeIssuerGated
 
 	// Public tunneled servers serve anonymously: no OAuth handshake, so the
 	// issuer gate is skipped even though the issuer column is populated.
@@ -230,7 +246,7 @@ func (s *Service) serveResolvedMCPEndpoint(
 			return oops.E(oops.CodeUnexpected, err, "load toolset").LogError(ctx, logger)
 		}
 
-		if err := s.serveToolsetResolved(w, r, &toolset, slug, mcpRouteBase, hostedServingFromWrapper(mcpServer, issuerGated), nil, sessionToolSelection, pendingIssuerGate); err != nil {
+		if err := s.serveToolsetResolved(w, r, &toolset, slug, mcpRouteBase, hostedServingFromWrapper(mcpServer, issuerGated, authMode), nil, sessionToolSelection, pendingIssuerGate); err != nil {
 			return fmt.Errorf("serve toolset-backed mcp: %w", err)
 		}
 		return nil
@@ -247,7 +263,7 @@ func (s *Service) serveResolvedMCPEndpoint(
 // callerGated reports whether the caller already ran the issuer gate keyed on
 // mcp_servers.user_session_issuer_id; the in-toolset gate never runs on this
 // path regardless.
-func hostedServingFromWrapper(mcpServer *mcpserversrepo.McpServer, callerGated bool) *hostedServing {
+func hostedServingFromWrapper(mcpServer *mcpserversrepo.McpServer, callerGated bool, authMode mcpservers.AuthorizationMode) *hostedServing {
 	var groupID *uuid.UUID
 	if mcpServer.ToolVariationsGroupID.Valid {
 		id := mcpServer.ToolVariationsGroupID.UUID
@@ -255,7 +271,12 @@ func hostedServingFromWrapper(mcpServer *mcpserversrepo.McpServer, callerGated b
 	}
 	serverID := mcpServer.ID
 	return &hostedServing{
-		isPublic:              mcpServer.Visibility == mcpservers.VisibilityPublic,
+		isPublic: mcpServer.Visibility == mcpservers.VisibilityPublic,
+		// Deliberately separate from isPublic. An upstream server is not open:
+		// it requires a bearer, Gram just does not validate one. Folding it
+		// into isPublic would skip the challenge that tells a client where to
+		// authenticate.
+		upstreamAuthorized:    authMode == mcpservers.AuthorizationModeUpstream,
 		runInToolsetGate:      false,
 		callerGated:           callerGated,
 		rbacResourceID:        mcpServer.ID,
@@ -447,7 +468,16 @@ func (s *Service) LoadResolvedMcpEndpointBySlug(ctx context.Context, logger *slo
 		// surface: every issuer-gated handler resolving through here
 		// (authorize, token, register, revoke, consent) must 404 even
 		// though the issuer column is populated.
-		if !mcpServer.UserSessionIssuerID.Valid || isTunneledPublic(mcpServer) {
+		//
+		// Upstream servers expose none of it either, and are refused by name
+		// rather than left to fall out of the NULL issuer column. Their
+		// well-known documents point clients at the upstream's authorization
+		// server, so a Gram /authorize for them would be an endpoint nothing
+		// advertises; reaching it would mean redirecting the caller to the
+		// Speakeasy IDP, since ResolvedMcpEndpoint.IsPublic is false for
+		// upstream and forceIDP follows from that.
+		upstreamAuthorized := mcpServer.Visibility == mcpservers.VisibilityUpstream
+		if !mcpServer.UserSessionIssuerID.Valid || isTunneledPublic(mcpServer) || upstreamAuthorized {
 			return nil, oops.E(oops.CodeNotFound, nil, "not found")
 		}
 		return s.BuildResolvedMcpEndpointForServer(ctx, logger, mcpEndpoint, mcpServer, mcpRouteBase)

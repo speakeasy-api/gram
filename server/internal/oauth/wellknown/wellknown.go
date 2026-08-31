@@ -151,6 +151,71 @@ func ResolveOAuthServerMetadataFromToolset(
 	return nil, nil
 }
 
+// RemoteSessionIssuerMetadata is the part of a remote_session_issuers row the
+// well-known surface needs to describe an upstream authorization server. It is
+// a plain struct rather than the repo row so this package stays independent of
+// the remote sessions schema.
+type RemoteSessionIssuerMetadata struct {
+	AuthorizationEndpoint         string
+	TokenEndpoint                 string
+	RegistrationEndpoint          string
+	ScopesSupported               []string
+	ResponseTypesSupported        []string
+	GrantTypesSupported           []string
+	CodeChallengeMethodsSupported []string
+
+	// Snapshot is remote_session_issuers.metadata: the discovery document as
+	// the issuer served it, filtered to what Gram will republish. Empty for a
+	// row that predates capture or was configured by hand.
+	Snapshot json.RawMessage
+}
+
+// ResolveOAuthServerMetadataFromRemoteSessionIssuer builds the RFC 8414
+// authorization-server document an `upstream` MCP server serves, describing the
+// issuer's own authorization server rather than Gram's.
+//
+// resourceURL is the Gram URL the document is fetched from, and becomes the
+// served `issuer`. RFC 8414 §3.3 requires the two to be equal, so a
+// spec-compliant MCP client does not reject the metadata; the upstream's own
+// authorization, token, and registration endpoints are carried through
+// unchanged, which the RFC does not require to share the issuer's origin.
+//
+// The second return value reports whether the document came from the captured
+// snapshot. When it did not, the document was reconstructed from the typed
+// columns and is missing whatever OIDC extension fields the upstream advertises
+// that Gram does not model, which callers should log: it is serviceable but
+// degraded, and it resolves itself the next time the issuer is refreshed.
+func ResolveOAuthServerMetadataFromRemoteSessionIssuer(issuer RemoteSessionIssuerMetadata, resourceURL string) (*OAuthServerMetadataResult, bool, error) {
+	if len(issuer.Snapshot) > 0 {
+		rewritten, err := rewriteMetadataIssuer(issuer.Snapshot, resourceURL)
+		if err != nil {
+			return nil, false, fmt.Errorf("rewrite remote session issuer metadata: %w", err)
+		}
+		return &OAuthServerMetadataResult{
+			Kind:     OAuthServerMetadataResultKindRaw,
+			Static:   nil,
+			Raw:      rewritten,
+			ProxyURL: "",
+		}, true, nil
+	}
+
+	return &OAuthServerMetadataResult{
+		Kind: OAuthServerMetadataResultKindStatic,
+		Static: &OAuthServerMetadata{
+			Issuer:                        resourceURL,
+			AuthorizationEndpoint:         issuer.AuthorizationEndpoint,
+			TokenEndpoint:                 issuer.TokenEndpoint,
+			RegistrationEndpoint:          issuer.RegistrationEndpoint,
+			ScopesSupported:               issuer.ScopesSupported,
+			ResponseTypesSupported:        issuer.ResponseTypesSupported,
+			GrantTypesSupported:           issuer.GrantTypesSupported,
+			CodeChallengeMethodsSupported: issuer.CodeChallengeMethodsSupported,
+		},
+		Raw:      nil,
+		ProxyURL: "",
+	}, false, nil
+}
+
 // rewriteMetadataIssuer returns raw with its top-level "issuer" field set to
 // issuer, leaving every other field untouched. Used to reconcile a captured
 // upstream OAuth authorization-server metadata document with the Gram URL it
