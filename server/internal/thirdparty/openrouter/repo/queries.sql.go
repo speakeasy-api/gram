@@ -283,6 +283,81 @@ func (q *Queries) ReleaseOpenRouterKeyBillingLock(ctx context.Context, arg Relea
 	return unlocked, err
 }
 
+const removeOpenRouterAPIKeyDisableCause = `-- name: RemoveOpenRouterAPIKeyDisableCause :one
+UPDATE openrouter_api_keys
+SET disable_causes = CASE
+      WHEN $1::text = ANY(disable_causes) THEN ARRAY(
+        SELECT cause
+        FROM unnest(array_remove(disable_causes, $1::text)) AS causes(cause)
+        GROUP BY cause
+        ORDER BY CASE cause
+          WHEN 'admin_lock' THEN 1
+          WHEN 'trial_demotion' THEN 2
+          WHEN 'billing_inactive' THEN 3
+          ELSE 4
+        END, cause
+      )
+      ELSE disable_causes
+    END,
+    disabled = CASE
+      WHEN $1::text = ANY(disable_causes)
+        AND cardinality(array_remove(disable_causes, $1::text)) = 0 THEN FALSE
+      ELSE disabled
+    END,
+    monthly_credits = CASE
+      WHEN $1::text = ANY(disable_causes) AND $2::boolean
+        THEN $3::bigint
+      ELSE monthly_credits
+    END,
+    updated_at = CASE
+      WHEN $1::text = ANY(disable_causes)
+        THEN GREATEST(clock_timestamp(), updated_at + INTERVAL '1 microsecond')
+      ELSE updated_at
+    END
+WHERE organization_id = $4
+  AND key_type = $5
+  AND key_hash = $6
+  AND disable_causes IS NOT NULL
+  AND deleted IS FALSE
+RETURNING organization_id, key_type, key, key_encrypted, key_hash, monthly_credits, disabled, disable_causes, created_at, updated_at, deleted_at, deleted
+`
+
+type RemoveOpenRouterAPIKeyDisableCauseParams struct {
+	DisableCause         string
+	UpdateMonthlyCredits bool
+	MonthlyCredits       int64
+	OrganizationID       string
+	KeyType              string
+	KeyHash              string
+}
+
+func (q *Queries) RemoveOpenRouterAPIKeyDisableCause(ctx context.Context, arg RemoveOpenRouterAPIKeyDisableCauseParams) (OpenrouterApiKey, error) {
+	row := q.db.QueryRow(ctx, removeOpenRouterAPIKeyDisableCause,
+		arg.DisableCause,
+		arg.UpdateMonthlyCredits,
+		arg.MonthlyCredits,
+		arg.OrganizationID,
+		arg.KeyType,
+		arg.KeyHash,
+	)
+	var i OpenrouterApiKey
+	err := row.Scan(
+		&i.OrganizationID,
+		&i.KeyType,
+		&i.Key,
+		&i.KeyEncrypted,
+		&i.KeyHash,
+		&i.MonthlyCredits,
+		&i.Disabled,
+		&i.DisableCauses,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
 const updateOpenRouterKey = `-- name: UpdateOpenRouterKey :one
 UPDATE openrouter_api_keys
 SET monthly_credits = $1, key_hash = $2,

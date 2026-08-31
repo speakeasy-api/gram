@@ -1886,6 +1886,25 @@ func (q *Queries) SetOpenRouterAPIKeyCreatedAtFixture(ctx context.Context, arg S
 	return err
 }
 
+const setOpenRouterAPIKeyHashFixture = `-- name: SetOpenRouterAPIKeyHashFixture :exec
+UPDATE openrouter_api_keys
+SET key_hash = $1
+WHERE organization_id = $2
+  AND key_type = $3
+`
+
+type SetOpenRouterAPIKeyHashFixtureParams struct {
+	KeyHash        string
+	OrganizationID string
+	KeyType        string
+}
+
+// Test-only fixture: simulates key rotation between an upstream response and CAS.
+func (q *Queries) SetOpenRouterAPIKeyHashFixture(ctx context.Context, arg SetOpenRouterAPIKeyHashFixtureParams) error {
+	_, err := q.db.Exec(ctx, setOpenRouterAPIKeyHashFixture, arg.KeyHash, arg.OrganizationID, arg.KeyType)
+	return err
+}
+
 const setOrgWebhookConfig = `-- name: SetOrgWebhookConfig :exec
 UPDATE organization_metadata
 SET svix_app_id = $1,

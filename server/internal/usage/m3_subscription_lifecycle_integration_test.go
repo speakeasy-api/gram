@@ -143,6 +143,14 @@ func (p *m3OpenRouterProvisioner) reinstateAPIKeyLimit(ctx context.Context, db o
 	return int(refreshed.MonthlyCredits), nil
 }
 
+func (*m3OpenRouterProvisioner) AddAPIKeyDisableCause(context.Context, string, openrouter.KeyType, openrouter.DisableCause) (openrouter.DisableCauseChange, error) {
+	return openrouter.DisableCauseChange{}, nil
+}
+
+func (*m3OpenRouterProvisioner) RemoveAPIKeyDisableCause(context.Context, string, openrouter.KeyType, openrouter.DisableCause, *int) (int, openrouter.DisableCauseChange, error) {
+	return 0, openrouter.DisableCauseChange{}, nil
+}
+
 func (p *m3OpenRouterProvisioner) DisableAPIKey(ctx context.Context, organizationID string, keyType openrouter.KeyType) error {
 	return p.disableAPIKey(ctx, p.db, organizationID, keyType)
 }

@@ -32,6 +32,125 @@ import (
 	trialsrepo "github.com/speakeasy-api/gram/server/internal/trials/repo"
 )
 
+func TestStubProvisionerDisableCausesMirrorLocalState(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	orgID := seedKey(t, ctx, ti, "stub-causes", string(openrouter.KeyTypeChat), "sk-or-stub-causes")
+	queries := orgrepo.New(ti.conn)
+	require.NoError(t, testrepo.New(ti.conn).SetOpenRouterAPIKeyClassificationFixture(ctx, testrepo.SetOpenRouterAPIKeyClassificationFixtureParams{
+		OrganizationID: orgID, KeyType: string(openrouter.KeyTypeChat), Disabled: false, DisableCauses: nil,
+	}))
+
+	_, err := ti.provisioner.AddAPIKeyDisableCause(ctx, orgID, openrouter.KeyTypeChat, openrouter.DisableCauseAdminLock)
+	require.ErrorContains(t, err, "unclassified")
+	_, _, err = ti.provisioner.RemoveAPIKeyDisableCause(ctx, orgID, openrouter.KeyTypeChat, openrouter.DisableCauseAdminLock, nil)
+	require.ErrorContains(t, err, "unclassified")
+	change, err := ti.provisioner.AddAPIKeyDisableCause(ctx, "missing-org", openrouter.KeyTypeChat, openrouter.DisableCauseAdminLock)
+	require.NoError(t, err)
+	require.Equal(t, openrouter.DisableCauseChange{}, change)
+	require.NoError(t, testrepo.New(ti.conn).SetOpenRouterAPIKeyClassificationFixture(ctx, testrepo.SetOpenRouterAPIKeyClassificationFixtureParams{
+		OrganizationID: orgID, KeyType: string(openrouter.KeyTypeChat), Disabled: false, DisableCauses: []string{},
+	}))
+
+	change, err = ti.provisioner.AddAPIKeyDisableCause(ctx, orgID, openrouter.KeyTypeChat, openrouter.DisableCauseTrialDemotion)
+	require.NoError(t, err)
+	require.Equal(t, openrouter.DisableCauseChange{CauseChanged: true, KeyAccessChanged: true}, change)
+	row, err := queries.GetOpenRouterAPIKey(ctx, orgrepo.GetOpenRouterAPIKeyParams{OrganizationID: orgID, KeyType: string(openrouter.KeyTypeChat)})
+	require.NoError(t, err)
+	require.Equal(t, []string{"trial_demotion"}, row.DisableCauses)
+	require.True(t, row.Disabled)
+
+	change, err = ti.provisioner.AddAPIKeyDisableCause(ctx, orgID, openrouter.KeyTypeChat, openrouter.DisableCauseTrialDemotion)
+	require.NoError(t, err)
+	require.Equal(t, openrouter.DisableCauseChange{}, change)
+	change, err = ti.provisioner.AddAPIKeyDisableCause(ctx, orgID, openrouter.KeyTypeChat, openrouter.DisableCauseAdminLock)
+	require.NoError(t, err)
+	require.Equal(t, openrouter.DisableCauseChange{CauseChanged: true}, change)
+
+	limit, change, err := ti.provisioner.RemoveAPIKeyDisableCause(ctx, orgID, openrouter.KeyTypeChat, openrouter.DisableCauseBillingInactive, new(99))
+	require.NoError(t, err)
+	require.Equal(t, 5, limit)
+	require.Equal(t, openrouter.DisableCauseChange{}, change)
+	limit, change, err = ti.provisioner.RemoveAPIKeyDisableCause(ctx, orgID, openrouter.KeyTypeChat, openrouter.DisableCauseTrialDemotion, new(99))
+	require.NoError(t, err)
+	require.Equal(t, 5, limit)
+	require.Equal(t, openrouter.DisableCauseChange{CauseChanged: true}, change)
+	row, err = queries.GetOpenRouterAPIKey(ctx, orgrepo.GetOpenRouterAPIKeyParams{OrganizationID: orgID, KeyType: string(openrouter.KeyTypeChat)})
+	require.NoError(t, err)
+	require.Equal(t, []string{"admin_lock"}, row.DisableCauses)
+	require.EqualValues(t, 5, row.MonthlyCredits)
+	require.True(t, row.Disabled)
+
+	limit, change, err = ti.provisioner.RemoveAPIKeyDisableCause(ctx, orgID, openrouter.KeyTypeChat, openrouter.DisableCauseAdminLock, new(42))
+	require.NoError(t, err)
+	require.Equal(t, 42, limit)
+	require.Equal(t, openrouter.DisableCauseChange{CauseChanged: true, KeyAccessChanged: true}, change)
+	row, err = queries.GetOpenRouterAPIKey(ctx, orgrepo.GetOpenRouterAPIKeyParams{OrganizationID: orgID, KeyType: string(openrouter.KeyTypeChat)})
+	require.NoError(t, err)
+	require.Empty(t, row.DisableCauses)
+	require.EqualValues(t, 42, row.MonthlyCredits)
+	require.False(t, row.Disabled)
+
+	change, err = ti.provisioner.AddAPIKeyDisableCause(ctx, orgID, openrouter.KeyTypeChat, openrouter.DisableCauseBillingInactive)
+	require.NoError(t, err)
+	require.Equal(t, openrouter.DisableCauseChange{CauseChanged: true, KeyAccessChanged: true}, change)
+	limit, change, err = ti.provisioner.RemoveAPIKeyDisableCause(ctx, orgID, openrouter.KeyTypeChat, openrouter.DisableCauseBillingInactive, nil)
+	require.NoError(t, err)
+	require.Equal(t, 42, limit)
+	require.Equal(t, openrouter.DisableCauseChange{CauseChanged: true, KeyAccessChanged: true}, change)
+	row, err = queries.GetOpenRouterAPIKey(ctx, orgrepo.GetOpenRouterAPIKeyParams{OrganizationID: orgID, KeyType: string(openrouter.KeyTypeChat)})
+	require.NoError(t, err)
+	require.Empty(t, row.DisableCauses)
+	require.EqualValues(t, 42, row.MonthlyCredits)
+	require.False(t, row.Disabled)
+
+	_, _, err = ti.provisioner.RemoveAPIKeyDisableCause(ctx, orgID, openrouter.KeyTypeChat, openrouter.DisableCauseAdminLock, new(0))
+	require.ErrorContains(t, err, "must be positive")
+	limit, change, err = ti.provisioner.RemoveAPIKeyDisableCause(ctx, "missing-org", openrouter.KeyTypeChat, openrouter.DisableCauseAdminLock, nil)
+	require.NoError(t, err)
+	require.Zero(t, limit)
+	require.Equal(t, openrouter.DisableCauseChange{}, change)
+}
+
+func TestStubProvisionerRemoveLastDisableCauseRestoresOrganizationDefault(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	orgID := seedKey(t, ctx, ti, "stub-default-limit", string(openrouter.KeyTypeChat), "sk-or-stub-default-limit")
+	require.NoError(t, orgmetarepo.New(ti.conn).SetAccountType(ctx, orgmetarepo.SetAccountTypeParams{
+		GramAccountType: string(billing.TierPayg),
+		ID:              orgID,
+	}))
+	require.NoError(t, orgrepo.New(ti.conn).UpdateOpenRouterKeyMonthlyCredits(ctx, orgrepo.UpdateOpenRouterKeyMonthlyCreditsParams{
+		OrganizationID: orgID,
+		KeyType:        string(openrouter.KeyTypeChat),
+		MonthlyCredits: 0,
+	}))
+	require.NoError(t, testrepo.New(ti.conn).SetOpenRouterAPIKeyClassificationFixture(ctx, testrepo.SetOpenRouterAPIKeyClassificationFixtureParams{
+		OrganizationID: orgID,
+		KeyType:        string(openrouter.KeyTypeChat),
+		Disabled:       true,
+		DisableCauses:  []string{string(openrouter.DisableCauseAdminLock)},
+	}))
+
+	expected, ok := openrouter.ResolveDefaultCreditLimit(ctx, testenv.NewLogger(t), ti.conn, orgID, billing.TierPayg)
+	require.True(t, ok)
+	limit, change, err := ti.provisioner.RemoveAPIKeyDisableCause(ctx, orgID, openrouter.KeyTypeChat, openrouter.DisableCauseAdminLock, nil)
+	require.NoError(t, err)
+	require.Equal(t, expected, limit)
+	require.Equal(t, openrouter.DisableCauseChange{CauseChanged: true, KeyAccessChanged: true}, change)
+
+	row, err := orgrepo.New(ti.conn).GetOpenRouterAPIKey(ctx, orgrepo.GetOpenRouterAPIKeyParams{
+		OrganizationID: orgID,
+		KeyType:        string(openrouter.KeyTypeChat),
+	})
+	require.NoError(t, err)
+	require.EqualValues(t, expected, row.MonthlyCredits)
+	require.Empty(t, row.DisableCauses)
+	require.False(t, row.Disabled)
+}
+
 func TestListKeys_RequiresPlatformAdmin(t *testing.T) {
 	t.Parallel()
 
