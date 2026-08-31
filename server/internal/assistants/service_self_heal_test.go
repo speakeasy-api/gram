@@ -9,14 +9,22 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/protobuf/proto"
+
+	meteringv1 "github.com/speakeasy-api/gram/infra/gen/gram/metering/v1"
 
 	"github.com/speakeasy-api/gram/server/internal/assets/assetstest"
 	assistantsrepo "github.com/speakeasy-api/gram/server/internal/assistants/repo"
 	"github.com/speakeasy-api/gram/server/internal/auth/assistanttokens"
 	"github.com/speakeasy-api/gram/server/internal/chat"
 	chatrepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
+	"github.com/speakeasy-api/gram/server/internal/conv"
+	hooksrepo "github.com/speakeasy-api/gram/server/internal/hooks/repo"
+	"github.com/speakeasy-api/gram/server/internal/metering"
+	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 )
 
 func TestServiceCoreSelfHealsHistoryCorruptionOnFirstAttempt(t *testing.T) {
@@ -28,6 +36,37 @@ func TestServiceCoreSelfHealsHistoryCorruptionOnFirstAttempt(t *testing.T) {
 	projectID, assistantID, chatID, threadID := insertAssistantFixture(t, conn)
 
 	ctx := t.Context()
+	_, err = orgrepo.New(conn).UpsertOrganizationMetadata(t.Context(), orgrepo.UpsertOrganizationMetadataParams{
+		ID:   "org-test",
+		Name: "Test organization",
+		Slug: "org-test",
+	})
+	require.NoError(t, err)
+	ownerUserID := "owner-" + uuid.NewString()
+	require.NoError(t, assistantsrepo.New(conn).UpsertAssistantChat(t.Context(), assistantsrepo.UpsertAssistantChatParams{
+		ChatID:         chatID,
+		ProjectID:      projectID,
+		OrganizationID: "org-test",
+		UserID:         conv.ToPGText(ownerUserID),
+		Title:          pgtype.Text{},
+	}))
+	account, err := hooksrepo.New(conn).UpsertUserAccount(t.Context(), hooksrepo.UpsertUserAccountParams{
+		OrganizationID:      "org-test",
+		Provider:            "anthropic",
+		ExternalAccountUuid: uuid.NewString(),
+		UserID:              pgtype.Text{},
+		ExternalOrgID:       pgtype.Text{},
+		ExternalAccountID:   pgtype.Text{},
+		Email:               conv.ToPGText("self-heal@example.test"),
+		AccountType:         conv.ToPGText("personal"),
+	})
+	require.NoError(t, err)
+	_, err = hooksrepo.New(conn).LinkChatUserAccount(t.Context(), hooksrepo.LinkChatUserAccountParams{
+		UserAccountID: uuid.NullUUID{UUID: account.ID, Valid: true},
+		ID:            chatID,
+		ProjectID:     projectID,
+	})
+	require.NoError(t, err)
 
 	// Seed eight chronological user messages plus some assistant/tool noise
 	// that should NOT carry over after self-heal trims to user-only.
@@ -116,6 +155,16 @@ func TestServiceCoreSelfHealsHistoryCorruptionOnFirstAttempt(t *testing.T) {
 		} else {
 			require.Equal(t, want, row.Content.Text(), "trimmed tail must preserve recent user prompts verbatim")
 		}
+	}
+
+	outboxRows, err := testrepo.New(conn).ListPublishOutboxRows(ctx)
+	require.NoError(t, err)
+	require.Len(t, outboxRows, selfHealUserMessageCap+1)
+	for _, row := range outboxRows {
+		reading := &meteringv1.MeterReading{}
+		require.NoError(t, proto.Unmarshal(row.Message, reading))
+		require.Equal(t, "personal", reading.GetAttributes()[metering.AttributeAccountType])
+		require.Equal(t, ownerUserID, reading.GetAttributes()[metering.AttributeBillingUserID])
 	}
 }
 

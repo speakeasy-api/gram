@@ -3475,7 +3475,7 @@ func (s *ServiceCore) selfHealCorruptHistory(ctx context.Context, chatID uuid.UU
 	notice := base
 	notice.Content = fmt.Sprintf(selfHealRecoveryNoticeTemplate, len(userMessages), selfHealUserMessageMaxLen)
 	rows = append(rows, chat.MessageWrite{
-		Params: notice, BillingUserID: billingUserID, UserEmail: "", Provider: "", HookHostname: "", AccountType: "", BillingMode: "",
+		Params: notice, BillingUserID: billingUserID, UserEmail: "", Provider: "", HookHostname: "", AccountType: chatRow.AccountType, BillingMode: "",
 	})
 	for _, m := range userMessages {
 		row := base
@@ -3483,7 +3483,7 @@ func (s *ServiceCore) selfHealCorruptHistory(ctx context.Context, chatID uuid.UU
 		row.UserID = m.UserID
 		row.ExternalUserID = m.ExternalUserID
 		rows = append(rows, chat.MessageWrite{
-			Params: row, BillingUserID: billingUserID, UserEmail: "", Provider: "", HookHostname: "", AccountType: "", BillingMode: "",
+			Params: row, BillingUserID: billingUserID, UserEmail: "", Provider: "", HookHostname: "", AccountType: chatRow.AccountType, BillingMode: "",
 		})
 	}
 
