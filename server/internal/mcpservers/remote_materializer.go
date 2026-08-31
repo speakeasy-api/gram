@@ -9,6 +9,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
+	"github.com/speakeasy-api/gram/server/internal/networkaccess"
 )
 
 // VerifyLiveRemoteMCPSourceInTransaction locks a remote source before creating
@@ -39,6 +40,7 @@ func CreateRemoteBackedMCPServer(ctx context.Context, tx pgx.Tx, auditLogger *au
 		ActorEmail:            nilIfEmpty(input.ActorEmail),
 		Name:                  input.DisplayName,
 		Visibility:            input.InitialVisibility,
+		NetworkAccessMode:     networkaccess.ModePublicOnly,
 		EnvironmentID:         uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 		RemoteMCPServerID:     uuid.NullUUID{UUID: input.RemoteMCPServerID, Valid: true},
 		TunneledMCPServerID:   uuid.NullUUID{UUID: uuid.Nil, Valid: false},

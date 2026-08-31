@@ -3,6 +3,7 @@ package metamcp
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"math"
 	"slices"
@@ -34,6 +35,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/metamcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/mv"
+	"github.com/speakeasy-api/gram/server/internal/networkaccess"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
@@ -43,13 +45,14 @@ import (
 )
 
 type Service struct {
-	tracer      trace.Tracer
-	logger      *slog.Logger
-	db          *pgxpool.Pool
-	auth        *auth.Auth
-	authz       *authz.Engine
-	audit       *audit.Logger
-	temporalEnv *tenv.Environment
+	tracer                   trace.Tracer
+	logger                   *slog.Logger
+	db                       *pgxpool.Pool
+	auth                     *auth.Auth
+	authz                    *authz.Engine
+	audit                    *audit.Logger
+	temporalEnv              *tenv.Environment
+	networkAccessEligibility networkaccess.EligibilityChecker
 }
 
 var _ gen.Service = (*Service)(nil)
@@ -63,17 +66,19 @@ func NewService(
 	authzEngine *authz.Engine,
 	auditLogger *audit.Logger,
 	temporalEnv *tenv.Environment,
+	networkAccessEligibility networkaccess.EligibilityChecker,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("metamcp"))
 
 	return &Service{
-		tracer:      tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/metamcp"),
-		logger:      logger,
-		db:          db,
-		auth:        auth.New(logger, db, sessions, authzEngine),
-		authz:       authzEngine,
-		audit:       auditLogger,
-		temporalEnv: temporalEnv,
+		tracer:                   tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/metamcp"),
+		logger:                   logger,
+		db:                       db,
+		auth:                     auth.New(logger, db, sessions, authzEngine),
+		authz:                    authzEngine,
+		audit:                    auditLogger,
+		temporalEnv:              temporalEnv,
+		networkAccessEligibility: networkAccessEligibility,
 	}
 }
 
@@ -107,6 +112,13 @@ func (s *Service) CreateMetaMcpServer(ctx context.Context, payload *gen.CreateMe
 	if err != nil {
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid user_session_issuer_id").LogError(ctx, logger)
 	}
+	mode, err := parseRequestedNetworkAccessMode(payload.NetworkAccessMode, networkaccess.ModePublicOnly)
+	if err != nil {
+		return nil, oops.E(oops.CodeBadRequest, err, "invalid network access mode").LogError(ctx, logger)
+	}
+	if err := s.admitNetworkAccessMode(ctx, authCtx.ActiveOrganizationID, mode); err != nil {
+		return nil, err
+	}
 
 	dbtx, err := s.db.Begin(ctx)
 	if err != nil {
@@ -136,6 +148,7 @@ func (s *Service) CreateMetaMcpServer(ctx context.Context, payload *gen.CreateMe
 		Name:                payload.Name,
 		UserSessionIssuerID: issuerID,
 		Visibility:          string(conv.PtrValOrEmpty(payload.Visibility, VisibilityPrivate)),
+		NetworkAccessMode:   networkaccess.Storage(mode),
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "create meta mcp server").LogError(ctx, logger)
@@ -271,13 +284,24 @@ func (s *Service) UpdateMetaMcpServer(ctx context.Context, payload *gen.UpdateMe
 		return nil, err
 	}
 
+	mode, err := parseRequestedNetworkAccessMode(payload.NetworkAccessMode, networkaccess.Effective(existing.NetworkAccessMode))
+	if err != nil {
+		return nil, oops.E(oops.CodeBadRequest, err, "invalid network access mode").LogError(ctx, logger)
+	}
+	if err := s.admitNetworkAccessMode(ctx, authCtx.ActiveOrganizationID, mode); err != nil {
+		return nil, err
+	}
+	storedMode := networkaccess.Storage(mode)
+
 	updated, err := txRepo.UpdateMetaMCPServer(ctx, repo.UpdateMetaMCPServerParams{
-		Name:                payload.Name,
-		UserSessionIssuerID: issuerID,
-		Visibility:          conv.PtrToPGText((*string)(payload.Visibility)),
-		ID:                  serverID,
-		OrganizationID:      authCtx.ActiveOrganizationID,
-		ProjectID:           *authCtx.ProjectID,
+		Name:                 payload.Name,
+		UserSessionIssuerID:  issuerID,
+		Visibility:           conv.PtrToPGText((*string)(payload.Visibility)),
+		NetworkAccessModeSet: payload.NetworkAccessMode != nil,
+		NetworkAccessMode:    storedMode,
+		ID:                   serverID,
+		OrganizationID:       authCtx.ActiveOrganizationID,
+		ProjectID:            *authCtx.ProjectID,
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "update meta mcp server").LogError(ctx, logger)
@@ -340,6 +364,30 @@ func (s *Service) UpdateMetaMcpServer(ctx context.Context, payload *gen.UpdateMe
 	}
 
 	return afterView, nil
+}
+
+func parseRequestedNetworkAccessMode(requested *types.NetworkAccessMode, fallback networkaccess.Mode) (networkaccess.Mode, error) {
+	if requested == nil {
+		return fallback, nil
+	}
+	mode, err := networkaccess.Parse(string(*requested))
+	if err != nil {
+		return "", fmt.Errorf("parse requested network access mode: %w", err)
+	}
+	return mode, nil
+}
+
+func (s *Service) admitNetworkAccessMode(ctx context.Context, organizationID string, mode networkaccess.Mode) error {
+	if mode.IsPublicOnly() {
+		return nil
+	}
+	if s.networkAccessEligibility == nil {
+		return oops.E(oops.CodeForbidden, nil, "private network access is not enabled for this organization")
+	}
+	if err := s.networkAccessEligibility.CheckNetworkAccess(ctx, networkaccess.EligibilityInput{OrganizationID: organizationID, Mode: mode}); err != nil {
+		return oops.E(oops.CodeForbidden, err, "private network access is not enabled for this organization")
+	}
+	return nil
 }
 
 func (s *Service) DeleteMetaMcpServer(ctx context.Context, payload *gen.DeleteMetaMcpServerPayload) error {

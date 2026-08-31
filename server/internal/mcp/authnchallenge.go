@@ -36,12 +36,12 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
-	"github.com/speakeasy-api/gram/server/internal/customdomains"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpmetrics"
 	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
+	"github.com/speakeasy-api/gram/server/internal/requestorigin"
 	"github.com/speakeasy-api/gram/server/internal/sessiontokens"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	usersessions_repo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
@@ -456,16 +456,11 @@ func WriteAuthenticateChallenge(w http.ResponseWriter, protectedResourceURL, mes
 	return oops.E(oops.CodeUnauthorized, nil, "%s", message)
 }
 
-// BaseURLForRequest returns the public base URL the runtime request was
-// addressed at — the custom domain when one is bound to the request
-// context, the server's default origin otherwise. Exposed so /x/mcp
-// callers building post-resolution OAuth URLs see the same origin /mcp
-// callers do.
+// BaseURLForRequest returns the externally visible origin stamped by request
+// middleware. The configured server URL is retained only for direct/internal
+// callers that do not pass through the HTTP middleware.
 func (s *Service) BaseURLForRequest(r *http.Request) string {
-	if domainCtx := customdomains.FromContext(r.Context()); domainCtx != nil {
-		return fmt.Sprintf("https://%s", domainCtx.Domain)
-	}
-	return s.serverURL.String()
+	return requestorigin.BaseURL(r.Context(), s.serverURL.String())
 }
 
 type issuerGateAuthentication struct {

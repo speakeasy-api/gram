@@ -6,40 +6,61 @@ import (
 	"log/slog"
 	"net/http"
 	"net/url"
+	"strings"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	domainsRepo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/requestorigin"
 )
 
 func Middleware(logger *slog.Logger, db *pgxpool.Pool, env string, serverURL *url.URL) func(next http.Handler) http.Handler {
 	domainsRepo := domainsRepo.New(db)
 	logger = logger.With(attr.SlogComponent("custom_domains_middleware"))
+	platformBaseURL := strings.TrimSuffix(serverURL.String(), "/")
+	platformHost, _ := requestorigin.CanonicalHost(serverURL.Host)
 
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			ctx := r.Context()
-			host := r.Host
-			// custom domains are not relevant in the local environment
+			// Local development deliberately accepts arbitrary request Hosts, but
+			// externally visible URLs still use the configured platform origin.
 			if env == "local" {
-				next.ServeHTTP(w, r)
+				ctx = requestorigin.WithContext(ctx, requestorigin.Origin{
+					Surface:          requestorigin.SurfacePlatform,
+					BaseURL:          platformBaseURL,
+					OrganizationID:   "",
+					NetworkIngressID: uuid.Nil,
+					NetworkIdentity:  nil,
+				})
+				next.ServeHTTP(w, r.WithContext(ctx))
 				return
 			}
-			if host == "" {
-				serr := oops.E(oops.CodeBadRequest, nil, "request host is not set").LogError(ctx, logger, attr.SlogHostName(host))
+
+			host, hostErr := requestorigin.CanonicalHost(r.Host)
+			if hostErr != nil {
+				serr := oops.E(oops.CodeBadRequest, hostErr, "request host is invalid").LogError(ctx, logger, attr.SlogHostName(r.Host))
 				w.Header().Set("Content-Type", "application/json")
 				w.WriteHeader(http.StatusBadRequest)
 				if err := json.NewEncoder(w).Encode(serr); err != nil {
-					logger.ErrorContext(ctx, "failed to encode missing host error response", attr.SlogHostName(host), attr.SlogError(err))
+					logger.ErrorContext(ctx, "failed to encode invalid host error response", attr.SlogHostName(r.Host), attr.SlogError(err))
 				}
 
 				return
 			}
 
-			if host == serverURL.Host {
-				next.ServeHTTP(w, r)
+			if host == platformHost {
+				ctx = requestorigin.WithContext(ctx, requestorigin.Origin{
+					Surface:          requestorigin.SurfacePlatform,
+					BaseURL:          platformBaseURL,
+					OrganizationID:   "",
+					NetworkIngressID: uuid.Nil,
+					NetworkIdentity:  nil,
+				})
+				next.ServeHTTP(w, r.WithContext(ctx))
 				return
 			}
 
@@ -69,6 +90,13 @@ func Middleware(logger *slog.Logger, db *pgxpool.Pool, env string, serverURL *ur
 				OrganizationID: domain.OrganizationID,
 				Domain:         domain.Domain,
 				DomainID:       domain.ID,
+			})
+			ctx = requestorigin.WithContext(ctx, requestorigin.Origin{
+				Surface:          requestorigin.SurfaceCustomDomain,
+				BaseURL:          "https://" + host,
+				OrganizationID:   domain.OrganizationID,
+				NetworkIngressID: uuid.Nil,
+				NetworkIdentity:  nil,
 			})
 
 			next.ServeHTTP(w, r.WithContext(ctx))

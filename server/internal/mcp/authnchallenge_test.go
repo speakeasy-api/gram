@@ -31,6 +31,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcp"
 	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/requestorigin"
 	toolsets_repo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	usersessions_repo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
@@ -692,6 +693,10 @@ func TestHandleConsentPost_CustomDomainIssMatchesAdvertisedIssuer(t *testing.T) 
 		OrganizationID: authCtx.ActiveOrganizationID,
 		Domain:         domain.Domain,
 		DomainID:       domain.ID,
+	})
+	domainCtx = requestorigin.WithContext(domainCtx, requestorigin.Origin{
+		Surface: requestorigin.SurfaceCustomDomain, BaseURL: "https://" + domain.Domain,
+		OrganizationID: authCtx.ActiveOrganizationID,
 	})
 
 	advertisedIssuer, supported := fetchAdvertisedIssuer(t, domainCtx, ti, slug)

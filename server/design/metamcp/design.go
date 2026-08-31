@@ -269,6 +269,7 @@ var CreateMetaMcpServerForm = Type("CreateMetaMcpServerForm", func() {
 		Format(FormatUUID)
 	})
 	Attribute("visibility", MetaMcpServerVisibility, "The visibility of the gateway. Defaults to private, which requires callers to authenticate.")
+	Attribute("network_access_mode", shared.NetworkAccessMode, "The allowed network surfaces. Omit to default to public_only.")
 
 	Required("name")
 })
@@ -287,6 +288,7 @@ var UpdateMetaMcpServerForm = Type("UpdateMetaMcpServerForm", func() {
 		Format(FormatUUID)
 	})
 	Attribute("visibility", MetaMcpServerVisibility, "The visibility of the gateway. Omit to leave it unchanged.")
+	Attribute("network_access_mode", shared.NetworkAccessMode, "The allowed network surfaces. Omit to preserve the stored mode.")
 
 	Required("id", "name")
 })
@@ -308,6 +310,7 @@ var MetaMcpServer = Type("MetaMcpServer", func() {
 		Format(FormatUUID)
 	})
 	Attribute("visibility", MetaMcpServerVisibility, "The visibility of the gateway.")
+	Attribute("network_access_mode", shared.NetworkAccessMode, "The effective allowed network surfaces. Existing NULL rows are public_only.")
 	Attribute("created_at", String, func() {
 		Description("When the meta MCP server was created")
 		Format(FormatDateTime)
@@ -318,7 +321,7 @@ var MetaMcpServer = Type("MetaMcpServer", func() {
 	})
 	Attribute("member_count", Int, "The number of live members. Only populated by listMetaMcpServers.")
 
-	Required("id", "organization_id", "project_id", "name", "visibility", "created_at", "updated_at")
+	Required("id", "organization_id", "project_id", "name", "visibility", "network_access_mode", "created_at", "updated_at")
 })
 
 var AddMetaMcpMemberForm = Type("AddMetaMcpMemberForm", func() {

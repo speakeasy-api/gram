@@ -98,7 +98,8 @@ INSERT INTO mcp_servers (
     toolset_id,
     unproxied_mcp_server_id,
     tool_variations_group_id,
-    visibility
+    visibility,
+    network_access_mode
 )
 VALUES (
     $1,
@@ -112,7 +113,8 @@ VALUES (
     $9,
     $10,
     $11,
-    $12
+    $12,
+    $13
 )
 RETURNING id, project_id, name, slug, environment_id, user_session_issuer_id, remote_session_issuer_id, remote_mcp_server_id, tunneled_mcp_server_id, toolset_id, unproxied_mcp_server_id, tool_variations_group_id, visibility, network_access_mode, created_at, updated_at, deleted_at, deleted
 `
@@ -130,6 +132,7 @@ type CreateMCPServerParams struct {
 	UnproxiedMcpServerID  uuid.NullUUID
 	ToolVariationsGroupID uuid.NullUUID
 	Visibility            string
+	NetworkAccessMode     pgtype.Text
 }
 
 func (q *Queries) CreateMCPServer(ctx context.Context, arg CreateMCPServerParams) (McpServer, error) {
@@ -146,6 +149,7 @@ func (q *Queries) CreateMCPServer(ctx context.Context, arg CreateMCPServerParams
 		arg.UnproxiedMcpServerID,
 		arg.ToolVariationsGroupID,
 		arg.Visibility,
+		arg.NetworkAccessMode,
 	)
 	var i McpServer
 	err := row.Scan(
@@ -696,7 +700,7 @@ func (q *Queries) ListMCPServersByProjectID(ctx context.Context, arg ListMCPServ
 }
 
 const listMCPServersByProjectIDLimited = `-- name: ListMCPServersByProjectIDLimited :many
-SELECT id, project_id, name, slug, environment_id, user_session_issuer_id, remote_mcp_server_id, tunneled_mcp_server_id, toolset_id, unproxied_mcp_server_id, tool_variations_group_id, visibility, created_at, updated_at, deleted_at, deleted
+SELECT id, project_id, name, slug, environment_id, user_session_issuer_id, remote_mcp_server_id, tunneled_mcp_server_id, toolset_id, unproxied_mcp_server_id, tool_variations_group_id, visibility, network_access_mode, created_at, updated_at, deleted_at, deleted
 FROM mcp_servers
 WHERE project_id = $1
   AND deleted IS FALSE
@@ -722,6 +726,7 @@ type ListMCPServersByProjectIDLimitedRow struct {
 	UnproxiedMcpServerID  uuid.NullUUID
 	ToolVariationsGroupID uuid.NullUUID
 	Visibility            string
+	NetworkAccessMode     pgtype.Text
 	CreatedAt             pgtype.Timestamptz
 	UpdatedAt             pgtype.Timestamptz
 	DeletedAt             pgtype.Timestamptz
@@ -750,6 +755,7 @@ func (q *Queries) ListMCPServersByProjectIDLimited(ctx context.Context, arg List
 			&i.UnproxiedMcpServerID,
 			&i.ToolVariationsGroupID,
 			&i.Visibility,
+			&i.NetworkAccessMode,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.DeletedAt,
@@ -1188,8 +1194,12 @@ SET
     unproxied_mcp_server_id = $8,
     tool_variations_group_id = $9,
     visibility = $10,
+    network_access_mode = CASE
+        WHEN $11::boolean THEN $12
+        ELSE network_access_mode
+    END,
     updated_at = clock_timestamp()
-WHERE id = $11 AND project_id = $12 AND deleted IS FALSE
+WHERE id = $13 AND project_id = $14 AND deleted IS FALSE
 RETURNING id, project_id, name, slug, environment_id, user_session_issuer_id, remote_session_issuer_id, remote_mcp_server_id, tunneled_mcp_server_id, toolset_id, unproxied_mcp_server_id, tool_variations_group_id, visibility, network_access_mode, created_at, updated_at, deleted_at, deleted
 `
 
@@ -1204,6 +1214,8 @@ type UpdateMCPServerParams struct {
 	UnproxiedMcpServerID  uuid.NullUUID
 	ToolVariationsGroupID uuid.NullUUID
 	Visibility            string
+	NetworkAccessModeSet  bool
+	NetworkAccessMode     pgtype.Text
 	ID                    uuid.UUID
 	ProjectID             uuid.UUID
 }
@@ -1220,6 +1232,8 @@ func (q *Queries) UpdateMCPServer(ctx context.Context, arg UpdateMCPServerParams
 		arg.UnproxiedMcpServerID,
 		arg.ToolVariationsGroupID,
 		arg.Visibility,
+		arg.NetworkAccessModeSet,
+		arg.NetworkAccessMode,
 		arg.ID,
 		arg.ProjectID,
 	)

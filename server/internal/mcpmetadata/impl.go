@@ -59,6 +59,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	organizations_repo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	projects_repo "github.com/speakeasy-api/gram/server/internal/projects/repo"
+	"github.com/speakeasy-api/gram/server/internal/requestorigin"
 	"github.com/speakeasy-api/gram/server/internal/toolconfig"
 	toolsets_repo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -1507,46 +1508,29 @@ func (s *Service) writeInstallPage(ctx context.Context, w http.ResponseWriter, i
 	return nil
 }
 
-// resolveToolsetMCPURL builds the public MCP URL for a toolset-backed install
-// honouring the URL slug the caller used: when routed through mcp_endpoints
-// the URL keeps the endpoint slug; the legacy path keeps toolset.McpSlug.
+// resolveToolsetMCPURL builds the MCP URL advertised by an install page from
+// the origin of the current request. Endpoint lookup continues to use legacy
+// custom-domain context during migration, but it is not URL authority.
 func (s *Service) resolveToolsetMCPURL(ctx context.Context, toolset toolsets_repo.Toolset, mcpSlug string) (string, error) {
 	if mcpSlug == "" {
 		return s.resolveMCPURLFromContext(ctx, toolset, s.serverURL.String())
 	}
-	baseURL := s.serverURL.String() + "/mcp"
-	if toolset.CustomDomainID.Valid {
-		customDomain, err := s.domainsRepo.GetCustomDomainByID(ctx, toolset.CustomDomainID.UUID)
-		if err != nil {
-			return "", fmt.Errorf("load custom domain: %w", err)
-		}
-		baseURL = fmt.Sprintf("https://%s/mcp", customDomain.Domain)
-	}
-	mcpURL, err := url.JoinPath(baseURL, mcpSlug)
+	baseURL := requestorigin.BaseURL(ctx, s.serverURL.String())
+	mcpURL, err := url.JoinPath(baseURL, "mcp", mcpSlug)
 	if err != nil {
 		return "", fmt.Errorf("join url path: %w", err)
 	}
 	return mcpURL, nil
 }
 
-// resolveMcpEndpointURL builds the public MCP URL for an mcp_endpoint-routed
-// install — custom-domain endpoints render on their own host, platform-domain
-// endpoints render under the serverURL.
+// resolveMcpEndpointURL builds the MCP URL advertised by an endpoint-routed
+// install from the current request origin. A domain-root endpoint remains bare.
 func (s *Service) resolveMcpEndpointURL(ctx context.Context, endpoint *mcpendpoints_repo.McpEndpoint) (string, error) {
-	baseURL := s.serverURL.String() + "/mcp"
-	if endpoint.CustomDomainID.Valid {
-		customDomain, err := s.domainsRepo.GetCustomDomainByID(ctx, endpoint.CustomDomainID.UUID)
-		if err != nil {
-			return "", fmt.Errorf("load custom domain: %w", err)
-		}
-		// A domain-root endpoint serves MCP at the bare domain, so install
-		// snippets use that instead of the also-valid /mcp/<slug> path.
-		if endpoint.IsDomainRoot.Valid && endpoint.IsDomainRoot.Bool {
-			return fmt.Sprintf("https://%s", customDomain.Domain), nil
-		}
-		baseURL = fmt.Sprintf("https://%s/mcp", customDomain.Domain)
+	baseURL := requestorigin.BaseURL(ctx, s.serverURL.String())
+	if endpoint.IsDomainRoot.Valid && endpoint.IsDomainRoot.Bool {
+		return baseURL, nil
 	}
-	mcpURL, err := url.JoinPath(baseURL, endpoint.Slug)
+	mcpURL, err := url.JoinPath(baseURL, "mcp", endpoint.Slug)
 	if err != nil {
 		return "", fmt.Errorf("join url path: %w", err)
 	}

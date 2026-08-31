@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/meta_mcp"
@@ -13,15 +14,12 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
-	"github.com/speakeasy-api/gram/server/internal/metamcp"
-	"github.com/speakeasy-api/gram/server/internal/oops"
-	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
-
-	"github.com/jackc/pgx/v5/pgtype"
-
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
+	"github.com/speakeasy-api/gram/server/internal/metamcp"
 	metamcprepo "github.com/speakeasy-api/gram/server/internal/metamcp/repo"
+	"github.com/speakeasy-api/gram/server/internal/oops"
 	remotesessionsrepo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 )
 
 func TestUpdateMetaMcpServer_RenamesAndAttachesIssuer(t *testing.T) {
@@ -130,6 +128,52 @@ func TestUpdateMetaMcpServer_MintsIssuerWhenNoneStored(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.NotNil(t, updated.UserSessionIssuerID, "update must mint an issuer for an issuerless gateway")
+}
+
+func TestUpdateMetaMcpServer_NonPublicOmissionFailsClosedAndPublicRecoverySucceeds(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	created, err := ti.service.CreateMetaMcpServer(ctx, &gen.CreateMetaMcpServerPayload{Name: "network recovery"})
+	require.NoError(t, err)
+	rows, err := testrepo.New(ti.conn).SetMetaMCPServerNetworkAccessModeFixture(ctx, testrepo.SetMetaMCPServerNetworkAccessModeFixtureParams{
+		NetworkAccessMode: pgtype.Text{String: "private_only", Valid: true},
+		ID:                uuid.MustParse(created.ID),
+		OrganizationID:    authCtx.ActiveOrganizationID,
+		ProjectID:         *authCtx.ProjectID,
+	})
+	require.NoError(t, err)
+	require.EqualValues(t, 1, rows)
+
+	_, err = ti.service.UpdateMetaMcpServer(ctx, &gen.UpdateMetaMcpServerPayload{
+		ID: created.ID, Name: created.Name, NetworkAccessMode: nil,
+	})
+	requireOopsCode(t, err, oops.CodeForbidden)
+
+	publicOnly := types.NetworkAccessMode("public_only")
+	updated, err := ti.service.UpdateMetaMcpServer(ctx, &gen.UpdateMetaMcpServerPayload{
+		ID: created.ID, Name: created.Name, NetworkAccessMode: &publicOnly,
+	})
+	require.NoError(t, err)
+	require.Equal(t, publicOnly, updated.NetworkAccessMode)
+
+	stored, err := metamcprepo.New(ti.conn).GetMetaMCPServer(ctx, metamcprepo.GetMetaMCPServerParams{
+		ID: uuid.MustParse(created.ID), OrganizationID: authCtx.ActiveOrganizationID, ProjectID: *authCtx.ProjectID,
+	})
+	require.NoError(t, err)
+	require.False(t, stored.NetworkAccessMode.Valid)
+
+	record, err := audittest.LatestAuditLogByAction(ctx, ti.conn, audit.ActionMetaMcpServerUpdate)
+	require.NoError(t, err)
+	beforeSnapshot, err := audittest.DecodeAuditData(record.BeforeSnapshot)
+	require.NoError(t, err)
+	afterSnapshot, err := audittest.DecodeAuditData(record.AfterSnapshot)
+	require.NoError(t, err)
+	require.Equal(t, "private_only", beforeSnapshot["NetworkAccessMode"])
+	require.Equal(t, "public_only", afterSnapshot["NetworkAccessMode"])
 }
 
 func TestUpdateMetaMcpServer_NotFound(t *testing.T) {

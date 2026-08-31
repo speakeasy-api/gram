@@ -27,6 +27,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/customdomains"
 	"github.com/speakeasy-api/gram/server/internal/oauthtest"
+	"github.com/speakeasy-api/gram/server/internal/requestorigin"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 )
@@ -375,6 +376,10 @@ func TestHandleGetProtectedResource_IssuerGatedToolsetBackend_OnCustomDomain(t *
 		OrganizationID: authCtx.ActiveOrganizationID,
 		Domain:         domain.Domain,
 		DomainID:       domain.ID,
+	})
+	domainCtx = requestorigin.WithContext(domainCtx, requestorigin.Origin{
+		Surface: requestorigin.SurfaceCustomDomain, BaseURL: "https://" + domain.Domain,
+		OrganizationID: authCtx.ActiveOrganizationID,
 	})
 
 	w, err := runMCPWellKnown(t, domainCtx, ti.service.HandleGetProtectedResource, slug)

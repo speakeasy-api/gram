@@ -12,6 +12,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	usersessionsrepo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
@@ -54,10 +55,54 @@ func TestCreateMcpServer_RemoteMcpBackend(t *testing.T) {
 	require.NotEmpty(t, *result.UserSessionIssuerID)
 	require.Nil(t, result.ToolsetID)
 	require.Equal(t, types.McpServerVisibility("disabled"), result.Visibility)
+	require.Equal(t, types.NetworkAccessMode("public_only"), result.NetworkAccessMode)
+
+	stored, err := mcpserversrepo.New(ti.conn).GetMCPServerByIDAndProjectID(ctx, mcpserversrepo.GetMCPServerByIDAndProjectIDParams{
+		ID: uuid.MustParse(result.ID), ProjectID: *authCtx.ProjectID,
+	})
+	require.NoError(t, err)
+	require.False(t, stored.NetworkAccessMode.Valid)
 
 	afterCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionMcpServerCreate)
 	require.NoError(t, err)
 	require.Equal(t, beforeCount+1, afterCount)
+}
+
+func TestCreateMcpServer_NonPublicModesFailClosed(t *testing.T) {
+	t.Parallel()
+
+	for _, requested := range []types.NetworkAccessMode{"dual", "private_only"} {
+		t.Run(string(requested), func(t *testing.T) {
+			t.Parallel()
+			ctx, ti := newTestService(t)
+			authCtx, ok := contextvalues.GetAuthContext(ctx)
+			require.True(t, ok)
+			remoteID := seedRemoteMcpServer(t, ctx, ti.conn, *authCtx.ProjectID).String()
+
+			_, err := ti.service.CreateMcpServer(ctx, &gen.CreateMcpServerPayload{
+				Name: "fail closed " + string(requested), RemoteMcpServerID: &remoteID,
+				Visibility: types.McpServerVisibility("disabled"), NetworkAccessMode: &requested,
+			})
+			requireOopsCode(t, err, oops.CodeForbidden)
+		})
+	}
+}
+
+func TestCreateMcpServer_UnproxiedRejectsNonPublicMode(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	ctx = withStaffEmail(t, ctx)
+	unproxiedID := seedUnproxiedMcpServer(t, ctx, ti.conn, *authCtx.ProjectID).String()
+	requested := types.NetworkAccessMode("dual")
+
+	_, err := ti.service.CreateMcpServer(ctx, &gen.CreateMcpServerPayload{
+		Name: "unproxied private", UnproxiedMcpServerID: &unproxiedID,
+		Visibility: types.McpServerVisibility("private"), NetworkAccessMode: &requested,
+	})
+	requireOopsCode(t, err, oops.CodeInvalid)
 }
 
 func TestCreateMcpServer_RejectsEmptyName(t *testing.T) {

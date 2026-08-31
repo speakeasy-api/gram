@@ -2202,6 +2202,30 @@ func (q *Queries) SetFunctionToolVariables(ctx context.Context, arg SetFunctionT
 	return err
 }
 
+const setMCPServerNetworkAccessModeFixture = `-- name: SetMCPServerNetworkAccessModeFixture :execrows
+UPDATE mcp_servers
+SET network_access_mode = $1
+WHERE id = $2
+  AND project_id = $3
+  AND deleted IS FALSE
+`
+
+type SetMCPServerNetworkAccessModeFixtureParams struct {
+	NetworkAccessMode pgtype.Text
+	ID                uuid.UUID
+	ProjectID         uuid.UUID
+}
+
+// Test-only fixture for building a pre-existing non-public row so update tests
+// can prove omitted values fail closed while explicit public_only recovers.
+func (q *Queries) SetMCPServerNetworkAccessModeFixture(ctx context.Context, arg SetMCPServerNetworkAccessModeFixtureParams) (int64, error) {
+	result, err := q.db.Exec(ctx, setMCPServerNetworkAccessModeFixture, arg.NetworkAccessMode, arg.ID, arg.ProjectID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const setMCPServerRemoteSessionIssuerFixture = `-- name: SetMCPServerRemoteSessionIssuerFixture :execrows
 UPDATE mcp_servers
 SET remote_session_issuer_id = $1
@@ -2224,6 +2248,36 @@ type SetMCPServerRemoteSessionIssuerFixtureParams struct {
 // matched nothing would otherwise let a negative test pass vacuously.
 func (q *Queries) SetMCPServerRemoteSessionIssuerFixture(ctx context.Context, arg SetMCPServerRemoteSessionIssuerFixtureParams) (int64, error) {
 	result, err := q.db.Exec(ctx, setMCPServerRemoteSessionIssuerFixture, arg.RemoteSessionIssuerID, arg.ID, arg.ProjectID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const setMetaMCPServerNetworkAccessModeFixture = `-- name: SetMetaMCPServerNetworkAccessModeFixture :execrows
+UPDATE meta_mcp_servers
+SET network_access_mode = $1
+WHERE id = $2
+  AND organization_id = $3
+  AND project_id = $4
+  AND deleted IS FALSE
+`
+
+type SetMetaMCPServerNetworkAccessModeFixtureParams struct {
+	NetworkAccessMode pgtype.Text
+	ID                uuid.UUID
+	OrganizationID    string
+	ProjectID         uuid.UUID
+}
+
+// Test-only equivalent for Meta MCP servers.
+func (q *Queries) SetMetaMCPServerNetworkAccessModeFixture(ctx context.Context, arg SetMetaMCPServerNetworkAccessModeFixtureParams) (int64, error) {
+	result, err := q.db.Exec(ctx, setMetaMCPServerNetworkAccessModeFixture,
+		arg.NetworkAccessMode,
+		arg.ID,
+		arg.OrganizationID,
+		arg.ProjectID,
+	)
 	if err != nil {
 		return 0, err
 	}

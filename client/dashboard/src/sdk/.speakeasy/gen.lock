@@ -3844,7 +3844,7 @@ examples:
         application/json: {"name": "<value>", "visibility": "disabled"}
       responses:
         "200":
-          application/json: {"created_at": "2025-01-23T20:53:32.469Z", "id": "df9f5333-5b18-4ebb-8ff1-d143df62b56f", "project_id": "500b982c-7d90-4657-9e63-bba27d26e2e3", "updated_at": "2024-12-04T04:34:07.135Z", "visibility": "private"}
+          application/json: {"created_at": "2025-01-23T20:53:32.469Z", "id": "df9f5333-5b18-4ebb-8ff1-d143df62b56f", "network_access_mode": "public_only", "project_id": "500b982c-7d90-4657-9e63-bba27d26e2e3", "updated_at": "2024-12-04T04:34:07.135Z", "visibility": "private"}
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":
@@ -3855,7 +3855,7 @@ examples:
         application/json: {"name": "<value>"}
       responses:
         "200":
-          application/json: {"created_at": "2024-04-05T20:51:34.626Z", "id": "c1f8fb42-7fd9-42e9-bae3-198f35870cf2", "name": "<value>", "organization_id": "<id>", "project_id": "1abf2652-3b94-4afb-912b-38b23c9447e1", "updated_at": "2024-04-03T09:54:44.150Z", "visibility": "disabled"}
+          application/json: {"created_at": "2024-04-05T20:51:34.626Z", "id": "c1f8fb42-7fd9-42e9-bae3-198f35870cf2", "name": "<value>", "network_access_mode": "public_only", "organization_id": "<id>", "project_id": "1abf2652-3b94-4afb-912b-38b23c9447e1", "updated_at": "2024-04-03T09:54:44.150Z", "visibility": "disabled"}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
@@ -3963,7 +3963,7 @@ examples:
         application/json: {"transport_type": "<value>", "url": "https://unpleasant-bench.com"}
       responses:
         "200":
-          application/json: {"mcp_server": {"created_at": "2026-05-23T21:48:59.403Z", "id": "25ee9f94-758c-401d-9595-6747b911fca0", "project_id": "3a1d14ec-f61e-4e6b-ba2e-e06b6e4f3033", "updated_at": "2024-05-07T21:35:35.086Z", "visibility": "private"}, "remote_mcp_server": {"created_at": "2025-12-16T20:32:19.033Z", "id": "986e7642-b0ae-4937-b0fd-ebeaf2f720bd", "project_id": "7bded525-efa5-4960-ba80-d868eedd6744", "transport_type": "<value>", "updated_at": "2024-12-03T19:43:06.675Z", "url": "https://joyful-equal.info"}}
+          application/json: {"mcp_server": {"created_at": "2026-05-23T21:48:59.403Z", "id": "25ee9f94-758c-401d-9595-6747b911fca0", "network_access_mode": "dual", "project_id": "3a1d14ec-f61e-4e6b-ba2e-e06b6e4f3033", "updated_at": "2024-05-07T21:35:35.086Z", "visibility": "private"}, "remote_mcp_server": {"created_at": "2025-12-16T20:32:19.033Z", "id": "986e7642-b0ae-4937-b0fd-ebeaf2f720bd", "project_id": "7bded525-efa5-4960-ba80-d868eedd6744", "transport_type": "<value>", "updated_at": "2024-12-03T19:43:06.675Z", "url": "https://joyful-equal.info"}}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
@@ -5614,7 +5614,7 @@ examples:
     speakeasy-default-get-mcp-server:
       responses:
         "200":
-          application/json: {"created_at": "2025-03-27T03:11:55.483Z", "id": "e06adce2-4b1d-4fb6-bb17-def0edb665e6", "project_id": "afa4249c-4a63-4332-86b6-e84f3ad65c72", "updated_at": "2025-07-28T20:58:04.836Z", "visibility": "private"}
+          application/json: {"created_at": "2025-03-27T03:11:55.483Z", "id": "e06adce2-4b1d-4fb6-bb17-def0edb665e6", "network_access_mode": "dual", "project_id": "afa4249c-4a63-4332-86b6-e84f3ad65c72", "updated_at": "2025-07-28T20:58:04.836Z", "visibility": "private"}
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
@@ -5637,7 +5637,7 @@ examples:
           id: "8dc5f443-a256-489e-9176-477844ab4d52"
       responses:
         "200":
-          application/json: {"created_at": "2024-06-24T04:56:25.716Z", "id": "ae1a33a6-20a8-47d9-b3be-f8d19435c0f9", "name": "<value>", "organization_id": "<id>", "project_id": "ba9012a9-da63-4c6b-821a-5c5b2cfaa7bd", "updated_at": "2024-03-24T06:19:24.439Z", "visibility": "private"}
+          application/json: {"created_at": "2024-06-24T04:56:25.716Z", "id": "ae1a33a6-20a8-47d9-b3be-f8d19435c0f9", "name": "<value>", "network_access_mode": "dual", "organization_id": "<id>", "project_id": "ba9012a9-da63-4c6b-821a-5c5b2cfaa7bd", "updated_at": "2024-03-24T06:19:24.439Z", "visibility": "private"}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":
@@ -7352,7 +7352,7 @@ examples:
     speakeasy-default-list-mcp-servers-for-org:
       responses:
         "200":
-          application/json: {"mcp_servers": [{"created_at": "2026-03-28T06:21:12.394Z", "id": "86626e25-460f-4b56-9f71-328b09d4cc96", "project_id": "aab89a63-e373-49be-9b2a-af1aa87baa50", "updated_at": "2024-09-01T15:49:00.273Z", "visibility": "disabled"}]}
+          application/json: {"mcp_servers": [{"created_at": "2026-03-28T06:21:12.394Z", "id": "86626e25-460f-4b56-9f71-328b09d4cc96", "network_access_mode": "private_only", "project_id": "aab89a63-e373-49be-9b2a-af1aa87baa50", "updated_at": "2024-09-01T15:49:00.273Z", "visibility": "disabled"}]}
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":
@@ -7382,7 +7382,7 @@ examples:
     speakeasy-default-list-meta-mcp-servers:
       responses:
         "200":
-          application/json: {"meta_mcp_servers": [{"created_at": "2026-11-18T21:37:16.963Z", "id": "c817b326-c217-4058-be33-839a6adfca21", "name": "<value>", "organization_id": "<id>", "project_id": "3057172a-67b4-4632-8c85-542e95603d80", "updated_at": "2026-10-03T03:43:27.201Z", "visibility": "private"}]}
+          application/json: {"meta_mcp_servers": [{"created_at": "2026-11-18T21:37:16.963Z", "id": "c817b326-c217-4058-be33-839a6adfca21", "name": "<value>", "network_access_mode": "private_only", "organization_id": "<id>", "project_id": "3057172a-67b4-4632-8c85-542e95603d80", "updated_at": "2026-10-03T03:43:27.201Z", "visibility": "private"}]}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":
@@ -9877,7 +9877,7 @@ examples:
         application/json: {"id": "e13cb59c-62f2-455e-b14f-136f3f588553", "visibility": "private"}
       responses:
         "200":
-          application/json: {"created_at": "2024-11-04T21:52:52.229Z", "id": "c1d392f2-f1c9-4820-aaf5-45cab4f9c86f", "project_id": "026be90d-2928-4be4-954b-e68b163394e1", "updated_at": "2025-09-04T19:28:41.048Z", "visibility": "disabled"}
+          application/json: {"created_at": "2024-11-04T21:52:52.229Z", "id": "c1d392f2-f1c9-4820-aaf5-45cab4f9c86f", "network_access_mode": "private_only", "project_id": "026be90d-2928-4be4-954b-e68b163394e1", "updated_at": "2025-09-04T19:28:41.048Z", "visibility": "disabled"}
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":
@@ -9910,7 +9910,7 @@ examples:
         application/json: {"id": "0ed4533c-c894-4b99-a315-ba1ec8947783", "name": "<value>"}
       responses:
         "200":
-          application/json: {"created_at": "2026-07-10T17:29:02.697Z", "id": "f5a95ca4-055d-47f6-b62c-b93212fbea06", "name": "<value>", "organization_id": "<id>", "project_id": "0f17506b-1037-4306-ba27-4e8d05871c35", "updated_at": "2025-10-10T20:16:25.755Z", "visibility": "disabled"}
+          application/json: {"created_at": "2026-07-10T17:29:02.697Z", "id": "f5a95ca4-055d-47f6-b62c-b93212fbea06", "name": "<value>", "network_access_mode": "public_only", "organization_id": "<id>", "project_id": "0f17506b-1037-4306-ba27-4e8d05871c35", "updated_at": "2025-10-10T20:16:25.755Z", "visibility": "disabled"}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
         "500":

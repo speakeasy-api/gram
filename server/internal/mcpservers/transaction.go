@@ -10,6 +10,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
+	"github.com/speakeasy-api/gram/server/internal/networkaccess"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -23,6 +24,7 @@ type MCPServerTransactionInput struct {
 	ActorEmail            *string
 	Name                  string
 	Visibility            string
+	NetworkAccessMode     networkaccess.Mode
 	EnvironmentID         uuid.NullUUID
 	RemoteMCPServerID     uuid.NullUUID
 	TunneledMCPServerID   uuid.NullUUID
@@ -57,6 +59,14 @@ func CreateMCPServerInTransaction(ctx context.Context, tx pgx.Tx, auditLogger *a
 		}
 	}
 
+	mode := input.NetworkAccessMode
+	if mode == "" {
+		mode = networkaccess.ModePublicOnly
+	}
+	if _, err := networkaccess.Parse(string(mode)); err != nil {
+		return repo.McpServer{}, fmt.Errorf("validate MCP server network access mode: %w", err)
+	}
+
 	server, err := repo.New(tx).CreateMCPServer(ctx, repo.CreateMCPServerParams{
 		ID:                    serverID,
 		ProjectID:             input.ProjectID,
@@ -70,6 +80,7 @@ func CreateMCPServerInTransaction(ctx context.Context, tx pgx.Tx, auditLogger *a
 		UnproxiedMcpServerID:  input.UnproxiedMCPServerID,
 		ToolVariationsGroupID: input.ToolVariationsGroupID,
 		Visibility:            input.Visibility,
+		NetworkAccessMode:     networkaccess.Storage(mode),
 	})
 	if err != nil {
 		return repo.McpServer{}, fmt.Errorf("create MCP server: %w", err)
