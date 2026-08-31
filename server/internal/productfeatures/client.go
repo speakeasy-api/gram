@@ -335,16 +335,17 @@ func SeedOrganizationDefaultsTx(ctx context.Context, tx pgx.Tx, organizationID s
 	return nil
 }
 
-// EnterpriseTrialBundle is the entitlement set an enterprise trial organization
-// receives at signup. A trial gates only on the time window, so identity (SSO,
-// SCIM) is included rather than held back as a conversion lever.
+// EnterpriseAccessBundle is the entitlement set an enterprise-level
+// organization receives at signup or paid-tier activation. A trial gates only
+// on the time window, so identity (SSO, SCIM) is included rather than held back
+// as a conversion lever.
 //
-// FeatureSkills is absent because Skills is generally available. The bundle
-// still calls EnableSkillsTx, which provisions the Skills role grants that the
-// entitlement cannot work without. FeatureHooksFailOpen and
+// FeatureSkills is absent because Skills is generally available. The trial and
+// paid-tier seeders separately provision the Skills role grants that access
+// requires. FeatureHooksFailOpen and
 // FeatureSkillCaptureMetadataOnly are absent because they change how an
 // entitlement behaves rather than granting one.
-var EnterpriseTrialBundle = []Feature{
+var EnterpriseAccessBundle = []Feature{
 	FeatureLogs,
 	FeatureToolIOLogs,
 	FeatureSessionCapture,
@@ -400,7 +401,7 @@ func SetTrialRuntimeFeaturesTx(ctx context.Context, tx pgx.Tx, organizationID st
 func SeedEnterpriseTrialBundleTx(ctx context.Context, tx pgx.Tx, organizationID string) error {
 	q := repo.New(tx)
 
-	for _, feature := range EnterpriseTrialBundle {
+	for _, feature := range EnterpriseAccessBundle {
 		if _, err := q.EnableFeature(ctx, repo.EnableFeatureParams{
 			OrganizationID: organizationID,
 			FeatureName:    string(feature),
@@ -416,15 +417,15 @@ func SeedEnterpriseTrialBundleTx(ctx context.Context, tx pgx.Tx, organizationID 
 	return nil
 }
 
-// SeedPaygEntitlementsTx grants PAYG capabilities only when an organization
-// has never configured them. A soft-deleted feature remains disabled. The
-// returned features are the rows this transaction inserted, so callers can
+// SeedEnterpriseAccessEntitlementsTx grants enterprise-level capabilities only
+// when an organization has never configured them. A soft-deleted feature remains
+// disabled. The returned features are the rows this transaction inserted, so callers can
 // update caches after commit without exposing uncommitted state.
-func SeedPaygEntitlementsTx(ctx context.Context, tx pgx.Tx, organizationID string) ([]Feature, error) {
+func SeedEnterpriseAccessEntitlementsTx(ctx context.Context, tx pgx.Tx, organizationID string) ([]Feature, error) {
 	q := repo.New(tx)
-	features := make([]Feature, 0, len(EnterpriseTrialBundle)+2)
+	features := make([]Feature, 0, len(EnterpriseAccessBundle)+2)
 	features = append(features, FeaturePlatformMCP)
-	features = append(features, EnterpriseTrialBundle...)
+	features = append(features, EnterpriseAccessBundle...)
 	features = append(features, FeatureSkills)
 
 	enabled := make([]Feature, 0, len(features))
@@ -434,7 +435,7 @@ func SeedPaygEntitlementsTx(ctx context.Context, tx pgx.Tx, organizationID strin
 			FeatureName:    string(feature),
 		})
 		if err != nil {
-			return nil, fmt.Errorf("enable new PAYG entitlement %s: %w", feature, err)
+			return nil, fmt.Errorf("enable new enterprise-access entitlement %s: %w", feature, err)
 		}
 		if inserted == 0 {
 			continue
@@ -442,7 +443,7 @@ func SeedPaygEntitlementsTx(ctx context.Context, tx pgx.Tx, organizationID strin
 
 		if feature == FeatureSkills {
 			if err := provisionSkillsSystemRoleGrantsTx(ctx, tx, organizationID); err != nil {
-				return nil, fmt.Errorf("provision PAYG Skills grants: %w", err)
+				return nil, fmt.Errorf("provision enterprise-access Skills grants: %w", err)
 			}
 		}
 		enabled = append(enabled, feature)

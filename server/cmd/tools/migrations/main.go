@@ -6,6 +6,8 @@
 //     OPENROUTER_DISABLE_CAUSES_MIGRATION.md. It defaults to a non-writing dry
 //     run. Writes use -apply or -manual-override and require explicit target
 //     confirmation.
+//   - pro-entitlements: PostgreSQL application-data backfill; see
+//     PRO_ENTITLEMENTS_BACKFILL.md. It defaults to a non-writing dry run.
 //
 // Each guide documents its own connectivity, secret environment variables,
 // invocation modes, output, and recovery procedure. Flags are subcommand-local;
@@ -84,9 +86,11 @@ func run() int {
 		return runRiskFindingsCols(args)
 	case "openrouter-disable-causes":
 		return runOpenRouterDisableCauses(args, os.Stdin, os.Stdout, os.Getenv)
+	case "pro-entitlements":
+		return runProEntitlements(args, os.Stdout, os.Getenv)
 	default:
 		// The unrecognized name is deliberately not echoed (log injection).
-		log.Printf("unknown migration subcommand (available: riskfindings, riskfindingscols, openrouter-disable-causes)")
+		log.Printf("unknown migration subcommand (available: riskfindings, riskfindingscols, openrouter-disable-causes, pro-entitlements)")
 		return 2
 	}
 }

@@ -27,7 +27,7 @@ func TestSeedEnterpriseTrialBundleTx_Idempotent(t *testing.T) {
 	// Skills sits outside the bundle: EnableSkillsTx enables it alongside the
 	// role grants it needs. slices.Concat rather than append, so this never
 	// writes into spare capacity the exported bundle might grow.
-	entitlements := slices.Concat(productfeatures.EnterpriseTrialBundle, []productfeatures.Feature{productfeatures.FeatureSkills})
+	entitlements := slices.Concat(productfeatures.EnterpriseAccessBundle, []productfeatures.Feature{productfeatures.FeatureSkills})
 
 	poolRepo := featurerepo.New(ti.conn)
 	for _, feature := range entitlements {
@@ -81,7 +81,7 @@ func TestSetTrialRuntimeFeaturesTx_TogglesOnlyRuntimeFeatures(t *testing.T) {
 	}
 }
 
-func TestSeedPaygEntitlementsTxPreservesExplicitDisable(t *testing.T) {
+func TestSeedEnterpriseAccessEntitlementsTxPreservesExplicitDisable(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestProductFeaturesService(t)
@@ -101,7 +101,7 @@ func TestSeedPaygEntitlementsTxPreservesExplicitDisable(t *testing.T) {
 	require.NoError(t, err)
 
 	tx := testenv.BeginTx(t, ctx, ti.conn)
-	enabled, err := productfeatures.SeedPaygEntitlementsTx(ctx, tx, organizationID)
+	enabled, err := productfeatures.SeedEnterpriseAccessEntitlementsTx(ctx, tx, organizationID)
 	require.NoError(t, err)
 	require.NoError(t, tx.Commit(ctx))
 	require.NotContains(t, enabled, productfeatures.FeatureSSO)
@@ -115,7 +115,7 @@ func TestSeedPaygEntitlementsTxPreservesExplicitDisable(t *testing.T) {
 
 	for _, feature := range slices.Concat(
 		[]productfeatures.Feature{productfeatures.FeaturePlatformMCP},
-		productfeatures.EnterpriseTrialBundle,
+		productfeatures.EnterpriseAccessBundle,
 		[]productfeatures.Feature{productfeatures.FeatureSkills},
 	) {
 		if feature == productfeatures.FeatureSSO {

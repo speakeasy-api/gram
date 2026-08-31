@@ -1,3 +1,15 @@
+-- name: ListProOrganizations :many
+SELECT id
+FROM organization_metadata
+WHERE gram_account_type = 'pro'
+ORDER BY id;
+
+-- name: LockAndCheckProOrganization :one
+SELECT gram_account_type = 'pro' AS is_pro
+FROM organization_metadata
+WHERE id = @organization_id
+FOR UPDATE;
+
 -- name: LockOrganizationMetadata :one
 SELECT id
 FROM organization_metadata
@@ -43,8 +55,8 @@ ON CONFLICT (organization_id, feature_name) WHERE deleted IS FALSE
 DO NOTHING;
 
 -- name: EnableFeatureIfNeverConfigured :execrows
--- PAYG activation grants purchased capabilities to legacy organizations while
--- preserving a soft-deleted row as an explicit administrator choice.
+-- Paid-tier activation grants enterprise-access capabilities while preserving
+-- a soft-deleted row as an explicit administrator choice.
 INSERT INTO organization_features (
     organization_id,
     feature_name
