@@ -177,7 +177,10 @@ func Resolve(ctx context.Context, db *pgxpool.Pool, logger *slog.Logger, input R
 		return deniedResult(&endpoint, &server, nil, networkaccess.ModePrivateOnly), nil
 	}
 	switch server.Visibility {
-	case mcpservers.VisibilityPublic, mcpservers.VisibilityPrivate:
+	// Upstream serves like the others; what differs is who authenticates the
+	// caller, which the serve path decides. ResolveAuthorizationMode still
+	// refuses an upstream row whose columns do not describe a servable server.
+	case mcpservers.VisibilityPublic, mcpservers.VisibilityPrivate, mcpservers.VisibilityUpstream:
 		// Known serving states continue to network-surface policy below.
 	default:
 		// Disabled and unrecognized values fail closed. An endpoint row owns

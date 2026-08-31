@@ -1708,6 +1708,13 @@ func (s *Service) resolveSecurityMode(toolset *toolsets_repo.Toolset, server *mc
 		switch {
 		case sessionGated:
 			return securityModeOAuth
+		case server.Visibility == mcpservers.VisibilityUpstream:
+			// Also OAuth, but against the upstream's authorization server
+			// rather than one of Gram's, which is why it is not folded into
+			// sessionGated: no Gram session exists here. Without this arm the
+			// install page tells the user to paste a Gram API key for a server
+			// whose only accepted credential is an upstream bearer.
+			return securityModeOAuth
 		case server.Visibility == mcpservers.VisibilityPublic:
 			return securityModePublic
 		default:
