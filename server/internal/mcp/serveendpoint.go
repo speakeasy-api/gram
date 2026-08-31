@@ -212,12 +212,12 @@ func (s *Service) serveResolvedMCPEndpoint(
 		}
 		return s.serveTunneledBackend(w, r, logger, mcpEndpoint, mcpServer, upstreamToken, wwwAuthenticate, sessionToolSelection)
 	case mcpServer.ToolsetID.Valid:
-		// AGE-1902: toolset-backed branch still reads runtime config from the
-		// toolsets row (visibility, OAuth, default environment). Once
-		// /mcp/{mcpSlug} is migrated to source these from the linked
-		// mcp_servers row instead, this branch should switch to passing the
-		// mcp_server config into ServeToolsetResolved (or its successor) and
-		// the toolset load below can be dropped.
+		// Wrapper-governed dispatch (AIS-633): visibility, issuer gating, the
+		// RBAC resource id, and the variation-group override come from the
+		// mcp_servers row; the toolset supplies only what remains a toolset
+		// concern (tools, resources, prompts, environment, tool selection
+		// mode, external OAuth). A soft-deleted toolset behind a live wrapper
+		// surfaces as not found here.
 		toolset, err := toolsetsrepo.New(s.db).GetToolsetByIDAndProject(ctx, toolsetsrepo.GetToolsetByIDAndProjectParams{
 			ID:        mcpServer.ToolsetID.UUID,
 			ProjectID: mcpEndpoint.ProjectID,
@@ -229,16 +229,7 @@ func (s *Service) serveResolvedMCPEndpoint(
 			return oops.E(oops.CodeUnexpected, err, "load toolset").LogError(ctx, logger)
 		}
 
-		// The mcp_servers row's variation group, when set, overrides the
-		// toolset's own column. Pass it through so ServeToolsetResolved resolves
-		// the effective group (mcp_server, then toolset, then project default).
-		var mcpServerVariationsGroupID *uuid.UUID
-		if mcpServer.ToolVariationsGroupID.Valid {
-			id := mcpServer.ToolVariationsGroupID.UUID
-			mcpServerVariationsGroupID = &id
-		}
-
-		if err := s.serveToolsetResolved(w, r, &toolset, slug, mcpRouteBase, issuerGated, nil, sessionToolSelection, mcpServerVariationsGroupID, &mcpServer.ID, pendingIssuerGate); err != nil {
+		if err := s.serveToolsetResolved(w, r, &toolset, slug, mcpRouteBase, hostedServingFromWrapper(mcpServer, issuerGated), nil, sessionToolSelection, pendingIssuerGate); err != nil {
 			return fmt.Errorf("serve toolset-backed mcp: %w", err)
 		}
 		return nil
@@ -246,6 +237,29 @@ func (s *Service) serveResolvedMCPEndpoint(
 		// CHECK constraint mcp_servers_backend_exclusivity_check guarantees
 		// exactly one backend is set; this is defensive.
 		return oops.E(oops.CodeUnexpected, nil, "mcp server has no backend configured").LogError(ctx, logger)
+	}
+}
+
+// hostedServingFromWrapper derives the hosting configuration for a request
+// that resolved through an mcp_endpoints → mcp_servers pair: the wrapper row
+// governs visibility, issuer gating, RBAC, and the variation group (AIS-633).
+// callerGated reports whether the caller already ran the issuer gate keyed on
+// mcp_servers.user_session_issuer_id; the in-toolset gate never runs on this
+// path regardless.
+func hostedServingFromWrapper(mcpServer *mcpserversrepo.McpServer, callerGated bool) *hostedServing {
+	var groupID *uuid.UUID
+	if mcpServer.ToolVariationsGroupID.Valid {
+		id := mcpServer.ToolVariationsGroupID.UUID
+		groupID = &id
+	}
+	serverID := mcpServer.ID
+	return &hostedServing{
+		isPublic:              mcpServer.Visibility == mcpservers.VisibilityPublic,
+		runInToolsetGate:      false,
+		callerGated:           callerGated,
+		rbacResourceID:        mcpServer.ID,
+		toolVariationsGroupID: groupID,
+		mcpServerID:           &serverID,
 	}
 }
 
@@ -380,10 +394,11 @@ func (s *Service) ResolveMCPEndpointAndServer(ctx context.Context, logger *slog.
 //     authoritative for the slug and is not an OAuth endpoint, so we do
 //     NOT fall back — this keeps non-issuer-gated remote-backed servers
 //     returning not-found, matching the well-known surface.
-//   - Addressing miss (CodeNotFound): fall back to the legacy
-//     toolsets.mcp_slug lookup so issuer-gated toolset-backed servers
-//     without an mcp_endpoint row (predating the toolsets → mcp_servers
-//     migration) still resolve.
+//   - Addressing miss (CodeNotFound, not ErrEndpointUnavailable): fall back
+//     to the legacy toolsets.mcp_slug lookup so issuer-gated toolset-backed
+//     servers without an mcp_endpoint row (predating the toolsets →
+//     mcp_servers migration) still resolve. A resolvable-but-unavailable
+//     address (disabled wrapper, dangling backend) is terminal.
 //
 // mcpRouteBase ("mcp" or "x/mcp") propagates into the resolved endpoint's
 // URL building on both the primary and fallback paths.
@@ -408,7 +423,7 @@ func (s *Service) LoadResolvedMcpEndpointBySlug(ctx context.Context, logger *slo
 			return nil, oops.E(oops.CodeNotFound, nil, "not found")
 		}
 		return s.BuildResolvedMcpEndpointForServer(ctx, logger, mcpEndpoint, mcpServer, mcpRouteBase)
-	case errors.As(err, &shareErr) && shareErr.Code == oops.CodeNotFound:
+	case isMCPEndpointAddressMiss(err, &shareErr):
 		return s.loadResolvedMcpEndpointByToolsetSlug(ctx, slug, mcpRouteBase)
 	default:
 		return nil, err
@@ -442,8 +457,7 @@ func (s *Service) BuildResolvedMcpEndpointForServer(
 	case err != nil:
 		return nil, oops.E(oops.CodeUnexpected, err, "load project").LogError(ctx, logger)
 	}
-	resolved := NewResolvedMcpEndpointFromMcpServer(mcpEndpoint, mcpServer, project.OrganizationID)
-	resolved.RouteBase = mcpRouteBase
+	resolved := NewResolvedMcpEndpointFromMcpServer(mcpEndpoint, mcpServer, project.OrganizationID, mcpRouteBase)
 	upstreamResource, err := s.resolveUpstreamResource(ctx, logger, mcpEndpoint.ProjectID, mcpServer)
 	if err != nil {
 		return nil, err

@@ -20,6 +20,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/customdomains"
+	"github.com/speakeasy-api/gram/server/internal/mcp/mcpmetrics"
 	mcpendpoints_repo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	mcpservers_repo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
@@ -299,12 +300,15 @@ func (e *ResolvedMcpEndpoint) ValidateRef(ref EndpointRef) error {
 // mcpServer.UserSessionIssuerID.Valid; organizationID comes from a
 // separate projects lookup since mcp_servers doesn't carry the org id
 // directly. AudienceURN is bound to the issuer URN rather than a
-// backend-specific id so /x/mcp tokens stay portable between
-// toolset-backed and remote-backed servers under the same issuer.
+// backend-specific id so tokens stay portable between toolset-backed and
+// remote-backed servers under the same issuer. routeBase is the URL surface
+// the request arrived under ("mcp" or "x/mcp") — always taken from the
+// inbound request or the cached ref, never assumed.
 func NewResolvedMcpEndpointFromMcpServer(
 	mcpEndpoint *mcpendpoints_repo.McpEndpoint,
 	mcpServer *mcpservers_repo.McpServer,
 	organizationID string,
+	routeBase string,
 ) *ResolvedMcpEndpoint {
 	return &ResolvedMcpEndpoint{
 		AudienceURN: urn.NewUserSessionIssuer(mcpServer.UserSessionIssuerID.UUID).String(),
@@ -316,12 +320,25 @@ func NewResolvedMcpEndpointFromMcpServer(
 		MetaMcpServerID:      uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 		OrganizationID:       organizationID,
 		ProjectID:            mcpEndpoint.ProjectID,
-		RouteBase:            "x/mcp",
+		RouteBase:            routeBase,
 		Slug:                 mcpEndpoint.Slug,
 		ToolsetID:            mcpServer.ToolsetID,
 		UpstreamResource:     "",
 		UserSessionIssuerID:  mcpServer.UserSessionIssuerID.UUID,
 	}
+}
+
+// LegacyToolsetAudienceURN is the pre-migration toolset-URN audience a
+// toolset-backed wrapper's bearers may still carry: sessions minted while the
+// server was gated on toolsets.user_session_issuer_id were bound to
+// urn.NewToolset rather than the issuer URN. ok is false for every endpoint
+// that is not a toolset-backed wrapper — only that shape ever accepts the
+// legacy audience (AIS-633; acceptance is deleted by AIS-646).
+func (e *ResolvedMcpEndpoint) LegacyToolsetAudienceURN() (string, bool) {
+	if !e.McpServerID.Valid || !e.ToolsetID.Valid {
+		return "", false
+	}
+	return urn.NewToolset(e.ToolsetID.UUID).String(), true
 }
 
 // NewResolvedMcpEndpointFromMetaMcpServer materialises a ResolvedMcpEndpoint
@@ -451,10 +468,9 @@ func (s *Service) buildResolvedMcpEndpointByRef(ctx context.Context, ref Endpoin
 		case err != nil:
 			return nil, oops.E(oops.CodeUnexpected, err, "load project").LogError(ctx, s.logger)
 		}
-		endpoint := NewResolvedMcpEndpointFromMcpServer(&mcpEndpoint, &mcpServer, project.OrganizationID)
-		if ref.RouteBase != "" {
-			endpoint.RouteBase = ref.RouteBase
-		}
+		// Refs cached before EndpointRef.RouteBase existed were only ever
+		// minted on the /x/mcp surface for server-keyed endpoints.
+		endpoint := NewResolvedMcpEndpointFromMcpServer(&mcpEndpoint, &mcpServer, project.OrganizationID, conv.Default(ref.RouteBase, "x/mcp"))
 		upstreamResource, err := s.resolveUpstreamResource(ctx, s.logger, mcpEndpoint.ProjectID, &mcpServer)
 		if err != nil {
 			return nil, err
@@ -470,6 +486,7 @@ func (s *Service) buildResolvedMcpEndpointByRef(ctx context.Context, ref Endpoin
 	case err != nil:
 		return nil, oops.E(oops.CodeUnexpected, err, "load mcp server").LogError(ctx, s.logger)
 	}
+	s.metrics.RecordToolsetSlugFallback(ctx, mcpmetrics.LegacyFallbackChallengeResume)
 	if !toolset.UserSessionIssuerID.Valid {
 		return nil, oops.E(oops.CodeNotFound, nil, "not found")
 	}
@@ -504,6 +521,7 @@ func (s *Service) loadResolvedMcpEndpointByToolsetSlug(ctx context.Context, mcpS
 	case err != nil:
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to load MCP server").LogError(ctx, s.logger)
 	}
+	s.metrics.RecordToolsetSlugFallback(ctx, mcpmetrics.LegacyFallbackOAuth)
 	if !toolset.UserSessionIssuerID.Valid {
 		return nil, oops.E(oops.CodeNotFound, nil, "not found")
 	}

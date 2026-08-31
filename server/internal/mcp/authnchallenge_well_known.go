@@ -24,6 +24,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/customdomains"
 	"github.com/speakeasy-api/gram/server/internal/httpcache"
+	"github.com/speakeasy-api/gram/server/internal/mcp/mcpmetrics"
 	mcpendpoints_repo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	mcpservers_repo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	metamcp_repo "github.com/speakeasy-api/gram/server/internal/metamcp/repo"
@@ -128,8 +129,9 @@ func (s *Service) HandleGetProtectedResource(w http.ResponseWriter, r *http.Requ
 			return s.ServeWellKnownProtectedResourceForMetaServer(ctx, w, r, logger, mcpEndpoint, metaServer, "mcp")
 		}
 		return s.ServeWellKnownProtectedResourceForServer(w, r, logger, mcpEndpoint, mcpServer, "mcp")
-	case errors.As(err, &shareErr) && shareErr.Code == oops.CodeNotFound:
-		// Fall through to the legacy toolset-by-slug lookup below.
+	case isMCPEndpointAddressMiss(err, &shareErr):
+		// Fall through to the legacy toolset-by-slug lookup below; a
+		// resolvable-but-unavailable address is terminal.
 	default:
 		return err
 	}
@@ -145,6 +147,7 @@ func (s *Service) HandleGetProtectedResource(w http.ResponseWriter, r *http.Requ
 	case err != nil:
 		return oops.E(oops.CodeUnexpected, err, "failed to load MCP server").LogError(ctx, s.logger)
 	}
+	s.metrics.RecordToolsetSlugFallback(ctx, mcpmetrics.LegacyFallbackWellKnownProtectedResource)
 
 	if toolset.UserSessionIssuerID.Valid {
 		endpoint := newResolvedMcpEndpointFromToolset(toolset, "mcp")
@@ -183,8 +186,9 @@ func (s *Service) HandleGetAuthorizationServer(w http.ResponseWriter, r *http.Re
 			return s.ServeWellKnownAuthorizationServerForMetaServer(ctx, w, r, logger, mcpEndpoint, metaServer, "mcp")
 		}
 		return s.ServeWellKnownAuthorizationServerForServer(w, r, logger, mcpEndpoint, mcpServer, "mcp")
-	case errors.As(err, &shareErr) && shareErr.Code == oops.CodeNotFound:
-		// Fall through to the legacy toolset-by-slug lookup below.
+	case isMCPEndpointAddressMiss(err, &shareErr):
+		// Fall through to the legacy toolset-by-slug lookup below; a
+		// resolvable-but-unavailable address is terminal.
 	default:
 		return err
 	}
@@ -200,6 +204,7 @@ func (s *Service) HandleGetAuthorizationServer(w http.ResponseWriter, r *http.Re
 	case err != nil:
 		return oops.E(oops.CodeUnexpected, err, "failed to load MCP server").LogError(ctx, s.logger)
 	}
+	s.metrics.RecordToolsetSlugFallback(ctx, mcpmetrics.LegacyFallbackWellKnownAuthorizationServer)
 
 	if toolset.UserSessionIssuerID.Valid {
 		endpoint := newResolvedMcpEndpointFromToolset(toolset, "mcp")

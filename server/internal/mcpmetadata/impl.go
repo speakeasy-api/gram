@@ -24,6 +24,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/trace"
 	goahttp "goa.design/goa/v3/http"
 	"goa.design/goa/v3/security"
@@ -44,6 +45,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/customdomains"
 	customdomains_repo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
 	environments_repo "github.com/speakeasy-api/gram/server/internal/environments/repo"
+	"github.com/speakeasy-api/gram/server/internal/mcp/mcpmetrics"
 	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
 	"github.com/speakeasy-api/gram/server/internal/mcpendpoints"
 	mcpendpoints_repo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
@@ -207,6 +209,7 @@ type Service struct {
 	siteURL        *url.URL
 	toolsetCache   cache.TypedCacheObject[mv.ToolsetBaseContents]
 	audit          *audit.Logger
+	legacyFallback *mcpmetrics.LegacyFallbackCounter
 
 	// Hosted install page script (embedded and served with cache-busting hash)
 	installPageScriptHash string
@@ -221,6 +224,7 @@ var (
 func NewService(
 	logger *slog.Logger,
 	tracerProvider trace.TracerProvider,
+	meterProvider metric.MeterProvider,
 	db *pgxpool.Pool,
 	sessions *sessions.Manager,
 	serverURL *url.URL,
@@ -250,6 +254,7 @@ func NewService(
 		siteURL:        siteURL,
 		toolsetCache:   cache.NewTypedObjectCache[mv.ToolsetBaseContents](logger.With(attr.SlogCacheNamespace("toolset")), cacheAdapter, cache.SuffixNone),
 		audit:          auditLogger,
+		legacyFallback: mcpmetrics.NewLegacyFallbackCounter(meterProvider.Meter("github.com/speakeasy-api/gram/server/internal/mcpmetadata"), logger),
 
 		installPageScriptHash: scriptHashStr,
 		installPageScriptData: hostedPageScriptData,
@@ -1029,14 +1034,14 @@ func (s *Service) ServeInstallPage(w http.ResponseWriter, r *http.Request) error
 // first (via the shared mcpendpoints.BySlugAndCustomDomain helper, mirroring
 // mcp.ServePublic's resolution), then falls back to the legacy
 // toolsets.mcp_slug lookup so platform-domain install pages keep working for
-// customers that pre-date mcp_endpoints. A disabled mcp_server resolves like
-// a 404 and is allowed to fall through to the legacy path, again matching
-// mcp.ServePublic.
+// customers that pre-date mcp_endpoints. Only a true address miss falls
+// through; a resolvable-but-unavailable address (disabled wrapper, dangling
+// backend) is terminal, again matching mcp.ServePublic (AIS-633).
 func (s *Service) resolveInstallContext(ctx context.Context, mcpSlug string) (*installContext, error) {
 	endpoint, server, metaServer, err := mcpendpoints.BySlugAndCustomDomain(ctx, s.db, s.logger, mcpSlug)
 	var shareErr *oops.ShareableError
 	switch {
-	case errors.As(err, &shareErr) && shareErr.Code == oops.CodeNotFound:
+	case errors.As(err, &shareErr) && shareErr.Code == oops.CodeNotFound && !errors.Is(err, mcpendpoints.ErrEndpointUnavailable):
 		// Fall through to legacy toolset lookup.
 	case err != nil:
 		return nil, fmt.Errorf("resolve mcp endpoint: %w", err)
@@ -1079,6 +1084,7 @@ func (s *Service) resolveInstallContext(ctx context.Context, mcpSlug string) (*i
 	if err != nil {
 		return nil, err
 	}
+	s.legacyFallback.RecordToolsetSlugFallback(ctx, mcpmetrics.LegacyFallbackInstallPage)
 	org, err := s.orgsRepo.GetOrganizationMetadata(ctx, toolset.OrganizationID)
 	if err != nil {
 		return nil, fmt.Errorf("load organization: %w", err)

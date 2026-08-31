@@ -325,6 +325,10 @@ const (
 	// McpKillswitchResourceClassKey is the bounded kill-switch resource
 	// coverage class of a covered MCP tools/call. Never a server identifier.
 	McpKillswitchResourceClassKey = attribute.Key("gram.mcp.killswitch.resource_class")
+	// McpEntryPointKey is the bounded entry-point dimension on the
+	// mcp.toolset_slug_fallback counter: which public surface resolved a
+	// request through the legacy toolsets.mcp_slug lookup.
+	McpEntryPointKey              = attribute.Key("gram.mcp.entry_point")
 	McpRequestedTagsKey           = attribute.Key("gram.mcp.requested_tags")
 	McpToolsReturnedKey           = attribute.Key("gram.mcp.tools_returned")
 	McpToolsFilteredKey           = attribute.Key("gram.mcp.tools_filtered")
@@ -2052,6 +2056,8 @@ func SlogMcpMethod(v string) slog.Attr      { return slog.String(string(McpMetho
 
 func McpSurface(v string) attribute.KeyValue { return McpSurfaceKey.String(v) }
 func SlogMcpSurface(v string) slog.Attr      { return slog.String(string(McpSurfaceKey), v) }
+
+func McpEntryPoint[V ~string](v V) attribute.KeyValue { return McpEntryPointKey.String(string(v)) }
 
 func McpKillswitchSurface[V ~string](v V) attribute.KeyValue {
 	return McpKillswitchSurfaceKey.String(string(v))

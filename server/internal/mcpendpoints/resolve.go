@@ -3,6 +3,7 @@ package mcpendpoints
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 
 	"github.com/google/uuid"
@@ -18,6 +19,14 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 )
 
+// ErrEndpointUnavailable marks an address that resolved to an mcp_endpoints
+// row whose backend cannot serve: disabled visibility, or a dangling backend
+// FK. The endpoint row makes the address authoritative, so this outcome is a
+// terminal not-found on every surface — unlike a plain address miss, it must
+// never fall back to the legacy toolsets.mcp_slug lookup, which would let a
+// disabled server resurrect the same slug through its toolset (AIS-633).
+var ErrEndpointUnavailable = errors.New("mcp endpoint unavailable")
+
 // BySlugAndCustomDomain walks the public addressing chain shared by the /mcp
 // and /x/mcp slug handlers, the install-page handlers, and the .well-known
 // routes: it scopes the lookup to the request's customdomains.Context, loads
@@ -29,8 +38,9 @@ import (
 // carry the slug attribute.
 //
 // Callers that want to fall back to a legacy lookup (e.g. /mcp's existing
-// toolsets.mcp_slug path) should check for oops.CodeNotFound and proceed
-// accordingly.
+// toolsets.mcp_slug path) may do so only on a true address miss — a
+// CodeNotFound that is NOT ErrEndpointUnavailable. A resolvable-but-unavailable
+// address (errors.Is(err, ErrEndpointUnavailable)) is terminal.
 func BySlugAndCustomDomain(ctx context.Context, db *pgxpool.Pool, logger *slog.Logger, slug string) (*repo.McpEndpoint, *mcpservers_repo.McpServer, *metamcp_repo.MetaMcpServer, error) {
 	var customDomainID uuid.NullUUID
 	if domainCtx := customdomains.FromContext(ctx); domainCtx != nil {
@@ -55,13 +65,13 @@ func BySlugAndCustomDomain(ctx context.Context, db *pgxpool.Pool, logger *slog.L
 		})
 		switch {
 		case errors.Is(err, pgx.ErrNoRows):
-			return nil, nil, nil, oops.E(oops.CodeNotFound, err, "meta mcp server not found")
+			return nil, nil, nil, oops.E(oops.CodeNotFound, fmt.Errorf("%w: %w", ErrEndpointUnavailable, err), "meta mcp server not found")
 		case err != nil:
 			return nil, nil, nil, oops.E(oops.CodeUnexpected, err, "load meta mcp server").LogError(ctx, logger)
 		}
 
 		if metaServer.Visibility == metamcp_visibility.Disabled {
-			return nil, nil, nil, oops.C(oops.CodeNotFound)
+			return nil, nil, nil, oops.E(oops.CodeNotFound, ErrEndpointUnavailable, "mcp endpoint not found")
 		}
 
 		return &endpoint, nil, &metaServer, nil
@@ -73,13 +83,13 @@ func BySlugAndCustomDomain(ctx context.Context, db *pgxpool.Pool, logger *slog.L
 	})
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
-		return nil, nil, nil, oops.E(oops.CodeNotFound, err, "mcp server not found")
+		return nil, nil, nil, oops.E(oops.CodeNotFound, fmt.Errorf("%w: %w", ErrEndpointUnavailable, err), "mcp server not found")
 	case err != nil:
 		return nil, nil, nil, oops.E(oops.CodeUnexpected, err, "load mcp server").LogError(ctx, logger)
 	}
 
 	if server.Visibility == mcpservers.VisibilityDisabled {
-		return nil, nil, nil, oops.C(oops.CodeNotFound)
+		return nil, nil, nil, oops.E(oops.CodeNotFound, ErrEndpointUnavailable, "mcp endpoint not found")
 	}
 
 	return &endpoint, &server, nil, nil
