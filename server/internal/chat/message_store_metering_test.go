@@ -301,7 +301,8 @@ func TestChatMessageWriterUpdatesCorrelatedPromotionReading(t *testing.T) {
 	chatID := seedChat(t, ctx, ti, "u", "", "metered correlated message")
 	writer, shutdown := chat.NewChatMessageWriter(testenv.NewLogger(t), ti.conn, assetstest.NewTestBlobStore(t))
 	t.Cleanup(func() { _ = shutdown(context.WithoutCancel(t.Context())) })
-	billingUserID := uuid.NewString()
+	proxyBillingUserID := uuid.NewString()
+	nativeBillingUserID := uuid.NewString()
 
 	base := repo.CreateChatMessageParams{
 		ID:               uuid.Nil,
@@ -333,7 +334,7 @@ func TestChatMessageWriterUpdatesCorrelatedPromotionReading(t *testing.T) {
 	}
 	written, err := writer.WriteCorrelated(ctx, ti.projectID, chat.MessageWrite{
 		Params:        base,
-		BillingUserID: billingUserID,
+		BillingUserID: proxyBillingUserID,
 		UserEmail:     "proxy-observed@example.test",
 		Provider:      "openai",
 		HookHostname:  "",
@@ -344,6 +345,7 @@ func TestChatMessageWriterUpdatesCorrelatedPromotionReading(t *testing.T) {
 	require.Equal(t, int64(1), written)
 	initialReadings := meterMessages(t, ti)
 	require.Len(t, initialReadings, 1)
+	require.Equal(t, proxyBillingUserID, initialReadings[0].GetAttributes()[metering.AttributeBillingUserID])
 
 	promoted := base
 	promoted.ID = uuid.Nil
@@ -351,7 +353,7 @@ func TestChatMessageWriterUpdatesCorrelatedPromotionReading(t *testing.T) {
 	promoted.Source = conv.ToPGText("codex")
 	written, err = writer.WriteCorrelated(ctx, ti.projectID, chat.MessageWrite{
 		Params:        promoted,
-		BillingUserID: billingUserID,
+		BillingUserID: nativeBillingUserID,
 		UserEmail:     "native-observed@example.test",
 		Provider:      "openai",
 		HookHostname:  "workstation.example.test",
@@ -369,9 +371,17 @@ func TestChatMessageWriterUpdatesCorrelatedPromotionReading(t *testing.T) {
 
 	readings := meterMessages(t, ti)
 	require.Len(t, readings, 2)
-	require.Equal(t, initialReadings[0].GetId(), readings[1].GetId())
-	require.Equal(t, initialReadings[0].GetOperationId(), readings[1].GetOperationId())
-	require.Equal(t, int64(expectedValue), readings[1].GetValue())
+	var promotedReading *meteringv1.MeterReading
+	for _, reading := range readings {
+		if reading.GetAttributes()[metering.AttributeHookSource] == "codex" {
+			promotedReading = reading
+			break
+		}
+	}
+	require.NotNil(t, promotedReading)
+	require.Equal(t, initialReadings[0].GetId(), promotedReading.GetId())
+	require.Equal(t, initialReadings[0].GetOperationId(), promotedReading.GetOperationId())
+	require.Equal(t, int64(expectedValue), promotedReading.GetValue())
 	require.Equal(t, map[string]string{
 		metering.AttributeChatID:           chatID.String(),
 		metering.AttributeProvider:         "openai",
@@ -379,9 +389,9 @@ func TestChatMessageWriterUpdatesCorrelatedPromotionReading(t *testing.T) {
 		metering.AttributeHookHostname:     "workstation.example.test",
 		metering.AttributeAccountType:      "team",
 		metering.AttributeBillingMode:      "metered",
-		metering.AttributeBillingUserID:    billingUserID,
+		metering.AttributeBillingUserID:    nativeBillingUserID,
 		metering.AttributeMessageUserEmail: "native-observed@example.test",
-	}, readings[1].GetAttributes())
+	}, promotedReading.GetAttributes())
 }
 
 func TestChatMessageWriterWriteInTxRollsBackMessageAndReading(t *testing.T) {
