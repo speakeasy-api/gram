@@ -81,6 +81,10 @@ func (s *Service) HandleIDPCallback(w http.ResponseWriter, r *http.Request) erro
 		s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, mcpmetrics.OAuthFlowStageIDPCallback)
 		return err
 	}
+	if endpoint.UserSessionIssuerID != challengeState.UserSessionIssuerID {
+		s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, mcpmetrics.OAuthFlowStageIDPCallback)
+		return oops.E(oops.CodeUnauthorized, errToolsetEndpointMismatch, "authn challenge issuer changed while the flow was in progress").LogError(ctx, logger)
+	}
 
 	logger = endpoint.LogWith(logger)
 	// issuerID is unchanged (same issuer the ref resolved to); re-point mcpSlug

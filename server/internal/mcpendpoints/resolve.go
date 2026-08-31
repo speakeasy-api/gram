@@ -16,53 +16,129 @@ import (
 	mcpservers_repo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	metamcp_repo "github.com/speakeasy-api/gram/server/internal/metamcp/repo"
 	metamcp_visibility "github.com/speakeasy-api/gram/server/internal/metamcp/visibility"
+	"github.com/speakeasy-api/gram/server/internal/networkaccess"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	projects_repo "github.com/speakeasy-api/gram/server/internal/projects/repo"
+	"github.com/speakeasy-api/gram/server/internal/requestorigin"
 )
 
-// ErrEndpointUnavailable marks an address that resolved to an mcp_endpoints
-// row whose backend cannot serve: disabled visibility, or a dangling backend
-// FK. The endpoint row makes the address authoritative, so this outcome is a
-// terminal not-found on every surface — unlike a plain address miss, it must
-// never fall back to the legacy toolsets.mcp_slug lookup, which would let a
-// disabled server resurrect the same slug through its toolset (AIS-633).
-var ErrEndpointUnavailable = errors.New("mcp endpoint unavailable")
+type NamespaceKind string
 
-// IsAddressMiss reports whether a resolution error is a true address miss —
-// the only outcome that may fall back to a legacy toolsets.mcp_slug lookup.
-func IsAddressMiss(err error) bool {
-	var shareErr *oops.ShareableError
-	return errors.As(err, &shareErr) && shareErr.Code == oops.CodeNotFound && !errors.Is(err, ErrEndpointUnavailable)
+const (
+	NamespacePlatform     NamespaceKind = "platform"
+	NamespaceCustomDomain NamespaceKind = "custom_domain"
+)
+
+// ResolutionInput is the complete addressing and policy authority for one MCP
+// endpoint lookup. Callers may use FromContext for public/custom-domain
+// requests. Private-listener callers must provide the ingress-pinned namespace
+// and expected organization explicitly once that listener lands.
+type ResolutionInput struct {
+	Slug                 string
+	NamespaceKind        NamespaceKind
+	CustomDomainID       uuid.NullUUID
+	ExpectedOrganization string
+	Surface              networkaccess.Surface
 }
 
-// BySlugAndCustomDomain walks the public addressing chain shared by the /mcp
-// and /x/mcp slug handlers, the install-page handlers, and the .well-known
-// routes: it scopes the lookup to the request's customdomains.Context, loads
-// the mcp_endpoint by (slug, custom domain), then loads whichever backend the
-// endpoint addresses. Exactly one of the returned server and metaServer is
-// non-nil, matching the endpoint table's backend-exclusivity check. Disabled
-// backends of either kind and missing rows all surface as oops.CodeNotFound to
-// avoid leaking existence to unauthenticated callers. logger should already
-// carry the slug attribute.
-//
-// Callers that want to fall back to a legacy lookup (e.g. /mcp's existing
-// toolsets.mcp_slug path) may do so only on a true address miss — a
-// CodeNotFound that is NOT ErrEndpointUnavailable. A resolvable-but-unavailable
-// address (errors.Is(err, ErrEndpointUnavailable)) is terminal.
-func BySlugAndCustomDomain(ctx context.Context, db *pgxpool.Pool, logger *slog.Logger, slug string) (*repo.McpEndpoint, *mcpservers_repo.McpServer, *metamcp_repo.MetaMcpServer, error) {
-	var customDomainID uuid.NullUUID
-	if domainCtx := customdomains.FromContext(ctx); domainCtx != nil {
-		customDomainID = uuid.NullUUID{UUID: domainCtx.DomainID, Valid: true}
+// ResolutionResult distinguishes a genuine address miss from an authoritative
+// endpoint result. An authoritative denial must terminate the request even
+// though its public HTTP representation is 404; callers must not continue into
+// legacy toolset fallback.
+type ResolutionResult struct {
+	Endpoint   *repo.McpEndpoint
+	Server     *mcpservers_repo.McpServer
+	MetaServer *metamcp_repo.MetaMcpServer
+	Mode       networkaccess.Mode
+	Found      bool
+	Allowed    bool
+}
+
+// FromContext derives the current public/custom-domain namespace and surface.
+// Missing request-origin context fails closed: handlers behind the production
+// middleware always receive one, while direct/internal callers must stamp it.
+func FromContext(ctx context.Context, slug string) (ResolutionInput, error) {
+	origin, hasOrigin := requestorigin.FromContext(ctx)
+	input := ResolutionInput{
+		Slug:                 slug,
+		NamespaceKind:        NamespacePlatform,
+		CustomDomainID:       uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		ExpectedOrganization: "",
+		Surface:              networkaccess.SurfacePublic,
+	}
+	if !hasOrigin {
+		// Direct internal/test callers that bypass HTTP middleware retain the
+		// legacy public namespace. They cannot acquire private surface authority.
+		if domainCtx := customdomains.FromContext(ctx); domainCtx != nil {
+			input.NamespaceKind = NamespaceCustomDomain
+			input.CustomDomainID = uuid.NullUUID{UUID: domainCtx.DomainID, Valid: true}
+			input.ExpectedOrganization = domainCtx.OrganizationID
+		}
+		return input, nil
+	}
+	input.ExpectedOrganization = origin.OrganizationID
+	switch origin.Surface {
+	case requestorigin.SurfacePlatform:
+	case requestorigin.SurfaceCustomDomain:
+		domainCtx := customdomains.FromContext(ctx)
+		if domainCtx == nil || domainCtx.DomainID == uuid.Nil || origin.OrganizationID == "" || origin.OrganizationID != domainCtx.OrganizationID {
+			return ResolutionInput{}, fmt.Errorf("custom-domain request authority is incomplete")
+		}
+		input.NamespaceKind = NamespaceCustomDomain
+		input.CustomDomainID = uuid.NullUUID{UUID: domainCtx.DomainID, Valid: true}
+	case requestorigin.SurfacePrivateNetwork:
+		input.Surface = networkaccess.SurfacePrivate
+		return ResolutionInput{}, fmt.Errorf("private request namespace must be supplied by the private listener")
+	default:
+		return ResolutionInput{}, fmt.Errorf("unknown request origin surface %q", origin.Surface)
+	}
+	return input, nil
+}
+
+// Resolve walks the namespace-scoped addressing chain and applies visibility,
+// tenant, and network-mode policy before any route-specific side effects.
+func Resolve(ctx context.Context, db *pgxpool.Pool, logger *slog.Logger, input ResolutionInput) (ResolutionResult, error) {
+	if input.Slug == "" {
+		return ResolutionResult{}, oops.E(oops.CodeNotFound, nil, "mcp endpoint not found")
+	}
+	if input.Surface == networkaccess.SurfacePrivate && input.ExpectedOrganization == "" {
+		return deniedResult(nil, nil, nil, networkaccess.ModePrivateOnly), nil
+	}
+	switch input.NamespaceKind {
+	case NamespacePlatform:
+		if input.CustomDomainID.Valid {
+			return deniedResult(nil, nil, nil, networkaccess.ModePrivateOnly), nil
+		}
+	case NamespaceCustomDomain:
+		if !input.CustomDomainID.Valid || input.CustomDomainID.UUID == uuid.Nil || input.ExpectedOrganization == "" {
+			// A pinned custom-domain namespace whose FK was cleared must never be
+			// reinterpreted as the platform namespace.
+			return deniedResult(nil, nil, nil, networkaccess.ModePrivateOnly), nil
+		}
+	default:
+		return deniedResult(nil, nil, nil, networkaccess.ModePrivateOnly), nil
 	}
 
 	endpoint, err := repo.New(db).GetMCPEndpointByCustomDomainAndSlug(ctx, repo.GetMCPEndpointByCustomDomainAndSlugParams{
-		Slug:           slug,
-		CustomDomainID: customDomainID,
+		Slug:           input.Slug,
+		CustomDomainID: input.CustomDomainID,
 	})
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
-		return nil, nil, nil, oops.E(oops.CodeNotFound, err, "mcp endpoint not found")
+		return ResolutionResult{Endpoint: nil, Server: nil, MetaServer: nil, Mode: networkaccess.ModePublicOnly, Found: false, Allowed: false}, nil
 	case err != nil:
-		return nil, nil, nil, oops.E(oops.CodeUnexpected, err, "load mcp endpoint").LogError(ctx, logger)
+		return ResolutionResult{}, oops.E(oops.CodeUnexpected, err, "load mcp endpoint").LogError(ctx, logger)
+	}
+
+	project, err := projects_repo.New(db).GetProjectByID(ctx, endpoint.ProjectID)
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		return deniedResult(&endpoint, nil, nil, networkaccess.ModePrivateOnly), nil
+	case err != nil:
+		return ResolutionResult{}, oops.E(oops.CodeUnexpected, err, "load mcp endpoint project").LogError(ctx, logger)
+	}
+	if input.ExpectedOrganization != "" && project.OrganizationID != input.ExpectedOrganization {
+		return deniedResult(&endpoint, nil, nil, networkaccess.ModePrivateOnly), nil
 	}
 
 	if endpoint.MetaMcpServerID.Valid {
@@ -72,16 +148,18 @@ func BySlugAndCustomDomain(ctx context.Context, db *pgxpool.Pool, logger *slog.L
 		})
 		switch {
 		case errors.Is(err, pgx.ErrNoRows):
-			return nil, nil, nil, oops.E(oops.CodeNotFound, fmt.Errorf("%w: %w", ErrEndpointUnavailable, err), "meta mcp server not found")
+			return deniedResult(&endpoint, nil, nil, networkaccess.ModePrivateOnly), nil
 		case err != nil:
-			return nil, nil, nil, oops.E(oops.CodeUnexpected, err, "load meta mcp server").LogError(ctx, logger)
+			return ResolutionResult{}, oops.E(oops.CodeUnexpected, err, "load meta mcp server").LogError(ctx, logger)
 		}
-
-		if metaServer.Visibility == metamcp_visibility.Disabled {
-			return nil, nil, nil, oops.E(oops.CodeNotFound, ErrEndpointUnavailable, "mcp endpoint not found")
+		mode, modeErr := networkaccess.Effective(metaServer.NetworkAccessMode)
+		if modeErr != nil {
+			return deniedResult(&endpoint, nil, &metaServer, networkaccess.ModePrivateOnly), nil
 		}
-
-		return &endpoint, nil, &metaServer, nil
+		if metaServer.OrganizationID != project.OrganizationID || metaServer.Visibility == metamcp_visibility.Disabled || !mode.Allows(input.Surface) {
+			return deniedResult(&endpoint, nil, &metaServer, mode), nil
+		}
+		return ResolutionResult{Endpoint: &endpoint, Server: nil, MetaServer: &metaServer, Mode: mode, Found: true, Allowed: true}, nil
 	}
 
 	server, err := mcpservers_repo.New(db).GetMCPServerByIDAndProjectID(ctx, mcpservers_repo.GetMCPServerByIDAndProjectIDParams{
@@ -90,18 +168,59 @@ func BySlugAndCustomDomain(ctx context.Context, db *pgxpool.Pool, logger *slog.L
 	})
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
-		return nil, nil, nil, oops.E(oops.CodeNotFound, fmt.Errorf("%w: %w", ErrEndpointUnavailable, err), "mcp server not found")
+		return deniedResult(&endpoint, nil, nil, networkaccess.ModePrivateOnly), nil
 	case err != nil:
-		return nil, nil, nil, oops.E(oops.CodeUnexpected, err, "load mcp server").LogError(ctx, logger)
+		return ResolutionResult{}, oops.E(oops.CodeUnexpected, err, "load mcp server").LogError(ctx, logger)
 	}
-
-	switch server.Visibility {
-	case mcpservers.VisibilityPublic, mcpservers.VisibilityPrivate:
-	default:
-		// Disabled or unrecognized visibility never serves; unknown values
-		// must not silently map onto a servable policy.
-		return nil, nil, nil, oops.E(oops.CodeNotFound, ErrEndpointUnavailable, "mcp endpoint not found")
+	mode, modeErr := networkaccess.Effective(server.NetworkAccessMode)
+	if modeErr != nil {
+		return deniedResult(&endpoint, &server, nil, networkaccess.ModePrivateOnly), nil
 	}
+	if server.Visibility == mcpservers.VisibilityDisabled || !mode.Allows(input.Surface) {
+		return deniedResult(&endpoint, &server, nil, mode), nil
+	}
+	return ResolutionResult{Endpoint: &endpoint, Server: &server, MetaServer: nil, Mode: mode, Found: true, Allowed: true}, nil
+}
 
-	return &endpoint, &server, nil, nil
+func deniedResult(endpoint *repo.McpEndpoint, server *mcpservers_repo.McpServer, metaServer *metamcp_repo.MetaMcpServer, mode networkaccess.Mode) ResolutionResult {
+	return ResolutionResult{Endpoint: endpoint, Server: server, MetaServer: metaServer, Mode: mode, Found: true, Allowed: false}
+}
+
+// ErrPolicyDenied marks a terminal address result whose public representation
+// is 404. Callers that support legacy fallback must not fall through when this
+// cause is present.
+var ErrPolicyDenied = errors.New("mcp endpoint policy denied")
+
+// IsPolicyDenied reports whether an error is the terminal policy outcome.
+func IsPolicyDenied(err error) bool {
+	return errors.Is(err, ErrPolicyDenied)
+}
+
+// IsAddressMiss reports whether an error is a genuine address miss that may
+// fall back to legacy toolset lookup rather than an authoritative policy denial.
+func IsAddressMiss(err error) bool {
+	var shareErr *oops.ShareableError
+	return errors.As(err, &shareErr) && shareErr.Code == oops.CodeNotFound && !IsPolicyDenied(err)
+}
+
+// BySlugAndCustomDomain preserves the public resolver signature while callers
+// migrate to ResolutionResult. A genuine miss remains CodeNotFound. Policy
+// denial is also represented as 404 to clients, but is authoritative and must
+// never be converted into legacy fallback by callers using Resolve directly.
+func BySlugAndCustomDomain(ctx context.Context, db *pgxpool.Pool, logger *slog.Logger, slug string) (*repo.McpEndpoint, *mcpservers_repo.McpServer, *metamcp_repo.MetaMcpServer, error) {
+	input, err := FromContext(ctx, slug)
+	if err != nil {
+		return nil, nil, nil, oops.E(oops.CodeNotFound, errors.Join(ErrPolicyDenied, err), "mcp endpoint not found")
+	}
+	result, err := Resolve(ctx, db, logger, input)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	if !result.Found {
+		return nil, nil, nil, oops.E(oops.CodeNotFound, nil, "mcp endpoint not found")
+	}
+	if !result.Allowed {
+		return nil, nil, nil, oops.E(oops.CodeNotFound, ErrPolicyDenied, "mcp endpoint not found")
+	}
+	return result.Endpoint, result.Server, result.MetaServer, nil
 }

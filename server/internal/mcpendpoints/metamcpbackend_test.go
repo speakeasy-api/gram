@@ -14,6 +14,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcpendpoints"
 	metamcprepo "github.com/speakeasy-api/gram/server/internal/metamcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/metamcp/visibility"
+	"github.com/speakeasy-api/gram/server/internal/networkaccess"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
@@ -22,6 +23,12 @@ import (
 // seedMetaMcpServer inserts a meta_mcp_servers row in the given project so
 // backend tests have a valid meta_mcp_server_id FK.
 func seedMetaMcpServer(t *testing.T, ctx context.Context, ti *testInstance, projectID uuid.UUID) uuid.UUID {
+	t.Helper()
+
+	return seedMetaMcpServerWithMode(t, ctx, ti, projectID, networkaccess.ModePublicOnly)
+}
+
+func seedMetaMcpServerWithMode(t *testing.T, ctx context.Context, ti *testInstance, projectID uuid.UUID, mode networkaccess.Mode) uuid.UUID {
 	t.Helper()
 
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
@@ -33,6 +40,7 @@ func seedMetaMcpServer(t *testing.T, ctx context.Context, ti *testInstance, proj
 		Name:                "endpoint-backed meta",
 		UserSessionIssuerID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 		Visibility:          visibility.Private,
+		NetworkAccessMode:   networkaccess.Storage(mode),
 	})
 	require.NoError(t, err)
 

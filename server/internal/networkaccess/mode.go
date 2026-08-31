@@ -13,6 +13,13 @@ const (
 	ModePublicOnly  Mode = "public_only"
 	ModeDual        Mode = "dual"
 	ModePrivateOnly Mode = "private_only"
+
+	// ServingPolicyVersion is incremented whenever a deployment gains a new
+	// network-mode enforcement contract. Rollout tooling must verify every
+	// serving pod reports at least this version before admitting non-public
+	// writes, preventing mixed-version fail-open rollouts.
+	ServingPolicyVersion       = 1
+	ServingPolicyVersionHeader = "X-Gram-Network-Serving-Policy-Version"
 )
 
 type Surface string

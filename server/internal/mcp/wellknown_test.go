@@ -22,10 +22,12 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/customdomains"
+	"github.com/speakeasy-api/gram/server/internal/networkaccess"
 	"github.com/speakeasy-api/gram/server/internal/oauthtest"
 	"github.com/speakeasy-api/gram/server/internal/requestorigin"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
@@ -67,6 +69,34 @@ func TestHandleGetAuthorizationServer_MissingSlug(t *testing.T) {
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "mcp slug must be provided")
 	require.Empty(t, w.Body.String())
+}
+
+func TestWellKnownPrivateOnlyEndpointDoesNotFallBack(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	toolsetsRepo := toolsetsrepo.New(ti.conn)
+	sharedSlug := "wellknown-private-only-" + uuid.NewString()[:8]
+	endpointToolset := createPublicMCPToolset(t, ctx, toolsetsRepo, authCtx, "endpoint-"+uuid.NewString()[:8])
+	createPublicMCPToolset(t, ctx, toolsetsRepo, authCtx, sharedSlug)
+	server := createToolsetMcpEndpoint(t, ctx, ti.conn, *authCtx.ProjectID, endpointToolset.ID, sharedSlug, "public", uuid.NullUUID{}, uuid.Nil)
+	rows, err := testrepo.New(ti.conn).SetMCPServerNetworkAccessModeFixture(ctx, testrepo.SetMCPServerNetworkAccessModeFixtureParams{
+		NetworkAccessMode: pgtype.Text{String: string(networkaccess.ModePrivateOnly), Valid: true},
+		ID:                server.ID, ProjectID: *authCtx.ProjectID,
+	})
+	require.NoError(t, err)
+	require.EqualValues(t, 1, rows)
+
+	for _, handler := range []func(http.ResponseWriter, *http.Request) error{
+		ti.service.HandleGetAuthorizationServer,
+		ti.service.HandleGetProtectedResource,
+	} {
+		w, err := runMCPWellKnown(t, ctx, handler, sharedSlug)
+		require.Error(t, err)
+		require.Empty(t, w.Body.String())
+	}
 }
 
 func TestHandleGetAuthorizationServer_NotFound(t *testing.T) {

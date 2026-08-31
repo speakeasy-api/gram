@@ -300,6 +300,17 @@ func (s *Service) handleTokenAuthorizationCodeGrant(
 	// key minted at /authorize and carried through the grant.
 	logger = logger.With(attr.SlogOAuthFlowID(grant.FlowID))
 
+	// New grants are bound to the exact endpoint authority consented by the
+	// subject. A nil snapshot denotes only a grant minted before this field
+	// landed; the authorization-code TTL bounds that compatibility window.
+	if grant.Endpoint != nil {
+		if err := endpoint.ValidateGrant(*grant.Endpoint, grant.UserSessionIssuerID, baseURL); err != nil {
+			logOAuthClientCredentialEvent(ctx, logger, r, "oauth authorization_code token request rejected", clientRow.ClientID, presentedAuthMethod, "authorization_code", "code_endpoint_mismatch")
+			s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, mcpmetrics.OAuthFlowStageToken)
+			return writeTokenError(ctx, w, logger, http.StatusBadRequest, "invalid_grant", "authorization code is bound to a different MCP endpoint or origin")
+		}
+	}
+
 	if grant.ClientID != clientRow.ClientID {
 		logOAuthClientCredentialEvent(ctx, logger, r, "oauth authorization_code token request rejected", clientRow.ClientID, presentedAuthMethod, "authorization_code", "code_client_mismatch")
 		s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, mcpmetrics.OAuthFlowStageToken)
