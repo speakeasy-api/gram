@@ -176,6 +176,37 @@ func TestUpdateMetaMcpServer_NonPublicOmissionFailsClosedAndPublicRecoverySuccee
 	require.Equal(t, "public_only", afterSnapshot["NetworkAccessMode"])
 }
 
+func TestUpdateMetaMcpServer_UnknownStoredModeFailsClosedAndPublicRecoverySucceeds(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	created, err := ti.service.CreateMetaMcpServer(ctx, &gen.CreateMetaMcpServerPayload{Name: "unknown network recovery"})
+	require.NoError(t, err)
+
+	rows, err := testrepo.New(ti.conn).SetMetaMCPServerNetworkAccessModeFixture(ctx, testrepo.SetMetaMCPServerNetworkAccessModeFixtureParams{
+		NetworkAccessMode: pgtype.Text{String: "future_mode", Valid: true},
+		ID:                uuid.MustParse(created.ID),
+		OrganizationID:    authCtx.ActiveOrganizationID,
+		ProjectID:         *authCtx.ProjectID,
+	})
+	require.NoError(t, err)
+	require.EqualValues(t, 1, rows)
+
+	_, err = ti.service.UpdateMetaMcpServer(ctx, &gen.UpdateMetaMcpServerPayload{
+		ID: created.ID, Name: created.Name, NetworkAccessMode: nil,
+	})
+	requireOopsCode(t, err, oops.CodeUnexpected)
+
+	publicOnly := types.NetworkAccessMode("public_only")
+	updated, err := ti.service.UpdateMetaMcpServer(ctx, &gen.UpdateMetaMcpServerPayload{
+		ID: created.ID, Name: created.Name, NetworkAccessMode: &publicOnly,
+	})
+	require.NoError(t, err)
+	require.Equal(t, publicOnly, updated.NetworkAccessMode)
+}
+
 func TestUpdateMetaMcpServer_NotFound(t *testing.T) {
 	t.Parallel()
 

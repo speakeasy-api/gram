@@ -129,6 +129,42 @@ func TestUpdateMcpServer_NonPublicOmissionFailsClosedAndPublicRecoverySucceeds(t
 	require.Equal(t, "public_only", afterSnapshot["NetworkAccessMode"])
 }
 
+func TestUpdateMcpServer_UnknownStoredModeFailsClosedAndPublicRecoverySucceeds(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	remoteID := seedRemoteMcpServer(t, ctx, ti.conn, *authCtx.ProjectID).String()
+	created, err := ti.service.CreateMcpServer(ctx, &gen.CreateMcpServerPayload{
+		Name: "unknown network recovery", RemoteMcpServerID: &remoteID,
+		Visibility: types.McpServerVisibility("disabled"),
+	})
+	require.NoError(t, err)
+
+	rows, err := testrepo.New(ti.conn).SetMCPServerNetworkAccessModeFixture(ctx, testrepo.SetMCPServerNetworkAccessModeFixtureParams{
+		NetworkAccessMode: pgtype.Text{String: "future_mode", Valid: true},
+		ID:                uuid.MustParse(created.ID),
+		ProjectID:         *authCtx.ProjectID,
+	})
+	require.NoError(t, err)
+	require.EqualValues(t, 1, rows)
+
+	_, err = ti.service.UpdateMcpServer(ctx, &gen.UpdateMcpServerPayload{
+		ID: created.ID, Name: nil, RemoteMcpServerID: &remoteID,
+		Visibility: types.McpServerVisibility("disabled"), NetworkAccessMode: nil,
+	})
+	requireOopsCode(t, err, oops.CodeUnexpected)
+
+	publicOnly := types.NetworkAccessMode("public_only")
+	updated, err := ti.service.UpdateMcpServer(ctx, &gen.UpdateMcpServerPayload{
+		ID: created.ID, Name: nil, RemoteMcpServerID: &remoteID,
+		Visibility: types.McpServerVisibility("disabled"), NetworkAccessMode: &publicOnly,
+	})
+	require.NoError(t, err)
+	require.Equal(t, publicOnly, updated.NetworkAccessMode)
+}
+
 func TestUpdateMcpServer_InvalidBackend(t *testing.T) {
 	t.Parallel()
 
