@@ -32,26 +32,40 @@ func Parse(value string) (Mode, error) {
 	}
 }
 
-func Effective(value pgtype.Text) Mode {
+// Effective resolves a persisted mode for policy decisions. Existing NULL and
+// empty values retain expand-migration compatibility, while unknown values stay
+// invalid so no serving or update path can accidentally authorize a surface.
+func Effective(value pgtype.Text) (Mode, error) {
 	if !value.Valid || value.String == "" {
-		return ModePublicOnly
+		return ModePublicOnly, nil
 	}
 	mode, err := Parse(value.String)
 	if err != nil {
-		// Views must stay inside the published API enum. Serving paths use
-		// EffectiveValidated and deny unknown values rather than relying on this
-		// restrictive representation.
-		return ModePrivateOnly
+		return "", fmt.Errorf("parse persisted network access mode: %w", err)
+	}
+	return mode, nil
+}
+
+// EffectiveForView keeps API responses inside the published enum. It is not a
+// policy decision: unknown persisted values render as the safe recovery mode,
+// while policy callers must use Effective and handle its error. If a client
+// echoes this value, the corrupt row is explicitly recovered to public_only.
+func EffectiveForView(value pgtype.Text) Mode {
+	mode, err := Effective(value)
+	if err != nil {
+		return ModePublicOnly
 	}
 	return mode
 }
 
-// ParseRequested parses an optional API mode and preserves fallback when the
-// field is omitted. T keeps this adapter shared without coupling the policy
-// package to generated API types.
-func ParseRequested[T ~string](requested *T, fallback Mode) (Mode, error) {
+// ParseRequested parses an optional API mode. An explicit value is resolved
+// without consulting storage so an authorized caller can always recover a
+// corrupt row to public_only; an omission strictly preserves the stored mode.
+// T keeps this adapter shared without coupling the policy package to generated
+// API types.
+func ParseRequested[T ~string](requested *T, stored pgtype.Text) (Mode, error) {
 	if requested == nil {
-		return fallback, nil
+		return Effective(stored)
 	}
 	mode, err := Parse(string(*requested))
 	if err != nil {

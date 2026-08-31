@@ -18,7 +18,7 @@ func BuildMetaMcpServerView(server repo.MetaMcpServer) *types.MetaMcpServer {
 		Name:                server.Name,
 		UserSessionIssuerID: conv.FromNullableUUID(server.UserSessionIssuerID),
 		Visibility:          types.MetaMcpServerVisibility(server.Visibility),
-		NetworkAccessMode:   types.NetworkAccessMode(networkaccess.Effective(server.NetworkAccessMode)),
+		NetworkAccessMode:   types.NetworkAccessMode(networkaccess.EffectiveForView(server.NetworkAccessMode)),
 		CreatedAt:           conv.FromPGTimestamptz(server.CreatedAt),
 		UpdatedAt:           conv.FromPGTimestamptz(server.UpdatedAt),
 		MemberCount:         nil,
