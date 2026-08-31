@@ -114,6 +114,39 @@ func TestRouteMetaMemberToken(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, "own", got)
 	})
+
+	t.Run("tunneled resource identifier exact match wins", func(t *testing.T) {
+		t.Parallel()
+		got, err := routeMetaMemberToken(tokens(entry("a", "https://tunneled.internal/mcp"), entry("b", "https://b.example.com/mcp")), tunnelMember, "https://tunneled.internal/mcp")
+		require.NoError(t, err)
+		require.Equal(t, "a", got)
+	})
+
+	t.Run("tunneled resource identifier mismatch is never forwarded", func(t *testing.T) {
+		t.Parallel()
+		got, err := routeMetaMemberToken(tokens(entry("a", "https://elsewhere.example.com/mcp")), tunnelMember, "https://tunneled.internal/mcp")
+		require.NoError(t, err)
+		require.Empty(t, got, "a credential qualified to another upstream degrades to an anonymous call")
+	})
+
+	t.Run("tunneled pre-identifier grant routes by own issuer", func(t *testing.T) {
+		t.Parallel()
+		// A grant minted against the member's issuer before its resource
+		// identifier was recorded is unqualified; the identity key still
+		// routes it, so recording an identifier does not strand the grant.
+		m := tokens(entry("sibling", "https://b.example.com/mcp"))
+		m[tunnelIssuerID] = entry("own", "")
+		got, err := routeMetaMemberToken(m, tunnelMember, "https://tunneled.internal/mcp")
+		require.NoError(t, err)
+		require.Equal(t, "own", got)
+	})
+
+	t.Run("tunneled duplicate resource fails member-scoped", func(t *testing.T) {
+		t.Parallel()
+		_, err := routeMetaMemberToken(tokens(entry("a", "https://tunneled.internal/mcp"), entry("b", "https://tunneled.internal/mcp")), tunnelMember, "https://tunneled.internal/mcp")
+		var memberErr *metaMemberError
+		require.ErrorAs(t, err, &memberErr)
+	})
 }
 
 // close must reach the proxy builder on a live detached context even after

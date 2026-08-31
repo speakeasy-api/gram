@@ -29,17 +29,18 @@ func (q *Queries) CountActiveServersByOrganizationID(ctx context.Context, organi
 }
 
 const createServer = `-- name: CreateServer :one
-INSERT INTO tunneled_mcp_servers (id, project_id, name, key_hash, key_prefix)
-VALUES ($1, $2, $3, $4, $5)
+INSERT INTO tunneled_mcp_servers (id, project_id, name, key_hash, key_prefix, resource_identifier)
+VALUES ($1, $2, $3, $4, $5, $6)
 RETURNING id, project_id, name, key_hash, key_prefix, status, allow_public, agent_version, resource_identifier, last_seen_at, created_at, updated_at, deleted_at, deleted
 `
 
 type CreateServerParams struct {
-	ID        uuid.UUID
-	ProjectID uuid.UUID
-	Name      string
-	KeyHash   string
-	KeyPrefix string
+	ID                 uuid.UUID
+	ProjectID          uuid.UUID
+	Name               string
+	KeyHash            string
+	KeyPrefix          string
+	ResourceIdentifier pgtype.Text
 }
 
 func (q *Queries) CreateServer(ctx context.Context, arg CreateServerParams) (TunneledMcpServer, error) {
@@ -49,6 +50,7 @@ func (q *Queries) CreateServer(ctx context.Context, arg CreateServerParams) (Tun
 		arg.Name,
 		arg.KeyHash,
 		arg.KeyPrefix,
+		arg.ResourceIdentifier,
 	)
 	var i TunneledMcpServer
 	err := row.Scan(
@@ -297,22 +299,29 @@ UPDATE tunneled_mcp_servers
 SET
     name = $1,
     allow_public = COALESCE($2, allow_public),
+    -- Tri-state: NULL leaves the stored value, empty string clears to NULL.
+    resource_identifier = CASE
+        WHEN $3::text IS NULL THEN resource_identifier
+        ELSE NULLIF($3::text, '')
+    END,
     updated_at = clock_timestamp()
-WHERE id = $3 AND project_id = $4 AND deleted IS FALSE
+WHERE id = $4 AND project_id = $5 AND deleted IS FALSE
 RETURNING id, project_id, name, key_hash, key_prefix, status, allow_public, agent_version, resource_identifier, last_seen_at, created_at, updated_at, deleted_at, deleted
 `
 
 type UpdateServerParams struct {
-	Name        string
-	AllowPublic pgtype.Bool
-	ID          uuid.UUID
-	ProjectID   uuid.UUID
+	Name               string
+	AllowPublic        pgtype.Bool
+	ResourceIdentifier pgtype.Text
+	ID                 uuid.UUID
+	ProjectID          uuid.UUID
 }
 
 func (q *Queries) UpdateServer(ctx context.Context, arg UpdateServerParams) (TunneledMcpServer, error) {
 	row := q.db.QueryRow(ctx, updateServer,
 		arg.Name,
 		arg.AllowPublic,
+		arg.ResourceIdentifier,
 		arg.ID,
 		arg.ProjectID,
 	)

@@ -209,6 +209,7 @@ var TunneledMcpCreateServerForm = Type("CreateTunneledMcpServerForm", func() {
 	Description("Form for creating a new tunneled MCP server source")
 
 	Attribute("name", String, "Human-readable display name for the tunneled MCP server")
+	Attribute("resource_identifier", String, "RFC 9728 protected resource identifier of the tunneled server, used only for exact-match credential routing and never dialed by Gram")
 	Required("name")
 })
 
@@ -222,6 +223,7 @@ var TunneledMcpUpdateServerForm = Type("UpdateTunneledMcpServerForm", func() {
 	})
 	Attribute("name", String, "Human-readable display name for the tunneled MCP server")
 	Attribute("allow_public", Boolean, "Consent to serve this source through a public, anonymous MCP endpoint. Disabling revokes all live anonymous sessions. Omit to leave unchanged.")
+	Attribute("resource_identifier", String, "RFC 9728 protected resource identifier of the tunneled server, used only for exact-match credential routing and never dialed by Gram. Pass an empty string to clear. Omit to leave unchanged.")
 
 	Required("id", "name")
 })
@@ -289,6 +291,7 @@ var TunneledMcpServer = Type("TunneledMcpServer", func() {
 	Attribute("connection_status", TunneledMcpConnectionStatus, "Derived connection status")
 	Attribute("allow_public", Boolean, "Whether the owner has consented to serving this source through a public, anonymous MCP endpoint")
 	Attribute("agent_version", String, "Most recent agent version reported by the tunnel")
+	Attribute("resource_identifier", String, "RFC 9728 protected resource identifier of the tunneled server, used only for exact-match credential routing and never dialed by Gram")
 	Attribute("last_seen_at", String, func() {
 		Description("Most recent persisted heartbeat timestamp")
 		Format(FormatDateTime)

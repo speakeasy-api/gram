@@ -1,6 +1,7 @@
 // Per-member credential selection for meta MCP endpoints: resolves the member a
-// connecting client belongs to at consent time and records its URL as the
-// grant's RFC 8707 resource, which routeUpstreamToken routes by unchanged.
+// connecting client belongs to at consent time and records its upstream
+// resource (remote server URL or tunneled resource identifier) as the grant's
+// RFC 8707 resource, which routeUpstreamToken routes by unchanged.
 
 package mcp
 
@@ -20,8 +21,9 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 )
 
-// resolveMetaMemberResource returns the upstream URL of the meta MCP member
-// whose upstream authenticates against remoteSessionIssuerID.
+// resolveMetaMemberResource returns the upstream resource (remote server URL
+// or tunneled resource identifier) of the meta MCP member whose upstream
+// authenticates against remoteSessionIssuerID.
 //
 // Tri-state: ("", true) means members claimed the issuer but no single member
 // wins, and the caller must not fall back to a weaker derivation; ("", false)

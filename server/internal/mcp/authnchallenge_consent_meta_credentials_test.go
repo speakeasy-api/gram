@@ -190,10 +190,11 @@ func TestMetaMCPCredentials_UnstampedGrantsFailClosedForEveryMember(t *testing.T
 	}
 }
 
-// The complement, and pre-existing routeUpstreamToken behaviour this change
-// leaves alone: a lone credential is forwarded even to a member it was not
-// minted for. Why qualification matters once a meta MCP holds a second member.
-func TestMetaMCPCredentials_LoneUnqualifiedCredentialIsStillForwarded(t *testing.T) {
+// A member without a stamped issuer mints an unqualified grant. The routers
+// refuse to forward it to any member — there is no lone-token fallback — so
+// the credential resolves but spends nowhere until re-consent qualifies it;
+// the selection rules are pinned by the router unit tables.
+func TestMetaMCPCredentials_LoneCredentialStaysUnqualified(t *testing.T) {
 	t.Parallel()
 
 	ctx, gw := connectMeta(t, "aim87-lone", 1, false)
@@ -201,8 +202,6 @@ func TestMetaMCPCredentials_LoneUnqualifiedCredentialIsStillForwarded(t *testing
 	tokens := gw.resolveTokens(t, ctx)
 	require.Len(t, tokens, 1)
 
-	// One credential, no resource: exactly the state the selection rule's
-	// deliberate lone-token pass-through forwards to any backend.
 	token := tokenFor(t, tokens, gw.members[0].clientID)
 	require.Equal(t, gw.members[0].accessToken, token.Token)
 	require.Empty(t, token.Resource)

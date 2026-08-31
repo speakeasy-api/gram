@@ -27,7 +27,9 @@ import (
 // sessions from its attached MCP servers. Exactly one distinct upstream URL
 // binds the audience; zero or multiple return "" so the parameter is omitted
 // (matching pre-resource behavior — an ambiguous multi-upstream client can't
-// be bound to a single audience). Url is empty for non-remote backends.
+// be bound to a single audience). Url is the remote server URL or the
+// tunneled server's recorded resource identifier, empty for other backends
+// and for tunneled servers recording none.
 func clientUpstreamResource(rows []repo.ListOrganizationMcpServersForClientRow) string {
 	resource := ""
 	for _, row := range rows {

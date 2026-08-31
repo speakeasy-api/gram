@@ -18,6 +18,9 @@ import (
 type CreateServerRequestBody struct {
 	// Human-readable display name for the tunneled MCP server
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// RFC 9728 protected resource identifier of the tunneled server, used only for
+	// exact-match credential routing and never dialed by Gram
+	ResourceIdentifier *string `form:"resource_identifier,omitempty" json:"resource_identifier,omitempty" xml:"resource_identifier,omitempty"`
 }
 
 // UpdateServerRequestBody is the type of the "tunneledMcp" service
@@ -30,6 +33,10 @@ type UpdateServerRequestBody struct {
 	// Consent to serve this source through a public, anonymous MCP endpoint.
 	// Disabling revokes all live anonymous sessions. Omit to leave unchanged.
 	AllowPublic *bool `form:"allow_public,omitempty" json:"allow_public,omitempty" xml:"allow_public,omitempty"`
+	// RFC 9728 protected resource identifier of the tunneled server, used only for
+	// exact-match credential routing and never dialed by Gram. Pass an empty
+	// string to clear. Omit to leave unchanged.
+	ResourceIdentifier *string `form:"resource_identifier,omitempty" json:"resource_identifier,omitempty" xml:"resource_identifier,omitempty"`
 }
 
 // RotateServerKeyRequestBody is the type of the "tunneledMcp" service
@@ -73,6 +80,9 @@ type GetServerResponseBody struct {
 	AllowPublic bool `form:"allow_public" json:"allow_public" xml:"allow_public"`
 	// Most recent agent version reported by the tunnel
 	AgentVersion *string `form:"agent_version,omitempty" json:"agent_version,omitempty" xml:"agent_version,omitempty"`
+	// RFC 9728 protected resource identifier of the tunneled server, used only for
+	// exact-match credential routing and never dialed by Gram
+	ResourceIdentifier *string `form:"resource_identifier,omitempty" json:"resource_identifier,omitempty" xml:"resource_identifier,omitempty"`
 	// Most recent persisted heartbeat timestamp
 	LastSeenAt *string `form:"last_seen_at,omitempty" json:"last_seen_at,omitempty" xml:"last_seen_at,omitempty"`
 	// Number of active tunnel connections currently visible in Redis
@@ -116,6 +126,9 @@ type UpdateServerResponseBody struct {
 	AllowPublic bool `form:"allow_public" json:"allow_public" xml:"allow_public"`
 	// Most recent agent version reported by the tunnel
 	AgentVersion *string `form:"agent_version,omitempty" json:"agent_version,omitempty" xml:"agent_version,omitempty"`
+	// RFC 9728 protected resource identifier of the tunneled server, used only for
+	// exact-match credential routing and never dialed by Gram
+	ResourceIdentifier *string `form:"resource_identifier,omitempty" json:"resource_identifier,omitempty" xml:"resource_identifier,omitempty"`
 	// Most recent persisted heartbeat timestamp
 	LastSeenAt *string `form:"last_seen_at,omitempty" json:"last_seen_at,omitempty" xml:"last_seen_at,omitempty"`
 	// Number of active tunnel connections currently visible in Redis
@@ -1449,6 +1462,9 @@ type TunneledMcpServerResponseBody struct {
 	AllowPublic bool `form:"allow_public" json:"allow_public" xml:"allow_public"`
 	// Most recent agent version reported by the tunnel
 	AgentVersion *string `form:"agent_version,omitempty" json:"agent_version,omitempty" xml:"agent_version,omitempty"`
+	// RFC 9728 protected resource identifier of the tunneled server, used only for
+	// exact-match credential routing and never dialed by Gram
+	ResourceIdentifier *string `form:"resource_identifier,omitempty" json:"resource_identifier,omitempty" xml:"resource_identifier,omitempty"`
 	// Most recent persisted heartbeat timestamp
 	LastSeenAt *string `form:"last_seen_at,omitempty" json:"last_seen_at,omitempty" xml:"last_seen_at,omitempty"`
 	// Number of active tunnel connections currently visible in Redis
@@ -1527,6 +1543,7 @@ func NewGetServerResponseBody(res *types.TunneledMcpServer) *GetServerResponseBo
 		ConnectionStatus:           string(res.ConnectionStatus),
 		AllowPublic:                res.AllowPublic,
 		AgentVersion:               res.AgentVersion,
+		ResourceIdentifier:         res.ResourceIdentifier,
 		LastSeenAt:                 res.LastSeenAt,
 		ActiveConnectionCount:      res.ActiveConnectionCount,
 		ActiveConsumerSessionCount: res.ActiveConsumerSessionCount,
@@ -1570,6 +1587,7 @@ func NewUpdateServerResponseBody(res *types.TunneledMcpServer) *UpdateServerResp
 		ConnectionStatus:           string(res.ConnectionStatus),
 		AllowPublic:                res.AllowPublic,
 		AgentVersion:               res.AgentVersion,
+		ResourceIdentifier:         res.ResourceIdentifier,
 		LastSeenAt:                 res.LastSeenAt,
 		ActiveConnectionCount:      res.ActiveConnectionCount,
 		ActiveConsumerSessionCount: res.ActiveConsumerSessionCount,
@@ -2589,7 +2607,8 @@ func NewDeleteServerGatewayErrorResponseBody(res *goa.ServiceError) *DeleteServe
 // payload.
 func NewCreateServerPayload(body *CreateServerRequestBody, sessionToken *string, apikeyToken *string, projectSlugInput *string) *tunneledmcp.CreateServerPayload {
 	v := &tunneledmcp.CreateServerPayload{
-		Name: *body.Name,
+		Name:               *body.Name,
+		ResourceIdentifier: body.ResourceIdentifier,
 	}
 	v.SessionToken = sessionToken
 	v.ApikeyToken = apikeyToken
@@ -2636,9 +2655,10 @@ func NewListServerConnectionsPayload(id string, sessionToken *string, apikeyToke
 // payload.
 func NewUpdateServerPayload(body *UpdateServerRequestBody, sessionToken *string, apikeyToken *string, projectSlugInput *string) *tunneledmcp.UpdateServerPayload {
 	v := &tunneledmcp.UpdateServerPayload{
-		ID:          *body.ID,
-		Name:        *body.Name,
-		AllowPublic: body.AllowPublic,
+		ID:                 *body.ID,
+		Name:               *body.Name,
+		AllowPublic:        body.AllowPublic,
+		ResourceIdentifier: body.ResourceIdentifier,
 	}
 	v.SessionToken = sessionToken
 	v.ApikeyToken = apikeyToken

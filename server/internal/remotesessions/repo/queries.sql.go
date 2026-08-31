@@ -2827,10 +2827,11 @@ SELECT DISTINCT
     p.slug AS project_slug,
     m.name,
     m.slug,
-    COALESCE(rms.url, '')::text AS url
+    COALESCE(rms.url, tms.resource_identifier, '')::text AS url
 FROM mcp_servers AS m
 JOIN projects AS p ON p.id = m.project_id
 LEFT JOIN remote_mcp_servers AS rms ON rms.id = m.remote_mcp_server_id AND rms.deleted IS FALSE
+LEFT JOIN tunneled_mcp_servers AS tms ON tms.id = m.tunneled_mcp_server_id AND tms.deleted IS FALSE
 WHERE m.deleted IS FALSE
   AND m.user_session_issuer_id IN (
       SELECT link.user_session_issuer_id
@@ -2855,6 +2856,9 @@ type ListOrganizationMcpServersForClientRow struct {
 //
 // A soft-deleted upstream must not contribute its URL: the derived RFC 8707
 // resource is sent to the authorization server and recorded on new grants.
+//
+// url is the server's routable resource: the remote server URL or the
+// tunneled server's recorded resource identifier (never dialed).
 func (q *Queries) ListOrganizationMcpServersForClient(ctx context.Context, remoteSessionClientID uuid.UUID) ([]ListOrganizationMcpServersForClientRow, error) {
 	rows, err := q.db.Query(ctx, listOrganizationMcpServersForClient, remoteSessionClientID)
 	if err != nil {
