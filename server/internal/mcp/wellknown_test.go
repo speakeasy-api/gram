@@ -26,7 +26,6 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/customdomains"
-	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	"github.com/speakeasy-api/gram/server/internal/oauthtest"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
@@ -395,11 +394,11 @@ func TestHandleGetProtectedResource_IssuerGatedToolsetBackend_OnCustomDomain(t *
 // TestHandleGetProtectedResource_LegacySlugFallbackProxy is the
 // protected-resource companion of the legacy fallback test.
 
-// TestHandleGetAuthorizationServer_IssuerGatedToolsetBackend_TwoEndpoints
-// pins the AIS-634 contract: a hosted (toolset-backed) server carrying two
-// endpoints serves an authorization-server document keyed on whichever
-// endpoint the request arrived at, with no dependence on toolsets.mcp_slug.
-func TestHandleGetAuthorizationServer_IssuerGatedToolsetBackend_TwoEndpoints(t *testing.T) {
+// TestWellKnown_IssuerGatedToolsetBackend_TwoEndpoints pins the AIS-634
+// contract: a hosted (toolset-backed) server carrying two endpoints serves
+// both well-known documents keyed on whichever endpoint the request arrived
+// at, with no dependence on toolsets.mcp_slug.
+func TestWellKnown_IssuerGatedToolsetBackend_TwoEndpoints(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestMCPService(t)
@@ -413,67 +412,29 @@ func TestHandleGetAuthorizationServer_IssuerGatedToolsetBackend_TwoEndpoints(t *
 	slugA := "two-ep-a-" + uuid.NewString()
 	slugB := "two-ep-b-" + uuid.NewString()
 	mcpServer := createToolsetMcpEndpoint(t, ctx, ti.conn, *authCtx.ProjectID, toolset.ID, slugA, "public", uuid.NullUUID{}, issuerID)
-	_, err := mcpendpointsrepo.New(ti.conn).CreateMCPEndpoint(ctx, mcpendpointsrepo.CreateMCPEndpointParams{
-		ProjectID:       *authCtx.ProjectID,
-		CustomDomainID:  uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-		McpServerID:     uuid.NullUUID{UUID: mcpServer.ID, Valid: true},
-		MetaMcpServerID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-		Slug:            slugB,
-	})
-	require.NoError(t, err)
+	createPlatformMcpEndpoint(t, ctx, ti.conn, *authCtx.ProjectID, mcpServer.ID, slugB)
 
 	for _, slug := range []string{slugA, slugB} {
+		expected := "http://0.0.0.0/mcp/" + slug
+
 		w, err := runMCPWellKnown(t, ctx, ti.service.HandleGetAuthorizationServer, slug)
 		require.NoError(t, err)
 		require.Equal(t, http.StatusOK, w.Code)
+		var asDoc map[string]any
+		require.NoError(t, json.Unmarshal(w.Body.Bytes(), &asDoc))
+		require.Equal(t, expected, asDoc["issuer"])
+		require.Equal(t, expected+"/authorize", asDoc["authorization_endpoint"])
+		require.Equal(t, expected+"/token", asDoc["token_endpoint"])
 
-		var metadata map[string]any
-		require.NoError(t, json.Unmarshal(w.Body.Bytes(), &metadata))
-		expectedIssuer := "http://0.0.0.0/mcp/" + slug
-		require.Equal(t, expectedIssuer, metadata["issuer"])
-		require.Equal(t, expectedIssuer+"/authorize", metadata["authorization_endpoint"])
-		require.Equal(t, expectedIssuer+"/token", metadata["token_endpoint"])
-	}
-}
-
-// TestHandleGetProtectedResource_IssuerGatedToolsetBackend_TwoEndpoints is
-// the protected-resource companion: each endpoint of one hosted server is
-// its own protected resource.
-func TestHandleGetProtectedResource_IssuerGatedToolsetBackend_TwoEndpoints(t *testing.T) {
-	t.Parallel()
-
-	ctx, ti := newTestMCPService(t)
-	toolsetsRepo := toolsetsrepo.New(ti.conn)
-	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	require.True(t, ok)
-	require.NotNil(t, authCtx.ProjectID)
-
-	issuerID := createUserSessionIssuer(t, ctx, ti.conn, *authCtx.ProjectID)
-	toolset := createPublicMCPToolset(t, ctx, toolsetsRepo, authCtx, "ts-two-ep-pr-"+uuid.NewString()[:8])
-	slugA := "two-ep-pr-a-" + uuid.NewString()
-	slugB := "two-ep-pr-b-" + uuid.NewString()
-	mcpServer := createToolsetMcpEndpoint(t, ctx, ti.conn, *authCtx.ProjectID, toolset.ID, slugA, "public", uuid.NullUUID{}, issuerID)
-	_, err := mcpendpointsrepo.New(ti.conn).CreateMCPEndpoint(ctx, mcpendpointsrepo.CreateMCPEndpointParams{
-		ProjectID:       *authCtx.ProjectID,
-		CustomDomainID:  uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-		McpServerID:     uuid.NullUUID{UUID: mcpServer.ID, Valid: true},
-		MetaMcpServerID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-		Slug:            slugB,
-	})
-	require.NoError(t, err)
-
-	for _, slug := range []string{slugA, slugB} {
-		w, err := runMCPWellKnown(t, ctx, ti.service.HandleGetProtectedResource, slug)
+		w, err = runMCPWellKnown(t, ctx, ti.service.HandleGetProtectedResource, slug)
 		require.NoError(t, err)
 		require.Equal(t, http.StatusOK, w.Code)
-
-		var metadata map[string]any
-		require.NoError(t, json.Unmarshal(w.Body.Bytes(), &metadata))
-		expectedResource := "http://0.0.0.0/mcp/" + slug
-		require.Equal(t, expectedResource, metadata["resource"])
-		authServers, ok := metadata["authorization_servers"].([]any)
+		var prDoc map[string]any
+		require.NoError(t, json.Unmarshal(w.Body.Bytes(), &prDoc))
+		require.Equal(t, expected, prDoc["resource"])
+		authServers, ok := prDoc["authorization_servers"].([]any)
 		require.True(t, ok)
-		require.Equal(t, []any{expectedResource}, authServers)
+		require.Equal(t, []any{expected}, authServers)
 	}
 }
 

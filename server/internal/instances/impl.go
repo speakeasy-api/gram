@@ -15,8 +15,8 @@ import (
 
 	customdomainsRepo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcpendpoints"
-	mcpendpointsRepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	mcpserversRepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
+	"github.com/speakeasy-api/gram/server/internal/mcpservers/visibility"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -185,11 +185,8 @@ func (s *Service) GetInstance(ctx context.Context, payload *gen.GetInstanceForm)
 		}
 	}
 
-	// The hosted server URL comes from the mcp_servers wrapper's primary
-	// endpoint when one exists; the toolset's own mcp_slug/custom_domain_id
-	// columns only decide for legacy toolsets that have no wrapper yet.
 	mcpServers := make([]*gen.InstanceMcpServer, 0)
-	wrapperURL, err := s.resolveWrapperMCPURL(ctx, toolset, *authCtx.ProjectID)
+	wrapperURL, err := s.resolveWrapperMCPURL(ctx, toolset, authCtx.ActiveOrganizationID, *authCtx.ProjectID)
 	if err != nil {
 		return nil, err
 	}
@@ -223,11 +220,9 @@ func (s *Service) GetInstance(ctx context.Context, payload *gen.GetInstanceForm)
 	}, nil
 }
 
-// resolveWrapperMCPURL builds the toolset's hosted MCP URL from its
-// mcp_servers wrapper's primary endpoint. Returns "" (no error) when the
-// toolset has no wrapper or the wrapper has no endpoints, in which case the
-// caller falls back to the legacy toolset-column-derived URL.
-func (s *Service) resolveWrapperMCPURL(ctx context.Context, toolset *types.Toolset, projectID uuid.UUID) (string, error) {
+// resolveWrapperMCPURL builds the toolset's hosted MCP URL from its wrapper's
+// primary endpoint; "" means fall back to the legacy toolset-column URL.
+func (s *Service) resolveWrapperMCPURL(ctx context.Context, toolset *types.Toolset, organizationID string, projectID uuid.UUID) (string, error) {
 	toolsetID, err := uuid.Parse(toolset.ID)
 	if err != nil {
 		return "", oops.E(oops.CodeUnexpected, err, "parse toolset id").LogError(ctx, s.logger)
@@ -242,33 +237,16 @@ func (s *Service) resolveWrapperMCPURL(ctx context.Context, toolset *types.Tools
 		return "", nil
 	case err != nil:
 		return "", oops.E(oops.CodeUnexpected, err, "load mcp server for toolset").LogError(ctx, s.logger)
-	}
-
-	endpoints, err := mcpendpointsRepo.New(s.db).ListMCPEndpointsByMCPServerID(ctx, mcpendpointsRepo.ListMCPEndpointsByMCPServerIDParams{
-		ProjectID:   projectID,
-		McpServerID: wrapper.ID,
-	})
-	if err != nil {
-		return "", oops.E(oops.CodeUnexpected, err, "list mcp server endpoints").LogError(ctx, s.logger)
-	}
-
-	primary := mcpendpoints.PrimaryEndpoint(endpoints)
-	if primary == nil {
+	case wrapper.Visibility == visibility.Disabled:
+		// The runtime 404s disabled wrappers; advertise the legacy URL instead.
 		return "", nil
 	}
 
-	if primary.CustomDomainID.Valid {
-		customDomain, err := s.customDomainsRepo.GetCustomDomainByID(ctx, primary.CustomDomainID.UUID)
-		if err != nil {
-			return "", oops.E(oops.CodeUnexpected, err, "failed to get custom domain").LogError(ctx, s.logger)
-		}
-		if primary.IsDomainRoot.Valid && primary.IsDomainRoot.Bool {
-			return fmt.Sprintf("https://%s", customDomain.Domain), nil
-		}
-		return fmt.Sprintf("https://%s/mcp/%s", customDomain.Domain, primary.Slug), nil
+	mcpURL, err := mcpendpoints.PrimaryEndpointURL(ctx, s.db, organizationID, projectID, wrapper.ID, s.serverURL.String())
+	if err != nil {
+		return "", oops.E(oops.CodeUnexpected, err, "resolve wrapper mcp url").LogError(ctx, s.logger)
 	}
-
-	return fmt.Sprintf("%s/mcp/%s", s.serverURL.String(), primary.Slug), nil
+	return mcpURL, nil
 }
 
 func (s *Service) ExecuteInstanceTool(w http.ResponseWriter, r *http.Request) error {

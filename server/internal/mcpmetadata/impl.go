@@ -1539,26 +1539,19 @@ func (s *Service) resolveToolsetMCPURL(ctx context.Context, toolset toolsets_rep
 	return mcpURL, nil
 }
 
-// resolveMcpEndpointURL builds the public MCP URL for an mcp_endpoint-routed
-// install — custom-domain endpoints render on their own host, platform-domain
-// endpoints render under the serverURL.
+// resolveMcpEndpointURL builds the public MCP URL for an mcp_endpoint-routed install.
 func (s *Service) resolveMcpEndpointURL(ctx context.Context, endpoint *mcpendpoints_repo.McpEndpoint) (string, error) {
-	baseURL := s.serverURL.String() + "/mcp"
+	domain := ""
 	if endpoint.CustomDomainID.Valid {
-		customDomain, err := s.domainsRepo.GetCustomDomainByID(ctx, endpoint.CustomDomainID.UUID)
+		row, err := s.domainsRepo.GetCustomDomainByID(ctx, endpoint.CustomDomainID.UUID)
 		if err != nil {
 			return "", fmt.Errorf("load custom domain: %w", err)
 		}
-		// A domain-root endpoint serves MCP at the bare domain, so install
-		// snippets use that instead of the also-valid /mcp/<slug> path.
-		if endpoint.IsDomainRoot.Valid && endpoint.IsDomainRoot.Bool {
-			return fmt.Sprintf("https://%s", customDomain.Domain), nil
-		}
-		baseURL = fmt.Sprintf("https://%s/mcp", customDomain.Domain)
+		domain = row.Domain
 	}
-	mcpURL, err := url.JoinPath(baseURL, endpoint.Slug)
+	mcpURL, err := mcpendpoints.EndpointURL(endpoint, domain, s.serverURL.String())
 	if err != nil {
-		return "", fmt.Errorf("join url path: %w", err)
+		return "", fmt.Errorf("build endpoint URL: %w", err)
 	}
 	return mcpURL, nil
 }
@@ -1726,7 +1719,7 @@ func (s *Service) loadToolsetFromContextAndSlug(ctx context.Context, mcpSlug str
 func (s *Service) resolveSecurityMode(toolset *toolsets_repo.Toolset, server *mcpservers_repo.McpServer) securityMode {
 	if server != nil {
 		oauthRequired := server.UserSessionIssuerID.Valid ||
-			(toolset != nil && toolset.ExternalOauthServerID.Valid)
+			(toolset != nil && (toolset.ExternalOauthServerID.Valid || toolset.OauthProxyServerID.Valid))
 		switch {
 		case oauthRequired:
 			return securityModeOAuth

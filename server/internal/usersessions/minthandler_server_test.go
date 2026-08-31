@@ -288,3 +288,61 @@ func createBackingToolset(t *testing.T, ctx context.Context, ti *testInstance, s
 
 	return toolset
 }
+
+// TestMintUserSessionForToolsetIgnoresDisabledWrapper pins that a disabled
+// wrapper does not govern the mint: the runtime refuses disabled wrappers and
+// serves the legacy route, so the mint must produce the legacy toolset binding.
+func TestMintUserSessionForToolsetIgnoresDisabledWrapper(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	toolset := createIssuerGatedMintToolset(t, ctx, ti, "mint-disabled-wrapper")
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx)
+
+	wrapperIssuer, err := ti.service.CreateUserSessionIssuer(ctx, &issuersgen.CreateUserSessionIssuerPayload{
+		SessionToken:         nil,
+		ApikeyToken:          nil,
+		ProjectSlugInput:     nil,
+		Slug:                 "mint-disabled-wrapper-srv-issuer",
+		AuthnChallengeMode:   "chain",
+		SessionDurationHours: 24,
+	})
+	require.NoError(t, err)
+
+	_, err = mcpserversrepo.New(ti.conn).CreateMCPServer(ctx, mcpserversrepo.CreateMCPServerParams{
+		ID:                    uuid.New(),
+		ProjectID:             *authCtx.ProjectID,
+		Name:                  pgtype.Text{String: "mint-disabled-wrapper-srv", Valid: true},
+		Slug:                  pgtype.Text{String: "mint-disabled-wrapper-srv", Valid: true},
+		EnvironmentID:         uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		UserSessionIssuerID:   uuid.NullUUID{UUID: uuid.MustParse(wrapperIssuer.ID), Valid: true},
+		RemoteMcpServerID:     uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		ToolsetID:             uuid.NullUUID{UUID: toolset.ID, Valid: true},
+		ToolVariationsGroupID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		Visibility:            mcpservers.VisibilityDisabled,
+	})
+	require.NoError(t, err)
+
+	ctx = withExactAuthzGrants(t, ctx, ti.conn,
+		authz.NewGrant(authz.ScopeMCPConnect, toolset.ID.String()),
+	)
+
+	toolsetID := toolset.ID.String()
+	got, err := ti.service.MintUserSession(ctx, &sessionsgen.MintUserSessionPayload{
+		ToolsetID:        &toolsetID,
+		McpServerID:      nil,
+		SessionToken:     nil,
+		ProjectSlugInput: nil,
+	})
+	require.NoError(t, err)
+
+	claims, err := usersessions.NewSigner("test-jwt-secret").Validate(
+		got.AccessToken,
+		urn.NewToolset(toolset.ID).String(),
+	)
+	require.NoError(t, err)
+	require.Equal(t, "http://0.0.0.0/mcp/"+toolset.McpSlug.String, claims.Issuer)
+}
