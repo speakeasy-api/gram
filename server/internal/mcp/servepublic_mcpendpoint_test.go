@@ -505,6 +505,29 @@ func TestServePublic_McpEndpoint_DisabledMcpServer_DoesNotFallBack(t *testing.T)
 	require.Equal(t, oops.CodeNotFound, oopsErr.Code)
 }
 
+// An unrecognized visibility value must not silently map onto a servable
+// policy: the endpoint is terminally not-found, like disabled.
+func TestServePublic_McpEndpoint_UnknownVisibility_DoesNotServe(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPService(t)
+	toolsetsRepo := toolsetsrepo.New(ti.conn)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	slug := "unknown-vis-" + uuid.NewString()[:8]
+	toolset := createPublicMCPToolset(t, ctx, toolsetsRepo, authCtx, "unknown-vis-ts-"+uuid.NewString()[:8])
+	createToolsetMcpEndpoint(t, ctx, ti.conn, *authCtx.ProjectID, toolset.ID, slug, "archived", uuid.NullUUID{}, uuid.Nil)
+
+	_, err := servePublicHTTP(t, ctx, ti, slug, makeInitializeBody(), "", nil)
+	require.Error(t, err, "an unknown visibility must not serve")
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeNotFound, oopsErr.Code)
+}
+
 // TestServePublic_PlatformDomain_DoesNotResolveCustomDomainEndpoint
 // regression-guards the platform-only resolution semantic: a
 // custom-domain-scoped mcp_endpoint must not resolve for a request

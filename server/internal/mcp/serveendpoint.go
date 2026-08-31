@@ -404,7 +404,6 @@ func (s *Service) ResolveMCPEndpointAndServer(ctx context.Context, logger *slog.
 // URL building on both the primary and fallback paths.
 func (s *Service) LoadResolvedMcpEndpointBySlug(ctx context.Context, logger *slog.Logger, slug, mcpRouteBase string) (*ResolvedMcpEndpoint, error) {
 	mcpEndpoint, mcpServer, metaServer, err := s.ResolveMCPEndpointAndServer(ctx, logger, slug)
-	var shareErr *oops.ShareableError
 	switch {
 	case err == nil:
 		if metaServer != nil {
@@ -423,7 +422,7 @@ func (s *Service) LoadResolvedMcpEndpointBySlug(ctx context.Context, logger *slo
 			return nil, oops.E(oops.CodeNotFound, nil, "not found")
 		}
 		return s.BuildResolvedMcpEndpointForServer(ctx, logger, mcpEndpoint, mcpServer, mcpRouteBase)
-	case isMCPEndpointAddressMiss(err, &shareErr):
+	case mcpendpoints.IsAddressMiss(err):
 		return s.loadResolvedMcpEndpointByToolsetSlug(ctx, slug, mcpRouteBase)
 	default:
 		return nil, err

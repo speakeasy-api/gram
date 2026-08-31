@@ -339,19 +339,12 @@ func (s *Service) validateUserSessionToken(ctx context.Context, token string, en
 	return newCtx, &subject, toolSelection, nil
 }
 
-// validateLegacyToolsetAudience re-validates a bearer whose primary audience
-// check failed, against the pre-migration toolset-URN audience. Only
-// toolset-backed wrappers accept it: sessions minted while the server was
-// gated on toolsets.user_session_issuer_id — before its mcp_servers wrapper
-// existed — carry urn.NewToolset as their audience and must keep validating
-// for one access-token lifetime after the backfill (AIS-633). Every
-// acceptance increments mcp.legacy_audience_accepted, whose zero reading is
-// the merge gate for deleting this path (AIS-646). ok is false when the
-// endpoint is not a toolset-backed wrapper, the primary failure was not an
-// audience mismatch, or the legacy validation fails too — callers then
-// surface the original error.
+// validateLegacyToolsetAudience re-validates a bearer that failed the primary
+// audience check against the pre-migration toolset-URN audience (AIS-633;
+// counted acceptance, deleted by AIS-646). ok is false when inapplicable or
+// the legacy validation fails too — callers surface the original error.
 func (s *Service) validateLegacyToolsetAudience(ctx context.Context, token string, endpoint *ResolvedMcpEndpoint, primaryErr error) (sessiontokens.ValidatedSession, bool) {
-	legacyAudience, ok := endpoint.LegacyToolsetAudienceURN()
+	legacyAudience, ok := endpoint.legacyToolsetAudienceURN()
 	if !ok || !errors.Is(primaryErr, jwt.ErrTokenInvalidAudience) {
 		return sessiontokens.ValidatedSession{}, false
 	}

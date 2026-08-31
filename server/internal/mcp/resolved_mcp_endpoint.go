@@ -328,13 +328,19 @@ func NewResolvedMcpEndpointFromMcpServer(
 	}
 }
 
-// LegacyToolsetAudienceURN is the pre-migration toolset-URN audience a
-// toolset-backed wrapper's bearers may still carry: sessions minted while the
-// server was gated on toolsets.user_session_issuer_id were bound to
-// urn.NewToolset rather than the issuer URN. ok is false for every endpoint
-// that is not a toolset-backed wrapper — only that shape ever accepts the
-// legacy audience (AIS-633; acceptance is deleted by AIS-646).
-func (e *ResolvedMcpEndpoint) LegacyToolsetAudienceURN() (string, bool) {
+// connectResourceID is the mcp:connect resource id: the wrapper's id when one
+// fronts the endpoint, else the toolset id.
+func (e *ResolvedMcpEndpoint) connectResourceID() uuid.UUID {
+	if e.McpServerID.Valid {
+		return e.McpServerID.UUID
+	}
+	return e.ToolsetID.UUID
+}
+
+// legacyToolsetAudienceURN is the pre-migration toolset-URN audience a
+// toolset-backed wrapper's bearers may still carry; ok is false for every
+// other endpoint shape (AIS-633; acceptance is deleted by AIS-646).
+func (e *ResolvedMcpEndpoint) legacyToolsetAudienceURN() (string, bool) {
 	if !e.McpServerID.Valid || !e.ToolsetID.Valid {
 		return "", false
 	}

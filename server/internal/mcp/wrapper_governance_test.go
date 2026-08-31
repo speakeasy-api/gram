@@ -30,9 +30,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/usersessions"
 )
 
-// collectCounterPoints returns the data points of one int64 counter by
-// attribute set, mirroring collectKillswitchCoverage for arbitrary
-// instruments.
+// collectCounterPoints returns one int64 counter's data points by attribute set.
 func collectCounterPoints(t *testing.T, reader *sdkmetric.ManualReader, instrument string) map[attribute.Set]int64 {
 	t.Helper()
 
@@ -145,7 +143,7 @@ func TestServePublic_WrapperGovernance_WrapperIssuerGatesToolsetBacked(t *testin
 	endpointSlug := "wg-endpoint-" + uuid.NewString()
 	createToolsetMcpEndpoint(t, ctx, ti.conn, *authCtx.ProjectID, toolset.ID, endpointSlug, "public", uuid.NullUUID{}, issuerID)
 
-	w, err := servePublicHTTP(t, ctx, ti, endpointSlug, makeInitializeBody(), "", nil)
+	w, err := servePublicHTTP(t, context.Background(), ti, endpointSlug, makeInitializeBody(), "", nil)
 	require.Error(t, err, "issuer-gated wrapper must reject unauthenticated requests")
 
 	expected := `Bearer resource_metadata="` + ti.serverURL.String() + `/.well-known/oauth-protected-resource/mcp/` + endpointSlug + `"`

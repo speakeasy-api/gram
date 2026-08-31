@@ -27,6 +27,13 @@ import (
 // disabled server resurrect the same slug through its toolset (AIS-633).
 var ErrEndpointUnavailable = errors.New("mcp endpoint unavailable")
 
+// IsAddressMiss reports whether a resolution error is a true address miss —
+// the only outcome that may fall back to a legacy toolsets.mcp_slug lookup.
+func IsAddressMiss(err error) bool {
+	var shareErr *oops.ShareableError
+	return errors.As(err, &shareErr) && shareErr.Code == oops.CodeNotFound && !errors.Is(err, ErrEndpointUnavailable)
+}
+
 // BySlugAndCustomDomain walks the public addressing chain shared by the /mcp
 // and /x/mcp slug handlers, the install-page handlers, and the .well-known
 // routes: it scopes the lookup to the request's customdomains.Context, loads
@@ -88,7 +95,11 @@ func BySlugAndCustomDomain(ctx context.Context, db *pgxpool.Pool, logger *slog.L
 		return nil, nil, nil, oops.E(oops.CodeUnexpected, err, "load mcp server").LogError(ctx, logger)
 	}
 
-	if server.Visibility == mcpservers.VisibilityDisabled {
+	switch server.Visibility {
+	case mcpservers.VisibilityPublic, mcpservers.VisibilityPrivate:
+	default:
+		// Disabled or unrecognized visibility never serves; unknown values
+		// must not silently map onto a servable policy.
 		return nil, nil, nil, oops.E(oops.CodeNotFound, ErrEndpointUnavailable, "mcp endpoint not found")
 	}
 

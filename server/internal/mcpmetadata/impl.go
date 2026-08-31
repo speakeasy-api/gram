@@ -1030,27 +1030,22 @@ func (s *Service) ServeInstallPage(w http.ResponseWriter, r *http.Request) error
 	return s.renderRemoteMcpInstallPage(ctx, w, ic, metadataRecord)
 }
 
-// resolveInstallContext tries the mcp_endpoints → mcp_server resolution path
-// first (via the shared mcpendpoints.BySlugAndCustomDomain helper, mirroring
-// mcp.ServePublic's resolution), then falls back to the legacy
-// toolsets.mcp_slug lookup so platform-domain install pages keep working for
-// customers that pre-date mcp_endpoints. Only a true address miss falls
-// through; a resolvable-but-unavailable address (disabled wrapper, dangling
-// backend) is terminal, again matching mcp.ServePublic (AIS-633).
+// resolveInstallContext resolves mcp_endpoints → mcp_server first, mirroring
+// mcp.ServePublic: only a true address miss falls back to the legacy
+// toolsets.mcp_slug lookup; an unavailable address is terminal (AIS-633).
 func (s *Service) resolveInstallContext(ctx context.Context, mcpSlug string) (*installContext, error) {
 	endpoint, server, metaServer, err := mcpendpoints.BySlugAndCustomDomain(ctx, s.db, s.logger, mcpSlug)
-	var shareErr *oops.ShareableError
 	switch {
-	case errors.As(err, &shareErr) && shareErr.Code == oops.CodeNotFound && !errors.Is(err, mcpendpoints.ErrEndpointUnavailable):
+	case mcpendpoints.IsAddressMiss(err):
 		// Fall through to legacy toolset lookup.
+	case errors.Is(err, mcpendpoints.ErrEndpointUnavailable):
+		// Disabled or dangling backend: the endpoint row owns the slug, so
+		// render the not-found page rather than an unexpected failure.
+		return nil, fmt.Errorf("%w: mcp endpoint backend unavailable", errToolsetNotFound)
 	case err != nil:
 		return nil, fmt.Errorf("resolve mcp endpoint: %w", err)
 	case metaServer != nil:
-		// Meta-backed endpoints have no install page yet (AGE-3299); the
-		// slug is authoritative, so surface not-found rather than falling
-		// through to an unrelated legacy toolset. Wrapping errToolsetNotFound
-		// is what makes ServeInstallPage render the not-found page instead of
-		// treating this as an unexpected failure.
+		// Meta-backed endpoints have no install page yet (AGE-3299).
 		return nil, fmt.Errorf("%w: meta-backed endpoint has no install page", errToolsetNotFound)
 	default:
 		var bridgeToolset *toolsets_repo.Toolset

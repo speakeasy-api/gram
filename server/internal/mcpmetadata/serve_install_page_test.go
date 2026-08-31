@@ -1949,3 +1949,27 @@ func TestServeInstallPage_MetaBackedEndpoint_ReturnsNotFound(t *testing.T) {
 	assert.Contains(t, rr.Body.String(), "Server Not Found")
 	assert.NotContains(t, rr.Body.String(), "Legacy Same-Slug Toolset")
 }
+
+// A live endpoint whose backend server is disabled renders the not-found page
+// rather than a 500: the address is authoritative and terminal (AIS-633).
+func TestServeInstallPage_DisabledServerBackend_ReturnsNotFound(t *testing.T) {
+	t.Parallel()
+	ctx, testInstance := newTestMCPMetadataService(t)
+
+	mcpSlug := "disabled-install-" + uuid.New().String()[:8]
+	createMcpServerWithEndpoint(t, ctx, testInstance, mcpServerFixtureOptions{
+		name:         "Disabled Server",
+		visibility:   mcpservers.VisibilityDisabled,
+		endpointSlug: mcpSlug,
+	})
+
+	req := httptest.NewRequest("GET", "/mcp/"+mcpSlug+"/install", nil)
+	rctx := chi.NewRouteContext()
+	rctx.URLParams.Add("mcpSlug", mcpSlug)
+	req = req.WithContext(context.WithValue(ctx, chi.RouteCtxKey, rctx))
+
+	rr := httptest.NewRecorder()
+	require.NoError(t, testInstance.service.ServeInstallPage(rr, req))
+	assert.Equal(t, http.StatusNotFound, rr.Code)
+	assert.Contains(t, rr.Body.String(), "Server Not Found")
+}

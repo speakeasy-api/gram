@@ -681,15 +681,12 @@ func (s *Service) serveProxyBackedEndpoint(w http.ResponseWriter, r *http.Reques
 	logger := s.logger.With(attr.SlogToolsetMCPSlug(mcpSlug))
 
 	mcpEndpoint, mcpServer, metaServer, err := s.ResolveMCPEndpointAndServer(ctx, logger, mcpSlug)
-	var shareErr *oops.ShareableError
 	switch {
 	case err == nil:
-	case isMCPEndpointAddressMiss(err, &shareErr):
-		// The legacy behavior behind handled=false (405, or the install page
-		// on HTML GETs) still answers for a live toolset slug and disappears
-		// with the fallback removal, so a miss that lands on a live toolset
-		// counts against the merge gate. The probe only runs on address
-		// misses, which post-backfill are scanner probes of nonexistent slugs.
+	case mcpendpoints.IsAddressMiss(err):
+		// The legacy handled=false behavior (405, or the install page on HTML
+		// GETs) still answers for a live toolset slug, so a miss landing on a
+		// live toolset counts against the merge gate.
 		var customDomainID uuid.NullUUID
 		if domainCtx := customdomains.FromContext(ctx); domainCtx != nil {
 			customDomainID = uuid.NullUUID{UUID: domainCtx.DomainID, Valid: true}
@@ -698,12 +695,8 @@ func (s *Service) serveProxyBackedEndpoint(w http.ResponseWriter, r *http.Reques
 			s.metrics.RecordToolsetSlugFallback(ctx, mcpmetrics.LegacyFallbackProxyGetDelete)
 		}
 		return false, nil
-	case errors.As(err, &shareErr) && shareErr.Code == oops.CodeNotFound:
-		// Resolvable but unavailable (disabled wrapper, dangling backend):
-		// the address is authoritative, so the outcome is a terminal 404
-		// rather than the caller's legacy fallback behavior.
-		return true, err
 	default:
+		// Unavailable addresses are terminal, never the legacy behavior.
 		return true, err
 	}
 
@@ -796,7 +789,6 @@ func (s *Service) ServePublic(w http.ResponseWriter, r *http.Request) error {
 	// unified backend switch (remote proxy / toolset). On 404, fall through
 	// to the legacy toolset-by-slug path below.
 	mcpEndpoint, mcpServer, metaServer, err := s.ResolveMCPEndpointAndServer(ctx, logger, mcpSlug)
-	var shareErr *oops.ShareableError
 	switch {
 	case err == nil:
 		if err := s.enforceCustomDomainLockdown(ctx, logger, mcpEndpoint.ProjectID); err != nil {
@@ -806,10 +798,8 @@ func (s *Service) ServePublic(w http.ResponseWriter, r *http.Request) error {
 			return s.serveResolvedMetaMCPEndpoint(w, r, logger, mcpEndpoint, metaServer)
 		}
 		return s.serveResolvedMCPEndpoint(w, r, logger, mcpEndpoint, mcpServer, mcpSlug, "mcp")
-	case isMCPEndpointAddressMiss(err, &shareErr):
-		// Fall through to legacy toolset lookup. A resolvable-but-unavailable
-		// address (disabled wrapper, dangling backend) is terminal instead: the
-		// endpoint row owns the slug, so its toolset must not resurrect it.
+	case mcpendpoints.IsAddressMiss(err):
+		// Address miss: fall through to the legacy toolset lookup.
 	default:
 		return err
 	}
@@ -836,50 +826,34 @@ func (s *Service) ServePublic(w http.ResponseWriter, r *http.Request) error {
 	return s.serveToolsetResolved(w, r, toolset, mcpSlug, "mcp", hostedServingFromToolset(toolset), nil, nil, nil)
 }
 
-// isMCPEndpointAddressMiss reports whether an mcp_endpoints resolution error
-// is a true address miss — the only outcome that may fall back to the legacy
-// toolsets.mcp_slug lookup. shareErr receives the unwrapped ShareableError as
-// a side effect of the check, matching the errors.As idiom at call sites.
-func isMCPEndpointAddressMiss(err error, shareErr **oops.ShareableError) bool {
-	return errors.As(err, shareErr) && (*shareErr).Code == oops.CodeNotFound && !errors.Is(err, mcpendpoints.ErrEndpointUnavailable)
-}
-
 // hostedServing is the hosting configuration one toolset-backed MCP request
-// is served under. The wrapper-resolved path (mcp_endpoints → mcp_servers)
-// derives it from the mcp_servers row — visibility, issuer gating, RBAC
-// resource id, variation-group override, and telemetry identity — and the
-// toolset's own mcp_is_public / user_session_issuer_id columns are not
-// consulted (AIS-633). The legacy toolsets.mcp_slug path derives every field
-// from the toolset row. The toolset always keeps what remains a toolset
-// concern: tools, resources, prompts, environment, tool selection mode, and
-// external OAuth.
+// is served under: derived from the mcp_servers row on the wrapper-resolved
+// path (AIS-633), from the toolset columns on the legacy toolsets.mcp_slug
+// path. Toolset concerns (tools, resources, prompts, environment, tool
+// selection mode, external OAuth) always stay on the toolset.
 type hostedServing struct {
-	// isPublic is the effective publicness: wrapper visibility == 'public' on
-	// the wrapper path, toolsets.mcp_is_public on the legacy path.
+	// isPublic: wrapper visibility == 'public', or toolsets.mcp_is_public on
+	// the legacy path.
 	isPublic bool
 
-	// runInToolsetGate makes serveToolsetResolved run the issuer gate keyed
-	// on toolsets.user_session_issuer_id. Legacy path only — the wrapper path
-	// gates pre-dispatch on mcp_servers.user_session_issuer_id.
+	// runInToolsetGate: run the in-toolset issuer gate (legacy path only; the
+	// wrapper path gates pre-dispatch).
 	runInToolsetGate bool
 
-	// callerGated marks the request as already authenticated by a caller-side
-	// issuer gate, so the legacy identity-auth chain must be skipped or it
-	// would re-reject the user-session JWT it doesn't recognise.
+	// callerGated: already authenticated by a caller-side issuer gate, so the
+	// legacy identity-auth chain must be skipped or it would re-reject the
+	// user-session JWT it doesn't recognise.
 	callerGated bool
 
-	// rbacResourceID is the resource id for mcp:connect checks (per-server
-	// and per-tool): the mcp_servers id on the wrapper path, the toolset id
-	// on the legacy path.
+	// rbacResourceID for mcp:connect checks: mcp_servers id or toolset id.
 	rbacResourceID uuid.UUID
 
-	// toolVariationsGroupID is the wrapper's variation-group override; nil
-	// falls through to the toolset's own column, then the project default.
+	// toolVariationsGroupID override; nil falls through to the toolset's
+	// column, then the project default.
 	toolVariationsGroupID *uuid.UUID
 
-	// mcpServerID is the fronting mcp_servers row id for telemetry and the
-	// hosted kill switch; nil on the legacy path, leaving the attribute off
-	// the rows.
+	// mcpServerID for telemetry and the hosted kill switch; nil on the legacy
+	// path.
 	mcpServerID *uuid.UUID
 }
 

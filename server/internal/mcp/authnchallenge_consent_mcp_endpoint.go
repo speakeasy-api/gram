@@ -263,13 +263,7 @@ func (s *Service) serveConsentToolsetMCP(w http.ResponseWriter, r *http.Request,
 			if authzCtx, cerr = s.authz.PrepareContext(authzCtx); cerr != nil {
 				return oops.E(oops.CodeUnexpected, cerr, "load access grants for consent inventory").LogError(ctx, logger)
 			}
-			// mcp:connect keys on the wrapper's id when one fronts the
-			// endpoint, matching the runtime request the minted session will
-			// make.
-			connectResourceID := endpoint.ToolsetID.UUID
-			if endpoint.McpServerID.Valid {
-				connectResourceID = endpoint.McpServerID.UUID
-			}
+			connectResourceID := endpoint.connectResourceID()
 			if cerr = s.authz.Require(authzCtx, authz.MCPCheck(authz.ScopeMCPConnect, connectResourceID.String(), endpoint.ProjectID.String())); cerr != nil {
 				return fmt.Errorf("authorize consent inventory access: %w", mcpaccess.ServerPermissionDenied(cerr, s.requestAccessURL(authzCtx, connectResourceID.String(), toolset.Name)))
 			}

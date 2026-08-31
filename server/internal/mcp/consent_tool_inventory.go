@@ -256,19 +256,12 @@ func (s *Service) enumerateToolsetConsentInventory(ctx context.Context, endpoint
 		return nil, nil, fmt.Errorf("endpoint is not toolset-backed")
 	}
 
-	// Wrapper-governed endpoints take publicness from wrapper visibility
-	// alone; only the legacy toolset-resolved endpoint reads the toolset flag
-	// (AIS-633).
+	// Wrapper visibility wins; only the legacy endpoint reads the toolset flag.
 	private := !endpoint.IsPublic
 	if !endpoint.McpServerID.Valid {
 		private = toolset.McpIsPublic == nil || !*toolset.McpIsPublic
 	}
-	// Per-tool checks key on the wrapper's id when one fronts the endpoint,
-	// matching the runtime tools/list gate.
-	connectResourceID := toolset.ID
-	if endpoint.McpServerID.Valid {
-		connectResourceID = endpoint.McpServerID.UUID.String()
-	}
+	connectResourceID := endpoint.connectResourceID().String()
 	tools = []consentInventoryTool{}
 	for _, tool := range toolset.Tools {
 		if tool == nil || conv.IsProxyTool(tool) {

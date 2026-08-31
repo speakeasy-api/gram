@@ -44,7 +44,7 @@ func TestHostedMalformedToolsCall_RecordsCoverageAtMethodBoundary(t *testing.T) 
 	_, err = servePublicHTTP(t, ctx, ti, endpointSlug, body, "", nil)
 	require.NoError(t, err)
 
-	coveragePoints := collectKillswitchCoverage(t, reader)
+	coveragePoints := collectCounterPoints(t, reader, mcpmetrics.InstrumentMCPToolCallKillswitchIdentity)
 	require.Equal(t, map[attribute.Set]int64{
 		attribute.NewSet(
 			attr.McpKillswitchSurface(mcpmetrics.KillswitchSurfaceHosted),
