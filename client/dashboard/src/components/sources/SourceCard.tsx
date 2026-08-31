@@ -120,7 +120,11 @@ export function SourceMcpIcon({
 }): JSX.Element {
   const { data } = useGetMcpMetadata({ mcpServerId }, undefined, {
     enabled: !!mcpServerId,
+    // 404 is the normal "no metadata set" answer; don't re-request it on every
+    // remount or each navigation replays a console error per server.
     retry: false,
+    retryOnMount: false,
+    staleTime: 5 * 60 * 1000,
     throwOnError: false,
   });
   const logoAssetId = data?.metadata?.logoAssetId;
