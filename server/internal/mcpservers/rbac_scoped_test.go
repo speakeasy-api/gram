@@ -293,3 +293,196 @@ func TestDeleteMcpServer_RBAC_OtherServerGrantDenied(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, a.server.ID, fetched.ID)
 }
+
+// The following tests exercise the toolset-id grant branch of grantResourceID
+// across every management endpoint (only Get is covered above), and pin the
+// UpdateMcpServer invariant that authorization keys on the server's existing
+// backing rather than the backing the payload switches it to.
+
+func TestListMcpServers_RBAC_ToolsetScopedGrantReturnsServer(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	server, toolsetID := createToolsetBackedServerFixture(t, ctx, ti, "scoped list toolset")
+	_ = createRemoteServerFixture(t, ctx, ti, "scoped list toolset other")
+
+	scoped := withExactAuthzGrants(t, ctx, ti.conn, authz.NewGrant(authz.ScopeMCPRead, toolsetID.String()))
+
+	result, err := ti.service.ListMcpServers(scoped, &gen.ListMcpServersPayload{
+		RemoteMcpServerID:    nil,
+		TunneledMcpServerID:  nil,
+		ToolsetID:            nil,
+		UnproxiedMcpServerID: nil,
+		SessionToken:         nil,
+		ApikeyToken:          nil,
+		ProjectSlugInput:     nil,
+	})
+	require.NoError(t, err)
+	require.Len(t, result.McpServers, 1)
+	require.Equal(t, server.ID, result.McpServers[0].ID)
+}
+
+func TestListToolFilters_RBAC_ToolsetScopedGrantAllows(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	server, toolsetID := createToolsetBackedServerFixture(t, ctx, ti, "scoped tool filters")
+
+	scoped := withExactAuthzGrants(t, ctx, ti.conn, authz.NewGrant(authz.ScopeMCPRead, toolsetID.String()))
+
+	_, err := ti.service.ListToolFilters(scoped, &gen.ListToolFiltersPayload{
+		ID:               &server.ID,
+		Slug:             nil,
+		SessionToken:     nil,
+		ApikeyToken:      nil,
+		ProjectSlugInput: nil,
+	})
+	require.NoError(t, err)
+}
+
+func TestListToolFilters_RBAC_OtherServerGrantDenied(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	server, _ := createToolsetBackedServerFixture(t, ctx, ti, "scoped tool filters denied")
+	other := createRemoteServerFixture(t, ctx, ti, "scoped tool filters denied other")
+
+	scoped := withExactAuthzGrants(t, ctx, ti.conn, authz.NewGrant(authz.ScopeMCPRead, other.server.ID))
+
+	_, err := ti.service.ListToolFilters(scoped, &gen.ListToolFiltersPayload{
+		ID:               &server.ID,
+		Slug:             nil,
+		SessionToken:     nil,
+		ApikeyToken:      nil,
+		ProjectSlugInput: nil,
+	})
+	requireOopsCode(t, err, oops.CodeForbidden)
+}
+
+func TestDeleteMcpServer_RBAC_ToolsetScopedGrantAllows(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	server, toolsetID := createToolsetBackedServerFixture(t, ctx, ti, "scoped delete toolset")
+
+	scoped := withExactAuthzGrants(t, ctx, ti.conn, authz.NewGrant(authz.ScopeMCPWrite, toolsetID.String()))
+
+	err := ti.service.DeleteMcpServer(scoped, &gen.DeleteMcpServerPayload{
+		ID:               server.ID,
+		SessionToken:     nil,
+		ApikeyToken:      nil,
+		ProjectSlugInput: nil,
+	})
+	require.NoError(t, err)
+
+	_, err = getMcpServerByID(ctx, ti, server.ID)
+	requireOopsCode(t, err, oops.CodeNotFound)
+}
+
+func TestUpdateMcpServer_RBAC_ToolsetScopedGrantAllows(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	server, toolsetID := createToolsetBackedServerFixture(t, ctx, ti, "scoped update toolset")
+
+	scoped := withExactAuthzGrants(t, ctx, ti.conn, authz.NewGrant(authz.ScopeMCPWrite, toolsetID.String()))
+
+	name := "scoped update toolset renamed"
+	toolsetIDStr := toolsetID.String()
+	updated, err := ti.service.UpdateMcpServer(scoped, &gen.UpdateMcpServerPayload{
+		SessionToken:          nil,
+		ApikeyToken:           nil,
+		ProjectSlugInput:      nil,
+		ID:                    server.ID,
+		Name:                  &name,
+		EnvironmentID:         nil,
+		RemoteMcpServerID:     nil,
+		TunneledMcpServerID:   nil,
+		ToolsetID:             &toolsetIDStr,
+		UnproxiedMcpServerID:  nil,
+		ToolVariationsGroupID: nil,
+		Visibility:            types.McpServerVisibility("private"),
+	})
+	require.NoError(t, err)
+	require.Equal(t, name, conv.PtrValOr(updated.Name, ""))
+}
+
+// A grant on the server's existing backing authorizes an update that switches
+// the backing to a target the caller has no grant on — authorization keys on
+// the row as it exists, not the payload's new backing.
+func TestUpdateMcpServer_RBAC_AuthorizesOnExistingBackingAllowsSwitch(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	server, toolsetID := createToolsetBackedServerFixture(t, ctx, ti, "scoped update switch allow")
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	newBackend := seedRemoteMcpServer(t, ctx, ti.conn, *authCtx.ProjectID).String()
+
+	// Grant is on the existing toolset backing only, not the remote target.
+	scoped := withExactAuthzGrants(t, ctx, ti.conn, authz.NewGrant(authz.ScopeMCPWrite, toolsetID.String()))
+
+	updated, err := ti.service.UpdateMcpServer(scoped, &gen.UpdateMcpServerPayload{
+		SessionToken:          nil,
+		ApikeyToken:           nil,
+		ProjectSlugInput:      nil,
+		ID:                    server.ID,
+		Name:                  nil,
+		EnvironmentID:         nil,
+		RemoteMcpServerID:     &newBackend,
+		TunneledMcpServerID:   nil,
+		ToolsetID:             nil,
+		UnproxiedMcpServerID:  nil,
+		ToolVariationsGroupID: nil,
+		Visibility:            types.McpServerVisibility("private"),
+	})
+	require.NoError(t, err)
+	require.NotNil(t, updated.RemoteMcpServerID)
+	require.Equal(t, newBackend, *updated.RemoteMcpServerID)
+}
+
+// A grant on the payload's target backing does NOT authorize an update of a
+// server the caller has no grant on — proving the check keys on the existing
+// backing, so a grant on a new toolset can't be used to hijack a server.
+func TestUpdateMcpServer_RBAC_TargetBackingGrantDoesNotAuthorize(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	server := createRemoteServerFixture(t, ctx, ti, "scoped update switch deny")
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	targetToolset, err := toolsetsrepo.New(ti.conn).CreateToolset(ctx, toolsetsrepo.CreateToolsetParams{
+		OrganizationID:         authCtx.ActiveOrganizationID,
+		ProjectID:              *authCtx.ProjectID,
+		Name:                   "scoped update switch deny target toolset",
+		Slug:                   "rbac-scoped-" + uuid.NewString(),
+		Description:            conv.ToPGText("scoped rbac fixture"),
+		DefaultEnvironmentSlug: conv.ToPGTextEmpty(""),
+		McpSlug:                conv.ToPGTextEmpty(""),
+		McpEnabled:             false,
+	})
+	require.NoError(t, err)
+
+	// Grant is on the toolset the payload would switch TO, not the server's
+	// existing remote backing.
+	scoped := withExactAuthzGrants(t, ctx, ti.conn, authz.NewGrant(authz.ScopeMCPWrite, targetToolset.ID.String()))
+
+	targetToolsetID := targetToolset.ID.String()
+	_, err = ti.service.UpdateMcpServer(scoped, &gen.UpdateMcpServerPayload{
+		SessionToken:          nil,
+		ApikeyToken:           nil,
+		ProjectSlugInput:      nil,
+		ID:                    server.server.ID,
+		Name:                  nil,
+		EnvironmentID:         nil,
+		RemoteMcpServerID:     nil,
+		TunneledMcpServerID:   nil,
+		ToolsetID:             &targetToolsetID,
+		UnproxiedMcpServerID:  nil,
+		ToolVariationsGroupID: nil,
+		Visibility:            types.McpServerVisibility("private"),
+	})
+	requireOopsCode(t, err, oops.CodeForbidden)
+}
