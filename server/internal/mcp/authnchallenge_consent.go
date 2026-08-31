@@ -438,8 +438,9 @@ func (s *Service) serveConsentGet(w http.ResponseWriter, r *http.Request, endpoi
 	var durationOptions []sessionDurationOption
 	if !challengeState.FirstParty {
 		if issuer, ierr := usersessions_repo.New(s.db).GetUserSessionIssuerByID(ctx, usersessions_repo.GetUserSessionIssuerByIDParams{
-			ID:        endpoint.UserSessionIssuerID,
-			ProjectID: endpoint.ProjectID,
+			ID:             endpoint.UserSessionIssuerID,
+			ProjectID:      endpoint.ProjectID,
+			OrganizationID: endpoint.OrganizationID,
 		}); ierr == nil {
 			durationOptions = buildSessionDurationOptions(issuer)
 		}

@@ -1006,8 +1006,9 @@ func (s *Service) DeleteMcpServer(ctx context.Context, payload *gen.DeleteMcpSer
 		// issuer must not block server deletion, so ErrNoRows skips the
 		// cascade entirely.
 		_, lockErr := userSessionsRepo.LockUserSessionIssuer(ctx, usersessionsrepo.LockUserSessionIssuerParams{
-			ID:        deleted.UserSessionIssuerID.UUID,
-			ProjectID: *authCtx.ProjectID,
+			ID:             deleted.UserSessionIssuerID.UUID,
+			ProjectID:      *authCtx.ProjectID,
+			OrganizationID: authCtx.ActiveOrganizationID,
 		})
 		if lockErr != nil && !errors.Is(lockErr, pgx.ErrNoRows) {
 			return oops.E(oops.CodeUnexpected, lockErr, "lock mcp server issuer").LogError(ctx, logger)
@@ -1023,8 +1024,9 @@ func (s *Service) DeleteMcpServer(ctx context.Context, payload *gen.DeleteMcpSer
 
 		if lockErr == nil && !hasActiveOwner {
 			deletedIssuer, err := userSessionsRepo.DeleteUserSessionIssuer(ctx, usersessionsrepo.DeleteUserSessionIssuerParams{
-				ID:        deleted.UserSessionIssuerID.UUID,
-				ProjectID: *authCtx.ProjectID,
+				ID:             deleted.UserSessionIssuerID.UUID,
+				ProjectID:      *authCtx.ProjectID,
+				OrganizationID: authCtx.ActiveOrganizationID,
 			})
 			switch {
 			case errors.Is(err, pgx.ErrNoRows):
