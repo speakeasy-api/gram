@@ -16,7 +16,7 @@ func TestValidateGrantRejectsOriginChange(t *testing.T) {
 		RouteBase:           "mcp",
 		UserSessionIssuerID: issuerID,
 	}
-	err := endpoint.ValidateGrant(EndpointRef{
+	err := endpoint.ValidateGrant(t.Context(), nil, EndpointRef{
 		McpSlug: "my-server",
 		BaseURL: "https://custom.example.com",
 	}, issuerID, "https://platform.example.com")
@@ -32,7 +32,7 @@ func TestValidateGrantAllowsLegacyMissingOrigin(t *testing.T) {
 		RouteBase:           "mcp",
 		UserSessionIssuerID: issuerID,
 	}
-	require.NoError(t, endpoint.ValidateGrant(EndpointRef{McpSlug: "my-server"}, issuerID, "https://platform.example.com"))
+	require.NoError(t, endpoint.ValidateGrant(t.Context(), nil, EndpointRef{McpSlug: "my-server"}, issuerID, "https://platform.example.com"))
 }
 
 func TestValidateChallengeRejectsIssuerChange(t *testing.T) {
@@ -43,7 +43,7 @@ func TestValidateChallengeRejectsIssuerChange(t *testing.T) {
 		RouteBase:           "mcp",
 		UserSessionIssuerID: uuid.New(),
 	}
-	err := endpoint.ValidateChallenge(EndpointRef{McpSlug: "my-server"}, uuid.New())
+	err := endpoint.ValidateChallenge(t.Context(), EndpointRef{McpSlug: "my-server"}, uuid.New())
 	require.ErrorIs(t, err, errToolsetEndpointMismatch)
 }
 
@@ -101,7 +101,8 @@ func TestEndpointRefPinsBridgedToolset(t *testing.T) {
 		McpServerID: uuid.NullUUID{UUID: uuid.New(), Valid: true},
 		ToolsetID:   uuid.NullUUID{UUID: toolsetID, Valid: true},
 	}
-	ref := endpoint.EndpointRef("https://platform.example.com")
+	ref, err := endpoint.EndpointRef(t.Context(), nil, "https://platform.example.com")
+	require.NoError(t, err)
 	require.Equal(t, endpoint.McpServerID, ref.McpServerID)
 	require.Equal(t, endpoint.ToolsetID, ref.ToolsetID)
 

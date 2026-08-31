@@ -179,11 +179,15 @@ func (s *Service) ServeAuthorize(w http.ResponseWriter, r *http.Request, endpoin
 		subject = &sub
 	}
 
+	endpointRef, err := endpoint.EndpointRef(ctx, s.db, baseURL)
+	if err != nil {
+		return oops.E(oops.CodeUnauthorized, err, "capture OAuth endpoint authority").LogError(ctx, logger)
+	}
 	challengeState := AuthnChallengeState{
 		ID:                  challengeID,
 		FlowID:              flowID,
 		UserSessionIssuerID: endpoint.UserSessionIssuerID,
-		Endpoint:            endpoint.EndpointRef(baseURL),
+		Endpoint:            endpointRef,
 		ClientID:            req.ClientID,
 		RedirectURI:         req.RedirectURI,
 		State:               req.State,

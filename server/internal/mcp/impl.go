@@ -393,7 +393,7 @@ func NewService(
 		platformtoolsruntime.WithFeatureChecker(platformFeatureChecker),
 	)
 
-	return &Service{
+	service := &Service{
 		logger:                    logger,
 		tracer:                    tracer,
 		metrics:                   metrics,
@@ -479,7 +479,11 @@ func NewService(
 		tunnelManager:      newTunnelManager(tunnelRoutes, tunnelForwardToken, remoteProxyManager, tunnelGatewayCIDRs),
 		tunnelPublic:       newTunnelPublicRuntime(redisClient, meterProvider, metrics, tunnelPublicConfig),
 		metaRuntime:        metaRuntimeConfig.withDefaults(),
-	}, nil
+	}
+	if remoteChallengeMgr != nil {
+		remoteChallengeMgr.SetPrivateAuthorityValidator(service.validateRemoteLoginPrivateAuthority)
+	}
+	return service, nil
 }
 
 func (s *Service) requestAccessURL(ctx context.Context, serverID string, serverName string) string {

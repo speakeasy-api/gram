@@ -61,11 +61,15 @@ func (s *Service) ServeFirstPartyConnect(w http.ResponseWriter, r *http.Request,
 	baseURL := s.BaseURLForRequest(r)
 	flowID := uuid.NewString()
 	challengeID := uuid.NewString()
+	endpointRef, err := endpoint.EndpointRef(ctx, s.db, baseURL)
+	if err != nil {
+		return oops.E(oops.CodeUnauthorized, err, "capture OAuth endpoint authority").LogError(ctx, logger)
+	}
 	challengeState := AuthnChallengeState{
 		ID:                  challengeID,
 		FlowID:              flowID,
 		UserSessionIssuerID: endpoint.UserSessionIssuerID,
-		Endpoint:            endpoint.EndpointRef(baseURL),
+		Endpoint:            endpointRef,
 		ClientID:            "",
 		RedirectURI:         "",
 		State:               "",
