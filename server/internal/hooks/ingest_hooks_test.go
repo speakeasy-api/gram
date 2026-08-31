@@ -1692,10 +1692,14 @@ func TestTelemetryHookEventName_TranslatesCanonicalVocabulary(t *testing.T) {
 	require.Equal(t, "UserPromptSubmit", telemetryHookEventName(withRaw("copilot", "prompt.submitted", "userPromptSubmitted")))
 	require.Equal(t, "SubagentStop", telemetryHookEventName(withRaw("copilot", "session.updated", "subagentStop")))
 	require.Equal(t, "PermissionRequest", telemetryHookEventName(withRaw("Copilot", "tool.requested", "permissionRequest")))
+	require.Equal(t, "PreToolUse", telemetryHookEventName(withRaw("copilot-cli", "tool.requested", "preToolUse")))
+	require.Equal(t, "PreToolUse", telemetryHookEventName(withRaw("vscode-copilot", "tool.requested", "PreToolUse")))
+	require.Equal(t, "SubagentStart", telemetryHookEventName(withRaw("vscode-copilot", "session.updated", "SubagentStart")))
+	require.Equal(t, "PreCompact", telemetryHookEventName(withRaw("vscode-copilot", "session.updated", "PreCompact")))
 
 	// Unrecognized raw names for known adapters fall back to the canonical map.
 	require.Equal(t, "PreToolUse", telemetryHookEventName(withRaw("cursor", "tool.requested", "beforeReadFile")))
-	require.Equal(t, "PreToolUse", telemetryHookEventName(withRaw("copilot", "tool.requested", "subagentStart")))
+	require.Equal(t, "SubagentStart", telemetryHookEventName(withRaw("copilot", "session.updated", "subagentStart")))
 
 	// OpenCode's message.part.updated carries every streaming part update, not
 	// just failures; agenthooks decides whether it is a real tool failure, so the

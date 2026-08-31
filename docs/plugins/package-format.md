@@ -353,7 +353,7 @@ Copilot is an [Agent Plugins 1.0](https://github.com/agentplugins/agent-plugins-
 }
 ```
 
-**`hooks/hooks.json`** — Copilot's own camelCase event names, one entry per event:
+**`hooks/hooks.json`** — Copilot CLI's native camelCase events, one entry per event:
 
 ```json
 {
@@ -362,8 +362,8 @@ Copilot is an [Agent Plugins 1.0](https://github.com/agentplugins/agent-plugins-
     "preToolUse": [
       {
         "type": "command",
-        "bash": "bash \"$COPILOT_PLUGIN_ROOT/hooks/bootstrap.sh\" --config=\"$COPILOT_PLUGIN_ROOT/speakeasy.json\" agenthooks run --provider=copilot --timeout=60s",
-        "powershell": "& \"$env:COPILOT_PLUGIN_ROOT/hooks/bootstrap.ps1\" \"--config=$env:COPILOT_PLUGIN_ROOT/speakeasy.json\" agenthooks run --provider=copilot --timeout=60s; exit $LASTEXITCODE",
+        "bash": "bash \"$COPILOT_PLUGIN_ROOT/hooks/bootstrap.sh\" --config=\"$COPILOT_PLUGIN_ROOT/speakeasy.json\" agenthooks run --provider=copilot-cli --timeout=60s",
+        "powershell": "& \"$env:COPILOT_PLUGIN_ROOT/hooks/bootstrap.ps1\" \"--config=$env:COPILOT_PLUGIN_ROOT/speakeasy.json\" agenthooks run --provider=copilot-cli --timeout=60s; exit $LASTEXITCODE",
         "timeoutSec": 60
       }
     ]
@@ -371,20 +371,22 @@ Copilot is an [Agent Plugins 1.0](https://github.com/agentplugins/agent-plugins-
 }
 ```
 
-Registered events: `sessionStart`, `sessionEnd`, `userPromptSubmitted`, `preToolUse`, `postToolUse`, `postToolUseFailure`, `permissionRequest`, `agentStop`, `subagentStop`, `notification`.
+Registered CLI events: `sessionStart`, `sessionEnd`, `userPromptSubmitted`, `preToolUse`, `postToolUse`, `postToolUseFailure`, `permissionRequest`, `agentStop`, `subagentStop`, `notification`.
+
+**`.speakeasy/vscode-hooks.json`** is a non-discovered deployment manifest for managed installation. It names provider `vscode-copilot`, destination `agenthooks-vscode.json`, and the eight PascalCase events `SessionStart`, `UserPromptSubmit`, `PreToolUse`, `PostToolUse`, `Stop`, `SubagentStart`, `SubagentStop`, and `PreCompact`. It is metadata, not a second hook file inside the plugin.
 
 Four differences from the other dialects, each load-bearing:
 
-| Field                 | Copilot                | Why                                                                                                                                                                                                                                                                             |
-| --------------------- | ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `matcher`             | **absent**             | An empty matcher is a validation error that discards this plugin's entire hook config. Absent means match-all — the semantic the other dialects' `"matcher": ""` was reaching for.                                                                                              |
-| `timeoutSec`          | seconds                | Copilot's own default is 30s. Claude and Cursor spell the same field `timeout`.                                                                                                                                                                                                 |
-| `bash` / `powershell` | native per-entry split | Copilot runs the `powershell` value as PowerShell directly, so unlike Codex there is no base64 `-EncodedCommand` wrapping. Without it, a Windows machine with no bash fails `preToolUse` — which is fail-closed, so every tool call is denied rather than merely untelemetered. |
-| `failClosed`          | **absent**             | Copilot fixes the posture per event: `preToolUse` is fail-closed on any non-timeout error, everything else fails open.                                                                                                                                                          |
+| Field                 | Copilot                | Why                                                                                                                                                                                |
+| --------------------- | ---------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `matcher`             | **absent**             | An empty matcher is a validation error that discards this plugin's entire hook config. Absent means match-all — the semantic the other dialects' `"matcher": ""` was reaching for. |
+| `timeoutSec`          | seconds                | Copilot's own default is 30s. Claude and Cursor spell the same field `timeout`.                                                                                                    |
+| `bash` / `powershell` | native per-entry split | Copilot CLI runs the PowerShell value directly. The command propagates `$LASTEXITCODE`, preserving the CLI codec's exit behavior.                                                  |
+| `failClosed`          | **absent**             | Copilot fixes the posture per event: `preToolUse` is fail-closed on any non-timeout error, everything else fails open.                                                             |
 
 The hook config ships at `hooks/hooks.json` **only**. Copilot parses both `<root>/hooks.json` and `<root>/hooks/hooks.json`, so shipping both registers every hook twice.
 
-**Surface support.** Hooks run in Copilot CLI only. VS Code and the Copilot app load the plugin — MCP servers and skills work there — but never fire its hooks. Copilot's cloud agent reads hooks from `.github/hooks/*.json` in the repository and is not targeted by this package.
+**Surface support.** Copilot CLI and VS Code are distinct runtimes. The plugin file invokes `copilot-cli`, whose native camelCase input and flat responses remain unchanged. Managed installation materializes the manifest as one PascalCase `vscode-copilot` registration, whose snake_case input and nested responses are codec-owned. Do not materialize that file alongside another VS Code/CLI shared registration: both runtimes scan the same hook locations and overlapping files double-fire in Copilot CLI.
 
 **Hook chain ordering.** Copilot short-circuits the hook chain on the first deny, so a customer hook that denies before Gram's entry suppresses Gram's telemetry for that call.
 

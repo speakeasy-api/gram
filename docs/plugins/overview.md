@@ -39,7 +39,7 @@ Assignments control who sees the plugin in their marketplace; RBAC (`mcp:connect
 
 **Observability plugin.** Every publish automatically includes a per-org observability plugin — one each for Claude, Cursor, Codex, OpenCode and GitHub Copilot — that bundles hooks forwarding tool-use events back to Gram. This is required for proper audit logging.
 
-**GitHub Copilot.** Copilot is supported on two separate tracks. MCP servers and skills ship through the platform-neutral Agent Plugins 1.0 package (`agent-plugins/<plugin-slug>/`), which Copilot loads in the CLI, VS Code and the Copilot app. Hooks ship through the Copilot observability package and run in **Copilot CLI only** — VS Code and the Copilot app load the plugin but never fire its hooks. See [Package format](./package-format.md#copilot-observability).
+**GitHub Copilot.** Copilot is supported on two separate tracks. MCP servers and skills ship through the platform-neutral Agent Plugins 1.0 package (`agent-plugins/<plugin-slug>/`). The observability package keeps the Copilot CLI registration explicitly `copilot-cli` and carries a separate managed-install manifest for VS Code's `vscode-copilot` registration. The two runtimes share canonical Gram events, not wire or response codecs. See [Package format](./package-format.md#copilot-observability).
 
 **Scoped API keys.** At publish time, Gram mints two API keys and embeds them in the generated configs:
 

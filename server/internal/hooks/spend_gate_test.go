@@ -406,7 +406,7 @@ func TestIngest_SpendGateIgnoresOtherAdapters(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, result)
 	assert.Equal(t, "allow", result.Decision,
-		"spend enforcement covers claude/codex/cursor/copilot/openclaw; opencode passes through pending a product decision")
+		"spend enforcement covers claude/codex/cursor/copilot-cli/vscode-copilot/openclaw; opencode passes through pending a product decision")
 }
 
 func TestCodex_UserPromptSubmit_SpendGateBlocksBeforeRiskScan(t *testing.T) {

@@ -95,11 +95,11 @@ func TestParseCopilotHookEvent(t *testing.T) {
 		{raw: "permissionRequest", expected: HookEventPermissionRequest, ok: true},
 		{raw: "agentStop", expected: HookEventStop, ok: true},
 		{raw: "subagentStop", expected: HookEventSubagentStop, ok: true},
+		{raw: "SubagentStart", expected: HookEventSubagentStart, ok: true},
+		{raw: "PreCompact", expected: HookEventPreCompact, ok: true},
 		{raw: "notification", expected: HookEventNotification, ok: true},
-		// Copilot events with no canonical equivalent stay unmapped so they
-		// fall through to the canonical Event.Type.
-		{raw: "preCompact", expected: HookEventUnknown, ok: false},
-		{raw: "subagentStart", expected: HookEventUnknown, ok: false},
+		{raw: "preCompact", expected: HookEventPreCompact, ok: true},
+		{raw: "subagentStart", expected: HookEventSubagentStart, ok: true},
 		{raw: "unknown", expected: HookEventUnknown, ok: false},
 	}
 

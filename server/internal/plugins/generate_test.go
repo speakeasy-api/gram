@@ -1141,9 +1141,9 @@ func TestGenerateCopilotObservabilityPluginRegistersBootstrapCommands(t *testing
 	var parsed copilotHooksConfig
 	require.NoError(t, json.Unmarshal(hooksJSON, &parsed))
 	require.Equal(t, 1, parsed.Version)
-	require.Len(t, parsed.Hooks, len(CopilotObservabilityHookEvents))
+	require.Len(t, parsed.Hooks, len(CopilotCLIObservabilityHookEvents))
 
-	for _, event := range CopilotObservabilityHookEvents {
+	for _, event := range CopilotCLIObservabilityHookEvents {
 		entries, ok := parsed.Hooks[event]
 		require.True(t, ok, "event %q must be registered in hooks.json or Copilot will silently drop it", event)
 		require.Len(t, entries, 1)
@@ -1155,14 +1155,24 @@ func TestGenerateCopilotObservabilityPluginRegistersBootstrapCommands(t *testing
 		require.Equal(t, "command", entries[0].Type)
 		require.Equal(t, timeoutSeconds, entries[0].TimeoutSec, "Copilot's own default is 30s")
 		require.Equal(t,
-			fmt.Sprintf(`bash "$COPILOT_PLUGIN_ROOT/hooks/bootstrap.sh" --config="$COPILOT_PLUGIN_ROOT/speakeasy.json" agenthooks run --provider=copilot --timeout=%ds`, timeoutSeconds),
+			fmt.Sprintf(`bash "$COPILOT_PLUGIN_ROOT/hooks/bootstrap.sh" --config="$COPILOT_PLUGIN_ROOT/speakeasy.json" agenthooks run --provider=copilot-cli --timeout=%ds`, timeoutSeconds),
 			entries[0].Bash,
 		)
 		// A Windows machine with no bash fails preToolUse, which Copilot
 		// fail-closes: every tool call denied, not merely lost telemetry.
-		require.Equal(t, copilotHooksPowerShellCommand(timeoutSeconds), entries[0].PowerShell,
+		require.Equal(t, copilotHooksPowerShellCommand("copilot-cli", timeoutSeconds), entries[0].PowerShell,
 			"every entry needs a powershell counterpart")
 		require.Contains(t, entries[0].PowerShell, "bootstrap.ps1")
+	}
+
+	var manifest copilotVSCodeHookManifest
+	require.NoError(t, json.Unmarshal(files[root+"/.speakeasy/vscode-hooks.json"], &manifest))
+	require.Equal(t, 1, manifest.SchemaVersion)
+	require.Equal(t, "vscode-copilot", manifest.Provider)
+	require.Equal(t, "agenthooks-vscode.json", manifest.Destination)
+	require.Len(t, manifest.Events, len(VSCodeCopilotObservabilityHookEvents))
+	for _, event := range VSCodeCopilotObservabilityHookEvents {
+		require.Contains(t, manifest.Events, event)
 	}
 }
 
@@ -2750,7 +2760,7 @@ func TestDogfoodPluginFilesIncludesCopilot(t *testing.T) {
 
 	var cfg copilotHooksConfig
 	require.NoError(t, json.Unmarshal(files["plugin-copilot/hooks/hooks.json"], &cfg))
-	require.Len(t, cfg.Hooks, len(CopilotObservabilityHookEvents))
+	require.Len(t, cfg.Hooks, len(CopilotCLIObservabilityHookEvents))
 	require.NotEmpty(t, files["plugin-copilot/hooks/bootstrap.sh"])
 	require.NotEmpty(t, files["plugin-copilot/hooks/bootstrap.ps1"])
 }

@@ -795,9 +795,9 @@ export function CopilotInstallContent(): JSX.Element {
       <div>
         <h3 className="mb-2 text-sm font-semibold">Quick install</h3>
         <p className="text-muted-foreground mb-3 text-sm">
-          Download the Gram observability plugin as a ZIP — a self-contained
-          Copilot plugin with a hooks-scoped API key already embedded (no CLI,
-          no key to export).
+          Download the Gram observability plugin as a ZIP. It includes a
+          hooks-scoped API key, an explicit Copilot CLI registration, and VS
+          Code registration metadata for managed installation.
         </p>
         <Button
           variant="secondary"
@@ -826,11 +826,11 @@ export function CopilotInstallContent(): JSX.Element {
           Before you install
         </p>
         <p className="text-muted-foreground text-sm">
-          Hooks run in{" "}
-          <span className="text-foreground font-medium">Copilot CLI</span> only.
-          MCP servers and skills from your Gram plugin also load in VS Code and
-          the Copilot app, but those surfaces never fire hooks — so no
-          telemetry, spend gating, or policy enforcement there.
+          VS Code hook support is a preview. Its managed registration uses the{" "}
+          <span className="text-foreground font-medium">vscode-copilot</span>{" "}
+          codec. The plugin registration remains explicitly{" "}
+          <span className="text-foreground font-medium">copilot-cli</span>, so
+          the two wire and response formats never get conflated.
         </p>
         <p className="text-muted-foreground text-sm">
           Copilot stops running a tool's hook chain at the first deny. If

@@ -384,7 +384,7 @@ const platformMCPGeneratorVersion = "3"
 // line when it pins a new binary, because new checksums always change the
 // rendered bootstrap script. Any other change to hooks generation needs a
 // manual bump, which the Plugin Generate Check CI workflow enforces.
-const hooksGeneratorVersion = "38"
+const hooksGeneratorVersion = "39"
 
 // Fixed, non-empty sentinels substituted for the per-publish API keys when
 // computing a fingerprint. They must be non-empty: an empty HooksAPIKey omits
@@ -548,13 +548,23 @@ var CursorObservabilityHookEvents = []string{
 	"afterMCPExecution",
 }
 
-// CopilotObservabilityHookEvents are GitHub Copilot's native (camelCase) hook
-// event names. Copilot only invokes the hooks runtime for events listed here,
-// so an event missing from this list is silently dropped client-side. Copilot's
-// four remaining events (preCompact, errorOccurred, subagentStart,
-// userPromptTransformed) have no Gram canonical type and are deliberately
-// unregistered.
-var CopilotObservabilityHookEvents = []string{
+// VSCodeCopilotObservabilityHookEvents is the shared PascalCase event set read
+// by VS Code Copilot Chat and by Copilot CLI's Claude-compatibility mode. The
+// explicit vscode-copilot provider is demoted by agenthooks to copilot-cli when
+// the CLI's COPILOT_* environment proves that runtime.
+var VSCodeCopilotObservabilityHookEvents = []string{
+	"SessionStart",
+	"UserPromptSubmit",
+	"PreToolUse",
+	"PostToolUse",
+	"Stop",
+	"SubagentStart",
+	"SubagentStop",
+	"PreCompact",
+}
+
+// CopilotCLIObservabilityHookEvents are Copilot CLI's native camelCase events.
+var CopilotCLIObservabilityHookEvents = []string{
 	"sessionStart",
 	"sessionEnd",
 	"userPromptSubmitted",
@@ -1482,9 +1492,8 @@ func generateOpenCodeObservabilityPluginInDir(files map[string][]byte, subdir st
 }
 
 // generateCopilotObservabilityPlugin emits the per-org observability plugin
-// for GitHub Copilot. Hooks only run in Copilot CLI (and the cloud agent, which
-// this package does not target); VS Code and the Copilot app load the plugin
-// but never fire its hooks.
+// for GitHub Copilot CLI and carries a non-discovered deployment manifest for
+// the device agent's shared VS Code/Copilot CLI user registration.
 func generateCopilotObservabilityPlugin(files map[string][]byte, cfg GenerateConfig) error {
 	return generateCopilotObservabilityPluginInDir(files, CopilotObservabilitySlug(cfg), cfg)
 }
@@ -1512,8 +1521,8 @@ func generateCopilotObservabilityPluginInDir(files map[string][]byte, subdir str
 	// subdirectory like the Claude/Cursor/Codex packages.
 	files[path.Join(subdir, "plugin.json")] = pluginJSON
 
-	hookEvents := make(map[string][]copilotHookCommand, len(CopilotObservabilityHookEvents))
-	for _, event := range CopilotObservabilityHookEvents {
+	hookEvents := make(map[string][]copilotHookCommand, len(CopilotCLIObservabilityHookEvents))
+	for _, event := range CopilotCLIObservabilityHookEvents {
 		// sessionStart carries the cold-install download, so it gets the same
 		// headroom Cursor's does; Copilot's own default is 30s, not enough.
 		timeoutSeconds := 60
@@ -1522,8 +1531,8 @@ func generateCopilotObservabilityPluginInDir(files map[string][]byte, subdir str
 		}
 		hookEvents[event] = []copilotHookCommand{{
 			Type:       "command",
-			Bash:       hooksBootstrapCommand(`$COPILOT_PLUGIN_ROOT`, "copilot", timeoutSeconds, false),
-			PowerShell: copilotHooksPowerShellCommand(timeoutSeconds),
+			Bash:       hooksBootstrapCommand(`$COPILOT_PLUGIN_ROOT`, "copilot-cli", timeoutSeconds, false),
+			PowerShell: copilotHooksPowerShellCommand("copilot-cli", timeoutSeconds),
 			TimeoutSec: timeoutSeconds,
 		}}
 	}
@@ -1534,6 +1543,22 @@ func generateCopilotObservabilityPluginInDir(files map[string][]byte, subdir str
 	// hooks/hooks.json ONLY. Copilot parses both <root>/hooks.json and
 	// <root>/hooks/hooks.json, so shipping both registers every hook twice.
 	files[path.Join(subdir, "hooks/hooks.json")] = hooksJSON
+
+	registrationEvents := make(map[string]int, len(VSCodeCopilotObservabilityHookEvents))
+	for _, event := range VSCodeCopilotObservabilityHookEvents {
+		registrationEvents[event] = 60
+	}
+	registrationEvents["SessionStart"] = 330
+	manifest, err := marshalJSON(copilotVSCodeHookManifest{
+		SchemaVersion: 1,
+		Provider:      "vscode-copilot",
+		Destination:   "agenthooks-vscode.json",
+		Events:        registrationEvents,
+	})
+	if err != nil {
+		return fmt.Errorf("marshal VS Code hook manifest: %w", err)
+	}
+	files[path.Join(subdir, ".speakeasy/vscode-hooks.json")] = manifest
 
 	if err := writeHooksRuntimeFiles(files, subdir, cfg); err != nil {
 		return err
@@ -3092,6 +3117,13 @@ type copilotHooksConfig struct {
 	Hooks   map[string][]copilotHookCommand `json:"hooks"`
 }
 
+type copilotVSCodeHookManifest struct {
+	SchemaVersion int            `json:"schema_version"`
+	Provider      string         `json:"provider"`
+	Destination   string         `json:"destination"`
+	Events        map[string]int `json:"events"`
+}
+
 // copilotHookCommand is one Copilot hook entry. Two deliberate omissions:
 //
 //   - No matcher field. Absent means match-all; an empty one is fatal.
@@ -3100,8 +3132,7 @@ type copilotHooksConfig struct {
 //
 // see package-format.md#copilot-observability
 //
-// bash and powershell are native per-entry fields, so unlike Codex the Windows
-// command needs no base64 -EncodedCommand wrapping.
+// bash and powershell are Copilot CLI's platform fields.
 type copilotHookCommand struct {
 	Type       string `json:"type"`
 	Bash       string `json:"bash"`

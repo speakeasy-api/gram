@@ -296,7 +296,7 @@ func TestIngest_CanonicalWarnChallengesEveryAdapterAndEvent(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestHooksService(t)
-	adapters := []string{"claude", "cursor", "codex", "opencode", "copilot"}
+	adapters := []string{"claude", "cursor", "codex", "opencode", "copilot", "copilot-cli", "vscode-copilot"}
 	eventKinds := []string{"prompt", "tool", "mcp", "permission"}
 
 	for _, adapter := range adapters {

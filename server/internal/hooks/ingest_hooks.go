@@ -1376,7 +1376,7 @@ func telemetryHookEventName(payload *gen.IngestPayload) string {
 			parse = parseCodexHookEvent
 		case "opencode":
 			parse = parseOpencodeHookEvent
-		case "copilot":
+		case "copilot", "copilot-cli", "vscode-copilot":
 			parse = parseCopilotHookEvent
 		}
 		if parse != nil {
