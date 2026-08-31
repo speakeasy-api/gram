@@ -542,9 +542,31 @@ func (s *Service) authenticateIssuerGate(
 
 func (s *Service) resolveIssuerGateAccessTokens(ctx context.Context, w http.ResponseWriter, authentication *issuerGateAuthentication) (map[uuid.UUID]remotesessions.UpstreamToken, error) {
 	endpoint := authentication.endpoint
+
+	// Meta MCP endpoints resolve partially: their member dispatch routes
+	// each credential by its recorded resource, so an unconnected provider
+	// degrades that one member while the rest of the session serves. The
+	// all-or-nothing ErrNoValidToken challenge below stays for direct
+	// endpoints, whose toolset dispatch has no per-upstream routing (AIS-152).
+	if endpoint.MetaMcpServerID.Valid {
+		tokens, err := s.remoteChallengeMgr.ResolveAvailableAccessTokens(ctx, endpoint.ProjectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID, authentication.subject)
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "resolve remote session").LogError(ctx, s.logger)
+		}
+		return tokens, nil
+	}
+
 	tokens, err := s.remoteChallengeMgr.ResolveAccessTokens(ctx, endpoint.ProjectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID, authentication.subject)
 	switch {
 	case errors.Is(err, remotesessions.ErrNoValidToken):
+		// The Gram user-session token is valid, but a required upstream
+		// remote session for this issuer is missing or unusable, so the
+		// runtime issues a re-auth challenge pointing the user at
+		// {routeBase}/{slug}/connect. This 401 is byte-identical to an
+		// invalid-token rejection (both are CodeUnauthorized), so without
+		// this line the two are indistinguishable in production. The
+		// specific broken upstream (and its refresh reason) is logged by
+		// remotesessions.ResolveAccessToken.
 		endpoint.LogWith(s.logger).WarnContext(ctx, "mcp issuer gate rejected: upstream remote session missing or unusable",
 			attr.SlogUserSessionIssuerID(endpoint.UserSessionIssuerID.String()),
 			attr.SlogToolsetMCPSlug(endpoint.Slug),

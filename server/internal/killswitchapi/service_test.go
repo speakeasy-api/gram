@@ -632,8 +632,7 @@ func requireServiceError(t *testing.T, err error, name string) {
 	var named goa.GoaErrorNamer
 	require.ErrorAs(t, err, &named)
 	require.Equal(t, name, named.GoaErrorName())
-	var conflict *gen.KillswitchConflict
-	if errors.As(err, &conflict) {
+	if conflict, ok := errors.AsType[*gen.KillswitchConflict](err); ok {
 		message := strings.ToLower(conflict.Message)
 		for _, internal := range []string{"prescription", "definition", "failure policy", "failure_policy"} {
 			require.NotContains(t, message, internal)

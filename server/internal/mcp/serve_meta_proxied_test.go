@@ -393,3 +393,53 @@ func TestServePublic_MetaEndpoint_ExecuteTool_NoCredentialCallsAnonymously(t *te
 	require.Empty(t, upstreamA.capturedAuth(),
 		"no bearer may be forwarded to a member with no matching credential — least of all a sibling's")
 }
+
+// A subject who connected only one of the gateway's two providers still gets
+// a served session: the covered member forwards its own bearer, the
+// uncovered member is called anonymously, and no request-level 401 fires.
+// Before partial resolution, the missing grant rejected the whole session.
+func TestServePublic_MetaEndpoint_PartialProviderConnectionsServe(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+	projectID := *authCtx.ProjectID
+	orgID := authCtx.ActiveOrganizationID
+
+	sharedIssuerID := createUserSessionIssuer(t, ctx, ti.conn, projectID)
+	metaSlug := "meta-partial-" + uuid.NewString()[:8]
+	meta := createMetaMcpEndpoint(t, ctx, ti.conn, projectID, orgID, metaSlug, sharedIssuerID)
+
+	upstreamA := newRecordingUpstream(t, "ping")
+	upstreamB := newRecordingUpstream(t, "ping")
+	seedMetaMemberWithUpstream(t, ctx, ti.conn, projectID, meta.ID, "Member A", "member-a", 0, upstreamA.url)
+	seedMetaMemberWithUpstream(t, ctx, ti.conn, projectID, meta.ID, "Member B", "member-b", 1, upstreamB.url)
+
+	// Both providers are attached to the gateway, but the subject linked
+	// only member B's — the exact shape of a user who skipped one consent
+	// tile. Member A's client stays attached with no token on purpose: the
+	// partial resolver must skip it, where the strict resolver would have
+	// failed the whole session.
+	createConsentRemoteClient(t, ctx, ti.conn, projectID, orgID, "meta-partial-a", "", []uuid.UUID{sharedIssuerID})
+	clientB := createConsentRemoteClient(t, ctx, ti.conn, projectID, orgID, "meta-partial-b", "", []uuid.UUID{sharedIssuerID})
+
+	subject := urn.NewUserSubject("meta-partial-user-" + uuid.NewString())
+	insertQualifiedRemoteSessionToken(t, ctx, ti, sharedIssuerID, clientB, subject, "token-member-b", upstreamB.url)
+
+	bearer := mintMetaIssuerBearer(t, ti, metaSlug, sharedIssuerID, subject)
+
+	rpc := executeMetaTool(t, ti, metaSlug, bearer, "member-b--ping")
+	text, isError := metaToolResultText(t, rpc)
+	require.False(t, isError, "the covered member must serve on a partially connected session: %s", text)
+	require.Equal(t, "Bearer token-member-b", upstreamB.capturedAuth(),
+		"the covered member must receive its own bearer")
+
+	rpc = executeMetaTool(t, ti, metaSlug, bearer, "member-a--ping")
+	text, isError = metaToolResultText(t, rpc)
+	require.False(t, isError, "the uncovered member must degrade to an anonymous call, not fail the session: %s", text)
+	require.Positive(t, upstreamA.requests.Load(), "member A's upstream must have been called")
+	require.Empty(t, upstreamA.capturedAuth(),
+		"no bearer may reach the member whose provider was never connected")
+}

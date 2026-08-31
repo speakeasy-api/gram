@@ -400,12 +400,12 @@ func (s *Service) buildMemberDispatch(
 		return nil, nil, err
 	}
 
-	// A hosted member records no upstream resource, so only a lone
-	// unqualified token can be its credential: a token consented for a
-	// specific member must never reach another member's tools, and several
-	// tokens are unroutable. Both degrade to no token rather than an error,
-	// so multi-credential meta sessions keep hosted members callable.
-	tokenInputs, err := appendRemoteSessionTokenInputs(nil, hostedMemberTokens(gate.tokens))
+	// A hosted member records no upstream resource, so its credential is the
+	// token map entry keyed by its own derived remote_session_issuer: a token
+	// consented for a specific member must never reach another member's
+	// tools. No entry degrades to no token rather than an error, so partially
+	// connected meta sessions keep hosted members callable.
+	tokenInputs, err := appendRemoteSessionTokenInputs(nil, hostedMemberTokens(gate.tokens, member))
 	if err != nil {
 		return nil, nil, oops.E(oops.CodeUnexpected, err, "resolve upstream tokens for meta MCP member").LogError(ctx, logger)
 	}
@@ -465,22 +465,21 @@ func (s *Service) buildMemberDispatch(
 }
 
 // hostedMemberTokens narrows a gate's token map to what a hosted member may
-// receive: exactly one token with no recorded resource. The tunneled arm of
-// routeMetaMemberToken applies the same rule, so on a mixed gateway one
-// unqualified credential reaches both; recording synthetic tunnel resources
-// (AIM-87 follow-up) is what will split them. A resource-qualified
-// token belongs to the member it was consented for, and several tokens are
-// unroutable without a scheme-to-issuer mapping; both cases yield no token.
-func hostedMemberTokens(tokens map[uuid.UUID]remotesessions.UpstreamToken) map[uuid.UUID]remotesessions.UpstreamToken {
-	if len(tokens) != 1 {
+// receive: the entry keyed by the member's own derived remote_session_issuer,
+// and only when its grant is unqualified. The tunneled arm of
+// routeMetaMemberToken applies the same rule. A lone-token fallback would
+// forward a sibling's bearer once partial resolution leaves gaps in the map,
+// and a resource-qualified token is audience-bound to the remote upstream it
+// was consented for; both cases yield no token.
+func hostedMemberTokens(tokens map[uuid.UUID]remotesessions.UpstreamToken, member metaMember) map[uuid.UUID]remotesessions.UpstreamToken {
+	if !member.remoteSessionIssuerID.Valid {
 		return nil
 	}
-	for _, entry := range tokens {
-		if entry.Resource != "" {
-			return nil
-		}
+	entry, ok := tokens[member.remoteSessionIssuerID.UUID]
+	if !ok || entry.Resource != "" {
+		return nil
 	}
-	return tokens
+	return map[uuid.UUID]remotesessions.UpstreamToken{member.remoteSessionIssuerID.UUID: entry}
 }
 
 // loadMemberToolset loads the member's toolset row, applying the member

@@ -242,7 +242,8 @@ SELECT
     s.tunneled_mcp_server_id AS mcp_server_tunneled_mcp_server_id,
     s.unproxied_mcp_server_id AS mcp_server_unproxied_mcp_server_id,
     s.environment_id AS mcp_server_environment_id,
-    s.tool_variations_group_id AS mcp_server_tool_variations_group_id
+    s.tool_variations_group_id AS mcp_server_tool_variations_group_id,
+    s.remote_session_issuer_id AS mcp_server_remote_session_issuer_id
 FROM meta_mcp_server_members m
 JOIN mcp_servers s
   ON s.id = m.mcp_server_id
