@@ -679,7 +679,8 @@ INSERT INTO remote_session_issuers (
     code_challenge_methods_supported,
     client_id_metadata_document_supported,
     oidc,
-    passthrough
+    passthrough,
+    metadata
 )
 VALUES (
     $1,
@@ -707,7 +708,12 @@ VALUES (
     $20,
     $21,
     $22,
-    $23
+    $23,
+    -- Best-effort snapshot of the issuer's own discovery document. NULL is the
+    -- normal outcome for a hand-configured issuer or an unreachable upstream:
+    -- the well-known surface reconstructs from the typed columns above until
+    -- the first refresh captures one.
+    $24::jsonb
 )
 RETURNING id, project_id, organization_id, slug, issuer, authorization_endpoint, token_endpoint, revocation_endpoint, registration_endpoint, jwks_uri, service_documentation, op_policy_uri, op_tos_uri, scopes_supported, grant_types_supported, response_types_supported, token_endpoint_auth_methods_supported, code_challenge_methods_supported, client_id_metadata_document_supported, oidc, passthrough, name, logo_asset_id, client_setup_documentation_url, metadata, created_at, updated_at, deleted_at, deleted
 `
@@ -736,6 +742,7 @@ type CreateRemoteSessionIssuerParams struct {
 	ClientIDMetadataDocumentSupported bool
 	Oidc                              bool
 	Passthrough                       bool
+	Metadata                          []byte
 }
 
 // Remote session issuers — upstream Authorization Server identity records
@@ -768,6 +775,7 @@ func (q *Queries) CreateRemoteSessionIssuer(ctx context.Context, arg CreateRemot
 		arg.ClientIDMetadataDocumentSupported,
 		arg.Oidc,
 		arg.Passthrough,
+		arg.Metadata,
 	)
 	var i RemoteSessionIssuer
 	err := row.Scan(
@@ -5577,11 +5585,18 @@ SET
     token_endpoint_auth_methods_supported = $12::text[],
     code_challenge_methods_supported = $13::text[],
     client_id_metadata_document_supported = $14::boolean,
+    -- The document the typed columns above were derived from, so the well-known
+    -- surface can re-serve the OIDC extension fields they do not model. Written
+    -- in the same statement from the same document, which is what keeps what
+    -- Gram advertises consistent with what Gram dials. NULL only when the
+    -- caller could not produce a storable snapshot; the column is nullable
+    -- because rows created before capture existed have never had one.
+    metadata = $15::jsonb,
     updated_at = clock_timestamp()
-WHERE id = $15
-  AND issuer = $16::text
-  AND project_id IS NOT DISTINCT FROM $17::uuid
-  AND organization_id IS NOT DISTINCT FROM $18::text
+WHERE id = $16
+  AND issuer = $17::text
+  AND project_id IS NOT DISTINCT FROM $18::uuid
+  AND organization_id IS NOT DISTINCT FROM $19::text
   AND deleted IS FALSE
 RETURNING id, project_id, organization_id, slug, issuer, authorization_endpoint, token_endpoint, revocation_endpoint, registration_endpoint, jwks_uri, service_documentation, op_policy_uri, op_tos_uri, scopes_supported, grant_types_supported, response_types_supported, token_endpoint_auth_methods_supported, code_challenge_methods_supported, client_id_metadata_document_supported, oidc, passthrough, name, logo_asset_id, client_setup_documentation_url, metadata, created_at, updated_at, deleted_at, deleted
 `
@@ -5601,6 +5616,7 @@ type UpdateRemoteSessionIssuerDiscoveredMetadataParams struct {
 	TokenEndpointAuthMethodsSupported []string
 	CodeChallengeMethodsSupported     []string
 	ClientIDMetadataDocumentSupported bool
+	Metadata                          []byte
 	ID                                uuid.UUID
 	Issuer                            string
 	ProjectID                         uuid.NullUUID
@@ -5665,6 +5681,7 @@ func (q *Queries) UpdateRemoteSessionIssuerDiscoveredMetadata(ctx context.Contex
 		arg.TokenEndpointAuthMethodsSupported,
 		arg.CodeChallengeMethodsSupported,
 		arg.ClientIDMetadataDocumentSupported,
+		arg.Metadata,
 		arg.ID,
 		arg.Issuer,
 		arg.ProjectID,

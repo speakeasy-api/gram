@@ -28,7 +28,8 @@ INSERT INTO remote_session_issuers (
     code_challenge_methods_supported,
     client_id_metadata_document_supported,
     oidc,
-    passthrough
+    passthrough,
+    metadata
 )
 VALUES (
     @project_id,
@@ -56,7 +57,14 @@ VALUES (
     @code_challenge_methods_supported,
     @client_id_metadata_document_supported,
     @oidc,
-    @passthrough
+    @passthrough,
+    -- The issuer's own discovery document, for callers that already hold one.
+    -- The create handlers do not: they persist an operator-submitted form and
+    -- deliberately do no discovery of their own, so they pass NULL and the
+    -- well-known surface reconstructs from the typed columns above until a
+    -- refresh captures a document. Platform MCP's identity-provider attachment
+    -- does discover, and supplies it here.
+    sqlc.narg('metadata')::jsonb
 )
 RETURNING *;
 
@@ -384,6 +392,13 @@ SET
     token_endpoint_auth_methods_supported = @token_endpoint_auth_methods_supported::text[],
     code_challenge_methods_supported = @code_challenge_methods_supported::text[],
     client_id_metadata_document_supported = @client_id_metadata_document_supported::boolean,
+    -- The document the typed columns above were derived from, so the well-known
+    -- surface can re-serve the OIDC extension fields they do not model. Written
+    -- in the same statement from the same document, which is what keeps what
+    -- Gram advertises consistent with what Gram dials. NULL only when the
+    -- caller could not produce a storable snapshot; the column is nullable
+    -- because rows created before capture existed have never had one.
+    metadata = sqlc.narg('metadata')::jsonb,
     updated_at = clock_timestamp()
 WHERE id = @id
   AND issuer = @issuer::text
