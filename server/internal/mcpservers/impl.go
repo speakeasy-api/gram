@@ -160,7 +160,7 @@ func (s *Service) CreateMcpServer(ctx context.Context, payload *gen.CreateMcpSer
 		return nil, err
 	}
 
-	mode, err := parseRequestedNetworkAccessMode(payload.NetworkAccessMode, networkaccess.ModePublicOnly)
+	mode, err := networkaccess.ParseRequested(payload.NetworkAccessMode, networkaccess.ModePublicOnly)
 	if err != nil {
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid network access mode").LogError(ctx, logger)
 	}
@@ -662,7 +662,7 @@ func (s *Service) UpdateMcpServer(ctx context.Context, payload *gen.UpdateMcpSer
 		}
 	}
 
-	mode, err := parseRequestedNetworkAccessMode(payload.NetworkAccessMode, networkaccess.Effective(existing.NetworkAccessMode))
+	mode, err := networkaccess.ParseRequested(payload.NetworkAccessMode, networkaccess.Effective(existing.NetworkAccessMode))
 	if err != nil {
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid network access mode").LogError(ctx, logger)
 	}
@@ -836,17 +836,6 @@ func (s *Service) triggerPluginPublish(ctx context.Context, authCtx *contextvalu
 	}
 
 	background.TriggerPluginPublish(ctx, s.temporalEnv, s.logger, *authCtx.ProjectID, authCtx.UserID, pluginCreated)
-}
-
-func parseRequestedNetworkAccessMode(requested *types.NetworkAccessMode, fallback networkaccess.Mode) (networkaccess.Mode, error) {
-	if requested == nil {
-		return fallback, nil
-	}
-	mode, err := networkaccess.Parse(string(*requested))
-	if err != nil {
-		return "", fmt.Errorf("parse requested network access mode: %w", err)
-	}
-	return mode, nil
 }
 
 func networkAccessModeUpdate(requested *types.NetworkAccessMode, mode networkaccess.Mode) *networkaccess.Mode {

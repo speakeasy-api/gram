@@ -21,7 +21,10 @@ func TestMode(t *testing.T) {
 	require.Equal(t, ModePublicOnly, Effective(pgtype.Text{}))
 	require.Equal(t, ModePublicOnly, Effective(pgtype.Text{String: "", Valid: true}))
 	require.Equal(t, ModeDual, Effective(pgtype.Text{String: string(ModeDual), Valid: true}))
-	require.Equal(t, ModePrivateOnly, Effective(pgtype.Text{String: "future_mode", Valid: true}))
+	unknown := Effective(pgtype.Text{String: "future_mode", Valid: true})
+	require.Empty(t, unknown)
+	require.False(t, unknown.Allows(SurfacePublic))
+	require.False(t, unknown.Allows(SurfacePrivate))
 
 	require.False(t, Storage(ModePublicOnly).Valid)
 	require.Equal(t, pgtype.Text{String: string(ModePrivateOnly), Valid: true}, Storage(ModePrivateOnly))
@@ -32,4 +35,16 @@ func TestMode(t *testing.T) {
 	require.True(t, ModeDual.Allows(SurfacePrivate))
 	require.False(t, ModePrivateOnly.Allows(SurfacePublic))
 	require.True(t, ModePrivateOnly.Allows(SurfacePrivate))
+
+	type requestedMode string
+	requested := requestedMode(ModeDual)
+	parsed, err := ParseRequested(&requested, ModePublicOnly)
+	require.NoError(t, err)
+	require.Equal(t, ModeDual, parsed)
+	parsed, err = ParseRequested[requestedMode](nil, ModePrivateOnly)
+	require.NoError(t, err)
+	require.Equal(t, ModePrivateOnly, parsed)
+	invalid := requestedMode("other")
+	_, err = ParseRequested(&invalid, ModePublicOnly)
+	require.ErrorContains(t, err, "parse requested network access mode")
 }
