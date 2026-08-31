@@ -14,7 +14,7 @@ import (
 // server span for requests to an MCP JSON-RPC endpoint, so a request that
 // carries one can be attributed to a protocol revision in traces.
 //
-// This is the only instrument covering all five inbound MCP paths and all three
+// This is the only instrument covering every inbound MCP path and all three
 // Streamable HTTP verbs from a single place, but it sees only what the header
 // carries, which varies by revision. Clients on revisions before 2025-06-18 do
 // not send it at all. Clients that do send it omit it from an `initialize`
@@ -74,6 +74,13 @@ func isMCPJSONRPCEndpoint(path string) bool {
 		// /platform/mcp/{toolsetSlug}.
 		slug, ok := strings.CutPrefix(tail, "mcp/")
 		return ok && slug != "" && !strings.Contains(slug, "/")
+	case "platform-mcp":
+		// POST /platform-mcp is Gram's own platform MCP server
+		// (internal/platformmcp), served by the go-sdk's Streamable HTTP
+		// handler. It carries no slug — the bare path is the endpoint — and
+		// everything below it (/authorize, /token, /provider-setup,
+		// /local-fixture/*) is OAuth or setup machinery, not JSON-RPC.
+		return tail == ""
 	default:
 		return false
 	}

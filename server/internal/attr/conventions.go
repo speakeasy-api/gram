@@ -27,6 +27,8 @@ const (
 	HTTPRequestHeaderRefererKey      = attribute.Key("http.request.header.referer")
 	HTTPRequestHeaderContentTypeKey  = attribute.Key("http.request.header.content_type")
 	HTTPRequestHeaderUserAgentKey    = attribute.Key("http.request.header.user_agent")
+	HTTPRequestHeaderOriginKey       = attribute.Key("http.request.header.origin")
+	HTTPRequestHeaderSecFetchSiteKey = attribute.Key("http.request.header.sec_fetch_site")
 	HTTPRequestMethodKey             = semconv.HTTPRequestMethodKey
 	HTTPRequestBodyKey               = attribute.Key("http.request.body")
 	HTTPResponseBodyKey              = attribute.Key("http.response.body")
@@ -782,6 +784,22 @@ func HTTPRequestHeaderUserAgent(v string) attribute.KeyValue {
 
 func SlogHTTPRequestHeaderUserAgent(v string) slog.Attr {
 	return slog.String(string(HTTPRequestHeaderUserAgentKey), v)
+}
+
+func HTTPRequestHeaderOrigin(v string) attribute.KeyValue {
+	return HTTPRequestHeaderOriginKey.String(v)
+}
+
+func SlogHTTPRequestHeaderOrigin(v string) slog.Attr {
+	return slog.String(string(HTTPRequestHeaderOriginKey), v)
+}
+
+func HTTPRequestHeaderSecFetchSite(v string) attribute.KeyValue {
+	return HTTPRequestHeaderSecFetchSiteKey.String(v)
+}
+
+func SlogHTTPRequestHeaderSecFetchSite(v string) slog.Attr {
+	return slog.String(string(HTTPRequestHeaderSecFetchSiteKey), v)
 }
 
 func HTTPRequestBody(v string) attribute.KeyValue { return HTTPRequestBodyKey.String(v) }
