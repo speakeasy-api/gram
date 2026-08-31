@@ -106,6 +106,7 @@ export const AUDIT_ACTIONS = [
   "organization:enterprise_trial_demoted",
   "organization:enterprise_trial_extended",
   "organization:enterprise_trial_rearmed",
+  "organization:enterprise_trial_converted",
   "organization:hooks_fail_open_disabled",
   "organization:hooks_fail_open_enabled",
   "organization:payg_activated",
@@ -467,6 +468,8 @@ export function staticActionPhrase(action: AuditAction): string {
       return "extended enterprise trial";
     case "organization:enterprise_trial_rearmed":
       return "restarted enterprise trial";
+    case "organization:enterprise_trial_converted":
+      return "converted enterprise trial for";
     case "organization:payg_activated":
       return "activated pay-as-you-go billing for";
     case "organization:payg_deactivated":

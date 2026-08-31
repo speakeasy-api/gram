@@ -86,7 +86,7 @@ func (d *DemoteExpiredTrials) Demote(ctx context.Context, args DemoteExpiredTria
 			d.logger.InfoContext(ctx, "expired trial changed before demotion", attr.SlogOrganizationID(args.OrganizationID))
 			return nil
 		}
-		if _, lockErr := tx.LockTrialLifecycleForRearm(ctx, args.OrganizationID); lockErr != nil {
+		if _, lockErr := tx.LockTrialLifecycle(ctx, args.OrganizationID); lockErr != nil {
 			return fmt.Errorf("lock no-op trial demotion lifecycle: %w", lockErr)
 		}
 		for _, keyType := range openrouter.AllKeyTypes {

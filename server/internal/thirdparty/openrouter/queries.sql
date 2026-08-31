@@ -44,6 +44,59 @@ WHERE organization_id = @organization_id
   AND key_type = @key_type
   AND deleted IS FALSE;
 
+-- name: PrepareEnterpriseTrialConversionKey :one
+-- Local-only conversion preparation. The caller owns the transaction and has
+-- already acquired lifecycle and per-key advisory locks in canonical order.
+WITH existing AS MATERIALIZED (
+  SELECT keys.key_type, keys.key_hash, keys.monthly_credits, keys.disabled, keys.disable_causes
+  FROM openrouter_api_keys AS keys
+  WHERE keys.organization_id = @organization_id
+    AND keys.key_type = @key_type
+    AND keys.deleted IS FALSE
+), desired AS (
+  SELECT
+    key_type,
+    key_hash,
+    GREATEST(monthly_credits, @enterprise_floor::bigint) AS monthly_credits,
+    CASE
+      WHEN key_type = 'chat' THEN array_remove(array_remove(disable_causes, 'trial_demotion'), 'billing_inactive')
+      ELSE array_remove(disable_causes, 'trial_demotion')
+    END AS disable_causes
+  FROM existing
+), updated AS (
+  UPDATE openrouter_api_keys AS keys
+  SET monthly_credits = desired.monthly_credits,
+      disable_causes = desired.disable_causes,
+      disabled = cardinality(desired.disable_causes) > 0,
+      updated_at = CASE
+        WHEN keys.monthly_credits IS DISTINCT FROM desired.monthly_credits
+          OR keys.disable_causes IS DISTINCT FROM desired.disable_causes
+          OR keys.disabled IS DISTINCT FROM (cardinality(desired.disable_causes) > 0)
+          THEN GREATEST(clock_timestamp(), keys.updated_at + INTERVAL '1 microsecond')
+        ELSE keys.updated_at
+      END
+  FROM desired
+  WHERE keys.organization_id = @organization_id
+    AND keys.key_type = @key_type
+    AND keys.key_hash = desired.key_hash
+    AND keys.key_hash = @expected_key_hash
+    AND keys.deleted IS FALSE
+    AND keys.disable_causes IS NOT NULL
+  RETURNING keys.key_hash, keys.monthly_credits, keys.disabled, keys.disable_causes
+)
+SELECT
+  existing.key_type,
+  existing.key_hash AS before_key_hash,
+  existing.monthly_credits AS before_monthly_credits,
+  existing.disabled AS before_disabled,
+  existing.disable_causes AS before_disable_causes,
+  updated.key_hash AS after_key_hash,
+  updated.monthly_credits AS after_monthly_credits,
+  updated.disabled AS after_disabled,
+  updated.disable_causes AS after_disable_causes
+FROM existing
+LEFT JOIN updated ON TRUE;
+
 -- name: UpdateOpenRouterKey :one
 UPDATE openrouter_api_keys
 SET monthly_credits = @monthly_credits, key_hash = @key_hash,

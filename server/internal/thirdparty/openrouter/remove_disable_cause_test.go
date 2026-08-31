@@ -175,6 +175,51 @@ func TestDevelopmentReconcileAPIKeyDisabledIsSafe(t *testing.T) {
 	require.NoError(t, NewDevelopment("local-key").ReconcileAPIKeyDisabled(t.Context(), "org-local", KeyTypeChat))
 }
 
+func TestReconcileAPIKeyConversionPolicyPinsLimitAndEffectiveDisabledState(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name          string
+		disableCauses []string
+		wantDisabled  bool
+	}{
+		{name: "enabled", disableCauses: []string{}, wantDisabled: false},
+		{name: "admin lock", disableCauses: []string{"admin_lock"}, wantDisabled: true},
+		{name: "billing inactive", disableCauses: []string{"billing_inactive"}, wantDisabled: true},
+		{name: "combined", disableCauses: []string{"admin_lock", "billing_inactive"}, wantDisabled: true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			ctx := t.Context()
+			orgID := "org-" + uuid.NewString()[:8]
+			provisioner, upstream, queries := newDisableTestProvisioner(t, orgID)
+			_, err := provisioner.ProvisionAPIKey(ctx, orgID, KeyTypeChat)
+			require.NoError(t, err)
+			require.NoError(t, testrepo.New(provisioner.db).SetOpenRouterAPIKeyClassificationFixture(ctx, testrepo.SetOpenRouterAPIKeyClassificationFixtureParams{
+				OrganizationID: orgID, KeyType: string(KeyTypeChat), Disabled: false, DisableCauses: tt.disableCauses,
+			}))
+			key, err := queries.GetOpenRouterAPIKey(ctx, repo.GetOpenRouterAPIKeyParams{OrganizationID: orgID, KeyType: string(KeyTypeChat)})
+			require.NoError(t, err)
+			patchesBefore := len(upstream.recorded())
+
+			require.NoError(t, provisioner.ReconcileAPIKeyConversionPolicy(ctx, orgID, KeyTypeChat))
+			require.NoError(t, provisioner.ReconcileAPIKeyConversionPolicy(ctx, orgID, KeyTypeChat), "idempotent retry must repeat complete reconciliation")
+
+			patches := upstream.recorded()[patchesBefore:]
+			require.Len(t, patches, 2)
+			wantPatch := fmt.Sprintf(`{"disabled":%t,"limit":%d,"limit_reset":"monthly"}`, tt.wantDisabled, key.MonthlyCredits)
+			require.JSONEq(t, wantPatch, patches[0])
+			require.JSONEq(t, wantPatch, patches[1])
+			after, err := queries.GetOpenRouterAPIKey(ctx, repo.GetOpenRouterAPIKeyParams{OrganizationID: orgID, KeyType: string(KeyTypeChat)})
+			require.NoError(t, err)
+			require.Equal(t, tt.disableCauses, after.DisableCauses, "reconciliation must preserve every disable cause")
+		})
+	}
+}
+
 func TestDisableCauseWithDBUsesCallerLockedConnection(t *testing.T) {
 	t.Parallel()
 

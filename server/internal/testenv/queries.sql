@@ -162,6 +162,10 @@ EXECUTE FUNCTION fail_admin_key_audit();
 -- name: DisableOpenRouterAdminDisableAuditFailureFixture :exec
 ALTER TABLE audit_logs DISABLE TRIGGER fail_admin_key_audit;
 
+-- name: RejectPublishOutboxWritesFixture :exec
+-- Test-only failure injection proving audit callers roll back when enqueueing fails.
+ALTER TABLE publish_outbox ADD CONSTRAINT reject_publish_outbox_writes_fixture CHECK (false) NOT VALID;
+
 -- name: CountOutboxEntriesByEventType :one
 -- Counts enqueued webhook events of a given type. The event type lives in a
 -- Pub/Sub message attribute rather than a column now, because the outbox row
@@ -598,6 +602,20 @@ SET key_hash = @key_hash
 WHERE organization_id = @organization_id
   AND key_type = @key_type;
 
+-- name: SetOpenRouterAPIKeyProviderPayloadFixture :exec
+-- Test-only privacy sentinel in the deprecated plaintext provider payload column.
+UPDATE openrouter_api_keys
+SET key = @provider_payload
+WHERE organization_id = @organization_id
+  AND key_type = @key_type;
+
+-- name: GetOpenRouterAPIKeyStateFixture :one
+-- Test-only fixture: observes guarded-mutation state, including soft-deleted rows.
+SELECT key_hash, monthly_credits, disabled, disable_causes, deleted
+FROM openrouter_api_keys
+WHERE organization_id = @organization_id
+  AND key_type = @key_type;
+
 -- name: SeedTrialArmAuditFixture :one
 -- Test-only fixture: records the immutable audit operation for a trial generation.
 INSERT INTO audit_logs (organization_id, actor_id, actor_type, action, subject_id, subject_type)
@@ -678,6 +696,21 @@ FROM openrouter_api_keys
 WHERE organization_id = @organization_id
   AND key_type = @key_type
 FOR UPDATE;
+
+-- name: SeedOpenRouterSpendPrivacyFixture :exec
+INSERT INTO openrouter_spend_daily (organization_id, key_type, day, spend_usd)
+VALUES (@organization_id, 'chat', CURRENT_DATE, sqlc.arg('spend_usd')::text::numeric);
+
+-- name: SeedPromptTemplatePrivacyFixture :exec
+INSERT INTO prompt_templates (tool_urn, project_id, history_id, name, prompt, kind)
+VALUES ('tools:privacy-fixture', @project_id, generate_uuidv7(), 'Privacy fixture', @prompt, 'prompt');
+
+-- name: LockOrganizationMetadataForUpdateNowaitFixture :one
+-- Test-only lock probe: fails instead of waiting if a lifecycle handler read the organization row too early.
+SELECT id
+FROM organization_metadata
+WHERE id = @organization_id
+FOR UPDATE NOWAIT;
 
 -- name: ListOpenRouterAPIKeyDisableCausesForUpdateNowaitFixture :many
 -- Test-only lock-order probe: fails immediately if any matching key row is locked.

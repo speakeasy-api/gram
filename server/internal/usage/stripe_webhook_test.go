@@ -1200,7 +1200,7 @@ func TestStripeCheckoutLocksConvertedTrialBeforeOpenRouterKeys(t *testing.T) {
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = trialTx.Rollback(context.Background()) })
 	trialHolderPID := postgresBackendPID(t, trialTx)
-	_, err = trialsrepo.New(trialTx).LockTrialLifecycleForRearm(t.Context(), stripeWebhookOrganizationID)
+	_, err = trialsrepo.New(trialTx).LockTrialLifecycle(t.Context(), stripeWebhookOrganizationID)
 	require.NoError(t, err)
 
 	response := make(chan int, 1)

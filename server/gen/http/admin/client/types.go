@@ -93,6 +93,13 @@ type ResumeStripeSubscriptionRequestBody struct {
 	OrganizationID string `form:"organization_id" json:"organization_id" xml:"organization_id"`
 }
 
+// MarkEnterpriseTrialConvertedRequestBody is the type of the "admin" service
+// "markEnterpriseTrialConverted" endpoint HTTP request body.
+type MarkEnterpriseTrialConvertedRequestBody struct {
+	// Organization ID.
+	ID string `form:"id" json:"id" xml:"id"`
+}
+
 // GetProjectResponseBody is the type of the "admin" service "getProject"
 // endpoint HTTP response body.
 type GetProjectResponseBody struct {
@@ -501,6 +508,15 @@ type ResumeStripeSubscriptionResponseBody struct {
 	CancelAt           *string `form:"cancel_at,omitempty" json:"cancel_at,omitempty" xml:"cancel_at,omitempty"`
 	CanceledAt         *string `form:"canceled_at,omitempty" json:"canceled_at,omitempty" xml:"canceled_at,omitempty"`
 	PaymentFailed      *bool   `form:"payment_failed,omitempty" json:"payment_failed,omitempty" xml:"payment_failed,omitempty"`
+}
+
+// MarkEnterpriseTrialConvertedResponseBody is the type of the "admin" service
+// "markEnterpriseTrialConverted" endpoint HTTP response body.
+type MarkEnterpriseTrialConvertedResponseBody struct {
+	// The converted organization ID.
+	OrganizationID *string `form:"organization_id,omitempty" json:"organization_id,omitempty" xml:"organization_id,omitempty"`
+	// The time at which the enterprise trial was recorded as converted.
+	ConvertedAt *string `form:"converted_at,omitempty" json:"converted_at,omitempty" xml:"converted_at,omitempty"`
 }
 
 // LoginUnauthorizedResponseBody is the type of the "admin" service "login"
@@ -4948,6 +4964,196 @@ type ResumeStripeSubscriptionGatewayErrorResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
+// MarkEnterpriseTrialConvertedUnauthorizedResponseBody is the type of the
+// "admin" service "markEnterpriseTrialConverted" endpoint HTTP response body
+// for the "unauthorized" error.
+type MarkEnterpriseTrialConvertedUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// MarkEnterpriseTrialConvertedForbiddenResponseBody is the type of the "admin"
+// service "markEnterpriseTrialConverted" endpoint HTTP response body for the
+// "forbidden" error.
+type MarkEnterpriseTrialConvertedForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// MarkEnterpriseTrialConvertedBadRequestResponseBody is the type of the
+// "admin" service "markEnterpriseTrialConverted" endpoint HTTP response body
+// for the "bad_request" error.
+type MarkEnterpriseTrialConvertedBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// MarkEnterpriseTrialConvertedNotFoundResponseBody is the type of the "admin"
+// service "markEnterpriseTrialConverted" endpoint HTTP response body for the
+// "not_found" error.
+type MarkEnterpriseTrialConvertedNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// MarkEnterpriseTrialConvertedConflictResponseBody is the type of the "admin"
+// service "markEnterpriseTrialConverted" endpoint HTTP response body for the
+// "conflict" error.
+type MarkEnterpriseTrialConvertedConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// MarkEnterpriseTrialConvertedUnsupportedMediaResponseBody is the type of the
+// "admin" service "markEnterpriseTrialConverted" endpoint HTTP response body
+// for the "unsupported_media" error.
+type MarkEnterpriseTrialConvertedUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// MarkEnterpriseTrialConvertedInvalidResponseBody is the type of the "admin"
+// service "markEnterpriseTrialConverted" endpoint HTTP response body for the
+// "invalid" error.
+type MarkEnterpriseTrialConvertedInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// MarkEnterpriseTrialConvertedInvariantViolationResponseBody is the type of
+// the "admin" service "markEnterpriseTrialConverted" endpoint HTTP response
+// body for the "invariant_violation" error.
+type MarkEnterpriseTrialConvertedInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// MarkEnterpriseTrialConvertedUnexpectedResponseBody is the type of the
+// "admin" service "markEnterpriseTrialConverted" endpoint HTTP response body
+// for the "unexpected" error.
+type MarkEnterpriseTrialConvertedUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// MarkEnterpriseTrialConvertedGatewayErrorResponseBody is the type of the
+// "admin" service "markEnterpriseTrialConverted" endpoint HTTP response body
+// for the "gateway_error" error.
+type MarkEnterpriseTrialConvertedGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
 // AdminOrganizationMemberResponseBody is used to define fields on response
 // body types.
 type AdminOrganizationMemberResponseBody struct {
@@ -5168,6 +5374,16 @@ func NewCancelStripeSubscriptionRequestBody(p *admin.CancelStripeSubscriptionPay
 func NewResumeStripeSubscriptionRequestBody(p *admin.ResumeStripeSubscriptionPayload) *ResumeStripeSubscriptionRequestBody {
 	body := &ResumeStripeSubscriptionRequestBody{
 		OrganizationID: p.OrganizationID,
+	}
+	return body
+}
+
+// NewMarkEnterpriseTrialConvertedRequestBody builds the HTTP request body from
+// the payload of the "markEnterpriseTrialConverted" endpoint of the "admin"
+// service.
+func NewMarkEnterpriseTrialConvertedRequestBody(p *admin.MarkEnterpriseTrialConvertedPayload) *MarkEnterpriseTrialConvertedRequestBody {
+	body := &MarkEnterpriseTrialConvertedRequestBody{
+		ID: p.ID,
 	}
 	return body
 }
@@ -9185,6 +9401,167 @@ func NewResumeStripeSubscriptionGatewayError(body *ResumeStripeSubscriptionGatew
 	return v
 }
 
+// NewMarkEnterpriseTrialConvertedResultOK builds a "admin" service
+// "markEnterpriseTrialConverted" endpoint result from a HTTP "OK" response.
+func NewMarkEnterpriseTrialConvertedResultOK(body *MarkEnterpriseTrialConvertedResponseBody) *admin.MarkEnterpriseTrialConvertedResult {
+	v := &admin.MarkEnterpriseTrialConvertedResult{
+		OrganizationID: *body.OrganizationID,
+		ConvertedAt:    *body.ConvertedAt,
+	}
+
+	return v
+}
+
+// NewMarkEnterpriseTrialConvertedUnauthorized builds a admin service
+// markEnterpriseTrialConverted endpoint unauthorized error.
+func NewMarkEnterpriseTrialConvertedUnauthorized(body *MarkEnterpriseTrialConvertedUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewMarkEnterpriseTrialConvertedForbidden builds a admin service
+// markEnterpriseTrialConverted endpoint forbidden error.
+func NewMarkEnterpriseTrialConvertedForbidden(body *MarkEnterpriseTrialConvertedForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewMarkEnterpriseTrialConvertedBadRequest builds a admin service
+// markEnterpriseTrialConverted endpoint bad_request error.
+func NewMarkEnterpriseTrialConvertedBadRequest(body *MarkEnterpriseTrialConvertedBadRequestResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewMarkEnterpriseTrialConvertedNotFound builds a admin service
+// markEnterpriseTrialConverted endpoint not_found error.
+func NewMarkEnterpriseTrialConvertedNotFound(body *MarkEnterpriseTrialConvertedNotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewMarkEnterpriseTrialConvertedConflict builds a admin service
+// markEnterpriseTrialConverted endpoint conflict error.
+func NewMarkEnterpriseTrialConvertedConflict(body *MarkEnterpriseTrialConvertedConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewMarkEnterpriseTrialConvertedUnsupportedMedia builds a admin service
+// markEnterpriseTrialConverted endpoint unsupported_media error.
+func NewMarkEnterpriseTrialConvertedUnsupportedMedia(body *MarkEnterpriseTrialConvertedUnsupportedMediaResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewMarkEnterpriseTrialConvertedInvalid builds a admin service
+// markEnterpriseTrialConverted endpoint invalid error.
+func NewMarkEnterpriseTrialConvertedInvalid(body *MarkEnterpriseTrialConvertedInvalidResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewMarkEnterpriseTrialConvertedInvariantViolation builds a admin service
+// markEnterpriseTrialConverted endpoint invariant_violation error.
+func NewMarkEnterpriseTrialConvertedInvariantViolation(body *MarkEnterpriseTrialConvertedInvariantViolationResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewMarkEnterpriseTrialConvertedUnexpected builds a admin service
+// markEnterpriseTrialConverted endpoint unexpected error.
+func NewMarkEnterpriseTrialConvertedUnexpected(body *MarkEnterpriseTrialConvertedUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewMarkEnterpriseTrialConvertedGatewayError builds a admin service
+// markEnterpriseTrialConverted endpoint gateway_error error.
+func NewMarkEnterpriseTrialConvertedGatewayError(body *MarkEnterpriseTrialConvertedGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
 // ValidateGetProjectResponseBody runs the validations defined on
 // GetProjectResponseBody
 func ValidateGetProjectResponseBody(body *GetProjectResponseBody) (err error) {
@@ -9886,6 +10263,21 @@ func ValidateResumeStripeSubscriptionResponseBody(body *ResumeStripeSubscription
 	}
 	if body.CanceledAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.canceled_at", *body.CanceledAt, goa.FormatDateTime))
+	}
+	return
+}
+
+// ValidateMarkEnterpriseTrialConvertedResponseBody runs the validations
+// defined on MarkEnterpriseTrialConvertedResponseBody
+func ValidateMarkEnterpriseTrialConvertedResponseBody(body *MarkEnterpriseTrialConvertedResponseBody) (err error) {
+	if body.OrganizationID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("organization_id", "body"))
+	}
+	if body.ConvertedAt == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("converted_at", "body"))
+	}
+	if body.ConvertedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.converted_at", *body.ConvertedAt, goa.FormatDateTime))
 	}
 	return
 }
@@ -15647,6 +16039,250 @@ func ValidateResumeStripeSubscriptionUnexpectedResponseBody(body *ResumeStripeSu
 // ValidateResumeStripeSubscriptionGatewayErrorResponseBody runs the
 // validations defined on resumeStripeSubscription_gateway_error_response_body
 func ValidateResumeStripeSubscriptionGatewayErrorResponseBody(body *ResumeStripeSubscriptionGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateMarkEnterpriseTrialConvertedUnauthorizedResponseBody runs the
+// validations defined on
+// markEnterpriseTrialConverted_unauthorized_response_body
+func ValidateMarkEnterpriseTrialConvertedUnauthorizedResponseBody(body *MarkEnterpriseTrialConvertedUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateMarkEnterpriseTrialConvertedForbiddenResponseBody runs the
+// validations defined on markEnterpriseTrialConverted_forbidden_response_body
+func ValidateMarkEnterpriseTrialConvertedForbiddenResponseBody(body *MarkEnterpriseTrialConvertedForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateMarkEnterpriseTrialConvertedBadRequestResponseBody runs the
+// validations defined on markEnterpriseTrialConverted_bad_request_response_body
+func ValidateMarkEnterpriseTrialConvertedBadRequestResponseBody(body *MarkEnterpriseTrialConvertedBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateMarkEnterpriseTrialConvertedNotFoundResponseBody runs the
+// validations defined on markEnterpriseTrialConverted_not_found_response_body
+func ValidateMarkEnterpriseTrialConvertedNotFoundResponseBody(body *MarkEnterpriseTrialConvertedNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateMarkEnterpriseTrialConvertedConflictResponseBody runs the
+// validations defined on markEnterpriseTrialConverted_conflict_response_body
+func ValidateMarkEnterpriseTrialConvertedConflictResponseBody(body *MarkEnterpriseTrialConvertedConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateMarkEnterpriseTrialConvertedUnsupportedMediaResponseBody runs the
+// validations defined on
+// markEnterpriseTrialConverted_unsupported_media_response_body
+func ValidateMarkEnterpriseTrialConvertedUnsupportedMediaResponseBody(body *MarkEnterpriseTrialConvertedUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateMarkEnterpriseTrialConvertedInvalidResponseBody runs the validations
+// defined on markEnterpriseTrialConverted_invalid_response_body
+func ValidateMarkEnterpriseTrialConvertedInvalidResponseBody(body *MarkEnterpriseTrialConvertedInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateMarkEnterpriseTrialConvertedInvariantViolationResponseBody runs the
+// validations defined on
+// markEnterpriseTrialConverted_invariant_violation_response_body
+func ValidateMarkEnterpriseTrialConvertedInvariantViolationResponseBody(body *MarkEnterpriseTrialConvertedInvariantViolationResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateMarkEnterpriseTrialConvertedUnexpectedResponseBody runs the
+// validations defined on markEnterpriseTrialConverted_unexpected_response_body
+func ValidateMarkEnterpriseTrialConvertedUnexpectedResponseBody(body *MarkEnterpriseTrialConvertedUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateMarkEnterpriseTrialConvertedGatewayErrorResponseBody runs the
+// validations defined on
+// markEnterpriseTrialConverted_gateway_error_response_body
+func ValidateMarkEnterpriseTrialConvertedGatewayErrorResponseBody(body *MarkEnterpriseTrialConvertedGatewayErrorResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}

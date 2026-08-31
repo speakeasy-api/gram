@@ -609,6 +609,40 @@ func (q *Queries) GetLatestTrialArmAuditIDFixture(ctx context.Context, organizat
 	return id, err
 }
 
+const getOpenRouterAPIKeyStateFixture = `-- name: GetOpenRouterAPIKeyStateFixture :one
+SELECT key_hash, monthly_credits, disabled, disable_causes, deleted
+FROM openrouter_api_keys
+WHERE organization_id = $1
+  AND key_type = $2
+`
+
+type GetOpenRouterAPIKeyStateFixtureParams struct {
+	OrganizationID string
+	KeyType        string
+}
+
+type GetOpenRouterAPIKeyStateFixtureRow struct {
+	KeyHash        string
+	MonthlyCredits int64
+	Disabled       bool
+	DisableCauses  []string
+	Deleted        bool
+}
+
+// Test-only fixture: observes guarded-mutation state, including soft-deleted rows.
+func (q *Queries) GetOpenRouterAPIKeyStateFixture(ctx context.Context, arg GetOpenRouterAPIKeyStateFixtureParams) (GetOpenRouterAPIKeyStateFixtureRow, error) {
+	row := q.db.QueryRow(ctx, getOpenRouterAPIKeyStateFixture, arg.OrganizationID, arg.KeyType)
+	var i GetOpenRouterAPIKeyStateFixtureRow
+	err := row.Scan(
+		&i.KeyHash,
+		&i.MonthlyCredits,
+		&i.Disabled,
+		&i.DisableCauses,
+		&i.Deleted,
+	)
+	return i, err
+}
+
 const getOrganizationMetadataStateFixture = `-- name: GetOrganizationMetadataStateFixture :one
 SELECT disabled_at, workos_last_event_id, whitelisted, gram_account_type, created_at, updated_at
 FROM organization_metadata
@@ -1600,6 +1634,21 @@ func (q *Queries) LockOpenRouterAPIKeyForUpdateFixture(ctx context.Context, arg 
 	return column_1, err
 }
 
+const lockOrganizationMetadataForUpdateNowaitFixture = `-- name: LockOrganizationMetadataForUpdateNowaitFixture :one
+SELECT id
+FROM organization_metadata
+WHERE id = $1
+FOR UPDATE NOWAIT
+`
+
+// Test-only lock probe: fails instead of waiting if a lifecycle handler read the organization row too early.
+func (q *Queries) LockOrganizationMetadataForUpdateNowaitFixture(ctx context.Context, organizationID string) (string, error) {
+	row := q.db.QueryRow(ctx, lockOrganizationMetadataForUpdateNowaitFixture, organizationID)
+	var id string
+	err := row.Scan(&id)
+	return id, err
+}
+
 const pauseDeviceIntegrationSyncsFixture = `-- name: PauseDeviceIntegrationSyncsFixture :exec
 UPDATE device_integration_syncs s
 SET auto_paused_at = clock_timestamp(),
@@ -1659,6 +1708,16 @@ WHERE id = $1
 // Test-only fixture: starts another demotion/re-arm cycle in the same generation.
 func (q *Queries) RedemoteTrialLifecycleFixture(ctx context.Context, organizationID string) error {
 	_, err := q.db.Exec(ctx, redemoteTrialLifecycleFixture, organizationID)
+	return err
+}
+
+const rejectPublishOutboxWritesFixture = `-- name: RejectPublishOutboxWritesFixture :exec
+ALTER TABLE publish_outbox ADD CONSTRAINT reject_publish_outbox_writes_fixture CHECK (false) NOT VALID
+`
+
+// Test-only failure injection proving audit callers roll back when enqueueing fails.
+func (q *Queries) RejectPublishOutboxWritesFixture(ctx context.Context) error {
+	_, err := q.db.Exec(ctx, rejectPublishOutboxWritesFixture)
 	return err
 }
 
@@ -1767,6 +1826,21 @@ func (q *Queries) SeedCapturedAgentChatMessageFixture(ctx context.Context, arg S
 	return id, err
 }
 
+const seedOpenRouterSpendPrivacyFixture = `-- name: SeedOpenRouterSpendPrivacyFixture :exec
+INSERT INTO openrouter_spend_daily (organization_id, key_type, day, spend_usd)
+VALUES ($1, 'chat', CURRENT_DATE, $2::text::numeric)
+`
+
+type SeedOpenRouterSpendPrivacyFixtureParams struct {
+	OrganizationID string
+	SpendUsd       string
+}
+
+func (q *Queries) SeedOpenRouterSpendPrivacyFixture(ctx context.Context, arg SeedOpenRouterSpendPrivacyFixtureParams) error {
+	_, err := q.db.Exec(ctx, seedOpenRouterSpendPrivacyFixture, arg.OrganizationID, arg.SpendUsd)
+	return err
+}
+
 const seedOpenRouterSpendRangeFixture = `-- name: SeedOpenRouterSpendRangeFixture :exec
 INSERT INTO openrouter_spend_daily (organization_id, key_type, day, spend_usd)
 SELECT
@@ -1818,6 +1892,21 @@ func (q *Queries) SeedOutboxEntry(ctx context.Context, arg SeedOutboxEntryParams
 	var id int64
 	err := row.Scan(&id)
 	return id, err
+}
+
+const seedPromptTemplatePrivacyFixture = `-- name: SeedPromptTemplatePrivacyFixture :exec
+INSERT INTO prompt_templates (tool_urn, project_id, history_id, name, prompt, kind)
+VALUES ('tools:privacy-fixture', $1, generate_uuidv7(), 'Privacy fixture', $2, 'prompt')
+`
+
+type SeedPromptTemplatePrivacyFixtureParams struct {
+	ProjectID uuid.UUID
+	Prompt    string
+}
+
+func (q *Queries) SeedPromptTemplatePrivacyFixture(ctx context.Context, arg SeedPromptTemplatePrivacyFixtureParams) error {
+	_, err := q.db.Exec(ctx, seedPromptTemplatePrivacyFixture, arg.ProjectID, arg.Prompt)
+	return err
 }
 
 const seedPublishOutboxRow = `-- name: SeedPublishOutboxRow :one
@@ -2149,6 +2238,25 @@ type SetOpenRouterAPIKeyHashFixtureParams struct {
 // Test-only fixture: simulates key rotation between an upstream response and CAS.
 func (q *Queries) SetOpenRouterAPIKeyHashFixture(ctx context.Context, arg SetOpenRouterAPIKeyHashFixtureParams) error {
 	_, err := q.db.Exec(ctx, setOpenRouterAPIKeyHashFixture, arg.KeyHash, arg.OrganizationID, arg.KeyType)
+	return err
+}
+
+const setOpenRouterAPIKeyProviderPayloadFixture = `-- name: SetOpenRouterAPIKeyProviderPayloadFixture :exec
+UPDATE openrouter_api_keys
+SET key = $1
+WHERE organization_id = $2
+  AND key_type = $3
+`
+
+type SetOpenRouterAPIKeyProviderPayloadFixtureParams struct {
+	ProviderPayload pgtype.Text
+	OrganizationID  string
+	KeyType         string
+}
+
+// Test-only privacy sentinel in the deprecated plaintext provider payload column.
+func (q *Queries) SetOpenRouterAPIKeyProviderPayloadFixture(ctx context.Context, arg SetOpenRouterAPIKeyProviderPayloadFixtureParams) error {
+	_, err := q.db.Exec(ctx, setOpenRouterAPIKeyProviderPayloadFixture, arg.ProviderPayload, arg.OrganizationID, arg.KeyType)
 	return err
 }
 

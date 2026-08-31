@@ -846,3 +846,36 @@ func (q *Queries) GetProjectBySlug(ctx context.Context, slug string) (GetProject
 	err := row.Scan(&i.ID, &i.Slug)
 	return i, err
 }
+
+const lockEnterpriseTrialInOrganizations = `-- name: LockEnterpriseTrialInOrganizations :one
+SELECT organization_id
+FROM trials
+WHERE organization_id = ANY($1::text[])
+  AND tier = 'enterprise'
+ORDER BY organization_id
+LIMIT 1
+FOR UPDATE
+`
+
+func (q *Queries) LockEnterpriseTrialInOrganizations(ctx context.Context, ids []string) (string, error) {
+	row := q.db.QueryRow(ctx, lockEnterpriseTrialInOrganizations, ids)
+	var organization_id string
+	err := row.Scan(&organization_id)
+	return organization_id, err
+}
+
+const lockOrganizationMetadata = `-- name: LockOrganizationMetadata :one
+SELECT id
+FROM organization_metadata
+WHERE id = $1
+FOR UPDATE
+`
+
+// Conversion locks this row only after lifecycle and key advisory locks, before
+// reading eligibility or snapshot data that a concurrent admin update can change.
+func (q *Queries) LockOrganizationMetadata(ctx context.Context, id string) (string, error) {
+	row := q.db.QueryRow(ctx, lockOrganizationMetadata, id)
+	var id_2 string
+	err := row.Scan(&id_2)
+	return id_2, err
+}

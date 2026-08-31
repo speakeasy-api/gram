@@ -156,7 +156,7 @@ func (s *Service) handleStripeWebhook(w http.ResponseWriter, r *http.Request) er
 
 	if event.Type == "checkout.session.completed" && checkoutEligible {
 		trialQueries := trialsrepo.New(tx)
-		_, err := trialQueries.LockTrialLifecycleForRearm(ctx, organizationID)
+		_, err := trialQueries.LockTrialLifecycle(ctx, organizationID)
 		switch {
 		case errors.Is(err, pgx.ErrNoRows):
 		case err != nil:

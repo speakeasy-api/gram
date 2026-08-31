@@ -27,9 +27,10 @@ const (
 
 	ActionOrganizationEnterpriseTrialArmed Action = "organization:enterprise_trial_armed"
 
-	ActionOrganizationEnterpriseTrialDemoted  Action = "organization:enterprise_trial_demoted"
-	ActionOrganizationEnterpriseTrialRearmed  Action = "organization:enterprise_trial_rearmed"
-	ActionOrganizationEnterpriseTrialExtended Action = "organization:enterprise_trial_extended"
+	ActionOrganizationEnterpriseTrialDemoted   Action = "organization:enterprise_trial_demoted"
+	ActionOrganizationEnterpriseTrialRearmed   Action = "organization:enterprise_trial_rearmed"
+	ActionOrganizationEnterpriseTrialExtended  Action = "organization:enterprise_trial_extended"
+	ActionOrganizationEnterpriseTrialConverted Action = "organization:enterprise_trial_converted"
 
 	ActionOrganizationPaygActivated   Action = "organization:payg_activated"
 	ActionOrganizationPaygDeactivated Action = "organization:payg_deactivated"
@@ -382,6 +383,68 @@ func (l *Logger) LogOrganizationEnterpriseTrialArmed(ctx context.Context, dbtx r
 // LogOrganizationEnterpriseTrialRearmedEvent records an operator putting a
 // demoted trial back on. AccountType carries the restored tier so a reader can
 // compare it with the demotion entry, which is the only record of the old one.
+type OrganizationEnterpriseTrialConversionOrganizationSnapshot struct {
+	AccountType string `json:"account_type"`
+	Whitelisted bool   `json:"whitelisted"`
+	Disabled    bool   `json:"disabled"`
+}
+
+type OrganizationEnterpriseTrialConversionLifecycleSnapshot struct {
+	Status      string     `json:"status"`
+	Tier        string     `json:"tier"`
+	EndsAt      *time.Time `json:"ends_at"`
+	ConvertedAt *time.Time `json:"converted_at"`
+	DemotedAt   *time.Time `json:"demoted_at"`
+}
+
+type OrganizationEnterpriseTrialConversionKeySnapshot struct {
+	KeyType           string `json:"key_type"`
+	StoredDisabled    bool   `json:"stored_disabled"`
+	EffectiveDisabled bool   `json:"effective_disabled"`
+	KeyAccessChanged  bool   `json:"key_access_changed"`
+	MonthlyCredits    int64  `json:"monthly_credits"`
+}
+
+type OrganizationEnterpriseTrialConversionSnapshot struct {
+	Organization OrganizationEnterpriseTrialConversionOrganizationSnapshot `json:"organization"`
+	Trial        OrganizationEnterpriseTrialConversionLifecycleSnapshot    `json:"trial"`
+	Keys         []OrganizationEnterpriseTrialConversionKeySnapshot        `json:"keys"`
+}
+
+type LogOrganizationEnterpriseTrialConvertedEvent struct {
+	OrganizationID   string
+	Actor            urn.Principal
+	ActorDisplayName *string
+	ActorSlug        *string
+	Before           OrganizationEnterpriseTrialConversionSnapshot
+	After            OrganizationEnterpriseTrialConversionSnapshot
+}
+
+func (l *Logger) LogOrganizationEnterpriseTrialConverted(ctx context.Context, dbtx repo.DBTX, event LogOrganizationEnterpriseTrialConvertedEvent) error {
+	action := ActionOrganizationEnterpriseTrialConverted
+	metadata, err := marshalAuditPayload(map[string]any{"conversion_source": "admin"})
+	if err != nil {
+		return fmt.Errorf("marshal %s metadata: %w", action, err)
+	}
+	beforeSnapshot, err := marshalAuditPayload(event.Before)
+	if err != nil {
+		return fmt.Errorf("marshal %s before snapshot: %w", action, err)
+	}
+	afterSnapshot, err := marshalAuditPayload(event.After)
+	if err != nil {
+		return fmt.Errorf("marshal %s after snapshot: %w", action, err)
+	}
+	entry := repo.InsertAuditLogParams{
+		OrganizationID: event.OrganizationID, ProjectID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		ActorID: event.Actor.ID, ActorType: string(event.Actor.Type),
+		ActorDisplayName: conv.PtrToPGTextEmpty(event.ActorDisplayName), ActorSlug: conv.PtrToPGTextEmpty(event.ActorSlug),
+		Action: string(action), SubjectID: event.OrganizationID, SubjectType: "organization",
+		SubjectDisplayName: conv.ToPGText("Organization"), SubjectSlug: conv.ToPGTextEmpty(""),
+		Metadata: metadata, BeforeSnapshot: beforeSnapshot, AfterSnapshot: afterSnapshot,
+	}
+	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.OrganizationEnterpriseTrialV1})
+}
+
 type LogOrganizationEnterpriseTrialRearmedEvent struct {
 	OrganizationID string
 

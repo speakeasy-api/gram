@@ -55,8 +55,10 @@ type keyRevival struct {
 type rearmProvisioner struct {
 	conn *pgxpool.Pool
 
-	mu       sync.Mutex
-	revivals []keyRevival
+	mu                       sync.Mutex
+	revivals                 []keyRevival
+	reconcileAttempts        []openrouter.KeyType
+	conversionPolicyAttempts []openrouter.KeyType
 
 	failOn openrouter.KeyType
 	// failAfter is how a test reaches the post-commit recap.
@@ -109,7 +111,30 @@ func (p *rearmProvisioner) RemoveAPIKeyDisableCauseWithDB(ctx context.Context, d
 	return keyLimit, change, nil
 }
 
+func (p *rearmProvisioner) PrepareEnterpriseTrialConversionKeyWithDB(ctx context.Context, db openrouter.DBTX, orgID string, keyType openrouter.KeyType, floor int64) (openrouter.EnterpriseTrialConversionKeyChange, error) {
+	change, err := new(openrouter.OpenRouter).PrepareEnterpriseTrialConversionKeyWithDB(ctx, db, orgID, keyType, floor)
+	if err != nil {
+		return openrouter.EnterpriseTrialConversionKeyChange{}, fmt.Errorf("prepare enterprise conversion key: %w", err)
+	}
+	return change, nil
+
+}
+
 func (p *rearmProvisioner) ReconcileAPIKeyDisabled(ctx context.Context, orgID string, keyType openrouter.KeyType) error {
+	p.mu.Lock()
+	p.reconcileAttempts = append(p.reconcileAttempts, keyType)
+	p.mu.Unlock()
+	return p.reconcileAPIKey(ctx, orgID, keyType)
+}
+
+func (p *rearmProvisioner) ReconcileAPIKeyConversionPolicy(ctx context.Context, orgID string, keyType openrouter.KeyType) error {
+	p.mu.Lock()
+	p.conversionPolicyAttempts = append(p.conversionPolicyAttempts, keyType)
+	p.mu.Unlock()
+	return p.reconcileAPIKey(ctx, orgID, keyType)
+}
+
+func (p *rearmProvisioner) reconcileAPIKey(ctx context.Context, orgID string, keyType openrouter.KeyType) error {
 	row, err := orrepo.New(p.conn).GetOpenRouterAPIKey(ctx, orrepo.GetOpenRouterAPIKeyParams{OrganizationID: orgID, KeyType: string(keyType)})
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil
@@ -829,7 +854,7 @@ func TestRearmTrial_LocksLifecycleBeforeAllKeyLocksAndRows(t *testing.T) {
 	seedDemotedTrial(t, ctx, conn, orgID, "enterprise")
 
 	rowLock := testenv.BeginTx(t, ctx, conn)
-	_, err := trialsRepo.New(rowLock).LockTrialLifecycleForRearm(ctx, orgID)
+	_, err := trialsRepo.New(rowLock).LockTrialLifecycle(ctx, orgID)
 	require.NoError(t, err)
 
 	rearmed := make(chan error, 1)

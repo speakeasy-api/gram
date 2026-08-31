@@ -79,7 +79,7 @@ func (c *Client) IsFeatureEnabled(ctx context.Context, organizationID string, fe
 		}
 
 		enabled = res
-		c.storeFeatureCache(ctx, organizationID, feature, enabled, "failed to cache feature flag state")
+		_ = c.storeFeatureCache(ctx, organizationID, feature, enabled, "failed to cache feature flag state")
 		return nil
 	})
 	if err != nil {
@@ -140,7 +140,7 @@ func (c *Client) SetFeatureEnabled(ctx context.Context, organizationID string, f
 		if err := setFeatureEnabled(ctx, repo.New(conn), organizationID, feature, enabled); err != nil {
 			return err
 		}
-		c.storeFeatureCache(ctx, organizationID, feature, enabled, "failed to update feature flag cache")
+		_ = c.storeFeatureCache(ctx, organizationID, feature, enabled, "failed to update feature flag cache")
 		return nil
 	})
 }
@@ -169,8 +169,8 @@ func (c *Client) SetRemoteSessionAutoRefreshEnabled(ctx context.Context, organiz
 			return fmt.Errorf("commit remote session auto-refresh update: %w", err)
 		}
 
-		c.storeFeatureCache(ctx, organizationID, FeatureRemoteSessionAutoRefreshEnforced, false, "failed to update feature flag cache")
-		c.storeFeatureCache(ctx, organizationID, FeatureRemoteSessionAutoRefresh, enabled, "failed to update feature flag cache")
+		_ = c.storeFeatureCache(ctx, organizationID, FeatureRemoteSessionAutoRefreshEnforced, false, "failed to update feature flag cache")
+		_ = c.storeFeatureCache(ctx, organizationID, FeatureRemoteSessionAutoRefresh, enabled, "failed to update feature flag cache")
 		return nil
 	})
 }
@@ -180,14 +180,7 @@ func (c *Client) SetRemoteSessionAutoRefreshEnabled(ctx context.Context, organiz
 // the feature flag from a code path that bypasses this client.
 func (c *Client) UpdateFeatureCache(ctx context.Context, organizationID string, feature Feature, _ bool) {
 	if err := c.withFeatureCacheLock(ctx, organizationID, feature, func(conn *pgxpool.Conn) error {
-		enabled, err := repo.New(conn).IsFeatureEnabled(ctx, repo.IsFeatureEnabledParams{
-			OrganizationID: organizationID, FeatureName: string(feature),
-		})
-		if err != nil {
-			return fmt.Errorf("reload feature cache state: %w", err)
-		}
-		c.storeFeatureCache(ctx, organizationID, feature, enabled, "failed to update feature flag cache")
-		return nil
+		return c.UpdateFeatureCacheUnderLock(ctx, conn, organizationID, feature)
 	}); err != nil {
 		c.logger.WarnContext(ctx, "failed to refresh feature flag cache",
 			attr.SlogError(err), attr.SlogOrganizationID(organizationID), attr.SlogProductFeatureName(string(feature)),
@@ -195,7 +188,22 @@ func (c *Client) UpdateFeatureCache(ctx context.Context, organizationID string, 
 	}
 }
 
-func (c *Client) storeFeatureCache(ctx context.Context, organizationID string, feature Feature, enabled bool, message string) {
+// UpdateFeatureCacheUnderLock refreshes one cache entry using the connection
+// that holds its feature lock. Callers must already hold that lock.
+func (c *Client) UpdateFeatureCacheUnderLock(ctx context.Context, conn *pgxpool.Conn, organizationID string, feature Feature) error {
+	enabled, err := repo.New(conn).IsFeatureEnabled(ctx, repo.IsFeatureEnabledParams{
+		OrganizationID: organizationID, FeatureName: string(feature),
+	})
+	if err != nil {
+		return fmt.Errorf("reload feature cache state: %w", err)
+	}
+	if err := c.storeFeatureCache(ctx, organizationID, feature, enabled, "failed to update feature flag cache"); err != nil {
+		return fmt.Errorf("store feature cache state: %w", err)
+	}
+	return nil
+}
+
+func (c *Client) storeFeatureCache(ctx context.Context, organizationID string, feature Feature, enabled bool, message string) error {
 	cacheEntry := FeatureCache{
 		OrganizationID: organizationID,
 		Feature:        feature,
@@ -207,7 +215,9 @@ func (c *Client) storeFeatureCache(ctx context.Context, organizationID string, f
 			attr.SlogOrganizationID(organizationID),
 			attr.SlogProductFeatureName(string(feature)),
 		)
+		return fmt.Errorf("store feature cache entry: %w", err)
 	}
+	return nil
 }
 
 func setFeatureEnabled(ctx context.Context, queries *repo.Queries, organizationID string, feature Feature, enabled bool) error {
@@ -236,6 +246,13 @@ func (c *Client) withFeatureCacheLocks(ctx context.Context, organizationID strin
 	}
 	defer release()
 	return fn(conn)
+}
+
+// AcquireFeatureCacheLocks acquires the same canonical, sorted advisory locks
+// used by feature mutations. The caller must begin its transaction on the
+// returned connection and hold the locks through commit and cache refresh.
+func (c *Client) AcquireFeatureCacheLocks(ctx context.Context, organizationID string, features []Feature) (*pgxpool.Conn, func(), error) {
+	return c.acquireFeatureCacheLocks(ctx, organizationID, features)
 }
 
 func (c *Client) acquireFeatureCacheLocks(ctx context.Context, organizationID string, features []Feature) (*pgxpool.Conn, func(), error) {
