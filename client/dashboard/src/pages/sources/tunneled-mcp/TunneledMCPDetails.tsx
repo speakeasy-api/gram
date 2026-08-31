@@ -660,6 +660,10 @@ function SettingsTab({
   return (
     <div className="mx-auto w-full max-w-[1270px] space-y-8 px-8 py-8">
       <NameSection tunneledMcpServer={tunneledMcpServer} update={update} />
+      <ResourceIdentifierSection
+        tunneledMcpServer={tunneledMcpServer}
+        update={update}
+      />
       <PublicAccessSection
         tunneledMcpServer={tunneledMcpServer}
         update={update}
@@ -914,6 +918,98 @@ function NameSection({
           value={draft}
           onChange={(value) => setDraft(value)}
           placeholder="Internal MCP server"
+        />
+        {update.isError && (
+          <Alert variant="error" dismissible={false}>
+            {update.error.message}
+          </Alert>
+        )}
+        <Stack direction="horizontal" gap={2}>
+          <RequireScope scope="mcp:write" level="component">
+            <Button
+              variant="primary"
+              disabled={saveDisabled}
+              onClick={() => void handleSave()}
+            >
+              {update.isPending ? (
+                <Button.LeftIcon>
+                  <Loader2 className="size-4 animate-spin" />
+                </Button.LeftIcon>
+              ) : null}
+              <Button.Text>{update.isPending ? "Saving" : "Save"}</Button.Text>
+            </Button>
+          </RequireScope>
+        </Stack>
+      </Stack>
+    </div>
+  );
+}
+
+function ResourceIdentifierSection({
+  tunneledMcpServer,
+  update,
+}: {
+  tunneledMcpServer: TunneledMcpServer;
+  update: UpdateTunneledMcpMutation;
+}) {
+  const stored = tunneledMcpServer.resourceIdentifier ?? "";
+  const [draft, setDraft] = useState(stored);
+
+  useEffect(() => {
+    setDraft(stored);
+  }, [stored]);
+
+  const queryClient = useQueryClient();
+
+  const dirty = draft.trim() !== stored;
+  const saveDisabled = !dirty || update.isPending;
+
+  const handleSave = async () => {
+    try {
+      // An empty string clears the identifier back to unset.
+      await update.mutateAsync({
+        request: {
+          updateTunneledMcpServerForm: {
+            id: tunneledMcpServer.id,
+            name: tunneledMcpServer.name,
+            resourceIdentifier: draft.trim(),
+          },
+        },
+      });
+      await Promise.all([
+        invalidateAllGetTunneledMcpServer(queryClient, {
+          refetchType: "all",
+        }),
+        invalidateAllTunneledMcpServers(queryClient, { refetchType: "all" }),
+      ]);
+      toast.success("Resource identifier updated");
+    } catch (error) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : "Failed to update resource identifier";
+      toast.error(message);
+    }
+  };
+
+  return (
+    <div className="border p-6">
+      <Text variant="subheading" className="mb-1">
+        Resource Identifier
+      </Text>
+      <Text muted small className="mb-4 max-w-3xl">
+        The identifier this server's own authorization server recognizes as its
+        audience (its RFC 9728 protected resource identifier). When set, user
+        credentials granted for this server are routed to it by exact match —
+        required once a gateway holds credentials for several servers. Gram
+        never connects to this address. Leave blank if the server has no OAuth
+        of its own.
+      </Text>
+      <Stack gap={2}>
+        <Input
+          value={draft}
+          onChange={(value) => setDraft(value)}
+          placeholder="https://mcp.internal.example.com/mcp"
         />
         {update.isError && (
           <Alert variant="error" dismissible={false}>
