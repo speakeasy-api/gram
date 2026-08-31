@@ -33,6 +33,50 @@ func postBulk(t *testing.T, ctx context.Context, svc *Service, body string) (*ge
 	return svc.BulkUpdateAccountType(ctx, payload)
 }
 
+func TestBulkUpdateAccountType_RejectsAnyEnterpriseTrialBatchAtomically(t *testing.T) {
+	t.Parallel()
+	convertedAt := time.Now().UTC().Add(-time.Hour)
+	for _, tc := range []struct {
+		name        string
+		convertedAt *time.Time
+	}{
+		{name: "unconverted enterprise trial"},
+		{name: "converted enterprise trial", convertedAt: &convertedAt},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			ctx, svc, conn := newTestAdminService(t)
+			suffix := strings.ReplaceAll(tc.name, " ", "_")
+			trialID, ordinaryID, bystanderID := "org_bulk_trial_"+suffix, "org_bulk_ordinary_"+suffix, "org_bulk_bystander_"+suffix
+			seedOrg(t, ctx, conn, orgFixture{id: trialID, name: trialID, slug: trialID, accountType: "free"})
+			seedTrial(t, ctx, conn, trialFixture{orgID: trialID, tier: "enterprise", endsAt: time.Now().UTC().Add(time.Hour), convertedAt: tc.convertedAt})
+			seedOrg(t, ctx, conn, orgFixture{id: ordinaryID, name: ordinaryID, slug: ordinaryID, accountType: "free"})
+			seedOrg(t, ctx, conn, orgFixture{id: bystanderID, name: bystanderID, slug: bystanderID, accountType: "pro"})
+			trialBefore, ordinaryBefore, bystanderBefore := readOrgState(t, ctx, conn, trialID), readOrgState(t, ctx, conn, ordinaryID), readOrgState(t, ctx, conn, bystanderID)
+
+			result, err := svc.BulkUpdateAccountType(ctx, &gen.BulkUpdateAccountTypePayload{Ids: []string{ordinaryID, trialID}, AccountType: "enterprise"})
+			require.Nil(t, result)
+			require.ErrorContains(t, err, "enterprise trial")
+			require.Equal(t, trialBefore, readOrgState(t, ctx, conn, trialID))
+			require.Equal(t, ordinaryBefore, readOrgState(t, ctx, conn, ordinaryID), "batch must not partially update before conflict")
+			require.Equal(t, bystanderBefore, readOrgState(t, ctx, conn, bystanderID), "organization outside the batch must remain untouched")
+		})
+	}
+}
+
+func TestBulkUpdateAccountType_AllowsNonEnterpriseTargetForEnterpriseTrial(t *testing.T) {
+	t.Parallel()
+	ctx, svc, conn := newTestAdminService(t)
+	orgID := "org_bulk_trial_nonenterprise_target"
+	seedOrg(t, ctx, conn, orgFixture{id: orgID, name: orgID, slug: orgID, accountType: "free"})
+	seedTrial(t, ctx, conn, trialFixture{orgID: orgID, tier: "enterprise", endsAt: time.Now().UTC().Add(time.Hour)})
+
+	result, err := svc.BulkUpdateAccountType(ctx, &gen.BulkUpdateAccountTypePayload{Ids: []string{orgID}, AccountType: "pro"})
+	require.NoError(t, err)
+	require.Equal(t, []string{orgID}, result.UpdatedIds)
+	require.Equal(t, "pro", readOrgState(t, ctx, conn, orgID).GramAccountType)
+}
+
 func TestBulkUpdateAccountType_WritesOnlyTheListedIDs(t *testing.T) {
 	t.Parallel()
 

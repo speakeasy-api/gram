@@ -113,7 +113,11 @@ FROM latest_months
 ORDER BY period_start;
 
 -- name: ListMaterializedOpenRouterInferenceKeys :many
-SELECT key_type, monthly_credits, disabled
+SELECT key_type
+  , monthly_credits
+  , (CASE WHEN disable_causes IS NULL THEN disabled ELSE cardinality(disable_causes) > 0 END)::boolean AS disabled
+  , disable_causes
+  , (disable_causes IS NOT NULL)::boolean AS disable_causes_classified
 FROM openrouter_api_keys
 WHERE organization_id = @organization_id
   AND key_type = ANY(@key_types::text[])
@@ -121,7 +125,7 @@ WHERE organization_id = @organization_id
 ORDER BY key_type;
 
 -- name: GetMaterializedOpenRouterInferenceKey :one
-SELECT key_type, disabled
+SELECT key_type, (CASE WHEN disable_causes IS NULL THEN disabled ELSE cardinality(disable_causes) > 0 END)::boolean AS disabled
 FROM openrouter_api_keys
 WHERE organization_id = @organization_id
   AND key_type = @key_type
@@ -296,12 +300,10 @@ WITH inserted AS (
 )
 SELECT EXISTS (SELECT 1 FROM inserted) AS inserted;
 
--- name: StripeWebhookReceiptExists :one
-SELECT EXISTS (
-    SELECT 1
-    FROM stripe_webhook_receipts
-    WHERE stripe_event_id = @stripe_event_id
-) AS received;
+-- name: GetStripeWebhookReceipt :one
+SELECT organization_id, event_type
+FROM stripe_webhook_receipts
+WHERE stripe_event_id = @stripe_event_id;
 
 -- name: AcquireStripeSubscriptionActivationLock :exec
 -- Serializes distinct Stripe events that refer to the same subscription.
@@ -313,6 +315,25 @@ SELECT pg_advisory_xact_lock(hashtextextended(@stripe_subscription_id, 0));
 SELECT pg_advisory_xact_lock(
     hashtextextended('openrouter-' || @key_type::text || '-billing:' || @organization_id::text, 0)
 );
+
+-- name: AcquireOpenRouterBillingSessionLock :exec
+SELECT pg_advisory_lock(
+    hashtextextended('openrouter-' || @key_type::text || '-billing:' || @organization_id::text, 0)
+);
+
+-- name: ReleaseOpenRouterBillingSessionLock :one
+SELECT pg_advisory_unlock(
+    hashtextextended('openrouter-' || @key_type::text || '-billing:' || @organization_id::text, 0)
+) AS unlocked;
+
+-- name: GetPaygOpenRouterChatLifecycleProjection :one
+SELECT
+    organization_metadata.gram_account_type
+  , billing_metadata.stripe_subscription_id
+FROM organization_metadata
+LEFT JOIN billing_metadata
+  ON billing_metadata.organization_id = organization_metadata.id
+WHERE organization_metadata.id = @organization_id;
 
 -- name: GetPaygActivationState :one
 SELECT
@@ -380,9 +401,50 @@ WHERE id = @organization_id
 -- name: DisablePaygOpenRouterChatKey :exec
 UPDATE openrouter_api_keys
 SET disabled = TRUE,
+    disable_causes = CASE
+      WHEN disable_causes IS NULL THEN NULL
+      WHEN 'billing_inactive' = ANY(disable_causes) THEN disable_causes
+      ELSE ARRAY(
+        SELECT cause
+        FROM unnest(array_append(disable_causes, 'billing_inactive')) AS causes(cause)
+        GROUP BY cause
+        ORDER BY CASE cause
+          WHEN 'admin_lock' THEN 1
+          WHEN 'trial_demotion' THEN 2
+          WHEN 'billing_inactive' THEN 3
+          ELSE 4
+        END
+      )
+    END,
     updated_at = clock_timestamp()
 WHERE organization_id = @organization_id
   AND key_type = 'chat'
+  AND deleted IS FALSE;
+
+-- name: RecoverPaygOpenRouterChatKey :execrows
+UPDATE openrouter_api_keys
+SET disable_causes = ARRAY(
+      SELECT cause
+      FROM unnest(array_remove(disable_causes, 'billing_inactive')) AS causes(cause)
+      GROUP BY cause
+      ORDER BY CASE cause
+        WHEN 'admin_lock' THEN 1
+        WHEN 'trial_demotion' THEN 2
+        WHEN 'billing_inactive' THEN 3
+        ELSE 4
+      END, cause
+    ),
+    disabled = cardinality(array_remove(disable_causes, 'billing_inactive')) > 0,
+    monthly_credits = @monthly_credits,
+    updated_at = CASE
+      WHEN 'billing_inactive' = ANY(disable_causes) OR monthly_credits != @monthly_credits
+        THEN GREATEST(clock_timestamp(), updated_at + INTERVAL '1 microsecond')
+      ELSE updated_at
+    END
+WHERE organization_id = @organization_id
+  AND key_type = 'chat'
+  AND key_hash = @key_hash
+  AND disable_causes IS NOT NULL
   AND deleted IS FALSE;
 
 -- name: CreateStripeBillingMetadataFixture :exec

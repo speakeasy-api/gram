@@ -58,10 +58,12 @@ func (s *Service) GetInferenceKeys(ctx context.Context, payload *gen.GetInferenc
 				return fmt.Errorf("read %s inference key usage: %w", keyType, err)
 			}
 			result[index] = &gen.AdminInferenceKey{
-				KeyType:        key.KeyType,
-				CreditsUsed:    creditsUsed,
-				MonthlyCredits: key.MonthlyCredits,
-				Disabled:       key.Disabled,
+				KeyType:                 key.KeyType,
+				CreditsUsed:             creditsUsed,
+				MonthlyCredits:          key.MonthlyCredits,
+				Disabled:                key.Disabled,
+				DisableCauses:           key.DisableCauses,
+				DisableCausesClassified: key.DisableCausesClassified,
 			}
 			return nil
 		})

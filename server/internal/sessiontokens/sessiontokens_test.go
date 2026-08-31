@@ -3,6 +3,7 @@ package sessiontokens_test
 import (
 	"context"
 	"errors"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -44,9 +45,25 @@ func TestSigner_MintAndValidateBearer(t *testing.T) {
 
 	session, err := signer.ValidateBearer(t.Context(), token, "platform-mcp", neverRevoked{})
 	require.NoError(t, err)
-	require.Equal(t, subject, session.Subject)
-	require.Equal(t, jti, session.JTI)
-	require.Equal(t, "client-abc", session.ClientID)
+	require.True(t, session.Valid())
+	require.Equal(t, subject, session.Subject())
+	require.Equal(t, jti, session.JTI())
+	require.Equal(t, "client-abc", session.ClientID())
+}
+
+func TestValidatedSessionIsOpaqueAndZeroIsInvalid(t *testing.T) {
+	t.Parallel()
+
+	typeOf := reflect.TypeFor[sessiontokens.ValidatedSession]()
+	for field := range typeOf.Fields() {
+		require.False(t, field.IsExported(), "validated session field %s must remain private", field.Name)
+	}
+
+	var zero sessiontokens.ValidatedSession
+	require.False(t, zero.Valid())
+	require.Empty(t, zero.Subject())
+	require.Empty(t, zero.JTI())
+	require.Empty(t, zero.ClientID())
 }
 
 func TestSigner_ExactExpirationOverridesLifetime(t *testing.T) {
@@ -86,7 +103,7 @@ func TestSigner_UsesProvidedJTI(t *testing.T) {
 
 	session, err := signer.ValidateBearer(t.Context(), token, "platform-mcp", neverRevoked{})
 	require.NoError(t, err)
-	require.Equal(t, jti, session.JTI)
+	require.Equal(t, jti, session.JTI())
 }
 
 func TestSigner_RejectsInvalidProvidedJTI(t *testing.T) {
@@ -177,6 +194,13 @@ func TestSigner_RejectsUnexpectedAlgorithmAndMissingRequiredClaims(t *testing.T)
 	require.NoError(t, err)
 	_, err = signer.ValidateBearer(t.Context(), missingJTIToken, "platform-mcp", neverRevoked{})
 	require.ErrorContains(t, err, "missing jti claim")
+
+	malformedSubject := jwt.NewWithClaims(jwt.SigningMethodHS256, sessiontokens.SessionClaims{RegisteredClaims: jwt.RegisteredClaims{Subject: "user:", Audience: jwt.ClaimStrings{"platform-mcp"}, ExpiresAt: jwt.NewNumericDate(time.Now().Add(time.Hour)), ID: "jti-3"}})
+	malformedSubjectToken, err := malformedSubject.SignedString([]byte("test-jwt-secret"))
+	require.NoError(t, err)
+	proof, err := signer.ValidateBearer(t.Context(), malformedSubjectToken, "platform-mcp", neverRevoked{})
+	require.ErrorContains(t, err, "parse session subject")
+	require.False(t, proof.Valid())
 }
 
 func TestSigner_FailsClosedOnRevocation(t *testing.T) {

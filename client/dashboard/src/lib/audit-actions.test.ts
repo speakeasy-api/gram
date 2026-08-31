@@ -55,6 +55,12 @@ describe("AUDIT_ACTIONS", () => {
     }
   });
 
+  it("describes enterprise conversion against its organization subject", () => {
+    expect(staticActionPhrase("organization:enterprise_trial_converted")).toBe(
+      "converted enterprise trial for",
+    );
+  });
+
   it("rejects actions it doesn't know", () => {
     expect(isAuditAction("risk_policy:delete")).toBe(true);
     expect(isAuditAction("not_a_resource:not_a_verb")).toBe(false);

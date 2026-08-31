@@ -23,25 +23,31 @@ type ReadingInserter interface {
 
 // MeterReadingCHWriter validates Pub/Sub readings and writes them to ClickHouse.
 type MeterReadingCHWriter struct {
-	logger   *slog.Logger
-	inserter ReadingInserter
+	logger        *slog.Logger
+	inserter      ReadingInserter
+	writesEnabled bool
 }
 
 // NewMeterReadingCHWriter creates a ClickHouse workload reading subscriber.
-func NewMeterReadingCHWriter(logger *slog.Logger, inserter ReadingInserter) *MeterReadingCHWriter {
+func NewMeterReadingCHWriter(logger *slog.Logger, inserter ReadingInserter, writesEnabled bool) *MeterReadingCHWriter {
 	return &MeterReadingCHWriter{
-		logger:   logger.With(attr.SlogComponent("meter-reading-ch-writer")),
-		inserter: inserter,
+		logger:        logger.With(attr.SlogComponent("meter-reading-ch-writer")),
+		inserter:      inserter,
+		writesEnabled: writesEnabled,
 	}
 }
 
 var _ streams.BatchHandler[*meteringv1.MeterReading] = (*MeterReadingCHWriter)(nil)
 
-// HandleBatch acknowledges malformed poison messages and retries ClickHouse failures.
+// HandleBatch acknowledges messages without insertion when ClickHouse writes are disabled.
 func (w *MeterReadingCHWriter) HandleBatch(ctx context.Context, messages []*meteringv1.MeterReading, _ []gcp.MessageMetadata) error {
+	if !w.writesEnabled {
+		return nil
+	}
+
 	insertedAt := time.Now().UTC()
 	rows := make([]chrepo.ReadingRow, 0, len(messages))
-	seen := make(map[uuid.UUID]struct{}, len(messages))
+	received := make(map[uuid.UUID]int, len(messages))
 
 	for _, message := range messages {
 		row, reason := meterReadingRow(message, insertedAt)
@@ -56,10 +62,14 @@ func (w *MeterReadingCHWriter) HandleBatch(ctx context.Context, messages []*mete
 			)
 			continue
 		}
-		if _, duplicate := seen[row.ID]; duplicate {
+		if priorIndex, duplicate := received[row.ID]; duplicate {
+			if row.ProducedAt.Before(rows[priorIndex].ProducedAt) {
+				continue
+			}
+			rows[priorIndex] = row
 			continue
 		}
-		seen[row.ID] = struct{}{}
+		received[row.ID] = len(rows)
 		rows = append(rows, row)
 	}
 
@@ -169,6 +179,7 @@ func meterReadingRow(message *meteringv1.MeterReading, insertedAt time.Time) (ch
 		Unit:              string(definition.unit),
 		Value:             message.GetValue(),
 		OccurredAt:        occurredAt,
+		ProducedAt:        producedAt,
 		InsertedAt:        insertedAt,
 		CorrectsReadingID: correctsReadingID,
 		Attributes:        attributes,

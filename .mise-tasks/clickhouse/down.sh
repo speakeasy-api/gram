@@ -14,4 +14,4 @@ exec atlas migrate down --to-version "${usage_target:?}" \
   --dir file://clickhouse/migrations \
   --config file://atlas.hcl \
   --url "$GRAM_CLICKHOUSE_URL" \
-  --dev-url "docker://clickhouse/clickhouse-server/25.8.3/dev"
+  --dev-url "docker://clickhouse/clickhouse-server/26.2.19.43@sha256:c2f2605585899d5103a0447daadbc0005f362200d5f0fcca7f40db3ca0dd36dd/dev"

@@ -215,7 +215,7 @@ describe("organization billing endpoints", () => {
   function stubFetch(): ReturnType<typeof vi.fn> {
     const fetch = vi.fn().mockImplementation(() =>
       Promise.resolve(
-        new Response(JSON.stringify({}), {
+        new Response(JSON.stringify([]), {
           status: 200,
           headers: { "Content-Type": "application/json" },
         }),
@@ -224,6 +224,38 @@ describe("organization billing endpoints", () => {
     vi.stubGlobal("fetch", fetch);
     return fetch;
   }
+
+  it("preserves classified empty and legacy unclassified cause semantics", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        new Response(
+          JSON.stringify([
+            {
+              key_type: "chat",
+              credits_used: 0,
+              monthly_credits: 100,
+              disabled: false,
+              disable_causes_classified: true,
+            },
+            {
+              key_type: "internal",
+              credits_used: 0,
+              monthly_credits: 50,
+              disabled: true,
+              disable_causes_classified: false,
+            },
+          ]),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        ),
+      ),
+    );
+
+    await expect(getInferenceKeys("org one")).resolves.toMatchObject([
+      { disable_causes: [], disable_causes_classified: true },
+      { disable_causes: null, disable_causes_classified: false },
+    ]);
+  });
 
   it("reads billing state from explicit admin organization endpoints", async () => {
     const fetch = stubFetch();
