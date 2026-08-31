@@ -4410,6 +4410,12 @@ CREATE TABLE IF NOT EXISTS tunneled_mcp_servers (
   allow_public boolean NOT NULL DEFAULT false,
   -- Last persisted tunnel agent version reported for this source.
   agent_version TEXT CHECK (agent_version IS NULL OR agent_version <> ''),
+  -- The tunneled server's own RFC 9728 protected-resource identifier: the
+  -- value an authorization server co-hosted with it recognizes as its
+  -- audience. Recorded as the RFC 8707 resource on grants and used only for
+  -- exact-match credential routing. Names a host inside the customer's
+  -- private network — this value must NEVER be dialed by Gram.
+  resource_identifier TEXT CHECK (resource_identifier IS NULL OR resource_identifier <> ''),
   -- Most recent persisted heartbeat time, used when Redis liveness data is absent.
   last_seen_at timestamptz,
 
@@ -4443,6 +4449,7 @@ COMMENT ON COLUMN tunneled_mcp_servers.key_prefix IS 'Non-secret prefix of the t
 COMMENT ON COLUMN tunneled_mcp_servers.status IS 'Durable lifecycle state for the source: created, active, or revoked. Live connection state is derived from Redis.';
 COMMENT ON COLUMN tunneled_mcp_servers.allow_public IS 'Owner consent for anonymous public MCP serving of this source. Double opt-in with mcp_servers.visibility=public, enforced in application code.';
 COMMENT ON COLUMN tunneled_mcp_servers.agent_version IS 'Last persisted tunnel agent version reported for this source. Per-connection agent versions are stored in Redis.';
+COMMENT ON COLUMN tunneled_mcp_servers.resource_identifier IS 'RFC 9728 protected-resource identifier of the tunneled server, recorded as the RFC 8707 resource on grants and used only for exact-match credential routing. Names a host inside the customer''s private network — never dialed by Gram.';
 COMMENT ON COLUMN tunneled_mcp_servers.last_seen_at IS 'Most recent persisted heartbeat time for the source, used when Redis liveness data is absent or expired.';
 COMMENT ON COLUMN tunneled_mcp_servers.created_at IS 'Time when the tunneled MCP source was created.';
 COMMENT ON COLUMN tunneled_mcp_servers.updated_at IS 'Time when the durable tunneled MCP source record was last updated.';
