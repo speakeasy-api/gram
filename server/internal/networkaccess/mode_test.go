@@ -22,9 +22,7 @@ func TestMode(t *testing.T) {
 	require.Equal(t, ModePublicOnly, Effective(pgtype.Text{String: "", Valid: true}))
 	require.Equal(t, ModeDual, Effective(pgtype.Text{String: string(ModeDual), Valid: true}))
 	unknown := Effective(pgtype.Text{String: "future_mode", Valid: true})
-	require.Empty(t, unknown)
-	require.False(t, unknown.Allows(SurfacePublic))
-	require.False(t, unknown.Allows(SurfacePrivate))
+	require.Equal(t, ModePrivateOnly, unknown)
 
 	require.False(t, Storage(ModePublicOnly).Valid)
 	require.Equal(t, pgtype.Text{String: string(ModePrivateOnly), Valid: true}, Storage(ModePrivateOnly))
