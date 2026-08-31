@@ -83,6 +83,18 @@ type EndpointRef struct {
 	// challenge before it existed.
 	MetaMcpServerID uuid.NullUUID `json:"meta_mcp_server_id,omitzero"`
 
+	// IsPublic snapshots whether the endpoint admitted an anonymous subject at
+	// mint time. New states always set it; nil preserves compatibility only for
+	// states minted before this field existed, which expire within the challenge
+	// TTL. Re-entry rejects a visibility change before consent or token minting.
+	IsPublic *bool `json:"is_public,omitempty"`
+
+	// ToolsetID pins direct-toolset endpoints. It is also populated on bridged
+	// server-backed endpoints for attribution, but server/meta IDs remain the
+	// primary backend identity. Missing alongside both server IDs denotes a
+	// pre-field legacy cached state.
+	ToolsetID uuid.NullUUID `json:"toolset_id,omitzero"`
+
 	// Path of a toolset-backed endpoint. Set for /mcp and toolset-backed
 	// /x/mcp challenges.
 	McpSlug string `json:"mcp_slug"`
@@ -194,6 +206,10 @@ type UserSessionGrant struct {
 	CodeChallenge       string             `json:"code_challenge"`
 	CodeChallengeMethod string             `json:"code_challenge_method"`
 	Subject             urn.SessionSubject `json:"subject"`
+	// Endpoint pins new authorization codes to the exact endpoint authority
+	// consented by the subject. Nil is accepted only for grants minted before
+	// this field landed; authorization-code TTL bounds that compatibility window.
+	Endpoint *EndpointRef `json:"endpoint,omitempty"`
 	// DesiredSessionDurationHours is the subject's consent-screen session
 	// length choice. Token minting clamps it to the issuer maximum. Zero means
 	// "no explicit choice" and the mint uses that maximum. Keep the JSON key

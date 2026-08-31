@@ -27,6 +27,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	metamcp_repo "github.com/speakeasy-api/gram/server/internal/metamcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/metamcp/visibility"
+	"github.com/speakeasy-api/gram/server/internal/networkaccess"
 	organizations_repo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	projects_repo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp/remotemcptest"
@@ -1909,6 +1910,37 @@ func TestServeInstallPage_CustomDomain_RootEndpointRendersBareDomainURL(t *testi
 // will add a real page): the response is the rendered not-found page rather
 // than a 500, and the slug must not fall through to an unrelated legacy
 // toolset sharing the same mcp_slug.
+func TestServeInstallPage_PrivateOnlyEndpointDoesNotFallBack(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestMCPMetadataService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	mcpSlug := "private-only-install-" + uuid.NewString()[:8]
+	createMcpServerWithEndpoint(t, ctx, ti, mcpServerFixtureOptions{
+		name: "Private Only Install", visibility: mcpservers.VisibilityPublic,
+		endpointSlug: mcpSlug, networkAccessMode: networkaccess.ModePrivateOnly,
+	})
+	legacy, err := ti.toolsetRepo.CreateToolset(ctx, toolsets_repo.CreateToolsetParams{
+		OrganizationID: authCtx.ActiveOrganizationID, ProjectID: *authCtx.ProjectID,
+		Name: "Legacy Install Fallback", Slug: "legacy-" + mcpSlug, McpSlug: conv.ToPGText(mcpSlug),
+		Description: conv.ToPGText("must not render"), DefaultEnvironmentSlug: pgtype.Text{String: "", Valid: false}, McpEnabled: true,
+	})
+	require.NoError(t, err)
+	require.NoError(t, ti.toolsetRepo.SetToolsetMCPPublicByID(ctx, toolsets_repo.SetToolsetMCPPublicByIDParams{
+		McpIsPublic: true, ID: legacy.ID, ProjectID: legacy.ProjectID,
+	}))
+
+	req := httptest.NewRequest("GET", "/mcp/"+mcpSlug+"/install", nil)
+	rctx := chi.NewRouteContext()
+	rctx.URLParams.Add("mcpSlug", mcpSlug)
+	req = req.WithContext(context.WithValue(ctx, chi.RouteCtxKey, rctx))
+	rr := httptest.NewRecorder()
+	require.NoError(t, ti.service.ServeInstallPage(rr, req))
+	require.Equal(t, http.StatusNotFound, rr.Code)
+	require.NotContains(t, rr.Body.String(), "Legacy Install Fallback")
+}
+
 func TestServeInstallPage_MetaBackedEndpoint_ReturnsNotFound(t *testing.T) {
 	t.Parallel()
 	ctx, testInstance := newTestMCPMetadataService(t)

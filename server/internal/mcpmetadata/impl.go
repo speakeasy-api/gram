@@ -1036,10 +1036,8 @@ func (s *Service) resolveInstallContext(ctx context.Context, mcpSlug string) (*i
 	switch {
 	case mcpendpoints.IsAddressMiss(err):
 		// Fall through to legacy toolset lookup.
-	case errors.Is(err, mcpendpoints.ErrEndpointUnavailable):
-		// Disabled or dangling backend: the endpoint row owns the slug, so
-		// render the not-found page rather than an unexpected failure.
-		return nil, fmt.Errorf("%w: mcp endpoint backend unavailable", errToolsetNotFound)
+	case mcpendpoints.IsPolicyDenied(err):
+		return nil, fmt.Errorf("%w: endpoint is not available on this network surface", errToolsetNotFound)
 	case err != nil:
 		return nil, fmt.Errorf("resolve mcp endpoint: %w", err)
 	case metaServer != nil:
