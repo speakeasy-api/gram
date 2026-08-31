@@ -215,6 +215,94 @@ func TestWorkloadIssuerAdmission_MalformedIssuerIsRejectedAndRemembered(t *testi
 	require.EqualValues(t, 1, lookup.calls.Load())
 }
 
+// The non-obvious half of the key, asserted where it matters rather than only
+// at the key function. Lookup matches a closed candidate set that includes the
+// caller's own spelling, so two inputs sharing a canonical form do not
+// necessarily share a result: collapsing them would let the rejection of one
+// answer for the spelling that would have matched.
+func TestWorkloadIssuerAdmission_SpellingsSharingACanonicalFormResolveSeparately(t *testing.T) {
+	t.Parallel()
+
+	lookup := &countingLookup{found: false}
+	admission := newWorkloadIssuerAdmission(lookup.fn())
+	endpoint := workloadTestTenant()
+
+	_, err := admission.admit(t.Context(), endpoint, "https://idp.example.test")
+	require.ErrorIs(t, err, errWorkloadIssuerUntrusted)
+	_, err = admission.admit(t.Context(), endpoint, "https://IDP.example.test")
+	require.ErrorIs(t, err, errWorkloadIssuerUntrusted)
+
+	require.EqualValues(t, 2, lookup.calls.Load(), "a spelling the lookup may resolve differently must be resolved on its own")
+}
+
+// A cached rejection must answer the way the original did. Otherwise the same
+// malformed iss would be a different error depending only on whether an entry
+// happened to be live, and a caller mapping malformed to 400 and unknown to
+// 401 would answer one request two ways.
+func TestWorkloadIssuerAdmission_CachedMalformedMissKeepsItsTaxonomy(t *testing.T) {
+	t.Parallel()
+
+	lookup := &countingLookup{err: fmt.Errorf("%w: no host", remotesessions.ErrIssuerURLInvalid)}
+	admission := newWorkloadIssuerAdmission(lookup.fn())
+	endpoint := workloadTestTenant()
+
+	_, first := admission.admit(t.Context(), endpoint, "not-a-url")
+	require.ErrorIs(t, first, remotesessions.ErrIssuerURLInvalid)
+
+	_, cached := admission.admit(t.Context(), endpoint, "not-a-url")
+	require.ErrorIs(t, cached, errWorkloadIssuerUntrusted)
+	require.ErrorIs(t, cached, remotesessions.ErrIssuerURLInvalid, "a repeat served from the cache must stay distinguishable from an unknown issuer")
+
+	require.EqualValues(t, 1, lookup.calls.Load())
+}
+
+// An unknown issuer and a malformed one are both rejections, but they are not
+// the same rejection, so one must never be served under the other's key.
+func TestWorkloadIssuerMissCache_ReasonSurvivesTheEntry(t *testing.T) {
+	t.Parallel()
+
+	cache := newWorkloadIssuerMissCache(8, time.Minute)
+	cache.remember("malformed", workloadIssuerMissMalformed)
+	cache.remember("unknown", workloadIssuerMissUnknown)
+
+	malformed, ok := cache.seen("malformed")
+	require.True(t, ok)
+	require.ErrorIs(t, malformed.err(), remotesessions.ErrIssuerURLInvalid)
+
+	unknown, ok := cache.seen("unknown")
+	require.True(t, ok)
+	require.ErrorIs(t, unknown.err(), errWorkloadIssuerUntrusted)
+	require.NotErrorIs(t, unknown.err(), remotesessions.ErrIssuerURLInvalid)
+}
+
+// A lapsed entry is a corpse, not a held entry: a fresh miss colliding with
+// one must be recorded rather than silently dropped.
+//
+// admit reaches remember only through seen, which drops a lapsed entry on the
+// way past, so this drives remember directly — the footgun is reachable by any
+// second consumer that does not happen to read first, and asserting it through
+// seen would assert nothing.
+func TestWorkloadIssuerMissCache_LapsedEntryIsRecordedAgain(t *testing.T) {
+	t.Parallel()
+
+	cache := newWorkloadIssuerMissCache(8, time.Minute)
+	cache.remember("issuer", workloadIssuerMissUnknown)
+
+	// Lapse the entry in place, leaving it present but dead — the state a
+	// read would have cleaned up.
+	cache.entries["issuer"] = workloadIssuerMissEntry{
+		expiry: time.Now().Add(-time.Minute),
+		reason: workloadIssuerMissUnknown,
+	}
+
+	cache.remember("issuer", workloadIssuerMissMalformed)
+
+	reason, ok := cache.seen("issuer")
+	require.True(t, ok, "a miss recorded after the previous entry lapsed must be held")
+	require.Equal(t, workloadIssuerMissMalformed, reason, "the new miss, not the lapsed one, must be what answers")
+	require.Len(t, cache.order, 1, "the lapsed entry must not leave a second slot behind")
+}
+
 // The key must distinguish exactly what the lookup distinguishes: same
 // tenancy and same spelling share an answer, and any difference in either
 // does not.
@@ -262,13 +350,15 @@ func TestWorkloadIssuerMissCache_BoundedByEntries(t *testing.T) {
 	cache := newWorkloadIssuerMissCache(maxEntries, time.Minute)
 
 	for i := range maxEntries * 10 {
-		cache.remember("issuer-" + strconv.Itoa(i))
+		cache.remember("issuer-"+strconv.Itoa(i), workloadIssuerMissUnknown)
 	}
 
-	require.LessOrEqual(t, len(cache.expiries), maxEntries, "a flood of distinct issuers must evict, never grow")
-	require.Len(t, cache.order, len(cache.expiries), "the insertion order must not outlive the entries it tracks")
-	require.True(t, cache.seen("issuer-79"), "the most recent miss must still be held")
-	require.False(t, cache.seen("issuer-0"), "the oldest miss must have been evicted")
+	require.LessOrEqual(t, len(cache.entries), maxEntries, "a flood of distinct issuers must evict, never grow")
+	require.Len(t, cache.order, len(cache.entries), "the insertion order must not outlive the entries it tracks")
+	_, held := cache.seen("issuer-79")
+	require.True(t, held, "the most recent miss must still be held")
+	_, evicted := cache.seen("issuer-0")
+	require.False(t, evicted, "the oldest miss must have been evicted")
 }
 
 // A lapsed entry must stop answering, so an issuer an operator has just added
@@ -279,16 +369,18 @@ func TestWorkloadIssuerMissCache_EntryExpires(t *testing.T) {
 	t.Parallel()
 
 	held := newWorkloadIssuerMissCache(8, time.Minute)
-	held.remember("issuer")
-	require.True(t, held.seen("issuer"), "a fresh entry answers")
+	held.remember("issuer", workloadIssuerMissUnknown)
+	_, fresh := held.seen("issuer")
+	require.True(t, fresh, "a fresh entry answers")
 
 	lapsing := newWorkloadIssuerMissCache(8, time.Millisecond)
-	lapsing.remember("issuer")
+	lapsing.remember("issuer", workloadIssuerMissUnknown)
 	require.Eventually(t, func() bool {
-		return !lapsing.seen("issuer")
+		_, still := lapsing.seen("issuer")
+		return !still
 	}, time.Second, 5*time.Millisecond, "a miss must stop being remembered once its ttl lapses")
 
-	require.Empty(t, lapsing.expiries, "a lapsed entry must be dropped, not merely ignored")
+	require.Empty(t, lapsing.entries, "a lapsed entry must be dropped, not merely ignored")
 }
 
 // Repeating a miss must not extend it. Otherwise a caller could pin an entry
@@ -297,12 +389,12 @@ func TestWorkloadIssuerMissCache_RepeatDoesNotExtendEntry(t *testing.T) {
 	t.Parallel()
 
 	cache := newWorkloadIssuerMissCache(8, time.Minute)
-	cache.remember("issuer")
-	first := cache.expiries["issuer"]
+	cache.remember("issuer", workloadIssuerMissUnknown)
+	first := cache.entries["issuer"]
 
-	cache.remember("issuer")
+	cache.remember("issuer", workloadIssuerMissUnknown)
 
-	require.Equal(t, first, cache.expiries["issuer"], "a repeated miss must not refresh the entry it hits")
+	require.Equal(t, first, cache.entries["issuer"], "a repeated miss must not refresh the entry it hits")
 	require.Len(t, cache.order, 1, "a repeated miss must not take a second slot")
 }
 

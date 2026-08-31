@@ -616,7 +616,7 @@ func (s *Service) GetRemoteSessionIssuer(ctx context.Context, payload *gen.GetRe
 		case errors.Is(err, ErrIssuerURLInvalid):
 			return nil, oops.E(oops.CodeBadRequest, err, "%s", err.Error()).LogError(ctx, logger)
 		case err != nil:
-			return nil, oops.E(oops.CodeUnexpected, err, "list remote session issuers by issuer url").LogError(ctx, logger)
+			return nil, oops.E(oops.CodeUnexpected, err, "resolve remote session issuer").LogError(ctx, logger)
 		case !found:
 			return nil, oops.E(oops.CodeNotFound, nil, "remote session issuer not found").LogWarn(ctx, logger)
 		}
