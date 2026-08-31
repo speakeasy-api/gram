@@ -1152,7 +1152,7 @@ SELECT
     groupUniqArrayArray(arraySort(JSONExtract(ifNull(toJSONString(attributes.user.groups), '[]'), 'Array(String)'))) AS groups,
     -- Attribution values only exist meaningfully on api_request rows; the If
     -- guard keeps other rows from contributing an all-empty tuple.
-    groupUniqArrayIf(tuple(toString(attributes.query_source), toString(attributes.skill.name), toString(attributes.agent.name), toString(attributes.mcp_server.name), toString(attributes.mcp_tool.name)), is_claude_api_request) AS attribution_tuples
+    groupUniqArrayIf((toString(attributes.query_source), toString(attributes.skill.name), toString(attributes.agent.name), toString(attributes.mcp_server.name), toString(attributes.mcp_tool.name)), is_claude_api_request) AS attribution_tuples
 FROM telemetry_logs
 WHERE time_unix_nano >= chat_session_cutoff_unix_nano
   AND chat_id != ''
@@ -1199,12 +1199,12 @@ CREATE TABLE IF NOT EXISTS billing_meter_readings (
     produced_at DateTime64(9, 'UTC') COMMENT 'UTC time when the producer created this reading variant and the ReplacingMergeTree version.',
     inserted_at DateTime64(9, 'UTC') DEFAULT now64(9) COMMENT 'UTC time when ClickHouse received the row for delivery-lag diagnostics.',
     corrects_reading_id Nullable(UUID) COMMENT 'Original reading corrected by this immutable adjustment.',
-    reading_kind LowCardinality(String) MATERIALIZED if(isNull(corrects_reading_id), 'usage', 'adjustment') COMMENT 'Derived row kind based on whether the reading corrects an earlier reading.',
+    reading_kind LowCardinality(String) MATERIALIZED if(corrects_reading_id IS NULL, 'usage', 'adjustment') COMMENT 'Derived row kind based on whether the reading corrects an earlier reading.',
     attributes Map(String, String) COMMENT 'Additional producer-supplied reading dimensions.',
     tokenizer_codec LowCardinality(String) MATERIALIZED attributes['codec'] COMMENT 'Tokenizer codec promoted from attributes for billing analysis.',
     CONSTRAINT identity_valid CHECK id != toUUID('00000000-0000-0000-0000-000000000000') AND project_id != toUUID('00000000-0000-0000-0000-000000000000') AND notEmpty(trimBoth(organization_id)) AND notEmpty(trimBoth(meter_id)) AND notEmpty(trimBoth(operation_id)),
-    CONSTRAINT value_kind_valid CHECK (isNull(corrects_reading_id) AND value > 0) OR (isNotNull(corrects_reading_id) AND value != 0),
-    CONSTRAINT correction_id_valid CHECK isNull(corrects_reading_id) OR (corrects_reading_id != toUUID('00000000-0000-0000-0000-000000000000') AND corrects_reading_id != id),
+    CONSTRAINT value_kind_valid CHECK (corrects_reading_id IS NULL AND value > 0) OR (corrects_reading_id IS NOT NULL AND value != 0),
+    CONSTRAINT correction_id_valid CHECK corrects_reading_id IS NULL OR (corrects_reading_id != toUUID('00000000-0000-0000-0000-000000000000') AND corrects_reading_id != id),
     CONSTRAINT measurement_valid CHECK unit = 'stokens' AND tokenizer_codec = 'tiktoken_o200k_base',
     INDEX idx_billing_meter_readings_occurred_at occurred_at TYPE minmax GRANULARITY 1
 ) ENGINE = ReplacingMergeTree(produced_at)
