@@ -21,6 +21,11 @@ const (
 	NamespaceCustomDomain = "custom_domain"
 )
 
+// ErrAuthorityUnavailable identifies a transient failure to read live ingress
+// authority. Callers should return a retryable service-unavailable response;
+// missing, disabled, deleted, or changed authority remains a terminal denial.
+var ErrAuthorityUnavailable = errors.New("network ingress authority lookup unavailable")
+
 // Authority is the non-sensitive, provider-neutral request authority pinned to
 // short-lived OAuth state. It intentionally excludes advisory network identity
 // and provider credentials.
@@ -160,12 +165,14 @@ func LoadRequestAuthority(ctx context.Context, db *pgxpool.Pool) (Authority, err
 	if !ok || origin.Surface != requestorigin.SurfacePrivateNetwork {
 		return Authority{}, fmt.Errorf("private request origin is unavailable")
 	}
-	row, err := repo.New(db).GetLiveNetworkIngressAuthority(ctx, origin.NetworkIngressID)
+	row, err := repo.New(db).GetLiveNetworkIngressAuthority(ctx, repo.GetLiveNetworkIngressAuthorityParams{
+		ID: origin.NetworkIngressID, OrganizationID: origin.OrganizationID,
+	})
 	if errors.Is(err, pgx.ErrNoRows) {
 		return Authority{}, fmt.Errorf("private network ingress is unavailable")
 	}
 	if err != nil {
-		return Authority{}, fmt.Errorf("load private network ingress authority: %w", err)
+		return Authority{}, errors.Join(ErrAuthorityUnavailable, err)
 	}
 	baseURL, err := canonicalPrivateBaseURL(origin.BaseURL)
 	if err != nil {
@@ -179,7 +186,7 @@ func LoadRequestAuthority(ctx context.Context, db *pgxpool.Pool) (Authority, err
 		NamespaceKind:    row.EndpointNamespaceKind,
 		CustomDomainID:   row.CustomDomainID,
 	}
-	if err := authority.ValidateLive(ctx, db); err != nil {
+	if err := authority.validateLiveRow(row); err != nil {
 		return Authority{}, err
 	}
 	return authority, nil
@@ -196,13 +203,19 @@ func (a Authority) ValidateLive(ctx context.Context, db *pgxpool.Pool) error {
 		return err
 	}
 
-	row, err := repo.New(db).GetLiveNetworkIngressAuthority(ctx, a.NetworkIngressID)
+	row, err := repo.New(db).GetLiveNetworkIngressAuthority(ctx, repo.GetLiveNetworkIngressAuthorityParams{
+		ID: a.NetworkIngressID, OrganizationID: a.OrganizationID,
+	})
 	if errors.Is(err, pgx.ErrNoRows) {
 		return fmt.Errorf("private network ingress is unavailable")
 	}
 	if err != nil {
-		return fmt.Errorf("load private network ingress authority: %w", err)
+		return errors.Join(ErrAuthorityUnavailable, err)
 	}
+	return a.validateLiveRow(row)
+}
+
+func (a Authority) validateLiveRow(row repo.GetLiveNetworkIngressAuthorityRow) error {
 	if row.OrganizationID != a.OrganizationID || row.EndpointNamespaceKind != a.NamespaceKind || row.CustomDomainID != a.CustomDomainID {
 		return fmt.Errorf("private network ingress authority changed")
 	}
@@ -240,6 +253,9 @@ func canonicalPrivateBaseURL(raw string) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("canonicalize private network ingress origin: %w", err)
 	}
+	if strings.Contains(host, ":") {
+		host = "[" + host + "]"
+	}
 	return (&url.URL{Scheme: "https", Host: host}).String(), nil
 }
 
@@ -247,11 +263,14 @@ func expectedBaseURL(dnsName pgtype.Text) string {
 	if !dnsName.Valid {
 		return ""
 	}
-	host := strings.TrimSpace(dnsName.String)
+	host := strings.ToLower(strings.TrimSuffix(strings.TrimSpace(dnsName.String), "."))
 	if host == "" {
 		return ""
 	}
-	baseURL, err := canonicalPrivateBaseURL((&url.URL{Scheme: "https", Host: strings.ToLower(strings.TrimSuffix(host, "."))}).String())
+	if strings.Count(host, ":") > 1 && !strings.HasPrefix(host, "[") {
+		host = "[" + host + "]"
+	}
+	baseURL, err := canonicalPrivateBaseURL((&url.URL{Scheme: "https", Host: host}).String())
 	if err != nil {
 		return ""
 	}

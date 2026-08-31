@@ -21,9 +21,15 @@ SELECT
     dns_name
 FROM network_ingresses
 WHERE id = $1
+  AND organization_id = $2
   AND enabled IS TRUE
   AND deleted IS FALSE
 `
+
+type GetLiveNetworkIngressAuthorityParams struct {
+	ID             uuid.UUID
+	OrganizationID string
+}
 
 type GetLiveNetworkIngressAuthorityRow struct {
 	ID                    uuid.UUID
@@ -33,8 +39,8 @@ type GetLiveNetworkIngressAuthorityRow struct {
 	DnsName               pgtype.Text
 }
 
-func (q *Queries) GetLiveNetworkIngressAuthority(ctx context.Context, id uuid.UUID) (GetLiveNetworkIngressAuthorityRow, error) {
-	row := q.db.QueryRow(ctx, getLiveNetworkIngressAuthority, id)
+func (q *Queries) GetLiveNetworkIngressAuthority(ctx context.Context, arg GetLiveNetworkIngressAuthorityParams) (GetLiveNetworkIngressAuthorityRow, error) {
+	row := q.db.QueryRow(ctx, getLiveNetworkIngressAuthority, arg.ID, arg.OrganizationID)
 	var i GetLiveNetworkIngressAuthorityRow
 	err := row.Scan(
 		&i.ID,

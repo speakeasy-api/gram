@@ -650,6 +650,13 @@ func (s *Service) ApplyIssuerGate(
 
 var errToolsetEndpointMismatch = errors.New("authn challenge endpoint does not match toolset")
 
+func oauthAuthorityError(err error) *oops.ShareableError {
+	if errors.Is(err, networkingress.ErrAuthorityUnavailable) {
+		return oops.E(oops.CodeUnavailable, err, "private OAuth authority lookup is unavailable")
+	}
+	return oops.E(oops.CodeUnauthorized, err, "authn challenge state does not match this MCP server")
+}
+
 // RequireUserSessionIssuer verifies the endpoint's user_session_issuer_id
 // FK still resolves to a live row, and stamps the issuer configuration the
 // OAuth handlers need onto the endpoint. Returns CodeNotFound when the

@@ -47,6 +47,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	customdomainsrepo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/networkingress"
@@ -55,6 +56,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/interceptors"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/remotesessionmetrics"
 	remotesessions_repo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
+	"github.com/speakeasy-api/gram/server/internal/requestorigin"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -82,6 +84,8 @@ type ParentChallenge struct {
 	Subject             *urn.SessionSubject
 	McpSlug             string
 	RouteBase           string
+	McpServerID         uuid.NullUUID
+	MetaMcpServerID     uuid.NullUUID
 	FinalRedirectURI    string
 	// Resource is the RFC 8707 resource indicator sent on the authorize
 	// redirect and code exchange. Empty omits the parameter.
@@ -117,7 +121,9 @@ type RemoteLoginState struct {
 	// RouteBase is "mcp" or "x/mcp" — drives the post-callback redirect
 	// to /<RouteBase>/{slug}/connect. Empty values fall back to "mcp"
 	// for in-flight states minted before this field landed.
-	RouteBase string `json:"route_base,omitempty"`
+	RouteBase       string        `json:"route_base,omitempty"`
+	McpServerID     uuid.NullUUID `json:"mcp_server_id,omitzero"`
+	MetaMcpServerID uuid.NullUUID `json:"meta_mcp_server_id,omitzero"`
 	// FinalRedirectURI overrides the default post-callback redirect to
 	// /<RouteBase>/{slug}/connect. Set by dashboard-driven flows that
 	// own their own popup-close surface (validated against an allow-list
@@ -568,6 +574,8 @@ func (m *ChallengeManager) BuildAuthorizationUrl(
 		Subject:               parent.Subject,
 		McpSlug:               parent.McpSlug,
 		RouteBase:             parent.RouteBase,
+		McpServerID:           parent.McpServerID,
+		MetaMcpServerID:       parent.MetaMcpServerID,
 		FinalRedirectURI:      parent.FinalRedirectURI,
 		AutoRefresh:           parent.AutoRefresh,
 		Authority:             parent.Authority,
@@ -847,6 +855,13 @@ func (m *ChallengeManager) HandleRemoteLoginCallback(w http.ResponseWriter, r *h
 	redirectBaseURL := m.serverURL.String()
 	if state.Authority.IsPrivate() {
 		redirectBaseURL = state.Authority.BaseURL
+	} else if state.Authority.Surface == requestorigin.SurfaceCustomDomain && state.Authority.CustomDomainID.Valid {
+		domain, derr := customdomainsrepo.New(m.db).GetCustomDomainByIDAndOrganization(ctx, customdomainsrepo.GetCustomDomainByIDAndOrganizationParams{
+			ID: state.Authority.CustomDomainID.UUID, OrganizationID: state.Authority.OrganizationID,
+		})
+		if derr == nil && domain.Verified && domain.Activated && !domain.Deleted && "https://"+strings.ToLower(domain.Domain) == state.Authority.BaseURL {
+			redirectBaseURL = state.Authority.BaseURL
+		}
 	}
 	redirect := fmt.Sprintf("%s/%s/%s/connect?state=%s", strings.TrimRight(redirectBaseURL, "/"), routeBase, mcpSlug, url.QueryEscape(state.ParentChallengeID))
 	if state.FinalRedirectURI != "" {
