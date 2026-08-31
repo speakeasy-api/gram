@@ -73,6 +73,9 @@ func (s *Service) HandleIDPCallback(w http.ResponseWriter, r *http.Request) erro
 		// controllable, so deliberately NOT counted as a flow failure.
 		return oops.E(oops.CodeUnauthorized, nil, "authn challenge state does not match this MCP server").LogError(ctx, logger)
 	}
+	if err := challengeState.Endpoint.Authority.ValidateLive(ctx, s.db); err != nil {
+		return oops.E(oops.CodeUnauthorized, err, "private OAuth authority is no longer valid").LogError(ctx, logger)
+	}
 
 	endpoint, err := s.loadResolvedMcpEndpointByRef(ctx, challengeState.Endpoint)
 	if err != nil {
@@ -81,7 +84,7 @@ func (s *Service) HandleIDPCallback(w http.ResponseWriter, r *http.Request) erro
 		s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, mcpmetrics.OAuthFlowStageIDPCallback)
 		return err
 	}
-	if err := endpoint.ValidateChallenge(challengeState.Endpoint, challengeState.UserSessionIssuerID); err != nil {
+	if err := endpoint.ValidateChallenge(ctx, challengeState.Endpoint, challengeState.UserSessionIssuerID); err != nil {
 		s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, mcpmetrics.OAuthFlowStageIDPCallback)
 		return oops.E(oops.CodeUnauthorized, err, "authn challenge endpoint authority changed while the flow was in progress").LogError(ctx, logger)
 	}

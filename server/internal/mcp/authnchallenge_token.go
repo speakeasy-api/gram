@@ -305,7 +305,7 @@ func (s *Service) handleTokenAuthorizationCodeGrant(
 	// subject. A nil snapshot denotes only a grant minted before this field
 	// landed; the authorization-code TTL bounds that compatibility window.
 	if grant.Endpoint != nil {
-		if err := endpoint.ValidateGrant(*grant.Endpoint, grant.UserSessionIssuerID, baseURL); err != nil {
+		if err := endpoint.ValidateGrant(ctx, s.db, *grant.Endpoint, grant.UserSessionIssuerID, baseURL); err != nil {
 			logOAuthClientCredentialEvent(ctx, logger, r, "oauth authorization_code token request rejected", clientRow.ClientID, presentedAuthMethod, "authorization_code", "code_endpoint_mismatch")
 			s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, mcpmetrics.OAuthFlowStageToken)
 			return writeTokenError(ctx, w, logger, http.StatusBadRequest, "invalid_grant", "code not found or expired")
@@ -320,7 +320,7 @@ func (s *Service) handleTokenAuthorizationCodeGrant(
 	// Recheck the consumed value so this remains safe if a future writer ever
 	// replaces grants under an existing key between the peek and GETDEL.
 	if grant.Endpoint != nil {
-		if err := endpoint.ValidateGrant(*grant.Endpoint, grant.UserSessionIssuerID, baseURL); err != nil {
+		if err := endpoint.ValidateGrant(ctx, s.db, *grant.Endpoint, grant.UserSessionIssuerID, baseURL); err != nil {
 			logOAuthClientCredentialEvent(ctx, logger, r, "oauth authorization_code token request rejected", clientRow.ClientID, presentedAuthMethod, "authorization_code", "code_endpoint_mismatch")
 			s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, mcpmetrics.OAuthFlowStageToken)
 			return writeTokenError(ctx, w, logger, http.StatusBadRequest, "invalid_grant", "code not found or expired")

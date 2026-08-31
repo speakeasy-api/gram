@@ -1938,12 +1938,9 @@ func TestServeInstallPage_PrivateOnlyEndpointDoesNotFallBack(t *testing.T) {
 	require.NotContains(t, rr.Body.String(), "Legacy Install Fallback")
 }
 
-// TestServeInstallPage_MetaBackedEndpoint_ReturnsNotFound verifies that a
-// meta-MCP-backed endpoint's install page is an authoritative 404 (AGE-3299
-// will add a real page): the response is the rendered not-found page rather
-// than a 500, and the slug must not fall through to an unrelated legacy
-// toolset sharing the same mcp_slug.
-func TestServeInstallPage_MetaBackedEndpoint_ReturnsNotFound(t *testing.T) {
+// Meta-backed endpoints render the minimal OAuth install surface added by
+// AIS-666 rather than falling through to an unrelated legacy toolset.
+func TestServeInstallPage_MetaBackedEndpoint_RendersMinimalInstall(t *testing.T) {
 	t.Parallel()
 	ctx, testInstance := newTestMCPMetadataService(t)
 
@@ -1957,7 +1954,7 @@ func TestServeInstallPage_MetaBackedEndpoint_ReturnsNotFound(t *testing.T) {
 		OrganizationID:      authCtx.ActiveOrganizationID,
 		ProjectID:           *authCtx.ProjectID,
 		Name:                "install page gateway",
-		UserSessionIssuerID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		UserSessionIssuerID: uuid.NullUUID{UUID: createUserSessionIssuer(t, ctx, testInstance, *authCtx.ProjectID).ID, Valid: true},
 		Visibility:          visibility.Private,
 	})
 	require.NoError(t, err)
@@ -1997,8 +1994,9 @@ func TestServeInstallPage_MetaBackedEndpoint_ReturnsNotFound(t *testing.T) {
 
 	rr := httptest.NewRecorder()
 	require.NoError(t, testInstance.service.ServeInstallPage(rr, req))
-	assert.Equal(t, http.StatusNotFound, rr.Code)
-	assert.Contains(t, rr.Body.String(), "Server Not Found")
+	assert.Equal(t, http.StatusOK, rr.Code)
+	assert.Contains(t, rr.Body.String(), "install page gateway")
+	assert.Contains(t, rr.Body.String(), "/mcp/"+mcpSlug)
 	assert.NotContains(t, rr.Body.String(), "Legacy Same-Slug Toolset")
 }
 

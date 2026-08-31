@@ -1249,6 +1249,41 @@ func (q *Queries) InsertMdmDeviceFixture(ctx context.Context, arg InsertMdmDevic
 	return err
 }
 
+const insertNetworkIngressFixture = `-- name: InsertNetworkIngressFixture :exec
+INSERT INTO network_ingresses (
+    id,
+    organization_id,
+    provider,
+    hostname,
+    endpoint_namespace_kind,
+    enabled,
+    attestor_namespace,
+    attestor_service_account,
+    dns_name
+) VALUES (
+    $1,
+    $2,
+    'test',
+    'private',
+    'platform',
+    true,
+    'test-ns',
+    'test-sa',
+    $3
+)
+`
+
+type InsertNetworkIngressFixtureParams struct {
+	ID             uuid.UUID
+	OrganizationID string
+	DnsName        pgtype.Text
+}
+
+func (q *Queries) InsertNetworkIngressFixture(ctx context.Context, arg InsertNetworkIngressFixtureParams) error {
+	_, err := q.db.Exec(ctx, insertNetworkIngressFixture, arg.ID, arg.OrganizationID, arg.DnsName)
+	return err
+}
+
 const insertPluginAssignmentFixture = `-- name: InsertPluginAssignmentFixture :exec
 INSERT INTO plugin_assignments (plugin_id, organization_id, principal_urn)
 VALUES ($1, $2, $3)
@@ -2284,6 +2319,22 @@ func (q *Queries) SetMetaMCPServerNetworkAccessModeFixture(ctx context.Context, 
 	return result.RowsAffected(), nil
 }
 
+const setNetworkIngressEnabledFixture = `-- name: SetNetworkIngressEnabledFixture :exec
+UPDATE network_ingresses
+SET enabled = $1
+WHERE id = $2
+`
+
+type SetNetworkIngressEnabledFixtureParams struct {
+	Enabled bool
+	ID      uuid.UUID
+}
+
+func (q *Queries) SetNetworkIngressEnabledFixture(ctx context.Context, arg SetNetworkIngressEnabledFixtureParams) error {
+	_, err := q.db.Exec(ctx, setNetworkIngressEnabledFixture, arg.Enabled, arg.ID)
+	return err
+}
+
 const setOpenRouterAPIKeyClassificationFixture = `-- name: SetOpenRouterAPIKeyClassificationFixture :exec
 UPDATE openrouter_api_keys
 SET disabled = $1,
@@ -2533,6 +2584,17 @@ type SetWorkosLastEventIDFixtureParams struct {
 // get wrong while still compiling.
 func (q *Queries) SetWorkosLastEventIDFixture(ctx context.Context, arg SetWorkosLastEventIDFixtureParams) error {
 	_, err := q.db.Exec(ctx, setWorkosLastEventIDFixture, arg.WorkosLastEventID, arg.ID)
+	return err
+}
+
+const softDeleteNetworkIngressFixture = `-- name: SoftDeleteNetworkIngressFixture :exec
+UPDATE network_ingresses
+SET deleted_at = clock_timestamp()
+WHERE id = $1
+`
+
+func (q *Queries) SoftDeleteNetworkIngressFixture(ctx context.Context, id uuid.UUID) error {
+	_, err := q.db.Exec(ctx, softDeleteNetworkIngressFixture, id)
 	return err
 }
 
