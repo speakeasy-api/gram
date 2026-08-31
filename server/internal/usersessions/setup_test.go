@@ -26,8 +26,10 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
@@ -405,4 +407,47 @@ func seedIssuer(t *testing.T, ctx context.Context, ti *testInstance, slug string
 	})
 	require.NoError(t, err)
 	return uuid.MustParse(issuer.ID)
+}
+
+// createSiblingProject creates a second project inside the auth context's own
+// organization. Two projects sharing an organization is the boundary that
+// matters for the organization-tier predicate: its second arm admits rows
+// whose project_id is NULL and whose organization matches, so a predicate
+// that dropped the project_id IS NULL guard would start matching every
+// sibling project's rows rather than only genuine organization-tier ones.
+func createSiblingProject(t *testing.T, ctx context.Context, conn *pgxpool.Pool, slug string) uuid.UUID {
+	t.Helper()
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	project, err := projectsrepo.New(conn).CreateProject(ctx, projectsrepo.CreateProjectParams{
+		Name:           slug,
+		Slug:           slug,
+		OrganizationID: authCtx.ActiveOrganizationID,
+	})
+	require.NoError(t, err)
+	return project.ID
+}
+
+// seedIssuerInProject creates a project-tier issuer owned by an arbitrary
+// project rather than the one on the auth context. organization_id is written
+// the way the production create handler writes it, so the row is a faithful
+// project-tier row (both columns set) rather than one that predates the
+// dual-write.
+func seedIssuerInProject(t *testing.T, ctx context.Context, conn *pgxpool.Pool, projectID uuid.UUID, slug string) uuid.UUID {
+	t.Helper()
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	issuer, err := repo.New(conn).CreateUserSessionIssuer(ctx, repo.CreateUserSessionIssuerParams{
+		ProjectID:          projectID,
+		OrganizationID:     conv.ToPGText(authCtx.ActiveOrganizationID),
+		Slug:               slug,
+		AuthnChallengeMode: "chain",
+		SessionDuration:    pgtype.Interval{Microseconds: int64(24 * time.Hour / time.Microsecond), Days: 0, Months: 0, Valid: true},
+	})
+	require.NoError(t, err)
+	return issuer.ID
 }
