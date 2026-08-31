@@ -19,7 +19,7 @@ type ClickhouseClientFunc func(t *testing.T) (clickhouse.Conn, error)
 // from migration files. Returns a container reference and a function to create
 // test connections. The per-test connection is automatically closed via t.Cleanup.
 func NewTestClickhouse(ctx context.Context) (*clickhousecontainer.ClickHouseContainer, ClickhouseClientFunc, error) {
-	container, err := clickhousecontainer.Run(ctx, "clickhouse/clickhouse-server:25.8.3",
+	container, err := clickhousecontainer.Run(ctx, "clickhouse/clickhouse-server:26.2.19.43@sha256:c2f2605585899d5103a0447daadbc0005f362200d5f0fcca7f40db3ca0dd36dd",
 		clickhousecontainer.WithUsername("gram"),
 		clickhousecontainer.WithPassword("gram"),
 		clickhousecontainer.WithInitScripts(rootPath("clickhouse", "schema.sql")),
