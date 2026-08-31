@@ -37,7 +37,7 @@ const CAP_COPY: Record<InferenceSpendCapKeyType, CapCopy> = {
     name: "Security inference",
     slug: "security",
     paused:
-      "The automated analysis Gram runs over this organization's traffic, including security scanning, is paused for the rest of the month. Raise the cap to start it again.",
+      "The automated analysis Speakeasy runs over this organization's traffic, including security scanning, is paused for the rest of the month. Raise the cap to start it again.",
   },
   chat: {
     name: "Other inference",
