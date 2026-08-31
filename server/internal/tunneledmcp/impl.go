@@ -117,7 +117,14 @@ func normalizeResourceIdentifier(raw string) (string, error) {
 		return "", errors.New("resource identifier must be an absolute http(s) URI without a fragment")
 	}
 	// Trim the path only: a trailing slash inside a query is data, not syntax.
-	u.Path = strings.TrimRight(u.Path, "/")
+	// Work in the escaped form so an encoded separator survives — decoding it
+	// would collapse two distinct identifiers onto one routing identity.
+	escaped := strings.TrimRight(u.EscapedPath(), "/")
+	decoded, err := url.PathUnescape(escaped)
+	if err != nil {
+		return "", fmt.Errorf("unescape resource identifier path: %w", err)
+	}
+	u.Path, u.RawPath = decoded, escaped
 	return u.String(), nil
 }
 

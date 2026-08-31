@@ -100,6 +100,20 @@ func TestUpdateServerResourceIdentifierTrimsPathOnly(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.Equal(t, "https://tunneled.internal/mcp?tenant=a/", conv.PtrValOr(updated.ResourceIdentifier, ""))
+
+	// An encoded separator must survive the trim: decoding it would collapse
+	// this identifier onto the genuinely different .../a/b.
+	updated, err = ti.service.UpdateServer(writeCtx, &gen.UpdateServerPayload{
+		SessionToken:       nil,
+		ApikeyToken:        nil,
+		ProjectSlugInput:   nil,
+		ID:                 server.ID.String(),
+		Name:               server.Name,
+		AllowPublic:        nil,
+		ResourceIdentifier: new("https://tunneled.internal/a%2Fb/"),
+	})
+	require.NoError(t, err)
+	require.Equal(t, "https://tunneled.internal/a%2Fb", conv.PtrValOr(updated.ResourceIdentifier, ""))
 }
 
 func TestUpdateServerRejectsInvalidResourceIdentifier(t *testing.T) {
