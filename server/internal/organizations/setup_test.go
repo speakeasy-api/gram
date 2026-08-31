@@ -59,6 +59,7 @@ func seedLocalRole(t *testing.T, ctx context.Context, conn *pgxpool.Pool, organi
 // organizations.NewService so test constructors can parametrize it.
 type orgFeatureStub interface {
 	IsFeatureEnabledUncached(ctx context.Context, organizationID string, feature productfeatures.Feature) (bool, error)
+	UpdateFeatureCache(ctx context.Context, organizationID string, feature productfeatures.Feature, enabled bool)
 }
 
 // stubOrgFeaturesEnabled reports every feature enabled, entitling all
@@ -69,12 +70,17 @@ func (stubOrgFeaturesEnabled) IsFeatureEnabledUncached(context.Context, string, 
 	return true, nil
 }
 
+func (stubOrgFeaturesEnabled) UpdateFeatureCache(context.Context, string, productfeatures.Feature, bool) {
+}
+
 // featureMapStub enables exactly the features mapped to true.
 type featureMapStub map[productfeatures.Feature]bool
 
 func (m featureMapStub) IsFeatureEnabledUncached(_ context.Context, _ string, feature productfeatures.Feature) (bool, error) {
 	return m[feature], nil
 }
+
+func (featureMapStub) UpdateFeatureCache(context.Context, string, productfeatures.Feature, bool) {}
 
 // enabledFeatures builds a featureMapStub that enables exactly the listed features.
 func enabledFeatures(features ...productfeatures.Feature) featureMapStub {
@@ -126,13 +132,14 @@ func TestMain(m *testing.M) {
 }
 
 type testInstance struct {
-	service *organizations.Service
-	conn    *pgxpool.Pool
-	orgs    *MockOrganizationProvider
-	loops   *MockLoopsClient
-	trial   *fakeTrialNotifier
-	posthog *fakeOnboardingTelemetry
-	svixSrv *svixtest.MockServer
+	service  *organizations.Service
+	conn     *pgxpool.Pool
+	orgs     *MockOrganizationProvider
+	loops    *MockLoopsClient
+	trial    *fakeTrialNotifier
+	posthog  *fakeOnboardingTelemetry
+	features *productfeatures.Client
+	svixSrv  *svixtest.MockServer
 }
 
 type fakeTrialNotifier struct {
@@ -197,19 +204,25 @@ func (f *fakeOnboardingTelemetry) IdentifyUser(_ context.Context, distinctID str
 func newTestOrganizationsService(t *testing.T) (context.Context, *testInstance) {
 	t.Helper()
 
-	return newTestOrganizationsServiceWithOptions(t, enabledFeatures(), productfeatures.SeedEnterpriseTrialBundleTx, stubUserProvisioner{})
+	return newTestOrganizationsServiceWithOptions(t, enabledFeatures(), productfeatures.SeedEnterpriseTrialBundleTx, stubUserProvisioner{}, false)
 }
 
 func newTestOrganizationsServiceWithTrialBundleSeeder(t *testing.T, trialBundleSeeder auth.EnterpriseTrialBundleSeeder) (context.Context, *testInstance) {
 	t.Helper()
 
-	return newTestOrganizationsServiceWithOptions(t, enabledFeatures(), trialBundleSeeder, stubUserProvisioner{})
+	return newTestOrganizationsServiceWithOptions(t, enabledFeatures(), trialBundleSeeder, stubUserProvisioner{}, false)
 }
 
 func newTestOrganizationsServiceWithInviteIdentityProvider(t *testing.T, invite organizations.InviteIdentityProvider) (context.Context, *testInstance) {
 	t.Helper()
 
-	return newTestOrganizationsServiceWithOptions(t, enabledFeatures(), productfeatures.SeedEnterpriseTrialBundleTx, invite)
+	return newTestOrganizationsServiceWithOptions(t, enabledFeatures(), productfeatures.SeedEnterpriseTrialBundleTx, invite, false)
+}
+
+func newTestOrganizationsServiceWithRealFeatures(t *testing.T) (context.Context, *testInstance) {
+	t.Helper()
+
+	return newTestOrganizationsServiceWithOptions(t, enabledFeatures(), productfeatures.SeedEnterpriseTrialBundleTx, stubUserProvisioner{}, true)
 }
 
 // newTestOrganizationsServiceRBAC creates a service instance whose feature
@@ -225,10 +238,10 @@ func newTestOrganizationsServiceRBAC(t *testing.T) (context.Context, *testInstan
 func newTestOrganizationsServiceWithFeatures(t *testing.T, features orgFeatureStub) (context.Context, *testInstance) {
 	t.Helper()
 
-	return newTestOrganizationsServiceWithOptions(t, features, productfeatures.SeedEnterpriseTrialBundleTx, stubUserProvisioner{})
+	return newTestOrganizationsServiceWithOptions(t, features, productfeatures.SeedEnterpriseTrialBundleTx, stubUserProvisioner{}, false)
 }
 
-func newTestOrganizationsServiceWithOptions(t *testing.T, features orgFeatureStub, trialBundleSeeder auth.EnterpriseTrialBundleSeeder, invite organizations.InviteIdentityProvider) (context.Context, *testInstance) {
+func newTestOrganizationsServiceWithOptions(t *testing.T, featureStub orgFeatureStub, trialBundleSeeder auth.EnterpriseTrialBundleSeeder, invite organizations.InviteIdentityProvider, useRealFeatures bool) (context.Context, *testInstance) {
 	t.Helper()
 
 	ctx := t.Context()
@@ -271,15 +284,21 @@ func newTestOrganizationsServiceWithOptions(t *testing.T, features orgFeatureStu
 
 	trialNotifier := &fakeTrialNotifier{}
 	posthog := &fakeOnboardingTelemetry{}
-	svc := organizations.NewService(logger, tracerProvider, conn, sessionManager, orgs, invite, features, nil, authzEngine, nil, trialNotifier, trialBundleSeeder, posthog, "http://localhost:35291", "http://localhost:5173", auditLogger, svixClient)
+	features := productfeatures.NewClient(logger, tracerProvider, conn, redisClient)
+	var featureChecker orgFeatureStub = featureStub
+	if useRealFeatures {
+		featureChecker = features
+	}
+	svc := organizations.NewService(logger, tracerProvider, conn, sessionManager, orgs, invite, featureChecker, nil, authzEngine, nil, trialNotifier, trialBundleSeeder, posthog, "http://localhost:35291", "http://localhost:5173", auditLogger, svixClient)
 
 	return ctx, &testInstance{
-		service: svc,
-		conn:    conn,
-		orgs:    orgs,
-		trial:   trialNotifier,
-		posthog: posthog,
-		svixSrv: svixSrv,
+		service:  svc,
+		conn:     conn,
+		orgs:     orgs,
+		trial:    trialNotifier,
+		posthog:  posthog,
+		features: features,
+		svixSrv:  svixSrv,
 	}
 }
 

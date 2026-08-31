@@ -39,6 +39,24 @@ func (m *MockOrganizationProvider) CreateOrganizationMembership(ctx context.Cont
 	return args.String(0), nil
 }
 
+func (m *MockOrganizationProvider) GetOrgMembership(ctx context.Context, workosUserID, workosOrgID string) (*thirdpartyworkos.Member, error) {
+	args := m.Called(ctx, workosUserID, workosOrgID)
+	if err := args.Error(1); err != nil {
+		return nil, fmt.Errorf("mock GetOrgMembership: %w", err)
+	}
+	member, _ := args.Get(0).(*thirdpartyworkos.Member)
+	return member, nil
+}
+
+func (m *MockOrganizationProvider) UpdateMemberRoles(ctx context.Context, membershipID string, roleSlugs []string) (*thirdpartyworkos.Member, error) {
+	args := m.Called(ctx, membershipID, roleSlugs)
+	if err := args.Error(1); err != nil {
+		return nil, fmt.Errorf("mock UpdateMemberRoles: %w", err)
+	}
+	member, _ := args.Get(0).(*thirdpartyworkos.Member)
+	return member, nil
+}
+
 func (m *MockOrganizationProvider) GetOrganizationDomainPolicy(ctx context.Context, workosOrgID string) (*thirdpartyworkos.OrganizationDomainPolicy, error) {
 	for _, call := range m.ExpectedCalls {
 		if call.Method == "GetOrganizationDomainPolicy" {
@@ -124,6 +142,21 @@ func (stubUserProvisioner) AuthenticateWithMagicAuth(_ context.Context, email st
 }
 
 func (stubUserProvisioner) UpsertUserFromIDP(_ context.Context, idpUser *identity.IDPUserInfo) (string, error) {
+	return idpUser.Sub, nil
+}
+
+type blockingInviteIdentityProvider struct {
+	started chan struct{}
+	release chan struct{}
+}
+
+func (p blockingInviteIdentityProvider) AuthenticateWithMagicAuth(_ context.Context, email string) (*identity.IDPUserInfo, error) {
+	close(p.started)
+	<-p.release
+	return stubUserProvisioner{}.AuthenticateWithMagicAuth(context.Background(), email)
+}
+
+func (blockingInviteIdentityProvider) UpsertUserFromIDP(_ context.Context, idpUser *identity.IDPUserInfo) (string, error) {
 	return idpUser.Sub, nil
 }
 

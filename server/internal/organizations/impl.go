@@ -85,6 +85,7 @@ type InviteIdentityProvider interface {
 type orgFeatureChecker interface {
 	// Uncached: revocation must gate the very next portal link request.
 	IsFeatureEnabledUncached(ctx context.Context, organizationID string, feature productfeatures.Feature) (bool, error)
+	UpdateFeatureCache(ctx context.Context, organizationID string, feature productfeatures.Feature, enabled bool)
 }
 
 type onboardingTelemetry interface {

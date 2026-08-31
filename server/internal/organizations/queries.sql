@@ -323,14 +323,15 @@ WHERE id = @id
   AND expires_at > clock_timestamp()
 RETURNING *;
 
--- name: AcceptInvitation :execrows
+-- name: AcceptInvitation :one
 UPDATE organization_invitations
 SET state = 'accepted',
     accepted_at = clock_timestamp(),
     updated_at = clock_timestamp()
 WHERE id = @id
   AND state = 'pending'
-  AND expires_at > clock_timestamp();
+  AND expires_at > clock_timestamp()
+RETURNING *;
 
 -- name: AcceptPendingInvitationForMember :one
 UPDATE organization_invitations

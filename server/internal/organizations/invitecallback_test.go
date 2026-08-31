@@ -26,14 +26,16 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/organizations"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
+	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
+	thirdpartyworkos "github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	trialsrepo "github.com/speakeasy-api/gram/server/internal/trials/repo"
 )
 
 func TestInviteCallback_FirstUserInvitedByPlatformAdminArmsTrial(t *testing.T) {
 	t.Parallel()
 
-	ctx, ti := newTestOrganizationsService(t)
+	ctx, ti := newTestOrganizationsServiceWithRealFeatures(t)
 	authCtx := requireAuthContext(t, ctx)
 	_, err := ti.conn.Exec(ctx, "UPDATE users SET admin = true WHERE id = $1", authCtx.UserID)
 	require.NoError(t, err)
@@ -47,6 +49,11 @@ func TestInviteCallback_FirstUserInvitedByPlatformAdminArmsTrial(t *testing.T) {
 	require.NoError(t, authz.SeedSystemRoleGrants(ctx, ti.conn, organizationID))
 
 	rawToken, invite := seedInviteCallbackInvite(t, ctx, ti, "platform-admin-first-user", organizationID, authCtx.UserID, authz.SystemRoleAdmin)
+	for _, feature := range productfeatures.EnterpriseTrialBundle {
+		enabled, featureErr := ti.features.IsFeatureEnabled(ctx, organizationID, feature)
+		require.NoError(t, featureErr)
+		require.Falsef(t, enabled, "feature %s should be cached as disabled before trial arming", feature)
+	}
 	ti.orgs.On("CreateOrganizationMembership", mock.Anything, "user_01INVITEE", organizationID, authz.SystemRoleAdmin).Return("membership_01INVITE", nil).Once()
 	seedInviteeUser(t, ctx, ti)
 	ti.trial.trialStartedErr = errors.New("notify failed")
@@ -72,6 +79,11 @@ func TestInviteCallback_FirstUserInvitedByPlatformAdminArmsTrial(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "enterprise", trial.Tier)
 	require.WithinDuration(t, armedAt.Add(14*24*time.Hour), trial.EndsAt.Time, time.Minute)
+	for _, feature := range productfeatures.EnterpriseTrialBundle {
+		enabled, featureErr := ti.features.IsFeatureEnabled(ctx, organizationID, feature)
+		require.NoError(t, featureErr)
+		require.Truef(t, enabled, "feature %s cache should refresh after trial arming", feature)
+	}
 
 	require.Equal(t, []string{organizationID}, ti.trial.trialStarted)
 	require.Empty(t, ti.trial.adminAdded)
@@ -130,11 +142,116 @@ func TestInviteCallback_ExistingInviteeRelationshipStillArmsTrial(t *testing.T) 
 	require.Equal(t, "accepted", storedInvite.State)
 }
 
+func TestInviteCallback_RoleUpdateDuringAuthenticationUsesAuthoritativeRole(t *testing.T) {
+	t.Parallel()
+
+	started := make(chan struct{})
+	release := make(chan struct{})
+	var releaseOnce sync.Once
+	releaseAuth := func() { releaseOnce.Do(func() { close(release) }) }
+	t.Cleanup(releaseAuth)
+
+	ctx, ti := newTestOrganizationsServiceWithInviteIdentityProvider(t, blockingInviteIdentityProvider{started: started, release: release})
+	authCtx := requireAuthContext(t, ctx)
+	const organizationID = "org_invite_role_update"
+	_, err := orgrepo.New(ti.conn).UpsertOrganizationMetadata(ctx, orgrepo.UpsertOrganizationMetadataParams{
+		ID: organizationID, Name: "Role Update Organization", Slug: "role-update-organization",
+		WorkosID: conv.ToPGText(organizationID), Whitelisted: pgtype.Bool{Bool: true, Valid: true},
+	})
+	require.NoError(t, err)
+	require.NoError(t, authz.SeedSystemRoleGrants(ctx, ti.conn, organizationID))
+	rawToken, invite := seedInviteCallbackInvite(t, ctx, ti, "role-update-during-authentication", organizationID, authCtx.UserID, authz.SystemRoleMember)
+	seedInviteeUser(t, ctx, ti)
+	ti.orgs.On("CreateOrganizationMembership", mock.Anything, "user_01INVITEE", organizationID, authz.SystemRoleAdmin).Return("membership_01INVITE", nil).Once()
+
+	result := make(chan *httptest.ResponseRecorder, 1)
+	go func() { result <- serveInviteCallback(t, ti, rawToken) }()
+	<-started
+
+	updated, err := orgrepo.New(ti.conn).UpdateInvitationRole(ctx, orgrepo.UpdateInvitationRoleParams{
+		ID: invite.ID, OrganizationID: organizationID, RoleSlug: conv.ToPGText(authz.SystemRoleAdmin),
+	})
+	require.NoError(t, err)
+	require.Equal(t, authz.SystemRoleAdmin, updated.RoleSlug.String)
+	releaseAuth()
+
+	recorder := <-result
+	require.Equal(t, http.StatusTemporaryRedirect, recorder.Code)
+	storedInvite, err := orgrepo.New(ti.conn).GetInvitationByID(ctx, invite.ID)
+	require.NoError(t, err)
+	require.Equal(t, "accepted", storedInvite.State)
+	require.Equal(t, authz.SystemRoleAdmin, storedInvite.RoleSlug.String)
+	roles, err := accessrepo.New(ti.conn).ListMemberRolePrincipalsByUser(ctx, accessrepo.ListMemberRolePrincipalsByUserParams{
+		OrganizationID: organizationID, UserID: "user_01INVITEE",
+	})
+	require.NoError(t, err)
+	require.Len(t, roles, 1)
+	require.Equal(t, authz.SystemRoleAdmin, roles[0].RoleSlug)
+}
+
+func TestInviteCallback_ExistingWorkOSMembershipRoleIsReconciled(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestOrganizationsService(t)
+	authCtx := requireAuthContext(t, ctx)
+	const organizationID = "org_existing_workos_membership"
+	_, err := orgrepo.New(ti.conn).UpsertOrganizationMetadata(ctx, orgrepo.UpsertOrganizationMetadataParams{
+		ID: organizationID, Name: "Existing Membership Organization", Slug: "existing-membership-organization",
+		WorkosID: conv.ToPGText(organizationID), Whitelisted: pgtype.Bool{Bool: true, Valid: true},
+	})
+	require.NoError(t, err)
+	require.NoError(t, authz.SeedSystemRoleGrants(ctx, ti.conn, organizationID))
+	rawToken, invite := seedInviteCallbackInvite(t, ctx, ti, "existing-workos-membership", organizationID, authCtx.UserID, authz.SystemRoleAdmin)
+	seedInviteeUser(t, ctx, ti)
+
+	createErr := errors.New("membership already exists")
+	member := &thirdpartyworkos.Member{ID: "membership_01EXISTING", UserID: "user_01INVITEE", OrganizationID: organizationID}
+	ti.orgs.On("CreateOrganizationMembership", mock.Anything, "user_01INVITEE", organizationID, authz.SystemRoleAdmin).Return("", createErr).Once()
+	ti.orgs.On("GetOrgMembership", mock.Anything, "user_01INVITEE", organizationID).Return(member, nil).Once()
+	ti.orgs.On("UpdateMemberRoles", mock.Anything, member.ID, []string{authz.SystemRoleAdmin}).Return(member, nil).Once()
+
+	recorder := serveInviteCallback(t, ti, rawToken)
+	require.Equal(t, http.StatusTemporaryRedirect, recorder.Code)
+	storedInvite, err := orgrepo.New(ti.conn).GetInvitationByID(ctx, invite.ID)
+	require.NoError(t, err)
+	require.Equal(t, "accepted", storedInvite.State)
+	var membershipID string
+	require.NoError(t, ti.conn.QueryRow(ctx, `
+		SELECT workos_membership_id
+		FROM organization_role_assignments
+		WHERE organization_id = $1 AND user_id = $2 AND deleted_at IS NULL
+	`, organizationID, "user_01INVITEE").Scan(&membershipID))
+	require.Equal(t, member.ID, membershipID)
+}
+
+func TestInviteCallback_WorkOSFailureDoesNotRollBackAcceptance(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestOrganizationsService(t)
+	authCtx := requireAuthContext(t, ctx)
+	rawToken, invite := seedInviteCallbackInvite(t, ctx, ti, "workos-membership-failure", authCtx.ActiveOrganizationID, authCtx.UserID, authz.SystemRoleAdmin)
+	seedInviteeUser(t, ctx, ti)
+	ti.orgs.On("CreateOrganizationMembership", mock.Anything, "user_01INVITEE", authCtx.ActiveOrganizationID, authz.SystemRoleAdmin).Return("", errors.New("create failed")).Once()
+	ti.orgs.On("GetOrgMembership", mock.Anything, "user_01INVITEE", authCtx.ActiveOrganizationID).Return(nil, errors.New("lookup failed")).Once()
+
+	recorder := serveInviteCallback(t, ti, rawToken)
+	require.Equal(t, http.StatusTemporaryRedirect, recorder.Code)
+	require.Equal(t, "http://localhost:5173", recorder.Header().Get("Location"))
+	storedInvite, err := orgrepo.New(ti.conn).GetInvitationByID(ctx, invite.ID)
+	require.NoError(t, err)
+	require.Equal(t, "accepted", storedInvite.State)
+}
+
 func TestInviteCallback_TrialBundleFailureRollsBackAcceptance(t *testing.T) {
 	t.Parallel()
 
 	seederErr := errors.New("seed trial bundle")
-	ctx, ti := newTestOrganizationsServiceWithTrialBundleSeeder(t, func(context.Context, pgx.Tx, string) error { return seederErr })
+	ctx, ti := newTestOrganizationsServiceWithTrialBundleSeeder(t, func(ctx context.Context, tx pgx.Tx, organizationID string) error {
+		if err := productfeatures.SeedEnterpriseTrialBundleTx(ctx, tx, organizationID); err != nil {
+			return err
+		}
+		return seederErr
+	})
 	authCtx := requireAuthContext(t, ctx)
 	_, err := ti.conn.Exec(ctx, "UPDATE users SET admin = true WHERE id = $1", authCtx.UserID)
 	require.NoError(t, err)
@@ -147,8 +264,8 @@ func TestInviteCallback_TrialBundleFailureRollsBackAcceptance(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, authz.SeedSystemRoleGrants(ctx, ti.conn, organizationID))
 	rawToken, invite := seedInviteCallbackInvite(t, ctx, ti, "trial-bundle-failure", organizationID, authCtx.UserID, authz.SystemRoleAdmin)
-	ti.orgs.On("CreateOrganizationMembership", mock.Anything, "user_01INVITEE", organizationID, authz.SystemRoleAdmin).Return("membership_01INVITE", nil).Once()
-	ti.orgs.On("DeleteOrganizationMembership", mock.Anything, "membership_01INVITE").Return(nil).Once()
+	auditsBefore, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionOrganizationEnterpriseTrialArmed)
+	require.NoError(t, err)
 	seedInviteeUser(t, ctx, ti)
 
 	recorder := serveInviteCallback(t, ti, rawToken)
@@ -173,8 +290,51 @@ func TestInviteCallback_TrialBundleFailureRollsBackAcceptance(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "free", org.GramAccountType)
 	require.True(t, org.Whitelisted)
+	var entitlementRows int
+	require.NoError(t, ti.conn.QueryRow(ctx, "SELECT count(*) FROM organization_features WHERE organization_id = $1", organizationID).Scan(&entitlementRows))
+	require.Zero(t, entitlementRows)
+	auditsAfter, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionOrganizationEnterpriseTrialArmed)
+	require.NoError(t, err)
+	require.Equal(t, auditsBefore, auditsAfter)
 	require.Empty(t, ti.trial.trialStarted)
 	require.Empty(t, ti.posthog.events)
+}
+
+func TestInviteCallback_DeletedPlatformAdminInviterDoesNotArmTrial(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestOrganizationsService(t)
+	authCtx := requireAuthContext(t, ctx)
+	_, err := ti.conn.Exec(ctx, "UPDATE users SET admin = true WHERE id = $1", authCtx.UserID)
+	require.NoError(t, err)
+
+	const organizationID = "org_deleted_platform_admin_inviter"
+	_, err = orgrepo.New(ti.conn).UpsertOrganizationMetadata(ctx, orgrepo.UpsertOrganizationMetadataParams{
+		ID: organizationID, Name: "Deleted Inviter Organization", Slug: "deleted-inviter-organization",
+		WorkosID: conv.ToPGText(organizationID), Whitelisted: pgtype.Bool{Bool: true, Valid: true},
+	})
+	require.NoError(t, err)
+	require.NoError(t, authz.SeedSystemRoleGrants(ctx, ti.conn, organizationID))
+	rawToken, invite := seedInviteCallbackInvite(t, ctx, ti, "deleted-platform-admin-inviter", organizationID, authCtx.UserID, authz.SystemRoleAdmin)
+	require.NoError(t, testrepo.New(ti.conn).ForceSoftDeleteUser(ctx, authCtx.UserID))
+	seedInviteeUser(t, ctx, ti)
+	ti.orgs.On("CreateOrganizationMembership", mock.Anything, "user_01INVITEE", organizationID, authz.SystemRoleAdmin).Return("membership_01INVITE", nil).Once()
+	auditsBefore, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionOrganizationEnterpriseTrialArmed)
+	require.NoError(t, err)
+
+	recorder := serveInviteCallback(t, ti, rawToken)
+	require.Equal(t, http.StatusTemporaryRedirect, recorder.Code)
+	storedInvite, err := orgrepo.New(ti.conn).GetInvitationByID(ctx, invite.ID)
+	require.NoError(t, err)
+	require.Equal(t, "accepted", storedInvite.State)
+	_, err = trialsrepo.New(ti.conn).GetTrial(ctx, organizationID)
+	require.ErrorIs(t, err, pgx.ErrNoRows)
+	org, err := orgrepo.New(ti.conn).GetOrganizationMetadata(ctx, organizationID)
+	require.NoError(t, err)
+	require.Equal(t, "free", org.GramAccountType)
+	auditsAfter, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionOrganizationEnterpriseTrialArmed)
+	require.NoError(t, err)
+	require.Equal(t, auditsBefore, auditsAfter)
 }
 
 func TestInviteCallback_ConcurrentFirstUserAcceptancesArmOneTrial(t *testing.T) {
