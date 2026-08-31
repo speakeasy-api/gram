@@ -61,20 +61,26 @@ func (s *Service) ServeFirstPartyConnect(w http.ResponseWriter, r *http.Request,
 	baseURL := s.BaseURLForRequest(r)
 	flowID := uuid.NewString()
 	challengeID := uuid.NewString()
+	endpointRef, err := endpoint.EndpointRef(ctx, s.db, baseURL)
+	if err != nil {
+		return oops.E(oops.CodeUnauthorized, err, "capture OAuth endpoint authority").LogError(ctx, logger)
+	}
 	challengeState := AuthnChallengeState{
+
 		ID:                       challengeID,
 		FlowID:                   flowID,
 		UserSessionIssuerID:      endpoint.UserSessionIssuerID,
 		AuthorizerUserID:         "",
 		AuthorizerImpersonated:   nil,
 		AgentAuthorizationTarget: nil,
-		Endpoint:                 endpoint.EndpointRef(baseURL),
+		Endpoint:                 endpointRef,
 		ClientID:                 "",
 		RedirectURI:              "",
 		State:                    "",
 		CodeChallenge:            "",
 		CodeChallengeMethod:      "",
 		CSRFToken:                csrfToken,
+
 		// Subject is stamped by HandleIDPCallback from authoritative IDP claims.
 		Subject:    nil,
 		CreatedAt:  time.Now(),

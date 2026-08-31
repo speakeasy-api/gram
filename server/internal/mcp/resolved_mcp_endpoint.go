@@ -16,6 +16,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/conv"
@@ -28,6 +29,7 @@ import (
 	metamcp_repo "github.com/speakeasy-api/gram/server/internal/metamcp/repo"
 	metamcp_visibility "github.com/speakeasy-api/gram/server/internal/metamcp/visibility"
 	"github.com/speakeasy-api/gram/server/internal/networkaccess"
+	"github.com/speakeasy-api/gram/server/internal/networkingress"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	projects_repo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	toolsets_repo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
@@ -200,9 +202,22 @@ func (e *ResolvedMcpEndpoint) ConsentURL(baseURL, stateID string) (string, error
 // BaseURLForRequest); it's snapshotted into the ref so handlers that
 // resume the challenge from a global URL (HandleIDPCallback) can
 // rebuild the consent redirect without re-deriving the origin.
-func (e *ResolvedMcpEndpoint) EndpointRef(baseURL string) EndpointRef {
+func (e *ResolvedMcpEndpoint) EndpointRef(ctx context.Context, db *pgxpool.Pool, baseURL string) (EndpointRef, error) {
 	isPublic := e.IsPublic
+	authority := networkingress.FromRequest(ctx, baseURL, e.OrganizationID, e.CustomDomainID)
+	if authority.IsPrivate() {
+		liveAuthority, err := networkingress.LoadRequestAuthority(ctx, db)
+		if err != nil {
+			return EndpointRef{}, fmt.Errorf("load private mint authority: %w", err)
+		}
+		if liveAuthority.OrganizationID != e.OrganizationID || liveAuthority.CustomDomainID != e.CustomDomainID {
+			return EndpointRef{}, fmt.Errorf("private mint authority does not match endpoint")
+		}
+		authority = liveAuthority
+		baseURL = liveAuthority.BaseURL
+	}
 	return EndpointRef{
+		Authority:       authority,
 		BaseURL:         baseURL,
 		RouteBase:       e.RouteBase,
 		McpSlug:         e.Slug,
@@ -211,7 +226,7 @@ func (e *ResolvedMcpEndpoint) EndpointRef(baseURL string) EndpointRef {
 		MetaMcpServerID: e.MetaMcpServerID,
 		ToolsetID:       e.ToolsetID,
 		IsPublic:        &isPublic,
-	}
+	}, nil
 }
 
 // IDPCallbackURL is the route-base-scoped callback the Speakeasy IDP
@@ -279,24 +294,40 @@ func (e *ResolvedMcpEndpoint) RootURL(baseURL string) (string, error) {
 // here so a future model with multiple addresses per endpoint can
 // expand the check to "the stored ref is in the endpoint's address
 // set" without churning callers.
-func (e *ResolvedMcpEndpoint) ValidateChallenge(ref EndpointRef, issuerID uuid.UUID) error {
+func (e *ResolvedMcpEndpoint) ValidateChallenge(ctx context.Context, ref EndpointRef, issuerID uuid.UUID) error {
 	if e.UserSessionIssuerID != issuerID {
+		return errToolsetEndpointMismatch
+	}
+	if err := ref.Authority.ValidateRequest(ctx); err != nil {
 		return errToolsetEndpointMismatch
 	}
 	return e.ValidateRef(ref)
 }
 
-func (e *ResolvedMcpEndpoint) ValidateGrant(ref EndpointRef, issuerID uuid.UUID, baseURL string) error {
-	if err := e.ValidateChallenge(ref, issuerID); err != nil {
+func (e *ResolvedMcpEndpoint) ValidateGrant(ctx context.Context, db *pgxpool.Pool, ref EndpointRef, issuerID uuid.UUID, baseURL string) error {
+	if err := e.ValidateChallenge(ctx, ref, issuerID); err != nil {
 		return err
 	}
-	if ref.BaseURL != "" && ref.BaseURL != baseURL {
+	if ref.Authority.Surface == "" {
+		if ref.BaseURL != "" && ref.BaseURL != baseURL {
+			return errToolsetEndpointMismatch
+		}
+	} else if err := ref.Authority.ValidateBaseURL(baseURL); err != nil {
+		return errToolsetEndpointMismatch
+	}
+	if err := ref.Authority.ValidateLive(ctx, db); err != nil {
 		return errToolsetEndpointMismatch
 	}
 	return nil
 }
 
 func (e *ResolvedMcpEndpoint) ValidateRef(ref EndpointRef) error {
+	if err := ref.Authority.ValidateEndpointRef(ref.BaseURL, ref.CustomDomainID); err != nil {
+		return errToolsetEndpointMismatch
+	}
+	if ref.Authority.Surface != "" && e.OrganizationID != ref.Authority.OrganizationID {
+		return errToolsetEndpointMismatch
+	}
 	if e.Slug != ref.McpSlug {
 		return errToolsetEndpointMismatch
 	}
@@ -500,7 +531,11 @@ func (s *Service) buildResolvedMcpEndpointByRef(ctx context.Context, ref Endpoin
 			return nil, oops.E(oops.CodeNotFound, nil, "not found")
 		}
 		mode, err := networkaccess.Effective(mcpServer.NetworkAccessMode)
-		if err != nil || !mode.Allows(networkaccess.SurfacePublic) {
+		surface := networkaccess.SurfacePublic
+		if ref.Authority.IsPrivate() {
+			surface = networkaccess.SurfacePrivate
+		}
+		if err != nil || !mode.Allows(surface) {
 			return nil, oops.E(oops.CodeNotFound, mcpendpoints.ErrPolicyDenied, "not found")
 		}
 		// Guard against an mcp_endpoint that has been re-pointed mid-flow
@@ -516,6 +551,9 @@ func (s *Service) buildResolvedMcpEndpointByRef(ctx context.Context, ref Endpoin
 		case err != nil:
 			return nil, oops.E(oops.CodeUnexpected, err, "load project").LogError(ctx, s.logger)
 		}
+		if ref.Authority.IsPrivate() && project.OrganizationID != ref.Authority.OrganizationID {
+			return nil, oops.E(oops.CodeNotFound, mcpendpoints.ErrPolicyDenied, "not found")
+		}
 		// Refs cached before EndpointRef.RouteBase existed were only ever
 		// minted on the /x/mcp surface for server-keyed endpoints.
 		endpoint := NewResolvedMcpEndpointFromMcpServer(&mcpEndpoint, &mcpServer, project.OrganizationID, conv.Default(ref.RouteBase, "x/mcp"))
@@ -527,6 +565,11 @@ func (s *Service) buildResolvedMcpEndpointByRef(ctx context.Context, ref Endpoin
 		return endpoint, nil
 	}
 
+	if ref.Authority.IsPrivate() {
+		// Legacy direct-toolset addressing has no organization-pinned private
+		// resolver and must never become a private fallback.
+		return nil, oops.E(oops.CodeNotFound, mcpendpoints.ErrPolicyDenied, "not found")
+	}
 	toolset, err := s.loadToolset(ctx, ref.McpSlug, ref.CustomDomainID, true)
 	switch {
 	case errors.Is(err, errToolsetNotFound):
@@ -621,7 +664,14 @@ func (s *Service) buildResolvedMetaMcpEndpointByRef(ctx context.Context, ref End
 		return nil, oops.E(oops.CodeNotFound, nil, "not found")
 	}
 	mode, err := networkaccess.Effective(metaServer.NetworkAccessMode)
-	if err != nil || !mode.Allows(networkaccess.SurfacePublic) {
+	surface := networkaccess.SurfacePublic
+	if ref.Authority.IsPrivate() {
+		surface = networkaccess.SurfacePrivate
+	}
+	if err != nil || !mode.Allows(surface) {
+		return nil, oops.E(oops.CodeNotFound, mcpendpoints.ErrPolicyDenied, "not found")
+	}
+	if ref.Authority.IsPrivate() && metaServer.OrganizationID != ref.Authority.OrganizationID {
 		return nil, oops.E(oops.CodeNotFound, mcpendpoints.ErrPolicyDenied, "not found")
 	}
 

@@ -18,6 +18,7 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"github.com/speakeasy-api/gram/server/internal/guardian"
+	"github.com/speakeasy-api/gram/server/internal/networkingress"
 	"github.com/speakeasy-api/gram/server/internal/platformmcp"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -162,6 +163,14 @@ func (a *Adapter) BeginSetup(ctx context.Context, request platformmcp.ProviderSe
 		FinalRedirectURI:    descriptor.ProviderSetupCompletionURL,
 		Resource:            descriptor.Resource,
 		AutoRefresh:         nil,
+		Authority: networkingress.Authority{
+			Surface:          "",
+			BaseURL:          "",
+			OrganizationID:   "",
+			NetworkIngressID: uuid.Nil,
+			NamespaceKind:    "",
+			CustomDomainID:   uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		},
 	}, client)
 	if err != nil {
 		return platformmcp.ProviderSetupResult{}, fmt.Errorf("build reviewed provider authorization URL: %w", err)
