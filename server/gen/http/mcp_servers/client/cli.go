@@ -45,8 +45,8 @@ func BuildCreateMcpServerPayload(mcpServersCreateMcpServerBody string, mcpServer
 		if body.ToolVariationsGroupID != nil {
 			err = goa.MergeErrors(err, goa.ValidateFormat("body.tool_variations_group_id", *body.ToolVariationsGroupID, goa.FormatUUID))
 		}
-		if !(body.Visibility == "disabled" || body.Visibility == "private" || body.Visibility == "public") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.visibility", body.Visibility, []any{"disabled", "private", "public"}))
+		if !(body.Visibility == "disabled" || body.Visibility == "private" || body.Visibility == "public" || body.Visibility == "upstream") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.visibility", body.Visibility, []any{"disabled", "private", "public", "upstream"}))
 		}
 		if body.NetworkAccessMode != nil {
 			if !(*body.NetworkAccessMode == "public_only" || *body.NetworkAccessMode == "dual" || *body.NetworkAccessMode == "private_only") {
@@ -262,8 +262,8 @@ func BuildUpdateMcpServerPayload(mcpServersUpdateMcpServerBody string, mcpServer
 		if body.ToolVariationsGroupID != nil {
 			err = goa.MergeErrors(err, goa.ValidateFormat("body.tool_variations_group_id", *body.ToolVariationsGroupID, goa.FormatUUID))
 		}
-		if !(body.Visibility == "disabled" || body.Visibility == "private" || body.Visibility == "public") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.visibility", body.Visibility, []any{"disabled", "private", "public"}))
+		if !(body.Visibility == "disabled" || body.Visibility == "private" || body.Visibility == "public" || body.Visibility == "upstream") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.visibility", body.Visibility, []any{"disabled", "private", "public", "upstream"}))
 		}
 		if body.NetworkAccessMode != nil {
 			if !(*body.NetworkAccessMode == "public_only" || *body.NetworkAccessMode == "dual" || *body.NetworkAccessMode == "private_only") {
