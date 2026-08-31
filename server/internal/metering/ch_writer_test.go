@@ -688,7 +688,8 @@ func TestMeterReadingCHWriterDoesNotEnrichAcrossOrganizations(t *testing.T) {
 	require.NotContains(t, localPrincipals, metering.AttributeChatOwnerDepartmentName)
 	require.NotContains(t, localPrincipals, metering.AttributeChatOwnerDirectoryMatch)
 }
-func TestMeterReadingCHWriterRetriesPostgresFailureBeforeClickHouseInsert(t *testing.T) {
+
+func TestMeterReadingCHWriterAbortsBeforeClickHouseInsertOnPostgresFailure(t *testing.T) {
 	t.Parallel()
 	now := time.Now().UTC()
 	message, _ := usageMessage(t, metering.UsageInput{

@@ -7,12 +7,20 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/protobuf/proto"
 
+	meteringv1 "github.com/speakeasy-api/gram/infra/gen/gram/metering/v1"
 	"github.com/speakeasy-api/gram/server/internal/assets/assetstest"
+	assistantrepo "github.com/speakeasy-api/gram/server/internal/assistants/repo"
 	"github.com/speakeasy-api/gram/server/internal/chat"
 	chatrepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
+	"github.com/speakeasy-api/gram/server/internal/conv"
+	hooksrepo "github.com/speakeasy-api/gram/server/internal/hooks/repo"
+	"github.com/speakeasy-api/gram/server/internal/metering"
+	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 )
 
 func TestRecordCompactedGenerationWritesNewGeneration(t *testing.T) {
@@ -23,6 +31,37 @@ func TestRecordCompactedGenerationWritesNewGeneration(t *testing.T) {
 
 	projectID, assistantID, chatID, threadID := insertAssistantFixture(t, conn)
 	ctx := t.Context()
+	_, err = orgrepo.New(conn).UpsertOrganizationMetadata(ctx, orgrepo.UpsertOrganizationMetadataParams{
+		ID:   "org-test",
+		Name: "Test organization",
+		Slug: "org-test",
+	})
+	require.NoError(t, err)
+	ownerUserID := "owner-" + uuid.NewString()
+	require.NoError(t, assistantrepo.New(conn).UpsertAssistantChat(ctx, assistantrepo.UpsertAssistantChatParams{
+		ChatID:         chatID,
+		ProjectID:      projectID,
+		OrganizationID: "org-test",
+		UserID:         conv.ToPGText(ownerUserID),
+		Title:          pgtype.Text{},
+	}))
+	account, err := hooksrepo.New(conn).UpsertUserAccount(ctx, hooksrepo.UpsertUserAccountParams{
+		OrganizationID:      "org-test",
+		Provider:            "anthropic",
+		ExternalAccountUuid: uuid.NewString(),
+		UserID:              pgtype.Text{},
+		ExternalOrgID:       pgtype.Text{},
+		ExternalAccountID:   pgtype.Text{},
+		Email:               conv.ToPGText("compaction@example.test"),
+		AccountType:         conv.ToPGText("personal"),
+	})
+	require.NoError(t, err)
+	_, err = hooksrepo.New(conn).LinkChatUserAccount(ctx, hooksrepo.LinkChatUserAccountParams{
+		UserAccountID: uuid.NullUUID{UUID: account.ID, Valid: true},
+		ID:            chatID,
+		ProjectID:     projectID,
+	})
+	require.NoError(t, err)
 
 	// Seed a long-ish generation 1 — the un-compacted history that cron is
 	// currently re-loading every fire.
@@ -81,6 +120,17 @@ func TestRecordCompactedGenerationWritesNewGeneration(t *testing.T) {
 	require.Equal(t, "third cron fire", history[0].Content.Text())
 	require.Equal(t, "assistant", history[1].Role)
 	require.Equal(t, "summary of work so far", history[1].Content.Text())
+
+	outboxRows, err := testrepo.New(conn).ListPublishOutboxRows(ctx)
+	require.NoError(t, err)
+	require.Len(t, outboxRows, len(compacted))
+	for _, row := range outboxRows {
+		reading := &meteringv1.MeterReading{}
+		require.NoError(t, proto.Unmarshal(row.Message, reading))
+		require.Equal(t, "personal", reading.GetAttributes()[metering.AttributeAccountType])
+		require.NotContains(t, reading.GetAttributes(), metering.AttributeMessageUserID)
+		require.NotContains(t, reading.GetAttributes(), metering.AttributeMessageExternalUserID)
+	}
 }
 
 func TestRecordCompactedGenerationRejectsForeignAssistant(t *testing.T) {
