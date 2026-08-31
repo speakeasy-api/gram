@@ -60,11 +60,10 @@ func CheckSlugAvailable(ctx context.Context, db repo.DBTX, check SlugAvailabilit
 // check-then-write and the per-table unique indexes cannot see cross-table
 // collisions.
 func LockSlugScope(ctx context.Context, db repo.DBTX, customDomainID uuid.NullUUID, slug string) error {
-	scope := "platform"
-	if customDomainID.Valid {
-		scope = customDomainID.UUID.String()
-	}
-	if err := repo.New(db).LockSlugScope(ctx, scope+"/"+slug); err != nil {
+	if err := repo.New(db).LockSlugScope(ctx, repo.LockSlugScopeParams{
+		CustomDomainID: customDomainID,
+		Slug:           slug,
+	}); err != nil {
 		return fmt.Errorf("lock mcp slug scope: %w", err)
 	}
 	return nil

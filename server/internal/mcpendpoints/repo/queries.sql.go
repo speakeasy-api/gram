@@ -826,14 +826,21 @@ func (q *Queries) LockRootMCPEndpointsByMCPServerID(ctx context.Context, arg Loc
 }
 
 const lockSlugScope = `-- name: LockSlugScope :exec
-SELECT pg_advisory_xact_lock(hashtextextended('mcp_slug:' || $1::text, 0))
+SELECT pg_advisory_xact_lock(hashtextextended(
+  'mcp_slug:' || coalesce($1::uuid::text, 'platform') || '/' || $2::text, 0
+))
 `
+
+type LockSlugScopeParams struct {
+	CustomDomainID uuid.NullUUID
+	Slug           string
+}
 
 // Serializes competing claims on one (namespace, slug) address for the rest of
 // the caller's transaction; the per-table unique indexes cannot see
 // cross-table collisions.
-func (q *Queries) LockSlugScope(ctx context.Context, scopeKey string) error {
-	_, err := q.db.Exec(ctx, lockSlugScope, scopeKey)
+func (q *Queries) LockSlugScope(ctx context.Context, arg LockSlugScopeParams) error {
+	_, err := q.db.Exec(ctx, lockSlugScope, arg.CustomDomainID, arg.Slug)
 	return err
 }
 

@@ -183,6 +183,11 @@ func (s *Service) CreateToolset(ctx context.Context, payload *gen.CreateToolsetP
 
 	tr := s.repo.WithTx(dbtx)
 
+	if mcpSlug, err = s.ensureGeneratedMcpSlug(ctx, dbtx, logger, authCtx.OrganizationSlug, authCtx.ActiveOrganizationID, mcpSlug); err != nil {
+		return nil, err
+	}
+	createToolParams.McpSlug = conv.ToPGText(mcpSlug)
+
 	createdToolset, err := tr.CreateToolset(ctx, createToolParams)
 	var pgErr *pgconn.PgError
 	if err != nil {
@@ -252,6 +257,38 @@ func (s *Service) CreateToolset(ctx context.Context, payload *gen.CreateToolsetP
 // Default plugin (project predates this feature) — callers should enqueue
 // an initial publish for it, but only after their own transaction commits,
 // since this runs pre-commit and the DB writes could still roll back.
+// ensureGeneratedMcpSlug guards a generated platform mcp_slug against the
+// unified namespace, regenerating on the rare collision with a live endpoint.
+func (s *Service) ensureGeneratedMcpSlug(ctx context.Context, dbtx pgx.Tx, logger *slog.Logger, orgSlug, orgID, slug string) (string, error) {
+	for attempt := 0; ; attempt++ {
+		if err := mcpendpoints.LockSlugScope(ctx, dbtx, uuid.NullUUID{UUID: uuid.Nil, Valid: false}, slug); err != nil {
+			return "", oops.E(oops.CodeUnexpected, err, "lock mcp slug scope").LogError(ctx, logger)
+		}
+		available, err := mcpendpoints.CheckSlugAvailable(ctx, dbtx, mcpendpoints.SlugAvailabilityCheck{
+			Slug:                     slug,
+			CustomDomainID:           uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+			OrganizationID:           orgID,
+			ExcludeToolsetID:         uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+			ExcludeMcpServerID:       uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+			SkipDomainOwnershipCheck: false,
+		})
+		if err != nil {
+			return "", oops.E(oops.CodeUnexpected, err, "check mcp slug availability").LogError(ctx, logger)
+		}
+		if available {
+			return slug, nil
+		}
+		if attempt == 2 {
+			return "", oops.E(oops.CodeConflict, nil, "could not generate a unique mcp slug").LogError(ctx, logger)
+		}
+		suffix, err := conv.GenerateRandomSlug(5)
+		if err != nil {
+			return "", oops.E(oops.CodeUnexpected, err, "failed to generate random slug").LogError(ctx, logger)
+		}
+		slug = orgSlug + "-" + suffix
+	}
+}
+
 func (s *Service) attachToDefaultPlugin(ctx context.Context, dbtx pgx.Tx, authCtx *contextvalues.AuthContext, toolsetID uuid.UUID, displayName string) (bool, error) {
 	pluginCreated, err := plugins.AttachToDefaultPluginAudited(ctx, dbtx, s.audit, authCtx, plugins.AttachToDefaultPluginParams{
 		OrganizationID: authCtx.ActiveOrganizationID,
@@ -759,6 +796,9 @@ func (s *Service) CloneToolset(ctx context.Context, payload *gen.CloneToolsetPay
 	newName := originalToolset.Name + "_copy"
 	newSlug := conv.ToSlug(newName)
 	mcpSlug := authCtx.OrganizationSlug + "-" + slugSuffix
+	if mcpSlug, err = s.ensureGeneratedMcpSlug(ctx, dbtx, logger, authCtx.OrganizationSlug, authCtx.ActiveOrganizationID, mcpSlug); err != nil {
+		return nil, err
+	}
 
 	// Prepare base parameters for creating the cloned toolset
 	baseParams := repo.CreateToolsetParams{

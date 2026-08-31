@@ -172,7 +172,9 @@ SELECT (
 -- Serializes competing claims on one (namespace, slug) address for the rest of
 -- the caller's transaction; the per-table unique indexes cannot see
 -- cross-table collisions.
-SELECT pg_advisory_xact_lock(hashtextextended('mcp_slug:' || @scope_key::text, 0));
+SELECT pg_advisory_xact_lock(hashtextextended(
+  'mcp_slug:' || coalesce(sqlc.narg('custom_domain_id')::uuid::text, 'platform') || '/' || @slug::text, 0
+));
 
 -- name: SoftDeleteMCPEndpointsByMCPServerID :many
 -- Soft-delete all endpoints that point at a given mcp server. Used when the
