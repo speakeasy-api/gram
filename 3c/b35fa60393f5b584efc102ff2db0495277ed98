@@ -1,0 +1,66 @@
+server/internal/mcp/authnchallenge_idp_callback.go
+  h_9630b74bdac540 84-87
+server/internal/mcp/authnchallenge_consent_action.go
+  h_9630b74bdac540 68
+server/cmd/gram/start.go
+  h_9630b74bdac540 1209-1213
+server/internal/mcpmetadata/setup_test.go
+  h_9630b74bdac540 29,124,178
+server/internal/mcp/authnchallenge_token.go
+  h_9630b74bdac540 303-313
+server/internal/mcp/impl.go
+  h_9630b74bdac540 25,640,744
+server/internal/networkaccess/mode.go
+  h_9630b74bdac540 16-22,43-54,56,60,62
+server/internal/middleware/private_ingress_headers_test.go
+  h_9630b74bdac540 1-36
+server/internal/mcp/authnchallenge.go
+  h_9630b74bdac540 84-95,200-203
+server/internal/mcp/servepublic_mcpendpoint_test.go
+  h_9630b74bdac540 37,41,462-465,475-476,483-487,497-548
+server/internal/mcp/authnchallenge_consent_mcp_endpoint.go
+  h_9630b74bdac540 142
+server/internal/networkaccess/mode_test.go
+  h_9630b74bdac540 24-27
+server/internal/mcpmetadata/serve_install_page_test.go
+  h_9630b74bdac540 30,1911-1941
+server/internal/mcpendpoints/metamcpbackend_test.go
+  h_9630b74bdac540 17,28-33,43
+server/internal/middleware/network_serving_policy_test.go
+  h_9630b74bdac540 1-25
+server/internal/mcp/serveendpoint.go
+  h_9630b74bdac540 402
+server/internal/mcp/authnchallenge_well_known.go
+  h_9630b74bdac540 27,132,187
+server/internal/mcpendpoints/resolve_policy_test.go
+  h_9630b74bdac540 1-236
+server/internal/middleware/network_serving_policy.go
+  h_9630b74bdac540 1-20
+server/internal/mcpendpoints/resolve.go
+  h_9630b74bdac540 6,19,21-22,25-119,123-124,128,130-136,138,140-141,151,153,155-157,159-160,162,171,173,175-177,179-180,182-183,185-218
+server/internal/middleware/private_ingress_headers.go
+  h_9630b74bdac540 1-25
+server/internal/mcp/wellknown_test.go
+  h_9630b74bdac540 25,30,74-99
+server/internal/mcpmetadata/impl.go
+  h_9630b74bdac540 1040,1042-1043
+server/internal/mcp/resolved_mcp_endpoint.go
+  h_9630b74bdac540 23,29,203-207,215-216,285-301,309,312-325,481,484-487,604-606
+server/internal/mcp/authnchallenge_consent.go
+  h_9630b74bdac540 332,658,669,704
+server/internal/mcp/resolved_mcp_endpoint_internal_test.go
+  h_9630b74bdac540 10-49,67-109
+server/internal/mcpendpoints/setup_test.go
+  h_9630b74bdac540 32,255-260,281
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "3cb35fa60393f5b584efc102ff2db0495277ed98",
+  "prompts": {},
+  "humans": {
+    "h_9630b74bdac540": {
+      "author": "Tristan Cartledge <tristan@speakeasyapi.dev>"
+    }
+  }
+}
