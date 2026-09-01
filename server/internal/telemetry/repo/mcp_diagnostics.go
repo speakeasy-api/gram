@@ -149,9 +149,10 @@ func unionSource(directSQL string, directArgs []any, hookSQL string, hookArgs []
 
 // mcpOutcomeDirectSource classifies calls that reached a hosted MCP server
 // directly. It reads mcp_call_summaries so toolset_slug is filtered at the
-// call, not after a session-level max(). Aggregate aliases carry the "g_"
-// prefix so they do not shadow base columns and collapse into an enclosing
-// aggregate (ILLEGAL_AGGREGATION).
+// call, not after a session-level max(). Rows without tool_use_id or
+// gen_ai.tool.call.id fall back to the log row id, matching the session MV.
+// Aggregate aliases carry the "g_" prefix so they do not shadow base columns
+// and collapse into an enclosing aggregate (ILLEGAL_AGGREGATION).
 func (q *Queries) mcpOutcomeDirectSource(arg GetMCPOutcomeBreakdownParams) (string, []any, error) {
 	grouped := sq.Select(
 		"trace_id",
