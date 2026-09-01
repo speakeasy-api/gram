@@ -320,6 +320,7 @@ func (s *Service) DeleteUserSessionIssuer(ctx context.Context, payload *gen.Dele
 
 	hasActiveOwner, err := txRepo.UserSessionIssuerHasActiveOwner(ctx, repo.UserSessionIssuerHasActiveOwnerParams{
 		ProjectID:           *authCtx.ProjectID,
+		OrganizationID:      authCtx.ActiveOrganizationID,
 		UserSessionIssuerID: id,
 	})
 	if err != nil {
@@ -338,6 +339,7 @@ func (s *Service) DeleteUserSessionIssuer(ctx context.Context, payload *gen.Dele
 		if errors.Is(err, pgx.ErrNoRows) {
 			hasActiveOwner, ownerErr := txRepo.UserSessionIssuerHasActiveOwner(ctx, repo.UserSessionIssuerHasActiveOwnerParams{
 				ProjectID:           *authCtx.ProjectID,
+				OrganizationID:      authCtx.ActiveOrganizationID,
 				UserSessionIssuerID: id,
 			})
 			if ownerErr != nil {

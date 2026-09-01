@@ -32,6 +32,7 @@ import (
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	"github.com/speakeasy-api/gram/server/internal/usersessions"
@@ -450,6 +451,29 @@ func seedIssuerInProject(t *testing.T, ctx context.Context, conn *pgxpool.Pool, 
 	})
 	require.NoError(t, err)
 	return issuer.ID
+}
+
+// seedOrganizationTierIssuer writes an issuer that belongs to the caller's
+// organization and to no project. No handler creates one: the create query
+// always writes a project_id, so the row has to be seeded directly. It is what
+// gives the second arm of the tier predicate a real subject, and it is the only
+// way to cover an issuer whose owners are allowed to live in a project other
+// than the caller's.
+func seedOrganizationTierIssuer(t *testing.T, ctx context.Context, conn *pgxpool.Pool, slug string) uuid.UUID {
+	t.Helper()
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	id, err := testrepo.New(conn).InsertOrganizationTierUserSessionIssuerFixture(ctx, testrepo.InsertOrganizationTierUserSessionIssuerFixtureParams{
+		OrganizationID:     conv.ToPGText(authCtx.ActiveOrganizationID),
+		Slug:               slug,
+		AuthnChallengeMode: "chain",
+		SessionDuration:    pgtype.Interval{Microseconds: int64(24 * time.Hour / time.Microsecond), Days: 0, Months: 0, Valid: true},
+	})
+	require.NoError(t, err)
+
+	return id
 }
 
 // siblingProject is a second project in the caller's OWN organization, holding

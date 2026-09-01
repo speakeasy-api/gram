@@ -1016,6 +1016,7 @@ func (s *Service) DeleteMcpServer(ctx context.Context, payload *gen.DeleteMcpSer
 
 		hasActiveOwner, err := userSessionsRepo.UserSessionIssuerHasActiveOwner(ctx, usersessionsrepo.UserSessionIssuerHasActiveOwnerParams{
 			ProjectID:           *authCtx.ProjectID,
+			OrganizationID:      authCtx.ActiveOrganizationID,
 			UserSessionIssuerID: deleted.UserSessionIssuerID.UUID,
 		})
 		if err != nil {

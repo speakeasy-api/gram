@@ -5,6 +5,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/user_session_issuers"
@@ -12,6 +13,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/mcpservers"
+	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	metamcprepo "github.com/speakeasy-api/gram/server/internal/metamcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/metamcp/visibility"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -308,6 +311,128 @@ func TestDeleteUserSessionIssuer_ConflictWithLiveMetaMcpServer(t *testing.T) {
 		ProjectSlugInput: nil,
 	})
 	require.NoError(t, err)
+}
+
+// An organization-tier issuer is addressable from every project in the
+// organization, so its owners are too. The owner check has to follow the
+// issuer's tier rather than the caller's project: scoped to the caller's
+// project it would see no owner here and soft-delete the issuer out from under
+// the sibling project's toolset.
+func TestDeleteUserSessionIssuer_OrganizationTierConflictWithSiblingToolset(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	issuerID := seedOrganizationTierIssuer(t, ctx, ti.conn, "org-tier-toolset-owner")
+	siblingID := createSiblingProject(t, ctx, ti.conn, "org-tier-toolset-owner-sib")
+
+	toolsets := toolsetsrepo.New(ti.conn)
+	toolset, err := toolsets.CreateToolset(ctx, toolsetsrepo.CreateToolsetParams{
+		OrganizationID:         authCtx.ActiveOrganizationID,
+		ProjectID:              siblingID,
+		Name:                   "org-tier-toolset-owner",
+		Slug:                   "org-tier-toolset-owner",
+		Description:            pgtype.Text{String: "", Valid: false},
+		DefaultEnvironmentSlug: pgtype.Text{String: "", Valid: false},
+		McpSlug:                pgtype.Text{String: "", Valid: false},
+		McpEnabled:             false,
+	})
+	require.NoError(t, err)
+
+	_, err = toolsets.UpdateToolsetUserSessionIssuer(ctx, toolsetsrepo.UpdateToolsetUserSessionIssuerParams{
+		UserSessionIssuerID: uuid.NullUUID{UUID: issuerID, Valid: true},
+		Slug:                toolset.Slug,
+		ProjectID:           siblingID,
+	})
+	require.NoError(t, err)
+
+	err = ti.service.DeleteUserSessionIssuer(ctx, &gen.DeleteUserSessionIssuerPayload{
+		ID:               issuerID.String(),
+		SessionToken:     nil,
+		ApikeyToken:      nil,
+		ProjectSlugInput: nil,
+	})
+	requireOopsCode(t, err, oops.CodeConflict)
+
+	_, err = repo.New(ti.conn).GetUserSessionIssuerByID(ctx, repo.GetUserSessionIssuerByIDParams{
+		ID:             issuerID,
+		ProjectID:      *authCtx.ProjectID,
+		OrganizationID: authCtx.ActiveOrganizationID,
+	})
+	require.NoError(t, err, "issuer must remain active when deletion is rejected")
+
+	// Releasing the sibling project's reference makes the issuer deletable, so
+	// the sweep blocks on a live owner rather than on the tier itself.
+	_, err = toolsets.UpdateToolsetUserSessionIssuer(ctx, toolsetsrepo.UpdateToolsetUserSessionIssuerParams{
+		UserSessionIssuerID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		Slug:                toolset.Slug,
+		ProjectID:           siblingID,
+	})
+	require.NoError(t, err)
+
+	err = ti.service.DeleteUserSessionIssuer(ctx, &gen.DeleteUserSessionIssuerPayload{
+		ID:               issuerID.String(),
+		SessionToken:     nil,
+		ApikeyToken:      nil,
+		ProjectSlugInput: nil,
+	})
+	require.NoError(t, err)
+}
+
+// The mcp_servers arm of the same sweep. mcp_servers carries no
+// organization_id, so it reaches the organization through its project.
+func TestDeleteUserSessionIssuer_OrganizationTierConflictWithSiblingMCPServer(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	issuerID := seedOrganizationTierIssuer(t, ctx, ti.conn, "org-tier-server-owner")
+	siblingID := createSiblingProject(t, ctx, ti.conn, "org-tier-server-owner-sib")
+
+	toolset, err := toolsetsrepo.New(ti.conn).CreateToolset(ctx, toolsetsrepo.CreateToolsetParams{
+		OrganizationID:         authCtx.ActiveOrganizationID,
+		ProjectID:              siblingID,
+		Name:                   "org-tier-server-owner-backing",
+		Slug:                   "org-tier-server-owner-backing",
+		Description:            pgtype.Text{String: "", Valid: false},
+		DefaultEnvironmentSlug: pgtype.Text{String: "", Valid: false},
+		McpSlug:                pgtype.Text{String: "", Valid: false},
+		McpEnabled:             false,
+	})
+	require.NoError(t, err)
+
+	_, err = mcpserversrepo.New(ti.conn).CreateMCPServer(ctx, mcpserversrepo.CreateMCPServerParams{
+		ID:                    uuid.New(),
+		ProjectID:             siblingID,
+		Name:                  pgtype.Text{String: "org-tier-server-owner", Valid: true},
+		Slug:                  pgtype.Text{String: "org-tier-server-owner", Valid: true},
+		EnvironmentID:         uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		UserSessionIssuerID:   uuid.NullUUID{UUID: issuerID, Valid: true},
+		RemoteMcpServerID:     uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		ToolsetID:             uuid.NullUUID{UUID: toolset.ID, Valid: true},
+		ToolVariationsGroupID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		Visibility:            mcpservers.VisibilityPrivate,
+	})
+	require.NoError(t, err)
+
+	err = ti.service.DeleteUserSessionIssuer(ctx, &gen.DeleteUserSessionIssuerPayload{
+		ID:               issuerID.String(),
+		SessionToken:     nil,
+		ApikeyToken:      nil,
+		ProjectSlugInput: nil,
+	})
+	requireOopsCode(t, err, oops.CodeConflict)
+
+	_, err = repo.New(ti.conn).GetUserSessionIssuerByID(ctx, repo.GetUserSessionIssuerByIDParams{
+		ID:             issuerID,
+		ProjectID:      *authCtx.ProjectID,
+		OrganizationID: authCtx.ActiveOrganizationID,
+	})
+	require.NoError(t, err, "issuer must remain active when deletion is rejected")
 }
 
 func TestDeleteUserSessionIssuer_SiblingProjectNotFound(t *testing.T) {

@@ -448,23 +448,30 @@ WHERE issuer.id = $1
   AND NOT EXISTS (
     SELECT 1
     FROM mcp_servers AS server
-    WHERE server.project_id = $2::uuid
-      AND server.user_session_issuer_id = issuer.id
+    JOIN projects AS server_project ON server_project.id = server.project_id
+    WHERE server.user_session_issuer_id = issuer.id
       AND server.deleted IS FALSE
+      AND (
+        server.project_id = issuer.project_id
+        OR (issuer.project_id IS NULL AND server_project.organization_id = issuer.organization_id)
+      )
 
     UNION ALL
 
     SELECT 1
     FROM toolsets AS toolset
-    WHERE toolset.project_id = $2::uuid
-      AND toolset.user_session_issuer_id = issuer.id
+    WHERE toolset.user_session_issuer_id = issuer.id
       AND toolset.deleted IS FALSE
+      AND (
+        toolset.project_id = issuer.project_id
+        OR (issuer.project_id IS NULL AND toolset.organization_id = issuer.organization_id)
+      )
 
     UNION ALL
 
     SELECT 1
     FROM meta_mcp_servers AS meta_mcp_server
-    WHERE meta_mcp_server.project_id = $2::uuid
+    WHERE meta_mcp_server.project_id = issuer.project_id
       AND meta_mcp_server.user_session_issuer_id = issuer.id
       AND meta_mcp_server.deleted IS FALSE
   )
@@ -482,16 +489,17 @@ type DeleteUserSessionIssuerParams struct {
 //
 // The issuer predicate spans both tiers, matching the other issuer queries: a
 // project-tier row in the caller's project, or an organization-tier row
-// (project_id NULL) in the caller's organization. The owner-existence
-// subqueries inside NOT EXISTS are the part that stays project-scoped. An
-// organization-tier issuer can be referenced from any project in the
-// organization, so those subqueries would have to sweep the whole organization
-// to be correct for one. No surface can create an organization-tier issuer, so
-// no reachable row exercises that gap. It would apply to mcp_servers and
-// toolsets, which hold plain single-column foreign keys; meta_mcp_servers
-// cannot reference an organization-tier issuer at all, because its composite
-// foreign key on (project_id, user_session_issuer_id) never matches a NULL
-// project_id.
+// (project_id NULL) in the caller's organization. The owner subqueries inside
+// NOT EXISTS take their scope from the issuer row rather than from the
+// caller's project, because the two diverge for an organization-tier issuer:
+// it can be referenced from any project in the organization, and a
+// project-scoped owner check would miss a sibling project's reference and soft
+// delete the issuer out from under it.
+//
+// meta_mcp_servers stays project-scoped, and correctly so: its composite
+// foreign key on (project_id, user_session_issuer_id) can never match a NULL
+// project_id, so an organization-tier issuer has no meta MCP owners to sweep
+// for.
 func (q *Queries) DeleteUserSessionIssuer(ctx context.Context, arg DeleteUserSessionIssuerParams) (UserSessionIssuer, error) {
 	row := q.db.QueryRow(ctx, deleteUserSessionIssuer, arg.ID, arg.ProjectID, arg.OrganizationID)
 	var i UserSessionIssuer
@@ -2566,38 +2574,59 @@ func (q *Queries) UpsertUserSessionClientFromCIMD(ctx context.Context, arg Upser
 const userSessionIssuerHasActiveOwner = `-- name: UserSessionIssuerHasActiveOwner :one
 SELECT EXISTS (
     SELECT 1
-    FROM mcp_servers AS server
-    WHERE server.project_id = $1
-      AND server.user_session_issuer_id = $2::uuid
-      AND server.deleted IS FALSE
+    FROM user_session_issuers AS issuer
+    WHERE issuer.id = $1::uuid
+      AND (issuer.project_id = $2::uuid OR (issuer.project_id IS NULL AND issuer.organization_id = $3::text))
+      AND issuer.deleted IS FALSE
+      AND EXISTS (
+        SELECT 1
+        FROM mcp_servers AS server
+        JOIN projects AS server_project ON server_project.id = server.project_id
+        WHERE server.user_session_issuer_id = issuer.id
+          AND server.deleted IS FALSE
+          AND (
+            server.project_id = issuer.project_id
+            OR (issuer.project_id IS NULL AND server_project.organization_id = issuer.organization_id)
+          )
 
-    UNION ALL
+        UNION ALL
 
-    SELECT 1
-    FROM toolsets AS toolset
-    WHERE toolset.project_id = $1
-      AND toolset.user_session_issuer_id = $2::uuid
-      AND toolset.deleted IS FALSE
+        SELECT 1
+        FROM toolsets AS toolset
+        WHERE toolset.user_session_issuer_id = issuer.id
+          AND toolset.deleted IS FALSE
+          AND (
+            toolset.project_id = issuer.project_id
+            OR (issuer.project_id IS NULL AND toolset.organization_id = issuer.organization_id)
+          )
 
-    UNION ALL
+        UNION ALL
 
-    SELECT 1
-    FROM meta_mcp_servers AS meta_mcp_server
-    WHERE meta_mcp_server.project_id = $1
-      AND meta_mcp_server.user_session_issuer_id = $2::uuid
-      AND meta_mcp_server.deleted IS FALSE
+        SELECT 1
+        FROM meta_mcp_servers AS meta_mcp_server
+        WHERE meta_mcp_server.project_id = issuer.project_id
+          AND meta_mcp_server.user_session_issuer_id = issuer.id
+          AND meta_mcp_server.deleted IS FALSE
+      )
 )
 `
 
 type UserSessionIssuerHasActiveOwnerParams struct {
-	ProjectID           uuid.UUID
 	UserSessionIssuerID uuid.UUID
+	ProjectID           uuid.UUID
+	OrganizationID      string
 }
 
 // An issuer can be referenced by an MCP server, toolset, or meta MCP server.
 // Only delete it once no active owner remains.
+//
+// Anchored on the issuer row so the owner lookup follows the issuer's tier the
+// same way DeleteUserSessionIssuer does. The caller's project and organization
+// decide which issuer row is visible; the issuer row then decides where its
+// owners can live. Preflight and write have to agree on that, otherwise this
+// check reports no owner for a reference the write would have to honor.
 func (q *Queries) UserSessionIssuerHasActiveOwner(ctx context.Context, arg UserSessionIssuerHasActiveOwnerParams) (bool, error) {
-	row := q.db.QueryRow(ctx, userSessionIssuerHasActiveOwner, arg.ProjectID, arg.UserSessionIssuerID)
+	row := q.db.QueryRow(ctx, userSessionIssuerHasActiveOwner, arg.UserSessionIssuerID, arg.ProjectID, arg.OrganizationID)
 	var exists bool
 	err := row.Scan(&exists)
 	return exists, err
