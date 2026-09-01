@@ -5,11 +5,13 @@ import (
 	"context"
 	"encoding/pem"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -165,6 +167,22 @@ func TestAttestorHandlerStreamsAndCancels(t *testing.T) {
 	case <-time.After(2 * time.Second):
 		t.Fatal("upstream request was not cancelled")
 	}
+}
+
+func TestTelemetryResponseBodyRecordsCompletionOnce(t *testing.T) {
+	t.Parallel()
+
+	completed := 0
+	body := &telemetryResponseBody{
+		ReadCloser: io.NopCloser(strings.NewReader("streamed response")),
+		complete:   func() { completed++ },
+	}
+	contents, err := io.ReadAll(body)
+	require.NoError(t, err)
+	require.Equal(t, "streamed response", string(contents))
+	require.Equal(t, 1, completed)
+	require.NoError(t, body.Close())
+	require.Equal(t, 1, completed)
 }
 
 func TestPrivateRouteCensus(t *testing.T) {
