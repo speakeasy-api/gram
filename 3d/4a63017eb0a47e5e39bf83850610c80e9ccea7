@@ -1,0 +1,26 @@
+server/cmd/gram/start_url_test.go
+  h_9630b74bdac540 1-44
+server/internal/networkaccess/mode.go
+  h_9630b74bdac540 41-43,48-59
+server/internal/mcpservers/impl.go
+  h_9630b74bdac540 163,613
+server/internal/metamcp/impl.go
+  h_9630b74bdac540 114,286
+server/design/metamcp/design.go
+  h_9630b74bdac540 97,278
+server/cmd/gram/start.go
+  h_9630b74bdac540 205-220,861-862
+server/internal/networkaccess/mode_test.go
+  h_9630b74bdac540 24-27,38-49
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "3d4a63017eb0a47e5e39bf83850610c80e9ccea7",
+  "prompts": {},
+  "humans": {
+    "h_9630b74bdac540": {
+      "author": "Tristan Cartledge <tristan@speakeasyapi.dev>"
+    }
+  }
+}

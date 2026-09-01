@@ -1,0 +1,28 @@
+server/internal/mcp/impl.go
+  h_9630b74bdac540 73,482-535
+server/cmd/gram/netingress_attestor.go
+  h_9630b74bdac540 1-127
+server/internal/netingress/routes.go
+  h_9630b74bdac540 1-144
+server/cmd/gram/root.go
+  h_9630b74bdac540 42
+server/internal/netingress/attestor.go
+  h_9630b74bdac540 1-126
+server/cmd/gram/start.go
+  h_9630b74bdac540 103,307-310,1609-1610,1690-1740,1874-1882,1963-1964,1967-1969,1971-1977,1979
+server/internal/xmcp/service.go
+  h_9630b74bdac540 25,62-101
+server/internal/netingress/attestor_test.go
+  h_9630b74bdac540 1-274
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "d56988e36c0bf85490f742e504048b3a5a323423",
+  "prompts": {},
+  "humans": {
+    "h_9630b74bdac540": {
+      "author": "Tristan Cartledge <tristan@speakeasyapi.dev>"
+    }
+  }
+}
