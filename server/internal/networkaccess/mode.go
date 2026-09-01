@@ -53,6 +53,12 @@ func Effective(value pgtype.Text) (Mode, error) {
 	return mode, nil
 }
 
+// EffectiveValidated is kept for serving-policy callers introduced before
+// Effective became fail-closed. Both names deliberately share one policy path.
+func EffectiveValidated(value pgtype.Text) (Mode, error) {
+	return Effective(value)
+}
+
 // EffectiveForView keeps API responses inside the published enum. It is not a
 // policy decision: unknown persisted values render as the safe recovery mode,
 // while policy callers must use Effective and handle its error. If a client

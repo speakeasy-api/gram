@@ -176,7 +176,15 @@ func Resolve(ctx context.Context, db *pgxpool.Pool, logger *slog.Logger, input R
 	if modeErr != nil {
 		return deniedResult(&endpoint, &server, nil, networkaccess.ModePrivateOnly), nil
 	}
-	if server.Visibility == mcpservers.VisibilityDisabled || !mode.Allows(input.Surface) {
+	switch server.Visibility {
+	case mcpservers.VisibilityPublic, mcpservers.VisibilityPrivate:
+		// Known serving states continue to network-surface policy below.
+	default:
+		// Disabled and unrecognized values fail closed. An endpoint row owns
+		// its address, so this is an authoritative denial rather than a miss.
+		return deniedResult(&endpoint, &server, nil, mode), nil
+	}
+	if !mode.Allows(input.Surface) {
 		return deniedResult(&endpoint, &server, nil, mode), nil
 	}
 	return ResolutionResult{Endpoint: &endpoint, Server: &server, MetaServer: nil, Mode: mode, Found: true, Allowed: true}, nil
