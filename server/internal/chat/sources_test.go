@@ -30,6 +30,18 @@ func TestCanonicalizeSources_CollapsesAliasesAndDropsEmpty(t *testing.T) {
 	require.Equal(t, []string{"chatgpt", "claude", "claude-chat-web", "claude-code", "claude-code-desktop", "codex", "cowork", "cursor"}, got)
 }
 
+func TestSourceAliases_OpenClawFoldsBothSpellings(t *testing.T) {
+	t.Parallel()
+
+	// Both spellings must collapse to one surface, or the agent-type filter
+	// splits OpenClaw into two entries. The generated shim passes
+	// --provider=openclaw; the capitalised form covers hand-configured installs.
+	require.Equal(t, "openclaw", CanonicalSource("openclaw"))
+	require.Equal(t, "openclaw", CanonicalSource("OpenClaw"))
+	require.Equal(t, []string{"openclaw"}, canonicalizeSources([]string{"openclaw", "OpenClaw"}))
+	require.Equal(t, []string{"openclaw", "OpenClaw"}, expandSourceAliases([]string{"openclaw"}))
+}
+
 func TestCanonicalizeSources_Empty(t *testing.T) {
 	t.Parallel()
 
