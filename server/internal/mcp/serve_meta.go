@@ -137,8 +137,15 @@ func (s *Service) serveResolvedMetaMCPEndpoint(
 		resolution.InEffect = mcpversions.Negotiate(params.ProtocolVersion, supportedMeta)
 	}
 	w.Header().Set(mcpversions.HTTPHeader, resolution.InEffect)
+	// Both halves the error wrapper needs, published together: an error
+	// escaping this handler has to echo the id the client sent and be encoded
+	// on the revision governing the request. Publishing only one leaves the
+	// wrapper answering with a modern wire code under a null id.
 	if rpcCtx, ok := contextvalues.GetRPCContext(ctx); ok {
 		rpcCtx.ProtocolVersion = resolution.InEffect
+		if req.ID.IsSet() {
+			rpcCtx.ID = req.ID
+		}
 	}
 
 	gate := &metaGateContext{

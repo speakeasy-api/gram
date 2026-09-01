@@ -10,6 +10,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/mcp/mcpversions"
 	"github.com/speakeasy-api/gram/server/internal/mcpjsonrpc"
 )
 
@@ -42,18 +43,29 @@ func MCPErrHandle(logger *slog.Logger, handler func(http.ResponseWriter, *http.R
 		var shareableErr *ShareableError
 		switch {
 		case errors.As(err, &shareableErr):
-			// The status stays keyed on the Gram error code, not on the wire
-			// code and not on the revision. Errors that escape a handler are
-			// transport-level refusals rather than protocol results, and the
-			// statuses this path already answers are correct on every
-			// revision: 401 carries the OAuth discovery challenge MCP clients
-			// need to start their authorization flow, 404 names an unknown
-			// server, 405 answers the GET compatibility probe. The
-			// specification's status table governs the JSON-RPC errors
-			// written from inside the handler, which this is not.
+			// The status starts from the Gram error code, which is what makes
+			// this path answer 401 with the OAuth discovery challenge MCP
+			// clients need to start authorizing, 403 for a denied toolset, and
+			// 405 for the GET compatibility probe. Those wire codes carry no
+			// mandated status, so the override leaves them alone on every
+			// revision.
+			//
+			// It does not leave the not-found alone, and must not: the wire
+			// code answered here is now the revision's, and a code carries its
+			// status with it. A not-found on a modern request answers -32602,
+			// whose mandated status is 400. Keeping the Gram code's 404 would
+			// pair it with the one status the specification gives a distinct
+			// meaning — a 404 carrying a JSON-RPC body says the method is
+			// unimplemented — and tell a dual-era client something untrue.
 			code = shareableErr.HTTPStatus(r.Context())
 			payload.Code = shareableErr.Code.MCPCodeFor(rpcCtx.ProtocolVersion)
 			payload.Message = shareableErr.Error()
+
+			if mcpversions.IsModern(rpcCtx.ProtocolVersion) {
+				if mandated, ok := payload.Code.MandatedHTTPStatus(); ok {
+					code = mandated
+				}
+			}
 		default:
 			stack := string(debug.Stack())
 			logger.ErrorContext(r.Context(), "unexpected error", attr.SlogError(err), attr.SlogErrorStack(stack))
@@ -83,7 +95,38 @@ const (
 	MCPCodeUnauthorized     MCPCode = -32001
 	MCPCodeResourceNotFound MCPCode = -32002
 	MCPCodeForbidden        MCPCode = -32003
+
+	// Codes MCP 2026-07-28 defines for the request-level conditions a server
+	// validates before it can act on a request at all. They sit outside the
+	// -32000 to -32019 sub-range that revision designates legacy, and unlike
+	// the codes in it they carry meaning a modern client is entitled to rely
+	// on. Each one is answered with 400.
+	MCPCodeHeaderMismatch                  MCPCode = -32020
+	MCPCodeMissingRequiredClientCapability MCPCode = -32021
+	MCPCodeUnsupportedProtocolVersion      MCPCode = -32022
 )
+
+// MandatedHTTPStatus returns the HTTP status MCP 2026-07-28 requires for c,
+// and whether that revision mandates one at all. Codes it says nothing about
+// report false, so callers leave their status alone rather than inventing one.
+//
+// Callers apply this only to requests governed by 2026-07-28. The
+// handshake-based revisions carry every JSON-RPC error in the body of a
+// successful response, and clients there read a non-2xx as a transport failure
+// without parsing the body.
+func (c MCPCode) MandatedHTTPStatus() (int, bool) {
+	switch c {
+	case MCPCodeMethodNotFound:
+		return http.StatusNotFound, true
+	case MCPCodeInvalidParams,
+		MCPCodeHeaderMismatch,
+		MCPCodeMissingRequiredClientCapability,
+		MCPCodeUnsupportedProtocolVersion:
+		return http.StatusBadRequest, true
+	default:
+		return 0, false
+	}
+}
 
 func (c MCPCode) Message() string {
 	switch c {
@@ -103,6 +146,12 @@ func (c MCPCode) Message() string {
 		return "Resource not found"
 	case MCPCodeForbidden:
 		return "Forbidden"
+	case MCPCodeHeaderMismatch:
+		return "Header mismatch"
+	case MCPCodeMissingRequiredClientCapability:
+		return "Missing required client capability"
+	case MCPCodeUnsupportedProtocolVersion:
+		return "Unsupported protocol version"
 	default:
 		return "Internal error"
 	}
@@ -133,9 +182,10 @@ type MCPError struct {
 // protocol revision in effect for that request, which selects the wire error
 // code; an empty or unrecognized value is served the legacy mappings.
 //
-// An error that already carries its own [MCPError] passes through with its
-// code intact, on the grounds that a caller naming a wire code directly has
-// chosen it deliberately.
+// An error that already carries its own [MCPError] passes through with the
+// code its caller named, since naming a wire code directly is a deliberate
+// choice. The one exception is the code 2026-07-28 forbids outright: a MUST
+// NOT is not a caller's to opt out of, so it is remapped like any other.
 func NewMCPErrorFromCause(id mcpjsonrpc.ID, revision string, source error) *MCPError {
 	var mcpErr *MCPError
 	var shareableErr *ShareableError
@@ -144,6 +194,9 @@ func NewMCPErrorFromCause(id mcpjsonrpc.ID, revision string, source error) *MCPE
 	case errors.As(source, &mcpErr):
 		if !mcpErr.ID.IsSet() {
 			mcpErr.ID = id
+		}
+		if mcpErr.Code == MCPCodeResourceNotFound && mcpversions.IsModern(revision) {
+			mcpErr.Code = MCPCodeInvalidParams
 		}
 		return mcpErr
 	case errors.As(source, &shareableErr):

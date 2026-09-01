@@ -216,12 +216,22 @@ func Known(v string) bool {
 
 // AtLeast reports whether v is a recognized revision no older than floor.
 //
-// Revision identifiers are ISO dates, so lexical order is chronological order
-// and the comparison stands on its own rather than on the ordering of [all].
-// An unrecognized value is never at least anything: garbage that happens to
-// sort above a real revision must not read as the newer behavior.
+// The comparison is positional in [all] rather than lexical on the
+// identifiers. Both are correct for the revisions recognized today, which are
+// all ISO dates and are held in that order by TestAllIsChronologicallyOrdered
+// and TestAllAreDatedRevisions. Position is used anyway because it depends on
+// the ordering [all] already declares contractual instead of on the shape of
+// the identifiers, so it keeps its meaning if the specification's undated
+// `draft` revision is ever recognized here — where a lexical test would rank
+// it above every dated revision.
+//
+// An unrecognized value is never at least anything, so a garbage revision
+// cannot reach behavior gated on a real one.
 func AtLeast(v, floor string) bool {
-	return Known(v) && v >= floor
+	vi := slices.Index(all, v)
+	fi := slices.Index(all, floor)
+
+	return vi >= 0 && fi >= 0 && vi >= fi
 }
 
 // IsModern reports whether v is [Version20260728] or later — the boundary the

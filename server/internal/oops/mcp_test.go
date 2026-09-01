@@ -249,11 +249,82 @@ func TestNewMCPErrorFromCause_ModernRevisionReplacesRetiredResourceNotFound(t *t
 func TestNewMCPErrorFromCause_PreservesExplicitCodeOnModernRevision(t *testing.T) {
 	t.Parallel()
 
-	existing := &MCPError{ID: mcpjsonrpc.NullID(), Code: MCPCodeResourceNotFound, Message: "explicit", Data: nil}
+	existing := &MCPError{ID: mcpjsonrpc.NullID(), Code: MCPCodeForbidden, Message: "explicit", Data: nil}
 	err := NewMCPErrorFromCause(mcpjsonrpc.StringID("req-1"), mcpversions.Version20260728, existing)
 
 	require.Same(t, existing, err)
+	require.Equal(t, MCPCodeForbidden, err.Code)
+}
+
+// TestNewMCPErrorFromCause_RemapsExplicitRetiredCodeOnModernRevision covers the
+// limit of that deference. Naming a wire code is a caller's choice, but the one
+// code 2026-07-28 forbids outright is not a choice that stays available, so the
+// passthrough arm remaps it like any other.
+func TestNewMCPErrorFromCause_RemapsExplicitRetiredCodeOnModernRevision(t *testing.T) {
+	t.Parallel()
+
+	existing := &MCPError{ID: mcpjsonrpc.NullID(), Code: MCPCodeResourceNotFound, Message: "explicit", Data: nil}
+	err := NewMCPErrorFromCause(mcpjsonrpc.StringID("req-1"), mcpversions.Version20260728, existing)
+
+	require.Equal(t, MCPCodeInvalidParams, err.Code)
+}
+
+// TestNewMCPErrorFromCause_KeepsExplicitRetiredCodeOnLegacyRevision is the
+// other half: the retired code is still what legacy clients are told to expect.
+func TestNewMCPErrorFromCause_KeepsExplicitRetiredCodeOnLegacyRevision(t *testing.T) {
+	t.Parallel()
+
+	existing := &MCPError{ID: mcpjsonrpc.NullID(), Code: MCPCodeResourceNotFound, Message: "explicit", Data: nil}
+	err := NewMCPErrorFromCause(mcpjsonrpc.StringID("req-1"), mcpversions.Version20251125, existing)
+
 	require.Equal(t, MCPCodeResourceNotFound, err.Code)
+}
+
+// TestMCPErrHandle_ModernRevisionUsesMandatedStatusForRemappedNotFound covers
+// the coupling between the two halves of this path. Once the wire code is
+// revision-aware, the status has to follow it: a not-found answers -32602 on a
+// modern request, and answering that with the Gram code's 404 would tell a
+// dual-era client the method is unimplemented, since a 404 carrying a JSON-RPC
+// body is precisely that signal.
+func TestMCPErrHandle_ModernRevisionUsesMandatedStatusForRemappedNotFound(t *testing.T) {
+	t.Parallel()
+	logger, _ := captureLogger()
+
+	handler := MCPErrHandle(logger, func(w http.ResponseWriter, r *http.Request) error {
+		if rpcCtx, ok := contextvalues.GetRPCContext(r.Context()); ok {
+			rpcCtx.ID = mcpjsonrpc.StringID("req-1")
+			rpcCtx.ProtocolVersion = mcpversions.Version20260728
+		}
+
+		return C(CodeNotFound)
+	})
+
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/mcp/test", nil))
+
+	require.Equal(t, http.StatusBadRequest, rec.Code)
+}
+
+// TestMCPErrHandle_LegacyRevisionKeepsNotFoundStatus pins that the override is
+// confined to the modern branch, so the statuses this path answers today are
+// untouched for the traffic that has always received them.
+func TestMCPErrHandle_LegacyRevisionKeepsNotFoundStatus(t *testing.T) {
+	t.Parallel()
+	logger, _ := captureLogger()
+
+	handler := MCPErrHandle(logger, func(w http.ResponseWriter, r *http.Request) error {
+		if rpcCtx, ok := contextvalues.GetRPCContext(r.Context()); ok {
+			rpcCtx.ID = mcpjsonrpc.StringID("req-1")
+			rpcCtx.ProtocolVersion = mcpversions.Version20251125
+		}
+
+		return C(CodeNotFound)
+	})
+
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/mcp/test", nil))
+
+	require.Equal(t, http.StatusNotFound, rec.Code)
 }
 
 // TestMCPErrHandle_ModernRevisionReplacesRetiredResourceNotFound covers the
@@ -265,16 +336,21 @@ func TestMCPErrHandle_ModernRevisionReplacesRetiredResourceNotFound(t *testing.T
 	t.Parallel()
 	logger, _ := captureLogger()
 
+	var holderInstalled bool
 	handler := MCPErrHandle(logger, func(w http.ResponseWriter, r *http.Request) error {
 		rpcCtx, ok := contextvalues.GetRPCContext(r.Context())
-		require.True(t, ok)
-		rpcCtx.ProtocolVersion = mcpversions.Version20260728
+		holderInstalled = ok
+		if ok {
+			rpcCtx.ProtocolVersion = mcpversions.Version20260728
+		}
 
 		return C(CodeNotFound)
 	})
 
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/mcp/test", nil))
+
+	require.True(t, holderInstalled, "the wrapper must install the holder before dispatch, or the handler has nowhere to publish the revision")
 
 	var response struct {
 		Error struct {
@@ -285,33 +361,146 @@ func TestMCPErrHandle_ModernRevisionReplacesRetiredResourceNotFound(t *testing.T
 	require.Equal(t, MCPCodeInvalidParams, response.Error.Code)
 }
 
-// TestMCPErrHandle_StatusStaysKeyedOnGramCodeForModernRevision pins the
-// deliberate asymmetry between the two error paths. The statuses this wrapper
-// answers are transport-level refusals that are correct on every revision, and
-// the 401 in particular is what an MCP client needs to begin its OAuth
-// discovery flow. Deriving the status from the revision here would answer that
-// challenge with a 200 and strand every client that has to authorize.
-func TestMCPErrHandle_StatusStaysKeyedOnGramCodeForModernRevision(t *testing.T) {
+// TestMCPErrHandle_UnmandatedCodesKeepGramStatusOnModernRevision pins the
+// statuses that must survive the modern branch. None of these Gram codes maps
+// to a wire code 2026-07-28 assigns a status to, so each keeps the status this
+// path has always answered. The 401 is the one that would hurt most to lose:
+// it carries the challenge an MCP client needs to begin OAuth discovery, and
+// answering it with anything else strands every client that has to authorize.
+func TestMCPErrHandle_UnmandatedCodesKeepGramStatusOnModernRevision(t *testing.T) {
 	t.Parallel()
 	logger, _ := captureLogger()
 
-	for code, want := range map[Code]int{
-		CodeUnauthorized:     http.StatusUnauthorized,
-		CodeForbidden:        http.StatusForbidden,
-		CodeNotFound:         http.StatusNotFound,
-		CodeMethodNotAllowed: http.StatusMethodNotAllowed,
+	for _, tt := range []struct {
+		code Code
+		want int
+	}{
+		{code: CodeUnauthorized, want: http.StatusUnauthorized},
+		{code: CodeForbidden, want: http.StatusForbidden},
+		{code: CodeMethodNotAllowed, want: http.StatusMethodNotAllowed},
 	} {
 		handler := MCPErrHandle(logger, func(w http.ResponseWriter, r *http.Request) error {
-			rpcCtx, ok := contextvalues.GetRPCContext(r.Context())
-			require.True(t, ok)
-			rpcCtx.ProtocolVersion = mcpversions.Version20260728
+			if rpcCtx, ok := contextvalues.GetRPCContext(r.Context()); ok {
+				rpcCtx.ID = mcpjsonrpc.StringID("req-1")
+				rpcCtx.ProtocolVersion = mcpversions.Version20260728
+			}
 
-			return C(code)
+			return C(tt.code)
 		})
 
 		rec := httptest.NewRecorder()
 		handler.ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/mcp/test", nil))
 
-		require.Equal(t, want, rec.Code, "code %s", code)
+		require.Equal(t, tt.want, rec.Code, "code %s", tt.code)
+	}
+}
+
+// TestMCPErrHandle_ModernRevisionUsesMandatedStatusForNullID covers the case
+// the two error paths previously disagreed on. A message naming no request
+// still gets the status its condition mandates: this path has no 200 to fall
+// back to, so skipping the override here would leave the Gram code's 404 on a
+// -32602 body and tell a dual-era client the method is unimplemented.
+func TestMCPErrHandle_ModernRevisionUsesMandatedStatusForNullID(t *testing.T) {
+	t.Parallel()
+	logger, _ := captureLogger()
+
+	handler := MCPErrHandle(logger, func(w http.ResponseWriter, r *http.Request) error {
+		if rpcCtx, ok := contextvalues.GetRPCContext(r.Context()); ok {
+			rpcCtx.ProtocolVersion = mcpversions.Version20260728
+		}
+
+		return C(CodeNotFound)
+	})
+
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/mcp/test", nil))
+
+	require.Equal(t, http.StatusBadRequest, rec.Code)
+
+	var response map[string]any
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &response))
+	require.Nil(t, response["id"])
+}
+
+// TestMCPErrHandle_ModernRevisionMapsNotImplementedToNotFound covers the one
+// override that moves a status the specification names for a reason. Gram
+// answers an unimplemented feature with 501, but the wire code is -32601, and
+// 404 carrying that code is what lets a dual-era client tell a modern server
+// missing a method from a legacy server missing the endpoint.
+func TestMCPErrHandle_ModernRevisionMapsNotImplementedToNotFound(t *testing.T) {
+	t.Parallel()
+	logger, _ := captureLogger()
+
+	require.Equal(t, http.StatusNotImplemented, StatusCodes[CodeNotImplemented],
+		"this test's premise: the Gram status differs from the mandated one")
+
+	handler := MCPErrHandle(logger, func(w http.ResponseWriter, r *http.Request) error {
+		if rpcCtx, ok := contextvalues.GetRPCContext(r.Context()); ok {
+			rpcCtx.ID = mcpjsonrpc.StringID("req-1")
+			rpcCtx.ProtocolVersion = mcpversions.Version20260728
+		}
+
+		return C(CodeNotImplemented)
+	})
+
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/mcp/test", nil))
+
+	require.Equal(t, http.StatusNotFound, rec.Code)
+}
+
+// TestMCPErrHandle_ModernRevisionMapsInvalidToBadRequest covers the other
+// status the override moves: Gram answers an invalid payload with 422, and
+// -32602 mandates 400.
+func TestMCPErrHandle_ModernRevisionMapsInvalidToBadRequest(t *testing.T) {
+	t.Parallel()
+	logger, _ := captureLogger()
+
+	require.Equal(t, http.StatusUnprocessableEntity, StatusCodes[CodeInvalid],
+		"this test's premise: the Gram status differs from the mandated one")
+
+	handler := MCPErrHandle(logger, func(w http.ResponseWriter, r *http.Request) error {
+		if rpcCtx, ok := contextvalues.GetRPCContext(r.Context()); ok {
+			rpcCtx.ID = mcpjsonrpc.StringID("req-1")
+			rpcCtx.ProtocolVersion = mcpversions.Version20260728
+		}
+
+		return C(CodeInvalid)
+	})
+
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/mcp/test", nil))
+
+	require.Equal(t, http.StatusBadRequest, rec.Code)
+}
+
+// TestMCPErrHandle_LegacyRevisionKeepsGramStatusesForMandatedCodes is the
+// guard on all of the above: none of those statuses may move for the traffic
+// in service today.
+func TestMCPErrHandle_LegacyRevisionKeepsGramStatusesForMandatedCodes(t *testing.T) {
+	t.Parallel()
+	logger, _ := captureLogger()
+
+	for _, tt := range []struct {
+		code Code
+		want int
+	}{
+		{code: CodeNotFound, want: http.StatusNotFound},
+		{code: CodeNotImplemented, want: http.StatusNotImplemented},
+		{code: CodeInvalid, want: http.StatusUnprocessableEntity},
+	} {
+		handler := MCPErrHandle(logger, func(w http.ResponseWriter, r *http.Request) error {
+			if rpcCtx, ok := contextvalues.GetRPCContext(r.Context()); ok {
+				rpcCtx.ID = mcpjsonrpc.StringID("req-1")
+				rpcCtx.ProtocolVersion = mcpversions.Version20251125
+			}
+
+			return C(tt.code)
+		})
+
+		rec := httptest.NewRecorder()
+		handler.ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/mcp/test", nil))
+
+		require.Equal(t, tt.want, rec.Code, "code %s", tt.code)
 	}
 }

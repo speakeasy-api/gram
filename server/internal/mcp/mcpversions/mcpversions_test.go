@@ -1,6 +1,7 @@
 package mcpversions_test
 
 import (
+	"regexp"
 	"slices"
 	"strings"
 	"testing"
@@ -15,6 +16,23 @@ func TestAllIsChronologicallyOrdered(t *testing.T) {
 
 	versions := mcpversions.All()
 	require.True(t, slices.IsSorted(versions), "revision identifiers are YYYY-MM-DD, so chronological order is lexical order")
+}
+
+// TestAllAreDatedRevisions makes the assumption TestAllIsChronologicallyOrdered
+// rests on explicit: that lexical order is chronological order here. It holds
+// only while every recognized revision is an ISO date. The specification also
+// names an undated `draft` revision, and recognizing one would break that
+// equivalence, so this fails rather than letting the ordering check quietly
+// stop meaning what it says.
+func TestAllAreDatedRevisions(t *testing.T) {
+	t.Parallel()
+
+	dated := regexp.MustCompile(`^\d{4}-\d{2}-\d{2}$`)
+	for _, v := range mcpversions.All() {
+		require.Regexpf(t, dated, v,
+			"revision %q is not a date, so lexical ordering no longer implies chronological ordering; "+
+				"place it in All by release order and confirm the comparisons in this package still hold", v)
+	}
 }
 
 func TestAllHasNoDuplicates(t *testing.T) {
@@ -317,7 +335,10 @@ func TestIsModern_NoSupportedSetResolvesModernYet(t *testing.T) {
 		mcpversions.SupportedMetaServer(),
 	} {
 		for _, v := range supported {
-			require.False(t, mcpversions.IsModern(v), "revision %s", v)
+			require.Falsef(t, mcpversions.IsModern(v),
+				"revision %s is now served, so the version-conditional wire behavior it gates is reachable for the first time. "+
+					"That behavior currently has unit coverage only: give the modern error codes and HTTP statuses end-to-end "+
+					"coverage on every surface, then delete this test.", v)
 		}
 	}
 }
