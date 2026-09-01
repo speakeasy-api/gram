@@ -46,6 +46,7 @@ import type { TimeSeriesBucket } from "@gram/client/models/components/timeseries
 import type { UserAccount } from "@gram/client/models/components/useraccount.js";
 import type { UserSummary } from "@gram/client/models/components/usersummary.js";
 import { AccountRow } from "@/components/observe/account-display";
+import { mergeUserSummaries } from "@/components/observe/mergeUserSummaries";
 import { providerLabel } from "@/components/observe/account-display-utils";
 import {
   Select,
@@ -1883,23 +1884,30 @@ async function fetchUserSummary(
   userId: string,
   externalOrgId: string,
 ): Promise<UserSummary | null> {
-  const result = await unwrapAsync(
-    telemetrySearchUsers(client, {
-      searchUsersPayload: {
-        filter: {
-          from,
-          to,
-          userIds: [userId],
-          externalOrgId: externalOrgId || undefined,
+  const users: UserSummary[] = [];
+  let cursor: string | undefined;
+  do {
+    const result = await unwrapAsync(
+      telemetrySearchUsers(client, {
+        searchUsersPayload: {
+          cursor,
+          filter: {
+            from,
+            to,
+            userIds: [userId],
+            externalOrgId: externalOrgId || undefined,
+          },
+          limit: 50,
+          sort: "desc",
+          userType: "internal",
         },
-        limit: 1,
-        sort: "desc",
-        userType: "internal",
-      },
-    }),
-  );
+      }),
+    );
+    users.push(...result.users);
+    cursor = result.nextCursor;
+  } while (cursor);
 
-  return result.users[0] ?? null;
+  return mergeUserSummaries(users);
 }
 
 async function fetchUserMetrics(

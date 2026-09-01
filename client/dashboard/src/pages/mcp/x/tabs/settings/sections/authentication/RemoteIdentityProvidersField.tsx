@@ -14,12 +14,19 @@ import { SettingsInlineEmptyState } from "../../SettingsInlineEmptyState";
 export function RemoteIdentityProvidersField({
   associatedIssuers,
   isLoading,
+  allowAdditionalProviders,
+  projectId,
   onAdd,
   onEdit,
   onDelete,
 }: {
   associatedIssuers: RemoteSessionIssuer[];
   isLoading: boolean;
+  /** Gateways bind a provider per member; remote/tunneled servers have one
+   * upstream, so only their empty state may offer an attach. */
+  allowAdditionalProviders: boolean;
+  /** Scopes the mcp:write gates to the target's own project. */
+  projectId: string;
   onAdd: () => void;
   onEdit: (issuer: RemoteSessionIssuer) => void;
   onDelete: (issuer: RemoteSessionIssuer) => void;
@@ -37,7 +44,11 @@ export function RemoteIdentityProvidersField({
         title="No remote identity providers"
         description="Attach a provider if the upstream service requires users to sign in to access their data."
         action={
-          <RequireScope scope="mcp:write" level="component">
+          <RequireScope
+            scope="mcp:write"
+            resourceId={projectId}
+            level="component"
+          >
             <Button variant="secondary" onClick={onAdd}>
               <Button.LeftIcon>
                 <Plus className="size-4" />
@@ -55,10 +66,25 @@ export function RemoteIdentityProvidersField({
           <RemoteIdentityProviderRow
             key={issuer.id}
             issuer={issuer}
+            projectId={projectId}
             onEdit={() => onEdit(issuer)}
             onDelete={() => onDelete(issuer)}
           />
         ))}
+        {allowAdditionalProviders && (
+          <RequireScope
+            scope="mcp:write"
+            resourceId={projectId}
+            level="component"
+          >
+            <Button variant="secondary" onClick={onAdd}>
+              <Button.LeftIcon>
+                <Plus className="size-4" />
+              </Button.LeftIcon>
+              <Button.Text>Attach Provider</Button.Text>
+            </Button>
+          </RequireScope>
+        )}
       </div>
     );
   }
@@ -79,8 +105,10 @@ function RemoteIdentityProviderRow({
   issuer,
   onEdit,
   onDelete,
+  projectId,
 }: {
   issuer: RemoteSessionIssuer;
+  projectId: string;
   onEdit: () => void;
   onDelete: () => void;
 }) {
@@ -114,7 +142,11 @@ function RemoteIdentityProviderRow({
             {issuer.issuer}
           </Text>
         </div>
-        <RequireScope scope="mcp:write" level="component">
+        <RequireScope
+          scope="mcp:write"
+          resourceId={projectId}
+          level="component"
+        >
           <div className="flex shrink-0 items-center gap-2">
             {canEdit && (
               <Button size="md" variant="secondary" onClick={onEdit}>

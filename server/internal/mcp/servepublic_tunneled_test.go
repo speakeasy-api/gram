@@ -4,8 +4,10 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"net"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -49,6 +51,9 @@ type fakeTunnelGateway struct {
 
 	mu       sync.Mutex
 	forwards []http.Header
+	// forwardBodies holds each forward's request body, index-aligned with
+	// forwards, so assertions can target a specific exchange.
+	forwardBodies []string
 }
 
 func (g *fakeTunnelGateway) lastForward() http.Header {
@@ -64,9 +69,26 @@ func (g *fakeTunnelGateway) forwardCount() int {
 	return len(g.forwards)
 }
 
+// forwardFor returns the headers of the most recent forward whose body
+// contains substr, failing the test when none matched.
+func (g *fakeTunnelGateway) forwardFor(substr string) http.Header {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	for i, v := range slices.Backward(g.forwardBodies) {
+		if strings.Contains(v, substr) {
+			return g.forwards[i]
+		}
+	}
+	require.Failf(g.t, "no forward matched", "no forwarded request body contains %q", substr)
+	return nil
+}
+
 func (g *fakeTunnelGateway) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	buf := &bytes.Buffer{}
+	_, _ = buf.ReadFrom(r.Body)
 	g.mu.Lock()
 	g.forwards = append(g.forwards, r.Header.Clone())
+	g.forwardBodies = append(g.forwardBodies, buf.String())
 	g.mu.Unlock()
 
 	exact := strings.TrimSpace(r.Header.Get(wire.HeaderTunnelAgentSession))
@@ -93,9 +115,6 @@ func (g *fakeTunnelGateway) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 		return
 	case http.MethodPost:
-		body := make([]byte, 0, 1024)
-		buf := bytes.NewBuffer(body)
-		_, _ = buf.ReadFrom(r.Body)
 		if strings.Contains(buf.String(), `"initialize"`) {
 			if g.backendSessionID != "" {
 				w.Header().Set("Mcp-Session-Id", g.backendSessionID)
@@ -108,6 +127,11 @@ func (g *fakeTunnelGateway) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "unknown session", http.StatusNotFound)
 			return
 		}
+		if strings.Contains(buf.String(), `"tools/call"`) {
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = fmt.Fprint(w, `{"jsonrpc":"2.0","id":"gram-gateway-tools/call","result":{"content":[{"type":"text","text":"pong through the tunnel"}],"isError":false}}`)
+			return
+		}
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = fmt.Fprint(w, `{"jsonrpc":"2.0","id":2,"result":{"tools":[]}}`)
 		return
@@ -117,9 +141,10 @@ func (g *fakeTunnelGateway) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 type publicTunnelFixture struct {
-	endpointSlug string
-	tunnelID     uuid.UUID
-	gateway      *fakeTunnelGateway
+	endpointSlug  string
+	tunnelID      uuid.UUID
+	gateway       *fakeTunnelGateway
+	gatewayServer *httptest.Server
 }
 
 func newPublicTunnelFixture(t *testing.T, ctx context.Context, ti *testInstance, gateway *fakeTunnelGateway, allowPublic bool) publicTunnelFixture {
@@ -132,17 +157,18 @@ func newPublicTunnelFixture(t *testing.T, ctx context.Context, ti *testInstance,
 	tunneledID, err := uuid.NewV7()
 	require.NoError(t, err)
 	tunneledServer, err := tunneledmcprepo.New(ti.conn).CreateServer(ctx, tunneledmcprepo.CreateServerParams{
-		ID:        tunneledID,
-		ProjectID: *authCtx.ProjectID,
-		Name:      "public-tunnel-" + uuid.NewString()[:8],
-		KeyHash:   uuid.NewString(),
-		KeyPrefix: "gram_tunnel_test",
+		ID:                 tunneledID,
+		ProjectID:          *authCtx.ProjectID,
+		Name:               "public-tunnel-" + uuid.NewString()[:8],
+		KeyHash:            uuid.NewString(),
+		KeyPrefix:          "gram_tunnel_test",
+		ResourceIdentifier: pgtype.Text{String: "", Valid: false},
 	})
 	require.NoError(t, err)
 
 	if allowPublic {
 		_, err = tunneledmcprepo.New(ti.conn).UpdateServer(ctx, tunneledmcprepo.UpdateServerParams{
-			Name:        tunneledServer.Name,
+			Name:        conv.ToPGText(tunneledServer.Name),
 			AllowPublic: pgtype.Bool{Bool: true, Valid: true},
 			ID:          tunneledServer.ID,
 			ProjectID:   *authCtx.ProjectID,
@@ -181,9 +207,10 @@ func newPublicTunnelFixture(t *testing.T, ctx context.Context, ti *testInstance,
 	require.NoError(t, ti.tunnelRoutes.Publish(ctx, tunneledServer.ID.String(), gatewayServer.URL, time.Hour))
 
 	return publicTunnelFixture{
-		endpointSlug: endpointSlug,
-		tunnelID:     tunneledServer.ID,
-		gateway:      gateway,
+		endpointSlug:  endpointSlug,
+		tunnelID:      tunneledServer.ID,
+		gateway:       gateway,
+		gatewayServer: gatewayServer,
 	}
 }
 
@@ -330,6 +357,38 @@ func TestServePublic_Tunneled_DeadAgentSessionTranslatesTo404(t *testing.T) {
 	require.ErrorAs(t, err, &oopsErr)
 	require.Equal(t, oops.CodeNotFound, oopsErr.Code)
 	require.Equal(t, before, gateway.forwardCount(), "dropped session must not be re-forwarded")
+}
+
+func TestServePublic_Tunneled_DeadGatewayDialDropsSession(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPService(t)
+	gateway := &fakeTunnelGateway{t: t, agentSessionID: "agent-1", backendSessionID: "backend-secret-session", legacy: false, dead: false, challenge: ""}
+	fixture := newPublicTunnelFixture(t, ctx, ti, gateway, true)
+
+	sid := initializeTunneledPublicSession(t, ti, fixture)
+	addr := fixture.gatewayServer.Listener.Addr().String()
+	fixture.gatewayServer.Close()
+
+	_, err := serveTunneledPublicRequest(t, ti, fixture.endpointSlug, http.MethodPost, makeToolsListBody(), sid)
+	require.Error(t, err)
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeNotFound, oopsErr.Code)
+
+	listener, err := net.Listen("tcp", addr)
+	require.NoError(t, err)
+	replacementGateway := &fakeTunnelGateway{t: t, agentSessionID: "agent-1", backendSessionID: "backend-secret-session", legacy: false, dead: false, challenge: ""}
+	replacementServer := httptest.NewUnstartedServer(replacementGateway)
+	replacementServer.Listener = listener
+	replacementServer.Start()
+	t.Cleanup(replacementServer.Close)
+
+	_, err = serveTunneledPublicRequest(t, ti, fixture.endpointSlug, http.MethodPost, makeToolsListBody(), sid)
+	require.Error(t, err)
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeNotFound, oopsErr.Code)
+	require.Zero(t, replacementGateway.forwardCount(), "dropped session must not reach a replacement gateway")
 }
 
 func TestServePublic_Tunneled_DeleteTerminatesSession(t *testing.T) {
@@ -485,15 +544,16 @@ func TestServePublic_Tunneled_PrivateVisibilityUnaffected(t *testing.T) {
 	tunneledID, err := uuid.NewV7()
 	require.NoError(t, err)
 	tunneledServer, err := tunneledmcprepo.New(ti.conn).CreateServer(ctx, tunneledmcprepo.CreateServerParams{
-		ID:        tunneledID,
-		ProjectID: *authCtx.ProjectID,
-		Name:      "private-tunnel-" + uuid.NewString()[:8],
-		KeyHash:   uuid.NewString(),
-		KeyPrefix: "gram_tunnel_test",
+		ID:                 tunneledID,
+		ProjectID:          *authCtx.ProjectID,
+		Name:               "private-tunnel-" + uuid.NewString()[:8],
+		KeyHash:            uuid.NewString(),
+		KeyPrefix:          "gram_tunnel_test",
+		ResourceIdentifier: pgtype.Text{String: "", Valid: false},
 	})
 	require.NoError(t, err)
 	_, err = tunneledmcprepo.New(ti.conn).UpdateServer(ctx, tunneledmcprepo.UpdateServerParams{
-		Name:        tunneledServer.Name,
+		Name:        conv.ToPGText(tunneledServer.Name),
 		AllowPublic: pgtype.Bool{Bool: true, Valid: true},
 		ID:          tunneledServer.ID,
 		ProjectID:   *authCtx.ProjectID,

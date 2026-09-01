@@ -36,6 +36,7 @@ export const AUDIT_ACTIONS = [
   "chat_session:access",
   "chat_session:handoff_export",
   "chat_session:move",
+  "chat_session:recall",
   "custom_domains:create",
   "custom_domains:delete",
   "custom_domains:update",
@@ -63,6 +64,10 @@ export const AUDIT_ACTIONS = [
   "json_web_key_set:create",
   "json_web_key_set:delete",
   "json_web_key_set:update",
+  "killswitch:activate",
+  "killswitch:change",
+  "killswitch:deactivate",
+  "killswitch:expire",
   "litellm_instance:create",
   "litellm_instance:revoke",
   "litellm_instance:rotate_key",
@@ -79,11 +84,6 @@ export const AUDIT_ACTIONS = [
   "mcp_approval_request:evidence_changed",
   "mcp_approval_request:research_start",
   "mcp_approval_request:supersede",
-  "mcp_collection:attach_server",
-  "mcp_collection:create",
-  "mcp_collection:delete",
-  "mcp_collection:detach_server",
-  "mcp_collection:update",
   "mcp_metadata:update",
   "meta-mcp:add_member",
   "meta-mcp:create",
@@ -101,10 +101,13 @@ export const AUDIT_ACTIONS = [
   "organization:enterprise_trial_demoted",
   "organization:enterprise_trial_extended",
   "organization:enterprise_trial_rearmed",
+  "organization:enterprise_trial_converted",
   "organization:hooks_fail_open_disabled",
   "organization:hooks_fail_open_enabled",
   "organization:payg_activated",
   "organization:payg_deactivated",
+  "organization:product_feature_disabled",
+  "organization:product_feature_enabled",
   "organization:webhooks_disabled",
   "organization:webhooks_enabled",
   "organization_invitation:create",
@@ -327,6 +330,8 @@ export function staticActionPhrase(action: AuditAction): string {
       return "exported chat session handoff";
     case "chat_session:move":
       return "moved chat session";
+    case "chat_session:recall":
+      return "recalled chat session";
 
     case "custom_domains:create":
       return "added custom domain";
@@ -357,6 +362,15 @@ export function staticActionPhrase(action: AuditAction): string {
       return "updated environment";
     case "environment:delete":
       return "deleted environment";
+
+    case "killswitch:activate":
+      return "activated killswitch";
+    case "killswitch:change":
+      return "changed killswitch";
+    case "killswitch:deactivate":
+      return "deactivated killswitch";
+    case "killswitch:expire":
+      return "recorded killswitch expiry";
 
     case "litellm_instance:create":
       return "created LiteLLM instance";
@@ -407,17 +421,6 @@ export function staticActionPhrase(action: AuditAction): string {
     case "mcp_approval_request:supersede":
       return "superseded the access decision for";
 
-    case "mcp_collection:create":
-      return "created collection";
-    case "mcp_collection:update":
-      return "updated collection";
-    case "mcp_collection:delete":
-      return "deleted collection";
-    case "mcp_collection:attach_server":
-      return "added a server to collection";
-    case "mcp_collection:detach_server":
-      return "removed a server from collection";
-
     case "mcp_metadata:update":
       return "updated MCP metadata for";
 
@@ -451,10 +454,16 @@ export function staticActionPhrase(action: AuditAction): string {
       return "extended enterprise trial";
     case "organization:enterprise_trial_rearmed":
       return "restarted enterprise trial";
+    case "organization:enterprise_trial_converted":
+      return "converted enterprise trial for";
     case "organization:payg_activated":
       return "activated pay-as-you-go billing for";
     case "organization:payg_deactivated":
       return "deactivated pay-as-you-go billing for";
+    case "organization:product_feature_enabled":
+      return "enabled a product feature for";
+    case "organization:product_feature_disabled":
+      return "disabled a product feature for";
 
     case "organization_invitation:create":
       return "invited";

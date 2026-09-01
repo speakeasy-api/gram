@@ -22,8 +22,14 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
+	"go.opentelemetry.io/otel/attribute"
+	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
+	"go.opentelemetry.io/otel/sdk/metric/metricdata"
 
+	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	toolsets_repo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
@@ -48,12 +54,12 @@ func setIssuerAdmissionMode(t *testing.T, ctx context.Context, ti *testInstance,
 	require.NoError(t, err)
 }
 
-// seedFreshIssuerToolset seeds a brand-new public issuer-gated toolset whose
-// admission mode has NEVER been set, i.e. the column is NULL. There is no
-// way back to NULL through the update path once a mode is written — that is
-// the intended one-way behavior — so tests covering the never-configured
-// default must start from a fresh issuer rather than clearing an existing
-// one.
+// seedFreshIssuerToolset seeds a brand-new public issuer-gated toolset and
+// pins what a create writes: the admission mode is stored as 'open', not
+// left NULL, so the resting policy is a real value on the row rather than an
+// absence the application has to interpret. Tests covering an unconfigured
+// issuer start here; clearIssuerAdmissionMode covers the older rows that
+// predate the create default.
 func seedFreshIssuerToolset(t *testing.T, ctx context.Context, ti *testInstance) toolsets_repo.Toolset {
 	t.Helper()
 
@@ -75,9 +81,49 @@ func seedFreshIssuerToolset(t *testing.T, ctx context.Context, ti *testInstance)
 		ProjectID: toolset.ProjectID,
 	})
 	require.NoError(t, err)
-	require.False(t, issuer.ClientIDMetadataAdmissionMode.Valid, "a freshly seeded issuer must have no stored admission mode")
+	require.True(t, issuer.ClientIDMetadataAdmissionMode.Valid, "a created issuer must carry an explicit admission mode")
+	require.Equal(t, string(admission.ModeOpen), issuer.ClientIDMetadataAdmissionMode.String)
 
 	return toolset
+}
+
+// clearIssuerAdmissionMode writes the column back to NULL, the state of
+// every row created before the create query wrote a mode explicitly. It has
+// no management API equivalent on purpose: this reproduces stored history,
+// not something an operator can do.
+func clearIssuerAdmissionMode(t *testing.T, ctx context.Context, ti *testInstance, toolset toolsets_repo.Toolset) {
+	t.Helper()
+
+	err := testrepo.New(ti.conn).SetUserSessionIssuerCIMDAdmissionMode(ctx, testrepo.SetUserSessionIssuerCIMDAdmissionModeParams{
+		ClientIDMetadataAdmissionMode: pgtype.Text{String: "", Valid: false},
+		ID:                            toolset.UserSessionIssuerID.UUID,
+		ProjectID:                     toolset.ProjectID,
+	})
+	require.NoError(t, err)
+}
+
+// admissionDecisionPoints reads the cimd.admission.decisions counter back as
+// an attribute-set keyed map.
+func admissionDecisionPoints(t *testing.T, reader *sdkmetric.ManualReader) map[attribute.Set]int64 {
+	t.Helper()
+
+	var rm metricdata.ResourceMetrics
+	require.NoError(t, reader.Collect(t.Context(), &rm))
+
+	points := map[attribute.Set]int64{}
+	for _, scope := range rm.ScopeMetrics {
+		for _, m := range scope.Metrics {
+			if m.Name != "cimd.admission.decisions" {
+				continue
+			}
+			sum, ok := m.Data.(metricdata.Sum[int64])
+			require.True(t, ok, "the admission instrument must be an int64 counter")
+			for _, dp := range sum.DataPoints {
+				points[dp.Attributes] = dp.Value
+			}
+		}
+	}
+	return points
 }
 
 // allowCustomCimdURL adds an issuer-specific allowed CIMD document URL,
@@ -85,12 +131,16 @@ func seedFreshIssuerToolset(t *testing.T, ctx context.Context, ti *testInstance)
 func allowCustomCimdURL(t *testing.T, ctx context.Context, ti *testInstance, toolset toolsets_repo.Toolset, clientID string) {
 	t.Helper()
 
-	_, err := usersessions_repo.New(ti.conn).CreateUserSessionIssuerCimdClient(ctx, usersessions_repo.CreateUserSessionIssuerCimdClientParams{
+	row, err := usersessions_repo.New(ti.conn).CreateUserSessionIssuerCimdClient(ctx, usersessions_repo.CreateUserSessionIssuerCimdClientParams{
 		ProjectID:           toolset.ProjectID,
 		UserSessionIssuerID: toolset.UserSessionIssuerID.UUID,
 		ClientIDMetadataUri: clientID,
 	})
 	require.NoError(t, err)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.Equal(t, authCtx.ActiveOrganizationID, row.OrganizationID.String, "the grant must inherit its issuer's organization")
 }
 
 // revokeCustomCimdURL soft-deletes an issuer's custom CIMD URL, the
@@ -128,33 +178,121 @@ func requireAuthorizeErrorDescription(t *testing.T, w *httptest.ResponseRecorder
 	require.Contains(t, body["error_description"], wantSubstring)
 }
 
-// TestCIMDAdmission_DefaultReportsWithoutEnforcing pins the shipped
-// default. A fresh issuer has never had a mode set, which resolves to
-// reporting: it evaluates exactly what presets would decide, records it,
-// and admits anyway.
+// TestCIMDAdmission_DefaultAdmitsWithoutEnforcing pins the resting policy.
+// An issuer nobody configured admits every spec-valid client, because a
+// presets denial is unrecoverable for the end user and enforcement is
+// something an operator chooses rather than something a default imposes.
 //
-// This is what lets admission control ship without changing anyone's
-// behaviour. The URL below is not in the catalog, so presets would refuse
-// it — and the request still succeeds, right through to the document fetch.
-func TestCIMDAdmission_DefaultReportsWithoutEnforcing(t *testing.T) {
+// The URL below is not in the catalog, so presets would refuse it — and the
+// request still succeeds, right through to the document fetch.
+func TestCIMDAdmission_DefaultAdmitsWithoutEnforcing(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti, ds, _ := newTestCIMDService(t)
-	// A separate, never-configured issuer: the harness toolset is put in
-	// open mode, and there is no path back to NULL once a mode is written.
 	fresh := seedFreshIssuerToolset(t, ctx, ti)
 
 	verifier := pkceVerifier(t)
 	w := doCIMDAuthorize(t, ti, fresh.McpSlug.String, ds.clientID, "http://127.0.0.1:51423/callback", pkceChallenge(verifier))
 
-	require.Equal(t, http.StatusFound, w.Code, "the default must not enforce yet")
-	require.Positive(t, ds.requests.Load(), "a reported client_id is still admitted, so the document is fetched")
+	require.Equal(t, http.StatusFound, w.Code, "the default must refuse nobody")
+	require.Positive(t, ds.requests.Load(), "an admitted client_id reaches the document fetch")
+}
+
+// TestCIMDAdmission_UnsetModeAdmits covers the rows that predate the create
+// default. They stay NULL until the backfill reaches them, and they must
+// behave exactly like the 'open' the backfill will write, or the deploy and
+// the backfill would be two different changes rather than one.
+func TestCIMDAdmission_UnsetModeAdmits(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti, ds, _ := newTestCIMDService(t)
+	legacy := seedFreshIssuerToolset(t, ctx, ti)
+	clearIssuerAdmissionMode(t, ctx, ti, legacy)
+
+	verifier := pkceVerifier(t)
+	w := doCIMDAuthorize(t, ti, legacy.McpSlug.String, ds.clientID, "http://127.0.0.1:51423/callback", pkceChallenge(verifier))
+
+	require.Equal(t, http.StatusFound, w.Code, "an unset mode must resolve to open, not fail closed")
+	require.Positive(t, ds.requests.Load(), "an admitted client_id reaches the document fetch")
+}
+
+// TestCIMDAdmission_OpenRecordsShadowDecision is the measurement the open
+// default rests on. Open refuses nobody, so without the shadow a catalog gap
+// would stop being discoverable the moment open became the resting state —
+// and the catalog is still learning from production traffic.
+//
+// The recorded outcome is admit-shaped because the request WAS admitted. It
+// still names what presets would have said, which is the signal an operator
+// acts on.
+func TestCIMDAdmission_OpenRecordsShadowDecision(t *testing.T) {
+	t.Parallel()
+
+	reader := sdkmetric.NewManualReader()
+	_, ti, ds, toolset := newTestCIMDServiceWithMeterProvider(t, sdkmetric.NewMeterProvider(sdkmetric.WithReader(reader)))
+
+	verifier := pkceVerifier(t)
+	w := doCIMDAuthorize(t, ti, toolset.McpSlug.String, ds.clientID, "http://127.0.0.1:51423/callback", pkceChallenge(verifier))
+	require.Equal(t, http.StatusFound, w.Code, "open admits a client the catalog does not list")
+
+	points := admissionDecisionPoints(t, reader)
+	require.Equal(t, int64(1), points[attribute.NewSet(
+		attr.CIMDAdmissionMode(admission.ModeOpen),
+		attr.CIMDAdmissionOutcome(string(admission.AdmitOpenNotListed)),
+	)], "an admitted client no rule covers must still name the gap")
+	require.Len(t, points, 1, "one request must produce exactly one decision")
+}
+
+// TestCIMDAdmission_OpenShadowRecordsOversized: an oversized client_id is
+// never handed to the database, so the shadow reaches no verdict about
+// whether the catalog covers it. That is the shadow working, not failing, so
+// it records its own outcome rather than borrowing the one that means the
+// measurement broke — on an unauthenticated endpoint a run of these is a
+// probing campaign, and it has to be visible as one.
+func TestCIMDAdmission_OpenShadowRecordsOversized(t *testing.T) {
+	t.Parallel()
+
+	reader := sdkmetric.NewManualReader()
+	_, ti, ds, toolset := newTestCIMDServiceWithMeterProvider(t, sdkmetric.NewMeterProvider(sdkmetric.WithReader(reader)))
+
+	oversized := "https://oversized.example.test/" + strings.Repeat("a", admission.MaxClientIDLength)
+	require.Greater(t, len(oversized), admission.MaxClientIDLength)
+
+	verifier := pkceVerifier(t)
+	doCIMDAuthorize(t, ti, toolset.McpSlug.String, oversized, "http://127.0.0.1:51423/callback", pkceChallenge(verifier))
+
+	points := admissionDecisionPoints(t, reader)
+	require.Equal(t, int64(1), points[attribute.NewSet(
+		attr.CIMDAdmissionMode(admission.ModeOpen),
+		attr.CIMDAdmissionOutcome(string(admission.AdmitOpenOversized)),
+	)], "an oversized client_id must be distinguishable from a broken lookup")
+	require.Zero(t, ds.requests.Load(), "an oversized client_id must not reach a document fetch")
+}
+
+// TestCIMDAdmission_OpenShadowConsultsCustomURLs: the shadow performs the
+// same custom-URL lookup enforcement would, so "no rule anywhere covers this
+// client" keeps meaning that rather than the weaker "not in the catalog". An
+// issuer that already allowed a URL must not be reported as a catalog gap.
+func TestCIMDAdmission_OpenShadowConsultsCustomURLs(t *testing.T) {
+	t.Parallel()
+
+	reader := sdkmetric.NewManualReader()
+	ctx, ti, ds, toolset := newTestCIMDServiceWithMeterProvider(t, sdkmetric.NewMeterProvider(sdkmetric.WithReader(reader)))
+	allowCustomCimdURL(t, ctx, ti, toolset, ds.clientID)
+
+	verifier := pkceVerifier(t)
+	w := doCIMDAuthorize(t, ti, toolset.McpSlug.String, ds.clientID, "http://127.0.0.1:51423/callback", pkceChallenge(verifier))
+	require.Equal(t, http.StatusFound, w.Code)
+
+	points := admissionDecisionPoints(t, reader)
+	require.Equal(t, int64(1), points[attribute.NewSet(
+		attr.CIMDAdmissionMode(admission.ModeOpen),
+		attr.CIMDAdmissionOutcome(string(admission.AdmitCustom)),
+	)], "a URL the issuer already allows is not a catalog gap")
 }
 
 // TestCIMDAdmission_PresetsDeniesUnknownURLWithoutFetching is the core
 // guarantee, exercised on an issuer that has explicitly opted in to
-// enforcement (and on the default once ResolveMode's NULL branch moves to
-// presets).
+// enforcement — the only way an issuer enforces.
 //
 // The no-request assertion is what makes this admission control rather than
 // post-fetch filtering.
@@ -171,43 +309,43 @@ func TestCIMDAdmission_PresetsDeniesUnknownURLWithoutFetching(t *testing.T) {
 	require.Zero(t, ds.requests.Load(), "a denied client_id must not cost an outbound document fetch")
 }
 
-// TestCIMDAdmission_ReportingMatchesPresetsExceptForEnforcement holds the
-// configuration constant and varies ONLY the mode, which is the whole claim:
-// reporting and presets reach the same decision and differ only in whether
-// it is applied.
+// TestCIMDAdmission_DefaultAdmitsWhatPresetsRefuses holds the configuration
+// constant and varies ONLY the mode, which is the whole claim: the default
+// and presets see the same client and differ entirely in what they do about
+// it.
 //
 // An earlier version gave the custom URL to one issuer and not the other, so
 // it compared two different configurations and demonstrated nothing about
 // mode equivalence. Decision-level equivalence is pinned exhaustively in
-// admission.TestEvaluate_ReportingDecidesExactlyAsPresets; this covers the
+// admission.TestEvaluateShadow_DecidesExactlyAsPresets; this covers the
 // wiring end to end.
-func TestCIMDAdmission_ReportingMatchesPresetsExceptForEnforcement(t *testing.T) {
+func TestCIMDAdmission_DefaultAdmitsWhatPresetsRefuses(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti, ds, toolset := newTestCIMDService(t)
 
 	// Two issuers, neither listing the URL, differing only in mode.
-	reporting := seedFreshIssuerToolset(t, ctx, ti)
+	unconfigured := seedFreshIssuerToolset(t, ctx, ti)
 	setIssuerAdmissionMode(t, ctx, ti, toolset, admission.ModePresets)
 
 	verifier := pkceVerifier(t)
 
-	w := doCIMDAuthorize(t, ti, reporting.McpSlug.String, ds.clientID, "http://127.0.0.1:51423/callback", pkceChallenge(verifier))
-	require.Equal(t, http.StatusFound, w.Code, "reporting must admit what presets would refuse")
+	w := doCIMDAuthorize(t, ti, unconfigured.McpSlug.String, ds.clientID, "http://127.0.0.1:51423/callback", pkceChallenge(verifier))
+	require.Equal(t, http.StatusFound, w.Code, "the default must admit what presets would refuse")
 	require.Positive(t, ds.requests.Load(), "an admitted client_id reaches the document fetch")
 
 	w = doCIMDAuthorize(t, ti, toolset.McpSlug.String, ds.clientID, "http://127.0.0.1:51423/callback", pkceChallenge(verifier))
 	requireAuthorizeOAuthError(t, w, http.StatusUnauthorized, "invalid_client")
 
-	// The agreement runs the other way too: a URL the issuer does list is
-	// admitted under both, so reporting is not simply admitting blindly.
+	// A URL the issuer does list is admitted under both, so the difference
+	// above is the mode and not the configuration.
 	allowCustomCimdURL(t, ctx, ti, toolset, ds.clientID)
 	w = doCIMDAuthorize(t, ti, toolset.McpSlug.String, ds.clientID, "http://127.0.0.1:51423/callback", pkceChallenge(verifier))
 	require.Equal(t, http.StatusFound, w.Code, "presets admits a listed URL")
 
-	allowCustomCimdURL(t, ctx, ti, reporting, ds.clientID)
-	w = doCIMDAuthorize(t, ti, reporting.McpSlug.String, ds.clientID, "http://127.0.0.1:51423/callback", pkceChallenge(verifier))
-	require.Equal(t, http.StatusFound, w.Code, "reporting admits a listed URL")
+	allowCustomCimdURL(t, ctx, ti, unconfigured, ds.clientID)
+	w = doCIMDAuthorize(t, ti, unconfigured.McpSlug.String, ds.clientID, "http://127.0.0.1:51423/callback", pkceChallenge(verifier))
+	require.Equal(t, http.StatusFound, w.Code, "the default admits a listed URL")
 }
 
 // TestCIMDAdmission_PresetsDenialIsActionable: the description is the end
@@ -345,8 +483,8 @@ func TestCIMDAdmission_PresetsAdvertisesSupport(t *testing.T) {
 	require.Equal(t, true, metadata["client_id_metadata_document_supported"])
 }
 
-// TestCIMDAdmission_DefaultAdvertisesSupport: an issuer that never had a
-// mode set resolves to presets, which advertises.
+// TestCIMDAdmission_DefaultAdvertisesSupport: an issuer nobody configured
+// resolves to open, and every mode but disabled advertises.
 func TestCIMDAdmission_DefaultAdvertisesSupport(t *testing.T) {
 	t.Parallel()
 

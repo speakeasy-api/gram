@@ -15,17 +15,22 @@ import {
   useSearchParams,
 } from "react-router";
 import { AppLayout, LoginCheck, OrgLayout } from "./components/app-layout.tsx";
+import { AppRouteContentErrorBoundary } from "./components/app-route-content-error-boundary.tsx";
 import { ModeSwitchProvider } from "./components/mode-switch-stage.tsx";
 import { CommandPalette } from "./components/command-palette";
+import { GuideEntryRedirect } from "./components/project-guide/GuideEntryRedirect";
 import {
   getRecentLabelOverride,
   pageLabel,
   recordVisit,
   RECENTS_LABEL_OVERRIDE_EVENT,
+  removeVisitsMatching,
+  shouldRemoveRestrictedRecents,
 } from "./components/command-palette/recentlyVisited";
 import { useIsPlatformAdmin, useUser } from "./contexts/Auth";
 import { useProjectNavRoutes } from "./hooks/useProjectNavRoutes";
 import { useRBAC } from "./hooks/useRBAC";
+import { useKillswitchAccess } from "./hooks/useKillswitchAccess";
 import { AuthProvider, ProjectProvider } from "./contexts/AuthProvider.tsx";
 import { useCommandPalette } from "./contexts/CommandPalette";
 import type { CommandAction } from "./contexts/CommandPalette";
@@ -63,20 +68,6 @@ export default function App(): JSX.Element {
     if (root.classList.contains(theme)) return;
     root.classList.add(theme);
     root.classList.remove(theme === "dark" ? "light" : "dark");
-
-    // Update favicon based on theme
-    const favicon = document.getElementById("favicon") as HTMLLinkElement;
-    const faviconAlt = document.getElementById(
-      "favicon-alt",
-    ) as HTMLLinkElement;
-
-    if (favicon) {
-      favicon.href = theme === "dark" ? "/favicon-dark.png" : "/favicon.png";
-    }
-
-    if (faviconAlt) {
-      faviconAlt.href = theme === "dark" ? "/favicon-dark.ico" : "/favicon.ico";
-    }
 
     localStorage.setItem(PREFERRED_THEME_STORAGE_KEY, theme);
 
@@ -161,6 +152,7 @@ const RouteProvider = () => {
   const location = useLocation();
   const projectNavRoutes = useProjectNavRoutes();
   const { hasAnyScope } = useRBAC();
+  const killswitchAccess = useKillswitchAccess();
   // RouteProvider is inside AuthProvider, so reuse the already-fetched session
   // instead of issuing another auth.info request.
   const recentsUserId = useUser().id || undefined;
@@ -201,6 +193,33 @@ const RouteProvider = () => {
     return () => window.removeEventListener("keydown", onKey);
   }, [isPlatformAdmin, goToPlatformAdmin, location, navigate]);
 
+  useEffect(() => {
+    if (
+      !shouldRemoveRestrictedRecents({
+        canAccess: killswitchAccess.canAccess,
+        isLoading: killswitchAccess.isLoading,
+      }) ||
+      !recentsUserId
+    )
+      return;
+    const killswitchHref = orgRoutes.killswitch.href();
+    removeVisitsMatching(
+      recentsUserId,
+      orgSlug,
+      projectSlug,
+      (entry) =>
+        entry.href === killswitchHref ||
+        entry.href.startsWith(`${killswitchHref}/`),
+    );
+  }, [
+    killswitchAccess.canAccess,
+    killswitchAccess.isLoading,
+    recentsUserId,
+    orgRoutes.killswitch,
+    orgSlug,
+    projectSlug,
+  ]);
+
   // Record the visited page for the command palette's "Recently Visited"
   // section. Stored client-side (localStorage), scoped per workspace.
   // matchesCurrent uses exact segment counts, so the active top-level route is
@@ -213,6 +232,7 @@ const RouteProvider = () => {
     // recentsUserId is a dependency, so the effect re-runs (and records the
     // current page) as soon as the session loads.
     if (!recentsUserId) return;
+    if (orgRoutes.killswitch.active && !killswitchAccess.canAccess) return;
     const active =
       Object.values(routes).find((r) => r.active && !r.external) ??
       Object.values(orgRoutes).find((r) => r.active && !r.external);
@@ -256,6 +276,7 @@ const RouteProvider = () => {
     recentsUserId,
     orgSlug,
     projectSlug,
+    killswitchAccess.canAccess,
   ]);
 
   // Register command palette navigation actions. Project "Pages" mirror the
@@ -285,7 +306,9 @@ const RouteProvider = () => {
     const showPlatformAdmin = import.meta.env.DEV || isPlatformAdmin;
     const paletteOrgRoutes = Object.fromEntries(
       Object.entries(orgRoutes).filter(
-        ([, route]) => showPlatformAdmin || !route.url.startsWith("platform-"),
+        ([key, route]) =>
+          (showPlatformAdmin || !route.url.startsWith("platform-")) &&
+          (key !== "killswitch" || killswitchAccess.canAccess),
       ),
     );
     const orgActions = routesToNavActions(
@@ -306,6 +329,7 @@ const RouteProvider = () => {
     projectSlug,
     hasAnyScope,
     isPlatformAdmin,
+    killswitchAccess.canAccess,
     addActions,
     removeActions,
   ]);
@@ -363,6 +387,7 @@ const RouteProvider = () => {
           element={<SharedSkillPage />}
         />
         <Route path="/" element={<LoginCheck />}>
+          <Route path="guide" element={<GuideEntryRedirect />} />
           <Route path=":orgSlug/projects/:projectSlug">
             {routesWithSubroutes(outsideStructureRoutes)}
           </Route>
@@ -438,10 +463,27 @@ const routesWithSubroutes = (routes: AppRoute[]) => {
       <Route
         key={item.title}
         path={item.url}
-        element={item.component ? <item.component /> : null}
+        element={
+          item.component ? (
+            <AppRouteContentErrorBoundary
+              fallback={<div className="p-8 text-sm">Loading…</div>}
+            >
+              <item.component />
+            </AppRouteContentErrorBoundary>
+          ) : null
+        }
       >
         {item.indexComponent && (
-          <Route index element={<item.indexComponent />} />
+          <Route
+            index
+            element={
+              <AppRouteContentErrorBoundary
+                fallback={<div className="p-8 text-sm">Loading…</div>}
+              >
+                <item.indexComponent />
+              </AppRouteContentErrorBoundary>
+            }
+          />
         )}
         {/* Check for any children routes stored on this item */}
         {routesWithSubroutes(

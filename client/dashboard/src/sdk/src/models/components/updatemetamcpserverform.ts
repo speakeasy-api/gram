@@ -4,9 +4,24 @@
 
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
+import { ClosedEnum } from "../../types/enums.js";
 
 /**
- * Form for updating a meta MCP server. This is a full-record replace: a user_session_issuer_id omitted from the request becomes null on the stored record.
+ * The visibility of a meta MCP server. Disabled refuses traffic; private requires a user session.
+ */
+export const UpdateMetaMcpServerFormVisibility = {
+  Disabled: "disabled",
+  Private: "private",
+} as const;
+/**
+ * The visibility of a meta MCP server. Disabled refuses traffic; private requires a user session.
+ */
+export type UpdateMetaMcpServerFormVisibility = ClosedEnum<
+  typeof UpdateMetaMcpServerFormVisibility
+>;
+
+/**
+ * Form for updating a meta MCP server. Omitting user_session_issuer_id preserves the stored issuer (one is minted if the gateway has none); omitting visibility preserves the stored value.
  */
 export type UpdateMetaMcpServerForm = {
   /**
@@ -21,13 +36,23 @@ export type UpdateMetaMcpServerForm = {
    * The ID of the user session issuer used to authenticate callers. Omit for no issuer.
    */
   userSessionIssuerId?: string | undefined;
+  /**
+   * The visibility of a meta MCP server. Disabled refuses traffic; private requires a user session.
+   */
+  visibility?: UpdateMetaMcpServerFormVisibility | undefined;
 };
+
+/** @internal */
+export const UpdateMetaMcpServerFormVisibility$outboundSchema: z.ZodMiniEnum<
+  typeof UpdateMetaMcpServerFormVisibility
+> = z.enum(UpdateMetaMcpServerFormVisibility);
 
 /** @internal */
 export type UpdateMetaMcpServerForm$Outbound = {
   id: string;
   name: string;
   user_session_issuer_id?: string | undefined;
+  visibility?: string | undefined;
 };
 
 /** @internal */
@@ -39,6 +64,7 @@ export const UpdateMetaMcpServerForm$outboundSchema: z.ZodMiniType<
     id: z.string(),
     name: z.string(),
     userSessionIssuerId: z.optional(z.string()),
+    visibility: z.optional(UpdateMetaMcpServerFormVisibility$outboundSchema),
   }),
   z.transform((v) => {
     return remap$(v, {

@@ -210,10 +210,11 @@ func (s *Service) ServeImage(ctx context.Context, payload *gen.ServeImageForm) (
 	}
 
 	return &gen.ServeImageResult{
-		ContentType:              row.ContentType,
-		ContentLength:            row.ContentLength,
-		LastModified:             row.UpdatedAt.Time.Format(time.RFC1123),
-		AccessControlAllowOrigin: new("*"),
+		ContentType:               row.ContentType,
+		ContentLength:             row.ContentLength,
+		LastModified:              row.UpdatedAt.Time.Format(time.RFC1123),
+		AccessControlAllowOrigin:  new("*"),
+		CrossOriginResourcePolicy: "cross-origin",
 	}, body, nil
 }
 

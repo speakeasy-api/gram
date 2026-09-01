@@ -141,6 +141,13 @@ FROM previous
 WHERE trials.organization_id = previous.organization_id
 RETURNING previous.ends_at AS previous_ends_at, trials.ends_at;
 
+-- name: LockTrialLifecycle :one
+-- Lifecycle operations lock this row before taking OpenRouter advisory locks.
+SELECT tier, ends_at, converted_at, demoted_at
+FROM trials
+WHERE organization_id = @organization_id
+FOR UPDATE;
+
 -- name: RearmTrial :one
 -- Operator-initiated reinstatement of a demoted trial. Returns the tier the
 -- trial grants, which the handler writes back onto the organization.
@@ -148,9 +155,6 @@ RETURNING previous.ends_at AS previous_ends_at, trials.ends_at;
 -- ends_at moves to a window measured from now, not left where it is:
 -- MarkTrialDemoted only demotes an already-past ends_at, so clearing demoted_at
 -- alone leaves a row the next sweep demotes again.
---
--- converted_at IS NULL guards nothing today, because MarkTrialConverted has no
--- production caller. It is written for the conversion path that will (AGE-3218).
 UPDATE trials
 SET demoted_at = NULL,
     ends_at = clock_timestamp() + make_interval(days => @rearm_for_days::int),

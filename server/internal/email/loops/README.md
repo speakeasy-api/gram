@@ -15,14 +15,27 @@ Every application template has:
 4. Validate locally:
 
    ```bash
-   mise exec -- go run ./server/cmd/sync-loops-email-templates --validate-only
-   mise run test:server ./internal/email/... ./cmd/sync-loops-email-templates
+   ./server/internal/email/loops/sync.sh --validate-only
+   mise run test:server ./internal/email/...
    ```
 
 Validation requires the manifest variable list to match the Go `Variables()`
 contract exactly. It checks every `.lmx` file recursively for XML
 well-formedness and explicitly set Loops-supported attribute ranges, and rejects
 undeclared or accidentally unused variables in registered templates.
+
+## Reconciling Loops
+
+`sync.sh` reconciles this manifest directly through the Loops Content API. Use
+the read-only mode to verify local credentials and resolve the existing IDs:
+
+```bash
+./server/internal/email/loops/sync.sh --resolve-only --output /tmp/email-template-ids.json
+```
+
+Run a full reconciliation only with the development Loops API key. The script
+updates drafts, checks Guardian, and publishes each template while respecting
+the Content API mutation limit.
 
 ## Design system
 

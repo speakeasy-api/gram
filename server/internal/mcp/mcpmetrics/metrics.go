@@ -72,6 +72,8 @@ type Metrics struct {
 
 	mcpToolCallCounter metric.Int64Counter
 	mcpRequestDuration metric.Float64Histogram
+	identityCoverage   *IdentityCoverageCounter
+	legacyFallback     *LegacyFallbackCounter
 
 	// oauthFlow{Started,Completed,Failed,Declined}Counter instrument the
 	// user-facing OAuth flow as a unit. They decompose a flow's terminal
@@ -191,6 +193,8 @@ func NewMetrics(meter metric.Meter, logger *slog.Logger) *Metrics {
 		mcpInitializeCounter:                 mcpInitializeCounter,
 		mcpRequestRejectedCounter:            mcpRequestRejectedCounter,
 		requestCensus:                        NewRequestCounter(meter, logger),
+		identityCoverage:                     NewIdentityCoverageCounter(meter, logger),
+		legacyFallback:                       NewLegacyFallbackCounter(meter, logger),
 		oauthFlowStartedCounter:              oauthFlowStartedCounter,
 		oauthFlowCompletedCounter:            oauthFlowCompletedCounter,
 		oauthFlowFailedCounter:               oauthFlowFailedCounter,
@@ -210,6 +214,35 @@ func (m *Metrics) RecordMCPToolCall(ctx context.Context, orgID string, mcpURL st
 		attr.OrganizationID(orgID),
 	}
 	m.mcpToolCallCounter.Add(ctx, 1, metric.WithAttributes(kv...))
+}
+
+// RecordKillswitchIdentityCoverage records the bounded coverage classes for
+// one tools/call observed at a registered MCP checkpoint.
+func (m *Metrics) RecordKillswitchIdentityCoverage(ctx context.Context, surface KillswitchCoverageSurface, identity KillswitchIdentityClass, resource KillswitchResourceClass) {
+	if m == nil {
+		return
+	}
+	m.identityCoverage.Record(ctx, surface, identity, resource)
+}
+
+// RecordToolsetSlugFallback counts one request served through the legacy
+// toolsets.mcp_slug lookup after an mcp_endpoints address miss. Semantics on
+// [LegacyFallbackCounter.RecordToolsetSlugFallback].
+func (m *Metrics) RecordToolsetSlugFallback(ctx context.Context, entryPoint LegacyFallbackEntryPoint) {
+	if m == nil {
+		return
+	}
+	m.legacyFallback.RecordToolsetSlugFallback(ctx, entryPoint)
+}
+
+// RecordLegacyAudienceAccepted counts one bearer accepted via the legacy
+// toolset-URN audience. Semantics on
+// [LegacyFallbackCounter.RecordLegacyAudienceAccepted].
+func (m *Metrics) RecordLegacyAudienceAccepted(ctx context.Context, issuerID string) {
+	if m == nil {
+		return
+	}
+	m.legacyFallback.RecordLegacyAudienceAccepted(ctx, issuerID)
 }
 
 // RecordMCPInitialize counts one observed MCP handshake, dimensioned by the

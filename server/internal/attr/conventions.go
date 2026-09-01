@@ -27,6 +27,8 @@ const (
 	HTTPRequestHeaderRefererKey      = attribute.Key("http.request.header.referer")
 	HTTPRequestHeaderContentTypeKey  = attribute.Key("http.request.header.content_type")
 	HTTPRequestHeaderUserAgentKey    = attribute.Key("http.request.header.user_agent")
+	HTTPRequestHeaderOriginKey       = attribute.Key("http.request.header.origin")
+	HTTPRequestHeaderSecFetchSiteKey = attribute.Key("http.request.header.sec_fetch_site")
 	HTTPRequestMethodKey             = semconv.HTTPRequestMethodKey
 	HTTPRequestBodyKey               = attribute.Key("http.request.body")
 	HTTPResponseBodyKey              = attribute.Key("http.response.body")
@@ -68,13 +70,15 @@ const (
 	UserAttributesKey = attribute.Key("user.attributes")
 	UserGroupsKey     = attribute.Key("user.groups")
 
-	ActualKey   = attribute.Key("actual")
-	EventKey    = attribute.Key("event")
-	ExpectedKey = attribute.Key("expected")
-	NameKey     = attribute.Key("name")
-	ReasonKey   = attribute.Key("reason")
-	ValueKey    = attribute.Key("value")
+	ActualKey    = attribute.Key("actual")
+	EventKey     = attribute.Key("event")
+	ErrorTypeKey = attribute.Key("error.type")
+	ExpectedKey  = attribute.Key("expected")
+	NameKey      = attribute.Key("name")
+	ReasonKey    = attribute.Key("reason")
+	ValueKey     = attribute.Key("value")
 
+	StripeErrorCodeKey      = attribute.Key("stripe.error.code")
 	StripeWebhookEventIDKey = attribute.Key("stripe.webhook.event_id")
 
 	SpanIDKey                    = attribute.Key("span.id")
@@ -193,17 +197,24 @@ const (
 	CIMDCrossOriginRedirectOriginsKey = attribute.Key("gram.cimd.cross_origin_redirect_origins")
 
 	// CIMDAdmissionModeKey is the effective per-issuer CIMD admission policy
-	// ("disabled", "presets", "open") — the low-cardinality dimension on
+	// ("disabled", "presets", "open", and "reporting" on rows that predate
+	// the open default) — the low-cardinality dimension on
 	// cimd.admission.decisions. Operator-chosen, never attacker-influenced.
 	CIMDAdmissionModeKey = attribute.Key("gram.cimd.admission_mode")
 
 	// CIMDAdmissionOutcomeKey is the machine-readable admission decision on
 	// cimd.admission.decisions. Admissions carry the reason they were
 	// admitted rather than a bare "admitted", so the values are
-	// "admitted_open", "admitted_catalog_exact", "admitted_catalog_pattern",
-	// "admitted_custom", "denied_disabled", "denied_not_listed",
-	// "denied_oversized", and "denied_unknown_mode". Chart the admitted_*
-	// values as a group; there is no single value meaning "admitted".
+	// "admitted_open", "admitted_open_not_listed",
+	// "admitted_open_oversized", "admitted_catalog_exact",
+	// "admitted_catalog_pattern", "admitted_custom", "denied_disabled",
+	// "denied_not_listed", "denied_oversized", and "denied_unknown_mode".
+	// Chart the admitted_* values as a group; there is no single value
+	// meaning "admitted".
+	//
+	// "admitted_open_not_listed" is the catalog-gap signal on an issuer that
+	// refuses nobody: the client got in, and no rule anywhere covered it.
+	// Alert on it alongside "denied_not_listed".
 	CIMDAdmissionOutcomeKey = attribute.Key("gram.cimd.admission_outcome")
 
 	// JWKSOriginKey is the host of a remote JWK Set URL — the per-key-host
@@ -306,7 +317,20 @@ const (
 	// McpSurfaceKey is the inbound MCP serving surface: "hosting" for the
 	// third-party-facing /mcp/{slug} and /x/mcp/{slug} paths (all backends), or
 	// "platform" for the assistant-token-only /platform/mcp/{toolsetSlug} path.
-	McpSurfaceKey                 = attribute.Key("gram.mcp.surface")
+	McpSurfaceKey = attribute.Key("gram.mcp.surface")
+	// McpKillswitchSurfaceKey is the kill-switch enforcement surface a covered
+	// MCP tools/call reached: "hosted" or "private_proxy".
+	McpKillswitchSurfaceKey = attribute.Key("gram.mcp.killswitch.surface")
+	// McpKillswitchIdentityClassKey is the bounded kill-switch identity
+	// coverage class of a covered MCP tools/call. Never a user identifier.
+	McpKillswitchIdentityClassKey = attribute.Key("gram.mcp.killswitch.identity_class")
+	// McpKillswitchResourceClassKey is the bounded kill-switch resource
+	// coverage class of a covered MCP tools/call. Never a server identifier.
+	McpKillswitchResourceClassKey = attribute.Key("gram.mcp.killswitch.resource_class")
+	// McpEntryPointKey is the bounded entry-point dimension on the
+	// mcp.toolset_slug_fallback counter: which public surface resolved a
+	// request through the legacy toolsets.mcp_slug lookup.
+	McpEntryPointKey              = attribute.Key("gram.mcp.entry_point")
 	McpRequestedTagsKey           = attribute.Key("gram.mcp.requested_tags")
 	McpToolsReturnedKey           = attribute.Key("gram.mcp.tools_returned")
 	McpToolsFilteredKey           = attribute.Key("gram.mcp.tools_filtered")
@@ -377,6 +401,12 @@ const (
 	OpenAPIOperationIDKey             = attribute.Key("gram.openapi.operation_id")
 	OpenAPIPathKey                    = attribute.Key("gram.openapi.path")
 	OpenAPIVersionKey                 = attribute.Key("gram.openapi.version")
+	OpenRouterBackfillAmbiguousKey    = attribute.Key("gram.openrouter.backfill.ambiguous")
+	OpenRouterBackfillBatchesKey      = attribute.Key("gram.openrouter.backfill.batches")
+	OpenRouterBackfillClassifiedKey   = attribute.Key("gram.openrouter.backfill.classified")
+	OpenRouterBackfillModeKey         = attribute.Key("gram.openrouter.backfill.mode")
+	OpenRouterBackfillScannedKey      = attribute.Key("gram.openrouter.backfill.scanned")
+	OpenRouterBackfillUpdatedKey      = attribute.Key("gram.openrouter.backfill.updated")
 	OpenRouterKeyLimitKey             = attribute.Key("gram.openrouter.key.limit")
 	OpenRouterKeyPreviousLimitKey     = attribute.Key("gram.openrouter.key.previous_limit")
 	OpenRouterKeyTypeKey              = attribute.Key("gram.openrouter.key.type")
@@ -408,6 +438,8 @@ const (
 	WorkOSSSOEnabledKey               = attribute.Key("gram.workos.sso_enabled")
 	WorkOSSCIMEnabledKey              = attribute.Key("gram.workos.scim_enabled")
 	WorkOSDirectoryUserIDKey          = attribute.Key("gram.workos.directory_user_id")
+	ExternalCredentialIDKey           = attribute.Key("gram.external_credential.id")
+	GCPImpersonateServiceAccountKey   = attribute.Key("gram.gcp.impersonate_service_account")
 	WorkOSDirectoryGroupIDKey         = attribute.Key("gram.workos.directory_group_id")
 	OutcomeKey                        = attribute.Key("gram.outcome")
 	PackageNameKey                    = attribute.Key("gram.package.name")
@@ -766,6 +798,22 @@ func SlogHTTPRequestHeaderUserAgent(v string) slog.Attr {
 	return slog.String(string(HTTPRequestHeaderUserAgentKey), v)
 }
 
+func HTTPRequestHeaderOrigin(v string) attribute.KeyValue {
+	return HTTPRequestHeaderOriginKey.String(v)
+}
+
+func SlogHTTPRequestHeaderOrigin(v string) slog.Attr {
+	return slog.String(string(HTTPRequestHeaderOriginKey), v)
+}
+
+func HTTPRequestHeaderSecFetchSite(v string) attribute.KeyValue {
+	return HTTPRequestHeaderSecFetchSiteKey.String(v)
+}
+
+func SlogHTTPRequestHeaderSecFetchSite(v string) slog.Attr {
+	return slog.String(string(HTTPRequestHeaderSecFetchSiteKey), v)
+}
+
 func HTTPRequestBody(v string) attribute.KeyValue { return HTTPRequestBodyKey.String(v) }
 func SlogHTTPRequestBody(v string) slog.Attr      { return slog.String(string(HTTPRequestBodyKey), v) }
 
@@ -956,6 +1004,14 @@ func SlogActual(v any) slog.Attr      { return slog.Any(string(ActualKey), v) }
 
 func Event(v string) attribute.KeyValue { return EventKey.String(v) }
 func SlogEvent(v string) slog.Attr      { return slog.String(string(EventKey), v) }
+
+func ErrorType[V ~string](v V) attribute.KeyValue { return ErrorTypeKey.String(string(v)) }
+func SlogErrorType(v string) slog.Attr            { return slog.String(string(ErrorTypeKey), v) }
+
+func StripeErrorCode(v string) attribute.KeyValue { return StripeErrorCodeKey.String(v) }
+func SlogStripeErrorCode(v string) slog.Attr {
+	return slog.String(string(StripeErrorCodeKey), v)
+}
 
 func StripeWebhookEventID(v string) attribute.KeyValue { return StripeWebhookEventIDKey.String(v) }
 func SlogStripeWebhookEventID(v string) slog.Attr {
@@ -1538,6 +1594,30 @@ func SlogOpenAPIPath(v string) slog.Attr      { return slog.String(string(OpenAP
 func OpenAPIVersion(v string) attribute.KeyValue { return OpenAPIVersionKey.String(v) }
 func SlogOpenAPIVersion(v string) slog.Attr      { return slog.String(string(OpenAPIVersionKey), v) }
 
+func SlogOpenRouterBackfillAmbiguous(v int64) slog.Attr {
+	return slog.Int64(string(OpenRouterBackfillAmbiguousKey), v)
+}
+
+func SlogOpenRouterBackfillBatches(v int64) slog.Attr {
+	return slog.Int64(string(OpenRouterBackfillBatchesKey), v)
+}
+
+func SlogOpenRouterBackfillClassified(v int64) slog.Attr {
+	return slog.Int64(string(OpenRouterBackfillClassifiedKey), v)
+}
+
+func SlogOpenRouterBackfillMode(v string) slog.Attr {
+	return slog.String(string(OpenRouterBackfillModeKey), v)
+}
+
+func SlogOpenRouterBackfillScanned(v int64) slog.Attr {
+	return slog.Int64(string(OpenRouterBackfillScannedKey), v)
+}
+
+func SlogOpenRouterBackfillUpdated(v int64) slog.Attr {
+	return slog.Int64(string(OpenRouterBackfillUpdatedKey), v)
+}
+
 func OpenRouterKeyLimit(v int) attribute.KeyValue { return OpenRouterKeyLimitKey.Int(v) }
 func SlogOpenRouterKeyLimit(v int) slog.Attr      { return slog.Int(string(OpenRouterKeyLimitKey), v) }
 
@@ -1612,6 +1692,18 @@ func SlogWorkOSOrganizationID(v string) slog.Attr {
 
 func WorkOSUserID(v string) attribute.KeyValue { return WorkOSUserIDKey.String(v) }
 func SlogWorkOSUserID(v string) slog.Attr      { return slog.String(string(WorkOSUserIDKey), v) }
+
+func ExternalCredentialID(v string) attribute.KeyValue { return ExternalCredentialIDKey.String(v) }
+func SlogExternalCredentialID(v string) slog.Attr {
+	return slog.String(string(ExternalCredentialIDKey), v)
+}
+
+func GCPImpersonateServiceAccount(v string) attribute.KeyValue {
+	return GCPImpersonateServiceAccountKey.String(v)
+}
+func SlogGCPImpersonateServiceAccount(v string) slog.Attr {
+	return slog.String(string(GCPImpersonateServiceAccountKey), v)
+}
 
 func WorkOSLinkedUserID(v string) attribute.KeyValue { return WorkOSLinkedUserIDKey.String(v) }
 func SlogWorkOSLinkedUserID(v string) slog.Attr {
@@ -1974,6 +2066,20 @@ func SlogMcpMethod(v string) slog.Attr      { return slog.String(string(McpMetho
 
 func McpSurface(v string) attribute.KeyValue { return McpSurfaceKey.String(v) }
 func SlogMcpSurface(v string) slog.Attr      { return slog.String(string(McpSurfaceKey), v) }
+
+func McpEntryPoint[V ~string](v V) attribute.KeyValue { return McpEntryPointKey.String(string(v)) }
+
+func McpKillswitchSurface[V ~string](v V) attribute.KeyValue {
+	return McpKillswitchSurfaceKey.String(string(v))
+}
+
+func McpKillswitchIdentityClass[V ~string](v V) attribute.KeyValue {
+	return McpKillswitchIdentityClassKey.String(string(v))
+}
+
+func McpKillswitchResourceClass[V ~string](v V) attribute.KeyValue {
+	return McpKillswitchResourceClassKey.String(string(v))
+}
 
 func MCPRequestedProtocolVersion(v string) attribute.KeyValue {
 	return McpRequestedProtocolVersionKey.String(v)

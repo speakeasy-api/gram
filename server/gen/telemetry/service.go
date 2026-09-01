@@ -2172,6 +2172,9 @@ type UserAccount struct {
 	// Account record id (user_accounts.id); used to scope chat/session views to
 	// this account
 	ID *string
+	// Gram user id of the directory owner of this account; the authoritative link
+	// between account-email-keyed usage and the org member
+	UserID *string
 	// AI provider the account belongs to ('anthropic', 'openai', 'cursor')
 	Provider string
 	// Email associated with the account; may differ from the user's work email for

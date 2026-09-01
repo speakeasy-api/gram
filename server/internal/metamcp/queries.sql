@@ -14,13 +14,15 @@ INSERT INTO meta_mcp_servers (
     organization_id,
     project_id,
     name,
-    user_session_issuer_id
+    user_session_issuer_id,
+    visibility
 )
 VALUES (
     @organization_id,
     @project_id,
     @name,
-    sqlc.narg('user_session_issuer_id')
+    sqlc.narg('user_session_issuer_id'),
+    @visibility
 )
 RETURNING *;
 
@@ -52,18 +54,27 @@ WHERE id = @id
 FOR UPDATE;
 
 -- name: ListMetaMCPServers :many
-SELECT *
+SELECT sqlc.embed(meta_mcp_servers),
+       (SELECT count(*)
+        FROM meta_mcp_server_members AS mm
+        WHERE mm.meta_mcp_server_id = meta_mcp_servers.id
+          AND mm.deleted IS FALSE) AS member_count
 FROM meta_mcp_servers
-WHERE organization_id = @organization_id
-  AND project_id = @project_id
-  AND deleted IS FALSE
-ORDER BY created_at DESC, id DESC;
+WHERE meta_mcp_servers.organization_id = @organization_id
+  AND meta_mcp_servers.project_id = @project_id
+  AND meta_mcp_servers.deleted IS FALSE
+ORDER BY meta_mcp_servers.created_at DESC, meta_mcp_servers.id DESC;
 
 -- name: UpdateMetaMCPServer :one
--- Full-record replace: a null user_session_issuer_id clears the reference.
+-- The service always supplies user_session_issuer_id (an omitted payload
+-- issuer resolves to the preserved or freshly minted one), so the narg here
+-- never arrives null from production code. A null visibility preserves the
+-- stored value so callers that do not manage visibility cannot re-enable a
+-- disabled gateway.
 UPDATE meta_mcp_servers
 SET name = @name,
     user_session_issuer_id = sqlc.narg('user_session_issuer_id'),
+    visibility = COALESCE(sqlc.narg('visibility'), visibility),
     updated_at = clock_timestamp()
 WHERE id = @id
   AND organization_id = @organization_id
@@ -213,20 +224,41 @@ ORDER BY m.sort_order, m.created_at, m.id;
 -- name: ListServableMetaMCPMembers :many
 -- Serving-path variant of ListMetaMCPMembers: additionally hides members
 -- whose server is disabled, matching the resolution path's rule that a
--- disabled server does not exist for unauthenticated callers. The dashboard
--- listing keeps the unfiltered query so admins still see disabled members.
+-- disabled server does not exist for unauthenticated callers, and members
+-- whose server has no slug (legacy pre-2026-05 rows), which the qualified
+-- serverslug--toolname contract cannot address. The dashboard listing keeps
+-- the unfiltered query so admins still see every member. Carries the backend
+-- and dispatch columns the gateway runtime needs to classify and execute
+-- against each member, including a tunneled member's recorded resource
+-- identifier so credential routing needs no second read per dial. A member
+-- whose tunneled source is soft-deleted reads as no identifier and routes
+-- anonymously; the dial then fails member-scoped on the missing tunnel.
 SELECT
     m.id,
     m.mcp_server_id,
     m.sort_order,
     s.name AS mcp_server_name,
-    s.slug AS mcp_server_slug
+    s.slug AS mcp_server_slug,
+    s.visibility AS mcp_server_visibility,
+    s.toolset_id AS mcp_server_toolset_id,
+    s.remote_mcp_server_id AS mcp_server_remote_mcp_server_id,
+    s.tunneled_mcp_server_id AS mcp_server_tunneled_mcp_server_id,
+    s.unproxied_mcp_server_id AS mcp_server_unproxied_mcp_server_id,
+    s.environment_id AS mcp_server_environment_id,
+    s.tool_variations_group_id AS mcp_server_tool_variations_group_id,
+    s.remote_session_issuer_id AS mcp_server_remote_session_issuer_id,
+    COALESCE(t.resource_identifier, '')::text AS tunneled_resource_identifier
 FROM meta_mcp_server_members m
 JOIN mcp_servers s
   ON s.id = m.mcp_server_id
  AND s.project_id = m.project_id
  AND s.deleted IS FALSE
  AND s.visibility <> 'disabled'
+ AND s.slug IS NOT NULL
+LEFT JOIN tunneled_mcp_servers t
+  ON t.id = s.tunneled_mcp_server_id
+ AND t.project_id = m.project_id
+ AND t.deleted IS FALSE
 WHERE m.meta_mcp_server_id = @meta_mcp_server_id
   AND m.project_id = @project_id
   AND m.deleted IS FALSE
@@ -249,3 +281,91 @@ WHERE id = @id
   AND project_id = @project_id
   AND deleted IS FALSE
 RETURNING *;
+
+-- name: ListMetaMCPMembersForRemoteSessionIssuer :many
+-- The meta MCP's proxied (remote or tunneled) members that authenticate
+-- against a given authorization server, filtered exactly as
+-- ListServableMetaMCPMembers so a member invisible to the serving path cannot
+-- claim a credential either.
+--
+-- A client names exactly one remote_session_issuer, so matching it against the
+-- member's own is the whole lookup; the caller still fails closed on none or
+-- several, since a grant records one resource.
+--
+-- upstream_url is the member's RFC 8707 resource: the remote server URL or
+-- the tunneled server's recorded resource identifier (empty when a tunneled
+-- member records none — the claim still lands, minting an unqualified grant).
+-- Hosted and unproxied members have no upstream and cannot claim.
+SELECT
+    s.id AS mcp_server_id,
+    s.visibility AS mcp_server_visibility,
+    COALESCE(r.url, t.resource_identifier, '')::text AS upstream_url
+FROM meta_mcp_server_members m
+JOIN mcp_servers s
+  ON s.id = m.mcp_server_id
+ AND s.project_id = m.project_id
+ AND s.deleted IS FALSE
+ AND s.visibility <> 'disabled'
+LEFT JOIN remote_mcp_servers r
+  ON r.id = s.remote_mcp_server_id
+ AND r.project_id = m.project_id
+ AND r.deleted IS FALSE
+LEFT JOIN tunneled_mcp_servers t
+  ON t.id = s.tunneled_mcp_server_id
+ AND t.project_id = m.project_id
+ AND t.deleted IS FALSE
+WHERE m.meta_mcp_server_id = @meta_mcp_server_id
+  AND m.project_id = @project_id
+  AND m.deleted IS FALSE
+  AND s.slug IS NOT NULL
+  AND (r.id IS NOT NULL OR t.id IS NOT NULL)
+  AND s.remote_session_issuer_id = @remote_session_issuer_id
+ORDER BY m.sort_order, m.created_at, m.id;
+
+-- name: AutoAttachMemberProviderClient :execrows
+-- Bind the member's upstream OAuth client to the gateway's issuer so consent
+-- can offer the member's provider. No-op when the gateway's issuer already
+-- holds a client for that upstream (one client per upstream per issuer), or
+-- when the member has no derivable client. Tenancy mirrors the resync
+-- derivation: the member's own project client, or an org-level client.
+INSERT INTO remote_session_client_user_session_issuers (remote_session_client_id, user_session_issuer_id)
+SELECT c.id, @gateway_issuer_id
+FROM remote_session_clients AS c
+JOIN remote_session_client_user_session_issuers AS l
+  ON l.remote_session_client_id = c.id
+JOIN projects AS p
+  ON p.id = @project_id
+WHERE l.user_session_issuer_id = @member_issuer_id
+  AND c.remote_session_issuer_id = @remote_issuer_id
+  AND c.deleted IS FALSE
+  AND (c.project_id = @project_id
+       OR (c.project_id IS NULL AND c.organization_id = p.organization_id))
+  AND NOT EXISTS (
+    SELECT 1
+    FROM remote_session_client_user_session_issuers AS l2
+    JOIN remote_session_clients AS c2
+      ON c2.id = l2.remote_session_client_id
+     AND c2.deleted IS FALSE
+    WHERE l2.user_session_issuer_id = @gateway_issuer_id
+      AND c2.remote_session_issuer_id = @remote_issuer_id
+  )
+ORDER BY c.created_at
+LIMIT 1
+ON CONFLICT DO NOTHING;
+
+-- name: ListMemberProviderIdentities :many
+-- Distinct provider identity pairs across a meta server's live members, for
+-- re-running consent wiring when the gateway's issuer changes. Ordered so
+-- callers take the per-remote-issuer binding locks deterministically.
+SELECT DISTINCT s.remote_session_issuer_id, s.user_session_issuer_id
+FROM meta_mcp_server_members m
+JOIN mcp_servers s
+  ON s.id = m.mcp_server_id
+ AND s.project_id = m.project_id
+ AND s.deleted IS FALSE
+WHERE m.meta_mcp_server_id = @meta_mcp_server_id
+  AND m.project_id = @project_id
+  AND m.deleted IS FALSE
+  AND s.remote_session_issuer_id IS NOT NULL
+  AND s.user_session_issuer_id IS NOT NULL
+ORDER BY s.remote_session_issuer_id, s.user_session_issuer_id;

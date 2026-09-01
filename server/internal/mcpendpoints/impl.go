@@ -165,6 +165,26 @@ func (s *Service) CreateMcpEndpoint(ctx context.Context, payload *gen.CreateMcpE
 		return nil, oops.E(oops.CodeInvalid, err, "invalid mcp endpoint").LogError(ctx, logger)
 	}
 
+	if err := LockSlugScope(ctx, dbtx, customDomainID, slug); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "lock mcp endpoint slug scope").LogError(ctx, logger)
+	}
+	// Availability spans toolsets.mcp_slug too; the target server's own
+	// backing toolset does not count.
+	available, err := CheckSlugAvailable(ctx, dbtx, SlugAvailabilityCheck{
+		Slug:                     slug,
+		CustomDomainID:           customDomainID,
+		OrganizationID:           authCtx.ActiveOrganizationID,
+		ExcludeToolsetID:         uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		ExcludeMcpServerID:       mcpServerID,
+		SkipDomainOwnershipCheck: false,
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "check mcp endpoint slug availability").LogError(ctx, logger)
+	}
+	if !available {
+		return nil, oops.E(oops.CodeConflict, nil, "mcp endpoint slug already exists for this domain").LogError(ctx, logger)
+	}
+
 	created, err := txRepo.CreateMCPEndpoint(ctx, repo.CreateMCPEndpointParams{
 		ProjectID:       *authCtx.ProjectID,
 		CustomDomainID:  customDomainID,
@@ -260,11 +280,10 @@ func (s *Service) triggerInitialPublishIfNeeded(ctx context.Context, authCtx *co
 
 	enqueueCtx := context.WithoutCancel(ctx)
 	if _, err := background.ExecutePluginInitialPublishWorkflow(enqueueCtx, s.temporalEnv, plugins.PublishProjectInput{
-		ProjectID:              *authCtx.ProjectID,
-		CreatedByUserID:        authCtx.UserID,
-		CommitMessage:          "Initial marketplace publish",
-		ForcePlatformMCPRepair: false,
-		SkipIfUnchanged:        false,
+		ProjectID:       *authCtx.ProjectID,
+		CreatedByUserID: authCtx.UserID,
+		CommitMessage:   "Initial marketplace publish",
+		SkipIfUnchanged: false,
 	}); err != nil {
 		s.logger.WarnContext(ctx, "failed to enqueue initial plugin publish", attr.SlogError(err))
 	}
@@ -496,6 +515,28 @@ func (s *Service) UpdateMcpEndpoint(ctx context.Context, payload *gen.UpdateMcpE
 		return nil, oops.E(oops.CodeInvalid, err, "invalid mcp endpoint").LogError(ctx, logger)
 	}
 
+	// Only an actual address change is probed: an unchanged (domain, slug)
+	// pair would collide with itself through a mirrored toolset slug.
+	if slug != existing.Slug || customDomainID != existing.CustomDomainID {
+		if err := LockSlugScope(ctx, dbtx, customDomainID, slug); err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "lock mcp endpoint slug scope").LogError(ctx, logger)
+		}
+		available, err := CheckSlugAvailable(ctx, dbtx, SlugAvailabilityCheck{
+			Slug:                     slug,
+			CustomDomainID:           customDomainID,
+			OrganizationID:           authCtx.ActiveOrganizationID,
+			ExcludeToolsetID:         uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+			ExcludeMcpServerID:       mcpServerID,
+			SkipDomainOwnershipCheck: false,
+		})
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "check mcp endpoint slug availability").LogError(ctx, logger)
+		}
+		if !available {
+			return nil, oops.E(oops.CodeConflict, nil, "mcp endpoint slug already exists for this domain").LogError(ctx, logger)
+		}
+	}
+
 	wasRoot := existing.IsDomainRoot.Valid && existing.IsDomainRoot.Bool
 	sameDomain := existing.CustomDomainID == customDomainID
 	// Meta-MCP-backed endpoints have no visibility notion, so a meta target
@@ -578,25 +619,21 @@ func (s *Service) CheckMcpEndpointSlugAvailability(ctx context.Context, payload 
 		return false, oops.E(oops.CodeBadRequest, err, "invalid custom_domain_id").LogError(ctx, logger)
 	}
 
-	// The query folds in a custom-domain ownership check: when
-	// custom_domain_id is supplied and not owned by the caller's organization,
-	// the result short-circuits to false ("unavailable"). This closes a
-	// slug-enumeration leak under foreign domains without exposing a separate
-	// error code, which the dashboard wouldn't differentiate from "taken"
-	// anyway.
-	available, err := repo.New(s.db).CheckSlugAvailability(ctx, repo.CheckSlugAvailabilityParams{
-		Slug:           string(payload.Slug),
-		CustomDomainID: customDomainID,
-		OrganizationID: authCtx.ActiveOrganizationID,
+	// A foreign or unknown domain reads as "unavailable" so slugs can't be
+	// probed under domains the caller doesn't own.
+	available, err := CheckSlugAvailable(ctx, s.db, SlugAvailabilityCheck{
+		Slug:                     string(payload.Slug),
+		CustomDomainID:           customDomainID,
+		OrganizationID:           authCtx.ActiveOrganizationID,
+		ExcludeToolsetID:         uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		ExcludeMcpServerID:       uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		SkipDomainOwnershipCheck: false,
 	})
 	if err != nil {
 		return false, oops.E(oops.CodeUnexpected, err, "check mcp endpoint slug availability").LogError(ctx, logger)
 	}
 
-	// available.Valid is always true for this query (boolean expression with
-	// no nullable sub-terms), but sqlc widens the return type to pgtype.Bool
-	// because it doesn't infer non-null on compound expressions.
-	return available.Bool, nil
+	return available, nil
 }
 
 func (s *Service) DeleteMcpEndpoint(ctx context.Context, payload *gen.DeleteMcpEndpointPayload) error {

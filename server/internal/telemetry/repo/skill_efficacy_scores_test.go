@@ -224,13 +224,14 @@ func TestQuerySkillInsightsAggregatesMappingsAndScoresWithoutUsage(t *testing.T)
 	testenv.FlushClickHouseAsyncInserts(t, conn)
 
 	rows, err := queries.QuerySkillInsights(ctx, repo.QuerySkillInsightsParams{
-		OrganizationID:  orgID,
-		ProjectID:       projectID.String(),
-		SkillIDs:        []string{score.SkillID.String()},
-		SkillVersionIDs: nil,
-		From:            observedAt.Add(-time.Hour),
-		To:              observedAt.Add(time.Hour),
-		IntervalSeconds: int64((24 * time.Hour).Seconds()),
+		OrganizationID:      orgID,
+		ProjectID:           projectID.String(),
+		SkillIDs:            []string{score.SkillID.String()},
+		SkillVersionIDs:     nil,
+		From:                observedAt.Add(-time.Hour),
+		To:                  observedAt.Add(time.Hour),
+		IntervalSeconds:     int64((24 * time.Hour).Seconds()),
+		IncludeSessionUsage: false,
 	})
 	require.NoError(t, err)
 	require.Len(t, rows, 1)
@@ -287,6 +288,7 @@ func TestQuerySkillInsightsDeduplicatesPhysicalScoresByEventID(t *testing.T) {
 	rows, err := queries.QuerySkillInsights(ctx, repo.QuerySkillInsightsParams{
 		OrganizationID: orgID, ProjectID: projectID.String(), SkillIDs: []string{score.SkillID.String()}, SkillVersionIDs: nil,
 		From: observedAt.Add(-time.Hour), To: observedAt.Add(time.Hour), IntervalSeconds: int64((24 * time.Hour).Seconds()),
+		IncludeSessionUsage: false,
 	})
 	require.NoError(t, err)
 	require.Len(t, rows, 1)

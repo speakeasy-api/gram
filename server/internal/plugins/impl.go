@@ -14,7 +14,6 @@ import (
 	"maps"
 	"os"
 	"regexp"
-	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -51,7 +50,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
-	"github.com/speakeasy-api/gram/server/internal/platformmcp"
 	"github.com/speakeasy-api/gram/server/internal/plugins/naming"
 	"github.com/speakeasy-api/gram/server/internal/plugins/repo"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
@@ -164,46 +162,6 @@ type Service struct {
 	// eligible and carry their existing hooks — so a missing provider can never
 	// force-advance an org.
 	features feature.Provider
-	// platformAdmission decides package presence separately from runtime access.
-	// Indeterminate outcomes preserve published package bytes rather than
-	// interpreting an unavailable dependency as a revocation.
-	platformAdmission PlatformMCPAdmission
-}
-
-func (s *Service) platformMCPPackageEnabled(ctx context.Context, organizationID, organizationSlug string, projectID uuid.UUID) (bool, error) {
-	if s == nil || organizationID == "" || organizationSlug == "" || projectID == uuid.Nil {
-		return false, nil
-	}
-
-	// The organization-scoped Platform package belongs only in the canonical
-	// marketplace attached to the organization's literal default project. Keep
-	// this placement check independent from onboarding state: users need the
-	// package in order to establish their first Platform MCP connection.
-	isDefaultProject, err := s.resolveDefaultProject(ctx, projectID)
-	if err != nil {
-		return false, fmt.Errorf("resolve default project: %w", err)
-	}
-	if !isDefaultProject {
-		return false, nil
-	}
-	if s.platformAdmission == nil {
-		return false, errors.New("platform mcp admission unavailable")
-	}
-
-	admission, err := s.platformAdmission.Evaluate(ctx, organizationID, organizationSlug)
-	if err != nil {
-		return false, fmt.Errorf("evaluate Platform MCP admission: %w", err)
-	}
-	if admission == platformmcp.AdmissionIndeterminate {
-		return false, errors.New("platform mcp admission indeterminate")
-	}
-	return admission == platformmcp.AdmissionEnabled, nil
-}
-
-// PlatformMCPAdmission is the package-level policy used by plugin publishing.
-// It remains deliberately independent from the runtime authorization gate.
-type PlatformMCPAdmission interface {
-	Evaluate(ctx context.Context, organizationID, organizationSlug string) (platformmcp.Admission, error)
 }
 
 var _ gen.Service = (*Service)(nil)
@@ -221,7 +179,6 @@ func NewService(
 	env string,
 	serverURL string,
 	features feature.Provider,
-	platformAdmission PlatformMCPAdmission,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("plugins"))
 
@@ -241,8 +198,7 @@ func NewService(
 		// rename via UpdateMarketplaceSettings, browser-login toggle via
 		// productfeatures) on the phased hooks rollout, mirroring the automated
 		// publisher. Fail-closed when nil: non-canary orgs defer those changes.
-		features:          features,
-		platformAdmission: platformAdmission,
+		features: features,
 	}
 }
 
@@ -254,24 +210,22 @@ func NewPublisher(
 	env string,
 	serverURL string,
 	features feature.Provider,
-	platformAdmission PlatformMCPAdmission,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("plugins"))
 
 	return &Service{
-		tracer:            nil,
-		logger:            logger,
-		db:                db,
-		repo:              repo.New(db),
-		auth:              nil,
-		authz:             nil,
-		audit:             auditLogger,
-		cache:             nil,
-		github:            github,
-		serverURL:         serverURL,
-		keyPrefix:         auth.APIKeyPrefix(env),
-		features:          features,
-		platformAdmission: platformAdmission,
+		tracer:    nil,
+		logger:    logger,
+		db:        db,
+		repo:      repo.New(db),
+		auth:      nil,
+		authz:     nil,
+		audit:     auditLogger,
+		cache:     nil,
+		github:    github,
+		serverURL: serverURL,
+		keyPrefix: auth.APIKeyPrefix(env),
+		features:  features,
 	}
 }
 
@@ -1377,42 +1331,6 @@ func (s *Service) DownloadPluginPackage(ctx context.Context, payload *gen.Downlo
 	}, io.NopCloser(bytes.NewReader(buf.Bytes())), nil
 }
 
-// DownloadPlatformMCPPlugin returns a credential-free Platform MCP package for
-// direct installation. It is admission-gated but does not require an existing
-// Platform connection and never mints or embeds an organization API key.
-func (s *Service) DownloadPlatformMCPPlugin(ctx context.Context, payload *gen.DownloadPlatformMCPPluginPayload) (*gen.DownloadPlatformMCPPluginResult, io.ReadCloser, error) {
-	ac, err := s.authContext(ctx)
-	if err != nil {
-		return nil, nil, oops.C(oops.CodeUnauthorized)
-	}
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: ac.ActiveOrganizationID, Dimensions: nil}); err != nil {
-		return nil, nil, err
-	}
-
-	admission, err := s.platformMCPOrganizationAdmission(ctx, ac.ActiveOrganizationID, ac.OrganizationSlug)
-	if err != nil {
-		return nil, nil, oops.E(oops.CodeFailedPrecondition, err, "Platform MCP package admission is unavailable").LogWarn(ctx, s.logger)
-	}
-	if admission != platformmcp.AdmissionEnabled {
-		return nil, nil, oops.E(oops.CodeFailedPrecondition, nil, "Platform MCP package is not available for this organization")
-	}
-
-	files, err := GeneratePlatformMCPPluginPackage(s.serverURL, "0", payload.Platform)
-	if err != nil {
-		return nil, nil, oops.E(oops.CodeUnexpected, err, "generate Platform MCP plugin package").LogError(ctx, s.logger)
-	}
-	var buf bytes.Buffer
-	if err := writePluginZip(&buf, files); err != nil {
-		return nil, nil, oops.E(oops.CodeUnexpected, err, "build Platform MCP plugin zip").LogError(ctx, s.logger)
-	}
-
-	filename := platformMCPPackageFilename(payload.Platform)
-	return &gen.DownloadPlatformMCPPluginResult{
-		ContentType:        "application/zip",
-		ContentDisposition: fmt.Sprintf(`attachment; filename="%s"`, filename),
-	}, io.NopCloser(bytes.NewReader(buf.Bytes())), nil
-}
-
 func (s *Service) DownloadObservabilityPlugin(ctx context.Context, payload *gen.DownloadObservabilityPluginPayload) (*gen.DownloadObservabilityPluginResult, io.ReadCloser, error) {
 	ac, err := s.authContext(ctx)
 	if err != nil {
@@ -1457,6 +1375,8 @@ func (s *Service) DownloadObservabilityPlugin(ctx context.Context, payload *gen.
 		filename = "observability-codex"
 	case "opencode":
 		filename = "observability-opencode"
+	case "copilot":
+		filename = "observability-copilot"
 	case "openclaw":
 		filename = "observability-openclaw"
 	}
@@ -1587,167 +1507,6 @@ func (s *Service) persistDownloadAPIKey(ctx context.Context, ac *contextvalues.A
 
 // --- Publish & Distribution ---
 
-func (s *Service) GetPlatformMCPPackageStatus(ctx context.Context, _ *gen.GetPlatformMCPPackageStatusPayload) (*gen.PlatformMCPPackageStatusResult, error) {
-	ac, err := s.organizationAuthContext(ctx)
-	if err != nil {
-		return nil, oops.C(oops.CodeUnauthorized)
-	}
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgRead, ResourceKind: "", ResourceID: ac.ActiveOrganizationID, Dimensions: nil}); err != nil {
-		return nil, err
-	}
-	return s.platformMCPPackageStatus(ctx, ac)
-}
-
-func (s *Service) RepairPlatformMCPPackage(ctx context.Context, _ *gen.RepairPlatformMCPPackagePayload) (*gen.PlatformMCPPackageStatusResult, error) {
-	ac, err := s.authContext(ctx)
-	if err != nil {
-		return nil, oops.C(oops.CodeUnauthorized)
-	}
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: ac.ActiveOrganizationID, Dimensions: nil}); err != nil {
-		return nil, err
-	}
-
-	status, defaultProject, err := s.platformMCPPackageStatusWithProject(ctx, ac)
-	if err != nil {
-		return nil, err
-	}
-	if !status.RepairAllowed || defaultProject == nil {
-		return nil, oops.E(oops.CodeFailedPrecondition, nil, "Platform MCP package cannot be published for this organization")
-	}
-	if _, err := s.PublishProject(ctx, PublishProjectInput{
-		ProjectID:              defaultProject.ID,
-		CreatedByUserID:        ac.UserID,
-		CommitMessage:          "Publish Platform MCP package",
-		SkipIfUnchanged:        true,
-		ForcePlatformMCPRepair: true,
-	}); err != nil {
-		return nil, err
-	}
-	return s.platformMCPPackageStatus(ctx, ac)
-}
-
-func (s *Service) platformMCPOrganizationAdmission(ctx context.Context, organizationID, organizationSlug string) (platformmcp.Admission, error) {
-	if s == nil || s.platformAdmission == nil || organizationID == "" || organizationSlug == "" {
-		return platformmcp.AdmissionIndeterminate, nil
-	}
-	admission, err := s.platformAdmission.Evaluate(ctx, organizationID, organizationSlug)
-	if err != nil {
-		return platformmcp.AdmissionIndeterminate, fmt.Errorf("evaluate Platform MCP admission: %w", err)
-	}
-	return admission, nil
-}
-
-func (s *Service) platformMCPPackageStatus(ctx context.Context, ac *contextvalues.AuthContext) (*gen.PlatformMCPPackageStatusResult, error) {
-	status, _, err := s.platformMCPPackageStatusWithProject(ctx, ac)
-	return status, err
-}
-
-func (s *Service) platformMCPPackageStatusWithProject(ctx context.Context, ac *contextvalues.AuthContext) (*gen.PlatformMCPPackageStatusResult, *projectsrepo.Project, error) {
-	result := &gen.PlatformMCPPackageStatusResult{
-		Admission:               "indeterminate",
-		Available:               false,
-		PackageName:             platformMCPPluginName,
-		ClaudeFilename:          platformMCPPackageFilename("claude"),
-		AgentPluginFilename:     platformMCPPackageFilename("agent-plugin"),
-		CanonicalProjectSlug:    nil,
-		MarketplaceName:         nil,
-		MarketplaceConnected:    false,
-		MarketplaceURL:          nil,
-		RepoURL:                 nil,
-		PackagePresent:          false,
-		Freshness:               "indeterminate",
-		RepairAllowed:           false,
-		DirectDownloadAvailable: false,
-	}
-
-	admission, admissionErr := s.platformMCPOrganizationAdmission(ctx, ac.ActiveOrganizationID, ac.OrganizationSlug)
-	if admissionErr != nil {
-		s.logger.WarnContext(ctx, "resolve Platform MCP package status admission", attr.SlogError(admissionErr))
-	}
-	switch admission {
-	case platformmcp.AdmissionEnabled:
-		result.Admission = "enabled"
-		result.Available = true
-		result.DirectDownloadAvailable = true
-	case platformmcp.AdmissionDisabled:
-		result.Admission = "disabled"
-		result.Freshness = "unavailable"
-	case platformmcp.AdmissionIndeterminate:
-	}
-
-	projects, err := projectsrepo.New(s.db).ListProjectsByOrganization(ctx, ac.ActiveOrganizationID)
-	if err != nil {
-		return nil, nil, oops.E(oops.CodeUnexpected, err, "list organization projects for Platform MCP package").LogError(ctx, s.logger)
-	}
-	if len(projects) == 0 {
-		result.Freshness = "unavailable"
-		return result, nil, nil
-	}
-	defaultProject := &projects[0]
-	result.CanonicalProjectSlug = &defaultProject.Slug
-	marketplaceName := s.resolveDefaultMarketplaceName(ctx, ac.ActiveOrganizationID, ac.OrganizationSlug, defaultProject.ID)
-	result.MarketplaceName = &marketplaceName
-	// Repair also bootstraps the canonical default-project marketplace when it
-	// does not exist yet. PublishProject owns that first-publish behavior; the
-	// user can add collaborators later through the ordinary marketplace flow.
-	result.RepairAllowed = result.Available && s.github != nil
-
-	if s.github == nil {
-		if result.Available {
-			result.Freshness = "missing"
-		}
-		return result, defaultProject, nil
-	}
-	conn, err := s.repo.GetGitHubConnection(ctx, defaultProject.ID)
-	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			if result.Available {
-				result.Freshness = "missing"
-			}
-			return result, defaultProject, nil
-		}
-		return nil, nil, oops.E(oops.CodeUnexpected, err, "get canonical Platform MCP marketplace connection").LogError(ctx, s.logger)
-	}
-	result.MarketplaceConnected = true
-	repoURL := fmt.Sprintf("https://github.com/%s/%s", conn.RepoOwner, conn.RepoName)
-	result.RepoURL = &repoURL
-	if conn.MarketplaceToken.Valid && s.serverURL != "" {
-		marketplaceURL := fmt.Sprintf("%s%s%s.git", s.serverURL, marketplace.RoutePrefix, conn.MarketplaceToken.String)
-		result.MarketplaceURL = &marketplaceURL
-	}
-
-	published := decodeMCPFingerprints(conn.PublishedMcpFingerprints)
-	publishedFingerprint := published[mcpPlatformFingerprintKey]
-	result.PackagePresent = publishedFingerprint != ""
-	if admission == platformmcp.AdmissionIndeterminate {
-		result.Freshness = "indeterminate"
-		return result, defaultProject, nil
-	}
-	if admission != platformmcp.AdmissionEnabled {
-		result.Freshness = "unavailable"
-		return result, defaultProject, nil
-	}
-	if publishedFingerprint == "" {
-		result.Freshness = "missing"
-		return result, defaultProject, nil
-	}
-
-	cfg := s.generateConfig(ctx, ac.ActiveOrganizationID, ac.OrganizationSlug, defaultProject.Slug, defaultProject.ID)
-	cfg.PlatformMCPEnabled = true
-	fingerprints, err := MCPFingerprints(nil, cfg)
-	if err != nil {
-		s.logger.WarnContext(ctx, "compute Platform MCP package status fingerprint", attr.SlogError(err))
-		result.Freshness = "indeterminate"
-		return result, defaultProject, nil
-	}
-	if publishedFingerprint == fingerprints[mcpPlatformFingerprintKey] {
-		result.Freshness = "current"
-	} else {
-		result.Freshness = "stale"
-	}
-	return result, defaultProject, nil
-}
-
 func (s *Service) GetPublishStatus(ctx context.Context, payload *gen.GetPublishStatusPayload) (*gen.PublishStatusResult, error) {
 	ac, err := s.authContext(ctx)
 	if err != nil {
@@ -1790,20 +1549,19 @@ func (s *Service) GetPublishStatus(ctx context.Context, payload *gen.GetPublishS
 			// directories when a rename happened while the rollout gate carried
 			// the hooks subtree.
 			slugCfg := GenerateConfig{
-				OrgName:            s.resolveOrganizationName(ctx, ac.ActiveOrganizationID, ac.OrganizationSlug),
-				OrgEmail:           "",
-				OrgID:              "",
-				ServerURL:          "",
-				APIKey:             "",
-				HooksAPIKey:        "",
-				ProjectSlug:        "",
-				IsDefaultProject:   false,
-				Version:            "",
-				MarketplaceName:    "",
-				HooksOrgName:       naming.PublishedHooksOrgName(conn.PublishedHooksConfig),
-				BrowserLogin:       false,
-				InstallFailOpen:    false,
-				PlatformMCPEnabled: false,
+				OrgName:          s.resolveOrganizationName(ctx, ac.ActiveOrganizationID, ac.OrganizationSlug),
+				OrgEmail:         "",
+				OrgID:            "",
+				ServerURL:        "",
+				APIKey:           "",
+				HooksAPIKey:      "",
+				ProjectSlug:      "",
+				IsDefaultProject: false,
+				Version:          "",
+				MarketplaceName:  "",
+				HooksOrgName:     naming.PublishedHooksOrgName(conn.PublishedHooksConfig),
+				BrowserLogin:     false,
+				InstallFailOpen:  false,
 			}
 			result.ClaudeObservabilityPlugin = conv.PtrEmpty(ClaudeObservabilitySlug(slugCfg))
 			result.CodexObservabilityPlugin = conv.PtrEmpty(CodexObservabilitySlug(slugCfg))
@@ -2012,22 +1770,12 @@ func (s *Service) publishUpToDate(ctx context.Context, ac *contextvalues.AuthCon
 
 	cfg := s.generateConfig(ctx, ac.ActiveOrganizationID, ac.OrganizationSlug, projectSlug, *ac.ProjectID)
 	publishedMCPFingerprints := decodeMCPFingerprints(conn.PublishedMcpFingerprints)
-	platformEnabled, admissionErr := s.platformMCPPackageEnabled(ctx, ac.ActiveOrganizationID, ac.OrganizationSlug, *ac.ProjectID)
-	if admissionErr != nil {
-		s.logger.WarnContext(ctx, "publish freshness: evaluate platform mcp package admission", attr.SlogError(admissionErr))
-	}
-	platformWasPublished := publishedMCPFingerprints[mcpPlatformFingerprintKey] != ""
-	cfg.PlatformMCPEnabled = platformEnabled || (admissionErr != nil && platformWasPublished)
 
 	mcpFingerprints, err := MCPFingerprints(pluginInfos, cfg)
 	if err != nil {
 		s.logger.WarnContext(ctx, "publish freshness: compute mcp fingerprints", attr.SlogError(err))
 		return nil
 	}
-	if admissionErr != nil && platformWasPublished {
-		mcpFingerprints[mcpPlatformFingerprintKey] = publishedMCPFingerprints[mcpPlatformFingerprintKey]
-	}
-
 	// The hooks component counts against freshness only when the org is cleared
 	// for the current generator version. publishProject applies the same
 	// eligibility gate and carries a gated org's published hooks subtree
@@ -2112,8 +1860,7 @@ func (s *Service) PublishPlugins(ctx context.Context, payload *gen.PublishPlugin
 		// bumps and installed copies refresh. The hooks component is still gated
 		// by the rollout inside publishProject — clicking Publish cannot force a
 		// hooks upgrade onto an org the rollout hasn't cleared.
-		ForcePlatformMCPRepair: false,
-		SkipIfUnchanged:        false,
+		SkipIfUnchanged: false,
 	})
 	if err != nil {
 		return nil, err
@@ -2126,10 +1873,6 @@ type PublishProjectInput struct {
 	ProjectID       uuid.UUID
 	CreatedByUserID string
 	CommitMessage   string
-	// ForcePlatformMCPRepair regenerates only the admitted first-party Platform
-	// package and shared marketplace manifests while carrying customer MCP and
-	// hooks subtrees unchanged. It is reserved for the explicit repair endpoint.
-	ForcePlatformMCPRepair bool
 	// SkipIfUnchanged short-circuits the publish when the project's current
 	// fingerprint matches the one last published, avoiding a no-op GitHub
 	// commit and fresh API keys. Set by the automated rollout; the dashboard
@@ -2176,10 +1919,9 @@ func (s *Service) PublishProject(ctx context.Context, input PublishProjectInput)
 			Slug:            nil,
 			CreatedByUserID: input.CreatedByUserID,
 		},
-		GitHubUsernames:        nil,
-		CommitMessage:          conv.Default(input.CommitMessage, "Update plugin packages"),
-		SkipIfUnchanged:        input.SkipIfUnchanged,
-		ForcePlatformMCPRepair: input.ForcePlatformMCPRepair,
+		GitHubUsernames: nil,
+		CommitMessage:   conv.Default(input.CommitMessage, "Update plugin packages"),
+		SkipIfUnchanged: input.SkipIfUnchanged,
 	})
 	if err != nil {
 		return nil, err
@@ -2196,16 +1938,15 @@ type publishActor struct {
 }
 
 type publishProjectInput struct {
-	ProjectID              uuid.UUID
-	ProjectName            string
-	ProjectSlug            string
-	OrganizationID         string
-	OrganizationSlug       string
-	Actor                  publishActor
-	GitHubUsernames        []string
-	CommitMessage          string
-	SkipIfUnchanged        bool
-	ForcePlatformMCPRepair bool
+	ProjectID        uuid.UUID
+	ProjectName      string
+	ProjectSlug      string
+	OrganizationID   string
+	OrganizationSlug string
+	Actor            publishActor
+	GitHubUsernames  []string
+	CommitMessage    string
+	SkipIfUnchanged  bool
 }
 
 // publishOutcome is the internal result of publishProject. Skipped is true when
@@ -2319,19 +2060,6 @@ func (s *Service) publishProject(ctx context.Context, input publishProjectInput)
 	// Package admission is available before the first Platform MCP connection,
 	// but placement remains restricted to the organization's default-project
 	// marketplace so other project repositories never receive this org package.
-	platformEnabled, admissionErr := s.platformMCPPackageEnabled(ctx, input.OrganizationID, input.OrganizationSlug, input.ProjectID)
-	if admissionErr != nil {
-		if errors.Is(admissionErr, context.Canceled) || errors.Is(admissionErr, context.DeadlineExceeded) {
-			return nil, fmt.Errorf("evaluate platform mcp package admission: %w", admissionErr)
-		}
-		s.logger.WarnContext(ctx, "platform mcp package admission is indeterminate; preserving prior state",
-			attr.SlogOrganizationID(input.OrganizationID),
-			attr.SlogError(admissionErr))
-	}
-	platformWasPublished := publishedMCPFingerprints[mcpPlatformFingerprintKey] != ""
-	preservePlatformMCP := admissionErr != nil && platformWasPublished
-	cfg.PlatformMCPEnabled = platformEnabled || preservePlatformMCP
-
 	// The per-plugin MCP fingerprints and the hooks generator version are the two
 	// independent rollout signals. Compute both up front so we can short-circuit
 	// unchanged publishes before touching GitHub and persist them after a
@@ -2340,31 +2068,14 @@ func (s *Service) publishProject(ctx context.Context, input publishProjectInput)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "compute mcp fingerprints").LogError(ctx, s.logger)
 	}
-	// An unavailable admission dependency must not mutate the Platform package or
-	// repeatedly treat a truthfully preserved B1 marketplace as a customer MCP
-	// change. Normalize both Platform-owned fingerprints to the published state
-	// before change detection. If integrity repair causes a push, the actual
-	// Platform/shared bytes are fingerprinted again before persistence below.
-	currentPlatformMCPFingerprint := mcpFingerprints[mcpPlatformFingerprintKey]
-	if preservePlatformMCP {
-		mcpFingerprints[mcpPlatformFingerprintKey] = publishedMCPFingerprints[mcpPlatformFingerprintKey]
-		mcpFingerprints[mcpSharedFingerprintKey] = publishedMCPFingerprints[mcpSharedFingerprintKey]
-	}
-
 	// Decide which components to (re)generate. A human publish refreshes customer
 	// MCP packages so installed copies pick up a new manifest version. A
 	// Platform-only transition deliberately carries those customer packages
 	// unchanged. Hooks change independently based on their version and
 	// output-affecting config.
-	// A confirmed Platform transition changes only its reserved fingerprint and
-	// shared marketplace files. Carry customer MCP files so adding/removing this
-	// first-party package never rotates customer credentials or manifests.
-	platformOnlyChange := input.ForcePlatformMCPRepair || (!firstPublish &&
-		!maps.Equal(mcpFingerprints, publishedMCPFingerprints) &&
-		platformMCPOnlyFingerprintChange(mcpFingerprints, publishedMCPFingerprints))
 	mcpChanged := firstPublish ||
-		(!input.SkipIfUnchanged && !platformOnlyChange) ||
-		(!platformOnlyChange && !maps.Equal(mcpFingerprints, publishedMCPFingerprints))
+		!input.SkipIfUnchanged ||
+		!maps.Equal(mcpFingerprints, publishedMCPFingerprints)
 
 	// Snapshot the hook-output-affecting config (resolved marketplace name,
 	// browser login, server URL, etc.). A rename or browser-login toggle
@@ -2413,10 +2124,7 @@ func (s *Service) publishProject(ctx context.Context, input publishProjectInput)
 		conv.FromPGTextOrEmpty[string](existing.PublishedHooksVersion) != targetHooksVersion ||
 		publishedHooksConfigHash != targetHooksConfigHash
 
-	// Indeterminate Platform admission must inspect an already-published subtree
-	// before skipping. A stored fingerprint alone cannot establish that its files
-	// still exist, and the preservation path below reconstructs incomplete repos.
-	if input.SkipIfUnchanged && !preservePlatformMCP && !mcpChanged && !platformOnlyChange && !hooksChanged {
+	if input.SkipIfUnchanged && !mcpChanged && !hooksChanged {
 		return &publishOutcome{RepoURL: repoURL, Skipped: true, HooksConfigDeferred: hooksConfigDeferred}, nil
 	}
 
@@ -2425,8 +2133,7 @@ func (s *Service) publishProject(ctx context.Context, input publishProjectInput)
 	// Fetch the repo only in that case; a first publish or a both-components
 	// change regenerates everything and needs no fetch.
 	var existingFiles map[string][]byte
-	existingRepoMissing := false
-	if !firstPublish && (!mcpChanged || !hooksChanged || preservePlatformMCP) {
+	if !firstPublish && (!mcpChanged || !hooksChanged) {
 		existingFiles, err = s.github.Client.GetRepoFiles(ctx, s.github.InstallationID, repoOwner, repoName, "main")
 		if err != nil {
 			if !errors.Is(err, ghclient.ErrRepoNotFound) {
@@ -2434,7 +2141,6 @@ func (s *Service) publishProject(ctx context.Context, input publishProjectInput)
 			}
 			// The connection row exists but the repo is gone or empty; regenerate
 			// both components rather than carrying stale files.
-			existingRepoMissing = true
 			existingFiles = nil
 		}
 	}
@@ -2458,31 +2164,6 @@ func (s *Service) publishProject(ctx context.Context, input publishProjectInput)
 		return true
 	}
 
-	if input.SkipIfUnchanged && preservePlatformMCP && !mcpChanged && !platformOnlyChange && !hooksChanged {
-		carryCfg := cfg
-		carryCfg.PlatformMCPEnabled = false
-		mcpPaths, err := mcpFilePaths(pluginInfos, carryCfg)
-		if err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "enumerate mcp files").LogError(ctx, s.logger)
-		}
-		sharedPaths, err := sharedFilePaths(pluginInfos, cfg)
-		if err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "enumerate shared files").LogError(ctx, s.logger)
-		}
-		verifiedFiles := make(map[string][]byte)
-		_, hooksIntact := carryHooksSubtree(verifiedFiles, existingFiles, targetHooksConfigJSON, cfg.OrgName)
-		platformIntact, nativeClientsAvailable := carryPlatformMCPSubtree(verifiedFiles, existingFiles)
-		// A repository claiming the current full B2/B3 fingerprint must contain the
-		// complete native set. A B1-only repository with its older fingerprint is a
-		// valid preserved state; a current fingerprint with missing native files is
-		// repaired below rather than skipped.
-		platformFingerprintMatchesLayout := nativeClientsAvailable ||
-			publishedMCPFingerprints[mcpPlatformFingerprintKey] != currentPlatformMCPFingerprint
-		if carry(verifiedFiles, mcpPaths) && carry(verifiedFiles, sharedPaths) && platformIntact && platformFingerprintMatchesLayout && hooksIntact {
-			return &publishOutcome{RepoURL: repoURL, Skipped: true, HooksConfigDeferred: hooksConfigDeferred}, nil
-		}
-	}
-
 	files := make(map[string][]byte)
 	var candidates []pluginAPIKeyCandidate
 	var hooksCandidate *pluginAPIKeyCandidate
@@ -2490,14 +2171,7 @@ func (s *Service) publishProject(ctx context.Context, input publishProjectInput)
 	// MCP component: carry when unchanged, otherwise regenerate with a fresh key.
 	carriedMCP := false
 	if !mcpChanged {
-		carryCfg := cfg
-		// A transition or an indeterminate result needs a separate Platform
-		// decision below. Otherwise include Platform paths in normal MCP carry
-		// enumeration so hooks-only publishes preserve its bytes verbatim.
-		if platformOnlyChange || !platformEnabled {
-			carryCfg.PlatformMCPEnabled = false
-		}
-		paths, err := mcpFilePaths(pluginInfos, carryCfg)
+		paths, err := mcpFilePaths(pluginInfos, cfg)
 		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "enumerate mcp files").LogError(ctx, s.logger)
 		}
@@ -2509,55 +2183,13 @@ func (s *Service) publishProject(ctx context.Context, input publishProjectInput)
 			return nil, oops.E(oops.CodeUnexpected, err, "build plugin mcp api key").LogError(ctx, s.logger)
 		}
 		cfg.APIKey = mcpCandidate.fullKey
-		if needsSkillFeedbackHooksKey(pluginInfos) {
-			candidate, err := s.buildPluginAPIKeyCandidate(auth.APIKeyScopeHooks, "hooks")
-			if err != nil {
-				return nil, oops.E(oops.CodeUnexpected, err, "build plugin hooks api key").LogError(ctx, s.logger)
-			}
-			hooksCandidate = &candidate
-			cfg.HooksAPIKey = candidate.fullKey
-			candidates = append(candidates, candidate)
-		}
 		mcpFiles, err := generateMCPFiles(pluginInfos, cfg)
 		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "generate mcp files").LogError(ctx, s.logger)
 		}
 		maps.Copy(files, mcpFiles)
-		if platformEnabled {
-			if err := generatePlatformMCPFilesInto(files, cfg); err != nil {
-				return nil, oops.E(oops.CodeUnexpected, err, "generate platform mcp files").LogError(ctx, s.logger)
-			}
-		}
 		candidates = append(candidates, mcpCandidate)
 	}
-	platformNativeClientsAvailable := true
-	if preservePlatformMCP {
-		platformIntact, nativeClientsAvailable := carryPlatformMCPSubtree(files, existingFiles)
-		platformNativeClientsAvailable = nativeClientsAvailable
-		if !platformIntact {
-			if !existingRepoMissing {
-				s.logger.WarnContext(ctx, "published platform mcp subtree cannot be preserved; reconstructing package",
-					attr.SlogOrganizationID(input.OrganizationID))
-			}
-			if err := generatePlatformMCPFilesInto(files, cfg); err != nil {
-				return nil, oops.E(oops.CodeUnexpected, err, "reconstruct platform mcp files after missing repo").LogError(ctx, s.logger)
-			}
-			platformNativeClientsAvailable = true
-			mcpFingerprints[mcpPlatformFingerprintKey] = currentPlatformMCPFingerprint
-		} else if !nativeClientsAvailable {
-			// The existing repository is a valid B1-only layout, or had an incomplete
-			// native set that was deliberately dropped as a unit. Persist a fingerprint
-			// for the exact Platform bytes being pushed so confirmed admission later
-			// observes a Platform-only transition and regenerates the complete B2/B3 set.
-			mcpFingerprints[mcpPlatformFingerprintKey] = platformMCPFingerprintFromFiles(files)
-		}
-	}
-	if platformEnabled && platformOnlyChange && carriedMCP {
-		if err := generatePlatformMCPFilesInto(files, cfg); err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "generate platform mcp files").LogError(ctx, s.logger)
-		}
-	}
-
 	// Hooks component: carry when the target version+config match what's
 	// published (including gated orgs pinned to an older version), otherwise
 	// regenerate with a fresh hooks key. The carry is prefix-based so it works
@@ -2614,7 +2246,7 @@ func (s *Service) publishProject(ctx context.Context, input publishProjectInput)
 	// manifests' observability entries at the carried directories so they stay
 	// resolvable.
 	sharedCfg.HooksOrgName = carriedHooksOrgName
-	sharedFiles, err := generateSharedFilesWithPlatformClients(pluginInfos, sharedCfg, platformNativeClientsAvailable)
+	sharedFiles, err := generateSharedFiles(pluginInfos, sharedCfg)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "generate shared files").LogError(ctx, s.logger)
 	}
@@ -2692,127 +2324,6 @@ func (s *Service) publishProject(ctx context.Context, input publishProjectInput)
 	}
 
 	return &publishOutcome{RepoURL: repoURL, Skipped: false, HooksConfigDeferred: hooksConfigDeferred}, nil
-}
-
-// platformMCPOnlyFingerprintChange reports whether two maps differ only in the
-// Platform packages and shared marketplace entries. Those paths have no tenant
-// credentials and can change without regenerating customer MCP packages.
-func platformMCPOnlyFingerprintChange(current, published map[string]string) bool {
-	if current[mcpPlatformFingerprintKey] == published[mcpPlatformFingerprintKey] {
-		return false
-	}
-	current = maps.Clone(current)
-	published = maps.Clone(published)
-	delete(current, mcpPlatformFingerprintKey)
-	delete(published, mcpPlatformFingerprintKey)
-	delete(current, mcpSharedFingerprintKey)
-	delete(published, mcpSharedFingerprintKey)
-	return maps.Equal(current, published)
-}
-
-// platformMCPFingerprintFromFiles hashes the Platform MCP files present in
-// files. It includes both the current Agent Plugin root and the identifier
-// still present in already-published repositories so a B1-only repair of
-// either layout records the bytes that were actually pushed.
-func platformMCPFingerprintFromFiles(files map[string][]byte) string {
-	platformRoots := []string{
-		platformMCPPluginRoot,
-		platformMCPCursorPluginRoot,
-		platformMCPCodexPluginRoot,
-		platformMCPOpenCodePluginRoot,
-		platformMCPAgentPluginRoot,
-		platformMCPLegacyAgentPluginRoot,
-	}
-	platformFiles := make(map[string][]byte)
-	for filePath, content := range files {
-		if slices.ContainsFunc(platformRoots, func(root string) bool { return strings.HasPrefix(filePath, root+"/") }) {
-			platformFiles[filePath] = content
-		}
-	}
-	return hashFiles(platformMCPGeneratorVersion, platformFiles)
-}
-
-// carryPlatformMCPSubtree preserves a complete currently-published Platform
-// package. B1 repositories contain Claude plus portable Agent Plugins; B2/B3
-// add Cursor, Codex, and OpenCode as one native-client set. Carry accepts
-// either the current Agent Plugin/OpenCode identifier or the identifier still
-// present in already-published repositories, so an unavailable admission
-// decision cannot regenerate those bytes. During indeterminate admission,
-// preserving B1 is valid, but partial native sets are never copied or
-// advertised. The second result reports whether the complete B2/B3 set exists.
-func carryPlatformMCPSubtree(dst, existing map[string][]byte) (bool, bool) {
-	if len(existing) == 0 {
-		return false, false
-	}
-	skills, err := loadPlatformMCPSkills()
-	if err != nil {
-		return false, false
-	}
-
-	stageRoots := func(roots []string, required []string) (map[string][]byte, bool) {
-		for _, requiredPath := range required {
-			if _, ok := existing[requiredPath]; !ok {
-				return nil, false
-			}
-		}
-		staged := make(map[string][]byte)
-		for p, content := range existing {
-			if slices.ContainsFunc(roots, func(root string) bool { return strings.HasPrefix(p, root+"/") }) {
-				staged[p] = content
-			}
-		}
-		return staged, true
-	}
-
-	for _, layout := range []struct {
-		pluginName string
-		agentRoot  string
-	}{
-		{platformMCPPluginName, platformMCPAgentPluginRoot},
-		{platformMCPLegacyPluginName, platformMCPLegacyAgentPluginRoot},
-	} {
-		b1Required := []string{
-			platformMCPPluginRoot + "/.claude-plugin/plugin.json",
-			platformMCPPluginRoot + "/.mcp.json",
-			layout.agentRoot + "/plugin.json",
-			layout.agentRoot + "/mcp.json",
-		}
-		nativeRequired := []string{
-			platformMCPCursorPluginRoot + "/.cursor-plugin/plugin.json",
-			platformMCPCursorPluginRoot + "/mcp.json",
-			platformMCPCodexPluginRoot + "/.codex-plugin/plugin.json",
-			platformMCPCodexPluginRoot + "/.mcp.json",
-			platformMCPOpenCodePluginRoot + "/plugin/" + layout.pluginName + ".ts",
-			platformMCPOpenCodePluginRoot + "/" + layout.pluginName + "/mcp.json",
-		}
-		for name := range skills {
-			b1Required = append(b1Required,
-				platformMCPPluginRoot+"/skills/"+name+"/SKILL.md",
-				layout.agentRoot+"/skills/"+name+"/SKILL.md",
-			)
-			nativeRequired = append(nativeRequired,
-				platformMCPCursorPluginRoot+"/skills/"+name+"/SKILL.md",
-				platformMCPCodexPluginRoot+"/skills/"+name+"/SKILL.md",
-				platformMCPOpenCodePluginRoot+"/"+layout.pluginName+"/skills/"+name+"/SKILL.md",
-			)
-		}
-
-		b1, ok := stageRoots([]string{platformMCPPluginRoot, layout.agentRoot}, b1Required)
-		if !ok {
-			continue
-		}
-		maps.Copy(dst, b1)
-
-		native, nativeOK := stageRoots(
-			[]string{platformMCPCursorPluginRoot, platformMCPCodexPluginRoot, platformMCPOpenCodePluginRoot},
-			nativeRequired,
-		)
-		if nativeOK {
-			maps.Copy(dst, native)
-		}
-		return true, nativeOK
-	}
-	return false, false
 }
 
 // carryHooksSubtree copies the published hooks (observability) subtree
@@ -2947,8 +2458,7 @@ func (s *Service) UpdateMarketplaceSettings(ctx context.Context, payload *gen.Up
 				// if the org isn't cleared, the new name still reaches MCP and the
 				// marketplace manifests while the Codex hooks are carried and catch
 				// up once eligible; the outcome reports that so we can tell the user.
-				ForcePlatformMCPRepair: false,
-				SkipIfUnchanged:        false,
+				SkipIfUnchanged: false,
 			})
 			if err != nil {
 				return nil, err
@@ -3448,13 +2958,12 @@ func (s *Service) generateConfig(ctx context.Context, orgID, orgSlug, projectSlu
 		// settings flip right after a publish) still mint distinct manifest
 		// versions; the 13-digit patch also sorts numerically above the
 		// 10-digit second epochs already in installed caches.
-		Version:            fmt.Sprintf("%d", time.Now().UnixMilli()),
-		MarketplaceName:    "",
-		HooksOrgName:       "",
-		IsDefaultProject:   s.isDefaultProject(ctx, projectID),
-		BrowserLogin:       false,
-		InstallFailOpen:    false,
-		PlatformMCPEnabled: false,
+		Version:          fmt.Sprintf("%d", time.Now().UnixMilli()),
+		MarketplaceName:  "",
+		HooksOrgName:     "",
+		IsDefaultProject: s.isDefaultProject(ctx, projectID),
+		BrowserLogin:     false,
+		InstallFailOpen:  false,
 	}
 	orgName, err := s.repo.GetOrganizationName(ctx, orgID)
 	switch {

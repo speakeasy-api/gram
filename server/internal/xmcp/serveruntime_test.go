@@ -23,6 +23,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/auth"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/killswitches/mcptoolexecution"
 	"github.com/speakeasy-api/gram/server/internal/mcp"
 	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
@@ -525,7 +526,7 @@ func TestServeMCP_IssuerGatedRemoteBackend_HappyPath(t *testing.T) {
 	require.NoError(t, err)
 	project, err := projectsrepo.New(ti.conn).GetProjectByID(ctx, *authCtx.ProjectID)
 	require.NoError(t, err)
-	endpoint := mcp.NewResolvedMcpEndpointFromMcpServer(&mcpEndpoint, &mcpServer, project.OrganizationID)
+	endpoint := mcp.NewResolvedMcpEndpointFromMcpServer(&mcpEndpoint, &mcpServer, project.OrganizationID, "x/mcp")
 
 	// Public OAuth client (token_endpoint_auth_method=none) — no
 	// client_secret_hash, PKCE alone establishes proof-of-possession.
@@ -625,7 +626,7 @@ func mintAccessTokenForSeededEndpoint(
 	require.NoError(t, err)
 	project, err := projectsrepo.New(ti.conn).GetProjectByID(ctx, mcpServer.ProjectID)
 	require.NoError(t, err)
-	endpoint := mcp.NewResolvedMcpEndpointFromMcpServer(&mcpEndpoint, &mcpServer, project.OrganizationID)
+	endpoint := mcp.NewResolvedMcpEndpointFromMcpServer(&mcpEndpoint, &mcpServer, project.OrganizationID, "x/mcp")
 
 	require.True(t, mcpServer.UserSessionIssuerID.Valid, "remote-backed seeds always carry an issuer")
 	subject := urn.NewAnonymousSubject(uuid.NewString())
@@ -732,7 +733,7 @@ func TestServeMCP_IssuerGatedToolsetBackend_HappyPath(t *testing.T) {
 	require.NoError(t, err)
 	project, err := projectsrepo.New(ti.conn).GetProjectByID(ctx, *authCtx.ProjectID)
 	require.NoError(t, err)
-	endpoint := mcp.NewResolvedMcpEndpointFromMcpServer(&mcpEndpoint, &mcpServer, project.OrganizationID)
+	endpoint := mcp.NewResolvedMcpEndpointFromMcpServer(&mcpEndpoint, &mcpServer, project.OrganizationID, "x/mcp")
 
 	subject := urn.NewAnonymousSubject(uuid.NewString())
 	accessToken := mintIssuerGatedAccessToken(t, ctx, ti, slug, endpoint, issuerID, subject)
@@ -743,6 +744,44 @@ func TestServeMCP_IssuerGatedToolsetBackend_HappyPath(t *testing.T) {
 	rr := runHandler(t, ctx, ti, http.MethodPost, slug, bearer(accessToken), []byte(initializeBody))
 	require.NotEqual(t, http.StatusUnauthorized, rr.Code, "issuer-gated bearer must not be rejected by the legacy auth chain inside ServeToolsetResolved; body=%s", rr.Body.String())
 	require.Equal(t, http.StatusOK, rr.Code, "ServeMCP should respond 200; body=%s", rr.Body.String())
+}
+
+func TestServeMCP_IssuerGatedToolsetBackend_Killswitch(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+	require.NotEmpty(t, authCtx.UserID)
+
+	slug, mcpServer, issuerID := seedIssuerGatedToolsetMCPEndpoint(t, ctx, ti, authCtx.ActiveOrganizationID, *authCtx.ProjectID, "public")
+	mcpEndpoint, err := mcpendpointsrepo.New(ti.conn).GetMCPEndpointByCustomDomainAndSlug(ctx, mcpendpointsrepo.GetMCPEndpointByCustomDomainAndSlugParams{
+		Slug:           slug,
+		CustomDomainID: uuid.NullUUID{},
+	})
+	require.NoError(t, err)
+	endpoint := mcp.NewResolvedMcpEndpointFromMcpServer(&mcpEndpoint, &mcpServer, authCtx.ActiveOrganizationID, "x/mcp")
+	accessToken := mintIssuerGatedAccessToken(t, ctx, ti, slug, endpoint, issuerID, urn.NewUserSubject(authCtx.UserID))
+
+	err = testrepo.New(ti.conn).InsertKillswitchPrescriptionFixture(ctx, testrepo.InsertKillswitchPrescriptionFixtureParams{
+		PrescriptionID: uuid.New(),
+		OrganizationID: authCtx.ActiveOrganizationID,
+		DefinitionKey:  string(mcptoolexecution.DefinitionKeyMCPToolExecution),
+		PrincipalKind:  string(mcptoolexecution.PrincipalKindUser),
+		PrincipalKey:   authCtx.UserID,
+		ResourceKind:   string(mcptoolexecution.ResourceKindMCPServer),
+		ResourceScope:  "selected",
+		InternalNote:   "test context",
+		ExternalNote:   "Exact x/mcp note.",
+		ResourceKeys:   []string{mcpServer.ID.String()},
+	})
+	require.NoError(t, err)
+
+	body := []byte(`{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"missing_tool","arguments":{}}}`)
+	rr := runHandler(t, ctx, ti, http.MethodPost, slug, bearer(accessToken), body)
+	require.Equal(t, http.StatusOK, rr.Code)
+	require.JSONEq(t, `{"jsonrpc":"2.0","id":2,"error":{"code":-32003,"message":"Exact x/mcp note.","data":{"code":"mcp_tool_calls_paused"}}}`, rr.Body.String())
 }
 
 // TestServeMCP_IssuerGatedRemoteBackend_Private_HappyPath exercises the
@@ -777,7 +816,7 @@ func TestServeMCP_IssuerGatedRemoteBackend_PrivateHappyPath(t *testing.T) {
 	require.NoError(t, err)
 	project, err := projectsrepo.New(ti.conn).GetProjectByID(ctx, *authCtx.ProjectID)
 	require.NoError(t, err)
-	endpoint := mcp.NewResolvedMcpEndpointFromMcpServer(&mcpEndpoint, &mcpServer, project.OrganizationID)
+	endpoint := mcp.NewResolvedMcpEndpointFromMcpServer(&mcpEndpoint, &mcpServer, project.OrganizationID, "x/mcp")
 
 	// Private endpoints route through the IDP, which stamps a user
 	// subject (not anonymous) onto the cached challenge state.
@@ -793,6 +832,59 @@ func TestServeMCP_IssuerGatedRemoteBackend_PrivateHappyPath(t *testing.T) {
 	require.NotEqual(t, http.StatusUnauthorized, rr.Code, "issuer-gated bearer on a private endpoint must not be re-rejected by RequirePrivateIdentityAuth; body=%s", rr.Body.String())
 	require.Equal(t, http.StatusOK, rr.Code, "ServeMCP should proxy through; body=%s", rr.Body.String())
 	require.Equal(t, http.MethodPost, gotMethod)
+}
+
+func TestServeMCP_IssuerGatedRemoteBackend_PrivateKillswitch(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+	require.NotEmpty(t, authCtx.UserID)
+
+	upstreamCalled := make(chan struct{}, 1)
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		upstreamCalled <- struct{}{}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"jsonrpc":"2.0","id":2,"result":{}}`))
+	}))
+	t.Cleanup(upstream.Close)
+
+	slug, mcpServer, issuerID := seedIssuerGatedRemoteMCPEndpoint(t, ctx, ti, *authCtx.ProjectID, upstream.URL, "private")
+	mcpEndpoint, err := mcpendpointsrepo.New(ti.conn).GetMCPEndpointByCustomDomainAndSlug(ctx, mcpendpointsrepo.GetMCPEndpointByCustomDomainAndSlugParams{
+		Slug:           slug,
+		CustomDomainID: uuid.NullUUID{},
+	})
+	require.NoError(t, err)
+	project, err := projectsrepo.New(ti.conn).GetProjectByID(ctx, *authCtx.ProjectID)
+	require.NoError(t, err)
+	endpoint := mcp.NewResolvedMcpEndpointFromMcpServer(&mcpEndpoint, &mcpServer, project.OrganizationID, "x/mcp")
+	accessToken := mintIssuerGatedAccessToken(t, ctx, ti, slug, endpoint, issuerID, urn.NewUserSubject(authCtx.UserID))
+
+	err = testrepo.New(ti.conn).InsertKillswitchPrescriptionFixture(ctx, testrepo.InsertKillswitchPrescriptionFixtureParams{
+		PrescriptionID: uuid.New(),
+		OrganizationID: authCtx.ActiveOrganizationID,
+		DefinitionKey:  string(mcptoolexecution.DefinitionKeyMCPToolExecution),
+		PrincipalKind:  string(mcptoolexecution.PrincipalKindUser),
+		PrincipalKey:   authCtx.UserID,
+		ResourceKind:   string(mcptoolexecution.ResourceKindMCPServer),
+		ResourceScope:  "selected",
+		InternalNote:   "test context",
+		ExternalNote:   "Exact private proxy note.",
+		ResourceKeys:   []string{mcpServer.ID.String()},
+	})
+	require.NoError(t, err)
+
+	body := []byte(`{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"missing_tool","arguments":{}}}`)
+	rr := runHandler(t, ctx, ti, http.MethodPost, slug, bearer(accessToken), body)
+	require.Equal(t, http.StatusOK, rr.Code)
+	require.JSONEq(t, `{"jsonrpc":"2.0","id":2,"error":{"code":-32003,"message":"Exact private proxy note.","data":{"code":"mcp_tool_calls_paused"}}}`, rr.Body.String())
+	select {
+	case <-upstreamCalled:
+		t.Fatal("private killswitch rejection reached the upstream MCP server")
+	default:
+	}
 }
 
 // TestServeMCP_IssuerGated_CrossIssuerTokenRejected asserts the
@@ -824,7 +916,7 @@ func TestServeMCP_IssuerGatedRemoteBackend_CrossIssuerTokenRejected(t *testing.T
 	require.NoError(t, err)
 	project, err := projectsrepo.New(ti.conn).GetProjectByID(ctx, *authCtx.ProjectID)
 	require.NoError(t, err)
-	endpointA := mcp.NewResolvedMcpEndpointFromMcpServer(&mcpEndpointA, &mcpServerA, project.OrganizationID)
+	endpointA := mcp.NewResolvedMcpEndpointFromMcpServer(&mcpEndpointA, &mcpServerA, project.OrganizationID, "x/mcp")
 
 	// Endpoint B: a sibling under a different issuer.
 	slugB, _, _ := seedIssuerGatedRemoteMCPEndpoint(t, ctx, ti, *authCtx.ProjectID, upstream.URL, "public")
@@ -1127,7 +1219,7 @@ func TestRequireUserSessionIssuer_DanglingFKReturnsNotFound(t *testing.T) {
 	require.NoError(t, err)
 	project, err := projectsrepo.New(ti.conn).GetProjectByID(ctx, *authCtx.ProjectID)
 	require.NoError(t, err)
-	endpoint := mcp.NewResolvedMcpEndpointFromMcpServer(&mcpEndpoint, &mcpServer, project.OrganizationID)
+	endpoint := mcp.NewResolvedMcpEndpointFromMcpServer(&mcpEndpoint, &mcpServer, project.OrganizationID, "x/mcp")
 
 	// Sanity check: the issuer FK resolves cleanly before deletion.
 	require.NoError(t, ti.mcpService.RequireUserSessionIssuer(ctx, endpoint))
@@ -1360,7 +1452,7 @@ func TestServeMCP_IssuerGatedToolsetBackend_PrivateHappyPath(t *testing.T) {
 	require.NoError(t, err)
 	project, err := projectsrepo.New(ti.conn).GetProjectByID(ctx, *authCtx.ProjectID)
 	require.NoError(t, err)
-	endpoint := mcp.NewResolvedMcpEndpointFromMcpServer(&mcpEndpoint, &mcpServer, project.OrganizationID)
+	endpoint := mcp.NewResolvedMcpEndpointFromMcpServer(&mcpEndpoint, &mcpServer, project.OrganizationID, "x/mcp")
 
 	// Private endpoints route through the IDP and stamp user subjects.
 	subject := urn.NewUserSubject("user_" + uuid.NewString()[:8])

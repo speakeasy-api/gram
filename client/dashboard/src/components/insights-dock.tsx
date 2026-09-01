@@ -1,4 +1,5 @@
 import { useNoToolsetsConfigured } from "@/hooks/useObservabilityMcpConfig";
+import { showProjectAssistantConnecting } from "@/hooks/projectAssistantAccess";
 import { useServerAssistantTransport } from "@/hooks/useServerAssistantTransport";
 import { useDrainInfiniteQuery } from "@/hooks/useDrainInfiniteQuery";
 import { useListChats } from "@gram/client/react-query/listChats.js";
@@ -1512,7 +1513,11 @@ export function InsightsProvider({
             {panelCloseButton}
           </div>
           {panelNotices}
-          {!assistantError && !assistantNeedsAdmin && (
+          {showProjectAssistantConnecting({
+            assistantError,
+            assistantNeedsAdmin,
+            noMcpAccessConfigured: noToolsetsConfigured,
+          }) && (
             <div className="text-muted-foreground flex flex-1 items-center justify-center gap-2 text-sm">
               <Loader2 className="size-4 animate-spin" />
               <span>Connecting to the Project Assistant…</span>

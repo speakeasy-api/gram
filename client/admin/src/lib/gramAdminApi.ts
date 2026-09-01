@@ -234,6 +234,42 @@ export type ListOrganizationsResult = {
   next_cursor?: string;
 };
 
+export type AdminAuditLog = {
+  id: string;
+  project_id?: string;
+  project_slug?: string;
+  actor_id: string;
+  actor_type: string;
+  actor_display_name?: string;
+  actor_slug?: string;
+  action: string;
+  acting_surface: string;
+  acting_client_id?: string;
+  subject_id: string;
+  subject_type: string;
+  subject_display_name?: string;
+  subject_slug?: string;
+  before_snapshot?: unknown;
+  after_snapshot?: unknown;
+  metadata?: Record<string, unknown>;
+  created_at: string;
+};
+
+export type ListOrganizationActivityResult = {
+  logs: AdminAuditLog[];
+  next_cursor?: string;
+};
+
+export function listOrganizationActivity(
+  organizationID: string,
+  cursor?: string,
+): Promise<ListOrganizationActivityResult> {
+  const qs = toSearchParams({ organization_id: organizationID, cursor });
+  return gramAdminFetch<ListOrganizationActivityResult>(
+    `/admin/organization.activity?${qs.toString()}`,
+  );
+}
+
 // Each filter is a repeated parameter the server reads as a set, and an absent
 // one means no filter of that kind: no account_types is every type, no
 // trial_states is every state, no disabled_states is active organizations only.
@@ -355,6 +391,24 @@ export function bulkUpdateAccountType(
 export type OrganizationRequest = {
   id: string;
 };
+
+export type MarkEnterpriseTrialConvertedResult = {
+  organization_id: string;
+  converted_at: string;
+};
+
+export function markEnterpriseTrialConverted(
+  body: OrganizationRequest,
+): Promise<MarkEnterpriseTrialConvertedResult> {
+  return gramAdminMutation<MarkEnterpriseTrialConvertedResult>(
+    "/admin/trial.convert",
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    },
+  );
+}
 
 // Both answer the organization in its new state, so a caller updates its cache
 // from the response rather than reading the record back.
@@ -491,11 +545,20 @@ export function listOrganizationMembers(
   );
 }
 
-export type AdminInferenceKey = {
+type AdminInferenceKeyResponse = {
   key_type: string;
   credits_used: number;
   monthly_credits: number;
   disabled: boolean;
+  disable_causes?: string[];
+  disable_causes_classified: boolean;
+};
+
+export type AdminInferenceKey = Omit<
+  AdminInferenceKeyResponse,
+  "disable_causes"
+> & {
+  disable_causes: string[] | null;
 };
 
 export type AdminOrganizationFeatures = {
@@ -605,13 +668,19 @@ export function setOrganizationChatAnalysisSetting(input: {
   );
 }
 
-export function getInferenceKeys(
+export async function getInferenceKeys(
   organizationID: string,
 ): Promise<AdminInferenceKey[]> {
   const qs = toSearchParams({ organization_id: organizationID });
-  return gramAdminFetch<AdminInferenceKey[]>(
+  const keys = await gramAdminFetch<AdminInferenceKeyResponse[]>(
     `/admin/organization.inferenceKeys?${qs}`,
   );
+  return keys.map((key) => ({
+    ...key,
+    disable_causes: key.disable_causes_classified
+      ? (key.disable_causes ?? [])
+      : null,
+  }));
 }
 
 export type AdminInferenceKeyType = "chat" | "internal";

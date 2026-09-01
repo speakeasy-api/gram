@@ -79,7 +79,7 @@ func (c *Client) IsFeatureEnabled(ctx context.Context, organizationID string, fe
 		}
 
 		enabled = res
-		c.storeFeatureCache(ctx, organizationID, feature, enabled, "failed to cache feature flag state")
+		_ = c.storeFeatureCache(ctx, organizationID, feature, enabled, "failed to cache feature flag state")
 		return nil
 	})
 	if err != nil {
@@ -140,7 +140,7 @@ func (c *Client) SetFeatureEnabled(ctx context.Context, organizationID string, f
 		if err := setFeatureEnabled(ctx, repo.New(conn), organizationID, feature, enabled); err != nil {
 			return err
 		}
-		c.storeFeatureCache(ctx, organizationID, feature, enabled, "failed to update feature flag cache")
+		_ = c.storeFeatureCache(ctx, organizationID, feature, enabled, "failed to update feature flag cache")
 		return nil
 	})
 }
@@ -169,8 +169,8 @@ func (c *Client) SetRemoteSessionAutoRefreshEnabled(ctx context.Context, organiz
 			return fmt.Errorf("commit remote session auto-refresh update: %w", err)
 		}
 
-		c.storeFeatureCache(ctx, organizationID, FeatureRemoteSessionAutoRefreshEnforced, false, "failed to update feature flag cache")
-		c.storeFeatureCache(ctx, organizationID, FeatureRemoteSessionAutoRefresh, enabled, "failed to update feature flag cache")
+		_ = c.storeFeatureCache(ctx, organizationID, FeatureRemoteSessionAutoRefreshEnforced, false, "failed to update feature flag cache")
+		_ = c.storeFeatureCache(ctx, organizationID, FeatureRemoteSessionAutoRefresh, enabled, "failed to update feature flag cache")
 		return nil
 	})
 }
@@ -180,14 +180,7 @@ func (c *Client) SetRemoteSessionAutoRefreshEnabled(ctx context.Context, organiz
 // the feature flag from a code path that bypasses this client.
 func (c *Client) UpdateFeatureCache(ctx context.Context, organizationID string, feature Feature, _ bool) {
 	if err := c.withFeatureCacheLock(ctx, organizationID, feature, func(conn *pgxpool.Conn) error {
-		enabled, err := repo.New(conn).IsFeatureEnabled(ctx, repo.IsFeatureEnabledParams{
-			OrganizationID: organizationID, FeatureName: string(feature),
-		})
-		if err != nil {
-			return fmt.Errorf("reload feature cache state: %w", err)
-		}
-		c.storeFeatureCache(ctx, organizationID, feature, enabled, "failed to update feature flag cache")
-		return nil
+		return c.UpdateFeatureCacheUnderLock(ctx, conn, organizationID, feature)
 	}); err != nil {
 		c.logger.WarnContext(ctx, "failed to refresh feature flag cache",
 			attr.SlogError(err), attr.SlogOrganizationID(organizationID), attr.SlogProductFeatureName(string(feature)),
@@ -195,7 +188,22 @@ func (c *Client) UpdateFeatureCache(ctx context.Context, organizationID string, 
 	}
 }
 
-func (c *Client) storeFeatureCache(ctx context.Context, organizationID string, feature Feature, enabled bool, message string) {
+// UpdateFeatureCacheUnderLock refreshes one cache entry using the connection
+// that holds its feature lock. Callers must already hold that lock.
+func (c *Client) UpdateFeatureCacheUnderLock(ctx context.Context, conn *pgxpool.Conn, organizationID string, feature Feature) error {
+	enabled, err := repo.New(conn).IsFeatureEnabled(ctx, repo.IsFeatureEnabledParams{
+		OrganizationID: organizationID, FeatureName: string(feature),
+	})
+	if err != nil {
+		return fmt.Errorf("reload feature cache state: %w", err)
+	}
+	if err := c.storeFeatureCache(ctx, organizationID, feature, enabled, "failed to update feature flag cache"); err != nil {
+		return fmt.Errorf("store feature cache state: %w", err)
+	}
+	return nil
+}
+
+func (c *Client) storeFeatureCache(ctx context.Context, organizationID string, feature Feature, enabled bool, message string) error {
 	cacheEntry := FeatureCache{
 		OrganizationID: organizationID,
 		Feature:        feature,
@@ -207,7 +215,9 @@ func (c *Client) storeFeatureCache(ctx context.Context, organizationID string, f
 			attr.SlogOrganizationID(organizationID),
 			attr.SlogProductFeatureName(string(feature)),
 		)
+		return fmt.Errorf("store feature cache entry: %w", err)
 	}
+	return nil
 }
 
 func setFeatureEnabled(ctx context.Context, queries *repo.Queries, organizationID string, feature Feature, enabled bool) error {
@@ -238,6 +248,13 @@ func (c *Client) withFeatureCacheLocks(ctx context.Context, organizationID strin
 	return fn(conn)
 }
 
+// AcquireFeatureCacheLocks acquires the same canonical, sorted advisory locks
+// used by feature mutations. The caller must begin its transaction on the
+// returned connection and hold the locks through commit and cache refresh.
+func (c *Client) AcquireFeatureCacheLocks(ctx context.Context, organizationID string, features []Feature) (*pgxpool.Conn, func(), error) {
+	return c.acquireFeatureCacheLocks(ctx, organizationID, features)
+}
+
 func (c *Client) acquireFeatureCacheLocks(ctx context.Context, organizationID string, features []Feature) (*pgxpool.Conn, func(), error) {
 	conn, err := c.db.Acquire(ctx)
 	if err != nil {
@@ -251,8 +268,8 @@ func (c *Client) acquireFeatureCacheLocks(ctx context.Context, organizationID st
 	release := func() {
 		unlockCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
 		defer cancel()
-		for i := len(acquired) - 1; i >= 0; i-- {
-			params := acquired[i]
+		for _, params := range slices.Backward(acquired) {
+
 			unlocked, unlockErr := queries.ReleaseFeatureCacheLock(unlockCtx, repo.ReleaseFeatureCacheLockParams(params))
 			if unlockErr != nil || !unlocked {
 				c.logger.ErrorContext(unlockCtx, "failed to release feature cache lock",
@@ -305,15 +322,29 @@ func provisionSkillsSystemRoleGrantsTx(ctx context.Context, dbtx repo.DBTX, orga
 	return nil
 }
 
-// SeedOrganizationDefaultsTx enables baseline entitlements for every newly
-// provisioned organization. It is intentionally separate from trial seeding so
-// an explicit org-admin disable remains durable and absent rows stay disabled.
+// OrganizationDefaultFeatures are enabled for every newly provisioned
+// organization. Org admins can still disable them. They are not part of
+// TrialRuntimeFeatures, so an expired trial does not turn them off.
+var OrganizationDefaultFeatures = []Feature{
+	FeaturePlatformMCP,
+	FeatureLogs,
+	FeatureToolIOLogs,
+	FeatureSessionCapture,
+}
+
+// SeedOrganizationDefaultsTx enables baseline entitlements for a newly
+// provisioned organization. Call it only on create: EnableFeature inserts a
+// new enabled row after a soft-delete, so replaying this on an existing org
+// would undo an administrator disable.
 func SeedOrganizationDefaultsTx(ctx context.Context, tx pgx.Tx, organizationID string) error {
-	if _, err := repo.New(tx).EnableFeature(ctx, repo.EnableFeatureParams{
-		OrganizationID: organizationID,
-		FeatureName:    string(FeaturePlatformMCP),
-	}); err != nil {
-		return fmt.Errorf("enable default %s entitlement: %w", FeaturePlatformMCP, err)
+	q := repo.New(tx)
+	for _, feature := range OrganizationDefaultFeatures {
+		if _, err := q.EnableFeature(ctx, repo.EnableFeatureParams{
+			OrganizationID: organizationID,
+			FeatureName:    string(feature),
+		}); err != nil {
+			return fmt.Errorf("enable default %s entitlement: %w", feature, err)
+		}
 	}
 	return nil
 }
@@ -343,9 +374,6 @@ var EnterpriseTrialBundle = []Feature{
 // TrialRuntimeFeatures are disabled when an enterprise trial expires and
 // restored when the organization returns to a paid or trial state.
 var TrialRuntimeFeatures = []Feature{
-	FeatureLogs,
-	FeatureToolIOLogs,
-	FeatureSessionCapture,
 	FeaturePlatformMCP,
 }
 
@@ -392,7 +420,7 @@ func SeedEnterpriseTrialBundleTx(ctx context.Context, tx pgx.Tx, organizationID 
 		}
 	}
 
-	if err := EnableSkillsTx(ctx, tx, organizationID); err != nil {
+	if _, err := EnableSkillsTx(ctx, tx, organizationID); err != nil {
 		return fmt.Errorf("enable Skills for enterprise trial: %w", err)
 	}
 
@@ -436,23 +464,25 @@ func SeedPaygEntitlementsTx(ctx context.Context, tx pgx.Tx, organizationID strin
 
 // EnableSkillsTx provisions the built-in Skills grants and enables the
 // org-level Skills feature in the caller's transaction. Existing grants and
-// exclusions are preserved.
-func EnableSkillsTx(ctx context.Context, dbtx repo.DBTX, organizationID string) error {
+// exclusions are preserved. It reports whether the feature row was newly
+// inserted, so callers can audit actual transitions without a separate read.
+func EnableSkillsTx(ctx context.Context, dbtx repo.DBTX, organizationID string) (bool, error) {
 	q := repo.New(dbtx)
 	if _, err := q.LockOrganizationMetadata(ctx, organizationID); err != nil {
-		return fmt.Errorf("lock organization for Skills enable: %w", err)
+		return false, fmt.Errorf("lock organization for Skills enable: %w", err)
 	}
 
 	if err := provisionSkillsSystemRoleGrantsTx(ctx, dbtx, organizationID); err != nil {
-		return err
+		return false, err
 	}
 
-	if _, err := q.EnableFeature(ctx, repo.EnableFeatureParams{
+	inserted, err := q.EnableFeature(ctx, repo.EnableFeatureParams{
 		OrganizationID: organizationID,
 		FeatureName:    string(FeatureSkills),
-	}); err != nil {
-		return fmt.Errorf("enable Skills feature flag: %w", err)
+	})
+	if err != nil {
+		return false, fmt.Errorf("enable Skills feature flag: %w", err)
 	}
 
-	return nil
+	return inserted > 0, nil
 }

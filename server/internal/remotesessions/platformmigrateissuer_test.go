@@ -297,7 +297,7 @@ func TestMigrateToGlobalIssuer_EndpointMismatchConflict(t *testing.T) {
 	preflight, err := ti.service.GetGlobalIssuerMigratePreflight(withAdmin(t, ctx), platformPreflightPayload(sourceID.String(), targetID.String()))
 	require.NoError(t, err)
 	require.False(t, preflight.CanMigrate)
-	require.Contains(t, preflight.EndpointMismatches, "issuer")
+	require.Contains(t, mismatchedFields(preflight.EndpointMismatches), "issuer")
 }
 
 // TestMigrateToGlobalIssuer_DuplicateBindingConflict proves the
@@ -517,8 +517,8 @@ func TestListGlobalIssuerConvergenceCandidates_MatchesCanonicalSpellings(t *test
 	// mismatch. Its endpoints, which this fixture derives from the URL and so
 	// spells with a doubled slash, still are: endpoints are request targets rather
 	// than identities and stay compared literally.
-	require.NotContains(t, found[slashed.String()].EndpointMismatches, "issuer", "a canonical match is not an issuer mismatch")
-	require.Contains(t, found[slashed.String()].EndpointMismatches, "token_endpoint")
+	require.NotContains(t, mismatchedFields(found[slashed.String()].EndpointMismatches), "issuer", "a canonical match is not an issuer mismatch")
+	require.Contains(t, mismatchedFields(found[slashed.String()].EndpointMismatches), "token_endpoint")
 
 	require.Empty(t, found[exact.String()].EndpointMismatches, "an identical issuer must have no blockers at all")
 	require.Equal(t, orgID, found[exact.String()].OrganizationID)
@@ -562,8 +562,8 @@ func TestListGlobalIssuerConvergenceCandidates_ReportsInlineBlockers(t *testing.
 		}
 	}
 	require.NotNil(t, candidate, "a near-miss candidate must still be listed")
-	require.Contains(t, candidate.EndpointMismatches, "token_endpoint")
-	require.NotContains(t, candidate.EndpointMismatches, "issuer")
+	require.Contains(t, mismatchedFields(candidate.EndpointMismatches), "token_endpoint")
+	require.NotContains(t, mismatchedFields(candidate.EndpointMismatches), "issuer")
 }
 
 func TestListGlobalIssuerConvergenceCandidates_TargetNotFound(t *testing.T) {

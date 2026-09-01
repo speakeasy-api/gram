@@ -2,14 +2,14 @@ lockVersion: 2.0.0
 id: f77ef720-de44-40b6-8dc1-f16f936ef992
 management:
   docVersion: 0.0.1
-  speakeasyVersion: 1.791.1
-  generationVersion: 2.926.2
+  speakeasyVersion: 1.796.1
+  generationVersion: 2.933.0
   releaseVersion: 0.33.8
 features:
   typescript:
     additionalDependencies: 0.1.0
     constsAndDefaults: 0.1.14
-    core: 3.31.4
+    core: 3.31.6
     defaultEnabledRetries: 0.1.0
     devContainers: 2.90.1
     downloadStreams: 0.1.1
@@ -27,6 +27,7 @@ features:
     responseFormat: 0.3.0
     retries: 2.83.1
     sdkHooks: 0.4.0
+    unions: 2.86.5
     uploadStreams: 0.1.1
 trackedFiles:
   FUNCTIONS.md: {}
@@ -149,13 +150,6 @@ trackedFiles:
   src/funcs/chatSummarizeToolCall.ts: {}
   src/funcs/cliAuthAuthorize.ts: {}
   src/funcs/cliAuthRedeem.ts: {}
-  src/funcs/collectionsAttachServer.ts: {}
-  src/funcs/collectionsCreate.ts: {}
-  src/funcs/collectionsDelete.ts: {}
-  src/funcs/collectionsDetachServer.ts: {}
-  src/funcs/collectionsList.ts: {}
-  src/funcs/collectionsListServers.ts: {}
-  src/funcs/collectionsUpdate.ts: {}
   src/funcs/deploymentsActive.ts: {}
   src/funcs/deploymentsCreate.ts: {}
   src/funcs/deploymentsEvolveDeployment.ts: {}
@@ -234,6 +228,7 @@ trackedFiles:
   src/funcs/hooksServerNamesUpsertServerNameOverride.ts: {}
   src/funcs/hooksSkillFeedback.ts: {}
   src/funcs/hooksUploadSkillContent.ts: {}
+  src/funcs/identityResolve.ts: {}
   src/funcs/instancesGetBySlug.ts: {}
   src/funcs/integrationsIntegrationsNumberGet.ts: {}
   src/funcs/integrationsList.ts: {}
@@ -251,6 +246,15 @@ trackedFiles:
   src/funcs/keysList.ts: {}
   src/funcs/keysRevokeById.ts: {}
   src/funcs/keysValidate.ts: {}
+  src/funcs/killswitchesBatchUserBadges.ts: {}
+  src/funcs/killswitchesCreate.ts: {}
+  src/funcs/killswitchesEdit.ts: {}
+  src/funcs/killswitchesGet.ts: {}
+  src/funcs/killswitchesLift.ts: {}
+  src/funcs/killswitchesList.ts: {}
+  src/funcs/killswitchesListCapabilities.ts: {}
+  src/funcs/killswitchesListMCPServers.ts: {}
+  src/funcs/killswitchesPreviewOverlaps.ts: {}
   src/funcs/litellmCreateInstance.ts: {}
   src/funcs/litellmIngestGuardrail.ts: {}
   src/funcs/litellmListInstances.ts: {}
@@ -357,6 +361,12 @@ trackedFiles:
   src/funcs/packagesListVersions.ts: {}
   src/funcs/packagesPublish.ts: {}
   src/funcs/packagesUpdate.ts: {}
+  src/funcs/platformKillswitchesPlatformKillswitchesNumberActivatePrescription.ts: {}
+  src/funcs/platformKillswitchesPlatformKillswitchesNumberChangePrescription.ts: {}
+  src/funcs/platformKillswitchesPlatformKillswitchesNumberDeactivatePrescription.ts: {}
+  src/funcs/platformKillswitchesPlatformKillswitchesNumberGetPrescription.ts: {}
+  src/funcs/platformKillswitchesPlatformKillswitchesNumberListDefinitions.ts: {}
+  src/funcs/platformKillswitchesPlatformKillswitchesNumberListPrescriptions.ts: {}
   src/funcs/platformMcpDismissOnboarding.ts: {}
   src/funcs/platformMcpDistributeOnboardingCandidate.ts: {}
   src/funcs/platformMcpGetOnboarding.ts: {}
@@ -373,17 +383,14 @@ trackedFiles:
   src/funcs/pluginsDeletePlugin.ts: {}
   src/funcs/pluginsDownloadCodexInstallScript.ts: {}
   src/funcs/pluginsDownloadObservabilityPlugin.ts: {}
-  src/funcs/pluginsDownloadPlatformMCPPlugin.ts: {}
   src/funcs/pluginsDownloadPluginPackage.ts: {}
   src/funcs/pluginsGetMarketplaceSettings.ts: {}
-  src/funcs/pluginsGetPlatformMCPPackageStatus.ts: {}
   src/funcs/pluginsGetPlugin.ts: {}
   src/funcs/pluginsGetPublishStatus.ts: {}
   src/funcs/pluginsListAudiences.ts: {}
   src/funcs/pluginsListPlugins.ts: {}
   src/funcs/pluginsPublishPlugins.ts: {}
   src/funcs/pluginsRemovePluginServer.ts: {}
-  src/funcs/pluginsRepairPlatformMCPPackage.ts: {}
   src/funcs/pluginsSetPluginAssignments.ts: {}
   src/funcs/pluginsUpdateMarketplaceSettings.ts: {}
   src/funcs/pluginsUpdatePlugin.ts: {}
@@ -562,6 +569,7 @@ trackedFiles:
   src/funcs/toolsetsList.ts: {}
   src/funcs/toolsetsListForOrg.ts: {}
   src/funcs/toolsetsListToolFilters.ts: {}
+  src/funcs/toolsetsListToolSchemaStaticValues.ts: {}
   src/funcs/toolsetsRemoveOAuthServer.ts: {}
   src/funcs/toolsetsSetToolVariationsGroup.ts: {}
   src/funcs/toolsetsSetUserSessionIssuer.ts: {}
@@ -650,6 +658,7 @@ trackedFiles:
   src/models/components/accessmember.ts: {}
   src/models/components/acknowledgeriskpolicychallengerequestbody.ts: {}
   src/models/components/acknowledgeriskpolicychallengeresponsebody.ts: {}
+  src/models/components/activateprescriptionrequestbody.ts: {}
   src/models/components/actorattribute.ts: {}
   src/models/components/adddeploymentpackageform.ts: {}
   src/models/components/addexternalmcpform.ts: {}
@@ -685,7 +694,6 @@ trackedFiles:
   src/models/components/assistantsessionsummary.ts: {}
   src/models/components/assistantskillref.ts: {}
   src/models/components/assistanttoolsetref.ts: {}
-  src/models/components/attachserverrequestbody.ts: {}
   src/models/components/attachusersessionissuerform.ts: {}
   src/models/components/auditlog.ts: {}
   src/models/components/auditlogfacetoption.ts: {}
@@ -704,6 +712,7 @@ trackedFiles:
   src/models/components/captureeventresult.ts: {}
   src/models/components/challengebucket.ts: {}
   src/models/components/challengeresolution.ts: {}
+  src/models/components/changeprescriptionrequestbody.ts: {}
   src/models/components/chat.ts: {}
   src/models/components/chatanalysissettings.ts: {}
   src/models/components/chatcontentpart.ts: {}
@@ -754,7 +763,6 @@ trackedFiles:
   src/models/components/createremotesessionclientform.ts: {}
   src/models/components/createremotesessionissuerform.ts: {}
   src/models/components/createrequestbody.ts: {}
-  src/models/components/createrequestbody2.ts: {}
   src/models/components/createrequestrequestbody.ts: {}
   src/models/components/createresponsebody.ts: {}
   src/models/components/createriskexclusionrequestbody.ts: {}
@@ -783,6 +791,7 @@ trackedFiles:
   src/models/components/cursorhookresult.ts: {}
   src/models/components/customdomain.ts: {}
   src/models/components/customdomainmcpendpoint.ts: {}
+  src/models/components/deactivateprescriptionrequestbody.ts: {}
   src/models/components/declineriskpolicychallengeresponsebody.ts: {}
   src/models/components/deleteconfigrequestbody.ts: {}
   src/models/components/deleteglobaltoolvariationresult.ts: {}
@@ -926,6 +935,8 @@ trackedFiles:
   src/models/components/hooktracesummary.ts: {}
   src/models/components/hookusagedata.ts: {}
   src/models/components/httptooldefinition.ts: {}
+  src/models/components/identitydirectory.ts: {}
+  src/models/components/identitymodel.ts: {}
   src/models/components/inferencespendcap.ts: {}
   src/models/components/inforesponsebody.ts: {}
   src/models/components/ingesthookresult.ts: {}
@@ -938,10 +949,43 @@ trackedFiles:
   src/models/components/interruptturnrequestbody.ts: {}
   src/models/components/interruptturnresult.ts: {}
   src/models/components/issuerconvergencecandidate.ts: {}
+  src/models/components/issuerfieldmismatch.ts: {}
   src/models/components/issuermigratepreflight.ts: {}
   src/models/components/jsonwebkey.ts: {}
   src/models/components/jsonwebkeyset.ts: {}
   src/models/components/key.ts: {}
+  src/models/components/killswitchbatchuserbadgesrequest.ts: {}
+  src/models/components/killswitchbatchuserbadgesresult.ts: {}
+  src/models/components/killswitchcapability.ts: {}
+  src/models/components/killswitchcapabilitykey.ts: {}
+  src/models/components/killswitchcomingsooncapability.ts: {}
+  src/models/components/killswitchconflictname.ts: {}
+  src/models/components/killswitchcreaterequest.ts: {}
+  src/models/components/killswitchdetail.ts: {}
+  src/models/components/killswitcheditrequest.ts: {}
+  src/models/components/killswitchhistoryaction.ts: {}
+  src/models/components/killswitchhistoryevent.ts: {}
+  src/models/components/killswitchliftrequest.ts: {}
+  src/models/components/killswitchliftresult.ts: {}
+  src/models/components/killswitchlistcapabilitiesresult.ts: {}
+  src/models/components/killswitchlistmcpserversresult.ts: {}
+  src/models/components/killswitchlistresult.ts: {}
+  src/models/components/killswitchliststatus.ts: {}
+  src/models/components/killswitchmcpserver.ts: {}
+  src/models/components/killswitchmutationreceipt.ts: {}
+  src/models/components/killswitchoverlap.ts: {}
+  src/models/components/killswitchoverlapstatus.ts: {}
+  src/models/components/killswitchpreviewoverlapsrequest.ts: {}
+  src/models/components/killswitchpreviewoverlapsresult.ts: {}
+  src/models/components/killswitchschedule.ts: {}
+  src/models/components/killswitchscheduleendbounded.ts: {}
+  src/models/components/killswitchscheduleenduntillifted.ts: {}
+  src/models/components/killswitchschedulestartnow.ts: {}
+  src/models/components/killswitchschedulestartscheduled.ts: {}
+  src/models/components/killswitchscope.ts: {}
+  src/models/components/killswitchstatus.ts: {}
+  src/models/components/killswitchsummary.ts: {}
+  src/models/components/killswitchuserbadge.ts: {}
   src/models/components/listactorattributesresult.ts: {}
   src/models/components/listaiintegrationschedulesresult.ts: {}
   src/models/components/listallowedoriginsresult.ts: {}
@@ -964,6 +1008,7 @@ trackedFiles:
   src/models/components/listcustomdetectionrulesresult.ts: {}
   src/models/components/listcustomdomainmcpendpointsresult.ts: {}
   src/models/components/listcustomdomainsresult.ts: {}
+  src/models/components/listdefinitionsresponsebody.ts: {}
   src/models/components/listdeploymentresult.ts: {}
   src/models/components/listdeviceintegrationprovidersresult.ts: {}
   src/models/components/listdeviceintegrationschedulesresult.ts: {}
@@ -998,6 +1043,7 @@ trackedFiles:
   src/models/components/listorganizationremotesessionsresult.ts: {}
   src/models/components/listpackagesresult.ts: {}
   src/models/components/listpluginsresult.ts: {}
+  src/models/components/listprescriptionsresponsebody.ts: {}
   src/models/components/listprojectsresult.ts: {}
   src/models/components/listprompttemplatesresult.ts: {}
   src/models/components/listregistriesresponsebody.ts: {}
@@ -1005,7 +1051,6 @@ trackedFiles:
   src/models/components/listremotesessionissuersresult.ts: {}
   src/models/components/listremotesessionsresult.ts: {}
   src/models/components/listresourcesresult.ts: {}
-  src/models/components/listresponsebody.ts: {}
   src/models/components/listriskevalreviewsresult.ts: {}
   src/models/components/listriskexclusionsresult.ts: {}
   src/models/components/listriskpoliciesresult.ts: {}
@@ -1018,7 +1063,6 @@ trackedFiles:
   src/models/components/listrootmcpserversresponsebody.ts: {}
   src/models/components/listscopesresult.ts: {}
   src/models/components/listserverheadersresult.ts: {}
-  src/models/components/listserversresponsebody.ts: {}
   src/models/components/listserversresult.ts: {}
   src/models/components/listsessionlinksresult.ts: {}
   src/models/components/listsessionquarantinesresult.ts: {}
@@ -1039,6 +1083,7 @@ trackedFiles:
   src/models/components/listsyncedusersresult.ts: {}
   src/models/components/listtoolfiltersresult.ts: {}
   src/models/components/listtoolmetadataresult.ts: {}
+  src/models/components/listtoolschemastaticvaluesresult.ts: {}
   src/models/components/listtoolsetsresult.ts: {}
   src/models/components/listtoolsetsummariesresult.ts: {}
   src/models/components/listtoolsresult.ts: {}
@@ -1073,7 +1118,6 @@ trackedFiles:
   src/models/components/manageddevice.ts: {}
   src/models/components/marketplacesettingsresult.ts: {}
   src/models/components/markriskresultsfalsepositiverequestbody.ts: {}
-  src/models/components/mcpcollection.ts: {}
   src/models/components/mcpendpoint.ts: {}
   src/models/components/mcpenvironmentconfig.ts: {}
   src/models/components/mcpenvironmentconfiginput.ts: {}
@@ -1137,9 +1181,11 @@ trackedFiles:
   src/models/components/packageversion.ts: {}
   src/models/components/paygbillingsummary.ts: {}
   src/models/components/periodusage.ts: {}
+  src/models/components/platformkillswitchdefinition.ts: {}
+  src/models/components/platformkillswitchmutationresult.ts: {}
+  src/models/components/platformkillswitchprescription.ts: {}
   src/models/components/platformmcponboardingsetuphandoff.ts: {}
   src/models/components/platformmcponboardingstate.ts: {}
-  src/models/components/platformmcppackagestatusresult.ts: {}
   src/models/components/platformtooldefinition.ts: {}
   src/models/components/plugin.ts: {}
   src/models/components/pluginassignment.ts: {}
@@ -1376,6 +1422,8 @@ trackedFiles:
   src/models/components/toolmetadata.ts: {}
   src/models/components/toolmetadataform.ts: {}
   src/models/components/toolmetric.ts: {}
+  src/models/components/toolschemastaticvalue.ts: {}
+  src/models/components/toolschemastaticvalues.ts: {}
   src/models/components/toolset.ts: {}
   src/models/components/toolsetentry.ts: {}
   src/models/components/toolsetenvironmentlink.ts: {}
@@ -1456,7 +1504,6 @@ trackedFiles:
   src/models/components/updateprompttemplateresult.ts: {}
   src/models/components/updateremotesessionclientform.ts: {}
   src/models/components/updateremotesessionissuerform.ts: {}
-  src/models/components/updaterequestbody.ts: {}
   src/models/components/updateriskexclusionrequestbody.ts: {}
   src/models/components/updateriskpolicyrequestbody.ts: {}
   src/models/components/updateroleform.ts: {}
@@ -1515,6 +1562,7 @@ trackedFiles:
   src/models/errors/apierror.ts: {}
   src/models/errors/gramerror.ts: {}
   src/models/errors/httpclienterrors.ts: {}
+  src/models/errors/killswitchconflict.ts: {}
   src/models/errors/responsevalidationerror.ts: {}
   src/models/errors/sdkvalidationerror.ts: {}
   src/models/errors/serviceerror.ts: {}
@@ -1530,7 +1578,6 @@ trackedFiles:
   src/models/operations/approveskillsuggestion.ts: {}
   src/models/operations/archiveskill.ts: {}
   src/models/operations/archivespendrule.ts: {}
-  src/models/operations/attachservertocollection.ts: {}
   src/models/operations/attachusersessionissuer.ts: {}
   src/models/operations/authcallback.ts: {}
   src/models/operations/authlogin.ts: {}
@@ -1553,7 +1600,6 @@ trackedFiles:
   src/models/operations/createcheckout.ts: {}
   src/models/operations/createcimdorganizationremotesessionclient.ts: {}
   src/models/operations/createcimdremotesessionclient.ts: {}
-  src/models/operations/createcollection.ts: {}
   src/models/operations/createcustomdetectionrule.ts: {}
   src/models/operations/createcustomersession.ts: {}
   src/models/operations/createdeployment.ts: {}
@@ -1606,7 +1652,6 @@ trackedFiles:
   src/models/operations/deleteawsiamcredential.ts: {}
   src/models/operations/deleteawskmskey.ts: {}
   src/models/operations/deletechat.ts: {}
-  src/models/operations/deletecollection.ts: {}
   src/models/operations/deletecustomdetectionrule.ts: {}
   src/models/operations/deletedeviceintegrationconfig.ts: {}
   src/models/operations/deletedomain.ts: {}
@@ -1647,7 +1692,6 @@ trackedFiles:
   src/models/operations/deleteusersessionissuer.ts: {}
   src/models/operations/deleteusersessionissuercimdclient.ts: {}
   src/models/operations/denyriskpolicybypassrequest.ts: {}
-  src/models/operations/detachserverfromcollection.ts: {}
   src/models/operations/detachusersessionissuer.ts: {}
   src/models/operations/disableadminopenrouterkey.ts: {}
   src/models/operations/disablewebhooks.ts: {}
@@ -1658,7 +1702,6 @@ trackedFiles:
   src/models/operations/distributeskill.ts: {}
   src/models/operations/downloadcodexinstallscript.ts: {}
   src/models/operations/downloadobservabilityplugin.ts: {}
-  src/models/operations/downloadplatformmcpplugin.ts: {}
   src/models/operations/downloadpluginpackage.ts: {}
   src/models/operations/enableadminopenrouterkey.ts: {}
   src/models/operations/enablewebhooks.ts: {}
@@ -1733,7 +1776,6 @@ trackedFiles:
   src/models/operations/getpaygbillingsummary.ts: {}
   src/models/operations/getperiodusage.ts: {}
   src/models/operations/getplatformmcponboarding.ts: {}
-  src/models/operations/getplatformmcppackagestatus.ts: {}
   src/models/operations/getplugin.ts: {}
   src/models/operations/getproductfeatures.ts: {}
   src/models/operations/getproject.ts: {}
@@ -1796,6 +1838,15 @@ trackedFiles:
   src/models/operations/ingestlitellmguardrail.ts: {}
   src/models/operations/integrationsnumberget.ts: {}
   src/models/operations/interruptassistantturn.ts: {}
+  src/models/operations/killswitchesbatchuserbadges.ts: {}
+  src/models/operations/killswitchescreate.ts: {}
+  src/models/operations/killswitchesedit.ts: {}
+  src/models/operations/killswitchesget.ts: {}
+  src/models/operations/killswitcheslift.ts: {}
+  src/models/operations/killswitcheslist.ts: {}
+  src/models/operations/killswitcheslistcapabilities.ts: {}
+  src/models/operations/killswitcheslistmcpservers.ts: {}
+  src/models/operations/killswitchespreviewoverlaps.ts: {}
   src/models/operations/listadminopenrouterkeys.ts: {}
   src/models/operations/listaiintegrationschedules.ts: {}
   src/models/operations/listallowedorigins.ts: {}
@@ -1818,8 +1869,6 @@ trackedFiles:
   src/models/operations/listchatsessionlinks.ts: {}
   src/models/operations/listchatsources.ts: {}
   src/models/operations/listcimdclientpresets.ts: {}
-  src/models/operations/listcollections.ts: {}
-  src/models/operations/listcollectionservers.ts: {}
   src/models/operations/listcustomdetectionrules.ts: {}
   src/models/operations/listcustomdomainmcpendpoints.ts: {}
   src/models/operations/listdeployments.ts: {}
@@ -1906,6 +1955,7 @@ trackedFiles:
   src/models/operations/listtoolsets.ts: {}
   src/models/operations/listtoolsetsfororg.ts: {}
   src/models/operations/listtoolsettoolfilters.ts: {}
+  src/models/operations/listtoolsettoolschemastaticvalues.ts: {}
   src/models/operations/listtoolusagetraces.ts: {}
   src/models/operations/listtoolvariationgroups.ts: {}
   src/models/operations/listtriggerdefinitions.ts: {}
@@ -1931,6 +1981,12 @@ trackedFiles:
   src/models/operations/mintusersession.ts: {}
   src/models/operations/moveorganizationremotesessionissuer.ts: {}
   src/models/operations/pausetriggerinstance.ts: {}
+  src/models/operations/platformkillswitchesnumberactivateprescription.ts: {}
+  src/models/operations/platformkillswitchesnumberchangeprescription.ts: {}
+  src/models/operations/platformkillswitchesnumberdeactivateprescription.ts: {}
+  src/models/operations/platformkillswitchesnumbergetprescription.ts: {}
+  src/models/operations/platformkillswitchesnumberlistdefinitions.ts: {}
+  src/models/operations/platformkillswitchesnumberlistprescriptions.ts: {}
   src/models/operations/previewspendrule.ts: {}
   src/models/operations/promotemcpapprovalrequest.ts: {}
   src/models/operations/publish.ts: {}
@@ -1964,10 +2020,10 @@ trackedFiles:
   src/models/operations/rendertemplate.ts: {}
   src/models/operations/rendertemplatebyid.ts: {}
   src/models/operations/repairplatformmcponboardingpublication.ts: {}
-  src/models/operations/repairplatformmcppackage.ts: {}
   src/models/operations/reportagentsessionmoved.ts: {}
   src/models/operations/requestaccess.ts: {}
   src/models/operations/resolvechallenge.ts: {}
+  src/models/operations/resolveidentity.ts: {}
   src/models/operations/resolveshadowmcpinventoryrequest.ts: {}
   src/models/operations/restoreskillversion.ts: {}
   src/models/operations/resumestripesubscription.ts: {}
@@ -2049,7 +2105,6 @@ trackedFiles:
   src/models/operations/updateassistant.ts: {}
   src/models/operations/updateawsiamcredential.ts: {}
   src/models/operations/updateawskmskey.ts: {}
-  src/models/operations/updatecollection.ts: {}
   src/models/operations/updatecustomdetectionrule.ts: {}
   src/models/operations/updatedeviceagentconfiguration.ts: {}
   src/models/operations/updatedomain.ts: {}
@@ -2158,6 +2213,7 @@ trackedFiles:
   src/react-query/auditLogFacets.ts: {}
   src/react-query/auditLogs.core.ts: {}
   src/react-query/auditLogs.ts: {}
+  src/react-query/batchKillswitchUserBadges.ts: {}
   src/react-query/builtinExclusions.core.ts: {}
   src/react-query/builtinExclusions.ts: {}
   src/react-query/cancelStripeSubscription.ts: {}
@@ -2184,13 +2240,6 @@ trackedFiles:
   src/react-query/cliAuthRedeem.ts: {}
   src/react-query/cloneEnvironment.ts: {}
   src/react-query/cloneToolset.ts: {}
-  src/react-query/collectionsAttachServer.ts: {}
-  src/react-query/collectionsCreate.ts: {}
-  src/react-query/collectionsDelete.ts: {}
-  src/react-query/collectionsDetachServer.ts: {}
-  src/react-query/collectionsListServers.core.ts: {}
-  src/react-query/collectionsListServers.ts: {}
-  src/react-query/collectionsUpdate.ts: {}
   src/react-query/createAPIKey.ts: {}
   src/react-query/createAgentSessionHandoff.ts: {}
   src/react-query/createAwsIamCredential.ts: {}
@@ -2208,6 +2257,7 @@ trackedFiles:
   src/react-query/createGlobalRemoteSessionIssuer.ts: {}
   src/react-query/createGlobalToolVariationGroup.ts: {}
   src/react-query/createJsonWebKeySet.ts: {}
+  src/react-query/createKillswitch.ts: {}
   src/react-query/createLiteLLMInstance.ts: {}
   src/react-query/createMcpApprovalRequest.ts: {}
   src/react-query/createMcpEndpoint.ts: {}
@@ -2297,6 +2347,7 @@ trackedFiles:
   src/react-query/dismissSkillSuggestion.ts: {}
   src/react-query/distributePlatformMCPOnboardingCandidate.ts: {}
   src/react-query/distributeSkill.ts: {}
+  src/react-query/editKillswitch.ts: {}
   src/react-query/enableAdminOpenRouterKey.ts: {}
   src/react-query/enableWebhooks.ts: {}
   src/react-query/ensureManagedAssistant.ts: {}
@@ -2442,6 +2493,8 @@ trackedFiles:
   src/react-query/hooksServerNamesUpsertServerNameOverride.ts: {}
   src/react-query/hooksSkillFeedback.ts: {}
   src/react-query/hooksUploadSkillContent.ts: {}
+  src/react-query/identity.core.ts: {}
+  src/react-query/identity.ts: {}
   src/react-query/index.ts:
     id: 9e975471aa65
     pristine_git_object: ee9cacb2ccb4e0631e0e1fcf4e467454534d2b35
@@ -2451,8 +2504,17 @@ trackedFiles:
   src/react-query/integrationsIntegrationsNumberGet.core.ts: {}
   src/react-query/integrationsIntegrationsNumberGet.ts: {}
   src/react-query/interruptAssistantTurn.ts: {}
+  src/react-query/killswitch.core.ts: {}
+  src/react-query/killswitch.ts: {}
+  src/react-query/killswitchCapabilities.core.ts: {}
+  src/react-query/killswitchCapabilities.ts: {}
+  src/react-query/killswitchMCPServers.core.ts: {}
+  src/react-query/killswitchMCPServers.ts: {}
+  src/react-query/killswitches.core.ts: {}
+  src/react-query/killswitches.ts: {}
   src/react-query/latestDeployment.core.ts: {}
   src/react-query/latestDeployment.ts: {}
+  src/react-query/liftKillswitch.ts: {}
   src/react-query/listAPIKeys.core.ts: {}
   src/react-query/listAPIKeys.ts: {}
   src/react-query/listAllowedOrigins.core.ts: {}
@@ -2477,8 +2539,6 @@ trackedFiles:
   src/react-query/listChatSources.ts: {}
   src/react-query/listChats.core.ts: {}
   src/react-query/listChats.ts: {}
-  src/react-query/listCollections.core.ts: {}
-  src/react-query/listCollections.ts: {}
   src/react-query/listDeployments.core.ts: {}
   src/react-query/listDeployments.ts: {}
   src/react-query/listDomains.core.ts: {}
@@ -2533,6 +2593,8 @@ trackedFiles:
   src/react-query/listScopes.ts: {}
   src/react-query/listSessions.core.ts: {}
   src/react-query/listSessions.ts: {}
+  src/react-query/listToolSchemaStaticValues.core.ts: {}
+  src/react-query/listToolSchemaStaticValues.ts: {}
   src/react-query/listToolUsageTraces.core.ts: {}
   src/react-query/listToolUsageTraces.ts: {}
   src/react-query/listTools.core.ts: {}
@@ -2603,10 +2665,17 @@ trackedFiles:
   src/react-query/otelForwardingConfig.core.ts: {}
   src/react-query/otelForwardingConfig.ts: {}
   src/react-query/pauseTrigger.ts: {}
+  src/react-query/platformKillswitchesPlatformKillswitchesNumberActivatePrescription.ts: {}
+  src/react-query/platformKillswitchesPlatformKillswitchesNumberChangePrescription.ts: {}
+  src/react-query/platformKillswitchesPlatformKillswitchesNumberDeactivatePrescription.ts: {}
+  src/react-query/platformKillswitchesPlatformKillswitchesNumberGetPrescription.core.ts: {}
+  src/react-query/platformKillswitchesPlatformKillswitchesNumberGetPrescription.ts: {}
+  src/react-query/platformKillswitchesPlatformKillswitchesNumberListDefinitions.core.ts: {}
+  src/react-query/platformKillswitchesPlatformKillswitchesNumberListDefinitions.ts: {}
+  src/react-query/platformKillswitchesPlatformKillswitchesNumberListPrescriptions.core.ts: {}
+  src/react-query/platformKillswitchesPlatformKillswitchesNumberListPrescriptions.ts: {}
   src/react-query/platformMCPOnboarding.core.ts: {}
   src/react-query/platformMCPOnboarding.ts: {}
-  src/react-query/platformMCPPackageStatus.core.ts: {}
-  src/react-query/platformMCPPackageStatus.ts: {}
   src/react-query/plugin.core.ts: {}
   src/react-query/plugin.ts: {}
   src/react-query/plugins.core.ts: {}
@@ -2615,10 +2684,9 @@ trackedFiles:
   src/react-query/pluginsDownloadCodexInstallScript.ts: {}
   src/react-query/pluginsDownloadObservabilityPlugin.core.ts: {}
   src/react-query/pluginsDownloadObservabilityPlugin.ts: {}
-  src/react-query/pluginsDownloadPlatformMCPPlugin.core.ts: {}
-  src/react-query/pluginsDownloadPlatformMCPPlugin.ts: {}
   src/react-query/pluginsDownloadPluginPackage.core.ts: {}
   src/react-query/pluginsDownloadPluginPackage.ts: {}
+  src/react-query/previewKillswitchOverlaps.ts: {}
   src/react-query/productFeatures.core.ts: {}
   src/react-query/productFeatures.ts: {}
   src/react-query/project.core.ts: {}
@@ -2672,7 +2740,6 @@ trackedFiles:
   src/react-query/renderTemplateByID.core.ts: {}
   src/react-query/renderTemplateByID.ts: {}
   src/react-query/repairPlatformMCPOnboardingPublication.ts: {}
-  src/react-query/repairPlatformMCPPackage.ts: {}
   src/react-query/reportAgentSessionMoved.ts: {}
   src/react-query/requestAccess.ts: {}
   src/react-query/resolveChallenge.ts: {}
@@ -2998,7 +3065,6 @@ trackedFiles:
   src/sdk/chat.ts: {}
   src/sdk/chatsessions.ts: {}
   src/sdk/cliauth.ts: {}
-  src/sdk/collections.ts: {}
   src/sdk/customrules.ts: {}
   src/sdk/deployments.ts: {}
   src/sdk/deviceintegrations.ts: {}
@@ -3016,10 +3082,12 @@ trackedFiles:
   src/sdk/gramrules.ts: {}
   src/sdk/hooks.ts: {}
   src/sdk/hooksservernames.ts: {}
+  src/sdk/identity.ts: {}
   src/sdk/instances.ts: {}
   src/sdk/integrations.ts: {}
   src/sdk/jsonwebkeysets.ts: {}
   src/sdk/keys.ts: {}
+  src/sdk/killswitches.ts: {}
   src/sdk/litellm.ts: {}
   src/sdk/mcpapproval.ts: {}
   src/sdk/mcpendpoints.ts: {}
@@ -3037,6 +3105,7 @@ trackedFiles:
   src/sdk/otelforwarding.ts: {}
   src/sdk/overview.ts: {}
   src/sdk/packages.ts: {}
+  src/sdk/platformkillswitches.ts: {}
   src/sdk/platformmcp.ts: {}
   src/sdk/plugins.ts: {}
   src/sdk/policies.ts: {}
@@ -3723,7 +3792,7 @@ examples:
         application/json: {"name": "<value>"}
       responses:
         "200":
-          application/json: {"created_at": "2024-04-05T20:51:34.626Z", "id": "c1f8fb42-7fd9-42e9-bae3-198f35870cf2", "name": "<value>", "organization_id": "<id>", "project_id": "1abf2652-3b94-4afb-912b-38b23c9447e1", "updated_at": "2024-04-03T09:54:44.150Z"}
+          application/json: {"created_at": "2024-04-05T20:51:34.626Z", "id": "c1f8fb42-7fd9-42e9-bae3-198f35870cf2", "name": "<value>", "organization_id": "<id>", "project_id": "1abf2652-3b94-4afb-912b-38b23c9447e1", "updated_at": "2024-04-03T09:54:44.150Z", "visibility": "disabled"}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
@@ -5299,7 +5368,7 @@ examples:
           target_id: "55beba50-b7b7-464f-844a-ce63acbbdbfb"
       responses:
         "200":
-          application/json: {"can_migrate": false, "client_count": 324927, "conflicting_mcp_server_names": ["<value 1>"], "endpoint_mismatches": ["<value 1>"], "mcp_server_names": ["<value 1>", "<value 2>"], "target_tenant_client_count": 887590, "warnings": ["<value 1>", "<value 2>"]}
+          application/json: {"can_migrate": false, "client_count": 324927, "conflicting_mcp_server_names": ["<value 1>"], "endpoint_mismatches": [{"field": "<value>"}], "mcp_server_names": ["<value 1>", "<value 2>"], "target_tenant_client_count": 887590, "warnings": [{"field": "<value>"}, {"field": "<value>"}]}
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":
@@ -5461,7 +5530,7 @@ examples:
           id: "8dc5f443-a256-489e-9176-477844ab4d52"
       responses:
         "200":
-          application/json: {"created_at": "2024-06-24T04:56:25.716Z", "id": "ae1a33a6-20a8-47d9-b3be-f8d19435c0f9", "name": "<value>", "organization_id": "<id>", "project_id": "ba9012a9-da63-4c6b-821a-5c5b2cfaa7bd", "updated_at": "2024-03-24T06:19:24.439Z"}
+          application/json: {"created_at": "2024-06-24T04:56:25.716Z", "id": "ae1a33a6-20a8-47d9-b3be-f8d19435c0f9", "name": "<value>", "organization_id": "<id>", "project_id": "ba9012a9-da63-4c6b-821a-5c5b2cfaa7bd", "updated_at": "2024-03-24T06:19:24.439Z", "visibility": "private"}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":
@@ -5563,7 +5632,7 @@ examples:
           target_id: "b04d1fd3-1ca3-4ee5-a1f0-eaac9c354d3e"
       responses:
         "200":
-          application/json: {"can_migrate": false, "client_count": 375885, "conflicting_mcp_server_names": ["<value 1>"], "endpoint_mismatches": [], "mcp_server_names": ["<value 1>", "<value 2>", "<value 3>"], "warnings": ["<value 1>", "<value 2>"]}
+          application/json: {"can_migrate": false, "client_count": 375885, "conflicting_mcp_server_names": ["<value 1>"], "endpoint_mismatches": [], "mcp_server_names": ["<value 1>", "<value 2>", "<value 3>"], "warnings": [{"field": "<value>"}, {"field": "<value>"}]}
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":
@@ -6222,7 +6291,7 @@ examples:
           id: "aeb78a8f-1333-4c63-af6c-f95eb9c7984c"
       responses:
         "200":
-          application/json: {"active_session_count": 664412, "client_id": "<id>", "client_id_issued_at": "2025-11-20T20:08:09.863Z", "client_name": "<value>", "created_at": "2026-12-17T13:56:06.145Z", "id": "0b9ca24f-3ad0-484b-87d2-5a3ac9c511ea", "redirect_uris": ["<value 1>"], "updated_at": "2024-07-14T17:42:03.950Z", "user_session_issuer_id": "2fbefede-d6cb-48f3-b2df-fc46b6f17886"}
+          application/json: {"active_session_count": 664412, "client_id": "<id>", "client_id_issued_at": "2025-11-20T20:08:09.863Z", "client_name": "<value>", "created_at": "2026-12-17T13:56:06.145Z", "credential_kind": "key", "id": "0b9ca24f-3ad0-484b-87d2-5a3ac9c511ea", "redirect_uris": ["<value 1>"], "updated_at": "2024-07-14T17:42:03.950Z", "user_session_issuer_id": "2fbefede-d6cb-48f3-b2df-fc46b6f17886"}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":
@@ -6350,6 +6419,206 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+  killswitches#batchUserBadges:
+    speakeasy-default-killswitches#batch-user-badges:
+      requestBody:
+        application/json: {"user_ids": ["<value 1>", "<value 2>"]}
+      responses:
+        "200":
+          application/json: {"badges": []}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+  killswitches#create:
+    speakeasy-default-killswitches#create:
+      requestBody:
+        application/json: {"external_note": "<value>", "internal_note": "<value>", "operation_id": "3d419be6-f835-412c-837b-896425ac7f51", "schedule": {"start": "now", "end": "until_lifted"}, "scope": {"type": "all_servers"}, "user_id": "<id>", "capability_key": "mcp_tool_calls"}
+      responses:
+        "200":
+          application/json: {"id": "0797ebcb-97c5-4261-917f-e2b35ddbeed4", "replayed": true, "version": 695995}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+        "409":
+          application/json: {"message": "<value>", "name": "operation_conflict"}
+  killswitches#edit:
+    speakeasy-default-killswitches#edit:
+      requestBody:
+        application/json: {"expected_version": 275073, "external_note": "<value>", "id": "41918793-ebc3-41f3-a13e-f7a3e1abd6c4", "internal_note": "<value>", "operation_id": "0f41d53c-15dd-4e42-a42a-da9b4cb27cc5", "schedule": {"start": "now", "end": "bounded", "ends_at": "2024-11-27T04:26:39.634Z"}, "scope": {"type": "all_servers"}}
+      responses:
+        "200":
+          application/json: {"id": "558b8155-a35c-4773-a2c0-c7fbd54e23a4", "replayed": true, "version": 713071}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+        "409":
+          application/json: {"message": "<value>", "name": "operation_conflict"}
+  killswitches#get:
+    speakeasy-default-killswitches#get:
+      parameters:
+        query:
+          id: "84e3b5af-44d3-41f3-bc2e-a692e392e65f"
+      responses:
+        "200":
+          application/json: {"capability_label": "<value>", "external_note": "<value>", "history": [], "history_truncated": false, "id": "f3de1b21-eb0b-446e-ac40-56b0ec40b925", "internal_note": "<value>", "schedule": {"start": "scheduled", "starts_at": "2024-11-22T19:49:14.400Z", "end": "until_lifted"}, "scope": {"type": "selected_servers", "server_ids": ["3b5af44d-31f3-4c2e-ba69-2e392e65fe69", "3de1b21e-b0b4-46ec-8405-6b0ec40b925a", "a95de8ce-fa49-4ad3-a7fd-3ea6cd035a6d"]}, "user_id": "<id>", "version": 862322, "capability_key": "mcp_tool_calls", "status": "scheduled"}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+  killswitches#lift:
+    speakeasy-default-killswitches#lift:
+      requestBody:
+        application/json: {"expected_version": 775049, "id": "de034cad-4128-4cf5-a1ba-5f31743c45b7", "operation_id": "0bfca1b9-857a-422e-8fff-fc7e00bb8e41"}
+      responses:
+        "200":
+          application/json: {"remaining_overlaps": [{"id": "0787149a-0e86-4cf3-be4c-365e9d02994c", "schedule": {"start": "now", "end": "until_lifted"}, "scope": {"type": "selected_servers", "server_ids": ["de034cad-4128-4cf5-a1ba-5f31743c45b7", "0bfca1b9-857a-422e-8fff-fc7e00bb8e41", "f0787149-a0e8-46cf-b3e4-c365e9d02994"]}, "status": "active"}], "result": {"id": "1d594cb6-260b-485e-ba89-1fd8d90362d6", "replayed": true, "version": 745460}, "truncated": false}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+        "409":
+          application/json: {"message": "<value>", "name": "version_conflict"}
+  killswitches#list:
+    speakeasy-default-killswitches#list:
+      responses:
+        "200":
+          application/json: {"items": [{"capability_label": "<value>", "id": "f40ef354-e9b4-400c-b5e0-b474fc5e2dae", "schedule": {"start": "scheduled", "starts_at": "2026-11-25T14:33:07.242Z", "end": "until_lifted"}, "scope": {"type": "selected_servers", "server_ids": ["0ef354e9-b400-4c5e-a0b4-74fc5e2daee4"]}, "user_id": "<id>", "version": 352902, "capability_key": "mcp_tool_calls", "status": "active"}]}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+  killswitches#listCapabilities:
+    speakeasy-default-killswitches#list-capabilities:
+      responses:
+        "200":
+          application/json: {"capabilities": [{"label": "<value>", "key": "mcp_tool_calls"}], "coming_soon": []}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+  killswitches#listMCPServers:
+    speakeasy-default-killswitches#list-MCP-servers:
+      responses:
+        "200":
+          application/json: {"servers": []}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+  killswitches#previewOverlaps:
+    speakeasy-default-killswitches#preview-overlaps:
+      requestBody:
+        application/json: {"schedule": {"start": "scheduled", "starts_at": "2026-12-17T12:51:31.525Z", "end": "bounded", "ends_at": "2024-06-15T04:40:42.247Z"}, "scope": {"type": "all_servers"}, "user_id": "<id>", "capability_key": "mcp_tool_calls"}
+      responses:
+        "200":
+          application/json: {"overlaps": [], "truncated": false}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+  killswitchesBatchUserBadges:
+    speakeasy-default-killswitches-batch-user-badges:
+      requestBody:
+        application/json: {"user_ids": []}
+      responses:
+        "200":
+          application/json: {"badges": []}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+  killswitchesCreate:
+    speakeasy-default-killswitches-create:
+      requestBody:
+        application/json: {"external_note": "<value>", "internal_note": "<value>", "operation_id": "c2bef8ac-c98a-4b89-8a32-cd62272034a3", "schedule": {"start": "now", "end": "bounded", "ends_at": "2024-06-16T19:43:19.564Z"}, "scope": {"type": "all_servers"}, "user_id": "<id>", "capability_key": "mcp_tool_calls"}
+      responses:
+        "200":
+          application/json: {"id": "2b497ff0-1441-454e-b4e8-5d3eb1b5584a", "replayed": false, "version": 597942}
+        "409":
+          application/json: {"message": "<value>", "name": "version_conflict"}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+  killswitchesEdit:
+    speakeasy-default-killswitches-edit:
+      requestBody:
+        application/json: {"expected_version": 294160, "external_note": "<value>", "id": "72b9f701-155a-4e33-8576-4bb37672ac79", "internal_note": "<value>", "operation_id": "fc513b63-a23e-488e-bed6-e06db8ab4fd5", "schedule": {"start": "scheduled", "starts_at": "2025-08-29T21:30:18.965Z", "end": "until_lifted"}, "scope": {"type": "all_servers"}}
+      responses:
+        "200":
+          application/json: {"id": "90947f38-2994-4c16-88bf-4e0384d11dc3", "replayed": false, "version": 499176}
+        "409":
+          application/json: {"message": "<value>", "name": "version_conflict"}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+  killswitchesGet:
+    speakeasy-default-killswitches-get:
+      parameters:
+        query:
+          id: "3aa7d685-0777-47f3-91a3-7e54b72bb4d4"
+      responses:
+        "200":
+          application/json: {"capability_label": "<value>", "external_note": "<value>", "history": [{"changed_at": "2026-11-13T17:48:28.615Z", "external_note": "<value>", "internal_note": "<value>", "schedule": {"start": "scheduled", "starts_at": "2024-07-14T20:01:43.318Z", "end": "bounded", "ends_at": "2024-12-09T21:55:27.033Z"}, "scope": {"type": "all_servers"}, "sequence": 611499, "version": 588073, "action": "edited", "status": "lifted"}], "history_truncated": true, "id": "96cba4a4-4e8e-481f-9de0-55e7582031cf", "internal_note": "<value>", "schedule": {"start": "scheduled", "starts_at": "2026-08-16T09:15:15.373Z", "end": "until_lifted"}, "scope": {"type": "selected_servers", "server_ids": ["e101a803-c388-4b8e-86e8-b208cc2fe968", "b76dda33-4e69-476a-a1a0-8d6b66db304f", "e6814a5d-f85f-4e5d-b290-0e27fe059054"]}, "user_id": "<id>", "version": 28275, "capability_key": "mcp_tool_calls", "status": "active"}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+  killswitchesLift:
+    speakeasy-default-killswitches-lift:
+      requestBody:
+        application/json: {"expected_version": 195979, "id": "95e486c0-61ba-4f35-a650-c22013dd43a9", "operation_id": "76c0f962-1fe4-42fd-95db-82545984a2b7"}
+      responses:
+        "200":
+          application/json: {"remaining_overlaps": [{"id": "430e6077-2990-42a1-a7a8-a77c3c767f9f", "schedule": {"start": "scheduled", "starts_at": "2025-10-27T12:03:57.259Z", "end": "until_lifted"}, "scope": {"type": "selected_servers", "server_ids": []}, "status": "active"}], "result": {"id": "776bd50a-d8b5-4dc3-bf7b-c192fb4ada35", "replayed": true, "version": 723426}, "truncated": false}
+        "409":
+          application/json: {"message": "<value>", "name": "operation_conflict"}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+  killswitchesList:
+    speakeasy-default-killswitches-list:
+      responses:
+        "200":
+          application/json: {"items": []}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+  killswitchesListCapabilities:
+    speakeasy-default-killswitches-list-capabilities:
+      responses:
+        "200":
+          application/json: {"capabilities": [{"label": "<value>", "key": "mcp_tool_calls"}], "coming_soon": []}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+  killswitchesListMCPServers:
+    speakeasy-default-killswitches-list-MCP-servers:
+      responses:
+        "200":
+          application/json: {"servers": []}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+  killswitchesPreviewOverlaps:
+    speakeasy-default-killswitches-preview-overlaps:
+      requestBody:
+        application/json: {"schedule": {"start": "now", "end": "bounded", "ends_at": "2026-09-27T02:17:57.903Z"}, "scope": {"type": "selected_servers", "server_ids": ["6db68204-4ca9-42cc-8f49-93e367971ed1", "bbb07b6c-a818-483a-a076-b5712d1ff133"]}, "user_id": "<id>", "capability_key": "mcp_tool_calls"}
+      responses:
+        "200":
+          application/json: {"overlaps": [], "truncated": false}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
   listAIIntegrationSchedules:
     speakeasy-default-list-AI-integration-schedules:
       parameters:
@@ -6988,7 +7257,7 @@ examples:
     speakeasy-default-list-meta-mcp-servers:
       responses:
         "200":
-          application/json: {"meta_mcp_servers": [{"created_at": "2026-11-18T21:37:16.963Z", "id": "c817b326-c217-4058-be33-839a6adfca21", "name": "<value>", "organization_id": "<id>", "project_id": "3057172a-67b4-4632-8c85-542e95603d80", "updated_at": "2026-10-03T03:43:27.201Z"}]}
+          application/json: {"meta_mcp_servers": [{"created_at": "2026-11-18T21:37:16.963Z", "id": "c817b326-c217-4058-be33-839a6adfca21", "name": "<value>", "organization_id": "<id>", "project_id": "3057172a-67b4-4632-8c85-542e95603d80", "updated_at": "2026-10-03T03:43:27.201Z", "visibility": "private"}]}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":
@@ -7561,6 +7830,18 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+  listToolsetToolSchemaStaticValues:
+    speakeasy-default-list-toolset-tool-schema-static-values:
+      parameters:
+        query:
+          slug: "<value>"
+      responses:
+        "200":
+          application/json: {"tools": []}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
   listToolsets:
     speakeasy-default-list-toolsets:
       responses:
@@ -7842,6 +8123,97 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+  platformKillswitches#activatePrescription:
+    speakeasy-default-platform-killswitches#activate-prescription:
+      requestBody:
+        application/json: {"external_note": "<value>", "internal_note": "<value>", "operation_id": "629cdd39-6836-4097-a97a-811a958b89a4", "organization_id": "<id>", "resource_scope": "selected", "start_mode": "now"}
+      responses:
+        "200":
+          application/json: {"prescription_id": "72cc733a-164c-435f-bec5-66a24c7112c6", "replayed": false, "state": "Arizona", "version": 971150}
+        "409":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+        "503":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+  platformKillswitches#changePrescription:
+    speakeasy-default-platform-killswitches#change-prescription:
+      requestBody:
+        application/json: {"expected_version": 984748, "external_note": "<value>", "internal_note": "<value>", "operation_id": "293fa46f-262a-4916-920b-f06d3ba97a1d", "organization_id": "<id>", "prescription_id": "ec7f5bbd-22be-4ced-a60a-e6ee0913b9aa", "resource_scope": "selected", "start_mode": "at"}
+      responses:
+        "200":
+          application/json: {"prescription_id": "f947951e-8ce8-4f05-ace8-63e85fc1468a", "replayed": true, "state": "Michigan", "version": 533195}
+        "409":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+        "503":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+  platformKillswitches#deactivatePrescription:
+    speakeasy-default-platform-killswitches#deactivate-prescription:
+      requestBody:
+        application/json: {"expected_version": 800607, "operation_id": "a4769c25-74c5-4820-9af8-fac38a66b65b", "organization_id": "<id>", "prescription_id": "0bfe14ce-a84d-441d-a478-54715ec8372d"}
+      responses:
+        "200":
+          application/json: {"prescription_id": "43461402-7bc9-4d52-99d9-c9790a323db8", "replayed": true, "state": "Michigan", "version": 614797}
+        "409":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+        "503":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+  platformKillswitches#getPrescription:
+    speakeasy-default-platform-killswitches#get-prescription:
+      parameters:
+        query:
+          organization_id: "<id>"
+          prescription_id: "c1b7df22-fea3-4e6b-bc6e-bfcac2745102"
+      responses:
+        "200":
+          application/json: {"definition": "<value>", "external_note": "<value>", "id": "917cf906-b955-4419-b763-f8d00a1c5ed6", "internal_note": "<value>", "organization_id": "<id>", "principal_key": "<value>", "principal_kind": "<value>", "resource_kind": "<value>", "resource_scope": "<value>", "selected_resource_keys": ["<value 1>", "<value 2>"], "starts_at": "2025-06-13T09:13:01.136Z", "state": "Kansas", "version": 551305}
+        "409":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+        "503":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+  platformKillswitches#listDefinitions:
+    speakeasy-default-platform-killswitches#list-definitions:
+      responses:
+        "200":
+          application/json: {"definitions": []}
+        "409":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+        "503":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+  platformKillswitches#listPrescriptions:
+    speakeasy-default-platform-killswitches#list-prescriptions:
+      parameters:
+        query:
+          organization_id: "<id>"
+      responses:
+        "200":
+          application/json: {"prescriptions": [{"definition": "<value>", "external_note": "<value>", "id": "b62ef8ef-7da2-4c23-86c5-def4d5bba2b1", "internal_note": "<value>", "organization_id": "<id>", "principal_key": "<value>", "principal_kind": "<value>", "resource_kind": "<value>", "resource_scope": "<value>", "selected_resource_keys": ["<value 1>", "<value 2>", "<value 3>"], "starts_at": "2024-01-24T19:46:09.708Z", "state": "Idaho", "version": 191198}]}
+        "409":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+        "503":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
   previewSpendRule:
     speakeasy-default-preview-spend-rule:
       requestBody:
@@ -7937,6 +8309,8 @@ examples:
         query:
           skill_ids: ["<value 1>"]
           limit: 20
+          include_session_cost: true
+          include_regression_signal: true
       requestBody:
         application/json: {"skill_ids": ["<value 1>"]}
       responses:
@@ -8084,7 +8458,7 @@ examples:
           id: "d0145c45-8a5b-43bc-a9c4-a3a89bdc2f69"
       responses:
         "200":
-          application/json: {"active_session_count": 782404, "client_id": "<id>", "client_id_issued_at": "2025-05-10T01:32:30.022Z", "client_name": "<value>", "created_at": "2026-04-04T02:28:40.401Z", "id": "03517621-79fb-45d3-9736-6369306e7c13", "redirect_uris": ["<value 1>"], "updated_at": "2026-04-20T05:37:40.377Z", "user_session_issuer_id": "c4e67dd1-0c9c-4d7a-9704-2f0a9196e432"}
+          application/json: {"active_session_count": 782404, "client_id": "<id>", "client_id_issued_at": "2025-05-10T01:32:30.022Z", "client_name": "<value>", "created_at": "2026-04-04T02:28:40.401Z", "credential_kind": "misconfigured", "id": "03517621-79fb-45d3-9736-6369306e7c13", "redirect_uris": ["<value 1>"], "updated_at": "2026-04-20T05:37:40.377Z", "user_session_issuer_id": "c4e67dd1-0c9c-4d7a-9704-2f0a9196e432"}
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
@@ -8259,6 +8633,18 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+  resolveIdentity:
+    speakeasy-default-resolve-identity:
+      parameters:
+        query:
+          urn: "user:user_01abc"
+      responses:
+        "200":
+          application/json: {"canonical_urn": "<value>", "directory": {"groups": []}, "display_name": "Bradley.Schoen", "emails": [], "external_user_ids": ["<value 1>", "<value 2>"], "kind": "agent", "user_ids": []}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
   resolveShadowMCPInventoryRequest:
     speakeasy-default-resolve-shadow-MCP-inventory-request:
       requestBody:
@@ -9362,7 +9748,7 @@ examples:
         application/json: {"id": "0ed4533c-c894-4b99-a315-ba1ec8947783", "name": "<value>"}
       responses:
         "200":
-          application/json: {"created_at": "2026-07-10T17:29:02.697Z", "id": "f5a95ca4-055d-47f6-b62c-b93212fbea06", "name": "<value>", "organization_id": "<id>", "project_id": "0f17506b-1037-4306-ba27-4e8d05871c35", "updated_at": "2025-10-10T20:16:25.755Z"}
+          application/json: {"created_at": "2026-07-10T17:29:02.697Z", "id": "f5a95ca4-055d-47f6-b62c-b93212fbea06", "name": "<value>", "organization_id": "<id>", "project_id": "0f17506b-1037-4306-ba27-4e8d05871c35", "updated_at": "2025-10-10T20:16:25.755Z", "visibility": "disabled"}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
         "500":
@@ -9607,7 +9993,7 @@ examples:
   updateTunneledMcpServer:
     speakeasy-default-update-tunneled-mcp-server:
       requestBody:
-        application/json: {"id": "e1429b32-4d75-43a3-aa46-02f1af57cf85", "name": "<value>"}
+        application/json: {"id": "e1429b32-4d75-43a3-aa46-02f1af57cf85"}
       responses:
         "200":
           application/json: {"active_connection_count": 408126, "active_consumer_session_count": 923001, "allow_public": false, "connection_status": "connected", "created_at": "2025-03-07T12:23:20.151Z", "id": "1bf5c61a-7401-4732-9a1c-7572bf19031e", "key_prefix": "<value>", "name": "<value>", "project_id": "f095b93d-e0ba-430e-a940-6ea2b3b7de5d", "status": "revoked", "updated_at": "2025-02-19T20:11:46.920Z"}

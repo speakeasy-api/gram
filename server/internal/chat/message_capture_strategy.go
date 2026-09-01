@@ -15,8 +15,11 @@ import (
 	"go.opentelemetry.io/otel/metric"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/chat/repo"
+	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/metering"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 )
@@ -273,6 +276,7 @@ func buildPendingRows(
 			chatID:           request.ChatID,
 			userID:           userID,
 			externalUserID:   externalUserID,
+			userEmail:        request.UserEmail,
 			messageID:        "",
 			toolCallID:       toolCallID,
 			role:             openrouter.GetRole(msg),
@@ -348,7 +352,7 @@ func (s *ChatMessageCaptureStrategy) CaptureMessage(
 		return nil
 	}
 
-	assistantRows := buildAssistantRows(request, response, projectID, toolCallsJSON, origin, userAgent, ipAddress, session.generation)
+	assistantRows := buildAssistantRows(ctx, request, response, projectID, toolCallsJSON, origin, userAgent, ipAddress, session.generation)
 
 	if len(session.pendingRows) == 0 {
 		if _, err := s.writer.Write(ctx, projectID, assistantRows); err != nil {
@@ -372,13 +376,14 @@ func (s *ChatMessageCaptureStrategy) CaptureMessage(
 // The row preserves any narrative text and tool_calls from the model response;
 // provider-specific replay normalization happens at the OpenRouter boundary.
 func buildAssistantRows(
+	ctx context.Context,
 	request openrouter.CompletionRequest,
 	response openrouter.CompletionResponse,
 	projectID uuid.UUID,
 	toolCallsJSON []byte,
 	origin, userAgent, ipAddress string,
 	generation int32,
-) []repo.CreateChatMessageParams {
+) []MessageWrite {
 	// Whitespace-only content is treated as no text; preserving invisible
 	// assistant narrative around tool calls does not add useful replay context.
 	content := response.Content
@@ -386,6 +391,7 @@ func buildAssistantRows(
 		content = ""
 	}
 	base := repo.CreateChatMessageParams{
+		ID:               uuid.Nil,
 		Replayed:         false,
 		CreatedAt:        conv.PtrToPGTimestamptz(nil),
 		ChatID:           request.ChatID,
@@ -426,7 +432,29 @@ func buildAssistantRows(
 	only.CompletionTokens = completionTokens
 	only.TotalTokens = totalTokens
 
-	return []repo.CreateChatMessageParams{only}
+	assistantID, workloadSource := messageReadingAttribution(ctx, request.UsageSource)
+	return []MessageWrite{{
+		Params:         only,
+		BillingUserID:  request.UserID,
+		AssistantID:    assistantID,
+		WorkloadSource: workloadSource,
+		UserEmail:      request.UserEmail,
+		// The completion payload does not report a provider; model names are not provider identity.
+		Provider:     "",
+		HookHostname: "",
+		AccountType:  "",
+		BillingMode:  "",
+	}}
+}
+
+func messageReadingAttribution(ctx context.Context, source billing.ModelUsageSource) (uuid.UUID, metering.WorkloadSource) {
+	if principal, ok := contextvalues.GetAssistantPrincipal(ctx); ok {
+		return principal.AssistantID, metering.WorkloadSourceAssistant
+	}
+	if source == billing.ModelUsageSourceAssistants {
+		return uuid.Nil, metering.WorkloadSourceAssistant
+	}
+	return uuid.Nil, metering.WorkloadSourceNative
 }
 
 // firstInvalidToolCall mirrors the runner's normalize_history validation:
@@ -537,7 +565,7 @@ func (s *ChatMessageCaptureStrategy) resolveSession(ctx context.Context, raw ope
 
 // flushTurnAtomically writes the pending user rows and the assistant rows in
 // a single transaction so the turn lands as a unit.
-func (s *ChatMessageCaptureStrategy) flushTurnAtomically(ctx context.Context, projectID uuid.UUID, pending []chatMessageRow, assistants []repo.CreateChatMessageParams) error {
+func (s *ChatMessageCaptureStrategy) flushTurnAtomically(ctx context.Context, projectID uuid.UUID, pending []chatMessageRow, assistants []MessageWrite) error {
 	if err := s.writer.WriteTurn(ctx, projectID, pending, assistants); err != nil {
 		s.logger.ErrorContext(ctx, "failed to flush chat turn", attr.SlogError(err))
 		return fmt.Errorf("flush chat turn: %w", err)

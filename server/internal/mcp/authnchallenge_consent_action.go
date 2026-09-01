@@ -10,9 +10,11 @@
 package mcp
 
 import (
+	"context"
 	"crypto/subtle"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"net/url"
 
@@ -124,26 +126,9 @@ func (s *Service) ServeConsentAction(w http.ResponseWriter, r *http.Request, end
 				autoRefresh = &v
 			}
 		}
-		// Not endpoint.UpstreamResource: under multi-binding that may belong
-		// to a different client's upstream; ambiguity derives "" (no resource).
-		clientResource, rerr := s.remoteChallengeMgr.FallbackResourceForClient(ctx, client.ID)
-		if rerr != nil {
-			return oops.E(oops.CodeUnexpected, rerr, "derive client upstream resource").LogError(ctx, logger)
-		}
-		challengeURL, berr := s.remoteChallengeMgr.BuildAuthorizationUrl(ctx, remotesessions.ParentChallenge{
-			ID:                  challengeState.ID,
-			ProjectID:           endpoint.ProjectID,
-			OrganizationID:      endpoint.OrganizationID,
-			UserSessionIssuerID: endpoint.UserSessionIssuerID,
-			Subject:             challengeState.Subject,
-			McpSlug:             endpoint.Slug,
-			RouteBase:           endpoint.RouteBase,
-			FinalRedirectURI:    "",
-			Resource:            clientResource,
-			AutoRefresh:         autoRefresh,
-		}, *client)
+		challengeURL, berr := s.buildRemoteConnectURL(ctx, logger, endpoint, challengeState, *client, autoRefresh)
 		if berr != nil {
-			return oops.E(oops.CodeUnexpected, berr, "build authorization url").LogError(ctx, logger)
+			return berr
 		}
 		http.Redirect(w, r, challengeURL, http.StatusSeeOther)
 		return nil
@@ -155,6 +140,24 @@ func (s *Service) ServeConsentAction(w http.ResponseWriter, r *http.Request, end
 		}
 		if _, err := s.remoteChallengeMgr.DisconnectRemoteSession(ctx, subject, endpoint.ProjectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID, client.ID); err != nil {
 			return oops.E(oops.CodeUnexpected, err, "disconnect remote session").LogError(ctx, logger)
+		}
+		// Latch auto-connect off. Without this the redirect back to the consent
+		// page would see a single disconnected card and immediately bounce the
+		// user into the provider again, making disconnect impossible to
+		// complete.
+		//
+		// CompareAndSwap, not Store: this handler read the challenge with a
+		// plain Get, so the approve POST may have consumed it since. A Store
+		// would put the consumed challenge back and let a replayed approval
+		// mint a second grant against it. A lost swap means the challenge
+		// moved on, which is not a reason to fail the disconnect that already
+		// succeeded.
+		if !challengeState.AutoConnectDone {
+			latched := challengeState
+			latched.AutoConnectDone = true
+			if _, err := s.authnChallengeCache.CompareAndSwap(ctx, challengeState, latched); err != nil {
+				logger.WarnContext(ctx, "latch auto-connect off after disconnect", attr.SlogError(err))
+			}
 		}
 		http.Redirect(w, r, backURL, http.StatusSeeOther)
 		return nil
@@ -177,8 +180,7 @@ func (s *Service) ServeConsentAction(w http.ResponseWriter, r *http.Request, end
 			case errors.Is(refreshErr, remotesessions.ErrRemoteSessionNotRefreshable):
 				return oops.E(oops.CodeBadRequest, refreshErr, "Reconnect this service before refreshing it.").LogWarn(ctx, logger)
 			default:
-				var tokenRefreshErr *remotesessions.TokenRefreshError
-				if errors.As(refreshErr, &tokenRefreshErr) {
+				if tokenRefreshErr, ok := errors.AsType[*remotesessions.TokenRefreshError](refreshErr); ok {
 					return oops.E(oops.CodeBadRequest, refreshErr, "Unable to refresh: %s", tokenRefreshErr.Reason).LogWarn(ctx, logger)
 				}
 				return oops.E(oops.CodeUnexpected, refreshErr, "refresh remote session").LogError(ctx, logger)
@@ -213,4 +215,58 @@ func (s *Service) ServeConsentAction(w http.ResponseWriter, r *http.Request, end
 	default:
 		return oops.E(oops.CodeBadRequest, nil, `action must be "connect", "refresh", "disconnect", or "set_auto_refresh"`).LogError(ctx, logger)
 	}
+}
+
+// buildRemoteConnectURL builds the upstream authorization URL for one remote
+// session client. Shared by the page's explicit Connect action and by the
+// consent page's auto-connect, so both legs resolve the upstream resource
+// identically — an auto-connect that qualified the credential differently from
+// a manual one would mint a session the runtime then rejects.
+func (s *Service) buildRemoteConnectURL(
+	ctx context.Context,
+	logger *slog.Logger,
+	endpoint *ResolvedMcpEndpoint,
+	challengeState AuthnChallengeState,
+	client remotesessions.Client,
+	autoRefresh *bool,
+) (string, error) {
+	// Not endpoint.UpstreamResource: under multi-binding that may belong
+	// to a different client's upstream.
+	var clientResource string
+	var rerr error
+	claimedByMember := false
+	if endpoint.MetaMcpServerID.Valid {
+		// Member visibility is judged against the consent subject, as the runtime
+		// request the minted session will make will be.
+		memberCtx, cerr := s.contextForSessionSubject(ctx, endpoint, *challengeState.Subject, "consent:"+challengeState.ID, challengeState.ClientID)
+		if cerr != nil {
+			return "", oops.E(oops.CodeUnexpected, cerr, "stamp consent subject context").LogError(ctx, logger)
+		}
+		clientResource, claimedByMember, rerr = s.resolveMetaMemberResource(memberCtx, logger, endpoint, client.RemoteSessionIssuerID)
+	}
+	// Gate on the claim, not an empty resource: an ambiguous meta MCP has
+	// decided, and falling back would qualify the credential anyway.
+	if rerr == nil && !claimedByMember {
+		clientResource, rerr = s.remoteChallengeMgr.FallbackResourceForClient(ctx, client.ID)
+	}
+	if rerr != nil {
+		return "", oops.E(oops.CodeUnexpected, rerr, "derive client upstream resource").LogError(ctx, logger)
+	}
+
+	challengeURL, berr := s.remoteChallengeMgr.BuildAuthorizationUrl(ctx, remotesessions.ParentChallenge{
+		ID:                  challengeState.ID,
+		ProjectID:           endpoint.ProjectID,
+		OrganizationID:      endpoint.OrganizationID,
+		UserSessionIssuerID: endpoint.UserSessionIssuerID,
+		Subject:             challengeState.Subject,
+		McpSlug:             endpoint.Slug,
+		RouteBase:           endpoint.RouteBase,
+		FinalRedirectURI:    "",
+		Resource:            clientResource,
+		AutoRefresh:         autoRefresh,
+	}, client)
+	if berr != nil {
+		return "", oops.E(oops.CodeUnexpected, berr, "build authorization url").LogError(ctx, logger)
+	}
+	return challengeURL, nil
 }

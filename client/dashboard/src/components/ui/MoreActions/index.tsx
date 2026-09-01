@@ -7,7 +7,7 @@ import {
 } from "@/components/ui/Dropdown";
 import { Icon } from "@/components/ui/Icon";
 import { IconName } from "@/components/ui/Icon/names";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/Button";
 
 export type Action = {
@@ -26,14 +26,16 @@ export function MoreActions({
   actions,
   triggerLabel,
   triggerLoading,
+  triggerDisabled,
   triggerStyle,
 }: {
   actions: Action[];
   triggerLabel?: string;
-  /** Shows a spinner in place of the trigger's kebab icon and disables it —
-   * for an async action (e.g. an AI suggestion) already in flight from a
-   * previous click. Only meaningful alongside `triggerLabel`. */
+  /** Shows a spinner in place of the trigger icon, disables it, and restores
+   * trigger focus when the async action completes. */
   triggerLoading?: boolean;
+  /** Disables the trigger without presenting it as the active async action. */
+  triggerDisabled?: boolean;
   /** Inline style for the trigger button. Every `Button` carries a 200ms
    * `transition-all` (`button.tsx`'s `.trans`), which per the CSS
    * Transitions spec holds a `visible → hidden` element at `visible` for
@@ -45,6 +47,27 @@ export function MoreActions({
   triggerStyle?: React.CSSProperties;
 }): JSX.Element {
   const [isOpen, setIsOpen] = useState(false);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const wasTriggerLoading = useRef(false);
+  const pendingFocusRestore = useRef(false);
+
+  useEffect(() => {
+    if (wasTriggerLoading.current && !triggerLoading) {
+      pendingFocusRestore.current = true;
+    }
+    wasTriggerLoading.current = triggerLoading === true;
+
+    const trigger = triggerRef.current;
+    if (
+      pendingFocusRestore.current &&
+      !triggerLoading &&
+      !triggerDisabled &&
+      trigger
+    ) {
+      trigger.focus();
+      pendingFocusRestore.current = false;
+    }
+  }, [triggerDisabled, triggerLoading]);
 
   const wrapOnClick =
     (onClick: () => void) => (e: React.MouseEvent<HTMLDivElement>) => {
@@ -59,10 +82,11 @@ export function MoreActions({
       <DropdownMenuTrigger asChild>
         {triggerLabel ? (
           <Button
+            ref={triggerRef}
             variant="tertiary"
             size="sm"
-            disabled={triggerLoading}
-            aria-busy={triggerLoading}
+            disabled={triggerLoading || triggerDisabled}
+            aria-busy={triggerLoading === true}
             style={triggerStyle}
           >
             <Icon
@@ -73,20 +97,28 @@ export function MoreActions({
           </Button>
         ) : (
           <Button
+            ref={triggerRef}
             variant="tertiary"
             size="sm"
             className="mx-[-4px] h-8 w-8 p-0"
+            disabled={triggerLoading || triggerDisabled}
+            aria-busy={triggerLoading === true}
             style={triggerStyle}
           >
-            <Icon name="ellipsis-vertical" className="size-4" />
-            <span className="sr-only">Open menu</span>
+            <Icon
+              name={triggerLoading ? "loader-circle" : "ellipsis-vertical"}
+              className={cn("size-4", triggerLoading && "animate-spin")}
+            />
+            <span className="sr-only">
+              {triggerLoading ? "Action in progress" : "Open menu"}
+            </span>
           </Button>
         )}
       </DropdownMenuTrigger>
       <DropdownMenuContent
         align="end"
         onCloseAutoFocus={(e) => {
-          e.preventDefault();
+          if (triggerLoading) e.preventDefault();
         }}
       >
         {actions.map((action, index) => (

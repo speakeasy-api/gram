@@ -332,6 +332,33 @@ func BuildListOrganizationProjectsPayload(adminListOrganizationProjectsOrganizat
 	return v, nil
 }
 
+// BuildListOrganizationActivityPayload builds the payload for the admin
+// listOrganizationActivity endpoint from CLI flags.
+func BuildListOrganizationActivityPayload(adminListOrganizationActivityOrganizationID string, adminListOrganizationActivityCursor string, adminListOrganizationActivityAdminSessionToken string) (*admin.ListOrganizationActivityPayload, error) {
+	var organizationID string
+	{
+		organizationID = adminListOrganizationActivityOrganizationID
+	}
+	var cursor *string
+	{
+		if adminListOrganizationActivityCursor != "" {
+			cursor = &adminListOrganizationActivityCursor
+		}
+	}
+	var adminSessionToken *string
+	{
+		if adminListOrganizationActivityAdminSessionToken != "" {
+			adminSessionToken = &adminListOrganizationActivityAdminSessionToken
+		}
+	}
+	v := &admin.ListOrganizationActivityPayload{}
+	v.OrganizationID = organizationID
+	v.Cursor = cursor
+	v.AdminSessionToken = adminSessionToken
+
+	return v, nil
+}
+
 // BuildListOrganizationsPayload builds the payload for the admin
 // listOrganizations endpoint from CLI flags.
 func BuildListOrganizationsPayload(adminListOrganizationsQ string, adminListOrganizationsAccountType string, adminListOrganizationsAccountTypes string, adminListOrganizationsTrialStates string, adminListOrganizationsDisabledStates string, adminListOrganizationsIncludeDisabled string, adminListOrganizationsCursor string, adminListOrganizationsLimit string, adminListOrganizationsSort string, adminListOrganizationsDirection string, adminListOrganizationsPage string, adminListOrganizationsAdminSessionToken string) (*admin.ListOrganizationsPayload, error) {
@@ -736,6 +763,37 @@ func BuildResumeStripeSubscriptionPayload(adminResumeStripeSubscriptionBody stri
 	}
 	v := &admin.ResumeStripeSubscriptionPayload{
 		OrganizationID: body.OrganizationID,
+	}
+	v.AdminSessionToken = adminSessionToken
+
+	return v, nil
+}
+
+// BuildMarkEnterpriseTrialConvertedPayload builds the payload for the admin
+// markEnterpriseTrialConverted endpoint from CLI flags.
+func BuildMarkEnterpriseTrialConvertedPayload(adminMarkEnterpriseTrialConvertedBody string, adminMarkEnterpriseTrialConvertedAdminSessionToken string) (*admin.MarkEnterpriseTrialConvertedPayload, error) {
+	var err error
+	var body MarkEnterpriseTrialConvertedRequestBody
+	{
+		err = json.Unmarshal([]byte(adminMarkEnterpriseTrialConvertedBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"id\": \"aa\"\n   }'")
+		}
+		if utf8.RuneCountInString(body.ID) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.id", body.ID, utf8.RuneCountInString(body.ID), 1, true))
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var adminSessionToken *string
+	{
+		if adminMarkEnterpriseTrialConvertedAdminSessionToken != "" {
+			adminSessionToken = &adminMarkEnterpriseTrialConvertedAdminSessionToken
+		}
+	}
+	v := &admin.MarkEnterpriseTrialConvertedPayload{
+		ID: body.ID,
 	}
 	v.AdminSessionToken = adminSessionToken
 

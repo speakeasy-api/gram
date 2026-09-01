@@ -1,7 +1,7 @@
 {
   "name": "dashboard",
   "private": true,
-  "version": "0.112.0",
+  "version": "0.113.0",
   "type": "module",
   "scripts": {
     "dev": "vite --port ${GRAM_SITE_PORT:-5173}",
@@ -9,6 +9,7 @@
     "prebuild": "if command -v mise >/dev/null 2>&1; then aube run build:cel-wasm; else echo 'mise/Go unavailable; skipping cel.wasm build (CEL editor falls back to server-side validation)'; fi",
     "build": "vite build",
     "build:consent": "vite build --config vite.consent.config.ts",
+    "build:consent-page": "vite build --config vite.consent-page.config.ts",
     "lint": "aube run lint:format && aube run lint:no-barrels && aube run lint:oxlint && aube run type-check",
     "lint:oxlint": "oxlint --type-aware --ignore-pattern 'src/sdk/**'",
     "lint:fix": "oxlint --type-aware --fix",

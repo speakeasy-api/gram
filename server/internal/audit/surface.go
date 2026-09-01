@@ -35,6 +35,11 @@ const (
 	// SurfaceProjectAssistant is a project's managed assistant acting during a
 	// user's turn.
 	SurfaceProjectAssistant Surface = "project_assistant"
+	// SurfaceAdmin is the isolated Google-authenticated admin app.
+	SurfaceAdmin Surface = "admin"
+	// SurfacePlatformBreakGlass is the main-server platform-administrator
+	// killswitch recovery path. It remains distinct from customer management.
+	SurfacePlatformBreakGlass Surface = "platform_break_glass"
 )
 
 // knownSurfaces is the allowlist an explicitly marked surface is checked
@@ -42,11 +47,13 @@ const (
 // depend on this one; anything not named here records an unknown surface
 // rather than widening what the column can hold.
 var knownSurfaces = map[Surface]struct{}{
-	SurfaceUnknown:          {},
-	SurfaceDashboard:        {},
-	SurfaceAPIKey:           {},
-	SurfacePlatformMCP:      {},
-	SurfaceProjectAssistant: {},
+	SurfaceUnknown:            {},
+	SurfaceDashboard:          {},
+	SurfaceAPIKey:             {},
+	SurfacePlatformMCP:        {},
+	SurfaceProjectAssistant:   {},
+	SurfaceAdmin:              {},
+	SurfacePlatformBreakGlass: {},
 }
 
 // actingIdentity is how a change was made: the surface, and the registered
@@ -69,6 +76,7 @@ type actingIdentity struct {
 //     way needs to set one, and it knows better than any inference here;
 //   - an assistant principal means the assistant runtime is acting, whatever
 //     credential carried the request in;
+//   - an admin session means the isolated admin app is acting;
 //   - an API key is a distinct surface from the dashboard, and calling it
 //     "dashboard" would misreport CLI and automation writes;
 //   - a session is the dashboard.
@@ -87,6 +95,10 @@ func actingIdentityFromContext(ctx context.Context) actingIdentity {
 
 	if _, ok := contextvalues.GetAssistantPrincipal(ctx); ok {
 		return actingIdentity{Surface: SurfaceProjectAssistant, ClientID: clientID}
+	}
+
+	if adminAuthCtx, ok := contextvalues.GetAdminAuthContext(ctx); ok && adminAuthCtx.SessionID != "" {
+		return actingIdentity{Surface: SurfaceAdmin, ClientID: clientID}
 	}
 
 	authCtx, ok := contextvalues.GetAuthContext(ctx)

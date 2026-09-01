@@ -1,5 +1,4 @@
 import * as React from "react";
-import { useOrganization } from "@/contexts/Auth";
 
 import { AppRoute, useOrgRoutes } from "@/routes";
 import { NavButton, NavGroupProvider } from "@/components/nav-menu";
@@ -12,6 +11,7 @@ import {
   SidebarMenuItem,
   SidebarTrigger,
 } from "@/components/ui/Sidebar";
+import { useIsPlatformAdmin, useOrganization } from "@/contexts/Auth";
 
 import { GramLogo } from "./gram-logo";
 import { HatchRule } from "./hatch-rule";
@@ -24,11 +24,10 @@ import { ScopeGatedNavGroup } from "@/components/scope-gated-nav-group";
 import { SidebarNavSkeleton } from "./sidebar-nav-skeleton";
 import { SidebarUserMenu } from "./sidebar-user-menu";
 import { TrialStatusCard } from "./trial-status-card";
-import { useIsPlatformAdmin } from "@/contexts/Auth";
-import { usePlatformMcpDashboardVisibility } from "@/hooks/usePlatformMcpDashboardVisibility";
 import { useProductFeatures } from "@gram/client/react-query/productFeatures.js";
 import { useRBAC } from "@/hooks/useRBAC";
 import { useTelemetry } from "@/contexts/Telemetry";
+import { useKillswitchAccess } from "@/hooks/useKillswitchAccess";
 
 /** Scopes that make an org-level nav item visible. */
 const orgReadOrAdmin: Scope[] = ["org:read", "org:admin"];
@@ -71,8 +70,7 @@ export function OrgSidebar({
     },
   );
   const isPlatformAdmin = useIsPlatformAdmin();
-  const { enabled: isPlatformMcpDashboardEnabled } =
-    usePlatformMcpDashboardVisibility();
+  const killswitchAccess = useKillswitchAccess();
   const isDeviceAgentEnabled =
     telemetry.isFeatureEnabled("gram-device-agent") ?? false;
   const isUserSessionsEnabled =
@@ -84,7 +82,7 @@ export function OrgSidebar({
     orgRoutes.domains,
     orgRoutes.logs,
     orgRoutes.skills,
-    ...(isPlatformMcpDashboardEnabled ? [orgRoutes.platformMcp] : []),
+    orgRoutes.platformMcp,
     orgRoutes.aiIntegrations,
     orgRoutes.webhooks,
     orgRoutes.externalServices,
@@ -95,6 +93,7 @@ export function OrgSidebar({
 
   const secureActive = [
     orgRoutes.auditLogs,
+    orgRoutes.killswitch,
     orgRoutes.deviceAgent,
     orgRoutes.access,
   ].some((r) => r.active);
@@ -125,20 +124,20 @@ export function OrgSidebar({
 
   const allOrgNavRoutes = [
     orgRoutes.home,
-    orgRoutes.collections,
     orgRoutes.team,
     orgRoutes.billing,
     orgRoutes.apiKeys,
     orgRoutes.domains,
     orgRoutes.logs,
     orgRoutes.skills,
-    ...(isPlatformMcpDashboardEnabled ? [orgRoutes.platformMcp] : []),
+    orgRoutes.platformMcp,
     orgRoutes.aiIntegrations,
     orgRoutes.webhooks,
     orgRoutes.externalServices,
     orgRoutes.encryptionKeys,
     orgRoutes.data,
     orgRoutes.auditLogs,
+    orgRoutes.killswitch,
     orgRoutes.deviceAgent,
     orgRoutes.access,
     orgRoutes.mcpSessions,
@@ -186,12 +185,6 @@ export function OrgSidebar({
                 scope={["org:read", "project:read", "org:admin"]}
               />
 
-              {/* Collections — top-level */}
-              <ScopeGatedTopLevelItem
-                item={orgRoutes.collections}
-                scope={["org:read", "org:admin"]}
-              />
-
               {/* Team — top-level */}
               <ScopeGatedTopLevelItem
                 item={orgRoutes.team}
@@ -221,14 +214,7 @@ export function OrgSidebar({
                   { item: orgRoutes.domains, scope: orgReadOrAdmin },
                   { item: orgRoutes.logs, scope: orgReadOrAdmin },
                   { item: orgRoutes.skills, scope: "org:admin" },
-                  ...(isPlatformMcpDashboardEnabled
-                    ? [
-                        {
-                          item: orgRoutes.platformMcp,
-                          scope: "org:admin" as const,
-                        },
-                      ]
-                    : []),
+                  { item: orgRoutes.platformMcp, scope: "org:admin" },
                   { item: orgRoutes.aiIntegrations, scope: orgReadOrAdmin },
                   { item: orgRoutes.webhooks, scope: orgReadOrAdmin },
                 ]}
@@ -248,6 +234,14 @@ export function OrgSidebar({
                 Icon={(p) => <Icon {...p} name="shield-check" />}
                 items={[
                   { item: orgRoutes.auditLogs, scope: orgReadOrAdmin },
+                  ...(killswitchAccess.canAccess
+                    ? [
+                        {
+                          item: orgRoutes.killswitch,
+                          scope: "org:admin" as const,
+                        },
+                      ]
+                    : []),
                   ...(isDeviceAgentEnabled
                     ? [{ item: orgRoutes.deviceAgent, scope: orgReadOrAdmin }]
                     : []),

@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/gen/types"
@@ -30,8 +31,9 @@ func TestListUserSessions(t *testing.T) {
 	require.NoError(t, err)
 
 	for _, principal := range []urn.SessionSubject{urn.NewUserSubject("p1"), urn.NewUserSubject("p2"), urn.NewUserSubject("p3")} {
-		_, err := seedUserSession(t, ctx, ti.conn, uuid.MustParse(issuer.ID), principal)
+		session, err := seedUserSession(t, ctx, ti.conn, uuid.MustParse(issuer.ID), principal)
 		require.NoError(t, err)
+		requireOrganizationID(t, ctx, session.OrganizationID)
 	}
 
 	got, err := ti.service.ListUserSessions(ctx, &gen.ListUserSessionsPayload{
@@ -478,4 +480,131 @@ func TestListUserSessions_ClientIDMetadataURI(t *testing.T) {
 	gotUnbound := bySessionID[unboundSession.ID.String()]
 	require.NotNil(t, gotUnbound)
 	require.Nil(t, gotUnbound.ClientIDMetadataURI, "a session with no bound client must not advertise a metadata document")
+}
+
+// The credential columns reach a session row through a LEFT JOIN on
+// user_session_clients, so these assert the projection itself rather than the
+// view builder: that a bound client's method and secret both arrive, and that
+// an unbound session reports neither instead of reading like a client that
+// predates the method column.
+func TestListUserSessions_ReportsClientCredentialKind(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+
+	issuer, err := ti.service.CreateUserSessionIssuer(ctx, &issuersgen.CreateUserSessionIssuerPayload{
+		SessionToken:         nil,
+		ApikeyToken:          nil,
+		ProjectSlugInput:     nil,
+		Slug:                 "credential-kind-issuer",
+		AuthnChallengeMode:   "chain",
+		SessionDurationHours: 24,
+	})
+	require.NoError(t, err)
+	issuerID := uuid.MustParse(issuer.ID)
+
+	keyClient, err := seedUserSessionClientWithAuth(t, ctx, ti.conn, issuerID, "key-client", "private_key_jwt", pgtype.Text{String: "", Valid: false})
+	require.NoError(t, err)
+	_, err = seedUserSessionForClient(t, ctx, ti.conn, issuerID, keyClient.ID, urn.NewUserSubject("keyholder"))
+	require.NoError(t, err)
+
+	got, err := ti.service.ListUserSessions(ctx, &gen.ListUserSessionsPayload{
+		SessionToken:        nil,
+		ApikeyToken:         nil,
+		ProjectSlugInput:    nil,
+		SubjectUrn:          nil,
+		UserSessionIssuerID: &issuer.ID,
+		Status:              nil,
+		Cursor:              nil,
+		Limit:               nil,
+	})
+	require.NoError(t, err)
+	require.Len(t, got.Items, 1)
+
+	require.NotNil(t, got.Items[0].ClientCredentialKind)
+	require.Equal(t, "key", *got.Items[0].ClientCredentialKind)
+	require.NotNil(t, got.Items[0].ClientTokenEndpointAuthMethod)
+	require.Equal(t, "private_key_jwt", *got.Items[0].ClientTokenEndpointAuthMethod)
+}
+
+// A row whose declared method contradicts the credentials stored for it cannot
+// authenticate at all. Only the lifted client_has_secret boolean can reveal
+// that, so this is the case that proves the column reaches the view: the
+// declared method alone reads as a healthy key-authenticated client.
+func TestListUserSessions_ContradictoryClientIsMisconfigured(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+
+	issuer, err := ti.service.CreateUserSessionIssuer(ctx, &issuersgen.CreateUserSessionIssuerPayload{
+		SessionToken:         nil,
+		ApikeyToken:          nil,
+		ProjectSlugInput:     nil,
+		Slug:                 "contradictory-credential-issuer",
+		AuthnChallengeMode:   "chain",
+		SessionDurationHours: 24,
+	})
+	require.NoError(t, err)
+	issuerID := uuid.MustParse(issuer.ID)
+
+	brokenClient, err := seedUserSessionClientWithAuth(t, ctx, ti.conn, issuerID, "broken-client", "private_key_jwt", pgtype.Text{String: "$2a$10$hash", Valid: true})
+	require.NoError(t, err)
+	_, err = seedUserSessionForClient(t, ctx, ti.conn, issuerID, brokenClient.ID, urn.NewUserSubject("brokenholder"))
+	require.NoError(t, err)
+
+	got, err := ti.service.ListUserSessions(ctx, &gen.ListUserSessionsPayload{
+		SessionToken:        nil,
+		ApikeyToken:         nil,
+		ProjectSlugInput:    nil,
+		SubjectUrn:          nil,
+		UserSessionIssuerID: &issuer.ID,
+		Status:              nil,
+		Cursor:              nil,
+		Limit:               nil,
+	})
+	require.NoError(t, err)
+	require.Len(t, got.Items, 1)
+
+	require.NotNil(t, got.Items[0].ClientCredentialKind)
+	require.Equal(t, "misconfigured", *got.Items[0].ClientCredentialKind)
+	require.NotNil(t, got.Items[0].ClientTokenEndpointAuthMethod)
+	require.Equal(t, "private_key_jwt", *got.Items[0].ClientTokenEndpointAuthMethod, "the declared value stays visible so the contradiction can be diagnosed")
+}
+
+// An API key subject mints a session directly, with no client bound to it. The
+// LEFT JOIN makes that row indistinguishable from a legacy client's at the SQL
+// level, so the view has to report neither field.
+func TestListUserSessions_UnboundSessionReportsNoCredentialFields(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+
+	issuer, err := ti.service.CreateUserSessionIssuer(ctx, &issuersgen.CreateUserSessionIssuerPayload{
+		SessionToken:         nil,
+		ApikeyToken:          nil,
+		ProjectSlugInput:     nil,
+		Slug:                 "unbound-credential-issuer",
+		AuthnChallengeMode:   "chain",
+		SessionDurationHours: 24,
+	})
+	require.NoError(t, err)
+
+	_, err = seedUserSession(t, ctx, ti.conn, uuid.MustParse(issuer.ID), urn.NewUserSubject("unbound"))
+	require.NoError(t, err)
+
+	got, err := ti.service.ListUserSessions(ctx, &gen.ListUserSessionsPayload{
+		SessionToken:        nil,
+		ApikeyToken:         nil,
+		ProjectSlugInput:    nil,
+		SubjectUrn:          nil,
+		UserSessionIssuerID: &issuer.ID,
+		Status:              nil,
+		Cursor:              nil,
+		Limit:               nil,
+	})
+	require.NoError(t, err)
+	require.Len(t, got.Items, 1)
+
+	require.Nil(t, got.Items[0].ClientCredentialKind)
+	require.Nil(t, got.Items[0].ClientTokenEndpointAuthMethod)
 }

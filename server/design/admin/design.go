@@ -5,11 +5,23 @@ import (
 
 	. "goa.design/goa/v3/dsl"
 
+	"github.com/speakeasy-api/gram/server/design/auditlogs"
 	"github.com/speakeasy-api/gram/server/design/security"
 	"github.com/speakeasy-api/gram/server/design/shared"
 	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 )
+
+var MarkEnterpriseTrialConvertedResult = Type("MarkEnterpriseTrialConvertedResult", func() {
+	Description("Privacy-minimal result of recording an enterprise trial conversion.")
+	Required("organization_id", "converted_at")
+
+	Attribute("organization_id", String, "The converted organization ID.")
+	Attribute("converted_at", String, func() {
+		Description("The time at which the enterprise trial was recorded as converted.")
+		Format(FormatDateTime)
+	})
+})
 
 var AdminOrganization = Type("AdminOrganization", func() {
 	Description("Organization details surfaced to admin operators.")
@@ -139,6 +151,13 @@ var AdminListOrganizationsResult = Type("AdminListOrganizationsResult", func() {
 	Attribute("total", Int64, "Number of organizations matching the filters, before paging.")
 })
 
+var AdminListOrganizationActivityResult = Type("AdminListOrganizationActivityResult", func() {
+	Required("logs")
+
+	Attribute("logs", ArrayOf(auditlogs.AuditLog), "List of organization activity.")
+	Attribute("next_cursor", String, "Cursor for the next page of results.")
+})
+
 var AdminOrganizationStats = Type("AdminOrganizationStats", func() {
 	Description("Platform-wide organization counts surfaced above the admin organizations list.")
 	Required("total", "created_last_7_days", "customers", "customers_created_last_7_days", "trials_ending_soon", "disabled", "disabled_last_7_days")
@@ -181,7 +200,9 @@ var AdminInferenceKey = Type("AdminInferenceKey", func() {
 	Attribute("credits_used", Float64, "Credits spent this month in USD.")
 	Attribute("monthly_credits", Int64)
 	Attribute("disabled", Boolean)
-	Required("key_type", "credits_used", "monthly_credits", "disabled")
+	Attribute("disable_causes", ArrayOf(String), "Active internal disable causes. Omitted for legacy unclassified rows.")
+	Attribute("disable_causes_classified", Boolean, "Whether disable_causes is classified, including an explicitly empty cause set.")
+	Required("key_type", "credits_used", "monthly_credits", "disabled", "disable_causes_classified")
 })
 
 var AdminInferenceKeyLimit = Type("AdminInferenceKeyLimit", func() {
@@ -494,6 +515,31 @@ var _ = Service("admin", func() {
 		Meta("openapi:operationId", "adminListOrganizationProjects")
 	})
 
+	Method("listOrganizationActivity", func() {
+		Description("Lists activity belonging to an organization for admin operators.")
+
+		Payload(func() {
+			security.AdminAuthPayload()
+			Required("organization_id")
+
+			Attribute("organization_id", String, "Organization ID.")
+			Attribute("cursor", String, "Cursor for paginating through organization activity.")
+		})
+
+		Result(AdminListOrganizationActivityResult)
+
+		HTTP(func() {
+			GET("/admin/organization.activity")
+
+			Param("organization_id")
+			Param("cursor")
+			Response(StatusOK)
+		})
+
+		shared.CursorPagination()
+		Meta("openapi:operationId", "adminListOrganizationActivity")
+	})
+
 	Method("listOrganizations", func() {
 		Description("Lists organizations for admin operations with optional search and filters.")
 
@@ -733,5 +779,28 @@ var _ = Service("admin", func() {
 		Result(AdminStripeSubscription)
 		HTTP(func() { POST("/admin/organization.resumeStripeSubscription"); Response(StatusOK) })
 		Meta("openapi:operationId", "adminResumeStripeSubscription")
+	})
+
+	Method("markEnterpriseTrialConverted", func() {
+		Description("Records that an organization's enterprise trial converted to a signed contract.")
+
+		Payload(func() {
+			security.AdminAuthPayload()
+			Required("id")
+			Meta("openapi:typename", "MarkEnterpriseTrialConvertedRequestBody")
+
+			Attribute("id", String, "Organization ID.", func() {
+				MinLength(1)
+			})
+		})
+
+		Result(MarkEnterpriseTrialConvertedResult)
+
+		HTTP(func() {
+			POST("/admin/trial.convert")
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "adminMarkEnterpriseTrialConverted")
 	})
 })

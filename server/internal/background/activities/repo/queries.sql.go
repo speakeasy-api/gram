@@ -989,7 +989,7 @@ SELECT
 FROM organization_metadata om
 JOIN openrouter_api_keys k ON k.organization_id = om.id
 WHERE om.disabled_at IS NULL
-  AND k.disabled = FALSE
+  AND CASE WHEN k.disable_causes IS NULL THEN k.disabled ELSE cardinality(k.disable_causes) > 0 END = FALSE
   AND k.deleted = FALSE
   AND om.gram_account_type = ANY($1::text[])
 ORDER BY om.slug

@@ -20,10 +20,12 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/customdomains"
+	"github.com/speakeasy-api/gram/server/internal/mcp/mcpmetrics"
 	mcpendpoints_repo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	mcpservers_repo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	metamcp_repo "github.com/speakeasy-api/gram/server/internal/metamcp/repo"
+	metamcp_visibility "github.com/speakeasy-api/gram/server/internal/metamcp/visibility"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	projects_repo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	toolsets_repo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
@@ -298,12 +300,15 @@ func (e *ResolvedMcpEndpoint) ValidateRef(ref EndpointRef) error {
 // mcpServer.UserSessionIssuerID.Valid; organizationID comes from a
 // separate projects lookup since mcp_servers doesn't carry the org id
 // directly. AudienceURN is bound to the issuer URN rather than a
-// backend-specific id so /x/mcp tokens stay portable between
-// toolset-backed and remote-backed servers under the same issuer.
+// backend-specific id so tokens stay portable between toolset-backed and
+// remote-backed servers under the same issuer. routeBase is the URL surface
+// the request arrived under ("mcp" or "x/mcp") — always taken from the
+// inbound request or the cached ref, never assumed.
 func NewResolvedMcpEndpointFromMcpServer(
 	mcpEndpoint *mcpendpoints_repo.McpEndpoint,
 	mcpServer *mcpservers_repo.McpServer,
 	organizationID string,
+	routeBase string,
 ) *ResolvedMcpEndpoint {
 	return &ResolvedMcpEndpoint{
 		AudienceURN: urn.NewUserSessionIssuer(mcpServer.UserSessionIssuerID.UUID).String(),
@@ -315,7 +320,7 @@ func NewResolvedMcpEndpointFromMcpServer(
 		MetaMcpServerID:      uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 		OrganizationID:       organizationID,
 		ProjectID:            mcpEndpoint.ProjectID,
-		RouteBase:            "x/mcp",
+		RouteBase:            routeBase,
 		Slug:                 mcpEndpoint.Slug,
 		ToolsetID:            mcpServer.ToolsetID,
 		UpstreamResource:     "",
@@ -323,13 +328,33 @@ func NewResolvedMcpEndpointFromMcpServer(
 	}
 }
 
+// connectResourceID is the mcp:connect resource id: the wrapper's id when one
+// fronts the endpoint, else the toolset id.
+func (e *ResolvedMcpEndpoint) connectResourceID() uuid.UUID {
+	if e.McpServerID.Valid {
+		return e.McpServerID.UUID
+	}
+	return e.ToolsetID.UUID
+}
+
+// legacyToolsetAudienceURN is the pre-migration toolset-URN audience a
+// toolset-backed wrapper's bearers may still carry; ok is false for every
+// other endpoint shape (AIS-633; acceptance is deleted by AIS-646).
+func (e *ResolvedMcpEndpoint) legacyToolsetAudienceURN() (string, bool) {
+	if !e.McpServerID.Valid || !e.ToolsetID.Valid {
+		return "", false
+	}
+	return urn.NewToolset(e.ToolsetID.UUID).String(), true
+}
+
 // NewResolvedMcpEndpointFromMetaMcpServer materialises a ResolvedMcpEndpoint
 // from a resolved (mcp_endpoint, meta_mcp_server) pair plus the owning
 // project's organisation id. Caller is responsible for first checking
-// metaServer.UserSessionIssuerID.Valid. Meta MCP servers have no visibility
-// column, so IsPublic reflects only whether an issuer gates the endpoint.
-// AudienceURN is bound to the issuer URN, matching the generic-server
-// constructor, so tokens stay portable between backends under one issuer.
+// metaServer.UserSessionIssuerID.Valid. AudienceURN is bound to the issuer URN,
+// matching the generic-server constructor, so tokens stay portable between
+// backends under one issuer. IsPublic is always false: a gateway's visibility
+// vocabulary has no anonymous state, and one with no issuer is already refused
+// by RequireUserSessionIssuer.
 func NewResolvedMcpEndpointFromMetaMcpServer(
 	mcpEndpoint *mcpendpoints_repo.McpEndpoint,
 	metaServer *metamcp_repo.MetaMcpServer,
@@ -341,7 +366,7 @@ func NewResolvedMcpEndpointFromMetaMcpServer(
 		// Stamped by RequireUserSessionIssuer, which every path runs next.
 		CIMDAdmissionModeRaw: pgtype.Text{String: "", Valid: false},
 		CustomDomainID:       mcpEndpoint.CustomDomainID,
-		IsPublic:             !metaServer.UserSessionIssuerID.Valid,
+		IsPublic:             false,
 		McpServerID:          uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 		MetaMcpServerID:      uuid.NullUUID{UUID: metaServer.ID, Valid: true},
 		OrganizationID:       organizationID,
@@ -449,10 +474,9 @@ func (s *Service) buildResolvedMcpEndpointByRef(ctx context.Context, ref Endpoin
 		case err != nil:
 			return nil, oops.E(oops.CodeUnexpected, err, "load project").LogError(ctx, s.logger)
 		}
-		endpoint := NewResolvedMcpEndpointFromMcpServer(&mcpEndpoint, &mcpServer, project.OrganizationID)
-		if ref.RouteBase != "" {
-			endpoint.RouteBase = ref.RouteBase
-		}
+		// Refs cached before EndpointRef.RouteBase existed were only ever
+		// minted on the /x/mcp surface for server-keyed endpoints.
+		endpoint := NewResolvedMcpEndpointFromMcpServer(&mcpEndpoint, &mcpServer, project.OrganizationID, conv.Default(ref.RouteBase, "x/mcp"))
 		upstreamResource, err := s.resolveUpstreamResource(ctx, s.logger, mcpEndpoint.ProjectID, &mcpServer)
 		if err != nil {
 			return nil, err
@@ -468,6 +492,7 @@ func (s *Service) buildResolvedMcpEndpointByRef(ctx context.Context, ref Endpoin
 	case err != nil:
 		return nil, oops.E(oops.CodeUnexpected, err, "load mcp server").LogError(ctx, s.logger)
 	}
+	s.metrics.RecordToolsetSlugFallback(ctx, mcpmetrics.LegacyFallbackChallengeResume)
 	if !toolset.UserSessionIssuerID.Valid {
 		return nil, oops.E(oops.CodeNotFound, nil, "not found")
 	}
@@ -502,6 +527,7 @@ func (s *Service) loadResolvedMcpEndpointByToolsetSlug(ctx context.Context, mcpS
 	case err != nil:
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to load MCP server").LogError(ctx, s.logger)
 	}
+	s.metrics.RecordToolsetSlugFallback(ctx, mcpmetrics.LegacyFallbackOAuth)
 	if !toolset.UserSessionIssuerID.Valid {
 		return nil, oops.E(oops.CodeNotFound, nil, "not found")
 	}
@@ -547,16 +573,18 @@ func (s *Service) buildResolvedMetaMcpEndpointByRef(ctx context.Context, ref End
 		// An issuer detached mid-flow closes in-flight challenges.
 		return nil, oops.E(oops.CodeNotFound, nil, "not found")
 	}
-	project, err := projects_repo.New(s.db).GetProjectByID(ctx, mcpEndpoint.ProjectID)
-	switch {
-	case errors.Is(err, pgx.ErrNoRows):
-		return nil, oops.E(oops.CodeNotFound, err, "project not found")
-	case err != nil:
-		return nil, oops.E(oops.CodeUnexpected, err, "load project").LogError(ctx, s.logger)
+	if metaServer.Visibility == metamcp_visibility.Disabled {
+		// A gateway disabled mid-flow closes in-flight challenges, matching
+		// the generic-server branch's visibility check.
+		return nil, oops.E(oops.CodeNotFound, nil, "not found")
 	}
+
 	routeBase := ref.RouteBase
 	if routeBase == "" {
 		routeBase = "mcp"
 	}
-	return NewResolvedMcpEndpointFromMetaMcpServer(&mcpEndpoint, &metaServer, project.OrganizationID, routeBase), nil
+	// The denormalized org id is authoritative — the composite FK on
+	// meta_mcp_servers pins (organization_id, project_id) to the projects
+	// row, and BuildResolvedMcpEndpointForMetaServer already relies on it.
+	return NewResolvedMcpEndpointFromMetaMcpServer(&mcpEndpoint, &metaServer, metaServer.OrganizationID, routeBase), nil
 }

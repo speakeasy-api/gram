@@ -9,6 +9,8 @@ import { useCallback } from "react";
 import {
   cancelOrganizationFetches,
   invalidateOrganizations,
+  invalidateOrganizationActivity,
+  invalidateOrganizationDetails,
   invalidateOrganizationStats,
   organizationQuery,
   writeOrganizationToCache,
@@ -100,22 +102,33 @@ type OrganizationWrite<TVariables> = UseMutationResult<
   TVariables
 >;
 
-// All three writes answer with the organization in its new state and all three
-// put it in the cache the same way, so the list and the peek repaint from the
-// response with no refetch behind them.
+function finishOrganizationWrite(
+  qc: ReturnType<typeof useQueryClient>,
+  org: AdminOrganization,
+): void {
+  writeOrganizationToCache(qc, org);
+  invalidateOrganizationDetails(qc, org);
+  invalidateOrganizationActivity(qc, org.id);
+}
+
+// All four writes answer with the organization in its new state and put it in
+// the cache the same way, so the list and the peek repaint immediately. The
+// detail is then invalidated for a canonical refetch, and audited activity is
+// invalidated from the same success path so an open Activity view includes the
+// new event.
 //
-// All three drop the reads already in flight first. React Query awaits
+// All four drop the reads already in flight first. React Query awaits
 // `onMutate` before it sends the request, so the stale fetch is cancelled
 // before the write leaves rather than racing it home.
 //
-// A write that fails replaces none of what it cancelled, so all three ask for
+// A write that fails replaces none of what it cancelled, so all four ask for
 // the totals again on that path. The row needs nothing: it was never repainted.
 export function useDisableOrganization(): OrganizationWrite<string> {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (id: string) => disableOrganization({ id }),
     onMutate: () => cancelOrganizationFetches(qc),
-    onSuccess: (org) => writeOrganizationToCache(qc, org),
+    onSuccess: (org) => finishOrganizationWrite(qc, org),
     onError: () => invalidateOrganizationStats(qc),
   });
 }
@@ -125,7 +138,7 @@ export function useEnableOrganization(): OrganizationWrite<string> {
   return useMutation({
     mutationFn: (id: string) => enableOrganization({ id }),
     onMutate: () => cancelOrganizationFetches(qc),
-    onSuccess: (org) => writeOrganizationToCache(qc, org),
+    onSuccess: (org) => finishOrganizationWrite(qc, org),
     onError: () => invalidateOrganizationStats(qc),
   });
 }
@@ -153,7 +166,7 @@ export function useExtendTrial(): OrganizationWrite<ExtendTrialRequest> {
     // mutation passes its own context as a second one.
     mutationFn: (body: ExtendTrialRequest) => extendTrial(body),
     onMutate: () => cancelOrganizationFetches(qc),
-    onSuccess: (org) => writeOrganizationToCache(qc, org),
+    onSuccess: (org) => finishOrganizationWrite(qc, org),
     onError: () => invalidateOrganizationStats(qc),
   });
 }
@@ -167,7 +180,7 @@ export function useRearmTrial(): OrganizationWrite<RearmTrialRequest> {
   return useMutation({
     mutationFn: (body: RearmTrialRequest) => rearmTrial(body),
     onMutate: () => cancelOrganizationFetches(qc),
-    onSuccess: (org) => writeOrganizationToCache(qc, org),
+    onSuccess: (org) => finishOrganizationWrite(qc, org),
     onError: () => invalidateOrganizationStats(qc),
   });
 }

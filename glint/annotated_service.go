@@ -10,7 +10,7 @@ import (
 )
 
 const (
-	annotationsPkgPath  = "github.com/speakeasy-api/gram/glint/annotations"
+	annotationsPkgPath  = "github.com/speakeasy-api/gram/server/internal/annotations"
 	annotationsTypeName = "Service"
 )
 

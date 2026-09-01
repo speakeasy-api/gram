@@ -21,8 +21,12 @@ type MetaMcpServer struct {
 	// The ID of the user session issuer used to authenticate callers. Null when no
 	// issuer is attached.
 	UserSessionIssuerID *string
+	// The visibility of the gateway.
+	Visibility MetaMcpServerVisibility
 	// When the meta MCP server was created
 	CreatedAt string
 	// When the meta MCP server was last updated
 	UpdatedAt string
+	// The number of live members. Only populated by listMetaMcpServers.
+	MemberCount *int
 }

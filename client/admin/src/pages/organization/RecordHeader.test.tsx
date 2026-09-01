@@ -2,8 +2,7 @@ import { cleanup, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { badgeTone } from "@/lib/badgeTone";
-import { organizationDashboardUrl, type TrialState } from "@/lib/gramAdminApi";
-import { TRIAL_LABELS } from "@/lib/trialLabels";
+import { organizationDashboardUrl } from "@/lib/gramAdminApi";
 import { fmtDateShort } from "@/lib/utils";
 import { anOrganization } from "@/test/fixtures";
 import { renderWithApp } from "@/test/harness";
@@ -78,17 +77,19 @@ describe("RecordHeader", () => {
     expect(fact?.querySelector('[aria-hidden="true"]')).toBeTruthy();
   });
 
-  it("draws the account type in the neutral tone", async () => {
-    // No trial, so the only badge beside the name is this one.
+  it("draws only the account type in the neutral tone", async () => {
     const org = anOrganization({
       account_type: "enterprise",
-      trial_state: "none",
+      trial_state: "ending_soon",
+      trial_ends_at: "2026-05-06T00:00:00Z",
     });
     await renderWithApp(<RecordHeader org={org} />);
 
-    const badge = screen
+    const badges = screen
       .getByRole("heading", { name: org.name })
-      .parentElement?.querySelector('[data-slot="badge"]');
+      .parentElement?.querySelectorAll('[data-slot="badge"]');
+    expect(badges).toHaveLength(1);
+    const badge = badges?.item(0);
     expect(badge?.textContent).toBe("enterprise");
     // happy-dom lays nothing out, so the class list is the whole account of a
     // colour a unit test can read. `Trial.test.tsx` reads a tone the same way.
@@ -97,75 +98,33 @@ describe("RecordHeader", () => {
     expect(badge?.className).toContain(badgeTone.neutral);
   });
 
-  it("names the record and its trial state", async () => {
+  it("keeps Open in Dashboard but no lifecycle or trial actions", async () => {
     const org = anOrganization({
       trial_state: "ending_soon",
       trial_ends_at: "2026-05-06T00:00:00Z",
     });
     await renderWithApp(<RecordHeader org={org} />);
 
-    expect(screen.getByRole("heading", { name: org.name })).toBeTruthy();
-    expect(screen.getByText(TRIAL_LABELS.ending_soon)).toBeTruthy();
+    expect(
+      screen.getByRole("button", { name: /Open in Dashboard/ }),
+    ).toBeTruthy();
+    expect(
+      screen.queryByRole("button", { name: `Disable ${org.name}` }),
+    ).toBeNull();
+    expect(
+      screen.queryByRole("button", { name: `Extend trial ${org.name}` }),
+    ).toBeNull();
   });
 
-  it("shows no trial mark on a record with no trial", async () => {
-    // `Trial` renders a bare dash for `none`, which is right in a table cell
-    // and reads as a stray hyphen beside a record name.
-    await renderWithApp(
-      <RecordHeader org={anOrganization({ trial_state: "none" })} />,
-    );
-
-    expect(screen.queryByText("-")).toBeNull();
-    expect(screen.queryByText(TRIAL_LABELS.none)).toBeNull();
-  });
-
-  it("shows no trial mark on a record the server sends no trial state for", async () => {
-    // A gate written as `!== "none"` alone draws the dash here.
-    await renderWithApp(<RecordHeader org={anOrganization()} />);
-
-    expect(screen.queryByText("-")).toBeNull();
-    expect(screen.queryByText(TRIAL_LABELS.none)).toBeNull();
-  });
-
-  it("still shows the dash when the server sends a state the client does not know", async () => {
-    // `Trial` renders the same bare dash for `none` and for an unrecognised
-    // value. Only `none` is "no trial"; an unrecognised state says this build
-    // is behind the server, and hiding it would hide that.
-    await renderWithApp(
-      <RecordHeader
-        org={anOrganization({ trial_state: "paused" as TrialState })}
-      />,
-    );
-
-    expect(screen.getByText("Trial state not recognised")).toBeTruthy();
-  });
-
-  it("carries the record's lifecycle action and not the trial's", async () => {
-    // A live trial, so the trial action would be offered if this bar drew it.
-    // It belongs in the callout, beside the deadline it acts on.
-    await renderWithApp(
-      <RecordHeader
-        org={anOrganization({
-          trial_state: "ending_soon",
-          trial_ends_at: "2026-05-06T00:00:00Z",
-        })}
-      />,
-    );
-
-    const labels = screen.queryAllByRole("button").map((b) => b.textContent);
-    expect(labels).toContain("Disable");
-    expect(labels).not.toContain("Extend trial");
-  });
-
-  it("offers Re-enable rather than Disable for a disabled organization", async () => {
+  it("puts no Re-enable action in a disabled organization's header", async () => {
     const org = anOrganization({ disabled_at: "2026-02-01T00:00:00Z" });
     await renderWithApp(<RecordHeader org={org} />);
 
     expect(
-      screen.getByRole("button", { name: `Re-enable ${org.name}` }),
+      screen.getByRole("button", { name: /Open in Dashboard/ }),
     ).toBeTruthy();
     expect(
-      screen.queryByRole("button", { name: `Disable ${org.name}` }),
+      screen.queryByRole("button", { name: `Re-enable ${org.name}` }),
     ).toBeNull();
   });
 });

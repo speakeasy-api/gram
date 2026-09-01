@@ -1724,6 +1724,13 @@ RETURNING c.*;
 --
 -- A soft-deleted upstream must not contribute its URL: the derived RFC 8707
 -- resource is sent to the authorization server and recorded on new grants.
+--
+-- Remote upstreams only. A tunneled server deliberately contributes nothing:
+-- its credentials route by the server's own derived remote_session_issuer and
+-- accept an unqualified grant, so stamping its identifier here would buy no
+-- routing and would make an issuer that fronts both kinds read as ambiguous,
+-- silently unqualifying a sibling remote server's grants. The member-scoped
+-- meta MCP derivation stamps it instead, where one member is unambiguous.
 SELECT DISTINCT
     m.id,
     m.project_id,
@@ -1733,7 +1740,7 @@ SELECT DISTINCT
     COALESCE(rms.url, '')::text AS url
 FROM mcp_servers AS m
 JOIN projects AS p ON p.id = m.project_id
-LEFT JOIN remote_mcp_servers AS rms ON rms.id = m.remote_mcp_server_id AND rms.deleted IS FALSE
+LEFT JOIN remote_mcp_servers AS rms ON rms.id = m.remote_mcp_server_id AND rms.project_id = m.project_id AND rms.deleted IS FALSE
 WHERE m.deleted IS FALSE
   AND m.user_session_issuer_id IN (
       SELECT link.user_session_issuer_id
@@ -2238,3 +2245,16 @@ WHERE subject_urn = @subject_urn
   AND remote_session_client_id = @remote_session_client_id
   AND deleted IS FALSE
   AND (last_used_at IS NULL OR last_used_at <= @used_cutoff::timestamptz);
+
+-- name: ListUserSessionIssuersBoundToProjectClient :many
+-- The bindings DeleteRemoteSessionClient is about to purge, read first so the
+-- post-commit resync knows which issuers to recompute. Mirrors the purge's own
+-- predicate exactly: narrower would miss bindings the purge still deletes.
+SELECT link.user_session_issuer_id
+FROM remote_session_client_user_session_issuers AS link
+JOIN remote_session_clients AS c
+  ON c.id = link.remote_session_client_id
+WHERE link.remote_session_client_id = @remote_session_client_id
+  AND c.project_id = @project_id
+ORDER BY link.user_session_issuer_id;
+

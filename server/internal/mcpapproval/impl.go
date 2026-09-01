@@ -1379,8 +1379,7 @@ func (s *Service) RecordDecision(ctx context.Context, payload *gen.RecordDecisio
 		if err := reconcileDecisionGrants(ctx, dbtx, request.OrganizationID, projectID, request.TargetKey, payload.Decision == decisionApproved, grantedPrincipals); err != nil {
 			// An inexpressible blast radius surfaces as the caller's error
 			// with its explanation intact; everything else is unexpected.
-			var shareable *oops.ShareableError
-			if errors.As(err, &shareable) {
+			if _, ok := errors.AsType[*oops.ShareableError](err); ok {
 				return nil, err
 			}
 			return nil, oops.E(oops.CodeUnexpected, err, "error enforcing decision").LogError(ctx, s.logger)

@@ -10,7 +10,38 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 )
+
+func TestIsPlatformAdminReadsCurrentDurableEntitlement(t *testing.T) {
+	t.Parallel()
+
+	userInfo := defaultMockUserInfo()
+	userInfo.UserID = "fresh-platform-admin-user"
+	userInfo.Admin = false
+	ctx, instance := newTestAuthService(t, userInfo)
+	require.NoError(t, instance.createTestUser(ctx, userInfo))
+
+	isAdmin, err := instance.sessionManager.IsPlatformAdmin(ctx, userInfo.UserID)
+	require.NoError(t, err)
+	require.False(t, isAdmin)
+
+	require.NoError(t, authRepo.New(instance.conn).SetUserAdminFixture(ctx, authRepo.SetUserAdminFixtureParams{
+		Admin: true, UserID: userInfo.UserID,
+	}))
+	isAdmin, err = instance.sessionManager.IsPlatformAdmin(ctx, userInfo.UserID)
+	require.NoError(t, err)
+	require.True(t, isAdmin)
+
+	require.NoError(t, testrepo.New(instance.conn).ForceSoftDeleteUser(ctx, userInfo.UserID))
+	isAdmin, err = instance.sessionManager.IsPlatformAdmin(ctx, userInfo.UserID)
+	require.NoError(t, err)
+	require.False(t, isAdmin)
+
+	isAdmin, err = instance.sessionManager.IsPlatformAdmin(ctx, "missing-platform-admin-user")
+	require.NoError(t, err)
+	require.False(t, isAdmin)
+}
 
 func TestAuthenticateRefreshesValidatedSession(t *testing.T) {
 	t.Parallel()
@@ -31,9 +62,34 @@ func TestAuthenticateRefreshesValidatedSession(t *testing.T) {
 	ctx = contextvalues.WithSessionCookieRefresh(ctx, func(sessionID string) {
 		refreshedSessionID = sessionID
 	})
-	_, err := instance.sessionManager.Authenticate(ctx, session.SessionID)
+	authenticatedCtx, err := instance.sessionManager.Authenticate(ctx, session.SessionID)
 	require.NoError(t, err)
 	require.Equal(t, session.SessionID, refreshedSessionID)
+	require.True(t, contextvalues.HasValidatedGramSession(authenticatedCtx))
+	require.False(t, contextvalues.IsLegacyImpersonatedSession(authenticatedCtx))
+}
+
+func TestAuthenticatePropagatesLegacyImpersonationProvenance(t *testing.T) {
+	t.Parallel()
+
+	userInfo := defaultMockUserInfo()
+	userInfo.UserID = "legacy-impersonated-user"
+	ctx, instance := newTestAuthService(t, userInfo)
+	require.NoError(t, instance.createTestUser(ctx, userInfo))
+	require.NoError(t, instance.createTestOrganization(ctx, userInfo.Organizations[0], userInfo.UserID))
+
+	session := sessions.Session{
+		SessionID:            "legacy-impersonated-session",
+		UserID:               userInfo.UserID,
+		ActiveOrganizationID: userInfo.Organizations[0].ID,
+		ImpersonatorEmail:    "support@example.com",
+	}
+	require.NoError(t, instance.sessionManager.StoreSession(ctx, session))
+
+	authenticatedCtx, err := instance.sessionManager.Authenticate(ctx, session.SessionID)
+	require.NoError(t, err)
+	require.True(t, contextvalues.HasValidatedGramSession(authenticatedCtx))
+	require.True(t, contextvalues.IsLegacyImpersonatedSession(authenticatedCtx))
 }
 
 // A validated, unexpired support session lets a platform admin access a non-member org.
@@ -73,6 +129,7 @@ func TestAuthenticate_SupportAdminCanAccessNonMemberOrg(t *testing.T) {
 	require.True(t, ok)
 	require.Equal(t, customerOrg.ID, authCtx.ActiveOrganizationID)
 	require.True(t, authCtx.IsAdmin)
+	require.True(t, contextvalues.HasValidatedGramSession(ctx))
 	require.True(t, contextvalues.IsSupportSession(ctx))
 }
 

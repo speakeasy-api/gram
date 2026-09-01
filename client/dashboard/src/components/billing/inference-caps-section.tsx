@@ -1,4 +1,5 @@
 import { InferenceCapControl } from "@/components/billing/inference-cap-control";
+import { InlineEmptyState } from "@/components/inline-empty-state";
 import { useInferenceCapsMode } from "@/components/billing/inference-caps-mode";
 import {
   INFERENCE_CAPS_ANCHOR,
@@ -52,8 +53,9 @@ const NOT_BILLING_NOTE =
 
 // The endpoint answers with the Gram-managed inference keys that have been
 // materialized for this organization, which can be none of them.
+const NO_CAPS_HEADING = "No keys available";
 const NO_CAPS_NOTE =
-  "No Gram-managed inference keys are available to configure yet.";
+  "There are no Speakeasy-managed inference keys available to configure yet.";
 
 /** The same note for a Stripe trial, which knows when billing takes over. */
 function stripeTrialNote(convertsOn: Date | null | undefined): string {
@@ -187,7 +189,9 @@ export function InferenceCapsSection(): JSX.Element | null {
         <Page.Section.Title area="">Inference caps</Page.Section.Title>
         <Page.Section.Description>
           Limit what this organization can spend each month on the inference
-          Gram runs for it. Each cap is enforced on its own.
+          Speakeasy runs for it. Each cap is enforced on its own. Caps follow
+          the calendar month rather than your billing cycle, so the spend they
+          meter isn't an invoice figure.
         </Page.Section.Description>
         <Page.Section.Body>
           {mode === "product-trial" ? (
@@ -324,9 +328,11 @@ function InferenceCaps({
           </Text>
         )}
         {caps.length === 0 ? (
-          <Text muted small>
-            {NO_CAPS_NOTE}
-          </Text>
+          <InlineEmptyState
+            icon="key-round"
+            heading={NO_CAPS_HEADING}
+            description={NO_CAPS_NOTE}
+          />
         ) : (
           caps.map((cap) => (
             <InferenceCapControl

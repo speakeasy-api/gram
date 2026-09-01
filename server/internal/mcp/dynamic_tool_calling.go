@@ -257,6 +257,7 @@ func handleSearchToolsCall(
 			IsError:           false,
 		},
 		serverIdentity: serverInfoHostedToolset,
+		cacheHints:     nil,
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to serialize find_tools response").LogError(ctx, logger)
@@ -373,6 +374,7 @@ func handleDescribeToolsCall(
 			IsError:           false,
 		},
 		serverIdentity: serverInfoHostedToolset,
+		cacheHints:     nil,
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to serialize describe_tools response").LogError(ctx, logger)

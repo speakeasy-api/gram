@@ -20,7 +20,6 @@ import { BusinessMemories } from "./businessmemories.js";
 import { Chat } from "./chat.js";
 import { ChatSessions } from "./chatsessions.js";
 import { CliAuth } from "./cliauth.js";
-import { Collections } from "./collections.js";
 import { Deployments } from "./deployments.js";
 import { DeviceIntegrations } from "./deviceintegrations.js";
 import { Domains } from "./domains.js";
@@ -31,10 +30,12 @@ import { ExternalKeys } from "./externalkeys.js";
 import { Features } from "./features.js";
 import { Hooks } from "./hooks.js";
 import { HooksServerNames } from "./hooksservernames.js";
+import { Identity } from "./identity.js";
 import { Instances } from "./instances.js";
 import { Integrations } from "./integrations.js";
 import { JsonWebKeySets } from "./jsonwebkeysets.js";
 import { Keys } from "./keys.js";
+import { Killswitches } from "./killswitches.js";
 import { Litellm } from "./litellm.js";
 import { McpApproval } from "./mcpapproval.js";
 import { McpEndpoints } from "./mcpendpoints.js";
@@ -51,6 +52,7 @@ import { Organizations } from "./organizations.js";
 import { Otel } from "./otel.js";
 import { OtelForwarding } from "./otelforwarding.js";
 import { Packages } from "./packages.js";
+import { PlatformKillswitches } from "./platformkillswitches.js";
 import { PlatformMcp } from "./platformmcp.js";
 import { Plugins } from "./plugins.js";
 import { Projects } from "./projects.js";
@@ -176,11 +178,6 @@ export class Gram extends ClientSDK {
     return (this._cliAuth ??= new CliAuth(this._options));
   }
 
-  private _collections?: Collections;
-  get collections(): Collections {
-    return (this._collections ??= new Collections(this._options));
-  }
-
   private _deployments?: Deployments;
   get deployments(): Deployments {
     return (this._deployments ??= new Deployments(this._options));
@@ -228,6 +225,11 @@ export class Gram extends ClientSDK {
     return (this._hooksServerNames ??= new HooksServerNames(this._options));
   }
 
+  private _identity?: Identity;
+  get identity(): Identity {
+    return (this._identity ??= new Identity(this._options));
+  }
+
   private _instances?: Instances;
   get instances(): Instances {
     return (this._instances ??= new Instances(this._options));
@@ -246,6 +248,11 @@ export class Gram extends ClientSDK {
   private _keys?: Keys;
   get keys(): Keys {
     return (this._keys ??= new Keys(this._options));
+  }
+
+  private _killswitches?: Killswitches;
+  get killswitches(): Killswitches {
+    return (this._killswitches ??= new Killswitches(this._options));
   }
 
   private _litellm?: Litellm;
@@ -325,6 +332,13 @@ export class Gram extends ClientSDK {
   private _packages?: Packages;
   get packages(): Packages {
     return (this._packages ??= new Packages(this._options));
+  }
+
+  private _platformKillswitches?: PlatformKillswitches;
+  get platformKillswitches(): PlatformKillswitches {
+    return (this._platformKillswitches ??= new PlatformKillswitches(
+      this._options,
+    ));
   }
 
   private _platformMcp?: PlatformMcp;

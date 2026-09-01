@@ -6,11 +6,13 @@ import (
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/meta_mcp"
+	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/metamcp"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	usersessionsrepo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
@@ -38,7 +40,9 @@ func TestCreateMetaMcpServer_Success(t *testing.T) {
 	require.Equal(t, "my gateway", result.Name)
 	require.Equal(t, authCtx.ActiveOrganizationID, result.OrganizationID)
 	require.Equal(t, authCtx.ProjectID.String(), result.ProjectID)
-	require.Nil(t, result.UserSessionIssuerID)
+	// A gateway without sign-in is a trap (anonymous callers, no member
+	// credentials), so omitting the issuer mints a dedicated one.
+	require.NotNil(t, result.UserSessionIssuerID)
 
 	afterCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionMetaMcpServerCreate)
 	require.NoError(t, err)
@@ -128,4 +132,39 @@ func TestCreateMetaMcpServer_RequiresWriteScope(t *testing.T) {
 		UserSessionIssuerID: nil,
 	})
 	requireOopsCode(t, err, oops.CodeForbidden)
+}
+
+func TestCreateMetaMcpServer_DefaultsToPrivate(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+
+	result, err := ti.service.CreateMetaMcpServer(ctx, &gen.CreateMetaMcpServerPayload{
+		SessionToken:        nil,
+		ApikeyToken:         nil,
+		ProjectSlugInput:    nil,
+		Name:                "default visibility gateway",
+		UserSessionIssuerID: nil,
+		Visibility:          nil,
+	})
+	require.NoError(t, err)
+	require.Equal(t, types.MetaMcpServerVisibility(metamcp.VisibilityPrivate), result.Visibility)
+}
+
+func TestCreateMetaMcpServer_AcceptsDisabled(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+
+	disabled := types.MetaMcpServerVisibility(metamcp.VisibilityDisabled)
+	result, err := ti.service.CreateMetaMcpServer(ctx, &gen.CreateMetaMcpServerPayload{
+		SessionToken:        nil,
+		ApikeyToken:         nil,
+		ProjectSlugInput:    nil,
+		Name:                "disabled gateway",
+		UserSessionIssuerID: nil,
+		Visibility:          &disabled,
+	})
+	require.NoError(t, err)
+	require.Equal(t, disabled, result.Visibility)
 }

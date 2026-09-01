@@ -1,7 +1,4 @@
-import type {
-  ExternalMCPRemote,
-  TransportType,
-} from "@gram/client/models/components/externalmcpremote.js";
+import type { ExternalMCPRemote } from "@gram/client/models/components/externalmcpremote.js";
 import { describe, expect, it } from "vitest";
 import {
   catalogHeadersForRemoteUrl,
@@ -15,7 +12,7 @@ import type { PulseMCPServer } from "./hooks";
 
 function remote(
   url: string,
-  transportType: TransportType = "streamable-http",
+  transportType: ExternalMCPRemote["transportType"] = "streamable-http",
   headerNames: string[] = [],
 ): ExternalMCPRemote {
   return {
@@ -99,6 +96,11 @@ describe("filterToHttpRemotes", () => {
     const sse = remote("https://x.example/sse", "sse");
     const result = filterToHttpRemotes(server([http, sse]));
     expect(result.remotes).toEqual([http]);
+  });
+
+  it("drops insecure streamable-http remotes", () => {
+    const insecure = remote("http://x.example/mcp", "streamable-http");
+    expect(filterToHttpRemotes(server([insecure])).remotes).toEqual([]);
   });
 
   it("collapses duplicate URLs after filtering", () => {

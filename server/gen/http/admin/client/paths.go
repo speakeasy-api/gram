@@ -62,6 +62,11 @@ func ListOrganizationProjectsAdminPath() string {
 	return "/admin/organization.projects"
 }
 
+// ListOrganizationActivityAdminPath returns the URL path to the admin service listOrganizationActivity HTTP endpoint.
+func ListOrganizationActivityAdminPath() string {
+	return "/admin/organization.activity"
+}
+
 // ListOrganizationsAdminPath returns the URL path to the admin service listOrganizations HTTP endpoint.
 func ListOrganizationsAdminPath() string {
 	return "/admin/organizations.list"
@@ -120,4 +125,9 @@ func CancelStripeSubscriptionAdminPath() string {
 // ResumeStripeSubscriptionAdminPath returns the URL path to the admin service resumeStripeSubscription HTTP endpoint.
 func ResumeStripeSubscriptionAdminPath() string {
 	return "/admin/organization.resumeStripeSubscription"
+}
+
+// MarkEnterpriseTrialConvertedAdminPath returns the URL path to the admin service markEnterpriseTrialConverted HTTP endpoint.
+func MarkEnterpriseTrialConvertedAdminPath() string {
+	return "/admin/trial.convert"
 }

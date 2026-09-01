@@ -192,8 +192,7 @@ func (m *ChallengeManager) resolveUpstreamToken(
 		// the user id is what lets "how many users are affected" be answered,
 		// since a client id is one row per provider connection, not per user.
 		reason := "upstream token refresh failed"
-		var refreshErr *TokenRefreshError
-		if errors.As(err, &refreshErr) {
+		if refreshErr, ok := errors.AsType[*TokenRefreshError](err); ok {
 			reason = refreshErr.Reason
 		}
 		args := []any{
@@ -202,8 +201,7 @@ func (m *ChallengeManager) resolveUpstreamToken(
 			attr.SlogOAuthFailureReason(reason),
 			attr.SlogError(err),
 		}
-		var failure *RefreshError
-		if errors.As(err, &failure) {
+		if failure, ok := errors.AsType[*RefreshError](err); ok {
 			args = append(args, attr.SlogOAuthIssuer(failure.IssuerURL), attr.SlogOutcome(string(failure.Outcome)))
 		}
 		if subject.Kind == urn.SessionSubjectKindUser {
@@ -343,10 +341,9 @@ type UpstreamToken struct {
 // is missing or invalid, even when the request only needs a different one.
 // Toolset dispatch is what still requires this — it has no per-tool
 // remote_session_issuer mapping (AIS-152), so a partial map would silently
-// dispatch a tool with no credential instead of challenging. Proxied backends
-// no longer need it: routeUpstreamToken picks by the backend's own resource.
-// One resolver serves both, so it stays all-or-nothing here; relaxing it for
-// the proxied path is a follow-up, not a behavior change this PR makes.
+// dispatch a tool with no credential instead of challenging. Meta MCP
+// endpoints route per member by recorded resource instead, so they resolve
+// through ResolveAvailableAccessTokens and tolerate gaps.
 // The cost is that one expired upstream blocks every tool on the issuer, and
 // a proxied request to a still-linked upstream, until it is re-linked.
 //
@@ -359,6 +356,35 @@ func (m *ChallengeManager) ResolveAccessTokens(
 	organizationID string,
 	userSessionIssuerID uuid.UUID,
 	subject urn.SessionSubject,
+) (map[uuid.UUID]UpstreamToken, error) {
+	return m.resolveBoundAccessTokens(ctx, projectID, organizationID, userSessionIssuerID, subject, false)
+}
+
+// ResolveAvailableAccessTokens is the partial-resolution variant the meta MCP
+// serving path calls. Per-client resolution is identical to
+// ResolveAccessTokens, but a bound client without a usable token is skipped
+// instead of failing the whole map: gateway member dispatch routes each
+// credential by its recorded resource, so a member whose provider is not
+// connected degrades member-scoped while every other member keeps serving.
+// Returns the resolvable subset — possibly empty — and errors only on
+// infrastructure failures, never on missing or expired grants.
+func (m *ChallengeManager) ResolveAvailableAccessTokens(
+	ctx context.Context,
+	projectID uuid.UUID,
+	organizationID string,
+	userSessionIssuerID uuid.UUID,
+	subject urn.SessionSubject,
+) (map[uuid.UUID]UpstreamToken, error) {
+	return m.resolveBoundAccessTokens(ctx, projectID, organizationID, userSessionIssuerID, subject, true)
+}
+
+func (m *ChallengeManager) resolveBoundAccessTokens(
+	ctx context.Context,
+	projectID uuid.UUID,
+	organizationID string,
+	userSessionIssuerID uuid.UUID,
+	subject urn.SessionSubject,
+	skipUnusable bool,
 ) (map[uuid.UUID]UpstreamToken, error) {
 	clients, err := m.listRemoteSessionClientRowsForUserSessionIssuer(ctx, projectID, organizationID, userSessionIssuerID)
 	if err != nil {
@@ -396,6 +422,9 @@ func (m *ChallengeManager) ResolveAccessTokens(
 			return nil, fmt.Errorf("resolve access token: %w", err)
 		}
 		if resolved.Token == "" {
+			if skipUnusable {
+				continue
+			}
 			return nil, ErrNoValidToken
 		}
 		tokens[c.RemoteSessionIssuerID] = resolved

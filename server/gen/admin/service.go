@@ -9,6 +9,7 @@ package admin
 
 import (
 	"context"
+	"encoding/json"
 
 	goa "goa.design/goa/v3/pkg"
 	"goa.design/goa/v3/security"
@@ -45,6 +46,8 @@ type Service interface {
 	ListOrganizationMembers(context.Context, *ListOrganizationMembersPayload) (res *AdminListOrganizationMembersResult, err error)
 	// Lists projects belonging to an organization (admin view, no auth scoping).
 	ListOrganizationProjects(context.Context, *ListOrganizationProjectsPayload) (res *AdminListOrganizationProjectsResult, err error)
+	// Lists activity belonging to an organization for admin operators.
+	ListOrganizationActivity(context.Context, *ListOrganizationActivityPayload) (res *AdminListOrganizationActivityResult, err error)
 	// Lists organizations for admin operations with optional search and filters.
 	ListOrganizations(context.Context, *ListOrganizationsPayload) (res *AdminListOrganizationsResult, err error)
 	// Extends a running enterprise trial by adding days to its current end date.
@@ -84,6 +87,9 @@ type Service interface {
 	// Removes a scheduled period-end cancellation from an organization's PAYG
 	// subscription.
 	ResumeStripeSubscription(context.Context, *ResumeStripeSubscriptionPayload) (res *AdminStripeSubscription, err error)
+	// Records that an organization's enterprise trial converted to a signed
+	// contract.
+	MarkEnterpriseTrialConverted(context.Context, *MarkEnterpriseTrialConvertedPayload) (res *MarkEnterpriseTrialConvertedResult, err error)
 }
 
 // Auther defines the authorization functions to be implemented by the service.
@@ -106,7 +112,7 @@ const ServiceName = "admin"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [23]string{"login", "callback", "logout", "getProject", "updateOrganization", "bulkUpdateAccountType", "disableOrganization", "enableOrganization", "getOrganization", "listOrganizationMembers", "listOrganizationProjects", "listOrganizations", "extendTrial", "createOrganization", "rearmTrial", "getOrganizationStats", "getInferenceKeys", "setInferenceKeyMonthlyLimit", "getInferenceSpendHistory", "getPaygBillingSummary", "getStripeSubscription", "cancelStripeSubscription", "resumeStripeSubscription"}
+var MethodNames = [25]string{"login", "callback", "logout", "getProject", "updateOrganization", "bulkUpdateAccountType", "disableOrganization", "enableOrganization", "getOrganization", "listOrganizationMembers", "listOrganizationProjects", "listOrganizationActivity", "listOrganizations", "extendTrial", "createOrganization", "rearmTrial", "getOrganizationStats", "getInferenceKeys", "setInferenceKeyMonthlyLimit", "getInferenceSpendHistory", "getPaygBillingSummary", "getStripeSubscription", "cancelStripeSubscription", "resumeStripeSubscription", "markEnterpriseTrialConverted"}
 
 // AdminBulkUpdateAccountTypeResult is the result type of the admin service
 // bulkUpdateAccountType method.
@@ -127,6 +133,11 @@ type AdminInferenceKey struct {
 	CreditsUsed    float64
 	MonthlyCredits int64
 	Disabled       bool
+	// Active internal disable causes. Omitted for legacy unclassified rows.
+	DisableCauses []string
+	// Whether disable_causes is classified, including an explicitly empty cause
+	// set.
+	DisableCausesClassified bool
 }
 
 // AdminInferenceKeyLimit is the result type of the admin service
@@ -141,6 +152,15 @@ type AdminInferenceSpendMonth struct {
 	// Exclusive end of the UTC calendar month.
 	PeriodEnd string
 	SpendUsd  string
+}
+
+// AdminListOrganizationActivityResult is the result type of the admin service
+// listOrganizationActivity method.
+type AdminListOrganizationActivityResult struct {
+	// List of organization activity.
+	Logs []*AuditLog
+	// Cursor for the next page of results.
+	NextCursor *string
 }
 
 // AdminListOrganizationMembersResult is the result type of the admin service
@@ -312,6 +332,33 @@ type AdminStripeSubscription struct {
 	PaymentFailed      bool
 }
 
+type AuditLog struct {
+	ID               string
+	ProjectID        *string
+	ProjectSlug      *string
+	ActorID          string
+	ActorType        string
+	ActorDisplayName *string
+	ActorSlug        *string
+	Action           string
+	// How the change was made: 'dashboard', 'api_key', 'platform_mcp',
+	// 'project_assistant', or 'unknown' when no surface was identifiable. Always
+	// present.
+	ActingSurface string
+	// The registered OAuth client the call authenticated as, when it had one.
+	// Absent for calls that carried no OAuth client.
+	ActingClientID     *string
+	SubjectID          string
+	SubjectType        string
+	SubjectDisplayName *string
+	SubjectSlug        *string
+	BeforeSnapshot     json.RawMessage
+	AfterSnapshot      json.RawMessage
+	Metadata           map[string]any
+	// The creation date of the audit log.
+	CreatedAt string
+}
+
 // BulkUpdateAccountTypePayload is the payload type of the admin service
 // bulkUpdateAccountType method.
 type BulkUpdateAccountTypePayload struct {
@@ -440,6 +487,16 @@ type GetStripeSubscriptionPayload struct {
 	OrganizationID    string
 }
 
+// ListOrganizationActivityPayload is the payload type of the admin service
+// listOrganizationActivity method.
+type ListOrganizationActivityPayload struct {
+	AdminSessionToken *string
+	// Organization ID.
+	OrganizationID string
+	// Cursor for paginating through organization activity.
+	Cursor *string
+}
+
 // ListOrganizationMembersPayload is the payload type of the admin service
 // listOrganizationMembers method.
 type ListOrganizationMembersPayload struct {
@@ -526,6 +583,23 @@ type LoginResult struct {
 type LogoutPayload struct {
 	// The session cookie value to clear for logging out
 	SessionID *string
+}
+
+// MarkEnterpriseTrialConvertedPayload is the payload type of the admin service
+// markEnterpriseTrialConverted method.
+type MarkEnterpriseTrialConvertedPayload struct {
+	AdminSessionToken *string
+	// Organization ID.
+	ID string
+}
+
+// MarkEnterpriseTrialConvertedResult is the result type of the admin service
+// markEnterpriseTrialConverted method.
+type MarkEnterpriseTrialConvertedResult struct {
+	// The converted organization ID.
+	OrganizationID string
+	// The time at which the enterprise trial was recorded as converted.
+	ConvertedAt string
 }
 
 // RearmTrialPayload is the payload type of the admin service rearmTrial method.

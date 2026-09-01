@@ -401,6 +401,70 @@ func (q *Queries) GetMCPServerBySlug(ctx context.Context, arg GetMCPServerBySlug
 	return i, err
 }
 
+const hasLiveMCPServerInOrganization = `-- name: HasLiveMCPServerInOrganization :one
+SELECT EXISTS(
+  SELECT 1
+  FROM mcp_servers AS m
+  JOIN projects AS p ON p.id = m.project_id
+  WHERE m.id = $1
+    AND p.organization_id = $2
+    AND m.deleted IS FALSE
+    AND p.deleted IS FALSE
+) AS exists
+`
+
+type HasLiveMCPServerInOrganizationParams struct {
+	ID             uuid.UUID
+	OrganizationID string
+}
+
+// Reports whether an MCP server is live and owned by the organization:
+// the server is not deleted and its project is not deleted. Used by
+// kill-switch resource validation, where a server under a soft-deleted
+// project must stop counting as a current organization resource.
+func (q *Queries) HasLiveMCPServerInOrganization(ctx context.Context, arg HasLiveMCPServerInOrganizationParams) (bool, error) {
+	row := q.db.QueryRow(ctx, hasLiveMCPServerInOrganization, arg.ID, arg.OrganizationID)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
+}
+
+const listLiveMCPServerIDsInOrganization = `-- name: ListLiveMCPServerIDsInOrganization :many
+SELECT m.id
+FROM mcp_servers AS m
+JOIN projects AS p ON p.id = m.project_id
+WHERE m.id = ANY($1::uuid[])
+  AND p.organization_id = $2
+  AND m.deleted IS FALSE
+  AND p.deleted IS FALSE
+ORDER BY m.id
+`
+
+type ListLiveMCPServerIDsInOrganizationParams struct {
+	Ids            []uuid.UUID
+	OrganizationID string
+}
+
+func (q *Queries) ListLiveMCPServerIDsInOrganization(ctx context.Context, arg ListLiveMCPServerIDsInOrganizationParams) ([]uuid.UUID, error) {
+	rows, err := q.db.Query(ctx, listLiveMCPServerIDsInOrganization, arg.Ids, arg.OrganizationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []uuid.UUID
+	for rows.Next() {
+		var id uuid.UUID
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listMCPServerToolMetadata = `-- name: ListMCPServerToolMetadata :many
 SELECT id, project_id, mcp_server_id, tool_name, title, read_only_hint, destructive_hint, idempotent_hint, open_world_hint, created_at, updated_at, deleted_at, deleted
 FROM mcp_server_tool_metadata
@@ -740,6 +804,43 @@ func (q *Queries) ListMCPServersForTelemetryByProjectID(ctx context.Context, pro
 	return items, nil
 }
 
+const lockLiveMCPServersInOrganization = `-- name: LockLiveMCPServersInOrganization :many
+SELECT m.id
+FROM mcp_servers AS m
+JOIN projects AS p ON p.id = m.project_id
+WHERE m.id = ANY($1::uuid[])
+  AND p.organization_id = $2
+  AND m.deleted IS FALSE
+  AND p.deleted IS FALSE
+ORDER BY m.id
+FOR SHARE OF m, p
+`
+
+type LockLiveMCPServersInOrganizationParams struct {
+	Ids            []uuid.UUID
+	OrganizationID string
+}
+
+func (q *Queries) LockLiveMCPServersInOrganization(ctx context.Context, arg LockLiveMCPServersInOrganizationParams) ([]uuid.UUID, error) {
+	rows, err := q.db.Query(ctx, lockLiveMCPServersInOrganization, arg.Ids, arg.OrganizationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []uuid.UUID
+	for rows.Next() {
+		var id uuid.UUID
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const lockMCPServerByIDAndProjectID = `-- name: LockMCPServerByIDAndProjectID :one
 SELECT id, project_id, name, slug, environment_id, user_session_issuer_id, remote_session_issuer_id, remote_mcp_server_id, tunneled_mcp_server_id, toolset_id, unproxied_mcp_server_id, tool_variations_group_id, visibility, created_at, updated_at, deleted_at, deleted
 FROM mcp_servers
@@ -846,6 +947,75 @@ func (q *Queries) LockMCPServersByIDs(ctx context.Context, arg LockMCPServersByI
 		return nil, err
 	}
 	return items, nil
+}
+
+const resyncMCPServerRemoteSessionIssuers = `-- name: ResyncMCPServerRemoteSessionIssuers :execrows
+WITH resolved AS (
+    SELECT input.user_session_issuer_id,
+           CASE WHEN count(DISTINCT i.id) = 1
+                THEN (array_agg(DISTINCT i.id))[1]
+           END AS remote_session_issuer_id
+    FROM unnest($3::uuid[]) AS input(user_session_issuer_id)
+    JOIN user_session_issuers AS usi
+      ON usi.id = input.user_session_issuer_id
+     AND usi.project_id = $1::uuid
+    LEFT JOIN remote_session_client_user_session_issuers AS link
+           ON link.user_session_issuer_id = input.user_session_issuer_id
+    LEFT JOIN remote_session_clients AS c
+           ON c.id = link.remote_session_client_id
+          AND c.deleted IS FALSE
+          AND (c.project_id = usi.project_id
+               OR (c.project_id IS NULL AND c.organization_id = $2::text))
+    LEFT JOIN remote_session_issuers AS i
+           ON i.id = c.remote_session_issuer_id
+          AND i.deleted IS FALSE
+    GROUP BY input.user_session_issuer_id
+)
+UPDATE mcp_servers AS s
+SET remote_session_issuer_id = resolved.remote_session_issuer_id,
+    updated_at = clock_timestamp()
+FROM resolved
+WHERE s.user_session_issuer_id = resolved.user_session_issuer_id
+  AND s.project_id = $1::uuid
+  -- Belt and suspenders on the caller's org/project pair agreeing.
+  AND EXISTS (SELECT 1
+              FROM projects AS p
+              WHERE p.id = s.project_id
+                AND p.organization_id = $2::text)
+  AND s.deleted IS FALSE
+  AND s.remote_session_issuer_id IS DISTINCT FROM resolved.remote_session_issuer_id
+`
+
+type ResyncMCPServerRemoteSessionIssuersParams struct {
+	ProjectID            uuid.UUID
+	OrganizationID       string
+	UserSessionIssuerIds []uuid.UUID
+}
+
+// Recomputes mcp_servers.remote_session_issuer_id from the live client
+// bindings on each named user session issuer. Exactly one distinct remote
+// issuer stamps it; none or several leave it NULL and readers fail closed.
+//
+// Best effort: runs post-commit outside the mutating transaction, so it takes
+// no advisory lock and a raced run merely leaves a stale value, which the
+// consent-time lookup degrades on and the next run heals.
+//
+// Clients and issuers are only ever soft-deleted, so `deleted IS FALSE` is the
+// removal signal; the column's ON DELETE SET NULL never fires. The filters
+// mirror the serve-time credential resolver: the column must never name an
+// issuer that resolver would refuse.
+//
+// Tenancy: the ids arrive from an untenanted join table, so the derivation is
+// pinned to the caller's own project — a foreign id derives no row and writes
+// nothing — and only that project's servers are written. Organization-level
+// clients of the caller's organization count toward the derivation, matching
+// what the attach surface permits.
+func (q *Queries) ResyncMCPServerRemoteSessionIssuers(ctx context.Context, arg ResyncMCPServerRemoteSessionIssuersParams) (int64, error) {
+	result, err := q.db.Exec(ctx, resyncMCPServerRemoteSessionIssuers, arg.ProjectID, arg.OrganizationID, arg.UserSessionIssuerIds)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const setMCPServerToolMetadata = `-- name: SetMCPServerToolMetadata :many

@@ -616,9 +616,13 @@ const RowContainer = forwardRef<HTMLTableRowElement, RowContainerProps>(
         ref={ref}
         {...rest}
         className={cn(
-          "-z-0 [grid-column:1/-1] grid max-w-full [grid-template-columns:subgrid] border-b transition-colors last:border-none hover:bg-muted/50 data-[state=selected]:bg-muted",
+          // Hovers use the accent token, not muted: in dark mode muted equals
+          // the card surface, so a muted hover paints invisibly.
+          "-z-0 [grid-column:1/-1] grid max-w-full [grid-template-columns:subgrid] border-b transition-colors last:border-none hover:bg-accent/50 data-[state=selected]:bg-muted",
+          // Clickable rows highlight at full accent so the hover reads as an
+          // affordance, not just a scan aid.
           isClickable &&
-            "cursor-pointer focus-visible:bg-muted/50 focus-visible:ring-ring focus-visible:ring-2 focus-visible:ring-inset focus-visible:outline-none",
+            "cursor-pointer hover:bg-accent focus-visible:bg-accent focus-visible:ring-ring focus-visible:ring-2 focus-visible:ring-inset focus-visible:outline-none",
           className,
         )}
         onClick={onClick}

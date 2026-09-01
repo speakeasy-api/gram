@@ -104,6 +104,7 @@ func (q *Queries) CountActiveUserSessionsByClientIDs(ctx context.Context, userSe
 const createUserSession = `-- name: CreateUserSession :one
 INSERT INTO user_sessions (
     project_id,
+    organization_id,
     user_session_issuer_id,
     user_session_client_id,
     subject_urn,
@@ -115,6 +116,7 @@ INSERT INTO user_sessions (
 )
 VALUES (
     (SELECT project_id FROM user_session_issuers WHERE id = $1),
+    (SELECT organization_id FROM user_session_issuers WHERE id = $1),
     $1,
     $2,
     $3,
@@ -178,6 +180,7 @@ const createUserSessionClient = `-- name: CreateUserSessionClient :one
 
 INSERT INTO user_session_clients (
     project_id,
+    organization_id,
     user_session_issuer_id,
     client_id,
     client_secret_hash,
@@ -190,6 +193,7 @@ INSERT INTO user_session_clients (
 )
 VALUES (
     (SELECT project_id FROM user_session_issuers WHERE id = $1),
+    (SELECT organization_id FROM user_session_issuers WHERE id = $1),
     $1,
     $2,
     $3,
@@ -261,12 +265,14 @@ func (q *Queries) CreateUserSessionClient(ctx context.Context, arg CreateUserSes
 const createUserSessionConsent = `-- name: CreateUserSessionConsent :one
 INSERT INTO user_session_consents (
     project_id,
+    organization_id,
     subject_urn,
     user_session_client_id,
     remote_set_hash
 )
 VALUES (
     (SELECT project_id FROM user_session_clients WHERE id = $1),
+    (SELECT organization_id FROM user_session_clients WHERE id = $1),
     $2,
     $1,
     $3
@@ -302,21 +308,31 @@ func (q *Queries) CreateUserSessionConsent(ctx context.Context, arg CreateUserSe
 const createUserSessionIssuer = `-- name: CreateUserSessionIssuer :one
 INSERT INTO user_session_issuers (
     project_id,
+    organization_id,
     slug,
     authn_challenge_mode,
-    session_duration
+    session_duration,
+    client_id_metadata_admission_mode
 )
 VALUES (
     $1::uuid,
     $2,
     $3,
-    $4
+    $4,
+    $5,
+    -- Written explicitly rather than left NULL so the resting policy is a
+    -- real, readable, operator-changeable value on the row instead of an
+    -- absence the application has to interpret. A literal, not a parameter:
+    -- the create form carries no admission field, and an operator changes
+    -- the mode afterwards through the update endpoint.
+    'open'
 )
 RETURNING id, project_id, organization_id, slug, authn_challenge_mode, session_duration, classification, client_id_metadata_admission_mode, created_at, updated_at, deleted_at, deleted
 `
 
 type CreateUserSessionIssuerParams struct {
 	ProjectID          uuid.UUID
+	OrganizationID     pgtype.Text
 	Slug               string
 	AuthnChallengeMode string
 	SessionDuration    pgtype.Interval
@@ -325,6 +341,7 @@ type CreateUserSessionIssuerParams struct {
 func (q *Queries) CreateUserSessionIssuer(ctx context.Context, arg CreateUserSessionIssuerParams) (UserSessionIssuer, error) {
 	row := q.db.QueryRow(ctx, createUserSessionIssuer,
 		arg.ProjectID,
+		arg.OrganizationID,
 		arg.Slug,
 		arg.AuthnChallengeMode,
 		arg.SessionDuration,
@@ -348,14 +365,16 @@ func (q *Queries) CreateUserSessionIssuer(ctx context.Context, arg CreateUserSes
 }
 
 const createUserSessionIssuerCimdClient = `-- name: CreateUserSessionIssuerCimdClient :one
-INSERT INTO user_session_issuer_cimd_clients (project_id, user_session_issuer_id, client_id_metadata_uri)
-SELECT $1::uuid, iss.id, $2
+INSERT INTO user_session_issuer_cimd_clients (project_id, organization_id, user_session_issuer_id, client_id_metadata_uri)
+SELECT $1::uuid, iss.organization_id, iss.id, $2
 FROM user_session_issuers AS iss
 WHERE iss.id = $3
   AND iss.project_id = $1::uuid
   AND iss.deleted IS FALSE
 ON CONFLICT (user_session_issuer_id, client_id_metadata_uri) WHERE deleted IS FALSE
-DO UPDATE SET updated_at = user_session_issuer_cimd_clients.updated_at
+DO UPDATE SET
+    organization_id = COALESCE(user_session_issuer_cimd_clients.organization_id, EXCLUDED.organization_id),
+    updated_at = user_session_issuer_cimd_clients.updated_at
 RETURNING id, project_id, organization_id, user_session_issuer_id, client_id_metadata_uri, created_at, updated_at, deleted_at, deleted, (xmax = 0) AS inserted
 `
 
@@ -387,11 +406,13 @@ type CreateUserSessionIssuerCimdClientRow struct {
 // than silently reviving an old one.
 //
 // `inserted` distinguishes the two so the caller only records an add event
-// for a real new grant. The DO UPDATE is a deliberate no-op write of the
-// existing updated_at: a genuine touch would misreport a re-add as a
+// for a real new grant. The DO UPDATE deliberately rewrites updated_at with
+// its own existing value: a genuine touch would misreport a re-add as a
 // modification, but ON CONFLICT still needs an action for RETURNING to
 // yield the row. `xmax = 0` is the standard test for "this row came from
-// the INSERT rather than the UPDATE".
+// the INSERT rather than the UPDATE". organization_id is the one column the
+// branch really writes, and only when the row has none, so re-adding a grant
+// can fill in tenancy without ever moving it.
 func (q *Queries) CreateUserSessionIssuerCimdClient(ctx context.Context, arg CreateUserSessionIssuerCimdClientParams) (CreateUserSessionIssuerCimdClientRow, error) {
 	row := q.db.QueryRow(ctx, createUserSessionIssuerCimdClient, arg.ProjectID, arg.ClientIDMetadataUri, arg.UserSessionIssuerID)
 	var i CreateUserSessionIssuerCimdClientRow
@@ -1462,6 +1483,12 @@ SELECT s.id, s.user_session_issuer_id, s.user_session_client_id, s.subject_urn, 
        iss.slug AS issuer_slug,
        c.client_name AS client_name,
        c.client_id_metadata_uri AS client_id_metadata_uri,
+       c.token_endpoint_auth_method AS client_token_endpoint_auth_method,
+       -- Whether the client stores a secret, never the hash itself: the
+       -- credential kind cannot be derived from the declared method alone (a
+       -- method predating the column resolves by whether a secret is on the
+       -- row), and the management API must not carry the hash.
+       (c.client_secret_hash IS NOT NULL)::boolean AS client_has_secret,
        u.display_name AS user_display_name,
        u.email AS user_email,
        u.photo_url AS user_photo_url,
@@ -1514,25 +1541,27 @@ type ListUserSessionsByProjectIDParams struct {
 }
 
 type ListUserSessionsByProjectIDRow struct {
-	ID                  uuid.UUID
-	UserSessionIssuerID uuid.UUID
-	UserSessionClientID uuid.NullUUID
-	SubjectUrn          urn.SessionSubject
-	Jti                 string
-	RefreshExpiresAt    pgtype.Timestamptz
-	ExpiresAt           pgtype.Timestamptz
-	LastUsedAt          pgtype.Timestamptz
-	CreatedAt           pgtype.Timestamptz
-	UpdatedAt           pgtype.Timestamptz
-	DeletedAt           pgtype.Timestamptz
-	Deleted             bool
-	IssuerSlug          string
-	ClientName          pgtype.Text
-	ClientIDMetadataUri pgtype.Text
-	UserDisplayName     pgtype.Text
-	UserEmail           pgtype.Text
-	UserPhotoUrl        pgtype.Text
-	ApiKeyName          pgtype.Text
+	ID                            uuid.UUID
+	UserSessionIssuerID           uuid.UUID
+	UserSessionClientID           uuid.NullUUID
+	SubjectUrn                    urn.SessionSubject
+	Jti                           string
+	RefreshExpiresAt              pgtype.Timestamptz
+	ExpiresAt                     pgtype.Timestamptz
+	LastUsedAt                    pgtype.Timestamptz
+	CreatedAt                     pgtype.Timestamptz
+	UpdatedAt                     pgtype.Timestamptz
+	DeletedAt                     pgtype.Timestamptz
+	Deleted                       bool
+	IssuerSlug                    string
+	ClientName                    pgtype.Text
+	ClientIDMetadataUri           pgtype.Text
+	ClientTokenEndpointAuthMethod pgtype.Text
+	ClientHasSecret               bool
+	UserDisplayName               pgtype.Text
+	UserEmail                     pgtype.Text
+	UserPhotoUrl                  pgtype.Text
+	ApiKeyName                    pgtype.Text
 }
 
 // refresh_token_hash is excluded from the projection so the management API
@@ -1571,6 +1600,8 @@ func (q *Queries) ListUserSessionsByProjectID(ctx context.Context, arg ListUserS
 			&i.IssuerSlug,
 			&i.ClientName,
 			&i.ClientIDMetadataUri,
+			&i.ClientTokenEndpointAuthMethod,
+			&i.ClientHasSecret,
 			&i.UserDisplayName,
 			&i.UserEmail,
 			&i.UserPhotoUrl,
@@ -2242,9 +2273,9 @@ SET
     slug = COALESCE($1::text, slug),
     authn_challenge_mode = COALESCE($2::text, authn_challenge_mode),
     session_duration = COALESCE($3::interval, session_duration),
-    -- Omitting the mode keeps the stored value, including NULL. Once a
-    -- concrete mode is written the column can never return to NULL through
-    -- this endpoint: "never configured" is a one-way state, and the API
+    -- Omitting the mode keeps the stored value, NULL included. Rows created
+    -- before the insert above wrote a mode explicitly stay NULL until a
+    -- backfill converges them, and nothing here needs to care: the API
     -- reports the resolved effective mode either way.
     client_id_metadata_admission_mode = COALESCE($4::text, client_id_metadata_admission_mode),
     updated_at = clock_timestamp()
@@ -2291,6 +2322,7 @@ func (q *Queries) UpdateUserSessionIssuer(ctx context.Context, arg UpdateUserSes
 const upsertUserSessionClientFromCIMD = `-- name: UpsertUserSessionClientFromCIMD :one
 INSERT INTO user_session_clients (
     project_id,
+    organization_id,
     user_session_issuer_id,
     client_id,
     client_secret_hash,
@@ -2307,6 +2339,7 @@ INSERT INTO user_session_clients (
 )
 VALUES (
     (SELECT project_id FROM user_session_issuers WHERE id = $1),
+    (SELECT organization_id FROM user_session_issuers WHERE id = $1),
     $1,
     $2,
     NULL,
@@ -2323,6 +2356,14 @@ VALUES (
 )
 ON CONFLICT (user_session_issuer_id, client_id) WHERE deleted IS FALSE
 DO UPDATE SET
+    -- Fill-only: a refresh may populate an organization the row was created
+    -- without, but never replaces one it already carries, so the stored value
+    -- comes first. Deliberately asymmetric with project_id, which this branch
+    -- leaves alone entirely, because a row created before organization
+    -- tenancy existed has no other occasion to acquire one. Tracking the
+    -- parent instead would move a row's organization while its project_id
+    -- stayed put, leaving the two contradicting each other.
+    organization_id = COALESCE(user_session_clients.organization_id, EXCLUDED.organization_id),
     client_name = EXCLUDED.client_name,
     redirect_uris = EXCLUDED.redirect_uris,
     client_id_metadata_uri = EXCLUDED.client_id_metadata_uri,

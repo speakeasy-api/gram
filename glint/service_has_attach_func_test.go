@@ -11,14 +11,14 @@ func TestServiceHasAttachFuncGood(t *testing.T) {
 	t.Parallel()
 
 	testdata := analysistest.TestData()
-	analysistest.Run(t, testdata, newServiceHasAttachFuncAnalyzer(serviceHasAttachFuncSettings{}), "serviceannotation")
+	analysistest.Run(t, testdata, newServiceHasAttachFuncAnalyzer(serviceHasAttachFuncSettings{}), "github.com/speakeasy-api/gram/server/internal/serviceannotation")
 }
 
 func TestServiceHasAttachFuncMissing(t *testing.T) {
 	t.Parallel()
 
 	testdata := analysistest.TestData()
-	analysistest.Run(t, testdata, newServiceHasAttachFuncAnalyzer(serviceHasAttachFuncSettings{}), "serviceannotationmissingattach")
+	analysistest.Run(t, testdata, newServiceHasAttachFuncAnalyzer(serviceHasAttachFuncSettings{}), "github.com/speakeasy-api/gram/server/internal/serviceannotationmissingattach")
 }
 
 func TestBuildAnalyzersSkipsDisabledServiceHasAttachFunc(t *testing.T) {

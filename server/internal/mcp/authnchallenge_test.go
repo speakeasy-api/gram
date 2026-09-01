@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -96,6 +97,7 @@ func seedPrivateToolsetWithIssuer(
 
 	issuer, err := usersessions_repo.New(ti.conn).CreateUserSessionIssuer(ctx, usersessions_repo.CreateUserSessionIssuerParams{
 		ProjectID:          *authCtx.ProjectID,
+		OrganizationID:     conv.ToPGText(authCtx.ActiveOrganizationID),
 		Slug:               slug + "-issuer",
 		AuthnChallengeMode: "chain",
 		SessionDuration:    pgtype.Interval{Microseconds: 3600 * 1e6, Valid: true},
@@ -1408,14 +1410,19 @@ func modernConsentGetPage(t *testing.T, ctx context.Context, ti *testInstance, e
 	return w.Body.String()
 }
 
+// consentApproveButtonTag returns the approve button's attributes with the
+// class list stripped. The class list carries disabled:* utilities, so a naive
+// substring check for "disabled" would match a perfectly enabled button.
 func consentApproveButtonTag(t *testing.T, page string) string {
 	t.Helper()
 	start := strings.Index(page, `value="approve"`)
 	require.GreaterOrEqual(t, start, 0, "approve button must render")
 	end := strings.Index(page[start:], ">")
 	require.GreaterOrEqual(t, end, 0)
-	return page[start : start+end]
+	return consentButtonClassAttr.ReplaceAllString(page[start:start+end], " ")
 }
+
+var consentButtonClassAttr = regexp.MustCompile(`(?s)\sclass="[^"]*"`)
 
 func TestHandleConsentGet_LegacyToolsetUsesAllToolsConsent(t *testing.T) {
 	t.Parallel()
@@ -1748,13 +1755,18 @@ func seedUserSessionWithSelection(t *testing.T, ctx context.Context, ti *testIns
 	return refreshToken
 }
 
-func postRefreshGrant(t *testing.T, ti *testInstance, mcpSlug, clientID, refreshToken string) *httptest.ResponseRecorder {
+// resource is the RFC 8707 indicator to submit; empty omits the parameter,
+// which the token endpoint accepts.
+func postRefreshGrant(t *testing.T, ti *testInstance, mcpSlug, clientID, refreshToken, resource string) *httptest.ResponseRecorder {
 	t.Helper()
 
 	form := url.Values{}
 	form.Set("grant_type", "refresh_token")
 	form.Set("refresh_token", refreshToken)
 	form.Set("client_id", clientID)
+	if resource != "" {
+		form.Set("resource", resource)
+	}
 	req := httptest.NewRequest(http.MethodPost, "/mcp/"+mcpSlug+"/token", strings.NewReader(form.Encode()))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	rctx := chi.NewRouteContext()
@@ -1841,14 +1853,14 @@ func TestHandleTokenRefresh_ToolSelectionResourceBinding(t *testing.T) {
 	var err error
 	_ = err
 	w := postRefreshGrant(t, ti, toolset.McpSlug.String, client.ClientID,
-		seedUserSessionWithSelection(t, ctx, ti, issuer.ID, client.ID, mismatched))
+		seedUserSessionWithSelection(t, ctx, ti, issuer.ID, client.ID, mismatched), "")
 	require.Equal(t, http.StatusBadRequest, w.Code)
 	require.Contains(t, w.Body.String(), "invalid_grant")
 	require.Contains(t, w.Body.String(), "different MCP endpoint")
 
 	matching := fmt.Appendf(nil, `{"resource":"toolset:%s","grant_id":"%s","allow":[{"type":"tool","name":"a"}]}`, toolset.ID.String(), uuid.NewString())
 	w = postRefreshGrant(t, ti, toolset.McpSlug.String, client.ClientID,
-		seedUserSessionWithSelection(t, ctx, ti, issuer.ID, client.ID, matching))
+		seedUserSessionWithSelection(t, ctx, ti, issuer.ID, client.ID, matching), "")
 	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
 	require.Contains(t, w.Body.String(), "access_token")
 }

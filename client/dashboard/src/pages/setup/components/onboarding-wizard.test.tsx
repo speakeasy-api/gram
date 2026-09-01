@@ -1,26 +1,39 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanup, render } from "@testing-library/react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+
+import { SetupWizard } from "./onboarding-wizard";
+
+const searchParamsState = vi.hoisted(() => ({
+  current: new URLSearchParams(),
+  setSearchParams: vi.fn(),
+}));
+
+const onboardingStatus = vi.hoisted(() => ({
+  current: {
+    data: { ssoConfigured: false, dsyncConfigured: false },
+    isLoading: false,
+  },
+}));
+
+const publishStatus = vi.hoisted(() => ({
+  current: { data: { connected: false }, isLoading: false },
+}));
 
 vi.mock("react-router", () => ({
   useNavigate: () => vi.fn(),
   useParams: () => ({ orgSlug: "acme" }),
-  useSearchParams: () => [new URLSearchParams(), vi.fn()],
+  useSearchParams: () => [
+    searchParamsState.current,
+    searchParamsState.setSearchParams,
+  ],
 }));
 vi.mock("@gram/client/react-query/onboardingStatus", () => ({
-  useOnboardingStatus: () => ({
-    data: { ssoConfigured: false, dsyncConfigured: false },
-    isLoading: false,
-  }),
+  useOnboardingStatus: () => onboardingStatus.current,
 }));
 vi.mock("@gram/client/react-query/publishStatus", () => ({
-  usePublishStatus: () => ({ data: { connected: false }, isLoading: false }),
+  usePublishStatus: () => publishStatus.current,
 }));
-vi.mock("@/hooks/usePlatformMcpDashboardVisibility", () => ({
-  usePlatformMcpDashboardVisibility: () => ({
-    enabled: false,
-    isLoading: false,
-  }),
-}));
+
 vi.mock("@/components/ui/Skeleton", () => ({
   Skeleton: ({ children }: { children: React.ReactNode }) => <>{children}</>,
 }));
@@ -45,12 +58,28 @@ vi.mock("./steps", () => ({
   PlatformMCPSetupStep: () => null,
 }));
 
-import { SetupWizard } from "./onboarding-wizard";
-
 afterEach(() => {
   cleanup();
   localStorage.clear();
 });
+
+beforeEach(() => {
+  searchParamsState.current = new URLSearchParams();
+  searchParamsState.setSearchParams.mockReset();
+  onboardingStatus.current = {
+    data: { ssoConfigured: false, dsyncConfigured: false },
+    isLoading: false,
+  };
+  publishStatus.current = { data: { connected: false }, isLoading: false };
+});
+
+function resumedStep(): string | null {
+  const updater = searchParamsState.setSearchParams.mock.calls[0]?.[0] as
+    | ((prev: URLSearchParams) => URLSearchParams)
+    | undefined;
+  if (!updater) return null;
+  return updater(new URLSearchParams()).get("step");
+}
 
 describe("SetupWizard", () => {
   it("records that the setup view was opened for the org", () => {
@@ -59,5 +88,24 @@ describe("SetupWizard", () => {
     expect(localStorage.getItem("gram-org-welcome-rollout-started:acme")).toBe(
       "true",
     );
+  });
+
+  it("resumes at instrument-agents after the marketplace is published", () => {
+    publishStatus.current = { data: { connected: true }, isLoading: false };
+
+    render(<SetupWizard />);
+
+    expect(resumedStep()).toBe("instrument-agents");
+  });
+
+  it("resumes at create-marketplace after directory sync is configured", () => {
+    onboardingStatus.current = {
+      data: { ssoConfigured: true, dsyncConfigured: true },
+      isLoading: false,
+    };
+
+    render(<SetupWizard />);
+
+    expect(resumedStep()).toBe("create-marketplace");
   });
 });

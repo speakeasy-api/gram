@@ -276,6 +276,7 @@ func handlePlatformInitialize(ctx context.Context, logger *slog.Logger, telemetr
 			Instructions: "",
 		},
 		serverIdentity: serverInfoPlatformToolset,
+		cacheHints:     nil,
 	}
 	bs, err := json.Marshal(result)
 	if err != nil {
@@ -316,6 +317,9 @@ func (s *Service) listPlatformToolsetTools(
 		ID:             req.ID,
 		Result:         toolsListResultTools{Tools: tools},
 		serverIdentity: serverInfoPlatformToolset,
+		// The catalog is filtered by the active organization's product
+		// features, so two organizations receive different tool lists.
+		cacheHints: cacheHintsCallerVarying,
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to serialize tools/list response").LogError(ctx, s.logger)
@@ -509,6 +513,7 @@ func (s *Service) callPlatformToolsetTool(
 			IsError:           rw.statusCode < 200 || rw.statusCode >= 300,
 		},
 		serverIdentity: serverInfoPlatformToolset,
+		cacheHints:     nil,
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to serialize tools/call result").LogError(ctx, logger, attr.SlogToolName(params.Name))
@@ -521,8 +526,7 @@ func platformToolCallError(ctx context.Context, logger *slog.Logger, err error, 
 		return rejected
 	}
 
-	var shareableErr *oops.ShareableError
-	if errors.As(err, &shareableErr) {
+	if _, ok := errors.AsType[*oops.ShareableError](err); ok {
 		return fmt.Errorf("execute platform tool: %w", err)
 	}
 

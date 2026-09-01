@@ -1,0 +1,565 @@
+package openrouter
+
+import (
+	"encoding/json"
+	"fmt"
+	"io"
+	"net/http"
+	"net/http/httptest"
+	"sync"
+	"testing"
+
+	"github.com/google/uuid"
+	"github.com/stretchr/testify/require"
+
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
+	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter/repo"
+)
+
+func TestRemoveOpenRouterAPIKeyDisableCauseQueryNoopDoesNotTouchUpdatedAt(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	orgID := "org-" + uuid.NewString()[:8]
+	provisioner, _, queries := newDisableTestProvisioner(t, orgID)
+	_, err := provisioner.ProvisionAPIKey(ctx, orgID, KeyTypeChat)
+	require.NoError(t, err)
+	before, err := queries.GetOpenRouterAPIKey(ctx, repo.GetOpenRouterAPIKeyParams{OrganizationID: orgID, KeyType: string(KeyTypeChat)})
+	require.NoError(t, err)
+
+	after, err := queries.RemoveOpenRouterAPIKeyDisableCause(ctx, repo.RemoveOpenRouterAPIKeyDisableCauseParams{
+		OrganizationID: orgID, KeyType: string(KeyTypeChat), KeyHash: before.KeyHash,
+		DisableCause: string(DisableCauseAdminLock), MonthlyCredits: 999, UpdateMonthlyCredits: true,
+	})
+	require.NoError(t, err)
+	require.Equal(t, before.DisableCauses, after.DisableCauses)
+	require.Equal(t, before.MonthlyCredits, after.MonthlyCredits)
+	require.Equal(t, before.UpdatedAt, after.UpdatedAt)
+}
+
+func TestRemoveAPIKeyDisableCauseMatrix(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name        string
+		seed        []DisableCause
+		remove      DisableCause
+		limit       *int
+		wantChange  DisableCauseChange
+		wantCauses  []string
+		wantPatches []string
+		wantLimit   int64
+	}{
+		{name: "absent cause is a no-op", seed: []DisableCause{DisableCauseAdminLock}, remove: DisableCauseTrialDemotion, wantCauses: []string{"admin_lock"}},
+		{name: "non-last removal is local only and ignores limit", seed: []DisableCause{DisableCauseBillingInactive, DisableCauseTrialDemotion, DisableCauseAdminLock}, remove: DisableCauseTrialDemotion, limit: new(42), wantChange: DisableCauseChange{CauseChanged: true}, wantCauses: []string{"admin_lock", "billing_inactive"}},
+		{name: "last removal enables without changing a healthy limit", seed: []DisableCause{DisableCauseAdminLock}, remove: DisableCauseAdminLock, wantChange: DisableCauseChange{CauseChanged: true, KeyAccessChanged: true}, wantCauses: []string{}, wantPatches: []string{`{"disabled":false}`}},
+		{name: "last removal applies an explicit recovered limit", seed: []DisableCause{DisableCauseBillingInactive}, remove: DisableCauseBillingInactive, limit: new(42), wantChange: DisableCauseChange{CauseChanged: true, KeyAccessChanged: true}, wantCauses: []string{}, wantPatches: []string{`{"limit":42,"limit_reset":"monthly","disabled":false}`}, wantLimit: 42},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			ctx := t.Context()
+			orgID := "org-" + uuid.NewString()[:8]
+			provisioner, upstream, queries := newDisableTestProvisioner(t, orgID)
+			_, err := provisioner.ProvisionAPIKey(ctx, orgID, KeyTypeChat)
+			require.NoError(t, err)
+			for _, cause := range tt.seed {
+				_, err = provisioner.AddAPIKeyDisableCause(ctx, orgID, KeyTypeChat, cause)
+				require.NoError(t, err)
+			}
+			before, err := queries.GetOpenRouterAPIKey(ctx, repo.GetOpenRouterAPIKeyParams{OrganizationID: orgID, KeyType: string(KeyTypeChat)})
+			require.NoError(t, err)
+			wantLimit := tt.wantLimit
+			if wantLimit == 0 {
+				wantLimit = before.MonthlyCredits
+			}
+			patchesBefore := len(upstream.recorded())
+
+			gotLimit, change, err := provisioner.RemoveAPIKeyDisableCause(ctx, orgID, KeyTypeChat, tt.remove, tt.limit)
+			require.NoError(t, err)
+			require.Equal(t, tt.wantChange, change)
+			require.Equal(t, int(wantLimit), gotLimit)
+			patches := upstream.recorded()[patchesBefore:]
+			require.Len(t, patches, len(tt.wantPatches))
+			for i := range tt.wantPatches {
+				require.JSONEq(t, tt.wantPatches[i], patches[i])
+			}
+			row, err := queries.GetOpenRouterAPIKey(ctx, repo.GetOpenRouterAPIKeyParams{OrganizationID: orgID, KeyType: string(KeyTypeChat)})
+			require.NoError(t, err)
+			require.Equal(t, tt.wantCauses, row.DisableCauses)
+			require.Equal(t, wantLimit, row.MonthlyCredits)
+			require.Equal(t, len(tt.wantCauses) > 0, row.Disabled)
+
+			if tt.wantChange.KeyAccessChanged {
+				patchCount := len(upstream.recorded())
+				retryLimit, retryChange, retryErr := provisioner.RemoveAPIKeyDisableCause(ctx, orgID, KeyTypeChat, tt.remove, tt.limit)
+				require.NoError(t, retryErr)
+				require.Equal(t, int(wantLimit), retryLimit)
+				require.Equal(t, DisableCauseChange{}, retryChange)
+				require.Len(t, upstream.recorded(), patchCount, "an idempotent retry must not PATCH upstream")
+			}
+		})
+	}
+}
+
+func TestRemoveAPIKeyDisableCauseRecoversLegacyZeroLimit(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	orgID := "org-" + uuid.NewString()[:8]
+	provisioner, upstream, queries := newDisableTestProvisioner(t, orgID)
+	_, err := provisioner.ProvisionAPIKey(ctx, orgID, KeyTypeChat)
+	require.NoError(t, err)
+	_, err = provisioner.AddAPIKeyDisableCause(ctx, orgID, KeyTypeChat, DisableCauseTrialDemotion)
+	require.NoError(t, err)
+	row, err := queries.GetOpenRouterAPIKey(ctx, repo.GetOpenRouterAPIKeyParams{OrganizationID: orgID, KeyType: string(KeyTypeChat)})
+	require.NoError(t, err)
+	_, err = queries.UpdateOpenRouterKey(ctx, repo.UpdateOpenRouterKeyParams{OrganizationID: orgID, KeyType: string(KeyTypeChat), KeyHash: row.KeyHash, MonthlyCredits: 0, Reinstate: false})
+	require.NoError(t, err)
+	patchesBefore := len(upstream.recorded())
+
+	gotLimit, change, err := provisioner.RemoveAPIKeyDisableCause(ctx, orgID, KeyTypeChat, DisableCauseTrialDemotion, nil)
+	require.NoError(t, err)
+	require.Positive(t, gotLimit)
+	require.Equal(t, DisableCauseChange{CauseChanged: true, KeyAccessChanged: true}, change)
+	patches := upstream.recorded()[patchesBefore:]
+	require.Len(t, patches, 1)
+	require.JSONEq(t, fmt.Sprintf(`{"limit":%d,"limit_reset":"monthly","disabled":false}`, gotLimit), patches[0])
+	row, err = queries.GetOpenRouterAPIKey(ctx, repo.GetOpenRouterAPIKeyParams{OrganizationID: orgID, KeyType: string(KeyTypeChat)})
+	require.NoError(t, err)
+	require.EqualValues(t, gotLimit, row.MonthlyCredits)
+	require.Empty(t, row.DisableCauses)
+	require.False(t, row.Disabled)
+}
+
+func TestAddDisableCauseReconcilesUpstreamAfterRolledBackFinalRemoval(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	orgID := "org-" + uuid.NewString()[:8]
+	provisioner, upstream, queries := newDisableTestProvisioner(t, orgID)
+	_, err := provisioner.ProvisionAPIKey(ctx, orgID, KeyTypeChat)
+	require.NoError(t, err)
+	_, err = provisioner.AddAPIKeyDisableCause(ctx, orgID, KeyTypeChat, DisableCauseAdminLock)
+	require.NoError(t, err)
+
+	conn, err := provisioner.db.Acquire(ctx)
+	require.NoError(t, err)
+	defer conn.Release()
+	tx, err := conn.Begin(ctx) //nolint:glint // this transaction only uses SQLc methods and must roll back a local mirror after the upstream call
+	require.NoError(t, err)
+	lockParams := repo.AcquireOpenRouterKeyBillingLockParams{OrganizationID: orgID, KeyType: string(KeyTypeChat)}
+	require.NoError(t, repo.New(tx).AcquireOpenRouterKeyBillingLock(ctx, lockParams))
+	_, change, err := provisioner.RemoveAPIKeyDisableCauseWithDB(ctx, tx, orgID, KeyTypeChat, DisableCauseAdminLock, nil)
+	require.NoError(t, err)
+	require.Equal(t, DisableCauseChange{CauseChanged: true, KeyAccessChanged: true}, change)
+	require.NoError(t, tx.Rollback(ctx))
+	unlocked, err := repo.New(conn).ReleaseOpenRouterKeyBillingLock(ctx, repo.ReleaseOpenRouterKeyBillingLockParams(lockParams))
+	require.NoError(t, err)
+	require.True(t, unlocked)
+
+	patchesBefore := len(upstream.recorded())
+	change, err = provisioner.AddAPIKeyDisableCause(ctx, orgID, KeyTypeChat, DisableCauseTrialDemotion)
+	require.NoError(t, err)
+	require.Equal(t, DisableCauseChange{CauseChanged: true, KeyAccessChanged: false}, change)
+	patches := upstream.recorded()[patchesBefore:]
+	require.Len(t, patches, 1)
+	require.JSONEq(t, `{"disabled":true}`, patches[0])
+	row, err := queries.GetOpenRouterAPIKey(ctx, repo.GetOpenRouterAPIKeyParams{OrganizationID: orgID, KeyType: string(KeyTypeChat)})
+	require.NoError(t, err)
+	require.Equal(t, []string{"admin_lock", "trial_demotion"}, row.DisableCauses)
+	require.True(t, row.Disabled)
+}
+
+func TestDevelopmentReconcileAPIKeyDisabledIsSafe(t *testing.T) {
+	t.Parallel()
+
+	require.NoError(t, NewDevelopment("local-key").ReconcileAPIKeyDisabled(t.Context(), "org-local", KeyTypeChat))
+}
+
+func TestReconcileAPIKeyConversionPolicyPinsLimitAndEffectiveDisabledState(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name          string
+		disableCauses []string
+		wantDisabled  bool
+	}{
+		{name: "enabled", disableCauses: []string{}, wantDisabled: false},
+		{name: "admin lock", disableCauses: []string{"admin_lock"}, wantDisabled: true},
+		{name: "billing inactive", disableCauses: []string{"billing_inactive"}, wantDisabled: true},
+		{name: "combined", disableCauses: []string{"admin_lock", "billing_inactive"}, wantDisabled: true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			ctx := t.Context()
+			orgID := "org-" + uuid.NewString()[:8]
+			provisioner, upstream, queries := newDisableTestProvisioner(t, orgID)
+			_, err := provisioner.ProvisionAPIKey(ctx, orgID, KeyTypeChat)
+			require.NoError(t, err)
+			require.NoError(t, testrepo.New(provisioner.db).SetOpenRouterAPIKeyClassificationFixture(ctx, testrepo.SetOpenRouterAPIKeyClassificationFixtureParams{
+				OrganizationID: orgID, KeyType: string(KeyTypeChat), Disabled: false, DisableCauses: tt.disableCauses,
+			}))
+			key, err := queries.GetOpenRouterAPIKey(ctx, repo.GetOpenRouterAPIKeyParams{OrganizationID: orgID, KeyType: string(KeyTypeChat)})
+			require.NoError(t, err)
+			patchesBefore := len(upstream.recorded())
+
+			require.NoError(t, provisioner.ReconcileAPIKeyConversionPolicy(ctx, orgID, KeyTypeChat))
+			require.NoError(t, provisioner.ReconcileAPIKeyConversionPolicy(ctx, orgID, KeyTypeChat), "idempotent retry must repeat complete reconciliation")
+
+			patches := upstream.recorded()[patchesBefore:]
+			require.Len(t, patches, 2)
+			wantPatch := fmt.Sprintf(`{"disabled":%t,"limit":%d,"limit_reset":"monthly"}`, tt.wantDisabled, key.MonthlyCredits)
+			require.JSONEq(t, wantPatch, patches[0])
+			require.JSONEq(t, wantPatch, patches[1])
+			after, err := queries.GetOpenRouterAPIKey(ctx, repo.GetOpenRouterAPIKeyParams{OrganizationID: orgID, KeyType: string(KeyTypeChat)})
+			require.NoError(t, err)
+			require.Equal(t, tt.disableCauses, after.DisableCauses, "reconciliation must preserve every disable cause")
+		})
+	}
+}
+
+func TestReconcileAPIKeyConversionPolicyRetryReadsNewCommittedPolicy(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	orgID := "org-" + uuid.NewString()[:8]
+	provisioner, _, queries := newDisableTestProvisioner(t, orgID)
+	_, err := provisioner.ProvisionAPIKey(ctx, orgID, KeyTypeChat)
+	require.NoError(t, err)
+	initialKey, err := queries.GetOpenRouterAPIKey(ctx, repo.GetOpenRouterAPIKeyParams{OrganizationID: orgID, KeyType: string(KeyTypeChat)})
+	require.NoError(t, err)
+
+	var mu sync.Mutex
+	patches := make([]string, 0, 2)
+	fail := true
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPatch {
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			return
+		}
+		raw, readErr := io.ReadAll(r.Body)
+		if readErr != nil {
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+		mu.Lock()
+		patches = append(patches, string(raw))
+		failRequest := fail
+		mu.Unlock()
+		if failRequest {
+			http.Error(w, "upstream unavailable", http.StatusServiceUnavailable)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{"data": map[string]any{"hash": "hash-1"}})
+	}))
+	t.Cleanup(upstream.Close)
+	provisioner.baseURL = upstream.URL
+
+	require.ErrorContains(t, provisioner.ReconcileAPIKeyConversionPolicy(ctx, orgID, KeyTypeChat), "reconcile upstream OpenRouter API key disabled state")
+	mu.Lock()
+	failedProjectionPatches := len(patches)
+	fail = false
+	mu.Unlock()
+	require.Positive(t, failedProjectionPatches)
+
+	rows, err := testrepo.New(provisioner.db).SetOpenRouterKeyLifecycleFixture(ctx, testrepo.SetOpenRouterKeyLifecycleFixtureParams{
+		OrganizationID: orgID, KeyType: string(KeyTypeChat), Disabled: false,
+		DisableCauses: []string{string(DisableCauseAdminLock)}, MonthlyCredits: 42,
+	})
+	require.NoError(t, err)
+	require.EqualValues(t, 1, rows)
+	require.NoError(t, provisioner.ReconcileAPIKeyConversionPolicy(ctx, orgID, KeyTypeChat))
+
+	mu.Lock()
+	gotPatches := append([]string(nil), patches...)
+	mu.Unlock()
+	require.Len(t, gotPatches, failedProjectionPatches+1)
+	for _, patch := range gotPatches[:failedProjectionPatches] {
+		require.JSONEq(t, fmt.Sprintf(`{"disabled":false,"limit":%d,"limit_reset":"monthly"}`, initialKey.MonthlyCredits), patch)
+	}
+	require.JSONEq(t, `{"disabled":true,"limit":42,"limit_reset":"monthly"}`, gotPatches[failedProjectionPatches])
+}
+
+func TestDisableCauseWithDBUsesCallerLockedConnection(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	orgID := "org-" + uuid.NewString()[:8]
+	provisioner, upstream, queries := newDisableTestProvisioner(t, orgID)
+	_, err := provisioner.ProvisionAPIKey(ctx, orgID, KeyTypeChat)
+	require.NoError(t, err)
+	conn, err := provisioner.db.Acquire(ctx)
+	require.NoError(t, err)
+	defer conn.Release()
+	lockParams := repo.AcquireOpenRouterKeyBillingLockParams{OrganizationID: orgID, KeyType: string(KeyTypeChat)}
+	require.NoError(t, repo.New(conn).AcquireOpenRouterKeyBillingLock(ctx, lockParams))
+	defer func() {
+		unlocked, releaseErr := repo.New(conn).ReleaseOpenRouterKeyBillingLock(ctx, repo.ReleaseOpenRouterKeyBillingLockParams(lockParams))
+		require.NoError(t, releaseErr)
+		require.True(t, unlocked)
+	}()
+
+	change, err := provisioner.AddAPIKeyDisableCauseWithDB(ctx, conn, orgID, KeyTypeChat, DisableCauseAdminLock)
+	require.NoError(t, err)
+	require.Equal(t, DisableCauseChange{CauseChanged: true, KeyAccessChanged: true}, change)
+	patchesBefore := len(upstream.recorded())
+	change, err = provisioner.AddAPIKeyDisableCauseWithDB(ctx, conn, orgID, KeyTypeChat, DisableCauseTrialDemotion)
+	require.NoError(t, err)
+	require.Equal(t, DisableCauseChange{CauseChanged: true, KeyAccessChanged: false}, change)
+	require.Empty(t, upstream.recorded()[patchesBefore:], "durable local mutations must not contact upstream before commit")
+	_, change, err = provisioner.RemoveAPIKeyDisableCauseWithDB(ctx, conn, orgID, KeyTypeChat, DisableCauseTrialDemotion, nil)
+	require.NoError(t, err)
+	require.Equal(t, DisableCauseChange{CauseChanged: true, KeyAccessChanged: false}, change)
+	_, change, err = provisioner.RemoveAPIKeyDisableCauseWithDB(ctx, conn, orgID, KeyTypeChat, DisableCauseAdminLock, nil)
+	require.NoError(t, err)
+	require.Equal(t, DisableCauseChange{CauseChanged: true, KeyAccessChanged: true}, change)
+	require.Empty(t, upstream.recorded()[patchesBefore:], "all local mutations stay upstream-free")
+	expected, err := queries.GetOpenRouterAPIKey(ctx, repo.GetOpenRouterAPIKeyParams{OrganizationID: orgID, KeyType: string(KeyTypeChat)})
+	require.NoError(t, err)
+	require.NoError(t, provisioner.ReconcileAPIKeyDisabledWithDB(ctx, conn, orgID, KeyTypeChat))
+	patches := upstream.recorded()[patchesBefore:]
+	require.Len(t, patches, 1)
+	require.JSONEq(t, fmt.Sprintf(`{"disabled":false,"limit":%d,"limit_reset":"monthly"}`, expected.MonthlyCredits), patches[0])
+	row, err := queries.GetOpenRouterAPIKey(ctx, repo.GetOpenRouterAPIKeyParams{OrganizationID: orgID, KeyType: string(KeyTypeChat)})
+	require.NoError(t, err)
+	require.Empty(t, row.DisableCauses)
+	require.False(t, row.Disabled)
+}
+
+func TestRemoveAPIKeyDisableCauseUsesCanonicalDistinctCauses(t *testing.T) {
+	t.Parallel()
+
+	t.Run("duplicate sole cause is the last cause", func(t *testing.T) {
+		t.Parallel()
+
+		ctx := t.Context()
+		orgID := "org-" + uuid.NewString()[:8]
+		provisioner, upstream, queries := newDisableTestProvisioner(t, orgID)
+		_, err := provisioner.ProvisionAPIKey(ctx, orgID, KeyTypeChat)
+		require.NoError(t, err)
+		require.NoError(t, testrepo.New(provisioner.db).SetOpenRouterAPIKeyClassificationFixture(ctx, testrepo.SetOpenRouterAPIKeyClassificationFixtureParams{OrganizationID: orgID, KeyType: string(KeyTypeChat), Disabled: true, DisableCauses: []string{"admin_lock", "admin_lock"}}))
+		patchesBefore := len(upstream.recorded())
+
+		_, change, err := provisioner.RemoveAPIKeyDisableCause(ctx, orgID, KeyTypeChat, DisableCauseAdminLock, nil)
+		require.NoError(t, err)
+		require.Equal(t, DisableCauseChange{CauseChanged: true, KeyAccessChanged: true}, change)
+		patches := upstream.recorded()[patchesBefore:]
+		require.Len(t, patches, 1)
+		require.JSONEq(t, `{"disabled":false}`, patches[0])
+		row, err := queries.GetOpenRouterAPIKey(ctx, repo.GetOpenRouterAPIKeyParams{OrganizationID: orgID, KeyType: string(KeyTypeChat)})
+		require.NoError(t, err)
+		require.Empty(t, row.DisableCauses)
+		require.False(t, row.Disabled)
+	})
+
+	t.Run("non-last removal preserves a drifted disabled mirror", func(t *testing.T) {
+		t.Parallel()
+
+		ctx := t.Context()
+		orgID := "org-" + uuid.NewString()[:8]
+		provisioner, upstream, queries := newDisableTestProvisioner(t, orgID)
+		_, err := provisioner.ProvisionAPIKey(ctx, orgID, KeyTypeChat)
+		require.NoError(t, err)
+		require.NoError(t, testrepo.New(provisioner.db).SetOpenRouterAPIKeyClassificationFixture(ctx, testrepo.SetOpenRouterAPIKeyClassificationFixtureParams{OrganizationID: orgID, KeyType: string(KeyTypeChat), Disabled: false, DisableCauses: []string{"trial_demotion", "admin_lock"}}))
+		before, err := queries.GetOpenRouterAPIKey(ctx, repo.GetOpenRouterAPIKeyParams{OrganizationID: orgID, KeyType: string(KeyTypeChat)})
+		require.NoError(t, err)
+		patchesBefore := len(upstream.recorded())
+
+		_, change, err := provisioner.RemoveAPIKeyDisableCause(ctx, orgID, KeyTypeChat, DisableCauseTrialDemotion, new(42))
+		require.NoError(t, err)
+		require.Equal(t, DisableCauseChange{CauseChanged: true}, change)
+		require.Len(t, upstream.recorded(), patchesBefore)
+		row, err := queries.GetOpenRouterAPIKey(ctx, repo.GetOpenRouterAPIKeyParams{OrganizationID: orgID, KeyType: string(KeyTypeChat)})
+		require.NoError(t, err)
+		require.Equal(t, []string{"admin_lock"}, row.DisableCauses)
+		require.False(t, row.Disabled)
+		require.Equal(t, before.MonthlyCredits, row.MonthlyCredits)
+	})
+}
+
+func TestReconcileAPIKeyDisabledWithDBNullFailsClosed(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	orgID := "org-" + uuid.NewString()[:8]
+	provisioner, upstream, _ := newDisableTestProvisioner(t, orgID)
+	_, err := provisioner.ProvisionAPIKey(ctx, orgID, KeyTypeChat)
+	require.NoError(t, err)
+	require.NoError(t, testrepo.New(provisioner.db).SetOpenRouterAPIKeyClassificationFixture(ctx, testrepo.SetOpenRouterAPIKeyClassificationFixtureParams{
+		OrganizationID: orgID, KeyType: string(KeyTypeChat), Disabled: true, DisableCauses: nil,
+	}))
+	patchesBefore := len(upstream.recorded())
+
+	err = provisioner.ReconcileAPIKeyDisabledWithDB(ctx, provisioner.db, orgID, KeyTypeChat)
+	require.ErrorContains(t, err, "disable causes are unclassified")
+	require.Len(t, upstream.recorded(), patchesBefore)
+}
+
+func TestRemoveAPIKeyDisableCauseMissingAndUnclassifiedFailClosed(t *testing.T) {
+	t.Parallel()
+
+	t.Run("missing key is a no-op", func(t *testing.T) {
+		t.Parallel()
+
+		ctx := t.Context()
+		orgID := "org-" + uuid.NewString()[:8]
+		provisioner, upstream, _ := newDisableTestProvisioner(t, orgID)
+		limit, change, err := provisioner.RemoveAPIKeyDisableCause(ctx, orgID, KeyTypeChat, DisableCauseAdminLock, nil)
+		require.NoError(t, err)
+		require.Zero(t, limit)
+		require.Equal(t, DisableCauseChange{}, change)
+		require.Empty(t, upstream.recorded())
+	})
+
+	t.Run("NULL classification fails closed", func(t *testing.T) {
+		t.Parallel()
+
+		ctx := t.Context()
+		orgID := "org-" + uuid.NewString()[:8]
+		provisioner, upstream, queries := newDisableTestProvisioner(t, orgID)
+		_, err := provisioner.ProvisionAPIKey(ctx, orgID, KeyTypeChat)
+		require.NoError(t, err)
+		require.NoError(t, testrepo.New(provisioner.db).SetOpenRouterAPIKeyClassificationFixture(ctx, testrepo.SetOpenRouterAPIKeyClassificationFixtureParams{OrganizationID: orgID, KeyType: string(KeyTypeChat), Disabled: true, DisableCauses: nil}))
+
+		_, _, err = provisioner.RemoveAPIKeyDisableCause(ctx, orgID, KeyTypeChat, DisableCauseAdminLock, nil)
+		require.ErrorContains(t, err, "unclassified")
+		require.Empty(t, upstream.recorded())
+		row, getErr := queries.GetOpenRouterAPIKey(ctx, repo.GetOpenRouterAPIKeyParams{OrganizationID: orgID, KeyType: string(KeyTypeChat)})
+		require.NoError(t, getErr)
+		require.Nil(t, row.DisableCauses)
+		require.True(t, row.Disabled)
+	})
+}
+
+func TestRemoveAPIKeyDisableCauseUpstreamFailureAndHashMismatchLeaveLocalUnchanged(t *testing.T) {
+	t.Parallel()
+
+	for _, tt := range []struct {
+		name      string
+		configure func(*disableTestUpstream)
+	}{
+		{name: "upstream failure", configure: func(u *disableTestUpstream) { u.server.Close() }},
+		{name: "hash mismatch", configure: func(u *disableTestUpstream) { u.respondWithPatchHash("wrong-hash") }},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			ctx := t.Context()
+			orgID := "org-" + uuid.NewString()[:8]
+			provisioner, upstream, queries := newDisableTestProvisioner(t, orgID)
+			_, err := provisioner.ProvisionAPIKey(ctx, orgID, KeyTypeChat)
+			require.NoError(t, err)
+			_, err = provisioner.AddAPIKeyDisableCause(ctx, orgID, KeyTypeChat, DisableCauseAdminLock)
+			require.NoError(t, err)
+			before, err := queries.GetOpenRouterAPIKey(ctx, repo.GetOpenRouterAPIKeyParams{OrganizationID: orgID, KeyType: string(KeyTypeChat)})
+			require.NoError(t, err)
+			tt.configure(upstream)
+
+			_, _, err = provisioner.RemoveAPIKeyDisableCause(ctx, orgID, KeyTypeChat, DisableCauseAdminLock, nil)
+			require.Error(t, err)
+			row, getErr := queries.GetOpenRouterAPIKey(ctx, repo.GetOpenRouterAPIKeyParams{OrganizationID: orgID, KeyType: string(KeyTypeChat)})
+			require.NoError(t, getErr)
+			require.Equal(t, []string{"admin_lock"}, row.DisableCauses)
+			require.True(t, row.Disabled)
+			require.Equal(t, before.MonthlyCredits, row.MonthlyCredits)
+		})
+	}
+}
+
+func TestRemoveAPIKeyDisableCauseRotationConflictRetryConverges(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	orgID := "org-" + uuid.NewString()[:8]
+	provisioner, upstream, queries := newDisableTestProvisioner(t, orgID)
+	_, err := provisioner.ProvisionAPIKey(ctx, orgID, KeyTypeChat)
+	require.NoError(t, err)
+	_, err = provisioner.AddAPIKeyDisableCause(ctx, orgID, KeyTypeChat, DisableCauseAdminLock)
+	require.NoError(t, err)
+	upstream.interceptPatch(func() {
+		upstream.interceptPatch(nil)
+		rotateErr := testrepo.New(provisioner.db).SetOpenRouterAPIKeyHashFixture(ctx, testrepo.SetOpenRouterAPIKeyHashFixtureParams{OrganizationID: orgID, KeyType: string(KeyTypeChat), KeyHash: "hash-2"})
+		require.NoError(t, rotateErr)
+	})
+
+	_, _, err = provisioner.RemoveAPIKeyDisableCause(ctx, orgID, KeyTypeChat, DisableCauseAdminLock, nil)
+	require.ErrorContains(t, err, "changed concurrently")
+	row, getErr := queries.GetOpenRouterAPIKey(ctx, repo.GetOpenRouterAPIKeyParams{OrganizationID: orgID, KeyType: string(KeyTypeChat)})
+	require.NoError(t, getErr)
+	require.Equal(t, []string{"admin_lock"}, row.DisableCauses)
+	require.True(t, row.Disabled)
+
+	upstream.respondWithPatchHash("hash-2")
+	_, change, err := provisioner.RemoveAPIKeyDisableCause(ctx, orgID, KeyTypeChat, DisableCauseAdminLock, nil)
+	require.NoError(t, err)
+	require.Equal(t, DisableCauseChange{CauseChanged: true, KeyAccessChanged: true}, change)
+	row, err = queries.GetOpenRouterAPIKey(ctx, repo.GetOpenRouterAPIKeyParams{OrganizationID: orgID, KeyType: string(KeyTypeChat)})
+	require.NoError(t, err)
+	require.Empty(t, row.DisableCauses)
+	require.False(t, row.Disabled)
+}
+
+func TestConcurrentAddAndRemoveDoesNotLoseCause(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	orgID := "org-" + uuid.NewString()[:8]
+	provisioner, upstream, queries := newDisableTestProvisioner(t, orgID)
+	_, err := provisioner.ProvisionAPIKey(ctx, orgID, KeyTypeChat)
+	require.NoError(t, err)
+	_, err = provisioner.AddAPIKeyDisableCause(ctx, orgID, KeyTypeChat, DisableCauseAdminLock)
+	require.NoError(t, err)
+
+	added := make(chan error, 1)
+	var once sync.Once
+	upstream.interceptPatch(func() {
+		once.Do(func() {
+			go func() {
+				_, addErr := provisioner.AddAPIKeyDisableCause(ctx, orgID, KeyTypeChat, DisableCauseTrialDemotion)
+				added <- addErr
+			}()
+		})
+	})
+
+	_, change, err := provisioner.RemoveAPIKeyDisableCause(ctx, orgID, KeyTypeChat, DisableCauseAdminLock, nil)
+	require.NoError(t, err)
+	require.Equal(t, DisableCauseChange{CauseChanged: true, KeyAccessChanged: true}, change)
+	require.NoError(t, <-added)
+	row, err := queries.GetOpenRouterAPIKey(ctx, repo.GetOpenRouterAPIKeyParams{OrganizationID: orgID, KeyType: string(KeyTypeChat)})
+	require.NoError(t, err)
+	require.Equal(t, []string{"trial_demotion"}, row.DisableCauses)
+	require.True(t, row.Disabled)
+}
+
+func TestRefreshAPIKeyLimitPreservesDisableCauses(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	orgID := "org-" + uuid.NewString()[:8]
+	provisioner, upstream, queries := newDisableTestProvisioner(t, orgID)
+	_, err := provisioner.ProvisionAPIKey(ctx, orgID, KeyTypeChat)
+	require.NoError(t, err)
+	_, err = provisioner.AddAPIKeyDisableCause(ctx, orgID, KeyTypeChat, DisableCauseTrialDemotion)
+	require.NoError(t, err)
+	patchesBefore := len(upstream.recorded())
+	limit := 77
+
+	got, err := provisioner.RefreshAPIKeyLimit(ctx, orgID, KeyTypeChat, &limit)
+	require.NoError(t, err)
+	require.Equal(t, limit, got)
+	patches := upstream.recorded()[patchesBefore:]
+	require.Len(t, patches, 1)
+	require.JSONEq(t, `{"limit":77,"limit_reset":"monthly"}`, patches[0])
+	row, err := queries.GetOpenRouterAPIKey(ctx, repo.GetOpenRouterAPIKeyParams{OrganizationID: orgID, KeyType: string(KeyTypeChat)})
+	require.NoError(t, err)
+	require.Equal(t, []string{"trial_demotion"}, row.DisableCauses)
+	require.True(t, row.Disabled)
+	require.EqualValues(t, 77, row.MonthlyCredits)
+}

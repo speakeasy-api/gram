@@ -465,6 +465,23 @@ func TestServePublic_BatchRequestRejected(t *testing.T) {
 	require.Contains(t, err.Error(), "batch requests are not supported")
 }
 
+// requireCacheHints asserts the caching members MCP 2026-07-28 requires on a
+// cacheable result. The members are read as pointers so an absent member fails
+// rather than decoding to a zero that happens to match the expected TTL.
+func requireCacheHints(t *testing.T, rawResult json.RawMessage, wantScope string) {
+	t.Helper()
+
+	var hints struct {
+		TTLMs      *int    `json:"ttlMs"`
+		CacheScope *string `json:"cacheScope"`
+	}
+	require.NoError(t, json.Unmarshal(rawResult, &hints))
+	require.NotNil(t, hints.TTLMs, "result carries no ttlMs")
+	require.NotNil(t, hints.CacheScope, "result carries no cacheScope")
+	require.Zero(t, *hints.TTLMs)
+	require.Equal(t, wantScope, *hints.CacheScope)
+}
+
 // servePublicToolsRequest issues a POST to /mcp/{slug} with an optional raw
 // query string (e.g. "tags=alpha,beta") and returns the recorder. Unlike
 // servePublicHTTP it threads a query string onto the URL so ?tags= filtering
@@ -705,6 +722,59 @@ func TestServePublic_ToolsCall_FilteredOutTool_NotFound(t *testing.T) {
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp), "body: %s", w.Body.String())
 	require.NotNil(t, resp.Error, "expected a JSON-RPC error, body: %s", w.Body.String())
 	require.Contains(t, resp.Error.Message, "not found")
+}
+
+// Nothing stops a tool variation from renaming one tool onto another's name,
+// which leaves two tools answering to it. Resolving by first match would
+// dispatch an arbitrary one of them, so the call is refused instead.
+func TestServePublic_ToolsCall_AmbiguousToolName_Rejected(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	toolset := createPublicMCPToolset(t, ctx, toolsets_repo.New(ti.conn), authCtx, "ambiguous-"+uuid.New().String()[:8])
+	urns := addHTTPTools(t, ctx, ti, toolset.ID, *authCtx.ProjectID, authCtx.ActiveOrganizationID, "alpha_tool", "beta_tool", "gamma_tool")
+
+	variationsRepo := variations_repo.New(ti.conn)
+	group, err := variationsRepo.InitGlobalToolVariationsGroup(ctx, variations_repo.InitGlobalToolVariationsGroupParams{
+		ProjectID:   *authCtx.ProjectID,
+		Name:        "default-group",
+		Description: conv.ToPGText("default group"),
+	})
+	require.NoError(t, err)
+
+	_, err = variationsRepo.UpsertToolVariation(ctx, variations_repo.UpsertToolVariationParams{
+		GroupID:     group,
+		SrcToolUrn:  urns["alpha_tool"],
+		SrcToolName: "alpha_tool",
+		Name:        conv.ToPGText("beta_tool"),
+	})
+	require.NoError(t, err)
+
+	w := servePublicToolsRequest(t, ctx, ti, toolset.McpSlug.String, "", makeToolsCallBody("beta_tool"))
+	require.Equal(t, http.StatusOK, w.Code, "body: %s", w.Body.String())
+
+	var resp struct {
+		Error *struct {
+			Code    int    `json:"code"`
+			Message string `json:"message"`
+		} `json:"error"`
+	}
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp), "body: %s", w.Body.String())
+	require.NotNil(t, resp.Error, "expected a JSON-RPC error, body: %s", w.Body.String())
+	require.Contains(t, resp.Error.Message, "ambiguous tool name")
+
+	// The guard is name-scoped, not a toolset-wide lockout: gamma_tool still
+	// resolves and fails later, in execution against its unconfigured server.
+	w = servePublicToolsRequest(t, ctx, ti, toolset.McpSlug.String, "", makeToolsCallBody("gamma_tool"))
+	require.Equal(t, http.StatusOK, w.Code, "body: %s", w.Body.String())
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp), "body: %s", w.Body.String())
+	require.NotNil(t, resp.Error, "expected a JSON-RPC error, body: %s", w.Body.String())
+	require.NotContains(t, resp.Error.Message, "ambiguous tool name")
+	require.NotContains(t, resp.Error.Message, "not found")
 }
 
 // makeInitializeBodyWithVersion mirrors makeInitializeBody with a

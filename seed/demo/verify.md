@@ -64,9 +64,45 @@ where a value is expected.
    count of 0 (a newly-emerged signal); top users render as
    `*@demo.getgram.ai` emails, not raw ids.
 
+10. **MCP connections** — on the **Acme Partner Gateway** server's _Clients and
+    Sessions_ tab, five registered agents and five connections. Grouped by
+    **Agent**: `Partner Reconciliation Agent` carries a green
+    **Key-authenticated** badge, `Vendor Sync (misconfigured)` a red **Cannot
+    authenticate** one, and the remaining three carry none (a missing badge on
+    the first two means the credential columns did not land). `Acme Legacy
+Connector` appears under **Inactive** with no connections. Its row menu's
+    **View registration** opens the detail sheet with an **Authentication**
+    field. The organization **MCP Sessions** page shows the same five
+    connections and the same two badges.
+
+11. **Killswitch list and detail (local rewritten seed only)** — Killswitch
+    management intentionally rejects demo/support sessions. Verify this contract in
+    the local organization after `mise run seed`, not through the demo-org
+    impersonation flow. Under **Secure → Killswitch**, the list shows six fictional
+    rows: three Active, one Scheduled, one Lifted, and one
+    Expired. Scope labels include both selected servers and all current/future
+    MCP servers. Filtering to Amara leaves two simultaneously effective rows
+    and preserves the principal filter in the URL; their detail overlap panels
+    identify each other. Open the changed Jonas row and confirm history narrows
+    **Acme Support Tools / Acme Ops / Linear** to **Acme Support Tools** without
+    losing the removed-server diff. Open the lifted and expired rows and confirm
+    their complete history and terminal status. On the active selected row, the
+    external message renders the newline, `<script>alert("demo")</script>`, and
+    `**This is plain text, not Markdown.**` literally: no script executes and no
+    Markdown formatting appears. Internal notes remain visible only on the
+    admin management detail/history surfaces.
+12. **Audit logs** — Killswitch history contributes nine rows: six
+    **activated**, one **changed**, one **lifted/deactivated**, and one
+    **expired**. Mutation rows name the same fictional operator and prescription
+    version as their Killswitch history entries; the expiry row is attributed to
+    **System**, follows the bounded row's deadline, and exposes no internal note
+    in the organization-visible audit snapshot.
+
 ## On failure
 
-Fix the seed SQL (see rules in `PAGES.md`), re-run `mise run seed:demo`,
-re-check only the failed pages, and commit the SQL change once green.
+Fix the seed SQL (see rules in `PAGES.md`), then re-run the target that owns
+the failed check: `mise run seed` for the local-only Killswitch checks, or
+`mise run seed:demo` for shared demo-org checks. Re-check only the failed pages,
+and commit the SQL change once green.
 Screenshots of failures go to `.playwright-cli/` (ignored) — reference them in
 the PR, don't commit them.

@@ -62,6 +62,10 @@ func TestCreateGcpIamCredential_TargetInGramProjectRejected(t *testing.T) {
 		ImpersonateServiceAccount: gramProjectServiceAccount("someone-else"),
 	})
 	requireOopsCode(t, err, oops.CodeBadRequest)
+
+	// Only staff can lift this refusal, and the operator has no way to tell that
+	// from the refusal itself, so the message has to say where to go.
+	require.ErrorContains(t, err, "contact Speakeasy support")
 }
 
 func TestCreateGcpIamCredential_ForbiddenForReadOnly(t *testing.T) {

@@ -23,13 +23,17 @@ const (
 	ActionOrganizationHooksFailOpenEnabled  Action = "organization:hooks_fail_open_enabled"
 	ActionOrganizationHooksFailOpenDisabled Action = "organization:hooks_fail_open_disabled"
 
+	ActionOrganizationProductFeatureEnabled  Action = "organization:product_feature_enabled"
+	ActionOrganizationProductFeatureDisabled Action = "organization:product_feature_disabled"
+
 	ActionOrganizationDeviceAgentConfigurationUpdated Action = "organization:device_agent_configuration_updated"
 
 	ActionOrganizationEnterpriseTrialArmed Action = "organization:enterprise_trial_armed"
 
-	ActionOrganizationEnterpriseTrialDemoted  Action = "organization:enterprise_trial_demoted"
-	ActionOrganizationEnterpriseTrialRearmed  Action = "organization:enterprise_trial_rearmed"
-	ActionOrganizationEnterpriseTrialExtended Action = "organization:enterprise_trial_extended"
+	ActionOrganizationEnterpriseTrialDemoted   Action = "organization:enterprise_trial_demoted"
+	ActionOrganizationEnterpriseTrialRearmed   Action = "organization:enterprise_trial_rearmed"
+	ActionOrganizationEnterpriseTrialExtended  Action = "organization:enterprise_trial_extended"
+	ActionOrganizationEnterpriseTrialConverted Action = "organization:enterprise_trial_converted"
 
 	ActionOrganizationPaygActivated   Action = "organization:payg_activated"
 	ActionOrganizationPaygDeactivated Action = "organization:payg_deactivated"
@@ -228,7 +232,16 @@ func (l *Logger) LogOrganizationWebhooksToggled(ctx context.Context, dbtx repo.D
 	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.OrganizationWebhooksV1})
 }
 
-type LogOrganizationHooksFailOpenToggledEvent struct {
+// hooksFailOpenFeatureName mirrors productfeatures.FeatureHooksFailOpen,
+// which this package cannot import without a cycle.
+const hooksFailOpenFeatureName = "hooks_fail_open"
+
+// LogOrganizationProductFeatureToggledEvent records a productFeatures.set
+// change. The toggled feature's name is carried in metadata under
+// "feature_name", except for hooks_fail_open, which keeps its dedicated
+// action (and no metadata) so security-posture changes stay distinguishable
+// from ordinary feature toggles.
+type LogOrganizationProductFeatureToggledEvent struct {
 	OrganizationID string
 
 	Actor            urn.Principal
@@ -238,15 +251,25 @@ type LogOrganizationHooksFailOpenToggledEvent struct {
 	OrganizationName string
 	OrganizationSlug string
 
-	FailOpenEnabled bool
+	FeatureName    string
+	FeatureEnabled bool
 }
 
-func (l *Logger) LogOrganizationHooksFailOpenToggled(ctx context.Context, dbtx repo.DBTX, event LogOrganizationHooksFailOpenToggledEvent) error {
-	var action Action
-	if event.FailOpenEnabled {
-		action = ActionOrganizationHooksFailOpenEnabled
+func (l *Logger) LogOrganizationProductFeatureToggled(ctx context.Context, dbtx repo.DBTX, event LogOrganizationProductFeatureToggledEvent) error {
+	action := conv.Ternary(event.FeatureEnabled, ActionOrganizationProductFeatureEnabled, ActionOrganizationProductFeatureDisabled)
+	outboxEvent := events.OrganizationProductFeatureV1
+	var metadata []byte
+	if event.FeatureName == hooksFailOpenFeatureName {
+		action = conv.Ternary(event.FeatureEnabled, ActionOrganizationHooksFailOpenEnabled, ActionOrganizationHooksFailOpenDisabled)
+		outboxEvent = events.OrganizationHooksFailOpenV1
 	} else {
-		action = ActionOrganizationHooksFailOpenDisabled
+		var err error
+		metadata, err = marshalAuditPayload(map[string]any{
+			"feature_name": event.FeatureName,
+		})
+		if err != nil {
+			return fmt.Errorf("marshal %s metadata: %w", action, err)
+		}
 	}
 
 	entry := repo.InsertAuditLogParams{
@@ -265,12 +288,12 @@ func (l *Logger) LogOrganizationHooksFailOpenToggled(ctx context.Context, dbtx r
 		SubjectDisplayName: conv.ToPGTextEmpty(event.OrganizationName),
 		SubjectSlug:        conv.ToPGTextEmpty(event.OrganizationSlug),
 
-		Metadata:       nil,
+		Metadata:       metadata,
 		BeforeSnapshot: nil,
 		AfterSnapshot:  nil,
 	}
 
-	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.OrganizationHooksFailOpenV1})
+	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: outboxEvent})
 }
 
 type DeviceAgentConfigurationSnapshot struct {
@@ -382,6 +405,74 @@ func (l *Logger) LogOrganizationEnterpriseTrialArmed(ctx context.Context, dbtx r
 // LogOrganizationEnterpriseTrialRearmedEvent records an operator putting a
 // demoted trial back on. AccountType carries the restored tier so a reader can
 // compare it with the demotion entry, which is the only record of the old one.
+type OrganizationEnterpriseTrialConversionOrganizationSnapshot struct {
+	AccountType string `json:"account_type"`
+	Whitelisted bool   `json:"whitelisted"`
+	Disabled    bool   `json:"disabled"`
+}
+
+type OrganizationEnterpriseTrialConversionLifecycleSnapshot struct {
+	Status      string     `json:"status"`
+	Tier        string     `json:"tier"`
+	EndsAt      *time.Time `json:"ends_at"`
+	ConvertedAt *time.Time `json:"converted_at"`
+	DemotedAt   *time.Time `json:"demoted_at"`
+}
+
+type OrganizationEnterpriseTrialConversionKeySnapshot struct {
+	KeyType           string `json:"key_type"`
+	StoredDisabled    bool   `json:"stored_disabled"`
+	EffectiveDisabled bool   `json:"effective_disabled"`
+	KeyAccessChanged  bool   `json:"key_access_changed"`
+	MonthlyCredits    int64  `json:"monthly_credits"`
+}
+
+type OrganizationEnterpriseTrialConversionSnapshot struct {
+	Organization OrganizationEnterpriseTrialConversionOrganizationSnapshot `json:"organization"`
+	Trial        OrganizationEnterpriseTrialConversionLifecycleSnapshot    `json:"trial"`
+	Keys         []OrganizationEnterpriseTrialConversionKeySnapshot        `json:"keys"`
+}
+
+type LogOrganizationEnterpriseTrialConvertedEvent struct {
+	OrganizationID   string
+	ConversionSource string
+	KeyAccessChanged *bool
+	Actor            urn.Principal
+	ActorDisplayName *string
+	ActorSlug        *string
+	Before           OrganizationEnterpriseTrialConversionSnapshot
+	After            OrganizationEnterpriseTrialConversionSnapshot
+}
+
+func (l *Logger) LogOrganizationEnterpriseTrialConverted(ctx context.Context, dbtx repo.DBTX, event LogOrganizationEnterpriseTrialConvertedEvent) error {
+	action := ActionOrganizationEnterpriseTrialConverted
+	metadataFields := map[string]any{"conversion_source": event.ConversionSource}
+	if event.KeyAccessChanged != nil {
+		metadataFields["key_access_changed"] = *event.KeyAccessChanged
+	}
+	metadata, err := marshalAuditPayload(metadataFields)
+	if err != nil {
+		return fmt.Errorf("marshal %s metadata: %w", action, err)
+	}
+	beforeSnapshot, err := marshalAuditPayload(event.Before)
+	if err != nil {
+		return fmt.Errorf("marshal %s before snapshot: %w", action, err)
+	}
+	afterSnapshot, err := marshalAuditPayload(event.After)
+	if err != nil {
+		return fmt.Errorf("marshal %s after snapshot: %w", action, err)
+	}
+	entry := repo.InsertAuditLogParams{
+		OrganizationID: event.OrganizationID, ProjectID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		ActorID: event.Actor.ID, ActorType: string(event.Actor.Type),
+		ActorDisplayName: conv.PtrToPGTextEmpty(event.ActorDisplayName), ActorSlug: conv.PtrToPGTextEmpty(event.ActorSlug),
+		Action: string(action), SubjectID: event.OrganizationID, SubjectType: "organization",
+		SubjectDisplayName: conv.ToPGText("Organization"), SubjectSlug: conv.ToPGTextEmpty(""),
+		Metadata: metadata, BeforeSnapshot: beforeSnapshot, AfterSnapshot: afterSnapshot,
+	}
+	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.OrganizationEnterpriseTrialV1})
+}
+
 type LogOrganizationEnterpriseTrialRearmedEvent struct {
 	OrganizationID string
 
@@ -392,16 +483,20 @@ type LogOrganizationEnterpriseTrialRearmedEvent struct {
 	OrganizationName string
 	OrganizationSlug string
 
-	AccountType string
-	TrialEndsAt time.Time
+	AccountType       string
+	TrialEndsAt       time.Time
+	ArmAuditOperation string
+	KeyAccessChanged  bool
 }
 
 func (l *Logger) LogOrganizationEnterpriseTrialRearmed(ctx context.Context, dbtx repo.DBTX, event LogOrganizationEnterpriseTrialRearmedEvent) error {
 	action := ActionOrganizationEnterpriseTrialRearmed
 
 	metadata, err := marshalAuditPayload(map[string]any{
-		"account_type":  event.AccountType,
-		"trial_ends_at": event.TrialEndsAt,
+		"account_type":       event.AccountType,
+		"trial_ends_at":      event.TrialEndsAt,
+		"arm_operation_id":   event.ArmAuditOperation,
+		"key_access_changed": event.KeyAccessChanged,
 	})
 	if err != nil {
 		return fmt.Errorf("marshal %s metadata: %w", action, err)
@@ -461,6 +556,18 @@ func (l *Logger) LogOrganizationEnterpriseTrialExtended(ctx context.Context, dbt
 	if err != nil {
 		return fmt.Errorf("marshal %s metadata: %w", action, err)
 	}
+	beforeSnapshot, err := marshalAuditPayload(map[string]any{
+		"trial_ends_at": event.PreviousTrialEndsAt,
+	})
+	if err != nil {
+		return fmt.Errorf("marshal %s before snapshot: %w", action, err)
+	}
+	afterSnapshot, err := marshalAuditPayload(map[string]any{
+		"trial_ends_at": event.TrialEndsAt,
+	})
+	if err != nil {
+		return fmt.Errorf("marshal %s after snapshot: %w", action, err)
+	}
 
 	entry := repo.InsertAuditLogParams{
 		OrganizationID: event.OrganizationID,
@@ -479,8 +586,8 @@ func (l *Logger) LogOrganizationEnterpriseTrialExtended(ctx context.Context, dbt
 		SubjectSlug:        conv.ToPGTextEmpty(event.OrganizationSlug),
 
 		Metadata:       metadata,
-		BeforeSnapshot: nil,
-		AfterSnapshot:  nil,
+		BeforeSnapshot: beforeSnapshot,
+		AfterSnapshot:  afterSnapshot,
 	}
 
 	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.OrganizationEnterpriseTrialV1})
@@ -498,6 +605,7 @@ type LogOrganizationEnterpriseTrialDemotedEvent struct {
 
 	PreviousAccountType string
 	TrialEndsAt         time.Time
+	KeyAccessChanged    bool
 }
 
 func (l *Logger) LogOrganizationEnterpriseTrialDemoted(ctx context.Context, dbtx repo.DBTX, event LogOrganizationEnterpriseTrialDemotedEvent) error {
@@ -506,6 +614,7 @@ func (l *Logger) LogOrganizationEnterpriseTrialDemoted(ctx context.Context, dbtx
 	metadata, err := marshalAuditPayload(map[string]any{
 		"previous_account_type": event.PreviousAccountType,
 		"trial_ends_at":         event.TrialEndsAt,
+		"key_access_changed":    event.KeyAccessChanged,
 	})
 	if err != nil {
 		return fmt.Errorf("marshal %s metadata: %w", action, err)

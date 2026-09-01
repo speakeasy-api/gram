@@ -129,23 +129,114 @@ func (s *Service) requireOrgAccess(ctx context.Context, scope authz.Scope) (*con
 	return authCtx, logger, nil
 }
 
+// priorTarget is a credential's impersonation state as already stored. Update
+// passes the row it is about to replace; create passes the zero value, having
+// nothing to carry forward.
+type priorTarget struct {
+	// ImpersonateServiceAccount is the target the stored row names.
+	ImpersonateServiceAccount string
+
+	// SkipProjectVerification is the stored exemption from the own-project
+	// refusal.
+	SkipProjectVerification bool
+}
+
+// impersonationDecision is what one write's screening settled: the target to
+// store, and whether the row carries the exemption from the own-project refusal.
+type impersonationDecision struct {
+	// Target is the trimmed service account the row should name.
+	Target string
+
+	// Exempt is what the row's skip_project_verification column should hold.
+	Exempt bool
+
+	// NewGrant reports that this write hands the credential an exemption it did
+	// not already hold for this same service account. It drives the log, which
+	// is the only durable record of the grant, so it tracks the pair the
+	// exemption is pinned to rather than the column alone: re-pointing an
+	// already-exempt credential at a second service account is a new grant even
+	// though the column does not change.
+	NewGrant bool
+}
+
 // resolveOrgImpersonationTarget validates the service account an organization
-// credential wants Gram to impersonate, returning the trimmed target.
-func (s *Service) resolveOrgImpersonationTarget(ctx context.Context, logger *slog.Logger, raw string) (string, error) {
+// credential wants Gram to impersonate, returning the trimmed target and
+// whether the row should record an exemption from the own-project refusal.
+//
+// Two callers may name a service account in Gram's own project. A platform
+// administrator may, which is how Speakeasy staff dogfood the feature against
+// an internal service account. And anyone may keep one a platform administrator
+// already approved, so long as they submit it unchanged: the update payload
+// replaces every column, so the dashboard resubmits the target even when the
+// operator only renamed the credential, and without this an exempted credential
+// could never be edited again by the organization that owns it.
+//
+// Carrying the exemption forward does not let it be laundered onto a different
+// identity, because it is pinned to the target rather than to the credential.
+// Naming any other service account in Gram's own project is screened as an
+// ordinary caller and refused, so the edit path cannot be used to probe which
+// internal service accounts Gram can impersonate. Moving the target away and
+// back refuses too: the intervening write records no exemption.
+func (s *Service) resolveOrgImpersonationTarget(ctx context.Context, logger *slog.Logger, raw string, isPlatformAdmin bool, prior priorTarget) (impersonationDecision, error) {
 	target := strings.TrimSpace(raw)
 	if target == "" {
-		return "", oops.E(oops.CodeBadRequest, nil, "impersonate_service_account is required").LogError(ctx, logger)
+		return impersonationDecision{}, oops.E(oops.CodeBadRequest, nil, "impersonate_service_account is required").LogError(ctx, logger)
 	}
 
-	reason, err := s.gcpIdentity.ImpersonationTargetProblem(ctx, logger, target)
+	kind, reason, err := s.gcpIdentity.ImpersonationTargetProblem(ctx, logger, target)
 	if err != nil {
-		return "", oops.E(oops.CodeUnexpected, err, "cannot validate impersonate_service_account right now, try again shortly").LogError(ctx, logger)
-	}
-	if reason != "" {
-		return "", oops.E(oops.CodeBadRequest, nil, "%s", reason).LogError(ctx, logger)
+		return impersonationDecision{}, oops.E(oops.CodeUnexpected, err, "cannot validate impersonate_service_account right now, try again shortly").LogError(ctx, logger)
 	}
 
-	return target, nil
+	switch kind {
+	case gcpauth.TargetOK:
+		return impersonationDecision{Target: target, Exempt: false, NewGrant: false}, nil
+
+	case gcpauth.TargetOwnProject:
+		// Compared case-insensitively so re-submitting the same account with
+		// different capitalization is not read as naming a new one, which would
+		// re-impose the refusal on an edit that changed nothing.
+		carried := prior.SkipProjectVerification && strings.EqualFold(target, strings.TrimSpace(prior.ImpersonateServiceAccount))
+		if !isPlatformAdmin && !carried {
+			return impersonationDecision{}, oops.E(oops.CodeBadRequest, nil, "%s; if you need this, contact Speakeasy support", reason).LogError(ctx, logger)
+		}
+
+		if carried {
+			// Persist the spelling that was approved rather than the one just
+			// submitted. The two differ only in case, and the caller may not
+			// change this target at all, so writing back their capitalization
+			// would let an edit that is required to be a no-op rewrite the
+			// identity the credential authenticates as.
+			return impersonationDecision{Target: strings.TrimSpace(prior.ImpersonateServiceAccount), Exempt: true, NewGrant: false}, nil
+		}
+
+		return impersonationDecision{Target: target, Exempt: true, NewGrant: true}, nil
+
+	case gcpauth.TargetMalformed:
+		return impersonationDecision{}, oops.E(oops.CodeBadRequest, nil, "%s", reason).LogError(ctx, logger)
+
+	default:
+		return impersonationDecision{}, oops.E(oops.CodeUnexpected, nil, "cannot validate impersonate_service_account right now, try again shortly").LogError(ctx, logger)
+	}
+}
+
+// logExemptionGranted records a credential gaining the exemption from the
+// own-project refusal. Only the transition is logged, not every write that
+// carries an existing exemption forward, so the grant stands out from the
+// re-saves that follow it.
+//
+// This log is the only durable record of the grant. The exemption is
+// deliberately absent from the audit snapshot and from every API surface,
+// because putting it there would show an organization a decision it cannot make
+// or undo. That leaves the actor and the organization it was exercised in
+// visible only here.
+func logExemptionGranted(ctx context.Context, logger *slog.Logger, authCtx *contextvalues.AuthContext, credentialID uuid.UUID, target string) {
+	logger.InfoContext(ctx, "platform admin exempted a gcp iam credential from own-project screening",
+		attr.SlogUserID(authCtx.UserID),
+		attr.SlogOrganizationID(authCtx.ActiveOrganizationID),
+		attr.SlogExternalCredentialID(credentialID.String()),
+		attr.SlogGCPImpersonateServiceAccount(target),
+	)
 }
 
 // verifyDetailMaxLen bounds the provider text a failed probe echoes back. The
@@ -351,7 +442,10 @@ func (s *Service) CreateGcpIamCredential(ctx context.Context, payload *gen.Creat
 	// The organization tier is impersonation-only, so the WIF columns are never
 	// written here and resolveGcpColumns (which infers between all three modes)
 	// does not apply.
-	impersonate, err := s.resolveOrgImpersonationTarget(ctx, logger, payload.ImpersonateServiceAccount)
+	decision, err := s.resolveOrgImpersonationTarget(ctx, logger, payload.ImpersonateServiceAccount, authCtx.IsAdmin, priorTarget{
+		ImpersonateServiceAccount: "",
+		SkipProjectVerification:   false,
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -375,10 +469,11 @@ func (s *Service) CreateGcpIamCredential(ctx context.Context, payload *gen.Creat
 
 	gcp, err := q.CreateGcpIamCredential(ctx, repo.CreateGcpIamCredentialParams{
 		ExternalCredentialID:      ec.ID,
-		ImpersonateServiceAccount: conv.ToPGText(impersonate),
+		ImpersonateServiceAccount: conv.ToPGText(decision.Target),
 		WifPoolID:                 pgtype.Text{String: "", Valid: false},
 		WifProviderID:             pgtype.Text{String: "", Valid: false},
 		WifProjectNumber:          pgtype.Text{String: "", Valid: false},
+		SkipProjectVerification:   decision.Exempt,
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error creating gcp iam credential").LogError(ctx, logger)
@@ -400,6 +495,10 @@ func (s *Service) CreateGcpIamCredential(ctx context.Context, payload *gen.Creat
 		return nil, oops.E(oops.CodeUnexpected, err, "error saving external credential").LogError(ctx, logger)
 	}
 
+	if decision.NewGrant {
+		logExemptionGranted(ctx, logger, authCtx, ec.ID, decision.Target)
+	}
+
 	return mv.BuildGcpIamCredentialView(ec, gcp), nil
 }
 
@@ -417,11 +516,6 @@ func (s *Service) UpdateGcpIamCredential(ctx context.Context, payload *gen.Updat
 	name := strings.TrimSpace(payload.Name)
 	if name == "" {
 		return nil, oops.E(oops.CodeBadRequest, nil, "name is required").LogError(ctx, logger)
-	}
-
-	impersonate, err := s.resolveOrgImpersonationTarget(ctx, logger, payload.ImpersonateServiceAccount)
-	if err != nil {
-		return nil, err
 	}
 
 	dbtx, err := s.db.Begin(ctx)
@@ -443,6 +537,24 @@ func (s *Service) UpdateGcpIamCredential(ctx context.Context, payload *gen.Updat
 		return nil, oops.E(oops.CodeUnexpected, err, "error loading gcp iam credential").LogError(ctx, logger)
 	}
 
+	// Screened after the row it may carry an exemption from has been read, since
+	// the decision depends on that row's target. The read takes no row lock and
+	// runs at READ COMMITTED, so a concurrent write can still land between it and
+	// the update below; that cannot produce an exemption for an unapproved
+	// service account, because carrying one forward demands an exact target
+	// match, but two racing edits can leave the later one's exemption standing.
+	//
+	// The screening resolves an ambient identity, which is memoized for the
+	// process lifetime, so this holds the transaction open across a network call
+	// at most once per process.
+	decision, err := s.resolveOrgImpersonationTarget(ctx, logger, payload.ImpersonateServiceAccount, authCtx.IsAdmin, priorTarget{
+		ImpersonateServiceAccount: current.GcpIamCredential.ImpersonateServiceAccount.String,
+		SkipProjectVerification:   current.GcpIamCredential.SkipProjectVerification,
+	})
+	if err != nil {
+		return nil, err
+	}
+
 	ec, err := q.UpdateExternalCredential(ctx, repo.UpdateExternalCredentialParams{
 		Name:           name,
 		ID:             id,
@@ -461,10 +573,11 @@ func (s *Service) UpdateGcpIamCredential(ctx context.Context, payload *gen.Updat
 	// precisely because impersonation is the only mode the form can express —
 	// there is no field the caller could omit and silently lose.
 	gcp, err := q.UpdateGcpIamCredential(ctx, repo.UpdateGcpIamCredentialParams{
-		ImpersonateServiceAccount: conv.ToPGText(impersonate),
+		ImpersonateServiceAccount: conv.ToPGText(decision.Target),
 		WifPoolID:                 pgtype.Text{String: "", Valid: false},
 		WifProviderID:             pgtype.Text{String: "", Valid: false},
 		WifProjectNumber:          pgtype.Text{String: "", Valid: false},
+		SkipProjectVerification:   decision.Exempt,
 		ExternalCredentialID:      id,
 	})
 	if err != nil {
@@ -487,6 +600,10 @@ func (s *Service) UpdateGcpIamCredential(ctx context.Context, payload *gen.Updat
 
 	if err := dbtx.Commit(ctx); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error saving external credential").LogError(ctx, logger)
+	}
+
+	if decision.NewGrant {
+		logExemptionGranted(ctx, logger, authCtx, id, decision.Target)
 	}
 
 	return mv.BuildGcpIamCredentialView(ec, gcp), nil
@@ -645,11 +762,16 @@ func (s *Service) VerifyGcpIamCredential(ctx context.Context, payload *gen.Verif
 	// can impersonate. A screening the server cannot evaluate is an error rather
 	// than an unverified result: reporting "not verified" would blame the
 	// customer's configuration for a fault on Gram's side.
-	reason, err := s.gcpIdentity.ImpersonationTargetProblem(ctx, logger, target)
+	//
+	// A row a platform administrator exempted is forgiven the own-project
+	// refusal, so probing it reports what it can actually do rather than a
+	// refusal no edit through this API can clear.
+	kind, reason, err := s.gcpIdentity.ImpersonationTargetProblem(ctx, logger, target)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "cannot verify this credential right now, try again shortly").LogError(ctx, logger)
 	}
-	if reason != "" {
+	exempted := kind == gcpauth.TargetOwnProject && row.GcpIamCredential.SkipProjectVerification
+	if kind != gcpauth.TargetOK && !exempted {
 		return &gen.VerifyCredentialResult{
 			Verified:  false,
 			Principal: conv.PtrEmpty(target),

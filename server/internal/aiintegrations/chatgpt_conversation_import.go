@@ -25,6 +25,7 @@ import (
 	chatrepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
+	"github.com/speakeasy-api/gram/server/internal/metering"
 	codexapi "github.com/speakeasy-api/gram/server/internal/thirdparty/codex"
 )
 
@@ -365,7 +366,7 @@ func (src *chatgptConversationSource) writeFile(ctx context.Context, file codexa
 	}
 
 	fallbacksBefore := src.timestampFallbacks()
-	rows := make([]chatrepo.CreateExternalChatMessageParams, 0, len(events))
+	rows := make([]chat.ExternalMessageWrite, 0, len(events))
 	for _, event := range events {
 		if event.Conversation.ID == "" || event.Message.ID == "" {
 			continue
@@ -388,35 +389,45 @@ func (src *chatgptConversationSource) writeFile(ctx context.Context, file codexa
 			contentRaw = event.Message.Content.Value
 		}
 
-		rows = append(rows, chatrepo.CreateExternalChatMessageParams{
-			ChatID:            src.chatIDs[event.Conversation.ID],
-			Role:              role,
-			ProjectID:         src.cfg.ProjectID,
-			Content:           content,
-			ContentRaw:        contentRaw,
-			ContentAssetUrl:   pgtype.Text{String: "", Valid: false},
-			StorageError:      pgtype.Text{String: "", Valid: false},
-			Model:             pgtype.Text{String: "", Valid: false},
-			MessageID:         pgtype.Text{String: "", Valid: false},
-			ToolCallID:        pgtype.Text{String: "", Valid: false},
-			UserID:            conv.ToPGText(userID),
-			ExternalUserID:    conv.ToPGText(event.Actor.UserID),
-			ExternalMessageID: conv.ToPGText(event.Message.ID),
-			FinishReason:      pgtype.Text{String: "", Valid: false},
-			ToolCalls:         nil,
-			PromptTokens:      0,
-			CompletionTokens:  0,
-			TotalTokens:       0,
-			Origin:            pgtype.Text{String: "", Valid: false},
-			// The feed has no browser user agent; the author's client type
-			// (e.g. desktop_web) is the closest surface signal, so it rides
-			// this column for later per-client analysis.
-			UserAgent:   conv.ToPGTextEmpty(event.Message.Author.ClientType),
-			IpAddress:   pgtype.Text{String: "", Valid: false},
-			Source:      conv.ToPGText(chatgptConversationSourceSlug),
-			ContentHash: nil,
-			Generation:  0,
-			CreatedAt:   conv.ToPGTimestamptz(createdAt),
+		rows = append(rows, chat.ExternalMessageWrite{
+			Params: chatrepo.CreateExternalChatMessageParams{
+				ID:                uuid.Nil,
+				ChatID:            src.chatIDs[event.Conversation.ID],
+				Role:              role,
+				ProjectID:         src.cfg.ProjectID,
+				Content:           content,
+				ContentRaw:        contentRaw,
+				ContentAssetUrl:   pgtype.Text{String: "", Valid: false},
+				StorageError:      pgtype.Text{String: "", Valid: false},
+				Model:             pgtype.Text{String: "", Valid: false},
+				MessageID:         pgtype.Text{String: "", Valid: false},
+				ToolCallID:        pgtype.Text{String: "", Valid: false},
+				UserID:            conv.ToPGText(userID),
+				ExternalUserID:    conv.ToPGText(event.Actor.UserID),
+				ExternalMessageID: conv.ToPGText(event.Message.ID),
+				FinishReason:      pgtype.Text{String: "", Valid: false},
+				ToolCalls:         nil,
+				PromptTokens:      0,
+				CompletionTokens:  0,
+				TotalTokens:       0,
+				Origin:            pgtype.Text{String: "", Valid: false},
+				// The feed has no browser user agent; the author's client type
+				// (e.g. desktop_web) is the closest surface signal, so it rides
+				// this column for later per-client analysis.
+				UserAgent:   conv.ToPGTextEmpty(event.Message.Author.ClientType),
+				IpAddress:   pgtype.Text{String: "", Valid: false},
+				Source:      conv.ToPGText(chatgptConversationSourceSlug),
+				ContentHash: nil,
+				Generation:  0,
+				CreatedAt:   conv.ToPGTimestamptz(createdAt),
+			},
+			BillingUserID:  userID,
+			WorkloadSource: metering.WorkloadSourceImport,
+			UserEmail:      event.Actor.UserEmail,
+			Provider:       codexProviderOpenAI,
+			HookHostname:   "",
+			AccountType:    complianceAccountTypeTeam,
+			BillingMode:    src.cfg.BillingMode,
 		})
 	}
 	if fallbacks := src.timestampFallbacks() - fallbacksBefore; fallbacks > 0 {

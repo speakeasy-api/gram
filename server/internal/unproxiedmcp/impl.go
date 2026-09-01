@@ -291,7 +291,7 @@ func (s *Service) ListTools(ctx context.Context, payload *gen.ListToolsPayload) 
 	// bounding the probe's own context isn't enough to bound *this call's*
 	// latency. The goroutine keeps running to let that cleanup finish
 	// naturally; only the response to the caller is time-boxed.
-	probeCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), listToolsTimeout) //nolint:gosec // cancel is deferred inside the goroutine below
+	probeCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), listToolsTimeout)
 	resultCh := make(chan *gen.ListUnproxiedMcpServerToolsResult, 1)
 	go func() {
 		defer cancel()
@@ -334,8 +334,7 @@ func (s *Service) probeListTools(probeCtx context.Context, serverURL string) *ge
 		MaxResponseBytes: listToolsMaxResponseBytes,
 	})
 	if err != nil {
-		var authErr *externalmcp.AuthRejectedError
-		if errors.As(err, &authErr) {
+		if _, ok := errors.AsType[*externalmcp.AuthRejectedError](err); ok {
 			return &gen.ListUnproxiedMcpServerToolsResult{
 				Status:  "auth_required",
 				Tools:   []*gen.UnproxiedMcpServerTool{},
@@ -352,8 +351,7 @@ func (s *Service) probeListTools(probeCtx context.Context, serverURL string) *ge
 
 	discovered, err := client.ListTools(probeCtx)
 	if err != nil {
-		var authErr *externalmcp.AuthRejectedError
-		if errors.As(err, &authErr) {
+		if _, ok := errors.AsType[*externalmcp.AuthRejectedError](err); ok {
 			return &gen.ListUnproxiedMcpServerToolsResult{
 				Status:  "auth_required",
 				Tools:   []*gen.UnproxiedMcpServerTool{},

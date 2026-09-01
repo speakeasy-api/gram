@@ -30,43 +30,20 @@ export type ToolsetAuthSurface =
   // legacy OAuth configured, unwired → legacy UI plus a convert path.
   | "legacy"
   // nothing configured → shared section, attach state.
-  | "attach"
-  // flag off → pre-user-sessions UI, unchanged.
-  | "legacy-only";
+  | "attach";
 
 export function toolsetAuthSurface({
-  flagEnabled,
   userSessionIssuerWired,
   oauthParadigm,
 }: {
-  flagEnabled: boolean;
   userSessionIssuerWired: boolean;
   oauthParadigm: OAuthParadigm | null;
 }): ToolsetAuthSurface {
-  if (!flagEnabled) return "legacy-only";
   // A wired issuer always wins: the serve path gates on it and any leftover
   // legacy OAuth config is inert.
   if (userSessionIssuerWired) return "manage";
   if (oauthParadigm) return "legacy";
   return "attach";
-}
-
-/**
- * Convert path offered on the "legacy" surface. External OAuth has no upstream
- * client to clone, so it converts by attaching a fresh provider via the attach
- * sheet.
- */
-export type ToolsetConvertAction = "attach-sheet";
-
-export function toolsetConvertAction(
-  oauthParadigm: OAuthParadigm | null,
-): ToolsetConvertAction | null {
-  switch (oauthParadigm) {
-    case "external":
-      return "attach-sheet";
-    case null:
-      return null;
-  }
 }
 
 /**
@@ -93,26 +70,18 @@ export function canConfigureExternalOAuth(
  * Whether the public→private flip must be blocked pending OAuth conversion.
  * The backend silently clears external OAuth / OAuth proxy config on any
  * mcp_is_public flip (UpdateToolset in server/internal/toolsets/impl.go).
- * A wired issuer makes leftover config inert, so the flip is safe. Flag off
- * keeps today's silent behavior since no convert path exists there.
+ * A wired issuer makes leftover config inert, so the flip is safe.
  */
 export function mustConvertOAuthBeforePrivate({
-  flagEnabled,
   mcpIsPublic,
   userSessionIssuerWired,
   oauthParadigm,
 }: {
-  flagEnabled: boolean;
   mcpIsPublic: boolean;
   userSessionIssuerWired: boolean;
   oauthParadigm: OAuthParadigm | null;
 }): boolean {
-  return (
-    flagEnabled &&
-    mcpIsPublic &&
-    !userSessionIssuerWired &&
-    oauthParadigm !== null
-  );
+  return mcpIsPublic && !userSessionIssuerWired && oauthParadigm !== null;
 }
 
 /**

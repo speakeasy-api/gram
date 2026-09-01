@@ -975,9 +975,9 @@ func (s *Service) GetIssuerMigratePreflight(ctx context.Context, payload *orgiss
 	return &orgissuersgen.OrganizationIssuerMigratePreflight{
 		ClientCount:               int(preflight.clientCount),
 		McpServerNames:            preflight.mcpServerNames,
-		EndpointMismatches:        preflight.endpointMismatches,
+		EndpointMismatches:        issuerFieldMismatchViews(preflight.endpointMismatches),
 		ConflictingMcpServerNames: preflight.conflictingMcpServerNames,
-		Warnings:                  preflight.warnings,
+		Warnings:                  issuerFieldMismatchViews(preflight.warnings),
 		CanMigrate:                preflight.canMigrate(),
 	}, nil
 }

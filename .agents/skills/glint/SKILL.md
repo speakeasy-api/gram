@@ -9,7 +9,9 @@ metadata:
 `glint` is Gram's package of custom `go/analysis` analyzers, and `gcl` is the golangci-lint custom-build configuration that loads `glint` as a plugin. Together they automate enforcement of project coding conventions and bug-prevention rules so the same feedback isn't re-litigated in PR review.
 
 - Plugin entry point: [glint/plugin.go](../../../glint/plugin.go) — registers the plugin via `register.Plugin("glint", New)`, defines the `settings`/`ruleSettings` structs, and lists every analyzer in `BuildAnalyzers`.
-- gcl wiring: [server/.custom-gcl.yml](../../../server/.custom-gcl.yml) — declares `github.com/speakeasy-api/gram/glint` as the imported plugin module for the custom golangci-lint binary.
+- gcl wiring: [server/.custom-gcl.yml](../../../server/.custom-gcl.yml) — declares `github.com/speakeasy-api/gram/glint` as the imported plugin module for the custom golangci-lint binary. Its `version` must match the golangci-lint pinned in [mise.toml](../../../mise.toml); `mise run lint:server` refuses to run otherwise.
+- `glint` is its own Go module ([glint/go.mod](../../../glint/go.mod)), separate from the root module, so that the custom build only depends on `golang.org/x/tools` and `plugin-module-register` at the versions golangci-lint itself uses, and so that server dependency bumps never rebuild `gcl`. Keep it that way: never import a root-module package from `glint`. The one shared type, the `annotations.Service` marker embedded by services, lives in the root module at [server/internal/annotations](../../../server/internal/annotations) and analyzers match it by import path.
+- Tests run with `mise run test:glint` (CI runs them in the `glint-test` job).
 
 The current set of analyzers and their rule keys is the source of truth in `BuildAnalyzers`. Read that function before adding a new one.
 
@@ -329,7 +331,7 @@ func TestNoAnonymousDefer(t *testing.T) {
 
 ### Fixtures
 
-Fixtures live at `glint/testdata/src/<fixture-name>/<file>.go`. Mark expected diagnostics with `// want "<regex>"` comments on the offending line:
+Fixtures live at `glint/testdata/src/<fixture-name>/<file>.go`. The `glint` module cannot import the root module, so an analyzer that matches a root-module type does it by import path and type name (see `annotationsPkgPath` in [glint/annotated_service.go](../../../glint/annotated_service.go)), and its fixtures compile against a stand-in copy of that type under `testdata/src/` at the real import path: `glint/testdata/src/github.com/speakeasy-api/gram/server/internal/annotations/structs.go` mirrors `server/internal/annotations/structs.go` and must be kept identical to it. Because that path is `internal` to `server/`, fixtures that import it live at `glint/testdata/src/github.com/speakeasy-api/gram/server/internal/<fixture-name>/` and the test passes that full import path to `analysistest.Run`. Mark expected diagnostics with `// want "<regex>"` comments on the offending line:
 
 ```go
 package noanonymousdefer
@@ -342,7 +344,7 @@ func bad() {
 For diagnostics whose text contains regex metacharacters (`*`, `(`, `.`, etc.), escape them in the `// want` directive and use backticks instead of double quotes when the message itself contains quotes:
 
 ```go
-repo *repo.Queries // want `field "repo" in Service has type \*serviceannotationrepofield/repo.Queries which is sqlc-generated; services should use \*pgxpool.Pool and create repo instances in methods`
+repo *repo.Queries // want `field "repo" in Service has type \*github.com/speakeasy-api/gram/server/internal/serviceannotationrepofield/repo.Queries which is sqlc-generated; services should use \*pgxpool.Pool and create repo instances in methods`
 ```
 
 ### Non-default settings

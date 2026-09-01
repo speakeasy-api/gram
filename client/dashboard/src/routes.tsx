@@ -37,6 +37,7 @@ import Environments, {
   EnvironmentsRoot,
 } from "./pages/environments/Environments";
 import Home from "./pages/home/Home";
+import { ProjectGuidePage } from "./components/project-guide/ProjectGuidePage";
 import Integrations from "./pages/integrations/Integrations";
 import Login from "./pages/login/Login";
 import Register from "./pages/login/Register";
@@ -46,6 +47,7 @@ import { LogsRoot } from "./pages/logs/Logs";
 import { BuiltInMCPDetailPage } from "./pages/mcp/BuiltInMCPDetailPage";
 import { MCPDetailPage } from "./pages/mcp/MCPDetails";
 import { MCPPage, MCPRoot } from "./pages/mcp/MCP";
+import GatewayDetailPage from "./pages/mcp/gateway/GatewayDetails";
 import MCPServerDetails from "./pages/mcp/x/MCPServerDetails";
 import {
   InsightsEmployeeDetailPage,
@@ -61,9 +63,6 @@ import CreateUnproxiedMcp from "./pages/sources/unproxied-mcp/CreateUnproxiedMcp
 import CreateRemoteMcp from "./pages/sources/remote-mcp/CreateRemoteMcp";
 import CreateTunneledMcp from "./pages/sources/tunneled-mcp/CreateTunneledMcp";
 import { SetupWizard } from "./pages/setup/components/onboarding-wizard";
-import Collections, { CollectionsRoot } from "./pages/collections/Collections";
-import CollectionDetail from "./pages/collections/CollectionDetail";
-import CreateCollection from "./pages/collections/CreateCollection";
 import OrgApiKeys from "./pages/org/OrgApiKeys";
 import Plugins, { PluginsRoot } from "./pages/plugins/Plugins";
 import PluginDetail from "./pages/plugins/PluginDetail";
@@ -133,6 +132,7 @@ import PolicyDetail, { PolicyNew } from "./pages/security/PolicyDetail";
 import DetectionRules from "./pages/security/DetectionRules";
 import Team from "./pages/team/Team";
 import SourceDetails from "./pages/sources/SourceDetails";
+import { KillswitchesRoot } from "./pages/killswitch/KillswitchesRoot";
 import {
   AddFromCatalogGate,
   SourcesPage,
@@ -143,6 +143,15 @@ import {
   ToolBuilderNew,
   ToolBuilderPage,
 } from "./pages/toolBuilder/ToolBuilder";
+
+const Killswitches = React.lazy(() =>
+  import("./pages/killswitch/Killswitches").then((module) => ({
+    default: module.default,
+  })),
+);
+const KillswitchDetail = React.lazy(
+  () => import("./pages/killswitch/KillswitchDetail"),
+);
 
 type AppRouteBasic = {
   title: string;
@@ -240,6 +249,11 @@ const ROUTE_STRUCTURE = {
     url: "",
     icon: "house",
     component: Home,
+  },
+  guide: {
+    title: "Project Guide",
+    url: "guide",
+    component: ProjectGuidePage,
   },
   chat: {
     title: "Project Assistant",
@@ -507,6 +521,42 @@ const ROUTE_STRUCTURE = {
           },
           settings: {
             title: "MCP Server Settings",
+            url: "settings",
+          },
+        },
+      },
+      // Gateway Endpoints (meta MCP servers). Addressed by id: a gateway has
+      // no slug of its own — routing identity lives on its mcp_endpoints.
+      gateway: {
+        title: "Gateway Details",
+        url: "gateway/:gatewayId",
+        component: GatewayDetailPage,
+        subPages: {
+          overview: {
+            title: "Gateway Overview",
+            url: "overview",
+          },
+          // Legacy URL: member management moved onto the Overview tab, and
+          // GatewayDetails redirects unknown tab segments there. Kept so old
+          // links keep resolving to the gateway page.
+          members: {
+            title: "Gateway Members",
+            url: "members",
+          },
+          inspect: {
+            title: "Gateway Inspect",
+            url: "inspect",
+          },
+          teamAccess: {
+            title: "Gateway Team Access",
+            url: "team-access",
+          },
+          sessions: {
+            title: "Gateway Clients and Sessions",
+            url: "sessions",
+          },
+          settings: {
+            title: "Gateway Settings",
             url: "settings",
           },
         },
@@ -1135,6 +1185,20 @@ const ORG_ROUTE_STRUCTURE = {
     icon: "history",
     component: OrgAuditLogs,
   },
+  killswitch: {
+    title: "Killswitch",
+    url: "killswitch",
+    icon: "shield-off",
+    component: KillswitchesRoot,
+    indexComponent: Killswitches,
+    subPages: {
+      detail: {
+        title: "Killswitch detail",
+        url: ":killswitchId",
+        component: KillswitchDetail,
+      },
+    },
+  },
   mcpSessions: {
     title: "MCP Sessions",
     url: "mcp-sessions",
@@ -1289,25 +1353,6 @@ const ORG_ROUTE_STRUCTURE = {
     url: "request-access",
     component: RequestAccess,
     outsideMainLayout: true,
-  },
-  collections: {
-    title: "Collections",
-    url: "collections",
-    icon: "layout-grid",
-    component: CollectionsRoot,
-    indexComponent: Collections,
-    subPages: {
-      create: {
-        title: "Create Collection",
-        url: "create",
-        component: CreateCollection,
-      },
-      detail: {
-        title: "Collection",
-        url: ":collectionSlug",
-        component: CollectionDetail,
-      },
-    },
   },
   setup: {
     title: "Setup",

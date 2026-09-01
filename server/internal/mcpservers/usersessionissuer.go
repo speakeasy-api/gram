@@ -45,14 +45,16 @@ func buildUserSessionResourceSlug(baseSlug string) (string, error) {
 	return normalizedBase + "-" + suffix, nil
 }
 
-// mintServerUserSessionIssuer creates the user_session_issuer a remote- or
+// MintServerUserSessionIssuer creates the user_session_issuer a remote- or
 // tunneled-backed server carries for its lifetime, inside the caller's create
 // transaction so a failed create can never leak an orphan issuer. The issuer
-// is slugged after the server, so it reads naturally in the issuer list and
-// stays unique per server.
-func mintServerUserSessionIssuer(
+// is slugged after the given resource, so it reads naturally in the issuer
+// list and stays unique per resource. Meta MCP creation mints its gateway
+// issuer through this too.
+func MintServerUserSessionIssuer(
 	ctx context.Context,
 	dbtx pgx.Tx,
+	organizationID string,
 	projectID uuid.UUID,
 	serverSlug string,
 ) (uuid.NullUUID, error) {
@@ -63,6 +65,7 @@ func mintServerUserSessionIssuer(
 
 	issuer, err := usersessionsrepo.New(dbtx).CreateUserSessionIssuer(ctx, usersessionsrepo.CreateUserSessionIssuerParams{
 		ProjectID:          projectID,
+		OrganizationID:     conv.ToPGText(organizationID),
 		Slug:               issuerSlug,
 		AuthnChallengeMode: "interactive",
 		SessionDuration: pgtype.Interval{

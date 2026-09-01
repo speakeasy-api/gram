@@ -291,3 +291,104 @@ func TamperDemoRows(ctx context.Context, db *pgxpool.Pool, ch driver.Conn, orgID
 	}
 	return nil
 }
+
+// LoginArtifacts is the state a developer's first login leaves in Postgres
+// before the local seed has ever run: the organization (created
+// un-whitelisted, already linked to WorkOS), the user row — whose id the auth
+// callback derives from the IDP subject rather than from the email the seed
+// keys on — and the membership tying the two together.
+type LoginArtifacts struct {
+	OrgID string
+	// OrgWorkOSID is the WorkOS organization the callback linked the org to,
+	// so the seed meets an already-linked row rather than a bare one.
+	OrgWorkOSID string
+	OrgName     string
+	OrgSlug     string
+	UserID      string
+	Email       string
+	// WorkOSID is the login subject, which the callback also records on the
+	// membership.
+	WorkOSID string
+	// MembershipID is the WorkOS membership id the callback recorded. It is
+	// deliberately not the 'devidp_mem_'-prefixed one the seed writes: the
+	// seed has to adopt the membership it finds, not only one it made.
+	MembershipID string
+}
+
+// PlantLoginArtifacts writes what logging in before seeding would have
+// written.
+func PlantLoginArtifacts(ctx context.Context, db *pgxpool.Pool, a LoginArtifacts) error {
+	if _, err := db.Exec(ctx, `
+		INSERT INTO organization_metadata (id, name, slug, workos_id, whitelisted)
+		VALUES ($1, $2, $3, $4, FALSE)`, a.OrgID, a.OrgName, a.OrgSlug, a.OrgWorkOSID); err != nil {
+		return fmt.Errorf("plant organization: %w", err)
+	}
+	if _, err := db.Exec(ctx, `
+		INSERT INTO users (id, email, display_name, workos_id)
+		VALUES ($1, $2, 'Dev', $3)`, a.UserID, a.Email, a.WorkOSID); err != nil {
+		return fmt.Errorf("plant user: %w", err)
+	}
+	if _, err := db.Exec(ctx, `
+		INSERT INTO organization_user_relationships
+			(organization_id, user_id, workos_user_id, workos_membership_id)
+		VALUES ($1, $2, $3, $4)`, a.OrgID, a.UserID, a.WorkOSID, a.MembershipID); err != nil {
+		return fmt.Errorf("plant membership: %w", err)
+	}
+	return nil
+}
+
+// DeveloperState is what the local fixtures are expected to converge on for
+// the developer they adopt, however the database got there.
+type DeveloperState struct {
+	// Users counts the rows holding the developer's email: more than one
+	// means a second identity was minted.
+	Users int
+	// UserID and WorkOSID come from the single row when Users == 1.
+	UserID   string
+	WorkOSID string
+	// Whitelisted is the organization's gate flag, and OrgWorkOSID its link
+	// to the IDP.
+	Whitelisted bool
+	OrgWorkOSID string
+	// Memberships and RoleAssignments count the live rows tying UserID to the
+	// organization.
+	Memberships     int
+	RoleAssignments int
+}
+
+// ReadDeveloperState collects the rows the local fixtures are responsible for.
+func ReadDeveloperState(ctx context.Context, db *pgxpool.Pool, orgID, email string) (DeveloperState, error) {
+	var state DeveloperState
+
+	if err := db.QueryRow(ctx,
+		`SELECT count(*) FROM users WHERE email = $1`, email).Scan(&state.Users); err != nil {
+		return state, fmt.Errorf("count users: %w", err)
+	}
+	if state.Users != 1 {
+		return state, nil
+	}
+
+	if err := db.QueryRow(ctx,
+		`SELECT id, coalesce(workos_id, '') FROM users WHERE email = $1`, email,
+	).Scan(&state.UserID, &state.WorkOSID); err != nil {
+		return state, fmt.Errorf("read user: %w", err)
+	}
+	if err := db.QueryRow(ctx,
+		`SELECT whitelisted, coalesce(workos_id, '') FROM organization_metadata WHERE id = $1`, orgID,
+	).Scan(&state.Whitelisted, &state.OrgWorkOSID); err != nil {
+		return state, fmt.Errorf("read organization: %w", err)
+	}
+	if err := db.QueryRow(ctx, `
+		SELECT count(*) FROM organization_user_relationships
+		WHERE organization_id = $1 AND user_id = $2 AND deleted IS FALSE`,
+		orgID, state.UserID).Scan(&state.Memberships); err != nil {
+		return state, fmt.Errorf("count memberships: %w", err)
+	}
+	if err := db.QueryRow(ctx, `
+		SELECT count(*) FROM organization_role_assignments
+		WHERE organization_id = $1 AND user_id = $2 AND deleted_at IS NULL`,
+		orgID, state.UserID).Scan(&state.RoleAssignments); err != nil {
+		return state, fmt.Errorf("count role assignments: %w", err)
+	}
+	return state, nil
+}

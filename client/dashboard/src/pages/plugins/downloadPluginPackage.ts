@@ -1,10 +1,10 @@
 import { useRef, useState } from "react";
 
-import type { DownloadPluginPackageQueryParamPlatform } from "@gram/client/models/operations/downloadpluginpackage.js";
+import type { QueryParamPlatform } from "@gram/client/models/operations/downloadpluginpackage.js";
 import { Gram } from "@gram/client";
 import { toast } from "sonner";
 
-export type PluginPackagePlatform = DownloadPluginPackageQueryParamPlatform;
+export type PluginPackagePlatform = QueryParamPlatform;
 
 // The SDK returns headers as a plain Record<string, string[]>, not a Fetch
 // Headers instance, so lookups must be done case-insensitively by hand — the

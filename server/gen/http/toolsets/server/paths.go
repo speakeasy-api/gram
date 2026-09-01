@@ -42,6 +42,11 @@ func ListToolFiltersToolsetsPath() string {
 	return "/rpc/toolsets.listToolFilters"
 }
 
+// ListToolSchemaStaticValuesToolsetsPath returns the URL path to the toolsets service listToolSchemaStaticValues HTTP endpoint.
+func ListToolSchemaStaticValuesToolsetsPath() string {
+	return "/rpc/toolsets.listToolSchemaStaticValues"
+}
+
 // CheckMCPSlugAvailabilityToolsetsPath returns the URL path to the toolsets service checkMCPSlugAvailability HTTP endpoint.
 func CheckMCPSlugAvailabilityToolsetsPath() string {
 	return "/rpc/toolsets.checkMCPSlugAvailability"

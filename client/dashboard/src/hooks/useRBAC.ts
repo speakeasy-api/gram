@@ -1,4 +1,4 @@
-import { useIsPlatformAdmin } from "@/contexts/Auth";
+import { useIsPlatformAdmin, useSession } from "@/contexts/Auth";
 import { Scope } from "@gram/client/models/components/rolegrant.js";
 import { useGrants } from "@gram/client/react-query/grants.js";
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -97,11 +97,13 @@ export function hasScopeInGrants(
   grants: EffectiveGrant[],
   scope: Scope,
   resourceId?: string,
+  projectId?: string,
 ): boolean {
   const allowCheck: Record<string, string> = {
     resourceKind: resourceKindForScope(scope),
   };
   if (resourceId) allowCheck.resourceId = resourceId;
+  if (projectId) allowCheck.projectId = projectId;
   // Unscoped allows are existential, but strict exclusions must distinguish
   // unrestricted wildcards from exclusions for one concrete resource.
   const exclusionCheck = resourceId
@@ -140,12 +142,21 @@ export function hasScopeInGrants(
   return hasAllow;
 }
 
+export function hasScopeInProject(
+  grants: EffectiveGrant[],
+  scope: Scope,
+  projectId: string,
+): boolean {
+  return hasScopeInGrants(grants, scope, "*", projectId);
+}
+
 /**
  * Core RBAC hook. Fetches the current user's effective grants and provides
  * helpers to check whether the user holds a particular scope.
  */
 function useRBACImpl() {
   const isAdmin = useIsPlatformAdmin();
+  const session = useSession();
 
   // Re-render when the toolbar changes scopes in localStorage.
   const [, setOverrideVersion] = useState(0);
@@ -159,10 +170,14 @@ function useRBACImpl() {
   // Always fetch grants so we can detect a broken org membership (404/403) and
   // show a recovery prompt via MembershipSyncGuard. throwOnError is disabled
   // so the error doesn't crash the app; it's surfaced via `error` instead.
-  const { data, isLoading, error } = useGrants(undefined, undefined, {
-    staleTime: 30_000,
-    throwOnError: false,
-  });
+  const { data, isLoading, error } = useGrants(
+    { gramSession: session.session },
+    undefined,
+    {
+      staleTime: 30_000,
+      throwOnError: false,
+    },
+  );
 
   // The toolbar event re-renders this hook; query invalidation refreshes the grants.
   const grants = useMemo(() => {
@@ -208,17 +223,35 @@ function useRBACImpl() {
     [hasScope],
   );
 
+  const hasAnyScopeInProject = useCallback(
+    (scopes: Scope[], projectId: string): boolean => {
+      return scopes.some((scope) =>
+        hasScopeInProject(grants ?? [], scope, projectId),
+      );
+    },
+    [grants],
+  );
+
   return useMemo(
     () => ({
       hasScope,
       hasAllScopes,
       hasAnyScope,
+      hasAnyScopeInProject,
       isLoading,
       grants: grants ?? [],
       /** Non-null when the grants query failed (e.g. missing org membership). */
       error: error ?? null,
     }),
-    [hasScope, hasAllScopes, hasAnyScope, isLoading, grants, error],
+    [
+      hasScope,
+      hasAllScopes,
+      hasAnyScope,
+      hasAnyScopeInProject,
+      isLoading,
+      grants,
+      error,
+    ],
   );
 }
 

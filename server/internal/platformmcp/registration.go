@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"net/url"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -72,6 +73,7 @@ type OperationReceipt struct {
 	RegistrationID uuid.NullUUID
 	Status         string
 	ResultCode     string
+	ResultPayload  []byte
 	InputHash      string
 	ExpiresAt      time.Time
 	Replayed       bool
@@ -758,6 +760,7 @@ func (s *RegistrationStore) createPrivateRegistrationComponents(ctx context.Cont
 	}
 	issuer, err := usersessionsrepo.New(tx).CreateUserSessionIssuer(ctx, usersessionsrepo.CreateUserSessionIssuerParams{
 		ProjectID:          project.ID,
+		OrganizationID:     conv.ToPGText(registration.OrganizationID),
 		Slug:               "platform-mcp-issuer-" + suffix,
 		AuthnChallengeMode: "interactive",
 		SessionDuration: pgtype.Interval{
@@ -785,6 +788,8 @@ func (s *RegistrationStore) createPrivateRegistrationComponents(ctx context.Cont
 	if err != nil {
 		return platformrepo.PlatformMcpCatalogRegistration{}, fmt.Errorf("create platform mcp server: %w", err)
 	}
+	// The slug embeds the 64-bit random registration suffix, so it cannot land
+	// on an existing toolsets.mcp_slug; no LockSlugScope/availability probe.
 	endpoint, err := mcpendpointsrepo.New(tx).CreateMCPEndpoint(ctx, mcpendpointsrepo.CreateMCPEndpointParams{
 		ProjectID:   project.ID,
 		McpServerID: uuid.NullUUID{UUID: server.ID, Valid: true},
@@ -926,6 +931,7 @@ func operationReceiptFromRow(row platformrepo.PlatformMcpOperationReceipt, repla
 		RegistrationID:       row.RegistrationID,
 		Status:               row.Status,
 		ResultCode:           row.ResultCode.String,
+		ResultPayload:        slices.Clone(row.ResultPayload),
 		InputHash:            row.InputHash,
 		ExpiresAt:            row.ExpiresAt.Time,
 		Replayed:             replayed,

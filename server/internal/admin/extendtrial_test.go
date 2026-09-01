@@ -22,6 +22,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/outbox/events"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
+	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 	trialsRepo "github.com/speakeasy-api/gram/server/internal/trials/repo"
 )
 
@@ -34,6 +35,36 @@ func readTrial(t *testing.T, ctx context.Context, conn *pgxpool.Pool, orgID stri
 	row, err := trialsRepo.New(conn).GetTrial(ctx, orgID)
 	require.NoError(t, err)
 	return row
+}
+
+func TestExtendTrial_IsCauseCapAndOpenRouterLockNeutral(t *testing.T) {
+	t.Parallel()
+
+	ctx, svc, conn := newTestAdminService(t)
+	const orgID = "org_extend_key_neutral"
+	seedOrg(t, ctx, conn, orgFixture{id: orgID, name: orgID, slug: orgID, accountType: "enterprise", whitelisted: true})
+	seedTrial(t, ctx, conn, trialFixture{orgID: orgID, tier: "enterprise", endsAt: time.Now().UTC().Add(24 * time.Hour)})
+	for i, keyType := range openrouter.AllKeyTypes {
+		seedOpenRouterKey(t, ctx, conn, orgID, keyFixture{keyType: keyType, monthlyCredits: int64(31 + i), disabled: true})
+		classifyRearmKey(t, ctx, conn, orgID, keyType, []string{string(openrouter.DisableCauseBillingInactive)})
+	}
+
+	blocker := testenv.BeginTx(t, ctx, conn)
+	defer func() { _ = blocker.Rollback(context.WithoutCancel(ctx)) }()
+	for _, keyType := range openrouter.AllKeyTypes {
+		require.NoError(t, openrouter.AcquireAPIKeyBillingTransactionLock(ctx, blocker, orgID, keyType))
+	}
+
+	callCtx, cancel := context.WithTimeout(ctx, 2*time.Second)
+	defer cancel()
+	_, err := svc.ExtendTrial(callCtx, &gen.ExtendTrialPayload{ID: orgID, Days: 2})
+	require.NoError(t, err, "extension must not wait for any OpenRouter lock")
+	for i, keyType := range openrouter.AllKeyTypes {
+		row := readOpenRouterKey(t, ctx, conn, orgID, keyType)
+		require.Equal(t, []string{string(openrouter.DisableCauseBillingInactive)}, row.DisableCauses)
+		require.EqualValues(t, 31+i, row.MonthlyCredits)
+		require.True(t, row.Disabled)
+	}
 }
 
 func TestExtendTrial_MovesEndsAtByExactlyTheGivenDays(t *testing.T) {
@@ -471,7 +502,9 @@ func TestExtendTrial_WritesAnAuditEntry(t *testing.T) {
 	require.False(t, entry.ProjectID.Valid, "a trial extension must not be scoped to a project")
 
 	require.NotNil(t, entry.ActorDisplayName, "the entry must name who extended the trial")
-	require.Equal(t, audit.SpeakeasyTeamActorLabel, *entry.ActorDisplayName)
+	require.Equal(t, "Test Operator", *entry.ActorDisplayName)
+	require.NotNil(t, entry.ActingSurface)
+	require.Equal(t, string(audit.SurfaceAdmin), *entry.ActingSurface)
 
 	var metadata struct {
 		ExtendedByDays      int       `json:"extended_by_days"`
@@ -488,6 +521,14 @@ func TestExtendTrial_WritesAnAuditEntry(t *testing.T) {
 	require.WithinDuration(t, after.EndsAt.Time, metadata.TrialEndsAt, 0, "the entry must carry the end date the row holds now")
 	require.True(t, metadata.TrialEndsAt.After(metadata.PreviousTrialEndsAt), "an extension must read forwards")
 
+	var beforeSnapshot, afterSnapshot struct {
+		TrialEndsAt time.Time `json:"trial_ends_at"`
+	}
+	require.NoError(t, json.Unmarshal(entry.BeforeSnapshot, &beforeSnapshot))
+	require.NoError(t, json.Unmarshal(entry.AfterSnapshot, &afterSnapshot))
+	require.WithinDuration(t, before.EndsAt.Time, beforeSnapshot.TrialEndsAt, 0)
+	require.WithinDuration(t, after.EndsAt.Time, afterSnapshot.TrialEndsAt, 0)
+
 	// The trial lifecycle event; any other would deliver this to nobody.
 	_, err = audittestrepo.New(conn).GetLatestOutboxPayloadByOrg(ctx, audittestrepo.GetLatestOutboxPayloadByOrgParams{
 		OrganizationID: "org_ext_audit",
@@ -496,7 +537,7 @@ func TestExtendTrial_WritesAnAuditEntry(t *testing.T) {
 	require.NoError(t, err, "an extension must enqueue an outbox entry on the enterprise trial event")
 }
 
-func TestExtendTrial_AuditEntryNamesTheTeamAndNotTheOperator(t *testing.T) {
+func TestExtendTrial_AuditEntryNamesTheOperator(t *testing.T) {
 	t.Parallel()
 
 	ctx, svc, conn := newTestAdminService(t)
@@ -519,11 +560,10 @@ func TestExtendTrial_AuditEntryNamesTheTeamAndNotTheOperator(t *testing.T) {
 	entry, err := audittest.LatestAuditLogByAction(ctx, conn, audit.ActionOrganizationEnterpriseTrialExtended)
 	require.NoError(t, err)
 
-	// The customer reads this feed, so a Speakeasy action carries the collective
-	// label. The read-side mask cannot reach this entry: it matches an actor id
-	// against a Gram user, and an admin session has an OIDC subject instead.
 	require.NotNil(t, entry.ActorDisplayName)
-	require.Equal(t, audit.SpeakeasyTeamActorLabel, *entry.ActorDisplayName)
+	require.Equal(t, "Test Operator", *entry.ActorDisplayName)
+	require.NotNil(t, entry.ActingSurface)
+	require.Equal(t, string(audit.SurfaceAdmin), *entry.ActingSurface)
 
 	// Without this, an entry naming nobody at all would satisfy the one above.
 	require.Equal(t, "oidc-subject-ext-actor", entry.ActorID,

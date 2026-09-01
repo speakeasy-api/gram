@@ -13,8 +13,10 @@ import (
 
 	assistantrepo "github.com/speakeasy-api/gram/server/internal/assistants/repo"
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/chat"
 	chatrepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/metering"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
@@ -128,43 +130,54 @@ func (s *ServiceCore) RecordCompactedGeneration(ctx context.Context, projectID, 
 	}
 	nextGen := currentGen + 1
 
-	params := make([]chatrepo.CreateChatMessageParams, 0, len(messages))
+	writes := make([]chat.MessageWrite, 0, len(messages))
 	for _, m := range messages {
 		toolCallsJSON, err := encodeRuntimeToolCalls(m.ToolCalls)
 		if err != nil {
 			return oops.E(oops.CodeBadRequest, err, "encode tool_calls").LogError(ctx, s.logger, logAttrs...)
 		}
 		empty := pgtype.Text{String: "", Valid: false}
-		params = append(params, chatrepo.CreateChatMessageParams{
-			Replayed:         false,
-			CreatedAt:        conv.PtrToPGTimestamptz(nil),
-			ChatID:           threadRow.ChatID,
-			Role:             m.Role,
-			ProjectID:        chatRow.ProjectID,
-			Content:          m.Content.Text(),
-			ContentRaw:       nil,
-			ContentAssetUrl:  empty,
-			StorageError:     empty,
-			Model:            empty,
-			MessageID:        empty,
-			ToolCallID:       conv.ToPGTextEmpty(m.ToolCallID),
-			UserID:           chatRow.UserID,
-			ExternalUserID:   chatRow.ExternalUserID,
-			FinishReason:     empty,
-			ToolCalls:        toolCallsJSON,
-			PromptTokens:     0,
-			CompletionTokens: 0,
-			TotalTokens:      0,
-			Origin:           empty,
-			UserAgent:        empty,
-			IpAddress:        empty,
-			Source:           conv.ToPGText(compactionMessageSource),
-			ContentHash:      nil,
-			Generation:       nextGen,
+		writes = append(writes, chat.MessageWrite{
+			Params: chatrepo.CreateChatMessageParams{
+				ID:               uuid.Nil,
+				Replayed:         false,
+				CreatedAt:        conv.PtrToPGTimestamptz(nil),
+				ChatID:           threadRow.ChatID,
+				Role:             m.Role,
+				ProjectID:        chatRow.ProjectID,
+				Content:          m.Content.Text(),
+				ContentRaw:       nil,
+				ContentAssetUrl:  empty,
+				StorageError:     empty,
+				Model:            empty,
+				MessageID:        empty,
+				ToolCallID:       conv.ToPGTextEmpty(m.ToolCallID),
+				UserID:           empty,
+				ExternalUserID:   empty,
+				FinishReason:     empty,
+				ToolCalls:        toolCallsJSON,
+				PromptTokens:     0,
+				CompletionTokens: 0,
+				TotalTokens:      0,
+				Origin:           empty,
+				UserAgent:        empty,
+				IpAddress:        empty,
+				Source:           conv.ToPGText(compactionMessageSource),
+				ContentHash:      nil,
+				Generation:       nextGen,
+			},
+			BillingUserID:  conv.FromPGTextOrEmpty[string](chatRow.UserID),
+			AssistantID:    principalAssistantID,
+			WorkloadSource: metering.WorkloadSourceAssistant,
+			UserEmail:      "",
+			Provider:       "",
+			HookHostname:   "",
+			AccountType:    chatRow.AccountType,
+			BillingMode:    "",
 		})
 	}
 
-	n, err := s.chatWriter.WriteInTx(ctx, tx, params)
+	n, err := s.chatWriter.WriteInTx(ctx, tx, writes)
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "write compacted chat messages").LogError(ctx, s.logger, logAttrs...)
 	}

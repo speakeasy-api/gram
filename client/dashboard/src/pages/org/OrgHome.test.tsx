@@ -50,6 +50,7 @@ vi.mock("@/contexts/Auth", () => ({
   useSession: () => ({
     rawGramAccountType: "enterprise",
     hasActiveSubscription: true,
+    trial: null,
   }),
 }));
 vi.mock("@/contexts/Sdk", () => ({
@@ -72,6 +73,12 @@ vi.mock("@/hooks/useProjectFavorites", () => ({
 vi.mock("@/hooks/useRBAC", () => ({
   useRBAC: () => ({ hasScope: () => true }),
 }));
+vi.mock(
+  "@gram/client/react-query/recordPlatformMCPDashboardCtaEvent.js",
+  () => ({
+    useRecordPlatformMCPDashboardCtaEventMutation: () => ({ mutate: vi.fn() }),
+  }),
+);
 vi.mock("@/routes", () => ({
   useOrgRoutes: () => ({
     access: {
@@ -87,6 +94,7 @@ vi.mock("@/routes", () => ({
     // Used by the welcome banner's route cards.
     home: { href: () => "/acme" },
     setup: { href: () => "/acme/setup" },
+    platformMcp: { href: () => "/acme/platform-mcp" },
   }),
   useRoutes: ({ projectSlug }: { projectSlug?: string }) => ({
     exploreDemo: { href: () => "/explore-demo" },
@@ -112,6 +120,7 @@ vi.mock("@gram/client/react-query/productFeatures.js", () => ({
 vi.mock("@tanstack/react-query", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@tanstack/react-query")>()),
   useQueryClient: () => ({ prefetchQuery: vi.fn() }),
+  useQuery: () => ({ data: undefined, isPending: false }),
 }));
 vi.mock("react-router", () => ({
   Link: ({ children, ...props }: React.ComponentProps<"a">) => (

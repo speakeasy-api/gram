@@ -12,8 +12,10 @@ import {
   getPaygBillingSummary,
   getStripeSubscription,
   getProject,
+  listOrganizationActivity,
   listOrganizations,
   logout,
+  markEnterpriseTrialConverted,
   organizationDashboardUrl,
   MAX_TRIAL_EXTENSION_DAYS,
   MAX_TRIAL_REARM_DAYS,
@@ -60,6 +62,69 @@ describe("toSearchParams", () => {
 // has to arrive as one key per value. A comma-joined `account_types=free,pro`
 // parses on the server as a single account type named "free,pro", which matches
 // no organization: the browser would show an empty list and no error.
+describe("listOrganizationActivity", () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it("encodes the explicit organization ID and omits an absent cursor", async () => {
+    const payload = {
+      logs: [
+        {
+          id: "event_2",
+          project_id: "project_1",
+          project_slug: "fictional-project",
+          actor_id: "user_1",
+          actor_type: "user",
+          actor_display_name: "Example Operator",
+          actor_slug: "example-operator",
+          action: "organization:settings_updated",
+          acting_surface: "dashboard",
+          acting_client_id: "client_1",
+          subject_id: "org_1",
+          subject_type: "organization",
+          subject_display_name: "Test Org",
+          subject_slug: "test-org",
+          before_snapshot: { enabled: false },
+          after_snapshot: { enabled: true },
+          metadata: { source: "test" },
+          created_at: "2026-01-15T12:30:00Z",
+        },
+        {
+          id: "event_1",
+          actor_id: "system",
+          actor_type: "system",
+          action: "organization:sync_completed",
+          acting_surface: "unknown",
+          subject_id: "org_1",
+          subject_type: "organization",
+          created_at: "2026-01-15T12:00:00Z",
+        },
+      ],
+      next_cursor: "opaque+/=",
+    };
+    const fetch = vi.fn().mockImplementation(() =>
+      Promise.resolve(
+        new Response(JSON.stringify(payload), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        }),
+      ),
+    );
+    vi.stubGlobal("fetch", fetch);
+
+    await expect(listOrganizationActivity("org explicit")).resolves.toEqual(
+      payload,
+    );
+    expect(fetch.mock.calls[0]?.[0]).toBe(
+      "/admin/organization.activity?organization_id=org+explicit",
+    );
+
+    await listOrganizationActivity("org explicit", "opaque+/=");
+    expect(fetch.mock.calls[1]?.[0]).toBe(
+      "/admin/organization.activity?organization_id=org+explicit&cursor=opaque%2B%2F%3D",
+    );
+  });
+});
+
 describe("listOrganizations", () => {
   afterEach(() => {
     vi.unstubAllGlobals();
@@ -151,7 +216,7 @@ describe("organization billing endpoints", () => {
   function stubFetch(): ReturnType<typeof vi.fn> {
     const fetch = vi.fn().mockImplementation(() =>
       Promise.resolve(
-        new Response(JSON.stringify({}), {
+        new Response(JSON.stringify([]), {
           status: 200,
           headers: { "Content-Type": "application/json" },
         }),
@@ -160,6 +225,38 @@ describe("organization billing endpoints", () => {
     vi.stubGlobal("fetch", fetch);
     return fetch;
   }
+
+  it("preserves classified empty and legacy unclassified cause semantics", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        new Response(
+          JSON.stringify([
+            {
+              key_type: "chat",
+              credits_used: 0,
+              monthly_credits: 100,
+              disabled: false,
+              disable_causes_classified: true,
+            },
+            {
+              key_type: "internal",
+              credits_used: 0,
+              monthly_credits: 50,
+              disabled: true,
+              disable_causes_classified: false,
+            },
+          ]),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        ),
+      ),
+    );
+
+    await expect(getInferenceKeys("org one")).resolves.toMatchObject([
+      { disable_causes: [], disable_causes_classified: true },
+      { disable_causes: null, disable_causes_classified: false },
+    ]);
+  });
 
   it("reads billing state from explicit admin organization endpoints", async () => {
     const fetch = stubFetch();
@@ -328,6 +425,52 @@ describe("the organization write endpoints", () => {
   it("mirrors the server's day-count bounds exactly", () => {
     expect(MIN_TRIAL_EXTENSION_DAYS).toBe(1);
     expect(MAX_TRIAL_EXTENSION_DAYS).toBe(365);
+  });
+
+  it("posts only the id to the dedicated enterprise conversion path and returns the privacy-minimal result", async () => {
+    const result = {
+      organization_id: ORG.id,
+      converted_at: "2026-03-08T12:34:56Z",
+    };
+    const fetch = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify(result), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+    vi.stubGlobal("fetch", fetch);
+
+    await expect(markEnterpriseTrialConverted({ id: ORG.id })).resolves.toEqual(
+      result,
+    );
+    expect(requestOf(fetch)).toEqual({
+      path: "/admin/trial.convert",
+      method: "POST",
+      contentType: "application/json",
+      body: { id: ORG.id },
+    });
+  });
+
+  it("reports a conversion 401 in place without starting login", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        new Response(JSON.stringify({ message: "admin session expired" }), {
+          status: 401,
+          headers: { "Content-Type": "application/json" },
+        }),
+      ),
+    );
+    const before = window.location.href;
+
+    await expect(
+      markEnterpriseTrialConverted({ id: ORG.id }),
+    ).rejects.toMatchObject({
+      status: 401,
+      message: expect.stringContaining("gram admin 401"),
+      body: { message: "admin session expired" },
+    });
+    expect(window.location.href).toBe(before);
   });
 
   it("posts the id to the disable path", async () => {

@@ -2096,8 +2096,10 @@ func marshalTypesMetaMcpServerToMetaMcpServerResponseBody(v *types.MetaMcpServer
 		ProjectID:           v.ProjectID,
 		Name:                v.Name,
 		UserSessionIssuerID: v.UserSessionIssuerID,
+		Visibility:          string(v.Visibility),
 		CreatedAt:           v.CreatedAt,
 		UpdatedAt:           v.UpdatedAt,
+		MemberCount:         v.MemberCount,
 	}
 
 	return res

@@ -29,12 +29,15 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	customdomainsrepo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
 	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
+	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/metamcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions"
+	remotesessionsrepo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	tenv "github.com/speakeasy-api/gram/server/internal/temporal"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
@@ -117,11 +120,22 @@ func (s *Service) CreateMetaMcpServer(ctx context.Context, payload *gen.CreateMe
 		return nil, err
 	}
 
+	// A gateway without sign-in serves everyone anonymously, which hides
+	// every private member and can hold no member credentials — a trap, not
+	// a use case. Mint a dedicated issuer when the caller supplies none.
+	if !issuerID.Valid {
+		issuerID, err = mcpservers.MintServerUserSessionIssuer(ctx, dbtx, authCtx.ActiveOrganizationID, *authCtx.ProjectID, payload.Name)
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "mint meta mcp issuer").LogError(ctx, logger)
+		}
+	}
+
 	created, err := txRepo.CreateMetaMCPServer(ctx, repo.CreateMetaMCPServerParams{
 		OrganizationID:      authCtx.ActiveOrganizationID,
 		ProjectID:           *authCtx.ProjectID,
 		Name:                payload.Name,
 		UserSessionIssuerID: issuerID,
+		Visibility:          string(conv.PtrValOrEmpty(payload.Visibility, VisibilityPrivate)),
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "create meta mcp server").LogError(ctx, logger)
@@ -239,6 +253,20 @@ func (s *Service) UpdateMetaMcpServer(ctx context.Context, payload *gen.UpdateMe
 		return nil, oops.E(oops.CodeUnexpected, err, "lock meta mcp server").LogError(ctx, logger)
 	}
 
+	// Defensive issuer wiring, mirroring create: an omitted issuer preserves
+	// the existing one (matching UpdateMCPServer's COALESCE) and a gateway
+	// that would end up issuer-less gets one minted, so no update path can
+	// strand a gateway in the anonymous trap.
+	if !issuerID.Valid {
+		issuerID = existing.UserSessionIssuerID
+	}
+	if !issuerID.Valid {
+		issuerID, err = mcpservers.MintServerUserSessionIssuer(ctx, dbtx, authCtx.ActiveOrganizationID, *authCtx.ProjectID, payload.Name)
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "mint meta mcp issuer").LogError(ctx, logger)
+		}
+	}
+
 	if err := s.lockIssuerReference(ctx, txRepo, *authCtx.ProjectID, issuerID); err != nil {
 		return nil, err
 	}
@@ -246,12 +274,42 @@ func (s *Service) UpdateMetaMcpServer(ctx context.Context, payload *gen.UpdateMe
 	updated, err := txRepo.UpdateMetaMCPServer(ctx, repo.UpdateMetaMCPServerParams{
 		Name:                payload.Name,
 		UserSessionIssuerID: issuerID,
+		Visibility:          conv.PtrToPGText((*string)(payload.Visibility)),
 		ID:                  serverID,
 		OrganizationID:      authCtx.ActiveOrganizationID,
 		ProjectID:           *authCtx.ProjectID,
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "update meta mcp server").LogError(ctx, logger)
+	}
+
+	// Consent wiring binds member provider clients to a specific issuer, so
+	// pointing the gateway at a different issuer (or gaining one) would
+	// silently orphan every members' tiles. Re-run the member attachment
+	// against the new issuer instead of leaving that to a manual ceremony.
+	rewiredIssuer := false
+	if issuerID.Valid && (!existing.UserSessionIssuerID.Valid || existing.UserSessionIssuerID.UUID != issuerID.UUID) {
+		identities, ierr := txRepo.ListMemberProviderIdentities(ctx, repo.ListMemberProviderIdentitiesParams{
+			MetaMcpServerID: serverID,
+			ProjectID:       *authCtx.ProjectID,
+		})
+		if ierr != nil {
+			return nil, oops.E(oops.CodeUnexpected, ierr, "list member provider identities").LogError(ctx, logger)
+		}
+		for _, identity := range identities {
+			if lerr := remotesessionsrepo.New(dbtx).LockRemoteSessionIssuerForClientBinding(ctx, identity.RemoteSessionIssuerID.UUID); lerr != nil {
+				return nil, oops.E(oops.CodeUnexpected, lerr, "lock remote session issuer for client binding").LogError(ctx, logger)
+			}
+			if _, aerr := txRepo.AutoAttachMemberProviderClient(ctx, repo.AutoAttachMemberProviderClientParams{
+				GatewayIssuerID: issuerID.UUID,
+				ProjectID:       *authCtx.ProjectID,
+				MemberIssuerID:  identity.UserSessionIssuerID.UUID,
+				RemoteIssuerID:  identity.RemoteSessionIssuerID.UUID,
+			}); aerr != nil {
+				return nil, oops.E(oops.CodeUnexpected, aerr, "attach member provider client").LogError(ctx, logger)
+			}
+		}
+		rewiredIssuer = true
 	}
 
 	afterView := mv.BuildMetaMcpServerView(updated)
@@ -272,6 +330,13 @@ func (s *Service) UpdateMetaMcpServer(ctx context.Context, payload *gen.UpdateMe
 
 	if err := dbtx.Commit(ctx); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "commit transaction").LogError(ctx, logger)
+	}
+
+	// Client-binding writers follow their commit with this resync so the
+	// denormalized mcp_servers.remote_session_issuer_id cannot go stale when
+	// the gateway issuer is shared with a server row.
+	if rewiredIssuer {
+		remotesessions.BestEffortResyncMCPServerRemoteSessionIssuers(ctx, logger, s.db, authCtx.ActiveOrganizationID, *authCtx.ProjectID, []uuid.UUID{issuerID.UUID})
 	}
 
 	return afterView, nil
@@ -532,6 +597,17 @@ func (s *Service) AddMetaMcpMember(ctx context.Context, payload *gen.AddMetaMcpM
 		return nil, oops.E(oops.CodeUnexpected, err, "lock mcp server").LogError(ctx, logger)
 	}
 
+	// The gateway addresses members by qualified serverslug--toolname, so a
+	// slugless server (legacy pre-2026-05 rows never updated since) can never
+	// be reached; updating the server generates a slug. Unproxied backends
+	// have no gateway-side dispatch path.
+	if !server.Slug.Valid {
+		return nil, oops.E(oops.CodeInvalid, nil, "mcp server has no slug; update the server to generate one before attaching it").LogError(ctx, logger)
+	}
+	if server.UnproxiedMcpServerID.Valid {
+		return nil, oops.E(oops.CodeInvalid, nil, "unproxied mcp servers cannot be meta mcp members").LogError(ctx, logger)
+	}
+
 	// The meta lock above serializes concurrent adds, so this sees every
 	// committed member.
 	sharing, err := txRepo.CountMetaMCPMembersSharingBackend(ctx, repo.CountMetaMCPMembersSharingBackendParams{
@@ -564,6 +640,41 @@ func (s *Service) AddMetaMcpMember(ctx context.Context, payload *gen.AddMetaMcpM
 		return nil, oops.E(oops.CodeUnexpected, err, "add meta mcp member").LogError(ctx, logger)
 	}
 
+	// Best-effort consent wiring: when both sides have the identity pieces —
+	// the gateway an issuer, the member a stamped upstream AS with a client —
+	// bind that client to the gateway's issuer so consent offers the member's
+	// provider without a manual attach ceremony.
+	wiredGatewayIssuer := false
+	if meta.UserSessionIssuerID.Valid && server.RemoteSessionIssuerID.Valid && server.UserSessionIssuerID.Valid {
+		// No DB constraint enforces one client per (issuer, upstream); every
+		// client-binding writer serializes on this advisory lock instead.
+		if lerr := remotesessionsrepo.New(dbtx).LockRemoteSessionIssuerForClientBinding(ctx, server.RemoteSessionIssuerID.UUID); lerr != nil {
+			return nil, oops.E(oops.CodeUnexpected, lerr, "lock remote session issuer for client binding").LogError(ctx, logger)
+		}
+		attached, aerr := txRepo.AutoAttachMemberProviderClient(ctx, repo.AutoAttachMemberProviderClientParams{
+			GatewayIssuerID: meta.UserSessionIssuerID.UUID,
+			ProjectID:       *authCtx.ProjectID,
+			MemberIssuerID:  server.UserSessionIssuerID.UUID,
+			RemoteIssuerID:  server.RemoteSessionIssuerID.UUID,
+		})
+		if aerr != nil {
+			return nil, oops.E(oops.CodeUnexpected, aerr, "attach member provider client").LogError(ctx, logger)
+		}
+		if attached > 0 {
+			logger.InfoContext(ctx, "attached member provider client to meta mcp issuer",
+				attr.SlogMetaMcpServerID(meta.ID.String()),
+				attr.SlogMcpServerID(server.ID.String()))
+		} else {
+			// No bindable client, or the upstream is already bound: either
+			// way the skip should be visible, matching autoConfigureAuth's
+			// every-skip-has-a-reason posture.
+			logger.InfoContext(ctx, "no member provider client attached to meta mcp issuer",
+				attr.SlogMetaMcpServerID(meta.ID.String()),
+				attr.SlogMcpServerID(server.ID.String()))
+		}
+		wiredGatewayIssuer = true
+	}
+
 	if err := s.audit.LogMetaMcpMemberAdd(ctx, dbtx, audit.LogMetaMcpMemberEvent{
 		OrganizationID:   authCtx.ActiveOrganizationID,
 		ProjectID:        *authCtx.ProjectID,
@@ -581,6 +692,13 @@ func (s *Service) AddMetaMcpMember(ctx context.Context, payload *gen.AddMetaMcpM
 
 	if err := dbtx.Commit(ctx); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "commit transaction").LogError(ctx, logger)
+	}
+
+	// Every client-binding writer follows its commit with this resync so the
+	// denormalized mcp_servers.remote_session_issuer_id cannot go stale when
+	// the gateway issuer is shared with a server row.
+	if wiredGatewayIssuer {
+		remotesessions.BestEffortResyncMCPServerRemoteSessionIssuers(ctx, logger, s.db, authCtx.ActiveOrganizationID, *authCtx.ProjectID, []uuid.UUID{meta.UserSessionIssuerID.UUID})
 	}
 
 	return mv.BuildMetaMcpMemberViewFromParts(member, server), nil

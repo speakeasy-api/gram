@@ -11,11 +11,13 @@ import (
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/auditlogs"
+	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/audit/repo"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
+	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
 type auditLogSeed struct {
@@ -25,6 +27,7 @@ type auditLogSeed struct {
 	actorType          string
 	actorDisplayName   *string
 	actorSlug          *string
+	actingSurface      *string
 	action             string
 	subjectID          string
 	subjectType        string
@@ -55,6 +58,34 @@ func TestAuditService_List_Unauthorized(t *testing.T) {
 	var oopsErr *oops.ShareableError
 	require.ErrorAs(t, err, &oopsErr)
 	require.Equal(t, oops.CodeUnauthorized, oopsErr.Code)
+}
+
+func TestAuditService_List_OpenRouterAdminEventDoesNotExposeDisableCauses(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestAuditService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx)
+
+	err := audit.NewLogger().LogOpenRouterAPIKeyDisable(ctx, ti.conn, audit.LogOpenRouterAPIKeyDisableEvent{
+		OrganizationID:      authCtx.ActiveOrganizationID,
+		Actor:               urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
+		ActorDisplayName:    authCtx.Email,
+		OpenRouterAPIKeyURN: urn.NewOpenRouterAPIKey(authCtx.ActiveOrganizationID, "chat"),
+		KeyType:             "chat",
+	})
+	require.NoError(t, err)
+
+	result, err := ti.service.List(ctx, &gen.ListPayload{})
+	require.NoError(t, err)
+	require.Len(t, result.Logs, 1)
+	entry := result.Logs[0]
+	require.Equal(t, string(audit.ActionOpenRouterAPIKeyDisable), entry.Action)
+	require.Nil(t, entry.BeforeSnapshot)
+	require.Nil(t, entry.AfterSnapshot)
+	require.Equal(t, map[string]any{"key_type": "chat"}, entry.Metadata)
+	require.NotContains(t, entry.Metadata, "disable_causes")
 }
 
 func TestAuditService_List_Empty(t *testing.T) {
@@ -797,6 +828,7 @@ func insertAuditLog(t *testing.T, ctx context.Context, ti *testInstance, seed au
 		ActorType:          seed.actorType,
 		ActorDisplayName:   conv.PtrToPGTextEmpty(seed.actorDisplayName),
 		ActorSlug:          conv.PtrToPGTextEmpty(seed.actorSlug),
+		ActingSurface:      conv.PtrToPGTextEmpty(seed.actingSurface),
 		Action:             seed.action,
 		SubjectID:          seed.subjectID,
 		SubjectType:        seed.subjectType,

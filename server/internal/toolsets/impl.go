@@ -34,6 +34,7 @@ import (
 	deploymentsRepo "github.com/speakeasy-api/gram/server/internal/deployments/repo"
 	environmentsRepo "github.com/speakeasy-api/gram/server/internal/environments/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
+	"github.com/speakeasy-api/gram/server/internal/mcpendpoints"
 	mcpmetadataRepo "github.com/speakeasy-api/gram/server/internal/mcpmetadata/repo"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/mv"
@@ -182,6 +183,11 @@ func (s *Service) CreateToolset(ctx context.Context, payload *gen.CreateToolsetP
 
 	tr := s.repo.WithTx(dbtx)
 
+	if mcpSlug, err = s.ensureGeneratedMcpSlug(ctx, dbtx, logger, authCtx.OrganizationSlug, authCtx.ActiveOrganizationID, mcpSlug); err != nil {
+		return nil, err
+	}
+	createToolParams.McpSlug = conv.ToPGText(mcpSlug)
+
 	createdToolset, err := tr.CreateToolset(ctx, createToolParams)
 	var pgErr *pgconn.PgError
 	if err != nil {
@@ -251,6 +257,38 @@ func (s *Service) CreateToolset(ctx context.Context, payload *gen.CreateToolsetP
 // Default plugin (project predates this feature) — callers should enqueue
 // an initial publish for it, but only after their own transaction commits,
 // since this runs pre-commit and the DB writes could still roll back.
+// ensureGeneratedMcpSlug guards a generated platform mcp_slug against the
+// unified namespace, regenerating on the rare collision with a live endpoint.
+func (s *Service) ensureGeneratedMcpSlug(ctx context.Context, dbtx pgx.Tx, logger *slog.Logger, orgSlug, orgID, slug string) (string, error) {
+	for attempt := 0; ; attempt++ {
+		if err := mcpendpoints.LockSlugScope(ctx, dbtx, uuid.NullUUID{UUID: uuid.Nil, Valid: false}, slug); err != nil {
+			return "", oops.E(oops.CodeUnexpected, err, "lock mcp slug scope").LogError(ctx, logger)
+		}
+		available, err := mcpendpoints.CheckSlugAvailable(ctx, dbtx, mcpendpoints.SlugAvailabilityCheck{
+			Slug:                     slug,
+			CustomDomainID:           uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+			OrganizationID:           orgID,
+			ExcludeToolsetID:         uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+			ExcludeMcpServerID:       uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+			SkipDomainOwnershipCheck: false,
+		})
+		if err != nil {
+			return "", oops.E(oops.CodeUnexpected, err, "check mcp slug availability").LogError(ctx, logger)
+		}
+		if available {
+			return slug, nil
+		}
+		if attempt == 2 {
+			return "", oops.E(oops.CodeConflict, nil, "could not generate a unique mcp slug").LogError(ctx, logger)
+		}
+		suffix, err := conv.GenerateRandomSlug(5)
+		if err != nil {
+			return "", oops.E(oops.CodeUnexpected, err, "failed to generate random slug").LogError(ctx, logger)
+		}
+		slug = orgSlug + "-" + suffix
+	}
+}
+
 func (s *Service) attachToDefaultPlugin(ctx context.Context, dbtx pgx.Tx, authCtx *contextvalues.AuthContext, toolsetID uuid.UUID, displayName string) (bool, error) {
 	pluginCreated, err := plugins.AttachToDefaultPluginAudited(ctx, dbtx, s.audit, authCtx, plugins.AttachToDefaultPluginParams{
 		OrganizationID: authCtx.ActiveOrganizationID,
@@ -279,11 +317,10 @@ func (s *Service) triggerInitialPublishIfNeeded(ctx context.Context, authCtx *co
 
 	enqueueCtx := context.WithoutCancel(ctx)
 	if _, err := background.ExecutePluginInitialPublishWorkflow(enqueueCtx, s.temporalEnv, plugins.PublishProjectInput{
-		ProjectID:              *authCtx.ProjectID,
-		CreatedByUserID:        authCtx.UserID,
-		CommitMessage:          "Initial marketplace publish",
-		ForcePlatformMCPRepair: false,
-		SkipIfUnchanged:        false,
+		ProjectID:       *authCtx.ProjectID,
+		CreatedByUserID: authCtx.UserID,
+		CommitMessage:   "Initial marketplace publish",
+		SkipIfUnchanged: false,
 	}); err != nil {
 		s.logger.WarnContext(ctx, "failed to enqueue initial plugin publish", attr.SlogError(err))
 	}
@@ -437,29 +474,49 @@ func (s *Service) UpdateToolset(ctx context.Context, payload *gen.UpdateToolsetP
 		toolsetDomainID = payload.CustomDomainID
 	}
 
-	if payload.McpSlug != nil && *payload.McpSlug != "" {
+	slugChanged := payload.McpSlug != nil && *payload.McpSlug != ""
+	domainChanged := updateParams.CustomDomainID.Valid &&
+		(!existingToolset.CustomDomainID.Valid || existingToolset.CustomDomainID.UUID != updateParams.CustomDomainID.UUID)
+	slug := existingToolset.McpSlug.String
+	if slugChanged {
+		slug = conv.ToLower(*payload.McpSlug)
+	}
+
+	// Probe whenever the effective (slug, domain) address changes: a domain
+	// change alone re-scopes the existing slug and can collide there too.
+	if slug != "" && (slugChanged || domainChanged) {
+		domainID := uuid.NullUUID{UUID: uuid.Nil, Valid: false}
 		// Slugs on the platform domain (no custom domain, or free accounts) must be prefixed with the org slug
 		if toolsetDomainID == nil || authCtx.AccountType == "free" {
-			if !strings.HasPrefix(conv.ToLower(*payload.McpSlug), authCtx.OrganizationSlug+"-") {
+			if !strings.HasPrefix(slug, authCtx.OrganizationSlug+"-") {
 				return nil, oops.E(oops.CodeBadRequest, nil, "mcp slug must be prefixed with the org slug for free accounts")
 			}
-
-			// Check slug uniqueness on the platform domain only (no custom domain).
-			// Custom domains have a separate namespace so the same slug can exist on both.
-			mcpToolset, mcpToolsetErr := tr.GetToolsetByPlatformMcpSlug(ctx, conv.ToPGText(conv.ToLower(*payload.McpSlug)))
-			if mcpToolsetErr == nil && mcpToolset.ID != existingToolset.ID {
-				return nil, oops.E(oops.CodeConflict, nil, "this slug is already taken")
-			}
-			updateParams.McpSlug = conv.ToPGText(conv.ToLower(*payload.McpSlug))
 		} else {
-			mcpToolset, mcpToolsetErr := tr.GetToolsetByMcpSlugAndCustomDomain(ctx, repo.GetToolsetByMcpSlugAndCustomDomainParams{
-				McpSlug:        conv.ToPGText(conv.ToLower(*payload.McpSlug)),
-				CustomDomainID: uuid.NullUUID{UUID: uuid.MustParse(*toolsetDomainID), Valid: true},
-			})
-			if mcpToolsetErr == nil && mcpToolset.ID != existingToolset.ID {
-				return nil, oops.E(oops.CodeConflict, nil, "this slug is already taken")
-			}
-			updateParams.McpSlug = conv.ToPGText(conv.ToLower(*payload.McpSlug))
+			domainID = uuid.NullUUID{UUID: uuid.MustParse(*toolsetDomainID), Valid: true}
+		}
+
+		if err := mcpendpoints.LockSlugScope(ctx, dbtx, domainID, slug); err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "lock mcp slug scope").LogError(ctx, logger)
+		}
+		// The scope is the toolset's own domain or the org's verified one, so
+		// the ownership guard is skipped: a soft-deleted domain must not block
+		// renames within its scope.
+		available, err := mcpendpoints.CheckSlugAvailable(ctx, dbtx, mcpendpoints.SlugAvailabilityCheck{
+			Slug:                     slug,
+			CustomDomainID:           domainID,
+			OrganizationID:           authCtx.ActiveOrganizationID,
+			ExcludeToolsetID:         uuid.NullUUID{UUID: existingToolset.ID, Valid: true},
+			ExcludeMcpServerID:       uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+			SkipDomainOwnershipCheck: true,
+		})
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "check mcp slug availability").LogError(ctx, logger)
+		}
+		if !available {
+			return nil, oops.E(oops.CodeConflict, nil, "this slug is already taken")
+		}
+		if slugChanged {
+			updateParams.McpSlug = conv.ToPGText(slug)
 		}
 	}
 
@@ -739,6 +796,9 @@ func (s *Service) CloneToolset(ctx context.Context, payload *gen.CloneToolsetPay
 	newName := originalToolset.Name + "_copy"
 	newSlug := conv.ToSlug(newName)
 	mcpSlug := authCtx.OrganizationSlug + "-" + slugSuffix
+	if mcpSlug, err = s.ensureGeneratedMcpSlug(ctx, dbtx, logger, authCtx.OrganizationSlug, authCtx.ActiveOrganizationID, mcpSlug); err != nil {
+		return nil, err
+	}
 
 	// Prepare base parameters for creating the cloned toolset
 	baseParams := repo.CreateToolsetParams{
@@ -876,8 +936,19 @@ func (s *Service) CloneToolset(ctx context.Context, payload *gen.CloneToolsetPay
 }
 
 func (s *Service) CheckMCPSlugAvailability(ctx context.Context, payload *gen.CheckMCPSlugAvailabilityPayload) (bool, error) {
-	//nolint:wrapcheck // Wrapping adds no value here
-	return s.repo.CheckMCPSlugAvailability(ctx, conv.ToPGText(conv.ToLower(payload.Slug)))
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil {
+		return false, oops.C(oops.CodeUnauthorized)
+	}
+
+	// Inverted wire contract: true means TAKEN, in any scope, matching the
+	// pre-unification semantics this deprecated inline check always had.
+	taken, err := s.repo.CheckMCPSlugAvailability(ctx, conv.ToPGText(conv.ToLower(payload.Slug)))
+	if err != nil {
+		return false, oops.E(oops.CodeUnexpected, err, "check mcp slug availability").LogError(ctx, s.logger)
+	}
+
+	return taken.Bool, nil
 }
 
 func (s *Service) AddExternalOAuthServer(ctx context.Context, payload *gen.AddExternalOAuthServerPayload) (*types.Toolset, error) {

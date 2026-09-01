@@ -3,23 +3,46 @@ import { renderHook, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { organizationQuery, organizationsListQuery } from "@/lib/adminQueries";
+import {
+  organizationActivityQuery,
+  organizationQuery,
+  organizationsListQuery,
+} from "@/lib/adminQueries";
 import {
   TRIAL_STATES,
   type AdminOrganization,
   type ListOrganizationsResult,
 } from "@/lib/gramAdminApi";
 
-import { canExtendTrial, canRearmTrial, useRearmTrial } from "./rowActions";
+import {
+  canExtendTrial,
+  canRearmTrial,
+  useDisableOrganization,
+  useEnableOrganization,
+  useExtendTrial,
+  useRearmTrial,
+} from "./rowActions";
 
 const mocks = vi.hoisted(() => ({
+  disableOrganization:
+    vi.fn<(body: { id: string }) => Promise<AdminOrganization>>(),
+  enableOrganization:
+    vi.fn<(body: { id: string }) => Promise<AdminOrganization>>(),
+  extendTrial:
+    vi.fn<(body: { id: string; days: number }) => Promise<AdminOrganization>>(),
   rearmTrial:
     vi.fn<(body: { id: string; days: number }) => Promise<AdminOrganization>>(),
 }));
 
 vi.mock("@/lib/gramAdminApi", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/lib/gramAdminApi")>();
-  return { ...actual, rearmTrial: mocks.rearmTrial };
+  return {
+    ...actual,
+    disableOrganization: mocks.disableOrganization,
+    enableOrganization: mocks.enableOrganization,
+    extendTrial: mocks.extendTrial,
+    rearmTrial: mocks.rearmTrial,
+  };
 });
 
 // Demoted, live and back on the free tier: the one record a re-arm acts on.
@@ -46,6 +69,12 @@ const REARMED_ORG: AdminOrganization = {
 };
 
 beforeEach(() => {
+  mocks.disableOrganization.mockReset();
+  mocks.disableOrganization.mockResolvedValue(REARMED_ORG);
+  mocks.enableOrganization.mockReset();
+  mocks.enableOrganization.mockResolvedValue(REARMED_ORG);
+  mocks.extendTrial.mockReset();
+  mocks.extendTrial.mockResolvedValue(REARMED_ORG);
   mocks.rearmTrial.mockReset();
   mocks.rearmTrial.mockResolvedValue(REARMED_ORG);
 });
@@ -82,6 +111,60 @@ describe("the trial predicates", () => {
           disabled_at: "2026-03-04T00:00:00Z",
         }),
       ).toBe(false);
+    },
+  );
+});
+
+describe("audited organization lifecycle mutations", () => {
+  function wrapper(qc: QueryClient) {
+    return function Wrapper({ children }: { children: ReactNode }) {
+      return <QueryClientProvider client={qc}>{children}</QueryClientProvider>;
+    };
+  }
+
+  it.each(["disable", "enable", "extend", "rearm"] as const)(
+    "invalidates organization activity after a successful %s",
+    async (action) => {
+      const qc = new QueryClient({
+        defaultOptions: { queries: { retry: false } },
+      });
+      const activity = organizationActivityQuery(DEMOTED_ORG.id);
+      const detail = organizationQuery(DEMOTED_ORG.slug);
+      qc.setQueryData(detail.queryKey, DEMOTED_ORG);
+      qc.setQueryData(activity.queryKey, {
+        pages: [{ logs: [] }],
+        pageParams: [undefined],
+      });
+      const { result } = renderHook(
+        () => ({
+          disable: useDisableOrganization(),
+          enable: useEnableOrganization(),
+          extend: useExtendTrial(),
+          rearm: useRearmTrial(),
+        }),
+        { wrapper: wrapper(qc) },
+      );
+
+      switch (action) {
+        case "disable":
+          result.current.disable.mutate(DEMOTED_ORG.id);
+          break;
+        case "enable":
+          result.current.enable.mutate(DEMOTED_ORG.id);
+          break;
+        case "extend":
+          result.current.extend.mutate({ id: DEMOTED_ORG.id, days: 14 });
+          break;
+        case "rearm":
+          result.current.rearm.mutate({ id: DEMOTED_ORG.id, days: 14 });
+          break;
+      }
+
+      await waitFor(() => {
+        expect(result.current[action].isSuccess).toBe(true);
+      });
+      expect(qc.getQueryState(activity.queryKey)?.isInvalidated).toBe(true);
+      expect(qc.getQueryState(detail.queryKey)?.isInvalidated).toBe(true);
     },
   );
 });

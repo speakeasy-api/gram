@@ -15,6 +15,7 @@ import (
 	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	metamcprepo "github.com/speakeasy-api/gram/server/internal/metamcp/repo"
+	"github.com/speakeasy-api/gram/server/internal/metamcp/visibility"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/plugins"
 	pluginsrepo "github.com/speakeasy-api/gram/server/internal/plugins/repo"
@@ -323,10 +324,12 @@ func TestDeleteMcpServer_RBACForbidden(t *testing.T) {
 
 	ctx, ti := newTestService(t)
 
-	ctx = withExactAuthzGrants(t, ctx, ti.conn)
+	fixture := createRemoteServerFixture(t, ctx, ti, "rbac forbidden delete")
 
-	err := ti.service.DeleteMcpServer(ctx, &gen.DeleteMcpServerPayload{
-		ID:               uuid.NewString(),
+	denied := withExactAuthzGrants(t, ctx, ti.conn)
+
+	err := ti.service.DeleteMcpServer(denied, &gen.DeleteMcpServerPayload{
+		ID:               fixture.server.ID,
 		SessionToken:     nil,
 		ApikeyToken:      nil,
 		ProjectSlugInput: nil,
@@ -361,6 +364,7 @@ func TestDeleteMcpServer_SoftDeletesMetaMcpMemberships(t *testing.T) {
 		ProjectID:           *authCtx.ProjectID,
 		Name:                "membership holder",
 		UserSessionIssuerID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		Visibility:          visibility.Private,
 	})
 	require.NoError(t, err)
 

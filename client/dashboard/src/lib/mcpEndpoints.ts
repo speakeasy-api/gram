@@ -20,6 +20,48 @@ export const DEFAULT_ENDPOINT_FAILED_MESSAGE =
 // the server detail page, so it should never roll back the source. Shared by
 // the remote-mcp, tunneled-mcp, and catalog install flows. Returns the created
 // endpoint so callers can surface its URL, or undefined on failure.
+// Platform slugs are capped at 40 chars including the `${orgSlug}-` prefix
+// (see useMcpEndpointSlugValidation).
+const PLATFORM_SLUG_MAX_LENGTH = 40;
+
+// Create the default endpoint for a freshly created gateway (meta MCP
+// server). The slug is derived from the gateway's name; on a conflict it
+// falls back to a random suffix. Same best-effort contract as
+// createDefaultMcpEndpoint. Returns undefined on failure.
+export async function createDefaultGatewayEndpoint(
+  client: SdkClient,
+  metaMcpServerId: string,
+  name: string,
+  orgSlug: string,
+): Promise<McpEndpoint | undefined> {
+  const prefix = `${orgSlug}-`;
+  const derived = name
+    .toLowerCase()
+    .replace(/[^a-z0-9_-]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    // Math.max: a prefix past the cap would make this a negative-end slice.
+    .slice(0, Math.max(0, PLATFORM_SLUG_MAX_LENGTH - prefix.length))
+    .replace(/-+$/, "");
+
+  const create = (slug: string) =>
+    client.mcpEndpoints.create({
+      createMcpEndpointForm: { metaMcpServerId, slug },
+    });
+
+  try {
+    return await create(`${prefix}${derived || randomSlugSuffix()}`);
+  } catch {
+    try {
+      return await create(`${prefix}${randomSlugSuffix()}`);
+    } catch {
+      toast.warning(
+        "Gateway created, but the default endpoint failed. Add one from the gateway page.",
+      );
+      return undefined;
+    }
+  }
+}
+
 export async function createDefaultMcpEndpoint(
   client: SdkClient,
   mcpServer: McpServer,
