@@ -15,7 +15,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { TrialFacts } from "@/pages/organization/TrialFacts";
+import { TrialFacts, TrialSummary } from "@/pages/organization/TrialFacts";
 import { OrganizationActions } from "@/pages/organizations/OrganizationActions";
 import {
   Select,
@@ -68,22 +68,27 @@ function Panel({
   children,
   className,
   headingRef,
+  meta,
 }: {
   title: string;
   children: React.ReactNode;
   className?: string;
   headingRef?: Ref<HTMLHeadingElement>;
+  meta?: React.ReactNode;
 }) {
   return (
     <section className={cn("bg-card rounded-lg border", className)}>
-      {/* h5 follows the record name's h4 in RecordHeader. */}
-      <h5
-        ref={headingRef}
-        tabIndex={headingRef ? -1 : undefined}
-        className="border-b px-5 py-2.5 text-sm font-semibold"
-      >
-        {title}
-      </h5>
+      <div className="flex items-center justify-between gap-4 border-b px-5 py-2.5">
+        {/* h5 follows the record name's h4 in RecordHeader. */}
+        <h5
+          ref={headingRef}
+          tabIndex={headingRef ? -1 : undefined}
+          className="text-sm font-semibold"
+        >
+          {title}
+        </h5>
+        {meta}
+      </div>
       <div className="p-5">{children}</div>
     </section>
   );
@@ -325,44 +330,46 @@ export function Overview({ org }: { org: AdminOrganization }): JSX.Element {
   return (
     <div
       data-slot="organization-overview"
-      className="flex flex-wrap items-start gap-4"
+      className="flex flex-wrap items-start gap-6"
     >
       <div
         data-slot="organization-overview-main"
-        className="min-w-[min(100%,32rem)] flex-[2_1_32rem] space-y-4"
+        className="min-w-[min(100%,32rem)] flex-[2_1_32rem] space-y-8"
       >
-        <Panel title="Details" headingRef={detailsHeading}>
+        <Panel
+          title="Details"
+          headingRef={detailsHeading}
+          meta={
+            <span className="text-muted-foreground text-xs">
+              Updated {fmtDateShort(org.updated_at)}
+            </span>
+          }
+        >
           <Row label="Name">
             <span className="text-sm">{org.name}</span>
           </Row>
           <Row label="Slug">
             <CopyValue label="Slug" value={org.slug} className="text-sm" />
           </Row>
-          <Row label="Organization id">
+          <Row label="Organization ID">
             <CopyValue
-              label="Organization id"
+              label="Organization ID"
               value={org.id}
               className="text-sm"
             />
           </Row>
-          <Row label="WorkOS id">
+          <Row label="WorkOS org ID">
             {/* No control over an absent value: a button that copies "-" is
               worse than no button. */}
             {org.workos_id ? (
               <CopyValue
-                label="WorkOS id"
+                label="WorkOS org ID"
                 value={org.workos_id}
                 className="text-sm"
               />
             ) : (
               <span className="text-muted-foreground text-sm">-</span>
             )}
-          </Row>
-          <Row label="Created">
-            <span className="text-sm">{fmtDateShort(org.created_at)}</span>
-          </Row>
-          <Row label="Updated">
-            <span className="text-sm">{fmtDateShort(org.updated_at)}</span>
           </Row>
           <Row label="Account type">
             <Select
@@ -397,39 +404,32 @@ export function Overview({ org }: { org: AdminOrganization }): JSX.Element {
             </Select>
           </Row>
           <Row label="Whitelisted">
-            <Switch
-              ref={whitelistedControl}
-              checked={org.whitelisted}
-              disabled={mut.isPending || conversionPending}
-              onCheckedChange={(v) => {
-                void commit(
-                  { whitelisted: v },
-                  `Whitelisted: ${yesNo(org.whitelisted)} → ${yesNo(v)}`,
-                  whitelistedControl,
-                );
-              }}
-            />
+            <div className="flex flex-wrap items-center gap-3">
+              <Switch
+                ref={whitelistedControl}
+                checked={org.whitelisted}
+                disabled={mut.isPending || conversionPending}
+                onCheckedChange={(v) => {
+                  void commit(
+                    { whitelisted: v },
+                    `Whitelisted: ${yesNo(org.whitelisted)} → ${yesNo(v)}`,
+                    whitelistedControl,
+                  );
+                }}
+              />
+              <span className="text-muted-foreground text-sm">
+                {org.whitelisted
+                  ? "Platform access, no demo gate"
+                  : "Demo gate applies"}
+              </span>
+            </div>
           </Row>
-          <Row label="Disabled at">
-            <span
-              className={cn(
-                "text-sm",
-                !org.disabled_at && "text-muted-foreground",
-              )}
-            >
-              {fmtDateShort(org.disabled_at)}
-            </span>
-          </Row>
-          {!showTrialPanel && (
-            <Row label="Trial">
-              <TrialFacts org={org} />
-            </Row>
-          )}
+          <TrialFacts org={org} />
         </Panel>
 
         <Panel
           title="Danger zone"
-          className="border-destructive [&>h5]:text-destructive"
+          className="border-destructive [&_h5]:text-destructive"
         >
           <div className="flex flex-wrap items-center justify-between gap-4">
             <div className="min-w-0 flex-1">
@@ -462,33 +462,39 @@ export function Overview({ org }: { org: AdminOrganization }): JSX.Element {
       {showTrialPanel && (
         <aside
           data-slot="organization-overview-trial"
-          className="bg-card w-full max-w-80 flex-[1_1_16rem] rounded-lg border"
+          className="bg-card w-full max-w-[21rem] flex-[1_1_18rem] rounded-lg border"
         >
-          <h5 className="border-b px-5 py-2.5 text-sm font-semibold">
-            Enterprise trial
-          </h5>
-          <div className="space-y-4 p-5">
-            <TrialFacts org={org} />
-            <OrganizationActions
-              org={org}
-              layout="buttons"
-              actions="trial"
-              focusFallbackRef={detailsHeading}
-            />
+          <div className="space-y-5 p-5">
+            <TrialSummary org={org} />
+            <div className="space-y-2">
+              {canMarkEnterpriseTrialConverted(org) && (
+                <Button
+                  ref={conversionControl}
+                  size="sm"
+                  className="w-full"
+                  disabled={conversionPending}
+                  aria-label={`Mark ${org.name} as converted`}
+                  onClick={() => {
+                    conversionContext.current = org;
+                    setConversionUncertain(false);
+                    setConversionOpen(true);
+                  }}
+                >
+                  Mark as converted
+                </Button>
+              )}
+              <OrganizationActions
+                org={org}
+                layout="buttons"
+                actions="trial"
+                focusFallbackRef={detailsHeading}
+                buttonClassName="h-8 w-full px-3 text-sm"
+              />
+            </div>
             {canMarkEnterpriseTrialConverted(org) && (
-              <Button
-                ref={conversionControl}
-                size="sm"
-                disabled={conversionPending}
-                aria-label={`Mark ${org.name} as converted`}
-                onClick={() => {
-                  conversionContext.current = org;
-                  setConversionUncertain(false);
-                  setConversionOpen(true);
-                }}
-              >
-                Mark as converted
-              </Button>
+              <p className="text-muted-foreground text-xs">
+                Converting keeps enterprise access and closes the trial.
+              </p>
             )}
           </div>
         </aside>

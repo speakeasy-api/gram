@@ -159,7 +159,7 @@ afterEach(() => {
 });
 
 describe("Overview", () => {
-  it("shows live trial facts in the Enterprise trial panel", async () => {
+  it("matches the approved active-trial hierarchy", async () => {
     await renderRouteTree(routeTree, {
       initialPath: `/organizations/${ORG.slug}`,
     });
@@ -167,21 +167,51 @@ describe("Overview", () => {
     const trialEndsAt = ORG.trial_ends_at;
     if (!trialEndsAt) throw new Error("the record under test needs a trial");
 
-    await screen.findByRole("heading", { name: "Enterprise trial" });
-    const facts = panelNamed("Enterprise trial");
+    await screen.findByRole("heading", { name: "Active trial" });
+    const trial = panelNamed("Active trial");
+    const detailsPanel = panelNamed("Details");
+    const details = within(detailsPanel);
+    expect(within(trial).getByText("RUNNING")).toBeTruthy();
+    expect(within(trial).getByText(/days left$/)).toBeTruthy();
+    expect(trial.textContent).toContain(
+      `End date ${new Date(trialEndsAt).toLocaleDateString()} · Enterprise tier`,
+    );
+    expect(within(trial).queryByText("State")).toBeNull();
     expect(
-      within(facts).getByText("State").nextElementSibling?.textContent,
+      details.getByText("Trial state").nextElementSibling?.textContent,
     ).toBe("Running");
     expect(
-      within(facts).getByText("Tier").nextElementSibling?.textContent,
+      details.getByText("Trial tier").nextElementSibling?.textContent,
     ).toBe("Enterprise");
-    expect(
-      within(facts).getByText("Ends").nextElementSibling?.textContent,
-    ).toBe(new Date(trialEndsAt).toLocaleDateString());
-    expect(screen.getAllByText("State")).toHaveLength(1);
+    expect(details.getByText("End date").nextElementSibling?.textContent).toBe(
+      new Date(trialEndsAt).toLocaleDateString(),
+    );
 
-    // The defaulted pair is gone from the page, not merely unread: an operator
-    // who sees "Free trial ends" reads a date no organization ever earned.
+    const buttons = within(trial).getAllByRole("button");
+    const convert = within(trial).getByRole("button", {
+      name: `Mark ${ORG.name} as converted`,
+    });
+    const extend = within(trial).getByRole("button", {
+      name: `Extend trial for ${ORG.name}`,
+    });
+    expect(buttons.indexOf(convert)).toBeLessThan(buttons.indexOf(extend));
+    expect(convert.className).toContain("w-full");
+    expect(extend.className).toContain("w-full");
+    expect(trial.textContent).toContain(
+      "Converting keeps enterprise access and closes the trial.",
+    );
+    expect(
+      details.getByText(`Updated ${shortDate(ORG.updated_at)}`),
+    ).toBeTruthy();
+    expect(details.getByText("Platform access, no demo gate")).toBeTruthy();
+    expect(details.queryByText("Created")).toBeNull();
+    expect(details.queryByText("Disabled at")).toBeNull();
+    const recordTitle = screen.getByRole("heading", {
+      level: 4,
+      name: ORG.name,
+    });
+    expect(recordTitle.parentElement?.textContent).not.toContain("Running");
+
     expect(screen.queryByText("Free trial started")).toBeNull();
     expect(screen.queryByText("Free trial ends")).toBeNull();
   });
@@ -224,14 +254,13 @@ describe("Overview", () => {
       initialPath: `/organizations/${ORG.slug}`,
     });
 
-    await screen.findByText("Created");
+    await screen.findByText(`Updated ${shortDate(updated)}`);
     // The zone really moved, and in it this instant is the 15th locally.
     expect(new Date(created).getDate()).toBe(15);
-    // Every date the view renders, not one of them: each row is a separate
-    // call and the rule holds for all of them or for none.
-    expect(valueBeside("Created").textContent).toBe(shortDate(created));
-    expect(valueBeside("Updated").textContent).toBe(shortDate(updated));
-    expect(valueBeside("Disabled at").textContent).toBe(shortDate(disabled));
+    expect(screen.getByText(`Created ${shortDate(created)}`)).toBeTruthy();
+    expect(panelNamed("Danger zone").textContent).toContain(
+      `Disabled ${shortDate(disabled)}`,
+    );
   });
 
   it("leaves the control reading the record while the dialog asks", async () => {
@@ -1149,8 +1178,12 @@ describe("Overview", () => {
         initialPath: `/organizations/${ORG.slug}`,
       });
 
+      const heading =
+        trialState === "running" || trialState === "ending_soon"
+          ? "Active trial"
+          : "Enterprise trial";
       expect(
-        await screen.findByRole("heading", { name: "Enterprise trial" }),
+        await screen.findByRole("heading", { name: heading }),
       ).toBeTruthy();
     },
   );
@@ -1208,7 +1241,7 @@ describe("Overview", () => {
     await screen.findByRole("heading", { name: "Details" });
     const details = panelNamed("Details");
     expect(
-      within(details).getByText("State").nextElementSibling?.textContent,
+      within(details).getByText("Trial state").nextElementSibling?.textContent,
     ).toBe("Converted");
     expect(
       within(details).getByText("Conversion date").nextElementSibling
@@ -1252,8 +1285,8 @@ describe("Overview", () => {
       initialPath: `/organizations/${ORG.slug}`,
     });
 
-    await screen.findByRole("heading", { name: "Enterprise trial" });
-    const trial = panelNamed("Enterprise trial");
+    await screen.findByRole("heading", { name: "Active trial" });
+    const trial = panelNamed("Active trial");
     const danger = panelNamed("Danger zone");
     expect(
       within(trial).getByRole("button", {
@@ -1309,7 +1342,7 @@ describe("Overview", () => {
     await screen.findByRole("heading", { name: "Details" });
     const details = panelNamed("Details");
     const danger = panelNamed("Danger zone");
-    const trial = panelNamed("Enterprise trial");
+    const trial = panelNamed("Active trial");
     const left = details.parentElement;
     const layout = left?.parentElement;
 
@@ -1326,8 +1359,8 @@ describe("Overview", () => {
     expect(left?.className).toContain("min-w-[min(100%,32rem)]");
     expect(left?.className).toContain("flex-[2_1_32rem]");
     expect(trial.className).toContain("w-full");
-    expect(trial.className).toContain("max-w-80");
-    expect(trial.className).toContain("flex-[1_1_16rem]");
+    expect(trial.className).toContain("max-w-[21rem]");
+    expect(trial.className).toContain("flex-[1_1_18rem]");
   });
 
   it("nests the panel headings under the record's own heading", async () => {
@@ -1338,7 +1371,7 @@ describe("Overview", () => {
     expect(
       await screen.findByRole("heading", { level: 4, name: ORG.name }),
     ).toBeTruthy();
-    for (const panel of ["Details", "Enterprise trial", "Danger zone"]) {
+    for (const panel of ["Details", "Active trial", "Danger zone"]) {
       expect(screen.getByRole("heading", { name: panel }).tagName).toBe("H5");
     }
   });
@@ -1539,8 +1572,8 @@ describe("Overview", () => {
     // belongs to a different field of the same record, which reads as right.
     const rows: [string, string][] = [
       ["Copy Slug", identified.slug],
-      ["Copy Organization id", identified.id],
-      ["Copy WorkOS id", identified.workos_id],
+      ["Copy Organization ID", identified.id],
+      ["Copy WorkOS org ID", identified.workos_id],
     ];
     for (const [name, value] of rows) {
       const control = await screen.findByRole("button", { name });
@@ -1560,24 +1593,26 @@ describe("Overview", () => {
     expect(new Set(rows.map(([, value]) => value)).size).toBe(rows.length);
   });
 
-  it("offers no copy control over an absent WorkOS id", async () => {
+  it("offers no copy control over an absent WorkOS org ID", async () => {
     await renderRouteTree(routeTree, {
       initialPath: `/organizations/${ORG.slug}`,
     });
 
-    await screen.findByText("WorkOS id");
+    await screen.findByText("WorkOS org ID");
     expect(ORG.workos_id).toBeUndefined();
     // A button that copies "-" is worse than no button.
-    expect(valueBeside("WorkOS id").textContent).toBe("-");
-    expect(screen.queryByRole("button", { name: "Copy WorkOS id" })).toBeNull();
+    expect(valueBeside("WorkOS org ID").textContent).toBe("-");
+    expect(
+      screen.queryByRole("button", { name: "Copy WorkOS org ID" }),
+    ).toBeNull();
   });
 
-  it("renders a dash for a record that was never disabled", async () => {
+  it("keeps disabled status in Danger zone rather than Details", async () => {
     await renderRouteTree(routeTree, {
       initialPath: `/organizations/${ORG.slug}`,
     });
 
-    await screen.findByText("Disabled at");
-    expect(valueBeside("Disabled at").textContent).toBe("-");
+    await screen.findByRole("heading", { name: "Danger zone" });
+    expect(screen.queryByText("Disabled at")).toBeNull();
   });
 });
