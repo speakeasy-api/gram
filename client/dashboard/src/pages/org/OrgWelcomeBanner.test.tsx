@@ -314,7 +314,7 @@ describe("OrgWelcomeBanner", () => {
     trial.current = activeTrial();
     render(<OrgWelcomeBanner />);
 
-    expect(screen.getByText("9 steps · resumable")).toBeTruthy();
+    expect(screen.getByText("8 steps · resumable")).toBeTruthy();
     fireEvent.click(screen.getByText("Begin rollout"));
 
     expect(localStorage.getItem("gram-org-welcome-rollout-started:acme")).toBe(

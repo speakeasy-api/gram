@@ -50,7 +50,6 @@ vi.mock("./steps", () => ({
   ConnectIdpStep: () => null,
   DirectorySyncStep: () => null,
   CreateMarketplaceStep: () => null,
-  EnableLoggingStep: () => null,
   DistributeServersStep: () => null,
   InstrumentAgentsStep: () => null,
   AdditionalAgentConfigStep: () => null,
@@ -91,12 +90,12 @@ describe("SetupWizard", () => {
     );
   });
 
-  it("resumes at enable-logging after the marketplace is published", () => {
+  it("resumes at instrument-agents after the marketplace is published", () => {
     publishStatus.current = { data: { connected: true }, isLoading: false };
 
     render(<SetupWizard />);
 
-    expect(resumedStep()).toBe("enable-logging");
+    expect(resumedStep()).toBe("instrument-agents");
   });
 
   it("resumes at create-marketplace after directory sync is configured", () => {
