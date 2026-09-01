@@ -1,6 +1,7 @@
 package netingress
 
 import (
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -13,6 +14,7 @@ import (
 	"go.opentelemetry.io/otel/sdk/metric/metricdata"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/networkingress"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
@@ -39,9 +41,9 @@ func TestTelemetryClampsDimensionsAndExcludesSensitiveValues(t *testing.T) {
 	require.Len(t, points, 1)
 	require.Equal(t, int64(1), points[0].Value)
 	require.Equal(t, attribute.NewSet(
-		attr.NetworkIngressOperation(OperationAdmission),
-		attr.NetworkIngressResult(ResultError),
-		attr.NetworkIngressReason(ReasonDependencyFailed),
+		attr.NetworkIngressOperation(networkingress.OperationUnknown),
+		attr.NetworkIngressResult(networkingress.ResultUnknown),
+		attr.NetworkIngressReason(networkingress.ReasonUnknown),
 		attr.Provider("unknown"),
 		attr.NetworkSurface("private"),
 	), points[0].Attributes)
@@ -76,6 +78,33 @@ func TestAttestationTelemetryClassifiesUnavailableVerifierAsError(t *testing.T) 
 		attr.Provider("unknown"),
 		attr.NetworkSurface("private"),
 	), points[0].Attributes)
+}
+
+func TestAttestationTelemetryRetainsCachedProviderOnRecheckFailure(t *testing.T) {
+	t.Parallel()
+
+	reader := sdkmetric.NewManualReader()
+	provider := sdkmetric.NewMeterProvider(sdkmetric.WithReader(reader))
+	t.Cleanup(func() { require.NoError(t, provider.Shutdown(t.Context())) })
+	telemetry := NewTelemetry(testenv.NewLogger(t), provider)
+	now := time.Now().UTC()
+	token := unsignedToken(t, now.Add(time.Minute))
+	lookup := &fakeAttestorLookup{ingress: Ingress{Provider: ProviderTailscale}, recheckErr: errors.New("database unavailable")}
+	verifier := NewAttestationVerifier(&fakeTokenReviewer{response: authenticatedTokenReview(DefaultTokenAudience, "system:serviceaccount:ns:sa")}, lookup, DefaultTokenAudience, time.Minute, telemetry)
+	verifier.now = func() time.Time { return now }
+	_, err := verifier.Verify(t.Context(), token, "192.0.2.1:1234")
+	require.NoError(t, err)
+	verifier.now = func() time.Time { return now.Add(servingStateRecheckTTL) }
+	_, err = verifier.Verify(t.Context(), token, "192.0.2.1:1234")
+	require.ErrorContains(t, err, "database unavailable")
+
+	var resourceMetrics metricdata.ResourceMetrics
+	require.NoError(t, reader.Collect(t.Context(), &resourceMetrics))
+	points := networkIngressCounterPoints(t, resourceMetrics, NetworkIngressOperationsMetric)
+	require.Len(t, points, 2)
+	providerValue, ok := points[1].Attributes.Value(attr.ProviderKey)
+	require.True(t, ok)
+	require.Equal(t, attr.Provider(ProviderTailscale).Value, providerValue)
 }
 
 func TestAttestorTelemetryRecordsHostMismatch(t *testing.T) {

@@ -120,6 +120,7 @@ func (v *AttestationVerifier) Verify(ctx context.Context, token, source string) 
 			return Ingress{}, fmt.Errorf("%w: token was recently rejected", ErrAttestationRejected)
 		}
 		if now.Sub(cached.lastChecked) >= servingStateRecheckTTL {
+			provider = cached.ingress.Provider
 			ingress, err = v.recheckCached(ctx, hash)
 			if err != nil {
 				if errors.Is(err, ErrAttestationRejected) {

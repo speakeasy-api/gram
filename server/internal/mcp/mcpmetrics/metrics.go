@@ -180,7 +180,7 @@ func NewMetrics(meter metric.Meter, logger *slog.Logger) *Metrics {
 
 	mcpRequestRejectedCounter, err := meter.Int64Counter(
 		InstrumentMCPRequestRejected,
-		metric.WithDescription("MCP requests rejected by the Session OAuth authentication gate before dispatch, by failure reason, server URL, and surface"),
+		metric.WithDescription("MCP requests rejected by the Session OAuth authentication gate before dispatch, by failure reason, server URL, serving surface, and public/private network surface"),
 		metric.WithUnit("{request}"),
 	)
 	if err != nil {
