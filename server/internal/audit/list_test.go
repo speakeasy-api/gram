@@ -8,7 +8,6 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 
-	audittestrepo "github.com/speakeasy-api/gram/server/internal/audit/audittest/repo"
 	"github.com/speakeasy-api/gram/server/internal/audit/repo"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
@@ -63,28 +62,27 @@ func TestListAuditLogs_Window(t *testing.T) {
 	require.NoError(t, err)
 
 	queries := repo.New(conn)
-	fixtures := audittestrepo.New(conn)
 
-	// Written now, then stamped at hours apart. created_at defaults to
-	// clock_timestamp(), which would leave the three rows microseconds apart
-	// and the boundary cases below resting on that spacing; fixed offsets make
-	// every assertion here depend only on the window predicate.
-	base := time.Now().UTC().Truncate(time.Second)
-	stamps := []time.Time{
-		base.Add(-3 * time.Hour),
-		base.Add(-2 * time.Hour),
-		base.Add(-1 * time.Hour),
-	}
-	for _, stamp := range stamps {
+	// Written now, then stamped an hour apart with the same fixture the admin
+	// activity test uses. created_at defaults to clock_timestamp(), which would
+	// leave the three rows microseconds apart and the boundary cases below
+	// resting on that spacing; fixed offsets make every assertion here depend
+	// only on the window predicate.
+	base := time.Date(2026, 8, 25, 12, 0, 0, 0, time.UTC)
+	stamps := make([]time.Time, 0, 3)
+	for i := range 3 {
 		row, err := queries.InsertAuditLog(ctx, repo.InsertAuditLogParams{
 			OrganizationID: orgID, ActorID: "user:test", ActorType: "user",
 			Action: "test:create", SubjectID: uuid.NewString(), SubjectType: "project",
 		})
 		require.NoError(t, err)
-		require.NoError(t, fixtures.BackdateAuditLog(ctx, audittestrepo.BackdateAuditLogParams{
+
+		stamp := base.Add(time.Duration(i) * time.Hour)
+		require.NoError(t, queries.UpdateAuditLogCreatedAtForTesting(ctx, repo.UpdateAuditLogCreatedAtForTestingParams{
 			CreatedAt: conv.ToPGTimestamptz(stamp),
-			ID:        row.ID,
+			Ids:       []uuid.UUID{row.ID},
 		}))
+		stamps = append(stamps, stamp)
 	}
 
 	window := func(from, to *time.Time) []repo.ListAuditLogsRow {
