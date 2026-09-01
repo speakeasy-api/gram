@@ -34,7 +34,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
 	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	metamcprepo "github.com/speakeasy-api/gram/server/internal/metamcp/repo"
-	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 )
@@ -70,9 +69,6 @@ func (s *Service) serveResolvedMetaMCPEndpoint(
 	metaServer *metamcprepo.MetaMcpServer,
 ) error {
 	ctx := r.Context()
-	defer o11y.LogDefer(ctx, logger, func() error {
-		return r.Body.Close()
-	})
 
 	logger = logger.With(attr.SlogMetaMcpServerID(metaServer.ID.String()))
 

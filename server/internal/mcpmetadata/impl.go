@@ -943,9 +943,6 @@ func (ic *installContext) organizationID() string {
 
 func (s *Service) ServeInstallPage(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
-	defer o11y.LogDefer(ctx, s.logger, func() error {
-		return r.Body.Close()
-	})
 
 	mcpSlug := chi.URLParam(r, "mcpSlug")
 	if mcpSlug == "" {
@@ -1572,9 +1569,6 @@ func (s *Service) InstallPageScriptHash() string {
 // ServeInstallPageScript serves the hosted install page JavaScript with immutable cache headers.
 func (s *Service) ServeInstallPageScript(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
-	defer o11y.LogDefer(ctx, s.logger, func() error {
-		return r.Body.Close()
-	})
 
 	hash := chi.URLParam(r, "hash")
 	if hash != s.installPageScriptHash {
