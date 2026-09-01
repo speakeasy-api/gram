@@ -19,7 +19,7 @@ func TestRouteCRUDPreservesNullableDestinationAndAudits(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestService(t)
-	destination := createOtelDestination(t, ctx, ti, "https://collector.example.test", "exclude")
+	destination := createDestination(t, ctx, ti, "https://collector.example.test", "exclude")
 
 	created, err := ti.service.CreateRoute(ctx, &gen.CreateRoutePayload{SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil,
 		DataSource: "product_telemetry", Enabled: false, OtelDestinationID: nil})
@@ -77,8 +77,8 @@ func TestRouteRejectsSecondRouteForSameSource(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestService(t)
-	first := createOtelDestination(t, ctx, ti, "https://first.example.test", "exclude")
-	second := createOtelDestination(t, ctx, ti, "https://second.example.test", "exclude")
+	first := createDestination(t, ctx, ti, "https://first.example.test", "exclude")
+	second := createDestination(t, ctx, ti, "https://second.example.test", "exclude")
 
 	_, err := ti.service.CreateRoute(ctx, &gen.CreateRoutePayload{
 		SessionToken:      nil,
@@ -106,7 +106,7 @@ func TestDestinationlessRouteReservesSource(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestService(t)
-	destination := createOtelDestination(t, ctx, ti, "https://collector.example.test", "exclude")
+	destination := createDestination(t, ctx, ti, "https://collector.example.test", "exclude")
 
 	_, err := ti.service.CreateRoute(ctx, &gen.CreateRoutePayload{
 		SessionToken:      nil,
@@ -133,8 +133,8 @@ func TestRouteSoftDeleteReleasesSource(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestService(t)
-	firstDestination := createOtelDestination(t, ctx, ti, "https://first.example.test", "exclude")
-	secondDestination := createOtelDestination(t, ctx, ti, "https://second.example.test", "exclude")
+	firstDestination := createDestination(t, ctx, ti, "https://first.example.test", "exclude")
+	secondDestination := createDestination(t, ctx, ti, "https://second.example.test", "exclude")
 
 	firstRoute, err := ti.service.CreateRoute(ctx, &gen.CreateRoutePayload{
 		SessionToken:      nil,
@@ -183,8 +183,8 @@ func TestRouteSourceUniquenessIsProjectScoped(t *testing.T) {
 	otherAuthCtx.ProjectSlug = &otherSlug
 	otherCtx := contextvalues.SetAuthContext(ctx, &otherAuthCtx)
 
-	destination := createOtelDestination(t, ctx, ti, "https://collector.example.test", "exclude")
-	otherDestination := createOtelDestination(t, otherCtx, ti, "https://other-collector.example.test", "exclude")
+	destination := createDestination(t, ctx, ti, "https://collector.example.test", "exclude")
+	otherDestination := createDestination(t, otherCtx, ti, "https://other-collector.example.test", "exclude")
 
 	_, err = ti.service.CreateRoute(ctx, &gen.CreateRoutePayload{
 		SessionToken:      nil,
@@ -225,13 +225,13 @@ func TestRouteRejectsCrossProjectDestinationReferences(t *testing.T) {
 	otherAuthCtx.ProjectID = &otherProject.ID
 	otherAuthCtx.ProjectSlug = &otherSlug
 	otherCtx := contextvalues.SetAuthContext(ctx, &otherAuthCtx)
-	otherDestination := createOtelDestination(t, otherCtx, ti, "https://other-collector.example.test", "exclude")
+	otherDestination := createDestination(t, otherCtx, ti, "https://other-collector.example.test", "exclude")
 
 	_, err = ti.service.CreateRoute(ctx, &gen.CreateRoutePayload{SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil,
 		DataSource: "product_telemetry", Enabled: true, OtelDestinationID: &otherDestination.ID})
 	requireOopsCode(t, err, oops.CodeInvalid)
 
-	listed, err := ti.service.ListOtelDestinations(ctx, &gen.ListOtelDestinationsPayload{SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil})
+	listed, err := ti.service.ListDestinations(ctx, &gen.ListDestinationsPayload{SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil})
 	require.NoError(t, err)
 	require.Empty(t, listed.Destinations)
 }
@@ -240,7 +240,7 @@ func TestRouteRejectsInvalidStoredDestinationAsUnexpected(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestService(t)
-	destination := createOtelDestination(t, ctx, ti, "https://collector.example.test", "exclude")
+	destination := createDestination(t, ctx, ti, "https://collector.example.test", "exclude")
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 	queries := repo.New(ti.conn)
@@ -272,7 +272,7 @@ func TestRouteCreateRollsBackWhenAuditInsertFails(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestService(t)
-	destination := createOtelDestination(t, ctx, ti, "https://collector.example.test", "exclude")
+	destination := createDestination(t, ctx, ti, "https://collector.example.test", "exclude")
 	require.NoError(t, audittest.RejectAction(ctx, ti.conn, audit.ActionDataExportRouteCreate))
 
 	_, err := ti.service.CreateRoute(ctx, &gen.CreateRoutePayload{SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil,

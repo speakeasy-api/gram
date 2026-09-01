@@ -20,48 +20,54 @@ func TestDestinationCRUDPreservesWriteOnlyHeadersAndAuditsSafeSnapshots(t *testi
 	ctx, ti := newTestService(t)
 	secret := "initial-secret"
 	secretToClear := "second-secret"
-	created, err := ti.service.CreateOtelDestination(ctx, &gen.CreateOtelDestinationPayload{SessionToken: nil,
+	created, err := ti.service.CreateDestination(ctx, &gen.CreateDestinationPayload{SessionToken: nil,
 		ApikeyToken:      nil,
 		ProjectSlugInput: nil,
 		Name:             "Primary collector",
-		EndpointURL:      "https://collector.example.test/otlp",
+		DestinationType:  "otel",
 		SensitiveData:    "include",
-		Headers: []*gen.CreateOtelDestinationHeaderInput{
-			{Name: "Authorization", Value: secret},
-			{Name: "X-API-Key", Value: secretToClear},
-		}})
+		Otel: &gen.CreateOtelDestinationInput{
+			EndpointURL: "https://collector.example.test/otlp",
+			Headers: []*gen.CreateOtelDestinationHeaderInput{
+				{Name: "Authorization", Value: secret},
+				{Name: "X-API-Key", Value: secretToClear},
+			}}})
 	require.NoError(t, err)
 	require.Equal(t, "Primary collector", created.Name)
 	require.Equal(t, "include", created.SensitiveData)
+	require.Equal(t, "otel", created.DestinationType)
+	require.NotNil(t, created.Otel)
 	require.Equal(t, []*gen.OtelDestinationHeader{
 		{Name: "Authorization", HasValue: true},
 		{Name: "X-API-Key", HasValue: true},
-	}, created.Headers)
+	}, created.Otel.Headers)
 
-	listed, err := ti.service.ListOtelDestinations(ctx, &gen.ListOtelDestinationsPayload{SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil})
+	listed, err := ti.service.ListDestinations(ctx, &gen.ListDestinationsPayload{SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil})
 	require.NoError(t, err)
 	require.Len(t, listed.Destinations, 1)
 	require.Equal(t, created, listed.Destinations[0])
 
 	cleared := ""
-	updated, err := ti.service.UpdateOtelDestination(ctx, &gen.UpdateOtelDestinationPayload{SessionToken: nil,
+	updated, err := ti.service.UpdateDestination(ctx, &gen.UpdateDestinationPayload{SessionToken: nil,
 		ApikeyToken:      nil,
 		ProjectSlugInput: nil,
 		ID:               created.ID,
 		Name:             "Renamed collector",
-		EndpointURL:      "https://collector.example.test/new-base",
+		DestinationType:  "otel",
 		SensitiveData:    "exclude",
-		Headers: []*gen.OtelDestinationHeaderInput{
-			{Name: "authorization", Value: nil},
-			{Name: "x-api-key", Value: &cleared},
-		}})
+		Otel: &gen.UpdateOtelDestinationInput{
+			EndpointURL: "https://collector.example.test/new-base",
+			Headers: []*gen.UpdateOtelDestinationHeaderInput{
+				{Name: "authorization", Value: nil},
+				{Name: "x-api-key", Value: &cleared},
+			}}})
 	require.NoError(t, err)
 	require.Equal(t, "Renamed collector", updated.Name)
 	require.Equal(t, "exclude", updated.SensitiveData)
 	require.Equal(t, []*gen.OtelDestinationHeader{
 		{Name: "authorization", HasValue: true},
 		{Name: "x-api-key", HasValue: false},
-	}, updated.Headers)
+	}, updated.Otel.Headers)
 
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
@@ -104,11 +110,12 @@ func TestDestinationCRUDPreservesWriteOnlyHeadersAndAuditsSafeSnapshots(t *testi
 	require.Equal(t, "include", beforeSnapshot["sensitive_data"])
 	require.Equal(t, "exclude", afterSnapshot["sensitive_data"])
 
-	require.NoError(t, ti.service.DeleteOtelDestination(ctx, &gen.DeleteOtelDestinationPayload{ID: created.ID,
+	require.NoError(t, ti.service.DeleteDestination(ctx, &gen.DeleteDestinationPayload{ID: created.ID,
+		DestinationType:  "otel",
 		SessionToken:     nil,
 		ApikeyToken:      nil,
 		ProjectSlugInput: nil}))
-	listed, err = ti.service.ListOtelDestinations(ctx, &gen.ListOtelDestinationsPayload{SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil})
+	listed, err = ti.service.ListDestinations(ctx, &gen.ListDestinationsPayload{SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil})
 	require.NoError(t, err)
 	require.Empty(t, listed.Destinations)
 
@@ -123,15 +130,17 @@ func TestDestinationUpdateReusesUnchangedEncryptedHeaders(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestService(t)
-	created, err := ti.service.CreateOtelDestination(ctx, &gen.CreateOtelDestinationPayload{SessionToken: nil,
+	created, err := ti.service.CreateDestination(ctx, &gen.CreateDestinationPayload{SessionToken: nil,
 		ApikeyToken:      nil,
 		ProjectSlugInput: nil,
 		Name:             "Primary collector",
-		EndpointURL:      "https://collector.example.test/otlp",
+		DestinationType:  "otel",
 		SensitiveData:    "exclude",
-		Headers: []*gen.CreateOtelDestinationHeaderInput{
-			{Name: "Authorization", Value: "initial-secret"},
-		}})
+		Otel: &gen.CreateOtelDestinationInput{
+			EndpointURL: "https://collector.example.test/otlp",
+			Headers: []*gen.CreateOtelDestinationHeaderInput{
+				{Name: "Authorization", Value: "initial-secret"},
+			}}})
 	require.NoError(t, err)
 
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
@@ -144,14 +153,17 @@ func TestDestinationUpdateReusesUnchangedEncryptedHeaders(t *testing.T) {
 	require.Len(t, rows, 1)
 	beforeCiphertext := rows[0].HeadersEncrypted
 
-	_, err = ti.service.UpdateOtelDestination(ctx, &gen.UpdateOtelDestinationPayload{SessionToken: nil,
+	_, err = ti.service.UpdateDestination(ctx, &gen.UpdateDestinationPayload{SessionToken: nil,
 		ApikeyToken:      nil,
 		ProjectSlugInput: nil,
 		ID:               created.ID,
 		Name:             "Renamed collector",
-		EndpointURL:      created.EndpointURL,
+		DestinationType:  "otel",
 		SensitiveData:    created.SensitiveData,
-		Headers:          []*gen.OtelDestinationHeaderInput{{Name: "Authorization", Value: nil}},
+		Otel: &gen.UpdateOtelDestinationInput{
+			EndpointURL: created.Otel.EndpointURL,
+			Headers:     []*gen.UpdateOtelDestinationHeaderInput{{Name: "Authorization", Value: nil}},
+		},
 	})
 	require.NoError(t, err)
 
@@ -168,16 +180,13 @@ func TestDestinationRejectsUserinfoAndFragments(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestService(t)
-	_, err := ti.service.CreateOtelDestination(ctx, &gen.CreateOtelDestinationPayload{SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil,
-		Name: "Test destination", EndpointURL: "https://user:password@collector.example.test", SensitiveData: "exclude", Headers: []*gen.CreateOtelDestinationHeaderInput{}})
+	_, err := ti.service.CreateDestination(ctx, otelDestinationPayload("https://user:password@collector.example.test"))
 	requireOopsCode(t, err, oops.CodeInvalid)
 
-	_, err = ti.service.CreateOtelDestination(ctx, &gen.CreateOtelDestinationPayload{SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil,
-		Name: "Test destination", EndpointURL: "https://collector.example.test/otlp#fragment", SensitiveData: "exclude", Headers: []*gen.CreateOtelDestinationHeaderInput{}})
+	_, err = ti.service.CreateDestination(ctx, otelDestinationPayload("https://collector.example.test/otlp#fragment"))
 	requireOopsCode(t, err, oops.CodeInvalid)
 
-	_, err = ti.service.CreateOtelDestination(ctx, &gen.CreateOtelDestinationPayload{SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil,
-		Name: "Test destination", EndpointURL: "https://collector.example.test/otlp#", SensitiveData: "exclude", Headers: []*gen.CreateOtelDestinationHeaderInput{}})
+	_, err = ti.service.CreateDestination(ctx, otelDestinationPayload("https://collector.example.test/otlp#"))
 	requireOopsCode(t, err, oops.CodeInvalid)
 }
 
@@ -185,8 +194,7 @@ func TestDestinationRejectsMissingHostname(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestService(t)
-	_, err := ti.service.CreateOtelDestination(ctx, &gen.CreateOtelDestinationPayload{SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil,
-		Name: "Test destination", EndpointURL: "https://:4318", SensitiveData: "exclude", Headers: []*gen.CreateOtelDestinationHeaderInput{}})
+	_, err := ti.service.CreateDestination(ctx, otelDestinationPayload("https://:4318"))
 	requireOopsCode(t, err, oops.CodeInvalid)
 }
 
@@ -194,12 +202,10 @@ func TestDestinationRejectsQueries(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestService(t)
-	_, err := ti.service.CreateOtelDestination(ctx, &gen.CreateOtelDestinationPayload{SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil,
-		Name: "Test destination", EndpointURL: "https://collector.example.test/otlp?token=secret", SensitiveData: "exclude", Headers: []*gen.CreateOtelDestinationHeaderInput{}})
+	_, err := ti.service.CreateDestination(ctx, otelDestinationPayload("https://collector.example.test/otlp?token=secret"))
 	requireOopsCode(t, err, oops.CodeInvalid)
 
-	_, err = ti.service.CreateOtelDestination(ctx, &gen.CreateOtelDestinationPayload{SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil,
-		Name: "Test destination", EndpointURL: "https://collector.example.test/otlp?", SensitiveData: "exclude", Headers: []*gen.CreateOtelDestinationHeaderInput{}})
+	_, err = ti.service.CreateDestination(ctx, otelDestinationPayload("https://collector.example.test/otlp?"))
 	requireOopsCode(t, err, oops.CodeInvalid)
 }
 
@@ -207,9 +213,9 @@ func TestDestinationRejectsInvalidHeaderValue(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestService(t)
-	_, err := ti.service.CreateOtelDestination(ctx, &gen.CreateOtelDestinationPayload{SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil,
-		Name: "Test destination", EndpointURL: "https://collector.example.test", SensitiveData: "exclude",
-		Headers: []*gen.CreateOtelDestinationHeaderInput{{Name: "Authorization", Value: "Bearer safe\r\nX-Injected: true"}}})
+	payload := otelDestinationPayload("https://collector.example.test")
+	payload.Otel.Headers = []*gen.CreateOtelDestinationHeaderInput{{Name: "Authorization", Value: "Bearer safe\r\nX-Injected: true"}}
+	_, err := ti.service.CreateDestination(ctx, payload)
 	requireOopsCode(t, err, oops.CodeInvalid)
 }
 
@@ -217,25 +223,24 @@ func TestDestinationAllowsHTTP(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestService(t)
-	created, err := ti.service.CreateOtelDestination(ctx, &gen.CreateOtelDestinationPayload{SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil,
-		Name: "Test destination", EndpointURL: "http://collector.example.test:4318", SensitiveData: "exclude", Headers: []*gen.CreateOtelDestinationHeaderInput{}})
+	created, err := ti.service.CreateDestination(ctx, otelDestinationPayload("http://collector.example.test:4318"))
 	require.NoError(t, err)
-	require.Equal(t, "http://collector.example.test:4318", created.EndpointURL)
+	require.Equal(t, "http://collector.example.test:4318", created.Otel.EndpointURL)
 }
 
 func TestDestinationDeletionConflictsWhileRouteReferencesIt(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestService(t)
-	destination := createOtelDestination(t, ctx, ti, "https://collector.example.test", "exclude")
+	destination := createDestination(t, ctx, ti, "https://collector.example.test", "exclude")
 	_, err := ti.service.CreateRoute(ctx, &gen.CreateRoutePayload{SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil,
 		DataSource: "product_telemetry", Enabled: true, OtelDestinationID: &destination.ID})
 	require.NoError(t, err)
 
-	err = ti.service.DeleteOtelDestination(ctx, &gen.DeleteOtelDestinationPayload{ID: destination.ID, SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil})
+	err = ti.service.DeleteDestination(ctx, &gen.DeleteDestinationPayload{ID: destination.ID, DestinationType: "otel", SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil})
 	requireOopsCode(t, err, oops.CodeConflict)
 
-	listed, err := ti.service.ListOtelDestinations(ctx, &gen.ListOtelDestinationsPayload{SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil})
+	listed, err := ti.service.ListDestinations(ctx, &gen.ListDestinationsPayload{SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil})
 	require.NoError(t, err)
 	require.Len(t, listed.Destinations, 1)
 }
@@ -246,8 +251,7 @@ func TestDestinationCreateRollsBackWhenAuditInsertFails(t *testing.T) {
 	ctx, ti := newTestService(t)
 	require.NoError(t, audittest.RejectAction(ctx, ti.conn, audit.ActionOtelDestinationCreate))
 
-	_, err := ti.service.CreateOtelDestination(ctx, &gen.CreateOtelDestinationPayload{SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil,
-		Name: "Test destination", EndpointURL: "https://collector.example.test", SensitiveData: "exclude", Headers: []*gen.CreateOtelDestinationHeaderInput{}})
+	_, err := ti.service.CreateDestination(ctx, otelDestinationPayload("https://collector.example.test"))
 	requireOopsCode(t, err, oops.CodeUnexpected)
 
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
@@ -261,8 +265,9 @@ func TestDestinationRejectsUnknownSensitiveDataPolicy(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestService(t)
-	_, err := ti.service.CreateOtelDestination(ctx, &gen.CreateOtelDestinationPayload{SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil,
-		Name: "Test destination", EndpointURL: "https://collector.example.test", SensitiveData: "redact", Headers: []*gen.CreateOtelDestinationHeaderInput{}})
+	payload := otelDestinationPayload("https://collector.example.test")
+	payload.SensitiveData = "redact"
+	_, err := ti.service.CreateDestination(ctx, payload)
 	requireOopsCode(t, err, oops.CodeInvalid)
 }
 
@@ -270,14 +275,40 @@ func TestDestinationRejectsBlankName(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestService(t)
-	_, err := ti.service.CreateOtelDestination(ctx, &gen.CreateOtelDestinationPayload{
-		SessionToken:     nil,
-		ApikeyToken:      nil,
-		ProjectSlugInput: nil,
-		Name:             "  ",
-		EndpointURL:      "https://collector.example.test",
-		SensitiveData:    "exclude",
-		Headers:          []*gen.CreateOtelDestinationHeaderInput{},
-	})
+	payload := otelDestinationPayload("https://collector.example.test")
+	payload.Name = "  "
+	_, err := ti.service.CreateDestination(ctx, payload)
 	requireOopsCode(t, err, oops.CodeInvalid)
+}
+
+func TestDestinationRejectsUnsupportedType(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	payload := otelDestinationPayload("https://collector.example.test")
+	payload.DestinationType = "siem"
+	_, err := ti.service.CreateDestination(ctx, payload)
+	requireOopsCode(t, err, oops.CodeInvalid)
+}
+
+func TestOtelDestinationRequiresOtelConfiguration(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	payload := otelDestinationPayload("https://collector.example.test")
+	payload.Otel = nil
+	_, err := ti.service.CreateDestination(ctx, payload)
+	requireOopsCode(t, err, oops.CodeInvalid)
+}
+
+func otelDestinationPayload(endpointURL string) *gen.CreateDestinationPayload {
+	return &gen.CreateDestinationPayload{
+		Name:            "Test destination",
+		DestinationType: "otel",
+		SensitiveData:   "exclude",
+		Otel: &gen.CreateOtelDestinationInput{
+			EndpointURL: endpointURL,
+			Headers:     []*gen.CreateOtelDestinationHeaderInput{},
+		},
+	}
 }

@@ -12,30 +12,32 @@ import (
 	goa "goa.design/goa/v3/pkg"
 )
 
-// CreateOtelDestinationRequestBody is the type of the "dataExports" service
-// "createOtelDestination" endpoint HTTP request body.
-type CreateOtelDestinationRequestBody struct {
+// CreateDestinationRequestBody is the type of the "dataExports" service
+// "createDestination" endpoint HTTP request body.
+type CreateDestinationRequestBody struct {
 	// Human-readable destination name.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// OTLP base URL.
-	EndpointURL *string `form:"endpoint_url,omitempty" json:"endpoint_url,omitempty" xml:"endpoint_url,omitempty"`
+	// Destination transport type.
+	DestinationType *string `form:"destination_type,omitempty" json:"destination_type,omitempty" xml:"destination_type,omitempty"`
 	// Sensitive-data policy.
 	SensitiveData *string `form:"sensitive_data,omitempty" json:"sensitive_data,omitempty" xml:"sensitive_data,omitempty"`
-	// Write-only headers.
-	Headers []*CreateOtelDestinationHeaderInputRequestBody `form:"headers,omitempty" json:"headers,omitempty" xml:"headers,omitempty"`
+	// OTEL configuration. Required when destination_type is otel.
+	Otel *CreateOtelDestinationInputRequestBody `form:"otel,omitempty" json:"otel,omitempty" xml:"otel,omitempty"`
 }
 
-// UpdateOtelDestinationRequestBody is the type of the "dataExports" service
-// "updateOtelDestination" endpoint HTTP request body.
-type UpdateOtelDestinationRequestBody struct {
+// UpdateDestinationRequestBody is the type of the "dataExports" service
+// "updateDestination" endpoint HTTP request body.
+type UpdateDestinationRequestBody struct {
 	// Human-readable destination name.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// OTLP base URL.
-	EndpointURL *string `form:"endpoint_url,omitempty" json:"endpoint_url,omitempty" xml:"endpoint_url,omitempty"`
+	// Destination transport type.
+	DestinationType *string `form:"destination_type,omitempty" json:"destination_type,omitempty" xml:"destination_type,omitempty"`
 	// Sensitive-data policy.
 	SensitiveData *string `form:"sensitive_data,omitempty" json:"sensitive_data,omitempty" xml:"sensitive_data,omitempty"`
-	// Complete header-name set for the destination.
-	Headers []*OtelDestinationHeaderInputRequestBody `form:"headers,omitempty" json:"headers,omitempty" xml:"headers,omitempty"`
+	// OTEL configuration. Required when destination_type is otel. Header entries
+	// with omitted values preserve existing encrypted values by case-insensitive
+	// name.
+	Otel *UpdateOtelDestinationInputRequestBody `form:"otel,omitempty" json:"otel,omitempty" xml:"otel,omitempty"`
 }
 
 // CreateRouteRequestBody is the type of the "dataExports" service
@@ -60,49 +62,49 @@ type UpdateRouteRequestBody struct {
 	OtelDestinationID *string `form:"otel_destination_id,omitempty" json:"otel_destination_id,omitempty" xml:"otel_destination_id,omitempty"`
 }
 
-// ListOtelDestinationsResponseBody is the type of the "dataExports" service
-// "listOtelDestinations" endpoint HTTP response body.
-type ListOtelDestinationsResponseBody struct {
-	// Active OTEL destinations in the selected project.
-	Destinations []*OtelDestinationResponseBody `form:"destinations" json:"destinations" xml:"destinations"`
+// ListDestinationsResponseBody is the type of the "dataExports" service
+// "listDestinations" endpoint HTTP response body.
+type ListDestinationsResponseBody struct {
+	// Active data export destinations in the selected project.
+	Destinations []*DestinationResponseBody `form:"destinations" json:"destinations" xml:"destinations"`
 }
 
-// CreateOtelDestinationResponseBody is the type of the "dataExports" service
-// "createOtelDestination" endpoint HTTP response body.
-type CreateOtelDestinationResponseBody struct {
+// CreateDestinationResponseBody is the type of the "dataExports" service
+// "createDestination" endpoint HTTP response body.
+type CreateDestinationResponseBody struct {
 	// Destination ID.
 	ID string `form:"id" json:"id" xml:"id"`
 	// Project that owns the destination.
 	ProjectID string `form:"project_id" json:"project_id" xml:"project_id"`
 	// Human-readable destination name.
 	Name string `form:"name" json:"name" xml:"name"`
-	// OTLP base URL. Signal-specific paths are appended during delivery.
-	EndpointURL string `form:"endpoint_url" json:"endpoint_url" xml:"endpoint_url"`
+	// Destination transport type.
+	DestinationType string `form:"destination_type" json:"destination_type" xml:"destination_type"`
 	// Whether sensitive data is included in payloads sent to this destination.
 	SensitiveData string `form:"sensitive_data" json:"sensitive_data" xml:"sensitive_data"`
-	// Configured header names. Header values are never returned.
-	Headers []*OtelDestinationHeaderResponseBody `form:"headers" json:"headers" xml:"headers"`
+	// OTEL configuration. Present when destination_type is otel.
+	Otel *OtelDestinationResponseBody `form:"otel,omitempty" json:"otel,omitempty" xml:"otel,omitempty"`
 	// Creation timestamp.
 	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
 	// Last update timestamp.
 	UpdatedAt string `form:"updated_at" json:"updated_at" xml:"updated_at"`
 }
 
-// UpdateOtelDestinationResponseBody is the type of the "dataExports" service
-// "updateOtelDestination" endpoint HTTP response body.
-type UpdateOtelDestinationResponseBody struct {
+// UpdateDestinationResponseBody is the type of the "dataExports" service
+// "updateDestination" endpoint HTTP response body.
+type UpdateDestinationResponseBody struct {
 	// Destination ID.
 	ID string `form:"id" json:"id" xml:"id"`
 	// Project that owns the destination.
 	ProjectID string `form:"project_id" json:"project_id" xml:"project_id"`
 	// Human-readable destination name.
 	Name string `form:"name" json:"name" xml:"name"`
-	// OTLP base URL. Signal-specific paths are appended during delivery.
-	EndpointURL string `form:"endpoint_url" json:"endpoint_url" xml:"endpoint_url"`
+	// Destination transport type.
+	DestinationType string `form:"destination_type" json:"destination_type" xml:"destination_type"`
 	// Whether sensitive data is included in payloads sent to this destination.
 	SensitiveData string `form:"sensitive_data" json:"sensitive_data" xml:"sensitive_data"`
-	// Configured header names. Header values are never returned.
-	Headers []*OtelDestinationHeaderResponseBody `form:"headers" json:"headers" xml:"headers"`
+	// OTEL configuration. Present when destination_type is otel.
+	Otel *OtelDestinationResponseBody `form:"otel,omitempty" json:"otel,omitempty" xml:"otel,omitempty"`
 	// Creation timestamp.
 	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
 	// Last update timestamp.
@@ -156,10 +158,10 @@ type UpdateRouteResponseBody struct {
 	UpdatedAt string `form:"updated_at" json:"updated_at" xml:"updated_at"`
 }
 
-// ListOtelDestinationsUnauthorizedResponseBody is the type of the
-// "dataExports" service "listOtelDestinations" endpoint HTTP response body for
-// the "unauthorized" error.
-type ListOtelDestinationsUnauthorizedResponseBody struct {
+// ListDestinationsUnauthorizedResponseBody is the type of the "dataExports"
+// service "listDestinations" endpoint HTTP response body for the
+// "unauthorized" error.
+type ListDestinationsUnauthorizedResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -175,105 +177,10 @@ type ListOtelDestinationsUnauthorizedResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// ListOtelDestinationsForbiddenResponseBody is the type of the "dataExports"
-// service "listOtelDestinations" endpoint HTTP response body for the
-// "forbidden" error.
-type ListOtelDestinationsForbiddenResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// ListOtelDestinationsBadRequestResponseBody is the type of the "dataExports"
-// service "listOtelDestinations" endpoint HTTP response body for the
-// "bad_request" error.
-type ListOtelDestinationsBadRequestResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// ListOtelDestinationsNotFoundResponseBody is the type of the "dataExports"
-// service "listOtelDestinations" endpoint HTTP response body for the
-// "not_found" error.
-type ListOtelDestinationsNotFoundResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// ListOtelDestinationsConflictResponseBody is the type of the "dataExports"
-// service "listOtelDestinations" endpoint HTTP response body for the
-// "conflict" error.
-type ListOtelDestinationsConflictResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// ListOtelDestinationsUnsupportedMediaResponseBody is the type of the
-// "dataExports" service "listOtelDestinations" endpoint HTTP response body for
-// the "unsupported_media" error.
-type ListOtelDestinationsUnsupportedMediaResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// ListOtelDestinationsInvalidResponseBody is the type of the "dataExports"
-// service "listOtelDestinations" endpoint HTTP response body for the "invalid"
+// ListDestinationsForbiddenResponseBody is the type of the "dataExports"
+// service "listDestinations" endpoint HTTP response body for the "forbidden"
 // error.
-type ListOtelDestinationsInvalidResponseBody struct {
+type ListDestinationsForbiddenResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -289,10 +196,294 @@ type ListOtelDestinationsInvalidResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// ListOtelDestinationsInvariantViolationResponseBody is the type of the
-// "dataExports" service "listOtelDestinations" endpoint HTTP response body for
+// ListDestinationsBadRequestResponseBody is the type of the "dataExports"
+// service "listDestinations" endpoint HTTP response body for the "bad_request"
+// error.
+type ListDestinationsBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListDestinationsNotFoundResponseBody is the type of the "dataExports"
+// service "listDestinations" endpoint HTTP response body for the "not_found"
+// error.
+type ListDestinationsNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListDestinationsConflictResponseBody is the type of the "dataExports"
+// service "listDestinations" endpoint HTTP response body for the "conflict"
+// error.
+type ListDestinationsConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListDestinationsUnsupportedMediaResponseBody is the type of the
+// "dataExports" service "listDestinations" endpoint HTTP response body for the
+// "unsupported_media" error.
+type ListDestinationsUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListDestinationsInvalidResponseBody is the type of the "dataExports" service
+// "listDestinations" endpoint HTTP response body for the "invalid" error.
+type ListDestinationsInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListDestinationsInvariantViolationResponseBody is the type of the
+// "dataExports" service "listDestinations" endpoint HTTP response body for the
+// "invariant_violation" error.
+type ListDestinationsInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListDestinationsUnexpectedResponseBody is the type of the "dataExports"
+// service "listDestinations" endpoint HTTP response body for the "unexpected"
+// error.
+type ListDestinationsUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListDestinationsGatewayErrorResponseBody is the type of the "dataExports"
+// service "listDestinations" endpoint HTTP response body for the
+// "gateway_error" error.
+type ListDestinationsGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateDestinationUnauthorizedResponseBody is the type of the "dataExports"
+// service "createDestination" endpoint HTTP response body for the
+// "unauthorized" error.
+type CreateDestinationUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateDestinationForbiddenResponseBody is the type of the "dataExports"
+// service "createDestination" endpoint HTTP response body for the "forbidden"
+// error.
+type CreateDestinationForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateDestinationBadRequestResponseBody is the type of the "dataExports"
+// service "createDestination" endpoint HTTP response body for the
+// "bad_request" error.
+type CreateDestinationBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateDestinationNotFoundResponseBody is the type of the "dataExports"
+// service "createDestination" endpoint HTTP response body for the "not_found"
+// error.
+type CreateDestinationNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateDestinationConflictResponseBody is the type of the "dataExports"
+// service "createDestination" endpoint HTTP response body for the "conflict"
+// error.
+type CreateDestinationConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateDestinationUnsupportedMediaResponseBody is the type of the
+// "dataExports" service "createDestination" endpoint HTTP response body for
+// the "unsupported_media" error.
+type CreateDestinationUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateDestinationInvalidResponseBody is the type of the "dataExports"
+// service "createDestination" endpoint HTTP response body for the "invalid"
+// error.
+type CreateDestinationInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateDestinationInvariantViolationResponseBody is the type of the
+// "dataExports" service "createDestination" endpoint HTTP response body for
 // the "invariant_violation" error.
-type ListOtelDestinationsInvariantViolationResponseBody struct {
+type CreateDestinationInvariantViolationResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -308,10 +499,10 @@ type ListOtelDestinationsInvariantViolationResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// ListOtelDestinationsUnexpectedResponseBody is the type of the "dataExports"
-// service "listOtelDestinations" endpoint HTTP response body for the
-// "unexpected" error.
-type ListOtelDestinationsUnexpectedResponseBody struct {
+// CreateDestinationUnexpectedResponseBody is the type of the "dataExports"
+// service "createDestination" endpoint HTTP response body for the "unexpected"
+// error.
+type CreateDestinationUnexpectedResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -327,10 +518,10 @@ type ListOtelDestinationsUnexpectedResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// ListOtelDestinationsGatewayErrorResponseBody is the type of the
-// "dataExports" service "listOtelDestinations" endpoint HTTP response body for
-// the "gateway_error" error.
-type ListOtelDestinationsGatewayErrorResponseBody struct {
+// CreateDestinationGatewayErrorResponseBody is the type of the "dataExports"
+// service "createDestination" endpoint HTTP response body for the
+// "gateway_error" error.
+type CreateDestinationGatewayErrorResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -346,10 +537,10 @@ type ListOtelDestinationsGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// CreateOtelDestinationUnauthorizedResponseBody is the type of the
-// "dataExports" service "createOtelDestination" endpoint HTTP response body
-// for the "unauthorized" error.
-type CreateOtelDestinationUnauthorizedResponseBody struct {
+// UpdateDestinationUnauthorizedResponseBody is the type of the "dataExports"
+// service "updateDestination" endpoint HTTP response body for the
+// "unauthorized" error.
+type UpdateDestinationUnauthorizedResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -365,10 +556,10 @@ type CreateOtelDestinationUnauthorizedResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// CreateOtelDestinationForbiddenResponseBody is the type of the "dataExports"
-// service "createOtelDestination" endpoint HTTP response body for the
-// "forbidden" error.
-type CreateOtelDestinationForbiddenResponseBody struct {
+// UpdateDestinationForbiddenResponseBody is the type of the "dataExports"
+// service "updateDestination" endpoint HTTP response body for the "forbidden"
+// error.
+type UpdateDestinationForbiddenResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -384,10 +575,10 @@ type CreateOtelDestinationForbiddenResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// CreateOtelDestinationBadRequestResponseBody is the type of the "dataExports"
-// service "createOtelDestination" endpoint HTTP response body for the
+// UpdateDestinationBadRequestResponseBody is the type of the "dataExports"
+// service "updateDestination" endpoint HTTP response body for the
 // "bad_request" error.
-type CreateOtelDestinationBadRequestResponseBody struct {
+type UpdateDestinationBadRequestResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -403,10 +594,10 @@ type CreateOtelDestinationBadRequestResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// CreateOtelDestinationNotFoundResponseBody is the type of the "dataExports"
-// service "createOtelDestination" endpoint HTTP response body for the
-// "not_found" error.
-type CreateOtelDestinationNotFoundResponseBody struct {
+// UpdateDestinationNotFoundResponseBody is the type of the "dataExports"
+// service "updateDestination" endpoint HTTP response body for the "not_found"
+// error.
+type UpdateDestinationNotFoundResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -422,10 +613,10 @@ type CreateOtelDestinationNotFoundResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// CreateOtelDestinationConflictResponseBody is the type of the "dataExports"
-// service "createOtelDestination" endpoint HTTP response body for the
-// "conflict" error.
-type CreateOtelDestinationConflictResponseBody struct {
+// UpdateDestinationConflictResponseBody is the type of the "dataExports"
+// service "updateDestination" endpoint HTTP response body for the "conflict"
+// error.
+type UpdateDestinationConflictResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -441,10 +632,10 @@ type CreateOtelDestinationConflictResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// CreateOtelDestinationUnsupportedMediaResponseBody is the type of the
-// "dataExports" service "createOtelDestination" endpoint HTTP response body
-// for the "unsupported_media" error.
-type CreateOtelDestinationUnsupportedMediaResponseBody struct {
+// UpdateDestinationUnsupportedMediaResponseBody is the type of the
+// "dataExports" service "updateDestination" endpoint HTTP response body for
+// the "unsupported_media" error.
+type UpdateDestinationUnsupportedMediaResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -460,10 +651,10 @@ type CreateOtelDestinationUnsupportedMediaResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// CreateOtelDestinationInvalidResponseBody is the type of the "dataExports"
-// service "createOtelDestination" endpoint HTTP response body for the
-// "invalid" error.
-type CreateOtelDestinationInvalidResponseBody struct {
+// UpdateDestinationInvalidResponseBody is the type of the "dataExports"
+// service "updateDestination" endpoint HTTP response body for the "invalid"
+// error.
+type UpdateDestinationInvalidResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -479,10 +670,10 @@ type CreateOtelDestinationInvalidResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// CreateOtelDestinationInvariantViolationResponseBody is the type of the
-// "dataExports" service "createOtelDestination" endpoint HTTP response body
-// for the "invariant_violation" error.
-type CreateOtelDestinationInvariantViolationResponseBody struct {
+// UpdateDestinationInvariantViolationResponseBody is the type of the
+// "dataExports" service "updateDestination" endpoint HTTP response body for
+// the "invariant_violation" error.
+type UpdateDestinationInvariantViolationResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -498,10 +689,10 @@ type CreateOtelDestinationInvariantViolationResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// CreateOtelDestinationUnexpectedResponseBody is the type of the "dataExports"
-// service "createOtelDestination" endpoint HTTP response body for the
-// "unexpected" error.
-type CreateOtelDestinationUnexpectedResponseBody struct {
+// UpdateDestinationUnexpectedResponseBody is the type of the "dataExports"
+// service "updateDestination" endpoint HTTP response body for the "unexpected"
+// error.
+type UpdateDestinationUnexpectedResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -517,10 +708,10 @@ type CreateOtelDestinationUnexpectedResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// CreateOtelDestinationGatewayErrorResponseBody is the type of the
-// "dataExports" service "createOtelDestination" endpoint HTTP response body
-// for the "gateway_error" error.
-type CreateOtelDestinationGatewayErrorResponseBody struct {
+// UpdateDestinationGatewayErrorResponseBody is the type of the "dataExports"
+// service "updateDestination" endpoint HTTP response body for the
+// "gateway_error" error.
+type UpdateDestinationGatewayErrorResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -536,10 +727,10 @@ type CreateOtelDestinationGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// UpdateOtelDestinationUnauthorizedResponseBody is the type of the
-// "dataExports" service "updateOtelDestination" endpoint HTTP response body
-// for the "unauthorized" error.
-type UpdateOtelDestinationUnauthorizedResponseBody struct {
+// DeleteDestinationUnauthorizedResponseBody is the type of the "dataExports"
+// service "deleteDestination" endpoint HTTP response body for the
+// "unauthorized" error.
+type DeleteDestinationUnauthorizedResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -555,10 +746,10 @@ type UpdateOtelDestinationUnauthorizedResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// UpdateOtelDestinationForbiddenResponseBody is the type of the "dataExports"
-// service "updateOtelDestination" endpoint HTTP response body for the
-// "forbidden" error.
-type UpdateOtelDestinationForbiddenResponseBody struct {
+// DeleteDestinationForbiddenResponseBody is the type of the "dataExports"
+// service "deleteDestination" endpoint HTTP response body for the "forbidden"
+// error.
+type DeleteDestinationForbiddenResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -574,10 +765,10 @@ type UpdateOtelDestinationForbiddenResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// UpdateOtelDestinationBadRequestResponseBody is the type of the "dataExports"
-// service "updateOtelDestination" endpoint HTTP response body for the
+// DeleteDestinationBadRequestResponseBody is the type of the "dataExports"
+// service "deleteDestination" endpoint HTTP response body for the
 // "bad_request" error.
-type UpdateOtelDestinationBadRequestResponseBody struct {
+type DeleteDestinationBadRequestResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -593,10 +784,10 @@ type UpdateOtelDestinationBadRequestResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// UpdateOtelDestinationNotFoundResponseBody is the type of the "dataExports"
-// service "updateOtelDestination" endpoint HTTP response body for the
-// "not_found" error.
-type UpdateOtelDestinationNotFoundResponseBody struct {
+// DeleteDestinationNotFoundResponseBody is the type of the "dataExports"
+// service "deleteDestination" endpoint HTTP response body for the "not_found"
+// error.
+type DeleteDestinationNotFoundResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -612,10 +803,10 @@ type UpdateOtelDestinationNotFoundResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// UpdateOtelDestinationConflictResponseBody is the type of the "dataExports"
-// service "updateOtelDestination" endpoint HTTP response body for the
-// "conflict" error.
-type UpdateOtelDestinationConflictResponseBody struct {
+// DeleteDestinationConflictResponseBody is the type of the "dataExports"
+// service "deleteDestination" endpoint HTTP response body for the "conflict"
+// error.
+type DeleteDestinationConflictResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -631,10 +822,10 @@ type UpdateOtelDestinationConflictResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// UpdateOtelDestinationUnsupportedMediaResponseBody is the type of the
-// "dataExports" service "updateOtelDestination" endpoint HTTP response body
-// for the "unsupported_media" error.
-type UpdateOtelDestinationUnsupportedMediaResponseBody struct {
+// DeleteDestinationUnsupportedMediaResponseBody is the type of the
+// "dataExports" service "deleteDestination" endpoint HTTP response body for
+// the "unsupported_media" error.
+type DeleteDestinationUnsupportedMediaResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -650,10 +841,10 @@ type UpdateOtelDestinationUnsupportedMediaResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// UpdateOtelDestinationInvalidResponseBody is the type of the "dataExports"
-// service "updateOtelDestination" endpoint HTTP response body for the
-// "invalid" error.
-type UpdateOtelDestinationInvalidResponseBody struct {
+// DeleteDestinationInvalidResponseBody is the type of the "dataExports"
+// service "deleteDestination" endpoint HTTP response body for the "invalid"
+// error.
+type DeleteDestinationInvalidResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -669,10 +860,10 @@ type UpdateOtelDestinationInvalidResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// UpdateOtelDestinationInvariantViolationResponseBody is the type of the
-// "dataExports" service "updateOtelDestination" endpoint HTTP response body
-// for the "invariant_violation" error.
-type UpdateOtelDestinationInvariantViolationResponseBody struct {
+// DeleteDestinationInvariantViolationResponseBody is the type of the
+// "dataExports" service "deleteDestination" endpoint HTTP response body for
+// the "invariant_violation" error.
+type DeleteDestinationInvariantViolationResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -688,10 +879,10 @@ type UpdateOtelDestinationInvariantViolationResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// UpdateOtelDestinationUnexpectedResponseBody is the type of the "dataExports"
-// service "updateOtelDestination" endpoint HTTP response body for the
-// "unexpected" error.
-type UpdateOtelDestinationUnexpectedResponseBody struct {
+// DeleteDestinationUnexpectedResponseBody is the type of the "dataExports"
+// service "deleteDestination" endpoint HTTP response body for the "unexpected"
+// error.
+type DeleteDestinationUnexpectedResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -707,200 +898,10 @@ type UpdateOtelDestinationUnexpectedResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// UpdateOtelDestinationGatewayErrorResponseBody is the type of the
-// "dataExports" service "updateOtelDestination" endpoint HTTP response body
-// for the "gateway_error" error.
-type UpdateOtelDestinationGatewayErrorResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// DeleteOtelDestinationUnauthorizedResponseBody is the type of the
-// "dataExports" service "deleteOtelDestination" endpoint HTTP response body
-// for the "unauthorized" error.
-type DeleteOtelDestinationUnauthorizedResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// DeleteOtelDestinationForbiddenResponseBody is the type of the "dataExports"
-// service "deleteOtelDestination" endpoint HTTP response body for the
-// "forbidden" error.
-type DeleteOtelDestinationForbiddenResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// DeleteOtelDestinationBadRequestResponseBody is the type of the "dataExports"
-// service "deleteOtelDestination" endpoint HTTP response body for the
-// "bad_request" error.
-type DeleteOtelDestinationBadRequestResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// DeleteOtelDestinationNotFoundResponseBody is the type of the "dataExports"
-// service "deleteOtelDestination" endpoint HTTP response body for the
-// "not_found" error.
-type DeleteOtelDestinationNotFoundResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// DeleteOtelDestinationConflictResponseBody is the type of the "dataExports"
-// service "deleteOtelDestination" endpoint HTTP response body for the
-// "conflict" error.
-type DeleteOtelDestinationConflictResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// DeleteOtelDestinationUnsupportedMediaResponseBody is the type of the
-// "dataExports" service "deleteOtelDestination" endpoint HTTP response body
-// for the "unsupported_media" error.
-type DeleteOtelDestinationUnsupportedMediaResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// DeleteOtelDestinationInvalidResponseBody is the type of the "dataExports"
-// service "deleteOtelDestination" endpoint HTTP response body for the
-// "invalid" error.
-type DeleteOtelDestinationInvalidResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// DeleteOtelDestinationInvariantViolationResponseBody is the type of the
-// "dataExports" service "deleteOtelDestination" endpoint HTTP response body
-// for the "invariant_violation" error.
-type DeleteOtelDestinationInvariantViolationResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// DeleteOtelDestinationUnexpectedResponseBody is the type of the "dataExports"
-// service "deleteOtelDestination" endpoint HTTP response body for the
-// "unexpected" error.
-type DeleteOtelDestinationUnexpectedResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// DeleteOtelDestinationGatewayErrorResponseBody is the type of the
-// "dataExports" service "deleteOtelDestination" endpoint HTTP response body
-// for the "gateway_error" error.
-type DeleteOtelDestinationGatewayErrorResponseBody struct {
+// DeleteDestinationGatewayErrorResponseBody is the type of the "dataExports"
+// service "deleteDestination" endpoint HTTP response body for the
+// "gateway_error" error.
+type DeleteDestinationGatewayErrorResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -1644,24 +1645,33 @@ type DeleteRouteGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// OtelDestinationResponseBody is used to define fields on response body types.
-type OtelDestinationResponseBody struct {
+// DestinationResponseBody is used to define fields on response body types.
+type DestinationResponseBody struct {
 	// Destination ID.
 	ID string `form:"id" json:"id" xml:"id"`
 	// Project that owns the destination.
 	ProjectID string `form:"project_id" json:"project_id" xml:"project_id"`
 	// Human-readable destination name.
 	Name string `form:"name" json:"name" xml:"name"`
-	// OTLP base URL. Signal-specific paths are appended during delivery.
-	EndpointURL string `form:"endpoint_url" json:"endpoint_url" xml:"endpoint_url"`
+	// Destination transport type.
+	DestinationType string `form:"destination_type" json:"destination_type" xml:"destination_type"`
 	// Whether sensitive data is included in payloads sent to this destination.
 	SensitiveData string `form:"sensitive_data" json:"sensitive_data" xml:"sensitive_data"`
-	// Configured header names. Header values are never returned.
-	Headers []*OtelDestinationHeaderResponseBody `form:"headers" json:"headers" xml:"headers"`
+	// OTEL configuration. Present when destination_type is otel.
+	Otel *OtelDestinationResponseBody `form:"otel,omitempty" json:"otel,omitempty" xml:"otel,omitempty"`
 	// Creation timestamp.
 	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
 	// Last update timestamp.
 	UpdatedAt string `form:"updated_at" json:"updated_at" xml:"updated_at"`
+}
+
+// OtelDestinationResponseBody is used to define fields on response body types.
+type OtelDestinationResponseBody struct {
+	// OTEL collector endpoint URL. Transport-specific paths may be appended during
+	// delivery.
+	EndpointURL string `form:"endpoint_url" json:"endpoint_url" xml:"endpoint_url"`
+	// Configured HTTP header names. Header values are never returned.
+	Headers []*OtelDestinationHeaderResponseBody `form:"headers" json:"headers" xml:"headers"`
 }
 
 // OtelDestinationHeaderResponseBody is used to define fields on response body
@@ -1692,6 +1702,15 @@ type DataExportRouteResponseBody struct {
 	UpdatedAt string `form:"updated_at" json:"updated_at" xml:"updated_at"`
 }
 
+// CreateOtelDestinationInputRequestBody is used to define fields on request
+// body types.
+type CreateOtelDestinationInputRequestBody struct {
+	// OTEL collector endpoint URL.
+	EndpointURL *string `form:"endpoint_url,omitempty" json:"endpoint_url,omitempty" xml:"endpoint_url,omitempty"`
+	// Write-only HTTP headers.
+	Headers []*CreateOtelDestinationHeaderInputRequestBody `form:"headers,omitempty" json:"headers,omitempty" xml:"headers,omitempty"`
+}
+
 // CreateOtelDestinationHeaderInputRequestBody is used to define fields on
 // request body types.
 type CreateOtelDestinationHeaderInputRequestBody struct {
@@ -1701,9 +1720,18 @@ type CreateOtelDestinationHeaderInputRequestBody struct {
 	Value *string `form:"value,omitempty" json:"value,omitempty" xml:"value,omitempty"`
 }
 
-// OtelDestinationHeaderInputRequestBody is used to define fields on request
+// UpdateOtelDestinationInputRequestBody is used to define fields on request
 // body types.
-type OtelDestinationHeaderInputRequestBody struct {
+type UpdateOtelDestinationInputRequestBody struct {
+	// OTEL collector endpoint URL.
+	EndpointURL *string `form:"endpoint_url,omitempty" json:"endpoint_url,omitempty" xml:"endpoint_url,omitempty"`
+	// Complete HTTP header-name set for the OTEL destination.
+	Headers []*UpdateOtelDestinationHeaderInputRequestBody `form:"headers,omitempty" json:"headers,omitempty" xml:"headers,omitempty"`
+}
+
+// UpdateOtelDestinationHeaderInputRequestBody is used to define fields on
+// request body types.
+type UpdateOtelDestinationHeaderInputRequestBody struct {
 	// Header name.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// Write-only header value. Omit to preserve an existing value; provide an
@@ -1711,75 +1739,57 @@ type OtelDestinationHeaderInputRequestBody struct {
 	Value *string `form:"value,omitempty" json:"value,omitempty" xml:"value,omitempty"`
 }
 
-// NewListOtelDestinationsResponseBody builds the HTTP response body from the
-// result of the "listOtelDestinations" endpoint of the "dataExports" service.
-func NewListOtelDestinationsResponseBody(res *dataexports.ListOtelDestinationsResult) *ListOtelDestinationsResponseBody {
-	body := &ListOtelDestinationsResponseBody{}
+// NewListDestinationsResponseBody builds the HTTP response body from the
+// result of the "listDestinations" endpoint of the "dataExports" service.
+func NewListDestinationsResponseBody(res *dataexports.ListDestinationsResult) *ListDestinationsResponseBody {
+	body := &ListDestinationsResponseBody{}
 	if res.Destinations != nil {
-		body.Destinations = make([]*OtelDestinationResponseBody, len(res.Destinations))
+		body.Destinations = make([]*DestinationResponseBody, len(res.Destinations))
 		for i, val := range res.Destinations {
 			if val == nil {
 				body.Destinations[i] = nil
 				continue
 			}
-			body.Destinations[i] = marshalDataexportsOtelDestinationToOtelDestinationResponseBody(val)
+			body.Destinations[i] = marshalDataexportsDestinationToDestinationResponseBody(val)
 		}
 	} else {
-		body.Destinations = []*OtelDestinationResponseBody{}
+		body.Destinations = []*DestinationResponseBody{}
 	}
 	return body
 }
 
-// NewCreateOtelDestinationResponseBody builds the HTTP response body from the
-// result of the "createOtelDestination" endpoint of the "dataExports" service.
-func NewCreateOtelDestinationResponseBody(res *dataexports.OtelDestination) *CreateOtelDestinationResponseBody {
-	body := &CreateOtelDestinationResponseBody{
-		ID:            res.ID,
-		ProjectID:     res.ProjectID,
-		Name:          res.Name,
-		EndpointURL:   res.EndpointURL,
-		SensitiveData: res.SensitiveData,
-		CreatedAt:     res.CreatedAt,
-		UpdatedAt:     res.UpdatedAt,
+// NewCreateDestinationResponseBody builds the HTTP response body from the
+// result of the "createDestination" endpoint of the "dataExports" service.
+func NewCreateDestinationResponseBody(res *dataexports.Destination) *CreateDestinationResponseBody {
+	body := &CreateDestinationResponseBody{
+		ID:              res.ID,
+		ProjectID:       res.ProjectID,
+		Name:            res.Name,
+		DestinationType: res.DestinationType,
+		SensitiveData:   res.SensitiveData,
+		CreatedAt:       res.CreatedAt,
+		UpdatedAt:       res.UpdatedAt,
 	}
-	if res.Headers != nil {
-		body.Headers = make([]*OtelDestinationHeaderResponseBody, len(res.Headers))
-		for i, val := range res.Headers {
-			if val == nil {
-				body.Headers[i] = nil
-				continue
-			}
-			body.Headers[i] = marshalDataexportsOtelDestinationHeaderToOtelDestinationHeaderResponseBody(val)
-		}
-	} else {
-		body.Headers = []*OtelDestinationHeaderResponseBody{}
+	if res.Otel != nil {
+		body.Otel = marshalDataexportsOtelDestinationToOtelDestinationResponseBody(res.Otel)
 	}
 	return body
 }
 
-// NewUpdateOtelDestinationResponseBody builds the HTTP response body from the
-// result of the "updateOtelDestination" endpoint of the "dataExports" service.
-func NewUpdateOtelDestinationResponseBody(res *dataexports.OtelDestination) *UpdateOtelDestinationResponseBody {
-	body := &UpdateOtelDestinationResponseBody{
-		ID:            res.ID,
-		ProjectID:     res.ProjectID,
-		Name:          res.Name,
-		EndpointURL:   res.EndpointURL,
-		SensitiveData: res.SensitiveData,
-		CreatedAt:     res.CreatedAt,
-		UpdatedAt:     res.UpdatedAt,
+// NewUpdateDestinationResponseBody builds the HTTP response body from the
+// result of the "updateDestination" endpoint of the "dataExports" service.
+func NewUpdateDestinationResponseBody(res *dataexports.Destination) *UpdateDestinationResponseBody {
+	body := &UpdateDestinationResponseBody{
+		ID:              res.ID,
+		ProjectID:       res.ProjectID,
+		Name:            res.Name,
+		DestinationType: res.DestinationType,
+		SensitiveData:   res.SensitiveData,
+		CreatedAt:       res.CreatedAt,
+		UpdatedAt:       res.UpdatedAt,
 	}
-	if res.Headers != nil {
-		body.Headers = make([]*OtelDestinationHeaderResponseBody, len(res.Headers))
-		for i, val := range res.Headers {
-			if val == nil {
-				body.Headers[i] = nil
-				continue
-			}
-			body.Headers[i] = marshalDataexportsOtelDestinationHeaderToOtelDestinationHeaderResponseBody(val)
-		}
-	} else {
-		body.Headers = []*OtelDestinationHeaderResponseBody{}
+	if res.Otel != nil {
+		body.Otel = marshalDataexportsOtelDestinationToOtelDestinationResponseBody(res.Otel)
 	}
 	return body
 }
@@ -1833,11 +1843,227 @@ func NewUpdateRouteResponseBody(res *dataexports.DataExportRoute) *UpdateRouteRe
 	return body
 }
 
-// NewListOtelDestinationsUnauthorizedResponseBody builds the HTTP response
-// body from the result of the "listOtelDestinations" endpoint of the
+// NewListDestinationsUnauthorizedResponseBody builds the HTTP response body
+// from the result of the "listDestinations" endpoint of the "dataExports"
+// service.
+func NewListDestinationsUnauthorizedResponseBody(res *goa.ServiceError) *ListDestinationsUnauthorizedResponseBody {
+	body := &ListDestinationsUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListDestinationsForbiddenResponseBody builds the HTTP response body from
+// the result of the "listDestinations" endpoint of the "dataExports" service.
+func NewListDestinationsForbiddenResponseBody(res *goa.ServiceError) *ListDestinationsForbiddenResponseBody {
+	body := &ListDestinationsForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListDestinationsBadRequestResponseBody builds the HTTP response body from
+// the result of the "listDestinations" endpoint of the "dataExports" service.
+func NewListDestinationsBadRequestResponseBody(res *goa.ServiceError) *ListDestinationsBadRequestResponseBody {
+	body := &ListDestinationsBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListDestinationsNotFoundResponseBody builds the HTTP response body from
+// the result of the "listDestinations" endpoint of the "dataExports" service.
+func NewListDestinationsNotFoundResponseBody(res *goa.ServiceError) *ListDestinationsNotFoundResponseBody {
+	body := &ListDestinationsNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListDestinationsConflictResponseBody builds the HTTP response body from
+// the result of the "listDestinations" endpoint of the "dataExports" service.
+func NewListDestinationsConflictResponseBody(res *goa.ServiceError) *ListDestinationsConflictResponseBody {
+	body := &ListDestinationsConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListDestinationsUnsupportedMediaResponseBody builds the HTTP response
+// body from the result of the "listDestinations" endpoint of the "dataExports"
+// service.
+func NewListDestinationsUnsupportedMediaResponseBody(res *goa.ServiceError) *ListDestinationsUnsupportedMediaResponseBody {
+	body := &ListDestinationsUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListDestinationsInvalidResponseBody builds the HTTP response body from
+// the result of the "listDestinations" endpoint of the "dataExports" service.
+func NewListDestinationsInvalidResponseBody(res *goa.ServiceError) *ListDestinationsInvalidResponseBody {
+	body := &ListDestinationsInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListDestinationsInvariantViolationResponseBody builds the HTTP response
+// body from the result of the "listDestinations" endpoint of the "dataExports"
+// service.
+func NewListDestinationsInvariantViolationResponseBody(res *goa.ServiceError) *ListDestinationsInvariantViolationResponseBody {
+	body := &ListDestinationsInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListDestinationsUnexpectedResponseBody builds the HTTP response body from
+// the result of the "listDestinations" endpoint of the "dataExports" service.
+func NewListDestinationsUnexpectedResponseBody(res *goa.ServiceError) *ListDestinationsUnexpectedResponseBody {
+	body := &ListDestinationsUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListDestinationsGatewayErrorResponseBody builds the HTTP response body
+// from the result of the "listDestinations" endpoint of the "dataExports"
+// service.
+func NewListDestinationsGatewayErrorResponseBody(res *goa.ServiceError) *ListDestinationsGatewayErrorResponseBody {
+	body := &ListDestinationsGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateDestinationUnauthorizedResponseBody builds the HTTP response body
+// from the result of the "createDestination" endpoint of the "dataExports"
+// service.
+func NewCreateDestinationUnauthorizedResponseBody(res *goa.ServiceError) *CreateDestinationUnauthorizedResponseBody {
+	body := &CreateDestinationUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateDestinationForbiddenResponseBody builds the HTTP response body from
+// the result of the "createDestination" endpoint of the "dataExports" service.
+func NewCreateDestinationForbiddenResponseBody(res *goa.ServiceError) *CreateDestinationForbiddenResponseBody {
+	body := &CreateDestinationForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateDestinationBadRequestResponseBody builds the HTTP response body
+// from the result of the "createDestination" endpoint of the "dataExports"
+// service.
+func NewCreateDestinationBadRequestResponseBody(res *goa.ServiceError) *CreateDestinationBadRequestResponseBody {
+	body := &CreateDestinationBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateDestinationNotFoundResponseBody builds the HTTP response body from
+// the result of the "createDestination" endpoint of the "dataExports" service.
+func NewCreateDestinationNotFoundResponseBody(res *goa.ServiceError) *CreateDestinationNotFoundResponseBody {
+	body := &CreateDestinationNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateDestinationConflictResponseBody builds the HTTP response body from
+// the result of the "createDestination" endpoint of the "dataExports" service.
+func NewCreateDestinationConflictResponseBody(res *goa.ServiceError) *CreateDestinationConflictResponseBody {
+	body := &CreateDestinationConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateDestinationUnsupportedMediaResponseBody builds the HTTP response
+// body from the result of the "createDestination" endpoint of the
 // "dataExports" service.
-func NewListOtelDestinationsUnauthorizedResponseBody(res *goa.ServiceError) *ListOtelDestinationsUnauthorizedResponseBody {
-	body := &ListOtelDestinationsUnauthorizedResponseBody{
+func NewCreateDestinationUnsupportedMediaResponseBody(res *goa.ServiceError) *CreateDestinationUnsupportedMediaResponseBody {
+	body := &CreateDestinationUnsupportedMediaResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -1848,11 +2074,10 @@ func NewListOtelDestinationsUnauthorizedResponseBody(res *goa.ServiceError) *Lis
 	return body
 }
 
-// NewListOtelDestinationsForbiddenResponseBody builds the HTTP response body
-// from the result of the "listOtelDestinations" endpoint of the "dataExports"
-// service.
-func NewListOtelDestinationsForbiddenResponseBody(res *goa.ServiceError) *ListOtelDestinationsForbiddenResponseBody {
-	body := &ListOtelDestinationsForbiddenResponseBody{
+// NewCreateDestinationInvalidResponseBody builds the HTTP response body from
+// the result of the "createDestination" endpoint of the "dataExports" service.
+func NewCreateDestinationInvalidResponseBody(res *goa.ServiceError) *CreateDestinationInvalidResponseBody {
+	body := &CreateDestinationInvalidResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -1863,56 +2088,11 @@ func NewListOtelDestinationsForbiddenResponseBody(res *goa.ServiceError) *ListOt
 	return body
 }
 
-// NewListOtelDestinationsBadRequestResponseBody builds the HTTP response body
-// from the result of the "listOtelDestinations" endpoint of the "dataExports"
-// service.
-func NewListOtelDestinationsBadRequestResponseBody(res *goa.ServiceError) *ListOtelDestinationsBadRequestResponseBody {
-	body := &ListOtelDestinationsBadRequestResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewListOtelDestinationsNotFoundResponseBody builds the HTTP response body
-// from the result of the "listOtelDestinations" endpoint of the "dataExports"
-// service.
-func NewListOtelDestinationsNotFoundResponseBody(res *goa.ServiceError) *ListOtelDestinationsNotFoundResponseBody {
-	body := &ListOtelDestinationsNotFoundResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewListOtelDestinationsConflictResponseBody builds the HTTP response body
-// from the result of the "listOtelDestinations" endpoint of the "dataExports"
-// service.
-func NewListOtelDestinationsConflictResponseBody(res *goa.ServiceError) *ListOtelDestinationsConflictResponseBody {
-	body := &ListOtelDestinationsConflictResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewListOtelDestinationsUnsupportedMediaResponseBody builds the HTTP response
-// body from the result of the "listOtelDestinations" endpoint of the
+// NewCreateDestinationInvariantViolationResponseBody builds the HTTP response
+// body from the result of the "createDestination" endpoint of the
 // "dataExports" service.
-func NewListOtelDestinationsUnsupportedMediaResponseBody(res *goa.ServiceError) *ListOtelDestinationsUnsupportedMediaResponseBody {
-	body := &ListOtelDestinationsUnsupportedMediaResponseBody{
+func NewCreateDestinationInvariantViolationResponseBody(res *goa.ServiceError) *CreateDestinationInvariantViolationResponseBody {
+	body := &CreateDestinationInvariantViolationResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -1923,11 +2103,11 @@ func NewListOtelDestinationsUnsupportedMediaResponseBody(res *goa.ServiceError) 
 	return body
 }
 
-// NewListOtelDestinationsInvalidResponseBody builds the HTTP response body
-// from the result of the "listOtelDestinations" endpoint of the "dataExports"
+// NewCreateDestinationUnexpectedResponseBody builds the HTTP response body
+// from the result of the "createDestination" endpoint of the "dataExports"
 // service.
-func NewListOtelDestinationsInvalidResponseBody(res *goa.ServiceError) *ListOtelDestinationsInvalidResponseBody {
-	body := &ListOtelDestinationsInvalidResponseBody{
+func NewCreateDestinationUnexpectedResponseBody(res *goa.ServiceError) *CreateDestinationUnexpectedResponseBody {
+	body := &CreateDestinationUnexpectedResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -1938,11 +2118,98 @@ func NewListOtelDestinationsInvalidResponseBody(res *goa.ServiceError) *ListOtel
 	return body
 }
 
-// NewListOtelDestinationsInvariantViolationResponseBody builds the HTTP
-// response body from the result of the "listOtelDestinations" endpoint of the
+// NewCreateDestinationGatewayErrorResponseBody builds the HTTP response body
+// from the result of the "createDestination" endpoint of the "dataExports"
+// service.
+func NewCreateDestinationGatewayErrorResponseBody(res *goa.ServiceError) *CreateDestinationGatewayErrorResponseBody {
+	body := &CreateDestinationGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUpdateDestinationUnauthorizedResponseBody builds the HTTP response body
+// from the result of the "updateDestination" endpoint of the "dataExports"
+// service.
+func NewUpdateDestinationUnauthorizedResponseBody(res *goa.ServiceError) *UpdateDestinationUnauthorizedResponseBody {
+	body := &UpdateDestinationUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUpdateDestinationForbiddenResponseBody builds the HTTP response body from
+// the result of the "updateDestination" endpoint of the "dataExports" service.
+func NewUpdateDestinationForbiddenResponseBody(res *goa.ServiceError) *UpdateDestinationForbiddenResponseBody {
+	body := &UpdateDestinationForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUpdateDestinationBadRequestResponseBody builds the HTTP response body
+// from the result of the "updateDestination" endpoint of the "dataExports"
+// service.
+func NewUpdateDestinationBadRequestResponseBody(res *goa.ServiceError) *UpdateDestinationBadRequestResponseBody {
+	body := &UpdateDestinationBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUpdateDestinationNotFoundResponseBody builds the HTTP response body from
+// the result of the "updateDestination" endpoint of the "dataExports" service.
+func NewUpdateDestinationNotFoundResponseBody(res *goa.ServiceError) *UpdateDestinationNotFoundResponseBody {
+	body := &UpdateDestinationNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUpdateDestinationConflictResponseBody builds the HTTP response body from
+// the result of the "updateDestination" endpoint of the "dataExports" service.
+func NewUpdateDestinationConflictResponseBody(res *goa.ServiceError) *UpdateDestinationConflictResponseBody {
+	body := &UpdateDestinationConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUpdateDestinationUnsupportedMediaResponseBody builds the HTTP response
+// body from the result of the "updateDestination" endpoint of the
 // "dataExports" service.
-func NewListOtelDestinationsInvariantViolationResponseBody(res *goa.ServiceError) *ListOtelDestinationsInvariantViolationResponseBody {
-	body := &ListOtelDestinationsInvariantViolationResponseBody{
+func NewUpdateDestinationUnsupportedMediaResponseBody(res *goa.ServiceError) *UpdateDestinationUnsupportedMediaResponseBody {
+	body := &UpdateDestinationUnsupportedMediaResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -1953,11 +2220,10 @@ func NewListOtelDestinationsInvariantViolationResponseBody(res *goa.ServiceError
 	return body
 }
 
-// NewListOtelDestinationsUnexpectedResponseBody builds the HTTP response body
-// from the result of the "listOtelDestinations" endpoint of the "dataExports"
-// service.
-func NewListOtelDestinationsUnexpectedResponseBody(res *goa.ServiceError) *ListOtelDestinationsUnexpectedResponseBody {
-	body := &ListOtelDestinationsUnexpectedResponseBody{
+// NewUpdateDestinationInvalidResponseBody builds the HTTP response body from
+// the result of the "updateDestination" endpoint of the "dataExports" service.
+func NewUpdateDestinationInvalidResponseBody(res *goa.ServiceError) *UpdateDestinationInvalidResponseBody {
+	body := &UpdateDestinationInvalidResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -1968,11 +2234,11 @@ func NewListOtelDestinationsUnexpectedResponseBody(res *goa.ServiceError) *ListO
 	return body
 }
 
-// NewListOtelDestinationsGatewayErrorResponseBody builds the HTTP response
-// body from the result of the "listOtelDestinations" endpoint of the
+// NewUpdateDestinationInvariantViolationResponseBody builds the HTTP response
+// body from the result of the "updateDestination" endpoint of the
 // "dataExports" service.
-func NewListOtelDestinationsGatewayErrorResponseBody(res *goa.ServiceError) *ListOtelDestinationsGatewayErrorResponseBody {
-	body := &ListOtelDestinationsGatewayErrorResponseBody{
+func NewUpdateDestinationInvariantViolationResponseBody(res *goa.ServiceError) *UpdateDestinationInvariantViolationResponseBody {
+	body := &UpdateDestinationInvariantViolationResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -1983,11 +2249,113 @@ func NewListOtelDestinationsGatewayErrorResponseBody(res *goa.ServiceError) *Lis
 	return body
 }
 
-// NewCreateOtelDestinationUnauthorizedResponseBody builds the HTTP response
-// body from the result of the "createOtelDestination" endpoint of the
+// NewUpdateDestinationUnexpectedResponseBody builds the HTTP response body
+// from the result of the "updateDestination" endpoint of the "dataExports"
+// service.
+func NewUpdateDestinationUnexpectedResponseBody(res *goa.ServiceError) *UpdateDestinationUnexpectedResponseBody {
+	body := &UpdateDestinationUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUpdateDestinationGatewayErrorResponseBody builds the HTTP response body
+// from the result of the "updateDestination" endpoint of the "dataExports"
+// service.
+func NewUpdateDestinationGatewayErrorResponseBody(res *goa.ServiceError) *UpdateDestinationGatewayErrorResponseBody {
+	body := &UpdateDestinationGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDeleteDestinationUnauthorizedResponseBody builds the HTTP response body
+// from the result of the "deleteDestination" endpoint of the "dataExports"
+// service.
+func NewDeleteDestinationUnauthorizedResponseBody(res *goa.ServiceError) *DeleteDestinationUnauthorizedResponseBody {
+	body := &DeleteDestinationUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDeleteDestinationForbiddenResponseBody builds the HTTP response body from
+// the result of the "deleteDestination" endpoint of the "dataExports" service.
+func NewDeleteDestinationForbiddenResponseBody(res *goa.ServiceError) *DeleteDestinationForbiddenResponseBody {
+	body := &DeleteDestinationForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDeleteDestinationBadRequestResponseBody builds the HTTP response body
+// from the result of the "deleteDestination" endpoint of the "dataExports"
+// service.
+func NewDeleteDestinationBadRequestResponseBody(res *goa.ServiceError) *DeleteDestinationBadRequestResponseBody {
+	body := &DeleteDestinationBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDeleteDestinationNotFoundResponseBody builds the HTTP response body from
+// the result of the "deleteDestination" endpoint of the "dataExports" service.
+func NewDeleteDestinationNotFoundResponseBody(res *goa.ServiceError) *DeleteDestinationNotFoundResponseBody {
+	body := &DeleteDestinationNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDeleteDestinationConflictResponseBody builds the HTTP response body from
+// the result of the "deleteDestination" endpoint of the "dataExports" service.
+func NewDeleteDestinationConflictResponseBody(res *goa.ServiceError) *DeleteDestinationConflictResponseBody {
+	body := &DeleteDestinationConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDeleteDestinationUnsupportedMediaResponseBody builds the HTTP response
+// body from the result of the "deleteDestination" endpoint of the
 // "dataExports" service.
-func NewCreateOtelDestinationUnauthorizedResponseBody(res *goa.ServiceError) *CreateOtelDestinationUnauthorizedResponseBody {
-	body := &CreateOtelDestinationUnauthorizedResponseBody{
+func NewDeleteDestinationUnsupportedMediaResponseBody(res *goa.ServiceError) *DeleteDestinationUnsupportedMediaResponseBody {
+	body := &DeleteDestinationUnsupportedMediaResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -1998,11 +2366,10 @@ func NewCreateOtelDestinationUnauthorizedResponseBody(res *goa.ServiceError) *Cr
 	return body
 }
 
-// NewCreateOtelDestinationForbiddenResponseBody builds the HTTP response body
-// from the result of the "createOtelDestination" endpoint of the "dataExports"
-// service.
-func NewCreateOtelDestinationForbiddenResponseBody(res *goa.ServiceError) *CreateOtelDestinationForbiddenResponseBody {
-	body := &CreateOtelDestinationForbiddenResponseBody{
+// NewDeleteDestinationInvalidResponseBody builds the HTTP response body from
+// the result of the "deleteDestination" endpoint of the "dataExports" service.
+func NewDeleteDestinationInvalidResponseBody(res *goa.ServiceError) *DeleteDestinationInvalidResponseBody {
+	body := &DeleteDestinationInvalidResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -2013,56 +2380,11 @@ func NewCreateOtelDestinationForbiddenResponseBody(res *goa.ServiceError) *Creat
 	return body
 }
 
-// NewCreateOtelDestinationBadRequestResponseBody builds the HTTP response body
-// from the result of the "createOtelDestination" endpoint of the "dataExports"
-// service.
-func NewCreateOtelDestinationBadRequestResponseBody(res *goa.ServiceError) *CreateOtelDestinationBadRequestResponseBody {
-	body := &CreateOtelDestinationBadRequestResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewCreateOtelDestinationNotFoundResponseBody builds the HTTP response body
-// from the result of the "createOtelDestination" endpoint of the "dataExports"
-// service.
-func NewCreateOtelDestinationNotFoundResponseBody(res *goa.ServiceError) *CreateOtelDestinationNotFoundResponseBody {
-	body := &CreateOtelDestinationNotFoundResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewCreateOtelDestinationConflictResponseBody builds the HTTP response body
-// from the result of the "createOtelDestination" endpoint of the "dataExports"
-// service.
-func NewCreateOtelDestinationConflictResponseBody(res *goa.ServiceError) *CreateOtelDestinationConflictResponseBody {
-	body := &CreateOtelDestinationConflictResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewCreateOtelDestinationUnsupportedMediaResponseBody builds the HTTP
-// response body from the result of the "createOtelDestination" endpoint of the
+// NewDeleteDestinationInvariantViolationResponseBody builds the HTTP response
+// body from the result of the "deleteDestination" endpoint of the
 // "dataExports" service.
-func NewCreateOtelDestinationUnsupportedMediaResponseBody(res *goa.ServiceError) *CreateOtelDestinationUnsupportedMediaResponseBody {
-	body := &CreateOtelDestinationUnsupportedMediaResponseBody{
+func NewDeleteDestinationInvariantViolationResponseBody(res *goa.ServiceError) *DeleteDestinationInvariantViolationResponseBody {
+	body := &DeleteDestinationInvariantViolationResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -2073,11 +2395,11 @@ func NewCreateOtelDestinationUnsupportedMediaResponseBody(res *goa.ServiceError)
 	return body
 }
 
-// NewCreateOtelDestinationInvalidResponseBody builds the HTTP response body
-// from the result of the "createOtelDestination" endpoint of the "dataExports"
+// NewDeleteDestinationUnexpectedResponseBody builds the HTTP response body
+// from the result of the "deleteDestination" endpoint of the "dataExports"
 // service.
-func NewCreateOtelDestinationInvalidResponseBody(res *goa.ServiceError) *CreateOtelDestinationInvalidResponseBody {
-	body := &CreateOtelDestinationInvalidResponseBody{
+func NewDeleteDestinationUnexpectedResponseBody(res *goa.ServiceError) *DeleteDestinationUnexpectedResponseBody {
+	body := &DeleteDestinationUnexpectedResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -2088,341 +2410,11 @@ func NewCreateOtelDestinationInvalidResponseBody(res *goa.ServiceError) *CreateO
 	return body
 }
 
-// NewCreateOtelDestinationInvariantViolationResponseBody builds the HTTP
-// response body from the result of the "createOtelDestination" endpoint of the
-// "dataExports" service.
-func NewCreateOtelDestinationInvariantViolationResponseBody(res *goa.ServiceError) *CreateOtelDestinationInvariantViolationResponseBody {
-	body := &CreateOtelDestinationInvariantViolationResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewCreateOtelDestinationUnexpectedResponseBody builds the HTTP response body
-// from the result of the "createOtelDestination" endpoint of the "dataExports"
+// NewDeleteDestinationGatewayErrorResponseBody builds the HTTP response body
+// from the result of the "deleteDestination" endpoint of the "dataExports"
 // service.
-func NewCreateOtelDestinationUnexpectedResponseBody(res *goa.ServiceError) *CreateOtelDestinationUnexpectedResponseBody {
-	body := &CreateOtelDestinationUnexpectedResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewCreateOtelDestinationGatewayErrorResponseBody builds the HTTP response
-// body from the result of the "createOtelDestination" endpoint of the
-// "dataExports" service.
-func NewCreateOtelDestinationGatewayErrorResponseBody(res *goa.ServiceError) *CreateOtelDestinationGatewayErrorResponseBody {
-	body := &CreateOtelDestinationGatewayErrorResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewUpdateOtelDestinationUnauthorizedResponseBody builds the HTTP response
-// body from the result of the "updateOtelDestination" endpoint of the
-// "dataExports" service.
-func NewUpdateOtelDestinationUnauthorizedResponseBody(res *goa.ServiceError) *UpdateOtelDestinationUnauthorizedResponseBody {
-	body := &UpdateOtelDestinationUnauthorizedResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewUpdateOtelDestinationForbiddenResponseBody builds the HTTP response body
-// from the result of the "updateOtelDestination" endpoint of the "dataExports"
-// service.
-func NewUpdateOtelDestinationForbiddenResponseBody(res *goa.ServiceError) *UpdateOtelDestinationForbiddenResponseBody {
-	body := &UpdateOtelDestinationForbiddenResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewUpdateOtelDestinationBadRequestResponseBody builds the HTTP response body
-// from the result of the "updateOtelDestination" endpoint of the "dataExports"
-// service.
-func NewUpdateOtelDestinationBadRequestResponseBody(res *goa.ServiceError) *UpdateOtelDestinationBadRequestResponseBody {
-	body := &UpdateOtelDestinationBadRequestResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewUpdateOtelDestinationNotFoundResponseBody builds the HTTP response body
-// from the result of the "updateOtelDestination" endpoint of the "dataExports"
-// service.
-func NewUpdateOtelDestinationNotFoundResponseBody(res *goa.ServiceError) *UpdateOtelDestinationNotFoundResponseBody {
-	body := &UpdateOtelDestinationNotFoundResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewUpdateOtelDestinationConflictResponseBody builds the HTTP response body
-// from the result of the "updateOtelDestination" endpoint of the "dataExports"
-// service.
-func NewUpdateOtelDestinationConflictResponseBody(res *goa.ServiceError) *UpdateOtelDestinationConflictResponseBody {
-	body := &UpdateOtelDestinationConflictResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewUpdateOtelDestinationUnsupportedMediaResponseBody builds the HTTP
-// response body from the result of the "updateOtelDestination" endpoint of the
-// "dataExports" service.
-func NewUpdateOtelDestinationUnsupportedMediaResponseBody(res *goa.ServiceError) *UpdateOtelDestinationUnsupportedMediaResponseBody {
-	body := &UpdateOtelDestinationUnsupportedMediaResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewUpdateOtelDestinationInvalidResponseBody builds the HTTP response body
-// from the result of the "updateOtelDestination" endpoint of the "dataExports"
-// service.
-func NewUpdateOtelDestinationInvalidResponseBody(res *goa.ServiceError) *UpdateOtelDestinationInvalidResponseBody {
-	body := &UpdateOtelDestinationInvalidResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewUpdateOtelDestinationInvariantViolationResponseBody builds the HTTP
-// response body from the result of the "updateOtelDestination" endpoint of the
-// "dataExports" service.
-func NewUpdateOtelDestinationInvariantViolationResponseBody(res *goa.ServiceError) *UpdateOtelDestinationInvariantViolationResponseBody {
-	body := &UpdateOtelDestinationInvariantViolationResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewUpdateOtelDestinationUnexpectedResponseBody builds the HTTP response body
-// from the result of the "updateOtelDestination" endpoint of the "dataExports"
-// service.
-func NewUpdateOtelDestinationUnexpectedResponseBody(res *goa.ServiceError) *UpdateOtelDestinationUnexpectedResponseBody {
-	body := &UpdateOtelDestinationUnexpectedResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewUpdateOtelDestinationGatewayErrorResponseBody builds the HTTP response
-// body from the result of the "updateOtelDestination" endpoint of the
-// "dataExports" service.
-func NewUpdateOtelDestinationGatewayErrorResponseBody(res *goa.ServiceError) *UpdateOtelDestinationGatewayErrorResponseBody {
-	body := &UpdateOtelDestinationGatewayErrorResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewDeleteOtelDestinationUnauthorizedResponseBody builds the HTTP response
-// body from the result of the "deleteOtelDestination" endpoint of the
-// "dataExports" service.
-func NewDeleteOtelDestinationUnauthorizedResponseBody(res *goa.ServiceError) *DeleteOtelDestinationUnauthorizedResponseBody {
-	body := &DeleteOtelDestinationUnauthorizedResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewDeleteOtelDestinationForbiddenResponseBody builds the HTTP response body
-// from the result of the "deleteOtelDestination" endpoint of the "dataExports"
-// service.
-func NewDeleteOtelDestinationForbiddenResponseBody(res *goa.ServiceError) *DeleteOtelDestinationForbiddenResponseBody {
-	body := &DeleteOtelDestinationForbiddenResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewDeleteOtelDestinationBadRequestResponseBody builds the HTTP response body
-// from the result of the "deleteOtelDestination" endpoint of the "dataExports"
-// service.
-func NewDeleteOtelDestinationBadRequestResponseBody(res *goa.ServiceError) *DeleteOtelDestinationBadRequestResponseBody {
-	body := &DeleteOtelDestinationBadRequestResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewDeleteOtelDestinationNotFoundResponseBody builds the HTTP response body
-// from the result of the "deleteOtelDestination" endpoint of the "dataExports"
-// service.
-func NewDeleteOtelDestinationNotFoundResponseBody(res *goa.ServiceError) *DeleteOtelDestinationNotFoundResponseBody {
-	body := &DeleteOtelDestinationNotFoundResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewDeleteOtelDestinationConflictResponseBody builds the HTTP response body
-// from the result of the "deleteOtelDestination" endpoint of the "dataExports"
-// service.
-func NewDeleteOtelDestinationConflictResponseBody(res *goa.ServiceError) *DeleteOtelDestinationConflictResponseBody {
-	body := &DeleteOtelDestinationConflictResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewDeleteOtelDestinationUnsupportedMediaResponseBody builds the HTTP
-// response body from the result of the "deleteOtelDestination" endpoint of the
-// "dataExports" service.
-func NewDeleteOtelDestinationUnsupportedMediaResponseBody(res *goa.ServiceError) *DeleteOtelDestinationUnsupportedMediaResponseBody {
-	body := &DeleteOtelDestinationUnsupportedMediaResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewDeleteOtelDestinationInvalidResponseBody builds the HTTP response body
-// from the result of the "deleteOtelDestination" endpoint of the "dataExports"
-// service.
-func NewDeleteOtelDestinationInvalidResponseBody(res *goa.ServiceError) *DeleteOtelDestinationInvalidResponseBody {
-	body := &DeleteOtelDestinationInvalidResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewDeleteOtelDestinationInvariantViolationResponseBody builds the HTTP
-// response body from the result of the "deleteOtelDestination" endpoint of the
-// "dataExports" service.
-func NewDeleteOtelDestinationInvariantViolationResponseBody(res *goa.ServiceError) *DeleteOtelDestinationInvariantViolationResponseBody {
-	body := &DeleteOtelDestinationInvariantViolationResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewDeleteOtelDestinationUnexpectedResponseBody builds the HTTP response body
-// from the result of the "deleteOtelDestination" endpoint of the "dataExports"
-// service.
-func NewDeleteOtelDestinationUnexpectedResponseBody(res *goa.ServiceError) *DeleteOtelDestinationUnexpectedResponseBody {
-	body := &DeleteOtelDestinationUnexpectedResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewDeleteOtelDestinationGatewayErrorResponseBody builds the HTTP response
-// body from the result of the "deleteOtelDestination" endpoint of the
-// "dataExports" service.
-func NewDeleteOtelDestinationGatewayErrorResponseBody(res *goa.ServiceError) *DeleteOtelDestinationGatewayErrorResponseBody {
-	body := &DeleteOtelDestinationGatewayErrorResponseBody{
+func NewDeleteDestinationGatewayErrorResponseBody(res *goa.ServiceError) *DeleteDestinationGatewayErrorResponseBody {
+	body := &DeleteDestinationGatewayErrorResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -2993,10 +2985,10 @@ func NewDeleteRouteGatewayErrorResponseBody(res *goa.ServiceError) *DeleteRouteG
 	return body
 }
 
-// NewListOtelDestinationsPayload builds a dataExports service
-// listOtelDestinations endpoint payload.
-func NewListOtelDestinationsPayload(sessionToken *string, apikeyToken *string, projectSlugInput *string) *dataexports.ListOtelDestinationsPayload {
-	v := &dataexports.ListOtelDestinationsPayload{}
+// NewListDestinationsPayload builds a dataExports service listDestinations
+// endpoint payload.
+func NewListDestinationsPayload(sessionToken *string, apikeyToken *string, projectSlugInput *string) *dataexports.ListDestinationsPayload {
+	v := &dataexports.ListDestinationsPayload{}
 	v.SessionToken = sessionToken
 	v.ApikeyToken = apikeyToken
 	v.ProjectSlugInput = projectSlugInput
@@ -3004,12 +2996,12 @@ func NewListOtelDestinationsPayload(sessionToken *string, apikeyToken *string, p
 	return v
 }
 
-// NewCreateOtelDestinationPayload builds a dataExports service
-// createOtelDestination endpoint payload.
-func NewCreateOtelDestinationPayload(body *CreateOtelDestinationRequestBody, sessionToken *string, apikeyToken *string, projectSlugInput *string) *dataexports.CreateOtelDestinationPayload {
-	v := &dataexports.CreateOtelDestinationPayload{
-		Name:        *body.Name,
-		EndpointURL: *body.EndpointURL,
+// NewCreateDestinationPayload builds a dataExports service createDestination
+// endpoint payload.
+func NewCreateDestinationPayload(body *CreateDestinationRequestBody, sessionToken *string, apikeyToken *string, projectSlugInput *string) *dataexports.CreateDestinationPayload {
+	v := &dataexports.CreateDestinationPayload{
+		Name:            *body.Name,
+		DestinationType: *body.DestinationType,
 	}
 	if body.SensitiveData != nil {
 		v.SensitiveData = *body.SensitiveData
@@ -3017,13 +3009,8 @@ func NewCreateOtelDestinationPayload(body *CreateOtelDestinationRequestBody, ses
 	if body.SensitiveData == nil {
 		v.SensitiveData = "exclude"
 	}
-	v.Headers = make([]*dataexports.CreateOtelDestinationHeaderInput, len(body.Headers))
-	for i, val := range body.Headers {
-		if val == nil {
-			v.Headers[i] = nil
-			continue
-		}
-		v.Headers[i] = unmarshalCreateOtelDestinationHeaderInputRequestBodyToDataexportsCreateOtelDestinationHeaderInput(val)
+	if body.Otel != nil {
+		v.Otel = unmarshalCreateOtelDestinationInputRequestBodyToDataexportsCreateOtelDestinationInput(body.Otel)
 	}
 	v.SessionToken = sessionToken
 	v.ApikeyToken = apikeyToken
@@ -3032,21 +3019,16 @@ func NewCreateOtelDestinationPayload(body *CreateOtelDestinationRequestBody, ses
 	return v
 }
 
-// NewUpdateOtelDestinationPayload builds a dataExports service
-// updateOtelDestination endpoint payload.
-func NewUpdateOtelDestinationPayload(body *UpdateOtelDestinationRequestBody, id string, sessionToken *string, apikeyToken *string, projectSlugInput *string) *dataexports.UpdateOtelDestinationPayload {
-	v := &dataexports.UpdateOtelDestinationPayload{
-		Name:          *body.Name,
-		EndpointURL:   *body.EndpointURL,
-		SensitiveData: *body.SensitiveData,
+// NewUpdateDestinationPayload builds a dataExports service updateDestination
+// endpoint payload.
+func NewUpdateDestinationPayload(body *UpdateDestinationRequestBody, id string, sessionToken *string, apikeyToken *string, projectSlugInput *string) *dataexports.UpdateDestinationPayload {
+	v := &dataexports.UpdateDestinationPayload{
+		Name:            *body.Name,
+		DestinationType: *body.DestinationType,
+		SensitiveData:   *body.SensitiveData,
 	}
-	v.Headers = make([]*dataexports.OtelDestinationHeaderInput, len(body.Headers))
-	for i, val := range body.Headers {
-		if val == nil {
-			v.Headers[i] = nil
-			continue
-		}
-		v.Headers[i] = unmarshalOtelDestinationHeaderInputRequestBodyToDataexportsOtelDestinationHeaderInput(val)
+	if body.Otel != nil {
+		v.Otel = unmarshalUpdateOtelDestinationInputRequestBodyToDataexportsUpdateOtelDestinationInput(body.Otel)
 	}
 	v.ID = id
 	v.SessionToken = sessionToken
@@ -3056,11 +3038,12 @@ func NewUpdateOtelDestinationPayload(body *UpdateOtelDestinationRequestBody, id 
 	return v
 }
 
-// NewDeleteOtelDestinationPayload builds a dataExports service
-// deleteOtelDestination endpoint payload.
-func NewDeleteOtelDestinationPayload(id string, sessionToken *string, apikeyToken *string, projectSlugInput *string) *dataexports.DeleteOtelDestinationPayload {
-	v := &dataexports.DeleteOtelDestinationPayload{}
+// NewDeleteDestinationPayload builds a dataExports service deleteDestination
+// endpoint payload.
+func NewDeleteDestinationPayload(id string, destinationType string, sessionToken *string, apikeyToken *string, projectSlugInput *string) *dataexports.DeleteDestinationPayload {
+	v := &dataexports.DeleteDestinationPayload{}
 	v.ID = id
+	v.DestinationType = destinationType
 	v.SessionToken = sessionToken
 	v.ApikeyToken = apikeyToken
 	v.ProjectSlugInput = projectSlugInput
@@ -3127,64 +3110,58 @@ func NewDeleteRoutePayload(id string, sessionToken *string, apikeyToken *string,
 	return v
 }
 
-// ValidateCreateOtelDestinationRequestBody runs the validations defined on
-// CreateOtelDestinationRequestBody
-func ValidateCreateOtelDestinationRequestBody(body *CreateOtelDestinationRequestBody) (err error) {
+// ValidateCreateDestinationRequestBody runs the validations defined on
+// CreateDestinationRequestBody
+func ValidateCreateDestinationRequestBody(body *CreateDestinationRequestBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
-	if body.EndpointURL == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("endpoint_url", "body"))
+	if body.DestinationType == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("destination_type", "body"))
 	}
-	if body.Headers == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("headers", "body"))
-	}
-	if body.EndpointURL != nil {
-		err = goa.MergeErrors(err, goa.ValidateFormat("body.endpoint_url", *body.EndpointURL, goa.FormatURI))
+	if body.DestinationType != nil {
+		if !(*body.DestinationType == "otel") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.destination_type", *body.DestinationType, []any{"otel"}))
+		}
 	}
 	if body.SensitiveData != nil {
 		if !(*body.SensitiveData == "exclude" || *body.SensitiveData == "include") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.sensitive_data", *body.SensitiveData, []any{"exclude", "include"}))
 		}
 	}
-	for _, e := range body.Headers {
-		if e != nil {
-			if err2 := ValidateCreateOtelDestinationHeaderInputRequestBody(e); err2 != nil {
-				err = goa.MergeErrors(err, err2)
-			}
+	if body.Otel != nil {
+		if err2 := ValidateCreateOtelDestinationInputRequestBody(body.Otel); err2 != nil {
+			err = goa.MergeErrors(err, err2)
 		}
 	}
 	return
 }
 
-// ValidateUpdateOtelDestinationRequestBody runs the validations defined on
-// UpdateOtelDestinationRequestBody
-func ValidateUpdateOtelDestinationRequestBody(body *UpdateOtelDestinationRequestBody) (err error) {
+// ValidateUpdateDestinationRequestBody runs the validations defined on
+// UpdateDestinationRequestBody
+func ValidateUpdateDestinationRequestBody(body *UpdateDestinationRequestBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
-	if body.EndpointURL == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("endpoint_url", "body"))
+	if body.DestinationType == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("destination_type", "body"))
 	}
 	if body.SensitiveData == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("sensitive_data", "body"))
 	}
-	if body.Headers == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("headers", "body"))
-	}
-	if body.EndpointURL != nil {
-		err = goa.MergeErrors(err, goa.ValidateFormat("body.endpoint_url", *body.EndpointURL, goa.FormatURI))
+	if body.DestinationType != nil {
+		if !(*body.DestinationType == "otel") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.destination_type", *body.DestinationType, []any{"otel"}))
+		}
 	}
 	if body.SensitiveData != nil {
 		if !(*body.SensitiveData == "exclude" || *body.SensitiveData == "include") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.sensitive_data", *body.SensitiveData, []any{"exclude", "include"}))
 		}
 	}
-	for _, e := range body.Headers {
-		if e != nil {
-			if err2 := ValidateOtelDestinationHeaderInputRequestBody(e); err2 != nil {
-				err = goa.MergeErrors(err, err2)
-			}
+	if body.Otel != nil {
+		if err2 := ValidateUpdateOtelDestinationInputRequestBody(body.Otel); err2 != nil {
+			err = goa.MergeErrors(err, err2)
 		}
 	}
 	return
@@ -3227,6 +3204,28 @@ func ValidateUpdateRouteRequestBody(body *UpdateRouteRequestBody) (err error) {
 	return
 }
 
+// ValidateCreateOtelDestinationInputRequestBody runs the validations defined
+// on CreateOtelDestinationInputRequestBody
+func ValidateCreateOtelDestinationInputRequestBody(body *CreateOtelDestinationInputRequestBody) (err error) {
+	if body.EndpointURL == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("endpoint_url", "body"))
+	}
+	if body.Headers == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("headers", "body"))
+	}
+	if body.EndpointURL != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.endpoint_url", *body.EndpointURL, goa.FormatURI))
+	}
+	for _, e := range body.Headers {
+		if e != nil {
+			if err2 := ValidateCreateOtelDestinationHeaderInputRequestBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	return
+}
+
 // ValidateCreateOtelDestinationHeaderInputRequestBody runs the validations
 // defined on CreateOtelDestinationHeaderInputRequestBody
 func ValidateCreateOtelDestinationHeaderInputRequestBody(body *CreateOtelDestinationHeaderInputRequestBody) (err error) {
@@ -3239,9 +3238,31 @@ func ValidateCreateOtelDestinationHeaderInputRequestBody(body *CreateOtelDestina
 	return
 }
 
-// ValidateOtelDestinationHeaderInputRequestBody runs the validations defined
-// on OtelDestinationHeaderInputRequestBody
-func ValidateOtelDestinationHeaderInputRequestBody(body *OtelDestinationHeaderInputRequestBody) (err error) {
+// ValidateUpdateOtelDestinationInputRequestBody runs the validations defined
+// on UpdateOtelDestinationInputRequestBody
+func ValidateUpdateOtelDestinationInputRequestBody(body *UpdateOtelDestinationInputRequestBody) (err error) {
+	if body.EndpointURL == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("endpoint_url", "body"))
+	}
+	if body.Headers == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("headers", "body"))
+	}
+	if body.EndpointURL != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.endpoint_url", *body.EndpointURL, goa.FormatURI))
+	}
+	for _, e := range body.Headers {
+		if e != nil {
+			if err2 := ValidateUpdateOtelDestinationHeaderInputRequestBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	return
+}
+
+// ValidateUpdateOtelDestinationHeaderInputRequestBody runs the validations
+// defined on UpdateOtelDestinationHeaderInputRequestBody
+func ValidateUpdateOtelDestinationHeaderInputRequestBody(body *UpdateOtelDestinationHeaderInputRequestBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}

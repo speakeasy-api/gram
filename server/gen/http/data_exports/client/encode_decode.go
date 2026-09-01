@@ -18,14 +18,13 @@ import (
 	goahttp "goa.design/goa/v3/http"
 )
 
-// BuildListOtelDestinationsRequest instantiates a HTTP request object with
-// method and path set to call the "dataExports" service "listOtelDestinations"
-// endpoint
-func (c *Client) BuildListOtelDestinationsRequest(ctx context.Context, v any) (*http.Request, error) {
-	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: ListOtelDestinationsDataExportsPath()}
+// BuildListDestinationsRequest instantiates a HTTP request object with method
+// and path set to call the "dataExports" service "listDestinations" endpoint
+func (c *Client) BuildListDestinationsRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: ListDestinationsDataExportsPath()}
 	req, err := http.NewRequest("GET", u.String(), nil)
 	if err != nil {
-		return nil, goahttp.ErrInvalidURL("dataExports", "listOtelDestinations", u.String(), err)
+		return nil, goahttp.ErrInvalidURL("dataExports", "listDestinations", u.String(), err)
 	}
 	if ctx != nil {
 		req = req.WithContext(ctx)
@@ -34,13 +33,13 @@ func (c *Client) BuildListOtelDestinationsRequest(ctx context.Context, v any) (*
 	return req, nil
 }
 
-// EncodeListOtelDestinationsRequest returns an encoder for requests sent to
-// the dataExports listOtelDestinations server.
-func EncodeListOtelDestinationsRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+// EncodeListDestinationsRequest returns an encoder for requests sent to the
+// dataExports listDestinations server.
+func EncodeListDestinationsRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
 	return func(req *http.Request, v any) error {
-		p, ok := v.(*dataexports.ListOtelDestinationsPayload)
+		p, ok := v.(*dataexports.ListDestinationsPayload)
 		if !ok {
-			return goahttp.ErrInvalidType("dataExports", "listOtelDestinations", "*dataexports.ListOtelDestinationsPayload", v)
+			return goahttp.ErrInvalidType("dataExports", "listDestinations", "*dataexports.ListDestinationsPayload", v)
 		}
 		if p.SessionToken != nil {
 			head := *p.SessionToken
@@ -58,10 +57,10 @@ func EncodeListOtelDestinationsRequest(encoder func(*http.Request) goahttp.Encod
 	}
 }
 
-// DecodeListOtelDestinationsResponse returns a decoder for responses returned
-// by the dataExports listOtelDestinations endpoint. restoreBody controls
-// whether the response body should be restored after having been read.
-// DecodeListOtelDestinationsResponse may return the following errors:
+// DecodeListDestinationsResponse returns a decoder for responses returned by
+// the dataExports listDestinations endpoint. restoreBody controls whether the
+// response body should be restored after having been read.
+// DecodeListDestinationsResponse may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
 //   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
 //   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
@@ -73,7 +72,7 @@ func EncodeListOtelDestinationsRequest(encoder func(*http.Request) goahttp.Encod
 //   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
 //   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
 //   - error: internal error
-func DecodeListOtelDestinationsResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+func DecodeListDestinationsResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
 	return func(resp *http.Response) (any, error) {
 		if restoreBody {
 			b, err := io.ReadAll(resp.Body)
@@ -90,181 +89,180 @@ func DecodeListOtelDestinationsResponse(decoder func(*http.Response) goahttp.Dec
 		switch resp.StatusCode {
 		case http.StatusOK:
 			var (
-				body ListOtelDestinationsResponseBody
+				body ListDestinationsResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("dataExports", "listOtelDestinations", err)
+				return nil, goahttp.ErrDecodingError("dataExports", "listDestinations", err)
 			}
-			err = ValidateListOtelDestinationsResponseBody(&body)
+			err = ValidateListDestinationsResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("dataExports", "listOtelDestinations", err)
+				return nil, goahttp.ErrValidationError("dataExports", "listDestinations", err)
 			}
-			res := NewListOtelDestinationsResultOK(&body)
+			res := NewListDestinationsResultOK(&body)
 			return res, nil
 		case http.StatusUnauthorized:
 			var (
-				body ListOtelDestinationsUnauthorizedResponseBody
+				body ListDestinationsUnauthorizedResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("dataExports", "listOtelDestinations", err)
+				return nil, goahttp.ErrDecodingError("dataExports", "listDestinations", err)
 			}
-			err = ValidateListOtelDestinationsUnauthorizedResponseBody(&body)
+			err = ValidateListDestinationsUnauthorizedResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("dataExports", "listOtelDestinations", err)
+				return nil, goahttp.ErrValidationError("dataExports", "listDestinations", err)
 			}
-			return nil, NewListOtelDestinationsUnauthorized(&body)
+			return nil, NewListDestinationsUnauthorized(&body)
 		case http.StatusForbidden:
 			var (
-				body ListOtelDestinationsForbiddenResponseBody
+				body ListDestinationsForbiddenResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("dataExports", "listOtelDestinations", err)
+				return nil, goahttp.ErrDecodingError("dataExports", "listDestinations", err)
 			}
-			err = ValidateListOtelDestinationsForbiddenResponseBody(&body)
+			err = ValidateListDestinationsForbiddenResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("dataExports", "listOtelDestinations", err)
+				return nil, goahttp.ErrValidationError("dataExports", "listDestinations", err)
 			}
-			return nil, NewListOtelDestinationsForbidden(&body)
+			return nil, NewListDestinationsForbidden(&body)
 		case http.StatusBadRequest:
 			var (
-				body ListOtelDestinationsBadRequestResponseBody
+				body ListDestinationsBadRequestResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("dataExports", "listOtelDestinations", err)
+				return nil, goahttp.ErrDecodingError("dataExports", "listDestinations", err)
 			}
-			err = ValidateListOtelDestinationsBadRequestResponseBody(&body)
+			err = ValidateListDestinationsBadRequestResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("dataExports", "listOtelDestinations", err)
+				return nil, goahttp.ErrValidationError("dataExports", "listDestinations", err)
 			}
-			return nil, NewListOtelDestinationsBadRequest(&body)
+			return nil, NewListDestinationsBadRequest(&body)
 		case http.StatusNotFound:
 			var (
-				body ListOtelDestinationsNotFoundResponseBody
+				body ListDestinationsNotFoundResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("dataExports", "listOtelDestinations", err)
+				return nil, goahttp.ErrDecodingError("dataExports", "listDestinations", err)
 			}
-			err = ValidateListOtelDestinationsNotFoundResponseBody(&body)
+			err = ValidateListDestinationsNotFoundResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("dataExports", "listOtelDestinations", err)
+				return nil, goahttp.ErrValidationError("dataExports", "listDestinations", err)
 			}
-			return nil, NewListOtelDestinationsNotFound(&body)
+			return nil, NewListDestinationsNotFound(&body)
 		case http.StatusConflict:
 			var (
-				body ListOtelDestinationsConflictResponseBody
+				body ListDestinationsConflictResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("dataExports", "listOtelDestinations", err)
+				return nil, goahttp.ErrDecodingError("dataExports", "listDestinations", err)
 			}
-			err = ValidateListOtelDestinationsConflictResponseBody(&body)
+			err = ValidateListDestinationsConflictResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("dataExports", "listOtelDestinations", err)
+				return nil, goahttp.ErrValidationError("dataExports", "listDestinations", err)
 			}
-			return nil, NewListOtelDestinationsConflict(&body)
+			return nil, NewListDestinationsConflict(&body)
 		case http.StatusUnsupportedMediaType:
 			var (
-				body ListOtelDestinationsUnsupportedMediaResponseBody
+				body ListDestinationsUnsupportedMediaResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("dataExports", "listOtelDestinations", err)
+				return nil, goahttp.ErrDecodingError("dataExports", "listDestinations", err)
 			}
-			err = ValidateListOtelDestinationsUnsupportedMediaResponseBody(&body)
+			err = ValidateListDestinationsUnsupportedMediaResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("dataExports", "listOtelDestinations", err)
+				return nil, goahttp.ErrValidationError("dataExports", "listDestinations", err)
 			}
-			return nil, NewListOtelDestinationsUnsupportedMedia(&body)
+			return nil, NewListDestinationsUnsupportedMedia(&body)
 		case http.StatusUnprocessableEntity:
 			var (
-				body ListOtelDestinationsInvalidResponseBody
+				body ListDestinationsInvalidResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("dataExports", "listOtelDestinations", err)
+				return nil, goahttp.ErrDecodingError("dataExports", "listDestinations", err)
 			}
-			err = ValidateListOtelDestinationsInvalidResponseBody(&body)
+			err = ValidateListDestinationsInvalidResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("dataExports", "listOtelDestinations", err)
+				return nil, goahttp.ErrValidationError("dataExports", "listDestinations", err)
 			}
-			return nil, NewListOtelDestinationsInvalid(&body)
+			return nil, NewListDestinationsInvalid(&body)
 		case http.StatusInternalServerError:
 			en := resp.Header.Get("goa-error")
 			switch en {
 			case "invariant_violation":
 				var (
-					body ListOtelDestinationsInvariantViolationResponseBody
+					body ListDestinationsInvariantViolationResponseBody
 					err  error
 				)
 				err = decoder(resp).Decode(&body)
 				if err != nil {
-					return nil, goahttp.ErrDecodingError("dataExports", "listOtelDestinations", err)
+					return nil, goahttp.ErrDecodingError("dataExports", "listDestinations", err)
 				}
-				err = ValidateListOtelDestinationsInvariantViolationResponseBody(&body)
+				err = ValidateListDestinationsInvariantViolationResponseBody(&body)
 				if err != nil {
-					return nil, goahttp.ErrValidationError("dataExports", "listOtelDestinations", err)
+					return nil, goahttp.ErrValidationError("dataExports", "listDestinations", err)
 				}
-				return nil, NewListOtelDestinationsInvariantViolation(&body)
+				return nil, NewListDestinationsInvariantViolation(&body)
 			case "unexpected":
 				var (
-					body ListOtelDestinationsUnexpectedResponseBody
+					body ListDestinationsUnexpectedResponseBody
 					err  error
 				)
 				err = decoder(resp).Decode(&body)
 				if err != nil {
-					return nil, goahttp.ErrDecodingError("dataExports", "listOtelDestinations", err)
+					return nil, goahttp.ErrDecodingError("dataExports", "listDestinations", err)
 				}
-				err = ValidateListOtelDestinationsUnexpectedResponseBody(&body)
+				err = ValidateListDestinationsUnexpectedResponseBody(&body)
 				if err != nil {
-					return nil, goahttp.ErrValidationError("dataExports", "listOtelDestinations", err)
+					return nil, goahttp.ErrValidationError("dataExports", "listDestinations", err)
 				}
-				return nil, NewListOtelDestinationsUnexpected(&body)
+				return nil, NewListDestinationsUnexpected(&body)
 			default:
 				body, _ := io.ReadAll(resp.Body)
-				return nil, goahttp.ErrInvalidResponse("dataExports", "listOtelDestinations", resp.StatusCode, string(body))
+				return nil, goahttp.ErrInvalidResponse("dataExports", "listDestinations", resp.StatusCode, string(body))
 			}
 		case http.StatusBadGateway:
 			var (
-				body ListOtelDestinationsGatewayErrorResponseBody
+				body ListDestinationsGatewayErrorResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("dataExports", "listOtelDestinations", err)
+				return nil, goahttp.ErrDecodingError("dataExports", "listDestinations", err)
 			}
-			err = ValidateListOtelDestinationsGatewayErrorResponseBody(&body)
+			err = ValidateListDestinationsGatewayErrorResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("dataExports", "listOtelDestinations", err)
+				return nil, goahttp.ErrValidationError("dataExports", "listDestinations", err)
 			}
-			return nil, NewListOtelDestinationsGatewayError(&body)
+			return nil, NewListDestinationsGatewayError(&body)
 		default:
 			body, _ := io.ReadAll(resp.Body)
-			return nil, goahttp.ErrInvalidResponse("dataExports", "listOtelDestinations", resp.StatusCode, string(body))
+			return nil, goahttp.ErrInvalidResponse("dataExports", "listDestinations", resp.StatusCode, string(body))
 		}
 	}
 }
 
-// BuildCreateOtelDestinationRequest instantiates a HTTP request object with
-// method and path set to call the "dataExports" service
-// "createOtelDestination" endpoint
-func (c *Client) BuildCreateOtelDestinationRequest(ctx context.Context, v any) (*http.Request, error) {
-	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: CreateOtelDestinationDataExportsPath()}
+// BuildCreateDestinationRequest instantiates a HTTP request object with method
+// and path set to call the "dataExports" service "createDestination" endpoint
+func (c *Client) BuildCreateDestinationRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: CreateDestinationDataExportsPath()}
 	req, err := http.NewRequest("POST", u.String(), nil)
 	if err != nil {
-		return nil, goahttp.ErrInvalidURL("dataExports", "createOtelDestination", u.String(), err)
+		return nil, goahttp.ErrInvalidURL("dataExports", "createDestination", u.String(), err)
 	}
 	if ctx != nil {
 		req = req.WithContext(ctx)
@@ -273,13 +271,13 @@ func (c *Client) BuildCreateOtelDestinationRequest(ctx context.Context, v any) (
 	return req, nil
 }
 
-// EncodeCreateOtelDestinationRequest returns an encoder for requests sent to
-// the dataExports createOtelDestination server.
-func EncodeCreateOtelDestinationRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+// EncodeCreateDestinationRequest returns an encoder for requests sent to the
+// dataExports createDestination server.
+func EncodeCreateDestinationRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
 	return func(req *http.Request, v any) error {
-		p, ok := v.(*dataexports.CreateOtelDestinationPayload)
+		p, ok := v.(*dataexports.CreateDestinationPayload)
 		if !ok {
-			return goahttp.ErrInvalidType("dataExports", "createOtelDestination", "*dataexports.CreateOtelDestinationPayload", v)
+			return goahttp.ErrInvalidType("dataExports", "createDestination", "*dataexports.CreateDestinationPayload", v)
 		}
 		if p.SessionToken != nil {
 			head := *p.SessionToken
@@ -293,18 +291,18 @@ func EncodeCreateOtelDestinationRequest(encoder func(*http.Request) goahttp.Enco
 			head := *p.ProjectSlugInput
 			req.Header.Set("Gram-Project", head)
 		}
-		body := NewCreateOtelDestinationRequestBody(p)
+		body := NewCreateDestinationRequestBody(p)
 		if err := encoder(req).Encode(&body); err != nil {
-			return goahttp.ErrEncodingError("dataExports", "createOtelDestination", err)
+			return goahttp.ErrEncodingError("dataExports", "createDestination", err)
 		}
 		return nil
 	}
 }
 
-// DecodeCreateOtelDestinationResponse returns a decoder for responses returned
-// by the dataExports createOtelDestination endpoint. restoreBody controls
-// whether the response body should be restored after having been read.
-// DecodeCreateOtelDestinationResponse may return the following errors:
+// DecodeCreateDestinationResponse returns a decoder for responses returned by
+// the dataExports createDestination endpoint. restoreBody controls whether the
+// response body should be restored after having been read.
+// DecodeCreateDestinationResponse may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
 //   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
 //   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
@@ -316,7 +314,7 @@ func EncodeCreateOtelDestinationRequest(encoder func(*http.Request) goahttp.Enco
 //   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
 //   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
 //   - error: internal error
-func DecodeCreateOtelDestinationResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+func DecodeCreateDestinationResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
 	return func(resp *http.Response) (any, error) {
 		if restoreBody {
 			b, err := io.ReadAll(resp.Body)
@@ -333,181 +331,180 @@ func DecodeCreateOtelDestinationResponse(decoder func(*http.Response) goahttp.De
 		switch resp.StatusCode {
 		case http.StatusOK:
 			var (
-				body CreateOtelDestinationResponseBody
+				body CreateDestinationResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("dataExports", "createOtelDestination", err)
+				return nil, goahttp.ErrDecodingError("dataExports", "createDestination", err)
 			}
-			err = ValidateCreateOtelDestinationResponseBody(&body)
+			err = ValidateCreateDestinationResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("dataExports", "createOtelDestination", err)
+				return nil, goahttp.ErrValidationError("dataExports", "createDestination", err)
 			}
-			res := NewCreateOtelDestinationOtelDestinationOK(&body)
+			res := NewCreateDestinationDestinationOK(&body)
 			return res, nil
 		case http.StatusUnauthorized:
 			var (
-				body CreateOtelDestinationUnauthorizedResponseBody
+				body CreateDestinationUnauthorizedResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("dataExports", "createOtelDestination", err)
+				return nil, goahttp.ErrDecodingError("dataExports", "createDestination", err)
 			}
-			err = ValidateCreateOtelDestinationUnauthorizedResponseBody(&body)
+			err = ValidateCreateDestinationUnauthorizedResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("dataExports", "createOtelDestination", err)
+				return nil, goahttp.ErrValidationError("dataExports", "createDestination", err)
 			}
-			return nil, NewCreateOtelDestinationUnauthorized(&body)
+			return nil, NewCreateDestinationUnauthorized(&body)
 		case http.StatusForbidden:
 			var (
-				body CreateOtelDestinationForbiddenResponseBody
+				body CreateDestinationForbiddenResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("dataExports", "createOtelDestination", err)
+				return nil, goahttp.ErrDecodingError("dataExports", "createDestination", err)
 			}
-			err = ValidateCreateOtelDestinationForbiddenResponseBody(&body)
+			err = ValidateCreateDestinationForbiddenResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("dataExports", "createOtelDestination", err)
+				return nil, goahttp.ErrValidationError("dataExports", "createDestination", err)
 			}
-			return nil, NewCreateOtelDestinationForbidden(&body)
+			return nil, NewCreateDestinationForbidden(&body)
 		case http.StatusBadRequest:
 			var (
-				body CreateOtelDestinationBadRequestResponseBody
+				body CreateDestinationBadRequestResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("dataExports", "createOtelDestination", err)
+				return nil, goahttp.ErrDecodingError("dataExports", "createDestination", err)
 			}
-			err = ValidateCreateOtelDestinationBadRequestResponseBody(&body)
+			err = ValidateCreateDestinationBadRequestResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("dataExports", "createOtelDestination", err)
+				return nil, goahttp.ErrValidationError("dataExports", "createDestination", err)
 			}
-			return nil, NewCreateOtelDestinationBadRequest(&body)
+			return nil, NewCreateDestinationBadRequest(&body)
 		case http.StatusNotFound:
 			var (
-				body CreateOtelDestinationNotFoundResponseBody
+				body CreateDestinationNotFoundResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("dataExports", "createOtelDestination", err)
+				return nil, goahttp.ErrDecodingError("dataExports", "createDestination", err)
 			}
-			err = ValidateCreateOtelDestinationNotFoundResponseBody(&body)
+			err = ValidateCreateDestinationNotFoundResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("dataExports", "createOtelDestination", err)
+				return nil, goahttp.ErrValidationError("dataExports", "createDestination", err)
 			}
-			return nil, NewCreateOtelDestinationNotFound(&body)
+			return nil, NewCreateDestinationNotFound(&body)
 		case http.StatusConflict:
 			var (
-				body CreateOtelDestinationConflictResponseBody
+				body CreateDestinationConflictResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("dataExports", "createOtelDestination", err)
+				return nil, goahttp.ErrDecodingError("dataExports", "createDestination", err)
 			}
-			err = ValidateCreateOtelDestinationConflictResponseBody(&body)
+			err = ValidateCreateDestinationConflictResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("dataExports", "createOtelDestination", err)
+				return nil, goahttp.ErrValidationError("dataExports", "createDestination", err)
 			}
-			return nil, NewCreateOtelDestinationConflict(&body)
+			return nil, NewCreateDestinationConflict(&body)
 		case http.StatusUnsupportedMediaType:
 			var (
-				body CreateOtelDestinationUnsupportedMediaResponseBody
+				body CreateDestinationUnsupportedMediaResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("dataExports", "createOtelDestination", err)
+				return nil, goahttp.ErrDecodingError("dataExports", "createDestination", err)
 			}
-			err = ValidateCreateOtelDestinationUnsupportedMediaResponseBody(&body)
+			err = ValidateCreateDestinationUnsupportedMediaResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("dataExports", "createOtelDestination", err)
+				return nil, goahttp.ErrValidationError("dataExports", "createDestination", err)
 			}
-			return nil, NewCreateOtelDestinationUnsupportedMedia(&body)
+			return nil, NewCreateDestinationUnsupportedMedia(&body)
 		case http.StatusUnprocessableEntity:
 			var (
-				body CreateOtelDestinationInvalidResponseBody
+				body CreateDestinationInvalidResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("dataExports", "createOtelDestination", err)
+				return nil, goahttp.ErrDecodingError("dataExports", "createDestination", err)
 			}
-			err = ValidateCreateOtelDestinationInvalidResponseBody(&body)
+			err = ValidateCreateDestinationInvalidResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("dataExports", "createOtelDestination", err)
+				return nil, goahttp.ErrValidationError("dataExports", "createDestination", err)
 			}
-			return nil, NewCreateOtelDestinationInvalid(&body)
+			return nil, NewCreateDestinationInvalid(&body)
 		case http.StatusInternalServerError:
 			en := resp.Header.Get("goa-error")
 			switch en {
 			case "invariant_violation":
 				var (
-					body CreateOtelDestinationInvariantViolationResponseBody
+					body CreateDestinationInvariantViolationResponseBody
 					err  error
 				)
 				err = decoder(resp).Decode(&body)
 				if err != nil {
-					return nil, goahttp.ErrDecodingError("dataExports", "createOtelDestination", err)
+					return nil, goahttp.ErrDecodingError("dataExports", "createDestination", err)
 				}
-				err = ValidateCreateOtelDestinationInvariantViolationResponseBody(&body)
+				err = ValidateCreateDestinationInvariantViolationResponseBody(&body)
 				if err != nil {
-					return nil, goahttp.ErrValidationError("dataExports", "createOtelDestination", err)
+					return nil, goahttp.ErrValidationError("dataExports", "createDestination", err)
 				}
-				return nil, NewCreateOtelDestinationInvariantViolation(&body)
+				return nil, NewCreateDestinationInvariantViolation(&body)
 			case "unexpected":
 				var (
-					body CreateOtelDestinationUnexpectedResponseBody
+					body CreateDestinationUnexpectedResponseBody
 					err  error
 				)
 				err = decoder(resp).Decode(&body)
 				if err != nil {
-					return nil, goahttp.ErrDecodingError("dataExports", "createOtelDestination", err)
+					return nil, goahttp.ErrDecodingError("dataExports", "createDestination", err)
 				}
-				err = ValidateCreateOtelDestinationUnexpectedResponseBody(&body)
+				err = ValidateCreateDestinationUnexpectedResponseBody(&body)
 				if err != nil {
-					return nil, goahttp.ErrValidationError("dataExports", "createOtelDestination", err)
+					return nil, goahttp.ErrValidationError("dataExports", "createDestination", err)
 				}
-				return nil, NewCreateOtelDestinationUnexpected(&body)
+				return nil, NewCreateDestinationUnexpected(&body)
 			default:
 				body, _ := io.ReadAll(resp.Body)
-				return nil, goahttp.ErrInvalidResponse("dataExports", "createOtelDestination", resp.StatusCode, string(body))
+				return nil, goahttp.ErrInvalidResponse("dataExports", "createDestination", resp.StatusCode, string(body))
 			}
 		case http.StatusBadGateway:
 			var (
-				body CreateOtelDestinationGatewayErrorResponseBody
+				body CreateDestinationGatewayErrorResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("dataExports", "createOtelDestination", err)
+				return nil, goahttp.ErrDecodingError("dataExports", "createDestination", err)
 			}
-			err = ValidateCreateOtelDestinationGatewayErrorResponseBody(&body)
+			err = ValidateCreateDestinationGatewayErrorResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("dataExports", "createOtelDestination", err)
+				return nil, goahttp.ErrValidationError("dataExports", "createDestination", err)
 			}
-			return nil, NewCreateOtelDestinationGatewayError(&body)
+			return nil, NewCreateDestinationGatewayError(&body)
 		default:
 			body, _ := io.ReadAll(resp.Body)
-			return nil, goahttp.ErrInvalidResponse("dataExports", "createOtelDestination", resp.StatusCode, string(body))
+			return nil, goahttp.ErrInvalidResponse("dataExports", "createDestination", resp.StatusCode, string(body))
 		}
 	}
 }
 
-// BuildUpdateOtelDestinationRequest instantiates a HTTP request object with
-// method and path set to call the "dataExports" service
-// "updateOtelDestination" endpoint
-func (c *Client) BuildUpdateOtelDestinationRequest(ctx context.Context, v any) (*http.Request, error) {
-	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: UpdateOtelDestinationDataExportsPath()}
+// BuildUpdateDestinationRequest instantiates a HTTP request object with method
+// and path set to call the "dataExports" service "updateDestination" endpoint
+func (c *Client) BuildUpdateDestinationRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: UpdateDestinationDataExportsPath()}
 	req, err := http.NewRequest("POST", u.String(), nil)
 	if err != nil {
-		return nil, goahttp.ErrInvalidURL("dataExports", "updateOtelDestination", u.String(), err)
+		return nil, goahttp.ErrInvalidURL("dataExports", "updateDestination", u.String(), err)
 	}
 	if ctx != nil {
 		req = req.WithContext(ctx)
@@ -516,13 +513,13 @@ func (c *Client) BuildUpdateOtelDestinationRequest(ctx context.Context, v any) (
 	return req, nil
 }
 
-// EncodeUpdateOtelDestinationRequest returns an encoder for requests sent to
-// the dataExports updateOtelDestination server.
-func EncodeUpdateOtelDestinationRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+// EncodeUpdateDestinationRequest returns an encoder for requests sent to the
+// dataExports updateDestination server.
+func EncodeUpdateDestinationRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
 	return func(req *http.Request, v any) error {
-		p, ok := v.(*dataexports.UpdateOtelDestinationPayload)
+		p, ok := v.(*dataexports.UpdateDestinationPayload)
 		if !ok {
-			return goahttp.ErrInvalidType("dataExports", "updateOtelDestination", "*dataexports.UpdateOtelDestinationPayload", v)
+			return goahttp.ErrInvalidType("dataExports", "updateDestination", "*dataexports.UpdateDestinationPayload", v)
 		}
 		if p.SessionToken != nil {
 			head := *p.SessionToken
@@ -539,18 +536,18 @@ func EncodeUpdateOtelDestinationRequest(encoder func(*http.Request) goahttp.Enco
 		values := req.URL.Query()
 		values.Add("id", p.ID)
 		req.URL.RawQuery = values.Encode()
-		body := NewUpdateOtelDestinationRequestBody(p)
+		body := NewUpdateDestinationRequestBody(p)
 		if err := encoder(req).Encode(&body); err != nil {
-			return goahttp.ErrEncodingError("dataExports", "updateOtelDestination", err)
+			return goahttp.ErrEncodingError("dataExports", "updateDestination", err)
 		}
 		return nil
 	}
 }
 
-// DecodeUpdateOtelDestinationResponse returns a decoder for responses returned
-// by the dataExports updateOtelDestination endpoint. restoreBody controls
-// whether the response body should be restored after having been read.
-// DecodeUpdateOtelDestinationResponse may return the following errors:
+// DecodeUpdateDestinationResponse returns a decoder for responses returned by
+// the dataExports updateDestination endpoint. restoreBody controls whether the
+// response body should be restored after having been read.
+// DecodeUpdateDestinationResponse may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
 //   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
 //   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
@@ -562,7 +559,7 @@ func EncodeUpdateOtelDestinationRequest(encoder func(*http.Request) goahttp.Enco
 //   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
 //   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
 //   - error: internal error
-func DecodeUpdateOtelDestinationResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+func DecodeUpdateDestinationResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
 	return func(resp *http.Response) (any, error) {
 		if restoreBody {
 			b, err := io.ReadAll(resp.Body)
@@ -579,181 +576,180 @@ func DecodeUpdateOtelDestinationResponse(decoder func(*http.Response) goahttp.De
 		switch resp.StatusCode {
 		case http.StatusOK:
 			var (
-				body UpdateOtelDestinationResponseBody
+				body UpdateDestinationResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("dataExports", "updateOtelDestination", err)
+				return nil, goahttp.ErrDecodingError("dataExports", "updateDestination", err)
 			}
-			err = ValidateUpdateOtelDestinationResponseBody(&body)
+			err = ValidateUpdateDestinationResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("dataExports", "updateOtelDestination", err)
+				return nil, goahttp.ErrValidationError("dataExports", "updateDestination", err)
 			}
-			res := NewUpdateOtelDestinationOtelDestinationOK(&body)
+			res := NewUpdateDestinationDestinationOK(&body)
 			return res, nil
 		case http.StatusUnauthorized:
 			var (
-				body UpdateOtelDestinationUnauthorizedResponseBody
+				body UpdateDestinationUnauthorizedResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("dataExports", "updateOtelDestination", err)
+				return nil, goahttp.ErrDecodingError("dataExports", "updateDestination", err)
 			}
-			err = ValidateUpdateOtelDestinationUnauthorizedResponseBody(&body)
+			err = ValidateUpdateDestinationUnauthorizedResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("dataExports", "updateOtelDestination", err)
+				return nil, goahttp.ErrValidationError("dataExports", "updateDestination", err)
 			}
-			return nil, NewUpdateOtelDestinationUnauthorized(&body)
+			return nil, NewUpdateDestinationUnauthorized(&body)
 		case http.StatusForbidden:
 			var (
-				body UpdateOtelDestinationForbiddenResponseBody
+				body UpdateDestinationForbiddenResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("dataExports", "updateOtelDestination", err)
+				return nil, goahttp.ErrDecodingError("dataExports", "updateDestination", err)
 			}
-			err = ValidateUpdateOtelDestinationForbiddenResponseBody(&body)
+			err = ValidateUpdateDestinationForbiddenResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("dataExports", "updateOtelDestination", err)
+				return nil, goahttp.ErrValidationError("dataExports", "updateDestination", err)
 			}
-			return nil, NewUpdateOtelDestinationForbidden(&body)
+			return nil, NewUpdateDestinationForbidden(&body)
 		case http.StatusBadRequest:
 			var (
-				body UpdateOtelDestinationBadRequestResponseBody
+				body UpdateDestinationBadRequestResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("dataExports", "updateOtelDestination", err)
+				return nil, goahttp.ErrDecodingError("dataExports", "updateDestination", err)
 			}
-			err = ValidateUpdateOtelDestinationBadRequestResponseBody(&body)
+			err = ValidateUpdateDestinationBadRequestResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("dataExports", "updateOtelDestination", err)
+				return nil, goahttp.ErrValidationError("dataExports", "updateDestination", err)
 			}
-			return nil, NewUpdateOtelDestinationBadRequest(&body)
+			return nil, NewUpdateDestinationBadRequest(&body)
 		case http.StatusNotFound:
 			var (
-				body UpdateOtelDestinationNotFoundResponseBody
+				body UpdateDestinationNotFoundResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("dataExports", "updateOtelDestination", err)
+				return nil, goahttp.ErrDecodingError("dataExports", "updateDestination", err)
 			}
-			err = ValidateUpdateOtelDestinationNotFoundResponseBody(&body)
+			err = ValidateUpdateDestinationNotFoundResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("dataExports", "updateOtelDestination", err)
+				return nil, goahttp.ErrValidationError("dataExports", "updateDestination", err)
 			}
-			return nil, NewUpdateOtelDestinationNotFound(&body)
+			return nil, NewUpdateDestinationNotFound(&body)
 		case http.StatusConflict:
 			var (
-				body UpdateOtelDestinationConflictResponseBody
+				body UpdateDestinationConflictResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("dataExports", "updateOtelDestination", err)
+				return nil, goahttp.ErrDecodingError("dataExports", "updateDestination", err)
 			}
-			err = ValidateUpdateOtelDestinationConflictResponseBody(&body)
+			err = ValidateUpdateDestinationConflictResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("dataExports", "updateOtelDestination", err)
+				return nil, goahttp.ErrValidationError("dataExports", "updateDestination", err)
 			}
-			return nil, NewUpdateOtelDestinationConflict(&body)
+			return nil, NewUpdateDestinationConflict(&body)
 		case http.StatusUnsupportedMediaType:
 			var (
-				body UpdateOtelDestinationUnsupportedMediaResponseBody
+				body UpdateDestinationUnsupportedMediaResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("dataExports", "updateOtelDestination", err)
+				return nil, goahttp.ErrDecodingError("dataExports", "updateDestination", err)
 			}
-			err = ValidateUpdateOtelDestinationUnsupportedMediaResponseBody(&body)
+			err = ValidateUpdateDestinationUnsupportedMediaResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("dataExports", "updateOtelDestination", err)
+				return nil, goahttp.ErrValidationError("dataExports", "updateDestination", err)
 			}
-			return nil, NewUpdateOtelDestinationUnsupportedMedia(&body)
+			return nil, NewUpdateDestinationUnsupportedMedia(&body)
 		case http.StatusUnprocessableEntity:
 			var (
-				body UpdateOtelDestinationInvalidResponseBody
+				body UpdateDestinationInvalidResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("dataExports", "updateOtelDestination", err)
+				return nil, goahttp.ErrDecodingError("dataExports", "updateDestination", err)
 			}
-			err = ValidateUpdateOtelDestinationInvalidResponseBody(&body)
+			err = ValidateUpdateDestinationInvalidResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("dataExports", "updateOtelDestination", err)
+				return nil, goahttp.ErrValidationError("dataExports", "updateDestination", err)
 			}
-			return nil, NewUpdateOtelDestinationInvalid(&body)
+			return nil, NewUpdateDestinationInvalid(&body)
 		case http.StatusInternalServerError:
 			en := resp.Header.Get("goa-error")
 			switch en {
 			case "invariant_violation":
 				var (
-					body UpdateOtelDestinationInvariantViolationResponseBody
+					body UpdateDestinationInvariantViolationResponseBody
 					err  error
 				)
 				err = decoder(resp).Decode(&body)
 				if err != nil {
-					return nil, goahttp.ErrDecodingError("dataExports", "updateOtelDestination", err)
+					return nil, goahttp.ErrDecodingError("dataExports", "updateDestination", err)
 				}
-				err = ValidateUpdateOtelDestinationInvariantViolationResponseBody(&body)
+				err = ValidateUpdateDestinationInvariantViolationResponseBody(&body)
 				if err != nil {
-					return nil, goahttp.ErrValidationError("dataExports", "updateOtelDestination", err)
+					return nil, goahttp.ErrValidationError("dataExports", "updateDestination", err)
 				}
-				return nil, NewUpdateOtelDestinationInvariantViolation(&body)
+				return nil, NewUpdateDestinationInvariantViolation(&body)
 			case "unexpected":
 				var (
-					body UpdateOtelDestinationUnexpectedResponseBody
+					body UpdateDestinationUnexpectedResponseBody
 					err  error
 				)
 				err = decoder(resp).Decode(&body)
 				if err != nil {
-					return nil, goahttp.ErrDecodingError("dataExports", "updateOtelDestination", err)
+					return nil, goahttp.ErrDecodingError("dataExports", "updateDestination", err)
 				}
-				err = ValidateUpdateOtelDestinationUnexpectedResponseBody(&body)
+				err = ValidateUpdateDestinationUnexpectedResponseBody(&body)
 				if err != nil {
-					return nil, goahttp.ErrValidationError("dataExports", "updateOtelDestination", err)
+					return nil, goahttp.ErrValidationError("dataExports", "updateDestination", err)
 				}
-				return nil, NewUpdateOtelDestinationUnexpected(&body)
+				return nil, NewUpdateDestinationUnexpected(&body)
 			default:
 				body, _ := io.ReadAll(resp.Body)
-				return nil, goahttp.ErrInvalidResponse("dataExports", "updateOtelDestination", resp.StatusCode, string(body))
+				return nil, goahttp.ErrInvalidResponse("dataExports", "updateDestination", resp.StatusCode, string(body))
 			}
 		case http.StatusBadGateway:
 			var (
-				body UpdateOtelDestinationGatewayErrorResponseBody
+				body UpdateDestinationGatewayErrorResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("dataExports", "updateOtelDestination", err)
+				return nil, goahttp.ErrDecodingError("dataExports", "updateDestination", err)
 			}
-			err = ValidateUpdateOtelDestinationGatewayErrorResponseBody(&body)
+			err = ValidateUpdateDestinationGatewayErrorResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("dataExports", "updateOtelDestination", err)
+				return nil, goahttp.ErrValidationError("dataExports", "updateDestination", err)
 			}
-			return nil, NewUpdateOtelDestinationGatewayError(&body)
+			return nil, NewUpdateDestinationGatewayError(&body)
 		default:
 			body, _ := io.ReadAll(resp.Body)
-			return nil, goahttp.ErrInvalidResponse("dataExports", "updateOtelDestination", resp.StatusCode, string(body))
+			return nil, goahttp.ErrInvalidResponse("dataExports", "updateDestination", resp.StatusCode, string(body))
 		}
 	}
 }
 
-// BuildDeleteOtelDestinationRequest instantiates a HTTP request object with
-// method and path set to call the "dataExports" service
-// "deleteOtelDestination" endpoint
-func (c *Client) BuildDeleteOtelDestinationRequest(ctx context.Context, v any) (*http.Request, error) {
-	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: DeleteOtelDestinationDataExportsPath()}
+// BuildDeleteDestinationRequest instantiates a HTTP request object with method
+// and path set to call the "dataExports" service "deleteDestination" endpoint
+func (c *Client) BuildDeleteDestinationRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: DeleteDestinationDataExportsPath()}
 	req, err := http.NewRequest("DELETE", u.String(), nil)
 	if err != nil {
-		return nil, goahttp.ErrInvalidURL("dataExports", "deleteOtelDestination", u.String(), err)
+		return nil, goahttp.ErrInvalidURL("dataExports", "deleteDestination", u.String(), err)
 	}
 	if ctx != nil {
 		req = req.WithContext(ctx)
@@ -762,13 +758,13 @@ func (c *Client) BuildDeleteOtelDestinationRequest(ctx context.Context, v any) (
 	return req, nil
 }
 
-// EncodeDeleteOtelDestinationRequest returns an encoder for requests sent to
-// the dataExports deleteOtelDestination server.
-func EncodeDeleteOtelDestinationRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+// EncodeDeleteDestinationRequest returns an encoder for requests sent to the
+// dataExports deleteDestination server.
+func EncodeDeleteDestinationRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
 	return func(req *http.Request, v any) error {
-		p, ok := v.(*dataexports.DeleteOtelDestinationPayload)
+		p, ok := v.(*dataexports.DeleteDestinationPayload)
 		if !ok {
-			return goahttp.ErrInvalidType("dataExports", "deleteOtelDestination", "*dataexports.DeleteOtelDestinationPayload", v)
+			return goahttp.ErrInvalidType("dataExports", "deleteDestination", "*dataexports.DeleteDestinationPayload", v)
 		}
 		if p.SessionToken != nil {
 			head := *p.SessionToken
@@ -784,15 +780,16 @@ func EncodeDeleteOtelDestinationRequest(encoder func(*http.Request) goahttp.Enco
 		}
 		values := req.URL.Query()
 		values.Add("id", p.ID)
+		values.Add("destination_type", p.DestinationType)
 		req.URL.RawQuery = values.Encode()
 		return nil
 	}
 }
 
-// DecodeDeleteOtelDestinationResponse returns a decoder for responses returned
-// by the dataExports deleteOtelDestination endpoint. restoreBody controls
-// whether the response body should be restored after having been read.
-// DecodeDeleteOtelDestinationResponse may return the following errors:
+// DecodeDeleteDestinationResponse returns a decoder for responses returned by
+// the dataExports deleteDestination endpoint. restoreBody controls whether the
+// response body should be restored after having been read.
+// DecodeDeleteDestinationResponse may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
 //   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
 //   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
@@ -804,7 +801,7 @@ func EncodeDeleteOtelDestinationRequest(encoder func(*http.Request) goahttp.Enco
 //   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
 //   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
 //   - error: internal error
-func DecodeDeleteOtelDestinationResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+func DecodeDeleteDestinationResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
 	return func(resp *http.Response) (any, error) {
 		if restoreBody {
 			b, err := io.ReadAll(resp.Body)
@@ -823,154 +820,154 @@ func DecodeDeleteOtelDestinationResponse(decoder func(*http.Response) goahttp.De
 			return nil, nil
 		case http.StatusUnauthorized:
 			var (
-				body DeleteOtelDestinationUnauthorizedResponseBody
+				body DeleteDestinationUnauthorizedResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("dataExports", "deleteOtelDestination", err)
+				return nil, goahttp.ErrDecodingError("dataExports", "deleteDestination", err)
 			}
-			err = ValidateDeleteOtelDestinationUnauthorizedResponseBody(&body)
+			err = ValidateDeleteDestinationUnauthorizedResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("dataExports", "deleteOtelDestination", err)
+				return nil, goahttp.ErrValidationError("dataExports", "deleteDestination", err)
 			}
-			return nil, NewDeleteOtelDestinationUnauthorized(&body)
+			return nil, NewDeleteDestinationUnauthorized(&body)
 		case http.StatusForbidden:
 			var (
-				body DeleteOtelDestinationForbiddenResponseBody
+				body DeleteDestinationForbiddenResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("dataExports", "deleteOtelDestination", err)
+				return nil, goahttp.ErrDecodingError("dataExports", "deleteDestination", err)
 			}
-			err = ValidateDeleteOtelDestinationForbiddenResponseBody(&body)
+			err = ValidateDeleteDestinationForbiddenResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("dataExports", "deleteOtelDestination", err)
+				return nil, goahttp.ErrValidationError("dataExports", "deleteDestination", err)
 			}
-			return nil, NewDeleteOtelDestinationForbidden(&body)
+			return nil, NewDeleteDestinationForbidden(&body)
 		case http.StatusBadRequest:
 			var (
-				body DeleteOtelDestinationBadRequestResponseBody
+				body DeleteDestinationBadRequestResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("dataExports", "deleteOtelDestination", err)
+				return nil, goahttp.ErrDecodingError("dataExports", "deleteDestination", err)
 			}
-			err = ValidateDeleteOtelDestinationBadRequestResponseBody(&body)
+			err = ValidateDeleteDestinationBadRequestResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("dataExports", "deleteOtelDestination", err)
+				return nil, goahttp.ErrValidationError("dataExports", "deleteDestination", err)
 			}
-			return nil, NewDeleteOtelDestinationBadRequest(&body)
+			return nil, NewDeleteDestinationBadRequest(&body)
 		case http.StatusNotFound:
 			var (
-				body DeleteOtelDestinationNotFoundResponseBody
+				body DeleteDestinationNotFoundResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("dataExports", "deleteOtelDestination", err)
+				return nil, goahttp.ErrDecodingError("dataExports", "deleteDestination", err)
 			}
-			err = ValidateDeleteOtelDestinationNotFoundResponseBody(&body)
+			err = ValidateDeleteDestinationNotFoundResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("dataExports", "deleteOtelDestination", err)
+				return nil, goahttp.ErrValidationError("dataExports", "deleteDestination", err)
 			}
-			return nil, NewDeleteOtelDestinationNotFound(&body)
+			return nil, NewDeleteDestinationNotFound(&body)
 		case http.StatusConflict:
 			var (
-				body DeleteOtelDestinationConflictResponseBody
+				body DeleteDestinationConflictResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("dataExports", "deleteOtelDestination", err)
+				return nil, goahttp.ErrDecodingError("dataExports", "deleteDestination", err)
 			}
-			err = ValidateDeleteOtelDestinationConflictResponseBody(&body)
+			err = ValidateDeleteDestinationConflictResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("dataExports", "deleteOtelDestination", err)
+				return nil, goahttp.ErrValidationError("dataExports", "deleteDestination", err)
 			}
-			return nil, NewDeleteOtelDestinationConflict(&body)
+			return nil, NewDeleteDestinationConflict(&body)
 		case http.StatusUnsupportedMediaType:
 			var (
-				body DeleteOtelDestinationUnsupportedMediaResponseBody
+				body DeleteDestinationUnsupportedMediaResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("dataExports", "deleteOtelDestination", err)
+				return nil, goahttp.ErrDecodingError("dataExports", "deleteDestination", err)
 			}
-			err = ValidateDeleteOtelDestinationUnsupportedMediaResponseBody(&body)
+			err = ValidateDeleteDestinationUnsupportedMediaResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("dataExports", "deleteOtelDestination", err)
+				return nil, goahttp.ErrValidationError("dataExports", "deleteDestination", err)
 			}
-			return nil, NewDeleteOtelDestinationUnsupportedMedia(&body)
+			return nil, NewDeleteDestinationUnsupportedMedia(&body)
 		case http.StatusUnprocessableEntity:
 			var (
-				body DeleteOtelDestinationInvalidResponseBody
+				body DeleteDestinationInvalidResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("dataExports", "deleteOtelDestination", err)
+				return nil, goahttp.ErrDecodingError("dataExports", "deleteDestination", err)
 			}
-			err = ValidateDeleteOtelDestinationInvalidResponseBody(&body)
+			err = ValidateDeleteDestinationInvalidResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("dataExports", "deleteOtelDestination", err)
+				return nil, goahttp.ErrValidationError("dataExports", "deleteDestination", err)
 			}
-			return nil, NewDeleteOtelDestinationInvalid(&body)
+			return nil, NewDeleteDestinationInvalid(&body)
 		case http.StatusInternalServerError:
 			en := resp.Header.Get("goa-error")
 			switch en {
 			case "invariant_violation":
 				var (
-					body DeleteOtelDestinationInvariantViolationResponseBody
+					body DeleteDestinationInvariantViolationResponseBody
 					err  error
 				)
 				err = decoder(resp).Decode(&body)
 				if err != nil {
-					return nil, goahttp.ErrDecodingError("dataExports", "deleteOtelDestination", err)
+					return nil, goahttp.ErrDecodingError("dataExports", "deleteDestination", err)
 				}
-				err = ValidateDeleteOtelDestinationInvariantViolationResponseBody(&body)
+				err = ValidateDeleteDestinationInvariantViolationResponseBody(&body)
 				if err != nil {
-					return nil, goahttp.ErrValidationError("dataExports", "deleteOtelDestination", err)
+					return nil, goahttp.ErrValidationError("dataExports", "deleteDestination", err)
 				}
-				return nil, NewDeleteOtelDestinationInvariantViolation(&body)
+				return nil, NewDeleteDestinationInvariantViolation(&body)
 			case "unexpected":
 				var (
-					body DeleteOtelDestinationUnexpectedResponseBody
+					body DeleteDestinationUnexpectedResponseBody
 					err  error
 				)
 				err = decoder(resp).Decode(&body)
 				if err != nil {
-					return nil, goahttp.ErrDecodingError("dataExports", "deleteOtelDestination", err)
+					return nil, goahttp.ErrDecodingError("dataExports", "deleteDestination", err)
 				}
-				err = ValidateDeleteOtelDestinationUnexpectedResponseBody(&body)
+				err = ValidateDeleteDestinationUnexpectedResponseBody(&body)
 				if err != nil {
-					return nil, goahttp.ErrValidationError("dataExports", "deleteOtelDestination", err)
+					return nil, goahttp.ErrValidationError("dataExports", "deleteDestination", err)
 				}
-				return nil, NewDeleteOtelDestinationUnexpected(&body)
+				return nil, NewDeleteDestinationUnexpected(&body)
 			default:
 				body, _ := io.ReadAll(resp.Body)
-				return nil, goahttp.ErrInvalidResponse("dataExports", "deleteOtelDestination", resp.StatusCode, string(body))
+				return nil, goahttp.ErrInvalidResponse("dataExports", "deleteDestination", resp.StatusCode, string(body))
 			}
 		case http.StatusBadGateway:
 			var (
-				body DeleteOtelDestinationGatewayErrorResponseBody
+				body DeleteDestinationGatewayErrorResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("dataExports", "deleteOtelDestination", err)
+				return nil, goahttp.ErrDecodingError("dataExports", "deleteDestination", err)
 			}
-			err = ValidateDeleteOtelDestinationGatewayErrorResponseBody(&body)
+			err = ValidateDeleteDestinationGatewayErrorResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("dataExports", "deleteOtelDestination", err)
+				return nil, goahttp.ErrValidationError("dataExports", "deleteDestination", err)
 			}
-			return nil, NewDeleteOtelDestinationGatewayError(&body)
+			return nil, NewDeleteDestinationGatewayError(&body)
 		default:
 			body, _ := io.ReadAll(resp.Body)
-			return nil, goahttp.ErrInvalidResponse("dataExports", "deleteOtelDestination", resp.StatusCode, string(body))
+			return nil, goahttp.ErrInvalidResponse("dataExports", "deleteDestination", resp.StatusCode, string(body))
 		}
 	}
 }
@@ -1928,18 +1925,34 @@ func DecodeDeleteRouteResponse(decoder func(*http.Response) goahttp.Decoder, res
 	}
 }
 
+// unmarshalDestinationResponseBodyToDataexportsDestination builds a value of
+// type *dataexports.Destination from a value of type *DestinationResponseBody.
+func unmarshalDestinationResponseBodyToDataexportsDestination(v *DestinationResponseBody) *dataexports.Destination {
+	res := &dataexports.Destination{
+		ID:              *v.ID,
+		ProjectID:       *v.ProjectID,
+		Name:            *v.Name,
+		DestinationType: *v.DestinationType,
+		SensitiveData:   *v.SensitiveData,
+		CreatedAt:       *v.CreatedAt,
+		UpdatedAt:       *v.UpdatedAt,
+	}
+	if v.Otel != nil {
+		res.Otel = unmarshalOtelDestinationResponseBodyToDataexportsOtelDestination(v.Otel)
+	}
+
+	return res
+}
+
 // unmarshalOtelDestinationResponseBodyToDataexportsOtelDestination builds a
 // value of type *dataexports.OtelDestination from a value of type
 // *OtelDestinationResponseBody.
 func unmarshalOtelDestinationResponseBodyToDataexportsOtelDestination(v *OtelDestinationResponseBody) *dataexports.OtelDestination {
+	if v == nil {
+		return nil
+	}
 	res := &dataexports.OtelDestination{
-		ID:            *v.ID,
-		ProjectID:     *v.ProjectID,
-		Name:          *v.Name,
-		EndpointURL:   *v.EndpointURL,
-		SensitiveData: *v.SensitiveData,
-		CreatedAt:     *v.CreatedAt,
-		UpdatedAt:     *v.UpdatedAt,
+		EndpointURL: *v.EndpointURL,
 	}
 	res.Headers = make([]*dataexports.OtelDestinationHeader, len(v.Headers))
 	for i, val := range v.Headers {
@@ -1965,6 +1978,32 @@ func unmarshalOtelDestinationHeaderResponseBodyToDataexportsOtelDestinationHeade
 	return res
 }
 
+// marshalDataexportsCreateOtelDestinationInputToCreateOtelDestinationInputRequestBody
+// builds a value of type *CreateOtelDestinationInputRequestBody from a value
+// of type *dataexports.CreateOtelDestinationInput.
+func marshalDataexportsCreateOtelDestinationInputToCreateOtelDestinationInputRequestBody(v *dataexports.CreateOtelDestinationInput) *CreateOtelDestinationInputRequestBody {
+	if v == nil {
+		return nil
+	}
+	res := &CreateOtelDestinationInputRequestBody{
+		EndpointURL: v.EndpointURL,
+	}
+	if v.Headers != nil {
+		res.Headers = make([]*CreateOtelDestinationHeaderInputRequestBody, len(v.Headers))
+		for i, val := range v.Headers {
+			if val == nil {
+				res.Headers[i] = nil
+				continue
+			}
+			res.Headers[i] = marshalDataexportsCreateOtelDestinationHeaderInputToCreateOtelDestinationHeaderInputRequestBody(val)
+		}
+	} else {
+		res.Headers = []*CreateOtelDestinationHeaderInputRequestBody{}
+	}
+
+	return res
+}
+
 // marshalDataexportsCreateOtelDestinationHeaderInputToCreateOtelDestinationHeaderInputRequestBody
 // builds a value of type *CreateOtelDestinationHeaderInputRequestBody from a
 // value of type *dataexports.CreateOtelDestinationHeaderInput.
@@ -1972,6 +2011,32 @@ func marshalDataexportsCreateOtelDestinationHeaderInputToCreateOtelDestinationHe
 	res := &CreateOtelDestinationHeaderInputRequestBody{
 		Name:  v.Name,
 		Value: v.Value,
+	}
+
+	return res
+}
+
+// marshalCreateOtelDestinationInputRequestBodyToDataexportsCreateOtelDestinationInput
+// builds a value of type *dataexports.CreateOtelDestinationInput from a value
+// of type *CreateOtelDestinationInputRequestBody.
+func marshalCreateOtelDestinationInputRequestBodyToDataexportsCreateOtelDestinationInput(v *CreateOtelDestinationInputRequestBody) *dataexports.CreateOtelDestinationInput {
+	if v == nil {
+		return nil
+	}
+	res := &dataexports.CreateOtelDestinationInput{
+		EndpointURL: v.EndpointURL,
+	}
+	if v.Headers != nil {
+		res.Headers = make([]*dataexports.CreateOtelDestinationHeaderInput, len(v.Headers))
+		for i, val := range v.Headers {
+			if val == nil {
+				res.Headers[i] = nil
+				continue
+			}
+			res.Headers[i] = marshalCreateOtelDestinationHeaderInputRequestBodyToDataexportsCreateOtelDestinationHeaderInput(val)
+		}
+	} else {
+		res.Headers = []*dataexports.CreateOtelDestinationHeaderInput{}
 	}
 
 	return res
@@ -1989,11 +2054,37 @@ func marshalCreateOtelDestinationHeaderInputRequestBodyToDataexportsCreateOtelDe
 	return res
 }
 
-// marshalDataexportsOtelDestinationHeaderInputToOtelDestinationHeaderInputRequestBody
-// builds a value of type *OtelDestinationHeaderInputRequestBody from a value
-// of type *dataexports.OtelDestinationHeaderInput.
-func marshalDataexportsOtelDestinationHeaderInputToOtelDestinationHeaderInputRequestBody(v *dataexports.OtelDestinationHeaderInput) *OtelDestinationHeaderInputRequestBody {
-	res := &OtelDestinationHeaderInputRequestBody{
+// marshalDataexportsUpdateOtelDestinationInputToUpdateOtelDestinationInputRequestBody
+// builds a value of type *UpdateOtelDestinationInputRequestBody from a value
+// of type *dataexports.UpdateOtelDestinationInput.
+func marshalDataexportsUpdateOtelDestinationInputToUpdateOtelDestinationInputRequestBody(v *dataexports.UpdateOtelDestinationInput) *UpdateOtelDestinationInputRequestBody {
+	if v == nil {
+		return nil
+	}
+	res := &UpdateOtelDestinationInputRequestBody{
+		EndpointURL: v.EndpointURL,
+	}
+	if v.Headers != nil {
+		res.Headers = make([]*UpdateOtelDestinationHeaderInputRequestBody, len(v.Headers))
+		for i, val := range v.Headers {
+			if val == nil {
+				res.Headers[i] = nil
+				continue
+			}
+			res.Headers[i] = marshalDataexportsUpdateOtelDestinationHeaderInputToUpdateOtelDestinationHeaderInputRequestBody(val)
+		}
+	} else {
+		res.Headers = []*UpdateOtelDestinationHeaderInputRequestBody{}
+	}
+
+	return res
+}
+
+// marshalDataexportsUpdateOtelDestinationHeaderInputToUpdateOtelDestinationHeaderInputRequestBody
+// builds a value of type *UpdateOtelDestinationHeaderInputRequestBody from a
+// value of type *dataexports.UpdateOtelDestinationHeaderInput.
+func marshalDataexportsUpdateOtelDestinationHeaderInputToUpdateOtelDestinationHeaderInputRequestBody(v *dataexports.UpdateOtelDestinationHeaderInput) *UpdateOtelDestinationHeaderInputRequestBody {
+	res := &UpdateOtelDestinationHeaderInputRequestBody{
 		Name:  v.Name,
 		Value: v.Value,
 	}
@@ -2001,11 +2092,37 @@ func marshalDataexportsOtelDestinationHeaderInputToOtelDestinationHeaderInputReq
 	return res
 }
 
-// marshalOtelDestinationHeaderInputRequestBodyToDataexportsOtelDestinationHeaderInput
-// builds a value of type *dataexports.OtelDestinationHeaderInput from a value
-// of type *OtelDestinationHeaderInputRequestBody.
-func marshalOtelDestinationHeaderInputRequestBodyToDataexportsOtelDestinationHeaderInput(v *OtelDestinationHeaderInputRequestBody) *dataexports.OtelDestinationHeaderInput {
-	res := &dataexports.OtelDestinationHeaderInput{
+// marshalUpdateOtelDestinationInputRequestBodyToDataexportsUpdateOtelDestinationInput
+// builds a value of type *dataexports.UpdateOtelDestinationInput from a value
+// of type *UpdateOtelDestinationInputRequestBody.
+func marshalUpdateOtelDestinationInputRequestBodyToDataexportsUpdateOtelDestinationInput(v *UpdateOtelDestinationInputRequestBody) *dataexports.UpdateOtelDestinationInput {
+	if v == nil {
+		return nil
+	}
+	res := &dataexports.UpdateOtelDestinationInput{
+		EndpointURL: v.EndpointURL,
+	}
+	if v.Headers != nil {
+		res.Headers = make([]*dataexports.UpdateOtelDestinationHeaderInput, len(v.Headers))
+		for i, val := range v.Headers {
+			if val == nil {
+				res.Headers[i] = nil
+				continue
+			}
+			res.Headers[i] = marshalUpdateOtelDestinationHeaderInputRequestBodyToDataexportsUpdateOtelDestinationHeaderInput(val)
+		}
+	} else {
+		res.Headers = []*dataexports.UpdateOtelDestinationHeaderInput{}
+	}
+
+	return res
+}
+
+// marshalUpdateOtelDestinationHeaderInputRequestBodyToDataexportsUpdateOtelDestinationHeaderInput
+// builds a value of type *dataexports.UpdateOtelDestinationHeaderInput from a
+// value of type *UpdateOtelDestinationHeaderInputRequestBody.
+func marshalUpdateOtelDestinationHeaderInputRequestBodyToDataexportsUpdateOtelDestinationHeaderInput(v *UpdateOtelDestinationHeaderInputRequestBody) *dataexports.UpdateOtelDestinationHeaderInput {
+	res := &dataexports.UpdateOtelDestinationHeaderInput{
 		Name:  v.Name,
 		Value: v.Value,
 	}

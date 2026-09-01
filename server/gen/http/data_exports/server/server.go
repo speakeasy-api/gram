@@ -18,15 +18,15 @@ import (
 
 // Server lists the dataExports service endpoint HTTP handlers.
 type Server struct {
-	Mounts                []*MountPoint
-	ListOtelDestinations  http.Handler
-	CreateOtelDestination http.Handler
-	UpdateOtelDestination http.Handler
-	DeleteOtelDestination http.Handler
-	ListRoutes            http.Handler
-	CreateRoute           http.Handler
-	UpdateRoute           http.Handler
-	DeleteRoute           http.Handler
+	Mounts            []*MountPoint
+	ListDestinations  http.Handler
+	CreateDestination http.Handler
+	UpdateDestination http.Handler
+	DeleteDestination http.Handler
+	ListRoutes        http.Handler
+	CreateRoute       http.Handler
+	UpdateRoute       http.Handler
+	DeleteRoute       http.Handler
 }
 
 // MountPoint holds information about the mounted endpoints.
@@ -56,23 +56,23 @@ func New(
 ) *Server {
 	return &Server{
 		Mounts: []*MountPoint{
-			{"ListOtelDestinations", "GET", "/rpc/dataExports.listOtelDestinations"},
-			{"CreateOtelDestination", "POST", "/rpc/dataExports.createOtelDestination"},
-			{"UpdateOtelDestination", "POST", "/rpc/dataExports.updateOtelDestination"},
-			{"DeleteOtelDestination", "DELETE", "/rpc/dataExports.deleteOtelDestination"},
+			{"ListDestinations", "GET", "/rpc/dataExports.listDestinations"},
+			{"CreateDestination", "POST", "/rpc/dataExports.createDestination"},
+			{"UpdateDestination", "POST", "/rpc/dataExports.updateDestination"},
+			{"DeleteDestination", "DELETE", "/rpc/dataExports.deleteDestination"},
 			{"ListRoutes", "GET", "/rpc/dataExports.listRoutes"},
 			{"CreateRoute", "POST", "/rpc/dataExports.createRoute"},
 			{"UpdateRoute", "POST", "/rpc/dataExports.updateRoute"},
 			{"DeleteRoute", "DELETE", "/rpc/dataExports.deleteRoute"},
 		},
-		ListOtelDestinations:  NewListOtelDestinationsHandler(e.ListOtelDestinations, mux, decoder, encoder, errhandler, formatter),
-		CreateOtelDestination: NewCreateOtelDestinationHandler(e.CreateOtelDestination, mux, decoder, encoder, errhandler, formatter),
-		UpdateOtelDestination: NewUpdateOtelDestinationHandler(e.UpdateOtelDestination, mux, decoder, encoder, errhandler, formatter),
-		DeleteOtelDestination: NewDeleteOtelDestinationHandler(e.DeleteOtelDestination, mux, decoder, encoder, errhandler, formatter),
-		ListRoutes:            NewListRoutesHandler(e.ListRoutes, mux, decoder, encoder, errhandler, formatter),
-		CreateRoute:           NewCreateRouteHandler(e.CreateRoute, mux, decoder, encoder, errhandler, formatter),
-		UpdateRoute:           NewUpdateRouteHandler(e.UpdateRoute, mux, decoder, encoder, errhandler, formatter),
-		DeleteRoute:           NewDeleteRouteHandler(e.DeleteRoute, mux, decoder, encoder, errhandler, formatter),
+		ListDestinations:  NewListDestinationsHandler(e.ListDestinations, mux, decoder, encoder, errhandler, formatter),
+		CreateDestination: NewCreateDestinationHandler(e.CreateDestination, mux, decoder, encoder, errhandler, formatter),
+		UpdateDestination: NewUpdateDestinationHandler(e.UpdateDestination, mux, decoder, encoder, errhandler, formatter),
+		DeleteDestination: NewDeleteDestinationHandler(e.DeleteDestination, mux, decoder, encoder, errhandler, formatter),
+		ListRoutes:        NewListRoutesHandler(e.ListRoutes, mux, decoder, encoder, errhandler, formatter),
+		CreateRoute:       NewCreateRouteHandler(e.CreateRoute, mux, decoder, encoder, errhandler, formatter),
+		UpdateRoute:       NewUpdateRouteHandler(e.UpdateRoute, mux, decoder, encoder, errhandler, formatter),
+		DeleteRoute:       NewDeleteRouteHandler(e.DeleteRoute, mux, decoder, encoder, errhandler, formatter),
 	}
 }
 
@@ -81,10 +81,10 @@ func (s *Server) Service() string { return "dataExports" }
 
 // Use wraps the server handlers with the given middleware.
 func (s *Server) Use(m func(http.Handler) http.Handler) {
-	s.ListOtelDestinations = m(s.ListOtelDestinations)
-	s.CreateOtelDestination = m(s.CreateOtelDestination)
-	s.UpdateOtelDestination = m(s.UpdateOtelDestination)
-	s.DeleteOtelDestination = m(s.DeleteOtelDestination)
+	s.ListDestinations = m(s.ListDestinations)
+	s.CreateDestination = m(s.CreateDestination)
+	s.UpdateDestination = m(s.UpdateDestination)
+	s.DeleteDestination = m(s.DeleteDestination)
 	s.ListRoutes = m(s.ListRoutes)
 	s.CreateRoute = m(s.CreateRoute)
 	s.UpdateRoute = m(s.UpdateRoute)
@@ -96,10 +96,10 @@ func (s *Server) MethodNames() []string { return dataexports.MethodNames[:] }
 
 // Mount configures the mux to serve the dataExports endpoints.
 func Mount(mux goahttp.Muxer, h *Server) {
-	MountListOtelDestinationsHandler(mux, h.ListOtelDestinations)
-	MountCreateOtelDestinationHandler(mux, h.CreateOtelDestination)
-	MountUpdateOtelDestinationHandler(mux, h.UpdateOtelDestination)
-	MountDeleteOtelDestinationHandler(mux, h.DeleteOtelDestination)
+	MountListDestinationsHandler(mux, h.ListDestinations)
+	MountCreateDestinationHandler(mux, h.CreateDestination)
+	MountUpdateDestinationHandler(mux, h.UpdateDestination)
+	MountDeleteDestinationHandler(mux, h.DeleteDestination)
 	MountListRoutesHandler(mux, h.ListRoutes)
 	MountCreateRouteHandler(mux, h.CreateRoute)
 	MountUpdateRouteHandler(mux, h.UpdateRoute)
@@ -111,21 +111,21 @@ func (s *Server) Mount(mux goahttp.Muxer) {
 	Mount(mux, s)
 }
 
-// MountListOtelDestinationsHandler configures the mux to serve the
-// "dataExports" service "listOtelDestinations" endpoint.
-func MountListOtelDestinationsHandler(mux goahttp.Muxer, h http.Handler) {
+// MountListDestinationsHandler configures the mux to serve the "dataExports"
+// service "listDestinations" endpoint.
+func MountListDestinationsHandler(mux goahttp.Muxer, h http.Handler) {
 	f, ok := h.(http.HandlerFunc)
 	if !ok {
 		f = func(w http.ResponseWriter, r *http.Request) {
 			h.ServeHTTP(w, r)
 		}
 	}
-	mux.Handle("GET", "/rpc/dataExports.listOtelDestinations", f)
+	mux.Handle("GET", "/rpc/dataExports.listDestinations", f)
 }
 
-// NewListOtelDestinationsHandler creates a HTTP handler which loads the HTTP
-// request and calls the "dataExports" service "listOtelDestinations" endpoint.
-func NewListOtelDestinationsHandler(
+// NewListDestinationsHandler creates a HTTP handler which loads the HTTP
+// request and calls the "dataExports" service "listDestinations" endpoint.
+func NewListDestinationsHandler(
 	endpoint goa.Endpoint,
 	mux goahttp.Muxer,
 	decoder func(*http.Request) goahttp.Decoder,
@@ -134,13 +134,13 @@ func NewListOtelDestinationsHandler(
 	formatter func(ctx context.Context, err error) goahttp.Statuser,
 ) http.Handler {
 	var (
-		decodeRequest  = DecodeListOtelDestinationsRequest(mux, decoder)
-		encodeResponse = EncodeListOtelDestinationsResponse(encoder)
-		encodeError    = EncodeListOtelDestinationsError(encoder, formatter)
+		decodeRequest  = DecodeListDestinationsRequest(mux, decoder)
+		encodeResponse = EncodeListDestinationsResponse(encoder)
+		encodeError    = EncodeListDestinationsError(encoder, formatter)
 	)
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
-		ctx = context.WithValue(ctx, goa.MethodKey, "listOtelDestinations")
+		ctx = context.WithValue(ctx, goa.MethodKey, "listDestinations")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "dataExports")
 		payload, err := decodeRequest(r)
 		if err != nil {
@@ -164,21 +164,21 @@ func NewListOtelDestinationsHandler(
 	})
 }
 
-// MountCreateOtelDestinationHandler configures the mux to serve the
-// "dataExports" service "createOtelDestination" endpoint.
-func MountCreateOtelDestinationHandler(mux goahttp.Muxer, h http.Handler) {
+// MountCreateDestinationHandler configures the mux to serve the "dataExports"
+// service "createDestination" endpoint.
+func MountCreateDestinationHandler(mux goahttp.Muxer, h http.Handler) {
 	f, ok := h.(http.HandlerFunc)
 	if !ok {
 		f = func(w http.ResponseWriter, r *http.Request) {
 			h.ServeHTTP(w, r)
 		}
 	}
-	mux.Handle("POST", "/rpc/dataExports.createOtelDestination", f)
+	mux.Handle("POST", "/rpc/dataExports.createDestination", f)
 }
 
-// NewCreateOtelDestinationHandler creates a HTTP handler which loads the HTTP
-// request and calls the "dataExports" service "createOtelDestination" endpoint.
-func NewCreateOtelDestinationHandler(
+// NewCreateDestinationHandler creates a HTTP handler which loads the HTTP
+// request and calls the "dataExports" service "createDestination" endpoint.
+func NewCreateDestinationHandler(
 	endpoint goa.Endpoint,
 	mux goahttp.Muxer,
 	decoder func(*http.Request) goahttp.Decoder,
@@ -187,13 +187,13 @@ func NewCreateOtelDestinationHandler(
 	formatter func(ctx context.Context, err error) goahttp.Statuser,
 ) http.Handler {
 	var (
-		decodeRequest  = DecodeCreateOtelDestinationRequest(mux, decoder)
-		encodeResponse = EncodeCreateOtelDestinationResponse(encoder)
-		encodeError    = EncodeCreateOtelDestinationError(encoder, formatter)
+		decodeRequest  = DecodeCreateDestinationRequest(mux, decoder)
+		encodeResponse = EncodeCreateDestinationResponse(encoder)
+		encodeError    = EncodeCreateDestinationError(encoder, formatter)
 	)
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
-		ctx = context.WithValue(ctx, goa.MethodKey, "createOtelDestination")
+		ctx = context.WithValue(ctx, goa.MethodKey, "createDestination")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "dataExports")
 		payload, err := decodeRequest(r)
 		if err != nil {
@@ -217,21 +217,21 @@ func NewCreateOtelDestinationHandler(
 	})
 }
 
-// MountUpdateOtelDestinationHandler configures the mux to serve the
-// "dataExports" service "updateOtelDestination" endpoint.
-func MountUpdateOtelDestinationHandler(mux goahttp.Muxer, h http.Handler) {
+// MountUpdateDestinationHandler configures the mux to serve the "dataExports"
+// service "updateDestination" endpoint.
+func MountUpdateDestinationHandler(mux goahttp.Muxer, h http.Handler) {
 	f, ok := h.(http.HandlerFunc)
 	if !ok {
 		f = func(w http.ResponseWriter, r *http.Request) {
 			h.ServeHTTP(w, r)
 		}
 	}
-	mux.Handle("POST", "/rpc/dataExports.updateOtelDestination", f)
+	mux.Handle("POST", "/rpc/dataExports.updateDestination", f)
 }
 
-// NewUpdateOtelDestinationHandler creates a HTTP handler which loads the HTTP
-// request and calls the "dataExports" service "updateOtelDestination" endpoint.
-func NewUpdateOtelDestinationHandler(
+// NewUpdateDestinationHandler creates a HTTP handler which loads the HTTP
+// request and calls the "dataExports" service "updateDestination" endpoint.
+func NewUpdateDestinationHandler(
 	endpoint goa.Endpoint,
 	mux goahttp.Muxer,
 	decoder func(*http.Request) goahttp.Decoder,
@@ -240,13 +240,13 @@ func NewUpdateOtelDestinationHandler(
 	formatter func(ctx context.Context, err error) goahttp.Statuser,
 ) http.Handler {
 	var (
-		decodeRequest  = DecodeUpdateOtelDestinationRequest(mux, decoder)
-		encodeResponse = EncodeUpdateOtelDestinationResponse(encoder)
-		encodeError    = EncodeUpdateOtelDestinationError(encoder, formatter)
+		decodeRequest  = DecodeUpdateDestinationRequest(mux, decoder)
+		encodeResponse = EncodeUpdateDestinationResponse(encoder)
+		encodeError    = EncodeUpdateDestinationError(encoder, formatter)
 	)
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
-		ctx = context.WithValue(ctx, goa.MethodKey, "updateOtelDestination")
+		ctx = context.WithValue(ctx, goa.MethodKey, "updateDestination")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "dataExports")
 		payload, err := decodeRequest(r)
 		if err != nil {
@@ -270,21 +270,21 @@ func NewUpdateOtelDestinationHandler(
 	})
 }
 
-// MountDeleteOtelDestinationHandler configures the mux to serve the
-// "dataExports" service "deleteOtelDestination" endpoint.
-func MountDeleteOtelDestinationHandler(mux goahttp.Muxer, h http.Handler) {
+// MountDeleteDestinationHandler configures the mux to serve the "dataExports"
+// service "deleteDestination" endpoint.
+func MountDeleteDestinationHandler(mux goahttp.Muxer, h http.Handler) {
 	f, ok := h.(http.HandlerFunc)
 	if !ok {
 		f = func(w http.ResponseWriter, r *http.Request) {
 			h.ServeHTTP(w, r)
 		}
 	}
-	mux.Handle("DELETE", "/rpc/dataExports.deleteOtelDestination", f)
+	mux.Handle("DELETE", "/rpc/dataExports.deleteDestination", f)
 }
 
-// NewDeleteOtelDestinationHandler creates a HTTP handler which loads the HTTP
-// request and calls the "dataExports" service "deleteOtelDestination" endpoint.
-func NewDeleteOtelDestinationHandler(
+// NewDeleteDestinationHandler creates a HTTP handler which loads the HTTP
+// request and calls the "dataExports" service "deleteDestination" endpoint.
+func NewDeleteDestinationHandler(
 	endpoint goa.Endpoint,
 	mux goahttp.Muxer,
 	decoder func(*http.Request) goahttp.Decoder,
@@ -293,13 +293,13 @@ func NewDeleteOtelDestinationHandler(
 	formatter func(ctx context.Context, err error) goahttp.Statuser,
 ) http.Handler {
 	var (
-		decodeRequest  = DecodeDeleteOtelDestinationRequest(mux, decoder)
-		encodeResponse = EncodeDeleteOtelDestinationResponse(encoder)
-		encodeError    = EncodeDeleteOtelDestinationError(encoder, formatter)
+		decodeRequest  = DecodeDeleteDestinationRequest(mux, decoder)
+		encodeResponse = EncodeDeleteDestinationResponse(encoder)
+		encodeError    = EncodeDeleteDestinationError(encoder, formatter)
 	)
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
-		ctx = context.WithValue(ctx, goa.MethodKey, "deleteOtelDestination")
+		ctx = context.WithValue(ctx, goa.MethodKey, "deleteDestination")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "dataExports")
 		payload, err := decodeRequest(r)
 		if err != nil {

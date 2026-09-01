@@ -15,28 +15,28 @@ import (
 	goa "goa.design/goa/v3/pkg"
 )
 
-// BuildListOtelDestinationsPayload builds the payload for the dataExports
-// listOtelDestinations endpoint from CLI flags.
-func BuildListOtelDestinationsPayload(dataExportsListOtelDestinationsSessionToken string, dataExportsListOtelDestinationsApikeyToken string, dataExportsListOtelDestinationsProjectSlugInput string) (*dataexports.ListOtelDestinationsPayload, error) {
+// BuildListDestinationsPayload builds the payload for the dataExports
+// listDestinations endpoint from CLI flags.
+func BuildListDestinationsPayload(dataExportsListDestinationsSessionToken string, dataExportsListDestinationsApikeyToken string, dataExportsListDestinationsProjectSlugInput string) (*dataexports.ListDestinationsPayload, error) {
 	var sessionToken *string
 	{
-		if dataExportsListOtelDestinationsSessionToken != "" {
-			sessionToken = &dataExportsListOtelDestinationsSessionToken
+		if dataExportsListDestinationsSessionToken != "" {
+			sessionToken = &dataExportsListDestinationsSessionToken
 		}
 	}
 	var apikeyToken *string
 	{
-		if dataExportsListOtelDestinationsApikeyToken != "" {
-			apikeyToken = &dataExportsListOtelDestinationsApikeyToken
+		if dataExportsListDestinationsApikeyToken != "" {
+			apikeyToken = &dataExportsListDestinationsApikeyToken
 		}
 	}
 	var projectSlugInput *string
 	{
-		if dataExportsListOtelDestinationsProjectSlugInput != "" {
-			projectSlugInput = &dataExportsListOtelDestinationsProjectSlugInput
+		if dataExportsListDestinationsProjectSlugInput != "" {
+			projectSlugInput = &dataExportsListDestinationsProjectSlugInput
 		}
 	}
-	v := &dataexports.ListOtelDestinationsPayload{}
+	v := &dataexports.ListDestinationsPayload{}
 	v.SessionToken = sessionToken
 	v.ApikeyToken = apikeyToken
 	v.ProjectSlugInput = projectSlugInput
@@ -44,22 +44,26 @@ func BuildListOtelDestinationsPayload(dataExportsListOtelDestinationsSessionToke
 	return v, nil
 }
 
-// BuildCreateOtelDestinationPayload builds the payload for the dataExports
-// createOtelDestination endpoint from CLI flags.
-func BuildCreateOtelDestinationPayload(dataExportsCreateOtelDestinationBody string, dataExportsCreateOtelDestinationSessionToken string, dataExportsCreateOtelDestinationApikeyToken string, dataExportsCreateOtelDestinationProjectSlugInput string) (*dataexports.CreateOtelDestinationPayload, error) {
+// BuildCreateDestinationPayload builds the payload for the dataExports
+// createDestination endpoint from CLI flags.
+func BuildCreateDestinationPayload(dataExportsCreateDestinationBody string, dataExportsCreateDestinationSessionToken string, dataExportsCreateDestinationApikeyToken string, dataExportsCreateDestinationProjectSlugInput string) (*dataexports.CreateDestinationPayload, error) {
 	var err error
-	var body CreateOtelDestinationRequestBody
+	var body CreateDestinationRequestBody
 	{
-		err = json.Unmarshal([]byte(dataExportsCreateOtelDestinationBody), &body)
+		err = json.Unmarshal([]byte(dataExportsCreateDestinationBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"endpoint_url\": \"https://example.com/foo\",\n      \"headers\": [\n         {\n            \"name\": \"abc123\",\n            \"value\": \"abc123\"\n         }\n      ],\n      \"name\": \"abc123\",\n      \"sensitive_data\": \"include\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"destination_type\": \"otel\",\n      \"name\": \"abc123\",\n      \"otel\": {\n         \"endpoint_url\": \"https://example.com/foo\",\n         \"headers\": [\n            {\n               \"name\": \"abc123\",\n               \"value\": \"abc123\"\n            }\n         ]\n      },\n      \"sensitive_data\": \"include\"\n   }'")
 		}
-		if body.Headers == nil {
-			err = goa.MergeErrors(err, goa.MissingFieldError("headers", "body"))
+		if !(body.DestinationType == "otel") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.destination_type", body.DestinationType, []any{"otel"}))
 		}
-		err = goa.MergeErrors(err, goa.ValidateFormat("body.endpoint_url", body.EndpointURL, goa.FormatURI))
 		if !(body.SensitiveData == "exclude" || body.SensitiveData == "include") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.sensitive_data", body.SensitiveData, []any{"exclude", "include"}))
+		}
+		if body.Otel != nil {
+			if err2 := ValidateCreateOtelDestinationInputRequestBody(body.Otel); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
 		}
 		if err != nil {
 			return nil, err
@@ -67,26 +71,26 @@ func BuildCreateOtelDestinationPayload(dataExportsCreateOtelDestinationBody stri
 	}
 	var sessionToken *string
 	{
-		if dataExportsCreateOtelDestinationSessionToken != "" {
-			sessionToken = &dataExportsCreateOtelDestinationSessionToken
+		if dataExportsCreateDestinationSessionToken != "" {
+			sessionToken = &dataExportsCreateDestinationSessionToken
 		}
 	}
 	var apikeyToken *string
 	{
-		if dataExportsCreateOtelDestinationApikeyToken != "" {
-			apikeyToken = &dataExportsCreateOtelDestinationApikeyToken
+		if dataExportsCreateDestinationApikeyToken != "" {
+			apikeyToken = &dataExportsCreateDestinationApikeyToken
 		}
 	}
 	var projectSlugInput *string
 	{
-		if dataExportsCreateOtelDestinationProjectSlugInput != "" {
-			projectSlugInput = &dataExportsCreateOtelDestinationProjectSlugInput
+		if dataExportsCreateDestinationProjectSlugInput != "" {
+			projectSlugInput = &dataExportsCreateDestinationProjectSlugInput
 		}
 	}
-	v := &dataexports.CreateOtelDestinationPayload{
-		Name:          body.Name,
-		EndpointURL:   body.EndpointURL,
-		SensitiveData: body.SensitiveData,
+	v := &dataexports.CreateDestinationPayload{
+		Name:            body.Name,
+		DestinationType: body.DestinationType,
+		SensitiveData:   body.SensitiveData,
 	}
 	{
 		var zero string
@@ -94,17 +98,8 @@ func BuildCreateOtelDestinationPayload(dataExportsCreateOtelDestinationBody stri
 			v.SensitiveData = "exclude"
 		}
 	}
-	if body.Headers != nil {
-		v.Headers = make([]*dataexports.CreateOtelDestinationHeaderInput, len(body.Headers))
-		for i, val := range body.Headers {
-			if val == nil {
-				v.Headers[i] = nil
-				continue
-			}
-			v.Headers[i] = marshalCreateOtelDestinationHeaderInputRequestBodyToDataexportsCreateOtelDestinationHeaderInput(val)
-		}
-	} else {
-		v.Headers = []*dataexports.CreateOtelDestinationHeaderInput{}
+	if body.Otel != nil {
+		v.Otel = marshalCreateOtelDestinationInputRequestBodyToDataexportsCreateOtelDestinationInput(body.Otel)
 	}
 	v.SessionToken = sessionToken
 	v.ApikeyToken = apikeyToken
@@ -113,30 +108,34 @@ func BuildCreateOtelDestinationPayload(dataExportsCreateOtelDestinationBody stri
 	return v, nil
 }
 
-// BuildUpdateOtelDestinationPayload builds the payload for the dataExports
-// updateOtelDestination endpoint from CLI flags.
-func BuildUpdateOtelDestinationPayload(dataExportsUpdateOtelDestinationBody string, dataExportsUpdateOtelDestinationID string, dataExportsUpdateOtelDestinationSessionToken string, dataExportsUpdateOtelDestinationApikeyToken string, dataExportsUpdateOtelDestinationProjectSlugInput string) (*dataexports.UpdateOtelDestinationPayload, error) {
+// BuildUpdateDestinationPayload builds the payload for the dataExports
+// updateDestination endpoint from CLI flags.
+func BuildUpdateDestinationPayload(dataExportsUpdateDestinationBody string, dataExportsUpdateDestinationID string, dataExportsUpdateDestinationSessionToken string, dataExportsUpdateDestinationApikeyToken string, dataExportsUpdateDestinationProjectSlugInput string) (*dataexports.UpdateDestinationPayload, error) {
 	var err error
-	var body UpdateOtelDestinationRequestBody
+	var body UpdateDestinationRequestBody
 	{
-		err = json.Unmarshal([]byte(dataExportsUpdateOtelDestinationBody), &body)
+		err = json.Unmarshal([]byte(dataExportsUpdateDestinationBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"endpoint_url\": \"https://example.com/foo\",\n      \"headers\": [\n         {\n            \"name\": \"abc123\",\n            \"value\": \"abc123\"\n         }\n      ],\n      \"name\": \"abc123\",\n      \"sensitive_data\": \"include\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"destination_type\": \"otel\",\n      \"name\": \"abc123\",\n      \"otel\": {\n         \"endpoint_url\": \"https://example.com/foo\",\n         \"headers\": [\n            {\n               \"name\": \"abc123\",\n               \"value\": \"abc123\"\n            }\n         ]\n      },\n      \"sensitive_data\": \"include\"\n   }'")
 		}
-		if body.Headers == nil {
-			err = goa.MergeErrors(err, goa.MissingFieldError("headers", "body"))
+		if !(body.DestinationType == "otel") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.destination_type", body.DestinationType, []any{"otel"}))
 		}
-		err = goa.MergeErrors(err, goa.ValidateFormat("body.endpoint_url", body.EndpointURL, goa.FormatURI))
 		if !(body.SensitiveData == "exclude" || body.SensitiveData == "include") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.sensitive_data", body.SensitiveData, []any{"exclude", "include"}))
 		}
+		if body.Otel != nil {
+			if err2 := ValidateUpdateOtelDestinationInputRequestBody(body.Otel); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
 		if err != nil {
 			return nil, err
 		}
 	}
 	var id string
 	{
-		id = dataExportsUpdateOtelDestinationID
+		id = dataExportsUpdateDestinationID
 		err = goa.MergeErrors(err, goa.ValidateFormat("id", id, goa.FormatUUID))
 		if err != nil {
 			return nil, err
@@ -144,38 +143,29 @@ func BuildUpdateOtelDestinationPayload(dataExportsUpdateOtelDestinationBody stri
 	}
 	var sessionToken *string
 	{
-		if dataExportsUpdateOtelDestinationSessionToken != "" {
-			sessionToken = &dataExportsUpdateOtelDestinationSessionToken
+		if dataExportsUpdateDestinationSessionToken != "" {
+			sessionToken = &dataExportsUpdateDestinationSessionToken
 		}
 	}
 	var apikeyToken *string
 	{
-		if dataExportsUpdateOtelDestinationApikeyToken != "" {
-			apikeyToken = &dataExportsUpdateOtelDestinationApikeyToken
+		if dataExportsUpdateDestinationApikeyToken != "" {
+			apikeyToken = &dataExportsUpdateDestinationApikeyToken
 		}
 	}
 	var projectSlugInput *string
 	{
-		if dataExportsUpdateOtelDestinationProjectSlugInput != "" {
-			projectSlugInput = &dataExportsUpdateOtelDestinationProjectSlugInput
+		if dataExportsUpdateDestinationProjectSlugInput != "" {
+			projectSlugInput = &dataExportsUpdateDestinationProjectSlugInput
 		}
 	}
-	v := &dataexports.UpdateOtelDestinationPayload{
-		Name:          body.Name,
-		EndpointURL:   body.EndpointURL,
-		SensitiveData: body.SensitiveData,
+	v := &dataexports.UpdateDestinationPayload{
+		Name:            body.Name,
+		DestinationType: body.DestinationType,
+		SensitiveData:   body.SensitiveData,
 	}
-	if body.Headers != nil {
-		v.Headers = make([]*dataexports.OtelDestinationHeaderInput, len(body.Headers))
-		for i, val := range body.Headers {
-			if val == nil {
-				v.Headers[i] = nil
-				continue
-			}
-			v.Headers[i] = marshalOtelDestinationHeaderInputRequestBodyToDataexportsOtelDestinationHeaderInput(val)
-		}
-	} else {
-		v.Headers = []*dataexports.OtelDestinationHeaderInput{}
+	if body.Otel != nil {
+		v.Otel = marshalUpdateOtelDestinationInputRequestBodyToDataexportsUpdateOtelDestinationInput(body.Otel)
 	}
 	v.ID = id
 	v.SessionToken = sessionToken
@@ -185,38 +175,49 @@ func BuildUpdateOtelDestinationPayload(dataExportsUpdateOtelDestinationBody stri
 	return v, nil
 }
 
-// BuildDeleteOtelDestinationPayload builds the payload for the dataExports
-// deleteOtelDestination endpoint from CLI flags.
-func BuildDeleteOtelDestinationPayload(dataExportsDeleteOtelDestinationID string, dataExportsDeleteOtelDestinationSessionToken string, dataExportsDeleteOtelDestinationApikeyToken string, dataExportsDeleteOtelDestinationProjectSlugInput string) (*dataexports.DeleteOtelDestinationPayload, error) {
+// BuildDeleteDestinationPayload builds the payload for the dataExports
+// deleteDestination endpoint from CLI flags.
+func BuildDeleteDestinationPayload(dataExportsDeleteDestinationID string, dataExportsDeleteDestinationDestinationType string, dataExportsDeleteDestinationSessionToken string, dataExportsDeleteDestinationApikeyToken string, dataExportsDeleteDestinationProjectSlugInput string) (*dataexports.DeleteDestinationPayload, error) {
 	var err error
 	var id string
 	{
-		id = dataExportsDeleteOtelDestinationID
+		id = dataExportsDeleteDestinationID
 		err = goa.MergeErrors(err, goa.ValidateFormat("id", id, goa.FormatUUID))
+		if err != nil {
+			return nil, err
+		}
+	}
+	var destinationType string
+	{
+		destinationType = dataExportsDeleteDestinationDestinationType
+		if !(destinationType == "otel") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("destination_type", destinationType, []any{"otel"}))
+		}
 		if err != nil {
 			return nil, err
 		}
 	}
 	var sessionToken *string
 	{
-		if dataExportsDeleteOtelDestinationSessionToken != "" {
-			sessionToken = &dataExportsDeleteOtelDestinationSessionToken
+		if dataExportsDeleteDestinationSessionToken != "" {
+			sessionToken = &dataExportsDeleteDestinationSessionToken
 		}
 	}
 	var apikeyToken *string
 	{
-		if dataExportsDeleteOtelDestinationApikeyToken != "" {
-			apikeyToken = &dataExportsDeleteOtelDestinationApikeyToken
+		if dataExportsDeleteDestinationApikeyToken != "" {
+			apikeyToken = &dataExportsDeleteDestinationApikeyToken
 		}
 	}
 	var projectSlugInput *string
 	{
-		if dataExportsDeleteOtelDestinationProjectSlugInput != "" {
-			projectSlugInput = &dataExportsDeleteOtelDestinationProjectSlugInput
+		if dataExportsDeleteDestinationProjectSlugInput != "" {
+			projectSlugInput = &dataExportsDeleteDestinationProjectSlugInput
 		}
 	}
-	v := &dataexports.DeleteOtelDestinationPayload{}
+	v := &dataexports.DeleteDestinationPayload{}
 	v.ID = id
+	v.DestinationType = destinationType
 	v.SessionToken = sessionToken
 	v.ApikeyToken = apikeyToken
 	v.ProjectSlugInput = projectSlugInput

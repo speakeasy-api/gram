@@ -16,14 +16,14 @@ import (
 
 // Endpoints wraps the "dataExports" service endpoints.
 type Endpoints struct {
-	ListOtelDestinations  goa.Endpoint
-	CreateOtelDestination goa.Endpoint
-	UpdateOtelDestination goa.Endpoint
-	DeleteOtelDestination goa.Endpoint
-	ListRoutes            goa.Endpoint
-	CreateRoute           goa.Endpoint
-	UpdateRoute           goa.Endpoint
-	DeleteRoute           goa.Endpoint
+	ListDestinations  goa.Endpoint
+	CreateDestination goa.Endpoint
+	UpdateDestination goa.Endpoint
+	DeleteDestination goa.Endpoint
+	ListRoutes        goa.Endpoint
+	CreateRoute       goa.Endpoint
+	UpdateRoute       goa.Endpoint
+	DeleteRoute       goa.Endpoint
 }
 
 // NewEndpoints wraps the methods of the "dataExports" service with endpoints.
@@ -31,34 +31,34 @@ func NewEndpoints(s Service) *Endpoints {
 	// Casting service to Auther interface
 	a := s.(Auther)
 	return &Endpoints{
-		ListOtelDestinations:  NewListOtelDestinationsEndpoint(s, a.APIKeyAuth),
-		CreateOtelDestination: NewCreateOtelDestinationEndpoint(s, a.APIKeyAuth),
-		UpdateOtelDestination: NewUpdateOtelDestinationEndpoint(s, a.APIKeyAuth),
-		DeleteOtelDestination: NewDeleteOtelDestinationEndpoint(s, a.APIKeyAuth),
-		ListRoutes:            NewListRoutesEndpoint(s, a.APIKeyAuth),
-		CreateRoute:           NewCreateRouteEndpoint(s, a.APIKeyAuth),
-		UpdateRoute:           NewUpdateRouteEndpoint(s, a.APIKeyAuth),
-		DeleteRoute:           NewDeleteRouteEndpoint(s, a.APIKeyAuth),
+		ListDestinations:  NewListDestinationsEndpoint(s, a.APIKeyAuth),
+		CreateDestination: NewCreateDestinationEndpoint(s, a.APIKeyAuth),
+		UpdateDestination: NewUpdateDestinationEndpoint(s, a.APIKeyAuth),
+		DeleteDestination: NewDeleteDestinationEndpoint(s, a.APIKeyAuth),
+		ListRoutes:        NewListRoutesEndpoint(s, a.APIKeyAuth),
+		CreateRoute:       NewCreateRouteEndpoint(s, a.APIKeyAuth),
+		UpdateRoute:       NewUpdateRouteEndpoint(s, a.APIKeyAuth),
+		DeleteRoute:       NewDeleteRouteEndpoint(s, a.APIKeyAuth),
 	}
 }
 
 // Use applies the given middleware to all the "dataExports" service endpoints.
 func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
-	e.ListOtelDestinations = m(e.ListOtelDestinations)
-	e.CreateOtelDestination = m(e.CreateOtelDestination)
-	e.UpdateOtelDestination = m(e.UpdateOtelDestination)
-	e.DeleteOtelDestination = m(e.DeleteOtelDestination)
+	e.ListDestinations = m(e.ListDestinations)
+	e.CreateDestination = m(e.CreateDestination)
+	e.UpdateDestination = m(e.UpdateDestination)
+	e.DeleteDestination = m(e.DeleteDestination)
 	e.ListRoutes = m(e.ListRoutes)
 	e.CreateRoute = m(e.CreateRoute)
 	e.UpdateRoute = m(e.UpdateRoute)
 	e.DeleteRoute = m(e.DeleteRoute)
 }
 
-// NewListOtelDestinationsEndpoint returns an endpoint function that calls the
-// method "listOtelDestinations" of service "dataExports".
-func NewListOtelDestinationsEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+// NewListDestinationsEndpoint returns an endpoint function that calls the
+// method "listDestinations" of service "dataExports".
+func NewListDestinationsEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
 	return func(ctx context.Context, req any) (any, error) {
-		p := req.(*ListOtelDestinationsPayload)
+		p := req.(*ListDestinationsPayload)
 		var err error
 		sc := security.APIKeyScheme{
 			Name:           "session",
@@ -109,15 +109,15 @@ func NewListOtelDestinationsEndpoint(s Service, authAPIKeyFn security.AuthAPIKey
 		if err != nil {
 			return nil, err
 		}
-		return s.ListOtelDestinations(ctx, p)
+		return s.ListDestinations(ctx, p)
 	}
 }
 
-// NewCreateOtelDestinationEndpoint returns an endpoint function that calls the
-// method "createOtelDestination" of service "dataExports".
-func NewCreateOtelDestinationEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+// NewCreateDestinationEndpoint returns an endpoint function that calls the
+// method "createDestination" of service "dataExports".
+func NewCreateDestinationEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
 	return func(ctx context.Context, req any) (any, error) {
-		p := req.(*CreateOtelDestinationPayload)
+		p := req.(*CreateDestinationPayload)
 		var err error
 		sc := security.APIKeyScheme{
 			Name:           "session",
@@ -168,15 +168,15 @@ func NewCreateOtelDestinationEndpoint(s Service, authAPIKeyFn security.AuthAPIKe
 		if err != nil {
 			return nil, err
 		}
-		return s.CreateOtelDestination(ctx, p)
+		return s.CreateDestination(ctx, p)
 	}
 }
 
-// NewUpdateOtelDestinationEndpoint returns an endpoint function that calls the
-// method "updateOtelDestination" of service "dataExports".
-func NewUpdateOtelDestinationEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+// NewUpdateDestinationEndpoint returns an endpoint function that calls the
+// method "updateDestination" of service "dataExports".
+func NewUpdateDestinationEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
 	return func(ctx context.Context, req any) (any, error) {
-		p := req.(*UpdateOtelDestinationPayload)
+		p := req.(*UpdateDestinationPayload)
 		var err error
 		sc := security.APIKeyScheme{
 			Name:           "session",
@@ -227,15 +227,15 @@ func NewUpdateOtelDestinationEndpoint(s Service, authAPIKeyFn security.AuthAPIKe
 		if err != nil {
 			return nil, err
 		}
-		return s.UpdateOtelDestination(ctx, p)
+		return s.UpdateDestination(ctx, p)
 	}
 }
 
-// NewDeleteOtelDestinationEndpoint returns an endpoint function that calls the
-// method "deleteOtelDestination" of service "dataExports".
-func NewDeleteOtelDestinationEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+// NewDeleteDestinationEndpoint returns an endpoint function that calls the
+// method "deleteDestination" of service "dataExports".
+func NewDeleteDestinationEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
 	return func(ctx context.Context, req any) (any, error) {
-		p := req.(*DeleteOtelDestinationPayload)
+		p := req.(*DeleteDestinationPayload)
 		var err error
 		sc := security.APIKeyScheme{
 			Name:           "session",
@@ -286,7 +286,7 @@ func NewDeleteOtelDestinationEndpoint(s Service, authAPIKeyFn security.AuthAPIKe
 		if err != nil {
 			return nil, err
 		}
-		return nil, s.DeleteOtelDestination(ctx, p)
+		return nil, s.DeleteDestination(ctx, p)
 	}
 }
 

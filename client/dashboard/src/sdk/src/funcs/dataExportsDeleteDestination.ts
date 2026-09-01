@@ -27,23 +27,23 @@ import {
   ServiceError$inboundSchema,
 } from "../models/errors/serviceerror.js";
 import {
-  DeleteOtelDestinationRequest,
-  DeleteOtelDestinationRequest$outboundSchema,
-  DeleteOtelDestinationSecurity,
-} from "../models/operations/deleteoteldestination.js";
+  DeleteDataExportDestinationRequest,
+  DeleteDataExportDestinationRequest$outboundSchema,
+  DeleteDataExportDestinationSecurity,
+} from "../models/operations/deletedataexportdestination.js";
 import { APICall, APIPromise } from "../types/async.js";
 import { Result } from "../types/fp.js";
 
 /**
- * deleteOtelDestination dataExports
+ * deleteDestination dataExports
  *
  * @remarks
- * Delete an OTEL destination that is not referenced by an active route.
+ * Delete a data export destination that is not referenced by an active route.
  */
-export function dataExportsDeleteOtelDestination(
+export function dataExportsDeleteDestination(
   client: GramCore,
-  request: DeleteOtelDestinationRequest,
-  security?: DeleteOtelDestinationSecurity | undefined,
+  request: DeleteDataExportDestinationRequest,
+  security?: DeleteDataExportDestinationSecurity | undefined,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -69,8 +69,8 @@ export function dataExportsDeleteOtelDestination(
 
 async function $do(
   client: GramCore,
-  request: DeleteOtelDestinationRequest,
-  security?: DeleteOtelDestinationSecurity | undefined,
+  request: DeleteDataExportDestinationRequest,
+  security?: DeleteDataExportDestinationSecurity | undefined,
   options?: RequestOptions,
 ): Promise<
   [
@@ -91,7 +91,8 @@ async function $do(
 > {
   const parsed = safeParse(
     request,
-    (value) => z.parse(DeleteOtelDestinationRequest$outboundSchema, value),
+    (value) =>
+      z.parse(DeleteDataExportDestinationRequest$outboundSchema, value),
     "Input validation failed",
   );
   if (!parsed.ok) {
@@ -100,9 +101,10 @@ async function $do(
   const payload = parsed.value;
   const body = null;
 
-  const path = pathToFunc("/rpc/dataExports.deleteOtelDestination")();
+  const path = pathToFunc("/rpc/dataExports.deleteDestination")();
 
   const query = encodeFormQuery({
+    "destination_type": payload.destination_type,
     "id": payload.id,
   });
 
@@ -152,7 +154,7 @@ async function $do(
   const context = {
     options: client._options,
     baseURL: options?.serverURL ?? client._baseURL ?? "",
-    operationID: "deleteOtelDestination",
+    operationID: "deleteDataExportDestination",
     oAuth2Scopes: null,
 
     resolvedSecurity: requestSecurity,

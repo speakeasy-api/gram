@@ -150,13 +150,13 @@ trackedFiles:
   src/funcs/chatSummarizeToolCall.ts: {}
   src/funcs/cliAuthAuthorize.ts: {}
   src/funcs/cliAuthRedeem.ts: {}
-  src/funcs/dataExportsCreateOtelDestination.ts: {}
+  src/funcs/dataExportsCreateDestination.ts: {}
   src/funcs/dataExportsCreateRoute.ts: {}
-  src/funcs/dataExportsDeleteOtelDestination.ts: {}
+  src/funcs/dataExportsDeleteDestination.ts: {}
   src/funcs/dataExportsDeleteRoute.ts: {}
-  src/funcs/dataExportsListOtelDestinations.ts: {}
+  src/funcs/dataExportsListDestinations.ts: {}
   src/funcs/dataExportsListRoutes.ts: {}
-  src/funcs/dataExportsUpdateOtelDestination.ts: {}
+  src/funcs/dataExportsUpdateDestination.ts: {}
   src/funcs/dataExportsUpdateRoute.ts: {}
   src/funcs/deploymentsActive.ts: {}
   src/funcs/deploymentsCreate.ts: {}
@@ -747,6 +747,7 @@ trackedFiles:
   src/models/components/createdataexportrouteform.ts: {}
   src/models/components/createdeploymentrequestbody.ts: {}
   src/models/components/createdeploymentresult.ts: {}
+  src/models/components/createdestinationform.ts: {}
   src/models/components/createdomainrequestbody.ts: {}
   src/models/components/createenvironmentform.ts: {}
   src/models/components/creategcpiamcredentialform.ts: {}
@@ -760,8 +761,8 @@ trackedFiles:
   src/models/components/createmcpserverform.ts: {}
   src/models/components/createmetamcpserverform.ts: {}
   src/models/components/createorganizationremotesessionclientform.ts: {}
-  src/models/components/createoteldestinationform.ts: {}
   src/models/components/createoteldestinationheaderinput.ts: {}
+  src/models/components/createoteldestinationinput.ts: {}
   src/models/components/createpackageform.ts: {}
   src/models/components/createpackageresult.ts: {}
   src/models/components/createplatformgcpiamcredentialform.ts: {}
@@ -815,6 +816,7 @@ trackedFiles:
   src/models/components/deploymentpackage.ts: {}
   src/models/components/deploymentsummary.ts:
     pristine_git_object: 9f408bfae0fc457c23380d8317f36f1be06ead9d
+  src/models/components/destination.ts: {}
   src/models/components/deviceagentconfiguration.ts: {}
   src/models/components/deviceintegrationconfig.ts: {}
   src/models/components/deviceintegrationcoverage.ts: {}
@@ -1023,6 +1025,7 @@ trackedFiles:
   src/models/components/listdataexportroutesresult.ts: {}
   src/models/components/listdefinitionsresponsebody.ts: {}
   src/models/components/listdeploymentresult.ts: {}
+  src/models/components/listdestinationsresult.ts: {}
   src/models/components/listdeviceintegrationprovidersresult.ts: {}
   src/models/components/listdeviceintegrationschedulesresult.ts: {}
   src/models/components/listenvironmentsresult.ts: {}
@@ -1054,7 +1057,6 @@ trackedFiles:
   src/models/components/listorganizationremotesessionclientsresult.ts: {}
   src/models/components/listorganizationremotesessionissuersresult.ts: {}
   src/models/components/listorganizationremotesessionsresult.ts: {}
-  src/models/components/listoteldestinationsresult.ts: {}
   src/models/components/listpackagesresult.ts: {}
   src/models/components/listpluginsresult.ts: {}
   src/models/components/listprescriptionsresponsebody.ts: {}
@@ -1176,7 +1178,6 @@ trackedFiles:
   src/models/components/otelattributevalue.ts: {}
   src/models/components/oteldestination.ts: {}
   src/models/components/oteldestinationheader.ts: {}
-  src/models/components/oteldestinationheaderinput.ts: {}
   src/models/components/otelforwardingconfig.ts: {}
   src/models/components/otelforwardingheader.ts: {}
   src/models/components/otelforwardingheaderinput.ts: {}
@@ -1499,6 +1500,7 @@ trackedFiles:
   src/models/components/updateawskmskeyrequestbody.ts: {}
   src/models/components/updateconfigurationrequestbody.ts: {}
   src/models/components/updatecustomdetectionrulerequestbody.ts: {}
+  src/models/components/updatedestinationrequestbody.ts: {}
   src/models/components/updatedomainrequestbody.ts: {}
   src/models/components/updateenvironmentrequestbody.ts: {}
   src/models/components/updategcpiamcredentialrequestbody.ts: {}
@@ -1513,7 +1515,8 @@ trackedFiles:
   src/models/components/updatememberrolesform.ts: {}
   src/models/components/updatemetamcpmemberform.ts: {}
   src/models/components/updatemetamcpserverform.ts: {}
-  src/models/components/updateoteldestinationrequestbody.ts: {}
+  src/models/components/updateoteldestinationheaderinput.ts: {}
+  src/models/components/updateoteldestinationinput.ts: {}
   src/models/components/updatepackageform.ts: {}
   src/models/components/updatepackageresult.ts: {}
   src/models/components/updatepluginform.ts: {}
@@ -1621,6 +1624,7 @@ trackedFiles:
   src/models/operations/createcimdremotesessionclient.ts: {}
   src/models/operations/createcustomdetectionrule.ts: {}
   src/models/operations/createcustomersession.ts: {}
+  src/models/operations/createdataexportdestination.ts: {}
   src/models/operations/createdataexportroute.ts: {}
   src/models/operations/createdeployment.ts: {}
   src/models/operations/createenvironment.ts: {}
@@ -1638,7 +1642,6 @@ trackedFiles:
   src/models/operations/createmetamcpserver.ts: {}
   src/models/operations/createorganizationremotesessionclient.ts: {}
   src/models/operations/createorganizationremotesessionissuer.ts: {}
-  src/models/operations/createoteldestination.ts: {}
   src/models/operations/createpackage.ts: {}
   src/models/operations/createplugin.ts: {}
   src/models/operations/createportalsession.ts: {}
@@ -1674,6 +1677,7 @@ trackedFiles:
   src/models/operations/deleteawskmskey.ts: {}
   src/models/operations/deletechat.ts: {}
   src/models/operations/deletecustomdetectionrule.ts: {}
+  src/models/operations/deletedataexportdestination.ts: {}
   src/models/operations/deletedataexportroute.ts: {}
   src/models/operations/deletedeviceintegrationconfig.ts: {}
   src/models/operations/deletedomain.ts: {}
@@ -1692,7 +1696,6 @@ trackedFiles:
   src/models/operations/deletemodelproviderkey.ts: {}
   src/models/operations/deleteorganizationremotesessionclient.ts: {}
   src/models/operations/deleteorganizationremotesessionissuer.ts: {}
-  src/models/operations/deleteoteldestination.ts: {}
   src/models/operations/deleteotelforwardingconfig.ts: {}
   src/models/operations/deleteplugin.ts: {}
   src/models/operations/deleteproject.ts: {}
@@ -1894,6 +1897,7 @@ trackedFiles:
   src/models/operations/listcimdclientpresets.ts: {}
   src/models/operations/listcustomdetectionrules.ts: {}
   src/models/operations/listcustomdomainmcpendpoints.ts: {}
+  src/models/operations/listdataexportdestinations.ts: {}
   src/models/operations/listdataexportroutes.ts: {}
   src/models/operations/listdeployments.ts: {}
   src/models/operations/listdeviceintegrationproviders.ts: {}
@@ -1936,7 +1940,6 @@ trackedFiles:
   src/models/operations/listorganizationremotesessionclientsessions.ts: {}
   src/models/operations/listorganizationremotesessionissuers.ts: {}
   src/models/operations/listorganizationusers.ts: {}
-  src/models/operations/listoteldestinations.ts: {}
   src/models/operations/listpackages.ts: {}
   src/models/operations/listplatformexternalcredentials.ts: {}
   src/models/operations/listplugins.ts: {}
@@ -2131,6 +2134,7 @@ trackedFiles:
   src/models/operations/updateawsiamcredential.ts: {}
   src/models/operations/updateawskmskey.ts: {}
   src/models/operations/updatecustomdetectionrule.ts: {}
+  src/models/operations/updatedataexportdestination.ts: {}
   src/models/operations/updatedataexportroute.ts: {}
   src/models/operations/updatedeviceagentconfiguration.ts: {}
   src/models/operations/updatedomain.ts: {}
@@ -2150,7 +2154,6 @@ trackedFiles:
   src/models/operations/updatemetamcpserver.ts: {}
   src/models/operations/updateorganizationremotesessionclient.ts: {}
   src/models/operations/updateorganizationremotesessionissuer.ts: {}
-  src/models/operations/updateoteldestination.ts: {}
   src/models/operations/updatepackage.ts: {}
   src/models/operations/updateplugin.ts: {}
   src/models/operations/updatepluginserver.ts: {}
@@ -2275,6 +2278,7 @@ trackedFiles:
   src/react-query/createCimdOrganizationRemoteSessionClient.ts: {}
   src/react-query/createCimdRemoteSessionClient.ts: {}
   src/react-query/createCustomerSession.ts: {}
+  src/react-query/createDataExportDestination.ts: {}
   src/react-query/createDataExportRoute.ts: {}
   src/react-query/createDeployment.ts: {}
   src/react-query/createEnvironment.ts: {}
@@ -2293,7 +2297,6 @@ trackedFiles:
   src/react-query/createMetaMcpServer.ts: {}
   src/react-query/createOrganizationRemoteSessionClient.ts: {}
   src/react-query/createOrganizationRemoteSessionIssuer.ts: {}
-  src/react-query/createOtelDestination.ts: {}
   src/react-query/createPackage.ts: {}
   src/react-query/createPlugin.ts: {}
   src/react-query/createPortalSession.ts: {}
@@ -2317,11 +2320,14 @@ trackedFiles:
   src/react-query/createUserSessionIssuerCimdClient.ts: {}
   src/react-query/customDomainMcpEndpoints.core.ts: {}
   src/react-query/customDomainMcpEndpoints.ts: {}
+  src/react-query/dataExportDestinations.core.ts: {}
+  src/react-query/dataExportDestinations.ts: {}
   src/react-query/dataExportRoutes.core.ts: {}
   src/react-query/dataExportRoutes.ts: {}
   src/react-query/deleteAIIntegrationConfig.ts: {}
   src/react-query/deleteAwsIamCredential.ts: {}
   src/react-query/deleteAwsKmsKey.ts: {}
+  src/react-query/deleteDataExportDestination.ts: {}
   src/react-query/deleteDataExportRoute.ts: {}
   src/react-query/deleteDeviceIntegrationConfig.ts: {}
   src/react-query/deleteDomain.ts: {}
@@ -2340,7 +2346,6 @@ trackedFiles:
   src/react-query/deleteModelProviderKey.ts: {}
   src/react-query/deleteOrganizationRemoteSessionClient.ts: {}
   src/react-query/deleteOrganizationRemoteSessionIssuer.ts: {}
-  src/react-query/deleteOtelDestination.ts: {}
   src/react-query/deleteOtelForwardingConfig.ts: {}
   src/react-query/deletePlugin.ts: {}
   src/react-query/deleteProject.ts: {}
@@ -2695,8 +2700,6 @@ trackedFiles:
   src/react-query/organizationRemoteSessionIssuerMigratePreflight.ts: {}
   src/react-query/organizationRemoteSessionIssuers.core.ts: {}
   src/react-query/organizationRemoteSessionIssuers.ts: {}
-  src/react-query/otelDestinations.core.ts: {}
-  src/react-query/otelDestinations.ts: {}
   src/react-query/otelForwardingConfig.core.ts: {}
   src/react-query/otelForwardingConfig.ts: {}
   src/react-query/pauseTrigger.ts: {}
@@ -3000,6 +3003,7 @@ trackedFiles:
   src/react-query/unshareSkill.ts: {}
   src/react-query/updateAwsIamCredential.ts: {}
   src/react-query/updateAwsKmsKey.ts: {}
+  src/react-query/updateDataExportDestination.ts: {}
   src/react-query/updateDataExportRoute.ts: {}
   src/react-query/updateDeviceAgentConfiguration.ts: {}
   src/react-query/updateDomain.ts: {}
@@ -3019,7 +3023,6 @@ trackedFiles:
   src/react-query/updateMetaMcpServer.ts: {}
   src/react-query/updateOrganizationRemoteSessionClient.ts: {}
   src/react-query/updateOrganizationRemoteSessionIssuer.ts: {}
-  src/react-query/updateOtelDestination.ts: {}
   src/react-query/updatePackage.ts: {}
   src/react-query/updatePlugin.ts: {}
   src/react-query/updatePluginServer.ts: {}
@@ -3680,6 +3683,17 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+  createDataExportDestination:
+    speakeasy-default-create-data-export-destination:
+      requestBody:
+        application/json: {"destination_type": "otel", "name": "<value>", "sensitive_data": "exclude"}
+      responses:
+        "200":
+          application/json: {"created_at": "2024-04-02T07:32:59.824Z", "destination_type": "otel", "id": "ce2534a3-ec03-4f48-8c3a-5057058c1c20", "name": "<value>", "project_id": "cf14e48a-f861-40e5-9809-be35b8035543", "sensitive_data": "include", "updated_at": "2025-10-05T10:00:15.072Z"}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
   createDataExportRoute:
     speakeasy-default-create-data-export-route:
       requestBody:
@@ -4299,6 +4313,19 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+  deleteDataExportDestination:
+    speakeasy-default-delete-data-export-destination:
+      parameters:
+        query:
+          id: "655a434e-a20d-4da9-b246-863a46973bad"
+          destination_type: "otel"
+      requestBody:
+        application/json: {"destination_type": "otel"}
+      responses:
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
   deleteDataExportRoute:
     speakeasy-default-delete-data-export-route:
       parameters:
@@ -6990,6 +7017,15 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+  listDataExportDestinations:
+    speakeasy-default-list-data-export-destinations:
+      responses:
+        "200":
+          application/json: {"destinations": [{"created_at": "2024-07-25T08:44:22.686Z", "destination_type": "otel", "id": "93fe4dd4-0df8-4674-bf72-c152a99fad21", "name": "<value>", "project_id": "96651d1c-ef6a-4192-b8bc-6fc544e0522f", "sensitive_data": "include", "updated_at": "2025-12-17T15:08:13.392Z"}]}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
   listDataExportRoutes:
     speakeasy-default-list-data-export-routes:
       responses:
@@ -9672,6 +9708,20 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+  updateDataExportDestination:
+    speakeasy-default-update-data-export-destination:
+      parameters:
+        query:
+          id: "80d6b19f-6dd6-4a85-828b-e85c11c536fc"
+      requestBody:
+        application/json: {"destination_type": "otel", "name": "<value>", "sensitive_data": "exclude"}
+      responses:
+        "200":
+          application/json: {"created_at": "2025-05-26T13:52:19.738Z", "destination_type": "otel", "id": "1de96843-21e2-4150-8b3f-0f37fb2f2166", "name": "<value>", "project_id": "2f98da04-debc-4ed4-bc16-d171038a5285", "sensitive_data": "include", "updated_at": "2025-07-04T17:34:52.007Z"}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
   updateDataExportRoute:
     speakeasy-default-update-data-export-route:
       parameters:

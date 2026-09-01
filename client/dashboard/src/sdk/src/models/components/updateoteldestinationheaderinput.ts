@@ -7,7 +7,7 @@ import * as z from "zod/v4-mini";
 /**
  * An HTTP header supplied when updating an OTEL destination. Omit value to preserve the encrypted value stored for the same case-insensitive name.
  */
-export type OtelDestinationHeaderInput = {
+export type UpdateOtelDestinationHeaderInput = {
   /**
    * Header name.
    */
@@ -19,24 +19,26 @@ export type OtelDestinationHeaderInput = {
 };
 
 /** @internal */
-export type OtelDestinationHeaderInput$Outbound = {
+export type UpdateOtelDestinationHeaderInput$Outbound = {
   name: string;
   value?: string | undefined;
 };
 
 /** @internal */
-export const OtelDestinationHeaderInput$outboundSchema: z.ZodMiniType<
-  OtelDestinationHeaderInput$Outbound,
-  OtelDestinationHeaderInput
+export const UpdateOtelDestinationHeaderInput$outboundSchema: z.ZodMiniType<
+  UpdateOtelDestinationHeaderInput$Outbound,
+  UpdateOtelDestinationHeaderInput
 > = z.object({
   name: z.string(),
   value: z.optional(z.string()),
 });
 
-export function otelDestinationHeaderInputToJSON(
-  otelDestinationHeaderInput: OtelDestinationHeaderInput,
+export function updateOtelDestinationHeaderInputToJSON(
+  updateOtelDestinationHeaderInput: UpdateOtelDestinationHeaderInput,
 ): string {
   return JSON.stringify(
-    OtelDestinationHeaderInput$outboundSchema.parse(otelDestinationHeaderInput),
+    UpdateOtelDestinationHeaderInput$outboundSchema.parse(
+      updateOtelDestinationHeaderInput,
+    ),
   );
 }

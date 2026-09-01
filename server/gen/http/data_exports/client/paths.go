@@ -7,24 +7,24 @@
 
 package client
 
-// ListOtelDestinationsDataExportsPath returns the URL path to the dataExports service listOtelDestinations HTTP endpoint.
-func ListOtelDestinationsDataExportsPath() string {
-	return "/rpc/dataExports.listOtelDestinations"
+// ListDestinationsDataExportsPath returns the URL path to the dataExports service listDestinations HTTP endpoint.
+func ListDestinationsDataExportsPath() string {
+	return "/rpc/dataExports.listDestinations"
 }
 
-// CreateOtelDestinationDataExportsPath returns the URL path to the dataExports service createOtelDestination HTTP endpoint.
-func CreateOtelDestinationDataExportsPath() string {
-	return "/rpc/dataExports.createOtelDestination"
+// CreateDestinationDataExportsPath returns the URL path to the dataExports service createDestination HTTP endpoint.
+func CreateDestinationDataExportsPath() string {
+	return "/rpc/dataExports.createDestination"
 }
 
-// UpdateOtelDestinationDataExportsPath returns the URL path to the dataExports service updateOtelDestination HTTP endpoint.
-func UpdateOtelDestinationDataExportsPath() string {
-	return "/rpc/dataExports.updateOtelDestination"
+// UpdateDestinationDataExportsPath returns the URL path to the dataExports service updateDestination HTTP endpoint.
+func UpdateDestinationDataExportsPath() string {
+	return "/rpc/dataExports.updateDestination"
 }
 
-// DeleteOtelDestinationDataExportsPath returns the URL path to the dataExports service deleteOtelDestination HTTP endpoint.
-func DeleteOtelDestinationDataExportsPath() string {
-	return "/rpc/dataExports.deleteOtelDestination"
+// DeleteDestinationDataExportsPath returns the URL path to the dataExports service deleteDestination HTTP endpoint.
+func DeleteDestinationDataExportsPath() string {
+	return "/rpc/dataExports.deleteDestination"
 }
 
 // ListRoutesDataExportsPath returns the URL path to the dataExports service listRoutes HTTP endpoint.

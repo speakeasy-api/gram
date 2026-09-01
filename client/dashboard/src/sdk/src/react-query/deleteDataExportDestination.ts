@@ -8,10 +8,9 @@ import {
   UseMutationResult,
 } from "@tanstack/react-query";
 import { GramCore } from "../core.js";
-import { dataExportsUpdateOtelDestination } from "../funcs/dataExportsUpdateOtelDestination.js";
+import { dataExportsDeleteDestination } from "../funcs/dataExportsDeleteDestination.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
-import { OtelDestination } from "../models/components/oteldestination.js";
 import { GramError } from "../models/errors/gramerror.js";
 import {
   ConnectionError,
@@ -24,22 +23,22 @@ import { ResponseValidationError } from "../models/errors/responsevalidationerro
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
 import { ServiceError } from "../models/errors/serviceerror.js";
 import {
-  UpdateOtelDestinationRequest,
-  UpdateOtelDestinationSecurity,
-} from "../models/operations/updateoteldestination.js";
+  DeleteDataExportDestinationRequest,
+  DeleteDataExportDestinationSecurity,
+} from "../models/operations/deletedataexportdestination.js";
 import { unwrapAsync } from "../types/fp.js";
 import { useGramContext } from "./_context.js";
 import { MutationHookOptions } from "./_types.js";
 
-export type UpdateOtelDestinationMutationVariables = {
-  request: UpdateOtelDestinationRequest;
-  security?: UpdateOtelDestinationSecurity | undefined;
+export type DeleteDataExportDestinationMutationVariables = {
+  request: DeleteDataExportDestinationRequest;
+  security?: DeleteDataExportDestinationSecurity | undefined;
   options?: RequestOptions;
 };
 
-export type UpdateOtelDestinationMutationData = OtelDestination;
+export type DeleteDataExportDestinationMutationData = void;
 
-export type UpdateOtelDestinationMutationError =
+export type DeleteDataExportDestinationMutationError =
   | ServiceError
   | GramError
   | ResponseValidationError
@@ -51,49 +50,49 @@ export type UpdateOtelDestinationMutationError =
   | SDKValidationError;
 
 /**
- * updateOtelDestination dataExports
+ * deleteDestination dataExports
  *
  * @remarks
- * Replace an OTEL destination in the selected project.
+ * Delete a data export destination that is not referenced by an active route.
  */
-export function useUpdateOtelDestinationMutation(
+export function useDeleteDataExportDestinationMutation(
   options?: MutationHookOptions<
-    UpdateOtelDestinationMutationData,
-    UpdateOtelDestinationMutationError,
-    UpdateOtelDestinationMutationVariables
+    DeleteDataExportDestinationMutationData,
+    DeleteDataExportDestinationMutationError,
+    DeleteDataExportDestinationMutationVariables
   >,
 ): UseMutationResult<
-  UpdateOtelDestinationMutationData,
-  UpdateOtelDestinationMutationError,
-  UpdateOtelDestinationMutationVariables
+  DeleteDataExportDestinationMutationData,
+  DeleteDataExportDestinationMutationError,
+  DeleteDataExportDestinationMutationVariables
 > {
   const client = useGramContext();
   return useMutation({
-    ...buildUpdateOtelDestinationMutation(client, options),
+    ...buildDeleteDataExportDestinationMutation(client, options),
     ...options,
   });
 }
 
-export function mutationKeyUpdateOtelDestination(): MutationKey {
-  return ["@gram/client", "dataExports", "updateOtelDestination"];
+export function mutationKeyDeleteDataExportDestination(): MutationKey {
+  return ["@gram/client", "dataExports", "deleteDestination"];
 }
 
-export function buildUpdateOtelDestinationMutation(
+export function buildDeleteDataExportDestinationMutation(
   client$: GramCore,
   hookOptions?: RequestOptions,
 ): {
   mutationKey: MutationKey;
   mutationFn: (
-    variables: UpdateOtelDestinationMutationVariables,
-  ) => Promise<UpdateOtelDestinationMutationData>;
+    variables: DeleteDataExportDestinationMutationVariables,
+  ) => Promise<DeleteDataExportDestinationMutationData>;
 } {
   return {
-    mutationKey: mutationKeyUpdateOtelDestination(),
-    mutationFn: function updateOtelDestinationMutationFn({
+    mutationKey: mutationKeyDeleteDataExportDestination(),
+    mutationFn: function deleteDataExportDestinationMutationFn({
       request,
       security,
       options,
-    }): Promise<UpdateOtelDestinationMutationData> {
+    }): Promise<DeleteDataExportDestinationMutationData> {
       const mergedOptions = {
         ...hookOptions,
         ...options,
@@ -106,7 +105,7 @@ export function buildUpdateOtelDestinationMutation(
           ),
         },
       };
-      return unwrapAsync(dataExportsUpdateOtelDestination(
+      return unwrapAsync(dataExportsDeleteDestination(
         client$,
         request,
         security,

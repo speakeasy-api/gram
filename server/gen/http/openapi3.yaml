@@ -14629,10 +14629,10 @@ paths:
             tags:
                 - collections
             x-speakeasy-name-override: update
-    /rpc/dataExports.createOtelDestination:
+    /rpc/dataExports.createDestination:
         post:
-            description: Create an OTEL destination in the selected project.
-            operationId: createOtelDestination
+            description: Create a data export destination in the selected project.
+            operationId: createDataExportDestination
             parameters:
                 - allowEmptyValue: true
                   description: Session header
@@ -14659,14 +14659,14 @@ paths:
                 content:
                     application/json:
                         schema:
-                            $ref: '#/components/schemas/CreateOtelDestinationForm'
+                            $ref: '#/components/schemas/CreateDestinationForm'
                 required: true
             responses:
                 "200":
                     content:
                         application/json:
                             schema:
-                                $ref: '#/components/schemas/OtelDestination'
+                                $ref: '#/components/schemas/Destination'
                     description: OK response.
                 "400":
                     content:
@@ -14727,12 +14727,12 @@ paths:
                   session_header_Gram-Session: []
                 - apikey_header_Gram-Key: []
                   project_slug_header_Gram-Project: []
-            summary: createOtelDestination dataExports
+            summary: createDestination dataExports
             tags:
                 - dataExports
-            x-speakeasy-name-override: createOtelDestination
+            x-speakeasy-name-override: createDestination
             x-speakeasy-react-hook:
-                name: CreateOtelDestination
+                name: CreateDataExportDestination
     /rpc/dataExports.createRoute:
         post:
             description: Create the selected data source's export route configuration.
@@ -14837,10 +14837,10 @@ paths:
             x-speakeasy-name-override: createRoute
             x-speakeasy-react-hook:
                 name: CreateDataExportRoute
-    /rpc/dataExports.deleteOtelDestination:
+    /rpc/dataExports.deleteDestination:
         delete:
-            description: Delete an OTEL destination that is not referenced by an active route.
-            operationId: deleteOtelDestination
+            description: Delete a data export destination that is not referenced by an active route.
+            operationId: deleteDataExportDestination
             parameters:
                 - allowEmptyValue: true
                   description: Destination ID.
@@ -14850,6 +14850,16 @@ paths:
                   schema:
                     description: Destination ID.
                     format: uuid
+                    type: string
+                - allowEmptyValue: true
+                  description: Destination transport type.
+                  in: query
+                  name: destination_type
+                  required: true
+                  schema:
+                    description: Destination transport type.
+                    enum:
+                        - otel
                     type: string
                 - allowEmptyValue: true
                   description: Session header
@@ -14934,12 +14944,12 @@ paths:
                   session_header_Gram-Session: []
                 - apikey_header_Gram-Key: []
                   project_slug_header_Gram-Project: []
-            summary: deleteOtelDestination dataExports
+            summary: deleteDestination dataExports
             tags:
                 - dataExports
-            x-speakeasy-name-override: deleteOtelDestination
+            x-speakeasy-name-override: deleteDestination
             x-speakeasy-react-hook:
-                name: DeleteOtelDestination
+                name: DeleteDataExportDestination
     /rpc/dataExports.deleteRoute:
         delete:
             description: Delete a data source's export route configuration.
@@ -15043,10 +15053,10 @@ paths:
             x-speakeasy-name-override: deleteRoute
             x-speakeasy-react-hook:
                 name: DeleteDataExportRoute
-    /rpc/dataExports.listOtelDestinations:
+    /rpc/dataExports.listDestinations:
         get:
-            description: List OTEL destinations for the selected project.
-            operationId: listOtelDestinations
+            description: List data export destinations for the selected project.
+            operationId: listDataExportDestinations
             parameters:
                 - allowEmptyValue: true
                   description: Session header
@@ -15074,7 +15084,7 @@ paths:
                     content:
                         application/json:
                             schema:
-                                $ref: '#/components/schemas/ListOtelDestinationsResult'
+                                $ref: '#/components/schemas/ListDestinationsResult'
                     description: OK response.
                 "400":
                     content:
@@ -15135,12 +15145,12 @@ paths:
                   session_header_Gram-Session: []
                 - apikey_header_Gram-Key: []
                   project_slug_header_Gram-Project: []
-            summary: listOtelDestinations dataExports
+            summary: listDestinations dataExports
             tags:
                 - dataExports
-            x-speakeasy-name-override: listOtelDestinations
+            x-speakeasy-name-override: listDestinations
             x-speakeasy-react-hook:
-                name: OtelDestinations
+                name: DataExportDestinations
     /rpc/dataExports.listRoutes:
         get:
             description: List data source export route configurations for the selected project.
@@ -15239,10 +15249,10 @@ paths:
             x-speakeasy-name-override: listRoutes
             x-speakeasy-react-hook:
                 name: DataExportRoutes
-    /rpc/dataExports.updateOtelDestination:
+    /rpc/dataExports.updateDestination:
         post:
-            description: Replace an OTEL destination in the selected project.
-            operationId: updateOtelDestination
+            description: Replace a data export destination in the selected project.
+            operationId: updateDataExportDestination
             parameters:
                 - allowEmptyValue: true
                   description: Destination ID.
@@ -15278,14 +15288,14 @@ paths:
                 content:
                     application/json:
                         schema:
-                            $ref: '#/components/schemas/UpdateOtelDestinationRequestBody'
+                            $ref: '#/components/schemas/UpdateDestinationRequestBody'
                 required: true
             responses:
                 "200":
                     content:
                         application/json:
                             schema:
-                                $ref: '#/components/schemas/OtelDestination'
+                                $ref: '#/components/schemas/Destination'
                     description: OK response.
                 "400":
                     content:
@@ -15346,12 +15356,12 @@ paths:
                   session_header_Gram-Session: []
                 - apikey_header_Gram-Key: []
                   project_slug_header_Gram-Project: []
-            summary: updateOtelDestination dataExports
+            summary: updateDestination dataExports
             tags:
                 - dataExports
-            x-speakeasy-name-override: updateOtelDestination
+            x-speakeasy-name-override: updateDestination
             x-speakeasy-react-hook:
-                name: UpdateOtelDestination
+                name: UpdateDataExportDestination
     /rpc/dataExports.updateRoute:
         post:
             description: Replace the selected data source's export route configuration.
@@ -67585,6 +67595,30 @@ components:
             properties:
                 deployment:
                     $ref: '#/components/schemas/Deployment'
+        CreateDestinationForm:
+            type: object
+            properties:
+                destination_type:
+                    type: string
+                    description: Destination transport type.
+                    enum:
+                        - otel
+                name:
+                    type: string
+                    description: Human-readable destination name.
+                otel:
+                    $ref: '#/components/schemas/CreateOtelDestinationInput'
+                sensitive_data:
+                    type: string
+                    description: Sensitive-data policy.
+                    default: exclude
+                    enum:
+                        - exclude
+                        - include
+            description: Form for creating a data export destination. Supply the transport configuration selected by destination_type.
+            required:
+                - name
+                - destination_type
         CreateDomainRequestBody:
             type: object
             properties:
@@ -67977,33 +68011,6 @@ components:
                     minLength: 1
             required:
                 - name
-        CreateOtelDestinationForm:
-            type: object
-            properties:
-                endpoint_url:
-                    type: string
-                    description: OTLP base URL.
-                    format: uri
-                headers:
-                    type: array
-                    items:
-                        $ref: '#/components/schemas/CreateOtelDestinationHeaderInput'
-                    description: Write-only headers.
-                name:
-                    type: string
-                    description: Human-readable destination name.
-                sensitive_data:
-                    type: string
-                    description: Sensitive-data policy.
-                    default: exclude
-                    enum:
-                        - exclude
-                        - include
-            description: Form for creating an OTEL destination.
-            required:
-                - name
-                - endpoint_url
-                - headers
         CreateOtelDestinationHeaderInput:
             type: object
             properties:
@@ -68017,6 +68024,22 @@ components:
             required:
                 - name
                 - value
+        CreateOtelDestinationInput:
+            type: object
+            properties:
+                endpoint_url:
+                    type: string
+                    description: OTEL collector endpoint URL.
+                    format: uri
+                headers:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/CreateOtelDestinationHeaderInput'
+                    description: Write-only HTTP headers.
+            description: OTEL-specific configuration supplied when creating a destination.
+            required:
+                - endpoint_url
+                - headers
         CreatePackageForm:
             type: object
             properties:
@@ -69559,6 +69582,50 @@ components:
                 - functions_tool_count
                 - external_mcp_asset_count
                 - external_mcp_tool_count
+        Destination:
+            type: object
+            properties:
+                created_at:
+                    type: string
+                    description: Creation timestamp.
+                    format: date-time
+                destination_type:
+                    type: string
+                    description: Destination transport type.
+                    enum:
+                        - otel
+                id:
+                    type: string
+                    description: Destination ID.
+                    format: uuid
+                name:
+                    type: string
+                    description: Human-readable destination name.
+                otel:
+                    $ref: '#/components/schemas/OtelDestination'
+                project_id:
+                    type: string
+                    description: Project that owns the destination.
+                    format: uuid
+                sensitive_data:
+                    type: string
+                    description: Whether sensitive data is included in payloads sent to this destination.
+                    enum:
+                        - exclude
+                        - include
+                updated_at:
+                    type: string
+                    description: Last update timestamp.
+                    format: date-time
+            description: A reusable project-scoped data export destination. The destination_type discriminator identifies the populated transport configuration.
+            required:
+                - id
+                - project_id
+                - name
+                - destination_type
+                - sensitive_data
+                - created_at
+                - updated_at
         DetachUserSessionIssuerForm:
             type: object
             properties:
@@ -74674,6 +74741,16 @@ components:
                     example: 01jp3f054qc02gbcmpp0qmyzed
             required:
                 - items
+        ListDestinationsResult:
+            type: object
+            properties:
+                destinations:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/Destination'
+                    description: Active data export destinations in the selected project.
+            required:
+                - destinations
         ListDeviceIntegrationProvidersResult:
             type: object
             properties:
@@ -75132,16 +75209,6 @@ components:
             description: Result type for the remote_sessions minted against a remote_session_client.
             required:
                 - items
-        ListOtelDestinationsResult:
-            type: object
-            properties:
-                destinations:
-                    type: array
-                    items:
-                        $ref: '#/components/schemas/OtelDestination'
-                    description: Active OTEL destinations in the selected project.
-            required:
-                - destinations
         ListPackagesResult:
             type: object
             properties:
@@ -77811,50 +77878,19 @@ components:
         OtelDestination:
             type: object
             properties:
-                created_at:
-                    type: string
-                    description: Creation timestamp.
-                    format: date-time
                 endpoint_url:
                     type: string
-                    description: OTLP base URL. Signal-specific paths are appended during delivery.
+                    description: OTEL collector endpoint URL. Transport-specific paths may be appended during delivery.
                     format: uri
                 headers:
                     type: array
                     items:
                         $ref: '#/components/schemas/OtelDestinationHeader'
-                    description: Configured header names. Header values are never returned.
-                id:
-                    type: string
-                    description: Destination ID.
-                    format: uuid
-                name:
-                    type: string
-                    description: Human-readable destination name.
-                project_id:
-                    type: string
-                    description: Project that owns the destination.
-                    format: uuid
-                sensitive_data:
-                    type: string
-                    description: Whether sensitive data is included in payloads sent to this destination.
-                    enum:
-                        - exclude
-                        - include
-                updated_at:
-                    type: string
-                    description: Last update timestamp.
-                    format: date-time
-            description: A reusable customer-owned OTLP collector connection.
+                    description: Configured HTTP header names. Header values are never returned.
+            description: OTEL-specific destination configuration.
             required:
-                - id
-                - project_id
-                - name
                 - endpoint_url
-                - sensitive_data
                 - headers
-                - created_at
-                - updated_at
         OtelDestinationHeader:
             type: object
             properties:
@@ -77868,18 +77904,6 @@ components:
             required:
                 - name
                 - has_value
-        OtelDestinationHeaderInput:
-            type: object
-            properties:
-                name:
-                    type: string
-                    description: Header name.
-                value:
-                    type: string
-                    description: Write-only header value. Omit to preserve an existing value; provide an empty string to clear it.
-            description: An HTTP header supplied when updating an OTEL destination. Omit value to preserve the encrypted value stored for the same case-insensitive name.
-            required:
-                - name
         OtelForwardingConfig:
             type: object
             properties:
@@ -87990,6 +88014,58 @@ components:
                 - id
                 - data_source
                 - enabled
+        UpdateDestinationForm:
+            type: object
+            properties:
+                destination_type:
+                    type: string
+                    description: Destination transport type.
+                    enum:
+                        - otel
+                id:
+                    type: string
+                    description: Destination ID.
+                    format: uuid
+                name:
+                    type: string
+                    description: Human-readable destination name.
+                otel:
+                    $ref: '#/components/schemas/UpdateOtelDestinationInput'
+                sensitive_data:
+                    type: string
+                    description: Sensitive-data policy.
+                    enum:
+                        - exclude
+                        - include
+            description: Full replacement form for a data export destination. Supply the transport configuration selected by destination_type.
+            required:
+                - id
+                - name
+                - destination_type
+                - sensitive_data
+        UpdateDestinationRequestBody:
+            type: object
+            properties:
+                destination_type:
+                    type: string
+                    description: Destination transport type.
+                    enum:
+                        - otel
+                name:
+                    type: string
+                    description: Human-readable destination name.
+                otel:
+                    $ref: '#/components/schemas/UpdateOtelDestinationInput'
+                sensitive_data:
+                    type: string
+                    description: Sensitive-data policy.
+                    enum:
+                        - exclude
+                        - include
+            required:
+                - name
+                - destination_type
+                - sensitive_data
         UpdateDomainRequestBody:
             type: object
             properties:
@@ -88341,63 +88417,33 @@ components:
                     description: New whitelisted flag.
             required:
                 - id
-        UpdateOtelDestinationForm:
+        UpdateOtelDestinationHeaderInput:
+            type: object
+            properties:
+                name:
+                    type: string
+                    description: Header name.
+                value:
+                    type: string
+                    description: Write-only header value. Omit to preserve an existing value; provide an empty string to clear it.
+            description: An HTTP header supplied when updating an OTEL destination. Omit value to preserve the encrypted value stored for the same case-insensitive name.
+            required:
+                - name
+        UpdateOtelDestinationInput:
             type: object
             properties:
                 endpoint_url:
                     type: string
-                    description: OTLP base URL.
+                    description: OTEL collector endpoint URL.
                     format: uri
                 headers:
                     type: array
                     items:
-                        $ref: '#/components/schemas/OtelDestinationHeaderInput'
-                    description: Complete header-name set for the destination.
-                id:
-                    type: string
-                    description: Destination ID.
-                    format: uuid
-                name:
-                    type: string
-                    description: Human-readable destination name.
-                sensitive_data:
-                    type: string
-                    description: Sensitive-data policy.
-                    enum:
-                        - exclude
-                        - include
-            description: Full replacement form for an OTEL destination. Header entries with omitted values preserve existing encrypted values by case-insensitive name.
+                        $ref: '#/components/schemas/UpdateOtelDestinationHeaderInput'
+                    description: Complete HTTP header-name set for the OTEL destination.
+            description: OTEL-specific configuration supplied when updating a destination.
             required:
-                - id
-                - name
                 - endpoint_url
-                - sensitive_data
-                - headers
-        UpdateOtelDestinationRequestBody:
-            type: object
-            properties:
-                endpoint_url:
-                    type: string
-                    description: OTLP base URL.
-                    format: uri
-                headers:
-                    type: array
-                    items:
-                        $ref: '#/components/schemas/OtelDestinationHeaderInput'
-                    description: Complete header-name set for the destination.
-                name:
-                    type: string
-                    description: Human-readable destination name.
-                sensitive_data:
-                    type: string
-                    description: Sensitive-data policy.
-                    enum:
-                        - exclude
-                        - include
-            required:
-                - name
-                - endpoint_url
-                - sensitive_data
                 - headers
         UpdatePackageForm:
             type: object
@@ -90441,7 +90487,7 @@ tags:
     - name: cliAuth
       description: Interactive device-agent enrollment via a PKCE one-time-code exchange. authorize (dashboard session) mints a short-lived code bound to a PKCE challenge; redeem (no auth — the code+verifier pair is the credential) exchanges it once for a per-user [agent,hooks] API key.
     - name: dataExports
-      description: Manage project-scoped OTEL destinations and data export routes.
+      description: Manage project-scoped data export destinations and routes.
     - name: deployments
       description: Manages deployments of tools from upstream sources.
     - name: deviceIntegrations

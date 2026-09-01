@@ -17,21 +17,21 @@ import (
 
 // Client lists the dataExports service endpoint HTTP clients.
 type Client struct {
-	// ListOtelDestinations Doer is the HTTP client used to make requests to the
-	// listOtelDestinations endpoint.
-	ListOtelDestinationsDoer goahttp.Doer
+	// ListDestinations Doer is the HTTP client used to make requests to the
+	// listDestinations endpoint.
+	ListDestinationsDoer goahttp.Doer
 
-	// CreateOtelDestination Doer is the HTTP client used to make requests to the
-	// createOtelDestination endpoint.
-	CreateOtelDestinationDoer goahttp.Doer
+	// CreateDestination Doer is the HTTP client used to make requests to the
+	// createDestination endpoint.
+	CreateDestinationDoer goahttp.Doer
 
-	// UpdateOtelDestination Doer is the HTTP client used to make requests to the
-	// updateOtelDestination endpoint.
-	UpdateOtelDestinationDoer goahttp.Doer
+	// UpdateDestination Doer is the HTTP client used to make requests to the
+	// updateDestination endpoint.
+	UpdateDestinationDoer goahttp.Doer
 
-	// DeleteOtelDestination Doer is the HTTP client used to make requests to the
-	// deleteOtelDestination endpoint.
-	DeleteOtelDestinationDoer goahttp.Doer
+	// DeleteDestination Doer is the HTTP client used to make requests to the
+	// deleteDestination endpoint.
+	DeleteDestinationDoer goahttp.Doer
 
 	// ListRoutes Doer is the HTTP client used to make requests to the listRoutes
 	// endpoint.
@@ -69,31 +69,31 @@ func NewClient(
 	restoreBody bool,
 ) *Client {
 	return &Client{
-		ListOtelDestinationsDoer:  doer,
-		CreateOtelDestinationDoer: doer,
-		UpdateOtelDestinationDoer: doer,
-		DeleteOtelDestinationDoer: doer,
-		ListRoutesDoer:            doer,
-		CreateRouteDoer:           doer,
-		UpdateRouteDoer:           doer,
-		DeleteRouteDoer:           doer,
-		RestoreResponseBody:       restoreBody,
-		scheme:                    scheme,
-		host:                      host,
-		decoder:                   dec,
-		encoder:                   enc,
+		ListDestinationsDoer:  doer,
+		CreateDestinationDoer: doer,
+		UpdateDestinationDoer: doer,
+		DeleteDestinationDoer: doer,
+		ListRoutesDoer:        doer,
+		CreateRouteDoer:       doer,
+		UpdateRouteDoer:       doer,
+		DeleteRouteDoer:       doer,
+		RestoreResponseBody:   restoreBody,
+		scheme:                scheme,
+		host:                  host,
+		decoder:               dec,
+		encoder:               enc,
 	}
 }
 
-// ListOtelDestinations returns an endpoint that makes HTTP requests to the
-// dataExports service listOtelDestinations server.
-func (c *Client) ListOtelDestinations() goa.Endpoint {
+// ListDestinations returns an endpoint that makes HTTP requests to the
+// dataExports service listDestinations server.
+func (c *Client) ListDestinations() goa.Endpoint {
 	var (
-		encodeRequest  = EncodeListOtelDestinationsRequest(c.encoder)
-		decodeResponse = DecodeListOtelDestinationsResponse(c.decoder, c.RestoreResponseBody)
+		encodeRequest  = EncodeListDestinationsRequest(c.encoder)
+		decodeResponse = DecodeListDestinationsResponse(c.decoder, c.RestoreResponseBody)
 	)
 	return func(ctx context.Context, v any) (any, error) {
-		req, err := c.BuildListOtelDestinationsRequest(ctx, v)
+		req, err := c.BuildListDestinationsRequest(ctx, v)
 		if err != nil {
 			return nil, err
 		}
@@ -101,23 +101,23 @@ func (c *Client) ListOtelDestinations() goa.Endpoint {
 		if err != nil {
 			return nil, err
 		}
-		resp, err := c.ListOtelDestinationsDoer.Do(req)
+		resp, err := c.ListDestinationsDoer.Do(req)
 		if err != nil {
-			return nil, goahttp.ErrRequestError("dataExports", "listOtelDestinations", err)
+			return nil, goahttp.ErrRequestError("dataExports", "listDestinations", err)
 		}
 		return decodeResponse(resp)
 	}
 }
 
-// CreateOtelDestination returns an endpoint that makes HTTP requests to the
-// dataExports service createOtelDestination server.
-func (c *Client) CreateOtelDestination() goa.Endpoint {
+// CreateDestination returns an endpoint that makes HTTP requests to the
+// dataExports service createDestination server.
+func (c *Client) CreateDestination() goa.Endpoint {
 	var (
-		encodeRequest  = EncodeCreateOtelDestinationRequest(c.encoder)
-		decodeResponse = DecodeCreateOtelDestinationResponse(c.decoder, c.RestoreResponseBody)
+		encodeRequest  = EncodeCreateDestinationRequest(c.encoder)
+		decodeResponse = DecodeCreateDestinationResponse(c.decoder, c.RestoreResponseBody)
 	)
 	return func(ctx context.Context, v any) (any, error) {
-		req, err := c.BuildCreateOtelDestinationRequest(ctx, v)
+		req, err := c.BuildCreateDestinationRequest(ctx, v)
 		if err != nil {
 			return nil, err
 		}
@@ -125,23 +125,23 @@ func (c *Client) CreateOtelDestination() goa.Endpoint {
 		if err != nil {
 			return nil, err
 		}
-		resp, err := c.CreateOtelDestinationDoer.Do(req)
+		resp, err := c.CreateDestinationDoer.Do(req)
 		if err != nil {
-			return nil, goahttp.ErrRequestError("dataExports", "createOtelDestination", err)
+			return nil, goahttp.ErrRequestError("dataExports", "createDestination", err)
 		}
 		return decodeResponse(resp)
 	}
 }
 
-// UpdateOtelDestination returns an endpoint that makes HTTP requests to the
-// dataExports service updateOtelDestination server.
-func (c *Client) UpdateOtelDestination() goa.Endpoint {
+// UpdateDestination returns an endpoint that makes HTTP requests to the
+// dataExports service updateDestination server.
+func (c *Client) UpdateDestination() goa.Endpoint {
 	var (
-		encodeRequest  = EncodeUpdateOtelDestinationRequest(c.encoder)
-		decodeResponse = DecodeUpdateOtelDestinationResponse(c.decoder, c.RestoreResponseBody)
+		encodeRequest  = EncodeUpdateDestinationRequest(c.encoder)
+		decodeResponse = DecodeUpdateDestinationResponse(c.decoder, c.RestoreResponseBody)
 	)
 	return func(ctx context.Context, v any) (any, error) {
-		req, err := c.BuildUpdateOtelDestinationRequest(ctx, v)
+		req, err := c.BuildUpdateDestinationRequest(ctx, v)
 		if err != nil {
 			return nil, err
 		}
@@ -149,23 +149,23 @@ func (c *Client) UpdateOtelDestination() goa.Endpoint {
 		if err != nil {
 			return nil, err
 		}
-		resp, err := c.UpdateOtelDestinationDoer.Do(req)
+		resp, err := c.UpdateDestinationDoer.Do(req)
 		if err != nil {
-			return nil, goahttp.ErrRequestError("dataExports", "updateOtelDestination", err)
+			return nil, goahttp.ErrRequestError("dataExports", "updateDestination", err)
 		}
 		return decodeResponse(resp)
 	}
 }
 
-// DeleteOtelDestination returns an endpoint that makes HTTP requests to the
-// dataExports service deleteOtelDestination server.
-func (c *Client) DeleteOtelDestination() goa.Endpoint {
+// DeleteDestination returns an endpoint that makes HTTP requests to the
+// dataExports service deleteDestination server.
+func (c *Client) DeleteDestination() goa.Endpoint {
 	var (
-		encodeRequest  = EncodeDeleteOtelDestinationRequest(c.encoder)
-		decodeResponse = DecodeDeleteOtelDestinationResponse(c.decoder, c.RestoreResponseBody)
+		encodeRequest  = EncodeDeleteDestinationRequest(c.encoder)
+		decodeResponse = DecodeDeleteDestinationResponse(c.decoder, c.RestoreResponseBody)
 	)
 	return func(ctx context.Context, v any) (any, error) {
-		req, err := c.BuildDeleteOtelDestinationRequest(ctx, v)
+		req, err := c.BuildDeleteDestinationRequest(ctx, v)
 		if err != nil {
 			return nil, err
 		}
@@ -173,9 +173,9 @@ func (c *Client) DeleteOtelDestination() goa.Endpoint {
 		if err != nil {
 			return nil, err
 		}
-		resp, err := c.DeleteOtelDestinationDoer.Do(req)
+		resp, err := c.DeleteDestinationDoer.Do(req)
 		if err != nil {
-			return nil, goahttp.ErrRequestError("dataExports", "deleteOtelDestination", err)
+			return nil, goahttp.ErrRequestError("dataExports", "deleteDestination", err)
 		}
 		return decodeResponse(resp)
 	}

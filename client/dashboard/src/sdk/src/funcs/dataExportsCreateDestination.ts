@@ -4,7 +4,7 @@
 
 import * as z from "zod/v4-mini";
 import { GramCore } from "../core.js";
-import { encodeSimple } from "../lib/encodings.js";
+import { encodeJSON, encodeSimple } from "../lib/encodings.js";
 import { matchStatusCode } from "../lib/http.js";
 import * as M from "../lib/matchers.js";
 import { compactMap } from "../lib/primitives.js";
@@ -13,9 +13,9 @@ import { RequestOptions } from "../lib/sdks.js";
 import { resolveSecurity } from "../lib/security.js";
 import { pathToFunc } from "../lib/url.js";
 import {
-  ListOtelDestinationsResult,
-  ListOtelDestinationsResult$inboundSchema,
-} from "../models/components/listoteldestinationsresult.js";
+  Destination,
+  Destination$inboundSchema,
+} from "../models/components/destination.js";
 import { GramError } from "../models/errors/gramerror.js";
 import {
   ConnectionError,
@@ -31,27 +31,27 @@ import {
   ServiceError$inboundSchema,
 } from "../models/errors/serviceerror.js";
 import {
-  ListOtelDestinationsRequest,
-  ListOtelDestinationsRequest$outboundSchema,
-  ListOtelDestinationsSecurity,
-} from "../models/operations/listoteldestinations.js";
+  CreateDataExportDestinationRequest,
+  CreateDataExportDestinationRequest$outboundSchema,
+  CreateDataExportDestinationSecurity,
+} from "../models/operations/createdataexportdestination.js";
 import { APICall, APIPromise } from "../types/async.js";
 import { Result } from "../types/fp.js";
 
 /**
- * listOtelDestinations dataExports
+ * createDestination dataExports
  *
  * @remarks
- * List OTEL destinations for the selected project.
+ * Create a data export destination in the selected project.
  */
-export function dataExportsListOtelDestinations(
+export function dataExportsCreateDestination(
   client: GramCore,
-  request?: ListOtelDestinationsRequest | undefined,
-  security?: ListOtelDestinationsSecurity | undefined,
+  request: CreateDataExportDestinationRequest,
+  security?: CreateDataExportDestinationSecurity | undefined,
   options?: RequestOptions,
 ): APIPromise<
   Result<
-    ListOtelDestinationsResult,
+    Destination,
     | ServiceError
     | GramError
     | ResponseValidationError
@@ -73,13 +73,13 @@ export function dataExportsListOtelDestinations(
 
 async function $do(
   client: GramCore,
-  request?: ListOtelDestinationsRequest | undefined,
-  security?: ListOtelDestinationsSecurity | undefined,
+  request: CreateDataExportDestinationRequest,
+  security?: CreateDataExportDestinationSecurity | undefined,
   options?: RequestOptions,
 ): Promise<
   [
     Result<
-      ListOtelDestinationsResult,
+      Destination,
       | ServiceError
       | GramError
       | ResponseValidationError
@@ -96,28 +96,31 @@ async function $do(
   const parsed = safeParse(
     request,
     (value) =>
-      z.parse(z.optional(ListOtelDestinationsRequest$outboundSchema), value),
+      z.parse(CreateDataExportDestinationRequest$outboundSchema, value),
     "Input validation failed",
   );
   if (!parsed.ok) {
     return [parsed, { status: "invalid" }];
   }
   const payload = parsed.value;
-  const body = null;
+  const body = encodeJSON("body", payload.CreateDestinationForm, {
+    explode: true,
+  });
 
-  const path = pathToFunc("/rpc/dataExports.listOtelDestinations")();
+  const path = pathToFunc("/rpc/dataExports.createDestination")();
 
   const headers = new Headers(compactMap({
+    "Content-Type": "application/json",
     Accept: "application/json",
-    "Gram-Key": encodeSimple("Gram-Key", payload?.["Gram-Key"], {
+    "Gram-Key": encodeSimple("Gram-Key", payload["Gram-Key"], {
       explode: false,
       charEncoding: "none",
     }),
-    "Gram-Project": encodeSimple("Gram-Project", payload?.["Gram-Project"], {
+    "Gram-Project": encodeSimple("Gram-Project", payload["Gram-Project"], {
       explode: false,
       charEncoding: "none",
     }),
-    "Gram-Session": encodeSimple("Gram-Session", payload?.["Gram-Session"], {
+    "Gram-Session": encodeSimple("Gram-Session", payload["Gram-Session"], {
       explode: false,
       charEncoding: "none",
     }),
@@ -153,7 +156,7 @@ async function $do(
   const context = {
     options: client._options,
     baseURL: options?.serverURL ?? client._baseURL ?? "",
-    operationID: "listOtelDestinations",
+    operationID: "createDataExportDestination",
     oAuth2Scopes: null,
 
     resolvedSecurity: requestSecurity,
@@ -167,7 +170,7 @@ async function $do(
 
   const requestRes = client._createRequest(context, {
     security: requestSecurity,
-    method: "GET",
+    method: "POST",
     baseURL: options?.serverURL,
     path: path,
     headers: headers,
@@ -197,7 +200,7 @@ async function $do(
   };
 
   const [result] = await M.match<
-    ListOtelDestinationsResult,
+    Destination,
     | ServiceError
     | GramError
     | ResponseValidationError
@@ -208,7 +211,7 @@ async function $do(
     | UnexpectedClientError
     | SDKValidationError
   >(
-    M.json(200, ListOtelDestinationsResult$inboundSchema),
+    M.json(200, Destination$inboundSchema),
     M.jsonErr([400, 401, 403, 404, 409, 415, 422], ServiceError$inboundSchema),
     M.jsonErr([500, 502], ServiceError$inboundSchema),
     M.fail("4XX"),

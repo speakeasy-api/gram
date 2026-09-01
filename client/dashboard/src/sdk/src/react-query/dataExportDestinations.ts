@@ -22,9 +22,9 @@ import { ResponseValidationError } from "../models/errors/responsevalidationerro
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
 import { ServiceError } from "../models/errors/serviceerror.js";
 import {
-  ListOtelDestinationsRequest,
-  ListOtelDestinationsSecurity,
-} from "../models/operations/listoteldestinations.js";
+  ListDataExportDestinationsRequest,
+  ListDataExportDestinationsSecurity,
+} from "../models/operations/listdataexportdestinations.js";
 import { useGramContext } from "./_context.js";
 import {
   QueryHookOptions,
@@ -32,19 +32,19 @@ import {
   TupleToPrefixes,
 } from "./_types.js";
 import {
-  buildOtelDestinationsQuery,
-  OtelDestinationsQueryData,
-  prefetchOtelDestinations,
-  queryKeyOtelDestinations,
-} from "./otelDestinations.core.js";
+  buildDataExportDestinationsQuery,
+  DataExportDestinationsQueryData,
+  prefetchDataExportDestinations,
+  queryKeyDataExportDestinations,
+} from "./dataExportDestinations.core.js";
 export {
-  buildOtelDestinationsQuery,
-  type OtelDestinationsQueryData,
-  prefetchOtelDestinations,
-  queryKeyOtelDestinations,
+  buildDataExportDestinationsQuery,
+  type DataExportDestinationsQueryData,
+  prefetchDataExportDestinations,
+  queryKeyDataExportDestinations,
 };
 
-export type OtelDestinationsQueryError =
+export type DataExportDestinationsQueryError =
   | ServiceError
   | GramError
   | ResponseValidationError
@@ -56,22 +56,25 @@ export type OtelDestinationsQueryError =
   | SDKValidationError;
 
 /**
- * listOtelDestinations dataExports
+ * listDestinations dataExports
  *
  * @remarks
- * List OTEL destinations for the selected project.
+ * List data export destinations for the selected project.
  */
-export function useOtelDestinations(
-  request?: ListOtelDestinationsRequest | undefined,
-  security?: ListOtelDestinationsSecurity | undefined,
+export function useDataExportDestinations(
+  request?: ListDataExportDestinationsRequest | undefined,
+  security?: ListDataExportDestinationsSecurity | undefined,
   options?: QueryHookOptions<
-    OtelDestinationsQueryData,
-    OtelDestinationsQueryError
+    DataExportDestinationsQueryData,
+    DataExportDestinationsQueryError
   >,
-): UseQueryResult<OtelDestinationsQueryData, OtelDestinationsQueryError> {
+): UseQueryResult<
+  DataExportDestinationsQueryData,
+  DataExportDestinationsQueryError
+> {
   const client = useGramContext();
   return useQuery({
-    ...buildOtelDestinationsQuery(
+    ...buildDataExportDestinationsQuery(
       client,
       request,
       security,
@@ -82,25 +85,25 @@ export function useOtelDestinations(
 }
 
 /**
- * listOtelDestinations dataExports
+ * listDestinations dataExports
  *
  * @remarks
- * List OTEL destinations for the selected project.
+ * List data export destinations for the selected project.
  */
-export function useOtelDestinationsSuspense(
-  request?: ListOtelDestinationsRequest | undefined,
-  security?: ListOtelDestinationsSecurity | undefined,
+export function useDataExportDestinationsSuspense(
+  request?: ListDataExportDestinationsRequest | undefined,
+  security?: ListDataExportDestinationsSecurity | undefined,
   options?: SuspenseQueryHookOptions<
-    OtelDestinationsQueryData,
-    OtelDestinationsQueryError
+    DataExportDestinationsQueryData,
+    DataExportDestinationsQueryError
   >,
 ): UseSuspenseQueryResult<
-  OtelDestinationsQueryData,
-  OtelDestinationsQueryError
+  DataExportDestinationsQueryData,
+  DataExportDestinationsQueryError
 > {
   const client = useGramContext();
   return useSuspenseQuery({
-    ...buildOtelDestinationsQuery(
+    ...buildDataExportDestinationsQuery(
       client,
       request,
       security,
@@ -110,7 +113,7 @@ export function useOtelDestinationsSuspense(
   });
 }
 
-export function setOtelDestinationsData(
+export function setDataExportDestinationsData(
   client: QueryClient,
   queryKeyBase: [
     parameters: {
@@ -119,14 +122,14 @@ export function setOtelDestinationsData(
       gramProject?: string | undefined;
     },
   ],
-  data: OtelDestinationsQueryData,
-): OtelDestinationsQueryData | undefined {
-  const key = queryKeyOtelDestinations(...queryKeyBase);
+  data: DataExportDestinationsQueryData,
+): DataExportDestinationsQueryData | undefined {
+  const key = queryKeyDataExportDestinations(...queryKeyBase);
 
-  return client.setQueryData<OtelDestinationsQueryData>(key, data);
+  return client.setQueryData<DataExportDestinationsQueryData>(key, data);
 }
 
-export function invalidateOtelDestinations(
+export function invalidateDataExportDestinations(
   client: QueryClient,
   queryKeyBase: TupleToPrefixes<
     [parameters: {
@@ -142,18 +145,18 @@ export function invalidateOtelDestinations(
     queryKey: [
       "@gram/client",
       "dataExports",
-      "listOtelDestinations",
+      "listDestinations",
       ...queryKeyBase,
     ],
   });
 }
 
-export function invalidateAllOtelDestinations(
+export function invalidateAllDataExportDestinations(
   client: QueryClient,
   filters?: Omit<InvalidateQueryFilters, "queryKey" | "predicate" | "exact">,
 ): Promise<void> {
   return client.invalidateQueries({
     ...filters,
-    queryKey: ["@gram/client", "dataExports", "listOtelDestinations"],
+    queryKey: ["@gram/client", "dataExports", "listDestinations"],
   });
 }

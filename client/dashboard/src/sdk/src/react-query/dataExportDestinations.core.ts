@@ -8,26 +8,26 @@ import {
   QueryKey,
 } from "@tanstack/react-query";
 import { GramCore } from "../core.js";
-import { dataExportsListOtelDestinations } from "../funcs/dataExportsListOtelDestinations.js";
+import { dataExportsListDestinations } from "../funcs/dataExportsListDestinations.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
-import { ListOtelDestinationsResult } from "../models/components/listoteldestinationsresult.js";
+import { ListDestinationsResult } from "../models/components/listdestinationsresult.js";
 import {
-  ListOtelDestinationsRequest,
-  ListOtelDestinationsSecurity,
-} from "../models/operations/listoteldestinations.js";
+  ListDataExportDestinationsRequest,
+  ListDataExportDestinationsSecurity,
+} from "../models/operations/listdataexportdestinations.js";
 import { unwrapAsync } from "../types/fp.js";
-export type OtelDestinationsQueryData = ListOtelDestinationsResult;
+export type DataExportDestinationsQueryData = ListDestinationsResult;
 
-export function prefetchOtelDestinations(
+export function prefetchDataExportDestinations(
   queryClient: QueryClient,
   client$: GramCore,
-  request?: ListOtelDestinationsRequest | undefined,
-  security?: ListOtelDestinationsSecurity | undefined,
+  request?: ListDataExportDestinationsRequest | undefined,
+  security?: ListDataExportDestinationsSecurity | undefined,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
-    ...buildOtelDestinationsQuery(
+    ...buildDataExportDestinationsQuery(
       client$,
       request,
       security,
@@ -36,26 +36,26 @@ export function prefetchOtelDestinations(
   });
 }
 
-export function buildOtelDestinationsQuery(
+export function buildDataExportDestinationsQuery(
   client$: GramCore,
-  request?: ListOtelDestinationsRequest | undefined,
-  security?: ListOtelDestinationsSecurity | undefined,
+  request?: ListDataExportDestinationsRequest | undefined,
+  security?: ListDataExportDestinationsSecurity | undefined,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;
   queryFn: (
     context: QueryFunctionContext,
-  ) => Promise<OtelDestinationsQueryData>;
+  ) => Promise<DataExportDestinationsQueryData>;
 } {
   return {
-    queryKey: queryKeyOtelDestinations({
+    queryKey: queryKeyDataExportDestinations({
       gramSession: request?.gramSession,
       gramKey: request?.gramKey,
       gramProject: request?.gramProject,
     }),
-    queryFn: async function otelDestinationsQueryFn(
+    queryFn: async function dataExportDestinationsQueryFn(
       ctx,
-    ): Promise<OtelDestinationsQueryData> {
+    ): Promise<DataExportDestinationsQueryData> {
       const sig = combineSignals(
         ctx.signal,
         options?.signal,
@@ -67,7 +67,7 @@ export function buildOtelDestinationsQuery(
         signal: sig,
       };
 
-      return unwrapAsync(dataExportsListOtelDestinations(
+      return unwrapAsync(dataExportsListDestinations(
         client$,
         request,
         security,
@@ -77,12 +77,12 @@ export function buildOtelDestinationsQuery(
   };
 }
 
-export function queryKeyOtelDestinations(
+export function queryKeyDataExportDestinations(
   parameters: {
     gramSession?: string | undefined;
     gramKey?: string | undefined;
     gramProject?: string | undefined;
   },
 ): QueryKey {
-  return ["@gram/client", "dataExports", "listOtelDestinations", parameters];
+  return ["@gram/client", "dataExports", "listDestinations", parameters];
 }

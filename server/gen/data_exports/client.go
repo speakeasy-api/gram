@@ -15,33 +15,33 @@ import (
 
 // Client is the "dataExports" service client.
 type Client struct {
-	ListOtelDestinationsEndpoint  goa.Endpoint
-	CreateOtelDestinationEndpoint goa.Endpoint
-	UpdateOtelDestinationEndpoint goa.Endpoint
-	DeleteOtelDestinationEndpoint goa.Endpoint
-	ListRoutesEndpoint            goa.Endpoint
-	CreateRouteEndpoint           goa.Endpoint
-	UpdateRouteEndpoint           goa.Endpoint
-	DeleteRouteEndpoint           goa.Endpoint
+	ListDestinationsEndpoint  goa.Endpoint
+	CreateDestinationEndpoint goa.Endpoint
+	UpdateDestinationEndpoint goa.Endpoint
+	DeleteDestinationEndpoint goa.Endpoint
+	ListRoutesEndpoint        goa.Endpoint
+	CreateRouteEndpoint       goa.Endpoint
+	UpdateRouteEndpoint       goa.Endpoint
+	DeleteRouteEndpoint       goa.Endpoint
 }
 
 // NewClient initializes a "dataExports" service client given the endpoints.
-func NewClient(listOtelDestinations, createOtelDestination, updateOtelDestination, deleteOtelDestination, listRoutes, createRoute, updateRoute, deleteRoute goa.Endpoint) *Client {
+func NewClient(listDestinations, createDestination, updateDestination, deleteDestination, listRoutes, createRoute, updateRoute, deleteRoute goa.Endpoint) *Client {
 	return &Client{
-		ListOtelDestinationsEndpoint:  listOtelDestinations,
-		CreateOtelDestinationEndpoint: createOtelDestination,
-		UpdateOtelDestinationEndpoint: updateOtelDestination,
-		DeleteOtelDestinationEndpoint: deleteOtelDestination,
-		ListRoutesEndpoint:            listRoutes,
-		CreateRouteEndpoint:           createRoute,
-		UpdateRouteEndpoint:           updateRoute,
-		DeleteRouteEndpoint:           deleteRoute,
+		ListDestinationsEndpoint:  listDestinations,
+		CreateDestinationEndpoint: createDestination,
+		UpdateDestinationEndpoint: updateDestination,
+		DeleteDestinationEndpoint: deleteDestination,
+		ListRoutesEndpoint:        listRoutes,
+		CreateRouteEndpoint:       createRoute,
+		UpdateRouteEndpoint:       updateRoute,
+		DeleteRouteEndpoint:       deleteRoute,
 	}
 }
 
-// ListOtelDestinations calls the "listOtelDestinations" endpoint of the
-// "dataExports" service.
-// ListOtelDestinations may return the following errors:
+// ListDestinations calls the "listDestinations" endpoint of the "dataExports"
+// service.
+// ListDestinations may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): unauthorized access
 //   - "forbidden" (type *goa.ServiceError): permission denied
 //   - "bad_request" (type *goa.ServiceError): request is invalid
@@ -53,18 +53,18 @@ func NewClient(listOtelDestinations, createOtelDestination, updateOtelDestinatio
 //   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
 //   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
 //   - error: internal error
-func (c *Client) ListOtelDestinations(ctx context.Context, p *ListOtelDestinationsPayload) (res *ListOtelDestinationsResult, err error) {
+func (c *Client) ListDestinations(ctx context.Context, p *ListDestinationsPayload) (res *ListDestinationsResult, err error) {
 	var ires any
-	ires, err = c.ListOtelDestinationsEndpoint(ctx, p)
+	ires, err = c.ListDestinationsEndpoint(ctx, p)
 	if err != nil {
 		return
 	}
-	return ires.(*ListOtelDestinationsResult), nil
+	return ires.(*ListDestinationsResult), nil
 }
 
-// CreateOtelDestination calls the "createOtelDestination" endpoint of the
+// CreateDestination calls the "createDestination" endpoint of the
 // "dataExports" service.
-// CreateOtelDestination may return the following errors:
+// CreateDestination may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): unauthorized access
 //   - "forbidden" (type *goa.ServiceError): permission denied
 //   - "bad_request" (type *goa.ServiceError): request is invalid
@@ -76,18 +76,18 @@ func (c *Client) ListOtelDestinations(ctx context.Context, p *ListOtelDestinatio
 //   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
 //   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
 //   - error: internal error
-func (c *Client) CreateOtelDestination(ctx context.Context, p *CreateOtelDestinationPayload) (res *OtelDestination, err error) {
+func (c *Client) CreateDestination(ctx context.Context, p *CreateDestinationPayload) (res *Destination, err error) {
 	var ires any
-	ires, err = c.CreateOtelDestinationEndpoint(ctx, p)
+	ires, err = c.CreateDestinationEndpoint(ctx, p)
 	if err != nil {
 		return
 	}
-	return ires.(*OtelDestination), nil
+	return ires.(*Destination), nil
 }
 
-// UpdateOtelDestination calls the "updateOtelDestination" endpoint of the
+// UpdateDestination calls the "updateDestination" endpoint of the
 // "dataExports" service.
-// UpdateOtelDestination may return the following errors:
+// UpdateDestination may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): unauthorized access
 //   - "forbidden" (type *goa.ServiceError): permission denied
 //   - "bad_request" (type *goa.ServiceError): request is invalid
@@ -99,18 +99,18 @@ func (c *Client) CreateOtelDestination(ctx context.Context, p *CreateOtelDestina
 //   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
 //   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
 //   - error: internal error
-func (c *Client) UpdateOtelDestination(ctx context.Context, p *UpdateOtelDestinationPayload) (res *OtelDestination, err error) {
+func (c *Client) UpdateDestination(ctx context.Context, p *UpdateDestinationPayload) (res *Destination, err error) {
 	var ires any
-	ires, err = c.UpdateOtelDestinationEndpoint(ctx, p)
+	ires, err = c.UpdateDestinationEndpoint(ctx, p)
 	if err != nil {
 		return
 	}
-	return ires.(*OtelDestination), nil
+	return ires.(*Destination), nil
 }
 
-// DeleteOtelDestination calls the "deleteOtelDestination" endpoint of the
+// DeleteDestination calls the "deleteDestination" endpoint of the
 // "dataExports" service.
-// DeleteOtelDestination may return the following errors:
+// DeleteDestination may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): unauthorized access
 //   - "forbidden" (type *goa.ServiceError): permission denied
 //   - "bad_request" (type *goa.ServiceError): request is invalid
@@ -122,8 +122,8 @@ func (c *Client) UpdateOtelDestination(ctx context.Context, p *UpdateOtelDestina
 //   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
 //   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
 //   - error: internal error
-func (c *Client) DeleteOtelDestination(ctx context.Context, p *DeleteOtelDestinationPayload) (err error) {
-	_, err = c.DeleteOtelDestinationEndpoint(ctx, p)
+func (c *Client) DeleteDestination(ctx context.Context, p *DeleteDestinationPayload) (err error) {
+	_, err = c.DeleteDestinationEndpoint(ctx, p)
 	return
 }
 

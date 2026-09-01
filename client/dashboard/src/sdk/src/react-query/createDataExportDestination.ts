@@ -8,10 +8,10 @@ import {
   UseMutationResult,
 } from "@tanstack/react-query";
 import { GramCore } from "../core.js";
-import { dataExportsCreateOtelDestination } from "../funcs/dataExportsCreateOtelDestination.js";
+import { dataExportsCreateDestination } from "../funcs/dataExportsCreateDestination.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
-import { OtelDestination } from "../models/components/oteldestination.js";
+import { Destination } from "../models/components/destination.js";
 import { GramError } from "../models/errors/gramerror.js";
 import {
   ConnectionError,
@@ -24,22 +24,22 @@ import { ResponseValidationError } from "../models/errors/responsevalidationerro
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
 import { ServiceError } from "../models/errors/serviceerror.js";
 import {
-  CreateOtelDestinationRequest,
-  CreateOtelDestinationSecurity,
-} from "../models/operations/createoteldestination.js";
+  CreateDataExportDestinationRequest,
+  CreateDataExportDestinationSecurity,
+} from "../models/operations/createdataexportdestination.js";
 import { unwrapAsync } from "../types/fp.js";
 import { useGramContext } from "./_context.js";
 import { MutationHookOptions } from "./_types.js";
 
-export type CreateOtelDestinationMutationVariables = {
-  request: CreateOtelDestinationRequest;
-  security?: CreateOtelDestinationSecurity | undefined;
+export type CreateDataExportDestinationMutationVariables = {
+  request: CreateDataExportDestinationRequest;
+  security?: CreateDataExportDestinationSecurity | undefined;
   options?: RequestOptions;
 };
 
-export type CreateOtelDestinationMutationData = OtelDestination;
+export type CreateDataExportDestinationMutationData = Destination;
 
-export type CreateOtelDestinationMutationError =
+export type CreateDataExportDestinationMutationError =
   | ServiceError
   | GramError
   | ResponseValidationError
@@ -51,49 +51,49 @@ export type CreateOtelDestinationMutationError =
   | SDKValidationError;
 
 /**
- * createOtelDestination dataExports
+ * createDestination dataExports
  *
  * @remarks
- * Create an OTEL destination in the selected project.
+ * Create a data export destination in the selected project.
  */
-export function useCreateOtelDestinationMutation(
+export function useCreateDataExportDestinationMutation(
   options?: MutationHookOptions<
-    CreateOtelDestinationMutationData,
-    CreateOtelDestinationMutationError,
-    CreateOtelDestinationMutationVariables
+    CreateDataExportDestinationMutationData,
+    CreateDataExportDestinationMutationError,
+    CreateDataExportDestinationMutationVariables
   >,
 ): UseMutationResult<
-  CreateOtelDestinationMutationData,
-  CreateOtelDestinationMutationError,
-  CreateOtelDestinationMutationVariables
+  CreateDataExportDestinationMutationData,
+  CreateDataExportDestinationMutationError,
+  CreateDataExportDestinationMutationVariables
 > {
   const client = useGramContext();
   return useMutation({
-    ...buildCreateOtelDestinationMutation(client, options),
+    ...buildCreateDataExportDestinationMutation(client, options),
     ...options,
   });
 }
 
-export function mutationKeyCreateOtelDestination(): MutationKey {
-  return ["@gram/client", "dataExports", "createOtelDestination"];
+export function mutationKeyCreateDataExportDestination(): MutationKey {
+  return ["@gram/client", "dataExports", "createDestination"];
 }
 
-export function buildCreateOtelDestinationMutation(
+export function buildCreateDataExportDestinationMutation(
   client$: GramCore,
   hookOptions?: RequestOptions,
 ): {
   mutationKey: MutationKey;
   mutationFn: (
-    variables: CreateOtelDestinationMutationVariables,
-  ) => Promise<CreateOtelDestinationMutationData>;
+    variables: CreateDataExportDestinationMutationVariables,
+  ) => Promise<CreateDataExportDestinationMutationData>;
 } {
   return {
-    mutationKey: mutationKeyCreateOtelDestination(),
-    mutationFn: function createOtelDestinationMutationFn({
+    mutationKey: mutationKeyCreateDataExportDestination(),
+    mutationFn: function createDataExportDestinationMutationFn({
       request,
       security,
       options,
-    }): Promise<CreateOtelDestinationMutationData> {
+    }): Promise<CreateDataExportDestinationMutationData> {
       const mergedOptions = {
         ...hookOptions,
         ...options,
@@ -106,7 +106,7 @@ export function buildCreateOtelDestinationMutation(
           ),
         },
       };
-      return unwrapAsync(dataExportsCreateOtelDestination(
+      return unwrapAsync(dataExportsCreateDestination(
         client$,
         request,
         security,

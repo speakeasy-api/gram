@@ -14,16 +14,16 @@ import (
 	"goa.design/goa/v3/security"
 )
 
-// Manage project-scoped OTEL destinations and data export routes.
+// Manage project-scoped data export destinations and routes.
 type Service interface {
-	// List OTEL destinations for the selected project.
-	ListOtelDestinations(context.Context, *ListOtelDestinationsPayload) (res *ListOtelDestinationsResult, err error)
-	// Create an OTEL destination in the selected project.
-	CreateOtelDestination(context.Context, *CreateOtelDestinationPayload) (res *OtelDestination, err error)
-	// Replace an OTEL destination in the selected project.
-	UpdateOtelDestination(context.Context, *UpdateOtelDestinationPayload) (res *OtelDestination, err error)
-	// Delete an OTEL destination that is not referenced by an active route.
-	DeleteOtelDestination(context.Context, *DeleteOtelDestinationPayload) (err error)
+	// List data export destinations for the selected project.
+	ListDestinations(context.Context, *ListDestinationsPayload) (res *ListDestinationsResult, err error)
+	// Create a data export destination in the selected project.
+	CreateDestination(context.Context, *CreateDestinationPayload) (res *Destination, err error)
+	// Replace a data export destination in the selected project.
+	UpdateDestination(context.Context, *UpdateDestinationPayload) (res *Destination, err error)
+	// Delete a data export destination that is not referenced by an active route.
+	DeleteDestination(context.Context, *DeleteDestinationPayload) (err error)
 	// List data source export route configurations for the selected project.
 	ListRoutes(context.Context, *ListRoutesPayload) (res *ListDataExportRoutesResult, err error)
 	// Create the selected data source's export route configuration.
@@ -54,7 +54,23 @@ const ServiceName = "dataExports"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [8]string{"listOtelDestinations", "createOtelDestination", "updateOtelDestination", "deleteOtelDestination", "listRoutes", "createRoute", "updateRoute", "deleteRoute"}
+var MethodNames = [8]string{"listDestinations", "createDestination", "updateDestination", "deleteDestination", "listRoutes", "createRoute", "updateRoute", "deleteRoute"}
+
+// CreateDestinationPayload is the payload type of the dataExports service
+// createDestination method.
+type CreateDestinationPayload struct {
+	SessionToken     *string
+	ApikeyToken      *string
+	ProjectSlugInput *string
+	// Human-readable destination name.
+	Name string
+	// Destination transport type.
+	DestinationType string
+	// Sensitive-data policy.
+	SensitiveData string
+	// OTEL configuration. Required when destination_type is otel.
+	Otel *CreateOtelDestinationInput
+}
 
 // An HTTP header supplied when creating an OTEL destination.
 type CreateOtelDestinationHeaderInput struct {
@@ -64,19 +80,11 @@ type CreateOtelDestinationHeaderInput struct {
 	Value string
 }
 
-// CreateOtelDestinationPayload is the payload type of the dataExports service
-// createOtelDestination method.
-type CreateOtelDestinationPayload struct {
-	SessionToken     *string
-	ApikeyToken      *string
-	ProjectSlugInput *string
-	// Human-readable destination name.
-	Name string
-	// OTLP base URL.
+// OTEL-specific configuration supplied when creating a destination.
+type CreateOtelDestinationInput struct {
+	// OTEL collector endpoint URL.
 	EndpointURL string
-	// Sensitive-data policy.
-	SensitiveData string
-	// Write-only headers.
+	// Write-only HTTP headers.
 	Headers []*CreateOtelDestinationHeaderInput
 }
 
@@ -114,11 +122,13 @@ type DataExportRoute struct {
 	UpdatedAt string
 }
 
-// DeleteOtelDestinationPayload is the payload type of the dataExports service
-// deleteOtelDestination method.
-type DeleteOtelDestinationPayload struct {
+// DeleteDestinationPayload is the payload type of the dataExports service
+// deleteDestination method.
+type DeleteDestinationPayload struct {
 	// Destination ID.
-	ID               string
+	ID string
+	// Destination transport type.
+	DestinationType  string
 	SessionToken     *string
 	ApikeyToken      *string
 	ProjectSlugInput *string
@@ -134,6 +144,27 @@ type DeleteRoutePayload struct {
 	ProjectSlugInput *string
 }
 
+// Destination is the result type of the dataExports service createDestination
+// method.
+type Destination struct {
+	// Destination ID.
+	ID string
+	// Project that owns the destination.
+	ProjectID string
+	// Human-readable destination name.
+	Name string
+	// Destination transport type.
+	DestinationType string
+	// Whether sensitive data is included in payloads sent to this destination.
+	SensitiveData string
+	// OTEL configuration. Present when destination_type is otel.
+	Otel *OtelDestination
+	// Creation timestamp.
+	CreatedAt string
+	// Last update timestamp.
+	UpdatedAt string
+}
+
 // ListDataExportRoutesResult is the result type of the dataExports service
 // listRoutes method.
 type ListDataExportRoutesResult struct {
@@ -141,19 +172,19 @@ type ListDataExportRoutesResult struct {
 	Routes []*DataExportRoute
 }
 
-// ListOtelDestinationsPayload is the payload type of the dataExports service
-// listOtelDestinations method.
-type ListOtelDestinationsPayload struct {
+// ListDestinationsPayload is the payload type of the dataExports service
+// listDestinations method.
+type ListDestinationsPayload struct {
 	SessionToken     *string
 	ApikeyToken      *string
 	ProjectSlugInput *string
 }
 
-// ListOtelDestinationsResult is the result type of the dataExports service
-// listOtelDestinations method.
-type ListOtelDestinationsResult struct {
-	// Active OTEL destinations in the selected project.
-	Destinations []*OtelDestination
+// ListDestinationsResult is the result type of the dataExports service
+// listDestinations method.
+type ListDestinationsResult struct {
+	// Active data export destinations in the selected project.
+	Destinations []*Destination
 }
 
 // ListRoutesPayload is the payload type of the dataExports service listRoutes
@@ -164,25 +195,13 @@ type ListRoutesPayload struct {
 	ProjectSlugInput *string
 }
 
-// OtelDestination is the result type of the dataExports service
-// createOtelDestination method.
+// OTEL-specific destination configuration.
 type OtelDestination struct {
-	// Destination ID.
-	ID string
-	// Project that owns the destination.
-	ProjectID string
-	// Human-readable destination name.
-	Name string
-	// OTLP base URL. Signal-specific paths are appended during delivery.
+	// OTEL collector endpoint URL. Transport-specific paths may be appended during
+	// delivery.
 	EndpointURL string
-	// Whether sensitive data is included in payloads sent to this destination.
-	SensitiveData string
-	// Configured header names. Header values are never returned.
+	// Configured HTTP header names. Header values are never returned.
 	Headers []*OtelDestinationHeader
-	// Creation timestamp.
-	CreatedAt string
-	// Last update timestamp.
-	UpdatedAt string
 }
 
 // A write-only HTTP header configured on an OTEL destination.
@@ -193,19 +212,9 @@ type OtelDestinationHeader struct {
 	HasValue bool
 }
 
-// An HTTP header supplied when updating an OTEL destination. Omit value to
-// preserve the encrypted value stored for the same case-insensitive name.
-type OtelDestinationHeaderInput struct {
-	// Header name.
-	Name string
-	// Write-only header value. Omit to preserve an existing value; provide an
-	// empty string to clear it.
-	Value *string
-}
-
-// UpdateOtelDestinationPayload is the payload type of the dataExports service
-// updateOtelDestination method.
-type UpdateOtelDestinationPayload struct {
+// UpdateDestinationPayload is the payload type of the dataExports service
+// updateDestination method.
+type UpdateDestinationPayload struct {
 	SessionToken     *string
 	ApikeyToken      *string
 	ProjectSlugInput *string
@@ -213,12 +222,32 @@ type UpdateOtelDestinationPayload struct {
 	ID string
 	// Human-readable destination name.
 	Name string
-	// OTLP base URL.
-	EndpointURL string
+	// Destination transport type.
+	DestinationType string
 	// Sensitive-data policy.
 	SensitiveData string
-	// Complete header-name set for the destination.
-	Headers []*OtelDestinationHeaderInput
+	// OTEL configuration. Required when destination_type is otel. Header entries
+	// with omitted values preserve existing encrypted values by case-insensitive
+	// name.
+	Otel *UpdateOtelDestinationInput
+}
+
+// An HTTP header supplied when updating an OTEL destination. Omit value to
+// preserve the encrypted value stored for the same case-insensitive name.
+type UpdateOtelDestinationHeaderInput struct {
+	// Header name.
+	Name string
+	// Write-only header value. Omit to preserve an existing value; provide an
+	// empty string to clear it.
+	Value *string
+}
+
+// OTEL-specific configuration supplied when updating a destination.
+type UpdateOtelDestinationInput struct {
+	// OTEL collector endpoint URL.
+	EndpointURL string
+	// Complete HTTP header-name set for the OTEL destination.
+	Headers []*UpdateOtelDestinationHeaderInput
 }
 
 // UpdateRoutePayload is the payload type of the dataExports service

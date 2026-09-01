@@ -19,23 +19,23 @@ import (
 	goa "goa.design/goa/v3/pkg"
 )
 
-// EncodeListOtelDestinationsResponse returns an encoder for responses returned
-// by the dataExports listOtelDestinations endpoint.
-func EncodeListOtelDestinationsResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
+// EncodeListDestinationsResponse returns an encoder for responses returned by
+// the dataExports listDestinations endpoint.
+func EncodeListDestinationsResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
 	return func(ctx context.Context, w http.ResponseWriter, v any) error {
-		res, _ := v.(*dataexports.ListOtelDestinationsResult)
+		res, _ := v.(*dataexports.ListDestinationsResult)
 		enc := encoder(ctx, w)
-		body := NewListOtelDestinationsResponseBody(res)
+		body := NewListDestinationsResponseBody(res)
 		w.WriteHeader(http.StatusOK)
 		return enc.Encode(body)
 	}
 }
 
-// DecodeListOtelDestinationsRequest returns a decoder for requests sent to the
-// dataExports listOtelDestinations endpoint.
-func DecodeListOtelDestinationsRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (*dataexports.ListOtelDestinationsPayload, error) {
-	return func(r *http.Request) (*dataexports.ListOtelDestinationsPayload, error) {
-		var payload *dataexports.ListOtelDestinationsPayload
+// DecodeListDestinationsRequest returns a decoder for requests sent to the
+// dataExports listDestinations endpoint.
+func DecodeListDestinationsRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (*dataexports.ListDestinationsPayload, error) {
+	return func(r *http.Request) (*dataexports.ListDestinationsPayload, error) {
+		var payload *dataexports.ListDestinationsPayload
 		var (
 			sessionToken     *string
 			apikeyToken      *string
@@ -53,7 +53,7 @@ func DecodeListOtelDestinationsRequest(mux goahttp.Muxer, decoder func(*http.Req
 		if projectSlugInputRaw != "" {
 			projectSlugInput = &projectSlugInputRaw
 		}
-		payload = NewListOtelDestinationsPayload(sessionToken, apikeyToken, projectSlugInput)
+		payload = NewListDestinationsPayload(sessionToken, apikeyToken, projectSlugInput)
 		if payload.SessionToken != nil {
 			if strings.Contains(*payload.SessionToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")
@@ -80,9 +80,9 @@ func DecodeListOtelDestinationsRequest(mux goahttp.Muxer, decoder func(*http.Req
 	}
 }
 
-// EncodeListOtelDestinationsError returns an encoder for errors returned by
-// the listOtelDestinations dataExports endpoint.
-func EncodeListOtelDestinationsError(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder, formatter func(ctx context.Context, err error) goahttp.Statuser) func(context.Context, http.ResponseWriter, error) error {
+// EncodeListDestinationsError returns an encoder for errors returned by the
+// listDestinations dataExports endpoint.
+func EncodeListDestinationsError(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder, formatter func(ctx context.Context, err error) goahttp.Statuser) func(context.Context, http.ResponseWriter, error) error {
 	encodeError := goahttp.ErrorEncoder(encoder, formatter)
 	return func(ctx context.Context, w http.ResponseWriter, v error) error {
 		var en goa.GoaErrorNamer
@@ -99,7 +99,7 @@ func EncodeListOtelDestinationsError(encoder func(context.Context, http.Response
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewListOtelDestinationsUnauthorizedResponseBody(res)
+				body = NewListDestinationsUnauthorizedResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusUnauthorized)
@@ -113,7 +113,7 @@ func EncodeListOtelDestinationsError(encoder func(context.Context, http.Response
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewListOtelDestinationsForbiddenResponseBody(res)
+				body = NewListDestinationsForbiddenResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusForbidden)
@@ -127,7 +127,7 @@ func EncodeListOtelDestinationsError(encoder func(context.Context, http.Response
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewListOtelDestinationsBadRequestResponseBody(res)
+				body = NewListDestinationsBadRequestResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusBadRequest)
@@ -141,7 +141,7 @@ func EncodeListOtelDestinationsError(encoder func(context.Context, http.Response
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewListOtelDestinationsNotFoundResponseBody(res)
+				body = NewListDestinationsNotFoundResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusNotFound)
@@ -155,7 +155,7 @@ func EncodeListOtelDestinationsError(encoder func(context.Context, http.Response
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewListOtelDestinationsConflictResponseBody(res)
+				body = NewListDestinationsConflictResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusConflict)
@@ -169,7 +169,7 @@ func EncodeListOtelDestinationsError(encoder func(context.Context, http.Response
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewListOtelDestinationsUnsupportedMediaResponseBody(res)
+				body = NewListDestinationsUnsupportedMediaResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusUnsupportedMediaType)
@@ -183,7 +183,7 @@ func EncodeListOtelDestinationsError(encoder func(context.Context, http.Response
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewListOtelDestinationsInvalidResponseBody(res)
+				body = NewListDestinationsInvalidResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusUnprocessableEntity)
@@ -197,7 +197,7 @@ func EncodeListOtelDestinationsError(encoder func(context.Context, http.Response
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewListOtelDestinationsInvariantViolationResponseBody(res)
+				body = NewListDestinationsInvariantViolationResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusInternalServerError)
@@ -211,7 +211,7 @@ func EncodeListOtelDestinationsError(encoder func(context.Context, http.Response
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewListOtelDestinationsUnexpectedResponseBody(res)
+				body = NewListDestinationsUnexpectedResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusInternalServerError)
@@ -225,7 +225,7 @@ func EncodeListOtelDestinationsError(encoder func(context.Context, http.Response
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewListOtelDestinationsGatewayErrorResponseBody(res)
+				body = NewListDestinationsGatewayErrorResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusBadGateway)
@@ -236,25 +236,25 @@ func EncodeListOtelDestinationsError(encoder func(context.Context, http.Response
 	}
 }
 
-// EncodeCreateOtelDestinationResponse returns an encoder for responses
-// returned by the dataExports createOtelDestination endpoint.
-func EncodeCreateOtelDestinationResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
+// EncodeCreateDestinationResponse returns an encoder for responses returned by
+// the dataExports createDestination endpoint.
+func EncodeCreateDestinationResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
 	return func(ctx context.Context, w http.ResponseWriter, v any) error {
-		res, _ := v.(*dataexports.OtelDestination)
+		res, _ := v.(*dataexports.Destination)
 		enc := encoder(ctx, w)
-		body := NewCreateOtelDestinationResponseBody(res)
+		body := NewCreateDestinationResponseBody(res)
 		w.WriteHeader(http.StatusOK)
 		return enc.Encode(body)
 	}
 }
 
-// DecodeCreateOtelDestinationRequest returns a decoder for requests sent to
-// the dataExports createOtelDestination endpoint.
-func DecodeCreateOtelDestinationRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (*dataexports.CreateOtelDestinationPayload, error) {
-	return func(r *http.Request) (*dataexports.CreateOtelDestinationPayload, error) {
-		var payload *dataexports.CreateOtelDestinationPayload
+// DecodeCreateDestinationRequest returns a decoder for requests sent to the
+// dataExports createDestination endpoint.
+func DecodeCreateDestinationRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (*dataexports.CreateDestinationPayload, error) {
+	return func(r *http.Request) (*dataexports.CreateDestinationPayload, error) {
+		var payload *dataexports.CreateDestinationPayload
 		var (
-			body CreateOtelDestinationRequestBody
+			body CreateDestinationRequestBody
 			err  error
 		)
 		err = decoder(r).Decode(&body)
@@ -268,7 +268,7 @@ func DecodeCreateOtelDestinationRequest(mux goahttp.Muxer, decoder func(*http.Re
 			}
 			return payload, goa.DecodePayloadError(err.Error())
 		}
-		err = ValidateCreateOtelDestinationRequestBody(&body)
+		err = ValidateCreateDestinationRequestBody(&body)
 		if err != nil {
 			return payload, err
 		}
@@ -290,7 +290,7 @@ func DecodeCreateOtelDestinationRequest(mux goahttp.Muxer, decoder func(*http.Re
 		if projectSlugInputRaw != "" {
 			projectSlugInput = &projectSlugInputRaw
 		}
-		payload = NewCreateOtelDestinationPayload(&body, sessionToken, apikeyToken, projectSlugInput)
+		payload = NewCreateDestinationPayload(&body, sessionToken, apikeyToken, projectSlugInput)
 		if payload.SessionToken != nil {
 			if strings.Contains(*payload.SessionToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")
@@ -317,9 +317,9 @@ func DecodeCreateOtelDestinationRequest(mux goahttp.Muxer, decoder func(*http.Re
 	}
 }
 
-// EncodeCreateOtelDestinationError returns an encoder for errors returned by
-// the createOtelDestination dataExports endpoint.
-func EncodeCreateOtelDestinationError(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder, formatter func(ctx context.Context, err error) goahttp.Statuser) func(context.Context, http.ResponseWriter, error) error {
+// EncodeCreateDestinationError returns an encoder for errors returned by the
+// createDestination dataExports endpoint.
+func EncodeCreateDestinationError(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder, formatter func(ctx context.Context, err error) goahttp.Statuser) func(context.Context, http.ResponseWriter, error) error {
 	encodeError := goahttp.ErrorEncoder(encoder, formatter)
 	return func(ctx context.Context, w http.ResponseWriter, v error) error {
 		var en goa.GoaErrorNamer
@@ -336,7 +336,7 @@ func EncodeCreateOtelDestinationError(encoder func(context.Context, http.Respons
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewCreateOtelDestinationUnauthorizedResponseBody(res)
+				body = NewCreateDestinationUnauthorizedResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusUnauthorized)
@@ -350,7 +350,7 @@ func EncodeCreateOtelDestinationError(encoder func(context.Context, http.Respons
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewCreateOtelDestinationForbiddenResponseBody(res)
+				body = NewCreateDestinationForbiddenResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusForbidden)
@@ -364,7 +364,7 @@ func EncodeCreateOtelDestinationError(encoder func(context.Context, http.Respons
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewCreateOtelDestinationBadRequestResponseBody(res)
+				body = NewCreateDestinationBadRequestResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusBadRequest)
@@ -378,7 +378,7 @@ func EncodeCreateOtelDestinationError(encoder func(context.Context, http.Respons
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewCreateOtelDestinationNotFoundResponseBody(res)
+				body = NewCreateDestinationNotFoundResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusNotFound)
@@ -392,7 +392,7 @@ func EncodeCreateOtelDestinationError(encoder func(context.Context, http.Respons
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewCreateOtelDestinationConflictResponseBody(res)
+				body = NewCreateDestinationConflictResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusConflict)
@@ -406,7 +406,7 @@ func EncodeCreateOtelDestinationError(encoder func(context.Context, http.Respons
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewCreateOtelDestinationUnsupportedMediaResponseBody(res)
+				body = NewCreateDestinationUnsupportedMediaResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusUnsupportedMediaType)
@@ -420,7 +420,7 @@ func EncodeCreateOtelDestinationError(encoder func(context.Context, http.Respons
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewCreateOtelDestinationInvalidResponseBody(res)
+				body = NewCreateDestinationInvalidResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusUnprocessableEntity)
@@ -434,7 +434,7 @@ func EncodeCreateOtelDestinationError(encoder func(context.Context, http.Respons
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewCreateOtelDestinationInvariantViolationResponseBody(res)
+				body = NewCreateDestinationInvariantViolationResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusInternalServerError)
@@ -448,7 +448,7 @@ func EncodeCreateOtelDestinationError(encoder func(context.Context, http.Respons
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewCreateOtelDestinationUnexpectedResponseBody(res)
+				body = NewCreateDestinationUnexpectedResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusInternalServerError)
@@ -462,7 +462,7 @@ func EncodeCreateOtelDestinationError(encoder func(context.Context, http.Respons
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewCreateOtelDestinationGatewayErrorResponseBody(res)
+				body = NewCreateDestinationGatewayErrorResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusBadGateway)
@@ -473,25 +473,25 @@ func EncodeCreateOtelDestinationError(encoder func(context.Context, http.Respons
 	}
 }
 
-// EncodeUpdateOtelDestinationResponse returns an encoder for responses
-// returned by the dataExports updateOtelDestination endpoint.
-func EncodeUpdateOtelDestinationResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
+// EncodeUpdateDestinationResponse returns an encoder for responses returned by
+// the dataExports updateDestination endpoint.
+func EncodeUpdateDestinationResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
 	return func(ctx context.Context, w http.ResponseWriter, v any) error {
-		res, _ := v.(*dataexports.OtelDestination)
+		res, _ := v.(*dataexports.Destination)
 		enc := encoder(ctx, w)
-		body := NewUpdateOtelDestinationResponseBody(res)
+		body := NewUpdateDestinationResponseBody(res)
 		w.WriteHeader(http.StatusOK)
 		return enc.Encode(body)
 	}
 }
 
-// DecodeUpdateOtelDestinationRequest returns a decoder for requests sent to
-// the dataExports updateOtelDestination endpoint.
-func DecodeUpdateOtelDestinationRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (*dataexports.UpdateOtelDestinationPayload, error) {
-	return func(r *http.Request) (*dataexports.UpdateOtelDestinationPayload, error) {
-		var payload *dataexports.UpdateOtelDestinationPayload
+// DecodeUpdateDestinationRequest returns a decoder for requests sent to the
+// dataExports updateDestination endpoint.
+func DecodeUpdateDestinationRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (*dataexports.UpdateDestinationPayload, error) {
+	return func(r *http.Request) (*dataexports.UpdateDestinationPayload, error) {
+		var payload *dataexports.UpdateDestinationPayload
 		var (
-			body UpdateOtelDestinationRequestBody
+			body UpdateDestinationRequestBody
 			err  error
 		)
 		err = decoder(r).Decode(&body)
@@ -505,7 +505,7 @@ func DecodeUpdateOtelDestinationRequest(mux goahttp.Muxer, decoder func(*http.Re
 			}
 			return payload, goa.DecodePayloadError(err.Error())
 		}
-		err = ValidateUpdateOtelDestinationRequestBody(&body)
+		err = ValidateUpdateDestinationRequestBody(&body)
 		if err != nil {
 			return payload, err
 		}
@@ -536,7 +536,7 @@ func DecodeUpdateOtelDestinationRequest(mux goahttp.Muxer, decoder func(*http.Re
 		if err != nil {
 			return payload, err
 		}
-		payload = NewUpdateOtelDestinationPayload(&body, id, sessionToken, apikeyToken, projectSlugInput)
+		payload = NewUpdateDestinationPayload(&body, id, sessionToken, apikeyToken, projectSlugInput)
 		if payload.SessionToken != nil {
 			if strings.Contains(*payload.SessionToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")
@@ -563,9 +563,9 @@ func DecodeUpdateOtelDestinationRequest(mux goahttp.Muxer, decoder func(*http.Re
 	}
 }
 
-// EncodeUpdateOtelDestinationError returns an encoder for errors returned by
-// the updateOtelDestination dataExports endpoint.
-func EncodeUpdateOtelDestinationError(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder, formatter func(ctx context.Context, err error) goahttp.Statuser) func(context.Context, http.ResponseWriter, error) error {
+// EncodeUpdateDestinationError returns an encoder for errors returned by the
+// updateDestination dataExports endpoint.
+func EncodeUpdateDestinationError(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder, formatter func(ctx context.Context, err error) goahttp.Statuser) func(context.Context, http.ResponseWriter, error) error {
 	encodeError := goahttp.ErrorEncoder(encoder, formatter)
 	return func(ctx context.Context, w http.ResponseWriter, v error) error {
 		var en goa.GoaErrorNamer
@@ -582,7 +582,7 @@ func EncodeUpdateOtelDestinationError(encoder func(context.Context, http.Respons
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewUpdateOtelDestinationUnauthorizedResponseBody(res)
+				body = NewUpdateDestinationUnauthorizedResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusUnauthorized)
@@ -596,7 +596,7 @@ func EncodeUpdateOtelDestinationError(encoder func(context.Context, http.Respons
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewUpdateOtelDestinationForbiddenResponseBody(res)
+				body = NewUpdateDestinationForbiddenResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusForbidden)
@@ -610,7 +610,7 @@ func EncodeUpdateOtelDestinationError(encoder func(context.Context, http.Respons
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewUpdateOtelDestinationBadRequestResponseBody(res)
+				body = NewUpdateDestinationBadRequestResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusBadRequest)
@@ -624,7 +624,7 @@ func EncodeUpdateOtelDestinationError(encoder func(context.Context, http.Respons
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewUpdateOtelDestinationNotFoundResponseBody(res)
+				body = NewUpdateDestinationNotFoundResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusNotFound)
@@ -638,7 +638,7 @@ func EncodeUpdateOtelDestinationError(encoder func(context.Context, http.Respons
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewUpdateOtelDestinationConflictResponseBody(res)
+				body = NewUpdateDestinationConflictResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusConflict)
@@ -652,7 +652,7 @@ func EncodeUpdateOtelDestinationError(encoder func(context.Context, http.Respons
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewUpdateOtelDestinationUnsupportedMediaResponseBody(res)
+				body = NewUpdateDestinationUnsupportedMediaResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusUnsupportedMediaType)
@@ -666,7 +666,7 @@ func EncodeUpdateOtelDestinationError(encoder func(context.Context, http.Respons
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewUpdateOtelDestinationInvalidResponseBody(res)
+				body = NewUpdateDestinationInvalidResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusUnprocessableEntity)
@@ -680,7 +680,7 @@ func EncodeUpdateOtelDestinationError(encoder func(context.Context, http.Respons
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewUpdateOtelDestinationInvariantViolationResponseBody(res)
+				body = NewUpdateDestinationInvariantViolationResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusInternalServerError)
@@ -694,7 +694,7 @@ func EncodeUpdateOtelDestinationError(encoder func(context.Context, http.Respons
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewUpdateOtelDestinationUnexpectedResponseBody(res)
+				body = NewUpdateDestinationUnexpectedResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusInternalServerError)
@@ -708,7 +708,7 @@ func EncodeUpdateOtelDestinationError(encoder func(context.Context, http.Respons
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewUpdateOtelDestinationGatewayErrorResponseBody(res)
+				body = NewUpdateDestinationGatewayErrorResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusBadGateway)
@@ -719,32 +719,41 @@ func EncodeUpdateOtelDestinationError(encoder func(context.Context, http.Respons
 	}
 }
 
-// EncodeDeleteOtelDestinationResponse returns an encoder for responses
-// returned by the dataExports deleteOtelDestination endpoint.
-func EncodeDeleteOtelDestinationResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
+// EncodeDeleteDestinationResponse returns an encoder for responses returned by
+// the dataExports deleteDestination endpoint.
+func EncodeDeleteDestinationResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
 	return func(ctx context.Context, w http.ResponseWriter, v any) error {
 		w.WriteHeader(http.StatusNoContent)
 		return nil
 	}
 }
 
-// DecodeDeleteOtelDestinationRequest returns a decoder for requests sent to
-// the dataExports deleteOtelDestination endpoint.
-func DecodeDeleteOtelDestinationRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (*dataexports.DeleteOtelDestinationPayload, error) {
-	return func(r *http.Request) (*dataexports.DeleteOtelDestinationPayload, error) {
-		var payload *dataexports.DeleteOtelDestinationPayload
+// DecodeDeleteDestinationRequest returns a decoder for requests sent to the
+// dataExports deleteDestination endpoint.
+func DecodeDeleteDestinationRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (*dataexports.DeleteDestinationPayload, error) {
+	return func(r *http.Request) (*dataexports.DeleteDestinationPayload, error) {
+		var payload *dataexports.DeleteDestinationPayload
 		var (
 			id               string
+			destinationType  string
 			sessionToken     *string
 			apikeyToken      *string
 			projectSlugInput *string
 			err              error
 		)
-		id = r.URL.Query().Get("id")
+		qp := r.URL.Query()
+		id = qp.Get("id")
 		if id == "" {
 			err = goa.MergeErrors(err, goa.MissingFieldError("id", "query string"))
 		}
 		err = goa.MergeErrors(err, goa.ValidateFormat("id", id, goa.FormatUUID))
+		destinationType = qp.Get("destination_type")
+		if destinationType == "" {
+			err = goa.MergeErrors(err, goa.MissingFieldError("destination_type", "query string"))
+		}
+		if !(destinationType == "otel") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("destination_type", destinationType, []any{"otel"}))
+		}
 		sessionTokenRaw := r.Header.Get("Gram-Session")
 		if sessionTokenRaw != "" {
 			sessionToken = &sessionTokenRaw
@@ -760,7 +769,7 @@ func DecodeDeleteOtelDestinationRequest(mux goahttp.Muxer, decoder func(*http.Re
 		if err != nil {
 			return payload, err
 		}
-		payload = NewDeleteOtelDestinationPayload(id, sessionToken, apikeyToken, projectSlugInput)
+		payload = NewDeleteDestinationPayload(id, destinationType, sessionToken, apikeyToken, projectSlugInput)
 		if payload.SessionToken != nil {
 			if strings.Contains(*payload.SessionToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")
@@ -787,9 +796,9 @@ func DecodeDeleteOtelDestinationRequest(mux goahttp.Muxer, decoder func(*http.Re
 	}
 }
 
-// EncodeDeleteOtelDestinationError returns an encoder for errors returned by
-// the deleteOtelDestination dataExports endpoint.
-func EncodeDeleteOtelDestinationError(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder, formatter func(ctx context.Context, err error) goahttp.Statuser) func(context.Context, http.ResponseWriter, error) error {
+// EncodeDeleteDestinationError returns an encoder for errors returned by the
+// deleteDestination dataExports endpoint.
+func EncodeDeleteDestinationError(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder, formatter func(ctx context.Context, err error) goahttp.Statuser) func(context.Context, http.ResponseWriter, error) error {
 	encodeError := goahttp.ErrorEncoder(encoder, formatter)
 	return func(ctx context.Context, w http.ResponseWriter, v error) error {
 		var en goa.GoaErrorNamer
@@ -806,7 +815,7 @@ func EncodeDeleteOtelDestinationError(encoder func(context.Context, http.Respons
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewDeleteOtelDestinationUnauthorizedResponseBody(res)
+				body = NewDeleteDestinationUnauthorizedResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusUnauthorized)
@@ -820,7 +829,7 @@ func EncodeDeleteOtelDestinationError(encoder func(context.Context, http.Respons
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewDeleteOtelDestinationForbiddenResponseBody(res)
+				body = NewDeleteDestinationForbiddenResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusForbidden)
@@ -834,7 +843,7 @@ func EncodeDeleteOtelDestinationError(encoder func(context.Context, http.Respons
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewDeleteOtelDestinationBadRequestResponseBody(res)
+				body = NewDeleteDestinationBadRequestResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusBadRequest)
@@ -848,7 +857,7 @@ func EncodeDeleteOtelDestinationError(encoder func(context.Context, http.Respons
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewDeleteOtelDestinationNotFoundResponseBody(res)
+				body = NewDeleteDestinationNotFoundResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusNotFound)
@@ -862,7 +871,7 @@ func EncodeDeleteOtelDestinationError(encoder func(context.Context, http.Respons
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewDeleteOtelDestinationConflictResponseBody(res)
+				body = NewDeleteDestinationConflictResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusConflict)
@@ -876,7 +885,7 @@ func EncodeDeleteOtelDestinationError(encoder func(context.Context, http.Respons
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewDeleteOtelDestinationUnsupportedMediaResponseBody(res)
+				body = NewDeleteDestinationUnsupportedMediaResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusUnsupportedMediaType)
@@ -890,7 +899,7 @@ func EncodeDeleteOtelDestinationError(encoder func(context.Context, http.Respons
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewDeleteOtelDestinationInvalidResponseBody(res)
+				body = NewDeleteDestinationInvalidResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusUnprocessableEntity)
@@ -904,7 +913,7 @@ func EncodeDeleteOtelDestinationError(encoder func(context.Context, http.Respons
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewDeleteOtelDestinationInvariantViolationResponseBody(res)
+				body = NewDeleteDestinationInvariantViolationResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusInternalServerError)
@@ -918,7 +927,7 @@ func EncodeDeleteOtelDestinationError(encoder func(context.Context, http.Respons
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewDeleteOtelDestinationUnexpectedResponseBody(res)
+				body = NewDeleteDestinationUnexpectedResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusInternalServerError)
@@ -932,7 +941,7 @@ func EncodeDeleteOtelDestinationError(encoder func(context.Context, http.Respons
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewDeleteOtelDestinationGatewayErrorResponseBody(res)
+				body = NewDeleteDestinationGatewayErrorResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusBadGateway)
@@ -1867,18 +1876,34 @@ func EncodeDeleteRouteError(encoder func(context.Context, http.ResponseWriter) g
 	}
 }
 
+// marshalDataexportsDestinationToDestinationResponseBody builds a value of
+// type *DestinationResponseBody from a value of type *dataexports.Destination.
+func marshalDataexportsDestinationToDestinationResponseBody(v *dataexports.Destination) *DestinationResponseBody {
+	res := &DestinationResponseBody{
+		ID:              v.ID,
+		ProjectID:       v.ProjectID,
+		Name:            v.Name,
+		DestinationType: v.DestinationType,
+		SensitiveData:   v.SensitiveData,
+		CreatedAt:       v.CreatedAt,
+		UpdatedAt:       v.UpdatedAt,
+	}
+	if v.Otel != nil {
+		res.Otel = marshalDataexportsOtelDestinationToOtelDestinationResponseBody(v.Otel)
+	}
+
+	return res
+}
+
 // marshalDataexportsOtelDestinationToOtelDestinationResponseBody builds a
 // value of type *OtelDestinationResponseBody from a value of type
 // *dataexports.OtelDestination.
 func marshalDataexportsOtelDestinationToOtelDestinationResponseBody(v *dataexports.OtelDestination) *OtelDestinationResponseBody {
+	if v == nil {
+		return nil
+	}
 	res := &OtelDestinationResponseBody{
-		ID:            v.ID,
-		ProjectID:     v.ProjectID,
-		Name:          v.Name,
-		EndpointURL:   v.EndpointURL,
-		SensitiveData: v.SensitiveData,
-		CreatedAt:     v.CreatedAt,
-		UpdatedAt:     v.UpdatedAt,
+		EndpointURL: v.EndpointURL,
 	}
 	if v.Headers != nil {
 		res.Headers = make([]*OtelDestinationHeaderResponseBody, len(v.Headers))
@@ -1908,6 +1933,28 @@ func marshalDataexportsOtelDestinationHeaderToOtelDestinationHeaderResponseBody(
 	return res
 }
 
+// unmarshalCreateOtelDestinationInputRequestBodyToDataexportsCreateOtelDestinationInput
+// builds a value of type *dataexports.CreateOtelDestinationInput from a value
+// of type *CreateOtelDestinationInputRequestBody.
+func unmarshalCreateOtelDestinationInputRequestBodyToDataexportsCreateOtelDestinationInput(v *CreateOtelDestinationInputRequestBody) *dataexports.CreateOtelDestinationInput {
+	if v == nil {
+		return nil
+	}
+	res := &dataexports.CreateOtelDestinationInput{
+		EndpointURL: *v.EndpointURL,
+	}
+	res.Headers = make([]*dataexports.CreateOtelDestinationHeaderInput, len(v.Headers))
+	for i, val := range v.Headers {
+		if val == nil {
+			res.Headers[i] = nil
+			continue
+		}
+		res.Headers[i] = unmarshalCreateOtelDestinationHeaderInputRequestBodyToDataexportsCreateOtelDestinationHeaderInput(val)
+	}
+
+	return res
+}
+
 // unmarshalCreateOtelDestinationHeaderInputRequestBodyToDataexportsCreateOtelDestinationHeaderInput
 // builds a value of type *dataexports.CreateOtelDestinationHeaderInput from a
 // value of type *CreateOtelDestinationHeaderInputRequestBody.
@@ -1920,11 +1967,33 @@ func unmarshalCreateOtelDestinationHeaderInputRequestBodyToDataexportsCreateOtel
 	return res
 }
 
-// unmarshalOtelDestinationHeaderInputRequestBodyToDataexportsOtelDestinationHeaderInput
-// builds a value of type *dataexports.OtelDestinationHeaderInput from a value
-// of type *OtelDestinationHeaderInputRequestBody.
-func unmarshalOtelDestinationHeaderInputRequestBodyToDataexportsOtelDestinationHeaderInput(v *OtelDestinationHeaderInputRequestBody) *dataexports.OtelDestinationHeaderInput {
-	res := &dataexports.OtelDestinationHeaderInput{
+// unmarshalUpdateOtelDestinationInputRequestBodyToDataexportsUpdateOtelDestinationInput
+// builds a value of type *dataexports.UpdateOtelDestinationInput from a value
+// of type *UpdateOtelDestinationInputRequestBody.
+func unmarshalUpdateOtelDestinationInputRequestBodyToDataexportsUpdateOtelDestinationInput(v *UpdateOtelDestinationInputRequestBody) *dataexports.UpdateOtelDestinationInput {
+	if v == nil {
+		return nil
+	}
+	res := &dataexports.UpdateOtelDestinationInput{
+		EndpointURL: *v.EndpointURL,
+	}
+	res.Headers = make([]*dataexports.UpdateOtelDestinationHeaderInput, len(v.Headers))
+	for i, val := range v.Headers {
+		if val == nil {
+			res.Headers[i] = nil
+			continue
+		}
+		res.Headers[i] = unmarshalUpdateOtelDestinationHeaderInputRequestBodyToDataexportsUpdateOtelDestinationHeaderInput(val)
+	}
+
+	return res
+}
+
+// unmarshalUpdateOtelDestinationHeaderInputRequestBodyToDataexportsUpdateOtelDestinationHeaderInput
+// builds a value of type *dataexports.UpdateOtelDestinationHeaderInput from a
+// value of type *UpdateOtelDestinationHeaderInputRequestBody.
+func unmarshalUpdateOtelDestinationHeaderInputRequestBodyToDataexportsUpdateOtelDestinationHeaderInput(v *UpdateOtelDestinationHeaderInputRequestBody) *dataexports.UpdateOtelDestinationHeaderInput {
+	res := &dataexports.UpdateOtelDestinationHeaderInput{
 		Name:  *v.Name,
 		Value: v.Value,
 	}

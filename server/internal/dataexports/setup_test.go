@@ -72,15 +72,18 @@ func requireOopsCode(t *testing.T, err error, code oops.Code) {
 	require.Equal(t, code, oopsErr.Code)
 }
 
-func createOtelDestination(t *testing.T, ctx context.Context, ti *testInstance, endpointURL, sensitiveData string) *gen.OtelDestination {
+func createDestination(t *testing.T, ctx context.Context, ti *testInstance, endpointURL, sensitiveData string) *gen.Destination {
 	t.Helper()
-	destination, err := ti.service.CreateOtelDestination(ctx, &gen.CreateOtelDestinationPayload{SessionToken: nil,
+	destination, err := ti.service.CreateDestination(ctx, &gen.CreateDestinationPayload{SessionToken: nil,
 		ApikeyToken:      nil,
 		ProjectSlugInput: nil,
 		Name:             "Test destination",
-		EndpointURL:      endpointURL,
+		DestinationType:  "otel",
 		SensitiveData:    sensitiveData,
-		Headers:          []*gen.CreateOtelDestinationHeaderInput{}})
+		Otel: &gen.CreateOtelDestinationInput{
+			EndpointURL: endpointURL,
+			Headers:     []*gen.CreateOtelDestinationHeaderInput{},
+		}})
 	require.NoError(t, err)
 	return destination
 }

@@ -5,7 +5,6 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
-import { ClosedEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 import {
@@ -14,61 +13,18 @@ import {
 } from "./oteldestinationheader.js";
 
 /**
- * Whether sensitive data is included in payloads sent to this destination.
- */
-export const OtelDestinationSensitiveData = {
-  Exclude: "exclude",
-  Include: "include",
-} as const;
-/**
- * Whether sensitive data is included in payloads sent to this destination.
- */
-export type OtelDestinationSensitiveData = ClosedEnum<
-  typeof OtelDestinationSensitiveData
->;
-
-/**
- * A reusable customer-owned OTLP collector connection.
+ * OTEL-specific destination configuration.
  */
 export type OtelDestination = {
   /**
-   * Creation timestamp.
-   */
-  createdAt: Date;
-  /**
-   * OTLP base URL. Signal-specific paths are appended during delivery.
+   * OTEL collector endpoint URL. Transport-specific paths may be appended during delivery.
    */
   endpointUrl: string;
   /**
-   * Configured header names. Header values are never returned.
+   * Configured HTTP header names. Header values are never returned.
    */
   headers: Array<OtelDestinationHeader>;
-  /**
-   * Destination ID.
-   */
-  id: string;
-  /**
-   * Human-readable destination name.
-   */
-  name: string;
-  /**
-   * Project that owns the destination.
-   */
-  projectId: string;
-  /**
-   * Whether sensitive data is included in payloads sent to this destination.
-   */
-  sensitiveData: OtelDestinationSensitiveData;
-  /**
-   * Last update timestamp.
-   */
-  updatedAt: Date;
 };
-
-/** @internal */
-export const OtelDestinationSensitiveData$inboundSchema: z.ZodMiniEnum<
-  typeof OtelDestinationSensitiveData
-> = z.enum(OtelDestinationSensitiveData);
 
 /** @internal */
 export const OtelDestination$inboundSchema: z.ZodMiniType<
@@ -76,28 +32,12 @@ export const OtelDestination$inboundSchema: z.ZodMiniType<
   unknown
 > = z.pipe(
   z.object({
-    created_at: z.pipe(
-      z.iso.datetime({ offset: true }),
-      z.transform(v => new Date(v)),
-    ),
     endpoint_url: z.string(),
     headers: z.array(OtelDestinationHeader$inboundSchema),
-    id: z.string(),
-    name: z.string(),
-    project_id: z.string(),
-    sensitive_data: OtelDestinationSensitiveData$inboundSchema,
-    updated_at: z.pipe(
-      z.iso.datetime({ offset: true }),
-      z.transform(v => new Date(v)),
-    ),
   }),
   z.transform((v) => {
     return remap$(v, {
-      "created_at": "createdAt",
       "endpoint_url": "endpointUrl",
-      "project_id": "projectId",
-      "sensitive_data": "sensitiveData",
-      "updated_at": "updatedAt",
     });
   }),
 );

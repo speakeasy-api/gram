@@ -8,7 +8,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/dataexports/repo"
 )
 
-func BuildOtelDestinationView(row repo.OtelDestination, headers map[string]string, sensitiveData string) *gen.OtelDestination {
+func BuildDestinationView(row repo.OtelDestination, headers map[string]string, sensitiveData string) *gen.Destination {
 	names := make([]string, 0, len(headers))
 	for name := range headers {
 		names = append(names, name)
@@ -23,15 +23,18 @@ func BuildOtelDestinationView(row repo.OtelDestination, headers map[string]strin
 		})
 	}
 
-	return &gen.OtelDestination{
-		ID:            row.ID.String(),
-		ProjectID:     row.ProjectID.String(),
-		Name:          row.Name,
-		EndpointURL:   row.EndpointUrl,
-		SensitiveData: sensitiveData,
-		Headers:       headerViews,
-		CreatedAt:     conv.FromPGTimestamptz(row.CreatedAt),
-		UpdatedAt:     conv.FromPGTimestamptz(row.UpdatedAt),
+	return &gen.Destination{
+		ID:              row.ID.String(),
+		ProjectID:       row.ProjectID.String(),
+		DestinationType: "otel",
+		Name:            row.Name,
+		SensitiveData:   sensitiveData,
+		Otel: &gen.OtelDestination{
+			EndpointURL: row.EndpointUrl,
+			Headers:     headerViews,
+		},
+		CreatedAt: conv.FromPGTimestamptz(row.CreatedAt),
+		UpdatedAt: conv.FromPGTimestamptz(row.UpdatedAt),
 	}
 }
 

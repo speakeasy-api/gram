@@ -12,30 +12,32 @@ import (
 	goa "goa.design/goa/v3/pkg"
 )
 
-// CreateOtelDestinationRequestBody is the type of the "dataExports" service
-// "createOtelDestination" endpoint HTTP request body.
-type CreateOtelDestinationRequestBody struct {
+// CreateDestinationRequestBody is the type of the "dataExports" service
+// "createDestination" endpoint HTTP request body.
+type CreateDestinationRequestBody struct {
 	// Human-readable destination name.
 	Name string `form:"name" json:"name" xml:"name"`
-	// OTLP base URL.
-	EndpointURL string `form:"endpoint_url" json:"endpoint_url" xml:"endpoint_url"`
+	// Destination transport type.
+	DestinationType string `form:"destination_type" json:"destination_type" xml:"destination_type"`
 	// Sensitive-data policy.
 	SensitiveData string `form:"sensitive_data" json:"sensitive_data" xml:"sensitive_data"`
-	// Write-only headers.
-	Headers []*CreateOtelDestinationHeaderInputRequestBody `form:"headers" json:"headers" xml:"headers"`
+	// OTEL configuration. Required when destination_type is otel.
+	Otel *CreateOtelDestinationInputRequestBody `form:"otel,omitempty" json:"otel,omitempty" xml:"otel,omitempty"`
 }
 
-// UpdateOtelDestinationRequestBody is the type of the "dataExports" service
-// "updateOtelDestination" endpoint HTTP request body.
-type UpdateOtelDestinationRequestBody struct {
+// UpdateDestinationRequestBody is the type of the "dataExports" service
+// "updateDestination" endpoint HTTP request body.
+type UpdateDestinationRequestBody struct {
 	// Human-readable destination name.
 	Name string `form:"name" json:"name" xml:"name"`
-	// OTLP base URL.
-	EndpointURL string `form:"endpoint_url" json:"endpoint_url" xml:"endpoint_url"`
+	// Destination transport type.
+	DestinationType string `form:"destination_type" json:"destination_type" xml:"destination_type"`
 	// Sensitive-data policy.
 	SensitiveData string `form:"sensitive_data" json:"sensitive_data" xml:"sensitive_data"`
-	// Complete header-name set for the destination.
-	Headers []*OtelDestinationHeaderInputRequestBody `form:"headers" json:"headers" xml:"headers"`
+	// OTEL configuration. Required when destination_type is otel. Header entries
+	// with omitted values preserve existing encrypted values by case-insensitive
+	// name.
+	Otel *UpdateOtelDestinationInputRequestBody `form:"otel,omitempty" json:"otel,omitempty" xml:"otel,omitempty"`
 }
 
 // CreateRouteRequestBody is the type of the "dataExports" service
@@ -60,49 +62,49 @@ type UpdateRouteRequestBody struct {
 	OtelDestinationID *string `form:"otel_destination_id,omitempty" json:"otel_destination_id,omitempty" xml:"otel_destination_id,omitempty"`
 }
 
-// ListOtelDestinationsResponseBody is the type of the "dataExports" service
-// "listOtelDestinations" endpoint HTTP response body.
-type ListOtelDestinationsResponseBody struct {
-	// Active OTEL destinations in the selected project.
-	Destinations []*OtelDestinationResponseBody `form:"destinations,omitempty" json:"destinations,omitempty" xml:"destinations,omitempty"`
+// ListDestinationsResponseBody is the type of the "dataExports" service
+// "listDestinations" endpoint HTTP response body.
+type ListDestinationsResponseBody struct {
+	// Active data export destinations in the selected project.
+	Destinations []*DestinationResponseBody `form:"destinations,omitempty" json:"destinations,omitempty" xml:"destinations,omitempty"`
 }
 
-// CreateOtelDestinationResponseBody is the type of the "dataExports" service
-// "createOtelDestination" endpoint HTTP response body.
-type CreateOtelDestinationResponseBody struct {
+// CreateDestinationResponseBody is the type of the "dataExports" service
+// "createDestination" endpoint HTTP response body.
+type CreateDestinationResponseBody struct {
 	// Destination ID.
 	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
 	// Project that owns the destination.
 	ProjectID *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
 	// Human-readable destination name.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// OTLP base URL. Signal-specific paths are appended during delivery.
-	EndpointURL *string `form:"endpoint_url,omitempty" json:"endpoint_url,omitempty" xml:"endpoint_url,omitempty"`
+	// Destination transport type.
+	DestinationType *string `form:"destination_type,omitempty" json:"destination_type,omitempty" xml:"destination_type,omitempty"`
 	// Whether sensitive data is included in payloads sent to this destination.
 	SensitiveData *string `form:"sensitive_data,omitempty" json:"sensitive_data,omitempty" xml:"sensitive_data,omitempty"`
-	// Configured header names. Header values are never returned.
-	Headers []*OtelDestinationHeaderResponseBody `form:"headers,omitempty" json:"headers,omitempty" xml:"headers,omitempty"`
+	// OTEL configuration. Present when destination_type is otel.
+	Otel *OtelDestinationResponseBody `form:"otel,omitempty" json:"otel,omitempty" xml:"otel,omitempty"`
 	// Creation timestamp.
 	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
 	// Last update timestamp.
 	UpdatedAt *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
 }
 
-// UpdateOtelDestinationResponseBody is the type of the "dataExports" service
-// "updateOtelDestination" endpoint HTTP response body.
-type UpdateOtelDestinationResponseBody struct {
+// UpdateDestinationResponseBody is the type of the "dataExports" service
+// "updateDestination" endpoint HTTP response body.
+type UpdateDestinationResponseBody struct {
 	// Destination ID.
 	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
 	// Project that owns the destination.
 	ProjectID *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
 	// Human-readable destination name.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// OTLP base URL. Signal-specific paths are appended during delivery.
-	EndpointURL *string `form:"endpoint_url,omitempty" json:"endpoint_url,omitempty" xml:"endpoint_url,omitempty"`
+	// Destination transport type.
+	DestinationType *string `form:"destination_type,omitempty" json:"destination_type,omitempty" xml:"destination_type,omitempty"`
 	// Whether sensitive data is included in payloads sent to this destination.
 	SensitiveData *string `form:"sensitive_data,omitempty" json:"sensitive_data,omitempty" xml:"sensitive_data,omitempty"`
-	// Configured header names. Header values are never returned.
-	Headers []*OtelDestinationHeaderResponseBody `form:"headers,omitempty" json:"headers,omitempty" xml:"headers,omitempty"`
+	// OTEL configuration. Present when destination_type is otel.
+	Otel *OtelDestinationResponseBody `form:"otel,omitempty" json:"otel,omitempty" xml:"otel,omitempty"`
 	// Creation timestamp.
 	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
 	// Last update timestamp.
@@ -156,10 +158,10 @@ type UpdateRouteResponseBody struct {
 	UpdatedAt *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
 }
 
-// ListOtelDestinationsUnauthorizedResponseBody is the type of the
-// "dataExports" service "listOtelDestinations" endpoint HTTP response body for
-// the "unauthorized" error.
-type ListOtelDestinationsUnauthorizedResponseBody struct {
+// ListDestinationsUnauthorizedResponseBody is the type of the "dataExports"
+// service "listDestinations" endpoint HTTP response body for the
+// "unauthorized" error.
+type ListDestinationsUnauthorizedResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -175,105 +177,10 @@ type ListOtelDestinationsUnauthorizedResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// ListOtelDestinationsForbiddenResponseBody is the type of the "dataExports"
-// service "listOtelDestinations" endpoint HTTP response body for the
-// "forbidden" error.
-type ListOtelDestinationsForbiddenResponseBody struct {
-	// Name is the name of this class of errors.
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-	// Is the error temporary?
-	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
-	// Is the error a timeout?
-	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
-	// Is the error a server-side fault?
-	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
-}
-
-// ListOtelDestinationsBadRequestResponseBody is the type of the "dataExports"
-// service "listOtelDestinations" endpoint HTTP response body for the
-// "bad_request" error.
-type ListOtelDestinationsBadRequestResponseBody struct {
-	// Name is the name of this class of errors.
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-	// Is the error temporary?
-	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
-	// Is the error a timeout?
-	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
-	// Is the error a server-side fault?
-	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
-}
-
-// ListOtelDestinationsNotFoundResponseBody is the type of the "dataExports"
-// service "listOtelDestinations" endpoint HTTP response body for the
-// "not_found" error.
-type ListOtelDestinationsNotFoundResponseBody struct {
-	// Name is the name of this class of errors.
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-	// Is the error temporary?
-	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
-	// Is the error a timeout?
-	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
-	// Is the error a server-side fault?
-	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
-}
-
-// ListOtelDestinationsConflictResponseBody is the type of the "dataExports"
-// service "listOtelDestinations" endpoint HTTP response body for the
-// "conflict" error.
-type ListOtelDestinationsConflictResponseBody struct {
-	// Name is the name of this class of errors.
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-	// Is the error temporary?
-	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
-	// Is the error a timeout?
-	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
-	// Is the error a server-side fault?
-	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
-}
-
-// ListOtelDestinationsUnsupportedMediaResponseBody is the type of the
-// "dataExports" service "listOtelDestinations" endpoint HTTP response body for
-// the "unsupported_media" error.
-type ListOtelDestinationsUnsupportedMediaResponseBody struct {
-	// Name is the name of this class of errors.
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-	// Is the error temporary?
-	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
-	// Is the error a timeout?
-	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
-	// Is the error a server-side fault?
-	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
-}
-
-// ListOtelDestinationsInvalidResponseBody is the type of the "dataExports"
-// service "listOtelDestinations" endpoint HTTP response body for the "invalid"
+// ListDestinationsForbiddenResponseBody is the type of the "dataExports"
+// service "listDestinations" endpoint HTTP response body for the "forbidden"
 // error.
-type ListOtelDestinationsInvalidResponseBody struct {
+type ListDestinationsForbiddenResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -289,10 +196,294 @@ type ListOtelDestinationsInvalidResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// ListOtelDestinationsInvariantViolationResponseBody is the type of the
-// "dataExports" service "listOtelDestinations" endpoint HTTP response body for
+// ListDestinationsBadRequestResponseBody is the type of the "dataExports"
+// service "listDestinations" endpoint HTTP response body for the "bad_request"
+// error.
+type ListDestinationsBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListDestinationsNotFoundResponseBody is the type of the "dataExports"
+// service "listDestinations" endpoint HTTP response body for the "not_found"
+// error.
+type ListDestinationsNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListDestinationsConflictResponseBody is the type of the "dataExports"
+// service "listDestinations" endpoint HTTP response body for the "conflict"
+// error.
+type ListDestinationsConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListDestinationsUnsupportedMediaResponseBody is the type of the
+// "dataExports" service "listDestinations" endpoint HTTP response body for the
+// "unsupported_media" error.
+type ListDestinationsUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListDestinationsInvalidResponseBody is the type of the "dataExports" service
+// "listDestinations" endpoint HTTP response body for the "invalid" error.
+type ListDestinationsInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListDestinationsInvariantViolationResponseBody is the type of the
+// "dataExports" service "listDestinations" endpoint HTTP response body for the
+// "invariant_violation" error.
+type ListDestinationsInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListDestinationsUnexpectedResponseBody is the type of the "dataExports"
+// service "listDestinations" endpoint HTTP response body for the "unexpected"
+// error.
+type ListDestinationsUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListDestinationsGatewayErrorResponseBody is the type of the "dataExports"
+// service "listDestinations" endpoint HTTP response body for the
+// "gateway_error" error.
+type ListDestinationsGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// CreateDestinationUnauthorizedResponseBody is the type of the "dataExports"
+// service "createDestination" endpoint HTTP response body for the
+// "unauthorized" error.
+type CreateDestinationUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// CreateDestinationForbiddenResponseBody is the type of the "dataExports"
+// service "createDestination" endpoint HTTP response body for the "forbidden"
+// error.
+type CreateDestinationForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// CreateDestinationBadRequestResponseBody is the type of the "dataExports"
+// service "createDestination" endpoint HTTP response body for the
+// "bad_request" error.
+type CreateDestinationBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// CreateDestinationNotFoundResponseBody is the type of the "dataExports"
+// service "createDestination" endpoint HTTP response body for the "not_found"
+// error.
+type CreateDestinationNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// CreateDestinationConflictResponseBody is the type of the "dataExports"
+// service "createDestination" endpoint HTTP response body for the "conflict"
+// error.
+type CreateDestinationConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// CreateDestinationUnsupportedMediaResponseBody is the type of the
+// "dataExports" service "createDestination" endpoint HTTP response body for
+// the "unsupported_media" error.
+type CreateDestinationUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// CreateDestinationInvalidResponseBody is the type of the "dataExports"
+// service "createDestination" endpoint HTTP response body for the "invalid"
+// error.
+type CreateDestinationInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// CreateDestinationInvariantViolationResponseBody is the type of the
+// "dataExports" service "createDestination" endpoint HTTP response body for
 // the "invariant_violation" error.
-type ListOtelDestinationsInvariantViolationResponseBody struct {
+type CreateDestinationInvariantViolationResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -308,10 +499,10 @@ type ListOtelDestinationsInvariantViolationResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// ListOtelDestinationsUnexpectedResponseBody is the type of the "dataExports"
-// service "listOtelDestinations" endpoint HTTP response body for the
-// "unexpected" error.
-type ListOtelDestinationsUnexpectedResponseBody struct {
+// CreateDestinationUnexpectedResponseBody is the type of the "dataExports"
+// service "createDestination" endpoint HTTP response body for the "unexpected"
+// error.
+type CreateDestinationUnexpectedResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -327,10 +518,10 @@ type ListOtelDestinationsUnexpectedResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// ListOtelDestinationsGatewayErrorResponseBody is the type of the
-// "dataExports" service "listOtelDestinations" endpoint HTTP response body for
-// the "gateway_error" error.
-type ListOtelDestinationsGatewayErrorResponseBody struct {
+// CreateDestinationGatewayErrorResponseBody is the type of the "dataExports"
+// service "createDestination" endpoint HTTP response body for the
+// "gateway_error" error.
+type CreateDestinationGatewayErrorResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -346,10 +537,10 @@ type ListOtelDestinationsGatewayErrorResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// CreateOtelDestinationUnauthorizedResponseBody is the type of the
-// "dataExports" service "createOtelDestination" endpoint HTTP response body
-// for the "unauthorized" error.
-type CreateOtelDestinationUnauthorizedResponseBody struct {
+// UpdateDestinationUnauthorizedResponseBody is the type of the "dataExports"
+// service "updateDestination" endpoint HTTP response body for the
+// "unauthorized" error.
+type UpdateDestinationUnauthorizedResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -365,10 +556,10 @@ type CreateOtelDestinationUnauthorizedResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// CreateOtelDestinationForbiddenResponseBody is the type of the "dataExports"
-// service "createOtelDestination" endpoint HTTP response body for the
-// "forbidden" error.
-type CreateOtelDestinationForbiddenResponseBody struct {
+// UpdateDestinationForbiddenResponseBody is the type of the "dataExports"
+// service "updateDestination" endpoint HTTP response body for the "forbidden"
+// error.
+type UpdateDestinationForbiddenResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -384,10 +575,10 @@ type CreateOtelDestinationForbiddenResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// CreateOtelDestinationBadRequestResponseBody is the type of the "dataExports"
-// service "createOtelDestination" endpoint HTTP response body for the
+// UpdateDestinationBadRequestResponseBody is the type of the "dataExports"
+// service "updateDestination" endpoint HTTP response body for the
 // "bad_request" error.
-type CreateOtelDestinationBadRequestResponseBody struct {
+type UpdateDestinationBadRequestResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -403,10 +594,10 @@ type CreateOtelDestinationBadRequestResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// CreateOtelDestinationNotFoundResponseBody is the type of the "dataExports"
-// service "createOtelDestination" endpoint HTTP response body for the
-// "not_found" error.
-type CreateOtelDestinationNotFoundResponseBody struct {
+// UpdateDestinationNotFoundResponseBody is the type of the "dataExports"
+// service "updateDestination" endpoint HTTP response body for the "not_found"
+// error.
+type UpdateDestinationNotFoundResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -422,10 +613,10 @@ type CreateOtelDestinationNotFoundResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// CreateOtelDestinationConflictResponseBody is the type of the "dataExports"
-// service "createOtelDestination" endpoint HTTP response body for the
-// "conflict" error.
-type CreateOtelDestinationConflictResponseBody struct {
+// UpdateDestinationConflictResponseBody is the type of the "dataExports"
+// service "updateDestination" endpoint HTTP response body for the "conflict"
+// error.
+type UpdateDestinationConflictResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -441,10 +632,10 @@ type CreateOtelDestinationConflictResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// CreateOtelDestinationUnsupportedMediaResponseBody is the type of the
-// "dataExports" service "createOtelDestination" endpoint HTTP response body
-// for the "unsupported_media" error.
-type CreateOtelDestinationUnsupportedMediaResponseBody struct {
+// UpdateDestinationUnsupportedMediaResponseBody is the type of the
+// "dataExports" service "updateDestination" endpoint HTTP response body for
+// the "unsupported_media" error.
+type UpdateDestinationUnsupportedMediaResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -460,10 +651,10 @@ type CreateOtelDestinationUnsupportedMediaResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// CreateOtelDestinationInvalidResponseBody is the type of the "dataExports"
-// service "createOtelDestination" endpoint HTTP response body for the
-// "invalid" error.
-type CreateOtelDestinationInvalidResponseBody struct {
+// UpdateDestinationInvalidResponseBody is the type of the "dataExports"
+// service "updateDestination" endpoint HTTP response body for the "invalid"
+// error.
+type UpdateDestinationInvalidResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -479,10 +670,10 @@ type CreateOtelDestinationInvalidResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// CreateOtelDestinationInvariantViolationResponseBody is the type of the
-// "dataExports" service "createOtelDestination" endpoint HTTP response body
-// for the "invariant_violation" error.
-type CreateOtelDestinationInvariantViolationResponseBody struct {
+// UpdateDestinationInvariantViolationResponseBody is the type of the
+// "dataExports" service "updateDestination" endpoint HTTP response body for
+// the "invariant_violation" error.
+type UpdateDestinationInvariantViolationResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -498,10 +689,10 @@ type CreateOtelDestinationInvariantViolationResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// CreateOtelDestinationUnexpectedResponseBody is the type of the "dataExports"
-// service "createOtelDestination" endpoint HTTP response body for the
-// "unexpected" error.
-type CreateOtelDestinationUnexpectedResponseBody struct {
+// UpdateDestinationUnexpectedResponseBody is the type of the "dataExports"
+// service "updateDestination" endpoint HTTP response body for the "unexpected"
+// error.
+type UpdateDestinationUnexpectedResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -517,10 +708,10 @@ type CreateOtelDestinationUnexpectedResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// CreateOtelDestinationGatewayErrorResponseBody is the type of the
-// "dataExports" service "createOtelDestination" endpoint HTTP response body
-// for the "gateway_error" error.
-type CreateOtelDestinationGatewayErrorResponseBody struct {
+// UpdateDestinationGatewayErrorResponseBody is the type of the "dataExports"
+// service "updateDestination" endpoint HTTP response body for the
+// "gateway_error" error.
+type UpdateDestinationGatewayErrorResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -536,10 +727,10 @@ type CreateOtelDestinationGatewayErrorResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// UpdateOtelDestinationUnauthorizedResponseBody is the type of the
-// "dataExports" service "updateOtelDestination" endpoint HTTP response body
-// for the "unauthorized" error.
-type UpdateOtelDestinationUnauthorizedResponseBody struct {
+// DeleteDestinationUnauthorizedResponseBody is the type of the "dataExports"
+// service "deleteDestination" endpoint HTTP response body for the
+// "unauthorized" error.
+type DeleteDestinationUnauthorizedResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -555,10 +746,10 @@ type UpdateOtelDestinationUnauthorizedResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// UpdateOtelDestinationForbiddenResponseBody is the type of the "dataExports"
-// service "updateOtelDestination" endpoint HTTP response body for the
-// "forbidden" error.
-type UpdateOtelDestinationForbiddenResponseBody struct {
+// DeleteDestinationForbiddenResponseBody is the type of the "dataExports"
+// service "deleteDestination" endpoint HTTP response body for the "forbidden"
+// error.
+type DeleteDestinationForbiddenResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -574,10 +765,10 @@ type UpdateOtelDestinationForbiddenResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// UpdateOtelDestinationBadRequestResponseBody is the type of the "dataExports"
-// service "updateOtelDestination" endpoint HTTP response body for the
+// DeleteDestinationBadRequestResponseBody is the type of the "dataExports"
+// service "deleteDestination" endpoint HTTP response body for the
 // "bad_request" error.
-type UpdateOtelDestinationBadRequestResponseBody struct {
+type DeleteDestinationBadRequestResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -593,10 +784,10 @@ type UpdateOtelDestinationBadRequestResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// UpdateOtelDestinationNotFoundResponseBody is the type of the "dataExports"
-// service "updateOtelDestination" endpoint HTTP response body for the
-// "not_found" error.
-type UpdateOtelDestinationNotFoundResponseBody struct {
+// DeleteDestinationNotFoundResponseBody is the type of the "dataExports"
+// service "deleteDestination" endpoint HTTP response body for the "not_found"
+// error.
+type DeleteDestinationNotFoundResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -612,10 +803,10 @@ type UpdateOtelDestinationNotFoundResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// UpdateOtelDestinationConflictResponseBody is the type of the "dataExports"
-// service "updateOtelDestination" endpoint HTTP response body for the
-// "conflict" error.
-type UpdateOtelDestinationConflictResponseBody struct {
+// DeleteDestinationConflictResponseBody is the type of the "dataExports"
+// service "deleteDestination" endpoint HTTP response body for the "conflict"
+// error.
+type DeleteDestinationConflictResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -631,10 +822,10 @@ type UpdateOtelDestinationConflictResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// UpdateOtelDestinationUnsupportedMediaResponseBody is the type of the
-// "dataExports" service "updateOtelDestination" endpoint HTTP response body
-// for the "unsupported_media" error.
-type UpdateOtelDestinationUnsupportedMediaResponseBody struct {
+// DeleteDestinationUnsupportedMediaResponseBody is the type of the
+// "dataExports" service "deleteDestination" endpoint HTTP response body for
+// the "unsupported_media" error.
+type DeleteDestinationUnsupportedMediaResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -650,10 +841,10 @@ type UpdateOtelDestinationUnsupportedMediaResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// UpdateOtelDestinationInvalidResponseBody is the type of the "dataExports"
-// service "updateOtelDestination" endpoint HTTP response body for the
-// "invalid" error.
-type UpdateOtelDestinationInvalidResponseBody struct {
+// DeleteDestinationInvalidResponseBody is the type of the "dataExports"
+// service "deleteDestination" endpoint HTTP response body for the "invalid"
+// error.
+type DeleteDestinationInvalidResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -669,10 +860,10 @@ type UpdateOtelDestinationInvalidResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// UpdateOtelDestinationInvariantViolationResponseBody is the type of the
-// "dataExports" service "updateOtelDestination" endpoint HTTP response body
-// for the "invariant_violation" error.
-type UpdateOtelDestinationInvariantViolationResponseBody struct {
+// DeleteDestinationInvariantViolationResponseBody is the type of the
+// "dataExports" service "deleteDestination" endpoint HTTP response body for
+// the "invariant_violation" error.
+type DeleteDestinationInvariantViolationResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -688,10 +879,10 @@ type UpdateOtelDestinationInvariantViolationResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// UpdateOtelDestinationUnexpectedResponseBody is the type of the "dataExports"
-// service "updateOtelDestination" endpoint HTTP response body for the
-// "unexpected" error.
-type UpdateOtelDestinationUnexpectedResponseBody struct {
+// DeleteDestinationUnexpectedResponseBody is the type of the "dataExports"
+// service "deleteDestination" endpoint HTTP response body for the "unexpected"
+// error.
+type DeleteDestinationUnexpectedResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -707,200 +898,10 @@ type UpdateOtelDestinationUnexpectedResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// UpdateOtelDestinationGatewayErrorResponseBody is the type of the
-// "dataExports" service "updateOtelDestination" endpoint HTTP response body
-// for the "gateway_error" error.
-type UpdateOtelDestinationGatewayErrorResponseBody struct {
-	// Name is the name of this class of errors.
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-	// Is the error temporary?
-	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
-	// Is the error a timeout?
-	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
-	// Is the error a server-side fault?
-	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
-}
-
-// DeleteOtelDestinationUnauthorizedResponseBody is the type of the
-// "dataExports" service "deleteOtelDestination" endpoint HTTP response body
-// for the "unauthorized" error.
-type DeleteOtelDestinationUnauthorizedResponseBody struct {
-	// Name is the name of this class of errors.
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-	// Is the error temporary?
-	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
-	// Is the error a timeout?
-	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
-	// Is the error a server-side fault?
-	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
-}
-
-// DeleteOtelDestinationForbiddenResponseBody is the type of the "dataExports"
-// service "deleteOtelDestination" endpoint HTTP response body for the
-// "forbidden" error.
-type DeleteOtelDestinationForbiddenResponseBody struct {
-	// Name is the name of this class of errors.
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-	// Is the error temporary?
-	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
-	// Is the error a timeout?
-	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
-	// Is the error a server-side fault?
-	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
-}
-
-// DeleteOtelDestinationBadRequestResponseBody is the type of the "dataExports"
-// service "deleteOtelDestination" endpoint HTTP response body for the
-// "bad_request" error.
-type DeleteOtelDestinationBadRequestResponseBody struct {
-	// Name is the name of this class of errors.
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-	// Is the error temporary?
-	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
-	// Is the error a timeout?
-	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
-	// Is the error a server-side fault?
-	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
-}
-
-// DeleteOtelDestinationNotFoundResponseBody is the type of the "dataExports"
-// service "deleteOtelDestination" endpoint HTTP response body for the
-// "not_found" error.
-type DeleteOtelDestinationNotFoundResponseBody struct {
-	// Name is the name of this class of errors.
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-	// Is the error temporary?
-	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
-	// Is the error a timeout?
-	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
-	// Is the error a server-side fault?
-	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
-}
-
-// DeleteOtelDestinationConflictResponseBody is the type of the "dataExports"
-// service "deleteOtelDestination" endpoint HTTP response body for the
-// "conflict" error.
-type DeleteOtelDestinationConflictResponseBody struct {
-	// Name is the name of this class of errors.
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-	// Is the error temporary?
-	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
-	// Is the error a timeout?
-	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
-	// Is the error a server-side fault?
-	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
-}
-
-// DeleteOtelDestinationUnsupportedMediaResponseBody is the type of the
-// "dataExports" service "deleteOtelDestination" endpoint HTTP response body
-// for the "unsupported_media" error.
-type DeleteOtelDestinationUnsupportedMediaResponseBody struct {
-	// Name is the name of this class of errors.
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-	// Is the error temporary?
-	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
-	// Is the error a timeout?
-	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
-	// Is the error a server-side fault?
-	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
-}
-
-// DeleteOtelDestinationInvalidResponseBody is the type of the "dataExports"
-// service "deleteOtelDestination" endpoint HTTP response body for the
-// "invalid" error.
-type DeleteOtelDestinationInvalidResponseBody struct {
-	// Name is the name of this class of errors.
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-	// Is the error temporary?
-	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
-	// Is the error a timeout?
-	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
-	// Is the error a server-side fault?
-	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
-}
-
-// DeleteOtelDestinationInvariantViolationResponseBody is the type of the
-// "dataExports" service "deleteOtelDestination" endpoint HTTP response body
-// for the "invariant_violation" error.
-type DeleteOtelDestinationInvariantViolationResponseBody struct {
-	// Name is the name of this class of errors.
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-	// Is the error temporary?
-	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
-	// Is the error a timeout?
-	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
-	// Is the error a server-side fault?
-	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
-}
-
-// DeleteOtelDestinationUnexpectedResponseBody is the type of the "dataExports"
-// service "deleteOtelDestination" endpoint HTTP response body for the
-// "unexpected" error.
-type DeleteOtelDestinationUnexpectedResponseBody struct {
-	// Name is the name of this class of errors.
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-	// Is the error temporary?
-	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
-	// Is the error a timeout?
-	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
-	// Is the error a server-side fault?
-	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
-}
-
-// DeleteOtelDestinationGatewayErrorResponseBody is the type of the
-// "dataExports" service "deleteOtelDestination" endpoint HTTP response body
-// for the "gateway_error" error.
-type DeleteOtelDestinationGatewayErrorResponseBody struct {
+// DeleteDestinationGatewayErrorResponseBody is the type of the "dataExports"
+// service "deleteDestination" endpoint HTTP response body for the
+// "gateway_error" error.
+type DeleteDestinationGatewayErrorResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -1644,24 +1645,33 @@ type DeleteRouteGatewayErrorResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// OtelDestinationResponseBody is used to define fields on response body types.
-type OtelDestinationResponseBody struct {
+// DestinationResponseBody is used to define fields on response body types.
+type DestinationResponseBody struct {
 	// Destination ID.
 	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
 	// Project that owns the destination.
 	ProjectID *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
 	// Human-readable destination name.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// OTLP base URL. Signal-specific paths are appended during delivery.
-	EndpointURL *string `form:"endpoint_url,omitempty" json:"endpoint_url,omitempty" xml:"endpoint_url,omitempty"`
+	// Destination transport type.
+	DestinationType *string `form:"destination_type,omitempty" json:"destination_type,omitempty" xml:"destination_type,omitempty"`
 	// Whether sensitive data is included in payloads sent to this destination.
 	SensitiveData *string `form:"sensitive_data,omitempty" json:"sensitive_data,omitempty" xml:"sensitive_data,omitempty"`
-	// Configured header names. Header values are never returned.
-	Headers []*OtelDestinationHeaderResponseBody `form:"headers,omitempty" json:"headers,omitempty" xml:"headers,omitempty"`
+	// OTEL configuration. Present when destination_type is otel.
+	Otel *OtelDestinationResponseBody `form:"otel,omitempty" json:"otel,omitempty" xml:"otel,omitempty"`
 	// Creation timestamp.
 	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
 	// Last update timestamp.
 	UpdatedAt *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
+}
+
+// OtelDestinationResponseBody is used to define fields on response body types.
+type OtelDestinationResponseBody struct {
+	// OTEL collector endpoint URL. Transport-specific paths may be appended during
+	// delivery.
+	EndpointURL *string `form:"endpoint_url,omitempty" json:"endpoint_url,omitempty" xml:"endpoint_url,omitempty"`
+	// Configured HTTP header names. Header values are never returned.
+	Headers []*OtelDestinationHeaderResponseBody `form:"headers,omitempty" json:"headers,omitempty" xml:"headers,omitempty"`
 }
 
 // OtelDestinationHeaderResponseBody is used to define fields on response body
@@ -1673,6 +1683,15 @@ type OtelDestinationHeaderResponseBody struct {
 	HasValue *bool `form:"has_value,omitempty" json:"has_value,omitempty" xml:"has_value,omitempty"`
 }
 
+// CreateOtelDestinationInputRequestBody is used to define fields on request
+// body types.
+type CreateOtelDestinationInputRequestBody struct {
+	// OTEL collector endpoint URL.
+	EndpointURL string `form:"endpoint_url" json:"endpoint_url" xml:"endpoint_url"`
+	// Write-only HTTP headers.
+	Headers []*CreateOtelDestinationHeaderInputRequestBody `form:"headers" json:"headers" xml:"headers"`
+}
+
 // CreateOtelDestinationHeaderInputRequestBody is used to define fields on
 // request body types.
 type CreateOtelDestinationHeaderInputRequestBody struct {
@@ -1682,9 +1701,18 @@ type CreateOtelDestinationHeaderInputRequestBody struct {
 	Value string `form:"value" json:"value" xml:"value"`
 }
 
-// OtelDestinationHeaderInputRequestBody is used to define fields on request
+// UpdateOtelDestinationInputRequestBody is used to define fields on request
 // body types.
-type OtelDestinationHeaderInputRequestBody struct {
+type UpdateOtelDestinationInputRequestBody struct {
+	// OTEL collector endpoint URL.
+	EndpointURL string `form:"endpoint_url" json:"endpoint_url" xml:"endpoint_url"`
+	// Complete HTTP header-name set for the OTEL destination.
+	Headers []*UpdateOtelDestinationHeaderInputRequestBody `form:"headers" json:"headers" xml:"headers"`
+}
+
+// UpdateOtelDestinationHeaderInputRequestBody is used to define fields on
+// request body types.
+type UpdateOtelDestinationHeaderInputRequestBody struct {
 	// Header name.
 	Name string `form:"name" json:"name" xml:"name"`
 	// Write-only header value. Omit to preserve an existing value; provide an
@@ -1711,13 +1739,13 @@ type DataExportRouteResponseBody struct {
 	UpdatedAt *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
 }
 
-// NewCreateOtelDestinationRequestBody builds the HTTP request body from the
-// payload of the "createOtelDestination" endpoint of the "dataExports" service.
-func NewCreateOtelDestinationRequestBody(p *dataexports.CreateOtelDestinationPayload) *CreateOtelDestinationRequestBody {
-	body := &CreateOtelDestinationRequestBody{
-		Name:          p.Name,
-		EndpointURL:   p.EndpointURL,
-		SensitiveData: p.SensitiveData,
+// NewCreateDestinationRequestBody builds the HTTP request body from the
+// payload of the "createDestination" endpoint of the "dataExports" service.
+func NewCreateDestinationRequestBody(p *dataexports.CreateDestinationPayload) *CreateDestinationRequestBody {
+	body := &CreateDestinationRequestBody{
+		Name:            p.Name,
+		DestinationType: p.DestinationType,
+		SensitiveData:   p.SensitiveData,
 	}
 	{
 		var zero string
@@ -1725,40 +1753,22 @@ func NewCreateOtelDestinationRequestBody(p *dataexports.CreateOtelDestinationPay
 			body.SensitiveData = "exclude"
 		}
 	}
-	if p.Headers != nil {
-		body.Headers = make([]*CreateOtelDestinationHeaderInputRequestBody, len(p.Headers))
-		for i, val := range p.Headers {
-			if val == nil {
-				body.Headers[i] = nil
-				continue
-			}
-			body.Headers[i] = marshalDataexportsCreateOtelDestinationHeaderInputToCreateOtelDestinationHeaderInputRequestBody(val)
-		}
-	} else {
-		body.Headers = []*CreateOtelDestinationHeaderInputRequestBody{}
+	if p.Otel != nil {
+		body.Otel = marshalDataexportsCreateOtelDestinationInputToCreateOtelDestinationInputRequestBody(p.Otel)
 	}
 	return body
 }
 
-// NewUpdateOtelDestinationRequestBody builds the HTTP request body from the
-// payload of the "updateOtelDestination" endpoint of the "dataExports" service.
-func NewUpdateOtelDestinationRequestBody(p *dataexports.UpdateOtelDestinationPayload) *UpdateOtelDestinationRequestBody {
-	body := &UpdateOtelDestinationRequestBody{
-		Name:          p.Name,
-		EndpointURL:   p.EndpointURL,
-		SensitiveData: p.SensitiveData,
+// NewUpdateDestinationRequestBody builds the HTTP request body from the
+// payload of the "updateDestination" endpoint of the "dataExports" service.
+func NewUpdateDestinationRequestBody(p *dataexports.UpdateDestinationPayload) *UpdateDestinationRequestBody {
+	body := &UpdateDestinationRequestBody{
+		Name:            p.Name,
+		DestinationType: p.DestinationType,
+		SensitiveData:   p.SensitiveData,
 	}
-	if p.Headers != nil {
-		body.Headers = make([]*OtelDestinationHeaderInputRequestBody, len(p.Headers))
-		for i, val := range p.Headers {
-			if val == nil {
-				body.Headers[i] = nil
-				continue
-			}
-			body.Headers[i] = marshalDataexportsOtelDestinationHeaderInputToOtelDestinationHeaderInputRequestBody(val)
-		}
-	} else {
-		body.Headers = []*OtelDestinationHeaderInputRequestBody{}
+	if p.Otel != nil {
+		body.Otel = marshalDataexportsUpdateOtelDestinationInputToUpdateOtelDestinationInputRequestBody(p.Otel)
 	}
 	return body
 }
@@ -1791,25 +1801,25 @@ func NewUpdateRouteRequestBody(p *dataexports.UpdateRoutePayload) *UpdateRouteRe
 	return body
 }
 
-// NewListOtelDestinationsResultOK builds a "dataExports" service
-// "listOtelDestinations" endpoint result from a HTTP "OK" response.
-func NewListOtelDestinationsResultOK(body *ListOtelDestinationsResponseBody) *dataexports.ListOtelDestinationsResult {
-	v := &dataexports.ListOtelDestinationsResult{}
-	v.Destinations = make([]*dataexports.OtelDestination, len(body.Destinations))
+// NewListDestinationsResultOK builds a "dataExports" service
+// "listDestinations" endpoint result from a HTTP "OK" response.
+func NewListDestinationsResultOK(body *ListDestinationsResponseBody) *dataexports.ListDestinationsResult {
+	v := &dataexports.ListDestinationsResult{}
+	v.Destinations = make([]*dataexports.Destination, len(body.Destinations))
 	for i, val := range body.Destinations {
 		if val == nil {
 			v.Destinations[i] = nil
 			continue
 		}
-		v.Destinations[i] = unmarshalOtelDestinationResponseBodyToDataexportsOtelDestination(val)
+		v.Destinations[i] = unmarshalDestinationResponseBodyToDataexportsDestination(val)
 	}
 
 	return v
 }
 
-// NewListOtelDestinationsUnauthorized builds a dataExports service
-// listOtelDestinations endpoint unauthorized error.
-func NewListOtelDestinationsUnauthorized(body *ListOtelDestinationsUnauthorizedResponseBody) *goa.ServiceError {
+// NewListDestinationsUnauthorized builds a dataExports service
+// listDestinations endpoint unauthorized error.
+func NewListDestinationsUnauthorized(body *ListDestinationsUnauthorizedResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -1822,9 +1832,9 @@ func NewListOtelDestinationsUnauthorized(body *ListOtelDestinationsUnauthorizedR
 	return v
 }
 
-// NewListOtelDestinationsForbidden builds a dataExports service
-// listOtelDestinations endpoint forbidden error.
-func NewListOtelDestinationsForbidden(body *ListOtelDestinationsForbiddenResponseBody) *goa.ServiceError {
+// NewListDestinationsForbidden builds a dataExports service listDestinations
+// endpoint forbidden error.
+func NewListDestinationsForbidden(body *ListDestinationsForbiddenResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -1837,9 +1847,9 @@ func NewListOtelDestinationsForbidden(body *ListOtelDestinationsForbiddenRespons
 	return v
 }
 
-// NewListOtelDestinationsBadRequest builds a dataExports service
-// listOtelDestinations endpoint bad_request error.
-func NewListOtelDestinationsBadRequest(body *ListOtelDestinationsBadRequestResponseBody) *goa.ServiceError {
+// NewListDestinationsBadRequest builds a dataExports service listDestinations
+// endpoint bad_request error.
+func NewListDestinationsBadRequest(body *ListDestinationsBadRequestResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -1852,9 +1862,9 @@ func NewListOtelDestinationsBadRequest(body *ListOtelDestinationsBadRequestRespo
 	return v
 }
 
-// NewListOtelDestinationsNotFound builds a dataExports service
-// listOtelDestinations endpoint not_found error.
-func NewListOtelDestinationsNotFound(body *ListOtelDestinationsNotFoundResponseBody) *goa.ServiceError {
+// NewListDestinationsNotFound builds a dataExports service listDestinations
+// endpoint not_found error.
+func NewListDestinationsNotFound(body *ListDestinationsNotFoundResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -1867,9 +1877,9 @@ func NewListOtelDestinationsNotFound(body *ListOtelDestinationsNotFoundResponseB
 	return v
 }
 
-// NewListOtelDestinationsConflict builds a dataExports service
-// listOtelDestinations endpoint conflict error.
-func NewListOtelDestinationsConflict(body *ListOtelDestinationsConflictResponseBody) *goa.ServiceError {
+// NewListDestinationsConflict builds a dataExports service listDestinations
+// endpoint conflict error.
+func NewListDestinationsConflict(body *ListDestinationsConflictResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -1882,9 +1892,9 @@ func NewListOtelDestinationsConflict(body *ListOtelDestinationsConflictResponseB
 	return v
 }
 
-// NewListOtelDestinationsUnsupportedMedia builds a dataExports service
-// listOtelDestinations endpoint unsupported_media error.
-func NewListOtelDestinationsUnsupportedMedia(body *ListOtelDestinationsUnsupportedMediaResponseBody) *goa.ServiceError {
+// NewListDestinationsUnsupportedMedia builds a dataExports service
+// listDestinations endpoint unsupported_media error.
+func NewListDestinationsUnsupportedMedia(body *ListDestinationsUnsupportedMediaResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -1897,9 +1907,9 @@ func NewListOtelDestinationsUnsupportedMedia(body *ListOtelDestinationsUnsupport
 	return v
 }
 
-// NewListOtelDestinationsInvalid builds a dataExports service
-// listOtelDestinations endpoint invalid error.
-func NewListOtelDestinationsInvalid(body *ListOtelDestinationsInvalidResponseBody) *goa.ServiceError {
+// NewListDestinationsInvalid builds a dataExports service listDestinations
+// endpoint invalid error.
+func NewListDestinationsInvalid(body *ListDestinationsInvalidResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -1912,9 +1922,9 @@ func NewListOtelDestinationsInvalid(body *ListOtelDestinationsInvalidResponseBod
 	return v
 }
 
-// NewListOtelDestinationsInvariantViolation builds a dataExports service
-// listOtelDestinations endpoint invariant_violation error.
-func NewListOtelDestinationsInvariantViolation(body *ListOtelDestinationsInvariantViolationResponseBody) *goa.ServiceError {
+// NewListDestinationsInvariantViolation builds a dataExports service
+// listDestinations endpoint invariant_violation error.
+func NewListDestinationsInvariantViolation(body *ListDestinationsInvariantViolationResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -1927,9 +1937,9 @@ func NewListOtelDestinationsInvariantViolation(body *ListOtelDestinationsInvaria
 	return v
 }
 
-// NewListOtelDestinationsUnexpected builds a dataExports service
-// listOtelDestinations endpoint unexpected error.
-func NewListOtelDestinationsUnexpected(body *ListOtelDestinationsUnexpectedResponseBody) *goa.ServiceError {
+// NewListDestinationsUnexpected builds a dataExports service listDestinations
+// endpoint unexpected error.
+func NewListDestinationsUnexpected(body *ListDestinationsUnexpectedResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -1942,9 +1952,9 @@ func NewListOtelDestinationsUnexpected(body *ListOtelDestinationsUnexpectedRespo
 	return v
 }
 
-// NewListOtelDestinationsGatewayError builds a dataExports service
-// listOtelDestinations endpoint gateway_error error.
-func NewListOtelDestinationsGatewayError(body *ListOtelDestinationsGatewayErrorResponseBody) *goa.ServiceError {
+// NewListDestinationsGatewayError builds a dataExports service
+// listDestinations endpoint gateway_error error.
+func NewListDestinationsGatewayError(body *ListDestinationsGatewayErrorResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -1957,33 +1967,28 @@ func NewListOtelDestinationsGatewayError(body *ListOtelDestinationsGatewayErrorR
 	return v
 }
 
-// NewCreateOtelDestinationOtelDestinationOK builds a "dataExports" service
-// "createOtelDestination" endpoint result from a HTTP "OK" response.
-func NewCreateOtelDestinationOtelDestinationOK(body *CreateOtelDestinationResponseBody) *dataexports.OtelDestination {
-	v := &dataexports.OtelDestination{
-		ID:            *body.ID,
-		ProjectID:     *body.ProjectID,
-		Name:          *body.Name,
-		EndpointURL:   *body.EndpointURL,
-		SensitiveData: *body.SensitiveData,
-		CreatedAt:     *body.CreatedAt,
-		UpdatedAt:     *body.UpdatedAt,
+// NewCreateDestinationDestinationOK builds a "dataExports" service
+// "createDestination" endpoint result from a HTTP "OK" response.
+func NewCreateDestinationDestinationOK(body *CreateDestinationResponseBody) *dataexports.Destination {
+	v := &dataexports.Destination{
+		ID:              *body.ID,
+		ProjectID:       *body.ProjectID,
+		Name:            *body.Name,
+		DestinationType: *body.DestinationType,
+		SensitiveData:   *body.SensitiveData,
+		CreatedAt:       *body.CreatedAt,
+		UpdatedAt:       *body.UpdatedAt,
 	}
-	v.Headers = make([]*dataexports.OtelDestinationHeader, len(body.Headers))
-	for i, val := range body.Headers {
-		if val == nil {
-			v.Headers[i] = nil
-			continue
-		}
-		v.Headers[i] = unmarshalOtelDestinationHeaderResponseBodyToDataexportsOtelDestinationHeader(val)
+	if body.Otel != nil {
+		v.Otel = unmarshalOtelDestinationResponseBodyToDataexportsOtelDestination(body.Otel)
 	}
 
 	return v
 }
 
-// NewCreateOtelDestinationUnauthorized builds a dataExports service
-// createOtelDestination endpoint unauthorized error.
-func NewCreateOtelDestinationUnauthorized(body *CreateOtelDestinationUnauthorizedResponseBody) *goa.ServiceError {
+// NewCreateDestinationUnauthorized builds a dataExports service
+// createDestination endpoint unauthorized error.
+func NewCreateDestinationUnauthorized(body *CreateDestinationUnauthorizedResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -1996,9 +2001,9 @@ func NewCreateOtelDestinationUnauthorized(body *CreateOtelDestinationUnauthorize
 	return v
 }
 
-// NewCreateOtelDestinationForbidden builds a dataExports service
-// createOtelDestination endpoint forbidden error.
-func NewCreateOtelDestinationForbidden(body *CreateOtelDestinationForbiddenResponseBody) *goa.ServiceError {
+// NewCreateDestinationForbidden builds a dataExports service createDestination
+// endpoint forbidden error.
+func NewCreateDestinationForbidden(body *CreateDestinationForbiddenResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -2011,9 +2016,9 @@ func NewCreateOtelDestinationForbidden(body *CreateOtelDestinationForbiddenRespo
 	return v
 }
 
-// NewCreateOtelDestinationBadRequest builds a dataExports service
-// createOtelDestination endpoint bad_request error.
-func NewCreateOtelDestinationBadRequest(body *CreateOtelDestinationBadRequestResponseBody) *goa.ServiceError {
+// NewCreateDestinationBadRequest builds a dataExports service
+// createDestination endpoint bad_request error.
+func NewCreateDestinationBadRequest(body *CreateDestinationBadRequestResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -2026,9 +2031,9 @@ func NewCreateOtelDestinationBadRequest(body *CreateOtelDestinationBadRequestRes
 	return v
 }
 
-// NewCreateOtelDestinationNotFound builds a dataExports service
-// createOtelDestination endpoint not_found error.
-func NewCreateOtelDestinationNotFound(body *CreateOtelDestinationNotFoundResponseBody) *goa.ServiceError {
+// NewCreateDestinationNotFound builds a dataExports service createDestination
+// endpoint not_found error.
+func NewCreateDestinationNotFound(body *CreateDestinationNotFoundResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -2041,9 +2046,9 @@ func NewCreateOtelDestinationNotFound(body *CreateOtelDestinationNotFoundRespons
 	return v
 }
 
-// NewCreateOtelDestinationConflict builds a dataExports service
-// createOtelDestination endpoint conflict error.
-func NewCreateOtelDestinationConflict(body *CreateOtelDestinationConflictResponseBody) *goa.ServiceError {
+// NewCreateDestinationConflict builds a dataExports service createDestination
+// endpoint conflict error.
+func NewCreateDestinationConflict(body *CreateDestinationConflictResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -2056,9 +2061,9 @@ func NewCreateOtelDestinationConflict(body *CreateOtelDestinationConflictRespons
 	return v
 }
 
-// NewCreateOtelDestinationUnsupportedMedia builds a dataExports service
-// createOtelDestination endpoint unsupported_media error.
-func NewCreateOtelDestinationUnsupportedMedia(body *CreateOtelDestinationUnsupportedMediaResponseBody) *goa.ServiceError {
+// NewCreateDestinationUnsupportedMedia builds a dataExports service
+// createDestination endpoint unsupported_media error.
+func NewCreateDestinationUnsupportedMedia(body *CreateDestinationUnsupportedMediaResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -2071,9 +2076,9 @@ func NewCreateOtelDestinationUnsupportedMedia(body *CreateOtelDestinationUnsuppo
 	return v
 }
 
-// NewCreateOtelDestinationInvalid builds a dataExports service
-// createOtelDestination endpoint invalid error.
-func NewCreateOtelDestinationInvalid(body *CreateOtelDestinationInvalidResponseBody) *goa.ServiceError {
+// NewCreateDestinationInvalid builds a dataExports service createDestination
+// endpoint invalid error.
+func NewCreateDestinationInvalid(body *CreateDestinationInvalidResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -2086,9 +2091,9 @@ func NewCreateOtelDestinationInvalid(body *CreateOtelDestinationInvalidResponseB
 	return v
 }
 
-// NewCreateOtelDestinationInvariantViolation builds a dataExports service
-// createOtelDestination endpoint invariant_violation error.
-func NewCreateOtelDestinationInvariantViolation(body *CreateOtelDestinationInvariantViolationResponseBody) *goa.ServiceError {
+// NewCreateDestinationInvariantViolation builds a dataExports service
+// createDestination endpoint invariant_violation error.
+func NewCreateDestinationInvariantViolation(body *CreateDestinationInvariantViolationResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -2101,9 +2106,9 @@ func NewCreateOtelDestinationInvariantViolation(body *CreateOtelDestinationInvar
 	return v
 }
 
-// NewCreateOtelDestinationUnexpected builds a dataExports service
-// createOtelDestination endpoint unexpected error.
-func NewCreateOtelDestinationUnexpected(body *CreateOtelDestinationUnexpectedResponseBody) *goa.ServiceError {
+// NewCreateDestinationUnexpected builds a dataExports service
+// createDestination endpoint unexpected error.
+func NewCreateDestinationUnexpected(body *CreateDestinationUnexpectedResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -2116,9 +2121,9 @@ func NewCreateOtelDestinationUnexpected(body *CreateOtelDestinationUnexpectedRes
 	return v
 }
 
-// NewCreateOtelDestinationGatewayError builds a dataExports service
-// createOtelDestination endpoint gateway_error error.
-func NewCreateOtelDestinationGatewayError(body *CreateOtelDestinationGatewayErrorResponseBody) *goa.ServiceError {
+// NewCreateDestinationGatewayError builds a dataExports service
+// createDestination endpoint gateway_error error.
+func NewCreateDestinationGatewayError(body *CreateDestinationGatewayErrorResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -2131,33 +2136,28 @@ func NewCreateOtelDestinationGatewayError(body *CreateOtelDestinationGatewayErro
 	return v
 }
 
-// NewUpdateOtelDestinationOtelDestinationOK builds a "dataExports" service
-// "updateOtelDestination" endpoint result from a HTTP "OK" response.
-func NewUpdateOtelDestinationOtelDestinationOK(body *UpdateOtelDestinationResponseBody) *dataexports.OtelDestination {
-	v := &dataexports.OtelDestination{
-		ID:            *body.ID,
-		ProjectID:     *body.ProjectID,
-		Name:          *body.Name,
-		EndpointURL:   *body.EndpointURL,
-		SensitiveData: *body.SensitiveData,
-		CreatedAt:     *body.CreatedAt,
-		UpdatedAt:     *body.UpdatedAt,
+// NewUpdateDestinationDestinationOK builds a "dataExports" service
+// "updateDestination" endpoint result from a HTTP "OK" response.
+func NewUpdateDestinationDestinationOK(body *UpdateDestinationResponseBody) *dataexports.Destination {
+	v := &dataexports.Destination{
+		ID:              *body.ID,
+		ProjectID:       *body.ProjectID,
+		Name:            *body.Name,
+		DestinationType: *body.DestinationType,
+		SensitiveData:   *body.SensitiveData,
+		CreatedAt:       *body.CreatedAt,
+		UpdatedAt:       *body.UpdatedAt,
 	}
-	v.Headers = make([]*dataexports.OtelDestinationHeader, len(body.Headers))
-	for i, val := range body.Headers {
-		if val == nil {
-			v.Headers[i] = nil
-			continue
-		}
-		v.Headers[i] = unmarshalOtelDestinationHeaderResponseBodyToDataexportsOtelDestinationHeader(val)
+	if body.Otel != nil {
+		v.Otel = unmarshalOtelDestinationResponseBodyToDataexportsOtelDestination(body.Otel)
 	}
 
 	return v
 }
 
-// NewUpdateOtelDestinationUnauthorized builds a dataExports service
-// updateOtelDestination endpoint unauthorized error.
-func NewUpdateOtelDestinationUnauthorized(body *UpdateOtelDestinationUnauthorizedResponseBody) *goa.ServiceError {
+// NewUpdateDestinationUnauthorized builds a dataExports service
+// updateDestination endpoint unauthorized error.
+func NewUpdateDestinationUnauthorized(body *UpdateDestinationUnauthorizedResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -2170,9 +2170,9 @@ func NewUpdateOtelDestinationUnauthorized(body *UpdateOtelDestinationUnauthorize
 	return v
 }
 
-// NewUpdateOtelDestinationForbidden builds a dataExports service
-// updateOtelDestination endpoint forbidden error.
-func NewUpdateOtelDestinationForbidden(body *UpdateOtelDestinationForbiddenResponseBody) *goa.ServiceError {
+// NewUpdateDestinationForbidden builds a dataExports service updateDestination
+// endpoint forbidden error.
+func NewUpdateDestinationForbidden(body *UpdateDestinationForbiddenResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -2185,9 +2185,9 @@ func NewUpdateOtelDestinationForbidden(body *UpdateOtelDestinationForbiddenRespo
 	return v
 }
 
-// NewUpdateOtelDestinationBadRequest builds a dataExports service
-// updateOtelDestination endpoint bad_request error.
-func NewUpdateOtelDestinationBadRequest(body *UpdateOtelDestinationBadRequestResponseBody) *goa.ServiceError {
+// NewUpdateDestinationBadRequest builds a dataExports service
+// updateDestination endpoint bad_request error.
+func NewUpdateDestinationBadRequest(body *UpdateDestinationBadRequestResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -2200,9 +2200,9 @@ func NewUpdateOtelDestinationBadRequest(body *UpdateOtelDestinationBadRequestRes
 	return v
 }
 
-// NewUpdateOtelDestinationNotFound builds a dataExports service
-// updateOtelDestination endpoint not_found error.
-func NewUpdateOtelDestinationNotFound(body *UpdateOtelDestinationNotFoundResponseBody) *goa.ServiceError {
+// NewUpdateDestinationNotFound builds a dataExports service updateDestination
+// endpoint not_found error.
+func NewUpdateDestinationNotFound(body *UpdateDestinationNotFoundResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -2215,9 +2215,9 @@ func NewUpdateOtelDestinationNotFound(body *UpdateOtelDestinationNotFoundRespons
 	return v
 }
 
-// NewUpdateOtelDestinationConflict builds a dataExports service
-// updateOtelDestination endpoint conflict error.
-func NewUpdateOtelDestinationConflict(body *UpdateOtelDestinationConflictResponseBody) *goa.ServiceError {
+// NewUpdateDestinationConflict builds a dataExports service updateDestination
+// endpoint conflict error.
+func NewUpdateDestinationConflict(body *UpdateDestinationConflictResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -2230,9 +2230,9 @@ func NewUpdateOtelDestinationConflict(body *UpdateOtelDestinationConflictRespons
 	return v
 }
 
-// NewUpdateOtelDestinationUnsupportedMedia builds a dataExports service
-// updateOtelDestination endpoint unsupported_media error.
-func NewUpdateOtelDestinationUnsupportedMedia(body *UpdateOtelDestinationUnsupportedMediaResponseBody) *goa.ServiceError {
+// NewUpdateDestinationUnsupportedMedia builds a dataExports service
+// updateDestination endpoint unsupported_media error.
+func NewUpdateDestinationUnsupportedMedia(body *UpdateDestinationUnsupportedMediaResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -2245,9 +2245,9 @@ func NewUpdateOtelDestinationUnsupportedMedia(body *UpdateOtelDestinationUnsuppo
 	return v
 }
 
-// NewUpdateOtelDestinationInvalid builds a dataExports service
-// updateOtelDestination endpoint invalid error.
-func NewUpdateOtelDestinationInvalid(body *UpdateOtelDestinationInvalidResponseBody) *goa.ServiceError {
+// NewUpdateDestinationInvalid builds a dataExports service updateDestination
+// endpoint invalid error.
+func NewUpdateDestinationInvalid(body *UpdateDestinationInvalidResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -2260,9 +2260,9 @@ func NewUpdateOtelDestinationInvalid(body *UpdateOtelDestinationInvalidResponseB
 	return v
 }
 
-// NewUpdateOtelDestinationInvariantViolation builds a dataExports service
-// updateOtelDestination endpoint invariant_violation error.
-func NewUpdateOtelDestinationInvariantViolation(body *UpdateOtelDestinationInvariantViolationResponseBody) *goa.ServiceError {
+// NewUpdateDestinationInvariantViolation builds a dataExports service
+// updateDestination endpoint invariant_violation error.
+func NewUpdateDestinationInvariantViolation(body *UpdateDestinationInvariantViolationResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -2275,9 +2275,9 @@ func NewUpdateOtelDestinationInvariantViolation(body *UpdateOtelDestinationInvar
 	return v
 }
 
-// NewUpdateOtelDestinationUnexpected builds a dataExports service
-// updateOtelDestination endpoint unexpected error.
-func NewUpdateOtelDestinationUnexpected(body *UpdateOtelDestinationUnexpectedResponseBody) *goa.ServiceError {
+// NewUpdateDestinationUnexpected builds a dataExports service
+// updateDestination endpoint unexpected error.
+func NewUpdateDestinationUnexpected(body *UpdateDestinationUnexpectedResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -2290,9 +2290,9 @@ func NewUpdateOtelDestinationUnexpected(body *UpdateOtelDestinationUnexpectedRes
 	return v
 }
 
-// NewUpdateOtelDestinationGatewayError builds a dataExports service
-// updateOtelDestination endpoint gateway_error error.
-func NewUpdateOtelDestinationGatewayError(body *UpdateOtelDestinationGatewayErrorResponseBody) *goa.ServiceError {
+// NewUpdateDestinationGatewayError builds a dataExports service
+// updateDestination endpoint gateway_error error.
+func NewUpdateDestinationGatewayError(body *UpdateDestinationGatewayErrorResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -2305,9 +2305,9 @@ func NewUpdateOtelDestinationGatewayError(body *UpdateOtelDestinationGatewayErro
 	return v
 }
 
-// NewDeleteOtelDestinationUnauthorized builds a dataExports service
-// deleteOtelDestination endpoint unauthorized error.
-func NewDeleteOtelDestinationUnauthorized(body *DeleteOtelDestinationUnauthorizedResponseBody) *goa.ServiceError {
+// NewDeleteDestinationUnauthorized builds a dataExports service
+// deleteDestination endpoint unauthorized error.
+func NewDeleteDestinationUnauthorized(body *DeleteDestinationUnauthorizedResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -2320,9 +2320,9 @@ func NewDeleteOtelDestinationUnauthorized(body *DeleteOtelDestinationUnauthorize
 	return v
 }
 
-// NewDeleteOtelDestinationForbidden builds a dataExports service
-// deleteOtelDestination endpoint forbidden error.
-func NewDeleteOtelDestinationForbidden(body *DeleteOtelDestinationForbiddenResponseBody) *goa.ServiceError {
+// NewDeleteDestinationForbidden builds a dataExports service deleteDestination
+// endpoint forbidden error.
+func NewDeleteDestinationForbidden(body *DeleteDestinationForbiddenResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -2335,9 +2335,9 @@ func NewDeleteOtelDestinationForbidden(body *DeleteOtelDestinationForbiddenRespo
 	return v
 }
 
-// NewDeleteOtelDestinationBadRequest builds a dataExports service
-// deleteOtelDestination endpoint bad_request error.
-func NewDeleteOtelDestinationBadRequest(body *DeleteOtelDestinationBadRequestResponseBody) *goa.ServiceError {
+// NewDeleteDestinationBadRequest builds a dataExports service
+// deleteDestination endpoint bad_request error.
+func NewDeleteDestinationBadRequest(body *DeleteDestinationBadRequestResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -2350,9 +2350,9 @@ func NewDeleteOtelDestinationBadRequest(body *DeleteOtelDestinationBadRequestRes
 	return v
 }
 
-// NewDeleteOtelDestinationNotFound builds a dataExports service
-// deleteOtelDestination endpoint not_found error.
-func NewDeleteOtelDestinationNotFound(body *DeleteOtelDestinationNotFoundResponseBody) *goa.ServiceError {
+// NewDeleteDestinationNotFound builds a dataExports service deleteDestination
+// endpoint not_found error.
+func NewDeleteDestinationNotFound(body *DeleteDestinationNotFoundResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -2365,9 +2365,9 @@ func NewDeleteOtelDestinationNotFound(body *DeleteOtelDestinationNotFoundRespons
 	return v
 }
 
-// NewDeleteOtelDestinationConflict builds a dataExports service
-// deleteOtelDestination endpoint conflict error.
-func NewDeleteOtelDestinationConflict(body *DeleteOtelDestinationConflictResponseBody) *goa.ServiceError {
+// NewDeleteDestinationConflict builds a dataExports service deleteDestination
+// endpoint conflict error.
+func NewDeleteDestinationConflict(body *DeleteDestinationConflictResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -2380,9 +2380,9 @@ func NewDeleteOtelDestinationConflict(body *DeleteOtelDestinationConflictRespons
 	return v
 }
 
-// NewDeleteOtelDestinationUnsupportedMedia builds a dataExports service
-// deleteOtelDestination endpoint unsupported_media error.
-func NewDeleteOtelDestinationUnsupportedMedia(body *DeleteOtelDestinationUnsupportedMediaResponseBody) *goa.ServiceError {
+// NewDeleteDestinationUnsupportedMedia builds a dataExports service
+// deleteDestination endpoint unsupported_media error.
+func NewDeleteDestinationUnsupportedMedia(body *DeleteDestinationUnsupportedMediaResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -2395,9 +2395,9 @@ func NewDeleteOtelDestinationUnsupportedMedia(body *DeleteOtelDestinationUnsuppo
 	return v
 }
 
-// NewDeleteOtelDestinationInvalid builds a dataExports service
-// deleteOtelDestination endpoint invalid error.
-func NewDeleteOtelDestinationInvalid(body *DeleteOtelDestinationInvalidResponseBody) *goa.ServiceError {
+// NewDeleteDestinationInvalid builds a dataExports service deleteDestination
+// endpoint invalid error.
+func NewDeleteDestinationInvalid(body *DeleteDestinationInvalidResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -2410,9 +2410,9 @@ func NewDeleteOtelDestinationInvalid(body *DeleteOtelDestinationInvalidResponseB
 	return v
 }
 
-// NewDeleteOtelDestinationInvariantViolation builds a dataExports service
-// deleteOtelDestination endpoint invariant_violation error.
-func NewDeleteOtelDestinationInvariantViolation(body *DeleteOtelDestinationInvariantViolationResponseBody) *goa.ServiceError {
+// NewDeleteDestinationInvariantViolation builds a dataExports service
+// deleteDestination endpoint invariant_violation error.
+func NewDeleteDestinationInvariantViolation(body *DeleteDestinationInvariantViolationResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -2425,9 +2425,9 @@ func NewDeleteOtelDestinationInvariantViolation(body *DeleteOtelDestinationInvar
 	return v
 }
 
-// NewDeleteOtelDestinationUnexpected builds a dataExports service
-// deleteOtelDestination endpoint unexpected error.
-func NewDeleteOtelDestinationUnexpected(body *DeleteOtelDestinationUnexpectedResponseBody) *goa.ServiceError {
+// NewDeleteDestinationUnexpected builds a dataExports service
+// deleteDestination endpoint unexpected error.
+func NewDeleteDestinationUnexpected(body *DeleteDestinationUnexpectedResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -2440,9 +2440,9 @@ func NewDeleteOtelDestinationUnexpected(body *DeleteOtelDestinationUnexpectedRes
 	return v
 }
 
-// NewDeleteOtelDestinationGatewayError builds a dataExports service
-// deleteOtelDestination endpoint gateway_error error.
-func NewDeleteOtelDestinationGatewayError(body *DeleteOtelDestinationGatewayErrorResponseBody) *goa.ServiceError {
+// NewDeleteDestinationGatewayError builds a dataExports service
+// deleteDestination endpoint gateway_error error.
+func NewDeleteDestinationGatewayError(body *DeleteDestinationGatewayErrorResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -3103,15 +3103,15 @@ func NewDeleteRouteGatewayError(body *DeleteRouteGatewayErrorResponseBody) *goa.
 	return v
 }
 
-// ValidateListOtelDestinationsResponseBody runs the validations defined on
-// ListOtelDestinationsResponseBody
-func ValidateListOtelDestinationsResponseBody(body *ListOtelDestinationsResponseBody) (err error) {
+// ValidateListDestinationsResponseBody runs the validations defined on
+// ListDestinationsResponseBody
+func ValidateListDestinationsResponseBody(body *ListDestinationsResponseBody) (err error) {
 	if body.Destinations == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("destinations", "body"))
 	}
 	for _, e := range body.Destinations {
 		if e != nil {
-			if err2 := ValidateOtelDestinationResponseBody(e); err2 != nil {
+			if err2 := ValidateDestinationResponseBody(e); err2 != nil {
 				err = goa.MergeErrors(err, err2)
 			}
 		}
@@ -3119,9 +3119,9 @@ func ValidateListOtelDestinationsResponseBody(body *ListOtelDestinationsResponse
 	return
 }
 
-// ValidateCreateOtelDestinationResponseBody runs the validations defined on
-// CreateOtelDestinationResponseBody
-func ValidateCreateOtelDestinationResponseBody(body *CreateOtelDestinationResponseBody) (err error) {
+// ValidateCreateDestinationResponseBody runs the validations defined on
+// CreateDestinationResponseBody
+func ValidateCreateDestinationResponseBody(body *CreateDestinationResponseBody) (err error) {
 	if body.ID == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
 	}
@@ -3131,14 +3131,11 @@ func ValidateCreateOtelDestinationResponseBody(body *CreateOtelDestinationRespon
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
-	if body.EndpointURL == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("endpoint_url", "body"))
+	if body.DestinationType == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("destination_type", "body"))
 	}
 	if body.SensitiveData == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("sensitive_data", "body"))
-	}
-	if body.Headers == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("headers", "body"))
 	}
 	if body.CreatedAt == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("created_at", "body"))
@@ -3152,19 +3149,19 @@ func ValidateCreateOtelDestinationResponseBody(body *CreateOtelDestinationRespon
 	if body.ProjectID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.project_id", *body.ProjectID, goa.FormatUUID))
 	}
-	if body.EndpointURL != nil {
-		err = goa.MergeErrors(err, goa.ValidateFormat("body.endpoint_url", *body.EndpointURL, goa.FormatURI))
+	if body.DestinationType != nil {
+		if !(*body.DestinationType == "otel") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.destination_type", *body.DestinationType, []any{"otel"}))
+		}
 	}
 	if body.SensitiveData != nil {
 		if !(*body.SensitiveData == "exclude" || *body.SensitiveData == "include") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.sensitive_data", *body.SensitiveData, []any{"exclude", "include"}))
 		}
 	}
-	for _, e := range body.Headers {
-		if e != nil {
-			if err2 := ValidateOtelDestinationHeaderResponseBody(e); err2 != nil {
-				err = goa.MergeErrors(err, err2)
-			}
+	if body.Otel != nil {
+		if err2 := ValidateOtelDestinationResponseBody(body.Otel); err2 != nil {
+			err = goa.MergeErrors(err, err2)
 		}
 	}
 	if body.CreatedAt != nil {
@@ -3176,9 +3173,9 @@ func ValidateCreateOtelDestinationResponseBody(body *CreateOtelDestinationRespon
 	return
 }
 
-// ValidateUpdateOtelDestinationResponseBody runs the validations defined on
-// UpdateOtelDestinationResponseBody
-func ValidateUpdateOtelDestinationResponseBody(body *UpdateOtelDestinationResponseBody) (err error) {
+// ValidateUpdateDestinationResponseBody runs the validations defined on
+// UpdateDestinationResponseBody
+func ValidateUpdateDestinationResponseBody(body *UpdateDestinationResponseBody) (err error) {
 	if body.ID == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
 	}
@@ -3188,14 +3185,11 @@ func ValidateUpdateOtelDestinationResponseBody(body *UpdateOtelDestinationRespon
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
-	if body.EndpointURL == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("endpoint_url", "body"))
+	if body.DestinationType == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("destination_type", "body"))
 	}
 	if body.SensitiveData == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("sensitive_data", "body"))
-	}
-	if body.Headers == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("headers", "body"))
 	}
 	if body.CreatedAt == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("created_at", "body"))
@@ -3209,19 +3203,19 @@ func ValidateUpdateOtelDestinationResponseBody(body *UpdateOtelDestinationRespon
 	if body.ProjectID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.project_id", *body.ProjectID, goa.FormatUUID))
 	}
-	if body.EndpointURL != nil {
-		err = goa.MergeErrors(err, goa.ValidateFormat("body.endpoint_url", *body.EndpointURL, goa.FormatURI))
+	if body.DestinationType != nil {
+		if !(*body.DestinationType == "otel") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.destination_type", *body.DestinationType, []any{"otel"}))
+		}
 	}
 	if body.SensitiveData != nil {
 		if !(*body.SensitiveData == "exclude" || *body.SensitiveData == "include") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.sensitive_data", *body.SensitiveData, []any{"exclude", "include"}))
 		}
 	}
-	for _, e := range body.Headers {
-		if e != nil {
-			if err2 := ValidateOtelDestinationHeaderResponseBody(e); err2 != nil {
-				err = goa.MergeErrors(err, err2)
-			}
+	if body.Otel != nil {
+		if err2 := ValidateOtelDestinationResponseBody(body.Otel); err2 != nil {
+			err = goa.MergeErrors(err, err2)
 		}
 	}
 	if body.CreatedAt != nil {
@@ -3337,9 +3331,9 @@ func ValidateUpdateRouteResponseBody(body *UpdateRouteResponseBody) (err error) 
 	return
 }
 
-// ValidateListOtelDestinationsUnauthorizedResponseBody runs the validations
-// defined on listOtelDestinations_unauthorized_response_body
-func ValidateListOtelDestinationsUnauthorizedResponseBody(body *ListOtelDestinationsUnauthorizedResponseBody) (err error) {
+// ValidateListDestinationsUnauthorizedResponseBody runs the validations
+// defined on listDestinations_unauthorized_response_body
+func ValidateListDestinationsUnauthorizedResponseBody(body *ListDestinationsUnauthorizedResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -3361,9 +3355,9 @@ func ValidateListOtelDestinationsUnauthorizedResponseBody(body *ListOtelDestinat
 	return
 }
 
-// ValidateListOtelDestinationsForbiddenResponseBody runs the validations
-// defined on listOtelDestinations_forbidden_response_body
-func ValidateListOtelDestinationsForbiddenResponseBody(body *ListOtelDestinationsForbiddenResponseBody) (err error) {
+// ValidateListDestinationsForbiddenResponseBody runs the validations defined
+// on listDestinations_forbidden_response_body
+func ValidateListDestinationsForbiddenResponseBody(body *ListDestinationsForbiddenResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -3385,9 +3379,9 @@ func ValidateListOtelDestinationsForbiddenResponseBody(body *ListOtelDestination
 	return
 }
 
-// ValidateListOtelDestinationsBadRequestResponseBody runs the validations
-// defined on listOtelDestinations_bad_request_response_body
-func ValidateListOtelDestinationsBadRequestResponseBody(body *ListOtelDestinationsBadRequestResponseBody) (err error) {
+// ValidateListDestinationsBadRequestResponseBody runs the validations defined
+// on listDestinations_bad_request_response_body
+func ValidateListDestinationsBadRequestResponseBody(body *ListDestinationsBadRequestResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -3409,9 +3403,9 @@ func ValidateListOtelDestinationsBadRequestResponseBody(body *ListOtelDestinatio
 	return
 }
 
-// ValidateListOtelDestinationsNotFoundResponseBody runs the validations
-// defined on listOtelDestinations_not_found_response_body
-func ValidateListOtelDestinationsNotFoundResponseBody(body *ListOtelDestinationsNotFoundResponseBody) (err error) {
+// ValidateListDestinationsNotFoundResponseBody runs the validations defined on
+// listDestinations_not_found_response_body
+func ValidateListDestinationsNotFoundResponseBody(body *ListDestinationsNotFoundResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -3433,9 +3427,9 @@ func ValidateListOtelDestinationsNotFoundResponseBody(body *ListOtelDestinations
 	return
 }
 
-// ValidateListOtelDestinationsConflictResponseBody runs the validations
-// defined on listOtelDestinations_conflict_response_body
-func ValidateListOtelDestinationsConflictResponseBody(body *ListOtelDestinationsConflictResponseBody) (err error) {
+// ValidateListDestinationsConflictResponseBody runs the validations defined on
+// listDestinations_conflict_response_body
+func ValidateListDestinationsConflictResponseBody(body *ListDestinationsConflictResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -3457,9 +3451,9 @@ func ValidateListOtelDestinationsConflictResponseBody(body *ListOtelDestinations
 	return
 }
 
-// ValidateListOtelDestinationsUnsupportedMediaResponseBody runs the
-// validations defined on listOtelDestinations_unsupported_media_response_body
-func ValidateListOtelDestinationsUnsupportedMediaResponseBody(body *ListOtelDestinationsUnsupportedMediaResponseBody) (err error) {
+// ValidateListDestinationsUnsupportedMediaResponseBody runs the validations
+// defined on listDestinations_unsupported_media_response_body
+func ValidateListDestinationsUnsupportedMediaResponseBody(body *ListDestinationsUnsupportedMediaResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -3481,9 +3475,9 @@ func ValidateListOtelDestinationsUnsupportedMediaResponseBody(body *ListOtelDest
 	return
 }
 
-// ValidateListOtelDestinationsInvalidResponseBody runs the validations defined
-// on listOtelDestinations_invalid_response_body
-func ValidateListOtelDestinationsInvalidResponseBody(body *ListOtelDestinationsInvalidResponseBody) (err error) {
+// ValidateListDestinationsInvalidResponseBody runs the validations defined on
+// listDestinations_invalid_response_body
+func ValidateListDestinationsInvalidResponseBody(body *ListDestinationsInvalidResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -3505,9 +3499,9 @@ func ValidateListOtelDestinationsInvalidResponseBody(body *ListOtelDestinationsI
 	return
 }
 
-// ValidateListOtelDestinationsInvariantViolationResponseBody runs the
-// validations defined on listOtelDestinations_invariant_violation_response_body
-func ValidateListOtelDestinationsInvariantViolationResponseBody(body *ListOtelDestinationsInvariantViolationResponseBody) (err error) {
+// ValidateListDestinationsInvariantViolationResponseBody runs the validations
+// defined on listDestinations_invariant_violation_response_body
+func ValidateListDestinationsInvariantViolationResponseBody(body *ListDestinationsInvariantViolationResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -3529,9 +3523,9 @@ func ValidateListOtelDestinationsInvariantViolationResponseBody(body *ListOtelDe
 	return
 }
 
-// ValidateListOtelDestinationsUnexpectedResponseBody runs the validations
-// defined on listOtelDestinations_unexpected_response_body
-func ValidateListOtelDestinationsUnexpectedResponseBody(body *ListOtelDestinationsUnexpectedResponseBody) (err error) {
+// ValidateListDestinationsUnexpectedResponseBody runs the validations defined
+// on listDestinations_unexpected_response_body
+func ValidateListDestinationsUnexpectedResponseBody(body *ListDestinationsUnexpectedResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -3553,9 +3547,9 @@ func ValidateListOtelDestinationsUnexpectedResponseBody(body *ListOtelDestinatio
 	return
 }
 
-// ValidateListOtelDestinationsGatewayErrorResponseBody runs the validations
-// defined on listOtelDestinations_gateway_error_response_body
-func ValidateListOtelDestinationsGatewayErrorResponseBody(body *ListOtelDestinationsGatewayErrorResponseBody) (err error) {
+// ValidateListDestinationsGatewayErrorResponseBody runs the validations
+// defined on listDestinations_gateway_error_response_body
+func ValidateListDestinationsGatewayErrorResponseBody(body *ListDestinationsGatewayErrorResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -3577,9 +3571,9 @@ func ValidateListOtelDestinationsGatewayErrorResponseBody(body *ListOtelDestinat
 	return
 }
 
-// ValidateCreateOtelDestinationUnauthorizedResponseBody runs the validations
-// defined on createOtelDestination_unauthorized_response_body
-func ValidateCreateOtelDestinationUnauthorizedResponseBody(body *CreateOtelDestinationUnauthorizedResponseBody) (err error) {
+// ValidateCreateDestinationUnauthorizedResponseBody runs the validations
+// defined on createDestination_unauthorized_response_body
+func ValidateCreateDestinationUnauthorizedResponseBody(body *CreateDestinationUnauthorizedResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -3601,9 +3595,9 @@ func ValidateCreateOtelDestinationUnauthorizedResponseBody(body *CreateOtelDesti
 	return
 }
 
-// ValidateCreateOtelDestinationForbiddenResponseBody runs the validations
-// defined on createOtelDestination_forbidden_response_body
-func ValidateCreateOtelDestinationForbiddenResponseBody(body *CreateOtelDestinationForbiddenResponseBody) (err error) {
+// ValidateCreateDestinationForbiddenResponseBody runs the validations defined
+// on createDestination_forbidden_response_body
+func ValidateCreateDestinationForbiddenResponseBody(body *CreateDestinationForbiddenResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -3625,9 +3619,9 @@ func ValidateCreateOtelDestinationForbiddenResponseBody(body *CreateOtelDestinat
 	return
 }
 
-// ValidateCreateOtelDestinationBadRequestResponseBody runs the validations
-// defined on createOtelDestination_bad_request_response_body
-func ValidateCreateOtelDestinationBadRequestResponseBody(body *CreateOtelDestinationBadRequestResponseBody) (err error) {
+// ValidateCreateDestinationBadRequestResponseBody runs the validations defined
+// on createDestination_bad_request_response_body
+func ValidateCreateDestinationBadRequestResponseBody(body *CreateDestinationBadRequestResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -3649,9 +3643,9 @@ func ValidateCreateOtelDestinationBadRequestResponseBody(body *CreateOtelDestina
 	return
 }
 
-// ValidateCreateOtelDestinationNotFoundResponseBody runs the validations
-// defined on createOtelDestination_not_found_response_body
-func ValidateCreateOtelDestinationNotFoundResponseBody(body *CreateOtelDestinationNotFoundResponseBody) (err error) {
+// ValidateCreateDestinationNotFoundResponseBody runs the validations defined
+// on createDestination_not_found_response_body
+func ValidateCreateDestinationNotFoundResponseBody(body *CreateDestinationNotFoundResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -3673,9 +3667,9 @@ func ValidateCreateOtelDestinationNotFoundResponseBody(body *CreateOtelDestinati
 	return
 }
 
-// ValidateCreateOtelDestinationConflictResponseBody runs the validations
-// defined on createOtelDestination_conflict_response_body
-func ValidateCreateOtelDestinationConflictResponseBody(body *CreateOtelDestinationConflictResponseBody) (err error) {
+// ValidateCreateDestinationConflictResponseBody runs the validations defined
+// on createDestination_conflict_response_body
+func ValidateCreateDestinationConflictResponseBody(body *CreateDestinationConflictResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -3697,9 +3691,9 @@ func ValidateCreateOtelDestinationConflictResponseBody(body *CreateOtelDestinati
 	return
 }
 
-// ValidateCreateOtelDestinationUnsupportedMediaResponseBody runs the
-// validations defined on createOtelDestination_unsupported_media_response_body
-func ValidateCreateOtelDestinationUnsupportedMediaResponseBody(body *CreateOtelDestinationUnsupportedMediaResponseBody) (err error) {
+// ValidateCreateDestinationUnsupportedMediaResponseBody runs the validations
+// defined on createDestination_unsupported_media_response_body
+func ValidateCreateDestinationUnsupportedMediaResponseBody(body *CreateDestinationUnsupportedMediaResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -3721,9 +3715,9 @@ func ValidateCreateOtelDestinationUnsupportedMediaResponseBody(body *CreateOtelD
 	return
 }
 
-// ValidateCreateOtelDestinationInvalidResponseBody runs the validations
-// defined on createOtelDestination_invalid_response_body
-func ValidateCreateOtelDestinationInvalidResponseBody(body *CreateOtelDestinationInvalidResponseBody) (err error) {
+// ValidateCreateDestinationInvalidResponseBody runs the validations defined on
+// createDestination_invalid_response_body
+func ValidateCreateDestinationInvalidResponseBody(body *CreateDestinationInvalidResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -3745,10 +3739,9 @@ func ValidateCreateOtelDestinationInvalidResponseBody(body *CreateOtelDestinatio
 	return
 }
 
-// ValidateCreateOtelDestinationInvariantViolationResponseBody runs the
-// validations defined on
-// createOtelDestination_invariant_violation_response_body
-func ValidateCreateOtelDestinationInvariantViolationResponseBody(body *CreateOtelDestinationInvariantViolationResponseBody) (err error) {
+// ValidateCreateDestinationInvariantViolationResponseBody runs the validations
+// defined on createDestination_invariant_violation_response_body
+func ValidateCreateDestinationInvariantViolationResponseBody(body *CreateDestinationInvariantViolationResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -3770,9 +3763,9 @@ func ValidateCreateOtelDestinationInvariantViolationResponseBody(body *CreateOte
 	return
 }
 
-// ValidateCreateOtelDestinationUnexpectedResponseBody runs the validations
-// defined on createOtelDestination_unexpected_response_body
-func ValidateCreateOtelDestinationUnexpectedResponseBody(body *CreateOtelDestinationUnexpectedResponseBody) (err error) {
+// ValidateCreateDestinationUnexpectedResponseBody runs the validations defined
+// on createDestination_unexpected_response_body
+func ValidateCreateDestinationUnexpectedResponseBody(body *CreateDestinationUnexpectedResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -3794,9 +3787,9 @@ func ValidateCreateOtelDestinationUnexpectedResponseBody(body *CreateOtelDestina
 	return
 }
 
-// ValidateCreateOtelDestinationGatewayErrorResponseBody runs the validations
-// defined on createOtelDestination_gateway_error_response_body
-func ValidateCreateOtelDestinationGatewayErrorResponseBody(body *CreateOtelDestinationGatewayErrorResponseBody) (err error) {
+// ValidateCreateDestinationGatewayErrorResponseBody runs the validations
+// defined on createDestination_gateway_error_response_body
+func ValidateCreateDestinationGatewayErrorResponseBody(body *CreateDestinationGatewayErrorResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -3818,9 +3811,9 @@ func ValidateCreateOtelDestinationGatewayErrorResponseBody(body *CreateOtelDesti
 	return
 }
 
-// ValidateUpdateOtelDestinationUnauthorizedResponseBody runs the validations
-// defined on updateOtelDestination_unauthorized_response_body
-func ValidateUpdateOtelDestinationUnauthorizedResponseBody(body *UpdateOtelDestinationUnauthorizedResponseBody) (err error) {
+// ValidateUpdateDestinationUnauthorizedResponseBody runs the validations
+// defined on updateDestination_unauthorized_response_body
+func ValidateUpdateDestinationUnauthorizedResponseBody(body *UpdateDestinationUnauthorizedResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -3842,9 +3835,9 @@ func ValidateUpdateOtelDestinationUnauthorizedResponseBody(body *UpdateOtelDesti
 	return
 }
 
-// ValidateUpdateOtelDestinationForbiddenResponseBody runs the validations
-// defined on updateOtelDestination_forbidden_response_body
-func ValidateUpdateOtelDestinationForbiddenResponseBody(body *UpdateOtelDestinationForbiddenResponseBody) (err error) {
+// ValidateUpdateDestinationForbiddenResponseBody runs the validations defined
+// on updateDestination_forbidden_response_body
+func ValidateUpdateDestinationForbiddenResponseBody(body *UpdateDestinationForbiddenResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -3866,9 +3859,9 @@ func ValidateUpdateOtelDestinationForbiddenResponseBody(body *UpdateOtelDestinat
 	return
 }
 
-// ValidateUpdateOtelDestinationBadRequestResponseBody runs the validations
-// defined on updateOtelDestination_bad_request_response_body
-func ValidateUpdateOtelDestinationBadRequestResponseBody(body *UpdateOtelDestinationBadRequestResponseBody) (err error) {
+// ValidateUpdateDestinationBadRequestResponseBody runs the validations defined
+// on updateDestination_bad_request_response_body
+func ValidateUpdateDestinationBadRequestResponseBody(body *UpdateDestinationBadRequestResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -3890,9 +3883,9 @@ func ValidateUpdateOtelDestinationBadRequestResponseBody(body *UpdateOtelDestina
 	return
 }
 
-// ValidateUpdateOtelDestinationNotFoundResponseBody runs the validations
-// defined on updateOtelDestination_not_found_response_body
-func ValidateUpdateOtelDestinationNotFoundResponseBody(body *UpdateOtelDestinationNotFoundResponseBody) (err error) {
+// ValidateUpdateDestinationNotFoundResponseBody runs the validations defined
+// on updateDestination_not_found_response_body
+func ValidateUpdateDestinationNotFoundResponseBody(body *UpdateDestinationNotFoundResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -3914,9 +3907,9 @@ func ValidateUpdateOtelDestinationNotFoundResponseBody(body *UpdateOtelDestinati
 	return
 }
 
-// ValidateUpdateOtelDestinationConflictResponseBody runs the validations
-// defined on updateOtelDestination_conflict_response_body
-func ValidateUpdateOtelDestinationConflictResponseBody(body *UpdateOtelDestinationConflictResponseBody) (err error) {
+// ValidateUpdateDestinationConflictResponseBody runs the validations defined
+// on updateDestination_conflict_response_body
+func ValidateUpdateDestinationConflictResponseBody(body *UpdateDestinationConflictResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -3938,9 +3931,9 @@ func ValidateUpdateOtelDestinationConflictResponseBody(body *UpdateOtelDestinati
 	return
 }
 
-// ValidateUpdateOtelDestinationUnsupportedMediaResponseBody runs the
-// validations defined on updateOtelDestination_unsupported_media_response_body
-func ValidateUpdateOtelDestinationUnsupportedMediaResponseBody(body *UpdateOtelDestinationUnsupportedMediaResponseBody) (err error) {
+// ValidateUpdateDestinationUnsupportedMediaResponseBody runs the validations
+// defined on updateDestination_unsupported_media_response_body
+func ValidateUpdateDestinationUnsupportedMediaResponseBody(body *UpdateDestinationUnsupportedMediaResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -3962,9 +3955,9 @@ func ValidateUpdateOtelDestinationUnsupportedMediaResponseBody(body *UpdateOtelD
 	return
 }
 
-// ValidateUpdateOtelDestinationInvalidResponseBody runs the validations
-// defined on updateOtelDestination_invalid_response_body
-func ValidateUpdateOtelDestinationInvalidResponseBody(body *UpdateOtelDestinationInvalidResponseBody) (err error) {
+// ValidateUpdateDestinationInvalidResponseBody runs the validations defined on
+// updateDestination_invalid_response_body
+func ValidateUpdateDestinationInvalidResponseBody(body *UpdateDestinationInvalidResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -3986,10 +3979,9 @@ func ValidateUpdateOtelDestinationInvalidResponseBody(body *UpdateOtelDestinatio
 	return
 }
 
-// ValidateUpdateOtelDestinationInvariantViolationResponseBody runs the
-// validations defined on
-// updateOtelDestination_invariant_violation_response_body
-func ValidateUpdateOtelDestinationInvariantViolationResponseBody(body *UpdateOtelDestinationInvariantViolationResponseBody) (err error) {
+// ValidateUpdateDestinationInvariantViolationResponseBody runs the validations
+// defined on updateDestination_invariant_violation_response_body
+func ValidateUpdateDestinationInvariantViolationResponseBody(body *UpdateDestinationInvariantViolationResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -4011,9 +4003,9 @@ func ValidateUpdateOtelDestinationInvariantViolationResponseBody(body *UpdateOte
 	return
 }
 
-// ValidateUpdateOtelDestinationUnexpectedResponseBody runs the validations
-// defined on updateOtelDestination_unexpected_response_body
-func ValidateUpdateOtelDestinationUnexpectedResponseBody(body *UpdateOtelDestinationUnexpectedResponseBody) (err error) {
+// ValidateUpdateDestinationUnexpectedResponseBody runs the validations defined
+// on updateDestination_unexpected_response_body
+func ValidateUpdateDestinationUnexpectedResponseBody(body *UpdateDestinationUnexpectedResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -4035,9 +4027,9 @@ func ValidateUpdateOtelDestinationUnexpectedResponseBody(body *UpdateOtelDestina
 	return
 }
 
-// ValidateUpdateOtelDestinationGatewayErrorResponseBody runs the validations
-// defined on updateOtelDestination_gateway_error_response_body
-func ValidateUpdateOtelDestinationGatewayErrorResponseBody(body *UpdateOtelDestinationGatewayErrorResponseBody) (err error) {
+// ValidateUpdateDestinationGatewayErrorResponseBody runs the validations
+// defined on updateDestination_gateway_error_response_body
+func ValidateUpdateDestinationGatewayErrorResponseBody(body *UpdateDestinationGatewayErrorResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -4059,9 +4051,9 @@ func ValidateUpdateOtelDestinationGatewayErrorResponseBody(body *UpdateOtelDesti
 	return
 }
 
-// ValidateDeleteOtelDestinationUnauthorizedResponseBody runs the validations
-// defined on deleteOtelDestination_unauthorized_response_body
-func ValidateDeleteOtelDestinationUnauthorizedResponseBody(body *DeleteOtelDestinationUnauthorizedResponseBody) (err error) {
+// ValidateDeleteDestinationUnauthorizedResponseBody runs the validations
+// defined on deleteDestination_unauthorized_response_body
+func ValidateDeleteDestinationUnauthorizedResponseBody(body *DeleteDestinationUnauthorizedResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -4083,9 +4075,9 @@ func ValidateDeleteOtelDestinationUnauthorizedResponseBody(body *DeleteOtelDesti
 	return
 }
 
-// ValidateDeleteOtelDestinationForbiddenResponseBody runs the validations
-// defined on deleteOtelDestination_forbidden_response_body
-func ValidateDeleteOtelDestinationForbiddenResponseBody(body *DeleteOtelDestinationForbiddenResponseBody) (err error) {
+// ValidateDeleteDestinationForbiddenResponseBody runs the validations defined
+// on deleteDestination_forbidden_response_body
+func ValidateDeleteDestinationForbiddenResponseBody(body *DeleteDestinationForbiddenResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -4107,9 +4099,9 @@ func ValidateDeleteOtelDestinationForbiddenResponseBody(body *DeleteOtelDestinat
 	return
 }
 
-// ValidateDeleteOtelDestinationBadRequestResponseBody runs the validations
-// defined on deleteOtelDestination_bad_request_response_body
-func ValidateDeleteOtelDestinationBadRequestResponseBody(body *DeleteOtelDestinationBadRequestResponseBody) (err error) {
+// ValidateDeleteDestinationBadRequestResponseBody runs the validations defined
+// on deleteDestination_bad_request_response_body
+func ValidateDeleteDestinationBadRequestResponseBody(body *DeleteDestinationBadRequestResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -4131,9 +4123,9 @@ func ValidateDeleteOtelDestinationBadRequestResponseBody(body *DeleteOtelDestina
 	return
 }
 
-// ValidateDeleteOtelDestinationNotFoundResponseBody runs the validations
-// defined on deleteOtelDestination_not_found_response_body
-func ValidateDeleteOtelDestinationNotFoundResponseBody(body *DeleteOtelDestinationNotFoundResponseBody) (err error) {
+// ValidateDeleteDestinationNotFoundResponseBody runs the validations defined
+// on deleteDestination_not_found_response_body
+func ValidateDeleteDestinationNotFoundResponseBody(body *DeleteDestinationNotFoundResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -4155,9 +4147,9 @@ func ValidateDeleteOtelDestinationNotFoundResponseBody(body *DeleteOtelDestinati
 	return
 }
 
-// ValidateDeleteOtelDestinationConflictResponseBody runs the validations
-// defined on deleteOtelDestination_conflict_response_body
-func ValidateDeleteOtelDestinationConflictResponseBody(body *DeleteOtelDestinationConflictResponseBody) (err error) {
+// ValidateDeleteDestinationConflictResponseBody runs the validations defined
+// on deleteDestination_conflict_response_body
+func ValidateDeleteDestinationConflictResponseBody(body *DeleteDestinationConflictResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -4179,9 +4171,9 @@ func ValidateDeleteOtelDestinationConflictResponseBody(body *DeleteOtelDestinati
 	return
 }
 
-// ValidateDeleteOtelDestinationUnsupportedMediaResponseBody runs the
-// validations defined on deleteOtelDestination_unsupported_media_response_body
-func ValidateDeleteOtelDestinationUnsupportedMediaResponseBody(body *DeleteOtelDestinationUnsupportedMediaResponseBody) (err error) {
+// ValidateDeleteDestinationUnsupportedMediaResponseBody runs the validations
+// defined on deleteDestination_unsupported_media_response_body
+func ValidateDeleteDestinationUnsupportedMediaResponseBody(body *DeleteDestinationUnsupportedMediaResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -4203,9 +4195,9 @@ func ValidateDeleteOtelDestinationUnsupportedMediaResponseBody(body *DeleteOtelD
 	return
 }
 
-// ValidateDeleteOtelDestinationInvalidResponseBody runs the validations
-// defined on deleteOtelDestination_invalid_response_body
-func ValidateDeleteOtelDestinationInvalidResponseBody(body *DeleteOtelDestinationInvalidResponseBody) (err error) {
+// ValidateDeleteDestinationInvalidResponseBody runs the validations defined on
+// deleteDestination_invalid_response_body
+func ValidateDeleteDestinationInvalidResponseBody(body *DeleteDestinationInvalidResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -4227,10 +4219,9 @@ func ValidateDeleteOtelDestinationInvalidResponseBody(body *DeleteOtelDestinatio
 	return
 }
 
-// ValidateDeleteOtelDestinationInvariantViolationResponseBody runs the
-// validations defined on
-// deleteOtelDestination_invariant_violation_response_body
-func ValidateDeleteOtelDestinationInvariantViolationResponseBody(body *DeleteOtelDestinationInvariantViolationResponseBody) (err error) {
+// ValidateDeleteDestinationInvariantViolationResponseBody runs the validations
+// defined on deleteDestination_invariant_violation_response_body
+func ValidateDeleteDestinationInvariantViolationResponseBody(body *DeleteDestinationInvariantViolationResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -4252,9 +4243,9 @@ func ValidateDeleteOtelDestinationInvariantViolationResponseBody(body *DeleteOte
 	return
 }
 
-// ValidateDeleteOtelDestinationUnexpectedResponseBody runs the validations
-// defined on deleteOtelDestination_unexpected_response_body
-func ValidateDeleteOtelDestinationUnexpectedResponseBody(body *DeleteOtelDestinationUnexpectedResponseBody) (err error) {
+// ValidateDeleteDestinationUnexpectedResponseBody runs the validations defined
+// on deleteDestination_unexpected_response_body
+func ValidateDeleteDestinationUnexpectedResponseBody(body *DeleteDestinationUnexpectedResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -4276,9 +4267,9 @@ func ValidateDeleteOtelDestinationUnexpectedResponseBody(body *DeleteOtelDestina
 	return
 }
 
-// ValidateDeleteOtelDestinationGatewayErrorResponseBody runs the validations
-// defined on deleteOtelDestination_gateway_error_response_body
-func ValidateDeleteOtelDestinationGatewayErrorResponseBody(body *DeleteOtelDestinationGatewayErrorResponseBody) (err error) {
+// ValidateDeleteDestinationGatewayErrorResponseBody runs the validations
+// defined on deleteDestination_gateway_error_response_body
+func ValidateDeleteDestinationGatewayErrorResponseBody(body *DeleteDestinationGatewayErrorResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -5260,9 +5251,9 @@ func ValidateDeleteRouteGatewayErrorResponseBody(body *DeleteRouteGatewayErrorRe
 	return
 }
 
-// ValidateOtelDestinationResponseBody runs the validations defined on
-// OtelDestinationResponseBody
-func ValidateOtelDestinationResponseBody(body *OtelDestinationResponseBody) (err error) {
+// ValidateDestinationResponseBody runs the validations defined on
+// DestinationResponseBody
+func ValidateDestinationResponseBody(body *DestinationResponseBody) (err error) {
 	if body.ID == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
 	}
@@ -5272,14 +5263,11 @@ func ValidateOtelDestinationResponseBody(body *OtelDestinationResponseBody) (err
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
-	if body.EndpointURL == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("endpoint_url", "body"))
+	if body.DestinationType == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("destination_type", "body"))
 	}
 	if body.SensitiveData == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("sensitive_data", "body"))
-	}
-	if body.Headers == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("headers", "body"))
 	}
 	if body.CreatedAt == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("created_at", "body"))
@@ -5293,19 +5281,19 @@ func ValidateOtelDestinationResponseBody(body *OtelDestinationResponseBody) (err
 	if body.ProjectID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.project_id", *body.ProjectID, goa.FormatUUID))
 	}
-	if body.EndpointURL != nil {
-		err = goa.MergeErrors(err, goa.ValidateFormat("body.endpoint_url", *body.EndpointURL, goa.FormatURI))
+	if body.DestinationType != nil {
+		if !(*body.DestinationType == "otel") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.destination_type", *body.DestinationType, []any{"otel"}))
+		}
 	}
 	if body.SensitiveData != nil {
 		if !(*body.SensitiveData == "exclude" || *body.SensitiveData == "include") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.sensitive_data", *body.SensitiveData, []any{"exclude", "include"}))
 		}
 	}
-	for _, e := range body.Headers {
-		if e != nil {
-			if err2 := ValidateOtelDestinationHeaderResponseBody(e); err2 != nil {
-				err = goa.MergeErrors(err, err2)
-			}
+	if body.Otel != nil {
+		if err2 := ValidateOtelDestinationResponseBody(body.Otel); err2 != nil {
+			err = goa.MergeErrors(err, err2)
 		}
 	}
 	if body.CreatedAt != nil {
@@ -5313,6 +5301,28 @@ func ValidateOtelDestinationResponseBody(body *OtelDestinationResponseBody) (err
 	}
 	if body.UpdatedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.updated_at", *body.UpdatedAt, goa.FormatDateTime))
+	}
+	return
+}
+
+// ValidateOtelDestinationResponseBody runs the validations defined on
+// OtelDestinationResponseBody
+func ValidateOtelDestinationResponseBody(body *OtelDestinationResponseBody) (err error) {
+	if body.EndpointURL == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("endpoint_url", "body"))
+	}
+	if body.Headers == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("headers", "body"))
+	}
+	if body.EndpointURL != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.endpoint_url", *body.EndpointURL, goa.FormatURI))
+	}
+	for _, e := range body.Headers {
+		if e != nil {
+			if err2 := ValidateOtelDestinationHeaderResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
 	}
 	return
 }
@@ -5326,6 +5336,26 @@ func ValidateOtelDestinationHeaderResponseBody(body *OtelDestinationHeaderRespon
 	if body.HasValue == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("has_value", "body"))
 	}
+	return
+}
+
+// ValidateCreateOtelDestinationInputRequestBody runs the validations defined
+// on CreateOtelDestinationInputRequestBody
+func ValidateCreateOtelDestinationInputRequestBody(body *CreateOtelDestinationInputRequestBody) (err error) {
+	if body.Headers == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("headers", "body"))
+	}
+	err = goa.MergeErrors(err, goa.ValidateFormat("body.endpoint_url", body.EndpointURL, goa.FormatURI))
+	return
+}
+
+// ValidateUpdateOtelDestinationInputRequestBody runs the validations defined
+// on UpdateOtelDestinationInputRequestBody
+func ValidateUpdateOtelDestinationInputRequestBody(body *UpdateOtelDestinationInputRequestBody) (err error) {
+	if body.Headers == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("headers", "body"))
+	}
+	err = goa.MergeErrors(err, goa.ValidateFormat("body.endpoint_url", body.EndpointURL, goa.FormatURI))
 	return
 }
 

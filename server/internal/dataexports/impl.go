@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"maps"
+	"sort"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgerrcode"
@@ -82,7 +83,7 @@ func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.A
 	return s.auth.Authorize(ctx, key, schema)
 }
 
-func (s *Service) ListOtelDestinations(ctx context.Context, _ *gen.ListOtelDestinationsPayload) (*gen.ListOtelDestinationsResult, error) {
+func (s *Service) ListDestinations(ctx context.Context, _ *gen.ListDestinationsPayload) (*gen.ListDestinationsResult, error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil {
 		return nil, oops.C(oops.CodeUnauthorized)
@@ -91,6 +92,21 @@ func (s *Service) ListOtelDestinations(ctx context.Context, _ *gen.ListOtelDesti
 		return nil, err
 	}
 
+	destinations, err := s.listOtelDestinations(ctx, authCtx)
+	if err != nil {
+		return nil, err
+	}
+	sort.Slice(destinations, func(i, j int) bool {
+		if destinations[i].CreatedAt == destinations[j].CreatedAt {
+			return destinations[i].ID < destinations[j].ID
+		}
+		return destinations[i].CreatedAt < destinations[j].CreatedAt
+	})
+
+	return &gen.ListDestinationsResult{Destinations: destinations}, nil
+}
+
+func (s *Service) listOtelDestinations(ctx context.Context, authCtx *contextvalues.AuthContext) ([]*gen.Destination, error) {
 	logger := s.logger.With(attr.SlogOrganizationID(authCtx.ActiveOrganizationID), attr.SlogProjectID(authCtx.ProjectID.String()))
 	rows, err := repo.New(s.db).ListOtelDestinations(ctx, repo.ListOtelDestinationsParams{
 		OrganizationID: authCtx.ActiveOrganizationID,
@@ -100,18 +116,18 @@ func (s *Service) ListOtelDestinations(ctx context.Context, _ *gen.ListOtelDesti
 		return nil, oops.E(oops.CodeUnexpected, err, "list OTEL destinations").LogError(ctx, logger)
 	}
 
-	result := &gen.ListOtelDestinationsResult{Destinations: make([]*gen.OtelDestination, 0, len(rows))}
+	destinations := make([]*gen.Destination, 0, len(rows))
 	for _, row := range rows {
 		view, err := s.buildDestinationView(row)
 		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "decode OTEL destination").LogError(ctx, logger)
 		}
-		result.Destinations = append(result.Destinations, view)
+		destinations = append(destinations, view)
 	}
-	return result, nil
+	return destinations, nil
 }
 
-func (s *Service) CreateOtelDestination(ctx context.Context, payload *gen.CreateOtelDestinationPayload) (*gen.OtelDestination, error) {
+func (s *Service) CreateDestination(ctx context.Context, payload *gen.CreateDestinationPayload) (*gen.Destination, error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil {
 		return nil, oops.C(oops.CodeUnauthorized)
@@ -120,12 +136,28 @@ func (s *Service) CreateOtelDestination(ctx context.Context, payload *gen.Create
 		return nil, err
 	}
 
+	destinationType, err := parseDestinationType(payload.DestinationType)
+	if err != nil {
+		return nil, oops.E(oops.CodeInvalid, err, "invalid destination_type")
+	}
+	switch destinationType {
+	case destinationTypeOTEL:
+		return s.createOtelDestination(ctx, authCtx, payload)
+	default:
+		return nil, oops.E(oops.CodeInvalid, fmt.Errorf("unsupported destination type %q", destinationType), "invalid destination_type")
+	}
+}
+
+func (s *Service) createOtelDestination(ctx context.Context, authCtx *contextvalues.AuthContext, payload *gen.CreateDestinationPayload) (*gen.Destination, error) {
+	if payload.Otel == nil {
+		return nil, oops.E(oops.CodeInvalid, errors.New("missing OTEL configuration"), "otel configuration is required")
+	}
+
 	name, err := validateDestinationName(payload.Name)
 	if err != nil {
 		return nil, err
 	}
-
-	endpointURL, err := validateDestinationURL(payload.EndpointURL)
+	endpointURL, err := validateDestinationURL(payload.Otel.EndpointURL)
 	if err != nil {
 		return nil, err
 	}
@@ -133,8 +165,8 @@ func (s *Service) CreateOtelDestination(ctx context.Context, payload *gen.Create
 	if err != nil {
 		return nil, oops.E(oops.CodeInvalid, err, "invalid sensitive_data")
 	}
-	headerInputs := make([]destinationHeaderInput, len(payload.Headers))
-	for i, input := range payload.Headers {
+	headerInputs := make([]destinationHeaderInput, len(payload.Otel.Headers))
+	for i, input := range payload.Otel.Headers {
 		if input != nil {
 			headerInputs[i] = destinationHeaderInput{
 				name:     input.Name,
@@ -187,16 +219,33 @@ func (s *Service) CreateOtelDestination(ctx context.Context, payload *gen.Create
 		return nil, oops.E(oops.CodeUnexpected, err, "commit OTEL destination creation").LogError(ctx, logger)
 	}
 
-	return mv.BuildOtelDestinationView(row, headers, string(policy)), nil
+	return mv.BuildDestinationView(row, headers, string(policy)), nil
 }
 
-func (s *Service) UpdateOtelDestination(ctx context.Context, payload *gen.UpdateOtelDestinationPayload) (*gen.OtelDestination, error) {
+func (s *Service) UpdateDestination(ctx context.Context, payload *gen.UpdateDestinationPayload) (*gen.Destination, error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil {
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
 		return nil, err
+	}
+
+	destinationType, err := parseDestinationType(payload.DestinationType)
+	if err != nil {
+		return nil, oops.E(oops.CodeInvalid, err, "invalid destination_type")
+	}
+	switch destinationType {
+	case destinationTypeOTEL:
+		return s.updateOtelDestination(ctx, authCtx, payload)
+	default:
+		return nil, oops.E(oops.CodeInvalid, fmt.Errorf("unsupported destination type %q", destinationType), "invalid destination_type")
+	}
+}
+
+func (s *Service) updateOtelDestination(ctx context.Context, authCtx *contextvalues.AuthContext, payload *gen.UpdateDestinationPayload) (*gen.Destination, error) {
+	if payload.Otel == nil {
+		return nil, oops.E(oops.CodeInvalid, errors.New("missing OTEL configuration"), "otel configuration is required")
 	}
 
 	destinationID, err := uuid.Parse(payload.ID)
@@ -207,7 +256,7 @@ func (s *Service) UpdateOtelDestination(ctx context.Context, payload *gen.Update
 	if err != nil {
 		return nil, err
 	}
-	endpointURL, err := validateDestinationURL(payload.EndpointURL)
+	endpointURL, err := validateDestinationURL(payload.Otel.EndpointURL)
 	if err != nil {
 		return nil, err
 	}
@@ -244,8 +293,8 @@ func (s *Service) UpdateOtelDestination(ctx context.Context, payload *gen.Update
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "decode OTEL destination sensitive-data policy").LogError(ctx, logger)
 	}
-	headerInputs := make([]destinationHeaderInput, len(payload.Headers))
-	for i, input := range payload.Headers {
+	headerInputs := make([]destinationHeaderInput, len(payload.Otel.Headers))
+	for i, input := range payload.Otel.Headers {
 		if input == nil {
 			continue
 		}
@@ -300,10 +349,10 @@ func (s *Service) UpdateOtelDestination(ctx context.Context, payload *gen.Update
 		return nil, oops.E(oops.CodeUnexpected, err, "commit OTEL destination update").LogError(ctx, logger)
 	}
 
-	return mv.BuildOtelDestinationView(after, headers, string(policy)), nil
+	return mv.BuildDestinationView(after, headers, string(policy)), nil
 }
 
-func (s *Service) DeleteOtelDestination(ctx context.Context, payload *gen.DeleteOtelDestinationPayload) error {
+func (s *Service) DeleteDestination(ctx context.Context, payload *gen.DeleteDestinationPayload) error {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil {
 		return oops.C(oops.CodeUnauthorized)
@@ -312,7 +361,20 @@ func (s *Service) DeleteOtelDestination(ctx context.Context, payload *gen.Delete
 		return err
 	}
 
-	destinationID, err := uuid.Parse(payload.ID)
+	destinationType, err := parseDestinationType(payload.DestinationType)
+	if err != nil {
+		return oops.E(oops.CodeInvalid, err, "invalid destination_type")
+	}
+	switch destinationType {
+	case destinationTypeOTEL:
+		return s.deleteOtelDestination(ctx, authCtx, payload.ID)
+	default:
+		return oops.E(oops.CodeInvalid, fmt.Errorf("unsupported destination type %q", destinationType), "invalid destination_type")
+	}
+}
+
+func (s *Service) deleteOtelDestination(ctx context.Context, authCtx *contextvalues.AuthContext, id string) error {
+	destinationID, err := uuid.Parse(id)
 	if err != nil {
 		return oops.E(oops.CodeInvalid, err, "invalid destination id")
 	}
@@ -373,7 +435,7 @@ func (s *Service) DeleteOtelDestination(ctx context.Context, payload *gen.Delete
 	return nil
 }
 
-func (s *Service) buildDestinationView(row repo.OtelDestination) (*gen.OtelDestination, error) {
+func (s *Service) buildDestinationView(row repo.OtelDestination) (*gen.Destination, error) {
 	headers, err := s.decryptHeaders(row.HeadersEncrypted)
 	if err != nil {
 		return nil, err
@@ -382,7 +444,19 @@ func (s *Service) buildDestinationView(row repo.OtelDestination) (*gen.OtelDesti
 	if err != nil {
 		return nil, err
 	}
-	return mv.BuildOtelDestinationView(row, headers, string(policy)), nil
+	return mv.BuildDestinationView(row, headers, string(policy)), nil
+}
+
+type destinationType string
+
+const destinationTypeOTEL destinationType = "otel"
+
+func parseDestinationType(value string) (destinationType, error) {
+	destination := destinationType(value)
+	if destination != destinationTypeOTEL {
+		return "", fmt.Errorf("unsupported destination type %q", value)
+	}
+	return destination, nil
 }
 
 type dataSource string
