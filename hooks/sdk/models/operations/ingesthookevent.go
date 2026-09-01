@@ -19,7 +19,7 @@ type IngestHookEventRequest struct {
 	XGramReplayed *bool `header:"style=simple,explode=false,name=X-Gram-Replayed"`
 	// True only for a synthetic prompt recovered after its live checkpoint; backfilled prompts are observational and never governed.
 	XGramBackfilled *bool `header:"style=simple,explode=false,name=X-Gram-Backfilled"`
-	// Opaque Gram-signed, proof-minted acting-user assertion for one governed live invocation.
+	// Opaque Gram-signed, proof-minted acting-user assertion required for governed live invocations and their observational replay.
 	XGramActingUser *string `header:"style=simple,explode=false,name=X-Gram-Acting-User"`
 	// Exact acting-user delegation contract used by the assertion.
 	XGramActingUserContract *string                      `header:"style=simple,explode=false,name=X-Gram-Acting-User-Contract"`

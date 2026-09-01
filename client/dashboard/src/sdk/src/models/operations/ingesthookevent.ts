@@ -32,7 +32,7 @@ export type IngestHookEventRequest = {
    */
   xGramBackfilled?: boolean | undefined;
   /**
-   * Opaque Gram-signed, proof-minted acting-user assertion for one governed live invocation.
+   * Opaque Gram-signed, proof-minted acting-user assertion required for governed live invocations and their observational replay.
    */
   xGramActingUser?: string | undefined;
   /**

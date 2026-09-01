@@ -19092,11 +19092,11 @@ paths:
             description: True only for a synthetic prompt recovered after its live checkpoint; backfilled prompts are observational and never governed.
             type: boolean
         - allowEmptyValue: true
-          description: Opaque Gram-signed, proof-minted acting-user assertion for one governed live invocation.
+          description: Opaque Gram-signed, proof-minted acting-user assertion required for governed live invocations and their observational replay.
           in: header
           name: X-Gram-Acting-User
           schema:
-            description: Opaque Gram-signed, proof-minted acting-user assertion for one governed live invocation.
+            description: Opaque Gram-signed, proof-minted acting-user assertion required for governed live invocations and their observational replay.
             type: string
         - allowEmptyValue: true
           description: Exact acting-user delegation contract used by the assertion.
