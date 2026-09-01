@@ -34,6 +34,7 @@ var _ = Service("assets", func() {
 				Header("content_length:Content-Length")
 				Header("last_modified:Last-Modified")
 				Header("access_control_allow_origin:Access-Control-Allow-Origin")
+				Header("cross_origin_resource_policy:Cross-Origin-Resource-Policy")
 			})
 
 			SkipResponseBodyEncodeDecode()
@@ -360,12 +361,18 @@ var ServeImageForm = Type("ServeImageForm", func() {
 })
 
 var ServeImageResult = Type("ServeImageResult", func() {
-	Required("content_type", "content_length", "last_modified")
+	Required(
+		"content_type",
+		"content_length",
+		"last_modified",
+		"cross_origin_resource_policy",
+	)
 
 	Attribute("content_type", String)
 	Attribute("content_length", Int64)
 	Attribute("last_modified", String)
 	Attribute("access_control_allow_origin", String)
+	Attribute("cross_origin_resource_policy", String)
 })
 
 var UploadOpenAPIv3Form = Type("UploadOpenAPIv3Form", func() {

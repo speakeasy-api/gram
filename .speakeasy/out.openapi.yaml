@@ -7102,6 +7102,9 @@ paths:
             Content-Type:
               schema:
                 type: string
+            Cross-Origin-Resource-Policy:
+              schema:
+                type: string
             Last-Modified:
               schema:
                 type: string
@@ -80371,12 +80374,15 @@ components:
           format: int64
         content_type:
           type: string
+        cross_origin_resource_policy:
+          type: string
         last_modified:
           type: string
       required:
         - content_type
         - content_length
         - last_modified
+        - cross_origin_resource_policy
     ServeOpenAPIv3Form:
       type: object
       properties:
