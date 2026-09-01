@@ -2,9 +2,12 @@ package k8s
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"strings"
 	"time"
 
@@ -56,8 +59,8 @@ func NewNetworkIngressResourceNames(id uuid.UUID) (NetworkIngressResourceNames, 
 	if id == uuid.Nil {
 		return NetworkIngressResourceNames{}, fmt.Errorf("%w: ingress id is required", ErrNetworkIngressInvalidDesiredState)
 	}
-	suffix := strings.ToLower(strings.ReplaceAll(id.String(), "-", ""))
-	prefix := "gram-netingress-" + suffix[:20]
+	digest := sha256.Sum256(id[:])
+	prefix := "gram-netingress-" + hex.EncodeToString(digest[:10])
 	return NetworkIngressResourceNames{
 		OwnerID:                id,
 		Namespace:              prefix,
@@ -78,6 +81,13 @@ func NewNetworkIngressResourceNames(id uuid.UUID) (NetworkIngressResourceNames, 
 func (n NetworkIngressResourceNames) Validate() error {
 	if n.OwnerID == uuid.Nil {
 		return fmt.Errorf("%w: resource owner is required", ErrNetworkIngressInvalidDesiredState)
+	}
+	expected, err := NewNetworkIngressResourceNames(n.OwnerID)
+	if err != nil {
+		return err
+	}
+	if n != expected {
+		return fmt.Errorf("%w: resource identities do not match owner", ErrNetworkIngressInvalidDesiredState)
 	}
 	values := []string{
 		n.Namespace,
@@ -130,19 +140,22 @@ func ParseNetworkIngressResourceNames(encoded []byte) (NetworkIngressResourceNam
 // decrypted provider-opaque bytes and must remain in-memory only. Only the
 // selected provider adapter may decode their contents.
 type NetworkIngressDesired struct {
-	ID             uuid.UUID
-	Provider       string
-	Hostname       string
-	Credentials    []byte
-	Resources      NetworkIngressResourceNames
-	AttestorImage  string
-	BackendService string
-	BackendPort    int32
+	ID             uuid.UUID                   `json:"id"`
+	Provider       string                      `json:"provider"`
+	Hostname       string                      `json:"hostname"`
+	Credentials    []byte                      `json:"-"`
+	Resources      NetworkIngressResourceNames `json:"resources"`
+	AttestorImage  string                      `json:"attestor_image"`
+	BackendService string                      `json:"backend_service"`
+	BackendPort    int32                       `json:"backend_port"`
 }
 
 func (d NetworkIngressDesired) Validate() error {
-	if d.ID == uuid.Nil || d.Provider == "" || d.Hostname == "" || len(d.Credentials) == 0 || d.AttestorImage == "" || d.BackendService == "" || d.BackendPort <= 0 {
+	if d.ID == uuid.Nil || d.Provider == "" || d.Hostname == "" || len(d.Credentials) == 0 || d.AttestorImage == "" || d.BackendService == "" || d.BackendPort <= 0 || d.BackendPort > 65535 {
 		return fmt.Errorf("%w: desired state is incomplete", ErrNetworkIngressInvalidDesiredState)
+	}
+	if d.Hostname != strings.ToLower(d.Hostname) || len(k8svalidation.IsDNS1123Label(d.Hostname)) > 0 {
+		return fmt.Errorf("%w: hostname must be a lowercase DNS label", ErrNetworkIngressInvalidDesiredState)
 	}
 	if err := d.Resources.Validate(); err != nil {
 		return err
@@ -170,14 +183,14 @@ type NetworkIngressProvisionerRegistry struct {
 	providers map[string]NetworkIngressProvisioner
 }
 
-func NewNetworkIngressProvisionerRegistry(providers map[string]NetworkIngressProvisioner) (*NetworkIngressProvisionerRegistry, error) {
+func NewNetworkIngressProvisionerRegistry(providers map[string]NetworkIngressProvisioner, logger *slog.Logger, metrics *NetworkIngressMetrics) (*NetworkIngressProvisionerRegistry, error) {
 	registry := &NetworkIngressProvisionerRegistry{providers: make(map[string]NetworkIngressProvisioner, len(providers))}
 	for provider, provisioner := range providers {
 		provider = strings.TrimSpace(provider)
 		if provider == "" || provisioner == nil {
 			return nil, fmt.Errorf("%w: provider registry entry is invalid", ErrNetworkIngressInvalidDesiredState)
 		}
-		registry.providers[provider] = provisioner
+		registry.providers[provider] = ObserveNetworkIngressProvisioner(provider, provisioner, logger, metrics)
 	}
 	return registry, nil
 }
