@@ -5,8 +5,8 @@
 -- demo project ids ARE the isolation boundary — they must match
 -- seed/demo/postgres.sql).
 --
--- The MVs (trace/metrics/attribute_metrics/chat_token/chat_session summaries,
--- attribute_keys, spend_rule_usage) fire on INSERT, and a DELETE on
+-- The MVs (trace/metrics/attribute_metrics/chat_token/chat_session/mcp_call
+-- summaries, attribute_keys, spend_rule_usage) fire on INSERT, and a DELETE on
 -- telemetry_logs never shrinks their targets — so each target is deleted
 -- explicitly below before the fresh insert repopulates it through the MVs.
 -- Rows are inserted with recent timestamps (trailing ~12 days), safely past
@@ -60,6 +60,8 @@ SET lightweight_deletes_sync = 1;
 DELETE FROM telemetry_logs WHERE gram_project_id IN
   (toUUID('dec0de00-0000-4000-a000-000000000001'));
 DELETE FROM trace_summaries WHERE gram_project_id IN
+  (toUUID('dec0de00-0000-4000-a000-000000000001'));
+DELETE FROM mcp_call_summaries WHERE gram_project_id IN
   (toUUID('dec0de00-0000-4000-a000-000000000001'));
 DELETE FROM metrics_summaries WHERE gram_project_id IN
   (toUUID('dec0de00-0000-4000-a000-000000000001'));
@@ -1022,6 +1024,13 @@ SELECT throwIf(
      (toUUID('dec0de00-0000-4000-a000-000000000001'))
    ) < 180,
   'demo seed postflight: chat_session_summaries_mv missing sessions');
+
+SELECT throwIf(
+  (SELECT count() FROM mcp_call_summaries WHERE gram_project_id IN
+     (toUUID('dec0de00-0000-4000-a000-000000000001'))
+     AND toolset_slug != ''
+   ) = 0,
+  'demo seed postflight: mcp_call_summaries_mv missing hosted MCP calls');
 
 SELECT throwIf(
   (SELECT count() FROM attribute_metrics_summaries WHERE gram_project_id IN

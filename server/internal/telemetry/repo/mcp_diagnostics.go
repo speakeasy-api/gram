@@ -121,10 +121,12 @@ func (q *Queries) GetMCPOutcomeBreakdown(ctx context.Context, arg GetMCPOutcomeB
 	return result, nil
 }
 
-// mcpTraceSource builds the per-trace row set both diagnostics and drill-down
-// read from: one row per trace, carrying its correlation id, when it happened,
-// the client that made it, the tool it called, and its classified outcome.
-// Aggregations sit on top of this; nothing below it reaches a raw log row.
+// mcpTraceSource builds the per-call row set both diagnostics and drill-down
+// read from: one row per tool call, carrying its correlation id, call id,
+// when it happened, the client that made it, the tool it called, and its
+// classified outcome. Aggregations sit on top of this. The source is
+// mcp_call_summaries (one row per tool call), not trace_summaries (one row
+// per session), so a multi-server session does not mix tools across servers.
 func (q *Queries) mcpTraceSource(arg GetMCPOutcomeBreakdownParams) (string, []any, error) {
 	directSQL, directArgs, err := q.mcpOutcomeDirectSource(arg)
 	if err != nil {
@@ -146,27 +148,29 @@ func unionSource(directSQL string, directArgs []any, hookSQL string, hookArgs []
 }
 
 // mcpOutcomeDirectSource classifies calls that reached a hosted MCP server
-// directly. Aggregate aliases carry the "g_" prefix for the reason the tool
-// usage CTE documents: an alias that shadows a trace_summaries column is merged
-// into the enclosing aggregate and fails with ILLEGAL_AGGREGATION.
+// directly. It reads mcp_call_summaries so toolset_slug is filtered at the
+// call, not after a session-level max(). Aggregate aliases carry the "g_"
+// prefix so they do not shadow base columns and collapse into an enclosing
+// aggregate (ILLEGAL_AGGREGATION).
 func (q *Queries) mcpOutcomeDirectSource(arg GetMCPOutcomeBreakdownParams) (string, []any, error) {
 	grouped := sq.Select(
 		"trace_id",
+		"tool_call_id",
 		"min(start_time_unix_nano) AS event_time_ns",
-		"max(toolset_slug) AS g_toolset_slug",
-		"any(tool_name) AS g_tool_name",
-		"ifNull(anyIfMerge(http_status_code), 0) AS g_http_status_code",
+		"max(tool_name) AS g_tool_name",
+		"max(http_status_code) AS g_http_status_code",
 	).
-		From("trace_summaries").
+		From("mcp_call_summaries").
 		Where(squirrel.Eq{"gram_project_id": arg.GramProjectIDs}).
-		GroupBy("trace_id").
-		Having("min(start_time_unix_nano) >= ?", arg.TimeStart).
-		Having("min(start_time_unix_nano) <= ?", arg.TimeEnd).
-		Having("any(event_source) != 'hook'").
-		Having("g_toolset_slug != ''")
+		Where("event_source != 'hook'").
+		Where("toolset_slug != ''")
 	if len(arg.ToolsetSlugs) > 0 {
-		grouped = grouped.Having(squirrel.Eq{"g_toolset_slug": arg.ToolsetSlugs})
+		grouped = grouped.Where(squirrel.Eq{"toolset_slug": arg.ToolsetSlugs})
 	}
+	grouped = grouped.
+		GroupBy("trace_id", "tool_call_id").
+		Having("min(start_time_unix_nano) >= ?", arg.TimeStart).
+		Having("min(start_time_unix_nano) <= ?", arg.TimeEnd)
 	grouped = withTraceWindowScanBounds(grouped, "start_time_unix_nano", arg.TimeStart, arg.TimeEnd)
 
 	groupedSQL, groupedArgs, err := grouped.ToSql()
@@ -185,6 +189,7 @@ func (q *Queries) mcpOutcomeDirectSource(arg GetMCPOutcomeBreakdownParams) (stri
 	return fmt.Sprintf(`
 SELECT
 	trace_id,
+	tool_call_id,
 	event_time_ns,
 	'%s' AS client,
 	g_tool_name AS tool_name,
@@ -196,26 +201,31 @@ FROM (%s)`, MCPClientUnattributed, outcome, groupedSQL), groupedArgs, nil
 // observed them. This is the only lane that can name a client today, and it
 // names the reporting integration — self-reported evidence, never a metric
 // dimension a caller can filter on.
+//
+// mcp_server_url is filtered in WHERE against mcp_call_summaries so a session
+// that called several servers contributes only the matching calls, not an
+// arbitrary tool_name from the whole trace.
 func (q *Queries) mcpOutcomeHookSource(arg GetMCPOutcomeBreakdownParams) (string, []any, error) {
 	grouped := sq.Select(
 		"trace_id",
+		"tool_call_id",
 		"min(start_time_unix_nano) AS event_time_ns",
-		"any(hook_source) AS g_hook_source",
-		"any(tool_name) AS g_tool_name",
-		"max(mcp_server_url) AS g_mcp_server_url",
+		"max(hook_source) AS g_hook_source",
+		"max(tool_name) AS g_tool_name",
 		"max(has_result) AS g_has_result",
 		"max(has_error) AS g_has_error",
 	).
-		From("trace_summaries").
+		From("mcp_call_summaries").
 		Where(squirrel.Eq{"gram_project_id": arg.GramProjectIDs}).
-		GroupBy("trace_id").
-		Having("min(start_time_unix_nano) >= ?", arg.TimeStart).
-		Having("min(start_time_unix_nano) <= ?", arg.TimeEnd).
-		Having("any(event_source) = 'hook'").
-		Having("g_mcp_server_url != ''")
+		Where("event_source = 'hook'").
+		Where("mcp_server_url != ''")
 	if len(arg.MCPServerURLSuffixes) > 0 {
-		grouped = grouped.Having("arrayExists(suffix -> endsWith(g_mcp_server_url, suffix), ?)", arg.MCPServerURLSuffixes)
+		grouped = grouped.Where("arrayExists(suffix -> endsWith(mcp_server_url, suffix), ?)", arg.MCPServerURLSuffixes)
 	}
+	grouped = grouped.
+		GroupBy("trace_id", "tool_call_id").
+		Having("min(start_time_unix_nano) >= ?", arg.TimeStart).
+		Having("min(start_time_unix_nano) <= ?", arg.TimeEnd)
 	grouped = withTraceWindowScanBounds(grouped, "start_time_unix_nano", arg.TimeStart, arg.TimeEnd)
 
 	groupedSQL, groupedArgs, err := grouped.ToSql()
@@ -232,6 +242,7 @@ func (q *Queries) mcpOutcomeHookSource(arg GetMCPOutcomeBreakdownParams) (string
 	return fmt.Sprintf(`
 SELECT
 	trace_id,
+	tool_call_id,
 	event_time_ns,
 	%s AS client,
 	g_tool_name AS tool_name,
