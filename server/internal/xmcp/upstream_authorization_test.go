@@ -201,7 +201,13 @@ func TestUpstream_WellKnownProtectedResourceAdvertisesTheGramURL(t *testing.T) {
 }
 
 // A row that names no issuer has no authorization server to advertise, so it is
-// not served at all rather than served as something else.
+// not served at all rather than served as something else. Asserted on the
+// runtime path, not the well-known path: a well-known 404 proves nothing here,
+// since a toolset with no external OAuth config 404s there regardless of
+// visibility, so that version of this test passed with the feature reverted.
+//
+// This is the branch that actually executes in production today, because
+// nothing outside tests can set remote_session_issuer_id yet.
 func TestUpstream_WithoutAnIssuerIsNotServed(t *testing.T) {
 	t.Parallel()
 
@@ -213,8 +219,40 @@ func TestUpstream_WithoutAnIssuerIsNotServed(t *testing.T) {
 	toolset := seedBareToolset(t, ctx, ti, *authCtx.ProjectID, authCtx.ActiveOrganizationID, "ts-upstream-noissuer-"+uuid.NewString()[:8])
 	slug, _ := seedToolsetMCPEndpoint(t, ctx, ti, *authCtx.ProjectID, toolset, mcpservers.VisibilityUpstream)
 
+	// Not 401: an incoherent row must not challenge a client into a handshake
+	// it can never complete. Not 200: it must certainly not serve.
+	rr := runHandler(t, ctx, ti, http.MethodPost, slug, bearer("upstream-issued-token"), []byte(initializeBody))
+	require.Equal(t, http.StatusNotFound, rr.Code, "body=%s", rr.Body.String())
+
 	_, err := runWellKnown(t, ctx, ti.service.HandleWellKnownOAuthServerMetadata, "/.well-known/oauth-authorization-server/x/mcp/"+slug, slug)
 	require.Error(t, err)
+}
+
+// An upstream row carrying a user session issuer would have its advertised
+// issuer reassigned by the remote-session resync, leaving it advertising one
+// authorization server while forwarding bearers to another. The runtime does
+// not trust the management API to have prevented that.
+func TestUpstream_WithAUserSessionIssuerIsNotServed(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	slug, mcpServer, _ := seedUpstreamToolsetMCPEndpoint(t, ctx, ti, *authCtx.ProjectID, authCtx.ActiveOrganizationID, upstreamDiscoveryDocument())
+
+	userIssuerID := seedUserSessionIssuer(t, ctx, ti, *authCtx.ProjectID)
+	stamped, err := testrepo.New(ti.conn).SetMCPServerUserSessionIssuerFixture(ctx, testrepo.SetMCPServerUserSessionIssuerFixtureParams{
+		UserSessionIssuerID: uuid.NullUUID{UUID: userIssuerID, Valid: true},
+		ID:                  mcpServer.ID,
+		ProjectID:           *authCtx.ProjectID,
+	})
+	require.NoError(t, err)
+	require.Equal(t, int64(1), stamped)
+
+	rr := runHandler(t, ctx, ti, http.MethodPost, slug, bearer("upstream-issued-token"), []byte(initializeBody))
+	require.Equal(t, http.StatusNotFound, rr.Code, "body=%s", rr.Body.String())
 }
 
 // A tokenless call must be challenged, not refused. Two separate bugs produce a
