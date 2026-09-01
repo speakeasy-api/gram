@@ -84,11 +84,6 @@ export const AUDIT_ACTIONS = [
   "mcp_approval_request:evidence_changed",
   "mcp_approval_request:research_start",
   "mcp_approval_request:supersede",
-  "mcp_collection:attach_server",
-  "mcp_collection:create",
-  "mcp_collection:delete",
-  "mcp_collection:detach_server",
-  "mcp_collection:update",
   "mcp_metadata:update",
   "meta-mcp:add_member",
   "meta-mcp:create",
@@ -423,17 +418,6 @@ export function staticActionPhrase(action: AuditAction): string {
       return "started research on";
     case "mcp_approval_request:supersede":
       return "superseded the access decision for";
-
-    case "mcp_collection:create":
-      return "created collection";
-    case "mcp_collection:update":
-      return "updated collection";
-    case "mcp_collection:delete":
-      return "deleted collection";
-    case "mcp_collection:attach_server":
-      return "added a server to collection";
-    case "mcp_collection:detach_server":
-      return "removed a server from collection";
 
     case "mcp_metadata:update":
       return "updated MCP metadata for";

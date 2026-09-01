@@ -217,7 +217,6 @@ const ASSET_KIND_LABELS: Record<string, string> = {
 
 const SUBJECT_TYPE_LABELS: Record<string, string> = {
   mcp_server: "MCP server",
-  mcp_collection: "Collection",
   otel_forwarding_config: "OpenTelemetry forwarding",
   api_key: "API key",
   chat_session: "Chat session",

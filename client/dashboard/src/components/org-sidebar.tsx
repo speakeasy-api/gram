@@ -124,7 +124,6 @@ export function OrgSidebar({
 
   const allOrgNavRoutes = [
     orgRoutes.home,
-    orgRoutes.collections,
     orgRoutes.team,
     orgRoutes.billing,
     orgRoutes.apiKeys,
@@ -184,12 +183,6 @@ export function OrgSidebar({
               <ScopeGatedTopLevelItem
                 item={orgRoutes.home}
                 scope={["org:read", "project:read", "org:admin"]}
-              />
-
-              {/* Collections — top-level */}
-              <ScopeGatedTopLevelItem
-                item={orgRoutes.collections}
-                scope={["org:read", "org:admin"]}
               />
 
               {/* Team — top-level */}

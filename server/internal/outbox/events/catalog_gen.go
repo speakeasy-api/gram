@@ -33,7 +33,6 @@ var All = []outbox.EventRegistration{
 	KillswitchV1,
 	LiteLLMInstanceV1,
 	McpApprovalRequestV1,
-	McpCollectionV1,
 	McpEndpointV1,
 	McpServerV1,
 	MetaMcpServerV1,

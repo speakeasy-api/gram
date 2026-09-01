@@ -63,9 +63,6 @@ import CreateUnproxiedMcp from "./pages/sources/unproxied-mcp/CreateUnproxiedMcp
 import CreateRemoteMcp from "./pages/sources/remote-mcp/CreateRemoteMcp";
 import CreateTunneledMcp from "./pages/sources/tunneled-mcp/CreateTunneledMcp";
 import { SetupWizard } from "./pages/setup/components/onboarding-wizard";
-import Collections, { CollectionsRoot } from "./pages/collections/Collections";
-import CollectionDetail from "./pages/collections/CollectionDetail";
-import CreateCollection from "./pages/collections/CreateCollection";
 import OrgApiKeys from "./pages/org/OrgApiKeys";
 import Plugins, { PluginsRoot } from "./pages/plugins/Plugins";
 import PluginDetail from "./pages/plugins/PluginDetail";
@@ -1356,25 +1353,6 @@ const ORG_ROUTE_STRUCTURE = {
     url: "request-access",
     component: RequestAccess,
     outsideMainLayout: true,
-  },
-  collections: {
-    title: "Collections",
-    url: "collections",
-    icon: "layout-grid",
-    component: CollectionsRoot,
-    indexComponent: Collections,
-    subPages: {
-      create: {
-        title: "Create Collection",
-        url: "create",
-        component: CreateCollection,
-      },
-      detail: {
-        title: "Collection",
-        url: ":collectionSlug",
-        component: CollectionDetail,
-      },
-    },
   },
   setup: {
     title: "Setup",

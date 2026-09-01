@@ -36,7 +36,6 @@ export type NamedAsset =
       name: string;
       slug: string;
       type: "externalmcp";
-      organizationMcpCollectionRegistryId?: string;
       registryId?: string;
       iconUrl?: string;
     }
@@ -175,10 +174,7 @@ export function SourceCard({
   const { hasScope } = useRBAC();
   const canWrite = hasScope("project:write");
   const config = sourceTypeConfig[asset.type];
-  const sourceTypeLabel =
-    asset.type === "externalmcp" && asset.organizationMcpCollectionRegistryId
-      ? "Collection"
-      : config.label;
+  const sourceTypeLabel = config.label;
 
   const sourceKind = sourceTypeToUrnKind(asset.type);
 

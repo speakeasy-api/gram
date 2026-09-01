@@ -6,8 +6,7 @@ import type { FilterState } from "./useFilterState";
 /**
  * Derive the catalog's tool_count / is_read_only scalars from a full tool list.
  * The catalog list endpoint precomputes these server-side; callers that only
- * have the full tools (e.g. collection-backed servers) use this to match the
- * `PulseMCPServer` shape.
+ * have the full tools use this to match the `PulseMCPServer` shape.
  */
 export function toolStats(tools: ExternalMCPTool[] | undefined): {
   toolCount: number;
