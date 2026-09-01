@@ -2,6 +2,8 @@ package netingress
 
 import (
 	"context"
+	"crypto/tls"
+	"crypto/x509"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -18,6 +20,27 @@ import (
 
 const maxProjectedTokenBytes = 64 * 1024
 
+func NewAttestorTransport(caPEM []byte) (*http.Transport, error) {
+	if len(caPEM) == 0 {
+		return nil, errors.New("attestor upstream CA bundle is required")
+	}
+	roots := x509.NewCertPool()
+	if !roots.AppendCertsFromPEM(caPEM) {
+		return nil, errors.New("attestor upstream CA bundle contains no certificates")
+	}
+	defaultTransport, ok := http.DefaultTransport.(*http.Transport)
+	if !ok {
+		return nil, errors.New("default HTTP transport has an unsupported type")
+	}
+	transport := defaultTransport.Clone()
+	transport.Proxy = nil
+	transport.TLSClientConfig = &tls.Config{
+		MinVersion: tls.VersionTLS12,
+		RootCAs:    roots,
+	}
+	return transport, nil
+}
+
 // AttestorConfig defines the per-ingress reverse proxy. ExpectedHost is the
 // customer tailnet FQDN while Upstream is gram-server's private listener.
 type AttestorConfig struct {
@@ -32,11 +55,14 @@ func NewAttestorHandler(config AttestorConfig) (http.Handler, error) {
 	if config.Upstream == nil || config.Upstream.Scheme == "" || config.Upstream.Host == "" {
 		return nil, errors.New("attestor upstream must be an absolute URL")
 	}
-	if config.Upstream.Scheme != "http" && config.Upstream.Scheme != "https" {
-		return nil, errors.New("attestor upstream must use HTTP or HTTPS")
+	if config.Upstream.Scheme != "https" {
+		return nil, errors.New("attestor upstream must use HTTPS")
 	}
 	if config.Upstream.User != nil || config.Upstream.Path != "" || config.Upstream.RawPath != "" || config.Upstream.RawQuery != "" || config.Upstream.ForceQuery || config.Upstream.Fragment != "" {
 		return nil, errors.New("attestor upstream must not contain userinfo, path, query, or fragment")
+	}
+	if config.Transport == nil {
+		return nil, errors.New("attestor upstream transport is required")
 	}
 	expectedHost, err := canonicalAuthority(config.ExpectedHost)
 	if err != nil {

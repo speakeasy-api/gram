@@ -64,7 +64,13 @@ SELECT
     deleted
 FROM network_ingresses
 WHERE id = $1
+  AND organization_id = $2
 `
+
+type GetIngressServingStateParams struct {
+	ID             uuid.UUID
+	OrganizationID string
+}
 
 type GetIngressServingStateRow struct {
 	OrganizationID         string
@@ -77,8 +83,8 @@ type GetIngressServingStateRow struct {
 	Deleted                bool
 }
 
-func (q *Queries) GetIngressServingState(ctx context.Context, id uuid.UUID) (GetIngressServingStateRow, error) {
-	row := q.db.QueryRow(ctx, getIngressServingState, id)
+func (q *Queries) GetIngressServingState(ctx context.Context, arg GetIngressServingStateParams) (GetIngressServingStateRow, error) {
+	row := q.db.QueryRow(ctx, getIngressServingState, arg.ID, arg.OrganizationID)
 	var i GetIngressServingStateRow
 	err := row.Scan(
 		&i.OrganizationID,

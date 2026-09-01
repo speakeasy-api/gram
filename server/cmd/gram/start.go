@@ -2,6 +2,7 @@ package gram
 
 import (
 	"context"
+	"crypto/tls"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -303,8 +304,18 @@ func newStartCommand() *cli.Command {
 		},
 		&cli.StringFlag{
 			Name:    "netingress-address",
-			Usage:   "Private network ingress HTTP address; empty disables the listener",
+			Usage:   "Private network ingress HTTPS address; empty disables the listener",
 			EnvVars: []string{"GRAM_NETINGRESS_ADDRESS"},
+		},
+		&cli.StringFlag{
+			Name:    "netingress-tls-cert-file",
+			Usage:   "TLS certificate file for the private network ingress listener",
+			EnvVars: []string{"GRAM_NETINGRESS_TLS_CERT_FILE"},
+		},
+		&cli.StringFlag{
+			Name:    "netingress-tls-key-file",
+			Usage:   "TLS private key file for the private network ingress listener",
+			EnvVars: []string{"GRAM_NETINGRESS_TLS_KEY_FILE"},
 		},
 		&cli.StringFlag{
 			Name:     "server-url",
@@ -1670,6 +1681,16 @@ func newStartCommand() *cli.Command {
 				if k8sClient.Clientset == nil {
 					return errors.New("private network ingress listener requires an in-cluster Kubernetes client")
 				}
+				if c.String("netingress-tls-cert-file") == "" || c.String("netingress-tls-key-file") == "" {
+					return errors.New("private network ingress listener requires a TLS certificate and key")
+				}
+				privateTLSCertificate, err := tls.LoadX509KeyPair(
+					c.String("netingress-tls-cert-file"),
+					c.String("netingress-tls-key-file"),
+				)
+				if err != nil {
+					return fmt.Errorf("load private network ingress TLS certificate: %w", err)
+				}
 				privateMux := goahttp.NewMuxer()
 				privateMux.Use(middleware.NetworkServingPolicyVersion)
 				privateMux.Use(netingress.RouteGuard)
@@ -1701,6 +1722,10 @@ func newStartCommand() *cli.Command {
 					Handler:           privateMux,
 					ReadHeaderTimeout: 10 * time.Second,
 					IdleTimeout:       620 * time.Second,
+					TLSConfig: &tls.Config{
+						MinVersion:   tls.VersionTLS12,
+						Certificates: []tls.Certificate{privateTLSCertificate},
+					},
 					BaseContext: func(net.Listener) context.Context {
 						return ctx
 					},
@@ -1848,7 +1873,7 @@ func newStartCommand() *cli.Command {
 			if privateIngressServer != nil {
 				group.Go(func() {
 					logger.InfoContext(ctx, "private network ingress listener started", attr.SlogServerAddress(privateIngressListener.Addr().String()))
-					if err := privateIngressServer.Serve(privateIngressListener); err != nil && !errors.Is(err, http.ErrServerClosed) {
+					if err := privateIngressServer.ServeTLS(privateIngressListener, "", ""); err != nil && !errors.Is(err, http.ErrServerClosed) {
 						logger.ErrorContext(ctx, "private network ingress listener error", attr.SlogError(err))
 					}
 				})

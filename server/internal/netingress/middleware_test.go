@@ -72,6 +72,28 @@ func TestMiddlewareStampsPrivateOriginAndStripsAttestation(t *testing.T) {
 	require.Equal(t, &requestorigin.NetworkIdentity{Login: "user@example.com", Name: "Example User"}, gotOrigin.NetworkIdentity)
 }
 
+func TestMiddlewareFormatsIPv6PrivateOrigin(t *testing.T) {
+	t.Parallel()
+
+	verifier := &fakeWorkloadVerifier{ingress: Ingress{
+		ID: uuid.New(), OrganizationID: "org_123", Provider: ProviderTailscale,
+		DNSName: "2001:db8::1", IdentityRequired: false,
+	}}
+	var gotOrigin requestorigin.Origin
+	next := http.HandlerFunc(func(w http.ResponseWriter, request *http.Request) {
+		gotOrigin, _ = requestorigin.FromContext(request.Context())
+		w.WriteHeader(http.StatusNoContent)
+	})
+	request := privateRequest()
+	request.Host = "[2001:db8::1]:443"
+	response := httptest.NewRecorder()
+
+	Middleware(verifier, IdentityParsers{ProviderTailscale: TailscaleIdentityParser{}})(next).ServeHTTP(response, request)
+
+	require.Equal(t, http.StatusNoContent, response.Code)
+	require.Equal(t, "https://[2001:db8::1]", gotOrigin.BaseURL)
+}
+
 func TestMiddlewareAllowsTaggedNodeWhenIdentityOptional(t *testing.T) {
 	t.Parallel()
 

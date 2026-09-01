@@ -5,12 +5,14 @@ import (
 	"errors"
 	"net"
 	"net/http"
+	"net/url"
 	"strings"
 
+	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/requestorigin"
 )
 
-const AttestationHeader = "X-Gram-Network-Attestation"
+const AttestationHeader = middleware.PrivateIngressAttestationHeader
 
 type WorkloadVerifier interface {
 	Verify(ctx context.Context, token, source string) (Ingress, error)
@@ -68,8 +70,11 @@ func Middleware(verifier WorkloadVerifier, parsers IdentityParsers) func(http.Ha
 			DeleteTailscaleIdentityHeaders(request.Header)
 
 			origin := requestorigin.Origin{
-				Surface:          requestorigin.SurfacePrivateNetwork,
-				BaseURL:          "https://" + ingress.DNSName,
+				Surface: requestorigin.SurfacePrivateNetwork,
+				BaseURL: (&url.URL{
+					Scheme: "https",
+					Host:   privateURLAuthority(ingress.DNSName),
+				}).String(),
 				OrganizationID:   ingress.OrganizationID,
 				NetworkIngressID: ingress.ID,
 				NetworkIdentity:  identity,
@@ -77,6 +82,13 @@ func Middleware(verifier WorkloadVerifier, parsers IdentityParsers) func(http.Ha
 			next.ServeHTTP(w, request.WithContext(requestorigin.WithContext(request.Context(), origin)))
 		})
 	}
+}
+
+func privateURLAuthority(host string) string {
+	if strings.Contains(host, ":") {
+		return "[" + host + "]"
+	}
+	return host
 }
 
 func transportSource(remoteAddr string) (string, error) {

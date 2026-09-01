@@ -89,8 +89,8 @@ func AttachPrivate(mux goahttp.Muxer, service *Service, metadataService *mcpmeta
 			handler = oops.ErrHandle(service.logger, service.handleOAuthToken)
 		case netingress.RouteRevoke:
 			handler = oops.ErrHandle(service.logger, service.handleOAuthRevoke)
-		case netingress.RouteInstallScript, netingress.RouteConsentScript, netingress.RouteConsentToolsScript:
-			// Shared assets are owned by the /mcp catalog and are not xMCP routes.
+		default:
+			panic(fmt.Sprintf("unsupported private xMCP route id %q", route.ID))
 		}
 		if handler == nil {
 			panic(fmt.Sprintf("private xMCP route %s %s has no handler", route.Method, route.Path))

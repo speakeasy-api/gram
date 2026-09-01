@@ -44,6 +44,12 @@ func newNetingressAttestorCommand() *cli.Command {
 				Required: true,
 			},
 			&cli.StringFlag{
+				Name:     "upstream-ca-file",
+				Usage:    "PEM CA bundle for the Gram private listener",
+				EnvVars:  []string{"GRAM_NETINGRESS_UPSTREAM_CA_FILE"},
+				Required: true,
+			},
+			&cli.StringFlag{
 				Name:     "expected-host",
 				Usage:    "Private ingress FQDN accepted from Tailscale",
 				EnvVars:  []string{"GRAM_NETINGRESS_EXPECTED_HOST"},
@@ -62,11 +68,19 @@ func newNetingressAttestorCommand() *cli.Command {
 			if err != nil {
 				return fmt.Errorf("parse private listener upstream: %w", err)
 			}
+			caPEM, err := os.ReadFile(c.String("upstream-ca-file"))
+			if err != nil {
+				return fmt.Errorf("read private listener CA bundle: %w", err)
+			}
+			transport, err := netingress.NewAttestorTransport(caPEM)
+			if err != nil {
+				return fmt.Errorf("configure private listener transport: %w", err)
+			}
 			handler, err := netingress.NewAttestorHandler(netingress.AttestorConfig{
 				Upstream:     upstream,
 				ExpectedHost: c.String("expected-host"),
 				TokenPath:    c.String("token-path"),
-				Transport:    nil,
+				Transport:    transport,
 				Logger:       logger,
 			})
 			if err != nil {

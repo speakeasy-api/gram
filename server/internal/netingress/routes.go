@@ -107,7 +107,12 @@ func isReservedGlobalPath(method, requestPath string) bool {
 	if strings.HasSuffix(requestPath, "/") || strings.Contains(requestPath, "//") || strings.Contains(requestPath, "/./") || strings.Contains(requestPath, "/../") {
 		return true
 	}
-	for _, callback := range []string{"/mcp/idp_callback", "/mcp/remote_login_callback"} {
+	for _, callback := range []string{
+		"/mcp/idp_callback",
+		"/mcp/remote_login_callback",
+		"/x/mcp/idp_callback",
+		"/x/mcp/remote_login_callback",
+	} {
 		if requestPath == callback || strings.HasPrefix(requestPath, callback+"/") {
 			return true
 		}

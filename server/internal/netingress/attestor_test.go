@@ -3,6 +3,7 @@ package netingress
 import (
 	"bufio"
 	"context"
+	"encoding/pem"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -35,13 +36,13 @@ func TestAttestorHandlerForwardsOnlyPrivateRoutesAndRefreshesToken(t *testing.T)
 	require.NoError(t, os.WriteFile(tokenPath, []byte("first-token\n"), 0o600))
 
 	seen := make(chan *http.Request, 2)
-	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	upstream := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		seen <- r.Clone(r.Context())
 		w.WriteHeader(http.StatusNoContent)
 	}))
 	t.Cleanup(upstream.Close)
 
-	handler := newTestAttestor(t, upstream.URL, tokenPath)
+	handler := newTestAttestor(t, upstream, tokenPath)
 
 	for _, token := range []string{"first-token", "rotated-token"} {
 		req := httptest.NewRequest(http.MethodPost, "https://private.example.ts.net/mcp/server?tag=one", nil)
@@ -74,11 +75,11 @@ func TestAttestorHandlerRejectsWrongHostRouteAndMissingToken(t *testing.T) {
 
 	tokenPath := filepath.Join(t.TempDir(), "token")
 	require.NoError(t, os.WriteFile(tokenPath, []byte("token"), 0o600))
-	upstream := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
+	upstream := httptest.NewTLSServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
 		t.Fatal("unexpected upstream request")
 	}))
 	t.Cleanup(upstream.Close)
-	handler := newTestAttestor(t, upstream.URL, tokenPath)
+	handler := newTestAttestor(t, upstream, tokenPath)
 
 	tests := []struct {
 		name   string
@@ -140,10 +141,10 @@ func TestAttestorHandlerStreamsAndCancels(t *testing.T) {
 		<-r.Context().Done()
 		close(cancelled)
 	})))
-	upstream := httptest.NewServer(privateRuntime)
+	upstream := httptest.NewTLSServer(privateRuntime)
 	t.Cleanup(upstream.Close)
 
-	server := httptest.NewServer(newTestAttestor(t, upstream.URL, tokenPath))
+	server := httptest.NewServer(newTestAttestor(t, upstream, tokenPath))
 	t.Cleanup(server.Close)
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -218,7 +219,10 @@ func TestPrivateRouteCensus(t *testing.T) {
 		{http.MethodGet, "/marketplace/repository"},
 		{http.MethodGet, "/mcp/idp_callback"},
 		{http.MethodGet, "/mcp/remote_login_callback"},
+		{http.MethodGet, "/x/mcp/idp_callback"},
+		{http.MethodGet, "/x/mcp/remote_login_callback"},
 		{http.MethodPost, "/mcp/idp_callback/"},
+		{http.MethodGet, "/x/mcp/idp_callback/"},
 		{http.MethodGet, "/mcp/remote_login_callback/"},
 		{http.MethodDelete, "/mcp/install-page-deadbeef.js/"},
 		{http.MethodGet, "/oauth/callback"},
@@ -237,6 +241,35 @@ func TestPrivateRouteCensus(t *testing.T) {
 		guarded.ServeHTTP(rr, req)
 		require.Equal(t, http.StatusNotFound, rr.Code, "%s %s", route.method, route.path)
 	}
+}
+
+func TestNewAttestorHandlerRequiresHTTPS(t *testing.T) {
+	t.Parallel()
+
+	target, err := url.Parse("http://gram-private.example")
+	require.NoError(t, err)
+	_, err = NewAttestorHandler(AttestorConfig{
+		Upstream:     target,
+		ExpectedHost: "private.example.ts.net",
+		TokenPath:    "/token",
+		Transport:    http.DefaultTransport,
+		Logger:       nil,
+	})
+	require.ErrorContains(t, err, "must use HTTPS")
+}
+
+func TestNewAttestorTransportDisablesAmbientProxy(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewTLSServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
+	t.Cleanup(server.Close)
+	certificate := server.Certificate()
+	caPEM := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: certificate.Raw})
+	transport, err := NewAttestorTransport(caPEM)
+	require.NoError(t, err)
+	require.Nil(t, transport.Proxy)
+	require.NotNil(t, transport.TLSClientConfig)
+	require.NotNil(t, transport.TLSClientConfig.RootCAs)
 }
 
 func TestCanonicalAuthorityMatchesPrivateMiddleware(t *testing.T) {
@@ -258,15 +291,15 @@ func TestReadProjectedTokenRejectsWhitespace(t *testing.T) {
 	}
 }
 
-func newTestAttestor(t *testing.T, upstream, tokenPath string) http.Handler {
+func newTestAttestor(t *testing.T, upstream *httptest.Server, tokenPath string) http.Handler {
 	t.Helper()
-	target, err := url.Parse(upstream)
+	target, err := url.Parse(upstream.URL)
 	require.NoError(t, err)
 	handler, err := NewAttestorHandler(AttestorConfig{
 		Upstream:     target,
 		ExpectedHost: "private.example.ts.net",
 		TokenPath:    tokenPath,
-		Transport:    nil,
+		Transport:    upstream.Client().Transport,
 		Logger:       nil,
 	})
 	require.NoError(t, err)

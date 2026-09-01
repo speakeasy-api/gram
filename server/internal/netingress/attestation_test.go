@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"errors"
 	"fmt"
+	"sync"
 	"testing"
 	"time"
 
@@ -35,6 +36,9 @@ type fakeAttestorLookup struct {
 	recheckCalls    int
 	namespace       string
 	serviceAccount  string
+	recheckStarted  chan struct{}
+	recheckRelease  chan struct{}
+	mu              sync.Mutex
 }
 
 func (f *fakeAttestorLookup) ByAttestor(_ context.Context, namespace, serviceAccount string) (Ingress, error) {
@@ -45,8 +49,28 @@ func (f *fakeAttestorLookup) ByAttestor(_ context.Context, namespace, serviceAcc
 }
 
 func (f *fakeAttestorLookup) Recheck(_ context.Context, _ Ingress) error {
+	f.mu.Lock()
 	f.recheckCalls++
-	return f.recheckErr
+	started := f.recheckStarted
+	release := f.recheckRelease
+	err := f.recheckErr
+	f.mu.Unlock()
+	if started != nil {
+		select {
+		case started <- struct{}{}:
+		default:
+		}
+	}
+	if release != nil {
+		<-release
+	}
+	return err
+}
+
+func (f *fakeAttestorLookup) recheckCount() int {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.recheckCalls
 }
 
 func TestAttestationVerifierSuccessAndCache(t *testing.T) {
@@ -229,6 +253,68 @@ func TestAttestationVerifierLookupAndCacheRecheckFailures(t *testing.T) {
 	_, err = verifier.Verify(t.Context(), token, "10.0.0.1:1234")
 	require.NoError(t, err)
 	require.Len(t, reviewer.requests, 3, "rejected cache entry must be removed before retry")
+}
+
+func TestAttestationVerifierCoalescesConcurrentRechecks(t *testing.T) {
+	t.Parallel()
+
+	now := time.Now().UTC()
+	current := now
+	token := unsignedToken(t, now.Add(time.Minute))
+	reviewer := &fakeTokenReviewer{response: authenticatedTokenReview(DefaultTokenAudience, "system:serviceaccount:ns:sa")}
+	lookup := &fakeAttestorLookup{
+		ingress:        Ingress{ID: uuid.New(), OrganizationID: "org_123"},
+		recheckStarted: make(chan struct{}, 1),
+		recheckRelease: make(chan struct{}),
+	}
+	verifier := NewAttestationVerifier(reviewer, lookup, DefaultTokenAudience, time.Minute)
+	verifier.now = func() time.Time { return current }
+	require.NoError(t, func() error {
+		_, err := verifier.Verify(t.Context(), token, "10.0.0.1")
+		return err
+	}())
+	current = now.Add(servingStateRecheckTTL)
+
+	const requests = 8
+	errorsCh := make(chan error, requests)
+	for range requests {
+		go func() {
+			_, err := verifier.Verify(t.Context(), token, "10.0.0.1")
+			errorsCh <- err
+		}()
+	}
+	select {
+	case <-lookup.recheckStarted:
+	case <-time.After(time.Second):
+		t.Fatal("recheck did not start")
+	}
+	close(lookup.recheckRelease)
+	for range requests {
+		require.NoError(t, <-errorsCh)
+	}
+	require.Equal(t, 1, lookup.recheckCount())
+}
+
+func TestAttestationVerifierGlobalRateLimitBoundsSourceChurn(t *testing.T) {
+	t.Parallel()
+
+	now := time.Now().UTC()
+	verifier := NewAttestationVerifier(
+		&fakeTokenReviewer{response: authenticatedTokenReview(DefaultTokenAudience, "system:serviceaccount:ns:sa")},
+		&fakeAttestorLookup{ingress: Ingress{ID: uuid.New()}},
+		DefaultTokenAudience,
+		time.Minute,
+	)
+	verifier.now = func() time.Time { return now }
+	verifier.globalLimiter = rate.NewLimiter(0, 1)
+
+	_, err := verifier.Verify(t.Context(), unsignedToken(t, now.Add(time.Minute)), "10.0.0.1")
+	require.NoError(t, err)
+	_, err = verifier.Verify(t.Context(), unsignedTokenWithClaims(t, jwt.RegisteredClaims{
+		ExpiresAt: jwt.NewNumericDate(now.Add(time.Minute)),
+		ID:        "second",
+	}), "10.0.0.2")
+	require.ErrorContains(t, err, "rate limit")
 }
 
 func TestAttestationVerifierFailsClosedWhenUnconfigured(t *testing.T) {
