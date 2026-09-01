@@ -220,7 +220,11 @@ function LoggingConsentBody({
       </div>
 
       {featuresFailed ? (
-        <div className="border-border border p-4" role="alert" aria-live="polite">
+        <div
+          className="border-border border p-4"
+          role="alert"
+          aria-live="polite"
+        >
           <p className="text-destructive text-sm">
             Couldn&apos;t load the current logging setting.
           </p>

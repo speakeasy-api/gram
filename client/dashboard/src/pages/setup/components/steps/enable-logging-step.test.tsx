@@ -71,14 +71,22 @@ const onComplete = vi.fn();
 const onSkip = vi.fn();
 const onBack = vi.fn();
 
+function stepProps() {
+  return {
+    onComplete: () => {
+      onComplete();
+    },
+    onSkip: () => {
+      onSkip();
+    },
+    onBack: () => {
+      onBack();
+    },
+  };
+}
+
 function renderStep() {
-  return render(
-    <EnableLoggingStep
-      onComplete={onComplete}
-      onSkip={onSkip}
-      onBack={onBack}
-    />,
-  );
+  return render(<EnableLoggingStep {...stepProps()} />);
 }
 
 beforeEach(() => {
@@ -176,8 +184,11 @@ describe("EnableLoggingStep", () => {
     renderStep();
 
     expect(
-      (screen.getByRole("button", { name: /Enable logging/ }) as HTMLButtonElement)
-        .disabled,
+      (
+        screen.getByRole("button", {
+          name: /Enable logging/,
+        }) as HTMLButtonElement
+      ).disabled,
     ).toBe(true);
     expect(screen.getByRole("button", { name: "Skip for now" })).toBeTruthy();
   });
@@ -188,13 +199,7 @@ describe("EnableLoggingStep", () => {
     expect(activeMutation?.onSuccess).toBeTypeOf("function");
 
     testState.organizationId = "org-next";
-    rerender(
-      <EnableLoggingStep
-        onComplete={onComplete}
-        onSkip={onSkip}
-        onBack={onBack}
-      />,
-    );
+    rerender(<EnableLoggingStep {...stepProps()} />);
     await activeMutation!.onSuccess!();
 
     expect(invalidateAllProductFeatures).not.toHaveBeenCalled();
@@ -219,13 +224,7 @@ describe("EnableLoggingStep", () => {
 
     const completion = activeMutation!.onSuccess!();
     testState.organizationId = "org-next";
-    rerender(
-      <EnableLoggingStep
-        onComplete={onComplete}
-        onSkip={onSkip}
-        onBack={onBack}
-      />,
-    );
+    rerender(<EnableLoggingStep {...stepProps()} />);
     resolveInvalidation!();
     await completion;
 
@@ -238,13 +237,7 @@ describe("EnableLoggingStep", () => {
     expect(activeMutation?.onError).toBeTypeOf("function");
 
     testState.organizationId = "org-next";
-    rerender(
-      <EnableLoggingStep
-        onComplete={onComplete}
-        onSkip={onSkip}
-        onBack={onBack}
-      />,
-    );
+    rerender(<EnableLoggingStep {...stepProps()} />);
     activeMutation!.onError!(new Error("stale failure"));
 
     expect(screen.queryByText("stale failure")).toBeNull();
@@ -262,8 +255,11 @@ describe("EnableLoggingStep", () => {
     fireEvent.click(screen.getByRole("button", { name: "Retry" }));
     expect(testState.refetch).toHaveBeenCalledOnce();
     expect(
-      (screen.getByRole("button", { name: /Enable logging/ }) as HTMLButtonElement)
-        .disabled,
+      (
+        screen.getByRole("button", {
+          name: /Enable logging/,
+        }) as HTMLButtonElement
+      ).disabled,
     ).toBe(true);
   });
 
