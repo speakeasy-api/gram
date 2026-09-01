@@ -46,7 +46,7 @@ import {
   BRAND_MESH_SURFACE_CLASS,
   BrandMeshLayers,
 } from "@/components/brand-mesh";
-import { getIdentityTint, useIsDarkTheme } from "@/components/gradient-colors";
+import { getIdentityTint } from "@/components/gradient-colors";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/Avatar";
 import {
   useHideInsightsDock,
@@ -830,7 +830,6 @@ function RecentRowIcon({
   userId?: string;
   externalUserId?: string;
 }): ReactElement {
-  const isDark = useIsDarkTheme();
   const { data: membersData } = useMembers();
   const member = resolveChatOwner(membersData?.members, {
     userId,
@@ -846,7 +845,7 @@ function RecentRowIcon({
         ) : null}
         <AvatarFallback
           className="text-xs font-medium"
-          style={getIdentityTint(display, isDark)}
+          style={getIdentityTint(display)}
         >
           {initialsOf(display)}
         </AvatarFallback>

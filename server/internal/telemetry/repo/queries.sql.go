@@ -198,63 +198,6 @@ const searchUsersKnownEmailsJoin = "(SELECT user_id, any(user_email) AS known_em
 // chat completions already set total = input + output), so the two row shapes
 // stay consistent. Without the fallback, Claude Code sessions surface "0 tokens"
 // in the costs/session views (DNO-323).
-// The per-user and per-project summaries must count the same usage the cost
-// dashboard bills. attribute_metrics_summaries_mv reads Claude Code usage off
-// flat attributes (input_tokens, cost_usd, ...) and Codex off native
-// *_token_count attributes; only generic OTel rows carry gen_ai.usage.*.
-// Reading the gen_ai.usage.* path alone therefore reported zero tokens and zero
-// spend for a Claude-Code-only identity that the Costs page bills in full, and
-// undercounted anyone whose usage spans both.
-//
-// The guard is deliberately WIDER than the MV's is_usage_row: it adds any row
-// carrying a gen_ai.usage.* field. Gram-hosted completions are not an agent
-// surface and the MV does not bill them, but these summaries have always
-// counted them, so narrowing to the MV's row set would silently drop them.
-// Every branch below mirrors the MV where the MV has an opinion.
-const summaryUsageRowFilter = "(" + sessionUsageMeasureFilter +
-	" OR toString(attributes.gen_ai.usage.input_tokens) != ''" +
-	" OR toString(attributes.gen_ai.usage.output_tokens) != ''" +
-	" OR toString(attributes.gen_ai.usage.total_tokens) != ''" +
-	" OR toString(attributes.gen_ai.usage.cost) != '')"
-
-const summaryInputTokensExpr = "sumIf(multiIf(" + sessionClaudeAPIRequestPredicate + ", " +
-	"toInt64OrZero(toString(attributes.input_tokens)), " +
-	sessionCodexAPIRequestPredicate + ", " + sessionCodexInputTokensExpr + ", " +
-	"toInt64OrZero(toString(attributes.gen_ai.usage.input_tokens))), " + summaryUsageRowFilter + ")"
-
-const summaryOutputTokensExpr = "sumIf(multiIf(" + sessionClaudeAPIRequestPredicate + ", " +
-	"toInt64OrZero(toString(attributes.output_tokens)), " +
-	sessionCodexAPIRequestPredicate + ", toInt64OrZero(toString(attributes.output_token_count)), " +
-	"toInt64OrZero(toString(attributes.gen_ai.usage.output_tokens))), " + summaryUsageRowFilter + ")"
-
-// The generic branch keeps totalTokensExpr's rule — an explicit reported total
-// wins, otherwise input + output — so rows that were already counted keep their
-// existing totals. The Claude branch adds cache writes because that is what the
-// MV bills for that surface.
-const summaryTotalTokensExpr = "sumIf(multiIf(" + sessionClaudeAPIRequestPredicate + ", " +
-	"toInt64OrZero(toString(attributes.input_tokens)) + toInt64OrZero(toString(attributes.output_tokens)) + " +
-	"toInt64OrZero(toString(attributes.cache_creation_tokens)), " +
-	sessionCodexAPIRequestPredicate + ", " + sessionCodexInputTokensExpr + " + toInt64OrZero(toString(attributes.output_token_count)), " +
-	"toString(attributes.gen_ai.usage.total_tokens) != '', toInt64OrZero(toString(attributes.gen_ai.usage.total_tokens)), " +
-	"toInt64OrZero(toString(attributes.gen_ai.usage.input_tokens)) + toInt64OrZero(toString(attributes.gen_ai.usage.output_tokens))), " +
-	summaryUsageRowFilter + ")"
-
-const summaryCacheReadTokensExpr = "sumIf(multiIf(" + sessionClaudeAPIRequestPredicate + ", " +
-	"toInt64OrZero(toString(attributes.cache_read_tokens)), " +
-	sessionCodexAPIRequestPredicate + ", " + sessionCodexCacheReadTokensExpr + ", " +
-	"toInt64OrZero(toString(attributes.gen_ai.usage.cache_read.input_tokens))), " + summaryUsageRowFilter + ")"
-
-// Codex reports no cache writes, so it falls into the gen_ai.usage.* branch and
-// sums 0 there — the same shape the MV uses.
-const summaryCacheCreationTokensExpr = "sumIf(if(" + sessionClaudeAPIRequestPredicate + ", " +
-	"toInt64OrZero(toString(attributes.cache_creation_tokens)), " +
-	"toInt64OrZero(toString(attributes.gen_ai.usage.cache_creation.input_tokens))), " + summaryUsageRowFilter + ")"
-
-const summaryCostExpr = "sumIf(if(" + sessionClaudeAPIRequestPredicate + ", " +
-	"multiIf(toString(attributes.cost_usd) != '', toFloat64OrZero(toString(attributes.cost_usd)), " +
-	"toString(attributes.cost_usd_micros) != '', toFloat64OrZero(toString(attributes.cost_usd_micros)) / 1000000, 0), " +
-	"toFloat64OrZero(toString(attributes.gen_ai.usage.cost))), " + summaryUsageRowFilter + ")"
-
 const totalTokensExpr = "sumIf(toInt64OrZero(toString(attributes.gen_ai.usage.total_tokens)), toString(attributes.gen_ai.usage.total_tokens) != '') + " +
 	"sumIf(toInt64OrZero(toString(attributes.gen_ai.usage.input_tokens)) + toInt64OrZero(toString(attributes.gen_ai.usage.output_tokens)), toString(attributes.gen_ai.usage.total_tokens) = '')"
 
@@ -3354,9 +3297,9 @@ func (q *Queries) SearchUsers(ctx context.Context, arg SearchUsersParams) ([]Use
 		"min(time_unix_nano) AS first_seen_unix_nano",
 		"max(time_unix_nano) AS last_seen_unix_nano",
 
-		// Token metrics, source-aware — see the summaryUsageRowFilter block.
-		summaryInputTokensExpr + " AS total_input_tokens",
-		summaryOutputTokensExpr + " AS total_output_tokens",
+		// Token metrics (from any event with gen_ai usage data)
+		"sumIf(toInt64OrZero(toString(attributes.gen_ai.usage.input_tokens)), toString(attributes.gen_ai.usage.input_tokens) != '') AS total_input_tokens",
+		"sumIf(toInt64OrZero(toString(attributes.gen_ai.usage.output_tokens)), toString(attributes.gen_ai.usage.output_tokens) != '') AS total_output_tokens",
 
 		// Raw user_id values folded into this summary. The group key is email-first,
 		// so callers joining against user_id-keyed stores (user_accounts, role
@@ -3376,17 +3319,12 @@ func (q *Queries) SearchUsers(ctx context.Context, arg SearchUsersParams) ([]Use
 			"uniqExactIf(toString(attributes.gen_ai.conversation.id), toString(attributes.gen_ai.conversation.id) != '') AS total_chats",
 			"uniqExactIf(toString(attributes.gen_ai.response.id), toString(attributes.gen_ai.response.id) != '') AS total_chat_requests",
 
-			// Remaining token/cost metrics, source-aware for the same reason as
-			// the input/output sums above. avg_tokens_per_request divides the
-			// aligned total by the rows that actually carry usage: no agent
-			// surface but a generic OTel one reports gen_ai.usage.total_tokens,
-			// so averaging that field alone answered 0 for every Claude Code
-			// and Codex identity.
-			summaryTotalTokensExpr+" AS total_tokens",
-			summaryCacheReadTokensExpr+" AS cache_read_input_tokens",
-			summaryCacheCreationTokensExpr+" AS cache_creation_input_tokens",
-			"toFloat64("+summaryTotalTokensExpr+") / greatest(countIf("+summaryUsageRowFilter+"), 1) AS avg_tokens_per_request",
-			summaryCostExpr+" AS total_cost",
+			// Remaining token/cost metrics
+			totalTokensExpr+" AS total_tokens",
+			"sumIf(toInt64OrZero(toString(attributes.gen_ai.usage.cache_read.input_tokens)), toString(attributes.gen_ai.usage.cache_read.input_tokens) != '') AS cache_read_input_tokens",
+			"sumIf(toInt64OrZero(toString(attributes.gen_ai.usage.cache_creation.input_tokens)), toString(attributes.gen_ai.usage.cache_creation.input_tokens) != '') AS cache_creation_input_tokens",
+			"avgIf(toFloat64OrZero(toString(attributes.gen_ai.usage.total_tokens)), toString(attributes.gen_ai.usage.total_tokens) != '') AS avg_tokens_per_request",
+			"sumIf(toFloat64OrZero(toString(attributes.gen_ai.usage.cost)), toString(attributes.gen_ai.usage.cost) != '') AS total_cost",
 
 			// Tool call metrics (path depends on event source — Gram MCP tools vs AI-coding hook tools)
 			"countIf("+tc.isCall+") AS total_tool_calls",
@@ -3538,17 +3476,17 @@ func (q *Queries) GetUserMetricsSummary(ctx context.Context, arg GetUserMetricsS
 		"uniqExactIf(toString(attributes.gen_ai.response.model), toString(attributes.gen_ai.response.model) != '') AS distinct_models",
 		"uniqExactIf(toString(attributes.gen_ai.provider.name), toString(attributes.gen_ai.provider.name) != '') AS distinct_providers",
 
-		// Token metrics, source-aware — see the summaryUsageRowFilter block.
-		summaryInputTokensExpr+" AS total_input_tokens",
-		summaryOutputTokensExpr+" AS total_output_tokens",
-		summaryTotalTokensExpr+" AS total_tokens",
-		summaryCacheReadTokensExpr+" AS cache_read_input_tokens",
-		summaryCacheCreationTokensExpr+" AS cache_creation_input_tokens",
-		"toFloat64("+summaryTotalTokensExpr+") / greatest(countIf("+summaryUsageRowFilter+"), 1) AS avg_tokens_per_request",
+		// Token metrics (from any event with gen_ai usage data)
+		"sumIf(toInt64OrZero(toString(attributes.gen_ai.usage.input_tokens)), toString(attributes.gen_ai.usage.input_tokens) != '') AS total_input_tokens",
+		"sumIf(toInt64OrZero(toString(attributes.gen_ai.usage.output_tokens)), toString(attributes.gen_ai.usage.output_tokens) != '') AS total_output_tokens",
+		totalTokensExpr+" AS total_tokens",
+		"sumIf(toInt64OrZero(toString(attributes.gen_ai.usage.cache_read.input_tokens)), toString(attributes.gen_ai.usage.cache_read.input_tokens) != '') AS cache_read_input_tokens",
+		"sumIf(toInt64OrZero(toString(attributes.gen_ai.usage.cache_creation.input_tokens)), toString(attributes.gen_ai.usage.cache_creation.input_tokens) != '') AS cache_creation_input_tokens",
+		"avgIf(toFloat64OrZero(toString(attributes.gen_ai.usage.total_tokens)), toString(attributes.gen_ai.usage.total_tokens) != '') AS avg_tokens_per_request",
 
 		// Cost lives on MetricsSummaryRow but was never selected here, so callers
 		// wanting a user's cost had to read it from the grouped employees list.
-		summaryCostExpr+" AS total_cost",
+		"sumIf(toFloat64OrZero(toString(attributes.gen_ai.usage.cost)), toString(attributes.gen_ai.usage.cost) != '') AS total_cost",
 
 		// Chat request metrics
 		"uniqExactIf(toString(attributes.gen_ai.response.id), toString(attributes.gen_ai.response.id) != '') AS total_chat_requests",

@@ -1,4 +1,3 @@
-import { IdentityLink } from "@/components/identity-link";
 import { StatTile, StatTileGroup } from "@/components/chart/stat-tile";
 import { Page } from "@/components/page-layout";
 import { Button } from "@/components/ui/Button";
@@ -758,9 +757,7 @@ function EventPersonCell({ event }: { event: SpendRuleEvent }): JSX.Element {
   return (
     <span className="block min-w-0">
       <span className="block truncate text-sm">
-        <IdentityLink identifier={event.email ? { email: event.email } : null}>
-          {event.displayName || event.email}
-        </IdentityLink>
+        {event.displayName || event.email}
       </span>
       {event.displayName && (
         <span className="text-muted-foreground block truncate text-xs">

@@ -798,13 +798,7 @@ func adminActivityLog(row auditrepo.ListAuditLogsRow) (*gen.AuditLog, error) {
 		metadata, _ = decoded.(map[string]any)
 	}
 
-	// Directory name first, matching the audit feed: every writer stores the
-	// acting user's email, so the stored value renders this list as a column
-	// of addresses. Actors with no directory row keep what was stored.
-	actorDisplayName := conv.FromPGText[string](row.ActorUserDisplayName)
-	if actorDisplayName == nil || *actorDisplayName == "" {
-		actorDisplayName = conv.FromPGText[string](row.ActorDisplayName)
-	}
+	actorDisplayName := conv.FromPGText[string](row.ActorDisplayName)
 	if row.ActorID == "system" {
 		actorDisplayName = conv.PtrEmpty("System")
 	}

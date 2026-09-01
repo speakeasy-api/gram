@@ -42,10 +42,7 @@ function AvatarFallback({
     <AvatarPrimitive.Fallback
       data-slot="avatar-fallback"
       className={cn(
-        // In dark mode --muted is the card surface, so a muted fallback is a
-        // hole rather than a face; --accent is the lighter step that reads as
-        // a face without becoming the brightest thing on the panel.
-        "bg-muted dark:bg-accent flex size-full items-center justify-center rounded-full",
+        "bg-muted flex size-full items-center justify-center rounded-full",
         className,
       )}
       {...props}

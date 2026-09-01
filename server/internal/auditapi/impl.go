@@ -285,19 +285,12 @@ func toAuditLog(row repo.ListAuditLogsRow) (*gen.AuditLog, error) {
 	}
 
 	return &gen.AuditLog{
-		ID:          row.ID.String(),
-		ProjectID:   conv.FromNullableUUID(row.ProjectID),
-		ProjectSlug: conv.FromPGText[string](row.ProjectSlug),
-		ActorID:     row.ActorID,
-		ActorType:   row.ActorType,
-		// The directory name wins over the stored one: writers record the
-		// acting user's email, so trusting the row renders the feed as a
-		// column of addresses. Actors with no directory row (API keys,
-		// system, deleted users) keep whatever was stored.
-		ActorDisplayName: firstNonEmpty(
-			conv.FromPGText[string](row.ActorUserDisplayName),
-			conv.FromPGText[string](row.ActorDisplayName),
-		),
+		ID:                 row.ID.String(),
+		ProjectID:          conv.FromNullableUUID(row.ProjectID),
+		ProjectSlug:        conv.FromPGText[string](row.ProjectSlug),
+		ActorID:            row.ActorID,
+		ActorType:          row.ActorType,
+		ActorDisplayName:   conv.FromPGText[string](row.ActorDisplayName),
 		ActorSlug:          conv.FromPGText[string](row.ActorSlug),
 		Action:             row.Action,
 		SubjectID:          row.SubjectID,
@@ -379,16 +372,4 @@ func normalizeSubjectIDs(ids []string) []string {
 		}
 	}
 	return out
-}
-
-// firstNonEmpty returns the first pointer that names a non-empty string, so a
-// preferred value can fall back to a stored one without either being lost when
-// it is present but blank.
-func firstNonEmpty(values ...*string) *string {
-	for _, value := range values {
-		if value != nil && *value != "" {
-			return value
-		}
-	}
-	return nil
 }

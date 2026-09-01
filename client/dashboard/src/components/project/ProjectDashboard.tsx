@@ -1,4 +1,3 @@
-import { IdentityLink } from "@/components/identity-link";
 import { Link, useNavigate } from "react-router";
 import { useOrganization } from "@/contexts/Auth";
 import {
@@ -9,7 +8,7 @@ import {
 import { RankedBarList } from "@/components/chart/RankedBarList";
 import { Page } from "@/components/page-layout";
 import { Avatar, AvatarFallback } from "@/components/ui/Avatar";
-import { getIdentityTint, useIsDarkTheme } from "@/components/gradient-colors";
+import { getIdentityTint } from "@/components/gradient-colors";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { useProject } from "@/contexts/Auth";
 import { useSlugs } from "@/contexts/Sdk";
@@ -51,7 +50,6 @@ import { ActivityTimelineCard } from "./ActivityTimelineCard";
 import { buildProjectOverviewQuery } from "./projectOverviewQuery";
 
 export function ProjectDashboard(): JSX.Element {
-  const isDark = useIsDarkTheme();
   const { orgSlug, projectSlug } = useSlugs();
   const project = useProject();
   const projectId = project.id;
@@ -208,9 +206,6 @@ export function ProjectDashboard(): JSX.Element {
         key: r.groupValue,
         label: memberByEmail.get(r.groupValue)?.name ?? r.groupValue,
         value: llmTokens(r.measures),
-        // Group keys are emails, which is exactly what the email: URN form
-        // exists for.
-        identifier: r.groupValue ? { email: r.groupValue } : null,
       }));
   }, [rankableUserRows, memberByEmail]);
 
@@ -712,25 +707,14 @@ export function ProjectDashboard(): JSX.Element {
                               <Avatar className="size-8 shrink-0">
                                 <AvatarFallback
                                   className="text-xs font-medium"
-                                  style={getIdentityTint(
-                                    user.initialsSource,
-                                    isDark,
-                                  )}
+                                  style={getIdentityTint(user.initialsSource)}
                                 >
                                   {emailInitials(user.initialsSource)}
                                 </AvatarFallback>
                               </Avatar>
                               <div className="min-w-0 flex-1">
                                 <p className="truncate text-sm font-medium">
-                                  <IdentityLink
-                                    identifier={
-                                      user.userId
-                                        ? { email: user.userId }
-                                        : null
-                                    }
-                                  >
-                                    {user.name}
-                                  </IdentityLink>
+                                  {user.name}
                                 </p>
                                 <p className="text-muted-foreground text-xs">
                                   {user.sessions.toLocaleString()}{" "}

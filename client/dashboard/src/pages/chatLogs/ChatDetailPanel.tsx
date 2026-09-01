@@ -1,4 +1,3 @@
-import { IdentityLink } from "@/components/identity-link";
 import { format, formatDistanceToNow } from "date-fns";
 import {
   ArrowLeft,
@@ -346,9 +345,7 @@ function SessionSummary({
             {accountEmail && (
               <MetaRow label="Account">
                 <span className="inline-flex flex-wrap items-center justify-end gap-1.5">
-                  <IdentityLink identifier={{ email: accountEmail }}>
-                    {accountEmail}
-                  </IdentityLink>
+                  {accountEmail}
                   <AccountTypeBadge accountType={chat.accountType} noTooltip />
                 </span>
               </MetaRow>
@@ -832,7 +829,7 @@ function SessionLinksSection({
     label: ReactNode,
     when: Date,
     onHop: (() => void) | undefined,
-    detail?: ReactNode,
+    detail?: string,
   ) => (
     <div key={key} className="flex items-baseline justify-between gap-3 py-1">
       <span className="min-w-0 truncate text-xs">
@@ -871,15 +868,9 @@ function SessionLinksSection({
             <>Derived from {link.parentTitle ?? "an earlier session"}</>,
             link.createdAt,
             hop(link.parentChatId, link.parentCaptured),
-            link.parentCaptured ? (
-              link.actorEmail ? (
-                <IdentityLink identifier={{ email: link.actorEmail }}>
-                  {link.actorEmail}
-                </IdentityLink>
-              ) : undefined
-            ) : (
-              "not yet captured"
-            ),
+            link.parentCaptured
+              ? (link.actorEmail ?? undefined)
+              : "not yet captured",
           ),
         )}
         {outbound.map((link, i) =>
@@ -1455,19 +1446,6 @@ function ChatDetailPanel({
   }, [view, fullyLoaded, loadingAllMessages, loadAllMessages]);
 
   const userLabelOverride = chat ? userLabel : undefined;
-  // The same key ChatOwnerLabel uses: a chat carries the Gram user when the
-  // owner is a member and the reported agent id otherwise. Memoized because a
-  // fresh object each render would invalidate the row context below on every
-  // pass, re-rendering the whole transcript.
-  const ownerIdentifier = useMemo(
-    () =>
-      chat?.userId
-        ? { userId: chat.userId }
-        : chat?.externalUserId
-          ? { externalUserId: chat.externalUserId }
-          : null,
-    [chat?.userId, chat?.externalUserId],
-  );
 
   const rowCtx = useMemo<RowContext>(
     () => ({
@@ -1479,7 +1457,6 @@ function ChatDetailPanel({
       searchQuery: searchActive ? searchQuery : undefined,
       userLabel: chat?.externalUserId,
       userLabelOverride,
-      ownerIdentifier,
     }),
     [
       riskResultsByMessage,
@@ -1491,7 +1468,6 @@ function ChatDetailPanel({
       searchQuery,
       chat?.externalUserId,
       userLabelOverride,
-      ownerIdentifier,
     ],
   );
 

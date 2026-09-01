@@ -3,7 +3,6 @@ import {
   formatDateRangeLabel,
   useDateRangeFilter,
 } from "@/components/observe/useDateRangeFilter";
-import { ViewUserProfileLink } from "@/components/identity-link";
 import { Page } from "@/components/page-layout";
 import { RequireScope } from "@/components/require-scope";
 import { ChatDetailSheet } from "@/pages/chatLogs/ChatDetailPanel";
@@ -137,13 +136,6 @@ function RiskOverviewUserDetailContent() {
           Risk findings and chat sessions for this user
           {rangeLabel && ` across ${rangeLabel}.`}
         </Page.Section.Description>
-        <Page.Section.CTA>
-          {/* This page is the risk slice of a person; the profile is where it
-              sits beside their access, spend and devices. */}
-          <ViewUserProfileLink
-            identifier={externalUserId ? { externalUserId } : null}
-          />
-        </Page.Section.CTA>
         <Page.Section.CTA>{controls}</Page.Section.CTA>
         <Page.Section.Body>
           <div className="space-y-6">

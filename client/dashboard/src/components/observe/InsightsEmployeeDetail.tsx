@@ -1,6 +1,5 @@
 import { Badge } from "@/components/ui/Badge";
 import { getInitials } from "@/lib/initials";
-import { ViewUserProfileLink } from "@/components/identity-link";
 import { Page } from "@/components/page-layout";
 import { Icon } from "@/components/ui/Icon";
 import { type IconName } from "@/components/ui/Icon/names";
@@ -509,17 +508,6 @@ export function InsightsEmployeeDetailContent(): JSX.Element {
                 isInsightsOpen ? "flex-wrap justify-start" : "shrink-0",
               )}
             >
-              {/* This page is the enrollment slice of a person; the profile is
-                  where it sits beside their access, risk and spend. */}
-              <ViewUserProfileLink
-                identifier={
-                  member
-                    ? { userId: member.id }
-                    : displayEmail
-                      ? { email: displayEmail }
-                      : null
-                }
-              />
               <AccountScopeSelector
                 accounts={accounts}
                 value={selectedOrgId}

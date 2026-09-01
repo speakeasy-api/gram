@@ -548,9 +548,7 @@
   --chart-3: var(--color-brand-red-600);
   --chart-4: var(--color-brand-blue-600);
   --chart-5: var(--color-brand-green-600);
-  /* The nav sits on the card surface rather than the app ground, so a page
-     that recesses its own body reads as content set into the shell. */
-  --sidebar: var(--color-base-white);
+  --sidebar: var(--color-neutral-100);
   --sidebar-foreground: var(--color-neutral-900);
   --sidebar-primary: var(--color-base-black);
   --sidebar-primary-foreground: var(--color-neutral-300);
