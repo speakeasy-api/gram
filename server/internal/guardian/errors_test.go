@@ -1,4 +1,4 @@
-package proxy_test
+package guardian_test
 
 import (
 	"context"
@@ -13,7 +13,6 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/oops"
-	"github.com/speakeasy-api/gram/server/internal/remotemcp/proxy"
 )
 
 func TestIsDeadPeerDialErrorRecognizesDefinitiveConnectFailures(t *testing.T) {
@@ -29,7 +28,7 @@ func TestIsDeadPeerDialErrorRecognizesDefinitiveConnectFailures(t *testing.T) {
 		transportErr := &url.Error{Op: "Post", URL: "http://10.0.0.1:8091", Err: dialErr}
 		err := fmt.Errorf("proxy post: %w", oops.E(oops.CodeGatewayError, transportErr, "remote mcp server unreachable"))
 
-		require.True(t, proxy.IsDeadPeerDialError(err), "cause %T %v", cause, cause)
+		require.True(t, guardian.IsDeadPeerDialError(err), "cause %T %v", cause, cause)
 	}
 }
 
@@ -44,6 +43,6 @@ func TestIsDeadPeerDialErrorRejectsNonDeadPeerFailures(t *testing.T) {
 	}
 
 	for _, err := range errs {
-		require.False(t, proxy.IsDeadPeerDialError(err), "error %T %v", err, err)
+		require.False(t, guardian.IsDeadPeerDialError(err), "error %T %v", err, err)
 	}
 }

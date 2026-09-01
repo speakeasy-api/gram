@@ -3,8 +3,6 @@ package proxy
 import (
 	"context"
 	"errors"
-	"net"
-	"syscall"
 
 	"github.com/speakeasy-api/gram/server/internal/oops"
 )
@@ -30,19 +28,6 @@ var ErrUndecodableJSONRPCBody = errors.New("upstream response is not a json-rpc 
 // a clean envelope (JSON-RPC error code -32600, "batch requests are not
 // supported") rather than a generic decode failure.
 var ErrBatchRequest = errors.New("batch requests are not supported")
-
-// IsDeadPeerDialError reports connect failures that definitively identify a dead peer.
-func IsDeadPeerDialError(err error) bool {
-	var opErr *net.OpError
-	if !errors.As(err, &opErr) || opErr.Op != "dial" {
-		return false
-	}
-
-	return opErr.Timeout() ||
-		errors.Is(opErr, syscall.ECONNREFUSED) ||
-		errors.Is(opErr, syscall.EHOSTUNREACH) ||
-		errors.Is(opErr, syscall.ENETUNREACH)
-}
 
 // classifyForwardError maps a [http.Client.Do] failure into a typed proxy
 // error. timedOut is true when the failure was caused by the proxy's own

@@ -33,6 +33,7 @@ import (
 	"github.com/redis/go-redis/v9"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/mcp/tunnelrouting"
 	"github.com/speakeasy-api/gram/server/internal/mcp/tunnelsessions"
 	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
@@ -563,7 +564,7 @@ func (s *Service) serveTunneledPublicSession(
 	}
 
 	if err := serveProxyBackend(w, r, p); err != nil {
-		if proxy.IsDeadPeerDialError(err) {
+		if guardian.IsDeadPeerDialError(err) {
 			if delErr := rt.sessions.Delete(ctx, tunnelID, mcpServerID, sid); delErr != nil {
 				logger.ErrorContext(ctx, "drop anonymous tunnel session for dead gateway", attr.SlogError(delErr))
 			}
