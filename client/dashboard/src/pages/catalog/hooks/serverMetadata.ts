@@ -1,25 +1,6 @@
 import type { ExternalMCPServer } from "@gram/client/models/components/externalmcpserver.js";
-import type { ExternalMCPTool } from "@gram/client/models/components/externalmcptool.js";
 import type { PulseMCPServer } from "../hooks";
 import type { FilterState } from "./useFilterState";
-
-/**
- * Derive the catalog's tool_count / is_read_only scalars from a full tool list.
- * The catalog list endpoint precomputes these server-side; callers that only
- * have the full tools use this to match the `PulseMCPServer` shape.
- */
-export function toolStats(tools: ExternalMCPTool[] | undefined): {
-  toolCount: number;
-  isReadOnly: boolean;
-} {
-  const list = tools ?? [];
-  return {
-    toolCount: list.length,
-    isReadOnly:
-      list.length > 0 &&
-      list.every((tool) => tool.annotations?.readOnlyHint === true),
-  };
-}
 
 /**
  * Parsed metadata from a server for display and filtering.
