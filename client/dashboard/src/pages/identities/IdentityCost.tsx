@@ -5,10 +5,12 @@ import { IdentityPanel, IdentityPanelEmpty } from "./IdentityPanel";
 import { identityHandoffs } from "./identityHandoffs";
 import { useIdentityOutlet } from "./identityRoute";
 import { ShareBar } from "@/components/chart/ShareBar";
+import { peerStanding, standingLabel } from "./identityPeers";
 import { IdentitySection } from "./IdentitySection";
 import { sectionMeta } from "./sectionMeta";
 import {
   useIdentityMetrics,
+  useIdentityPeers,
   useIdentityProject,
   useIdentityWindow,
 } from "./useIdentityQueries";
@@ -36,6 +38,16 @@ export default function IdentityCost(): JSX.Element {
   const metricsQuery = useIdentityMetrics(identity, from, to);
   const metrics = metricsQuery.data?.metrics;
   const models = [...(metrics?.models ?? [])].sort((a, b) => b.count - a.count);
+
+  const { peers } = useIdentityPeers(identity, from, to);
+  const spend = metrics?.totalCost ?? 0;
+  const spendStanding = peerStanding(
+    peers.map((peer) => peer.totalCost ?? 0),
+    spend,
+  );
+  const costStanding = spendStanding
+    ? standingLabel(spendStanding, spend)
+    : undefined;
 
   // Cache reads are the lever worth surfacing: they are billed at a fraction
   // of fresh input, so the same token count costs wildly different amounts
@@ -70,6 +82,7 @@ export default function IdentityCost(): JSX.Element {
         <StatTileGroup className="overflow-x-auto [&>*]:min-w-[11.5rem]">
           <StatTile
             title="Spend"
+            subtext={costStanding}
             value={metrics?.totalCost ?? 0}
             format="currency"
             tone="neutral"

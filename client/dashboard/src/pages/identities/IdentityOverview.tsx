@@ -1,5 +1,6 @@
 import { StatTile, StatTileGroup } from "@/components/chart/stat-tile";
 import { Text } from "@/components/ui/Text";
+import { peerStanding, standingLabel } from "./identityPeers";
 import { IdentitySection } from "./IdentitySection";
 import { HumanizeDateTime } from "@/lib/dates";
 import { useOrgRoutes, useRoutes } from "@/routes";
@@ -21,6 +22,7 @@ import {
   useIdentityChats,
   useIdentityDevices,
   useIdentityMetrics,
+  useIdentityPeers,
   useIdentityProject,
   useIdentityRisk,
   useIdentityShadowServers,
@@ -78,6 +80,14 @@ export default function IdentityOverview(): JSX.Element {
       d.coverageBucket === "agent_stale" || d.coverageBucket === "no_agent",
   );
 
+  const { peers, self } = useIdentityPeers(identity, from, to);
+
+  // Personal-vs-team is recorded per linked account on the roster row; the
+  // per-user summary does not carry accounts at all.
+  const personalAccounts = (self?.accounts ?? []).filter(
+    (account) => account.accountType === "personal",
+  );
+
   type AttentionItem = {
     key: string;
     title: string;
@@ -95,6 +105,21 @@ export default function IdentityOverview(): JSX.Element {
         .join(", "),
       trailing: "Security",
       href: orgRoutes.identities.detail.security.href(encodedUrn),
+    },
+    personalAccounts.length > 0 && {
+      key: "personal-account",
+      // Work done through a personal subscription sits outside the team
+      // workspace: it is not covered by org policy, its spend lands on
+      // someone's card, and its transcripts are not the company's to audit.
+      title: `Working through ${personalAccounts.length} personal account${
+        personalAccounts.length === 1 ? "" : "s"
+      }`,
+      detail: personalAccounts
+        .map((account) => account.provider)
+        .filter(Boolean)
+        .join(", "),
+      trailing: "Devices",
+      href: orgRoutes.identities.detail.devices.href(encodedUrn),
     },
     shadowServers.length > 0 && {
       key: "shadow",
@@ -133,6 +158,20 @@ export default function IdentityOverview(): JSX.Element {
 
   const chats = chatsQuery.data?.chats ?? [];
   const logs = auditQuery.data?.result.logs ?? [];
+
+  // A bare figure cannot be read: $1,250 is alarming or unremarkable
+  // depending entirely on what everyone else spent. Rank against the same
+  // window the figure covers.
+  const standingFor = (
+    field: "totalCost" | "totalToolCalls" | "totalChats",
+  ): string | undefined => {
+    const value = metrics?.[field] ?? 0;
+    const standing = peerStanding(
+      peers.map((peer) => peer[field] ?? 0),
+      value,
+    );
+    return standing ? standingLabel(standing, value) : undefined;
+  };
 
   return (
     <IdentitySection>
@@ -174,6 +213,7 @@ export default function IdentityOverview(): JSX.Element {
         <StatTileGroup className="overflow-x-auto [&>*]:min-w-[11.5rem]">
           <StatTile
             title="Spend"
+            subtext={standingFor("totalCost")}
             value={metrics?.totalCost ?? 0}
             format="currency"
             tone="neutral"
@@ -181,6 +221,7 @@ export default function IdentityOverview(): JSX.Element {
           />
           <StatTile
             title="Tool calls"
+            subtext={standingFor("totalToolCalls")}
             value={metrics?.totalToolCalls ?? 0}
             format="compact"
             tone="information"
@@ -188,6 +229,7 @@ export default function IdentityOverview(): JSX.Element {
           />
           <StatTile
             title="Chats"
+            subtext={standingFor("totalChats")}
             value={metrics?.totalChats ?? 0}
             format="compact"
             tone="information"

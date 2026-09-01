@@ -4,11 +4,13 @@ import { useOrgRoutes, useRoutes } from "@/routes";
 import { IdentityPanel, IdentityPanelEmpty } from "./IdentityPanel";
 import { identityHandoffs } from "./identityHandoffs";
 import { useIdentityOutlet } from "./identityRoute";
+import { ShareBar } from "@/components/chart/ShareBar";
 import { SplitRankedBarList } from "@/components/chart/SplitRankedBarList";
 import { IdentitySection } from "./IdentitySection";
 import { sectionMeta } from "./sectionMeta";
 import {
   useIdentityMetrics,
+  useIdentityPeers,
   useIdentityProject,
   useIdentityWindow,
 } from "./useIdentityQueries";
@@ -41,12 +43,19 @@ export default function IdentityUsage(): JSX.Element {
   const tools = [...(metrics?.tools ?? [])].sort((a, b) => b.count - a.count);
   const models = [...(metrics?.models ?? [])].sort((a, b) => b.count - a.count);
 
+  // hookSources rides on the roster row, not the per-user summary.
+  const { self } = useIdentityPeers(identity, from, to);
+  const agents = [...(self?.hookSources ?? [])]
+    .filter((source) => source.source && source.eventCount > 0)
+    .sort((a, b) => b.eventCount - a.eventCount);
+
   return (
     <IdentitySection
       title="Usage"
       meta={sectionMeta([
         { count: tools.length, singular: "tool" },
         { count: models.length, singular: "model" },
+        { count: agents.length, singular: "agent" },
       ])}
     >
       <div className="flex flex-col gap-6">
@@ -80,6 +89,23 @@ export default function IdentityUsage(): JSX.Element {
             icon="hash"
           />
         </StatTileGroup>
+
+        {/* Which surfaces the work came through. Two people with identical
+            tool counts can be running one CLI or juggling four, and nothing
+            else on the page says which — the per-user summary does not carry
+            it, only the roster row does. */}
+        {agents.length > 0 && (
+          <IdentityPanel title="Agents" contentClassName="px-4 py-4">
+            <ShareBar
+              segments={agents.map((agent) => ({
+                key: agent.source,
+                label: agent.source,
+                value: agent.eventCount,
+              }))}
+              ariaLabel="Share of activity by agent surface"
+            />
+          </IdentityPanel>
+        )}
 
         {/* Tools carry their failure share on the same bar: volume alone is
             the boring half of the question, and a heavily-used tool that

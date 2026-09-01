@@ -3,6 +3,9 @@ import { useOrganization, useProject, useSession } from "@/contexts/Auth";
 import { useRBAC } from "@/hooks/useRBAC";
 import { useGramContext } from "@gram/client/react-query/_context.js";
 import { useQuery } from "@tanstack/react-query";
+import type { UserSummary } from "@gram/client/models/components/usersummary.js";
+import { fetchIdentityPeers, identityPeersQueryKey } from "./identityPeers";
+
 import { fetchIdentityRoster, identityRosterQueryKey } from "./identityRoster";
 import { useSearchParams } from "react-router";
 import type { AccessMember } from "@gram/client/models/components/accessmember.js";
@@ -311,4 +314,48 @@ export function useIdentityDevices(
     ...OFF,
     enabled: userIds.length > 0 || userEmails.length > 0,
   });
+}
+
+/**
+ * This identity's row in the windowed org-wide roster, plus its peers.
+ *
+ * One request serves three readings the per-user summary cannot give: where
+ * their figures sit against everyone else's, which agent surfaces they work
+ * through (hookSources), and whether any linked account is a personal one.
+ * The per-user endpoint returns none of those.
+ */
+export function useIdentityPeers(
+  identity: IdentityModel,
+  from: Date,
+  to: Date,
+): {
+  peers: UserSummary[];
+  self: UserSummary | undefined;
+  isPending: boolean;
+} {
+  const client = useGramContext();
+  const organization = useOrganization();
+  const { slug: projectSlug } = useIdentityProject();
+  const query = useQuery({
+    queryKey: identityPeersQueryKey(organization.id, projectSlug, from, to),
+    queryFn: () => fetchIdentityPeers(client, projectSlug, from, to),
+    throwOnError: false,
+  });
+
+  const identifiers = new Set(
+    [...identity.emails, ...identity.externalUserIds, ...identity.userIds].map(
+      (value) => value.toLowerCase(),
+    ),
+  );
+  const peers = query.data ?? [];
+
+  return {
+    peers,
+    self: peers.find(
+      (summary) =>
+        identifiers.has((summary.userEmail || "").toLowerCase()) ||
+        identifiers.has((summary.userId || "").toLowerCase()),
+    ),
+    isPending: query.isPending,
+  };
 }
