@@ -71385,8 +71385,8 @@ components:
           description: The cursor for paginating through audit logs.
         from:
           type: string
-          format: date-time
           description: Inclusive start of the window to list changes from. Omit for the whole history.
+          format: date-time
         project_slug:
           type: string
           description: Project slug to filter audit logs to a specific project.
@@ -71404,8 +71404,8 @@ components:
           description: Subject type to filter audit logs to a specific kind of subject. When omitted, assistant activity events are excluded; pass 'assistant' to list them.
         to:
           type: string
-          format: date-time
           description: Exclusive end of the window to list changes from. Omit for the whole history.
+          format: date-time
     ListAuditLogsResult:
       type: object
       properties:
