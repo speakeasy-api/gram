@@ -8,6 +8,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -22,6 +23,16 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oauthtest"
 	toolsets_repo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 )
+
+type eofCloseBody struct {
+	io.Reader
+	closed bool
+}
+
+func (b *eofCloseBody) Close() error {
+	b.closed = true
+	return io.EOF
+}
 
 // ---------------------------------------------------------------------------
 // Tests from servepublic_auth_test.go (all except helpers and BatchRequest)
@@ -106,7 +117,7 @@ func TestServePublicAuth_WithSecurityDefs_WrongMCPHeader_Returns401(t *testing.T
 	require.Contains(t, err.Error(), "unauthorized")
 }
 
-func TestServePublicAuth_PrivateServer_NoToken_Returns401(t *testing.T) {
+func TestServePublicAuth_PrivateServer_NoToken_Returns401WithoutClosingRequestBody(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestMCPService(t)
@@ -127,10 +138,22 @@ func TestServePublicAuth_PrivateServer_NoToken_Returns401(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	unauthCtx := context.Background()
-	_, err = servePublicHTTP(t, unauthCtx, ti, toolset.McpSlug.String, makeInitializeBody(), "", nil)
+	body := &eofCloseBody{
+		Reader: bytes.NewReader(makeInitializeBody()),
+		closed: false,
+	}
+	req := httptest.NewRequest(http.MethodPost, "/mcp/"+toolset.McpSlug.String, body)
+	req.Header.Set("Accept", "application/json")
+	req.Header.Set("Content-Type", "application/json")
+
+	rctx := chi.NewRouteContext()
+	rctx.URLParams.Add("mcpSlug", toolset.McpSlug.String)
+	req = req.WithContext(context.WithValue(t.Context(), chi.RouteCtxKey, rctx))
+
+	err = ti.service.ServePublic(httptest.NewRecorder(), req)
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "expired or invalid access token")
+	require.False(t, body.closed, "the HTTP server owns the inbound request body lifecycle")
 }
 
 // ---------------------------------------------------------------------------
