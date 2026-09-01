@@ -1,0 +1,34 @@
+server/database/sqlc.yaml
+  h_9630b74bdac540 414-421,424-432
+server/internal/netingress/tailscale_identity.go
+  h_9630b74bdac540 1-103
+server/internal/netingress/lookup_test.go
+  h_9630b74bdac540 1-145
+server/internal/netingress/tailscale_identity_test.go
+  h_9630b74bdac540 1-128
+server/internal/netingress/middleware.go
+  h_9630b74bdac540 1-104
+server/internal/netingress/middleware_test.go
+  h_9630b74bdac540 1-169
+server/internal/netingress/attestation_test.go
+  h_9630b74bdac540 1-267
+server/internal/netingress/lookup.go
+  h_9630b74bdac540 1-103
+server/internal/netingress/identity.go
+  h_9630b74bdac540 1-34
+server/internal/netingress/queries.sql
+  h_9630b74bdac540 1-25
+server/internal/netingress/attestation.go
+  h_9630b74bdac540 1-263
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "47b33a0461b2059f31825e3ec97f64a8f86db114",
+  "prompts": {},
+  "humans": {
+    "h_9630b74bdac540": {
+      "author": "Tristan Cartledge <tristan@speakeasyapi.dev>"
+    }
+  }
+}
