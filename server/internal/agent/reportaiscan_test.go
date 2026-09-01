@@ -301,6 +301,7 @@ func TestReportAIScan_PersistsReportedReceiptMetadata(t *testing.T) {
 
 	receipts := aiScanReceipts(t, ti, orgID)
 	require.Len(t, receipts, 1)
+	require.EqualValues(t, math.MaxInt32, receipts[0].TargetListVersion, "receipt must preserve the agent-reported target list version")
 	require.EqualValues(t, 7, receipts[0].MatchCount, "receipt must preserve the agent-reported count")
 }
 

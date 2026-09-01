@@ -190,6 +190,28 @@ func TestService_ListAIDetections_RejectsStaleGrantAfterLiveRoleRevocation(t *te
 	require.Equal(t, oops.CodeForbidden, shareableErr.Code)
 }
 
+func TestService_ListAIDetections_AllowsValidatedSupportSessionWithPreparedOrgAdminGrant(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestAccessService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	supportOrgID := "detections-test-org-" + uuid.NewString()
+	seedOrganization(t, ctx, ti.conn, supportOrgID)
+	authCtx.ActiveOrganizationID = supportOrgID
+	authCtx.IsAdmin = true
+	authCtx.SupportOrganizationID = supportOrgID
+	ctx = contextvalues.WithValidatedSupportSession(ctx, authCtx)
+	ctx = withRBACGrants(t, ctx, authz.Grant{Scope: authz.ScopeOrgAdmin, Selector: authz.NewSelector(authz.ScopeOrgAdmin, supportOrgID)})
+
+	seedAIDetection(t, ctx, ti, supportOrgID, "cursor", "serial-1", "member@example.com", "installed", "harness", time.Now().UTC())
+
+	result, err := ti.service.ListAIDetections(ctx, &gen.ListAIDetectionsPayload{Category: nil, DirectoryGroupID: nil, SessionToken: nil})
+	require.NoError(t, err)
+	require.Len(t, result.Detections, 1)
+	require.Equal(t, "cursor", result.Detections[0].TargetID)
+}
+
 func TestService_ListAIDetections_FiltersByCategory(t *testing.T) {
 	t.Parallel()
 

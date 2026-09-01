@@ -35,7 +35,7 @@ func TestUpsertAIDetectionsRejectsZeroSeenAtDeterministically(t *testing.T) {
 	require.Equal(t, oops.CodeUnexpected, shareableErr.Code)
 }
 
-func TestUpsertAIDetectionsRejectsInvalidFiniteValues(t *testing.T) {
+func TestUpsertAIDetectionsRejectsInvalidSignalAndCategory(t *testing.T) {
 	t.Parallel()
 	logger := NewStub(testenv.NewLogger(t))
 	valid := AIDetection{
