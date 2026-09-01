@@ -88,11 +88,14 @@ FOR NO KEY UPDATE;
 -- Recheck active owners in the write so an owner added after the handler's
 -- preflight check prevents the issuer from being soft-deleted.
 --
--- The owner-existence subqueries below stay project-scoped. An
+-- The issuer predicate spans both tiers, matching the other issuer queries: a
+-- project-tier row in the caller's project, or an organization-tier row
+-- (project_id NULL) in the caller's organization. The owner-existence
+-- subqueries inside NOT EXISTS are the part that stays project-scoped. An
 -- organization-tier issuer can be referenced from any project in the
--- organization, so they would have to sweep the whole organization to be
--- correct for one. No surface can create an organization-tier issuer, so no
--- reachable row exercises that gap. It would apply to mcp_servers and
+-- organization, so those subqueries would have to sweep the whole organization
+-- to be correct for one. No surface can create an organization-tier issuer, so
+-- no reachable row exercises that gap. It would apply to mcp_servers and
 -- toolsets, which hold plain single-column foreign keys; meta_mcp_servers
 -- cannot reference an organization-tier issuer at all, because its composite
 -- foreign key on (project_id, user_session_issuer_id) never matches a NULL
