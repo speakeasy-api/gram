@@ -2270,6 +2270,40 @@ func TestGenerateReadmeIncludesCodexInstallation(t *testing.T) {
 	require.Contains(t, readme, "codex plugin marketplace add")
 }
 
+func TestGenerateReadmeIncludesOpenClawInstallation(t *testing.T) {
+	t.Parallel()
+	files, err := GeneratePluginPackages(nil, GenerateConfig{
+		OrgName:     "Acme",
+		ServerURL:   "https://app.getgram.ai",
+		HooksAPIKey: "gram_hooks_test",
+	})
+	require.NoError(t, err)
+
+	readme := string(files["README.md"])
+	require.Contains(t, readme, "### OpenClaw")
+	require.Contains(t, readme, "openclaw plugins install ./"+OpenClawObservabilitySlug(GenerateConfig{OrgName: "Acme"}))
+	// The install is inert without this: the conversation hooks never fire and
+	// prompts, responses and usage go uncaptured with no error.
+	require.Contains(t, readme, `"allowConversationAccess": true`)
+	require.Contains(t, readme, "openclaw plugins uninstall speakeasy-observability")
+	require.Contains(t, readme, "Coverage depends on your model-auth mode")
+}
+
+// With no hooks key nothing OpenClaw-shaped is generated, so the README must
+// not tell users to install a package that is not in the repo.
+func TestGenerateReadmeOmitsOpenClawWithoutHooksKey(t *testing.T) {
+	t.Parallel()
+	files, err := GeneratePluginPackages(nil, GenerateConfig{
+		OrgName:   "Acme",
+		ServerURL: "https://app.getgram.ai",
+	})
+	require.NoError(t, err)
+
+	readme := string(files["README.md"])
+	require.NotContains(t, readme, "### OpenClaw")
+	require.NotContains(t, readme, "speakeasy-observability")
+}
+
 // Bootstrap and install scripts in ZIPs must carry the execute bit, otherwise
 // extracting the archive leaves them unrunnable. Mirrors the GitHub publish
 // path's mode 100755 in thirdparty/github/repo.go.

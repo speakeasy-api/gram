@@ -11,10 +11,10 @@ packages are generated and published.
 OpenClaw coverage is **not** uniform — it depends on how the customer's models
 authenticate. Establish this first, because it changes what you promise them.
 
-| Model auth mode                                       | What OpenClaw runs                                        | Hooks that fire                                                                                                   | Speakeasy coverage                                                                                                                     |
-| ----------------------------------------------------- | --------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
-| Embedded runtime (`agentRuntime: { id: "openclaw" }`) | Model + tool loop in-process                              | Full set: `before_agent_run`, `before_tool_call`, `after_tool_call`, `llm_output`, `agent_end`, session lifecycle | Full — capture **and** real-time tool blocking                                                                                         |
-| Claude CLI harness (`agentRuntime: claude-cli`)       | Delegates the loop to the Claude Code CLI, out-of-process | Only `agent_turn_prepare`, `before_prompt_build`, `before_message_write`                                          | Partial from OpenClaw — but these sessions are covered by Speakeasy's **Claude Code** hooks, which the CLI honors via managed settings |
+| Model auth mode                                       | What OpenClaw runs                                        | Hooks that fire                                                                                                   | Speakeasy coverage                                                                                                                                                              |
+| ----------------------------------------------------- | --------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Embedded runtime (`agentRuntime: { id: "openclaw" }`) | Model + tool loop in-process                              | Full set: `before_agent_run`, `before_tool_call`, `after_tool_call`, `llm_output`, `agent_end`, session lifecycle | Full — capture **and** real-time tool blocking                                                                                                                                  |
+| Claude CLI harness (`agentRuntime: claude-cli`)       | Delegates the loop to the Claude Code CLI, out-of-process | Only `agent_turn_prepare`, `before_prompt_build`, `before_message_write`                                          | Partial from OpenClaw. Tool and LLM activity is captured **only if Claude Code hooks are separately deployed on the same machine**; without that, these sessions are unobserved |
 
 The trap: `openclaw models auth login` writes `agentRuntime: {id: "claude-cli"}`
 **by default for every model** when a claude-cli profile exists on the machine.
@@ -22,9 +22,13 @@ A customer who authenticated interactively will land in the second row without
 choosing to. Auth-profile ordering alone does not flip it — the per-model
 `agentRuntime` does.
 
-This is complementary coverage, not a hole: between the two paths every session
-is observed. But say so explicitly, or the OpenClaw dashboard will look empty
-to a customer whose models all route through the Claude CLI.
+The two paths are complementary, but only when both are deployed. A machine
+that followed this runbook and nothing else has **no** coverage for
+claude-cli-routed models: OpenClaw's hooks do not fire for them, and no Claude
+Code hooks are installed to pick them up. Either install the Claude Code
+observability plugin alongside this one, or tell the customer those sessions
+are not captured. Say which, or the OpenClaw dashboard will look empty to a
+customer whose models all route through the Claude CLI.
 
 ## Install (developer laptop)
 
@@ -32,10 +36,17 @@ to a customer whose models all route through the Claude CLI.
    (**Plugins → Observability → OpenClaw**). This mints a hooks API key and
    bakes it into the package's `speakeasy.json`. Requires `OrgAdmin`.
 
-2. Install it. `openclaw plugins install` accepts a directory or an archive
-   path, so either works:
+2. Install it. `openclaw plugins install` accepts an archive path directly, so
+   the download works as-is:
 
    ```sh
+   openclaw plugins install ./<org>-observability-openclaw.zip
+   ```
+
+   Or extract first and point at the directory:
+
+   ```sh
+   unzip <org>-observability-openclaw.zip
    openclaw plugins install ./<org>-observability-openclaw
    ```
 
@@ -59,11 +70,15 @@ to a customer whose models all route through the Claude CLI.
    ```
 
    **This step is not optional.** Without `allowConversationAccess`, the
-   conversation hooks (`before_agent_run`, `llm_input`, `llm_output`,
-   `agent_end`, `before_agent_finalize`) silently never fire — no error, no
-   warning, just no prompts, no assistant responses and no usage. Tool hooks
-   still fire, so a half-configured install looks _partly_ working, which is
-   the most confusing failure mode we have here.
+   conversation-scope hooks the plugin subscribes (`before_agent_run`,
+   `llm_output`, `agent_end`) silently never fire — no error, no warning, just
+   no prompts, no assistant responses and no usage. Tool hooks still fire, so a
+   half-configured install looks _partly_ working, which is the most confusing
+   failure mode we have here.
+
+   OpenClaw gates further conversation hooks behind the same flag (`llm_input`
+   and `before_agent_finalize` among them), but the plugin does not subscribe
+   those and never reports them.
 
 4. Restart the Gateway. Plugin changes are not hot-loaded.
 
@@ -74,8 +89,30 @@ Uninstall with `openclaw plugins uninstall speakeasy-observability`.
 ## Install (server / CI, no device agent)
 
 The plugin does not require the Speakeasy device agent. For a shared gateway or
-a CI image, skip the dashboard download and drive the hooks runtime entirely
-from the environment:
+a CI image, install the same package but drive its credentials from the
+environment instead of the key baked into the download.
+
+**At image build time:**
+
+1. Download the OpenClaw observability ZIP from the dashboard, as in step 1
+   above. It is the same artifact; the baked key is simply overridden at run
+   time by the variables below.
+
+2. Install it into the image:
+
+   ```sh
+   openclaw plugins install ./<org>-observability-openclaw.zip
+   ```
+
+3. Preinstall the `speakeasy-hooks` binary. The plugin's bootstrap otherwise
+   downloads it from `https://github.com/speakeasy-api/gram/releases` on the
+   first hook firing, which needs egress from the running container and adds
+   latency to the first turn. Set `GRAM_HOOKS_HOME` to a directory baked into
+   the image and populate it at build time; the bootstrap uses that instead of
+   its per-OS cache location. If the download is left in place, allowlist that
+   host or the first hook fails with a bootstrap error.
+
+**At run time**, supply:
 
 | Variable                  | Purpose                                 |
 | ------------------------- | --------------------------------------- |
@@ -84,9 +121,8 @@ from the environment:
 | `GRAM_HOOKS_PROJECT_SLUG` | Target project; defaults to `default`   |
 | `GRAM_HOOKS_ORG_ID`       | Org ID                                  |
 
-Bake the plugin directory into the image and install it at build time; supply
-the variables at run time so the key is not baked into a layer. Rotate by
-replacing `GRAM_HOOKS_ORG_KEY` and restarting the gateway — no reinstall.
+Supplying these at run time keeps the key out of an image layer. Rotate by
+replacing `GRAM_HOOKS_ORG_KEY` and restarting the gateway, with no reinstall.
 
 Sessions from a shared gateway attribute to the org, not to an individual.
 Per-user attribution on shared gateways is tracked separately in DNO-971.
@@ -128,8 +164,17 @@ Two behaviors worth knowing:
 - **OpenClaw does not impose the 15s fail-closed policy timeout** we originally
   briefed. A `before_tool_call` handler that stalls is awaited in full. Per-hook
   `timeoutMs` exists on the registration API but is opt-in in the versions we
-  have tested. **Our shim therefore owns its own deadline** (`--timeout=60s`);
-  without it a hung control-plane call would stall the agent turn indefinitely.
+  have tested, so **our shim owns its own deadlines**. There are three, and they
+  are not interchangeable:
+
+  | Budget               | Value | What it bounds                                                                                                         |
+  | -------------------- | ----- | ---------------------------------------------------------------------------------------------------------------------- |
+  | `GATE_TIMEOUT_MS`    | 10s   | `before_tool_call` and `before_agent_run`. Blocking hooks fail closed here, so a stalled gate resolves in 10s, not 60. |
+  | `DEFAULT_TIMEOUT_MS` | 30s   | The observe-only hooks                                                                                                 |
+  | `--timeout=60s`      | 60s   | The `agenthooks serve` process itself, not any individual handler deadline                                             |
+
+  Without shim-owned deadlines a hung control-plane call would stall the agent
+  turn indefinitely.
 
 ## Version-pin policy
 
@@ -145,17 +190,56 @@ Note the drift: the fixtures our decoder is tested against were captured from
 2026.6.34, and nothing in the repo records that. Treat the fixture corpus as
 version-stamped evidence, not as a permanent contract.
 
-To qualify a new OpenClaw version, follow the LiteLLM precedent
-(`server/internal/litellm/fixtures/`): re-record the hook payloads from the new
-build, diff them against the checked-in fixtures, run the verification above
-for both capture and a blocked tool call, and only then document the version as
-supported. A change to any hook's payload shape, name or return contract is a
-decoder change in `agenthooks/codec_openclaw.go`, not a docs change.
+### Qualification procedure (manual)
 
-We deliberately do **not** run a nightly canary against OpenClaw `latest`. It
+Run this against a new OpenClaw build before adding it to the table above. It
+is deliberately manual; see the note on canaries below.
+
+1. Install the target version into an isolated profile so a real install is not
+   disturbed:
+
+   ```sh
+   npm i -g openclaw@<version>
+   openclaw --dev --version
+   ```
+
+2. Install the observability package into that profile and enable
+   `allowConversationAccess`, per the install steps above. Use `--dev` for
+   every command so the state stays under `~/.openclaw-dev`.
+
+3. Confirm the model is on the embedded runtime, not the claude-cli harness.
+   Under claude-cli the tool and LLM hooks never fire and the run proves
+   nothing about the payloads.
+
+4. Re-record the hook frames and diff them against
+   `agenthookstest/fixtures/openclaw/` in the agenthooks repo. Check
+   specifically that:
+   - each subscribed hook still fires with the same name
+   - `ctx.runId` is identical across `before_agent_run`, `before_tool_call`,
+     `llm_output` and `agent_end`, since turn correlation depends on it and
+     degrades silently if it breaks
+   - `llm_output.event.usage` still carries the token fields
+   - `before_tool_call` still honours `{block, blockReason}`
+
+5. Run the capture verification above, plus one blocked tool call, and confirm
+   both land in the dashboard.
+
+6. Only then update the version table here and the fixture README. Any change
+   to a hook's payload shape, name or return contract is a decoder change in
+   `agenthooks/codec_openclaw.go`, not a docs change.
+
+### Why there is no nightly canary
+
+We deliberately do **not** run a scheduled job against OpenClaw `latest`. It
 would page on OpenClaw's release cadence and registry flakes without telling us
-what we actually support — the same reasoning the LiteLLM real-proxy suite is
-`workflow_dispatch` rather than scheduled.
+what we actually support, which is the same reasoning that keeps the LiteLLM
+real-proxy suite (`.github/workflows/litellm-e2e.yml`) on `workflow_dispatch`
+rather than a schedule. The procedure above is the qualification gate instead.
+
+`openclaw agent --local` does give a headless one-shot turn, so wiring OpenClaw
+into the existing `hooks:e2e` harness alongside the other providers is the
+natural home for an automated version of this. That is tracked separately
+rather than bolted on here.
 
 ## Operational gotchas
 
