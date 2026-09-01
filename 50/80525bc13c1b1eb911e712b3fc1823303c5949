@@ -1,0 +1,24 @@
+server/internal/k8s/network_ingress_metrics.go
+  h_9630b74bdac540 1-188
+server/internal/k8s/network_ingress_provisioner_test.go
+  h_9630b74bdac540 1-102
+server/internal/k8s/tailscale_network_ingress_provisioner.go
+  h_9630b74bdac540 1-772
+server/internal/k8s/tailscale_network_ingress_provisioner_test.go
+  h_9630b74bdac540 1-226
+server/internal/k8s/network_ingress_provisioner.go
+  h_9630b74bdac540 1-194
+server/internal/attr/conventions.go
+  h_9630b74bdac540 290-291,1409-1417
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "5080525bc13c1b1eb911e712b3fc1823303c5949",
+  "prompts": {},
+  "humans": {
+    "h_9630b74bdac540": {
+      "author": "Tristan Cartledge <tristan@speakeasyapi.dev>"
+    }
+  }
+}
