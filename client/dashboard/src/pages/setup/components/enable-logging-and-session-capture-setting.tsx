@@ -13,7 +13,7 @@ import {
 } from "@gram/client/react-query/productFeatures.js";
 import { useQueryClient } from "@tanstack/react-query";
 import { FileText } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 const TITLE = "Enable logging and session capture";
 const DESCRIPTION =
@@ -94,13 +94,18 @@ function EnableLoggingAndSessionCaptureSettingInner({
 
   const mutation = useFeaturesSetMutation();
   const [isSaving, setIsSaving] = useState(false);
+  const onBusyChangeRef = useRef(onBusyChange);
+  onBusyChangeRef.current = onBusyChange;
 
   useEffect(() => {
     onBusyChange?.(isSaving);
-    return () => {
-      onBusyChange?.(false);
-    };
   }, [isSaving, onBusyChange]);
+
+  useEffect(() => {
+    return () => {
+      onBusyChangeRef.current?.(false);
+    };
+  }, []);
 
   if (!features.data) return null;
 

@@ -1,4 +1,10 @@
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import type { ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -8,6 +14,7 @@ const testState = vi.hoisted(() => ({
     | undefined,
   organizationId: "org-active",
   mutate: vi.fn(),
+  mutateAsync: vi.fn(),
   mutationOptions: undefined as
     | {
         onError?: (error: Error) => void;
@@ -58,7 +65,11 @@ vi.mock("@gram/client/react-query/featuresSet.js", () => ({
     ) => Promise<void>;
   }) => {
     testState.mutationOptions = options;
-    return { isPending: false, mutate: testState.mutate };
+    return {
+      isPending: false,
+      mutate: testState.mutate,
+      mutateAsync: testState.mutateAsync,
+    };
   },
 }));
 
@@ -82,6 +93,8 @@ beforeEach(() => {
   testState.organizationId = "org-active";
   testState.isAdmin = true;
   testState.mutate.mockReset();
+  testState.mutateAsync.mockReset();
+  testState.mutateAsync.mockResolvedValue(undefined);
   testState.mutationOptions = undefined;
   testState.productFeaturesQuery.mockReset();
   handleAPIError.mockReset();
@@ -92,7 +105,7 @@ beforeEach(() => {
 afterEach(cleanup);
 
 describe("EnableLogsSetting", () => {
-  it("enables the same logs product feature as Logging & Telemetry", () => {
+  it("enables the same logs product feature as Logging & Telemetry", async () => {
     render(<EnableLogsSetting />);
 
     expect(testState.productFeaturesQuery).toHaveBeenCalledWith(
@@ -103,24 +116,29 @@ describe("EnableLogsSetting", () => {
 
     fireEvent.click(screen.getByRole("switch", { name: "Enable logs" }));
 
-    expect(testState.mutate).toHaveBeenCalledWith({
-      request: {
-        setProductFeatureRequestBody: {
-          organizationId: "org-active",
-          featureName: "logs",
-          enabled: true,
+    await waitFor(() => {
+      expect(testState.mutateAsync).toHaveBeenCalledWith({
+        request: {
+          setProductFeatureRequestBody: {
+            organizationId: "org-active",
+            featureName: "logs",
+            enabled: true,
+          },
         },
-      },
+      });
     });
   });
 
-  it("turns off tool I/O logs when logging is disabled", () => {
+  it("turns off tool I/O logs when logging is disabled", async () => {
     testState.data = { logsEnabled: true, toolIoLogsEnabled: true };
 
     render(<EnableLogsSetting />);
     fireEvent.click(screen.getByRole("switch", { name: "Enable logs" }));
 
-    expect(testState.mutate).toHaveBeenCalledWith({
+    await waitFor(() => {
+      expect(testState.mutateAsync).toHaveBeenCalledTimes(2);
+    });
+    expect(testState.mutateAsync).toHaveBeenNthCalledWith(1, {
       request: {
         setProductFeatureRequestBody: {
           organizationId: "org-active",
@@ -129,7 +147,7 @@ describe("EnableLogsSetting", () => {
         },
       },
     });
-    expect(testState.mutate).toHaveBeenCalledWith({
+    expect(testState.mutateAsync).toHaveBeenNthCalledWith(2, {
       request: {
         setProductFeatureRequestBody: {
           organizationId: "org-active",
@@ -137,6 +155,56 @@ describe("EnableLogsSetting", () => {
           enabled: false,
         },
       },
+    });
+  });
+
+  it("keeps pending true until both disable writes settle", async () => {
+    testState.data = { logsEnabled: true, toolIoLogsEnabled: true };
+    const onPendingChange = vi.fn();
+    let resolveLogs: (() => void) | undefined;
+    let resolveToolIo: (() => void) | undefined;
+    const logsGate = new Promise<void>((resolve) => {
+      resolveLogs = resolve;
+    });
+    const toolIoGate = new Promise<void>((resolve) => {
+      resolveToolIo = resolve;
+    });
+    testState.mutateAsync.mockImplementation(
+      async (variables: {
+        request: { setProductFeatureRequestBody: { featureName: string } };
+      }) => {
+        const { featureName } = variables.request.setProductFeatureRequestBody;
+        if (featureName === "logs") {
+          await logsGate;
+          return;
+        }
+        await toolIoGate;
+      },
+    );
+
+    render(
+      <EnableLogsSetting
+        onPendingChange={(pending) => {
+          onPendingChange(pending);
+        }}
+      />,
+    );
+    fireEvent.click(screen.getByRole("switch", { name: "Enable logs" }));
+
+    await waitFor(() => {
+      expect(onPendingChange).toHaveBeenCalledWith(true);
+    });
+    expect(testState.mutateAsync).toHaveBeenCalledTimes(1);
+
+    resolveLogs?.();
+    await waitFor(() => {
+      expect(testState.mutateAsync).toHaveBeenCalledTimes(2);
+    });
+    expect(onPendingChange).not.toHaveBeenCalledWith(false);
+
+    resolveToolIo?.();
+    await waitFor(() => {
+      expect(onPendingChange).toHaveBeenCalledWith(false);
     });
   });
 

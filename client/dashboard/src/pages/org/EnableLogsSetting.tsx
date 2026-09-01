@@ -13,7 +13,7 @@ import {
 } from "@gram/client/react-query/productFeatures.js";
 import { useQueryClient } from "@tanstack/react-query";
 import { FileText } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 const ENABLE_LOGS_TITLE = "Enable Logs";
 const ENABLE_LOGS_DESCRIPTION = "Record tool call traces and telemetry data";
@@ -86,38 +86,55 @@ function EnableLogsSettingInner({
       handleAPIError(error, "Failed to update setting");
     },
   });
+  const [isSaving, setIsSaving] = useState(false);
+  const onPendingChangeRef = useRef(onPendingChange);
+  onPendingChangeRef.current = onPendingChange;
 
   useEffect(() => {
-    onPendingChange?.(mutation.isPending);
+    onPendingChange?.(isSaving);
+  }, [isSaving, onPendingChange]);
+
+  useEffect(() => {
     return () => {
-      onPendingChange?.(false);
+      onPendingChangeRef.current?.(false);
     };
-  }, [mutation.isPending, onPendingChange]);
+  }, []);
 
   if (!features.data) return null;
 
   const handleSetLogs = (enabled: boolean) => {
-    mutation.mutate({
-      request: {
-        setProductFeatureRequestBody: {
-          organizationId,
-          featureName: FeatureName.Logs,
-          enabled,
-        },
-      },
-    });
-
-    if (!enabled && effectiveToolIoLogsEnabled) {
-      mutation.mutate({
-        request: {
-          setProductFeatureRequestBody: {
-            organizationId,
-            featureName: FeatureName.ToolIoLogs,
-            enabled: false,
+    void (async () => {
+      setIsSaving(true);
+      try {
+        await mutation.mutateAsync({
+          request: {
+            setProductFeatureRequestBody: {
+              organizationId,
+              featureName: FeatureName.Logs,
+              enabled,
+            },
           },
-        },
-      });
-    }
+        });
+
+        if (!enabled && effectiveToolIoLogsEnabled) {
+          await mutation.mutateAsync({
+            request: {
+              setProductFeatureRequestBody: {
+                organizationId,
+                featureName: FeatureName.ToolIoLogs,
+                enabled: false,
+              },
+            },
+          });
+        }
+      } catch {
+        // onError on the mutation reports the failure.
+      } finally {
+        if (isCurrentOrganization()) {
+          setIsSaving(false);
+        }
+      }
+    })();
   };
 
   return (
@@ -137,7 +154,7 @@ function EnableLogsSettingInner({
         <Switch
           checked={effectiveLogsEnabled}
           onCheckedChange={handleSetLogs}
-          disabled={mutation.isPending}
+          disabled={isSaving || mutation.isPending}
           aria-label="Enable logs"
         />
       </RequireScope>
