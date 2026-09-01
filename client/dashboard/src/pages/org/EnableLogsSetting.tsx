@@ -15,9 +15,8 @@ import { useQueryClient } from "@tanstack/react-query";
 import { FileText } from "lucide-react";
 import { useState } from "react";
 
-export const ENABLE_LOGS_TITLE = "Enable Logs";
-export const ENABLE_LOGS_DESCRIPTION =
-  "Record tool call traces and telemetry data";
+const ENABLE_LOGS_TITLE = "Enable Logs";
+const ENABLE_LOGS_DESCRIPTION = "Record tool call traces and telemetry data";
 export const ENABLE_LOGS_PAGE_DESCRIPTION =
   "Configure logging and telemetry settings for all your tool capture. When enabled, tool calls and traces are recorded for debugging and analytics. These power the insights and logs page on the platform.";
 
