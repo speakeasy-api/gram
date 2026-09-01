@@ -4844,6 +4844,12 @@ CREATE INDEX IF NOT EXISTS mcp_servers_toolset_id_idx
 ON mcp_servers (toolset_id)
 WHERE toolset_id IS NOT NULL;
 
+-- A toolset has at most one live wrapper; resolution, minting, and the
+-- toolset<->wrapper mirror all assume the mapping is 1:1.
+CREATE UNIQUE INDEX IF NOT EXISTS mcp_servers_toolset_id_key
+ON mcp_servers (toolset_id)
+WHERE toolset_id IS NOT NULL AND deleted IS FALSE;
+
 CREATE INDEX IF NOT EXISTS mcp_servers_unproxied_mcp_server_id_idx
 ON mcp_servers (unproxied_mcp_server_id)
 WHERE unproxied_mcp_server_id IS NOT NULL;
