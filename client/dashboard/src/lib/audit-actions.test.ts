@@ -59,6 +59,8 @@ describe("AUDIT_ACTIONS", () => {
     expect(staticActionPhrase("organization:enterprise_trial_converted")).toBe(
       "converted enterprise trial for",
     );
+  });
+
   it("describes data export actions", () => {
     expect(
       (

@@ -2,4 +2,4 @@
 "server": minor
 ---
 
-Add project-scoped OTEL destination and data export route management APIs.
+Add organization-authorized APIs for managing project-scoped OTEL destinations and data export routes.
