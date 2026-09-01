@@ -22,6 +22,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/mcp"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpversions"
+	"github.com/speakeasy-api/gram/server/internal/mcpjsonrpc"
 	metadata_repo "github.com/speakeasy-api/gram/server/internal/mcpmetadata/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	toolsets_repo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
@@ -976,4 +977,71 @@ func TestServePublic_InitializeBodyWinsOverNonconformingHeader(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, http.StatusOK, w.Code)
 	require.Equal(t, mcpversions.Version20251125, answeredProtocolVersion(t, w))
+}
+
+// carriedProtocolVersion serves a tools/list request declaring declared and
+// returns the revision the hosted handler published to the error wrapper's
+// holder. tools/list is deliberate: initialize would additionally negotiate,
+// which is a different value settled at a different point.
+func carriedProtocolVersion(t *testing.T, ctx context.Context, ti *testInstance, mcpSlug, declared string) string {
+	t.Helper()
+
+	body, err := json.Marshal(map[string]any{
+		"jsonrpc": "2.0",
+		"id":      1,
+		"method":  "tools/list",
+		"params":  map[string]any{},
+	})
+	require.NoError(t, err)
+
+	rpcCtx := &contextvalues.RPCContext{ID: mcpjsonrpc.NullID(), ProtocolVersion: ""}
+	ctx = contextvalues.SetRPCContext(ctx, rpcCtx)
+
+	_, err = servePublicHTTP(t, ctx, ti, mcpSlug, body, "", map[string]string{
+		mcpversions.HTTPHeader: declared,
+	})
+	require.NoError(t, err)
+
+	return rpcCtx.ProtocolVersion
+}
+
+// TestServePublic_CarriesSupportedDeclarationToTheErrorWrapper covers the
+// plumbing that lets an error escaping the handler be encoded on the revision
+// the client is speaking. A supported declaration governs the request, so it
+// is what the wrapper must see.
+func TestServePublic_CarriesSupportedDeclarationToTheErrorWrapper(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPService(t)
+	toolsetsRepo := toolsets_repo.New(ti.conn)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	toolset := createPublicMCPToolset(t, ctx, toolsetsRepo, authCtx, "carried-supported-version")
+
+	require.Equal(t, mcpversions.Version20250618, carriedProtocolVersion(t, ctx, ti, toolset.McpSlug.String, mcpversions.Version20250618))
+}
+
+// TestServePublic_CarriesResolvedRevisionNotRawDeclaration pins the half that
+// is easy to get wrong. A declaration this surface does not serve resolves
+// downward, and it is the resolved answer that governs the request. Publishing
+// the raw declaration instead would encode errors on a revision Gram never
+// agreed to speak — the exact confusion the Declared/InEffect split exists to
+// prevent — and would silently begin doing so the moment a client asks for a
+// revision ahead of the supported set.
+func TestServePublic_CarriesResolvedRevisionNotRawDeclaration(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPService(t)
+	toolsetsRepo := toolsets_repo.New(ti.conn)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	toolset := createPublicMCPToolset(t, ctx, toolsetsRepo, authCtx, "carried-resolved-version")
+
+	require.NotContains(t, mcpversions.SupportedHostedToolset(), mcpversions.Version20260728,
+		"this test's premise is that the declared revision is unsupported")
+	require.Equal(t, mcpversions.DefaultInEffect, carriedProtocolVersion(t, ctx, ti, toolset.McpSlug.String, mcpversions.Version20260728))
 }

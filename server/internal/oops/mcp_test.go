@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/mcp/mcpversions"
 	"github.com/speakeasy-api/gram/server/internal/mcpjsonrpc"
 	"github.com/stretchr/testify/require"
 )
@@ -144,7 +145,7 @@ func TestNewMCPErrorFromCause(t *testing.T) {
 		t.Parallel()
 
 		existing := &MCPError{ID: mcpjsonrpc.ID{Number: 0, String: ""}, Code: MCPCodeMethodNotFound, Message: "missing", Data: nil}
-		err := NewMCPErrorFromCause(id, existing)
+		err := NewMCPErrorFromCause(id, mcpversions.Version20251125, existing)
 
 		require.Same(t, existing, err)
 		require.Equal(t, id, err.ID)
@@ -153,7 +154,7 @@ func TestNewMCPErrorFromCause(t *testing.T) {
 	t.Run("maps_shareable_error_code", func(t *testing.T) {
 		t.Parallel()
 
-		err := NewMCPErrorFromCause(id, E(CodeNotFound, nil, "mcp server not found"))
+		err := NewMCPErrorFromCause(id, mcpversions.Version20251125, E(CodeNotFound, nil, "mcp server not found"))
 
 		require.Equal(t, id, err.ID)
 		require.Equal(t, MCPCodeResourceNotFound, err.Code)
@@ -163,10 +164,154 @@ func TestNewMCPErrorFromCause(t *testing.T) {
 	t.Run("defaults_unknown_error_to_internal", func(t *testing.T) {
 		t.Parallel()
 
-		err := NewMCPErrorFromCause(id, errors.New("boom"))
+		err := NewMCPErrorFromCause(id, mcpversions.Version20251125, errors.New("boom"))
 
 		require.Equal(t, id, err.ID)
 		require.Equal(t, MCPCodeInternalError, err.Code)
 		require.Equal(t, "Internal error", err.Message)
 	})
+}
+
+// TestCodeMCPCodeFor_LegacyRevisionsKeepRetiredResourceNotFound pins the half
+// of the 2026-07-28 error-code rule that is easy to lose in a refactor: the
+// retired -32002 is not merely permitted on the handshake-based revisions, it
+// is what their clients are told to expect, so the mapping is a branch rather
+// than a migration.
+func TestCodeMCPCodeFor_LegacyRevisionsKeepRetiredResourceNotFound(t *testing.T) {
+	t.Parallel()
+
+	for _, revision := range []string{
+		mcpversions.Version20241105,
+		mcpversions.Version20250326,
+		mcpversions.Version20250618,
+		mcpversions.Version20251125,
+	} {
+		require.Equal(t, MCPCodeResourceNotFound, CodeNotFound.MCPCodeFor(revision), "revision %s", revision)
+	}
+}
+
+// TestCodeMCPCodeFor_ModernRevisionReplacesRetiredResourceNotFound covers the
+// MUST NOT: an implementation of 2026-07-28 may not emit -32002 at all.
+func TestCodeMCPCodeFor_ModernRevisionReplacesRetiredResourceNotFound(t *testing.T) {
+	t.Parallel()
+
+	require.Equal(t, MCPCodeInvalidParams, CodeNotFound.MCPCodeFor(mcpversions.Version20260728))
+}
+
+// TestCodeMCPCodeFor_UnresolvedRevisionIsLegacy covers the error paths that
+// fail before a revision can be resolved — everything ahead of body decode.
+// They have no declaration to read, so they must not be answered as modern.
+func TestCodeMCPCodeFor_UnresolvedRevisionIsLegacy(t *testing.T) {
+	t.Parallel()
+
+	require.Equal(t, MCPCodeResourceNotFound, CodeNotFound.MCPCodeFor(""))
+	require.Equal(t, MCPCodeResourceNotFound, CodeNotFound.MCPCodeFor("not-a-revision"))
+}
+
+// TestCodeMCPCodeFor_OnlyResourceNotFoundIsRevisionConditional guards the
+// scope of the branch. Gram's other server-defined codes sit in the range
+// 2026-07-28 designates legacy, but only -32002 is a MUST NOT; the rest stay
+// legal to emit and must not be quietly remapped alongside it.
+func TestCodeMCPCodeFor_OnlyResourceNotFoundIsRevisionConditional(t *testing.T) {
+	t.Parallel()
+
+	for _, code := range []Code{
+		CodeUnauthorized,
+		CodeForbidden,
+		CodeBadRequest,
+		CodeConflict,
+		CodeFailedPrecondition,
+		CodeUnsupportedMedia,
+		CodeMethodNotAllowed,
+		CodeInvalid,
+		CodeNotImplemented,
+		CodeUnexpected,
+	} {
+		require.Equal(t, code.MCPCode(), code.MCPCodeFor(mcpversions.Version20260728), "code %s", code)
+	}
+}
+
+// TestNewMCPErrorFromCause_ModernRevisionReplacesRetiredResourceNotFound
+// covers the in-handler write path, which is where Gram's general not-found —
+// an unknown tool, toolset, or endpoint — reaches the wire.
+func TestNewMCPErrorFromCause_ModernRevisionReplacesRetiredResourceNotFound(t *testing.T) {
+	t.Parallel()
+
+	err := NewMCPErrorFromCause(mcpjsonrpc.StringID("req-1"), mcpversions.Version20260728, E(CodeNotFound, nil, "unknown tool"))
+
+	require.Equal(t, MCPCodeInvalidParams, err.Code)
+	require.Equal(t, "unknown tool", err.Message)
+}
+
+// TestNewMCPErrorFromCause_PreservesExplicitCodeOnModernRevision covers the
+// passthrough arm: a caller that names a wire code itself has chosen it, and
+// the revision mapping must not second-guess that.
+func TestNewMCPErrorFromCause_PreservesExplicitCodeOnModernRevision(t *testing.T) {
+	t.Parallel()
+
+	existing := &MCPError{ID: mcpjsonrpc.NullID(), Code: MCPCodeResourceNotFound, Message: "explicit", Data: nil}
+	err := NewMCPErrorFromCause(mcpjsonrpc.StringID("req-1"), mcpversions.Version20260728, existing)
+
+	require.Same(t, existing, err)
+	require.Equal(t, MCPCodeResourceNotFound, err.Code)
+}
+
+// TestMCPErrHandle_ModernRevisionReplacesRetiredResourceNotFound covers the
+// outer path. A not-found can escape a handler after the body is decoded — a
+// private MCP server reached anonymously is answered that way — so this path
+// carries the MUST NOT too, and reaches the revision through the mutable
+// holder it installs rather than through the request context it captured.
+func TestMCPErrHandle_ModernRevisionReplacesRetiredResourceNotFound(t *testing.T) {
+	t.Parallel()
+	logger, _ := captureLogger()
+
+	handler := MCPErrHandle(logger, func(w http.ResponseWriter, r *http.Request) error {
+		rpcCtx, ok := contextvalues.GetRPCContext(r.Context())
+		require.True(t, ok)
+		rpcCtx.ProtocolVersion = mcpversions.Version20260728
+
+		return C(CodeNotFound)
+	})
+
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/mcp/test", nil))
+
+	var response struct {
+		Error struct {
+			Code MCPCode `json:"code"`
+		} `json:"error"`
+	}
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &response))
+	require.Equal(t, MCPCodeInvalidParams, response.Error.Code)
+}
+
+// TestMCPErrHandle_StatusStaysKeyedOnGramCodeForModernRevision pins the
+// deliberate asymmetry between the two error paths. The statuses this wrapper
+// answers are transport-level refusals that are correct on every revision, and
+// the 401 in particular is what an MCP client needs to begin its OAuth
+// discovery flow. Deriving the status from the revision here would answer that
+// challenge with a 200 and strand every client that has to authorize.
+func TestMCPErrHandle_StatusStaysKeyedOnGramCodeForModernRevision(t *testing.T) {
+	t.Parallel()
+	logger, _ := captureLogger()
+
+	for code, want := range map[Code]int{
+		CodeUnauthorized:     http.StatusUnauthorized,
+		CodeForbidden:        http.StatusForbidden,
+		CodeNotFound:         http.StatusNotFound,
+		CodeMethodNotAllowed: http.StatusMethodNotAllowed,
+	} {
+		handler := MCPErrHandle(logger, func(w http.ResponseWriter, r *http.Request) error {
+			rpcCtx, ok := contextvalues.GetRPCContext(r.Context())
+			require.True(t, ok)
+			rpcCtx.ProtocolVersion = mcpversions.Version20260728
+
+			return C(code)
+		})
+
+		rec := httptest.NewRecorder()
+		handler.ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/mcp/test", nil))
+
+		require.Equal(t, want, rec.Code, "code %s", code)
+	}
 }

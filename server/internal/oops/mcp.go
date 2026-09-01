@@ -17,7 +17,7 @@ import (
 // errors as JSON-RPC error responses instead of the generic HTTP error shape.
 func MCPErrHandle(logger *slog.Logger, handler func(http.ResponseWriter, *http.Request) error) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		rpcCtx := &contextvalues.RPCContext{ID: mcpjsonrpc.NullID()}
+		rpcCtx := &contextvalues.RPCContext{ID: mcpjsonrpc.NullID(), ProtocolVersion: ""}
 		r = r.WithContext(contextvalues.SetRPCContext(r.Context(), rpcCtx))
 
 		err := handler(w, r)
@@ -42,8 +42,17 @@ func MCPErrHandle(logger *slog.Logger, handler func(http.ResponseWriter, *http.R
 		var shareableErr *ShareableError
 		switch {
 		case errors.As(err, &shareableErr):
+			// The status stays keyed on the Gram error code, not on the wire
+			// code and not on the revision. Errors that escape a handler are
+			// transport-level refusals rather than protocol results, and the
+			// statuses this path already answers are correct on every
+			// revision: 401 carries the OAuth discovery challenge MCP clients
+			// need to start their authorization flow, 404 names an unknown
+			// server, 405 answers the GET compatibility probe. The
+			// specification's status table governs the JSON-RPC errors
+			// written from inside the handler, which this is not.
 			code = shareableErr.HTTPStatus(r.Context())
-			payload.Code = shareableErr.Code.MCPCode()
+			payload.Code = shareableErr.Code.MCPCodeFor(rpcCtx.ProtocolVersion)
 			payload.Message = shareableErr.Error()
 		default:
 			stack := string(debug.Stack())
@@ -119,7 +128,15 @@ type MCPError struct {
 	Data    *MCPErrorData
 }
 
-func NewMCPErrorFromCause(id mcpjsonrpc.ID, source error) *MCPError {
+// NewMCPErrorFromCause converts an error returned by an MCP request handler
+// into the JSON-RPC error to write in response to request id. revision is the
+// protocol revision in effect for that request, which selects the wire error
+// code; an empty or unrecognized value is served the legacy mappings.
+//
+// An error that already carries its own [MCPError] passes through with its
+// code intact, on the grounds that a caller naming a wire code directly has
+// chosen it deliberately.
+func NewMCPErrorFromCause(id mcpjsonrpc.ID, revision string, source error) *MCPError {
 	var mcpErr *MCPError
 	var shareableErr *ShareableError
 
@@ -132,7 +149,7 @@ func NewMCPErrorFromCause(id mcpjsonrpc.ID, source error) *MCPError {
 	case errors.As(source, &shareableErr):
 		return &MCPError{
 			ID:      id,
-			Code:    shareableErr.Code.MCPCode(),
+			Code:    shareableErr.Code.MCPCodeFor(revision),
 			Message: shareableErr.Error(),
 			Data:    nil,
 		}

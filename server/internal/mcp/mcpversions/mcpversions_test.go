@@ -264,3 +264,60 @@ func TestSupportedMetaServerSpansFloorToCeiling(t *testing.T) {
 	mcpversions.SupportedMetaServer()[0] = "mutated"
 	require.Equal(t, mcpversions.Version20241105, mcpversions.SupportedMetaServer()[0], "SupportedMetaServer must not hand out a mutable view of package state")
 }
+
+// TestAtLeast_ComparesChronologically covers the ordering the wire-format
+// branches rest on.
+func TestAtLeast_ComparesChronologically(t *testing.T) {
+	t.Parallel()
+
+	require.True(t, mcpversions.AtLeast(mcpversions.Version20260728, mcpversions.Version20251125))
+	require.True(t, mcpversions.AtLeast(mcpversions.Version20251125, mcpversions.Version20251125))
+	require.False(t, mcpversions.AtLeast(mcpversions.Version20250618, mcpversions.Version20251125))
+}
+
+// TestAtLeast_UnrecognizedInputIsNeverAtLeast covers the case lexical
+// comparison alone would get wrong: a garbage value can sort above a real
+// revision, and reading that as the newer behavior would serve a wire format
+// to a client that cannot possibly have asked for it.
+func TestAtLeast_UnrecognizedInputIsNeverAtLeast(t *testing.T) {
+	t.Parallel()
+
+	require.False(t, mcpversions.AtLeast("zzzz-zz-zz", mcpversions.Version20260728))
+	require.False(t, mcpversions.AtLeast("9999-12-31", mcpversions.Version20260728))
+	require.False(t, mcpversions.AtLeast("", mcpversions.Version20260728))
+}
+
+// TestIsModern_SplitsAtTheStatelessBoundary pins which side of the
+// handshake/stateless divide each recognized revision falls on.
+func TestIsModern_SplitsAtTheStatelessBoundary(t *testing.T) {
+	t.Parallel()
+
+	require.True(t, mcpversions.IsModern(mcpversions.Version20260728))
+
+	for _, v := range []string{
+		mcpversions.Version20241105,
+		mcpversions.Version20250326,
+		mcpversions.Version20250618,
+		mcpversions.Version20251125,
+	} {
+		require.False(t, mcpversions.IsModern(v), "revision %s", v)
+	}
+}
+
+// TestIsModern_NoSupportedSetResolvesModernYet records that every
+// revision-conditional branch keyed on IsModern is unreachable in production
+// until a surface advertises 2026-07-28, and fails the day one does — which is
+// when those branches need their own end-to-end coverage.
+func TestIsModern_NoSupportedSetResolvesModernYet(t *testing.T) {
+	t.Parallel()
+
+	for _, supported := range [][]string{
+		mcpversions.SupportedHostedToolset(),
+		mcpversions.SupportedPlatformToolset(),
+		mcpversions.SupportedMetaServer(),
+	} {
+		for _, v := range supported {
+			require.False(t, mcpversions.IsModern(v), "revision %s", v)
+		}
+	}
+}

@@ -909,6 +909,17 @@ func (s *Service) serveToolsetResolved(w http.ResponseWriter, r *http.Request, t
 		}
 	}
 
+	// Resolved the moment the declaration is readable, rather than alongside
+	// the rest of the request inputs further down, because the authorization
+	// and admission checks in between return errors of their own and each one
+	// has to be answered on the revision the client is actually speaking. The
+	// initialize handler overwrites InEffect with the negotiated answer once
+	// this reaches mcpInputs, which is the one sanctioned mutation.
+	protocolVersion := mcpversions.Resolve(mcprequests.DeclaredProtocolVersion(r.Header.Get(mcpversions.HTTPHeader), req.Params), mcpversions.SupportedHostedToolset())
+	if rpcCtx, ok := contextvalues.GetRPCContext(ctx); ok {
+		rpcCtx.ProtocolVersion = protocolVersion.InEffect
+	}
+
 	// Extract tokens from headers separately:
 	// - authToken: from Authorization header (for OAuth flows)
 	// - sessionToken: from Gram-Chat-Session header (for chat session fallback on non-OAuth endpoints)
@@ -1098,7 +1109,7 @@ func (s *Service) serveToolsetResolved(w http.ResponseWriter, r *http.Request, t
 	hostedCoverageRecorded := false
 	if isHostedToolsCall {
 		if err := s.enforceHostedToolsCall(ctx, toolset.OrganizationID, cfg.mcpServerID); err != nil {
-			return s.respondMCPError(ctx, w, req.ID, err)
+			return writeMCPError(ctx, s.logger, w, req.ID, protocolVersion.InEffect, err)
 		}
 		hostedCoverageRecorded = true
 	}
@@ -1174,7 +1185,7 @@ func (s *Service) serveToolsetResolved(w http.ResponseWriter, r *http.Request, t
 		metaMcpServerID:          "",
 		skipProxyTools:           false,
 		tags:                     tags,
-		protocolVersion:          mcpversions.Resolve(mcprequests.DeclaredProtocolVersion(r.Header.Get(mcpversions.HTTPHeader), req.Params), mcpversions.SupportedHostedToolset()),
+		protocolVersion:          protocolVersion,
 		identityCoverageRecorded: hostedCoverageRecorded,
 		toolSelection:            callerToolSelection,
 	}
@@ -1220,7 +1231,9 @@ func (s *Service) serveToolsetResolved(w http.ResponseWriter, r *http.Request, t
 		if rpcCtx, ok := contextvalues.GetRPCContext(ctx); ok && rpcCtx.ID.IsSet() {
 			mcpID = rpcCtx.ID
 		}
-		return s.respondMCPError(ctx, w, mcpID, err)
+		// Read back off mcpInputs rather than the local: an initialize
+		// request carries the negotiated answer only there.
+		return writeMCPError(ctx, s.logger, w, mcpID, mcpInputs.protocolVersion.InEffect, err)
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -1268,20 +1281,6 @@ func (s *Service) enforceHostedToolsCall(ctx context.Context, organizationID str
 	default:
 		return errors.New("invalid hosted MCP kill-switch disposition")
 	}
-}
-
-func (s *Service) respondMCPError(ctx context.Context, w http.ResponseWriter, id mcpjsonrpc.ID, cause error) error {
-	bs, err := json.Marshal(oops.NewMCPErrorFromCause(id, cause))
-	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "failed to serialize error response").LogError(ctx, s.logger)
-	}
-
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-	if _, err := w.Write(bs); err != nil {
-		return oops.E(oops.CodeUnexpected, err, "failed to write MCP error response")
-	}
-	return nil
 }
 
 // checkToolsetSecurity loads the toolset's security variables and checks if the

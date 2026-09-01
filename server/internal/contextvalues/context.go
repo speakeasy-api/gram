@@ -97,8 +97,28 @@ type AdminAuthContext struct {
 	HD          string
 }
 
+// RPCContext is the mutable holder an MCP/JSON-RPC error wrapper installs
+// before invoking its handler, so that state the handler discovers while
+// serving the request is visible to the wrapper afterwards. A plain context
+// value cannot serve that purpose here: the wrapper reads the request context
+// it captured before dispatch, where anything the handler added is absent.
 type RPCContext struct {
+	// ID is the JSON-RPC id of the request being served, so that an error
+	// serialized after the handler returns echoes the id the client sent
+	// rather than a null one.
 	ID mcpjsonrpc.ID
+
+	// ProtocolVersion is the MCP protocol revision in effect for the request,
+	// which selects the revision-conditional wire mappings. It stays empty
+	// until the handler resolves it, which cannot happen before the request
+	// body is decoded, so errors raised earlier are answered on the legacy
+	// mappings.
+	//
+	// It carries the resolved revision rather than the raw declaration,
+	// because whether a declaration is honored depends on the supported set
+	// of the surface serving the request, and the wrapper reading this is
+	// shared across surfaces with sets of their own.
+	ProtocolVersion string
 }
 
 const (

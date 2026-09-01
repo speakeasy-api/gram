@@ -214,6 +214,29 @@ func Known(v string) bool {
 	return slices.Contains(all, v)
 }
 
+// AtLeast reports whether v is a recognized revision no older than floor.
+//
+// Revision identifiers are ISO dates, so lexical order is chronological order
+// and the comparison stands on its own rather than on the ordering of [all].
+// An unrecognized value is never at least anything: garbage that happens to
+// sort above a real revision must not read as the newer behavior.
+func AtLeast(v, floor string) bool {
+	return Known(v) && v >= floor
+}
+
+// IsModern reports whether v is [Version20260728] or later — the boundary the
+// specification draws between the handshake-based revisions and the stateless
+// era, and the only version test the wire-format branches make. Naming it once
+// means a later revision that supersedes 2026-07-28 moves the boundary here
+// rather than at each branch.
+//
+// Callers pass the revision in effect for a request ([Resolution.InEffect]),
+// never the declared one: what a client asked for does not govern what it is
+// served.
+func IsModern(v string) bool {
+	return AtLeast(v, Version20260728)
+}
+
 // Clamp bounds a client-supplied version for use as a metric dimension: a
 // recognized revision passes through, an absent one becomes [None], and
 // anything else becomes [Other].
