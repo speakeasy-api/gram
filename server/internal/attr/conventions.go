@@ -731,6 +731,8 @@ const (
 	ResilienceNamespaceKey              = attribute.Key("gram.resilience.namespace")
 	ResiliencePartitionKey              = attribute.Key("gram.resilience.partition")
 	ResilienceSubsetKey                 = attribute.Key("gram.resilience.subset")
+
+	MeteringStripeExportDispositionKey = attribute.Key("gram.metering.stripe_export.disposition")
 )
 
 const (
@@ -1765,6 +1767,10 @@ func OrganizationInviteRoleSlug(v string) attribute.KeyValue {
 
 func Outcome[V ~string](v V) attribute.KeyValue { return OutcomeKey.String(string(v)) }
 func SlogOutcome(v string) slog.Attr            { return slog.String(string(OutcomeKey), v) }
+
+func MeteringStripeExportDisposition[V ~string](v V) attribute.KeyValue {
+	return MeteringStripeExportDispositionKey.String(string(v))
+}
 
 func PackageName(v string) attribute.KeyValue { return PackageNameKey.String(v) }
 func SlogPackageName(v string) slog.Attr      { return slog.String(string(PackageNameKey), v) }
