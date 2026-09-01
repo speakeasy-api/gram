@@ -156,7 +156,7 @@ var UserSession = Type("UserSession", func() {
 	Attribute("user_session_issuer_id", String, "The issuing user_session_issuer id.", func() {
 		Format(FormatUUID)
 	})
-	Attribute("subject_urn", String, "The session's subject URN (user:<id> | apikey:<uuid> | anonymous:<mcp-session-id>).")
+	Attribute("subject_urn", String, "The session's subject URN (user:<id> | apikey:<uuid> | anonymous:<mcp-session-id> | workload:<issuer-id>:<external-subject>).")
 	Attribute("jti", String, "Current access-token JTI; used by the revocation path.")
 	Attribute("refresh_expires_at", String, "Next refresh deadline.", func() {
 		Format(FormatDateTime)

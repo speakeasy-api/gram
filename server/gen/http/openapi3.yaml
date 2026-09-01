@@ -87940,7 +87940,7 @@ components:
                     description: 'Subject kind: ''user'', ''apikey'', ''anonymous'', or ''workload''.'
                 subject_urn:
                     type: string
-                    description: The session's subject URN (user:<id> | apikey:<uuid> | anonymous:<mcp-session-id>).
+                    description: The session's subject URN (user:<id> | apikey:<uuid> | anonymous:<mcp-session-id> | workload:<issuer-id>:<external-subject>).
                 updated_at:
                     type: string
                     format: date-time

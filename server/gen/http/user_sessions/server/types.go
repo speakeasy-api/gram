@@ -817,7 +817,7 @@ type UserSessionResponseBody struct {
 	// The issuing user_session_issuer id.
 	UserSessionIssuerID string `form:"user_session_issuer_id" json:"user_session_issuer_id" xml:"user_session_issuer_id"`
 	// The session's subject URN (user:<id> | apikey:<uuid> |
-	// anonymous:<mcp-session-id>).
+	// anonymous:<mcp-session-id> | workload:<issuer-id>:<external-subject>).
 	SubjectUrn string `form:"subject_urn" json:"subject_urn" xml:"subject_urn"`
 	// Current access-token JTI; used by the revocation path.
 	Jti string `form:"jti" json:"jti" xml:"jti"`
