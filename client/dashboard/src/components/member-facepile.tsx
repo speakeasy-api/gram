@@ -1,5 +1,5 @@
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/Avatar";
-import { getIdentityTint } from "@/components/gradient-colors";
+import { useIdentityTint } from "@/components/gradient-colors";
 import { IdentityLink } from "@/components/identity-link";
 import {
   Popover,
@@ -41,7 +41,7 @@ function MemberAvatar({
   className?: string;
 }): React.JSX.Element {
   // Deterministic per-member flat tint so each fallback face is unique.
-  const tint = getIdentityTint(member.id || member.name);
+  const tint = useIdentityTint(member.id || member.name);
   return (
     <Avatar className={className}>
       {member.photoUrl && (

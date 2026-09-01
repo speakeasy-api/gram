@@ -1,3 +1,6 @@
+import { useContext } from "react";
+import { ConfigContext } from "@/components/ui/context/config";
+
 // Deterministic gradient colors from any string label (project/org/assistant
 // id, member id). Colors are drawn from the Speakeasy brand spectrum and kept
 // subtle: a single brand hue with a small drift + lightness delta, rather than
@@ -54,16 +57,49 @@ export function getGradientColors(label: string): {
  * Deterministic muted identity tint for avatars/initials: a soft brand-hue
  * wash with a deep same-hue foreground. Solid (no gradient) and desaturated
  * to sit inside the editorial palette.
+ *
+ * The light and dark values are mirrored rather than shared: a 90%-lightness
+ * wash is a soft chip on white and the brightest object on the page in dark
+ * mode, so the dark theme sinks the ground and lifts the text instead. Callers
+ * inside React should use `useIdentityTint`, which resolves the theme for
+ * them; this stays exported for the rare non-component caller.
  */
-export function getIdentityTint(label: string): {
+export function getIdentityTint(
+  label: string,
+  isDark = false,
+): {
   backgroundColor: string;
   color: string;
 } {
   const base = BRAND_HUES[fnv1a(label) % BRAND_HUES.length]!;
+  if (isDark) {
+    return {
+      backgroundColor: `hsl(${base.h}, ${Math.min(base.s, 24)}%, 24%)`,
+      color: `hsl(${base.h}, ${Math.min(base.s + 10, 40)}%, 82%)`,
+    };
+  }
   return {
     backgroundColor: `hsl(${base.h}, ${Math.min(base.s, 30)}%, 90%)`,
     color: `hsl(${base.h}, ${Math.min(base.s + 10, 45)}%, 28%)`,
   };
+}
+
+/** Whether the resolved theme is dark, for callers that tint inside a render
+ * callback and so cannot call a hook at the point of use. */
+export function useIsDarkTheme(): boolean {
+  return useContext(ConfigContext)?.theme === "dark";
+}
+
+/**
+ * The identity tint for the resolved theme. Inline styles cannot follow a CSS
+ * theme, so the component resolves it and re-renders when the theme flips.
+ */
+export function useIdentityTint(label: string): {
+  backgroundColor: string;
+  color: string;
+} {
+  const config = useContext(ConfigContext);
+  return getIdentityTint(label, config?.theme === "dark");
 }
 
 /**

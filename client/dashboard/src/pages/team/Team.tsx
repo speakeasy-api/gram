@@ -71,7 +71,7 @@ import {
 } from "@/components/ui/ContextMenu";
 import { useOrgRoutes } from "@/routes";
 import { cn } from "@/lib/utils";
-import { getIdentityTint } from "@/components/gradient-colors";
+import { getIdentityTint, useIsDarkTheme } from "@/components/gradient-colors";
 import type { AccessMember } from "@gram/client/models/components/accessmember.js";
 import { ChangeRoleDialog } from "@/pages/access/ChangeRoleDialog";
 
@@ -227,6 +227,7 @@ export default function Team(): JSX.Element {
 }
 
 function TeamInner() {
+  const isDark = useIsDarkTheme();
   const organization = useOrganization();
   const user = useUser();
   const queryClient = useQueryClient();
@@ -526,7 +527,7 @@ function TeamInner() {
           ) : (
             <div
               className="flex h-8 w-8 items-center justify-center rounded-full text-xs font-medium"
-              style={getIdentityTint(member.id)}
+              style={getIdentityTint(member.id, isDark)}
             >
               {member.name
                 .split(" ")
@@ -704,7 +705,7 @@ function TeamInner() {
           >
             <div
               className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-medium"
-              style={getIdentityTint(invite.email)}
+              style={getIdentityTint(invite.email, isDark)}
             >
               {invite.email
                 .split("@")[0]
@@ -772,7 +773,7 @@ function TeamInner() {
               ) : (
                 <div
                   className="flex h-7 w-7 items-center justify-center rounded-full text-xs font-medium"
-                  style={getIdentityTint(inviter.id)}
+                  style={getIdentityTint(inviter.id, isDark)}
                 >
                   {inviter.name
                     .split(" ")

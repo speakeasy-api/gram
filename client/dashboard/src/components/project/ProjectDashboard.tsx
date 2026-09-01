@@ -9,7 +9,7 @@ import {
 import { RankedBarList } from "@/components/chart/RankedBarList";
 import { Page } from "@/components/page-layout";
 import { Avatar, AvatarFallback } from "@/components/ui/Avatar";
-import { getIdentityTint } from "@/components/gradient-colors";
+import { getIdentityTint, useIsDarkTheme } from "@/components/gradient-colors";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { useProject } from "@/contexts/Auth";
 import { useSlugs } from "@/contexts/Sdk";
@@ -51,6 +51,7 @@ import { ActivityTimelineCard } from "./ActivityTimelineCard";
 import { buildProjectOverviewQuery } from "./projectOverviewQuery";
 
 export function ProjectDashboard(): JSX.Element {
+  const isDark = useIsDarkTheme();
   const { orgSlug, projectSlug } = useSlugs();
   const project = useProject();
   const projectId = project.id;
@@ -711,7 +712,10 @@ export function ProjectDashboard(): JSX.Element {
                               <Avatar className="size-8 shrink-0">
                                 <AvatarFallback
                                   className="text-xs font-medium"
-                                  style={getIdentityTint(user.initialsSource)}
+                                  style={getIdentityTint(
+                                    user.initialsSource,
+                                    isDark,
+                                  )}
                                 >
                                   {emailInitials(user.initialsSource)}
                                 </AvatarFallback>
