@@ -22,24 +22,25 @@ import (
 )
 
 type platformAdminReaderStub struct {
-	results []bool
-	err     error
-	calls   []string
+	results     []bool
+	err         error
+	calls       []string
+	displayName string
 }
 
-func (s *platformAdminReaderStub) IsPlatformAdmin(_ context.Context, userID string) (bool, error) {
+func (s *platformAdminReaderStub) GetPlatformAdminIdentity(_ context.Context, userID string) (bool, string, error) {
 	s.calls = append(s.calls, userID)
 	if s.err != nil {
-		return false, s.err
+		return false, "", s.err
 	}
 	if len(s.results) == 0 {
-		return false, nil
+		return false, "", nil
 	}
 	result := s.results[0]
 	if len(s.results) > 1 {
 		s.results = s.results[1:]
 	}
-	return result, nil
+	return result, s.displayName, nil
 }
 
 type platformGenericStub struct {
@@ -98,7 +99,7 @@ func TestPlatformServiceDelegatesAllSixOperationsWithExplicitTargetAndSessionAct
 	t.Parallel()
 
 	generic := &platformGenericStub{}
-	admins := &platformAdminReaderStub{results: []bool{true}}
+	admins := &platformAdminReaderStub{results: []bool{true}, displayName: "Platform Operator"}
 	service := &PlatformService{logger: testenv.NewLogger(t), sessions: admins, generic: generic}
 	ctx := validatedCustomerContext(t, "", "actor_user", " actor@example.com ")
 
@@ -114,9 +115,11 @@ func TestPlatformServiceDelegatesAllSixOperationsWithExplicitTargetAndSessionAct
 	require.Equal(t, OrganizationID("org_target"), generic.get.OrganizationID)
 	require.Equal(t, OrganizationID("org_target"), generic.list.OrganizationID)
 	require.Equal(t, "actor_user", generic.activate.ActorUserID)
-	require.Equal(t, "actor@example.com", generic.activate.ActorDisplayName)
+	require.Equal(t, "Platform Operator", generic.activate.ActorDisplayName)
 	require.Equal(t, "actor_user", generic.change.ActorUserID)
+	require.Equal(t, "Platform Operator", generic.change.ActorDisplayName)
 	require.Equal(t, "actor_user", generic.deactivate.ActorUserID)
+	require.Equal(t, "Platform Operator", generic.deactivate.ActorDisplayName)
 	require.Equal(t, []string{
 		string(audit.SurfacePlatformBreakGlass), string(audit.SurfacePlatformBreakGlass), string(audit.SurfacePlatformBreakGlass),
 		string(audit.SurfacePlatformBreakGlass), string(audit.SurfacePlatformBreakGlass), string(audit.SurfacePlatformBreakGlass),

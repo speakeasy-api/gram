@@ -29,9 +29,10 @@ func TestIsPlatformAdminReadsCurrentDurableEntitlement(t *testing.T) {
 	require.NoError(t, authRepo.New(instance.conn).SetUserAdminFixture(ctx, authRepo.SetUserAdminFixtureParams{
 		Admin: true, UserID: userInfo.UserID,
 	}))
-	isAdmin, err = instance.sessionManager.IsPlatformAdmin(ctx, userInfo.UserID)
+	isAdmin, displayName, err := instance.sessionManager.GetPlatformAdminIdentity(ctx, userInfo.UserID)
 	require.NoError(t, err)
 	require.True(t, isAdmin)
+	require.Equal(t, userInfo.Email, displayName)
 
 	require.NoError(t, testrepo.New(instance.conn).ForceSoftDeleteUser(ctx, userInfo.UserID))
 	isAdmin, err = instance.sessionManager.IsPlatformAdmin(ctx, userInfo.UserID)

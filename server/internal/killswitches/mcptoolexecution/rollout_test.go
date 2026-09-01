@@ -50,17 +50,17 @@ func TestResolveRolloutMode(t *testing.T) {
 	require.Equal(t, RolloutModeOff, mode)
 }
 
-func TestEvaluateForRolloutFailsSafeWithoutEvaluation(t *testing.T) {
+func TestEvaluateForRolloutFailsClosedWithoutEvaluation(t *testing.T) {
 	t.Parallel()
 
 	called := false
 	disposition, err := evaluateForRollout(t.Context(), &failingRolloutProvider{}, "org_test", func() (killswitches.TransportDisposition, error) {
 		called = true
-		return killswitches.NewInfrastructureRejectionDisposition(), errors.New("must not run")
+		return killswitches.NewContinueDisposition(), nil
 	})
-	require.NoError(t, err)
+	require.ErrorContains(t, err, "local flag state unavailable")
 	require.False(t, called)
-	require.Equal(t, killswitches.TransportDispositionContinue, disposition.Kind())
+	require.Equal(t, killswitches.TransportDispositionInfrastructureRejection, disposition.Kind())
 }
 
 func TestCheckpointTransitionsFromOffToShadowToEnforce(t *testing.T) {

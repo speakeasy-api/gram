@@ -37,9 +37,9 @@ const (
 	FlagRiskAsyncScanShadow  Flag = "risk-async-scan-shadow"
 
 	// FlagMCPKillswitchShadow and FlagMCPKillswitchEnforce form the server-side
-	// rollout gate for authenticated MCP tools/call evaluation. Both are
-	// evaluated from PostHog's local cache on every call. Enforce takes
-	// precedence when both are enabled; absent or indeterminate flags mean off.
+	// rollout gate for authenticated MCP tools/call evaluation. Mode resolution
+	// uses PostHog's local cache and checks enforce first, so it takes precedence
+	// when both flags are enabled.
 	FlagMCPKillswitchShadow  Flag = "mcp-killswitch-shadow"
 	FlagMCPKillswitchEnforce Flag = "mcp-killswitch-enforce"
 

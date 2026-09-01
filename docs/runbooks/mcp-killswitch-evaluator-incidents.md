@@ -9,7 +9,7 @@ policy fails closed in enforce mode.
 
 1. Declare an incident and assign an incident commander and database owner.
 2. Stop rollout cohort expansion. Do not create or edit prescriptions.
-3. Check `killswitch.evaluation.duration{outcome:evaluator_failure}`, p95/p99
+3. Check `killswitch.evaluation.duration{gram.outcome:evaluator_failure}`, p95/p99
    latency, PostgreSQL health, pool saturation, lock waits, and deploy changes.
 4. Compare hosted and private proxy outcomes. A one-surface failure can indicate
    a mixed or unhealthy serving fleet.
@@ -52,8 +52,9 @@ A partial binary rollback is unsafe while prescriptions might remain active.
 - Break-glass credentials are restricted to approved incident responders.
 - Prefer deactivation. Activation or change during an evaluator incident needs
   explicit incident-commander approval and an audited reason.
-- Use a new operation ID for each intended mutation; never retry with altered
-  input under an existing operation ID.
+- Use a new operation ID for each new or changed mutation. If a request times out
+  after commit, retry the identical input with the same operation ID; never reuse
+  that ID with altered input.
 - Confirm organization authorization and tenant binding. Never infer authority
   from email, API-key ownership, creator fields, or cached attribution.
 - Record only prescription IDs and internal evidence in the restricted incident
@@ -64,18 +65,22 @@ total database outage.
 
 ## Recovery checks
 
-Before leaving off mode:
+After repair, restore the cohort to shadow before running evaluator and coverage
+checks or approving enforce:
 
 1. PostgreSQL query latency, lock waits, CPU, and pool saturation are healthy.
 2. Every serving instance runs the approved checkpoint build.
-3. Hosted and private proxy coverage metrics are present.
+3. Restore the controlled cohort to shadow and confirm hosted and private proxy
+   coverage metrics are present.
 4. In a controlled environment, unmatched, matched, and evaluator-failure
    outcomes are observable and bounded.
 5. Shadow traffic runs through a peak period without exceeding approved latency,
    failure, coverage, or database-load thresholds.
-6. A controlled activation denies the next matching call, lift restores the
+6. The incident commander and service owner approve enforce for a controlled
+   cohort; enable enforce for that cohort.
+7. A controlled activation denies the next matching call, lift restores the
    next call, and expiry follows database time.
-7. The incident commander and service owner approve cohort enforcement.
+8. Review the controlled evidence before expanding enforcement.
 
 ## Rollback validation
 

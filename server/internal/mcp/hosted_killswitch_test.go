@@ -14,6 +14,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/killswitches/mcptoolexecution"
 	remotesessionsrepo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
@@ -29,6 +30,7 @@ func TestServePublic_HostedToolsCallKillswitch(t *testing.T) {
 	require.True(t, ok)
 	require.NotNil(t, authCtx.ProjectID)
 	require.NotEmpty(t, authCtx.UserID)
+	ti.features.SetFlag(feature.FlagMCPKillswitchEnforce, authCtx.ActiveOrganizationID, true)
 
 	toolset := createPublicMCPToolset(t, ctx, toolsetsrepo.New(ti.conn), authCtx, "killswitch-"+uuid.NewString()[:8])
 	endpointSlug := "killswitch-" + uuid.NewString()

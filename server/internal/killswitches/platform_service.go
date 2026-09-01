@@ -122,7 +122,7 @@ func (s *PlatformService) ActivatePrescription(ctx context.Context, payload *gen
 		prescriptionID = &value
 	}
 	result, err := generic.ActivatePrescription(ctx, ActivatePrescriptionInput{
-		MutationContext: MutationContext{OrganizationID: OrganizationID(payload.OrganizationID), ActorUserID: actor.userID, ActorDisplayName: actor.email, OperationID: operationID},
+		MutationContext: MutationContext{OrganizationID: OrganizationID(payload.OrganizationID), ActorUserID: actor.userID, ActorDisplayName: actor.displayName, OperationID: operationID},
 		PrescriptionID:  prescriptionID, ExpectedVersion: payload.ExpectedVersion,
 		Definition: DefinitionKey(conv.PtrValOrEmpty(payload.Definition, "")), PrincipalKind: PrincipalKind(conv.PtrValOrEmpty(payload.PrincipalKind, "")), PrincipalInput: conv.PtrValOrEmpty(payload.PrincipalInput, ""),
 		ResourceKind: ResourceKind(conv.PtrValOrEmpty(payload.ResourceKind, "")), Desired: desired,
@@ -151,7 +151,7 @@ func (s *PlatformService) ChangePrescription(ctx context.Context, payload *gen.C
 		return nil, err
 	}
 	result, err := generic.ChangePrescription(ctx, ChangePrescriptionRequest{
-		MutationContext: MutationContext{OrganizationID: OrganizationID(payload.OrganizationID), ActorUserID: actor.userID, ActorDisplayName: actor.email, OperationID: operationID},
+		MutationContext: MutationContext{OrganizationID: OrganizationID(payload.OrganizationID), ActorUserID: actor.userID, ActorDisplayName: actor.displayName, OperationID: operationID},
 		PrescriptionID:  PrescriptionID(payload.PrescriptionID), ExpectedVersion: payload.ExpectedVersion, Desired: desired,
 	})
 	if err != nil {
@@ -174,7 +174,7 @@ func (s *PlatformService) DeactivatePrescription(ctx context.Context, payload *g
 		return nil, badPlatformRequest(err)
 	}
 	result, err := generic.DeactivatePrescription(ctx, DeactivatePrescriptionRequest{
-		MutationContext: MutationContext{OrganizationID: OrganizationID(payload.OrganizationID), ActorUserID: actor.userID, ActorDisplayName: actor.email, OperationID: operationID},
+		MutationContext: MutationContext{OrganizationID: OrganizationID(payload.OrganizationID), ActorUserID: actor.userID, ActorDisplayName: actor.displayName, OperationID: operationID},
 		PrescriptionID:  PrescriptionID(payload.PrescriptionID), ExpectedVersion: payload.ExpectedVersion,
 	})
 	if err != nil {
@@ -234,17 +234,23 @@ func (s *PlatformService) ListPrescriptions(ctx context.Context, payload *gen.Li
 }
 
 type platformActor struct {
-	userID string
-	email  string
+	userID      string
+	displayName string
 }
 
 func (s *PlatformService) authorize(ctx context.Context) (context.Context, platformActor, error) {
-	authCtx, _, err := gramauth.RequireFreshPlatformAdminSession(ctx, s.logger, s.sessions)
+	authCtx, displayName, _, err := gramauth.RequireFreshPlatformAdminSession(ctx, s.logger, s.sessions)
 	if err != nil {
 		return ctx, platformActor{}, fmt.Errorf("authorize platform killswitch request: %w", err)
 	}
+
+	displayName = strings.TrimSpace(displayName)
+	if displayName == "" {
+		displayName = strings.TrimSpace(*authCtx.Email)
+	}
+
 	ctx = contextvalues.SetActingSurface(ctx, string(audit.SurfacePlatformBreakGlass))
-	return ctx, platformActor{userID: authCtx.UserID, email: strings.TrimSpace(*authCtx.Email)}, nil
+	return ctx, platformActor{userID: authCtx.UserID, displayName: displayName}, nil
 }
 
 func (s *PlatformService) configuredGeneric() (GenericService, error) {
@@ -258,8 +264,7 @@ func mapPlatformLifecycleError(err error) error {
 	if err == nil {
 		return nil
 	}
-	var shareable *oops.ShareableError
-	if errors.As(err, &shareable) {
+	if _, ok := errors.AsType[*oops.ShareableError](err); ok {
 		return err
 	}
 	switch {

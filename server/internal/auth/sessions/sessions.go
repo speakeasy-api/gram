@@ -236,14 +236,21 @@ func (s *Manager) AuthenticateWithCookie(ctx context.Context) (context.Context, 
 // identity cache because an administrator may have been revoked after that
 // cache was populated.
 func (s *Manager) IsPlatformAdmin(ctx context.Context, userID string) (bool, error) {
+	isAdmin, _, err := s.GetPlatformAdminIdentity(ctx, userID)
+	return isAdmin, err
+}
+
+// GetPlatformAdminIdentity returns current platform-admin status and display name
+// from one authoritative user-row read.
+func (s *Manager) GetPlatformAdminIdentity(ctx context.Context, userID string) (bool, string, error) {
 	user, err := s.userRepo.GetUser(ctx, userID)
 	if errors.Is(err, pgx.ErrNoRows) {
-		return false, nil
+		return false, "", nil
 	}
 	if err != nil {
-		return false, fmt.Errorf("get user for platform admin check: %w", err)
+		return false, "", fmt.Errorf("get user for platform admin check: %w", err)
 	}
-	return isCurrentPlatformAdmin(user.Admin, user.DeletedAt.Valid), nil
+	return isCurrentPlatformAdmin(user.Admin, user.DeletedAt.Valid), user.DisplayName, nil
 }
 
 func isCurrentPlatformAdmin(admin, deleted bool) bool {
