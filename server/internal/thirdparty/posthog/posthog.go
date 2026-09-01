@@ -208,7 +208,6 @@ func (p *Posthog) FlagVariant(ctx context.Context, flag feature.Flag, distinctID
 
 func (p *Posthog) IsFlagEnabledLocal(ctx context.Context, flag feature.Flag, distinctID string, groups, personProperties map[string]string) (bool, error) {
 	if p.disabled {
-		p.logger.InfoContext(ctx, "posthog is disabled, returning false")
 		return false, nil
 	}
 	if !p.localEvaluation {
@@ -239,11 +238,8 @@ func (p *Posthog) IsFlagEnabledLocal(ctx context.Context, flag feature.Flag, dis
 		return false, fmt.Errorf("failed to locally check feature flag: %w", err)
 	}
 
-	j, err := json.Marshal(flagState)
-	if err != nil {
-		return false, fmt.Errorf("failed to unmarshal feature flag: %w", err)
-	}
-	return string(j) == "true", nil
+	enabled, ok := flagState.(bool)
+	return ok && enabled, nil
 }
 
 func (p *Posthog) FlagPayload(ctx context.Context, flag feature.Flag, distinctID string, groups map[string]string) ([]byte, error) {

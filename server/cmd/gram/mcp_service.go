@@ -83,7 +83,7 @@ type mcpServiceDependencies struct {
 
 func newMCPService(c *cli.Context, d mcpServiceDependencies) (*mcp.Service, error) {
 	cacheImpl := cache.NewRedisCacheAdapter(d.Redis)
-	checkpoint, err := mcptoolexecution.NewCheckpoint(d.DB, mcptoolexecution.DefaultEvaluationTimeout, d.Meter, d.Logger)
+	checkpoint, err := mcptoolexecution.NewCheckpoint(d.DB, mcptoolexecution.DefaultEvaluationTimeout, d.Meter, d.Logger, d.Features)
 	if err != nil {
 		return nil, fmt.Errorf("initialize mcp tool-execution checkpoint: %w", err)
 	}

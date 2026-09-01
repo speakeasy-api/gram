@@ -11,6 +11,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.opentelemetry.io/otel/metric"
 
+	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/killswitches"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpmetrics"
 )
@@ -34,11 +35,12 @@ type Checkpoint struct {
 	failurePolicy killswitches.FailurePolicy
 	timeout       time.Duration
 	recorder      IdentityCoverageRecorder
+	flags         feature.Provider
 }
 
 // NewCheckpoint builds the private MCP tool-execution checkpoint
 // from the registered adapters and authoritative PostgreSQL evaluator.
-func NewCheckpoint(db *pgxpool.Pool, timeout time.Duration, meterProvider metric.MeterProvider, logger *slog.Logger) (*Checkpoint, error) {
+func NewCheckpoint(db *pgxpool.Pool, timeout time.Duration, meterProvider metric.MeterProvider, logger *slog.Logger, flags feature.Provider) (*Checkpoint, error) {
 	registry, err := NewRegistry(db)
 	if err != nil {
 		return nil, err
@@ -47,10 +49,10 @@ func NewCheckpoint(db *pgxpool.Pool, timeout time.Duration, meterProvider metric
 	if err != nil {
 		return nil, fmt.Errorf("build mcp tool-execution evaluator: %w", err)
 	}
-	return newCheckpoint(registry, evaluation, timeout)
+	return newCheckpoint(registry, evaluation, timeout, flags)
 }
 
-func newCheckpoint(registry *killswitches.Registry, evaluation evaluator, timeout time.Duration) (*Checkpoint, error) {
+func newCheckpoint(registry *killswitches.Registry, evaluation evaluator, timeout time.Duration, flags feature.Provider) (*Checkpoint, error) {
 	if registry == nil {
 		return nil, errors.New("mcp tool-execution registry is required")
 	}
@@ -85,6 +87,7 @@ func newCheckpoint(registry *killswitches.Registry, evaluation evaluator, timeou
 		failurePolicy: coverage.FailurePolicy,
 		timeout:       timeout,
 		recorder:      nil,
+		flags:         flags,
 	}, nil
 }
 
@@ -108,6 +111,12 @@ func (c *Checkpoint) Evaluate(ctx context.Context, organizationID, mcpServerID s
 		return killswitches.NewInfrastructureRejectionDisposition(), errors.New("mcp tool-execution checkpoint is unavailable")
 	}
 
+	return evaluateForRollout(ctx, c.flags, organizationID, func() (killswitches.TransportDisposition, error) {
+		return c.evaluate(ctx, organizationID, mcpServerID)
+	})
+}
+
+func (c *Checkpoint) evaluate(ctx context.Context, organizationID, mcpServerID string) (killswitches.TransportDisposition, error) {
 	ctx, cancel := context.WithTimeout(ctx, c.timeout)
 	defer cancel()
 
