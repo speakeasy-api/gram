@@ -489,6 +489,30 @@ func TestServePublic_MalformedBodyIsParseError(t *testing.T) {
 	require.Equal(t, oops.MCPCodeParseError, shareable.Code.MCPCode())
 }
 
+// Valid JSON of the wrong shape (a type error, not a syntax error) stays an
+// invalid request (-32600), not a parse error (-32700).
+func TestServePublic_WrongTypeBodyIsInvalidRequest(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPService(t)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	toolset := createPublicMCPToolset(t, ctx, toolsets_repo.New(ti.conn), authCtx, "pub-type-error")
+
+	unauthCtx := context.Background()
+	// `method` is a number where a string is expected: syntactically valid JSON,
+	// so json.Unmarshal returns a type error, not a syntax error.
+	_, err := servePublicHTTP(t, unauthCtx, ti, toolset.McpSlug.String, []byte(`{"jsonrpc":"2.0","id":1,"method":123}`), "", nil)
+	require.Error(t, err)
+
+	var shareable *oops.ShareableError
+	require.ErrorAs(t, err, &shareable)
+	require.Equal(t, oops.CodeBadRequest, shareable.Code)
+	require.Equal(t, oops.MCPCodeInvalidRequest, shareable.Code.MCPCode())
+}
+
 // requireCacheHints asserts the caching members MCP 2026-07-28 requires on a
 // cacheable result. The members are read as pointers so an absent member fails
 // rather than decoding to a zero that happens to match the expected TTL.

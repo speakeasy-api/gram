@@ -71,9 +71,13 @@ WHERE l.remote_session_client_id = c.id
   AND l.user_session_issuer_id = $1
   AND c.remote_session_issuer_id = $2
   AND NOT EXISTS (
+    -- All consumers of the gateway issuer live in its project (the issuer is
+    -- project-scoped), so scope the scan there — both for tenancy and to keep
+    -- the anti-join off a cross-tenant sequential scan.
     SELECT 1
     FROM mcp_servers AS s
     WHERE s.deleted IS FALSE
+      AND s.project_id = $3
       AND s.remote_session_issuer_id = $2
       AND (
         s.user_session_issuer_id = $1
@@ -96,6 +100,7 @@ WHERE l.remote_session_client_id = c.id
 type AutoDetachMemberProviderClientParams struct {
 	GatewayIssuerID uuid.UUID
 	RemoteIssuerID  uuid.UUID
+	ProjectID       uuid.UUID
 }
 
 // Reverse of AutoAttachMemberProviderClient: unbind the gateway issuer's
@@ -107,7 +112,7 @@ type AutoDetachMemberProviderClientParams struct {
 // Run after the member row is soft-deleted so the just-removed member is
 // already excluded by the deleted filter below.
 func (q *Queries) AutoDetachMemberProviderClient(ctx context.Context, arg AutoDetachMemberProviderClientParams) (int64, error) {
-	result, err := q.db.Exec(ctx, autoDetachMemberProviderClient, arg.GatewayIssuerID, arg.RemoteIssuerID)
+	result, err := q.db.Exec(ctx, autoDetachMemberProviderClient, arg.GatewayIssuerID, arg.RemoteIssuerID, arg.ProjectID)
 	if err != nil {
 		return 0, err
 	}

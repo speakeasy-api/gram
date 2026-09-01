@@ -880,6 +880,7 @@ func (s *Service) RemoveMetaMcpMember(ctx context.Context, payload *gen.RemoveMe
 			detached, derr := txRepo.AutoDetachMemberProviderClient(ctx, repo.AutoDetachMemberProviderClientParams{
 				GatewayIssuerID: meta.UserSessionIssuerID.UUID,
 				RemoteIssuerID:  server.RemoteSessionIssuerID.UUID,
+				ProjectID:       *authCtx.ProjectID,
 			})
 			if derr != nil {
 				return oops.E(oops.CodeUnexpected, derr, "detach member provider client").LogError(ctx, logger)

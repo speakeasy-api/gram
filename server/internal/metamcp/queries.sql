@@ -368,9 +368,13 @@ WHERE l.remote_session_client_id = c.id
   AND l.user_session_issuer_id = @gateway_issuer_id
   AND c.remote_session_issuer_id = @remote_issuer_id
   AND NOT EXISTS (
+    -- All consumers of the gateway issuer live in its project (the issuer is
+    -- project-scoped), so scope the scan there — both for tenancy and to keep
+    -- the anti-join off a cross-tenant sequential scan.
     SELECT 1
     FROM mcp_servers AS s
     WHERE s.deleted IS FALSE
+      AND s.project_id = @project_id
       AND s.remote_session_issuer_id = @remote_issuer_id
       AND (
         s.user_session_issuer_id = @gateway_issuer_id

@@ -1077,7 +1077,13 @@ func (s *Service) serveToolsetResolved(w http.ResponseWriter, r *http.Request, t
 	}
 
 	if bodyDecodeErr != nil {
-		return oops.E(oops.CodeParseError, bodyDecodeErr, "failed to decode request body").LogError(ctx, s.logger)
+		// Only an unparseable body is a JSON-RPC parse error (-32700); valid
+		// JSON of the wrong shape/type stays an invalid request (-32600).
+		decodeCode := oops.CodeBadRequest
+		if !json.Valid(bodyBytes) {
+			decodeCode = oops.CodeParseError
+		}
+		return oops.E(decodeCode, bodyDecodeErr, "failed to decode request body").LogError(ctx, s.logger)
 	}
 	hostedCoverageRecorded := false
 	if isHostedToolsCall {

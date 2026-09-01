@@ -576,8 +576,11 @@ function AddMemberSheet({
                 classification === "hosted" || classification === "proxied";
               // The backend rejects these outright (unproxied has no dispatch
               // path; slugless can't be addressed), so don't offer a doomed Add.
+              // Derived from the server fields, not the display classification,
+              // which collapses a disabled+slugless/unproxied server to
+              // "disabled" and would otherwise look addable.
               const canAdd =
-                classification !== "unproxied" && classification !== "slugless";
+                Boolean(server.slug) && !server.unproxiedMcpServerId;
               return (
                 <div
                   key={server.id}
