@@ -53,6 +53,11 @@ function mcpServerVisibilityToast(visibility: McpServerVisibility) {
       return "MCP server enabled";
     case "public":
       return "MCP server set to public";
+    case "upstream":
+      // Not reachable from this section, which only toggles enabled and
+      // public. Named so the switch stays exhaustive and so a future control
+      // that can set it does not fall through to a generic message.
+      return "MCP server set to upstream authorization";
     default:
       return "MCP server updated";
   }
