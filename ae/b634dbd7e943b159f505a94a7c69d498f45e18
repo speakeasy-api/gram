@@ -1,0 +1,24 @@
+server/internal/guardian/errors.go
+  s_96b2c00dcff3bd::t_06d669d90bcd7c 1-21
+server/internal/mcp/tunnelpublic.go
+  s_96b2c00dcff3bd::t_70ee8bfbb0e36f 567
+  s_96b2c00dcff3bd::t_543d896ba5d9fe 36
+server/internal/guardian/errors_test.go
+  s_96b2c00dcff3bd::t_aebc27b1d03b7e 1,31,46
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.0",
+  "base_commit_sha": "aeb634dbd7e943b159f505a94a7c69d498f45e18",
+  "prompts": {},
+  "sessions": {
+    "s_96b2c00dcff3bd": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "fa7ffb9e-4a92-4c17-871e-ef187a8b1d4b",
+        "model": "claude-fable-5"
+      },
+      "human_author": "Vishal Gowda <vishal@speakeasy.com>"
+    }
+  }
+}
