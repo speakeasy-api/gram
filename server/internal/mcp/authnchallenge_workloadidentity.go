@@ -108,6 +108,14 @@ func newStaticWorkloadIdentityLookup(admitted ...workloadIdentity) workloadIdent
 // unconfigured lookup, a subject the assertion never carried, and an issuer
 // that resolved to nothing are all non-admission rather than a reason to skip
 // the check.
+//
+// Nothing calls this yet, and that is the milestone's shape rather than an
+// omission: the token endpoint grant that verifies a workload assertion is
+// what creates a caller, and it does not exist. Its siblings on this path —
+// workloadIssuerKeySource and the workload expectation on clientauth.Verify —
+// shipped the same way, exercised by tests until the grant arrives to use
+// them. The order is deliberate, because the grant must not be the change that
+// also introduces the boundary it depends on.
 func admitWorkloadIdentity(
 	ctx context.Context,
 	lookup workloadIdentityLookup,
