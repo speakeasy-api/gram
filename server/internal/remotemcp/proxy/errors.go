@@ -29,22 +29,47 @@ var ErrUndecodableJSONRPCBody = errors.New("upstream response is not a json-rpc 
 // supported") rather than a generic decode failure.
 var ErrBatchRequest = errors.New("batch requests are not supported")
 
+// classifiedForwardError keeps a transport failure unlogged while retry policy
+// decides whether it is recoverable. It unwraps to the client-facing error so
+// retryers can still inspect the original transport cause.
+type classifiedForwardError struct {
+	err *oops.ShareableError
+}
+
+func (e *classifiedForwardError) Error() string {
+	return e.err.Error()
+}
+
+func (e *classifiedForwardError) Unwrap() error {
+	return e.err
+}
+
 // classifyForwardError maps a [http.Client.Do] failure into a typed proxy
 // error. timedOut is true when the failure was caused by the proxy's own
 // phase-1 timer firing (vs. a parent-context cancellation from the user
 // disconnecting); both surface the same context.Canceled in the http
 // error chain so the caller distinguishes via the timer's Stop() return.
-func (p *Proxy) classifyForwardError(ctx context.Context, err error, timedOut bool) error {
+func classifyForwardError(err error, timedOut bool) error {
+	var classified *oops.ShareableError
 	switch {
 	case timedOut:
-		return oops.E(oops.CodeGatewayError, err, "remote mcp server timed out").LogError(ctx, p.Logger)
+		classified = oops.E(oops.CodeGatewayError, err, "remote mcp server timed out")
 	case errors.Is(err, context.DeadlineExceeded):
 		// Backstop in case any transport-level deadline (e.g.
 		// TLSHandshakeTimeout) fires before our phase timer.
-		return oops.E(oops.CodeGatewayError, err, "remote mcp server timed out").LogError(ctx, p.Logger)
+		classified = oops.E(oops.CodeGatewayError, err, "remote mcp server timed out")
 	case errors.Is(err, context.Canceled):
-		return oops.E(oops.CodeBadRequest, err, "client cancelled request").LogError(ctx, p.Logger)
+		classified = oops.E(oops.CodeBadRequest, err, "client cancelled request")
 	default:
-		return oops.E(oops.CodeGatewayError, err, "remote mcp server unreachable").LogError(ctx, p.Logger)
+		classified = oops.E(oops.CodeGatewayError, err, "remote mcp server unreachable")
 	}
+	return &classifiedForwardError{err: classified}
+}
+
+func (p *Proxy) logForwardError(ctx context.Context, err error) error {
+	classified, ok := errors.AsType[*classifiedForwardError](err)
+	if !ok {
+		return err
+	}
+	return classified.err.LogError(ctx, p.Logger)
 }

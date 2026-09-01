@@ -369,6 +369,7 @@ func newKillswitchTestProxy(t *testing.T, upstreamURL string, interceptors ...pr
 		StreamingTimeout:                5 * time.Second,
 		MaxBufferedBodyBytes:            proxy.DefaultMaxBufferedBodyBytes,
 		RemoteURL:                       upstreamURL,
+		ForwardErrorRetryer:             nil,
 		ToolsCallPreForwardInterceptors: interceptors[:1],
 		ToolsCallRequestInterceptors:    interceptors[1:],
 	}
