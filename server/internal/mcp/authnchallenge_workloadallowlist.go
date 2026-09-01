@@ -15,6 +15,7 @@ import (
 	"sync"
 	"time"
 
+	"golang.org/x/sync/semaphore"
 	"golang.org/x/sync/singleflight"
 
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
@@ -45,13 +46,33 @@ const (
 	// thousands — with headroom.
 	workloadIssuerMissEntries = 4096
 
-	// workloadIssuerLookupTimeout bounds one admission lookup.
+	// workloadIssuerLookupTimeout bounds one admission lookup, including the
+	// wait for a slot below.
 	//
 	// The lookup runs detached from the caller's context, so nothing else
 	// bounds it. Generous for a single indexed read, and deliberately far
 	// short of the pool's 60s statement timeout, which is a backstop against
 	// a runaway query rather than a delay any caller should wait out.
 	workloadIssuerLookupTimeout = 5 * time.Second
+
+	// workloadIssuerLookupSlots bounds how many admission lookups hold a
+	// database connection at once.
+	//
+	// Detaching the flight is what makes this necessary. singleflight collapses
+	// concurrent resolutions of one issuer and does nothing at all for distinct
+	// ones, so a flood of *different* spellings — free to produce, since this
+	// grant is reachable without credentials — puts one query per spelling in
+	// the pool, and detachment means abandoning the requests no longer takes
+	// them back out. Without a bound the cheapest possible attack is a pool
+	// exhaustion that starves every other caller of the database.
+	//
+	// Small on purpose. pool_max_conns is not configured anywhere, so the pool
+	// is pgx's default of max(4, NumCPU) — single digits on a typical container
+	// — and a bound above that would not be a bound. These are single indexed
+	// reads, so four concurrent slots still clear thousands per second; the
+	// ceiling is here to keep admission from monopolizing the pool, not to
+	// ration a scarce resource. Revisit if the pool is ever sized explicitly.
+	workloadIssuerLookupSlots = 4
 )
 
 // errWorkloadIssuerUntrusted reports an assertion whose iss names no issuer
@@ -133,6 +154,11 @@ type workloadIssuerAdmission struct {
 	// cache read before any of them records a miss, so without this each
 	// one still costs a query.
 	inflight singleflight.Group
+
+	// slots bounds how many of those lookups touch the database at once.
+	// singleflight handles repeats of one issuer; this handles distinct ones,
+	// which it cannot. See workloadIssuerLookupSlots.
+	slots *semaphore.Weighted
 }
 
 func newWorkloadIssuerAdmission(lookup workloadIssuerLookup) *workloadIssuerAdmission {
@@ -140,6 +166,7 @@ func newWorkloadIssuerAdmission(lookup workloadIssuerLookup) *workloadIssuerAdmi
 		lookup:   lookup,
 		misses:   newWorkloadIssuerMissCache(workloadIssuerMissEntries, workloadIssuerMissTTL),
 		inflight: singleflight.Group{},
+		slots:    semaphore.NewWeighted(workloadIssuerLookupSlots),
 	}
 }
 
@@ -164,7 +191,7 @@ func (a *workloadIssuerAdmission) admit(ctx context.Context, endpoint *ResolvedM
 		return nil, reason.err()
 	}
 
-	resolved, err, _ := a.inflight.Do(key, func() (any, error) {
+	ch := a.inflight.DoChan(key, func() (any, error) {
 		// Re-check under the flight. A caller that read the cache before a
 		// flight recorded its miss arrives here after that flight has ended,
 		// and without this would start a redundant lookup — the same
@@ -175,12 +202,25 @@ func (a *workloadIssuerAdmission) admit(ctx context.Context, endpoint *ResolvedM
 
 		// The flight runs under whichever caller opened it, so a leader that
 		// goes away would otherwise hand context.Canceled to everyone sharing
-		// its lookup. On a grant reachable without credentials that matters
-		// on its own: an abandoned request would fail a legitimate one
-		// resolving the same issuer. Detached instead — values carry through,
-		// cancellation does not — which makes the timeout the only bound.
+		// its lookup. On a grant reachable without credentials that matters on
+		// its own: an abandoned request would fail a legitimate one resolving
+		// the same issuer. Detached instead — values carry through,
+		// cancellation does not — so the timeout and the slot bound below are
+		// what bound this work. Callers keep their own cancellation in the
+		// select at the end of admit, which is the half detachment must not
+		// take away from them.
 		lookupCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), workloadIssuerLookupTimeout)
 		defer cancel()
+
+		if err := a.slots.Acquire(lookupCtx, 1); err != nil {
+			// Never remembered. A queue too long to clear inside the timeout
+			// is a statement about load, not about this issuer, and caching it
+			// would keep rejecting a legitimate workload after the pressure
+			// passed — the same reason a database failure is not remembered
+			// below.
+			return nil, fmt.Errorf("acquire workload issuer lookup slot: %w", err)
+		}
+		defer a.slots.Release(1)
 
 		row, found, lookupErr := a.lookup(lookupCtx, endpoint, issuerURL)
 		switch {
@@ -201,15 +241,25 @@ func (a *workloadIssuerAdmission) admit(ctx context.Context, endpoint *ResolvedM
 		}
 		return workloadIssuerResolution{row: row}, nil
 	})
-	if err != nil {
-		return nil, err
-	}
 
-	resolution, ok := resolved.(workloadIssuerResolution)
-	if !ok {
-		return nil, fmt.Errorf("resolve workload issuer: unexpected resolution %T", resolved)
+	select {
+	case <-ctx.Done():
+		// This caller gave up; the flight it may have opened carries on for
+		// whoever else is sharing it, and still records its miss — abandoning a
+		// request must not cost the next one a query. Deliberately not
+		// errWorkloadIssuerUntrusted: nothing was decided about this issuer,
+		// and a caller mapping untrusted to a 401 must not report one here.
+		return nil, fmt.Errorf("await workload issuer admission: %w", ctx.Err())
+	case res := <-ch:
+		if res.Err != nil {
+			return nil, res.Err
+		}
+		resolution, ok := res.Val.(workloadIssuerResolution)
+		if !ok {
+			return nil, fmt.Errorf("resolve workload issuer: unexpected resolution %T", res.Val)
+		}
+		return resolution.row, nil
 	}
-	return resolution.row, nil
 }
 
 // workloadIssuerMissKey identifies one remembered miss.
