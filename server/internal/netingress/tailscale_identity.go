@@ -89,15 +89,34 @@ func parseTailscaleIdentityValue(headers http.Header, name string, decodeWord bo
 		if err != nil {
 			return "", fmt.Errorf("decode %s: %w", name, err)
 		}
-		// mime.WordDecoder deliberately leaves malformed encoded-words intact.
-		// Treat an unchanged marker as invalid rather than accepting ambiguous
-		// provider identity text.
-		if decoded == raw || strings.Contains(decoded, "=?") {
-			return "", fmt.Errorf("invalid RFC 2047 encoding in %s", name)
+		// DecodeHeader preserves malformed encoded-word tokens. Validate only
+		// raw token boundaries so legitimate decoded user text containing "=?"
+		// remains valid.
+		for token := range strings.FieldsSeq(raw) {
+			if !looksLikeEncodedWord(token) {
+				continue
+			}
+			tokenDecoded, tokenErr := (&mime.WordDecoder{CharsetReader: nil}).DecodeHeader(token)
+			if tokenErr != nil || tokenDecoded == token {
+				return "", fmt.Errorf("invalid RFC 2047 encoding in %s", name)
+			}
 		}
 	}
 	if decoded == "" || strings.TrimSpace(decoded) != decoded || !utf8.ValidString(decoded) || strings.ContainsAny(decoded, "\r\n\x00") {
 		return "", fmt.Errorf("invalid decoded %s value", name)
 	}
 	return decoded, nil
+}
+
+func looksLikeEncodedWord(token string) bool {
+	rest, ok := strings.CutPrefix(token, "=?")
+	if !ok {
+		return false
+	}
+	charset, rest, ok := strings.Cut(rest, "?")
+	if !ok || charset == "" {
+		return false
+	}
+	encoding, _, ok := strings.Cut(rest, "?")
+	return ok && len(encoding) == 1 && strings.ContainsAny(encoding, "bBqQ")
 }

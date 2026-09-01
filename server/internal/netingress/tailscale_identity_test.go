@@ -38,6 +38,17 @@ func TestTailscaleIdentityParser(t *testing.T) {
 		require.Equal(t, "Exámple User", identity.Name)
 	})
 
+	t.Run("decoded identity may contain literal encoded-word marker", func(t *testing.T) {
+		t.Parallel()
+		headers := http.Header{
+			TailscaleUserLoginHeader: {mime.QEncoding.Encode("utf-8", "user@example.com")},
+			TailscaleUserNameHeader:  {mime.QEncoding.Encode("utf-8", "Example =? User")},
+		}
+		identity, err := parser.ParseIdentity(headers)
+		require.NoError(t, err)
+		require.Equal(t, "Example =? User", identity.Name)
+	})
+
 	t.Run("tagged node has no identity", func(t *testing.T) {
 		t.Parallel()
 		identity, err := parser.ParseIdentity(http.Header{})

@@ -5,7 +5,6 @@ import (
 	"errors"
 	"net"
 	"net/http"
-	"net/url"
 	"strings"
 
 	"github.com/speakeasy-api/gram/server/internal/middleware"
@@ -69,12 +68,14 @@ func Middleware(verifier WorkloadVerifier, parsers IdentityParsers) func(http.Ha
 			}
 			DeleteTailscaleIdentityHeaders(request.Header)
 
+			baseURL, err := requestorigin.HTTPSBaseURL(ingress.DNSName)
+			if err != nil {
+				http.Error(w, "private ingress unavailable", http.StatusServiceUnavailable)
+				return
+			}
 			origin := requestorigin.Origin{
-				Surface: requestorigin.SurfacePrivateNetwork,
-				BaseURL: (&url.URL{
-					Scheme: "https",
-					Host:   privateURLAuthority(ingress.DNSName),
-				}).String(),
+				Surface:          requestorigin.SurfacePrivateNetwork,
+				BaseURL:          baseURL,
 				OrganizationID:   ingress.OrganizationID,
 				NetworkIngressID: ingress.ID,
 				NetworkIdentity:  identity,
@@ -82,13 +83,6 @@ func Middleware(verifier WorkloadVerifier, parsers IdentityParsers) func(http.Ha
 			next.ServeHTTP(w, request.WithContext(requestorigin.WithContext(request.Context(), origin)))
 		})
 	}
-}
-
-func privateURLAuthority(host string) string {
-	if strings.Contains(host, ":") {
-		return "[" + host + "]"
-	}
-	return host
 }
 
 func transportSource(remoteAddr string) (string, error) {
