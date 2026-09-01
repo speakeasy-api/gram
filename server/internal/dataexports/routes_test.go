@@ -236,6 +236,38 @@ func TestRouteRejectsCrossProjectDestinationReferences(t *testing.T) {
 	require.Empty(t, listed.Destinations)
 }
 
+func TestRouteRejectsInvalidStoredDestinationAsUnexpected(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	destination := createOtelDestination(t, ctx, ti, "https://collector.example.test", "exclude")
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	queries := repo.New(ti.conn)
+	rows, err := queries.ListOtelDestinations(ctx, repo.ListOtelDestinationsParams{
+		OrganizationID: authCtx.ActiveOrganizationID,
+		ProjectID:      *authCtx.ProjectID,
+	})
+	require.NoError(t, err)
+	require.Len(t, rows, 1)
+
+	row := rows[0]
+	_, err = queries.UpdateOtelDestination(ctx, repo.UpdateOtelDestinationParams{
+		Name:             row.Name,
+		EndpointUrl:      "not-a-url",
+		HeadersEncrypted: row.HeadersEncrypted,
+		SensitiveData:    row.SensitiveData,
+		OrganizationID:   row.OrganizationID,
+		ProjectID:        row.ProjectID,
+		ID:               row.ID,
+	})
+	require.NoError(t, err)
+
+	_, err = ti.service.CreateRoute(ctx, &gen.CreateRoutePayload{SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil,
+		DataSource: "product_telemetry", Enabled: true, OtelDestinationID: &destination.ID})
+	requireOopsCode(t, err, oops.CodeUnexpected)
+}
+
 func TestRouteCreateRollsBackWhenAuditInsertFails(t *testing.T) {
 	t.Parallel()
 

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"maps"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgerrcode"
@@ -259,9 +260,12 @@ func (s *Service) UpdateOtelDestination(ctx context.Context, payload *gen.Update
 	if err != nil {
 		return nil, err
 	}
-	headersEncrypted, err := s.encryptHeaders(headers)
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "encrypt OTEL destination headers").LogError(ctx, logger)
+	headersEncrypted := before.HeadersEncrypted
+	if !maps.Equal(headers, existingHeaders) {
+		headersEncrypted, err = s.encryptHeaders(headers)
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "encrypt OTEL destination headers").LogError(ctx, logger)
+		}
 	}
 	beforeSnapshot := destinationSnapshot(before.Name, before.EndpointUrl, existingHeaders, beforePolicy)
 
@@ -616,38 +620,42 @@ func (s *Service) validateRouteDestination(
 	destinationID *string,
 	enabled bool,
 ) (uuid.NullUUID, error) {
-	if destinationID == nil {
-		if enabled {
-			return uuid.NullUUID{}, oops.E(oops.CodeInvalid, nil, "otel_destination_id is required when the route is enabled")
-		}
-		return uuid.NullUUID{UUID: uuid.Nil, Valid: false}, nil
-	}
-
-	id, err := uuid.Parse(*destinationID)
+	ref, err := conv.PtrToNullUUID(destinationID)
 	if err != nil {
 		return uuid.NullUUID{}, oops.E(oops.CodeInvalid, err, "invalid otel_destination_id")
 	}
+	if !ref.Valid {
+		if enabled {
+			return uuid.NullUUID{}, oops.E(oops.CodeInvalid, nil, "otel_destination_id is required when the route is enabled")
+		}
+		return ref, nil
+	}
+
+	logger := s.logger.With(
+		attr.SlogOrganizationID(organizationID),
+		attr.SlogProjectID(projectID.String()),
+	)
 	destination, err := queries.GetOtelDestinationForRoute(ctx, repo.GetOtelDestinationForRouteParams{
 		OrganizationID: organizationID,
 		ProjectID:      projectID,
-		ID:             id,
+		ID:             ref.UUID,
 	})
 	if errors.Is(err, pgx.ErrNoRows) {
 		return uuid.NullUUID{}, oops.E(oops.CodeInvalid, err, "otel_destination_id must reference an active destination in this project")
 	}
 	if err != nil {
-		return uuid.NullUUID{}, oops.E(oops.CodeUnexpected, err, "load route destination").LogError(ctx, s.logger)
+		return uuid.NullUUID{}, oops.E(oops.CodeUnexpected, err, "load route destination").LogError(ctx, logger)
 	}
 	if _, err := validateDestinationURL(destination.EndpointUrl); err != nil {
-		return uuid.NullUUID{}, oops.E(oops.CodeInvalid, err, "OTEL destination is not usable")
+		return uuid.NullUUID{}, oops.E(oops.CodeUnexpected, err, "stored OTEL destination has invalid endpoint URL").LogError(ctx, logger)
 	}
 	if _, err := sensitiveDataFromRow(destination.SensitiveData); err != nil {
-		return uuid.NullUUID{}, oops.E(oops.CodeInvalid, err, "OTEL destination has an invalid sensitive-data policy")
+		return uuid.NullUUID{}, oops.E(oops.CodeUnexpected, err, "stored OTEL destination has invalid sensitive-data policy").LogError(ctx, logger)
 	}
 	if _, err := s.decryptHeaders(destination.HeadersEncrypted); err != nil {
-		return uuid.NullUUID{}, oops.E(oops.CodeInvalid, fmt.Errorf("decode stored headers: %w", err), "OTEL destination is not usable")
+		return uuid.NullUUID{}, oops.E(oops.CodeUnexpected, err, "decode stored OTEL destination headers").LogError(ctx, logger)
 	}
-	return uuid.NullUUID{UUID: id, Valid: true}, nil
+	return ref, nil
 }
 
 func routeSnapshot(row repo.DataExportRoute) *audit.DataExportRouteSnapshot {

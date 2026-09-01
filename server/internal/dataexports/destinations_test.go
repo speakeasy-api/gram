@@ -119,6 +119,51 @@ func TestDestinationCRUDPreservesWriteOnlyHeadersAndAuditsSafeSnapshots(t *testi
 	}
 }
 
+func TestDestinationUpdateReusesUnchangedEncryptedHeaders(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	created, err := ti.service.CreateOtelDestination(ctx, &gen.CreateOtelDestinationPayload{SessionToken: nil,
+		ApikeyToken:      nil,
+		ProjectSlugInput: nil,
+		Name:             "Primary collector",
+		EndpointURL:      "https://collector.example.test/otlp",
+		SensitiveData:    "exclude",
+		Headers: []*gen.CreateOtelDestinationHeaderInput{
+			{Name: "Authorization", Value: "initial-secret"},
+		}})
+	require.NoError(t, err)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	rows, err := repo.New(ti.conn).ListOtelDestinations(ctx, repo.ListOtelDestinationsParams{
+		OrganizationID: authCtx.ActiveOrganizationID,
+		ProjectID:      *authCtx.ProjectID,
+	})
+	require.NoError(t, err)
+	require.Len(t, rows, 1)
+	beforeCiphertext := rows[0].HeadersEncrypted
+
+	_, err = ti.service.UpdateOtelDestination(ctx, &gen.UpdateOtelDestinationPayload{SessionToken: nil,
+		ApikeyToken:      nil,
+		ProjectSlugInput: nil,
+		ID:               created.ID,
+		Name:             "Renamed collector",
+		EndpointURL:      created.EndpointURL,
+		SensitiveData:    created.SensitiveData,
+		Headers:          []*gen.OtelDestinationHeaderInput{{Name: "Authorization", Value: nil}},
+	})
+	require.NoError(t, err)
+
+	rows, err = repo.New(ti.conn).ListOtelDestinations(ctx, repo.ListOtelDestinationsParams{
+		OrganizationID: authCtx.ActiveOrganizationID,
+		ProjectID:      *authCtx.ProjectID,
+	})
+	require.NoError(t, err)
+	require.Len(t, rows, 1)
+	require.Equal(t, beforeCiphertext, rows[0].HeadersEncrypted)
+}
+
 func TestDestinationRejectsUserinfoAndFragments(t *testing.T) {
 	t.Parallel()
 

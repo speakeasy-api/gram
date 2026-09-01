@@ -11,6 +11,7 @@ import (
 	"golang.org/x/net/http/httpguts"
 
 	"github.com/speakeasy-api/gram/server/internal/audit"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 )
 
@@ -124,7 +125,7 @@ func normalizeHeaderInputs(inputs []destinationHeaderInput, existing map[string]
 
 func (s *Service) encryptHeaders(headers map[string]string) (pgtype.Text, error) {
 	if len(headers) == 0 {
-		return pgtype.Text{String: "", Valid: false}, nil
+		return conv.ToPGTextEmpty(""), nil
 	}
 
 	plaintext, err := json.Marshal(headers)
@@ -135,7 +136,7 @@ func (s *Service) encryptHeaders(headers map[string]string) (pgtype.Text, error)
 	if err != nil {
 		return pgtype.Text{}, fmt.Errorf("encrypt destination headers: %w", err)
 	}
-	return pgtype.Text{String: ciphertext, Valid: true}, nil
+	return conv.ToPGText(ciphertext), nil
 }
 
 func (s *Service) decryptHeaders(stored pgtype.Text) (map[string]string, error) {
