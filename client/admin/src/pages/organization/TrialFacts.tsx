@@ -110,7 +110,7 @@ export function TrialFacts({ org }: { org: AdminOrganization }): JSX.Element {
         : (TRIAL_LABELS[org.trial_state] ?? stateLabel(org.trial_state));
 
   return (
-    <div ref={attachExpiration}>
+    <div ref={attachExpiration} className="mt-5 border-t pt-5">
       <Fact label="Trial state">{state}</Fact>
       {state !== "No trial" && (
         <>

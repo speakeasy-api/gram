@@ -186,6 +186,10 @@ describe("Overview", () => {
     expect(details.getByText("End date").nextElementSibling?.textContent).toBe(
       new Date(trialEndsAt).toLocaleDateString(),
     );
+    const trialFacts =
+      details.getByText("Trial state").parentElement?.parentElement;
+    expect(trialFacts?.className).toContain("border-t");
+    expect(trialFacts?.className).toContain("mt-5");
 
     const buttons = within(trial).getAllByRole("button");
     const convert = within(trial).getByRole("button", {
