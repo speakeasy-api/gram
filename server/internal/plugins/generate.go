@@ -927,6 +927,24 @@ func generateReadme(plugins []PluginInfo, cfg GenerateConfig) []byte {
 	b.WriteString("OpenCode picks the package up on next start; remove the copied files to uninstall.\n")
 	b.WriteString("Plugins that need authentication read the environment variables named in their `mcp.json`.\n")
 
+	b.WriteString("\n### OpenClaw\n\n")
+	b.WriteString("Install the observability package directly from its directory:\n\n")
+	if cfg.HooksAPIKey != "" {
+		fmt.Fprintf(&b, "```\nopenclaw plugins install ./%s\n```\n\n", OpenClawObservabilitySlug(cfg))
+	} else {
+		b.WriteString("```\nopenclaw plugins install <plugin-dir>\n```\n\n")
+	}
+	b.WriteString("Add `--force` when replacing an existing install. Then enable conversation-scope hooks — ")
+	b.WriteString("without this the prompt, assistant-response and usage hooks silently never fire:\n\n")
+	b.WriteString("```json\n{\n  \"plugins\": {\n    \"entries\": {\n      \"speakeasy-observability\": {\n        \"enabled\": true,\n        \"hooks\": { \"allowConversationAccess\": true }\n      }\n    }\n  }\n}\n```\n\n")
+	b.WriteString("Restart the Gateway to load the plugin. Uninstall with `openclaw plugins uninstall speakeasy-observability`.\n\n")
+	b.WriteString("> **Coverage depends on your model-auth mode.** When a model routes through the Claude CLI harness ")
+	b.WriteString("(`agentRuntime: claude-cli`, which `openclaw models auth login` writes by default when a claude-cli ")
+	b.WriteString("profile exists), OpenClaw delegates the model and tool loop out-of-process and the tool/LLM hooks ")
+	b.WriteString("never fire — those sessions are covered by Speakeasy's Claude Code hooks instead. For OpenClaw-side ")
+	b.WriteString("tool capture and enforcement, configure the embedded runtime (`agentRuntime: { id: \"openclaw\" }`) ")
+	b.WriteString("for the models you want covered.\n")
+
 	return []byte(b.String())
 }
 
