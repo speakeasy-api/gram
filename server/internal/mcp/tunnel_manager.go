@@ -107,6 +107,7 @@ func (m *tunnelManager) buildProxy(
 		options...,
 	)
 	p.UpstreamResponseRetryer = tunnelrouting.Retryer(m.routes, tunnelID, addr, clientAffinityKey, m.forwardToken)
+	p.ForwardErrorRetryer = tunnelrouting.DeadDialRetryer(logger, m.routes, tunnelID, addr, clientAffinityKey, m.forwardToken)
 	// Redirects won't work across a tunnel boundary; disable.
 	p.DisableRedirects = true
 	p.GuardianClientOptions = m.guardianClientOptions()

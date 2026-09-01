@@ -310,6 +310,7 @@ func (f *ProxyManager) BuildTarget(
 		Headers:                     headers,
 		AuthorizationOverride:       upstreamAuth,
 		UpstreamResponseRetryer:     nil,
+		ForwardErrorRetryer:         nil,
 		UpstreamResponseInterceptor: nil,
 		DisableRedirects:            false,
 		StrictToolSelection:         selection != nil,

@@ -136,6 +136,8 @@ type UpstreamResponseRetry struct {
 
 type UpstreamResponseRetryer func(ctx context.Context, resp *http.Response) (*UpstreamResponseRetry, error)
 
+type ForwardErrorRetryer func(ctx context.Context, err error) (*UpstreamResponseRetry, error)
+
 // Proxy is a one-request handler that forwards inbound MCP client requests
 // to a configured Remote MCP Server. A fresh value is expected per inbound
 // request so the SessionID and interceptor state stay tied to a single
@@ -224,6 +226,15 @@ type Proxy struct {
 	// response headers arrive but before any response is relayed to the user.
 	// It is used by tunneled MCP to fail over stale gateway owners.
 	UpstreamResponseRetryer UpstreamResponseRetryer
+
+	// ForwardErrorRetryer may replace the upstream target once when the
+	// forward fails with a transport-level error before any response
+	// headers arrive. The retryer owns replay safety: it must only request
+	// a retry for failures where the request cannot have reached the
+	// backend (e.g. dial-phase errors). Returning a non-nil error replaces
+	// the classified forward error; returning (nil, nil) keeps it. It is
+	// used by tunneled MCP to evict routes whose gateway address is dead.
+	ForwardErrorRetryer ForwardErrorRetryer
 
 	// UpstreamResponseInterceptor, when set, runs once against the final
 	// upstream response — after any retry, before any header or body byte is
@@ -981,7 +992,22 @@ func (p *Proxy) forwardRequestWithRetry(
 	validate func(*http.Request) error,
 ) (*http.Request, *http.Response, error) {
 	upstreamReq, upstreamResp, err := p.forwardRequest(ctx, r, body(), validate)
-	if err != nil || p.UpstreamResponseRetryer == nil {
+	if err != nil {
+		if p.ForwardErrorRetryer == nil {
+			return upstreamReq, upstreamResp, err
+		}
+		retry, retryerErr := p.ForwardErrorRetryer(ctx, err)
+		if retryerErr != nil {
+			return upstreamReq, nil, retryerErr
+		}
+		if retry == nil {
+			return upstreamReq, upstreamResp, err
+		}
+		p.RemoteURL = retry.RemoteURL
+		p.Headers = retry.Headers
+		return p.forwardRequest(ctx, r, body(), validate)
+	}
+	if p.UpstreamResponseRetryer == nil {
 		return upstreamReq, upstreamResp, err
 	}
 

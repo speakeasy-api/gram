@@ -7,12 +7,16 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	"log/slog"
 	"math/big"
 	"net/http"
 	"net/url"
 	"strings"
 
+	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/mcp/httpheaders"
+	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp/proxy"
 	"github.com/speakeasy-api/gram/tunnel/route"
 	"github.com/speakeasy-api/gram/tunnel/wire"
@@ -145,6 +149,47 @@ func Retryer(routes route.Store, tunnelID, selectedAddr, clientAffinityKey, forw
 		addr, ok := SelectRoute(clientAffinityKey, candidates, exclude)
 		if !ok {
 			return nil, nil
+		}
+		gatewayURL, err := GatewayURL(addr)
+		if err != nil {
+			return nil, fmt.Errorf("build tunnel retry route URL: %w", err)
+		}
+		return &proxy.UpstreamResponseRetry{
+			RemoteURL: gatewayURL,
+			Headers:   Headers(tunnelID, forwardToken, clientAffinityKey),
+		}, nil
+	}
+}
+
+// DeadDialRetryer returns the tunnel-specific policy for forwards that fail
+// before any gateway response arrives. A dead-peer dial failure means the
+// selected route points at a gateway that no longer exists (e.g. a pod that
+// died without unpublishing), so the route is evicted for every subsequent
+// request rather than left to burn down its TTL one 3-second dial at a time.
+// The request never left gram-server, so replay against another candidate is
+// safe for any method; when no candidate remains the dead tunnel surfaces as
+// the same CodeNotFound that route selection uses for tunnels with no live
+// route: a customer-side outage, not platform 5xx budget.
+func DeadDialRetryer(logger *slog.Logger, routes route.Store, tunnelID, selectedAddr, clientAffinityKey, forwardToken string) proxy.ForwardErrorRetryer {
+	return func(ctx context.Context, forwardErr error) (*proxy.UpstreamResponseRetry, error) {
+		if !guardian.IsDeadPeerDialError(forwardErr) {
+			return nil, nil
+		}
+
+		if selectedAddr != "" {
+			if err := routes.Unpublish(ctx, tunnelID, selectedAddr); err != nil {
+				return nil, fmt.Errorf("unpublish dead tunnel route: %w", err)
+			}
+		}
+
+		candidates, err := routes.Candidates(ctx, tunnelID)
+		if err != nil {
+			return nil, fmt.Errorf("list tunnel retry routes: %w", err)
+		}
+		addr, ok := SelectRoute(clientAffinityKey, candidates, map[string]struct{}{selectedAddr: {}})
+		if !ok {
+			return nil, oops.E(oops.CodeNotFound, forwardErr, "not found").
+				LogWarn(ctx, logger.With(attr.SlogErrorMessage("tunnel gateway is unreachable")))
 		}
 		gatewayURL, err := GatewayURL(addr)
 		if err != nil {
