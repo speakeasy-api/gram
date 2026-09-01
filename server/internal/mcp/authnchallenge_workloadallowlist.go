@@ -15,9 +15,11 @@ import (
 	"sync"
 	"time"
 
-	"golang.org/x/sync/semaphore"
+	"github.com/redis/go-redis/v9"
+	"go.opentelemetry.io/otel/metric"
 	"golang.org/x/sync/singleflight"
 
+	"github.com/speakeasy-api/gram/server/internal/ratelimit"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	remotesessions_repo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 )
@@ -46,35 +48,38 @@ const (
 	// thousands — with headroom.
 	workloadIssuerMissEntries = 4096
 
-	// workloadIssuerLookupTimeout bounds one admission lookup, including the
-	// wait for a slot below.
+	// workloadIssuerLookupTimeout bounds one admission lookup, the budget
+	// charge included.
 	//
 	// The lookup runs detached from the caller's context, so nothing else
 	// bounds it. Generous for a single indexed read, and deliberately far
 	// short of the pool's 60s statement timeout, which is a backstop against
 	// a runaway query rather than a delay any caller should wait out.
 	workloadIssuerLookupTimeout = 5 * time.Second
-
-	// workloadIssuerLookupSlots bounds how many admission lookups hold a
-	// database connection at once.
-	//
-	// The detached flight is what makes this necessary. singleflight collapses
-	// concurrent resolutions of one issuer and does nothing at all for distinct
-	// ones, so a flood of *different* spellings — free to produce, since this
-	// grant is reachable without credentials — puts one query per spelling in
-	// the pool, and detachment holds each there for the timeout above whether
-	// or not its caller is still waiting. Unbounded, the cheapest possible
-	// request is a pool exhaustion that starves every other caller of the
-	// database.
-	//
-	// Small on purpose. pool_max_conns is not configured anywhere, so the pool
-	// is pgx's default of max(4, NumCPU) — single digits on a typical container
-	// — and a bound above that would not be a bound. These are single indexed
-	// reads, so four concurrent slots still clear thousands per second; the
-	// ceiling is here to keep admission from monopolizing the pool, not to
-	// ration a scarce resource. Revisit if the pool is ever sized explicitly.
-	workloadIssuerLookupSlots = 4
 )
+
+// workloadIssuerLookupRate bounds how many admission lookups one endpoint can
+// drive into the database.
+//
+// This is the bound, and the miss cache is an optimization on top of it. A
+// flood of *distinct* issuer spellings misses the cache every time and
+// singleflight collapses none of them, so without a ceiling the cheapest
+// possible request — free to produce, since this grant is reachable without
+// credentials — costs a query. The ceiling is what makes that finite; the
+// cache only keeps the common repeat cheap.
+//
+// Keyed per endpoint rather than per replica, which is the property that
+// matters. A budget shared across the process would let one tenant's traffic
+// exhaust every other tenant's, turning a mitigation into a cross-tenant
+// denial surface. The bucket lives in Redis, so the budget is fleet-wide
+// rather than multiplied by the replica count.
+//
+// Sized for what an endpoint legitimately resolves: an organization trusts
+// tens of issuers, not thousands, and repeats inside the miss TTL never reach
+// here at all. The burst absorbs a cold replica resolving several distinct
+// issuers at once; the sustained rate is deliberately far above steady-state
+// need and far below what an attacker would want.
+var workloadIssuerLookupRate = ratelimit.PerMinute(120).WithBurst(30)
 
 // errWorkloadIssuerUntrusted reports an assertion whose iss names no issuer
 // this endpoint trusts.
@@ -83,6 +88,24 @@ const (
 // meant for us: a CI provider's issuer mints valid tokens for every job on
 // its platform. This is where "genuinely signed" stops being enough.
 var errWorkloadIssuerUntrusted = errors.New("issuer is not trusted by this endpoint")
+
+// errWorkloadIssuerLookupRateLimited reports an admission lookup refused
+// because the endpoint has spent its lookup budget.
+//
+// Deliberately distinct from errWorkloadIssuerUntrusted: nothing was decided
+// about this issuer, so a caller mapping untrusted onto a 401 must not answer
+// one here. This is the 429-shaped outcome, and it carries a retry hint.
+var errWorkloadIssuerLookupRateLimited = errors.New("workload issuer lookups are rate limited for this endpoint")
+
+// errWorkloadIssuerLimiterUnavailable reports that the limiter's store could
+// not answer.
+//
+// Fails closed, matching the jwks key resolver on the sibling path: an
+// unreachable bucket is not a throttle, and running the lookup unbounded
+// because the thing that bounds it is down would spend exactly the budget the
+// limiter exists to protect. Kept separate from a refusal so an outage is not
+// reported to an operator as a rate limit they can wait out.
+var errWorkloadIssuerLimiterUnavailable = errors.New("workload issuer lookup limiter unavailable")
 
 // workloadIssuerMissReason records why an issuer was rejected, so a repeat
 // served from the cache answers with the same taxonomy the original did.
@@ -112,6 +135,44 @@ func (r workloadIssuerMissReason) err() error {
 	}
 	return errWorkloadIssuerUntrusted
 }
+
+// newWorkloadIssuerLookupBudget builds the per-endpoint ceiling admission
+// charges its lookups against, or nil when there is no store to hold the
+// buckets.
+//
+// Nil is not "unlimited" to the caller: newWorkloadIssuerAdmission treats an
+// absent budget as unprotected and refuses, which is the same shape as
+// newClientAssertionVerifier returning nil so assertion clients are refused
+// rather than admitted unverified. A deployment without the store does not get
+// the grant.
+func newWorkloadIssuerLookupBudget(redisClient *redis.Client, meterProvider metric.MeterProvider) workloadIssuerBudget {
+	if redisClient == nil {
+		return nil
+	}
+
+	limiter := ratelimit.New(
+		ratelimit.NewRedisStore(redisClient),
+		"workload_issuer_lookup",
+		workloadIssuerLookupRate,
+		ratelimit.WithMetrics(meterProvider),
+	)
+
+	return limiter.Allow
+}
+
+// workloadIssuerBudget charges one admission lookup against the ceiling for a
+// scope, reporting whether it may proceed.
+//
+// A function rather than *ratelimit.Limiter for the same reason
+// workloadIssuerLookup is a function rather than a database handle: admission
+// needs one narrow thing, and taking it narrowly is what lets the refusal and
+// outage paths be exercised without standing up the store behind them.
+// Production passes (*ratelimit.Limiter).Allow.
+//
+// Reporting !Allowed and returning an error are different answers and callers
+// must not conflate them — the limiter package says so itself. A refusal is a
+// decision the budget made; an error is the store failing to make one.
+type workloadIssuerBudget func(ctx context.Context, scope string) (ratelimit.Result, error)
 
 // workloadIssuerLookup resolves an assertion's iss to the trusted issuer row
 // an endpoint admits it under, reporting false when no tier-visible row
@@ -156,19 +217,43 @@ type workloadIssuerAdmission struct {
 	// one still costs a query.
 	inflight singleflight.Group
 
-	// slots bounds how many of those lookups touch the database at once.
-	// singleflight handles repeats of one issuer; this handles distinct ones,
-	// which it cannot. See workloadIssuerLookupSlots.
-	slots *semaphore.Weighted
+	// charge applies the per-endpoint ceiling on lookups that reach the
+	// database. singleflight collapses repeats of one issuer and the miss cache
+	// absorbs them over time; neither bounds distinct spellings, and this does.
+	// See workloadIssuerLookupRate.
+	//
+	// Nil means no ceiling was wired, which admission treats as unprotected
+	// rather than unlimited — deliberately unlike jwks.NewKeyResolver, where a
+	// nil limiter disables the bound. That path is reached behind a registered
+	// client; this one is reachable by anyone, so running it with its only
+	// bound absent is the thing the bound exists to prevent.
+	charge workloadIssuerBudget
 }
 
-func newWorkloadIssuerAdmission(lookup workloadIssuerLookup) *workloadIssuerAdmission {
+func newWorkloadIssuerAdmission(lookup workloadIssuerLookup, charge workloadIssuerBudget) *workloadIssuerAdmission {
 	return &workloadIssuerAdmission{
 		lookup:   lookup,
 		misses:   newWorkloadIssuerMissCache(workloadIssuerMissEntries, workloadIssuerMissTTL),
 		inflight: singleflight.Group{},
-		slots:    semaphore.NewWeighted(workloadIssuerLookupSlots),
+		charge:   charge,
 	}
+}
+
+// workloadIssuerLookupScope names the budget an endpoint's admission lookups
+// are charged to.
+//
+// The authorization server's own identifier, matching workloadFetchScope on
+// the key-resolution path next door and for the same reason: it is the tenant
+// boundary, so no endpoint can spend another's budget. Never the issuer URL,
+// which two organizations may legitimately share, and never anything derived
+// from the request, which would let a caller mint itself a fresh budget by
+// varying what it sends — the exact move the ceiling exists to stop.
+//
+// The prefix keeps this budget separate from the key fetches charged under
+// workloadFetchScope. They bound different resources, and one exhausting the
+// other would be a bug rather than a policy.
+func workloadIssuerLookupScope(endpoint *ResolvedMcpEndpoint) string {
+	return "workload-issuer-lookup:" + endpoint.UserSessionIssuerID.String()
 }
 
 // workloadIssuerResolution is what one admitted lookup produced, carried
@@ -215,15 +300,22 @@ func (a *workloadIssuerAdmission) admit(ctx context.Context, endpoint *ResolvedM
 		lookupCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), workloadIssuerLookupTimeout)
 		defer cancel()
 
-		if err := a.slots.Acquire(lookupCtx, 1); err != nil {
-			// Never remembered. A queue too long to clear inside the timeout
-			// is a statement about load, not about this issuer, and caching it
-			// would keep rejecting a legitimate workload after the pressure
-			// passed — the same reason a database failure is not remembered
-			// below.
-			return nil, fmt.Errorf("acquire workload issuer lookup slot: %w", err)
+		// Charged before the query, so a refusal costs nothing but the bucket
+		// read. Neither outcome below is ever remembered as a miss: a spent
+		// budget and an unreachable bucket are statements about load and about
+		// us, not about this issuer, and caching either would keep rejecting a
+		// legitimate workload once the pressure passed — the same reason a
+		// database failure is not remembered further down.
+		if a.charge == nil {
+			return nil, errWorkloadIssuerLimiterUnavailable
 		}
-		defer a.slots.Release(1)
+		charged, chargeErr := a.charge(lookupCtx, workloadIssuerLookupScope(endpoint))
+		if chargeErr != nil {
+			return nil, fmt.Errorf("%w: %w", errWorkloadIssuerLimiterUnavailable, chargeErr)
+		}
+		if !charged.Allowed {
+			return nil, fmt.Errorf("%w: retry after %s", errWorkloadIssuerLookupRateLimited, charged.RetryAfter)
+		}
 
 		row, found, lookupErr := a.lookup(lookupCtx, endpoint, issuerURL)
 		switch {
