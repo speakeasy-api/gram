@@ -5,14 +5,6 @@ import {
   isProjectSelectableResourceType,
 } from "./types";
 
-// --- Collection group shape (minimal interface for computation) ---
-
-export interface CollectionGroup {
-  id: string;
-  name: string;
-  servers: { id: string; tools: { name: string }[] }[];
-}
-
 // --- Discriminated union for panel state ---
 
 export type PanelState =
@@ -20,8 +12,7 @@ export type PanelState =
   | ProjectsPanel
   | ServersPanel
   | ToolsSelectPanel
-  | ToolsAnnotationPanel
-  | CollectionPanel;
+  | ToolsAnnotationPanel;
 
 interface AllPanel {
   activePanel: "all";
@@ -54,17 +45,10 @@ interface ToolsAnnotationPanel {
   label: string;
 }
 
-interface CollectionPanel {
-  activePanel: "collection";
-  selectedCollectionCount: number;
-  label: string;
-}
-
 // --- Pure computation ---
 
 export function computePanelState(
   selectors: Selector[] | null,
-  collectionGroups: CollectionGroup[],
   resourceType: ResourceType,
   customTab?: CustomTab,
 ): PanelState {
@@ -129,19 +113,6 @@ export function computePanelState(
   // Tool-level selectors
   const hasTools = selectors.some((s) => s.tool);
   if (hasTools) {
-    // Check if selectors match collection groups
-    const collectionCount = getSelectedCollectionCount(
-      selectors,
-      collectionGroups,
-    );
-    if (collectionCount > 0) {
-      return {
-        activePanel: "collection",
-        selectedCollectionCount: collectionCount,
-        label: `${collectionCount} collection${collectionCount === 1 ? "" : "s"} selected`,
-      };
-    }
-
     // Individual tool selection
     const selectedTools = selectors
       .filter((s) => s.tool && s.resourceId)
@@ -172,25 +143,4 @@ export function computePanelState(
         ? "Select..."
         : `${count} ${noun}${count === 1 ? "" : "s"} selected`,
   };
-}
-
-/**
- * Counts how many collection groups are fully selected (all their tools
- * present in selectors).
- */
-export function getSelectedCollectionCount(
-  selectors: Selector[],
-  collectionGroups: CollectionGroup[],
-): number {
-  return collectionGroups.filter((group) => {
-    const allToolSelectors = group.servers.flatMap((s) =>
-      s.tools.map((t) => ({ resourceId: s.id, tool: t.name })),
-    );
-    if (allToolSelectors.length === 0) return false;
-    return allToolSelectors.every((ts) =>
-      selectors.some(
-        (s) => s.resourceId === ts.resourceId && s.tool === ts.tool,
-      ),
-    );
-  }).length;
 }

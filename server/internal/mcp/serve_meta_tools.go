@@ -231,8 +231,10 @@ func (s *Service) handleMetaExecuteToolCall(
 	}
 
 	// Pre-dispatch security check so an unsatisfied member surfaces as a
-	// member-scoped result (as in ServeToolsetResolved).
-	satisfied, err := s.checkToolsetSecurity(ctx, toolset, inputs)
+	// member-scoped result (as in serveToolsetResolved). Members keep the
+	// toolset's own publicness; the meta surface is outside wrapper
+	// governance.
+	satisfied, err := s.checkToolsetSecurity(ctx, toolset, toolset.McpIsPublic, inputs)
 	if err != nil {
 		return nil, err
 	}
@@ -400,12 +402,12 @@ func (s *Service) buildMemberDispatch(
 		return nil, nil, err
 	}
 
-	// A hosted member records no upstream resource, so only a lone
-	// unqualified token can be its credential: a token consented for a
-	// specific member must never reach another member's tools, and several
-	// tokens are unroutable. Both degrade to no token rather than an error,
-	// so multi-credential meta sessions keep hosted members callable.
-	tokenInputs, err := appendRemoteSessionTokenInputs(nil, hostedMemberTokens(gate.tokens))
+	// A hosted member records no upstream resource, so its credential is the
+	// token map entry keyed by its own derived remote_session_issuer: a token
+	// consented for a specific member must never reach another member's
+	// tools. No entry degrades to no token rather than an error, so partially
+	// connected meta sessions keep hosted members callable.
+	tokenInputs, err := appendRemoteSessionTokenInputs(nil, hostedMemberTokens(gate.tokens, member))
 	if err != nil {
 		return nil, nil, oops.E(oops.CodeUnexpected, err, "resolve upstream tokens for meta MCP member").LogError(ctx, logger)
 	}
@@ -440,21 +442,25 @@ func (s *Service) buildMemberDispatch(
 
 	serverID := member.serverID
 	inputs := &mcpInputs{
-		projectID:                projectID,
-		organizationID:           toolset.OrganizationID,
-		toolset:                  toolset.Slug,
-		environment:              environment,
-		mcpEnvVariables:          nil,
-		oauthTokenInputs:         tokenInputs,
-		authenticated:            gate.authenticated,
-		sessionID:                gate.sessionID,
-		chatID:                   gate.chatID,
-		mode:                     ToolModeStatic,
-		userID:                   gate.userID,
-		externalUserID:           gate.externalUserID,
-		apiKeyID:                 gate.apiKeyID,
-		toolVariationsGroupID:    variationsGroupID,
-		mcpServerID:              &serverID,
+		projectID:             projectID,
+		organizationID:        toolset.OrganizationID,
+		toolset:               toolset.Slug,
+		environment:           environment,
+		mcpEnvVariables:       nil,
+		oauthTokenInputs:      tokenInputs,
+		authenticated:         gate.authenticated,
+		sessionID:             gate.sessionID,
+		chatID:                gate.chatID,
+		mode:                  ToolModeStatic,
+		userID:                gate.userID,
+		externalUserID:        gate.externalUserID,
+		apiKeyID:              gate.apiKeyID,
+		toolVariationsGroupID: variationsGroupID,
+		mcpServerID:           &serverID,
+		// Meta members keep their toolset-keyed per-tool checks; the meta
+		// surface's RBAC model is outside the wrapper-governance cutover.
+		wrapperRBACResourceID:    "",
+		wrapperIsPublic:          nil,
 		skipProxyTools:           true,
 		tags:                     nil,
 		protocolVersion:          gate.protocolVersion,
@@ -465,22 +471,21 @@ func (s *Service) buildMemberDispatch(
 }
 
 // hostedMemberTokens narrows a gate's token map to what a hosted member may
-// receive: exactly one token with no recorded resource. The tunneled arm of
-// routeMetaMemberToken applies the same rule, so on a mixed gateway one
-// unqualified credential reaches both; recording synthetic tunnel resources
-// (AIM-87 follow-up) is what will split them. A resource-qualified
-// token belongs to the member it was consented for, and several tokens are
-// unroutable without a scheme-to-issuer mapping; both cases yield no token.
-func hostedMemberTokens(tokens map[uuid.UUID]remotesessions.UpstreamToken) map[uuid.UUID]remotesessions.UpstreamToken {
-	if len(tokens) != 1 {
+// receive: the entry keyed by the member's own derived remote_session_issuer,
+// and only when its grant is unqualified. The tunneled arm of
+// routeMetaMemberToken applies the same rule. A lone-token fallback would
+// forward a sibling's bearer once partial resolution leaves gaps in the map,
+// and a resource-qualified token is audience-bound to the remote upstream it
+// was consented for; both cases yield no token.
+func hostedMemberTokens(tokens map[uuid.UUID]remotesessions.UpstreamToken, member metaMember) map[uuid.UUID]remotesessions.UpstreamToken {
+	if !member.remoteSessionIssuerID.Valid {
 		return nil
 	}
-	for _, entry := range tokens {
-		if entry.Resource != "" {
-			return nil
-		}
+	entry, ok := tokens[member.remoteSessionIssuerID.UUID]
+	if !ok || entry.Resource != "" {
+		return nil
 	}
-	return tokens
+	return map[uuid.UUID]remotesessions.UpstreamToken{member.remoteSessionIssuerID.UUID: entry}
 }
 
 // loadMemberToolset loads the member's toolset row, applying the member

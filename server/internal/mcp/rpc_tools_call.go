@@ -266,8 +266,10 @@ func handleToolsCall(
 	// verify they have mcp:connect for this specific tool (not just the server).
 	// The connection-level check only validates the server; this narrows to the
 	// tool and disposition dimensions. Public MCPs skip this — they're open to
-	// everyone, mirroring the connection-level guard in impl.go.
-	if payload.authenticated && authzEngine != nil && (toolset.McpIsPublic == nil || !*toolset.McpIsPublic) {
+	// everyone, mirroring the connection-level guard in impl.go. Both the
+	// privacy read and the resource id follow the wrapper when one fronts
+	// the request.
+	if payload.authenticated && authzEngine != nil && payload.effectiveMCPPrivate(toolset.McpIsPublic) {
 		var disposition string
 		if tool != nil {
 			baseTool, err := conv.ToBaseTool(tool)
@@ -275,7 +277,7 @@ func handleToolsCall(
 				disposition = conv.DispositionFromAnnotations(baseTool.Annotations)
 			}
 		}
-		if err := authzEngine.Require(ctx, authz.MCPToolCallCheck(toolset.ID, authz.MCPToolCallDimensions{
+		if err := authzEngine.Require(ctx, authz.MCPToolCallCheck(payload.mcpConnectResourceID(toolset.ID), authz.MCPToolCallDimensions{
 			Tool:        params.Name,
 			Disposition: disposition,
 			ProjectID:   payload.projectID.String(),

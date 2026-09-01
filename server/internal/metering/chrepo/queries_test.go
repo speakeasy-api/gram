@@ -18,7 +18,9 @@ func TestInsertReadingsPersistsAndDeduplicatesStableIDs(t *testing.T) {
 	projectID := uuid.New()
 	readingID := uuid.New()
 	correctionID := uuid.New()
-	firstInsertedAt := time.Now().UTC().Add(-2 * time.Second)
+	producedAt := time.Now().UTC().Add(-3 * time.Second)
+	adjustmentProducedAt := producedAt.Add(time.Second)
+	firstInsertedAt := producedAt.Add(2 * time.Second)
 	secondInsertedAt := firstInsertedAt.Add(time.Second)
 	firstOccurredAt := time.Date(2026, time.January, 15, 1, 2, 3, 4, time.UTC)
 	secondOccurredAt := time.Date(2026, time.February, 15, 1, 2, 3, 4, time.UTC)
@@ -32,6 +34,7 @@ func TestInsertReadingsPersistsAndDeduplicatesStableIDs(t *testing.T) {
 		Unit:              "stokens",
 		Value:             10,
 		OccurredAt:        firstOccurredAt,
+		ProducedAt:        producedAt,
 		InsertedAt:        firstInsertedAt,
 		CorrectsReadingID: nil,
 		Attributes:        map[string]string{"codec": "tiktoken_o200k_base", "source": "first"},
@@ -49,6 +52,7 @@ func TestInsertReadingsPersistsAndDeduplicatesStableIDs(t *testing.T) {
 		Unit:              "stokens",
 		Value:             -4,
 		OccurredAt:        secondOccurredAt,
+		ProducedAt:        adjustmentProducedAt,
 		InsertedAt:        secondInsertedAt,
 		CorrectsReadingID: &readingID,
 		Attributes:        map[string]string{"codec": "tiktoken_o200k_base"},
@@ -59,13 +63,14 @@ func TestInsertReadingsPersistsAndDeduplicatesStableIDs(t *testing.T) {
 	require.NoError(t, queries.InsertReadings(t.Context(), []chrepo.ReadingRow{redelivery, correction}))
 
 	var (
-		operationID, unit, corrects string
-		value                       int64
-		occurredAt, insertedAt      time.Time
-		attributes                  map[string]string
+		operationID, unit, corrects  string
+		value                        int64
+		occurredAt, storedProducedAt time.Time
+		storedInsertedAt             time.Time
+		attributes                   map[string]string
 	)
 	err := conn.QueryRow(t.Context(), `
-		SELECT operation_id, toString(unit), value, occurred_at, inserted_at,
+		SELECT operation_id, toString(unit), value, occurred_at, produced_at, inserted_at,
 		       ifNull(toString(corrects_reading_id), ''), attributes
 		FROM billing_meter_readings FINAL
 		WHERE organization_id = ? AND project_id = ? AND meter_id = ? AND id = ?
@@ -74,7 +79,8 @@ func TestInsertReadingsPersistsAndDeduplicatesStableIDs(t *testing.T) {
 		&unit,
 		&value,
 		&occurredAt,
-		&insertedAt,
+		&storedProducedAt,
+		&storedInsertedAt,
 		&corrects,
 		&attributes,
 	)
@@ -83,7 +89,8 @@ func TestInsertReadingsPersistsAndDeduplicatesStableIDs(t *testing.T) {
 	require.Equal(t, "stokens", unit)
 	require.Equal(t, int64(10), value)
 	require.Equal(t, secondOccurredAt, occurredAt)
-	require.Equal(t, secondInsertedAt, insertedAt)
+	require.Equal(t, producedAt, storedProducedAt)
+	require.Equal(t, secondInsertedAt, storedInsertedAt)
 	require.Empty(t, corrects)
 	require.Equal(t, "redelivery", attributes["source"])
 

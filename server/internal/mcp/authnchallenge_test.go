@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -1409,14 +1410,19 @@ func modernConsentGetPage(t *testing.T, ctx context.Context, ti *testInstance, e
 	return w.Body.String()
 }
 
+// consentApproveButtonTag returns the approve button's attributes with the
+// class list stripped. The class list carries disabled:* utilities, so a naive
+// substring check for "disabled" would match a perfectly enabled button.
 func consentApproveButtonTag(t *testing.T, page string) string {
 	t.Helper()
 	start := strings.Index(page, `value="approve"`)
 	require.GreaterOrEqual(t, start, 0, "approve button must render")
 	end := strings.Index(page[start:], ">")
 	require.GreaterOrEqual(t, end, 0)
-	return page[start : start+end]
+	return consentButtonClassAttr.ReplaceAllString(page[start:start+end], " ")
 }
+
+var consentButtonClassAttr = regexp.MustCompile(`(?s)\sclass="[^"]*"`)
 
 func TestHandleConsentGet_LegacyToolsetUsesAllToolsConsent(t *testing.T) {
 	t.Parallel()

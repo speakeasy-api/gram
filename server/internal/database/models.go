@@ -1460,6 +1460,7 @@ type OpenrouterApiKey struct {
 	KeyHash        string
 	MonthlyCredits int64
 	Disabled       bool
+	DisableCauses  []string
 	CreatedAt      pgtype.Timestamptz
 	UpdatedAt      pgtype.Timestamptz
 	DeletedAt      pgtype.Timestamptz
@@ -2167,6 +2168,7 @@ type RemoteSessionClient struct {
 	ClientIDIssuedAt        pgtype.Timestamptz
 	ClientSecretExpiresAt   pgtype.Timestamptz
 	TokenEndpointAuthMethod pgtype.Text
+	JsonWebKeySetID         uuid.NullUUID
 	Scope                   []string
 	Audience                pgtype.Text
 	ClientIDMetadataUri     pgtype.Text
@@ -2933,6 +2935,8 @@ type TunneledMcpServer struct {
 	AllowPublic bool
 	// Last persisted tunnel agent version reported for this source. Per-connection agent versions are stored in Redis.
 	AgentVersion pgtype.Text
+	// RFC 9728 protected-resource identifier of the tunneled server, recorded as the RFC 8707 resource on grants and used only for exact-match credential routing. Names a host inside the customer's private network — never dialed by Gram.
+	ResourceIdentifier pgtype.Text
 	// Most recent persisted heartbeat time for the source, used when Redis liveness data is absent or expired.
 	LastSeenAt pgtype.Timestamptz
 	// Time when the tunneled MCP source was created.

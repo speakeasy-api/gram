@@ -44,6 +44,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/functions"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/k8s"
+	"github.com/speakeasy-api/gram/server/internal/openrouterkeys"
 	"github.com/speakeasy-api/gram/server/internal/plugins"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/rag"
@@ -84,36 +85,37 @@ type WorkerOptions struct {
 
 	// GitHubEvidenceToken authenticates the recheck sweep's repository
 	// lookups; empty falls back to GitHub's small unauthenticated budget.
-	GitHubEvidenceToken string
-	SiteURL             *url.URL
-	BillingTracker      billing.Tracker
-	BillingRepository   billing.Repository
-	StripeClient        stripeclient.Client
-	RedisClient         *redis.Client
-	CacheAdapter        cache.Cache
-	EmailService        *email.Service
-	PosthogClient       *posthog.Posthog
-	FunctionsDeployer   functions.Deployer
-	FunctionsVersion    functions.RunnerVersion
-	RagService          *rag.ToolsetVectorStore
-	MCPRegistryClient   *externalmcp.RegistryClient
-	TelemetryLogger     *telemetry.Logger
-	ClickhouseConn      clickhouse.Conn
-	TelemetryRepo       *telemetryrepo.Queries
-	TriggersApp         *bgtriggers.App
-	AssistantsCore      *assistants.ServiceCore
-	TemporalEnv         *tenv.Environment
-	PIIScanner          risk_analysis.PIIScanner
-	PIScanner           *promptinjection.Scanner
-	CustomRuleScanner   *customruleanalyzer.Scanner
-	BuiltinPresets      *presetlib.Library
-	ShadowMCPClient     *shadowmcp.Client
-	AuditLogger         *audit.Logger
-	WorkOSClient        activities.WorkOSClient
-	SvixClient          *svix.Svix
-	ProductFeatures     *productfeatures.Client
-	PluginPublisher     *plugins.Service
-	Publishers          *Publishers
+	GitHubEvidenceToken      string
+	SiteURL                  *url.URL
+	BillingTracker           billing.Tracker
+	BillingRepository        billing.Repository
+	StripeClient             stripeclient.Client
+	TUMMeterStreamingEnabled bool
+	RedisClient              *redis.Client
+	CacheAdapter             cache.Cache
+	EmailService             *email.Service
+	PosthogClient            *posthog.Posthog
+	FunctionsDeployer        functions.Deployer
+	FunctionsVersion         functions.RunnerVersion
+	RagService               *rag.ToolsetVectorStore
+	MCPRegistryClient        *externalmcp.RegistryClient
+	TelemetryLogger          *telemetry.Logger
+	ClickhouseConn           clickhouse.Conn
+	TelemetryRepo            *telemetryrepo.Queries
+	TriggersApp              *bgtriggers.App
+	AssistantsCore           *assistants.ServiceCore
+	TemporalEnv              *tenv.Environment
+	PIIScanner               risk_analysis.PIIScanner
+	PIScanner                *promptinjection.Scanner
+	CustomRuleScanner        *customruleanalyzer.Scanner
+	BuiltinPresets           *presetlib.Library
+	ShadowMCPClient          *shadowmcp.Client
+	AuditLogger              *audit.Logger
+	WorkOSClient             activities.WorkOSClient
+	SvixClient               *svix.Svix
+	ProductFeatures          *productfeatures.Client
+	PluginPublisher          *plugins.Service
+	Publishers               *Publishers
 
 	// TrialEmailsService synchronizes trial lifecycle changes with Loops.
 	TrialEmailsService *trialemails.Service
@@ -151,48 +153,49 @@ func ForDeploymentProcessing(
 	auditLogger *audit.Logger,
 ) *WorkerOptions {
 	return &WorkerOptions{
-		DB:                  db,
-		GuardianPolicy:      guardianPolicy,
-		EncryptionClient:    enc,
-		FeatureProvider:     f,
-		AssetStorage:        assetStorage,
-		FunctionsDeployer:   deployer,
-		FunctionsVersion:    "local", // Test deployers don't use baked versions
-		MCPRegistryClient:   mcpRegistryClient,
-		AuditLogger:         auditLogger,
-		SlackClient:         nil,
-		ChatMessageWriter:   nil,
-		ChatClient:          nil,
-		OpenRouter:          nil,
-		OpenRouterSpend:     nil,
-		K8sClient:           nil,
-		ExpectedTargetCNAME: "",
-		ExpectedARecords:    nil,
-		GitHubEvidenceToken: "",
-		SiteURL:             nil,
-		BillingTracker:      nil,
-		BillingRepository:   nil,
-		StripeClient:        nil,
-		RagService:          nil,
-		RedisClient:         nil,
-		PosthogClient:       nil,
-		TelemetryLogger:     nil,
-		TelemetryRepo:       nil,
-		TriggersApp:         nil,
-		CacheAdapter:        nil,
-		EmailService:        nil,
-		AssistantsCore:      nil,
-		TemporalEnv:         nil,
-		PIIScanner:          nil,
-		PIScanner:           nil,
-		CustomRuleScanner:   nil,
-		BuiltinPresets:      nil,
-		ShadowMCPClient:     nil,
-		WorkOSClient:        workos.NewStubClient(),
-		SvixClient:          nil,
-		ProductFeatures:     nil,
-		ClickhouseConn:      nil,
-		PluginPublisher:     nil,
+		DB:                       db,
+		GuardianPolicy:           guardianPolicy,
+		EncryptionClient:         enc,
+		FeatureProvider:          f,
+		AssetStorage:             assetStorage,
+		FunctionsDeployer:        deployer,
+		FunctionsVersion:         "local", // Test deployers don't use baked versions
+		MCPRegistryClient:        mcpRegistryClient,
+		AuditLogger:              auditLogger,
+		SlackClient:              nil,
+		ChatMessageWriter:        nil,
+		ChatClient:               nil,
+		OpenRouter:               nil,
+		OpenRouterSpend:          nil,
+		K8sClient:                nil,
+		ExpectedTargetCNAME:      "",
+		ExpectedARecords:         nil,
+		GitHubEvidenceToken:      "",
+		SiteURL:                  nil,
+		BillingTracker:           nil,
+		BillingRepository:        nil,
+		StripeClient:             nil,
+		TUMMeterStreamingEnabled: false,
+		RagService:               nil,
+		RedisClient:              nil,
+		PosthogClient:            nil,
+		TelemetryLogger:          nil,
+		TelemetryRepo:            nil,
+		TriggersApp:              nil,
+		CacheAdapter:             nil,
+		EmailService:             nil,
+		AssistantsCore:           nil,
+		TemporalEnv:              nil,
+		PIIScanner:               nil,
+		PIScanner:                nil,
+		CustomRuleScanner:        nil,
+		BuiltinPresets:           nil,
+		ShadowMCPClient:          nil,
+		WorkOSClient:             workos.NewStubClient(),
+		SvixClient:               nil,
+		ProductFeatures:          nil,
+		ClickhouseConn:           nil,
+		PluginPublisher:          nil,
 		Publishers: &Publishers{
 			PresidioAnalysis:        gcp.NewNoopPublisher[*riskv1.PresidioAnalysis](),
 			GitleaksAnalysis:        gcp.NewNoopPublisher[*riskv1.GitleaksAnalysis](),
@@ -238,6 +241,7 @@ func NewTemporalWorker(
 		BillingTracker:            nil,
 		BillingRepository:         nil,
 		StripeClient:              nil,
+		TUMMeterStreamingEnabled:  false,
 		RedisClient:               nil,
 		PosthogClient:             nil,
 		FunctionsDeployer:         nil,
@@ -288,6 +292,7 @@ func NewTemporalWorker(
 			BillingTracker:            conv.Default(o.BillingTracker, opts.BillingTracker),
 			BillingRepository:         conv.Default(o.BillingRepository, opts.BillingRepository),
 			StripeClient:              conv.Default(o.StripeClient, opts.StripeClient),
+			TUMMeterStreamingEnabled:  conv.Default(o.TUMMeterStreamingEnabled, opts.TUMMeterStreamingEnabled),
 			RedisClient:               conv.Default(o.RedisClient, opts.RedisClient),
 			PosthogClient:             conv.Default(o.PosthogClient, opts.PosthogClient),
 			FunctionsDeployer:         conv.Default(o.FunctionsDeployer, opts.FunctionsDeployer),
@@ -406,6 +411,7 @@ func NewTemporalWorker(
 		opts.GitHubEvidenceToken,
 		opts.RiskFingerprinter,
 		opts.DisableRiskRetroReconcile,
+		opts.TUMMeterStreamingEnabled,
 	)
 
 	temporalWorker.RegisterActivity(activities.ProcessDeployment)
@@ -416,6 +422,11 @@ func NewTemporalWorker(
 	temporalWorker.RegisterActivity(activities.RefreshOpenRouterKey)
 	temporalWorker.RegisterActivity(activities.SetOpenRouterSpendCap)
 	temporalWorker.RegisterActivity(activities.ReconcilePaygOpenRouterChatKey)
+	temporalWorker.RegisterActivity(activities.ReconcileEnterpriseTrialConversionKeys)
+	adminReconciler := openrouterkeys.NewAdminReconciliationExecutor(logger, opts.DB, opts.OpenRouter)
+	adminReconciliationActivities := NewOpenRouterAdminReconciliationActivities(logger, adminReconciler)
+	temporalWorker.RegisterActivityWithOptions(adminReconciliationActivities.CaptureCursor, activity.RegisterOptions{Name: OpenRouterAdminCaptureCursorActivityName})
+	temporalWorker.RegisterActivityWithOptions(adminReconciliationActivities.Reconcile, activity.RegisterOptions{Name: OpenRouterAdminReconcileActivityName})
 	temporalWorker.RegisterActivity(activities.VerifyCustomDomain)
 	temporalWorker.RegisterActivity(activities.VerifyCustomDomainV2)
 	temporalWorker.RegisterActivity(activities.CustomDomainIngress)
@@ -556,6 +567,7 @@ func NewTemporalWorker(
 	temporalWorker.RegisterWorkflow(OpenRouterSpendCapWorkflow)
 	temporalWorker.RegisterWorkflow(AdminOpenRouterSpendCapWorkflow)
 	temporalWorker.RegisterWorkflow(PaygOpenRouterChatKeyReconcileWorkflow)
+	temporalWorker.RegisterWorkflow(EnterpriseTrialConversionKeyReconcileWorkflow)
 	temporalWorker.RegisterWorkflow(CustomDomainRegistrationWorkflow)
 	temporalWorker.RegisterWorkflow(CustomDomainDeletionWorkflow)
 	temporalWorker.RegisterWorkflow(CustomDomainUpdateWorkflow)
@@ -640,6 +652,7 @@ func NewTemporalWorker(
 	temporalWorker.RegisterWorkflow(TrialLifecycleEmailWorkflow)
 	temporalWorker.RegisterWorkflow(AccessPausedEmailWorkflow)
 	temporalWorker.RegisterWorkflow(PaygActivatedEmailWorkflow)
+	temporalWorker.RegisterWorkflow(OpenRouterAdminReconciliationWorkflow)
 
 	return &Workers{
 		main:              temporalWorker,

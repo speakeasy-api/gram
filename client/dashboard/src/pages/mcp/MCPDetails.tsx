@@ -1,7 +1,6 @@
 import { Block, BlockInner } from "@/components/block";
 import { CodeBlock } from "@/components/code";
 import { ClientsAndSessionsTab } from "@/components/sessions/ClientsAndSessionsTab";
-import { MCPPublishingSection as SharedMCPPublishingSection } from "./MCPPublishingSection";
 import { MCPToolFilteringSection } from "@/components/mcp-tool-filtering-section";
 import {
   useMcpMetadataMetadataForm,
@@ -53,6 +52,7 @@ import {
   isUserSessionIssuerWired,
   mustConvertOAuthBeforePrivate,
 } from "./toolsetAuthSurface";
+import { useTabScrollReset } from "@/hooks/useTabScrollReset";
 import { useRoutes } from "@/routes";
 import { GramError } from "@gram/client/models/errors/gramerror.js";
 import { useExportMcpMetadataMutation } from "@gram/client/react-query/exportMcpMetadata.js";
@@ -277,6 +277,7 @@ function MCPDetailPageContent({
   const location = useLocation();
 
   const activeTab = activeTabFromPath(location.pathname, toolsetSlug);
+  const tabContentRef = useTabScrollReset(activeTab ?? undefined);
 
   if (!activeTab) {
     const initialTab = initialTabFromHash(window.location.hash);
@@ -297,7 +298,10 @@ function MCPDetailPageContent({
       </Page.Header>
       <Page.Body fullWidth className="gap-0">
         {/* Name, status, URL, and Playground live in the sidebar header now */}
-        <div className="mx-auto w-full max-w-[1270px] flex-1">
+        <div
+          ref={tabContentRef}
+          className="mx-auto w-full max-w-[1270px] flex-1"
+        >
           {renderMcpDetailTabContent(activeTab, toolset)}
         </div>
       </Page.Body>
@@ -1584,8 +1588,6 @@ function MCPSettingsTab({ toolset }: { toolset: Toolset }) {
         </Block>
       </PageSection>
 
-      <MCPPublishingSection toolset={toolset} />
-
       <MCPToolFilteringSection
         className="mb-8"
         target={{
@@ -1696,23 +1698,6 @@ function MCPSettingsTab({ toolset }: { toolset: Toolset }) {
         accountUpgrade
       />
     </Stack>
-  );
-}
-
-// MCPPublishingSection wraps the shared publishing section for toolset-backed
-// MCP servers. The mcp_server-backed variant lives on the Remote MCP server
-// settings page; both share MCPPublishingSection.
-function MCPPublishingSection({ toolset }: { toolset: Toolset }) {
-  return (
-    <SharedMCPPublishingSection
-      target={{
-        kind: "toolset",
-        toolsetId: toolset.id,
-        mcpSlug: toolset.mcpSlug ?? undefined,
-      }}
-      canPublish={Boolean(toolset.mcpEnabled && toolset.mcpSlug)}
-      disabledMessage="Enable this MCP server before publishing it to a collection."
-    />
   );
 }
 

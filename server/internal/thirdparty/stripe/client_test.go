@@ -99,6 +99,7 @@ type fakeStripeAPI struct {
 	customerParams             *stripesdk.CustomerCreateParams
 	checkoutSessionParams      *stripesdk.CheckoutSessionCreateParams
 	checkoutRetrieveParams     *stripesdk.CheckoutSessionRetrieveParams
+	checkoutExpireID           string
 	checkoutSession            *stripesdk.CheckoutSession
 	subscriptionRetrieveParams *stripesdk.SubscriptionRetrieveParams
 	subscriptionUpdateParams   *stripesdk.SubscriptionUpdateParams
@@ -130,6 +131,12 @@ func (f *fakeStripeAPI) createCheckoutSession(_ context.Context, params *stripes
 	f.calls++
 	f.checkoutSessionParams = params
 	return &stripesdk.CheckoutSession{ID: "cs_test", URL: "https://checkout.stripe.test/session"}, f.err
+}
+
+func (f *fakeStripeAPI) expireCheckoutSession(_ context.Context, id string, _ *stripesdk.CheckoutSessionExpireParams) (*stripesdk.CheckoutSession, error) {
+	f.calls++
+	f.checkoutExpireID = id
+	return &stripesdk.CheckoutSession{ID: id, Status: stripesdk.CheckoutSessionStatusExpired}, f.err
 }
 
 func (f *fakeStripeAPI) retrieveCheckoutSession(_ context.Context, _ string, params *stripesdk.CheckoutSessionRetrieveParams) (*stripesdk.CheckoutSession, error) {
@@ -517,6 +524,16 @@ func TestCreateCheckoutSessionRejectsMissingIdempotencyKey(t *testing.T) {
 	_, err := c.CreateCheckoutSession(t.Context(), CreateCheckoutSessionInput{})
 	require.ErrorIs(t, err, errMissingIdempotencyKey)
 	require.Zero(t, api.calls)
+}
+
+func TestExpireCheckoutSession(t *testing.T) {
+	t.Parallel()
+
+	api := &fakeStripeAPI{}
+	err := (&client{api: api}).ExpireCheckoutSession(t.Context(), "cs_test")
+	require.NoError(t, err)
+	require.Equal(t, "cs_test", api.checkoutExpireID)
+	require.Equal(t, 1, api.calls)
 }
 
 func TestGetCheckoutSessionExpandsSubscription(t *testing.T) {

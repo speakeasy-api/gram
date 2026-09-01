@@ -96,7 +96,7 @@ func newTestMCPMetadataService(t *testing.T) (context.Context, *testInstance) {
 
 	auditLogger := audit.NewLogger()
 
-	svc := mcpmetadata.NewService(logger, tracerProvider, conn, sessionManager, serverURL, siteURL, cacheAdapter, authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient()), auditLogger)
+	svc := mcpmetadata.NewService(logger, tracerProvider, testenv.NewMeterProvider(t), conn, sessionManager, serverURL, siteURL, cacheAdapter, authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient()), auditLogger)
 
 	return ctx, &testInstance{
 		service:        svc,

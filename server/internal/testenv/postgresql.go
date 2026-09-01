@@ -38,6 +38,10 @@ func rootPath(elem ...string) string {
 // a function to create test databases from the template. All clone databases
 // are automatically dropped when the test ends using t.Cleanup hooks.
 func NewTestPostgres(ctx context.Context) (*postgres.PostgresContainer, PostgresDBCloneFunc, error) {
+	if err := ensureDockerReady(ctx); err != nil {
+		return nil, nil, fmt.Errorf("wait for docker: %w", err)
+	}
+
 	container, err := postgres.Run(
 		ctx,
 		"pgvector/pgvector:pg17",

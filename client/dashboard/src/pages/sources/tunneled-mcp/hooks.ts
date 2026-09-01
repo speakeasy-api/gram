@@ -21,6 +21,7 @@ import { toast } from "sonner";
 
 export type CreateTunneledMcpSourceVariables = {
   name: string;
+  resourceIdentifier?: string;
 };
 
 export type CreateTunneledMcpSourceData = {
@@ -39,9 +40,9 @@ export function useCreateTunneledMcpSource(): UseMutationResult<
   const { orgSlug } = useSlugs();
 
   return useMutation({
-    mutationFn: async ({ name }) => {
+    mutationFn: async ({ name, resourceIdentifier }) => {
       const result = await client.tunneledMcp.createServer({
-        createTunneledMcpServerForm: { name },
+        createTunneledMcpServerForm: { name, resourceIdentifier },
       });
       const tunneledMcpServer = result.server;
 

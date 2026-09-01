@@ -45,7 +45,7 @@ export class Features extends ClientSDK {
    * setProductFeature features
    *
    * @remarks
-   * Enable or disable an organization feature flag.
+   * Enable or disable an organization feature flag. Staff-managed entitlements (such as sso and scim) additionally require a Speakeasy platform administrator; organization admins can set only the org-settable operational toggles.
    */
   async set(
     request: SetProductFeatureRequest,
