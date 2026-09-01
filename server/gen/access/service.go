@@ -56,10 +56,16 @@ type Service interface {
 	// List AI tools detected on enrolled devices by device-agent AI scans,
 	// aggregated per detection target across the organization. Org-scoped —
 	// detections attach to devices and enrolled users, not projects. Requires an
-	// org admin session. Display names and categories are decorated from the
-	// server's detection target catalog at read time; targets the catalog does not
-	// know are listed under their raw reported id.
+	// authenticated session authorized for org:admin on the active organization.
+	// Display names and categories are decorated from the server's detection
+	// target catalog at read time; targets the catalog does not know are listed
+	// under their raw reported id.
 	ListAIDetections(context.Context, *ListAIDetectionsPayload) (res *ListAIDetectionsResult, err error)
+	// List AI tools detected for one enrolled employee in the active organization.
+	// The employee email is required so project viewers cannot broaden the request
+	// into an organization-wide inventory. Linked alias emails are folded to the
+	// canonical identity. Requires project:read on the active project.
+	ListEmployeeAIDetections(context.Context, *ListEmployeeAIDetectionsPayload) (res *ListAIDetectionsResult, err error)
 	// Request access to a scope by sending an email notification to organization
 	// administrators.
 	RequestAccess(context.Context, *RequestAccessPayload) (res *RequestAccessResult, err error)
@@ -95,7 +101,7 @@ const ServiceName = "access"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [20]string{"listRoles", "getRole", "createRole", "updateRole", "deleteRole", "listScopes", "listMembers", "listGrants", "updateMemberRoles", "listShadowMCPInventory", "getShadowMCPInventoryServer", "updateShadowMCPInventoryServerName", "listShadowMCPInventoryUsers", "listShadowMCPInventoryServersForUser", "resolveShadowMCPInventoryRequest", "listAIDetections", "requestAccess", "listChallenges", "listChallengeBuckets", "resolveChallenge"}
+var MethodNames = [21]string{"listRoles", "getRole", "createRole", "updateRole", "deleteRole", "listScopes", "listMembers", "listGrants", "updateMemberRoles", "listShadowMCPInventory", "getShadowMCPInventoryServer", "updateShadowMCPInventoryServerName", "listShadowMCPInventoryUsers", "listShadowMCPInventoryServersForUser", "resolveShadowMCPInventoryRequest", "listAIDetections", "listEmployeeAIDetections", "requestAccess", "listChallenges", "listChallengeBuckets", "resolveChallenge"}
 
 // One AI detection target aggregated across an organization's device-agent
 // scan reports.
@@ -118,6 +124,8 @@ type AIDetection struct {
 	// Detection signals observed for this target across all reports: installed
 	// and/or running.
 	Signals []string
+	// Unique non-empty detected versions for this target.
+	Versions []string
 	// When this tool was first detected anywhere in the organization.
 	FirstSeen string
 	// When this tool was most recently detected.
@@ -384,6 +392,15 @@ type ListChallengesResult struct {
 	Challenges []*AuthzChallenge
 	// Total number of matching challenges for pagination.
 	Total int
+}
+
+// ListEmployeeAIDetectionsPayload is the payload type of the access service
+// listEmployeeAIDetections method.
+type ListEmployeeAIDetectionsPayload struct {
+	// Canonical enrolled-employee email to list detections for.
+	UserEmail        string
+	SessionToken     *string
+	ProjectSlugInput *string
 }
 
 // ListGrantsPayload is the payload type of the access service listGrants

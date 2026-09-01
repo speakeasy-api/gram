@@ -695,6 +695,41 @@ func BuildListAIDetectionsPayload(accessListAIDetectionsCategory string, accessL
 	return v, nil
 }
 
+// BuildListEmployeeAIDetectionsPayload builds the payload for the access
+// listEmployeeAIDetections endpoint from CLI flags.
+func BuildListEmployeeAIDetectionsPayload(accessListEmployeeAIDetectionsUserEmail string, accessListEmployeeAIDetectionsSessionToken string, accessListEmployeeAIDetectionsProjectSlugInput string) (*access.ListEmployeeAIDetectionsPayload, error) {
+	var err error
+	var userEmail string
+	{
+		userEmail = accessListEmployeeAIDetectionsUserEmail
+		err = goa.MergeErrors(err, goa.ValidateFormat("user_email", userEmail, goa.FormatEmail))
+		if utf8.RuneCountInString(userEmail) > 320 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("user_email", userEmail, utf8.RuneCountInString(userEmail), 320, false))
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if accessListEmployeeAIDetectionsSessionToken != "" {
+			sessionToken = &accessListEmployeeAIDetectionsSessionToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if accessListEmployeeAIDetectionsProjectSlugInput != "" {
+			projectSlugInput = &accessListEmployeeAIDetectionsProjectSlugInput
+		}
+	}
+	v := &access.ListEmployeeAIDetectionsPayload{}
+	v.UserEmail = userEmail
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
 // BuildRequestAccessPayload builds the payload for the access requestAccess
 // endpoint from CLI flags.
 func BuildRequestAccessPayload(accessRequestAccessBody string, accessRequestAccessApikeyToken string, accessRequestAccessSessionToken string) (*access.RequestAccessPayload, error) {

@@ -441,7 +441,7 @@ var _ = Service("access", func() {
 	})
 
 	Method("listAIDetections", func() {
-		Description("List AI tools detected on enrolled devices by device-agent AI scans, aggregated per detection target across the organization. Org-scoped — detections attach to devices and enrolled users, not projects. Requires an org admin session. Display names and categories are decorated from the server's detection target catalog at read time; targets the catalog does not know are listed under their raw reported id.")
+		Description("List AI tools detected on enrolled devices by device-agent AI scans, aggregated per detection target across the organization. Org-scoped — detections attach to devices and enrolled users, not projects. Requires an authenticated session authorized for org:admin on the active organization. Display names and categories are decorated from the server's detection target catalog at read time; targets the catalog does not know are listed under their raw reported id.")
 		Security(security.Session)
 
 		Payload(func() {
@@ -467,6 +467,35 @@ var _ = Service("access", func() {
 		Meta("openapi:operationId", "listAIDetections")
 		Meta("openapi:extension:x-speakeasy-name-override", "listAIDetections")
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "AIDetections"}`)
+	})
+
+	Method("listEmployeeAIDetections", func() {
+		Description("List AI tools detected for one enrolled employee in the active organization. The employee email is required so project viewers cannot broaden the request into an organization-wide inventory. Linked alias emails are folded to the canonical identity. Requires project:read on the active project.")
+		Security(security.Session, security.ProjectSlug)
+
+		Payload(func() {
+			Attribute("user_email", String, "Canonical enrolled-employee email to list detections for.", func() {
+				Format(FormatEmail)
+				MaxLength(320)
+			})
+			Required("user_email")
+			security.SessionPayload()
+			security.ProjectPayload()
+		})
+
+		Result(ListAIDetectionsResult)
+
+		HTTP(func() {
+			GET("/rpc/access.listEmployeeAIDetections")
+			Param("user_email")
+			security.SessionHeader()
+			security.ProjectHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "listEmployeeAIDetections")
+		Meta("openapi:extension:x-speakeasy-name-override", "listEmployeeAIDetections")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "EmployeeAIDetections"}`)
 	})
 
 	Method("requestAccess", func() {
@@ -916,7 +945,7 @@ var ListShadowMCPInventoryUsersResult = Type("ListShadowMCPInventoryUsersResult"
 
 var AIDetectionModel = Type("AIDetection", func() {
 	Description("One AI detection target aggregated across an organization's device-agent scan reports.")
-	Required("target_id", "display_name", "category", "user_count", "device_count", "signals", "first_seen", "last_seen")
+	Required("target_id", "display_name", "category", "user_count", "device_count", "signals", "versions", "first_seen", "last_seen")
 
 	Attribute("target_id", String, "Id of the detected AI tool as reported by agents (e.g. claude-code, ollama).")
 	Attribute("display_name", String, "Human-readable name from the server's detection target catalog. Ids the catalog does not know — agent binaries can ship newer target lists — fall back to the raw id.")
@@ -930,6 +959,7 @@ var AIDetectionModel = Type("AIDetection", func() {
 			Enum("installed", "running")
 		})
 	})
+	Attribute("versions", ArrayOf(String), "Unique non-empty detected versions for this target.")
 	Attribute("first_seen", String, func() {
 		Description("When this tool was first detected anywhere in the organization.")
 		Format(FormatDateTime)

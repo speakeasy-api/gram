@@ -97,8 +97,15 @@ Connector` appears under **Inactive** with no connections. Its row menu's
     version as their Killswitch history entries; the expiry row is attributed to
     **System**, follows the bounded row's deadline, and exposes no internal note
     in the organization-visible audit snapshot.
+13. **Employee Shadow AI** — open **Employee Enrollment**, then Priya's detail
+    page. The Shadow AI section lists Claude Code, Cursor, Codex, and Ollama in
+    deterministic last-seen order, spans Harness and Local model categories,
+    and shows two devices where applicable. Installed / Running signals,
+    detected versions, and first / last seen values render without exposing
+    hardware identifiers. Jonas's detail shows Claude Code, Cursor, and Aider,
+    proving each page is filtered to its canonical enrolled-user identity.
 
-13. **Gateway overview Activity** — open MCP → **Acme Agent Gateway** → Overview.
+14. **Gateway overview Activity** — open MCP → **Acme Agent Gateway** → Overview.
     The Activity section shows non-zero tool calls over the last 7 days, a
     Gateway tool usage chart with all four tools populated, the three discovery tools
     decreasing (list_servers > describe_server > describe_tools) and
