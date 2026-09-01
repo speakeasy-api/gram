@@ -131,3 +131,7 @@ LEFT JOIN LATERAL (
     AND membership.deleted IS FALSE
 ) identity ON TRUE
 ORDER BY input.ordinality;
+-- name: GetStripeCustomerID :one
+SELECT stripe_customer_id
+FROM billing_metadata
+WHERE organization_id = @organization_id;

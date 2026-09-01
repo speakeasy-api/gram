@@ -69,6 +69,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/functions"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/inv"
+	"github.com/speakeasy-api/gram/server/internal/metering"
 	"github.com/speakeasy-api/gram/server/internal/must"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/organizations/orgprovision"
@@ -588,6 +589,44 @@ func newStripeClient(
 		c.String("stripe-webhook-secret"),
 		catalog,
 	), nil
+}
+
+func newStripeMeterEventClient(
+	guardianPolicy *guardian.Policy,
+	c *cli.Context,
+) (stripeclient.V2MeterEventClient, error) {
+	if !c.Bool(stripeTUMMeterStreamingFlagName) {
+		return stripeclient.NewNoopV2MeterEventClient(), nil
+	}
+
+	apiKey := c.String("stripe-api-key")
+	switch {
+	case stripeclient.IsConfigured(apiKey):
+		return stripeclient.NewV2MeterEventClient(guardianPolicy, apiKey), nil
+	case c.String("environment") == "local":
+		return stripeclient.NewNoopV2MeterEventClient(), nil
+	default:
+		return nil, errors.New("stripe API key is required")
+	}
+}
+
+func newStripeCatalog(c *cli.Context) metering.StripeCatalog {
+	tumMeterEventName := c.String("stripe-meter-event-name")
+	tumMeterStreamingEnabled := c.Bool(stripeTUMMeterStreamingFlagName)
+	return metering.StripeCatalogFunc(func(definition metering.Definition) (string, error) {
+		switch definition {
+		case metering.AgentSessionStorage():
+			if !tumMeterStreamingEnabled {
+				return "", nil
+			}
+			if !stripeclient.IsConfigured(tumMeterEventName) {
+				return "", errors.New("stripe TUM meter event name is not configured")
+			}
+			return tumMeterEventName, nil
+		default:
+			return "", errors.New("meter definition is not mapped to Stripe")
+		}
+	})
 }
 
 // workosClientOpts builds the ClientOpts threaded into every workos.NewClient

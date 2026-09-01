@@ -70,13 +70,15 @@ const (
 	UserAttributesKey = attribute.Key("user.attributes")
 	UserGroupsKey     = attribute.Key("user.groups")
 
-	ActualKey   = attribute.Key("actual")
-	EventKey    = attribute.Key("event")
-	ExpectedKey = attribute.Key("expected")
-	NameKey     = attribute.Key("name")
-	ReasonKey   = attribute.Key("reason")
-	ValueKey    = attribute.Key("value")
+	ActualKey    = attribute.Key("actual")
+	EventKey     = attribute.Key("event")
+	ErrorTypeKey = attribute.Key("error.type")
+	ExpectedKey  = attribute.Key("expected")
+	NameKey      = attribute.Key("name")
+	ReasonKey    = attribute.Key("reason")
+	ValueKey     = attribute.Key("value")
 
+	StripeErrorCodeKey      = attribute.Key("stripe.error.code")
 	StripeWebhookEventIDKey = attribute.Key("stripe.webhook.event_id")
 
 	SpanIDKey                    = attribute.Key("span.id")
@@ -998,6 +1000,14 @@ func SlogActual(v any) slog.Attr      { return slog.Any(string(ActualKey), v) }
 
 func Event(v string) attribute.KeyValue { return EventKey.String(v) }
 func SlogEvent(v string) slog.Attr      { return slog.String(string(EventKey), v) }
+
+func ErrorType[V ~string](v V) attribute.KeyValue { return ErrorTypeKey.String(string(v)) }
+func SlogErrorType(v string) slog.Attr            { return slog.String(string(ErrorTypeKey), v) }
+
+func StripeErrorCode(v string) attribute.KeyValue { return StripeErrorCodeKey.String(v) }
+func SlogStripeErrorCode(v string) slog.Attr {
+	return slog.String(string(StripeErrorCodeKey), v)
+}
 
 func StripeWebhookEventID(v string) attribute.KeyValue { return StripeWebhookEventIDKey.String(v) }
 func SlogStripeWebhookEventID(v string) slog.Attr {

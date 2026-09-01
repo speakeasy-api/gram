@@ -94,7 +94,7 @@ func setupTUMStripeReporter(t *testing.T, name string, accountType string, ancho
 			MeterEventName: "tum_tokens",
 		},
 	}
-	reporter := activities.NewReportTUMUsageToStripe(testenv.NewLogger(t), db, stripe)
+	reporter := activities.NewReportTUMUsageToStripe(testenv.NewLogger(t), db, stripe, true)
 	return reporter, stripe, db, organizationID
 }
 
@@ -111,6 +111,20 @@ func upsertTUMCycle(t *testing.T, db *pgxpool.Pool, organizationID string, start
 		TumTokens:      tokens,
 		FinalizedAt:    finalized,
 	}))
+}
+
+func TestReportTUMUsageToStripe_DisabledSkipsReporting(t *testing.T) {
+	t.Parallel()
+
+	stripe := &mockTUMStripeClient{
+		catalog: stripeclient.Catalog{
+			MeterIDTUM:     "mtr_tum",
+			MeterEventName: "tum_tokens",
+		},
+	}
+	reporter := activities.NewReportTUMUsageToStripe(testenv.NewLogger(t), nil, stripe, false)
+
+	require.NoError(t, reporter.Do(t.Context(), activities.ReportTUMUsageToStripeInput{}))
 }
 
 func TestReportTUMUsageToStripe_ReportsSignedDurableDeltas(t *testing.T) {
