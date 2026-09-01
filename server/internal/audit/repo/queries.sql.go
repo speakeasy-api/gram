@@ -393,7 +393,9 @@ type ListAuditLogsRow struct {
 // stored value renders the feed as a column of addresses; joining the
 // directory repairs the rows already written, and keeps names current when
 // someone is renamed. The stored value remains the fallback for actors with
-// no directory row (API keys, system, deleted users).
+// no directory row: API keys and system actors. A soft-deleted user still
+// resolves, deliberately — they really did perform the action, and their name
+// is both more useful and less identifying than the email the row stored.
 func (q *Queries) ListAuditLogs(ctx context.Context, arg ListAuditLogsParams) ([]ListAuditLogsRow, error) {
 	rows, err := q.db.Query(ctx, listAuditLogs,
 		arg.OrganizationID,
