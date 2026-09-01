@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"slices"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -121,22 +120,6 @@ func (s *ServiceCore) RecordCompactedGeneration(ctx context.Context, projectID, 
 		return oops.E(oops.CodeUnexpected, err, "lock chat for compaction").LogError(ctx, s.logger, logAttrs...)
 	}
 
-	latestRows, err := chatrepo.New(tx).ListLatestGenerationChatMessages(ctx, chatrepo.ListLatestGenerationChatMessagesParams{
-		ChatID:    threadRow.ChatID,
-		ProjectID: projectID,
-	})
-	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "load latest chat generation").LogError(ctx, s.logger, logAttrs...)
-	}
-	matches, err := compactedGenerationMatches(messages, latestRows)
-	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "compare compacted chat generation").LogError(ctx, s.logger, logAttrs...)
-	}
-	if matches {
-		s.logger.LogAttrs(ctx, slog.LevelInfo, "assistant compacted generation already persisted", logAttrs...)
-		return nil
-	}
-
 	currentGen, err := chatrepo.New(tx).GetMaxGenerationForChat(ctx, chatrepo.GetMaxGenerationForChatParams{
 		ChatID:    threadRow.ChatID,
 		ProjectID: projectID,
@@ -206,28 +189,6 @@ func (s *ServiceCore) RecordCompactedGeneration(ctx context.Context, projectID, 
 
 	s.logger.LogAttrs(ctx, slog.LevelInfo, "assistant compacted generation persisted", logAttrs...)
 	return nil
-}
-
-func compactedGenerationMatches(messages []runtimeMessage, rows []chatrepo.ChatMessage) (bool, error) {
-	if len(messages) != len(rows) {
-		return false, nil
-	}
-	for i, message := range messages {
-		row := rows[i]
-		if message.Role != row.Role ||
-			message.Content.Text() != row.Content ||
-			message.ToolCallID != conv.FromPGTextOrEmpty[string](row.ToolCallID) {
-			return false, nil
-		}
-		toolCalls, err := decodePersistedToolCalls(row.ToolCalls)
-		if err != nil {
-			return false, fmt.Errorf("decode message %d tool calls: %w", i, err)
-		}
-		if !slices.Equal(message.ToolCalls, toolCalls) {
-			return false, nil
-		}
-	}
-	return true, nil
 }
 
 // encodeRuntimeToolCalls inverts decodePersistedToolCalls so a compacted

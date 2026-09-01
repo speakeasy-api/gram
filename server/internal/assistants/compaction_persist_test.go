@@ -133,16 +133,6 @@ func TestRecordCompactedGenerationWritesNewGeneration(t *testing.T) {
 		require.NotContains(t, reading.GetAttributes(), metering.AttributeMessageExternalUserID)
 	}
 
-	// The runner retries this POST when it does not receive a response. The
-	// retry must observe the already-persisted transcript instead of creating
-	// a second billable generation with fresh message IDs.
-	require.NoError(t, core.RecordCompactedGeneration(ctx, projectID, threadID, assistantID, compacted))
-	maxGen, err = q.GetMaxGenerationForChat(ctx, chatrepo.GetMaxGenerationForChatParams{ChatID: chatID, ProjectID: projectID})
-	require.NoError(t, err)
-	require.EqualValues(t, 2, maxGen)
-	outboxRows, err = testrepo.New(conn).ListPublishOutboxRows(ctx)
-	require.NoError(t, err)
-	require.Len(t, outboxRows, len(compacted))
 }
 
 func TestRecordCompactedGenerationRejectsForeignAssistant(t *testing.T) {
