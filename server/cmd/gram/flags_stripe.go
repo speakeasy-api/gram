@@ -5,7 +5,10 @@ import (
 	"github.com/urfave/cli/v2/altsrc"
 )
 
-const stripeTUMMeterStreamingFlagName = "stripe-tum-meter-streaming"
+const (
+	stripeMeterEventExportFlagName  = "stripe-meter-event-export-enabled"
+	stripeTUMMeterStreamingFlagName = "stripe-tum-meter-streaming"
+)
 
 func stripeFlags() []cli.Flag {
 	return []cli.Flag{
@@ -47,6 +50,12 @@ func stripeFlags() []cli.Flag {
 			Name:    stripeTUMMeterStreamingFlagName,
 			Usage:   "Send TUM meter events through Pub/Sub instead of legacy hourly Stripe reporting",
 			EnvVars: []string{"GRAM_STRIPE_TUM_METER_STREAMING"},
+			Value:   false,
+		},
+		&cli.BoolFlag{
+			Name:    stripeMeterEventExportFlagName,
+			Usage:   "Export Pub/Sub meter readings to Stripe; when disabled, acknowledge them without processing",
+			EnvVars: []string{"GRAM_STRIPE_METER_EVENT_EXPORT_ENABLED"},
 			Value:   false,
 		},
 	}

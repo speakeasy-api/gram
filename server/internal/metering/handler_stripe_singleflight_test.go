@@ -62,7 +62,7 @@ func TestMeterReadingStripeExporterCoalescesConcurrentCustomerLookups(t *testing
 	defer lookup.Release()
 	client := &countingV2MeterEventClient{calls: atomic.Int32{}}
 	stripeCatalog := StripeCatalogFunc(func(Definition) (string, error) { return "tum", nil })
-	exporter := NewMeterReadingStripeExporter(testenv.NewLogger(t), testenv.NewMeterProvider(t), nil, client, stripeCatalog)
+	exporter := NewMeterReadingStripeExporter(testenv.NewLogger(t), testenv.NewMeterProvider(t), nil, client, stripeCatalog, true)
 	exporter.stripeCustomers = lookup
 
 	start := make(chan struct{})

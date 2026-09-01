@@ -36,12 +36,22 @@ var tumStripeCatalog = metering.StripeCatalogFunc(func(definition metering.Defin
 	return "", nil
 })
 
+func TestMeterReadingStripeExporterDisabledAcknowledgesWithoutProcessing(t *testing.T) {
+	t.Parallel()
+
+	client := &captureV2MeterEventClient{inputs: nil, err: errors.New("must not be called")}
+	exporter := metering.NewMeterReadingStripeExporter(testenv.NewLogger(t), testenv.NewMeterProvider(t), nil, client, nil, false)
+
+	require.NoError(t, exporter.Handle(t.Context(), new(meteringv1.MeterReading), gcp.MessageMetadata{}))
+	require.Empty(t, client.inputs)
+}
+
 func TestMeterReadingStripeExporterTransparentlyAcknowledgesAdjustments(t *testing.T) {
 	t.Parallel()
 
 	conn, _ := newMeteringPostgres(t)
 	client := &captureV2MeterEventClient{inputs: nil, err: errors.New("must not be called")}
-	exporter := metering.NewMeterReadingStripeExporter(testenv.NewLogger(t), testenv.NewMeterProvider(t), conn, client, tumStripeCatalog)
+	exporter := metering.NewMeterReadingStripeExporter(testenv.NewLogger(t), testenv.NewMeterProvider(t), conn, client, tumStripeCatalog, true)
 	reading := new(meteringv1.MeterReading)
 	reading.SetKind(meteringv1.MeterReading_KIND_ADJUSTMENT)
 	reading.SetMeterId("unrecognized.meter")
@@ -56,7 +66,7 @@ func TestMeterReadingStripeExporterNacksUnrecognizedMeter(t *testing.T) {
 
 	conn, _ := newMeteringPostgres(t)
 	client := &captureV2MeterEventClient{inputs: nil, err: nil}
-	exporter := metering.NewMeterReadingStripeExporter(testenv.NewLogger(t), testenv.NewMeterProvider(t), conn, client, tumStripeCatalog)
+	exporter := metering.NewMeterReadingStripeExporter(testenv.NewLogger(t), testenv.NewMeterProvider(t), conn, client, tumStripeCatalog, true)
 	reading := new(meteringv1.MeterReading)
 	reading.SetKind(meteringv1.MeterReading_KIND_USAGE)
 	reading.SetMeterId("unrecognized.meter")
@@ -79,6 +89,7 @@ func TestMeterReadingStripeExporterAcknowledgesCatalogMiss(t *testing.T) {
 		metering.StripeCatalogFunc(func(metering.Definition) (string, error) {
 			return "", nil
 		}),
+		true,
 	)
 	reading, _ := stripeUsageMessage(t, "organization", time.Date(2026, time.August, 28, 10, 0, 0, 0, time.UTC), 1)
 
@@ -99,6 +110,7 @@ func TestMeterReadingStripeExporterNacksCatalogError(t *testing.T) {
 		metering.StripeCatalogFunc(func(metering.Definition) (string, error) {
 			return "", mapErr
 		}),
+		true,
 	)
 	reading, _ := stripeUsageMessage(t, "organization", time.Date(2026, time.August, 28, 10, 0, 0, 0, time.UTC), 1)
 
@@ -112,7 +124,7 @@ func TestMeterReadingStripeExporterAcknowledgesOrganizationWithoutStripeCustomer
 
 	conn, organizationID := newMeteringPostgres(t)
 	client := &captureV2MeterEventClient{inputs: nil, err: nil}
-	exporter := metering.NewMeterReadingStripeExporter(testenv.NewLogger(t), testenv.NewMeterProvider(t), conn, client, tumStripeCatalog)
+	exporter := metering.NewMeterReadingStripeExporter(testenv.NewLogger(t), testenv.NewMeterProvider(t), conn, client, tumStripeCatalog, true)
 	reading, _ := stripeUsageMessage(t, organizationID, time.Date(2026, time.August, 28, 10, 0, 0, 0, time.UTC), 17)
 
 	require.NoError(t, exporter.Handle(t.Context(), reading, gcp.MessageMetadata{}))
@@ -135,7 +147,7 @@ func TestMeterReadingStripeExporterSendsMappedUsage(t *testing.T) {
 		StripeCustomerID: pgtype.Text{String: "cus_test", Valid: true},
 	}))
 	client := &captureV2MeterEventClient{inputs: nil, err: nil}
-	exporter := metering.NewMeterReadingStripeExporter(testenv.NewLogger(t), testenv.NewMeterProvider(t), conn, client, tumStripeCatalog)
+	exporter := metering.NewMeterReadingStripeExporter(testenv.NewLogger(t), testenv.NewMeterProvider(t), conn, client, tumStripeCatalog, true)
 	occurredAt := time.Date(2026, time.August, 28, 10, 1, 2, 345, time.UTC)
 	reading, _ := stripeUsageMessage(t, organizationID, occurredAt, 23)
 
@@ -158,7 +170,7 @@ func TestMeterReadingStripeExporterCachesStripeCustomer(t *testing.T) {
 		StripeCustomerID: pgtype.Text{String: "cus_cached", Valid: true},
 	}))
 	client := &captureV2MeterEventClient{inputs: nil, err: nil}
-	exporter := metering.NewMeterReadingStripeExporter(testenv.NewLogger(t), testenv.NewMeterProvider(t), conn, client, tumStripeCatalog)
+	exporter := metering.NewMeterReadingStripeExporter(testenv.NewLogger(t), testenv.NewMeterProvider(t), conn, client, tumStripeCatalog, true)
 	first, _ := stripeUsageMessage(t, organizationID, time.Date(2026, time.August, 28, 10, 0, 0, 0, time.UTC), 1)
 	require.NoError(t, exporter.Handle(t.Context(), first, gcp.MessageMetadata{}))
 
@@ -183,7 +195,7 @@ func TestMeterReadingStripeExporterNacksClassifiedStripeFailure(t *testing.T) {
 		Err:            errors.New("rate limited"),
 	}
 	client := &captureV2MeterEventClient{inputs: nil, err: stripeErr}
-	exporter := metering.NewMeterReadingStripeExporter(testenv.NewLogger(t), testenv.NewMeterProvider(t), conn, client, tumStripeCatalog)
+	exporter := metering.NewMeterReadingStripeExporter(testenv.NewLogger(t), testenv.NewMeterProvider(t), conn, client, tumStripeCatalog, true)
 	reading, _ := stripeUsageMessage(t, organizationID, time.Date(2026, time.August, 28, 10, 0, 0, 0, time.UTC), 1)
 
 	err := exporter.Handle(t.Context(), reading, gcp.MessageMetadata{})

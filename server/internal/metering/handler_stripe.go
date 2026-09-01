@@ -49,6 +49,7 @@ func (f StripeCatalogFunc) MeterEventName(definition Definition) (string, error)
 
 // MeterReadingStripeExporter sends recognized usage readings to Stripe billing meters.
 type MeterReadingStripeExporter struct {
+	enabled         bool
 	stripeCustomers stripeCustomerReader
 	stripe          stripeclient.V2MeterEventClient
 	stripeCatalog   StripeCatalog
@@ -64,6 +65,7 @@ func NewMeterReadingStripeExporter(
 	readReplica *pgxpool.Pool,
 	stripe stripeclient.V2MeterEventClient,
 	stripeCatalog StripeCatalog,
+	enabled bool,
 ) *MeterReadingStripeExporter {
 	exportErrors, err := meterProvider.Meter("github.com/speakeasy-api/gram/server/internal/metering").Int64Counter(
 		meterStripeExportErrors,
@@ -75,6 +77,7 @@ func NewMeterReadingStripeExporter(
 	}
 
 	return &MeterReadingStripeExporter{
+		enabled:         enabled,
 		stripeCustomers: meteringrepo.New(readReplica),
 		stripe:          stripe,
 		stripeCatalog:   stripeCatalog,
@@ -86,8 +89,12 @@ func NewMeterReadingStripeExporter(
 
 var _ streams.Handler[*meteringv1.MeterReading] = (*MeterReadingStripeExporter)(nil)
 
-// Handle transparently acknowledges adjustments and exports recognized usage readings.
+// Handle acknowledges every reading while disabled, transparently acknowledges
+// adjustments, and exports recognized usage readings.
 func (e *MeterReadingStripeExporter) Handle(ctx context.Context, reading *meteringv1.MeterReading, _ gcp.MessageMetadata) error {
+	if !e.enabled {
+		return nil
+	}
 	if reading.GetKind() == meteringv1.MeterReading_KIND_ADJUSTMENT {
 		return nil
 	}
