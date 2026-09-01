@@ -38,6 +38,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/visibility"
+	"github.com/speakeasy-api/gram/server/internal/metering"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/platformtools"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
@@ -2575,7 +2576,7 @@ func (s *ServiceCore) ProcessThreadEvents(ctx context.Context, projectID, thread
 			// and re-pend the event. Further attempts fall through to the
 			// terminal-fail branch so persistent corruption can't loop.
 			if errors.Is(runErr, ErrHistoryCorrupted) && event.Attempts <= 1 {
-				if healErr := s.selfHealCorruptHistory(ctx, thread.ChatID, thread.ProjectID); healErr != nil {
+				if healErr := s.selfHealCorruptHistory(ctx, thread.ChatID, thread.ProjectID, thread.AssistantID); healErr != nil {
 					s.logger.ErrorContext(ctx, "assistant self-heal failed",
 						attr.SlogAssistantThreadID(thread.ID.String()),
 						attr.SlogAssistantEventID(event.ID.String()),
@@ -3404,10 +3405,19 @@ const selfHealRecoveryNoticeTemplate = "[gram self-heal] Earlier conversation hi
 // messages (each truncated to selfHealUserMessageMaxLen runes). The next
 // /configure pulls this generation as the live history; assistant/tool
 // turns are dropped — they're the most likely source of the rejection.
-func (s *ServiceCore) selfHealCorruptHistory(ctx context.Context, chatID uuid.UUID, projectID uuid.UUID) error {
+func (s *ServiceCore) selfHealCorruptHistory(ctx context.Context, chatID uuid.UUID, projectID uuid.UUID, assistantID uuid.UUID) error {
 	if s.chatWriter == nil {
 		return fmt.Errorf("self-heal: chat writer not configured")
 	}
+
+	chatRow, err := chatrepo.New(s.db).GetChat(ctx, chatrepo.GetChatParams{
+		ID:        chatID,
+		ProjectID: projectID,
+	})
+	if err != nil {
+		return fmt.Errorf("self-heal: load chat: %w", err)
+	}
+	billingUserID := conv.FromPGTextOrEmpty[string](chatRow.UserID)
 
 	messages, err := chatrepo.New(s.db).ListLatestGenerationChatMessages(ctx, chatrepo.ListLatestGenerationChatMessagesParams{
 		ChatID:    chatID,
@@ -3462,16 +3472,36 @@ func (s *ServiceCore) selfHealCorruptHistory(ctx context.Context, chatID uuid.UU
 		Generation:       nextGen,
 	}
 
-	rows := make([]chatrepo.CreateChatMessageParams, 0, len(userMessages)+1)
+	rows := make([]chat.MessageWrite, 0, len(userMessages)+1)
 	notice := base
 	notice.Content = fmt.Sprintf(selfHealRecoveryNoticeTemplate, len(userMessages), selfHealUserMessageMaxLen)
-	rows = append(rows, notice)
+	rows = append(rows, chat.MessageWrite{
+		Params:         notice,
+		BillingUserID:  billingUserID,
+		AssistantID:    assistantID,
+		WorkloadSource: metering.WorkloadSourceAssistant,
+		UserEmail:      "",
+		Provider:       "",
+		HookHostname:   "",
+		AccountType:    chatRow.AccountType,
+		BillingMode:    "",
+	})
 	for _, m := range userMessages {
 		row := base
 		row.Content = conv.TruncateString(m.Content, selfHealUserMessageMaxLen)
 		row.UserID = m.UserID
 		row.ExternalUserID = m.ExternalUserID
-		rows = append(rows, row)
+		rows = append(rows, chat.MessageWrite{
+			Params:         row,
+			BillingUserID:  billingUserID,
+			AssistantID:    assistantID,
+			WorkloadSource: metering.WorkloadSourceAssistant,
+			UserEmail:      "",
+			Provider:       "",
+			HookHostname:   "",
+			AccountType:    chatRow.AccountType,
+			BillingMode:    "",
+		})
 	}
 
 	if _, err := s.chatWriter.Write(ctx, projectID, rows); err != nil {

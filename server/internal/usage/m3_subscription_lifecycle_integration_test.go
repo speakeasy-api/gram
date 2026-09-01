@@ -3,7 +3,6 @@ package usage_test
 import (
 	"context"
 	"errors"
-	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -17,9 +16,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	"github.com/speakeasy-api/gram/server/internal/authz"
-	"github.com/speakeasy-api/gram/server/internal/background/activities"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
-	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 	openrouterrepo "github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter/repo"
 	stripeclient "github.com/speakeasy-api/gram/server/internal/thirdparty/stripe"
@@ -99,93 +96,9 @@ func (*m3StripeWebhookClient) Catalog() stripeclient.Catalog {
 	return stripeclient.Catalog{PriceIDTUM: "", MeterIDTUM: "", MeterEventName: "", PortalConfigurationID: ""}
 }
 
-type m3OpenRouterProvisioner struct {
-	db           openrouterrepo.DBTX
-	disableCalls []openrouter.KeyType
-	refreshCalls []openrouter.KeyType
-}
-
-func (*m3OpenRouterProvisioner) ProvisionAPIKey(context.Context, string, openrouter.KeyType) (string, error) {
-	return "", errors.New("not implemented")
-}
-
-func (p *m3OpenRouterProvisioner) RefreshAPIKeyLimit(ctx context.Context, organizationID string, keyType openrouter.KeyType, limit *int) (int, error) {
-	return p.reinstateAPIKeyLimit(ctx, p.db, organizationID, keyType, limit)
-}
-
-func (p *m3OpenRouterProvisioner) RefreshAPIKeyLimitWithDB(ctx context.Context, db openrouter.DBTX, organizationID string, keyType openrouter.KeyType, limit *int) (int, error) {
-	return p.reinstateAPIKeyLimit(ctx, db, organizationID, keyType, limit)
-}
-
-func (p *m3OpenRouterProvisioner) ReinstateAPIKeyLimitWithDB(ctx context.Context, db openrouter.DBTX, organizationID string, keyType openrouter.KeyType, limit *int) (int, error) {
-	return p.reinstateAPIKeyLimit(ctx, db, organizationID, keyType, limit)
-}
-
-func (p *m3OpenRouterProvisioner) reinstateAPIKeyLimit(ctx context.Context, db openrouterrepo.DBTX, organizationID string, keyType openrouter.KeyType, limit *int) (int, error) {
-	key, err := openrouterrepo.New(db).GetOpenRouterAPIKey(ctx, openrouterrepo.GetOpenRouterAPIKeyParams{
-		OrganizationID: organizationID,
-		KeyType:        string(keyType),
-	})
-	if err != nil {
-		return 0, fmt.Errorf("get OpenRouter API key: %w", err)
-	}
-	refreshed, err := openrouterrepo.New(db).UpdateOpenRouterKey(ctx, openrouterrepo.UpdateOpenRouterKeyParams{
-		MonthlyCredits: int64(*limit),
-		KeyHash:        key.KeyHash,
-		Reinstate:      key.Disabled,
-		OrganizationID: organizationID,
-		KeyType:        string(keyType),
-	})
-	if err != nil {
-		return 0, fmt.Errorf("update OpenRouter API key: %w", err)
-	}
-	p.refreshCalls = append(p.refreshCalls, keyType)
-	return int(refreshed.MonthlyCredits), nil
-}
-
-func (p *m3OpenRouterProvisioner) DisableAPIKey(ctx context.Context, organizationID string, keyType openrouter.KeyType) error {
-	return p.disableAPIKey(ctx, p.db, organizationID, keyType)
-}
-
-func (p *m3OpenRouterProvisioner) DisableAPIKeyWithDB(ctx context.Context, db openrouter.DBTX, organizationID string, keyType openrouter.KeyType) error {
-	return p.disableAPIKey(ctx, db, organizationID, keyType)
-}
-
-func (p *m3OpenRouterProvisioner) disableAPIKey(ctx context.Context, db openrouter.DBTX, organizationID string, keyType openrouter.KeyType) error {
-	p.disableCalls = append(p.disableCalls, keyType)
-	if err := openrouterrepo.New(db).DisableOpenRouterAPIKey(ctx, openrouterrepo.DisableOpenRouterAPIKeyParams{
-		OrganizationID: organizationID,
-		KeyType:        string(keyType),
-	}); err != nil {
-		return fmt.Errorf("disable OpenRouter API key: %w", err)
-	}
-	return nil
-}
-
-func (*m3OpenRouterProvisioner) GetCreditsUsed(context.Context, string, openrouter.KeyType) (float64, int, error) {
-	return 0, 0, errors.New("not implemented")
-}
-
-func (*m3OpenRouterProvisioner) GetKeyUsage(context.Context, string) (float64, *int64, error) {
-	return 0, nil, errors.New("not implemented")
-}
-
-func (*m3OpenRouterProvisioner) ReconcileMonthlyCredits(context.Context, string, openrouter.KeyType, int64, int64, *int64) (int64, error) {
-	return 0, errors.New("not implemented")
-}
-
-func (p *m3OpenRouterProvisioner) ReconcileMonthlyCreditsWithDB(ctx context.Context, _ openrouter.DBTX, organizationID string, keyType openrouter.KeyType, currentLimit int64, currentGeneration int64, upstreamLimit *int64) (int64, error) {
-	return p.ReconcileMonthlyCredits(ctx, organizationID, keyType, currentLimit, currentGeneration, upstreamLimit)
-}
-
-func (*m3OpenRouterProvisioner) GetModelUsage(context.Context, string, string, openrouter.KeyType) (*openrouter.ModelUsage, error) {
-	return nil, errors.New("not implemented")
-}
-
 func TestM3SubscriptionLossRecheckoutAndStaleReplayLifecycle(t *testing.T) {
 	t.Parallel()
 
-	logger := testenv.NewLogger(t)
 	db, err := usage.CloneM3BillingValidationDatabase(t, "m3_subscription_lifecycle")
 	require.NoError(t, err)
 
@@ -213,7 +126,6 @@ func TestM3SubscriptionLossRecheckoutAndStaleReplayLifecycle(t *testing.T) {
 	}
 
 	stripe := &m3StripeWebhookClient{}
-	provisioner := &m3OpenRouterProvisioner{db: db, disableCalls: nil, refreshCalls: nil}
 	service, metrics := usage.NewM3StripeWebhookService(t, db, stripe)
 	mux := goahttp.NewMuxer()
 	usage.Attach(mux, service)
@@ -269,25 +181,14 @@ func TestM3SubscriptionLossRecheckoutAndStaleReplayLifecycle(t *testing.T) {
 	deleted("event_subscription_loss", "subscription_initial")
 	require.EqualValues(t, 1, metrics.SubscriptionLosses())
 	require.True(t, keyState(openrouter.KeyTypeChat).Disabled)
+	require.Equal(t, []string{"billing_inactive"}, keyState(openrouter.KeyTypeChat).DisableCauses)
 	require.False(t, keyState(openrouter.KeyTypeInternal).Disabled)
-
-	reconciler := activities.NewReconcilePaygOpenRouterChatKey(logger, db, provisioner)
-	require.NoError(t, reconciler.Do(t.Context(), activities.ReconcilePaygOpenRouterChatKeyArgs{
-		OrganizationID: m3OrganizationID,
-		DesiredState:   openrouter.KeyDesiredStateDisabled,
-	}))
-	require.Equal(t, []openrouter.KeyType{openrouter.KeyTypeChat}, provisioner.disableCalls)
-	require.Empty(t, provisioner.refreshCalls)
 	require.EqualValues(t, 70, keyState(openrouter.KeyTypeInternal).MonthlyCredits)
 
 	secondAnchor := time.Date(2026, time.October, 2, 0, 0, 0, 0, time.UTC)
 	checkout("event_recheckout", "subscription_replacement", secondAnchor)
-	require.True(t, keyState(openrouter.KeyTypeChat).Disabled, "recheckout commits before the durable wake-up is consumed")
-	require.NoError(t, reconciler.Do(t.Context(), activities.ReconcilePaygOpenRouterChatKeyArgs{
-		OrganizationID: m3OrganizationID,
-		DesiredState:   openrouter.KeyDesiredStateEnabled,
-	}))
 	require.False(t, keyState(openrouter.KeyTypeChat).Disabled)
+	require.Empty(t, keyState(openrouter.KeyTypeChat).DisableCauses)
 	require.False(t, keyState(openrouter.KeyTypeInternal).Disabled)
 	require.EqualValues(t, 100, keyState(openrouter.KeyTypeChat).MonthlyCredits)
 	require.EqualValues(t, 70, keyState(openrouter.KeyTypeInternal).MonthlyCredits)
@@ -297,10 +198,6 @@ func TestM3SubscriptionLossRecheckoutAndStaleReplayLifecycle(t *testing.T) {
 	deleted("event_stale_subscription_loss", "subscription_initial")
 	serve("exact replay")
 	require.EqualValues(t, 1, metrics.SubscriptionLosses(), "stale and replayed deletions do not repeat the metric")
-	require.NoError(t, reconciler.Do(t.Context(), activities.ReconcilePaygOpenRouterChatKeyArgs{
-		OrganizationID: m3OrganizationID,
-		DesiredState:   openrouter.KeyDesiredStateDisabled,
-	}))
 
 	metadata, err := usagerepo.New(db).GetBillingMetadata(t.Context(), m3OrganizationID)
 	require.NoError(t, err)
@@ -312,9 +209,8 @@ func TestM3SubscriptionLossRecheckoutAndStaleReplayLifecycle(t *testing.T) {
 	require.Equal(t, "payg", organization.GramAccountType)
 	require.True(t, organization.Whitelisted)
 	require.False(t, keyState(openrouter.KeyTypeChat).Disabled)
+	require.Empty(t, keyState(openrouter.KeyTypeChat).DisableCauses)
 	require.False(t, keyState(openrouter.KeyTypeInternal).Disabled)
-	require.Equal(t, []openrouter.KeyType{openrouter.KeyTypeChat}, provisioner.disableCalls)
-	require.Equal(t, []openrouter.KeyType{openrouter.KeyTypeChat}, provisioner.refreshCalls)
 
 	receipts, err := usagerepo.New(db).CountStripeWebhookReceiptsFixture(t.Context(), m3OrganizationID)
 	require.NoError(t, err)

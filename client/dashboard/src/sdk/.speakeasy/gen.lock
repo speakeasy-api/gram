@@ -152,13 +152,6 @@ trackedFiles:
   src/funcs/chatSummarizeToolCall.ts: {}
   src/funcs/cliAuthAuthorize.ts: {}
   src/funcs/cliAuthRedeem.ts: {}
-  src/funcs/collectionsAttachServer.ts: {}
-  src/funcs/collectionsCreate.ts: {}
-  src/funcs/collectionsDelete.ts: {}
-  src/funcs/collectionsDetachServer.ts: {}
-  src/funcs/collectionsList.ts: {}
-  src/funcs/collectionsListServers.ts: {}
-  src/funcs/collectionsUpdate.ts: {}
   src/funcs/deploymentsActive.ts: {}
   src/funcs/deploymentsCreate.ts: {}
   src/funcs/deploymentsEvolveDeployment.ts: {}
@@ -705,7 +698,6 @@ trackedFiles:
   src/models/components/assistantsessionsummary.ts: {}
   src/models/components/assistantskillref.ts: {}
   src/models/components/assistanttoolsetref.ts: {}
-  src/models/components/attachserverrequestbody.ts: {}
   src/models/components/attachusersessionissuerform.ts: {}
   src/models/components/auditlog.ts: {}
   src/models/components/auditlogfacetoption.ts: {}
@@ -775,7 +767,6 @@ trackedFiles:
   src/models/components/createremotesessionclientform.ts: {}
   src/models/components/createremotesessionissuerform.ts: {}
   src/models/components/createrequestbody.ts: {}
-  src/models/components/createrequestbody2.ts: {}
   src/models/components/createrequestrequestbody.ts: {}
   src/models/components/createresponsebody.ts: {}
   src/models/components/createriskexclusionrequestbody.ts: {}
@@ -1065,7 +1056,6 @@ trackedFiles:
   src/models/components/listremotesessionissuersresult.ts: {}
   src/models/components/listremotesessionsresult.ts: {}
   src/models/components/listresourcesresult.ts: {}
-  src/models/components/listresponsebody.ts: {}
   src/models/components/listriskevalreviewsresult.ts: {}
   src/models/components/listriskexclusionsresult.ts: {}
   src/models/components/listriskpoliciesresult.ts: {}
@@ -1078,7 +1068,6 @@ trackedFiles:
   src/models/components/listrootmcpserversresponsebody.ts: {}
   src/models/components/listscopesresult.ts: {}
   src/models/components/listserverheadersresult.ts: {}
-  src/models/components/listserversresponsebody.ts: {}
   src/models/components/listserversresult.ts: {}
   src/models/components/listsessionlinksresult.ts: {}
   src/models/components/listsessionquarantinesresult.ts: {}
@@ -1134,7 +1123,6 @@ trackedFiles:
   src/models/components/manageddevice.ts: {}
   src/models/components/marketplacesettingsresult.ts: {}
   src/models/components/markriskresultsfalsepositiverequestbody.ts: {}
-  src/models/components/mcpcollection.ts: {}
   src/models/components/mcpendpoint.ts: {}
   src/models/components/mcpenvironmentconfig.ts: {}
   src/models/components/mcpenvironmentconfiginput.ts: {}
@@ -1522,7 +1510,6 @@ trackedFiles:
   src/models/components/updateprompttemplateresult.ts: {}
   src/models/components/updateremotesessionclientform.ts: {}
   src/models/components/updateremotesessionissuerform.ts: {}
-  src/models/components/updaterequestbody.ts: {}
   src/models/components/updateriskexclusionrequestbody.ts: {}
   src/models/components/updateriskpolicyrequestbody.ts: {}
   src/models/components/updateroleform.ts: {}
@@ -1597,7 +1584,6 @@ trackedFiles:
   src/models/operations/approveskillsuggestion.ts: {}
   src/models/operations/archiveskill.ts: {}
   src/models/operations/archivespendrule.ts: {}
-  src/models/operations/attachservertocollection.ts: {}
   src/models/operations/attachusersessionissuer.ts: {}
   src/models/operations/authcallback.ts: {}
   src/models/operations/authlogin.ts: {}
@@ -1620,7 +1606,6 @@ trackedFiles:
   src/models/operations/createcheckout.ts: {}
   src/models/operations/createcimdorganizationremotesessionclient.ts: {}
   src/models/operations/createcimdremotesessionclient.ts: {}
-  src/models/operations/createcollection.ts: {}
   src/models/operations/createcustomdetectionrule.ts: {}
   src/models/operations/createcustomersession.ts: {}
   src/models/operations/createdeployment.ts: {}
@@ -1673,7 +1658,6 @@ trackedFiles:
   src/models/operations/deleteawsiamcredential.ts: {}
   src/models/operations/deleteawskmskey.ts: {}
   src/models/operations/deletechat.ts: {}
-  src/models/operations/deletecollection.ts: {}
   src/models/operations/deletecustomdetectionrule.ts: {}
   src/models/operations/deletedeviceintegrationconfig.ts: {}
   src/models/operations/deletedomain.ts: {}
@@ -1714,7 +1698,6 @@ trackedFiles:
   src/models/operations/deleteusersessionissuer.ts: {}
   src/models/operations/deleteusersessionissuercimdclient.ts: {}
   src/models/operations/denyriskpolicybypassrequest.ts: {}
-  src/models/operations/detachserverfromcollection.ts: {}
   src/models/operations/detachusersessionissuer.ts: {}
   src/models/operations/disableadminopenrouterkey.ts: {}
   src/models/operations/disablewebhooks.ts: {}
@@ -1893,8 +1876,6 @@ trackedFiles:
   src/models/operations/listchatsessionlinks.ts: {}
   src/models/operations/listchatsources.ts: {}
   src/models/operations/listcimdclientpresets.ts: {}
-  src/models/operations/listcollections.ts: {}
-  src/models/operations/listcollectionservers.ts: {}
   src/models/operations/listcustomdetectionrules.ts: {}
   src/models/operations/listcustomdomainmcpendpoints.ts: {}
   src/models/operations/listdeployments.ts: {}
@@ -2132,7 +2113,6 @@ trackedFiles:
   src/models/operations/updateassistant.ts: {}
   src/models/operations/updateawsiamcredential.ts: {}
   src/models/operations/updateawskmskey.ts: {}
-  src/models/operations/updatecollection.ts: {}
   src/models/operations/updatecustomdetectionrule.ts: {}
   src/models/operations/updatedeviceagentconfiguration.ts: {}
   src/models/operations/updatedomain.ts: {}
@@ -2270,13 +2250,6 @@ trackedFiles:
   src/react-query/cliAuthRedeem.ts: {}
   src/react-query/cloneEnvironment.ts: {}
   src/react-query/cloneToolset.ts: {}
-  src/react-query/collectionsAttachServer.ts: {}
-  src/react-query/collectionsCreate.ts: {}
-  src/react-query/collectionsDelete.ts: {}
-  src/react-query/collectionsDetachServer.ts: {}
-  src/react-query/collectionsListServers.core.ts: {}
-  src/react-query/collectionsListServers.ts: {}
-  src/react-query/collectionsUpdate.ts: {}
   src/react-query/createAPIKey.ts: {}
   src/react-query/createAgentSessionHandoff.ts: {}
   src/react-query/createAwsIamCredential.ts: {}
@@ -2576,8 +2549,6 @@ trackedFiles:
   src/react-query/listChatSources.ts: {}
   src/react-query/listChats.core.ts: {}
   src/react-query/listChats.ts: {}
-  src/react-query/listCollections.core.ts: {}
-  src/react-query/listCollections.ts: {}
   src/react-query/listDeployments.core.ts: {}
   src/react-query/listDeployments.ts: {}
   src/react-query/listDomains.core.ts: {}
@@ -3105,7 +3076,6 @@ trackedFiles:
   src/sdk/chat.ts: {}
   src/sdk/chatsessions.ts: {}
   src/sdk/cliauth.ts: {}
-  src/sdk/collections.ts: {}
   src/sdk/customrules.ts: {}
   src/sdk/deployments.ts: {}
   src/sdk/deviceintegrations.ts: {}
@@ -10052,7 +10022,7 @@ examples:
   updateTunneledMcpServer:
     speakeasy-default-update-tunneled-mcp-server:
       requestBody:
-        application/json: {"id": "e1429b32-4d75-43a3-aa46-02f1af57cf85", "name": "<value>"}
+        application/json: {"id": "e1429b32-4d75-43a3-aa46-02f1af57cf85"}
       responses:
         "200":
           application/json: {"active_connection_count": 408126, "active_consumer_session_count": 923001, "allow_public": false, "connection_status": "connected", "created_at": "2025-03-07T12:23:20.151Z", "id": "1bf5c61a-7401-4732-9a1c-7572bf19031e", "key_prefix": "<value>", "name": "<value>", "project_id": "f095b93d-e0ba-430e-a940-6ea2b3b7de5d", "status": "revoked", "updated_at": "2025-02-19T20:11:46.920Z"}

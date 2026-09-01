@@ -32,7 +32,6 @@ import (
 	chatc "github.com/speakeasy-api/gram/server/gen/http/chat/client"
 	chatsessionsc "github.com/speakeasy-api/gram/server/gen/http/chat_sessions/client"
 	cliauthc "github.com/speakeasy-api/gram/server/gen/http/cli_auth/client"
-	collectionsc "github.com/speakeasy-api/gram/server/gen/http/collections/client"
 	deploymentsc "github.com/speakeasy-api/gram/server/gen/http/deployments/client"
 	deviceintegrationsc "github.com/speakeasy-api/gram/server/gen/http/device_integrations/client"
 	domainsc "github.com/speakeasy-api/gram/server/gen/http/domains/client"
@@ -114,7 +113,7 @@ func UsageCommands() []string {
 		"assistant-memories (list-assistant-memories|get-assistant-memory|delete-assistant-memory)",
 		"assistants (list-assistants|get-assistant|create-assistant|update-assistant|delete-assistant|send-message|interrupt-turn|get-managed-assistant|ensure-managed-assistant)",
 		"auditlogs (list|list-facets)",
-		"admin (login|callback|logout|get-project|update-organization|bulk-update-account-type|disable-organization|enable-organization|get-organization|list-organization-members|list-organization-projects|list-organization-activity|list-organizations|extend-trial|create-organization|rearm-trial|get-organization-stats|get-inference-keys|set-inference-key-monthly-limit|get-inference-spend-history|get-payg-billing-summary|get-stripe-subscription|cancel-stripe-subscription|resume-stripe-subscription)",
+		"admin (login|callback|logout|get-project|update-organization|bulk-update-account-type|disable-organization|enable-organization|get-organization|list-organization-members|list-organization-projects|list-organization-activity|list-organizations|extend-trial|create-organization|rearm-trial|get-organization-stats|get-inference-keys|set-inference-key-monthly-limit|get-inference-spend-history|get-payg-billing-summary|get-stripe-subscription|cancel-stripe-subscription|resume-stripe-subscription|mark-enterprise-trial-converted)",
 		"auth (callback|login|switch-scopes|enter-demo|logout|register|info)",
 		"business-memories (list-business-memories|list-business-memory-content-scopes|search-business-memories)",
 		"chat (list-chats|get-assistant-session-summary|get-work-units-trend|load-chat|generate-title|credit-usage|delete-chat|set-pinned|summarize|summarize-tool-call|submit-feedback|list-sources|list-session-links)",
@@ -127,7 +126,6 @@ func UsageCommands() []string {
 		"external-credentials (create-aws-iam-credential|update-aws-iam-credential|create-gcp-iam-credential|update-gcp-iam-credential|list-external-credentials|list-aws-iam-credentials|list-gcp-iam-credentials|get-aws-iam-credential|get-gcp-iam-credential|verify-gcp-iam-credential|get-gcp-setup-info|delete-aws-iam-credential|delete-gcp-iam-credential)",
 		"external-keys (create-aws-kms-key|update-aws-kms-key|create-gcp-kms-key|update-gcp-kms-key|list-external-keys|list-aws-kms-keys|list-gcp-kms-keys|get-aws-kms-key|get-gcp-kms-key|verify-gcp-kms-key|delete-aws-kms-key|delete-gcp-kms-key)",
 		"mcp-registries (clear-cache|list-registries|list-catalog|get-server-details|get-setup-docs)",
-		"collections (create|list|update|delete|attach-server|detach-server|list-servers)",
 		"functions get-signed-asset-url",
 		"hooks-server-names (list|upsert|delete)",
 		"hooks (claude|cursor|codex|ingest|upload-skill-content|skill-feedback|logs|metrics)",
@@ -731,6 +729,10 @@ func ParseEndpoint(
 		adminResumeStripeSubscriptionBodyFlag              = adminResumeStripeSubscriptionFlags.String("body", "REQUIRED", "")
 		adminResumeStripeSubscriptionAdminSessionTokenFlag = adminResumeStripeSubscriptionFlags.String("admin-session-token", "", "")
 
+		adminMarkEnterpriseTrialConvertedFlags                 = flag.NewFlagSet("mark-enterprise-trial-converted", flag.ExitOnError)
+		adminMarkEnterpriseTrialConvertedBodyFlag              = adminMarkEnterpriseTrialConvertedFlags.String("body", "REQUIRED", "")
+		adminMarkEnterpriseTrialConvertedAdminSessionTokenFlag = adminMarkEnterpriseTrialConvertedFlags.String("admin-session-token", "", "")
+
 		authFlags = flag.NewFlagSet("auth", flag.ContinueOnError)
 
 		authCallbackFlags     = flag.NewFlagSet("callback", flag.ExitOnError)
@@ -1231,42 +1233,6 @@ func ParseEndpoint(
 		mcpRegistriesGetSetupDocsSessionTokenFlag      = mcpRegistriesGetSetupDocsFlags.String("session-token", "", "")
 		mcpRegistriesGetSetupDocsApikeyTokenFlag       = mcpRegistriesGetSetupDocsFlags.String("apikey-token", "", "")
 		mcpRegistriesGetSetupDocsProjectSlugInputFlag  = mcpRegistriesGetSetupDocsFlags.String("project-slug-input", "", "")
-
-		collectionsFlags = flag.NewFlagSet("collections", flag.ContinueOnError)
-
-		collectionsCreateFlags            = flag.NewFlagSet("create", flag.ExitOnError)
-		collectionsCreateBodyFlag         = collectionsCreateFlags.String("body", "REQUIRED", "")
-		collectionsCreateSessionTokenFlag = collectionsCreateFlags.String("session-token", "", "")
-		collectionsCreateApikeyTokenFlag  = collectionsCreateFlags.String("apikey-token", "", "")
-
-		collectionsListFlags            = flag.NewFlagSet("list", flag.ExitOnError)
-		collectionsListSessionTokenFlag = collectionsListFlags.String("session-token", "", "")
-		collectionsListApikeyTokenFlag  = collectionsListFlags.String("apikey-token", "", "")
-
-		collectionsUpdateFlags            = flag.NewFlagSet("update", flag.ExitOnError)
-		collectionsUpdateBodyFlag         = collectionsUpdateFlags.String("body", "REQUIRED", "")
-		collectionsUpdateSessionTokenFlag = collectionsUpdateFlags.String("session-token", "", "")
-		collectionsUpdateApikeyTokenFlag  = collectionsUpdateFlags.String("apikey-token", "", "")
-
-		collectionsDeleteFlags            = flag.NewFlagSet("delete", flag.ExitOnError)
-		collectionsDeleteCollectionIDFlag = collectionsDeleteFlags.String("collection-id", "REQUIRED", "")
-		collectionsDeleteSessionTokenFlag = collectionsDeleteFlags.String("session-token", "", "")
-		collectionsDeleteApikeyTokenFlag  = collectionsDeleteFlags.String("apikey-token", "", "")
-
-		collectionsAttachServerFlags            = flag.NewFlagSet("attach-server", flag.ExitOnError)
-		collectionsAttachServerBodyFlag         = collectionsAttachServerFlags.String("body", "REQUIRED", "")
-		collectionsAttachServerSessionTokenFlag = collectionsAttachServerFlags.String("session-token", "", "")
-		collectionsAttachServerApikeyTokenFlag  = collectionsAttachServerFlags.String("apikey-token", "", "")
-
-		collectionsDetachServerFlags            = flag.NewFlagSet("detach-server", flag.ExitOnError)
-		collectionsDetachServerBodyFlag         = collectionsDetachServerFlags.String("body", "REQUIRED", "")
-		collectionsDetachServerSessionTokenFlag = collectionsDetachServerFlags.String("session-token", "", "")
-		collectionsDetachServerApikeyTokenFlag  = collectionsDetachServerFlags.String("apikey-token", "", "")
-
-		collectionsListServersFlags              = flag.NewFlagSet("list-servers", flag.ExitOnError)
-		collectionsListServersCollectionSlugFlag = collectionsListServersFlags.String("collection-slug", "REQUIRED", "")
-		collectionsListServersSessionTokenFlag   = collectionsListServersFlags.String("session-token", "", "")
-		collectionsListServersApikeyTokenFlag    = collectionsListServersFlags.String("apikey-token", "", "")
 
 		functionsFlags = flag.NewFlagSet("functions", flag.ContinueOnError)
 
@@ -3922,6 +3888,7 @@ func ParseEndpoint(
 	adminGetStripeSubscriptionFlags.Usage = adminGetStripeSubscriptionUsage
 	adminCancelStripeSubscriptionFlags.Usage = adminCancelStripeSubscriptionUsage
 	adminResumeStripeSubscriptionFlags.Usage = adminResumeStripeSubscriptionUsage
+	adminMarkEnterpriseTrialConvertedFlags.Usage = adminMarkEnterpriseTrialConvertedUsage
 
 	authFlags.Usage = authUsage
 	authCallbackFlags.Usage = authCallbackUsage
@@ -4041,15 +4008,6 @@ func ParseEndpoint(
 	mcpRegistriesListCatalogFlags.Usage = mcpRegistriesListCatalogUsage
 	mcpRegistriesGetServerDetailsFlags.Usage = mcpRegistriesGetServerDetailsUsage
 	mcpRegistriesGetSetupDocsFlags.Usage = mcpRegistriesGetSetupDocsUsage
-
-	collectionsFlags.Usage = collectionsUsage
-	collectionsCreateFlags.Usage = collectionsCreateUsage
-	collectionsListFlags.Usage = collectionsListUsage
-	collectionsUpdateFlags.Usage = collectionsUpdateUsage
-	collectionsDeleteFlags.Usage = collectionsDeleteUsage
-	collectionsAttachServerFlags.Usage = collectionsAttachServerUsage
-	collectionsDetachServerFlags.Usage = collectionsDetachServerUsage
-	collectionsListServersFlags.Usage = collectionsListServersUsage
 
 	functionsFlags.Usage = functionsUsage
 	functionsGetSignedAssetURLFlags.Usage = functionsGetSignedAssetURLUsage
@@ -4668,8 +4626,6 @@ func ParseEndpoint(
 			svcf = externalKeysFlags
 		case "mcp-registries":
 			svcf = mcpRegistriesFlags
-		case "collections":
-			svcf = collectionsFlags
 		case "functions":
 			svcf = functionsFlags
 		case "hooks-server-names":
@@ -5134,6 +5090,9 @@ func ParseEndpoint(
 			case "resume-stripe-subscription":
 				epf = adminResumeStripeSubscriptionFlags
 
+			case "mark-enterprise-trial-converted":
+				epf = adminMarkEnterpriseTrialConvertedFlags
+
 			}
 
 		case "auth":
@@ -5466,31 +5425,6 @@ func ParseEndpoint(
 
 			case "get-setup-docs":
 				epf = mcpRegistriesGetSetupDocsFlags
-
-			}
-
-		case "collections":
-			switch epn {
-			case "create":
-				epf = collectionsCreateFlags
-
-			case "list":
-				epf = collectionsListFlags
-
-			case "update":
-				epf = collectionsUpdateFlags
-
-			case "delete":
-				epf = collectionsDeleteFlags
-
-			case "attach-server":
-				epf = collectionsAttachServerFlags
-
-			case "detach-server":
-				epf = collectionsDetachServerFlags
-
-			case "list-servers":
-				epf = collectionsListServersFlags
 
 			}
 
@@ -7419,6 +7353,9 @@ func ParseEndpoint(
 			case "resume-stripe-subscription":
 				endpoint = c.ResumeStripeSubscription()
 				data, err = adminc.BuildResumeStripeSubscriptionPayload(*adminResumeStripeSubscriptionBodyFlag, *adminResumeStripeSubscriptionAdminSessionTokenFlag)
+			case "mark-enterprise-trial-converted":
+				endpoint = c.MarkEnterpriseTrialConverted()
+				data, err = adminc.BuildMarkEnterpriseTrialConvertedPayload(*adminMarkEnterpriseTrialConvertedBodyFlag, *adminMarkEnterpriseTrialConvertedAdminSessionTokenFlag)
 			}
 		case "auth":
 			c := authc.NewClient(scheme, host, doer, enc, dec, restore)
@@ -7752,31 +7689,6 @@ func ParseEndpoint(
 			case "get-setup-docs":
 				endpoint = c.GetSetupDocs()
 				data, err = mcpregistriesc.BuildGetSetupDocsPayload(*mcpRegistriesGetSetupDocsServerURLFlag, *mcpRegistriesGetSetupDocsRegistrySpecifierFlag, *mcpRegistriesGetSetupDocsSessionTokenFlag, *mcpRegistriesGetSetupDocsApikeyTokenFlag, *mcpRegistriesGetSetupDocsProjectSlugInputFlag)
-			}
-		case "collections":
-			c := collectionsc.NewClient(scheme, host, doer, enc, dec, restore)
-			switch epn {
-			case "create":
-				endpoint = c.Create()
-				data, err = collectionsc.BuildCreatePayload(*collectionsCreateBodyFlag, *collectionsCreateSessionTokenFlag, *collectionsCreateApikeyTokenFlag)
-			case "list":
-				endpoint = c.List()
-				data, err = collectionsc.BuildListPayload(*collectionsListSessionTokenFlag, *collectionsListApikeyTokenFlag)
-			case "update":
-				endpoint = c.Update()
-				data, err = collectionsc.BuildUpdatePayload(*collectionsUpdateBodyFlag, *collectionsUpdateSessionTokenFlag, *collectionsUpdateApikeyTokenFlag)
-			case "delete":
-				endpoint = c.Delete()
-				data, err = collectionsc.BuildDeletePayload(*collectionsDeleteCollectionIDFlag, *collectionsDeleteSessionTokenFlag, *collectionsDeleteApikeyTokenFlag)
-			case "attach-server":
-				endpoint = c.AttachServer()
-				data, err = collectionsc.BuildAttachServerPayload(*collectionsAttachServerBodyFlag, *collectionsAttachServerSessionTokenFlag, *collectionsAttachServerApikeyTokenFlag)
-			case "detach-server":
-				endpoint = c.DetachServer()
-				data, err = collectionsc.BuildDetachServerPayload(*collectionsDetachServerBodyFlag, *collectionsDetachServerSessionTokenFlag, *collectionsDetachServerApikeyTokenFlag)
-			case "list-servers":
-				endpoint = c.ListServers()
-				data, err = collectionsc.BuildListServersPayload(*collectionsListServersCollectionSlugFlag, *collectionsListServersSessionTokenFlag, *collectionsListServersApikeyTokenFlag)
 			}
 		case "functions":
 			c := functionsc.NewClient(scheme, host, doer, enc, dec, restore)
@@ -11213,6 +11125,7 @@ func adminUsage() {
 	fmt.Fprintln(os.Stderr, `    get-stripe-subscription: Returns the live Stripe subscription and payment state for an organization.`)
 	fmt.Fprintln(os.Stderr, `    cancel-stripe-subscription: Schedules an organization's PAYG subscription to cancel at period end.`)
 	fmt.Fprintln(os.Stderr, `    resume-stripe-subscription: Removes a scheduled period-end cancellation from an organization's PAYG subscription.`)
+	fmt.Fprintln(os.Stderr, `    mark-enterprise-trial-converted: Records that an organization's enterprise trial converted to a signed contract.`)
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Additional help:")
 	fmt.Fprintf(os.Stderr, "    %s admin COMMAND --help\n", os.Args[0])
@@ -11721,6 +11634,26 @@ func adminResumeStripeSubscriptionUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin resume-stripe-subscription --body '{\n      \"organization_id\": \"abc123\"\n   }' --admin-session-token \"abc123\"")
+}
+
+func adminMarkEnterpriseTrialConvertedUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] admin mark-enterprise-trial-converted", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -admin-session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Records that an organization's enterprise trial converted to a signed contract.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -admin-session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin mark-enterprise-trial-converted --body '{\n      \"id\": \"aa\"\n   }' --admin-session-token \"abc123\"")
 }
 
 // authUsage displays the usage of the auth command and its subcommands.
@@ -14026,175 +13959,6 @@ func mcpRegistriesGetSetupDocsUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "mcp-registries get-setup-docs --server-url \"https://mcp.box.com\" --registry-specifier \"com.pulsemcp.mirror/box\" --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
-}
-
-// collectionsUsage displays the usage of the collections command and its
-// subcommands.
-func collectionsUsage() {
-	fmt.Fprintln(os.Stderr, `MCP collection operations`)
-	fmt.Fprintf(os.Stderr, "Usage:\n    %s [globalflags] collections COMMAND [flags]\n\n", os.Args[0])
-	fmt.Fprintln(os.Stderr, "COMMAND:")
-	fmt.Fprintln(os.Stderr, `    create: Create an MCP collection within the organization`)
-	fmt.Fprintln(os.Stderr, `    list: List MCP collections in the organization`)
-	fmt.Fprintln(os.Stderr, `    update: Update an MCP collection`)
-	fmt.Fprintln(os.Stderr, `    delete: Delete an MCP collection`)
-	fmt.Fprintln(os.Stderr, `    attach-server: Attach a server to a collection. Provide exactly one of toolset_id or mcp_server_id.`)
-	fmt.Fprintln(os.Stderr, `    detach-server: Detach a server from a collection. Provide exactly one of toolset_id or mcp_server_id.`)
-	fmt.Fprintln(os.Stderr, `    list-servers: List published MCP servers from a collection`)
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, "Additional help:")
-	fmt.Fprintf(os.Stderr, "    %s collections COMMAND --help\n", os.Args[0])
-}
-func collectionsCreateUsage() {
-	// Header with flags
-	fmt.Fprintf(os.Stderr, "%s [flags] collections create", os.Args[0])
-	fmt.Fprint(os.Stderr, " -body JSON")
-	fmt.Fprint(os.Stderr, " -session-token STRING")
-	fmt.Fprint(os.Stderr, " -apikey-token STRING")
-	fmt.Fprintln(os.Stderr)
-
-	// Description
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Create an MCP collection within the organization`)
-
-	// Flags list
-	fmt.Fprintln(os.Stderr, `    -body JSON: `)
-	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
-	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
-
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "collections create --body '{\n      \"description\": \"aaa\",\n      \"mcp_registry_namespace\": \"aa\",\n      \"mcp_server_ids\": [\n         \"abc123\"\n      ],\n      \"name\": \"aa\",\n      \"slug\": \"aa\",\n      \"toolset_ids\": [\n         \"abc123\"\n      ],\n      \"visibility\": \"private\"\n   }' --session-token \"abc123\" --apikey-token \"abc123\"")
-}
-
-func collectionsListUsage() {
-	// Header with flags
-	fmt.Fprintf(os.Stderr, "%s [flags] collections list", os.Args[0])
-	fmt.Fprint(os.Stderr, " -session-token STRING")
-	fmt.Fprint(os.Stderr, " -apikey-token STRING")
-	fmt.Fprintln(os.Stderr)
-
-	// Description
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `List MCP collections in the organization`)
-
-	// Flags list
-	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
-	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
-
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "collections list --session-token \"abc123\" --apikey-token \"abc123\"")
-}
-
-func collectionsUpdateUsage() {
-	// Header with flags
-	fmt.Fprintf(os.Stderr, "%s [flags] collections update", os.Args[0])
-	fmt.Fprint(os.Stderr, " -body JSON")
-	fmt.Fprint(os.Stderr, " -session-token STRING")
-	fmt.Fprint(os.Stderr, " -apikey-token STRING")
-	fmt.Fprintln(os.Stderr)
-
-	// Description
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Update an MCP collection`)
-
-	// Flags list
-	fmt.Fprintln(os.Stderr, `    -body JSON: `)
-	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
-	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
-
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "collections update --body '{\n      \"collection_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"description\": \"aaa\",\n      \"name\": \"aa\",\n      \"visibility\": \"private\"\n   }' --session-token \"abc123\" --apikey-token \"abc123\"")
-}
-
-func collectionsDeleteUsage() {
-	// Header with flags
-	fmt.Fprintf(os.Stderr, "%s [flags] collections delete", os.Args[0])
-	fmt.Fprint(os.Stderr, " -collection-id STRING")
-	fmt.Fprint(os.Stderr, " -session-token STRING")
-	fmt.Fprint(os.Stderr, " -apikey-token STRING")
-	fmt.Fprintln(os.Stderr)
-
-	// Description
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Delete an MCP collection`)
-
-	// Flags list
-	fmt.Fprintln(os.Stderr, `    -collection-id STRING: `)
-	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
-	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
-
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "collections delete --collection-id \"550e8400-e29b-41d4-a716-446655440000\" --session-token \"abc123\" --apikey-token \"abc123\"")
-}
-
-func collectionsAttachServerUsage() {
-	// Header with flags
-	fmt.Fprintf(os.Stderr, "%s [flags] collections attach-server", os.Args[0])
-	fmt.Fprint(os.Stderr, " -body JSON")
-	fmt.Fprint(os.Stderr, " -session-token STRING")
-	fmt.Fprint(os.Stderr, " -apikey-token STRING")
-	fmt.Fprintln(os.Stderr)
-
-	// Description
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Attach a server to a collection. Provide exactly one of toolset_id or mcp_server_id.`)
-
-	// Flags list
-	fmt.Fprintln(os.Stderr, `    -body JSON: `)
-	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
-	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
-
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "collections attach-server --body '{\n      \"collection_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"toolset_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }' --session-token \"abc123\" --apikey-token \"abc123\"")
-}
-
-func collectionsDetachServerUsage() {
-	// Header with flags
-	fmt.Fprintf(os.Stderr, "%s [flags] collections detach-server", os.Args[0])
-	fmt.Fprint(os.Stderr, " -body JSON")
-	fmt.Fprint(os.Stderr, " -session-token STRING")
-	fmt.Fprint(os.Stderr, " -apikey-token STRING")
-	fmt.Fprintln(os.Stderr)
-
-	// Description
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Detach a server from a collection. Provide exactly one of toolset_id or mcp_server_id.`)
-
-	// Flags list
-	fmt.Fprintln(os.Stderr, `    -body JSON: `)
-	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
-	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
-
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "collections detach-server --body '{\n      \"collection_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"toolset_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }' --session-token \"abc123\" --apikey-token \"abc123\"")
-}
-
-func collectionsListServersUsage() {
-	// Header with flags
-	fmt.Fprintf(os.Stderr, "%s [flags] collections list-servers", os.Args[0])
-	fmt.Fprint(os.Stderr, " -collection-slug STRING")
-	fmt.Fprint(os.Stderr, " -session-token STRING")
-	fmt.Fprint(os.Stderr, " -apikey-token STRING")
-	fmt.Fprintln(os.Stderr)
-
-	// Description
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `List published MCP servers from a collection`)
-
-	// Flags list
-	fmt.Fprintln(os.Stderr, `    -collection-slug STRING: `)
-	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
-	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
-
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "collections list-servers --collection-slug \"abc123\" --session-token \"abc123\" --apikey-token \"abc123\"")
 }
 
 // functionsUsage displays the usage of the functions command and its
@@ -18000,7 +17764,7 @@ func featuresUsage() {
 	fmt.Fprintf(os.Stderr, "Usage:\n    %s [globalflags] features COMMAND [flags]\n\n", os.Args[0])
 	fmt.Fprintln(os.Stderr, "COMMAND:")
 	fmt.Fprintln(os.Stderr, `    get-product-features: Get the current state of all product feature flags.`)
-	fmt.Fprintln(os.Stderr, `    set-product-feature: Enable or disable an organization feature flag.`)
+	fmt.Fprintln(os.Stderr, `    set-product-feature: Enable or disable an organization feature flag. Staff-managed entitlements (such as sso and scim) additionally require a Speakeasy platform administrator; organization admins can set only the org-settable operational toggles.`)
 	fmt.Fprintln(os.Stderr, `    set-remote-session-auto-refresh-policy: Set the organization policy for automatic remote-session refresh.`)
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Additional help:")
@@ -18035,7 +17799,7 @@ func featuresSetProductFeatureUsage() {
 
 	// Description
 	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Enable or disable an organization feature flag.`)
+	fmt.Fprintln(os.Stderr, `Enable or disable an organization feature flag. Staff-managed entitlements (such as sso and scim) additionally require a Speakeasy platform administrator; organization admins can set only the org-settable operational toggles.`)
 
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -body JSON: `)
@@ -24019,7 +23783,7 @@ func tunneledMcpCreateServerUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "tunneled-mcp create-server --body '{\n      \"name\": \"abc123\"\n   }' --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "tunneled-mcp create-server --body '{\n      \"name\": \"abc123\",\n      \"resource_identifier\": \"abc123\"\n   }' --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 func tunneledMcpListServersUsage() {
@@ -24113,7 +23877,7 @@ func tunneledMcpUpdateServerUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "tunneled-mcp update-server --body '{\n      \"allow_public\": false,\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"name\": \"abc123\"\n   }' --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "tunneled-mcp update-server --body '{\n      \"allow_public\": false,\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"name\": \"abc123\",\n      \"resource_identifier\": \"abc123\"\n   }' --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 func tunneledMcpRotateServerKeyUsage() {

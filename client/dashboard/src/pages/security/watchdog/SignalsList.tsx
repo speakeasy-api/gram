@@ -68,6 +68,7 @@ function groupLabel(group: SignalGroup, mode: SignalGroupMode): string {
       return RULE_CATEGORY_META[group.key as RuleCategory]?.label ?? group.key;
     case "team":
     case "app":
+    case "principal":
       return group.key === UNATTRIBUTED_GROUP_KEY ? "Unattributed" : group.key;
   }
 }

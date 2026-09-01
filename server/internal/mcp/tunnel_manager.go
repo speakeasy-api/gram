@@ -3,6 +3,7 @@ package mcp
 import (
 	"context"
 	"log/slog"
+	"time"
 
 	"github.com/google/uuid"
 
@@ -16,6 +17,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/remotemcp/proxy"
 	"github.com/speakeasy-api/gram/tunnel/route"
 )
+
+const tunnelGatewayDialTimeout = 3 * time.Second
 
 type tunnelManager struct {
 	routes       route.Store
@@ -106,8 +109,16 @@ func (m *tunnelManager) buildProxy(
 	p.UpstreamResponseRetryer = tunnelrouting.Retryer(m.routes, tunnelID, addr, clientAffinityKey, m.forwardToken)
 	// Redirects won't work across a tunnel boundary; disable.
 	p.DisableRedirects = true
-	if len(m.gatewayCIDRs) > 0 {
-		p.GuardianClientOptions = []guardian.ClientOption{guardian.WithAllowedCIDRBlocks(m.gatewayCIDRs...)}
-	}
+	p.GuardianClientOptions = m.guardianClientOptions()
 	return p, nil
+}
+
+// guardianClientOptions builds the shared client options for dialing tunnel
+// gateways.
+func (m *tunnelManager) guardianClientOptions() []guardian.ClientOption {
+	opts := []guardian.ClientOption{guardian.WithDialTimeout(tunnelGatewayDialTimeout)}
+	if len(m.gatewayCIDRs) > 0 {
+		opts = append(opts, guardian.WithAllowedCIDRBlocks(m.gatewayCIDRs...))
+	}
+	return opts
 }

@@ -3838,7 +3838,7 @@ DO UPDATE SET
 WHERE chat_messages.project_id = EXCLUDED.project_id
   AND EXCLUDED.source IN ('codex', 'opencode')
   AND chat_messages.source = 'litellm'
-RETURNING id
+RETURNING id, content, tool_calls, model, user_id, external_user_id, source
 `
 
 type UpsertCorrelatedChatMessageParams struct {
@@ -3871,9 +3871,19 @@ type UpsertCorrelatedChatMessageParams struct {
 	CreatedAt         pgtype.Timestamptz
 }
 
-// The writer supplies the candidate id and compares it with RETURNING id to
-// distinguish a new message from promotion of an existing correlated row.
-func (q *Queries) UpsertCorrelatedChatMessage(ctx context.Context, arg UpsertCorrelatedChatMessageParams) (uuid.UUID, error) {
+type UpsertCorrelatedChatMessageRow struct {
+	ID             uuid.UUID
+	Content        string
+	ToolCalls      []byte
+	Model          pgtype.Text
+	UserID         pgtype.Text
+	ExternalUserID pgtype.Text
+	Source         pgtype.Text
+}
+
+// Returns the persisted metering fields for both inserts and promotions so the
+// reading uses the durable row identity and measured content.
+func (q *Queries) UpsertCorrelatedChatMessage(ctx context.Context, arg UpsertCorrelatedChatMessageParams) (UpsertCorrelatedChatMessageRow, error) {
 	row := q.db.QueryRow(ctx, upsertCorrelatedChatMessage,
 		arg.ID,
 		arg.ChatID,
@@ -3903,9 +3913,17 @@ func (q *Queries) UpsertCorrelatedChatMessage(ctx context.Context, arg UpsertCor
 		arg.Replayed,
 		arg.CreatedAt,
 	)
-	var id uuid.UUID
-	err := row.Scan(&id)
-	return id, err
+	var i UpsertCorrelatedChatMessageRow
+	err := row.Scan(
+		&i.ID,
+		&i.Content,
+		&i.ToolCalls,
+		&i.Model,
+		&i.UserID,
+		&i.ExternalUserID,
+		&i.Source,
+	)
+	return i, err
 }
 
 const upsertExternalChat = `-- name: UpsertExternalChat :one

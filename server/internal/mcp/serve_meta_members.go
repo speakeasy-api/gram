@@ -42,6 +42,15 @@ type metaMember struct {
 	visibility            string
 	environmentID         uuid.NullUUID
 	toolVariationsGroupID uuid.NullUUID
+	// The member server's own derived provider issuer (see
+	// mcpserverissuersync.go). Token routing for tunneled members keys on it,
+	// so NULL or stale degrades to an anonymous call, never a wrong bearer.
+	remoteSessionIssuerID uuid.NullUUID
+
+	// A tunneled member's recorded RFC 8707 resource identifier, empty when it
+	// records none. Routing accepts a grant qualified to this value; it never
+	// selects across issuers, so it is not an address and is never dialed.
+	tunneledResourceIdentifier string
 }
 
 // memberStatus is the list_servers connection state. Hosted members execute
@@ -139,17 +148,19 @@ func (s *Service) resolveMetaMemberSnapshot(
 		}
 
 		members = append(members, metaMember{
-			serverID:              row.McpServerID,
-			slug:                  conv.PtrValOr(conv.FromPGText[string](row.McpServerSlug), ""),
-			name:                  conv.PtrValOr(conv.FromPGText[string](row.McpServerName), ""),
-			sortOrder:             row.SortOrder,
-			backend:               backend,
-			toolsetID:             row.McpServerToolsetID,
-			remoteServerID:        row.McpServerRemoteMcpServerID,
-			tunneledServerID:      row.McpServerTunneledMcpServerID,
-			visibility:            row.McpServerVisibility,
-			environmentID:         row.McpServerEnvironmentID,
-			toolVariationsGroupID: row.McpServerToolVariationsGroupID,
+			serverID:                   row.McpServerID,
+			slug:                       conv.PtrValOr(conv.FromPGText[string](row.McpServerSlug), ""),
+			name:                       conv.PtrValOr(conv.FromPGText[string](row.McpServerName), ""),
+			sortOrder:                  row.SortOrder,
+			backend:                    backend,
+			toolsetID:                  row.McpServerToolsetID,
+			remoteServerID:             row.McpServerRemoteMcpServerID,
+			tunneledServerID:           row.McpServerTunneledMcpServerID,
+			visibility:                 row.McpServerVisibility,
+			environmentID:              row.McpServerEnvironmentID,
+			toolVariationsGroupID:      row.McpServerToolVariationsGroupID,
+			remoteSessionIssuerID:      row.McpServerRemoteSessionIssuerID,
+			tunneledResourceIdentifier: row.TunneledResourceIdentifier,
 		})
 	}
 

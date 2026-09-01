@@ -22,6 +22,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/hookevents"
 	"github.com/speakeasy-api/gram/server/internal/hooks/repo"
+	"github.com/speakeasy-api/gram/server/internal/metering"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
@@ -374,15 +375,26 @@ func (s *Service) insertMessageWithFallbackUpsertResult(
 		return false, err
 	}
 
+	write := chat.MessageWrite{
+		Params:         msgParams,
+		BillingUserID:  metadata.UserID,
+		AssistantID:    uuid.Nil,
+		WorkloadSource: metering.WorkloadSourceHook,
+		UserEmail:      metadata.UserEmail,
+		Provider:       metadata.Provider,
+		HookHostname:   metadata.Hostname,
+		AccountType:    metadata.AccountType,
+		BillingMode:    metadata.BillingMode,
+	}
 	writeMessage := func() (int64, error) {
 		if msgParams.MessageID.Valid && strings.HasPrefix(msgParams.MessageID.String, agentPromptCorrelationPrefix) {
-			n, writeErr := s.writer.WriteCorrelated(ctx, projectID, msgParams, msgParams.MessageID.String)
+			n, writeErr := s.writer.WriteCorrelated(ctx, projectID, write, msgParams.MessageID.String)
 			if writeErr != nil {
 				return 0, fmt.Errorf("write correlated chat message: %w", writeErr)
 			}
 			return n, nil
 		}
-		n, writeErr := s.writer.Write(ctx, projectID, []chatRepo.CreateChatMessageParams{msgParams})
+		n, writeErr := s.writer.Write(ctx, projectID, []chat.MessageWrite{write})
 		if writeErr != nil {
 			return 0, fmt.Errorf("write chat message: %w", writeErr)
 		}
@@ -536,8 +548,18 @@ func (s *Service) insertUncorrelatedAgentPrompt(
 	if err != nil {
 		return false, fmt.Errorf("upsert claude code session: %w", err)
 	}
-	params := []chatRepo.CreateChatMessageParams{msgParams}
-	n, err := s.writer.WriteInTx(ctx, tx, params)
+	writes := []chat.MessageWrite{{
+		Params:         msgParams,
+		BillingUserID:  metadata.UserID,
+		AssistantID:    uuid.Nil,
+		WorkloadSource: metering.WorkloadSourceHook,
+		UserEmail:      metadata.UserEmail,
+		Provider:       metadata.Provider,
+		HookHostname:   metadata.Hostname,
+		AccountType:    metadata.AccountType,
+		BillingMode:    metadata.BillingMode,
+	}}
+	n, err := s.writer.WriteInTx(ctx, tx, writes)
 	if err != nil {
 		return false, fmt.Errorf("insert uncorrelated agent prompt: %w", err)
 	}
@@ -545,7 +567,7 @@ func (s *Service) insertUncorrelatedAgentPrompt(
 		return false, fmt.Errorf("commit uncorrelated agent prompt: %w", err)
 	}
 	if n > 0 {
-		s.writer.NotifyStoredRows(ctx, projectID, params)
+		s.writer.NotifyStoredRows(ctx, projectID, writes)
 	}
 	return n > 0, nil
 }

@@ -9,7 +9,6 @@ import {
 import { BrandingSection } from "./sections/BrandingSection";
 import { DangerZoneSection } from "./sections/DangerZoneSection";
 import { HeadersSection } from "./sections/HeadersSection";
-import { PublishingSection } from "./sections/PublishingSection";
 import {
   MCP_SERVER_URL_SECTION_ID,
   ServerUrlSection,
@@ -69,7 +68,6 @@ export function SettingsTab({
         />
       ) : null}
       {isUnproxied ? null : <ToolFilteringSection mcpServer={mcpServer} />}
-      <PublishingSection mcpServer={mcpServer} endpoints={endpoints} />
       <DangerZoneSection mcpServer={mcpServer} endpoints={endpoints} />
     </div>
   );

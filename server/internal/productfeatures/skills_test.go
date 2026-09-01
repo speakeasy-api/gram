@@ -26,6 +26,7 @@ func TestProductFeaturesService_SkillsAlwaysEnabled(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestProductFeaturesService(t)
+	ctx = withPlatformAdmin(t, ctx)
 	organizationID := activeOrganizationID(t, ctx)
 	seedOrganization(t, ctx, ti.conn, organizationID)
 	result, err := ti.service.GetProductFeatures(ctx, &gen.GetProductFeaturesPayload{
@@ -50,6 +51,7 @@ func TestProductFeaturesService_EnableSkillsPatchesExistingRBACGrants(t *testing
 	t.Parallel()
 
 	ctx, ti := newTestProductFeaturesService(t)
+	ctx = withPlatformAdmin(t, ctx)
 	organizationID := activeOrganizationID(t, ctx)
 	seedOrganization(t, ctx, ti.conn, organizationID)
 	require.NoError(t, authz.SeedSystemRoleGrants(ctx, ti.conn, organizationID))
@@ -103,7 +105,7 @@ func TestProductFeatureEnableTx_RequiresExistingOrganization(t *testing.T) {
 
 	ctx, ti := newTestProductFeaturesService(t)
 	skillsTx := testenv.BeginTx(t, ctx, ti.conn)
-	err := productfeatures.EnableSkillsTx(ctx, skillsTx, "org_missing_skills_lock")
+	_, err := productfeatures.EnableSkillsTx(ctx, skillsTx, "org_missing_skills_lock")
 	require.ErrorIs(t, err, pgx.ErrNoRows)
 
 }
@@ -116,7 +118,9 @@ func TestEnableSkillsTx_RollsBackWithCallerTransaction(t *testing.T) {
 	seedOrganization(t, ctx, ti.conn, organizationID)
 	tx := testenv.BeginTx(t, ctx, ti.conn)
 
-	require.NoError(t, productfeatures.EnableSkillsTx(ctx, tx, organizationID))
+	inserted, err := productfeatures.EnableSkillsTx(ctx, tx, organizationID)
+	require.NoError(t, err)
+	require.True(t, inserted)
 	enabled, err := featurerepo.New(tx).IsFeatureEnabled(ctx, featurerepo.IsFeatureEnabledParams{
 		OrganizationID: organizationID,
 		FeatureName:    string(productfeatures.FeatureSkills),
@@ -218,6 +222,7 @@ func TestProductFeaturesService_EnableSkillsTargetsRequestedOrganization(t *test
 	t.Parallel()
 
 	ctx, ti := newTestProductFeaturesService(t)
+	ctx = withPlatformAdmin(t, ctx)
 	activeOrganizationID := activeOrganizationID(t, ctx)
 	targetOrganizationID := uuid.NewString()
 	seedOrganization(t, ctx, ti.conn, targetOrganizationID)

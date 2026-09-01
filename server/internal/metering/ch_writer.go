@@ -2,17 +2,18 @@ package metering
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log/slog"
 	"maps"
 	"time"
 
 	"github.com/google/uuid"
-
 	meteringv1 "github.com/speakeasy-api/gram/infra/gen/gram/metering/v1"
 	"github.com/speakeasy-api/gram/infra/pkg/gcp"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/metering/chrepo"
+	meteringrepo "github.com/speakeasy-api/gram/server/internal/metering/repo"
 	"github.com/speakeasy-api/gram/server/internal/streams"
 )
 
@@ -23,31 +24,27 @@ type ReadingInserter interface {
 
 // MeterReadingCHWriter validates Pub/Sub readings and writes them to ClickHouse.
 type MeterReadingCHWriter struct {
-	logger        *slog.Logger
-	inserter      ReadingInserter
-	writesEnabled bool
+	logger   *slog.Logger
+	db       meteringrepo.DBTX
+	inserter ReadingInserter
 }
 
 // NewMeterReadingCHWriter creates a ClickHouse workload reading subscriber.
-func NewMeterReadingCHWriter(logger *slog.Logger, inserter ReadingInserter, writesEnabled bool) *MeterReadingCHWriter {
+func NewMeterReadingCHWriter(logger *slog.Logger, db meteringrepo.DBTX, inserter ReadingInserter) *MeterReadingCHWriter {
 	return &MeterReadingCHWriter{
-		logger:        logger.With(attr.SlogComponent("meter-reading-ch-writer")),
-		inserter:      inserter,
-		writesEnabled: writesEnabled,
+		logger:   logger.With(attr.SlogComponent("meter-reading-ch-writer")),
+		db:       db,
+		inserter: inserter,
 	}
 }
 
 var _ streams.BatchHandler[*meteringv1.MeterReading] = (*MeterReadingCHWriter)(nil)
 
-// HandleBatch acknowledges messages without insertion when ClickHouse writes are disabled.
+// HandleBatch validates, enriches, and inserts a batch of meter readings.
 func (w *MeterReadingCHWriter) HandleBatch(ctx context.Context, messages []*meteringv1.MeterReading, _ []gcp.MessageMetadata) error {
-	if !w.writesEnabled {
-		return nil
-	}
-
 	insertedAt := time.Now().UTC()
 	rows := make([]chrepo.ReadingRow, 0, len(messages))
-	seen := make(map[uuid.UUID]struct{}, len(messages))
+	received := make(map[uuid.UUID]int, len(messages))
 
 	for _, message := range messages {
 		row, reason := meterReadingRow(message, insertedAt)
@@ -62,15 +59,133 @@ func (w *MeterReadingCHWriter) HandleBatch(ctx context.Context, messages []*mete
 			)
 			continue
 		}
-		if _, duplicate := seen[row.ID]; duplicate {
+		if priorIndex, duplicate := received[row.ID]; duplicate {
+			if row.ProducedAt.Before(rows[priorIndex].ProducedAt) {
+				continue
+			}
+			rows[priorIndex] = row
 			continue
 		}
-		seen[row.ID] = struct{}{}
+		received[row.ID] = len(rows)
 		rows = append(rows, row)
 	}
 
+	if err := w.enrichBillingUsers(ctx, rows); err != nil {
+		return err
+	}
 	if err := w.inserter.InsertReadings(ctx, rows); err != nil {
 		return fmt.Errorf("insert meter readings: %w", err)
+	}
+	return nil
+}
+
+type billingUserLookupKey struct {
+	organizationID string
+	userID         string
+}
+
+var consumerOwnedBillingUserAttributes = [...]string{
+	AttributeBillingUserAccountEmail,
+	AttributeBillingUserDivisionName,
+	AttributeBillingUserDepartmentName,
+	AttributeBillingUserJobTitle,
+	AttributeBillingUserEmployeeType,
+	AttributeBillingUserCostCenterName,
+	AttributeBillingUserDirectoryGroups,
+	AttributeBillingUserDirectoryMatch,
+	AttributeBillingUserRBACRoles,
+}
+
+func setResolvedAttribute(attributes map[string]string, key string, value string) {
+	if value != "" {
+		attributes[key] = value
+	}
+}
+
+func setResolvedStringSliceAttribute(attributes map[string]string, key string, values []string) error {
+	if len(values) == 0 {
+		return nil
+	}
+	encoded, err := json.Marshal(values)
+	if err != nil {
+		return fmt.Errorf("marshal %s: %w", key, err)
+	}
+	setResolvedAttribute(attributes, key, string(encoded))
+	return nil
+}
+
+func (w *MeterReadingCHWriter) enrichBillingUsers(ctx context.Context, rows []chrepo.ReadingRow) error {
+	keys := make([]billingUserLookupKey, 0)
+	seen := make(map[billingUserLookupKey]struct{})
+	rowKeys := make(map[uuid.UUID]billingUserLookupKey)
+
+	for i := range rows {
+		row := &rows[i]
+		for _, key := range consumerOwnedBillingUserAttributes {
+			delete(row.Attributes, key)
+		}
+
+		billingUserID := row.Attributes[AttributeBillingUserID]
+		if billingUserID == "" {
+			continue
+		}
+		lookupKey := billingUserLookupKey{
+			organizationID: row.OrganizationID,
+			userID:         billingUserID,
+		}
+		rowKeys[row.ID] = lookupKey
+		if _, duplicate := seen[lookupKey]; duplicate {
+			continue
+		}
+		seen[lookupKey] = struct{}{}
+		keys = append(keys, lookupKey)
+	}
+	if len(keys) == 0 {
+		return nil
+	}
+
+	params := meteringrepo.ResolveBillingUserAttributesParams{
+		OrganizationIds: make([]string, len(keys)),
+		BillingUserIds:  make([]string, len(keys)),
+	}
+	for i, key := range keys {
+		params.OrganizationIds[i] = key.organizationID
+		params.BillingUserIds[i] = key.userID
+	}
+
+	resolvedRows, err := meteringrepo.New(w.db).ResolveBillingUserAttributes(ctx, params)
+	if err != nil {
+		return fmt.Errorf("resolve billing user attributes: %w", err)
+	}
+	resolved := make(map[billingUserLookupKey]map[string]string, len(resolvedRows))
+	for _, result := range resolvedRows {
+		key := billingUserLookupKey{
+			organizationID: result.OrganizationID,
+			userID:         result.BillingUserID,
+		}
+		attributes := make(map[string]string)
+		setResolvedAttribute(attributes, AttributeBillingUserAccountEmail, result.BillingUserAccountEmail)
+		setResolvedAttribute(attributes, AttributeBillingUserDivisionName, result.BillingUserDivisionName)
+		setResolvedAttribute(attributes, AttributeBillingUserDepartmentName, result.BillingUserDepartmentName)
+		setResolvedAttribute(attributes, AttributeBillingUserJobTitle, result.BillingUserJobTitle)
+		setResolvedAttribute(attributes, AttributeBillingUserEmployeeType, result.BillingUserEmployeeType)
+		setResolvedAttribute(attributes, AttributeBillingUserCostCenterName, result.BillingUserCostCenterName)
+		if err := setResolvedStringSliceAttribute(attributes, AttributeBillingUserDirectoryGroups, result.BillingUserGroupNames); err != nil {
+			return err
+		}
+		setResolvedAttribute(attributes, AttributeBillingUserDirectoryMatch, result.BillingUserDirectoryMatch)
+		if err := setResolvedStringSliceAttribute(attributes, AttributeBillingUserRBACRoles, result.BillingUserRoleSlugs); err != nil {
+			return err
+		}
+		resolved[key] = attributes
+	}
+
+	for i := range rows {
+		key, ok := rowKeys[rows[i].ID]
+		if !ok {
+			continue
+		}
+		maps.Copy(rows[i].Attributes, resolved[key])
 	}
 	return nil
 }
@@ -175,6 +290,7 @@ func meterReadingRow(message *meteringv1.MeterReading, insertedAt time.Time) (ch
 		Unit:              string(definition.unit),
 		Value:             message.GetValue(),
 		OccurredAt:        occurredAt,
+		ProducedAt:        producedAt,
 		InsertedAt:        insertedAt,
 		CorrectsReadingID: correctsReadingID,
 		Attributes:        attributes,

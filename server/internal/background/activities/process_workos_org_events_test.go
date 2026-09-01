@@ -21,6 +21,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	orgid "github.com/speakeasy-api/gram/server/internal/organizations/id"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
+	"github.com/speakeasy-api/gram/server/internal/productfeatures"
+	featurerepo "github.com/speakeasy-api/gram/server/internal/productfeatures/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	workosrepo "github.com/speakeasy-api/gram/server/internal/thirdparty/workos/repo"
@@ -269,6 +271,88 @@ func TestProcessWorkOSOrganizationEvents_OrganizationCreateUsesWorkOSIDWhenNameY
 	require.NoError(t, err)
 	require.Equal(t, orgName, row.Name)
 	require.Equal(t, "org-01hzonechar", row.Slug)
+}
+
+func requireOrganizationDefaultFeatures(t *testing.T, ctx context.Context, conn *pgxpool.Pool, organizationID string, enabled bool) {
+	t.Helper()
+
+	q := featurerepo.New(conn)
+	for _, feature := range productfeatures.OrganizationDefaultFeatures {
+		got, err := q.IsFeatureEnabled(ctx, featurerepo.IsFeatureEnabledParams{
+			OrganizationID: organizationID,
+			FeatureName:    string(feature),
+		})
+		require.NoError(t, err)
+		require.Equalf(t, enabled, got, "feature %s", feature)
+	}
+}
+
+func TestProcessWorkOSOrganizationEvents_OrganizationCreateSeedsLoggingDefaults(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	conn := newOrgEventsTestConn(t, "workos_org_events_org_create_seeds_defaults")
+	logger := testenv.NewLogger(t)
+
+	const workosOrgID = "org_01HZSEEDDEFAULTS"
+
+	stub := newWorkOSClientWithEvents([][]events.Event{
+		{
+			{
+				ID:        "event_01HZSEEDDEFAULTS",
+				Event:     "organization.created",
+				CreatedAt: time.Now(),
+				Data:      newOrgEventPayload(t, workosOrgID),
+			},
+		},
+	})
+
+	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, stub, cache.NoopCache, nil)
+	res, err := activity.Do(ctx, activities.ProcessWorkOSOrganizationEventsParams{WorkOSOrganizationID: workosOrgID})
+	require.NoError(t, err)
+	require.Equal(t, "event_01HZSEEDDEFAULTS", res.LastEventID)
+
+	row, err := orgrepo.New(conn).GetOrganizationByWorkosID(ctx, conv.ToPGText(workosOrgID))
+	require.NoError(t, err)
+	requireOrganizationDefaultFeatures(t, ctx, conn, row.ID, true)
+}
+
+func TestProcessWorkOSOrganizationEvents_ExistingOrgUpdateDoesNotSeedLoggingDefaults(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	conn := newOrgEventsTestConn(t, "workos_org_events_org_update_skips_defaults")
+	logger := testenv.NewLogger(t)
+
+	const workosOrgID = "org_01HZSKIPDEFAULTS"
+	const externalID = "sb_skip_defaults"
+
+	err := orgrepo.New(conn).CreateOrganizationMetadata(ctx, orgrepo.CreateOrganizationMetadataParams{
+		ID:   externalID,
+		Name: "Already Exists",
+		Slug: "already-exists",
+	})
+	require.NoError(t, err)
+	requireOrganizationDefaultFeatures(t, ctx, conn, externalID, false)
+
+	stub := newWorkOSClientWithEvents([][]events.Event{
+		{
+			{
+				ID:        "event_01HZSKIPDEFAULTS",
+				Event:     "organization.updated",
+				CreatedAt: time.Now(),
+				Data: []byte(`{"id":"` + workosOrgID + `","object":"organization","name":"Already Exists","external_id":"` + externalID +
+					`","updated_at":"2026-05-06T12:00:00Z"}`),
+			},
+		},
+	})
+
+	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, stub, cache.NoopCache, nil)
+	res, err := activity.Do(ctx, activities.ProcessWorkOSOrganizationEventsParams{WorkOSOrganizationID: workosOrgID})
+	require.NoError(t, err)
+	require.Equal(t, "event_01HZSKIPDEFAULTS", res.LastEventID)
+
+	requireOrganizationDefaultFeatures(t, ctx, conn, externalID, false)
 }
 
 func TestProcessWorkOSOrganizationEvents_OrganizationExternalIDMissingLocallyCreates(t *testing.T) {
