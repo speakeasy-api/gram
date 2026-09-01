@@ -21,6 +21,7 @@ const (
 	actingPrincipalContractHeader = "x-gram-acting-principal-contract"
 	inferenceInvocationHeader     = "x-gram-inference-invocation-id"
 	liteLLMAIAccessTimeout        = 5 * time.Second
+	liteLLMIdentityFailureMessage = "Speakeasy could not verify the acting user for this LiteLLM inference. Mint a fresh acting-principal assertion from an authenticated Gram session and try again."
 )
 
 type liteLLMAIAccessCheckpointer interface {
@@ -70,7 +71,7 @@ func NewLiteLLMAIAccessCheckpoint(registry *killswitches.Registry, evaluator lit
 }
 
 func liteLLMIdentityFailureDecision() liteLLMAIAccessDecision {
-	return liteLLMAIAccessDecision{blocked: true, reason: "ai_access_identity_unavailable", message: delegation.IdentityFailureMessage, userID: ""}
+	return liteLLMAIAccessDecision{blocked: true, reason: "ai_access_identity_unavailable", message: liteLLMIdentityFailureMessage, userID: ""}
 }
 
 func liteLLMEvaluatorFailureDecision() liteLLMAIAccessDecision {
@@ -98,7 +99,7 @@ func (c *LiteLLMAIAccessCheckpoint) Evaluate(ctx context.Context, payload *gen.I
 
 	resourceResult, err := c.resource.Derive(evalCtx, organizationID, mcptoolexecution.LiteLLMInstanceSource{ProjectID: *authCtx.ProjectID, APIKeyID: apiKeyID})
 	if err != nil {
-		return liteLLMIdentityFailureDecision()
+		return liteLLMEvaluatorFailureDecision()
 	}
 	resourceKey, supported, err := resourceResult.Key()
 	if err != nil || !supported {

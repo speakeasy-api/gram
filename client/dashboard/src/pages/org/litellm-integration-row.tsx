@@ -714,7 +714,7 @@ function SetupContent({
       </SetupSection>
       <SetupSection
         title="Verify safe traffic"
-        description="Set LITELLM_VIRTUAL_KEY and LITELLM_MODEL, then mint a fresh acting-principal assertion and invocation ID from an authenticated Gram session before running this against the proxy."
+        description="Set LITELLM_VIRTUAL_KEY and LITELLM_MODEL. Before each command, mint from an authenticated Gram session, then export the returned assertion as GRAM_LITELLM_ACTING_PRINCIPAL and invocation ID as GRAM_LITELLM_INVOCATION_ID. Refresh both values for every command."
       >
         <CodeBlock language="shell" copyLabel="safe traffic command">
           {liteLLMVerificationCommands.safe}

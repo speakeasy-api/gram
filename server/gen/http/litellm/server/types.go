@@ -2733,6 +2733,9 @@ func ValidateMintActingPrincipalRequestBody(body *MintActingPrincipalRequestBody
 	if body.InvocationID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.invocation_id", *body.InvocationID, goa.FormatUUID))
 	}
+	if body.InvocationID != nil {
+		err = goa.MergeErrors(err, goa.ValidatePattern("body.invocation_id", *body.InvocationID, "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"))
+	}
 	return
 }
 

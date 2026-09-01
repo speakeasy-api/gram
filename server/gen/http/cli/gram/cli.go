@@ -15007,7 +15007,7 @@ func litellmMintActingPrincipalUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "litellm mint-acting-principal --body '{\n      \"instance_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"invocation_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }' --session-token \"abc123\" --project-slug-input \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "litellm mint-acting-principal --body '{\n      \"instance_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"invocation_id\": \"0198a1b2-c3d4-7000-8000-0123456789ab\"\n   }' --session-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 func litellmRotateInstanceKeyUsage() {

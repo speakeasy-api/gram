@@ -338,6 +338,50 @@ func (q *Queries) ListLiteLLMInstances(ctx context.Context, arg ListLiteLLMInsta
 	return items, nil
 }
 
+const lockActiveLiteLLMInstancesInOrganization = `-- name: LockActiveLiteLLMInstancesInOrganization :many
+SELECT li.id
+FROM litellm_instances li
+JOIN projects p
+  ON p.id = li.project_id
+ AND p.organization_id = li.organization_id
+JOIN api_keys ak
+  ON ak.id = li.api_key_id
+ AND ak.project_id = li.project_id
+ AND ak.organization_id = li.organization_id
+WHERE li.id = ANY($1::uuid[])
+  AND li.organization_id = $2
+  AND li.deleted IS FALSE
+  AND p.deleted IS FALSE
+  AND ak.deleted IS FALSE
+ORDER BY li.id
+FOR SHARE OF li, p, ak
+`
+
+type LockActiveLiteLLMInstancesInOrganizationParams struct {
+	Ids            []uuid.UUID
+	OrganizationID string
+}
+
+func (q *Queries) LockActiveLiteLLMInstancesInOrganization(ctx context.Context, arg LockActiveLiteLLMInstancesInOrganizationParams) ([]uuid.UUID, error) {
+	rows, err := q.db.Query(ctx, lockActiveLiteLLMInstancesInOrganization, arg.Ids, arg.OrganizationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []uuid.UUID
+	for rows.Next() {
+		var id uuid.UUID
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const recordLiteLLMInstanceHealth = `-- name: RecordLiteLLMInstanceHealth :exec
 UPDATE litellm_instances
 SET last_guardrail_event_at = CASE

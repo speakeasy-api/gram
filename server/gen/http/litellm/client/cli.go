@@ -95,10 +95,11 @@ func BuildMintActingPrincipalPayload(litellmMintActingPrincipalBody string, lite
 	{
 		err = json.Unmarshal([]byte(litellmMintActingPrincipalBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"instance_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"invocation_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"instance_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"invocation_id\": \"0198a1b2-c3d4-7000-8000-0123456789ab\"\n   }'")
 		}
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.instance_id", body.InstanceID, goa.FormatUUID))
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.invocation_id", body.InvocationID, goa.FormatUUID))
+		err = goa.MergeErrors(err, goa.ValidatePattern("body.invocation_id", body.InvocationID, "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"))
 		if err != nil {
 			return nil, err
 		}

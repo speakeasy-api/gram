@@ -4,11 +4,13 @@ import (
 	"context"
 	"errors"
 	"maps"
+	"strings"
 	"testing"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/hooks/delegation"
 	gen "github.com/speakeasy-api/gram/server/gen/litellm"
 	"github.com/speakeasy-api/gram/server/internal/auth"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
@@ -23,6 +25,15 @@ import (
 type recordingLiteLLMEvaluator struct {
 	result   killswitches.EvaluationResult
 	requests []killswitches.EvaluationRequest
+}
+
+type failingDeriveResourceAdapter struct {
+	killswitches.ResourceAdapter
+	err error
+}
+
+func (a failingDeriveResourceAdapter) Derive(context.Context, killswitches.OrganizationID, any) (killswitches.CanonicalizationResult[killswitches.ResourceKey], error) {
+	return killswitches.CanonicalizationResult[killswitches.ResourceKey]{}, a.err
 }
 
 func (e *recordingLiteLLMEvaluator) Evaluate(_ context.Context, request killswitches.EvaluationRequest) killswitches.EvaluationResult {
@@ -41,6 +52,16 @@ type checkpointFixture struct {
 	instanceID string
 	signer     *litellmacting.Signer
 	userID     string
+}
+
+func cloneCheckpointPayload(payload *gen.IngestPayload) gen.IngestPayload {
+	clone := *payload
+	if payload.RequestData != nil {
+		requestData := *payload.RequestData
+		clone.RequestData = &requestData
+	}
+	clone.RequestHeaders = maps.Clone(payload.RequestHeaders)
+	return clone
 }
 
 func newCheckpointFixture(t *testing.T, result killswitches.EvaluationResult) checkpointFixture {
@@ -110,6 +131,40 @@ func TestLiteLLMAIAccessEvaluatesEveryRetryAndReturnsSelectedNote(t *testing.T) 
 	require.Len(t, fixture.evaluator.requests, 2, "retry must revalidate and reevaluate instead of using an allow cache")
 }
 
+//nolint:paralleltest,tparallel // Subtests share the recording evaluator to assert every content shape was checked.
+func TestLiteLLMAIAccessRunsBeforeTextImageAndToolExtraction(t *testing.T) {
+	t.Parallel()
+	matched, err := killswitches.NewMatchResult(killswitches.PrescriptionID(uuid.NewString()), "Selected external note.")
+	require.NoError(t, err)
+	fixture := newCheckpointFixture(t, matched)
+	fixture.instance.service.aiAccess = fixture.checkpoint
+	ctx := contextvalues.SetAuthContext(fixture.ctx, fixture.auth)
+
+	cases := map[string]func(*gen.IngestPayload){
+		"textless":   func(payload *gen.IngestPayload) {},
+		"image only": func(payload *gen.IngestPayload) { payload.Images = []string{"image"} },
+		"tool only":  func(payload *gen.IngestPayload) { payload.Tools = []any{map[string]any{"name": "fixture-tool"}} },
+	}
+	for name, mutate := range cases {
+		t.Run(name, func(t *testing.T) {
+			payloadCopy := cloneCheckpointPayload(fixture.payload)
+			payloadCopy.StructuredMessages = nil
+			payloadCopy.Texts = nil
+			payloadCopy.Images = nil
+			payloadCopy.Tools = nil
+			callID := "ai-access-content-" + uuid.NewString()
+			payloadCopy.LitellmCallID = &callID
+			mutate(&payloadCopy)
+
+			result, ingestErr := fixture.instance.service.Ingest(ctx, &payloadCopy)
+			require.NoError(t, ingestErr)
+			require.Equal(t, gen.LiteLLMGuardrailAction("BLOCKED"), result.Action)
+			require.Equal(t, "Selected external note.", *result.BlockedReason)
+		})
+	}
+	require.Len(t, fixture.evaluator.requests, len(cases))
+}
+
 //nolint:paralleltest,tparallel // Subtests intentionally share a stateful evaluator to assert that no requests occurred.
 func TestLiteLLMAIAccessRejectsUntrustedAndMismatchedIdentity(t *testing.T) {
 	t.Parallel()
@@ -149,18 +204,67 @@ func TestLiteLLMAIAccessRejectsUntrustedAndMismatchedIdentity(t *testing.T) {
 	}
 	for name, mutate := range cases {
 		t.Run(name, func(t *testing.T) {
-			payloadCopy := *fixture.payload
-			payloadCopy.RequestHeaders = make(map[string]string, len(fixture.payload.RequestHeaders))
-			maps.Copy(payloadCopy.RequestHeaders, fixture.payload.RequestHeaders)
+			payloadCopy := cloneCheckpointPayload(fixture.payload)
 			authCopy := *fixture.auth
 			mutate(&payloadCopy, &authCopy)
 			decision := fixture.checkpoint.Evaluate(fixture.ctx, &payloadCopy, &authCopy)
 			require.True(t, decision.blocked)
 			require.Equal(t, "ai_access_identity_unavailable", decision.reason)
+			require.Equal(t, liteLLMIdentityFailureMessage, decision.message)
 			require.NotEqual(t, "Selected external note.", decision.message)
 		})
 	}
 	require.Empty(t, fixture.evaluator.requests)
+}
+
+func TestLiteLLMLifecycleAcceptsCurrentSelectedInstance(t *testing.T) {
+	t.Parallel()
+	noMatch, err := killswitches.NewNoMatchResult(killswitches.NoMatchReasonNoPrescription)
+	require.NoError(t, err)
+	fixture := newCheckpointFixture(t, noMatch)
+	registry, err := mcptoolexecution.NewRegistry(fixture.instance.conn)
+	require.NoError(t, err)
+	lifecycle, err := killswitches.NewLifecycleService(fixture.instance.conn, registry, mcptoolexecution.NewCustomerLifecycleValidator(), nil)
+	require.NoError(t, err)
+	operationID := uuid.New()
+	request := killswitches.ActivatePrescriptionRequest{
+		MutationContext: killswitches.MutationContext{
+			OrganizationID: killswitches.OrganizationID(fixture.auth.ActiveOrganizationID),
+			ActorUserID:    fixture.userID, ActorDisplayName: fixture.userID, OperationID: operationID,
+		},
+		Definition: mcptoolexecution.DefinitionKeyAIAccess, PrincipalKind: mcptoolexecution.PrincipalKindUser, PrincipalInput: fixture.userID,
+		ResourceKind: mcptoolexecution.ResourceKindLiteLLMInstance,
+		Desired: killswitches.DesiredVersionInput{
+			ResourceScope: killswitches.ResourceScopeSelected, SelectedResourceInputs: []string{" " + strings.ToUpper(fixture.instanceID) + " "},
+			StartMode: killswitches.StartModeNow, InternalNote: "selected LiteLLM instance", ExternalNote: "Access paused.",
+		},
+	}
+	activated, err := lifecycle.ActivatePrescription(fixture.ctx, request)
+	require.NoError(t, err)
+	require.Equal(t, int64(1), activated.Version)
+
+	replayed, err := lifecycle.ActivatePrescription(fixture.ctx, request)
+	require.NoError(t, err)
+	require.True(t, replayed.Replayed)
+	require.Equal(t, activated.PrescriptionID, replayed.PrescriptionID)
+
+	deactivated, err := lifecycle.DeactivatePrescription(fixture.ctx, killswitches.DeactivatePrescriptionRequest{
+		MutationContext: killswitches.MutationContext{
+			OrganizationID: killswitches.OrganizationID(fixture.auth.ActiveOrganizationID),
+			ActorUserID:    fixture.userID, ActorDisplayName: fixture.userID, OperationID: uuid.New(),
+		},
+		PrescriptionID: activated.PrescriptionID, ExpectedVersion: activated.Version,
+	})
+	require.NoError(t, err)
+	require.NoError(t, fixture.instance.service.RevokeInstance(fixture.ctx, &gen.RevokeInstancePayload{ID: fixture.instanceID}))
+	_, err = lifecycle.ReactivatePrescription(fixture.ctx, killswitches.ReactivatePrescriptionRequest{
+		MutationContext: killswitches.MutationContext{
+			OrganizationID: killswitches.OrganizationID(fixture.auth.ActiveOrganizationID),
+			ActorUserID:    fixture.userID, ActorDisplayName: fixture.userID, OperationID: uuid.New(),
+		},
+		PrescriptionID: activated.PrescriptionID, ExpectedVersion: deactivated.Version, Desired: request.Desired,
+	})
+	require.ErrorIs(t, err, killswitches.ErrInvalidReference)
 }
 
 func TestLiteLLMInstanceResourceValidationRequiresCurrentOwnership(t *testing.T) {
@@ -185,6 +289,20 @@ func TestLiteLLMInstanceResourceValidationRequiresCurrentOwnership(t *testing.T)
 	current, err = adapter.ValidateCurrentOrganization(fixture.ctx, killswitches.OrganizationID(fixture.auth.ActiveOrganizationID), key)
 	require.NoError(t, err)
 	require.False(t, current)
+}
+
+func TestLiteLLMAIAccessClassifiesResourceLookupFailureAsEvaluatorUnavailable(t *testing.T) {
+	t.Parallel()
+	noMatch, err := killswitches.NewNoMatchResult(killswitches.NoMatchReasonNoPrescription)
+	require.NoError(t, err)
+	fixture := newCheckpointFixture(t, noMatch)
+	fixture.checkpoint.resource = failingDeriveResourceAdapter{ResourceAdapter: fixture.checkpoint.resource, err: errors.New("database unavailable")}
+
+	decision := fixture.checkpoint.Evaluate(fixture.ctx, fixture.payload, fixture.auth)
+	require.True(t, decision.blocked)
+	require.Equal(t, "ai_access_evaluator_unavailable", decision.reason)
+	require.Equal(t, delegation.EvaluatorFailureMessage, decision.message)
+	require.Empty(t, fixture.evaluator.requests)
 }
 
 func TestLiteLLMAIAccessFailsClosedOnMembershipAndEvaluatorFailures(t *testing.T) {

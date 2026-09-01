@@ -77,6 +77,24 @@ WHERE li.organization_id = @organization_id
   AND li.api_key_id = @api_key_id
   AND li.deleted IS FALSE;
 
+-- name: LockActiveLiteLLMInstancesInOrganization :many
+SELECT li.id
+FROM litellm_instances li
+JOIN projects p
+  ON p.id = li.project_id
+ AND p.organization_id = li.organization_id
+JOIN api_keys ak
+  ON ak.id = li.api_key_id
+ AND ak.project_id = li.project_id
+ AND ak.organization_id = li.organization_id
+WHERE li.id = ANY(@ids::uuid[])
+  AND li.organization_id = @organization_id
+  AND li.deleted IS FALSE
+  AND p.deleted IS FALSE
+  AND ak.deleted IS FALSE
+ORDER BY li.id
+FOR SHARE OF li, p, ak;
+
 -- name: IsActiveLiteLLMInstanceInOrganization :one
 SELECT EXISTS(
   SELECT 1

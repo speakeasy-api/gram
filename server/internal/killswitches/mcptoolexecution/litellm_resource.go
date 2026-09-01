@@ -37,15 +37,7 @@ func (*LiteLLMInstanceResourceAdapter) Kind() killswitches.ResourceKind {
 }
 
 func (*LiteLLMInstanceResourceAdapter) Canonicalize(_ killswitches.OrganizationID, input string) (killswitches.CanonicalizationResult[killswitches.ResourceKey], error) {
-	id, err := uuid.Parse(input)
-	if err != nil || id == uuid.Nil || id.String() != input {
-		return killswitches.UnsupportedCanonicalizationResult[killswitches.ResourceKey](), nil
-	}
-	result, err := killswitches.NewCanonicalizationResult(killswitches.ResourceKey(id.String()))
-	if err != nil {
-		return killswitches.CanonicalizationResult[killswitches.ResourceKey]{}, fmt.Errorf("canonicalize LiteLLM instance: %w", err)
-	}
-	return result, nil
+	return canonicalUUIDResourceKey(input)
 }
 
 func (a *LiteLLMInstanceResourceAdapter) ValidateCurrentOrganization(ctx context.Context, organizationID killswitches.OrganizationID, key killswitches.ResourceKey) (bool, error) {
@@ -73,7 +65,7 @@ func (a *LiteLLMInstanceResourceAdapter) Derive(ctx context.Context, organizatio
 		ApiKeyID:       src.APIKeyID,
 	})
 	if errors.Is(err, pgx.ErrNoRows) {
-		return killswitches.CanonicalizationResult[killswitches.ResourceKey]{}, errors.New("active managed LiteLLM instance not found for integration key")
+		return killswitches.UnsupportedCanonicalizationResult[killswitches.ResourceKey](), nil
 	}
 	if err != nil {
 		return killswitches.CanonicalizationResult[killswitches.ResourceKey]{}, fmt.Errorf("resolve active managed LiteLLM instance: %w", err)
@@ -83,7 +75,7 @@ func (a *LiteLLMInstanceResourceAdapter) Derive(ctx context.Context, organizatio
 
 func litellmResourceFixtures() []killswitches.ResourceCanonicalizationFixture {
 	return []killswitches.ResourceCanonicalizationFixture{
-		{OrganizationID: "fixture-org", Input: "018f5f59-13ac-7a82-b3d6-e241722c675d", Expected: supportedKey(killswitches.ResourceKey("018f5f59-13ac-7a82-b3d6-e241722c675d"))},
+		{OrganizationID: "fixture-org", Input: " 018F5F59-13AC-7A82-B3D6-E241722C675D ", Expected: supportedKey(killswitches.ResourceKey("018f5f59-13ac-7a82-b3d6-e241722c675d"))},
 		{OrganizationID: "fixture-org", Input: "not-a-uuid", Expected: killswitches.UnsupportedCanonicalizationResult[killswitches.ResourceKey]()},
 	}
 }

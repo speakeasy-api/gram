@@ -2,7 +2,8 @@
 // fail-closed `mcp_tool_execution` and internal `ai_access` definitions, the
 // authoritative concrete-user principal adapter, the canonical
 // organization-owned resource adapters, and the coverage inventory for hosted
-// and private-proxy MCP tools/call plus approved live Claude/Codex hook activity.
+// and private-proxy MCP tools/call, approved live Claude/Codex hook activity,
+// and managed LiteLLM pre-inference requests.
 //
 // Registration declares the contracts consumed by the MCP and hook checkpoints.
 // The internal ai_access definition is not exposed through customer management.
@@ -24,8 +25,9 @@ const (
 	DefinitionKeyMCPToolExecution killswitches.DefinitionKey = "mcp_tool_execution"
 
 	// DefinitionKeyAIAccess is the internal broad AI-access capability. Its
-	// verified coverage is limited to authenticated MCP tools/call and the
-	// explicitly registered live Claude/Codex hook surfaces below.
+	// verified coverage is limited to authenticated MCP tools/call, the
+	// explicitly registered live Claude/Codex hooks, and the managed LiteLLM
+	// pre-inference surface below.
 	DefinitionKeyAIAccess killswitches.DefinitionKey = "ai_access"
 
 	// PrincipalKindUser is the concrete Gram user principal namespace; keys
@@ -41,7 +43,8 @@ const (
 	IdentityContractKeyAuthenticatedUserMCPServer killswitches.IdentityContractKey = "authenticated_user_mcp_server"
 
 	// IdentityContractKeyAuthenticatedUserAIResource is the additive ai_access
-	// contract spanning existing MCP servers and governed native hook activity.
+	// contract spanning MCP servers, governed native hooks, and managed LiteLLM
+	// pre-inference activity.
 	IdentityContractKeyAuthenticatedUserAIResource killswitches.IdentityContractKey = "authenticated_user_ai_resource"
 
 	ResourceKindHookActivity    killswitches.ResourceKind = "hook_activity"

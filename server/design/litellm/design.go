@@ -169,7 +169,11 @@ var _ = Service("litellm", func() {
 			security.SessionPayload()
 			security.ProjectPayload()
 			Attribute("instance_id", String, func() { Format(FormatUUID) })
-			Attribute("invocation_id", String, "Fresh canonical UUIDv7 identifying exactly one inference attempt.", func() { Format(FormatUUID) })
+			Attribute("invocation_id", String, "Fresh canonical UUIDv7 identifying exactly one inference attempt.", func() {
+				Format(FormatUUID)
+				Pattern(`^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$`)
+				Example("0198a1b2-c3d4-7000-8000-0123456789ab")
+			})
 			Required("instance_id", "invocation_id")
 		})
 		Result(ActingPrincipalResult)
