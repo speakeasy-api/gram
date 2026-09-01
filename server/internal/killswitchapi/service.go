@@ -27,6 +27,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/killswitches"
 	"github.com/speakeasy-api/gram/server/internal/killswitches/mcptoolexecution"
 	killswitchrepo "github.com/speakeasy-api/gram/server/internal/killswitches/repo"
@@ -49,19 +50,24 @@ type Service struct {
 	auth       *gramauth.Auth
 	db         *pgxpool.Pool
 	authorized *killswitches.AuthorizedService
+	generic    killswitches.GenericService
 	user       killswitches.PrincipalAdapter
 	server     killswitches.ResourceAdapter
+	features   feature.Provider
 }
 
 var _ gen.Service = (*Service)(nil)
 var _ gen.Auther = (*Service)(nil)
 
-func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessionManager *sessions.Manager, authzEngine *authz.Engine, auditLogger *audit.Logger) (*Service, error) {
+func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessionManager *sessions.Manager, authzEngine *authz.Engine, auditLogger *audit.Logger, features feature.Provider) (*Service, error) {
 	registry, err := mcptoolexecution.NewRegistry(db)
 	if err != nil {
 		return nil, fmt.Errorf("build MCP tool-call killswitch registry: %w", err)
 	}
-	lifecycle, err := killswitches.NewLifecycleService(db, registry, mcptoolexecution.NewCustomerLifecycleValidator(), killswitches.NewAuditBeforeCommitHook(auditLogger))
+	lifecycle, err := killswitches.NewLifecycleService(
+		db, registry, mcptoolexecution.NewCustomerLifecycleValidator(), killswitches.NewAuditBeforeCommitHook(auditLogger),
+		killswitches.WithBeforeApplyHook(rolloutBeforeApply(features)),
+	)
 	if err != nil {
 		return nil, fmt.Errorf("build killswitch lifecycle service: %w", err)
 	}
@@ -83,9 +89,29 @@ func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pg
 	}
 	return &Service{
 		tracer: tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/killswitchapi"), logger: logger,
-		auth: gramauth.New(logger, db, sessionManager, authzEngine), db: db, authorized: authorized,
-		user: user, server: server,
+		auth: gramauth.New(logger, db, sessionManager, authzEngine), db: db, authorized: authorized, generic: facade,
+		user: user, server: server, features: features,
 	}, nil
+}
+
+func (s *Service) GenericService() killswitches.GenericService {
+	return s.generic
+}
+
+func rolloutBeforeApply(features feature.Provider) killswitches.BeforeApplyHook {
+	return func(ctx context.Context, mutation killswitches.MutationContext, operation killswitches.MutationOperation) error {
+		if operation == killswitches.MutationOperationDeactivate {
+			return nil
+		}
+		mode, err := mcptoolexecution.ResolveRolloutMode(ctx, features, string(mutation.OrganizationID))
+		if err != nil {
+			return fmt.Errorf("%w: resolve MCP killswitch rollout mode: %w", killswitches.ErrOperationUnavailable, err)
+		}
+		if mode != mcptoolexecution.RolloutModeEnforce {
+			return fmt.Errorf("%w: killswitch activation is not enabled for this organization", killswitches.ErrOperationUnavailable)
+		}
+		return nil
+	}
 }
 
 func Attach(mux goahttp.Muxer, service *Service) {
@@ -737,8 +763,7 @@ func mapError(err error) error {
 	if err == nil {
 		return nil
 	}
-	var shareable *oops.ShareableError
-	if errors.As(err, &shareable) {
+	if _, ok := errors.AsType[*oops.ShareableError](err); ok {
 		return err
 	}
 	switch {

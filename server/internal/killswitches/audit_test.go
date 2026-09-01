@@ -219,6 +219,7 @@ func TestManagementAuditAndBreakGlassRemainAvailableDuringEvaluatorIncident(t *t
 	require.Equal(t, "user:customer-admin", rows[0].ActorID)
 	require.Equal(t, string(audit.SurfaceDashboard), rows[0].ActingSurface)
 	require.Equal(t, "user:platform-admin", rows[1].ActorID)
+	require.Equal(t, "platform-admin@example.com", rows[1].ActorDisplayName)
 	require.Equal(t, string(audit.SurfacePlatformBreakGlass), rows[1].ActingSurface)
 	require.Len(t, listOutboxMessages(t, conn, orgID), 2)
 }

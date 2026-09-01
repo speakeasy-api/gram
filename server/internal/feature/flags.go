@@ -36,6 +36,13 @@ const (
 	FlagRiskFindingAnalytics Flag = "risk-finding-analytics"
 	FlagRiskAsyncScanShadow  Flag = "risk-async-scan-shadow"
 
+	// FlagMCPKillswitchShadow and FlagMCPKillswitchEnforce form the server-side
+	// rollout gate for authenticated MCP tools/call evaluation. Mode resolution
+	// uses PostHog's local cache and checks enforce first, so it takes precedence
+	// when both flags are enabled.
+	FlagMCPKillswitchShadow  Flag = "mcp-killswitch-shadow"
+	FlagMCPKillswitchEnforce Flag = "mcp-killswitch-enforce"
+
 	// FlagPlatformMCPRiskMutations is the exact-project kill switch for risk
 	// policy and exclusion writes exposed through Platform MCP. It is evaluated
 	// at invocation time and fails closed when absent, disabled, or indeterminate.
