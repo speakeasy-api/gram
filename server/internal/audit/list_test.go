@@ -62,23 +62,16 @@ func TestListAuditLogs_Window(t *testing.T) {
 	require.NoError(t, err)
 
 	queries := repo.New(conn)
-	// Written now and then backdated: created_at defaults to the insert time,
-	// and the window is the only thing under test here.
-	days := []int{-10, -3, -1}
-	for _, offset := range days {
-		row, err := queries.InsertAuditLog(ctx, repo.InsertAuditLogParams{
+	for range 3 {
+		_, err := queries.InsertAuditLog(ctx, repo.InsertAuditLogParams{
 			OrganizationID: orgID, ActorID: "user:test", ActorType: "user",
 			Action: "test:create", SubjectID: uuid.NewString(), SubjectType: "project",
 		})
 		require.NoError(t, err)
-		_, err = conn.Exec(ctx,
-			"UPDATE audit_logs SET created_at = now() + make_interval(days => $1) WHERE id = $2",
-			offset, row.ID)
-		require.NoError(t, err)
 	}
 
-	now := time.Now().UTC()
 	window := func(from, to *time.Time) []repo.ListAuditLogsRow {
+		t.Helper()
 		rows, err := queries.ListAuditLogs(ctx, repo.ListAuditLogsParams{
 			OrganizationID: orgID,
 			CursorSeq:      pgtype.Int8{},
@@ -89,19 +82,20 @@ func TestListAuditLogs_Window(t *testing.T) {
 		return rows
 	}
 
-	require.Len(t, window(nil, nil), 3, "no bound is no filter")
+	// Bounds are taken from what the rows were actually stamped with, rather
+	// than from a backdated fixture: created_at defaults to clock_timestamp(),
+	// which advances between statements, so the three rows are strictly
+	// ordered and the boundary cases land exactly on a stored value.
+	all := window(nil, nil)
+	require.Len(t, all, 3, "no bound is no filter")
+	newest := all[0].CreatedAt.Time
+	middle := all[1].CreatedAt.Time
+	oldest := all[2].CreatedAt.Time
+	require.True(t, oldest.Before(middle) && middle.Before(newest),
+		"rows are stamped in insertion order")
 
-	fiveDaysAgo := now.AddDate(0, 0, -5)
-	require.Len(t, window(&fiveDaysAgo, nil), 2, "from alone drops what precedes it")
-
-	twoDaysAgo := now.AddDate(0, 0, -2)
-	require.Len(t, window(nil, &twoDaysAgo), 2, "to alone drops what follows it")
-	require.Len(t, window(&fiveDaysAgo, &twoDaysAgo), 1, "both bounds keep the middle")
-
-	// Half-open: a row landing exactly on `from` is in, exactly on `to` is out.
-	rows := window(nil, nil)
-	require.Len(t, rows, 3)
-	newest := rows[0].CreatedAt.Time
-	require.Len(t, window(&newest, nil), 1, "from is inclusive")
-	require.Empty(t, window(&newest, &newest), "to is exclusive")
+	require.Len(t, window(&middle, nil), 2, "from is inclusive")
+	require.Len(t, window(nil, &middle), 1, "to is exclusive")
+	require.Len(t, window(&oldest, &newest), 2, "the window is half-open")
+	require.Empty(t, window(&newest, &newest), "an empty window matches nothing")
 }
