@@ -1,6 +1,6 @@
 import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi, beforeEach } from "vitest";
-import { CAL_DEMO_LINK } from "./demo-booking";
+import { CAL_DEMO_LINK, CAL_DEMO_NAMESPACE } from "./demo-booking";
 
 type MockSession = {
   user: { email: string; displayName?: string };
@@ -16,19 +16,23 @@ const { captureMock, sessionHolder, calUiMock } = vi.hoisted(() => ({
     } as MockSession,
   },
 }));
+const calNamespaces = vi.hoisted(() => [] as (string | undefined)[]);
 
 // Replace the Cal embed with a probe that exposes the props it received.
 vi.mock("@calcom/embed-react", () => ({
   default: ({
     calLink,
+    namespace,
     config,
   }: {
     calLink: string;
+    namespace?: string;
     config?: Record<string, string | undefined>;
   }) => (
     <div
       data-testid="cal-embed"
       data-cal-link={calLink}
+      data-cal-namespace={namespace ?? ""}
       data-cal-name={config?.name ?? ""}
       data-cal-email={config?.email ?? ""}
       // Keyed by the booking question's identifier on the Cal event, which is
@@ -38,7 +42,10 @@ vi.mock("@calcom/embed-react", () => ({
       data-cal-notes={config?.notes ?? ""}
     />
   ),
-  getCalApi: () => Promise.resolve(calUiMock),
+  getCalApi: (options?: { namespace?: string }) => {
+    calNamespaces.push(options?.namespace);
+    return Promise.resolve(calUiMock);
+  },
 }));
 
 vi.mock("@/contexts/Auth", () => ({
@@ -57,9 +64,16 @@ vi.mock("@/components/billing/lockout-payg-checkout-panel", () => ({
 
 import { DemoBookingFlow } from "./DemoBookingFlow";
 
+/** Renders, then settles the promise `getCalApi` returns. */
+async function renderConfigured(ui: React.ReactElement = <DemoBookingFlow />) {
+  render(ui);
+  await waitFor(() => expect(calUiMock).toHaveBeenCalled());
+}
+
 beforeEach(() => {
   captureMock.mockClear();
   calUiMock.mockClear();
+  calNamespaces.length = 0;
   sessionHolder.current = {
     user: { email: "jane@acme.com", displayName: "Jane Smith" },
     organization: { name: "Acme Inc" },
@@ -141,9 +155,7 @@ describe("DemoBookingFlow", () => {
   // hideEventTypeDetails and cssVarsPerTheme are UiConfig, not prefill config;
   // passing them via the `config` prop silently does nothing.
   it("brands the embed through the ui instruction, not the config prop", async () => {
-    render(<DemoBookingFlow />);
-
-    await waitFor(() => expect(calUiMock).toHaveBeenCalled());
+    await renderConfigured();
 
     const [instruction, uiConfig] = calUiMock.mock.calls[0] as [
       string,
@@ -158,6 +170,15 @@ describe("DemoBookingFlow", () => {
       "light",
       "dark",
     ]);
+  });
+
+  it("uses one Cal namespace for the embed and its instructions", async () => {
+    await renderConfigured();
+
+    expect(calNamespaces).toEqual([CAL_DEMO_NAMESPACE]);
+    expect(
+      screen.getByTestId("cal-embed").getAttribute("data-cal-namespace"),
+    ).toBe(CAL_DEMO_NAMESPACE);
   });
 
   it("footnotes the details it handed the embed", () => {

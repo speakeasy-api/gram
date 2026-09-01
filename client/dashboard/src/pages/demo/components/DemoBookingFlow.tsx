@@ -3,7 +3,11 @@ import _Cal, { getCalApi } from "@calcom/embed-react";
 import { LockoutPaygCheckoutPanel } from "@/components/billing/lockout-payg-checkout-panel";
 import { useSessionData } from "@/contexts/Auth";
 import { useTelemetry } from "@/contexts/Telemetry";
-import { CAL_DEMO_LINK, splitDisplayName } from "./demo-booking";
+import {
+  CAL_DEMO_LINK,
+  CAL_DEMO_NAMESPACE,
+  splitDisplayName,
+} from "./demo-booking";
 
 // Cal's .d.ts returns the legacy global `JSX.Element`, incompatible with
 // react-jsx/TS5. Widen only the return type; keep prop types intact so a
@@ -43,7 +47,7 @@ function useCalBranding() {
   useEffect(() => {
     let cancelled = false;
     void (async () => {
-      const cal = await getCalApi();
+      const cal = await getCalApi({ namespace: CAL_DEMO_NAMESPACE });
       if (cancelled) return;
       cal("ui", {
         theme: "light",
@@ -51,6 +55,7 @@ function useCalBranding() {
         cssVarsPerTheme: { light: CAL_BRAND_VARS, dark: CAL_BRAND_VARS },
       });
     })();
+
     return () => {
       cancelled = true;
     };
@@ -153,6 +158,7 @@ export function DemoBookingFlow({
             capped so the card still clears the fold on a laptop viewport. */}
         <div className="h-[clamp(500px,54vh,600px)] w-full overflow-auto">
           <Cal
+            namespace={CAL_DEMO_NAMESPACE}
             calLink={CAL_DEMO_LINK}
             config={{
               // Caller defaults go first so the identity below wins: the type

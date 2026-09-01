@@ -2,6 +2,9 @@
 // embedded directly (no routing form). Rotate here if the Cal event changes.
 export const CAL_DEMO_LINK = "team/speakeasy-com/ai-transformation";
 
+// Keep the branding instruction and inline embed on the same Cal instance.
+export const CAL_DEMO_NAMESPACE = "gram-demo";
+
 export function splitDisplayName(displayName?: string): {
   firstName: string;
   lastName: string;
