@@ -65,9 +65,11 @@ func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.A
 	return s.auth.Authorize(ctx, key, schema)
 }
 
-// Resolve maps an identity URN to the subject it names. Org read is the gate
-// because the response is the same directory information access.listMembers
-// already returns to every member.
+// Resolve maps an identity URN to the subject it names. Org read is the gate:
+// the subject is an org member and the caller is one too. Note the response
+// carries more than access.listMembers does — directory attributes, group
+// memberships and the linked AI-account addresses — so raising this gate is
+// the lever if those are ever judged admin-only.
 func (s *Service) Resolve(ctx context.Context, payload *gen.ResolvePayload) (*gen.IdentityModel, error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.ActiveOrganizationID == "" {

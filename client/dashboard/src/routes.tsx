@@ -52,11 +52,23 @@ import MCPServerDetails from "./pages/mcp/x/MCPServerDetails";
 import {
   InsightsEmployeeDetailPage,
   InsightsEmployeesLayout,
-  InsightsEmployeesPage,
   InsightsHooksPage,
   InsightsRoot,
 } from "./pages/insights/Insights";
 import Costs from "./pages/costs/Costs";
+import IdentitiesIndex, {
+  IdentitiesIndexRedirect,
+  IdentityDetailIndexRedirect,
+  IdentitiesRoot,
+} from "./pages/identities/IdentitiesIndex";
+import IdentityDetailRoot from "./pages/identities/IdentityDetailRoot";
+import IdentityOverview from "./pages/identities/IdentityOverview";
+import IdentityAccess from "./pages/identities/IdentityAccess";
+import IdentityUsage from "./pages/identities/IdentityUsage";
+import IdentitySecurity from "./pages/identities/IdentitySecurity";
+import IdentityCost from "./pages/identities/IdentityCost";
+import IdentityDevices from "./pages/identities/IdentityDevices";
+import IdentityActivity from "./pages/identities/IdentityActivity";
 import FunctionsOnboarding from "./pages/onboarding/FunctionsOnboarding";
 import UploadOpenAPI from "./pages/onboarding/UploadOpenAPI";
 import CreateUnproxiedMcp from "./pages/sources/unproxied-mcp/CreateUnproxiedMcp";
@@ -634,12 +646,16 @@ const ROUTE_STRUCTURE = {
     component: InsightsRoot,
     indexComponent: InsightsHooksPage,
   },
+  // Superseded by the org-level Identities index, which lists the same people
+  // plus the identities the directory has never heard of. The routes stay so
+  // existing links keep working: the index redirects, and the enrollment detail
+  // (its data-flow graph has no equivalent yet) still renders.
   employees: {
     title: "Employee Enrollment",
     url: "employees",
     icon: "users",
     component: InsightsEmployeesLayout,
-    indexComponent: InsightsEmployeesPage,
+    indexComponent: IdentitiesIndexRedirect,
     subPages: {
       detail: {
         title: "Employee Detail",
@@ -1196,6 +1212,67 @@ const ORG_ROUTE_STRUCTURE = {
         title: "Killswitch detail",
         url: ":killswitchId",
         component: KillswitchDetail,
+      },
+    },
+  },
+  // One page per person, reached from every surface that renders a human. The
+  // URL segment is an identity URN (`user:...`, `email:...`, `external:...`),
+  // url-encoded; the resolver folds every identifier for a subject onto the
+  // same canonical URN, so links built from different systems converge here.
+  //
+  // Org-level because that is what an identity is: `identity.resolve`, the
+  // directory, roles, devices, the audit trail and the challenge log are all
+  // org-scoped. Only the telemetry panels are per-project, and they take the
+  // project as a filter in the page header rather than as a route segment.
+  identities: {
+    title: "Identities",
+    url: "identities",
+    icon: "users",
+    component: IdentitiesRoot,
+    indexComponent: IdentitiesIndex,
+    subPages: {
+      detail: {
+        title: "Identity",
+        url: ":identityUrn",
+        component: IdentityDetailRoot,
+        indexComponent: IdentityDetailIndexRedirect,
+        subPages: {
+          overview: {
+            title: "Identity Overview",
+            url: "overview",
+            component: IdentityOverview,
+          },
+          access: {
+            title: "Identity Access",
+            url: "access",
+            component: IdentityAccess,
+          },
+          usage: {
+            title: "Identity Usage",
+            url: "usage",
+            component: IdentityUsage,
+          },
+          security: {
+            title: "Identity Security",
+            url: "security",
+            component: IdentitySecurity,
+          },
+          cost: {
+            title: "Identity Cost",
+            url: "cost",
+            component: IdentityCost,
+          },
+          devices: {
+            title: "Identity Devices",
+            url: "devices",
+            component: IdentityDevices,
+          },
+          activity: {
+            title: "Identity Activity",
+            url: "activity",
+            component: IdentityActivity,
+          },
+        },
       },
     },
   },

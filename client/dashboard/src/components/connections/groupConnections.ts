@@ -53,7 +53,9 @@ export type ConnectionGroup = {
    * face. Absent for provider and client groups, which are not identities and
    * would read oddly with an initials badge.
    */
-  identity?: { photoUrl?: string };
+  // `urn` is the subject URN the sessions were filed under, which is also the
+  // identity URN the person's page resolves from.
+  identity?: { photoUrl?: string; urn?: string };
   /**
    * The registration this group stands for, under client grouping. Carrying the
    * whole record (rather than an id) lets the header offer "revoke
@@ -178,7 +180,10 @@ export function groupConnections(
           // initials rather than omitting the avatar.
           identity:
             grouping === "subject" && session.subjectType === "user"
-              ? { photoUrl: session.subjectPhotoUrl ?? undefined }
+              ? {
+                  photoUrl: session.subjectPhotoUrl ?? undefined,
+                  urn: session.subjectUrn,
+                }
               : undefined,
           client: undefined,
           // Both read off the session rather than a registration record, which
