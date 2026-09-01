@@ -14,7 +14,7 @@ type UserSession struct {
 	// The issuing user_session_issuer id.
 	UserSessionIssuerID string
 	// The session's subject URN (user:<id> | apikey:<uuid> |
-	// anonymous:<mcp-session-id>).
+	// anonymous:<mcp-session-id> | workload:<issuer-id>:<external-subject>).
 	SubjectUrn string
 	// Current access-token JTI; used by the revocation path.
 	Jti string
