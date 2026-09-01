@@ -24,9 +24,11 @@ import (
 
 	webhooksv1 "github.com/speakeasy-api/gram/infra/gen/gram/webhooks/v1"
 	gen "github.com/speakeasy-api/gram/server/gen/killswitches"
+	platformgen "github.com/speakeasy-api/gram/server/gen/platform_killswitches"
 	usersessionsgen "github.com/speakeasy-api/gram/server/gen/user_sessions"
 	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
 	"github.com/speakeasy-api/gram/server/internal/audit"
+	authrepo "github.com/speakeasy-api/gram/server/internal/auth/repo"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
@@ -42,12 +44,12 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcpidentity"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
+	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/outbox/events"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp/proxy"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
-	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	toolsrepo "github.com/speakeasy-api/gram/server/internal/tools/repo"
 	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	tunneledmcprepo "github.com/speakeasy-api/gram/server/internal/tunneledmcp/repo"
@@ -397,6 +399,13 @@ func requireGoaError(t *testing.T, err error, name string) {
 	require.Equal(t, name, named.GoaErrorName())
 }
 
+func requireUnavailableError(t *testing.T, err error) {
+	t.Helper()
+	var unavailable *oops.ShareableError
+	require.ErrorAs(t, err, &unavailable)
+	require.Equal(t, oops.CodeUnavailable, unavailable.Code)
+}
+
 func databaseNow(t *testing.T, db *pgxpool.Pool) time.Time {
 	t.Helper()
 	now, err := killswitchrepo.New(db).GetKillswitchDatabaseTime(t.Context())
@@ -498,19 +507,20 @@ func requireHistoryEvent(t *testing.T, event *gen.KillswitchHistoryEvent, versio
 }
 
 type expectedLifecycleEvent struct {
-	action      audit.Action
-	version     int64
-	state       string
-	operation   string
-	operationID uuid.UUID
-	actorID     string
+	action        audit.Action
+	version       int64
+	state         string
+	operation     string
+	operationID   uuid.UUID
+	actorID       string
+	actingSurface string
 }
 
 func requireLifecycleEvents(t *testing.T, f *killswitchAcceptanceFixture, prescriptionID string, expected []expectedLifecycleEvent) {
 	t.Helper()
 	//nolint:glint // notestingrawsql: bounded read-only acceptance assertion
 	rows, err := f.ti.conn.Query(t.Context(), `
-		SELECT action, actor_id, subject_type, coalesce(after_snapshot, 'null'::jsonb), coalesce(metadata, 'null'::jsonb)
+		SELECT action, actor_id, subject_type, coalesce(after_snapshot, 'null'::jsonb), coalesce(metadata, 'null'::jsonb), coalesce(acting_surface, '')
 		FROM audit_logs
 		WHERE organization_id = $1 AND subject_id = $2
 		ORDER BY seq
@@ -521,9 +531,9 @@ func requireLifecycleEvents(t *testing.T, f *killswitchAcceptanceFixture, prescr
 	var got int
 	for rows.Next() {
 		require.Less(t, got, len(expected))
-		var action, actorID, subjectType string
+		var action, actorID, subjectType, actingSurface string
 		var snapshotJSON, metadataJSON []byte
-		require.NoError(t, rows.Scan(&action, &actorID, &subjectType, &snapshotJSON, &metadataJSON))
+		require.NoError(t, rows.Scan(&action, &actorID, &subjectType, &snapshotJSON, &metadataJSON, &actingSurface))
 		want := expected[got]
 		require.Equal(t, string(want.action), action)
 		wantActorID := want.actorID
@@ -532,6 +542,9 @@ func requireLifecycleEvents(t *testing.T, f *killswitchAcceptanceFixture, prescr
 		}
 		require.Equal(t, wantActorID, actorID)
 		require.Equal(t, "killswitch_prescription", subjectType)
+		if want.actingSurface != "" {
+			require.Equal(t, want.actingSurface, actingSurface)
+		}
 		var snapshot audit.KillswitchVersionSnapshot
 		require.NoError(t, json.Unmarshal(snapshotJSON, &snapshot))
 		require.Equal(t, audit.KillswitchVersionSnapshot{Version: want.version, State: want.state}, snapshot)
@@ -708,6 +721,8 @@ func TestKillswitchAcceptanceAIAccessProductionComposition(t *testing.T) {
 	t.Parallel()
 
 	ctx, f := newKillswitchAcceptanceFixture(t)
+	require.NoError(t, authrepo.New(f.ti.conn).SetUserAdminFixture(ctx, authrepo.SetUserAdminFixtureParams{Admin: true, UserID: f.auth.UserID}))
+	platform := killswitches.NewPlatformService(f.ti.logger, f.ti.tracerProvider, f.ti.conn, f.ti.sessionManager, f.ti.authzEngine, f.management.GenericService())
 
 	hosted := f.newHostedTarget(t, ctx, "ai-hosted")
 	var hostedProtectedCalls atomic.Int32
@@ -736,19 +751,35 @@ func TestKillswitchAcceptanceAIAccessProductionComposition(t *testing.T) {
 		{target: remote, toolName: "ping", successToken: remote.successToken, protectedCalls: remote.upstream.calls.Load},
 		{target: tunnel, toolName: "ping", successToken: tunnel.successToken, protectedCalls: tunnel.upstream.calls.Load},
 	}
-	resourceKeys := make([]string, 0, len(targets))
 	for i := range targets {
 		targets[i].sessionID = f.initialize(t, targets[i].target)
 		requireSuccessfulToolCall(t, f.call(t, targets[i].target, makeToolsCallBody(targets[i].toolName), targets[i].sessionID), targets[i].successToken)
-		resourceKeys = append(resourceKeys, targets[i].target.server.ID.String())
 	}
+	scope := selectedServers(hosted.server.ID, remote.server.ID, tunnel.server.ID)
+	resourceKeys := scope.ServerIds
 
-	require.NoError(t, testrepo.New(f.ti.conn).InsertKillswitchPrescriptionFixture(t.Context(), testrepo.InsertKillswitchPrescriptionFixtureParams{
-		PrescriptionID: uuid.New(), OrganizationID: f.auth.ActiveOrganizationID,
-		DefinitionKey: string(mcptoolexecution.DefinitionKeyAIAccess), PrincipalKind: string(mcptoolexecution.PrincipalKindUser), PrincipalKey: f.auth.UserID,
-		ResourceKind: string(mcptoolexecution.ResourceKindMCPServer), ResourceScope: "selected", ResourceKeys: resourceKeys,
-		InternalNote: "internal AI access acceptance fixture", ExternalNote: acceptanceAIExternalNote,
-	}))
+	aiActivateOperation := uuid.New()
+	aiActivatePayload := &platformgen.ActivatePrescriptionPayload{
+		OrganizationID: f.auth.ActiveOrganizationID, OperationID: aiActivateOperation.String(),
+		Definition: new(string(mcptoolexecution.DefinitionKeyAIAccess)), PrincipalKind: new(string(mcptoolexecution.PrincipalKindUser)), PrincipalInput: new(f.auth.UserID),
+		ResourceKind: new(string(mcptoolexecution.ResourceKindMCPServer)), ResourceScope: string(killswitches.ResourceScopeSelected), SelectedResourceInputs: resourceKeys, StartMode: string(killswitches.StartModeNow),
+		InternalNote: acceptanceInternalNote, ExternalNote: acceptanceAIExternalNote,
+	}
+	aiPrescription, err := platform.ActivatePrescription(ctx, aiActivatePayload)
+	require.NoError(t, err)
+	require.False(t, aiPrescription.Replayed)
+	require.Equal(t, int64(1), aiPrescription.Version)
+	require.Equal(t, string(killswitches.PrescriptionStateActive), aiPrescription.State)
+
+	listed, err := platform.ListPrescriptions(ctx, &platformgen.ListPrescriptionsPayload{OrganizationID: f.auth.ActiveOrganizationID})
+	require.NoError(t, err)
+	require.Len(t, listed.Prescriptions, 1)
+	require.Equal(t, aiPrescription.PrescriptionID, listed.Prescriptions[0].ID)
+	aiDetail, err := platform.GetPrescription(ctx, &platformgen.GetPrescriptionPayload{OrganizationID: f.auth.ActiveOrganizationID, PrescriptionID: aiPrescription.PrescriptionID})
+	require.NoError(t, err)
+	require.Equal(t, string(mcptoolexecution.DefinitionKeyAIAccess), aiDetail.Definition)
+	require.Equal(t, acceptanceInternalNote, aiDetail.InternalNote)
+	require.Equal(t, acceptanceAIExternalNote, aiDetail.ExternalNote)
 
 	protectedBaselines := make([]int32, len(targets))
 	for i, target := range targets {
@@ -757,11 +788,58 @@ func TestKillswitchAcceptanceAIAccessProductionComposition(t *testing.T) {
 		require.Equal(t, protectedBaselines[i], target.protectedCalls(), target.target.name)
 	}
 
+	f.ti.features.SetFlag(feature.FlagMCPKillswitchEnforce, f.auth.ActiveOrganizationID, false)
+	replayedActivation, err := platform.ActivatePrescription(ctx, aiActivatePayload)
+	require.NoError(t, err)
+	require.True(t, replayedActivation.Replayed)
+	freshActivation := *aiActivatePayload
+	freshActivation.OperationID = uuid.NewString()
+	_, err = platform.ActivatePrescription(ctx, &freshActivation)
+	requireUnavailableError(t, err)
+
+	_, err = platform.ChangePrescription(ctx, &platformgen.ChangePrescriptionPayload{
+		OrganizationID: f.auth.ActiveOrganizationID, OperationID: uuid.NewString(), PrescriptionID: aiPrescription.PrescriptionID, ExpectedVersion: 1,
+		ResourceScope: string(killswitches.ResourceScopeSelected), SelectedResourceInputs: resourceKeys, StartMode: string(killswitches.StartModeNow), InternalNote: acceptanceInternalNote, ExternalNote: "fresh change while rollout is off",
+	})
+	requireUnavailableError(t, err)
+
+	aiDeactivateOperation := uuid.New()
+	aiDeactivatePayload := &platformgen.DeactivatePrescriptionPayload{
+		OrganizationID: f.auth.ActiveOrganizationID, OperationID: aiDeactivateOperation.String(), PrescriptionID: aiPrescription.PrescriptionID, ExpectedVersion: 1,
+	}
+	deactivated, err := platform.DeactivatePrescription(ctx, aiDeactivatePayload)
+	require.NoError(t, err)
+	require.False(t, deactivated.Replayed)
+	require.Equal(t, int64(2), deactivated.Version)
+	require.Equal(t, string(killswitches.PrescriptionStateInactive), deactivated.State)
+	replayedDeactivation, err := platform.DeactivatePrescription(ctx, aiDeactivatePayload)
+	require.NoError(t, err)
+	require.True(t, replayedDeactivation.Replayed)
+
+	aiDetail, err = platform.GetPrescription(ctx, &platformgen.GetPrescriptionPayload{OrganizationID: f.auth.ActiveOrganizationID, PrescriptionID: aiPrescription.PrescriptionID})
+	require.NoError(t, err)
+	require.Equal(t, string(killswitches.PrescriptionStateInactive), aiDetail.State)
+	require.Equal(t, acceptanceInternalNote, aiDetail.InternalNote)
+	listed, err = platform.ListPrescriptions(ctx, &platformgen.ListPrescriptionsPayload{OrganizationID: f.auth.ActiveOrganizationID})
+	require.NoError(t, err)
+	require.Len(t, listed.Prescriptions, 1)
+	require.Equal(t, string(killswitches.PrescriptionStateInactive), listed.Prescriptions[0].State)
+	requireLifecycleEvents(t, f, aiPrescription.PrescriptionID, []expectedLifecycleEvent{
+		{action: audit.ActionKillswitchActivate, version: 1, state: "active", operation: "activate", operationID: aiActivateOperation, actingSurface: string(audit.SurfacePlatformBreakGlass)},
+		{action: audit.ActionKillswitchDeactivate, version: 2, state: "inactive", operation: "deactivate", operationID: aiDeactivateOperation, actingSurface: string(audit.SurfacePlatformBreakGlass)},
+	})
+
+	f.ti.features.SetFlag(feature.FlagMCPKillswitchEnforce, f.auth.ActiveOrganizationID, true)
+	for i, target := range targets {
+		requireSuccessfulToolCall(t, f.call(t, target.target, makeToolsCallBody(target.toolName), target.sessionID), target.successToken)
+		protectedBaselines[i] = target.protectedCalls()
+	}
+
 	capabilities, err := f.management.ListCapabilities(ctx, &gen.ListCapabilitiesPayload{})
 	require.NoError(t, err)
 	require.Equal(t, []*gen.KillswitchCapability{{Key: killswitchapi.CapabilityMCPToolCalls, Label: "MCP tool calls"}}, capabilities.Capabilities)
 	operationID := uuid.New()
-	mcpPrescription := f.create(t, ctx, operationID, selectedServers(hosted.server.ID, remote.server.ID, tunnel.server.ID), scheduleNow(), acceptanceExternalNote)
+	mcpPrescription := f.create(t, ctx, operationID, scope, scheduleNow(), acceptanceExternalNote)
 	requireLifecycleEvents(t, f, mcpPrescription.ID, []expectedLifecycleEvent{{
 		action: audit.ActionKillswitchActivate, version: 1, state: "active", operation: "activate", operationID: operationID,
 	}})

@@ -21,7 +21,7 @@ func TestPrivateCheckpointDualDefinitionMatrixAndNextCall(t *testing.T) {
 	realEvaluator, err := killswitches.NewEvaluator(conn, registry, time.Second, nil, testenv.NewLogger(t))
 	require.NoError(t, err)
 	counted := &countingEvaluator{delegate: realEvaluator}
-	checkpoint, err := newCheckpoint(registry, counted, time.Second)
+	checkpoint, err := newCheckpoint(registry, counted, time.Second, enforcedRollout(orgID))
 	require.NoError(t, err)
 
 	userID := "user_" + uuid.NewString()
