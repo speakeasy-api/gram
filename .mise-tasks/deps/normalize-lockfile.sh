@@ -28,6 +28,14 @@ fi
 echo "Restoring pnpm-lock.yaml from merge base $base..."
 git restore --source="$base" --worktree -- pnpm-lock.yaml
 
+keep_normalized=0
+restore_lockfile() {
+  if [ "$keep_normalized" -eq 0 ]; then
+    git restore --worktree -- pnpm-lock.yaml
+  fi
+}
+trap restore_lockfile EXIT
+
 echo "Re-resolving manifest changes with aube..."
 aube install --lockfile-only --fix-lockfile
 
@@ -45,6 +53,7 @@ if [ -n "$unexpected" ]; then
 fi
 
 git diff --check -- pnpm-lock.yaml
+keep_normalized=1
 
 if git diff --quiet -- pnpm-lock.yaml; then
   echo "Lockfile is already normalized; no changes to review."
