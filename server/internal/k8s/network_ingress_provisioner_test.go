@@ -2,6 +2,7 @@ package k8s
 
 import (
 	"context"
+	"encoding/json"
 	"testing"
 
 	"github.com/google/uuid"
@@ -31,7 +32,7 @@ func TestNetworkIngressResourceNamesStableAndRoundTrip(t *testing.T) {
 	second, err := NewNetworkIngressResourceNames(ingressID)
 	require.NoError(t, err)
 	require.Equal(t, first, second)
-	require.Equal(t, "gram-netingress-0199aabbccdd70008000", first.Namespace)
+	require.Equal(t, "gram-netingress-86c7c63bb062541a6ba1", first.Namespace)
 	require.NotContains(t, first.Namespace, ".")
 
 	encoded, err := first.Marshal()
@@ -40,6 +41,10 @@ func TestNetworkIngressResourceNamesStableAndRoundTrip(t *testing.T) {
 	parsed, err := ParseNetworkIngressResourceNames(encoded)
 	require.NoError(t, err)
 	require.Equal(t, first, parsed)
+
+	drifted := first
+	drifted.Ingress = "valid-but-wrong"
+	require.ErrorIs(t, drifted.Validate(), ErrNetworkIngressInvalidDesiredState)
 }
 
 func TestNetworkIngressResourceNamesRejectIncompleteState(t *testing.T) {
@@ -71,7 +76,16 @@ func TestNetworkIngressDesiredValidationDoesNotExposeCredentials(t *testing.T) {
 		BackendPort:    8443,
 	}
 	require.NoError(t, desired.Validate())
+	serialized, err := json.Marshal(struct {
+		NetworkIngressDesired NetworkIngressDesired `json:"desired"`
+	}{NetworkIngressDesired: desired})
+	require.NoError(t, err)
+	require.NotContains(t, string(serialized), "sensitive")
+	require.NotContains(t, string(serialized), "Credentials")
 
+	desired.BackendPort = 65536
+	err = desired.Validate()
+	require.ErrorIs(t, err, ErrNetworkIngressInvalidDesiredState)
 	desired.BackendPort = 0
 	err = desired.Validate()
 	require.ErrorIs(t, err, ErrNetworkIngressInvalidDesiredState)
@@ -85,18 +99,18 @@ func TestNetworkIngressProvisionerRegistry(t *testing.T) {
 	provisioner := stubNetworkIngressProvisioner{}
 	registry, err := NewNetworkIngressProvisionerRegistry(map[string]NetworkIngressProvisioner{
 		NetworkIngressProviderTailscale: provisioner,
-	})
+	}, nil, nil)
 	require.NoError(t, err)
 
 	got, err := registry.Provisioner(NetworkIngressProviderTailscale)
 	require.NoError(t, err)
-	require.Equal(t, provisioner, got)
+	require.IsType(t, &observedNetworkIngressProvisioner{}, got)
 	_, err = registry.Provisioner("unknown")
 	require.ErrorIs(t, err, ErrNetworkIngressUnsupportedProvider)
 
-	_, err = NewNetworkIngressProvisionerRegistry(map[string]NetworkIngressProvisioner{"": provisioner})
+	_, err = NewNetworkIngressProvisionerRegistry(map[string]NetworkIngressProvisioner{"": provisioner}, nil, nil)
 	require.ErrorIs(t, err, ErrNetworkIngressInvalidDesiredState)
-	_, err = NewNetworkIngressProvisionerRegistry(map[string]NetworkIngressProvisioner{"nil": nil})
+	_, err = NewNetworkIngressProvisionerRegistry(map[string]NetworkIngressProvisioner{"nil": nil}, nil, nil)
 	require.ErrorIs(t, err, ErrNetworkIngressInvalidDesiredState)
 
 }
