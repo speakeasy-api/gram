@@ -417,6 +417,33 @@ func (q *Queries) GetUsersByWorkosIDs(ctx context.Context, workosIds []string) (
 	return items, nil
 }
 
+const lockUserForPlatformAdminCheck = `-- name: LockUserForPlatformAdminCheck :one
+SELECT id, email, display_name, photo_url, admin, last_login, workos_id, workos_created_at, workos_updated_at, workos_deleted_at, deleted_at, created_at, updated_at FROM users
+WHERE id = $1
+FOR SHARE
+`
+
+func (q *Queries) LockUserForPlatformAdminCheck(ctx context.Context, id string) (User, error) {
+	row := q.db.QueryRow(ctx, lockUserForPlatformAdminCheck, id)
+	var i User
+	err := row.Scan(
+		&i.ID,
+		&i.Email,
+		&i.DisplayName,
+		&i.PhotoUrl,
+		&i.Admin,
+		&i.LastLogin,
+		&i.WorkosID,
+		&i.WorkosCreatedAt,
+		&i.WorkosUpdatedAt,
+		&i.WorkosDeletedAt,
+		&i.DeletedAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const overwriteUserWorkosID = `-- name: OverwriteUserWorkosID :exec
 UPDATE users
 SET workos_id = $1,

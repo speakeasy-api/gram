@@ -203,9 +203,7 @@ export function AppSidebar({
                 ? [{ item: routes.orgMemory, ...accessFor(routes.orgMemory) }]
                 : []),
               { item: routes.logs, ...accessFor(routes.logs) },
-              // Employee Enrollment is gone from the nav: its index redirects
-              // to the org-level Identities list, and a plain nav item that
-              // silently swaps the app shell is the worst way to arrive there.
+              { item: routes.employees, ...accessFor(routes.employees) },
             ]}
           />
 

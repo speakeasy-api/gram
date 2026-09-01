@@ -2830,7 +2830,7 @@ SELECT DISTINCT
     COALESCE(rms.url, '')::text AS url
 FROM mcp_servers AS m
 JOIN projects AS p ON p.id = m.project_id
-LEFT JOIN remote_mcp_servers AS rms ON rms.id = m.remote_mcp_server_id AND rms.deleted IS FALSE
+LEFT JOIN remote_mcp_servers AS rms ON rms.id = m.remote_mcp_server_id AND rms.project_id = m.project_id AND rms.deleted IS FALSE
 WHERE m.deleted IS FALSE
   AND m.user_session_issuer_id IN (
       SELECT link.user_session_issuer_id
@@ -2855,6 +2855,13 @@ type ListOrganizationMcpServersForClientRow struct {
 //
 // A soft-deleted upstream must not contribute its URL: the derived RFC 8707
 // resource is sent to the authorization server and recorded on new grants.
+//
+// Remote upstreams only. A tunneled server deliberately contributes nothing:
+// its credentials route by the server's own derived remote_session_issuer and
+// accept an unqualified grant, so stamping its identifier here would buy no
+// routing and would make an issuer that fronts both kinds read as ambiguous,
+// silently unqualifying a sibling remote server's grants. The member-scoped
+// meta MCP derivation stamps it instead, where one member is unambiguous.
 func (q *Queries) ListOrganizationMcpServersForClient(ctx context.Context, remoteSessionClientID uuid.UUID) ([]ListOrganizationMcpServersForClientRow, error) {
 	rows, err := q.db.Query(ctx, listOrganizationMcpServersForClient, remoteSessionClientID)
 	if err != nil {

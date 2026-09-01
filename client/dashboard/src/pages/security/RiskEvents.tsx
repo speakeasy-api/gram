@@ -1,5 +1,3 @@
-import { IdentityLink } from "@/components/identity-link";
-import { identityRefForUserKey } from "@/lib/identity-urn";
 import { LogWorkbench } from "@/components/log-workbench";
 import {
   defineFilters,
@@ -766,9 +764,7 @@ function RiskEventsRow({
         {result.chatTitle ?? "Untitled"}
       </div>
       <div className="text-muted-foreground min-w-0 truncate font-mono text-xs">
-        <IdentityLink identifier={identityRefForUserKey(result.userId)}>
-          {result.userId ?? "-"}
-        </IdentityLink>
+        {result.userId ?? "-"}
       </div>
       {/* Judge rationale wraps to two lines, so this cell can't clip to one. */}
       <div className={cn("min-w-0", !isEventSource && "truncate")}>

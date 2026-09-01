@@ -25,10 +25,6 @@ export function isNotFoundError(error: unknown): boolean {
   return getHttpStatusCode(error) === 404;
 }
 
-export function isBadRequestError(error: unknown): boolean {
-  return getHttpStatusCode(error) === 400;
-}
-
 export function isUnauthorizedError(error: unknown): boolean {
   return getHttpStatusCode(error) === 401;
 }

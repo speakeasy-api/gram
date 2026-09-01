@@ -1,6 +1,8 @@
 // servepublic_mcpendpoint_test.go verifies that /mcp/{mcpSlug} resolves
 // through mcp_endpoints → mcp_servers first and falls back to the
-// legacy toolsets.mcp_slug lookup on any not-found.
+// legacy toolsets.mcp_slug lookup only on a true address miss — a
+// resolvable-but-unavailable address (disabled wrapper, dangling backend)
+// is terminal (AIS-633).
 package mcp_test
 
 import (
@@ -162,11 +164,12 @@ func TestServePublic_McpEndpoint_PublicTunneledBacked_FailsClosed(t *testing.T) 
 	tunneledID, err := uuid.NewV7()
 	require.NoError(t, err)
 	tunneledServer, err := tunneledmcprepo.New(ti.conn).CreateServer(ctx, tunneledmcprepo.CreateServerParams{
-		ID:        tunneledID,
-		ProjectID: *authCtx.ProjectID,
-		Name:      "public-tunnel-attempt",
-		KeyHash:   uuid.NewString(),
-		KeyPrefix: "gram_tunnel_test",
+		ID:                 tunneledID,
+		ProjectID:          *authCtx.ProjectID,
+		Name:               "public-tunnel-attempt",
+		KeyHash:            uuid.NewString(),
+		KeyPrefix:          "gram_tunnel_test",
+		ResourceIdentifier: pgtype.Text{String: "", Valid: false},
 	})
 	require.NoError(t, err)
 
@@ -305,7 +308,7 @@ func mintIssuerBearerForEndpointSubject(
 		CustomDomainID: uuid.NullUUID{},
 	})
 	require.NoError(t, err)
-	endpoint := mcp.NewResolvedMcpEndpointFromMcpServer(&mcpEndpoint, &mcpServer, organizationID)
+	endpoint := mcp.NewResolvedMcpEndpointFromMcpServer(&mcpEndpoint, &mcpServer, organizationID, "mcp")
 
 	clientID := "test-client-" + uuid.NewString()
 	redirectURI := "http://localhost:3000/callback"
@@ -470,13 +473,13 @@ func TestServePublic_McpEndpoint_IssuerGated_NoAuth_EmitsChallenge(t *testing.T)
 	require.Equal(t, expected, wwwAuth, "mcpRouteBase must be 'mcp' (not 'x/mcp') for /mcp callers")
 }
 
-// TestServePublic_McpEndpoint_DisabledMcpServer_FallsBackToLegacyToolset
-// verifies the ServePublic doc contract that a disabled mcp_server
-// surfaces as CodeNotFound from ResolveMCPEndpointAndServer and falls
-// through to the legacy toolsets.mcp_slug lookup. A toolset with
-// mcp_slug equal to the endpoint slug acts as the legacy-path target
-// the fallback must find.
-func TestServePublic_McpEndpoint_DisabledMcpServer_FallsBackToLegacyToolset(t *testing.T) {
+// TestServePublic_McpEndpoint_DisabledMcpServer_DoesNotFallBack pins the
+// endpoint-authority rule (AIS-633): a disabled mcp_server behind a live
+// mcp_endpoint is a terminal not-found. Even when a public toolset carries
+// the same slug via toolsets.mcp_slug, the endpoint row owns the address and
+// the disabled server must not resurrect through its toolset. (This reverses
+// the pre-AIS-633 fallback behavior, where the same setup served the toolset.)
+func TestServePublic_McpEndpoint_DisabledMcpServer_DoesNotFallBack(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestMCPService(t)
@@ -486,21 +489,44 @@ func TestServePublic_McpEndpoint_DisabledMcpServer_FallsBackToLegacyToolset(t *t
 	require.True(t, ok)
 	require.NotNil(t, authCtx.ProjectID)
 
-	// A separate (disabled) toolset is the mcp_endpoint's backend; the
-	// fallback target is a different public toolset sharing the slug
-	// via createPublicMCPToolset (which sets both Slug and McpSlug to
-	// the same value). The mcp_endpoint resolution finds the disabled
-	// server (returns CodeNotFound); the fallback's GetToolsetByMcpSlug
-	// finds the public legacy toolset.
+	// A separate (disabled) wrapper is the mcp_endpoint's backend; a second
+	// public toolset shares the slug via createPublicMCPToolset (which sets
+	// both Slug and McpSlug to the same value) and would have served the
+	// request under the old fallback.
 	sharedSlug := "shared-" + uuid.NewString()[:8]
 	disabledToolset := createPublicMCPToolset(t, ctx, toolsetsRepo, authCtx, "disabled-"+uuid.NewString()[:8])
 	createPublicMCPToolset(t, ctx, toolsetsRepo, authCtx, sharedSlug)
 
 	createToolsetMcpEndpoint(t, ctx, ti.conn, *authCtx.ProjectID, disabledToolset.ID, sharedSlug, "disabled", uuid.NullUUID{}, uuid.Nil)
 
-	w, err := servePublicHTTP(t, ctx, ti, sharedSlug, makeInitializeBody(), "", nil)
-	require.NoError(t, err, "disabled mcp_server must fall through to the legacy toolset lookup")
-	require.Equal(t, http.StatusOK, w.Code, "body=%s", w.Body.String())
+	_, err := servePublicHTTP(t, ctx, ti, sharedSlug, makeInitializeBody(), "", nil)
+	require.Error(t, err, "a disabled wrapper must not fall back to the legacy toolset lookup")
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeNotFound, oopsErr.Code)
+}
+
+// An unrecognized visibility value must not silently map onto a servable
+// policy: the endpoint is terminally not-found, like disabled.
+func TestServePublic_McpEndpoint_UnknownVisibility_DoesNotServe(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPService(t)
+	toolsetsRepo := toolsetsrepo.New(ti.conn)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	slug := "unknown-vis-" + uuid.NewString()[:8]
+	toolset := createPublicMCPToolset(t, ctx, toolsetsRepo, authCtx, "unknown-vis-ts-"+uuid.NewString()[:8])
+	createToolsetMcpEndpoint(t, ctx, ti.conn, *authCtx.ProjectID, toolset.ID, slug, "archived", uuid.NullUUID{}, uuid.Nil)
+
+	_, err := servePublicHTTP(t, ctx, ti, slug, makeInitializeBody(), "", nil)
+	require.Error(t, err, "an unknown visibility must not serve")
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeNotFound, oopsErr.Code)
 }
 
 // TestServePublic_PlatformDomain_DoesNotResolveCustomDomainEndpoint

@@ -9,7 +9,6 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/otel/attribute"
 	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
-	"go.opentelemetry.io/otel/sdk/metric/metricdata"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
@@ -36,7 +35,7 @@ func TestHandleToolsCall_RecordsCoverageWithoutRequestContext(t *testing.T) {
 	}, "missing_tool", json.RawMessage(`{}`))
 	require.Error(t, err)
 
-	coveragePoints := collectKillswitchCoverage(t, reader)
+	coveragePoints := collectCounterPoints(t, reader, mcpmetrics.InstrumentMCPToolCallKillswitchIdentity)
 	require.Equal(t, int64(1), coveragePoints[attribute.NewSet(
 		attr.McpKillswitchSurface(mcpmetrics.KillswitchSurfaceHosted),
 		attr.McpKillswitchIdentityClass(mcpmetrics.KillswitchIdentityUnattributed),
@@ -63,7 +62,7 @@ func TestServePublic_RecordsCanonicalServerCoverage(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, 200, response.Code)
 
-	coveragePoints := collectKillswitchCoverage(t, reader)
+	coveragePoints := collectCounterPoints(t, reader, mcpmetrics.InstrumentMCPToolCallKillswitchIdentity)
 	require.Equal(t, int64(1), coveragePoints[attribute.NewSet(
 		attr.McpKillswitchSurface(mcpmetrics.KillswitchSurfaceHosted),
 		attr.McpKillswitchIdentityClass(mcpmetrics.KillswitchIdentityActiveUser),
@@ -74,25 +73,4 @@ func TestServePublic_RecordsCanonicalServerCoverage(t *testing.T) {
 		attr.McpKillswitchIdentityClass(mcpmetrics.KillswitchIdentityActiveUser),
 		attr.McpKillswitchResourceClass(mcpmetrics.KillswitchResourceLegacyNoServer),
 	)])
-}
-
-func collectKillswitchCoverage(t *testing.T, reader *sdkmetric.ManualReader) map[attribute.Set]int64 {
-	t.Helper()
-
-	var rm metricdata.ResourceMetrics
-	require.NoError(t, reader.Collect(t.Context(), &rm))
-	coveragePoints := map[attribute.Set]int64{}
-	for _, scope := range rm.ScopeMetrics {
-		for _, metric := range scope.Metrics {
-			if metric.Name != mcpmetrics.InstrumentMCPToolCallKillswitchIdentity {
-				continue
-			}
-			sum, ok := metric.Data.(metricdata.Sum[int64])
-			require.True(t, ok)
-			for _, point := range sum.DataPoints {
-				coveragePoints[point.Attributes] = point.Value
-			}
-		}
-	}
-	return coveragePoints
 }

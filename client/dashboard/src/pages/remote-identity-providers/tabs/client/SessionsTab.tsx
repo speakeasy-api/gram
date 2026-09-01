@@ -1,4 +1,3 @@
-import { IdentityLink } from "@/components/identity-link";
 import { RequireScope } from "@/components/require-scope";
 import { TableRowContextMenu } from "@/components/table-row-context-menu";
 import { DotRow } from "@/components/ui/DotRow";
@@ -133,11 +132,9 @@ export function SessionsTab({ clientId }: { clientId: string }): JSX.Element {
                 >
                   <td className="px-3 py-3">
                     <Text small as="div" className="break-all">
-                      <IdentityLink identifier={{ urn: session.subjectUrn }}>
-                        {session.subjectDisplayName ??
-                          session.subjectEmail ??
-                          session.subjectUrn}
-                      </IdentityLink>
+                      {session.subjectDisplayName ??
+                        session.subjectEmail ??
+                        session.subjectUrn}
                     </Text>
                   </td>
                   <td className="px-3 py-3">

@@ -67,6 +67,7 @@ const GROUP_OPTIONS: { value: SignalGroupMode; label: string }[] = [
   { value: "category", label: "Data type" },
   { value: "team", label: "Team" },
   { value: "app", label: "App" },
+  { value: "principal", label: "User" },
 ];
 
 const GROUP_MODES = new Set<SignalGroupMode>(
