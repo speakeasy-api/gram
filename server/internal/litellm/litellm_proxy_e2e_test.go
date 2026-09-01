@@ -34,6 +34,7 @@ import (
 
 	riskv1 "github.com/speakeasy-api/gram/infra/gen/gram/risk/v1"
 	"github.com/speakeasy-api/gram/infra/pkg/gcp"
+	gen "github.com/speakeasy-api/gram/server/gen/litellm"
 	"github.com/speakeasy-api/gram/server/internal/auth"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	riskanalysis "github.com/speakeasy-api/gram/server/internal/background/activities/risk_analysis"
@@ -43,6 +44,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	keysrepo "github.com/speakeasy-api/gram/server/internal/keys/repo"
+	"github.com/speakeasy-api/gram/server/internal/litellmacting"
 	"github.com/speakeasy-api/gram/server/internal/message"
 	"github.com/speakeasy-api/gram/server/internal/risk"
 	riskcelenv "github.com/speakeasy-api/gram/server/internal/risk/celenv"
@@ -269,6 +271,18 @@ type proxyHarness struct {
 	httpClient *http.Client
 }
 
+type proxyE2EAIAccess struct{}
+
+func (proxyE2EAIAccess) Evaluate(_ context.Context, payload *gen.IngestPayload, _ *contextvalues.AuthContext) liteLLMAIAccessDecision {
+	if payload.RequestHeaders[actingPrincipalHeader] != "e2e-signed-assertion" {
+		return liteLLMAIAccessDecision{}
+	}
+	if payload.RequestHeaders[actingPrincipalContractHeader] != litellmacting.ContractVersion || payload.RequestHeaders[inferenceInvocationHeader] != "0198a1b2-c3d4-7000-8000-0123456789ab" {
+		return liteLLMAIAccessDecision{}
+	}
+	return liteLLMAIAccessDecision{blocked: true, reason: "ai_access_denied", message: "AI access selected note."}
+}
+
 type proxyResponse struct {
 	Status int
 	Header http.Header
@@ -280,6 +294,7 @@ func TestLiteLLMProxyE2E(t *testing.T) { //nolint:paralleltest // Scenarios inte
 	test.safeNonStreaming()
 	test.nativeSessionHeaders()
 	test.blockedNonStreaming()
+	test.aiAccessHeadersBlockBeforeProvider()
 	test.safeStreaming()
 	test.blockedStreaming()
 	test.failClosed()
@@ -344,6 +359,7 @@ func newProxyHarness(t *testing.T) *proxyHarness {
 	}))
 
 	apiKey := createProxyAPIKey(t, ctx, instance.conn, authCtx)
+	instance.service.aiAccess = proxyE2EAIAccess{}
 	mux := goahttp.NewMuxer()
 	Attach(mux, instance.service)
 	gramServer := httptest.NewServer(mux)
@@ -475,10 +491,15 @@ func buildProxyConfig(t *testing.T, providerURL, timeoutProviderURL, gramURL, fa
 	require.Equal(t, "gram", guardrail.Name)
 	require.Equal(t, "generic_guardrail_api", guardrail.Params["guardrail"])
 	require.Equal(t, true, guardrail.Params["default_on"])
+	require.Equal(t, true, guardrail.Params["fail_on_error"])
+	require.Equal(t, "fail_closed", guardrail.Params["unreachable_fallback"])
 	require.Equal(t, true, guardrail.Params["streaming_end_of_stream_only"])
 	require.NotEmpty(t, guardrail.Params["api_base"])
 	require.ElementsMatch(t, []any{"pre_call", "post_call"}, guardrail.Params["mode"])
 	require.Equal(t, []any{
+		"x-gram-acting-principal",
+		"x-gram-acting-principal-contract",
+		"x-gram-inference-invocation-id",
 		"x-gram-session-id",
 		"x-claude-code-session-id",
 		"session-id",
@@ -724,6 +745,23 @@ func (h *proxyHarness) blockedNonStreaming() {
 	require.Equal(h.t, h.prompt(scenario, sessionID, callID, "token="+syntheticSecret), messages[0].Content)
 	require.Equal(h.t, "litellm", messages[0].Source.String)
 	h.materializeFinding(messages[0].ID)
+}
+
+func (h *proxyHarness) aiAccessHeadersBlockBeforeProvider() {
+	scenario, sessionID, callID := "ai-access", "e2e-ai-access-session", "e2e-ai-access-call"
+	response := h.request(scenario, "x-gram-session-id", sessionID, callID, "gram-e2e", "safe prompt", false, map[string]string{
+		actingPrincipalHeader: "e2e-signed-assertion", actingPrincipalContractHeader: litellmacting.ContractVersion, inferenceInvocationHeader: "0198a1b2-c3d4-7000-8000-0123456789ab",
+	})
+	require.GreaterOrEqual(h.t, response.Status, http.StatusBadRequest, string(response.Body))
+	var blocked struct {
+		Error struct {
+			Message string `json:"message"`
+		} `json:"error"`
+	}
+	require.NoError(h.t, json.Unmarshal(response.Body, &blocked))
+	require.Equal(h.t, "AI access selected note.", blocked.Error.Message)
+	require.Equal(h.t, 0, h.provider.count(h.key(scenario, sessionID, callID)))
+	h.noMessages(sessionID)
 }
 
 func (h *proxyHarness) safeStreaming() {

@@ -6,7 +6,6 @@ import { Button } from "@/components/ui/Button";
 import { Dialog } from "@/components/ui/Dialog";
 import { Label } from "@/components/ui/Label";
 import { MoreActions } from "@/components/ui/MoreActions";
-import { RadioGroup, RadioGroupItem } from "@/components/ui/RadioGroup";
 import {
   Select,
   SelectContent,
@@ -389,8 +388,6 @@ export function CreateInstanceDialog({
   const queryClient = useQueryClient();
   const [projectSlug, setProjectSlug] = useState(initialProjectSlug);
   const [name, setName] = useState("");
-  const [failurePosture, setFailurePosture] =
-    useState<FailurePosture>("fail_closed");
   const mutation = useCreateLiteLLMInstanceMutation({
     gcTime: 0,
     onSuccess: (data) => {
@@ -402,7 +399,6 @@ export function CreateInstanceDialog({
   const closeDialog = () => {
     onOpenChange(false);
     setName("");
-    setFailurePosture("fail_closed");
     mutation.reset();
   };
 
@@ -422,7 +418,7 @@ export function CreateInstanceDialog({
         gramProject: projectSlug,
         createInstanceRequestBody: {
           name: name.trim(),
-          failurePosture,
+          failurePosture: "fail_closed",
         },
       },
     });
@@ -484,40 +480,10 @@ export function CreateInstanceDialog({
                 required
                 autoFocus
               />
-              <Stack gap={2}>
-                <Label id="litellm-failure-posture-label">
-                  Failure posture
-                </Label>
-                <RadioGroup
-                  aria-labelledby="litellm-failure-posture-label"
-                  value={failurePosture}
-                  onValueChange={(value) =>
-                    setFailurePosture(value as FailurePosture)
-                  }
-                >
-                  <label className="border-border flex cursor-pointer gap-3 border p-3">
-                    <RadioGroupItem value="fail_closed" />
-                    <Stack gap={1}>
-                      <Text className="font-medium">
-                        Fail closed (recommended)
-                      </Text>
-                      <Text muted small>
-                        Block model requests when Gram cannot evaluate them.
-                      </Text>
-                    </Stack>
-                  </label>
-                  <label className="border-warning-softest flex cursor-pointer gap-3 border p-3">
-                    <RadioGroupItem value="fail_open" />
-                    <Stack gap={1}>
-                      <Text className="font-medium">Fail open</Text>
-                      <Text muted small>
-                        Allow model requests during a Gram outage. This is an
-                        explicit security posture decision.
-                      </Text>
-                    </Stack>
-                  </label>
-                </RadioGroup>
-              </Stack>
+              <Alert variant="info">
+                Managed LiteLLM integrations fail closed: model requests are
+                blocked when Gram cannot evaluate AI access.
+              </Alert>
               {mutation.error ? <ErrorAlert error={mutation.error} /> : null}
               <Dialog.Footer>
                 <Button
@@ -740,15 +706,15 @@ function SetupContent({
       </SetupSection>
       <SetupSection
         title="LiteLLM configuration"
-        description="Merge this guardrail fragment into your LiteLLM configuration."
+        description="Merge this fail-closed guardrail fragment into LiteLLM 1.94.0. Legacy instance posture labels do not change this supported configuration."
       >
         <CodeBlock language="yaml" copyLabel="LiteLLM configuration">
-          {buildLiteLLMGuardrailConfig(serverURL, instance.failurePosture)}
+          {buildLiteLLMGuardrailConfig(serverURL)}
         </CodeBlock>
       </SetupSection>
       <SetupSection
         title="Verify safe traffic"
-        description="Set LITELLM_VIRTUAL_KEY and LITELLM_MODEL in your shell, then run this against the proxy."
+        description="Set LITELLM_VIRTUAL_KEY and LITELLM_MODEL, then mint a fresh acting-principal assertion and invocation ID from an authenticated Gram session before running this against the proxy."
       >
         <CodeBlock language="shell" copyLabel="safe traffic command">
           {liteLLMVerificationCommands.safe}
@@ -756,7 +722,7 @@ function SetupContent({
       </SetupSection>
       <SetupSection
         title="Verify blocking"
-        description="This synthetic credential should be blocked when the project secret policy is enabled."
+        description="Mint a fresh acting-principal assertion and invocation ID first. This synthetic credential should be blocked when the project secret policy is enabled."
       >
         <CodeBlock language="shell" copyLabel="blocking test command">
           {liteLLMVerificationCommands.blocked}
