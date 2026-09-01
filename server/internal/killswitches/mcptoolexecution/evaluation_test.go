@@ -38,8 +38,9 @@ func TestHostedCheckpoint_ReevaluatesAndFailsClosed(t *testing.T) {
 	require.Equal(t, killswitches.TransportDispositionContinue, disposition.Kind())
 
 	note := "AI access paused exactly."
+	aiID := uuid.New()
 	insertPrescription(t, conn, orgID, prescriptionFixture{
-		ID:            uuid.New(),
+		ID:            aiID,
 		DefinitionKey: DefinitionKeyAIAccess,
 		PrincipalKey:  userID,
 		Scope:         "selected",
@@ -53,11 +54,27 @@ func TestHostedCheckpoint_ReevaluatesAndFailsClosed(t *testing.T) {
 	gotNote, ok := disposition.ExternalNote()
 	require.True(t, ok)
 	require.Equal(t, note, gotNote)
-	require.Equal(t, 2, counted.calls)
+	deletePrescription(t, conn, orgID, aiID)
+	mcpNote := "MCP tool calls paused exactly."
+	insertPrescription(t, conn, orgID, prescriptionFixture{
+		ID:           uuid.New(),
+		PrincipalKey: userID,
+		Scope:        "selected",
+		Resources:    []string{serverID.String()},
+		ExternalNote: mcpNote,
+	})
+	disposition, err = checkpoint.Evaluate(ctx, orgID, source)
+	require.NoError(t, err)
+	require.Equal(t, killswitches.TransportDispositionMatchedDenial, disposition.Kind())
+	gotNote, ok = disposition.ExternalNote()
+	require.True(t, ok)
+	require.Equal(t, mcpNote, gotNote)
+
+	require.Equal(t, 3, counted.calls)
 	for _, request := range counted.requests {
 		require.Equal(t, []killswitches.DefinitionKey{DefinitionKeyMCPToolExecution, DefinitionKeyAIAccess}, request.DefinitionKeys)
 	}
-	require.Len(t, recorder.observations, 2)
+	require.Len(t, recorder.observations, 3)
 	for _, observation := range recorder.observations {
 		require.Equal(t, coverageObservation{
 			surface:  mcpmetrics.KillswitchSurfaceHosted,

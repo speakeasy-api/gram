@@ -120,6 +120,12 @@ func clearPrescriptions(t *testing.T, conn *pgxpool.Pool, organizationID string)
 	}
 }
 
+func deletePrescription(t *testing.T, conn *pgxpool.Pool, organizationID string, prescriptionID uuid.UUID) {
+	t.Helper()
+	_, err := conn.Exec(t.Context(), "DELETE FROM killswitch_prescriptions WHERE organization_id = $1 AND id = $2", organizationID, prescriptionID)
+	require.NoError(t, err)
+}
+
 type prescriptionFixture struct {
 	ID            uuid.UUID
 	DefinitionKey killswitches.DefinitionKey

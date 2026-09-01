@@ -81,7 +81,10 @@ func TestPrivateCheckpointDualDefinitionMatrixAndNextCall(t *testing.T) {
 	// The MCP match was activated first and is less specific than the newer,
 	// selected AI match. Definition candidate order must still choose MCP.
 	requireNote("MCP-specific note.")
-	require.Equal(t, 4, counted.calls)
+
+	deletePrescription(t, conn, orgID, mcpID)
+	requireNote("Newer selected AI note.")
+	require.Equal(t, 5, counted.calls)
 	for _, request := range counted.requests {
 		require.Equal(t, []killswitches.DefinitionKey{DefinitionKeyMCPToolExecution, DefinitionKeyAIAccess}, request.DefinitionKeys)
 	}
