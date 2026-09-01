@@ -289,6 +289,8 @@ const (
 	NetworkIngressOperationKey     = attribute.Key("gram.network_ingress.operation")
 	NetworkIngressResultKey        = attribute.Key("gram.network_ingress.result")
 	NetworkIngressReasonKey        = attribute.Key("gram.network_ingress.reason")
+	NetworkIngressErrorCodeKey     = attribute.Key("gram.network_ingress.error_code")
+	NetworkIngressDurationKey      = attribute.Key("gram.network_ingress.operation.duration")
 
 	CustomDomainHealthStatusKey         = attribute.Key("gram.custom_domain.health.status")
 	CustomDomainHealthIssueKey          = attribute.Key("gram.custom_domain.health.issue")
@@ -1419,6 +1421,17 @@ func NetworkIngressReason[V ~string](v V) attribute.KeyValue {
 }
 func SlogNetworkIngressReason[V ~string](v V) slog.Attr {
 	return slog.String(string(NetworkIngressReasonKey), string(v))
+}
+
+func NetworkIngressErrorCode[V ~string](v V) attribute.KeyValue {
+	return NetworkIngressErrorCodeKey.String(string(v))
+}
+func SlogNetworkIngressErrorCode[V ~string](v V) slog.Attr {
+	return slog.String(string(NetworkIngressErrorCodeKey), string(v))
+}
+
+func SlogNetworkIngressDuration(v time.Duration) slog.Attr {
+	return slog.Duration(string(NetworkIngressDurationKey), v)
 }
 
 func CustomDomainProvisionerKind(v string) attribute.KeyValue {
