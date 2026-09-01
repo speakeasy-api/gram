@@ -4,6 +4,7 @@ import (
 	"context"
 	"log"
 	"os"
+	"sync"
 	"testing"
 	"time"
 
@@ -12,6 +13,7 @@ import (
 
 	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
 	"github.com/speakeasy-api/gram/server/internal/audit"
+	"github.com/speakeasy-api/gram/server/internal/auth"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/authztest"
 	"github.com/speakeasy-api/gram/server/internal/billing"
@@ -285,7 +287,7 @@ func newTestOrganizationsServiceWithOptions(t *testing.T, featureStub orgFeature
 	trialNotifier := &fakeTrialNotifier{}
 	posthog := &fakeOnboardingTelemetry{}
 	features := productfeatures.NewClient(logger, tracerProvider, conn, redisClient)
-	var featureChecker orgFeatureStub = featureStub
+	featureChecker := featureStub
 	if useRealFeatures {
 		featureChecker = features
 	}

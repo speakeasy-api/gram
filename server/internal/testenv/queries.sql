@@ -365,6 +365,27 @@ VALUES (@plugin_id, @organization_id, @principal_urn);
 INSERT INTO users (id, email, display_name)
 VALUES (@id, @email, @display_name);
 
+-- name: SetUserPlatformAdminFixture :exec
+-- Test-only fixture: controls platform-admin eligibility for invitation flows.
+UPDATE users
+SET admin = @admin
+WHERE id = @id;
+
+-- name: GetOrganizationRoleAssignmentMembershipIDFixture :one
+-- Test-only fixture: reads the external membership attached during reconciliation.
+SELECT workos_membership_id::text
+FROM organization_role_assignments
+WHERE organization_id = @organization_id
+  AND user_id = @user_id
+  AND deleted_at IS NULL
+LIMIT 1;
+
+-- name: CountOrganizationFeaturesFixture :one
+-- Test-only fixture: verifies entitlement writes roll back with trial provisioning.
+SELECT count(*)
+FROM organization_features
+WHERE organization_id = @organization_id;
+
 -- name: InsertDeviceAgentSyncFixture :exec
 INSERT INTO device_agent_syncs (organization_id, email, first_seen_at, last_seen_at)
 VALUES (@organization_id, @email, @seen_at, @seen_at);

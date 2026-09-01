@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"sync"
@@ -37,7 +38,7 @@ func TestInviteCallback_FirstUserInvitedByPlatformAdminArmsTrial(t *testing.T) {
 
 	ctx, ti := newTestOrganizationsServiceWithRealFeatures(t)
 	authCtx := requireAuthContext(t, ctx)
-	_, err := ti.conn.Exec(ctx, "UPDATE users SET admin = true WHERE id = $1", authCtx.UserID)
+	err := testrepo.New(ti.conn).SetUserPlatformAdminFixture(ctx, testrepo.SetUserPlatformAdminFixtureParams{Admin: true, ID: authCtx.UserID})
 	require.NoError(t, err)
 
 	const organizationID = "org_platform_admin_invite"
@@ -114,7 +115,7 @@ func TestInviteCallback_ExistingInviteeRelationshipStillArmsTrial(t *testing.T) 
 
 	ctx, ti := newTestOrganizationsService(t)
 	authCtx := requireAuthContext(t, ctx)
-	_, err := ti.conn.Exec(ctx, "UPDATE users SET admin = true WHERE id = $1", authCtx.UserID)
+	err := testrepo.New(ti.conn).SetUserPlatformAdminFixture(ctx, testrepo.SetUserPlatformAdminFixtureParams{Admin: true, ID: authCtx.UserID})
 	require.NoError(t, err)
 
 	const organizationID = "org_existing_invitee_relationship"
@@ -220,12 +221,11 @@ func TestInviteCallback_ExistingWorkOSMembershipRoleIsReconciled(t *testing.T) {
 	storedInvite, err := orgrepo.New(ti.conn).GetInvitationByID(ctx, invite.ID)
 	require.NoError(t, err)
 	require.Equal(t, "accepted", storedInvite.State)
-	var membershipID string
-	require.NoError(t, ti.conn.QueryRow(ctx, `
-		SELECT workos_membership_id
-		FROM organization_role_assignments
-		WHERE organization_id = $1 AND user_id = $2 AND deleted_at IS NULL
-	`, organizationID, "user_01INVITEE").Scan(&membershipID))
+	membershipID, err := testrepo.New(ti.conn).GetOrganizationRoleAssignmentMembershipIDFixture(ctx, testrepo.GetOrganizationRoleAssignmentMembershipIDFixtureParams{
+		OrganizationID: organizationID,
+		UserID:         conv.ToPGText("user_01INVITEE"),
+	})
+	require.NoError(t, err)
 	require.Equal(t, member.ID, membershipID)
 	roles, err := accessrepo.New(ti.conn).ListMemberRolePrincipalsByUser(ctx, accessrepo.ListMemberRolePrincipalsByUserParams{
 		OrganizationID: organizationID,
@@ -260,12 +260,12 @@ func TestInviteCallback_TrialBundleFailureRollsBackAcceptance(t *testing.T) {
 	seederErr := errors.New("seed trial bundle")
 	ctx, ti := newTestOrganizationsServiceWithTrialBundleSeeder(t, func(ctx context.Context, tx pgx.Tx, organizationID string) error {
 		if err := productfeatures.SeedEnterpriseTrialBundleTx(ctx, tx, organizationID); err != nil {
-			return err
+			return fmt.Errorf("seed enterprise trial bundle: %w", err)
 		}
 		return seederErr
 	})
 	authCtx := requireAuthContext(t, ctx)
-	_, err := ti.conn.Exec(ctx, "UPDATE users SET admin = true WHERE id = $1", authCtx.UserID)
+	err := testrepo.New(ti.conn).SetUserPlatformAdminFixture(ctx, testrepo.SetUserPlatformAdminFixtureParams{Admin: true, ID: authCtx.UserID})
 	require.NoError(t, err)
 
 	const organizationID = "org_failed_platform_invite"
@@ -302,8 +302,8 @@ func TestInviteCallback_TrialBundleFailureRollsBackAcceptance(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "free", org.GramAccountType)
 	require.True(t, org.Whitelisted)
-	var entitlementRows int
-	require.NoError(t, ti.conn.QueryRow(ctx, "SELECT count(*) FROM organization_features WHERE organization_id = $1", organizationID).Scan(&entitlementRows))
+	entitlementRows, err := testrepo.New(ti.conn).CountOrganizationFeaturesFixture(ctx, organizationID)
+	require.NoError(t, err)
 	require.Zero(t, entitlementRows)
 	auditsAfter, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionOrganizationEnterpriseTrialArmed)
 	require.NoError(t, err)
@@ -317,7 +317,7 @@ func TestInviteCallback_DeletedPlatformAdminInviterDoesNotArmTrial(t *testing.T)
 
 	ctx, ti := newTestOrganizationsService(t)
 	authCtx := requireAuthContext(t, ctx)
-	_, err := ti.conn.Exec(ctx, "UPDATE users SET admin = true WHERE id = $1", authCtx.UserID)
+	err := testrepo.New(ti.conn).SetUserPlatformAdminFixture(ctx, testrepo.SetUserPlatformAdminFixtureParams{Admin: true, ID: authCtx.UserID})
 	require.NoError(t, err)
 
 	const organizationID = "org_deleted_platform_admin_inviter"
@@ -358,7 +358,7 @@ func TestInviteCallback_ConcurrentFirstUserAcceptancesArmOneTrial(t *testing.T) 
 	}
 	ctx, ti := newTestOrganizationsServiceWithInviteIdentityProvider(t, testInviteIdentityProvider{identities: identities})
 	authCtx := requireAuthContext(t, ctx)
-	_, err := ti.conn.Exec(ctx, "UPDATE users SET admin = true WHERE id = $1", authCtx.UserID)
+	err := testrepo.New(ti.conn).SetUserPlatformAdminFixture(ctx, testrepo.SetUserPlatformAdminFixtureParams{Admin: true, ID: authCtx.UserID})
 	require.NoError(t, err)
 
 	const organizationID = "org_concurrent_platform_invites"
@@ -402,9 +402,8 @@ func TestInviteCallback_ConcurrentFirstUserAcceptancesArmOneTrial(t *testing.T) 
 		require.Len(t, roles, 1)
 		require.Equal(t, authz.SystemRoleAdmin, roles[0].RoleSlug)
 	}
-	var trials int
-	require.NoError(t, ti.conn.QueryRow(ctx, "SELECT count(*) FROM trials WHERE organization_id = $1", organizationID).Scan(&trials))
-	require.Equal(t, 1, trials)
+	_, err = trialsrepo.New(ti.conn).GetTrial(ctx, organizationID)
+	require.NoError(t, err)
 	audits, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionOrganizationEnterpriseTrialArmed)
 	require.NoError(t, err)
 	require.EqualValues(t, 1, audits)
@@ -447,7 +446,7 @@ func TestInviteCallback_ExistingTrialLifecycleIsUnchanged(t *testing.T) {
 
 	ctx, ti := newTestOrganizationsService(t)
 	authCtx := requireAuthContext(t, ctx)
-	_, err := ti.conn.Exec(ctx, "UPDATE users SET admin = true WHERE id = $1", authCtx.UserID)
+	err := testrepo.New(ti.conn).SetUserPlatformAdminFixture(ctx, testrepo.SetUserPlatformAdminFixtureParams{Admin: true, ID: authCtx.UserID})
 	require.NoError(t, err)
 
 	const organizationID = "org_existing_invite_trial"
