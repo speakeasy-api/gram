@@ -1,16 +1,30 @@
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import type { ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const testState = vi.hoisted(() => ({
-  data: { logsEnabled: false, toolIoLogsEnabled: false } as
-    | { logsEnabled: boolean; toolIoLogsEnabled: boolean }
+  data: {
+    logsEnabled: false,
+    toolIoLogsEnabled: false,
+    sessionCaptureEnabled: false,
+  } as
+    | {
+        logsEnabled: boolean;
+        toolIoLogsEnabled: boolean;
+        sessionCaptureEnabled: boolean;
+      }
     | undefined,
   error: null as Error | null,
   isFetching: false,
   isLoading: false,
   organizationId: "org-active",
-  mutate: vi.fn(),
+  mutateAsync: vi.fn(),
   productFeaturesQuery: vi.fn(),
   refetch: vi.fn(),
 }));
@@ -50,7 +64,7 @@ vi.mock("react-router", () => ({
 vi.mock("@gram/client/react-query/featuresSet.js", () => ({
   useFeaturesSetMutation: () => ({
     isPending: false,
-    mutate: testState.mutate,
+    mutateAsync: testState.mutateAsync,
   }),
 }));
 
@@ -98,12 +112,17 @@ function renderStep() {
 }
 
 beforeEach(() => {
-  testState.data = { logsEnabled: false, toolIoLogsEnabled: false };
+  testState.data = {
+    logsEnabled: false,
+    toolIoLogsEnabled: false,
+    sessionCaptureEnabled: false,
+  };
   testState.error = null;
   testState.isFetching = false;
   testState.isLoading = false;
   testState.organizationId = "org-active";
-  testState.mutate.mockReset();
+  testState.mutateAsync.mockReset();
+  testState.mutateAsync.mockResolvedValue(undefined);
   testState.productFeaturesQuery.mockReset();
   testState.refetch.mockReset();
   onComplete.mockReset();
@@ -114,7 +133,7 @@ beforeEach(() => {
 afterEach(cleanup);
 
 describe("EnableLoggingStep", () => {
-  it("shows the same Enable Logs control as Logging & Telemetry", () => {
+  it("shows the combined logging and session capture control", () => {
     renderStep();
 
     expect(
@@ -122,11 +141,17 @@ describe("EnableLoggingStep", () => {
         "Configure logging and telemetry settings for all your tool capture. When enabled, tool calls and traces are recorded for debugging and analytics. These power the insights and logs page on the platform.",
       ),
     ).toBeTruthy();
-    expect(screen.getByText("Enable Logs")).toBeTruthy();
+    expect(screen.getByText("Enable logging and session capture")).toBeTruthy();
     expect(
-      screen.getByText("Record tool call traces and telemetry data"),
+      screen.getByText(
+        "Turns on Enable Logs, Record Tool I/O, and Agent Session Capture. Tool calls, request and response bodies, and agent session prompts are recorded.",
+      ),
     ).toBeTruthy();
-    expect(screen.getByRole("switch", { name: "Enable logs" })).toBeTruthy();
+    expect(
+      screen.getByRole("switch", {
+        name: "Enable logging and session capture",
+      }),
+    ).toBeTruthy();
     expect(
       (
         screen.getByRole("link", {
@@ -136,16 +161,41 @@ describe("EnableLoggingStep", () => {
     ).toBe("/acme/logs");
   });
 
-  it("enables the logs product feature from the shared switch", () => {
+  it("enables logs, tool I/O, and session capture from the combined switch", async () => {
     renderStep();
 
-    fireEvent.click(screen.getByRole("switch", { name: "Enable logs" }));
+    fireEvent.click(
+      screen.getByRole("switch", {
+        name: "Enable logging and session capture",
+      }),
+    );
 
-    expect(testState.mutate).toHaveBeenCalledWith({
+    await waitFor(() => {
+      expect(testState.mutateAsync).toHaveBeenCalledTimes(3);
+    });
+    expect(testState.mutateAsync).toHaveBeenCalledWith({
       request: {
         setProductFeatureRequestBody: {
           organizationId: "org-active",
           featureName: "logs",
+          enabled: true,
+        },
+      },
+    });
+    expect(testState.mutateAsync).toHaveBeenCalledWith({
+      request: {
+        setProductFeatureRequestBody: {
+          organizationId: "org-active",
+          featureName: "tool_io_logs",
+          enabled: true,
+        },
+      },
+    });
+    expect(testState.mutateAsync).toHaveBeenCalledWith({
+      request: {
+        setProductFeatureRequestBody: {
+          organizationId: "org-active",
+          featureName: "session_capture",
           enabled: true,
         },
       },
@@ -157,18 +207,34 @@ describe("EnableLoggingStep", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Skip for now" }));
 
-    expect(testState.mutate).not.toHaveBeenCalled();
+    expect(testState.mutateAsync).not.toHaveBeenCalled();
     expect(onSkip).toHaveBeenCalledOnce();
   });
 
-  it("hides skip when logging is already enabled", () => {
-    testState.data = { logsEnabled: true, toolIoLogsEnabled: false };
+  it("hides skip when the logging bundle is already enabled", () => {
+    testState.data = {
+      logsEnabled: true,
+      toolIoLogsEnabled: true,
+      sessionCaptureEnabled: true,
+    };
 
     renderStep();
 
     expect(screen.queryByRole("button", { name: "Skip for now" })).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: /Continue/ }));
     expect(onComplete).toHaveBeenCalledOnce();
+  });
+
+  it("keeps skip available when only some logging features are on", () => {
+    testState.data = {
+      logsEnabled: true,
+      toolIoLogsEnabled: false,
+      sessionCaptureEnabled: false,
+    };
+
+    renderStep();
+
+    expect(screen.getByRole("button", { name: "Skip for now" })).toBeTruthy();
   });
 
   it("shows a retry state when product features fail to load", () => {

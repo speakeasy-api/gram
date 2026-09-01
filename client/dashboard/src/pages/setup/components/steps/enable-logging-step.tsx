@@ -1,14 +1,13 @@
 import { LogDataRetentionBanner } from "@/components/observe/LoggingPageHeader";
 import { Button } from "@/components/ui/Button";
 import { useOrganization } from "@/contexts/Auth";
-import {
-  ENABLE_LOGS_PAGE_DESCRIPTION,
-  EnableLogsSetting,
-} from "@/pages/org/EnableLogsSetting";
+import { ENABLE_LOGS_PAGE_DESCRIPTION } from "@/pages/org/EnableLogsSetting";
 import { useOrgRoutes } from "@/routes";
 import { useProductFeatures } from "@gram/client/react-query/productFeatures.js";
 import { FileText } from "lucide-react";
+import { useState } from "react";
 import { Link } from "react-router";
+import { EnableLoggingAndSessionCaptureSetting } from "../enable-logging-and-session-capture-setting";
 import { StepContainer } from "../step-container";
 
 interface EnableLoggingStepProps {
@@ -29,7 +28,12 @@ export function EnableLoggingStep({
     undefined,
     { throwOnError: false },
   );
-  const logsEnabled = features.data?.logsEnabled === true;
+  const [bundleEnabled, setBundleEnabled] = useState<boolean | null>(null);
+  const loggingBundleEnabled =
+    bundleEnabled ??
+    (features.data?.logsEnabled === true &&
+      features.data?.toolIoLogsEnabled === true &&
+      features.data?.sessionCaptureEnabled === true);
   const featuresLoading = features.isLoading;
   const featuresFailed =
     !featuresLoading && Boolean(features.error || !features.data);
@@ -41,12 +45,12 @@ export function EnableLoggingStep({
           <FileText className="text-foreground h-6 w-6" />
         </div>
       }
-      title="Enable logs"
+      title="Enable logging"
       description={ENABLE_LOGS_PAGE_DESCRIPTION}
       onContinue={onComplete}
       continueLabel="Continue"
       skipLabel="Skip for now"
-      onSkip={logsEnabled ? undefined : onSkip}
+      onSkip={loggingBundleEnabled ? undefined : onSkip}
       showBack
       onBack={onBack}
       canContinue={!featuresLoading && !featuresFailed}
@@ -55,17 +59,21 @@ export function EnableLoggingStep({
       <div className="space-y-6">
         <LogDataRetentionBanner />
         <div className="border-border bg-card border p-4">
-          <EnableLogsSetting />
+          <EnableLoggingAndSessionCaptureSetting
+            onEnabledChange={setBundleEnabled}
+          />
         </div>
         <p className="text-muted-foreground text-sm">
-          This is the same Enable Logs setting as{" "}
+          This turns on Enable Logs, Record Tool I/O, and Agent Session Capture
+          — the same settings as{" "}
           <Link
             to={orgRoutes.logs.href()}
             className="underline underline-offset-2"
           >
             Logging &amp; Telemetry
           </Link>
-          . Tool I/O, session capture, and other options stay on that page.
+          . Fail Open, Hook Browser Sign-In, and other options stay on that
+          page.
         </p>
         {featuresFailed ? (
           <div
