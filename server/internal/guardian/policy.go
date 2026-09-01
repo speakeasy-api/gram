@@ -190,10 +190,15 @@ func WithAllowedCIDRBlocks(cidrs ...string) func(*httpClientOptions) {
 }
 
 // WithDialTimeout bounds only the TCP connect phase for this client,
-// replacing the policy dialer's default. Zero disables the dial timeout,
-// leaving connects bounded only by request contexts ([net.Dialer] semantics).
+// replacing the policy dialer's default. A non-positive value disables the
+// dial timeout, leaving connects bounded only by request contexts. A raw
+// negative [net.Dialer.Timeout] would instead fail every dial with an
+// already-expired deadline, so it is normalized to zero here.
 func WithDialTimeout(timeout time.Duration) func(*httpClientOptions) {
 	return func(o *httpClientOptions) {
+		if timeout < 0 {
+			timeout = 0
+		}
 		o.dialTimeout = &timeout
 	}
 }

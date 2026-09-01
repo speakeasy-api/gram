@@ -20,4 +20,8 @@ func TestWithDialTimeout(t *testing.T) {
 	WithDialTimeout(0)(&opts)
 	require.NotNil(t, opts.dialTimeout, "explicit zero must be honored, not treated as unset")
 	require.Equal(t, time.Duration(0), *opts.dialTimeout)
+
+	WithDialTimeout(-time.Second)(&opts)
+	require.NotNil(t, opts.dialTimeout)
+	require.Equal(t, time.Duration(0), *opts.dialTimeout, "negative must normalize to disabled, not an expired deadline")
 }
