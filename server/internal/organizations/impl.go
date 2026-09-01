@@ -10,6 +10,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/url"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -1493,6 +1494,53 @@ func (s *Service) capturePlatformAdminInviteTelemetry(ctx context.Context, email
 	}
 	if err := s.posthog.IdentifyUser(ctx, email, map[string]any{"created_via": "platform_admin_invite"}); err != nil {
 		s.logger.ErrorContext(ctx, "failed to set platform admin invite created_via person property", attr.SlogError(err), attr.SlogOrganizationID(org.ID))
+	}
+}
+
+func (s *Service) reconcileInvitationWorkOSMembership(ctx context.Context, invite orgrepo.OrganizationInvitation, org orgrepo.OrganizationMetadatum, gramUserID, workosUserID string) {
+	if !invite.RoleSlug.Valid || !org.WorkosID.Valid || org.WorkosID.String == "" {
+		return
+	}
+
+	workosRoleSlugs := []string{invite.RoleSlug.String}
+	membershipID, err := s.orgs.CreateOrganizationMembership(ctx, workosUserID, org.WorkosID.String, invite.RoleSlug.String)
+	if err != nil {
+		s.logger.WarnContext(ctx, "invite callback: failed to create WorkOS membership; checking for an existing membership", attr.SlogError(err))
+
+		member, lookupErr := s.orgs.GetOrgMembership(ctx, workosUserID, org.WorkosID.String)
+		if lookupErr != nil {
+			s.logger.WarnContext(ctx, "invite callback: failed to look up WorkOS membership", attr.SlogError(lookupErr))
+			return
+		}
+		if member == nil {
+			return
+		}
+
+		workosRoleSlugs = append([]string(nil), member.RoleSlugs...)
+		if !slices.Contains(workosRoleSlugs, invite.RoleSlug.String) {
+			workosRoleSlugs = append(workosRoleSlugs, invite.RoleSlug.String)
+		}
+		updated, updateErr := s.orgs.UpdateMemberRoles(ctx, member.ID, workosRoleSlugs)
+		if updateErr != nil {
+			s.logger.WarnContext(ctx, "invite callback: failed to update WorkOS membership role", attr.SlogError(updateErr))
+			return
+		}
+		membershipID = member.ID
+		if updated != nil && updated.ID != "" {
+			membershipID = updated.ID
+		}
+	}
+
+	if err := orgrepo.New(s.db).SyncUserOrganizationRoleAssignments(ctx, orgrepo.SyncUserOrganizationRoleAssignmentsParams{
+		OrganizationID:     invite.OrganizationID,
+		WorkosUserID:       workosUserID,
+		WorkosRoleSlugs:    workosRoleSlugs,
+		UserID:             conv.ToPGText(gramUserID),
+		WorkosMembershipID: conv.ToPGText(membershipID),
+		WorkosUpdatedAt:    pgtype.Timestamptz{Time: time.Now(), InfinityModifier: pgtype.Finite, Valid: true},
+		WorkosLastEventID:  pgtype.Text{},
+	}); err != nil {
+		s.logger.WarnContext(ctx, "invite callback: failed to attach WorkOS membership locally", attr.SlogError(err))
 	}
 }
 

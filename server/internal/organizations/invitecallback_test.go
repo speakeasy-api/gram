@@ -205,10 +205,15 @@ func TestInviteCallback_ExistingWorkOSMembershipRoleIsReconciled(t *testing.T) {
 	seedInviteeUser(t, ctx, ti)
 
 	createErr := errors.New("membership already exists")
-	member := &thirdpartyworkos.Member{ID: "membership_01EXISTING", UserID: "user_01INVITEE", OrganizationID: organizationID}
+	member := &thirdpartyworkos.Member{
+		ID:             "membership_01EXISTING",
+		UserID:         "user_01INVITEE",
+		OrganizationID: organizationID,
+		RoleSlugs:      []string{authz.SystemRoleMember},
+	}
 	ti.orgs.On("CreateOrganizationMembership", mock.Anything, "user_01INVITEE", organizationID, authz.SystemRoleAdmin).Return("", createErr).Once()
 	ti.orgs.On("GetOrgMembership", mock.Anything, "user_01INVITEE", organizationID).Return(member, nil).Once()
-	ti.orgs.On("UpdateMemberRoles", mock.Anything, member.ID, []string{authz.SystemRoleAdmin}).Return(member, nil).Once()
+	ti.orgs.On("UpdateMemberRoles", mock.Anything, member.ID, []string{authz.SystemRoleMember, authz.SystemRoleAdmin}).Return(member, nil).Once()
 
 	recorder := serveInviteCallback(t, ti, rawToken)
 	require.Equal(t, http.StatusTemporaryRedirect, recorder.Code)
@@ -222,6 +227,13 @@ func TestInviteCallback_ExistingWorkOSMembershipRoleIsReconciled(t *testing.T) {
 		WHERE organization_id = $1 AND user_id = $2 AND deleted_at IS NULL
 	`, organizationID, "user_01INVITEE").Scan(&membershipID))
 	require.Equal(t, member.ID, membershipID)
+	roles, err := accessrepo.New(ti.conn).ListMemberRolePrincipalsByUser(ctx, accessrepo.ListMemberRolePrincipalsByUserParams{
+		OrganizationID: organizationID,
+		UserID:         "user_01INVITEE",
+	})
+	require.NoError(t, err)
+	require.Len(t, roles, 2)
+	require.ElementsMatch(t, []string{authz.SystemRoleMember, authz.SystemRoleAdmin}, []string{roles[0].RoleSlug, roles[1].RoleSlug})
 }
 
 func TestInviteCallback_WorkOSFailureDoesNotRollBackAcceptance(t *testing.T) {
