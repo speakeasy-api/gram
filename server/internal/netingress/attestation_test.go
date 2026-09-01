@@ -260,6 +260,7 @@ func TestAttestationVerifierCoalescesConcurrentRechecks(t *testing.T) {
 
 	now := time.Now().UTC()
 	current := now
+	const requests = 8
 	token := unsignedToken(t, now.Add(time.Minute))
 	reviewer := &fakeTokenReviewer{response: authenticatedTokenReview(DefaultTokenAudience, "system:serviceaccount:ns:sa")}
 	lookup := &fakeAttestorLookup{
@@ -269,13 +270,14 @@ func TestAttestationVerifierCoalescesConcurrentRechecks(t *testing.T) {
 	}
 	verifier := NewAttestationVerifier(reviewer, lookup, DefaultTokenAudience, time.Minute)
 	verifier.now = func() time.Time { return current }
+	joined := make(chan struct{}, requests)
+	verifier.recheckJoined = func() { joined <- struct{}{} }
 	require.NoError(t, func() error {
 		_, err := verifier.Verify(t.Context(), token, "10.0.0.1")
 		return err
 	}())
 	current = now.Add(servingStateRecheckTTL)
 
-	const requests = 8
 	errorsCh := make(chan error, requests)
 	for range requests {
 		go func() {
@@ -288,10 +290,59 @@ func TestAttestationVerifierCoalescesConcurrentRechecks(t *testing.T) {
 	case <-time.After(time.Second):
 		t.Fatal("recheck did not start")
 	}
+	for range requests {
+		select {
+		case <-joined:
+		case <-time.After(time.Second):
+			t.Fatal("concurrent caller did not join the recheck")
+		}
+	}
 	close(lookup.recheckRelease)
 	for range requests {
 		require.NoError(t, <-errorsCh)
 	}
+	require.Equal(t, 1, lookup.recheckCount())
+}
+
+func TestAttestationVerifierCanceledWaiterDoesNotCancelSharedRecheck(t *testing.T) {
+	t.Parallel()
+
+	now := time.Now().UTC()
+	current := now
+	token := unsignedToken(t, now.Add(time.Minute))
+	reviewer := &fakeTokenReviewer{response: authenticatedTokenReview(DefaultTokenAudience, "system:serviceaccount:ns:sa")}
+	lookup := &fakeAttestorLookup{
+		ingress:        Ingress{ID: uuid.New(), OrganizationID: "org_123"},
+		recheckStarted: make(chan struct{}, 1),
+		recheckRelease: make(chan struct{}),
+	}
+	verifier := NewAttestationVerifier(reviewer, lookup, DefaultTokenAudience, time.Minute)
+	verifier.now = func() time.Time { return current }
+	_, err := verifier.Verify(t.Context(), token, "10.0.0.1")
+	require.NoError(t, err)
+	current = now.Add(servingStateRecheckTTL)
+
+	canceledCtx, cancel := context.WithCancel(t.Context())
+	canceledErr := make(chan error, 1)
+	go func() {
+		_, err := verifier.Verify(canceledCtx, token, "10.0.0.1")
+		canceledErr <- err
+	}()
+	select {
+	case <-lookup.recheckStarted:
+	case <-time.After(time.Second):
+		t.Fatal("recheck did not start")
+	}
+	cancel()
+	require.ErrorIs(t, <-canceledErr, context.Canceled)
+
+	healthyErr := make(chan error, 1)
+	go func() {
+		_, err := verifier.Verify(t.Context(), token, "10.0.0.1")
+		healthyErr <- err
+	}()
+	close(lookup.recheckRelease)
+	require.NoError(t, <-healthyErr)
 	require.Equal(t, 1, lookup.recheckCount())
 }
 
