@@ -800,7 +800,7 @@ func (h *proxyHarness) aiAccessHeadersBlockBeforeProvider() {
 			},
 			PrescriptionID: activation.PrescriptionID, ExpectedVersion: activation.Version,
 		})
-		require.NoError(h.t, deactivateErr)
+		assert.NoError(h.t, deactivateErr)
 	}()
 
 	scenario, sessionID, callID := "ai-access", "e2e-ai-access-session", "e2e-ai-access-call"
