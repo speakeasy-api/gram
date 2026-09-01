@@ -92,7 +92,7 @@ func parseTailscaleIdentityValue(headers http.Header, name string, decodeWord bo
 		// mime.WordDecoder deliberately leaves malformed encoded-words intact.
 		// Treat an unchanged marker as invalid rather than accepting ambiguous
 		// provider identity text.
-		if decoded == raw {
+		if decoded == raw || strings.Contains(decoded, "=?") {
 			return "", fmt.Errorf("invalid RFC 2047 encoding in %s", name)
 		}
 	}

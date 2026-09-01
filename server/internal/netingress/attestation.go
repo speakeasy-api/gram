@@ -12,6 +12,7 @@ import (
 
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
+	"golang.org/x/sync/singleflight"
 	"golang.org/x/time/rate"
 	authenticationv1 "k8s.io/api/authentication/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -24,6 +25,8 @@ const (
 	negativeCacheTTL        = 2 * time.Second
 	servingStateRecheckTTL  = 2 * time.Second
 	maxSourceLimiters       = 4096
+	globalReviewRate        = rate.Limit(500)
+	globalReviewBurst       = 1000
 )
 
 var ErrAttestationRejected = errors.New("private ingress attestation rejected")
@@ -54,6 +57,8 @@ type AttestationVerifier struct {
 	mu             sync.Mutex
 	cache          map[[32]byte]cacheEntry
 	sourceLimiters map[string]*rate.Limiter
+	globalLimiter  *rate.Limiter
+	rechecks       singleflight.Group
 }
 
 func NewAttestationVerifier(reviewer TokenReviewer, lookup AttestorIngressLookup, audience string, maxTTL time.Duration) *AttestationVerifier {
@@ -72,6 +77,8 @@ func NewAttestationVerifier(reviewer TokenReviewer, lookup AttestorIngressLookup
 		mu:             sync.Mutex{},
 		cache:          make(map[[32]byte]cacheEntry),
 		sourceLimiters: make(map[string]*rate.Limiter),
+		globalLimiter:  rate.NewLimiter(globalReviewRate, globalReviewBurst),
+		rechecks:       singleflight.Group{},
 	}
 }
 
@@ -90,14 +97,7 @@ func (v *AttestationVerifier) Verify(ctx context.Context, token, source string) 
 			return Ingress{}, fmt.Errorf("%w: token was recently rejected", ErrAttestationRejected)
 		}
 		if now.Sub(cached.lastChecked) >= servingStateRecheckTTL {
-			if err := v.lookup.Recheck(ctx, cached.ingress); err != nil {
-				if errors.Is(err, ErrIngressUnavailable) || errors.Is(err, ErrIngressChanged) {
-					v.deleteCached(hash)
-					return Ingress{}, fmt.Errorf("%w: ingress authority is no longer active", ErrAttestationRejected)
-				}
-				return Ingress{}, fmt.Errorf("recheck cached private ingress authority: %w", err)
-			}
-			v.markChecked(hash, now)
+			return v.recheckCached(ctx, hash)
 		}
 		return cached.ingress, nil
 	}
@@ -200,6 +200,36 @@ func (v *AttestationVerifier) sweepAndBoundCache(now time.Time) {
 	}
 }
 
+func (v *AttestationVerifier) recheckCached(ctx context.Context, hash [32]byte) (Ingress, error) {
+	value, err, _ := v.rechecks.Do(string(hash[:]), func() (any, error) {
+		now := v.now()
+		cached, ok := v.cached(hash, now)
+		if !ok || cached.rejected {
+			return zeroIngress(), fmt.Errorf("%w: cached authority expired", ErrAttestationRejected)
+		}
+		if now.Sub(cached.lastChecked) < servingStateRecheckTTL {
+			return cached.ingress, nil
+		}
+		if err := v.lookup.Recheck(ctx, cached.ingress); err != nil {
+			if errors.Is(err, ErrIngressUnavailable) || errors.Is(err, ErrIngressChanged) {
+				v.deleteCached(hash)
+				return zeroIngress(), fmt.Errorf("%w: ingress authority is no longer active", ErrAttestationRejected)
+			}
+			return zeroIngress(), fmt.Errorf("recheck cached private ingress authority: %w", err)
+		}
+		v.markChecked(hash, now)
+		return cached.ingress, nil
+	})
+	if err != nil {
+		return Ingress{}, err
+	}
+	ingress, ok := value.(Ingress)
+	if !ok {
+		return Ingress{}, errors.New("private ingress recheck returned an invalid result")
+	}
+	return ingress, nil
+}
+
 func (v *AttestationVerifier) markChecked(hash [32]byte, now time.Time) {
 	v.mu.Lock()
 	defer v.mu.Unlock()
@@ -214,6 +244,9 @@ func (v *AttestationVerifier) markChecked(hash [32]byte, now time.Time) {
 func (v *AttestationVerifier) allowSource(source string) bool {
 	v.mu.Lock()
 	defer v.mu.Unlock()
+	if v.globalLimiter == nil || !v.globalLimiter.Allow() {
+		return false
+	}
 	limiter, ok := v.sourceLimiters[source]
 	if !ok {
 		if len(v.sourceLimiters) >= maxSourceLimiters {
