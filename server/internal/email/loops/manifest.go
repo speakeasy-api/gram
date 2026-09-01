@@ -1,6 +1,6 @@
-// Package loopsync reconciles repository-owned LMX transactional emails with
-// Loops' Content API.
-package loopsync
+// Package loops validates the repository-owned LMX transactional email
+// manifest.
+package loops
 
 import (
 	"encoding/json"
