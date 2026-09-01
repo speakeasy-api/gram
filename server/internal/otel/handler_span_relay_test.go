@@ -70,15 +70,16 @@ func TestSpanRelayHandlerGroupsByProvenanceAndCachesDestinations(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(capture.handler))
 	t.Cleanup(server.Close)
 	handler := newRelayTestHandler(t, testenv.NewMeterProvider(t))
-	destinationA := cacheRelayTestDestination(t, handler, "org-a", server.URL, map[string]string{"X-Customer": "a"})
-	cacheRelayTestDestination(t, handler, "org-b", server.URL, map[string]string{"X-Customer": "b"})
+	destinationA := cacheRelayTestDestination(t, handler, "org-a", testLogProjectID, server.URL, map[string]string{"X-Customer": "a"})
+	cacheRelayTestDestination(t, handler, "org-a", testLogOtherProjectID, server.URL, map[string]string{"X-Customer": "a"})
+	cacheRelayTestDestination(t, handler, "org-b", testLogProjectID, server.URL, map[string]string{"X-Customer": "b"})
 	require.Equal(t, 10*time.Second, destinationA.httpClient.Timeout)
 
 	messages, failures := relayTestMessages(
-		relayTestSpan("a-1", "org-a", "project-1"),
-		relayTestSpan("a-2", "org-a", "project-1"),
-		relayTestSpan("a-3", "org-a", "project-2"),
-		relayTestSpan("b-1", "org-b", "project-1"),
+		relayTestSpan("a-1", "org-a", testLogProjectID),
+		relayTestSpan("a-2", "org-a", testLogProjectID),
+		relayTestSpan("a-3", "org-a", testLogOtherProjectID),
+		relayTestSpan("b-1", "org-b", testLogProjectID),
 	)
 	require.NoError(t, handler.handleBatch(t.Context(), messages))
 	for _, failure := range failures {
@@ -87,7 +88,7 @@ func TestSpanRelayHandlerGroupsByProvenanceAndCachesDestinations(t *testing.T) {
 
 	// A second batch must stay on the in-memory destination cache: this handler
 	// has no database connection, so a miss would fail the test.
-	messages, failures = relayTestMessages(relayTestSpan("a-4", "org-a", "project-1"))
+	messages, failures = relayTestMessages(relayTestSpan("a-4", "org-a", testLogProjectID))
 	require.NoError(t, handler.handleBatch(t.Context(), messages))
 	require.NoError(t, failures[0])
 
@@ -132,7 +133,7 @@ func TestNewRelayExportRequestDiscardsGramOnlySpanFields(t *testing.T) {
 	futureGramField = protowire.AppendString(futureGramField, "internal-future-value")
 	span.ProtoReflect().SetUnknown(append(futureOTLPField, futureGramField...))
 
-	request, err := newRelayExportRequest([]*otelv1.Span{span})
+	request, err := newRelayExportRequest([]*otelv1.Span{span}, true)
 	require.NoError(t, err)
 	require.Len(t, request.GetResourceSpans(), 1)
 	require.Len(t, request.GetResourceSpans()[0].GetScopeSpans(), 1)
@@ -154,6 +155,48 @@ func TestNewRelayExportRequestDiscardsGramOnlySpanFields(t *testing.T) {
 	} {
 		require.NotContains(t, string(encoded), internalValue)
 	}
+}
+
+func TestSpanRelayExportExcludesSensitiveContentWithoutMutatingSource(t *testing.T) {
+	t.Parallel()
+
+	span := relayTestSpan("redacted", testLogOrganizationID, testLogProjectID)
+	span.SetAttributes([]*otelv1.Span_KeyValue{
+		relayTestSpanAttribute("gen_ai.input.messages", "input"),
+		relayTestSpanAttribute("gen_ai.output.messages", "output"),
+		relayTestSpanAttribute("user_prompt", "user"),
+		relayTestSpanAttribute("prompt", "prompt"),
+		relayTestSpanAttribute("model", "preserved"),
+	})
+	before := proto.Clone(span)
+
+	request, err := newRelayExportRequest([]*otelv1.Span{span}, false)
+	require.NoError(t, err)
+	require.True(t, proto.Equal(before, span))
+
+	converted := request.GetResourceSpans()[0].GetScopeSpans()[0].GetSpans()[0]
+	require.Len(t, converted.GetAttributes(), 1)
+	require.Equal(t, "model", converted.GetAttributes()[0].GetKey())
+	require.Equal(t, "preserved", converted.GetAttributes()[0].GetValue().GetStringValue())
+}
+
+func TestSpanRelayExportIncludesSensitiveContent(t *testing.T) {
+	t.Parallel()
+
+	span := relayTestSpan("included", testLogOrganizationID, testLogProjectID)
+	span.SetAttributes([]*otelv1.Span_KeyValue{
+		relayTestSpanAttribute("gen_ai.input.messages", "input"),
+		relayTestSpanAttribute("gen_ai.output.messages", "output"),
+		relayTestSpanAttribute("user_prompt", "user"),
+		relayTestSpanAttribute("prompt", "prompt"),
+		relayTestSpanAttribute("model", "preserved"),
+	})
+
+	request, err := newRelayExportRequest([]*otelv1.Span{span}, true)
+	require.NoError(t, err)
+
+	converted := request.GetResourceSpans()[0].GetScopeSpans()[0].GetSpans()[0]
+	require.Len(t, converted.GetAttributes(), 5)
 }
 
 func TestSpanRelayHandlerMetricRecordersIgnoreUnavailableCounters(t *testing.T) {
@@ -180,7 +223,8 @@ func TestSpanRelayHandlerCountsInvalidAndMissingDestinationDrops(t *testing.T) {
 	meterProvider := sdkmetric.NewMeterProvider(sdkmetric.WithReader(reader))
 	t.Cleanup(func() { require.NoError(t, meterProvider.Shutdown(context.Background())) })
 	handler := newRelayTestHandler(t, meterProvider)
-	handler.relay.destinationCache["org-a"] = cachedRelayDestination{
+	missingKey := relayTestRouteKey("org-a", testLogProjectID)
+	handler.relay.destinationCache[missingKey] = cachedRelayDestination{
 		destination: nil,
 		expiresAt:   time.Now().Add(time.Hour),
 	}
@@ -188,15 +232,18 @@ func TestSpanRelayHandlerCountsInvalidAndMissingDestinationDrops(t *testing.T) {
 	messages, failures := relayTestMessages(
 		nil,
 		(&otelv1.Span_builder{}).Build(),
-		relayTestSpan("missing-1", "org-a", "project-1"),
-		relayTestSpan("missing-2", "org-a", "project-1"),
+		relayTestSpan("empty-org", "", testLogProjectID),
+		relayTestSpan("missing-project", "org-a", ""),
+		relayTestSpan("malformed", "org-a", "malformed"),
+		relayTestSpan("missing-1", "org-a", testLogProjectID),
+		relayTestSpan("missing-2", "org-a", testLogProjectID),
 	)
 	require.NoError(t, handler.handleBatch(t.Context(), messages))
 	for _, failure := range failures {
 		require.NoError(t, failure)
 	}
 
-	require.Equal(t, int64(2), relaySpanCount(t, reader, meterSpanRelaySpansDropped, relayReasonInvalid))
+	require.Equal(t, int64(5), relaySpanCount(t, reader, meterSpanRelaySpansDropped, relayReasonInvalid))
 	require.Equal(t, int64(2), relaySpanCount(t, reader, meterSpanRelaySpansDropped, relayReasonNoDestination))
 }
 
@@ -217,12 +264,12 @@ func TestSpanRelayHandlerFailsOnlyMessagesForFailedDestination(t *testing.T) {
 	meterProvider := sdkmetric.NewMeterProvider(sdkmetric.WithReader(reader))
 	t.Cleanup(func() { require.NoError(t, meterProvider.Shutdown(context.Background())) })
 	handler := newRelayTestHandler(t, meterProvider)
-	cacheRelayTestDestination(t, handler, "org-a", failedServer.URL, nil)
-	cacheRelayTestDestination(t, handler, "org-b", successServer.URL, nil)
+	cacheRelayTestDestination(t, handler, "org-a", testLogProjectID, failedServer.URL, nil)
+	cacheRelayTestDestination(t, handler, "org-a", testLogOtherProjectID, successServer.URL, nil)
 
 	messages, failures := relayTestMessages(
-		relayTestSpan("failed", "org-a", "project-1"),
-		relayTestSpan("delivered", "org-b", "project-1"),
+		relayTestSpan("failed", "org-a", testLogProjectID),
+		relayTestSpan("delivered", "org-a", testLogOtherProjectID),
 	)
 	require.NoError(t, handler.handleBatch(t.Context(), messages))
 	require.ErrorContains(t, failures[0], "503 Service Unavailable")
@@ -246,9 +293,9 @@ func TestSpanRelayHandlerDropsPermanentHTTPFailureWithoutRetry(t *testing.T) {
 	meterProvider := sdkmetric.NewMeterProvider(sdkmetric.WithReader(reader))
 	t.Cleanup(func() { require.NoError(t, meterProvider.Shutdown(context.Background())) })
 	handler := newRelayTestHandler(t, meterProvider)
-	cacheRelayTestDestination(t, handler, "org-a", server.URL, nil)
+	cacheRelayTestDestination(t, handler, "org-a", testLogProjectID, server.URL, nil)
 
-	messages, failures := relayTestMessages(relayTestSpan("rejected", "org-a", "project-1"))
+	messages, failures := relayTestMessages(relayTestSpan("rejected", "org-a", testLogProjectID))
 	require.NoError(t, handler.handleBatch(t.Context(), messages))
 	require.NoError(t, failures[0])
 	require.Equal(t, int64(1), requests.Load())
@@ -273,9 +320,9 @@ func TestSpanRelayHandlerRetriesRateLimitFailure(t *testing.T) {
 	meterProvider := sdkmetric.NewMeterProvider(sdkmetric.WithReader(reader))
 	t.Cleanup(func() { require.NoError(t, meterProvider.Shutdown(context.Background())) })
 	handler := newRelayTestHandler(t, meterProvider)
-	cacheRelayTestDestination(t, handler, "org-a", server.URL, nil)
+	cacheRelayTestDestination(t, handler, "org-a", testLogProjectID, server.URL, nil)
 
-	messages, failures := relayTestMessages(relayTestSpan("rate-limited", "org-a", "project-1"))
+	messages, failures := relayTestMessages(relayTestSpan("rate-limited", "org-a", testLogProjectID))
 	require.NoError(t, handler.handleBatch(t.Context(), messages))
 	require.ErrorContains(t, failures[0], "429 Too Many Requests")
 	require.Equal(t, int64(2), requests.Load())
@@ -317,13 +364,15 @@ func cacheRelayTestDestination(
 	t *testing.T,
 	handler *SpanRelayHandler,
 	organizationID string,
+	projectID string,
 	baseURL string,
 	headers map[string]string,
 ) *relayDestination {
 	t.Helper()
-	destination, err := handler.relay.newDestination(organizationID, baseURL, headers)
+	key := relayTestRouteKey(organizationID, projectID)
+	destination, err := handler.relay.newDestination(key, baseURL, headers, true)
 	require.NoError(t, err)
-	handler.relay.destinationCache[organizationID] = cachedRelayDestination{
+	handler.relay.destinationCache[key] = cachedRelayDestination{
 		destination: destination,
 		expiresAt:   time.Now().Add(time.Hour),
 	}
@@ -355,6 +404,13 @@ func relaySpanCount(
 		}
 	}
 	return 0
+}
+
+func relayTestSpanAttribute(key, value string) *otelv1.Span_KeyValue {
+	return (&otelv1.Span_KeyValue_builder{
+		Key:   &key,
+		Value: (&otelv1.Span_AnyValue_builder{StringValue: &value}).Build(),
+	}).Build()
 }
 
 func relayTestSpan(name, organizationID, projectID string) *otelv1.Span {

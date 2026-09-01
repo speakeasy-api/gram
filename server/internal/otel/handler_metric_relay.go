@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"log/slog"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
-
 	otelv1 "github.com/speakeasy-api/gram/infra/gen/gram/otel/v1"
 	"go.opentelemetry.io/otel/metric"
 	collectormetricsv1 "go.opentelemetry.io/proto/otlp/collector/metrics/v1"
@@ -43,7 +43,7 @@ type MetricRelayHandler struct {
 type metricProvenanceKey struct {
 	source         string
 	organizationID string
-	projectID      string
+	projectID      uuid.UUID
 }
 
 type metricRelayMessage struct {
@@ -120,7 +120,7 @@ func (h *MetricRelayHandler) handleBatch(ctx context.Context, messages []metricR
 		destination *relayDestination
 		err         error
 	}
-	destinations := make(map[string]destinationResult)
+	destinations := make(map[relayRouteKey]destinationResult)
 	type destinationDelivery struct {
 		destination *relayDestination
 		batch       rightSizedProtoBatch[metricRelayMessage, *collectormetricsv1.ExportMetricsServiceRequest]
@@ -128,10 +128,14 @@ func (h *MetricRelayHandler) handleBatch(ctx context.Context, messages []metricR
 	deliveries := make([]destinationDelivery, 0, len(groups))
 
 	for _, provenanceGroup := range groups {
-		result, ok := destinations[provenanceGroup.key.organizationID]
+		routeKey := relayRouteKey{
+			organizationID: provenanceGroup.key.organizationID,
+			projectID:      provenanceGroup.key.projectID,
+		}
+		result, ok := destinations[routeKey]
 		if !ok {
-			result.destination, result.err = h.relay.destinationForOrganization(ctx, provenanceGroup.key.organizationID)
-			destinations[provenanceGroup.key.organizationID] = result
+			result.destination, result.err = h.relay.destinationForRoute(ctx, routeKey)
+			destinations[routeKey] = result
 		}
 		if result.err != nil {
 			err := fmt.Errorf("load metric relay destination: %w", result.err)
@@ -144,6 +148,7 @@ func (h *MetricRelayHandler) handleBatch(ctx context.Context, messages []metricR
 				"load metric relay destination",
 				attr.SlogError(result.err),
 				attr.SlogOrganizationID(provenanceGroup.key.organizationID),
+				attr.SlogProjectID(provenanceGroup.key.projectID.String()),
 			)
 			continue
 		}
@@ -160,6 +165,7 @@ func (h *MetricRelayHandler) handleBatch(ctx context.Context, messages []metricR
 				"build metric relay exports",
 				attr.SlogError(err),
 				attr.SlogOrganizationID(provenanceGroup.key.organizationID),
+				attr.SlogProjectID(provenanceGroup.key.projectID.String()),
 			)
 			continue
 		}
@@ -197,6 +203,7 @@ func (h *MetricRelayHandler) handleBatch(ctx context.Context, messages []metricR
 					"relay otel metrics",
 					attr.SlogError(err),
 					attr.SlogOrganizationID(item.destination.organizationID),
+					attr.SlogProjectID(item.destination.projectID.String()),
 					attr.SlogURLFull(item.destination.endpoint),
 				)
 			}
@@ -241,11 +248,16 @@ func groupMetricsByProvenance(messages []metricRelayMessage) ([]metricProvenance
 			invalid++
 			continue
 		}
+		projectID, err := uuid.Parse(provenance.GetProjectId())
+		if err != nil {
+			invalid++
+			continue
+		}
 
 		key := metricProvenanceKey{
 			source:         provenance.GetSource(),
 			organizationID: provenance.GetOrganizationId(),
-			projectID:      provenance.GetProjectId(),
+			projectID:      projectID,
 		}
 		index, ok := indexes[key]
 		if !ok {

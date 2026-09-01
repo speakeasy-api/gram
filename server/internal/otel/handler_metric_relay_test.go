@@ -9,6 +9,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
+
 	otelv1 "github.com/speakeasy-api/gram/infra/gen/gram/otel/v1"
 	"go.opentelemetry.io/otel/metric"
 	collectormetricsv1 "go.opentelemetry.io/proto/otlp/collector/metrics/v1"
@@ -57,6 +59,24 @@ func (c *metricRelayRequestCapture) snapshot() []capturedMetricRelayRequest {
 	return slices.Clone(c.requests)
 }
 
+func TestGroupMetricsByProvenanceRejectsInvalidProjectIDs(t *testing.T) {
+	t.Parallel()
+
+	messages, _ := metricRelayTestMessages(
+		nil,
+		(&otelv1.Metric_builder{}).Build(),
+		relayTestMetric("empty-org", "", testMetricProjectID),
+		relayTestMetric("missing-project", testMetricOrganizationID, ""),
+		relayTestMetric("malformed-project", testMetricOrganizationID, "malformed"),
+		relayTestMetric("valid", testMetricOrganizationID, testMetricProjectID),
+	)
+
+	groups, invalid := groupMetricsByProvenance(messages)
+	require.Equal(t, 5, invalid)
+	require.Len(t, groups, 1)
+	require.Equal(t, uuid.MustParse(testMetricProjectID), groups[0].key.projectID)
+}
+
 func TestMetricRelayHandlerPreservesMetricsWithoutMixingProvenance(t *testing.T) {
 	t.Parallel()
 
@@ -64,7 +84,8 @@ func TestMetricRelayHandlerPreservesMetricsWithoutMixingProvenance(t *testing.T)
 	server := httptest.NewServer(http.HandlerFunc(capture.handler))
 	t.Cleanup(server.Close)
 	handler := newMetricRelayTestHandler(t, testenv.NewMeterProvider(t))
-	cacheMetricRelayTestDestination(t, handler, testMetricOrganizationID, server.URL)
+	cacheMetricRelayTestDestination(t, handler, testMetricOrganizationID, testMetricProjectID, server.URL)
+	cacheMetricRelayTestDestination(t, handler, testMetricOrganizationID, testLogOtherProjectID, server.URL)
 
 	messages, failures := metricRelayTestMessages(
 		relayTestMetric("requests", testMetricOrganizationID, testMetricProjectID),
@@ -114,7 +135,7 @@ func TestMetricRelayHandlerLimitsDestinationExportsTo512KiB(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(capture.handler))
 	t.Cleanup(server.Close)
 	handler := newMetricRelayTestHandler(t, testenv.NewMeterProvider(t))
-	cacheMetricRelayTestDestination(t, handler, testMetricOrganizationID, server.URL)
+	cacheMetricRelayTestDestination(t, handler, testMetricOrganizationID, testMetricProjectID, server.URL)
 
 	items := []*otelv1.Metric{
 		relayTestMetric("one", testMetricOrganizationID, testMetricProjectID),
@@ -176,11 +197,12 @@ func newMetricRelayTestHandler(t *testing.T, meterProvider metric.MeterProvider)
 	)
 }
 
-func cacheMetricRelayTestDestination(t *testing.T, handler *MetricRelayHandler, organizationID, baseURL string) {
+func cacheMetricRelayTestDestination(t *testing.T, handler *MetricRelayHandler, organizationID, projectID, baseURL string) {
 	t.Helper()
-	destination, err := handler.relay.newDestination(organizationID, baseURL, nil)
+	key := relayTestRouteKey(organizationID, projectID)
+	destination, err := handler.relay.newDestination(key, baseURL, nil, true)
 	require.NoError(t, err)
-	handler.relay.destinationCache[organizationID] = cachedRelayDestination{
+	handler.relay.destinationCache[key] = cachedRelayDestination{
 		destination: destination,
 		expiresAt:   time.Now().Add(time.Hour),
 	}

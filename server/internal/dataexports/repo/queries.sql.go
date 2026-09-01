@@ -118,6 +118,48 @@ func (q *Queries) CreateOtelDestination(ctx context.Context, arg CreateOtelDesti
 	return i, err
 }
 
+const getActiveOtelRouteDestination = `-- name: GetActiveOtelRouteDestination :one
+
+SELECT
+  destination.endpoint_url,
+  destination.headers_encrypted,
+  COALESCE(destination.sensitive_data, 'exclude') = 'include' AS include_sensitive_data
+FROM data_export_routes AS route
+JOIN otel_destinations AS destination
+  ON destination.organization_id = route.organization_id
+ AND destination.project_id = route.project_id
+ AND destination.id = route.otel_destination_id
+WHERE route.organization_id = $1
+  AND route.project_id = $2
+  AND route.data_source = $3
+  AND route.enabled IS TRUE
+  AND route.deleted IS FALSE
+  AND route.otel_destination_id IS NOT NULL
+  AND destination.deleted IS FALSE
+`
+
+type GetActiveOtelRouteDestinationParams struct {
+	OrganizationID string
+	ProjectID      uuid.UUID
+	DataSource     string
+}
+
+type GetActiveOtelRouteDestinationRow struct {
+	EndpointUrl          string
+	HeadersEncrypted     pgtype.Text
+	IncludeSensitiveData bool
+}
+
+// Every query pins both organization_id and project_id. Resource UUIDs and
+// tenant-pinned foreign keys are integrity controls, not authorization bounds.
+// Resolve the active OTEL destination for one project data source.
+func (q *Queries) GetActiveOtelRouteDestination(ctx context.Context, arg GetActiveOtelRouteDestinationParams) (GetActiveOtelRouteDestinationRow, error) {
+	row := q.db.QueryRow(ctx, getActiveOtelRouteDestination, arg.OrganizationID, arg.ProjectID, arg.DataSource)
+	var i GetActiveOtelRouteDestinationRow
+	err := row.Scan(&i.EndpointUrl, &i.HeadersEncrypted, &i.IncludeSensitiveData)
+	return i, err
+}
+
 const getDataExportRouteForUpdate = `-- name: GetDataExportRouteForUpdate :one
 SELECT id, organization_id, project_id, data_source, enabled, otel_destination_id, created_at, updated_at, deleted_at, deleted
 FROM data_export_routes
@@ -289,8 +331,6 @@ type ListOtelDestinationsParams struct {
 	ProjectID      uuid.UUID
 }
 
-// Every query pins both organization_id and project_id. Resource UUIDs and
-// tenant-pinned foreign keys are integrity controls, not authorization bounds.
 // List active destinations in stable creation order for the management API.
 func (q *Queries) ListOtelDestinations(ctx context.Context, arg ListOtelDestinationsParams) ([]OtelDestination, error) {
 	rows, err := q.db.Query(ctx, listOtelDestinations, arg.OrganizationID, arg.ProjectID)
