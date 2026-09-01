@@ -129,10 +129,11 @@ func (u SessionSubject) Workload() (uuid.UUID, string, error) {
 // themselves colon-heavy (`repo:owner/name:ref:refs/heads/main`), so
 // everything after the issuer reference belongs to the subject verbatim.
 func splitWorkloadID(id string) (uuid.UUID, string, error) {
-	issuerPart, externalSubject, found := strings.Cut(id, delimiter)
-	if !found {
+	parts := strings.SplitN(id, delimiter, 2)
+	if len(parts) != 2 {
 		return uuid.Nil, "", fmt.Errorf("%w: workload id must be <issuer-id>:<external-subject>", ErrInvalid)
 	}
+	issuerPart, externalSubject := parts[0], parts[1]
 
 	issuerID, err := uuid.Parse(issuerPart)
 	if err != nil {
