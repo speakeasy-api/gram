@@ -1,4 +1,3 @@
-//nolint:exhaustruct // Server details intentionally rely on documented optional zero values.
 package externalmcp
 
 import (

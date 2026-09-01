@@ -3,7 +3,6 @@ package deployments
 import (
 	"errors"
 	"fmt"
-	"strings"
 
 	"github.com/google/uuid"
 	"github.com/speakeasy-api/gram/server/internal/constants"
@@ -16,11 +15,10 @@ const (
 )
 
 var (
-	ErrRequired           = errors.New("field is required")
-	ErrSlug               = errors.New(constants.SlugMessage)
-	ErrTooLong            = errors.New("field is too long")
-	ErrUnsupported        = errors.New("field value is unsupported")
-	ErrExactlyOneRequired = errors.New("one of these fields must be provided, but not both")
+	ErrRequired    = errors.New("field is required")
+	ErrSlug        = errors.New(constants.SlugMessage)
+	ErrTooLong     = errors.New("field is too long")
+	ErrUnsupported = errors.New("field value is unsupported")
 )
 
 type maskingError struct {
@@ -48,13 +46,6 @@ func newErrUnsupported(supported string) error {
 func requireOrElse(acc error, node string, prop string, condition bool, err error) error {
 	if !condition {
 		return errors.Join(acc, fmt.Errorf("%s/%s: %w", node, prop, err))
-	}
-	return acc
-}
-
-func requireFieldsOrElse(acc error, node string, props []string, condition bool, err error) error {
-	if !condition {
-		return errors.Join(acc, fmt.Errorf("%s/{%s}: %w", node, strings.Join(props, ","), err))
 	}
 	return acc
 }
