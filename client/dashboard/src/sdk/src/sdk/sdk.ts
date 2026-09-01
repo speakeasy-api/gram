@@ -183,6 +183,7 @@ export class Gram extends ClientSDK {
   get dataExports(): DataExports {
     return (this._dataExports ??= new DataExports(this._options));
   }
+
   private _deployments?: Deployments;
   get deployments(): Deployments {
     return (this._deployments ??= new Deployments(this._options));
