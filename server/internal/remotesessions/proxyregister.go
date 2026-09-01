@@ -17,17 +17,14 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/speakeasy-api/gram/server/internal/attr"
-	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/mcp/tunnelrouting"
-	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
-	"github.com/speakeasy-api/gram/server/internal/urn"
 	"goa.design/goa/v3/security"
 )
 
@@ -45,8 +42,8 @@ type ProxyRegisterRequest struct {
 	// TunneledMcpServerID routes the registration POST through an MCP tunnel
 	// instead of dialing the registration endpoint from cloud egress, for
 	// authorization servers inside a customer network. Platform admins only;
-	// the handler rejects it for everyone else and audit-logs its use. Callers
-	// use the tunnel bound to the remote session issuer they are registering.
+	// the handler rejects it for everyone else. Callers use the tunnel bound to
+	// the remote session issuer they are registering.
 	TunneledMcpServerID *string `json:"tunneled_mcp_server_id,omitempty"`
 }
 
@@ -279,8 +276,8 @@ func (s *Service) handleProxyRegister(w http.ResponseWriter, r *http.Request) er
 
 	// Registration through a tunnel sends a request into customer
 	// infrastructure before any client row exists to hang authorization off,
-	// so it stays white-glove: platform admins only, scoped to the active project
-	// and organization, and durably audit-logged as an attempt before the POST.
+	// so it stays white-glove: platform admins only and scoped to the active
+	// project and organization.
 	if req.TunneledMcpServerID != nil {
 		if strings.TrimSpace(*req.TunneledMcpServerID) == "" {
 			return oops.E(oops.CodeBadRequest, nil, "tunneled_mcp_server_id cannot be empty").LogError(ctx, s.logger)
@@ -292,7 +289,7 @@ func (s *Service) handleProxyRegister(w http.ResponseWriter, r *http.Request) er
 		if terr != nil {
 			return oops.E(oops.CodeBadRequest, terr, "invalid tunneled_mcp_server_id").LogError(ctx, s.logger)
 		}
-		row, terr := repo.New(s.db).GetTunneledMcpServerBinding(ctx, repo.GetTunneledMcpServerBindingParams{
+		_, terr = repo.New(s.db).GetTunneledMcpServerBinding(ctx, repo.GetTunneledMcpServerBindingParams{
 			ID:             tunnelID,
 			ProjectID:      *authCtx.ProjectID,
 			OrganizationID: authCtx.ActiveOrganizationID,
@@ -302,26 +299,6 @@ func (s *Service) handleProxyRegister(w http.ResponseWriter, r *http.Request) er
 				return oops.E(oops.CodeNotFound, terr, "active tunneled MCP server not found in the current project and organization").LogError(ctx, s.logger)
 			}
 			return oops.E(oops.CodeUnexpected, terr, "get tunneled mcp server").LogError(ctx, s.logger)
-		}
-		dbtx, terr := s.db.Begin(ctx)
-		if terr != nil {
-			return oops.E(oops.CodeUnexpected, terr, "begin tunnel registration audit transaction").LogError(ctx, s.logger)
-		}
-		defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
-		if terr := s.auditLogger.LogTunneledMcpServerDynamicClientRegistration(ctx, dbtx, audit.LogTunneledMcpServerDynamicClientRegistrationEvent{
-			OrganizationID:        authCtx.ActiveOrganizationID,
-			ProjectID:             row.ProjectID,
-			Actor:                 urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
-			ActorDisplayName:      authCtx.Email,
-			ActorSlug:             nil,
-			TunneledMcpServerURN:  urn.NewTunneledMcpServer(row.ID),
-			TunneledMcpServerName: row.Name,
-			RegistrationEndpoint:  req.RegistrationEndpoint,
-		}); terr != nil {
-			return oops.E(oops.CodeUnexpected, terr, "log tunneled dynamic client registration attempt").LogError(ctx, s.logger)
-		}
-		if terr := dbtx.Commit(ctx); terr != nil {
-			return oops.E(oops.CodeUnexpected, terr, "commit tunnel registration audit").LogError(ctx, s.logger)
 		}
 	}
 

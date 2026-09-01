@@ -12,8 +12,6 @@ import (
 	"github.com/stretchr/testify/require"
 	goahttp "goa.design/goa/v3/http"
 
-	"github.com/speakeasy-api/gram/server/internal/audit"
-	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	authrepo "github.com/speakeasy-api/gram/server/internal/auth/repo"
 	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
@@ -53,9 +51,6 @@ func TestProxyRegisterMountedHandlerResolvesProjectForTunneledRequest(t *testing
 	t.Cleanup(gateway.Close)
 	require.NoError(t, ti.tunnelRoutes.Publish(ctx, tunnelID.String(), gateway.URL, time.Minute))
 
-	before, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionTunneledMcpServerDynamicClientRegistration)
-	require.NoError(t, err)
-
 	tunnelIDString := tunnelID.String()
 	recorder := serveProxyRegister(t, ctx, ti, remotesessions.ProxyRegisterRequest{
 		RegistrationEndpoint:    "https://idp.internal/oauth/register",
@@ -68,10 +63,6 @@ func TestProxyRegisterMountedHandlerResolvesProjectForTunneledRequest(t *testing
 	var response remotesessions.ProxyRegisterResponse
 	require.NoError(t, json.NewDecoder(recorder.Body).Decode(&response))
 	require.Equal(t, "registered-through-tunnel", response.ClientID)
-
-	after, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionTunneledMcpServerDynamicClientRegistration)
-	require.NoError(t, err)
-	require.Equal(t, before+1, after)
 }
 
 func TestProxyRegisterMountedHandlerRequiresPlatformAdminForTunnel(t *testing.T) {
