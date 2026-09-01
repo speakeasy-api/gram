@@ -193,6 +193,13 @@ func (s *Service) ingest(ctx context.Context, payload *gen.IngestPayload) (res *
 			attr.SlogHookSource(source),
 			attr.SlogHookEvent(eventType),
 		)
+		_, _, governed := governedHook(payload, nil)
+		if governed {
+			return &AuthenticatedIngestResult{
+				Result: canonicalDenyResultWithReason("ai_access_identity_unavailable", aiAccessIdentityFailureMessage),
+				Actor:  ResolvedActor{UserID: "", Email: ""},
+			}, nil
+		}
 		return &AuthenticatedIngestResult{
 			Result: canonicalAllowResult(),
 			Actor:  ResolvedActor{UserID: "", Email: ""},
@@ -217,11 +224,81 @@ func (s *Service) ingest(ctx context.Context, payload *gen.IngestPayload) (res *
 	)
 	logger.InfoContext(ctx, "unified hook received", attr.SlogEvent("hooks_ingest"))
 
-	if !s.claimHookIdempotency(ctx, conv.PtrValOr(payload.IdempotencyKey, ""), replayed) {
+	duplicate := !s.claimHookIdempotency(ctx, conv.PtrValOr(payload.IdempotencyKey, ""), replayed)
+	if duplicate {
 		ctx = withHookDuplicate(ctx)
 	}
 
-	blockReason, userReason := s.evaluateCanonicalHook(ctx, payload, authCtx, actor, timestamp)
+	var aiDecision hookAIAccessDecision
+	observationalGoverned := false
+	_, governedEvent, isGoverned := governedHook(payload, authCtx)
+	if isGoverned {
+		switch {
+		case !validGovernedHookPayload(payload, governedEvent):
+			aiDecision = identityFailureDecision()
+		case s.aiAccess == nil:
+			aiDecision = evaluatorFailureDecision()
+		default:
+			observational := conv.PtrValOr(payload.Replayed, false) || conv.PtrValOr(payload.Backfilled, false)
+			resolved := false
+			if duplicate && !observational {
+				cachedDecision, cachedPrincipal, status := s.cachedHookAIAccessDenial(ctx, payload, authCtx.ActiveOrganizationID)
+				switch status {
+				case hookDenialCacheHit:
+					_, failure := s.aiAccess.VerifyCached(ctx, payload, authCtx, cachedPrincipal)
+					if failure.deny {
+						aiDecision = failure
+					} else {
+						aiDecision = cachedDecision
+					}
+					resolved = true
+				case hookDenialCacheFailure:
+					aiDecision = evaluatorFailureDecision()
+					resolved = true
+				case hookDenialCacheMiss:
+				}
+			}
+			if !resolved {
+				verified, failure := s.aiAccess.Verify(ctx, payload, authCtx)
+				if failure.deny {
+					aiDecision = failure
+				} else if verified.observational {
+					// Replay/backfill delivery is telemetry-only. Its signed marker
+					// excludes policy evaluation but can never authorize live work.
+					observationalGoverned = true
+				} else {
+					release, cachedDecision, cachedPrincipal, cached, coordinationFailed := s.awaitHookAIAccessEvaluation(ctx, payload, authCtx.ActiveOrganizationID)
+					switch {
+					case coordinationFailed:
+						aiDecision = evaluatorFailureDecision()
+					case cached:
+						if cachedPrincipal != verified.principalKey {
+							aiDecision = identityFailureDecision()
+						} else {
+							aiDecision = cachedDecision
+						}
+					default:
+						evaluationCtx, cancelEvaluation := context.WithTimeout(ctx, AIAccessEvaluationTimeout)
+						aiDecision = s.aiAccess.EvaluateVerified(evaluationCtx, verified)
+						cancelEvaluation()
+						publicationCtx, cancelPublication := context.WithTimeout(context.WithoutCancel(ctx), aiAccessDenialPublicationTimeout)
+						aiDecision = s.publishHookAIAccessDenial(publicationCtx, payload, authCtx.ActiveOrganizationID, verified.principalKey, aiDecision)
+						cancelPublication()
+						released, releaseErr := release()
+						if (releaseErr != nil || !released) && !aiDecision.deny {
+							aiDecision = evaluatorFailureDecision()
+						}
+					}
+				}
+			}
+		}
+	}
+	blockReason, userReason := "", ""
+	if aiDecision.deny {
+		blockReason, userReason = aiDecision.reason, aiDecision.message
+	} else if !observationalGoverned {
+		blockReason, userReason = s.evaluateCanonicalHook(ctx, payload, authCtx, actor, timestamp)
+	}
 	skillCapture, observed, observationErr := s.recordSkillActivation(ctx, payload, authCtx, actor, timestamp, blockReason)
 	if observationErr != nil {
 		logger.WarnContext(ctx, "failed to record skill activation",
@@ -274,7 +351,13 @@ func (s *Service) ingest(ctx context.Context, payload *gen.IngestPayload) (res *
 	s.captureMCPAttribution(context.WithoutCancel(ctx), payload, authCtx)
 	if blockReason != "" {
 		return &AuthenticatedIngestResult{
-			Result: withBlockEffect(blockEffects, s.withOrgSettings(ctx, authCtx.ActiveOrganizationID, canonicalDenyResult(userReason), skillCapture)),
+			Result: withBlockEffect(blockEffects, s.withOrgSettings(ctx, authCtx.ActiveOrganizationID, canonicalDenyResultWithReason(aiDecision.reason, userReason), skillCapture)),
+			Actor:  ResolvedActor(actor),
+		}, nil
+	}
+	if observationalGoverned {
+		return &AuthenticatedIngestResult{
+			Result: s.withOrgSettings(ctx, authCtx.ActiveOrganizationID, canonicalDenyResultWithReason("ai_access_observational", "Recorded hook delivery cannot authorize an AI action."), skillCapture),
 			Actor:  ResolvedActor(actor),
 		}, nil
 	}
@@ -1934,11 +2017,13 @@ func canonicalAllowResult() *gen.IngestHookResult {
 	}
 }
 
-func canonicalDenyResult(message string) *gen.IngestHookResult {
+func canonicalDenyResultWithReason(reason, message string) *gen.IngestHookResult {
 	if strings.TrimSpace(message) == "" {
 		message = "Request denied by Speakeasy policy."
 	}
-	reason := "policy_denied"
+	if strings.TrimSpace(reason) == "" {
+		reason = "policy_denied"
+	}
 	return &gen.IngestHookResult{
 		Decision: "deny",
 		Reason:   &reason,

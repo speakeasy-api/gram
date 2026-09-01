@@ -3473,6 +3473,17 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+  cliAuthDelegateHooksActingUser:
+    speakeasy-default-cli-auth-delegate-hooks-acting-user:
+      requestBody:
+        application/json: {"contract_version": "<value>", "event": "<value>", "idempotency_key": "<value>", "provider": "<value>", "refresh_token": "<value>", "session_id": "<id>", "signature": "<value>", "signed_at": 44516}
+      responses:
+        "200":
+          application/json: {"assertion": "<value>", "expires_in": 191140}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
   cliAuthRedeem:
     speakeasy-default-cli-auth-redeem:
       requestBody:

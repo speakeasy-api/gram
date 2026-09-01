@@ -3,9 +3,12 @@ package relay
 import (
 	"bytes"
 	"context"
+	"crypto/ed25519"
+	"crypto/rand"
 	"encoding/json"
 	"errors"
 	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -15,6 +18,7 @@ import (
 	"github.com/speakeasy-api/agenthooks"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/hooks/delegation"
 	"github.com/speakeasy-api/gram/hooks/sdk/models/components"
 )
 
@@ -53,6 +57,32 @@ func seedSpoolEntryWithConfig(t *testing.T, serverURL string, age time.Duration,
 	require.NoError(t, err)
 	require.NoError(t, os.WriteFile(filepath.Join(dir, spoolFileName(time.Now().Add(-age))), b, 0o600))
 	return key
+}
+
+func makeSpoolEntryGoverned(t *testing.T, name string) {
+	t.Helper()
+	entry := readSpoolEntry(t, name)
+	event := delegation.EventPreToolUse
+	entry.Envelope.Source.RawEventName = &event
+	entry.Envelope.Event.Type = components.TypeToolRequested
+	b, err := json.Marshal(entry)
+	require.NoError(t, err)
+	dir := filepath.Join(os.Getenv("XDG_STATE_HOME"), "gram", "hooks", "spool")
+	require.NoError(t, os.WriteFile(filepath.Join(dir, name), b, 0o600))
+}
+
+func seedGovernedSpoolEntry(t *testing.T, serverURL string, age time.Duration, configPath string) string {
+	t.Helper()
+	authFile := filepath.Join(t.TempDir(), "hooks-auth.env")
+	t.Setenv("GRAM_HOOKS_AUTH_FILE", authFile)
+	_, privateKey, err := ed25519.GenerateKey(rand.Reader)
+	require.NoError(t, err)
+	require.NoError(t, writeAuth(creds{ServerURL: serverURL, APIKey: "cached-key", Project: "default", Org: "", RefreshToken: "refresh", ProofPrivateKey: delegation.EncodePrivateKey(privateKey), ContractVersion: delegation.ContractVersion, Source: credCache}))
+	seedSpoolEntryWithConfig(t, serverURL, age, "governed", configPath)
+	files := spoolFiles(t)
+	require.NotEmpty(t, files)
+	makeSpoolEntryGoverned(t, files[len(files)-1])
+	return authFile
 }
 
 func drainEnv(t *testing.T) {
@@ -189,6 +219,56 @@ func TestDrainExpiresStaleEntriesWithoutSending(t *testing.T) {
 	require.Empty(t, spoolFiles(t))
 }
 
+func TestGovernedReplayBindingIsObservational(t *testing.T) {
+	event := delegation.EventPreToolUse
+	sessionID := "session-replay"
+	entry := spoolEntry{
+		V: spoolEntryVersion,
+		Envelope: components.IngestRequestBody{
+			Source:  components.HookIngestSource{Adapter: delegation.ProviderClaude, RawEventName: &event},
+			Session: &components.HookIngestSession{ID: &sessionID},
+			Event:   components.HookIngestEvent{Type: components.TypeToolRequested},
+		},
+	}
+	binding, ok := governedReplayBinding(entry)
+	require.True(t, ok)
+	require.True(t, binding.observational)
+	require.Equal(t, sessionID, binding.sessionID)
+
+	toolName := "Skill"
+	entry.Envelope.Event.Type = components.TypeSkillActivated
+	entry.Envelope.Data = &components.HookIngestData{
+		Skill:    &components.HookSkillData{Name: "review"},
+		ToolCall: &components.HookToolCallData{Name: &toolName},
+	}
+	binding, ok = governedReplayBinding(entry)
+	require.True(t, ok)
+	require.True(t, binding.observational)
+}
+
+func TestDrainReadsVersionOneEntries(t *testing.T) {
+	drainEnv(t)
+	fs := newFakeServer(t, nil)
+	seedSpoolEntry(t, fs.URL, time.Hour, "sess-v1")
+	names := spoolFiles(t)
+	require.Len(t, names, 1)
+	dir := filepath.Join(os.Getenv("XDG_STATE_HOME"), "gram", "hooks", "spool")
+	path := filepath.Join(dir, names[0])
+	b, err := os.ReadFile(path)
+	require.NoError(t, err)
+	var raw map[string]any
+	require.NoError(t, json.Unmarshal(b, &raw))
+	raw["v"] = spoolEntryV1
+	b, err = json.Marshal(raw)
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(path, b, 0o600))
+
+	s := Drain(t.Context())
+	require.Equal(t, 1, s.Replayed)
+	require.Zero(t, s.Remaining)
+	require.Equal(t, 1, fs.count())
+}
+
 // TestDrainSkipsNewerSchemaEntries: an entry written by a newer binary is
 // left for a newer binary — never interpreted, never deleted.
 func TestDrainSkipsNewerSchemaEntries(t *testing.T) {
@@ -273,6 +353,132 @@ func TestDrainUsesConfigOrgKeyFallback(t *testing.T) {
 	fs.mu.Lock()
 	defer fs.mu.Unlock()
 	require.Equal(t, "org-key-1", fs.headers[0].Get("Gram-Key"))
+}
+
+// A transport fallback must not discard the proof enrollment needed to mint
+// assertions for later governed entries in the same deployment backlog.
+func TestDrainOrgFallbackPreservesProofForLaterGovernedEntry(t *testing.T) {
+	setSpoolStateHome(t)
+	t.Setenv("GRAM_HOOKS_API_KEY", "")
+	requests := 0
+	fs := newFakeServer(t, func(components.IngestRequestBody) (int, decision) {
+		requests++
+		if requests == 1 {
+			return http.StatusUnauthorized, decision{}
+		}
+		return http.StatusOK, decision{Decision: "allow"}
+	})
+	cfgPath := filepath.Join(t.TempDir(), "speakeasy.json")
+	require.NoError(t, os.WriteFile(cfgPath, []byte(`{"server_url":"`+fs.URL+`","project":"default","hooks_api_key":"org-key"}`), 0o600))
+	seedSpoolEntryWithConfig(t, fs.URL, 2*time.Hour, "ungoverned", cfgPath)
+	seedGovernedSpoolEntry(t, fs.URL, time.Hour, cfgPath)
+	require.Len(t, spoolFiles(t), 2)
+
+	summary := Drain(t.Context())
+	require.Equal(t, DrainSummary{Replayed: 2, Remaining: 0}, summary)
+	require.Equal(t, 3, fs.count(), "cached rejection, org fallback, then governed replay")
+	fs.mu.Lock()
+	defer fs.mu.Unlock()
+	require.Equal(t, "cached-key", fs.headers[2].Get("Gram-Key"), "a governed assertion must use its bound enrollment key")
+	require.NotEmpty(t, fs.headers[2].Get("X-Gram-Acting-User"))
+}
+
+func TestDrainAbortsOnMintFailure(t *testing.T) {
+	setSpoolStateHome(t)
+	t.Setenv("GRAM_HOOKS_API_KEY", "")
+	ingestRequests := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/rpc/cliAuth.delegateHooksActingUser" {
+			w.WriteHeader(http.StatusServiceUnavailable)
+			return
+		}
+		ingestRequests++
+		w.WriteHeader(http.StatusOK)
+	}))
+	t.Cleanup(server.Close)
+	seedGovernedSpoolEntry(t, server.URL, time.Hour, "")
+	require.Len(t, spoolFiles(t), 1)
+
+	summary := Drain(t.Context())
+	require.True(t, summary.Aborted)
+	require.Equal(t, 1, summary.Remaining)
+	require.Zero(t, summary.Skipped)
+	require.Zero(t, ingestRequests)
+}
+
+func TestDrainAbortsBeforeGovernedAssertionCanExpire(t *testing.T) {
+	setSpoolStateHome(t)
+	t.Setenv("GRAM_HOOKS_API_KEY", "")
+	ingestRequests := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.URL.Path == "/rpc/cliAuth.delegateHooksActingUser" {
+			_ = json.NewEncoder(w).Encode(delegation.MintResponse{Assertion: "short-lived", ExpiresIn: int(assertionExpirySafetyMargin.Seconds())})
+			return
+		}
+		ingestRequests++
+		w.WriteHeader(http.StatusUnauthorized)
+	}))
+	t.Cleanup(server.Close)
+	seedGovernedSpoolEntry(t, server.URL, time.Hour, "")
+
+	summary := Drain(t.Context())
+
+	require.True(t, summary.Aborted)
+	require.Equal(t, 1, summary.Remaining)
+	require.Zero(t, summary.Skipped)
+	require.Zero(t, ingestRequests)
+}
+
+func TestDrainSkipsGovernedEntryWithoutProofAndContinues(t *testing.T) {
+	drainEnv(t)
+	fs := newFakeServer(t, nil)
+	seedSpoolEntry(t, fs.URL, 2*time.Hour, "governed")
+	seedSpoolEntry(t, fs.URL, time.Hour, "ordinary")
+	files := spoolFiles(t)
+	require.Len(t, files, 2)
+	makeSpoolEntryGoverned(t, files[0])
+
+	summary := Drain(t.Context())
+
+	require.Equal(t, 1, summary.Replayed)
+	require.Equal(t, 1, summary.Skipped)
+	require.Equal(t, 1, summary.Remaining)
+	require.False(t, summary.Aborted)
+	require.Equal(t, 1, fs.count())
+}
+
+func TestDrainMintAuthRejectionRequiresReauth(t *testing.T) {
+	for _, test := range []struct {
+		name   string
+		status int
+	}{
+		{name: "unauthorized", status: http.StatusUnauthorized},
+		{name: "forbidden", status: http.StatusForbidden},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			setSpoolStateHome(t)
+			t.Setenv("GRAM_HOOKS_API_KEY", "")
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if r.URL.Path == "/rpc/cliAuth.delegateHooksActingUser" {
+					w.WriteHeader(test.status)
+					return
+				}
+				w.WriteHeader(http.StatusOK)
+			}))
+			t.Cleanup(server.Close)
+			authFile := seedGovernedSpoolEntry(t, server.URL, time.Hour, "")
+			require.Len(t, spoolFiles(t), 1)
+
+			summary := Drain(t.Context())
+
+			require.True(t, summary.Aborted)
+			require.Equal(t, 1, summary.Remaining)
+			_, err := os.Stat(authFile)
+			require.ErrorIs(t, err, os.ErrNotExist)
+			require.True(t, reauthNeeded())
+		})
+	}
 }
 
 // TestMaybeSpawnDrainAfterRecovery drives the real provider path: sends fail

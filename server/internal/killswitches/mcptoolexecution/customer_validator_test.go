@@ -9,8 +9,40 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/hooks/delegation"
 	"github.com/speakeasy-api/gram/server/internal/killswitches"
 )
+
+func TestCustomerLifecycleValidatorAcceptsOnlyRegisteredHookActivities(t *testing.T) {
+	t.Parallel()
+	db, orgID := newTestDatabase(t, "ks_customer_hook_activity")
+	tx, err := db.Begin(t.Context())
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = tx.Rollback(context.Background()) })
+
+	bindings := delegation.ApprovedBindings()
+	keys := make([]killswitches.ResourceKey, len(bindings))
+	for i, binding := range bindings {
+		keys[i] = killswitches.ResourceKey(binding.ResourceKey)
+	}
+	validator := NewCustomerLifecycleValidator()
+	require.NoError(t, validator.ValidateCurrent(t.Context(), tx, killswitches.CurrentReferenceBatch{
+		OrganizationID: killswitches.OrganizationID(orgID),
+		Resources:      &killswitches.CurrentResourceReferences{Kind: ResourceKindHookActivity, Keys: keys},
+	}))
+
+	err = validator.ValidateCurrent(t.Context(), tx, killswitches.CurrentReferenceBatch{
+		OrganizationID: killswitches.OrganizationID(orgID),
+		Resources:      &killswitches.CurrentResourceReferences{Kind: ResourceKindHookActivity, Keys: []killswitches.ResourceKey{"claude:PermissionRequest"}},
+	})
+	require.ErrorIs(t, err, killswitches.ErrInvalidReference)
+
+	err = validator.ValidateCurrent(t.Context(), tx, killswitches.CurrentReferenceBatch{
+		OrganizationID: killswitches.OrganizationID(orgID),
+		Resources:      &killswitches.CurrentResourceReferences{Kind: ResourceKindHookActivity, Keys: nil},
+	})
+	require.ErrorIs(t, err, killswitches.ErrInvalidReference)
+}
 
 func TestCustomerLifecycleValidatorLocksLivenessUpdatesUntilCommit(t *testing.T) {
 	t.Parallel()

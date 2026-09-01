@@ -42,6 +42,10 @@ const (
 	// still satisfies the data endpoints during the transition, with no
 	// re-provisioning.
 	APIKeyScopeAgentUser APIKeyScope = iota
+	// APIKeyScopeHooksActingUser marks proof-bound relay credentials minted by
+	// CLI auth. It is intentionally absent from APIKeyScopes so public key
+	// creation cannot mint the trusted approved-client discriminator.
+	APIKeyScopeHooksActingUser APIKeyScope = iota
 )
 
 // PluginAPIKeyNamePrefix is reserved for keys minted by plugin distribution
@@ -201,6 +205,8 @@ func (scope APIKeyScope) String() string {
 		return "agent"
 	case APIKeyScopeAgentUser:
 		return "agent_user"
+	case APIKeyScopeHooksActingUser:
+		return "hooks_acting_user"
 	default:
 		return "invalid"
 	}

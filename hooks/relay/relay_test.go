@@ -3,6 +3,8 @@ package relay
 import (
 	"bytes"
 	"context"
+	"crypto/ed25519"
+	"crypto/rand"
 	"encoding/json"
 	"io"
 	"maps"
@@ -24,6 +26,7 @@ import (
 	"github.com/speakeasy-api/agenthooks/agenthookstest"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/hooks/delegation"
 	"github.com/speakeasy-api/gram/hooks/sdk/models/components"
 )
 
@@ -43,6 +46,11 @@ func newFakeServer(t *testing.T, respond func(components.IngestRequestBody) (int
 	t.Helper()
 	fs := &fakeServer{Server: nil, mu: sync.Mutex{}, requests: nil, headers: nil, respond: respond, effects: nil}
 	fs.Server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/rpc/cliAuth.delegateHooksActingUser" {
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(delegation.MintResponse{Assertion: "test-assertion", ExpiresIn: 30})
+			return
+		}
 		body, _ := io.ReadAll(r.Body)
 		var p components.IngestRequestBody
 		_ = json.Unmarshal(body, &p)
@@ -105,6 +113,15 @@ func setSpoolStateHome(t *testing.T) string {
 func invoke(t *testing.T, cfg Config, provider agenthooks.Provider, fixture string) agenthookstest.Result {
 	t.Helper()
 	t.Setenv("GRAM_DEVICE_AGENT_COMMANDS", "speakeasy-hooks-test-missing-device-agent")
+	// Most relay tests exercise transport behavior, not enrollment. Supply a
+	// proof-bound test credential so governed native events reach the fake
+	// server. Tests that set an explicit key retain that identity-failure path.
+	if _, ok := resolveAuth(cfg); !ok && !disableLocalAuth() && !reauthNeeded() && os.Getenv("GRAM_HOOKS_TEST_NO_PROOF") != "1" && os.Getenv("GRAM_HOOKS_API_KEY") == "" && cfg.HooksAPIKey == "" {
+		t.Setenv("GRAM_HOOKS_AUTH_FILE", filepath.Join(t.TempDir(), "hooks-auth.env"))
+		_, privateKey, err := ed25519.GenerateKey(rand.Reader)
+		require.NoError(t, err)
+		require.NoError(t, writeAuth(creds{ServerURL: cfg.ServerURL, APIKey: "test-hooks-key", Project: cfg.ProjectSlug, Org: firstNonEmpty(cfg.OrgID, "test-org"), RefreshToken: "test-refresh", ProofPrivateKey: delegation.EncodePrivateKey(privateKey), ContractVersion: delegation.ContractVersion, Source: credCache}))
+	}
 	if v := os.Getenv("XDG_STATE_HOME"); v == "" || v != spoolStateHome {
 		t.Setenv("XDG_STATE_HOME", t.TempDir())
 	}
@@ -113,12 +130,36 @@ func invoke(t *testing.T, cfg Config, provider agenthooks.Provider, fixture stri
 	return agenthookstest.Invoke(t, runner, provider, payload, "--variant=cli")
 }
 
+func writeTestProofAuth(t *testing.T, serverURL, apiKey string) string {
+	t.Helper()
+	authFile := filepath.Join(t.TempDir(), "hooks-auth.env")
+	t.Setenv("GRAM_HOOKS_AUTH_FILE", authFile)
+	t.Setenv("GRAM_HOOKS_API_KEY", "")
+	_, privateKey, err := ed25519.GenerateKey(rand.Reader)
+	require.NoError(t, err)
+	require.NoError(t, writeAuth(creds{ServerURL: serverURL, APIKey: apiKey, Project: "default", Org: "test-org", RefreshToken: "test-refresh", ProofPrivateKey: delegation.EncodePrivateKey(privateKey), ContractVersion: delegation.ContractVersion, Source: credCache}))
+	return authFile
+}
+
 func authedConfig(t *testing.T, serverURL string) Config {
 	t.Helper()
 	t.Setenv("GRAM_HOOKS_AUTH_FILE", filepath.Join(t.TempDir(), "hooks-auth.env"))
-	t.Setenv("GRAM_HOOKS_API_KEY", "test-hooks-key")
-	t.Setenv("GRAM_HOOKS_DISABLE_LOCAL_AUTH", "1")
+	t.Setenv("GRAM_HOOKS_API_KEY", "")
+	t.Setenv("GRAM_HOOKS_DISABLE_LOCAL_AUTH", "")
+	_, privateKey, err := ed25519.GenerateKey(rand.Reader)
+	require.NoError(t, err)
+	require.NoError(t, writeAuth(creds{ServerURL: serverURL, APIKey: "test-hooks-key", Project: "default", Org: "test-org", RefreshToken: "test-refresh", ProofPrivateKey: delegation.EncodePrivateKey(privateKey), ContractVersion: delegation.ContractVersion, Source: credCache}))
 	return Config{ServerURL: serverURL, ProjectSlug: "default", OrgID: "", HooksAPIKey: "", BrowserLogin: false, Nonblocking: false, DebugLog: "", ConfigPath: "", ConfigError: ""}
+}
+
+func TestGovernedAuthPrefersProofBoundCacheOverEnvironmentKey(t *testing.T) {
+	serverURL := "https://gram.test"
+	writeTestProofAuth(t, serverURL, "proof-bound-key")
+	t.Setenv("GRAM_HOOKS_API_KEY", "telemetry-key")
+	c, ok := resolveGovernedAuth(Config{ServerURL: serverURL, ProjectSlug: "default", OrgID: "test-org"})
+	require.True(t, ok)
+	require.Equal(t, credCache, c.Source)
+	require.Equal(t, "proof-bound-key", c.APIKey)
 }
 
 func TestEnvelopeClaudePreToolUse(t *testing.T) {
@@ -372,9 +413,9 @@ func TestRatchetNeverAuthedFailsOpen(t *testing.T) {
 	t.Setenv("GRAM_HOOKS_API_KEY", "")
 	cfg := Config{ServerURL: fs.URL, ProjectSlug: "default", OrgID: "", HooksAPIKey: "", BrowserLogin: false, Nonblocking: false, DebugLog: "", ConfigPath: "", ConfigError: ""}
 
-	res := invoke(t, cfg, agenthooks.ProviderClaudeCode, "claude/pre_tool_use.json")
+	res := invoke(t, cfg, agenthooks.ProviderClaudeCode, "claude/permission_request.json")
 
-	require.Equal(t, 0, res.ExitCode, "never-authenticated machine must not block")
+	require.Equal(t, 0, res.ExitCode, "ungoverned events preserve the pre-enrollment posture")
 	require.Equal(t, "{}", string(bytes.TrimSpace(res.Stdout)))
 	require.Equal(t, 0, fs.count(), "no events may leak before authentication")
 }
@@ -432,7 +473,7 @@ func TestAuthRejectedForgetsCachedKey(t *testing.T) {
 	t.Setenv("GRAM_HOOKS_API_KEY", "")
 	cfg := Config{ServerURL: fs.URL, ProjectSlug: "default", OrgID: "", HooksAPIKey: "", BrowserLogin: false, Nonblocking: false, DebugLog: "", ConfigPath: "", ConfigError: ""}
 
-	res := invoke(t, cfg, agenthooks.ProviderClaudeCode, "claude/pre_tool_use.json")
+	res := invoke(t, cfg, agenthooks.ProviderClaudeCode, "claude/permission_request.json")
 
 	require.Contains(t, string(res.Stdout), `"permissionDecision":"deny"`, "a rejected credential must fail closed")
 	_, statErr := os.Stat(authFile)
@@ -441,13 +482,62 @@ func TestAuthRejectedForgetsCachedKey(t *testing.T) {
 	require.FileExists(t, authFile+".reauth-needed", "the rejection must leave the reconnect marker")
 }
 
+func TestRejectedDelegationRefreshRequiresReconnect(t *testing.T) {
+	var ingestRequests atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/rpc/cliAuth.delegateHooksActingUser" {
+			w.WriteHeader(http.StatusUnauthorized)
+			return
+		}
+		ingestRequests.Add(1)
+		w.WriteHeader(http.StatusOK)
+	}))
+	t.Cleanup(server.Close)
+
+	authFile := writeTestProofAuth(t, server.URL, "valid-api-key")
+	cfg := Config{ServerURL: server.URL, ProjectSlug: "default", OrgID: "test-org", HooksAPIKey: "", BrowserLogin: false, Nonblocking: false, DebugLog: "", ConfigPath: "", ConfigError: ""}
+
+	res := invoke(t, cfg, agenthooks.ProviderClaudeCode, "claude/pre_tool_use.json")
+
+	require.Contains(t, string(res.Stdout), `"permissionDecision":"deny"`)
+	require.Contains(t, string(res.Stdout), actingIdentityFailureMessage)
+	require.Zero(t, ingestRequests.Load(), "an invalid delegation must not reach governed ingest")
+	require.NoFileExists(t, authFile, "the invalid proof enrollment must be forgotten")
+	require.FileExists(t, authFile+".reauth-needed")
+	require.ErrorContains(t, NewRelay(cfg).Login(t.Context(), false), "browser sign-in is disabled", "ordinary login must not treat a rejected delegation as ready")
+}
+
+func TestUnavailableDelegationMintKeepsEnrollment(t *testing.T) {
+	var ingestRequests atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/rpc/cliAuth.delegateHooksActingUser" {
+			w.WriteHeader(http.StatusServiceUnavailable)
+			return
+		}
+		ingestRequests.Add(1)
+		w.WriteHeader(http.StatusOK)
+	}))
+	t.Cleanup(server.Close)
+
+	authFile := writeTestProofAuth(t, server.URL, "valid-api-key")
+	cfg := Config{ServerURL: server.URL, ProjectSlug: "default", OrgID: "test-org", HooksAPIKey: "", BrowserLogin: false, Nonblocking: false, DebugLog: "", ConfigPath: "", ConfigError: ""}
+
+	res := invoke(t, cfg, agenthooks.ProviderClaudeCode, "claude/pre_tool_use.json")
+
+	require.Contains(t, string(res.Stdout), `"permissionDecision":"deny"`)
+	require.Contains(t, string(res.Stdout), delegation.EvaluatorFailureMessage)
+	require.Zero(t, ingestRequests.Load(), "a failed delegation mint must not reach governed ingest")
+	require.FileExists(t, authFile, "a transient mint failure must retain the enrollment")
+	require.NoFileExists(t, authFile+".reauth-needed")
+}
+
 func TestOrgKeyFallbackSendsWithoutPersonalCredential(t *testing.T) {
 	fs := newFakeServer(t, nil)
 	t.Setenv("GRAM_HOOKS_AUTH_FILE", filepath.Join(t.TempDir(), "hooks-auth.env"))
 	t.Setenv("GRAM_HOOKS_API_KEY", "")
 	cfg := Config{ServerURL: fs.URL, ProjectSlug: "default", OrgID: "org-1", HooksAPIKey: "shared-org-key", BrowserLogin: false, Nonblocking: false, DebugLog: "", ConfigPath: "", ConfigError: ""}
 
-	res := invoke(t, cfg, agenthooks.ProviderClaudeCode, "claude/pre_tool_use.json")
+	res := invoke(t, cfg, agenthooks.ProviderClaudeCode, "claude/permission_request.json")
 
 	require.Equal(t, 0, res.ExitCode)
 	require.Equal(t, 1, fs.count())
@@ -469,7 +559,7 @@ func TestRejectedCacheRetriesThroughOrgKeyWithCachedIdentity(t *testing.T) {
 	t.Setenv("GRAM_HOOKS_API_KEY", "")
 	cfg := Config{ServerURL: fs.URL, ProjectSlug: "default", OrgID: "org-1", HooksAPIKey: "shared-org-key", BrowserLogin: false, Nonblocking: false, DebugLog: "", ConfigPath: "", ConfigError: ""}
 
-	res := invoke(t, cfg, agenthooks.ProviderClaudeCode, "claude/pre_tool_use.json")
+	res := invoke(t, cfg, agenthooks.ProviderClaudeCode, "claude/permission_request.json")
 
 	require.Equal(t, 0, res.ExitCode)
 	require.Equal(t, 2, fs.count())
@@ -506,7 +596,7 @@ func TestLegacyNonblockingFailsOpenOnOutage(t *testing.T) {
 	cfg.Nonblocking = true
 	fs.Close()
 
-	res := invoke(t, cfg, agenthooks.ProviderClaudeCode, "claude/pre_tool_use.json")
+	res := invoke(t, cfg, agenthooks.ProviderClaudeCode, "claude/permission_request.json")
 
 	require.Equal(t, 0, res.ExitCode)
 	require.Equal(t, "{}", string(bytes.TrimSpace(res.Stdout)))
@@ -833,7 +923,7 @@ func TestLoginCommandQuotesUnsafePaths(t *testing.T) {
 	require.Contains(t, cmd, " --config='"+cfgPath+"'")
 }
 
-func TestNudgeEmittedOncePerSession(t *testing.T) {
+func TestGovernedPromptWithoutIdentityDeniesWithoutNudge(t *testing.T) {
 	fs := newFakeServer(t, nil)
 	t.Setenv("GRAM_HOOKS_AUTH_FILE", filepath.Join(t.TempDir(), "hooks-auth.env"))
 	t.Setenv("GRAM_HOOKS_DISABLE_LOCAL_AUTH", "1")
@@ -845,11 +935,12 @@ func TestNudgeEmittedOncePerSession(t *testing.T) {
 
 	first := invoke(t, cfg, agenthooks.ProviderClaudeCode, "claude/user_prompt_submit.json")
 	require.Equal(t, 0, first.ExitCode)
-	require.Contains(t, string(first.Stdout), "additionalContext")
-	require.Contains(t, string(first.Stdout), "login")
+	require.Contains(t, string(first.Stdout), `"decision":"block"`)
+	require.NotContains(t, string(first.Stdout), "additionalContext")
+	require.Contains(t, string(first.Stdout), "verify your current organization membership")
 
 	second := invoke(t, cfg, agenthooks.ProviderClaudeCode, "claude/user_prompt_submit.json")
-	require.NotContains(t, string(second.Stdout), "additionalContext", "nudge fires at most once per session")
+	require.Contains(t, string(second.Stdout), `"decision":"block"`)
 }
 
 // TestEnvelopeCodexSkillInference mirrors the bash senders' best-effort Codex
@@ -1239,6 +1330,169 @@ func TestCodexToolQueueConcurrentPushPop(t *testing.T) {
 	require.Empty(t, popCodexToolID(path), "the drained queue yields nothing")
 }
 
+func TestGovernedNativeClientsPropagateProofAndNativeDenials(t *testing.T) {
+	bindings := []struct {
+		name, fixture, provider, event string
+		native                         agenthooks.Provider
+	}{
+		{name: "claude-prompt", fixture: "claude/user_prompt_submit.json", provider: delegation.ProviderClaude, event: delegation.EventUserPromptSubmit, native: agenthooks.ProviderClaudeCode},
+		{name: "claude-tool", fixture: "claude/pre_tool_use.json", provider: delegation.ProviderClaude, event: delegation.EventPreToolUse, native: agenthooks.ProviderClaudeCode},
+		{name: "codex-prompt", fixture: "codex/user_prompt_submit.json", provider: delegation.ProviderCodex, event: delegation.EventUserPromptSubmit, native: agenthooks.ProviderCodex},
+		{name: "codex-tool", fixture: "codex/pre_tool_use.json", provider: delegation.ProviderCodex, event: delegation.EventPreToolUse, native: agenthooks.ProviderCodex},
+	}
+	for _, binding := range bindings {
+		t.Run(binding.name, func(t *testing.T) {
+			t.Setenv("TMPDIR", t.TempDir())
+			publicKey, privateKey, err := ed25519.GenerateKey(rand.Reader)
+			require.NoError(t, err)
+			const assertion = "server-signed-acting-user-assertion"
+			const denialNote = "AI access denied by the acceptance fixture."
+			var minted delegation.MintRequest
+			var ingestHeader http.Header
+			handlerErrors := make(chan error, 4)
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.Header().Set("Content-Type", "application/json")
+				if r.URL.Path == "/rpc/cliAuth.delegateHooksActingUser" {
+					if err := json.NewDecoder(r.Body).Decode(&minted); err != nil {
+						handlerErrors <- err
+						w.WriteHeader(http.StatusBadRequest)
+						return
+					}
+					if err := delegation.Verify(publicKey, minted); err != nil {
+						handlerErrors <- err
+						w.WriteHeader(http.StatusUnauthorized)
+						return
+					}
+					_ = json.NewEncoder(w).Encode(delegation.MintResponse{Assertion: assertion, ExpiresIn: 30})
+					return
+				}
+				var body components.IngestRequestBody
+				if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+					handlerErrors <- err
+					w.WriteHeader(http.StatusBadRequest)
+					return
+				}
+				if binding.event == delegation.EventPreToolUse && body.Event.Type == components.TypePromptSubmitted {
+					_ = json.NewEncoder(w).Encode(decision{Decision: "allow"})
+					return
+				}
+				ingestHeader = r.Header.Clone()
+				_ = json.NewEncoder(w).Encode(decision{Decision: "deny", Reason: "ai_access_identity_unavailable", Message: denialNote})
+			}))
+			t.Cleanup(server.Close)
+			authFile := filepath.Join(t.TempDir(), "hooks-auth.env")
+			t.Setenv("GRAM_HOOKS_AUTH_FILE", authFile)
+			require.NoError(t, writeAuth(creds{ServerURL: server.URL, APIKey: "test-hooks-key", Project: "default", Org: "test-org", RefreshToken: "test-refresh", ProofPrivateKey: delegation.EncodePrivateKey(privateKey), ContractVersion: delegation.ContractVersion, Source: credCache}))
+
+			res := invoke(t, Config{ServerURL: server.URL, ProjectSlug: "default"}, binding.native, binding.fixture)
+			select {
+			case err := <-handlerErrors:
+				require.NoError(t, err)
+			default:
+			}
+			rendered := string(res.Stdout) + res.Stderr
+			require.Contains(t, rendered, denialNote)
+			require.Zero(t, res.ExitCode)
+			if binding.event == delegation.EventUserPromptSubmit {
+				require.Contains(t, string(res.Stdout), `"decision":"block"`)
+			} else {
+				require.Contains(t, string(res.Stdout), `"permissionDecision":"deny"`)
+			}
+			require.Equal(t, binding.provider, minted.Provider)
+			require.Equal(t, binding.event, minted.Event)
+			require.NotEmpty(t, minted.SessionID)
+			require.NotEmpty(t, minted.IdempotencyKey)
+			require.Equal(t, assertion, ingestHeader.Get("X-Gram-Acting-User"))
+			require.Equal(t, delegation.ContractVersion, ingestHeader.Get("X-Gram-Acting-User-Contract"))
+			require.Equal(t, minted.IdempotencyKey, ingestHeader.Get("Idempotency-Key"))
+		})
+	}
+}
+
+func TestGovernedNativeMatrixIgnoresEveryFailOpenSettingOnOperationalFailures(t *testing.T) {
+	shrinkRetryBudget(t)
+
+	type failureMode struct {
+		name         string
+		serverURL    string
+		clientBudget time.Duration
+	}
+	serverFor := func(handler func(http.ResponseWriter, *http.Request)) string {
+		t.Helper()
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.URL.Path == "/rpc/cliAuth.delegateHooksActingUser" {
+				w.Header().Set("Content-Type", "application/json")
+				_ = json.NewEncoder(w).Encode(delegation.MintResponse{Assertion: "test-assertion", ExpiresIn: 30})
+				return
+			}
+			handler(w, r)
+		}))
+		t.Cleanup(server.Close)
+		return server.URL
+	}
+	failures := []failureMode{
+		{name: "status0", serverURL: "http://127.0.0.1:1"},
+		{name: "malformed-2xx", serverURL: serverFor(func(w http.ResponseWriter, _ *http.Request) {
+			w.Header().Set("Content-Type", "text/html")
+			_, _ = w.Write([]byte("<html>intercepted</html>"))
+		})},
+		{name: "5xx", serverURL: serverFor(func(w http.ResponseWriter, _ *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusServiceUnavailable)
+			_ = json.NewEncoder(w).Encode(decision{})
+		})},
+		{name: "timeout", clientBudget: 75 * time.Millisecond, serverURL: serverFor(func(w http.ResponseWriter, _ *http.Request) {
+			time.Sleep(150 * time.Millisecond)
+			w.WriteHeader(http.StatusGatewayTimeout)
+		})},
+	}
+	bindings := []struct {
+		name     string
+		provider agenthooks.Provider
+		fixture  string
+	}{
+		{"claude-prompt", agenthooks.ProviderClaudeCode, "claude/user_prompt_submit.json"},
+		{"claude-tool", agenthooks.ProviderClaudeCode, "claude/pre_tool_use.json"},
+		{"codex-prompt", agenthooks.ProviderCodex, "codex/user_prompt_submit.json"},
+		{"codex-tool", agenthooks.ProviderCodex, "codex/pre_tool_use.json"},
+	}
+	settings := []struct {
+		name        string
+		environment bool
+		cached      bool
+		nonblocking bool
+	}{
+		{name: "environment", environment: true},
+		{name: "cached", cached: true},
+		{name: "nonblocking", nonblocking: true},
+		{name: "all", environment: true, cached: true, nonblocking: true},
+	}
+
+	for _, failure := range failures {
+		for _, binding := range bindings {
+			for _, setting := range settings {
+				t.Run(failure.name+"/"+binding.name+"/"+setting.name, func(t *testing.T) {
+					stateHome := setSpoolStateHome(t)
+					t.Setenv("XDG_STATE_HOME", stateHome)
+					t.Setenv("GRAM_HOOKS_FAIL_OPEN", strconv.FormatBool(setting.environment))
+					t.Setenv("GRAM_DEVICE_AGENT_COMMANDS", "speakeasy-hooks-test-missing-device-agent")
+					writeTestProofAuth(t, failure.serverURL, "test-hooks-key")
+					cfg := Config{ServerURL: failure.serverURL, ProjectSlug: "default", Nonblocking: setting.nonblocking}
+					writeOrgSettings(cfg, setting.cached)
+					relay := NewRelay(cfg)
+					if failure.clientBudget > 0 {
+						relay.client.budget = failure.clientBudget
+					}
+					payload := agenthookstest.Fixture(t, binding.fixture)
+					res := agenthookstest.Invoke(t, newRunner(relay), binding.provider, payload, "--variant=cli")
+					rendered := strings.ToLower(string(res.Stdout) + string(res.Stderr))
+					require.True(t, res.ExitCode != 0 || strings.Contains(rendered, "deny") || strings.Contains(rendered, "block"), "native adapter must express a safe denial: exit=%d output=%s", res.ExitCode, rendered)
+				})
+			}
+		}
+	}
+}
+
 // TestMissingVerdictBlocksGatingEvent: a JSON 2xx whose body carries no
 // explicit decision must not read as an allow on a blocking hook.
 func TestMissingVerdictBlocksGatingEvent(t *testing.T) {
@@ -1246,6 +1500,8 @@ func TestMissingVerdictBlocksGatingEvent(t *testing.T) {
 		return http.StatusOK, decision{Decision: "", Reason: "", Message: ""}
 	})
 	cfg := authedConfig(t, fs.URL)
+	t.Setenv("GRAM_HOOKS_FAIL_OPEN", "1")
+	cfg.Nonblocking = true
 
 	res := invoke(t, cfg, agenthooks.ProviderClaudeCode, "claude/pre_tool_use.json")
 	require.Contains(t, string(res.Stdout), `"permissionDecision":"deny"`)
@@ -1256,41 +1512,40 @@ func TestMissingVerdictBlocksGatingEvent(t *testing.T) {
 // content type — e.g. an intercepting proxy) carries no verdict and must not
 // read as an implicit allow on a blocking hook.
 func TestUnparseable2xxBlocksGatingEvent(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/rpc/cliAuth.delegateHooksActingUser" {
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(delegation.MintResponse{Assertion: "test-assertion", ExpiresIn: 30})
+			return
+		}
 		w.Header().Set("Content-Type", "text/html")
 		_, _ = w.Write([]byte("<html>intercepted</html>"))
 	}))
 	t.Cleanup(srv.Close)
 	cfg := authedConfig(t, srv.URL)
-	// Cached posture: without it the cold-start pass would fail this open.
-	writeOrgSettings(cfg, false)
+	t.Setenv("GRAM_HOOKS_FAIL_OPEN", "1")
+	cfg.Nonblocking = true
+	writeOrgSettings(cfg, true)
 
 	res := invoke(t, cfg, agenthooks.ProviderClaudeCode, "claude/pre_tool_use.json")
 	require.Contains(t, string(res.Stdout), `"permissionDecision":"deny"`)
 	require.Contains(t, string(res.Stdout), "verdict")
 }
 
-// TestRejectedCachedKeyNudgesPromptReconnect covers the stale-cache recovery
-// path: when the server rejects the cached key on a prompt submission, the
-// cache is cleared, a reauth marker is left, and the prompt fails open with a
-// reconnect nudge instead of blocking every turn — without ever sending an
-// unauthenticated request.
-func TestRejectedCachedKeyNudgesPromptReconnect(t *testing.T) {
+// TestRejectedCachedKeyBlocksPromptAndRequiresReconnect covers stale-cache
+// recovery without allowing the governed prompt to resume.
+func TestRejectedCachedKeyBlocksPromptAndRequiresReconnect(t *testing.T) {
 	fs := newFakeServer(t, func(components.IngestRequestBody) (int, decision) {
 		return http.StatusUnauthorized, decision{Decision: "", Reason: "", Message: "unauthorized: api_key not found"}
 	})
-	authFile := filepath.Join(t.TempDir(), "hooks-auth.env")
-	require.NoError(t, os.WriteFile(authFile, []byte("server_url="+fs.URL+"\napi_key=stale-key\nproject=default\n"), 0o600))
-	require.NoError(t, os.WriteFile(authFile+".established", []byte{}, 0o600))
-	t.Setenv("GRAM_HOOKS_AUTH_FILE", authFile)
-	t.Setenv("GRAM_HOOKS_API_KEY", "")
+	authFile := writeTestProofAuth(t, fs.URL, "stale-key")
 	t.Setenv("TMPDIR", t.TempDir())
-	cfg := Config{ServerURL: fs.URL, ProjectSlug: "default", OrgID: "", HooksAPIKey: "", BrowserLogin: false, Nonblocking: false, DebugLog: "", ConfigPath: "", ConfigError: ""}
+	cfg := Config{ServerURL: fs.URL, ProjectSlug: "default", OrgID: "test-org", HooksAPIKey: "", BrowserLogin: false, Nonblocking: false, DebugLog: "", ConfigPath: "", ConfigError: ""}
 
 	first := invoke(t, cfg, agenthooks.ProviderClaudeCode, "claude/user_prompt_submit.json")
-	require.Equal(t, 0, first.ExitCode, "a rejected cached key must fail the prompt open")
-	require.Contains(t, string(first.Stdout), "additionalContext")
-	require.Contains(t, string(first.Stdout), "login")
+	require.Equal(t, 0, first.ExitCode)
+	require.Contains(t, string(first.Stdout), `"decision":"block"`)
+	require.Contains(t, string(first.Stdout), "verify your current organization membership")
 	_, statErr := os.Stat(authFile)
 	require.True(t, os.IsNotExist(statErr), "the rejected cached key must be forgotten")
 	require.FileExists(t, authFile+".established", "clearing a rejected key must preserve the fail-closed ratchet marker")
@@ -1298,7 +1553,9 @@ func TestRejectedCachedKeyNudgesPromptReconnect(t *testing.T) {
 	require.Equal(t, 1, fs.count())
 
 	second := invoke(t, cfg, agenthooks.ProviderClaudeCode, "claude/user_prompt_submit.json")
-	require.Equal(t, 0, second.ExitCode, "prompts keep failing open while reconnect is pending")
+	require.Equal(t, 0, second.ExitCode)
+	require.Contains(t, string(second.Stdout), `"decision":"block"`)
+	require.Contains(t, string(second.Stdout), "verify your current organization membership")
 	require.Equal(t, 1, fs.count(), "no unauthenticated request may follow the cleared key")
 }
 
@@ -1309,22 +1566,18 @@ func TestRejectedCachedKeyStillBlocksToolUse(t *testing.T) {
 	fs := newFakeServer(t, func(components.IngestRequestBody) (int, decision) {
 		return http.StatusUnauthorized, decision{Decision: "", Reason: "", Message: "unauthorized: api_key not found"}
 	})
-	authFile := filepath.Join(t.TempDir(), "hooks-auth.env")
-	require.NoError(t, os.WriteFile(authFile, []byte("server_url="+fs.URL+"\napi_key=stale-key\nproject=default\n"), 0o600))
-	require.NoError(t, os.WriteFile(authFile+".established", []byte{}, 0o600))
-	t.Setenv("GRAM_HOOKS_AUTH_FILE", authFile)
-	t.Setenv("GRAM_HOOKS_API_KEY", "")
-	cfg := Config{ServerURL: fs.URL, ProjectSlug: "default", OrgID: "", HooksAPIKey: "", BrowserLogin: false, Nonblocking: false, DebugLog: "", ConfigPath: "", ConfigError: ""}
+	authFile := writeTestProofAuth(t, fs.URL, "stale-key")
+	cfg := Config{ServerURL: fs.URL, ProjectSlug: "default", OrgID: "test-org", HooksAPIKey: "", BrowserLogin: false, Nonblocking: false, DebugLog: "", ConfigPath: "", ConfigError: ""}
 
 	first := invoke(t, cfg, agenthooks.ProviderClaudeCode, "claude/pre_tool_use.json")
 	require.Contains(t, string(first.Stdout), `"permissionDecision":"deny"`)
-	require.Contains(t, string(first.Stdout), "unauthorized: api_key not found")
+	require.Contains(t, string(first.Stdout), "verify your current organization membership")
 	require.FileExists(t, authFile+".reauth-needed")
 	require.Equal(t, 1, fs.count())
 
 	second := invoke(t, cfg, agenthooks.ProviderClaudeCode, "claude/pre_tool_use.json")
 	require.Contains(t, string(second.Stdout), `"permissionDecision":"deny"`, "reauth-needed tool events must still fail closed")
-	require.Contains(t, string(second.Stdout), "reconnect")
+	require.Contains(t, string(second.Stdout), "verify your current organization membership")
 	require.Equal(t, 1, fs.count(), "reauth-needed tool events must not send unauthenticated requests")
 }
 
@@ -1347,7 +1600,8 @@ func TestEnvKeyRejectionNamesConfiguredKey(t *testing.T) {
 		return http.StatusUnauthorized, decision{Decision: "", Reason: "", Message: "unauthorized: api_key not found"}
 	})
 	cfg := authedConfig(t, fs.URL)
-	res := invoke(t, cfg, agenthooks.ProviderClaudeCode, "claude/pre_tool_use.json")
+	t.Setenv("GRAM_HOOKS_API_KEY", "rejected-explicit-key")
+	res := invoke(t, cfg, agenthooks.ProviderClaudeCode, "claude/permission_request.json")
 
 	require.Contains(t, string(res.Stdout), `"permissionDecision":"deny"`)
 	require.Contains(t, string(res.Stdout), "GRAM_HOOKS_API_KEY")
@@ -1389,7 +1643,7 @@ func TestInsecureServerURLFailsClosedWhenEstablished(t *testing.T) {
 	t.Setenv("GRAM_HOOKS_API_KEY", "leaky-key")
 	cfg := Config{ServerURL: "http://gram.example.com", ProjectSlug: "default", OrgID: "", HooksAPIKey: "", BrowserLogin: false, Nonblocking: false, DebugLog: "", ConfigPath: "", ConfigError: ""}
 
-	res := invoke(t, cfg, agenthooks.ProviderClaudeCode, "claude/pre_tool_use.json")
+	res := invoke(t, cfg, agenthooks.ProviderClaudeCode, "claude/permission_request.json")
 	require.Contains(t, string(res.Stdout), `"permissionDecision":"deny"`)
 	require.Contains(t, string(res.Stdout), "insecure")
 }
@@ -1402,7 +1656,7 @@ func TestInsecureServerURLFailsOpenNeverAuthed(t *testing.T) {
 	t.Setenv("GRAM_HOOKS_API_KEY", "leaky-key")
 	cfg := Config{ServerURL: "http://gram.example.com", ProjectSlug: "default", OrgID: "", HooksAPIKey: "", BrowserLogin: false, Nonblocking: false, DebugLog: "", ConfigPath: "", ConfigError: ""}
 
-	res := invoke(t, cfg, agenthooks.ProviderClaudeCode, "claude/pre_tool_use.json")
+	res := invoke(t, cfg, agenthooks.ProviderClaudeCode, "claude/permission_request.json")
 	require.Equal(t, 0, res.ExitCode)
 	require.Equal(t, "{}", string(bytes.TrimSpace(res.Stdout)))
 }
@@ -1472,6 +1726,8 @@ func TestBackfilledPromptDenyGatesTriggeringToolEvent(t *testing.T) {
 	require.Contains(t, string(res.Stdout), "deny")
 	require.Contains(t, string(res.Stdout), "pi-guard", "the prompt deny message must reach the user on the triggering event")
 	require.Equal(t, int32(1), prompts.Load(), "the backfilled prompt must still be reported")
+	require.NotEmpty(t, fs.headers)
+	require.Equal(t, "true", fs.headers[0].Get("X-Gram-Backfilled"), "backfilled is method-level transport metadata")
 	require.Equal(t, int32(0), tools.Load(), "the gated tool call is not reported: the agent never got to make it")
 }
 
@@ -1520,7 +1776,7 @@ func TestBrokenConfigFailsClosedWhenEstablished(t *testing.T) {
 	t.Setenv("GRAM_HOOKS_API_KEY", "")
 	cfg := Config{ServerURL: fs.URL, ProjectSlug: "", OrgID: "", HooksAPIKey: "", BrowserLogin: false, Nonblocking: false, DebugLog: "", ConfigPath: "/missing/speakeasy.json", ConfigError: "open /missing/speakeasy.json: no such file or directory"}
 
-	res := invoke(t, cfg, agenthooks.ProviderClaudeCode, "claude/pre_tool_use.json")
+	res := invoke(t, cfg, agenthooks.ProviderClaudeCode, "claude/permission_request.json")
 	require.Contains(t, string(res.Stdout), `"permissionDecision":"deny"`)
 	require.Contains(t, string(res.Stdout), "Reinstall")
 	require.Equal(t, 0, fs.count(), "no event may leave the machine under an unknown deployment identity")

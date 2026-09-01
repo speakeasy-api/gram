@@ -18,6 +18,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/hooks/delegation"
 	riskv1 "github.com/speakeasy-api/gram/infra/gen/gram/risk/v1"
 	gen "github.com/speakeasy-api/gram/server/gen/hooks"
 	"github.com/speakeasy-api/gram/server/internal/attr"
@@ -195,6 +196,45 @@ func TestIngest_NoCredentialsFailsOpen(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, result)
 	require.Equal(t, "allow", result.Decision)
+}
+
+func TestIngest_NoCredentialsGovernedShapeTamperingFailsClosed(t *testing.T) {
+	t.Parallel()
+
+	for name, test := range map[string]struct {
+		mutate       func(*gen.IngestPayload)
+		wantDecision string
+	}{
+		"proofless request remains ungoverned": {
+			mutate:       func(*gen.IngestPayload) {},
+			wantDecision: "allow",
+		},
+		"acting-user contract attempt with stripped raw event": {
+			mutate: func(payload *gen.IngestPayload) {
+				payload.Source.RawEventName = nil
+				assertion, contract := "assertion", delegation.ContractVersion
+				payload.ActingUserAssertion = &assertion
+				payload.ActingUserContractVersion = &contract
+			},
+			wantDecision: "deny",
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			_, ti := newTestHooksService(t)
+			payload := canonicalIngestPayload(delegation.ProviderClaude, "prompt.submitted", "tampered-"+uuid.NewString())
+			event := delegation.EventUserPromptSubmit
+			payload.Source.RawEventName = &event
+			test.mutate(payload)
+
+			result, err := ti.service.Ingest(t.Context(), payload)
+			require.NoError(t, err)
+			require.Equal(t, test.wantDecision, result.Decision)
+			if test.wantDecision == "deny" {
+				require.Equal(t, "ai_access_identity_unavailable", *result.Reason)
+			}
+		})
+	}
 }
 
 // A request that presents an API key must have it validated: a rejected key
@@ -694,7 +734,7 @@ func TestIngest_InferredSkillEmitsDerivedTelemetryRow(t *testing.T) {
 
 	timestamp := time.Now().UTC().Add(-time.Minute).Truncate(time.Second)
 	occurredAt := timestamp.Format(time.RFC3339Nano)
-	raw := "PreToolUse"
+	raw := "ObservedPreToolUse"
 	toolName := "Bash"
 	toolID := "call_skill_read"
 	payload := canonicalIngestPayload("codex", "tool.requested", "codex-skill-session")
@@ -777,7 +817,7 @@ func TestIngest_SkillRowSurvivesToolIOScrub(t *testing.T) {
 
 	timestamp := time.Now().UTC().Add(-time.Minute).Truncate(time.Second)
 	occurredAt := timestamp.Format(time.RFC3339Nano)
-	raw := "PreToolUse"
+	raw := "ObservedPreToolUse"
 	toolName := "Bash"
 	toolID := "call_scrubbed_skill_read"
 	payload := canonicalIngestPayload("codex", "tool.requested", "codex-scrubbed-skill-session")

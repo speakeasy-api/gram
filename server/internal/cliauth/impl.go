@@ -14,13 +14,16 @@ package cliauth
 
 import (
 	"context"
+	"crypto/ed25519"
 	"crypto/rand"
+	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
-	"slices"
+	"net/http"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -28,6 +31,8 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
 	"go.opentelemetry.io/otel/trace"
+
+	"github.com/speakeasy-api/gram/hooks/delegation"
 	goahttp "goa.design/goa/v3/http"
 	"goa.design/goa/v3/security"
 
@@ -38,10 +43,13 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/hooksacting"
 	keysrepo "github.com/speakeasy-api/gram/server/internal/keys/repo"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/oauth"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 )
 
@@ -53,7 +61,13 @@ const (
 
 	// codeKeyNamespace prefixes the Redis keys backing the one-time-code store
 	// so they never collide with the other Redis consumers sharing the client.
-	codeKeyNamespace = "cliauth:code:"
+	codeKeyNamespace      = "cliauth:code:"
+	mintNonceKeyNamespace = "cliauth:hooks-mint-nonce:v1:"
+
+	// Keep a proof replay record for the full interval in which the same signed
+	// request can be accepted. Exact retries reuse a live assertion and may
+	// replace an expired one without extending the replay-record window.
+	mintReplayTTL = 2*hooksacting.ProofClockSkew + hooksacting.AssertionLifetime
 
 	// pkceMethodS256 is the only PKCE challenge method this flow accepts.
 	pkceMethodS256 = "S256"
@@ -71,20 +85,57 @@ type codeRecord struct {
 	Scopes              []string `json:"scopes"`
 	CodeChallenge       string   `json:"code_challenge"`
 	CodeChallengeMethod string   `json:"code_challenge_method"`
+	ProofPublicKey      string   `json:"proof_public_key,omitempty"`
+	DelegationContract  string   `json:"delegation_contract_version,omitempty"`
 }
 
+type mintReplayRecord struct {
+	Fingerprint string `json:"fingerprint"`
+	Assertion   string `json:"assertion"`
+}
+
+// consumeMintNonceScript atomically records the first assertion minted for a
+// nonce or returns the original record. Reading a retry never refreshes TTL.
+var consumeMintNonceScript = redis.NewScript(`
+local existing = redis.call("GET", KEYS[1])
+if existing then
+  return existing
+end
+redis.call("SET", KEYS[1], ARGV[1], "PX", ARGV[2])
+return ARGV[1]
+`)
+
+// refreshMintNonceScript replaces one unusable assertion only when the exact
+// replay record is still current, preserving the original replay TTL.
+var refreshMintNonceScript = redis.NewScript(`
+local existing = redis.call("GET", KEYS[1])
+if not existing then
+  return ""
+end
+if existing ~= ARGV[1] then
+  return existing
+end
+local ttl = redis.call("PTTL", KEYS[1])
+if ttl <= 0 then
+  return ""
+end
+redis.call("SET", KEYS[1], ARGV[2], "PX", ttl)
+return ARGV[2]
+`)
+
 type Service struct {
-	tracer      trace.Tracer
-	logger      *slog.Logger
-	db          *pgxpool.Pool
-	auth        *auth.Auth
-	authz       *authz.Engine
-	sessions    *sessions.Manager
-	pkce        *oauth.PKCEService
-	redis       *redis.Client
-	projectRepo *projectsrepo.Queries
-	keysRepo    *keysrepo.Queries
-	keyPrefix   string
+	tracer       trace.Tracer
+	logger       *slog.Logger
+	db           *pgxpool.Pool
+	auth         *auth.Auth
+	authz        *authz.Engine
+	sessions     *sessions.Manager
+	pkce         *oauth.PKCEService
+	redis        *redis.Client
+	projectRepo  *projectsrepo.Queries
+	keysRepo     *keysrepo.Queries
+	actingSigner *hooksacting.Signer
+	keyPrefix    string
 }
 
 var (
@@ -103,21 +154,23 @@ func NewService(
 	sessionManager *sessions.Manager,
 	authzEngine *authz.Engine,
 	redisClient *redis.Client,
+	actingSigner *hooksacting.Signer,
 	env string,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("cliauth"))
 	return &Service{
-		tracer:      tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/cliauth"),
-		logger:      logger,
-		db:          db,
-		auth:        auth.New(logger, db, sessionManager, authzEngine),
-		authz:       authzEngine,
-		sessions:    sessionManager,
-		pkce:        oauth.NewPKCEService(logger),
-		redis:       redisClient,
-		projectRepo: projectsrepo.New(db),
-		keysRepo:    keysrepo.New(db),
-		keyPrefix:   auth.APIKeyPrefix(env),
+		tracer:       tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/cliauth"),
+		logger:       logger,
+		db:           db,
+		auth:         auth.New(logger, db, sessionManager, authzEngine),
+		authz:        authzEngine,
+		sessions:     sessionManager,
+		pkce:         oauth.NewPKCEService(logger),
+		redis:        redisClient,
+		projectRepo:  projectsrepo.New(db),
+		keysRepo:     keysrepo.New(db),
+		actingSigner: actingSigner,
+		keyPrefix:    auth.APIKeyPrefix(env),
 	}
 }
 
@@ -125,10 +178,13 @@ func Attach(mux goahttp.Muxer, service *Service) {
 	endpoints := gen.NewEndpoints(service)
 	endpoints.Use(middleware.MapErrors())
 	endpoints.Use(middleware.TraceMethods(service.tracer))
-	srv.Mount(
-		mux,
-		srv.New(endpoints, mux, goahttp.RequestDecoder, goahttp.ResponseEncoder, nil, nil),
-	)
+	handler := srv.New(endpoints, mux, goahttp.RequestDecoder, goahttp.ResponseEncoder, nil, nil)
+	delegate := handler.DelegateHooksActingUser
+	handler.DelegateHooksActingUser = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		r.Body = http.MaxBytesReader(w, r.Body, 16<<10)
+		delegate.ServeHTTP(w, r)
+	})
+	srv.Mount(mux, handler)
 }
 
 // APIKeyAuth backs the Session security scheme on Authorize (redeem is
@@ -174,19 +230,14 @@ func (s *Service) Authorize(ctx context.Context, payload *gen.AuthorizePayload) 
 		return nil, oops.E(oops.CodeForbidden, nil, "device enrollment is not available while impersonating a user").LogError(ctx, s.logger)
 	}
 
-	// Backstop: the user must be a real member of the active org. Session
-	// authentication already refuses a foreign org without a live support
-	// session, but the shared demo org is exempt there (no membership rows by
-	// design) — enrolling a real device into it would report the operator's
-	// transcripts into a shared workspace. Resolved via GetUserInfo so lookup
-	// failures surface as unexpected errors, not a misleading 403.
-	userInfo, _, err := s.sessions.GetUserInfo(ctx, authCtx.UserID)
+	// Session/user-info caches are not authoritative for enrollment. Check the
+	// active relationship row directly so a removed user cannot authorize from
+	// stale session state.
+	active, err := s.hasActiveMembership(ctx, authCtx.UserID, authCtx.ActiveOrganizationID)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "load user info").LogError(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "check active organization membership").LogError(ctx, s.logger)
 	}
-	if !slices.ContainsFunc(userInfo.Organizations, func(org sessions.Organization) bool {
-		return org.ID == authCtx.ActiveOrganizationID
-	}) {
+	if !active {
 		return nil, oops.E(oops.CodeForbidden, nil, "device enrollment requires membership in the active organization").LogError(ctx, s.logger)
 	}
 
@@ -203,9 +254,30 @@ func (s *Service) Authorize(ctx context.Context, payload *gen.AuthorizePayload) 
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid code_challenge").LogError(ctx, s.logger)
 	}
 
+	proofPublicKey := strings.TrimSpace(conv.PtrValOr(payload.ProofPublicKey, ""))
+	delegationContract := strings.TrimSpace(conv.PtrValOr(payload.DelegationContractVersion, ""))
+	if proofPublicKey != "" {
+		if delegationContract != delegation.ContractVersion {
+			return nil, oops.E(oops.CodeBadRequest, nil, "unsupported hooks delegation contract").LogError(ctx, s.logger)
+		}
+		if _, err := delegation.ParsePublicKey(proofPublicKey); err != nil {
+			return nil, oops.E(oops.CodeBadRequest, err, "invalid proof_public_key").LogError(ctx, s.logger)
+		}
+	} else if delegationContract != "" {
+		return nil, oops.E(oops.CodeBadRequest, nil, "proof_public_key is required for hooks delegation").LogError(ctx, s.logger)
+	}
+
 	project, err := s.resolveProject(ctx, authCtx.ActiveOrganizationID, payload.ProjectSlug)
 	if err != nil {
 		return nil, err
+	}
+
+	scopes := []string{auth.APIKeyScopeAgentUser.String()}
+	if proofPublicKey != "" {
+		// A proof-bound relay enrollment must authenticate unified hook ingest.
+		// The internal acting-user marker is not publicly mintable and lets ingest
+		// distinguish approved relays from caller-controlled source metadata.
+		scopes = append(scopes, auth.APIKeyScopeHooks.String(), auth.APIKeyScopeHooksActingUser.String())
 	}
 
 	code, err := generateOpaqueToken()
@@ -219,9 +291,11 @@ func (s *Service) Authorize(ctx context.Context, payload *gen.AuthorizePayload) 
 		ProjectID:           project.ID.String(),
 		ProjectSlug:         project.Slug,
 		UserEmail:           *authCtx.Email,
-		Scopes:              []string{auth.APIKeyScopeAgentUser.String()},
+		Scopes:              scopes,
 		CodeChallenge:       payload.CodeChallenge,
 		CodeChallengeMethod: pkceMethodS256,
+		ProofPublicKey:      proofPublicKey,
+		DelegationContract:  delegationContract,
 	}
 	raw, err := json.Marshal(record)
 	if err != nil {
@@ -288,14 +362,48 @@ func (s *Service) Redeem(ctx context.Context, payload *gen.RedeemPayload) (*gen.
 	if err != nil {
 		return nil, oops.E(oops.CodeUnauthorized, err, "unauthorized").LogError(ctx, s.logger)
 	}
+	active, err := s.hasActiveMembership(ctx, record.UserID, record.OrgID)
+	if err != nil || !active {
+		return nil, oops.E(oops.CodeUnauthorized, err, "unauthorized").LogError(ctx, s.logger)
+	}
 
-	rawKey, err := s.mintKey(ctx, record, projectID)
+	var refreshToken string
+	proofBound := record.ProofPublicKey != "" && record.DelegationContract == delegation.ContractVersion
+	var publicKey ed25519.PublicKey
+	if proofBound {
+		if s.actingSigner == nil {
+			return nil, oops.E(oops.CodeUnauthorized, nil, "unauthorized").LogError(ctx, s.logger)
+		}
+		publicKey, err = delegation.ParsePublicKey(record.ProofPublicKey)
+		if err != nil {
+			return nil, oops.E(oops.CodeUnauthorized, err, "unauthorized").LogError(ctx, s.logger)
+		}
+	}
+
+	rawKey, enrollmentID, err := s.mintKey(ctx, record, projectID)
 	if err != nil {
 		// The code was already consumed (GETDEL above), so a mint failure is
 		// unrecoverable for the caller — they must re-enroll regardless. Fail
 		// closed like every other path (the internal error stays in the logs);
 		// a distinct 5xx here would leak that the code+verifier was valid.
 		return nil, oops.E(oops.CodeUnauthorized, err, "unauthorized").LogError(ctx, s.logger)
+	}
+	if proofBound {
+		refreshToken, err = mintRefreshOrRevoke(
+			func() (string, error) {
+				return s.actingSigner.MintRefresh(record.UserID, record.OrgID, enrollmentID.String(), publicKey)
+			},
+			func() error {
+				_, deleteErr := s.keysRepo.DeleteAPIKey(ctx, keysrepo.DeleteAPIKeyParams{ID: enrollmentID, OrganizationID: record.OrgID})
+				if deleteErr != nil {
+					return fmt.Errorf("delete failed enrollment API key: %w", deleteErr)
+				}
+				return nil
+			},
+		)
+		if err != nil {
+			return nil, oops.E(oops.CodeUnauthorized, err, "unauthorized").LogError(ctx, s.logger)
+		}
 	}
 
 	s.logger.InfoContext(ctx, "redeemed cliauth one-time code",
@@ -304,11 +412,170 @@ func (s *Service) Redeem(ctx context.Context, payload *gen.RedeemPayload) (*gen.
 		attr.SlogProjectID(record.ProjectID),
 	)
 
-	return &gen.RedeemResult{
-		AccessToken: rawKey,
-		UserEmail:   record.UserEmail,
-		ProjectSlug: record.ProjectSlug,
-	}, nil
+	result := &gen.RedeemResult{
+		AccessToken:            rawKey,
+		UserEmail:              record.UserEmail,
+		ProjectSlug:            record.ProjectSlug,
+		OrganizationID:         nil,
+		DelegationRefreshToken: nil,
+	}
+	if proofBound {
+		result.OrganizationID = &record.OrgID
+		result.DelegationRefreshToken = &refreshToken
+	}
+	return result, nil
+}
+
+// DelegateHooksActingUser validates the proof-bound refresh credential, the
+// local Ed25519 signature, and current active membership before minting a
+// single-invocation assertion. Every rejection is intentionally opaque.
+func (s *Service) DelegateHooksActingUser(ctx context.Context, payload *gen.DelegateHooksActingUserPayload) (*gen.DelegateHooksActingUserResult, error) {
+	if s.actingSigner == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+	request := delegation.MintRequest{
+		RefreshToken: payload.RefreshToken, ContractVersion: payload.ContractVersion,
+		Provider: payload.Provider, Event: payload.Event, SessionID: payload.SessionID,
+		IdempotencyKey: payload.IdempotencyKey, Observational: conv.PtrValOr(payload.Observational, false), SignedAt: payload.SignedAt, Nonce: payload.Nonce, Signature: payload.Signature,
+	}
+	identity, err := s.actingSigner.VerifyRefresh(request.RefreshToken)
+	if err != nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+	assertion, err := mintAssertionAfterIdentityChecks(
+		identity,
+		request,
+		s.actingSigner.MintAssertion,
+		func() (bool, error) { return s.hasActiveHooksEnrollment(ctx, identity) },
+		func() (bool, error) { return s.hasActiveMembership(ctx, identity.UserID, identity.OrganizationID) },
+	)
+	if errors.Is(err, errActingUserIdentityDependency) {
+		return nil, oops.E(oops.CodeUnavailable, err, "acting-user identity validation unavailable").LogError(ctx, s.logger)
+	}
+	if err != nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+	assertion, err = s.consumeMintNonce(ctx, identity, request, assertion)
+	if errors.Is(err, errActingUserNonceDependency) {
+		return nil, oops.E(oops.CodeUnavailable, err, "acting-user delegation unavailable").LogError(ctx, s.logger)
+	}
+	if err != nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+	expiresIn, err := s.actingSigner.AssertionExpiresIn(assertion)
+	if err != nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+	return &gen.DelegateHooksActingUserResult{Assertion: assertion, ExpiresIn: expiresIn}, nil
+}
+
+func mintRefreshOrRevoke(mint func() (string, error), revoke func() error) (string, error) {
+	refreshToken, err := mint()
+	if err == nil {
+		return refreshToken, nil
+	}
+	if revokeErr := revoke(); revokeErr != nil {
+		return "", errors.Join(err, fmt.Errorf("revoke API key after refresh mint failure: %w", revokeErr))
+	}
+	return "", err
+}
+
+func (s *Service) hasActiveHooksEnrollment(ctx context.Context, identity hooksacting.RefreshIdentity) (bool, error) {
+	enrollmentID, err := uuid.Parse(identity.EnrollmentID)
+	if err != nil {
+		return false, fmt.Errorf("parse enrollment id: %w", err)
+	}
+	active, err := s.keysRepo.GetActiveHooksEnrollment(ctx, keysrepo.GetActiveHooksEnrollmentParams{
+		ID: enrollmentID, OrganizationID: identity.OrganizationID, CreatedByUserID: identity.UserID, Scope: auth.APIKeyScopeHooksActingUser.String(),
+	})
+	if err != nil {
+		return false, fmt.Errorf("get active hooks enrollment: %w", err)
+	}
+	return active, nil
+}
+
+var (
+	errActingUserIdentityDependency = errors.New("acting-user identity dependency unavailable")
+	errActingUserNonceDependency    = errors.New("acting-user nonce dependency unavailable")
+)
+
+func mintAssertionAfterIdentityChecks(
+	identity hooksacting.RefreshIdentity,
+	request delegation.MintRequest,
+	mintAssertion func(hooksacting.RefreshIdentity, delegation.MintRequest) (string, error),
+	hasActiveEnrollment func() (bool, error),
+	hasActiveMembership func() (bool, error),
+) (string, error) {
+	// Verify proof of private-key possession before spending database queries.
+	// Discard this assertion because identity validation can outlive it.
+	if _, err := mintAssertion(identity, request); err != nil {
+		return "", err
+	}
+	activeEnrollment, err := hasActiveEnrollment()
+	if err != nil {
+		return "", fmt.Errorf("%w: check active enrollment: %w", errActingUserIdentityDependency, err)
+	}
+	if !activeEnrollment {
+		return "", errors.New("inactive enrollment")
+	}
+	activeMembership, err := hasActiveMembership()
+	if err != nil {
+		return "", fmt.Errorf("%w: check active membership: %w", errActingUserIdentityDependency, err)
+	}
+	if !activeMembership {
+		return "", errors.New("inactive organization membership")
+	}
+	// Mint after the authoritative checks so the candidate written to a new or
+	// expired exact-replay record starts with its full usable lifetime.
+	return mintAssertion(identity, request)
+}
+
+func (s *Service) hasActiveMembership(ctx context.Context, userID, organizationID string) (bool, error) {
+	active, err := orgrepo.New(s.db).HasActiveOrganizationUser(ctx, orgrepo.HasActiveOrganizationUserParams{UserID: userID, OrganizationID: organizationID})
+	if err != nil {
+		return false, fmt.Errorf("check active organization membership: %w", err)
+	}
+	return active, nil
+}
+
+func (s *Service) consumeMintNonce(ctx context.Context, identity hooksacting.RefreshIdentity, request delegation.MintRequest, assertion string) (string, error) {
+	if strings.TrimSpace(identity.RefreshJTI) == "" {
+		return "", errors.New("refresh credential has no jti")
+	}
+	// Digest the complete canonical request. A retry is exact only when every
+	// signed field and the signature itself match the original request.
+	requestBytes, err := json.Marshal(request)
+	if err != nil {
+		return "", fmt.Errorf("marshal hooks mint request: %w", err)
+	}
+	fingerprintHash := sha256.Sum256(requestBytes)
+	// Scope nonce uniqueness to the refresh credential that authorized it.
+	// Distinct enrollments may generate the same nonce without colliding.
+	replayKeyHash := sha256.Sum256([]byte(identity.RefreshJTI + "\x00" + request.Nonce))
+	record := mintReplayRecord{Fingerprint: hex.EncodeToString(fingerprintHash[:]), Assertion: assertion}
+	raw, err := json.Marshal(record)
+	if err != nil {
+		return "", fmt.Errorf("marshal hooks mint replay record: %w", err)
+	}
+	storedRaw, err := consumeMintNonceScript.Run(ctx, s.redis, []string{mintNonceKeyNamespace + hex.EncodeToString(replayKeyHash[:])}, string(raw), mintReplayTTL.Milliseconds()).Text()
+	if err != nil {
+		return "", fmt.Errorf("%w: consume hooks mint nonce: %w", errActingUserNonceDependency, err)
+	}
+	var stored mintReplayRecord
+	if err := json.Unmarshal([]byte(storedRaw), &stored); err != nil || stored.Fingerprint != record.Fingerprint || stored.Assertion == "" {
+		return "", errors.New("conflicting or invalid mint nonce replay")
+	}
+	if expiresIn, err := s.actingSigner.AssertionExpiresIn(stored.Assertion); err == nil && expiresIn > 0 {
+		return stored.Assertion, nil
+	}
+	storedRaw, err = refreshMintNonceScript.Run(ctx, s.redis, []string{mintNonceKeyNamespace + hex.EncodeToString(replayKeyHash[:])}, storedRaw, string(raw)).Text()
+	if err != nil {
+		return "", fmt.Errorf("%w: refresh hooks mint replay assertion: %w", errActingUserNonceDependency, err)
+	}
+	if err := json.Unmarshal([]byte(storedRaw), &stored); err != nil || stored.Fingerprint != record.Fingerprint || stored.Assertion == "" {
+		return "", errors.New("conflicting or invalid refreshed mint nonce replay")
+	}
+	return stored.Assertion, nil
 }
 
 // resolveProject returns the named project (validated against the org) or, when
@@ -344,16 +611,16 @@ func (s *Service) resolveProject(ctx context.Context, orgID string, slug *string
 // repo, returning the raw key (which is only ever seen here). Mirrors the
 // key-assembly in keys.CreateKey: prefix + random token, sha256 hash stored,
 // prefix + token[:5] as the display prefix.
-func (s *Service) mintKey(ctx context.Context, record codeRecord, projectID uuid.UUID) (string, error) {
+func (s *Service) mintKey(ctx context.Context, record codeRecord, projectID uuid.UUID) (string, uuid.UUID, error) {
 	token, err := generateOpaqueToken()
 	if err != nil {
-		return "", fmt.Errorf("generate api key token: %w", err)
+		return "", uuid.Nil, fmt.Errorf("generate api key token: %w", err)
 	}
 
 	fullKey := s.keyPrefix + token
 	keyHash, err := auth.GetAPIKeyHash(fullKey)
 	if err != nil {
-		return "", fmt.Errorf("hash api key: %w", err)
+		return "", uuid.Nil, fmt.Errorf("hash api key: %w", err)
 	}
 
 	// Unique per-enrollment key name (timestamp + fresh entropy, never
@@ -364,13 +631,13 @@ func (s *Service) mintKey(ctx context.Context, record codeRecord, projectID uuid
 	// reclaimed out of band via revocation, not by deleting a prior key here.
 	keyName, err := auth.DeviceAgentKeyName(record.UserID)
 	if err != nil {
-		return "", fmt.Errorf("generate device-agent key name: %w", err)
+		return "", uuid.Nil, fmt.Errorf("generate device-agent key name: %w", err)
 	}
 
 	// record.Scopes is set by Authorize and validated non-empty in Redeem, so it
 	// is used directly here — no default, so an unexpectedly empty scope set
 	// surfaces as an integrity failure upstream rather than a silently broken key.
-	if _, err := s.keysRepo.CreateAPIKey(ctx, keysrepo.CreateAPIKeyParams{
+	created, err := s.keysRepo.CreateAPIKey(ctx, keysrepo.CreateAPIKeyParams{
 		OrganizationID:  record.OrgID,
 		ProjectID:       uuid.NullUUID{UUID: projectID, Valid: true},
 		CreatedByUserID: record.UserID,
@@ -378,11 +645,12 @@ func (s *Service) mintKey(ctx context.Context, record codeRecord, projectID uuid
 		KeyPrefix:       s.keyPrefix + token[:5],
 		KeyHash:         keyHash,
 		Scopes:          record.Scopes,
-	}); err != nil {
-		return "", fmt.Errorf("create api key: %w", err)
+	})
+	if err != nil {
+		return "", uuid.Nil, fmt.Errorf("create api key: %w", err)
 	}
 
-	return fullKey, nil
+	return fullKey, created.ID, nil
 }
 
 // generateOpaqueToken returns a 64-char hex string from 32 crypto-random bytes.

@@ -11,6 +11,11 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func TestHooksActingUserScopeIsNotPubliclyMintable(t *testing.T) {
+	t.Parallel()
+	require.NotContains(t, APIKeyScopes, APIKeyScopeHooksActingUser.String())
+}
+
 // TestEffectiveScopes pins the one-way scope implications, especially the
 // device-agent split: an org `agent` install key implies `agent_user` (so it
 // still reads the data endpoints during the transition), but a per-user

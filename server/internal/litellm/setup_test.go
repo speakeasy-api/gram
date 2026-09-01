@@ -158,6 +158,7 @@ func newRealTestServiceWithScannerFactory(t *testing.T, scannerFactory func(*pgx
 		nil,
 		risk.NewPolicyBypassEvaluator(logger, conn),
 		spendGate,
+		nil,
 		shadowmcp.NewClient(logger, conn, cacheAdapter, serverURL),
 		chatWriter,
 		nil,

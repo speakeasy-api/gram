@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/speakeasy-api/gram/hooks/delegation"
 	sdk "github.com/speakeasy-api/gram/hooks/sdk"
 	"github.com/speakeasy-api/gram/hooks/sdk/models/apierrors"
 	"github.com/speakeasy-api/gram/hooks/sdk/models/components"
@@ -28,10 +29,13 @@ const perAttemptTime = 10 * time.Second
 // verdict.
 const sendBudget = 45 * time.Second
 
-// gateSendBudget bounds the synchronous verdict exchange for gating events.
-// The chain is 5s network < the openclaw daemon's ~9s gate deadline < the
-// shim's 10s wall: a fail-closed block must land before an upstream deadline
-// expires and dissolves it into an allow. Observes keep the full sendBudget.
+// gateMintBudget gives proof minting a separate allowance so it cannot consume
+// the ingest hop's deadline on governed checkpoints.
+const gateMintBudget = 2 * time.Second
+
+// gateSendBudget bounds the ingest hop for gating events. Together with the
+// governed mint allowance, the 7s exchange stays below the openclaw daemon's
+// ~9s gate deadline and the shim's 10s wall. Observes keep sendBudget.
 const gateSendBudget = 5 * time.Second
 
 // skillUploadBudget bounds the content upload that runs inline after a
@@ -107,18 +111,22 @@ type client struct {
 	replayed bool
 }
 
+func newRelayHTTPClient(timeout time.Duration) *http.Client {
+	return &http.Client{
+		Timeout:   timeout,
+		Transport: &deviceTransport{base: http.DefaultTransport},
+		CheckRedirect: func(_ *http.Request, _ []*http.Request) error {
+			return http.ErrUseLastResponse
+		},
+	}
+}
+
 func newClient(serverURL string) *client {
 	return &client{
 		budget: sendBudget,
 		sdk: sdk.New(
 			sdk.WithServerURL(strings.TrimRight(serverURL, "/")),
-			sdk.WithClient(&http.Client{
-				Timeout:   perAttemptTime,
-				Transport: &deviceTransport{base: http.DefaultTransport},
-				CheckRedirect: func(_ *http.Request, _ []*http.Request) error {
-					return http.ErrUseLastResponse
-				},
-			}),
+			sdk.WithClient(newRelayHTTPClient(perAttemptTime)),
 			// Retries cover connection errors and 429/5xx; the SDK rewinds the
 			// request body per attempt, so the Idempotency-Key header minted in
 			// send is reused across redeliveries. The elapsed cap keeps the
@@ -192,18 +200,32 @@ func (cl *client) uploadSkillContent(ctx context.Context, c creds, rawSHA256, co
 // original key, and the server dedupes it against any partially delivered
 // original.
 func (cl *client) send(ctx context.Context, c creds, body components.IngestRequestBody, idemKey string) ingestResult {
+	return cl.sendWithAssertion(ctx, c, body, idemKey, "", false)
+}
+
+func (cl *client) sendWithAssertion(ctx context.Context, c creds, body components.IngestRequestBody, idemKey, actingUserAssertion string, backfilled bool) ingestResult {
 	ctx, cancel := context.WithTimeout(ctx, cl.budget)
 	defer cancel()
 
 	req := operations.IngestHookEventRequest{
-		GramKey:        new(c.APIKey),
-		GramProject:    nil,
-		IdempotencyKey: new(idemKey),
-		XGramReplayed:  nil,
-		Body:           body,
+		GramKey:                 new(c.APIKey),
+		GramProject:             nil,
+		IdempotencyKey:          new(idemKey),
+		XGramReplayed:           nil,
+		XGramBackfilled:         nil,
+		XGramActingUser:         nil,
+		XGramActingUserContract: nil,
+		Body:                    body,
 	}
 	if cl.replayed {
 		req.XGramReplayed = new(true)
+	}
+	if backfilled {
+		req.XGramBackfilled = new(true)
+	}
+	if actingUserAssertion != "" {
+		req.XGramActingUser = new(actingUserAssertion)
+		req.XGramActingUserContract = new(delegation.ContractVersion)
 	}
 	if c.Project != "" {
 		req.GramProject = new(c.Project)

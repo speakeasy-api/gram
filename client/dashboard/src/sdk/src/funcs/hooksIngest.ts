@@ -117,6 +117,21 @@ async function $do(
       payload["Idempotency-Key"],
       { explode: false, charEncoding: "none" },
     ),
+    "X-Gram-Acting-User": encodeSimple(
+      "X-Gram-Acting-User",
+      payload["X-Gram-Acting-User"],
+      { explode: false, charEncoding: "none" },
+    ),
+    "X-Gram-Acting-User-Contract": encodeSimple(
+      "X-Gram-Acting-User-Contract",
+      payload["X-Gram-Acting-User-Contract"],
+      { explode: false, charEncoding: "none" },
+    ),
+    "X-Gram-Backfilled": encodeSimple(
+      "X-Gram-Backfilled",
+      payload["X-Gram-Backfilled"],
+      { explode: false, charEncoding: "none" },
+    ),
     "X-Gram-Replayed": encodeSimple(
       "X-Gram-Replayed",
       payload["X-Gram-Replayed"],

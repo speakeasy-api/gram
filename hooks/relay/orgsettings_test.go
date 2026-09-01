@@ -102,8 +102,8 @@ func TestIngestWithoutEffectsLeavesOrgSettings(t *testing.T) {
 	require.True(t, got.FailOpen)
 }
 
-// TestServerErrorFailsOpenWithCachedSetting is the feature's core case: a 5xx
-// with a cached fail-open choice lets the gating event through.
+// TestServerErrorFailsOpenWithCachedSetting proves a governed live tool remains
+// fail closed even when the legacy cached posture says fail open.
 func TestServerErrorFailsOpenWithCachedSetting(t *testing.T) {
 	shrinkRetryBudget(t)
 	fs := newFakeServer(t, func(components.IngestRequestBody) (int, decision) {
@@ -115,7 +115,7 @@ func TestServerErrorFailsOpenWithCachedSetting(t *testing.T) {
 	res := invoke(t, cfg, agenthooks.ProviderClaudeCode, "claude/pre_tool_use.json")
 
 	require.Equal(t, 0, res.ExitCode)
-	require.Equal(t, "{}", string(bytes.TrimSpace(res.Stdout)))
+	require.Contains(t, string(bytes.TrimSpace(res.Stdout)), `"permissionDecision":"deny"`)
 }
 
 // TestServerErrorBlocksWhenCachedFailClosed: an explicit fail-closed choice
@@ -141,15 +141,15 @@ func TestUnreachableFailsOpenWithCachedSetting(t *testing.T) {
 	writeOrgSettings(cfg, true)
 	fs.Close()
 
-	res := invoke(t, cfg, agenthooks.ProviderClaudeCode, "claude/pre_tool_use.json")
+	res := invoke(t, cfg, agenthooks.ProviderClaudeCode, "claude/permission_request.json")
 
 	require.Equal(t, 0, res.ExitCode)
 	require.Equal(t, "{}", string(bytes.TrimSpace(res.Stdout)))
 }
 
 // TestUnreachableBlocksWhenCachedFailClosed mirrors the default posture for a
-// dead server once a posture has been cached (a never-cached machine instead
-// gets the cold-start pass — see TestColdStartNoCacheFailsOpen).
+// dead server once a posture has been cached; governed requests also fail
+// closed on a never-cached machine.
 func TestUnreachableBlocksWhenCachedFailClosed(t *testing.T) {
 	fs := newFakeServer(t, nil)
 	cfg := authedConfig(t, fs.URL)
@@ -184,9 +184,10 @@ func TestEnvKeyRejectionStaysClosedDespiteFailOpen(t *testing.T) {
 		return http.StatusUnauthorized, decision{Decision: "", Reason: "", Message: ""}
 	})
 	cfg := authedConfig(t, fs.URL)
+	t.Setenv("GRAM_HOOKS_API_KEY", "rejected-explicit-key")
 	writeOrgSettings(cfg, true)
 
-	res := invoke(t, cfg, agenthooks.ProviderClaudeCode, "claude/pre_tool_use.json")
+	res := invoke(t, cfg, agenthooks.ProviderClaudeCode, "claude/permission_request.json")
 
 	require.Contains(t, string(res.Stdout), `"permissionDecision":"deny"`)
 	require.Contains(t, string(res.Stdout), "GRAM_HOOKS_API_KEY")
@@ -207,7 +208,7 @@ func TestCachedKeyRejectionRatchetUnchangedByFailOpen(t *testing.T) {
 	cfg := Config{ServerURL: fs.URL, ProjectSlug: "default", OrgID: "", HooksAPIKey: "", BrowserLogin: false, Nonblocking: false, DebugLog: "", ConfigPath: "", ConfigError: ""}
 	writeOrgSettings(cfg, true)
 
-	res := invoke(t, cfg, agenthooks.ProviderClaudeCode, "claude/pre_tool_use.json")
+	res := invoke(t, cfg, agenthooks.ProviderClaudeCode, "claude/permission_request.json")
 
 	require.Contains(t, string(res.Stdout), `"permissionDecision":"deny"`, "a rejected credential must fail closed regardless of fail-open")
 	_, statErr := os.Stat(authFile)
@@ -312,7 +313,7 @@ func TestAgedOrgSettingsWithinMaxAgeStillApply(t *testing.T) {
 	seedOrgSettings(t, cfg, true, orgSettingsMaxAge-time.Hour)
 	fs.Close()
 
-	res := invoke(t, cfg, agenthooks.ProviderClaudeCode, "claude/pre_tool_use.json")
+	res := invoke(t, cfg, agenthooks.ProviderClaudeCode, "claude/permission_request.json")
 
 	require.Equal(t, 0, res.ExitCode)
 	require.Equal(t, "{}", string(bytes.TrimSpace(res.Stdout)))
@@ -354,8 +355,9 @@ func TestUnchangedRecentOrgSettingsSkipRewrite(t *testing.T) {
 	require.Equal(t, before, after, "a recently confirmed unchanged value must skip the rewrite")
 }
 
-// TestFailOpenEnvOverride: the escape hatch works with no cache file at all.
-func TestFailOpenEnvOverride(t *testing.T) {
+// TestFailOpenEnvOverrideDoesNotBypassGovernedTool verifies the legacy
+// override cannot fail open a governed tool when delivery fails.
+func TestFailOpenEnvOverrideDoesNotBypassGovernedTool(t *testing.T) {
 	shrinkRetryBudget(t)
 	fs := newFakeServer(t, func(components.IngestRequestBody) (int, decision) {
 		return http.StatusServiceUnavailable, decision{Decision: "", Reason: "", Message: ""}
@@ -366,12 +368,12 @@ func TestFailOpenEnvOverride(t *testing.T) {
 	res := invoke(t, cfg, agenthooks.ProviderClaudeCode, "claude/pre_tool_use.json")
 
 	require.Equal(t, 0, res.ExitCode)
-	require.Equal(t, "{}", string(bytes.TrimSpace(res.Stdout)))
+	require.Contains(t, string(bytes.TrimSpace(res.Stdout)), `"permissionDecision":"deny"`)
 }
 
-// TestColdStartNoCacheFailsOpen: a machine that has never cached an org
-// posture must not brick on its first gate during a control-plane outage.
-func TestColdStartNoCacheFailsOpen(t *testing.T) {
+// TestGovernedColdStartNoCacheFailsClosed proves a machine with no cached
+// posture still denies governed work during a control-plane outage.
+func TestGovernedColdStartNoCacheFailsClosed(t *testing.T) {
 	shrinkRetryBudget(t)
 	fs := newFakeServer(t, func(components.IngestRequestBody) (int, decision) {
 		return http.StatusServiceUnavailable, decision{Decision: "", Reason: "", Message: ""}
@@ -381,11 +383,11 @@ func TestColdStartNoCacheFailsOpen(t *testing.T) {
 	res := invoke(t, cfg, agenthooks.ProviderClaudeCode, "claude/pre_tool_use.json")
 
 	require.Equal(t, 0, res.ExitCode)
-	require.Equal(t, "{}", string(bytes.TrimSpace(res.Stdout)))
+	require.Contains(t, string(bytes.TrimSpace(res.Stdout)), `"permissionDecision":"deny"`)
 }
 
-// TestStaleCacheIsNotAColdStart: a present-but-expired posture keeps the
-// fail-closed default — only a never-cached machine gets the cold-start pass.
+// TestStaleCacheIsNotAColdStart proves a present-but-expired posture keeps the
+// fail-closed default, matching a never-cached governed machine.
 func TestStaleCacheIsNotAColdStart(t *testing.T) {
 	shrinkRetryBudget(t)
 	fs := newFakeServer(t, func(components.IngestRequestBody) (int, decision) {
@@ -399,9 +401,9 @@ func TestStaleCacheIsNotAColdStart(t *testing.T) {
 	require.Contains(t, string(res.Stdout), `"permissionDecision":"deny"`, "stale cache must not fail open")
 }
 
-// TestGateBudgetBeatsHangingServer: a hanging control plane must resolve the
-// gate within gateSendBudget — fail-closed here (posture cached) — instead of
-// riding the full sendBudget past the provider-side deadline.
+// TestGateBudgetBeatsHangingServer: a hanging governed ingest must resolve
+// within gateSendBudget — fail-closed here — instead of riding the full
+// sendBudget past the provider-side deadline.
 func TestGateBudgetBeatsHangingServer(t *testing.T) {
 	shrinkRetryBudget(t)
 	release := make(chan struct{})
@@ -411,7 +413,9 @@ func TestGateBudgetBeatsHangingServer(t *testing.T) {
 		return http.StatusServiceUnavailable, decision{Decision: "", Reason: "", Message: ""}
 	})
 	cfg := authedConfig(t, fs.URL)
-	seedOrgSettings(t, cfg, false, time.Minute)
+	cfg.Nonblocking = true
+	t.Setenv("GRAM_HOOKS_FAIL_OPEN", "1")
+	seedOrgSettings(t, cfg, true, time.Minute)
 
 	start := time.Now()
 	res := invoke(t, cfg, agenthooks.ProviderClaudeCode, "claude/pre_tool_use.json")

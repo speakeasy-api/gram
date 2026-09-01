@@ -481,3 +481,234 @@ func DecodeRedeemResponse(decoder func(*http.Response) goahttp.Decoder, restoreB
 		}
 	}
 }
+
+// BuildDelegateHooksActingUserRequest instantiates a HTTP request object with
+// method and path set to call the "cliAuth" service "delegateHooksActingUser"
+// endpoint
+func (c *Client) BuildDelegateHooksActingUserRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: DelegateHooksActingUserCliAuthPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("cliAuth", "delegateHooksActingUser", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeDelegateHooksActingUserRequest returns an encoder for requests sent to
+// the cliAuth delegateHooksActingUser server.
+func EncodeDelegateHooksActingUserRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*cliauth.DelegateHooksActingUserPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("cliAuth", "delegateHooksActingUser", "*cliauth.DelegateHooksActingUserPayload", v)
+		}
+		body := NewDelegateHooksActingUserRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("cliAuth", "delegateHooksActingUser", err)
+		}
+		return nil
+	}
+}
+
+// DecodeDelegateHooksActingUserResponse returns a decoder for responses
+// returned by the cliAuth delegateHooksActingUser endpoint. restoreBody
+// controls whether the response body should be restored after having been read.
+// DecodeDelegateHooksActingUserResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeDelegateHooksActingUserResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body DelegateHooksActingUserResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("cliAuth", "delegateHooksActingUser", err)
+			}
+			err = ValidateDelegateHooksActingUserResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("cliAuth", "delegateHooksActingUser", err)
+			}
+			res := NewDelegateHooksActingUserResultOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body DelegateHooksActingUserUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("cliAuth", "delegateHooksActingUser", err)
+			}
+			err = ValidateDelegateHooksActingUserUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("cliAuth", "delegateHooksActingUser", err)
+			}
+			return nil, NewDelegateHooksActingUserUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body DelegateHooksActingUserForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("cliAuth", "delegateHooksActingUser", err)
+			}
+			err = ValidateDelegateHooksActingUserForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("cliAuth", "delegateHooksActingUser", err)
+			}
+			return nil, NewDelegateHooksActingUserForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body DelegateHooksActingUserBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("cliAuth", "delegateHooksActingUser", err)
+			}
+			err = ValidateDelegateHooksActingUserBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("cliAuth", "delegateHooksActingUser", err)
+			}
+			return nil, NewDelegateHooksActingUserBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body DelegateHooksActingUserNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("cliAuth", "delegateHooksActingUser", err)
+			}
+			err = ValidateDelegateHooksActingUserNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("cliAuth", "delegateHooksActingUser", err)
+			}
+			return nil, NewDelegateHooksActingUserNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body DelegateHooksActingUserConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("cliAuth", "delegateHooksActingUser", err)
+			}
+			err = ValidateDelegateHooksActingUserConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("cliAuth", "delegateHooksActingUser", err)
+			}
+			return nil, NewDelegateHooksActingUserConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body DelegateHooksActingUserUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("cliAuth", "delegateHooksActingUser", err)
+			}
+			err = ValidateDelegateHooksActingUserUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("cliAuth", "delegateHooksActingUser", err)
+			}
+			return nil, NewDelegateHooksActingUserUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body DelegateHooksActingUserInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("cliAuth", "delegateHooksActingUser", err)
+			}
+			err = ValidateDelegateHooksActingUserInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("cliAuth", "delegateHooksActingUser", err)
+			}
+			return nil, NewDelegateHooksActingUserInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body DelegateHooksActingUserInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("cliAuth", "delegateHooksActingUser", err)
+				}
+				err = ValidateDelegateHooksActingUserInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("cliAuth", "delegateHooksActingUser", err)
+				}
+				return nil, NewDelegateHooksActingUserInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body DelegateHooksActingUserUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("cliAuth", "delegateHooksActingUser", err)
+				}
+				err = ValidateDelegateHooksActingUserUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("cliAuth", "delegateHooksActingUser", err)
+				}
+				return nil, NewDelegateHooksActingUserUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("cliAuth", "delegateHooksActingUser", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body DelegateHooksActingUserGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("cliAuth", "delegateHooksActingUser", err)
+			}
+			err = ValidateDelegateHooksActingUserGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("cliAuth", "delegateHooksActingUser", err)
+			}
+			return nil, NewDelegateHooksActingUserGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("cliAuth", "delegateHooksActingUser", resp.StatusCode, string(body))
+		}
+	}
+}

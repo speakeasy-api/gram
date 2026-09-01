@@ -16,8 +16,14 @@ type IngestHookEventRequest struct {
 	// Optional per-invocation token reused across retries so the server stores a redelivered event exactly once.
 	IdempotencyKey *string `header:"style=simple,explode=false,name=Idempotency-Key"`
 	// Set when the event is redelivered from a device's offline spool after control-plane downtime, under its original Idempotency-Key and occurred_at.
-	XGramReplayed *bool                        `header:"style=simple,explode=false,name=X-Gram-Replayed"`
-	Body          components.IngestRequestBody `request:"mediaType=application/json"`
+	XGramReplayed *bool `header:"style=simple,explode=false,name=X-Gram-Replayed"`
+	// True only for a synthetic prompt recovered after its live checkpoint; backfilled prompts are observational and never governed.
+	XGramBackfilled *bool `header:"style=simple,explode=false,name=X-Gram-Backfilled"`
+	// Opaque Gram-signed, proof-minted acting-user assertion required for governed live invocations and their observational replay.
+	XGramActingUser *string `header:"style=simple,explode=false,name=X-Gram-Acting-User"`
+	// Exact acting-user delegation contract used by the assertion.
+	XGramActingUserContract *string                      `header:"style=simple,explode=false,name=X-Gram-Acting-User-Contract"`
+	Body                    components.IngestRequestBody `request:"mediaType=application/json"`
 }
 
 func (i *IngestHookEventRequest) GetGramKey() *string {
@@ -46,6 +52,27 @@ func (i *IngestHookEventRequest) GetXGramReplayed() *bool {
 		return nil
 	}
 	return i.XGramReplayed
+}
+
+func (i *IngestHookEventRequest) GetXGramBackfilled() *bool {
+	if i == nil {
+		return nil
+	}
+	return i.XGramBackfilled
+}
+
+func (i *IngestHookEventRequest) GetXGramActingUser() *string {
+	if i == nil {
+		return nil
+	}
+	return i.XGramActingUser
+}
+
+func (i *IngestHookEventRequest) GetXGramActingUserContract() *string {
+	if i == nil {
+		return nil
+	}
+	return i.XGramActingUserContract
 }
 
 func (i *IngestHookEventRequest) GetBody() components.IngestRequestBody {

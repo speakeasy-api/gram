@@ -35,7 +35,8 @@ import (
 const (
 	// spoolEntryVersion versions the on-disk entry schema; drain skips
 	// versions it doesn't understand rather than guessing.
-	spoolEntryVersion = 1
+	spoolEntryVersion = 2
+	spoolEntryV1      = 1
 
 	// spoolMaxAge expires entries that were never drained (a laptop shelved
 	// mid-outage). Mirrors the org-settings cache's 14d ceiling: events
@@ -70,6 +71,7 @@ type spoolEntry struct {
 	ProjectSlug    string                       `json:"project_slug,omitempty"`
 	ConfigPath     string                       `json:"config_path,omitempty"`
 	SpooledAt      time.Time                    `json:"spooled_at"`
+	Backfilled     bool                         `json:"backfilled,omitempty"`
 	Envelope       components.IngestRequestBody `json:"envelope"`
 }
 
@@ -84,7 +86,7 @@ const maxSpoolEntryBytes = 8 << 20
 // control plane. Best-effort by design: a spool failure only logs — the
 // event's gating outcome was already decided, and buffering must never
 // affect the user's session.
-func (r *Relay) spoolUnsent(idemKey string, payload components.IngestRequestBody) {
+func (r *Relay) spoolUnsent(idemKey string, payload components.IngestRequestBody, backfilled bool) {
 	dir := spoolDir()
 	if dir == "" {
 		r.debugf("spool: no writable state dir; entry dropped")
@@ -98,6 +100,7 @@ func (r *Relay) spoolUnsent(idemKey string, payload components.IngestRequestBody
 		ProjectSlug:    r.cfg.ProjectSlug,
 		ConfigPath:     r.cfg.ConfigPath,
 		SpooledAt:      time.Now().UTC(),
+		Backfilled:     backfilled,
 		Envelope:       payload,
 	}
 	data, err := json.Marshal(entry)

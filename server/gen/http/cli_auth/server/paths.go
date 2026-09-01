@@ -16,3 +16,8 @@ func AuthorizeCliAuthPath() string {
 func RedeemCliAuthPath() string {
 	return "/rpc/cliAuth.redeem"
 }
+
+// DelegateHooksActingUserCliAuthPath returns the URL path to the cliAuth service delegateHooksActingUser HTTP endpoint.
+func DelegateHooksActingUserCliAuthPath() string {
+	return "/rpc/cliAuth.delegateHooksActingUser"
+}
