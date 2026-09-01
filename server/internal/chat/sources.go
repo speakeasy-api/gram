@@ -20,11 +20,7 @@ var sourceAliases = map[string][]string{
 	"claude-code-desktop": {"claude-code-desktop"},
 	"cowork":              {"cowork", "claude-cowork", "Claude Cowork"},
 	"cursor":              {"cursor", "Cursor"},
-	// OpenClaw sessions arrive via the generated observability plugin, which
-	// passes --provider=openclaw; the capitalised form matches hand-configured
-	// installs and the adapter's own display casing.
-	"openclaw": {"openclaw", "OpenClaw"},
-	"codex":    {"codex", "Codex"},
+	"codex":               {"codex", "Codex"},
 	// ChatGPT (web/desktop chat + Work mode) — rows arrive via the OpenAI
 	// compliance import pipelines under the chatgpt hook source.
 	"chatgpt": {"chatgpt", "ChatGPT"},
@@ -33,6 +29,13 @@ var sourceAliases = map[string][]string{
 	// by hooks/OTEL).
 	"codex-web": {"codex-web", "CodexWeb", "Codex Web"},
 }
+
+// openclaw is deliberately absent, like opencode: the generated plugin always
+// passes --provider=openclaw, so there is only ever one raw spelling and
+// pass-through already gives the filter a single entry. An alias folding a
+// capitalised variant would be worse than none, because hook_source keeps its
+// casing into ClickHouse and the summary MVs match the lowercase value only:
+// the filter would show one surface while the usage rows silently undercounted.
 
 // rawToCanonicalSource is the reverse of sourceAliases: each known raw value
 // mapped to its canonical form, built once at init.

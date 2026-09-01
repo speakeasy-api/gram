@@ -30,16 +30,16 @@ func TestCanonicalizeSources_CollapsesAliasesAndDropsEmpty(t *testing.T) {
 	require.Equal(t, []string{"chatgpt", "claude", "claude-chat-web", "claude-code", "claude-code-desktop", "codex", "cowork", "cursor"}, got)
 }
 
-func TestSourceAliases_OpenClawFoldsBothSpellings(t *testing.T) {
+func TestSourceAliases_OpenClawPassesThroughUnaliased(t *testing.T) {
 	t.Parallel()
 
-	// Both spellings must collapse to one surface, or the agent-type filter
-	// splits OpenClaw into two entries. The generated shim passes
-	// --provider=openclaw; the capitalised form covers hand-configured installs.
+	// openclaw carries no alias on purpose. The filter value must stay byte
+	// identical to the raw hook source, because the summary MVs match that
+	// lowercase literal: folding a capitalised variant here would unify the
+	// filter while the usage rows silently undercounted.
 	require.Equal(t, "openclaw", CanonicalSource("openclaw"))
-	require.Equal(t, "openclaw", CanonicalSource("OpenClaw"))
-	require.Equal(t, []string{"openclaw"}, canonicalizeSources([]string{"openclaw", "OpenClaw"}))
-	require.Equal(t, []string{"openclaw", "OpenClaw"}, expandSourceAliases([]string{"openclaw"}))
+	require.Equal(t, []string{"openclaw"}, canonicalizeSources([]string{"openclaw", "openclaw"}))
+	require.Equal(t, []string{"openclaw"}, expandSourceAliases([]string{"openclaw"}))
 }
 
 func TestCanonicalizeSources_Empty(t *testing.T) {
