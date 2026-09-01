@@ -852,7 +852,7 @@ type UserSessionResponseBody struct {
 	// for a client registered before the value was recorded;
 	// client_credential_kind separates those cases and is what should be displayed.
 	ClientTokenEndpointAuthMethod *string `form:"client_token_endpoint_auth_method,omitempty" json:"client_token_endpoint_auth_method,omitempty" xml:"client_token_endpoint_auth_method,omitempty"`
-	// Subject kind: 'user', 'apikey', or 'anonymous'.
+	// Subject kind: 'user', 'apikey', 'anonymous', or 'workload'.
 	SubjectType string `form:"subject_type" json:"subject_type" xml:"subject_type"`
 	// Resolved human-readable name of the subject, if known.
 	SubjectDisplayName *string `form:"subject_display_name,omitempty" json:"subject_display_name,omitempty" xml:"subject_display_name,omitempty"`

@@ -87937,7 +87937,7 @@ components:
                     description: Avatar URL for the subject when it resolves to a Gram user with one. Null for API key and anonymous subjects, and for users who have no photo.
                 subject_type:
                     type: string
-                    description: 'Subject kind: ''user'', ''apikey'', or ''anonymous''.'
+                    description: 'Subject kind: ''user'', ''apikey'', ''anonymous'', or ''workload''.'
                 subject_urn:
                     type: string
                     description: The session's subject URN (user:<id> | apikey:<uuid> | anonymous:<mcp-session-id>).

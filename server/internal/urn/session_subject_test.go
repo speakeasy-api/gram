@@ -519,6 +519,10 @@ func TestParseSessionSubject_RejectsMalformedWorkloadIDs(t *testing.T) {
 		"no issuer reference":    "workload:repo-acme-payments-api",
 		"issuer is not a uuid":   "workload:not-a-uuid:repo:acme/payments-api",
 		"empty external subject": "workload:0192f4c8-1a2b-7c3d-8e4f-5a6b7c8d9e0f:",
+		// The nil uuid parses like any other, so it has to be rejected by
+		// name: no remote_session_issuers row is ever the nil uuid, and an
+		// uninitialised reference must not produce a valid-looking subject.
+		"nil uuid issuer": "workload:00000000-0000-0000-0000-000000000000:repo:acme/api",
 	} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()

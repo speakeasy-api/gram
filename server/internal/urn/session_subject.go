@@ -138,6 +138,14 @@ func splitWorkloadID(id string) (uuid.UUID, string, error) {
 	if err != nil {
 		return uuid.Nil, "", fmt.Errorf("%w: workload issuer reference must be a uuid", ErrInvalid)
 	}
+	if issuerID == uuid.Nil {
+		// The nil uuid parses like any other but names no issuer: every
+		// remote_session_issuers row is minted by generate_uuidv7. Accepting
+		// it would let an uninitialised issuer reference produce a
+		// valid-looking subject, which is the collision this kind carries an
+		// issuer to prevent, wearing the shape of a real one.
+		return uuid.Nil, "", fmt.Errorf("%w: workload issuer reference is the nil uuid", ErrInvalid)
+	}
 	if externalSubject == "" {
 		return uuid.Nil, "", fmt.Errorf("%w: workload external subject is empty", ErrInvalid)
 	}
