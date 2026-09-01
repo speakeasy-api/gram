@@ -28,12 +28,25 @@
 
       <section class="bg-card border">
         <header class="flex flex-col gap-2 border-b px-6 py-6 sm:px-8">
-          <p class="text-eyebrow">
-            {{if .FirstParty}}Connect{{else}}Authorize{{end}}
-          </p>
-          <h1 class="text-display-xs">
-            {{if .FirstParty}}{{.MCPSlug}}{{else}}{{.ClientName}}{{end}}
-          </h1>
+          {{if .FirstParty}}
+          <p class="text-eyebrow">Connect</p>
+          <h1 class="text-display-xs">{{.MCPSlug}}</h1>
+          {{else}}
+          {{/* The client and the server are named side by side because the
+          server slug carries the organization prefix ({org}-{server}), so a
+          single running sentence buries the one identity the user is being
+          asked to hand access to. */}}
+          <div class="flex flex-wrap items-start gap-x-10 gap-y-2">
+            <div class="flex flex-col gap-2">
+              <p class="text-eyebrow">Authorize</p>
+              <h1 class="text-display-xs">{{.ClientName}}</h1>
+            </div>
+            <div class="flex min-w-0 flex-col gap-2">
+              <p class="text-eyebrow">Server</p>
+              <p class="text-display-xs font-mono break-all">{{.MCPSlug}}</p>
+            </div>
+          </div>
+          {{end}}
           <p class="text-sm text-muted-foreground">
             {{if .FirstParty}}
             {{if .RemoteSessionCards}}Link the services this MCP server needs to access on your behalf.{{else}}This MCP server needs no per-user service connections — you're all set.{{end}}
