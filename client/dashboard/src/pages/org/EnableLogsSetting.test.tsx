@@ -200,11 +200,11 @@ describe("EnableLogsSetting", () => {
     await waitFor(() => {
       expect(testState.mutateAsync).toHaveBeenCalledTimes(2);
     });
-    expect(onPendingChange).not.toHaveBeenCalledWith(false);
+    expect(onPendingChange).toHaveBeenLastCalledWith(true);
 
     resolveToolIo?.();
     await waitFor(() => {
-      expect(onPendingChange).toHaveBeenCalledWith(false);
+      expect(onPendingChange).toHaveBeenLastCalledWith(false);
     });
   });
 
