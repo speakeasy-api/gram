@@ -459,18 +459,6 @@ func parseDestinationType(value string) (destinationType, error) {
 	return destination, nil
 }
 
-type dataSource string
-
-const dataSourceProductTelemetry dataSource = "product_telemetry"
-
-func parseDataSource(value string) (dataSource, error) {
-	source := dataSource(value)
-	if source != dataSourceProductTelemetry {
-		return "", fmt.Errorf("unsupported data source %q", value)
-	}
-	return source, nil
-}
-
 func routeSourceConflict(err error) *oops.ShareableError {
 	var pgErr *pgconn.PgError
 	if errors.As(err, &pgErr) && pgErr.Code == pgerrcode.UniqueViolation && pgErr.ConstraintName == "data_export_routes_project_source_key" {
