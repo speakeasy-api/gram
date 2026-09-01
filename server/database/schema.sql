@@ -74,10 +74,9 @@ CREATE TABLE IF NOT EXISTS organization_metadata (
 CREATE UNIQUE INDEX IF NOT EXISTS organization_metadata_workos_id_key
 ON organization_metadata (workos_id);
 
--- One row per organization provisioned by the trial signup flow. Only that
--- transaction inserts a row; a trial is never attached to an organization that
--- already exists, which is what lets expiry hardcode its demotion. Unrelated to
--- organization_metadata.free_trial_*, another concept.
+-- One enterprise-trial lifecycle per organization. Lifecycle operations update
+-- the row in place. Unrelated to organization_metadata.free_trial_*, another
+-- concept.
 CREATE TABLE IF NOT EXISTS trials (
   organization_id TEXT NOT NULL,
 

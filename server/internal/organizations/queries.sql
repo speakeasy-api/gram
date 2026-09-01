@@ -44,6 +44,23 @@ SELECT *
 FROM organization_metadata
 WHERE id = @id;
 
+-- name: LockOrganizationForInviteAcceptance :one
+SELECT *
+FROM organization_metadata
+WHERE id = @id
+FOR UPDATE;
+
+-- name: HasOtherActiveOrganizationUsers :one
+SELECT EXISTS (
+    SELECT 1
+    FROM organization_user_relationships AS relationship
+    JOIN users ON users.id = relationship.user_id
+    WHERE relationship.organization_id = @organization_id
+      AND relationship.deleted_at IS NULL
+      AND users.deleted_at IS NULL
+      AND users.id <> @user_id
+);
+
 -- name: GetOrganizationMetadataBySlug :one
 SELECT *
 FROM organization_metadata
@@ -306,14 +323,15 @@ WHERE id = @id
   AND expires_at > clock_timestamp()
 RETURNING *;
 
--- name: AcceptInvitation :execrows
+-- name: AcceptInvitation :one
 UPDATE organization_invitations
 SET state = 'accepted',
     accepted_at = clock_timestamp(),
     updated_at = clock_timestamp()
 WHERE id = @id
   AND state = 'pending'
-  AND expires_at > clock_timestamp();
+  AND expires_at > clock_timestamp()
+RETURNING *;
 
 -- name: AcceptPendingInvitationForMember :one
 UPDATE organization_invitations
