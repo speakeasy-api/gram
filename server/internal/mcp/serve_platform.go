@@ -98,7 +98,7 @@ func (s *Service) ServePlatformToolset(w http.ResponseWriter, r *http.Request) e
 
 	var req rawRequest
 	if err := json.Unmarshal(bodyBytes, &req); err != nil {
-		return oops.E(oops.CodeBadRequest, err, "failed to decode request body").LogError(ctx, s.logger)
+		return oops.E(oops.CodeParseError, err, "failed to decode request body").LogError(ctx, s.logger)
 	}
 	if req.JSONRPC != "2.0" {
 		return oops.E(oops.CodeBadRequest, errInvalidJSONRPCVersion, "unsupported JSON-RPC version").LogError(ctx, s.logger)

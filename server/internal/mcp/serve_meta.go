@@ -118,7 +118,7 @@ func (s *Service) serveResolvedMetaMCPEndpoint(
 
 	var req rawRequest
 	if err := json.Unmarshal(bodyBytes, &req); err != nil {
-		return oops.E(oops.CodeBadRequest, err, "failed to decode request body").LogError(ctx, logger)
+		return oops.E(oops.CodeParseError, err, "failed to decode request body").LogError(ctx, logger)
 	}
 	if req.JSONRPC != "2.0" {
 		return oops.E(oops.CodeBadRequest, errInvalidJSONRPCVersion, "unsupported JSON-RPC version").LogError(ctx, logger)

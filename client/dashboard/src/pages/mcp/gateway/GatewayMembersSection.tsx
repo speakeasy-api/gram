@@ -534,8 +534,9 @@ function AddMemberSheet({
         <SheetHeader className="px-6 pt-6 pb-0">
           <SheetTitle>Add member</SheetTitle>
           <SheetDescription>
-            Front another MCP server through this gateway. Disabled, unproxied
-            and slugless servers can be added but are excluded from serving.
+            Front another MCP server through this gateway. Disabled servers can
+            be added but won't serve until enabled; unproxied and slugless
+            servers can't be added.
           </SheetDescription>
         </SheetHeader>
 
@@ -573,6 +574,10 @@ function AddMemberSheet({
               const classification = classifyMemberServer(server);
               const servable =
                 classification === "hosted" || classification === "proxied";
+              // The backend rejects these outright (unproxied has no dispatch
+              // path; slugless can't be addressed), so don't offer a doomed Add.
+              const canAdd =
+                classification !== "unproxied" && classification !== "slugless";
               return (
                 <div
                   key={server.id}
@@ -605,7 +610,7 @@ function AddMemberSheet({
                   <Button
                     variant="secondary"
                     size="sm"
-                    disabled={adding}
+                    disabled={adding || !canAdd}
                     onClick={() => onAdd(server)}
                   >
                     <Button.Text>Add</Button.Text>

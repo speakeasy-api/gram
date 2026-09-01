@@ -214,14 +214,20 @@ export function useDeleteTunneledMcpSource(): UseMutationResult<
       await client.tunneledMcp.deleteServer({ id: tunneledMcpServerId });
     },
     onSuccess: async () => {
+      // Mark stale only (refetchType "none"): the deleted source's own queries
+      // are still mounted on this detail page until the caller navigates away,
+      // and force-refetching them here would block mutateAsync on requests for
+      // a resource that no longer exists — leaving the confirm dialog stuck on
+      // "Deleting…". Consumers (e.g. the sources list) refetch on their next
+      // mount after navigation.
       await Promise.all([
-        invalidateAllTunneledMcpServers(queryClient, { refetchType: "all" }),
+        invalidateAllTunneledMcpServers(queryClient, { refetchType: "none" }),
         invalidateAllListTunneledMcpServerConnections(queryClient, {
-          refetchType: "all",
+          refetchType: "none",
         }),
-        invalidateAllMcpServers(queryClient, { refetchType: "all" }),
-        invalidateAllMcpEndpoints(queryClient, { refetchType: "all" }),
-        invalidateAllUserSessionIssuers(queryClient, { refetchType: "all" }),
+        invalidateAllMcpServers(queryClient, { refetchType: "none" }),
+        invalidateAllMcpEndpoints(queryClient, { refetchType: "none" }),
+        invalidateAllUserSessionIssuers(queryClient, { refetchType: "none" }),
       ]);
     },
   });

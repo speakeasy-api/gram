@@ -1077,7 +1077,7 @@ func (s *Service) serveToolsetResolved(w http.ResponseWriter, r *http.Request, t
 	}
 
 	if bodyDecodeErr != nil {
-		return oops.E(oops.CodeBadRequest, bodyDecodeErr, "failed to decode request body").LogError(ctx, s.logger)
+		return oops.E(oops.CodeParseError, bodyDecodeErr, "failed to decode request body").LogError(ctx, s.logger)
 	}
 	hostedCoverageRecorded := false
 	if isHostedToolsCall {

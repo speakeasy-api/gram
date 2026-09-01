@@ -22,6 +22,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcp"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpversions"
 	metadata_repo "github.com/speakeasy-api/gram/server/internal/mcpmetadata/repo"
+	"github.com/speakeasy-api/gram/server/internal/oops"
 	toolsets_repo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	variations_repo "github.com/speakeasy-api/gram/server/internal/variations/repo"
 )
@@ -463,6 +464,29 @@ func TestServePublic_BatchRequestRejected(t *testing.T) {
 	_, err = servePublicHTTP(t, unauthCtx, ti, toolset.McpSlug.String, bodyBytes, "", nil)
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "batch requests are not supported")
+}
+
+// A body that is not valid JSON is a JSON-RPC parse error (-32700), not an
+// invalid request (-32600).
+func TestServePublic_MalformedBodyIsParseError(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPService(t)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	toolset := createPublicMCPToolset(t, ctx, toolsets_repo.New(ti.conn), authCtx, "pub-parse-error")
+
+	unauthCtx := context.Background()
+	_, err := servePublicHTTP(t, unauthCtx, ti, toolset.McpSlug.String, []byte("{not valid json"), "", nil)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "failed to decode request body")
+
+	var shareable *oops.ShareableError
+	require.ErrorAs(t, err, &shareable)
+	require.Equal(t, oops.CodeParseError, shareable.Code)
+	require.Equal(t, oops.MCPCodeParseError, shareable.Code.MCPCode())
 }
 
 // requireCacheHints asserts the caching members MCP 2026-07-28 requires on a
