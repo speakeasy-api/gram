@@ -2765,6 +2765,7 @@ type chatMessageRow struct {
 	chatID         uuid.UUID
 	userID         string
 	externalUserID string
+	userEmail      string
 	messageID      string
 	toolCallID     string
 
@@ -2820,7 +2821,7 @@ const (
 	maxConcurrentChatAssetWork = 32
 )
 
-func prepareMessages(ctx context.Context, logger *slog.Logger, assetStorage assets.BlobStore, rows []chatMessageRow) ([]repo.CreateChatMessageParams, error) {
+func prepareMessages(ctx context.Context, logger *slog.Logger, assetStorage assets.BlobStore, rows []chatMessageRow) ([]MessageWrite, error) {
 	if len(rows) == 0 {
 		return nil, nil
 	}
@@ -2941,9 +2942,10 @@ func prepareMessages(ctx context.Context, logger *slog.Logger, assetStorage asse
 	}
 
 	// Build database params from upload results.
-	dbrows := make([]repo.CreateChatMessageParams, len(rows))
+	dbrows := make([]MessageWrite, len(rows))
 	for i, row := range rows {
 		res := results[i]
+		assistantID, workloadSource := messageReadingAttribution(ctx, billing.ModelUsageSource(row.metadata.Source))
 
 		// Log storage errors but continue - we'll still store the message with plain text.
 		var storageError pgtype.Text
@@ -2962,33 +2964,43 @@ func prepareMessages(ctx context.Context, logger *slog.Logger, assetStorage asse
 			contentRaw = res.jsonData
 		}
 
-		dbrows[i] = repo.CreateChatMessageParams{
-			ID:               uuid.Nil,
-			Replayed:         false,
-			CreatedAt:        conv.PtrToPGTimestamptz(nil),
-			ChatID:           row.chatID,
-			ProjectID:        row.projectID,
-			Role:             row.role,
-			Content:          openrouter.GetText(row.content),
-			ContentRaw:       contentRaw,
-			ContentAssetUrl:  conv.ToPGText(res.assetURL),
-			StorageError:     storageError,
-			Model:            conv.ToPGText(row.model),
-			MessageID:        conv.ToPGText(row.messageID),
-			ToolCallID:       conv.ToPGText(row.toolCallID),
-			UserID:           conv.ToPGText(row.userID),
-			ExternalUserID:   conv.ToPGText(row.externalUserID),
-			FinishReason:     conv.PtrToPGText(row.finishReason),
-			ToolCalls:        row.toolCalls,
-			PromptTokens:     row.promptTokens,
-			CompletionTokens: row.completionTokens,
-			TotalTokens:      row.totalTokens,
-			Origin:           conv.ToPGText(row.metadata.Origin),
-			UserAgent:        conv.ToPGText(row.metadata.UserAgent),
-			IpAddress:        conv.ToPGText(row.metadata.IPAddress),
-			Source:           conv.ToPGText(row.metadata.Source),
-			ContentHash:      nil,
-			Generation:       row.generation,
+		dbrows[i] = MessageWrite{
+			Params: repo.CreateChatMessageParams{
+				ID:               uuid.Nil,
+				Replayed:         false,
+				CreatedAt:        conv.PtrToPGTimestamptz(nil),
+				ChatID:           row.chatID,
+				ProjectID:        row.projectID,
+				Role:             row.role,
+				Content:          openrouter.GetText(row.content),
+				ContentRaw:       contentRaw,
+				ContentAssetUrl:  conv.ToPGText(res.assetURL),
+				StorageError:     storageError,
+				Model:            conv.ToPGText(row.model),
+				MessageID:        conv.ToPGText(row.messageID),
+				ToolCallID:       conv.ToPGText(row.toolCallID),
+				UserID:           conv.ToPGText(row.userID),
+				ExternalUserID:   conv.ToPGText(row.externalUserID),
+				FinishReason:     conv.PtrToPGText(row.finishReason),
+				ToolCalls:        row.toolCalls,
+				PromptTokens:     row.promptTokens,
+				CompletionTokens: row.completionTokens,
+				TotalTokens:      row.totalTokens,
+				Origin:           conv.ToPGText(row.metadata.Origin),
+				UserAgent:        conv.ToPGText(row.metadata.UserAgent),
+				IpAddress:        conv.ToPGText(row.metadata.IPAddress),
+				Source:           conv.ToPGText(row.metadata.Source),
+				ContentHash:      nil,
+				Generation:       row.generation,
+			},
+			BillingUserID:  row.userID,
+			AssistantID:    assistantID,
+			WorkloadSource: workloadSource,
+			UserEmail:      row.userEmail,
+			Provider:       "",
+			HookHostname:   "",
+			AccountType:    "",
+			BillingMode:    "",
 		}
 	}
 

@@ -27,14 +27,21 @@ SELECT EXISTS (
   FROM toolsets
   WHERE mcp_slug = $1
   AND deleted IS FALSE
+) OR EXISTS (
+  SELECT 1
+  FROM mcp_endpoints
+  WHERE slug = $1
+  AND deleted IS FALSE
 )
 `
 
-func (q *Queries) CheckMCPSlugAvailability(ctx context.Context, mcpSlug pgtype.Text) (bool, error) {
+// Deprecated inline-editor probe: taken when any live toolset or endpoint
+// holds the slug in any scope. Removed with the mcp_slug fallback (AIS-646).
+func (q *Queries) CheckMCPSlugAvailability(ctx context.Context, mcpSlug pgtype.Text) (pgtype.Bool, error) {
 	row := q.db.QueryRow(ctx, checkMCPSlugAvailability, mcpSlug)
-	var exists bool
-	err := row.Scan(&exists)
-	return exists, err
+	var column_1 pgtype.Bool
+	err := row.Scan(&column_1)
+	return column_1, err
 }
 
 const clearToolsetOAuthServers = `-- name: ClearToolsetOAuthServers :one

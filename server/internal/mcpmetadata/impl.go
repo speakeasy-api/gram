@@ -24,6 +24,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/trace"
 	goahttp "goa.design/goa/v3/http"
 	"goa.design/goa/v3/security"
@@ -44,6 +45,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/customdomains"
 	customdomains_repo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
 	environments_repo "github.com/speakeasy-api/gram/server/internal/environments/repo"
+	"github.com/speakeasy-api/gram/server/internal/mcp/mcpmetrics"
 	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
 	"github.com/speakeasy-api/gram/server/internal/mcpendpoints"
 	mcpendpoints_repo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
@@ -207,6 +209,7 @@ type Service struct {
 	siteURL        *url.URL
 	toolsetCache   cache.TypedCacheObject[mv.ToolsetBaseContents]
 	audit          *audit.Logger
+	legacyFallback *mcpmetrics.LegacyFallbackCounter
 
 	// Hosted install page script (embedded and served with cache-busting hash)
 	installPageScriptHash string
@@ -221,6 +224,7 @@ var (
 func NewService(
 	logger *slog.Logger,
 	tracerProvider trace.TracerProvider,
+	meterProvider metric.MeterProvider,
 	db *pgxpool.Pool,
 	sessions *sessions.Manager,
 	serverURL *url.URL,
@@ -250,6 +254,7 @@ func NewService(
 		siteURL:        siteURL,
 		toolsetCache:   cache.NewTypedObjectCache[mv.ToolsetBaseContents](logger.With(attr.SlogCacheNamespace("toolset")), cacheAdapter, cache.SuffixNone),
 		audit:          auditLogger,
+		legacyFallback: mcpmetrics.NewLegacyFallbackCounter(meterProvider.Meter("github.com/speakeasy-api/gram/server/internal/mcpmetadata"), logger),
 
 		installPageScriptHash: scriptHashStr,
 		installPageScriptData: hostedPageScriptData,
@@ -1024,27 +1029,22 @@ func (s *Service) ServeInstallPage(w http.ResponseWriter, r *http.Request) error
 	return s.renderRemoteMcpInstallPage(ctx, w, ic, metadataRecord)
 }
 
-// resolveInstallContext tries the mcp_endpoints → mcp_server resolution path
-// first (via the shared mcpendpoints.BySlugAndCustomDomain helper, mirroring
-// mcp.ServePublic's resolution), then falls back to the legacy
-// toolsets.mcp_slug lookup so platform-domain install pages keep working for
-// customers that pre-date mcp_endpoints. A disabled mcp_server resolves like
-// a 404 and is allowed to fall through to the legacy path, again matching
-// mcp.ServePublic.
+// resolveInstallContext resolves mcp_endpoints → mcp_server first, mirroring
+// mcp.ServePublic: only a true address miss falls back to the legacy
+// toolsets.mcp_slug lookup; an unavailable address is terminal (AIS-633).
 func (s *Service) resolveInstallContext(ctx context.Context, mcpSlug string) (*installContext, error) {
 	endpoint, server, metaServer, err := mcpendpoints.BySlugAndCustomDomain(ctx, s.db, s.logger, mcpSlug)
-	var shareErr *oops.ShareableError
 	switch {
-	case errors.As(err, &shareErr) && shareErr.Code == oops.CodeNotFound:
+	case mcpendpoints.IsAddressMiss(err):
 		// Fall through to legacy toolset lookup.
+	case errors.Is(err, mcpendpoints.ErrEndpointUnavailable):
+		// Disabled or dangling backend: the endpoint row owns the slug, so
+		// render the not-found page rather than an unexpected failure.
+		return nil, fmt.Errorf("%w: mcp endpoint backend unavailable", errToolsetNotFound)
 	case err != nil:
 		return nil, fmt.Errorf("resolve mcp endpoint: %w", err)
 	case metaServer != nil:
-		// Meta-backed endpoints have no install page yet (AGE-3299); the
-		// slug is authoritative, so surface not-found rather than falling
-		// through to an unrelated legacy toolset. Wrapping errToolsetNotFound
-		// is what makes ServeInstallPage render the not-found page instead of
-		// treating this as an unexpected failure.
+		// Meta-backed endpoints have no install page yet (AGE-3299).
 		return nil, fmt.Errorf("%w: meta-backed endpoint has no install page", errToolsetNotFound)
 	default:
 		var bridgeToolset *toolsets_repo.Toolset
@@ -1078,6 +1078,7 @@ func (s *Service) resolveInstallContext(ctx context.Context, mcpSlug string) (*i
 	if err != nil {
 		return nil, err
 	}
+	s.legacyFallback.RecordToolsetSlugFallback(ctx, mcpmetrics.LegacyFallbackInstallPage)
 	org, err := s.orgsRepo.GetOrganizationMetadata(ctx, toolset.OrganizationID)
 	if err != nil {
 		return nil, fmt.Errorf("load organization: %w", err)

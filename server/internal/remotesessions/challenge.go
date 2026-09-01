@@ -297,12 +297,17 @@ type RemoteSessionState struct {
 	Status      RemoteSessionStatus
 	AutoRefresh bool
 	// AccessExpiresAt is the upstream-reported deadline for the current access
-	// token. RefreshExpiresAt is the earliest known deadline for renewal,
-	// combining the refresh-token idle timeout and absolute authorization
-	// lifetime. Either is nil when the provider omitted that lifetime.
-	AccessExpiresAt  *time.Time
-	RefreshExpiresAt *time.Time
-	CanRefresh       bool
+	// token. RefreshExpiresAt is the refresh token's own deadline — an idle
+	// timeout that using the session postpones. AuthorizationExpiresAt is the
+	// absolute end of the grant, which renewing does not move. The two are kept
+	// apart rather than reduced to the earliest, because auto refresh defeats
+	// the first and is powerless against the second, and a caller that cannot
+	// tell them apart cannot say which applies. Any is nil when the provider
+	// omitted that lifetime, which is common.
+	AccessExpiresAt        *time.Time
+	RefreshExpiresAt       *time.Time
+	AuthorizationExpiresAt *time.Time
+	CanRefresh             bool
 }
 
 // RemoteSessionStatuses returns, per remote_session_client_id, the state of
@@ -344,17 +349,18 @@ func (m *ChallengeManager) RemoteSessionStatuses(
 			expires := row.RefreshExpiresAt.Time
 			refreshExpiresAt = &expires
 		}
-		if row.AuthorizationExpiresAt.Valid &&
-			(refreshExpiresAt == nil || row.AuthorizationExpiresAt.Time.Before(*refreshExpiresAt)) {
+		var authorizationExpiresAt *time.Time
+		if row.AuthorizationExpiresAt.Valid {
 			expires := row.AuthorizationExpiresAt.Time
-			refreshExpiresAt = &expires
+			authorizationExpiresAt = &expires
 		}
 		statuses[row.RemoteSessionClientID] = RemoteSessionState{
-			Status:           RemoteSessionStatus(row.Status),
-			AutoRefresh:      row.AutoRefresh,
-			AccessExpiresAt:  accessExpiresAt,
-			RefreshExpiresAt: refreshExpiresAt,
-			CanRefresh:       row.CanRefresh,
+			Status:                 RemoteSessionStatus(row.Status),
+			AutoRefresh:            row.AutoRefresh,
+			AccessExpiresAt:        accessExpiresAt,
+			RefreshExpiresAt:       refreshExpiresAt,
+			AuthorizationExpiresAt: authorizationExpiresAt,
+			CanRefresh:             row.CanRefresh,
 		}
 	}
 	return statuses, nil

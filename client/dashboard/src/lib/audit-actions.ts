@@ -84,11 +84,6 @@ export const AUDIT_ACTIONS = [
   "mcp_approval_request:evidence_changed",
   "mcp_approval_request:research_start",
   "mcp_approval_request:supersede",
-  "mcp_collection:attach_server",
-  "mcp_collection:create",
-  "mcp_collection:delete",
-  "mcp_collection:detach_server",
-  "mcp_collection:update",
   "mcp_metadata:update",
   "meta-mcp:add_member",
   "meta-mcp:create",
@@ -111,6 +106,8 @@ export const AUDIT_ACTIONS = [
   "organization:hooks_fail_open_enabled",
   "organization:payg_activated",
   "organization:payg_deactivated",
+  "organization:product_feature_disabled",
+  "organization:product_feature_enabled",
   "organization:webhooks_disabled",
   "organization:webhooks_enabled",
   "organization_invitation:create",
@@ -424,17 +421,6 @@ export function staticActionPhrase(action: AuditAction): string {
     case "mcp_approval_request:supersede":
       return "superseded the access decision for";
 
-    case "mcp_collection:create":
-      return "created collection";
-    case "mcp_collection:update":
-      return "updated collection";
-    case "mcp_collection:delete":
-      return "deleted collection";
-    case "mcp_collection:attach_server":
-      return "added a server to collection";
-    case "mcp_collection:detach_server":
-      return "removed a server from collection";
-
     case "mcp_metadata:update":
       return "updated MCP metadata for";
 
@@ -474,6 +460,10 @@ export function staticActionPhrase(action: AuditAction): string {
       return "activated pay-as-you-go billing for";
     case "organization:payg_deactivated":
       return "deactivated pay-as-you-go billing for";
+    case "organization:product_feature_enabled":
+      return "enabled a product feature for";
+    case "organization:product_feature_disabled":
+      return "disabled a product feature for";
 
     case "organization_invitation:create":
       return "invited";

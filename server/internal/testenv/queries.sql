@@ -813,3 +813,8 @@ SET remote_session_issuer_id = @remote_session_issuer_id
 WHERE id = @id
   AND project_id = @project_id
   AND deleted IS FALSE;
+
+-- name: CreateStripeBillingMetadataFixture :exec
+-- Test-only fixture: associates an organization with a Stripe customer.
+INSERT INTO billing_metadata (organization_id, stripe_customer_id)
+VALUES (@organization_id, @stripe_customer_id);

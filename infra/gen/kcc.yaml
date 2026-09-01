@@ -1075,6 +1075,20 @@ pubsub:
         name: gram-metering-v1-meter-reading
   - labels:
       managed_by: proto-pubsub-orchestrator
+      proto_message: gram-metering-v1-meter-reading-stripe-exporter
+      topic_proto_message: gram-metering-v1-meter-reading
+    name: gram-metering-v1-meter-reading-stripe-exporter
+    spec:
+      ackDeadlineSeconds: 60
+      messageRetentionDuration: 2678400s
+      retainAckedMessages: true
+      retryPolicy:
+        maximumBackoff: 600s
+        minimumBackoff: 10s
+      topicRef:
+        name: gram-metering-v1-meter-reading
+  - labels:
+      managed_by: proto-pubsub-orchestrator
       proto_message: gram-otel-v1-inbound-log-record-transformer
       topic_proto_message: gram-otel-v1-inbound-log-record
     name: gram-otel-v1-inbound-log-record-transformer

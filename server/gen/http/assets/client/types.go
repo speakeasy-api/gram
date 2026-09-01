@@ -2541,12 +2541,13 @@ func NewCreateSignedChatAttachmentURLRequestBody(p *assets.CreateSignedChatAttac
 
 // NewServeImageResultOK builds a "assets" service "serveImage" endpoint result
 // from a HTTP "OK" response.
-func NewServeImageResultOK(contentType string, contentLength int64, lastModified string, accessControlAllowOrigin *string) *assets.ServeImageResult {
+func NewServeImageResultOK(contentType string, contentLength int64, lastModified string, accessControlAllowOrigin *string, crossOriginResourcePolicy string) *assets.ServeImageResult {
 	v := &assets.ServeImageResult{}
 	v.ContentType = contentType
 	v.ContentLength = contentLength
 	v.LastModified = lastModified
 	v.AccessControlAllowOrigin = accessControlAllowOrigin
+	v.CrossOriginResourcePolicy = crossOriginResourcePolicy
 
 	return v
 }

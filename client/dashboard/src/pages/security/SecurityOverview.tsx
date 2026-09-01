@@ -21,12 +21,13 @@ import { Button } from "@/components/ui/Button";
 import { Icon } from "@/components/ui/Icon";
 import { type DateRangePreset } from "@/elements";
 import { TimeRangePicker } from "@/components/DashboardTimeRangePicker";
+import { encodeIdentityUrn } from "@/lib/identity-urn";
 import { useRiskOverview } from "@gram/client/react-query/riskOverview.js";
 import { keepPreviousData } from "@tanstack/react-query";
 import { Shield } from "lucide-react";
 import { useCallback, useEffect, useMemo, type ReactNode } from "react";
 import { Link, Outlet, useLocation } from "react-router";
-import { useRoutes } from "@/routes";
+import { useOrgRoutes, useRoutes } from "@/routes";
 import {
   formatDateRangeLabel,
   useDateRangeFilter,
@@ -154,6 +155,7 @@ function NoPoliciesEmptyState() {
 
 function SecurityOverviewContent() {
   const routes = useRoutes();
+  const orgRoutes = useOrgRoutes();
   const location = useLocation();
   const {
     dateRange,
@@ -262,18 +264,14 @@ function SecurityOverviewContent() {
   }, [overview?.topRules, routes.riskEvents, location.search]);
 
   const topUsers = useMemo<BarDatum[]>(() => {
-    const userDetailRoute = (
-      routes.riskOverview as unknown as {
-        userDetail?: { href: (...params: string[]) => string };
-      }
-    ).userDetail;
     return (overview?.topUsers ?? []).map((user) => {
-      const href =
-        user.externalUserId && userDetailRoute
-          ? `${userDetailRoute.href(
-              encodeURIComponent(user.externalUserId),
-            )}${location.search}`
-          : undefined;
+      // Bars lead to the person's identity page, where these findings sit
+      // beside their access, spend and devices.
+      const href = user.externalUserId
+        ? `${orgRoutes.identities.detail.overview.href(
+            encodeIdentityUrn(`external:${user.externalUserId}`),
+          )}${location.search}`
+        : undefined;
       return {
         key: user.externalUserId || user.email,
         label: user.email,
@@ -281,7 +279,7 @@ function SecurityOverviewContent() {
         href,
       };
     });
-  }, [overview?.topUsers, routes.riskOverview, location.search]);
+  }, [overview?.topUsers, orgRoutes.identities, location.search]);
 
   if (overviewQuery.error) {
     return (

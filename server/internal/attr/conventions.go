@@ -70,13 +70,15 @@ const (
 	UserAttributesKey = attribute.Key("user.attributes")
 	UserGroupsKey     = attribute.Key("user.groups")
 
-	ActualKey   = attribute.Key("actual")
-	EventKey    = attribute.Key("event")
-	ExpectedKey = attribute.Key("expected")
-	NameKey     = attribute.Key("name")
-	ReasonKey   = attribute.Key("reason")
-	ValueKey    = attribute.Key("value")
+	ActualKey    = attribute.Key("actual")
+	EventKey     = attribute.Key("event")
+	ErrorTypeKey = attribute.Key("error.type")
+	ExpectedKey  = attribute.Key("expected")
+	NameKey      = attribute.Key("name")
+	ReasonKey    = attribute.Key("reason")
+	ValueKey     = attribute.Key("value")
 
+	StripeErrorCodeKey      = attribute.Key("stripe.error.code")
 	StripeWebhookEventIDKey = attribute.Key("stripe.webhook.event_id")
 
 	SpanIDKey                    = attribute.Key("span.id")
@@ -325,6 +327,10 @@ const (
 	// McpKillswitchResourceClassKey is the bounded kill-switch resource
 	// coverage class of a covered MCP tools/call. Never a server identifier.
 	McpKillswitchResourceClassKey = attribute.Key("gram.mcp.killswitch.resource_class")
+	// McpEntryPointKey is the bounded entry-point dimension on the
+	// mcp.toolset_slug_fallback counter: which public surface resolved a
+	// request through the legacy toolsets.mcp_slug lookup.
+	McpEntryPointKey              = attribute.Key("gram.mcp.entry_point")
 	McpRequestedTagsKey           = attribute.Key("gram.mcp.requested_tags")
 	McpToolsReturnedKey           = attribute.Key("gram.mcp.tools_returned")
 	McpToolsFilteredKey           = attribute.Key("gram.mcp.tools_filtered")
@@ -998,6 +1004,14 @@ func SlogActual(v any) slog.Attr      { return slog.Any(string(ActualKey), v) }
 
 func Event(v string) attribute.KeyValue { return EventKey.String(v) }
 func SlogEvent(v string) slog.Attr      { return slog.String(string(EventKey), v) }
+
+func ErrorType[V ~string](v V) attribute.KeyValue { return ErrorTypeKey.String(string(v)) }
+func SlogErrorType(v string) slog.Attr            { return slog.String(string(ErrorTypeKey), v) }
+
+func StripeErrorCode(v string) attribute.KeyValue { return StripeErrorCodeKey.String(v) }
+func SlogStripeErrorCode(v string) slog.Attr {
+	return slog.String(string(StripeErrorCodeKey), v)
+}
 
 func StripeWebhookEventID(v string) attribute.KeyValue { return StripeWebhookEventIDKey.String(v) }
 func SlogStripeWebhookEventID(v string) slog.Attr {
@@ -2052,6 +2066,8 @@ func SlogMcpMethod(v string) slog.Attr      { return slog.String(string(McpMetho
 
 func McpSurface(v string) attribute.KeyValue { return McpSurfaceKey.String(v) }
 func SlogMcpSurface(v string) slog.Attr      { return slog.String(string(McpSurfaceKey), v) }
+
+func McpEntryPoint[V ~string](v V) attribute.KeyValue { return McpEntryPointKey.String(string(v)) }
 
 func McpKillswitchSurface[V ~string](v V) attribute.KeyValue {
 	return McpKillswitchSurfaceKey.String(string(v))

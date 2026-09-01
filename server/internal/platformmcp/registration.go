@@ -788,6 +788,8 @@ func (s *RegistrationStore) createPrivateRegistrationComponents(ctx context.Cont
 	if err != nil {
 		return platformrepo.PlatformMcpCatalogRegistration{}, fmt.Errorf("create platform mcp server: %w", err)
 	}
+	// The slug embeds the 64-bit random registration suffix, so it cannot land
+	// on an existing toolsets.mcp_slug; no LockSlugScope/availability probe.
 	endpoint, err := mcpendpointsrepo.New(tx).CreateMCPEndpoint(ctx, mcpendpointsrepo.CreateMCPEndpointParams{
 		ProjectID:   project.ID,
 		McpServerID: uuid.NullUUID{UUID: server.ID, Valid: true},

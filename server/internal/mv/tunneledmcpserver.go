@@ -31,6 +31,7 @@ func BuildTunneledMcpServerView(server repo.TunneledMcpServer, connections []Tun
 		ConnectionStatus:           tunneledMcpConnectionStatus(server, connections),
 		AllowPublic:                server.AllowPublic,
 		AgentVersion:               agentVersion,
+		ResourceIdentifier:         conv.FromPGText[string](server.ResourceIdentifier),
 		LastSeenAt:                 lastSeenAt,
 		ActiveConnectionCount:      len(connections),
 		ActiveConsumerSessionCount: activeConsumerSessionCount(connections),

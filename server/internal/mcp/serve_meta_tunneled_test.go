@@ -29,7 +29,8 @@ import (
 // per mcp_servers_issuer_required_check) and attaches it to the meta server,
 // returning the tunnel id that routes are published under and the member's
 // own user_session_issuer id (the input to the issuer resync that token
-// routing keys on).
+// routing keys on). A non-empty resourceIdentifier is recorded on the source
+// at creation, the way an operator who already knows it records it.
 func seedTunneledMetaMember(
 	t *testing.T,
 	ctx context.Context,
@@ -38,17 +39,20 @@ func seedTunneledMetaMember(
 	metaID uuid.UUID,
 	name, slug string,
 	sortOrder int32,
+	resourceIdentifier string,
 ) (uuid.UUID, uuid.UUID) {
 	t.Helper()
 
+	tunnelName := "meta-tunnel-" + uuid.NewString()[:8]
 	tunneledID, err := uuid.NewV7()
 	require.NoError(t, err)
 	tunneledServer, err := tunneledmcprepo.New(ti.conn).CreateServer(ctx, tunneledmcprepo.CreateServerParams{
-		ID:        tunneledID,
-		ProjectID: projectID,
-		Name:      "meta-tunnel-" + uuid.NewString()[:8],
-		KeyHash:   uuid.NewString(),
-		KeyPrefix: "gram_tunnel_test",
+		ID:                 tunneledID,
+		ProjectID:          projectID,
+		Name:               tunnelName,
+		KeyHash:            uuid.NewString(),
+		KeyPrefix:          "gram_tunnel_test",
+		ResourceIdentifier: conv.ToPGTextEmpty(resourceIdentifier),
 	})
 	require.NoError(t, err)
 
@@ -98,7 +102,7 @@ func TestServePublic_MetaEndpoint_ExecuteTool_TunneledMemberRoutesOwnToken(t *te
 	meta := createMetaMcpEndpoint(t, ctx, ti.conn, projectID, orgID, metaSlug, sharedIssuerID)
 
 	gateway := &fakeTunnelGateway{t: t, agentSessionID: "agent-1", backendSessionID: "backend-secret-session", legacy: false, dead: false, challenge: ""}
-	tunnelID, memberIssuerID := seedTunneledMetaMember(t, ctx, ti, projectID, meta.ID, "Tunneled member", "member-tunnel", 0)
+	tunnelID, memberIssuerID := seedTunneledMetaMember(t, ctx, ti, projectID, meta.ID, "Tunneled member", "member-tunnel", 0, "")
 	gatewayServer := httptest.NewServer(gateway)
 	t.Cleanup(gatewayServer.Close)
 	require.NoError(t, ti.tunnelRoutes.Publish(ctx, tunnelID.String(), gatewayServer.URL, time.Hour))
@@ -134,6 +138,95 @@ func TestServePublic_MetaEndpoint_ExecuteTool_TunneledMemberRoutesOwnToken(t *te
 		"the member must keep forwarding its own token, never a sibling's")
 }
 
+// A tunneled member that records a resource identifier accepts the grant
+// minted against its own authorization server and qualified to that
+// identifier — the whole point of recording one — and carries it through the
+// tunnel gateway on the wire.
+func TestServePublic_MetaEndpoint_ExecuteTool_TunneledMemberRoutesIdentifierQualifiedToken(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+	projectID := *authCtx.ProjectID
+	orgID := authCtx.ActiveOrganizationID
+
+	const identifier = "https://tunneled.internal/mcp"
+
+	sharedIssuerID := createUserSessionIssuer(t, ctx, ti.conn, projectID)
+	metaSlug := "meta-tunnel-rid-" + uuid.NewString()[:8]
+	meta := createMetaMcpEndpoint(t, ctx, ti.conn, projectID, orgID, metaSlug, sharedIssuerID)
+
+	gateway := &fakeTunnelGateway{t: t, agentSessionID: "agent-rid", backendSessionID: "backend-rid", legacy: false, dead: false, challenge: ""}
+	tunnelID, memberIssuerID := seedTunneledMetaMember(t, ctx, ti, projectID, meta.ID, "Tunneled member", "member-tunnel", 0, identifier)
+	gatewayServer := httptest.NewServer(gateway)
+	t.Cleanup(gatewayServer.Close)
+	require.NoError(t, ti.tunnelRoutes.Publish(ctx, tunnelID.String(), gatewayServer.URL, time.Hour))
+
+	client := createConsentRemoteClient(t, ctx, ti.conn, projectID, orgID, "meta-tunnel-rid", "", []uuid.UUID{sharedIssuerID, memberIssuerID})
+	require.NoError(t, remotesessions.ResyncMCPServerRemoteSessionIssuers(ctx, ti.conn, orgID, projectID, []uuid.UUID{memberIssuerID}))
+	subject := urn.NewUserSubject("meta-tunnel-rid-user-" + uuid.NewString())
+	insertQualifiedRemoteSessionToken(t, ctx, ti, sharedIssuerID, client, subject, "token-qualified", identifier)
+
+	bearer := mintMetaIssuerBearer(t, ti, metaSlug, sharedIssuerID, subject)
+
+	rpc := executeMetaTool(t, ti, metaSlug, bearer, "member-tunnel--ping")
+	text, isError := metaToolResultText(t, rpc)
+	require.False(t, isError, "a grant qualified to the member's identifier must serve: %s", text)
+	require.Equal(t, "Bearer token-qualified", gateway.forwardFor(`"tools/call"`).Get("Authorization"))
+}
+
+// A recorded identifier selects among grants under the member's own issuer;
+// it never reaches across issuers. Otherwise an operator holding mcp:write
+// could name a sibling's upstream as their tunnel's identifier and have every
+// user's credential for that upstream delivered into the tunnel.
+func TestServePublic_MetaEndpoint_ExecuteTool_TunneledIdentifierNeverHarvestsSiblingToken(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+	projectID := *authCtx.ProjectID
+	orgID := authCtx.ActiveOrganizationID
+
+	// The tunnel claims the sibling's audience as its own identifier.
+	const vendorResource = "https://api.vendor.example.com/mcp"
+
+	sharedIssuerID := createUserSessionIssuer(t, ctx, ti.conn, projectID)
+	metaSlug := "meta-tunnel-harvest-" + uuid.NewString()[:8]
+	meta := createMetaMcpEndpoint(t, ctx, ti.conn, projectID, orgID, metaSlug, sharedIssuerID)
+
+	gateway := &fakeTunnelGateway{t: t, agentSessionID: "agent-h", backendSessionID: "backend-h", legacy: false, dead: false, challenge: ""}
+	tunnelID, memberIssuerID := seedTunneledMetaMember(t, ctx, ti, projectID, meta.ID, "Tunneled member", "member-tunnel", 0, vendorResource)
+	gatewayServer := httptest.NewServer(gateway)
+	t.Cleanup(gatewayServer.Close)
+	require.NoError(t, ti.tunnelRoutes.Publish(ctx, tunnelID.String(), gatewayServer.URL, time.Hour))
+
+	// The member has a provider of its own, so it does resolve a derived
+	// issuer to key on — the routing decision is about which entry it may
+	// take, not about the member being unroutable. The subject never
+	// connected that provider, so the map holds no entry under it.
+	createConsentRemoteClient(t, ctx, ti.conn, projectID, orgID, "meta-tunnel-own", "", []uuid.UUID{sharedIssuerID, memberIssuerID})
+	require.NoError(t, remotesessions.ResyncMCPServerRemoteSessionIssuers(ctx, ti.conn, orgID, projectID, []uuid.UUID{memberIssuerID}))
+
+	// The victim credential belongs to a different provider client, minted
+	// against the vendor's authorization server and correctly audienced to
+	// it — so a resource scan would match the tunnel's claimed identifier.
+	vendorClient := createConsentRemoteClient(t, ctx, ti.conn, projectID, orgID, "meta-tunnel-vendor", "", []uuid.UUID{sharedIssuerID})
+	subject := urn.NewUserSubject("meta-tunnel-harvest-user-" + uuid.NewString())
+	insertQualifiedRemoteSessionToken(t, ctx, ti, sharedIssuerID, vendorClient, subject, "victim-vendor-token", vendorResource)
+
+	bearer := mintMetaIssuerBearer(t, ti, metaSlug, sharedIssuerID, subject)
+
+	rpc := executeMetaTool(t, ti, metaSlug, bearer, "member-tunnel--ping")
+	text, isError := metaToolResultText(t, rpc)
+	require.False(t, isError, "the member must still serve, anonymously: %s", text)
+	require.Empty(t, gateway.forwardFor(`"tools/call"`).Get("Authorization"),
+		"a credential minted through another authorization server must never reach the tunnel")
+}
+
 // The partial-resolution leak guard: a tunneled member whose own provider the
 // subject never connected must be called anonymously, even when the session
 // holds another tunneled sibling's unqualified credential — the exact map
@@ -154,8 +247,8 @@ func TestServePublic_MetaEndpoint_ExecuteTool_TunneledMemberNeverBorrowsSiblingT
 
 	gatewayA := &fakeTunnelGateway{t: t, agentSessionID: "agent-a", backendSessionID: "backend-a", legacy: false, dead: false, challenge: ""}
 	gatewayB := &fakeTunnelGateway{t: t, agentSessionID: "agent-b", backendSessionID: "backend-b", legacy: false, dead: false, challenge: ""}
-	tunnelAID, memberAIssuerID := seedTunneledMetaMember(t, ctx, ti, projectID, meta.ID, "Tunneled member A", "member-tunnel-a", 0)
-	tunnelBID, memberBIssuerID := seedTunneledMetaMember(t, ctx, ti, projectID, meta.ID, "Tunneled member B", "member-tunnel-b", 1)
+	tunnelAID, memberAIssuerID := seedTunneledMetaMember(t, ctx, ti, projectID, meta.ID, "Tunneled member A", "member-tunnel-a", 0, "")
+	tunnelBID, memberBIssuerID := seedTunneledMetaMember(t, ctx, ti, projectID, meta.ID, "Tunneled member B", "member-tunnel-b", 1, "")
 	serverA := httptest.NewServer(gatewayA)
 	t.Cleanup(serverA.Close)
 	serverB := httptest.NewServer(gatewayB)

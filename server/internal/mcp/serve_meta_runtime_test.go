@@ -338,7 +338,7 @@ func TestServePublic_MetaEndpoint_ListServers_StatusByBackend(t *testing.T) {
 	proxiedSlug := "member-remote-" + uuid.NewString()[:8]
 	seedMetaMember(t, ctx, ti.conn, *authCtx.ProjectID, meta.ID, "remote member", proxiedSlug, 2, mcpservers.VisibilityPrivate)
 	tunneledSlug := "member-tunnel-" + uuid.NewString()[:8]
-	tunnelID, _ := seedTunneledMetaMember(t, ctx, ti, *authCtx.ProjectID, meta.ID, "tunneled member", tunneledSlug, 3)
+	tunnelID, _ := seedTunneledMetaMember(t, ctx, ti, *authCtx.ProjectID, meta.ID, "tunneled member", tunneledSlug, 3, "")
 
 	listStatuses := func() map[string]string {
 		envelope := callMetaTool(t, ctx, ti, slug, "list_servers", map[string]any{})

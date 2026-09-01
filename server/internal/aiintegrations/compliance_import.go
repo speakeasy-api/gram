@@ -19,6 +19,7 @@ import (
 	chatrepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
+	"github.com/speakeasy-api/gram/server/internal/metering"
 	anthropicapi "github.com/speakeasy-api/gram/server/internal/thirdparty/anthropic"
 	usersrepo "github.com/speakeasy-api/gram/server/internal/users/repo"
 )
@@ -60,7 +61,7 @@ type discoveredActivity struct {
 // messagePageBatch is one fetched page of chat messages ready to write.
 type messagePageBatch struct {
 	chatID uuid.UUID
-	rows   []chatrepo.CreateExternalChatMessageParams
+	rows   []chat.ExternalMessageWrite
 	// lastID is the page's pagination token; it advances the per-chat
 	// message cursor only after the page's rows are durably written.
 	lastID string
@@ -530,8 +531,8 @@ func (s *ComplianceImportService) upsertMessagePageChat(ctx context.Context, cfg
 	return nil
 }
 
-func (s *ComplianceImportService) buildExternalMessageRows(ctx context.Context, cfg Config, chatID uuid.UUID, page *anthropicapi.ChatMessagesPage, activity anthropicapi.Activity, users *connectedUserResolver) ([]chatrepo.CreateExternalChatMessageParams, error) {
-	rows := make([]chatrepo.CreateExternalChatMessageParams, 0, len(page.Messages))
+func (s *ComplianceImportService) buildExternalMessageRows(ctx context.Context, cfg Config, chatID uuid.UUID, page *anthropicapi.ChatMessagesPage, activity anthropicapi.Activity, users *connectedUserResolver) ([]chat.ExternalMessageWrite, error) {
+	rows := make([]chat.ExternalMessageWrite, 0, len(page.Messages))
 	userID, err := users.resolve(ctx, page.User.EmailAddress)
 	if err != nil {
 		return nil, err
@@ -563,33 +564,42 @@ func (s *ComplianceImportService) buildExternalMessageRows(ctx context.Context, 
 			contentRaw = msg.Content
 		}
 
-		rows = append(rows, chatrepo.CreateExternalChatMessageParams{
-			ID:                uuid.Nil,
-			ChatID:            chatID,
-			Role:              msg.Role,
-			ProjectID:         cfg.ProjectID,
-			Content:           content,
-			ContentRaw:        contentRaw,
-			ContentAssetUrl:   pgtype.Text{String: "", Valid: false},
-			StorageError:      pgtype.Text{String: "", Valid: false},
-			Model:             conv.ToPGText(model),
-			MessageID:         pgtype.Text{String: "", Valid: false},
-			ToolCallID:        pgtype.Text{String: "", Valid: false},
-			UserID:            conv.ToPGText(userID),
-			ExternalUserID:    conv.ToPGText(page.User.ID),
-			ExternalMessageID: conv.ToPGText(msg.ID),
-			FinishReason:      pgtype.Text{String: "", Valid: false},
-			ToolCalls:         nil,
-			PromptTokens:      0,
-			CompletionTokens:  0,
-			TotalTokens:       0,
-			Origin:            conv.ToPGText(page.Href),
-			UserAgent:         conv.ToPGTextEmpty(activity.Actor.UserAgent),
-			IpAddress:         conv.ToPGTextEmpty(activity.Actor.IPAddress),
-			Source:            conv.ToPGText(source),
-			ContentHash:       nil,
-			Generation:        0,
-			CreatedAt:         conv.ToPGTimestamptz(createdAt),
+		rows = append(rows, chat.ExternalMessageWrite{
+			Params: chatrepo.CreateExternalChatMessageParams{
+				ID:                uuid.Nil,
+				ChatID:            chatID,
+				Role:              msg.Role,
+				ProjectID:         cfg.ProjectID,
+				Content:           content,
+				ContentRaw:        contentRaw,
+				ContentAssetUrl:   pgtype.Text{String: "", Valid: false},
+				StorageError:      pgtype.Text{String: "", Valid: false},
+				Model:             conv.ToPGText(model),
+				MessageID:         pgtype.Text{String: "", Valid: false},
+				ToolCallID:        pgtype.Text{String: "", Valid: false},
+				UserID:            conv.ToPGText(userID),
+				ExternalUserID:    conv.ToPGText(page.User.ID),
+				ExternalMessageID: conv.ToPGText(msg.ID),
+				FinishReason:      pgtype.Text{String: "", Valid: false},
+				ToolCalls:         nil,
+				PromptTokens:      0,
+				CompletionTokens:  0,
+				TotalTokens:       0,
+				Origin:            conv.ToPGText(page.Href),
+				UserAgent:         conv.ToPGTextEmpty(activity.Actor.UserAgent),
+				IpAddress:         conv.ToPGTextEmpty(activity.Actor.IPAddress),
+				Source:            conv.ToPGText(source),
+				ContentHash:       nil,
+				Generation:        0,
+				CreatedAt:         conv.ToPGTimestamptz(createdAt),
+			},
+			BillingUserID:  userID,
+			WorkloadSource: metering.WorkloadSourceImport,
+			UserEmail:      page.User.EmailAddress,
+			Provider:       anthropicAnalyticsProviderTag,
+			HookHostname:   "",
+			AccountType:    complianceAccountTypeTeam,
+			BillingMode:    cfg.BillingMode,
 		})
 	}
 	return rows, nil

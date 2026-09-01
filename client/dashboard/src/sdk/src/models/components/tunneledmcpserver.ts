@@ -86,6 +86,10 @@ export type TunneledMcpServer = {
    */
   projectId: string;
   /**
+   * RFC 9728 protected resource identifier of the tunneled server, used only for exact-match credential routing and never dialed by Gram
+   */
+  resourceIdentifier?: string | undefined;
+  /**
    * Stored lifecycle status for a tunneled MCP server source
    */
   status: TunneledMcpServerStatus;
@@ -127,6 +131,7 @@ export const TunneledMcpServer$inboundSchema: z.ZodMiniType<
     ),
     name: z.string(),
     project_id: z.string(),
+    resource_identifier: z.optional(z.string()),
     status: TunneledMcpServerStatus$inboundSchema,
     updated_at: z.pipe(
       z.iso.datetime({ offset: true }),
@@ -144,6 +149,7 @@ export const TunneledMcpServer$inboundSchema: z.ZodMiniType<
       "key_prefix": "keyPrefix",
       "last_seen_at": "lastSeenAt",
       "project_id": "projectId",
+      "resource_identifier": "resourceIdentifier",
       "updated_at": "updatedAt",
     });
   }),
