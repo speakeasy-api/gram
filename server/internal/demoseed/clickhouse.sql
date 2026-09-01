@@ -216,6 +216,7 @@ SELECT
   concat(
     '{"prompt.id":"demo-unattributed-prompt-', toString(i), '"',
     ',"event.name":"api_request"',
+    ',"gen_ai.response.id":"', resp_id, '"',
     ',"input_tokens":', toString(2200 + (i * 37) % 900),
     ',"output_tokens":', toString(180 + (i * 11) % 220),
     ',"cache_read_tokens":', toString(9000 + (i * 53) % 4000),
@@ -241,6 +242,7 @@ FROM (
     -- In the demo domain so the tenant rewrite reaches it, but deliberately
     -- not one of the seeded members: that mismatch is the whole point.
     'ana.vidal@demo.getgram.ai' AS actor,
+    concat('msg_', substring(lower(hex(MD5(concat('gram-demo-unattributed-resp-', toString(number + 1))))), 1, 24)) AS resp_id,
     lower(hex(MD5(concat('gram-demo-unattributed-chat-', toString(number + 1))))) AS ch,
     concat(substring(ch, 1, 8), '-', substring(ch, 9, 4), '-5', substring(ch, 14, 3), '-8',
            substring(ch, 18, 3), '-', substring(ch, 21, 12)) AS chat_id,
@@ -266,6 +268,7 @@ SELECT
   concat(
     '{"prompt.id":"demo-prompt-', toString(i), '-', toString(turn), '"',
     ',"event.name":"api_request"',
+    ',"gen_ai.response.id":"msg_', substring(lower(hex(MD5(concat('gram-demo-respid-', toString(i), '-', toString(turn))))), 1, 24), '"',
     ',"input_tokens":', toString(in_tok),
     ',"output_tokens":', toString(out_tok),
     ',"cache_read_tokens":', toString(in_tok * 6),
@@ -482,6 +485,7 @@ SELECT
   lower(hex(MD5(concat('gram-demo-usagetrace-', toString(i))))),
   concat(
     '{"gen_ai.conversation.id":"', chat_id, '"',
+    ',"gen_ai.response.id":"msg_', substring(lower(hex(MD5(concat('gram-demo-cursor-respid-', toString(i))))), 1, 24), '"',
     ',"gen_ai.usage.input_tokens":', toString(in_tok),
     ',"gen_ai.usage.output_tokens":', toString(out_tok),
     ',"gen_ai.usage.cache_read.input_tokens":', toString(in_tok * 4),
@@ -1115,6 +1119,17 @@ SELECT throwIf(
      (toUUID('dec0de00-0000-4000-a000-000000000001'))
    ) < 180,
   'demo seed postflight: chat_session_summaries_mv missing sessions');
+
+-- Every request-shaped row carries gen_ai.response.id, the field the per-user
+-- summary counts chat requests by. Without it "Chat requests" reads 0 on every
+-- identity while the chat count beside it reads correctly, which looks like a
+-- broken panel rather than absent data.
+SELECT throwIf(
+  (SELECT uniqExact(toString(attributes.gen_ai.response.id)) FROM telemetry_logs
+   WHERE gram_project_id IN (toUUID('dec0de00-0000-4000-a000-000000000001'))
+     AND toString(attributes.gen_ai.response.id) != ''
+   ) < 180,
+  'demo seed postflight: request rows missing gen_ai.response.id');
 
 SELECT throwIf(
   (SELECT count() FROM attribute_metrics_summaries WHERE gram_project_id IN
