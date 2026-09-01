@@ -166,7 +166,10 @@ function IdentityDetailContent(): JSX.Element {
         {/* Rail beside the content, not in the app sidebar: the reader keeps
             the project nav they arrived with. The recessed ground separates
             the navigation from the panels, which carry the card surface. */}
-        <div className="bg-background flex min-h-0 flex-1 flex-col gap-6 px-8 py-8 lg:flex-row lg:gap-8">
+        {/* pb-16, not py-8: the body is the scroll container, so a symmetric
+            inset leaves the last panel sitting flush against the bottom edge
+            of the viewport with nothing under it. */}
+        <div className="bg-background flex min-h-0 flex-1 flex-col gap-6 px-8 pt-8 pb-16 lg:flex-row lg:gap-8">
           <IdentityRail
             items={identityRailItems(
               orgRoutes,

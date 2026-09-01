@@ -169,6 +169,8 @@ func (s *Service) ListShadowMCPInventory(ctx context.Context, payload *gen.ListS
 			Limit:               shadowMCPInventoryUsageTraceLimit,
 			OrganizationID:      "",
 			UserKeys:            nil,
+			From:                nil,
+			To:                  nil,
 		})
 		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "list shadow mcp inventory usage").LogError(ctx, s.logger)
@@ -370,6 +372,8 @@ func (s *Service) GetShadowMCPInventoryServer(ctx context.Context, payload *gen.
 		Limit:               shadowMCPInventoryUsageTraceLimit,
 		OrganizationID:      "",
 		UserKeys:            nil,
+		From:                nil,
+		To:                  nil,
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "list shadow mcp inventory usage").LogError(ctx, s.logger)
@@ -554,6 +558,13 @@ func (s *Service) ListShadowMCPInventoryServersForUser(ctx context.Context, payl
 		return nil, err
 	}
 
+	// The window is a filter, not a required frame: with neither bound this
+	// still answers over the whole history.
+	from, to, err := parseChallengeWindow(payload.From, payload.To)
+	if err != nil {
+		return nil, oops.E(oops.CodeBadRequest, err, "invalid shadow mcp window").LogError(ctx, s.logger)
+	}
+
 	chRepo := telemetryrepo.New(s.chConn)
 	usageRows, err := chRepo.ListShadowMCPInventoryUsage(ctx, telemetryrepo.ListShadowMCPInventoryUsageParams{
 		// Gated, not the raw org id: the fold is behind a rollout flag, and
@@ -565,6 +576,8 @@ func (s *Service) ListShadowMCPInventoryServersForUser(ctx context.Context, payl
 		CanonicalServerURLs: nil,
 		UserKeys:            userKeys,
 		Limit:               shadowMCPInventoryUsageTraceLimit,
+		From:                from,
+		To:                  to,
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "list shadow mcp inventory usage for user").LogError(ctx, s.logger)

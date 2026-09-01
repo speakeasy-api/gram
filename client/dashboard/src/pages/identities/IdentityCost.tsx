@@ -1,4 +1,8 @@
-import { StatTile, StatTileGroup } from "@/components/chart/stat-tile";
+import {
+  StatTile,
+  StatTileGroup,
+  StatTileSkeleton,
+} from "@/components/chart/stat-tile";
 import { useLocation } from "react-router";
 import { useOrgRoutes, useRoutes } from "@/routes";
 import { IdentityPanel, IdentityPanelEmpty } from "./IdentityPanel";
@@ -80,35 +84,46 @@ export default function IdentityCost(): JSX.Element {
     >
       <div className="flex flex-col gap-6">
         <StatTileGroup className="overflow-x-auto [&>*]:min-w-[11.5rem]">
-          <StatTile
-            title="Spend"
-            subtext={costStanding}
-            value={metrics?.totalCost ?? 0}
-            format="currency"
-            tone="neutral"
-            icon="credit-card"
-          />
-          <StatTile
-            title="Input tokens"
-            value={metrics?.totalInputTokens ?? 0}
-            format="compact"
-            tone="neutral"
-            icon="arrow-down-to-line"
-          />
-          <StatTile
-            title="Output tokens"
-            value={metrics?.totalOutputTokens ?? 0}
-            format="compact"
-            tone="neutral"
-            icon="arrow-up-from-line"
-          />
-          <StatTile
-            title="Cache reads"
-            value={metrics?.cacheReadInputTokens ?? 0}
-            format="compact"
-            tone="neutral"
-            icon="database"
-          />
+          {metricsQuery.isLoading ? (
+            <>
+              <StatTileSkeleton />
+              <StatTileSkeleton />
+              <StatTileSkeleton />
+              <StatTileSkeleton />
+            </>
+          ) : (
+            <>
+              <StatTile
+                title="Spend"
+                subtext={costStanding}
+                value={metrics?.totalCost ?? 0}
+                format="currency"
+                tone="neutral"
+                icon="credit-card"
+              />
+              <StatTile
+                title="Input tokens"
+                value={metrics?.totalInputTokens ?? 0}
+                format="compact"
+                tone="neutral"
+                icon="arrow-down-to-line"
+              />
+              <StatTile
+                title="Output tokens"
+                value={metrics?.totalOutputTokens ?? 0}
+                format="compact"
+                tone="neutral"
+                icon="arrow-up-from-line"
+              />
+              <StatTile
+                title="Cache reads"
+                value={metrics?.cacheReadInputTokens ?? 0}
+                format="compact"
+                tone="neutral"
+                icon="database"
+              />
+            </>
+          )}
         </StatTileGroup>
 
         {/* Two compositions rather than two lists. Where the tokens went is
@@ -120,6 +135,8 @@ export default function IdentityCost(): JSX.Element {
             title="Where the tokens went"
             handoffLabel="Costs"
             handoffHref={handoffs.costs}
+            loading={metricsQuery.isLoading}
+            loadingVariant="block"
             footer={cacheShareLabel}
           >
             {tokenSegments.length === 0 ? (
@@ -140,6 +157,8 @@ export default function IdentityCost(): JSX.Element {
             title="Model mix"
             handoffLabel="Costs"
             handoffHref={handoffs.costs}
+            loading={metricsQuery.isLoading}
+            loadingVariant="block"
             footer={
               // Cost aggregates over every address the subject is known by,
               // which is why this can exceed what one address alone would show.

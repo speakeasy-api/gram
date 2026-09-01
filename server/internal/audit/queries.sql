@@ -122,6 +122,16 @@ WHERE a.organization_id = @organization_id
     sqlc.narg(acting_surface)::text IS NULL
     OR COALESCE(a.acting_surface, 'unknown') = sqlc.narg(acting_surface)::text
   )
+  -- Half-open window, so consecutive ranges neither double-count a row nor
+  -- drop one that lands exactly on a boundary.
+  AND (
+    sqlc.narg(created_from)::timestamptz IS NULL
+    OR a.created_at >= sqlc.narg(created_from)::timestamptz
+  )
+  AND (
+    sqlc.narg(created_to)::timestamptz IS NULL
+    OR a.created_at < sqlc.narg(created_to)::timestamptz
+  )
 ORDER BY a.seq DESC
 LIMIT 51;
 

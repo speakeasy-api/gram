@@ -344,6 +344,16 @@ WHERE a.organization_id = $1
     $10::text IS NULL
     OR COALESCE(a.acting_surface, 'unknown') = $10::text
   )
+  -- Half-open window, so consecutive ranges neither double-count a row nor
+  -- drop one that lands exactly on a boundary.
+  AND (
+    $11::timestamptz IS NULL
+    OR a.created_at >= $11::timestamptz
+  )
+  AND (
+    $12::timestamptz IS NULL
+    OR a.created_at < $12::timestamptz
+  )
 ORDER BY a.seq DESC
 LIMIT 51
 `
@@ -359,6 +369,8 @@ type ListAuditLogsParams struct {
 	SubjectID              pgtype.Text
 	SubjectIds             []string
 	ActingSurface          pgtype.Text
+	CreatedFrom            pgtype.Timestamptz
+	CreatedTo              pgtype.Timestamptz
 }
 
 type ListAuditLogsRow struct {
@@ -408,6 +420,8 @@ func (q *Queries) ListAuditLogs(ctx context.Context, arg ListAuditLogsParams) ([
 		arg.SubjectID,
 		arg.SubjectIds,
 		arg.ActingSurface,
+		arg.CreatedFrom,
+		arg.CreatedTo,
 	)
 	if err != nil {
 		return nil, err

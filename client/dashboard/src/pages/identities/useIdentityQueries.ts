@@ -230,9 +230,14 @@ export function useIdentityChats(
 
 export function useIdentityAuditLogs(
   identity: IdentityModel,
+  from: Date,
+  to: Date,
 ): ReturnType<typeof useAuditLogs> {
   const actorId = identity.userIds[0];
-  return useAuditLogs({ actorId }, undefined, { ...OFF, enabled: !!actorId });
+  return useAuditLogs({ actorId, from, to }, undefined, {
+    ...OFF,
+    enabled: !!actorId,
+  });
 }
 
 export function useIdentityRisk(
@@ -278,12 +283,14 @@ export function useIdentityMember(identity: IdentityModel): {
  */
 export function useIdentityChallenges(
   identity: IdentityModel,
+  from: Date,
+  to: Date,
 ): ReturnType<typeof useChallenges> {
   const { member } = useIdentityMember(identity);
   const fallback = identity.workosUserId ?? identity.userIds[0];
   const principalUrn =
     member?.principalUrn ?? (fallback ? `user:${fallback}` : "");
-  return useChallenges({ principalUrn, limit: 25 }, undefined, {
+  return useChallenges({ principalUrn, limit: 25, from, to }, undefined, {
     ...OFF,
     enabled: !!principalUrn,
   });
@@ -291,6 +298,8 @@ export function useIdentityChallenges(
 
 export function useIdentityShadowServers(
   identity: IdentityModel,
+  from: Date,
+  to: Date,
   limit = 10,
 ): ReturnType<typeof useShadowMCPInventoryServersForUser> {
   const project = useIdentityProject();
@@ -299,7 +308,7 @@ export function useIdentityShadowServers(
   // address for some agents and an agent-side id for others — pass both sets.
   const userKeys = [...identity.emails, ...identity.externalUserIds];
   return useShadowMCPInventoryServersForUser(
-    { projectId: project.id, userKeys, limit },
+    { projectId: project.id, userKeys, from, to, limit },
     undefined,
     { ...OFF, enabled: canReadRisk && userKeys.length > 0 },
   );

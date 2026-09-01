@@ -105,7 +105,26 @@ func (s *Service) List(ctx context.Context, payload *gen.ListPayload) (*gen.List
 		SubjectIds:             normalizeSubjectIDs(payload.SubjectIds),
 		ActingSurface:          conv.PtrToPGTextEmpty(payload.ActingSurface),
 		IncludeAssistantEvents: false,
+		CreatedFrom:            pgtype.Timestamptz{Time: time.Time{}, Valid: false, InfinityModifier: pgtype.Finite},
+		CreatedTo:              pgtype.Timestamptz{Time: time.Time{}, Valid: false, InfinityModifier: pgtype.Finite},
 	}
+
+	// The window is a filter, not a required frame: a caller that sends
+	// neither bound still gets the whole history, which is what every existing
+	// caller of this endpoint expects.
+	createdFrom, err := parseOptionalWindowBound(payload.From)
+	if err != nil {
+		return nil, oops.E(oops.CodeBadRequest, err, "invalid from").LogError(ctx, s.logger)
+	}
+	createdTo, err := parseOptionalWindowBound(payload.To)
+	if err != nil {
+		return nil, oops.E(oops.CodeBadRequest, err, "invalid to").LogError(ctx, s.logger)
+	}
+	if createdFrom != nil && createdTo != nil && !createdFrom.Before(*createdTo) {
+		return nil, oops.E(oops.CodeBadRequest, nil, "from must be before to").LogError(ctx, s.logger)
+	}
+	params.CreatedFrom = conv.PtrToPGTimestamptz(createdFrom)
+	params.CreatedTo = conv.PtrToPGTimestamptz(createdTo)
 
 	if payload.Cursor != nil && *payload.Cursor != "" {
 		seq, err := audit.DecodeCursor(*payload.Cursor)
@@ -163,6 +182,26 @@ func (s *Service) List(ctx context.Context, payload *gen.ListPayload) (*gen.List
 
 func shouldMaskCustomerActor(isAdminActor, isSpeakeasyActor bool) bool {
 	return isAdminActor || isSpeakeasyActor
+}
+
+// parseOptionalWindowBound reads an RFC 3339 bound sent as a query parameter.
+// A blank string means "no bound" rather than "the zero time": the dashboard
+// clears a range by sending the parameter empty, and reading that as year zero
+// would silently filter every row out.
+func parseOptionalWindowBound(raw *string) (*time.Time, error) {
+	if raw == nil {
+		return nil, nil
+	}
+	trimmed := strings.TrimSpace(*raw)
+	if trimmed == "" {
+		return nil, nil
+	}
+	parsed, err := time.Parse(time.RFC3339Nano, trimmed)
+	if err != nil {
+		return nil, fmt.Errorf("parse timestamp: %w", err)
+	}
+	utc := parsed.UTC()
+	return &utc, nil
 }
 
 // speakeasyActorIDs returns which of the given user actor IDs belong to the

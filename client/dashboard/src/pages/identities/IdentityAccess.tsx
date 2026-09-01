@@ -17,6 +17,7 @@ import {
   useIdentityChallenges,
   useIdentityMember,
   useIdentityProject,
+  useIdentityWindow,
 } from "./useIdentityQueries";
 
 const RECENT_CHALLENGES = 5;
@@ -29,8 +30,9 @@ export default function IdentityAccess(): JSX.Element {
   // and every handoff would otherwise resolve to a path with the slug missing.
   const routes = useRoutes({ projectSlug: project.slug });
   const { identity } = useIdentityOutlet();
+  const { from, to } = useIdentityWindow();
   const orgRoutes = useOrgRoutes();
-  const { member } = useIdentityMember(identity);
+  const { member, query: membersQuery } = useIdentityMember(identity);
   const handoffs = identityHandoffs(
     identity,
     routes,
@@ -44,7 +46,10 @@ export default function IdentityAccess(): JSX.Element {
     new URLSearchParams(location.search),
   );
   const rolesQuery = useRoles(undefined, undefined, { throwOnError: false });
-  const challengesQuery = useIdentityChallenges(identity);
+  const challengesQuery = useIdentityChallenges(identity, from, to);
+  // Roles are the join of the member row and the role catalogue, so both have
+  // to land before the panels can say anything true about them.
+  const rolesLoading = rolesQuery.isLoading || membersQuery.isLoading;
 
   const rolesById = new Map(
     (rolesQuery.data?.roles ?? []).map((role) => [role.id, role]),
@@ -89,6 +94,8 @@ export default function IdentityAccess(): JSX.Element {
           title="Roles"
           handoffLabel="Roles & Permissions"
           handoffHref={handoffs.roles}
+          loading={rolesLoading}
+          loadingVariant="block"
           footer={
             member ? undefined : "No org member row resolves to this identity."
           }
@@ -114,6 +121,7 @@ export default function IdentityAccess(): JSX.Element {
           title="What this identity can do"
           handoffLabel="Roles & Permissions"
           handoffHref={handoffs.roles}
+          loading={rolesLoading}
           footer={
             permissions.length > 0
               ? "Granted by the roles above, across every project."
@@ -145,6 +153,8 @@ export default function IdentityAccess(): JSX.Element {
           title="Authorization challenges"
           handoffLabel="Roles & Permissions"
           handoffHref={handoffs.challenges}
+          loading={challengesQuery.isLoading}
+          loadingRows={RECENT_CHALLENGES}
           footer={
             challenges.length > 0
               ? `${denied.length} denied of ${challenges.length} recorded`

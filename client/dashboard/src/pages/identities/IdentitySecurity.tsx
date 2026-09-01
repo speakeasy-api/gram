@@ -55,8 +55,8 @@ export default function IdentitySecurity(): JSX.Element {
   );
 
   const riskQuery = useIdentityRisk(identity, from, to);
-  const challengesQuery = useIdentityChallenges(identity);
-  const shadowQuery = useIdentityShadowServers(identity);
+  const challengesQuery = useIdentityChallenges(identity, from, to);
+  const shadowQuery = useIdentityShadowServers(identity, from, to);
 
   const categories = riskQuery.data?.categories ?? [];
   const rules = riskQuery.data?.rules ?? [];
@@ -87,6 +87,8 @@ export default function IdentitySecurity(): JSX.Element {
           title="Risk findings"
           handoffLabel="Risk Events"
           handoffHref={handoffs.riskEvents}
+          loading={riskQuery.isLoading}
+          loadingVariant="block"
           footer={
             matchedOn > 0
               ? `Matched on ${matchedOn} identifier${matchedOn === 1 ? "" : "s"}`
@@ -116,6 +118,8 @@ export default function IdentitySecurity(): JSX.Element {
           title="Findings by rule"
           handoffLabel="Risk Events"
           handoffHref={handoffs.riskEvents}
+          loading={riskQuery.isLoading}
+          loadingVariant="block"
           footer={
             rules.length > TOP_RULES
               ? `Top ${TOP_RULES} of ${rules.length} rules`
@@ -145,7 +149,8 @@ export default function IdentitySecurity(): JSX.Element {
           title="Shadow MCP servers"
           handoffLabel="Shadow MCP"
           handoffHref={handoffs.shadowMcp}
-          footer="Servers this person reached, not the project-wide inventory."
+          loading={shadowQuery.isLoading}
+          footer="Servers this person reached in this window, not the project-wide inventory."
         >
           {shadowServers.length === 0 ? (
             <IdentityPanelEmpty>
@@ -172,6 +177,7 @@ export default function IdentitySecurity(): JSX.Element {
           title="Denied authorization challenges"
           handoffLabel="Roles & Permissions"
           handoffHref={handoffs.challenges}
+          loading={challengesQuery.isLoading}
           footer={
             denied.length > 0
               ? `${denied.filter((c) => !c.resolvedAt).length} still unresolved`

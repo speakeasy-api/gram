@@ -1,4 +1,8 @@
-import { StatTile, StatTileGroup } from "@/components/chart/stat-tile";
+import {
+  StatTile,
+  StatTileGroup,
+  StatTileSkeleton,
+} from "@/components/chart/stat-tile";
 import { useLocation } from "react-router";
 import { useOrgRoutes, useRoutes } from "@/routes";
 import { IdentityPanel, IdentityPanelEmpty } from "./IdentityPanel";
@@ -44,7 +48,11 @@ export default function IdentityUsage(): JSX.Element {
   const models = [...(metrics?.models ?? [])].sort((a, b) => b.count - a.count);
 
   // hookSources rides on the roster row, not the per-user summary.
-  const { self } = useIdentityPeers(identity, from, to);
+  const { self, isPending: peersPending } = useIdentityPeers(
+    identity,
+    from,
+    to,
+  );
   const agents = [...(self?.hookSources ?? [])]
     .filter((source) => source.source && source.eventCount > 0)
     .sort((a, b) => b.eventCount - a.eventCount);
@@ -60,42 +68,60 @@ export default function IdentityUsage(): JSX.Element {
     >
       <div className="flex flex-col gap-6">
         <StatTileGroup className="overflow-x-auto [&>*]:min-w-[11.5rem]">
-          <StatTile
-            title="Tool calls"
-            value={metrics?.totalToolCalls ?? 0}
-            format="compact"
-            tone="information"
-            icon="wrench"
-          />
-          <StatTile
-            title="Failed calls"
-            value={metrics?.toolCallFailure ?? 0}
-            format="compact"
-            tone={(metrics?.toolCallFailure ?? 0) > 0 ? "warning" : "neutral"}
-            icon="triangle-alert"
-          />
-          <StatTile
-            title="Chat requests"
-            value={metrics?.totalChatRequests ?? 0}
-            format="compact"
-            tone="information"
-            icon="message-square"
-          />
-          <StatTile
-            title="Tokens"
-            value={metrics?.totalTokens ?? 0}
-            format="compact"
-            tone="neutral"
-            icon="hash"
-          />
+          {metricsQuery.isLoading ? (
+            <>
+              <StatTileSkeleton />
+              <StatTileSkeleton />
+              <StatTileSkeleton />
+              <StatTileSkeleton />
+            </>
+          ) : (
+            <>
+              <StatTile
+                title="Tool calls"
+                value={metrics?.totalToolCalls ?? 0}
+                format="compact"
+                tone="information"
+                icon="wrench"
+              />
+              <StatTile
+                title="Failed calls"
+                value={metrics?.toolCallFailure ?? 0}
+                format="compact"
+                tone={
+                  (metrics?.toolCallFailure ?? 0) > 0 ? "warning" : "neutral"
+                }
+                icon="triangle-alert"
+              />
+              <StatTile
+                title="Chat requests"
+                value={metrics?.totalChatRequests ?? 0}
+                format="compact"
+                tone="information"
+                icon="message-square"
+              />
+              <StatTile
+                title="Tokens"
+                value={metrics?.totalTokens ?? 0}
+                format="compact"
+                tone="neutral"
+                icon="hash"
+              />
+            </>
+          )}
         </StatTileGroup>
 
         {/* Which surfaces the work came through. Two people with identical
             tool counts can be running one CLI or juggling four, and nothing
             else on the page says which — the per-user summary does not carry
             it, only the roster row does. */}
-        {agents.length > 0 && (
-          <IdentityPanel title="Agents" contentClassName="px-4 py-4">
+        {(peersPending || agents.length > 0) && (
+          <IdentityPanel
+            title="Agents"
+            contentClassName="px-4 py-4"
+            loading={peersPending}
+            loadingVariant="block"
+          >
             <ShareBar
               segments={agents.map((agent) => ({
                 key: agent.source,
@@ -116,6 +142,8 @@ export default function IdentityUsage(): JSX.Element {
           title="Tools"
           handoffLabel="Tool Logs"
           handoffHref={handoffs.toolLogs}
+          loading={metricsQuery.isLoading}
+          loadingVariant="block"
           footer={
             tools.length > TOP_TOOLS
               ? `Top ${TOP_TOOLS} of ${tools.length} tools by call volume`

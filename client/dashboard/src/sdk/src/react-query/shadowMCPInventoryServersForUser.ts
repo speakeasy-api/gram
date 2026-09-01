@@ -119,6 +119,8 @@ export function setShadowMCPInventoryServersForUserData(
     parameters: {
       projectId: string;
       userKeys: Array<string>;
+      from?: Date | undefined;
+      to?: Date | undefined;
       limit?: number | undefined;
       gramSession?: string | undefined;
     },
@@ -139,6 +141,8 @@ export function invalidateShadowMCPInventoryServersForUser(
     [parameters: {
       projectId: string;
       userKeys: Array<string>;
+      from?: Date | undefined;
+      to?: Date | undefined;
       limit?: number | undefined;
       gramSession?: string | undefined;
     }]

@@ -1,4 +1,8 @@
-import { StatTile, StatTileGroup } from "@/components/chart/stat-tile";
+import {
+  StatTile,
+  StatTileGroup,
+  StatTileSkeleton,
+} from "@/components/chart/stat-tile";
 import { Text } from "@/components/ui/Text";
 import { peerStanding, standingLabel } from "./identityPeers";
 import { IdentitySection } from "./IdentitySection";
@@ -57,10 +61,10 @@ export default function IdentityOverview(): JSX.Element {
   const isSelf = useIsSelf(identity);
   const canReadOthersChats = hasChatRead || isSelf;
   const canReadRisk = useCanReadRisk();
-  const auditQuery = useIdentityAuditLogs(identity);
+  const auditQuery = useIdentityAuditLogs(identity, from, to);
   const riskQuery = useIdentityRisk(identity, from, to);
-  const challengesQuery = useIdentityChallenges(identity);
-  const shadowQuery = useIdentityShadowServers(identity);
+  const challengesQuery = useIdentityChallenges(identity, from, to);
+  const shadowQuery = useIdentityShadowServers(identity, from, to);
   const devicesQuery = useIdentityDevices(identity);
 
   const metrics = metricsQuery.data?.metrics;
@@ -80,7 +84,21 @@ export default function IdentityOverview(): JSX.Element {
       d.coverageBucket === "agent_stale" || d.coverageBucket === "no_agent",
   );
 
-  const { peers, self } = useIdentityPeers(identity, from, to);
+  const {
+    peers,
+    self,
+    isPending: peersPending,
+  } = useIdentityPeers(identity, from, to);
+
+  // isLoading rather than isPending throughout: a query held behind `enabled`
+  // — no agent identifier, no chat:read — stays pending forever, and showing
+  // that as a wait would spin a panel that is never going to fetch.
+  const attentionLoading =
+    riskQuery.isLoading ||
+    challengesQuery.isLoading ||
+    shadowQuery.isLoading ||
+    devicesQuery.isLoading ||
+    peersPending;
 
   // Personal-vs-team is recorded per linked account on the roster row; the
   // per-user summary does not carry accounts at all.
@@ -186,6 +204,8 @@ export default function IdentityOverview(): JSX.Element {
 
         <IdentityPanel
           title="Needs attention"
+          loading={attentionLoading}
+          loadingRows={2}
           footer={
             attention.length > 0
               ? `${attention.length} item${attention.length === 1 ? "" : "s"}`
@@ -194,7 +214,7 @@ export default function IdentityOverview(): JSX.Element {
         >
           {attention.length === 0 ? (
             <IdentityPanelEmpty>
-              Nothing outstanding in this window.
+              Nothing outstanding for this identity.
             </IdentityPanelEmpty>
           ) : (
             attention.map((item) => (
@@ -210,47 +230,68 @@ export default function IdentityOverview(): JSX.Element {
           )}
         </IdentityPanel>
 
+        {/* Each tile reads a different endpoint, so they are held back
+            individually: a spend figure that has landed is worth showing while
+            findings are still counting. */}
         <StatTileGroup className="overflow-x-auto [&>*]:min-w-[11.5rem]">
-          <StatTile
-            title="Spend"
-            subtext={standingFor("totalCost")}
-            value={metrics?.totalCost ?? 0}
-            format="currency"
-            tone="neutral"
-            icon="credit-card"
-          />
-          <StatTile
-            title="Tool calls"
-            subtext={standingFor("totalToolCalls")}
-            value={metrics?.totalToolCalls ?? 0}
-            format="compact"
-            tone="information"
-            icon="wrench"
-          />
-          <StatTile
-            title="Chats"
-            subtext={standingFor("totalChats")}
-            value={metrics?.totalChats ?? 0}
-            format="compact"
-            tone="information"
-            icon="message-square"
-          />
-          {canReadRisk && (
+          {metricsQuery.isLoading ? (
+            <>
+              <StatTileSkeleton />
+              <StatTileSkeleton />
+              <StatTileSkeleton />
+            </>
+          ) : (
+            <>
+              <StatTile
+                title="Spend"
+                subtext={standingFor("totalCost")}
+                value={metrics?.totalCost ?? 0}
+                format="currency"
+                tone="neutral"
+                icon="credit-card"
+              />
+              <StatTile
+                title="Tool calls"
+                subtext={standingFor("totalToolCalls")}
+                value={metrics?.totalToolCalls ?? 0}
+                format="compact"
+                tone="information"
+                icon="wrench"
+              />
+              <StatTile
+                title="Chats"
+                subtext={standingFor("totalChats")}
+                value={metrics?.totalChats ?? 0}
+                format="compact"
+                tone="information"
+                icon="message-square"
+              />
+            </>
+          )}
+          {canReadRisk &&
+            (riskQuery.isLoading ? (
+              <StatTileSkeleton />
+            ) : (
+              <StatTile
+                title="Findings"
+                value={findings}
+                format="compact"
+                tone={findings > 0 ? "destructive" : "neutral"}
+                icon="flag"
+              />
+            ))}
+          {devicesQuery.isLoading ? (
+            <StatTileSkeleton />
+          ) : (
             <StatTile
-              title="Findings"
-              value={findings}
+              title="Devices"
+              value={devices.length}
               format="compact"
-              tone={findings > 0 ? "destructive" : "neutral"}
-              icon="flag"
+              tone="neutral"
+              icon="laptop"
+              tooltip="Current MDM inventory. Unlike the figures beside it, this is not filtered by the selected time range — a device is assigned or it is not."
             />
           )}
-          <StatTile
-            title="Devices"
-            value={devices.length}
-            format="compact"
-            tone="neutral"
-            icon="laptop"
-          />
         </StatTileGroup>
 
         <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
@@ -258,6 +299,7 @@ export default function IdentityOverview(): JSX.Element {
             title="Recent activity"
             handoffLabel="Audit Logs"
             handoffHref={handoffs.auditLogs}
+            loading={auditQuery.isLoading}
             footer={
               logs.length > 0
                 ? `Actor filtered to ${identity.displayName}`
@@ -286,6 +328,7 @@ export default function IdentityOverview(): JSX.Element {
             title="Recent chats"
             handoffLabel="Agent Sessions"
             handoffHref={handoffs.agentSessions}
+            loading={chatsQuery.isLoading}
             footer={
               chatsQuery.data
                 ? `${chatsQuery.data.total ?? chats.length} session${

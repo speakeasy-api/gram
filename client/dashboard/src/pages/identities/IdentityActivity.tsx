@@ -44,7 +44,7 @@ export default function IdentityActivity(): JSX.Element {
     new URLSearchParams(location.search),
   );
 
-  const auditQuery = useIdentityAuditLogs(identity);
+  const auditQuery = useIdentityAuditLogs(identity, from, to);
   const chatsQuery = useIdentityChats(identity, from, to, 20);
   const hasChatRead = useCanReadOthersChats();
   const isSelf = useIsSelf(identity);
@@ -52,6 +52,9 @@ export default function IdentityActivity(): JSX.Element {
 
   const logs = auditQuery.data?.result.logs ?? [];
   const chats = chatsQuery.data?.chats ?? [];
+  // isLoading rather than isPending: the chat query is held behind `enabled`
+  // for a viewer without chat:read, and that is a refusal to fetch, not a wait.
+  const activityLoading = auditQuery.isLoading || chatsQuery.isLoading;
 
   const logDates = logs.map((log) => new Date(log.createdAt));
   const chatDates = chats
@@ -71,8 +74,12 @@ export default function IdentityActivity(): JSX.Element {
           this tab can add is the shape of the window: two people with
           identical row lists can work in daily drips or in two long bursts,
           and only the columns tell them apart. */}
-      {(logDates.length > 0 || chatDates.length > 0) && (
-        <IdentityPanel title="Activity by day">
+      {(activityLoading || logDates.length > 0 || chatDates.length > 0) && (
+        <IdentityPanel
+          title="Activity by day"
+          loading={activityLoading}
+          loadingVariant="block"
+        >
           <div className="px-4 py-4">
             <DailyActivityChart
               from={from}
@@ -91,6 +98,8 @@ export default function IdentityActivity(): JSX.Element {
           title="Audit trail"
           handoffLabel="Audit Logs"
           handoffHref={handoffs.auditLogs}
+          loading={auditQuery.isLoading}
+          loadingRows={RECENT_ROWS}
           footer={
             // Audit logs key on the Gram user id, so a subject with no
             // directory row has nothing here even when it has telemetry.
@@ -127,6 +136,8 @@ export default function IdentityActivity(): JSX.Element {
           title="Chat sessions"
           handoffLabel="Agent Sessions"
           handoffHref={handoffs.agentSessions}
+          loading={chatsQuery.isLoading}
+          loadingRows={RECENT_ROWS}
           footer={
             chatsQuery.data
               ? `${chatsQuery.data.total ?? chats.length} session${

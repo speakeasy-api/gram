@@ -44,6 +44,16 @@ export default function IdentityDevices(): JSX.Element {
   const devicesQuery = useIdentityDevices(identity);
   const devices = devicesQuery.data?.result.devices ?? [];
 
+  // Deliberately outside the page's time range. Every other panel reports
+  // events, which a window slices; this reports the MDM inventory as it stands
+  // right now. A laptop is assigned or it is not — "devices in the last 7
+  // days" would answer a question nobody asked and hide a machine that has
+  // been quietly missing its agent for a month, which is exactly the one worth
+  // seeing. The footer says so rather than leaving the reader to assume the
+  // range applied here too.
+  const coverageNote =
+    "Current MDM inventory — not filtered by the selected time range.";
+
   return (
     <IdentitySection
       title="Devices"
@@ -53,16 +63,17 @@ export default function IdentityDevices(): JSX.Element {
         title="Managed devices"
         handoffLabel="Device Agent"
         handoffHref={handoffs.deviceAgent}
+        loading={devicesQuery.isLoading}
         footer={
           // Devices match on the id OR on the MDM-reported email, because a
           // device only carries a user id when that email resolved.
           identity.emails.length > 0
-            ? `Matched on ${identity.userIds.length} user id${
+            ? `${coverageNote} Matched on ${identity.userIds.length} user id${
                 identity.userIds.length === 1 ? "" : "s"
               } and ${identity.emails.length} address${
                 identity.emails.length === 1 ? "" : "es"
-              }`
-            : undefined
+              }.`
+            : coverageNote
         }
       >
         {devices.length === 0 ? (
