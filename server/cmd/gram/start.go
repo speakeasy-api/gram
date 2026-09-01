@@ -99,6 +99,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/metamcp"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/modelkeys"
+	"github.com/speakeasy-api/gram/server/internal/netingress"
 	"github.com/speakeasy-api/gram/server/internal/networkaccess"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/openrouterkeys"
@@ -299,6 +300,11 @@ func newStartCommand() *cli.Command {
 			Value:   ":8080",
 			Usage:   "HTTP address to listen on",
 			EnvVars: []string{"GRAM_SERVER_ADDRESS"},
+		},
+		&cli.StringFlag{
+			Name:    "netingress-address",
+			Usage:   "Private network ingress HTTP address; empty disables the listener",
+			EnvVars: []string{"GRAM_NETINGRESS_ADDRESS"},
 		},
 		&cli.StringFlag{
 			Name:     "server-url",
@@ -1575,7 +1581,8 @@ func newStartCommand() *cli.Command {
 			remotemcp.Attach(mux, remotemcp.NewService(logger, tracerProvider, db, sessionManager, encryptionClient, authzEngine, guardianPolicy, auditLogger, mcpServersService))
 			unproxiedmcp.Attach(mux, unproxiedmcp.NewService(logger, tracerProvider, db, sessionManager, authzEngine, guardianPolicy, auditLogger))
 			tunneledmcp.Attach(mux, tunneledmcp.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger, route.NewRedis(redisClient), redisClient))
-			xmcp.Attach(mux, xmcp.NewService(logger, db, encryptionClient, mcpService), mcpMetadataService)
+			xmcpService := xmcp.NewService(logger, db, encryptionClient, mcpService)
+			xmcp.Attach(mux, xmcpService, mcpMetadataService)
 			triggers.Attach(mux, triggers.NewService(logger, tracerProvider, db, sessionManager, authzEngine, triggerApp, auditLogger))
 			tools.Attach(mux, tools.NewService(logger, tracerProvider, db, sessionManager, authzEngine, platformFeatureChecker, assistantPlatformExtras))
 			resources.Attach(mux, resources.NewService(logger, tracerProvider, db, sessionManager, authzEngine))
@@ -1654,6 +1661,57 @@ func newStartCommand() *cli.Command {
 				return err
 			}
 			mcp.Attach(mux, mcpService, mcpMetadataService)
+
+			var (
+				privateIngressServer   *http.Server
+				privateIngressListener net.Listener
+			)
+			if privateAddress := c.String("netingress-address"); privateAddress != "" {
+				if k8sClient.Clientset == nil {
+					return errors.New("private network ingress listener requires an in-cluster Kubernetes client")
+				}
+				privateMux := goahttp.NewMuxer()
+				privateMux.Use(middleware.NetworkServingPolicyVersion)
+				privateMux.Use(netingress.RouteGuard)
+				privateMux.Use(middleware.DropInboundOTelBaggage)
+				privateMux.Use(func(h http.Handler) http.Handler {
+					return otelhttp.NewHandler(h, "http",
+						otelhttp.WithServerName("gram-netingress"),
+						otelhttp.WithPublicEndpointFn(func(*http.Request) bool { return true }),
+					)
+				})
+				privateMux.Use(middleware.RouteLabelerMiddleware)
+				privateMux.Use(middleware.MCPProtocolVersionTelemetry)
+				privateMux.Use(middleware.NewHTTPLoggingMiddleware(logger))
+				privateMux.Use(middleware.NewRecovery(logger))
+				privateMux.Use(netingress.Middleware(
+					netingress.NewAttestationVerifier(
+						k8sClient.Clientset.AuthenticationV1().TokenReviews(),
+						netingress.NewIngressLookup(db),
+						netingress.DefaultTokenAudience,
+						30*time.Second,
+					),
+					netingress.IdentityParsers{netingress.ProviderTailscale: netingress.TailscaleIdentityParser{}},
+				))
+				privateMux.Use(middleware.SessionMiddleware)
+				mcp.AttachPrivate(privateMux, mcpService, mcpMetadataService)
+				xmcp.AttachPrivate(privateMux, xmcpService, mcpMetadataService)
+				privateIngressServer = &http.Server{
+					Addr:              privateAddress,
+					Handler:           privateMux,
+					ReadHeaderTimeout: 10 * time.Second,
+					IdleTimeout:       620 * time.Second,
+					BaseContext: func(net.Listener) context.Context {
+						return ctx
+					},
+				}
+				privateIngressListener, err = net.Listen("tcp", privateAddress)
+				if err != nil {
+					return fmt.Errorf("listen for private network ingress: %w", err)
+				}
+				defer func() { _ = privateIngressListener.Close() }()
+			}
+
 			chat.Attach(mux, chatService)
 			variations.Attach(mux, variations.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger))
 			customdomains.Attach(mux, customdomains.NewService(logger, tracerProvider, db, sessionManager, &background.CustomDomainRegistrationClient{TemporalEnv: temporalEnv}, authzEngine, auditLogger, c.String("custom-domain-cname"), customDomainARecords))
@@ -1787,6 +1845,15 @@ func newStartCommand() *cli.Command {
 
 			group := pool.New()
 
+			if privateIngressServer != nil {
+				group.Go(func() {
+					logger.InfoContext(ctx, "private network ingress listener started", attr.SlogServerAddress(privateIngressListener.Addr().String()))
+					if err := privateIngressServer.Serve(privateIngressListener); err != nil && !errors.Is(err, http.ErrServerClosed) {
+						logger.ErrorContext(ctx, "private network ingress listener error", attr.SlogError(err))
+					}
+				})
+			}
+
 			if c.Bool("dev-single-process") {
 				workerInterruptCh := make(chan any)
 				group.Go(func() {
@@ -1868,12 +1935,23 @@ func newStartCommand() *cli.Command {
 				)
 				defer graceCancel()
 
-				if err := srv.Shutdown(graceCtx); err != nil {
-					if gerr := context.Cause(graceCtx); gerr != nil {
-						err = errors.Join(err, gerr)
+				shutdownGroup := pool.New()
+				shutdownGroup.Go(func() {
+					if err := srv.Shutdown(graceCtx); err != nil {
+						if gerr := context.Cause(graceCtx); gerr != nil {
+							err = errors.Join(err, gerr)
+						}
+						logger.ErrorContext(ctx, "failed to shutdown server", attr.SlogError(err))
 					}
-					logger.ErrorContext(ctx, "failed to shutdown server", attr.SlogError(err))
+				})
+				if privateIngressServer != nil {
+					shutdownGroup.Go(func() {
+						if err := privateIngressServer.Shutdown(graceCtx); err != nil {
+							logger.ErrorContext(ctx, "failed to shutdown private network ingress listener", attr.SlogError(err))
+						}
+					})
 				}
+				shutdownGroup.Wait()
 
 				// The HTTP server is now fully drained, so no new risk signals are
 				// produced. Flush the throttle's queued trailing signals here while the
