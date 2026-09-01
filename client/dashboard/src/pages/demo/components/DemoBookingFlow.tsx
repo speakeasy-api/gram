@@ -1,9 +1,16 @@
-import { useEffect } from "react";
-import _Cal, { getCalApi } from "@calcom/embed-react";
+import { useEffect, useState } from "react";
+import _Cal, { getCalApi, type EmbedEvent } from "@calcom/embed-react";
 import { LockoutPaygCheckoutPanel } from "@/components/billing/lockout-payg-checkout-panel";
 import { useSessionData } from "@/contexts/Auth";
 import { useTelemetry } from "@/contexts/Telemetry";
-import { CAL_DEMO_LINK, splitDisplayName } from "./demo-booking";
+import {
+  CAL_DEMO_LINK,
+  CAL_DEMO_NAMESPACE,
+  CAL_DEMO_URL,
+  CAL_EMBED_TIMEOUT_MS,
+  SALES_EMAIL,
+  splitDisplayName,
+} from "./demo-booking";
 
 // Cal's .d.ts returns the legacy global `JSX.Element`, incompatible with
 // react-jsx/TS5. Widen only the return type; keep prop types intact so a
@@ -33,28 +40,145 @@ const CAL_BRAND_VARS = {
   "cal-brand-text": "#fff",
 };
 
+type CalApi = Awaited<ReturnType<typeof getCalApi>>;
+
+// Why the calendar never appeared. `code` is Cal's own failure code, present
+// only on `linkFailed`.
+type EmbedFailure = {
+  reason: "timeout" | "link_failed" | "api_error";
+  code?: string;
+};
+
 // `hideEventTypeDetails` and `cssVarsPerTheme` belong to Cal's UiConfig, not to
 // the `config` prop (PrefillAndIframeAttrsConfig) — passing them there only
 // appends inert query params, which is why the embed kept drawing its own
 // title/duration block. They have to go through the "ui" instruction.
 // The auth surface is fixed light mode, so both themes get the same values: a
 // dark-mode visitor would otherwise get a dark calendar inside a white card.
-function useCalBranding() {
+//
+// The instruction resolves to Cal's `doInIframe`, which throws when the
+// instance it lands on has no live iframe, so it is sent twice and never
+// unguarded: once as soon as the API is up (Cal replays a queued `ui` against
+// the iframe once one exists) and again on `linkReady`, when the iframe is
+// definitely there. Applying it early is what avoids a flash of Cal's own
+// styling; applying it again is what makes the styling arrive at all if the
+// early attempt landed on a stale instance.
+function applyBranding(cal: CalApi) {
+  try {
+    cal("ui", {
+      theme: "light",
+      hideEventTypeDetails: true,
+      cssVarsPerTheme: { light: CAL_BRAND_VARS, dark: CAL_BRAND_VARS },
+    });
+  } catch {
+    // An unbranded calendar is a cosmetic problem. Letting the throw escape as
+    // an unhandled error, which is what used to happen, is not.
+  }
+}
+
+/**
+ * Tracks whether Cal's iframe actually paints.
+ *
+ * Cal keeps the iframe hidden until it emits `linkReady`, so that event — or
+ * `linkFailed`, or neither before the timeout — is the whole story: the visitor
+ * either has a calendar or is looking at an empty box.
+ */
+function useCalEmbedStatus(): { ready: boolean; failure: EmbedFailure | null } {
+  const [ready, setReady] = useState(false);
+  const [failure, setFailure] = useState<EmbedFailure | null>(null);
+
   useEffect(() => {
-    let cancelled = false;
+    // First outcome wins; cleanup closes it so a late callback can neither
+    // report twice nor touch an unmounted tree.
+    let settled = false;
+    let cal: CalApi | undefined;
+
+    const settle = (next: EmbedFailure | null) => {
+      if (settled) return;
+      settled = true;
+      if (next) setFailure(next);
+      else setReady(true);
+    };
+
+    const onLinkReady = () => {
+      if (cal) applyBranding(cal);
+      settle(null);
+    };
+    const onLinkFailed = (event: EmbedEvent<"linkFailed">) => {
+      settle({ reason: "link_failed", code: event.detail.data.code });
+    };
+
+    const timer = window.setTimeout(
+      () => settle({ reason: "timeout" }),
+      CAL_EMBED_TIMEOUT_MS,
+    );
+
     void (async () => {
-      const cal = await getCalApi();
-      if (cancelled) return;
-      cal("ui", {
-        theme: "light",
-        hideEventTypeDetails: true,
-        cssVarsPerTheme: { light: CAL_BRAND_VARS, dark: CAL_BRAND_VARS },
-      });
+      try {
+        cal = await getCalApi({ namespace: CAL_DEMO_NAMESPACE });
+        if (settled) return;
+        cal("on", { action: "linkReady", callback: onLinkReady });
+        cal("on", { action: "linkFailed", callback: onLinkFailed });
+        applyBranding(cal);
+      } catch {
+        settle({ reason: "api_error" });
+      }
     })();
+
     return () => {
-      cancelled = true;
+      settled = true;
+      window.clearTimeout(timer);
+      cal?.("off", { action: "linkReady", callback: onLinkReady });
+      cal?.("off", { action: "linkFailed", callback: onLinkFailed });
     };
   }, []);
+
+  return { ready, failure };
+}
+
+// Covers the window before `linkReady`, which is Cal's own signal that the
+// iframe is worth showing. Without it the visitor watches the embed's spinner
+// appear and then vanish behind a hidden iframe.
+function CalendarLoading(): JSX.Element {
+  return (
+    <div className="absolute inset-0 flex items-center justify-center bg-(--card)">
+      <span className="auth-mono animate-pulse text-xs text-(--muted) motion-reduce:animate-none">
+        Loading calendar
+      </span>
+    </div>
+  );
+}
+
+// Both routes out of here are ordinary links, so neither depends on the embed
+// that just failed.
+function CalendarFallback(): JSX.Element {
+  return (
+    <div className="flex h-full flex-col items-center justify-center gap-2.5 px-6 text-center">
+      <p className="text-[16px] tracking-[0.0025em]">
+        The booking calendar could not load.
+      </p>
+      <p className="max-w-[32rem] text-sm tracking-[0.0025em] text-(--muted-strong)">
+        Open the booking page in a new tab, or email the team and we will find a
+        time.
+      </p>
+      <div className="mt-1 flex flex-wrap items-center justify-center gap-x-6 gap-y-2">
+        <a
+          href={CAL_DEMO_URL}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="auth-mono text-xs text-(--link) underline underline-offset-4"
+        >
+          Book a demo
+        </a>
+        <a
+          href={`mailto:${SALES_EMAIL}`}
+          className="auth-mono text-xs text-(--link) underline underline-offset-4"
+        >
+          Email {SALES_EMAIL}
+        </a>
+      </div>
+    </div>
+  );
 }
 
 // Sits above the card on the cold-signup gate. The expired-trial gate passes
@@ -93,7 +217,26 @@ export function DemoBookingFlow({
   const { session } = useSessionData();
   const telemetry = useTelemetry();
 
-  useCalBranding();
+  const { ready, failure } = useCalEmbedStatus();
+
+  // Until 2026-08 the only thing this flow reported was a successful booking,
+  // so an embed that never rendered showed up as silence rather than as a
+  // failure. Both outcomes are captured now: the pair is what makes a failure
+  // rate — and an alert on it — possible.
+  useEffect(() => {
+    if (!failure) return;
+    telemetry.capture("demo_booking_embed_failed", {
+      reason: failure.reason,
+      code: failure.code,
+      cal_link: CAL_DEMO_LINK,
+      timeout_ms: CAL_EMBED_TIMEOUT_MS,
+    });
+  }, [failure, telemetry]);
+
+  useEffect(() => {
+    if (!ready) return;
+    telemetry.capture("demo_booking_embed_loaded", { cal_link: CAL_DEMO_LINK });
+  }, [ready, telemetry]);
 
   const email = session?.user.email ?? "";
   const { firstName, lastName } = splitDisplayName(session?.user.displayName);
@@ -151,28 +294,36 @@ export function DemoBookingFlow({
 
         {/* Tall enough for a six-row month without clipping the last week,
             capped so the card still clears the fold on a laptop viewport. */}
-        <div className="h-[clamp(500px,54vh,600px)] w-full overflow-auto">
-          <Cal
-            calLink={CAL_DEMO_LINK}
-            config={{
-              // Caller defaults go first so the identity below wins: the type
-              // is an open record and cannot stop a caller passing `email`,
-              // but attendee details are this component's to set.
-              // Empty entries are dropped rather than sent, so an unset
-              // default leaves the field open instead of blanking it.
-              ...Object.fromEntries(
-                Object.entries(formDefaults ?? {}).filter(([, v]) => v),
-              ),
-              layout: "month_view",
-              theme: "light",
-              name,
-              email,
-              // Key must match the booking question's identifier on the Cal
-              // event.
-              "Company-Name": companyName,
-            }}
-            style={{ width: "100%", height: "100%", overflow: "auto" }}
-          />
+        <div className="relative h-[clamp(500px,54vh,600px)] w-full overflow-auto">
+          {failure ? (
+            <CalendarFallback />
+          ) : (
+            <>
+              <Cal
+                namespace={CAL_DEMO_NAMESPACE}
+                calLink={CAL_DEMO_LINK}
+                config={{
+                  // Caller defaults go first so the identity below wins: the
+                  // type is an open record and cannot stop a caller passing
+                  // `email`, but attendee details are this component's to set.
+                  // Empty entries are dropped rather than sent, so an unset
+                  // default leaves the field open instead of blanking it.
+                  ...Object.fromEntries(
+                    Object.entries(formDefaults ?? {}).filter(([, v]) => v),
+                  ),
+                  layout: "month_view",
+                  theme: "light",
+                  name,
+                  email,
+                  // Key must match the booking question's identifier on the
+                  // Cal event.
+                  "Company-Name": companyName,
+                }}
+                style={{ width: "100%", height: "100%", overflow: "auto" }}
+              />
+              {!ready && <CalendarLoading />}
+            </>
+          )}
         </div>
       </div>
 

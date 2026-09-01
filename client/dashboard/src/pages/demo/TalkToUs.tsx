@@ -3,6 +3,7 @@ import { useSdkClient } from "@/contexts/Sdk";
 import { useCaptureUpgradeGateViewed } from "@/contexts/Telemetry";
 import { AuthShell } from "@/pages/login/components/auth-shell";
 import { DemoBookingFlow } from "@/pages/demo/components/DemoBookingFlow";
+import { SALES_EMAIL } from "@/pages/demo/components/demo-booking";
 import {
   getTrialLifecycleFromDates,
   type TrialLifecycle,
@@ -10,8 +11,6 @@ import {
 import { getGateCopy } from "@/pages/demo/upgrade-gate-copy";
 import { Link, Navigate } from "react-router";
 import { Button } from "@/components/ui/Button";
-
-const SALES_EMAIL = "sales@speakeasy.com";
 
 // Reached two ways: the gate redirects an organization here once its trial has
 // ended and the sweep has demoted it, or a user on a running trial navigates
