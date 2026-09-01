@@ -16,7 +16,7 @@ export GOFLAGS="-buildvcs=false ${GOFLAGS:-}"
 # (protobuf itself, googleapis-common-protos, ...) that this sweep must never
 # touch. (-not -path rather than -prune: -delete implies -depth, which
 # disables -prune.)
-find ./infra/ -not -path "*/.venv/*" \( -name "*.pb.go" -o -name "*_pb2.py" -o -name "*_pb2.pyi" \) -delete
+find ./infra/ -not -path "*/.venv/*" \( -name "*.pb.go" -o -name "*_pb2.py" -o -name "*_pb2.pyi" -o -name "*.sql" \) -delete
 buf generate
 
 buf build -o ./infra/gen/descriptors.pb
