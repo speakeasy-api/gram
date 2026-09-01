@@ -13,7 +13,6 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
@@ -48,23 +47,14 @@ func seedTunneledMetaMember(
 	tunneledID, err := uuid.NewV7()
 	require.NoError(t, err)
 	tunneledServer, err := tunneledmcprepo.New(ti.conn).CreateServer(ctx, tunneledmcprepo.CreateServerParams{
-		ID:        tunneledID,
-		ProjectID: projectID,
-		Name:      tunnelName,
-		KeyHash:   uuid.NewString(),
-		KeyPrefix: "gram_tunnel_test",
+		ID:                 tunneledID,
+		ProjectID:          projectID,
+		Name:               tunnelName,
+		KeyHash:            uuid.NewString(),
+		KeyPrefix:          "gram_tunnel_test",
+		ResourceIdentifier: conv.ToPGTextEmpty(resourceIdentifier),
 	})
 	require.NoError(t, err)
-	if resourceIdentifier != "" {
-		_, err = tunneledmcprepo.New(ti.conn).UpdateServer(ctx, tunneledmcprepo.UpdateServerParams{
-			ID:                 tunneledServer.ID,
-			ProjectID:          projectID,
-			Name:               tunnelName,
-			AllowPublic:        pgtype.Bool{Bool: false, Valid: false},
-			ResourceIdentifier: conv.ToPGText(resourceIdentifier),
-		})
-		require.NoError(t, err)
-	}
 
 	memberIssuerID := createUserSessionIssuer(t, ctx, ti.conn, projectID)
 	serverID, err := uuid.NewV7()

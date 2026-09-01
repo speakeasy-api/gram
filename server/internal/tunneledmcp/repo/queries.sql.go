@@ -29,17 +29,18 @@ func (q *Queries) CountActiveServersByOrganizationID(ctx context.Context, organi
 }
 
 const createServer = `-- name: CreateServer :one
-INSERT INTO tunneled_mcp_servers (id, project_id, name, key_hash, key_prefix)
-VALUES ($1, $2, $3, $4, $5)
+INSERT INTO tunneled_mcp_servers (id, project_id, name, key_hash, key_prefix, resource_identifier)
+VALUES ($1, $2, $3, $4, $5, $6)
 RETURNING id, project_id, name, key_hash, key_prefix, status, allow_public, agent_version, resource_identifier, last_seen_at, created_at, updated_at, deleted_at, deleted
 `
 
 type CreateServerParams struct {
-	ID        uuid.UUID
-	ProjectID uuid.UUID
-	Name      string
-	KeyHash   string
-	KeyPrefix string
+	ID                 uuid.UUID
+	ProjectID          uuid.UUID
+	Name               string
+	KeyHash            string
+	KeyPrefix          string
+	ResourceIdentifier pgtype.Text
 }
 
 func (q *Queries) CreateServer(ctx context.Context, arg CreateServerParams) (TunneledMcpServer, error) {
@@ -49,6 +50,7 @@ func (q *Queries) CreateServer(ctx context.Context, arg CreateServerParams) (Tun
 		arg.Name,
 		arg.KeyHash,
 		arg.KeyPrefix,
+		arg.ResourceIdentifier,
 	)
 	var i TunneledMcpServer
 	err := row.Scan(
@@ -295,7 +297,7 @@ func (q *Queries) RotateServerKey(ctx context.Context, arg RotateServerKeyParams
 const updateServer = `-- name: UpdateServer :one
 UPDATE tunneled_mcp_servers
 SET
-    name = $1,
+    name = COALESCE($1, name),
     allow_public = COALESCE($2, allow_public),
     -- Tri-state: NULL leaves the stored value, empty string clears to NULL.
     resource_identifier = CASE
@@ -308,7 +310,7 @@ RETURNING id, project_id, name, key_hash, key_prefix, status, allow_public, agen
 `
 
 type UpdateServerParams struct {
-	Name               string
+	Name               pgtype.Text
 	AllowPublic        pgtype.Bool
 	ResourceIdentifier pgtype.Text
 	ID                 uuid.UUID

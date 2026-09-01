@@ -144,6 +144,16 @@ func (s *Service) CreateServer(ctx context.Context, payload *gen.CreateServerPay
 		return nil, oops.E(oops.CodeBadRequest, nil, "name must be non-empty").LogWarn(ctx, logger)
 	}
 
+	// Optional at create; blank stays unset — most operators record it later.
+	var resourceIdentifier pgtype.Text
+	if payload.ResourceIdentifier != nil {
+		normalized, nerr := normalizeResourceIdentifier(*payload.ResourceIdentifier)
+		if nerr != nil {
+			return nil, oops.E(oops.CodeBadRequest, nerr, "invalid resource identifier").LogWarn(ctx, logger)
+		}
+		resourceIdentifier = conv.ToPGTextEmpty(normalized)
+	}
+
 	serverID, err := uuid.NewV7()
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "generate server id").LogError(ctx, logger)
@@ -178,11 +188,12 @@ func (s *Service) CreateServer(ctx context.Context, payload *gen.CreateServerPay
 	}
 
 	server, err := txRepo.CreateServer(ctx, repo.CreateServerParams{
-		ID:        serverID,
-		ProjectID: *authCtx.ProjectID,
-		Name:      name,
-		KeyHash:   issuedKey.Hash,
-		KeyPrefix: issuedKey.Prefix,
+		ID:                 serverID,
+		ProjectID:          *authCtx.ProjectID,
+		Name:               name,
+		KeyHash:            issuedKey.Hash,
+		KeyPrefix:          issuedKey.Prefix,
+		ResourceIdentifier: resourceIdentifier,
 	})
 	if err != nil {
 		var pgErr *pgconn.PgError
@@ -301,14 +312,26 @@ func (s *Service) UpdateServer(ctx context.Context, payload *gen.UpdateServerPay
 	}
 
 	logger := s.logger.With(attr.SlogProjectID(authCtx.ProjectID.String()))
-	name := strings.TrimSpace(payload.Name)
-	if name == "" {
-		return nil, oops.E(oops.CodeBadRequest, nil, "name must be non-empty").LogWarn(ctx, logger)
+
+	// Tri-state: omitted leaves the stored name.
+	var name pgtype.Text
+	if payload.Name != nil {
+		trimmed := strings.TrimSpace(*payload.Name)
+		if trimmed == "" {
+			return nil, oops.E(oops.CodeBadRequest, nil, "name must be non-empty").LogWarn(ctx, logger)
+		}
+		name = conv.ToPGText(trimmed)
 	}
 
 	serverID, err := uuid.Parse(payload.ID)
 	if err != nil {
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid server id").LogWarn(ctx, logger)
+	}
+
+	// With every field tri-state, an empty form would otherwise still run the
+	// transaction, churn updated_at, and log a no-op audit event.
+	if payload.Name == nil && payload.AllowPublic == nil && payload.ResourceIdentifier == nil {
+		return nil, oops.E(oops.CodeBadRequest, nil, "no fields to update").LogWarn(ctx, logger)
 	}
 
 	// Tri-state: omitted leaves the stored value, empty string clears it.

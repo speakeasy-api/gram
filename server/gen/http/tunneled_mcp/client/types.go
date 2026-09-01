@@ -18,6 +18,11 @@ import (
 type CreateServerRequestBody struct {
 	// Human-readable display name for the tunneled MCP server
 	Name string `form:"name" json:"name" xml:"name"`
+	// RFC 9728 protected resource identifier of the tunneled server, used only for
+	// exact-match credential routing and never dialed by Gram. Omit unless the
+	// identifier is already known; it is usually recorded later, once the tunnel
+	// is up.
+	ResourceIdentifier *string `form:"resource_identifier,omitempty" json:"resource_identifier,omitempty" xml:"resource_identifier,omitempty"`
 }
 
 // UpdateServerRequestBody is the type of the "tunneledMcp" service
@@ -25,8 +30,9 @@ type CreateServerRequestBody struct {
 type UpdateServerRequestBody struct {
 	// The ID of the tunneled MCP server to update
 	ID string `form:"id" json:"id" xml:"id"`
-	// Human-readable display name for the tunneled MCP server
-	Name string `form:"name" json:"name" xml:"name"`
+	// Human-readable display name for the tunneled MCP server. Omit to leave
+	// unchanged.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// Consent to serve this source through a public, anonymous MCP endpoint.
 	// Disabling revokes all live anonymous sessions. Omit to leave unchanged.
 	AllowPublic *bool `form:"allow_public,omitempty" json:"allow_public,omitempty" xml:"allow_public,omitempty"`
@@ -1501,7 +1507,8 @@ type TunneledMcpConnectionResponseBody struct {
 // the "createServer" endpoint of the "tunneledMcp" service.
 func NewCreateServerRequestBody(p *tunneledmcp.CreateServerPayload) *CreateServerRequestBody {
 	body := &CreateServerRequestBody{
-		Name: p.Name,
+		Name:               p.Name,
+		ResourceIdentifier: p.ResourceIdentifier,
 	}
 	return body
 }

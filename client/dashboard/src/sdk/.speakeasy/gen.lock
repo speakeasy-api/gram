@@ -10023,7 +10023,7 @@ examples:
   updateTunneledMcpServer:
     speakeasy-default-update-tunneled-mcp-server:
       requestBody:
-        application/json: {"id": "e1429b32-4d75-43a3-aa46-02f1af57cf85", "name": "<value>"}
+        application/json: {"id": "e1429b32-4d75-43a3-aa46-02f1af57cf85"}
       responses:
         "200":
           application/json: {"active_connection_count": 408126, "active_consumer_session_count": 923001, "allow_public": false, "connection_status": "connected", "created_at": "2025-03-07T12:23:20.151Z", "id": "1bf5c61a-7401-4732-9a1c-7572bf19031e", "key_prefix": "<value>", "name": "<value>", "project_id": "f095b93d-e0ba-430e-a940-6ea2b3b7de5d", "status": "revoked", "updated_at": "2025-02-19T20:11:46.920Z"}

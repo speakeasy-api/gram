@@ -9,7 +9,6 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
@@ -163,24 +162,14 @@ func createTunneledMetaMember(t *testing.T, ctx context.Context, conn *pgxpool.P
 	t.Helper()
 
 	tunneled, err := tunneledmcp_repo.New(conn).CreateServer(ctx, tunneledmcp_repo.CreateServerParams{
-		ID:        uuid.New(),
-		ProjectID: projectID,
-		Name:      slug,
-		KeyHash:   "hash-" + slug,
-		KeyPrefix: "pfx",
+		ID:                 uuid.New(),
+		ProjectID:          projectID,
+		Name:               slug,
+		KeyHash:            "hash-" + slug,
+		KeyPrefix:          "pfx",
+		ResourceIdentifier: conv.ToPGTextEmpty(resourceIdentifier),
 	})
 	require.NoError(t, err)
-	// The identifier is recorded after creation, once the tunnel is up.
-	if resourceIdentifier != "" {
-		_, err = tunneledmcp_repo.New(conn).UpdateServer(ctx, tunneledmcp_repo.UpdateServerParams{
-			ID:                 tunneled.ID,
-			ProjectID:          projectID,
-			Name:               slug,
-			AllowPublic:        pgtype.Bool{Bool: false, Valid: false},
-			ResourceIdentifier: conv.ToPGText(resourceIdentifier),
-		})
-		require.NoError(t, err)
-	}
 
 	mcpServer, err := mcpservers_repo.New(conn).CreateMCPServer(ctx, mcpservers_repo.CreateMCPServerParams{
 		ID:                  uuid.New(),

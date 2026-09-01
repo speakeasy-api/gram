@@ -19,8 +19,8 @@ WHERE projects.organization_id = @organization_id
   AND tunneled_mcp_servers.deleted IS FALSE;
 
 -- name: CreateServer :one
-INSERT INTO tunneled_mcp_servers (id, project_id, name, key_hash, key_prefix)
-VALUES (@id, @project_id, @name, @key_hash, @key_prefix)
+INSERT INTO tunneled_mcp_servers (id, project_id, name, key_hash, key_prefix, resource_identifier)
+VALUES (@id, @project_id, @name, @key_hash, @key_prefix, @resource_identifier)
 RETURNING *;
 
 -- name: ListServersByProjectID :many
@@ -46,7 +46,7 @@ FOR UPDATE;
 -- name: UpdateServer :one
 UPDATE tunneled_mcp_servers
 SET
-    name = @name,
+    name = COALESCE(sqlc.narg('name'), name),
     allow_public = COALESCE(sqlc.narg('allow_public'), allow_public),
     -- Tri-state: NULL leaves the stored value, empty string clears to NULL.
     resource_identifier = CASE

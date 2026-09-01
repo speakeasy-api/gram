@@ -1461,11 +1461,12 @@ func TestServeInstallPage_McpServer_TunneledPublic_NoOAuthSteps(t *testing.T) {
 	require.NotNil(t, authCtx.ProjectID)
 
 	tunneledServer, err := tunneledmcprepo.New(ti.conn).CreateServer(ctx, tunneledmcprepo.CreateServerParams{
-		ID:        uuid.New(),
-		ProjectID: *authCtx.ProjectID,
-		Name:      "Public Tunneled MCP Server",
-		KeyHash:   "test-key-hash",
-		KeyPrefix: "test-key-prefix",
+		ID:                 uuid.New(),
+		ProjectID:          *authCtx.ProjectID,
+		Name:               "Public Tunneled MCP Server",
+		KeyHash:            "test-key-hash",
+		KeyPrefix:          "test-key-prefix",
+		ResourceIdentifier: pgtype.Text{String: "", Valid: false},
 	})
 	require.NoError(t, err)
 
@@ -1502,11 +1503,12 @@ func TestServeInstallPage_McpServer_TunneledPrivate_ShowsOAuthSteps(t *testing.T
 	require.NotNil(t, authCtx.ProjectID)
 
 	tunneledServer, err := tunneledmcprepo.New(ti.conn).CreateServer(ctx, tunneledmcprepo.CreateServerParams{
-		ID:        uuid.New(),
-		ProjectID: *authCtx.ProjectID,
-		Name:      "Private Tunneled MCP Server",
-		KeyHash:   "test-key-hash",
-		KeyPrefix: "test-key-prefix",
+		ID:                 uuid.New(),
+		ProjectID:          *authCtx.ProjectID,
+		Name:               "Private Tunneled MCP Server",
+		KeyHash:            "test-key-hash",
+		KeyPrefix:          "test-key-prefix",
+		ResourceIdentifier: pgtype.Text{String: "", Valid: false},
 	})
 	require.NoError(t, err)
 

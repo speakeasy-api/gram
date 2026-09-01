@@ -12,23 +12,61 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 )
 
-func TestCreateServerRecordsNoResourceIdentifier(t *testing.T) {
+func TestCreateServerResourceIdentifier(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestService(t)
 	authCtx := requireAuthContext(t, ctx)
 	writeCtx := authztest.WithExactGrants(t, ctx, projectScopedMCPGrant(authz.ScopeMCPWrite, *authCtx.ProjectID))
 
-	// The identifier is only knowable once the tunnel is up, so creation
-	// records none and the update form is the only way to set it.
 	result, err := ti.service.CreateServer(writeCtx, &gen.CreateServerPayload{
-		SessionToken:     nil,
-		ApikeyToken:      nil,
-		ProjectSlugInput: nil,
-		Name:             "without-identifier",
+		SessionToken:       nil,
+		ApikeyToken:        nil,
+		ProjectSlugInput:   nil,
+		Name:               "without-identifier",
+		ResourceIdentifier: nil,
 	})
 	require.NoError(t, err)
 	require.Nil(t, result.Server.ResourceIdentifier)
+
+	// Blank means unset, same as omitting: there is no stored value to clear.
+	result, err = ti.service.CreateServer(writeCtx, &gen.CreateServerPayload{
+		SessionToken:       nil,
+		ApikeyToken:        nil,
+		ProjectSlugInput:   nil,
+		Name:               "blank-identifier",
+		ResourceIdentifier: new(""),
+	})
+	require.NoError(t, err)
+	require.Nil(t, result.Server.ResourceIdentifier)
+
+	result, err = ti.service.CreateServer(writeCtx, &gen.CreateServerPayload{
+		SessionToken:       nil,
+		ApikeyToken:        nil,
+		ProjectSlugInput:   nil,
+		Name:               "with-identifier",
+		ResourceIdentifier: new(" https://tunneled.internal/mcp/ "),
+	})
+	require.NoError(t, err)
+	require.Equal(t, "https://tunneled.internal/mcp", conv.PtrValOr(result.Server.ResourceIdentifier, ""),
+		"the identifier is stored trimmed, without a trailing slash")
+}
+
+func TestCreateServerRejectsInvalidResourceIdentifier(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	authCtx := requireAuthContext(t, ctx)
+	writeCtx := authztest.WithExactGrants(t, ctx, projectScopedMCPGrant(authz.ScopeMCPWrite, *authCtx.ProjectID))
+
+	_, err := ti.service.CreateServer(writeCtx, &gen.CreateServerPayload{
+		SessionToken:       nil,
+		ApikeyToken:        nil,
+		ProjectSlugInput:   nil,
+		Name:               "invalid-identifier",
+		ResourceIdentifier: new("tunneled.internal/mcp"),
+	})
+	requireOopsCode(t, err, oops.CodeBadRequest)
 }
 
 func TestUpdateServerResourceIdentifierTriState(t *testing.T) {
@@ -44,7 +82,7 @@ func TestUpdateServerResourceIdentifierTriState(t *testing.T) {
 		ApikeyToken:        nil,
 		ProjectSlugInput:   nil,
 		ID:                 server.ID.String(),
-		Name:               server.Name,
+		Name:               new(server.Name),
 		AllowPublic:        nil,
 		ResourceIdentifier: new(" https://tunneled.internal/mcp/ "),
 	})
@@ -52,18 +90,20 @@ func TestUpdateServerResourceIdentifierTriState(t *testing.T) {
 	require.Equal(t, "https://tunneled.internal/mcp", conv.PtrValOr(updated.ResourceIdentifier, ""),
 		"the identifier is stored trimmed, without a trailing slash")
 
-	// Omitting the field leaves the stored value untouched.
+	// Omitting a field leaves the stored value untouched — name included, so a
+	// section editing only the identifier cannot revert a concurrent rename.
 	updated, err = ti.service.UpdateServer(writeCtx, &gen.UpdateServerPayload{
 		SessionToken:       nil,
 		ApikeyToken:        nil,
 		ProjectSlugInput:   nil,
 		ID:                 server.ID.String(),
-		Name:               server.Name,
-		AllowPublic:        nil,
+		Name:               nil,
+		AllowPublic:        new(false),
 		ResourceIdentifier: nil,
 	})
 	require.NoError(t, err)
 	require.Equal(t, "https://tunneled.internal/mcp", conv.PtrValOr(updated.ResourceIdentifier, ""))
+	require.Equal(t, server.Name, updated.Name)
 
 	// An empty string clears it back to NULL.
 	updated, err = ti.service.UpdateServer(writeCtx, &gen.UpdateServerPayload{
@@ -71,7 +111,7 @@ func TestUpdateServerResourceIdentifierTriState(t *testing.T) {
 		ApikeyToken:        nil,
 		ProjectSlugInput:   nil,
 		ID:                 server.ID.String(),
-		Name:               server.Name,
+		Name:               new(server.Name),
 		AllowPublic:        nil,
 		ResourceIdentifier: new(""),
 	})
@@ -94,7 +134,7 @@ func TestUpdateServerResourceIdentifierTrimsPathOnly(t *testing.T) {
 		ApikeyToken:        nil,
 		ProjectSlugInput:   nil,
 		ID:                 server.ID.String(),
-		Name:               server.Name,
+		Name:               new(server.Name),
 		AllowPublic:        nil,
 		ResourceIdentifier: new("https://tunneled.internal/mcp/?tenant=a/"),
 	})
@@ -108,7 +148,7 @@ func TestUpdateServerResourceIdentifierTrimsPathOnly(t *testing.T) {
 		ApikeyToken:        nil,
 		ProjectSlugInput:   nil,
 		ID:                 server.ID.String(),
-		Name:               server.Name,
+		Name:               new(server.Name),
 		AllowPublic:        nil,
 		ResourceIdentifier: new("https://tunneled.internal/a%2Fb/"),
 	})
@@ -138,7 +178,7 @@ func TestUpdateServerRejectsInvalidResourceIdentifier(t *testing.T) {
 			ApikeyToken:        nil,
 			ProjectSlugInput:   nil,
 			ID:                 server.ID.String(),
-			Name:               server.Name,
+			Name:               new(server.Name),
 			AllowPublic:        nil,
 			ResourceIdentifier: new(invalid),
 		})

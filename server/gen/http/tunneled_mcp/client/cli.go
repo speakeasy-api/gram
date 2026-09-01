@@ -23,7 +23,7 @@ func BuildCreateServerPayload(tunneledMcpCreateServerBody string, tunneledMcpCre
 	{
 		err = json.Unmarshal([]byte(tunneledMcpCreateServerBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"name\": \"abc123\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"name\": \"abc123\",\n      \"resource_identifier\": \"abc123\"\n   }'")
 		}
 	}
 	var sessionToken *string
@@ -45,7 +45,8 @@ func BuildCreateServerPayload(tunneledMcpCreateServerBody string, tunneledMcpCre
 		}
 	}
 	v := &tunneledmcp.CreateServerPayload{
-		Name: body.Name,
+		Name:               body.Name,
+		ResourceIdentifier: body.ResourceIdentifier,
 	}
 	v.SessionToken = sessionToken
 	v.ApikeyToken = apikeyToken

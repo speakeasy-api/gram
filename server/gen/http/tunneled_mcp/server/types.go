@@ -18,6 +18,11 @@ import (
 type CreateServerRequestBody struct {
 	// Human-readable display name for the tunneled MCP server
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// RFC 9728 protected resource identifier of the tunneled server, used only for
+	// exact-match credential routing and never dialed by Gram. Omit unless the
+	// identifier is already known; it is usually recorded later, once the tunnel
+	// is up.
+	ResourceIdentifier *string `form:"resource_identifier,omitempty" json:"resource_identifier,omitempty" xml:"resource_identifier,omitempty"`
 }
 
 // UpdateServerRequestBody is the type of the "tunneledMcp" service
@@ -25,7 +30,8 @@ type CreateServerRequestBody struct {
 type UpdateServerRequestBody struct {
 	// The ID of the tunneled MCP server to update
 	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Human-readable display name for the tunneled MCP server
+	// Human-readable display name for the tunneled MCP server. Omit to leave
+	// unchanged.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// Consent to serve this source through a public, anonymous MCP endpoint.
 	// Disabling revokes all live anonymous sessions. Omit to leave unchanged.
@@ -2604,7 +2610,8 @@ func NewDeleteServerGatewayErrorResponseBody(res *goa.ServiceError) *DeleteServe
 // payload.
 func NewCreateServerPayload(body *CreateServerRequestBody, sessionToken *string, apikeyToken *string, projectSlugInput *string) *tunneledmcp.CreateServerPayload {
 	v := &tunneledmcp.CreateServerPayload{
-		Name: *body.Name,
+		Name:               *body.Name,
+		ResourceIdentifier: body.ResourceIdentifier,
 	}
 	v.SessionToken = sessionToken
 	v.ApikeyToken = apikeyToken
@@ -2652,7 +2659,7 @@ func NewListServerConnectionsPayload(id string, sessionToken *string, apikeyToke
 func NewUpdateServerPayload(body *UpdateServerRequestBody, sessionToken *string, apikeyToken *string, projectSlugInput *string) *tunneledmcp.UpdateServerPayload {
 	v := &tunneledmcp.UpdateServerPayload{
 		ID:                 *body.ID,
-		Name:               *body.Name,
+		Name:               body.Name,
 		AllowPublic:        body.AllowPublic,
 		ResourceIdentifier: body.ResourceIdentifier,
 	}
@@ -2702,9 +2709,6 @@ func ValidateCreateServerRequestBody(body *CreateServerRequestBody) (err error) 
 func ValidateUpdateServerRequestBody(body *UpdateServerRequestBody) (err error) {
 	if body.ID == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
 	if body.ID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", *body.ID, goa.FormatUUID))
