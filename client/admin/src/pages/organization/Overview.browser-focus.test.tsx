@@ -185,7 +185,7 @@ describe("Overview conversion without DialogTrigger restoration", () => {
     );
     await waitFor(() =>
       expect(
-        screen.queryByRole("heading", { name: "Active trial" }),
+        screen.queryByRole("heading", { name: "Enterprise trial" }),
       ).toBeNull(),
     );
     expect(announce).not.toHaveBeenCalled();
@@ -220,7 +220,7 @@ describe("Overview conversion without DialogTrigger restoration", () => {
     );
     await waitFor(() =>
       expect(
-        screen.queryByRole("heading", { name: "Active trial" }),
+        screen.queryByRole("heading", { name: "Enterprise trial" }),
       ).toBeNull(),
     );
 

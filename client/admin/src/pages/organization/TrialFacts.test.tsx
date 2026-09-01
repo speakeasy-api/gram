@@ -94,6 +94,26 @@ describe("TrialFacts", () => {
     expect(vi.getTimerCount()).toBe(0);
   });
 
+  it("refreshes the summary clock when transitioning into a live trial", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime("2026-05-06T00:00:00Z");
+    const view = render(
+      <TrialSummary org={anOrganization({ trial_state: "converted" })} />,
+    );
+    vi.setSystemTime("2026-05-06T00:30:00Z");
+
+    view.rerender(
+      <TrialSummary
+        org={anOrganization({
+          trial_state: "running",
+          trial_ends_at: "2026-05-06T01:00:00Z",
+        })}
+      />,
+    );
+
+    expect(screen.getByText("30 minutes left")).toBeTruthy();
+  });
+
   it("updates Details to expired at the exact end", () => {
     vi.useFakeTimers();
     vi.setSystemTime("2026-05-06T00:00:30Z");
@@ -156,17 +176,20 @@ describe("TrialFacts", () => {
     },
   );
 
-  it("labels an unknown future trial state safely", () => {
-    render(
-      <TrialFacts
-        org={anOrganization({ trial_state: "future_state" as "running" })}
-      />,
-    );
+  it.each(["future_state", "constructor", "toString"])(
+    "labels unknown trial state %s safely",
+    (trialState) => {
+      render(
+        <TrialFacts
+          org={anOrganization({ trial_state: trialState as "running" })}
+        />,
+      );
 
-    expect(
-      screen.getByText("Trial state").nextElementSibling?.textContent,
-    ).toBe("Unknown");
-  });
+      expect(
+        screen.getByText("Trial state").nextElementSibling?.textContent,
+      ).toBe("Unknown");
+    },
+  );
 
   it.each([
     ["converted", "Converted", "Conversion date"],

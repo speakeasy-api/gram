@@ -29,6 +29,14 @@ function stateLabel(state: unknown): string {
   }
 }
 
+const LABEL_BY_STATE: Record<string, string | undefined> = TRIAL_LABELS;
+
+function trialLabel(state: unknown): string {
+  return typeof state === "string" && Object.hasOwn(TRIAL_LABELS, state)
+    ? (LABEL_BY_STATE[state] ?? "Unknown")
+    : stateLabel(state);
+}
+
 function nextRemainingChange(remaining: number): number {
   if (remaining > 72 * HOUR_MS) {
     return Math.max(72 * HOUR_MS, (Math.ceil(remaining / DAY_MS) - 1) * DAY_MS);
@@ -107,7 +115,7 @@ export function TrialFacts({ org }: { org: AdminOrganization }): JSX.Element {
       ? "No trial"
       : expired
         ? TRIAL_LABELS.expired
-        : (TRIAL_LABELS[org.trial_state] ?? stateLabel(org.trial_state));
+        : trialLabel(org.trial_state);
 
   return (
     <div ref={attachExpiration} className="mt-5 border-t pt-5">
@@ -168,11 +176,7 @@ export function TrialSummary({ org }: { org: AdminOrganization }): JSX.Element {
       : org.trial_state === "demoted"
         ? "Trial demoted"
         : "Trial status unknown";
-  const status = expired
-    ? TRIAL_LABELS.expired
-    : org.trial_state
-      ? (TRIAL_LABELS[org.trial_state] ?? stateLabel(org.trial_state))
-      : stateLabel(org.trial_state);
+  const status = expired ? TRIAL_LABELS.expired : trialLabel(org.trial_state);
 
   return (
     <div>
