@@ -142,7 +142,7 @@ type httpClientOptions struct {
 	retryConfig       *RetryConfig
 	resolver          *net.Resolver
 	allowedCIDRBlocks []*net.IPNet
-	dialTimeout       time.Duration
+	dialTimeout       *time.Duration
 	resilience        *resilienceOptions
 }
 
@@ -189,12 +189,12 @@ func WithAllowedCIDRBlocks(cidrs ...string) func(*httpClientOptions) {
 	}
 }
 
-// WithDialTimeout bounds only the TCP connect phase for this client.
+// WithDialTimeout bounds only the TCP connect phase for this client,
+// replacing the policy dialer's default. Zero disables the dial timeout,
+// leaving connects bounded only by request contexts ([net.Dialer] semantics).
 func WithDialTimeout(timeout time.Duration) func(*httpClientOptions) {
 	return func(o *httpClientOptions) {
-		if timeout > 0 {
-			o.dialTimeout = timeout
-		}
+		o.dialTimeout = &timeout
 	}
 }
 
@@ -347,8 +347,8 @@ func (p *Policy) clientWithBaseTransport(transport *http.Transport, options ...f
 		dialOpts = append(dialOpts, WithDialerAllowedCIDRBlocks(opts.allowedCIDRBlocks))
 	}
 	dialer := p.Dialer(dialOpts...)
-	if opts.dialTimeout > 0 {
-		dialer.Timeout = opts.dialTimeout
+	if opts.dialTimeout != nil {
+		dialer.Timeout = *opts.dialTimeout
 	}
 	transport.DialContext = dialer.DialContext
 
