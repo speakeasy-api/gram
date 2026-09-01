@@ -39,6 +39,10 @@ func workloadTestTenant() *ResolvedMcpEndpoint {
 // calls it from many goroutines at once.
 type countingLookup struct {
 	calls atomic.Int64
+	// running and peak track how many lookups are inside the function at once,
+	// so a test can assert the slot bound rather than infer it from timing.
+	running atomic.Int64
+	peak    atomic.Int64
 	// release, when non-nil, holds the lookup open until the test closes it,
 	// so a test can guarantee callers pile up behind one in-flight call.
 	release chan struct{}
@@ -50,10 +54,24 @@ type countingLookup struct {
 func (l *countingLookup) fn() workloadIssuerLookup {
 	return func(_ context.Context, _ *ResolvedMcpEndpoint, _ string) (*remotesessions_repo.RemoteSessionIssuer, bool, error) {
 		l.calls.Add(1)
+		l.enter()
+		defer l.running.Add(-1)
+
 		if l.release != nil {
 			<-l.release
 		}
 		return l.issuer, l.found, l.err
+	}
+}
+
+// enter records one more concurrent lookup, raising the high-water mark.
+func (l *countingLookup) enter() {
+	running := l.running.Add(1)
+	for {
+		peak := l.peak.Load()
+		if running <= peak || l.peak.CompareAndSwap(peak, running) {
+			return
+		}
 	}
 }
 
@@ -137,6 +155,94 @@ func TestWorkloadIssuerAdmission_ConcurrentMissesCollapseToOneLookup(t *testing.
 	wg.Wait()
 
 	require.EqualValues(t, 1, lookup.calls.Load(), "concurrent rejections of one issuer must share a single lookup")
+}
+
+// Detaching the flight must not cost the caller its own cancellation. A client
+// that disconnects has to stop waiting immediately, while the flight it opened
+// carries on for anyone sharing it and still records what it found.
+func TestWorkloadIssuerAdmission_AbandonedCallerStopsWaitingButFlightFinishes(t *testing.T) {
+	t.Parallel()
+
+	const issuerURL = "https://attacker.example.test"
+
+	lookup := &countingLookup{found: false, release: make(chan struct{})}
+	admission := newWorkloadIssuerAdmission(lookup.fn())
+	endpoint := workloadTestTenant()
+
+	ctx, cancel := context.WithCancel(t.Context())
+	var abandoned error
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		_, abandoned = admission.admit(ctx, endpoint, issuerURL)
+	}()
+
+	// The flight is inside the held-open lookup before the caller gives up, so
+	// this abandons work that is genuinely still running.
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		assert.EqualValues(c, 1, lookup.running.Load())
+	}, 5*time.Second, time.Millisecond)
+
+	cancel()
+
+	select {
+	case <-done:
+	case <-time.After(5 * time.Second):
+		t.Fatal("a caller that gave up was left waiting on the flight it opened")
+	}
+
+	require.ErrorIs(t, abandoned, context.Canceled)
+	require.NotErrorIs(t, abandoned, errWorkloadIssuerUntrusted, "giving up decides nothing about the issuer, and must not be reported as a rejection")
+
+	// The abandoned flight still lands its miss, so the next caller is served
+	// from the cache instead of paying for the query again.
+	close(lookup.release)
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		reason, ok := admission.misses.seen(workloadIssuerMissKey(endpoint, issuerURL))
+		if assert.True(c, ok, "the flight must record its miss even though its caller left") {
+			assert.Equal(c, workloadIssuerMissUnknown, reason)
+		}
+	}, 5*time.Second, time.Millisecond)
+
+	require.EqualValues(t, 1, lookup.calls.Load(), "abandoning a request must not cost the next one a second lookup")
+}
+
+// singleflight collapses repeats of one issuer and does nothing for distinct
+// ones. Since the flight is detached, a flood of *different* spellings would
+// otherwise put one query per spelling in a pool of single-digit size and hold
+// each until its timeout — the cheapest possible way to starve every other
+// caller of the database.
+func TestWorkloadIssuerAdmission_ConcurrentDistinctIssuersHoldBoundedSlots(t *testing.T) {
+	t.Parallel()
+
+	const callers = 32
+	require.Greater(t, callers, workloadIssuerLookupSlots, "the flood has to exceed the bound for this to assert anything")
+
+	lookup := &countingLookup{found: false, release: make(chan struct{})}
+	admission := newWorkloadIssuerAdmission(lookup.fn())
+	endpoint := workloadTestTenant()
+
+	var wg sync.WaitGroup
+	for i := range callers {
+		wg.Go(func() {
+			// A distinct spelling per caller, so singleflight collapses none of
+			// them and the slot bound is the only thing holding them back.
+			_, err := admission.admit(t.Context(), endpoint, "https://attacker-"+strconv.Itoa(i)+".example.test")
+			require.ErrorIs(t, err, errWorkloadIssuerUntrusted)
+		})
+	}
+
+	// Every slot is occupied and the rest are queued behind them before
+	// anything is allowed to finish.
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		assert.EqualValues(c, workloadIssuerLookupSlots, lookup.running.Load())
+	}, 5*time.Second, time.Millisecond)
+
+	close(lookup.release)
+	wg.Wait()
+
+	require.EqualValues(t, callers, lookup.calls.Load(), "distinct issuers must each still be resolved, only never all at once")
+	require.LessOrEqual(t, lookup.peak.Load(), int64(workloadIssuerLookupSlots), "a flood of distinct issuers must never hold more than the slot bound")
 }
 
 // Two endpoints in different tenancies resolve independently, so one
