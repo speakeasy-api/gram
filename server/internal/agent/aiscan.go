@@ -15,6 +15,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
+	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
 // ReportAIScan ingests one device-agent AI scan report: the matches land in
@@ -47,6 +48,9 @@ func (s *Service) ReportAIScan(ctx context.Context, payload *gen.ReportAIScanPay
 	}
 	if email == "" {
 		return oops.E(oops.CodeBadRequest, nil, "could not resolve the enrolled user's email for this scan report")
+	}
+	if _, err := urn.ParsePrincipal(string(urn.PrincipalTypeEmail) + ":" + email); err != nil {
+		return oops.E(oops.CodeBadRequest, err, "invalid email")
 	}
 
 	startedAt, err := time.Parse(time.RFC3339, payload.ScanStartedAt)

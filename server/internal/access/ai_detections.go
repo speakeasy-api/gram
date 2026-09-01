@@ -46,6 +46,7 @@ func (s *Service) ListAIDetections(ctx context.Context, payload *gen.ListAIDetec
 	// normalized emails and pushes them down to ClickHouse as a user_email
 	// restriction. A group with no active members matches nothing.
 	var userEmails []string
+	canonicalIdentityOrg := ""
 	if payload.DirectoryGroupID != nil {
 		groupID, err := uuid.Parse(*payload.DirectoryGroupID)
 		if err != nil {
@@ -59,13 +60,14 @@ func (s *Service) ListAIDetections(ctx context.Context, payload *gen.ListAIDetec
 			return &gen.ListAIDetectionsResult{Detections: []*gen.AIDetection{}}, nil
 		}
 		userEmails = emails
+		canonicalIdentityOrg = s.canonicalFoldOrg(ctx, ac.ActiveOrganizationID)
 	}
 
 	rows, err := telemetryrepo.New(s.chConn).ListAIDetectionSummaries(ctx, telemetryrepo.ListAIDetectionSummariesParams{
 		OrganizationID:       ac.ActiveOrganizationID,
 		Categories:           categories,
 		UserEmails:           userEmails,
-		CanonicalIdentityOrg: s.canonicalFoldOrg(ctx, ac.ActiveOrganizationID),
+		CanonicalIdentityOrg: canonicalIdentityOrg,
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "list ai detections").LogError(ctx, s.logger)

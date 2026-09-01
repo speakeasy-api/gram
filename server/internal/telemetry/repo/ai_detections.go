@@ -7,6 +7,8 @@ import (
 
 	"github.com/ClickHouse/clickhouse-go/v2"
 	"github.com/Masterminds/squirrel"
+
+	"github.com/speakeasy-api/gram/server/internal/o11y"
 )
 
 // UpsertAIDetectionParams is one (organization, target, device, user, signal)
@@ -54,26 +56,31 @@ type aiDetectionUpsert struct {
 	UpdatedAt      time.Time
 }
 
+type aiDetectionKey struct {
+	OrganizationID string
+	DeviceSerial   string
+	UserEmail      string
+	TargetID       string
+	Signal         string
+}
+
 type aiDetectionScope struct {
 	OrganizationID string
 	DeviceSerial   string
 	UserEmail      string
 }
 
-func aiDetectionKey(organizationID, deviceSerial, userEmail, targetID, signal string) string {
-	return organizationID + "\x00" + deviceSerial + "\x00" + userEmail + "\x00" + targetID + "\x00" + signal
-}
-
 // UpsertAIDetections merges the given detections with any existing rows (one
-// batched lookup per reporting device+user scope) and writes them with a
-// synchronous insert: the read-merge-write preserves first_seen, so the
-// insert must not be deferred by ClickHouse async insert buffering.
+// batched lookup per reporting device+user scope) and writes them with an
+// acknowledged async insert. ClickHouse buffers the tiny batch, while
+// wait_for_async_insert=1 preserves the immediate visibility required by the
+// read-merge-write cycle.
 func (q *Queries) UpsertAIDetections(ctx context.Context, args []UpsertAIDetectionParams) error {
 	if len(args) == 0 {
 		return nil
 	}
 
-	upserts := make(map[string]*aiDetectionUpsert, len(args))
+	upserts := make(map[aiDetectionKey]*aiDetectionUpsert, len(args))
 	for _, arg := range args {
 		if arg.OrganizationID == "" {
 			return fmt.Errorf("validating ai detection: organization id is required")
@@ -99,7 +106,13 @@ func (q *Queries) UpsertAIDetections(ctx context.Context, args []UpsertAIDetecti
 			updatedAt = time.Now()
 		}
 
-		key := aiDetectionKey(arg.OrganizationID, arg.DeviceSerial, arg.UserEmail, arg.TargetID, arg.Signal)
+		key := aiDetectionKey{
+			OrganizationID: arg.OrganizationID,
+			DeviceSerial:   arg.DeviceSerial,
+			UserEmail:      arg.UserEmail,
+			TargetID:       arg.TargetID,
+			Signal:         arg.Signal,
+		}
 		upsert := upserts[key]
 		if upsert == nil {
 			upserts[key] = &aiDetectionUpsert{
@@ -133,10 +146,6 @@ func (q *Queries) UpsertAIDetections(ctx context.Context, args []UpsertAIDetecti
 		}
 	}
 
-	if len(upserts) == 0 {
-		return nil
-	}
-
 	// Fetch existing rows with one batched lookup per (org, device, user)
 	// scope — a scan report always lands in exactly one scope, so the usual
 	// case is a single lookup covering every target in the report.
@@ -155,12 +164,16 @@ func (q *Queries) UpsertAIDetections(ctx context.Context, args []UpsertAIDetecti
 			return err
 		}
 		for _, existing := range existingRows {
-			upsert, ok := upserts[aiDetectionKey(scope.OrganizationID, scope.DeviceSerial, scope.UserEmail, existing.TargetID, existing.Signal)]
+			key := aiDetectionKey{
+				OrganizationID: scope.OrganizationID,
+				DeviceSerial:   scope.DeviceSerial,
+				UserEmail:      scope.UserEmail,
+				TargetID:       existing.TargetID,
+				Signal:         existing.Signal,
+			}
+			upsert, ok := upserts[key]
 			if !ok {
 				continue
-			}
-			if upsert.Category == "" {
-				upsert.Category = existing.Category
 			}
 			if upsert.Version == "" {
 				upsert.Version = existing.Version
@@ -190,15 +203,16 @@ func (q *Queries) UpsertAIDetections(ctx context.Context, args []UpsertAIDetecti
 	return nil
 }
 
-// insertAIDetectionRows writes detection rows synchronously (async_insert=0):
-// every caller is a read-merge-write cycle whose next read must see the rows
-// written here. Timestamps are sent as fromUnixTimestamp64Nano expressions
+// insertAIDetectionRows buffers tiny batches with async_insert=1 and waits for
+// the server flush with wait_for_async_insert=1, so the next read sees the rows.
+// Timestamps are sent as fromUnixTimestamp64Nano expressions
 // because clickhouse-go's positional binder truncates time.Time arguments to
 // whole seconds, which collapses distinct updated_at versions written within
 // the same second and makes the argMax(_, updated_at) reads nondeterministic.
 func (q *Queries) insertAIDetectionRows(ctx context.Context, rows []*aiDetectionUpsert) error {
 	ctx = clickhouse.Context(ctx, clickhouse.WithSettings(clickhouse.Settings{
-		"async_insert": 0,
+		"async_insert":          1,
+		"wait_for_async_insert": 1,
 	}))
 
 	builder := sq.Insert("ai_detections").
@@ -278,7 +292,7 @@ func (q *Queries) listAIDetectionRowsByScope(ctx context.Context, scope aiDetect
 	if err != nil {
 		return nil, fmt.Errorf("querying ai detection scope lookup: %w", err)
 	}
-	defer func() { _ = rows.Close() }()
+	defer o11y.NoLogDefer(func() error { return rows.Close() })
 
 	result := make([]AIDetectionRow, 0, len(targetIDs))
 	for rows.Next() {
@@ -340,7 +354,7 @@ func (q *Queries) ListAIDetectionSummaries(ctx context.Context, arg ListAIDetect
 	if err != nil {
 		return nil, fmt.Errorf("querying ai detection summaries: %w", err)
 	}
-	defer func() { _ = rows.Close() }()
+	defer o11y.NoLogDefer(func() error { return rows.Close() })
 
 	result := []AIDetectionSummaryRow{}
 	for rows.Next() {
@@ -410,15 +424,16 @@ type InsertAIScanReceiptParams struct {
 	ReceivedAt        time.Time
 }
 
-// InsertAIScanReceipts appends scan receipts with a synchronous insert
-// (async_insert=0) so a caller's follow-up read sees them.
+// InsertAIScanReceipts buffers tiny receipt batches with async_insert=1 and
+// waits for the server flush so a caller's follow-up read sees them.
 func (q *Queries) InsertAIScanReceipts(ctx context.Context, args []InsertAIScanReceiptParams) error {
 	if len(args) == 0 {
 		return nil
 	}
 
 	ctx = clickhouse.Context(ctx, clickhouse.WithSettings(clickhouse.Settings{
-		"async_insert": 0,
+		"async_insert":          1,
+		"wait_for_async_insert": 1,
 	}))
 
 	builder := sq.Insert("ai_scan_receipts").
@@ -515,7 +530,7 @@ func (q *Queries) ListAIScanReceipts(ctx context.Context, arg ListAIScanReceipts
 	if err != nil {
 		return nil, fmt.Errorf("querying ai scan receipts: %w", err)
 	}
-	defer func() { _ = rows.Close() }()
+	defer o11y.NoLogDefer(func() error { return rows.Close() })
 
 	result := []AIScanReceiptRow{}
 	for rows.Next() {

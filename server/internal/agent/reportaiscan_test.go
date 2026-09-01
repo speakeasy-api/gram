@@ -253,6 +253,32 @@ func TestReportAIScan_OrgKeyRequiresVouchedEmail(t *testing.T) {
 	require.Equal(t, oops.CodeBadRequest, shareableErr.Code)
 }
 
+func TestReportAIScan_RejectsMalformedVouchedEmailWithoutWriting(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestAgentService(t)
+	ctx, orgID := withUniqueScanOrg(t, ctx)
+
+	now := time.Now().UTC()
+	err := ti.service.ReportAIScan(ctx, &gen.ReportAIScanPayload{
+		ScanStartedAt:     now.Add(-time.Minute).Format(time.RFC3339),
+		ScanCompletedAt:   now.Format(time.RFC3339),
+		TargetListVersion: 3,
+		MatchCount:        1,
+		Matches: []*gen.AIScanMatch{
+			{TargetID: "cursor", Category: "harness", Signal: "installed", Version: nil},
+		},
+		Email:        new("not an email"),
+		SerialNumber: new("SERIAL-INVALID-EMAIL"),
+		Hostname:     nil,
+	})
+	var shareableErr *oops.ShareableError
+	require.ErrorAs(t, err, &shareableErr)
+	require.Equal(t, oops.CodeBadRequest, shareableErr.Code)
+	require.ErrorContains(t, err, "invalid email")
+	require.Empty(t, aiDetectionSummaries(t, ti, orgID))
+	require.Empty(t, aiScanReceipts(t, ti, orgID))
+}
+
 // A per-user key attributes the scan to the key owner: a vouched email in the
 // header must be ignored on that path, mirroring getPlugins.
 func TestReportAIScan_PerUserKeyAttributesToKeyOwner(t *testing.T) {
