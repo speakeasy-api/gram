@@ -61,12 +61,72 @@ WHERE id = @id
 FOR UPDATE;
 
 -- name: GetActiveLiteLLMInstanceIDByAPIKey :one
-SELECT id
-FROM litellm_instances
-WHERE organization_id = @organization_id
-  AND project_id = @project_id
-  AND api_key_id = @api_key_id
-  AND deleted IS FALSE;
+SELECT li.id
+FROM litellm_instances li
+JOIN projects p
+  ON p.id = li.project_id
+ AND p.organization_id = li.organization_id
+ AND p.deleted IS FALSE
+JOIN api_keys ak
+  ON ak.id = li.api_key_id
+ AND ak.project_id = li.project_id
+ AND ak.organization_id = li.organization_id
+ AND ak.deleted IS FALSE
+WHERE li.organization_id = @organization_id
+  AND li.project_id = @project_id
+  AND li.api_key_id = @api_key_id
+  AND li.deleted IS FALSE;
+
+-- name: IsActiveLiteLLMInstanceInOrganization :one
+SELECT EXISTS(
+  SELECT 1
+  FROM litellm_instances li
+  JOIN projects p
+    ON p.id = li.project_id
+   AND p.organization_id = li.organization_id
+   AND p.deleted IS FALSE
+  JOIN api_keys ak
+    ON ak.id = li.api_key_id
+   AND ak.project_id = li.project_id
+   AND ak.organization_id = li.organization_id
+   AND ak.deleted IS FALSE
+  WHERE li.id = @id
+    AND li.organization_id = @organization_id
+    AND li.deleted IS FALSE
+);
+
+-- name: GetLiteLLMActingPrincipalMintContext :one
+SELECT EXISTS(
+    SELECT 1
+    FROM users u
+    JOIN organization_user_relationships our
+      ON our.user_id = u.id
+     AND our.organization_id = @organization_id
+     AND our.deleted_at IS NULL
+    WHERE u.id = @user_id
+      AND u.deleted_at IS NULL
+  ) AS active_member
+  , COALESCE(li.id, '00000000-0000-0000-0000-000000000000'::uuid) AS id
+  , COALESCE(li.api_key_id, '00000000-0000-0000-0000-000000000000'::uuid) AS api_key_id
+FROM (SELECT 1) AS request
+LEFT JOIN LATERAL (
+  SELECT candidate.id, candidate.api_key_id
+  FROM litellm_instances candidate
+  JOIN projects p
+    ON p.id = candidate.project_id
+   AND p.organization_id = candidate.organization_id
+   AND p.deleted IS FALSE
+  JOIN api_keys ak
+    ON ak.id = candidate.api_key_id
+   AND ak.project_id = candidate.project_id
+   AND ak.organization_id = candidate.organization_id
+   AND ak.deleted IS FALSE
+  WHERE candidate.id = @id
+    AND candidate.organization_id = @organization_id
+    AND candidate.project_id = @project_id
+    AND candidate.deleted IS FALSE
+) li ON TRUE;
+
 
 -- name: RotateLiteLLMInstanceKey :one
 UPDATE litellm_instances

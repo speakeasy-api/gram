@@ -1,6 +1,7 @@
 package contextvalues
 
 import (
+	"context"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -37,6 +38,27 @@ func TestValidatedGramSessionProvenanceIsPrivateAndPropagatesLegacyImpersonation
 	impersonated := WithValidatedGramSession(t.Context(), base, true)
 	require.True(t, HasValidatedGramSession(impersonated))
 	require.True(t, IsLegacyImpersonatedSession(impersonated))
+}
+
+func TestIsOrdinaryGramUserSessionRejectsAlternateProvenance(t *testing.T) {
+	t.Parallel()
+	sessionID := "session_123"
+	base := &AuthContext{ActiveOrganizationID: "org_123", UserID: "user_123", SessionID: &sessionID}
+	validated := WithValidatedGramSession(t.Context(), base, false)
+	require.True(t, IsOrdinaryGramUserSession(validated))
+
+	cases := map[string]func(context.Context) context.Context{
+		"assistant":      func(ctx context.Context) context.Context { return SetAssistantPrincipal(ctx, AssistantPrincipal{}) },
+		"OAuth":          func(ctx context.Context) context.Context { return SetOAuthClientID(ctx, "client_123") },
+		"acting surface": func(ctx context.Context) context.Context { return SetActingSurface(ctx, ActingSurfacePlatformMCP) },
+		"RBAC override":  func(ctx context.Context) context.Context { return SetRBACScopeOverride(ctx, "scope") },
+	}
+	for name, decorate := range cases {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			require.False(t, IsOrdinaryGramUserSession(decorate(validated)))
+		})
+	}
 }
 
 func TestRefreshSessionCookieIgnoresNilCallback(t *testing.T) {

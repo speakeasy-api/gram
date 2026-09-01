@@ -136,7 +136,7 @@ func UsageCommands() []string {
 		"integrations (get|list)",
 		"json-web-key-sets (create-set|update-set|list-sets|get-set|delete-set|list-keys|publish-key|activate-key|retire-key|revoke-key)",
 		"keys (create-key|list-keys|revoke-key|verify-key)",
-		"litellm (create-instance|list-instances|rotate-instance-key|revoke-instance|ingest|traces)",
+		"litellm (create-instance|list-instances|mint-acting-principal|rotate-instance-key|revoke-instance|ingest|traces)",
 		"mcp-approval (list-requests|get-request|ensure-server-review|create-request|promote|refresh-evidence|start-research|record-decision)",
 		"mcp-endpoints (create-mcp-endpoint|get-mcp-endpoint|list-mcp-endpoints|update-mcp-endpoint|check-mcp-endpoint-slug-availability|delete-mcp-endpoint)",
 		"mcp-metadata (get-mcp-metadata|set-mcp-metadata|export-mcp-metadata)",
@@ -1434,6 +1434,11 @@ func ParseEndpoint(
 		litellmListInstancesFlags                = flag.NewFlagSet("list-instances", flag.ExitOnError)
 		litellmListInstancesSessionTokenFlag     = litellmListInstancesFlags.String("session-token", "", "")
 		litellmListInstancesProjectSlugInputFlag = litellmListInstancesFlags.String("project-slug-input", "", "")
+
+		litellmMintActingPrincipalFlags                = flag.NewFlagSet("mint-acting-principal", flag.ExitOnError)
+		litellmMintActingPrincipalBodyFlag             = litellmMintActingPrincipalFlags.String("body", "REQUIRED", "")
+		litellmMintActingPrincipalSessionTokenFlag     = litellmMintActingPrincipalFlags.String("session-token", "", "")
+		litellmMintActingPrincipalProjectSlugInputFlag = litellmMintActingPrincipalFlags.String("project-slug-input", "", "")
 
 		litellmRotateInstanceKeyFlags                = flag.NewFlagSet("rotate-instance-key", flag.ExitOnError)
 		litellmRotateInstanceKeyBodyFlag             = litellmRotateInstanceKeyFlags.String("body", "REQUIRED", "")
@@ -4093,6 +4098,7 @@ func ParseEndpoint(
 	litellmFlags.Usage = litellmUsage
 	litellmCreateInstanceFlags.Usage = litellmCreateInstanceUsage
 	litellmListInstancesFlags.Usage = litellmListInstancesUsage
+	litellmMintActingPrincipalFlags.Usage = litellmMintActingPrincipalUsage
 	litellmRotateInstanceKeyFlags.Usage = litellmRotateInstanceKeyUsage
 	litellmRevokeInstanceFlags.Usage = litellmRevokeInstanceUsage
 	litellmIngestFlags.Usage = litellmIngestUsage
@@ -5613,6 +5619,9 @@ func ParseEndpoint(
 
 			case "list-instances":
 				epf = litellmListInstancesFlags
+
+			case "mint-acting-principal":
+				epf = litellmMintActingPrincipalFlags
 
 			case "rotate-instance-key":
 				epf = litellmRotateInstanceKeyFlags
@@ -7896,6 +7905,9 @@ func ParseEndpoint(
 			case "list-instances":
 				endpoint = c.ListInstances()
 				data, err = litellmc.BuildListInstancesPayload(*litellmListInstancesSessionTokenFlag, *litellmListInstancesProjectSlugInputFlag)
+			case "mint-acting-principal":
+				endpoint = c.MintActingPrincipal()
+				data, err = litellmc.BuildMintActingPrincipalPayload(*litellmMintActingPrincipalBodyFlag, *litellmMintActingPrincipalSessionTokenFlag, *litellmMintActingPrincipalProjectSlugInputFlag)
 			case "rotate-instance-key":
 				endpoint = c.RotateInstanceKey()
 				data, err = litellmc.BuildRotateInstanceKeyPayload(*litellmRotateInstanceKeyBodyFlag, *litellmRotateInstanceKeySessionTokenFlag, *litellmRotateInstanceKeyProjectSlugInputFlag)
@@ -14925,6 +14937,7 @@ func litellmUsage() {
 	fmt.Fprintln(os.Stderr, "COMMAND:")
 	fmt.Fprintln(os.Stderr, `    create-instance: Provision a LiteLLM integration for a project and return its plaintext ingestion key once. Requires org:admin.`)
 	fmt.Fprintln(os.Stderr, `    list-instances: List active and revoked LiteLLM integrations for a project. Plaintext keys are never returned. Requires org:admin.`)
+	fmt.Fprintln(os.Stderr, `    mint-acting-principal: Mint a short-lived acting-principal assertion from an authoritative Gram user session for one active managed LiteLLM inference invocation. The caller must forward the assertion and invocation ID as original request headers to LiteLLM.`)
 	fmt.Fprintln(os.Stderr, `    rotate-instance-key: Atomically replace a LiteLLM integration key and return the new plaintext value once. Requires org:admin.`)
 	fmt.Fprintln(os.Stderr, `    revoke-instance: Revoke a LiteLLM integration and immediately invalidate its active key. Requires org:admin.`)
 	fmt.Fprintln(os.Stderr, `    ingest: Evaluates and captures a LiteLLM model request before it reaches the provider.`)
@@ -14952,7 +14965,7 @@ func litellmCreateInstanceUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "litellm create-instance --body '{\n      \"failure_posture\": \"fail_open\",\n      \"name\": \"aaa\"\n   }' --session-token \"abc123\" --project-slug-input \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "litellm create-instance --body '{\n      \"failure_posture\": \"fail_closed\",\n      \"name\": \"aaa\"\n   }' --session-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 func litellmListInstancesUsage() {
@@ -14973,6 +14986,28 @@ func litellmListInstancesUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "litellm list-instances --session-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func litellmMintActingPrincipalUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] litellm mint-acting-principal", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Mint a short-lived acting-principal assertion from an authoritative Gram user session for one active managed LiteLLM inference invocation. The caller must forward the assertion and invocation ID as original request headers to LiteLLM.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "litellm mint-acting-principal --body '{\n      \"instance_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"invocation_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }' --session-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 func litellmRotateInstanceKeyUsage() {

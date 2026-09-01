@@ -8,7 +8,6 @@ import { ClosedEnum } from "../../types/enums.js";
 
 export const FailurePosture = {
   FailClosed: "fail_closed",
-  FailOpen: "fail_open",
 } as const;
 export type FailurePosture = ClosedEnum<typeof FailurePosture>;
 

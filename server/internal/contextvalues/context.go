@@ -50,6 +50,30 @@ func HasValidatedGramSession(ctx context.Context) bool {
 	return ok && authCtx != nil && authCtx.gramSessionValidated
 }
 
+// IsOrdinaryGramUserSession reports whether the request has only authenticated
+// user-session provenance, with no alternate or elevated acting surface.
+func IsOrdinaryGramUserSession(ctx context.Context) bool {
+	authCtx, ok := GetAuthContext(ctx)
+	if !ok || authCtx == nil || !authCtx.gramSessionValidated || authCtx.SessionID == nil || *authCtx.SessionID == "" ||
+		authCtx.ActiveOrganizationID == "" || authCtx.UserID == "" || authCtx.APIKeyID != "" || authCtx.APIKeyName != "" ||
+		len(authCtx.APIKeyScopes) != 0 || authCtx.OrgWidePluginHooksKey || IsSupportSession(ctx) || IsLegacyImpersonatedSession(ctx) {
+		return false
+	}
+	if _, ok := GetAssistantPrincipal(ctx); ok {
+		return false
+	}
+	if _, ok := GetOAuthClientID(ctx); ok {
+		return false
+	}
+	if _, ok := GetActingSurface(ctx); ok {
+		return false
+	}
+	if _, ok := GetRBACScopeOverride(ctx); ok {
+		return false
+	}
+	return true
+}
+
 // IsLegacyImpersonatedSession reports legacy WorkOS impersonation propagated by
 // sessions.Authenticate without exposing the impersonator identity.
 func IsLegacyImpersonatedSession(ctx context.Context) bool {

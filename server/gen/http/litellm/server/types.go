@@ -22,6 +22,14 @@ type CreateInstanceRequestBody struct {
 	FailurePosture *string `form:"failure_posture,omitempty" json:"failure_posture,omitempty" xml:"failure_posture,omitempty"`
 }
 
+// MintActingPrincipalRequestBody is the type of the "litellm" service
+// "mintActingPrincipal" endpoint HTTP request body.
+type MintActingPrincipalRequestBody struct {
+	InstanceID *string `form:"instance_id,omitempty" json:"instance_id,omitempty" xml:"instance_id,omitempty"`
+	// Fresh canonical UUIDv7 identifying exactly one inference attempt.
+	InvocationID *string `form:"invocation_id,omitempty" json:"invocation_id,omitempty" xml:"invocation_id,omitempty"`
+}
+
 // RotateInstanceKeyRequestBody is the type of the "litellm" service
 // "rotateInstanceKey" endpoint HTTP request body.
 type RotateInstanceKeyRequestBody struct {
@@ -66,6 +74,15 @@ type CreateInstanceResponseBody struct {
 // "listInstances" endpoint HTTP response body.
 type ListInstancesResponseBody struct {
 	Instances []*LiteLLMInstanceResponseBody `form:"instances" json:"instances" xml:"instances"`
+}
+
+// MintActingPrincipalResponseBody is the type of the "litellm" service
+// "mintActingPrincipal" endpoint HTTP response body.
+type MintActingPrincipalResponseBody struct {
+	Assertion       string `form:"assertion" json:"assertion" xml:"assertion"`
+	ContractVersion string `form:"contract_version" json:"contract_version" xml:"contract_version"`
+	InvocationID    string `form:"invocation_id" json:"invocation_id" xml:"invocation_id"`
+	ExpiresIn       int    `form:"expires_in" json:"expires_in" xml:"expires_in"`
 }
 
 // RotateInstanceKeyResponseBody is the type of the "litellm" service
@@ -435,6 +452,193 @@ type ListInstancesUnexpectedResponseBody struct {
 // ListInstancesGatewayErrorResponseBody is the type of the "litellm" service
 // "listInstances" endpoint HTTP response body for the "gateway_error" error.
 type ListInstancesGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// MintActingPrincipalUnauthorizedResponseBody is the type of the "litellm"
+// service "mintActingPrincipal" endpoint HTTP response body for the
+// "unauthorized" error.
+type MintActingPrincipalUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// MintActingPrincipalForbiddenResponseBody is the type of the "litellm"
+// service "mintActingPrincipal" endpoint HTTP response body for the
+// "forbidden" error.
+type MintActingPrincipalForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// MintActingPrincipalBadRequestResponseBody is the type of the "litellm"
+// service "mintActingPrincipal" endpoint HTTP response body for the
+// "bad_request" error.
+type MintActingPrincipalBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// MintActingPrincipalNotFoundResponseBody is the type of the "litellm" service
+// "mintActingPrincipal" endpoint HTTP response body for the "not_found" error.
+type MintActingPrincipalNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// MintActingPrincipalConflictResponseBody is the type of the "litellm" service
+// "mintActingPrincipal" endpoint HTTP response body for the "conflict" error.
+type MintActingPrincipalConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// MintActingPrincipalUnsupportedMediaResponseBody is the type of the "litellm"
+// service "mintActingPrincipal" endpoint HTTP response body for the
+// "unsupported_media" error.
+type MintActingPrincipalUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// MintActingPrincipalInvalidResponseBody is the type of the "litellm" service
+// "mintActingPrincipal" endpoint HTTP response body for the "invalid" error.
+type MintActingPrincipalInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// MintActingPrincipalInvariantViolationResponseBody is the type of the
+// "litellm" service "mintActingPrincipal" endpoint HTTP response body for the
+// "invariant_violation" error.
+type MintActingPrincipalInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// MintActingPrincipalUnexpectedResponseBody is the type of the "litellm"
+// service "mintActingPrincipal" endpoint HTTP response body for the
+// "unexpected" error.
+type MintActingPrincipalUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// MintActingPrincipalGatewayErrorResponseBody is the type of the "litellm"
+// service "mintActingPrincipal" endpoint HTTP response body for the
+// "gateway_error" error.
+type MintActingPrincipalGatewayErrorResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -1287,6 +1491,18 @@ func NewListInstancesResponseBody(res *litellm.ListInstancesResult) *ListInstanc
 	return body
 }
 
+// NewMintActingPrincipalResponseBody builds the HTTP response body from the
+// result of the "mintActingPrincipal" endpoint of the "litellm" service.
+func NewMintActingPrincipalResponseBody(res *litellmviews.LitellmActingPrincipalResultView) *MintActingPrincipalResponseBody {
+	body := &MintActingPrincipalResponseBody{
+		Assertion:       *res.Assertion,
+		ContractVersion: *res.ContractVersion,
+		InvocationID:    *res.InvocationID,
+		ExpiresIn:       *res.ExpiresIn,
+	}
+	return body
+}
+
 // NewRotateInstanceKeyResponseBody builds the HTTP response body from the
 // result of the "rotateInstanceKey" endpoint of the "litellm" service.
 func NewRotateInstanceKeyResponseBody(res *litellmviews.LitellmInstanceKeyResultView) *RotateInstanceKeyResponseBody {
@@ -1604,6 +1820,155 @@ func NewListInstancesUnexpectedResponseBody(res *goa.ServiceError) *ListInstance
 // the result of the "listInstances" endpoint of the "litellm" service.
 func NewListInstancesGatewayErrorResponseBody(res *goa.ServiceError) *ListInstancesGatewayErrorResponseBody {
 	body := &ListInstancesGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewMintActingPrincipalUnauthorizedResponseBody builds the HTTP response body
+// from the result of the "mintActingPrincipal" endpoint of the "litellm"
+// service.
+func NewMintActingPrincipalUnauthorizedResponseBody(res *goa.ServiceError) *MintActingPrincipalUnauthorizedResponseBody {
+	body := &MintActingPrincipalUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewMintActingPrincipalForbiddenResponseBody builds the HTTP response body
+// from the result of the "mintActingPrincipal" endpoint of the "litellm"
+// service.
+func NewMintActingPrincipalForbiddenResponseBody(res *goa.ServiceError) *MintActingPrincipalForbiddenResponseBody {
+	body := &MintActingPrincipalForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewMintActingPrincipalBadRequestResponseBody builds the HTTP response body
+// from the result of the "mintActingPrincipal" endpoint of the "litellm"
+// service.
+func NewMintActingPrincipalBadRequestResponseBody(res *goa.ServiceError) *MintActingPrincipalBadRequestResponseBody {
+	body := &MintActingPrincipalBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewMintActingPrincipalNotFoundResponseBody builds the HTTP response body
+// from the result of the "mintActingPrincipal" endpoint of the "litellm"
+// service.
+func NewMintActingPrincipalNotFoundResponseBody(res *goa.ServiceError) *MintActingPrincipalNotFoundResponseBody {
+	body := &MintActingPrincipalNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewMintActingPrincipalConflictResponseBody builds the HTTP response body
+// from the result of the "mintActingPrincipal" endpoint of the "litellm"
+// service.
+func NewMintActingPrincipalConflictResponseBody(res *goa.ServiceError) *MintActingPrincipalConflictResponseBody {
+	body := &MintActingPrincipalConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewMintActingPrincipalUnsupportedMediaResponseBody builds the HTTP response
+// body from the result of the "mintActingPrincipal" endpoint of the "litellm"
+// service.
+func NewMintActingPrincipalUnsupportedMediaResponseBody(res *goa.ServiceError) *MintActingPrincipalUnsupportedMediaResponseBody {
+	body := &MintActingPrincipalUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewMintActingPrincipalInvalidResponseBody builds the HTTP response body from
+// the result of the "mintActingPrincipal" endpoint of the "litellm" service.
+func NewMintActingPrincipalInvalidResponseBody(res *goa.ServiceError) *MintActingPrincipalInvalidResponseBody {
+	body := &MintActingPrincipalInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewMintActingPrincipalInvariantViolationResponseBody builds the HTTP
+// response body from the result of the "mintActingPrincipal" endpoint of the
+// "litellm" service.
+func NewMintActingPrincipalInvariantViolationResponseBody(res *goa.ServiceError) *MintActingPrincipalInvariantViolationResponseBody {
+	body := &MintActingPrincipalInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewMintActingPrincipalUnexpectedResponseBody builds the HTTP response body
+// from the result of the "mintActingPrincipal" endpoint of the "litellm"
+// service.
+func NewMintActingPrincipalUnexpectedResponseBody(res *goa.ServiceError) *MintActingPrincipalUnexpectedResponseBody {
+	body := &MintActingPrincipalUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewMintActingPrincipalGatewayErrorResponseBody builds the HTTP response body
+// from the result of the "mintActingPrincipal" endpoint of the "litellm"
+// service.
+func NewMintActingPrincipalGatewayErrorResponseBody(res *goa.ServiceError) *MintActingPrincipalGatewayErrorResponseBody {
+	body := &MintActingPrincipalGatewayErrorResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -2198,7 +2563,7 @@ func NewCreateInstancePayload(body *CreateInstanceRequestBody, sessionToken *str
 		Name: *body.Name,
 	}
 	if body.FailurePosture != nil {
-		v.FailurePosture = litellm.LiteLLMFailurePosture(*body.FailurePosture)
+		v.FailurePosture = litellm.LiteLLMCreateFailurePosture(*body.FailurePosture)
 	}
 	if body.FailurePosture == nil {
 		v.FailurePosture = "fail_closed"
@@ -2213,6 +2578,19 @@ func NewCreateInstancePayload(body *CreateInstanceRequestBody, sessionToken *str
 // payload.
 func NewListInstancesPayload(sessionToken *string, projectSlugInput *string) *litellm.ListInstancesPayload {
 	v := &litellm.ListInstancesPayload{}
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v
+}
+
+// NewMintActingPrincipalPayload builds a litellm service mintActingPrincipal
+// endpoint payload.
+func NewMintActingPrincipalPayload(body *MintActingPrincipalRequestBody, sessionToken *string, projectSlugInput *string) *litellm.MintActingPrincipalPayload {
+	v := &litellm.MintActingPrincipalPayload{
+		InstanceID:   *body.InstanceID,
+		InvocationID: *body.InvocationID,
+	}
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput
 
@@ -2333,9 +2711,27 @@ func ValidateCreateInstanceRequestBody(body *CreateInstanceRequestBody) (err err
 		}
 	}
 	if body.FailurePosture != nil {
-		if !(*body.FailurePosture == "fail_closed" || *body.FailurePosture == "fail_open") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.failure_posture", *body.FailurePosture, []any{"fail_closed", "fail_open"}))
+		if !(*body.FailurePosture == "fail_closed") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.failure_posture", *body.FailurePosture, []any{"fail_closed"}))
 		}
+	}
+	return
+}
+
+// ValidateMintActingPrincipalRequestBody runs the validations defined on
+// MintActingPrincipalRequestBody
+func ValidateMintActingPrincipalRequestBody(body *MintActingPrincipalRequestBody) (err error) {
+	if body.InstanceID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("instance_id", "body"))
+	}
+	if body.InvocationID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("invocation_id", "body"))
+	}
+	if body.InstanceID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.instance_id", *body.InstanceID, goa.FormatUUID))
+	}
+	if body.InvocationID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.invocation_id", *body.InvocationID, goa.FormatUUID))
 	}
 	return
 }
