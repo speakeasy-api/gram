@@ -24,6 +24,8 @@ type Server struct {
 	UpdateRemoteSessionClient http.Handler
 	AttachUserSessionIssuer   http.Handler
 	DetachUserSessionIssuer   http.Handler
+	AttachKeySet              http.Handler
+	DetachKeySet              http.Handler
 	ListRemoteSessionClients  http.Handler
 	GetRemoteSessionClient    http.Handler
 	DeleteRemoteSessionClient http.Handler
@@ -61,6 +63,8 @@ func New(
 			{"UpdateRemoteSessionClient", "POST", "/rpc/remoteSessionClients.update"},
 			{"AttachUserSessionIssuer", "POST", "/rpc/remoteSessionClients.attachUserSessionIssuer"},
 			{"DetachUserSessionIssuer", "POST", "/rpc/remoteSessionClients.detachUserSessionIssuer"},
+			{"AttachKeySet", "POST", "/rpc/remoteSessionClients.attachKeySet"},
+			{"DetachKeySet", "DELETE", "/rpc/remoteSessionClients.detachKeySet"},
 			{"ListRemoteSessionClients", "GET", "/rpc/remoteSessionClients.list"},
 			{"GetRemoteSessionClient", "GET", "/rpc/remoteSessionClients.get"},
 			{"DeleteRemoteSessionClient", "DELETE", "/rpc/remoteSessionClients.delete"},
@@ -70,6 +74,8 @@ func New(
 		UpdateRemoteSessionClient: NewUpdateRemoteSessionClientHandler(e.UpdateRemoteSessionClient, mux, decoder, encoder, errhandler, formatter),
 		AttachUserSessionIssuer:   NewAttachUserSessionIssuerHandler(e.AttachUserSessionIssuer, mux, decoder, encoder, errhandler, formatter),
 		DetachUserSessionIssuer:   NewDetachUserSessionIssuerHandler(e.DetachUserSessionIssuer, mux, decoder, encoder, errhandler, formatter),
+		AttachKeySet:              NewAttachKeySetHandler(e.AttachKeySet, mux, decoder, encoder, errhandler, formatter),
+		DetachKeySet:              NewDetachKeySetHandler(e.DetachKeySet, mux, decoder, encoder, errhandler, formatter),
 		ListRemoteSessionClients:  NewListRemoteSessionClientsHandler(e.ListRemoteSessionClients, mux, decoder, encoder, errhandler, formatter),
 		GetRemoteSessionClient:    NewGetRemoteSessionClientHandler(e.GetRemoteSessionClient, mux, decoder, encoder, errhandler, formatter),
 		DeleteRemoteSessionClient: NewDeleteRemoteSessionClientHandler(e.DeleteRemoteSessionClient, mux, decoder, encoder, errhandler, formatter),
@@ -86,6 +92,8 @@ func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.UpdateRemoteSessionClient = m(s.UpdateRemoteSessionClient)
 	s.AttachUserSessionIssuer = m(s.AttachUserSessionIssuer)
 	s.DetachUserSessionIssuer = m(s.DetachUserSessionIssuer)
+	s.AttachKeySet = m(s.AttachKeySet)
+	s.DetachKeySet = m(s.DetachKeySet)
 	s.ListRemoteSessionClients = m(s.ListRemoteSessionClients)
 	s.GetRemoteSessionClient = m(s.GetRemoteSessionClient)
 	s.DeleteRemoteSessionClient = m(s.DeleteRemoteSessionClient)
@@ -101,6 +109,8 @@ func Mount(mux goahttp.Muxer, h *Server) {
 	MountUpdateRemoteSessionClientHandler(mux, h.UpdateRemoteSessionClient)
 	MountAttachUserSessionIssuerHandler(mux, h.AttachUserSessionIssuer)
 	MountDetachUserSessionIssuerHandler(mux, h.DetachUserSessionIssuer)
+	MountAttachKeySetHandler(mux, h.AttachKeySet)
+	MountDetachKeySetHandler(mux, h.DetachKeySet)
 	MountListRemoteSessionClientsHandler(mux, h.ListRemoteSessionClients)
 	MountGetRemoteSessionClientHandler(mux, h.GetRemoteSessionClient)
 	MountDeleteRemoteSessionClientHandler(mux, h.DeleteRemoteSessionClient)
@@ -357,6 +367,112 @@ func NewDetachUserSessionIssuerHandler(
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "detachUserSessionIssuer")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "remoteSessionClients")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountAttachKeySetHandler configures the mux to serve the
+// "remoteSessionClients" service "attachKeySet" endpoint.
+func MountAttachKeySetHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/rpc/remoteSessionClients.attachKeySet", f)
+}
+
+// NewAttachKeySetHandler creates a HTTP handler which loads the HTTP request
+// and calls the "remoteSessionClients" service "attachKeySet" endpoint.
+func NewAttachKeySetHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeAttachKeySetRequest(mux, decoder)
+		encodeResponse = EncodeAttachKeySetResponse(encoder)
+		encodeError    = EncodeAttachKeySetError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "attachKeySet")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "remoteSessionClients")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountDetachKeySetHandler configures the mux to serve the
+// "remoteSessionClients" service "detachKeySet" endpoint.
+func MountDetachKeySetHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("DELETE", "/rpc/remoteSessionClients.detachKeySet", f)
+}
+
+// NewDetachKeySetHandler creates a HTTP handler which loads the HTTP request
+// and calls the "remoteSessionClients" service "detachKeySet" endpoint.
+func NewDetachKeySetHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeDetachKeySetRequest(mux, decoder)
+		encodeResponse = EncodeDetachKeySetResponse(encoder)
+		encodeError    = EncodeDetachKeySetError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "detachKeySet")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "remoteSessionClients")
 		payload, err := decodeRequest(r)
 		if err != nil {

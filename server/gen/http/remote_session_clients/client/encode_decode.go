@@ -1238,6 +1238,489 @@ func DecodeDetachUserSessionIssuerResponse(decoder func(*http.Response) goahttp.
 	}
 }
 
+// BuildAttachKeySetRequest instantiates a HTTP request object with method and
+// path set to call the "remoteSessionClients" service "attachKeySet" endpoint
+func (c *Client) BuildAttachKeySetRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: AttachKeySetRemoteSessionClientsPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("remoteSessionClients", "attachKeySet", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeAttachKeySetRequest returns an encoder for requests sent to the
+// remoteSessionClients attachKeySet server.
+func EncodeAttachKeySetRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*remotesessionclients.AttachKeySetPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("remoteSessionClients", "attachKeySet", "*remotesessionclients.AttachKeySetPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
+		}
+		if p.ProjectSlugInput != nil {
+			head := *p.ProjectSlugInput
+			req.Header.Set("Gram-Project", head)
+		}
+		body := NewAttachKeySetRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("remoteSessionClients", "attachKeySet", err)
+		}
+		return nil
+	}
+}
+
+// DecodeAttachKeySetResponse returns a decoder for responses returned by the
+// remoteSessionClients attachKeySet endpoint. restoreBody controls whether the
+// response body should be restored after having been read.
+// DecodeAttachKeySetResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeAttachKeySetResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body AttachKeySetResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("remoteSessionClients", "attachKeySet", err)
+			}
+			err = ValidateAttachKeySetResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("remoteSessionClients", "attachKeySet", err)
+			}
+			res := NewAttachKeySetRemoteSessionClientOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body AttachKeySetUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("remoteSessionClients", "attachKeySet", err)
+			}
+			err = ValidateAttachKeySetUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("remoteSessionClients", "attachKeySet", err)
+			}
+			return nil, NewAttachKeySetUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body AttachKeySetForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("remoteSessionClients", "attachKeySet", err)
+			}
+			err = ValidateAttachKeySetForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("remoteSessionClients", "attachKeySet", err)
+			}
+			return nil, NewAttachKeySetForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body AttachKeySetBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("remoteSessionClients", "attachKeySet", err)
+			}
+			err = ValidateAttachKeySetBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("remoteSessionClients", "attachKeySet", err)
+			}
+			return nil, NewAttachKeySetBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body AttachKeySetNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("remoteSessionClients", "attachKeySet", err)
+			}
+			err = ValidateAttachKeySetNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("remoteSessionClients", "attachKeySet", err)
+			}
+			return nil, NewAttachKeySetNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body AttachKeySetConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("remoteSessionClients", "attachKeySet", err)
+			}
+			err = ValidateAttachKeySetConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("remoteSessionClients", "attachKeySet", err)
+			}
+			return nil, NewAttachKeySetConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body AttachKeySetUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("remoteSessionClients", "attachKeySet", err)
+			}
+			err = ValidateAttachKeySetUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("remoteSessionClients", "attachKeySet", err)
+			}
+			return nil, NewAttachKeySetUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body AttachKeySetInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("remoteSessionClients", "attachKeySet", err)
+			}
+			err = ValidateAttachKeySetInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("remoteSessionClients", "attachKeySet", err)
+			}
+			return nil, NewAttachKeySetInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body AttachKeySetInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("remoteSessionClients", "attachKeySet", err)
+				}
+				err = ValidateAttachKeySetInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("remoteSessionClients", "attachKeySet", err)
+				}
+				return nil, NewAttachKeySetInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body AttachKeySetUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("remoteSessionClients", "attachKeySet", err)
+				}
+				err = ValidateAttachKeySetUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("remoteSessionClients", "attachKeySet", err)
+				}
+				return nil, NewAttachKeySetUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("remoteSessionClients", "attachKeySet", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body AttachKeySetGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("remoteSessionClients", "attachKeySet", err)
+			}
+			err = ValidateAttachKeySetGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("remoteSessionClients", "attachKeySet", err)
+			}
+			return nil, NewAttachKeySetGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("remoteSessionClients", "attachKeySet", resp.StatusCode, string(body))
+		}
+	}
+}
+
+// BuildDetachKeySetRequest instantiates a HTTP request object with method and
+// path set to call the "remoteSessionClients" service "detachKeySet" endpoint
+func (c *Client) BuildDetachKeySetRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: DetachKeySetRemoteSessionClientsPath()}
+	req, err := http.NewRequest("DELETE", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("remoteSessionClients", "detachKeySet", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeDetachKeySetRequest returns an encoder for requests sent to the
+// remoteSessionClients detachKeySet server.
+func EncodeDetachKeySetRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*remotesessionclients.DetachKeySetPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("remoteSessionClients", "detachKeySet", "*remotesessionclients.DetachKeySetPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
+		}
+		if p.ProjectSlugInput != nil {
+			head := *p.ProjectSlugInput
+			req.Header.Set("Gram-Project", head)
+		}
+		values := req.URL.Query()
+		values.Add("id", p.ID)
+		req.URL.RawQuery = values.Encode()
+		return nil
+	}
+}
+
+// DecodeDetachKeySetResponse returns a decoder for responses returned by the
+// remoteSessionClients detachKeySet endpoint. restoreBody controls whether the
+// response body should be restored after having been read.
+// DecodeDetachKeySetResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeDetachKeySetResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body DetachKeySetResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("remoteSessionClients", "detachKeySet", err)
+			}
+			err = ValidateDetachKeySetResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("remoteSessionClients", "detachKeySet", err)
+			}
+			res := NewDetachKeySetRemoteSessionClientOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body DetachKeySetUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("remoteSessionClients", "detachKeySet", err)
+			}
+			err = ValidateDetachKeySetUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("remoteSessionClients", "detachKeySet", err)
+			}
+			return nil, NewDetachKeySetUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body DetachKeySetForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("remoteSessionClients", "detachKeySet", err)
+			}
+			err = ValidateDetachKeySetForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("remoteSessionClients", "detachKeySet", err)
+			}
+			return nil, NewDetachKeySetForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body DetachKeySetBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("remoteSessionClients", "detachKeySet", err)
+			}
+			err = ValidateDetachKeySetBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("remoteSessionClients", "detachKeySet", err)
+			}
+			return nil, NewDetachKeySetBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body DetachKeySetNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("remoteSessionClients", "detachKeySet", err)
+			}
+			err = ValidateDetachKeySetNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("remoteSessionClients", "detachKeySet", err)
+			}
+			return nil, NewDetachKeySetNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body DetachKeySetConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("remoteSessionClients", "detachKeySet", err)
+			}
+			err = ValidateDetachKeySetConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("remoteSessionClients", "detachKeySet", err)
+			}
+			return nil, NewDetachKeySetConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body DetachKeySetUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("remoteSessionClients", "detachKeySet", err)
+			}
+			err = ValidateDetachKeySetUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("remoteSessionClients", "detachKeySet", err)
+			}
+			return nil, NewDetachKeySetUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body DetachKeySetInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("remoteSessionClients", "detachKeySet", err)
+			}
+			err = ValidateDetachKeySetInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("remoteSessionClients", "detachKeySet", err)
+			}
+			return nil, NewDetachKeySetInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body DetachKeySetInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("remoteSessionClients", "detachKeySet", err)
+				}
+				err = ValidateDetachKeySetInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("remoteSessionClients", "detachKeySet", err)
+				}
+				return nil, NewDetachKeySetInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body DetachKeySetUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("remoteSessionClients", "detachKeySet", err)
+				}
+				err = ValidateDetachKeySetUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("remoteSessionClients", "detachKeySet", err)
+				}
+				return nil, NewDetachKeySetUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("remoteSessionClients", "detachKeySet", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body DetachKeySetGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("remoteSessionClients", "detachKeySet", err)
+			}
+			err = ValidateDetachKeySetGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("remoteSessionClients", "detachKeySet", err)
+			}
+			return nil, NewDetachKeySetGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("remoteSessionClients", "detachKeySet", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // BuildListRemoteSessionClientsRequest instantiates a HTTP request object with
 // method and path set to call the "remoteSessionClients" service
 // "listRemoteSessionClients" endpoint
@@ -1979,6 +2462,7 @@ func unmarshalRemoteSessionClientResponseBodyToTypesRemoteSessionClient(v *Remot
 		ClientIDIssuedAt:        *v.ClientIDIssuedAt,
 		ClientSecretExpiresAt:   v.ClientSecretExpiresAt,
 		TokenEndpointAuthMethod: v.TokenEndpointAuthMethod,
+		JSONWebKeySetID:         v.JSONWebKeySetID,
 		Audience:                v.Audience,
 		CreatedAt:               *v.CreatedAt,
 		UpdatedAt:               *v.UpdatedAt,

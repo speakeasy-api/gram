@@ -663,6 +663,104 @@ SET
 WHERE id = @id AND project_id = @project_id AND deleted IS FALSE
 RETURNING *;
 
+-- Serializes the two halves of the private_key_jwt coupling, which live in
+-- different handlers and would otherwise each decide from a stale read.
+--
+-- requirePrivateKeyJWTKeySet (on the update paths) reads the client's
+-- json_web_key_set_id to allow the method; requireDetachableKeySet (on the
+-- detach path) reads the client's token_endpoint_auth_method to allow the
+-- clear. Under READ COMMITTED, both can pass against the same starting row and
+-- then commit: the update's WHERE mentions neither column, so it re-qualifies
+-- happily against the detached row and the pair lands
+-- token_endpoint_auth_method = private_key_jwt with a NULL json_web_key_set_id
+-- -- exactly the row both rules exist to prevent. Every handler that evaluates
+-- either rule takes this lock first, so one of the two blocks and re-reads.
+--
+-- The JSON Web Key Set lock does not cover this: it serializes attach against
+-- set deletion on json_web_key_sets, not method against link on
+-- remote_session_clients.
+--
+-- Locking order is client first, then set (LockJsonWebKeySetForClientAttach).
+-- DeleteSet takes the set lock and then only reads remote_session_clients
+-- unlocked, so there is no cycle.
+--
+-- Scoped by id alone rather than by tenancy: the caller's tenancy-scoped read
+-- follows immediately and turns a foreign row into a not-found, and narrowing
+-- the lock here would mean duplicating two different surfaces' predicates.
+-- name: LockRemoteSessionClientForAuthMethodWrite :one
+SELECT id
+FROM remote_session_clients
+WHERE id = @id
+  AND deleted IS FALSE
+FOR UPDATE;
+
+-- Takes the JSON Web Key Set row in FOR SHARE while a client attaches to it, so
+-- the set cannot be soft-deleted out from under the attach. jsonWebKeySets'
+-- DeleteSet takes FOR UPDATE on the same row before counting referencing
+-- clients, so one of the two blocks and neither commits on a stale read. Without
+-- it the interleave attach-sees-live-set / delete-sees-no-references lets both
+-- commit, stranding a client pointed at a deleted set — the foreign key does not
+-- catch it because `deleted` is a generated column and soft deletes never fire
+-- it. FOR SHARE rather than FOR UPDATE so two clients can attach to the same set
+-- concurrently, mirroring the FOR SHARE / FOR UPDATE pairing externalkeys uses
+-- for the same problem one layer down.
+--
+-- project_id IS NULL matches LockJsonWebKeySetForKeyWrite: sets are an
+-- organization-tier resource, and a project-tier set is not a thing that exists.
+-- name: LockJsonWebKeySetForClientAttach :one
+SELECT id
+FROM json_web_key_sets
+WHERE id = @id
+  AND organization_id = @organization_id
+  AND project_id IS NULL
+  AND deleted IS FALSE
+FOR SHARE;
+
+-- Sets or clears a project-tier client's JSON Web Key Set. A NULL
+-- json_web_key_set_id is the detach; unlike the COALESCE patches in
+-- UpdateRemoteSessionClient this is an unconditional assignment, which is the
+-- whole reason the link gets its own methods instead of riding the update form.
+--
+-- project_id = @project_id matches UpdateRemoteSessionClient rather than the
+-- org-level-inclusive predicate the reads use: an organization-level client is
+-- not mutable from the project surface. organization_id is matched as well
+-- because the composite foreign key to json_web_key_sets is MATCH SIMPLE and
+-- skips its check entirely on a NULL organization_id; the handler rejects those
+-- rows before reaching here, and this predicate is the backstop.
+-- name: SetRemoteSessionClientJsonWebKeySet :one
+UPDATE remote_session_clients
+SET
+    json_web_key_set_id = sqlc.narg('json_web_key_set_id')::uuid,
+    updated_at = clock_timestamp()
+WHERE id = @id
+  AND project_id = @project_id
+  AND organization_id = @organization_id
+  AND deleted IS FALSE
+RETURNING *;
+
+-- The organization-surface counterpart of SetRemoteSessionClientJsonWebKeySet.
+-- See the ORG REACHABILITY note on ListOrganizationRemoteSessionClientsByIssuerID.
+--
+-- This one requires c.organization_id = @organization_id outright, where the
+-- sibling UpdateOrganizationRemoteSessionClient also admits a client reachable
+-- only through its issuer's organization. That arm exists for clients whose own
+-- organization_id was never backfilled, and those rows cannot hold a set at all:
+-- remote_session_clients_json_web_key_set_id_check requires a non-NULL
+-- organization_id whenever json_web_key_set_id is set. The handler turns them
+-- into an explicit refusal rather than letting the CHECK surface as a 500.
+-- name: SetOrganizationRemoteSessionClientJsonWebKeySet :one
+UPDATE remote_session_clients AS c
+SET
+    json_web_key_set_id = sqlc.narg('json_web_key_set_id')::uuid,
+    updated_at = clock_timestamp()
+FROM remote_session_issuers AS i
+WHERE c.id = @id
+  AND c.remote_session_issuer_id = i.id
+  AND c.organization_id = @organization_id
+  AND c.deleted IS FALSE
+  AND i.deleted IS FALSE
+RETURNING c.*;
+
 -- name: CreateRemoteSessionClientCIMD :one
 -- Create a client directly in Client ID Metadata Document (CIMD) mode. The
 -- createCimd handler generates the row id and the document URL up front, so

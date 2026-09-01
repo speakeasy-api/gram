@@ -140,9 +140,11 @@ export const AUDIT_ACTIONS = [
   "remote-mcp:create",
   "remote-mcp:delete",
   "remote-mcp:update",
+  "remote-session-client:attach-key-set",
   "remote-session-client:attach-user-session-issuer",
   "remote-session-client:create",
   "remote-session-client:delete",
+  "remote-session-client:detach-key-set",
   "remote-session-client:detach-mcp-server",
   "remote-session-client:detach-user-session-issuer",
   "remote-session-client:revoke-sessions",
@@ -551,6 +553,10 @@ export function staticActionPhrase(action: AuditAction): string {
       return "attached a user session issuer to";
     case "remote-session-client:detach-user-session-issuer":
       return "detached a user session issuer from";
+    case "remote-session-client:attach-key-set":
+      return "attached a signing key set to";
+    case "remote-session-client:detach-key-set":
+      return "detached a signing key set from";
     case "remote-session-client:detach-mcp-server":
       return "detached an MCP server from";
     case "remote-session-client:revoke-sessions":

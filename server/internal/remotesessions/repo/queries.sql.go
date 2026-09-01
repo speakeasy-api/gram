@@ -4256,6 +4256,80 @@ func (q *Queries) ListUserSessionIssuersBoundToProjectClient(ctx context.Context
 	return items, nil
 }
 
+const lockJsonWebKeySetForClientAttach = `-- name: LockJsonWebKeySetForClientAttach :one
+SELECT id
+FROM json_web_key_sets
+WHERE id = $1
+  AND organization_id = $2
+  AND project_id IS NULL
+  AND deleted IS FALSE
+FOR SHARE
+`
+
+type LockJsonWebKeySetForClientAttachParams struct {
+	ID             uuid.UUID
+	OrganizationID string
+}
+
+// Takes the JSON Web Key Set row in FOR SHARE while a client attaches to it, so
+// the set cannot be soft-deleted out from under the attach. jsonWebKeySets'
+// DeleteSet takes FOR UPDATE on the same row before counting referencing
+// clients, so one of the two blocks and neither commits on a stale read. Without
+// it the interleave attach-sees-live-set / delete-sees-no-references lets both
+// commit, stranding a client pointed at a deleted set — the foreign key does not
+// catch it because `deleted` is a generated column and soft deletes never fire
+// it. FOR SHARE rather than FOR UPDATE so two clients can attach to the same set
+// concurrently, mirroring the FOR SHARE / FOR UPDATE pairing externalkeys uses
+// for the same problem one layer down.
+//
+// project_id IS NULL matches LockJsonWebKeySetForKeyWrite: sets are an
+// organization-tier resource, and a project-tier set is not a thing that exists.
+func (q *Queries) LockJsonWebKeySetForClientAttach(ctx context.Context, arg LockJsonWebKeySetForClientAttachParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, lockJsonWebKeySetForClientAttach, arg.ID, arg.OrganizationID)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
+}
+
+const lockRemoteSessionClientForAuthMethodWrite = `-- name: LockRemoteSessionClientForAuthMethodWrite :one
+SELECT id
+FROM remote_session_clients
+WHERE id = $1
+  AND deleted IS FALSE
+FOR UPDATE
+`
+
+// Serializes the two halves of the private_key_jwt coupling, which live in
+// different handlers and would otherwise each decide from a stale read.
+//
+// requirePrivateKeyJWTKeySet (on the update paths) reads the client's
+// json_web_key_set_id to allow the method; requireDetachableKeySet (on the
+// detach path) reads the client's token_endpoint_auth_method to allow the
+// clear. Under READ COMMITTED, both can pass against the same starting row and
+// then commit: the update's WHERE mentions neither column, so it re-qualifies
+// happily against the detached row and the pair lands
+// token_endpoint_auth_method = private_key_jwt with a NULL json_web_key_set_id
+// -- exactly the row both rules exist to prevent. Every handler that evaluates
+// either rule takes this lock first, so one of the two blocks and re-reads.
+//
+// The JSON Web Key Set lock does not cover this: it serializes attach against
+// set deletion on json_web_key_sets, not method against link on
+// remote_session_clients.
+//
+// Locking order is client first, then set (LockJsonWebKeySetForClientAttach).
+// DeleteSet takes the set lock and then only reads remote_session_clients
+// unlocked, so there is no cycle.
+//
+// Scoped by id alone rather than by tenancy: the caller's tenancy-scoped read
+// follows immediately and turns a foreign row into a not-found, and narrowing
+// the lock here would mean duplicating two different surfaces' predicates.
+func (q *Queries) LockRemoteSessionClientForAuthMethodWrite(ctx context.Context, id uuid.UUID) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, lockRemoteSessionClientForAuthMethodWrite, id)
+	var id_2 uuid.UUID
+	err := row.Scan(&id_2)
+	return id_2, err
+}
+
 const lockRemoteSessionClientForSessionWrite = `-- name: LockRemoteSessionClientForSessionWrite :one
 SELECT id
 FROM remote_session_clients
@@ -4512,6 +4586,62 @@ func (q *Queries) RotateLocalFixtureOrganizationRemoteSessionClient(ctx context.
 	return i, err
 }
 
+const setOrganizationRemoteSessionClientJsonWebKeySet = `-- name: SetOrganizationRemoteSessionClientJsonWebKeySet :one
+UPDATE remote_session_clients AS c
+SET
+    json_web_key_set_id = $1::uuid,
+    updated_at = clock_timestamp()
+FROM remote_session_issuers AS i
+WHERE c.id = $2
+  AND c.remote_session_issuer_id = i.id
+  AND c.organization_id = $3
+  AND c.deleted IS FALSE
+  AND i.deleted IS FALSE
+RETURNING c.id, c.project_id, c.organization_id, c.remote_session_issuer_id, c.client_id, c.client_secret_encrypted, c.client_id_issued_at, c.client_secret_expires_at, c.token_endpoint_auth_method, c.json_web_key_set_id, c.scope, c.audience, c.client_id_metadata_uri, c.legacy_callback_url, c.created_at, c.updated_at, c.deleted_at, c.deleted
+`
+
+type SetOrganizationRemoteSessionClientJsonWebKeySetParams struct {
+	JsonWebKeySetID uuid.NullUUID
+	ID              uuid.UUID
+	OrganizationID  pgtype.Text
+}
+
+// The organization-surface counterpart of SetRemoteSessionClientJsonWebKeySet.
+// See the ORG REACHABILITY note on ListOrganizationRemoteSessionClientsByIssuerID.
+//
+// This one requires c.organization_id = @organization_id outright, where the
+// sibling UpdateOrganizationRemoteSessionClient also admits a client reachable
+// only through its issuer's organization. That arm exists for clients whose own
+// organization_id was never backfilled, and those rows cannot hold a set at all:
+// remote_session_clients_json_web_key_set_id_check requires a non-NULL
+// organization_id whenever json_web_key_set_id is set. The handler turns them
+// into an explicit refusal rather than letting the CHECK surface as a 500.
+func (q *Queries) SetOrganizationRemoteSessionClientJsonWebKeySet(ctx context.Context, arg SetOrganizationRemoteSessionClientJsonWebKeySetParams) (RemoteSessionClient, error) {
+	row := q.db.QueryRow(ctx, setOrganizationRemoteSessionClientJsonWebKeySet, arg.JsonWebKeySetID, arg.ID, arg.OrganizationID)
+	var i RemoteSessionClient
+	err := row.Scan(
+		&i.ID,
+		&i.ProjectID,
+		&i.OrganizationID,
+		&i.RemoteSessionIssuerID,
+		&i.ClientID,
+		&i.ClientSecretEncrypted,
+		&i.ClientIDIssuedAt,
+		&i.ClientSecretExpiresAt,
+		&i.TokenEndpointAuthMethod,
+		&i.JsonWebKeySetID,
+		&i.Scope,
+		&i.Audience,
+		&i.ClientIDMetadataUri,
+		&i.LegacyCallbackUrl,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
 const setOrganizationRemoteSessionIssuerProject = `-- name: SetOrganizationRemoteSessionIssuerProject :one
 UPDATE remote_session_issuers
 SET project_id = $1::uuid,
@@ -4641,6 +4771,67 @@ func (q *Queries) SetRemoteSessionAutoRefresh(ctx context.Context, arg SetRemote
 		return 0, err
 	}
 	return result.RowsAffected(), nil
+}
+
+const setRemoteSessionClientJsonWebKeySet = `-- name: SetRemoteSessionClientJsonWebKeySet :one
+UPDATE remote_session_clients
+SET
+    json_web_key_set_id = $1::uuid,
+    updated_at = clock_timestamp()
+WHERE id = $2
+  AND project_id = $3
+  AND organization_id = $4
+  AND deleted IS FALSE
+RETURNING id, project_id, organization_id, remote_session_issuer_id, client_id, client_secret_encrypted, client_id_issued_at, client_secret_expires_at, token_endpoint_auth_method, json_web_key_set_id, scope, audience, client_id_metadata_uri, legacy_callback_url, created_at, updated_at, deleted_at, deleted
+`
+
+type SetRemoteSessionClientJsonWebKeySetParams struct {
+	JsonWebKeySetID uuid.NullUUID
+	ID              uuid.UUID
+	ProjectID       uuid.NullUUID
+	OrganizationID  pgtype.Text
+}
+
+// Sets or clears a project-tier client's JSON Web Key Set. A NULL
+// json_web_key_set_id is the detach; unlike the COALESCE patches in
+// UpdateRemoteSessionClient this is an unconditional assignment, which is the
+// whole reason the link gets its own methods instead of riding the update form.
+//
+// project_id = @project_id matches UpdateRemoteSessionClient rather than the
+// org-level-inclusive predicate the reads use: an organization-level client is
+// not mutable from the project surface. organization_id is matched as well
+// because the composite foreign key to json_web_key_sets is MATCH SIMPLE and
+// skips its check entirely on a NULL organization_id; the handler rejects those
+// rows before reaching here, and this predicate is the backstop.
+func (q *Queries) SetRemoteSessionClientJsonWebKeySet(ctx context.Context, arg SetRemoteSessionClientJsonWebKeySetParams) (RemoteSessionClient, error) {
+	row := q.db.QueryRow(ctx, setRemoteSessionClientJsonWebKeySet,
+		arg.JsonWebKeySetID,
+		arg.ID,
+		arg.ProjectID,
+		arg.OrganizationID,
+	)
+	var i RemoteSessionClient
+	err := row.Scan(
+		&i.ID,
+		&i.ProjectID,
+		&i.OrganizationID,
+		&i.RemoteSessionIssuerID,
+		&i.ClientID,
+		&i.ClientSecretEncrypted,
+		&i.ClientIDIssuedAt,
+		&i.ClientSecretExpiresAt,
+		&i.TokenEndpointAuthMethod,
+		&i.JsonWebKeySetID,
+		&i.Scope,
+		&i.Audience,
+		&i.ClientIDMetadataUri,
+		&i.LegacyCallbackUrl,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
 }
 
 const setRemoteSessionUpdatedAt = `-- name: SetRemoteSessionUpdatedAt :exec

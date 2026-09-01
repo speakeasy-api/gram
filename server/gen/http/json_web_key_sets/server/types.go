@@ -101,6 +101,17 @@ type GetSetResponseBody struct {
 	UpdatedAt string `form:"updated_at" json:"updated_at" xml:"updated_at"`
 }
 
+// GetSetDeletePreflightResponseBody is the type of the "jsonWebKeySets"
+// service "getSetDeletePreflight" endpoint HTTP response body.
+type GetSetDeletePreflightResponseBody struct {
+	// Number of live remote_session_clients referencing this set. Deleting the set
+	// is refused while this is non-zero.
+	ClientCount int `form:"client_count" json:"client_count" xml:"client_count"`
+	// The client_id values of the referencing remote_session_clients, oldest
+	// first. Truncated when client_count exceeds the listing cap.
+	ClientIds []string `form:"client_ids" json:"client_ids" xml:"client_ids"`
+}
+
 // ListKeysResponseBody is the type of the "jsonWebKeySets" service "listKeys"
 // endpoint HTTP response body.
 type ListKeysResponseBody struct {
@@ -986,6 +997,196 @@ type GetSetUnexpectedResponseBody struct {
 // GetSetGatewayErrorResponseBody is the type of the "jsonWebKeySets" service
 // "getSet" endpoint HTTP response body for the "gateway_error" error.
 type GetSetGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetSetDeletePreflightUnauthorizedResponseBody is the type of the
+// "jsonWebKeySets" service "getSetDeletePreflight" endpoint HTTP response body
+// for the "unauthorized" error.
+type GetSetDeletePreflightUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetSetDeletePreflightForbiddenResponseBody is the type of the
+// "jsonWebKeySets" service "getSetDeletePreflight" endpoint HTTP response body
+// for the "forbidden" error.
+type GetSetDeletePreflightForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetSetDeletePreflightBadRequestResponseBody is the type of the
+// "jsonWebKeySets" service "getSetDeletePreflight" endpoint HTTP response body
+// for the "bad_request" error.
+type GetSetDeletePreflightBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetSetDeletePreflightNotFoundResponseBody is the type of the
+// "jsonWebKeySets" service "getSetDeletePreflight" endpoint HTTP response body
+// for the "not_found" error.
+type GetSetDeletePreflightNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetSetDeletePreflightConflictResponseBody is the type of the
+// "jsonWebKeySets" service "getSetDeletePreflight" endpoint HTTP response body
+// for the "conflict" error.
+type GetSetDeletePreflightConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetSetDeletePreflightUnsupportedMediaResponseBody is the type of the
+// "jsonWebKeySets" service "getSetDeletePreflight" endpoint HTTP response body
+// for the "unsupported_media" error.
+type GetSetDeletePreflightUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetSetDeletePreflightInvalidResponseBody is the type of the "jsonWebKeySets"
+// service "getSetDeletePreflight" endpoint HTTP response body for the
+// "invalid" error.
+type GetSetDeletePreflightInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetSetDeletePreflightInvariantViolationResponseBody is the type of the
+// "jsonWebKeySets" service "getSetDeletePreflight" endpoint HTTP response body
+// for the "invariant_violation" error.
+type GetSetDeletePreflightInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetSetDeletePreflightUnexpectedResponseBody is the type of the
+// "jsonWebKeySets" service "getSetDeletePreflight" endpoint HTTP response body
+// for the "unexpected" error.
+type GetSetDeletePreflightUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetSetDeletePreflightGatewayErrorResponseBody is the type of the
+// "jsonWebKeySets" service "getSetDeletePreflight" endpoint HTTP response body
+// for the "gateway_error" error.
+type GetSetDeletePreflightGatewayErrorResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -2234,6 +2435,24 @@ func NewGetSetResponseBody(res *jsonwebkeysets.JSONWebKeySet) *GetSetResponseBod
 	return body
 }
 
+// NewGetSetDeletePreflightResponseBody builds the HTTP response body from the
+// result of the "getSetDeletePreflight" endpoint of the "jsonWebKeySets"
+// service.
+func NewGetSetDeletePreflightResponseBody(res *jsonwebkeysets.JSONWebKeySetDeletePreflight) *GetSetDeletePreflightResponseBody {
+	body := &GetSetDeletePreflightResponseBody{
+		ClientCount: res.ClientCount,
+	}
+	if res.ClientIds != nil {
+		body.ClientIds = make([]string, len(res.ClientIds))
+		for i, val := range res.ClientIds {
+			body.ClientIds[i] = val
+		}
+	} else {
+		body.ClientIds = []string{}
+	}
+	return body
+}
+
 // NewListKeysResponseBody builds the HTTP response body from the result of the
 // "listKeys" endpoint of the "jsonWebKeySets" service.
 func NewListKeysResponseBody(res *jsonwebkeysets.ListJSONWebKeysResult) *ListKeysResponseBody {
@@ -2897,6 +3116,156 @@ func NewGetSetUnexpectedResponseBody(res *goa.ServiceError) *GetSetUnexpectedRes
 // result of the "getSet" endpoint of the "jsonWebKeySets" service.
 func NewGetSetGatewayErrorResponseBody(res *goa.ServiceError) *GetSetGatewayErrorResponseBody {
 	body := &GetSetGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetSetDeletePreflightUnauthorizedResponseBody builds the HTTP response
+// body from the result of the "getSetDeletePreflight" endpoint of the
+// "jsonWebKeySets" service.
+func NewGetSetDeletePreflightUnauthorizedResponseBody(res *goa.ServiceError) *GetSetDeletePreflightUnauthorizedResponseBody {
+	body := &GetSetDeletePreflightUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetSetDeletePreflightForbiddenResponseBody builds the HTTP response body
+// from the result of the "getSetDeletePreflight" endpoint of the
+// "jsonWebKeySets" service.
+func NewGetSetDeletePreflightForbiddenResponseBody(res *goa.ServiceError) *GetSetDeletePreflightForbiddenResponseBody {
+	body := &GetSetDeletePreflightForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetSetDeletePreflightBadRequestResponseBody builds the HTTP response body
+// from the result of the "getSetDeletePreflight" endpoint of the
+// "jsonWebKeySets" service.
+func NewGetSetDeletePreflightBadRequestResponseBody(res *goa.ServiceError) *GetSetDeletePreflightBadRequestResponseBody {
+	body := &GetSetDeletePreflightBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetSetDeletePreflightNotFoundResponseBody builds the HTTP response body
+// from the result of the "getSetDeletePreflight" endpoint of the
+// "jsonWebKeySets" service.
+func NewGetSetDeletePreflightNotFoundResponseBody(res *goa.ServiceError) *GetSetDeletePreflightNotFoundResponseBody {
+	body := &GetSetDeletePreflightNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetSetDeletePreflightConflictResponseBody builds the HTTP response body
+// from the result of the "getSetDeletePreflight" endpoint of the
+// "jsonWebKeySets" service.
+func NewGetSetDeletePreflightConflictResponseBody(res *goa.ServiceError) *GetSetDeletePreflightConflictResponseBody {
+	body := &GetSetDeletePreflightConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetSetDeletePreflightUnsupportedMediaResponseBody builds the HTTP
+// response body from the result of the "getSetDeletePreflight" endpoint of the
+// "jsonWebKeySets" service.
+func NewGetSetDeletePreflightUnsupportedMediaResponseBody(res *goa.ServiceError) *GetSetDeletePreflightUnsupportedMediaResponseBody {
+	body := &GetSetDeletePreflightUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetSetDeletePreflightInvalidResponseBody builds the HTTP response body
+// from the result of the "getSetDeletePreflight" endpoint of the
+// "jsonWebKeySets" service.
+func NewGetSetDeletePreflightInvalidResponseBody(res *goa.ServiceError) *GetSetDeletePreflightInvalidResponseBody {
+	body := &GetSetDeletePreflightInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetSetDeletePreflightInvariantViolationResponseBody builds the HTTP
+// response body from the result of the "getSetDeletePreflight" endpoint of the
+// "jsonWebKeySets" service.
+func NewGetSetDeletePreflightInvariantViolationResponseBody(res *goa.ServiceError) *GetSetDeletePreflightInvariantViolationResponseBody {
+	body := &GetSetDeletePreflightInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetSetDeletePreflightUnexpectedResponseBody builds the HTTP response body
+// from the result of the "getSetDeletePreflight" endpoint of the
+// "jsonWebKeySets" service.
+func NewGetSetDeletePreflightUnexpectedResponseBody(res *goa.ServiceError) *GetSetDeletePreflightUnexpectedResponseBody {
+	body := &GetSetDeletePreflightUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetSetDeletePreflightGatewayErrorResponseBody builds the HTTP response
+// body from the result of the "getSetDeletePreflight" endpoint of the
+// "jsonWebKeySets" service.
+func NewGetSetDeletePreflightGatewayErrorResponseBody(res *goa.ServiceError) *GetSetDeletePreflightGatewayErrorResponseBody {
+	body := &GetSetDeletePreflightGatewayErrorResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -3799,6 +4168,16 @@ func NewListSetsPayload(sessionToken *string) *jsonwebkeysets.ListSetsPayload {
 // NewGetSetPayload builds a jsonWebKeySets service getSet endpoint payload.
 func NewGetSetPayload(id string, sessionToken *string) *jsonwebkeysets.GetSetPayload {
 	v := &jsonwebkeysets.GetSetPayload{}
+	v.ID = id
+	v.SessionToken = sessionToken
+
+	return v
+}
+
+// NewGetSetDeletePreflightPayload builds a jsonWebKeySets service
+// getSetDeletePreflight endpoint payload.
+func NewGetSetDeletePreflightPayload(id string, sessionToken *string) *jsonwebkeysets.GetSetDeletePreflightPayload {
+	v := &jsonwebkeysets.GetSetDeletePreflightPayload{}
 	v.ID = id
 	v.SessionToken = sessionToken
 

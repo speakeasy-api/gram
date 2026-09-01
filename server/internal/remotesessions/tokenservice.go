@@ -76,6 +76,12 @@ func newTokenEndpointRequest(ctx context.Context, endpoint string, form url.Valu
 		form.Set("client_secret", clientSecret)
 	case TokenEndpointAuthMethodNone:
 		form.Set("client_id", clientID)
+	case TokenEndpointAuthMethodPrivateKeyJWT:
+		// AIM-156 builds the RFC 7523 assertion this method needs. No client can
+		// store the value yet (it is absent from tokenEndpointAuthMethodEnum), so
+		// this is unreachable; it fails loudly rather than falling through to an
+		// unauthenticated request that the upstream rejects as an opaque 401.
+		return nil, fmt.Errorf("token endpoint auth method %q is not implemented", method)
 	}
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, strings.NewReader(form.Encode()))

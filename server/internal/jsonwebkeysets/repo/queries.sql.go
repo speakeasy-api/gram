@@ -111,6 +111,43 @@ func (q *Queries) CascadeSoftDeleteJsonWebKeys(ctx context.Context, arg CascadeS
 	return items, nil
 }
 
+const countRemoteSessionClientsForJsonWebKeySet = `-- name: CountRemoteSessionClientsForJsonWebKeySet :one
+SELECT COUNT(*)
+FROM remote_session_clients
+WHERE organization_id = $1::text
+  AND json_web_key_set_id = $2::uuid
+  AND deleted IS FALSE
+`
+
+type CountRemoteSessionClientsForJsonWebKeySetParams struct {
+	OrganizationID  string
+	JsonWebKeySetID uuid.UUID
+}
+
+// Counts the live remote_session_clients still pointing at a set. Backs both the
+// delete preflight and the refusal inside DeleteSet, which run the same query so
+// the preflight cannot disagree with the mutation it predicts.
+//
+// Run inside the delete transaction, after LockJsonWebKeySetForKeyWrite. The
+// attach side takes FOR SHARE on the same row (LockJsonWebKeySetForClientAttach
+// in remotesessions), so an attach either lands before this count sees it or
+// blocks until the delete commits and then fails its own live-set lookup.
+//
+// The database will not enforce this. remote_session_clients_json_web_key_set_tenant_fkey
+// omits ON DELETE, which is NO ACTION, and `deleted` is a generated column, so
+// nothing fires on the soft-delete path. Soft-deleted clients do not count: a
+// tombstoned client never authenticates again and must not pin a set forever.
+//
+// A count rather than EXISTS because the preflight needs the number anyway, and
+// COUNT(*) types as a non-nullable int64 — no fail-open reading of an unset
+// pgtype.Bool, which is the trap the externalkeys guard documents.
+func (q *Queries) CountRemoteSessionClientsForJsonWebKeySet(ctx context.Context, arg CountRemoteSessionClientsForJsonWebKeySetParams) (int64, error) {
+	row := q.db.QueryRow(ctx, countRemoteSessionClientsForJsonWebKeySet, arg.OrganizationID, arg.JsonWebKeySetID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const createJsonWebKey = `-- name: CreateJsonWebKey :one
 INSERT INTO json_web_keys (
   organization_id,
@@ -512,6 +549,51 @@ func (q *Queries) ListJsonWebKeys(ctx context.Context, arg ListJsonWebKeysParams
 			&i.DeletedAt,
 			&i.Deleted,
 		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listRemoteSessionClientsForJsonWebKeySet = `-- name: ListRemoteSessionClientsForJsonWebKeySet :many
+SELECT id, client_id
+FROM remote_session_clients
+WHERE organization_id = $1::text
+  AND json_web_key_set_id = $2::uuid
+  AND deleted IS FALSE
+ORDER BY created_at ASC, id ASC
+LIMIT $3
+`
+
+type ListRemoteSessionClientsForJsonWebKeySetParams struct {
+	OrganizationID  string
+	JsonWebKeySetID uuid.UUID
+	LimitValue      int32
+}
+
+type ListRemoteSessionClientsForJsonWebKeySetRow struct {
+	ID       uuid.UUID
+	ClientID string
+}
+
+// The referencing clients the preflight lists back to the administrator, oldest
+// first so the listing is stable across calls. Capped: the count above is the
+// authoritative number and this is only the label list, so a set referenced by
+// more clients than the cap reports a truncated list against a full count.
+func (q *Queries) ListRemoteSessionClientsForJsonWebKeySet(ctx context.Context, arg ListRemoteSessionClientsForJsonWebKeySetParams) ([]ListRemoteSessionClientsForJsonWebKeySetRow, error) {
+	rows, err := q.db.Query(ctx, listRemoteSessionClientsForJsonWebKeySet, arg.OrganizationID, arg.JsonWebKeySetID, arg.LimitValue)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListRemoteSessionClientsForJsonWebKeySetRow
+	for rows.Next() {
+		var i ListRemoteSessionClientsForJsonWebKeySetRow
+		if err := rows.Scan(&i.ID, &i.ClientID); err != nil {
 			return nil, err
 		}
 		items = append(items, i)

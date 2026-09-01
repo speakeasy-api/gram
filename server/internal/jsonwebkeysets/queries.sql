@@ -255,3 +255,40 @@ WHERE id = @id
   AND organization_id = @organization_id
   AND deleted IS FALSE
 RETURNING *;
+
+-- Counts the live remote_session_clients still pointing at a set. Backs both the
+-- delete preflight and the refusal inside DeleteSet, which run the same query so
+-- the preflight cannot disagree with the mutation it predicts.
+--
+-- Run inside the delete transaction, after LockJsonWebKeySetForKeyWrite. The
+-- attach side takes FOR SHARE on the same row (LockJsonWebKeySetForClientAttach
+-- in remotesessions), so an attach either lands before this count sees it or
+-- blocks until the delete commits and then fails its own live-set lookup.
+--
+-- The database will not enforce this. remote_session_clients_json_web_key_set_tenant_fkey
+-- omits ON DELETE, which is NO ACTION, and `deleted` is a generated column, so
+-- nothing fires on the soft-delete path. Soft-deleted clients do not count: a
+-- tombstoned client never authenticates again and must not pin a set forever.
+--
+-- A count rather than EXISTS because the preflight needs the number anyway, and
+-- COUNT(*) types as a non-nullable int64 — no fail-open reading of an unset
+-- pgtype.Bool, which is the trap the externalkeys guard documents.
+-- name: CountRemoteSessionClientsForJsonWebKeySet :one
+SELECT COUNT(*)
+FROM remote_session_clients
+WHERE organization_id = @organization_id::text
+  AND json_web_key_set_id = @json_web_key_set_id::uuid
+  AND deleted IS FALSE;
+
+-- The referencing clients the preflight lists back to the administrator, oldest
+-- first so the listing is stable across calls. Capped: the count above is the
+-- authoritative number and this is only the label list, so a set referenced by
+-- more clients than the cap reports a truncated list against a full count.
+-- name: ListRemoteSessionClientsForJsonWebKeySet :many
+SELECT id, client_id
+FROM remote_session_clients
+WHERE organization_id = @organization_id::text
+  AND json_web_key_set_id = @json_web_key_set_id::uuid
+  AND deleted IS FALSE
+ORDER BY created_at ASC, id ASC
+LIMIT sqlc.arg('limit_value');

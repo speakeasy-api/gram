@@ -18,6 +18,7 @@ import {
   parseScopes,
 } from "../../../mcp/x/tabs/settings/sections/authentication/issuerFormUtils";
 import { DeleteClientDialog } from "../../clientDialogs";
+import { KeySetField } from "./KeySetField";
 
 export function SettingsTab({
   client,
@@ -72,6 +73,7 @@ export function SettingsTab({
           value={authMethod}
           onChange={setAuthMethod}
         />
+        <KeySetField client={client} issuerId={issuerId} />
         <div className="flex flex-col gap-1.5">
           <Label>Scopes (comma-separated)</Label>
           <Input value={scope} onChange={setScope} />

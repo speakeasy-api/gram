@@ -135,6 +135,10 @@ func (s *Service) CreateRemoteSessionClient(ctx context.Context, payload *gen.Cr
 		return nil, oops.E(oops.CodeBadRequest, nil, "client_id is required").LogError(ctx, logger)
 	}
 
+	if err := requirePrivateKeyJWTKeySet(payload.TokenEndpointAuthMethod, uuid.NullUUID{UUID: uuid.Nil, Valid: false}); err != nil {
+		return nil, err
+	}
+
 	var secretCiphertext pgtype.Text
 	if payload.ClientSecret != nil && *payload.ClientSecret != "" {
 		encrypted, encErr := s.enc.Encrypt([]byte(*payload.ClientSecret))
@@ -395,6 +399,12 @@ func (s *Service) UpdateRemoteSessionClient(ctx context.Context, payload *gen.Up
 
 	txRepo := repo.New(dbtx)
 
+	// Locked before the read: this handler evaluates the private_key_jwt rule
+	// against the client's json_web_key_set_id, which detachKeySet writes.
+	if err := lockClientForAuthMethodWrite(ctx, logger, txRepo, clientID); err != nil {
+		return nil, err
+	}
+
 	// Project-only lookup: an organization-level client is not mutable from the
 	// project surface, so passing an empty organization_id keeps org-level rows
 	// invisible here and an update against one resolves to a clean not-found.
@@ -421,6 +431,10 @@ func (s *Service) UpdateRemoteSessionClient(ctx context.Context, payload *gen.Up
 	beforeView, err := mv.BuildRemoteSessionClientView(existing.RemoteSessionClient, existing.UserSessionIssuerIds)
 	if err != nil {
 		return nil, oops.E(oops.CodeInvariantViolation, err, "build remote session client view").LogError(ctx, logger)
+	}
+
+	if err := requirePrivateKeyJWTKeySet(payload.TokenEndpointAuthMethod, existing.RemoteSessionClient.JsonWebKeySetID); err != nil {
+		return nil, err
 	}
 
 	var secretCiphertext pgtype.Text

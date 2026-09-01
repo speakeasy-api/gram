@@ -21,6 +21,8 @@ const (
 	ActionRemoteSessionClientRevokeSessions          Action = "remote-session-client:revoke-sessions"
 	ActionRemoteSessionClientAttachUserSessionIssuer Action = "remote-session-client:attach-user-session-issuer"
 	ActionRemoteSessionClientDetachUserSessionIssuer Action = "remote-session-client:detach-user-session-issuer"
+	ActionRemoteSessionClientAttachKeySet            Action = "remote-session-client:attach-key-set"
+	ActionRemoteSessionClientDetachKeySet            Action = "remote-session-client:detach-key-set"
 )
 
 type LogRemoteSessionClientCreateEvent struct {
@@ -237,6 +239,70 @@ func (l *Logger) LogRemoteSessionClientDetachUserSessionIssuer(ctx context.Conte
 func (l *Logger) logRemoteSessionClientUserSessionIssuerAttachment(ctx context.Context, dbtx repo.DBTX, action Action, event LogRemoteSessionClientUserSessionIssuerAttachmentEvent) error {
 	metadata, err := marshalAuditPayload(map[string]any{
 		"user_session_issuer_id": event.UserSessionIssuerURN.ID.String(),
+	})
+	if err != nil {
+		return fmt.Errorf("marshal %s metadata: %w", action, err)
+	}
+
+	entry := repo.InsertAuditLogParams{
+		OrganizationID: event.OrganizationID,
+		ProjectID:      uuid.NullUUID{UUID: event.ProjectID, Valid: event.ProjectID != uuid.Nil},
+
+		ActorID:          event.Actor.ID,
+		ActorType:        string(event.Actor.Type),
+		ActorDisplayName: conv.PtrToPGTextEmpty(event.ActorDisplayName),
+		ActorSlug:        conv.PtrToPGTextEmpty(event.ActorSlug),
+
+		Action: string(action),
+
+		SubjectID:          event.RemoteSessionClientURN.ID.String(),
+		SubjectType:        string(subjectTypeRemoteSessionClient),
+		SubjectDisplayName: conv.ToPGTextEmpty(event.ClientID),
+		SubjectSlug:        conv.ToPGTextEmpty(""),
+
+		BeforeSnapshot: nil,
+		AfterSnapshot:  nil,
+		Metadata:       metadata,
+	}
+
+	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.RemoteSessionClientV1})
+}
+
+// LogRemoteSessionClientKeySetAttachmentEvent describes an attach or detach of
+// a JSON Web Key Set to/from a remote_session_client. The set is captured in
+// metadata rather than as a before/after snapshot, matching the
+// user_session_issuer attachment events on this subject: the action names the
+// direction and the metadata names the set, which together fully describe the
+// change. On a detach the set recorded is the one that was removed, so the
+// entry stays readable without joining the preceding attach.
+type LogRemoteSessionClientKeySetAttachmentEvent struct {
+	OrganizationID string
+	ProjectID      uuid.UUID
+
+	Actor            urn.Principal
+	ActorDisplayName *string
+	ActorSlug        *string
+
+	RemoteSessionClientURN urn.RemoteSessionClient
+	ClientID               string //nolint:glint // RFC 7591 client_id (issuer-assigned opaque string), distinct from the resource's URN/UUID.
+	JsonWebKeySetURN       urn.JsonWebKeySet
+}
+
+// LogRemoteSessionClientAttachKeySet records that a JSON Web Key Set was
+// attached to a remote_session_client.
+func (l *Logger) LogRemoteSessionClientAttachKeySet(ctx context.Context, dbtx repo.DBTX, event LogRemoteSessionClientKeySetAttachmentEvent) error {
+	return l.logRemoteSessionClientKeySetAttachment(ctx, dbtx, ActionRemoteSessionClientAttachKeySet, event)
+}
+
+// LogRemoteSessionClientDetachKeySet records that a JSON Web Key Set was
+// detached from a remote_session_client.
+func (l *Logger) LogRemoteSessionClientDetachKeySet(ctx context.Context, dbtx repo.DBTX, event LogRemoteSessionClientKeySetAttachmentEvent) error {
+	return l.logRemoteSessionClientKeySetAttachment(ctx, dbtx, ActionRemoteSessionClientDetachKeySet, event)
+}
+
+func (l *Logger) logRemoteSessionClientKeySetAttachment(ctx context.Context, dbtx repo.DBTX, action Action, event LogRemoteSessionClientKeySetAttachmentEvent) error {
+	metadata, err := marshalAuditPayload(map[string]any{
+		"json_web_key_set_id": event.JsonWebKeySetURN.ID.String(),
 	})
 	if err != nil {
 		return fmt.Errorf("marshal %s metadata: %w", action, err)
