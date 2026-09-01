@@ -17,7 +17,7 @@ type fakeIngressRepository struct {
 	attestorParams repo.GetActiveIngressByAttestorParams
 	attestorRow    repo.GetActiveIngressByAttestorRow
 	attestorErr    error
-	versionID      uuid.UUID
+	versionParams  repo.GetIngressServingStateParams
 	versionRow     repo.GetIngressServingStateRow
 	versionErr     error
 }
@@ -27,8 +27,8 @@ func (f *fakeIngressRepository) GetActiveIngressByAttestor(_ context.Context, pa
 	return f.attestorRow, f.attestorErr
 }
 
-func (f *fakeIngressRepository) GetIngressServingState(_ context.Context, id uuid.UUID) (repo.GetIngressServingStateRow, error) {
-	f.versionID = id
+func (f *fakeIngressRepository) GetIngressServingState(_ context.Context, params repo.GetIngressServingStateParams) (repo.GetIngressServingStateRow, error) {
+	f.versionParams = params
 	return f.versionRow, f.versionErr
 }
 
@@ -130,7 +130,7 @@ func TestIngressLookupRecheck(t *testing.T) {
 			fake := &fakeIngressRepository{versionRow: test.row, versionErr: test.err}
 			lookup := &IngressLookup{repo: fake}
 			err := lookup.Recheck(t.Context(), cached)
-			require.Equal(t, ingressID, fake.versionID)
+			require.Equal(t, repo.GetIngressServingStateParams{ID: ingressID, OrganizationID: "org_123"}, fake.versionParams)
 			if test.want == nil {
 				require.NoError(t, err)
 				return

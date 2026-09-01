@@ -29,7 +29,7 @@ type Ingress struct {
 
 type ingressRepository interface {
 	GetActiveIngressByAttestor(context.Context, repo.GetActiveIngressByAttestorParams) (repo.GetActiveIngressByAttestorRow, error)
-	GetIngressServingState(context.Context, uuid.UUID) (repo.GetIngressServingStateRow, error)
+	GetIngressServingState(context.Context, repo.GetIngressServingStateParams) (repo.GetIngressServingStateRow, error)
 }
 
 type IngressLookup struct {
@@ -60,7 +60,10 @@ func (l *IngressLookup) ByAttestor(ctx context.Context, namespace, serviceAccoun
 // Recheck compares every field that can alter serving authority. This does not
 // rely on writers remembering to update a timestamp when changing policy.
 func (l *IngressLookup) Recheck(ctx context.Context, cached Ingress) error {
-	row, err := l.repo.GetIngressServingState(ctx, cached.ID)
+	row, err := l.repo.GetIngressServingState(ctx, repo.GetIngressServingStateParams{
+		ID:             cached.ID,
+		OrganizationID: cached.OrganizationID,
+	})
 	if errors.Is(err, pgx.ErrNoRows) {
 		return ErrIngressUnavailable
 	}

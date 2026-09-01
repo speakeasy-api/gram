@@ -70,6 +70,13 @@ func TestTailscaleIdentityParser(t *testing.T) {
 			},
 		},
 		{
+			name: "valid word followed by malformed marker",
+			headers: http.Header{
+				TailscaleUserLoginHeader: {mime.QEncoding.Encode("utf-8", "user@example.com") + " =?utf-8?q?unterminated"},
+				TailscaleUserNameHeader:  {"Example User"},
+			},
+		},
+		{
 			name: "newline",
 			headers: http.Header{
 				TailscaleUserLoginHeader: {"user@example.com\nforged"},

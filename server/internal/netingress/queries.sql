@@ -22,4 +22,5 @@ SELECT
     enabled,
     deleted
 FROM network_ingresses
-WHERE id = @id;
+WHERE id = @id
+  AND organization_id = @organization_id;
