@@ -22,6 +22,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/mcp"
 	"github.com/speakeasy-api/gram/server/internal/mcpmetadata"
+	"github.com/speakeasy-api/gram/server/internal/netingress"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oauth/wellknown"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -55,6 +56,46 @@ func NewService(
 		db:         db,
 		enc:        enc,
 		mcpService: mcpService,
+	}
+}
+
+// AttachPrivate registers the slug-scoped /x/mcp routes accepted by private
+// network ingress. Global callbacks stay exclusively on the public listener.
+func AttachPrivate(mux goahttp.Muxer, service *Service, metadataService *mcpmetadata.Service) {
+	for _, route := range netingress.PrivateRoutes(netingress.RouteSurfaceXMCP) {
+		var handler http.Handler
+		switch route.ID {
+		case netingress.RouteRuntime:
+			handler = oops.MCPErrHandle(service.logger, service.ServeMCP)
+		case netingress.RouteInstall:
+			handler = oops.ErrHandle(service.logger, metadataService.ServeInstallPage)
+		case netingress.RouteProtectedResource:
+			handler = oops.ErrHandle(service.logger, service.HandleWellKnownOAuthProtectedResourceMetadata)
+		case netingress.RouteAuthorizationServer:
+			handler = oops.ErrHandle(service.logger, service.HandleWellKnownOAuthServerMetadata)
+		case netingress.RouteRegister:
+			handler = oops.ErrHandle(service.logger, service.handleOAuthRegister)
+		case netingress.RouteAuthorize:
+			handler = oops.ErrHandle(service.logger, service.handleOAuthAuthorize)
+		case netingress.RouteConnect:
+			handler = oops.ErrHandle(service.logger, service.handleOAuthConsent)
+		case netingress.RouteConnectRemoteSession:
+			handler = oops.ErrHandle(service.logger, service.handleOAuthConsentAction)
+		case netingress.RouteConnectMCP:
+			handler = oops.ErrHandle(service.logger, service.handleOAuthConsentMCP)
+		case netingress.RouteConnectFirstParty:
+			handler = oops.ErrHandle(service.logger, service.handleFirstPartyConnect)
+		case netingress.RouteToken:
+			handler = oops.ErrHandle(service.logger, service.handleOAuthToken)
+		case netingress.RouteRevoke:
+			handler = oops.ErrHandle(service.logger, service.handleOAuthRevoke)
+		case netingress.RouteInstallScript, netingress.RouteConsentScript, netingress.RouteConsentToolsScript:
+			// Shared assets are owned by the /mcp catalog and are not xMCP routes.
+		}
+		if handler == nil {
+			panic(fmt.Sprintf("private xMCP route %s %s has no handler", route.Method, route.Path))
+		}
+		o11y.AttachHandler(mux, route.Method, route.Path, handler.ServeHTTP)
 	}
 }
 
