@@ -808,18 +808,17 @@ type ExternalKey struct {
 }
 
 type ExternalMcpAttachment struct {
-	ID                                  uuid.UUID
-	DeploymentID                        uuid.UUID
-	RegistryID                          uuid.NullUUID
-	OrganizationMcpCollectionRegistryID uuid.NullUUID
-	Name                                string
-	Slug                                string
-	RegistryServerSpecifier             string
-	SelectedRemotes                     []string
-	CreatedAt                           pgtype.Timestamptz
-	UpdatedAt                           pgtype.Timestamptz
-	DeletedAt                           pgtype.Timestamptz
-	Deleted                             bool
+	ID                      uuid.UUID
+	DeploymentID            uuid.UUID
+	RegistryID              uuid.NullUUID
+	Name                    string
+	Slug                    string
+	RegistryServerSpecifier string
+	SelectedRemotes         []string
+	CreatedAt               pgtype.Timestamptz
+	UpdatedAt               pgtype.Timestamptz
+	DeletedAt               pgtype.Timestamptz
+	Deleted                 bool
 }
 
 type ExternalMcpToolDefinition struct {
@@ -1500,42 +1499,6 @@ type OrganizationInvitation struct {
 	RevokedAt      pgtype.Timestamptz
 	CreatedAt      pgtype.Timestamptz
 	UpdatedAt      pgtype.Timestamptz
-}
-
-type OrganizationMcpCollection struct {
-	ID             uuid.UUID
-	OrganizationID string
-	Name           string
-	Description    pgtype.Text
-	Slug           string
-	Visibility     string
-	CreatedAt      pgtype.Timestamptz
-	UpdatedAt      pgtype.Timestamptz
-	DeletedAt      pgtype.Timestamptz
-	Deleted        bool
-}
-
-type OrganizationMcpCollectionRegistry struct {
-	ID           uuid.UUID
-	CollectionID uuid.UUID
-	Namespace    string
-	CreatedAt    pgtype.Timestamptz
-	UpdatedAt    pgtype.Timestamptz
-	DeletedAt    pgtype.Timestamptz
-	Deleted      bool
-}
-
-type OrganizationMcpCollectionServerAttachment struct {
-	PublishedAt  pgtype.Timestamptz
-	CreatedAt    pgtype.Timestamptz
-	UpdatedAt    pgtype.Timestamptz
-	DeletedAt    pgtype.Timestamptz
-	PublishedBy  pgtype.Text
-	ID           uuid.UUID
-	CollectionID uuid.UUID
-	ToolsetID    uuid.NullUUID
-	McpServerID  uuid.NullUUID
-	Deleted      bool
 }
 
 type OrganizationMetadatum struct {
