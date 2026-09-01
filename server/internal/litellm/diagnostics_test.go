@@ -50,7 +50,7 @@ func TestListInstancesIncludesSafeDiagnostics(t *testing.T) {
 	require.Equal(t, gen.LiteLLMInstanceHealthStatus("pending"), created.Instance.Diagnostics.Status)
 	require.Nil(t, created.Instance.Diagnostics.VirtualKeyEmailPct24h)
 	require.Nil(t, created.Instance.Diagnostics.PlatformUserPct24h)
-	withoutTraffic, err := ti.service.CreateInstance(ctx, &gen.CreateInstancePayload{Name: "without-traffic", FailurePosture: "fail_open"})
+	withoutTraffic, err := ti.service.CreateInstance(ctx, &gen.CreateInstancePayload{Name: "without-traffic", FailurePosture: "fail_closed"})
 	require.NoError(t, err)
 
 	keyHash, err := auth.GetAPIKeyHash(created.Key)

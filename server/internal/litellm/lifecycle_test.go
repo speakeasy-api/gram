@@ -53,9 +53,11 @@ func TestInstanceLifecycle(t *testing.T) {
 	err = ti.keys.RevokeKey(ctx, &keysgen.RevokeKeyPayload{ID: managedKey.ID.String()})
 	requireOops(t, err, oops.CodeConflict)
 
-	second, err := ti.service.CreateInstance(ctx, &gen.CreateInstancePayload{Name: "staging", FailurePosture: "fail_open"})
+	_, err = ti.service.CreateInstance(ctx, &gen.CreateInstancePayload{Name: "unsupported", FailurePosture: "fail_open"})
+	requireOops(t, err, oops.CodeBadRequest)
+	second, err := ti.service.CreateInstance(ctx, &gen.CreateInstancePayload{Name: "staging", FailurePosture: "fail_closed"})
 	require.NoError(t, err)
-	require.Equal(t, gen.LiteLLMFailurePosture("fail_open"), second.Instance.FailurePosture)
+	require.Equal(t, gen.LiteLLMFailurePosture("fail_closed"), second.Instance.FailurePosture)
 
 	listed, err := ti.service.ListInstances(ctx, &gen.ListInstancesPayload{})
 	require.NoError(t, err)

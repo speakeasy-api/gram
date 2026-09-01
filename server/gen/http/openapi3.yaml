@@ -24263,6 +24263,101 @@ paths:
             x-speakeasy-name-override: listInstances
             x-speakeasy-react-hook:
                 name: LiteLLMInstances
+    /rpc/litellm.mintActingPrincipal:
+        post:
+            description: Mint a short-lived acting-principal assertion from an authoritative Gram user session for one active managed LiteLLM inference invocation. The caller must forward the assertion and invocation ID as original request headers to LiteLLM.
+            operationId: mintLiteLLMActingPrincipal
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/MintActingPrincipalRequestBody'
+                required: true
+            responses:
+                "201":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/LitellmActingPrincipalResult'
+                    description: Created response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+            summary: mintActingPrincipal litellm
+            tags:
+                - litellm
+            x-speakeasy-name-override: mintActingPrincipal
+            x-speakeasy-react-hook:
+                disabled: true
     /rpc/litellm.revokeInstance:
         delete:
             description: Revoke a LiteLLM integration and immediately invalidate its active key. Requires org:admin.
@@ -66826,7 +66921,6 @@ components:
                     type: string
                     enum:
                         - fail_closed
-                        - fail_open
                 name:
                     type: string
                     maxLength: 255
@@ -75337,6 +75431,27 @@ components:
             description: A message supplied to LiteLLM for the guarded model request.
             required:
                 - role
+        LitellmActingPrincipalResult:
+            type: object
+            properties:
+                assertion:
+                    type: string
+                contract_version:
+                    type: string
+                    enum:
+                        - litellm-acting-principal.v1
+                expires_in:
+                    type: integer
+                    format: int64
+                invocation_id:
+                    type: string
+                    format: uuid
+            description: A short-lived Gram-signed acting-principal assertion for one managed LiteLLM inference invocation.
+            required:
+                - assertion
+                - contract_version
+                - invocation_id
+                - expires_in
         LitellmIngestResult:
             type: object
             properties:
@@ -76098,6 +76213,21 @@ components:
                 - issuer
                 - clients_migrated
                 - source_deleted
+        MintActingPrincipalRequestBody:
+            type: object
+            properties:
+                instance_id:
+                    type: string
+                    format: uuid
+                invocation_id:
+                    type: string
+                    description: Fresh canonical UUIDv7 identifying exactly one inference attempt.
+                    example: 0198a1b2-c3d4-7000-8000-0123456789ab
+                    format: uuid
+                    pattern: ^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$
+            required:
+                - instance_id
+                - invocation_id
         MintUserSessionRequestBody:
             type: object
             properties:

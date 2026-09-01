@@ -25,6 +25,10 @@ type Client struct {
 	// listInstances endpoint.
 	ListInstancesDoer goahttp.Doer
 
+	// MintActingPrincipal Doer is the HTTP client used to make requests to the
+	// mintActingPrincipal endpoint.
+	MintActingPrincipalDoer goahttp.Doer
+
 	// RotateInstanceKey Doer is the HTTP client used to make requests to the
 	// rotateInstanceKey endpoint.
 	RotateInstanceKeyDoer goahttp.Doer
@@ -59,17 +63,18 @@ func NewClient(
 	restoreBody bool,
 ) *Client {
 	return &Client{
-		CreateInstanceDoer:    doer,
-		ListInstancesDoer:     doer,
-		RotateInstanceKeyDoer: doer,
-		RevokeInstanceDoer:    doer,
-		IngestDoer:            doer,
-		TracesDoer:            doer,
-		RestoreResponseBody:   restoreBody,
-		scheme:                scheme,
-		host:                  host,
-		decoder:               dec,
-		encoder:               enc,
+		CreateInstanceDoer:      doer,
+		ListInstancesDoer:       doer,
+		MintActingPrincipalDoer: doer,
+		RotateInstanceKeyDoer:   doer,
+		RevokeInstanceDoer:      doer,
+		IngestDoer:              doer,
+		TracesDoer:              doer,
+		RestoreResponseBody:     restoreBody,
+		scheme:                  scheme,
+		host:                    host,
+		decoder:                 dec,
+		encoder:                 enc,
 	}
 }
 
@@ -116,6 +121,30 @@ func (c *Client) ListInstances() goa.Endpoint {
 		resp, err := c.ListInstancesDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("litellm", "listInstances", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// MintActingPrincipal returns an endpoint that makes HTTP requests to the
+// litellm service mintActingPrincipal server.
+func (c *Client) MintActingPrincipal() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeMintActingPrincipalRequest(c.encoder)
+		decodeResponse = DecodeMintActingPrincipalResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildMintActingPrincipalRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.MintActingPrincipalDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("litellm", "mintActingPrincipal", err)
 		}
 		return decodeResponse(resp)
 	}

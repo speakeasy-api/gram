@@ -2,7 +2,8 @@
 // fail-closed `mcp_tool_execution` and internal `ai_access` definitions, the
 // authoritative concrete-user principal adapter, the canonical
 // organization-owned resource adapters, and the coverage inventory for hosted
-// and private-proxy MCP tools/call plus approved live Claude/Codex hook activity.
+// and private-proxy MCP tools/call, approved live Claude/Codex hook activity,
+// and managed LiteLLM pre-inference requests.
 //
 // Registration declares the contracts consumed by the MCP and hook checkpoints.
 // The internal ai_access definition is not exposed through customer management.
@@ -24,8 +25,9 @@ const (
 	DefinitionKeyMCPToolExecution killswitches.DefinitionKey = "mcp_tool_execution"
 
 	// DefinitionKeyAIAccess is the internal broad AI-access capability. Its
-	// verified coverage is limited to authenticated MCP tools/call and the
-	// explicitly registered live Claude/Codex hook surfaces below.
+	// verified coverage is limited to authenticated MCP tools/call, the
+	// explicitly registered live Claude/Codex hooks, and the managed LiteLLM
+	// pre-inference surface below.
 	DefinitionKeyAIAccess killswitches.DefinitionKey = "ai_access"
 
 	// PrincipalKindUser is the concrete Gram user principal namespace; keys
@@ -41,10 +43,12 @@ const (
 	IdentityContractKeyAuthenticatedUserMCPServer killswitches.IdentityContractKey = "authenticated_user_mcp_server"
 
 	// IdentityContractKeyAuthenticatedUserAIResource is the additive ai_access
-	// contract spanning existing MCP servers and governed native hook activity.
+	// contract spanning MCP servers, governed native hooks, and managed LiteLLM
+	// pre-inference activity.
 	IdentityContractKeyAuthenticatedUserAIResource killswitches.IdentityContractKey = "authenticated_user_ai_resource"
 
-	ResourceKindHookActivity killswitches.ResourceKind = "hook_activity"
+	ResourceKindHookActivity    killswitches.ResourceKind = "hook_activity"
+	ResourceKindLiteLLMInstance killswitches.ResourceKind = "litellm_instance"
 
 	// SurfaceHostedToolsCall is hosted MCP tools/call dispatch.
 	SurfaceHostedToolsCall killswitches.Surface = "mcp_hosted_tools_call"
@@ -59,13 +63,15 @@ const (
 
 	// TransportAdapterPrivateProxyJSONRPC keys the private-proxy JSON-RPC
 	// transport mapping owned by the forwarding checkpoint.
-	TransportAdapterPrivateProxyJSONRPC killswitches.TransportAdapterKey = "mcp_private_proxy_jsonrpc"
-	TransportAdapterHookNative          killswitches.TransportAdapterKey = "hooks_native_deny"
+	TransportAdapterPrivateProxyJSONRPC     killswitches.TransportAdapterKey = "mcp_private_proxy_jsonrpc"
+	TransportAdapterHookNative              killswitches.TransportAdapterKey = "hooks_native_deny"
+	TransportAdapterLiteLLMGenericGuardrail killswitches.TransportAdapterKey = "litellm_generic_guardrail"
 
 	SurfaceClaudeUserPromptSubmit killswitches.Surface = "hooks_claude_live_user_prompt_submit"
 	SurfaceClaudePreToolUse       killswitches.Surface = "hooks_claude_live_pre_tool_use"
 	SurfaceCodexUserPromptSubmit  killswitches.Surface = "hooks_codex_live_user_prompt_submit"
 	SurfaceCodexPreToolUse        killswitches.Surface = "hooks_codex_live_pre_tool_use"
+	SurfaceLiteLLMPreInference    killswitches.Surface = "litellm_generic_guardrail_pre_call"
 
 	// DefaultExternalNote is the editable customer-safe starting value for
 	// new MCP tool-execution prescriptions. It never leaks framework vocabulary.
@@ -105,13 +111,13 @@ func NewRegistration(db *pgxpool.Pool) (killswitches.Registration, error) {
 			{
 				Key:                 DefinitionKeyAIAccess,
 				PrincipalKinds:      []killswitches.PrincipalKind{PrincipalKindUser},
-				ResourceKinds:       []killswitches.ResourceKind{ResourceKindMCPServer, ResourceKindHookActivity},
+				ResourceKinds:       []killswitches.ResourceKind{ResourceKindMCPServer, ResourceKindHookActivity, ResourceKindLiteLLMInstance},
 				FailurePolicy:       killswitches.FailurePolicyFailClosed,
 				DefaultExternalNote: DefaultAIAccessExternalNote,
 				EnforcementOwner:    EnforcementOwner,
 				IdentityContract:    IdentityContractKeyAuthenticatedUserAIResource,
-				Surfaces:            []killswitches.Surface{SurfaceHostedToolsCall, SurfacePrivateProxyToolsCall, SurfaceClaudeUserPromptSubmit, SurfaceClaudePreToolUse, SurfaceCodexUserPromptSubmit, SurfaceCodexPreToolUse},
-				TransportAdapters:   []killswitches.TransportAdapterKey{TransportAdapterHostedJSONRPC, TransportAdapterPrivateProxyJSONRPC, TransportAdapterHookNative},
+				Surfaces:            []killswitches.Surface{SurfaceHostedToolsCall, SurfacePrivateProxyToolsCall, SurfaceClaudeUserPromptSubmit, SurfaceClaudePreToolUse, SurfaceCodexUserPromptSubmit, SurfaceCodexPreToolUse, SurfaceLiteLLMPreInference},
+				TransportAdapters:   []killswitches.TransportAdapterKey{TransportAdapterHostedJSONRPC, TransportAdapterPrivateProxyJSONRPC, TransportAdapterHookNative, TransportAdapterLiteLLMGenericGuardrail},
 			},
 		},
 		IdentityContracts: []killswitches.IdentityContract{
@@ -123,7 +129,7 @@ func NewRegistration(db *pgxpool.Pool) (killswitches.Registration, error) {
 			{
 				Key:            IdentityContractKeyAuthenticatedUserAIResource,
 				PrincipalKinds: []killswitches.PrincipalKind{PrincipalKindUser},
-				ResourceKinds:  []killswitches.ResourceKind{ResourceKindMCPServer, ResourceKindHookActivity},
+				ResourceKinds:  []killswitches.ResourceKind{ResourceKindMCPServer, ResourceKindHookActivity, ResourceKindLiteLLMInstance},
 			},
 		},
 		PrincipalAdapters: []killswitches.PrincipalAdapterRegistration{{
@@ -133,12 +139,14 @@ func NewRegistration(db *pgxpool.Pool) (killswitches.Registration, error) {
 		ResourceAdapters: []killswitches.ResourceAdapterRegistration{
 			{Adapter: NewMCPServerResourceAdapter(db), Fixtures: resourceFixtures()},
 			{Adapter: HookActivityResourceAdapter{}, Fixtures: hookResourceFixtures()},
+			{Adapter: NewLiteLLMInstanceResourceAdapter(db), Fixtures: litellmResourceFixtures()},
 		},
-		Surfaces: []killswitches.Surface{SurfaceHostedToolsCall, SurfacePrivateProxyToolsCall, SurfaceClaudeUserPromptSubmit, SurfaceClaudePreToolUse, SurfaceCodexUserPromptSubmit, SurfaceCodexPreToolUse},
+		Surfaces: []killswitches.Surface{SurfaceHostedToolsCall, SurfacePrivateProxyToolsCall, SurfaceClaudeUserPromptSubmit, SurfaceClaudePreToolUse, SurfaceCodexUserPromptSubmit, SurfaceCodexPreToolUse, SurfaceLiteLLMPreInference},
 		TransportAdapters: []killswitches.TransportAdapterRegistration{
 			{Key: TransportAdapterHostedJSONRPC, Adapter: killswitches.ResolveTransportDisposition},
 			{Key: TransportAdapterPrivateProxyJSONRPC, Adapter: killswitches.ResolveTransportDisposition},
 			{Key: TransportAdapterHookNative, Adapter: killswitches.ResolveTransportDisposition},
+			{Key: TransportAdapterLiteLLMGenericGuardrail, Adapter: killswitches.ResolveTransportDisposition},
 		},
 		Coverage: append([]killswitches.CoverageContract{
 			{
@@ -188,6 +196,15 @@ func NewRegistration(db *pgxpool.Pool) (killswitches.Registration, error) {
 				TransportAdapter: TransportAdapterPrivateProxyJSONRPC,
 				EnforcementOwner: EnforcementOwner,
 				IdentityContract: IdentityContractKeyAuthenticatedUserAIResource,
+			},
+			{
+				Definition: DefinitionKeyAIAccess, Surface: SurfaceLiteLLMPreInference,
+				PrincipalSource: "Gram-signed litellm-acting-principal.v1 assertion minted from an ordinary authenticated Gram user session for one active managed instance and invocation; active organization membership is revalidated for every callback. LiteLLM user, email, end-user, virtual-key, API-key creator, session, and correlation metadata are never actor provenance.",
+				ResourceSource:  "litellm_instances.id from an uncached authoritative lookup scoped by the callback's authenticated organization, project, and current integration API-key ID.",
+				Checkpoint:      "Generic Guardrail request callback before text, image, or tool extraction, risk processing, persistence, or provider inference.",
+				ProtectedWork:   "Pre-inference request callbacks from the tested LiteLLM 1.94.0 fail-closed Generic Guardrail configuration. Response callbacks and unmanaged, unasserted, or fail-open deployments are not claimed as covered.",
+				FailurePolicy:   killswitches.FailurePolicyFailClosed, TransportAdapter: TransportAdapterLiteLLMGenericGuardrail,
+				EnforcementOwner: EnforcementOwner, IdentityContract: IdentityContractKeyAuthenticatedUserAIResource,
 			},
 		}, hookContracts...),
 	}, nil

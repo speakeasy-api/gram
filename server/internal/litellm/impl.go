@@ -27,6 +27,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/hooks"
 	"github.com/speakeasy-api/gram/server/internal/litellm/callcache"
+	"github.com/speakeasy-api/gram/server/internal/litellmacting"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	telemetryrepo "github.com/speakeasy-api/gram/server/internal/telemetry/repo"
@@ -47,20 +48,22 @@ type authorizer interface {
 }
 
 type Service struct {
-	tracer    trace.Tracer
-	logger    *slog.Logger
-	auth      authorizer
-	hooks     HookIngester
-	calls     *callcache.Cache
-	traces    *TraceProcessor
-	metrics   *MetricProcessor
-	health    *HealthProcessor
-	db        *pgxpool.Pool
-	telemetry telemetryrepo.CHTX
-	instances *InstanceResolver
-	authz     *authz.Engine
-	audit     *audit.Logger
-	keyPrefix string
+	tracer       trace.Tracer
+	logger       *slog.Logger
+	auth         authorizer
+	hooks        HookIngester
+	calls        *callcache.Cache
+	traces       *TraceProcessor
+	metrics      *MetricProcessor
+	health       *HealthProcessor
+	db           *pgxpool.Pool
+	telemetry    telemetryrepo.CHTX
+	instances    *InstanceResolver
+	authz        *authz.Engine
+	audit        *audit.Logger
+	keyPrefix    string
+	actingSigner *litellmacting.Signer
+	aiAccess     liteLLMAIAccessCheckpointer
 }
 
 var (
@@ -68,22 +71,24 @@ var (
 	_ gen.Auther  = (*Service)(nil)
 )
 
-func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, telemetryDB telemetryrepo.CHTX, sessionsManager *sessions.Manager, authzEngine *authz.Engine, hookIngester HookIngester, calls *callcache.Cache, traces *TraceProcessor, metrics *MetricProcessor, health *HealthProcessor, instances *InstanceResolver, auditLogger *audit.Logger, environment string) *Service {
+func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, telemetryDB telemetryrepo.CHTX, sessionsManager *sessions.Manager, authzEngine *authz.Engine, hookIngester HookIngester, calls *callcache.Cache, traces *TraceProcessor, metrics *MetricProcessor, health *HealthProcessor, instances *InstanceResolver, auditLogger *audit.Logger, actingSigner *litellmacting.Signer, aiAccess liteLLMAIAccessCheckpointer, environment string) *Service {
 	return &Service{
-		tracer:    tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/litellm"),
-		logger:    logger.With(attr.SlogComponent("litellm")),
-		auth:      auth.New(logger, db, sessionsManager, authzEngine),
-		hooks:     hookIngester,
-		calls:     calls,
-		traces:    traces,
-		metrics:   metrics,
-		health:    health,
-		db:        db,
-		telemetry: telemetryDB,
-		instances: instances,
-		authz:     authzEngine,
-		audit:     auditLogger,
-		keyPrefix: auth.APIKeyPrefix(environment),
+		tracer:       tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/litellm"),
+		logger:       logger.With(attr.SlogComponent("litellm")),
+		auth:         auth.New(logger, db, sessionsManager, authzEngine),
+		hooks:        hookIngester,
+		calls:        calls,
+		traces:       traces,
+		metrics:      metrics,
+		health:       health,
+		db:           db,
+		telemetry:    telemetryDB,
+		instances:    instances,
+		authz:        authzEngine,
+		audit:        auditLogger,
+		keyPrefix:    auth.APIKeyPrefix(environment),
+		actingSigner: actingSigner,
+		aiAccess:     aiAccess,
 	}
 }
 
@@ -143,6 +148,18 @@ func (s *Service) Ingest(ctx context.Context, payload *gen.IngestPayload) (resul
 }
 
 func (s *Service) ingestRequest(ctx context.Context, payload *gen.IngestPayload, callID string) (*gen.LitellmIngestResult, error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil {
+		return nil, oops.E(oops.CodeUnauthorized, nil, "unauthorized")
+	}
+	if s.aiAccess == nil {
+		return liteLLMIdentityFailureDecision().result(), nil
+	}
+	aiAccess := s.aiAccess.Evaluate(ctx, payload, authCtx)
+	if aiAccess.blocked {
+		return aiAccess.result(), nil
+	}
+
 	prompt := latestUserPrompt(payload.StructuredMessages)
 	if prompt == "" {
 		prompt = lastText(payload.Texts)
@@ -151,11 +168,8 @@ func (s *Service) ingestRequest(ctx context.Context, payload *gen.IngestPayload,
 		return noneResult(), nil
 	}
 
-	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	if !ok || authCtx == nil {
-		return nil, oops.E(oops.CodeUnauthorized, nil, "unauthorized")
-	}
 	authCopy := strippedAuthContext(authCtx)
+	authCopy.UserID = aiAccess.userID
 
 	traceID := strings.TrimSpace(conv.PtrValOr(payload.LitellmTraceID, ""))
 	attribution := agentAttributionFromHeaders(payload.RequestHeaders)
@@ -165,7 +179,6 @@ func (s *Service) ingestRequest(ctx context.Context, payload *gen.IngestPayload,
 	}
 	model := strings.TrimSpace(conv.PtrValOr(payload.Model, ""))
 	version := strings.TrimSpace(conv.PtrValOr(payload.LitellmVersion, ""))
-	email := conv.NormalizeEmail(conv.PtrValOr(payload.RequestData.UserAPIKeyUserEmail, ""))
 	idempotencyKey := "litellm:" + callID + ":request"
 	turnID := callID
 	if attribution.TurnID != "" {
@@ -186,7 +199,7 @@ func (s *Service) ingestRequest(ctx context.Context, payload *gen.IngestPayload,
 			AdapterVersion: conv.PtrEmpty(version),
 			RawEventName:   nil,
 			Hostname:       nil,
-			UserEmail:      conv.PtrEmpty(email),
+			UserEmail:      nil,
 		},
 		Session: &hooksgen.HookIngestSession{
 			ID:     &sessionID,
@@ -273,7 +286,6 @@ func (s *Service) ingestResponse(ctx context.Context, payload *gen.IngestPayload
 	traceID := strings.TrimSpace(conv.PtrValOr(payload.LitellmTraceID, ""))
 	sessionID := conv.Default(traceID, callID)
 	originatingClient := ""
-	email := conv.NormalizeEmail(conv.PtrValOr(payload.RequestData.UserAPIKeyUserEmail, ""))
 
 	cacheCtx, cancel := context.WithTimeout(ctx, callCacheTimeout)
 	cached, err := s.calls.Get(cacheCtx, *authCtx.ProjectID, callID)
@@ -282,7 +294,6 @@ func (s *Service) ingestResponse(ctx context.Context, payload *gen.IngestPayload
 		sessionID = cached.SessionID
 		authCopy.UserID = cached.UserID
 		authCopy.Email = conv.PtrEmpty(cached.Email)
-		email = cached.Email
 		if cached.OriginatingClient != "" {
 			originatingClient = cached.OriginatingClient
 		} else {
@@ -319,7 +330,7 @@ func (s *Service) ingestResponse(ctx context.Context, payload *gen.IngestPayload
 			AdapterVersion: conv.PtrEmpty(version),
 			RawEventName:   nil,
 			Hostname:       nil,
-			UserEmail:      conv.PtrEmpty(email),
+			UserEmail:      nil,
 		},
 		Session: &hooksgen.HookIngestSession{
 			ID:     &sessionID,

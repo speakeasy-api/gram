@@ -43,10 +43,10 @@ func TestMCPToolExecutionRegistration(t *testing.T) {
 	require.True(t, ok)
 	require.Equal(t, killswitches.FailurePolicyFailClosed, aiDefinition.FailurePolicy)
 	require.Equal(t, []killswitches.PrincipalKind{PrincipalKindUser}, aiDefinition.PrincipalKinds)
-	require.ElementsMatch(t, []killswitches.ResourceKind{ResourceKindMCPServer, ResourceKindHookActivity}, aiDefinition.ResourceKinds)
+	require.ElementsMatch(t, []killswitches.ResourceKind{ResourceKindMCPServer, ResourceKindHookActivity, ResourceKindLiteLLMInstance}, aiDefinition.ResourceKinds)
 	require.Equal(t, IdentityContractKeyAuthenticatedUserAIResource, aiDefinition.IdentityContract)
-	require.ElementsMatch(t, []killswitches.Surface{SurfaceHostedToolsCall, SurfacePrivateProxyToolsCall, SurfaceClaudeUserPromptSubmit, SurfaceClaudePreToolUse, SurfaceCodexUserPromptSubmit, SurfaceCodexPreToolUse}, aiDefinition.Surfaces)
-	require.ElementsMatch(t, []killswitches.TransportAdapterKey{TransportAdapterHostedJSONRPC, TransportAdapterPrivateProxyJSONRPC, TransportAdapterHookNative}, aiDefinition.TransportAdapters)
+	require.ElementsMatch(t, []killswitches.Surface{SurfaceHostedToolsCall, SurfacePrivateProxyToolsCall, SurfaceClaudeUserPromptSubmit, SurfaceClaudePreToolUse, SurfaceCodexUserPromptSubmit, SurfaceCodexPreToolUse, SurfaceLiteLLMPreInference}, aiDefinition.Surfaces)
+	require.ElementsMatch(t, []killswitches.TransportAdapterKey{TransportAdapterHostedJSONRPC, TransportAdapterPrivateProxyJSONRPC, TransportAdapterHookNative, TransportAdapterLiteLLMGenericGuardrail}, aiDefinition.TransportAdapters)
 	require.Equal(t, DefaultAIAccessExternalNote, aiDefinition.DefaultExternalNote)
 	require.NotEqual(t, definition.DefaultExternalNote, aiDefinition.DefaultExternalNote)
 	require.Equal(t, EnforcementOwner, aiDefinition.EnforcementOwner)
@@ -69,7 +69,7 @@ func TestMCPCoverageInventory(t *testing.T) {
 	require.NoError(t, err)
 
 	inventory := registry.CoverageInventory()
-	require.Len(t, inventory, 8)
+	require.Len(t, inventory, 9)
 	coverageByDefinition := map[killswitches.DefinitionKey][]killswitches.Surface{}
 	for _, contract := range inventory {
 		coverageByDefinition[contract.Definition] = append(coverageByDefinition[contract.Definition], contract.Surface)
@@ -85,7 +85,7 @@ func TestMCPCoverageInventory(t *testing.T) {
 		require.NotEmpty(t, contract.ProtectedWork)
 	}
 	require.Equal(t, []killswitches.Surface{SurfaceHostedToolsCall, SurfacePrivateProxyToolsCall}, coverageByDefinition[DefinitionKeyMCPToolExecution])
-	require.ElementsMatch(t, []killswitches.Surface{SurfaceHostedToolsCall, SurfacePrivateProxyToolsCall, SurfaceClaudeUserPromptSubmit, SurfaceClaudePreToolUse, SurfaceCodexUserPromptSubmit, SurfaceCodexPreToolUse}, coverageByDefinition[DefinitionKeyAIAccess])
+	require.ElementsMatch(t, []killswitches.Surface{SurfaceHostedToolsCall, SurfacePrivateProxyToolsCall, SurfaceClaudeUserPromptSubmit, SurfaceClaudePreToolUse, SurfaceCodexUserPromptSubmit, SurfaceCodexPreToolUse, SurfaceLiteLLMPreInference}, coverageByDefinition[DefinitionKeyAIAccess])
 
 	hosted, ok := registry.Coverage(DefinitionKeyMCPToolExecution, SurfaceHostedToolsCall)
 	require.True(t, ok)

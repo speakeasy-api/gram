@@ -186,7 +186,7 @@ func newRealTestServiceWithScannerFactory(t *testing.T, scannerFactory func(*pgx
 		require.NoError(t, healthProcessor.Shutdown(shutdownCtx))
 	})
 	auditLogger := audit.NewLogger()
-	service := NewService(logger, tracerProvider, conn, chConn, sessionManager, authzEngine, hookService, calls, traceProcessor, metricProcessor, healthProcessor, instanceResolver, auditLogger, "local")
+	service := NewService(logger, tracerProvider, conn, chConn, sessionManager, authzEngine, hookService, calls, traceProcessor, metricProcessor, healthProcessor, instanceResolver, auditLogger, nil, allowLiteLLMAIAccess{}, "local")
 	return ctx, &realTestInstance{
 		service:   service,
 		hooks:     hookService,

@@ -55,13 +55,17 @@ func (a *MCPServerResourceAdapter) Kind() killswitches.ResourceKind {
 // its canonical lowercase form. Input that can never name a server is
 // deliberately unsupported, not an error.
 func (a *MCPServerResourceAdapter) Canonicalize(_ killswitches.OrganizationID, input string) (killswitches.CanonicalizationResult[killswitches.ResourceKey], error) {
+	return canonicalUUIDResourceKey(input)
+}
+
+func canonicalUUIDResourceKey(input string) (killswitches.CanonicalizationResult[killswitches.ResourceKey], error) {
 	id, err := uuid.Parse(strings.TrimSpace(input))
 	if err != nil || id == uuid.Nil {
 		return killswitches.UnsupportedCanonicalizationResult[killswitches.ResourceKey](), nil
 	}
 	result, err := killswitches.NewCanonicalizationResult(killswitches.ResourceKey(id.String()))
 	if err != nil {
-		return killswitches.CanonicalizationResult[killswitches.ResourceKey]{}, fmt.Errorf("canonicalize mcp server key: %w", err)
+		return killswitches.CanonicalizationResult[killswitches.ResourceKey]{}, fmt.Errorf("canonicalize UUID resource key: %w", err)
 	}
 	return result, nil
 }

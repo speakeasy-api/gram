@@ -494,6 +494,247 @@ func DecodeListInstancesResponse(decoder func(*http.Response) goahttp.Decoder, r
 	}
 }
 
+// BuildMintActingPrincipalRequest instantiates a HTTP request object with
+// method and path set to call the "litellm" service "mintActingPrincipal"
+// endpoint
+func (c *Client) BuildMintActingPrincipalRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: MintActingPrincipalLitellmPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("litellm", "mintActingPrincipal", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeMintActingPrincipalRequest returns an encoder for requests sent to the
+// litellm mintActingPrincipal server.
+func EncodeMintActingPrincipalRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*litellm.MintActingPrincipalPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("litellm", "mintActingPrincipal", "*litellm.MintActingPrincipalPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		if p.ProjectSlugInput != nil {
+			head := *p.ProjectSlugInput
+			req.Header.Set("Gram-Project", head)
+		}
+		body := NewMintActingPrincipalRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("litellm", "mintActingPrincipal", err)
+		}
+		return nil
+	}
+}
+
+// DecodeMintActingPrincipalResponse returns a decoder for responses returned
+// by the litellm mintActingPrincipal endpoint. restoreBody controls whether
+// the response body should be restored after having been read.
+// DecodeMintActingPrincipalResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeMintActingPrincipalResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusCreated:
+			var (
+				body MintActingPrincipalResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("litellm", "mintActingPrincipal", err)
+			}
+			p := NewMintActingPrincipalLitellmActingPrincipalResultCreated(&body)
+			view := "default"
+			vres := &litellmviews.LitellmActingPrincipalResult{Projected: p, View: view}
+			if err = litellmviews.ValidateLitellmActingPrincipalResult(vres); err != nil {
+				return nil, goahttp.ErrValidationError("litellm", "mintActingPrincipal", err)
+			}
+			res := litellm.NewLitellmActingPrincipalResult(vres)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body MintActingPrincipalUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("litellm", "mintActingPrincipal", err)
+			}
+			err = ValidateMintActingPrincipalUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("litellm", "mintActingPrincipal", err)
+			}
+			return nil, NewMintActingPrincipalUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body MintActingPrincipalForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("litellm", "mintActingPrincipal", err)
+			}
+			err = ValidateMintActingPrincipalForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("litellm", "mintActingPrincipal", err)
+			}
+			return nil, NewMintActingPrincipalForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body MintActingPrincipalBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("litellm", "mintActingPrincipal", err)
+			}
+			err = ValidateMintActingPrincipalBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("litellm", "mintActingPrincipal", err)
+			}
+			return nil, NewMintActingPrincipalBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body MintActingPrincipalNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("litellm", "mintActingPrincipal", err)
+			}
+			err = ValidateMintActingPrincipalNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("litellm", "mintActingPrincipal", err)
+			}
+			return nil, NewMintActingPrincipalNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body MintActingPrincipalConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("litellm", "mintActingPrincipal", err)
+			}
+			err = ValidateMintActingPrincipalConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("litellm", "mintActingPrincipal", err)
+			}
+			return nil, NewMintActingPrincipalConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body MintActingPrincipalUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("litellm", "mintActingPrincipal", err)
+			}
+			err = ValidateMintActingPrincipalUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("litellm", "mintActingPrincipal", err)
+			}
+			return nil, NewMintActingPrincipalUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body MintActingPrincipalInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("litellm", "mintActingPrincipal", err)
+			}
+			err = ValidateMintActingPrincipalInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("litellm", "mintActingPrincipal", err)
+			}
+			return nil, NewMintActingPrincipalInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body MintActingPrincipalInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("litellm", "mintActingPrincipal", err)
+				}
+				err = ValidateMintActingPrincipalInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("litellm", "mintActingPrincipal", err)
+				}
+				return nil, NewMintActingPrincipalInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body MintActingPrincipalUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("litellm", "mintActingPrincipal", err)
+				}
+				err = ValidateMintActingPrincipalUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("litellm", "mintActingPrincipal", err)
+				}
+				return nil, NewMintActingPrincipalUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("litellm", "mintActingPrincipal", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body MintActingPrincipalGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("litellm", "mintActingPrincipal", err)
+			}
+			err = ValidateMintActingPrincipalGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("litellm", "mintActingPrincipal", err)
+			}
+			return nil, NewMintActingPrincipalGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("litellm", "mintActingPrincipal", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // BuildRotateInstanceKeyRequest instantiates a HTTP request object with method
 // and path set to call the "litellm" service "rotateInstanceKey" endpoint
 func (c *Client) BuildRotateInstanceKeyRequest(ctx context.Context, v any) (*http.Request, error) {
