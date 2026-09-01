@@ -224,6 +224,16 @@ func (g UserSessionGrant) TTL() time.Duration { return 10 * time.Minute }
 // not a credential rejection.
 var errIssuerGateOrgLookup = errors.New("describe organization for issuer-gated endpoint")
 
+// errUnsupportedSessionSubject marks a session subject kind that parses but
+// that this path has no way to describe as a caller.
+//
+// A rejection rather than a fallback on purpose. AuthContext names a user or
+// an api key and nothing else, so a kind that is neither has no field to be
+// stamped into — and handing back a context carrying an empty identity would
+// read to authz.Engine as an authenticated session belonging to nobody, which
+// is wider than any answer the design intends.
+var errUnsupportedSessionSubject = errors.New("session subject kind cannot be described as a caller")
+
 // The gram.oauth.failure_reason values the issuer gate emits on its rejection
 // logs and on the mcp.request.rejected counter, beyond the bearer-token
 // classification issuerGateFailureReason produces. Together they are a closed
@@ -428,6 +438,14 @@ func (s *Service) contextForSessionSubject(
 	case urn.SessionSubjectKindAnonymous:
 		// Unreachable: anonymous subjects return ctx untouched above. Listed
 		// for exhaustiveness so the linter doesn't flag the switch.
+	case urn.SessionSubjectKindWorkload:
+		// A workload is neither of the identities AuthContext carries, and
+		// giving it the anonymous treatment above would be worse than saying
+		// so: anonymous callers deliberately get no permission context, which
+		// for an admitted, issuer-vouched machine would skip authorization
+		// altogether. Refused, so an identity this path cannot describe is an
+		// error rather than a silent grant.
+		return nil, fmt.Errorf("%w: %q", errUnsupportedSessionSubject, subject.Kind)
 	}
 	return contextvalues.SetAuthContext(ctx, authCtx), nil
 }

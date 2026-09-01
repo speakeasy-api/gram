@@ -57,6 +57,11 @@ func buildView(row repo.ListUserSessionsByProjectIDRow) *types.UserSession {
 		subjectName = conv.FromPGText[string](row.ApiKeyName)
 	case urn.SessionSubjectKindAnonymous:
 		// anonymous subjects have no resolved display name
+	case urn.SessionSubjectKindWorkload:
+		// A workload's name is its issuer and external subject, which this
+		// row does not join, so there is nothing to resolve here. subjectType
+		// already reports "workload", so the caller is named by kind even
+		// with no display name to resolve.
 	}
 
 	var revokedAt *string
