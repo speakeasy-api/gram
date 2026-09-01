@@ -15,7 +15,10 @@ import { useMembers } from "@gram/client/react-query/members.js";
 import { useChallenges } from "@gram/client/react-query/challenges.js";
 import { useListChats } from "@gram/client/react-query/listChats.js";
 import { useManagedDevices } from "@gram/client/react-query/managedDevices.js";
-import { useGetUserMetricsSummary } from "@gram/client/react-query/getUserMetricsSummary.js";
+import {
+  buildGetUserMetricsSummaryQuery,
+  useGetUserMetricsSummary,
+} from "@gram/client/react-query/getUserMetricsSummary.js";
 import { useRiskUserBreakdown } from "@gram/client/react-query/riskUserBreakdown.js";
 import { useShadowMCPInventoryServersForUser } from "@gram/client/react-query/shadowMCPInventoryServersForUser.js";
 
@@ -87,21 +90,41 @@ export function useIdentityMetrics(
   from: Date,
   to: Date,
 ): ReturnType<typeof useGetUserMetricsSummary> {
+  const client = useGramContext();
   const { slug: gramProject } = useIdentityProject();
   const userId = identity.userIds[0];
   const externalUserId = identity.externalUserIds[0];
-  return useGetUserMetricsSummary(
-    {
-      gramProject,
-      getUserMetricsSummaryPayload: {
-        from,
-        to,
-        ...(userId ? { userId } : externalUserId ? { externalUserId } : {}),
-      },
+  const request = {
+    gramProject,
+    getUserMetricsSummaryPayload: {
+      from,
+      to,
+      ...(userId ? { userId } : externalUserId ? { externalUserId } : {}),
     },
-    undefined,
-    { ...OFF, enabled: !!userId || !!externalUserId },
-  );
+  };
+
+  // Built rather than called through useGetUserMetricsSummary, purely to widen
+  // the cache key. This endpoint takes its subject and window in the request
+  // body, and the generated key covers only the project and auth headers, so
+  // every identity and every range in one project share a single cache entry:
+  // the tiles would keep the first answer they got and the range picker would
+  // look inert on exactly the figures this page leads with. The generated
+  // queryFn still does the fetching; only the key is ours.
+  const built = buildGetUserMetricsSummaryQuery(client, request);
+  return useQuery({
+    ...built,
+    queryKey: [
+      ...built.queryKey,
+      {
+        userId: userId ?? null,
+        externalUserId: externalUserId ?? null,
+        from: from.toISOString(),
+        to: to.toISOString(),
+      },
+    ],
+    throwOnError: false,
+    enabled: !!userId || !!externalUserId,
+  });
 }
 
 /**
