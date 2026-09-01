@@ -18,7 +18,8 @@ import (
 // of the proxy (see [Service.serveRemoteBackend]); this interceptor is the
 // finer per-tool refinement and is therefore only attached for private
 // visibility. Public servers bypass server-level RBAC by design, so per-tool
-// RBAC is also skipped — see the conditional attach in [Service.buildProxy].
+// RBAC is also skipped — see the conditional attach in
+// [ProxyManager.BuildTarget].
 //
 // The check carries both the tool-name and `disposition` dimensions. The
 // disposition is resolved from admin-authored tool metadata via the injected
