@@ -11,6 +11,8 @@ import (
 )
 
 func TestRetryDockerInfoRetriesTransientFailures(t *testing.T) {
+	t.Parallel()
+
 	synctest.Test(t, func(t *testing.T) {
 		attempts := 0
 		err := retryDockerInfo(t.Context(), func(context.Context) error {
@@ -27,6 +29,8 @@ func TestRetryDockerInfoRetriesTransientFailures(t *testing.T) {
 }
 
 func TestRetryDockerInfoStopsAtDeadline(t *testing.T) {
+	t.Parallel()
+
 	synctest.Test(t, func(t *testing.T) {
 		ctx, cancel := context.WithTimeout(t.Context(), time.Second)
 		defer cancel()

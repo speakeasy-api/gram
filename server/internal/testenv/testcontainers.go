@@ -69,8 +69,10 @@ func ensureDockerReady(ctx context.Context) error {
 		defer o11y.NoLogDefer(cli.Close)
 
 		if err := retryDockerInfo(readyCtx, func(ctx context.Context) error {
-			_, err := cli.Info(ctx, client.InfoOptions{})
-			return err
+			if _, err := cli.Info(ctx, client.InfoOptions{}); err != nil {
+				return fmt.Errorf("query docker info: %w", err)
+			}
+			return nil
 		}); err != nil {
 			return nil, err
 		}
