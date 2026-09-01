@@ -2161,6 +2161,76 @@ ON json_web_keys (organization_id, json_web_key_set_id);
 CREATE INDEX IF NOT EXISTS json_web_keys_external_key_tenant_idx
 ON json_web_keys (organization_id, external_key_id);
 
+-- Customer-hosted MCP servers connected through outbound tunnels. Gram stores
+-- the durable management/source record; live connection routing is cached in
+-- Redis by the tunnel gateway.
+CREATE TABLE IF NOT EXISTS tunneled_mcp_servers (
+  -- Stable UUID for the tunneled MCP source. Used by management APIs,
+  -- dashboard routes, and Redis connection cache keys.
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  -- Project that owns this source. All management queries are project-scoped.
+  project_id uuid NOT NULL,
+  -- User-facing display name for the tunneled MCP source.
+  name TEXT NOT NULL CHECK (name <> ''),
+  -- Hash of the one-time tunnel key. The plaintext key is not stored.
+  key_hash TEXT NOT NULL CHECK (key_hash <> ''),
+  -- Non-secret key prefix shown in the UI for user-side key identification.
+  key_prefix TEXT NOT NULL CHECK (key_prefix <> ''),
+  -- Durable source lifecycle. Live connection state is derived from Redis.
+  status TEXT NOT NULL DEFAULT 'created' CHECK (status IN ('created', 'active', 'revoked')),
+  -- Owner consent for serving this source through a public (anonymous) MCP
+  -- endpoint. An mcp_servers row fronting this source may only take
+  -- visibility=public while this is true (double opt-in, enforced in
+  -- application code at create/update validation and at serve time).
+  allow_public boolean NOT NULL DEFAULT false,
+  -- Last persisted tunnel agent version reported for this source.
+  agent_version TEXT CHECK (agent_version IS NULL OR agent_version <> ''),
+  -- The tunneled server's own RFC 9728 protected-resource identifier: the
+  -- value an authorization server co-hosted with it recognizes as its
+  -- audience. Recorded as the RFC 8707 resource on grants and used only for
+  -- exact-match credential routing. Names a host inside the customer's
+  -- private network — this value must NEVER be dialed by Gram.
+  resource_identifier TEXT CHECK (resource_identifier IS NULL OR resource_identifier <> ''),
+  -- Most recent persisted heartbeat time, used when Redis liveness data is absent.
+  last_seen_at timestamptz,
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  deleted_at timestamptz,
+  deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
+
+  CONSTRAINT tunneled_mcp_servers_pkey PRIMARY KEY (id),
+  CONSTRAINT tunneled_mcp_servers_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS tunneled_mcp_servers_project_id_idx
+ON tunneled_mcp_servers (project_id)
+WHERE deleted IS FALSE;
+
+CREATE UNIQUE INDEX IF NOT EXISTS tunneled_mcp_servers_project_id_name_key
+ON tunneled_mcp_servers (project_id, name)
+WHERE deleted IS FALSE;
+
+CREATE UNIQUE INDEX IF NOT EXISTS tunneled_mcp_servers_key_hash_key
+ON tunneled_mcp_servers (key_hash)
+WHERE deleted IS FALSE;
+
+COMMENT ON TABLE tunneled_mcp_servers IS 'Customer-hosted MCP server sources that connect to Gram through outbound tunnels.';
+COMMENT ON COLUMN tunneled_mcp_servers.id IS 'Stable UUID for the tunneled MCP source. Used by management APIs, dashboard routes, and Redis connection cache keys.';
+COMMENT ON COLUMN tunneled_mcp_servers.project_id IS 'Project that owns this tunneled MCP source. All management queries are scoped by project_id.';
+COMMENT ON COLUMN tunneled_mcp_servers.name IS 'User-facing display name for the tunneled MCP source.';
+COMMENT ON COLUMN tunneled_mcp_servers.key_hash IS 'Hash of the one-time tunnel key. Used for future tunnel authentication without storing the plaintext key.';
+COMMENT ON COLUMN tunneled_mcp_servers.key_prefix IS 'Non-secret prefix of the tunnel key shown in the UI so users can identify which key/source they are using.';
+COMMENT ON COLUMN tunneled_mcp_servers.status IS 'Durable lifecycle state for the source: created, active, or revoked. Live connection state is derived from Redis.';
+COMMENT ON COLUMN tunneled_mcp_servers.allow_public IS 'Owner consent for anonymous public MCP serving of this source. Double opt-in with mcp_servers.visibility=public, enforced in application code.';
+COMMENT ON COLUMN tunneled_mcp_servers.agent_version IS 'Last persisted tunnel agent version reported for this source. Per-connection agent versions are stored in Redis.';
+COMMENT ON COLUMN tunneled_mcp_servers.resource_identifier IS 'RFC 9728 protected-resource identifier of the tunneled server, recorded as the RFC 8707 resource on grants and used only for exact-match credential routing. Names a host inside the customer''s private network — never dialed by Gram.';
+COMMENT ON COLUMN tunneled_mcp_servers.last_seen_at IS 'Most recent persisted heartbeat time for the source, used when Redis liveness data is absent or expired.';
+COMMENT ON COLUMN tunneled_mcp_servers.created_at IS 'Time when the tunneled MCP source was created.';
+COMMENT ON COLUMN tunneled_mcp_servers.updated_at IS 'Time when the durable tunneled MCP source record was last updated.';
+COMMENT ON COLUMN tunneled_mcp_servers.deleted_at IS 'Soft-delete timestamp for the tunneled MCP source. NULL means the source is active.';
+COMMENT ON COLUMN tunneled_mcp_servers.deleted IS 'Generated soft-delete flag derived from deleted_at and used by partial indexes.';
+
 -- Remote Session Issuers are references to external authorization servers
 -- that will mint tokens that can be passed on behalf of a Gram session to an
 -- MCP backend
@@ -2208,6 +2278,11 @@ CREATE TABLE IF NOT EXISTS remote_session_issuers (
   oidc BOOLEAN NOT NULL DEFAULT FALSE,
   passthrough BOOLEAN NOT NULL DEFAULT FALSE,
 
+  -- When set, every call Gram makes to this issuer's endpoints (metadata
+  -- discovery, code exchange, refresh, revocation, and registration) rides
+  -- this tunnel instead of dialing directly from cloud egress.
+  tunneled_mcp_server_id uuid,
+
   name TEXT CHECK (name IS NULL OR name <> ''),
   logo_asset_id uuid,
 
@@ -2228,7 +2303,8 @@ CREATE TABLE IF NOT EXISTS remote_session_issuers (
   CONSTRAINT remote_session_issuers_pkey PRIMARY KEY (id),
   CONSTRAINT remote_session_issuers_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE,
   CONSTRAINT remote_session_issuers_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE,
-  CONSTRAINT remote_session_issuers_logo_asset_id_fkey FOREIGN KEY (logo_asset_id) REFERENCES assets (id) ON DELETE SET NULL
+  CONSTRAINT remote_session_issuers_logo_asset_id_fkey FOREIGN KEY (logo_asset_id) REFERENCES assets (id) ON DELETE SET NULL,
+  CONSTRAINT remote_session_issuers_tunneled_mcp_server_id_fkey FOREIGN KEY (tunneled_mcp_server_id) REFERENCES tunneled_mcp_servers (id) ON DELETE SET NULL
 );
 
 CREATE UNIQUE INDEX IF NOT EXISTS remote_session_issuers_project_slug_key
@@ -4630,76 +4706,6 @@ WHERE deleted IS FALSE;
 CREATE UNIQUE INDEX IF NOT EXISTS remote_mcp_server_headers_remote_mcp_server_id_name_key
 ON remote_mcp_server_headers (remote_mcp_server_id, name)
 WHERE deleted IS FALSE;
-
--- Customer-hosted MCP servers connected through outbound tunnels. Gram stores
--- the durable management/source record; live connection routing is cached in
--- Redis by the tunnel gateway.
-CREATE TABLE IF NOT EXISTS tunneled_mcp_servers (
-  -- Stable UUID for the tunneled MCP source. Used by management APIs,
-  -- dashboard routes, and Redis connection cache keys.
-  id uuid NOT NULL DEFAULT generate_uuidv7(),
-  -- Project that owns this source. All management queries are project-scoped.
-  project_id uuid NOT NULL,
-  -- User-facing display name for the tunneled MCP source.
-  name TEXT NOT NULL CHECK (name <> ''),
-  -- Hash of the one-time tunnel key. The plaintext key is not stored.
-  key_hash TEXT NOT NULL CHECK (key_hash <> ''),
-  -- Non-secret key prefix shown in the UI for user-side key identification.
-  key_prefix TEXT NOT NULL CHECK (key_prefix <> ''),
-  -- Durable source lifecycle. Live connection state is derived from Redis.
-  status TEXT NOT NULL DEFAULT 'created' CHECK (status IN ('created', 'active', 'revoked')),
-  -- Owner consent for serving this source through a public (anonymous) MCP
-  -- endpoint. An mcp_servers row fronting this source may only take
-  -- visibility=public while this is true (double opt-in, enforced in
-  -- application code at create/update validation and at serve time).
-  allow_public boolean NOT NULL DEFAULT false,
-  -- Last persisted tunnel agent version reported for this source.
-  agent_version TEXT CHECK (agent_version IS NULL OR agent_version <> ''),
-  -- The tunneled server's own RFC 9728 protected-resource identifier: the
-  -- value an authorization server co-hosted with it recognizes as its
-  -- audience. Recorded as the RFC 8707 resource on grants and used only for
-  -- exact-match credential routing. Names a host inside the customer's
-  -- private network — this value must NEVER be dialed by Gram.
-  resource_identifier TEXT CHECK (resource_identifier IS NULL OR resource_identifier <> ''),
-  -- Most recent persisted heartbeat time, used when Redis liveness data is absent.
-  last_seen_at timestamptz,
-
-  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
-  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
-  deleted_at timestamptz,
-  deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
-
-  CONSTRAINT tunneled_mcp_servers_pkey PRIMARY KEY (id),
-  CONSTRAINT tunneled_mcp_servers_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE
-);
-
-CREATE INDEX IF NOT EXISTS tunneled_mcp_servers_project_id_idx
-ON tunneled_mcp_servers (project_id)
-WHERE deleted IS FALSE;
-
-CREATE UNIQUE INDEX IF NOT EXISTS tunneled_mcp_servers_project_id_name_key
-ON tunneled_mcp_servers (project_id, name)
-WHERE deleted IS FALSE;
-
-CREATE UNIQUE INDEX IF NOT EXISTS tunneled_mcp_servers_key_hash_key
-ON tunneled_mcp_servers (key_hash)
-WHERE deleted IS FALSE;
-
-COMMENT ON TABLE tunneled_mcp_servers IS 'Customer-hosted MCP server sources that connect to Gram through outbound tunnels.';
-COMMENT ON COLUMN tunneled_mcp_servers.id IS 'Stable UUID for the tunneled MCP source. Used by management APIs, dashboard routes, and Redis connection cache keys.';
-COMMENT ON COLUMN tunneled_mcp_servers.project_id IS 'Project that owns this tunneled MCP source. All management queries are scoped by project_id.';
-COMMENT ON COLUMN tunneled_mcp_servers.name IS 'User-facing display name for the tunneled MCP source.';
-COMMENT ON COLUMN tunneled_mcp_servers.key_hash IS 'Hash of the one-time tunnel key. Used for future tunnel authentication without storing the plaintext key.';
-COMMENT ON COLUMN tunneled_mcp_servers.key_prefix IS 'Non-secret prefix of the tunnel key shown in the UI so users can identify which key/source they are using.';
-COMMENT ON COLUMN tunneled_mcp_servers.status IS 'Durable lifecycle state for the source: created, active, or revoked. Live connection state is derived from Redis.';
-COMMENT ON COLUMN tunneled_mcp_servers.allow_public IS 'Owner consent for anonymous public MCP serving of this source. Double opt-in with mcp_servers.visibility=public, enforced in application code.';
-COMMENT ON COLUMN tunneled_mcp_servers.agent_version IS 'Last persisted tunnel agent version reported for this source. Per-connection agent versions are stored in Redis.';
-COMMENT ON COLUMN tunneled_mcp_servers.resource_identifier IS 'RFC 9728 protected-resource identifier of the tunneled server, recorded as the RFC 8707 resource on grants and used only for exact-match credential routing. Names a host inside the customer''s private network — never dialed by Gram.';
-COMMENT ON COLUMN tunneled_mcp_servers.last_seen_at IS 'Most recent persisted heartbeat time for the source, used when Redis liveness data is absent or expired.';
-COMMENT ON COLUMN tunneled_mcp_servers.created_at IS 'Time when the tunneled MCP source was created.';
-COMMENT ON COLUMN tunneled_mcp_servers.updated_at IS 'Time when the durable tunneled MCP source record was last updated.';
-COMMENT ON COLUMN tunneled_mcp_servers.deleted_at IS 'Soft-delete timestamp for the tunneled MCP source. NULL means the source is active.';
-COMMENT ON COLUMN tunneled_mcp_servers.deleted IS 'Generated soft-delete flag derived from deleted_at and used by partial indexes.';
 
 -- Configurable request headers attached to a tunneled MCP server. Each header
 -- resolves either to a static value (optionally encrypted at rest when secret)
