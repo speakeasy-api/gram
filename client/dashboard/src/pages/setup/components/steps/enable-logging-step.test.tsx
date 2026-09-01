@@ -237,6 +237,19 @@ describe("EnableLoggingStep", () => {
     expect(screen.getByRole("button", { name: "Skip for now" })).toBeTruthy();
   });
 
+  it("hides skip until the current logging setting is known", () => {
+    testState.data = undefined;
+    testState.isLoading = true;
+
+    renderStep();
+
+    expect(screen.queryByRole("button", { name: "Skip for now" })).toBeNull();
+    expect(
+      (screen.getByRole("button", { name: /Loading/ }) as HTMLButtonElement)
+        .disabled,
+    ).toBe(true);
+  });
+
   it("shows a retry state when product features fail to load", () => {
     testState.data = undefined;
     testState.error = new Error("features unavailable");
@@ -246,12 +259,51 @@ describe("EnableLoggingStep", () => {
     expect(
       screen.getByText("Couldn't load the current logging setting."),
     ).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Skip for now" })).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Retry" }));
     expect(testState.refetch).toHaveBeenCalledOnce();
     expect(
       (screen.getByRole("button", { name: /Continue/ }) as HTMLButtonElement)
         .disabled,
     ).toBe(true);
+  });
+
+  it("blocks skip and continue while the bundle writes are in flight", async () => {
+    let releaseMutations: (() => void) | undefined;
+    const gate = new Promise<void>((resolve) => {
+      releaseMutations = () => {
+        resolve();
+      };
+    });
+    testState.mutateAsync.mockImplementation(async () => {
+      await gate;
+    });
+
+    renderStep();
+    fireEvent.click(
+      screen.getByRole("switch", {
+        name: "Enable logging and session capture",
+      }),
+    );
+
+    await waitFor(() => {
+      expect(screen.queryByRole("button", { name: "Skip for now" })).toBeNull();
+    });
+    expect(
+      (screen.getByRole("button", { name: /Loading/ }) as HTMLButtonElement)
+        .disabled,
+    ).toBe(true);
+
+    releaseMutations?.();
+    await waitFor(() => {
+      expect(
+        (screen.getByRole("button", { name: /Continue/ }) as HTMLButtonElement)
+          .disabled,
+      ).toBe(false);
+    });
+    expect(screen.queryByRole("button", { name: "Skip for now" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: /Continue/ }));
+    expect(onComplete).toHaveBeenCalledOnce();
   });
 
   it("keeps the retry action disabled while refetching", () => {

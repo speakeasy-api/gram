@@ -25,13 +25,15 @@ const testState = vi.hoisted(() => ({
       }
     | undefined,
   productFeaturesQuery: vi.fn(),
+  isAdmin: true,
 }));
 
 const handleAPIError = vi.hoisted(() => vi.fn());
 const invalidateAllProductFeatures = vi.hoisted(() => vi.fn());
 
 vi.mock("@/components/require-scope", () => ({
-  RequireScope: ({ children }: { children: ReactNode }) => <>{children}</>,
+  RequireScope: ({ children }: { children: ReactNode }) =>
+    testState.isAdmin ? <>{children}</> : null,
 }));
 
 vi.mock("@/contexts/Auth", () => ({
@@ -78,6 +80,7 @@ import { EnableLogsSetting } from "./EnableLogsSetting";
 beforeEach(() => {
   testState.data = { logsEnabled: false, toolIoLogsEnabled: false };
   testState.organizationId = "org-active";
+  testState.isAdmin = true;
   testState.mutate.mockReset();
   testState.mutationOptions = undefined;
   testState.productFeaturesQuery.mockReset();
@@ -196,5 +199,13 @@ describe("EnableLogsSetting", () => {
     activeMutation!.onError!(new Error("stale failure"));
 
     expect(handleAPIError).not.toHaveBeenCalled();
+  });
+
+  it("does not render the switch for non-admins", () => {
+    testState.isAdmin = false;
+
+    render(<EnableLogsSetting />);
+
+    expect(screen.queryByRole("switch", { name: "Enable logs" })).toBeNull();
   });
 });

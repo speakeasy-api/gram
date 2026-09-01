@@ -29,6 +29,7 @@ export function EnableLoggingStep({
     { throwOnError: false },
   );
   const [bundleEnabled, setBundleEnabled] = useState<boolean | null>(null);
+  const [bundleBusy, setBundleBusy] = useState(false);
   const loggingBundleEnabled =
     bundleEnabled ??
     (features.data?.logsEnabled === true &&
@@ -37,6 +38,9 @@ export function EnableLoggingStep({
   const featuresLoading = features.isLoading;
   const featuresFailed =
     !featuresLoading && Boolean(features.error || !features.data);
+  const featuresReady =
+    Boolean(features.data) && !featuresLoading && !featuresFailed;
+  const canSkip = featuresReady && !loggingBundleEnabled && !bundleBusy;
 
   return (
     <StepContainer
@@ -50,17 +54,18 @@ export function EnableLoggingStep({
       onContinue={onComplete}
       continueLabel="Continue"
       skipLabel="Skip for now"
-      onSkip={loggingBundleEnabled ? undefined : onSkip}
+      onSkip={canSkip ? onSkip : undefined}
       showBack
       onBack={onBack}
-      canContinue={!featuresLoading && !featuresFailed}
-      isLoading={featuresLoading}
+      canContinue={featuresReady && !bundleBusy}
+      isLoading={featuresLoading || bundleBusy}
     >
       <div className="space-y-6">
         <LogDataRetentionBanner />
         <div className="border-border bg-card border p-4">
           <EnableLoggingAndSessionCaptureSetting
             onEnabledChange={setBundleEnabled}
+            onBusyChange={setBundleBusy}
           />
         </div>
         <p className="text-muted-foreground text-sm">

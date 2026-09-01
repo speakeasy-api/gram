@@ -52,6 +52,7 @@ function OrgLogsInner({
   const [hooksFailOpenEnabled, setHooksFailOpenEnabled] = useState<
     boolean | null
   >(null);
+  const [logsSettingPending, setLogsSettingPending] = useState(false);
 
   const effectiveLogsEnabled =
     logsEnabled ?? featuresData?.logsEnabled ?? false;
@@ -88,7 +89,7 @@ function OrgLogsInner({
       },
     });
 
-  const isMutatingLogs = logsMutationStatus === "pending";
+  const isMutatingLogs = logsMutationStatus === "pending" || logsSettingPending;
 
   const handleSetToolIoLogs = (enabled: boolean) => {
     setLogsFeature({
@@ -150,8 +151,9 @@ function OrgLogsInner({
           <EnableLogsSetting
             onEnabledChange={(enabled) => {
               setLogsEnabled(enabled);
-              if (!enabled) setToolIoLogsEnabled(false);
+              if (!enabled) setToolIoLogsEnabled(null);
             }}
+            onPendingChange={setLogsSettingPending}
           />
 
           <div className="border-border border-t" />

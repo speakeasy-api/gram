@@ -13,7 +13,7 @@ import {
 } from "@gram/client/react-query/productFeatures.js";
 import { useQueryClient } from "@tanstack/react-query";
 import { FileText } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 const ENABLE_LOGS_TITLE = "Enable Logs";
 const ENABLE_LOGS_DESCRIPTION = "Record tool call traces and telemetry data";
@@ -22,15 +22,15 @@ export const ENABLE_LOGS_PAGE_DESCRIPTION =
 
 interface EnableLogsSettingProps {
   onEnabledChange?: (enabled: boolean) => void;
+  onPendingChange?: (pending: boolean) => void;
 }
 
 /**
  * The organization "Enable Logs" switch from Logging & Telemetry.
- * Setup onboarding and the org logs page share this so they flip the same
- * `logs` product feature.
  */
 export function EnableLogsSetting({
   onEnabledChange,
+  onPendingChange,
 }: EnableLogsSettingProps = {}): JSX.Element | null {
   const organization = useOrganization();
   const isCurrentOrganization = useIsCurrentOrganization(organization.id);
@@ -40,6 +40,7 @@ export function EnableLogsSetting({
       organizationId={organization.id}
       isCurrentOrganization={isCurrentOrganization}
       onEnabledChange={onEnabledChange}
+      onPendingChange={onPendingChange}
     />
   );
 }
@@ -48,6 +49,7 @@ function EnableLogsSettingInner({
   organizationId,
   isCurrentOrganization,
   onEnabledChange,
+  onPendingChange,
 }: EnableLogsSettingProps & {
   organizationId: string;
   isCurrentOrganization: () => boolean;
@@ -84,6 +86,13 @@ function EnableLogsSettingInner({
       handleAPIError(error, "Failed to update setting");
     },
   });
+
+  useEffect(() => {
+    onPendingChange?.(mutation.isPending);
+    return () => {
+      onPendingChange?.(false);
+    };
+  }, [mutation.isPending, onPendingChange]);
 
   if (!features.data) return null;
 

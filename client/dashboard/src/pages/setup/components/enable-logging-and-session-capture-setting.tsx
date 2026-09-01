@@ -13,7 +13,7 @@ import {
 } from "@gram/client/react-query/productFeatures.js";
 import { useQueryClient } from "@tanstack/react-query";
 import { FileText } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 const TITLE = "Enable logging and session capture";
 const DESCRIPTION =
@@ -35,6 +35,7 @@ const DISABLE_ORDER = [
 
 interface EnableLoggingAndSessionCaptureSettingProps {
   onEnabledChange?: (enabled: boolean) => void;
+  onBusyChange?: (busy: boolean) => void;
 }
 
 /**
@@ -44,6 +45,7 @@ interface EnableLoggingAndSessionCaptureSettingProps {
  */
 export function EnableLoggingAndSessionCaptureSetting({
   onEnabledChange,
+  onBusyChange,
 }: EnableLoggingAndSessionCaptureSettingProps = {}): JSX.Element | null {
   const organization = useOrganization();
   const isCurrentOrganization = useIsCurrentOrganization(organization.id);
@@ -53,6 +55,7 @@ export function EnableLoggingAndSessionCaptureSetting({
       organizationId={organization.id}
       isCurrentOrganization={isCurrentOrganization}
       onEnabledChange={onEnabledChange}
+      onBusyChange={onBusyChange}
     />
   );
 }
@@ -61,6 +64,7 @@ function EnableLoggingAndSessionCaptureSettingInner({
   organizationId,
   isCurrentOrganization,
   onEnabledChange,
+  onBusyChange,
 }: EnableLoggingAndSessionCaptureSettingProps & {
   organizationId: string;
   isCurrentOrganization: () => boolean;
@@ -89,6 +93,14 @@ function EnableLoggingAndSessionCaptureSettingInner({
     effectiveSessionCaptureEnabled;
 
   const mutation = useFeaturesSetMutation();
+  const [isSaving, setIsSaving] = useState(false);
+
+  useEffect(() => {
+    onBusyChange?.(isSaving);
+    return () => {
+      onBusyChange?.(false);
+    };
+  }, [isSaving, onBusyChange]);
 
   if (!features.data) return null;
 
@@ -107,6 +119,7 @@ function EnableLoggingAndSessionCaptureSettingInner({
 
   const handleSetBundle = (enabled: boolean) => {
     void (async () => {
+      setIsSaving(true);
       const order = enabled ? ENABLE_ORDER : DISABLE_ORDER;
       try {
         for (const featureName of order) {
@@ -130,6 +143,7 @@ function EnableLoggingAndSessionCaptureSettingInner({
         if (!isCurrentOrganization()) return;
         handleAPIError(error, "Failed to update setting");
       } finally {
+        setIsSaving(false);
         if (isCurrentOrganization()) {
           await invalidateAllProductFeatures(queryClient);
         }
@@ -154,7 +168,7 @@ function EnableLoggingAndSessionCaptureSettingInner({
         <Switch
           checked={bundleEnabled}
           onCheckedChange={handleSetBundle}
-          disabled={mutation.isPending}
+          disabled={isSaving || mutation.isPending}
           aria-label="Enable logging and session capture"
         />
       </RequireScope>
