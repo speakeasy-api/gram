@@ -15,8 +15,10 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/ratelimit"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	remotesessions_repo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
 // workloadTenantEndpoint names the tenancy an admission resolves under, which
@@ -80,7 +82,7 @@ func TestWorkloadIssuerAdmission_TrustedIssuerResolves(t *testing.T) {
 
 	want := &remotesessions_repo.RemoteSessionIssuer{Slug: "gh-actions"}
 	lookup := &countingLookup{issuer: want, found: true}
-	admission := newWorkloadIssuerAdmission(lookup.fn())
+	admission := newWorkloadIssuerAdmission(lookup.fn(), allowAllWorkloadLookups)
 
 	got, err := admission.admit(t.Context(), workloadTestTenant(), "https://token.actions.example.test")
 
@@ -95,7 +97,7 @@ func TestWorkloadIssuerAdmission_UntrustedIssuerRejectedWithoutEgress(t *testing
 	t.Parallel()
 
 	lookup := &countingLookup{found: false}
-	admission := newWorkloadIssuerAdmission(lookup.fn())
+	admission := newWorkloadIssuerAdmission(lookup.fn(), allowAllWorkloadLookups)
 
 	row, err := admission.admit(t.Context(), workloadTestTenant(), "https://attacker.example.test")
 
@@ -110,7 +112,7 @@ func TestWorkloadIssuerAdmission_RepeatedMissCostsOneLookup(t *testing.T) {
 	t.Parallel()
 
 	lookup := &countingLookup{found: false}
-	admission := newWorkloadIssuerAdmission(lookup.fn())
+	admission := newWorkloadIssuerAdmission(lookup.fn(), allowAllWorkloadLookups)
 	endpoint := workloadTestTenant()
 
 	for range 25 {
@@ -130,7 +132,7 @@ func TestWorkloadIssuerAdmission_ConcurrentMissesCollapseToOneLookup(t *testing.
 	const callers = 32
 
 	lookup := &countingLookup{found: false, release: make(chan struct{})}
-	admission := newWorkloadIssuerAdmission(lookup.fn())
+	admission := newWorkloadIssuerAdmission(lookup.fn(), allowAllWorkloadLookups)
 	endpoint := workloadTestTenant()
 
 	// Held inside admit: one caller occupies the lookup, the rest join it.
@@ -166,7 +168,7 @@ func TestWorkloadIssuerAdmission_AbandonedCallerStopsWaitingButFlightFinishes(t 
 	const issuerURL = "https://attacker.example.test"
 
 	lookup := &countingLookup{found: false, release: make(chan struct{})}
-	admission := newWorkloadIssuerAdmission(lookup.fn())
+	admission := newWorkloadIssuerAdmission(lookup.fn(), allowAllWorkloadLookups)
 	endpoint := workloadTestTenant()
 
 	ctx, cancel := context.WithCancel(t.Context())
@@ -207,51 +209,13 @@ func TestWorkloadIssuerAdmission_AbandonedCallerStopsWaitingButFlightFinishes(t 
 	require.EqualValues(t, 1, lookup.calls.Load(), "abandoning a request must not cost the next one a second lookup")
 }
 
-// singleflight collapses repeats of one issuer and does nothing for distinct
-// ones. Since the flight is detached, a flood of *different* spellings would
-// otherwise put one query per spelling in a pool of single-digit size and hold
-// each until its timeout — the cheapest possible way to starve every other
-// caller of the database.
-func TestWorkloadIssuerAdmission_ConcurrentDistinctIssuersHoldBoundedSlots(t *testing.T) {
-	t.Parallel()
-
-	const callers = 32
-	require.Greater(t, callers, workloadIssuerLookupSlots, "the flood has to exceed the bound for this to assert anything")
-
-	lookup := &countingLookup{found: false, release: make(chan struct{})}
-	admission := newWorkloadIssuerAdmission(lookup.fn())
-	endpoint := workloadTestTenant()
-
-	var wg sync.WaitGroup
-	for i := range callers {
-		wg.Go(func() {
-			// A distinct spelling per caller, so singleflight collapses none of
-			// them and the slot bound is the only thing holding them back.
-			_, err := admission.admit(t.Context(), endpoint, "https://attacker-"+strconv.Itoa(i)+".example.test")
-			require.ErrorIs(t, err, errWorkloadIssuerUntrusted)
-		})
-	}
-
-	// Every slot is occupied and the rest are queued behind them before
-	// anything is allowed to finish.
-	require.EventuallyWithT(t, func(c *assert.CollectT) {
-		assert.EqualValues(c, workloadIssuerLookupSlots, lookup.running.Load())
-	}, 5*time.Second, time.Millisecond)
-
-	close(lookup.release)
-	wg.Wait()
-
-	require.EqualValues(t, callers, lookup.calls.Load(), "distinct issuers must each still be resolved, only never all at once")
-	require.LessOrEqual(t, lookup.peak.Load(), int64(workloadIssuerLookupSlots), "a flood of distinct issuers must never hold more than the slot bound")
-}
-
 // Two endpoints in different tenancies resolve independently, so one
 // rejection must never answer for the other.
 func TestWorkloadIssuerAdmission_MissIsNotSharedAcrossTenancies(t *testing.T) {
 	t.Parallel()
 
 	lookup := &countingLookup{found: false}
-	admission := newWorkloadIssuerAdmission(lookup.fn())
+	admission := newWorkloadIssuerAdmission(lookup.fn(), allowAllWorkloadLookups)
 
 	const issuerURL = "https://idp.example.test"
 	_, err := admission.admit(t.Context(), workloadTestTenant(), issuerURL)
@@ -271,7 +235,7 @@ func TestWorkloadIssuerAdmission_MissIsNotSharedAcrossProjectsOnOneIssuer(t *tes
 	t.Parallel()
 
 	lookup := &countingLookup{found: false}
-	admission := newWorkloadIssuerAdmission(lookup.fn())
+	admission := newWorkloadIssuerAdmission(lookup.fn(), allowAllWorkloadLookups)
 
 	organizationID := uuid.NewString()
 	sharedIssuer := uuid.New()
@@ -291,7 +255,7 @@ func TestWorkloadIssuerAdmission_LookupFailureIsNotRemembered(t *testing.T) {
 	t.Parallel()
 
 	lookup := &countingLookup{err: errors.New("connection refused")}
-	admission := newWorkloadIssuerAdmission(lookup.fn())
+	admission := newWorkloadIssuerAdmission(lookup.fn(), allowAllWorkloadLookups)
 	endpoint := workloadTestTenant()
 
 	_, err := admission.admit(t.Context(), endpoint, "https://idp.example.test")
@@ -310,7 +274,7 @@ func TestWorkloadIssuerAdmission_MalformedIssuerIsRejectedAndRemembered(t *testi
 	t.Parallel()
 
 	lookup := &countingLookup{err: fmt.Errorf("%w: no host", remotesessions.ErrIssuerURLInvalid)}
-	admission := newWorkloadIssuerAdmission(lookup.fn())
+	admission := newWorkloadIssuerAdmission(lookup.fn(), allowAllWorkloadLookups)
 	endpoint := workloadTestTenant()
 
 	for range 5 {
@@ -330,7 +294,7 @@ func TestWorkloadIssuerAdmission_SpellingsSharingACanonicalFormResolveSeparately
 	t.Parallel()
 
 	lookup := &countingLookup{found: false}
-	admission := newWorkloadIssuerAdmission(lookup.fn())
+	admission := newWorkloadIssuerAdmission(lookup.fn(), allowAllWorkloadLookups)
 	endpoint := workloadTestTenant()
 
 	_, err := admission.admit(t.Context(), endpoint, "https://idp.example.test")
@@ -349,7 +313,7 @@ func TestWorkloadIssuerAdmission_CachedMalformedMissKeepsItsTaxonomy(t *testing.
 	t.Parallel()
 
 	lookup := &countingLookup{err: fmt.Errorf("%w: no host", remotesessions.ErrIssuerURLInvalid)}
-	admission := newWorkloadIssuerAdmission(lookup.fn())
+	admission := newWorkloadIssuerAdmission(lookup.fn(), allowAllWorkloadLookups)
 	endpoint := workloadTestTenant()
 
 	_, first := admission.admit(t.Context(), endpoint, "not-a-url")
@@ -520,4 +484,123 @@ func TestNewWorkloadIssuerLookup_MalformedIssuerNeverReachesTheDatabase(t *testi
 		require.False(t, found)
 		require.Nil(t, row)
 	}
+}
+
+// allowAllWorkloadLookups is the budget for tests about something other than
+// the budget: every charge succeeds, so admission behaves as it does for an
+// endpoint well inside its ceiling.
+func allowAllWorkloadLookups(context.Context, string) (ratelimit.Result, error) {
+	return ratelimit.Result{Allowed: true, Remaining: 1, RetryAfter: 0}, nil
+}
+
+// The ceiling is the bound this path relies on, so a refusal must be its own
+// answer. Reported as errWorkloadIssuerUntrusted it would tell a caller the
+// issuer was rejected, which is a 401 and a lie; reported as nothing in
+// particular it would surface as a 5xx.
+func TestWorkloadIssuerAdmission_SpentBudgetIsNotATrustDecision(t *testing.T) {
+	t.Parallel()
+
+	lookup := &countingLookup{issuer: &remotesessions_repo.RemoteSessionIssuer{Slug: "gh"}, found: true}
+	spent := func(context.Context, string) (ratelimit.Result, error) {
+		return ratelimit.Result{Allowed: false, Remaining: 0, RetryAfter: 3 * time.Second}, nil
+	}
+	admission := newWorkloadIssuerAdmission(lookup.fn(), spent)
+
+	_, err := admission.admit(t.Context(), workloadTestTenant(), "https://idp.example.test")
+
+	require.ErrorIs(t, err, errWorkloadIssuerLookupRateLimited)
+	require.NotErrorIs(t, err, errWorkloadIssuerUntrusted, "a spent budget decides nothing about the issuer")
+	require.EqualValues(t, 0, lookup.calls.Load(), "a refused charge must cost no query")
+}
+
+// An unreachable bucket is not a throttle. Running the lookup anyway would
+// spend exactly the budget the ceiling exists to protect, so it fails closed —
+// and stays distinguishable from a refusal an operator could wait out.
+func TestWorkloadIssuerAdmission_LimiterOutageFailsClosed(t *testing.T) {
+	t.Parallel()
+
+	lookup := &countingLookup{issuer: &remotesessions_repo.RemoteSessionIssuer{Slug: "gh"}, found: true}
+	outage := errors.New("redis unreachable")
+	admission := newWorkloadIssuerAdmission(lookup.fn(), func(context.Context, string) (ratelimit.Result, error) {
+		return ratelimit.Result{Allowed: false, Remaining: 0, RetryAfter: 0}, outage
+	})
+
+	_, err := admission.admit(t.Context(), workloadTestTenant(), "https://idp.example.test")
+
+	require.ErrorIs(t, err, errWorkloadIssuerLimiterUnavailable)
+	require.ErrorIs(t, err, outage)
+	require.NotErrorIs(t, err, errWorkloadIssuerLookupRateLimited, "an outage must not read as a rate limit")
+	require.EqualValues(t, 0, lookup.calls.Load(), "an unbounded lookup is exactly what the ceiling prevents")
+}
+
+// A ceiling that was never wired leaves this path with no bound at all. On a
+// grant reachable without credentials that is the condition the bound exists
+// for, so it refuses rather than running unprotected.
+func TestWorkloadIssuerAdmission_AbsentBudgetRefuses(t *testing.T) {
+	t.Parallel()
+
+	lookup := &countingLookup{issuer: &remotesessions_repo.RemoteSessionIssuer{Slug: "gh"}, found: true}
+	admission := newWorkloadIssuerAdmission(lookup.fn(), nil)
+
+	_, err := admission.admit(t.Context(), workloadTestTenant(), "https://idp.example.test")
+
+	require.ErrorIs(t, err, errWorkloadIssuerLimiterUnavailable)
+	require.EqualValues(t, 0, lookup.calls.Load())
+}
+
+// Neither a refusal nor an outage says anything about the issuer, so neither
+// may be remembered: caching one would keep rejecting a legitimate workload
+// after the pressure passed.
+func TestWorkloadIssuerAdmission_BudgetOutcomesAreNeverRemembered(t *testing.T) {
+	t.Parallel()
+
+	endpoint := workloadTestTenant()
+	const issuerURL = "https://idp.example.test"
+
+	for name, charge := range map[string]workloadIssuerBudget{
+		"refused": func(context.Context, string) (ratelimit.Result, error) {
+			return ratelimit.Result{Allowed: false, Remaining: 0, RetryAfter: time.Second}, nil
+		},
+		"store outage": func(context.Context, string) (ratelimit.Result, error) {
+			return ratelimit.Result{Allowed: false, Remaining: 0, RetryAfter: 0}, errors.New("redis unreachable")
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			admission := newWorkloadIssuerAdmission((&countingLookup{found: false}).fn(), charge)
+			_, err := admission.admit(t.Context(), endpoint, issuerURL)
+			require.Error(t, err)
+
+			_, held := admission.misses.seen(workloadIssuerMissKey(endpoint, issuerURL))
+			require.False(t, held, "%s is a statement about load, not about the issuer", name)
+		})
+	}
+}
+
+// The budget is per endpoint, which is the property that keeps a mitigation
+// from becoming a cross-tenant denial surface: one endpoint's spend must never
+// be charged against another's.
+func TestWorkloadIssuerLookupScope_SeparatesEndpoints(t *testing.T) {
+	t.Parallel()
+
+	issuerID := uuid.New()
+	shared := workloadTenantEndpoint(uuid.NewString(), uuid.New(), issuerID)
+
+	require.Equal(t, workloadIssuerLookupScope(shared),
+		workloadIssuerLookupScope(workloadTenantEndpoint(uuid.NewString(), uuid.New(), issuerID)),
+		"one authorization server is one budget, whatever project addresses it")
+	require.NotEqual(t, workloadIssuerLookupScope(shared), workloadIssuerLookupScope(workloadTestTenant()),
+		"a different endpoint must not spend this one's budget")
+	require.NotEqual(t, workloadIssuerLookupScope(shared), workloadFetchScope(shared),
+		"key fetches and admission lookups bound different resources and must not share a bucket")
+}
+
+// Without a store there are no buckets, and admission must not read that as
+// permission to run unbounded.
+func TestNewWorkloadIssuerLookupBudget_NilWithoutAStore(t *testing.T) {
+	t.Parallel()
+
+	require.Nil(t, newWorkloadIssuerLookupBudget(nil, testenv.NewMeterProvider(t)),
+		"no store means no ceiling, which admission refuses rather than ignores")
 }
