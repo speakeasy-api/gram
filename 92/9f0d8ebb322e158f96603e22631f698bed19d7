@@ -1,0 +1,50 @@
+server/cmd/tools/enforceload/main.go
+  s_b390d6ce53b276::t_d24ad50684367c 34,288,291,299,303,388,391,404,408,416,443,447,512,555,558,566,568,583,592,596,633-634,638,640,642,644,650,682,697,709,745-746,845
+server/internal/scanners/gitleaks/setup_test.go
+  s_b390d6ce53b276::t_d24ad50684367c 16,21,26,37
+docs/pubsub-topology.md
+  s_b390d6ce53b276::t_17841632fd4d33 89,211
+server/internal/replicainbox/inbox.go
+  s_b390d6ce53b276::t_17841632fd4d33 7
+server/internal/risk/enforcereply/dispatch.go
+  s_b390d6ce53b276::t_d24ad50684367c 1
+  s_b390d6ce53b276::t_87e9c0cb8b75cc 2-150
+server/internal/risk/enforcereply/writer_test.go
+  s_b390d6ce53b276::t_d24ad50684367c 1-23
+server/cmd/tools/enforceproto/main.go
+  s_b390d6ce53b276::t_d24ad50684367c 28,72,75,90,117,130-131,135
+docs/research/2026-08-20-enforcement-reply-load-test.md
+  s_b390d6ce53b276::t_17841632fd4d33 17
+server/internal/scanners/gitleaks/enforce_handler.go
+  s_b390d6ce53b276::t_d24ad50684367c 19,43,55,100,109,113
+server/internal/risk/enforcereply/dispatch_test.go
+  s_b390d6ce53b276::t_d24ad50684367c 1
+  s_b390d6ce53b276::t_87e9c0cb8b75cc 2-122
+server/cmd/gram/streams.go
+  s_b390d6ce53b276::t_d24ad50684367c 59,420
+server/internal/risk/enforcereply/inbox.go
+  s_b390d6ce53b276::t_d24ad50684367c 1-167
+server/internal/risk/enforcereply/setup_test.go
+  s_b390d6ce53b276::t_17841632fd4d33 24
+  s_b390d6ce53b276::t_d24ad50684367c 1-23,25-56
+server/internal/risk/enforcereply/inbox_test.go
+  s_b390d6ce53b276::t_d24ad50684367c 1-263
+server/internal/scanners/gitleaks/enforce_handler_test.go
+  s_b390d6ce53b276::t_d24ad50684367c 15,31,36,38,77,82,98,117
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.24",
+  "base_commit_sha": "929f0d8ebb322e158f96603e22631f698bed19d7",
+  "prompts": {},
+  "sessions": {
+    "s_b390d6ce53b276": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "c7be466b-35a7-46f8-83d3-cbbede48fd92",
+        "model": "claude-fable-5"
+      },
+      "human_author": "Vishal Gowda <vishal@speakeasy.com>"
+    }
+  }
+}

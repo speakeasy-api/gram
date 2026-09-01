@@ -1,0 +1,38 @@
+server/internal/remotemcp/proxy/proxy.go
+  s_a3a87fcf3ca9e8::t_8246e80e0cbbc5 139-140
+  s_a3a87fcf3ca9e8::t_617dad9e20e0cf 231-236
+  s_a3a87fcf3ca9e8::t_55186dee46bb34 995-1010
+  s_a3a87fcf3ca9e8::t_333efa2e6660b0 230,237-238
+server/internal/mcp/tunnelrouting/routing_test.go
+  s_a3a87fcf3ca9e8::t_0ef2937b89226b 6-7,9-10,17
+  s_a3a87fcf3ca9e8::t_f2bafb1d68cfc7 19,252-315
+server/internal/mcp/tunnelrouting/routing.go
+  s_a3a87fcf3ca9e8::t_476ce2d6c6d51b 10,16-17,19
+  s_a3a87fcf3ca9e8::t_d04544f96aa603 172
+  s_a3a87fcf3ca9e8::t_6167d33290d761 154,156,164-171,173-194
+  s_a3a87fcf3ca9e8::t_dece6a6a185840 155
+  s_a3a87fcf3ca9e8::t_01fac22ce6ab9a 157-159,161-163
+  s_a3a87fcf3ca9e8::t_4f04ea08849c88 160
+server/internal/mcp/tunnel_manager.go
+  s_a3a87fcf3ca9e8::t_9b687b6fde1c56 110
+server/internal/remotemcp/proxy/proxy_test.go
+  s_a3a87fcf3ca9e8::t_51e978be32ea40 11,2771-2844
+server/internal/remotemcp/proxymanager.go
+  s_a3a87fcf3ca9e8::t_454dc8f102ca81 313
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.0",
+  "base_commit_sha": "7b75e7fd9e151fed1b210d0d1e2c5d83dd6922b9",
+  "prompts": {},
+  "sessions": {
+    "s_a3a87fcf3ca9e8": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "0ffdf6db-dc05-4dd5-b70e-f5bd2a70ac61",
+        "model": "claude-fable-5"
+      },
+      "human_author": "Vishal Gowda <vishal@speakeasy.com>"
+    }
+  }
+}
