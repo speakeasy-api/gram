@@ -89,17 +89,11 @@ func parseTailscaleIdentityValue(headers http.Header, name string, decodeWord bo
 		if err != nil {
 			return "", fmt.Errorf("decode %s: %w", name, err)
 		}
-		// DecodeHeader preserves malformed encoded-word tokens. Validate only
-		// raw token boundaries so legitimate decoded user text containing "=?"
-		// remains valid.
-		for token := range strings.FieldsSeq(raw) {
-			if !looksLikeEncodedWord(token) {
-				continue
-			}
-			tokenDecoded, tokenErr := (&mime.WordDecoder{CharsetReader: nil}).DecodeHeader(token)
-			if tokenErr != nil || tokenDecoded == token {
-				return "", fmt.Errorf("invalid RFC 2047 encoding in %s", name)
-			}
+		// DecodeHeader preserves malformed encoded-word fragments. Validate every
+		// raw marker independently rather than relying on whitespace token
+		// boundaries; valid decoded user text may still contain a literal "=?".
+		if err := validateEncodedWordMarkers(raw); err != nil {
+			return "", fmt.Errorf("invalid RFC 2047 encoding in %s: %w", name, err)
 		}
 	}
 	if decoded == "" || strings.TrimSpace(decoded) != decoded || !utf8.ValidString(decoded) || strings.ContainsAny(decoded, "\r\n\x00") {
@@ -108,8 +102,8 @@ func parseTailscaleIdentityValue(headers http.Header, name string, decodeWord bo
 	return decoded, nil
 }
 
-func looksLikeEncodedWord(token string) bool {
-	rest, ok := strings.CutPrefix(token, "=?")
+func looksLikeCompleteEncodedWord(candidate string) bool {
+	rest, ok := strings.CutPrefix(candidate, "=?")
 	if !ok {
 		return false
 	}
@@ -117,6 +111,30 @@ func looksLikeEncodedWord(token string) bool {
 	if !ok || charset == "" {
 		return false
 	}
-	encoding, _, ok := strings.Cut(rest, "?")
-	return ok && len(encoding) == 1 && strings.ContainsAny(encoding, "bBqQ")
+	encoding, rest, ok := strings.Cut(rest, "?")
+	return ok && len(encoding) == 1 && strings.ContainsAny(encoding, "bBqQ") && strings.HasSuffix(rest, "?=")
+}
+
+func validateEncodedWordMarkers(raw string) error {
+	decoder := &mime.WordDecoder{CharsetReader: nil}
+	for offset := 0; ; {
+		relativeStart := strings.Index(raw[offset:], "=?")
+		if relativeStart < 0 {
+			return nil
+		}
+		start := offset + relativeStart
+		relativeEnd := strings.Index(raw[start+2:], "?=")
+		if relativeEnd < 0 {
+			return fmt.Errorf("unterminated encoded word")
+		}
+		end := start + 2 + relativeEnd + 2
+		candidate := raw[start:end]
+		if !looksLikeCompleteEncodedWord(candidate) {
+			return fmt.Errorf("malformed encoded word")
+		}
+		if _, err := decoder.DecodeHeader(candidate); err != nil {
+			return fmt.Errorf("decode encoded word: %w", err)
+		}
+		offset = end
+	}
 }
