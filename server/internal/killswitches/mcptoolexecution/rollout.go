@@ -19,8 +19,8 @@ const (
 )
 
 // ResolveRolloutMode uses only locally cached feature-flag state so the serving
-// path never adds a remote feature-provider dependency. Missing, disabled, or
-// indeterminate flags fail safe to off. Enforce wins if both flags are enabled.
+// path never adds a remote feature-provider dependency. Missing or disabled
+// flags resolve to off. Enforce wins if both flags are enabled.
 func ResolveRolloutMode(ctx context.Context, flags feature.Provider, organizationID string) (RolloutMode, error) {
 	if flags == nil {
 		return RolloutModeOff, nil
@@ -52,7 +52,10 @@ func evaluateForRollout(
 	evaluate func() (killswitches.TransportDisposition, error),
 ) (killswitches.TransportDisposition, error) {
 	mode, err := ResolveRolloutMode(ctx, flags, organizationID)
-	if err != nil || mode == RolloutModeOff {
+	if err != nil {
+		return killswitches.NewInfrastructureRejectionDisposition(), fmt.Errorf("resolve MCP killswitch rollout mode: %w", err)
+	}
+	if mode == RolloutModeOff {
 		return killswitches.NewContinueDisposition(), nil
 	}
 

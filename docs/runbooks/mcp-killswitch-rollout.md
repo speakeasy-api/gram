@@ -30,11 +30,16 @@ repository or rollout tickets.
 | Shadow  | on                      | off                      | Evaluate and emit metrics, but always continue  | Create and edit unavailable; lift remains available |
 | Enforce | either                  | on                       | Apply matched denial and registered fail policy | Create and edit available                           |
 
-Enforce takes precedence if both flags are on. Missing, unavailable, or
-indeterminate local evaluation resolves to off. A successfully cached PostHog
-result remains in effect until the local poller refreshes it, so every mode
-change must be verified on every serving instance. Flag evaluation stays local
-to the process; the serving path does not perform a remote PostHog request.
+Management behavior in the table applies to fresh mutations. A completed
+operation replay bypasses the current gate and returns its stored result in every
+mode.
+
+Enforce takes precedence if both flags are on. Missing or disabled flags resolve
+to off; a local flag-resolution error rejects the call as an infrastructure
+failure. A successfully cached PostHog result remains in effect until the local
+poller refreshes it, so every mode change must be verified on every serving
+instance. Flag evaluation stays local to the process; the serving path does not
+perform a remote PostHog request.
 
 ## Fleet-readiness gate
 
@@ -46,11 +51,12 @@ Before enabling shadow for any production cohort:
 3. Confirm dashboards and monitors below are live and owned.
 4. Confirm no active production prescriptions exist before a mixed-version
    deploy. If any exist, lift them before changing serving versions.
-5. Enable shadow for a controlled cohort. Then confirm both
+5. Direct `HandleToolsCall` census observations remain active in off mode, while
+   routed hosted and private-proxy checkpoint derivation starts in shadow. Enable
+   shadow for a controlled cohort, then confirm both
    `gram.mcp.killswitch.surface:hosted` and
    `gram.mcp.killswitch.surface:private_proxy` appear in
-   `mcp.tool.call.killswitch_identity`. Off mode intentionally emits no coverage
-   observation.
+   `mcp.tool.call.killswitch_identity`.
 6. Confirm `killswitch.evaluation.duration` emits
    `gram.outcome:matched`, `gram.outcome:unmatched`, and
    `gram.outcome:evaluator_failure` in a non-production or controlled test. Do
@@ -70,10 +76,10 @@ Observe:
 
 - p95 and p99 of `killswitch.evaluation.duration`; p99 must remain comfortably
   below the one-second private checkpoint timeout and two-second hosted timeout;
-- `outcome:evaluator_failure` ratio; stop on any sustained rate above 0.1% for
+- `gram.outcome:evaluator_failure` ratio; stop on any sustained rate above 0.1% for
   five minutes or any correlated serving incident;
-- matched and unmatched query volume; histogram count is the authoritative
-  evaluator-query count;
+- matched and unmatched evaluator-invocation volume; the histogram count records
+  evaluator invocations, not PostgreSQL query count;
 - active-user plus canonical-server coverage by `surface`; investigate any
   increase in `unavailable`, `invalid_owner`, or unsupported classes;
 - PostgreSQL query rate, latency, CPU, lock waits, and pool saturation compared

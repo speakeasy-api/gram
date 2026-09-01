@@ -23,6 +23,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/auth"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/killswitches/mcptoolexecution"
 	"github.com/speakeasy-api/gram/server/internal/mcp"
 	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
@@ -754,6 +755,7 @@ func TestServeMCP_IssuerGatedToolsetBackend_Killswitch(t *testing.T) {
 	require.True(t, ok)
 	require.NotNil(t, authCtx.ProjectID)
 	require.NotEmpty(t, authCtx.UserID)
+	ti.features.SetFlag(feature.FlagMCPKillswitchEnforce, authCtx.ActiveOrganizationID, true)
 
 	slug, mcpServer, issuerID := seedIssuerGatedToolsetMCPEndpoint(t, ctx, ti, authCtx.ActiveOrganizationID, *authCtx.ProjectID, "public")
 	mcpEndpoint, err := mcpendpointsrepo.New(ti.conn).GetMCPEndpointByCustomDomainAndSlug(ctx, mcpendpointsrepo.GetMCPEndpointByCustomDomainAndSlugParams{
@@ -842,6 +844,7 @@ func TestServeMCP_IssuerGatedRemoteBackend_PrivateKillswitch(t *testing.T) {
 	require.True(t, ok)
 	require.NotNil(t, authCtx.ProjectID)
 	require.NotEmpty(t, authCtx.UserID)
+	ti.features.SetFlag(feature.FlagMCPKillswitchEnforce, authCtx.ActiveOrganizationID, true)
 
 	upstreamCalled := make(chan struct{}, 1)
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
