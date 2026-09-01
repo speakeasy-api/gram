@@ -58,13 +58,14 @@ const (
 	// workloadIssuerLookupSlots bounds how many admission lookups hold a
 	// database connection at once.
 	//
-	// Detaching the flight is what makes this necessary. singleflight collapses
+	// The detached flight is what makes this necessary. singleflight collapses
 	// concurrent resolutions of one issuer and does nothing at all for distinct
 	// ones, so a flood of *different* spellings — free to produce, since this
 	// grant is reachable without credentials — puts one query per spelling in
-	// the pool, and detachment means abandoning the requests no longer takes
-	// them back out. Without a bound the cheapest possible attack is a pool
-	// exhaustion that starves every other caller of the database.
+	// the pool, and detachment holds each there for the timeout above whether
+	// or not its caller is still waiting. Unbounded, the cheapest possible
+	// request is a pool exhaustion that starves every other caller of the
+	// database.
 	//
 	// Small on purpose. pool_max_conns is not configured anywhere, so the pool
 	// is pgx's default of max(4, NumCPU) — single digits on a typical container
@@ -200,15 +201,17 @@ func (a *workloadIssuerAdmission) admit(ctx context.Context, endpoint *ResolvedM
 			return nil, reason.err()
 		}
 
-		// The flight runs under whichever caller opened it, so a leader that
-		// goes away would otherwise hand context.Canceled to everyone sharing
-		// its lookup. On a grant reachable without credentials that matters on
-		// its own: an abandoned request would fail a legitimate one resolving
-		// the same issuer. Detached instead — values carry through,
-		// cancellation does not — so the timeout and the slot bound below are
-		// what bound this work. Callers keep their own cancellation in the
-		// select at the end of admit, which is the half detachment must not
-		// take away from them.
+		// Detached from the caller that opened the flight: values carry
+		// through, cancellation does not. The flight runs under whichever
+		// caller happened to open it, so tying its lifetime to that one would
+		// hand context.Canceled to everyone sharing the lookup the moment that
+		// caller went away — on a grant reachable without credentials, an
+		// abandoned request failing a legitimate one resolving the same issuer.
+		//
+		// Detachment costs the caller nothing, because cancellation is not
+		// taken away from it: the select at the end of admit returns on the
+		// caller's own context while the flight carries on for the rest. What
+		// bounds the flight is the timeout here and the slot below.
 		lookupCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), workloadIssuerLookupTimeout)
 		defer cancel()
 
