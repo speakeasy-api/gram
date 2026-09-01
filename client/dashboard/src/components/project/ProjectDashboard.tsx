@@ -1,3 +1,4 @@
+import { IdentityLink } from "@/components/identity-link";
 import { Link, useNavigate } from "react-router";
 import { useOrganization } from "@/contexts/Auth";
 import {
@@ -206,6 +207,9 @@ export function ProjectDashboard(): JSX.Element {
         key: r.groupValue,
         label: memberByEmail.get(r.groupValue)?.name ?? r.groupValue,
         value: llmTokens(r.measures),
+        // Group keys are emails, which is exactly what the email: URN form
+        // exists for.
+        identifier: r.groupValue ? { email: r.groupValue } : null,
       }));
   }, [rankableUserRows, memberByEmail]);
 
@@ -714,7 +718,15 @@ export function ProjectDashboard(): JSX.Element {
                               </Avatar>
                               <div className="min-w-0 flex-1">
                                 <p className="truncate text-sm font-medium">
-                                  {user.name}
+                                  <IdentityLink
+                                    identifier={
+                                      user.userId
+                                        ? { email: user.userId }
+                                        : null
+                                    }
+                                  >
+                                    {user.name}
+                                  </IdentityLink>
                                 </p>
                                 <p className="text-muted-foreground text-xs">
                                   {user.sessions.toLocaleString()}{" "}

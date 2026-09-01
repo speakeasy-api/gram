@@ -1,9 +1,15 @@
+import { IdentityLink } from "@/components/identity-link";
+import type { IdentityRef } from "@/lib/identity-urn";
+
 export type RankedBarListItem = {
   key: string;
   label: string;
   value: number;
   // Optional display override for the value (e.g. "42%"); bar width still uses `value`.
   valueLabel?: string;
+  // When the item names a person, the identity their label links to. Omitted
+  // for non-person rankings (servers, tools, rules), which stay plain text.
+  identifier?: IdentityRef | null;
 };
 
 /**
@@ -36,7 +42,13 @@ export function RankedBarList({
             {i + 1}
           </span>
           <span className="truncate text-sm" title={item.label}>
-            {item.label}
+            {item.identifier ? (
+              <IdentityLink identifier={item.identifier}>
+                {item.label}
+              </IdentityLink>
+            ) : (
+              item.label
+            )}
           </span>
           {/* On a narrow panel the bar and its figure drop to a second line
               under the label rather than crushing every column. */}
