@@ -13,6 +13,7 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/dynamic"
 	dynamicfake "k8s.io/client-go/dynamic/fake"
 	"k8s.io/client-go/kubernetes/fake"
@@ -71,6 +72,10 @@ func TestTailscaleNetworkIngressProvisionerApplyObserveAndDelete(t *testing.T) {
 
 	setUnstructuredReady(t, dynamicClient, tailnetGVR, "", desired.Resources.Tailnet, "TailnetReady")
 	setUnstructuredReady(t, dynamicClient, proxyGroupGVR, "", desired.Resources.ProxyGroup, "ProxyGroupReady")
+	deployment.Generation = 2
+	deployment.Status.ObservedGeneration = 2
+	deployment.Status.UpdatedReplicas = 1
+	deployment.Status.ReadyReplicas = 1
 	deployment.Status.AvailableReplicas = 1
 	_, err = typed.AppsV1().Deployments(desired.Resources.Namespace).UpdateStatus(t.Context(), deployment, metav1.UpdateOptions{})
 	require.NoError(t, err)
@@ -84,6 +89,9 @@ func TestTailscaleNetworkIngressProvisionerApplyObserveAndDelete(t *testing.T) {
 	require.NoError(t, err)
 	deployment, err = typed.AppsV1().Deployments(desired.Resources.Namespace).Get(t.Context(), desired.Resources.AttestorDeployment, metav1.GetOptions{})
 	require.NoError(t, err)
+	deployment.Status.ObservedGeneration = deployment.Generation
+	deployment.Status.UpdatedReplicas = 1
+	deployment.Status.ReadyReplicas = 1
 	deployment.Status.AvailableReplicas = 1
 	_, err = typed.AppsV1().Deployments(desired.Resources.Namespace).UpdateStatus(t.Context(), deployment, metav1.UpdateOptions{})
 	require.NoError(t, err)
@@ -92,11 +100,29 @@ func TestTailscaleNetworkIngressProvisionerApplyObserveAndDelete(t *testing.T) {
 	require.Equal(t, NetworkIngressStatusOnline, observation.Status)
 	require.Equal(t, "private-test.example.ts.net", observation.DNSName)
 
+	deployment.Status.ObservedGeneration--
+	_, err = typed.AppsV1().Deployments(desired.Resources.Namespace).UpdateStatus(t.Context(), deployment, metav1.UpdateOptions{})
+	require.NoError(t, err)
+	pending, err := provisioner.observe(t.Context(), desired.Resources, desired.Hostname)
+	require.NoError(t, err)
+	require.Equal(t, NetworkIngressStatusPending, pending.Status)
+	deployment.Status.ObservedGeneration = deployment.Generation
+	_, err = typed.AppsV1().Deployments(desired.Resources.Namespace).UpdateStatus(t.Context(), deployment, metav1.UpdateOptions{})
+	require.NoError(t, err)
+	pending, err = provisioner.observe(t.Context(), desired.Resources, "renamed-private-test")
+	require.NoError(t, err)
+	require.Equal(t, NetworkIngressStatusPending, pending.Status)
+
 	var mu sync.Mutex
 	var deletes []string
+	var missingPrecondition bool
 	recordDelete := func(action ktesting.Action) (bool, runtime.Object, error) {
 		if action.GetVerb() == "delete" {
+			deleteAction, ok := action.(ktesting.DeleteAction)
 			mu.Lock()
+			if !ok || deleteAction.GetDeleteOptions().Preconditions == nil || deleteAction.GetDeleteOptions().Preconditions.UID == nil {
+				missingPrecondition = true
+			}
 			deletes = append(deletes, action.GetResource().Resource)
 			mu.Unlock()
 		}
@@ -106,8 +132,28 @@ func TestTailscaleNetworkIngressProvisionerApplyObserveAndDelete(t *testing.T) {
 	dynamicClient.PrependReactor("delete", "*", recordDelete)
 	require.NoError(t, provisioner.Delete(t.Context(), desired.Resources))
 	require.NoError(t, provisioner.Delete(t.Context(), desired.Resources))
-	require.GreaterOrEqual(t, len(deletes), 11)
-	require.Equal(t, []string{"ingresses", "proxygrouppolicies", "services", "deployments", "proxygroups", "tailnets", "secrets", "secrets", "serviceaccounts", "networkpolicies", "networkpolicies", "namespaces"}, deletes[:12])
+	require.False(t, missingPrecondition)
+	require.GreaterOrEqual(t, len(deletes), 12)
+	require.Equal(t, []string{"ingresses", "services", "deployments", "proxygrouppolicies", "proxygroups", "tailnets", "secrets", "secrets", "serviceaccounts", "networkpolicies", "networkpolicies", "namespaces"}, deletes[:12])
+}
+
+func TestTailscaleNetworkIngressProvisionerPreservesDynamicMetadata(t *testing.T) {
+	t.Parallel()
+
+	provisioner, _, dynamicClient, desired := newTestTailscaleProvisioner(t)
+	tailnet := tailnetObject(desired)
+	tailnet.SetUID(types.UID("tailnet-uid"))
+	tailnet.SetFinalizers([]string{"tailscale.com/finalizer"})
+	tailnet.SetAnnotations(map[string]string{"tailscale.com/controller-state": "preserve"})
+	_, err := dynamicClient.Resource(tailnetGVR).Create(t.Context(), tailnet, metav1.CreateOptions{})
+	require.NoError(t, err)
+
+	require.NoError(t, provisioner.applyDynamic(t.Context(), tailnetGVR, "", tailnetObject(desired)))
+	got, err := dynamicClient.Resource(tailnetGVR).Get(t.Context(), desired.Resources.Tailnet, metav1.GetOptions{})
+	require.NoError(t, err)
+	require.Equal(t, types.UID("tailnet-uid"), got.GetUID())
+	require.Equal(t, []string{"tailscale.com/finalizer"}, got.GetFinalizers())
+	require.Equal(t, "preserve", got.GetAnnotations()["tailscale.com/controller-state"])
 }
 
 func TestTailscaleNetworkIngressProvisionerRefusesUnownedResources(t *testing.T) {
@@ -124,7 +170,7 @@ func TestTailscaleNetworkIngressProvisionerRefusesUnownedResources(t *testing.T)
 
 	err = provisioner.Delete(t.Context(), desired.Resources)
 	require.Error(t, err)
-	require.Contains(t, err.Error(), "refuse to delete unowned resource")
+	require.Contains(t, err.Error(), "refuse to delete unowned namespace")
 	_, err = typed.CoreV1().Namespaces().Get(t.Context(), desired.Resources.Namespace, metav1.GetOptions{})
 	require.NoError(t, err)
 }
@@ -152,17 +198,23 @@ func TestTailscaleNetworkIngressProvisionerPartialFailureAndRedaction(t *testing
 	require.Equal(t, NetworkIngressErrorInvalidCredentials, observation.ErrorCode)
 	require.NotContains(t, err.Error(), "sensitive-client")
 	require.NotContains(t, err.Error(), "sensitive-secret")
+
+	desired.Credentials = []byte(`{"client_id":"sensitive-client","client_secret":"sensitive-secret"} garbage`)
+	observation, err = provisioner.Apply(t.Context(), desired)
+	require.Error(t, err)
+	require.Equal(t, NetworkIngressErrorInvalidCredentials, observation.ErrorCode)
+	require.NotContains(t, err.Error(), "sensitive-client")
+	require.NotContains(t, err.Error(), "sensitive-secret")
 }
 
 func TestTailscaleNetworkIngressProvisionerReplacesImmutableProxyGroup(t *testing.T) {
 	t.Parallel()
 
 	provisioner, typed, dynamicClient, desired := newTestTailscaleProvisioner(t)
-	wrong := proxyGroupObject(desired, "tag:test-proxy")
-	require.NoError(t, unstructured.SetNestedField(wrong.Object, "another-tailnet", "spec", "tailnet"))
+	wrong := proxyGroupObject(desired, "tag:wrong-proxy")
 	_, err := dynamicClient.Resource(proxyGroupGVR).Create(t.Context(), wrong, metav1.CreateOptions{})
 	require.NoError(t, err)
-	_, err = typed.NetworkingV1().Ingresses(desired.Resources.Namespace).Create(t.Context(), &networkingv1.Ingress{ObjectMeta: metav1.ObjectMeta{Name: desired.Resources.Ingress, Namespace: desired.Resources.Namespace}}, metav1.CreateOptions{})
+	_, err = typed.NetworkingV1().Ingresses(desired.Resources.Namespace).Create(t.Context(), &networkingv1.Ingress{ObjectMeta: metav1.ObjectMeta{Name: desired.Resources.Ingress, Namespace: desired.Resources.Namespace, Labels: ingressLabels(desired)}}, metav1.CreateOptions{})
 	require.NoError(t, err)
 
 	var deleted []string

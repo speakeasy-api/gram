@@ -147,6 +147,10 @@ func (p *observedNetworkIngressProvisioner) record(ctx context.Context, operatio
 		p.logger.ErrorContext(ctx, "network ingress provisioner operation failed", attrs...)
 		return
 	}
+	if operation == networkIngressOperationObserve {
+		p.logger.DebugContext(ctx, "network ingress provisioner observation completed", attrs...)
+		return
+	}
 	p.logger.InfoContext(ctx, "network ingress provisioner operation completed", attrs...)
 }
 
