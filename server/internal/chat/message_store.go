@@ -39,6 +39,12 @@ type MessageWrite struct {
 	// BillingUserID is the Gram user to whom this feature explicitly allocates usage.
 	BillingUserID string
 
+	// AssistantID identifies the assistant responsible for this workload when applicable.
+	AssistantID uuid.UUID
+
+	// WorkloadSource identifies the product path responsible for this workload.
+	WorkloadSource metering.WorkloadSource
+
 	// UserEmail is the email explicitly observed for the message actor.
 	UserEmail string
 
@@ -62,6 +68,9 @@ type ExternalMessageWrite struct {
 
 	// BillingUserID is the Gram user to whom this import explicitly allocates usage.
 	BillingUserID string
+
+	// WorkloadSource identifies the product path responsible for this imported workload.
+	WorkloadSource metering.WorkloadSource
 
 	// UserEmail is the email explicitly observed for the imported message actor.
 	UserEmail string
@@ -272,6 +281,8 @@ type meterMessageInput struct {
 	accountType           string
 	billingMode           string
 	billingUserID         string
+	assistantID           uuid.UUID
+	workloadSource        metering.WorkloadSource
 	messageUserID         pgtype.Text
 	messageExternalUserID pgtype.Text
 	messageUserEmail      string
@@ -317,6 +328,10 @@ func (w *ChatMessageWriter) meterMessage(ctx context.Context, input meterMessage
 	setReadingAttribute(&attributes, metering.AttributeHookHostname, input.hookHostname)
 	setReadingAttribute(&attributes, metering.AttributeAccountType, input.accountType)
 	setReadingAttribute(&attributes, metering.AttributeBillingMode, input.billingMode)
+	if input.assistantID != uuid.Nil {
+		setReadingAttribute(&attributes, metering.AttributeAssistantID, input.assistantID.String())
+	}
+	setReadingAttribute(&attributes, metering.AttributeWorkloadSource, string(input.workloadSource))
 	setReadingAttribute(&attributes, metering.AttributeBillingUserID, input.billingUserID)
 	if input.messageUserID.Valid {
 		setReadingAttribute(&attributes, metering.AttributeMessageUserID, input.messageUserID.String)
@@ -372,6 +387,8 @@ func (w *ChatMessageWriter) meterMessages(
 			accountType:           write.AccountType,
 			billingMode:           write.BillingMode,
 			billingUserID:         write.BillingUserID,
+			assistantID:           write.AssistantID,
+			workloadSource:        write.WorkloadSource,
 			messageUserID:         param.UserID,
 			messageExternalUserID: param.ExternalUserID,
 			messageUserEmail:      write.UserEmail,
@@ -621,6 +638,8 @@ func (w *ChatMessageWriter) WriteExternal(ctx context.Context, projectID uuid.UU
 			accountType:           write.AccountType,
 			billingMode:           write.BillingMode,
 			billingUserID:         write.BillingUserID,
+			assistantID:           uuid.Nil,
+			workloadSource:        write.WorkloadSource,
 			messageUserID:         param.UserID,
 			messageExternalUserID: param.ExternalUserID,
 			messageUserEmail:      write.UserEmail,

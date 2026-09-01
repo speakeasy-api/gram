@@ -2945,6 +2945,7 @@ func prepareMessages(ctx context.Context, logger *slog.Logger, assetStorage asse
 	dbrows := make([]MessageWrite, len(rows))
 	for i, row := range rows {
 		res := results[i]
+		assistantID, workloadSource := messageReadingAttribution(ctx, billing.ModelUsageSource(row.metadata.Source))
 
 		// Log storage errors but continue - we'll still store the message with plain text.
 		var storageError pgtype.Text
@@ -2992,12 +2993,14 @@ func prepareMessages(ctx context.Context, logger *slog.Logger, assetStorage asse
 				ContentHash:      nil,
 				Generation:       row.generation,
 			},
-			BillingUserID: row.userID,
-			UserEmail:     row.userEmail,
-			Provider:      "",
-			HookHostname:  "",
-			AccountType:   "",
-			BillingMode:   "",
+			BillingUserID:  row.userID,
+			AssistantID:    assistantID,
+			WorkloadSource: workloadSource,
+			UserEmail:      row.userEmail,
+			Provider:       "",
+			HookHostname:   "",
+			AccountType:    "",
+			BillingMode:    "",
 		}
 	}
 

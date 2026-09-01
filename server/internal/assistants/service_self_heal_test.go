@@ -165,6 +165,8 @@ func TestServiceCoreSelfHealsHistoryCorruptionOnFirstAttempt(t *testing.T) {
 		require.NoError(t, proto.Unmarshal(row.Message, reading))
 		require.Equal(t, "personal", reading.GetAttributes()[metering.AttributeAccountType])
 		require.Equal(t, ownerUserID, reading.GetAttributes()[metering.AttributeBillingUserID])
+		require.Equal(t, assistantID.String(), reading.GetAttributes()[metering.AttributeAssistantID])
+		require.Equal(t, string(metering.WorkloadSourceAssistant), reading.GetAttributes()[metering.AttributeWorkloadSource])
 	}
 }
 

@@ -25,6 +25,7 @@ import (
 	chatrepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
+	"github.com/speakeasy-api/gram/server/internal/metering"
 	codexapi "github.com/speakeasy-api/gram/server/internal/thirdparty/codex"
 )
 
@@ -420,12 +421,13 @@ func (src *chatgptConversationSource) writeFile(ctx context.Context, file codexa
 				Generation:  0,
 				CreatedAt:   conv.ToPGTimestamptz(createdAt),
 			},
-			BillingUserID: userID,
-			UserEmail:     event.Actor.UserEmail,
-			Provider:      codexProviderOpenAI,
-			HookHostname:  "",
-			AccountType:   complianceAccountTypeTeam,
-			BillingMode:   src.cfg.BillingMode,
+			BillingUserID:  userID,
+			WorkloadSource: metering.WorkloadSourceImport,
+			UserEmail:      event.Actor.UserEmail,
+			Provider:       codexProviderOpenAI,
+			HookHostname:   "",
+			AccountType:    complianceAccountTypeTeam,
+			BillingMode:    src.cfg.BillingMode,
 		})
 	}
 	if fallbacks := src.timestampFallbacks() - fallbacksBefore; fallbacks > 0 {

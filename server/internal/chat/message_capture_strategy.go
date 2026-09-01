@@ -15,8 +15,11 @@ import (
 	"go.opentelemetry.io/otel/metric"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/chat/repo"
+	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/metering"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 )
@@ -349,7 +352,7 @@ func (s *ChatMessageCaptureStrategy) CaptureMessage(
 		return nil
 	}
 
-	assistantRows := buildAssistantRows(request, response, projectID, toolCallsJSON, origin, userAgent, ipAddress, session.generation)
+	assistantRows := buildAssistantRows(ctx, request, response, projectID, toolCallsJSON, origin, userAgent, ipAddress, session.generation)
 
 	if len(session.pendingRows) == 0 {
 		if _, err := s.writer.Write(ctx, projectID, assistantRows); err != nil {
@@ -373,6 +376,7 @@ func (s *ChatMessageCaptureStrategy) CaptureMessage(
 // The row preserves any narrative text and tool_calls from the model response;
 // provider-specific replay normalization happens at the OpenRouter boundary.
 func buildAssistantRows(
+	ctx context.Context,
 	request openrouter.CompletionRequest,
 	response openrouter.CompletionResponse,
 	projectID uuid.UUID,
@@ -428,16 +432,29 @@ func buildAssistantRows(
 	only.CompletionTokens = completionTokens
 	only.TotalTokens = totalTokens
 
+	assistantID, workloadSource := messageReadingAttribution(ctx, request.UsageSource)
 	return []MessageWrite{{
-		Params:        only,
-		BillingUserID: request.UserID,
-		UserEmail:     request.UserEmail,
+		Params:         only,
+		BillingUserID:  request.UserID,
+		AssistantID:    assistantID,
+		WorkloadSource: workloadSource,
+		UserEmail:      request.UserEmail,
 		// The completion payload does not report a provider; model names are not provider identity.
 		Provider:     "",
 		HookHostname: "",
 		AccountType:  "",
 		BillingMode:  "",
 	}}
+}
+
+func messageReadingAttribution(ctx context.Context, source billing.ModelUsageSource) (uuid.UUID, metering.WorkloadSource) {
+	if principal, ok := contextvalues.GetAssistantPrincipal(ctx); ok {
+		return principal.AssistantID, metering.WorkloadSourceAssistant
+	}
+	if source == billing.ModelUsageSourceAssistants {
+		return uuid.Nil, metering.WorkloadSourceAssistant
+	}
+	return uuid.Nil, metering.WorkloadSourceNative
 }
 
 // firstInvalidToolCall mirrors the runner's normalize_history validation:

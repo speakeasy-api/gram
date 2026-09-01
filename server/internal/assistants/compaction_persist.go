@@ -16,6 +16,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/chat"
 	chatrepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/metering"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
@@ -165,12 +166,14 @@ func (s *ServiceCore) RecordCompactedGeneration(ctx context.Context, projectID, 
 				ContentHash:      nil,
 				Generation:       nextGen,
 			},
-			BillingUserID: conv.FromPGTextOrEmpty[string](chatRow.UserID),
-			UserEmail:     "",
-			Provider:      "",
-			HookHostname:  "",
-			AccountType:   chatRow.AccountType,
-			BillingMode:   "",
+			BillingUserID:  conv.FromPGTextOrEmpty[string](chatRow.UserID),
+			AssistantID:    principalAssistantID,
+			WorkloadSource: metering.WorkloadSourceAssistant,
+			UserEmail:      "",
+			Provider:       "",
+			HookHostname:   "",
+			AccountType:    chatRow.AccountType,
+			BillingMode:    "",
 		})
 	}
 

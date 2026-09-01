@@ -19,6 +19,7 @@ import (
 	chatrepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
+	"github.com/speakeasy-api/gram/server/internal/metering"
 	anthropicapi "github.com/speakeasy-api/gram/server/internal/thirdparty/anthropic"
 	usersrepo "github.com/speakeasy-api/gram/server/internal/users/repo"
 )
@@ -592,12 +593,13 @@ func (s *ComplianceImportService) buildExternalMessageRows(ctx context.Context, 
 				Generation:        0,
 				CreatedAt:         conv.ToPGTimestamptz(createdAt),
 			},
-			BillingUserID: userID,
-			UserEmail:     page.User.EmailAddress,
-			Provider:      anthropicAnalyticsProviderTag,
-			HookHostname:  "",
-			AccountType:   complianceAccountTypeTeam,
-			BillingMode:   cfg.BillingMode,
+			BillingUserID:  userID,
+			WorkloadSource: metering.WorkloadSourceImport,
+			UserEmail:      page.User.EmailAddress,
+			Provider:       anthropicAnalyticsProviderTag,
+			HookHostname:   "",
+			AccountType:    complianceAccountTypeTeam,
+			BillingMode:    cfg.BillingMode,
 		})
 	}
 	return rows, nil

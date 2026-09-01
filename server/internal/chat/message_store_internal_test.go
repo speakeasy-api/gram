@@ -10,7 +10,10 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/chat/repo"
+	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/metering"
 )
 
 func TestReadingsForMessagesLogsAndSkipsMeteringFailure(t *testing.T) {
@@ -43,6 +46,39 @@ func TestReadingsForMessagesLogsAndSkipsMeteringFailure(t *testing.T) {
 	require.Empty(t, readings)
 	require.Contains(t, logs.String(), "generate chat message storage reading")
 	require.Contains(t, logs.String(), messageID.String())
+}
+
+func TestMessageReadingAttributionClassifiesNativeWorkload(t *testing.T) {
+	t.Parallel()
+
+	assistantID, source := messageReadingAttribution(t.Context(), billing.ModelUsageSourcePlayground)
+
+	require.Equal(t, uuid.Nil, assistantID)
+	require.Equal(t, metering.WorkloadSourceNative, source)
+}
+
+func TestMessageReadingAttributionClassifiesAssistantPrincipal(t *testing.T) {
+	t.Parallel()
+
+	assistantID := uuid.New()
+	ctx := contextvalues.SetAssistantPrincipal(t.Context(), contextvalues.AssistantPrincipal{
+		AssistantID: assistantID,
+		ThreadID:    uuid.New(),
+	})
+
+	actualAssistantID, source := messageReadingAttribution(ctx, billing.ModelUsageSourcePlayground)
+
+	require.Equal(t, assistantID, actualAssistantID)
+	require.Equal(t, metering.WorkloadSourceAssistant, source)
+}
+
+func TestMessageReadingAttributionClassifiesAssistantSetup(t *testing.T) {
+	t.Parallel()
+
+	assistantID, source := messageReadingAttribution(t.Context(), billing.ModelUsageSourceAssistants)
+
+	require.Equal(t, uuid.Nil, assistantID)
+	require.Equal(t, metering.WorkloadSourceAssistant, source)
 }
 
 func TestStoredMessageContentRejectsMalformedToolCalls(t *testing.T) {

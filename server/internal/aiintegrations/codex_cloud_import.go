@@ -25,6 +25,7 @@ import (
 	chatrepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
+	"github.com/speakeasy-api/gram/server/internal/metering"
 	codexapi "github.com/speakeasy-api/gram/server/internal/thirdparty/codex"
 )
 
@@ -488,12 +489,13 @@ func (src *codexCloudSource) writeFile(ctx context.Context, file codexapi.LogFil
 				Generation:  0,
 				CreatedAt:   conv.ToPGTimestamptz(admittedAt[i]),
 			},
-			BillingUserID: userID,
-			UserEmail:     event.Actor.UserEmail,
-			Provider:      codexProviderOpenAI,
-			HookHostname:  "",
-			AccountType:   complianceAccountTypeTeam,
-			BillingMode:   src.cfg.BillingMode,
+			BillingUserID:  userID,
+			WorkloadSource: metering.WorkloadSourceImport,
+			UserEmail:      event.Actor.UserEmail,
+			Provider:       codexProviderOpenAI,
+			HookHostname:   "",
+			AccountType:    complianceAccountTypeTeam,
+			BillingMode:    src.cfg.BillingMode,
 		})
 	}
 	if len(rows) == 0 {

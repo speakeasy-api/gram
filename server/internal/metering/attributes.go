@@ -1,61 +1,86 @@
 package metering
 
-// AttributeChatID identifies the chat containing the metered message.
-const AttributeChatID = "chat_id"
+const (
+	// AttributeChatID identifies the chat containing the metered message.
+	AttributeChatID = "chat_id"
 
-// AttributeModel identifies the model that produced or received the message.
-const AttributeModel = "model"
+	// AttributeAssistantID identifies the assistant responsible for the workload.
+	AttributeAssistantID = "assistant_id"
 
-// AttributeProvider identifies the AI provider explicitly reported by ingestion.
-const AttributeProvider = "provider"
+	// AttributeWorkloadSource identifies the product path responsible for the workload.
+	AttributeWorkloadSource = "workload_source"
 
-// AttributeHookSource identifies the canonical agent source.
-const AttributeHookSource = "hook_source"
+	// AttributeModel identifies the model that produced or received the message.
+	AttributeModel = "model"
 
-// AttributeHookHostname identifies the device hostname explicitly reported by hooks.
-const AttributeHookHostname = "hook_hostname"
+	// AttributeProvider identifies the AI provider explicitly reported by ingestion.
+	AttributeProvider = "provider"
 
-// AttributeAccountType identifies the AI account classification reported for the session.
-const AttributeAccountType = "account_type"
+	// AttributeHookSource identifies the canonical agent source.
+	AttributeHookSource = "hook_source"
 
-// AttributeBillingMode identifies the AI account billing mode resolved for the session.
-const AttributeBillingMode = "billing_mode"
+	// AttributeHookHostname identifies the device hostname explicitly reported by hooks.
+	AttributeHookHostname = "hook_hostname"
 
-// AttributeMessageUserID identifies the Gram user attached to the message.
-const AttributeMessageUserID = "message_user_id"
+	// AttributeAccountType identifies the AI account classification reported for the session.
+	AttributeAccountType = "account_type"
 
-// AttributeMessageExternalUserID preserves the message actor's opaque external ID.
-const AttributeMessageExternalUserID = "message_external_user_id"
+	// AttributeBillingMode identifies the AI account billing mode resolved for the session.
+	AttributeBillingMode = "billing_mode"
 
-// AttributeMessageUserEmail preserves the email explicitly observed by the producer.
-const AttributeMessageUserEmail = "message_user_email"
+	// AttributeMessageUserID identifies the Gram user attached to the message.
+	AttributeMessageUserID = "message_user_id"
 
-// AttributeBillingUserID identifies the Gram user to whom the producer allocates usage.
-const AttributeBillingUserID = "billing_user_id"
+	// AttributeMessageExternalUserID preserves the message actor's opaque external ID.
+	AttributeMessageExternalUserID = "message_external_user_id"
 
-// AttributeBillingUserAccountEmail is the current Gram account email for the billing user.
-const AttributeBillingUserAccountEmail = "billing_user_account_email"
+	// AttributeMessageUserEmail preserves the email explicitly observed by the producer.
+	AttributeMessageUserEmail = "message_user_email"
 
-// AttributeBillingUserDivisionName identifies the billing user's active directory division.
-const AttributeBillingUserDivisionName = "billing_user_division_name"
+	// AttributeBillingUserID identifies the Gram user to whom the producer allocates usage.
+	AttributeBillingUserID = "billing_user_id"
 
-// AttributeBillingUserDepartmentName identifies the billing user's active directory department.
-const AttributeBillingUserDepartmentName = "billing_user_department_name"
+	// AttributeBillingUserAccountEmail is the current Gram account email for the billing user.
+	AttributeBillingUserAccountEmail = "billing_user_account_email"
 
-// AttributeBillingUserJobTitle identifies the billing user's active directory job title.
-const AttributeBillingUserJobTitle = "billing_user_job_title"
+	// AttributeBillingUserDivisionName identifies the billing user's active directory division.
+	AttributeBillingUserDivisionName = "billing_user_division_name"
 
-// AttributeBillingUserEmployeeType identifies the billing user's active directory employee type.
-const AttributeBillingUserEmployeeType = "billing_user_employee_type"
+	// AttributeBillingUserDepartmentName identifies the billing user's active directory department.
+	AttributeBillingUserDepartmentName = "billing_user_department_name"
 
-// AttributeBillingUserCostCenterName identifies the billing user's active directory cost center.
-const AttributeBillingUserCostCenterName = "billing_user_cost_center_name"
+	// AttributeBillingUserJobTitle identifies the billing user's active directory job title.
+	AttributeBillingUserJobTitle = "billing_user_job_title"
 
-// AttributeBillingUserDirectoryGroups contains the billing user's sorted directory groups as JSON.
-const AttributeBillingUserDirectoryGroups = "billing_user_directory_groups"
+	// AttributeBillingUserEmployeeType identifies the billing user's active directory employee type.
+	AttributeBillingUserEmployeeType = "billing_user_employee_type"
 
-// AttributeBillingUserDirectoryMatch records how the billing user's directory profile matched.
-const AttributeBillingUserDirectoryMatch = "billing_user_directory_match"
+	// AttributeBillingUserCostCenterName identifies the billing user's active directory cost center.
+	AttributeBillingUserCostCenterName = "billing_user_cost_center_name"
 
-// AttributeBillingUserRBACRoles contains the billing user's sorted role slugs as JSON.
-const AttributeBillingUserRBACRoles = "billing_user_rbac_roles"
+	// AttributeBillingUserDirectoryGroups contains the billing user's sorted directory groups as JSON.
+	AttributeBillingUserDirectoryGroups = "billing_user_directory_groups"
+
+	// AttributeBillingUserDirectoryMatch records how the billing user's directory profile matched.
+	AttributeBillingUserDirectoryMatch = "billing_user_directory_match"
+
+	// AttributeBillingUserRBACRoles contains the billing user's sorted role slugs as JSON.
+	AttributeBillingUserRBACRoles = "billing_user_rbac_roles"
+)
+
+// WorkloadSource is a stable product-path classification for metered workload.
+type WorkloadSource string
+
+const (
+	// WorkloadSourceAssistant identifies workload produced by a Gram assistant.
+	WorkloadSourceAssistant WorkloadSource = "assistant"
+
+	// WorkloadSourceHook identifies workload captured by a live agent hook.
+	WorkloadSourceHook WorkloadSource = "hook"
+
+	// WorkloadSourceImport identifies workload imported from an external provider.
+	WorkloadSourceImport WorkloadSource = "import"
+
+	// WorkloadSourceNative identifies workload written through Gram's native chat surface.
+	WorkloadSourceNative WorkloadSource = "native"
+)
