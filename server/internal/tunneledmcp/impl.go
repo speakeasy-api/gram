@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net/url"
 	"strings"
 	"time"
 
@@ -94,6 +95,39 @@ func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.A
 	return s.auth.Authorize(ctx, key, schema)
 }
 
+// normalizeResourceIdentifier canonicalizes a resource identifier from a
+// management payload: an absolute http(s) URI carrying no fragment at all
+// (RFC 8707), stored with any trailing slash trimmed from its path so one
+// server is one routing identity. Blank input stays blank, meaning unset or
+// clear per the calling form's semantics; anything else that is not a usable
+// identifier is an error rather than a silent clear. The value names a host
+// inside the customer's network and is never dialed, so it is deliberately
+// not checked against the outbound URL policy that refuses private hosts.
+func normalizeResourceIdentifier(raw string) (string, error) {
+	trimmed := strings.TrimSpace(raw)
+	if trimmed == "" {
+		return "", nil
+	}
+	u, err := url.Parse(trimmed)
+	if err != nil {
+		return "", fmt.Errorf("parse resource identifier: %w", err)
+	}
+	// A bare "#" parses to an empty Fragment, so the raw string decides.
+	if (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" || strings.Contains(trimmed, "#") {
+		return "", errors.New("resource identifier must be an absolute http(s) URI without a fragment")
+	}
+	// Trim the path only: a trailing slash inside a query is data, not syntax.
+	// Work in the escaped form so an encoded separator survives — decoding it
+	// would collapse two distinct identifiers onto one routing identity.
+	escaped := strings.TrimRight(u.EscapedPath(), "/")
+	decoded, err := url.PathUnescape(escaped)
+	if err != nil {
+		return "", fmt.Errorf("unescape resource identifier path: %w", err)
+	}
+	u.Path, u.RawPath = decoded, escaped
+	return u.String(), nil
+}
+
 func (s *Service) CreateServer(ctx context.Context, payload *gen.CreateServerPayload) (*gen.CreateTunneledMcpServerResult, error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
@@ -108,6 +142,16 @@ func (s *Service) CreateServer(ctx context.Context, payload *gen.CreateServerPay
 	name := strings.TrimSpace(payload.Name)
 	if name == "" {
 		return nil, oops.E(oops.CodeBadRequest, nil, "name must be non-empty").LogWarn(ctx, logger)
+	}
+
+	// Optional at create; blank stays unset — most operators record it later.
+	var resourceIdentifier pgtype.Text
+	if payload.ResourceIdentifier != nil {
+		normalized, nerr := normalizeResourceIdentifier(*payload.ResourceIdentifier)
+		if nerr != nil {
+			return nil, oops.E(oops.CodeBadRequest, nerr, "invalid resource identifier").LogWarn(ctx, logger)
+		}
+		resourceIdentifier = conv.ToPGTextEmpty(normalized)
 	}
 
 	serverID, err := uuid.NewV7()
@@ -144,11 +188,12 @@ func (s *Service) CreateServer(ctx context.Context, payload *gen.CreateServerPay
 	}
 
 	server, err := txRepo.CreateServer(ctx, repo.CreateServerParams{
-		ID:        serverID,
-		ProjectID: *authCtx.ProjectID,
-		Name:      name,
-		KeyHash:   issuedKey.Hash,
-		KeyPrefix: issuedKey.Prefix,
+		ID:                 serverID,
+		ProjectID:          *authCtx.ProjectID,
+		Name:               name,
+		KeyHash:            issuedKey.Hash,
+		KeyPrefix:          issuedKey.Prefix,
+		ResourceIdentifier: resourceIdentifier,
 	})
 	if err != nil {
 		var pgErr *pgconn.PgError
@@ -267,14 +312,36 @@ func (s *Service) UpdateServer(ctx context.Context, payload *gen.UpdateServerPay
 	}
 
 	logger := s.logger.With(attr.SlogProjectID(authCtx.ProjectID.String()))
-	name := strings.TrimSpace(payload.Name)
-	if name == "" {
-		return nil, oops.E(oops.CodeBadRequest, nil, "name must be non-empty").LogWarn(ctx, logger)
+
+	// Tri-state: omitted leaves the stored name.
+	var name pgtype.Text
+	if payload.Name != nil {
+		trimmed := strings.TrimSpace(*payload.Name)
+		if trimmed == "" {
+			return nil, oops.E(oops.CodeBadRequest, nil, "name must be non-empty").LogWarn(ctx, logger)
+		}
+		name = conv.ToPGText(trimmed)
 	}
 
 	serverID, err := uuid.Parse(payload.ID)
 	if err != nil {
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid server id").LogWarn(ctx, logger)
+	}
+
+	// With every field tri-state, an empty form would otherwise still run the
+	// transaction, churn updated_at, and log a no-op audit event.
+	if payload.Name == nil && payload.AllowPublic == nil && payload.ResourceIdentifier == nil {
+		return nil, oops.E(oops.CodeBadRequest, nil, "no fields to update").LogWarn(ctx, logger)
+	}
+
+	// Tri-state: omitted leaves the stored value, empty string clears it.
+	var resourceIdentifier pgtype.Text
+	if payload.ResourceIdentifier != nil {
+		normalized, nerr := normalizeResourceIdentifier(*payload.ResourceIdentifier)
+		if nerr != nil {
+			return nil, oops.E(oops.CodeBadRequest, nerr, "invalid resource identifier").LogWarn(ctx, logger)
+		}
+		resourceIdentifier = conv.ToPGText(normalized)
 	}
 
 	dbtx, err := s.db.Begin(ctx)
@@ -300,10 +367,11 @@ func (s *Service) UpdateServer(ctx context.Context, payload *gen.UpdateServerPay
 	beforeView := s.tunnelManager.serverView(ctx, s.logger, existing)
 
 	updated, err := txRepo.UpdateServer(ctx, repo.UpdateServerParams{
-		ID:          serverID,
-		ProjectID:   *authCtx.ProjectID,
-		Name:        name,
-		AllowPublic: conv.PtrToPGBool(payload.AllowPublic),
+		ID:                 serverID,
+		ProjectID:          *authCtx.ProjectID,
+		Name:               name,
+		AllowPublic:        conv.PtrToPGBool(payload.AllowPublic),
+		ResourceIdentifier: resourceIdentifier,
 	})
 	if err != nil {
 		var pgErr *pgconn.PgError

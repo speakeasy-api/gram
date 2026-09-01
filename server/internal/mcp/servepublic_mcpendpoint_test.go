@@ -164,11 +164,12 @@ func TestServePublic_McpEndpoint_PublicTunneledBacked_FailsClosed(t *testing.T) 
 	tunneledID, err := uuid.NewV7()
 	require.NoError(t, err)
 	tunneledServer, err := tunneledmcprepo.New(ti.conn).CreateServer(ctx, tunneledmcprepo.CreateServerParams{
-		ID:        tunneledID,
-		ProjectID: *authCtx.ProjectID,
-		Name:      "public-tunnel-attempt",
-		KeyHash:   uuid.NewString(),
-		KeyPrefix: "gram_tunnel_test",
+		ID:                 tunneledID,
+		ProjectID:          *authCtx.ProjectID,
+		Name:               "public-tunnel-attempt",
+		KeyHash:            uuid.NewString(),
+		KeyPrefix:          "gram_tunnel_test",
+		ResourceIdentifier: pgtype.Text{String: "", Valid: false},
 	})
 	require.NoError(t, err)
 

@@ -33,6 +33,7 @@ import (
 	remotemcprepo "github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
+	tunneledmcprepo "github.com/speakeasy-api/gram/server/internal/tunneledmcp/repo"
 )
 
 // ServeMCPEndpoint resolves a public MCP route; mcpRouteBase preserves the called surface in auth URLs.
@@ -198,7 +199,7 @@ func (s *Service) serveResolvedMCPEndpoint(
 				return fmt.Errorf("resolve issuer-gated upstream tokens: %w", err)
 			}
 		}
-		upstreamToken, err := routeUpstreamToken(ctx, logger, upstreamTokens, upstreamResource)
+		upstreamToken, err := routeUpstreamToken(ctx, logger, upstreamTokens, upstreamResource, tunneledBackendIssuer(mcpServer))
 		var routeErr *upstreamRoutingError
 		switch {
 		case errors.As(err, &routeErr):
@@ -272,42 +273,34 @@ func hostedServingFromWrapper(mcpServer *mcpserversrepo.McpServer, callerGated b
 // remote_session_clients (the one_per_issuer index was dropped in AIS-137),
 // so the map can hold several entries; selection is by qualified identity —
 // the RFC 8707 resource recorded on each credential at grant time must match
-// the backend's own upstream resource. Ambiguity fails closed: zero or
-// multiple matching entries, or a multi-entry map with no resource to match
-// against (tunneled backends record none), returns an error rather than
-// forwarding an arbitrary, possibly mismatched, bearer.
+// the backend's own upstream resource. There is no lone-token shortcut: an
+// unmatched credential is never forwarded regardless of how few there are.
 //
-// A single-entry map is forwarded as-is: a lone binding is that backend's
-// credential by construction (this preserves behavior for servers connected
-// before resources were recorded, and for tunneled backends whose resource is
-// always empty). A lone credential whose recorded resource disagrees with the
-// backend's is still forwarded, but logged at warn level so the mismatch is
-// visible in production and a future move to strict single-entry matching has
-// a signal for how often it would reject. A backend with no resource of its
-// own (tunneled) has nothing to disagree with, so it never warns.
-func routeUpstreamToken(ctx context.Context, logger *slog.Logger, tokens map[uuid.UUID]remotesessions.UpstreamToken, upstreamResource string) (string, error) {
+// tunneledIssuerID is a tunneled backend's own derived remote_session_issuer
+// (invalid for remote backends). A tunneled backend is routed by that identity
+// alone rather than by scanning recorded resources: its dial target is the
+// tunnel, decoupled from whatever resource its identifier claims, so an
+// operator-supplied identifier colliding with a sibling's upstream would
+// otherwise deliver that sibling's bearer into the tunnel. A remote backend's
+// routing key is the URL the proxy dials, so matching across the map returns
+// each credential to the audience it names.
+//
+// A tunneled backend with no usable entry calls anonymously; an unmatched or
+// ambiguous resource on a remote backend fails closed so a mismatched bearer
+// is never forwarded.
+func routeUpstreamToken(ctx context.Context, logger *slog.Logger, tokens map[uuid.UUID]remotesessions.UpstreamToken, upstreamResource string, tunneledIssuerID uuid.NullUUID) (string, error) {
 	want := strings.TrimRight(upstreamResource, "/")
-
-	switch len(tokens) {
-	case 0:
+	if len(tokens) == 0 {
 		return "", nil
-	case 1:
-		for _, entry := range tokens {
-			if want != "" && entry.Resource != "" && strings.TrimRight(entry.Resource, "/") != want {
-				logger.WarnContext(ctx, "forwarding lone remote_session token whose recorded resource does not match the backend's upstream resource",
-					attr.SlogRemoteSessionClientID(entry.RemoteSessionClientID.String()),
-					attr.SlogOAuthResource(entry.Resource),
-					attr.SlogResourceURI(upstreamResource),
-				)
-			}
-			return entry.Token, nil
-		}
 	}
 
-	if want == "" {
-		return "", routeFailClosed(ctx, logger, "backend_no_resource", tokens, upstreamResource,
-			fmt.Sprintf("proxied MCP backend has no upstream resource to route by, but %d remote_session tokens resolved", len(tokens)))
+	if tunneledIssuerID.Valid {
+		return tunneledIssuerToken(tokens, tunneledIssuerID, want), nil
 	}
+	if want == "" {
+		return "", nil
+	}
+
 	var match string
 	found, nullResources := 0, 0
 	for _, entry := range tokens {
@@ -319,20 +312,56 @@ func routeUpstreamToken(ctx context.Context, logger *slog.Logger, tokens map[uui
 			match = entry.Token
 		}
 	}
-	if found != 1 {
-		// Distinguish routing failures by cause: legacy grants minted before
-		// the resource column vs genuine duplicates.
-		reason := "duplicate_resource"
-		if found == 0 {
-			reason = "no_match"
-			if nullResources > 0 {
-				reason = "legacy_null_resource"
-			}
-		}
-		return "", routeFailClosed(ctx, logger, reason, tokens, upstreamResource,
+	switch {
+	case found == 1:
+		return match, nil
+	case found > 1:
+		return "", routeFailClosed(ctx, logger, "duplicate_resource", tokens, upstreamResource,
 			fmt.Sprintf("%d of %d resolved remote_session tokens match the backend's upstream resource", found, len(tokens)))
 	}
-	return match, nil
+	// Distinguish routing failures by cause: legacy grants minted before
+	// the resource column vs genuinely unmatched credentials.
+	reason := "no_match"
+	if nullResources > 0 {
+		reason = "legacy_null_resource"
+	}
+	return "", routeFailClosed(ctx, logger, reason, tokens, upstreamResource,
+		fmt.Sprintf("0 of %d resolved remote_session tokens match the backend's upstream resource", len(tokens)))
+}
+
+// tunneledIssuerToken selects a tunneled backend's bearer from the entry keyed
+// by its own derived remote_session_issuer. The grant is accepted when it is
+// unqualified — the backend records no resource identifier, or the grant was
+// minted before it did — or when it names the identifier passed as want. A
+// grant audience-bound elsewhere, a missing entry, and a backend with no
+// derived issuer all yield "" for an anonymous call. hostedMemberTokens
+// applies the same identity rule to hosted members.
+func tunneledIssuerToken(tokens map[uuid.UUID]remotesessions.UpstreamToken, issuerID uuid.NullUUID, want string) string {
+	if !issuerID.Valid {
+		return ""
+	}
+	entry, ok := tokens[issuerID.UUID]
+	switch {
+	case !ok:
+		return ""
+	case entry.Resource == "":
+		return entry.Token
+	case want != "" && strings.TrimRight(entry.Resource, "/") == want:
+		return entry.Token
+	default:
+		return ""
+	}
+}
+
+// tunneledBackendIssuer yields the identity routeUpstreamToken routes a
+// resourceless tunneled backend by: the server's own derived
+// remote_session_issuer, and only for tunneled backends — remote backends
+// route strictly by recorded resource.
+func tunneledBackendIssuer(mcpServer *mcpserversrepo.McpServer) uuid.NullUUID {
+	if !mcpServer.TunneledMcpServerID.Valid {
+		return uuid.NullUUID{UUID: uuid.Nil, Valid: false}
+	}
+	return mcpServer.RemoteSessionIssuerID
 }
 
 // upstreamRoutingError is a fail-closed routing outcome: the endpoint's
@@ -349,9 +378,9 @@ func (e *upstreamRoutingError) Error() string {
 }
 
 // routeFailClosed emits the one structured line per fail-closed routing
-// outcome — so legacy-NULL, unmatched, duplicate, and resourceless-backend
-// causes are distinguishable in aggregate — and returns the typed error. Call
-// sites do not log it again.
+// outcome — so legacy-NULL, unmatched, and duplicate causes are
+// distinguishable in aggregate — and returns the typed error. Call sites do
+// not log it again.
 func routeFailClosed(ctx context.Context, logger *slog.Logger, reason string, tokens map[uuid.UUID]remotesessions.UpstreamToken, upstreamResource, detail string) error {
 	recorded := make([]string, 0, len(tokens))
 	for _, entry := range tokens {
@@ -469,28 +498,43 @@ func (s *Service) BuildResolvedMcpEndpointForServer(
 }
 
 // resolveUpstreamResource derives the RFC 8707 resource indicator for an
-// mcp_server's upstream: the remote backend URL (sans trailing slash) for
-// remote-backed servers, empty otherwise.
+// mcp_server's upstream (sans trailing slash): the remote backend URL for
+// remote-backed servers, the recorded resource identifier for tunneled
+// servers (empty when none is recorded), empty for other backends.
 func (s *Service) resolveUpstreamResource(
 	ctx context.Context,
 	logger *slog.Logger,
 	projectID uuid.UUID,
 	mcpServer *mcpserversrepo.McpServer,
 ) (string, error) {
-	if !mcpServer.RemoteMcpServerID.Valid {
+	switch {
+	case mcpServer.RemoteMcpServerID.Valid:
+		remote, err := remotemcprepo.New(s.db).GetServerByID(ctx, remotemcprepo.GetServerByIDParams{
+			ID:        mcpServer.RemoteMcpServerID.UUID,
+			ProjectID: projectID,
+		})
+		switch {
+		case errors.Is(err, pgx.ErrNoRows):
+			return "", oops.E(oops.CodeNotFound, err, "remote mcp server not found")
+		case err != nil:
+			return "", oops.E(oops.CodeUnexpected, err, "load remote mcp server").LogError(ctx, logger)
+		}
+		return strings.TrimRight(remote.Url, "/"), nil
+	case mcpServer.TunneledMcpServerID.Valid:
+		tunneled, err := tunneledmcprepo.New(s.db).GetServerByID(ctx, tunneledmcprepo.GetServerByIDParams{
+			ID:        mcpServer.TunneledMcpServerID.UUID,
+			ProjectID: projectID,
+		})
+		switch {
+		case errors.Is(err, pgx.ErrNoRows):
+			return "", oops.E(oops.CodeNotFound, err, "tunneled mcp server not found")
+		case err != nil:
+			return "", oops.E(oops.CodeUnexpected, err, "load tunneled mcp server").LogError(ctx, logger)
+		}
+		return strings.TrimRight(tunneled.ResourceIdentifier.String, "/"), nil
+	default:
 		return "", nil
 	}
-	remote, err := remotemcprepo.New(s.db).GetServerByID(ctx, remotemcprepo.GetServerByIDParams{
-		ID:        mcpServer.RemoteMcpServerID.UUID,
-		ProjectID: projectID,
-	})
-	switch {
-	case errors.Is(err, pgx.ErrNoRows):
-		return "", oops.E(oops.CodeNotFound, err, "remote mcp server not found")
-	case err != nil:
-		return "", oops.E(oops.CodeUnexpected, err, "load remote mcp server").LogError(ctx, logger)
-	}
-	return strings.TrimRight(remote.Url, "/"), nil
 }
 
 // serveRemoteBackend handles an mcp_server backed by a remote_mcp_server.

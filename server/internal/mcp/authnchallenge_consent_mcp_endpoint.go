@@ -332,7 +332,7 @@ func (s *Service) serveConsentProxiedMCP(
 		}
 		return oops.E(oops.CodeUnexpected, err, "resolve upstream tokens for consent transport").LogError(ctx, logger)
 	}
-	upstreamToken, err := routeUpstreamToken(ctx, logger, tokens, endpoint.UpstreamResource)
+	upstreamToken, err := routeUpstreamToken(ctx, logger, tokens, endpoint.UpstreamResource, tunneledBackendIssuer(serverRow))
 	var routeErr *upstreamRoutingError
 	switch {
 	case errors.As(err, &routeErr):

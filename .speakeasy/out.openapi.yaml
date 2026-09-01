@@ -65874,6 +65874,9 @@ components:
         name:
           type: string
           description: Human-readable display name for the tunneled MCP server
+        resource_identifier:
+          type: string
+          description: RFC 9728 protected resource identifier of the tunneled server, used only for exact-match credential routing and never dialed by Gram. Omit unless the identifier is already known; it is usually recorded later, once the tunnel is up.
       description: Form for creating a new tunneled MCP server source
       required:
         - name
@@ -84330,6 +84333,9 @@ components:
           type: string
           description: The project ID this tunneled MCP server belongs to
           format: uuid
+        resource_identifier:
+          type: string
+          description: RFC 9728 protected resource identifier of the tunneled server, used only for exact-match credential routing and never dialed by Gram
         status:
           type: string
           description: Stored lifecycle status for a tunneled MCP server source
@@ -85850,11 +85856,13 @@ components:
           format: uuid
         name:
           type: string
-          description: Human-readable display name for the tunneled MCP server
+          description: Human-readable display name for the tunneled MCP server. Omit to leave unchanged.
+        resource_identifier:
+          type: string
+          description: RFC 9728 protected resource identifier of the tunneled server, used only for exact-match credential routing and never dialed by Gram. Pass an empty string to clear. Omit to leave unchanged.
       description: Form for updating a tunneled MCP server source
       required:
         - id
-        - name
     UpdateUserSessionIssuerForm:
       type: object
       properties:

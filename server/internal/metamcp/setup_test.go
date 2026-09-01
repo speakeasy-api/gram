@@ -192,11 +192,12 @@ func seedTunnelBackend(t *testing.T, ctx context.Context, conn *pgxpool.Pool, pr
 	t.Helper()
 
 	server, err := tunneledmcprepo.New(conn).CreateServer(ctx, tunneledmcprepo.CreateServerParams{
-		ID:        uuid.New(),
-		ProjectID: projectID,
-		Name:      "tunnel " + uuid.NewString(),
-		KeyHash:   "key-hash-" + uuid.NewString(),
-		KeyPrefix: "key-prefix",
+		ID:                 uuid.New(),
+		ProjectID:          projectID,
+		Name:               "tunnel " + uuid.NewString(),
+		KeyHash:            "key-hash-" + uuid.NewString(),
+		KeyPrefix:          "key-prefix",
+		ResourceIdentifier: pgtype.Text{String: "", Valid: false},
 	})
 	require.NoError(t, err)
 

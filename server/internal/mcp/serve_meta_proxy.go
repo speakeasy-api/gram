@@ -23,6 +23,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
@@ -48,33 +49,27 @@ const metaMemberUpstreamProtocolVersion = "2025-06-18"
 const memberSessionCloseTimeout = 5 * time.Second
 
 // routeMetaMemberToken selects the bearer forwarded to one meta MCP member.
-// Strict: a remote member gets only a token whose recorded RFC 8707 resource
-// names its upstream — no lone-token fallback, since mcp:write can attach a
-// member pointing anywhere and a fallback would forward a sibling's
-// credential there. No match means an anonymous call, never a mismatched
-// bearer. A tunneled member records no resource, so it routes by identity
-// instead: the token map entry keyed by the member's own derived
-// remote_session_issuer, and only when that grant is unqualified.
+// No lone-token fallback on either arm: mcp:write can attach a member
+// pointing anywhere, and forwarding an unmatched credential would hand it a
+// sibling's bearer. No match means an anonymous call, never a mismatched one.
+//
+// A remote member matches on recorded RFC 8707 resource across the whole map,
+// because its routing key is its upstream URL — the same address the proxy
+// dials, so a credential that matches is being returned to the audience it
+// names.
+//
+// A tunneled member is routed by identity alone: only the entry keyed by its
+// own derived remote_session_issuer (mcpserverissuersync.go), accepted when
+// that grant is unqualified or names this member's recorded resource
+// identifier. The identifier cannot select across issuers the way a remote
+// URL does, because a tunnel's dial target is decoupled from the resource it
+// claims — an operator-supplied identifier that collided with a sibling's
+// upstream would otherwise deliver that sibling's bearer to the tunnel.
 func routeMetaMemberToken(tokens map[uuid.UUID]remotesessions.UpstreamToken, member metaMember, upstreamResource string) (string, error) {
-	if member.tunneledServerID.Valid {
-		// A tunneled backend records no RFC 8707 resource, so a lone-token
-		// heuristic would forward a sibling's bearer once partial resolution
-		// leaves gaps in the map. The map is keyed by remote_session_issuer,
-		// and the member row carries its own derived issuer precisely for
-		// this lookup (mcpserverissuersync.go), so route by exact key. A
-		// member with no derived issuer, no entry, or an entry whose grant is
-		// audience-bound to some remote upstream calls anonymously.
-		if !member.remoteSessionIssuerID.Valid {
-			return "", nil
-		}
-		entry, ok := tokens[member.remoteSessionIssuerID.UUID]
-		if !ok || entry.Resource != "" {
-			return "", nil
-		}
-		return entry.Token, nil
-	}
-
 	want := strings.TrimRight(upstreamResource, "/")
+	if member.tunneledServerID.Valid {
+		return tunneledIssuerToken(tokens, member.remoteSessionIssuerID, want), nil
+	}
 	if want == "" {
 		return "", nil
 	}
@@ -132,6 +127,12 @@ func (s *Service) dialMetaMember(
 			ID:        member.remoteServerID.UUID,
 			ProjectID: gate.projectID,
 		})
+		if errors.Is(rerr, pgx.ErrNoRows) {
+			// The snapshot query does not join the backend source tables, so a
+			// soft-deleted upstream still yields a member. Isolate it rather
+			// than failing every member of the gateway.
+			return nil, &metaMemberError{message: fmt.Sprintf("server %q is not currently servable", member.slug)}
+		}
 		if rerr != nil {
 			return nil, fmt.Errorf("load meta MCP member upstream: %w", rerr)
 		}
@@ -153,7 +154,7 @@ func (s *Service) dialMetaMember(
 		}, nil
 
 	case member.tunneledServerID.Valid:
-		upstreamToken, terr := routeMetaMemberToken(gate.tokens, member, "")
+		upstreamToken, terr := routeMetaMemberToken(gate.tokens, member, strings.TrimRight(member.tunneledResourceIdentifier, "/"))
 		if terr != nil {
 			return nil, terr
 		}
