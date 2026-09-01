@@ -1,0 +1,23 @@
+server/internal/guardian/policy.go
+  s_96b2c00dcff3bd::t_f985db91d40f73 145
+  s_96b2c00dcff3bd::t_142b7cf54b2a73 192-194,197
+  s_96b2c00dcff3bd::t_1b629de2b55625 350-351
+server/internal/guardian/policy_internal_test.go
+  s_96b2c00dcff3bd::t_b934ad1a3282b1 1-23
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.0",
+  "base_commit_sha": "97601ff8b09d21de513b6abe4dca0b9871df6737",
+  "prompts": {},
+  "sessions": {
+    "s_96b2c00dcff3bd": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "fa7ffb9e-4a92-4c17-871e-ef187a8b1d4b",
+        "model": "claude-fable-5"
+      },
+      "human_author": "Vishal Gowda <vishal@speakeasy.com>"
+    }
+  }
+}
