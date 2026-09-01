@@ -215,6 +215,9 @@ func (s *Service) resolveToolsetMintTarget(ctx context.Context, toolsetIDStr str
 	case wrapper.Visibility == visibility.Disabled:
 		// The runtime refuses disabled wrappers and serves the legacy route,
 		// so a wrapper-bound token would be rejected everywhere.
+	case !wrapper.UserSessionIssuerID.Valid:
+		// A wrapper without an issuer cannot be a mint target; the toolset's
+		// own issuer gate below still applies.
 	default:
 		return s.serverMintTarget(ctx, &wrapper, projectID)
 	}

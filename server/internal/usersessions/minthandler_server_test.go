@@ -346,3 +346,52 @@ func TestMintUserSessionForToolsetIgnoresDisabledWrapper(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "http://0.0.0.0/mcp/"+toolset.McpSlug.String, claims.Issuer)
 }
+
+// TestMintUserSessionForToolsetIgnoresIssuerlessWrapper pins that a wrapper
+// without a user session issuer does not govern the mint; the toolset's own
+// issuer binding still applies. Production has manually created wrappers in
+// exactly this shape.
+func TestMintUserSessionForToolsetIgnoresIssuerlessWrapper(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	toolset := createIssuerGatedMintToolset(t, ctx, ti, "mint-issuerless-wrapper")
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx)
+
+	_, err := mcpserversrepo.New(ti.conn).CreateMCPServer(ctx, mcpserversrepo.CreateMCPServerParams{
+		ID:                    uuid.New(),
+		ProjectID:             *authCtx.ProjectID,
+		Name:                  pgtype.Text{String: "mint-issuerless-wrapper-srv", Valid: true},
+		Slug:                  pgtype.Text{String: "mint-issuerless-wrapper-srv", Valid: true},
+		EnvironmentID:         uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		UserSessionIssuerID:   uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		RemoteMcpServerID:     uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		ToolsetID:             uuid.NullUUID{UUID: toolset.ID, Valid: true},
+		ToolVariationsGroupID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		Visibility:            mcpservers.VisibilityPrivate,
+	})
+	require.NoError(t, err)
+
+	ctx = withExactAuthzGrants(t, ctx, ti.conn,
+		authz.NewGrant(authz.ScopeMCPConnect, toolset.ID.String()),
+	)
+
+	toolsetID := toolset.ID.String()
+	got, err := ti.service.MintUserSession(ctx, &sessionsgen.MintUserSessionPayload{
+		ToolsetID:        &toolsetID,
+		McpServerID:      nil,
+		SessionToken:     nil,
+		ProjectSlugInput: nil,
+	})
+	require.NoError(t, err)
+
+	claims, err := usersessions.NewSigner("test-jwt-secret").Validate(
+		got.AccessToken,
+		urn.NewToolset(toolset.ID).String(),
+	)
+	require.NoError(t, err)
+	require.Equal(t, "http://0.0.0.0/mcp/"+toolset.McpSlug.String, claims.Issuer)
+}
