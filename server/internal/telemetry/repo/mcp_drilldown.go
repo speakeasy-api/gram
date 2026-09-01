@@ -138,8 +138,9 @@ func (q *Queries) ListMCPTraceReferences(ctx context.Context, arg ListMCPTraceRe
 		if arg.BeforeTraceID != "" && arg.BeforeToolCallID != "" {
 			sb = sb.Where("(event_time_ns, trace_id, tool_call_id) < (?, ?, ?)", arg.BeforeUnixNano, arg.BeforeTraceID, arg.BeforeToolCallID)
 		} else if arg.BeforeTraceID != "" {
-			// Callers that have not yet adopted the call-id half of the key
-			// keep the previous (time, trace) exclusive boundary.
+			// A cursor without a call id keeps the (time, trace) exclusive
+			// boundary so a token minted before that half existed still pages
+			// one-call-per-trace traffic correctly.
 			sb = sb.Where("(event_time_ns, trace_id) < (?, ?)", arg.BeforeUnixNano, arg.BeforeTraceID)
 		} else {
 			sb = sb.Where("event_time_ns < ?", arg.BeforeUnixNano)
