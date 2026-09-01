@@ -204,6 +204,7 @@ func TestCheckpointBoundsAllIdentityAndResourceResolution(t *testing.T) {
 		transport:     killswitches.ResolveTransportDisposition,
 		failurePolicy: killswitches.FailurePolicyFailClosed,
 		timeout:       20 * time.Millisecond,
+		flags:         enforcedRollout("org_example"),
 	}
 	ctx := testIdentityContext(t, mcpidentity.KindUserSession, "user_example")
 	started := time.Now()
