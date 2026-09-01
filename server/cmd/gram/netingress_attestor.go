@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/urfave/cli/v2"
+	"go.opentelemetry.io/otel"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/netingress"
@@ -64,6 +65,7 @@ func newNetingressAttestorCommand() *cli.Command {
 		},
 		Action: func(c *cli.Context) error {
 			logger := PullLogger(c.Context).With(attr.SlogComponent("netingress_attestor"))
+			telemetry := netingress.NewTelemetry(logger, otel.GetMeterProvider())
 			upstream, err := url.Parse(c.String("upstream-url"))
 			if err != nil {
 				return fmt.Errorf("parse private listener upstream: %w", err)
@@ -82,6 +84,7 @@ func newNetingressAttestorCommand() *cli.Command {
 				TokenPath:    c.String("token-path"),
 				Transport:    transport,
 				Logger:       logger,
+				Telemetry:    telemetry,
 			})
 			if err != nil {
 				return fmt.Errorf("configure private ingress attestor: %w", err)

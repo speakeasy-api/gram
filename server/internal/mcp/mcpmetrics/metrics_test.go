@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
 	"go.opentelemetry.io/otel/sdk/metric/metricdata"
@@ -13,6 +14,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcprequests"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpversions"
+	"github.com/speakeasy-api/gram/server/internal/requestorigin"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
@@ -201,6 +203,7 @@ func TestRequestCounterRecord_PinsInstrumentAndDimensions(t *testing.T) {
 		attr.MCPNegotiatedProtocolVersion(mcpversions.Version20260728),
 		attr.McpMethod("tools/list"),
 		attr.McpSurface(string(SurfaceHosting)),
+		attr.NetworkSurface(NetworkSurfacePublic),
 	)
 }
 
@@ -221,6 +224,29 @@ func TestRequestCounterRecord_ClampsAtRecordSite(t *testing.T) {
 		attr.MCPNegotiatedProtocolVersion(mcpversions.Other),
 		attr.McpMethod(mcprequests.MethodOther),
 		attr.McpSurface(string(SurfacePlatform)),
+		attr.NetworkSurface(NetworkSurfacePublic),
+	)
+}
+
+func TestRequestCounterRecordUsesTrustedPrivateOrigin(t *testing.T) {
+	t.Parallel()
+
+	reader := sdkmetric.NewManualReader()
+	meter := sdkmetric.NewMeterProvider(sdkmetric.WithReader(reader)).Meter("test")
+	ctx := requestorigin.WithContext(t.Context(), requestorigin.Origin{
+		Surface:          requestorigin.SurfacePrivateNetwork,
+		BaseURL:          "https://private.example",
+		OrganizationID:   "<ORG_ID>",
+		NetworkIngressID: uuid.New(),
+	})
+
+	NewRequestCounter(meter, testenv.NewLogger(t)).Record(ctx, mcpversions.Version20260728, "tools/list", SurfaceHosting)
+
+	metricdatatest.AssertHasAttributes(t, collectMetric(t, reader, InstrumentMCPRequest),
+		attr.MCPNegotiatedProtocolVersion(mcpversions.Version20260728),
+		attr.McpMethod("tools/list"),
+		attr.McpSurface(string(SurfaceHosting)),
+		attr.NetworkSurface(NetworkSurfacePrivate),
 	)
 }
 

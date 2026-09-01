@@ -6,6 +6,7 @@ import (
 	"net"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/requestorigin"
@@ -17,30 +18,43 @@ type WorkloadVerifier interface {
 	Verify(ctx context.Context, token, source string) (Ingress, error)
 }
 
-func Middleware(verifier WorkloadVerifier, parsers IdentityParsers) func(http.Handler) http.Handler {
+func Middleware(verifier WorkloadVerifier, parsers IdentityParsers, telemetry ...*Telemetry) func(http.Handler) http.Handler {
+	var metrics *Telemetry
+	if len(telemetry) > 0 {
+		metrics = telemetry[0]
+	}
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, request *http.Request) {
+			started := time.Now()
+			record := func(result, reason, provider string) {
+				metrics.Record(request.Context(), OperationAdmission, result, reason, provider, time.Since(started))
+			}
 			token, ok := bearerToken(request.Header.Values(AttestationHeader))
 			request.Header.Del(AttestationHeader)
 			if !ok {
+				record(ResultDenied, ReasonMissingAttestation, "")
 				http.Error(w, "workload attestation required", http.StatusUnauthorized)
 				return
 			}
 			if verifier == nil {
+				record(ResultError, ReasonVerifierUnavailable, "")
 				http.Error(w, "private ingress unavailable", http.StatusServiceUnavailable)
 				return
 			}
 
 			source, err := transportSource(request.RemoteAddr)
 			if err != nil {
+				record(ResultError, ReasonInvalidSource, "")
 				http.Error(w, "private ingress unavailable", http.StatusServiceUnavailable)
 				return
 			}
 			ingress, err := verifier.Verify(request.Context(), token, source)
 			if err != nil {
 				if errors.Is(err, ErrAttestationRejected) {
+					record(ResultDenied, ReasonAttestationRejected, "")
 					http.Error(w, "invalid workload attestation", http.StatusUnauthorized)
 				} else {
+					record(ResultError, ReasonDependencyFailed, "")
 					http.Error(w, "private ingress unavailable", http.StatusServiceUnavailable)
 				}
 				return
@@ -48,6 +62,7 @@ func Middleware(verifier WorkloadVerifier, parsers IdentityParsers) func(http.Ha
 
 			host, err := requestorigin.CanonicalHost(request.Host)
 			if err != nil || host != ingress.DNSName {
+				record(ResultDenied, ReasonHostMismatch, ingress.Provider)
 				http.NotFound(w, request)
 				return
 			}
@@ -56,13 +71,16 @@ func Middleware(verifier WorkloadVerifier, parsers IdentityParsers) func(http.Ha
 			identity, err := parsers.Parse(ingress.Provider, request.Header)
 			if err != nil {
 				if errors.Is(err, ErrUnsupportedProvider) {
+					record(ResultError, ReasonProviderUnsupported, ingress.Provider)
 					http.Error(w, "private ingress unavailable", http.StatusServiceUnavailable)
 				} else {
+					record(ResultDenied, ReasonIdentityInvalid, ingress.Provider)
 					http.Error(w, "invalid network identity", http.StatusUnauthorized)
 				}
 				return
 			}
 			if ingress.IdentityRequired && identity == nil {
+				record(ResultDenied, ReasonIdentityRequired, ingress.Provider)
 				http.Error(w, "network identity required", http.StatusUnauthorized)
 				return
 			}
@@ -70,9 +88,11 @@ func Middleware(verifier WorkloadVerifier, parsers IdentityParsers) func(http.Ha
 
 			baseURL, err := requestorigin.HTTPSBaseURL(ingress.DNSName)
 			if err != nil {
+				record(ResultError, ReasonOriginInvalid, ingress.Provider)
 				http.Error(w, "private ingress unavailable", http.StatusServiceUnavailable)
 				return
 			}
+			record(ResultAllowed, ReasonNone, ingress.Provider)
 			origin := requestorigin.Origin{
 				Surface:          requestorigin.SurfacePrivateNetwork,
 				BaseURL:          baseURL,

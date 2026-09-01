@@ -12,6 +12,7 @@ import (
 	"net/url"
 	"os"
 	"strings"
+	"time"
 	"unicode"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
@@ -49,6 +50,7 @@ type AttestorConfig struct {
 	TokenPath    string
 	Transport    http.RoundTripper
 	Logger       *slog.Logger
+	Telemetry    *Telemetry
 }
 
 func NewAttestorHandler(config AttestorConfig) (http.Handler, error) {
@@ -87,10 +89,24 @@ func NewAttestorHandler(config AttestorConfig) (http.Handler, error) {
 		FlushInterval: 0,
 		ErrorLog:      nil,
 		BufferPool:    nil,
-		ModifyResponse: func(*http.Response) error {
+		ModifyResponse: func(response *http.Response) error {
+			if response.Request == nil {
+				return nil
+			}
+			ctx := response.Request.Context()
+			started, _ := ctx.Value(proxyStartedKey{}).(time.Time)
+			if !started.IsZero() {
+				config.Telemetry.Record(ctx, OperationProxy, ResultAllowed, ReasonNone, ProviderTailscale, time.Since(started))
+			}
 			return nil
 		},
 		ErrorHandler: func(w http.ResponseWriter, request *http.Request, proxyErr error) {
+			started, _ := request.Context().Value(proxyStartedKey{}).(time.Time)
+			duration := time.Duration(0)
+			if !started.IsZero() {
+				duration = time.Since(started)
+			}
+			config.Telemetry.Record(request.Context(), OperationProxy, ResultError, ReasonUpstreamFailed, ProviderTailscale, duration)
 			if config.Logger != nil {
 				config.Logger.ErrorContext(request.Context(), "private ingress attestor proxy error", attr.SlogError(proxyErr))
 			}
@@ -101,18 +117,21 @@ func NewAttestorHandler(config AttestorConfig) (http.Handler, error) {
 	return RouteGuard(http.HandlerFunc(func(w http.ResponseWriter, request *http.Request) {
 		host, hostErr := canonicalAuthority(request.Host)
 		if hostErr != nil || host != expectedHost {
+			config.Telemetry.Record(request.Context(), OperationProxy, ResultDenied, ReasonHostMismatch, ProviderTailscale, 0)
 			http.NotFound(w, request)
 			return
 		}
 		token, readErr := readProjectedToken(config.TokenPath)
 		if readErr != nil {
+			config.Telemetry.Record(request.Context(), OperationProxy, ResultError, ReasonTokenReadFailed, ProviderTailscale, 0)
 			if config.Logger != nil {
 				config.Logger.ErrorContext(request.Context(), "read projected private ingress token", attr.SlogError(readErr))
 			}
 			http.Error(w, "private ingress attestor unavailable", http.StatusServiceUnavailable)
 			return
 		}
-		proxy.ServeHTTP(w, request.WithContext(withProjectedToken(request.Context(), token)))
+		ctx := context.WithValue(withProjectedToken(request.Context(), token), proxyStartedKey{}, time.Now())
+		proxy.ServeHTTP(w, request.WithContext(ctx))
 	})), nil
 }
 
@@ -141,6 +160,7 @@ func readProjectedToken(path string) (string, error) {
 }
 
 type projectedTokenKey struct{}
+type proxyStartedKey struct{}
 
 func withProjectedToken(ctx context.Context, token string) context.Context {
 	return context.WithValue(ctx, projectedTokenKey{}, token)
