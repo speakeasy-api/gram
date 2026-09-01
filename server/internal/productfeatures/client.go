@@ -322,15 +322,29 @@ func provisionSkillsSystemRoleGrantsTx(ctx context.Context, dbtx repo.DBTX, orga
 	return nil
 }
 
-// SeedOrganizationDefaultsTx enables baseline entitlements for every newly
-// provisioned organization. It is intentionally separate from trial seeding so
-// an explicit org-admin disable remains durable and absent rows stay disabled.
+// OrganizationDefaultFeatures are enabled for every newly provisioned
+// organization. Org admins can still disable them. They are not part of
+// TrialRuntimeFeatures, so an expired trial does not turn them off.
+var OrganizationDefaultFeatures = []Feature{
+	FeaturePlatformMCP,
+	FeatureLogs,
+	FeatureToolIOLogs,
+	FeatureSessionCapture,
+}
+
+// SeedOrganizationDefaultsTx enables baseline entitlements for a newly
+// provisioned organization. Call it only on create: EnableFeature inserts a
+// new enabled row after a soft-delete, so replaying this on an existing org
+// would undo an administrator disable.
 func SeedOrganizationDefaultsTx(ctx context.Context, tx pgx.Tx, organizationID string) error {
-	if _, err := repo.New(tx).EnableFeature(ctx, repo.EnableFeatureParams{
-		OrganizationID: organizationID,
-		FeatureName:    string(FeaturePlatformMCP),
-	}); err != nil {
-		return fmt.Errorf("enable default %s entitlement: %w", FeaturePlatformMCP, err)
+	q := repo.New(tx)
+	for _, feature := range OrganizationDefaultFeatures {
+		if _, err := q.EnableFeature(ctx, repo.EnableFeatureParams{
+			OrganizationID: organizationID,
+			FeatureName:    string(feature),
+		}); err != nil {
+			return fmt.Errorf("enable default %s entitlement: %w", feature, err)
+		}
 	}
 	return nil
 }
@@ -360,9 +374,6 @@ var EnterpriseTrialBundle = []Feature{
 // TrialRuntimeFeatures are disabled when an enterprise trial expires and
 // restored when the organization returns to a paid or trial state.
 var TrialRuntimeFeatures = []Feature{
-	FeatureLogs,
-	FeatureToolIOLogs,
-	FeatureSessionCapture,
 	FeaturePlatformMCP,
 }
 
