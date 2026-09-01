@@ -27,6 +27,14 @@ EOF
 
 while (($# > 0)); do
     case "$1" in
+        --manifest=*|--ids=*|--output=*|--base-url=*)
+            option="${1%%=*}"
+            value="${1#*=}"
+            shift
+            set -- "$option" "$value" "$@"
+            ;;
+    esac
+    case "$1" in
         --manifest) MANIFEST="${2:?--manifest requires a path}"; shift 2 ;;
         --ids) IDS_FILE="${2:?--ids requires a path}"; shift 2 ;;
         --output) OUTPUT="${2:?--output requires a path}"; shift 2 ;;
@@ -43,7 +51,10 @@ MANIFEST_DIR="$(cd "$(dirname "$MANIFEST")" && pwd)"
 MANIFEST="${MANIFEST_DIR}/$(basename "$MANIFEST")"
 
 if ! jq -e '
+    (keys | sort) == (["defaults", "templates", "version"] | sort) and
     .version == 1 and
+    (.defaults | type == "object") and
+    (.defaults | keys | sort) == (["from_email", "from_name", "reply_to_email"] | sort) and
     (.defaults.from_name | type == "string" and length > 0) and
     (.defaults.from_email | type == "string" and length > 0) and
     (.defaults.reply_to_email | type == "string" and length > 0) and
@@ -51,14 +62,26 @@ if ! jq -e '
     all(.templates | to_entries[];
         (.key | type == "string" and length > 0) and
         (.value | type == "object") and
+        ((.value | keys) - ["managed_name", "preview_text", "source", "subject", "unused_variables", "variables"] | length == 0) and
         (.value.managed_name | type == "string" and length > 0) and
         (.value.subject | type == "string" and length > 0) and
         (.value.preview_text | type == "string" and length > 0) and
         (.value.source | type == "string" and length > 0) and
-        (.value.variables | type == "array" and all(.[]; type == "string" and length > 0))
+        (.value.variables | type == "array" and all(.[]; type == "string" and length > 0)) and
+        (.value.unused_variables == null or (.value.unused_variables | type == "array" and all(.[]; type == "string" and length > 0)))
     )
 ' "$MANIFEST" >/dev/null; then
     echo "Invalid email template manifest: $MANIFEST" >&2
+    exit 1
+fi
+
+# CI validates the canonical manifest against the Go application registry. Any
+# alternate manifest must preserve that exact template and variable contract.
+if ! jq -e --slurpfile canonical "${SCRIPT_DIR}/manifest.json" '
+    (.templates | with_entries(.value = (.value.variables | sort))) ==
+    ($canonical[0].templates | with_entries(.value = (.value.variables | sort)))
+' "$MANIFEST" >/dev/null; then
+    echo "Manifest does not match the application template contract: $MANIFEST" >&2
     exit 1
 fi
 
@@ -274,6 +297,10 @@ while IFS= read -r key; do
         }')"
     request POST "/email-messages/$(urlencode "$draft_id")" 200 "$payload" true
     request GET "/email-messages/$(urlencode "$draft_id")/guardian" 200 "" true
+    if ! jq -e '.errors | type == "array"' <<<"$RESPONSE" >/dev/null; then
+        echo "Guardian returned an invalid response for template $key" >&2
+        exit 1
+    fi
     if [[ "$(jq '.errors | length' <<<"$RESPONSE")" -gt 0 ]]; then
         echo "Guardian rejected template $key:" >&2
         jq -r '.errors[] | "  \(.rule): \(.description)"' <<<"$RESPONSE" >&2
