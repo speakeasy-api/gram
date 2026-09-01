@@ -64,6 +64,7 @@ type Service struct {
 	featureFlags    feature.Provider
 	productFeatures productFeatureCacheUpdater
 	trial           trialemails.Notifier
+	now             func() time.Time
 }
 
 type productFeatureCacheUpdater interface {
@@ -73,6 +74,11 @@ type productFeatureCacheUpdater interface {
 var _ gen.Service = (*Service)(nil)
 
 const polarWebhookKeyBillingLockWaitTimeout = 5 * time.Second
+
+type checkoutTrialProvisioner interface {
+	PrepareEnterpriseTrialConversionKeyWithDB(context.Context, openrouter.DBTX, string, openrouter.KeyType, int64) (openrouter.EnterpriseTrialConversionKeyChange, error)
+	ReconcileAPIKeyDisabled(context.Context, string, openrouter.KeyType) error
+}
 
 type openRouterBillingDBProvisioner interface {
 	RefreshAPIKeyLimitWithDB(context.Context, openrouter.DBTX, string, openrouter.KeyType, *int) (int, error)
@@ -107,6 +113,7 @@ func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pg
 		featureFlags:    featureFlags,
 		productFeatures: productFeatures,
 		trial:           trialNotifier,
+		now:             time.Now,
 	}
 	service.stripeHandler = service.serviceStripeWebhookHandler
 	return service
@@ -137,6 +144,7 @@ func NewBillingOperations(logger *slog.Logger, db *pgxpool.Pool, stripeClient st
 		featureFlags:    nil,
 		productFeatures: nil,
 		trial:           nil,
+		now:             time.Now,
 	}
 }
 

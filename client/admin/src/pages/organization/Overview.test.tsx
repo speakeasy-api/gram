@@ -9,10 +9,12 @@ import {
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
+  organizationActivityQuery,
   organizationQuery,
   organizationsListQuery,
   organizationsStatsQuery,
 } from "@/lib/adminQueries";
+import { GramAdminError, type AdminOrganization } from "@/lib/gramAdminApi";
 import { routeTree } from "@/routeTree.gen";
 import { anOrganization } from "@/test/fixtures";
 import { renderRouteTree } from "@/test/harness";
@@ -24,6 +26,12 @@ const mocks = vi.hoisted(() => ({
   listOrganizations: vi.fn(),
   getOrganizationStats: vi.fn(),
   updateOrganization: vi.fn(),
+  markEnterpriseTrialConverted: vi.fn(),
+  toastSuccess: vi.fn(),
+}));
+
+vi.mock("sonner", () => ({
+  toast: { success: mocks.toastSuccess },
 }));
 
 vi.mock("@/lib/gramAdminApi", async (importOriginal) => {
@@ -36,6 +44,7 @@ vi.mock("@/lib/gramAdminApi", async (importOriginal) => {
     listOrganizations: mocks.listOrganizations,
     getOrganizationStats: mocks.getOrganizationStats,
     updateOrganization: mocks.updateOrganization,
+    markEnterpriseTrialConverted: mocks.markEnterpriseTrialConverted,
   };
 });
 
@@ -62,17 +71,12 @@ function valueBeside(label: string): HTMLElement {
   return value;
 }
 
-// The labels of one group's rows, in the order they are drawn. Read off the
-// group's heading, so a row that moves out of a group fails the group it left
-// as well as the one it joined.
-function labelsIn(group: string): string[] {
-  const section = screen
-    .getByRole("heading", { name: group })
-    .closest("section");
-  if (!section) throw new Error(`the ${group} heading is not in a group`);
-  return [...section.querySelectorAll('[data-slot="field-label"]')].map(
-    (n) => n.textContent ?? "",
-  );
+function panelNamed(name: string): HTMLElement {
+  const panel = screen.getByRole("heading", { name }).closest("section, aside");
+  if (!(panel instanceof HTMLElement)) {
+    throw new Error(`the ${name} heading is not in a panel`);
+  }
+  return panel;
 }
 
 // Opens the account type select and picks an option, and hands back the
@@ -141,6 +145,12 @@ beforeEach(() => {
   mocks.listOrganizations.mockReset();
   mocks.getOrganizationStats.mockReset();
   mocks.updateOrganization.mockReset();
+  mocks.markEnterpriseTrialConverted.mockReset();
+  mocks.toastSuccess.mockReset();
+  mocks.markEnterpriseTrialConverted.mockResolvedValue({
+    organization_id: ORG.id,
+    converted_at: "2026-03-08T12:34:56Z",
+  });
 });
 
 afterEach(() => {
@@ -149,7 +159,7 @@ afterEach(() => {
 });
 
 describe("Overview", () => {
-  it("shows live trial facts without changing the shared row display", async () => {
+  it("shows live trial facts in the Enterprise trial panel", async () => {
     await renderRouteTree(routeTree, {
       initialPath: `/organizations/${ORG.slug}`,
     });
@@ -157,8 +167,8 @@ describe("Overview", () => {
     const trialEndsAt = ORG.trial_ends_at;
     if (!trialEndsAt) throw new Error("the record under test needs a trial");
 
-    await screen.findByText("Trial");
-    const facts = valueBeside("Trial");
+    await screen.findByRole("heading", { name: "Enterprise trial" });
+    const facts = panelNamed("Enterprise trial");
     expect(
       within(facts).getByText("State").nextElementSibling?.textContent,
     ).toBe("Running");
@@ -168,6 +178,7 @@ describe("Overview", () => {
     expect(
       within(facts).getByText("Ends").nextElementSibling?.textContent,
     ).toBe(new Date(trialEndsAt).toLocaleDateString());
+    expect(screen.getAllByText("State")).toHaveLength(1);
 
     // The defaulted pair is gone from the page, not merely unread: an operator
     // who sees "Free trial ends" reads a date no organization ever earned.
@@ -175,7 +186,7 @@ describe("Overview", () => {
     expect(screen.queryByText("Free trial ends")).toBeNull();
   });
 
-  it("keeps No trial visible for an organization that never trialled", async () => {
+  it("hides the trial panel for an organization that never trialled", async () => {
     mocks.getOrganization.mockResolvedValue({
       ...ORG,
       trial_state: "none",
@@ -185,8 +196,10 @@ describe("Overview", () => {
       initialPath: `/organizations/${ORG.slug}`,
     });
 
-    await screen.findByText("Trial");
-    expect(valueBeside("Trial").textContent).toBe("No trial");
+    await screen.findByRole("heading", { name: "Details" });
+    expect(
+      screen.queryByRole("heading", { name: "Enterprise trial" }),
+    ).toBeNull();
   });
 
   it("reads a date as the server's day, not the reader's", async () => {
@@ -289,10 +302,9 @@ describe("Overview", () => {
       );
     });
 
-    mocks.updateOrganization.mockResolvedValue({
-      ...ORG,
-      account_type: "enterprise",
-    });
+    const saved = { ...ORG, account_type: "enterprise" };
+    mocks.updateOrganization.mockResolvedValue(saved);
+    mocks.getOrganization.mockResolvedValue(saved);
     await pickAccountType("enterprise");
     await confirmDialog();
 
@@ -419,7 +431,10 @@ describe("Overview", () => {
 
   it("shows a saved change on a record the operator reached by id", async () => {
     const saved = { ...ORG, account_type: "enterprise" };
-    mocks.updateOrganization.mockResolvedValue(saved);
+    mocks.updateOrganization.mockImplementation(async () => {
+      mocks.getOrganization.mockResolvedValue(saved);
+      return saved;
+    });
 
     // By id, which is how the list opens a record whose slug it has not got.
     // The record is written back under one address only, so the other one keeps
@@ -436,6 +451,7 @@ describe("Overview", () => {
     await waitFor(() => {
       expect(screen.getByRole("combobox").textContent).toBe("enterprise");
     });
+    expect(mocks.getOrganization.mock.calls.length).toBeGreaterThan(1);
     expect(ORG.account_type).not.toBe("enterprise");
   });
 
@@ -629,40 +645,701 @@ describe("Overview", () => {
     expect(mocks.updateOrganization).not.toHaveBeenCalled();
   });
 
-  it("draws the facts in three named groups", async () => {
+  it.each([
+    ["running enterprise trial", { ...ORG, trial_state: "running" }, true],
+    ["ending enterprise trial", { ...ORG, trial_state: "ending_soon" }, true],
+    ["expired enterprise trial", { ...ORG, trial_state: "expired" }, true],
+    ["demoted enterprise trial", { ...ORG, trial_state: "demoted" }, true],
+    [
+      "disabled enterprise trial",
+      { ...ORG, disabled_at: "2026-03-01T00:00:00Z" },
+      true,
+    ],
+    [
+      "enterprise trial with an enterprise account type",
+      { ...ORG, account_type: "enterprise" },
+      true,
+    ],
+    [
+      "enterprise trial with a free account type",
+      { ...ORG, account_type: "free" },
+      true,
+    ],
+    ["non-enterprise trial", { ...ORG, trial_tier: "pro" }, false],
+    [
+      "already converted timestamp",
+      { ...ORG, trial_converted_at: "2026-03-01T00:00:00Z" },
+      false,
+    ],
+    ["converted state", { ...ORG, trial_state: "converted" }, false],
+    ["no trial state", { ...ORG, trial_state: "none" }, false],
+  ] as const)(
+    "offers conversion only for a %s",
+    async (_case, org, eligible) => {
+      mocks.getOrganization.mockResolvedValue(org);
+      await renderRouteTree(routeTree, {
+        initialPath: `/organizations/${org.slug}`,
+      });
+
+      await screen.findByRole("heading", { name: "Details" });
+      const control = screen.queryByRole("button", {
+        name: `Mark ${org.name} as converted`,
+      });
+      expect(Boolean(control)).toBe(eligible);
+    },
+  );
+
+  it.each([
+    [
+      "running",
+      ORG,
+      "This action ends the enterprise trial and prevents automatic demotion. Use this action only after the enterprise contract is confirmed.",
+      undefined,
+    ],
+    [
+      "ending soon",
+      { ...ORG, trial_state: "ending_soon" as const },
+      "This action ends the enterprise trial and prevents automatic demotion. Use this action only after the enterprise contract is confirmed.",
+      undefined,
+    ],
+    [
+      "expired",
+      { ...ORG, trial_state: "expired" as const },
+      "The trial period has ended, but demotion is not complete. This action prevents demotion and keeps enterprise access.",
+      undefined,
+    ],
+    [
+      "demoted",
+      { ...ORG, trial_state: "demoted" as const },
+      "This action records the enterprise contract and restores enterprise access. Model provider keys with an admin lock or billing restriction remain disabled.",
+      undefined,
+    ],
+    [
+      "disabled",
+      { ...ORG, disabled_at: "2026-03-01T00:00:00Z" },
+      "This action ends the enterprise trial and prevents automatic demotion. Use this action only after the enterprise contract is confirmed.",
+      "The organization remains disabled after conversion.",
+    ],
+  ] as const)(
+    "renders AGE-3149 confirmation copy for a %s trial",
+    async (_case, org, stateCopy, disabledCopy) => {
+      mocks.getOrganization.mockResolvedValue(org);
+      await renderRouteTree(routeTree, {
+        initialPath: `/organizations/${ORG.slug}`,
+      });
+
+      fireEvent.click(
+        await screen.findByRole("button", {
+          name: `Mark ${org.name} as converted`,
+        }),
+      );
+      const dialog = await screen.findByRole("dialog");
+      expect(within(dialog).getByRole("heading").textContent).toBe(
+        "Mark trial as converted?",
+      );
+      expect(dialog.textContent).toContain(stateCopy);
+      if (disabledCopy) expect(dialog.textContent).toContain(disabledCopy);
+    },
+  );
+
+  it("returns focus to the conversion opener when the operator cancels", async () => {
     await renderRouteTree(routeTree, {
       initialPath: `/organizations/${ORG.slug}`,
     });
+    const opener = await screen.findByRole("button", {
+      name: `Mark ${ORG.name} as converted`,
+    });
+    fireEvent.click(opener);
+    fireEvent.click(
+      within(await screen.findByRole("dialog")).getByRole("button", {
+        name: "Cancel",
+      }),
+    );
 
-    await screen.findByRole("heading", { name: "Identity" });
-    // Written out rather than counted: the label an operator reads is the
-    // whole contract of a fact row, and "Whitelisted" in particular must not
-    // drift to a name that reads like a preference. See S2-FACTS-AUDIT.md.
-    expect(labelsIn("Identity")).toEqual([
-      "Name",
-      "Slug",
-      "Organization id",
-      "WorkOS id",
-      "Created",
-      "Updated",
-    ]);
-    expect(labelsIn("Plan")).toEqual(["Account type", "Trial"]);
-    expect(labelsIn("Access")).toEqual(["Whitelisted", "Disabled at"]);
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    expect(document.activeElement).toBe(opener);
+    expect(mocks.markEnterpriseTrialConverted).not.toHaveBeenCalled();
   });
 
-  it("nests the group headings under the record's own heading", async () => {
+  it("invalidates detail, list, stats, and activity, refetches canonically, and never caches the narrow result as an organization", async () => {
+    const converted = {
+      ...ORG,
+      trial_state: "converted" as const,
+      trial_converted_at: "2026-03-08T12:34:56Z",
+    };
+    mocks.getOrganization
+      .mockResolvedValueOnce(ORG)
+      .mockResolvedValue(converted);
+    const qc = new QueryClient({
+      defaultOptions: {
+        queries: { retry: false },
+        mutations: { retry: false },
+      },
+    });
+    qc.setQueryData(organizationsListQuery().queryKey, {
+      organizations: [ORG],
+      next_cursor: undefined,
+    });
+    const invalidate = vi.spyOn(qc, "invalidateQueries");
+    await renderRouteTree(routeTree, {
+      initialPath: `/organizations/${ORG.slug}`,
+      queryClient: qc,
+    });
+    invalidate.mockClear();
+
+    fireEvent.click(
+      await screen.findByRole("button", {
+        name: `Mark ${ORG.name} as converted`,
+      }),
+    );
+    fireEvent.click(
+      within(await screen.findByRole("dialog")).getByRole("button", {
+        name: "Mark as converted",
+      }),
+    );
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+
+    const invalidatedKeys = invalidate.mock.calls.map(
+      ([filters]) => filters?.queryKey,
+    );
+    expect(invalidatedKeys).toContainEqual(organizationsListQuery().queryKey);
+    expect(invalidatedKeys).toContainEqual(["gram-admin-organization"]);
+    expect(invalidatedKeys).toContainEqual(organizationsStatsQuery.queryKey);
+    expect(invalidatedKeys).toContainEqual(
+      organizationActivityQuery(ORG.id).queryKey,
+    );
+    expect(mocks.getOrganization).toHaveBeenCalledWith(ORG.id);
+    expect(qc.getQueryData(organizationQuery(ORG.id).queryKey)).toEqual(
+      converted,
+    );
+    expect(qc.getQueryData(organizationsListQuery().queryKey)).toEqual({
+      organizations: [ORG],
+      next_cursor: undefined,
+    });
+  });
+
+  it.each([
+    [
+      "running",
+      ORG,
+      "Enterprise access remains active. Conversion details are available on the Activity page.",
+    ],
+    [
+      "ending soon",
+      { ...ORG, trial_state: "ending_soon" as const },
+      "Enterprise access remains active. Conversion details are available on the Activity page.",
+    ],
+    [
+      "expired",
+      { ...ORG, trial_state: "expired" as const },
+      "Enterprise access remains active. Conversion details are available on the Activity page.",
+    ],
+    [
+      "demoted",
+      { ...ORG, trial_state: "demoted" as const },
+      "Enterprise access was restored. Conversion details are available on the Activity page.",
+    ],
+    [
+      "disabled",
+      {
+        ...ORG,
+        trial_state: "demoted" as const,
+        disabled_at: "2026-03-01T00:00:00Z",
+      },
+      "The organization remains disabled. Conversion details are available on the Activity page.",
+    ],
+  ] as const)(
+    "shows AGE-3149 conversion success feedback for a %s trial",
+    async (_case, org, description) => {
+      const converted = {
+        ...org,
+        account_type: "enterprise",
+        whitelisted: true,
+        trial_state: "converted" as const,
+        trial_converted_at: "2026-03-08T12:34:56Z",
+      };
+      mocks.getOrganization.mockImplementation((idOrSlug: string) =>
+        Promise.resolve(idOrSlug === ORG.id ? converted : org),
+      );
+      await renderRouteTree(routeTree, {
+        initialPath: `/organizations/${ORG.slug}`,
+      });
+
+      fireEvent.click(
+        await screen.findByRole("button", {
+          name: `Mark ${org.name} as converted`,
+        }),
+      );
+      fireEvent.click(
+        within(await screen.findByRole("dialog")).getByRole("button", {
+          name: "Mark as converted",
+        }),
+      );
+
+      await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+      expect(mocks.toastSuccess).toHaveBeenCalledWith(
+        "Trial marked as converted",
+        { description },
+      );
+    },
+  );
+
+  it("keeps the whole operation visibly locked after POST success until canonical reconciliation settles", async () => {
+    const converted = {
+      ...ORG,
+      trial_state: "converted" as const,
+      trial_converted_at: "2026-03-08T12:34:56Z",
+    };
+    let settleRefresh!: (value: AdminOrganization) => void;
+    const refresh = new Promise<AdminOrganization>((resolve) => {
+      settleRefresh = resolve;
+    });
+    mocks.getOrganization.mockResolvedValueOnce(ORG).mockReturnValue(refresh);
     await renderRouteTree(routeTree, {
       initialPath: `/organizations/${ORG.slug}`,
     });
 
-    // The record names itself at level 4, which is the level the whole admin
-    // app titles a page at. A group drawn above that level is read as a
-    // sibling of the record rather than a part of it.
+    const opener = await screen.findByRole("button", {
+      name: `Mark ${ORG.name} as converted`,
+    });
+    fireEvent.click(opener);
+    const dialog = await screen.findByRole("dialog");
+    const submit = within(dialog).getByRole("button", {
+      name: "Mark as converted",
+    });
+    fireEvent.click(submit);
+    fireEvent.click(submit);
+    await waitFor(() => expect(mocks.getOrganization).toHaveBeenCalledTimes(2));
+
+    expect(mocks.markEnterpriseTrialConverted).toHaveBeenCalledTimes(1);
+    const pendingSubmit = within(dialog).getByRole("button", {
+      name: "Marking as converted…",
+    });
+    expect(isDisabled(pendingSubmit)).toBe(true);
+    expect(pendingSubmit.getAttribute("aria-busy")).toBe("true");
+    expect(
+      pendingSubmit.querySelector('[data-slot="conversion-spinner"]'),
+    ).toBeTruthy();
+    expect(
+      isDisabled(within(dialog).getByRole("button", { name: "Cancel" })),
+    ).toBe(true);
+    expect(isDisabled(opener)).toBe(true);
+    expect(within(dialog).queryByRole("button", { name: "Close" })).toBeNull();
+    fireEvent.keyDown(document, { key: "Escape" });
+    const overlay = document.querySelector('[data-slot="dialog-overlay"]');
+    if (!(overlay instanceof HTMLElement))
+      throw new Error("dialog has no overlay");
+    fireEvent.pointerDown(overlay);
+    fireEvent.click(overlay);
+    fireEvent.click(submit);
+    expect(screen.getByRole("dialog")).toBe(dialog);
+    expect(mocks.markEnterpriseTrialConverted).toHaveBeenCalledTimes(1);
+
+    settleRefresh(converted);
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    expect(document.activeElement).toBe(
+      screen.getByRole("heading", { name: "Details" }),
+    );
+  });
+
+  it.each([
+    [400, "Bad Request"],
+    [401, "Unauthorized"],
+    [403, "Forbidden"],
+    [404, "Not Found"],
+    [422, "Unprocessable Entity"],
+  ] as const)(
+    "closes and restores the opener for a pre-commit %s error",
+    async (status, label) => {
+      mocks.markEnterpriseTrialConverted.mockRejectedValue(
+        new GramAdminError(
+          status,
+          { message: label },
+          `gram admin ${status} ${label}`,
+        ),
+      );
+      await renderRouteTree(routeTree, {
+        initialPath: `/organizations/${ORG.slug}`,
+      });
+      const opener = await screen.findByRole("button", {
+        name: `Mark ${ORG.name} as converted`,
+      });
+      fireEvent.click(opener);
+      fireEvent.click(
+        within(await screen.findByRole("dialog")).getByRole("button", {
+          name: "Mark as converted",
+        }),
+      );
+
+      await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+      expect(document.activeElement).toBe(opener);
+      expect(liveRegion().textContent).toContain(label);
+      expect(mocks.toastSuccess).not.toHaveBeenCalled();
+    },
+  );
+
+  it("treats a stale concurrent 409 as potentially committed, locks through truth reconciliation, and retries idempotently", async () => {
+    const converted = {
+      ...ORG,
+      account_type: "enterprise",
+      whitelisted: true,
+      trial_state: "converted" as const,
+      trial_converted_at: "2026-03-08T12:34:56Z",
+    };
+    let settleRefresh!: (value: AdminOrganization) => void;
+    const refresh = new Promise<AdminOrganization>((resolve) => {
+      settleRefresh = resolve;
+    });
+    mocks.getOrganization
+      .mockResolvedValueOnce(ORG)
+      .mockImplementation((idOrSlug: string) =>
+        idOrSlug === ORG.slug ? refresh : Promise.resolve(converted),
+      );
+    mocks.markEnterpriseTrialConverted
+      .mockRejectedValueOnce(
+        new GramAdminError(
+          409,
+          { message: "converted access is not normalized" },
+          "gram admin 409 Conflict",
+        ),
+      )
+      .mockResolvedValueOnce({
+        organization_id: ORG.id,
+        converted_at: converted.trial_converted_at,
+      });
+    const qc = new QueryClient({
+      defaultOptions: {
+        queries: { retry: false },
+        mutations: { retry: false },
+      },
+    });
+    qc.setQueryData(organizationsListQuery().queryKey, {
+      organizations: [ORG],
+      next_cursor: undefined,
+    });
+    const invalidate = vi.spyOn(qc, "invalidateQueries");
+    await renderRouteTree(routeTree, {
+      initialPath: `/organizations/${ORG.slug}`,
+      queryClient: qc,
+    });
+    invalidate.mockClear();
+
+    fireEvent.click(
+      await screen.findByRole("button", {
+        name: `Mark ${ORG.name} as converted`,
+      }),
+    );
+    fireEvent.click(
+      within(await screen.findByRole("dialog")).getByRole("button", {
+        name: "Mark as converted",
+      }),
+    );
+
+    const dialog = await screen.findByRole("dialog");
+    const pendingRetry = await within(dialog).findByRole("button", {
+      name: "Marking as converted…",
+    });
+    expect(dialog.textContent).toContain("may already be recorded");
+    expect(isDisabled(pendingRetry)).toBe(true);
+    expect(pendingRetry.getAttribute("aria-busy")).toBe("true");
+    expect(
+      isDisabled(within(dialog).getByRole("button", { name: "Cancel" })),
+    ).toBe(true);
+    fireEvent.keyDown(document, { key: "Escape" });
+    const overlay = document.querySelector('[data-slot="dialog-overlay"]');
+    if (!(overlay instanceof HTMLElement))
+      throw new Error("dialog has no overlay");
+    fireEvent.pointerDown(overlay);
+    fireEvent.click(overlay);
+    fireEvent.click(pendingRetry);
+    expect(screen.getByRole("dialog")).toBe(dialog);
+    expect(mocks.markEnterpriseTrialConverted).toHaveBeenCalledTimes(1);
+
+    settleRefresh(converted);
+    const retry = await within(dialog).findByRole("button", { name: "Retry" });
+    expect(isDisabled(retry)).toBe(false);
+    expect(
+      screen.queryByRole("heading", { name: "Enterprise trial" }),
+    ).toBeNull();
+    const invalidatedKeys = invalidate.mock.calls.map(
+      ([filters]) => filters?.queryKey,
+    );
+    expect(invalidatedKeys).toContainEqual(organizationsListQuery().queryKey);
+    expect(invalidatedKeys).toContainEqual(["gram-admin-organization"]);
+    expect(invalidatedKeys).toContainEqual(organizationsStatsQuery.queryKey);
+    expect(invalidatedKeys).toContainEqual(
+      organizationActivityQuery(ORG.id).queryKey,
+    );
+    expect(qc.getQueryData(organizationQuery(ORG.id).queryKey)).toEqual(
+      converted,
+    );
+    expect(qc.getQueryData(organizationsListQuery().queryKey)).toEqual({
+      organizations: [ORG],
+      next_cursor: undefined,
+    });
+
+    fireEvent.click(retry);
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    expect(mocks.markEnterpriseTrialConverted).toHaveBeenCalledTimes(2);
+    expect(mocks.toastSuccess).toHaveBeenCalledTimes(1);
+    expect(document.activeElement).toBe(
+      screen.getByRole("heading", { name: "Details" }),
+    );
+  });
+
+  it("keeps an ambiguous post-commit error open, refetches truth, and safely retries after the panel unmounts", async () => {
+    const original = { ...ORG, trial_state: "demoted" as const };
+    const converted = {
+      ...original,
+      trial_state: "converted" as const,
+      trial_converted_at: "2026-03-08T12:34:56Z",
+    };
+    mocks.getOrganization
+      .mockResolvedValueOnce(original)
+      .mockResolvedValue(converted);
+    mocks.markEnterpriseTrialConverted
+      .mockRejectedValueOnce(new Error("provider unavailable"))
+      .mockResolvedValueOnce({
+        organization_id: ORG.id,
+        converted_at: converted.trial_converted_at,
+      });
+    await renderRouteTree(routeTree, {
+      initialPath: `/organizations/${ORG.slug}`,
+    });
+    fireEvent.click(
+      await screen.findByRole("button", {
+        name: `Mark ${ORG.name} as converted`,
+      }),
+    );
+    fireEvent.click(
+      within(await screen.findByRole("dialog")).getByRole("button", {
+        name: "Mark as converted",
+      }),
+    );
+
+    const dialog = await screen.findByRole("dialog");
+    await waitFor(() => {
+      expect(dialog.textContent).toContain("may already be recorded");
+      expect(liveRegion().textContent).toContain("may already be recorded");
+      expect(dialog.textContent).toContain(
+        "records the enterprise contract and restores enterprise access",
+      );
+      expect(
+        screen.queryByRole("heading", { name: "Enterprise trial" }),
+      ).toBeNull();
+    });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Retry" }));
+
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    expect(mocks.markEnterpriseTrialConverted).toHaveBeenCalledTimes(2);
+    expect(document.activeElement).toBe(
+      screen.getByRole("heading", { name: "Details" }),
+    );
+    expect(mocks.toastSuccess).toHaveBeenCalledTimes(1);
+  });
+
+  it.each(["running", "ending_soon", "expired", "demoted"] as const)(
+    "shows the trial panel for a %s trial",
+    async (trialState) => {
+      mocks.getOrganization.mockResolvedValue({
+        ...ORG,
+        trial_state: trialState,
+      });
+      await renderRouteTree(routeTree, {
+        initialPath: `/organizations/${ORG.slug}`,
+      });
+
+      expect(
+        await screen.findByRole("heading", { name: "Enterprise trial" }),
+      ).toBeTruthy();
+    },
+  );
+
+  it.each(["none", "converted", undefined] as const)(
+    "hides the trial panel for a %s trial",
+    async (trialState) => {
+      mocks.getOrganization.mockResolvedValue({
+        ...ORG,
+        trial_state: trialState,
+      });
+      await renderRouteTree(routeTree, {
+        initialPath: `/organizations/${ORG.slug}`,
+      });
+
+      await screen.findByRole("heading", { name: "Details" });
+      expect(
+        screen.queryByRole("heading", { name: "Enterprise trial" }),
+      ).toBeNull();
+    },
+  );
+
+  it.each(["none", undefined] as const)(
+    "keeps no-trial facts in Details for a %s trial state",
+    async (trialState) => {
+      mocks.getOrganization.mockResolvedValue({
+        ...ORG,
+        trial_state: trialState,
+      });
+      await renderRouteTree(routeTree, {
+        initialPath: `/organizations/${ORG.slug}`,
+      });
+
+      await screen.findByRole("heading", { name: "Details" });
+      const details = panelNamed("Details");
+      expect(within(details).getByText("No trial")).toBeTruthy();
+      expect(screen.getAllByText("No trial")).toHaveLength(1);
+      expect(
+        screen.queryByRole("heading", { name: "Enterprise trial" }),
+      ).toBeNull();
+    },
+  );
+
+  it("keeps converted trial facts in Details without showing the side panel", async () => {
+    const convertedAt = "2026-08-20T00:00:00Z";
+    mocks.getOrganization.mockResolvedValue({
+      ...ORG,
+      trial_state: "converted",
+      trial_converted_at: convertedAt,
+    });
+    await renderRouteTree(routeTree, {
+      initialPath: `/organizations/${ORG.slug}`,
+    });
+
+    await screen.findByRole("heading", { name: "Details" });
+    const details = panelNamed("Details");
+    expect(
+      within(details).getByText("State").nextElementSibling?.textContent,
+    ).toBe("Converted");
+    expect(
+      within(details).getByText("Conversion date").nextElementSibling
+        ?.textContent,
+    ).toBe(new Date(convertedAt).toLocaleDateString());
+    expect(
+      screen.queryByRole("heading", { name: "Enterprise trial" }),
+    ).toBeNull();
+  });
+
+  it.each([
+    [
+      "enabled",
+      ORG,
+      "Every member loses access to Gram until the organization is re-enabled.",
+      "Sessions end immediately; nothing is deleted.",
+    ],
+    [
+      "disabled",
+      { ...ORG, disabled_at: "2026-02-01T00:00:00Z" },
+      "Re-enabling restores organization access for every member",
+      "Model provider keys with admin, billing, or unknown disable causes remain disabled.",
+    ],
+  ] as const)(
+    "explains the scoped impact for a %s organization in Danger zone",
+    async (_state, org, impact, causeQualification) => {
+      mocks.getOrganization.mockResolvedValue(org);
+      await renderRouteTree(routeTree, {
+        initialPath: `/organizations/${org.slug}`,
+      });
+
+      await screen.findByRole("heading", { name: "Danger zone" });
+      const danger = panelNamed("Danger zone");
+      expect(danger.textContent).toContain(impact);
+      expect(danger.textContent).toContain(causeQualification);
+    },
+  );
+
+  it("scopes trial and lifecycle actions to their new panels", async () => {
+    await renderRouteTree(routeTree, {
+      initialPath: `/organizations/${ORG.slug}`,
+    });
+
+    await screen.findByRole("heading", { name: "Enterprise trial" });
+    const trial = panelNamed("Enterprise trial");
+    const danger = panelNamed("Danger zone");
+    expect(
+      within(trial).getByRole("button", {
+        name: `Extend trial for ${ORG.name}`,
+      }),
+    ).toBeTruthy();
+    expect(
+      within(trial).queryByRole("button", { name: `Disable ${ORG.name}` }),
+    ).toBeNull();
+    expect(
+      within(danger).getByRole("button", { name: `Disable ${ORG.name}` }),
+    ).toBeTruthy();
+    expect(
+      within(danger).queryByRole("button", {
+        name: `Extend trial for ${ORG.name}`,
+      }),
+    ).toBeNull();
+  });
+
+  it("offers the existing re-arm action for a demoted trial", async () => {
+    mocks.getOrganization.mockResolvedValue({ ...ORG, trial_state: "demoted" });
+    await renderRouteTree(routeTree, {
+      initialPath: `/organizations/${ORG.slug}`,
+    });
+
+    await screen.findByRole("heading", { name: "Enterprise trial" });
+    expect(
+      within(panelNamed("Enterprise trial")).getByRole("button", {
+        name: `Re-arm trial for ${ORG.name}`,
+      }),
+    ).toBeTruthy();
+  });
+
+  it("offers only the conversion action for an expired trial", async () => {
+    mocks.getOrganization.mockResolvedValue({ ...ORG, trial_state: "expired" });
+    await renderRouteTree(routeTree, {
+      initialPath: `/organizations/${ORG.slug}`,
+    });
+
+    await screen.findByRole("heading", { name: "Enterprise trial" });
+    const trial = within(panelNamed("Enterprise trial"));
+    expect(
+      trial.getByRole("button", { name: `Mark ${ORG.name} as converted` }),
+    ).toBeTruthy();
+    expect(trial.queryByRole("button", { name: /Extend|Re-arm/ })).toBeNull();
+  });
+
+  it("wraps a wide Details and Danger zone column beside the trial panel", async () => {
+    await renderRouteTree(routeTree, {
+      initialPath: `/organizations/${ORG.slug}`,
+    });
+
+    await screen.findByRole("heading", { name: "Details" });
+    const details = panelNamed("Details");
+    const danger = panelNamed("Danger zone");
+    const trial = panelNamed("Enterprise trial");
+    const left = details.parentElement;
+    const layout = left?.parentElement;
+
+    expect(left).toBe(danger.parentElement);
+    expect(layout).toBe(trial.parentElement);
+    // jsdom does not calculate geometry. These stable slots and responsive
+    // primitives are the strongest component-level contract; browser coverage
+    // can measure the named regions at wide and narrow viewports without
+    // coupling to incidental descendants.
+    expect(layout?.dataset.slot).toBe("organization-overview");
+    expect(left?.dataset.slot).toBe("organization-overview-main");
+    expect(trial.dataset.slot).toBe("organization-overview-trial");
+    expect(layout?.className).toContain("flex-wrap");
+    expect(left?.className).toContain("min-w-[min(100%,32rem)]");
+    expect(left?.className).toContain("flex-[2_1_32rem]");
+    expect(trial.className).toContain("w-full");
+    expect(trial.className).toContain("max-w-80");
+    expect(trial.className).toContain("flex-[1_1_16rem]");
+  });
+
+  it("nests the panel headings under the record's own heading", async () => {
+    await renderRouteTree(routeTree, {
+      initialPath: `/organizations/${ORG.slug}`,
+    });
+
     expect(
       await screen.findByRole("heading", { level: 4, name: ORG.name }),
     ).toBeTruthy();
-    for (const group of ["Identity", "Plan", "Access"]) {
-      expect(screen.getByRole("heading", { name: group }).tagName).toBe("H5");
+    for (const panel of ["Details", "Enterprise trial", "Danger zone"]) {
+      expect(screen.getByRole("heading", { name: panel }).tagName).toBe("H5");
     }
   });
 
@@ -671,7 +1348,7 @@ describe("Overview", () => {
       initialPath: `/organizations/${ORG.slug}`,
     });
 
-    await screen.findByRole("heading", { name: "Identity" });
+    await screen.findByRole("heading", { name: "Details" });
     // By label, not by text: the record nav says "Members" too, and that one
     // is the count this row was dropped in favour of.
     const labels = [

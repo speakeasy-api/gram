@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"slices"
@@ -140,9 +141,10 @@ func (g *fakeTunnelGateway) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 type publicTunnelFixture struct {
-	endpointSlug string
-	tunnelID     uuid.UUID
-	gateway      *fakeTunnelGateway
+	endpointSlug  string
+	tunnelID      uuid.UUID
+	gateway       *fakeTunnelGateway
+	gatewayServer *httptest.Server
 }
 
 func newPublicTunnelFixture(t *testing.T, ctx context.Context, ti *testInstance, gateway *fakeTunnelGateway, allowPublic bool) publicTunnelFixture {
@@ -204,9 +206,10 @@ func newPublicTunnelFixture(t *testing.T, ctx context.Context, ti *testInstance,
 	require.NoError(t, ti.tunnelRoutes.Publish(ctx, tunneledServer.ID.String(), gatewayServer.URL, time.Hour))
 
 	return publicTunnelFixture{
-		endpointSlug: endpointSlug,
-		tunnelID:     tunneledServer.ID,
-		gateway:      gateway,
+		endpointSlug:  endpointSlug,
+		tunnelID:      tunneledServer.ID,
+		gateway:       gateway,
+		gatewayServer: gatewayServer,
 	}
 }
 
@@ -353,6 +356,38 @@ func TestServePublic_Tunneled_DeadAgentSessionTranslatesTo404(t *testing.T) {
 	require.ErrorAs(t, err, &oopsErr)
 	require.Equal(t, oops.CodeNotFound, oopsErr.Code)
 	require.Equal(t, before, gateway.forwardCount(), "dropped session must not be re-forwarded")
+}
+
+func TestServePublic_Tunneled_DeadGatewayDialDropsSession(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPService(t)
+	gateway := &fakeTunnelGateway{t: t, agentSessionID: "agent-1", backendSessionID: "backend-secret-session", legacy: false, dead: false, challenge: ""}
+	fixture := newPublicTunnelFixture(t, ctx, ti, gateway, true)
+
+	sid := initializeTunneledPublicSession(t, ti, fixture)
+	addr := fixture.gatewayServer.Listener.Addr().String()
+	fixture.gatewayServer.Close()
+
+	_, err := serveTunneledPublicRequest(t, ti, fixture.endpointSlug, http.MethodPost, makeToolsListBody(), sid)
+	require.Error(t, err)
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeNotFound, oopsErr.Code)
+
+	listener, err := net.Listen("tcp", addr)
+	require.NoError(t, err)
+	replacementGateway := &fakeTunnelGateway{t: t, agentSessionID: "agent-1", backendSessionID: "backend-secret-session", legacy: false, dead: false, challenge: ""}
+	replacementServer := httptest.NewUnstartedServer(replacementGateway)
+	replacementServer.Listener = listener
+	replacementServer.Start()
+	t.Cleanup(replacementServer.Close)
+
+	_, err = serveTunneledPublicRequest(t, ti, fixture.endpointSlug, http.MethodPost, makeToolsListBody(), sid)
+	require.Error(t, err)
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeNotFound, oopsErr.Code)
+	require.Zero(t, replacementGateway.forwardCount(), "dropped session must not reach a replacement gateway")
 }
 
 func TestServePublic_Tunneled_DeleteTerminatesSession(t *testing.T) {

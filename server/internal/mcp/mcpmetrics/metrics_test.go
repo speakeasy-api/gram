@@ -28,6 +28,7 @@ func TestNewMetrics(t *testing.T) {
 		require.NotNil(t, m)
 		require.NotNil(t, m.mcpToolCallCounter)
 		require.NotNil(t, m.mcpRequestDuration)
+		require.NotNil(t, m.identityCoverage)
 	})
 }
 

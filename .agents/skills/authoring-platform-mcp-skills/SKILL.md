@@ -102,7 +102,7 @@ Use it as the pattern for authority boundaries and evidence, not as a template f
 
 - Editing generated package output instead of `platform_mcp_skills/`.
 - Putting the shipped workflow in `.agents/skills/`, which only reaches repository contributors.
-- Reusing ordinary `PluginInfo.Skills`; that path intentionally bundles the hooks-backed skill-feedback sidecar.
+- Reusing ordinary `PluginInfo.Skills`; Platform MCP skills require the reviewed generator path and package metadata.
 - Hardcoding one skill in Go, forcing every new skill to modify the generator.
 - Claiming install, OAuth intent, or a stale status proves authorization/readiness.
 - Asking the user to paste secrets into chat instead of using the secure server-returned handoff.

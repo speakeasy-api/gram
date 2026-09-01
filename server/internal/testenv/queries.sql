@@ -3,6 +3,48 @@ INSERT INTO chat_messages (chat_id, project_id, role, content)
 VALUES (@chat_id, @project_id, @role, @content)
 RETURNING id;
 
+-- name: InsertKillswitchPrescriptionFixture :exec
+WITH fixture_clock AS (
+  SELECT clock_timestamp() - INTERVAL '1 hour' AS active_since
+),
+inserted_prescription AS (
+  INSERT INTO killswitch_prescriptions (
+    id, organization_id, definition_key, principal_kind, principal_key, resource_kind, current_version
+  ) VALUES (
+    @prescription_id, @organization_id, @definition_key, @principal_kind, @principal_key, @resource_kind, 1
+  )
+  RETURNING organization_id, id
+),
+inserted_version AS (
+  INSERT INTO killswitch_prescription_versions (
+    organization_id, prescription_id, version, state, resource_scope, starts_at, expires_at, activated_at, internal_note, external_note
+  )
+  SELECT
+    organization_id,
+    id,
+    1,
+    'active',
+    CASE
+      WHEN @resource_scope::text = 'all' AND cardinality(COALESCE(@resource_keys::text[], ARRAY[]::text[])) = 0 THEN @resource_scope::text
+      WHEN @resource_scope::text = 'selected' AND cardinality(COALESCE(@resource_keys::text[], ARRAY[]::text[])) > 0 THEN @resource_scope::text
+      ELSE NULL
+    END,
+    active_since,
+    NULL,
+    active_since,
+    @internal_note,
+    @external_note
+  FROM inserted_prescription
+  CROSS JOIN fixture_clock
+  RETURNING organization_id, prescription_id, version
+)
+INSERT INTO killswitch_prescription_version_resources (
+  organization_id, prescription_id, version, resource_key
+)
+SELECT organization_id, prescription_id, version, resource_key
+FROM inserted_version
+CROSS JOIN unnest(@resource_keys::text[]) AS resource(resource_key);
+
 -- name: ForceSoftDeleteChat :exec
 -- Bypasses the production SoftDeleteChat guard (which refuses to delete a chat
 -- backing a live assistant thread) so tests can wedge the database into the
@@ -83,6 +125,47 @@ UPDATE deployments_functions SET memory_mib_override = @memory_mib_override, sca
 
 -- name: GetDeploymentFunctionInfraOverrides :many
 SELECT memory_mib_override, scale_override FROM deployments_functions WHERE deployment_id = @deployment_id;
+-- name: SetOpenRouterKeyLifecycleFixture :execrows
+-- Test-only fixture for Stripe lifecycle tests.
+UPDATE openrouter_api_keys
+SET disabled = @disabled,
+    disable_causes = @disable_causes,
+    monthly_credits = @monthly_credits
+WHERE organization_id = @organization_id
+  AND key_type = @key_type
+  AND deleted IS FALSE;
+
+-- name: SeedAuditLogFixture :one
+INSERT INTO audit_logs (organization_id, actor_id, actor_type, action, subject_id, subject_type, metadata)
+VALUES (@organization_id, 'user:<USER_ID>', 'user', @action, 'subject:<SUBJECT_ID>', 'subject', jsonb_build_object('key_type', @key_type::text))
+RETURNING seq;
+
+-- name: SeedUnrelatedAuditHistoryFixture :exec
+INSERT INTO audit_logs (organization_id, actor_id, actor_type, action, subject_id, subject_type, metadata)
+SELECT @organization_id, 'user:<USER_ID>', 'user', 'unrelated:' || n, 'subject:<SUBJECT_ID>', 'subject', jsonb_build_object('key_type', @key_type::text)
+FROM generate_series(1, @event_count::int) AS n;
+
+-- name: InstallOpenRouterAdminDisableAuditFailureFixture :exec
+CREATE FUNCTION fail_admin_key_audit() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+  RAISE EXCEPTION 'forced audit failure';
+END
+$$;
+
+-- name: EnableOpenRouterAdminDisableAuditFailureFixture :exec
+CREATE TRIGGER fail_admin_key_audit
+BEFORE INSERT ON audit_logs
+FOR EACH ROW
+WHEN (NEW.action = 'openrouter-key:disable')
+EXECUTE FUNCTION fail_admin_key_audit();
+
+-- name: DisableOpenRouterAdminDisableAuditFailureFixture :exec
+ALTER TABLE audit_logs DISABLE TRIGGER fail_admin_key_audit;
+
+-- name: RejectPublishOutboxWritesFixture :exec
+-- Test-only failure injection proving audit callers roll back when enqueueing fails.
+ALTER TABLE publish_outbox ADD CONSTRAINT reject_publish_outbox_writes_fixture CHECK (false) NOT VALID;
+
 -- name: CountOutboxEntriesByEventType :one
 -- Counts enqueued webhook events of a given type. The event type lives in a
 -- Pub/Sub message attribute rather than a column now, because the outbox row
@@ -503,6 +586,140 @@ SELECT
 UPDATE openrouter_api_keys
 SET created_at = @created_at
 WHERE organization_id = @organization_id;
+
+-- name: SetOpenRouterAPIKeyClassificationFixture :exec
+-- Test-only fixture: creates compatibility states that production writes reject.
+UPDATE openrouter_api_keys
+SET disabled = @disabled,
+    disable_causes = @disable_causes::text[]
+WHERE organization_id = @organization_id
+  AND key_type = @key_type;
+
+-- name: SetOpenRouterAPIKeyHashFixture :exec
+-- Test-only fixture: simulates key rotation between an upstream response and CAS.
+UPDATE openrouter_api_keys
+SET key_hash = @key_hash
+WHERE organization_id = @organization_id
+  AND key_type = @key_type;
+
+-- name: SetOpenRouterAPIKeyProviderPayloadFixture :exec
+-- Test-only privacy sentinel in the deprecated plaintext provider payload column.
+UPDATE openrouter_api_keys
+SET key = @provider_payload
+WHERE organization_id = @organization_id
+  AND key_type = @key_type;
+
+-- name: GetOpenRouterAPIKeyStateFixture :one
+-- Test-only fixture: observes guarded-mutation state, including soft-deleted rows.
+SELECT key_hash, monthly_credits, disabled, disable_causes, deleted
+FROM openrouter_api_keys
+WHERE organization_id = @organization_id
+  AND key_type = @key_type;
+
+-- name: SeedTrialArmAuditFixture :one
+-- Test-only fixture: records the immutable audit operation for a trial generation.
+INSERT INTO audit_logs (organization_id, actor_id, actor_type, action, subject_id, subject_type)
+VALUES (@organization_id, 'system', 'user', 'organization:enterprise_trial_armed', @organization_id, 'organization')
+RETURNING id::text;
+
+-- name: SeedTrialDemotionAuditFixture :exec
+-- Test-only fixture: records the committed demotion boundary for a retry cycle.
+INSERT INTO audit_logs (organization_id, actor_id, actor_type, action, subject_id, subject_type)
+VALUES (@organization_id, 'system', 'user', 'organization:enterprise_trial_demoted', @organization_id, 'organization');
+
+-- name: RedemoteTrialLifecycleFixture :exec
+-- Test-only fixture: starts another demotion/re-arm cycle in the same generation.
+WITH demoted_trial AS (
+    UPDATE trials
+    SET ends_at = clock_timestamp() - interval '1 day',
+        demoted_at = clock_timestamp(),
+        updated_at = clock_timestamp()
+    WHERE organization_id = @organization_id
+)
+UPDATE organization_metadata
+SET gram_account_type = 'free', whitelisted = FALSE
+WHERE id = @organization_id;
+
+-- name: GetLatestTrialArmAuditIDFixture :one
+-- Test-only fixture: reads the arm operation selected by the production ordering.
+SELECT id::text
+FROM audit_logs
+WHERE organization_id = @organization_id
+  AND action = 'organization:enterprise_trial_armed'
+ORDER BY seq DESC, id DESC
+LIMIT 1;
+
+-- name: SeedRearmAuditMetadataFixture :exec
+-- Test-only fixture: seeds a historical re-arm audit with caller-provided metadata.
+INSERT INTO audit_logs (organization_id, actor_id, actor_type, action, subject_id, subject_type, metadata)
+VALUES (@organization_id, 'system', 'user', 'organization:enterprise_trial_rearmed', @organization_id, 'organization', @metadata::jsonb);
+
+-- name: RecreateTrialGenerationFixture :exec
+-- Test-only fixture: replaces a trial while preserving timestamp precision.
+WITH deleted AS (
+    DELETE FROM trials AS doomed
+    WHERE doomed.organization_id = @target_organization_id
+    RETURNING doomed.organization_id
+)
+INSERT INTO trials (organization_id, tier, created_at, ends_at)
+SELECT deleted.organization_id, @tier, @created_at, @ends_at
+FROM deleted;
+
+-- name: IsQueryBlockedOnLockFixture :one
+-- Test-only synchronization: reports whether a matching active query is waiting on a lock.
+SELECT EXISTS (
+    SELECT 1
+    FROM pg_catalog.pg_stat_activity
+    WHERE datname = current_database()
+      AND state = 'active'
+      AND wait_event_type = 'Lock'
+      AND query LIKE @query_pattern::text
+);
+
+-- name: TryAcquireOpenRouterKeyBillingLockFixture :one
+-- Test-only non-blocking probe of the production OpenRouter billing lock key.
+SELECT pg_try_advisory_lock(
+    hashtextextended('openrouter-' || @key_type::text || '-billing:' || @organization_id::text, 0)
+);
+
+-- name: SoftDeleteOpenRouterAPIKeyFixture :exec
+-- Test-only fixture: soft-deletes one classified key row.
+UPDATE openrouter_api_keys
+SET deleted_at = clock_timestamp()
+WHERE organization_id = @organization_id
+  AND key_type = @key_type;
+
+-- name: LockOpenRouterAPIKeyForUpdateFixture :one
+-- Test-only synchronization: holds a row lock even when the key is soft-deleted.
+SELECT 1
+FROM openrouter_api_keys
+WHERE organization_id = @organization_id
+  AND key_type = @key_type
+FOR UPDATE;
+
+-- name: SeedOpenRouterSpendPrivacyFixture :exec
+INSERT INTO openrouter_spend_daily (organization_id, key_type, day, spend_usd)
+VALUES (@organization_id, 'chat', CURRENT_DATE, sqlc.arg('spend_usd')::text::numeric);
+
+-- name: SeedPromptTemplatePrivacyFixture :exec
+INSERT INTO prompt_templates (tool_urn, project_id, history_id, name, prompt, kind)
+VALUES ('tools:privacy-fixture', @project_id, generate_uuidv7(), 'Privacy fixture', @prompt, 'prompt');
+
+-- name: LockOrganizationMetadataForUpdateNowaitFixture :one
+-- Test-only lock probe: fails instead of waiting if a lifecycle handler read the organization row too early.
+SELECT id
+FROM organization_metadata
+WHERE id = @organization_id
+FOR UPDATE NOWAIT;
+
+-- name: ListOpenRouterAPIKeyDisableCausesForUpdateNowaitFixture :many
+-- Test-only lock-order probe: fails immediately if any matching key row is locked.
+SELECT disable_causes
+FROM openrouter_api_keys
+WHERE organization_id = @organization_id
+  AND deleted IS FALSE
+ORDER BY key_type
+FOR UPDATE NOWAIT;
 
 -- name: SeedOpenRouterSpendRangeFixture :exec
 -- Test-only fixture: records one exact daily spend amount across an inclusive

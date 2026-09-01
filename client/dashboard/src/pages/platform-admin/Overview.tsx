@@ -6,6 +6,7 @@ import { useOrganization } from "@/contexts/Auth";
 import { useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { AdminRow, AdminSection } from "./AdminSection";
+import { OrganizationActivitySection } from "./Activity";
 import { PlatformAdminGate } from "./PlatformAdminGate";
 
 const PLATFORM_ADMIN_KEY = "gram-dev-platform-admin";
@@ -47,6 +48,7 @@ export default function PlatformAdminOverview(): JSX.Element {
             <PlatformAdminGate>
               <div className="space-y-8">
                 <OrgInfoSection />
+                <OrganizationActivityOverview />
                 <OrgOverrideSection />
                 {import.meta.env.DEV && <PlatformAdminImpersonationSection />}
               </div>
@@ -56,6 +58,11 @@ export default function PlatformAdminOverview(): JSX.Element {
       </Page.Body>
     </Page>
   );
+}
+
+function OrganizationActivityOverview(): JSX.Element {
+  const organization = useOrganization();
+  return <OrganizationActivitySection organizationId={organization.id} />;
 }
 
 function OrgInfoSection(): JSX.Element {

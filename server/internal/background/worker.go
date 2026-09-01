@@ -44,6 +44,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/functions"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/k8s"
+	"github.com/speakeasy-api/gram/server/internal/openrouterkeys"
 	"github.com/speakeasy-api/gram/server/internal/plugins"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/rag"
@@ -416,6 +417,11 @@ func NewTemporalWorker(
 	temporalWorker.RegisterActivity(activities.RefreshOpenRouterKey)
 	temporalWorker.RegisterActivity(activities.SetOpenRouterSpendCap)
 	temporalWorker.RegisterActivity(activities.ReconcilePaygOpenRouterChatKey)
+	temporalWorker.RegisterActivity(activities.ReconcileEnterpriseTrialConversionKeys)
+	adminReconciler := openrouterkeys.NewAdminReconciliationExecutor(logger, opts.DB, opts.OpenRouter)
+	adminReconciliationActivities := NewOpenRouterAdminReconciliationActivities(logger, adminReconciler)
+	temporalWorker.RegisterActivityWithOptions(adminReconciliationActivities.CaptureCursor, activity.RegisterOptions{Name: OpenRouterAdminCaptureCursorActivityName})
+	temporalWorker.RegisterActivityWithOptions(adminReconciliationActivities.Reconcile, activity.RegisterOptions{Name: OpenRouterAdminReconcileActivityName})
 	temporalWorker.RegisterActivity(activities.VerifyCustomDomain)
 	temporalWorker.RegisterActivity(activities.VerifyCustomDomainV2)
 	temporalWorker.RegisterActivity(activities.CustomDomainIngress)
@@ -486,6 +492,9 @@ func NewTemporalWorker(
 	temporalWorker.RegisterActivity(activities.FilterNoopOutboxEvents)
 	temporalWorker.RegisterActivity(activities.RelayOutboxEvents)
 	temporalWorker.RegisterActivity(activities.GCOutboxProcessedRows)
+	// Killswitch maintenance activities
+	temporalWorker.RegisterActivity(activities.RecordDueKillswitchExpiries)
+	temporalWorker.RegisterActivity(activities.CleanupExpiredKillswitchOperations)
 	// Publish outbox relay activities
 	temporalWorker.RegisterActivity(activities.DrainPublishOutbox)
 	temporalWorker.RegisterActivity(activities.GCPublishOutboxDeadLetters)
@@ -553,6 +562,7 @@ func NewTemporalWorker(
 	temporalWorker.RegisterWorkflow(OpenRouterSpendCapWorkflow)
 	temporalWorker.RegisterWorkflow(AdminOpenRouterSpendCapWorkflow)
 	temporalWorker.RegisterWorkflow(PaygOpenRouterChatKeyReconcileWorkflow)
+	temporalWorker.RegisterWorkflow(EnterpriseTrialConversionKeyReconcileWorkflow)
 	temporalWorker.RegisterWorkflow(CustomDomainRegistrationWorkflow)
 	temporalWorker.RegisterWorkflow(CustomDomainDeletionWorkflow)
 	temporalWorker.RegisterWorkflow(CustomDomainUpdateWorkflow)
@@ -609,6 +619,8 @@ func NewTemporalWorker(
 	// Outbox -> Relay workflow and GC
 	temporalWorker.RegisterWorkflow(ProcessOutboxWorkflow)
 	temporalWorker.RegisterWorkflow(OutboxGCWorkflow)
+	// Killswitch expiry history and receipt retention
+	temporalWorker.RegisterWorkflow(KillswitchMaintenanceWorkflow)
 	// Publish outbox -> Pub/Sub workflow and dead letter GC
 	temporalWorker.RegisterWorkflow(PublishOutboxWorkflow)
 	temporalWorker.RegisterWorkflow(PublishOutboxGCWorkflow)
@@ -635,6 +647,7 @@ func NewTemporalWorker(
 	temporalWorker.RegisterWorkflow(TrialLifecycleEmailWorkflow)
 	temporalWorker.RegisterWorkflow(AccessPausedEmailWorkflow)
 	temporalWorker.RegisterWorkflow(PaygActivatedEmailWorkflow)
+	temporalWorker.RegisterWorkflow(OpenRouterAdminReconciliationWorkflow)
 
 	return &Workers{
 		main:              temporalWorker,
@@ -727,6 +740,10 @@ func (w *Workers) registerSchedules(ctx context.Context) {
 
 	if err := AddOutboxGCSchedule(ctx, env); err != nil {
 		logger.ErrorContext(ctx, "failed to add outbox gc schedule", attr.SlogError(err))
+	}
+
+	if err := AddKillswitchMaintenanceSchedule(ctx, env); err != nil {
+		logger.ErrorContext(ctx, "failed to add killswitch maintenance schedule", attr.SlogError(err))
 	}
 
 	if err := AddPublishOutboxSchedule(ctx, env); err != nil {

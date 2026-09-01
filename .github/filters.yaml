@@ -2,6 +2,7 @@ server:
   - ".github/**"
   - "go.mod"
   - "go.sum"
+  - "glint/**"
   - "agents/**"
   - "ci/**"
   - "server/**"
@@ -72,6 +73,12 @@ database-changes:
 db-migrations:
   - "server/migrations/**"
   - "server/clickhouse/migrations/**"
+
+glint:
+  - ".github/**"
+  - "glint/**"
+  - ".mise-tasks/go/tidy.sh"
+  - ".mise-tasks/test/glint.sh"
 
 plog:
   - ".github/**"

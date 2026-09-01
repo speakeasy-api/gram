@@ -10,6 +10,7 @@ import (
 	otelv1 "github.com/speakeasy-api/gram/infra/gen/gram/otel/v1"
 	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
+	"github.com/speakeasy-api/gram/server/internal/otel/dialect"
 	"go.opentelemetry.io/otel/attribute"
 	"golang.org/x/sync/errgroup"
 )
@@ -31,7 +32,7 @@ const (
 // streams and increase cardinality.
 type MetricEnricher interface {
 	Name() string
-	Enrich(ctx context.Context, metric *otelv1.InboundMetric) ([]attribute.KeyValue, error)
+	Enrich(ctx context.Context, metric *otelv1.InboundMetric, metricDialect dialect.MetricDialect) ([]attribute.KeyValue, error)
 }
 
 func enrichMetric(
@@ -40,6 +41,11 @@ func enrichMetric(
 	item *otelv1.InboundMetric,
 	enrichers []MetricEnricher,
 ) ([]attribute.KeyValue, error) {
+	if len(enrichers) == 0 {
+		return nil, nil
+	}
+
+	metricDialect := dialect.ForMetric(item)
 	group := new(errgroup.Group)
 	group.SetLimit(runtime.NumCPU())
 
@@ -63,7 +69,7 @@ func enrichMetric(
 				)
 			}(time.Now())
 
-			enrichedAttrs, err := enricher.Enrich(ctx, item)
+			enrichedAttrs, err := enricher.Enrich(ctx, item, metricDialect)
 			if err != nil {
 				outcomeErr = fmt.Errorf("%s: %w", enricher.Name(), err)
 				errs[i] = outcomeErr

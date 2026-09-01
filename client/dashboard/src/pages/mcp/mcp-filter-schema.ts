@@ -11,7 +11,12 @@ import {
 // No auth facet: hosted list rows lack issuer/OAuth fields, so filtering would hide valid rows.
 export const MCP_FILTERS = defineFilters([
   { id: "status", label: "Status", kind: "multiselect" },
-  { id: "source", label: "Source", kind: "multiselect" },
+  {
+    id: "source",
+    label: "Source",
+    kind: "multiselect",
+    description: "Where the server came from and how Gram reaches it.",
+  },
   { id: "plugins", label: "Included in plugins", kind: "multiselect" },
 ]);
 

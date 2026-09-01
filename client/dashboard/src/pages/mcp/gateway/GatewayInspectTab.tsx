@@ -105,6 +105,7 @@ export function GatewayInspectTab({
           error={error}
           hasUrl={!!connectUrl}
           configuredMembers={rows.length}
+          hasIssuer={!!metaMcpServer.userSessionIssuerId}
           connectUrl={connectUrl}
           headers={headers}
           onRetry={refetch}
@@ -123,6 +124,7 @@ function InspectBody({
   error,
   hasUrl,
   configuredMembers,
+  hasIssuer,
   connectUrl,
   headers,
   onRetry,
@@ -135,6 +137,7 @@ function InspectBody({
   error: Error | null;
   hasUrl: boolean;
   configuredMembers: number;
+  hasIssuer: boolean;
   connectUrl: string | undefined;
   headers: Record<string, string> | undefined;
   onRetry: () => void;
@@ -155,9 +158,14 @@ function InspectBody({
   }
 
   if (needsAuth) {
+    // Unconnected providers no longer reject a session (members degrade
+    // member-scoped instead). A 401 here means either the session token was
+    // refused or minting failed and the anonymous probe was denied, so the
+    // copy asserts neither.
     return (
       <Text muted small>
-        This gateway rejected the dashboard&apos;s session. Check its issuer in{" "}
+        This gateway could not authenticate the dashboard&apos;s connection.
+        Reload to try again, or review the gateway&apos;s authentication in{" "}
         <Link to={settingsHref}>Settings</Link>.
       </Text>
     );
@@ -196,7 +204,13 @@ function InspectBody({
       {/* Left column: the tool surface, then one level down into a member. */}
       <div className="flex flex-col gap-6">
         <InspectCard title="tools/list" meta={`${data.tools.length} tools`}>
-          <CodeSnippet language="js" code={toolSignatures} fontSize="small" />
+          <CodeSnippet
+            language="js"
+            code={toolSignatures}
+            fontSize="small"
+            className="min-h-full"
+            snippetClassName="self-start"
+          />
         </InspectCard>
 
         {(data.servers?.length ?? 0) > 0 && (
@@ -238,7 +252,9 @@ function InspectBody({
               />
               {data.servers.length < configuredMembers && (
                 <Text muted className="text-xs">
-                  {`${configuredMembers - data.servers.length} of ${configuredMembers} configured members aren't served to you. Private members need mcp:connect, and members with no gateway dispatch path are excluded.`}
+                  {hasIssuer
+                    ? `${configuredMembers - data.servers.length} of ${configuredMembers} configured members aren't served to you. Private members need mcp:connect on their backing resource (the member server for proxied members, the backing toolset for hosted members), and disabled, unproxied, or slugless members are never served.`
+                    : `${configuredMembers - data.servers.length} of ${configuredMembers} configured members aren't served. This gateway has no sign-in attached, so every caller — including this tab — is anonymous and private members are hidden. Attach an issuer under Settings → Authentication.`}
                 </Text>
               )}
             </div>
@@ -344,7 +360,10 @@ function InspectCard({
           </Badge>
         )}
       </div>
-      <div className="border-primary/60 bg-muted/20 border-l-2 px-4 py-3">
+      {/* Every card body is the same fixed height: long content (a member's
+          full catalog) scrolls inside it, short content sits in calm space,
+          and the four cards read as one aligned grid. */}
+      <div className="border-primary/60 bg-muted/20 h-[28rem] overflow-auto border-l-2 px-4 py-3">
         {children}
       </div>
     </div>

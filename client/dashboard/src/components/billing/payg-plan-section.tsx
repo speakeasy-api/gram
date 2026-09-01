@@ -1,4 +1,5 @@
 import { CancelPaygDialog } from "@/components/billing/cancel-payg-dialog";
+import { usePaygCheckoutAccess } from "@/components/billing/payg-checkout-access";
 import {
   canCancelPaygPlan,
   canResumePaygPlan,
@@ -9,6 +10,7 @@ import {
 } from "@/components/billing/payg-plan-state";
 import { PaygPortalButton } from "@/components/billing/payg-portal-button";
 import { ResumePaygButton } from "@/components/billing/resume-payg-button";
+import { StartPaygCheckoutCTA } from "@/components/billing/start-payg-checkout-cta";
 import { useStripeSubscription } from "@/components/billing/use-stripe-subscription";
 import { Page } from "@/components/page-layout";
 import { RequireScope } from "@/components/require-scope";
@@ -16,49 +18,69 @@ import { Button } from "@/components/ui/Button";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { Stack } from "@/components/ui/Stack";
 import { Text } from "@/components/ui/Text";
-import { useSession } from "@/contexts/Auth";
 import { useProductTier } from "@/hooks/useProductTier";
-import { useTrialNow } from "@/hooks/useTrialNow";
 import { isNotFoundError } from "@/lib/route-errors";
-import { getTrialLifecycleFromDates } from "@/lib/trial-status";
+import type { ReactNode } from "react";
 
 /**
- * The organization's self-serve plan: what Stripe is doing right now, the way
+ * The organization's payment relationship, in either of its two states.
+ *
+ * With no payment method attached — an active product trial, before checkout
+ * has run — the section offers the checkout CTA that attaches one. With a
+ * payment method attached, it reports what Stripe is doing right now, the way
  * into the customer portal, and the in-product cancel and resume controls.
+ * Which state applies also decides the section's description.
  *
  * The rules live here rather than at the call site so the billing page can
- * place the section without re-deriving when a pay-as-you-go subscription
- * exists. Organizations that haven't taken one out get `StartPaygCheckoutCTA`
- * instead, which is what puts them here.
+ * place the section without re-deriving which payment state the organization
+ * is in.
  *
- * An active product trial is one of those organizations even when the account
- * type already reads as PAYG: checkout hasn't run, so there is no Stripe
- * subscription to report on, and asking for one would answer 404 — which this
- * section would otherwise render as "billing isn't managed through Stripe"
- * directly beside the checkout button that is about to set it up. The trial
- * lifecycle is read from the same session clock the checkout CTA and inference
- * cap controls use, so the three can't disagree about when the trial is over.
+ * During an active product trial there is no Stripe subscription to report on
+ * even when the account type already reads as PAYG: checkout hasn't run, so
+ * asking for one would answer 404 — which the attached state would render as
+ * "billing isn't managed through Stripe" directly beside the checkout button
+ * that is about to set it up. The trial lifecycle comes from the same hook
+ * the checkout CTA gates on, so the frame and the CTA inside it read one
+ * clock.
  */
 export function PaygPlanSection(): JSX.Element | null {
   const productTier = useProductTier();
-  const { trial } = useSession();
-  // A trial that ends while the page is open has to bring the plan with it, so
-  // this reads a clock that re-renders on the trial's own boundaries.
-  const now = useTrialNow(trial);
+  const { eligible, trialLifecycle } = usePaygCheckoutAccess("active-trial");
+
+  if (trialLifecycle === "active") {
+    // The eligibility gate (flag, admin scope) decides whether there is
+    // anything to offer; a section whose only content is an action the viewer
+    // cannot take would just be announcing a dead end.
+    if (!eligible) return null;
+    return (
+      <PaymentSection description="Add a payment method to start pay as you go when your trial ends.">
+        <StartPaygCheckoutCTA label="Add payment method" />
+      </PaymentSection>
+    );
+  }
 
   if (productTier !== "payg") return null;
-  if (getTrialLifecycleFromDates(trial, now) === "active") return null;
 
   return (
+    <PaymentSection description="Your pay-as-you-go subscription, payment method, and invoices.">
+      <PaygPlanBody />
+    </PaymentSection>
+  );
+}
+
+function PaymentSection({
+  description,
+  children,
+}: {
+  description: string;
+  children: ReactNode;
+}): JSX.Element {
+  return (
     <Page.Section>
-      {/* Secondary section below Usage: suppress the area eyebrow. */}
-      <Page.Section.Title area="">Plan</Page.Section.Title>
-      <Page.Section.Description>
-        Your pay-as-you-go subscription, payment method, and invoices.
-      </Page.Section.Description>
-      <Page.Section.Body>
-        <PaygPlanBody />
-      </Page.Section.Body>
+      {/* Secondary section: suppress the area eyebrow. */}
+      <Page.Section.Title area="">Payment</Page.Section.Title>
+      <Page.Section.Description>{description}</Page.Section.Description>
+      <Page.Section.Body>{children}</Page.Section.Body>
     </Page.Section>
   );
 }

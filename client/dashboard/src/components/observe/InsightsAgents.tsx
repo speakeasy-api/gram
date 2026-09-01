@@ -156,6 +156,7 @@ const COST_FILTERS = defineFilters([
     label: "Account type",
     kind: "select",
     allLabel: "All",
+    description: "Usage on personal accounts versus team-managed ones.",
   },
 ]);
 

@@ -505,6 +505,7 @@ func newStreamsCommand() *cli.Command {
 
 			svixRelayHandler := svixrelay.NewHandler(logger, meterProvider, db, svixClient)
 			paygKeyRefreshHandler := usage.NewPaygKeyRefreshHandler(logger, openRouterKeyRefresher)
+			trialConversionKeyReconcileHandler := usage.NewEnterpriseTrialConversionKeyReconcileHandler(logger, openRouterKeyRefresher)
 			billingNotificationHandler := billingnotifications.NewEventHandler(logger, &background.TemporalBillingEmailScheduler{TemporalEnv: temporalEnv})
 			webhookEventHandler := streams.HandlerFunc[*webhooksv1.Event](func(ctx context.Context, event *webhooksv1.Event, metadata gcp.MessageMetadata) error {
 				var handlerErrors []error
@@ -513,6 +514,9 @@ func newStreamsCommand() *cli.Command {
 				}
 				if err := paygKeyRefreshHandler.Handle(ctx, event, metadata); err != nil {
 					handlerErrors = append(handlerErrors, fmt.Errorf("schedule PAYG key refresh: %w", err))
+				}
+				if err := trialConversionKeyReconcileHandler.Handle(ctx, event, metadata); err != nil {
+					handlerErrors = append(handlerErrors, fmt.Errorf("schedule enterprise trial conversion key reconciliation: %w", err))
 				}
 				if err := billingNotificationHandler.Handle(ctx, event, metadata); err != nil {
 					handlerErrors = append(handlerErrors, fmt.Errorf("schedule billing notification: %w", err))
@@ -574,7 +578,7 @@ func newStreamsCommand() *cli.Command {
 				mustReceive(rg, &webhooksv1.Event{}, &webhooksv1.SvixRelay{}, webhookEventHandler)
 
 				mustReceive(rg, &authzv1.Challenge{}, &authzv1.ChallengeCHWriter{}, authz.NewChallengeCHWriter(logger, chConn))
-				mustReceiveBatch(rg, &meteringv1.MeterReading{}, &meteringv1.MeterReadingCHWriter{}, metering.NewMeterReadingCHWriter(logger, meteringchrepo.New(chConn)), gcp.BatchReceiveSettings{MaxMessages: 1000, MaxBytes: 10 * constants.MiB, MaxLatency: time.Second})
+				mustReceiveBatch(rg, &meteringv1.MeterReading{}, &meteringv1.MeterReadingCHWriter{}, metering.NewMeterReadingCHWriter(logger, db, meteringchrepo.New(chConn)), gcp.BatchReceiveSettings{MaxMessages: 1000, MaxBytes: 10 * constants.MiB, MaxLatency: time.Second})
 
 				mustReceive(rg, &otelv1.InboundLogRecord{}, &otelv1.InboundLogRecordTransformer{}, otelsvc.NewLogTransformHandler(
 					logger,

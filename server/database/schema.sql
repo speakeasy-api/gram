@@ -1930,6 +1930,238 @@ CREATE INDEX IF NOT EXISTS user_sessions_user_session_issuer_id_jti_idx
 ON user_sessions (user_session_issuer_id, jti)
 WHERE deleted IS FALSE;
 
+-- Sharable records for how to authenticate into an external service, such as
+-- any ambient infrastructure environment or customer-managed product. This is
+-- implemented using the Class Table Inheritance pattern with provider acting
+-- as the discriminator. Each row in this table has exactly one provider subtype
+-- row (e.g. in tables such as aws_iam_credentials, gcp_iam_credentials, etc.).
+-- The canonical `provider` values are defined in this supertype table, while
+-- subtype tables carry a pinned `external_credentials_provider` that
+-- composite-FKs back to (id, provider) to enforce 1:1 semantics across tables.
+-- Support addititional providers by updating the provider check in this table
+-- and creating a subtype table.
+CREATE TABLE IF NOT EXISTS external_credentials (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  organization_id TEXT,
+  project_id uuid,
+  provider TEXT NOT NULL,
+  name TEXT NOT NULL,
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  deleted_at timestamptz,
+  deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
+  CONSTRAINT external_credentials_pkey PRIMARY KEY (id),
+  CONSTRAINT external_credentials_id_provider_key UNIQUE (id, provider),
+  CONSTRAINT external_credentials_provider_check CHECK (provider IN ('aws_iam', 'gcp_iam')),
+  CONSTRAINT external_credentials_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE,
+  CONSTRAINT external_credentials_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS external_credentials_organization_id_idx
+ON external_credentials (organization_id)
+WHERE deleted IS FALSE;
+
+-- AWS credential: AssumeRole+ExternalId | AssumeRoleWithWebIdentity | key-policy grant (mode derived)
+CREATE TABLE IF NOT EXISTS aws_iam_credentials (
+  external_credential_id uuid NOT NULL,
+  external_credentials_provider TEXT NOT NULL DEFAULT 'aws_iam',
+  assume_role_arn TEXT,
+  external_id TEXT,
+  oidc_audience TEXT,
+  oidc_subject TEXT,
+  sts_region TEXT,
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  CONSTRAINT aws_iam_credentials_pkey PRIMARY KEY (external_credential_id),
+  CONSTRAINT aws_iam_credentials_external_credentials_provider_check CHECK (external_credentials_provider = 'aws_iam'),
+  CONSTRAINT aws_iam_credentials_auth_exclusive_check CHECK (num_nonnulls(external_id, oidc_audience) <= 1),
+  CONSTRAINT aws_iam_credentials_fkey FOREIGN KEY (external_credential_id, external_credentials_provider) REFERENCES external_credentials (id, provider) ON DELETE CASCADE
+);
+
+-- GCP credential: ambient | impersonation | WIF (mode derived); keyless, no SA-JSON
+CREATE TABLE IF NOT EXISTS gcp_iam_credentials (
+  external_credential_id uuid NOT NULL,
+  external_credentials_provider TEXT NOT NULL DEFAULT 'gcp_iam',
+  impersonate_service_account TEXT,
+  wif_pool_id TEXT,
+  wif_provider_id TEXT,
+  wif_project_number TEXT,
+  -- Exempts this credential from the validation that refuses an impersonation
+  -- target in the server's own GCP project. Recorded on the row because the
+  -- same validation runs on the outbound path, where there is no request actor
+  -- to consult.
+  skip_project_verification boolean NOT NULL DEFAULT FALSE,
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  CONSTRAINT gcp_iam_credentials_pkey PRIMARY KEY (external_credential_id),
+  CONSTRAINT gcp_iam_credentials_external_credentials_provider_check CHECK (external_credentials_provider = 'gcp_iam'),
+  CONSTRAINT gcp_iam_credentials_wif_complete_check CHECK (num_nonnulls(wif_pool_id, wif_provider_id, wif_project_number) IN (0, 3)),
+  CONSTRAINT gcp_iam_credentials_fkey FOREIGN KEY (external_credential_id, external_credentials_provider) REFERENCES external_credentials (id, provider) ON DELETE CASCADE
+);
+
+-- Sharable records for referencing an externally-managed key, such as KMS key
+-- for signing. This is implemented using the Class Table Inheritance pattern
+-- with `provider` acting as the discriminator. Each row in
+-- this table has exactly one key provider subtype row (e.g. in tables such as
+-- aws_kms_keys, gcp_kms_keys, etc.). The canonical `provider` values are
+-- defined in this supertype table, while subtype tables carry a pinned
+-- `external_keys_provider` that composite-FKs back to (id, provider) to enforce
+-- 1:1 semantics across tables. Support addititional key providers by updating
+-- the provider check in this table and creating a subtype table.
+CREATE TABLE IF NOT EXISTS external_keys (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  organization_id TEXT,
+  project_id uuid,
+  external_credential_id uuid NOT NULL,
+  provider TEXT NOT NULL,
+  algorithm TEXT NOT NULL,
+  name TEXT NOT NULL,
+  -- Reference to the access grant the customer configured on their KMS key: the
+  -- gram-owned cloud identity (GCP service-account email or AWS principal ARN)
+  -- they granted. Set only for the "ambient identity" model, where the customer
+  -- grants gram's own principal directly (AWS KMS key policy / GCP IAM binding)
+  -- instead of gram assuming a customer role; NULL for the assume-role models.
+  -- Kept for audit and drift detection: if gram rotates its own identity, this
+  -- can be compared against the current one to flag a stale grant and prompt a
+  -- re-grant before signing starts failing.
+  customer_grant_reference TEXT,
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  deleted_at timestamptz,
+  deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
+  CONSTRAINT external_keys_pkey PRIMARY KEY (id),
+  CONSTRAINT external_keys_id_provider_key UNIQUE (id, provider),
+  CONSTRAINT external_keys_provider_check CHECK (provider IN ('aws_kms', 'gcp_kms')),
+  CONSTRAINT external_keys_external_credential_id_fkey FOREIGN KEY (external_credential_id) REFERENCES external_credentials (id),
+  CONSTRAINT external_keys_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE,
+  CONSTRAINT external_keys_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS external_keys_organization_id_idx
+ON external_keys (organization_id)
+WHERE deleted IS FALSE;
+
+CREATE INDEX IF NOT EXISTS external_keys_external_credential_id_idx
+ON external_keys (external_credential_id)
+WHERE deleted IS FALSE;
+
+-- Composite unique key so tenant-scoped tables (e.g. json_web_key_sets) can
+-- composite-FK to (organization_id, id) and pin the reference to one org.
+CREATE UNIQUE INDEX IF NOT EXISTS external_keys_organization_id_id_key
+ON external_keys (organization_id, id);
+
+CREATE TABLE IF NOT EXISTS aws_kms_keys (
+  external_key_id uuid NOT NULL,
+  external_keys_provider TEXT NOT NULL DEFAULT 'aws_kms',
+  key_arn TEXT NOT NULL,
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  CONSTRAINT aws_kms_keys_pkey PRIMARY KEY (external_key_id),
+  CONSTRAINT aws_kms_keys_external_keys_provider_check CHECK (external_keys_provider = 'aws_kms'),
+  CONSTRAINT aws_kms_keys_fkey FOREIGN KEY (external_key_id, external_keys_provider) REFERENCES external_keys (id, provider) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS gcp_kms_keys (
+  external_key_id uuid NOT NULL,
+  external_keys_provider TEXT NOT NULL DEFAULT 'gcp_kms',
+  resource_name TEXT NOT NULL,
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  CONSTRAINT gcp_kms_keys_pkey PRIMARY KEY (external_key_id),
+  CONSTRAINT gcp_kms_keys_external_keys_provider_check CHECK (external_keys_provider = 'gcp_kms'),
+  CONSTRAINT gcp_kms_keys_fkey FOREIGN KEY (external_key_id, external_keys_provider) REFERENCES external_keys (id, provider) ON DELETE CASCADE
+);
+
+-- JSON Web Key Set (JWKS): the published collection of public keys for an
+-- issuer. Individual keys are external key based (e.g. KMS keys) and hold
+-- public JWK material only; the private key never leaves the customer KMS and
+-- is only ever called to sign. The backing external key is tenancy-pinned via
+-- a composite FK to (organization_id, id) so a set can only reference a key
+-- owned by the same organization.
+CREATE TABLE IF NOT EXISTS json_web_key_sets (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  organization_id TEXT NOT NULL,
+  project_id uuid,
+  external_key_id uuid NOT NULL,
+  name TEXT NOT NULL,
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  deleted_at timestamptz,
+  deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
+  CONSTRAINT json_web_key_sets_pkey PRIMARY KEY (id),
+  CONSTRAINT json_web_key_sets_external_key_tenant_fkey FOREIGN KEY (organization_id, external_key_id) REFERENCES external_keys (organization_id, id),
+  CONSTRAINT json_web_key_sets_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE,
+  CONSTRAINT json_web_key_sets_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE
+);
+
+-- Composite unique key so json_web_keys can composite-FK to (organization_id, id)
+-- and pin the reference to one org. A unique index for parity with external_keys.
+CREATE UNIQUE INDEX IF NOT EXISTS json_web_key_sets_organization_id_id_key
+ON json_web_key_sets (organization_id, id);
+
+-- Non-partial index backing json_web_key_sets_external_key_tenant_fkey, which
+-- has no ON DELETE clause (NO ACTION). Postgres does not index the referencing
+-- side automatically, so without this the check on every hard-deleted
+-- external_keys row falls back to the (organization_id, id) unique index above
+-- and filters external_key_id from the heap. Also serves the external key
+-- delete guard, which reads the same two columns. Non-partial because the
+-- foreign-key check has to see soft-deleted rows, which a
+-- WHERE deleted IS FALSE index would exclude; the delete guard alone would be
+-- happy with a partial one.
+CREATE INDEX IF NOT EXISTS json_web_key_sets_external_key_tenant_idx
+ON json_web_key_sets (organization_id, external_key_id);
+
+-- Individual published key entries within a JSON Web Key Set. Each row is one
+-- public JWK (identified by `kid`) with a lifecycle state.
+CREATE TABLE IF NOT EXISTS json_web_keys (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  organization_id TEXT NOT NULL,
+  project_id uuid,
+  json_web_key_set_id uuid NOT NULL,
+  external_key_id uuid NOT NULL,
+  -- Pin the key version for external key providers that support versioning
+  external_key_version TEXT,
+  state TEXT NOT NULL,
+  kid TEXT NOT NULL,
+  public_jwk JSONB NOT NULL,
+  activated_at timestamptz,
+  retired_at timestamptz,
+  revoked_at timestamptz,
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  deleted_at timestamptz,
+  deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
+  CONSTRAINT json_web_keys_pkey PRIMARY KEY (id),
+  CONSTRAINT json_web_keys_set_tenant_fkey FOREIGN KEY (organization_id, json_web_key_set_id) REFERENCES json_web_key_sets (organization_id, id) ON DELETE CASCADE,
+  CONSTRAINT json_web_keys_external_key_tenant_fkey FOREIGN KEY (organization_id, external_key_id) REFERENCES external_keys (organization_id, id),
+  CONSTRAINT json_web_keys_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS json_web_keys_one_active_idx
+ON json_web_keys (json_web_key_set_id)
+WHERE state = 'active' AND deleted IS FALSE;
+
+CREATE UNIQUE INDEX IF NOT EXISTS json_web_keys_set_kid_idx
+ON json_web_keys (json_web_key_set_id, kid)
+WHERE deleted IS FALSE;
+
+-- Non-partial index backing json_web_keys_set_tenant_fkey (ON DELETE CASCADE):
+-- keeps set/org/project cascade deletes off a seq scan, including soft-deleted
+-- rows that the partial unique indexes above exclude.
+CREATE INDEX IF NOT EXISTS json_web_keys_set_tenant_idx
+ON json_web_keys (organization_id, json_web_key_set_id);
+
+-- Non-partial index backing json_web_keys_external_key_tenant_fkey, which has
+-- no ON DELETE clause (NO ACTION). Postgres does not index the referencing side
+-- automatically, so without this the check on every hard-deleted external_keys
+-- row falls back to json_web_keys_set_tenant_idx above and filters
+-- external_key_id from the heap. Also serves the external key delete guard,
+-- which reads the same two columns. Non-partial for the same reason as
+-- json_web_keys_set_tenant_idx: the foreign-key check has to see soft-deleted
+-- rows.
+CREATE INDEX IF NOT EXISTS json_web_keys_external_key_tenant_idx
+ON json_web_keys (organization_id, external_key_id);
+
 -- Remote Session Issuers are references to external authorization servers
 -- that will mint tokens that can be passed on behalf of a Gram session to an
 -- MCP backend
@@ -2039,6 +2271,7 @@ CREATE TABLE IF NOT EXISTS remote_session_clients (
   client_id_issued_at timestamptz,
   client_secret_expires_at timestamptz,
   token_endpoint_auth_method TEXT,
+  json_web_key_set_id uuid,
   scope TEXT[],
   audience TEXT,
 
@@ -2069,6 +2302,16 @@ CREATE TABLE IF NOT EXISTS remote_session_clients (
   CONSTRAINT remote_session_clients_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE,
   CONSTRAINT remote_session_clients_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE,
   CONSTRAINT remote_session_clients_remote_session_issuer_id_fkey FOREIGN KEY (remote_session_issuer_id) REFERENCES remote_session_issuers (id) ON DELETE CASCADE,
+  CONSTRAINT remote_session_clients_json_web_key_set_tenant_fkey FOREIGN KEY (organization_id, json_web_key_set_id) REFERENCES json_web_key_sets (organization_id, id),
+  -- organization_id is nullable on this table, and the composite foreign key
+  -- above is MATCH SIMPLE, so a row with a NULL organization_id would skip the
+  -- key check entirely and could point at any organization's set. Require the
+  -- organization to be known whenever a client opts into a JWKS so the tenant
+  -- pinning cannot be bypassed.
+  CONSTRAINT remote_session_clients_json_web_key_set_id_check CHECK (
+    json_web_key_set_id IS NULL
+    OR organization_id IS NOT NULL
+  ),
   -- CIMD spec forbids symmetric secrets, so a row that publishes a CIMD
   -- document must not have an encrypted secret on file. The spec also
   -- requires the client_id value in the metadata document to equal the
@@ -2087,6 +2330,9 @@ CREATE TABLE IF NOT EXISTS remote_session_clients (
 CREATE INDEX IF NOT EXISTS remote_session_clients_organization_id_idx
 ON remote_session_clients (organization_id)
 WHERE deleted IS FALSE;
+
+CREATE INDEX IF NOT EXISTS remote_session_clients_json_web_key_set_idx
+ON remote_session_clients (organization_id, json_web_key_set_id);
 
 CREATE TABLE IF NOT EXISTS remote_session_client_user_session_issuers (
   remote_session_client_id uuid NOT NULL,
@@ -2327,6 +2573,7 @@ CREATE TABLE IF NOT EXISTS openrouter_api_keys (
   key_hash TEXT NOT NULL,
   monthly_credits BIGINT NOT NULL DEFAULT 0,
   disabled BOOLEAN NOT NULL DEFAULT FALSE,
+  disable_causes TEXT[],
 
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
@@ -4072,6 +4319,7 @@ CREATE TABLE IF NOT EXISTS otel_destinations (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
   organization_id TEXT NOT NULL,
   project_id uuid NOT NULL,
+  name TEXT NOT NULL,
   endpoint_url TEXT NOT NULL,
   headers_encrypted TEXT,
   sensitive_data TEXT DEFAULT 'exclude',
@@ -4116,9 +4364,8 @@ CREATE TABLE IF NOT EXISTS data_export_routes (
   CONSTRAINT data_export_routes_destination_tenant_fkey FOREIGN KEY (organization_id, project_id, otel_destination_id) REFERENCES otel_destinations (organization_id, project_id, id) ON DELETE RESTRICT
 );
 
--- A project can have at most one non-deleted export route per source. Supporting
--- multiple destinations per source requires destination-specific delivery state
--- so retrying one failed destination does not redeliver to successful ones.
+-- Each project can configure at most one non-deleted route per data source.
+-- Disabled routes still reserve the source until they are deleted.
 CREATE UNIQUE INDEX IF NOT EXISTS data_export_routes_project_source_key
   ON data_export_routes (project_id, data_source)
   WHERE deleted IS FALSE;
@@ -4316,6 +4563,12 @@ ON audit_logs (organization_id, seq DESC);
 CREATE INDEX IF NOT EXISTS audit_logs_organization_id_project_id_seq_idx
 ON audit_logs (organization_id, project_id, seq DESC);
 
+CREATE INDEX IF NOT EXISTS audit_logs_organization_subject_action_seq_idx
+ON audit_logs (organization_id, subject_type, subject_id, action, seq DESC);
+
+CREATE INDEX IF NOT EXISTS audit_logs_organization_subject_seq_idx
+ON audit_logs (organization_id, subject_id, seq DESC);
+
 -- Remote MCP servers are upstream MCP endpoints that Gram proxies requests to.
 -- See https://modelcontextprotocol.io/registry/remote-servers
 CREATE TABLE IF NOT EXISTS remote_mcp_servers (
@@ -4403,6 +4656,12 @@ CREATE TABLE IF NOT EXISTS tunneled_mcp_servers (
   allow_public boolean NOT NULL DEFAULT false,
   -- Last persisted tunnel agent version reported for this source.
   agent_version TEXT CHECK (agent_version IS NULL OR agent_version <> ''),
+  -- The tunneled server's own RFC 9728 protected-resource identifier: the
+  -- value an authorization server co-hosted with it recognizes as its
+  -- audience. Recorded as the RFC 8707 resource on grants and used only for
+  -- exact-match credential routing. Names a host inside the customer's
+  -- private network — this value must NEVER be dialed by Gram.
+  resource_identifier TEXT CHECK (resource_identifier IS NULL OR resource_identifier <> ''),
   -- Most recent persisted heartbeat time, used when Redis liveness data is absent.
   last_seen_at timestamptz,
 
@@ -4436,6 +4695,7 @@ COMMENT ON COLUMN tunneled_mcp_servers.key_prefix IS 'Non-secret prefix of the t
 COMMENT ON COLUMN tunneled_mcp_servers.status IS 'Durable lifecycle state for the source: created, active, or revoked. Live connection state is derived from Redis.';
 COMMENT ON COLUMN tunneled_mcp_servers.allow_public IS 'Owner consent for anonymous public MCP serving of this source. Double opt-in with mcp_servers.visibility=public, enforced in application code.';
 COMMENT ON COLUMN tunneled_mcp_servers.agent_version IS 'Last persisted tunnel agent version reported for this source. Per-connection agent versions are stored in Redis.';
+COMMENT ON COLUMN tunneled_mcp_servers.resource_identifier IS 'RFC 9728 protected-resource identifier of the tunneled server, recorded as the RFC 8707 resource on grants and used only for exact-match credential routing. Names a host inside the customer''s private network — never dialed by Gram.';
 COMMENT ON COLUMN tunneled_mcp_servers.last_seen_at IS 'Most recent persisted heartbeat time for the source, used when Redis liveness data is absent or expired.';
 COMMENT ON COLUMN tunneled_mcp_servers.created_at IS 'Time when the tunneled MCP source was created.';
 COMMENT ON COLUMN tunneled_mcp_servers.updated_at IS 'Time when the durable tunneled MCP source record was last updated.';
@@ -6134,238 +6394,6 @@ COMMENT ON COLUMN publish_outbox_dead_letters.enqueued_at IS 'created_at of the 
 CREATE INDEX IF NOT EXISTS publish_outbox_dead_letters_created_at_idx
 ON publish_outbox_dead_letters (created_at);
 
--- Sharable records for how to authenticate into an external service, such as
--- any ambient infrastructure environment or customer-managed product. This is
--- implemented using the Class Table Inheritance pattern with provider acting
--- as the discriminator. Each row in this table has exactly one provider subtype
--- row (e.g. in tables such as aws_iam_credentials, gcp_iam_credentials, etc.).
--- The canonical `provider` values are defined in this supertype table, while
--- subtype tables carry a pinned `external_credentials_provider` that
--- composite-FKs back to (id, provider) to enforce 1:1 semantics across tables.
--- Support addititional providers by updating the provider check in this table
--- and creating a subtype table.
-CREATE TABLE IF NOT EXISTS external_credentials (
-  id uuid NOT NULL DEFAULT generate_uuidv7(),
-  organization_id TEXT,
-  project_id uuid,
-  provider TEXT NOT NULL,
-  name TEXT NOT NULL,
-  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
-  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
-  deleted_at timestamptz,
-  deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
-  CONSTRAINT external_credentials_pkey PRIMARY KEY (id),
-  CONSTRAINT external_credentials_id_provider_key UNIQUE (id, provider),
-  CONSTRAINT external_credentials_provider_check CHECK (provider IN ('aws_iam', 'gcp_iam')),
-  CONSTRAINT external_credentials_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE,
-  CONSTRAINT external_credentials_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE
-);
-
-CREATE INDEX IF NOT EXISTS external_credentials_organization_id_idx
-ON external_credentials (organization_id)
-WHERE deleted IS FALSE;
-
--- AWS credential: AssumeRole+ExternalId | AssumeRoleWithWebIdentity | key-policy grant (mode derived)
-CREATE TABLE IF NOT EXISTS aws_iam_credentials (
-  external_credential_id uuid NOT NULL,
-  external_credentials_provider TEXT NOT NULL DEFAULT 'aws_iam',
-  assume_role_arn TEXT,
-  external_id TEXT,
-  oidc_audience TEXT,
-  oidc_subject TEXT,
-  sts_region TEXT,
-  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
-  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
-  CONSTRAINT aws_iam_credentials_pkey PRIMARY KEY (external_credential_id),
-  CONSTRAINT aws_iam_credentials_external_credentials_provider_check CHECK (external_credentials_provider = 'aws_iam'),
-  CONSTRAINT aws_iam_credentials_auth_exclusive_check CHECK (num_nonnulls(external_id, oidc_audience) <= 1),
-  CONSTRAINT aws_iam_credentials_fkey FOREIGN KEY (external_credential_id, external_credentials_provider) REFERENCES external_credentials (id, provider) ON DELETE CASCADE
-);
-
--- GCP credential: ambient | impersonation | WIF (mode derived); keyless, no SA-JSON
-CREATE TABLE IF NOT EXISTS gcp_iam_credentials (
-  external_credential_id uuid NOT NULL,
-  external_credentials_provider TEXT NOT NULL DEFAULT 'gcp_iam',
-  impersonate_service_account TEXT,
-  wif_pool_id TEXT,
-  wif_provider_id TEXT,
-  wif_project_number TEXT,
-  -- Exempts this credential from the validation that refuses an impersonation
-  -- target in the server's own GCP project. Recorded on the row because the
-  -- same validation runs on the outbound path, where there is no request actor
-  -- to consult.
-  skip_project_verification boolean NOT NULL DEFAULT FALSE,
-  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
-  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
-  CONSTRAINT gcp_iam_credentials_pkey PRIMARY KEY (external_credential_id),
-  CONSTRAINT gcp_iam_credentials_external_credentials_provider_check CHECK (external_credentials_provider = 'gcp_iam'),
-  CONSTRAINT gcp_iam_credentials_wif_complete_check CHECK (num_nonnulls(wif_pool_id, wif_provider_id, wif_project_number) IN (0, 3)),
-  CONSTRAINT gcp_iam_credentials_fkey FOREIGN KEY (external_credential_id, external_credentials_provider) REFERENCES external_credentials (id, provider) ON DELETE CASCADE
-);
-
--- Sharable records for referencing an externally-managed key, such as KMS key
--- for signing. This is implemented using the Class Table Inheritance pattern
--- with `provider` acting as the discriminator. Each row in
--- this table has exactly one key provider subtype row (e.g. in tables such as
--- aws_kms_keys, gcp_kms_keys, etc.). The canonical `provider` values are
--- defined in this supertype table, while subtype tables carry a pinned
--- `external_keys_provider` that composite-FKs back to (id, provider) to enforce
--- 1:1 semantics across tables. Support addititional key providers by updating
--- the provider check in this table and creating a subtype table.
-CREATE TABLE IF NOT EXISTS external_keys (
-  id uuid NOT NULL DEFAULT generate_uuidv7(),
-  organization_id TEXT,
-  project_id uuid,
-  external_credential_id uuid NOT NULL,
-  provider TEXT NOT NULL,
-  algorithm TEXT NOT NULL,
-  name TEXT NOT NULL,
-  -- Reference to the access grant the customer configured on their KMS key: the
-  -- gram-owned cloud identity (GCP service-account email or AWS principal ARN)
-  -- they granted. Set only for the "ambient identity" model, where the customer
-  -- grants gram's own principal directly (AWS KMS key policy / GCP IAM binding)
-  -- instead of gram assuming a customer role; NULL for the assume-role models.
-  -- Kept for audit and drift detection: if gram rotates its own identity, this
-  -- can be compared against the current one to flag a stale grant and prompt a
-  -- re-grant before signing starts failing.
-  customer_grant_reference TEXT,
-  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
-  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
-  deleted_at timestamptz,
-  deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
-  CONSTRAINT external_keys_pkey PRIMARY KEY (id),
-  CONSTRAINT external_keys_id_provider_key UNIQUE (id, provider),
-  CONSTRAINT external_keys_provider_check CHECK (provider IN ('aws_kms', 'gcp_kms')),
-  CONSTRAINT external_keys_external_credential_id_fkey FOREIGN KEY (external_credential_id) REFERENCES external_credentials (id),
-  CONSTRAINT external_keys_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE,
-  CONSTRAINT external_keys_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE
-);
-
-CREATE INDEX IF NOT EXISTS external_keys_organization_id_idx
-ON external_keys (organization_id)
-WHERE deleted IS FALSE;
-
-CREATE INDEX IF NOT EXISTS external_keys_external_credential_id_idx
-ON external_keys (external_credential_id)
-WHERE deleted IS FALSE;
-
--- Composite unique key so tenant-scoped tables (e.g. json_web_key_sets) can
--- composite-FK to (organization_id, id) and pin the reference to one org.
-CREATE UNIQUE INDEX IF NOT EXISTS external_keys_organization_id_id_key
-ON external_keys (organization_id, id);
-
-CREATE TABLE IF NOT EXISTS aws_kms_keys (
-  external_key_id uuid NOT NULL,
-  external_keys_provider TEXT NOT NULL DEFAULT 'aws_kms',
-  key_arn TEXT NOT NULL,
-  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
-  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
-  CONSTRAINT aws_kms_keys_pkey PRIMARY KEY (external_key_id),
-  CONSTRAINT aws_kms_keys_external_keys_provider_check CHECK (external_keys_provider = 'aws_kms'),
-  CONSTRAINT aws_kms_keys_fkey FOREIGN KEY (external_key_id, external_keys_provider) REFERENCES external_keys (id, provider) ON DELETE CASCADE
-);
-
-CREATE TABLE IF NOT EXISTS gcp_kms_keys (
-  external_key_id uuid NOT NULL,
-  external_keys_provider TEXT NOT NULL DEFAULT 'gcp_kms',
-  resource_name TEXT NOT NULL,
-  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
-  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
-  CONSTRAINT gcp_kms_keys_pkey PRIMARY KEY (external_key_id),
-  CONSTRAINT gcp_kms_keys_external_keys_provider_check CHECK (external_keys_provider = 'gcp_kms'),
-  CONSTRAINT gcp_kms_keys_fkey FOREIGN KEY (external_key_id, external_keys_provider) REFERENCES external_keys (id, provider) ON DELETE CASCADE
-);
-
--- JSON Web Key Set (JWKS): the published collection of public keys for an
--- issuer. Individual keys are external key based (e.g. KMS keys) and hold
--- public JWK material only; the private key never leaves the customer KMS and
--- is only ever called to sign. The backing external key is tenancy-pinned via
--- a composite FK to (organization_id, id) so a set can only reference a key
--- owned by the same organization.
-CREATE TABLE IF NOT EXISTS json_web_key_sets (
-  id uuid NOT NULL DEFAULT generate_uuidv7(),
-  organization_id TEXT NOT NULL,
-  project_id uuid,
-  external_key_id uuid NOT NULL,
-  name TEXT NOT NULL,
-  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
-  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
-  deleted_at timestamptz,
-  deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
-  CONSTRAINT json_web_key_sets_pkey PRIMARY KEY (id),
-  CONSTRAINT json_web_key_sets_external_key_tenant_fkey FOREIGN KEY (organization_id, external_key_id) REFERENCES external_keys (organization_id, id),
-  CONSTRAINT json_web_key_sets_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE,
-  CONSTRAINT json_web_key_sets_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE
-);
-
--- Composite unique key so json_web_keys can composite-FK to (organization_id, id)
--- and pin the reference to one org. A unique index for parity with external_keys.
-CREATE UNIQUE INDEX IF NOT EXISTS json_web_key_sets_organization_id_id_key
-ON json_web_key_sets (organization_id, id);
-
--- Non-partial index backing json_web_key_sets_external_key_tenant_fkey, which
--- has no ON DELETE clause (NO ACTION). Postgres does not index the referencing
--- side automatically, so without this the check on every hard-deleted
--- external_keys row falls back to the (organization_id, id) unique index above
--- and filters external_key_id from the heap. Also serves the external key
--- delete guard, which reads the same two columns. Non-partial because the
--- foreign-key check has to see soft-deleted rows, which a
--- WHERE deleted IS FALSE index would exclude; the delete guard alone would be
--- happy with a partial one.
-CREATE INDEX IF NOT EXISTS json_web_key_sets_external_key_tenant_idx
-ON json_web_key_sets (organization_id, external_key_id);
-
--- Individual published key entries within a JSON Web Key Set. Each row is one
--- public JWK (identified by `kid`) with a lifecycle state.
-CREATE TABLE IF NOT EXISTS json_web_keys (
-  id uuid NOT NULL DEFAULT generate_uuidv7(),
-  organization_id TEXT NOT NULL,
-  project_id uuid,
-  json_web_key_set_id uuid NOT NULL,
-  external_key_id uuid NOT NULL,
-  -- Pin the key version for external key providers that support versioning
-  external_key_version TEXT,
-  state TEXT NOT NULL,
-  kid TEXT NOT NULL,
-  public_jwk JSONB NOT NULL,
-  activated_at timestamptz,
-  retired_at timestamptz,
-  revoked_at timestamptz,
-  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
-  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
-  deleted_at timestamptz,
-  deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
-  CONSTRAINT json_web_keys_pkey PRIMARY KEY (id),
-  CONSTRAINT json_web_keys_set_tenant_fkey FOREIGN KEY (organization_id, json_web_key_set_id) REFERENCES json_web_key_sets (organization_id, id) ON DELETE CASCADE,
-  CONSTRAINT json_web_keys_external_key_tenant_fkey FOREIGN KEY (organization_id, external_key_id) REFERENCES external_keys (organization_id, id),
-  CONSTRAINT json_web_keys_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE
-);
-
-CREATE UNIQUE INDEX IF NOT EXISTS json_web_keys_one_active_idx
-ON json_web_keys (json_web_key_set_id)
-WHERE state = 'active' AND deleted IS FALSE;
-
-CREATE UNIQUE INDEX IF NOT EXISTS json_web_keys_set_kid_idx
-ON json_web_keys (json_web_key_set_id, kid)
-WHERE deleted IS FALSE;
-
--- Non-partial index backing json_web_keys_set_tenant_fkey (ON DELETE CASCADE):
--- keeps set/org/project cascade deletes off a seq scan, including soft-deleted
--- rows that the partial unique indexes above exclude.
-CREATE INDEX IF NOT EXISTS json_web_keys_set_tenant_idx
-ON json_web_keys (organization_id, json_web_key_set_id);
-
--- Non-partial index backing json_web_keys_external_key_tenant_fkey, which has
--- no ON DELETE clause (NO ACTION). Postgres does not index the referencing side
--- automatically, so without this the check on every hard-deleted external_keys
--- row falls back to json_web_keys_set_tenant_idx above and filters
--- external_key_id from the heap. Also serves the external key delete guard,
--- which reads the same two columns. Non-partial for the same reason as
--- json_web_keys_set_tenant_idx: the foreign-key check has to see soft-deleted
--- rows.
-CREATE INDEX IF NOT EXISTS json_web_keys_external_key_tenant_idx
-ON json_web_keys (organization_id, external_key_id);
-
 -- Customer-supplied model provider API keys (BYOK), scoped per project and
 -- responsibility slot (completion surface). The 'default' slot applies to
 -- every surface that has no dedicated override row. Key material is
@@ -7695,3 +7723,96 @@ CREATE INDEX IF NOT EXISTS platform_mcp_feedback_organization_subject_created_at
 CREATE INDEX IF NOT EXISTS platform_mcp_feedback_organization_connection_created_at_idx ON platform_mcp_feedback (organization_id, connection_id, created_at DESC) WHERE connection_id IS NOT NULL;
 CREATE INDEX IF NOT EXISTS platform_mcp_feedback_organization_workflow_created_at_idx ON platform_mcp_feedback (organization_id, workflow_id, created_at DESC) WHERE workflow_id IS NOT NULL;
 CREATE INDEX IF NOT EXISTS platform_mcp_feedback_expires_at_idx ON platform_mcp_feedback (expires_at);
+
+CREATE TABLE IF NOT EXISTS killswitch_prescriptions (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  organization_id TEXT NOT NULL,
+  definition_key TEXT NOT NULL,
+  principal_kind TEXT NOT NULL,
+  principal_key TEXT NOT NULL,
+  resource_kind TEXT NOT NULL,
+  current_version BIGINT NOT NULL,
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  CONSTRAINT killswitch_prescriptions_pkey PRIMARY KEY (id),
+  CONSTRAINT killswitch_prescriptions_definition_key_check CHECK (definition_key <> ''),
+  CONSTRAINT killswitch_prescriptions_principal_kind_check CHECK (principal_kind <> ''),
+  CONSTRAINT killswitch_prescriptions_principal_key_check CHECK (principal_key <> ''),
+  CONSTRAINT killswitch_prescriptions_resource_kind_check CHECK (resource_kind <> ''),
+  CONSTRAINT killswitch_prescriptions_current_version_check CHECK (current_version > 0),
+  CONSTRAINT killswitch_prescriptions_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE
+);
+CREATE UNIQUE INDEX IF NOT EXISTS killswitch_prescriptions_organization_id_id_key ON killswitch_prescriptions (organization_id, id);
+CREATE INDEX IF NOT EXISTS killswitch_prescriptions_evaluator_idx ON killswitch_prescriptions (organization_id, definition_key, principal_kind, principal_key, resource_kind, id);
+-- Customer list pages use fixed contract dimensions and descending keyset order.
+CREATE INDEX IF NOT EXISTS killswitch_prescriptions_customer_list_idx ON killswitch_prescriptions (organization_id, definition_key, principal_kind, resource_kind, created_at DESC, id DESC);
+
+CREATE TABLE IF NOT EXISTS killswitch_prescription_versions (
+  organization_id TEXT NOT NULL,
+  prescription_id uuid NOT NULL,
+  version BIGINT NOT NULL,
+  state TEXT NOT NULL,
+  resource_scope TEXT NOT NULL,
+  -- NULL means the prescription starts immediately; a value is an explicit schedule.
+  starts_at timestamptz,
+  expires_at timestamptz,
+  activated_at timestamptz,
+  superseded_at timestamptz,
+  internal_note TEXT NOT NULL,
+  external_note TEXT NOT NULL,
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  CONSTRAINT killswitch_prescription_versions_pkey PRIMARY KEY (prescription_id, version),
+  CONSTRAINT killswitch_prescription_versions_prescription_fkey FOREIGN KEY (organization_id, prescription_id) REFERENCES killswitch_prescriptions (organization_id, id) ON DELETE CASCADE,
+  CONSTRAINT killswitch_prescription_versions_version_check CHECK (version > 0),
+  CONSTRAINT killswitch_prescription_versions_state_check CHECK (state <> ''),
+  CONSTRAINT killswitch_prescription_versions_resource_scope_check CHECK (resource_scope IN ('all', 'selected')),
+  CONSTRAINT killswitch_prescription_versions_interval_check CHECK (expires_at IS NULL OR starts_at IS NULL OR expires_at > starts_at),
+  CONSTRAINT killswitch_prescription_versions_external_note_check CHECK (char_length(external_note) BETWEEN 1 AND 500),
+  CONSTRAINT killswitch_prescription_versions_internal_note_check CHECK (char_length(internal_note) BETWEEN 1 AND 4000)
+);
+CREATE UNIQUE INDEX IF NOT EXISTS killswitch_prescription_versions_org_prescription_version_key ON killswitch_prescription_versions (organization_id, prescription_id, version);
+-- Privileged cross-organization expiry discovery: the maintenance sweep scans due
+-- versions globally ordered by expires_at, prescription_id, and version, so the index
+-- deliberately does not lead with organization_id.
+CREATE INDEX IF NOT EXISTS killswitch_prescription_versions_expiry_due_idx ON killswitch_prescription_versions (expires_at, prescription_id, version) WHERE state = 'active' AND expires_at IS NOT NULL AND (superseded_at IS NULL OR expires_at < superseded_at);
+
+CREATE TABLE IF NOT EXISTS killswitch_prescription_version_resources (
+  organization_id TEXT NOT NULL,
+  prescription_id uuid NOT NULL,
+  version BIGINT NOT NULL,
+  resource_key TEXT NOT NULL,
+  CONSTRAINT killswitch_prescription_version_resources_pkey PRIMARY KEY (prescription_id, version, resource_key),
+  CONSTRAINT killswitch_prescription_version_resources_version_fkey FOREIGN KEY (organization_id, prescription_id, version) REFERENCES killswitch_prescription_versions (organization_id, prescription_id, version) ON DELETE CASCADE,
+  CONSTRAINT killswitch_prescription_version_resources_resource_key_check CHECK (resource_key <> '')
+);
+CREATE INDEX IF NOT EXISTS killswitch_prescription_version_resources_lookup_idx ON killswitch_prescription_version_resources (organization_id, resource_key, prescription_id, version);
+
+CREATE TABLE IF NOT EXISTS killswitch_expiry_events (
+  organization_id TEXT NOT NULL,
+  prescription_id uuid NOT NULL,
+  version BIGINT NOT NULL,
+  recorded_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  CONSTRAINT killswitch_expiry_events_pkey PRIMARY KEY (prescription_id, version),
+  CONSTRAINT killswitch_expiry_events_prescription_version_fkey FOREIGN KEY (organization_id, prescription_id, version) REFERENCES killswitch_prescription_versions (organization_id, prescription_id, version) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS killswitch_operations (
+  organization_id TEXT NOT NULL,
+  operation_id uuid NOT NULL,
+  actor_user_id TEXT NOT NULL,
+  operation TEXT NOT NULL,
+  request_hash TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'pending',
+  response JSONB,
+  expires_at timestamptz NOT NULL,
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  CONSTRAINT killswitch_operations_pkey PRIMARY KEY (organization_id, operation_id),
+  CONSTRAINT killswitch_operations_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE,
+  CONSTRAINT killswitch_operations_actor_user_id_check CHECK (actor_user_id <> ''),
+  CONSTRAINT killswitch_operations_operation_check CHECK (operation <> ''),
+  CONSTRAINT killswitch_operations_request_hash_check CHECK (request_hash <> ''),
+  CONSTRAINT killswitch_operations_status_check CHECK (status IN ('pending', 'completed')),
+  CONSTRAINT killswitch_operations_completed_response_check CHECK ((status = 'pending' AND response IS NULL) OR (status = 'completed' AND response IS NOT NULL))
+);
+CREATE INDEX IF NOT EXISTS killswitch_operations_expires_at_idx ON killswitch_operations (expires_at);

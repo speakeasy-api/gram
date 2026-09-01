@@ -4,6 +4,7 @@ import type { MetaMcpMember } from "@gram/client/models/components/metamcpmember
 import {
   buildMemberRows,
   classifyMemberServer,
+  memberBackendKind,
   nextSortOrder,
   planReorder,
 } from "./memberRows";
@@ -156,5 +157,43 @@ describe("nextSortOrder", () => {
 
   it("starts at 0 for an empty gateway", () => {
     expect(nextSortOrder([])).toBe(0);
+  });
+});
+
+describe("memberBackendKind", () => {
+  it("names each backend kind", () => {
+    expect(memberBackendKind(server({ toolsetId: "ts-1" }))).toBe("hosted");
+    expect(memberBackendKind(server({ remoteMcpServerId: "r-1" }))).toBe(
+      "remote",
+    );
+    expect(memberBackendKind(server({ tunneledMcpServerId: "t-1" }))).toBe(
+      "tunneled",
+    );
+  });
+
+  it("returns undefined for servers with no backend and for missing servers", () => {
+    expect(memberBackendKind(server())).toBeUndefined();
+    expect(memberBackendKind(undefined)).toBeUndefined();
+  });
+
+  it("treats unproxied as kindless even when a backend id is present", () => {
+    expect(
+      memberBackendKind(
+        server({ unproxiedMcpServerId: "u-1", toolsetId: "ts-1" }),
+      ),
+    ).toBeUndefined();
+  });
+
+  it("prefers hosted, then tunneled, over remote when multiple ids are set", () => {
+    expect(
+      memberBackendKind(
+        server({ toolsetId: "ts-1", remoteMcpServerId: "r-1" }),
+      ),
+    ).toBe("hosted");
+    expect(
+      memberBackendKind(
+        server({ tunneledMcpServerId: "t-1", remoteMcpServerId: "r-1" }),
+      ),
+    ).toBe("tunneled");
   });
 });

@@ -35,7 +35,13 @@ const ContractPriceEstimator = React.lazy(() =>
 // with empty defaults) is unrepresentable, and background refetches can't
 // clobber in-progress edits.
 export const TumAdminSection = (): JSX.Element => {
-  const { data: tum, isError } = useGetTokensUnderManagement();
+  // Opted out of the shared throwOnError so the inline error branch below is
+  // reachable — thrown, the failure would take the whole billing page down.
+  const { data: tum, isError } = useGetTokensUnderManagement(
+    undefined,
+    undefined,
+    { throwOnError: false },
+  );
 
   let body: JSX.Element;
   if (tum) {

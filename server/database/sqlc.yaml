@@ -331,6 +331,16 @@ sql:
         omit_unused_structs: true
 
   - schema: schema.sql
+    queries: ../cmd/tools/migrations/openrouterdisablecauses/queries.sql
+    engine: postgresql
+    gen:
+      go:
+        package: "openrouterdisablecauses"
+        out: "../cmd/tools/migrations/openrouterdisablecauses"
+        sql_package: "pgx/v5"
+        omit_unused_structs: true
+
+  - schema: schema.sql
     queries: ../internal/openrouterkeys/queries.sql
     engine: postgresql
     gen:
@@ -677,6 +687,16 @@ sql:
         omit_unused_structs: true
 
   - schema: schema.sql
+    queries: ../internal/metering/queries.sql
+    engine: postgresql
+    gen:
+      go:
+        package: "repo"
+        out: "../internal/metering/repo"
+        sql_package: "pgx/v5"
+        omit_unused_structs: true
+
+  - schema: schema.sql
     queries: ../internal/spendrules/queries.sql
     engine: postgresql
     gen:
@@ -796,6 +816,16 @@ sql:
       go:
         package: "repo"
         out: "../internal/platformmcp/repo"
+        sql_package: "pgx/v5"
+        omit_unused_structs: true
+
+  - schema: schema.sql
+    queries: ../internal/killswitches/queries.sql
+    engine: postgresql
+    gen:
+      go:
+        package: "repo"
+        out: "../internal/killswitches/repo"
         sql_package: "pgx/v5"
         omit_unused_structs: true
 

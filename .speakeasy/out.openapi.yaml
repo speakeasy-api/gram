@@ -21384,6 +21384,815 @@ paths:
       x-speakeasy-name-override: validate
       x-speakeasy-react-hook:
         name: ValidateAPIKey
+  /rpc/killswitches.batchUserBadges:
+    post:
+      operationId: killswitchesBatchUserBadges
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/KillswitchBatchUserBadgesRequest'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/KillswitchBatchUserBadgesResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+        "503":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unavailable: service temporarily unavailable'
+      summary: batchUserBadges killswitches
+      tags:
+        - killswitches
+      x-speakeasy-name-override: batchUserBadges
+      x-speakeasy-react-hook:
+        name: BatchKillswitchUserBadges
+      security:
+        - session_header_Gram-Session: []
+  /rpc/killswitches.create:
+    post:
+      operationId: killswitchesCreate
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/KillswitchCreateRequest'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/KillswitchMutationReceipt'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/KillswitchConflict'
+          description: 'operation_conflict: The operation ID was already used for a different request.'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+        "503":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unavailable: service temporarily unavailable'
+      summary: create killswitches
+      tags:
+        - killswitches
+      x-speakeasy-name-override: create
+      x-speakeasy-react-hook:
+        name: CreateKillswitch
+      security:
+        - session_header_Gram-Session: []
+  /rpc/killswitches.edit:
+    post:
+      operationId: killswitchesEdit
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/KillswitchEditRequest'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/KillswitchMutationReceipt'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/KillswitchConflict'
+          description: 'version_conflict: The killswitch changed after the supplied version.'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+        "503":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unavailable: service temporarily unavailable'
+      summary: edit killswitches
+      tags:
+        - killswitches
+      x-speakeasy-name-override: edit
+      x-speakeasy-react-hook:
+        name: EditKillswitch
+      security:
+        - session_header_Gram-Session: []
+  /rpc/killswitches.get:
+    get:
+      operationId: killswitchesGet
+      parameters:
+        - allowEmptyValue: true
+          in: query
+          name: id
+          required: true
+          schema:
+            format: uuid
+            type: string
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/KillswitchDetail'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+        "503":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unavailable: service temporarily unavailable'
+      summary: get killswitches
+      tags:
+        - killswitches
+      x-speakeasy-name-override: get
+      x-speakeasy-react-hook:
+        name: Killswitch
+      security:
+        - session_header_Gram-Session: []
+  /rpc/killswitches.lift:
+    post:
+      operationId: killswitchesLift
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/KillswitchLiftRequest'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/KillswitchLiftResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/KillswitchConflict'
+          description: 'version_conflict: The killswitch changed after the supplied version.'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+        "503":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unavailable: service temporarily unavailable'
+      summary: lift killswitches
+      tags:
+        - killswitches
+      x-speakeasy-name-override: lift
+      x-speakeasy-react-hook:
+        name: LiftKillswitch
+      security:
+        - session_header_Gram-Session: []
+  /rpc/killswitches.list:
+    get:
+      operationId: killswitchesList
+      parameters:
+        - allowEmptyValue: true
+          in: query
+          name: capability_key
+          schema: {$ref: "#/components/schemas/KillswitchCapabilityKey"}
+        - allowEmptyValue: true
+          in: query
+          name: user_id
+          schema:
+            type: string
+        - allowEmptyValue: true
+          in: query
+          name: status
+          schema: {$ref: "#/components/schemas/KillswitchListStatus"}
+        - allowEmptyValue: true
+          in: query
+          name: limit
+          schema:
+            format: int32
+            maximum: 100
+            minimum: 1
+            type: integer
+        - allowEmptyValue: true
+          in: query
+          name: cursor
+          schema:
+            type: string
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/KillswitchListResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+        "503":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unavailable: service temporarily unavailable'
+      summary: list killswitches
+      tags:
+        - killswitches
+      x-speakeasy-name-override: list
+      x-speakeasy-pagination:
+        inputs:
+          - in: parameters
+            name: cursor
+            type: cursor
+        outputs:
+          nextCursor: $.next_cursor
+        type: cursor
+      x-speakeasy-react-hook:
+        name: Killswitches
+      security:
+        - session_header_Gram-Session: []
+  /rpc/killswitches.listCapabilities:
+    get:
+      operationId: killswitchesListCapabilities
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/KillswitchListCapabilitiesResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+        "503":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unavailable: service temporarily unavailable'
+      summary: listCapabilities killswitches
+      tags:
+        - killswitches
+      x-speakeasy-name-override: listCapabilities
+      x-speakeasy-react-hook:
+        name: KillswitchCapabilities
+      security:
+        - session_header_Gram-Session: []
+  /rpc/killswitches.listMCPServers:
+    get:
+      operationId: killswitchesListMCPServers
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/KillswitchListMCPServersResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+        "503":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unavailable: service temporarily unavailable'
+      summary: listMCPServers killswitches
+      tags:
+        - killswitches
+      x-speakeasy-name-override: listMCPServers
+      x-speakeasy-react-hook:
+        name: KillswitchMCPServers
+      security:
+        - session_header_Gram-Session: []
+  /rpc/killswitches.previewOverlaps:
+    post:
+      operationId: killswitchesPreviewOverlaps
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/KillswitchPreviewOverlapsRequest'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/KillswitchPreviewOverlapsResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+        "503":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unavailable: service temporarily unavailable'
+      summary: previewOverlaps killswitches
+      tags:
+        - killswitches
+      x-speakeasy-name-override: previewOverlaps
+      x-speakeasy-react-hook:
+        name: PreviewKillswitchOverlaps
+      security:
+        - session_header_Gram-Session: []
   /rpc/litellm.createInstance:
     post:
       description: Provision a LiteLLM integration for a project and return its plaintext ingestion key once. Requires org:admin.
@@ -26281,7 +27090,7 @@ paths:
         name: RemoveMetaMcpMember
   /rpc/metaMcp.update:
     post:
-      description: 'Update a meta MCP server. This is a full-record replace: a user_session_issuer_id omitted from the request becomes null on the stored record. Visibility is the exception — omitting it preserves the stored value, so a caller that does not manage visibility cannot re-enable a disabled gateway by saving an unrelated field.'
+      description: Update a meta MCP server. Omitting user_session_issuer_id preserves the stored issuer, and a gateway that would end up without one gets a dedicated issuer minted — an update can never leave a gateway serving anonymously. Omitting visibility preserves the stored value, so a caller that does not manage visibility cannot re-enable a disabled gateway by saving an unrelated field.
       operationId: updateMetaMcpServer
       parameters:
         - allowEmptyValue: true
@@ -31743,6 +32552,569 @@ paths:
       x-speakeasy-name-override: update
       x-speakeasy-react-hook:
         name: UpdatePackage
+  /rpc/platformKillswitches.activatePrescription:
+    post:
+      tags:
+        - platformKillswitches
+      summary: activatePrescription platformKillswitches
+      operationId: platformKillswitches#activatePrescription
+      parameters:
+        - name: Gram-Session
+          in: header
+          description: Session header
+          allowEmptyValue: true
+          schema:
+            type: string
+            description: Session header
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ActivatePrescriptionRequestBody'
+      responses:
+        "200":
+          description: OK response.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PlatformKillswitchMutationResult'
+        "400":
+          description: 'bad_request: request is invalid'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "401":
+          description: 'unauthorized: unauthorized access'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "403":
+          description: 'forbidden: permission denied'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "404":
+          description: 'not_found: resource not found'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "409":
+          description: 'version_conflict: The prescription changed after the supplied expected version.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "415":
+          description: 'unsupported_media: unsupported media type'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "422":
+          description: 'invalid: request contains one or more invalidation fields'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "500":
+          description: 'unexpected: an unexpected error occurred'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "502":
+          description: 'gateway_error: an unexpected error occurred'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "503":
+          description: 'unavailable: service temporarily unavailable'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+      security:
+        - session_header_Gram-Session: []
+        - {}
+  /rpc/platformKillswitches.changePrescription:
+    post:
+      tags:
+        - platformKillswitches
+      summary: changePrescription platformKillswitches
+      operationId: platformKillswitches#changePrescription
+      parameters:
+        - name: Gram-Session
+          in: header
+          description: Session header
+          allowEmptyValue: true
+          schema:
+            type: string
+            description: Session header
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ChangePrescriptionRequestBody'
+      responses:
+        "200":
+          description: OK response.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PlatformKillswitchMutationResult'
+        "400":
+          description: 'bad_request: request is invalid'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "401":
+          description: 'unauthorized: unauthorized access'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "403":
+          description: 'forbidden: permission denied'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "404":
+          description: 'not_found: resource not found'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "409":
+          description: 'version_conflict: The prescription changed after the supplied expected version.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "415":
+          description: 'unsupported_media: unsupported media type'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "422":
+          description: 'invalid: request contains one or more invalidation fields'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "500":
+          description: 'unexpected: an unexpected error occurred'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "502":
+          description: 'gateway_error: an unexpected error occurred'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "503":
+          description: 'unavailable: service temporarily unavailable'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+      security:
+        - session_header_Gram-Session: []
+        - {}
+  /rpc/platformKillswitches.deactivatePrescription:
+    post:
+      tags:
+        - platformKillswitches
+      summary: deactivatePrescription platformKillswitches
+      operationId: platformKillswitches#deactivatePrescription
+      parameters:
+        - name: Gram-Session
+          in: header
+          description: Session header
+          allowEmptyValue: true
+          schema:
+            type: string
+            description: Session header
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DeactivatePrescriptionRequestBody'
+      responses:
+        "200":
+          description: OK response.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PlatformKillswitchMutationResult'
+        "400":
+          description: 'bad_request: request is invalid'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "401":
+          description: 'unauthorized: unauthorized access'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "403":
+          description: 'forbidden: permission denied'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "404":
+          description: 'not_found: resource not found'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "409":
+          description: 'version_conflict: The prescription changed after the supplied expected version.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "415":
+          description: 'unsupported_media: unsupported media type'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "422":
+          description: 'invalid: request contains one or more invalidation fields'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "500":
+          description: 'unexpected: an unexpected error occurred'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "502":
+          description: 'gateway_error: an unexpected error occurred'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "503":
+          description: 'unavailable: service temporarily unavailable'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+      security:
+        - session_header_Gram-Session: []
+        - {}
+  /rpc/platformKillswitches.getPrescription:
+    get:
+      tags:
+        - platformKillswitches
+      summary: getPrescription platformKillswitches
+      operationId: platformKillswitches#getPrescription
+      parameters:
+        - name: organization_id
+          in: query
+          allowEmptyValue: true
+          required: true
+          schema:
+            type: string
+        - name: prescription_id
+          in: query
+          allowEmptyValue: true
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: Gram-Session
+          in: header
+          description: Session header
+          allowEmptyValue: true
+          schema:
+            type: string
+            description: Session header
+      responses:
+        "200":
+          description: OK response.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PlatformKillswitchPrescription'
+        "400":
+          description: 'bad_request: request is invalid'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "401":
+          description: 'unauthorized: unauthorized access'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "403":
+          description: 'forbidden: permission denied'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "404":
+          description: 'not_found: resource not found'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "409":
+          description: 'version_conflict: The prescription changed after the supplied expected version.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "415":
+          description: 'unsupported_media: unsupported media type'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "422":
+          description: 'invalid: request contains one or more invalidation fields'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "500":
+          description: 'unexpected: an unexpected error occurred'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "502":
+          description: 'gateway_error: an unexpected error occurred'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "503":
+          description: 'unavailable: service temporarily unavailable'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+      security:
+        - session_header_Gram-Session: []
+        - {}
+  /rpc/platformKillswitches.listDefinitions:
+    get:
+      tags:
+        - platformKillswitches
+      summary: listDefinitions platformKillswitches
+      operationId: platformKillswitches#listDefinitions
+      parameters:
+        - name: Gram-Session
+          in: header
+          description: Session header
+          allowEmptyValue: true
+          schema:
+            type: string
+            description: Session header
+      responses:
+        "200":
+          description: OK response.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListDefinitionsResponseBody'
+        "400":
+          description: 'bad_request: request is invalid'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "401":
+          description: 'unauthorized: unauthorized access'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "403":
+          description: 'forbidden: permission denied'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "404":
+          description: 'not_found: resource not found'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "409":
+          description: 'version_conflict: The prescription changed after the supplied expected version.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "415":
+          description: 'unsupported_media: unsupported media type'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "422":
+          description: 'invalid: request contains one or more invalidation fields'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "500":
+          description: 'unexpected: an unexpected error occurred'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "502":
+          description: 'gateway_error: an unexpected error occurred'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "503":
+          description: 'unavailable: service temporarily unavailable'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+      security:
+        - session_header_Gram-Session: []
+        - {}
+  /rpc/platformKillswitches.listPrescriptions:
+    get:
+      operationId: platformKillswitches#listPrescriptions
+      parameters:
+        - allowEmptyValue: true
+          in: query
+          name: organization_id
+          required: true
+          schema:
+            type: string
+        - allowEmptyValue: true
+          in: query
+          name: limit
+          schema:
+            format: int32
+            maximum: 100
+            minimum: 1
+            type: integer
+        - allowEmptyValue: true
+          in: query
+          name: after_id
+          schema:
+            format: uuid
+            type: string
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListPrescriptionsResponseBody'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'version_conflict: The prescription changed after the supplied expected version.'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+        "503":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unavailable: service temporarily unavailable'
+      security:
+        - session_header_Gram-Session: []
+        - {}
+      summary: listPrescriptions platformKillswitches
+      tags:
+        - platformKillswitches
+      x-speakeasy-pagination:
+        inputs:
+          - in: parameters
+            name: after_id
+            type: cursor
+        outputs:
+          nextCursor: $.next_after_id
+        type: cursor
   /rpc/platformMcp.dismissOnboarding:
     post:
       description: Dismiss the optional current user's Platform MCP onboarding workflow without changing organization setup or project resources.
@@ -60599,6 +61971,62 @@ components:
           description: The policy that issued the warning.
       required:
         - acknowledged
+    ActivatePrescriptionRequestBody:
+      type: object
+      properties:
+        definition:
+          type: string
+        expected_version:
+          type: integer
+          format: int64
+        expires_at:
+          type: string
+          format: date-time
+        external_note:
+          type: string
+          maxLength: 500
+        internal_note:
+          type: string
+          maxLength: 4000
+        operation_id:
+          type: string
+          format: uuid
+        organization_id:
+          type: string
+        prescription_id:
+          type: string
+          format: uuid
+        principal_input:
+          type: string
+        principal_kind:
+          type: string
+        resource_kind:
+          type: string
+        resource_scope:
+          type: string
+          enum:
+            - all
+            - selected
+        selected_resource_inputs:
+          type: array
+          items:
+            type: string
+          maxItems: 1000
+        start_mode:
+          type: string
+          enum:
+            - now
+            - at
+        starts_at:
+          type: string
+          format: date-time
+      required:
+        - organization_id
+        - operation_id
+        - resource_scope
+        - start_mode
+        - internal_note
+        - external_note
     ActorAttribute:
       type: object
       properties:
@@ -60876,6 +62304,14 @@ components:
           type: number
           description: Credits spent this month in USD.
           format: double
+        disable_causes:
+          type: array
+          items:
+            type: string
+          description: Active internal disable causes. Omitted for legacy unclassified rows.
+        disable_causes_classified:
+          type: boolean
+          description: Whether disable_causes is classified, including an explicitly empty cause set.
         disabled:
           type: boolean
         key_type:
@@ -60889,6 +62325,7 @@ components:
         - credits_used
         - monthly_credits
         - disabled
+        - disable_causes_classified
     AdminInferenceKeyLimit:
       type: object
       properties:
@@ -60975,6 +62412,11 @@ components:
           type: string
           description: When the key row was created.
           format: date-time
+        disable_causes:
+          type: array
+          items:
+            type: string
+          description: Administrative view of every reason currently disabling the key. Values are open-ended for forward compatibility.
         disabled:
           type: boolean
           description: Whether the key is locked down (refused locally and disabled upstream).
@@ -62694,6 +64136,56 @@ components:
         - resolution_type
         - resolved_by
         - created_at
+    ChangePrescriptionRequestBody:
+      type: object
+      properties:
+        expected_version:
+          type: integer
+          format: int64
+        expires_at:
+          type: string
+          format: date-time
+        external_note:
+          type: string
+          maxLength: 500
+        internal_note:
+          type: string
+          maxLength: 4000
+        operation_id:
+          type: string
+          format: uuid
+        organization_id:
+          type: string
+        prescription_id:
+          type: string
+          format: uuid
+        resource_scope:
+          type: string
+          enum:
+            - all
+            - selected
+        selected_resource_inputs:
+          type: array
+          items:
+            type: string
+          maxItems: 1000
+        start_mode:
+          type: string
+          enum:
+            - now
+            - at
+        starts_at:
+          type: string
+          format: date-time
+      required:
+        - organization_id
+        - operation_id
+        - resource_scope
+        - start_mode
+        - internal_note
+        - external_note
+        - prescription_id
+        - expected_version
     Chat:
       type: object
       properties:
@@ -65417,6 +66909,25 @@ components:
         - project_name
         - project_slug
         - is_domain_root
+    DeactivatePrescriptionRequestBody:
+      type: object
+      properties:
+        expected_version:
+          type: integer
+          format: int64
+        operation_id:
+          type: string
+          format: uuid
+        organization_id:
+          type: string
+        prescription_id:
+          type: string
+          format: uuid
+      required:
+        - organization_id
+        - operation_id
+        - prescription_id
+        - expected_version
     DeclineRiskPolicyChallengeResponseBody:
       type: object
       properties:
@@ -69985,6 +71496,375 @@ components:
         - scopes
         - created_at
         - updated_at
+    KillswitchBatchUserBadgesRequest:
+      type: object
+      properties:
+        user_ids:
+          type: array
+          items:
+            type: string
+          minItems: 1
+          maxItems: 100
+      required:
+        - user_ids
+    KillswitchBatchUserBadgesResult:
+      type: object
+      properties:
+        badges:
+          type: array
+          items:
+            $ref: '#/components/schemas/KillswitchUserBadge'
+      required:
+        - badges
+    KillswitchCapability:
+      type: object
+      properties:
+        label:
+          type: string
+        key: {$ref: "#/components/schemas/KillswitchCapabilityKey"}
+      required:
+        - key
+        - label
+    KillswitchComingSoonCapability:
+      type: object
+      properties:
+        label:
+          type: string
+      required:
+        - label
+    KillswitchConflict:
+      type: object
+      properties:
+        message:
+          type: string
+        name: {$ref: "#/components/schemas/KillswitchConflictName"}
+      required:
+        - name
+        - message
+    KillswitchCreateRequest:
+      type: object
+      properties:
+        external_note:
+          type: string
+          maxLength: 500
+        internal_note:
+          type: string
+          maxLength: 4000
+        operation_id:
+          type: string
+          format: uuid
+        schedule:
+          $ref: '#/components/schemas/KillswitchSchedule'
+        scope:
+          $ref: '#/components/schemas/KillswitchScope'
+        user_id:
+          type: string
+        capability_key: {$ref: "#/components/schemas/KillswitchCapabilityKey"}
+      required:
+        - operation_id
+        - scope
+        - schedule
+        - external_note
+        - internal_note
+        - capability_key
+        - user_id
+    KillswitchDetail:
+      type: object
+      properties:
+        capability_label:
+          type: string
+        external_note:
+          type: string
+        history:
+          type: array
+          items:
+            $ref: '#/components/schemas/KillswitchHistoryEvent'
+          maxItems: 100
+        history_truncated:
+          type: boolean
+        id:
+          type: string
+          format: uuid
+        internal_note:
+          type: string
+        schedule:
+          $ref: '#/components/schemas/KillswitchSchedule'
+        scope:
+          $ref: '#/components/schemas/KillswitchScope'
+        user_id:
+          type: string
+        version:
+          type: integer
+          format: int64
+        capability_key: {$ref: "#/components/schemas/KillswitchCapabilityKey"}
+        status: {$ref: "#/components/schemas/KillswitchStatus"}
+      required:
+        - external_note
+        - internal_note
+        - history
+        - history_truncated
+        - id
+        - capability_key
+        - capability_label
+        - user_id
+        - version
+        - status
+        - scope
+        - schedule
+    KillswitchEditRequest:
+      type: object
+      properties:
+        expected_version:
+          type: integer
+          format: int64
+        external_note:
+          type: string
+          maxLength: 500
+        id:
+          type: string
+          format: uuid
+        internal_note:
+          type: string
+          maxLength: 4000
+        operation_id:
+          type: string
+          format: uuid
+        schedule:
+          $ref: '#/components/schemas/KillswitchSchedule'
+        scope:
+          $ref: '#/components/schemas/KillswitchScope'
+      required:
+        - operation_id
+        - scope
+        - schedule
+        - external_note
+        - internal_note
+        - id
+        - expected_version
+    KillswitchHistoryEvent:
+      type: object
+      properties:
+        actor_display_name:
+          type: string
+        actor_user_id:
+          type: string
+        changed_at:
+          type: string
+          format: date-time
+        external_note:
+          type: string
+        internal_note:
+          type: string
+        schedule:
+          $ref: '#/components/schemas/KillswitchSchedule'
+        scope:
+          $ref: '#/components/schemas/KillswitchScope'
+        sequence:
+          type: integer
+          format: int64
+        version:
+          type: integer
+          format: int64
+        action: {$ref: "#/components/schemas/KillswitchHistoryAction"}
+        status: {$ref: "#/components/schemas/KillswitchStatus"}
+      required:
+        - sequence
+        - version
+        - action
+        - status
+        - scope
+        - schedule
+        - external_note
+        - internal_note
+        - changed_at
+    KillswitchLiftRequest:
+      type: object
+      properties:
+        expected_version:
+          type: integer
+          format: int64
+        id:
+          type: string
+          format: uuid
+        operation_id:
+          type: string
+          format: uuid
+      required:
+        - operation_id
+        - id
+        - expected_version
+    KillswitchLiftResult:
+      type: object
+      properties:
+        remaining_overlaps:
+          type: array
+          items:
+            $ref: '#/components/schemas/KillswitchOverlap'
+          maxItems: 100
+        result:
+          $ref: '#/components/schemas/KillswitchMutationReceipt'
+        truncated:
+          type: boolean
+      required:
+        - result
+        - remaining_overlaps
+        - truncated
+    KillswitchListCapabilitiesResult:
+      type: object
+      properties:
+        capabilities:
+          type: array
+          items:
+            $ref: '#/components/schemas/KillswitchCapability'
+        coming_soon:
+          type: array
+          items:
+            $ref: '#/components/schemas/KillswitchComingSoonCapability'
+      required:
+        - capabilities
+        - coming_soon
+    KillswitchListMCPServersResult:
+      type: object
+      properties:
+        servers:
+          type: array
+          items:
+            $ref: '#/components/schemas/KillswitchMCPServer'
+      required:
+        - servers
+    KillswitchListResult:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/KillswitchSummary'
+          maxItems: 100
+        next_cursor:
+          type: string
+      required:
+        - items
+    KillswitchMCPServer:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        project_id:
+          type: string
+          format: uuid
+      required:
+        - id
+        - name
+        - project_id
+    KillswitchMutationReceipt:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        replayed:
+          type: boolean
+        version:
+          type: integer
+          format: int64
+      required:
+        - id
+        - version
+        - replayed
+    KillswitchOverlap:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        schedule:
+          $ref: '#/components/schemas/KillswitchSchedule'
+        scope:
+          $ref: '#/components/schemas/KillswitchScope'
+        status: {$ref: "#/components/schemas/KillswitchOverlapStatus"}
+      required:
+        - id
+        - status
+        - scope
+        - schedule
+    KillswitchPreviewOverlapsRequest:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        schedule:
+          $ref: '#/components/schemas/KillswitchSchedule'
+        scope:
+          $ref: '#/components/schemas/KillswitchScope'
+        user_id:
+          type: string
+        capability_key: {$ref: "#/components/schemas/KillswitchCapabilityKey"}
+      required:
+        - capability_key
+        - user_id
+        - scope
+        - schedule
+    KillswitchPreviewOverlapsResult:
+      type: object
+      properties:
+        overlaps:
+          type: array
+          items:
+            $ref: '#/components/schemas/KillswitchOverlap'
+          maxItems: 100
+        truncated:
+          type: boolean
+      required:
+        - overlaps
+        - truncated
+    KillswitchSummary:
+      type: object
+      properties:
+        capability_label:
+          type: string
+        id:
+          type: string
+          format: uuid
+        schedule:
+          $ref: '#/components/schemas/KillswitchSchedule'
+        scope:
+          $ref: '#/components/schemas/KillswitchScope'
+        user_id:
+          type: string
+        version:
+          type: integer
+          format: int64
+        capability_key: {$ref: "#/components/schemas/KillswitchCapabilityKey"}
+        status: {$ref: "#/components/schemas/KillswitchStatus"}
+      required:
+        - id
+        - capability_key
+        - capability_label
+        - user_id
+        - version
+        - status
+        - scope
+        - schedule
+    KillswitchUserBadge:
+      type: object
+      properties:
+        affected:
+          type: boolean
+        affected_now:
+          type: boolean
+        scheduled:
+          type: boolean
+        user_id:
+          type: string
+      required:
+        - user_id
+        - affected
+        - affected_now
+        - scheduled
     LLMClientUsage:
       type: object
       properties:
@@ -70332,6 +72212,15 @@ components:
       required:
         - domains
         - dns_config
+    ListDefinitionsResponseBody:
+      type: object
+      properties:
+        definitions:
+          type: array
+          items:
+            $ref: '#/components/schemas/PlatformKillswitchDefinition'
+      required:
+        - definitions
     ListDeploymentForm:
       type: object
       properties:
@@ -70830,6 +72719,18 @@ components:
           description: The plugins in the organization.
       required:
         - plugins
+    ListPrescriptionsResponseBody:
+      type: object
+      properties:
+        next_after_id:
+          type: string
+          description: Cursor for the next page; empty when exhausted.
+        prescriptions:
+          type: array
+          items:
+            $ref: '#/components/schemas/PlatformKillswitchPrescription'
+      required:
+        - prescriptions
     ListProjectsPayload:
       type: object
       properties:
@@ -72213,6 +74114,29 @@ components:
         - coverage_bucket
         - first_seen_at
         - last_seen_at
+    MarkEnterpriseTrialConvertedRequestBody:
+      type: object
+      properties:
+        id:
+          type: string
+          description: Organization ID.
+          minLength: 1
+      required:
+        - id
+    MarkEnterpriseTrialConvertedResult:
+      type: object
+      properties:
+        converted_at:
+          type: string
+          description: The time at which the enterprise trial was recorded as converted.
+          format: date-time
+        organization_id:
+          type: string
+          description: The converted organization ID.
+      description: Privacy-minimal result of recording an enterprise trial conversion.
+      required:
+        - organization_id
+        - converted_at
     MarkRiskResultsFalsePositiveRequestBody:
       type: object
       properties:
@@ -73720,6 +75644,120 @@ components:
         - included_servers
         - actual_enabled_server_count
         - has_active_subscription
+    PlatformKillswitchDefinition:
+      type: object
+      properties:
+        default_external_note:
+          type: string
+        enforcement_owner:
+          type: string
+        failure_policy:
+          type: string
+        identity_contract:
+          type: string
+        key:
+          type: string
+        principal_kinds:
+          type: array
+          items:
+            type: string
+        resource_kinds:
+          type: array
+          items:
+            type: string
+        surfaces:
+          type: array
+          items:
+            type: string
+        transport_adapters:
+          type: array
+          items:
+            type: string
+      required:
+        - key
+        - principal_kinds
+        - resource_kinds
+        - failure_policy
+        - default_external_note
+        - enforcement_owner
+        - identity_contract
+        - surfaces
+        - transport_adapters
+    PlatformKillswitchMutationResult:
+      type: object
+      properties:
+        prescription_id:
+          type: string
+          format: uuid
+        replayed:
+          type: boolean
+        state:
+          type: string
+        version:
+          type: integer
+          format: int64
+      required:
+        - prescription_id
+        - version
+        - state
+        - replayed
+    PlatformKillswitchPrescription:
+      type: object
+      properties:
+        activated_at:
+          type: string
+          format: date-time
+        definition:
+          type: string
+        expires_at:
+          type: string
+          format: date-time
+        external_note:
+          type: string
+        id:
+          type: string
+          format: uuid
+        internal_note:
+          type: string
+        organization_id:
+          type: string
+        principal_key:
+          type: string
+        principal_kind:
+          type: string
+        resource_kind:
+          type: string
+        resource_scope:
+          type: string
+        selected_resource_keys:
+          type: array
+          items:
+            type: string
+        starts_at:
+          type: string
+          format: date-time
+        state:
+          type: string
+        superseded_at:
+          type: string
+          format: date-time
+        version:
+          type: integer
+          format: int64
+      required:
+        - id
+        - organization_id
+        - definition
+        - principal_kind
+        - principal_key
+        - resource_kind
+        - version
+        - state
+        - resource_scope
+        - selected_resource_keys
+        - starts_at
+        - internal_note
+        - external_note
     PlatformMCPOnboardingSetupHandoff:
       type: object
       properties:
@@ -83791,7 +85829,7 @@ components:
           enum:
             - disabled
             - private
-      description: 'Form for updating a meta MCP server. This is a full-record replace: a user_session_issuer_id omitted from the request becomes null on the stored record. Visibility is the exception — omitting it preserves the stored value, so a caller that does not manage visibility cannot re-enable a disabled gateway by saving an unrelated field.'
+      description: Form for updating a meta MCP server. Omitting user_session_issuer_id preserves the stored issuer (one is minted if the gateway has none); omitting visibility preserves the stored value.
       required:
         - id
         - name
@@ -84608,7 +86646,7 @@ components:
             - interactive
         client_id_metadata_admission_mode:
           type: string
-          description: Which CIMD (OAuth Client ID Metadata Document) clients this issuer admits. 'presets' admits Gram's curated catalog plus this issuer's custom URLs; 'open' admits any spec-valid document; 'disabled' admits none and stops advertising CIMD support. Omit to leave unchanged. Once set, the issuer can never return to the unset state — it can only be moved between explicit modes.
+          description: Which CIMD (OAuth Client ID Metadata Document) clients this issuer admits. 'presets' admits Gram's curated catalog plus this issuer's custom URLs; 'open' admits any spec-valid document; 'disabled' admits none and stops advertising CIMD support. Omit to leave unchanged.
           enum:
             - disabled
             - presets
@@ -85289,7 +87327,7 @@ components:
           description: chain | interactive.
         client_id_metadata_admission_mode:
           type: string
-          description: 'The EFFECTIVE CIMD admission policy in force for this issuer: disabled | presets | reporting | open. Always populated, so clients never have to reason about an unset state. Note ''reporting'' can be READ but not written: it is the current default for an issuer whose mode has never been configured, and it admits every spec-valid client while recording what ''presets'' would have refused. It exists so the platform can measure before switching the default to ''presets''. Set an explicit mode to opt out of it.'
+          description: 'The EFFECTIVE CIMD admission policy in force for this issuer: disabled | presets | reporting | open. Always populated, so clients never have to reason about an unset state. ''open'' is the resting policy an issuer carries unless an operator chooses otherwise: it admits any spec-valid document, and ''presets'' enforcement is opt-in because a denial under it is unrecoverable for the end user. Note ''reporting'' can be READ but not written: it is a legacy value that admits exactly what ''open'' admits, and no issuer is created with it.'
           enum:
             - disabled
             - presets
@@ -85796,6 +87834,75 @@ components:
       required:
         - scores_available
         - buckets
+    KillswitchCapabilityKey: {type: string, enum: [mcp_tool_calls]}
+    KillswitchStatus: {type: string, enum: [active, scheduled, expired, lifted]}
+    KillswitchListStatus: {type: string, enum: [active, scheduled, expired, lifted]}
+    KillswitchHistoryAction: {type: string, enum: [created, edited, lifted, expired, restored]}
+    KillswitchOverlapStatus: {type: string, enum: [active, scheduled]}
+    KillswitchConflictName: {type: string, enum: [operation_conflict, version_conflict]}
+    KillswitchScopeAllServersType: {type: string, enum: [all_servers]}
+    KillswitchScopeSelectedServersType: {type: string, enum: [selected_servers]}
+    KillswitchScheduleStartNow: {type: string, enum: [now]}
+    KillswitchScheduleStartScheduled: {type: string, enum: [scheduled]}
+    KillswitchScheduleEndUntilLifted: {type: string, enum: [until_lifted]}
+    KillswitchScheduleEndBounded: {type: string, enum: [bounded]}
+    KillswitchScope:
+      oneOf:
+        - title: KillswitchAllServersScope
+          type: object
+          additionalProperties: false
+          required: [type]
+          properties:
+            type:
+              $ref: "#/components/schemas/KillswitchScopeAllServersType"
+        - title: KillswitchSelectedServersScope
+          type: object
+          additionalProperties: false
+          required: [type, server_ids]
+          properties:
+            type:
+              $ref: "#/components/schemas/KillswitchScopeSelectedServersType"
+            server_ids:
+              type: array
+              minItems: 1
+              maxItems: 1000
+              items:
+                type: string
+                format: uuid
+    KillswitchSchedule:
+      oneOf:
+        - title: KillswitchNowUntilLiftedSchedule
+          type: object
+          additionalProperties: false
+          required: [start, end]
+          properties:
+            start: {$ref: "#/components/schemas/KillswitchScheduleStartNow"}
+            end: {$ref: "#/components/schemas/KillswitchScheduleEndUntilLifted"}
+        - title: KillswitchNowBoundedSchedule
+          type: object
+          additionalProperties: false
+          required: [start, end, ends_at]
+          properties:
+            start: {$ref: "#/components/schemas/KillswitchScheduleStartNow"}
+            end: {$ref: "#/components/schemas/KillswitchScheduleEndBounded"}
+            ends_at: {type: string, format: date-time}
+        - title: KillswitchScheduledUntilLiftedSchedule
+          type: object
+          additionalProperties: false
+          required: [start, starts_at, end]
+          properties:
+            start: {$ref: "#/components/schemas/KillswitchScheduleStartScheduled"}
+            starts_at: {type: string, format: date-time}
+            end: {$ref: "#/components/schemas/KillswitchScheduleEndUntilLifted"}
+        - title: KillswitchScheduledBoundedSchedule
+          type: object
+          additionalProperties: false
+          required: [start, starts_at, end, ends_at]
+          properties:
+            start: {$ref: "#/components/schemas/KillswitchScheduleStartScheduled"}
+            starts_at: {type: string, format: date-time}
+            end: {$ref: "#/components/schemas/KillswitchScheduleEndBounded"}
+            ends_at: {type: string, format: date-time}
   securitySchemes:
     admin_auth_header_Authorization:
       type: apiKey
@@ -85831,6 +87938,8 @@ components:
       name: Gram-Session
       in: header
 tags:
+  - name: killswitches
+    description: Manage MCP tool-call killswitches for users in the active organization. Requires an ordinary live organization-administrator session.
   - name: access
     description: Manage roles, team member access control, and authorization challenge events.
   - name: agent
@@ -85919,6 +88028,8 @@ tags:
     description: Platform-admin management of an organization's chat session analysis settings. Speakeasy-staff only; every method requires the platform-admin flag.
   - name: adminExternalCredentials
     description: Platform-admin management of platform external_credentials — how Gram authenticates into a cloud provider to reach a platform KMS key. Shared across every organization (organization_id NULL, project_id NULL). Speakeasy-staff only; every method requires the platform-admin flag.
+  - name: platformKillswitches
+    description: Platform break-glass access to generic killswitch lifecycle operations on the main server. Requires a current users.admin entitlement on an ordinary Gram session.
   - name: adminOpenRouterKeys
     description: Platform-admin management of per-organization platform OpenRouter keys. Speakeasy-staff only; every method requires the platform-admin flag.
   - name: platformMcp

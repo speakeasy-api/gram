@@ -8,13 +8,16 @@
 package mcp_test
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"net/http/httputil"
 	"net/url"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -255,6 +258,69 @@ func TestServePublic_MetaEndpoint_ExecuteTool_ForwardsEachMembersOwnBearer(t *te
 		"member B's upstream must receive exactly member B's bearer and never A's")
 }
 
+// A caller's _meta must not reach a proxied member: WireMeta re-serializes
+// lossily (empty/null fields) and strict vendors reject the result with 400.
+// Regression for a real-client failure — MCP clients attach _meta routinely.
+func TestServePublic_MetaEndpoint_ExecuteTool_DropsCallerMetaUpstream(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+	projectID := *authCtx.ProjectID
+	orgID := authCtx.ActiveOrganizationID
+
+	sharedIssuerID := createUserSessionIssuer(t, ctx, ti.conn, projectID)
+	metaSlug := "meta-nometa-e2e-" + uuid.NewString()[:8]
+	meta := createMetaMcpEndpoint(t, ctx, ti.conn, projectID, orgID, metaSlug, sharedIssuerID)
+
+	upstream := newRecordingUpstream(t, "ping")
+	var bodies sync.Map
+	var bodyIdx atomic.Int64
+	target, perr := url.Parse(upstream.url)
+	require.NoError(t, perr)
+	reverse := httputil.NewSingleHostReverseProxy(target)
+	recorder := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		raw, rerr := io.ReadAll(r.Body)
+		if rerr != nil {
+			http.Error(w, rerr.Error(), http.StatusInternalServerError)
+			return
+		}
+		bodies.Store(bodyIdx.Add(1), string(raw))
+		r.Body = io.NopCloser(bytes.NewReader(raw))
+		reverse.ServeHTTP(w, r)
+	}))
+	t.Cleanup(recorder.Close)
+	seedMetaMemberWithUpstream(t, ctx, ti.conn, projectID, meta.ID, "Member", "member-nometa", 0, recorder.URL)
+
+	subject := urn.NewUserSubject("meta-nometa-user-" + uuid.NewString())
+	bearer := mintMetaIssuerBearer(t, ti, metaSlug, sharedIssuerID, subject)
+
+	body := makeMetaRPCBody(t, "tools/call", map[string]any{
+		"_meta":     map[string]any{"progressToken": 1, "claudecode/toolUseId": "toolu_regression"},
+		"name":      "execute_tool",
+		"arguments": map[string]any{"name": "member-nometa--ping", "arguments": map[string]any{}},
+	})
+	resp, err := servePublicHTTP(t, context.Background(), ti, metaSlug, body, bearer, nil)
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, resp.Code, "execute_tool response: %s", resp.Body.String())
+	text, isError := metaToolResultText(t, decodeRPCResponse(t, resp))
+	require.False(t, isError, "execute_tool with caller _meta must succeed: %s", text)
+	require.Contains(t, text, "pong from ping")
+
+	seen := 0
+	bodies.Range(func(_, v any) bool {
+		seen++
+		body, isString := v.(string)
+		require.True(t, isString)
+		require.NotContains(t, body, `"_meta"`,
+			"no upstream request may carry a _meta object")
+		return true
+	})
+	require.Positive(t, seen, "the upstream recorder must have observed requests")
+}
+
 // An ambiguous credential map — two stored tokens claiming one member's
 // resource — must fail member-scoped with the upstream never contacted.
 func TestServePublic_MetaEndpoint_ExecuteTool_AmbiguousCredentialMakesNoCall(t *testing.T) {
@@ -285,7 +351,7 @@ func TestServePublic_MetaEndpoint_ExecuteTool_AmbiguousCredentialMakesNoCall(t *
 	rpc := executeMetaTool(t, ti, metaSlug, bearer, "member--ping")
 	text, isError := metaToolResultText(t, rpc)
 	require.True(t, isError, "an ambiguous credential map must fail the member call")
-	require.Contains(t, text, "not configured unambiguously")
+	require.Contains(t, text, "recorded for the same upstream", "the message must name the duplication, not just report misconfiguration")
 	require.Zero(t, upstream.requests.Load(), "no call may be made when the credential is ambiguous")
 }
 
@@ -326,4 +392,54 @@ func TestServePublic_MetaEndpoint_ExecuteTool_NoCredentialCallsAnonymously(t *te
 	require.Positive(t, upstreamA.requests.Load(), "member A's upstream must have been called")
 	require.Empty(t, upstreamA.capturedAuth(),
 		"no bearer may be forwarded to a member with no matching credential — least of all a sibling's")
+}
+
+// A subject who connected only one of the gateway's two providers still gets
+// a served session: the covered member forwards its own bearer, the
+// uncovered member is called anonymously, and no request-level 401 fires.
+// Before partial resolution, the missing grant rejected the whole session.
+func TestServePublic_MetaEndpoint_PartialProviderConnectionsServe(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+	projectID := *authCtx.ProjectID
+	orgID := authCtx.ActiveOrganizationID
+
+	sharedIssuerID := createUserSessionIssuer(t, ctx, ti.conn, projectID)
+	metaSlug := "meta-partial-" + uuid.NewString()[:8]
+	meta := createMetaMcpEndpoint(t, ctx, ti.conn, projectID, orgID, metaSlug, sharedIssuerID)
+
+	upstreamA := newRecordingUpstream(t, "ping")
+	upstreamB := newRecordingUpstream(t, "ping")
+	seedMetaMemberWithUpstream(t, ctx, ti.conn, projectID, meta.ID, "Member A", "member-a", 0, upstreamA.url)
+	seedMetaMemberWithUpstream(t, ctx, ti.conn, projectID, meta.ID, "Member B", "member-b", 1, upstreamB.url)
+
+	// Both providers are attached to the gateway, but the subject linked
+	// only member B's — the exact shape of a user who skipped one consent
+	// tile. Member A's client stays attached with no token on purpose: the
+	// partial resolver must skip it, where the strict resolver would have
+	// failed the whole session.
+	createConsentRemoteClient(t, ctx, ti.conn, projectID, orgID, "meta-partial-a", "", []uuid.UUID{sharedIssuerID})
+	clientB := createConsentRemoteClient(t, ctx, ti.conn, projectID, orgID, "meta-partial-b", "", []uuid.UUID{sharedIssuerID})
+
+	subject := urn.NewUserSubject("meta-partial-user-" + uuid.NewString())
+	insertQualifiedRemoteSessionToken(t, ctx, ti, sharedIssuerID, clientB, subject, "token-member-b", upstreamB.url)
+
+	bearer := mintMetaIssuerBearer(t, ti, metaSlug, sharedIssuerID, subject)
+
+	rpc := executeMetaTool(t, ti, metaSlug, bearer, "member-b--ping")
+	text, isError := metaToolResultText(t, rpc)
+	require.False(t, isError, "the covered member must serve on a partially connected session: %s", text)
+	require.Equal(t, "Bearer token-member-b", upstreamB.capturedAuth(),
+		"the covered member must receive its own bearer")
+
+	rpc = executeMetaTool(t, ti, metaSlug, bearer, "member-a--ping")
+	text, isError = metaToolResultText(t, rpc)
+	require.False(t, isError, "the uncovered member must degrade to an anonymous call, not fail the session: %s", text)
+	require.Positive(t, upstreamA.requests.Load(), "member A's upstream must have been called")
+	require.Empty(t, upstreamA.capturedAuth(),
+		"no bearer may reach the member whose provider was never connected")
 }

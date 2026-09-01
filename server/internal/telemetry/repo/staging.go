@@ -306,10 +306,11 @@ func (q *Queries) ListExistingTelemetryLogIDs(ctx context.Context, projectID str
 }
 
 // DeleteStagedTelemetryLogs synchronously removes promoted rows from staging
-// with a lightweight delete. Waiting for every replica keeps the activity's
-// next drain pass from observing rows it already promoted. Safe to retry:
-// deleting an already-deleted id is a no-op, and a crash before this delete
-// only leaves rows the next promotion pass skips via the dedup guard.
+// with a lightweight delete. Waiting for active replicas keeps the activity's
+// next drain pass from observing rows it already promoted without failing when
+// ClickHouse Cloud has an inactive compute replica. Safe to retry: deleting an
+// already-deleted id is a no-op, and a crash before this delete only leaves
+// rows the next promotion pass skips via the dedup guard.
 func (q *Queries) DeleteStagedTelemetryLogs(ctx context.Context, projectID string, ids []string) error {
 	if len(ids) == 0 {
 		return nil
@@ -325,7 +326,7 @@ func (q *Queries) DeleteStagedTelemetryLogs(ctx context.Context, projectID strin
 	}
 
 	ctx = clickhouse.Context(ctx, clickhouse.WithSettings(clickhouse.Settings{
-		"lightweight_deletes_sync": 2,
+		"lightweight_deletes_sync": 3,
 	}))
 
 	if err := q.conn.Exec(ctx, query, args...); err != nil {

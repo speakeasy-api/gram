@@ -75,6 +75,9 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/jsonwebkeysets"
 	"github.com/speakeasy-api/gram/server/internal/k8s"
 	"github.com/speakeasy-api/gram/server/internal/keys"
+	"github.com/speakeasy-api/gram/server/internal/killswitchapi"
+	"github.com/speakeasy-api/gram/server/internal/killswitches"
+	"github.com/speakeasy-api/gram/server/internal/killswitches/mcptoolexecution"
 	"github.com/speakeasy-api/gram/server/internal/litellm"
 	"github.com/speakeasy-api/gram/server/internal/litellm/callcache"
 	"github.com/speakeasy-api/gram/server/internal/marketplace"
@@ -88,7 +91,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcpapproval/packagemeta"
 	"github.com/speakeasy-api/gram/server/internal/mcpapproval/remoteprobe"
 	"github.com/speakeasy-api/gram/server/internal/mcpapproval/repometa"
-	"github.com/speakeasy-api/gram/server/internal/mcpclient"
 	"github.com/speakeasy-api/gram/server/internal/mcpendpoints"
 	"github.com/speakeasy-api/gram/server/internal/mcpmetadata"
 	mcpmetadata_repo "github.com/speakeasy-api/gram/server/internal/mcpmetadata/repo"
@@ -136,7 +138,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/skillefficacy"
 	"github.com/speakeasy-api/gram/server/internal/skills"
 	"github.com/speakeasy-api/gram/server/internal/skills/efficacy"
-	feedbackrecorder "github.com/speakeasy-api/gram/server/internal/skills/feedback"
 	"github.com/speakeasy-api/gram/server/internal/spendrules"
 	spendcelenv "github.com/speakeasy-api/gram/server/internal/spendrules/celenv"
 	tm "github.com/speakeasy-api/gram/server/internal/telemetry"
@@ -1019,8 +1020,7 @@ func newStartCommand() *cli.Command {
 			platformFeatureChecker := productFeatures.PlatformFeatureCheck
 
 			memoryTools := platformtoolsruntime.MemoryExternalTools(memorySvc)
-			feedbackRecorder := feedbackrecorder.NewRecorder(db, logger, &background.TemporalSkillSuggestionSignaler{TemporalEnv: temporalEnv, Logger: logger, StartDelay: 0})
-			skillTools := platformtoolsruntime.AssistantSkillTools(logger, db, feedbackRecorder, platformskills.WithEfficacySignaler(efficacySignaler))
+			skillTools := platformtoolsruntime.AssistantSkillTools(logger, db, platformskills.WithEfficacySignaler(efficacySignaler))
 			triggerTools := platformtoolsruntime.TriggerExternalTools(db, triggerApp, auditLogger)
 			// mcpService captures this map by reference now; the remaining
 			// insights tools (chat/orgs/risk/deployments/skills) are merged in once
@@ -1057,10 +1057,15 @@ func newStartCommand() *cli.Command {
 
 			toolDispositionCache := mcpservers.NewToolDispositionCache(logger, db, cache.NewRedisCacheAdapter(redisClient))
 			var platformSelectedUseRecorder toolcallobserver.SuccessRecorder = platformmcp.NewSelectedUseRecorder(db)
+			mcpToolExecutionCheckpoint, err := mcptoolexecution.NewCheckpoint(db, mcptoolexecution.DefaultEvaluationTimeout, meterProvider, logger)
+			if err != nil {
+				return fmt.Errorf("initialize mcp tool-execution checkpoint: %w", err)
+			}
 			remoteProxyManager := remotemcp.NewProxyManager(
 				logger,
 				tracerProvider,
 				meterProvider,
+				db,
 				guardianPolicy,
 				authzEngine,
 				posthogClient,
@@ -1070,6 +1075,7 @@ func newStartCommand() *cli.Command {
 				toolDispositionCache,
 				platformSelectedUseRecorder,
 				toolfilter.NewSessionToolWitnessStore(logger, cache.NewRedisCacheAdapter(redisClient)),
+				mcpToolExecutionCheckpoint,
 			)
 
 			// guardian.WithAllowedCIDRBlocks silently drops invalid CIDRs, so a
@@ -1082,7 +1088,7 @@ func newStartCommand() *cli.Command {
 				}
 			}
 
-			mcpService := mcp.NewService(
+			mcpService, err := mcp.NewService(
 				logger,
 				tracerProvider,
 				meterProvider,
@@ -1131,15 +1137,11 @@ func newStartCommand() *cli.Command {
 					MemberCallTimeout: c.Duration("meta-member-call-timeout"),
 				},
 			)
+			if err != nil {
+				return fmt.Errorf("initialize MCP service: %w", err)
+			}
 
-			chatClient := chat.NewAgenticChatClient(
-				logger,
-				db,
-				env,
-				cache.NewRedisCacheAdapter(redisClient),
-				completionsClient,
-				mcpclient.NewInternalMCPClient(mcpService),
-			)
+			chatClient := chat.NewAgenticChatClient(completionsClient)
 			contextWindowResolver := openrouter.NewContextWindowResolver(logger, guardianPolicy, cache.NewRedisCacheAdapter(redisClient))
 			chatService := chat.NewService(logger, tracerProvider, db, sessionManager, chatSessionsManager, openRouter, chatClient, contextWindowResolver, posthogClient, telemSvc, assetStorage, authzEngine, assistantTokenManager, billingRepo, auditLogger).
 				WithTurnStream(turnStream)
@@ -1308,6 +1310,19 @@ func newStartCommand() *cli.Command {
 			mux.Use(middleware.NewHTTPLoggingMiddleware(logger))
 			mux.Use(middleware.NewRecovery(logger))
 			mux.Use(middleware.CORSMiddleware(c.String("environment"), c.String("server-url"), chatSessionsManager))
+			// Must stay below CORSMiddleware: chatSessionsCORS runs inside it and
+			// marks requests whose Origin matched the chat-session audience claim,
+			// which MCPSecurity reads to exempt Elements. The Gram first-party
+			// origins are trusted so the dashboard's MCP inspection tabs can reach a
+			// customer's custom domain, which is cross-site and cannot be rebased
+			// onto the platform host (mcp_endpoint rows resolve by slug + custom
+			// domain). site-url and server-url are the same origin in production and
+			// differ only in local development.
+			mcpSecurity, err := middleware.MCPSecurity(logger, []string{c.String("server-url"), c.String("site-url")})
+			if err != nil {
+				return fmt.Errorf("configure mcp security middleware: %w", err)
+			}
+			mux.Use(mcpSecurity)
 			mux.Use(customdomains.Middleware(logger, db, c.String("environment"), serverURL))
 			mux.Use(middleware.SessionMiddleware)
 			mux.Use(middleware.RBACOverrideMiddleware())
@@ -1513,7 +1528,19 @@ func newStartCommand() *cli.Command {
 			// not coalesced into the chat-write cooldown.
 			chatanalysis.Attach(mux, chatanalysis.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger,
 				&background.TemporalChatAnalysisSignaler{TemporalEnv: temporalEnv, Logger: logger}))
-			openrouterkeys.Attach(mux, openrouterkeys.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger, openRouter, encryptionClient))
+			openRouterAdminCoordinator := &background.TemporalOpenRouterAdminCoordinator{TemporalEnv: temporalEnv}
+			openrouterkeys.Attach(mux, openrouterkeys.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger, openRouter, encryptionClient, openRouterAdminCoordinator))
+			// Platform break-glass remains separately unavailable; this composition is
+			// intentionally customer-only and enforces ordinary live admin sessions.
+			// DNO-979 owns production definitions and authoritative validators. Keep
+			// this break-glass transport mounted but explicitly unavailable until
+			// that safe lifecycle composition exists.
+			killswitches.AttachPlatformService(mux, killswitches.NewPlatformService(logger, tracerProvider, db, sessionManager, authzEngine, nil))
+			killswitchService, err := killswitchapi.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger)
+			if err != nil {
+				return fmt.Errorf("build customer killswitch service: %w", err)
+			}
+			killswitchapi.Attach(mux, killswitchService)
 			skillsService := skills.NewService(logger, tracerProvider, db, sessionManager, authzEngine, productFeatures, auditLogger,
 				&background.TemporalSkillSuggestionSignaler{TemporalEnv: temporalEnv, Logger: logger, StartDelay: 0}, siteURL)
 			skills.Attach(mux, skillsService)

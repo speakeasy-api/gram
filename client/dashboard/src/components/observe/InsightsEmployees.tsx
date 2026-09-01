@@ -100,6 +100,7 @@ const EMPLOYEE_FILTERS = defineFilters([
     label: "Account type",
     kind: "select",
     allLabel: "All",
+    description: "Usage on personal accounts versus team-managed ones.",
   },
   { id: "role", label: "Role", kind: "select" },
   { id: "user", label: "User", kind: "select" },

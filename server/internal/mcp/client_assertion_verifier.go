@@ -61,7 +61,7 @@ func newClientAssertionVerifier(redisClient *redis.Client, policy *guardian.Poli
 		logger.ErrorContext(context.Background(), "client assertion key resolver unavailable, assertion clients will be refused", attr.SlogError(err))
 		return nil
 	}
-	guard, err := replay.NewRedisGuard(redisClient, "client_assertion_jti", clientauth.MaxReplayHold)
+	guard, err := replay.NewRedisGuard(redisClient, "client_assertion_jti", clientauth.DefaultMaxReplayHold)
 	if err != nil {
 		logger.ErrorContext(context.Background(), "client assertion replay guard unavailable, assertion clients will be refused", attr.SlogError(err))
 		return nil

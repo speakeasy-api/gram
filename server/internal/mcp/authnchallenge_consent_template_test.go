@@ -501,3 +501,30 @@ func TestConsentTemplateToolAccessOmittedOnFirstParty(t *testing.T) {
 	require.NotContains(t, page.String(), "consent-tools-root")
 	require.NotContains(t, page.String(), "consent-tools-")
 }
+
+// A first-party connect page for a server with no per-user providers must not
+// tell the user to connect services that are not there.
+func TestConsentTemplateFirstPartyNoCardCopy(t *testing.T) {
+	t.Parallel()
+
+	var page bytes.Buffer
+	err := consentTemplate.Execute(&page, consentTemplateData{
+		ClientName:         "Gram",
+		MCPSlug:            "example",
+		MCPRouteBase:       "mcp",
+		State:              "state",
+		CSRFToken:          "csrf",
+		SubjectDisplay:     "user@example.com",
+		ScriptURL:          "/mcp/consent-page-test.js",
+		RemoteSessionCards: nil,
+		FirstParty:         true,
+		ConsentEnabled:     true,
+	})
+	require.NoError(t, err)
+
+	html := page.String()
+	require.Contains(t, html, "This MCP server needs no per-user service connections — you're all set.")
+	require.Contains(t, html, "You can close this tab.")
+	require.NotContains(t, html, "Link the services this MCP server needs")
+	require.NotContains(t, html, "connected the services above")
+}

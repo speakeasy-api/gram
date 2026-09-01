@@ -36,6 +36,7 @@ import { Instances } from "./instances.js";
 import { Integrations } from "./integrations.js";
 import { JsonWebKeySets } from "./jsonwebkeysets.js";
 import { Keys } from "./keys.js";
+import { Killswitches } from "./killswitches.js";
 import { Litellm } from "./litellm.js";
 import { McpApproval } from "./mcpapproval.js";
 import { McpEndpoints } from "./mcpendpoints.js";
@@ -52,6 +53,7 @@ import { Organizations } from "./organizations.js";
 import { Otel } from "./otel.js";
 import { OtelForwarding } from "./otelforwarding.js";
 import { Packages } from "./packages.js";
+import { PlatformKillswitches } from "./platformkillswitches.js";
 import { PlatformMcp } from "./platformmcp.js";
 import { Plugins } from "./plugins.js";
 import { Projects } from "./projects.js";
@@ -254,6 +256,11 @@ export class Gram extends ClientSDK {
     return (this._keys ??= new Keys(this._options));
   }
 
+  private _killswitches?: Killswitches;
+  get killswitches(): Killswitches {
+    return (this._killswitches ??= new Killswitches(this._options));
+  }
+
   private _litellm?: Litellm;
   get litellm(): Litellm {
     return (this._litellm ??= new Litellm(this._options));
@@ -331,6 +338,13 @@ export class Gram extends ClientSDK {
   private _packages?: Packages;
   get packages(): Packages {
     return (this._packages ??= new Packages(this._options));
+  }
+
+  private _platformKillswitches?: PlatformKillswitches;
+  get platformKillswitches(): PlatformKillswitches {
+    return (this._platformKillswitches ??= new PlatformKillswitches(
+      this._options,
+    ));
   }
 
   private _platformMcp?: PlatformMcp;

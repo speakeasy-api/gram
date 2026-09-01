@@ -37,6 +37,7 @@ import Environments, {
   EnvironmentsRoot,
 } from "./pages/environments/Environments";
 import Home from "./pages/home/Home";
+import { ProjectGuidePage } from "./components/project-guide/ProjectGuidePage";
 import Integrations from "./pages/integrations/Integrations";
 import Login from "./pages/login/Login";
 import Register from "./pages/login/Register";
@@ -134,6 +135,7 @@ import PolicyDetail, { PolicyNew } from "./pages/security/PolicyDetail";
 import DetectionRules from "./pages/security/DetectionRules";
 import Team from "./pages/team/Team";
 import SourceDetails from "./pages/sources/SourceDetails";
+import { KillswitchesRoot } from "./pages/killswitch/KillswitchesRoot";
 import {
   AddFromCatalogGate,
   SourcesPage,
@@ -144,6 +146,15 @@ import {
   ToolBuilderNew,
   ToolBuilderPage,
 } from "./pages/toolBuilder/ToolBuilder";
+
+const Killswitches = React.lazy(() =>
+  import("./pages/killswitch/Killswitches").then((module) => ({
+    default: module.default,
+  })),
+);
+const KillswitchDetail = React.lazy(
+  () => import("./pages/killswitch/KillswitchDetail"),
+);
 
 type AppRouteBasic = {
   title: string;
@@ -241,6 +252,11 @@ const ROUTE_STRUCTURE = {
     url: "",
     icon: "house",
     component: Home,
+  },
+  guide: {
+    title: "Project Guide",
+    url: "guide",
+    component: ProjectGuidePage,
   },
   chat: {
     title: "Project Assistant",
@@ -523,6 +539,9 @@ const ROUTE_STRUCTURE = {
             title: "Gateway Overview",
             url: "overview",
           },
+          // Legacy URL: member management moved onto the Overview tab, and
+          // GatewayDetails redirects unknown tab segments there. Kept so old
+          // links keep resolving to the gateway page.
           members: {
             title: "Gateway Members",
             url: "members",
@@ -1168,6 +1187,20 @@ const ORG_ROUTE_STRUCTURE = {
     url: "audit-logs",
     icon: "history",
     component: OrgAuditLogs,
+  },
+  killswitch: {
+    title: "Killswitch",
+    url: "killswitch",
+    icon: "shield-off",
+    component: KillswitchesRoot,
+    indexComponent: Killswitches,
+    subPages: {
+      detail: {
+        title: "Killswitch detail",
+        url: ":killswitchId",
+        component: KillswitchDetail,
+      },
+    },
   },
   mcpSessions: {
     title: "MCP Sessions",

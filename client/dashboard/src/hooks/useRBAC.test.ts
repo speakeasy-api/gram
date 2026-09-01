@@ -1,11 +1,23 @@
+import { queryKeyGrants } from "@gram/client/react-query/grants.js";
 import { describe, expect, it } from "vitest";
 import {
   exclusionScopesForScope,
   hasScopeInGrants,
+  hasScopeInProject,
   resourceKindForScope,
   selectorMatches,
   selectorMatchesStrict,
 } from "./useRBAC";
+
+describe("grants query key", () => {
+  it("isolates effective grants by session", () => {
+    const first = queryKeyGrants({ gramSession: "session-first" });
+    const second = queryKeyGrants({ gramSession: "session-second" });
+
+    expect(first).not.toEqual(second);
+    expect(first.at(-1)).toEqual({ gramSession: "session-first" });
+  });
+});
 
 describe("resourceKindForScope", () => {
   it("returns 'project' for project scopes", () => {
@@ -57,6 +69,39 @@ describe("resourceKindForScope", () => {
   it("returns '*' for unknown scope families", () => {
     expect(resourceKindForScope("root")).toBe("*");
     expect(resourceKindForScope("unknown:thing")).toBe("*");
+  });
+});
+
+describe("hasScopeInProject", () => {
+  it("matches MCP grants constrained by the project selector", () => {
+    expect(
+      hasScopeInProject(
+        [
+          {
+            scope: "mcp:read",
+            selectors: [
+              { resourceKind: "mcp", resourceId: "*", projectId: "project_a" },
+            ],
+          },
+        ],
+        "mcp:read",
+        "project_a",
+      ),
+    ).toBe(true);
+    expect(
+      hasScopeInProject(
+        [
+          {
+            scope: "mcp:read",
+            selectors: [
+              { resourceKind: "mcp", resourceId: "*", projectId: "project_a" },
+            ],
+          },
+        ],
+        "mcp:read",
+        "project_b",
+      ),
+    ).toBe(false);
   });
 });
 

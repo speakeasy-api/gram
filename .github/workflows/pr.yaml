@@ -37,6 +37,7 @@ jobs:
       tsframework: ${{ steps.gates.outputs.tsframework }}
       migrations: ${{ steps.gates.outputs.migrations }}
       plog: ${{ steps.gates.outputs.plog }}
+      glint: ${{ steps.gates.outputs.glint }}
       infra: ${{ steps.gates.outputs.infra }}
       pystreams: ${{ steps.gates.outputs.pystreams }}
       sdk: ${{ steps.gates.outputs.sdk }}
@@ -144,6 +145,13 @@ jobs:
             echo "Plog jobs will run."
           else
             echo "Plog jobs will be skipped."
+          fi
+
+          if [[ "${{ steps.filter.outputs.glint }}" == "true" || "${{ github.ref }}" == "refs/heads/main" || "${{ github.event_name }}" == "merge_group" || "$HAS_FULL_CI_LABEL" == "true" ]]; then
+            echo "glint=true" >> $GITHUB_OUTPUT
+            echo "glint jobs will run."
+          else
+            echo "glint jobs will be skipped."
           fi
 
           if [[ "${{ steps.filter.outputs.infra }}" == "true" || "${{ github.ref }}" == "refs/heads/main" || "${{ github.event_name }}" == "merge_group" || "$HAS_FULL_CI_LABEL" == "true" ]]; then
@@ -749,7 +757,7 @@ jobs:
     if: needs.changes.outputs.migrations == 'true' && github.event_name == 'pull_request'
     services:
       clickhouse:
-        image: clickhouse/clickhouse-server:25.8.3
+        image: clickhouse/clickhouse-server:26.2.19.43@sha256:c2f2605585899d5103a0447daadbc0005f362200d5f0fcca7f40db3ca0dd36dd
         env:
           CLICKHOUSE_USER: gram
           CLICKHOUSE_PASSWORD: gram
@@ -891,7 +899,7 @@ jobs:
         with:
           dir: file://server/clickhouse/migrations
           dir-name: gram-clickhouse
-          dev-url: docker://clickhouse/clickhouse-server/25.8.3/dev
+          dev-url: docker://clickhouse/clickhouse-server/26.2.19.43@sha256:c2f2605585899d5103a0447daadbc0005f362200d5f0fcca7f40db3ca0dd36dd/dev
           git-base: origin/main
         env:
           GITHUB_TOKEN: ${{ github.token }}
@@ -1000,7 +1008,7 @@ jobs:
         with:
           dir: file://server/clickhouse/migrations
           dir-name: gram-clickhouse
-          dev-url: docker://clickhouse/clickhouse-server/25.8.3/dev
+          dev-url: docker://clickhouse/clickhouse-server/26.2.19.43@sha256:c2f2605585899d5103a0447daadbc0005f362200d5f0fcca7f40db3ca0dd36dd/dev
           tag: ${{ steps.tag.outputs.tag }}
 
   webhooks-catalog-breaking-changes:
@@ -1386,6 +1394,47 @@ jobs:
 
       - name: Test
         run: mise run test:hooks
+
+      - name: Run "go mod tidy"
+        run: mise run go:tidy
+
+      - name: Check for dirty files
+        run: mise run git:porcelain
+
+  glint-test:
+    runs-on: blacksmith-4vcpu-ubuntu-2404
+    needs: changes
+    if: needs.changes.outputs.glint == 'true'
+    env:
+      GOMAXPROCS: 4
+    steps:
+      - name: Checkout
+        uses: useblacksmith/checkout@6fd481652155169ed4d2f25ebaf97464f685175f # v1
+
+      - name: Setup Mise
+        uses: jdx/mise-action@7e36c90d9ab29c415a2384db3006f3ec8a8cc654 # v4.2.4
+        with:
+          install: true
+          cache: true
+          cache_key_prefix: mise-blacksmith-v1
+          env: false
+
+      - name: Prepare GitHub Actions environment
+        run: mise run github
+
+      - name: Cache Go
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          key: ${{ env.GH_CACHE_GO_KEY }}
+          restore-keys: |
+            ${{ env.GH_CACHE_GO_KEY }}
+            ${{ env.GH_CACHE_GO_KEY_PARTIAL }}
+          path: |
+            ${{ env.GOCACHE }}
+            ${{ env.GOMODCACHE }}
+
+      - name: Test
+        run: mise run test:glint
 
       - name: Run "go mod tidy"
         run: mise run go:tidy
@@ -2136,23 +2185,54 @@ jobs:
             docker tag "${{ steps.apko.outputs.image }}-amd64" "$TAG"
           done
 
-      - name: "[DEV] Push images"
-        if: github.event.pull_request.user.login != 'dependabot[bot]'
-        env:
-          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN_DEV }}
-        run: |
-          set -x
-          fly auth docker
-          docker push --all-tags "${{ steps.flyCreateDev.outputs.flyAppRegistry }}"
+      - parallel:
+          - name: "[DEV] Push images"
+            if: github.event.pull_request.user.login != 'dependabot[bot]'
+            env:
+              DOCKER_CONFIG: ${{ runner.temp }}/docker-dev
+              FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN_DEV }}
+              CURRENT_TAGS: ${{ steps.meta.outputs.tags }}
+              FLY_APP_REGISTRY: ${{ steps.flyCreateDev.outputs.flyAppRegistry }}
+            run: |
+              set -euo pipefail
+              mkdir -p "$DOCKER_CONFIG"
+              fly auth docker
 
-      - name: "[PROD] Push images"
-        if: github.event.pull_request.user.login != 'dependabot[bot]'
-        env:
-          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN_PROD }}
-        run: |
-          set -x
-          fly auth docker
-          docker push --all-tags "${{ steps.flyCreateProd.outputs.flyAppRegistry }}"
+              matched=false
+              while IFS= read -r tag; do
+                [[ "$tag" == "$FLY_APP_REGISTRY":* ]] || continue
+                docker push "$tag"
+                matched=true
+              done <<< "$CURRENT_TAGS"
+
+              if [[ "$matched" != true ]]; then
+                echo "::error::No current image tags matched $FLY_APP_REGISTRY"
+                exit 1
+              fi
+
+          - name: "[PROD] Push images"
+            if: github.event.pull_request.user.login != 'dependabot[bot]'
+            env:
+              DOCKER_CONFIG: ${{ runner.temp }}/docker-prod
+              FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN_PROD }}
+              CURRENT_TAGS: ${{ steps.meta.outputs.tags }}
+              FLY_APP_REGISTRY: ${{ steps.flyCreateProd.outputs.flyAppRegistry }}
+            run: |
+              set -euo pipefail
+              mkdir -p "$DOCKER_CONFIG"
+              fly auth docker
+
+              matched=false
+              while IFS= read -r tag; do
+                [[ "$tag" == "$FLY_APP_REGISTRY":* ]] || continue
+                docker push "$tag"
+                matched=true
+              done <<< "$CURRENT_TAGS"
+
+              if [[ "$matched" != true ]]; then
+                echo "::error::No current image tags matched $FLY_APP_REGISTRY"
+                exit 1
+              fi
 
       - name: Prune aube store
         if: success()
@@ -2282,6 +2362,7 @@ jobs:
       - cli-build-lint
       - hooks-build-test
       - plog-build-lint
+      - glint-test
       - infra-build-lint
       - pystreams-build-lint
       - functions-build-host

@@ -27,6 +27,8 @@ const (
 	HTTPRequestHeaderRefererKey      = attribute.Key("http.request.header.referer")
 	HTTPRequestHeaderContentTypeKey  = attribute.Key("http.request.header.content_type")
 	HTTPRequestHeaderUserAgentKey    = attribute.Key("http.request.header.user_agent")
+	HTTPRequestHeaderOriginKey       = attribute.Key("http.request.header.origin")
+	HTTPRequestHeaderSecFetchSiteKey = attribute.Key("http.request.header.sec_fetch_site")
 	HTTPRequestMethodKey             = semconv.HTTPRequestMethodKey
 	HTTPRequestBodyKey               = attribute.Key("http.request.body")
 	HTTPResponseBodyKey              = attribute.Key("http.response.body")
@@ -193,17 +195,24 @@ const (
 	CIMDCrossOriginRedirectOriginsKey = attribute.Key("gram.cimd.cross_origin_redirect_origins")
 
 	// CIMDAdmissionModeKey is the effective per-issuer CIMD admission policy
-	// ("disabled", "presets", "open") — the low-cardinality dimension on
+	// ("disabled", "presets", "open", and "reporting" on rows that predate
+	// the open default) — the low-cardinality dimension on
 	// cimd.admission.decisions. Operator-chosen, never attacker-influenced.
 	CIMDAdmissionModeKey = attribute.Key("gram.cimd.admission_mode")
 
 	// CIMDAdmissionOutcomeKey is the machine-readable admission decision on
 	// cimd.admission.decisions. Admissions carry the reason they were
 	// admitted rather than a bare "admitted", so the values are
-	// "admitted_open", "admitted_catalog_exact", "admitted_catalog_pattern",
-	// "admitted_custom", "denied_disabled", "denied_not_listed",
-	// "denied_oversized", and "denied_unknown_mode". Chart the admitted_*
-	// values as a group; there is no single value meaning "admitted".
+	// "admitted_open", "admitted_open_not_listed",
+	// "admitted_open_oversized", "admitted_catalog_exact",
+	// "admitted_catalog_pattern", "admitted_custom", "denied_disabled",
+	// "denied_not_listed", "denied_oversized", and "denied_unknown_mode".
+	// Chart the admitted_* values as a group; there is no single value
+	// meaning "admitted".
+	//
+	// "admitted_open_not_listed" is the catalog-gap signal on an issuer that
+	// refuses nobody: the client got in, and no rule anywhere covered it.
+	// Alert on it alongside "denied_not_listed".
 	CIMDAdmissionOutcomeKey = attribute.Key("gram.cimd.admission_outcome")
 
 	// JWKSOriginKey is the host of a remote JWK Set URL — the per-key-host
@@ -306,7 +315,16 @@ const (
 	// McpSurfaceKey is the inbound MCP serving surface: "hosting" for the
 	// third-party-facing /mcp/{slug} and /x/mcp/{slug} paths (all backends), or
 	// "platform" for the assistant-token-only /platform/mcp/{toolsetSlug} path.
-	McpSurfaceKey                 = attribute.Key("gram.mcp.surface")
+	McpSurfaceKey = attribute.Key("gram.mcp.surface")
+	// McpKillswitchSurfaceKey is the kill-switch enforcement surface a covered
+	// MCP tools/call reached: "hosted" or "private_proxy".
+	McpKillswitchSurfaceKey = attribute.Key("gram.mcp.killswitch.surface")
+	// McpKillswitchIdentityClassKey is the bounded kill-switch identity
+	// coverage class of a covered MCP tools/call. Never a user identifier.
+	McpKillswitchIdentityClassKey = attribute.Key("gram.mcp.killswitch.identity_class")
+	// McpKillswitchResourceClassKey is the bounded kill-switch resource
+	// coverage class of a covered MCP tools/call. Never a server identifier.
+	McpKillswitchResourceClassKey = attribute.Key("gram.mcp.killswitch.resource_class")
 	McpRequestedTagsKey           = attribute.Key("gram.mcp.requested_tags")
 	McpToolsReturnedKey           = attribute.Key("gram.mcp.tools_returned")
 	McpToolsFilteredKey           = attribute.Key("gram.mcp.tools_filtered")
@@ -377,6 +395,12 @@ const (
 	OpenAPIOperationIDKey             = attribute.Key("gram.openapi.operation_id")
 	OpenAPIPathKey                    = attribute.Key("gram.openapi.path")
 	OpenAPIVersionKey                 = attribute.Key("gram.openapi.version")
+	OpenRouterBackfillAmbiguousKey    = attribute.Key("gram.openrouter.backfill.ambiguous")
+	OpenRouterBackfillBatchesKey      = attribute.Key("gram.openrouter.backfill.batches")
+	OpenRouterBackfillClassifiedKey   = attribute.Key("gram.openrouter.backfill.classified")
+	OpenRouterBackfillModeKey         = attribute.Key("gram.openrouter.backfill.mode")
+	OpenRouterBackfillScannedKey      = attribute.Key("gram.openrouter.backfill.scanned")
+	OpenRouterBackfillUpdatedKey      = attribute.Key("gram.openrouter.backfill.updated")
 	OpenRouterKeyLimitKey             = attribute.Key("gram.openrouter.key.limit")
 	OpenRouterKeyPreviousLimitKey     = attribute.Key("gram.openrouter.key.previous_limit")
 	OpenRouterKeyTypeKey              = attribute.Key("gram.openrouter.key.type")
@@ -766,6 +790,22 @@ func HTTPRequestHeaderUserAgent(v string) attribute.KeyValue {
 
 func SlogHTTPRequestHeaderUserAgent(v string) slog.Attr {
 	return slog.String(string(HTTPRequestHeaderUserAgentKey), v)
+}
+
+func HTTPRequestHeaderOrigin(v string) attribute.KeyValue {
+	return HTTPRequestHeaderOriginKey.String(v)
+}
+
+func SlogHTTPRequestHeaderOrigin(v string) slog.Attr {
+	return slog.String(string(HTTPRequestHeaderOriginKey), v)
+}
+
+func HTTPRequestHeaderSecFetchSite(v string) attribute.KeyValue {
+	return HTTPRequestHeaderSecFetchSiteKey.String(v)
+}
+
+func SlogHTTPRequestHeaderSecFetchSite(v string) slog.Attr {
+	return slog.String(string(HTTPRequestHeaderSecFetchSiteKey), v)
 }
 
 func HTTPRequestBody(v string) attribute.KeyValue { return HTTPRequestBodyKey.String(v) }
@@ -1540,6 +1580,30 @@ func SlogOpenAPIPath(v string) slog.Attr      { return slog.String(string(OpenAP
 func OpenAPIVersion(v string) attribute.KeyValue { return OpenAPIVersionKey.String(v) }
 func SlogOpenAPIVersion(v string) slog.Attr      { return slog.String(string(OpenAPIVersionKey), v) }
 
+func SlogOpenRouterBackfillAmbiguous(v int64) slog.Attr {
+	return slog.Int64(string(OpenRouterBackfillAmbiguousKey), v)
+}
+
+func SlogOpenRouterBackfillBatches(v int64) slog.Attr {
+	return slog.Int64(string(OpenRouterBackfillBatchesKey), v)
+}
+
+func SlogOpenRouterBackfillClassified(v int64) slog.Attr {
+	return slog.Int64(string(OpenRouterBackfillClassifiedKey), v)
+}
+
+func SlogOpenRouterBackfillMode(v string) slog.Attr {
+	return slog.String(string(OpenRouterBackfillModeKey), v)
+}
+
+func SlogOpenRouterBackfillScanned(v int64) slog.Attr {
+	return slog.Int64(string(OpenRouterBackfillScannedKey), v)
+}
+
+func SlogOpenRouterBackfillUpdated(v int64) slog.Attr {
+	return slog.Int64(string(OpenRouterBackfillUpdatedKey), v)
+}
+
 func OpenRouterKeyLimit(v int) attribute.KeyValue { return OpenRouterKeyLimitKey.Int(v) }
 func SlogOpenRouterKeyLimit(v int) slog.Attr      { return slog.Int(string(OpenRouterKeyLimitKey), v) }
 
@@ -1988,6 +2052,18 @@ func SlogMcpMethod(v string) slog.Attr      { return slog.String(string(McpMetho
 
 func McpSurface(v string) attribute.KeyValue { return McpSurfaceKey.String(v) }
 func SlogMcpSurface(v string) slog.Attr      { return slog.String(string(McpSurfaceKey), v) }
+
+func McpKillswitchSurface[V ~string](v V) attribute.KeyValue {
+	return McpKillswitchSurfaceKey.String(string(v))
+}
+
+func McpKillswitchIdentityClass[V ~string](v V) attribute.KeyValue {
+	return McpKillswitchIdentityClassKey.String(string(v))
+}
+
+func McpKillswitchResourceClass[V ~string](v V) attribute.KeyValue {
+	return McpKillswitchResourceClassKey.String(string(v))
+}
 
 func MCPRequestedProtocolVersion(v string) attribute.KeyValue {
 	return McpRequestedProtocolVersionKey.String(v)

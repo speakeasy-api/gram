@@ -48,12 +48,12 @@ import {
   EXCLUDED_TAG_KEY,
   MCPToolFilterScopesPanel,
 } from "@/pages/mcp/MCPToolFilterScopesPanel";
-import { ONBOARD_EXTERNAL_MCP_TO_USER_SESSIONS_FLAG } from "@/lib/externalMcpUserSessions";
 import {
   getOAuthParadigm,
   isUserSessionIssuerWired,
   mustConvertOAuthBeforePrivate,
 } from "./toolsetAuthSurface";
+import { useTabScrollReset } from "@/hooks/useTabScrollReset";
 import { useRoutes } from "@/routes";
 import { GramError } from "@gram/client/models/errors/gramerror.js";
 import { useExportMcpMetadataMutation } from "@gram/client/react-query/exportMcpMetadata.js";
@@ -278,6 +278,7 @@ function MCPDetailPageContent({
   const location = useLocation();
 
   const activeTab = activeTabFromPath(location.pathname, toolsetSlug);
+  const tabContentRef = useTabScrollReset(activeTab ?? undefined);
 
   if (!activeTab) {
     const initialTab = initialTabFromHash(window.location.hash);
@@ -298,7 +299,10 @@ function MCPDetailPageContent({
       </Page.Header>
       <Page.Body fullWidth className="gap-0">
         {/* Name, status, URL, and Playground live in the sidebar header now */}
-        <div className="mx-auto w-full max-w-[1270px] flex-1">
+        <div
+          ref={tabContentRef}
+          className="mx-auto w-full max-w-[1270px] flex-1"
+        >
           {renderMcpDetailTabContent(activeTab, toolset)}
         </div>
       </Page.Body>
@@ -607,10 +611,6 @@ export function MCPStatusDropdown({
     const needsConvertBlock =
       status === "private" &&
       mustConvertOAuthBeforePrivate({
-        flagEnabled:
-          telemetry.isFeatureEnabled(
-            ONBOARD_EXTERNAL_MCP_TO_USER_SESSIONS_FLAG,
-          ) ?? false,
         mcpIsPublic: toolset.mcpIsPublic ?? false,
         userSessionIssuerWired: isUserSessionIssuerWired(toolset),
         oauthParadigm: getOAuthParadigm(toolset),

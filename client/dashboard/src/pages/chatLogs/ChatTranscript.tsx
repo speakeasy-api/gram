@@ -41,6 +41,11 @@ import {
 import { cn } from "@/lib/utils";
 import { Avatar, AvatarFallback } from "@/components/ui/Avatar";
 import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/Collapsible";
+import {
   type ClaudeUsageMatch,
   formatDurationFromNanos,
   formatUsageCost,
@@ -55,6 +60,7 @@ import {
   displayItemContainsMessage,
   type DisplayItem,
   findQueryRanges,
+  messageEnvelope,
   messageText,
   type MessageRow,
   type PromptAttachment,
@@ -70,6 +76,7 @@ import {
   RiskBadge,
 } from "./chatRisk";
 import {
+  getMatchStrings,
   distinctRiskCount,
   resultsAreSensitive,
   useRowReveal,
@@ -339,6 +346,56 @@ function TurnHeader({
   );
 }
 
+// The harness framing a user turn opened with (`<message-context>`, OpenClaw's
+// "Conversation info (untrusted metadata)" block, …). Stored verbatim and
+// folded into a disclosure that is collapsed by default: it is plumbing, not
+// conversation, but a reviewer must still be able to inspect it — a prompt
+// that spoofs an envelope is exactly the kind of thing they are looking for.
+function HarnessContextDisclosure({
+  envelope,
+  results,
+  revealed,
+}: {
+  envelope: string;
+  results: RiskResult[] | undefined;
+  revealed?: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  // Only findings whose match lives in the envelope belong here; a body match
+  // would otherwise be repeated as an out-of-text "Flagged value" — it is
+  // already highlighted in the message body below.
+  const envelopeResults = useMemo(
+    () =>
+      (results ?? []).filter((r) =>
+        getMatchStrings([r]).some((m) => envelope.includes(m)),
+      ),
+    [results, envelope],
+  );
+  return (
+    <Collapsible open={open} onOpenChange={setOpen} className="mb-1.5">
+      <CollapsibleTrigger className="text-muted-foreground hover:text-foreground inline-flex items-center gap-1 text-xs">
+        {open ? (
+          <ChevronUp className="size-3" />
+        ) : (
+          <ChevronDown className="size-3" />
+        )}
+        Harness context
+      </CollapsibleTrigger>
+      <CollapsibleContent className="text-muted-foreground mt-1 border-l-2 pl-2 font-mono text-xs whitespace-pre-wrap">
+        {envelopeResults.length > 0 ? (
+          <HighlightedMessageText
+            text={envelope}
+            results={envelopeResults}
+            revealed={revealed}
+          />
+        ) : (
+          envelope
+        )}
+      </CollapsibleContent>
+    </Collapsible>
+  );
+}
+
 // Outgoing turn — left-aligned to match the assistant, but kept in a bg-muted
 // bubble. The avatar/name + risk badge sit in the turn header above (the risk
 // badge's popover carries "Mark false positive" and "Setup exclusion rule"
@@ -368,6 +425,7 @@ function UserMessageRow({
   }
   const usage = ctx.claudeUsageByMessage.get(message.id);
   const text = messageText(message.content);
+  const envelope = messageEnvelope(message.content);
   const flagged =
     (!!results && results.length > 0) ||
     row.attachments.some((attachment) => attachment.isRisk);
@@ -389,6 +447,13 @@ function UserMessageRow({
           "bg-muted text-foreground mx-2 max-w-[80%] px-4 py-2 wrap-break-word",
         )}
       >
+        {envelope && (
+          <HarnessContextDisclosure
+            envelope={envelope}
+            results={messageResults}
+            revealed={messageSensitive ? revealed : undefined}
+          />
+        )}
         {messageResults && messageResults.length > 0 ? (
           <HighlightedMessageText
             text={text}

@@ -4,15 +4,12 @@ import {
   StatTileSkeleton,
 } from "@/components/chart/stat-tile";
 import { Page } from "@/components/page-layout";
-import { Button } from "@/components/ui/Button";
 import { CopyButton } from "@/components/ui/CopyButton";
 import { Text } from "@/components/ui/Text";
 import { useResolvedMcpServerUrl } from "@/hooks/useToolsetUrl";
-import { useRoutes } from "@/routes";
 import type { McpEndpoint } from "@gram/client/models/components/mcpendpoint.js";
 import type { MetaMcpServer } from "@gram/client/models/components/metamcpserver.js";
-import { ArrowRight } from "lucide-react";
-import { MembersStatusTable } from "./GatewayMembersTab";
+import { GatewayMembersSection } from "./GatewayMembersSection";
 import { useGatewayMemberRows } from "./useGatewayMemberRows";
 
 export function GatewayOverviewTab({
@@ -24,7 +21,6 @@ export function GatewayOverviewTab({
   endpoints: McpEndpoint[];
   isLoadingEndpoints: boolean;
 }): JSX.Element {
-  const routes = useRoutes();
   const { mcpUrl } = useResolvedMcpServerUrl(endpoints, isLoadingEndpoints);
   const { rows, isLoading } = useGatewayMemberRows(metaMcpServer.id);
 
@@ -47,7 +43,10 @@ export function GatewayOverviewTab({
         <Page.Section.Body>
           <div className="flex flex-col gap-6">
             {mcpUrl ? (
-              <div className="border-border bg-card flex items-center gap-2 border px-3 py-2">
+              <div className="border-border bg-muted/30 flex items-center gap-3 border px-4 py-3">
+                <span className="border-border bg-background text-muted-foreground shrink-0 border px-1.5 py-0.5 font-mono text-[10px] tracking-widest uppercase">
+                  mcp
+                </span>
                 <Text className="min-w-0 flex-1 truncate font-mono text-sm">
                   {mcpUrl}
                 </Text>
@@ -107,30 +106,7 @@ export function GatewayOverviewTab({
         </Page.Section.Body>
       </Page.Section>
 
-      <Page.Section>
-        <Page.Section.Title area="" className="text-display-xs">
-          Members
-        </Page.Section.Title>
-        <Page.Section.CTA>
-          <Button
-            variant="secondary"
-            size="sm"
-            onClick={() => routes.mcp.gateway.members.goTo(metaMcpServer.id)}
-          >
-            <Button.Text>Manage members</Button.Text>
-            <Button.RightIcon>
-              <ArrowRight className="size-4" />
-            </Button.RightIcon>
-          </Button>
-        </Page.Section.CTA>
-        <Page.Section.Description>
-          The order agents see in list_servers. Status reflects what the backend
-          can attest; live upstream health lands with the proxied runtime.
-        </Page.Section.Description>
-        <Page.Section.Body>
-          <MembersStatusTable rows={rows} isLoading={isLoading} />
-        </Page.Section.Body>
-      </Page.Section>
+      <GatewayMembersSection metaMcpServer={metaMcpServer} />
     </>
   );
 }

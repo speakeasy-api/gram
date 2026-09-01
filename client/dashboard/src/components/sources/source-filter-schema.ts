@@ -25,11 +25,22 @@ export const SOURCE_FILTERS = defineFilters([
     label: "MCP usage",
     kind: "select",
     allLabel: "Any MCP usage",
+    description: "Whether the source's tools are served by an MCP server.",
   },
   { id: "transport", label: "Transport", kind: "multiselect" },
   { id: "format", label: "Format", kind: "multiselect" },
-  { id: "catalogKind", label: "Catalog kind", kind: "multiselect" },
-  { id: "failing", label: "Deployment errors", kind: "boolean" },
+  {
+    id: "catalogKind",
+    label: "Catalog kind",
+    kind: "multiselect",
+    description: "Whether the entry is one server or a collection of them.",
+  },
+  {
+    id: "failing",
+    label: "Deployment errors",
+    kind: "boolean",
+    description: "Only sources whose latest deployment failed.",
+  },
 ]);
 
 export type SourceFilterValues = FilterValues<typeof SOURCE_FILTERS>;

@@ -47,17 +47,6 @@ func main() {
 			// successful send, and by the device agent when its downtime
 			// detector sees the control plane recover.
 			os.Exit(relay.RunDrain(context.Background(), os.Stdout))
-		case "skill-feedback":
-			// Serves the speakeasy-skill-feedback MCP server over stdio.
-			// Generated plugin .mcp.json entries invoke this through the
-			// bootstrap script with --config pointing at the plugin's
-			// speakeasy.json.
-			flagCfg, _ := relay.SplitInlineFlags(relay.Config{ServerURL: "", ProjectSlug: "", OrgID: "", HooksAPIKey: "", BrowserLogin: false, Nonblocking: false, DebugLog: "", ConfigPath: "", ConfigError: ""}, os.Args[2:])
-			if err := relay.RunSkillFeedbackMCP(context.Background(), relay.LoadConfig(flagCfg)); err != nil {
-				fmt.Fprintf(os.Stderr, "speakeasy-hooks skill-feedback: %v\n", err)
-				os.Exit(1)
-			}
-			os.Exit(0)
 		}
 	}
 

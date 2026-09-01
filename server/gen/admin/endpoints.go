@@ -16,30 +16,31 @@ import (
 
 // Endpoints wraps the "admin" service endpoints.
 type Endpoints struct {
-	Login                       goa.Endpoint
-	Callback                    goa.Endpoint
-	Logout                      goa.Endpoint
-	GetProject                  goa.Endpoint
-	UpdateOrganization          goa.Endpoint
-	BulkUpdateAccountType       goa.Endpoint
-	DisableOrganization         goa.Endpoint
-	EnableOrganization          goa.Endpoint
-	GetOrganization             goa.Endpoint
-	ListOrganizationMembers     goa.Endpoint
-	ListOrganizationProjects    goa.Endpoint
-	ListOrganizationActivity    goa.Endpoint
-	ListOrganizations           goa.Endpoint
-	ExtendTrial                 goa.Endpoint
-	CreateOrganization          goa.Endpoint
-	RearmTrial                  goa.Endpoint
-	GetOrganizationStats        goa.Endpoint
-	GetInferenceKeys            goa.Endpoint
-	SetInferenceKeyMonthlyLimit goa.Endpoint
-	GetInferenceSpendHistory    goa.Endpoint
-	GetPaygBillingSummary       goa.Endpoint
-	GetStripeSubscription       goa.Endpoint
-	CancelStripeSubscription    goa.Endpoint
-	ResumeStripeSubscription    goa.Endpoint
+	Login                        goa.Endpoint
+	Callback                     goa.Endpoint
+	Logout                       goa.Endpoint
+	GetProject                   goa.Endpoint
+	UpdateOrganization           goa.Endpoint
+	BulkUpdateAccountType        goa.Endpoint
+	DisableOrganization          goa.Endpoint
+	EnableOrganization           goa.Endpoint
+	GetOrganization              goa.Endpoint
+	ListOrganizationMembers      goa.Endpoint
+	ListOrganizationProjects     goa.Endpoint
+	ListOrganizationActivity     goa.Endpoint
+	ListOrganizations            goa.Endpoint
+	ExtendTrial                  goa.Endpoint
+	CreateOrganization           goa.Endpoint
+	RearmTrial                   goa.Endpoint
+	GetOrganizationStats         goa.Endpoint
+	GetInferenceKeys             goa.Endpoint
+	SetInferenceKeyMonthlyLimit  goa.Endpoint
+	GetInferenceSpendHistory     goa.Endpoint
+	GetPaygBillingSummary        goa.Endpoint
+	GetStripeSubscription        goa.Endpoint
+	CancelStripeSubscription     goa.Endpoint
+	ResumeStripeSubscription     goa.Endpoint
+	MarkEnterpriseTrialConverted goa.Endpoint
 }
 
 // NewEndpoints wraps the methods of the "admin" service with endpoints.
@@ -47,30 +48,31 @@ func NewEndpoints(s Service) *Endpoints {
 	// Casting service to Auther interface
 	a := s.(Auther)
 	return &Endpoints{
-		Login:                       NewLoginEndpoint(s),
-		Callback:                    NewCallbackEndpoint(s),
-		Logout:                      NewLogoutEndpoint(s),
-		GetProject:                  NewGetProjectEndpoint(s, a.APIKeyAuth),
-		UpdateOrganization:          NewUpdateOrganizationEndpoint(s, a.APIKeyAuth),
-		BulkUpdateAccountType:       NewBulkUpdateAccountTypeEndpoint(s, a.APIKeyAuth),
-		DisableOrganization:         NewDisableOrganizationEndpoint(s, a.APIKeyAuth),
-		EnableOrganization:          NewEnableOrganizationEndpoint(s, a.APIKeyAuth),
-		GetOrganization:             NewGetOrganizationEndpoint(s, a.APIKeyAuth),
-		ListOrganizationMembers:     NewListOrganizationMembersEndpoint(s, a.APIKeyAuth),
-		ListOrganizationProjects:    NewListOrganizationProjectsEndpoint(s, a.APIKeyAuth),
-		ListOrganizationActivity:    NewListOrganizationActivityEndpoint(s, a.APIKeyAuth),
-		ListOrganizations:           NewListOrganizationsEndpoint(s, a.APIKeyAuth),
-		ExtendTrial:                 NewExtendTrialEndpoint(s, a.APIKeyAuth),
-		CreateOrganization:          NewCreateOrganizationEndpoint(s, a.APIKeyAuth),
-		RearmTrial:                  NewRearmTrialEndpoint(s, a.APIKeyAuth),
-		GetOrganizationStats:        NewGetOrganizationStatsEndpoint(s, a.APIKeyAuth),
-		GetInferenceKeys:            NewGetInferenceKeysEndpoint(s, a.APIKeyAuth),
-		SetInferenceKeyMonthlyLimit: NewSetInferenceKeyMonthlyLimitEndpoint(s, a.APIKeyAuth),
-		GetInferenceSpendHistory:    NewGetInferenceSpendHistoryEndpoint(s, a.APIKeyAuth),
-		GetPaygBillingSummary:       NewGetPaygBillingSummaryEndpoint(s, a.APIKeyAuth),
-		GetStripeSubscription:       NewGetStripeSubscriptionEndpoint(s, a.APIKeyAuth),
-		CancelStripeSubscription:    NewCancelStripeSubscriptionEndpoint(s, a.APIKeyAuth),
-		ResumeStripeSubscription:    NewResumeStripeSubscriptionEndpoint(s, a.APIKeyAuth),
+		Login:                        NewLoginEndpoint(s),
+		Callback:                     NewCallbackEndpoint(s),
+		Logout:                       NewLogoutEndpoint(s),
+		GetProject:                   NewGetProjectEndpoint(s, a.APIKeyAuth),
+		UpdateOrganization:           NewUpdateOrganizationEndpoint(s, a.APIKeyAuth),
+		BulkUpdateAccountType:        NewBulkUpdateAccountTypeEndpoint(s, a.APIKeyAuth),
+		DisableOrganization:          NewDisableOrganizationEndpoint(s, a.APIKeyAuth),
+		EnableOrganization:           NewEnableOrganizationEndpoint(s, a.APIKeyAuth),
+		GetOrganization:              NewGetOrganizationEndpoint(s, a.APIKeyAuth),
+		ListOrganizationMembers:      NewListOrganizationMembersEndpoint(s, a.APIKeyAuth),
+		ListOrganizationProjects:     NewListOrganizationProjectsEndpoint(s, a.APIKeyAuth),
+		ListOrganizationActivity:     NewListOrganizationActivityEndpoint(s, a.APIKeyAuth),
+		ListOrganizations:            NewListOrganizationsEndpoint(s, a.APIKeyAuth),
+		ExtendTrial:                  NewExtendTrialEndpoint(s, a.APIKeyAuth),
+		CreateOrganization:           NewCreateOrganizationEndpoint(s, a.APIKeyAuth),
+		RearmTrial:                   NewRearmTrialEndpoint(s, a.APIKeyAuth),
+		GetOrganizationStats:         NewGetOrganizationStatsEndpoint(s, a.APIKeyAuth),
+		GetInferenceKeys:             NewGetInferenceKeysEndpoint(s, a.APIKeyAuth),
+		SetInferenceKeyMonthlyLimit:  NewSetInferenceKeyMonthlyLimitEndpoint(s, a.APIKeyAuth),
+		GetInferenceSpendHistory:     NewGetInferenceSpendHistoryEndpoint(s, a.APIKeyAuth),
+		GetPaygBillingSummary:        NewGetPaygBillingSummaryEndpoint(s, a.APIKeyAuth),
+		GetStripeSubscription:        NewGetStripeSubscriptionEndpoint(s, a.APIKeyAuth),
+		CancelStripeSubscription:     NewCancelStripeSubscriptionEndpoint(s, a.APIKeyAuth),
+		ResumeStripeSubscription:     NewResumeStripeSubscriptionEndpoint(s, a.APIKeyAuth),
+		MarkEnterpriseTrialConverted: NewMarkEnterpriseTrialConvertedEndpoint(s, a.APIKeyAuth),
 	}
 }
 
@@ -100,6 +102,7 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.GetStripeSubscription = m(e.GetStripeSubscription)
 	e.CancelStripeSubscription = m(e.CancelStripeSubscription)
 	e.ResumeStripeSubscription = m(e.ResumeStripeSubscription)
+	e.MarkEnterpriseTrialConverted = m(e.MarkEnterpriseTrialConverted)
 }
 
 // NewLoginEndpoint returns an endpoint function that calls the method "login"
@@ -609,5 +612,28 @@ func NewResumeStripeSubscriptionEndpoint(s Service, authAPIKeyFn security.AuthAP
 			return nil, err
 		}
 		return s.ResumeStripeSubscription(ctx, p)
+	}
+}
+
+// NewMarkEnterpriseTrialConvertedEndpoint returns an endpoint function that
+// calls the method "markEnterpriseTrialConverted" of service "admin".
+func NewMarkEnterpriseTrialConvertedEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*MarkEnterpriseTrialConvertedPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "admin_auth",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.AdminSessionToken != nil {
+			key = *p.AdminSessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.MarkEnterpriseTrialConverted(ctx, p)
 	}
 }

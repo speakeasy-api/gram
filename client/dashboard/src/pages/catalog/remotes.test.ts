@@ -101,6 +101,11 @@ describe("filterToHttpRemotes", () => {
     expect(result.remotes).toEqual([http]);
   });
 
+  it("drops insecure streamable-http remotes", () => {
+    const insecure = remote("http://x.example/mcp", "streamable-http");
+    expect(filterToHttpRemotes(server([insecure])).remotes).toEqual([]);
+  });
+
   it("collapses duplicate URLs after filtering", () => {
     const first = remote(
       "https://mcp.cloudflare.com/mcp",

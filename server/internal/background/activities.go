@@ -48,6 +48,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/functions"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/k8s"
+	"github.com/speakeasy-api/gram/server/internal/killswitches"
 	mcpapprovaladvisories "github.com/speakeasy-api/gram/server/internal/mcpapproval/advisories"
 	mcpapprovalcatalog "github.com/speakeasy-api/gram/server/internal/mcpapproval/catalog"
 	"github.com/speakeasy-api/gram/server/internal/mcpapproval/domainmeta"
@@ -130,6 +131,7 @@ type Activities struct {
 	refreshOpenRouterKey            *activities.RefreshOpenRouterKey
 	setOpenRouterSpendCap           *activities.SetOpenRouterSpendCap
 	reconcilePaygOpenRouterChatKey  *activities.ReconcilePaygOpenRouterChatKey
+	reconcileTrialConversionKeys    *activities.ReconcileEnterpriseTrialConversionKeys
 	transitionDeployment            *activities.TransitionDeployment
 	validateDeployment              *activities.ValidateDeployment
 	verifyCustomDomain              *activities.VerifyCustomDomain
@@ -163,6 +165,7 @@ type Activities struct {
 	cancelAssistantsSubscription    *activities.CancelAssistantsSubscription
 	outboxRelay                     *outbox_relay.Relay
 	outboxGC                        *outbox_relay.GC
+	killswitchMaintenance           *killswitches.MaintenanceService
 	publishOutbox                   *publish_outbox.Relay
 	pluginPublisher                 *activities.PluginPublisher
 	sessionQuarantineReassert       *activities.SessionQuarantineReassert
@@ -350,14 +353,21 @@ func NewActivities(
 		), features, auditLogger)
 	}
 
+	var skillSuggestionSignaler efficacy.SuggestionSignaler
+	if temporalEnv != nil {
+		skillSuggestionSignaler = &TemporalSkillSuggestionSignaler{TemporalEnv: temporalEnv, Logger: logger, StartDelay: 0}
+	}
+
 	var skillSuggestionAnalyzer *activities.SkillSuggestionAnalyzer
-	if db != nil && telemetryRepo != nil && chatClient != nil && temporalEnv != nil && judgeRateLimiter != nil {
+	if db != nil && telemetryRepo != nil && chatClient != nil && skillSuggestionSignaler != nil && judgeRateLimiter != nil {
 		engine, err := suggest.NewEngine(suggest.DefaultConfig(), logger, db, telemetryRepo, chatrepo.New(db), chatClient, judgeRateLimiter)
 		if err != nil {
 			panic(fmt.Errorf("new skill suggestion engine: %w", err))
 		}
-		skillSuggestionAnalyzer = activities.NewSkillSuggestionAnalyzer(db, engine, &TemporalSkillSuggestionSignaler{TemporalEnv: temporalEnv, Logger: logger, StartDelay: 0})
+		skillSuggestionAnalyzer = activities.NewSkillSuggestionAnalyzer(db, engine, skillSuggestionSignaler)
 	}
+
+	conversionPolicyReconciler, _ := openrouterProvisioner.(activities.ConversionPolicyReconciler)
 
 	return &Activities{
 		db:                              db,
@@ -392,6 +402,7 @@ func NewActivities(
 		refreshOpenRouterKey:            activities.NewRefreshOpenRouterKey(logger, db, openrouterProvisioner),
 		setOpenRouterSpendCap:           activities.NewSetOpenRouterSpendCap(logger, db, openrouterProvisioner, auditLogger, cacheAdapter),
 		reconcilePaygOpenRouterChatKey:  activities.NewReconcilePaygOpenRouterChatKey(logger, db, openrouterProvisioner),
+		reconcileTrialConversionKeys:    activities.NewReconcileEnterpriseTrialConversionKeys(logger, conversionPolicyReconciler),
 		transitionDeployment:            activities.NewTransitionDeployment(logger, db),
 		validateDeployment:              activities.NewValidateDeployment(logger, db, billingRepo),
 		verifyCustomDomain:              activities.NewVerifyCustomDomain(logger, db, auditLogger, expectedTargetCNAME, expectedARecords),
@@ -425,6 +436,7 @@ func NewActivities(
 		cancelAssistantsSubscription:    activities.NewCancelAssistantsSubscription(logger, billingRepo),
 		outboxRelay:                     outbox_relay.New(logger, tracerProvider, db, svixClient),
 		outboxGC:                        outbox_relay.NewGC(logger, meterProvider, db),
+		killswitchMaintenance:           killswitches.NewMaintenanceService(db, auditLogger),
 		publishOutbox:                   publish_outbox.New(logger, tracerProvider, meterProvider, db, publishers.Outbox),
 		pluginPublisher:                 activities.NewPluginPublisher(logger, db, pluginPublisher),
 		sessionQuarantineReassert:       activities.NewSessionQuarantineReassert(logger, db, cacheAdapter),
@@ -446,7 +458,7 @@ func NewActivities(
 			meterProvider,
 			db,
 			productFeatures,
-			efficacy.NewPublisher(logger, tracerProvider, db, telemetryRepo, efficacy.NewJudge(logger, tracerProvider, chatClient, judgeRateLimiter)),
+			efficacy.NewPublisher(logger, tracerProvider, db, telemetryRepo, efficacy.NewJudge(logger, tracerProvider, chatClient, judgeRateLimiter), skillSuggestionSignaler),
 			&TemporalSkillEfficacySignaler{TemporalEnv: temporalEnv, Logger: logger},
 		),
 		skillSuggestionAnalyzer: skillSuggestionAnalyzer,
@@ -565,6 +577,10 @@ func (a *Activities) SetOpenRouterSpendCap(ctx context.Context, input activities
 
 func (a *Activities) ReconcilePaygOpenRouterChatKey(ctx context.Context, input activities.ReconcilePaygOpenRouterChatKeyArgs) error {
 	return a.reconcilePaygOpenRouterChatKey.Do(ctx, input)
+}
+
+func (a *Activities) ReconcileEnterpriseTrialConversionKeys(ctx context.Context, input activities.ReconcileEnterpriseTrialConversionKeysArgs) error {
+	return a.reconcileTrialConversionKeys.Do(ctx, input)
 }
 
 func (a *Activities) VerifyCustomDomain(ctx context.Context, input activities.VerifyCustomDomainArgs) (activities.VerifyCustomDomainResult, error) {
@@ -938,6 +954,26 @@ func (a *Activities) GCPublishOutboxDeadLetters(ctx context.Context, cutoff time
 	n, err := a.publishOutbox.DeleteDeadLetters(ctx, cutoff, batchSize)
 	if err != nil {
 		return 0, fmt.Errorf("gc publish outbox dead letters: %w", err)
+	}
+	return n, nil
+}
+
+// RecordDueKillswitchExpiries and CleanupExpiredKillswitchOperations take only
+// a batch size and return only aggregate counts: killswitch identifiers,
+// notes, and tenant data stay inside the database-backed maintenance
+// transactions and never enter Temporal history.
+func (a *Activities) RecordDueKillswitchExpiries(ctx context.Context, batchSize int32) (killswitches.ExpiryBatchResult, error) {
+	result, err := a.killswitchMaintenance.RecordDueExpiries(ctx, batchSize)
+	if err != nil {
+		return result, fmt.Errorf("record due killswitch expiries: %w", err)
+	}
+	return result, nil
+}
+
+func (a *Activities) CleanupExpiredKillswitchOperations(ctx context.Context, batchSize int32) (int64, error) {
+	n, err := a.killswitchMaintenance.CleanupExpiredOperationsGlobal(ctx, batchSize)
+	if err != nil {
+		return n, fmt.Errorf("cleanup expired killswitch operations: %w", err)
 	}
 	return n, nil
 }

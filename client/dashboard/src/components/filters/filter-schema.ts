@@ -75,6 +75,12 @@ interface BaseDimension<K extends FilterKind> {
   /** Human label shown on the control and chips. */
   label: string;
   kind: K;
+  /**
+   * Optional one-line explanation rendered under the label in the sheet. Use it
+   * for dimensions whose concept isn't obvious from the label alone (e.g.
+   * "Account type", "Unique matches only"); leave it off for self-evident ones.
+   */
+  description?: string;
   icon?: ComponentType<{ className?: string }>;
   /** Pinned dimensions render inline in the bar; the rest live in the sheet. */
   pinned?: boolean;

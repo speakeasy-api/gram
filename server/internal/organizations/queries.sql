@@ -91,6 +91,16 @@ SELECT EXISTS(
     AND organization_user_relationships.deleted_at IS NULL
 ) AS exists;
 
+-- name: LockActiveOrganizationUser :one
+SELECT our.user_id
+FROM organization_user_relationships AS our
+JOIN users AS u ON u.id = our.user_id
+WHERE our.user_id = @user_id
+  AND our.organization_id = @organization_id
+  AND our.deleted_at IS NULL
+  AND u.deleted_at IS NULL
+FOR SHARE OF our, u;
+
 -- name: GetOrganizationUserRelationship :one
 SELECT *
 FROM organization_user_relationships

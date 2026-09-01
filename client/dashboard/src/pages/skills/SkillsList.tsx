@@ -54,6 +54,7 @@ const SKILL_FILTERS = defineFilters([
     label: "Classification",
     kind: "multiselect",
     pinned: true,
+    description: "Whether a skill is your own or ships with a plugin.",
   },
   {
     id: "tags",

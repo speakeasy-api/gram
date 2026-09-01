@@ -52,19 +52,26 @@ const memberSessionCloseTimeout = 5 * time.Second
 // names its upstream — no lone-token fallback, since mcp:write can attach a
 // member pointing anywhere and a fallback would forward a sibling's
 // credential there. No match means an anonymous call, never a mismatched
-// bearer. A tunneled member records no resource, so only a lone unqualified
-// token can be its credential; several tokens fail member-scoped.
+// bearer. A tunneled member records no resource, so it routes by identity
+// instead: the token map entry keyed by the member's own derived
+// remote_session_issuer, and only when that grant is unqualified.
 func routeMetaMemberToken(tokens map[uuid.UUID]remotesessions.UpstreamToken, member metaMember, upstreamResource string) (string, error) {
 	if member.tunneledServerID.Valid {
-		if len(tokens) > 1 {
-			return "", &metaMemberError{message: fmt.Sprintf("server %q upstream credentials are not configured unambiguously for this meta MCP", member.slug)}
+		// A tunneled backend records no RFC 8707 resource, so a lone-token
+		// heuristic would forward a sibling's bearer once partial resolution
+		// leaves gaps in the map. The map is keyed by remote_session_issuer,
+		// and the member row carries its own derived issuer precisely for
+		// this lookup (mcpserverissuersync.go), so route by exact key. A
+		// member with no derived issuer, no entry, or an entry whose grant is
+		// audience-bound to some remote upstream calls anonymously.
+		if !member.remoteSessionIssuerID.Valid {
+			return "", nil
 		}
-		for _, entry := range tokens {
-			if entry.Resource == "" {
-				return entry.Token, nil
-			}
+		entry, ok := tokens[member.remoteSessionIssuerID.UUID]
+		if !ok || entry.Resource != "" {
+			return "", nil
 		}
-		return "", nil
+		return entry.Token, nil
 	}
 
 	want := strings.TrimRight(upstreamResource, "/")
@@ -85,7 +92,9 @@ func routeMetaMemberToken(tokens map[uuid.UUID]remotesessions.UpstreamToken, mem
 	case 1:
 		return matched, nil
 	default:
-		return "", &metaMemberError{message: fmt.Sprintf("server %q upstream credentials are not configured unambiguously for this meta MCP", member.slug)}
+		// Several credentials claim the same upstream, so forwarding any one
+		// would be a guess. Name the duplication rather than the symptom.
+		return "", &metaMemberError{message: fmt.Sprintf("server %q has %d upstream credentials recorded for the same upstream, so none can be chosen; disconnect the duplicates from this gateway's sign-in and reconnect once", member.slug, found)}
 	}
 }
 
@@ -137,7 +146,7 @@ func (s *Service) dialMetaMember(
 		return func(context.Context) (*proxy.Proxy, error) {
 			// No WWW-Authenticate relay: a member's auth challenge must not
 			// invite the client to re-authenticate against the meta MCP.
-			p := s.remoteProxyManager.Build(logger, &remoteServer, member.serverID.String(), headers, member.visibility, gate.projectID.String(), upstreamToken, "", gate.toolSelection)
+			p := s.remoteProxyManager.Build(logger, &remoteServer, member.serverID.String(), headers, member.visibility, gate.organizationID, gate.projectID.String(), upstreamToken, "", gate.toolSelection, remotemcp.WithoutToolsCallIdentityCoverage())
 			// Meta-MCP-synthesized initializes are not client sessions.
 			p.InitializeRequestInterceptors = nil
 			return p, nil
@@ -152,7 +161,7 @@ func (s *Service) dialMetaMember(
 		// land on one tunnel gateway.
 		affinity := tunnelrouting.HashedClientAffinityKey("meta:"+member.serverID.String(), callerIdentity)
 		return func(ctx context.Context) (*proxy.Proxy, error) {
-			p, berr := s.tunnelManager.buildProxy(ctx, affinity, logger, gate.projectID, &serverRow, upstreamToken, "", gate.toolSelection)
+			p, berr := s.tunnelManager.buildProxy(ctx, affinity, logger, gate.projectID, gate.organizationID, &serverRow, upstreamToken, "", gate.toolSelection, remotemcp.WithoutToolsCallIdentityCoverage())
 			if berr != nil {
 				return nil, fmt.Errorf("build tunnel proxy: %w", berr)
 			}
@@ -510,10 +519,14 @@ func (s *Service) executeProxiedMemberTool(
 		return nil, oops.E(oops.CodeUnexpected, err, "dial meta MCP member").LogError(ctx, logger)
 	}
 
+	// The caller's _meta stays on our side of the wire: WireMeta is a lossy
+	// observability parse (re-serializing it emits empty/null fields that
+	// strict vendors reject with 400), and the per-call handshake already
+	// declares this proxy's identity and protocol version to the upstream.
 	upstreamResult, rpcErr, err := s.callProxiedMember(ctx, logger, build, member, "tools/call", toolsCallParams{
 		Name:      toolName,
 		Arguments: arguments,
-		Meta:      memberWireMeta(meta),
+		Meta:      nil,
 	})
 	if err != nil {
 		if memberErr, ok := errors.AsType[*metaMemberError](err); ok {
@@ -535,23 +548,12 @@ func (s *Service) executeProxiedMemberTool(
 		Result: upstreamResult,
 		// The result's _meta identity stays the member's, as on hosted.
 		serverIdentity: serverInfo{Name: member.slug, Version: "0.0.0"},
+		cacheHints:     nil,
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "serialize member tool result").LogError(ctx, logger)
 	}
 	return bs, nil
-}
-
-// memberWireMeta rewrites the client's declared protocol version to the one
-// this upstream hop actually speaks, so the forwarded _meta cannot contradict
-// the member session's handshake; the rest of _meta rides along.
-func memberWireMeta(meta *mcprequests.WireMeta) *mcprequests.WireMeta {
-	if meta == nil || meta.ProtocolVersion == metaMemberUpstreamProtocolVersion {
-		return meta
-	}
-	m := *meta
-	m.ProtocolVersion = metaMemberUpstreamProtocolVersion
-	return &m
 }
 
 // maxProxiedListPages bounds cursor-following on a member's tools/list.

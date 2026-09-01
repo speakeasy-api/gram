@@ -60,6 +60,42 @@ WHERE m.id = @id
   AND p.organization_id = @organization_id
   AND m.deleted IS FALSE;
 
+-- name: LockLiveMCPServersInOrganization :many
+SELECT m.id
+FROM mcp_servers AS m
+JOIN projects AS p ON p.id = m.project_id
+WHERE m.id = ANY(@ids::uuid[])
+  AND p.organization_id = @organization_id
+  AND m.deleted IS FALSE
+  AND p.deleted IS FALSE
+ORDER BY m.id
+FOR SHARE OF m, p;
+
+-- name: ListLiveMCPServerIDsInOrganization :many
+SELECT m.id
+FROM mcp_servers AS m
+JOIN projects AS p ON p.id = m.project_id
+WHERE m.id = ANY(@ids::uuid[])
+  AND p.organization_id = @organization_id
+  AND m.deleted IS FALSE
+  AND p.deleted IS FALSE
+ORDER BY m.id;
+
+-- name: HasLiveMCPServerInOrganization :one
+-- Reports whether an MCP server is live and owned by the organization:
+-- the server is not deleted and its project is not deleted. Used by
+-- kill-switch resource validation, where a server under a soft-deleted
+-- project must stop counting as a current organization resource.
+SELECT EXISTS(
+  SELECT 1
+  FROM mcp_servers AS m
+  JOIN projects AS p ON p.id = m.project_id
+  WHERE m.id = @id
+    AND p.organization_id = @organization_id
+    AND m.deleted IS FALSE
+    AND p.deleted IS FALSE
+) AS exists;
+
 -- name: GetMCPServerBySlug :one
 SELECT *
 FROM mcp_servers

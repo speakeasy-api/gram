@@ -401,6 +401,70 @@ func (q *Queries) GetMCPServerBySlug(ctx context.Context, arg GetMCPServerBySlug
 	return i, err
 }
 
+const hasLiveMCPServerInOrganization = `-- name: HasLiveMCPServerInOrganization :one
+SELECT EXISTS(
+  SELECT 1
+  FROM mcp_servers AS m
+  JOIN projects AS p ON p.id = m.project_id
+  WHERE m.id = $1
+    AND p.organization_id = $2
+    AND m.deleted IS FALSE
+    AND p.deleted IS FALSE
+) AS exists
+`
+
+type HasLiveMCPServerInOrganizationParams struct {
+	ID             uuid.UUID
+	OrganizationID string
+}
+
+// Reports whether an MCP server is live and owned by the organization:
+// the server is not deleted and its project is not deleted. Used by
+// kill-switch resource validation, where a server under a soft-deleted
+// project must stop counting as a current organization resource.
+func (q *Queries) HasLiveMCPServerInOrganization(ctx context.Context, arg HasLiveMCPServerInOrganizationParams) (bool, error) {
+	row := q.db.QueryRow(ctx, hasLiveMCPServerInOrganization, arg.ID, arg.OrganizationID)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
+}
+
+const listLiveMCPServerIDsInOrganization = `-- name: ListLiveMCPServerIDsInOrganization :many
+SELECT m.id
+FROM mcp_servers AS m
+JOIN projects AS p ON p.id = m.project_id
+WHERE m.id = ANY($1::uuid[])
+  AND p.organization_id = $2
+  AND m.deleted IS FALSE
+  AND p.deleted IS FALSE
+ORDER BY m.id
+`
+
+type ListLiveMCPServerIDsInOrganizationParams struct {
+	Ids            []uuid.UUID
+	OrganizationID string
+}
+
+func (q *Queries) ListLiveMCPServerIDsInOrganization(ctx context.Context, arg ListLiveMCPServerIDsInOrganizationParams) ([]uuid.UUID, error) {
+	rows, err := q.db.Query(ctx, listLiveMCPServerIDsInOrganization, arg.Ids, arg.OrganizationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []uuid.UUID
+	for rows.Next() {
+		var id uuid.UUID
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listMCPServerToolMetadata = `-- name: ListMCPServerToolMetadata :many
 SELECT id, project_id, mcp_server_id, tool_name, title, read_only_hint, destructive_hint, idempotent_hint, open_world_hint, created_at, updated_at, deleted_at, deleted
 FROM mcp_server_tool_metadata
@@ -733,6 +797,43 @@ func (q *Queries) ListMCPServersForTelemetryByProjectID(ctx context.Context, pro
 			return nil, err
 		}
 		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const lockLiveMCPServersInOrganization = `-- name: LockLiveMCPServersInOrganization :many
+SELECT m.id
+FROM mcp_servers AS m
+JOIN projects AS p ON p.id = m.project_id
+WHERE m.id = ANY($1::uuid[])
+  AND p.organization_id = $2
+  AND m.deleted IS FALSE
+  AND p.deleted IS FALSE
+ORDER BY m.id
+FOR SHARE OF m, p
+`
+
+type LockLiveMCPServersInOrganizationParams struct {
+	Ids            []uuid.UUID
+	OrganizationID string
+}
+
+func (q *Queries) LockLiveMCPServersInOrganization(ctx context.Context, arg LockLiveMCPServersInOrganizationParams) ([]uuid.UUID, error) {
+	rows, err := q.db.Query(ctx, lockLiveMCPServersInOrganization, arg.Ids, arg.OrganizationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []uuid.UUID
+	for rows.Next() {
+		var id uuid.UUID
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err

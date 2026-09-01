@@ -1,10 +1,22 @@
-import { useRef, type JSX } from "react";
+import { useRef, useState, type JSX, type Ref } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useParams } from "@tanstack/react-router";
+import { LoaderCircle } from "lucide-react";
+import { toast } from "sonner";
 
 import { useConfirmDialog } from "@/components/ConfirmDialog";
 import { CopyValue } from "@/components/CopyValue";
+import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { TrialFacts } from "@/pages/organization/TrialFacts";
+import { OrganizationActions } from "@/pages/organizations/OrganizationActions";
 import {
   Select,
   SelectContent,
@@ -13,15 +25,21 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
+import { useOnUnmount } from "@/hooks/useOnUnmount";
 import { ACCOUNT_TYPE_OPTIONS, isAccountType } from "@/lib/accountTypes";
 import {
   cancelOrganizationFetches,
+  invalidateOrganizationActivity,
+  invalidateOrganizationDetails,
+  invalidateOrganizations,
   invalidateOrganizationStats,
   organizationQuery,
   writeOrganizationToCache,
 } from "@/lib/adminQueries";
 import {
   errorMessage,
+  GramAdminError,
+  markEnterpriseTrialConverted,
   updateOrganization,
   type AdminOrganization,
 } from "@/lib/gramAdminApi";
@@ -36,7 +54,7 @@ function Row({
   children: React.ReactNode;
 }) {
   return (
-    <div className="grid grid-cols-[12rem_1fr] items-baseline gap-3 py-1">
+    <div className="grid grid-cols-1 gap-1 py-1 sm:grid-cols-[7.5rem_minmax(0,1fr)] sm:items-center sm:gap-3">
       <span data-slot="field-label" className="text-muted-foreground text-sm">
         {label}
       </span>
@@ -45,27 +63,70 @@ function Row({
   );
 }
 
-function Group({
+function Panel({
   title,
   children,
+  className,
+  headingRef,
 }: {
   title: string;
   children: React.ReactNode;
+  className?: string;
+  headingRef?: Ref<HTMLHeadingElement>;
 }) {
   return (
-    <section className="mt-5 first:mt-0">
-      {/* h5 under the record name's h4 in RecordHeader. A group is part of the
-          record, not a sibling of it. */}
-      <h5 className="text-muted-foreground mb-1 text-xs font-medium">
+    <section className={cn("bg-card rounded-lg border", className)}>
+      {/* h5 follows the record name's h4 in RecordHeader. */}
+      <h5
+        ref={headingRef}
+        tabIndex={headingRef ? -1 : undefined}
+        className="border-b px-5 py-2.5 text-sm font-semibold"
+      >
         {title}
       </h5>
-      {children}
+      <div className="p-5">{children}</div>
     </section>
   );
 }
 
 function yesNo(v: boolean): string {
   return v ? "yes" : "no";
+}
+
+function canMarkEnterpriseTrialConverted(org: AdminOrganization): boolean {
+  return (
+    org.trial_tier === "enterprise" &&
+    (org.trial_state === "running" ||
+      org.trial_state === "ending_soon" ||
+      org.trial_state === "expired" ||
+      org.trial_state === "demoted") &&
+    !org.trial_converted_at
+  );
+}
+
+function conversionConfirmation(org: AdminOrganization): string {
+  let description =
+    "This action ends the enterprise trial and prevents automatic demotion. Use this action only after the enterprise contract is confirmed.";
+  if (org.trial_state === "expired") {
+    description =
+      "The trial period has ended, but demotion is not complete. This action prevents demotion and keeps enterprise access.";
+  } else if (org.trial_state === "demoted") {
+    description =
+      "This action records the enterprise contract and restores enterprise access. Model provider keys with an admin lock or billing restriction remain disabled.";
+  }
+  if (org.disabled_at) {
+    description += " The organization remains disabled after conversion.";
+  }
+  return description;
+}
+
+function conversionSuccessDescription(org: AdminOrganization): string {
+  const access = org.disabled_at
+    ? "The organization remains disabled."
+    : org.trial_state === "demoted"
+      ? "Enterprise access was restored."
+      : "Enterprise access remains active.";
+  return `${access} Conversion details are available on the Activity page.`;
 }
 
 // The view reads the record from the same query the layout above it reads, so
@@ -90,11 +151,112 @@ export function Overview({ org }: { org: AdminOrganization }): JSX.Element {
   const qc = useQueryClient();
   const [confirm, confirmDialog] = useConfirmDialog();
   const { announce, showFailure } = useWriteReport();
+  const [conversionOpen, setConversionOpen] = useState(false);
+  const [conversionUncertain, setConversionUncertain] = useState(false);
+  const [conversionPending, setConversionPending] = useState(false);
 
   // Where the keyboard goes when the dialog closes. `useConfirmDialog` has no
   // `DialogTrigger`, so Radix's own restore drops focus on `document.body`.
   const accountTypeControl = useRef<HTMLButtonElement>(null);
   const whitelistedControl = useRef<HTMLButtonElement>(null);
+  const detailsHeading = useRef<HTMLHeadingElement>(null);
+  const conversionControl = useRef<HTMLButtonElement>(null);
+  const conversionContext = useRef(org);
+  const conversionFocusAfterClose = useRef<"opener" | "details">("opener");
+  const mounted = useRef(true);
+  useOnUnmount(() => {
+    mounted.current = false;
+  });
+
+  const conversionMut = useMutation({
+    mutationFn: () => markEnterpriseTrialConverted({ id: org.id }),
+  });
+
+  const refreshConversionTruth = async (): Promise<void> => {
+    invalidateOrganizationActivity(qc, org.id);
+    await invalidateOrganizations(qc);
+    await qc.fetchQuery(organizationQuery(org.id));
+  };
+
+  const focusConversionTarget = (): boolean => {
+    if (!mounted.current) return false;
+    const target =
+      conversionFocusAfterClose.current === "details"
+        ? detailsHeading.current
+        : conversionControl.current;
+    if (!target?.isConnected) return false;
+    target.focus();
+    return true;
+  };
+
+  const restoreConversionFocus = (): void => {
+    // Controlled dialogs can skip close-autofocus when Presence unmounts. This
+    // second path runs after React disconnects the focused dialog control.
+    setTimeout(() => focusConversionTarget());
+  };
+
+  const restoreConversionFocusFromDialog = (event: Event): void => {
+    // When Radix does run close-autofocus, focus at the end of its Presence
+    // lifecycle. A timer alone runs while FocusScope still traps the keyboard.
+    if (focusConversionTarget()) event.preventDefault();
+  };
+
+  const closeConversion = (focus: "opener" | "details"): void => {
+    conversionFocusAfterClose.current = focus;
+    setConversionOpen(false);
+    restoreConversionFocus();
+  };
+
+  const convert = async (): Promise<void> => {
+    if (conversionPending) return;
+    const successDescription = conversionSuccessDescription(
+      conversionContext.current,
+    );
+    setConversionPending(true);
+    showFailure(null);
+    try {
+      await conversionMut.mutateAsync();
+      await refreshConversionTruth();
+      if (!mounted.current) return;
+      setConversionUncertain(false);
+      closeConversion("details");
+      toast.success("Trial marked as converted", {
+        description: successDescription,
+      });
+    } catch (error) {
+      // Goa payload validation, admin auth, lookup, and provider preparation
+      // all fail before the conversion transaction commits. A 409 is excluded:
+      // the server also uses it when converted_at is already committed but the
+      // organization access snapshot is incompatible.
+      const preCommit =
+        error instanceof GramAdminError &&
+        (error.status === 400 ||
+          error.status === 401 ||
+          error.status === 403 ||
+          error.status === 404 ||
+          error.status === 422);
+      if (!mounted.current) return;
+      if (preCommit) {
+        const text = `Could not mark ${org.name} as converted: ${errorMessage(error)}`;
+        announce(text);
+        showFailure(text);
+        closeConversion("opener");
+        return;
+      }
+
+      const text = `Conversion may already be recorded. Refreshing canonical organization truth after: ${errorMessage(error)}`;
+      setConversionUncertain(true);
+      announce(text);
+      showFailure(text);
+      try {
+        await refreshConversionTruth();
+      } catch {
+        // Retry remains available when canonical truth cannot be loaded.
+      }
+    } finally {
+      if (mounted.current) setConversionPending(false);
+    }
+  };
 
   const mut = useMutation({
     mutationFn: (change: FactChange) =>
@@ -104,7 +266,10 @@ export function Overview({ org }: { org: AdminOrganization }): JSX.Element {
     // cancelled nothing, so a list read already in flight put the pre-write row
     // back, and the stats kept their old totals.
     onMutate: () => cancelOrganizationFetches(qc),
-    onSuccess: (updated) => writeOrganizationToCache(qc, updated),
+    onSuccess: (updated) => {
+      writeOrganizationToCache(qc, updated);
+      invalidateOrganizationDetails(qc, updated);
+    },
     // A failed write replaces nothing it cancelled, so the totals have to be
     // asked for again. The record needs nothing: it was never repainted.
     onError: () => invalidateOrganizationStats(qc),
@@ -151,109 +316,240 @@ export function Overview({ org }: { org: AdminOrganization }): JSX.Element {
     });
   };
 
+  const showTrialPanel =
+    org.trial_state === "running" ||
+    org.trial_state === "ending_soon" ||
+    org.trial_state === "expired" ||
+    org.trial_state === "demoted";
+
   return (
-    <div className="border-border bg-muted/10 rounded-md border p-4">
-      <Group title="Identity">
-        <Row label="Name">
-          <span className="text-sm">{org.name}</span>
-        </Row>
-        <Row label="Slug">
-          <CopyValue label="Slug" value={org.slug} className="text-sm" />
-        </Row>
-        <Row label="Organization id">
-          <CopyValue
-            label="Organization id"
-            value={org.id}
-            className="text-sm"
-          />
-        </Row>
-        <Row label="WorkOS id">
-          {/* No control over an absent value: a button that copies "-" is
-              worse than no button. */}
-          {org.workos_id ? (
+    <div
+      data-slot="organization-overview"
+      className="flex flex-wrap items-start gap-4"
+    >
+      <div
+        data-slot="organization-overview-main"
+        className="min-w-[min(100%,32rem)] flex-[2_1_32rem] space-y-4"
+      >
+        <Panel title="Details" headingRef={detailsHeading}>
+          <Row label="Name">
+            <span className="text-sm">{org.name}</span>
+          </Row>
+          <Row label="Slug">
+            <CopyValue label="Slug" value={org.slug} className="text-sm" />
+          </Row>
+          <Row label="Organization id">
             <CopyValue
-              label="WorkOS id"
-              value={org.workos_id}
+              label="Organization id"
+              value={org.id}
               className="text-sm"
             />
-          ) : (
-            <span className="text-muted-foreground text-sm">-</span>
-          )}
-        </Row>
-        <Row label="Created">
-          <span className="text-sm">{fmtDateShort(org.created_at)}</span>
-        </Row>
-        <Row label="Updated">
-          <span className="text-sm">{fmtDateShort(org.updated_at)}</span>
-        </Row>
-      </Group>
-
-      <Group title="Plan">
-        <Row label="Account type">
-          <Select
-            value={org.account_type}
-            disabled={mut.isPending}
-            onValueChange={(v) => {
-              void commit(
-                { account_type: v },
-                `Account type: ${org.account_type} → ${v}`,
-                accountTypeControl,
-              );
-            }}
-          >
-            <SelectTrigger
-              ref={accountTypeControl}
-              className="h-auto w-auto px-2 py-1.5"
-            >
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {ACCOUNT_TYPE_OPTIONS.map((t) => (
-                <SelectItem key={t} value={t}>
-                  {t}
-                </SelectItem>
-              ))}
-              {!isAccountType(org.account_type) && (
-                <SelectItem value={org.account_type}>
-                  {org.account_type}
-                </SelectItem>
-              )}
-            </SelectContent>
-          </Select>
-        </Row>
-        <Row label="Trial">
-          <TrialFacts org={org} />
-        </Row>
-      </Group>
-
-      {/* Access, not a setting. `whitelisted` gates the platform, so it keeps
-          its own group away from anything that reads as a preference. */}
-      <Group title="Access">
-        <Row label="Whitelisted">
-          <Switch
-            ref={whitelistedControl}
-            checked={org.whitelisted}
-            disabled={mut.isPending}
-            onCheckedChange={(v) => {
-              void commit(
-                { whitelisted: v },
-                `Whitelisted: ${yesNo(org.whitelisted)} → ${yesNo(v)}`,
-                whitelistedControl,
-              );
-            }}
-          />
-        </Row>
-        <Row label="Disabled at">
-          <span
-            className={cn(
-              "text-sm",
-              !org.disabled_at && "text-muted-foreground",
+          </Row>
+          <Row label="WorkOS id">
+            {/* No control over an absent value: a button that copies "-" is
+              worse than no button. */}
+            {org.workos_id ? (
+              <CopyValue
+                label="WorkOS id"
+                value={org.workos_id}
+                className="text-sm"
+              />
+            ) : (
+              <span className="text-muted-foreground text-sm">-</span>
             )}
-          >
-            {fmtDateShort(org.disabled_at)}
-          </span>
-        </Row>
-      </Group>
+          </Row>
+          <Row label="Created">
+            <span className="text-sm">{fmtDateShort(org.created_at)}</span>
+          </Row>
+          <Row label="Updated">
+            <span className="text-sm">{fmtDateShort(org.updated_at)}</span>
+          </Row>
+          <Row label="Account type">
+            <Select
+              value={org.account_type}
+              disabled={mut.isPending || conversionPending}
+              onValueChange={(v) => {
+                void commit(
+                  { account_type: v },
+                  `Account type: ${org.account_type} → ${v}`,
+                  accountTypeControl,
+                );
+              }}
+            >
+              <SelectTrigger
+                ref={accountTypeControl}
+                className="h-auto w-auto px-2 py-1.5"
+              >
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {ACCOUNT_TYPE_OPTIONS.map((t) => (
+                  <SelectItem key={t} value={t}>
+                    {t}
+                  </SelectItem>
+                ))}
+                {!isAccountType(org.account_type) && (
+                  <SelectItem value={org.account_type}>
+                    {org.account_type}
+                  </SelectItem>
+                )}
+              </SelectContent>
+            </Select>
+          </Row>
+          <Row label="Whitelisted">
+            <Switch
+              ref={whitelistedControl}
+              checked={org.whitelisted}
+              disabled={mut.isPending || conversionPending}
+              onCheckedChange={(v) => {
+                void commit(
+                  { whitelisted: v },
+                  `Whitelisted: ${yesNo(org.whitelisted)} → ${yesNo(v)}`,
+                  whitelistedControl,
+                );
+              }}
+            />
+          </Row>
+          <Row label="Disabled at">
+            <span
+              className={cn(
+                "text-sm",
+                !org.disabled_at && "text-muted-foreground",
+              )}
+            >
+              {fmtDateShort(org.disabled_at)}
+            </span>
+          </Row>
+          {!showTrialPanel && (
+            <Row label="Trial">
+              <TrialFacts org={org} />
+            </Row>
+          )}
+        </Panel>
+
+        <Panel
+          title="Danger zone"
+          className="border-destructive [&>h5]:text-destructive"
+        >
+          <div className="flex flex-wrap items-center justify-between gap-4">
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-medium">
+                {org.disabled_at
+                  ? "Re-enable organization"
+                  : "Disable organization"}
+              </p>
+              <p className="text-muted-foreground mt-0.5 text-sm">
+                {org.disabled_at
+                  ? `Disabled ${fmtDateShort(org.disabled_at)}. Re-enabling restores organization access for every member and takes effect at once. Model provider keys with admin, billing, or unknown disable causes remain disabled.`
+                  : "Every member loses access to Gram until the organization is re-enabled. Sessions end immediately; nothing is deleted."}
+              </p>
+            </div>
+            <OrganizationActions
+              org={org}
+              layout="buttons"
+              actions="lifecycle"
+              focusFallbackRef={detailsHeading}
+              buttonClassName={
+                org.disabled_at
+                  ? undefined
+                  : "border-destructive bg-destructive text-white hover:bg-destructive/90 hover:text-white"
+              }
+            />
+          </div>
+        </Panel>
+      </div>
+
+      {showTrialPanel && (
+        <aside
+          data-slot="organization-overview-trial"
+          className="bg-card w-full max-w-80 flex-[1_1_16rem] rounded-lg border"
+        >
+          <h5 className="border-b px-5 py-2.5 text-sm font-semibold">
+            Enterprise trial
+          </h5>
+          <div className="space-y-4 p-5">
+            <TrialFacts org={org} />
+            <OrganizationActions
+              org={org}
+              layout="buttons"
+              actions="trial"
+              focusFallbackRef={detailsHeading}
+            />
+            {canMarkEnterpriseTrialConverted(org) && (
+              <Button
+                ref={conversionControl}
+                size="sm"
+                disabled={conversionPending}
+                aria-label={`Mark ${org.name} as converted`}
+                onClick={() => {
+                  conversionContext.current = org;
+                  setConversionUncertain(false);
+                  setConversionOpen(true);
+                }}
+              >
+                Mark as converted
+              </Button>
+            )}
+          </div>
+        </aside>
+      )}
+
+      <Dialog
+        open={conversionOpen}
+        onOpenChange={(open) => {
+          if (!open && !conversionPending) closeConversion("opener");
+        }}
+      >
+        <DialogContent
+          showCloseButton={!conversionPending}
+          onCloseAutoFocus={restoreConversionFocusFromDialog}
+        >
+          <DialogHeader>
+            <DialogTitle>Mark trial as converted?</DialogTitle>
+            <DialogDescription>
+              {conversionConfirmation(conversionContext.current)}
+            </DialogDescription>
+          </DialogHeader>
+          {conversionUncertain && (
+            <p role="alert" className="text-destructive text-sm">
+              Conversion may already be recorded. A canonical organization
+              refresh was requested. Retry safely uses the same idempotent
+              operation.
+            </p>
+          )}
+          <DialogFooter>
+            <Button
+              variant="ghost"
+              size="sm"
+              disabled={conversionPending}
+              onClick={() => closeConversion("opener")}
+            >
+              Cancel
+            </Button>
+            <Button
+              size="sm"
+              disabled={conversionPending}
+              aria-busy={conversionPending}
+              onClick={() => void convert()}
+            >
+              {conversionPending ? (
+                <>
+                  <LoaderCircle
+                    data-slot="conversion-spinner"
+                    aria-hidden="true"
+                    className="animate-spin"
+                  />
+                  Marking as converted…
+                </>
+              ) : conversionUncertain ? (
+                "Retry"
+              ) : (
+                "Mark as converted"
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {confirmDialog}
     </div>

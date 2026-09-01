@@ -20,6 +20,8 @@ import { useMemo } from "react";
 export type AuthTarget = {
   /** Seeds auto-derived issuer slugs on first add. */
   slug: string;
+  /** Project owning the target; scopes permission gates to it. */
+  projectId: string;
   /** Current issuer link; null when the target has none yet. */
   userSessionIssuerId: string | null;
   /**
@@ -30,6 +32,10 @@ export type AuthTarget = {
   /** Link a freshly created issuer to the target (first add). Absent for
    * targets that always have an issuer (mcp servers). */
   linkUserSessionIssuer?: (userSessionIssuerId: string) => Promise<void>;
+  /** True when the target's issuer may bind several upstream providers
+   * (gateways front many members). Remote/tunneled servers have exactly one
+   * upstream and must not offer additional attachments. */
+  multipleProviders?: boolean;
   /** Invalidate the target-specific queries that embed the link. */
   invalidate: (queryClient: QueryClient) => Promise<void>;
 };
@@ -38,6 +44,7 @@ export function useMcpServerAuthTarget(mcpServer: McpServer): AuthTarget {
   return useMemo(
     () => ({
       slug: mcpServer.slug ?? "mcp",
+      projectId: mcpServer.projectId,
       userSessionIssuerId: mcpServer.userSessionIssuerId ?? null,
       remoteMcpServerId: mcpServer.remoteMcpServerId,
       invalidate: async (queryClient: QueryClient) => {
@@ -57,6 +64,7 @@ export function useToolsetAuthTarget(toolset: Toolset): AuthTarget {
   return useMemo(
     () => ({
       slug: toolset.slug,
+      projectId: toolset.projectId,
       userSessionIssuerId: toolset.userSessionIssuerId ?? null,
       linkUserSessionIssuer: async (userSessionIssuerId: string) => {
         // Toolsets are already live, so linking only flips auth gating —
@@ -86,7 +94,9 @@ export function useMetaMcpAuthTarget(
   return useMemo(
     () => ({
       slug: slugSeed,
+      projectId: metaMcpServer.projectId,
       userSessionIssuerId: metaMcpServer.userSessionIssuerId ?? null,
+      multipleProviders: true,
       linkUserSessionIssuer: async (userSessionIssuerId: string) => {
         // update is a full-record replace, so the name rides along.
         await client.metaMcp.update({

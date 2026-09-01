@@ -12,29 +12,29 @@ const (
 	ModeDisabled Mode = "disabled"
 
 	// ModePresets admits the enabled catalog entries plus the issuer's own
-	// custom URLs. This is the default for an issuer whose mode was never
-	// explicitly set.
+	// custom URLs, and refuses everything else. It is opt-in: an operator
+	// chooses it deliberately, because a denial under it is unrecoverable
+	// for the end user.
 	ModePresets Mode = "presets"
 
-	// ModeReporting evaluates exactly what ModePresets would decide, records
-	// it, and then admits regardless. It is the migration step onto
-	// ModePresets: an operator turns it on, waits, and reads
-	// cimd.admission.decisions to learn which client_ids WOULD have been
-	// refused, adding catalog entries or custom URLs until that number is
-	// zero. Only then is switching to ModePresets safe.
-	//
-	// It exists because a presets denial is unrecoverable for the end user
-	// (MCP clients do not fall back to dynamic registration after an
-	// authorize rejection), so the cost of discovering a missing entry the
-	// hard way is a support ticket. This mode makes that discovery free.
-	//
-	// Because it admits everything, it is exactly as permissive as ModeOpen
-	// while it is on. It is a temporary measurement state, not a resting
-	// place.
+	// ModeReporting evaluates exactly what ModePresets would decide,
+	// records it, and then admits regardless. It is no longer reachable:
+	// nothing writes it, and the unconfigured default is ModeOpen, which
+	// carries the same measurement. ResolveMode still recognizes it so a
+	// row written while it was the default resolves rather than failing
+	// closed.
 	ModeReporting Mode = "reporting"
 
-	// ModeOpen skips admission entirely. Every document validation rule
-	// still applies — open means "any spec-valid client", not "any client".
+	// ModeOpen admits every spec-valid client. Document validation rules
+	// all still apply: open means "any spec-valid client", not "any
+	// client".
+	//
+	// The mode itself records nothing beyond the admission. Evaluate
+	// returns AdmitOpen immediately and consults no catalog, so a caller
+	// running this mode MUST call EvaluateShadow separately and record what
+	// it decided. Skipping that is silent: the client is admitted either
+	// way, and the only thing lost is every catalog gap this issuer would
+	// have revealed.
 	ModeOpen Mode = "open"
 )
 
@@ -42,45 +42,38 @@ const (
 // client. False only for ModeReporting, where the decision is recorded and
 // then discarded.
 //
-// Callers MUST consult this before acting on OutcomeDeny. Evaluate returns
-// the same decision for ModeReporting as for ModePresets on purpose: the
-// whole point is that the recorded outcome is directly comparable to what
-// ModePresets will produce after the switch, so the same query answers
-// "what would happen" before and "what is happening" after.
+// Callers MUST consult this before acting on OutcomeDeny.
+//
+// ModeOpen enforces, and that is not a contradiction to relax: Evaluate
+// never denies in open mode, so the only OutcomeDeny a caller can hold
+// under it is one that caller built itself, deliberately, as a real
+// refusal. The shadow measurement never produces one — EvaluateShadow's
+// result is translated into an AdmitReason and recorded, never returned as
+// a decision.
 func (m Mode) Enforces() bool {
 	return m != ModeReporting
 }
 
 // ResolveMode maps a stored user_session_issuers.client_id_metadata_admission_mode
-// value onto the effective policy. This is the ONLY place either resolution
-// rule lives, so the default can move without a migration or a backfill.
+// value onto the effective policy. This is the ONLY place the resolution
+// rules live.
 //
-// The column is nullable with no database default precisely so the two
-// states stay distinguishable: an operator who explicitly chose a mode, and
-// an issuer that never had one.
+// NULL resolves to ModeOpen. Open is the resting state rather than a
+// waypoint toward enforcement: MCP clients pick CIMD over dynamic client
+// registration once, at metadata-discovery time, and do not fall back when
+// /authorize refuses the client_id, so a presets denial is a dead end with
+// no client-side recovery. Applying a curated allowlist to an issuer whose
+// operator never chose one would impose that dead end on customers who
+// never asked for it, so ModePresets is opt-in.
 //
-// THE NULL BRANCH IS THE ROLLOUT LEVER, and it currently resolves to
-// ModeReporting, not ModePresets. Because no issuer has the default written
-// to its row, changing the line below changes the behaviour of every
-// unconfigured issuer with no migration and no backfill.
+// Nothing is given up by defaulting open. The measurement that would gate
+// an enforcement decision rides along with it: an open-mode admission also
+// computes what ModePresets would have decided (EvaluateShadow) and records
+// that, so catalog gaps stay discoverable from cimd.admission.decisions
+// without anyone being refused to find them.
 //
-// Shipping ModeReporting first is deliberate. An unconfigured issuer today
-// behaves exactly as it did before admission control existed (it admits
-// every spec-valid document), so nothing regresses, while every decision
-// ModePresets would have made is recorded. The exit condition is:
-//
-//  1. CIMD is exposed to the whole customer base (the gram-user-session-cimd
-//     rollout flag reached 100% and was then removed, AIS-210), so
-//     cimd.admission.decisions carries a meaningful sample.
-//  2. Watch cimd.admission.decisions for outcome denied_not_listed with
-//     mode reporting. Each one names a client the catalog is missing; add a
-//     catalog entry, or have the operator add a custom URL.
-//  3. Change this branch to ModePresets once that count is zero and stable.
-//     Enforcement then begins with evidence rather than a guess.
-//
-// The default moves in one direction, once. Operators who want enforcement
-// before then set ModePresets explicitly through the management API; only
-// the default is deferred, not the capability.
+// New rows are written 'open' explicitly, so this branch covers only rows
+// created before that and any row left unset by a direct database write.
 //
 // stored/valid mirror a nullable text column (pgtype.Text's String/Valid)
 // without dragging a pgx dependency into a policy package. The returned
@@ -95,7 +88,7 @@ func (m Mode) Enforces() bool {
 // unrecognized value.
 func ResolveMode(stored string, valid bool) (Mode, bool) {
 	if !valid {
-		return ModeReporting, true
+		return ModeOpen, true
 	}
 	switch mode := Mode(stored); mode {
 	case ModeDisabled, ModePresets, ModeReporting, ModeOpen:
@@ -110,11 +103,11 @@ func ResolveMode(stored string, valid bool) (Mode, bool) {
 // carries no CHECK constraint, by convention.
 //
 // ModeReporting is deliberately excluded. It is as permissive as ModeOpen
-// for as long as it is on, so exposing it as a per-issuer choice would put
-// a reassuringly-named permissive state in front of operators, with nothing
-// to stop it being left there. It is a deployment-time default (see
-// ResolveMode), not a setting. ResolveMode still recognizes it, so a value
-// written by that lever resolves correctly.
+// while it is on, so exposing it as a per-issuer choice would put a
+// reassuringly-named permissive state in front of operators with nothing to
+// stop it being left there. ModeOpen is the honest name for that behaviour
+// and is writable. ResolveMode still recognizes ModeReporting so rows
+// written while it was the default keep resolving.
 func IsValidMode(value string) bool {
 	switch Mode(value) {
 	case ModeDisabled, ModePresets, ModeOpen:
