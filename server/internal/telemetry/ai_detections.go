@@ -35,19 +35,30 @@ type AIScanReceipt struct {
 // UpsertAIDetections merges AI-scan detections into the ai_detections
 // inventory, preserving first_seen via the repo's read-merge-write.
 func (l *Logger) UpsertAIDetections(ctx context.Context, detections []AIDetection) error {
-	if len(detections) == 0 || l.chConn == nil {
+	if len(detections) == 0 {
 		return nil
 	}
 
-	now := time.Now()
+	now := time.Now().UTC()
 	params := make([]repo.UpsertAIDetectionParams, 0, len(detections))
 	for _, detection := range detections {
-		if detection.OrganizationID == "" || detection.TargetID == "" || detection.UserEmail == "" || detection.Signal == "" {
-			continue
+		if detection.OrganizationID == "" {
+			return oops.E(oops.CodeUnexpected, nil, "ai detection missing organization id")
 		}
-		seenAt := detection.SeenAt
-		if seenAt.IsZero() {
-			seenAt = now
+		if detection.TargetID == "" {
+			return oops.E(oops.CodeUnexpected, nil, "ai detection missing target id")
+		}
+		if detection.UserEmail == "" {
+			return oops.E(oops.CodeUnexpected, nil, "ai detection missing user email")
+		}
+		if detection.Signal != "installed" && detection.Signal != "running" {
+			return oops.E(oops.CodeUnexpected, nil, "ai detection has invalid signal")
+		}
+		if detection.Category != "harness" && detection.Category != "local_model" {
+			return oops.E(oops.CodeUnexpected, nil, "ai detection has invalid category")
+		}
+		if detection.SeenAt.IsZero() {
+			return oops.E(oops.CodeUnexpected, nil, "ai detection missing seen_at")
 		}
 		params = append(params, repo.UpsertAIDetectionParams{
 			OrganizationID: detection.OrganizationID,
@@ -57,12 +68,12 @@ func (l *Logger) UpsertAIDetections(ctx context.Context, detections []AIDetectio
 			Signal:         detection.Signal,
 			Category:       detection.Category,
 			Version:        detection.Version,
-			SeenAt:         seenAt,
+			SeenAt:         detection.SeenAt.UTC(),
 			UpdatedAt:      now,
 		})
 	}
 
-	if len(params) == 0 {
+	if l.chConn == nil {
 		return nil
 	}
 

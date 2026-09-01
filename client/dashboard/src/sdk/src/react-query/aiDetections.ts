@@ -60,7 +60,7 @@ export type AiDetectionsQueryError =
  * listAIDetections access
  *
  * @remarks
- * List AI tools detected on enrolled devices by device-agent AI scans, aggregated per detection target across the organization. Org-scoped — detections attach to devices and enrolled users, not projects. Requires an org admin session. Display names and categories are decorated from the Speakeasy-owned detection target registry at read time.
+ * List AI tools detected on enrolled devices by device-agent AI scans, aggregated per detection target across the organization. Org-scoped — detections attach to devices and enrolled users, not projects. Requires an org admin session. Display names and categories are decorated from the server's detection target catalog at read time; targets the catalog does not know are listed under their raw reported id.
  */
 export function useAiDetections(
   request?: ListAIDetectionsRequest | undefined,
@@ -83,7 +83,7 @@ export function useAiDetections(
  * listAIDetections access
  *
  * @remarks
- * List AI tools detected on enrolled devices by device-agent AI scans, aggregated per detection target across the organization. Org-scoped — detections attach to devices and enrolled users, not projects. Requires an org admin session. Display names and categories are decorated from the Speakeasy-owned detection target registry at read time.
+ * List AI tools detected on enrolled devices by device-agent AI scans, aggregated per detection target across the organization. Org-scoped — detections attach to devices and enrolled users, not projects. Requires an org admin session. Display names and categories are decorated from the server's detection target catalog at read time; targets the catalog does not know are listed under their raw reported id.
  */
 export function useAiDetectionsSuspense(
   request?: ListAIDetectionsRequest | undefined,

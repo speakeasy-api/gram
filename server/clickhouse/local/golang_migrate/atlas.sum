@@ -1,4 +1,4 @@
-h1:8/LEvZZuLGIFUdkOphoRkQZcTOsIJP0gKiYPvpqEEDI=
+h1:ebrxSQ3fd2mXqW8KU9Zis3cfyqkMSXhK7/HzGxd6Dzg=
 20251127155815_initial_golang_migrate.up.sql h1:fkATa14aucJEoldFi1VgW7TRT8gyC6NGe1Hq/OzXVuI=
 20251208142630_add-tool-logs-table.up.sql h1:cGJCiWBvLPFwOlpx0jYYLgdPZD21+gKSF/x4mVksBcI=
 20251209104438_add-id-col-to-tool-logs-table.up.sql h1:+Ubsl1ZKfeCZL9dBhohUnkBksKZj6nwdZSXm7WwowaE=
@@ -92,4 +92,4 @@ h1:8/LEvZZuLGIFUdkOphoRkQZcTOsIJP0gKiYPvpqEEDI=
 20260821180408_add-risk-findings-event-kind.up.sql h1:QkhOhO7Q4cfBVkbhvAatxmHdTbZtDm9MQ7+78USDRFQ=
 20260824192251_otel-event-feed-tables.up.sql h1:n3KFSIcdJXiqHRQQCAjkrD5Ux0dAsqJ1Ar9R7rM31qI=
 20260825112511_billing-meter-readings.up.sql h1:27Ts5n4EmmxCSfPKF89JmZBaixYgLQ0xvqoE/4yAGOM=
-20260831143540_shadow-ai-detections.up.sql h1:vwEXXBp9Uz2ePoBL8QzTk2wEIN3ynJhlcSQNi3n33p8=
+20260831143540_shadow-ai-detections.up.sql h1:qG8r+HJXSf6HdzuROqvk5HEVCp6Yr898lsAeiiLyBWw=

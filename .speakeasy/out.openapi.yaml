@@ -672,7 +672,7 @@ paths:
         name: ShadowMCPInventoryServer
   /rpc/access.listAIDetections:
     get:
-      description: List AI tools detected on enrolled devices by device-agent AI scans, aggregated per detection target across the organization. Org-scoped — detections attach to devices and enrolled users, not projects. Requires an org admin session. Display names and categories are decorated from the Speakeasy-owned detection target registry at read time.
+      description: List AI tools detected on enrolled devices by device-agent AI scans, aggregated per detection target across the organization. Org-scoped — detections attach to devices and enrolled users, not projects. Requires an org admin session. Display names and categories are decorated from the server's detection target catalog at read time; targets the catalog does not know are listed under their raw reported id.
       operationId: listAIDetections
       parameters:
         - allowEmptyValue: true
@@ -62005,14 +62005,17 @@ components:
       properties:
         category:
           type: string
-          description: 'Detection target category: harness (an AI coding tool) or local_model (a local model runtime). From the registry when the target is still registered, otherwise as recorded at detection time.'
+          description: 'Detection target category: harness (an AI coding tool) or local_model (a local model runtime). From the catalog for ids it knows, otherwise as recorded at detection time.'
+          enum:
+            - harness
+            - local_model
         device_count:
           type: integer
           description: Distinct devices, by hardware serial, this tool was detected on. Devices that report no serial are not counted.
           format: int64
         display_name:
           type: string
-          description: Human-readable name from the detection target registry. Targets the registry no longer knows fall back to their id.
+          description: Human-readable name from the server's detection target catalog. Ids the catalog does not know — agent binaries can ship newer target lists — fall back to the raw id.
         first_seen:
           type: string
           description: When this tool was first detected anywhere in the organization.
@@ -62025,10 +62028,13 @@ components:
           type: array
           items:
             type: string
+            enum:
+              - installed
+              - running
           description: 'Detection signals observed for this target across all reports: installed and/or running.'
         target_id:
           type: string
-          description: Registry id of the detected AI tool (e.g. claude-code, ollama).
+          description: Id of the detected AI tool as reported by agents (e.g. claude-code, ollama).
         user_count:
           type: integer
           description: Distinct enrolled users this tool was detected for.
@@ -62168,14 +62174,21 @@ components:
         category:
           type: string
           description: 'Target category the agent scanned under: harness or local_model. The server catalog''s category wins for targets it knows; this is what gets stored for the rest.'
+          enum:
+            - harness
+            - local_model
           maxLength: 32
         signal:
           type: string
           description: 'What the scan observed: installed or running.'
+          enum:
+            - installed
+            - running
           maxLength: 16
         target_id:
           type: string
           description: 'Identifier of the matched target from the agent''s compiled-in list (e.g. claude-code, ollama). Stored as reported: an agent binary can ship a newer target list than the server catalog knows.'
+          minLength: 1
           maxLength: 64
         version:
           type: string
@@ -78032,6 +78045,12 @@ components:
     ReportAIScanRequestBody:
       type: object
       properties:
+        match_count:
+          type: integer
+          description: Number of matches reported by the agent. Echoed into the scan receipt as reported.
+          format: int64
+          minimum: 0
+          maximum: 100
         matches:
           type: array
           items:
@@ -78051,10 +78070,12 @@ components:
           description: Version of the target list compiled into the agent binary that ran the scan. Echoed into the scan receipt as reported.
           format: int64
           minimum: 0
+          maximum: 2.147483647e+09
       required:
         - scan_started_at
         - scan_completed_at
         - target_list_version
+        - match_count
         - matches
     ReportSessionMovedRequestBody:
       type: object

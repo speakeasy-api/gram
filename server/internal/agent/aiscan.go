@@ -63,6 +63,13 @@ func (s *Service) ReportAIScan(ctx context.Context, payload *gen.ReportAIScanPay
 		completedAt = startedAt
 	}
 
+	if payload.TargetListVersion < 0 || payload.TargetListVersion > math.MaxInt32 {
+		return oops.E(oops.CodeBadRequest, nil, "target_list_version must be between 0 and 2147483647")
+	}
+	if payload.MatchCount < 0 || payload.MatchCount > 100 {
+		return oops.E(oops.CodeBadRequest, nil, "match_count must be between 0 and 100")
+	}
+
 	serial := normalizeSerial(payload.SerialNumber)
 	receivedAt := time.Now().UTC()
 
@@ -70,13 +77,20 @@ func (s *Service) ReportAIScan(ctx context.Context, payload *gen.ReportAIScanPay
 	unknownTargetIDs := make([]string, 0)
 	for _, match := range payload.Matches {
 		if match == nil {
-			continue
+			return oops.E(oops.CodeBadRequest, nil, "matches must not contain null entries")
 		}
 		targetID := strings.ToLower(strings.TrimSpace(match.TargetID))
 		if targetID == "" {
-			continue
+			return oops.E(oops.CodeBadRequest, nil, "match target_id must not be blank")
 		}
 		category := strings.ToLower(strings.TrimSpace(match.Category))
+		if category != "harness" && category != "local_model" {
+			return oops.E(oops.CodeBadRequest, nil, "match category must be harness or local_model")
+		}
+		signal := strings.ToLower(strings.TrimSpace(match.Signal))
+		if signal != "installed" && signal != "running" {
+			return oops.E(oops.CodeBadRequest, nil, "match signal must be installed or running")
+		}
 		if target, known := aitargets.ByID(targetID); known {
 			category = string(target.Category)
 		} else {
@@ -87,10 +101,10 @@ func (s *Service) ReportAIScan(ctx context.Context, payload *gen.ReportAIScanPay
 			TargetID:       targetID,
 			DeviceSerial:   serial,
 			UserEmail:      email,
-			Signal:         strings.ToLower(strings.TrimSpace(match.Signal)),
+			Signal:         signal,
 			Category:       category,
 			Version:        strings.TrimSpace(conv.PtrValOr(match.Version, "")),
-			SeenAt:         completedAt,
+			SeenAt:         receivedAt,
 		})
 	}
 	if len(unknownTargetIDs) > 0 {
@@ -104,15 +118,14 @@ func (s *Service) ReportAIScan(ctx context.Context, payload *gen.ReportAIScanPay
 		return oops.E(oops.CodeUnexpected, err, "error recording ai scan detections").LogError(ctx, s.logger)
 	}
 
-	targetListVersion := min(payload.TargetListVersion, math.MaxInt32)
 	if err := s.telemetry.InsertAIScanReceipt(ctx, telemetry.AIScanReceipt{
 		OrganizationID:    authCtx.ActiveOrganizationID,
 		DeviceSerial:      serial,
 		UserEmail:         email,
 		ScanStartedAt:     startedAt,
 		ScanCompletedAt:   completedAt,
-		TargetListVersion: int32(targetListVersion),
-		MatchCount:        uint32(len(detections)), //nolint:gosec // matches is capped at 100 entries by the design
+		TargetListVersion: int32(payload.TargetListVersion), // validated against the Int32 range above
+		MatchCount:        uint32(payload.MatchCount),       // validated against [0, 100] above
 		ReceivedAt:        receivedAt,
 	}); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "error recording ai scan receipt").LogError(ctx, s.logger)

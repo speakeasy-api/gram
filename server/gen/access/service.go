@@ -57,7 +57,8 @@ type Service interface {
 	// aggregated per detection target across the organization. Org-scoped —
 	// detections attach to devices and enrolled users, not projects. Requires an
 	// org admin session. Display names and categories are decorated from the
-	// Speakeasy-owned detection target registry at read time.
+	// server's detection target catalog at read time; targets the catalog does not
+	// know are listed under their raw reported id.
 	ListAIDetections(context.Context, *ListAIDetectionsPayload) (res *ListAIDetectionsResult, err error)
 	// Request access to a scope by sending an email notification to organization
 	// administrators.
@@ -99,14 +100,15 @@ var MethodNames = [20]string{"listRoles", "getRole", "createRole", "updateRole",
 // One AI detection target aggregated across an organization's device-agent
 // scan reports.
 type AIDetection struct {
-	// Registry id of the detected AI tool (e.g. claude-code, ollama).
+	// Id of the detected AI tool as reported by agents (e.g. claude-code, ollama).
 	TargetID string
-	// Human-readable name from the detection target registry. Targets the registry
-	// no longer knows fall back to their id.
+	// Human-readable name from the server's detection target catalog. Ids the
+	// catalog does not know — agent binaries can ship newer target lists — fall
+	// back to the raw id.
 	DisplayName string
 	// Detection target category: harness (an AI coding tool) or local_model (a
-	// local model runtime). From the registry when the target is still registered,
-	// otherwise as recorded at detection time.
+	// local model runtime). From the catalog for ids it knows, otherwise as
+	// recorded at detection time.
 	Category string
 	// Distinct enrolled users this tool was detected for.
 	UserCount int64

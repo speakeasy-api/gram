@@ -289,6 +289,9 @@ type ReportAIScanPayload struct {
 	// Version of the target list compiled into the agent binary that ran the scan.
 	// Echoed into the scan receipt as reported.
 	TargetListVersion int
+	// Number of matches reported by the agent. Echoed into the scan receipt as
+	// reported.
+	MatchCount int
 	// Detection targets the scan matched. Empty when the device came back clean;
 	// the report still lands as a scan receipt.
 	Matches []*AIScanMatch

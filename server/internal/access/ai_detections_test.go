@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/access"
+	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
@@ -23,15 +24,29 @@ import (
 // package's parallel tests while the mock auth context always carries the
 // same org id, so org-scoped detection reads would otherwise observe sibling
 // tests' writes.
-func withUniqueDetectionOrg(t *testing.T, ctx context.Context) (context.Context, string) {
+func withUniqueDetectionOrg(t *testing.T, ctx context.Context, ti *testInstance) (context.Context, string, string) {
 	t.Helper()
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 	clone := *authCtx
 	clone.ActiveOrganizationID = "detections-test-org-" + uuid.NewString()
 	ctx = contextvalues.SetAuthContext(ctx, &clone)
+
+	seedOrganization(t, ctx, ti.conn, clone.ActiveOrganizationID)
+	email := "member@example.com"
+	if clone.Email != nil {
+		email = *clone.Email
+	}
+	workosUserID := "workos-user-" + uuid.NewString()
+	membershipID := "membership-" + uuid.NewString()
+	seedConnectedUser(t, ctx, ti.conn, clone.ActiveOrganizationID, clone.UserID, email, "Detection Test User", workosUserID, membershipID)
+	require.NoError(t, authz.SeedSystemRoleGrants(ctx, ti.conn, clone.ActiveOrganizationID))
+	seedRoleAssignment(t, ctx, ti.conn, clone.ActiveOrganizationID, clone.UserID, mockMember("", membershipID, workosUserID, authz.SystemRoleAdmin))
+
+	// Retain the prepared grant so revocation tests prove it cannot override
+	// live membership and grant state.
 	ctx = withRBACGrants(t, ctx, authz.Grant{Scope: authz.ScopeOrgAdmin, Selector: authz.NewSelector(authz.ScopeOrgAdmin, clone.ActiveOrganizationID)})
-	return ctx, clone.ActiveOrganizationID
+	return ctx, clone.ActiveOrganizationID, workosUserID
 }
 
 func seedAIDetection(t *testing.T, ctx context.Context, ti *testInstance, orgID, targetID, serial, email, signal, category string, seenAt time.Time) {
@@ -101,7 +116,7 @@ func TestService_ListAIDetections_AggregatesAndDecoratesFromCatalog(t *testing.T
 	t.Parallel()
 
 	ctx, ti := newTestAccessService(t)
-	ctx, orgID := withUniqueDetectionOrg(t, ctx)
+	ctx, orgID, _ := withUniqueDetectionOrg(t, ctx, ti)
 
 	now := time.Now().UTC().Truncate(time.Second)
 	seedAIDetection(t, ctx, ti, orgID, "cursor", "serial-1", "alex@example.com", "installed", "harness", now.Add(-2*time.Hour))
@@ -138,15 +153,38 @@ func TestService_ListAIDetections_AggregatesAndDecoratesFromCatalog(t *testing.T
 	require.Equal(t, "local_model", unknown.Category, "unknown ids keep the category recorded at detection time")
 }
 
-func TestService_ListAIDetections_RequiresOrgAdmin(t *testing.T) {
+func TestService_ListAIDetections_RejectsStaleGrantWithoutLiveMembership(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestAccessService(t)
-	// The default test context carries admin grants; strip them so the
-	// endpoint's org-admin requirement is what gets exercised.
-	ctx = withRBACGrants(t, ctx)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	clone := *authCtx
+	clone.ActiveOrganizationID = "detections-test-org-" + uuid.NewString()
+	seedOrganization(t, ctx, ti.conn, clone.ActiveOrganizationID)
+	ctx = contextvalues.SetAuthContext(ctx, &clone)
+	ctx = withRBACGrants(t, ctx, authz.Grant{Scope: authz.ScopeOrgAdmin, Selector: authz.NewSelector(authz.ScopeOrgAdmin, clone.ActiveOrganizationID)})
 
 	_, err := ti.service.ListAIDetections(ctx, &gen.ListAIDetectionsPayload{Category: nil, DirectoryGroupID: nil, SessionToken: nil})
+	var shareableErr *oops.ShareableError
+	require.ErrorAs(t, err, &shareableErr)
+	require.Equal(t, oops.CodeForbidden, shareableErr.Code)
+}
+
+func TestService_ListAIDetections_RejectsStaleGrantAfterLiveRoleRevocation(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestAccessService(t)
+	ctx, orgID, workosUserID := withUniqueDetectionOrg(t, ctx, ti)
+
+	deleted, err := accessrepo.New(ti.conn).SoftDeleteAllRoleAssignmentsByWorkosUser(ctx, accessrepo.SoftDeleteAllRoleAssignmentsByWorkosUserParams{
+		OrganizationID: orgID,
+		WorkosUserID:   workosUserID,
+	})
+	require.NoError(t, err)
+	require.EqualValues(t, 1, deleted)
+
+	_, err = ti.service.ListAIDetections(ctx, &gen.ListAIDetectionsPayload{Category: nil, DirectoryGroupID: nil, SessionToken: nil})
 	var shareableErr *oops.ShareableError
 	require.ErrorAs(t, err, &shareableErr)
 	require.Equal(t, oops.CodeForbidden, shareableErr.Code)
@@ -156,7 +194,7 @@ func TestService_ListAIDetections_FiltersByCategory(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestAccessService(t)
-	ctx, orgID := withUniqueDetectionOrg(t, ctx)
+	ctx, orgID, _ := withUniqueDetectionOrg(t, ctx, ti)
 
 	now := time.Now().UTC()
 	seedAIDetection(t, ctx, ti, orgID, "cursor", "serial-1", "alex@example.com", "installed", "harness", now)
@@ -172,7 +210,7 @@ func TestService_ListAIDetections_FiltersByDirectoryGroup(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestAccessService(t)
-	ctx, orgID := withUniqueDetectionOrg(t, ctx)
+	ctx, orgID, _ := withUniqueDetectionOrg(t, ctx, ti)
 
 	now := time.Now().UTC()
 	seedAIDetection(t, ctx, ti, orgID, "cursor", "serial-1", "member@example.com", "installed", "harness", now)

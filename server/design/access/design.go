@@ -904,10 +904,16 @@ var AIDetectionModel = Type("AIDetection", func() {
 
 	Attribute("target_id", String, "Id of the detected AI tool as reported by agents (e.g. claude-code, ollama).")
 	Attribute("display_name", String, "Human-readable name from the server's detection target catalog. Ids the catalog does not know — agent binaries can ship newer target lists — fall back to the raw id.")
-	Attribute("category", String, "Detection target category: harness (an AI coding tool) or local_model (a local model runtime). From the catalog for ids it knows, otherwise as recorded at detection time.")
+	Attribute("category", String, "Detection target category: harness (an AI coding tool) or local_model (a local model runtime). From the catalog for ids it knows, otherwise as recorded at detection time.", func() {
+		Enum("harness", "local_model")
+	})
 	Attribute("user_count", Int64, "Distinct enrolled users this tool was detected for.")
 	Attribute("device_count", Int64, "Distinct devices, by hardware serial, this tool was detected on. Devices that report no serial are not counted.")
-	Attribute("signals", ArrayOf(String), "Detection signals observed for this target across all reports: installed and/or running.")
+	Attribute("signals", ArrayOf(String), "Detection signals observed for this target across all reports: installed and/or running.", func() {
+		Elem(func() {
+			Enum("installed", "running")
+		})
+	})
 	Attribute("first_seen", String, func() {
 		Description("When this tool was first detected anywhere in the organization.")
 		Format(FormatDateTime)

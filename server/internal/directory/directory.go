@@ -174,10 +174,7 @@ func (s *Service) ListActiveGroupMemberEmails(ctx context.Context, organizationI
 	if err != nil {
 		return nil, fmt.Errorf("list active directory group member emails: %w", err)
 	}
-	if emails == nil {
-		emails = []string{}
-	}
-	return emails, nil
+	return normalizeEmails(emails), nil
 }
 
 // ListActiveAttributeValues returns active, non-null directory attribute

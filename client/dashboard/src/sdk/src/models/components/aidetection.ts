@@ -5,23 +5,42 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
+import { ClosedEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
+
+/**
+ * Detection target category: harness (an AI coding tool) or local_model (a local model runtime). From the catalog for ids it knows, otherwise as recorded at detection time.
+ */
+export const Category = {
+  Harness: "harness",
+  LocalModel: "local_model",
+} as const;
+/**
+ * Detection target category: harness (an AI coding tool) or local_model (a local model runtime). From the catalog for ids it knows, otherwise as recorded at detection time.
+ */
+export type Category = ClosedEnum<typeof Category>;
+
+export const Signals = {
+  Installed: "installed",
+  Running: "running",
+} as const;
+export type Signals = ClosedEnum<typeof Signals>;
 
 /**
  * One AI detection target aggregated across an organization's device-agent scan reports.
  */
 export type AIDetection = {
   /**
-   * Detection target category: harness (an AI coding tool) or local_model (a local model runtime). From the registry when the target is still registered, otherwise as recorded at detection time.
+   * Detection target category: harness (an AI coding tool) or local_model (a local model runtime). From the catalog for ids it knows, otherwise as recorded at detection time.
    */
-  category: string;
+  category: Category;
   /**
    * Distinct devices, by hardware serial, this tool was detected on. Devices that report no serial are not counted.
    */
   deviceCount: number;
   /**
-   * Human-readable name from the detection target registry. Targets the registry no longer knows fall back to their id.
+   * Human-readable name from the server's detection target catalog. Ids the catalog does not know — agent binaries can ship newer target lists — fall back to the raw id.
    */
   displayName: string;
   /**
@@ -35,9 +54,9 @@ export type AIDetection = {
   /**
    * Detection signals observed for this target across all reports: installed and/or running.
    */
-  signals: Array<string>;
+  signals: Array<Signals>;
   /**
-   * Registry id of the detected AI tool (e.g. claude-code, ollama).
+   * Id of the detected AI tool as reported by agents (e.g. claude-code, ollama).
    */
   targetId: string;
   /**
@@ -47,10 +66,20 @@ export type AIDetection = {
 };
 
 /** @internal */
+export const Category$inboundSchema: z.ZodMiniEnum<typeof Category> = z.enum(
+  Category,
+);
+
+/** @internal */
+export const Signals$inboundSchema: z.ZodMiniEnum<typeof Signals> = z.enum(
+  Signals,
+);
+
+/** @internal */
 export const AIDetection$inboundSchema: z.ZodMiniType<AIDetection, unknown> = z
   .pipe(
     z.object({
-      category: z.string(),
+      category: Category$inboundSchema,
       device_count: z.int(),
       display_name: z.string(),
       first_seen: z.pipe(
@@ -61,7 +90,7 @@ export const AIDetection$inboundSchema: z.ZodMiniType<AIDetection, unknown> = z
         z.iso.datetime({ offset: true }),
         z.transform(v => new Date(v)),
       ),
-      signals: z.array(z.string()),
+      signals: z.array(Signals$inboundSchema),
       target_id: z.string(),
       user_count: z.int(),
     }),

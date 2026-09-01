@@ -4234,14 +4234,15 @@ type ShadowMCPInventoryUserSourceResponseBody struct {
 
 // AIDetectionResponseBody is used to define fields on response body types.
 type AIDetectionResponseBody struct {
-	// Registry id of the detected AI tool (e.g. claude-code, ollama).
+	// Id of the detected AI tool as reported by agents (e.g. claude-code, ollama).
 	TargetID string `form:"target_id" json:"target_id" xml:"target_id"`
-	// Human-readable name from the detection target registry. Targets the registry
-	// no longer knows fall back to their id.
+	// Human-readable name from the server's detection target catalog. Ids the
+	// catalog does not know — agent binaries can ship newer target lists — fall
+	// back to the raw id.
 	DisplayName string `form:"display_name" json:"display_name" xml:"display_name"`
 	// Detection target category: harness (an AI coding tool) or local_model (a
-	// local model runtime). From the registry when the target is still registered,
-	// otherwise as recorded at detection time.
+	// local model runtime). From the catalog for ids it knows, otherwise as
+	// recorded at detection time.
 	Category string `form:"category" json:"category" xml:"category"`
 	// Distinct enrolled users this tool was detected for.
 	UserCount int64 `form:"user_count" json:"user_count" xml:"user_count"`

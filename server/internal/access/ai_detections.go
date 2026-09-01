@@ -2,11 +2,13 @@ package access
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/google/uuid"
 
 	gen "github.com/speakeasy-api/gram/server/gen/access"
 	"github.com/speakeasy-api/gram/server/internal/agent/aitargets"
+	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/directory"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	telemetryrepo "github.com/speakeasy-api/gram/server/internal/telemetry/repo"
@@ -21,9 +23,12 @@ import (
 // Org-scoped by design: detections attach to devices and enrolled users, not
 // projects (the same shape as agent.listSyncedUsers).
 func (s *Service) ListAIDetections(ctx context.Context, payload *gen.ListAIDetectionsPayload) (*gen.ListAIDetectionsResult, error) {
-	ac, err := s.requireOrgAdmin(ctx)
+	ac, err := s.authContext(ctx)
 	if err != nil {
-		return nil, err
+		return nil, oops.E(oops.CodeUnauthorized, err, "missing auth context").LogError(ctx, s.logger)
+	}
+	if err := s.authz.RequireUserOrganizationScope(ctx, ac.ActiveOrganizationID, ac.UserID, authz.ScopeOrgAdmin); err != nil {
+		return nil, fmt.Errorf("authorize AI detections organization administrator: %w", err)
 	}
 
 	var categories []string

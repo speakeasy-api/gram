@@ -4,6 +4,31 @@
 
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
+import { ClosedEnum } from "../../types/enums.js";
+
+/**
+ * Target category the agent scanned under: harness or local_model. The server catalog's category wins for targets it knows; this is what gets stored for the rest.
+ */
+export const AIScanMatchCategory = {
+  Harness: "harness",
+  LocalModel: "local_model",
+} as const;
+/**
+ * Target category the agent scanned under: harness or local_model. The server catalog's category wins for targets it knows; this is what gets stored for the rest.
+ */
+export type AIScanMatchCategory = ClosedEnum<typeof AIScanMatchCategory>;
+
+/**
+ * What the scan observed: installed or running.
+ */
+export const Signal = {
+  Installed: "installed",
+  Running: "running",
+} as const;
+/**
+ * What the scan observed: installed or running.
+ */
+export type Signal = ClosedEnum<typeof Signal>;
 
 /**
  * One AI detection target a device-agent scan matched.
@@ -12,11 +37,11 @@ export type AIScanMatch = {
   /**
    * Target category the agent scanned under: harness or local_model. The server catalog's category wins for targets it knows; this is what gets stored for the rest.
    */
-  category: string;
+  category: AIScanMatchCategory;
   /**
    * What the scan observed: installed or running.
    */
-  signal: string;
+  signal: Signal;
   /**
    * Identifier of the matched target from the agent's compiled-in list (e.g. claude-code, ollama). Stored as reported: an agent binary can ship a newer target list than the server catalog knows.
    */
@@ -26,6 +51,16 @@ export type AIScanMatch = {
    */
   version?: string | undefined;
 };
+
+/** @internal */
+export const AIScanMatchCategory$outboundSchema: z.ZodMiniEnum<
+  typeof AIScanMatchCategory
+> = z.enum(AIScanMatchCategory);
+
+/** @internal */
+export const Signal$outboundSchema: z.ZodMiniEnum<typeof Signal> = z.enum(
+  Signal,
+);
 
 /** @internal */
 export type AIScanMatch$Outbound = {
@@ -41,8 +76,8 @@ export const AIScanMatch$outboundSchema: z.ZodMiniType<
   AIScanMatch
 > = z.pipe(
   z.object({
-    category: z.string(),
-    signal: z.string(),
+    category: AIScanMatchCategory$outboundSchema,
+    signal: Signal$outboundSchema,
     targetId: z.string(),
     version: z.optional(z.string()),
   }),

@@ -75,13 +75,25 @@ func (q *Queries) UpsertAIDetections(ctx context.Context, args []UpsertAIDetecti
 
 	upserts := make(map[string]*aiDetectionUpsert, len(args))
 	for _, arg := range args {
-		if arg.OrganizationID == "" || arg.TargetID == "" || arg.UserEmail == "" || arg.Signal == "" {
-			continue
+		if arg.OrganizationID == "" {
+			return fmt.Errorf("validating ai detection: organization id is required")
+		}
+		if arg.TargetID == "" {
+			return fmt.Errorf("validating ai detection: target id is required")
+		}
+		if arg.UserEmail == "" {
+			return fmt.Errorf("validating ai detection: user email is required")
+		}
+		if arg.Signal != "installed" && arg.Signal != "running" {
+			return fmt.Errorf("validating ai detection: invalid signal %q", arg.Signal)
+		}
+		if arg.Category != "harness" && arg.Category != "local_model" {
+			return fmt.Errorf("validating ai detection: invalid category %q", arg.Category)
+		}
+		if arg.SeenAt.IsZero() {
+			return fmt.Errorf("validating ai detection: seen at is required")
 		}
 		seenAt := arg.SeenAt
-		if seenAt.IsZero() {
-			seenAt = time.Now()
-		}
 		updatedAt := arg.UpdatedAt
 		if updatedAt.IsZero() {
 			updatedAt = time.Now()
@@ -319,38 +331,9 @@ type AIDetectionSummaryRow struct {
 // ListAIDetectionSummaries aggregates detections per target for one
 // organization, most recently seen first.
 func (q *Queries) ListAIDetectionSummaries(ctx context.Context, arg ListAIDetectionSummariesParams) ([]AIDetectionSummaryRow, error) {
-	sb := sq.Select(
-		"target_id",
-		"argMax(category, updated_at) AS detected_category",
-		"uniqExact(user_email) AS user_count",
-		"uniqExactIf(device_serial, device_serial != '') AS device_count",
-		"groupUniqArray(signal) AS signals",
-		"min(first_seen) AS first_seen",
-		"max(last_seen) AS last_seen",
-	).
-		From("ai_detections").
-		Where("organization_id = ?", arg.OrganizationID)
-
-	if len(arg.Categories) > 0 {
-		sb = sb.Where(squirrel.Eq{"category": arg.Categories})
-	}
-	if len(arg.UserEmails) > 0 {
-		// Fold the team filter through the identity map where rolled out, so
-		// detections stored under an employee's linked alias emails still
-		// match their directory email.
-		if orgLit := canonicalIdentityOrgLiteral(arg.CanonicalIdentityOrg); orgLit != "" {
-			sb = sb.Where(canonicalEmailFilter(orgLit, "user_email", arg.UserEmails))
-		} else {
-			sb = sb.Where(squirrel.Eq{"user_email": arg.UserEmails}) //nolint:glint // fold not rolled out to this org; both sides are lowercase-normalized
-		}
-	}
-
-	sb = sb.GroupBy("organization_id", "target_id").
-		OrderBy("last_seen DESC", "target_id ASC")
-
-	query, queryArgs, err := sb.ToSql()
+	query, queryArgs, err := buildListAIDetectionSummariesQuery(arg)
 	if err != nil {
-		return nil, fmt.Errorf("building ai detection summary query: %w", err)
+		return nil, err
 	}
 
 	rows, err := q.conn.Query(ctx, query, queryArgs...)
@@ -372,6 +355,46 @@ func (q *Queries) ListAIDetectionSummaries(ctx context.Context, arg ListAIDetect
 	}
 
 	return result, nil
+}
+
+func buildListAIDetectionSummariesQuery(arg ListAIDetectionSummariesParams) (string, []any, error) {
+	sb := sq.Select(
+		"target_id",
+		"argMax(category, updated_at) AS detected_category",
+		"uniqExact(user_email) AS user_count",
+		"uniqExactIf(device_serial, device_serial != '') AS device_count",
+		"groupUniqArray(signal) AS signals",
+		"min(first_seen) AS first_seen",
+		"max(last_seen) AS last_seen",
+	).
+		From("ai_detections").
+		Where("organization_id = ?", arg.OrganizationID)
+
+	if len(arg.Categories) > 0 {
+		sb = sb.Where(squirrel.Eq{"category": arg.Categories})
+	}
+	canonicalOrgLit := ""
+	if len(arg.UserEmails) > 0 {
+		// Fold the team filter through the identity map where rolled out, so
+		// detections stored under an employee's linked alias emails still
+		// match their directory email.
+		canonicalOrgLit = canonicalIdentityOrgLiteral(arg.CanonicalIdentityOrg)
+		if canonicalOrgLit != "" {
+			sb = sb.Where(canonicalEmailFilter(canonicalOrgLit, "user_email", arg.UserEmails))
+		} else {
+			sb = sb.Where(squirrel.Eq{"user_email": arg.UserEmails}) //nolint:glint // fold not rolled out to this org; both sides are lowercase-normalized
+		}
+	}
+
+	sb = sb.GroupBy("organization_id", "target_id").
+		OrderBy("last_seen DESC", "target_id ASC")
+
+	query, args, err := withCanonicalFoldSettings(sb, canonicalOrgLit).ToSql()
+	if err != nil {
+		return "", nil, fmt.Errorf("building ai detection summary query: %w", err)
+	}
+
+	return query, args, nil
 }
 
 // InsertAIScanReceiptParams is one scan receipt: proof a device ran an AI

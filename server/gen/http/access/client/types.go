@@ -4258,14 +4258,15 @@ type ShadowMCPInventoryUserSourceResponseBody struct {
 
 // AIDetectionResponseBody is used to define fields on response body types.
 type AIDetectionResponseBody struct {
-	// Registry id of the detected AI tool (e.g. claude-code, ollama).
+	// Id of the detected AI tool as reported by agents (e.g. claude-code, ollama).
 	TargetID *string `form:"target_id,omitempty" json:"target_id,omitempty" xml:"target_id,omitempty"`
-	// Human-readable name from the detection target registry. Targets the registry
-	// no longer knows fall back to their id.
+	// Human-readable name from the server's detection target catalog. Ids the
+	// catalog does not know — agent binaries can ship newer target lists — fall
+	// back to the raw id.
 	DisplayName *string `form:"display_name,omitempty" json:"display_name,omitempty" xml:"display_name,omitempty"`
 	// Detection target category: harness (an AI coding tool) or local_model (a
-	// local model runtime). From the registry when the target is still registered,
-	// otherwise as recorded at detection time.
+	// local model runtime). From the catalog for ids it knows, otherwise as
+	// recorded at detection time.
 	Category *string `form:"category,omitempty" json:"category,omitempty" xml:"category,omitempty"`
 	// Distinct enrolled users this tool was detected for.
 	UserCount *int64 `form:"user_count,omitempty" json:"user_count,omitempty" xml:"user_count,omitempty"`
@@ -13692,6 +13693,16 @@ func ValidateAIDetectionResponseBody(body *AIDetectionResponseBody) (err error) 
 	}
 	if body.LastSeen == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("last_seen", "body"))
+	}
+	if body.Category != nil {
+		if !(*body.Category == "harness" || *body.Category == "local_model") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.category", *body.Category, []any{"harness", "local_model"}))
+		}
+	}
+	for _, e := range body.Signals {
+		if !(e == "installed" || e == "running") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.signals[*]", e, []any{"installed", "running"}))
+		}
 	}
 	if body.FirstSeen != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.first_seen", *body.FirstSeen, goa.FormatDateTime))

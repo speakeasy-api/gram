@@ -226,7 +226,7 @@ func BuildReportAIScanPayload(agentReportAIScanBody string, agentReportAIScanApi
 	{
 		err = json.Unmarshal([]byte(agentReportAIScanBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"matches\": [\n         {\n            \"category\": \"aaa\",\n            \"signal\": \"aaa\",\n            \"target_id\": \"aaa\",\n            \"version\": \"aaa\"\n         },\n         {\n            \"category\": \"aaa\",\n            \"signal\": \"aaa\",\n            \"target_id\": \"aaa\",\n            \"version\": \"aaa\"\n         },\n         {\n            \"category\": \"aaa\",\n            \"signal\": \"aaa\",\n            \"target_id\": \"aaa\",\n            \"version\": \"aaa\"\n         }\n      ],\n      \"scan_completed_at\": \"1970-01-01T00:00:01Z\",\n      \"scan_started_at\": \"1970-01-01T00:00:01Z\",\n      \"target_list_version\": 1\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"match_count\": 1,\n      \"matches\": [\n         {\n            \"category\": \"aaa\",\n            \"signal\": \"aaa\",\n            \"target_id\": \"aa\",\n            \"version\": \"aaa\"\n         },\n         {\n            \"category\": \"aaa\",\n            \"signal\": \"aaa\",\n            \"target_id\": \"aa\",\n            \"version\": \"aaa\"\n         },\n         {\n            \"category\": \"aaa\",\n            \"signal\": \"aaa\",\n            \"target_id\": \"aa\",\n            \"version\": \"aaa\"\n         }\n      ],\n      \"scan_completed_at\": \"1970-01-01T00:00:01Z\",\n      \"scan_started_at\": \"1970-01-01T00:00:01Z\",\n      \"target_list_version\": 1\n   }'")
 		}
 		if body.Matches == nil {
 			err = goa.MergeErrors(err, goa.MissingFieldError("matches", "body"))
@@ -235,6 +235,15 @@ func BuildReportAIScanPayload(agentReportAIScanBody string, agentReportAIScanApi
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.scan_completed_at", body.ScanCompletedAt, goa.FormatDateTime))
 		if body.TargetListVersion < 0 {
 			err = goa.MergeErrors(err, goa.InvalidRangeError("body.target_list_version", body.TargetListVersion, 0, true))
+		}
+		if body.TargetListVersion > 2.147483647e+09 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.target_list_version", body.TargetListVersion, 2.147483647e+09, false))
+		}
+		if body.MatchCount < 0 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.match_count", body.MatchCount, 0, true))
+		}
+		if body.MatchCount > 100 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.match_count", body.MatchCount, 100, false))
 		}
 		if len(body.Matches) > 100 {
 			err = goa.MergeErrors(err, goa.InvalidLengthError("body.matches", body.Matches, len(body.Matches), 100, false))
@@ -278,6 +287,7 @@ func BuildReportAIScanPayload(agentReportAIScanBody string, agentReportAIScanApi
 		ScanStartedAt:     body.ScanStartedAt,
 		ScanCompletedAt:   body.ScanCompletedAt,
 		TargetListVersion: body.TargetListVersion,
+		MatchCount:        body.MatchCount,
 	}
 	if body.Matches != nil {
 		v.Matches = make([]*agent.AIScanMatch, len(body.Matches))

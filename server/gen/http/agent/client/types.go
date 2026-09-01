@@ -58,6 +58,9 @@ type ReportAIScanRequestBody struct {
 	// Version of the target list compiled into the agent binary that ran the scan.
 	// Echoed into the scan receipt as reported.
 	TargetListVersion int `form:"target_list_version" json:"target_list_version" xml:"target_list_version"`
+	// Number of matches reported by the agent. Echoed into the scan receipt as
+	// reported.
+	MatchCount int `form:"match_count" json:"match_count" xml:"match_count"`
 	// Detection targets the scan matched. Empty when the device came back clean;
 	// the report still lands as a scan receipt.
 	Matches []*AIScanMatchRequestBody `form:"matches" json:"matches" xml:"matches"`
@@ -1741,6 +1744,7 @@ func NewReportAIScanRequestBody(p *agent.ReportAIScanPayload) *ReportAIScanReque
 		ScanStartedAt:     p.ScanStartedAt,
 		ScanCompletedAt:   p.ScanCompletedAt,
 		TargetListVersion: p.TargetListVersion,
+		MatchCount:        p.MatchCount,
 	}
 	if p.Matches != nil {
 		body.Matches = make([]*AIScanMatchRequestBody, len(p.Matches))
@@ -5227,11 +5231,20 @@ func ValidateAgentSessionMetaResponseBody(body *AgentSessionMetaResponseBody) (e
 // ValidateAIScanMatchRequestBody runs the validations defined on
 // AIScanMatchRequestBody
 func ValidateAIScanMatchRequestBody(body *AIScanMatchRequestBody) (err error) {
+	if utf8.RuneCountInString(body.TargetID) < 1 {
+		err = goa.MergeErrors(err, goa.InvalidLengthError("body.target_id", body.TargetID, utf8.RuneCountInString(body.TargetID), 1, true))
+	}
 	if utf8.RuneCountInString(body.TargetID) > 64 {
 		err = goa.MergeErrors(err, goa.InvalidLengthError("body.target_id", body.TargetID, utf8.RuneCountInString(body.TargetID), 64, false))
 	}
+	if !(body.Category == "harness" || body.Category == "local_model") {
+		err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.category", body.Category, []any{"harness", "local_model"}))
+	}
 	if utf8.RuneCountInString(body.Category) > 32 {
 		err = goa.MergeErrors(err, goa.InvalidLengthError("body.category", body.Category, utf8.RuneCountInString(body.Category), 32, false))
+	}
+	if !(body.Signal == "installed" || body.Signal == "running") {
+		err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.signal", body.Signal, []any{"installed", "running"}))
 	}
 	if utf8.RuneCountInString(body.Signal) > 16 {
 		err = goa.MergeErrors(err, goa.InvalidLengthError("body.signal", body.Signal, utf8.RuneCountInString(body.Signal), 16, false))

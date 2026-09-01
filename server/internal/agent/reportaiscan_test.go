@@ -2,6 +2,7 @@ package agent_test
 
 import (
 	"context"
+	"math"
 	"testing"
 	"time"
 
@@ -62,10 +63,12 @@ func TestReportAIScan_StoresDetectionsAndReceipt(t *testing.T) {
 	started := time.Now().UTC().Add(-2 * time.Minute).Truncate(time.Second)
 	completed := started.Add(30 * time.Second)
 
+	requestStartedAt := time.Now().UTC()
 	err := ti.service.ReportAIScan(ctx, &gen.ReportAIScanPayload{
 		ScanStartedAt:     started.Format(time.RFC3339),
 		ScanCompletedAt:   completed.Format(time.RFC3339),
 		TargetListVersion: 3,
+		MatchCount:        2,
 		Matches: []*gen.AIScanMatch{
 			{TargetID: "cursor", Category: "harness", Signal: "installed", Version: new("1.7.2")},
 			{TargetID: "ollama", Category: "local_model", Signal: "running", Version: nil},
@@ -75,6 +78,7 @@ func TestReportAIScan_StoresDetectionsAndReceipt(t *testing.T) {
 		Hostname:     new("devbox"),
 	})
 	require.NoError(t, err)
+	requestCompletedAt := time.Now().UTC()
 
 	summaries := aiDetectionSummaries(t, ti, orgID)
 	require.Len(t, summaries, 2)
@@ -84,8 +88,8 @@ func TestReportAIScan_StoresDetectionsAndReceipt(t *testing.T) {
 	require.EqualValues(t, 1, cursor.UserCount)
 	require.EqualValues(t, 1, cursor.DeviceCount)
 	require.ElementsMatch(t, []string{"installed"}, cursor.Signals)
-	require.WithinDuration(t, completed, cursor.FirstSeen, time.Second)
-	require.WithinDuration(t, completed, cursor.LastSeen, time.Second)
+	require.WithinRange(t, cursor.FirstSeen, requestStartedAt, requestCompletedAt, "first_seen must be derived from server receipt time")
+	require.Equal(t, cursor.FirstSeen, cursor.LastSeen)
 
 	ollama := summaries["ollama"]
 	require.Equal(t, "local_model", ollama.Category)
@@ -100,6 +104,7 @@ func TestReportAIScan_StoresDetectionsAndReceipt(t *testing.T) {
 	require.EqualValues(t, 2, receipt.MatchCount)
 	require.WithinDuration(t, started, receipt.ScanStartedAt, time.Second)
 	require.WithinDuration(t, completed, receipt.ScanCompletedAt, time.Second)
+	require.WithinRange(t, receipt.ReceivedAt, requestStartedAt, requestCompletedAt)
 }
 
 // A clean device still posts: no detections, one receipt with a zero match
@@ -114,6 +119,7 @@ func TestReportAIScan_ZeroMatchesLandsReceiptOnly(t *testing.T) {
 		ScanStartedAt:     started.Format(time.RFC3339),
 		ScanCompletedAt:   started.Add(5 * time.Second).Format(time.RFC3339),
 		TargetListVersion: 3,
+		MatchCount:        0,
 		Matches:           []*gen.AIScanMatch{},
 		Email:             new("developer@example.com"),
 		SerialNumber:      new("SERIAL-CLEAN"),
@@ -143,6 +149,7 @@ func TestReportAIScan_StoresUnknownTargetIDsAsReported(t *testing.T) {
 		ScanStartedAt:     now.Add(-time.Minute).Format(time.RFC3339),
 		ScanCompletedAt:   now.Format(time.RFC3339),
 		TargetListVersion: 9,
+		MatchCount:        2,
 		Matches: []*gen.AIScanMatch{
 			{TargetID: "brand-new-tool", Category: "harness", Signal: "installed", Version: nil},
 			{TargetID: "cursor", Category: "local_model", Signal: "installed", Version: nil},
@@ -173,32 +180,54 @@ func TestReportAIScan_PreservesFirstSeenAcrossReports(t *testing.T) {
 	ctx, ti := newTestAgentService(t)
 	ctx, orgID := withUniqueScanOrg(t, ctx)
 
-	first := time.Now().UTC().Add(-2 * time.Hour).Truncate(time.Second)
-	second := first.Add(time.Hour)
+	firstReportedCompletion := time.Now().UTC().Add(-2 * time.Hour).Truncate(time.Second)
+	firstRequestStartedAt := time.Now().UTC()
+	err := ti.service.ReportAIScan(ctx, &gen.ReportAIScanPayload{
+		ScanStartedAt:     firstReportedCompletion.Add(-10 * time.Second).Format(time.RFC3339),
+		ScanCompletedAt:   firstReportedCompletion.Format(time.RFC3339),
+		TargetListVersion: 3,
+		MatchCount:        1,
+		Matches: []*gen.AIScanMatch{
+			{TargetID: "claude-code", Category: "harness", Signal: "installed", Version: nil},
+		},
+		Email:        new("developer@example.com"),
+		SerialNumber: new("SERIAL-1"),
+		Hostname:     nil,
+	})
+	require.NoError(t, err)
+	firstRequestCompletedAt := time.Now().UTC()
 
-	for _, completed := range []time.Time{first, second} {
-		err := ti.service.ReportAIScan(ctx, &gen.ReportAIScanPayload{
-			ScanStartedAt:     completed.Add(-10 * time.Second).Format(time.RFC3339),
-			ScanCompletedAt:   completed.Format(time.RFC3339),
-			TargetListVersion: 3,
-			Matches: []*gen.AIScanMatch{
-				{TargetID: "claude-code", Category: "harness", Signal: "installed", Version: nil},
-			},
-			Email:        new("developer@example.com"),
-			SerialNumber: new("SERIAL-1"),
-			Hostname:     nil,
-		})
-		require.NoError(t, err)
-	}
+	firstRow := aiDetectionSummaries(t, ti, orgID)["claude-code"]
+	require.WithinRange(t, firstRow.FirstSeen, firstRequestStartedAt, firstRequestCompletedAt)
+	require.Equal(t, firstRow.FirstSeen, firstRow.LastSeen)
 
-	summaries := aiDetectionSummaries(t, ti, orgID)
-	row := summaries["claude-code"]
-	require.WithinDuration(t, first, row.FirstSeen, time.Second, "first_seen must survive the second report's read-merge-write")
-	require.WithinDuration(t, second, row.LastSeen, time.Second)
+	secondReportedCompletion := firstReportedCompletion.Add(time.Hour)
+	secondRequestStartedAt := time.Now().UTC()
+	err = ti.service.ReportAIScan(ctx, &gen.ReportAIScanPayload{
+		ScanStartedAt:     secondReportedCompletion.Add(-10 * time.Second).Format(time.RFC3339),
+		ScanCompletedAt:   secondReportedCompletion.Format(time.RFC3339),
+		TargetListVersion: 3,
+		MatchCount:        1,
+		Matches: []*gen.AIScanMatch{
+			{TargetID: "claude-code", Category: "harness", Signal: "installed", Version: nil},
+		},
+		Email:        new("developer@example.com"),
+		SerialNumber: new("SERIAL-1"),
+		Hostname:     nil,
+	})
+	require.NoError(t, err)
+	secondRequestCompletedAt := time.Now().UTC()
+
+	row := aiDetectionSummaries(t, ti, orgID)["claude-code"]
+	require.Equal(t, firstRow.FirstSeen, row.FirstSeen, "first_seen must survive the second report's read-merge-write")
+	require.WithinRange(t, row.LastSeen, secondRequestStartedAt, secondRequestCompletedAt)
 	require.EqualValues(t, 1, row.UserCount)
 	require.EqualValues(t, 1, row.DeviceCount)
 
-	require.Len(t, aiScanReceipts(t, ti, orgID), 2, "every scan posts its own receipt")
+	receipts := aiScanReceipts(t, ti, orgID)
+	require.Len(t, receipts, 2, "every scan posts its own receipt")
+	require.WithinDuration(t, secondReportedCompletion, receipts[0].ScanCompletedAt, time.Second)
+	require.WithinDuration(t, firstReportedCompletion, receipts[1].ScanCompletedAt, time.Second)
 }
 
 // The org install key vouches for an email like getPlugins; without one the
@@ -213,6 +242,7 @@ func TestReportAIScan_OrgKeyRequiresVouchedEmail(t *testing.T) {
 		ScanStartedAt:     now.Add(-time.Minute).Format(time.RFC3339),
 		ScanCompletedAt:   now.Format(time.RFC3339),
 		TargetListVersion: 3,
+		MatchCount:        0,
 		Matches:           []*gen.AIScanMatch{},
 		Email:             nil,
 		SerialNumber:      nil,
@@ -236,6 +266,7 @@ func TestReportAIScan_PerUserKeyAttributesToKeyOwner(t *testing.T) {
 		ScanStartedAt:     now.Add(-time.Minute).Format(time.RFC3339),
 		ScanCompletedAt:   now.Format(time.RFC3339),
 		TargetListVersion: 3,
+		MatchCount:        0,
 		Matches:           []*gen.AIScanMatch{},
 		Email:             new("someone-else@example.com"),
 		SerialNumber:      nil,
@@ -246,4 +277,65 @@ func TestReportAIScan_PerUserKeyAttributesToKeyOwner(t *testing.T) {
 	receipts := aiScanReceipts(t, ti, orgID)
 	require.Len(t, receipts, 1)
 	require.Equal(t, "owner@example.com", receipts[0].UserEmail)
+}
+
+func TestReportAIScan_PersistsReportedReceiptMetadata(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestAgentService(t)
+	ctx, orgID := withUniqueScanOrg(t, ctx)
+
+	now := time.Now().UTC()
+	err := ti.service.ReportAIScan(ctx, &gen.ReportAIScanPayload{
+		ScanStartedAt:     now.Add(-time.Minute).Format(time.RFC3339),
+		ScanCompletedAt:   now.Format(time.RFC3339),
+		TargetListVersion: math.MaxInt32,
+		MatchCount:        7,
+		Matches: []*gen.AIScanMatch{
+			{TargetID: "cursor", Category: "harness", Signal: "installed", Version: nil},
+		},
+		Email:        new("developer@example.com"),
+		SerialNumber: new("SERIAL-COUNT"),
+		Hostname:     nil,
+	})
+	require.NoError(t, err)
+
+	receipts := aiScanReceipts(t, ti, orgID)
+	require.Len(t, receipts, 1)
+	require.EqualValues(t, 7, receipts[0].MatchCount, "receipt must preserve the agent-reported count")
+}
+
+func TestReportAIScan_RejectsMalformedMatches(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestAgentService(t)
+	ctx, orgID := withUniqueScanOrg(t, ctx)
+	now := time.Now().UTC()
+
+	cases := []struct {
+		name  string
+		match *gen.AIScanMatch
+	}{
+		{name: "null match", match: nil},
+		{name: "blank target id", match: &gen.AIScanMatch{TargetID: " ", Category: "harness", Signal: "installed", Version: nil}},
+		{name: "invalid category", match: &gen.AIScanMatch{TargetID: "new-tool", Category: "other", Signal: "installed", Version: nil}},
+		{name: "invalid signal", match: &gen.AIScanMatch{TargetID: "cursor", Category: "harness", Signal: "stopped", Version: nil}},
+	}
+
+	for _, testCase := range cases {
+		err := ti.service.ReportAIScan(ctx, &gen.ReportAIScanPayload{
+			ScanStartedAt:     now.Add(-time.Minute).Format(time.RFC3339),
+			ScanCompletedAt:   now.Format(time.RFC3339),
+			TargetListVersion: 3,
+			MatchCount:        1,
+			Matches:           []*gen.AIScanMatch{testCase.match},
+			Email:             new("developer@example.com"),
+			SerialNumber:      new("SERIAL-INVALID"),
+			Hostname:          nil,
+		})
+		var shareableErr *oops.ShareableError
+		require.ErrorAs(t, err, &shareableErr, testCase.name)
+		require.Equal(t, oops.CodeBadRequest, shareableErr.Code, testCase.name)
+	}
+
+	require.Empty(t, aiDetectionSummaries(t, ti, orgID))
+	require.Empty(t, aiScanReceipts(t, ti, orgID), "malformed reports must not leave receipts")
 }

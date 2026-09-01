@@ -58,6 +58,9 @@ type ReportAIScanRequestBody struct {
 	// Version of the target list compiled into the agent binary that ran the scan.
 	// Echoed into the scan receipt as reported.
 	TargetListVersion *int `form:"target_list_version,omitempty" json:"target_list_version,omitempty" xml:"target_list_version,omitempty"`
+	// Number of matches reported by the agent. Echoed into the scan receipt as
+	// reported.
+	MatchCount *int `form:"match_count,omitempty" json:"match_count,omitempty" xml:"match_count,omitempty"`
 	// Detection targets the scan matched. Empty when the device came back clean;
 	// the report still lands as a scan receipt.
 	Matches []*AIScanMatchRequestBody `form:"matches,omitempty" json:"matches,omitempty" xml:"matches,omitempty"`
@@ -3045,6 +3048,7 @@ func NewReportAIScanPayload(body *ReportAIScanRequestBody, apikeyToken *string, 
 		ScanStartedAt:     *body.ScanStartedAt,
 		ScanCompletedAt:   *body.ScanCompletedAt,
 		TargetListVersion: *body.TargetListVersion,
+		MatchCount:        *body.MatchCount,
 	}
 	v.Matches = make([]*agent.AIScanMatch, len(body.Matches))
 	for i, val := range body.Matches {
@@ -3131,6 +3135,9 @@ func ValidateReportAIScanRequestBody(body *ReportAIScanRequestBody) (err error) 
 	if body.TargetListVersion == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("target_list_version", "body"))
 	}
+	if body.MatchCount == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("match_count", "body"))
+	}
 	if body.Matches == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("matches", "body"))
 	}
@@ -3143,6 +3150,21 @@ func ValidateReportAIScanRequestBody(body *ReportAIScanRequestBody) (err error) 
 	if body.TargetListVersion != nil {
 		if *body.TargetListVersion < 0 {
 			err = goa.MergeErrors(err, goa.InvalidRangeError("body.target_list_version", *body.TargetListVersion, 0, true))
+		}
+	}
+	if body.TargetListVersion != nil {
+		if *body.TargetListVersion > 2.147483647e+09 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.target_list_version", *body.TargetListVersion, 2.147483647e+09, false))
+		}
+	}
+	if body.MatchCount != nil {
+		if *body.MatchCount < 0 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.match_count", *body.MatchCount, 0, true))
+		}
+	}
+	if body.MatchCount != nil {
+		if *body.MatchCount > 100 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.match_count", *body.MatchCount, 100, false))
 		}
 	}
 	if len(body.Matches) > 100 {
@@ -3198,13 +3220,28 @@ func ValidateAIScanMatchRequestBody(body *AIScanMatchRequestBody) (err error) {
 		err = goa.MergeErrors(err, goa.MissingFieldError("signal", "body"))
 	}
 	if body.TargetID != nil {
+		if utf8.RuneCountInString(*body.TargetID) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.target_id", *body.TargetID, utf8.RuneCountInString(*body.TargetID), 1, true))
+		}
+	}
+	if body.TargetID != nil {
 		if utf8.RuneCountInString(*body.TargetID) > 64 {
 			err = goa.MergeErrors(err, goa.InvalidLengthError("body.target_id", *body.TargetID, utf8.RuneCountInString(*body.TargetID), 64, false))
 		}
 	}
 	if body.Category != nil {
+		if !(*body.Category == "harness" || *body.Category == "local_model") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.category", *body.Category, []any{"harness", "local_model"}))
+		}
+	}
+	if body.Category != nil {
 		if utf8.RuneCountInString(*body.Category) > 32 {
 			err = goa.MergeErrors(err, goa.InvalidLengthError("body.category", *body.Category, utf8.RuneCountInString(*body.Category), 32, false))
+		}
+	}
+	if body.Signal != nil {
+		if !(*body.Signal == "installed" || *body.Signal == "running") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.signal", *body.Signal, []any{"installed", "running"}))
 		}
 	}
 	if body.Signal != nil {
