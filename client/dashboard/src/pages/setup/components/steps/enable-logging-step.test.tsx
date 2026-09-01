@@ -1,53 +1,61 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import type { ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const testState = vi.hoisted(() => ({
-  data: { logsEnabled: false } as { logsEnabled: boolean } | undefined,
+  data: { logsEnabled: false, toolIoLogsEnabled: false } as
+    | { logsEnabled: boolean; toolIoLogsEnabled: boolean }
+    | undefined,
   error: null as Error | null,
   isFetching: false,
   isLoading: false,
-  isAdmin: true,
   organizationId: "org-active",
   mutate: vi.fn(),
-  mutationOptions: undefined as
-    | {
-        onError?: (error: Error) => void;
-        onSuccess?: () => Promise<void>;
-      }
-    | undefined,
-  mutationStatus: "idle" as "idle" | "pending" | "success" | "error",
   productFeaturesQuery: vi.fn(),
   refetch: vi.fn(),
 }));
-
-const invalidateAllProductFeatures = vi.hoisted(() => vi.fn());
 
 vi.mock("@/contexts/Auth", () => ({
   useOrganization: () => ({ id: testState.organizationId }),
 }));
 
-vi.mock("@/hooks/useRBAC", () => ({
-  useRBAC: () => ({
-    hasScope: (scope: string) =>
-      scope === "org:admin" ? testState.isAdmin : true,
+vi.mock("@/components/require-scope", () => ({
+  RequireScope: ({ children }: { children: ReactNode }) => <>{children}</>,
+}));
+
+vi.mock("@/lib/errors", () => ({ handleAPIError: vi.fn() }));
+
+vi.mock("@/routes", () => ({
+  useOrgRoutes: () => ({
+    logs: { href: () => "/acme/logs" },
   }),
 }));
 
+vi.mock("react-router", () => ({
+  Link: ({
+    to,
+    children,
+    className,
+  }: {
+    to: string;
+    children: ReactNode;
+    className?: string;
+  }) => (
+    <a href={to} className={className}>
+      {children}
+    </a>
+  ),
+}));
+
 vi.mock("@gram/client/react-query/featuresSet.js", () => ({
-  useFeaturesSetMutation: (options: {
-    onError?: (error: Error) => void;
-    onSuccess?: () => Promise<void>;
-  }) => {
-    testState.mutationOptions = options;
-    return {
-      mutate: testState.mutate,
-      status: testState.mutationStatus,
-    };
-  },
+  useFeaturesSetMutation: () => ({
+    isPending: false,
+    mutate: testState.mutate,
+  }),
 }));
 
 vi.mock("@gram/client/react-query/productFeatures.js", () => ({
-  invalidateAllProductFeatures,
+  invalidateAllProductFeatures: vi.fn(),
   useProductFeatures: (...args: unknown[]) => {
     testState.productFeaturesQuery(...args);
     return {
@@ -90,19 +98,14 @@ function renderStep() {
 }
 
 beforeEach(() => {
-  testState.data = { logsEnabled: false };
+  testState.data = { logsEnabled: false, toolIoLogsEnabled: false };
   testState.error = null;
   testState.isFetching = false;
   testState.isLoading = false;
-  testState.isAdmin = true;
   testState.organizationId = "org-active";
   testState.mutate.mockReset();
-  testState.mutationOptions = undefined;
-  testState.mutationStatus = "idle";
   testState.productFeaturesQuery.mockReset();
   testState.refetch.mockReset();
-  invalidateAllProductFeatures.mockReset();
-  invalidateAllProductFeatures.mockResolvedValue(undefined);
   onComplete.mockReset();
   onSkip.mockReset();
   onBack.mockReset();
@@ -111,29 +114,32 @@ beforeEach(() => {
 afterEach(cleanup);
 
 describe("EnableLoggingStep", () => {
-  it("discloses collected data and keeps logging opt-in", () => {
+  it("shows the same Enable Logs control as Logging & Telemetry", () => {
     renderStep();
 
-    expect(testState.productFeaturesQuery).toHaveBeenCalledWith(
-      { organizationId: "org-active" },
-      undefined,
-      expect.anything(),
-    );
-    expect(screen.getByText("What enabling collects")).toBeTruthy();
     expect(
-      screen.getByText("Tool call traces and execution metadata"),
+      screen.getByText(
+        "Configure logging and telemetry settings for all your tool capture. When enabled, tool calls and traces are recorded for debugging and analytics. These power the insights and logs page on the platform.",
+      ),
     ).toBeTruthy();
+    expect(screen.getByText("Enable Logs")).toBeTruthy();
     expect(
-      screen.getByText(/Speakeasy will not start recording until you opt in/),
+      screen.getByText("Record tool call traces and telemetry data"),
     ).toBeTruthy();
-    expect(screen.getByRole("button", { name: /Enable logging/ })).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Skip for now" })).toBeTruthy();
+    expect(screen.getByRole("switch", { name: "Enable logs" })).toBeTruthy();
+    expect(
+      (
+        screen.getByRole("link", {
+          name: "Logging & Telemetry",
+        }) as HTMLAnchorElement
+      ).getAttribute("href"),
+    ).toBe("/acme/logs");
   });
 
-  it("enables the logs feature for the active organization", () => {
+  it("enables the logs product feature from the shared switch", () => {
     renderStep();
 
-    fireEvent.click(screen.getByRole("button", { name: /Enable logging/ }));
+    fireEvent.click(screen.getByRole("switch", { name: "Enable logs" }));
 
     expect(testState.mutate).toHaveBeenCalledWith({
       request: {
@@ -146,17 +152,6 @@ describe("EnableLoggingStep", () => {
     });
   });
 
-  it("advances after a successful opt-in", async () => {
-    renderStep();
-    const activeMutation = testState.mutationOptions;
-    expect(activeMutation?.onSuccess).toBeTypeOf("function");
-
-    await activeMutation!.onSuccess!();
-
-    expect(invalidateAllProductFeatures).toHaveBeenCalledOnce();
-    expect(onComplete).toHaveBeenCalledOnce();
-  });
-
   it("lets the admin skip without enabling logging", () => {
     renderStep();
 
@@ -166,81 +161,14 @@ describe("EnableLoggingStep", () => {
     expect(onSkip).toHaveBeenCalledOnce();
   });
 
-  it("shows a continue path when logging is already enabled", () => {
-    testState.data = { logsEnabled: true };
+  it("hides skip when logging is already enabled", () => {
+    testState.data = { logsEnabled: true, toolIoLogsEnabled: false };
 
     renderStep();
 
-    expect(screen.getByText("Product logging is enabled")).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Skip for now" })).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: /Continue/ }));
     expect(onComplete).toHaveBeenCalledOnce();
-    expect(testState.mutate).not.toHaveBeenCalled();
-  });
-
-  it("disables enablement when the viewer is not an org admin", () => {
-    testState.isAdmin = false;
-
-    renderStep();
-
-    expect(
-      (
-        screen.getByRole("button", {
-          name: /Enable logging/,
-        }) as HTMLButtonElement
-      ).disabled,
-    ).toBe(true);
-    expect(screen.getByRole("button", { name: "Skip for now" })).toBeTruthy();
-  });
-
-  it("ignores a deferred mutation completion after an organization switch", async () => {
-    const { rerender } = renderStep();
-    const activeMutation = testState.mutationOptions;
-    expect(activeMutation?.onSuccess).toBeTypeOf("function");
-
-    testState.organizationId = "org-next";
-    rerender(<EnableLoggingStep {...stepProps()} />);
-    await activeMutation!.onSuccess!();
-
-    expect(invalidateAllProductFeatures).not.toHaveBeenCalled();
-    expect(onComplete).not.toHaveBeenCalled();
-    expect(testState.productFeaturesQuery).toHaveBeenLastCalledWith(
-      { organizationId: "org-next" },
-      undefined,
-      expect.anything(),
-    );
-  });
-
-  it("ignores a mutation completion when the organization switches during invalidation", async () => {
-    let resolveInvalidation: (() => void) | undefined;
-    invalidateAllProductFeatures.mockReturnValue(
-      new Promise<void>((resolve) => {
-        resolveInvalidation = resolve;
-      }),
-    );
-    const { rerender } = renderStep();
-    const activeMutation = testState.mutationOptions;
-    expect(activeMutation?.onSuccess).toBeTypeOf("function");
-
-    const completion = activeMutation!.onSuccess!();
-    testState.organizationId = "org-next";
-    rerender(<EnableLoggingStep {...stepProps()} />);
-    resolveInvalidation!();
-    await completion;
-
-    expect(onComplete).not.toHaveBeenCalled();
-  });
-
-  it("ignores a stale mutation error after an organization switch", () => {
-    const { rerender } = renderStep();
-    const activeMutation = testState.mutationOptions;
-    expect(activeMutation?.onError).toBeTypeOf("function");
-
-    testState.organizationId = "org-next";
-    rerender(<EnableLoggingStep {...stepProps()} />);
-    activeMutation!.onError!(new Error("stale failure"));
-
-    expect(screen.queryByText("stale failure")).toBeNull();
   });
 
   it("shows a retry state when product features fail to load", () => {
@@ -249,17 +177,14 @@ describe("EnableLoggingStep", () => {
 
     renderStep();
 
-    expect(screen.getByRole("alert").textContent).toContain(
-      "Couldn't load the current logging setting.",
-    );
+    expect(
+      screen.getByText("Couldn't load the current logging setting."),
+    ).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Retry" }));
     expect(testState.refetch).toHaveBeenCalledOnce();
     expect(
-      (
-        screen.getByRole("button", {
-          name: /Enable logging/,
-        }) as HTMLButtonElement
-      ).disabled,
+      (screen.getByRole("button", { name: /Continue/ }) as HTMLButtonElement)
+        .disabled,
     ).toBe(true);
   });
 

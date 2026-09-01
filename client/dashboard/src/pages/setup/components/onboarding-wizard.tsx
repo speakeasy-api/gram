@@ -38,8 +38,8 @@ const CORE_STEPS: Step[] = [
   },
   {
     id: "enable-logging",
-    title: "Enable logging",
-    description: "Opt in to product telemetry",
+    title: "Enable logs",
+    description: "Record tool call traces and telemetry",
   },
   {
     id: "instrument-agents",
