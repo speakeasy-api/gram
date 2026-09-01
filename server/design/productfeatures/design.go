@@ -58,7 +58,7 @@ var _ = Service("features", func() {
 	})
 
 	Method("setProductFeature", func() {
-		Description("Enable or disable an organization feature flag.")
+		Description("Enable or disable an organization feature flag. Staff-managed entitlements (such as sso and scim) additionally require a Speakeasy platform administrator; organization admins can set only the org-settable operational toggles.")
 
 		Payload(func() {
 			Attribute("organization_id", String, "Organization whose product feature to update.")

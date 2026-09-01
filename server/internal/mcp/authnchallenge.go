@@ -28,6 +28,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -41,6 +42,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
+	"github.com/speakeasy-api/gram/server/internal/sessiontokens"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	usersessions_repo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
@@ -130,6 +132,13 @@ type AuthnChallengeState struct {
 	// upstream providers, but there is no client to approve or redirect back to
 	// — completing the connections is terminal.
 	FirstParty bool `json:"first_party,omitempty"`
+	// AutoConnectDone records that the consent page has already sent this
+	// challenge straight to an upstream provider without the user clicking
+	// Connect (see maybeAutoConnect). It is a latch, not a success flag: it is
+	// set before the redirect and also by an explicit disconnect, so a denied
+	// or failed upstream leg — and a deliberate disconnect — return the user to
+	// a page they can act on instead of bouncing them out again.
+	AutoConnectDone bool `json:"auto_connect_done,omitempty"`
 }
 
 var _ cache.CacheableObject[AuthnChallengeState] = (*AuthnChallengeState)(nil)
@@ -306,7 +315,11 @@ func (s *Service) validateUserSessionToken(ctx context.Context, token string, en
 	}
 	session, err := s.userSessionSigner.ValidateBearer(ctx, token, endpoint.AudienceURN, s.chatSessionsManager)
 	if err != nil {
-		return ctx, nil, nil, fmt.Errorf("validate user-session bearer: %w", err)
+		legacySession, ok := s.validateLegacyToolsetAudience(ctx, token, endpoint, err)
+		if !ok {
+			return ctx, nil, nil, fmt.Errorf("validate user-session bearer: %w", err)
+		}
+		session = legacySession
 	}
 
 	// The consent-screen tool selection loads for every subject kind —
@@ -317,7 +330,7 @@ func (s *Service) validateUserSessionToken(ctx context.Context, token string, en
 	if err != nil {
 		return ctx, nil, nil, fmt.Errorf("%w: %w", errToolSelectionLoad, err)
 	}
-	if toolSelection != nil && toolSelection.Resource != endpointToolSelectionResource(endpoint) {
+	if toolSelection != nil && !endpointAcceptsToolSelectionResource(endpoint, toolSelection.Resource) {
 		// Issuer-scoped tokens are portable across endpoints sharing the
 		// issuer; a selection consented on endpoint A must not authorize
 		// same-named tools on endpoint B. Reject into reauth.
@@ -331,6 +344,23 @@ func (s *Service) validateUserSessionToken(ctx context.Context, token string, en
 	}
 	newCtx = s.identityValidator.StampValidatedSession(newCtx, session)
 	return newCtx, &subject, toolSelection, nil
+}
+
+// validateLegacyToolsetAudience re-validates a bearer that failed the primary
+// audience check against the pre-migration toolset-URN audience (AIS-633;
+// counted acceptance, deleted by AIS-646). ok is false when inapplicable or
+// the legacy validation fails too — callers surface the original error.
+func (s *Service) validateLegacyToolsetAudience(ctx context.Context, token string, endpoint *ResolvedMcpEndpoint, primaryErr error) (sessiontokens.ValidatedSession, bool) {
+	legacyAudience, ok := endpoint.legacyToolsetAudienceURN()
+	if !ok || !errors.Is(primaryErr, jwt.ErrTokenInvalidAudience) {
+		return sessiontokens.ValidatedSession{}, false
+	}
+	session, err := s.userSessionSigner.ValidateBearer(ctx, token, legacyAudience, s.chatSessionsManager)
+	if err != nil {
+		return sessiontokens.ValidatedSession{}, false
+	}
+	s.metrics.RecordLegacyAudienceAccepted(ctx, endpoint.UserSessionIssuerID.String())
+	return session, true
 }
 
 // contextForSessionSubject stamps the request context for a resolved session

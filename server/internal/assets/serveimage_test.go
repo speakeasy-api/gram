@@ -60,6 +60,7 @@ func TestService_ServeImage_Success(t *testing.T) {
 	require.Equal(t, contentType, result.ContentType)
 	require.Equal(t, contentLength, result.ContentLength)
 	require.NotEmpty(t, result.LastModified)
+	require.Equal(t, "cross-origin", result.CrossOriginResourcePolicy)
 
 	bodyBytes, err := io.ReadAll(body)
 	require.NoError(t, err)

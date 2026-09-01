@@ -4,12 +4,14 @@ import { useRBAC } from "@/hooks/useRBAC";
 import { mcpServerRouteParam } from "@/lib/sources";
 import { useEnvironments } from "@/pages/environments/useEnvironments";
 import { BUILTIN_RULES_BY_CATEGORY } from "@/pages/security/detection-rules-data";
-import { useRoutes } from "@/routes";
+import { encodeIdentityUrn } from "@/lib/identity-urn";
+import { useOrgRoutes, useRoutes } from "@/routes";
 import { useAssistantsListSuspense } from "@gram/client/react-query/assistantsList.js";
 import { useLatestDeploymentSuspense } from "@gram/client/react-query/latestDeployment.js";
 import { useListDeploymentsSuspense } from "@gram/client/react-query/listDeployments.js";
 import { useListToolsetsSuspense } from "@gram/client/react-query/listToolsets.js";
 import { useMcpServersSuspense } from "@gram/client/react-query/mcpServers.js";
+import { useMembersSuspense } from "@gram/client/react-query/members.js";
 import { useRiskListCustomDetectionRulesSuspense } from "@gram/client/react-query/riskListCustomDetectionRules.js";
 import { useListMcpApprovalRequestsSuspense } from "@gram/client/react-query/listMcpApprovalRequests.js";
 import { useRiskListPoliciesSuspense } from "@gram/client/react-query/riskListPolicies.js";
@@ -398,6 +400,53 @@ function ApprovalRequestsGroup({ onNavigate }: GroupProps) {
         />
       ))}
     </CommandGroup>
+  );
+}
+
+/**
+ * People, by name or address, jumping straight to their identity page.
+ *
+ * Directory members only: the identities index also lists unattributed
+ * addresses and agent ids, but reaching those needs an all-time telemetry crawl
+ * — far too heavy for a surface that has to answer on every keystroke.
+ */
+function PeopleGroup({ onNavigate }: GroupProps) {
+  const orgRoutes = useOrgRoutes();
+  const { data } = useMembersSuspense();
+  const members = data?.members ?? [];
+  if (!members.length) return null;
+  return (
+    <CommandGroup heading="People">
+      {members.map((member) => (
+        <ResultItem
+          key={member.id}
+          value={`person ${member.name} ${member.email} ${member.id}`}
+          label={member.name || member.email}
+          sublabel={member.email}
+          icon="user"
+          onSelect={() => {
+            orgRoutes.identities.detail.overview.goTo(
+              encodeIdentityUrn(`user:${member.id}`),
+            );
+            onNavigate();
+          }}
+        />
+      ))}
+    </CommandGroup>
+  );
+}
+
+/**
+ * The people group on its own, so the palette can offer it from the org shell
+ * too — where the project-scoped resource groups have no project to read.
+ */
+export function PeopleResults({ onNavigate }: GroupProps): JSX.Element | null {
+  const { hasAnyScope } = useRBAC();
+  if (!hasAnyScope(["org:read", "org:admin"])) return null;
+  return (
+    <LazyGroup>
+      <PeopleGroup onNavigate={onNavigate} />
+    </LazyGroup>
   );
 }
 

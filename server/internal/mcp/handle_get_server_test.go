@@ -14,6 +14,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/mcpmetadata"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 )
 
@@ -25,6 +26,7 @@ func TestHandleGetServer_ContentNegotiation(t *testing.T) {
 	metadataService := mcpmetadata.NewService(
 		testInstance.logger,
 		testInstance.tracerProvider,
+		testenv.NewMeterProvider(t),
 		testInstance.conn,
 		testInstance.sessionManager,
 		testInstance.serverURL,

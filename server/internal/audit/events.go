@@ -33,7 +33,6 @@ const (
 	subjectTypeKillswitchPrescription      subjectType = "killswitch_prescription"
 	subjectTypeLiteLLMInstance             subjectType = "litellm_instance"
 	subjectTypeMcpApprovalRequest          subjectType = "mcp_approval_request"
-	subjectTypeMcpCollection               subjectType = "mcp_collection"
 	subjectTypeMcpEndpoint                 subjectType = "mcp_endpoint"
 	subjectTypeMcpServer                   subjectType = "mcp_server"
 	subjectTypeMetaMcpServer               subjectType = "meta_mcp_server"

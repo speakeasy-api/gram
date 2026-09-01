@@ -237,7 +237,14 @@ func (s *Service) serveConsentToolsetMCP(w http.ResponseWriter, r *http.Request,
 		if terr != nil {
 			return oops.E(oops.CodeUnexpected, terr, "load toolset for consent authorization").LogError(ctx, logger)
 		}
-		private := !endpoint.IsPublic || !toolset.McpIsPublic
+		// Wrapper-governed endpoints (toolset-backed mcp_servers) take
+		// publicness from wrapper visibility alone (AIS-633); the legacy
+		// toolset-resolved endpoint keeps consulting the toolset flag so a
+		// mid-flow flip still closes the inventory.
+		private := !endpoint.IsPublic
+		if !endpoint.McpServerID.Valid {
+			private = !endpoint.IsPublic || !toolset.McpIsPublic
+		}
 		if private && challengeState.Subject.Kind == urn.SessionSubjectKindAnonymous {
 			return oops.E(oops.CodeUnauthorized, nil, "anonymous subject cannot enumerate a private MCP server").LogWarn(ctx, logger)
 		}
@@ -256,8 +263,9 @@ func (s *Service) serveConsentToolsetMCP(w http.ResponseWriter, r *http.Request,
 			if authzCtx, cerr = s.authz.PrepareContext(authzCtx); cerr != nil {
 				return oops.E(oops.CodeUnexpected, cerr, "load access grants for consent inventory").LogError(ctx, logger)
 			}
-			if cerr = s.authz.Require(authzCtx, authz.MCPCheck(authz.ScopeMCPConnect, endpoint.ToolsetID.UUID.String(), endpoint.ProjectID.String())); cerr != nil {
-				return fmt.Errorf("authorize consent inventory access: %w", mcpaccess.ServerPermissionDenied(cerr, s.requestAccessURL(authzCtx, endpoint.ToolsetID.UUID.String(), toolset.Name)))
+			connectResourceID := endpoint.connectResourceID()
+			if cerr = s.authz.Require(authzCtx, authz.MCPCheck(authz.ScopeMCPConnect, connectResourceID.String(), endpoint.ProjectID.String())); cerr != nil {
+				return fmt.Errorf("authorize consent inventory access: %w", mcpaccess.ServerPermissionDenied(cerr, s.requestAccessURL(authzCtx, connectResourceID.String(), toolset.Name)))
 			}
 		}
 		tools, roleHidden, terr := s.enumerateToolsetConsentInventory(authzCtx, endpoint)

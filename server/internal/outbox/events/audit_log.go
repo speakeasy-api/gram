@@ -41,7 +41,7 @@ var (
 	KillswitchV1                           = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.killswitch_event_v1", "Emitted when killswitches are activated, changed, deactivated, or expire")
 	LiteLLMInstanceV1                      = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.litellm_instance_event_v1", "Emitted when changes to LiteLLM instances are made")
 	McpApprovalRequestV1                   = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.mcp_approval_request_event_v1", "Emitted when changes to MCP approval requests are made")
-	McpCollectionV1                        = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.mcp_collection_event_v1", "Emitted when changes to MCP collections are made")
+	McpCollectionV1                        = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.mcp_collection_event_v1", "Emitted when changes to MCP collections are made") // Deprecated: collections are gone and nothing emits this; it stays registered so the catalog keeps the event type.
 	McpEndpointV1                          = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.mcp_endpoint_event_v1", "Emitted when changes to MCP endpoints are made")
 	McpServerV1                            = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.mcp_server_event_v1", "Emitted when changes to MCP servers are made")
 	MetaMcpServerV1                        = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.meta_mcp_server_event_v1", "Emitted when changes to meta MCP servers or their memberships are made")
@@ -52,6 +52,7 @@ var (
 	OrganizationDeviceAgentConfigurationV1 = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.organization_device_agent_configuration_event_v1", "Emitted when the organization's device-agent configuration is changed")
 	OrganizationEnterpriseTrialV1          = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.organization_enterprise_trial_event_v1", "Emitted when the organization's enterprise trial is armed, extended, demoted, re-armed, or converted")
 	OrganizationInviteV1                   = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.organization_invite_event_v1", "Emitted when changes to organization invites are made")
+	OrganizationProductFeatureV1           = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.organization_product_feature_event_v1", "Emitted when an organization product feature flag is toggled")
 	OrganizationWebhooksV1                 = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.organization_webhooks_event_v1", "Emitted when changes to organization webhooks are made")
 	OtelForwardingV1                       = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.otel_forwarding_event_v1", "Emitted when changes to OTEL forwarding configs are made")
 	PlatformMcpRegistrationV1              = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.platform_mcp_registration_event_v1", "Emitted when Platform MCP catalog registrations converge private components")

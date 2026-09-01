@@ -12,119 +12,136 @@ import (
 // sq is the squirrel statement builder pre-configured for ClickHouse (uses ? placeholders).
 var sq = squirrel.StatementBuilder.PlaceholderFormat(squirrel.Question)
 
-// InsertChallenge writes one challenge with a stable deduplication token. The
-// server may batch concurrent async inserts, but the call waits for the flush so
-// the Pub/Sub handler only acknowledges a durably accepted row.
-func (q *Queries) InsertChallenge(ctx context.Context, row ChallengeRow) error {
-	ctx = clickhouse.Context(ctx, clickhouse.WithSettings(clickhouse.Settings{
-		"async_insert":               1,
-		"async_insert_deduplicate":   1,
-		"insert_deduplication_token": "authz-challenge:" + row.ID,
-		"wait_for_async_insert":      1,
+// authzChallengeColumns is the authz_challenges column list, in the exact order
+// InsertChallenges binds values. The Nested subcolumns are quoted because their
+// names contain a dot.
+var authzChallengeColumns = []string{
+	"id",
+	"timestamp",
+	"organization_id",
+	"project_id",
+	"trace_id",
+	"span_id",
+	"request_id",
+	"principal_urn",
+	"principal_type",
+	"user_id",
+	"user_external_id",
+	"user_email",
+	"api_key_id",
+	"session_id",
+	"role_slugs",
+	"operation",
+	"outcome",
+	"reason",
+	"scope",
+	"resource_kind",
+	"resource_id",
+	"selector",
+	"expanded_scopes",
+	`"requested_checks.scope"`,
+	`"requested_checks.resource_kind"`,
+	`"requested_checks.resource_id"`,
+	`"requested_checks.selector"`,
+	`"matched_grants.principal_urn"`,
+	`"matched_grants.scope"`,
+	`"matched_grants.selector"`,
+	`"matched_grants.matched_via_check_scope"`,
+	"evaluated_grant_count",
+	"filter_candidate_count",
+	"filter_allowed_count",
+}
+
+// InsertChallenges writes a batch of challenge rows to authz_challenges. The
+// call waits for the flush so the Pub/Sub handler only acknowledges durably
+// accepted rows.
+//
+// authz_challenges is plain MergeTree, so a redelivered batch lands as duplicate
+// rows. The read path absorbs them: ListChallenges selects DISTINCT,
+// CountChallenges counts uniqExact(id), and every aggregate feeding
+// authz_challenge_bucket_summaries (argMax, groupUniqArray, min, max) returns
+// the same value whether a row appears once or many times.
+func (q *Queries) InsertChallenges(ctx context.Context, rows []ChallengeRow) error {
+	if len(rows) == 0 {
+		return nil
+	}
+
+	builder := sq.Insert("authz_challenges").Columns(authzChallengeColumns...)
+	for _, row := range rows {
+		reqScope := make([]string, len(row.RequestedChecks))
+		reqKind := make([]string, len(row.RequestedChecks))
+		reqRID := make([]string, len(row.RequestedChecks))
+		reqSel := make([]string, len(row.RequestedChecks))
+		for i, c := range row.RequestedChecks {
+			reqScope[i] = c.Scope
+			reqKind[i] = c.ResourceKind
+			reqRID[i] = c.ResourceID
+			reqSel[i] = c.Selector
+		}
+
+		mgURN := make([]string, len(row.MatchedGrants))
+		mgScope := make([]string, len(row.MatchedGrants))
+		mgSel := make([]string, len(row.MatchedGrants))
+		mgVia := make([]string, len(row.MatchedGrants))
+		for i, g := range row.MatchedGrants {
+			mgURN[i] = g.PrincipalURN
+			mgScope[i] = g.Scope
+			mgSel[i] = g.Selector
+			mgVia[i] = g.MatchedViaCheckScope
+		}
+
+		builder = builder.Values(
+			row.ID,
+			row.Timestamp,
+			row.OrganizationID,
+			row.ProjectID,
+			row.TraceID,
+			row.SpanID,
+			row.RequestID,
+			row.PrincipalURN,
+			string(row.PrincipalType),
+			row.UserID,
+			row.UserExternalID,
+			row.UserEmail,
+			row.APIKeyID,
+			row.SessionID,
+			row.RoleSlugs,
+			string(row.Operation),
+			string(row.Outcome),
+			string(row.Reason),
+			row.Scope,
+			row.ResourceKind,
+			row.ResourceID,
+			row.Selector,
+			row.ExpandedScopes,
+			reqScope,
+			reqKind,
+			reqRID,
+			reqSel,
+			mgURN,
+			mgScope,
+			mgSel,
+			mgVia,
+			row.EvaluatedGrantCount,
+			row.FilterCandidateCount,
+			row.FilterAllowedCount,
+		)
+	}
+
+	query, args, err := builder.ToSql()
+	if err != nil {
+		return fmt.Errorf("build authz challenge insert query: %w", err)
+	}
+
+	insertCtx := clickhouse.Context(ctx, clickhouse.WithSettings(clickhouse.Settings{
+		"async_insert":          1,
+		"wait_for_async_insert": 1,
 	}))
 
-	reqScope := make([]string, len(row.RequestedChecks))
-	reqKind := make([]string, len(row.RequestedChecks))
-	reqRID := make([]string, len(row.RequestedChecks))
-	reqSel := make([]string, len(row.RequestedChecks))
-	for i, c := range row.RequestedChecks {
-		reqScope[i] = c.Scope
-		reqKind[i] = c.ResourceKind
-		reqRID[i] = c.ResourceID
-		reqSel[i] = c.Selector
-	}
-
-	mgURN := make([]string, len(row.MatchedGrants))
-	mgScope := make([]string, len(row.MatchedGrants))
-	mgSel := make([]string, len(row.MatchedGrants))
-	mgVia := make([]string, len(row.MatchedGrants))
-	for i, g := range row.MatchedGrants {
-		mgURN[i] = g.PrincipalURN
-		mgScope[i] = g.Scope
-		mgSel[i] = g.Selector
-		mgVia[i] = g.MatchedViaCheckScope
-	}
-
-	const query = `INSERT INTO authz_challenges (
-		id,
-		timestamp,
-		organization_id,
-		project_id,
-		trace_id,
-		span_id,
-		request_id,
-		principal_urn,
-		principal_type,
-		user_id,
-		user_external_id,
-		user_email,
-		api_key_id,
-		session_id,
-		role_slugs,
-		operation,
-		outcome,
-		reason,
-		scope,
-		resource_kind,
-		resource_id,
-		selector,
-		expanded_scopes,
-		"requested_checks.scope",
-		"requested_checks.resource_kind",
-		"requested_checks.resource_id",
-		"requested_checks.selector",
-		"matched_grants.principal_urn",
-		"matched_grants.scope",
-		"matched_grants.selector",
-		"matched_grants.matched_via_check_scope",
-		evaluated_grant_count,
-		filter_candidate_count,
-		filter_allowed_count
-	) VALUES (
-		?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
-		?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
-		?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
-		?, ?, ?, ?
-	)`
-
-	if err := q.conn.Exec(ctx, query,
-		row.ID,
-		row.Timestamp,
-		row.OrganizationID,
-		row.ProjectID,
-		row.TraceID,
-		row.SpanID,
-		row.RequestID,
-		row.PrincipalURN,
-		string(row.PrincipalType),
-		row.UserID,
-		row.UserExternalID,
-		row.UserEmail,
-		row.APIKeyID,
-		row.SessionID,
-		row.RoleSlugs,
-		string(row.Operation),
-		string(row.Outcome),
-		string(row.Reason),
-		row.Scope,
-		row.ResourceKind,
-		row.ResourceID,
-		row.Selector,
-		row.ExpandedScopes,
-		reqScope,
-		reqKind,
-		reqRID,
-		reqSel,
-		mgURN,
-		mgScope,
-		mgSel,
-		mgVia,
-		row.EvaluatedGrantCount,
-		row.FilterCandidateCount,
-		row.FilterAllowedCount,
-	); err != nil {
+	if err := q.conn.Exec(insertCtx, query, args...); err != nil {
 		return fmt.Errorf("exec authz challenge insert: %w", err)
 	}
+
 	return nil
 }
 

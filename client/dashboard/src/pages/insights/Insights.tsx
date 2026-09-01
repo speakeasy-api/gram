@@ -3,7 +3,6 @@ import { useMemo } from "react";
 import { Outlet, useParams } from "react-router";
 import { InsightsAgentsContent } from "@/components/observe/InsightsAgents";
 import { InsightsEmployeeDetailContent } from "@/components/observe/InsightsEmployeeDetail";
-import { InsightsEmployeesContent } from "@/components/observe/InsightsEmployees";
 import { InsightsToolsContent } from "@/components/observe/InsightsTools";
 import { Page } from "@/components/page-layout";
 import { RequireScope } from "@/components/require-scope";
@@ -80,14 +79,6 @@ export function InsightsHooksPage(): JSX.Element {
   return (
     <RequireScope scope="org:admin" level="page">
       <InsightsToolsContent />
-    </RequireScope>
-  );
-}
-
-export function InsightsEmployeesPage(): JSX.Element {
-  return (
-    <RequireScope scope="org:admin" level="page">
-      <InsightsEmployeesContent />
     </RequireScope>
   );
 }

@@ -50,6 +50,16 @@ func TestStripeFlagsAreAvailableInEveryServerProcess(t *testing.T) {
 			_, tomlSourceable = portalConfigurationID.(altsrc.FlagInputSourceExtension)
 			require.True(t, tomlSourceable, "Stripe catalog must be TOML-sourceable")
 			require.Contains(t, portalConfigurationID.Names(), "stripe.portal_configuration_id")
+
+			streaming, ok := requireFlag(t, command.Flags, stripeTUMMeterStreamingFlagName).(*cli.BoolFlag)
+			require.True(t, ok)
+			require.False(t, streaming.Value)
+			require.Equal(t, []string{"GRAM_STRIPE_TUM_METER_STREAMING"}, streaming.EnvVars)
+
+			exportEnabled, ok := requireFlag(t, command.Flags, stripeMeterEventExportFlagName).(*cli.BoolFlag)
+			require.True(t, ok)
+			require.False(t, exportEnabled.Value)
+			require.Equal(t, []string{"GRAM_STRIPE_METER_EVENT_EXPORT_ENABLED"}, exportEnabled.EnvVars)
 		})
 	}
 }

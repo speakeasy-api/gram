@@ -269,6 +269,22 @@ func (q *Queries) CreateRemoteMCPServerMaterializationFailureTriggerFixture(ctx 
 	return err
 }
 
+const createStripeBillingMetadataFixture = `-- name: CreateStripeBillingMetadataFixture :exec
+INSERT INTO billing_metadata (organization_id, stripe_customer_id)
+VALUES ($1, $2)
+`
+
+type CreateStripeBillingMetadataFixtureParams struct {
+	OrganizationID   string
+	StripeCustomerID pgtype.Text
+}
+
+// Test-only fixture: associates an organization with a Stripe customer.
+func (q *Queries) CreateStripeBillingMetadataFixture(ctx context.Context, arg CreateStripeBillingMetadataFixtureParams) error {
+	_, err := q.db.Exec(ctx, createStripeBillingMetadataFixture, arg.OrganizationID, arg.StripeCustomerID)
+	return err
+}
+
 const deferDeviceIntegrationSyncsFixture = `-- name: DeferDeviceIntegrationSyncsFixture :exec
 UPDATE device_integration_syncs s
 SET next_poll_after = clock_timestamp() + interval '1 hour'

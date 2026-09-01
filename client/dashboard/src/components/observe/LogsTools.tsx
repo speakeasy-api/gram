@@ -1,3 +1,5 @@
+import { IdentityLink } from "@/components/identity-link";
+import { identityRefForKind } from "@/lib/identity-urn";
 import { AccountTypeIcon } from "@/components/account-type-icon";
 import { EnableLoggingOverlay } from "@/components/EnableLoggingOverlay";
 import { EnterpriseGate } from "@/components/enterprise-gate";
@@ -1102,9 +1104,12 @@ function LogsToolsTraceRow({
             accountType={trace.accountType}
             className="shrink-0"
           />
-          <span className="text-muted-foreground min-w-0 truncate">
+          <IdentityLink
+            identifier={identityRefForKind(trace.userKind, trace.userKey)}
+            className="text-muted-foreground min-w-0 truncate"
+          >
             {userLabel || "—"}
-          </span>
+          </IdentityLink>
         </div>
 
         <div className="flex min-w-28 shrink-0 items-center gap-2">

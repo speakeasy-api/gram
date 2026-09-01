@@ -242,8 +242,8 @@ VALUES (
 );
 
 -- name: UpsertCorrelatedChatMessage :one
--- The writer supplies the candidate id and compares it with RETURNING id to
--- distinguish a new message from promotion of an existing correlated row.
+-- Returns the persisted metering fields for both inserts and promotions so the
+-- reading uses the durable row identity and measured content.
 INSERT INTO chat_messages (
     id
   , chat_id
@@ -314,7 +314,7 @@ DO UPDATE SET
 WHERE chat_messages.project_id = EXCLUDED.project_id
   AND EXCLUDED.source IN ('codex', 'opencode')
   AND chat_messages.source = 'litellm'
-RETURNING id;
+RETURNING id, content, tool_calls, model, user_id, external_user_id, source;
 
 -- name: AcquireChatPromptCorrelationLock :exec
 SELECT pg_advisory_xact_lock(hashtextextended(

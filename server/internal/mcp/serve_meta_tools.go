@@ -231,8 +231,10 @@ func (s *Service) handleMetaExecuteToolCall(
 	}
 
 	// Pre-dispatch security check so an unsatisfied member surfaces as a
-	// member-scoped result (as in ServeToolsetResolved).
-	satisfied, err := s.checkToolsetSecurity(ctx, toolset, inputs)
+	// member-scoped result (as in serveToolsetResolved). Members keep the
+	// toolset's own publicness; the meta surface is outside wrapper
+	// governance.
+	satisfied, err := s.checkToolsetSecurity(ctx, toolset, toolset.McpIsPublic, inputs)
 	if err != nil {
 		return nil, err
 	}
@@ -440,21 +442,25 @@ func (s *Service) buildMemberDispatch(
 
 	serverID := member.serverID
 	inputs := &mcpInputs{
-		projectID:                projectID,
-		organizationID:           toolset.OrganizationID,
-		toolset:                  toolset.Slug,
-		environment:              environment,
-		mcpEnvVariables:          nil,
-		oauthTokenInputs:         tokenInputs,
-		authenticated:            gate.authenticated,
-		sessionID:                gate.sessionID,
-		chatID:                   gate.chatID,
-		mode:                     ToolModeStatic,
-		userID:                   gate.userID,
-		externalUserID:           gate.externalUserID,
-		apiKeyID:                 gate.apiKeyID,
-		toolVariationsGroupID:    variationsGroupID,
-		mcpServerID:              &serverID,
+		projectID:             projectID,
+		organizationID:        toolset.OrganizationID,
+		toolset:               toolset.Slug,
+		environment:           environment,
+		mcpEnvVariables:       nil,
+		oauthTokenInputs:      tokenInputs,
+		authenticated:         gate.authenticated,
+		sessionID:             gate.sessionID,
+		chatID:                gate.chatID,
+		mode:                  ToolModeStatic,
+		userID:                gate.userID,
+		externalUserID:        gate.externalUserID,
+		apiKeyID:              gate.apiKeyID,
+		toolVariationsGroupID: variationsGroupID,
+		mcpServerID:           &serverID,
+		// Meta members keep their toolset-keyed per-tool checks; the meta
+		// surface's RBAC model is outside the wrapper-governance cutover.
+		wrapperRBACResourceID:    "",
+		wrapperIsPublic:          nil,
 		skipProxyTools:           true,
 		tags:                     nil,
 		protocolVersion:          gate.protocolVersion,

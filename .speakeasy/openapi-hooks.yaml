@@ -798,8 +798,6 @@ tags:
     description: Manage organization-level external keys — externally-managed AWS or GCP KMS keys Gram signs with.
   - name: mcpRegistries
     description: External MCP registry operations
-  - name: collections
-    description: MCP collection operations
   - name: functions
     description: Endpoints for working with functions.
   - name: hooksServerNames
