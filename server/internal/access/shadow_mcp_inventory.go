@@ -560,7 +560,7 @@ func (s *Service) ListShadowMCPInventoryServersForUser(ctx context.Context, payl
 
 	// The window is a filter, not a required frame: with neither bound this
 	// still answers over the whole history.
-	from, to, err := parseChallengeWindow(payload.From, payload.To)
+	from, to, err := conv.ParseOptionalTimeWindow(payload.From, payload.To)
 	if err != nil {
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid shadow mcp window").LogError(ctx, s.logger)
 	}

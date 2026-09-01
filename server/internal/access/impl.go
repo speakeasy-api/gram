@@ -777,7 +777,7 @@ func (s *Service) ListChallenges(ctx context.Context, payload *gen.ListChallenge
 	// The window is a filter, not a required frame: a caller that sends neither
 	// bound still gets the whole history, which is what every existing caller
 	// of this endpoint expects.
-	from, to, err := parseChallengeWindow(payload.From, payload.To)
+	from, to, err := conv.ParseOptionalTimeWindow(payload.From, payload.To)
 	if err != nil {
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid challenge window").LogError(ctx, s.logger)
 	}
@@ -847,41 +847,6 @@ func (s *Service) ListChallenges(ctx context.Context, payload *gen.ListChallenge
 	}
 
 	return s.buildChallengeResult(ctx, authCtx, challenges, int(total))
-}
-
-// parseChallengeWindow reads the optional RFC 3339 bounds a caller sends to
-// scope a challenge listing to a time range. A blank string means "no bound"
-// rather than "the zero time": the dashboard clears a range by sending the
-// parameter empty, and reading that as year zero would filter every row out.
-func parseChallengeWindow(rawFrom, rawTo *string) (*time.Time, *time.Time, error) {
-	parse := func(raw *string, name string) (*time.Time, error) {
-		if raw == nil {
-			return nil, nil
-		}
-		trimmed := strings.TrimSpace(*raw)
-		if trimmed == "" {
-			return nil, nil
-		}
-		parsed, err := time.Parse(time.RFC3339Nano, trimmed)
-		if err != nil {
-			return nil, fmt.Errorf("parse %s: %w", name, err)
-		}
-		utc := parsed.UTC()
-		return &utc, nil
-	}
-
-	from, err := parse(rawFrom, "from")
-	if err != nil {
-		return nil, nil, err
-	}
-	to, err := parse(rawTo, "to")
-	if err != nil {
-		return nil, nil, err
-	}
-	if from != nil && to != nil && !from.Before(*to) {
-		return nil, nil, fmt.Errorf("from must be before to")
-	}
-	return from, to, nil
 }
 
 // lookupResolutions batch-fetches resolution state from PG for a set of CH challenges.
