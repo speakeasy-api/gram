@@ -90,10 +90,7 @@ func validateUpserts(
 
 	for i, e := range externalMCPsToUpsert {
 		node := fmt.Sprintf("external_mcp/%d", i)
-		err = requireFieldsOrElse(err, node,
-			[]string{"registry_id", "organization_mcp_collection_registry_id"},
-			e.registryID.Valid != e.organizationMcpCollectionRegistryID.Valid,
-			ErrExactlyOneRequired)
+		err = requireOrElse(err, node, "registry_id", e.registryID.Valid, ErrRequired)
 	}
 
 	return err

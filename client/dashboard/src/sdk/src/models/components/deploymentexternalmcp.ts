@@ -18,10 +18,6 @@ export type DeploymentExternalMCP = {
    */
   name: string;
   /**
-   * The ID of the internal collection registry the server is from.
-   */
-  organizationMcpCollectionRegistryId?: string | undefined;
-  /**
    * The ID of the external MCP registry the server is from.
    */
   registryId?: string | undefined;
@@ -43,15 +39,12 @@ export const DeploymentExternalMCP$inboundSchema: z.ZodMiniType<
   z.object({
     id: z.string(),
     name: z.string(),
-    organization_mcp_collection_registry_id: z.optional(z.string()),
     registry_id: z.optional(z.string()),
     registry_server_specifier: z.string(),
     slug: z.string(),
   }),
   z.transform((v) => {
     return remap$(v, {
-      "organization_mcp_collection_registry_id":
-        "organizationMcpCollectionRegistryId",
       "registry_id": "registryId",
       "registry_server_specifier": "registryServerSpecifier",
     });
