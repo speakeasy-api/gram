@@ -10,8 +10,11 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"golang.org/x/net/http/httpguts"
 
+	gen "github.com/speakeasy-api/gram/server/gen/data_exports"
+
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/dataexports/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 )
 
@@ -176,5 +179,35 @@ func destinationSnapshot(name, endpointURL string, headers map[string]string, po
 		EndpointURL:   endpointURL,
 		Headers:       headersSnapshot,
 		SensitiveData: string(policy),
+	}
+}
+
+func buildOtelDestinationView(row repo.OtelDestination, headers map[string]string, sensitiveData string) *gen.Destination {
+	names := make([]string, 0, len(headers))
+	for name := range headers {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+
+	headerViews := make([]*gen.OtelDestinationHeader, 0, len(names))
+	for _, name := range names {
+		headerViews = append(headerViews, &gen.OtelDestinationHeader{
+			Name:     name,
+			HasValue: headers[name] != "",
+		})
+	}
+
+	return &gen.Destination{
+		ID:              row.ID.String(),
+		ProjectID:       row.ProjectID.String(),
+		Name:            row.Name,
+		DestinationType: "otel",
+		SensitiveData:   sensitiveData,
+		Otel: &gen.OtelDestination{
+			EndpointURL: row.EndpointUrl,
+			Headers:     headerViews,
+		},
+		CreatedAt: conv.FromPGTimestamptz(row.CreatedAt),
+		UpdatedAt: conv.FromPGTimestamptz(row.UpdatedAt),
 	}
 }

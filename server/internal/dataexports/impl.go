@@ -29,7 +29,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/dataexports/repo"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
-	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -219,7 +218,7 @@ func (s *Service) createOtelDestination(ctx context.Context, authCtx *contextval
 		return nil, oops.E(oops.CodeUnexpected, err, "commit OTEL destination creation").LogError(ctx, logger)
 	}
 
-	return mv.BuildDestinationView(row, headers, string(policy)), nil
+	return buildOtelDestinationView(row, headers, string(policy)), nil
 }
 
 func (s *Service) UpdateDestination(ctx context.Context, payload *gen.UpdateDestinationPayload) (*gen.Destination, error) {
@@ -349,7 +348,7 @@ func (s *Service) updateOtelDestination(ctx context.Context, authCtx *contextval
 		return nil, oops.E(oops.CodeUnexpected, err, "commit OTEL destination update").LogError(ctx, logger)
 	}
 
-	return mv.BuildDestinationView(after, headers, string(policy)), nil
+	return buildOtelDestinationView(after, headers, string(policy)), nil
 }
 
 func (s *Service) DeleteDestination(ctx context.Context, payload *gen.DeleteDestinationPayload) error {
@@ -444,7 +443,7 @@ func (s *Service) buildDestinationView(row repo.OtelDestination) (*gen.Destinati
 	if err != nil {
 		return nil, err
 	}
-	return mv.BuildDestinationView(row, headers, string(policy)), nil
+	return buildOtelDestinationView(row, headers, string(policy)), nil
 }
 
 type destinationType string
@@ -457,14 +456,6 @@ func parseDestinationType(value string) (destinationType, error) {
 		return "", fmt.Errorf("unsupported destination type %q", value)
 	}
 	return destination, nil
-}
-
-func routeSourceConflict(err error) *oops.ShareableError {
-	var pgErr *pgconn.PgError
-	if errors.As(err, &pgErr) && pgErr.Code == pgerrcode.UniqueViolation && pgErr.ConstraintName == "data_export_routes_project_source_key" {
-		return oops.E(oops.CodeConflict, err, "a route already exists for this data source")
-	}
-	return nil
 }
 
 func (s *Service) ListRoutes(ctx context.Context, _ *gen.ListRoutesPayload) (*gen.ListDataExportRoutesResult, error) {
@@ -487,7 +478,7 @@ func (s *Service) ListRoutes(ctx context.Context, _ *gen.ListRoutesPayload) (*ge
 
 	result := &gen.ListDataExportRoutesResult{Routes: make([]*gen.DataExportRoute, 0, len(rows))}
 	for _, row := range rows {
-		result.Routes = append(result.Routes, mv.BuildDataExportRouteView(row))
+		result.Routes = append(result.Routes, buildDataExportRouteView(row))
 	}
 	return result, nil
 }
@@ -525,8 +516,9 @@ func (s *Service) CreateRoute(ctx context.Context, payload *gen.CreateRoutePaylo
 		OtelDestinationID: destinationID,
 	})
 	if err != nil {
-		if conflict := routeSourceConflict(err); conflict != nil {
-			return nil, conflict
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.Code == pgerrcode.UniqueViolation && pgErr.ConstraintName == "data_export_routes_project_source_key" {
+			return nil, oops.E(oops.CodeConflict, err, "a route already exists for this data source")
 		}
 		return nil, oops.E(oops.CodeUnexpected, err, "create data export route").LogError(ctx, logger)
 	}
@@ -545,7 +537,7 @@ func (s *Service) CreateRoute(ctx context.Context, payload *gen.CreateRoutePaylo
 	if err := dbtx.Commit(ctx); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "commit data export route creation").LogError(ctx, logger)
 	}
-	return mv.BuildDataExportRouteView(row), nil
+	return buildDataExportRouteView(row), nil
 }
 
 func (s *Service) UpdateRoute(ctx context.Context, payload *gen.UpdateRoutePayload) (*gen.DataExportRoute, error) {
@@ -598,8 +590,9 @@ func (s *Service) UpdateRoute(ctx context.Context, payload *gen.UpdateRoutePaylo
 		ID:                routeID,
 	})
 	if err != nil {
-		if conflict := routeSourceConflict(err); conflict != nil {
-			return nil, conflict
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.Code == pgerrcode.UniqueViolation && pgErr.ConstraintName == "data_export_routes_project_source_key" {
+			return nil, oops.E(oops.CodeConflict, err, "a route already exists for this data source")
 		}
 		return nil, oops.E(oops.CodeUnexpected, err, "update data export route").LogError(ctx, logger)
 	}
@@ -622,7 +615,7 @@ func (s *Service) UpdateRoute(ctx context.Context, payload *gen.UpdateRoutePaylo
 	if err := dbtx.Commit(ctx); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "commit data export route update").LogError(ctx, logger)
 	}
-	return mv.BuildDataExportRouteView(after), nil
+	return buildDataExportRouteView(after), nil
 }
 
 func (s *Service) DeleteRoute(ctx context.Context, payload *gen.DeleteRoutePayload) error {
