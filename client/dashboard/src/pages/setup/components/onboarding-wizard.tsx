@@ -11,6 +11,7 @@ import {
   ConnectIdpStep,
   DirectorySyncStep,
   CreateMarketplaceStep,
+  EnableLoggingStep,
   DistributeServersStep,
   InstrumentAgentsStep,
   AdditionalAgentConfigStep,
@@ -34,6 +35,11 @@ const CORE_STEPS: Step[] = [
     id: "create-marketplace",
     title: "Create plugin marketplace",
     description: "For distributing servers to your users",
+  },
+  {
+    id: "enable-logging",
+    title: "Enable logging",
+    description: "Opt in to product telemetry",
   },
   {
     id: "instrument-agents",
@@ -70,6 +76,11 @@ const PLATFORM_MCP_STEP: Step = {
   badge: "Optional",
 };
 
+function indexOfStep(steps: Step[], id: string): number {
+  const index = steps.findIndex((step) => step.id === id);
+  return index === -1 ? 0 : index;
+}
+
 export function SetupWizard(): JSX.Element {
   const navigate = useNavigate();
   const { orgSlug } = useParams();
@@ -98,10 +109,11 @@ export function SetupWizard(): JSX.Element {
 
   // Server-side onboarding signals used to resume at the right step on reload.
   // `onboardingStatus` covers SSO + DSYNC; `publishStatus` covers the
-  // marketplace step. Steps after marketplace (instrument-agents,
-  // additional-agent-config, confirm-traffic, distribute-servers) have no
-  // server signal — once marketplace is published we land on instrument-agents
-  // and let the user click forward.
+  // marketplace step. After marketplace we land on enable-logging so logging
+  // consent is always an explicit opt-in before instrumentation. Steps after
+  // that (instrument-agents, additional-agent-config, confirm-traffic,
+  // distribute-servers) have no server signal — once marketplace is published
+  // we land on enable-logging and let the user click forward.
   const { data: onboardingStatus, isLoading: isOnboardingStatusLoading } =
     useOnboardingStatus();
   const { data: publishStatus, isLoading: isPublishStatusLoading } =
@@ -115,11 +127,11 @@ export function SetupWizard(): JSX.Element {
     // fail — we fall back to step 0.
     let resumeStep = 0;
     if (publishStatus?.connected) {
-      resumeStep = 3; // marketplace done → instrument-agents
+      resumeStep = indexOfStep(steps, "enable-logging");
     } else if (onboardingStatus?.dsyncConfigured) {
-      resumeStep = 2; // dsync done → create-marketplace
+      resumeStep = indexOfStep(steps, "create-marketplace");
     } else if (onboardingStatus?.ssoConfigured) {
-      resumeStep = 1; // sso done → directory-sync
+      resumeStep = indexOfStep(steps, "directory-sync");
     }
     setSearchParams(
       (prev) => {
@@ -248,6 +260,14 @@ export function SetupWizard(): JSX.Element {
         return (
           <CreateMarketplaceStep
             onComplete={completeCurrentStep}
+            onBack={goBack}
+          />
+        );
+      case "enable-logging":
+        return (
+          <EnableLoggingStep
+            onComplete={completeCurrentStep}
+            onSkip={completeCurrentStep}
             onBack={goBack}
           />
         );

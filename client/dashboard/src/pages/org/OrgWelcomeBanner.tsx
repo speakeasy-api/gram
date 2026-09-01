@@ -146,9 +146,9 @@ export function OrgWelcomeBanner(): JSX.Element | null {
           title: setupStarted
             ? "Continue enterprise rollout"
             : "Start enterprise rollout",
-          body: "SSO, directory sync, agent platforms, and policies — the wizard walks the whole sequence.",
+          body: "SSO, directory sync, logging consent, agent platforms, and policies — the wizard walks the whole sequence.",
           cta: setupStarted ? "Resume rollout" : "Begin rollout",
-          meta: "8 steps · resumable",
+          meta: "9 steps · resumable",
           to: orgRoutes.setup.href(),
           recommended,
           onClick: markSetupStarted,
