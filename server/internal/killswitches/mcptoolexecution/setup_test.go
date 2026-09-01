@@ -12,6 +12,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/killswitches"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 )
@@ -119,23 +120,34 @@ func clearPrescriptions(t *testing.T, conn *pgxpool.Pool, organizationID string)
 	}
 }
 
-type prescriptionFixture struct {
-	ID           uuid.UUID
-	PrincipalKey string
-	Scope        string
-	Resources    []string
-	ExternalNote string
+func deletePrescription(t *testing.T, conn *pgxpool.Pool, organizationID string, prescriptionID uuid.UUID) {
+	t.Helper()
+	_, err := conn.Exec(t.Context(), "DELETE FROM killswitch_prescriptions WHERE organization_id = $1 AND id = $2", organizationID, prescriptionID)
+	require.NoError(t, err)
 }
 
-// insertPrescription creates an immediately active mcp_tool_execution
-// prescription with the concrete user principal and mcp_server resource kind.
+type prescriptionFixture struct {
+	ID            uuid.UUID
+	DefinitionKey killswitches.DefinitionKey
+	PrincipalKey  string
+	Scope         string
+	Resources     []string
+	ExternalNote  string
+}
+
+// insertPrescription creates an immediately active prescription with the
+// concrete user principal and mcp_server resource kind.
 func insertPrescription(t *testing.T, conn *pgxpool.Pool, organizationID string, fixture prescriptionFixture) {
 	t.Helper()
 
+	definitionKey := fixture.DefinitionKey
+	if definitionKey == "" {
+		definitionKey = DefinitionKeyMCPToolExecution
+	}
 	err := testrepo.New(conn).InsertKillswitchPrescriptionFixture(t.Context(), testrepo.InsertKillswitchPrescriptionFixtureParams{
 		PrescriptionID: fixture.ID,
 		OrganizationID: organizationID,
-		DefinitionKey:  string(DefinitionKeyMCPToolExecution),
+		DefinitionKey:  string(definitionKey),
 		PrincipalKind:  string(PrincipalKindUser),
 		PrincipalKey:   fixture.PrincipalKey,
 		ResourceKind:   string(ResourceKindMCPServer),
