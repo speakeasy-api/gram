@@ -1,4 +1,4 @@
-package loopsync
+package loops
 
 import (
 	"encoding/json"
