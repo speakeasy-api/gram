@@ -8,7 +8,9 @@ import {
 } from "./IdentityPanel";
 import { identityHandoffs } from "./identityHandoffs";
 import { useIdentityOutlet } from "./identityRoute";
+import { DailyActivityChart } from "@/components/chart/DailyActivityChart";
 import { IdentitySection } from "./IdentitySection";
+import { sectionMeta } from "./sectionMeta";
 import {
   useCanReadOthersChats,
   useIdentityAuditLogs,
@@ -17,6 +19,10 @@ import {
   useIdentityWindow,
   useIsSelf,
 } from "./useIdentityQueries";
+
+// The lists are a recent sample, not an archive: the handoff owns the full
+// history and a 20-row list only made this tab a longer Overview.
+const RECENT_ROWS = 6;
 
 export default function IdentityActivity(): JSX.Element {
   const { identity } = useIdentityOutlet();
@@ -47,11 +53,39 @@ export default function IdentityActivity(): JSX.Element {
   const logs = auditQuery.data?.result.logs ?? [];
   const chats = chatsQuery.data?.chats ?? [];
 
+  const logDates = logs.map((log) => new Date(log.createdAt));
+  const chatDates = chats
+    .map((chat) => chat.lastMessageTimestamp)
+    .filter((ts): ts is Date => Boolean(ts))
+    .map((ts) => new Date(ts));
+
   return (
     <IdentitySection
       title="Activity"
-      meta={`${logs.length} change${logs.length === 1 ? "" : "s"} · ${chats.length} session${chats.length === 1 ? "" : "s"}`}
+      meta={sectionMeta([
+        { count: logs.length, singular: "change" },
+        { count: chats.length, singular: "session" },
+      ])}
     >
+      {/* Overview already shows the most recent handful of both lists. What
+          this tab can add is the shape of the window: two people with
+          identical row lists can work in daily drips or in two long bursts,
+          and only the columns tell them apart. */}
+      {(logDates.length > 0 || chatDates.length > 0) && (
+        <IdentityPanel title="Activity by day">
+          <div className="px-4 py-4">
+            <DailyActivityChart
+              from={from}
+              to={to}
+              series={[
+                { key: "changes", label: "Changes", dates: logDates },
+                { key: "sessions", label: "Sessions", dates: chatDates },
+              ]}
+            />
+          </div>
+        </IdentityPanel>
+      )}
+
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
         <IdentityPanel
           title="Audit trail"
@@ -70,7 +104,7 @@ export default function IdentityActivity(): JSX.Element {
               No recorded changes by this identity.
             </IdentityPanelEmpty>
           ) : (
-            logs.slice(0, 20).map((log) => (
+            logs.slice(0, RECENT_ROWS).map((log) => (
               <IdentityPanelRow
                 key={log.id}
                 title={log.action}
@@ -111,18 +145,20 @@ export default function IdentityActivity(): JSX.Element {
               No chat sessions in this window.
             </IdentityPanelEmpty>
           ) : (
-            chats.map((chat) => (
-              <IdentityPanelRow
-                key={chat.id}
-                title={chat.title || "Untitled chat"}
-                detail={
-                  chat.lastMessageTimestamp ? (
-                    <HumanizeDateTime date={chat.lastMessageTimestamp} />
-                  ) : undefined
-                }
-                trailing={`${chat.numMessages ?? 0} msgs`}
-              />
-            ))
+            chats
+              .slice(0, RECENT_ROWS)
+              .map((chat) => (
+                <IdentityPanelRow
+                  key={chat.id}
+                  title={chat.title || "Untitled chat"}
+                  detail={
+                    chat.lastMessageTimestamp ? (
+                      <HumanizeDateTime date={chat.lastMessageTimestamp} />
+                    ) : undefined
+                  }
+                  trailing={`${chat.numMessages ?? 0} msgs`}
+                />
+              ))
           )}
         </IdentityPanel>
       </div>

@@ -1,14 +1,12 @@
 import { StatTile, StatTileGroup } from "@/components/chart/stat-tile";
 import { useLocation } from "react-router";
 import { useOrgRoutes, useRoutes } from "@/routes";
-import {
-  IdentityPanel,
-  IdentityPanelEmpty,
-  IdentityPanelRow,
-} from "./IdentityPanel";
+import { IdentityPanel, IdentityPanelEmpty } from "./IdentityPanel";
 import { identityHandoffs } from "./identityHandoffs";
 import { useIdentityOutlet } from "./identityRoute";
+import { ShareBar } from "@/components/chart/ShareBar";
 import { IdentitySection } from "./IdentitySection";
+import { sectionMeta } from "./sectionMeta";
 import {
   useIdentityMetrics,
   useIdentityProject,
@@ -38,15 +36,38 @@ export default function IdentityCost(): JSX.Element {
   const metricsQuery = useIdentityMetrics(identity, from, to);
   const metrics = metricsQuery.data?.metrics;
   const models = [...(metrics?.models ?? [])].sort((a, b) => b.count - a.count);
-  const totalCalls = models.reduce((sum, model) => sum + model.count, 0);
+
+  // Cache reads are the lever worth surfacing: they are billed at a fraction
+  // of fresh input, so the same token count costs wildly different amounts
+  // depending on this split.
+  const tokenSegments = [
+    { key: "input", label: "Input", value: metrics?.totalInputTokens ?? 0 },
+    { key: "output", label: "Output", value: metrics?.totalOutputTokens ?? 0 },
+    {
+      key: "cacheRead",
+      label: "Cache reads",
+      value: metrics?.cacheReadInputTokens ?? 0,
+    },
+    {
+      key: "cacheWrite",
+      label: "Cache writes",
+      value: metrics?.cacheCreationInputTokens ?? 0,
+    },
+  ].filter((segment) => segment.value > 0);
+  const tokenTotal = tokenSegments.reduce((sum, s) => sum + s.value, 0);
+  const cacheRead = metrics?.cacheReadInputTokens ?? 0;
+  const cacheShareLabel =
+    tokenTotal > 0 && cacheRead > 0
+      ? `${Math.round((cacheRead / tokenTotal) * 100)}% served from cache`
+      : undefined;
 
   return (
     <IdentitySection
       title="Cost"
-      meta={`${models.length} model${models.length === 1 ? "" : "s"}`}
+      meta={sectionMeta([{ count: models.length, singular: "model" }])}
     >
       <div className="flex flex-col gap-6">
-        <StatTileGroup className="overflow-x-auto [&>*]:min-w-[9rem]">
+        <StatTileGroup className="overflow-x-auto [&>*]:min-w-[11.5rem]">
           <StatTile
             title="Spend"
             value={metrics?.totalCost ?? 0}
@@ -77,37 +98,61 @@ export default function IdentityCost(): JSX.Element {
           />
         </StatTileGroup>
 
-        <IdentityPanel
-          title="Model mix"
-          handoffLabel="Costs"
-          handoffHref={handoffs.costs}
-          footer={
-            // Cost aggregates over every address the subject is known by,
-            // which is why this can exceed what one address alone would show.
-            identity.emails.length > 1
-              ? `Aggregated over ${identity.emails.length} addresses`
-              : undefined
-          }
-        >
-          {models.length === 0 ? (
-            <IdentityPanelEmpty>
-              No model usage in this window.
-            </IdentityPanelEmpty>
-          ) : (
-            models.map((model) => (
-              <IdentityPanelRow
-                key={model.name}
-                title={model.name}
-                detail={
-                  totalCalls > 0
-                    ? `${Math.round((model.count / totalCalls) * 100)}% of calls`
-                    : undefined
-                }
-                trailing={model.count.toLocaleString()}
-              />
-            ))
-          )}
-        </IdentityPanel>
+        {/* Two compositions rather than two lists. Where the tokens went is
+            the only question this tab can answer that Usage cannot: a person
+            whose spend is nearly all cache reads is cheap for the same
+            apparent volume as one whose spend is fresh input. */}
+        <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+          <IdentityPanel
+            title="Where the tokens went"
+            handoffLabel="Costs"
+            handoffHref={handoffs.costs}
+            footer={cacheShareLabel}
+          >
+            {tokenSegments.length === 0 ? (
+              <IdentityPanelEmpty>
+                No token usage in this window.
+              </IdentityPanelEmpty>
+            ) : (
+              <div className="px-4 py-4">
+                <ShareBar
+                  segments={tokenSegments}
+                  ariaLabel="Token usage by kind"
+                />
+              </div>
+            )}
+          </IdentityPanel>
+
+          <IdentityPanel
+            title="Model mix"
+            handoffLabel="Costs"
+            handoffHref={handoffs.costs}
+            footer={
+              // Cost aggregates over every address the subject is known by,
+              // which is why this can exceed what one address alone would show.
+              identity.emails.length > 1
+                ? `Aggregated over ${identity.emails.length} addresses`
+                : undefined
+            }
+          >
+            {models.length === 0 ? (
+              <IdentityPanelEmpty>
+                No model usage in this window.
+              </IdentityPanelEmpty>
+            ) : (
+              <div className="px-4 py-4">
+                <ShareBar
+                  segments={models.map((model) => ({
+                    key: model.name,
+                    label: model.name,
+                    value: model.count,
+                  }))}
+                  ariaLabel="Share of calls by model"
+                />
+              </div>
+            )}
+          </IdentityPanel>
+        </div>
       </div>
     </IdentitySection>
   );

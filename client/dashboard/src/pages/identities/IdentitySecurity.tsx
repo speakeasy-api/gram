@@ -13,7 +13,10 @@ import {
 } from "./IdentityPanel";
 import { identityHandoffs } from "./identityHandoffs";
 import { useIdentityOutlet } from "./identityRoute";
+import { RankedBarList } from "@/components/chart/RankedBarList";
+import { ShareBar } from "@/components/chart/ShareBar";
 import { IdentitySection } from "./IdentitySection";
+import { sectionMeta } from "./sectionMeta";
 import {
   useCanReadRisk,
   useIdentityChallenges,
@@ -23,6 +26,8 @@ import {
   useIdentityShadowServers,
   useIdentityWindow,
 } from "./useIdentityQueries";
+
+const TOP_RULES = 5;
 
 export default function IdentitySecurity(): JSX.Element {
   const canReadRisk = useCanReadRisk();
@@ -67,15 +72,15 @@ export default function IdentitySecurity(): JSX.Element {
   return (
     <IdentitySection
       title="Security"
-      meta={
+      meta={sectionMeta(
         canReadRisk
-          ? `${findings} finding${findings === 1 ? "" : "s"} · ${
-              denied.length
-            } denied · ${shadowServers.length} shadow server${
-              shadowServers.length === 1 ? "" : "s"
-            }`
-          : `${denied.length} denied challenge${denied.length === 1 ? "" : "s"}`
-      }
+          ? [
+              { count: findings, singular: "finding" },
+              { count: denied.length, singular: "denied", plural: "denied" },
+              { count: shadowServers.length, singular: "shadow server" },
+            ]
+          : [{ count: denied.length, singular: "denied challenge" }],
+      )}
     >
       <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
         <IdentityPanel
@@ -91,17 +96,19 @@ export default function IdentitySecurity(): JSX.Element {
           {categories.length === 0 ? (
             <IdentityPanelEmpty>No findings in this window.</IdentityPanelEmpty>
           ) : (
-            categories.map((category) => (
-              <IdentityPanelRow
-                key={category.category}
-                accent="destructive"
-                title={
-                  RULE_CATEGORY_META[category.category as RuleCategory]
-                    ?.label ?? category.category
-                }
-                trailing={Number(category.findings).toLocaleString()}
+            <div className="px-4 py-4">
+              <ShareBar
+                segments={categories.map((category) => ({
+                  key: category.category,
+                  label:
+                    RULE_CATEGORY_META[category.category as RuleCategory]
+                      ?.label ?? category.category,
+                  value: Number(category.findings),
+                  valueLabel: Number(category.findings).toLocaleString(),
+                }))}
+                ariaLabel="Findings by category"
               />
-            ))
+            </div>
           )}
         </IdentityPanel>
 
@@ -109,26 +116,28 @@ export default function IdentitySecurity(): JSX.Element {
           title="Findings by rule"
           handoffLabel="Risk Events"
           handoffHref={handoffs.riskEvents}
+          footer={
+            rules.length > TOP_RULES
+              ? `Top ${TOP_RULES} of ${rules.length} rules`
+              : undefined
+          }
         >
           {rules.length === 0 ? (
             <IdentityPanelEmpty>
               No rule matched this identity in this window.
             </IdentityPanelEmpty>
           ) : (
-            rules
-              .slice(0, 8)
-              .map((rule, index) => (
-                <IdentityPanelRow
-                  key={rule.ruleId || `__none_${index}`}
-                  title={
-                    rule.ruleId
-                      ? getRuleTitleFallback(rule.ruleId)
-                      : "(no rule_id)"
-                  }
-                  detail={rule.source}
-                  trailing={Number(rule.findings).toLocaleString()}
-                />
-              ))
+            <div className="px-4 py-4">
+              <RankedBarList
+                items={rules.slice(0, TOP_RULES).map((rule, index) => ({
+                  key: rule.ruleId || `__none_${index}`,
+                  label: rule.ruleId
+                    ? getRuleTitleFallback(rule.ruleId)
+                    : "(no rule_id)",
+                  value: Number(rule.findings),
+                }))}
+              />
+            </div>
           )}
         </IdentityPanel>
 

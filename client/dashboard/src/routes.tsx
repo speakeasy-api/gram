@@ -58,6 +58,7 @@ import {
 import Costs from "./pages/costs/Costs";
 import IdentitiesIndex, {
   IdentitiesIndexRedirect,
+  IdentityDetailIndexRedirect,
   IdentitiesRoot,
 } from "./pages/identities/IdentitiesIndex";
 import IdentityDetailRoot from "./pages/identities/IdentityDetailRoot";
@@ -1234,6 +1235,7 @@ const ORG_ROUTE_STRUCTURE = {
         title: "Identity",
         url: ":identityUrn",
         component: IdentityDetailRoot,
+        indexComponent: IdentityDetailIndexRedirect,
         subPages: {
           overview: {
             title: "Identity Overview",

@@ -9,12 +9,17 @@ import {
 } from "./IdentityPanel";
 import { identityHandoffs } from "./identityHandoffs";
 import { useIdentityOutlet } from "./identityRoute";
+import { ShareBar } from "@/components/chart/ShareBar";
+import { Badge } from "@/components/ui/Badge";
 import { IdentitySection } from "./IdentitySection";
+import { sectionMeta } from "./sectionMeta";
 import {
   useIdentityChallenges,
   useIdentityMember,
   useIdentityProject,
 } from "./useIdentityQueries";
+
+const RECENT_CHALLENGES = 5;
 
 export default function IdentityAccess(): JSX.Element {
   const location = useLocation();
@@ -53,7 +58,10 @@ export default function IdentityAccess(): JSX.Element {
   return (
     <IdentitySection
       title="Access"
-      meta={`${roles.length} role${roles.length === 1 ? "" : "s"} · ${denied.length} denied`}
+      meta={sectionMeta([
+        { count: roles.length, singular: "role" },
+        { count: denied.length, singular: "denied", plural: "denied" },
+      ])}
     >
       <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
         <IdentityPanel
@@ -69,13 +77,15 @@ export default function IdentityAccess(): JSX.Element {
               No roles assigned in this organization.
             </IdentityPanelEmpty>
           ) : (
-            roles.map((role) => (
-              <IdentityPanelRow
-                key={role.id}
-                title={role.name}
-                detail={role.slug}
-              />
-            ))
+            <ul className="flex flex-wrap gap-2 px-4 py-4">
+              {roles.map((role) => (
+                <li key={role.id}>
+                  <Badge variant="neutral" title={role.slug}>
+                    {role.name}
+                  </Badge>
+                </li>
+              ))}
+            </ul>
           )}
         </IdentityPanel>
 
@@ -94,9 +104,21 @@ export default function IdentityAccess(): JSX.Element {
               No authorization checks recorded for this identity.
             </IdentityPanelEmpty>
           ) : (
-            challenges
-              .slice(0, 10)
-              .map((challenge) => (
+            <>
+              <div className="border-border border-b px-4 py-4">
+                <ShareBar
+                  segments={[
+                    {
+                      key: "allowed",
+                      label: "Allowed",
+                      value: challenges.length - denied.length,
+                    },
+                    { key: "denied", label: "Denied", value: denied.length },
+                  ].filter((segment) => segment.value > 0)}
+                  ariaLabel="Authorization outcomes"
+                />
+              </div>
+              {challenges.slice(0, RECENT_CHALLENGES).map((challenge) => (
                 <IdentityPanelRow
                   key={challenge.id}
                   accent={
@@ -114,7 +136,8 @@ export default function IdentityAccess(): JSX.Element {
                         : "Allowed"
                   }
                 />
-              ))
+              ))}
+            </>
           )}
         </IdentityPanel>
       </div>

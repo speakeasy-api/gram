@@ -9,6 +9,7 @@ import {
 import { identityHandoffs } from "./identityHandoffs";
 import { useIdentityOutlet } from "./identityRoute";
 import { IdentitySection } from "./IdentitySection";
+import { sectionMeta } from "./sectionMeta";
 import { useIdentityDevices, useIdentityProject } from "./useIdentityQueries";
 
 /** How each coverage bucket reads, and whether it is worth flagging. */
@@ -46,7 +47,7 @@ export default function IdentityDevices(): JSX.Element {
   return (
     <IdentitySection
       title="Devices"
-      meta={`${devices.length} device${devices.length === 1 ? "" : "s"}`}
+      meta={sectionMeta([{ count: devices.length, singular: "device" }])}
     >
       <IdentityPanel
         title="Managed devices"

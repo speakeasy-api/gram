@@ -179,6 +179,11 @@ SELECT
     ',"http.server.request.duration":0.42',
     ',"gram.project.id":"', toString(proj), '"',
     concat(',"user.id":"', actor, '"'),
+    -- Also the external user id: that is the key every identity read path
+    -- filters a non-directory actor by (external:<id> resolves to exactly
+    -- this), so reporting only user.id leaves the agent's own page empty
+    -- while the roster still lists it.
+    concat(',"gram.external_user.id":"', actor, '"'),
     ',"gram.hook.source":"codex"}'
   ),
   '{"gram.deployment.id":"demo-seed"}',

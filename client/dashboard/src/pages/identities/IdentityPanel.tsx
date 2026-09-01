@@ -16,6 +16,7 @@ export function IdentityPanel({
   footer,
   children,
   className,
+  contentClassName,
 }: {
   title: string;
   /** The page this panel continues on, e.g. "Audit Logs". */
@@ -25,6 +26,12 @@ export function IdentityPanel({
   footer?: React.ReactNode;
   children: React.ReactNode;
   className?: string;
+  /**
+   * Padding for the body. Rows bring their own (they run full-bleed to the
+   * panel edge so their separators do too); anything else — a chart, a chip
+   * list — needs its own inset or it sits flush against the border.
+   */
+  contentClassName?: string;
 }): React.JSX.Element {
   return (
     <section
@@ -42,7 +49,7 @@ export function IdentityPanel({
           </Link>
         )}
       </header>
-      <div className="flex-1">{children}</div>
+      <div className={cn("flex-1", contentClassName)}>{children}</div>
       {footer && (
         <footer className="border-border border-t px-4 py-2.5">
           <Text variant="small" muted className="text-xs">

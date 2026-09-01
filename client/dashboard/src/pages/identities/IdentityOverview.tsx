@@ -171,7 +171,7 @@ export default function IdentityOverview(): JSX.Element {
           )}
         </IdentityPanel>
 
-        <StatTileGroup className="overflow-x-auto [&>*]:min-w-[9rem]">
+        <StatTileGroup className="overflow-x-auto [&>*]:min-w-[11.5rem]">
           <StatTile
             title="Spend"
             value={metrics?.totalCost ?? 0}

@@ -1,19 +1,20 @@
 import { StatTile, StatTileGroup } from "@/components/chart/stat-tile";
 import { useLocation } from "react-router";
 import { useOrgRoutes, useRoutes } from "@/routes";
-import {
-  IdentityPanel,
-  IdentityPanelEmpty,
-  IdentityPanelRow,
-} from "./IdentityPanel";
+import { IdentityPanel, IdentityPanelEmpty } from "./IdentityPanel";
 import { identityHandoffs } from "./identityHandoffs";
 import { useIdentityOutlet } from "./identityRoute";
+import { SplitRankedBarList } from "@/components/chart/SplitRankedBarList";
 import { IdentitySection } from "./IdentitySection";
+import { sectionMeta } from "./sectionMeta";
 import {
   useIdentityMetrics,
   useIdentityProject,
   useIdentityWindow,
 } from "./useIdentityQueries";
+
+// Enough to show the shape of someone's usage; the handoff owns the long tail.
+const TOP_TOOLS = 5;
 
 export default function IdentityUsage(): JSX.Element {
   const { identity } = useIdentityOutlet();
@@ -43,10 +44,13 @@ export default function IdentityUsage(): JSX.Element {
   return (
     <IdentitySection
       title="Usage"
-      meta={`${tools.length} tool${tools.length === 1 ? "" : "s"} · ${models.length} model${models.length === 1 ? "" : "s"}`}
+      meta={sectionMeta([
+        { count: tools.length, singular: "tool" },
+        { count: models.length, singular: "model" },
+      ])}
     >
       <div className="flex flex-col gap-6">
-        <StatTileGroup className="overflow-x-auto [&>*]:min-w-[9rem]">
+        <StatTileGroup className="overflow-x-auto [&>*]:min-w-[11.5rem]">
           <StatTile
             title="Tool calls"
             value={metrics?.totalToolCalls ?? 0}
@@ -77,59 +81,38 @@ export default function IdentityUsage(): JSX.Element {
           />
         </StatTileGroup>
 
-        <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
-          <IdentityPanel
-            title="Top tools"
-            handoffLabel="Tool Logs"
-            handoffHref={handoffs.toolLogs}
-            footer={
-              tools.length > 8 ? `Top 8 of ${tools.length} tools` : undefined
-            }
-          >
-            {tools.length === 0 ? (
-              <IdentityPanelEmpty>
-                No tool calls in this window.
-              </IdentityPanelEmpty>
-            ) : (
-              tools
-                .slice(0, 8)
-                .map((tool) => (
-                  <IdentityPanelRow
-                    key={tool.urn}
-                    title={tool.urn}
-                    detail={
-                      tool.failureCount > 0
-                        ? `${tool.failureCount} failed`
-                        : undefined
-                    }
-                    trailing={tool.count.toLocaleString()}
-                  />
-                ))
-            )}
-          </IdentityPanel>
-
-          <IdentityPanel
-            title="Models"
-            handoffLabel="Costs"
-            handoffHref={handoffs.costs}
-          >
-            {models.length === 0 ? (
-              <IdentityPanelEmpty>
-                No model usage in this window.
-              </IdentityPanelEmpty>
-            ) : (
-              models
-                .slice(0, 8)
-                .map((model) => (
-                  <IdentityPanelRow
-                    key={model.name}
-                    title={model.name}
-                    trailing={model.count.toLocaleString()}
-                  />
-                ))
-            )}
-          </IdentityPanel>
-        </div>
+        {/* Tools carry their failure share on the same bar: volume alone is
+            the boring half of the question, and a heavily-used tool that
+            fails often should not be able to hide behind its rank. Model
+            usage lives on the Cost tab, the only place it reads against
+            money rather than repeating this list. */}
+        <IdentityPanel
+          title="Tools"
+          handoffLabel="Tool Logs"
+          handoffHref={handoffs.toolLogs}
+          footer={
+            tools.length > TOP_TOOLS
+              ? `Top ${TOP_TOOLS} of ${tools.length} tools by call volume`
+              : undefined
+          }
+        >
+          {tools.length === 0 ? (
+            <IdentityPanelEmpty>
+              No tool calls in this window.
+            </IdentityPanelEmpty>
+          ) : (
+            <div className="px-4 py-4">
+              <SplitRankedBarList
+                items={tools.slice(0, TOP_TOOLS).map((tool) => ({
+                  key: tool.urn,
+                  label: tool.urn,
+                  value: tool.count,
+                  failed: tool.failureCount,
+                }))}
+              />
+            </div>
+          )}
+        </IdentityPanel>
       </div>
     </IdentitySection>
   );

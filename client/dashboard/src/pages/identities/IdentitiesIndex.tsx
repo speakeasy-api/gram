@@ -22,7 +22,13 @@ import { useRoles } from "@gram/client/react-query/roles.js";
 import { useQuery } from "@tanstack/react-query";
 import { Bot } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
-import { Navigate, Outlet, useLocation, useNavigate } from "react-router";
+import {
+  Navigate,
+  Outlet,
+  useLocation,
+  useNavigate,
+  useParams,
+} from "react-router";
 import {
   identityHasAccount,
   identityKindOf,
@@ -40,6 +46,25 @@ export function IdentitiesRoot(): JSX.Element {
  * The project-level Employee Enrollment index moved to the org-level Identities
  * list. Existing links land here and are sent on.
  */
+/**
+ * The bare detail URL has no content of its own — every panel lives on a tab —
+ * so send it to the overview rather than render a header over an empty pane.
+ * Hand-typed and truncated links land here.
+ */
+export function IdentityDetailIndexRedirect(): JSX.Element {
+  const orgRoutes = useOrgRoutes();
+  const location = useLocation();
+  const { identityUrn = "" } = useParams<{ identityUrn: string }>();
+  return (
+    <Navigate
+      to={`${orgRoutes.identities.detail.overview.href(
+        encodeIdentityUrn(identityUrn),
+      )}${location.search}`}
+      replace
+    />
+  );
+}
+
 export function IdentitiesIndexRedirect(): JSX.Element {
   const orgRoutes = useOrgRoutes();
   const location = useLocation();
@@ -68,6 +93,17 @@ const KIND_OPTIONS = (["person", "agent"] as IdentityKind[]).map((kind) => ({
   value: kind,
   label: IDENTITY_KIND_LABELS[kind],
 }));
+
+// One em dash for every kind of "no role": an agent has none by definition, a
+// person with no account has none yet, and the roster reports an absent role
+// as a bare "-" or "Unknown" depending on which source answered. Three
+// spellings of nothing in one column read as three different states.
+function roleLabel(identity: Employee): string {
+  if (identityKindOf(identity) !== "person") return "\u2014";
+  const role = identity.role.trim();
+  if (!role || role === "-" || role === "Unknown") return "\u2014";
+  return role;
+}
 
 const IDENTITY_COLUMNS: Column<Employee>[] = [
   {
@@ -111,11 +147,7 @@ const IDENTITY_COLUMNS: Column<Employee>[] = [
     width: "1fr",
     render: (identity) => (
       <Text muted small className="truncate">
-        {identityKindOf(identity) !== "person"
-          ? "—"
-          : identity.role === "Unknown"
-            ? "None"
-            : identity.role}
+        {roleLabel(identity)}
       </Text>
     ),
   },
@@ -255,7 +287,7 @@ function IdentitiesIndexContent(): JSX.Element {
         platform knows about, account here or not.
       </Page.Section.Description>
       <Page.Section.Body>
-        <StatTileGroup className="overflow-x-auto [&>*]:min-w-[9rem]">
+        <StatTileGroup className="overflow-x-auto [&>*]:min-w-[11.5rem]">
           <StatTile
             title="Identities"
             value={identities.length}
