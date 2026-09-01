@@ -1,3 +1,4 @@
+import { IdentityLink } from "@/components/identity-link";
 import { useEffect, useMemo, useState } from "react";
 import { ChevronRight } from "lucide-react";
 
@@ -403,10 +404,16 @@ function ConnectionGroupRow({
       )}
     >
       <div className={cn(CONNECTION_ROW_FRAME, "hover:bg-muted/30 py-2.5")}>
-        <button
-          type="button"
+        <div
+          role="button"
+          tabIndex={0}
           onClick={() => setExpanded((open) => !open)}
-          className={CONNECTION_ROW_GRID}
+          onKeyDown={(event) => {
+            if (event.key !== "Enter" && event.key !== " ") return;
+            event.preventDefault();
+            setExpanded((open) => !open);
+          }}
+          className={cn(CONNECTION_ROW_GRID, "cursor-pointer text-left")}
           aria-expanded={expanded}
         >
           <ChevronRight
@@ -419,9 +426,18 @@ function ConnectionGroupRow({
           <GroupIcon group={group} />
 
           <span className="flex min-w-0 items-center gap-2">
-            <span className="text-foreground truncate text-sm font-medium">
-              {group.label}
-            </span>
+            {group.identity?.urn ? (
+              <IdentityLink
+                identifier={{ urn: group.identity.urn }}
+                className="text-foreground truncate text-sm font-medium"
+              >
+                {group.label}
+              </IdentityLink>
+            ) : (
+              <span className="text-foreground truncate text-sm font-medium">
+                {group.label}
+              </span>
+            )}
             {/* Absent unless the row names a registration, which is what
                 grouping by agent makes it. */}
             <ClientCredentialBadge
@@ -466,7 +482,7 @@ function ConnectionGroupRow({
             <StatusDot state={groupState} />
             {showStateLabel ? groupPresentation.label : ""}
           </span>
-        </button>
+        </div>
 
         <span className={CONNECTION_ACTIONS_SLOT}>
           {actions.length > 0 ? <MoreActions actions={actions} /> : null}

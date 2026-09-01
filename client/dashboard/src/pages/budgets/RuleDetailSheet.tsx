@@ -1,3 +1,4 @@
+import { IdentityLink } from "@/components/identity-link";
 import { Button } from "@/components/ui/Button";
 import {
   Sheet,
@@ -224,8 +225,13 @@ function RuleDetail({
                       </span>
                     </div>
                     <p className="text-muted-foreground text-xs">
-                      {event.displayName || event.email} ·{" "}
-                      {formatUsd(event.spendUsd)} of {formatUsd(event.limitUsd)}
+                      <IdentityLink
+                        identifier={event.email ? { email: event.email } : null}
+                      >
+                        {event.displayName || event.email}
+                      </IdentityLink>{" "}
+                      · {formatUsd(event.spendUsd)} of{" "}
+                      {formatUsd(event.limitUsd)}
                     </p>
                   </li>
                 );
@@ -413,7 +419,11 @@ function ActorRow({ actor }: { actor: SpendRuleActorUsage }): JSX.Element {
       <div className="flex items-center justify-between gap-3 text-xs">
         <div className="min-w-0">
           <div className="truncate font-medium">
-            {actor.displayName || actor.email}
+            <IdentityLink
+              identifier={actor.email ? { email: actor.email } : null}
+            >
+              {actor.displayName || actor.email}
+            </IdentityLink>
           </div>
           {actor.displayName && (
             <div className="text-muted-foreground truncate">{actor.email}</div>

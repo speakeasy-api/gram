@@ -4,7 +4,8 @@ import {
 } from "@/components/observe/useDateRangeFilter";
 import { Page } from "@/components/page-layout";
 import { RequireScope } from "@/components/require-scope";
-import { useRoutes } from "@/routes";
+import { encodeIdentityUrn } from "@/lib/identity-urn";
+import { useOrgRoutes } from "@/routes";
 import { type DateRangePreset } from "@/elements";
 import { TimeRangePicker } from "@/components/DashboardTimeRangePicker";
 import { useRiskOverview } from "@gram/client/react-query/riskOverview.js";
@@ -40,7 +41,7 @@ export default function RiskOverviewUsersIndex(): JSX.Element {
 }
 
 function RiskOverviewUsersIndexContent() {
-  const routes = useRoutes();
+  const orgRoutes = useOrgRoutes();
   const location = useLocation();
   const {
     dateRange,
@@ -61,12 +62,6 @@ function RiskOverviewUsersIndexContent() {
   const users = overviewQuery.data?.topUsers ?? [];
   const total = users.reduce((acc, u) => acc + Number(u.findings), 0);
   const max = users[0]?.findings ?? 0;
-
-  const userDetailRoute = (
-    routes.riskOverview as unknown as {
-      userDetail?: { href: (...params: string[]) => string };
-    }
-  ).userDetail;
 
   const controls = (
     <TimeRangePicker
@@ -106,12 +101,14 @@ function RiskOverviewUsersIndexContent() {
         ) : (
           <ul className="divide-border divide-y border">
             {users.map((u, i) => {
-              const href =
-                u.externalUserId && userDetailRoute
-                  ? `${userDetailRoute.href(
-                      encodeURIComponent(u.externalUserId),
-                    )}${location.search}`
-                  : null;
+              // Rows lead to the identity page rather than to the risk-only
+              // user view: one person's findings, spend and access now hang
+              // off a single page.
+              const href = u.externalUserId
+                ? `${orgRoutes.identities.detail.overview.href(
+                    encodeIdentityUrn(`external:${u.externalUserId}`),
+                  )}${location.search}`
+                : null;
               const pct =
                 max > 0 ? (Number(u.findings) / Number(max)) * 100 : 0;
               const totalPct =
@@ -133,9 +130,9 @@ function RiskOverviewUsersIndexContent() {
                         )}
                       </span>
                     </div>
-                    <div className="bg-muted h-1 w-full rounded-full">
+                    <div className="bg-muted h-1 w-full">
                       <div
-                        className="h-1 rounded-full bg-blue-700 dark:bg-blue-500"
+                        className="bg-destructive h-1"
                         style={{ width: `${pct}%` }}
                       />
                     </div>

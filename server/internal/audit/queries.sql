@@ -69,9 +69,18 @@ LEFT JOIN LATERAL (
 -- When no subject_type filter is given, assistant activity events (one per
 -- assistant tool call) are excluded so they don't drown out the platform
 -- audit feed. The private admin caller can explicitly include all events.
-SELECT a.*, p.slug AS project_slug
+-- The actor name is resolved at read time rather than trusted from the row.
+-- Every writer stores the acting user's EMAIL in actor_display_name, so the
+-- stored value renders the feed as a column of addresses; joining the
+-- directory repairs the rows already written, and keeps names current when
+-- someone is renamed. The stored value remains the fallback for actors with
+-- no directory row: API keys and system actors. A soft-deleted user still
+-- resolves, deliberately — they really did perform the action, and their name
+-- is both more useful and less identifying than the email the row stored.
+SELECT a.*, p.slug AS project_slug, u.display_name AS actor_user_display_name
 FROM audit_logs a
 LEFT JOIN projects p ON p.id = a.project_id
+LEFT JOIN users u ON a.actor_type = 'user' AND u.id = a.actor_id
 WHERE a.organization_id = @organization_id
   AND (
     sqlc.narg(project_id)::uuid IS NULL
@@ -159,12 +168,20 @@ WITH filtered_logs AS (
 )
 SELECT
   actor_counts.actor_id AS value,
-  COALESCE(latest_actor_names.actor_display_name, actor_counts.actor_id) AS display_name,
+  -- Directory name first, for the same reason ListAuditLogs joins it: the
+  -- stored value is the acting user's email, so the filter dropdown would
+  -- otherwise list addresses while the feed beside it lists names.
+  COALESCE(
+    NULLIF(u.display_name, ''),
+    latest_actor_names.actor_display_name,
+    actor_counts.actor_id
+  ) AS display_name,
   actor_counts.count,
   actor_counts.is_user_actor,
   actor_counts.is_admin_actor
 FROM actor_counts
 LEFT JOIN latest_actor_names ON latest_actor_names.actor_id = actor_counts.actor_id
+LEFT JOIN users u ON actor_counts.is_user_actor AND u.id = actor_counts.actor_id
 ORDER BY actor_counts.count DESC, actor_counts.actor_id ASC;
 
 -- name: ListAuditSurfaceFacets :many
