@@ -120,7 +120,6 @@ function subjectLinkText(log: AuditLog): string {
     case "environment":
     case "project":
     case "plugin":
-    case "mcp_collection":
       return log.subjectSlug || log.subjectId;
     default:
       return getSubjectLabel(log);

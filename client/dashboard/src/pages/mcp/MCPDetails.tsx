@@ -1,7 +1,6 @@
 import { Block, BlockInner } from "@/components/block";
 import { CodeBlock } from "@/components/code";
 import { ClientsAndSessionsTab } from "@/components/sessions/ClientsAndSessionsTab";
-import { MCPPublishingSection as SharedMCPPublishingSection } from "./MCPPublishingSection";
 import { MCPToolFilteringSection } from "@/components/mcp-tool-filtering-section";
 import {
   useMcpMetadataMetadataForm,
@@ -1589,8 +1588,6 @@ function MCPSettingsTab({ toolset }: { toolset: Toolset }) {
         </Block>
       </PageSection>
 
-      <MCPPublishingSection toolset={toolset} />
-
       <MCPToolFilteringSection
         className="mb-8"
         target={{
@@ -1701,23 +1698,6 @@ function MCPSettingsTab({ toolset }: { toolset: Toolset }) {
         accountUpgrade
       />
     </Stack>
-  );
-}
-
-// MCPPublishingSection wraps the shared publishing section for toolset-backed
-// MCP servers. The mcp_server-backed variant lives on the Remote MCP server
-// settings page; both share MCPPublishingSection.
-function MCPPublishingSection({ toolset }: { toolset: Toolset }) {
-  return (
-    <SharedMCPPublishingSection
-      target={{
-        kind: "toolset",
-        toolsetId: toolset.id,
-        mcpSlug: toolset.mcpSlug ?? undefined,
-      }}
-      canPublish={Boolean(toolset.mcpEnabled && toolset.mcpSlug)}
-      disabledMessage="Enable this MCP server before publishing it to a collection."
-    />
   );
 }
 

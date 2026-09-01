@@ -62,13 +62,6 @@ export default function ExternalMCPDetails(): JSX.Element {
     );
   }, [deployment, sourceSlug]);
   const sourceOrigin = useMemo(() => {
-    if (source?.organizationMcpCollectionRegistryId) {
-      return {
-        id: source.organizationMcpCollectionRegistryId,
-        label: "Collection",
-      };
-    }
-
     if (source?.registryId) {
       return {
         id: source.registryId,
