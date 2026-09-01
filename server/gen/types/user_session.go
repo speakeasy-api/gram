@@ -49,7 +49,7 @@ type UserSession struct {
 	// for a client registered before the value was recorded;
 	// client_credential_kind separates those cases and is what should be displayed.
 	ClientTokenEndpointAuthMethod *string
-	// Subject kind: 'user', 'apikey', or 'anonymous'.
+	// Subject kind: 'user', 'apikey', 'anonymous', or 'workload'.
 	SubjectType string
 	// Resolved human-readable name of the subject, if known.
 	SubjectDisplayName *string
