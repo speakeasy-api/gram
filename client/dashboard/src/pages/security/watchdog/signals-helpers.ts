@@ -33,7 +33,12 @@ export const SEVERITY_ACCENT: Record<SeverityRating, string> = {
 
 /** How the signals list is sectioned. Rows keep the server's risk ranking
  * within every section. */
-export type SignalGroupMode = "severity" | "category" | "team" | "app";
+export type SignalGroupMode =
+  | "severity"
+  | "category"
+  | "team"
+  | "app"
+  | "principal";
 
 /**
  * Group key for signals whose findings carry no team/app attribution (rows
@@ -99,6 +104,15 @@ function dominantApp(signal: RiskSignal): string {
   return signal.apps[0] ?? "";
 }
 
+/**
+ * The principal (user) a signal is filed under when grouping by principal:
+ * the most-affected user by finding count. Returns the user's email for
+ * display. Empty when no top user exists.
+ */
+function dominantPrincipal(signal: RiskSignal): string {
+  return signal.topUsers[0]?.email ?? "";
+}
+
 function groupKeyForMode(signal: RiskSignal, mode: SignalGroupMode): string {
   switch (mode) {
     case "severity":
@@ -109,6 +123,8 @@ function groupKeyForMode(signal: RiskSignal, mode: SignalGroupMode): string {
       return dominantTeam(signal);
     case "app":
       return dominantApp(signal);
+    case "principal":
+      return dominantPrincipal(signal);
   }
 }
 
