@@ -20,7 +20,11 @@ var sourceAliases = map[string][]string{
 	"claude-code-desktop": {"claude-code-desktop"},
 	"cowork":              {"cowork", "claude-cowork", "Claude Cowork"},
 	"cursor":              {"cursor", "Cursor"},
-	"codex":               {"codex", "Codex"},
+	// OpenClaw sessions arrive via the generated observability plugin, which
+	// passes --provider=openclaw; the capitalised form matches hand-configured
+	// installs and the adapter's own display casing.
+	"openclaw": {"openclaw", "OpenClaw"},
+	"codex":    {"codex", "Codex"},
 	// ChatGPT (web/desktop chat + Work mode) — rows arrive via the OpenAI
 	// compliance import pipelines under the chatgpt hook source.
 	"chatgpt": {"chatgpt", "ChatGPT"},
