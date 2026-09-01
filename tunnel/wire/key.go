@@ -18,7 +18,10 @@ const (
 	HeaderTunnelID              = "X-Gram-Tunnel-Id"
 	HeaderTunnelConsumerSession = "X-Gram-Tunnel-Consumer-Session"
 	// HeaderTunnelForwardToken authenticates gram-server -> gateway hops and is stripped before agent forwarding.
-	HeaderTunnelForwardToken    = "X-Gram-Tunnel-Forward-Token"
+	HeaderTunnelForwardToken = "X-Gram-Tunnel-Forward-Token"
+	// HeaderTunnelRequireActive makes the gateway revalidate durable tunnel
+	// state immediately before forwarding a sensitive back-channel request.
+	HeaderTunnelRequireActive   = "X-Gram-Tunnel-Require-Active"
 	HeaderTunnelServiceVersion  = "X-Gram-Tunnel-Service-Version"
 	HeaderTunnelServiceMetadata = "X-Gram-Tunnel-Service-Metadata"
 	// HeaderTunnelError carries a TunnelError* status when a tunneled forward
@@ -38,9 +41,10 @@ const (
 )
 
 // Tunnel forward error statuses reported in HeaderTunnelError. Callers switch on
-// these to decide retry/failover: *NoLiveSession, *TunnelBusy and
-// *SubstreamFailed are gateway-side (a route was picked but the agent session
-// was gone, at capacity, or broken); *NoRoute, *InvalidRoute,
+// these to decide retry/failover: *NoLiveSession, *TunnelBusy,
+// *ActiveCheckFailed and *SubstreamFailed are gateway-side (a route was picked
+// but the agent session was gone, at capacity, could not be revalidated, or
+// broke); *NoRoute, *InvalidRoute,
 // *RouteStoreUnavailable and *RouteLookupFailed are gram-server-side (routing
 // could not select a gateway owner at all).
 const (
@@ -50,6 +54,7 @@ const (
 	// route; they may try another gateway. The request never entered a
 	// substream, so replay is safe for any method.
 	TunnelErrorTunnelBusy            = "tunnel-busy"
+	TunnelErrorActiveCheckFailed     = "active-check-failed"
 	TunnelErrorSubstreamFailed       = "substream-failed"
 	TunnelErrorNoRoute               = "no-route"
 	TunnelErrorInvalidRoute          = "invalid-route"

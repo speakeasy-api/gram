@@ -124,6 +124,27 @@ export function deriveNameFromUrl(url: string): string | null {
 // credential-less client whose client_id is a Gram-hosted document URL.
 export type ClientType = "dcr" | "manual" | "cimd";
 
+export const TUNNELED_DCR_PERMISSION_MESSAGE =
+  "Dynamic client registration through this provider's tunnel requires platform admin access. Use Manual, or CIMD when supported.";
+
+export function dynamicClientRegistrationAvailability({
+  registrationEndpoint,
+  tunneled,
+  isPlatformAdmin,
+}: {
+  registrationEndpoint: string | null | undefined;
+  tunneled: boolean;
+  isPlatformAdmin: boolean;
+}): { available: boolean; permissionRestricted: boolean } {
+  const hasRegistrationEndpoint = !!registrationEndpoint?.trim();
+  const permissionRestricted =
+    hasRegistrationEndpoint && tunneled && !isPlatformAdmin;
+  return {
+    available: hasRegistrationEndpoint && !permissionRestricted,
+    permissionRestricted,
+  };
+}
+
 export const CLIENT_TYPE_LABELS: Record<ClientType, string> = {
   dcr: "Dynamic Client Registration (DCR)",
   cimd: "Client ID Metadata Document (CIMD)",
@@ -156,7 +177,7 @@ export function clientTypeHelp(
 ): string {
   switch (clientType) {
     case "dcr":
-      return "The issuer advertises a registration endpoint (RFC 7591), so the platform can automatically register a client on save. You can also choose to manually define an existing client.";
+      return "A registration endpoint (RFC 7591) is configured, so the platform can automatically register a client on save. You can also choose to manually define an existing client.";
     case "cimd":
       return "The issuer supports Client ID Metadata Documents, so the platform hosts a public document and uses its URL as the client_id. No credentials are stored; the issuer authenticates the client by dereferencing that URL.";
     case "manual": {

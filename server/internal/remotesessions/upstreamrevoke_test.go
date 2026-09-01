@@ -28,6 +28,7 @@ import (
 
 	orgsessionsgen "github.com/speakeasy-api/gram/server/gen/organization_remote_sessions"
 	clientsgen "github.com/speakeasy-api/gram/server/gen/remote_session_clients"
+	issuersgen "github.com/speakeasy-api/gram/server/gen/remote_session_issuers"
 	gen "github.com/speakeasy-api/gram/server/gen/remote_sessions"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
@@ -126,6 +127,7 @@ func newRevocationUpstream(t *testing.T, spy *revocationSpy) *httptest.Server {
 type revokeFixture struct {
 	sessionID   uuid.UUID
 	subject     urn.SessionSubject
+	issuerID    uuid.UUID
 	clientID    uuid.UUID
 	accessToken string
 	// refreshToken is "" when the fixture was seeded access-token-only.
@@ -243,6 +245,7 @@ func seedRevocableSession(
 	return revokeFixture{
 		sessionID:      session.ID,
 		subject:        subject,
+		issuerID:       issuer.ID,
 		clientID:       client.ID,
 		accessToken:    accessToken,
 		refreshToken:   refreshToken,
@@ -438,7 +441,7 @@ func TestRevokeUnstoredDetached_RevokesPairThatWasNeverStored(t *testing.T) {
 
 	fx := seedRevocableSession(t, ctx, ti, "revoke-unstored", upstream.URL+"/revoke", "s3cret", true)
 
-	newTestUpstreamRevoker(t, ti).RevokeUnstoredDetached(ctx, fx.clientID, "unstored-access", "unstored-refresh")
+	newTestUpstreamRevoker(t, ti).RevokeUnstoredDetached(ctx, fx.clientID, "unstored-access", "unstored-refresh", uuid.NullUUID{})
 
 	calls, form, _ := spy.snapshot()
 	require.Equal(t, 1, calls, "exactly one RFC 7009 request")
@@ -446,6 +449,30 @@ func TestRevokeUnstoredDetached_RevokesPairThatWasNeverStored(t *testing.T) {
 	require.Equal(t, "refresh_token", form.Get("token_type_hint"))
 	require.Equal(t, fx.externalCID, form.Get("client_id"))
 	require.Equal(t, "s3cret", form.Get("client_secret"))
+}
+
+func TestRevokeUnstoredDetached_UsesCallbackTransportSnapshot(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	spy := &revocationSpy{}
+	upstream := newRevocationUpstream(t, spy)
+	fx := seedRevocableSession(t, ctx, ti, "revoke-unstored-snapshot", upstream.URL+"/revoke", "s3cret", true)
+
+	tunnelID := seedTunneledMcpServer(t, ctx, ti)
+	_, err := ti.service.UpdateRemoteSessionIssuer(withAdmin(t, ctx), &issuersgen.UpdateRemoteSessionIssuerPayload{
+		ID:                  fx.issuerID.String(),
+		TunneledMcpServerID: conv.PtrEmpty(tunnelID.String()),
+	})
+	require.NoError(t, err)
+
+	// The callback exchanged this pair directly before the issuer gained a
+	// tunnel binding. Cleanup must use that snapshot rather than the new route.
+	newTestUpstreamRevoker(t, ti).RevokeUnstoredDetached(ctx, fx.clientID, "unstored-access", "unstored-refresh", uuid.NullUUID{})
+
+	calls, form, _ := spy.snapshot()
+	require.Equal(t, 1, calls)
+	require.Equal(t, "unstored-refresh", form.Get("token"))
 }
 
 // Most upstreams advertise no revocation_endpoint. That must be a silent no-op,
@@ -643,6 +670,7 @@ func newDisconnectChallengeManager(t *testing.T, ti *testInstance) *remotesessio
 		ti.conn,
 		testenv.NewEncryptionClient(t),
 		policy,
+		nil,
 		cache.NoopCache,
 		mustURL(t, "http://localhost"),
 	)

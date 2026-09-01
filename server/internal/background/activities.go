@@ -49,6 +49,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/k8s"
 	"github.com/speakeasy-api/gram/server/internal/killswitches"
+	"github.com/speakeasy-api/gram/server/internal/mcp/tunnelrouting"
 	mcpapprovaladvisories "github.com/speakeasy-api/gram/server/internal/mcpapproval/advisories"
 	mcpapprovalcatalog "github.com/speakeasy-api/gram/server/internal/mcpapproval/catalog"
 	"github.com/speakeasy-api/gram/server/internal/mcpapproval/domainmeta"
@@ -187,6 +188,7 @@ func NewActivities(
 	tracerProvider trace.TracerProvider,
 	meterProvider metric.MeterProvider,
 	guardianPolicy *guardian.Policy,
+	tunnelHTTPClient *tunnelrouting.HTTPClient,
 	db *pgxpool.Pool,
 	encryption *encryption.Client,
 	features feature.Provider,
@@ -309,7 +311,7 @@ func NewActivities(
 		remoteSessionRefresh = activities.NewRemoteSessionRefresh(
 			logger,
 			db,
-			remotesessions.NewRefreshService(logger, meterProvider, db, encryption, guardianPolicy, cacheAdapter),
+			remotesessions.NewRefreshService(logger, meterProvider, db, encryption, guardianPolicy, tunnelHTTPClient, cacheAdapter),
 		)
 	}
 

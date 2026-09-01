@@ -13,6 +13,8 @@ export type ProxyRegisterUpstreamClientInput = {
   registrationEndpoint: string;
   scope?: string;
   tokenEndpointAuthMethod?: string;
+  tunneledMcpServerId?: string;
+  projectSlug?: string;
 };
 
 export class ProxyRegistrationError extends Error {
@@ -38,10 +40,16 @@ export async function proxyRegisterUpstreamClient(
   if (input.tokenEndpointAuthMethod !== undefined) {
     body.token_endpoint_auth_method = input.tokenEndpointAuthMethod;
   }
+  if (input.tunneledMcpServerId !== undefined) {
+    body.tunneled_mcp_server_id = input.tunneledMcpServerId;
+  }
 
   const response = await authedFetch("/oauth/proxy-register", {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: {
+      "Content-Type": "application/json",
+      ...(input.projectSlug ? { "gram-project": input.projectSlug } : {}),
+    },
     body: JSON.stringify(body),
     signal,
     ...(import.meta.env.DEV ? { credentials: "include" } : {}),

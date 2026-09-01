@@ -32,7 +32,7 @@ func TestRegisterDynamicClientDoesNotFollowRedirects(t *testing.T) {
 	serverURL, err := url.Parse(registration.URL)
 	require.NoError(t, err)
 
-	_, err = RegisterDynamicClient(t.Context(), policy, serverURL, ProxyRegisterRequest{RegistrationEndpoint: registration.URL})
+	_, err = RegisterDynamicClient(t.Context(), policy, nil, serverURL, ProxyRegisterRequest{RegistrationEndpoint: registration.URL})
 	require.Error(t, err)
 	require.Zero(t, redirectedTo.Load(), "DCR must not resend registration data to a redirect target")
 }

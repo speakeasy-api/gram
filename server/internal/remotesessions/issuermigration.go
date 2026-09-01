@@ -162,8 +162,8 @@ func validateMigrationScope(source, target repo.RemoteSessionIssuer) error {
 // A single string-slice pair could not express that difference.
 type issuerFieldMismatch struct {
 	// field names the differing issuer field in its wire spelling: issuer,
-	// token_endpoint, authorization_endpoint, oidc, passthrough, or
-	// scopes_supported.
+	// token_endpoint, authorization_endpoint, oidc, passthrough,
+	// scopes_supported, or tunneled_mcp_server_id.
 	field string
 
 	// sourceValue is the source issuer's value for a scalar field. Nil when the
@@ -215,6 +215,28 @@ func boolFieldMismatch(field string, source, target bool) issuerFieldMismatch {
 		field:        field,
 		sourceValue:  &sourceValue,
 		targetValue:  &targetValue,
+		sourceValues: nil,
+		targetValues: nil,
+	}
+}
+
+// uuidFieldMismatch describes a nullable UUID reference's divergence. An unset
+// reference stays nil so it remains distinguishable from any set value.
+func uuidFieldMismatch(field string, source, target uuid.NullUUID) issuerFieldMismatch {
+	var sourceValue, targetValue *string
+	if source.Valid {
+		v := source.UUID.String()
+		sourceValue = &v
+	}
+	if target.Valid {
+		v := target.UUID.String()
+		targetValue = &v
+	}
+
+	return issuerFieldMismatch{
+		field:        field,
+		sourceValue:  sourceValue,
+		targetValue:  targetValue,
 		sourceValues: nil,
 		targetValues: nil,
 	}
@@ -274,6 +296,9 @@ func endpointMismatches(source, target repo.RemoteSessionIssuer) []issuerFieldMi
 	}
 	if !pgTextEqual(source.AuthorizationEndpoint, target.AuthorizationEndpoint) {
 		mismatches = append(mismatches, textFieldMismatch("authorization_endpoint", source.AuthorizationEndpoint, target.AuthorizationEndpoint))
+	}
+	if source.TunneledMcpServerID != target.TunneledMcpServerID {
+		mismatches = append(mismatches, uuidFieldMismatch("tunneled_mcp_server_id", source.TunneledMcpServerID, target.TunneledMcpServerID))
 	}
 
 	return mismatches

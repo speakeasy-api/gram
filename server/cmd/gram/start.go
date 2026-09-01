@@ -82,6 +82,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/marketplace"
 	"github.com/speakeasy-api/gram/server/internal/mcp"
 	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
+	"github.com/speakeasy-api/gram/server/internal/mcp/tunnelrouting"
 	"github.com/speakeasy-api/gram/server/internal/mcpapproval"
 	mcpapprovaladvisories "github.com/speakeasy-api/gram/server/internal/mcpapproval/advisories"
 	mcpapprovalcatalog "github.com/speakeasy-api/gram/server/internal/mcpapproval/catalog"
@@ -1010,6 +1011,26 @@ func newStartCommand() *cli.Command {
 				platformtoolsruntime.WithExternalTools(assistantPlatformExtras),
 			)
 
+			// guardian.WithAllowedCIDRBlocks silently drops invalid CIDRs, so a
+			// typo here would strand tunnels fail-closed with no signal. Reject
+			// misconfiguration at startup instead.
+			tunnelGatewayCIDRs := c.StringSlice("tunnel-gateway-cidr-blocks")
+			for _, cidr := range tunnelGatewayCIDRs {
+				if _, _, err := net.ParseCIDR(cidr); err != nil {
+					return fmt.Errorf("invalid tunnel gateway CIDR block %q: %w", cidr, err)
+				}
+			}
+
+			// Back-channel OAuth calls (token exchange, refresh, revocation,
+			// dynamic client registration) for tunnel-bound remote session
+			// clients ride this transport instead of dialing from cloud egress.
+			tunnelHTTPClient := tunnelrouting.NewHTTPClient(
+				route.NewRedis(redisClient),
+				c.String("tunnel-forward-token"),
+				guardianPolicy,
+				tunnelGatewayCIDRs,
+			)
+
 			remoteChallengeManager := remotesessions.NewChallengeManager(
 				logger,
 				tracerProvider,
@@ -1017,6 +1038,7 @@ func newStartCommand() *cli.Command {
 				db,
 				encryptionClient,
 				guardianPolicy,
+				tunnelHTTPClient,
 				cache.NewRedisCacheAdapter(redisClient),
 				serverURL,
 			)
@@ -1043,16 +1065,6 @@ func newStartCommand() *cli.Command {
 				toolfilter.NewSessionToolWitnessStore(logger, cache.NewRedisCacheAdapter(redisClient)),
 				mcpToolExecutionCheckpoint,
 			)
-
-			// guardian.WithAllowedCIDRBlocks silently drops invalid CIDRs, so a
-			// typo here would strand tunnels fail-closed with no signal. Reject
-			// misconfiguration at startup instead.
-			tunnelGatewayCIDRs := c.StringSlice("tunnel-gateway-cidr-blocks")
-			for _, cidr := range tunnelGatewayCIDRs {
-				if _, _, err := net.ParseCIDR(cidr); err != nil {
-					return fmt.Errorf("invalid tunnel gateway CIDR block %q: %w", cidr, err)
-				}
-			}
 
 			mcpService, err := mcp.NewService(
 				logger,
@@ -1534,14 +1546,14 @@ func newStartCommand() *cli.Command {
 			cliauth.Attach(mux, cliauth.NewService(logger, tracerProvider, db, sessionManager, authzEngine, redisClient, c.String("environment")))
 			chatsessionssvc.Attach(mux, chatsessionssvc.NewService(logger, tracerProvider, db, sessionManager, chatSessionsManager, authzEngine))
 			environments.Attach(mux, environments.NewService(logger, tracerProvider, db, sessionManager, encryptionClient, authzEngine, auditLogger))
-			upstreamRevoker := remotesessions.NewUpstreamRevoker(logger, tracerProvider, meterProvider, db, encryptionClient, guardianPolicy)
+			upstreamRevoker := remotesessions.NewUpstreamRevoker(logger, tracerProvider, meterProvider, db, encryptionClient, guardianPolicy, tunnelHTTPClient)
 			mcpServersService := mcpservers.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger, temporalEnv, toolDispositionCache, pluginsGitHub != nil, assetsService, upstreamRevoker)
 			mcpservers.Attach(mux, mcpServersService)
 			mcpendpoints.Attach(mux, mcpendpoints.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger, temporalEnv, pluginsGitHub != nil))
 			metamcp.Attach(mux, metamcp.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger, temporalEnv))
 			remoteSessionsCache := cache.NewRedisCacheAdapter(redisClient)
-			remoteSessionsService := remotesessions.NewService(logger, tracerProvider, meterProvider, db, sessionManager, authzEngine, encryptionClient, env, guardianPolicy, auditLogger, serverURL, remotesessions.NewRefreshService(logger, meterProvider, db, encryptionClient, guardianPolicy, remoteSessionsCache))
-			usersessions.Attach(mux, usersessions.NewService(logger, tracerProvider, meterProvider, db, sessionManager, chatSessionsManager, authzEngine, auditLogger, guardianPolicy, encryptionClient, usersessions.NewSigner(c.String(usersessions.JWTSigningKeyFlag)), serverURL.String(), ratelimit.NewRedisStore(redisClient)))
+			remoteSessionsService := remotesessions.NewService(logger, tracerProvider, meterProvider, db, sessionManager, authzEngine, encryptionClient, env, guardianPolicy, tunnelHTTPClient, auditLogger, serverURL, remotesessions.NewRefreshService(logger, meterProvider, db, encryptionClient, guardianPolicy, tunnelHTTPClient, remoteSessionsCache))
+			usersessions.Attach(mux, usersessions.NewService(logger, tracerProvider, meterProvider, db, sessionManager, chatSessionsManager, authzEngine, auditLogger, guardianPolicy, tunnelHTTPClient, encryptionClient, usersessions.NewSigner(c.String(usersessions.JWTSigningKeyFlag)), serverURL.String(), ratelimit.NewRedisStore(redisClient)))
 			tokenexchange.Attach(mux, tokenexchange.NewService(logger, tracerProvider, db, sessionManager, authzEngine, c.String("environment")))
 			remotesessions.Attach(mux, remoteSessionsService)
 			remotemcp.Attach(mux, remotemcp.NewService(logger, tracerProvider, db, sessionManager, encryptionClient, authzEngine, guardianPolicy, auditLogger, mcpServersService))
@@ -1775,6 +1787,7 @@ func newStartCommand() *cli.Command {
 
 					temporalWorker := background.NewTemporalWorker(temporalEnv, logger, tracerProvider, meterProvider, &background.WorkerOptions{
 						GuardianPolicy:            guardianPolicy,
+						TunnelHTTPClient:          tunnelHTTPClient,
 						DB:                        db,
 						EncryptionClient:          encryptionClient,
 						FeatureProvider:           featureFlags,

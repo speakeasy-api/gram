@@ -48,6 +48,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
+	"github.com/speakeasy-api/gram/server/internal/mcp/tunnelrouting"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/interceptors"
@@ -100,15 +101,22 @@ type RemoteLoginState struct {
 	// OrganizationID scopes the callback's client lookup so an organization-level
 	// client (project_id NULL) bound to this project's user_session_issuer
 	// resolves on the way back. Empty for in-flight states minted before it.
-	OrganizationID        string              `json:"organization_id,omitempty"`
-	UserSessionIssuerID   uuid.UUID           `json:"user_session_issuer_id"`
-	RemoteSessionClientID uuid.UUID           `json:"remote_session_client_id"`
-	TokenEndpoint         string              `json:"token_endpoint"`
-	RedirectURI           string              `json:"redirect_uri"`
-	CodeVerifier          string              `json:"code_verifier"`
-	Resource              string              `json:"resource,omitempty"`
-	Subject               *urn.SessionSubject `json:"subject,omitempty"`
-	McpSlug               string              `json:"mcp_slug"`
+	OrganizationID        string    `json:"organization_id,omitempty"`
+	UserSessionIssuerID   uuid.UUID `json:"user_session_issuer_id"`
+	RemoteSessionClientID uuid.UUID `json:"remote_session_client_id"`
+	TokenEndpoint         string    `json:"token_endpoint"`
+	TunneledMcpServerID   string    `json:"tunneled_mcp_server_id,omitempty"`
+
+	// TransportSelected marks TunneledMcpServerID as the security-sensitive
+	// transport snapshot chosen before the authorization redirect. An empty
+	// tunnel ID snapshots direct egress. False identifies legacy cached states
+	// that must fall back to the issuer's current persisted binding.
+	TransportSelected bool                `json:"transport_selected,omitempty"`
+	RedirectURI       string              `json:"redirect_uri"`
+	CodeVerifier      string              `json:"code_verifier"`
+	Resource          string              `json:"resource,omitempty"`
+	Subject           *urn.SessionSubject `json:"subject,omitempty"`
+	McpSlug           string              `json:"mcp_slug"`
 	// RouteBase is "mcp" or "x/mcp" — drives the post-callback redirect
 	// to /<RouteBase>/{slug}/connect. Empty values fall back to "mcp"
 	// for in-flight states minted before this field landed.
@@ -136,6 +144,7 @@ type ChallengeManager struct {
 	db        *pgxpool.Pool
 	enc       *encryption.Client
 	policy    *guardian.Policy
+	tunnels   *tunnelrouting.HTTPClient
 	cache     cache.TypedCacheObject[RemoteLoginState]
 	locks     cache.Cache
 	refresher *RefreshService
@@ -163,24 +172,26 @@ func NewChallengeManager(
 	db *pgxpool.Pool,
 	enc *encryption.Client,
 	policy *guardian.Policy,
+	tunnels *tunnelrouting.HTTPClient,
 	cacheImpl cache.Cache,
 	serverURL *url.URL,
 ) *ChallengeManager {
 	logger = logger.With(attr.SlogComponent("remotesessions_challenge"))
 	return &ChallengeManager{
-		logger: logger,
-		db:     db,
-		enc:    enc,
-		policy: policy,
+		logger:  logger,
+		db:      db,
+		enc:     enc,
+		policy:  policy,
+		tunnels: tunnels,
 		cache: cache.NewTypedObjectCache[RemoteLoginState](
 			logger.With(attr.SlogCacheNamespace("remote_login")),
 			cacheImpl,
 			cache.SuffixNone,
 		),
 		locks:     cacheImpl,
-		refresher: NewRefreshService(logger, meterProvider, db, enc, policy, cacheImpl),
+		refresher: NewRefreshService(logger, meterProvider, db, enc, policy, tunnels, cacheImpl),
 		serverURL: serverURL,
-		revoker:   NewUpstreamRevoker(logger, tracerProvider, meterProvider, db, enc, policy),
+		revoker:   NewUpstreamRevoker(logger, tracerProvider, meterProvider, db, enc, policy, tunnels),
 		authorizeInterceptors: []interceptors.AuthorizeInterceptor{
 			interceptors.NewGoogle(logger),
 		},
@@ -209,6 +220,7 @@ type Client struct {
 	IssuerURL             string
 	AuthorizationEndpoint string
 	TokenEndpoint         string
+	TunneledMcpServerID   uuid.NullUUID
 	// ClientScope, when non-empty, overrides IssuerScopesSupported in the
 	// OAuth dance.
 	ClientScope           []string
@@ -263,6 +275,7 @@ func (m *ChallengeManager) ListClients(
 			IssuerURL:                           r.IssuerUrl,
 			AuthorizationEndpoint:               conv.PtrValOr(conv.FromPGText[string](r.AuthorizationEndpoint), ""),
 			TokenEndpoint:                       conv.PtrValOr(conv.FromPGText[string](r.TokenEndpoint), ""),
+			TunneledMcpServerID:                 r.TunneledMcpServerID,
 			ClientScope:                         r.ClientScope,
 			IssuerScopesSupported:               r.ScopesSupported,
 			IssuerCodeChallengeMethodsSupported: r.CodeChallengeMethodsSupported,
@@ -536,6 +549,8 @@ func (m *ChallengeManager) BuildAuthorizationUrl(
 		UserSessionIssuerID:   parent.UserSessionIssuerID,
 		RemoteSessionClientID: client.ID,
 		TokenEndpoint:         client.TokenEndpoint,
+		TunneledMcpServerID:   conv.PtrValOr(conv.FromNullableUUID(client.TunneledMcpServerID), ""),
+		TransportSelected:     true,
 		RedirectURI:           redirectURI,
 		CodeVerifier:          verifier,
 		Resource:              parent.Resource,
@@ -664,8 +679,28 @@ func (m *ChallengeManager) HandleRemoteLoginCallback(w http.ResponseWriter, r *h
 	if err != nil {
 		return oops.E(oops.CodeUnauthorized, err, "the remote session client is misconfigured").LogError(ctx, logger)
 	}
+
+	// Bind the code exchange to the transport selected before redirecting the
+	// user. A binding change during the OAuth flow must not reroute the code or
+	// client credentials. Cached states created before TransportSelected existed
+	// retain their historical behavior by using the issuer's current binding.
+	tunnelID := clientRow.TunneledMcpServerID
+	if state.TransportSelected {
+		tunnelID = uuid.NullUUID{UUID: uuid.Nil, Valid: false}
+		if state.TunneledMcpServerID != "" {
+			parsed, perr := uuid.Parse(state.TunneledMcpServerID)
+			if perr != nil {
+				return oops.E(oops.CodeUnauthorized, perr, "remote login state has an invalid tunnel binding").LogError(ctx, logger)
+			}
+			tunnelID = uuid.NullUUID{UUID: parsed, Valid: true}
+		}
+	}
+	doer, err := upstreamHTTPDoer(m.policy.PooledClient(), m.tunnels, tunnelID)
+	if err != nil {
+		return oops.E(oops.CodeUnauthorized, err, "the identity provider's tunnel transport is unavailable").LogError(ctx, logger)
+	}
 	audience := conv.FromPGTextOrEmpty[string](client.Audience)
-	tok, err := m.exchangeCode(ctx, state, client.ClientID, clientSecret, authMethod, audience, code)
+	tok, err := m.exchangeCode(ctx, doer, state, client.ClientID, clientSecret, authMethod, audience, code)
 	if err != nil {
 		return oops.E(oops.CodeUnauthorized, err, "upstream token exchange failed").LogError(ctx, logger)
 	}
@@ -681,7 +716,7 @@ func (m *ChallengeManager) HandleRemoteLoginCallback(w http.ResponseWriter, r *h
 		if !stranded {
 			return
 		}
-		m.revoker.RevokeUnstoredDetached(ctx, state.RemoteSessionClientID, tok.AccessToken, tok.RefreshToken)
+		m.revoker.RevokeUnstoredDetached(ctx, state.RemoteSessionClientID, tok.AccessToken, tok.RefreshToken, tunnelID)
 	}()
 
 	accessEnc, err := m.enc.Encrypt([]byte(tok.AccessToken))
@@ -842,6 +877,7 @@ func (m *ChallengeManager) HandleLegacyProxyCallback(w http.ResponseWriter, r *h
 
 func (m *ChallengeManager) exchangeCode(
 	ctx context.Context,
+	doer httpDoer,
 	state RemoteLoginState,
 	externalClientID string,
 	clientSecret string,
@@ -866,7 +902,7 @@ func (m *ChallengeManager) exchangeCode(
 		return tokenResponse{}, fmt.Errorf("new token request: %w", err)
 	}
 
-	resp, err := m.policy.PooledClient().Do(req)
+	resp, err := doer.Do(req)
 	if err != nil {
 		return tokenResponse{}, fmt.Errorf("post token: %w", err)
 	}
