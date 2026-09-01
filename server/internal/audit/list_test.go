@@ -8,6 +8,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 
+	audittestrepo "github.com/speakeasy-api/gram/server/internal/audit/audittest/repo"
 	"github.com/speakeasy-api/gram/server/internal/audit/repo"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
@@ -62,12 +63,28 @@ func TestListAuditLogs_Window(t *testing.T) {
 	require.NoError(t, err)
 
 	queries := repo.New(conn)
-	for range 3 {
-		_, err := queries.InsertAuditLog(ctx, repo.InsertAuditLogParams{
+	fixtures := audittestrepo.New(conn)
+
+	// Written now, then stamped at hours apart. created_at defaults to
+	// clock_timestamp(), which would leave the three rows microseconds apart
+	// and the boundary cases below resting on that spacing; fixed offsets make
+	// every assertion here depend only on the window predicate.
+	base := time.Now().UTC().Truncate(time.Second)
+	stamps := []time.Time{
+		base.Add(-3 * time.Hour),
+		base.Add(-2 * time.Hour),
+		base.Add(-1 * time.Hour),
+	}
+	for _, stamp := range stamps {
+		row, err := queries.InsertAuditLog(ctx, repo.InsertAuditLogParams{
 			OrganizationID: orgID, ActorID: "user:test", ActorType: "user",
 			Action: "test:create", SubjectID: uuid.NewString(), SubjectType: "project",
 		})
 		require.NoError(t, err)
+		require.NoError(t, fixtures.BackdateAuditLog(ctx, audittestrepo.BackdateAuditLogParams{
+			CreatedAt: conv.ToPGTimestamptz(stamp),
+			ID:        row.ID,
+		}))
 	}
 
 	window := func(from, to *time.Time) []repo.ListAuditLogsRow {
@@ -82,18 +99,9 @@ func TestListAuditLogs_Window(t *testing.T) {
 		return rows
 	}
 
-	// Bounds are taken from what the rows were actually stamped with, rather
-	// than from a backdated fixture: created_at defaults to clock_timestamp(),
-	// which advances between statements, so the three rows are strictly
-	// ordered and the boundary cases land exactly on a stored value.
-	all := window(nil, nil)
-	require.Len(t, all, 3, "no bound is no filter")
-	newest := all[0].CreatedAt.Time
-	middle := all[1].CreatedAt.Time
-	oldest := all[2].CreatedAt.Time
-	require.True(t, oldest.Before(middle) && middle.Before(newest),
-		"rows are stamped in insertion order")
+	oldest, middle, newest := stamps[0], stamps[1], stamps[2]
 
+	require.Len(t, window(nil, nil), 3, "no bound is no filter")
 	require.Len(t, window(&middle, nil), 2, "from is inclusive")
 	require.Len(t, window(nil, &middle), 1, "to is exclusive")
 	require.Len(t, window(&oldest, &newest), 2, "the window is half-open")
