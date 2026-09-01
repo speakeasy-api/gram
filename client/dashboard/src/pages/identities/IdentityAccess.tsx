@@ -52,6 +52,26 @@ export default function IdentityAccess(): JSX.Element {
   const roles = (member?.roleIds ?? []).map(
     (id) => rolesById.get(id) ?? { id, name: id, slug: id },
   );
+  // A scope slug is "<family>:<action>" (org:read, chat:read). Grouping by
+  // family turns a flat list of twenty slugs into the handful of areas this
+  // person has any reach over, which is the shape the question is asked in.
+  const scopeFamilies = new Map<string, Set<string>>();
+  for (const role of roles) {
+    for (const grant of ("grants" in role ? role.grants : []) ?? []) {
+      const slug = String(grant.scope);
+      const [family = slug, action = ""] = slug.split(":");
+      if (!scopeFamilies.has(family)) scopeFamilies.set(family, new Set());
+      scopeFamilies.get(family)?.add(action || slug);
+    }
+  }
+  const permissions = [...scopeFamilies.entries()]
+    .map(([family, actions]) => ({ family, actions: [...actions].sort() }))
+    .sort((a, b) => a.family.localeCompare(b.family));
+  const scopeCount = permissions.reduce(
+    (sum, group) => sum + group.actions.length,
+    0,
+  );
+
   const challenges = challengesQuery.data?.challenges ?? [];
   const denied = challenges.filter((c) => c.outcome === "deny");
 
@@ -60,10 +80,11 @@ export default function IdentityAccess(): JSX.Element {
       title="Access"
       meta={sectionMeta([
         { count: roles.length, singular: "role" },
+        { count: scopeCount, singular: "permission" },
         { count: denied.length, singular: "denied", plural: "denied" },
       ])}
     >
-      <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+      <div className="grid grid-cols-1 items-start gap-6 md:grid-cols-2">
         <IdentityPanel
           title="Roles"
           handoffLabel="Roles & Permissions"
@@ -86,6 +107,37 @@ export default function IdentityAccess(): JSX.Element {
                 </li>
               ))}
             </ul>
+          )}
+        </IdentityPanel>
+
+        <IdentityPanel
+          title="What this identity can do"
+          handoffLabel="Roles & Permissions"
+          handoffHref={handoffs.roles}
+          footer={
+            permissions.length > 0
+              ? "Granted by the roles above, across every project."
+              : undefined
+          }
+        >
+          {permissions.length === 0 ? (
+            <IdentityPanelEmpty>
+              These roles carry no permissions.
+            </IdentityPanelEmpty>
+          ) : (
+            permissions.map((group) => (
+              <div
+                key={group.family}
+                className="border-border flex items-baseline gap-3 border-b px-4 py-3 last:border-b-0"
+              >
+                <span className="w-28 shrink-0 truncate font-mono text-xs">
+                  {group.family}
+                </span>
+                <span className="text-muted-foreground min-w-0 flex-1 font-mono text-xs">
+                  {group.actions.join("  ")}
+                </span>
+              </div>
+            ))
           )}
         </IdentityPanel>
 
