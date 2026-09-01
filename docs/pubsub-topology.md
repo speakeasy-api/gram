@@ -127,7 +127,7 @@ flowchart LR
   t_gram_telemetry_v1_log_record --> s_gram_telemetry_v1_noop
   t_gram_webhooks_v1_event --> s_gram_webhooks_v1_svix_relay
   s_gram_webhooks_v1_svix_relay -. dead-letter .-> t_gram_webhooks_v1_svix_relay_dlq
-  c13[\"📥<br/>server/cmd/gram/streams.go<br/>authz.NewChallengeCHWriter"\]:::go
+  c13[\"📥<br/>server/cmd/gram/streams.go<br/>authz.NewChallengeCHWriter<br/>(batch)"\]:::go
   s_gram_authz_v1_challenge_ch_writer --> c13
   c14[\"📥<br/>server/cmd/gram/streams.go<br/>metering.NewMeterReadingCHWriter<br/>(batch)"\]:::go
   s_gram_metering_v1_meter_reading_ch_writer --> c14

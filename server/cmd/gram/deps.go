@@ -195,6 +195,14 @@ func newClickhouseClient(ctx context.Context, logger *slog.Logger, c *cli.Contex
 		Settings: clickhouse.Settings{
 			"max_execution_time": 60, // query timeout
 		},
+		// The driver defaults to MaxIdleConns+5 open connections, which is far
+		// too few for the streams process: one pool is shared by every
+		// subscription's ClickHouse writer. DialTimeout doubles as the pool
+		// acquisition timeout, so keep it short enough that saturation surfaces
+		// as a fast failure instead of parking each message for 30s.
+		MaxOpenConns: 32,
+		MaxIdleConns: 16,
+		DialTimeout:  10 * time.Second,
 		TLS: &tls.Config{
 			// #nosec G402 -- we're reading the value from an environment variable.
 			InsecureSkipVerify: insecure,
