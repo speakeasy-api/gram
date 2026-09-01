@@ -25,6 +25,7 @@ import (
 	chatrepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
+	"github.com/speakeasy-api/gram/server/internal/metering"
 	codexapi "github.com/speakeasy-api/gram/server/internal/thirdparty/codex"
 )
 
@@ -436,7 +437,7 @@ func (src *codexCloudSource) writeFile(ctx context.Context, file codexapi.LogFil
 		}
 	}
 
-	rows := make([]chatrepo.CreateExternalChatMessageParams, 0, len(admitted))
+	rows := make([]chat.ExternalMessageWrite, 0, len(admitted))
 	for i, event := range admitted {
 		var role, content string
 		switch event.EventDetails.DetailType {
@@ -454,38 +455,47 @@ func (src *codexCloudSource) writeFile(ctx context.Context, file codexapi.LogFil
 			return err
 		}
 
-		rows = append(rows, chatrepo.CreateExternalChatMessageParams{
-			ID:                uuid.Nil,
-			ChatID:            src.chatIDs[event.EventDetails.SessionID],
-			Role:              role,
-			ProjectID:         src.cfg.ProjectID,
-			Content:           content,
-			ContentRaw:        nil,
-			ContentAssetUrl:   pgtype.Text{String: "", Valid: false},
-			StorageError:      pgtype.Text{String: "", Valid: false},
-			Model:             conv.ToPGTextEmpty(event.EventDetails.Model),
-			MessageID:         pgtype.Text{String: "", Valid: false},
-			ToolCallID:        pgtype.Text{String: "", Valid: false},
-			UserID:            conv.ToPGText(userID),
-			ExternalUserID:    conv.ToPGText(event.Actor.UserID),
-			ExternalMessageID: conv.ToPGText(event.EventID),
-			FinishReason:      conv.ToPGTextEmpty(event.EventDetails.Status),
-			ToolCalls:         nil,
-			// Per-turn token_usage from the feed is deliberately dropped:
-			// cloud tokens meter through the compliance COSTS promotion, and
-			// recording them here as well would double count.
-			PromptTokens:     0,
-			CompletionTokens: 0,
-			TotalTokens:      0,
-			Origin:           pgtype.Text{String: "", Valid: false},
-			// The client_id (CODEX_WEB) is the closest surface signal the
-			// feed carries; it rides this column for per-client analysis.
-			UserAgent:   conv.ToPGTextEmpty(event.ClientID),
-			IpAddress:   pgtype.Text{String: "", Valid: false},
-			Source:      conv.ToPGText(codexCloudSourceSlug),
-			ContentHash: nil,
-			Generation:  0,
-			CreatedAt:   conv.ToPGTimestamptz(admittedAt[i]),
+		rows = append(rows, chat.ExternalMessageWrite{
+			Params: chatrepo.CreateExternalChatMessageParams{
+				ID:                uuid.Nil,
+				ChatID:            src.chatIDs[event.EventDetails.SessionID],
+				Role:              role,
+				ProjectID:         src.cfg.ProjectID,
+				Content:           content,
+				ContentRaw:        nil,
+				ContentAssetUrl:   pgtype.Text{String: "", Valid: false},
+				StorageError:      pgtype.Text{String: "", Valid: false},
+				Model:             conv.ToPGTextEmpty(event.EventDetails.Model),
+				MessageID:         pgtype.Text{String: "", Valid: false},
+				ToolCallID:        pgtype.Text{String: "", Valid: false},
+				UserID:            conv.ToPGText(userID),
+				ExternalUserID:    conv.ToPGText(event.Actor.UserID),
+				ExternalMessageID: conv.ToPGText(event.EventID),
+				FinishReason:      conv.ToPGTextEmpty(event.EventDetails.Status),
+				ToolCalls:         nil,
+				// Per-turn token_usage from the feed is deliberately dropped:
+				// cloud tokens meter through the compliance COSTS promotion, and
+				// recording them here as well would double count.
+				PromptTokens:     0,
+				CompletionTokens: 0,
+				TotalTokens:      0,
+				Origin:           pgtype.Text{String: "", Valid: false},
+				// The client_id (CODEX_WEB) is the closest surface signal the
+				// feed carries; it rides this column for per-client analysis.
+				UserAgent:   conv.ToPGTextEmpty(event.ClientID),
+				IpAddress:   pgtype.Text{String: "", Valid: false},
+				Source:      conv.ToPGText(codexCloudSourceSlug),
+				ContentHash: nil,
+				Generation:  0,
+				CreatedAt:   conv.ToPGTimestamptz(admittedAt[i]),
+			},
+			BillingUserID:  userID,
+			WorkloadSource: metering.WorkloadSourceImport,
+			UserEmail:      event.Actor.UserEmail,
+			Provider:       codexProviderOpenAI,
+			HookHostname:   "",
+			AccountType:    complianceAccountTypeTeam,
+			BillingMode:    src.cfg.BillingMode,
 		})
 	}
 	if len(rows) == 0 {
