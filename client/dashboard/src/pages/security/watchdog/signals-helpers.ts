@@ -105,12 +105,20 @@ function dominantApp(signal: RiskSignal): string {
 }
 
 /**
+ * The placeholder email the server emits for findings it cannot attribute to
+ * a user. Treated as no attribution here so those signals land in the
+ * unattributed bucket rather than under an "Unknown user" heading.
+ */
+const UNKNOWN_USER_EMAIL = "Unknown user";
+
+/**
  * The principal (user) a signal is filed under when grouping by principal:
  * the most-affected user by finding count. Returns the user's email for
- * display. Empty when no top user exists.
+ * display. Empty when no top user exists or the user is unattributed.
  */
 function dominantPrincipal(signal: RiskSignal): string {
-  return signal.topUsers[0]?.email ?? "";
+  const email = signal.topUsers[0]?.email ?? "";
+  return email === UNKNOWN_USER_EMAIL ? "" : email;
 }
 
 function groupKeyForMode(signal: RiskSignal, mode: SignalGroupMode): string {
