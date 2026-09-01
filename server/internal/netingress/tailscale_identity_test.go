@@ -42,11 +42,11 @@ func TestTailscaleIdentityParser(t *testing.T) {
 		t.Parallel()
 		headers := http.Header{
 			TailscaleUserLoginHeader: {mime.QEncoding.Encode("utf-8", "user@example.com")},
-			TailscaleUserNameHeader:  {mime.QEncoding.Encode("utf-8", "Example =? User")},
+			TailscaleUserNameHeader:  {mime.BEncoding.Encode("utf-8", "Exámple =? User")},
 		}
 		identity, err := parser.ParseIdentity(headers)
 		require.NoError(t, err)
-		require.Equal(t, "Example =? User", identity.Name)
+		require.Equal(t, "Exámple =? User", identity.Name)
 	})
 
 	t.Run("tagged node has no identity", func(t *testing.T) {
@@ -84,6 +84,20 @@ func TestTailscaleIdentityParser(t *testing.T) {
 			name: "valid word followed by malformed marker",
 			headers: http.Header{
 				TailscaleUserLoginHeader: {mime.QEncoding.Encode("utf-8", "user@example.com") + " =?utf-8?q?unterminated"},
+				TailscaleUserNameHeader:  {"Example User"},
+			},
+		},
+		{
+			name: "valid word followed by malformed marker in same token",
+			headers: http.Header{
+				TailscaleUserLoginHeader: {mime.QEncoding.Encode("utf-8", "user@example.com") + "=?utf-8?q?unterminated"},
+				TailscaleUserNameHeader:  {"Example User"},
+			},
+		},
+		{
+			name: "malformed marker after plain prefix",
+			headers: http.Header{
+				TailscaleUserLoginHeader: {"prefix=?utf-8?q?unterminated"},
 				TailscaleUserNameHeader:  {"Example User"},
 			},
 		},
