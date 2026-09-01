@@ -455,6 +455,7 @@ func newTestMCPServiceWithPoolConfigAndTemporal(
 	require.NoError(t, err)
 	remoteChallengeMgr := remotesessions.NewChallengeManager(logger, tracerProvider, meterProvider, conn, enc, guardianPolicy, nil, cacheAdapter, serverURL, remotesessions.WithIDTokenVerifier(remotesessions.NewIDTokenVerifier(idTokenKeys)))
 	features := &feature.InMemory{}
+	features.SetFlag(feature.FlagMCPKillswitchEnforce, authCtx.ActiveOrganizationID, true)
 	mcpToolExecutionCheckpoint, err := mcptoolexecution.NewCheckpoint(conn, mcptoolexecution.DefaultEvaluationTimeout, meterProvider, logger, features)
 	require.NoError(t, err)
 	scanEvaluator := mcpriskscan.NewNoop(tracerProvider, meterProvider, logger)

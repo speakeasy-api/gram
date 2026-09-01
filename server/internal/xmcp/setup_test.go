@@ -30,6 +30,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authztest"
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/cache"
+	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	customdomainsrepo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
@@ -156,6 +157,9 @@ func newTestService(t *testing.T) (context.Context, *testInstance) {
 	userSessionSigner := usersessions.NewSigner("test-jwt-secret")
 	remoteChallengeMgr := remotesessions.NewChallengeManager(logger, tracerProvider, meterProvider, conn, enc, guardianPolicy, nil, cacheAdapter, serverURL)
 	features := &feature.InMemory{}
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	features.SetFlag(feature.FlagMCPKillswitchEnforce, authCtx.ActiveOrganizationID, true)
 	mcpToolExecutionCheckpoint, err := mcptoolexecution.NewCheckpoint(conn, mcptoolexecution.DefaultEvaluationTimeout, meterProvider, logger, features)
 	require.NoError(t, err)
 	scanEvaluator := mcpriskscan.NewNoop(tracerProvider, meterProvider, logger)
