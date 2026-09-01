@@ -10,6 +10,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/killswitches"
 	"github.com/speakeasy-api/gram/server/internal/mcpidentity"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
@@ -35,6 +36,12 @@ func (e *fixedEvaluator) Evaluate(context.Context, killswitches.EvaluationReques
 	return e.result
 }
 
+func enforcedRollout(organizationID string) *feature.InMemory {
+	flags := &feature.InMemory{}
+	flags.SetFlag(feature.FlagMCPKillswitchEnforce, organizationID, true)
+	return flags
+}
+
 func TestCheckpointEvaluatesEveryCoveredCallWithRealEvaluator(t *testing.T) {
 	t.Parallel()
 	conn, orgID := newTestDatabase(t, "ks_mcp_checkpoint")
@@ -43,7 +50,7 @@ func TestCheckpointEvaluatesEveryCoveredCallWithRealEvaluator(t *testing.T) {
 	realEvaluator, err := killswitches.NewEvaluator(conn, registry, time.Second, nil, testenv.NewLogger(t))
 	require.NoError(t, err)
 	counted := &countingEvaluator{delegate: realEvaluator}
-	checkpoint, err := newCheckpoint(registry, counted, time.Second)
+	checkpoint, err := newCheckpoint(registry, counted, time.Second, enforcedRollout(orgID))
 	require.NoError(t, err)
 
 	userID := "user_" + uuid.NewString()
@@ -112,7 +119,7 @@ func TestCheckpointPreservesUnsupportedIdentityAndFailsClosedOnCoverageFailure(t
 	noMatch, err := killswitches.NewNoMatchResult(killswitches.NoMatchReasonNoPrescription)
 	require.NoError(t, err)
 	evaluation := &fixedEvaluator{result: noMatch}
-	checkpoint, err := newCheckpoint(registry, evaluation, time.Second)
+	checkpoint, err := newCheckpoint(registry, evaluation, time.Second, enforcedRollout(orgID))
 	require.NoError(t, err)
 
 	projectID := insertProject(t, conn, orgID, "unsupported-identity", nil)
@@ -215,7 +222,7 @@ func TestCheckpointReturnsEvaluatorInfrastructureFailureWithoutMatch(t *testing.
 	failure, err := killswitches.NewInfrastructureFailureResult(cause)
 	require.NoError(t, err)
 	evaluation := &fixedEvaluator{result: failure}
-	checkpoint, err := newCheckpoint(registry, evaluation, time.Second)
+	checkpoint, err := newCheckpoint(registry, evaluation, time.Second, enforcedRollout(orgID))
 	require.NoError(t, err)
 
 	userID := "user_" + uuid.NewString()

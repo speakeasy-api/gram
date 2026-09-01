@@ -30,7 +30,7 @@ func TestHostedCheckpoint_ReevaluatesAndFailsClosed(t *testing.T) {
 	serverID := insertMCPServer(t, conn, orgID, projectID, nil)
 	source := ServerSource{FrontingServerID: uuid.NullUUID{UUID: serverID, Valid: true}}
 	recorder := &coverageRecorder{}
-	checkpoint, err := NewHostedCheckpoint(conn, testenv.NewMeterProvider(t), testenv.NewLogger(t), recorder)
+	checkpoint, err := NewHostedCheckpoint(conn, testenv.NewMeterProvider(t), testenv.NewLogger(t), recorder, enforcedRollout(orgID))
 	require.NoError(t, err)
 	ctx := testIdentityContext(t, mcpidentity.KindUserSession, userID)
 

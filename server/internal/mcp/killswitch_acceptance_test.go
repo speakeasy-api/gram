@@ -32,6 +32,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	deploymentsrepo "github.com/speakeasy-api/gram/server/internal/deployments/repo"
 	environmentsrepo "github.com/speakeasy-api/gram/server/internal/environments/repo"
+	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/killswitchapi"
 	"github.com/speakeasy-api/gram/server/internal/killswitches"
@@ -129,6 +130,8 @@ func newKillswitchAcceptanceFixture(t *testing.T) (context.Context, *killswitchA
 	require.NotNil(t, authCtx.ProjectID)
 	require.NotNil(t, authCtx.Email)
 
+	ti.features.SetFlag(feature.FlagMCPKillswitchEnforce, authCtx.ActiveOrganizationID, true)
+
 	selectors, err := authz.NewSelector(authz.ScopeOrgAdmin, authCtx.ActiveOrganizationID).MarshalJSON()
 	require.NoError(t, err)
 	_, err = accessrepo.New(ti.conn).UpsertPrincipalGrant(ctx, accessrepo.UpsertPrincipalGrantParams{
@@ -139,7 +142,7 @@ func newKillswitchAcceptanceFixture(t *testing.T) (context.Context, *killswitchA
 	})
 	require.NoError(t, err)
 
-	management, err := killswitchapi.NewService(ti.logger, ti.tracerProvider, ti.conn, ti.sessionManager, ti.authzEngine, ti.audit)
+	management, err := killswitchapi.NewService(ti.logger, ti.tracerProvider, ti.conn, ti.sessionManager, ti.authzEngine, ti.audit, ti.features)
 	require.NoError(t, err)
 	return ctx, &killswitchAcceptanceFixture{ti: ti, management: management, auth: authCtx}
 }
@@ -671,7 +674,7 @@ func TestKillswitchAcceptancePrivateRemoteAndTunnelProductionComposition(t *test
 			noMatchAfter := f.captureNoMatchResponses(t, target, postActivationSession)
 			require.Equal(t, noMatchBefore, noMatchAfter, "initialize and list methods outside tools/call must remain byte-for-byte unchanged")
 
-			checkpoint, err := mcptoolexecution.NewCheckpoint(f.ti.conn, mcptoolexecution.DefaultEvaluationTimeout, testenv.NewMeterProvider(t), f.ti.logger)
+			checkpoint, err := mcptoolexecution.NewCheckpoint(f.ti.conn, mcptoolexecution.DefaultEvaluationTimeout, testenv.NewMeterProvider(t), f.ti.logger, f.ti.features)
 			require.NoError(t, err)
 			unsupportedCtx := mcpidentity.NewValidatorBoundary().StampAPIKey(t.Context())
 			disposition, err := checkpoint.Evaluate(unsupportedCtx, f.auth.ActiveOrganizationID, target.server.ID.String())

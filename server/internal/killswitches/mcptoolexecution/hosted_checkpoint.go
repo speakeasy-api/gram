@@ -11,6 +11,7 @@ import (
 	"go.opentelemetry.io/otel/metric"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/killswitches"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpmetrics"
 )
@@ -27,11 +28,12 @@ type HostedCheckpoint struct {
 	failurePolicy killswitches.FailurePolicy
 	recorder      IdentityCoverageRecorder
 	logger        *slog.Logger
+	flags         feature.Provider
 }
 
 // NewHostedCheckpoint builds the production checkpoint from the registered M2
 // contracts and the authoritative PostgreSQL evaluator.
-func NewHostedCheckpoint(db *pgxpool.Pool, meterProvider metric.MeterProvider, logger *slog.Logger, recorder IdentityCoverageRecorder) (*HostedCheckpoint, error) {
+func NewHostedCheckpoint(db *pgxpool.Pool, meterProvider metric.MeterProvider, logger *slog.Logger, recorder IdentityCoverageRecorder, flags feature.Provider) (*HostedCheckpoint, error) {
 	registry, err := NewRegistry(db)
 	if err != nil {
 		return nil, err
@@ -67,12 +69,23 @@ func NewHostedCheckpoint(db *pgxpool.Pool, meterProvider metric.MeterProvider, l
 		failurePolicy: definition.FailurePolicy,
 		recorder:      recorder,
 		logger:        logger,
+		flags:         flags,
 	}, nil
 }
 
 // Evaluate revalidates principal membership and server ownership on every call.
 // Unsupported identities and resources remain outside M2 and continue unchanged.
 func (c *HostedCheckpoint) Evaluate(ctx context.Context, organizationID string, resourceSource ServerSource) (killswitches.TransportDisposition, error) {
+	if c == nil {
+		return killswitches.NewInfrastructureRejectionDisposition(), errors.New("hosted MCP killswitch checkpoint is unavailable")
+	}
+
+	return evaluateForRollout(ctx, c.flags, organizationID, func() (killswitches.TransportDisposition, error) {
+		return c.evaluate(ctx, organizationID, resourceSource)
+	})
+}
+
+func (c *HostedCheckpoint) evaluate(ctx context.Context, organizationID string, resourceSource ServerSource) (killswitches.TransportDisposition, error) {
 	organization := killswitches.OrganizationID(organizationID)
 	evaluationCtx, cancel := context.WithTimeout(ctx, hostedEvaluatorTimeout)
 	defer cancel()

@@ -28,14 +28,31 @@ type LifecycleService struct {
 	db           *pgxpool.Pool
 	registry     *Registry
 	validator    LifecycleValidator
+	beforeApply  BeforeApplyHook
 	beforeCommit BeforeCommitHook
 }
 
-func NewLifecycleService(db *pgxpool.Pool, registry *Registry, validator LifecycleValidator, beforeCommit BeforeCommitHook) (*LifecycleService, error) {
+// BeforeApplyHook runs only for a newly claimed mutation receipt. Completed
+// operation replays bypass it, preserving durable idempotency during rollbacks.
+type BeforeApplyHook func(context.Context, MutationContext, MutationOperation) error
+
+type LifecycleOption func(*LifecycleService)
+
+func WithBeforeApplyHook(hook BeforeApplyHook) LifecycleOption {
+	return func(service *LifecycleService) { service.beforeApply = hook }
+}
+
+func NewLifecycleService(db *pgxpool.Pool, registry *Registry, validator LifecycleValidator, beforeCommit BeforeCommitHook, options ...LifecycleOption) (*LifecycleService, error) {
 	if db == nil || registry == nil || isNilInterface(validator) {
 		return nil, ErrInvalidArgument
 	}
-	return &LifecycleService{db: db, registry: registry, validator: validator, beforeCommit: beforeCommit}, nil
+	service := &LifecycleService{db: db, registry: registry, validator: validator, beforeCommit: beforeCommit}
+	for _, option := range options {
+		if option != nil {
+			option(service)
+		}
+	}
+	return service, nil
 }
 
 type mutationQueries struct {
@@ -319,6 +336,11 @@ func (s *LifecycleService) executeMutation(ctx context.Context, mutation Mutatio
 	}
 	if !fresh {
 		return replayOperation(receipt, operation, requestHash)
+	}
+	if s.beforeApply != nil {
+		if err := s.beforeApply(ctx, mutation, operation); err != nil {
+			return MutationResult{}, fmt.Errorf("before killswitch lifecycle apply: %w", err)
+		}
 	}
 
 	result, err := apply(mutationQueries{repo: queries, restricted: restricted})
