@@ -779,7 +779,7 @@ func (s *Service) ListChallenges(ctx context.Context, payload *gen.ListChallenge
 	// of this endpoint expects.
 	from, to, err := conv.ParseOptionalTimeWindow(payload.From, payload.To)
 	if err != nil {
-		return nil, oops.E(oops.CodeBadRequest, err, "invalid challenge window").LogError(ctx, s.logger)
+		return nil, oops.E(oops.CodeBadRequest, err, "%s", err.Error()).LogError(ctx, s.logger)
 	}
 
 	filters := chrepo.ChallengeListFilters{

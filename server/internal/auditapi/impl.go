@@ -114,7 +114,7 @@ func (s *Service) List(ctx context.Context, payload *gen.ListPayload) (*gen.List
 	// caller of this endpoint expects.
 	createdFrom, createdTo, err := conv.ParseOptionalTimeWindow(payload.From, payload.To)
 	if err != nil {
-		return nil, oops.E(oops.CodeBadRequest, err, "invalid audit log window").LogError(ctx, s.logger)
+		return nil, oops.E(oops.CodeBadRequest, err, "%s", err.Error()).LogError(ctx, s.logger)
 	}
 	params.CreatedFrom = conv.PtrToPGTimestamptz(createdFrom)
 	params.CreatedTo = conv.PtrToPGTimestamptz(createdTo)

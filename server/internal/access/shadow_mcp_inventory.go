@@ -562,7 +562,7 @@ func (s *Service) ListShadowMCPInventoryServersForUser(ctx context.Context, payl
 	// still answers over the whole history.
 	from, to, err := conv.ParseOptionalTimeWindow(payload.From, payload.To)
 	if err != nil {
-		return nil, oops.E(oops.CodeBadRequest, err, "invalid shadow mcp window").LogError(ctx, s.logger)
+		return nil, oops.E(oops.CodeBadRequest, err, "%s", err.Error()).LogError(ctx, s.logger)
 	}
 
 	chRepo := telemetryrepo.New(s.chConn)

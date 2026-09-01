@@ -1,6 +1,7 @@
 package conv_test
 
 import (
+	"errors"
 	"math"
 	"testing"
 	"time"
@@ -309,10 +310,10 @@ func TestParseOptionalTimeWindow_RejectsInvertedAndEmpty(t *testing.T) {
 	late := "2026-03-08T00:00:00Z"
 
 	_, _, err := conv.ParseOptionalTimeWindow(&late, &early)
-	require.ErrorContains(t, err, "from must be before to")
+	require.EqualError(t, err, "from must be before to")
 
 	_, _, err = conv.ParseOptionalTimeWindow(&early, &early)
-	require.ErrorContains(t, err, "from must be before to", "an empty window is rejected too")
+	require.EqualError(t, err, "from must be before to", "an empty window is rejected too")
 }
 
 func TestParseOptionalTimeWindow_RejectsUnparseable(t *testing.T) {
@@ -321,9 +322,13 @@ func TestParseOptionalTimeWindow_RejectsUnparseable(t *testing.T) {
 	bad := "not-a-timestamp"
 	valid := "2026-03-08T00:00:00Z"
 
+	// The message is what a 400 carries, so it names the offending parameter
+	// rather than describing the window as a whole: a caller that sent one bad
+	// bound should not have to guess which one to fix.
 	_, _, err := conv.ParseOptionalTimeWindow(&bad, nil)
-	require.ErrorContains(t, err, "parse from")
+	require.EqualError(t, err, "invalid from")
+	require.ErrorContains(t, errors.Unwrap(err), "parse from", "the parse detail stays available for logs")
 
 	_, _, err = conv.ParseOptionalTimeWindow(&valid, &bad)
-	require.ErrorContains(t, err, "parse to")
+	require.EqualError(t, err, "invalid to")
 }
