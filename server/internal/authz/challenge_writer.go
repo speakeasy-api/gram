@@ -3,6 +3,7 @@ package authz
 import (
 	"context"
 	"fmt"
+	"github.com/ClickHouse/clickhouse-go/v2"
 	"log/slog"
 	"time"
 
@@ -25,19 +26,13 @@ const (
 	meterChallengeCHWriterInserted = "gram.authz_ch_writer.challenges_inserted"
 )
 
-// ChallengeInserter writes a batch of challenge rows to ClickHouse.
-// *authzrepo.Queries satisfies it; tests supply a fake.
-type ChallengeInserter interface {
-	InsertChallenges(ctx context.Context, rows []authzrepo.ChallengeRow) error
-}
-
 // ChallengeCHWriter consumes authz challenge events from Pub/Sub and persists
 // them to ClickHouse in batches. Invalid messages are poison records: they are
 // logged and acknowledged, while a failed insert is staged against the messages
 // it covered so only those redeliver.
 type ChallengeCHWriter struct {
 	logger             *slog.Logger
-	inserter           ChallengeInserter
+	repo               *authzrepo.Queries
 	challengesSkipped  metric.Int64Counter
 	challengesInserted metric.Int64Counter
 }
@@ -50,7 +45,7 @@ const (
 func NewChallengeCHWriter(
 	logger *slog.Logger,
 	meterProvider metric.MeterProvider,
-	inserter ChallengeInserter,
+	conn clickhouse.Conn,
 ) *ChallengeCHWriter {
 	logger = logger.With(attr.SlogComponent("authz-challenge-ch-writer"))
 	meter := meterProvider.Meter("github.com/speakeasy-api/gram/server/internal/authz")
@@ -71,7 +66,7 @@ func NewChallengeCHWriter(
 
 	return &ChallengeCHWriter{
 		logger:             logger,
-		inserter:           inserter,
+		repo:               authzrepo.New(conn),
 		challengesSkipped:  challengesSkipped,
 		challengesInserted: challengesInserted,
 	}
@@ -127,7 +122,7 @@ func (w *ChallengeCHWriter) processBatch(ctx context.Context, messages []*authzv
 		return failed
 	}
 
-	err := w.inserter.InsertChallenges(ctx, rows)
+	err := w.repo.InsertChallenges(ctx, rows)
 	if w.challengesInserted != nil {
 		w.challengesInserted.Add(ctx, int64(len(rows)), metric.WithAttributes(attr.Outcome(o11y.OutcomeFromError(err))))
 	}

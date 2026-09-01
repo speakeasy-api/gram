@@ -54,7 +54,7 @@ func newChallengeCHWriter(t *testing.T) (*ChallengeCHWriter, clickhouse.Conn) {
 	conn, err := newClickhouseClient(t)
 	require.NoError(t, err)
 
-	return NewChallengeCHWriter(testenv.NewLogger(t), testenv.NewMeterProvider(t), authzrepo.New(conn)), conn
+	return NewChallengeCHWriter(testenv.NewLogger(t), testenv.NewMeterProvider(t), conn), conn
 }
 
 func TestChallengeCHWriterPersistsMessage(t *testing.T) {
