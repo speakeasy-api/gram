@@ -140,6 +140,11 @@ func TestDelegateHooksActingUserRequiresCurrentMembershipAndProof(t *testing.T) 
 	require.NoError(t, err)
 	require.NotEmpty(t, secondResult.Assertion)
 
+	spoofed := *payload
+	spoofed.SessionID = "spoofed-session"
+	_, err = ti.service.DelegateHooksActingUser(ctx, &spoofed)
+	requireOopsCode(t, err, oops.CodeUnauthorized)
+
 	_, err = ti.conn.Exec(ctx, `UPDATE api_keys SET deleted_at = clock_timestamp() WHERE id = $1`, enrollmentID) //nolint:glint // notestingrawsql: isolated integration fixture must simulate enrollment revocation
 	require.NoError(t, err)
 	_, err = ti.service.DelegateHooksActingUser(ctx, payload)
@@ -147,11 +152,6 @@ func TestDelegateHooksActingUserRequiresCurrentMembershipAndProof(t *testing.T) 
 	secondResult, err = ti.service.DelegateHooksActingUser(ctx, &secondPayload)
 	require.NoError(t, err, "revoking one enrollment must not revoke another")
 	require.NotEmpty(t, secondResult.Assertion)
-
-	spoofed := *payload
-	spoofed.SessionID = "spoofed-session"
-	_, err = ti.service.DelegateHooksActingUser(ctx, &spoofed)
-	requireOopsCode(t, err, oops.CodeUnauthorized)
 
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)

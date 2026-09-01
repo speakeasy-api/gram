@@ -25,6 +25,17 @@ JOIN users ON users.id = api_keys.created_by_user_id
 WHERE key_hash = @key_hash
   AND deleted IS FALSE;
 
+-- name: GetActiveHooksEnrollment :one
+SELECT EXISTS (
+  SELECT 1
+  FROM api_keys
+  WHERE id = @id
+    AND organization_id = @organization_id
+    AND created_by_user_id = @created_by_user_id
+    AND deleted IS FALSE
+    AND @scope::text = ANY(scopes)
+);
+
 -- name: ListAPIKeysByOrganization :many
 SELECT *
 FROM api_keys

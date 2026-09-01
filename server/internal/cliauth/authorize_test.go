@@ -76,7 +76,7 @@ func TestRedeem_InvalidProofEnrollmentDoesNotCreateOrphanAPIKey(t *testing.T) {
 	requireOopsCode(t, err, oops.CodeUnauthorized)
 	var after int
 	require.NoError(t, ti.conn.QueryRow(ctx, `SELECT count(*) FROM api_keys`).Scan(&after)) //nolint:glint // notestingrawsql: bounded integration assertion verifies no orphan side effect
-	require.Equal(t, before, after, "refresh validation must precede the API-key side effect")
+	require.Equal(t, before, after, "proof public-key validation must precede the API-key side effect")
 }
 
 func TestAuthorize_RejectsStaleSessionMembership(t *testing.T) {

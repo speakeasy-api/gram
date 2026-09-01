@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/speakeasy-api/agenthooks"
+	"github.com/speakeasy-api/gram/hooks/delegation"
 	"github.com/speakeasy-api/gram/hooks/sdk/models/components"
 	"github.com/speakeasy-api/gram/hooks/wire"
 )
@@ -227,7 +228,11 @@ func (r *Relay) deliver(ctx context.Context, typed any) (ingestResult, authState
 			// native fail-closed denial now. Replayed events are explicitly outside
 			// governance, so this cache can never authorize protected work.
 			r.finishExchange(idemKey, payload, backfilled, ingestResult{statusCode: 0})
-			return ingestResult{statusCode: http.StatusOK, decision: decision{Decision: "deny", Reason: "ai_access_identity_unavailable", Message: actingIdentityFailureMessage}}, state
+			reason, message := "ai_access_identity_unavailable", actingIdentityFailureMessage
+			if errors.Is(err, errDelegationUnavailable) {
+				reason, message = "ai_access_evaluator_unavailable", delegation.EvaluatorFailureMessage
+			}
+			return ingestResult{statusCode: http.StatusOK, decision: decision{Decision: "deny", Reason: reason, Message: message}}, state
 		}
 	}
 	sendCtx := ctx

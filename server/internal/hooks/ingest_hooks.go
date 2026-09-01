@@ -278,10 +278,10 @@ func (s *Service) ingest(ctx context.Context, payload *gen.IngestPayload) (res *
 							aiDecision = cachedDecision
 						}
 					default:
-						evaluationCtx, cancelEvaluation := context.WithTimeout(ctx, aiAccessEvaluationTimeout)
+						evaluationCtx, cancelEvaluation := context.WithTimeout(ctx, AIAccessEvaluationTimeout)
 						aiDecision = s.aiAccess.EvaluateVerified(evaluationCtx, verified)
 						cancelEvaluation()
-						publicationCtx, cancelPublication := context.WithTimeout(ctx, aiAccessDenialPublicationTimeout)
+						publicationCtx, cancelPublication := context.WithTimeout(context.WithoutCancel(ctx), aiAccessDenialPublicationTimeout)
 						aiDecision = s.publishHookAIAccessDenial(publicationCtx, payload, authCtx.ActiveOrganizationID, verified.principalKey, aiDecision)
 						cancelPublication()
 						released, releaseErr := release()

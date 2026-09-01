@@ -20,6 +20,8 @@ import (
 	"github.com/speakeasy-api/gram/hooks/sdk/models/components"
 )
 
+const assertionExpirySafetyMargin = 5 * time.Second
+
 // Draining the offline payload spool (DNO-498, part 2 of the capture in
 // spool.go). Entries replay oldest-first — global chronological order, which
 // implies per-session order — each under its originally minted
@@ -142,9 +144,10 @@ func drainSpool(ctx context.Context, dir string) DrainSummary {
 			clients[entry.ServerURL] = cl
 		}
 		assertion := ""
+		assertionLifetime := time.Duration(0)
 		binding, governed := governedReplayBinding(entry)
 		if governed {
-			assertion, err = mintActingUserAssertion(ctx, entry.ServerURL, a.proof, binding, entry.IdempotencyKey)
+			assertion, assertionLifetime, err = mintActingUserAssertionWithExpiry(ctx, entry.ServerURL, a.proof, binding, entry.IdempotencyKey)
 			if err != nil {
 				if errors.Is(err, errProofBoundEnrollmentRequired) {
 					s.Skipped++
@@ -161,10 +164,18 @@ func drainSpool(ctx context.Context, dir string) DrainSummary {
 			}
 		}
 		replayCreds := a.c
+		sendCtx := ctx
+		cancelSend := func() {}
 		if governed {
 			replayCreds = a.proof
+			if assertionLifetime <= assertionExpirySafetyMargin {
+				s.Aborted = true
+				break
+			}
+			sendCtx, cancelSend = context.WithTimeout(ctx, assertionLifetime-assertionExpirySafetyMargin)
 		}
-		res := cl.sendWithAssertion(ctx, replayCreds, entry.Envelope, entry.IdempotencyKey, assertion, entry.Backfilled)
+		res := cl.sendWithAssertion(sendCtx, replayCreds, entry.Envelope, entry.IdempotencyKey, assertion, entry.Backfilled)
+		cancelSend()
 		if res.authRejected {
 			// A rejected credential is machine state, not event state — the
 			// backlog would deliver fine after a re-login or key rotation.
@@ -223,9 +234,16 @@ func governedReplayBinding(entry spoolEntry) (governedBinding, bool) {
 	}
 	event := strings.TrimSpace(*entry.Envelope.Source.RawEventName)
 	sessionID := strings.TrimSpace(*entry.Envelope.Session.ID)
-	canonicalType := string(entry.Envelope.Event.Type)
-	validShape := (event == delegation.EventUserPromptSubmit && canonicalType == "prompt.submitted") ||
-		(event == delegation.EventPreToolUse && canonicalType == "tool.requested")
+	skillName, toolName := "", ""
+	if entry.Envelope.Data != nil {
+		if entry.Envelope.Data.Skill != nil {
+			skillName = entry.Envelope.Data.Skill.Name
+		}
+		if entry.Envelope.Data.ToolCall != nil && entry.Envelope.Data.ToolCall.Name != nil {
+			toolName = *entry.Envelope.Data.ToolCall.Name
+		}
+	}
+	validShape := delegation.ValidGovernedShape(event, string(entry.Envelope.Event.Type), skillName, toolName)
 	if sessionID == "" || !validShape || !delegation.Approved(provider, event) {
 		return governedBinding{}, false
 	}

@@ -21,6 +21,7 @@ import (
 
 	"github.com/speakeasy-api/gram/hooks/delegation"
 	gen "github.com/speakeasy-api/gram/server/gen/hooks"
+	hookshttp "github.com/speakeasy-api/gram/server/gen/http/hooks/server"
 	"github.com/speakeasy-api/gram/server/internal/auth"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	chatRepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
@@ -56,6 +57,18 @@ func (e *blockingHookEvaluator) Evaluate(_ context.Context, _ killswitches.Evalu
 		close(e.started)
 	}
 	<-e.release
+	return e.result
+}
+
+type cancelingHookEvaluator struct {
+	result killswitches.EvaluationResult
+	cancel context.CancelFunc
+	calls  atomic.Int32
+}
+
+func (e *cancelingHookEvaluator) Evaluate(_ context.Context, _ killswitches.EvaluationRequest) killswitches.EvaluationResult {
+	e.calls.Add(1)
+	e.cancel()
 	return e.result
 }
 
@@ -260,26 +273,28 @@ func TestHookAIAccessIdentityAndEvaluatorFailuresAreNativeDenials(t *testing.T) 
 }
 
 func TestHookAIAccessRejectsUntrustedOrDifferentEnrollmentKey(t *testing.T) {
-	noMatch, err := killswitches.NewNoMatchResult(killswitches.NoMatchReasonNoPrescription)
-	require.NoError(t, err)
-	ctx, ti, evaluator, signer, privateKey := setupHookAIAccess(t, noMatch)
-	payload := signedGovernedPayload(t, ctx, signer, privateKey, delegation.ProviderClaude, delegation.EventPreToolUse)
-	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	require.True(t, ok)
+	t.Parallel()
 
 	for name, mutate := range map[string]func(*contextvalues.AuthContext){
 		"missing trusted scope": func(a *contextvalues.AuthContext) { a.APIKeyScopes = nil },
 		"different enrollment":  func(a *contextvalues.AuthContext) { a.APIKeyID = uuid.NewString() },
 	} {
 		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			noMatch, err := killswitches.NewNoMatchResult(killswitches.NoMatchReasonNoPrescription)
+			require.NoError(t, err)
+			ctx, ti, evaluator, signer, privateKey := setupHookAIAccess(t, noMatch)
+			payload := signedGovernedPayload(t, ctx, signer, privateKey, delegation.ProviderClaude, delegation.EventPreToolUse)
+			authCtx, ok := contextvalues.GetAuthContext(ctx)
+			require.True(t, ok)
 			candidate := *authCtx
 			mutate(&candidate)
 			result, ingestErr := ti.service.Ingest(contextvalues.SetAuthContext(ctx, &candidate), payload)
 			require.NoError(t, ingestErr)
 			require.Equal(t, "ai_access_identity_unavailable", *result.Reason)
+			require.Empty(t, evaluator.requests)
 		})
 	}
-	require.Empty(t, evaluator.requests)
 }
 
 func TestHookAIAccessRejectsCrossTenantAndInactiveMembershipPerClient(t *testing.T) {
@@ -332,15 +347,21 @@ func TestHookAIAccessExclusionsReplayAndBackfillRequireSignedObservationalBindin
 	require.NoError(t, err)
 	ctx, ti, evaluator, signer, privateKey := setupHookAIAccess(t, noMatch)
 
-	for _, test := range []struct{ provider, event, eventType string }{
-		{delegation.ProviderCodex, "PermissionRequest", "tool.requested"},
-		{"cursor", delegation.EventPreToolUse, "tool.requested"},
+	for _, test := range []struct {
+		provider, event, eventType string
+		wantDecision               string
+	}{
+		{delegation.ProviderCodex, "PermissionRequest", "tool.requested", "deny"},
+		{"cursor", delegation.EventPreToolUse, "tool.requested", "deny"},
 	} {
 		payload := canonicalIngestPayload(test.provider, test.eventType, uuid.NewString())
 		payload.Source.RawEventName = &test.event
 		result, err := ti.service.Ingest(ctx, payload)
 		require.NoError(t, err)
-		require.Equal(t, "allow", result.Decision, "known excluded providers and events remain telemetry-only")
+		require.Equal(t, test.wantDecision, result.Decision)
+		if test.wantDecision == "deny" {
+			require.Equal(t, "ai_access_identity_unavailable", *result.Reason)
+		}
 	}
 
 	for name, flags := range map[string]struct{ backfilled, replayed bool }{
@@ -365,6 +386,25 @@ func TestHookAIAccessExclusionsReplayAndBackfillRequireSignedObservationalBindin
 		require.Equal(t, "ai_access_observational", *result.Reason, name)
 	}
 	require.Empty(t, evaluator.requests)
+}
+
+func TestHookAIAccessAcceptsSignedExplicitSkillCheckpoint(t *testing.T) {
+	t.Parallel()
+	noMatch, err := killswitches.NewNoMatchResult(killswitches.NoMatchReasonNoPrescription)
+	require.NoError(t, err)
+	ctx, ti, evaluator, signer, privateKey := setupHookAIAccess(t, noMatch)
+	payload := signedGovernedPayload(t, ctx, signer, privateKey, delegation.ProviderClaude, delegation.EventPreToolUse)
+	toolName := "Skill"
+	payload.Event.Type = "skill.activated"
+	payload.Data = &gen.HookIngestData{
+		Skill:    &gen.HookSkillData{Name: "review"},
+		ToolCall: &gen.HookToolCallData{Name: &toolName},
+	}
+
+	result, err := ti.service.Ingest(ctx, payload)
+	require.NoError(t, err)
+	require.Equal(t, "allow", result.Decision)
+	require.Len(t, evaluator.requests, 1)
 }
 
 func TestHookAIAccessObservationalMarkerTamperingFailsClosed(t *testing.T) {
@@ -398,6 +438,28 @@ func TestHookAIAccessObservationalMarkerTamperingFailsClosed(t *testing.T) {
 	require.Empty(t, evaluator.requests)
 }
 
+func TestHookAIAccessPublishesMatchedDenialAfterRequestCancellation(t *testing.T) {
+	t.Parallel()
+	match, err := killswitches.NewMatchResult(killswitches.PrescriptionID(uuid.NewString()), "Stable denial.")
+	require.NoError(t, err)
+	ctx, ti, _, signer, privateKey := setupHookAIAccess(t, match)
+	firstCtx, cancel := context.WithCancel(ctx)
+	evaluator := &cancelingHookEvaluator{result: match, cancel: cancel}
+	ti.service.aiAccess.evaluator = evaluator
+	payload := signedGovernedPayload(t, ctx, signer, privateKey, delegation.ProviderClaude, delegation.EventPreToolUse)
+
+	first, err := ti.service.Ingest(firstCtx, payload)
+	require.NoError(t, err)
+	second, err := ti.service.Ingest(ctx, payload)
+	require.NoError(t, err)
+	firstBytes, err := json.Marshal(hookshttp.NewIngestResponseBody(first))
+	require.NoError(t, err)
+	secondBytes, err := json.Marshal(hookshttp.NewIngestResponseBody(second))
+	require.NoError(t, err)
+	require.Equal(t, firstBytes, secondBytes)
+	require.Equal(t, int32(1), evaluator.calls.Load(), "the duplicate must use the denial published after cancellation")
+}
+
 func TestHookAIAccessDuplicateDenialIsByteIdenticalAndPersistenceDeduplicates(t *testing.T) {
 	t.Parallel()
 	match, err := killswitches.NewMatchResult(killswitches.PrescriptionID(uuid.NewString()), "Stable denial.")
@@ -415,9 +477,9 @@ func TestHookAIAccessDuplicateDenialIsByteIdenticalAndPersistenceDeduplicates(t 
 			require.NoError(t, err)
 			second, err := ti.service.Ingest(ctx, payload)
 			require.NoError(t, err)
-			firstBytes, err := json.Marshal(first)
+			firstBytes, err := json.Marshal(hookshttp.NewIngestResponseBody(first))
 			require.NoError(t, err)
-			secondBytes, err := json.Marshal(second)
+			secondBytes, err := json.Marshal(hookshttp.NewIngestResponseBody(second))
 			require.NoError(t, err)
 			require.Equal(t, firstBytes, secondBytes, "an exact redelivery must return byte-identical denial JSON")
 			require.Len(t, evaluator.requests, 1, "an exact redelivery must reuse the cached denial")

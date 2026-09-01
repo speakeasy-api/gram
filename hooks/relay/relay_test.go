@@ -507,6 +507,30 @@ func TestRejectedDelegationRefreshRequiresReconnect(t *testing.T) {
 	require.ErrorContains(t, NewRelay(cfg).Login(t.Context(), false), "browser sign-in is disabled", "ordinary login must not treat a rejected delegation as ready")
 }
 
+func TestUnavailableDelegationMintKeepsEnrollment(t *testing.T) {
+	var ingestRequests atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/rpc/cliAuth.delegateHooksActingUser" {
+			w.WriteHeader(http.StatusServiceUnavailable)
+			return
+		}
+		ingestRequests.Add(1)
+		w.WriteHeader(http.StatusOK)
+	}))
+	t.Cleanup(server.Close)
+
+	authFile := writeTestProofAuth(t, server.URL, "valid-api-key")
+	cfg := Config{ServerURL: server.URL, ProjectSlug: "default", OrgID: "test-org", HooksAPIKey: "", BrowserLogin: false, Nonblocking: false, DebugLog: "", ConfigPath: "", ConfigError: ""}
+
+	res := invoke(t, cfg, agenthooks.ProviderClaudeCode, "claude/pre_tool_use.json")
+
+	require.Contains(t, string(res.Stdout), `"permissionDecision":"deny"`)
+	require.Contains(t, string(res.Stdout), delegation.EvaluatorFailureMessage)
+	require.Zero(t, ingestRequests.Load(), "a failed delegation mint must not reach governed ingest")
+	require.FileExists(t, authFile, "a transient mint failure must retain the enrollment")
+	require.NoFileExists(t, authFile+".reauth-needed")
+}
+
 func TestOrgKeyFallbackSendsWithoutPersonalCredential(t *testing.T) {
 	fs := newFakeServer(t, nil)
 	t.Setenv("GRAM_HOOKS_AUTH_FILE", filepath.Join(t.TempDir(), "hooks-auth.env"))

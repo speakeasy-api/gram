@@ -131,11 +131,8 @@ func delegationReady(c creds) bool {
 	return err == nil
 }
 
-// resolveAuth returns the effective credential: an explicit env key wins over
-// the cache. Only GRAM_HOOKS_API_KEY is honored — the generic GRAM_API_KEY is
-// a different product surface (MCP access) and must not silently authenticate
-// hook telemetry. The second return is false when the machine holds no
-// credential.
+// resolveGovernedAuth prefers a proof-bound cached enrollment for governed
+// activity, then falls back to the ordinary telemetry credential resolver.
 func resolveGovernedAuth(cfg Config) (creds, bool) {
 	if cached, ok := readCachedAuth(cfg); ok && delegationReady(cached) {
 		return cached, true
@@ -143,6 +140,10 @@ func resolveGovernedAuth(cfg Config) (creds, bool) {
 	return resolveAuth(cfg)
 }
 
+// resolveAuth returns the effective telemetry credential. An explicit
+// GRAM_HOOKS_API_KEY wins over the cache; the generic GRAM_API_KEY belongs to
+// the MCP surface and must not authenticate hook telemetry. The second return
+// is false when the machine holds no credential.
 func resolveAuth(cfg Config) (creds, bool) {
 	apiKey := strings.TrimSpace(os.Getenv("GRAM_HOOKS_API_KEY"))
 	if apiKey != "" {

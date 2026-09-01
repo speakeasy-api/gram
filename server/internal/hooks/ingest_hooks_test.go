@@ -205,8 +205,8 @@ func TestIngest_NoCredentialsGovernedShapeTamperingFailsClosed(t *testing.T) {
 		mutate       func(*gen.IngestPayload)
 		wantDecision string
 	}{
-		"proofless legacy shape remains ungoverned": {
-			mutate:       func(payload *gen.IngestPayload) { payload.Event.Type = "message.created" },
+		"proofless request remains ungoverned": {
+			mutate:       func(*gen.IngestPayload) {},
 			wantDecision: "allow",
 		},
 		"acting-user contract attempt with stripped raw event": {

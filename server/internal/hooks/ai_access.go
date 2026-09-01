@@ -24,13 +24,15 @@ import (
 )
 
 const (
-	aiAccessIdentityFailureMessage   = delegation.IdentityFailureMessage
-	aiAccessEvaluatorFailureMessage  = "Speakeasy could not confirm the current AI access policy. Try again."
-	aiAccessDenialCacheTTL           = 10 * time.Minute
-	aiAccessEvaluationTimeout        = 5 * time.Second
+	aiAccessIdentityFailureMessage  = delegation.IdentityFailureMessage
+	aiAccessEvaluatorFailureMessage = delegation.EvaluatorFailureMessage
+	aiAccessDenialCacheTTL          = 10 * time.Minute
+	// AIAccessEvaluationTimeout bounds the authoritative hook evaluator in both
+	// its database and request contexts.
+	AIAccessEvaluationTimeout        = 5 * time.Second
 	aiAccessDenialPublicationTimeout = 2 * time.Second
 	aiAccessEvaluationLeaseSlack     = 5 * time.Second
-	aiAccessEvaluationLeaseTTL       = aiAccessEvaluationTimeout + aiAccessDenialPublicationTimeout + aiAccessEvaluationLeaseSlack
+	aiAccessEvaluationLeaseTTL       = AIAccessEvaluationTimeout + aiAccessDenialPublicationTimeout + aiAccessEvaluationLeaseSlack
 	aiAccessEvaluationPollInterval   = 10 * time.Millisecond
 )
 
@@ -100,13 +102,13 @@ func governedHook(payload *gen.IngestPayload, authCtx *contextvalues.AuthContext
 		return "", "", false
 	}
 
-	// The trusted enrollment scope covers only Claude/Codex prompt and pre-tool
-	// bindings. Acting-user material always enters the checkpoint so tampering
-	// cannot relabel a signed action as excluded. Without that material, known
-	// excluded providers/events remain telemetry-only.
+	// The trusted enrollment scope covers Claude/Codex prompt and pre-tool
+	// bindings. Canonical prompt/tool events from an approved client always enter
+	// the checkpoint: source fields are caller-controlled and cannot safely
+	// exclude a proof-stripped or relabeled request from governance.
 	canonicalType := strings.TrimSpace(payload.Event.Type)
 	coveredCanonicalType := canonicalType == "prompt.submitted" || canonicalType == "tool.requested"
-	if delegation.Approved(provider, rawEvent) || (provider == "" && coveredCanonicalType) {
+	if delegation.Approved(provider, rawEvent) || coveredCanonicalType {
 		return provider, rawEvent, true
 	}
 	return "", "", false
@@ -117,9 +119,7 @@ func validGovernedHookPayload(payload *gen.IngestPayload, event string) bool {
 	if payload == nil || payload.Event == nil || rawEvent != event {
 		return false
 	}
-	canonicalType := strings.TrimSpace(payload.Event.Type)
-	return (event == delegation.EventUserPromptSubmit && canonicalType == "prompt.submitted") ||
-		(event == delegation.EventPreToolUse && canonicalType == "tool.requested")
+	return delegation.ValidGovernedShape(event, payload.Event.Type, canonicalSkillName(payload), canonicalToolName(payload))
 }
 
 type verifiedHookAIAccess struct {

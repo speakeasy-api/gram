@@ -496,8 +496,8 @@ type IngestPayload struct {
 	// True only for a synthetic prompt recovered after its live checkpoint;
 	// backfilled prompts are observational and never governed.
 	Backfilled *bool
-	// Opaque Gram-signed, proof-minted acting-user assertion for one governed live
-	// invocation.
+	// Opaque Gram-signed, proof-minted acting-user assertion required for governed
+	// live invocations and their observational replay.
 	ActingUserAssertion *string
 	// Exact acting-user delegation contract used by the assertion.
 	ActingUserContractVersion *string

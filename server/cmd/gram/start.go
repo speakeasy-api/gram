@@ -1378,7 +1378,7 @@ func newStartCommand() *cli.Command {
 			if err != nil {
 				return fmt.Errorf("create hooks kill-switch registry: %w", err)
 			}
-			killswitchEvaluator, err := killswitches.NewEvaluator(db, killswitchRegistry, mcptoolexecution.DefaultEvaluationTimeout, meterProvider, logger)
+			killswitchEvaluator, err := killswitches.NewEvaluator(db, killswitchRegistry, hooks.AIAccessEvaluationTimeout, meterProvider, logger)
 			if err != nil {
 				return fmt.Errorf("create hooks kill-switch evaluator: %w", err)
 			}

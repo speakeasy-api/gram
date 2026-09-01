@@ -148,8 +148,8 @@ func TestUnreachableFailsOpenWithCachedSetting(t *testing.T) {
 }
 
 // TestUnreachableBlocksWhenCachedFailClosed mirrors the default posture for a
-// dead server once a posture has been cached (a never-cached machine instead
-// gets the cold-start pass — see TestColdStartNoCacheFailsOpen).
+// dead server once a posture has been cached; governed requests also fail
+// closed on a never-cached machine.
 func TestUnreachableBlocksWhenCachedFailClosed(t *testing.T) {
 	fs := newFakeServer(t, nil)
 	cfg := authedConfig(t, fs.URL)
@@ -371,9 +371,9 @@ func TestFailOpenEnvOverrideDoesNotBypassGovernedTool(t *testing.T) {
 	require.Contains(t, string(bytes.TrimSpace(res.Stdout)), `"permissionDecision":"deny"`)
 }
 
-// TestColdStartNoCacheFailsOpen: a machine that has never cached an org
-// posture must not brick on its first gate during a control-plane outage.
-func TestColdStartNoCacheFailsOpen(t *testing.T) {
+// TestGovernedColdStartNoCacheFailsClosed proves a machine with no cached
+// posture still denies governed work during a control-plane outage.
+func TestGovernedColdStartNoCacheFailsClosed(t *testing.T) {
 	shrinkRetryBudget(t)
 	fs := newFakeServer(t, func(components.IngestRequestBody) (int, decision) {
 		return http.StatusServiceUnavailable, decision{Decision: "", Reason: "", Message: ""}
@@ -386,8 +386,8 @@ func TestColdStartNoCacheFailsOpen(t *testing.T) {
 	require.Contains(t, string(bytes.TrimSpace(res.Stdout)), `"permissionDecision":"deny"`)
 }
 
-// TestStaleCacheIsNotAColdStart: a present-but-expired posture keeps the
-// fail-closed default — only a never-cached machine gets the cold-start pass.
+// TestStaleCacheIsNotAColdStart proves a present-but-expired posture keeps the
+// fail-closed default, matching a never-cached governed machine.
 func TestStaleCacheIsNotAColdStart(t *testing.T) {
 	shrinkRetryBudget(t)
 	fs := newFakeServer(t, func(components.IngestRequestBody) (int, decision) {

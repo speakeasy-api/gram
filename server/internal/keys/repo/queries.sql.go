@@ -193,6 +193,37 @@ func (q *Queries) GetAPIKeyByKeyHash(ctx context.Context, keyHash string) (GetAP
 	return i, err
 }
 
+const getActiveHooksEnrollment = `-- name: GetActiveHooksEnrollment :one
+SELECT EXISTS (
+  SELECT 1
+  FROM api_keys
+  WHERE id = $1
+    AND organization_id = $2
+    AND created_by_user_id = $3
+    AND deleted IS FALSE
+    AND $4::text = ANY(scopes)
+)
+`
+
+type GetActiveHooksEnrollmentParams struct {
+	ID              uuid.UUID
+	OrganizationID  string
+	CreatedByUserID string
+	Scope           string
+}
+
+func (q *Queries) GetActiveHooksEnrollment(ctx context.Context, arg GetActiveHooksEnrollmentParams) (bool, error) {
+	row := q.db.QueryRow(ctx, getActiveHooksEnrollment,
+		arg.ID,
+		arg.OrganizationID,
+		arg.CreatedByUserID,
+		arg.Scope,
+	)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
+}
+
 const isAPIKeyManagedByActiveLiteLLMInstance = `-- name: IsAPIKeyManagedByActiveLiteLLMInstance :one
 SELECT EXISTS (
   SELECT 1

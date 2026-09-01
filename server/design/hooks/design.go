@@ -433,7 +433,7 @@ var _ = Service("hooks", func() {
 			Attribute("project_slug_input", String, "Optional project slug for plugin-driven attribution.")
 			Attribute("replayed", Boolean, "Set when the event is redelivered from a device's offline spool after control-plane downtime, under its original Idempotency-Key and occurred_at.")
 			Attribute("backfilled", Boolean, "True only for a synthetic prompt recovered after its live checkpoint; backfilled prompts are observational and never governed.")
-			Attribute("acting_user_assertion", String, "Opaque Gram-signed, proof-minted acting-user assertion for one governed live invocation.")
+			Attribute("acting_user_assertion", String, "Opaque Gram-signed, proof-minted acting-user assertion required for governed live invocations and their observational replay.")
 			Attribute("acting_user_contract_version", String, "Exact acting-user delegation contract used by the assertion.")
 		})
 

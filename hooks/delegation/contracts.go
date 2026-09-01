@@ -29,7 +29,8 @@ const (
 	EventUserPromptSubmit = "UserPromptSubmit"
 	EventPreToolUse       = "PreToolUse"
 
-	IdentityFailureMessage = "Speakeasy could not verify your current organization membership for this AI action. Reconnect Speakeasy hooks and try again."
+	IdentityFailureMessage  = "Speakeasy could not verify your current organization membership for this AI action. Reconnect Speakeasy hooks and try again."
+	EvaluatorFailureMessage = "Speakeasy could not confirm the current AI access policy. Try again."
 )
 
 // MintRequest asks Gram to mint one short-lived assertion. Signature is an
@@ -88,6 +89,21 @@ func ApprovedBindings() []Binding {
 func Approved(provider, event string) bool {
 	_, ok := ResourceKey(provider, event)
 	return ok
+}
+
+// ValidGovernedShape reports whether a canonical payload still represents the
+// native checkpoint bound into its acting-user assertion.
+func ValidGovernedShape(event, canonicalType, skillName, toolName string) bool {
+	switch event {
+	case EventUserPromptSubmit:
+		return strings.TrimSpace(canonicalType) == "prompt.submitted"
+	case EventPreToolUse:
+		canonicalType = strings.TrimSpace(canonicalType)
+		return canonicalType == "tool.requested" ||
+			(canonicalType == "skill.activated" && strings.TrimSpace(skillName) != "" && strings.TrimSpace(toolName) == "Skill")
+	default:
+		return false
+	}
 }
 
 // ResourceKey returns the registered hook_activity resource key.

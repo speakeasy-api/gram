@@ -20,6 +20,7 @@ const actingIdentityFailureMessage = delegation.IdentityFailureMessage
 
 var (
 	errDelegationReauthRequired     = errors.New("hooks delegation enrollment must be refreshed")
+	errDelegationUnavailable        = errors.New("hooks delegation service unavailable")
 	errProofBoundEnrollmentRequired = errors.New("proof-bound hooks enrollment is required")
 )
 
@@ -58,7 +59,7 @@ func governedHookBindingOf(typed any) (governedBinding, bool) {
 	if prompt, ok := typed.(*agenthooks.PromptEvent); ok {
 		observational = prompt.Backfilled
 	}
-	return governedBinding{provider: provider, event: event, sessionID: base.Session.ID, observational: observational}, true
+	return governedBinding{provider: provider, event: event, sessionID: strings.TrimSpace(base.Session.ID), observational: observational}, true
 }
 
 func (r *Relay) mintActingUserAssertion(ctx context.Context, credentials creds, binding governedBinding, idempotencyKey string) (string, error) {
@@ -66,16 +67,21 @@ func (r *Relay) mintActingUserAssertion(ctx context.Context, credentials creds, 
 }
 
 func mintActingUserAssertion(ctx context.Context, serverURL string, credentials creds, binding governedBinding, idempotencyKey string) (string, error) {
+	assertion, _, err := mintActingUserAssertionWithExpiry(ctx, serverURL, credentials, binding, idempotencyKey)
+	return assertion, err
+}
+
+func mintActingUserAssertionWithExpiry(ctx context.Context, serverURL string, credentials creds, binding governedBinding, idempotencyKey string) (string, time.Duration, error) {
 	if credentials.Source != credCache || credentials.ContractVersion != delegation.ContractVersion || credentials.RefreshToken == "" || credentials.ProofPrivateKey == "" {
-		return "", errProofBoundEnrollmentRequired
+		return "", 0, errProofBoundEnrollmentRequired
 	}
 	privateKey, err := delegation.ParsePrivateKey(credentials.ProofPrivateKey)
 	if err != nil {
-		return "", err
+		return "", 0, fmt.Errorf("%w: %w", errProofBoundEnrollmentRequired, err)
 	}
 	nonce, err := delegation.NewNonce()
 	if err != nil {
-		return "", err
+		return "", 0, fmt.Errorf("%w: create nonce: %w", errDelegationUnavailable, err)
 	}
 	request := delegation.MintRequest{
 		RefreshToken: credentials.RefreshToken, ContractVersion: delegation.ContractVersion,
@@ -85,35 +91,38 @@ func mintActingUserAssertion(ctx context.Context, serverURL string, credentials 
 	}
 	request.Signature, err = delegation.Sign(privateKey, request)
 	if err != nil {
-		return "", err
+		return "", 0, fmt.Errorf("%w: sign request: %w", errDelegationUnavailable, err)
 	}
 	body, err := json.Marshal(request)
 	if err != nil {
-		return "", err
+		return "", 0, fmt.Errorf("%w: encode request: %w", errDelegationUnavailable, err)
 	}
 	httpRequest, err := http.NewRequestWithContext(ctx, http.MethodPost, strings.TrimRight(serverURL, "/")+"/rpc/cliAuth.delegateHooksActingUser", bytes.NewReader(body))
 	if err != nil {
-		return "", err
+		return "", 0, fmt.Errorf("%w: create request: %w", errDelegationUnavailable, err)
 	}
 	httpRequest.Header.Set("Content-Type", "application/json")
 	response, err := newRelayHTTPClient(perAttemptTime).Do(httpRequest)
 	if err != nil {
-		return "", fmt.Errorf("mint acting-user assertion: %w", err)
+		return "", 0, fmt.Errorf("%w: mint acting-user assertion: %w", errDelegationUnavailable, err)
 	}
 	defer response.Body.Close()
 	if response.StatusCode != http.StatusOK {
 		_, _ = io.Copy(io.Discard, io.LimitReader(response.Body, 4096))
 		if response.StatusCode == http.StatusUnauthorized || response.StatusCode == http.StatusForbidden {
-			return "", fmt.Errorf("%w: HTTP %d", errDelegationReauthRequired, response.StatusCode)
+			return "", 0, fmt.Errorf("%w: HTTP %d", errDelegationReauthRequired, response.StatusCode)
 		}
-		return "", fmt.Errorf("mint acting-user assertion: HTTP %d", response.StatusCode)
+		if response.StatusCode == http.StatusRequestTimeout || response.StatusCode == http.StatusTooManyRequests || response.StatusCode >= http.StatusInternalServerError {
+			return "", 0, fmt.Errorf("%w: mint acting-user assertion: HTTP %d", errDelegationUnavailable, response.StatusCode)
+		}
+		return "", 0, fmt.Errorf("%w: HTTP %d", errProofBoundEnrollmentRequired, response.StatusCode)
 	}
 	var result delegation.MintResponse
 	if err := json.NewDecoder(io.LimitReader(response.Body, 64<<10)).Decode(&result); err != nil {
-		return "", fmt.Errorf("decode acting-user assertion: %w", err)
+		return "", 0, fmt.Errorf("%w: decode acting-user assertion: %w", errDelegationUnavailable, err)
 	}
-	if strings.TrimSpace(result.Assertion) == "" {
-		return "", errors.New("mint acting-user assertion: empty assertion")
+	if strings.TrimSpace(result.Assertion) == "" || result.ExpiresIn <= 0 {
+		return "", 0, fmt.Errorf("%w: invalid mint response", errDelegationUnavailable)
 	}
-	return result.Assertion, nil
+	return result.Assertion, time.Duration(result.ExpiresIn) * time.Second, nil
 }

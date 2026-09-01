@@ -389,7 +389,18 @@ func (s *Service) Redeem(ctx context.Context, payload *gen.RedeemPayload) (*gen.
 		return nil, oops.E(oops.CodeUnauthorized, err, "unauthorized").LogError(ctx, s.logger)
 	}
 	if proofBound {
-		refreshToken, err = s.actingSigner.MintRefresh(record.UserID, record.OrgID, enrollmentID.String(), publicKey)
+		refreshToken, err = mintRefreshOrRevoke(
+			func() (string, error) {
+				return s.actingSigner.MintRefresh(record.UserID, record.OrgID, enrollmentID.String(), publicKey)
+			},
+			func() error {
+				_, deleteErr := s.keysRepo.DeleteAPIKey(ctx, keysrepo.DeleteAPIKeyParams{ID: enrollmentID, OrganizationID: record.OrgID})
+				if deleteErr != nil {
+					return fmt.Errorf("delete failed enrollment API key: %w", deleteErr)
+				}
+				return nil
+			},
+		)
 		if err != nil {
 			return nil, oops.E(oops.CodeUnauthorized, err, "unauthorized").LogError(ctx, s.logger)
 		}
@@ -431,22 +442,23 @@ func (s *Service) DelegateHooksActingUser(ctx context.Context, payload *gen.Dele
 	if err != nil {
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
-	activeEnrollment, err := s.hasActiveHooksEnrollment(ctx, identity)
-	if err != nil || !activeEnrollment {
-		return nil, oops.C(oops.CodeUnauthorized)
-	}
-	assertion, err := mintAssertionAfterMembership(
+	assertion, err := mintAssertionAfterIdentityChecks(
 		identity,
 		request,
 		s.actingSigner.MintAssertion,
-		func() (bool, error) {
-			return s.hasActiveMembership(ctx, identity.UserID, identity.OrganizationID)
-		},
+		func() (bool, error) { return s.hasActiveHooksEnrollment(ctx, identity) },
+		func() (bool, error) { return s.hasActiveMembership(ctx, identity.UserID, identity.OrganizationID) },
 	)
+	if errors.Is(err, errActingUserIdentityDependency) {
+		return nil, oops.E(oops.CodeUnavailable, err, "acting-user identity validation unavailable").LogError(ctx, s.logger)
+	}
 	if err != nil {
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 	assertion, err = s.consumeMintNonce(ctx, identity, request, assertion)
+	if errors.Is(err, errActingUserNonceDependency) {
+		return nil, oops.E(oops.CodeUnavailable, err, "acting-user delegation unavailable").LogError(ctx, s.logger)
+	}
 	if err != nil {
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
@@ -457,47 +469,64 @@ func (s *Service) DelegateHooksActingUser(ctx context.Context, payload *gen.Dele
 	return &gen.DelegateHooksActingUserResult{Assertion: assertion, ExpiresIn: expiresIn}, nil
 }
 
+func mintRefreshOrRevoke(mint func() (string, error), revoke func() error) (string, error) {
+	refreshToken, err := mint()
+	if err == nil {
+		return refreshToken, nil
+	}
+	if revokeErr := revoke(); revokeErr != nil {
+		return "", errors.Join(err, fmt.Errorf("revoke API key after refresh mint failure: %w", revokeErr))
+	}
+	return "", err
+}
+
 func (s *Service) hasActiveHooksEnrollment(ctx context.Context, identity hooksacting.RefreshIdentity) (bool, error) {
 	enrollmentID, err := uuid.Parse(identity.EnrollmentID)
 	if err != nil {
-		return false, err
+		return false, fmt.Errorf("parse enrollment id: %w", err)
 	}
-	keys, err := s.keysRepo.ListAPIKeysByOrganization(ctx, identity.OrganizationID)
+	active, err := s.keysRepo.GetActiveHooksEnrollment(ctx, keysrepo.GetActiveHooksEnrollmentParams{
+		ID: enrollmentID, OrganizationID: identity.OrganizationID, CreatedByUserID: identity.UserID, Scope: auth.APIKeyScopeHooksActingUser.String(),
+	})
 	if err != nil {
-		return false, err
+		return false, fmt.Errorf("get active hooks enrollment: %w", err)
 	}
-	for _, key := range keys {
-		if key.ID == enrollmentID && key.CreatedByUserID == identity.UserID {
-			for _, scope := range key.Scopes {
-				if scope == auth.APIKeyScopeHooksActingUser.String() {
-					return true, nil
-				}
-			}
-		}
-	}
-	return false, nil
+	return active, nil
 }
 
-func mintAssertionAfterMembership(
+var (
+	errActingUserIdentityDependency = errors.New("acting-user identity dependency unavailable")
+	errActingUserNonceDependency    = errors.New("acting-user nonce dependency unavailable")
+)
+
+func mintAssertionAfterIdentityChecks(
 	identity hooksacting.RefreshIdentity,
 	request delegation.MintRequest,
 	mintAssertion func(hooksacting.RefreshIdentity, delegation.MintRequest) (string, error),
+	hasActiveEnrollment func() (bool, error),
 	hasActiveMembership func() (bool, error),
 ) (string, error) {
-	// Verify proof of private-key possession before spending a database query.
-	// Discard this assertion because membership verification can outlive it.
+	// Verify proof of private-key possession before spending database queries.
+	// Discard this assertion because identity validation can outlive it.
 	if _, err := mintAssertion(identity, request); err != nil {
 		return "", err
 	}
-	active, err := hasActiveMembership()
+	activeEnrollment, err := hasActiveEnrollment()
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("%w: check active enrollment: %w", errActingUserIdentityDependency, err)
 	}
-	if !active {
+	if !activeEnrollment {
+		return "", errors.New("inactive enrollment")
+	}
+	activeMembership, err := hasActiveMembership()
+	if err != nil {
+		return "", fmt.Errorf("%w: check active membership: %w", errActingUserIdentityDependency, err)
+	}
+	if !activeMembership {
 		return "", errors.New("inactive organization membership")
 	}
-	// Mint after the authoritative membership check so the candidate written to
-	// a new or expired exact-replay record starts with its full usable lifetime.
+	// Mint after the authoritative checks so the candidate written to a new or
+	// expired exact-replay record starts with its full usable lifetime.
 	return mintAssertion(identity, request)
 }
 
@@ -530,7 +559,7 @@ func (s *Service) consumeMintNonce(ctx context.Context, identity hooksacting.Ref
 	}
 	storedRaw, err := consumeMintNonceScript.Run(ctx, s.redis, []string{mintNonceKeyNamespace + hex.EncodeToString(replayKeyHash[:])}, string(raw), mintReplayTTL.Milliseconds()).Text()
 	if err != nil {
-		return "", fmt.Errorf("consume hooks mint nonce: %w", err)
+		return "", fmt.Errorf("%w: consume hooks mint nonce: %w", errActingUserNonceDependency, err)
 	}
 	var stored mintReplayRecord
 	if err := json.Unmarshal([]byte(storedRaw), &stored); err != nil || stored.Fingerprint != record.Fingerprint || stored.Assertion == "" {
@@ -541,7 +570,7 @@ func (s *Service) consumeMintNonce(ctx context.Context, identity hooksacting.Ref
 	}
 	storedRaw, err = refreshMintNonceScript.Run(ctx, s.redis, []string{mintNonceKeyNamespace + hex.EncodeToString(replayKeyHash[:])}, storedRaw, string(raw)).Text()
 	if err != nil {
-		return "", fmt.Errorf("refresh hooks mint replay assertion: %w", err)
+		return "", fmt.Errorf("%w: refresh hooks mint replay assertion: %w", errActingUserNonceDependency, err)
 	}
 	if err := json.Unmarshal([]byte(storedRaw), &stored); err != nil || stored.Fingerprint != record.Fingerprint || stored.Assertion == "" {
 		return "", errors.New("conflicting or invalid refreshed mint nonce replay")

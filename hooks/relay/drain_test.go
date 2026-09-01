@@ -234,6 +234,16 @@ func TestGovernedReplayBindingIsObservational(t *testing.T) {
 	require.True(t, ok)
 	require.True(t, binding.observational)
 	require.Equal(t, sessionID, binding.sessionID)
+
+	toolName := "Skill"
+	entry.Envelope.Event.Type = components.TypeSkillActivated
+	entry.Envelope.Data = &components.HookIngestData{
+		Skill:    &components.HookSkillData{Name: "review"},
+		ToolCall: &components.HookToolCallData{Name: &toolName},
+	}
+	binding, ok = governedReplayBinding(entry)
+	require.True(t, ok)
+	require.True(t, binding.observational)
 }
 
 func TestDrainReadsVersionOneEntries(t *testing.T) {
@@ -390,6 +400,30 @@ func TestDrainAbortsOnMintFailure(t *testing.T) {
 	require.Len(t, spoolFiles(t), 1)
 
 	summary := Drain(t.Context())
+	require.True(t, summary.Aborted)
+	require.Equal(t, 1, summary.Remaining)
+	require.Zero(t, summary.Skipped)
+	require.Zero(t, ingestRequests)
+}
+
+func TestDrainAbortsBeforeGovernedAssertionCanExpire(t *testing.T) {
+	setSpoolStateHome(t)
+	t.Setenv("GRAM_HOOKS_API_KEY", "")
+	ingestRequests := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.URL.Path == "/rpc/cliAuth.delegateHooksActingUser" {
+			_ = json.NewEncoder(w).Encode(delegation.MintResponse{Assertion: "short-lived", ExpiresIn: int(assertionExpirySafetyMargin.Seconds())})
+			return
+		}
+		ingestRequests++
+		w.WriteHeader(http.StatusUnauthorized)
+	}))
+	t.Cleanup(server.Close)
+	seedGovernedSpoolEntry(t, server.URL, time.Hour, "")
+
+	summary := Drain(t.Context())
+
 	require.True(t, summary.Aborted)
 	require.Equal(t, 1, summary.Remaining)
 	require.Zero(t, summary.Skipped)

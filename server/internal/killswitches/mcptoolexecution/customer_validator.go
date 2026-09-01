@@ -45,6 +45,9 @@ func (customerLifecycleValidator) ValidateCurrent(ctx context.Context, dbtx kill
 	if batch.Resources == nil {
 		return nil
 	}
+	if len(batch.Resources.Keys) == 0 {
+		return killswitches.ErrInvalidReference
+	}
 	if batch.Resources.Kind == ResourceKindHookActivity {
 		if batch.OrganizationID == "" {
 			return fmt.Errorf("%w: hook activity is not available", killswitches.ErrInvalidReference)

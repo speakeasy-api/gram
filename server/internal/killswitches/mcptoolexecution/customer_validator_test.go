@@ -36,6 +36,12 @@ func TestCustomerLifecycleValidatorAcceptsOnlyRegisteredHookActivities(t *testin
 		Resources:      &killswitches.CurrentResourceReferences{Kind: ResourceKindHookActivity, Keys: []killswitches.ResourceKey{"claude:PermissionRequest"}},
 	})
 	require.ErrorIs(t, err, killswitches.ErrInvalidReference)
+
+	err = validator.ValidateCurrent(t.Context(), tx, killswitches.CurrentReferenceBatch{
+		OrganizationID: killswitches.OrganizationID(orgID),
+		Resources:      &killswitches.CurrentResourceReferences{Kind: ResourceKindHookActivity, Keys: nil},
+	})
+	require.ErrorIs(t, err, killswitches.ErrInvalidReference)
 }
 
 func TestCustomerLifecycleValidatorLocksLivenessUpdatesUntilCommit(t *testing.T) {

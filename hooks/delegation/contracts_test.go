@@ -56,6 +56,14 @@ func TestNewNonceIsRandomAndCanonical(t *testing.T) {
 	require.NotEqual(t, first, second)
 }
 
+func TestValidGovernedShapeIncludesExplicitSkillCheckpoint(t *testing.T) {
+	require.True(t, delegation.ValidGovernedShape(delegation.EventUserPromptSubmit, "prompt.submitted", "", ""))
+	require.True(t, delegation.ValidGovernedShape(delegation.EventPreToolUse, "tool.requested", "", ""))
+	require.True(t, delegation.ValidGovernedShape(delegation.EventPreToolUse, "skill.activated", "review", "Skill"))
+	require.False(t, delegation.ValidGovernedShape(delegation.EventPreToolUse, "skill.activated", "", "Skill"))
+	require.False(t, delegation.ValidGovernedShape(delegation.EventPreToolUse, "skill.activated", "review", "Bash"))
+}
+
 func TestApprovedCoverageIsExact(t *testing.T) {
 	for _, provider := range []string{delegation.ProviderClaude, delegation.ProviderCodex} {
 		require.True(t, delegation.Approved(provider, delegation.EventUserPromptSubmit))
