@@ -30,7 +30,7 @@ import (
 // returning the tunnel id that routes are published under and the member's
 // own user_session_issuer id (the input to the issuer resync that token
 // routing keys on). A non-empty resourceIdentifier is recorded on the source
-// the way an operator records it, after creation.
+// at creation, the way an operator who already knows it records it.
 func seedTunneledMetaMember(
 	t *testing.T,
 	ctx context.Context,
