@@ -1,4 +1,3 @@
-import { IdentityLink } from "@/components/identity-link";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/Avatar";
 import {
   Tooltip,
@@ -122,10 +121,6 @@ export function useChallengeRowColumns(
         render: (row: ChallengeBucket) => {
           if (isChild(row)) return null;
           const display = principalDisplayName(row.userEmail, row.principalUrn);
-          // Only user principals are people; an api_key principal resolves to
-          // no identity page.
-          const identifier =
-            row.principalType === "user" ? { urn: row.principalUrn } : null;
           return (
             <Tooltip>
               <TooltipTrigger asChild>
@@ -136,7 +131,7 @@ export function useChallengeRowColumns(
                     rowFade(row),
                   )}
                 >
-                  <IdentityLink identifier={identifier}>{display}</IdentityLink>
+                  {display}
                 </Text>
               </TooltipTrigger>
               {row.roleSlugs.length > 0 && (
@@ -222,9 +217,6 @@ export function useChallengeRowColumns(
           const display = member?.email ?? row.resolvedBy;
           return (
             <Tooltip>
-              {/* The avatar stays the trigger: asChild hands it the ref the
-                  tooltip positions against, which a wrapper would swallow. The
-                  identity column beside this one carries the link. */}
               <TooltipTrigger asChild>
                 <Avatar className="h-7 w-7">
                   {member?.photoUrl && (

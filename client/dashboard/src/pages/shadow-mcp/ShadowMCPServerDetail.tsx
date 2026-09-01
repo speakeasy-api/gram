@@ -1,5 +1,3 @@
-import { IdentityLink } from "@/components/identity-link";
-import { identityRefForUserKey } from "@/lib/identity-urn";
 import { formatShortDate } from "@/components/access/shadow-mcp-utils";
 import { InlineEditableText } from "@/components/inline-editable-text";
 import { Page } from "@/components/page-layout";
@@ -233,13 +231,7 @@ function TopUsersTable({
     {
       key: "user",
       header: "User",
-      render: (user) => (
-        <Text variant="small">
-          <IdentityLink identifier={identityRefForUserKey(user.userKey)}>
-            {user.userKey}
-          </IdentityLink>
-        </Text>
-      ),
+      render: (user) => <Text variant="small">{user.userKey}</Text>,
       width: "1fr",
     },
     {

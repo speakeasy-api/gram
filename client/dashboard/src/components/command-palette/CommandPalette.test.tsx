@@ -23,7 +23,6 @@ vi.mock("./recentlyVisited", () => ({
 }));
 vi.mock("./ResourceResults", () => ({
   ResourceResults: () => null,
-  PeopleResults: () => null,
 }));
 
 import { CommandPalette } from "./CommandPalette";

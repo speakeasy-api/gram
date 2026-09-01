@@ -140,9 +140,6 @@ const SESSION_COLUMNS: SessionColumn[] = [
     track: "minmax(120px,24rem)",
     render: (s) => (
       <div className="flex min-w-0 items-center">
-        {/* Not a link: the row is a button that opens the session, and an
-            anchor inside it is invalid markup. The session's own detail names
-            the owner and links from there. */}
         <span className="truncate">{displayOrDash(s.userEmail)}</span>
       </div>
     ),

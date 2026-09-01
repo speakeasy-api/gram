@@ -1,5 +1,3 @@
-import { IdentityLink } from "@/components/identity-link";
-import type { IdentityRef } from "@/lib/identity-urn";
 import {
   type CSSProperties,
   type JSX,
@@ -113,10 +111,6 @@ interface RowContext {
    * session ran on a personal AI account, whose email should label the turns
    * instead of the attributed employee's work email. */
   userLabelOverride?: string;
-  /** The chat owner's identity, resolved once by the panel. The turn's own
-   * userId is a display label as often as an id (userLabelOverride replaces
-   * it wholesale), so it cannot be keyed on. */
-  ownerIdentifier?: IdentityRef | null;
 }
 
 type ResolvedRowContext = Required<
@@ -273,14 +267,12 @@ function TurnHeader({
   author,
   userId,
   userLabel,
-  ownerIdentifier,
   createdAt,
   results,
 }: {
   author: TurnAuthor;
   userId?: string;
   userLabel?: string;
-  ownerIdentifier?: IdentityRef | null;
   createdAt?: Date;
   results?: RiskResult[];
 }) {
@@ -346,13 +338,7 @@ function TurnHeader({
             </AvatarFallback>
           </Avatar>
           <span className="text-foreground max-w-[220px] truncate text-sm font-medium">
-            {isUser ? (
-              <IdentityLink identifier={ownerIdentifier}>
-                {userDisplayName(userName)}
-              </IdentityLink>
-            ) : (
-              "Assistant"
-            )}
+            {isUser ? userDisplayName(userName) : "Assistant"}
           </span>
         </div>
       </div>
@@ -1192,7 +1178,6 @@ function DisplayItemView({
           author={item.author}
           userId={ctx.userLabelOverride ?? item.userId}
           userLabel={ctx.userLabel}
-          ownerIdentifier={ctx.ownerIdentifier}
           createdAt={item.createdAt}
           results={item.messageIds.flatMap(
             (id) => ctx.riskResultsByMessage.get(id) ?? [],

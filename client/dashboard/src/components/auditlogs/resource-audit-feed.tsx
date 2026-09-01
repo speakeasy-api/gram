@@ -1,4 +1,3 @@
-import { IdentityLink } from "@/components/identity-link";
 import {
   ActionIconTile,
   AuditFeedFooter,
@@ -169,15 +168,7 @@ function ResourceAuditRow({
       <ActionIconTile action={log.action} />
       <div className="min-w-0 flex-1 text-sm leading-5">
         <strong className="text-foreground font-semibold">
-          {/* Only user actors are people; API keys and system actors resolve
-              to no profile. */}
-          <IdentityLink
-            identifier={
-              log.actorType === "user" ? { userId: log.actorId } : null
-            }
-          >
-            {getActorLabel(log)}
-          </IdentityLink>
+          {getActorLabel(log)}
         </strong>{" "}
         <span className="text-muted-foreground">{renderVerb(log)}</span>{" "}
         {href ? (

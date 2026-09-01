@@ -611,20 +611,6 @@ const RowContainer = forwardRef<HTMLTableRowElement, RowContainerProps>(
       onClick();
     };
 
-    // A click that started on a control inside the row belongs to that control:
-    // without this a row-level navigation also fires for the actions menu, a
-    // link, or a checkbox, and steals it.
-    const handleClick = (event: React.MouseEvent<HTMLTableRowElement>) => {
-      if (!onClick) return;
-      if (event.target instanceof Element) {
-        const control = event.target.closest("a,button,input,select,textarea");
-        // Bounded to this row: an unbounded closest() would also match a
-        // clickable ancestor wrapping the whole table.
-        if (control && event.currentTarget.contains(control)) return;
-      }
-      onClick();
-    };
-
     return (
       <tr
         ref={ref}
@@ -639,7 +625,7 @@ const RowContainer = forwardRef<HTMLTableRowElement, RowContainerProps>(
             "cursor-pointer hover:bg-accent focus-visible:bg-accent focus-visible:ring-ring focus-visible:ring-2 focus-visible:ring-inset focus-visible:outline-none",
           className,
         )}
-        onClick={handleClick}
+        onClick={onClick}
         onKeyDown={isClickable ? handleKeyDown : onKeyDown}
         tabIndex={isClickable ? 0 : tabIndex}
       >
@@ -851,25 +837,19 @@ function NoResultsMessage({
   className,
   children,
 }: PropsWithChildrenAndClassName) {
-  // A row, not a bare div: this renders inside <tbody>, and anything else is
-  // invalid markup that React reports as a hydration error.
   const Wrapper = ({ children, className }: PropsWithChildrenAndClassName) => (
-    <tr
+    <div
       className={cn(
         "[grid-column:1/-1] grid [grid-template-columns:subgrid]",
         className,
       )}
     >
       {children}
-    </tr>
+    </div>
   );
 
-  // Padded to the same inset as a data cell: the message sits in the grid
-  // where a row would, so flush-left text reads as a broken row.
   const ContentWrapper = ({ children }: PropsWithChildren) => (
-    <td className="text-muted-foreground [grid-column:1/-1] px-4 py-6 text-sm">
-      {children}
-    </td>
+    <div className="[grid-column:1/-1]">{children}</div>
   );
 
   return (

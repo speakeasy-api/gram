@@ -38,29 +38,12 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock("@/contexts/Auth", () => ({
   useSession: () => ({ session: "session" }),
-  useIsPlatformAdmin: () => false,
-}));
-
-// The member and actor names are IdentityLinks now. Their href resolves
-// through useRBAC, which reaches for the SDK this suite does not provide.
-vi.mock("@/hooks/useRBAC", () => ({
-  useRBAC: () => ({
-    hasScope: () => true,
-    hasAnyScope: () => true,
-    isLoading: false,
-  }),
 }));
 vi.mock("@/routes", () => ({
   useOrgRoutes: () => ({
     killswitch: {
       href: () => "/acme/killswitch",
       detail: { href: (id: string) => `/acme/killswitch/${id}` },
-    },
-    // The member and actor names link to their identity pages.
-    identities: {
-      detail: {
-        overview: { href: (urn: string) => `/acme/identities/${urn}/overview` },
-      },
     },
   }),
 }));

@@ -81,6 +81,7 @@ export function useProjectNavRoutes(): ProjectNavRoute[] {
       },
       { route: routes.plugins, scope: readWrite },
       { route: routes.environments, scope: readWrite },
+      { route: routes.employees, scope: observe },
       { route: routes.costs, scope: observe },
       { route: routes.insights, scope: observe },
       { route: routes.agentSessions, scope: observe },
