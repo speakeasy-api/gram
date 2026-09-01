@@ -537,8 +537,14 @@ function TeamInner() {
             </div>
           )}
           <Stack direction="vertical" gap={0}>
+            {/* The row click opens the same page, but a handler is not a
+                link: no cmd+click, no middle-click, no copy-link, and nothing
+                a screen reader announces as navigation. Keyed on userId, the
+                same field the row click uses. */}
             <Text variant="body" className="font-medium">
-              {member.name}
+              <IdentityLink identifier={{ userId: member.userId }}>
+                {member.name}
+              </IdentityLink>
             </Text>
             <Text variant="body" className="text-muted-foreground text-sm">
               {member.email}

@@ -13,6 +13,7 @@ import { Badge } from "@/components/ui/Badge";
 import { Column, type SortDescriptor, Table } from "@/components/ui/Table";
 import { sortTableData } from "@/components/ui/Table/sorting";
 import { Text } from "@/components/ui/Text";
+import { IdentityLink } from "@/components/identity-link";
 import { getInitials } from "@/lib/initials";
 import { encodeIdentityUrn } from "@/lib/identity-urn";
 import { useOrgRoutes } from "@/routes";
@@ -393,7 +394,17 @@ function IdentityCell({ identity }: { identity: Employee }): JSX.Element {
       </Avatar>
       <div className="flex min-w-0 flex-col">
         <div className="flex min-w-0 items-center gap-2">
-          <Text className="truncate font-medium">{identity.name}</Text>
+          {/* The row click already navigates here, but a handler is not a
+              link: no cmd+click, no middle-click, no copy-link, and nothing
+              for a screen reader to announce. On a page whose whole job is
+              reaching people, the name itself has to be the anchor. */}
+          <Text className="truncate font-medium">
+            <IdentityLink
+              identifier={{ urn: identityUrnForEmployee(identity) }}
+            >
+              {identity.name}
+            </IdentityLink>
+          </Text>
           {!isAgent && !hasAccount && (
             <Badge variant="neutral">No linked account</Badge>
           )}
