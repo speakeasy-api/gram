@@ -61,14 +61,19 @@ type AttestationVerifier struct {
 	globalLimiter  *rate.Limiter
 	rechecks       singleflight.Group
 	recheckJoined  func()
+	telemetry      *Telemetry
 }
 
-func NewAttestationVerifier(reviewer TokenReviewer, lookup AttestorIngressLookup, audience string, maxTTL time.Duration) *AttestationVerifier {
+func NewAttestationVerifier(reviewer TokenReviewer, lookup AttestorIngressLookup, audience string, maxTTL time.Duration, telemetry ...*Telemetry) *AttestationVerifier {
 	if audience == "" {
 		audience = DefaultTokenAudience
 	}
 	if maxTTL <= 0 {
 		maxTTL = 30 * time.Second
+	}
+	var metrics *Telemetry
+	if len(telemetry) > 0 {
+		metrics = telemetry[0]
 	}
 	return &AttestationVerifier{
 		reviewer:       reviewer,
@@ -82,14 +87,28 @@ func NewAttestationVerifier(reviewer TokenReviewer, lookup AttestorIngressLookup
 		globalLimiter:  rate.NewLimiter(globalReviewRate, globalReviewBurst),
 		rechecks:       singleflight.Group{},
 		recheckJoined:  nil,
+		telemetry:      metrics,
 	}
 }
 
-func (v *AttestationVerifier) Verify(ctx context.Context, token, source string) (Ingress, error) {
+func (v *AttestationVerifier) Verify(ctx context.Context, token, source string) (ingress Ingress, err error) {
+	started := time.Now()
+	result, reason, provider := ResultError, ReasonDependencyFailed, ""
+	defer func() {
+		if err == nil {
+			result = ResultAllowed
+			provider = ingress.Provider
+		} else if reason != ReasonVerifierUnavailable && (errors.Is(err, ErrAttestationRejected) || reason == ReasonRateLimited) {
+			result = ResultDenied
+		}
+		v.telemetry.Record(ctx, OperationAttestation, result, reason, provider, time.Since(started))
+	}()
 	if v.reviewer == nil || v.lookup == nil {
+		reason = ReasonVerifierUnavailable
 		return Ingress{}, fmt.Errorf("%w: verifier is not configured", ErrAttestationRejected)
 	}
 	if token == "" || strings.TrimSpace(token) != token || len(token) > maxAttestationBytes || source == "" {
+		reason = ReasonAttestationRejected
 		return Ingress{}, fmt.Errorf("%w: invalid bearer token", ErrAttestationRejected)
 	}
 
@@ -97,15 +116,26 @@ func (v *AttestationVerifier) Verify(ctx context.Context, token, source string) 
 	now := v.now()
 	if cached, ok := v.cached(hash, now); ok {
 		if cached.rejected {
+			reason = ReasonNegativeCacheHit
 			return Ingress{}, fmt.Errorf("%w: token was recently rejected", ErrAttestationRejected)
 		}
 		if now.Sub(cached.lastChecked) >= servingStateRecheckTTL {
-			return v.recheckCached(ctx, hash)
+			ingress, err = v.recheckCached(ctx, hash)
+			if err != nil {
+				if errors.Is(err, ErrAttestationRejected) {
+					reason = ReasonAuthorityRejected
+				}
+				return Ingress{}, err
+			}
+			reason = ReasonCacheHit
+			return ingress, nil
 		}
+		reason = ReasonCacheHit
 		return cached.ingress, nil
 	}
 
 	if !v.allowSource(source) {
+		reason = ReasonRateLimited
 		return Ingress{}, errors.New("token review rate limit exceeded")
 	}
 	//nolint:exhaustruct // request populates only TokenReview spec; API server owns response metadata/status
@@ -116,30 +146,36 @@ func (v *AttestationVerifier) Verify(ctx context.Context, token, source string) 
 		},
 	}, metav1.CreateOptions{})
 	if err != nil {
+		reason = ReasonDependencyFailed
 		return Ingress{}, fmt.Errorf("review private ingress token: %w", err)
 	}
 	if review == nil || !review.Status.Authenticated || review.Status.Error != "" || !containsAudience(review.Status.Audiences, v.audience) {
+		reason = ReasonTokenReviewDenied
 		v.storeRejected(hash, now)
 		return Ingress{}, fmt.Errorf("%w: token review denied", ErrAttestationRejected)
 	}
 
 	namespace, serviceAccount, err := parseServiceAccountSubject(review.Status.User.Username)
 	if err != nil {
+		reason = ReasonAttestationRejected
 		v.storeRejected(hash, now)
 		return Ingress{}, fmt.Errorf("%w: %w", ErrAttestationRejected, err)
 	}
 	expiresAt, err := tokenExpiry(token)
 	if err != nil || !expiresAt.After(now) {
+		reason = ReasonAttestationRejected
 		v.storeRejected(hash, now)
 		return Ingress{}, fmt.Errorf("%w: token expiry is invalid", ErrAttestationRejected)
 	}
 
-	ingress, err := v.lookup.ByAttestor(ctx, namespace, serviceAccount)
+	ingress, err = v.lookup.ByAttestor(ctx, namespace, serviceAccount)
 	if errors.Is(err, ErrIngressUnavailable) {
+		reason = ReasonAuthorityRejected
 		v.storeRejected(hash, now)
 		return Ingress{}, fmt.Errorf("%w: attestor is not authorized", ErrAttestationRejected)
 	}
 	if err != nil {
+		reason = ReasonDependencyFailed
 		return Ingress{}, fmt.Errorf("lookup attestor ingress: %w", err)
 	}
 
@@ -147,6 +183,7 @@ func (v *AttestationVerifier) Verify(ctx context.Context, token, source string) 
 	if expiresAt.Before(cacheExpiry) {
 		cacheExpiry = expiresAt
 	}
+	reason = ReasonNone
 	v.storeCached(hash, cacheEntry{ingress: ingress, expiresAt: cacheExpiry, rejected: false, lastChecked: now})
 	return ingress, nil
 }

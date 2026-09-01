@@ -308,6 +308,7 @@ func (m *Metrics) RecordMCPRequestRejected(ctx context.Context, reason string, m
 		attr.OAuthFailureReason(reason),
 		attr.McpURL(mcpURL),
 		attr.McpSurface(string(surface)),
+		attr.NetworkSurface(NetworkSurfaceFromContext(ctx)),
 	))
 }
 

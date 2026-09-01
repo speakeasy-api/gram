@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -420,16 +421,23 @@ func (s *Service) ResolveMCPEndpointAndServer(ctx context.Context, logger *slog.
 		return mcpendpoints.BySlugAndCustomDomain(ctx, s.db, logger, slug) //nolint:wrapcheck // thin passthrough; underlying error already carries context.
 	}
 
+	started := time.Now()
+	record := func(result, reason string) {
+		s.networkIngressTelemetry.Record(ctx, networkingress.OperationResolution, result, reason, "unknown", time.Since(started))
+	}
 	authority, err := networkingress.LoadRequestAuthority(ctx, s.db)
 	if errors.Is(err, networkingress.ErrAuthorityUnavailable) {
+		record(networkingress.ResultError, networkingress.ReasonAuthorityUnavailable)
 		return nil, nil, nil, oops.E(oops.CodeUnavailable, err, "private network ingress authority is unavailable").LogError(ctx, logger)
 	}
 	if err != nil {
+		record(networkingress.ResultDenied, networkingress.ReasonAuthorityRejected)
 		logger.WarnContext(ctx, "private network ingress authority rejected", attr.SlogError(err))
 		return nil, nil, nil, oops.E(oops.CodeNotFound, errors.Join(mcpendpoints.ErrPolicyDenied, err), "mcp endpoint not found")
 	}
 	namespaceKind, err := privateEndpointNamespace(authority.NamespaceKind)
 	if err != nil {
+		record(networkingress.ResultDenied, networkingress.ReasonNamespaceRejected)
 		logger.WarnContext(ctx, "private network ingress namespace rejected", attr.SlogError(err))
 		return nil, nil, nil, oops.E(oops.CodeNotFound, errors.Join(mcpendpoints.ErrPolicyDenied, err), "mcp endpoint not found")
 	}
@@ -441,11 +449,18 @@ func (s *Service) ResolveMCPEndpointAndServer(ctx context.Context, logger *slog.
 		Surface:              networkaccess.SurfacePrivate,
 	})
 	if err != nil {
+		record(networkingress.ResultError, networkingress.ReasonDependencyFailed)
 		return nil, nil, nil, fmt.Errorf("resolve private MCP endpoint: %w", err)
 	}
-	if !result.Found || !result.Allowed {
+	if !result.Found {
+		record(networkingress.ResultDenied, networkingress.ReasonEndpointNotFound)
 		return nil, nil, nil, oops.E(oops.CodeNotFound, mcpendpoints.ErrPolicyDenied, "mcp endpoint not found")
 	}
+	if !result.Allowed {
+		record(networkingress.ResultDenied, networkingress.ReasonPolicyDenied)
+		return nil, nil, nil, oops.E(oops.CodeNotFound, mcpendpoints.ErrPolicyDenied, "mcp endpoint not found")
+	}
+	record(networkingress.ResultAllowed, networkingress.ReasonNone)
 	return result.Endpoint, result.Server, result.MetaServer, nil
 }
 
