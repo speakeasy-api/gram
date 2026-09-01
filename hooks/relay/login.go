@@ -80,10 +80,8 @@ func (l *loginFlow) Run(ctx context.Context, force bool) error {
 	if insecureServerURL(l.cfg.ServerURL) {
 		return fmt.Errorf("refusing insecure Gram server URL %q; use https:// (or an http://localhost dev server)", l.cfg.ServerURL)
 	}
-	if c, ok := resolveAuth(l.cfg); ok && !force {
-		if c.Source == credEnv || (!reauthNeeded() && c.Source != credOrg && delegationReady(c)) {
-			return nil
-		}
+	if cached, ok := readCachedAuth(l.cfg); ok && !force && !reauthNeeded() && delegationReady(cached) {
+		return nil
 	}
 	if !l.cfg.BrowserLogin {
 		return errors.New("browser sign-in is disabled for this organization; set GRAM_HOOKS_API_KEY to a hooks-scoped key")

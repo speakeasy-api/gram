@@ -14,6 +14,7 @@ package cliauth
 
 import (
 	"context"
+	"crypto/ed25519"
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
@@ -274,8 +275,9 @@ func (s *Service) Authorize(ctx context.Context, payload *gen.AuthorizePayload) 
 	scopes := []string{auth.APIKeyScopeAgentUser.String()}
 	if proofPublicKey != "" {
 		// A proof-bound relay enrollment must authenticate unified hook ingest.
-		// Keep ordinary device-agent enrollment narrow when no proof key exists.
-		scopes = append(scopes, auth.APIKeyScopeHooks.String())
+		// The internal acting-user marker is not publicly mintable and lets ingest
+		// distinguish approved relays from caller-controlled source metadata.
+		scopes = append(scopes, auth.APIKeyScopeHooks.String(), auth.APIKeyScopeHooksActingUser.String())
 	}
 
 	code, err := generateOpaqueToken()
@@ -365,31 +367,32 @@ func (s *Service) Redeem(ctx context.Context, payload *gen.RedeemPayload) (*gen.
 		return nil, oops.E(oops.CodeUnauthorized, err, "unauthorized").LogError(ctx, s.logger)
 	}
 
-	// Validate and mint the refresh credential before creating the API key. A
-	// broken signer or malformed proof key must not leave an orphan key row.
 	var refreshToken string
 	proofBound := record.ProofPublicKey != "" && record.DelegationContract == delegation.ContractVersion
+	var publicKey ed25519.PublicKey
 	if proofBound {
 		if s.actingSigner == nil {
 			return nil, oops.E(oops.CodeUnauthorized, nil, "unauthorized").LogError(ctx, s.logger)
 		}
-		publicKey, err := delegation.ParsePublicKey(record.ProofPublicKey)
-		if err != nil {
-			return nil, oops.E(oops.CodeUnauthorized, err, "unauthorized").LogError(ctx, s.logger)
-		}
-		refreshToken, err = s.actingSigner.MintRefresh(record.UserID, record.OrgID, publicKey)
+		publicKey, err = delegation.ParsePublicKey(record.ProofPublicKey)
 		if err != nil {
 			return nil, oops.E(oops.CodeUnauthorized, err, "unauthorized").LogError(ctx, s.logger)
 		}
 	}
 
-	rawKey, err := s.mintKey(ctx, record, projectID)
+	rawKey, enrollmentID, err := s.mintKey(ctx, record, projectID)
 	if err != nil {
 		// The code was already consumed (GETDEL above), so a mint failure is
 		// unrecoverable for the caller — they must re-enroll regardless. Fail
 		// closed like every other path (the internal error stays in the logs);
 		// a distinct 5xx here would leak that the code+verifier was valid.
 		return nil, oops.E(oops.CodeUnauthorized, err, "unauthorized").LogError(ctx, s.logger)
+	}
+	if proofBound {
+		refreshToken, err = s.actingSigner.MintRefresh(record.UserID, record.OrgID, enrollmentID.String(), publicKey)
+		if err != nil {
+			return nil, oops.E(oops.CodeUnauthorized, err, "unauthorized").LogError(ctx, s.logger)
+		}
 	}
 
 	s.logger.InfoContext(ctx, "redeemed cliauth one-time code",
@@ -428,6 +431,10 @@ func (s *Service) DelegateHooksActingUser(ctx context.Context, payload *gen.Dele
 	if err != nil {
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
+	activeEnrollment, err := s.hasActiveHooksEnrollment(ctx, identity)
+	if err != nil || !activeEnrollment {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
 	assertion, err := mintAssertionAfterMembership(
 		identity,
 		request,
@@ -448,6 +455,27 @@ func (s *Service) DelegateHooksActingUser(ctx context.Context, payload *gen.Dele
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 	return &gen.DelegateHooksActingUserResult{Assertion: assertion, ExpiresIn: expiresIn}, nil
+}
+
+func (s *Service) hasActiveHooksEnrollment(ctx context.Context, identity hooksacting.RefreshIdentity) (bool, error) {
+	enrollmentID, err := uuid.Parse(identity.EnrollmentID)
+	if err != nil {
+		return false, err
+	}
+	keys, err := s.keysRepo.ListAPIKeysByOrganization(ctx, identity.OrganizationID)
+	if err != nil {
+		return false, err
+	}
+	for _, key := range keys {
+		if key.ID == enrollmentID && key.CreatedByUserID == identity.UserID {
+			for _, scope := range key.Scopes {
+				if scope == auth.APIKeyScopeHooksActingUser.String() {
+					return true, nil
+				}
+			}
+		}
+	}
+	return false, nil
 }
 
 func mintAssertionAfterMembership(
@@ -554,16 +582,16 @@ func (s *Service) resolveProject(ctx context.Context, orgID string, slug *string
 // repo, returning the raw key (which is only ever seen here). Mirrors the
 // key-assembly in keys.CreateKey: prefix + random token, sha256 hash stored,
 // prefix + token[:5] as the display prefix.
-func (s *Service) mintKey(ctx context.Context, record codeRecord, projectID uuid.UUID) (string, error) {
+func (s *Service) mintKey(ctx context.Context, record codeRecord, projectID uuid.UUID) (string, uuid.UUID, error) {
 	token, err := generateOpaqueToken()
 	if err != nil {
-		return "", fmt.Errorf("generate api key token: %w", err)
+		return "", uuid.Nil, fmt.Errorf("generate api key token: %w", err)
 	}
 
 	fullKey := s.keyPrefix + token
 	keyHash, err := auth.GetAPIKeyHash(fullKey)
 	if err != nil {
-		return "", fmt.Errorf("hash api key: %w", err)
+		return "", uuid.Nil, fmt.Errorf("hash api key: %w", err)
 	}
 
 	// Unique per-enrollment key name (timestamp + fresh entropy, never
@@ -574,13 +602,13 @@ func (s *Service) mintKey(ctx context.Context, record codeRecord, projectID uuid
 	// reclaimed out of band via revocation, not by deleting a prior key here.
 	keyName, err := auth.DeviceAgentKeyName(record.UserID)
 	if err != nil {
-		return "", fmt.Errorf("generate device-agent key name: %w", err)
+		return "", uuid.Nil, fmt.Errorf("generate device-agent key name: %w", err)
 	}
 
 	// record.Scopes is set by Authorize and validated non-empty in Redeem, so it
 	// is used directly here — no default, so an unexpectedly empty scope set
 	// surfaces as an integrity failure upstream rather than a silently broken key.
-	if _, err := s.keysRepo.CreateAPIKey(ctx, keysrepo.CreateAPIKeyParams{
+	created, err := s.keysRepo.CreateAPIKey(ctx, keysrepo.CreateAPIKeyParams{
 		OrganizationID:  record.OrgID,
 		ProjectID:       uuid.NullUUID{UUID: projectID, Valid: true},
 		CreatedByUserID: record.UserID,
@@ -588,11 +616,12 @@ func (s *Service) mintKey(ctx context.Context, record codeRecord, projectID uuid
 		KeyPrefix:       s.keyPrefix + token[:5],
 		KeyHash:         keyHash,
 		Scopes:          record.Scopes,
-	}); err != nil {
-		return "", fmt.Errorf("create api key: %w", err)
+	})
+	if err != nil {
+		return "", uuid.Nil, fmt.Errorf("create api key: %w", err)
 	}
 
-	return fullKey, nil
+	return fullKey, created.ID, nil
 }
 
 // generateOpaqueToken returns a 64-char hex string from 32 crypto-random bytes.

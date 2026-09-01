@@ -136,6 +136,13 @@ func delegationReady(c creds) bool {
 // a different product surface (MCP access) and must not silently authenticate
 // hook telemetry. The second return is false when the machine holds no
 // credential.
+func resolveGovernedAuth(cfg Config) (creds, bool) {
+	if cached, ok := readCachedAuth(cfg); ok && delegationReady(cached) {
+		return cached, true
+	}
+	return resolveAuth(cfg)
+}
+
 func resolveAuth(cfg Config) (creds, bool) {
 	apiKey := strings.TrimSpace(os.Getenv("GRAM_HOOKS_API_KEY"))
 	if apiKey != "" {

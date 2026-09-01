@@ -193,7 +193,7 @@ func (s *Service) ingest(ctx context.Context, payload *gen.IngestPayload) (res *
 			attr.SlogHookSource(source),
 			attr.SlogHookEvent(eventType),
 		)
-		_, _, governed := governedHook(payload)
+		_, _, governed := governedHook(payload, nil)
 		if governed {
 			return &AuthenticatedIngestResult{
 				Result: canonicalDenyResultWithReason("ai_access_identity_unavailable", aiAccessIdentityFailureMessage),
@@ -231,7 +231,7 @@ func (s *Service) ingest(ctx context.Context, payload *gen.IngestPayload) (res *
 
 	var aiDecision hookAIAccessDecision
 	observationalGoverned := false
-	_, governedEvent, isGoverned := governedHook(payload)
+	_, governedEvent, isGoverned := governedHook(payload, authCtx)
 	if isGoverned {
 		switch {
 		case !validGovernedHookPayload(payload, governedEvent):

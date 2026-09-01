@@ -369,7 +369,7 @@ func TestDrainOrgFallbackPreservesProofForLaterGovernedEntry(t *testing.T) {
 	require.Equal(t, 3, fs.count(), "cached rejection, org fallback, then governed replay")
 	fs.mu.Lock()
 	defer fs.mu.Unlock()
-	require.Equal(t, "org-key", fs.headers[2].Get("Gram-Key"))
+	require.Equal(t, "cached-key", fs.headers[2].Get("Gram-Key"), "a governed assertion must use its bound enrollment key")
 	require.NotEmpty(t, fs.headers[2].Get("X-Gram-Acting-User"))
 }
 

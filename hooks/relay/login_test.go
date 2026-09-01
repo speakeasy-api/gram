@@ -159,12 +159,12 @@ func TestLoginRejectsLegacyCredentialCallback(t *testing.T) {
 	require.Empty(t, values)
 }
 
-func TestLoginWithExplicitEnvironmentKeyIsAlreadyConfigured(t *testing.T) {
+func TestLoginWithExplicitEnvironmentKeyStillRequiresProofBoundEnrollment(t *testing.T) {
 	t.Setenv("GRAM_HOOKS_AUTH_FILE", filepath.Join(t.TempDir(), "hooks-auth.env"))
 	t.Setenv("GRAM_HOOKS_API_KEY", "explicit-key")
 	markReauthNeeded()
 	cfg := Config{ServerURL: "https://app.example.test", ProjectSlug: "default", OrgID: "", HooksAPIKey: "", BrowserLogin: false, Nonblocking: false, DebugLog: "", ConfigPath: "", ConfigError: ""}
-	require.NoError(t, NewRelay(cfg).Login(t.Context(), false))
+	require.ErrorContains(t, NewRelay(cfg).Login(t.Context(), false), "browser sign-in is disabled")
 }
 
 func TestLoginWithEnvironmentKeyRejectsInsecureServer(t *testing.T) {

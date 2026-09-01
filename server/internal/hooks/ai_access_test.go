@@ -6,6 +6,7 @@ import (
 	"crypto/hkdf"
 	"crypto/rand"
 	"crypto/sha256"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
@@ -15,12 +16,16 @@ import (
 
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/hooks/delegation"
 	gen "github.com/speakeasy-api/gram/server/gen/hooks"
+	"github.com/speakeasy-api/gram/server/internal/auth"
 	"github.com/speakeasy-api/gram/server/internal/cache"
+	chatRepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/hooksacting"
 	"github.com/speakeasy-api/gram/server/internal/killswitches"
 	"github.com/speakeasy-api/gram/server/internal/killswitches/mcptoolexecution"
@@ -67,6 +72,13 @@ func (e *recordingHookEvaluator) Evaluate(_ context.Context, request killswitche
 func setupHookAIAccess(t *testing.T, result killswitches.EvaluationResult) (context.Context, *testInstance, *recordingHookEvaluator, *hooksacting.Signer, ed25519.PrivateKey) {
 	t.Helper()
 	ctx, ti := newTestHooksService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	authCtx.APIKeyScopes = append(authCtx.APIKeyScopes, auth.APIKeyScopeHooksActingUser.String())
+	if authCtx.APIKeyID == "" {
+		authCtx.APIKeyID = uuid.NewString()
+	}
+	ctx = contextvalues.SetAuthContext(ctx, authCtx)
 	registry, err := mcptoolexecution.NewRegistry(ti.conn)
 	require.NoError(t, err)
 	evaluator := &recordingHookEvaluator{result: result}
@@ -102,7 +114,7 @@ func signedHookPayload(t *testing.T, ctx context.Context, signer *hooksacting.Si
 
 	publicKey, ok := privateKey.Public().(ed25519.PublicKey)
 	require.True(t, ok)
-	refresh, err := signer.MintRefresh(authCtx.UserID, authCtx.ActiveOrganizationID, publicKey)
+	refresh, err := signer.MintRefresh(authCtx.UserID, authCtx.ActiveOrganizationID, authCtx.APIKeyID, publicKey)
 	require.NoError(t, err)
 	identity, err := signer.VerifyRefresh(refresh)
 	require.NoError(t, err)
@@ -139,86 +151,179 @@ func TestHookAIAccessApprovedNativeMatrixAndExactDenial(t *testing.T) {
 	}
 }
 
-func TestHookAIAccessIdentityAndEvaluatorFailuresAreNativeDenials(t *testing.T) {
+func TestHookAIAccessEvaluatesWhileMCPRolloutIsOff(t *testing.T) {
 	t.Parallel()
-	noMatch, err := killswitches.NewNoMatchResult(killswitches.NoMatchReasonNoPrescription)
+	match, err := killswitches.NewMatchResult(killswitches.PrescriptionID(uuid.NewString()), "Hook policy remains authoritative.")
 	require.NoError(t, err)
-	ctx, ti, evaluator, signer, privateKey := setupHookAIAccess(t, noMatch)
-	payload := signedGovernedPayload(t, ctx, signer, privateKey, delegation.ProviderClaude, delegation.EventPreToolUse)
-	payload.ActingUserAssertion = nil
-	result, err := ti.service.Ingest(ctx, payload)
-	require.NoError(t, err)
-	require.Equal(t, "deny", result.Decision)
-	require.Equal(t, "ai_access_identity_unavailable", *result.Reason)
-	require.Equal(t, aiAccessIdentityFailureMessage, *result.Message)
-	require.Empty(t, evaluator.requests, "missing identity never becomes an evaluator candidate")
-
-	failure, err := killswitches.NewInfrastructureFailureResultWithPolicy(context.DeadlineExceeded, killswitches.FailurePolicyFailClosed, killswitches.InfrastructureFailureTimeout)
-	require.NoError(t, err)
-	ctx, ti, evaluator, signer, privateKey = setupHookAIAccess(t, failure)
-	payload = signedGovernedPayload(t, ctx, signer, privateKey, delegation.ProviderCodex, delegation.EventUserPromptSubmit)
-	result, err = ti.service.Ingest(ctx, payload)
-	require.NoError(t, err)
-	require.Equal(t, "deny", result.Decision)
-	require.Equal(t, "ai_access_evaluator_unavailable", *result.Reason)
-	require.Equal(t, aiAccessEvaluatorFailureMessage, *result.Message)
-	require.NotEqual(t, "Exact administrator note.", *result.Message)
-	require.Len(t, evaluator.requests, 1)
-
-	ctx, ti, _, signer, privateKey = setupHookAIAccess(t, noMatch)
-	ti.service.aiAccess = nil
-	payload = signedGovernedPayload(t, ctx, signer, privateKey, delegation.ProviderClaude, delegation.EventPreToolUse)
-	result, err = ti.service.Ingest(ctx, payload)
-	require.NoError(t, err)
-	require.Equal(t, "ai_access_evaluator_unavailable", *result.Reason)
-}
-
-func TestHookAIAccessRejectsCrossTenantSpoofAndInactiveMembership(t *testing.T) {
-	t.Parallel()
-	noMatch, err := killswitches.NewNoMatchResult(killswitches.NoMatchReasonNoPrescription)
-	require.NoError(t, err)
-	ctx, ti, evaluator, signer, privateKey := setupHookAIAccess(t, noMatch)
-	payload := signedGovernedPayload(t, ctx, signer, privateKey, delegation.ProviderClaude, delegation.EventPreToolUse)
-	payload.ActingUserAssertion = new("spoofed")
-	result, err := ti.service.Ingest(ctx, payload)
-	require.NoError(t, err)
-	require.Equal(t, "ai_access_identity_unavailable", *result.Reason)
-	require.Empty(t, evaluator.requests)
-
-	payload = signedGovernedPayload(t, ctx, signer, privateKey, delegation.ProviderClaude, delegation.EventPreToolUse)
+	ctx, ti, evaluator, signer, privateKey := setupHookAIAccess(t, match)
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
-	publicKey, ok := privateKey.Public().(ed25519.PublicKey)
-	require.True(t, ok)
-	refresh, err := signer.MintRefresh(authCtx.UserID, "other-organization", publicKey)
+	mode, err := mcptoolexecution.ResolveRolloutMode(ctx, &feature.InMemory{}, authCtx.ActiveOrganizationID)
 	require.NoError(t, err)
-	identity, err := signer.VerifyRefresh(refresh)
-	require.NoError(t, err)
-	crossTenantRequest := delegation.MintRequest{RefreshToken: refresh, ContractVersion: delegation.ContractVersion, Provider: delegation.ProviderClaude, Event: delegation.EventPreToolUse, SessionID: canonicalSessionID(payload), IdempotencyKey: *payload.IdempotencyKey, SignedAt: time.Now().Unix(), Nonce: "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"}
-	crossTenantRequest.Signature, err = delegation.Sign(privateKey, crossTenantRequest)
-	require.NoError(t, err)
-	crossTenantAssertion, err := signer.MintAssertion(identity, crossTenantRequest)
-	require.NoError(t, err)
-	payload.ActingUserAssertion = &crossTenantAssertion
-	result, err = ti.service.Ingest(ctx, payload)
-	require.NoError(t, err)
-	require.Equal(t, "ai_access_identity_unavailable", *result.Reason)
-	require.Empty(t, evaluator.requests)
+	require.Equal(t, mcptoolexecution.RolloutModeOff, mode)
 
-	payload = signedGovernedPayload(t, ctx, signer, privateKey, delegation.ProviderClaude, delegation.EventPreToolUse)
-	authCtx, ok = contextvalues.GetAuthContext(ctx)
+	payload := signedGovernedPayload(t, ctx, signer, privateKey, delegation.ProviderClaude, delegation.EventPreToolUse)
+	result, err := ti.service.Ingest(ctx, payload)
+	require.NoError(t, err)
+	require.Equal(t, "ai_access_denied", *result.Reason)
+	require.Equal(t, "Hook policy remains authoritative.", *result.Message)
+	require.Len(t, evaluator.requests, 1, "MCP off must not disable hook evaluation")
+}
+
+func TestApprovedClientGovernedSurfaceTamperingFailsClosed(t *testing.T) {
+	t.Parallel()
+	noMatch, err := killswitches.NewNoMatchResult(killswitches.NoMatchReasonNoPrescription)
+	require.NoError(t, err)
+	for _, provider := range []string{delegation.ProviderClaude, delegation.ProviderCodex} {
+		t.Run(provider, func(t *testing.T) {
+			t.Parallel()
+			ctx, ti, evaluator, signer, privateKey := setupHookAIAccess(t, noMatch)
+			for name, mutate := range map[string]func(*gen.IngestPayload){
+				"missing raw event": func(payload *gen.IngestPayload) { payload.Source.RawEventName = nil },
+				"changed raw event": func(payload *gen.IngestPayload) { payload.Source.RawEventName = new("PermissionRequest") },
+				"changed provider":  func(payload *gen.IngestPayload) { payload.Source.Adapter = "cursor" },
+				"changed canonical type": func(payload *gen.IngestPayload) {
+					payload.Event.Type = "message.created"
+				},
+			} {
+				t.Run(name, func(t *testing.T) {
+					payload := signedGovernedPayload(t, ctx, signer, privateKey, provider, delegation.EventPreToolUse)
+					mutate(payload)
+					result, err := ti.service.Ingest(ctx, payload)
+					require.NoError(t, err)
+					require.Equal(t, "deny", result.Decision)
+					require.Equal(t, "ai_access_identity_unavailable", *result.Reason)
+				})
+			}
+			require.Empty(t, evaluator.requests)
+		})
+	}
+}
+
+func TestHookAIAccessIdentityAndEvaluatorFailuresAreNativeDenials(t *testing.T) {
+	t.Parallel()
+	for _, provider := range []string{delegation.ProviderClaude, delegation.ProviderCodex} {
+		t.Run(provider, func(t *testing.T) {
+			t.Parallel()
+			noMatch, err := killswitches.NewNoMatchResult(killswitches.NoMatchReasonNoPrescription)
+			require.NoError(t, err)
+			ctx, ti, evaluator, signer, privateKey := setupHookAIAccess(t, noMatch)
+			authCtx, ok := contextvalues.GetAuthContext(ctx)
+			require.True(t, ok)
+			for _, proofCase := range []string{"missing", "malformed", "stale", "spoofed"} {
+				t.Run(proofCase, func(t *testing.T) {
+					payload := signedGovernedPayload(t, ctx, signer, privateKey, provider, delegation.EventPreToolUse)
+					switch proofCase {
+					case "missing":
+						payload.ActingUserAssertion = nil
+					case "malformed":
+						payload.ActingUserAssertion = new("not-a-jwt")
+					case "stale":
+						payload.ActingUserAssertion = new(staleSignedAssertion(t, payload, authCtx))
+					case "spoofed":
+						parts := strings.Split(*payload.ActingUserAssertion, ".")
+						require.Len(t, parts, 3)
+						if strings.HasPrefix(parts[2], "A") {
+							parts[2] = "B" + parts[2][1:]
+						} else {
+							parts[2] = "A" + parts[2][1:]
+						}
+						payload.ActingUserAssertion = new(strings.Join(parts, "."))
+					}
+					result, err := ti.service.Ingest(ctx, payload)
+					require.NoError(t, err)
+					require.Equal(t, "deny", result.Decision)
+					require.Equal(t, "ai_access_identity_unavailable", *result.Reason)
+					require.Equal(t, aiAccessIdentityFailureMessage, *result.Message)
+				})
+			}
+			require.Empty(t, evaluator.requests, "invalid identity never becomes an evaluator candidate")
+
+			failure, err := killswitches.NewInfrastructureFailureResultWithPolicy(context.DeadlineExceeded, killswitches.FailurePolicyFailClosed, killswitches.InfrastructureFailureTimeout)
+			require.NoError(t, err)
+			evaluator.result = failure
+			payload := signedGovernedPayload(t, ctx, signer, privateKey, provider, delegation.EventUserPromptSubmit)
+			result, err := ti.service.Ingest(ctx, payload)
+			require.NoError(t, err)
+			require.Equal(t, "deny", result.Decision)
+			require.Equal(t, "ai_access_evaluator_unavailable", *result.Reason)
+			require.Equal(t, aiAccessEvaluatorFailureMessage, *result.Message)
+			require.Len(t, evaluator.requests, 1)
+
+			ti.service.aiAccess = nil
+			payload = signedGovernedPayload(t, ctx, signer, privateKey, provider, delegation.EventPreToolUse)
+			result, err = ti.service.Ingest(ctx, payload)
+			require.NoError(t, err)
+			require.Equal(t, "ai_access_evaluator_unavailable", *result.Reason)
+		})
+	}
+}
+
+func TestHookAIAccessRejectsUntrustedOrDifferentEnrollmentKey(t *testing.T) {
+	noMatch, err := killswitches.NewNoMatchResult(killswitches.NoMatchReasonNoPrescription)
+	require.NoError(t, err)
+	ctx, ti, evaluator, signer, privateKey := setupHookAIAccess(t, noMatch)
+	payload := signedGovernedPayload(t, ctx, signer, privateKey, delegation.ProviderClaude, delegation.EventPreToolUse)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
-	_, err = ti.conn.Exec(ctx, `UPDATE organization_user_relationships SET deleted_at = clock_timestamp() WHERE organization_id = $1 AND user_id = $2`, authCtx.ActiveOrganizationID, authCtx.UserID) //nolint:glint // notestingrawsql: isolated integration fixture must simulate membership removal
-	require.NoError(t, err)
-	t.Cleanup(func() {
-		_, restoreErr := ti.conn.Exec(context.Background(), `UPDATE organization_user_relationships SET deleted_at = NULL WHERE organization_id = $1 AND user_id = $2`, authCtx.ActiveOrganizationID, authCtx.UserID) //nolint:glint // notestingrawsql: restore isolated membership fixture during cleanup
-		require.NoError(t, restoreErr)
-	})
-	result, err = ti.service.Ingest(ctx, payload)
-	require.NoError(t, err)
-	require.Equal(t, "deny", result.Decision)
-	require.Equal(t, "ai_access_identity_unavailable", *result.Reason)
-	require.Empty(t, evaluator.requests, "inactive membership never becomes an evaluator candidate")
+
+	for name, mutate := range map[string]func(*contextvalues.AuthContext){
+		"missing trusted scope": func(a *contextvalues.AuthContext) { a.APIKeyScopes = nil },
+		"different enrollment":  func(a *contextvalues.AuthContext) { a.APIKeyID = uuid.NewString() },
+	} {
+		t.Run(name, func(t *testing.T) {
+			candidate := *authCtx
+			mutate(&candidate)
+			result, ingestErr := ti.service.Ingest(contextvalues.SetAuthContext(ctx, &candidate), payload)
+			require.NoError(t, ingestErr)
+			require.Equal(t, "ai_access_identity_unavailable", *result.Reason)
+		})
+	}
+	require.Empty(t, evaluator.requests)
+}
+
+func TestHookAIAccessRejectsCrossTenantAndInactiveMembershipPerClient(t *testing.T) {
+	t.Parallel()
+	for _, provider := range []string{delegation.ProviderClaude, delegation.ProviderCodex} {
+		t.Run(provider, func(t *testing.T) {
+			t.Parallel()
+			noMatch, err := killswitches.NewNoMatchResult(killswitches.NoMatchReasonNoPrescription)
+			require.NoError(t, err)
+			ctx, ti, evaluator, signer, privateKey := setupHookAIAccess(t, noMatch)
+			payload := signedGovernedPayload(t, ctx, signer, privateKey, provider, delegation.EventPreToolUse)
+			authCtx, ok := contextvalues.GetAuthContext(ctx)
+			require.True(t, ok)
+			publicKey, ok := privateKey.Public().(ed25519.PublicKey)
+			require.True(t, ok)
+			refresh, err := signer.MintRefresh(authCtx.UserID, "other-organization", authCtx.APIKeyID, publicKey)
+			require.NoError(t, err)
+			identity, err := signer.VerifyRefresh(refresh)
+			require.NoError(t, err)
+			crossTenantRequest := delegation.MintRequest{RefreshToken: refresh, ContractVersion: delegation.ContractVersion, Provider: provider, Event: delegation.EventPreToolUse, SessionID: canonicalSessionID(payload), IdempotencyKey: *payload.IdempotencyKey, SignedAt: time.Now().Unix(), Nonce: "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"}
+			crossTenantRequest.Signature, err = delegation.Sign(privateKey, crossTenantRequest)
+			require.NoError(t, err)
+			crossTenantAssertion, err := signer.MintAssertion(identity, crossTenantRequest)
+			require.NoError(t, err)
+			payload.ActingUserAssertion = &crossTenantAssertion
+			result, err := ti.service.Ingest(ctx, payload)
+			require.NoError(t, err)
+			require.Equal(t, "ai_access_identity_unavailable", *result.Reason)
+			require.Empty(t, evaluator.requests)
+
+			payload = signedGovernedPayload(t, ctx, signer, privateKey, provider, delegation.EventPreToolUse)
+			_, err = ti.conn.Exec(ctx, `UPDATE organization_user_relationships SET deleted_at = clock_timestamp() WHERE organization_id = $1 AND user_id = $2`, authCtx.ActiveOrganizationID, authCtx.UserID) //nolint:glint // notestingrawsql: isolated integration fixture must simulate membership removal
+			require.NoError(t, err)
+			t.Cleanup(func() {
+				_, restoreErr := ti.conn.Exec(context.Background(), `UPDATE organization_user_relationships SET deleted_at = NULL WHERE organization_id = $1 AND user_id = $2`, authCtx.ActiveOrganizationID, authCtx.UserID) //nolint:glint // notestingrawsql: restore isolated membership fixture during cleanup
+				require.NoError(t, restoreErr)
+			})
+			result, err = ti.service.Ingest(ctx, payload)
+			require.NoError(t, err)
+			require.Equal(t, "deny", result.Decision)
+			require.Equal(t, "ai_access_identity_unavailable", *result.Reason)
+			require.Empty(t, evaluator.requests, "inactive membership never becomes an evaluator candidate")
+		})
+	}
 }
 
 func TestHookAIAccessExclusionsReplayAndBackfillRequireSignedObservationalBinding(t *testing.T) {
@@ -233,11 +338,9 @@ func TestHookAIAccessExclusionsReplayAndBackfillRequireSignedObservationalBindin
 	} {
 		payload := canonicalIngestPayload(test.provider, test.eventType, uuid.NewString())
 		payload.Source.RawEventName = &test.event
-		payload.ActingUserAssertion = new("caller-controlled")
-		payload.ActingUserContractVersion = new(delegation.ContractVersion)
 		result, err := ti.service.Ingest(ctx, payload)
 		require.NoError(t, err)
-		require.Equal(t, "allow", result.Decision)
+		require.Equal(t, "allow", result.Decision, "known excluded providers and events remain telemetry-only")
 	}
 
 	for name, flags := range map[string]struct{ backfilled, replayed bool }{
@@ -295,6 +398,44 @@ func TestHookAIAccessObservationalMarkerTamperingFailsClosed(t *testing.T) {
 	require.Empty(t, evaluator.requests)
 }
 
+func TestHookAIAccessDuplicateDenialIsByteIdenticalAndPersistenceDeduplicates(t *testing.T) {
+	t.Parallel()
+	match, err := killswitches.NewMatchResult(killswitches.PrescriptionID(uuid.NewString()), "Stable denial.")
+	require.NoError(t, err)
+	for _, provider := range []string{delegation.ProviderClaude, delegation.ProviderCodex} {
+		t.Run(provider, func(t *testing.T) {
+			t.Parallel()
+			ctx, ti, evaluator, signer, privateKey := setupHookAIAccess(t, match)
+			ti.service.productFeatures = alwaysEnabledFeatures{}
+			payload := signedGovernedPayload(t, ctx, signer, privateKey, provider, delegation.EventUserPromptSubmit)
+			prompt := "deduplicated governed prompt"
+			payload.Data = &gen.HookIngestData{Prompt: &gen.HookPromptData{Text: &prompt}}
+
+			first, err := ti.service.Ingest(ctx, payload)
+			require.NoError(t, err)
+			second, err := ti.service.Ingest(ctx, payload)
+			require.NoError(t, err)
+			firstBytes, err := json.Marshal(first)
+			require.NoError(t, err)
+			secondBytes, err := json.Marshal(second)
+			require.NoError(t, err)
+			require.Equal(t, firstBytes, secondBytes, "an exact redelivery must return byte-identical denial JSON")
+			require.Len(t, evaluator.requests, 1, "an exact redelivery must reuse the cached denial")
+
+			authCtx, ok := contextvalues.GetAuthContext(ctx)
+			require.True(t, ok)
+			require.NotNil(t, authCtx.ProjectID)
+			require.EventuallyWithT(t, func(collect *assert.CollectT) {
+				messages, listErr := chatRepo.New(ti.conn).ListChatMessages(ctx, chatRepo.ListChatMessagesParams{
+					ChatID: sessionIDToUUID(canonicalSessionID(payload)), ProjectID: *authCtx.ProjectID,
+				})
+				require.NoError(collect, listErr)
+				require.Len(collect, messages, 1, "duplicate delivery must persist one prompt row")
+			}, 2*time.Second, 20*time.Millisecond)
+		})
+	}
+}
+
 func TestHookAIAccessDuplicateVerifiesIdentityBeforeCachedDenial(t *testing.T) {
 	t.Parallel()
 	match, err := killswitches.NewMatchResult(killswitches.PrescriptionID(uuid.NewString()), "Stable denial.")
@@ -332,7 +473,7 @@ func TestHookAIAccessDuplicateVerifiesIdentityBeforeCachedDenial(t *testing.T) {
 
 	publicKey, ok := privateKey.Public().(ed25519.PublicKey)
 	require.True(t, ok)
-	crossTenantRefresh, err := signer.MintRefresh(authCtx.UserID, "other-organization", publicKey)
+	crossTenantRefresh, err := signer.MintRefresh(authCtx.UserID, "other-organization", authCtx.APIKeyID, publicKey)
 	require.NoError(t, err)
 	crossTenantIdentity, err := signer.VerifyRefresh(crossTenantRefresh)
 	require.NoError(t, err)
@@ -353,7 +494,7 @@ func TestHookAIAccessDuplicateVerifiesIdentityBeforeCachedDenial(t *testing.T) {
 	seedHookUser(t, ctx, ti.conn, authCtx.ActiveOrganizationID, otherUserID, "duplicate-user@example.test")
 	otherPublicKey, otherPrivateKey, err := ed25519.GenerateKey(rand.Reader)
 	require.NoError(t, err)
-	otherRefresh, err := signer.MintRefresh(otherUserID, authCtx.ActiveOrganizationID, otherPublicKey)
+	otherRefresh, err := signer.MintRefresh(otherUserID, authCtx.ActiveOrganizationID, authCtx.APIKeyID, otherPublicKey)
 	require.NoError(t, err)
 	otherIdentity, err := signer.VerifyRefresh(otherRefresh)
 	require.NoError(t, err)

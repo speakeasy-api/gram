@@ -6,6 +6,7 @@ import (
 	"encoding/binary"
 	"encoding/hex"
 	"errors"
+	"slices"
 	"strings"
 	"time"
 
@@ -13,6 +14,7 @@ import (
 
 	"github.com/speakeasy-api/gram/hooks/delegation"
 	gen "github.com/speakeasy-api/gram/server/gen/hooks"
+	"github.com/speakeasy-api/gram/server/internal/auth"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
@@ -71,35 +73,48 @@ func NewHookAIAccessCheckpoint(registry *killswitches.Registry, evaluator hookAI
 }
 
 type hookAIAccessDecision struct {
-	governed bool
-	deny     bool
-	reason   string
-	message  string
+	deny    bool
+	reason  string
+	message string
 }
 
-func governedHook(payload *gen.IngestPayload) (provider, event string, governed bool) {
+func hookSourceBinding(payload *gen.IngestPayload) (provider, event string) {
 	if payload == nil || payload.Source == nil {
+		return "", ""
+	}
+	return strings.ToLower(strings.TrimSpace(payload.Source.Adapter)), strings.TrimSpace(conv.PtrValOr(payload.Source.RawEventName, ""))
+}
+
+func governedHook(payload *gen.IngestPayload, authCtx *contextvalues.AuthContext) (provider, event string, governed bool) {
+	if payload == nil || payload.Event == nil {
 		return "", "", false
 	}
-	provider = strings.ToLower(strings.TrimSpace(payload.Source.Adapter))
-	rawEvent := strings.TrimSpace(conv.PtrValOr(payload.Source.RawEventName, ""))
-	if delegation.Approved(provider, rawEvent) {
-		return provider, rawEvent, true
-	}
-	// Acting-user material only indicates a stripped governed binding when the
-	// provider is covered and the raw event is absent. Out-of-scope callers must
-	// not be able to expand the checkpoint's denial surface.
-	coveredProvider := provider == delegation.ProviderClaude || provider == delegation.ProviderCodex
+	provider, rawEvent := hookSourceBinding(payload)
 	governanceEvidence := strings.TrimSpace(conv.PtrValOr(payload.ActingUserAssertion, "")) != "" ||
 		strings.TrimSpace(conv.PtrValOr(payload.ActingUserContractVersion, "")) != ""
-	if !coveredProvider || rawEvent != "" || !governanceEvidence {
+	approvedClient := authCtx != nil && slices.Contains(authCtx.APIKeyScopes, auth.APIKeyScopeHooksActingUser.String())
+	if governanceEvidence {
+		return provider, rawEvent, true
+	}
+	if !approvedClient {
 		return "", "", false
 	}
-	return provider, rawEvent, true
+
+	// The trusted enrollment scope covers only Claude/Codex prompt and pre-tool
+	// bindings. Acting-user material always enters the checkpoint so tampering
+	// cannot relabel a signed action as excluded. Without that material, known
+	// excluded providers/events remain telemetry-only.
+	canonicalType := strings.TrimSpace(payload.Event.Type)
+	coveredCanonicalType := canonicalType == "prompt.submitted" || canonicalType == "tool.requested"
+	if delegation.Approved(provider, rawEvent) || (provider == "" && coveredCanonicalType) {
+		return provider, rawEvent, true
+	}
+	return "", "", false
 }
 
 func validGovernedHookPayload(payload *gen.IngestPayload, event string) bool {
-	if payload == nil || payload.Event == nil || payload.Source == nil || strings.TrimSpace(conv.PtrValOr(payload.Source.RawEventName, "")) != event {
+	_, rawEvent := hookSourceBinding(payload)
+	if payload == nil || payload.Event == nil || rawEvent != event {
 		return false
 	}
 	canonicalType := strings.TrimSpace(payload.Event.Type)
@@ -115,11 +130,11 @@ type verifiedHookAIAccess struct {
 }
 
 func identityFailureDecision() hookAIAccessDecision {
-	return hookAIAccessDecision{governed: true, deny: true, reason: "ai_access_identity_unavailable", message: aiAccessIdentityFailureMessage}
+	return hookAIAccessDecision{deny: true, reason: "ai_access_identity_unavailable", message: aiAccessIdentityFailureMessage}
 }
 
 func evaluatorFailureDecision() hookAIAccessDecision {
-	return hookAIAccessDecision{governed: true, deny: true, reason: "ai_access_evaluator_unavailable", message: aiAccessEvaluatorFailureMessage}
+	return hookAIAccessDecision{deny: true, reason: "ai_access_evaluator_unavailable", message: aiAccessEvaluatorFailureMessage}
 }
 
 // Verify authenticates and canonicalizes the acting identity and resource. It
@@ -127,11 +142,11 @@ func evaluatorFailureDecision() hookAIAccessDecision {
 //
 //nolint:exhaustruct // Empty outcomes intentionally encode unverified and ungoverned state-machine branches.
 func (c *HookAIAccessCheckpoint) Verify(ctx context.Context, payload *gen.IngestPayload, authCtx *contextvalues.AuthContext) (verifiedHookAIAccess, hookAIAccessDecision) {
-	provider, event, governed := governedHook(payload)
+	provider, event, governed := governedHook(payload, authCtx)
 	if !governed {
 		return verifiedHookAIAccess{}, hookAIAccessDecision{}
 	}
-	if c == nil || authCtx == nil || strings.TrimSpace(authCtx.ActiveOrganizationID) == "" || payload == nil {
+	if c == nil || authCtx == nil || strings.TrimSpace(authCtx.ActiveOrganizationID) == "" || strings.TrimSpace(authCtx.APIKeyID) == "" || !slices.Contains(authCtx.APIKeyScopes, auth.APIKeyScopeHooksActingUser.String()) || payload == nil {
 		return verifiedHookAIAccess{}, identityFailureDecision()
 	}
 	if !validGovernedHookPayload(payload, event) {
@@ -148,7 +163,7 @@ func (c *HookAIAccessCheckpoint) Verify(ctx context.Context, payload *gen.Ingest
 	verified, err := c.verifier.VerifyAssertion(assertion, hooksacting.AssertionBinding{
 		OrganizationID: authCtx.ActiveOrganizationID, Provider: provider, Event: event, SessionID: sessionID, IdempotencyKey: idempotencyKey, Observational: observational,
 	})
-	if err != nil {
+	if err != nil || verified.EnrollmentID != authCtx.APIKeyID {
 		return verifiedHookAIAccess{}, identityFailureDecision()
 	}
 	organizationID := killswitches.OrganizationID(authCtx.ActiveOrganizationID)
@@ -170,7 +185,7 @@ func (c *HookAIAccessCheckpoint) Verify(ctx context.Context, payload *gen.Ingest
 //
 //nolint:exhaustruct // Empty outcomes intentionally encode unverified and ungoverned state-machine branches.
 func (c *HookAIAccessCheckpoint) VerifyCached(ctx context.Context, payload *gen.IngestPayload, authCtx *contextvalues.AuthContext, principalKey killswitches.PrincipalKey) (verifiedHookAIAccess, hookAIAccessDecision) {
-	provider, event, governed := governedHook(payload)
+	provider, event, governed := governedHook(payload, authCtx)
 	if !governed {
 		return verifiedHookAIAccess{}, hookAIAccessDecision{}
 	}
@@ -220,13 +235,13 @@ func (c *HookAIAccessCheckpoint) EvaluateVerified(ctx context.Context, verified 
 	}
 	switch disposition.Kind() {
 	case killswitches.TransportDispositionContinue:
-		return hookAIAccessDecision{governed: true, deny: false, reason: "", message: ""}
+		return hookAIAccessDecision{deny: false, reason: "", message: ""}
 	case killswitches.TransportDispositionMatchedDenial:
 		note, ok := disposition.ExternalNote()
 		if !ok || strings.TrimSpace(note) == "" {
 			return evaluatorFailureDecision()
 		}
-		return hookAIAccessDecision{governed: true, deny: true, reason: "ai_access_denied", message: note}
+		return hookAIAccessDecision{deny: true, reason: "ai_access_denied", message: note}
 	default:
 		return evaluatorFailureDecision()
 	}
@@ -239,7 +254,8 @@ type cachedHookDenial struct {
 }
 
 func hookDenialCacheKey(payload *gen.IngestPayload, organizationID string) (string, bool) {
-	provider, event, governed := governedHook(payload)
+	provider, event := hookSourceBinding(payload)
+	governed := delegation.Approved(provider, event)
 	idempotencyKey := strings.TrimSpace(conv.PtrValOr(payload.IdempotencyKey, ""))
 	sessionID := canonicalSessionID(payload)
 	contractVersion := strings.TrimSpace(conv.PtrValOr(payload.ActingUserContractVersion, ""))
@@ -283,7 +299,7 @@ func (s *Service) cachedHookAIAccessDenial(ctx context.Context, payload *gen.Ing
 	if cached.PrincipalKey == "" || cached.Reason != "ai_access_denied" || strings.TrimSpace(cached.Message) == "" {
 		return hookAIAccessDecision{}, "", hookDenialCacheFailure
 	}
-	return hookAIAccessDecision{governed: true, deny: true, reason: cached.Reason, message: cached.Message}, cached.PrincipalKey, hookDenialCacheHit
+	return hookAIAccessDecision{deny: true, reason: cached.Reason, message: cached.Message}, cached.PrincipalKey, hookDenialCacheHit
 }
 
 //nolint:exhaustruct // Empty decisions encode cache and lease state-machine branches.
@@ -355,5 +371,5 @@ func (s *Service) publishHookAIAccessDenial(ctx context.Context, payload *gen.In
 	if err := s.cache.Get(ctx, key, &first); err != nil || first.PrincipalKey == "" || first.Reason != "ai_access_denied" || strings.TrimSpace(first.Message) == "" {
 		return evaluatorFailureDecision()
 	}
-	return hookAIAccessDecision{governed: true, deny: true, reason: first.Reason, message: first.Message}
+	return hookAIAccessDecision{deny: true, reason: first.Reason, message: first.Message}
 }

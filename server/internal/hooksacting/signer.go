@@ -37,6 +37,7 @@ type refreshClaims struct {
 	OrganizationID  string `json:"org"`
 	PublicKey       string `json:"public_key"`
 	KeyID           string `json:"kid"`
+	EnrollmentID    string `json:"enrollment_id"`
 }
 
 type delegationClaims struct {
@@ -49,6 +50,7 @@ type delegationClaims struct {
 	IdempotencyKey  string `json:"idempotency_key"`
 	Observational   bool   `json:"observational,omitempty"`
 	KeyID           string `json:"kid"`
+	EnrollmentID    string `json:"enrollment_id"`
 }
 
 type RefreshIdentity struct {
@@ -56,6 +58,7 @@ type RefreshIdentity struct {
 	OrganizationID string
 	PublicKey      ed25519.PublicKey
 	KeyID          string
+	EnrollmentID   string
 	RefreshJTI     string
 }
 
@@ -68,6 +71,7 @@ type AssertionIdentity struct {
 	IdempotencyKey string
 	Observational  bool
 	KeyID          string
+	EnrollmentID   string
 }
 
 type AssertionBinding struct {
@@ -96,8 +100,8 @@ func NewSigner(secret string) (*Signer, error) {
 	return &Signer{refreshKey: refreshKey, assertionKey: assertionKey, now: time.Now}, nil
 }
 
-func (s *Signer) MintRefresh(userID, organizationID string, publicKey ed25519.PublicKey) (string, error) {
-	if s == nil || strings.TrimSpace(userID) == "" || strings.TrimSpace(organizationID) == "" || len(publicKey) != ed25519.PublicKeySize {
+func (s *Signer) MintRefresh(userID, organizationID, enrollmentID string, publicKey ed25519.PublicKey) (string, error) {
+	if s == nil || strings.TrimSpace(userID) == "" || strings.TrimSpace(organizationID) == "" || strings.TrimSpace(enrollmentID) == "" || len(publicKey) != ed25519.PublicKeySize {
 		return "", errors.New("valid user, organization, and Ed25519 public key are required")
 	}
 	subject, err := urn.ParseSessionSubject(urn.NewUserSubject(userID).String())
@@ -117,7 +121,7 @@ func (s *Signer) MintRefresh(userID, organizationID string, publicKey ed25519.Pu
 			ExpiresAt: jwt.NewNumericDate(now.Add(RefreshLifetime)),
 		},
 		ContractVersion: delegation.ContractVersion, OrganizationID: organizationID,
-		PublicKey: delegation.EncodePublicKey(publicKey), KeyID: delegation.KeyID(publicKey),
+		PublicKey: delegation.EncodePublicKey(publicKey), KeyID: delegation.KeyID(publicKey), EnrollmentID: enrollmentID,
 	}
 	signed, err := jwt.NewWithClaims(jwt.SigningMethodHS256, claims).SignedString(s.refreshKey)
 	if err != nil {
@@ -138,19 +142,20 @@ func (s *Signer) VerifyRefresh(raw string) (RefreshIdentity, error) {
 		OrganizationID:  "",
 		PublicKey:       "",
 		KeyID:           "",
+		EnrollmentID:    "",
 	}
 	if err := s.parse(raw, delegation.RefreshIssuer, delegation.RefreshAudience, RefreshLifetime, s.refreshKey, &claims, &claims.RegisteredClaims); err != nil {
 		return RefreshIdentity{}, err
 	}
 	userID, err := parseUserSubject(claims.Subject)
-	if err != nil || claims.ContractVersion != delegation.ContractVersion || strings.TrimSpace(claims.OrganizationID) == "" {
+	if err != nil || claims.ContractVersion != delegation.ContractVersion || strings.TrimSpace(claims.OrganizationID) == "" || strings.TrimSpace(claims.EnrollmentID) == "" {
 		return RefreshIdentity{}, errors.New("invalid delegation refresh claims")
 	}
 	publicKey, err := delegation.ParsePublicKey(claims.PublicKey)
 	if err != nil || claims.KeyID != delegation.KeyID(publicKey) {
 		return RefreshIdentity{}, errors.New("invalid delegation refresh key binding")
 	}
-	return RefreshIdentity{UserID: userID, OrganizationID: claims.OrganizationID, PublicKey: publicKey, KeyID: claims.KeyID, RefreshJTI: claims.ID}, nil
+	return RefreshIdentity{UserID: userID, OrganizationID: claims.OrganizationID, PublicKey: publicKey, KeyID: claims.KeyID, EnrollmentID: claims.EnrollmentID, RefreshJTI: claims.ID}, nil
 }
 
 func (s *Signer) MintAssertion(identity RefreshIdentity, req delegation.MintRequest) (string, error) {
@@ -178,7 +183,7 @@ func (s *Signer) MintAssertion(identity RefreshIdentity, req delegation.MintRequ
 		},
 		ContractVersion: delegation.ContractVersion, OrganizationID: identity.OrganizationID,
 		Provider: req.Provider, Event: req.Event, SessionID: req.SessionID,
-		IdempotencyKey: req.IdempotencyKey, Observational: req.Observational, KeyID: identity.KeyID,
+		IdempotencyKey: req.IdempotencyKey, Observational: req.Observational, KeyID: identity.KeyID, EnrollmentID: identity.EnrollmentID,
 	}
 	signed, err := jwt.NewWithClaims(jwt.SigningMethodHS256, claims).SignedString(s.assertionKey)
 	if err != nil {
@@ -203,18 +208,19 @@ func (s *Signer) VerifyAssertion(raw string, expected AssertionBinding) (Asserti
 		IdempotencyKey:  "",
 		Observational:   false,
 		KeyID:           "",
+		EnrollmentID:    "",
 	}
 	if err := s.parse(raw, delegation.AssertionIssuer, delegation.AssertionAudience, AssertionLifetime, s.assertionKey, &claims, &claims.RegisteredClaims); err != nil {
 		return AssertionIdentity{}, err
 	}
 	userID, err := parseUserSubject(claims.Subject)
-	if err != nil || claims.ContractVersion != delegation.ContractVersion || claims.KeyID == "" {
+	if err != nil || claims.ContractVersion != delegation.ContractVersion || claims.KeyID == "" || claims.EnrollmentID == "" {
 		return AssertionIdentity{}, errors.New("invalid acting-user assertion claims")
 	}
 	if claims.OrganizationID != expected.OrganizationID || claims.Provider != expected.Provider || claims.Event != expected.Event || claims.SessionID != expected.SessionID || claims.IdempotencyKey != expected.IdempotencyKey || claims.Observational != expected.Observational {
 		return AssertionIdentity{}, errors.New("acting-user assertion binding mismatch")
 	}
-	return AssertionIdentity{UserID: userID, OrganizationID: claims.OrganizationID, Provider: claims.Provider, Event: claims.Event, SessionID: claims.SessionID, IdempotencyKey: claims.IdempotencyKey, Observational: claims.Observational, KeyID: claims.KeyID}, nil
+	return AssertionIdentity{UserID: userID, OrganizationID: claims.OrganizationID, Provider: claims.Provider, Event: claims.Event, SessionID: claims.SessionID, IdempotencyKey: claims.IdempotencyKey, Observational: claims.Observational, KeyID: claims.KeyID, EnrollmentID: claims.EnrollmentID}, nil
 }
 
 // AssertionExpiresIn returns the usable whole-second lifetime of a valid assertion.
@@ -224,7 +230,7 @@ func (s *Signer) AssertionExpiresIn(raw string) (int, error) {
 	}
 	claims := delegationClaims{
 		RegisteredClaims: jwt.RegisteredClaims{Issuer: "", Subject: "", Audience: nil, ExpiresAt: nil, NotBefore: nil, IssuedAt: nil, ID: ""}, ContractVersion: "", OrganizationID: "", Provider: "", Event: "",
-		SessionID: "", IdempotencyKey: "", Observational: false, KeyID: "",
+		SessionID: "", IdempotencyKey: "", Observational: false, KeyID: "", EnrollmentID: "",
 	}
 	if err := s.parse(raw, delegation.AssertionIssuer, delegation.AssertionAudience, AssertionLifetime, s.assertionKey, &claims, &claims.RegisteredClaims); err != nil {
 		return 0, err

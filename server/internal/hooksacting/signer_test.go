@@ -21,7 +21,7 @@ func TestMintRefreshRejectsInvalidUserSubject(t *testing.T) {
 	signer, err := NewSigner("test-secret")
 	require.NoError(t, err)
 
-	_, err = signer.MintRefresh(strings.Repeat("u", urn.MaxSessionSubjectIDLength+1), "org-1", publicKey)
+	_, err = signer.MintRefresh(strings.Repeat("u", urn.MaxSessionSubjectIDLength+1), "org-1", "enrollment-1", publicKey)
 	require.ErrorContains(t, err, "invalid hooks acting-user subject")
 }
 
@@ -34,7 +34,7 @@ func TestSignerProofBoundDelegationAndBindings(t *testing.T) {
 	require.NoError(t, err)
 	signer.now = func() time.Time { return now }
 
-	refresh, err := signer.MintRefresh("user-1", "org-1", publicKey)
+	refresh, err := signer.MintRefresh("user-1", "org-1", "enrollment-1", publicKey)
 	require.NoError(t, err)
 	identity, err := signer.VerifyRefresh(refresh)
 	require.NoError(t, err)
@@ -174,7 +174,7 @@ func TestSignerRejectsStaleAndSpoofedProof(t *testing.T) {
 	require.NoError(t, err)
 	now := time.Now().UTC()
 	signer.now = func() time.Time { return now }
-	refresh, err := signer.MintRefresh("user-1", "org-1", publicKey)
+	refresh, err := signer.MintRefresh("user-1", "org-1", "enrollment-1", publicKey)
 	require.NoError(t, err)
 	identity, err := signer.VerifyRefresh(refresh)
 	require.NoError(t, err)

@@ -193,21 +193,6 @@ func NewRegistration(db *pgxpool.Pool) (killswitches.Registration, error) {
 	}, nil
 }
 
-// HookCoverageVersionContract is the checked-in version boundary for DNO-989.
-// No already-released relay is claimed: v1 first exists in the next release.
-// Native versions list only clients substantiated by the real-client E2E suite.
-var HookCoverageVersionContract = struct {
-	ContractVersion       string
-	ReleasedRelayVersions []string
-	TestedNativeVersions  []string
-	TestedPlatforms       []string
-}{
-	ContractVersion:       delegation.ContractVersion,
-	ReleasedRelayVersions: []string{},
-	TestedNativeVersions:  []string{"Claude Code 2.1.250", "Codex CLI 0.150.1"},
-	TestedPlatforms:       []string{"macOS 26.5.2 arm64"},
-}
-
 func hookCoverageContracts() ([]killswitches.CoverageContract, error) {
 	bindings := delegation.ApprovedBindings()
 	result := make([]killswitches.CoverageContract, 0, len(bindings))

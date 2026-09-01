@@ -159,7 +159,14 @@ func (r *Relay) deliver(ctx context.Context, typed any) (ingestResult, authState
 		return ingestResult{statusCode: 0, decision: decision{}, authRejected: false, failOpen: nil, skillCapture: nil, blockEffect: nil}, stateNeverAuthed
 	}
 
-	c, ok := resolveAuth(r.cfg)
+	binding, governed := governedHookBindingOf(typed)
+	var c creds
+	var ok bool
+	if governed {
+		c, ok = resolveGovernedAuth(r.cfg)
+	} else {
+		c, ok = resolveAuth(r.cfg)
+	}
 	if !ok {
 		if reauthNeeded() {
 			r.debugf("event=%s no-creds state=reauth-needed authfile=%s", agenthooks.EventOf(typed).NativeName, authFilePath())
@@ -202,7 +209,6 @@ func (r *Relay) deliver(ctx context.Context, typed any) (ingestResult, authState
 	// the spooled copy a later drain replays. The server stores at most one
 	// event per key, so every redelivery path is safe.
 	idemKey := newIdempotencyToken()
-	binding, governed := governedHookBindingOf(typed)
 	assertion := ""
 	if governed {
 		mintCtx, cancel := context.WithTimeout(ctx, gateMintBudget)

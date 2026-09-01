@@ -3302,7 +3302,9 @@ async function runAIAccessSuite(args) {
           checkpoint.name === "prompt"
             ? outputProvesNativePromptDenial(provider, res, note) &&
               !outputHasAssistantMarker(res, successMarker)
-            : denialIndex >= 0 && toolIndex < 0;
+            : denialIndex >= 0 &&
+              toolIndex < 0 &&
+              !outputHasAssistantMarker(res, successMarker);
         const denialEnforced =
           res.exitCode === 0 && !res.timedOut && serverDenied && clientDenied;
         checks.push({

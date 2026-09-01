@@ -42,9 +42,10 @@ func TestDelegateHooksActingUserRequiresCurrentMembershipAndProof(t *testing.T) 
 	require.NotNil(t, redeemed.OrganizationID)
 	keyHash, err := auth.GetAPIKeyHash(redeemed.AccessToken)
 	require.NoError(t, err)
+	var enrollmentID uuid.UUID
 	var scopes []string
-	require.NoError(t, ti.conn.QueryRow(ctx, `SELECT scopes FROM api_keys WHERE key_hash = $1`, keyHash).Scan(&scopes)) //nolint:glint // notestingrawsql: bounded integration assertion verifies proof-bound key scopes
-	require.ElementsMatch(t, []string{auth.APIKeyScopeAgentUser.String(), auth.APIKeyScopeHooks.String()}, scopes)
+	require.NoError(t, ti.conn.QueryRow(ctx, `SELECT id, scopes FROM api_keys WHERE key_hash = $1`, keyHash).Scan(&enrollmentID, &scopes)) //nolint:glint // notestingrawsql: bounded integration assertion verifies proof-bound key scopes
+	require.ElementsMatch(t, []string{auth.APIKeyScopeAgentUser.String(), auth.APIKeyScopeHooks.String(), auth.APIKeyScopeHooksActingUser.String()}, scopes)
 
 	request := delegation.MintRequest{
 		RefreshToken: *redeemed.DelegationRefreshToken, ContractVersion: delegation.ContractVersion,
@@ -137,6 +138,14 @@ func TestDelegateHooksActingUserRequiresCurrentMembershipAndProof(t *testing.T) 
 	secondPayload.Signature = secondRequest.Signature
 	secondResult, err := ti.service.DelegateHooksActingUser(ctx, &secondPayload)
 	require.NoError(t, err)
+	require.NotEmpty(t, secondResult.Assertion)
+
+	_, err = ti.conn.Exec(ctx, `UPDATE api_keys SET deleted_at = clock_timestamp() WHERE id = $1`, enrollmentID) //nolint:glint // notestingrawsql: isolated integration fixture must simulate enrollment revocation
+	require.NoError(t, err)
+	_, err = ti.service.DelegateHooksActingUser(ctx, payload)
+	requireOopsCode(t, err, oops.CodeUnauthorized)
+	secondResult, err = ti.service.DelegateHooksActingUser(ctx, &secondPayload)
+	require.NoError(t, err, "revoking one enrollment must not revoke another")
 	require.NotEmpty(t, secondResult.Assertion)
 
 	spoofed := *payload

@@ -142,7 +142,8 @@ func drainSpool(ctx context.Context, dir string) DrainSummary {
 			clients[entry.ServerURL] = cl
 		}
 		assertion := ""
-		if binding, governed := governedReplayBinding(entry); governed {
+		binding, governed := governedReplayBinding(entry)
+		if governed {
 			assertion, err = mintActingUserAssertion(ctx, entry.ServerURL, a.proof, binding, entry.IdempotencyKey)
 			if err != nil {
 				if errors.Is(err, errProofBoundEnrollmentRequired) {
@@ -159,15 +160,18 @@ func drainSpool(ctx context.Context, dir string) DrainSummary {
 				break
 			}
 		}
-		res := cl.sendWithAssertion(ctx, a.c, entry.Envelope, entry.IdempotencyKey, assertion, entry.Backfilled)
 		replayCreds := a.c
+		if governed {
+			replayCreds = a.proof
+		}
+		res := cl.sendWithAssertion(ctx, replayCreds, entry.Envelope, entry.IdempotencyKey, assertion, entry.Backfilled)
 		if res.authRejected {
 			// A rejected credential is machine state, not event state — the
 			// backlog would deliver fine after a re-login or key rotation.
 			// Mirror the live path's one fallback (a rejected cached key
 			// retries through the config's shared org key), then skip the
 			// deployment's remaining entries. Never delete on auth rejection.
-			if a.c.Source == credCache && a.orgKey != "" {
+			if !governed && replayCreds.Source == credCache && a.orgKey != "" {
 				org := creds{ServerURL: entry.ServerURL, APIKey: a.orgKey, Project: entry.ProjectSlug, Email: "", Org: entry.OrgID, Source: credOrg}
 				res = cl.sendWithAssertion(ctx, org, entry.Envelope, entry.IdempotencyKey, assertion, entry.Backfilled)
 				if !res.authRejected {
@@ -397,8 +401,8 @@ func resolveDrainAuth(entry spoolEntry, key string, memo map[string]drainAuth) d
 		}
 		a.orgKey = cfg.HooksAPIKey
 		a.c, a.ok = resolveAuth(cfg)
-		if a.ok && a.c.Source == credCache {
-			a.proof = a.c
+		if cached, cachedOK := readCachedAuth(cfg); cachedOK && delegationReady(cached) {
+			a.proof = cached
 		}
 		if a.ok && a.c.Source == credEnv {
 			if envURL := strings.TrimRight(strings.TrimSpace(os.Getenv("GRAM_HOOKS_SERVER_URL")), "/"); envURL != "" && envURL != entry.ServerURL {

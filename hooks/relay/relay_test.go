@@ -152,6 +152,16 @@ func authedConfig(t *testing.T, serverURL string) Config {
 	return Config{ServerURL: serverURL, ProjectSlug: "default", OrgID: "", HooksAPIKey: "", BrowserLogin: false, Nonblocking: false, DebugLog: "", ConfigPath: "", ConfigError: ""}
 }
 
+func TestGovernedAuthPrefersProofBoundCacheOverEnvironmentKey(t *testing.T) {
+	serverURL := "https://gram.test"
+	writeTestProofAuth(t, serverURL, "proof-bound-key")
+	t.Setenv("GRAM_HOOKS_API_KEY", "telemetry-key")
+	c, ok := resolveGovernedAuth(Config{ServerURL: serverURL, ProjectSlug: "default", OrgID: "test-org"})
+	require.True(t, ok)
+	require.Equal(t, credCache, c.Source)
+	require.Equal(t, "proof-bound-key", c.APIKey)
+}
+
 func TestEnvelopeClaudePreToolUse(t *testing.T) {
 	payload := agenthookstest.Fixture(t, "claude/pre_tool_use.json")
 	runner := agenthooks.New()
@@ -1294,6 +1304,85 @@ func TestCodexToolQueueConcurrentPushPop(t *testing.T) {
 		seen[id] = true
 	}
 	require.Empty(t, popCodexToolID(path), "the drained queue yields nothing")
+}
+
+func TestGovernedNativeClientsPropagateProofAndNativeDenials(t *testing.T) {
+	bindings := []struct {
+		name, fixture, provider, event string
+		native                         agenthooks.Provider
+	}{
+		{name: "claude-prompt", fixture: "claude/user_prompt_submit.json", provider: delegation.ProviderClaude, event: delegation.EventUserPromptSubmit, native: agenthooks.ProviderClaudeCode},
+		{name: "claude-tool", fixture: "claude/pre_tool_use.json", provider: delegation.ProviderClaude, event: delegation.EventPreToolUse, native: agenthooks.ProviderClaudeCode},
+		{name: "codex-prompt", fixture: "codex/user_prompt_submit.json", provider: delegation.ProviderCodex, event: delegation.EventUserPromptSubmit, native: agenthooks.ProviderCodex},
+		{name: "codex-tool", fixture: "codex/pre_tool_use.json", provider: delegation.ProviderCodex, event: delegation.EventPreToolUse, native: agenthooks.ProviderCodex},
+	}
+	for _, binding := range bindings {
+		t.Run(binding.name, func(t *testing.T) {
+			t.Setenv("TMPDIR", t.TempDir())
+			publicKey, privateKey, err := ed25519.GenerateKey(rand.Reader)
+			require.NoError(t, err)
+			const assertion = "server-signed-acting-user-assertion"
+			const denialNote = "AI access denied by the acceptance fixture."
+			var minted delegation.MintRequest
+			var ingestHeader http.Header
+			handlerErrors := make(chan error, 4)
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.Header().Set("Content-Type", "application/json")
+				if r.URL.Path == "/rpc/cliAuth.delegateHooksActingUser" {
+					if err := json.NewDecoder(r.Body).Decode(&minted); err != nil {
+						handlerErrors <- err
+						w.WriteHeader(http.StatusBadRequest)
+						return
+					}
+					if err := delegation.Verify(publicKey, minted); err != nil {
+						handlerErrors <- err
+						w.WriteHeader(http.StatusUnauthorized)
+						return
+					}
+					_ = json.NewEncoder(w).Encode(delegation.MintResponse{Assertion: assertion, ExpiresIn: 30})
+					return
+				}
+				var body components.IngestRequestBody
+				if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+					handlerErrors <- err
+					w.WriteHeader(http.StatusBadRequest)
+					return
+				}
+				if binding.event == delegation.EventPreToolUse && body.Event.Type == components.TypePromptSubmitted {
+					_ = json.NewEncoder(w).Encode(decision{Decision: "allow"})
+					return
+				}
+				ingestHeader = r.Header.Clone()
+				_ = json.NewEncoder(w).Encode(decision{Decision: "deny", Reason: "ai_access_identity_unavailable", Message: denialNote})
+			}))
+			t.Cleanup(server.Close)
+			authFile := filepath.Join(t.TempDir(), "hooks-auth.env")
+			t.Setenv("GRAM_HOOKS_AUTH_FILE", authFile)
+			require.NoError(t, writeAuth(creds{ServerURL: server.URL, APIKey: "test-hooks-key", Project: "default", Org: "test-org", RefreshToken: "test-refresh", ProofPrivateKey: delegation.EncodePrivateKey(privateKey), ContractVersion: delegation.ContractVersion, Source: credCache}))
+
+			res := invoke(t, Config{ServerURL: server.URL, ProjectSlug: "default"}, binding.native, binding.fixture)
+			select {
+			case err := <-handlerErrors:
+				require.NoError(t, err)
+			default:
+			}
+			rendered := string(res.Stdout) + res.Stderr
+			require.Contains(t, rendered, denialNote)
+			require.Zero(t, res.ExitCode)
+			if binding.event == delegation.EventUserPromptSubmit {
+				require.Contains(t, string(res.Stdout), `"decision":"block"`)
+			} else {
+				require.Contains(t, string(res.Stdout), `"permissionDecision":"deny"`)
+			}
+			require.Equal(t, binding.provider, minted.Provider)
+			require.Equal(t, binding.event, minted.Event)
+			require.NotEmpty(t, minted.SessionID)
+			require.NotEmpty(t, minted.IdempotencyKey)
+			require.Equal(t, assertion, ingestHeader.Get("X-Gram-Acting-User"))
+			require.Equal(t, delegation.ContractVersion, ingestHeader.Get("X-Gram-Acting-User-Contract"))
+			require.Equal(t, minted.IdempotencyKey, ingestHeader.Get("Idempotency-Key"))
+		})
+	}
 }
 
 func TestGovernedNativeMatrixIgnoresEveryFailOpenSettingOnOperationalFailures(t *testing.T) {

@@ -107,11 +107,6 @@ func TestMCPCoverageInventory(t *testing.T) {
 		require.False(t, covered, string(excludedSurface))
 	}
 
-	require.Equal(t, "hooks-acting-user.v1", HookCoverageVersionContract.ContractVersion)
-	require.Empty(t, HookCoverageVersionContract.ReleasedRelayVersions, "no already-released relay implements the proof contract")
-	require.Equal(t, []string{"Claude Code 2.1.250", "Codex CLI 0.150.1"}, HookCoverageVersionContract.TestedNativeVersions)
-	require.Equal(t, []string{"macOS 26.5.2 arm64"}, HookCoverageVersionContract.TestedPlatforms)
-
 	excluded := ExcludedMCPSurfaces()
 	names := make([]string, 0, len(excluded))
 	for _, surface := range excluded {

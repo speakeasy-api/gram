@@ -201,15 +201,22 @@ func TestIngest_NoCredentialsFailsOpen(t *testing.T) {
 func TestIngest_NoCredentialsGovernedShapeTamperingFailsClosed(t *testing.T) {
 	t.Parallel()
 
-	for name, mutate := range map[string]func(*gen.IngestPayload){
-		"recognized raw event with malformed canonical type": func(payload *gen.IngestPayload) {
-			payload.Event.Type = "message.created"
+	for name, test := range map[string]struct {
+		mutate       func(*gen.IngestPayload)
+		wantDecision string
+	}{
+		"proofless legacy shape remains ungoverned": {
+			mutate:       func(payload *gen.IngestPayload) { payload.Event.Type = "message.created" },
+			wantDecision: "allow",
 		},
-		"acting-user governed type with stripped raw event": func(payload *gen.IngestPayload) {
-			payload.Source.RawEventName = nil
-			assertion, contract := "assertion", delegation.ContractVersion
-			payload.ActingUserAssertion = &assertion
-			payload.ActingUserContractVersion = &contract
+		"acting-user contract attempt with stripped raw event": {
+			mutate: func(payload *gen.IngestPayload) {
+				payload.Source.RawEventName = nil
+				assertion, contract := "assertion", delegation.ContractVersion
+				payload.ActingUserAssertion = &assertion
+				payload.ActingUserContractVersion = &contract
+			},
+			wantDecision: "deny",
 		},
 	} {
 		t.Run(name, func(t *testing.T) {
@@ -218,12 +225,14 @@ func TestIngest_NoCredentialsGovernedShapeTamperingFailsClosed(t *testing.T) {
 			payload := canonicalIngestPayload(delegation.ProviderClaude, "prompt.submitted", "tampered-"+uuid.NewString())
 			event := delegation.EventUserPromptSubmit
 			payload.Source.RawEventName = &event
-			mutate(payload)
+			test.mutate(payload)
 
 			result, err := ti.service.Ingest(t.Context(), payload)
 			require.NoError(t, err)
-			require.Equal(t, "deny", result.Decision)
-			require.Equal(t, "ai_access_identity_unavailable", *result.Reason)
+			require.Equal(t, test.wantDecision, result.Decision)
+			if test.wantDecision == "deny" {
+				require.Equal(t, "ai_access_identity_unavailable", *result.Reason)
+			}
 		})
 	}
 }
