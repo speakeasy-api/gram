@@ -47,8 +47,7 @@ func (f workloadIdentityFixture) admit(t *testing.T, lookup workloadIdentityLook
 	return admitWorkloadIdentity(t.Context(), lookup, f.endpoint, f.issuer, f.subject)
 }
 
-// The ticket's central case: a static policy naming exactly one subject admits
-// that subject.
+// A static policy naming exactly one subject admits that subject.
 func TestAdmitWorkloadIdentity_AdmittedSubjectPasses(t *testing.T) {
 	t.Parallel()
 
@@ -77,8 +76,8 @@ func TestAdmitWorkloadIdentity_VerifiedButUnadmittedSubjectIsRejected(t *testing
 	require.ErrorIs(t, fixture.admit(t, lookup), errWorkloadNotAdmitted)
 }
 
-// An empty policy is the production wiring, so it has to admit nothing rather
-// than fall through to an allow-all.
+// An empty policy has to admit nothing rather than fall through to an
+// allow-all.
 func TestAdmitWorkloadIdentity_EmptyPolicyAdmitsNothing(t *testing.T) {
 	t.Parallel()
 
@@ -87,8 +86,9 @@ func TestAdmitWorkloadIdentity_EmptyPolicyAdmitsNothing(t *testing.T) {
 	require.ErrorIs(t, fixture.admit(t, newStaticWorkloadIdentityLookup()), errWorkloadNotAdmitted)
 }
 
-// An unwired policy is the state production is in until a store is configured.
-// It must read as "no admissions", never as "no check to run".
+// An unwired policy must read as "no admissions", never as "no check to run":
+// a lookup nobody supplied is the absence of permission, not the absence of a
+// rule to apply.
 func TestAdmitWorkloadIdentity_UnconfiguredLookupAdmitsNothing(t *testing.T) {
 	t.Parallel()
 

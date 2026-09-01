@@ -59,12 +59,11 @@ type workloadIdentity struct {
 // workloadIdentityLookup reports whether an endpoint admits one workload
 // identity.
 //
-// Injected so admission can be exercised without a database, and so the
-// Nigel POC can wire a static policy eight weeks before any table exists. The
-// database-backed implementation lands with the trusted issuer configuration
-// milestone and swaps in here without changing a caller: its query is the same
-// triple against user_session_issuer_workload_identities, filtered to rows
-// that are enabled and not soft-deleted.
+// Injected so that admission can be exercised against a static policy with no
+// database behind it, and so a store can replace that policy without touching
+// a caller. A database-backed implementation is the same triple queried
+// against user_session_issuer_workload_identities, restricted to rows that are
+// enabled and not soft-deleted.
 //
 // Reporting false and reporting an error are different answers. False is a
 // decision — this endpoint does not admit this workload. An error is the
@@ -75,12 +74,11 @@ type workloadIdentityLookup func(ctx context.Context, identity workloadIdentity)
 // newStaticWorkloadIdentityLookup admits exactly the identities given and
 // nothing else.
 //
-// Calling it with no identities is the production wiring: an empty policy
-// admits nothing. That is the whole contract — there is no allow-all here, and
-// no configuration that produces one, because the grant this serves is
-// reachable without credentials and a policy that fails open on a
-// misconfiguration would admit every machine its issuers ever mint a token
-// for.
+// Calling it with no identities admits nothing, which is the safe default and
+// the whole contract: there is no allow-all here and no configuration that
+// produces one. The grant this serves is reachable without credentials, so a
+// policy that failed open on a misconfiguration would admit every machine its
+// issuers ever mint a token for.
 func newStaticWorkloadIdentityLookup(admitted ...workloadIdentity) workloadIdentityLookup {
 	set := make(map[workloadIdentity]struct{}, len(admitted))
 	for _, identity := range admitted {
@@ -108,14 +106,6 @@ func newStaticWorkloadIdentityLookup(admitted ...workloadIdentity) workloadIdent
 // unconfigured lookup, a subject the assertion never carried, and an issuer
 // that resolved to nothing are all non-admission rather than a reason to skip
 // the check.
-//
-// Nothing calls this yet, and that is the milestone's shape rather than an
-// omission: the token endpoint grant that verifies a workload assertion is
-// what creates a caller, and it does not exist. Its siblings on this path —
-// workloadIssuerKeySource and the workload expectation on clientauth.Verify —
-// shipped the same way, exercised by tests until the grant arrives to use
-// them. The order is deliberate, because the grant must not be the change that
-// also introduces the boundary it depends on.
 func admitWorkloadIdentity(
 	ctx context.Context,
 	lookup workloadIdentityLookup,
