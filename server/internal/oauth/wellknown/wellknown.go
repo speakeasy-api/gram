@@ -58,15 +58,26 @@ type OAuthProtectedResourceMetadata struct {
 }
 
 // OAuthServerMetadata represents OAuth 2.0 Authorization Server Metadata (RFC 8414).
+//
+// Every optional member is omitempty. A nil slice would otherwise marshal to
+// `null`, which clients modelling these as optional arrays reject outright, and
+// an empty slice asserts "supports none of these" rather than "not stated" —
+// for response_types_supported that means a client refuses `code`, and for
+// registration_endpoint an empty string is not the URL RFC 8414 promises. When
+// a value is genuinely unknown, saying nothing lets the client apply the RFC's
+// defaults; saying `[]` or `""` does not.
 type OAuthServerMetadata struct {
-	Issuer                        string   `json:"issuer"`
-	AuthorizationEndpoint         string   `json:"authorization_endpoint"`
-	TokenEndpoint                 string   `json:"token_endpoint"`
-	RegistrationEndpoint          string   `json:"registration_endpoint"`
-	ScopesSupported               []string `json:"scopes_supported,omitempty"`
-	ResponseTypesSupported        []string `json:"response_types_supported"`
-	GrantTypesSupported           []string `json:"grant_types_supported"`
-	CodeChallengeMethodsSupported []string `json:"code_challenge_methods_supported"`
+	Issuer                            string   `json:"issuer"`
+	AuthorizationEndpoint             string   `json:"authorization_endpoint"`
+	TokenEndpoint                     string   `json:"token_endpoint"`
+	RegistrationEndpoint              string   `json:"registration_endpoint,omitempty"`
+	RevocationEndpoint                string   `json:"revocation_endpoint,omitempty"`
+	JwksURI                           string   `json:"jwks_uri,omitempty"`
+	ScopesSupported                   []string `json:"scopes_supported,omitempty"`
+	ResponseTypesSupported            []string `json:"response_types_supported,omitempty"`
+	GrantTypesSupported               []string `json:"grant_types_supported,omitempty"`
+	TokenEndpointAuthMethodsSupported []string `json:"token_endpoint_auth_methods_supported,omitempty"`
+	CodeChallengeMethodsSupported     []string `json:"code_challenge_methods_supported,omitempty"`
 }
 
 type OAuthServerMetadataResultKind string
@@ -156,13 +167,16 @@ func ResolveOAuthServerMetadataFromToolset(
 // a plain struct rather than the repo row so this package stays independent of
 // the remote sessions schema.
 type RemoteSessionIssuerMetadata struct {
-	AuthorizationEndpoint         string
-	TokenEndpoint                 string
-	RegistrationEndpoint          string
-	ScopesSupported               []string
-	ResponseTypesSupported        []string
-	GrantTypesSupported           []string
-	CodeChallengeMethodsSupported []string
+	AuthorizationEndpoint             string
+	TokenEndpoint                     string
+	RegistrationEndpoint              string
+	RevocationEndpoint                string
+	JwksURI                           string
+	ScopesSupported                   []string
+	ResponseTypesSupported            []string
+	GrantTypesSupported               []string
+	TokenEndpointAuthMethodsSupported []string
+	CodeChallengeMethodsSupported     []string
 
 	// Snapshot is remote_session_issuers.metadata: the discovery document as
 	// the issuer served it, filtered to what Gram will republish. Empty for a
@@ -202,14 +216,22 @@ func ResolveOAuthServerMetadataFromRemoteSessionIssuer(issuer RemoteSessionIssue
 	return &OAuthServerMetadataResult{
 		Kind: OAuthServerMetadataResultKindStatic,
 		Static: &OAuthServerMetadata{
-			Issuer:                        resourceURL,
-			AuthorizationEndpoint:         issuer.AuthorizationEndpoint,
-			TokenEndpoint:                 issuer.TokenEndpoint,
-			RegistrationEndpoint:          issuer.RegistrationEndpoint,
-			ScopesSupported:               issuer.ScopesSupported,
-			ResponseTypesSupported:        issuer.ResponseTypesSupported,
-			GrantTypesSupported:           issuer.GrantTypesSupported,
-			CodeChallengeMethodsSupported: issuer.CodeChallengeMethodsSupported,
+			Issuer:                resourceURL,
+			AuthorizationEndpoint: issuer.AuthorizationEndpoint,
+			TokenEndpoint:         issuer.TokenEndpoint,
+			RegistrationEndpoint:  issuer.RegistrationEndpoint,
+			// Modelled by remote_session_issuers and therefore reconstructable.
+			// Omitting token_endpoint_auth_methods_supported in particular is
+			// not harmless: RFC 8414 makes its absence mean client_secret_basic,
+			// so a public client issuer advertising `none` would fail token
+			// exchange on this path while working on the snapshot path.
+			RevocationEndpoint:                issuer.RevocationEndpoint,
+			JwksURI:                           issuer.JwksURI,
+			ScopesSupported:                   issuer.ScopesSupported,
+			ResponseTypesSupported:            issuer.ResponseTypesSupported,
+			GrantTypesSupported:               issuer.GrantTypesSupported,
+			TokenEndpointAuthMethodsSupported: issuer.TokenEndpointAuthMethodsSupported,
+			CodeChallengeMethodsSupported:     issuer.CodeChallengeMethodsSupported,
 		},
 		Raw:      nil,
 		ProxyURL: "",

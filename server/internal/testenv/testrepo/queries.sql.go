@@ -2230,6 +2230,36 @@ func (q *Queries) SetMCPServerRemoteSessionIssuerFixture(ctx context.Context, ar
 	return result.RowsAffected(), nil
 }
 
+const setMCPServerUserSessionIssuerFixture = `-- name: SetMCPServerUserSessionIssuerFixture :execrows
+UPDATE mcp_servers
+SET user_session_issuer_id = $1
+WHERE id = $2
+  AND project_id = $3
+  AND deleted IS FALSE
+`
+
+type SetMCPServerUserSessionIssuerFixtureParams struct {
+	UserSessionIssuerID uuid.NullUUID
+	ID                  uuid.UUID
+	ProjectID           uuid.UUID
+}
+
+// Test-only fixture: attaches a user session issuer to an existing MCP server.
+// UpdateMCPServer COALESCEs this column and the management API refuses the
+// combination outright, so this is the only way to build a row that is both
+// upstream and issuer-gated — the state the runtime must refuse to serve
+// because ResyncMCPServerRemoteSessionIssuers would reassign the issuer being
+// advertised.
+//
+// Returns the row count so the caller can insist the stamp landed.
+func (q *Queries) SetMCPServerUserSessionIssuerFixture(ctx context.Context, arg SetMCPServerUserSessionIssuerFixtureParams) (int64, error) {
+	result, err := q.db.Exec(ctx, setMCPServerUserSessionIssuerFixture, arg.UserSessionIssuerID, arg.ID, arg.ProjectID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const setOpenRouterAPIKeyClassificationFixture = `-- name: SetOpenRouterAPIKeyClassificationFixture :exec
 UPDATE openrouter_api_keys
 SET disabled = $1,

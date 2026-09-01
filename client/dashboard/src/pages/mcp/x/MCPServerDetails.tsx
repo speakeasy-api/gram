@@ -321,12 +321,19 @@ export function MCPServerStatusDropdown({
     });
   };
 
+  // Mapped explicitly rather than defaulting the tail to "Private". Upstream
+  // servers are the one thing that default got exactly backwards: they are not
+  // private, and they are not selectable from the dropdown below either (the
+  // mode selector is AIM-27), so this is read-only display for a value only
+  // the API can currently set.
   const currentLabel =
     server.visibility === "disabled"
       ? "Disabled"
       : server.visibility === "public"
         ? "Public"
-        : "Private";
+        : server.visibility === "upstream"
+          ? "Upstream auth"
+          : "Private";
 
   const isTunneled = Boolean(server.tunneledMcpServerId);
   const { data: tunneledSource } = useGetTunneledMcpServer(
@@ -340,9 +347,12 @@ export function MCPServerStatusDropdown({
     ? [...VISIBILITY_OPTIONS, PUBLIC_VISIBILITY_OPTION]
     : VISIBILITY_OPTIONS;
 
+  // A value with no option — today only "upstream" — must not inherit green,
+  // which this file assigns to Public ("anyone can connect anonymously"). That
+  // is the opposite of what an upstream server does.
   const currentDotClass =
     options.find((option) => option.value === server.visibility)?.dotClass ??
-    "bg-green-400";
+    "bg-muted-foreground/60";
 
   // Unproxied servers have no Gram-hosted endpoint for disabled/private to
   // gate — the vendor's own server is reachable regardless of this setting —

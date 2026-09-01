@@ -923,6 +923,14 @@ type installContext struct {
 }
 
 // isPublic returns true when the install page is accessible without auth.
+//
+// Upstream servers never reach the mcpServer arm below: they are toolset-backed
+// by construction, so they take the toolset arm and inherit
+// toolset.McpIsPublic. That is false for a converted server, which is the
+// answer we want, but it is a coincidence rather than a rule — a backing
+// toolset left public would render the page as needing no credential while
+// resolveSecurityMode correctly reports OAuth. Worth revisiting when AIM-25
+// removes the toolset-keyed source of truth.
 // For toolset-backed installs the existing toolset.McpIsPublic flag wins,
 // even when reached via an mcp_server bridge — visibility on the
 // mcp_server is irrelevant to a toolset-backed install during the
@@ -932,9 +940,6 @@ func (ic *installContext) isPublic() bool {
 	if ic.toolset != nil {
 		return ic.toolset.McpIsPublic
 	}
-	// Deliberately false for upstream: the page is reachable without a Gram
-	// identity, but the server is not open, so it must not render as needing no
-	// credential at all. resolveSecurityMode reports OAuth for it instead.
 	return ic.mcpServer != nil && ic.mcpServer.Visibility == mcpservers.VisibilityPublic
 }
 

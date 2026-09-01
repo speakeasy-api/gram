@@ -822,6 +822,21 @@ UPDATE remote_session_issuers
 SET deleted_at = clock_timestamp()
 WHERE id = @id;
 
+-- name: SetMCPServerUserSessionIssuerFixture :execrows
+-- Test-only fixture: attaches a user session issuer to an existing MCP server.
+-- UpdateMCPServer COALESCEs this column and the management API refuses the
+-- combination outright, so this is the only way to build a row that is both
+-- upstream and issuer-gated — the state the runtime must refuse to serve
+-- because ResyncMCPServerRemoteSessionIssuers would reassign the issuer being
+-- advertised.
+--
+-- Returns the row count so the caller can insist the stamp landed.
+UPDATE mcp_servers
+SET user_session_issuer_id = @user_session_issuer_id
+WHERE id = @id
+  AND project_id = @project_id
+  AND deleted IS FALSE;
+
 -- name: SetMCPServerRemoteSessionIssuerFixture :execrows
 -- Test-only fixture: stamps the denormalised upstream authorization server on
 -- an MCP server. Server creation cannot set it — no client bindings exist yet —

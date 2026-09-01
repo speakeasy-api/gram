@@ -709,10 +709,12 @@ VALUES (
     $21,
     $22,
     $23,
-    -- Best-effort snapshot of the issuer's own discovery document. NULL is the
-    -- normal outcome for a hand-configured issuer or an unreachable upstream:
-    -- the well-known surface reconstructs from the typed columns above until
-    -- the first refresh captures one.
+    -- The issuer's own discovery document, for callers that already hold one.
+    -- The create handlers do not: they persist an operator-submitted form and
+    -- deliberately do no discovery of their own, so they pass NULL and the
+    -- well-known surface reconstructs from the typed columns above until a
+    -- refresh captures a document. Platform MCP's identity-provider attachment
+    -- does discover, and supplies it here.
     $24::jsonb
 )
 RETURNING id, project_id, organization_id, slug, issuer, authorization_endpoint, token_endpoint, revocation_endpoint, registration_endpoint, jwks_uri, service_documentation, op_policy_uri, op_tos_uri, scopes_supported, grant_types_supported, response_types_supported, token_endpoint_auth_methods_supported, code_challenge_methods_supported, client_id_metadata_document_supported, oidc, passthrough, name, logo_asset_id, client_setup_documentation_url, metadata, created_at, updated_at, deleted_at, deleted
@@ -5000,6 +5002,15 @@ SET
     token_endpoint_auth_methods_supported = COALESCE($17::text[], token_endpoint_auth_methods_supported),
     code_challenge_methods_supported = COALESCE($18::text[], code_challenge_methods_supported),
     client_id_metadata_document_supported = COALESCE($19, client_id_metadata_document_supported),
+    -- Cleared, not preserved. The snapshot is what Gram advertises to MCP
+    -- clients; the columns this statement rewrites are what Gram dials. An
+    -- operator correcting an endpoint, or repointing issuer entirely, would
+    -- otherwise leave Gram serving a document naming the old authorization
+    -- server while every remote session flow used the new one. Refresh keeps
+    -- the two coupled by writing both from one document; a manual edit has no
+    -- document to write, so it drops the snapshot and the well-known surface
+    -- reconstructs from these columns until the next refresh recaptures it.
+    metadata = NULL,
     oidc = COALESCE($20, oidc),
     passthrough = COALESCE($21, passthrough),
     updated_at = clock_timestamp()
@@ -5217,6 +5228,15 @@ SET
     token_endpoint_auth_methods_supported = COALESCE($17::text[], token_endpoint_auth_methods_supported),
     code_challenge_methods_supported = COALESCE($18::text[], code_challenge_methods_supported),
     client_id_metadata_document_supported = COALESCE($19, client_id_metadata_document_supported),
+    -- Cleared, not preserved. The snapshot is what Gram advertises to MCP
+    -- clients; the columns this statement rewrites are what Gram dials. An
+    -- operator correcting an endpoint, or repointing issuer entirely, would
+    -- otherwise leave Gram serving a document naming the old authorization
+    -- server while every remote session flow used the new one. Refresh keeps
+    -- the two coupled by writing both from one document; a manual edit has no
+    -- document to write, so it drops the snapshot and the well-known surface
+    -- reconstructs from these columns until the next refresh recaptures it.
+    metadata = NULL,
     oidc = COALESCE($20, oidc),
     passthrough = COALESCE($21, passthrough),
     updated_at = clock_timestamp()
@@ -5465,6 +5485,15 @@ SET
     token_endpoint_auth_methods_supported = COALESCE($17::text[], token_endpoint_auth_methods_supported),
     code_challenge_methods_supported = COALESCE($18::text[], code_challenge_methods_supported),
     client_id_metadata_document_supported = COALESCE($19, client_id_metadata_document_supported),
+    -- Cleared, not preserved. The snapshot is what Gram advertises to MCP
+    -- clients; the columns this statement rewrites are what Gram dials. An
+    -- operator correcting an endpoint, or repointing issuer entirely, would
+    -- otherwise leave Gram serving a document naming the old authorization
+    -- server while every remote session flow used the new one. Refresh keeps
+    -- the two coupled by writing both from one document; a manual edit has no
+    -- document to write, so it drops the snapshot and the well-known surface
+    -- reconstructs from these columns until the next refresh recaptures it.
+    metadata = NULL,
     oidc = COALESCE($20, oidc),
     passthrough = COALESCE($21, passthrough),
     updated_at = clock_timestamp()

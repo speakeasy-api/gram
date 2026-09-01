@@ -11,6 +11,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/mcp/metamcp"
@@ -144,6 +145,15 @@ func (s *Service) resolveMetaMemberSnapshot(
 				return ctx, nil, oops.E(oops.CodeUnexpected, err, "check member authz").LogError(ctx, logger)
 			}
 		default:
+			// Fail closed, but say so. metamcp.AddMetaMcpMember refuses these
+			// at attach, yet visibility is mutable afterwards, so a member can
+			// arrive here by being flipped later. Without a line the member's
+			// tools simply disappear from the gateway with nothing anywhere to
+			// explain it, and the gateway's own member list still reports it
+			// healthy.
+			logger.WarnContext(ctx, "filtering meta mcp member whose visibility the gateway cannot front",
+				attr.SlogMcpServerID(row.McpServerID.String()),
+			)
 			continue
 		}
 

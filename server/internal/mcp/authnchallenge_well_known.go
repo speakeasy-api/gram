@@ -424,14 +424,17 @@ func (s *Service) serveUpstreamAuthorizationServer(ctx context.Context, w http.R
 	}
 
 	result, fromSnapshot, err := wellknown.ResolveOAuthServerMetadataFromRemoteSessionIssuer(wellknown.RemoteSessionIssuerMetadata{
-		AuthorizationEndpoint:         conv.FromPGTextOrEmpty[string](issuer.AuthorizationEndpoint),
-		TokenEndpoint:                 conv.FromPGTextOrEmpty[string](issuer.TokenEndpoint),
-		RegistrationEndpoint:          conv.FromPGTextOrEmpty[string](issuer.RegistrationEndpoint),
-		ScopesSupported:               issuer.ScopesSupported,
-		ResponseTypesSupported:        issuer.ResponseTypesSupported,
-		GrantTypesSupported:           issuer.GrantTypesSupported,
-		CodeChallengeMethodsSupported: issuer.CodeChallengeMethodsSupported,
-		Snapshot:                      issuer.Metadata,
+		AuthorizationEndpoint:             conv.FromPGTextOrEmpty[string](issuer.AuthorizationEndpoint),
+		TokenEndpoint:                     conv.FromPGTextOrEmpty[string](issuer.TokenEndpoint),
+		RegistrationEndpoint:              conv.FromPGTextOrEmpty[string](issuer.RegistrationEndpoint),
+		RevocationEndpoint:                conv.FromPGTextOrEmpty[string](issuer.RevocationEndpoint),
+		JwksURI:                           conv.FromPGTextOrEmpty[string](issuer.JwksUri),
+		ScopesSupported:                   issuer.ScopesSupported,
+		ResponseTypesSupported:            issuer.ResponseTypesSupported,
+		GrantTypesSupported:               issuer.GrantTypesSupported,
+		TokenEndpointAuthMethodsSupported: issuer.TokenEndpointAuthMethodsSupported,
+		CodeChallengeMethodsSupported:     issuer.CodeChallengeMethodsSupported,
+		Snapshot:                          issuer.Metadata,
 	}, resourceURL)
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "failed to resolve upstream OAuth server metadata").LogError(ctx, logger)

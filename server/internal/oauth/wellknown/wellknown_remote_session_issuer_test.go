@@ -123,3 +123,73 @@ func TestResolveOAuthServerMetadataFromRemoteSessionIssuer_RejectsUnparseableSna
 	}, upstreamResourceURL)
 	require.ErrorContains(t, err, "rewrite remote session issuer metadata")
 }
+
+// The shape an issuer that was hand-configured, or created before capture
+// existed, actually has: nullable PKCE column NULL, optional endpoints empty,
+// capability arrays empty. Every other reconstruction test seeds them non-nil,
+// so this is the one that sees what a real degraded row serves.
+//
+// Emitting these would break clients rather than merely under-inform them:
+// `"code_challenge_methods_supported": null` fails an optional-array schema
+// outright, `"registration_endpoint": ""` is not the URL RFC 8414 promises,
+// and `"response_types_supported": []` asserts the server supports no response
+// types at all, so a strict client refuses `code`.
+func TestResolveOAuthServerMetadataFromRemoteSessionIssuer_OmitsUnknownMembers(t *testing.T) {
+	t.Parallel()
+
+	result, fromSnapshot, err := ResolveOAuthServerMetadataFromRemoteSessionIssuer(RemoteSessionIssuerMetadata{
+		AuthorizationEndpoint:             "https://idp.example.com/authorize",
+		TokenEndpoint:                     "https://idp.example.com/token",
+		RegistrationEndpoint:              "",
+		RevocationEndpoint:                "",
+		JwksURI:                           "",
+		ScopesSupported:                   []string{},
+		ResponseTypesSupported:            []string{},
+		GrantTypesSupported:               []string{},
+		TokenEndpointAuthMethodsSupported: []string{},
+		CodeChallengeMethodsSupported:     nil,
+		Snapshot:                          nil,
+	}, upstreamResourceURL)
+	require.NoError(t, err)
+	require.False(t, fromSnapshot)
+
+	encoded, err := json.Marshal(result.Static)
+	require.NoError(t, err)
+
+	var got map[string]any
+	require.NoError(t, json.Unmarshal(encoded, &got))
+
+	// The two members RFC 8414 always requires, plus the rewritten issuer.
+	require.Equal(t, map[string]any{
+		"issuer":                 upstreamResourceURL,
+		"authorization_endpoint": "https://idp.example.com/authorize",
+		"token_endpoint":         "https://idp.example.com/token",
+	}, got, "an unknown member must be absent, not null or empty")
+}
+
+// The counterpart: a member Gram does know is served, including the three the
+// first version of this reconstruction dropped despite modelling them.
+func TestResolveOAuthServerMetadataFromRemoteSessionIssuer_ServesEveryModelledMember(t *testing.T) {
+	t.Parallel()
+
+	result, _, err := ResolveOAuthServerMetadataFromRemoteSessionIssuer(RemoteSessionIssuerMetadata{
+		AuthorizationEndpoint:             "https://idp.example.com/authorize",
+		TokenEndpoint:                     "https://idp.example.com/token",
+		RegistrationEndpoint:              "https://idp.example.com/register",
+		RevocationEndpoint:                "https://idp.example.com/revoke",
+		JwksURI:                           "https://idp.example.com/jwks",
+		ScopesSupported:                   []string{"openid"},
+		ResponseTypesSupported:            []string{"code"},
+		GrantTypesSupported:               []string{"authorization_code"},
+		TokenEndpointAuthMethodsSupported: []string{"none"},
+		CodeChallengeMethodsSupported:     []string{"S256"},
+		Snapshot:                          nil,
+	}, upstreamResourceURL)
+	require.NoError(t, err)
+
+	require.Equal(t, "https://idp.example.com/revoke", result.Static.RevocationEndpoint)
+	require.Equal(t, "https://idp.example.com/jwks", result.Static.JwksURI)
+	// RFC 8414 reads an absent value here as client_secret_basic, so dropping
+	// it would break a public client that authenticates with `none`.
+	require.Equal(t, []string{"none"}, result.Static.TokenEndpointAuthMethodsSupported)
+}

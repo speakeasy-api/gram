@@ -327,6 +327,15 @@ SET
     token_endpoint_auth_methods_supported = COALESCE(sqlc.narg('token_endpoint_auth_methods_supported')::text[], token_endpoint_auth_methods_supported),
     code_challenge_methods_supported = COALESCE(sqlc.narg('code_challenge_methods_supported')::text[], code_challenge_methods_supported),
     client_id_metadata_document_supported = COALESCE(sqlc.narg('client_id_metadata_document_supported'), client_id_metadata_document_supported),
+    -- Cleared, not preserved. The snapshot is what Gram advertises to MCP
+    -- clients; the columns this statement rewrites are what Gram dials. An
+    -- operator correcting an endpoint, or repointing issuer entirely, would
+    -- otherwise leave Gram serving a document naming the old authorization
+    -- server while every remote session flow used the new one. Refresh keeps
+    -- the two coupled by writing both from one document; a manual edit has no
+    -- document to write, so it drops the snapshot and the well-known surface
+    -- reconstructs from these columns until the next refresh recaptures it.
+    metadata = NULL,
     oidc = COALESCE(sqlc.narg('oidc'), oidc),
     passthrough = COALESCE(sqlc.narg('passthrough'), passthrough),
     updated_at = clock_timestamp()
@@ -1570,6 +1579,15 @@ SET
     token_endpoint_auth_methods_supported = COALESCE(sqlc.narg('token_endpoint_auth_methods_supported')::text[], token_endpoint_auth_methods_supported),
     code_challenge_methods_supported = COALESCE(sqlc.narg('code_challenge_methods_supported')::text[], code_challenge_methods_supported),
     client_id_metadata_document_supported = COALESCE(sqlc.narg('client_id_metadata_document_supported'), client_id_metadata_document_supported),
+    -- Cleared, not preserved. The snapshot is what Gram advertises to MCP
+    -- clients; the columns this statement rewrites are what Gram dials. An
+    -- operator correcting an endpoint, or repointing issuer entirely, would
+    -- otherwise leave Gram serving a document naming the old authorization
+    -- server while every remote session flow used the new one. Refresh keeps
+    -- the two coupled by writing both from one document; a manual edit has no
+    -- document to write, so it drops the snapshot and the well-known surface
+    -- reconstructs from these columns until the next refresh recaptures it.
+    metadata = NULL,
     oidc = COALESCE(sqlc.narg('oidc'), oidc),
     passthrough = COALESCE(sqlc.narg('passthrough'), passthrough),
     updated_at = clock_timestamp()
@@ -2080,6 +2098,15 @@ SET
     token_endpoint_auth_methods_supported = COALESCE(sqlc.narg('token_endpoint_auth_methods_supported')::text[], token_endpoint_auth_methods_supported),
     code_challenge_methods_supported = COALESCE(sqlc.narg('code_challenge_methods_supported')::text[], code_challenge_methods_supported),
     client_id_metadata_document_supported = COALESCE(sqlc.narg('client_id_metadata_document_supported'), client_id_metadata_document_supported),
+    -- Cleared, not preserved. The snapshot is what Gram advertises to MCP
+    -- clients; the columns this statement rewrites are what Gram dials. An
+    -- operator correcting an endpoint, or repointing issuer entirely, would
+    -- otherwise leave Gram serving a document naming the old authorization
+    -- server while every remote session flow used the new one. Refresh keeps
+    -- the two coupled by writing both from one document; a manual edit has no
+    -- document to write, so it drops the snapshot and the well-known surface
+    -- reconstructs from these columns until the next refresh recaptures it.
+    metadata = NULL,
     oidc = COALESCE(sqlc.narg('oidc'), oidc),
     passthrough = COALESCE(sqlc.narg('passthrough'), passthrough),
     updated_at = clock_timestamp()

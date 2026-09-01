@@ -170,9 +170,9 @@ func (s *Service) CreateMcpServer(ctx context.Context, payload *gen.CreateMcpSer
 		return nil, oops.E(oops.CodeInvalid, err, "invalid mcp server").LogWarn(ctx, logger)
 	}
 
-	// Create never writes a user session issuer, so the NULL half of the rule
-	// holds by construction here; the backend half does not.
-	if err := verifyUpstreamAuthorization(string(payload.Visibility), ids.ToolsetID, uuid.NullUUID{UUID: uuid.Nil, Valid: false}); err != nil {
+	// Create writes neither issuer column, so the NULL-user-session half holds
+	// by construction and the remote-session half can never be satisfied here.
+	if err := verifyUpstreamAuthorization(string(payload.Visibility), ids.ToolsetID, uuid.NullUUID{UUID: uuid.Nil, Valid: false}, uuid.NullUUID{UUID: uuid.Nil, Valid: false}); err != nil {
 		return nil, oops.E(oops.CodeInvalid, err, "invalid mcp server").LogWarn(ctx, logger)
 	}
 
@@ -737,7 +737,7 @@ func (s *Service) UpdateMcpServer(ctx context.Context, payload *gen.UpdateMcpSer
 	// Same reason as the consent check above: the update query COALESCEs unset
 	// references, so only the post-update row says which backend and issuer the
 	// server actually ended up with.
-	if err := verifyUpstreamAuthorization(updated.Visibility, updated.ToolsetID, updated.UserSessionIssuerID); err != nil {
+	if err := verifyUpstreamAuthorization(updated.Visibility, updated.ToolsetID, updated.UserSessionIssuerID, updated.RemoteSessionIssuerID); err != nil {
 		return nil, oops.E(oops.CodeInvalid, err, "invalid mcp server").LogWarn(ctx, logger)
 	}
 
@@ -1253,7 +1253,7 @@ func verifyTunneledPublicConsent(ctx context.Context, dbtx pgx.Tx, projectID uui
 // naming the issuer whose metadata the well-known documents serve. A server
 // that was both `upstream` and issuer-gated would advertise one authorization
 // server while forwarding bearers to another.
-func verifyUpstreamAuthorization(visibility string, toolsetID, userSessionIssuerID uuid.NullUUID) error {
+func verifyUpstreamAuthorization(visibility string, toolsetID, userSessionIssuerID, remoteSessionIssuerID uuid.NullUUID) error {
 	if visibility != VisibilityUpstream {
 		return nil
 	}
@@ -1262,6 +1262,18 @@ func verifyUpstreamAuthorization(visibility string, toolsetID, userSessionIssuer
 	}
 	if userSessionIssuerID.Valid {
 		return fmt.Errorf("MCP servers serving direct upstream authorization cannot also be gated by a user session issuer")
+	}
+	// Refused at the write rather than left to fail at request time. Without an
+	// issuer there is no authorization server to advertise, so
+	// ResolveAuthorizationMode returns Invalid and every request 404s with only
+	// a log line to explain it — an operator flipping a working server to
+	// upstream would take it offline with no visible cause. Nothing can set
+	// this column yet (AIM-27 adds the management surface; the resync that
+	// derives it cannot match a row whose user_session_issuer_id is NULL, which
+	// upstream requires), so this makes upstream unreachable through the API
+	// until that lands, which is the honest state.
+	if !remoteSessionIssuerID.Valid {
+		return fmt.Errorf("MCP servers serving direct upstream authorization must name the remote session issuer whose authorization server clients authenticate against")
 	}
 	return nil
 }

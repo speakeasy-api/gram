@@ -355,6 +355,12 @@ function AddServersDialog({
           !!server.slug &&
           !server.tunneledMcpServerId &&
           server.visibility !== "disabled" &&
+          // Rejected by resolveMcpServerRefsForWrite for the same reason
+          // tunneled servers are: the assistant runtime sends only
+          // Gram-Environment and no Authorization header, so an upstream
+          // server would 401 on every turn. Offering it here would surface
+          // that as a validation error after the user picked it.
+          server.visibility !== "upstream" &&
           serverIdsWithGramEndpoint.has(server.id),
       )
       .map((server): AttachedRef => ({
