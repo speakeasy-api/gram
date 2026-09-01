@@ -16,7 +16,9 @@ export const REVEAL_DENIED_REASON =
 // event behind the reveal, and offering one opens an empty dialog.
 const NO_MATCH_FINGERPRINT = "<redacted len=0>";
 
-export function hasRevealableEvent(matchRedacted: string | undefined): boolean {
+export function hasRevealableEvent(
+  matchRedacted: string | undefined,
+): matchRedacted is string {
   return Boolean(matchRedacted) && matchRedacted !== NO_MATCH_FINGERPRINT;
 }
 
