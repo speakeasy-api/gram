@@ -33,7 +33,6 @@ import (
 	platformskills "github.com/speakeasy-api/gram/server/internal/platformtools/skills"
 	platformtriggers "github.com/speakeasy-api/gram/server/internal/platformtools/triggers"
 	platformusers "github.com/speakeasy-api/gram/server/internal/platformtools/users"
-	feedbackrecorder "github.com/speakeasy-api/gram/server/internal/skills/feedback"
 	"github.com/speakeasy-api/gram/server/internal/toolconfig"
 )
 
@@ -137,10 +136,9 @@ func MemoryExternalTools(svc *memory.MemoryService) []platformtools.ExternalTool
 }
 
 // AssistantSkillTools returns the always-on attached-skill tools.
-func AssistantSkillTools(logger *slog.Logger, db *pgxpool.Pool, recorder *feedbackrecorder.Recorder, opts ...platformskills.LoadOption) []platformtools.ExternalTool {
+func AssistantSkillTools(logger *slog.Logger, db *pgxpool.Pool, opts ...platformskills.LoadOption) []platformtools.ExternalTool {
 	return []platformtools.ExternalTool{
 		{Executor: platformskills.NewLoadTool(logger, db, opts...), RequiredFeature: ""},
-		{Executor: platformskills.NewAssistantFeedbackTool(db, recorder), RequiredFeature: ""},
 	}
 }
 

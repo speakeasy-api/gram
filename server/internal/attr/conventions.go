@@ -27,6 +27,8 @@ const (
 	HTTPRequestHeaderRefererKey      = attribute.Key("http.request.header.referer")
 	HTTPRequestHeaderContentTypeKey  = attribute.Key("http.request.header.content_type")
 	HTTPRequestHeaderUserAgentKey    = attribute.Key("http.request.header.user_agent")
+	HTTPRequestHeaderOriginKey       = attribute.Key("http.request.header.origin")
+	HTTPRequestHeaderSecFetchSiteKey = attribute.Key("http.request.header.sec_fetch_site")
 	HTTPRequestMethodKey             = semconv.HTTPRequestMethodKey
 	HTTPRequestBodyKey               = attribute.Key("http.request.body")
 	HTTPResponseBodyKey              = attribute.Key("http.response.body")
@@ -68,13 +70,15 @@ const (
 	UserAttributesKey = attribute.Key("user.attributes")
 	UserGroupsKey     = attribute.Key("user.groups")
 
-	ActualKey   = attribute.Key("actual")
-	EventKey    = attribute.Key("event")
-	ExpectedKey = attribute.Key("expected")
-	NameKey     = attribute.Key("name")
-	ReasonKey   = attribute.Key("reason")
-	ValueKey    = attribute.Key("value")
+	ActualKey    = attribute.Key("actual")
+	EventKey     = attribute.Key("event")
+	ErrorTypeKey = attribute.Key("error.type")
+	ExpectedKey  = attribute.Key("expected")
+	NameKey      = attribute.Key("name")
+	ReasonKey    = attribute.Key("reason")
+	ValueKey     = attribute.Key("value")
 
+	StripeErrorCodeKey      = attribute.Key("stripe.error.code")
 	StripeWebhookEventIDKey = attribute.Key("stripe.webhook.event_id")
 
 	SpanIDKey                    = attribute.Key("span.id")
@@ -323,6 +327,10 @@ const (
 	// McpKillswitchResourceClassKey is the bounded kill-switch resource
 	// coverage class of a covered MCP tools/call. Never a server identifier.
 	McpKillswitchResourceClassKey = attribute.Key("gram.mcp.killswitch.resource_class")
+	// McpEntryPointKey is the bounded entry-point dimension on the
+	// mcp.toolset_slug_fallback counter: which public surface resolved a
+	// request through the legacy toolsets.mcp_slug lookup.
+	McpEntryPointKey              = attribute.Key("gram.mcp.entry_point")
 	McpRequestedTagsKey           = attribute.Key("gram.mcp.requested_tags")
 	McpToolsReturnedKey           = attribute.Key("gram.mcp.tools_returned")
 	McpToolsFilteredKey           = attribute.Key("gram.mcp.tools_filtered")
@@ -393,6 +401,12 @@ const (
 	OpenAPIOperationIDKey             = attribute.Key("gram.openapi.operation_id")
 	OpenAPIPathKey                    = attribute.Key("gram.openapi.path")
 	OpenAPIVersionKey                 = attribute.Key("gram.openapi.version")
+	OpenRouterBackfillAmbiguousKey    = attribute.Key("gram.openrouter.backfill.ambiguous")
+	OpenRouterBackfillBatchesKey      = attribute.Key("gram.openrouter.backfill.batches")
+	OpenRouterBackfillClassifiedKey   = attribute.Key("gram.openrouter.backfill.classified")
+	OpenRouterBackfillModeKey         = attribute.Key("gram.openrouter.backfill.mode")
+	OpenRouterBackfillScannedKey      = attribute.Key("gram.openrouter.backfill.scanned")
+	OpenRouterBackfillUpdatedKey      = attribute.Key("gram.openrouter.backfill.updated")
 	OpenRouterKeyLimitKey             = attribute.Key("gram.openrouter.key.limit")
 	OpenRouterKeyPreviousLimitKey     = attribute.Key("gram.openrouter.key.previous_limit")
 	OpenRouterKeyTypeKey              = attribute.Key("gram.openrouter.key.type")
@@ -784,6 +798,22 @@ func SlogHTTPRequestHeaderUserAgent(v string) slog.Attr {
 	return slog.String(string(HTTPRequestHeaderUserAgentKey), v)
 }
 
+func HTTPRequestHeaderOrigin(v string) attribute.KeyValue {
+	return HTTPRequestHeaderOriginKey.String(v)
+}
+
+func SlogHTTPRequestHeaderOrigin(v string) slog.Attr {
+	return slog.String(string(HTTPRequestHeaderOriginKey), v)
+}
+
+func HTTPRequestHeaderSecFetchSite(v string) attribute.KeyValue {
+	return HTTPRequestHeaderSecFetchSiteKey.String(v)
+}
+
+func SlogHTTPRequestHeaderSecFetchSite(v string) slog.Attr {
+	return slog.String(string(HTTPRequestHeaderSecFetchSiteKey), v)
+}
+
 func HTTPRequestBody(v string) attribute.KeyValue { return HTTPRequestBodyKey.String(v) }
 func SlogHTTPRequestBody(v string) slog.Attr      { return slog.String(string(HTTPRequestBodyKey), v) }
 
@@ -974,6 +1004,14 @@ func SlogActual(v any) slog.Attr      { return slog.Any(string(ActualKey), v) }
 
 func Event(v string) attribute.KeyValue { return EventKey.String(v) }
 func SlogEvent(v string) slog.Attr      { return slog.String(string(EventKey), v) }
+
+func ErrorType[V ~string](v V) attribute.KeyValue { return ErrorTypeKey.String(string(v)) }
+func SlogErrorType(v string) slog.Attr            { return slog.String(string(ErrorTypeKey), v) }
+
+func StripeErrorCode(v string) attribute.KeyValue { return StripeErrorCodeKey.String(v) }
+func SlogStripeErrorCode(v string) slog.Attr {
+	return slog.String(string(StripeErrorCodeKey), v)
+}
 
 func StripeWebhookEventID(v string) attribute.KeyValue { return StripeWebhookEventIDKey.String(v) }
 func SlogStripeWebhookEventID(v string) slog.Attr {
@@ -1556,6 +1594,30 @@ func SlogOpenAPIPath(v string) slog.Attr      { return slog.String(string(OpenAP
 func OpenAPIVersion(v string) attribute.KeyValue { return OpenAPIVersionKey.String(v) }
 func SlogOpenAPIVersion(v string) slog.Attr      { return slog.String(string(OpenAPIVersionKey), v) }
 
+func SlogOpenRouterBackfillAmbiguous(v int64) slog.Attr {
+	return slog.Int64(string(OpenRouterBackfillAmbiguousKey), v)
+}
+
+func SlogOpenRouterBackfillBatches(v int64) slog.Attr {
+	return slog.Int64(string(OpenRouterBackfillBatchesKey), v)
+}
+
+func SlogOpenRouterBackfillClassified(v int64) slog.Attr {
+	return slog.Int64(string(OpenRouterBackfillClassifiedKey), v)
+}
+
+func SlogOpenRouterBackfillMode(v string) slog.Attr {
+	return slog.String(string(OpenRouterBackfillModeKey), v)
+}
+
+func SlogOpenRouterBackfillScanned(v int64) slog.Attr {
+	return slog.Int64(string(OpenRouterBackfillScannedKey), v)
+}
+
+func SlogOpenRouterBackfillUpdated(v int64) slog.Attr {
+	return slog.Int64(string(OpenRouterBackfillUpdatedKey), v)
+}
+
 func OpenRouterKeyLimit(v int) attribute.KeyValue { return OpenRouterKeyLimitKey.Int(v) }
 func SlogOpenRouterKeyLimit(v int) slog.Attr      { return slog.Int(string(OpenRouterKeyLimitKey), v) }
 
@@ -2004,6 +2066,8 @@ func SlogMcpMethod(v string) slog.Attr      { return slog.String(string(McpMetho
 
 func McpSurface(v string) attribute.KeyValue { return McpSurfaceKey.String(v) }
 func SlogMcpSurface(v string) slog.Attr      { return slog.String(string(McpSurfaceKey), v) }
+
+func McpEntryPoint[V ~string](v V) attribute.KeyValue { return McpEntryPointKey.String(string(v)) }
 
 func McpKillswitchSurface[V ~string](v V) attribute.KeyValue {
 	return McpKillswitchSurfaceKey.String(string(v))

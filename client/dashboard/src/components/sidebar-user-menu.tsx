@@ -1,6 +1,7 @@
-import { useSession, useUser } from "@/contexts/Auth";
+import { useOrganization, useSession, useUser } from "@/contexts/Auth";
 import { useSdkClient, useSlugs } from "@/contexts/Sdk";
 import { useRBAC } from "@/hooks/useRBAC";
+import { DEMO_ORG_SLUG } from "@/lib/demo";
 import { useOrgRoutes, useRoutes } from "@/routes";
 import {
   DropdownMenu,
@@ -16,6 +17,7 @@ import {
   ActivityIcon,
   BookOpenIcon,
   BuildingIcon,
+  CompassIcon,
   CreditCardIcon,
   LogOutIcon,
   MailIcon,
@@ -37,6 +39,7 @@ import {
 export function SidebarUserMenu(): JSX.Element {
   const user = useUser();
   const session = useSession();
+  const organization = useOrganization();
   const navigate = useNavigate();
   const routes = useRoutes();
   const orgRoutes = useOrgRoutes();
@@ -46,6 +49,7 @@ export function SidebarUserMenu(): JSX.Element {
 
   const canAccessOrgRoutes = hasAnyScope(["org:read", "org:admin"]);
   const isMultiOrg = session.organizations.length > 1;
+  const isDemoOrg = organization.slug === DEMO_ORG_SLUG;
 
   const [menuOpen, setMenuOpen] = useState(false);
   const pylonOpen = useSyncExternalStore(
@@ -155,6 +159,12 @@ export function SidebarUserMenu(): JSX.Element {
               >
                 <BuildingIcon className="mr-2 h-4 w-4" />
                 Switch Organization
+              </DropdownMenuItem>
+            )}
+            {!isDemoOrg && (
+              <DropdownMenuItem onClick={() => routes.exploreDemo.goTo()}>
+                <CompassIcon className="mr-2 h-4 w-4" />
+                Explore demo org
               </DropdownMenuItem>
             )}
           </DropdownMenuGroup>

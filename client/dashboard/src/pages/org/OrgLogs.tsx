@@ -7,8 +7,12 @@ import { Text } from "@/components/ui/Text";
 import { FeatureName } from "@gram/client/models/components/setproductfeaturerequestbody.js";
 import { useFeaturesSetMutation } from "@gram/client/react-query/featuresSet";
 import { Stack } from "@/components/ui/Stack";
-import { Eye, FileText, LogIn, Monitor, Unplug } from "lucide-react";
+import { Eye, LogIn, Monitor, Unplug } from "lucide-react";
 import { useState } from "react";
+import {
+  ENABLE_LOGS_PAGE_DESCRIPTION,
+  EnableLogsSetting,
+} from "./EnableLogsSetting";
 import { OtelForwardingSection } from "./OtelForwardingSection";
 import { useProductFeatures } from "@gram/client/react-query/productFeatures.js";
 import { handleAPIError } from "@/lib/errors";
@@ -48,6 +52,7 @@ function OrgLogsInner({
   const [hooksFailOpenEnabled, setHooksFailOpenEnabled] = useState<
     boolean | null
   >(null);
+  const [logsSettingPending, setLogsSettingPending] = useState(false);
 
   const effectiveLogsEnabled =
     logsEnabled ?? featuresData?.logsEnabled ?? false;
@@ -66,9 +71,7 @@ function OrgLogsInner({
         if (!isCurrentOrganization()) return;
         const { featureName, enabled } =
           variables.request.setProductFeatureRequestBody;
-        if (featureName === FeatureName.Logs) {
-          setLogsEnabled(enabled);
-        } else if (featureName === FeatureName.ToolIoLogs) {
+        if (featureName === FeatureName.ToolIoLogs) {
           setToolIoLogsEnabled(enabled);
         } else if (featureName === FeatureName.SessionCapture) {
           setSessionCaptureEnabled(enabled);
@@ -86,31 +89,7 @@ function OrgLogsInner({
       },
     });
 
-  const isMutatingLogs = logsMutationStatus === "pending";
-
-  const handleSetLogs = (enabled: boolean) => {
-    setLogsFeature({
-      request: {
-        setProductFeatureRequestBody: {
-          organizationId,
-          featureName: FeatureName.Logs,
-          enabled,
-        },
-      },
-    });
-
-    if (!enabled && effectiveToolIoLogsEnabled) {
-      setLogsFeature({
-        request: {
-          setProductFeatureRequestBody: {
-            organizationId,
-            featureName: FeatureName.ToolIoLogs,
-            enabled: false,
-          },
-        },
-      });
-    }
-  };
+  const isMutatingLogs = logsMutationStatus === "pending" || logsSettingPending;
 
   const handleSetToolIoLogs = (enabled: boolean) => {
     setLogsFeature({
@@ -164,37 +143,18 @@ function OrgLogsInner({
     <SettingsPage
       scope={["org:read", "org:admin"]}
       title="Logs"
-      description="Configure logging and telemetry settings for all your tool capture. When enabled, tool calls and traces are recorded for debugging and analytics. These power the insights and logs page on the platform."
+      description={ENABLE_LOGS_PAGE_DESCRIPTION}
     >
       <LogDataRetentionBanner />
       <div className="border-border bg-card border p-4">
         <Stack gap={4}>
-          <Stack direction="horizontal" justify="space-between" align="center">
-            <Stack gap={1}>
-              <Stack direction="horizontal" align="center" gap={2}>
-                <FileText className="text-muted-foreground h-4 w-4" />
-                <Text variant="body" className="font-medium">
-                  Enable Logs
-                </Text>
-              </Stack>
-              <Text
-                variant="body"
-                className="text-muted-foreground ml-6 text-sm"
-              >
-                Record tool call traces and telemetry data
-              </Text>
-            </Stack>
-            {featuresData && (
-              <RequireScope scope="org:admin" level="component">
-                <Switch
-                  checked={effectiveLogsEnabled}
-                  onCheckedChange={handleSetLogs}
-                  disabled={isMutatingLogs}
-                  aria-label="Enable logs"
-                />
-              </RequireScope>
-            )}
-          </Stack>
+          <EnableLogsSetting
+            onEnabledChange={(enabled) => {
+              setLogsEnabled(enabled);
+              if (!enabled) setToolIoLogsEnabled(null);
+            }}
+            onPendingChange={setLogsSettingPending}
+          />
 
           <div className="border-border border-t" />
 

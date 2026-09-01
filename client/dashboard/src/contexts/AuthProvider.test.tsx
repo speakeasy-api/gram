@@ -1,3 +1,4 @@
+import { GramError } from "@gram/client/models/errors/gramerror.js";
 import { cleanup, render, screen } from "@testing-library/react";
 import { MemoryRouter, useLocation } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -43,6 +44,7 @@ vi.mock("@/contexts/Auth", async (importOriginal) => ({
   useSessionData: () => mocks.sessionData() as unknown,
 }));
 
+import { useSession } from "./Auth";
 import { AuthProvider } from "./AuthProvider";
 import { nullTelemetry, TelemetryStateProvider } from "./Telemetry";
 
@@ -91,6 +93,10 @@ const LocationProbe = () => {
   );
 };
 
+const SessionProbe = () => (
+  <div data-testid="session">{useSession().session ?? "none"}</div>
+);
+
 function renderGate(initialPath: string | string[] = "/") {
   const initialEntries = Array.isArray(initialPath)
     ? initialPath
@@ -105,6 +111,7 @@ function renderGate(initialPath: string | string[] = "/") {
         <LocationProbe />
         <AuthProvider>
           <div data-testid="app" />
+          <SessionProbe />
         </AuthProvider>
       </MemoryRouter>
     </TelemetryStateProvider>,
@@ -172,6 +179,35 @@ describe("AuthProvider organization telemetry group", () => {
     renderGate();
 
     expect(registeredOrgGroups()).toEqual([]);
+  });
+
+  it("retains cached authentication after a transient focus refetch error", () => {
+    mocks.sessionData.mockReturnValue({
+      ...gatedSession({ activeOrganizationId: undefined }),
+      error: new Error("temporary network failure"),
+      status: "error",
+    });
+
+    renderGate();
+
+    expect(screen.getByTestId("session").textContent).toBe("session-token");
+  });
+
+  it("drops cached authentication after an unauthorized focus refetch", () => {
+    const error = new GramError("unauthorized", {
+      response: new Response(null, { status: 401 }),
+      request: new Request("https://app.getgram.ai/rpc/auth.info"),
+      body: "",
+    });
+    mocks.sessionData.mockReturnValue({
+      ...gatedSession({ activeOrganizationId: undefined }),
+      error,
+      status: "error",
+    });
+
+    renderGate();
+
+    expect(screen.getByTestId("session").textContent).toBe("");
   });
 
   it("lets authenticated users stay on /guide until the guide route resolves", () => {

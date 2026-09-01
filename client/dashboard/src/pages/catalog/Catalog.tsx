@@ -96,14 +96,14 @@ function CatalogInner() {
     if (attachFailures > 0) {
       toast.error(
         attachFailures === 1
-          ? "An installed server could not be added to the gateway. Add it from the gateway's Members tab."
-          : `${attachFailures} installed servers could not be added to the gateway. Add them from the gateway's Members tab.`,
+          ? "An installed server could not be added to the gateway. Add it from the gateway's overview."
+          : `${attachFailures} installed servers could not be added to the gateway. Add them from the gateway's overview.`,
       );
     }
     // Redirect only when everything worked; otherwise stay so the dialog's
     // per-server results (and the toast above) remain visible.
     if (result.status === "succeeded" && attachFailures === 0) {
-      void navigate(routes.mcp.gateway.members.href(attachToGatewayId));
+      void navigate(routes.mcp.gateway.overview.href(attachToGatewayId));
     }
   };
 

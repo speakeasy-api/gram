@@ -79,8 +79,9 @@ export function GatewaySidebarNav(): React.JSX.Element | null {
             rows.length > 0
               ? `Fronting ${rows.length} MCP ${rows.length === 1 ? "server" : "servers"}.`
               : "Add MCP servers for this gateway to front.",
+          // Member management lives on the Overview tab.
           ready: rows.length > 0,
-          href: gatewayTabHref(routes, id, "members"),
+          href: gatewayTabHref(routes, id, "overview"),
         },
         {
           key: "authentication",
@@ -101,13 +102,6 @@ export function GatewaySidebarNav(): React.JSX.Element | null {
       Icon: LayoutDashboard,
       href: gatewayTabHref(routes, id, "overview"),
       active: activeTab === "overview",
-    },
-    {
-      key: "members",
-      title: "Members",
-      Icon: Network,
-      href: gatewayTabHref(routes, id, "members"),
-      active: activeTab === "members",
     },
     {
       key: "inspect",
@@ -163,11 +157,12 @@ export function GatewaySidebarNav(): React.JSX.Element | null {
       {mcpUrl && (
         <div className="flex flex-col gap-1">
           <DetailSidebarInfoLabel>URL</DetailSidebarInfoLabel>
-          <div className="flex items-start gap-1">
+          <div className="flex min-w-0 items-start gap-1">
             <Text
               variant="small"
               muted
-              className="line-clamp-2 font-mono text-xs break-all"
+              className="truncate font-mono text-xs"
+              title={mcpUrl}
             >
               {mcpUrl.replace(/^https?:\/\//, "")}
             </Text>

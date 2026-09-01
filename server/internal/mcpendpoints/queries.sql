@@ -114,36 +114,67 @@ SET
 WHERE id = @id AND project_id = @project_id AND deleted IS FALSE
 RETURNING *;
 
--- name: CheckSlugAvailability :one
--- Returns true when the slug is available for an mcp_endpoint in the given
--- uniqueness namespace. Platform-domain endpoints (custom_domain_id IS NULL)
--- and custom-domain endpoints live in separate namespaces enforced by partial
--- unique indexes; this query mirrors that scoping by treating NULL as a valid
--- match value via IS NOT DISTINCT FROM. Soft-deleted rows are ignored. The
--- slug-existence check is intentionally not project-scoped because the
--- uniqueness indexes it mirrors span all projects within their namespace.
---
--- When custom_domain_id is supplied, the domain must also belong to the
--- caller's organization. Foreign or unknown domains short-circuit to
--- "unavailable" (returns false) so callers can't probe slug-existence under
--- domains they don't own. organization_id is ignored on the platform-domain
--- branch (custom_domain_id IS NULL).
+-- name: CheckUnifiedSlugAvailability :one
+-- True when no live mcp_endpoints.slug or toolsets.mcp_slug holds the slug in
+-- the namespace (platform when custom_domain_id is NULL, else that domain).
+-- Not project-scoped, mirroring the partial unique indexes. Owner exclusions:
+-- exclude_toolset_id discounts that toolset's row and its wrapper's endpoints;
+-- exclude_mcp_server_id discounts the toolset backing that server. Unless
+-- skip_domain_check, a supplied domain must be live and owned by
+-- organization_id or the result is false (blocks probing foreign domains).
 SELECT (
-  sqlc.narg('custom_domain_id')::uuid IS NULL
+  @skip_domain_check::boolean
+  OR sqlc.narg('custom_domain_id')::uuid IS NULL
   OR EXISTS (
     SELECT 1
-    FROM custom_domains
-    WHERE id = sqlc.narg('custom_domain_id')::uuid
-      AND organization_id = @organization_id
-      AND deleted IS FALSE
+    FROM custom_domains cd
+    WHERE cd.id = sqlc.narg('custom_domain_id')::uuid
+      AND cd.organization_id = @organization_id
+      AND cd.deleted IS FALSE
   )
 ) AND NOT EXISTS (
   SELECT 1
-  FROM mcp_endpoints
-  WHERE slug = @slug
-    AND custom_domain_id IS NOT DISTINCT FROM sqlc.narg('custom_domain_id')::uuid
-    AND deleted IS FALSE
+  FROM mcp_endpoints e
+  WHERE e.slug = @slug
+    AND e.custom_domain_id IS NOT DISTINCT FROM sqlc.narg('custom_domain_id')::uuid
+    AND e.deleted IS FALSE
+    AND (
+      sqlc.narg('exclude_toolset_id')::uuid IS NULL
+      OR NOT EXISTS (
+        SELECT 1
+        FROM mcp_servers s
+        WHERE s.id = e.mcp_server_id
+          AND s.toolset_id = sqlc.narg('exclude_toolset_id')::uuid
+      )
+    )
+) AND NOT EXISTS (
+  SELECT 1
+  FROM toolsets t
+  WHERE t.mcp_slug = @slug
+    AND t.custom_domain_id IS NOT DISTINCT FROM sqlc.narg('custom_domain_id')::uuid
+    AND t.deleted IS FALSE
+    AND (
+      sqlc.narg('exclude_toolset_id')::uuid IS NULL
+      OR t.id <> sqlc.narg('exclude_toolset_id')::uuid
+    )
+    AND (
+      sqlc.narg('exclude_mcp_server_id')::uuid IS NULL
+      OR NOT EXISTS (
+        SELECT 1
+        FROM mcp_servers s
+        WHERE s.id = sqlc.narg('exclude_mcp_server_id')::uuid
+          AND s.toolset_id = t.id
+      )
+    )
 );
+
+-- name: LockSlugScope :exec
+-- Serializes competing claims on one (namespace, slug) address for the rest of
+-- the caller's transaction; the per-table unique indexes cannot see
+-- cross-table collisions.
+SELECT pg_advisory_xact_lock(hashtextextended(
+  'mcp_slug:' || coalesce(sqlc.narg('custom_domain_id')::uuid::text, 'platform') || '/' || @slug::text, 0
+));
 
 -- name: SoftDeleteMCPEndpointsByMCPServerID :many
 -- Soft-delete all endpoints that point at a given mcp server. Used when the

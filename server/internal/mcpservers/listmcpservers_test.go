@@ -184,14 +184,17 @@ func TestListMcpServers_RBACForbidden(t *testing.T) {
 
 	ctx, ti := newTestService(t)
 
-	ctx = withExactAuthzGrants(t, ctx, ti.conn)
+	_ = createRemoteServerFixture(t, ctx, ti, "rbac forbidden list")
 
-	_, err := ti.service.ListMcpServers(ctx, &gen.ListMcpServersPayload{
+	denied := withExactAuthzGrants(t, ctx, ti.conn)
+
+	result, err := ti.service.ListMcpServers(denied, &gen.ListMcpServersPayload{
 		SessionToken:      nil,
 		ApikeyToken:       nil,
 		ProjectSlugInput:  nil,
 		RemoteMcpServerID: nil,
 		ToolsetID:         nil,
 	})
-	requireOopsCode(t, err, oops.CodeForbidden)
+	require.NoError(t, err)
+	require.Empty(t, result.McpServers)
 }

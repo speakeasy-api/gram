@@ -715,8 +715,7 @@ func mapError(err error) error {
 	if err == nil {
 		return nil
 	}
-	var shareable *oops.ShareableError
-	if errors.As(err, &shareable) {
+	if _, ok := errors.AsType[*oops.ShareableError](err); ok {
 		return err
 	}
 	switch {

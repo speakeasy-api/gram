@@ -347,15 +347,17 @@ func TestUpdateMcpServer_RBACForbidden(t *testing.T) {
 
 	ctx, ti := newTestService(t)
 
-	ctx = withExactAuthzGrants(t, ctx, ti.conn)
+	fixture := createRemoteServerFixture(t, ctx, ti, "rbac forbidden update")
 
-	_, err := ti.service.UpdateMcpServer(ctx, &gen.UpdateMcpServerPayload{
+	denied := withExactAuthzGrants(t, ctx, ti.conn)
+
+	_, err := ti.service.UpdateMcpServer(denied, &gen.UpdateMcpServerPayload{
 		SessionToken:      nil,
 		ApikeyToken:       nil,
 		ProjectSlugInput:  nil,
-		ID:                uuid.NewString(),
+		ID:                fixture.server.ID,
 		EnvironmentID:     nil,
-		RemoteMcpServerID: nil,
+		RemoteMcpServerID: &fixture.remoteMcpServerID,
 		ToolsetID:         nil,
 		Visibility:        types.McpServerVisibility("disabled"),
 	})

@@ -198,6 +198,132 @@ func TestProductFeaturesService_SetProductFeature(t *testing.T) {
 	})
 }
 
+// The default test session is an org admin without the platform-admin bit, so
+// it must be refused staff-only entitlements like SSO.
+func TestProductFeaturesService_SetProductFeatureSSODeniedForOrgAdmin(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestProductFeaturesService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx)
+
+	err := ti.service.SetProductFeature(ctx, &gen.SetProductFeaturePayload{
+		OrganizationID: requestedOrganizationID(ctx),
+		FeatureName:    string(productfeatures.FeatureSSO),
+		Enabled:        true,
+	})
+	requireOopsCode(t, err, oops.CodeForbidden)
+
+	enabled, err := repo.New(ti.conn).IsFeatureEnabled(ctx, repo.IsFeatureEnabledParams{
+		OrganizationID: authCtx.ActiveOrganizationID,
+		FeatureName:    string(productfeatures.FeatureSSO),
+	})
+	require.NoError(t, err)
+	require.False(t, enabled, "denied toggle must not write the feature row")
+}
+
+// Disabling skills is a documented silent no-op (skills are always on), so it
+// must stay reachable for org admins instead of tripping the staff-only gate.
+func TestProductFeaturesService_SetProductFeatureSkillsDisableNoopForOrgAdmin(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestProductFeaturesService(t)
+
+	err := ti.service.SetProductFeature(ctx, &gen.SetProductFeaturePayload{
+		OrganizationID: requestedOrganizationID(ctx),
+		FeatureName:    string(productfeatures.FeatureSkills),
+		Enabled:        false,
+	})
+	require.NoError(t, err)
+}
+
+func TestProductFeaturesService_SetProductFeatureSSOAllowedForPlatformAdmin(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestProductFeaturesService(t)
+	ctx = withPlatformAdmin(t, ctx)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx)
+
+	err := ti.service.SetProductFeature(ctx, &gen.SetProductFeaturePayload{
+		OrganizationID: requestedOrganizationID(ctx),
+		FeatureName:    string(productfeatures.FeatureSSO),
+		Enabled:        true,
+	})
+	require.NoError(t, err)
+
+	enabled, err := repo.New(ti.conn).IsFeatureEnabled(ctx, repo.IsFeatureEnabledParams{
+		OrganizationID: authCtx.ActiveOrganizationID,
+		FeatureName:    string(productfeatures.FeatureSSO),
+	})
+	require.NoError(t, err)
+	require.True(t, enabled)
+}
+
+// Org admins keep self-serve control of the logs toggle even with the
+// platform-admin bit set — staff toggling logs must keep working too.
+func TestProductFeaturesService_SetProductFeatureLogsAllowedForPlatformAdmin(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestProductFeaturesService(t)
+	ctx = withPlatformAdmin(t, ctx)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx)
+
+	err := ti.service.SetProductFeature(ctx, &gen.SetProductFeaturePayload{
+		OrganizationID: requestedOrganizationID(ctx),
+		FeatureName:    "logs",
+		Enabled:        true,
+	})
+	require.NoError(t, err)
+
+	enabled, err := repo.New(ti.conn).IsFeatureEnabled(ctx, repo.IsFeatureEnabledParams{
+		OrganizationID: authCtx.ActiveOrganizationID,
+		FeatureName:    "logs",
+	})
+	require.NoError(t, err)
+	require.True(t, enabled)
+}
+
+// TestFeature_RequiresPlatformAdmin pins the org-settable/staff-only split:
+// the org-settable set mirrors the dashboard's self-serve organization
+// settings, everything else — including features added in the future — fails
+// closed to platform admins.
+func TestFeature_RequiresPlatformAdmin(t *testing.T) {
+	t.Parallel()
+
+	orgSettable := []productfeatures.Feature{
+		productfeatures.FeatureLogs,
+		productfeatures.FeatureToolIOLogs,
+		productfeatures.FeatureSessionCapture,
+		productfeatures.FeatureHooksBrowserLogin,
+		productfeatures.FeatureHooksFailOpen,
+		productfeatures.FeatureSkillCaptureMetadataOnly,
+		productfeatures.FeatureConsentToolFiltering,
+		productfeatures.FeaturePlatformMCP,
+	}
+	for _, feature := range orgSettable {
+		require.Falsef(t, feature.RequiresPlatformAdmin(), "feature %s must stay org-settable", feature)
+	}
+
+	staffOnly := []productfeatures.Feature{
+		productfeatures.FeatureSSO,
+		productfeatures.FeatureSCIM,
+		productfeatures.FeatureSkills,
+		productfeatures.FeatureAuthzChallengeLogging,
+		productfeatures.FeatureCustomModelKeys,
+		productfeatures.FeatureAIPlatformPushIntegrations,
+		productfeatures.FeatureCustomerManagedEncryptionKeys,
+		productfeatures.FeatureSessionPortability,
+		productfeatures.FeatureRemoteSessionAutoRefresh,
+		productfeatures.FeatureRemoteSessionAutoRefreshEnforced,
+	}
+	for _, feature := range staffOnly {
+		require.Truef(t, feature.RequiresPlatformAdmin(), "feature %s must require platform admin", feature)
+	}
+
+	require.True(t, productfeatures.Feature("some_future_feature").RequiresPlatformAdmin(), "unknown features must fail closed")
+}
+
 func TestProductFeaturesService_SetRemoteSessionAutoRefreshPolicy(t *testing.T) {
 	t.Parallel()
 

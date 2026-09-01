@@ -43,7 +43,16 @@ import (
 //go:embed consent_template.html
 var consentTemplateHTML string
 
-var consentTemplate = template.Must(template.New("consent").Parse(consentTemplateHTML))
+// consentLogoHTML defines the "speakeasyWordmark" template. Kept in its own
+// file because it is generated from the dashboard's GramLogo component and is
+// almost entirely path data.
+//
+//go:embed consent_logo.html
+var consentLogoHTML string
+
+var consentTemplate = template.Must(
+	template.Must(template.New("consent").Parse(consentTemplateHTML)).Parse(consentLogoHTML),
+)
 
 // consentScriptData is the consent page's client-side script. It is served
 // as an external file (not inlined into the template) because the ingress
@@ -144,14 +153,27 @@ type consentTemplateData struct {
 	// ConsentToolsPrefill is the subject's stored selection serialized for
 	// the island bootstrap; empty when there is no restrictive prefill.
 	ConsentToolsPrefill string
+	// ConnectedCardCount is the number of RemoteSessionCards already linked,
+	// rendered as the "n of m connected" summary above the service list.
+	ConnectedCardCount int
+	// Styles is the compiled design-system stylesheet inlined into the
+	// document head. A build artifact, never user input.
+	Styles template.CSS
+	// SelectedSessionDuration is the preselected length, surfaced on the
+	// summary line so the session's lifetime is visible without opening the
+	// configuration disclosure. Empty when there is no picker.
+	SelectedSessionDuration string
 }
 
 // sessionDurationOption is one <option> of the consent page's session length
 // picker.
 type sessionDurationOption struct {
-	Hours    int
-	Label    string
-	Selected bool
+	Hours int
+	Label string
+	// ShortLabel drops the "(maximum)" qualifier so the duration reads as a
+	// plain phrase on the summary line ("signing in as … for 2 weeks").
+	ShortLabel string
+	Selected   bool
 }
 
 // remoteSessionCard is the per-remote view rendered by the {{range}} block
@@ -189,6 +211,12 @@ type remoteSessionCard struct {
 	AccessExpiresIn  string
 	RefreshExpiresAt string
 	RefreshExpiresIn string
+	// AuthorizationExpiresAt is the absolute end of the grant, which no amount
+	// of background refreshing extends — unlike the refresh idle timeout above,
+	// which is exactly what auto refresh prevents. The page states the two
+	// differently for that reason.
+	AuthorizationExpiresAt string
+	AuthorizationExpiresIn string
 	// AutoRefreshChecked is the effective auto-refresh value for this card:
 	// the stored preference when the organization lets subjects choose,
 	// otherwise the organization's own policy value.
@@ -373,14 +401,14 @@ func (s *Service) serveConsentGet(w http.ResponseWriter, r *http.Request, endpoi
 		return oops.E(oops.CodeUnexpected, err, "build remote session cards").LogError(ctx, logger)
 	}
 
-	hasConnectedCard := false
+	connectedCardCount := 0
 	autoRefreshHasSessions := false
 	// Every card already carries the organization's policy applied to its own
 	// stored preference, so the page value is on only when none of them is off.
 	everyCardAutoRefreshes := true
 	for _, c := range cards {
 		if c.Connected {
-			hasConnectedCard = true
+			connectedCardCount++
 		}
 		if c.Connected || c.Expired {
 			autoRefreshHasSessions = true
@@ -388,7 +416,21 @@ func (s *Service) serveConsentGet(w http.ResponseWriter, r *http.Request, endpoi
 		everyCardAutoRefreshes = everyCardAutoRefreshes && c.AutoRefreshChecked
 	}
 	autoRefreshOn := len(cards) > 0 && everyCardAutoRefreshes
-	consentEnabled := len(cards) == 0 || hasConnectedCard
+	consentEnabled := len(cards) == 0 || connectedCardCount > 0
+
+	// Skip the interstitial when it has nothing to ask. A server fronting a
+	// single upstream that the subject has not linked yet leaves the page with
+	// exactly one useful control, and the user already expressed intent by
+	// starting the authorization — so send them straight to the provider and
+	// let them land back here with something to approve. Multi-service pages
+	// keep the list: each provider is its own consent decision, and a silent
+	// chain of redirects through three login screens is worse than a list that
+	// shows what is being asked for.
+	if redirected, err := s.maybeAutoConnect(ctx, w, r, logger, endpoint, challengeState, cards); err != nil {
+		return err
+	} else if redirected {
+		return nil
+	}
 
 	// First-party pages mint no user session, so there is no length to pick.
 	// A lookup failure degrades to no picker rather than a failed render; the
@@ -460,6 +502,9 @@ func (s *Service) serveConsentGet(w http.ResponseWriter, r *http.Request, endpoi
 		ConsentToolsURL:         fmt.Sprintf("/%s/%s/connect/mcp", endpoint.RouteBase, endpoint.Slug),
 		ConsentToolsScriptURL:   consentToolsScriptURL,
 		ConsentToolsPrefill:     prefillAttr,
+		ConnectedCardCount:      connectedCardCount,
+		Styles:                  consentPageStyles,
+		SelectedSessionDuration: selectedSessionDuration(durationOptions),
 	}
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
@@ -853,16 +898,19 @@ func shouldAutoCloseFirstParty(firstParty bool, cards []remoteSessionCard) bool 
 // consentDurationPresets are the session-length choices offered on the
 // consent page, largest first. The issuer's maximum is inserted when not
 // already present, and anything above the maximum is dropped.
-var consentDurationPresets = []sessionDurationOption{
-	{Hours: 90 * 24, Label: "90 days", Selected: false},
-	{Hours: 60 * 24, Label: "60 days", Selected: false},
-	{Hours: 30 * 24, Label: "30 days", Selected: false},
-	{Hours: 14 * 24, Label: "2 weeks", Selected: false},
-	{Hours: 7 * 24, Label: "1 week", Selected: false},
-	{Hours: 3 * 24, Label: "3 days", Selected: false},
-	{Hours: 24, Label: "1 day", Selected: false},
-	{Hours: 12, Label: "12 hours", Selected: false},
-	{Hours: 1, Label: "1 hour", Selected: false},
+var consentDurationPresets = []struct {
+	Hours int
+	Label string
+}{
+	{Hours: 90 * 24, Label: "90 days"},
+	{Hours: 60 * 24, Label: "60 days"},
+	{Hours: 30 * 24, Label: "30 days"},
+	{Hours: 14 * 24, Label: "2 weeks"},
+	{Hours: 7 * 24, Label: "1 week"},
+	{Hours: 3 * 24, Label: "3 days"},
+	{Hours: 24, Label: "1 day"},
+	{Hours: 12, Label: "12 hours"},
+	{Hours: 1, Label: "1 hour"},
 }
 
 // formatDurationHours renders a whole-hour count the way the presets do.
@@ -904,7 +952,12 @@ func buildSessionDurationOptions(issuer usersessions_repo.UserSessionIssuer) []s
 			return
 		}
 		seen[hours] = true
-		options = append(options, sessionDurationOption{Hours: hours, Label: label, Selected: hours == maxHours})
+		options = append(options, sessionDurationOption{
+			Hours:      hours,
+			Label:      label,
+			ShortLabel: formatDurationHours(hours),
+			Selected:   hours == maxHours,
+		})
 	}
 	add(maxHours, formatDurationHours(maxHours)+" (maximum)")
 	for _, preset := range consentDurationPresets {
@@ -1008,20 +1061,28 @@ func (s *Service) buildRemoteSessionCards(
 			refreshExpiresAt = state.RefreshExpiresAt.UTC().Format(time.RFC3339)
 			refreshExpiresIn = formatTimeRemaining(renderedAt, *state.RefreshExpiresAt)
 		}
+		authorizationExpiresAt := ""
+		authorizationExpiresIn := ""
+		if state.AuthorizationExpiresAt != nil {
+			authorizationExpiresAt = state.AuthorizationExpiresAt.UTC().Format(time.RFC3339)
+			authorizationExpiresIn = formatTimeRemaining(renderedAt, *state.AuthorizationExpiresAt)
+		}
 		issuerDisplay, issuerLogoURL := issuerCardBranding(c, s.serverURL)
 		cards = append(cards, remoteSessionCard{
-			ClientID:           c.ID.String(),
-			IssuerSlug:         c.IssuerSlug,
-			IssuerDisplay:      issuerDisplay,
-			IssuerLogoURL:      issuerLogoURL,
-			Connected:          state.Status == remotesessions.RemoteSessionActive,
-			Expired:            state.Status == remotesessions.RemoteSessionExpired,
-			CanRefresh:         state.CanRefresh,
-			AccessExpiresAt:    accessExpiresAt,
-			AccessExpiresIn:    accessExpiresIn,
-			RefreshExpiresAt:   refreshExpiresAt,
-			RefreshExpiresIn:   refreshExpiresIn,
-			AutoRefreshChecked: checked,
+			ClientID:               c.ID.String(),
+			IssuerSlug:             c.IssuerSlug,
+			IssuerDisplay:          issuerDisplay,
+			IssuerLogoURL:          issuerLogoURL,
+			Connected:              state.Status == remotesessions.RemoteSessionActive,
+			Expired:                state.Status == remotesessions.RemoteSessionExpired,
+			CanRefresh:             state.CanRefresh,
+			AccessExpiresAt:        accessExpiresAt,
+			AccessExpiresIn:        accessExpiresIn,
+			RefreshExpiresAt:       refreshExpiresAt,
+			RefreshExpiresIn:       refreshExpiresIn,
+			AuthorizationExpiresAt: authorizationExpiresAt,
+			AuthorizationExpiresIn: authorizationExpiresIn,
+			AutoRefreshChecked:     checked,
 		})
 	}
 	return cards, nil
@@ -1057,4 +1118,88 @@ func pluralize(value int, singular string) string {
 		return singular
 	}
 	return singular + "s"
+}
+
+// maybeAutoConnect sends the subject straight to the sole unlinked upstream
+// provider, reporting whether it wrote a redirect. It is a no-op unless there
+// is exactly one remote-session card, that card is unlinked, and this
+// challenge has not auto-connected before.
+//
+// The latch is persisted BEFORE redirecting and is never cleared, so every
+// path back to this page — the user denying consent upstream, the provider
+// erroring, an explicit disconnect — renders the page with its manual
+// controls instead of bouncing the user out again.
+func (s *Service) maybeAutoConnect(
+	ctx context.Context,
+	w http.ResponseWriter,
+	r *http.Request,
+	logger *slog.Logger,
+	endpoint *ResolvedMcpEndpoint,
+	challengeState AuthnChallengeState,
+	cards []remoteSessionCard,
+) (bool, error) {
+	if challengeState.AutoConnectDone || len(cards) != 1 || cards[0].Connected {
+		return false, nil
+	}
+
+	clients, err := s.remoteChallengeMgr.ListClients(ctx, endpoint.ProjectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID)
+	if err != nil {
+		return false, oops.E(oops.CodeUnexpected, err, "list remote session clients").LogError(ctx, logger)
+	}
+	var client *remotesessions.Client
+	for i := range clients {
+		if clients[i].ID.String() == cards[0].ClientID {
+			client = &clients[i]
+			break
+		}
+	}
+	if client == nil {
+		return false, nil
+	}
+
+	// Claim the latch before redirecting: a redirect the latch did not survive
+	// is an infinite bounce between this page and the provider.
+	//
+	// CompareAndSwap rather than Store, for two reasons. Concurrent GETs would
+	// both read AutoConnectDone=false and both start an upstream login; only
+	// the swap winner may redirect. And a plain Store would recreate a
+	// challenge that the approve POST's GetAndDelete had already consumed,
+	// handing a replayed approval a live state to mint a second grant against.
+	// Losing the race is not an error — it means someone else is driving this
+	// challenge, so fall through and render.
+	claimed := challengeState
+	claimed.AutoConnectDone = true
+	swapped, err := s.authnChallengeCache.CompareAndSwap(ctx, challengeState, claimed)
+	if err != nil {
+		logger.WarnContext(ctx, "claim auto-connect latch; falling back to the consent page", attr.SlogError(err))
+		return false, nil
+	}
+	if !swapped {
+		return false, nil
+	}
+	challengeState = claimed
+
+	// autoRefresh is nil: the subject has not been shown the control yet, so
+	// there is no choice to record. The page's own Connect action is what
+	// authors a stored preference.
+	challengeURL, err := s.buildRemoteConnectURL(ctx, logger, endpoint, challengeState, *client, nil)
+	if err != nil {
+		// Already logged. Render the page so the user can connect manually
+		// rather than seeing an error for a step they did not take.
+		return false, nil
+	}
+
+	http.Redirect(w, r, challengeURL, http.StatusSeeOther)
+	return true, nil
+}
+
+// selectedSessionDuration returns the preselected option's short label, for
+// the summary line. Empty when there is no picker to describe.
+func selectedSessionDuration(options []sessionDurationOption) string {
+	for _, o := range options {
+		if o.Selected {
+			return o.ShortLabel
+		}
+	}
+	return ""
 }

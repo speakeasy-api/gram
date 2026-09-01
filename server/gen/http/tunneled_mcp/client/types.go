@@ -18,6 +18,11 @@ import (
 type CreateServerRequestBody struct {
 	// Human-readable display name for the tunneled MCP server
 	Name string `form:"name" json:"name" xml:"name"`
+	// RFC 9728 protected resource identifier of the tunneled server, used only for
+	// exact-match credential routing and never dialed by Gram. Omit unless the
+	// identifier is already known; it is usually recorded later, once the tunnel
+	// is up.
+	ResourceIdentifier *string `form:"resource_identifier,omitempty" json:"resource_identifier,omitempty" xml:"resource_identifier,omitempty"`
 }
 
 // UpdateServerRequestBody is the type of the "tunneledMcp" service
@@ -25,11 +30,16 @@ type CreateServerRequestBody struct {
 type UpdateServerRequestBody struct {
 	// The ID of the tunneled MCP server to update
 	ID string `form:"id" json:"id" xml:"id"`
-	// Human-readable display name for the tunneled MCP server
-	Name string `form:"name" json:"name" xml:"name"`
+	// Human-readable display name for the tunneled MCP server. Omit to leave
+	// unchanged.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// Consent to serve this source through a public, anonymous MCP endpoint.
 	// Disabling revokes all live anonymous sessions. Omit to leave unchanged.
 	AllowPublic *bool `form:"allow_public,omitempty" json:"allow_public,omitempty" xml:"allow_public,omitempty"`
+	// RFC 9728 protected resource identifier of the tunneled server, used only for
+	// exact-match credential routing and never dialed by Gram. Pass an empty
+	// string to clear. Omit to leave unchanged.
+	ResourceIdentifier *string `form:"resource_identifier,omitempty" json:"resource_identifier,omitempty" xml:"resource_identifier,omitempty"`
 }
 
 // RotateServerKeyRequestBody is the type of the "tunneledMcp" service
@@ -73,6 +83,9 @@ type GetServerResponseBody struct {
 	AllowPublic *bool `form:"allow_public,omitempty" json:"allow_public,omitempty" xml:"allow_public,omitempty"`
 	// Most recent agent version reported by the tunnel
 	AgentVersion *string `form:"agent_version,omitempty" json:"agent_version,omitempty" xml:"agent_version,omitempty"`
+	// RFC 9728 protected resource identifier of the tunneled server, used only for
+	// exact-match credential routing and never dialed by Gram
+	ResourceIdentifier *string `form:"resource_identifier,omitempty" json:"resource_identifier,omitempty" xml:"resource_identifier,omitempty"`
 	// Most recent persisted heartbeat timestamp
 	LastSeenAt *string `form:"last_seen_at,omitempty" json:"last_seen_at,omitempty" xml:"last_seen_at,omitempty"`
 	// Number of active tunnel connections currently visible in Redis
@@ -116,6 +129,9 @@ type UpdateServerResponseBody struct {
 	AllowPublic *bool `form:"allow_public,omitempty" json:"allow_public,omitempty" xml:"allow_public,omitempty"`
 	// Most recent agent version reported by the tunnel
 	AgentVersion *string `form:"agent_version,omitempty" json:"agent_version,omitempty" xml:"agent_version,omitempty"`
+	// RFC 9728 protected resource identifier of the tunneled server, used only for
+	// exact-match credential routing and never dialed by Gram
+	ResourceIdentifier *string `form:"resource_identifier,omitempty" json:"resource_identifier,omitempty" xml:"resource_identifier,omitempty"`
 	// Most recent persisted heartbeat timestamp
 	LastSeenAt *string `form:"last_seen_at,omitempty" json:"last_seen_at,omitempty" xml:"last_seen_at,omitempty"`
 	// Number of active tunnel connections currently visible in Redis
@@ -1449,6 +1465,9 @@ type TunneledMcpServerResponseBody struct {
 	AllowPublic *bool `form:"allow_public,omitempty" json:"allow_public,omitempty" xml:"allow_public,omitempty"`
 	// Most recent agent version reported by the tunnel
 	AgentVersion *string `form:"agent_version,omitempty" json:"agent_version,omitempty" xml:"agent_version,omitempty"`
+	// RFC 9728 protected resource identifier of the tunneled server, used only for
+	// exact-match credential routing and never dialed by Gram
+	ResourceIdentifier *string `form:"resource_identifier,omitempty" json:"resource_identifier,omitempty" xml:"resource_identifier,omitempty"`
 	// Most recent persisted heartbeat timestamp
 	LastSeenAt *string `form:"last_seen_at,omitempty" json:"last_seen_at,omitempty" xml:"last_seen_at,omitempty"`
 	// Number of active tunnel connections currently visible in Redis
@@ -1488,7 +1507,8 @@ type TunneledMcpConnectionResponseBody struct {
 // the "createServer" endpoint of the "tunneledMcp" service.
 func NewCreateServerRequestBody(p *tunneledmcp.CreateServerPayload) *CreateServerRequestBody {
 	body := &CreateServerRequestBody{
-		Name: p.Name,
+		Name:               p.Name,
+		ResourceIdentifier: p.ResourceIdentifier,
 	}
 	return body
 }
@@ -1497,9 +1517,10 @@ func NewCreateServerRequestBody(p *tunneledmcp.CreateServerPayload) *CreateServe
 // the "updateServer" endpoint of the "tunneledMcp" service.
 func NewUpdateServerRequestBody(p *tunneledmcp.UpdateServerPayload) *UpdateServerRequestBody {
 	body := &UpdateServerRequestBody{
-		ID:          p.ID,
-		Name:        p.Name,
-		AllowPublic: p.AllowPublic,
+		ID:                 p.ID,
+		Name:               p.Name,
+		AllowPublic:        p.AllowPublic,
+		ResourceIdentifier: p.ResourceIdentifier,
 	}
 	return body
 }
@@ -1852,6 +1873,7 @@ func NewGetServerTunneledMcpServerOK(body *GetServerResponseBody) *types.Tunnele
 		ConnectionStatus:           types.TunneledMcpConnectionStatus(*body.ConnectionStatus),
 		AllowPublic:                *body.AllowPublic,
 		AgentVersion:               body.AgentVersion,
+		ResourceIdentifier:         body.ResourceIdentifier,
 		LastSeenAt:                 body.LastSeenAt,
 		ActiveConnectionCount:      *body.ActiveConnectionCount,
 		ActiveConsumerSessionCount: *body.ActiveConsumerSessionCount,
@@ -2194,6 +2216,7 @@ func NewUpdateServerTunneledMcpServerOK(body *UpdateServerResponseBody) *types.T
 		ConnectionStatus:           types.TunneledMcpConnectionStatus(*body.ConnectionStatus),
 		AllowPublic:                *body.AllowPublic,
 		AgentVersion:               body.AgentVersion,
+		ResourceIdentifier:         body.ResourceIdentifier,
 		LastSeenAt:                 body.LastSeenAt,
 		ActiveConnectionCount:      *body.ActiveConnectionCount,
 		ActiveConsumerSessionCount: *body.ActiveConsumerSessionCount,

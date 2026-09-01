@@ -154,18 +154,20 @@ func stampRemoteSessionIssuer(t *testing.T, ctx context.Context, conn *pgxpool.P
 	require.Equal(t, int64(1), stamped, "the issuer stamp must land on exactly one live server")
 }
 
-// createTunneledMetaMember attaches a tunneled member stamped with an
-// issuer. It has no upstream URL, so the lookup must not return it however its
-// issuer matches.
-func createTunneledMetaMember(t *testing.T, ctx context.Context, conn *pgxpool.Pool, projectID, metaServerID uuid.UUID, slug string, remoteIssuerID uuid.NullUUID, sortOrder int32) seededMetaMember {
+// createTunneledMetaMember attaches a tunneled member stamped with an issuer.
+// Its upstream resource is the recorded resource identifier — empty
+// resourceIdentifier records none, so the member claims its issuer's
+// credential but qualifies it to nothing.
+func createTunneledMetaMember(t *testing.T, ctx context.Context, conn *pgxpool.Pool, projectID, metaServerID uuid.UUID, slug, resourceIdentifier string, remoteIssuerID uuid.NullUUID, sortOrder int32) seededMetaMember {
 	t.Helper()
 
 	tunneled, err := tunneledmcp_repo.New(conn).CreateServer(ctx, tunneledmcp_repo.CreateServerParams{
-		ID:        uuid.New(),
-		ProjectID: projectID,
-		Name:      slug,
-		KeyHash:   "hash-" + slug,
-		KeyPrefix: "pfx",
+		ID:                 uuid.New(),
+		ProjectID:          projectID,
+		Name:               slug,
+		KeyHash:            "hash-" + slug,
+		KeyPrefix:          "pfx",
+		ResourceIdentifier: conv.ToPGTextEmpty(resourceIdentifier),
 	})
 	require.NoError(t, err)
 
@@ -609,9 +611,11 @@ func TestServeConsentAction_MetaMCPConnectLookupErrorFailsClosed(t *testing.T) {
 	requireConnectActionFailsClosed(t, fx, clientID)
 }
 
-// A tunneled member has no upstream URL, so there is nothing a token could be
-// routed to however well its issuer matches.
-func TestServeConsentAction_MetaMCPConnectExcludesTunneledMembers(t *testing.T) {
+// A tunneled member with no recorded resource identifier still claims its
+// issuer's credential — blocking any weaker derivation — but qualifies it to
+// nothing, so the grant is minted unqualified and serving routes it by the
+// member's own issuer identity instead.
+func TestServeConsentAction_MetaMCPConnectTunneledMemberWithoutIdentifierSendsNoResource(t *testing.T) {
 	t.Parallel()
 
 	ctx, fx, metaServerID := seedMetaConsentEndpoint(t, "aim87-tunnel-gw")
@@ -619,11 +623,32 @@ func TestServeConsentAction_MetaMCPConnectExcludesTunneledMembers(t *testing.T) 
 	clientID := createConsentRemoteClient(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, "aim87-tunnel", "", []uuid.UUID{fx.shared})
 	issuerID := clientRemoteIssuerID(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, clientID)
 
-	createTunneledMetaMember(t, ctx, fx.ti.conn, fx.projectID, metaServerID, "aim87-tunnel-member", conv.ToNullUUID(issuerID), 0)
+	createTunneledMetaMember(t, ctx, fx.ti.conn, fx.projectID, metaServerID, "aim87-tunnel-member", "", conv.ToNullUUID(issuerID), 0)
+	// A derivable per-client resource exists, so an omitted one proves the
+	// claim happened and suppressed it — without this the assertion would
+	// hold even if the tunneled member stopped claiming altogether.
+	attachConsentRemoteMcpServer(t, ctx, fx.ti.conn, fx.projectID, fx.shared, "aim87-tunnel-fallback", "https://fallback.example.com/mcp")
 
 	loc := postConnectAction(t, fx, clientID)
 	_, hasResource := loc.Query()["resource"]
-	require.False(t, hasResource, "a tunneled member advertises no upstream URL to route to")
+	require.False(t, hasResource, "a tunneled member recording no resource identifier qualifies the credential to nothing")
+}
+
+// A tunneled member with a recorded resource identifier claims its issuer's
+// credential and qualifies it to that identifier, exactly as a remote member
+// qualifies to its URL (AIM-151).
+func TestServeConsentAction_MetaMCPConnectResolvesTunneledMemberIdentifier(t *testing.T) {
+	t.Parallel()
+
+	ctx, fx, metaServerID := seedMetaConsentEndpoint(t, "aim151-tunnel-gw")
+
+	clientID := createConsentRemoteClient(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, "aim151-tunnel", "", []uuid.UUID{fx.shared})
+	issuerID := clientRemoteIssuerID(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, clientID)
+
+	createTunneledMetaMember(t, ctx, fx.ti.conn, fx.projectID, metaServerID, "aim151-tunnel-member", "https://tunneled.internal/mcp", conv.ToNullUUID(issuerID), 0)
+
+	require.Equal(t, "https://tunneled.internal/mcp", postConnectAction(t, fx, clientID).Query().Get("resource"),
+		"the credential must be qualified to the tunneled member's recorded resource identifier")
 }
 
 // A member of another meta MCP, on the same issuer, must not be reachable from

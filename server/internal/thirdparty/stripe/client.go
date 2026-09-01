@@ -348,6 +348,7 @@ type WebhookEvent struct {
 type stripeAPI interface {
 	createCustomer(context.Context, *stripesdk.CustomerCreateParams) (*stripesdk.Customer, error)
 	createCheckoutSession(context.Context, *stripesdk.CheckoutSessionCreateParams) (*stripesdk.CheckoutSession, error)
+	expireCheckoutSession(context.Context, string, *stripesdk.CheckoutSessionExpireParams) (*stripesdk.CheckoutSession, error)
 	retrieveCheckoutSession(context.Context, string, *stripesdk.CheckoutSessionRetrieveParams) (*stripesdk.CheckoutSession, error)
 	retrieveSubscription(context.Context, string, *stripesdk.SubscriptionRetrieveParams) (*stripesdk.Subscription, error)
 	updateSubscription(context.Context, string, *stripesdk.SubscriptionUpdateParams) (*stripesdk.Subscription, error)
@@ -377,6 +378,14 @@ func (s *sdkAPI) createCheckoutSession(ctx context.Context, params *stripesdk.Ch
 	session, err := s.client.V1CheckoutSessions.Create(ctx, params)
 	if err != nil {
 		return nil, fmt.Errorf("stripe SDK create Checkout session: %w", err)
+	}
+	return session, nil
+}
+
+func (s *sdkAPI) expireCheckoutSession(ctx context.Context, id string, params *stripesdk.CheckoutSessionExpireParams) (*stripesdk.CheckoutSession, error) {
+	session, err := s.client.V1CheckoutSessions.Expire(ctx, id, params)
+	if err != nil {
+		return nil, fmt.Errorf("stripe SDK expire Checkout session: %w", err)
 	}
 	return session, nil
 }
@@ -552,6 +561,16 @@ func (c *client) CreateCheckoutSession(ctx context.Context, input CreateCheckout
 		return nil, fmt.Errorf("create Stripe Checkout session: %w", err)
 	}
 	return &CheckoutSession{ID: session.ID, URL: session.URL}, nil
+}
+
+func (c *client) ExpireCheckoutSession(ctx context.Context, id string) error {
+	if id == "" {
+		return errors.New("missing Stripe Checkout session id")
+	}
+	if _, err := c.api.expireCheckoutSession(ctx, id, new(stripesdk.CheckoutSessionExpireParams)); err != nil {
+		return fmt.Errorf("expire Stripe Checkout session: %w", err)
+	}
+	return nil
 }
 
 func (c *client) GetCheckoutSession(ctx context.Context, id string) (*CheckoutSessionState, error) {

@@ -17,7 +17,6 @@ import (
 	"github.com/redis/go-redis/v9"
 	"github.com/sourcegraph/conc/pool"
 	"github.com/urfave/cli/v2"
-	"github.com/urfave/cli/v2/altsrc"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	"go.opentelemetry.io/otel"
 	"go.temporal.io/sdk/client"
@@ -260,30 +259,13 @@ func newAdminCommand() *cli.Command {
 			EnvVars:  []string{"LOOPS_API_KEY"},
 			Required: false,
 		},
-		&cli.StringFlag{
-			Name: "stripe-api-key", Usage: "The Stripe API key", EnvVars: []string{"STRIPE_API_KEY"},
-		},
-		&cli.StringFlag{
-			Name: "stripe-webhook-secret", Usage: "The Stripe webhook signing secret", EnvVars: []string{"STRIPE_WEBHOOK_SECRET"},
-		},
 		&cli.BoolFlag{
 			Name:    adminBillingTelemetryEnabledFlag,
 			Usage:   "Enable PAYG billing telemetry from ClickHouse",
 			EnvVars: []string{"GRAM_ADMIN_BILLING_TELEMETRY_ENABLED"},
 		},
-		altsrc.NewStringFlag(&cli.StringFlag{
-			Name: "stripe-price-id-tum", Aliases: []string{"stripe.price_id_tum"}, EnvVars: []string{"STRIPE_PRICE_ID_TUM"},
-		}),
-		altsrc.NewStringFlag(&cli.StringFlag{
-			Name: "stripe-meter-id-tum", Aliases: []string{"stripe.meter_id_tum"}, EnvVars: []string{"STRIPE_METER_ID_TUM"},
-		}),
-		altsrc.NewStringFlag(&cli.StringFlag{
-			Name: "stripe-meter-event-name", Aliases: []string{"stripe.meter_event_name"}, EnvVars: []string{"STRIPE_METER_EVENT_NAME"},
-		}),
-		altsrc.NewStringFlag(&cli.StringFlag{
-			Name: "stripe-portal-configuration-id", Aliases: []string{"stripe.portal_configuration_id"}, EnvVars: []string{"STRIPE_PORTAL_CONFIGURATION_ID"},
-		}),
 	}
+	flags = append(flags, stripeFlags()...)
 	flags = append(flags, clickHouseFlags()...)
 
 	return &cli.Command{

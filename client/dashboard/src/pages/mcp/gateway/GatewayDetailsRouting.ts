@@ -1,8 +1,9 @@
 import type { useRoutes } from "@/routes";
 
+// "members" is not a tab: member management lives on the Overview tab, and the
+// legacy /members URL falls through the unknown-tab redirect to overview.
 const VALID_TABS = [
   "overview",
-  "members",
   "inspect",
   "team-access",
   "sessions",
@@ -72,8 +73,6 @@ export function gatewayTabHref(
   switch (tab) {
     case "overview":
       return routes.mcp.gateway.overview.href(gatewayId);
-    case "members":
-      return routes.mcp.gateway.members.href(gatewayId);
     case "inspect":
       return routes.mcp.gateway.inspect.href(gatewayId);
     case "team-access":

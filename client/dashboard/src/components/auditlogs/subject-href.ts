@@ -52,10 +52,6 @@ export function subjectHref(log: AuditLog, orgSlug: string): string | null {
       return `/${orgSlug}/access/roles?editRole=${log.subjectId}`;
     case "access_member":
       return `/${orgSlug}/access/members`;
-    case "mcp_collection":
-      return log.subjectSlug
-        ? `/${orgSlug}/collections/${log.subjectSlug}`
-        : null;
     case "api_key":
       return `/${orgSlug}/api-keys`;
     case "json_web_key_set":

@@ -69,10 +69,7 @@ export function SourceTableRow({
   const { hasScope } = useRBAC();
   const canWrite = hasScope("project:write");
   const config = sourceTypeConfig[asset.type];
-  const sourceTypeLabel =
-    asset.type === "externalmcp" && asset.organizationMcpCollectionRegistryId
-      ? "Collection"
-      : config.label;
+  const sourceTypeLabel = config.label;
   const sourceKind = sourceTypeToUrnKind(asset.type);
 
   const createdAt = "createdAt" in asset ? asset.createdAt : undefined;
