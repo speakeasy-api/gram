@@ -1,7 +1,7 @@
 import { Icon, IconProps } from "@/components/ui/Icon";
 import { IconName } from "@/components/ui/Icon/names";
 import React, { useMemo } from "react";
-import { Link, useLocation, useNavigate } from "react-router";
+import { Link, Navigate, useLocation, useNavigate } from "react-router";
 import { ReleaseStage } from "./components/release-stage-badge";
 import { useSlugs } from "./contexts/Sdk";
 import { cn } from "./lib/utils";
@@ -42,7 +42,6 @@ import Home from "./pages/home/Home";
 import { ProjectGuidePage } from "./components/project-guide/ProjectGuidePage";
 import Integrations from "./pages/integrations/Integrations";
 import Login from "./pages/login/Login";
-import Register from "./pages/login/Register";
 import ExploreDemo from "./pages/demo/ExploreDemo";
 import SignUp from "./pages/login/SignUp";
 import { LogsRoot } from "./pages/logs/Logs";
@@ -236,7 +235,7 @@ const ROUTE_STRUCTURE = {
   register: {
     title: "Register",
     url: "/register",
-    component: Register,
+    component: () => <Navigate to="/sign-up" replace />,
     unauthenticated: true,
   },
   exploreDemo: {
