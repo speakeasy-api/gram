@@ -85,7 +85,7 @@ export function IdentityPanel({
 }
 
 /** Which shape a pending panel stands in for: a list of rows, or a chart. */
-export type IdentityPanelSkeletonVariant = "rows" | "block";
+type IdentityPanelSkeletonVariant = "rows" | "block";
 
 /**
  * The placeholder a pending panel shows in place of its body, shaped like what
@@ -93,7 +93,7 @@ export type IdentityPanelSkeletonVariant = "rows" | "block";
  * does not reflow when the data lands, and a chart panel gets one block rather
  * than rows it would never have drawn.
  */
-export function IdentityPanelSkeleton({
+function IdentityPanelSkeleton({
   rows = 3,
   variant = "rows",
 }: {
