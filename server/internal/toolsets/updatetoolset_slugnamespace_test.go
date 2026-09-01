@@ -104,7 +104,7 @@ func TestToolsetsService_UpdateToolset_McpSlugRenameUnderSoftDeletedDomain(t *te
 	t.Parallel()
 
 	ctx, ti := newTestToolsetsService(t)
-	ctx = withProAccount(t, ctx)
+	ctx = withAccountType(t, ctx, "pro")
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 
@@ -152,7 +152,7 @@ func TestToolsetsService_UpdateToolset_DomainChangeProbesExistingSlug(t *testing
 	t.Parallel()
 
 	ctx, ti := newTestToolsetsService(t)
-	ctx = withProAccount(t, ctx)
+	ctx = withAccountType(t, ctx, "pro")
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 
