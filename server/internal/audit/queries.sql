@@ -74,7 +74,9 @@ LEFT JOIN LATERAL (
 -- stored value renders the feed as a column of addresses; joining the
 -- directory repairs the rows already written, and keeps names current when
 -- someone is renamed. The stored value remains the fallback for actors with
--- no directory row (API keys, system, deleted users).
+-- no directory row: API keys and system actors. A soft-deleted user still
+-- resolves, deliberately — they really did perform the action, and their name
+-- is both more useful and less identifying than the email the row stored.
 SELECT a.*, p.slug AS project_slug, u.display_name AS actor_user_display_name
 FROM audit_logs a
 LEFT JOIN projects p ON p.id = a.project_id

@@ -1,5 +1,6 @@
-import { useContext } from "react";
-import { ConfigContext } from "@/components/ui/context/config";
+import { useIsDarkTheme } from "@/lib/theme";
+
+export { useIsDarkTheme };
 
 // Deterministic gradient colors from any string label (project/org/assistant
 // id, member id). Colors are drawn from the Speakeasy brand spectrum and kept
@@ -84,12 +85,6 @@ export function getIdentityTint(
   };
 }
 
-/** Whether the resolved theme is dark, for callers that tint inside a render
- * callback and so cannot call a hook at the point of use. */
-export function useIsDarkTheme(): boolean {
-  return useContext(ConfigContext)?.theme === "dark";
-}
-
 /**
  * The identity tint for the resolved theme. Inline styles cannot follow a CSS
  * theme, so the component resolves it and re-renders when the theme flips.
@@ -98,8 +93,7 @@ export function useIdentityTint(label: string): {
   backgroundColor: string;
   color: string;
 } {
-  const config = useContext(ConfigContext);
-  return getIdentityTint(label, config?.theme === "dark");
+  return getIdentityTint(label, useIsDarkTheme());
 }
 
 /**
