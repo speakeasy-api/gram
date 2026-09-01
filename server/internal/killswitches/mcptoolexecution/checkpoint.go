@@ -20,8 +20,10 @@ import (
 // per-call serving path.
 const DefaultEvaluationTimeout = time.Second
 
+var mcpEvaluationDefinitions = [...]killswitches.DefinitionKey{DefinitionKeyMCPToolExecution, DefinitionKeyAIAccess}
+
 func mcpEvaluationDefinitionKeys() []killswitches.DefinitionKey {
-	return []killswitches.DefinitionKey{DefinitionKeyMCPToolExecution, DefinitionKeyAIAccess}
+	return mcpEvaluationDefinitions[:]
 }
 
 type evaluator interface {
