@@ -104,13 +104,17 @@ environment instead of the key baked into the download.
    openclaw plugins install ./<org>-observability-openclaw.zip
    ```
 
-3. Preinstall the `speakeasy-hooks` binary. The plugin's bootstrap otherwise
-   downloads it from `https://github.com/speakeasy-api/gram/releases` on the
-   first hook firing, which needs egress from the running container and adds
-   latency to the first turn. Set `GRAM_HOOKS_HOME` to a directory baked into
-   the image and populate it at build time; the bootstrap uses that instead of
-   its per-OS cache location. If the download is left in place, allowlist that
-   host or the first hook fails with a bootstrap error.
+3. Optionally preinstall the `speakeasy-hooks` binary. The plugin's bootstrap
+   otherwise fetches it on the first hook firing, which needs egress from the
+   running container and adds latency to the first turn. Set `GRAM_HOOKS_HOME`
+   to a directory baked into the image and populate it at build time; the
+   bootstrap uses that instead of its per-OS cache location.
+
+   If you leave the download in place, the host to allowlist is **your own Gram
+   server** (`<GRAM_HOOKS_SERVER_URL>/hooks/releases/...`), not GitHub. The
+   binary is served by the org's Gram deployment precisely so that egress
+   restricted environments only ever need the one domain they already allow for
+   ingest.
 
 **At run time**, supply:
 
