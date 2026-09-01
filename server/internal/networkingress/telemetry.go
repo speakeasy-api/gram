@@ -20,10 +20,12 @@ const (
 	OperationProxy          = "proxy"
 	OperationResolution     = "resolution"
 	OperationOAuthAuthority = "oauth_authority"
+	OperationUnknown        = "unknown"
 
 	ResultAllowed = "allowed"
 	ResultDenied  = "denied"
 	ResultError   = "error"
+	ResultUnknown = "unknown"
 
 	ReasonNone                 = "none"
 	ReasonMissingAttestation   = "missing_attestation"
@@ -47,6 +49,7 @@ const (
 	ReasonEndpointNotFound     = "endpoint_not_found"
 	ReasonPolicyDenied         = "policy_denied"
 	ReasonDependencyFailed     = "dependency_failed"
+	ReasonUnknown              = "unknown"
 )
 
 type Telemetry struct {
@@ -124,19 +127,19 @@ func (t *Telemetry) Record(ctx context.Context, operation, result, reason, provi
 
 func clampOperation(value string) string {
 	switch value {
-	case OperationAdmission, OperationAttestation, OperationProxy, OperationResolution, OperationOAuthAuthority:
+	case OperationAdmission, OperationAttestation, OperationProxy, OperationResolution, OperationOAuthAuthority, OperationUnknown:
 		return value
 	default:
-		return OperationAdmission
+		return OperationUnknown
 	}
 }
 
 func clampResult(value string) string {
 	switch value {
-	case ResultAllowed, ResultDenied, ResultError:
+	case ResultAllowed, ResultDenied, ResultError, ResultUnknown:
 		return value
 	default:
-		return ResultError
+		return ResultUnknown
 	}
 }
 
@@ -147,10 +150,10 @@ func clampReason(value string) string {
 		ReasonProviderUnsupported, ReasonOriginInvalid, ReasonTokenReadFailed, ReasonUpstreamFailed,
 		ReasonRateLimited, ReasonCacheHit, ReasonNegativeCacheHit, ReasonTokenReviewDenied,
 		ReasonAuthorityRejected, ReasonAuthorityUnavailable, ReasonNamespaceRejected,
-		ReasonEndpointNotFound, ReasonPolicyDenied, ReasonDependencyFailed:
+		ReasonEndpointNotFound, ReasonPolicyDenied, ReasonDependencyFailed, ReasonUnknown:
 		return value
 	default:
-		return ReasonDependencyFailed
+		return ReasonUnknown
 	}
 }
 
