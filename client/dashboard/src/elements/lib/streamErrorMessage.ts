@@ -45,65 +45,100 @@ type ErrorBag = {
   response?: unknown;
 };
 
+const AI_ACCESS_DENIED = "ai_access_denied";
+
 const CHILD_FIELDS: ReadonlyArray<keyof ErrorBag> = [
   "error",
   "cause",
   "lastError",
 ];
 
-// Tracks objects already visited so circular references (`err.cause === err`)
-// don't recurse forever. WeakSet so we don't pin the error tree alive.
-const walk = (error: unknown, seen: WeakSet<object>): boolean => {
-  if (!error) return false;
+type ErrorTreeVisitor<T> = (value: unknown) => T | undefined;
 
-  if (typeof error === "string") return hasCreditHint(error);
-  if (typeof error !== "object") return false;
-  if (seen.has(error)) return false;
+// Visit every normalized error node once. responseBody is visited both as raw
+// text and, when valid JSON, as a nested error envelope.
+const visitErrorTree = <T>(
+  error: unknown,
+  visitor: ErrorTreeVisitor<T>,
+  seen = new WeakSet<object>(),
+): T | undefined => {
+  const result = visitor(error);
+  if (result !== undefined) return result;
+  if (!error || typeof error !== "object" || seen.has(error)) return undefined;
   seen.add(error);
 
   const obj = error as ErrorBag;
-
-  if (obj.name === "insufficient_credits") return true;
-
-  const status =
-    typeof obj.statusCode === "number"
-      ? obj.statusCode
-      : typeof obj.status === "number"
-        ? obj.status
-        : undefined;
-  if (status === 402) return true;
-
-  if (
-    obj.response &&
-    typeof obj.response === "object" &&
-    (obj.response as { status?: unknown }).status === 402
-  ) {
-    return true;
-  }
-
-  if (typeof obj.message === "string" && hasCreditHint(obj.message))
-    return true;
-
   if (typeof obj.responseBody === "string") {
-    if (hasCreditHint(obj.responseBody)) return true;
-    const parsed = tryParseJson(obj.responseBody);
-    if (parsed && walk(parsed, seen)) return true;
+    const rawResult = visitor(obj.responseBody);
+    if (rawResult !== undefined) return rawResult;
+    const parsedResult = visitErrorTree(
+      tryParseJson(obj.responseBody),
+      visitor,
+      seen,
+    );
+    if (parsedResult !== undefined) return parsedResult;
   }
-
   for (const field of CHILD_FIELDS) {
-    if (walk(obj[field], seen)) return true;
+    const childResult = visitErrorTree(obj[field], visitor, seen);
+    if (childResult !== undefined) return childResult;
   }
-
   if (Array.isArray(obj.errors)) {
     for (const inner of obj.errors) {
-      if (walk(inner, seen)) return true;
+      const childResult = visitErrorTree(inner, visitor, seen);
+      if (childResult !== undefined) return childResult;
     }
   }
-
-  return false;
+  return undefined;
 };
 
+// Extract only the server-authored dedicated denial envelope. Never render a
+// message from an unavailable/generic error, or from an object that merely
+// mentions the code in free text. React renders the returned string as text.
+const findAIAccessDenial = (error: unknown): ErrorBag | undefined =>
+  visitErrorTree(error, (value) => {
+    if (!value || typeof value !== "object") return undefined;
+    const obj = value as ErrorBag;
+    return obj.name === AI_ACCESS_DENIED ? obj : undefined;
+  });
+
+const findAIAccessDenialNote = (error: unknown): string | undefined => {
+  const denial = findAIAccessDenial(error);
+  if (typeof denial?.message !== "string") return undefined;
+  return denial.message.trim() ? denial.message : undefined;
+};
+
+const hasCreditsError = (error: unknown): boolean =>
+  visitErrorTree(error, (value) => {
+    if (typeof value === "string") return hasCreditHint(value) || undefined;
+    if (!value || typeof value !== "object") return undefined;
+
+    const obj = value as ErrorBag;
+    if (obj.name === "insufficient_credits") return true;
+    const status =
+      typeof obj.statusCode === "number"
+        ? obj.statusCode
+        : typeof obj.status === "number"
+          ? obj.status
+          : undefined;
+    if (status === 402) return true;
+    if (
+      obj.response &&
+      typeof obj.response === "object" &&
+      (obj.response as { status?: unknown }).status === 402
+    )
+      return true;
+    if (typeof obj.message === "string" && hasCreditHint(obj.message))
+      return true;
+    return undefined;
+  }) === true;
+
+// Tenant-authored denial notes are display content, never telemetry content.
+export const sanitizeStreamErrorForTelemetry = (error: unknown): unknown =>
+  findAIAccessDenial(error) ? new Error(AI_ACCESS_DENIED) : error;
+
 export const describeStreamError = (error: unknown): string | undefined => {
-  if (walk(error, new WeakSet())) return CREDITS_EXHAUSTED_MESSAGE;
+  const denialNote = findAIAccessDenialNote(error);
+  if (denialNote) return denialNote;
+  if (hasCreditsError(error)) return CREDITS_EXHAUSTED_MESSAGE;
   return undefined;
 };

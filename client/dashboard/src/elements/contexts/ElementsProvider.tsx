@@ -25,7 +25,10 @@ import {
 } from "@/elements/lib/tools";
 import { compactForModel } from "@/elements/lib/contextCompaction";
 import { dictationAdapter } from "@/elements/lib/dictation";
-import { describeStreamError } from "@/elements/lib/streamErrorMessage";
+import {
+  describeStreamError,
+  sanitizeStreamErrorForTelemetry,
+} from "@/elements/lib/streamErrorMessage";
 import { cn } from "@/lib/utils";
 import { recommended } from "@/elements/plugins";
 import elementsSystemPrompt from "@/elements/prompts/system.txt?raw";
@@ -430,6 +433,27 @@ const ElementsProviderInner = ({ children, config }: ElementsProviderProps) => {
           ? config.languageModel
           : (openRouterModel!.chat(model) as LanguageModel);
 
+        const reportStreamError = (
+          error: unknown,
+          source: "streaming" | "stream-creation",
+          label: string,
+        ) => {
+          const telemetryError = sanitizeStreamErrorForTelemetry(error);
+          console.error(label, telemetryError);
+          trackError(telemetryError, { source });
+
+          const isNetworkError =
+            error instanceof TypeError ||
+            (error instanceof Error &&
+              (error.message.includes("fetch") ||
+                error.message.includes("network") ||
+                error.message.includes("Failed to fetch") ||
+                error.message.includes("NetworkError") ||
+                error.message.includes("ECONNREFUSED") ||
+                error.message.includes("ETIMEDOUT")));
+          if (isNetworkError) connectionStatus?.markDisconnected();
+        };
+
         try {
           // This works around AI SDK bug where these fields cause validation failures
           const cleanedMessages = cleanMessagesForModel(messages);
@@ -473,25 +497,12 @@ const ElementsProviderInner = ({ children, config }: ElementsProviderProps) => {
             stopWhen: isStepCount(10),
             experimental_transform: smoothStream({ delayInMs: 15 }),
             abortSignal,
-            onError: ({ error }) => {
-              console.error("Stream error in onError callback:", error);
-              trackError(error, { source: "streaming" });
-
-              // Check if this is a network/connection error
-              const isNetworkError =
-                error instanceof TypeError ||
-                (error instanceof Error &&
-                  (error.message.includes("fetch") ||
-                    error.message.includes("network") ||
-                    error.message.includes("Failed to fetch") ||
-                    error.message.includes("NetworkError") ||
-                    error.message.includes("ECONNREFUSED") ||
-                    error.message.includes("ETIMEDOUT")));
-
-              if (isNetworkError) {
-                connectionStatus?.markDisconnected();
-              }
-            },
+            onError: ({ error }) =>
+              reportStreamError(
+                error,
+                "streaming",
+                "Stream error in onError callback:",
+              ),
           });
 
           // Mark as connected when stream starts successfully
@@ -515,24 +526,7 @@ const ElementsProviderInner = ({ children, config }: ElementsProviderProps) => {
               "An error occurred while generating a response.",
           });
         } catch (error) {
-          console.error("Error creating stream:", error);
-          trackError(error, { source: "stream-creation" });
-
-          // Check if this is a network/connection error
-          const isNetworkError =
-            error instanceof TypeError ||
-            (error instanceof Error &&
-              (error.message.includes("fetch") ||
-                error.message.includes("network") ||
-                error.message.includes("Failed to fetch") ||
-                error.message.includes("NetworkError") ||
-                error.message.includes("ECONNREFUSED") ||
-                error.message.includes("ETIMEDOUT")));
-
-          if (isNetworkError) {
-            connectionStatus?.markDisconnected();
-          }
-
+          reportStreamError(error, "stream-creation", "Error creating stream:");
           throw error;
         }
       },
