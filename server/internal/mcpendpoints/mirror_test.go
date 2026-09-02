@@ -237,9 +237,10 @@ func TestUpdateMcpEndpoint_MoveBetweenHostedServers_ReleasesSlugFirst(t *testing
 	require.False(t, slug.Valid)
 }
 
-// Creating an endpoint on a domain other than the server's current primary
-// must lock the primary's domain up front, in the order the server delete
-// path uses, so the backward mirror's late primary-domain lock cannot deadlock.
+// The create path takes the primary's domain before the server row, matching
+// the delete path. Both paths lock the backing toolset first, so for a hosted
+// server the two never interleave and this ordering cannot deadlock; it is
+// pinned sequentially because a race would pass with or without it.
 func TestCreateMcpEndpoint_ToolsetBacked_LocksPrimaryDomainUpFront(t *testing.T) {
 	t.Parallel()
 
