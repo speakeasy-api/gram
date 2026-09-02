@@ -67,8 +67,8 @@ func (s *Service) ServeConsentAction(w http.ResponseWriter, r *http.Request, end
 		return oops.E(oops.CodeUnauthorized, err, "authn challenge state not found or expired").LogError(ctx, logger)
 	}
 	logger = logger.With(attr.SlogOAuthFlowID(challengeState.FlowID))
-	if err := endpoint.ValidateChallenge(challengeState.Endpoint, challengeState.UserSessionIssuerID); err != nil {
-		return oops.E(oops.CodeUnauthorized, err, "authn challenge state does not match this MCP server").LogError(ctx, logger)
+	if err := endpoint.ValidateChallenge(ctx, challengeState.Endpoint, challengeState.UserSessionIssuerID); err != nil {
+		return oauthAuthorityError(err).LogError(ctx, logger)
 	}
 	if challengeState.CSRFToken == "" || subtle.ConstantTimeCompare([]byte(r.PostForm.Get("csrf_token")), []byte(challengeState.CSRFToken)) != 1 {
 		return oops.E(oops.CodeUnauthorized, nil, "invalid consent csrf token").LogError(ctx, logger)
@@ -261,9 +261,12 @@ func (s *Service) buildRemoteConnectURL(
 		Subject:             challengeState.Subject,
 		McpSlug:             endpoint.Slug,
 		RouteBase:           endpoint.RouteBase,
+		McpServerID:         endpoint.McpServerID,
+		MetaMcpServerID:     endpoint.MetaMcpServerID,
 		FinalRedirectURI:    "",
 		Resource:            clientResource,
 		AutoRefresh:         autoRefresh,
+		Authority:           challengeState.Endpoint.Authority,
 	}, client)
 	if berr != nil {
 		return "", oops.E(oops.CodeUnexpected, berr, "build authorization url").LogError(ctx, logger)

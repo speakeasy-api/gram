@@ -39,6 +39,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpmetrics"
 	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
 	"github.com/speakeasy-api/gram/server/internal/mv"
+	"github.com/speakeasy-api/gram/server/internal/networkingress"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/requestorigin"
@@ -59,7 +60,12 @@ type EndpointRef struct {
 	// Set when the endpoint belongs to a custom domain, otherwise null.
 	CustomDomainID uuid.NullUUID `json:"custom_domain_id"`
 
-	// BaseURL is the public base URL the challenge was minted under,
+	// Authority pins the provider-neutral request surface, ingress, organization,
+	// namespace, and origin used to mint new challenges. Zero value denotes a
+	// TTL-bounded state minted before private ingress OAuth existed.
+	Authority networkingress.Authority `json:"authority,omitzero"`
+
+	// BaseURL is the externally visible base URL the challenge was minted under,
 	// stamped at mint time. For custom-domain challenges this is
 	// "https://<custom-domain>"; otherwise it is the server's default
 	// URL (s.serverURL.String()). Always populated by new mints so
@@ -89,10 +95,9 @@ type EndpointRef struct {
 	// TTL. Re-entry rejects a visibility change before consent or token minting.
 	IsPublic *bool `json:"is_public,omitempty"`
 
-	// ToolsetID pins direct-toolset endpoints. It is also populated on bridged
-	// server-backed endpoints for attribution, but server/meta IDs remain the
-	// primary backend identity. Missing alongside both server IDs denotes a
-	// pre-field legacy cached state.
+	// ToolsetID pins direct-toolset endpoints. Server/meta IDs remain the primary
+	// backend identity for their endpoints. Missing alongside both server IDs
+	// denotes a pre-field legacy cached state.
 	ToolsetID uuid.NullUUID `json:"toolset_id,omitzero"`
 
 	// Path of a toolset-backed endpoint. Set for /mcp and toolset-backed
@@ -644,6 +649,13 @@ func (s *Service) ApplyIssuerGate(
 }
 
 var errToolsetEndpointMismatch = errors.New("authn challenge endpoint does not match toolset")
+
+func oauthAuthorityError(err error) *oops.ShareableError {
+	if errors.Is(err, networkingress.ErrAuthorityUnavailable) {
+		return oops.E(oops.CodeUnavailable, err, "private OAuth authority lookup is unavailable")
+	}
+	return oops.E(oops.CodeUnauthorized, err, "authn challenge state does not match this MCP server")
+}
 
 // RequireUserSessionIssuer verifies the endpoint's user_session_issuer_id
 // FK still resolves to a live row, and stamps the issuer configuration the

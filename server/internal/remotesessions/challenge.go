@@ -34,6 +34,7 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -46,13 +47,16 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	customdomainsrepo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
+	"github.com/speakeasy-api/gram/server/internal/networkingress"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/interceptors"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/remotesessionmetrics"
 	remotesessions_repo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
+	"github.com/speakeasy-api/gram/server/internal/requestorigin"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -80,6 +84,8 @@ type ParentChallenge struct {
 	Subject             *urn.SessionSubject
 	McpSlug             string
 	RouteBase           string
+	McpServerID         uuid.NullUUID
+	MetaMcpServerID     uuid.NullUUID
 	FinalRedirectURI    string
 	// Resource is the RFC 8707 resource indicator sent on the authorize
 	// redirect and code exchange. Empty omits the parameter.
@@ -88,6 +94,9 @@ type ParentChallenge struct {
 	// session this leg will mint. Nil means "no explicit choice" — the
 	// callback falls back to the client capability's default.
 	AutoRefresh *bool
+	// Authority carries only provider-neutral mint-time request authority. It
+	// never contains advisory network identity or provider credentials.
+	Authority networkingress.Authority
 }
 
 // RemoteLoginState is the per-remote-leg Redis state, keyed by the opaque
@@ -112,7 +121,9 @@ type RemoteLoginState struct {
 	// RouteBase is "mcp" or "x/mcp" — drives the post-callback redirect
 	// to /<RouteBase>/{slug}/connect. Empty values fall back to "mcp"
 	// for in-flight states minted before this field landed.
-	RouteBase string `json:"route_base,omitempty"`
+	RouteBase       string        `json:"route_base,omitempty"`
+	McpServerID     uuid.NullUUID `json:"mcp_server_id,omitzero"`
+	MetaMcpServerID uuid.NullUUID `json:"meta_mcp_server_id,omitzero"`
 	// FinalRedirectURI overrides the default post-callback redirect to
 	// /<RouteBase>/{slug}/connect. Set by dashboard-driven flows that
 	// own their own popup-close surface (validated against an allow-list
@@ -121,8 +132,9 @@ type RemoteLoginState struct {
 	// AutoRefresh is the subject's consent-screen auto-refresh choice. Nil
 	// (including in-flight states minted before this field) defers to the
 	// client capability's default at persist time.
-	AutoRefresh *bool     `json:"auto_refresh,omitempty"`
-	CreatedAt   time.Time `json:"created_at"`
+	AutoRefresh *bool                    `json:"auto_refresh,omitempty"`
+	Authority   networkingress.Authority `json:"authority,omitzero"`
+	CreatedAt   time.Time                `json:"created_at"`
 }
 
 var _ cache.CacheableObject[RemoteLoginState] = (*RemoteLoginState)(nil)
@@ -154,6 +166,10 @@ type ChallengeManager struct {
 	// metrics carries the unsampled upstream-authorize census that the PKCE
 	// enforcement decision (AIS-566) reads.
 	metrics *remotesessionmetrics.Authorize
+	// privateAuthorityValidator is installed by the MCP service at startup. The
+	// callback package owns state mechanics; the caller owns endpoint resolution.
+	privateAuthorityValidator   func(context.Context, RemoteLoginState) error
+	privateAuthorityValidatorMu sync.RWMutex
 }
 
 func NewChallengeManager(
@@ -184,7 +200,9 @@ func NewChallengeManager(
 		authorizeInterceptors: []interceptors.AuthorizeInterceptor{
 			interceptors.NewGoogle(logger),
 		},
-		metrics: remotesessionmetrics.NewAuthorize(logger, meterProvider),
+		metrics:                     remotesessionmetrics.NewAuthorize(logger, meterProvider),
+		privateAuthorityValidator:   nil,
+		privateAuthorityValidatorMu: sync.RWMutex{},
 	}
 }
 
@@ -228,6 +246,20 @@ type Client struct {
 	// remote_sessions=true) so a client registered against the old
 	// oauth_proxy_servers URL keeps working without re-registration.
 	LegacyCallbackUrl bool
+}
+
+// SetPrivateAuthorityValidator installs provider-neutral private endpoint
+// revalidation without introducing a remotesessions -> mcp import cycle.
+func (m *ChallengeManager) SetPrivateAuthorityValidator(validator func(context.Context, RemoteLoginState) error) {
+	m.privateAuthorityValidatorMu.Lock()
+	defer m.privateAuthorityValidatorMu.Unlock()
+	m.privateAuthorityValidator = validator
+}
+
+func (m *ChallengeManager) privateValidator() func(context.Context, RemoteLoginState) error {
+	m.privateAuthorityValidatorMu.RLock()
+	defer m.privateAuthorityValidatorMu.RUnlock()
+	return m.privateAuthorityValidator
 }
 
 func (c Client) resolveScopes() []string {
@@ -542,8 +574,11 @@ func (m *ChallengeManager) BuildAuthorizationUrl(
 		Subject:               parent.Subject,
 		McpSlug:               parent.McpSlug,
 		RouteBase:             parent.RouteBase,
+		McpServerID:           parent.McpServerID,
+		MetaMcpServerID:       parent.MetaMcpServerID,
 		FinalRedirectURI:      parent.FinalRedirectURI,
 		AutoRefresh:           parent.AutoRefresh,
+		Authority:             parent.Authority,
 		CreatedAt:             time.Now(),
 	}
 	if err := m.cache.Store(ctx, state); err != nil {
@@ -588,27 +623,29 @@ func (m *ChallengeManager) HandleRemoteLoginCallback(w http.ResponseWriter, r *h
 	logger := m.logger
 
 	q := r.URL.Query()
+	stateID := q.Get("state")
+	if stateID == "" {
+		return oops.E(oops.CodeBadRequest, nil, "state is required").LogError(ctx, logger)
+	}
+
+	// Single-use state: GETDEL so success, denial, and malformed callbacks all
+	// terminate the login. The upstream code itself is also single-use, but
+	// consuming state on every terminal response closes replay of denied flows.
+	// the code. The upstream code itself is also single-use, but defense in
+	// depth keeps the failure mode obvious.
+	state, err := m.cache.GetAndDelete(ctx, "remoteLogin:"+stateID)
+	if err != nil {
+		return oops.E(oops.CodeUnauthorized, err, "remote login state not found or expired").LogError(ctx, logger)
+	}
 	if errCode := q.Get("error"); errCode != "" {
 		return oops.E(oops.CodeUnauthorized, nil, "remote authn challenge denied: %s", errCode).LogWarn(ctx, logger,
 			attr.SlogOAuthError(errCode),
 			attr.SlogOAuthErrorDescription(q.Get("error_description")),
 		)
 	}
-	stateID := q.Get("state")
-	if stateID == "" {
-		return oops.E(oops.CodeBadRequest, nil, "state is required").LogError(ctx, logger)
-	}
 	code := q.Get("code")
 	if code == "" {
 		return oops.E(oops.CodeBadRequest, nil, "code is required").LogError(ctx, logger)
-	}
-
-	// Single-use state: GETDEL so a duplicate callback can't double-exchange
-	// the code. The upstream code itself is also single-use, but defense in
-	// depth keeps the failure mode obvious.
-	state, err := m.cache.GetAndDelete(ctx, "remoteLogin:"+stateID)
-	if err != nil {
-		return oops.E(oops.CodeUnauthorized, err, "remote login state not found or expired").LogError(ctx, logger)
 	}
 	mcpSlug := state.McpSlug
 	if mcpSlug == "" {
@@ -638,6 +675,18 @@ func (m *ChallengeManager) HandleRemoteLoginCallback(w http.ResponseWriter, r *h
 	// remote_sessions row anyway.
 	if state.Subject == nil || state.Subject.IsZero() {
 		return oops.E(oops.CodeUnauthorized, nil, "remote login requires a stamped subject on the parent challenge").LogError(ctx, logger)
+	}
+	if err := state.Authority.ValidateLive(ctx, m.db); err != nil {
+		return oops.E(oops.CodeUnauthorized, err, "private OAuth authority is no longer valid").LogError(ctx, logger)
+	}
+	if state.Authority.IsPrivate() {
+		validator := m.privateValidator()
+		if validator == nil {
+			return oops.E(oops.CodeUnauthorized, nil, "private MCP endpoint authority validator is unavailable").LogError(ctx, logger)
+		}
+		if err := validator(ctx, state); err != nil {
+			return oops.E(oops.CodeUnauthorized, err, "private MCP endpoint authority is no longer valid").LogError(ctx, logger)
+		}
 	}
 
 	queries := remotesessions_repo.New(m.db)
@@ -803,7 +852,18 @@ func (m *ChallengeManager) HandleRemoteLoginCallback(w http.ResponseWriter, r *h
 	if routeBase == "" {
 		routeBase = "mcp"
 	}
-	redirect := fmt.Sprintf("%s/%s/%s/connect?state=%s", strings.TrimRight(m.serverURL.String(), "/"), routeBase, mcpSlug, url.QueryEscape(state.ParentChallengeID))
+	redirectBaseURL := m.serverURL.String()
+	if state.Authority.IsPrivate() {
+		redirectBaseURL = state.Authority.BaseURL
+	} else if state.Authority.Surface == requestorigin.SurfaceCustomDomain && state.Authority.CustomDomainID.Valid {
+		domain, derr := customdomainsrepo.New(m.db).GetCustomDomainByIDAndOrganization(ctx, customdomainsrepo.GetCustomDomainByIDAndOrganizationParams{
+			ID: state.Authority.CustomDomainID.UUID, OrganizationID: state.Authority.OrganizationID,
+		})
+		if derr == nil && domain.Verified && domain.Activated && !domain.Deleted && "https://"+strings.ToLower(domain.Domain) == state.Authority.BaseURL {
+			redirectBaseURL = state.Authority.BaseURL
+		}
+	}
+	redirect := fmt.Sprintf("%s/%s/%s/connect?state=%s", strings.TrimRight(redirectBaseURL, "/"), routeBase, mcpSlug, url.QueryEscape(state.ParentChallengeID))
 	if state.FinalRedirectURI != "" {
 		redirect = state.FinalRedirectURI
 	}

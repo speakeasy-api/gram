@@ -53,8 +53,11 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcpmetadata/templatefuncs"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	mcpservers_repo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
+	metamcp_repo "github.com/speakeasy-api/gram/server/internal/metamcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/mv"
+	"github.com/speakeasy-api/gram/server/internal/networkaccess"
+	"github.com/speakeasy-api/gram/server/internal/networkingress"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	organizations_repo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
@@ -919,6 +922,7 @@ func appendTagsQuery(mcpURL, tag string) string {
 type installContext struct {
 	toolset      *toolsets_repo.Toolset
 	mcpServer    *mcpservers_repo.McpServer
+	metaServer   *metamcp_repo.MetaMcpServer
 	mcpEndpoint  *mcpendpoints_repo.McpEndpoint
 	organization organizations_repo.OrganizationMetadatum
 }
@@ -933,6 +937,7 @@ func (ic *installContext) isPublic() bool {
 	if ic.toolset != nil {
 		return ic.toolset.McpIsPublic
 	}
+	// Meta MCP servers require OAuth and never expose an anonymous install.
 	return ic.mcpServer != nil && ic.mcpServer.Visibility == mcpservers.VisibilityPublic
 }
 
@@ -970,7 +975,14 @@ func (s *Service) ServeInstallPage(w http.ResponseWriter, r *http.Request) error
 		return oops.E(oops.CodeUnexpected, err, "load mcp server").LogError(ctx, s.logger, attr.SlogToolsetMCPSlug(mcpSlug))
 	}
 
-	if !ic.isPublic() {
+	origin, hasOrigin := requestorigin.FromContext(ctx)
+	privateInstall := hasOrigin && origin.Surface == requestorigin.SurfacePrivateNetwork
+	// Deliberate RFC boundary: reaching the organization-pinned private ingress
+	// is sufficient to view install metadata, even when runtime/OAuth requires a
+	// Gram principal. Endpoint resolution above still enforces ingress org,
+	// namespace, and network mode. NetworkIdentity remains advisory and is not
+	// elevated into a Gram principal or runtime authorization grant.
+	if !privateInstall && !ic.isPublic() {
 		// If no auth context, redirect to login page
 		if authCtx == nil {
 			if s.serverURL != nil {
@@ -1025,6 +1037,9 @@ func (s *Service) ServeInstallPage(w http.ResponseWriter, r *http.Request) error
 	if ic.toolset != nil {
 		return s.renderToolsetInstallPage(ctx, w, ic, mcpSlug, metadataRecord)
 	}
+	if ic.metaServer != nil {
+		return s.renderMetaMcpInstallPage(ctx, w, ic)
+	}
 	return s.renderRemoteMcpInstallPage(ctx, w, ic, metadataRecord)
 }
 
@@ -1033,7 +1048,32 @@ func (s *Service) ServeInstallPage(w http.ResponseWriter, r *http.Request) error
 // plain namespace miss. Policy denials are authoritative 404s and never fall
 // through to an unrelated legacy toolset.
 func (s *Service) resolveInstallContext(ctx context.Context, mcpSlug string) (*installContext, error) {
-	endpoint, server, metaServer, err := mcpendpoints.BySlugAndCustomDomain(ctx, s.db, s.logger, mcpSlug)
+	var endpoint *mcpendpoints_repo.McpEndpoint
+	var server *mcpservers_repo.McpServer
+	var metaServer *metamcp_repo.MetaMcpServer
+	var err error
+	if origin, ok := requestorigin.FromContext(ctx); ok && origin.Surface == requestorigin.SurfacePrivateNetwork {
+		authority, authorityErr := networkingress.LoadRequestAuthority(ctx, s.db)
+		if authorityErr != nil {
+			return nil, fmt.Errorf("%w: private request authority is unavailable", errToolsetNotFound)
+		}
+		result, resolveErr := mcpendpoints.Resolve(ctx, s.db, s.logger, mcpendpoints.ResolutionInput{
+			Slug:                 mcpSlug,
+			NamespaceKind:        mcpendpoints.NamespaceKind(authority.NamespaceKind),
+			CustomDomainID:       authority.CustomDomainID,
+			ExpectedOrganization: authority.OrganizationID,
+			Surface:              networkaccess.SurfacePrivate,
+		})
+		if resolveErr != nil {
+			err = resolveErr
+		} else if !result.Found || !result.Allowed {
+			err = oops.E(oops.CodeNotFound, mcpendpoints.ErrPolicyDenied, "mcp endpoint not found")
+		} else {
+			endpoint, server, metaServer = result.Endpoint, result.Server, result.MetaServer
+		}
+	} else {
+		endpoint, server, metaServer, err = mcpendpoints.BySlugAndCustomDomain(ctx, s.db, s.logger, mcpSlug)
+	}
 	switch {
 	case mcpendpoints.IsAddressMiss(err):
 		// Fall through to legacy toolset lookup.
@@ -1042,8 +1082,20 @@ func (s *Service) resolveInstallContext(ctx context.Context, mcpSlug string) (*i
 	case err != nil:
 		return nil, fmt.Errorf("resolve mcp endpoint: %w", err)
 	case metaServer != nil:
-		// Meta-backed endpoints have no install page yet (AGE-3299).
-		return nil, fmt.Errorf("%w: meta-backed endpoint has no install page", errToolsetNotFound)
+		if !metaServer.UserSessionIssuerID.Valid {
+			return nil, fmt.Errorf("%w: meta-backed endpoint has no OAuth issuer", errToolsetNotFound)
+		}
+		org, err := s.orgsRepo.GetOrganizationMetadata(ctx, metaServer.OrganizationID)
+		if err != nil {
+			return nil, fmt.Errorf("load meta mcp organization: %w", err)
+		}
+		return &installContext{
+			toolset:      nil,
+			mcpServer:    nil,
+			metaServer:   metaServer,
+			mcpEndpoint:  endpoint,
+			organization: org,
+		}, nil
 	default:
 		var bridgeToolset *toolsets_repo.Toolset
 		if server.ToolsetID.Valid {
@@ -1067,6 +1119,7 @@ func (s *Service) resolveInstallContext(ctx context.Context, mcpSlug string) (*i
 		return &installContext{
 			toolset:      bridgeToolset,
 			mcpServer:    server,
+			metaServer:   nil,
 			mcpEndpoint:  endpoint,
 			organization: org,
 		}, nil
@@ -1084,6 +1137,7 @@ func (s *Service) resolveInstallContext(ctx context.Context, mcpSlug string) (*i
 	return &installContext{
 		toolset:      toolset,
 		mcpServer:    nil,
+		metaServer:   nil,
 		mcpEndpoint:  nil,
 		organization: org,
 	}, nil
@@ -1301,6 +1355,35 @@ func (s *Service) renderToolsetInstallPage(ctx context.Context, w http.ResponseW
 		OrgName:          ic.organization.Name,
 		FilteringEnabled: filteringEnabled,
 		Scopes:           scopes,
+	})
+}
+
+func (s *Service) renderMetaMcpInstallPage(ctx context.Context, w http.ResponseWriter, ic *installContext) error {
+	metaServer := ic.metaServer
+	endpoint := ic.mcpEndpoint
+	if metaServer == nil || endpoint == nil {
+		return oops.E(oops.CodeUnexpected, nil, "meta mcp install context missing backend or endpoint").LogError(ctx, s.logger)
+	}
+	mcpURL, err := s.resolveMcpEndpointURL(ctx, endpoint)
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "resolve meta mcp endpoint url").LogError(ctx, s.logger, attr.SlogMetaMcpServerID(metaServer.ID.String()))
+	}
+	return s.writeInstallPage(ctx, w, hostedPageRenderInputs{
+		MCPName:          metaServer.Name,
+		MCPSlug:          endpoint.Slug,
+		MCPDescription:   "",
+		MCPURL:           mcpURL,
+		SecurityInputs:   []securityInput{},
+		Tools:            []toolInfo{},
+		LogoAssetURL:     s.siteURL.String() + "/external/sticker-logo.png",
+		DocsURL:          "",
+		DocsText:         "",
+		Instructions:     "",
+		IsPublic:         false,
+		IsOAuth:          true,
+		OrgName:          ic.organization.Name,
+		FilteringEnabled: false,
+		Scopes:           nil,
 	})
 }
 

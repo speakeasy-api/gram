@@ -133,7 +133,8 @@ func TestHandleTokenWrongEndpointDoesNotBurnAuthorizationCode(t *testing.T) {
 	sum := sha256.Sum256([]byte(verifier))
 	code := "code-" + uuid.NewString()
 	grantCache := cache.NewTypedObjectCache[mcp.UserSessionGrant](ti.logger, ti.cacheAdapter, cache.SuffixNone)
-	ref := correct.EndpointRef(ti.serverURL.String())
+	ref, err := correct.EndpointRef(ctx, ti.conn, ti.serverURL.String())
+	require.NoError(t, err)
 	require.NoError(t, grantCache.Store(ctx, mcp.UserSessionGrant{
 		Code: code, UserSessionIssuerID: issuer.ID, UserSessionClientID: client.ID,
 		ClientID: client.ClientID, RedirectURI: client.RedirectUris[0],
