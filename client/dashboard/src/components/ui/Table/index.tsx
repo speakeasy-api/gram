@@ -825,9 +825,12 @@ function CellContainer({ children, className }: PropsWithChildrenAndClassName) {
     <td
       className={cn(
         styles.tableCell,
-        // min-w-0: an unbreakable value (a long agent id) would otherwise set
-        // this cell's min-content width and push the whole row into overflow.
-        `flex max-w-full min-w-0 items-center`,
+        // min-w-0 lets a cell shrink below its content: an unbreakable value
+        // (a long agent id) would otherwise set the grid track's floor and
+        // push the whole row into overflow. overflow-hidden then keeps what
+        // does not fit inside the column rather than painting over the next
+        // one — a cell that wants an ellipsis still asks for it itself.
+        `flex max-w-full min-w-0 items-center overflow-hidden`,
         className,
       )}
     >
