@@ -13,6 +13,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 
 	gen "github.com/speakeasy-api/gram/server/gen/usage"
+	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
@@ -54,6 +55,44 @@ type stripeCheckoutTrialFingerprint struct {
 type preparedStripeCheckoutIntent struct {
 	stripeCheckoutIntent
 	customerID string
+}
+
+// stripeOrganizationIdentity is the organization view stamped onto Stripe customers,
+// Checkout sessions and subscriptions so downstream consumers (revenue notifications,
+// CRM sync) can attribute them without a Gram DB lookup.
+type stripeOrganizationIdentity struct {
+	name        string
+	accountType string
+	email       string
+}
+
+// stripeOrganizationIdentity resolves the identity from organization metadata. The
+// customer email prefers the billing alert email and falls back to the first
+// organization admin; it stays empty when neither exists.
+func (s *Service) stripeOrganizationIdentity(ctx context.Context, organizationID string, billingMetadata repo.BillingMetadatum) (stripeOrganizationIdentity, error) {
+	organization, err := s.orgRepo.GetOrganizationMetadata(ctx, organizationID)
+	if err != nil {
+		return stripeOrganizationIdentity{}, oops.E(oops.CodeUnexpected, err, "failed to load organization for billing").LogError(ctx, s.logger)
+	}
+
+	email := ""
+	if billingMetadata.AlertEmail.Valid && billingMetadata.AlertEmail.String != "" {
+		email = billingMetadata.AlertEmail.String
+	} else {
+		admins, adminErr := authz.ResolveOrganizationAdminEmails(ctx, s.db, organizationID)
+		if adminErr != nil {
+			s.logger.WarnContext(ctx, "failed to resolve organization admin emails for Stripe customer", attr.SlogError(adminErr))
+		}
+		if len(admins) > 0 {
+			email = admins[0]
+		}
+	}
+
+	return stripeOrganizationIdentity{
+		name:        organization.Name,
+		accountType: organization.GramAccountType,
+		email:       email,
+	}, nil
 }
 
 type stripeCheckoutSessionExpirer interface {
@@ -125,13 +164,33 @@ func (s *Service) CreateStripeCheckout(ctx context.Context, _ *gen.CreateStripeC
 		proposedIntent = storedIntent
 	}
 
+	identity, identityErr := s.stripeOrganizationIdentity(ctx, authCtx.ActiveOrganizationID, billingMetadata)
+	if identityErr != nil {
+		return "", identityErr
+	}
+
 	customerID := ""
 	if err == nil && billingMetadata.StripeCustomerID.Valid {
 		customerID = billingMetadata.StripeCustomerID.String
+		// Best effort: keep identity and contract metadata current on customers created
+		// before the contract existed, or whose name/email/account type changed.
+		if updateErr := s.stripeClient.UpdateCustomer(ctx, stripeclient.UpdateCustomerInput{
+			CustomerID:       customerID,
+			OrganizationID:   authCtx.ActiveOrganizationID,
+			OrganizationSlug: authCtx.OrganizationSlug,
+			OrganizationName: identity.name,
+			Email:            identity.email,
+			AccountType:      identity.accountType,
+		}); updateErr != nil {
+			s.logger.WarnContext(ctx, "failed to refresh Stripe customer identity", attr.SlogError(updateErr))
+		}
 	} else {
 		customer, err := s.stripeClient.CreateCustomer(ctx, stripeclient.CreateCustomerInput{
 			OrganizationID:   authCtx.ActiveOrganizationID,
 			OrganizationSlug: authCtx.OrganizationSlug,
+			OrganizationName: identity.name,
+			Email:            identity.email,
+			AccountType:      identity.accountType,
 			IdempotencyKey:   fmt.Sprintf("customer:%s", authCtx.ActiveOrganizationID),
 		})
 		if err != nil {
@@ -140,7 +199,7 @@ func (s *Service) CreateStripeCheckout(ctx context.Context, _ *gen.CreateStripeC
 		customerID = customer.ID
 	}
 	billingURL := s.siteURL.JoinPath(authCtx.OrganizationSlug, "billing").String()
-	replaceLifecycleIntentKey, err := s.expireLifecycleStaleCheckoutSession(ctx, billingMetadata, customerID, authCtx.ActiveOrganizationID, authCtx.OrganizationSlug, billingURL, proposedIntent, now)
+	replaceLifecycleIntentKey, err := s.expireLifecycleStaleCheckoutSession(ctx, billingMetadata, customerID, authCtx.ActiveOrganizationID, authCtx.OrganizationSlug, billingURL, identity, proposedIntent, now)
 	if err != nil {
 		return "", err
 	}
@@ -158,6 +217,7 @@ func (s *Service) CreateStripeCheckout(ctx context.Context, _ *gen.CreateStripeC
 		CustomerID:         preparedIntent.customerID,
 		OrganizationID:     authCtx.ActiveOrganizationID,
 		OrganizationSlug:   authCtx.OrganizationSlug,
+		OrganizationName:   identity.name,
 		SuccessURL:         billingURL,
 		CancelURL:          billingURL,
 		TrialEnd:           preparedIntent.trialEnd,
@@ -320,6 +380,7 @@ func (s *Service) expireLifecycleStaleCheckoutSession(
 	ctx context.Context,
 	metadata repo.BillingMetadatum,
 	customerID, organizationID, organizationSlug, billingURL string,
+	identity stripeOrganizationIdentity,
 	proposed stripeCheckoutIntent,
 	now time.Time,
 ) (pgtype.Text, error) {
@@ -337,9 +398,11 @@ func (s *Service) expireLifecycleStaleCheckoutSession(
 	if metadata.StripeCheckoutSessionID.Valid {
 		sessionID = metadata.StripeCheckoutSessionID.String
 	} else {
+		// Same idempotency key as the original request, so the input must match it exactly.
 		stale, createErr := s.stripeClient.CreateCheckoutSession(ctx, stripeclient.CreateCheckoutSessionInput{
 			CustomerID: customerID, OrganizationID: organizationID, OrganizationSlug: organizationSlug,
-			SuccessURL: billingURL, CancelURL: billingURL, TrialEnd: staleIntent.trialEnd,
+			OrganizationName: identity.name,
+			SuccessURL:       billingURL, CancelURL: billingURL, TrialEnd: staleIntent.trialEnd,
 			BillingCycleAnchor: staleIntent.billingCycleAnchor, ExpiresAt: staleIntent.expiresAt, IdempotencyKey: staleIntent.idempotencyKey,
 		})
 		if createErr != nil || stale == nil || stale.ID == "" {
