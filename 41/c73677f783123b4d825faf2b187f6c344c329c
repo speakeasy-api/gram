@@ -1,0 +1,58 @@
+server/internal/risk/enforcereply/dispatch_test.go
+  s_e6230f47bfe42b::t_d6d81a36f4e69f 46-68,70-75,77-81,135-173
+  s_e6230f47bfe42b::t_aedaf3628fbefe 174
+infra/gen_py/gram/risk/v1/presidio_enforcer_pb2.pyi
+  s_e6230f47bfe42b::t_d6d81a36f4e69f 1-10
+pystreams/src/pystreams/risk/replywriter.py
+  s_e6230f47bfe42b::t_d6d81a36f4e69f 1-68
+infra/gen/kcc.yaml
+  s_e6230f47bfe42b::t_205e0d986aa7e2 959-981,1387-1404,1682-1697
+infra/proto/gram/risk/v1/presidio_enforcer.proto
+  s_e6230f47bfe42b::t_d6d81a36f4e69f 1-23
+docs/pubsub-topology.md
+  s_e6230f47bfe42b::t_738900587620ed 45-46,70,96-105,137-138,144-187,221-222,251,265
+server/internal/risk/enforcereply/inbox_test.go
+  s_e6230f47bfe42b::t_d6d81a36f4e69f 16-19
+infra/pkg/topics/topics_gen.go
+  s_e6230f47bfe42b::t_205e0d986aa7e2 56-57,85,124-125,173-174
+server/internal/risk/enforcereply/dispatch.go
+  s_e6230f47bfe42b::t_d6d81a36f4e69f 73,86,90-98,100-111,136-138,156-178
+infra/internal/diagram/diagram_test.go
+  s_e6230f47bfe42b::t_d6d81a36f4e69f 133-169
+infra/gen_py/gram/risk/v1/presidio_enforcement_pb2.pyi
+  s_e6230f47bfe42b::t_d6d81a36f4e69f 1-34
+infra/internal/diagram/diagram.go
+  s_e6230f47bfe42b::t_d6d81a36f4e69f 568-570,587-595
+pystreams/pyproject.toml
+  s_e6230f47bfe42b::t_d6d81a36f4e69f 21,29
+infra/proto/gram/risk/v1/presidio_enforcement.proto
+  s_e6230f47bfe42b::t_d6d81a36f4e69f 1-33
+pystreams/tests/test_risk_replywriter.py
+  s_e6230f47bfe42b::t_d4b2444226cb3e 1-34
+infra/gen/gram/risk/v1/presidio_enforcement.pb.go
+  s_e6230f47bfe42b::t_694e96f76d8db7 1-465
+infra/gen/gram/risk/v1/presidio_enforcer.pb.go
+  s_e6230f47bfe42b::t_d518439f63cc03 1-111
+infra/gen_py/gram/risk/v1/presidio_enforcement_pb2.py
+  s_e6230f47bfe42b::t_6d908d5d2b57e5 1-40
+infra/gen_py/gram/risk/v1/presidio_enforcer_pb2.py
+  s_e6230f47bfe42b::t_039d4d38e5d00c 1-40
+uv.lock
+  s_e6230f47bfe42b::t_333178b8813f2c 310-322,1084,1092,1115,1123,1185-1193
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.0",
+  "base_commit_sha": "41c73677f783123b4d825faf2b187f6c344c329c",
+  "prompts": {},
+  "sessions": {
+    "s_e6230f47bfe42b": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a06262-6646-7ab1-b37f-a88218754fe5",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "Vishal Gowda <vishal@speakeasy.com>"
+    }
+  }
+}
