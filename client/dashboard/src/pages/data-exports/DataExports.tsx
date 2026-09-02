@@ -86,7 +86,7 @@ function visualSource({ route }: ProjectExportRow): VisualSource {
   return {
     key: route.id,
     name: sourceLabel(route.dataSource),
-    detail: "OTLP traces & logs",
+    detail: "OTLP traces, logs, and metrics",
   };
 }
 
@@ -464,7 +464,10 @@ function ExportAnimationStyles(): JSX.Element {
       }
 
       @media (prefers-reduced-motion: reduce) {
-        .data-export-flow-line { animation: none; }
+        .data-export-flow-line {
+          animation: none;
+          stroke-dasharray: none;
+        }
       }
     `}</style>
   );
@@ -508,8 +511,8 @@ function ExportMap({
                 key={route.id}
                 className="grid grid-cols-[360px_minmax(180px,260px)_minmax(360px,1fr)] items-stretch"
               >
-                <div className="flex min-h-24 items-center justify-between gap-4 border border-foreground px-5 py-3">
-                  <div className="min-w-0">
+                <div className="relative min-h-28 border border-foreground px-5 py-3">
+                  <div className="min-w-0 pr-10 pb-8">
                     <div className="mb-1 flex items-center gap-2">
                       <ProjectAvatar
                         project={project}
@@ -524,7 +527,27 @@ function ExportMap({
                       {source.detail}
                     </span>
                   </div>
-                  <div className="flex shrink-0 items-center gap-2">
+                  <RequireScope scope="org:admin" level="component">
+                    <div className="absolute top-3 right-3">
+                      <MoreActions
+                        actions={[
+                          {
+                            label: "Configure export",
+                            icon: "pencil",
+                            onClick: () => onConfigure(project),
+                          },
+                          {
+                            label: "Delete export",
+                            icon: "trash-2",
+                            destructive: true,
+                            disabled: mutating,
+                            onClick: () => onDelete(project, route),
+                          },
+                        ]}
+                      />
+                    </div>
+                  </RequireScope>
+                  <div className="absolute right-3 bottom-3 flex items-center gap-2">
                     <span
                       className={
                         route.enabled
@@ -547,24 +570,6 @@ function ExportMap({
                         aria-label={`${route.enabled ? "Pause" : "Enable"} export from ${source.name}`}
                       />
                     </RequireScope>
-                    <RequireScope scope="org:admin" level="component">
-                      <MoreActions
-                        actions={[
-                          {
-                            label: "Configure export",
-                            icon: "pencil",
-                            onClick: () => onConfigure(project),
-                          },
-                          {
-                            label: "Delete export",
-                            icon: "trash-2",
-                            destructive: true,
-                            disabled: mutating,
-                            onClick: () => onDelete(project, route),
-                          },
-                        ]}
-                      />
-                    </RequireScope>
                   </div>
                 </div>
                 <svg
@@ -582,6 +587,12 @@ function ExportMap({
                       refY="4"
                       orient="auto"
                     >
+                      <path
+                        d="M0,0 L8,4 L0,8 Z"
+                        className="fill-card stroke-card"
+                        strokeWidth="3"
+                        strokeLinejoin="round"
+                      />
                       <path
                         d="M0,0 L8,4 L0,8 Z"
                         className={
@@ -602,7 +613,7 @@ function ExportMap({
                     }
                     strokeWidth="2"
                     strokeLinecap="round"
-                    strokeDasharray={route.enabled ? "8 7" : "5 6"}
+                    strokeDasharray={route.enabled ? "8 7" : undefined}
                     vectorEffect="non-scaling-stroke"
                     markerEnd={`url(#${arrowID})`}
                   />
