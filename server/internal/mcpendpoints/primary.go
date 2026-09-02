@@ -2,15 +2,11 @@ package mcpendpoints
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"net/url"
-	"slices"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
 
-	customdomainsrepo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 )
 
@@ -66,39 +62,30 @@ func EndpointURL(endpoint *repo.McpEndpoint, domain string, serverURL string) (s
 	return u, nil
 }
 
-// PrimaryEndpointURL resolves a server's primary endpoint to its public URL,
-// skipping endpoints whose custom domain was deleted concurrently or is not
-// owned by organizationID. Returns "" when no endpoint is addressable.
+// PrimaryEndpointURL resolves a server's primary addressable endpoint to its
+// public URL; "" when the server has none.
 func PrimaryEndpointURL(ctx context.Context, db repo.DBTX, organizationID string, projectID uuid.UUID, mcpServerID uuid.UUID, serverURL string) (string, error) {
-	endpoints, err := repo.New(db).ListMCPEndpointsByMCPServerID(ctx, repo.ListMCPEndpointsByMCPServerIDParams{
-		ProjectID:   projectID,
-		McpServerID: mcpServerID,
+	rows, err := repo.New(db).ListAddressableMCPEndpointsByMCPServerID(ctx, repo.ListAddressableMCPEndpointsByMCPServerIDParams{
+		OrganizationID: organizationID,
+		ProjectID:      projectID,
+		McpServerID:    mcpServerID,
 	})
 	if err != nil {
-		return "", fmt.Errorf("list mcp server endpoints: %w", err)
+		return "", fmt.Errorf("list addressable mcp server endpoints: %w", err)
 	}
 
-	for {
-		primary := PrimaryEndpoint(endpoints)
-		if primary == nil {
-			return "", nil
+	endpoints := make([]repo.McpEndpoint, 0, len(rows))
+	domains := make(map[uuid.UUID]string, len(rows))
+	for _, row := range rows {
+		endpoints = append(endpoints, row.McpEndpoint)
+		if row.CustomDomain.Valid {
+			domains[row.McpEndpoint.ID] = row.CustomDomain.String
 		}
-		domain := ""
-		if primary.CustomDomainID.Valid {
-			row, err := customdomainsrepo.New(db).GetCustomDomainByIDAndOrganization(ctx, customdomainsrepo.GetCustomDomainByIDAndOrganizationParams{
-				ID:             primary.CustomDomainID.UUID,
-				OrganizationID: organizationID,
-			})
-			switch {
-			case errors.Is(err, pgx.ErrNoRows):
-				id := primary.ID
-				endpoints = slices.DeleteFunc(endpoints, func(e repo.McpEndpoint) bool { return e.ID == id })
-				continue
-			case err != nil:
-				return "", fmt.Errorf("load custom domain: %w", err)
-			}
-			domain = row.Domain
-		}
-		return EndpointURL(primary, domain, serverURL)
 	}
+
+	primary := PrimaryEndpoint(endpoints)
+	if primary == nil {
+		return "", nil
+	}
+	return EndpointURL(primary, domains[primary.ID], serverURL)
 }

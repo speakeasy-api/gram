@@ -611,7 +611,9 @@ function IdentityCell({ identity }: { identity: Employee }): JSX.Element {
               link: no cmd+click, no middle-click, no copy-link, and nothing
               for a screen reader to announce. On a page whose whole job is
               reaching people, the name itself has to be the anchor. */}
-          <Text className="truncate font-medium">
+          {/* An agent's name may be a long unbroken id, so it wraps anywhere
+              and stops at two lines rather than running past the row. */}
+          <Text className="line-clamp-2 min-w-0 font-medium wrap-anywhere">
             <IdentityLink
               identifier={{ urn: identityUrnForEmployee(identity) }}
             >

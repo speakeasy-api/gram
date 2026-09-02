@@ -220,7 +220,11 @@ func (s *Service) resolveToolsetMintTarget(ctx context.Context, toolsetIDStr str
 		// A wrapper without an issuer cannot be a mint target; the toolset's
 		// own issuer gate below still applies.
 	default:
-		return s.serverMintTarget(ctx, &wrapper, projectID)
+		target, err := s.wrapperMintTarget(ctx, &wrapper, projectID)
+		if err != nil || target != nil {
+			return target, err
+		}
+		// No addressable endpoint: only the legacy toolset route serves.
 	}
 
 	if !toolset.UserSessionIssuerID.Valid {
@@ -281,13 +285,35 @@ func (s *Service) serverMintTarget(ctx context.Context, server *mcpserversrepo.M
 		return nil, err
 	}
 
+	return serverMintTargetAt(server, issuerURL), nil
+}
+
+// wrapperMintTarget binds a toolset's wrapper only when an endpoint addresses
+// it; a nil target means the legacy toolset route is the one that serves.
+func (s *Service) wrapperMintTarget(ctx context.Context, server *mcpserversrepo.McpServer, projectID uuid.UUID) (*mintTarget, error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+
+	issuerURL, err := mcpendpoints.PrimaryEndpointURL(ctx, s.db, authCtx.ActiveOrganizationID, projectID, server.ID, s.serverURL)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "resolve mint issuer URL").LogError(ctx, s.logger)
+	}
+	if issuerURL == "" {
+		return nil, nil
+	}
+	return serverMintTargetAt(server, issuerURL), nil
+}
+
+func serverMintTargetAt(server *mcpserversrepo.McpServer, issuerURL string) *mintTarget {
 	return &mintTarget{
 		issuerID:   server.UserSessionIssuerID.UUID,
 		audience:   urn.NewUserSessionIssuer(server.UserSessionIssuerID.UUID).String(),
 		issuerURL:  issuerURL,
 		resourceID: server.ID.String(),
 		logAttr:    attr.SlogMcpServerID(server.ID.String()),
-	}, nil
+	}
 }
 
 // serverMintIssuerURL builds the descriptive iss claim from the server's
