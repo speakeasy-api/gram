@@ -699,25 +699,6 @@ WHERE c.id = @id
   AND i.deleted IS FALSE
 FOR UPDATE OF c;
 
--- Adopts a legacy client into the organization that owns its project, so it can
--- hold a key set at all: organization_id was added without a backfill
--- (20260625174452), and the json_web_key_set_id CHECK forbids a set while it is
--- NULL.
---
--- The statement is its own tenancy check, writing only when the client's
--- project belongs to the caller's organization, so zero rows means refuse. A
--- client with no project (the platform-owned global tier) matches nothing and
--- is never adopted. Runs under LockRemoteSessionClientForAuthMethodWrite.
--- name: BackfillRemoteSessionClientOrganization :execrows
-UPDATE remote_session_clients AS c
-SET organization_id = p.organization_id,
-    updated_at = clock_timestamp()
-FROM projects AS p
-WHERE c.id = @id
-  AND c.project_id = p.id
-  AND c.organization_id IS NULL
-  AND p.organization_id = @organization_id
-  AND c.deleted IS FALSE;
 
 -- Holds the key set while a client attaches to it, against DeleteSet's
 -- FOR UPDATE on the same row. Without it, attach-sees-live-set racing

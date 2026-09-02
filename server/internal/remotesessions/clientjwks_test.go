@@ -483,14 +483,13 @@ func TestAttachKeySet_ProjectSurfaceRefusesOrganizationLevelClient(t *testing.T)
 	require.NotNil(t, attached.JSONWebKeySetID)
 }
 
-// TestAttachClientKeySet_AdoptsClientWithoutOrganization covers the legacy rows
-// left by the organization_id migration, which ran without a backfill. The
-// CHECK constraint forbids a set on any row whose organization_id is still
-// NULL, so attaching resolves the organization through the client's project and
-// adopts the row, which is what AIM-77 means by matching ownership through
-// project_id. Refusing instead would strand every pre-migration client on
-// shared-secret authentication.
-func TestAttachClientKeySet_AdoptsClientWithoutOrganization(t *testing.T) {
+// TestAttachClientKeySet_RefusesClientWithoutOrganization covers a client whose
+// organization_id was never populated. The CHECK constraint forbids a set on
+// such a row, so the attach is refused rather than resolving the organization
+// through the project and adopting it: a production census found no client in
+// that state, and every create path has populated the column since
+// 20260625174452, so the population cannot grow.
+func TestAttachClientKeySet_RefusesClientWithoutOrganization(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestService(t)
@@ -500,31 +499,27 @@ func TestAttachClientKeySet_AdoptsClientWithoutOrganization(t *testing.T) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 
-	issuerID := createRemoteIssuer(t, ctx, ti, "keyset-adopt-issuer", "")
-	legacyClientID := seedProjectRemoteClientNoOrg(t, ctx, ti.conn, *authCtx.ProjectID, uuid.MustParse(issuerID), "keyset-adopt-client")
-	setID := createJsonWebKeySet(t, ctx, ti.conn, orgID, "keyset-adopt-set")
+	issuerID := createRemoteIssuer(t, ctx, ti, "keyset-noorg-issuer", "")
+	legacyClientID := seedProjectRemoteClientNoOrg(t, ctx, ti.conn, *authCtx.ProjectID, uuid.MustParse(issuerID), "keyset-noorg-client")
+	setID := createJsonWebKeySet(t, ctx, ti.conn, orgID, "keyset-noorg-set")
 
-	attached, err := ti.service.AttachClientKeySet(ctx, &orgclientsgen.AttachClientKeySetPayload{
+	_, err := ti.service.AttachClientKeySet(ctx, &orgclientsgen.AttachClientKeySetPayload{
 		SessionToken:    nil,
 		ApikeyToken:     nil,
 		ID:              legacyClientID.String(),
 		JSONWebKeySetID: setID.String(),
 	})
-	require.NoError(t, err)
-	require.NotNil(t, attached.JSONWebKeySetID)
-	require.Equal(t, setID.String(), *attached.JSONWebKeySetID)
+	requireOopsCode(t, err, oops.CodeFailedPrecondition)
 
-	// The adoption is durable, not just reflected in the response: the row now
-	// carries the organization the composite foreign key pins the set to.
-	require.Equal(t, orgID, attached.OrganizationID)
-
+	// The refusal wrote nothing: the row keeps its NULL organization_id rather
+	// than being adopted on the way past.
 	stored, err := repo.New(ti.conn).GetOrganizationRemoteSessionClientByID(ctx, repo.GetOrganizationRemoteSessionClientByIDParams{
 		ID:             legacyClientID,
 		OrganizationID: conv.ToPGText(orgID),
 	})
 	require.NoError(t, err)
-	require.True(t, stored.RemoteSessionClient.OrganizationID.Valid)
-	require.Equal(t, orgID, stored.RemoteSessionClient.OrganizationID.String)
+	require.False(t, stored.RemoteSessionClient.OrganizationID.Valid)
+	require.False(t, stored.RemoteSessionClient.JsonWebKeySetID.Valid)
 }
 
 // TestDetachClientKeySet_ClientWithoutOrganizationIsNoop proves detach never

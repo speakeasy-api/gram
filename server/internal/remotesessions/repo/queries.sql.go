@@ -34,40 +34,6 @@ func (q *Queries) AttachRemoteSessionClientToUserSessionIssuer(ctx context.Conte
 	return err
 }
 
-const backfillRemoteSessionClientOrganization = `-- name: BackfillRemoteSessionClientOrganization :execrows
-UPDATE remote_session_clients AS c
-SET organization_id = p.organization_id,
-    updated_at = clock_timestamp()
-FROM projects AS p
-WHERE c.id = $1
-  AND c.project_id = p.id
-  AND c.organization_id IS NULL
-  AND p.organization_id = $2
-  AND c.deleted IS FALSE
-`
-
-type BackfillRemoteSessionClientOrganizationParams struct {
-	ID             uuid.UUID
-	OrganizationID string
-}
-
-// Adopts a legacy client into the organization that owns its project, so it can
-// hold a key set at all: organization_id was added without a backfill
-// (20260625174452), and the json_web_key_set_id CHECK forbids a set while it is
-// NULL.
-//
-// The statement is its own tenancy check, writing only when the client's
-// project belongs to the caller's organization, so zero rows means refuse. A
-// client with no project (the platform-owned global tier) matches nothing and
-// is never adopted. Runs under LockRemoteSessionClientForAuthMethodWrite.
-func (q *Queries) BackfillRemoteSessionClientOrganization(ctx context.Context, arg BackfillRemoteSessionClientOrganizationParams) (int64, error) {
-	result, err := q.db.Exec(ctx, backfillRemoteSessionClientOrganization, arg.ID, arg.OrganizationID)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected(), nil
-}
-
 const checkRemoteSessionClientBindingForUserSessionIssuer = `-- name: CheckRemoteSessionClientBindingForUserSessionIssuer :one
 SELECT EXISTS (
   SELECT 1

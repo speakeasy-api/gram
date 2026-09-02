@@ -49,56 +49,30 @@ func (s *Service) requireKeySetEntitlement(ctx context.Context, logger *slog.Log
 	return nil
 }
 
-// adoptClientOrganization makes a client eligible to hold a JSON Web Key Set,
-// backfilling its organization_id from its project when the column was never
-// populated.
+// requireKeySetEligibleClient refuses a client that cannot hold a JSON Web Key
+// Set, and pins the one that can to the caller's organization.
 //
-// remote_session_clients.organization_id is nullable and was added without a
-// backfill (20260625174452), so rows predating it are still NULL, and
-// remote_session_clients_json_web_key_set_id_check forbids a set on any of
-// them. Resolving the organization through project_id (AIM-77) is what lets a
-// legacy client opt into private_key_jwt at all; refusing them instead would
-// strand every pre-migration client on shared-secret authentication until some
-// unrelated backfill lands.
+// remote_session_clients.organization_id is nullable, and
+// remote_session_clients_json_web_key_set_id_check forbids a set on any row
+// where it is still NULL. AIM-77 anticipated resolving those rows' organization
+// through project_id and adopting them; a production census found no client in
+// that state, and every create path has populated the column since
+// 20260625174452, so the population cannot grow. Refusing is the whole
+// behaviour that case needs.
 //
-// The adoption is not a shortcut around tenancy, it is the point at which
-// tenancy becomes knowable. The composite foreign key to json_web_key_sets is
-// MATCH SIMPLE and skips its check entirely while organization_id is NULL, so
-// the column has to be populated before the database can pin the set to an
-// organization at all. BackfillRemoteSessionClientOrganization writes only when
-// the client's project belongs to the caller's organization, which makes the
-// statement its own ownership check: no rows means the organization could not
-// be established, and the caller is refused rather than adopted.
-//
-// A client with no project and no organization is the platform-owned global
-// tier. It matches nothing in the backfill and is refused, which is correct:
-// those rows are not a tenant's to claim.
-func adoptClientOrganization(ctx context.Context, logger *slog.Logger, txRepo *repo.Queries, client *repo.RemoteSessionClient, organizationID string) (bool, error) {
-	if client.OrganizationID.Valid && client.OrganizationID.String != "" {
-		if client.OrganizationID.String != organizationID {
-			return false, oops.E(oops.CodeNotFound, nil, "remote session client not found").LogError(ctx, logger)
-		}
-
-		return false, nil
+// The organization match is the tenancy check the database cannot make on its
+// own here: the composite foreign key to json_web_key_sets is MATCH SIMPLE and
+// skips its check entirely while organization_id is NULL.
+func requireKeySetEligibleClient(ctx context.Context, logger *slog.Logger, client repo.RemoteSessionClient, organizationID string) error {
+	if !client.OrganizationID.Valid || client.OrganizationID.String == "" {
+		return oops.E(oops.CodeFailedPrecondition, nil, "this remote session client has no owning organization, so it cannot hold a key set")
 	}
 
-	rows, err := txRepo.BackfillRemoteSessionClientOrganization(ctx, repo.BackfillRemoteSessionClientOrganizationParams{
-		ID:             client.ID,
-		OrganizationID: organizationID,
-	})
-	if err != nil {
-		return false, oops.E(oops.CodeUnexpected, err, "backfill remote session client organization").LogError(ctx, logger)
-	}
-	if rows == 0 {
-		return false, oops.E(oops.CodeFailedPrecondition, nil, "this remote session client has no owning organization to resolve, so it cannot hold a key set")
+	if client.OrganizationID.String != organizationID {
+		return oops.E(oops.CodeNotFound, nil, "remote session client not found").LogError(ctx, logger)
 	}
 
-	// The statement only writes when the project resolves to this organization,
-	// so the row now holds exactly it. Reflecting that here keeps the view and
-	// the subsequent tenancy-scoped write consistent without a second read.
-	client.OrganizationID = conv.ToPGText(organizationID)
-
-	return true, nil
+	return nil
 }
 
 // resolveAttachableKeySet takes the named set's row in FOR SHARE for the rest
@@ -329,8 +303,7 @@ func (s *Service) settleClientKeySet(
 	// Re-applying the state the row already holds changes nothing, so it neither
 	// writes nor audits, in either direction. An audit entry for a change that
 	// did not happen is a false record, and a dashboard replaying its own
-	// optimistic state should not inflate the log. Checked before adoption so a
-	// no-op detach never rewrites a client's organization as a side effect.
+	// optimistic state should not inflate the log.
 	if sameKeySet(existing.JsonWebKeySetID, target) {
 		view, err := mv.BuildRemoteSessionClientView(existing, userSessionIssuerIDs)
 		if err != nil {
@@ -339,11 +312,8 @@ func (s *Service) settleClientKeySet(
 		return view, nil
 	}
 
-	var adopted bool
 	if target.Valid {
-		var err error
-		adopted, err = adoptClientOrganization(ctx, logger, txRepo, &existing, authCtx.ActiveOrganizationID)
-		if err != nil {
+		if err := requireKeySetEligibleClient(ctx, logger, existing, authCtx.ActiveOrganizationID); err != nil {
 			return nil, err
 		}
 
@@ -399,19 +369,6 @@ func (s *Service) settleClientKeySet(
 
 	if err := dbtx.Commit(ctx); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "commit transaction").LogError(ctx, logger)
-	}
-
-	// Logged after the commit, not at the point of the write: set resolution,
-	// the write, the audit insert, or the commit itself can still fail, and a
-	// rollback takes the adoption with it. Claiming it happened before it is
-	// durable is the same false record that kept it out of the audit trail.
-	//
-	// Deliberately not an audit event: adopting the row is a migration detail of
-	// Gram's own making, not an action the administrator took or needs to answer
-	// for. The attach they did perform is audited.
-	if adopted {
-		logger.InfoContext(ctx, "backfilled remote session client organization from its project during key set attach",
-			attr.SlogRemoteSessionClientID(updated.ID.String()))
 	}
 
 	return view, nil
