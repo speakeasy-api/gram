@@ -873,9 +873,9 @@ func completionTelemetryIdentity(source string) (resourceURN, normalizedSource s
 	}
 }
 
-func limitEmbeddingInputs(model string, inputs []string) ([]string, int, error) {
+func limitEmbeddingInputs(model string, inputs []string, inputFallbacks [][]string) ([]string, int, error) {
 	if model == openAITextEmbedding3Small {
-		return limitOpenAIEmbeddingInputs(inputs)
+		return limitOpenAIEmbeddingInputs(inputs, inputFallbacks)
 	}
 
 	var limited []string
@@ -896,7 +896,7 @@ func limitEmbeddingInputs(model string, inputs []string) ([]string, int, error) 
 	return limited, truncatedCount, nil
 }
 
-func limitOpenAIEmbeddingInputs(inputs []string) ([]string, int, error) {
+func limitOpenAIEmbeddingInputs(inputs []string, inputFallbacks [][]string) ([]string, int, error) {
 	var (
 		codec          tokenizer.Codec
 		limited        []string
@@ -904,36 +904,43 @@ func limitOpenAIEmbeddingInputs(inputs []string) ([]string, int, error) {
 	)
 
 	for i, input := range inputs {
-		// A tokenizer cannot emit more tokens than there are input bytes.
-		if len(input) <= maxOpenAIEmbeddingInputTokens {
+		selected := input
+		tokenIDs, exceedsLimit, err := embeddingInputTokensOverLimit(&codec, selected, i)
+		if err != nil {
+			return nil, 0, err
+		}
+		if !exceedsLimit {
 			continue
 		}
 
-		if codec == nil {
-			var err error
-			codec, err = loadOpenAIEmbeddingCodec()
-			if err != nil {
-				return nil, 0, fmt.Errorf("load OpenAI embedding tokenizer: %w", err)
+		if i < len(inputFallbacks) {
+			for _, fallback := range inputFallbacks[i] {
+				if fallback == "" || fallback == selected {
+					continue
+				}
+				selected = fallback
+				tokenIDs, exceedsLimit, err = embeddingInputTokensOverLimit(&codec, selected, i)
+				if err != nil {
+					return nil, 0, err
+				}
+				if !exceedsLimit {
+					break
+				}
 			}
 		}
 
-		tokenIDs, _, err := codec.Encode(input)
-		if err != nil {
-			return nil, 0, fmt.Errorf("tokenize embedding input %d: %w", i, err)
-		}
-		if len(tokenIDs) <= maxOpenAIEmbeddingInputTokens {
-			continue
+		if exceedsLimit {
+			selected, err = codec.Decode(tokenIDs[:maxOpenAIEmbeddingInputTokens])
+			if err != nil {
+				return nil, 0, fmt.Errorf("decode truncated embedding input %d: %w", i, err)
+			}
+			truncatedCount++
 		}
 
-		truncated, err := codec.Decode(tokenIDs[:maxOpenAIEmbeddingInputTokens])
-		if err != nil {
-			return nil, 0, fmt.Errorf("decode truncated embedding input %d: %w", i, err)
-		}
 		if limited == nil {
 			limited = slices.Clone(inputs)
 		}
-		limited[i] = truncated
-		truncatedCount++
+		limited[i] = selected
 	}
 
 	if limited == nil {
@@ -942,15 +949,36 @@ func limitOpenAIEmbeddingInputs(inputs []string) ([]string, int, error) {
 	return limited, truncatedCount, nil
 }
 
+func embeddingInputTokensOverLimit(codec *tokenizer.Codec, input string, index int) ([]uint, bool, error) {
+	// A tokenizer cannot emit more tokens than there are input bytes.
+	if len(input) <= maxOpenAIEmbeddingInputTokens {
+		return nil, false, nil
+	}
+
+	if *codec == nil {
+		loaded, err := loadOpenAIEmbeddingCodec()
+		if err != nil {
+			return nil, false, fmt.Errorf("load OpenAI embedding tokenizer: %w", err)
+		}
+		*codec = loaded
+	}
+
+	tokenIDs, _, err := (*codec).Encode(input)
+	if err != nil {
+		return nil, false, fmt.Errorf("tokenize embedding input %d: %w", index, err)
+	}
+	return tokenIDs, len(tokenIDs) > maxOpenAIEmbeddingInputTokens, nil
+}
+
 func (c *ChatClient) CreateEmbeddings(ctx context.Context, orgID string, model string, inputs []string, opts ...EmbeddingOption) ([][]float32, error) {
 	var resolved EmbeddingOptions
 	for _, opt := range opts {
 		opt(&resolved)
 	}
-	return c.createEmbeddings(ctx, orgID, model, inputs, resolved.Dimensions, resolved.KeyType.OrDefault())
+	return c.createEmbeddings(ctx, orgID, model, inputs, resolved.InputFallbacks, resolved.Dimensions, resolved.KeyType.OrDefault())
 }
 
-func (c *ChatClient) createEmbeddings(ctx context.Context, orgID string, model string, inputs []string, dimensions *int64, keyType KeyType) ([][]float32, error) {
+func (c *ChatClient) createEmbeddings(ctx context.Context, orgID string, model string, inputs []string, inputFallbacks [][]string, dimensions *int64, keyType KeyType) ([][]float32, error) {
 	resolvedKey, err := c.keyResolver.ResolveKey(ctx, orgID, "", "", keyType)
 	if err != nil {
 		return nil, fmt.Errorf("resolving OpenRouter key: %w", err)
@@ -965,7 +993,7 @@ func (c *ChatClient) createEmbeddings(ctx context.Context, orgID string, model s
 		return nil, fmt.Errorf("at least one input is required")
 	}
 
-	inputs, truncatedCount, err := limitEmbeddingInputs(model, inputs)
+	inputs, truncatedCount, err := limitEmbeddingInputs(model, inputs, inputFallbacks)
 	if err != nil {
 		return nil, err
 	}

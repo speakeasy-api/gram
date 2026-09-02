@@ -288,10 +288,11 @@ func (s *ToolsetVectorStore) SearchToolsetTools(ctx context.Context, toolset typ
 }
 
 type embeddingCandidate struct {
-	entryKey string
-	payload  []byte
-	content  string
-	tags     []string
+	entryKey  string
+	payload   []byte
+	content   string
+	fallbacks []string
+	tags      []string
 }
 
 func (s *ToolsetVectorStore) prepareEmbeddingCandidates(ctx context.Context, tools []*types.Tool) ([]embeddingCandidate, error) {
@@ -328,7 +329,8 @@ func (s *ToolsetVectorStore) prepareEmbeddingCandidates(ctx context.Context, too
 		}
 
 		tags := extractTags(tool)
-		content := buildEmbeddableContent(&entry, tags)
+		schemaSummary, topLevelSchemaSummary := summarizeInputSchemaLevels(entry.InputSchema)
+		content := buildEmbeddableContent(&entry, tags, schemaSummary)
 		if strings.TrimSpace(content) == "" {
 			continue
 		}
@@ -337,7 +339,11 @@ func (s *ToolsetVectorStore) prepareEmbeddingCandidates(ctx context.Context, too
 			entryKey: baseTool.ToolUrn,
 			payload:  payload,
 			content:  content,
-			tags:     tags,
+			fallbacks: []string{
+				buildTopLevelEmbeddableContent(&entry, topLevelSchemaSummary),
+				buildNameDescriptionEmbeddableContent(&entry),
+			},
+			tags: tags,
 		})
 	}
 
@@ -455,11 +461,19 @@ func (s *ToolsetVectorStore) generateEmbeddings(ctx context.Context, orgID strin
 				}
 
 				inputs := make([]string, 0, batch.endIdx-batch.startIdx)
+				inputFallbacks := make([][]string, 0, batch.endIdx-batch.startIdx)
 				for i := batch.startIdx; i < batch.endIdx; i++ {
 					inputs = append(inputs, candidates[i].content)
+					inputFallbacks = append(inputFallbacks, candidates[i].fallbacks)
 				}
 
-				vectors, err := s.chatClient.CreateEmbeddings(ctx, orgID, s.embeddingModel, inputs)
+				vectors, err := s.chatClient.CreateEmbeddings(
+					ctx,
+					orgID,
+					s.embeddingModel,
+					inputs,
+					openrouter.WithEmbeddingInputFallbacks(inputFallbacks),
+				)
 				if err != nil {
 					setErr(fmt.Errorf("create embeddings batch: %w", err))
 					return
@@ -533,7 +547,7 @@ type toolListEntry struct {
 	Meta        map[string]any  `json:"_meta,omitempty"`
 }
 
-func buildEmbeddableContent(entry *toolListEntry, tags []string) string {
+func buildEmbeddableContent(entry *toolListEntry, tags []string, schemaSummary string) string {
 	parts := []string{
 		entry.Name,
 		entry.Description,
@@ -541,26 +555,75 @@ func buildEmbeddableContent(entry *toolListEntry, tags []string) string {
 	if len(tags) > 0 {
 		parts = append(parts, "tags: "+strings.Join(tags, ", "))
 	}
-	if schema := summarizeInputSchema(entry.InputSchema); schema != "" {
-		parts = append(parts, "parameters:\n"+schema)
+	if schemaSummary != "" {
+		parts = append(parts, "parameters:\n"+schemaSummary)
 	}
 
 	return strings.TrimSpace(strings.Join(filterNonEmpty(parts), "\n"))
 }
 
 func summarizeInputSchema(raw json.RawMessage) string {
+	summary, _ := summarizeInputSchemaLevels(raw)
+	return summary
+}
+
+func summarizeInputSchemaLevels(raw json.RawMessage) (full string, topLevel string) {
 	if len(raw) == 0 {
-		return ""
+		return "", ""
 	}
 
 	var schema map[string]any
 	if err := json.Unmarshal(raw, &schema); err != nil {
-		return string(raw)
+		return string(raw), ""
 	}
 
 	lines := make([]string, 0)
 	appendSchemaSummary(&lines, "input", schema, false, 0)
+	return strings.Join(lines, "\n"), summarizeTopLevelInputSchema(schema)
+}
+
+func summarizeTopLevelInputSchema(schema map[string]any) string {
+	properties, ok := schema["properties"].(map[string]any)
+	if !ok {
+		return ""
+	}
+
+	names := make([]string, 0, len(properties))
+	for name := range properties {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+
+	lines := make([]string, 0, len(names))
+	for _, name := range names {
+		line := "- " + name
+		if property, ok := properties[name].(map[string]any); ok {
+			description, _ := property["description"].(string)
+			if description == "" {
+				description, _ = property["title"].(string)
+			}
+			if description = summarizeSchemaText(description, 320); description != "" {
+				line += ": " + description
+			}
+		}
+		lines = append(lines, line)
+	}
 	return strings.Join(lines, "\n")
+}
+
+func buildTopLevelEmbeddableContent(entry *toolListEntry, schemaSummary string) string {
+	parts := []string{entry.Name, entry.Description}
+	if schemaSummary != "" {
+		parts = append(parts, "parameters:\n"+schemaSummary)
+	}
+	return strings.TrimSpace(strings.Join(filterNonEmpty(parts), "\n"))
+}
+
+func buildNameDescriptionEmbeddableContent(entry *toolListEntry) string {
+	return strings.TrimSpace(strings.Join(filterNonEmpty([]string{
+		entry.Name,
+		entry.Description,
+	}), "\n"))
 }
 
 func appendSchemaSummary(lines *[]string, path string, schema map[string]any, required bool, depth int) {

@@ -35,6 +35,9 @@ type EmbeddingOptions struct {
 	Dimensions *int64
 	// KeyType selects the organization key pool used for the request.
 	KeyType KeyType
+	// InputFallbacks supplies progressively smaller alternatives for each input.
+	// The outer index corresponds to inputs; inner values are tried in order.
+	InputFallbacks [][]string
 }
 
 // WithEmbeddingDimensions requests a specific output dimensionality from the
@@ -52,6 +55,15 @@ func WithEmbeddingDimensions(dimensions int) EmbeddingOption {
 func WithEmbeddingKeyType(keyType KeyType) EmbeddingOption {
 	return func(o *EmbeddingOptions) {
 		o.KeyType = keyType
+	}
+}
+
+// WithEmbeddingInputFallbacks supplies progressively smaller alternatives for
+// oversized inputs. The client tries each alternative before truncating the
+// final one to the model's token limit.
+func WithEmbeddingInputFallbacks(fallbacks [][]string) EmbeddingOption {
+	return func(o *EmbeddingOptions) {
+		o.InputFallbacks = fallbacks
 	}
 }
 

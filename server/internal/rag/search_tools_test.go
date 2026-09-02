@@ -38,7 +38,8 @@ func TestBuildEmbeddableContent_SummarizesSchemaDeterministically(t *testing.T) 
 		},
 	}
 
-	content := buildEmbeddableContent(entry, []string{"source:http", "records"})
+	schemaSummary, topLevelSchemaSummary := summarizeInputSchemaLevels(entry.InputSchema)
+	content := buildEmbeddableContent(entry, []string{"source:http", "records"}, schemaSummary)
 	require.Equal(t, `create_record
 Create a record.
 tags: source:http, records
@@ -50,6 +51,13 @@ parameters:
 - alpha[].mode (string, enum=[fast, safe])
 - zeta (required, string): Last field.`, content)
 	require.NotContains(t, content, "metadata is retained")
+	require.Equal(t, `create_record
+Create a record.
+parameters:
+- alpha
+- zeta: Last field.`, buildTopLevelEmbeddableContent(entry, topLevelSchemaSummary))
+	require.Equal(t, `create_record
+Create a record.`, buildNameDescriptionEmbeddableContent(entry))
 }
 
 func TestSummarizeInputSchema_MalformedSchemaFallsBackToOriginal(t *testing.T) {
