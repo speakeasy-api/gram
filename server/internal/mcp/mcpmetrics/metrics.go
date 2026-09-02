@@ -62,6 +62,11 @@ type Metrics struct {
 	// proxy's request interceptor, which constructs its own [RequestCounter].
 	requestCensus *RequestCounter
 
+	// metaMemberDispatchCounter counts proxied meta member dials by backend
+	// kind and credential routing outcome. No per-gateway dimension: that
+	// view lives in ClickHouse.
+	metaMemberDispatchCounter metric.Int64Counter
+
 	// mcpRequestRejectedCounter is the unsampled census of requests the issuer
 	// gate turned away before dispatch: the population that never reaches
 	// requestCensus. It carries a per-server URL because "which server is
@@ -122,6 +127,15 @@ func NewMetrics(meter metric.Meter, logger *slog.Logger) *Metrics {
 	)
 	if err != nil {
 		logger.ErrorContext(context.Background(), "failed to create mcp request duration", attr.SlogError(err))
+	}
+
+	metaMemberDispatchCounter, err := meter.Int64Counter(
+		"mcp.meta.member.dispatch",
+		metric.WithDescription("Proxied meta MCP member dispatch attempts by backend kind and credential routing outcome"),
+		metric.WithUnit("{dispatch}"),
+	)
+	if err != nil {
+		logger.ErrorContext(context.Background(), "failed to create meta member dispatch counter", attr.SlogError(err))
 	}
 
 	mcpInitializeCounter, err := meter.Int64Counter(
@@ -191,6 +205,7 @@ func NewMetrics(meter metric.Meter, logger *slog.Logger) *Metrics {
 		mcpToolCallCounter:                   mcpToolCallCounter,
 		mcpRequestDuration:                   mcpRequestDuration,
 		mcpInitializeCounter:                 mcpInitializeCounter,
+		metaMemberDispatchCounter:            metaMemberDispatchCounter,
 		mcpRequestRejectedCounter:            mcpRequestRejectedCounter,
 		requestCensus:                        NewRequestCounter(meter, logger),
 		identityCoverage:                     NewIdentityCoverageCounter(meter, logger),
@@ -390,4 +405,28 @@ func (m *Metrics) RecordOAuthRefreshTokenReplayServed(ctx context.Context, issue
 		return
 	}
 	m.oauthRefreshTokenReplayServedCounter.Add(ctx, 1, metric.WithAttributes(oauthFlowDimensions(issuerID, mcpSlug)...))
+}
+
+// MetaDispatchOutcome classifies how a meta member dispatch was credentialed.
+type MetaDispatchOutcome string
+
+const (
+	// MetaDispatchCredentialed: a member-qualified credential was forwarded.
+	MetaDispatchCredentialed MetaDispatchOutcome = "credentialed"
+	// MetaDispatchAnonymous: no credential matched; the call went out bare.
+	MetaDispatchAnonymous MetaDispatchOutcome = "anonymous"
+	// MetaDispatchAmbiguous: several credentials claimed the member; the
+	// dispatch failed closed.
+	MetaDispatchAmbiguous MetaDispatchOutcome = "ambiguous"
+)
+
+// RecordMetaMemberDispatch counts one meta member dispatch.
+func (m *Metrics) RecordMetaMemberDispatch(ctx context.Context, backend string, outcome MetaDispatchOutcome) {
+	if m == nil || m.metaMemberDispatchCounter == nil {
+		return
+	}
+	m.metaMemberDispatchCounter.Add(ctx, 1, metric.WithAttributes(
+		attr.MetaMemberBackend(backend),
+		attr.MetaDispatchOutcome(outcome),
+	))
 }

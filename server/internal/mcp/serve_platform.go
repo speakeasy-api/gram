@@ -459,6 +459,7 @@ func (s *Service) callPlatformToolsetTool(
 			ResponseStatusCode:    rw.statusCode,
 			MCPURL:                &mcpURL,
 			MCPSessionID:          nil,
+			MetaMCPServerID:       nil,
 			ChatID:                conv.PtrEmpty(chatID),
 			Type:                  plan.BillingType,
 			ResourceURI:           "",

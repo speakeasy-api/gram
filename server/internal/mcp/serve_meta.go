@@ -36,6 +36,7 @@ import (
 	metamcprepo "github.com/speakeasy-api/gram/server/internal/metamcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
+	tm "github.com/speakeasy-api/gram/server/internal/telemetry"
 )
 
 // metaGateContext carries the per-request state the meta MCP tools need:
@@ -44,6 +45,7 @@ import (
 // serveResolvedMetaMCPEndpoint and threaded through dispatch.
 type metaGateContext struct {
 	projectID       uuid.UUID
+	metaServerID    uuid.UUID
 	organizationID  string
 	tokens          map[uuid.UUID]remotesessions.UpstreamToken
 	toolSelection   *toolfilter.SessionSelection
@@ -138,6 +140,7 @@ func (s *Service) serveResolvedMetaMCPEndpoint(
 
 	gate := &metaGateContext{
 		projectID:      mcpEndpoint.ProjectID,
+		metaServerID:   metaServer.ID,
 		organizationID: metaServer.OrganizationID,
 		tokens:         gateTokens,
 		toolSelection:  gateToolSelection,
@@ -443,24 +446,77 @@ func (s *Service) callMetaServerTool(
 		return nil, oops.E(oops.CodeNotFound, nil, "unknown tool %q", params.Name).LogError(ctx, logger)
 	}
 
+	start := time.Now()
+
 	// One snapshot per request: every meta MCP tool answers from the same
 	// member set, so a membership mutation lands between requests, never
 	// inside one.
 	ctx, members, err := s.resolveMetaMemberSnapshot(ctx, logger, metaServer.ID, mcpEndpoint.ProjectID)
 	if err != nil {
+		if params.Name != metamcp.ToolExecuteTool {
+			s.logMetaDiscovery(ctx, gate, params.Name, start, err)
+		}
 		return nil, err
 	}
 
+	var body json.RawMessage
 	switch params.Name {
 	case metamcp.ToolListServers:
-		return s.handleMetaListServersCall(ctx, logger, members, req)
+		body, err = s.handleMetaListServersCall(ctx, logger, members, req)
 	case metamcp.ToolDescribeServer:
-		return s.handleMetaDescribeServerCall(ctx, logger, gate, members, req, params.Arguments)
+		body, err = s.handleMetaDescribeServerCall(ctx, logger, gate, members, req, params.Arguments)
 	case metamcp.ToolDescribeTools:
-		return s.handleMetaDescribeToolsCall(ctx, logger, gate, members, req, params.Arguments)
+		body, err = s.handleMetaDescribeToolsCall(ctx, logger, gate, members, req, params.Arguments)
 	default:
+		// execute_tool is deliberately not logged here: the member dispatch
+		// writes the single tool_call row, stamped with this gateway's id.
 		return s.handleMetaExecuteToolCall(ctx, logger, gate, members, req, params.Arguments, params.Meta)
 	}
+	s.logMetaDiscovery(ctx, gate, params.Name, start, err)
+	return body, err
+}
+
+// logMetaDiscovery writes one meta_discovery telemetry row for a gateway
+// discovery call. Failures record their oops status code.
+func (s *Service) logMetaDiscovery(ctx context.Context, gate *metaGateContext, toolName string, start time.Time, handlerErr error) {
+	logAttrs := tm.HTTPLogAttributes{
+		attr.EventSourceKey:     string(tm.EventSourceMetaDiscovery),
+		attr.MetaMcpServerIDKey: gate.metaServerID.String(),
+	}
+	logAttrs.RecordDuration(time.Since(start).Seconds())
+	statusCode := http.StatusOK
+	if handlerErr != nil {
+		statusCode = http.StatusInternalServerError
+		if oopsErr, ok := errors.AsType[*oops.ShareableError](handlerErr); ok {
+			statusCode = oopsErr.HTTPStatus(ctx)
+		}
+	}
+	logAttrs.RecordStatusCode(statusCode)
+	logAttrs.RecordTraceContext(ctx)
+	if gate.chatID != "" {
+		logAttrs[attr.GenAIConversationIDKey] = gate.chatID
+	}
+	if gate.externalUserID != "" {
+		logAttrs[attr.ExternalUserIDKey] = gate.externalUserID
+	}
+	if gate.apiKeyID != "" {
+		logAttrs[attr.APIKeyIDKey] = gate.apiKeyID
+	}
+	s.telemLogger.Log(ctx, tm.LogParams{
+		Timestamp: time.Now(),
+		ToolInfo: tm.ToolInfo{
+			ID: gate.metaServerID.String(),
+			// Not "tools:"-prefixed: that prefix is the query layer's tool-call classifier.
+			URN:            "metamcp:" + gate.metaServerID.String() + ":" + toolName,
+			Name:           toolName,
+			ProjectID:      gate.projectID.String(),
+			DeploymentID:   "",
+			FunctionID:     nil,
+			OrganizationID: gate.organizationID,
+		},
+		UserInfo:   tm.UserInfoByID(gate.userID),
+		Attributes: logAttrs,
+	})
 }
 
 func (s *Service) handleMetaListServersCall(

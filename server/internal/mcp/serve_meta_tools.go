@@ -461,6 +461,7 @@ func (s *Service) buildMemberDispatch(
 		// surface's RBAC model is outside the wrapper-governance cutover.
 		wrapperRBACResourceID:    "",
 		wrapperIsPublic:          nil,
+		metaMcpServerID:          gate.metaServerID.String(),
 		skipProxyTools:           true,
 		tags:                     nil,
 		protocolVersion:          gate.protocolVersion,

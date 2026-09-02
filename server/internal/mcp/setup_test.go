@@ -9,6 +9,7 @@ import (
 	"slices"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -585,4 +586,17 @@ func (ti *testInstance) addToolWithDualSecurity(ctx context.Context, t *testing.
 	require.NoError(t, err)
 
 	return deploymentID
+}
+
+// requireTelemetryRowCount polls telemetry_logs until the count for the WHERE
+// clause matches; emission is fire-and-forget.
+func requireTelemetryRowCount(t *testing.T, where string, want uint64, args ...any) {
+	t.Helper()
+	chConn, err := infra.NewClickhouseClient(t)
+	require.NoError(t, err)
+	var count uint64
+	require.Eventually(t, func() bool {
+		row := chConn.QueryRow(t.Context(), "SELECT count() FROM telemetry_logs WHERE "+where, args...)
+		return row.Scan(&count) == nil && count == want
+	}, 5*time.Second, 50*time.Millisecond, "telemetry_logs rows for %q: want %d, got %d", where, want, count)
 }

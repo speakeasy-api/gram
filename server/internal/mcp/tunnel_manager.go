@@ -95,6 +95,7 @@ func (m *tunnelManager) buildProxy(
 			RemoteMCPServerID:   "",
 			TunneledMCPServerID: tunnelID,
 			McpServerID:         mcpServer.ID.String(),
+			MetaMCPServerID:     "",
 		},
 		gatewayURL,
 		tunnelrouting.Headers(tunnelID, m.forwardToken, clientAffinityKey),

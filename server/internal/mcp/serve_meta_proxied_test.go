@@ -256,6 +256,9 @@ func TestServePublic_MetaEndpoint_ExecuteTool_ForwardsEachMembersOwnBearer(t *te
 	require.False(t, isError, "member B execute_tool must succeed")
 	require.Equal(t, "Bearer token-member-b", upstreamB.capturedAuth(),
 		"member B's upstream must receive exactly member B's bearer and never A's")
+
+	// The proxied members' tool_call rows carry the gateway id.
+	requireTelemetryRowCount(t, `meta_mcp_server_id = ? AND event_source = 'tool_call' AND tool_name = 'ping'`, 2, meta.ID.String())
 }
 
 // A caller's _meta must not reach a proxied member: WireMeta re-serializes
