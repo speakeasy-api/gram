@@ -655,6 +655,46 @@ func BuildResolveShadowMCPInventoryRequestPayload(accessResolveShadowMCPInventor
 	return v, nil
 }
 
+// BuildListAIDetectionsPayload builds the payload for the access
+// listAIDetections endpoint from CLI flags.
+func BuildListAIDetectionsPayload(accessListAIDetectionsCategory string, accessListAIDetectionsDirectoryGroupID string, accessListAIDetectionsSessionToken string) (*access.ListAIDetectionsPayload, error) {
+	var err error
+	var category *string
+	{
+		if accessListAIDetectionsCategory != "" {
+			category = &accessListAIDetectionsCategory
+			if !(*category == "harness" || *category == "local_model") {
+				err = goa.MergeErrors(err, goa.InvalidEnumValueError("category", *category, []any{"harness", "local_model"}))
+			}
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var directoryGroupID *string
+	{
+		if accessListAIDetectionsDirectoryGroupID != "" {
+			directoryGroupID = &accessListAIDetectionsDirectoryGroupID
+			err = goa.MergeErrors(err, goa.ValidateFormat("directory_group_id", *directoryGroupID, goa.FormatUUID))
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var sessionToken *string
+	{
+		if accessListAIDetectionsSessionToken != "" {
+			sessionToken = &accessListAIDetectionsSessionToken
+		}
+	}
+	v := &access.ListAIDetectionsPayload{}
+	v.Category = category
+	v.DirectoryGroupID = directoryGroupID
+	v.SessionToken = sessionToken
+
+	return v, nil
+}
+
 // BuildRequestAccessPayload builds the payload for the access requestAccess
 // endpoint from CLI flags.
 func BuildRequestAccessPayload(accessRequestAccessBody string, accessRequestAccessApikeyToken string, accessRequestAccessSessionToken string) (*access.RequestAccessPayload, error) {

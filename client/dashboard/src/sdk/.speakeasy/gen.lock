@@ -37,6 +37,7 @@ trackedFiles:
   src/funcs/accessDeleteRole.ts: {}
   src/funcs/accessGetRole.ts: {}
   src/funcs/accessGetShadowMCPInventoryServer.ts: {}
+  src/funcs/accessListAIDetections.ts: {}
   src/funcs/accessListChallengeBuckets.ts: {}
   src/funcs/accessListChallenges.ts: {}
   src/funcs/accessListGrants.ts: {}
@@ -88,6 +89,7 @@ trackedFiles:
   src/funcs/agentGetPlugins.ts: {}
   src/funcs/agentGetSessionMeta.ts: {}
   src/funcs/agentListSyncedUsers.ts: {}
+  src/funcs/agentReportAIScan.ts: {}
   src/funcs/agentReportSessionMoved.ts: {}
   src/funcs/agentUpdateConfiguration.ts: {}
   src/funcs/aiIntegrationsDeleteConfig.ts: {}
@@ -680,8 +682,10 @@ trackedFiles:
   src/models/components/agentplugin.ts: {}
   src/models/components/agentsessionmeta.ts: {}
   src/models/components/agentusage.ts: {}
+  src/models/components/aidetection.ts: {}
   src/models/components/aiintegrationconfig.ts: {}
   src/models/components/aiintegrationschedulestate.ts: {}
+  src/models/components/aiscanmatch.ts: {}
   src/models/components/allowedorigin.ts: {}
   src/models/components/approvaldecision.ts: {}
   src/models/components/approvalrequestdetail.ts: {}
@@ -998,6 +1002,7 @@ trackedFiles:
   src/models/components/killswitchsummary.ts: {}
   src/models/components/killswitchuserbadge.ts: {}
   src/models/components/listactorattributesresult.ts: {}
+  src/models/components/listaidetectionsresult.ts: {}
   src/models/components/listaiintegrationschedulesresult.ts: {}
   src/models/components/listallowedoriginsresult.ts: {}
   src/models/components/listapprovalrequestsresult.ts: {}
@@ -1254,6 +1259,7 @@ trackedFiles:
   src/models/components/rendertemplatebyidrequestbody.ts: {}
   src/models/components/rendertemplaterequestbody.ts: {}
   src/models/components/rendertemplateresult.ts: {}
+  src/models/components/reportaiscanrequestbody.ts: {}
   src/models/components/reportsessionmovedrequestbody.ts: {}
   src/models/components/requestaccessform.ts: {}
   src/models/components/requestaccessresult.ts: {}
@@ -1865,6 +1871,7 @@ trackedFiles:
   src/models/operations/killswitcheslistmcpservers.ts: {}
   src/models/operations/killswitchespreviewoverlaps.ts: {}
   src/models/operations/listadminopenrouterkeys.ts: {}
+  src/models/operations/listaidetections.ts: {}
   src/models/operations/listaiintegrationschedules.ts: {}
   src/models/operations/listallowedorigins.ts: {}
   src/models/operations/listapikeys.ts: {}
@@ -2039,6 +2046,7 @@ trackedFiles:
   src/models/operations/rendertemplate.ts: {}
   src/models/operations/rendertemplatebyid.ts: {}
   src/models/operations/repairplatformmcponboardingpublication.ts: {}
+  src/models/operations/reportagentaiscan.ts: {}
   src/models/operations/reportagentsessionmoved.ts: {}
   src/models/operations/requestaccess.ts: {}
   src/models/operations/resolvechallenge.ts: {}
@@ -2207,6 +2215,8 @@ trackedFiles:
   src/react-query/agentPlugins.ts: {}
   src/react-query/agentSessionMeta.core.ts: {}
   src/react-query/agentSessionMeta.ts: {}
+  src/react-query/aiDetections.core.ts: {}
+  src/react-query/aiDetections.ts: {}
   src/react-query/aiIntegrationConfig.core.ts: {}
   src/react-query/aiIntegrationConfig.ts: {}
   src/react-query/aiIntegrationSchedules.core.ts: {}
@@ -2765,6 +2775,7 @@ trackedFiles:
   src/react-query/renderTemplateByID.core.ts: {}
   src/react-query/renderTemplateByID.ts: {}
   src/react-query/repairPlatformMCPOnboardingPublication.ts: {}
+  src/react-query/reportAgentAIScan.ts: {}
   src/react-query/reportAgentSessionMoved.ts: {}
   src/react-query/requestAccess.ts: {}
   src/react-query/resolveChallenge.ts: {}
@@ -6711,6 +6722,15 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+  listAIDetections:
+    speakeasy-default-list-AI-detections:
+      responses:
+        "200":
+          application/json: {"detections": [{"category": "local_model", "device_count": 819801, "display_name": "Vincenzo_Goldner", "first_seen": "2026-07-26T16:06:54.315Z", "last_seen": "2026-11-06T14:12:23.988Z", "signals": [], "target_id": "<id>", "user_count": 392569}]}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
   listAIIntegrationSchedules:
     speakeasy-default-list-AI-integration-schedules:
       parameters:
@@ -8721,6 +8741,15 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+  reportAgentAIScan:
+    speakeasy-default-report-agent-AI-scan:
+      requestBody:
+        application/json: {"matches": [{"category": "local_model", "signal": "running", "target_id": "<id>"}], "scan_completed_at": "2026-04-20T00:30:34.871Z", "scan_started_at": "2026-12-21T19:48:10.987Z", "target_list_version": 275214}
+      responses:
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
   reportAgentSessionMoved:
     speakeasy-default-report-agent-session-moved:
       requestBody:

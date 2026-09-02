@@ -31,6 +31,7 @@ type Endpoints struct {
 	ListShadowMCPInventoryUsers          goa.Endpoint
 	ListShadowMCPInventoryServersForUser goa.Endpoint
 	ResolveShadowMCPInventoryRequest     goa.Endpoint
+	ListAIDetections                     goa.Endpoint
 	RequestAccess                        goa.Endpoint
 	ListChallenges                       goa.Endpoint
 	ListChallengeBuckets                 goa.Endpoint
@@ -57,6 +58,7 @@ func NewEndpoints(s Service) *Endpoints {
 		ListShadowMCPInventoryUsers:          NewListShadowMCPInventoryUsersEndpoint(s, a.APIKeyAuth),
 		ListShadowMCPInventoryServersForUser: NewListShadowMCPInventoryServersForUserEndpoint(s, a.APIKeyAuth),
 		ResolveShadowMCPInventoryRequest:     NewResolveShadowMCPInventoryRequestEndpoint(s, a.APIKeyAuth),
+		ListAIDetections:                     NewListAIDetectionsEndpoint(s, a.APIKeyAuth),
 		RequestAccess:                        NewRequestAccessEndpoint(s, a.APIKeyAuth),
 		ListChallenges:                       NewListChallengesEndpoint(s, a.APIKeyAuth),
 		ListChallengeBuckets:                 NewListChallengeBucketsEndpoint(s, a.APIKeyAuth),
@@ -81,6 +83,7 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.ListShadowMCPInventoryUsers = m(e.ListShadowMCPInventoryUsers)
 	e.ListShadowMCPInventoryServersForUser = m(e.ListShadowMCPInventoryServersForUser)
 	e.ResolveShadowMCPInventoryRequest = m(e.ResolveShadowMCPInventoryRequest)
+	e.ListAIDetections = m(e.ListAIDetections)
 	e.RequestAccess = m(e.RequestAccess)
 	e.ListChallenges = m(e.ListChallenges)
 	e.ListChallengeBuckets = m(e.ListChallengeBuckets)
@@ -539,6 +542,29 @@ func NewResolveShadowMCPInventoryRequestEndpoint(s Service, authAPIKeyFn securit
 			return nil, err
 		}
 		return s.ResolveShadowMCPInventoryRequest(ctx, p)
+	}
+}
+
+// NewListAIDetectionsEndpoint returns an endpoint function that calls the
+// method "listAIDetections" of service "access".
+func NewListAIDetectionsEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*ListAIDetectionsPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.ListAIDetections(ctx, p)
 	}
 }
 

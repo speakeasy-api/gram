@@ -523,10 +523,8 @@ func Attach(mux goahttp.Muxer, service *Service, metadataService *mcpmetadata.Se
 	o11y.AttachHandler(mux, "GET", PublicServerRoute+"/install", oops.ErrHandle(service.logger, metadataService.ServeInstallPage).ServeHTTP)
 	o11y.AttachHandler(mux, "GET", "/mcp/install-page-{hash}.js", oops.ErrHandle(service.logger, metadataService.ServeInstallPageScript).ServeHTTP)
 
-	// OAuth metadata at the canonical RFC paths. The handlers in
-	// authnchallenge.go dispatch internally on toolsets.user_session_issuer_id:
-	// issuer-gated toolsets get the new metadata shape; legacy toolsets fall
-	// through to wellknown.Resolve* (preserving the prior behaviour).
+	// OAuth metadata at the canonical RFC paths; resolution semantics are
+	// documented in authnchallenge_well_known.go.
 	o11y.AttachHandler(mux, "GET", wellknown.OAuthProtectedResourcePath+PublicServerRoute, oops.ErrHandle(service.logger, service.HandleGetProtectedResource).ServeHTTP)
 	o11y.AttachHandler(mux, "GET", wellknown.OAuthAuthorizationServerPath+PublicServerRoute, oops.ErrHandle(service.logger, service.HandleGetAuthorizationServer).ServeHTTP)
 	o11y.AttachHandler(mux, "POST", PublicServerRoute+"/register", oops.ErrHandle(service.logger, service.HandleRegister).ServeHTTP)
