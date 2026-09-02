@@ -60,6 +60,7 @@ import (
 	bgtriggers "github.com/speakeasy-api/gram/server/internal/background/triggers"
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/cache"
+	"github.com/speakeasy-api/gram/server/internal/clickhouseclient"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/email"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
@@ -161,6 +162,11 @@ func newGuardianPolicy(c *cli.Context, logger *slog.Logger, tracerProvider trace
 	return policy, nil
 }
 
+const (
+	clickhouseSocketReadTimeout    = 70 * time.Second
+	clickhouseReadOperationTimeout = 75 * time.Second
+)
+
 func newClickhouseClient(ctx context.Context, logger *slog.Logger, c *cli.Context) (clickhouse.Conn, func(context.Context) error, error) {
 	logger = logger.With(attr.SlogComponent("clickhouse"))
 	nilFunc := noopShutdown
@@ -203,6 +209,7 @@ func newClickhouseClient(ctx context.Context, logger *slog.Logger, c *cli.Contex
 		MaxOpenConns: 32,
 		MaxIdleConns: 16,
 		DialTimeout:  10 * time.Second,
+		ReadTimeout:  clickhouseSocketReadTimeout,
 		TLS: &tls.Config{
 			// #nosec G402 -- we're reading the value from an environment variable.
 			InsecureSkipVerify: insecure,
@@ -260,7 +267,14 @@ func newClickhouseClient(ctx context.Context, logger *slog.Logger, c *cli.Contex
 	// forwards the caller's span context to ClickHouse by default, so
 	// server-side spans (system.opentelemetry_span_log) can be joined against
 	// APM traces by trace id; no per-call-site wiring exists or is needed.
-	return o11y.TraceClickhouseConn(conn), shutdown, nil
+	resilientConn := clickhouseclient.WithReadResilience(
+		conn,
+		func() (clickhouse.Conn, error) {
+			return clickhouse.Open(opts)
+		},
+		clickhouseReadOperationTimeout,
+	)
+	return o11y.TraceClickhouseConn(resilientConn), shutdown, nil
 }
 
 type dbClientOptions struct {
