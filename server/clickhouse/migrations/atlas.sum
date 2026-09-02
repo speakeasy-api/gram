@@ -1,4 +1,4 @@
-h1:CC0gpfYBm4yHaRSm/9fNJKtFQJA9BqR+K4Lj32k34oU=
+h1:uxfP6/iL0fT3LU/W4Ozs6f/ye8pipkW2S5V0Z9DILzg=
 20251013090028_initial.sql h1:I90GAjfJN/3i4nLe4AThT5OW/Qgc0+5LOI2jZ6WQZME=
 20251028141444_add_indexes.sql h1:CDwn2EdBZ7Nrn9hx5vYguR1ljlP5hTxiOI6n/I25Cpk=
 20251029120230_add_other_indexes.sql h1:3EtD+3hW8+s5me23va+BdfiIKmfQKOdv4glrQ34fle4=
@@ -101,3 +101,4 @@ h1:CC0gpfYBm4yHaRSm/9fNJKtFQJA9BqR+K4Lj32k34oU=
 20260830194025_create-billing-meter-readings-with-produced-version.sql h1:8zElCaRtJdH7pqsg9gKO469BADjfzEWyebYiNrRQFzA=
 20260831143534_shadow-ai-detections.sql h1:tM9NOsGhFltm02XO0vYZiko2F6z7q5rERNq7jaKC4CY=
 20260902165930_meta-mcp-attribution.sql h1:DqvRFSad+IKXmH+pZzFTzzsD4gKIGl+4cnXb2buvTEA=
+20260902193935_openclaw-usage-rows.sql h1:EqmJwX/4Tf1aQVEvIT2viHC3vWV0/iKonGRY8RXP2qc=
