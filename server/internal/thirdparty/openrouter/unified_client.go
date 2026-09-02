@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/tiktoken-go/tokenizer"
 	"go.opentelemetry.io/otel/trace"
 
 	or_base "github.com/OpenRouterTeam/go-sdk"
@@ -37,6 +38,10 @@ type TelemetryLogger interface {
 
 const (
 	DefaultChatModel = "anthropic/claude-opus-5"
+
+	openAITextEmbedding3Small     = "openai/text-embedding-3-small"
+	maxOpenAIEmbeddingInputTokens = 8_000
+	legacyMaxEmbeddingInputBytes  = 24_000
 )
 
 // ChatClient is the single HTTP client for all OpenRouter communication.
@@ -863,6 +868,139 @@ func completionTelemetryIdentity(source string) (resourceURN, normalizedSource s
 	}
 }
 
+func limitEmbeddingInputs(model string, inputs []string) ([]string, int, error) {
+	if model == openAITextEmbedding3Small {
+		return limitOpenAIEmbeddingInputs(inputs)
+	}
+
+	var limited []string
+	truncatedCount := 0
+	for i, input := range inputs {
+		if len(input) <= legacyMaxEmbeddingInputBytes {
+			continue
+		}
+		if limited == nil {
+			limited = slices.Clone(inputs)
+		}
+		limited[i] = input[:legacyMaxEmbeddingInputBytes]
+		truncatedCount++
+	}
+	if limited == nil {
+		return inputs, 0, nil
+	}
+	return limited, truncatedCount, nil
+}
+
+// SelectEmbeddingInputFallbacks selects the first representation for each
+// input that fits the model's per-input token limit. Selection is currently
+// supported only for openai/text-embedding-3-small; other models are returned
+// unchanged because their tokenizer and token limit are not declared here. If
+// every representation is oversized, the final fallback is returned for the
+// client to truncate.
+func SelectEmbeddingInputFallbacks(model string, inputs []string, inputFallbacks [][]string) ([]string, error) {
+	if model != openAITextEmbedding3Small || len(inputFallbacks) == 0 {
+		return inputs, nil
+	}
+
+	var (
+		codec    tokenizer.Codec
+		selected []string
+	)
+	for i, input := range inputs {
+		candidate := input
+		_, exceedsLimit, err := embeddingInputTokensOverLimit(&codec, candidate, i)
+		if err != nil {
+			return nil, err
+		}
+		if !exceedsLimit {
+			continue
+		}
+
+		if i < len(inputFallbacks) {
+			for _, fallback := range inputFallbacks[i] {
+				if fallback == "" || fallback == candidate {
+					continue
+				}
+				candidate = fallback
+				_, exceedsLimit, err = embeddingInputTokensOverLimit(&codec, candidate, i)
+				if err != nil {
+					return nil, err
+				}
+				if !exceedsLimit {
+					break
+				}
+			}
+		}
+
+		if candidate == input {
+			continue
+		}
+		if selected == nil {
+			selected = slices.Clone(inputs)
+		}
+		selected[i] = candidate
+	}
+
+	if selected == nil {
+		return inputs, nil
+	}
+	return selected, nil
+}
+
+func limitOpenAIEmbeddingInputs(inputs []string) ([]string, int, error) {
+	var (
+		codec          tokenizer.Codec
+		limited        []string
+		truncatedCount int
+	)
+
+	for i, input := range inputs {
+		tokenIDs, exceedsLimit, err := embeddingInputTokensOverLimit(&codec, input, i)
+		if err != nil {
+			return nil, 0, err
+		}
+		if !exceedsLimit {
+			continue
+		}
+
+		truncated, err := codec.Decode(tokenIDs[:maxOpenAIEmbeddingInputTokens])
+		if err != nil {
+			return nil, 0, fmt.Errorf("decode truncated embedding input %d: %w", i, err)
+		}
+		if limited == nil {
+			limited = slices.Clone(inputs)
+		}
+		limited[i] = truncated
+		truncatedCount++
+	}
+
+	if limited == nil {
+		return inputs, 0, nil
+	}
+	return limited, truncatedCount, nil
+}
+
+func embeddingInputTokensOverLimit(codec *tokenizer.Codec, input string, index int) ([]uint, bool, error) {
+	// A tokenizer cannot emit more tokens than there are input bytes.
+	if len(input) <= maxOpenAIEmbeddingInputTokens {
+		return nil, false, nil
+	}
+
+	if *codec == nil {
+		loaded, err := tokenizer.Get(tokenizer.Cl100kBase)
+		if err != nil {
+			return nil, false, fmt.Errorf("load OpenAI embedding tokenizer: %w", err)
+		}
+		*codec = loaded
+	}
+
+	tokenIDs, _, err := (*codec).Encode(input)
+	if err != nil {
+		return nil, false, fmt.Errorf("tokenize embedding input %d: %w", index, err)
+	}
+	return tokenIDs, len(tokenIDs) > maxOpenAIEmbeddingInputTokens, nil
+}
+
 func (c *ChatClient) CreateEmbeddings(ctx context.Context, orgID string, model string, inputs []string, opts ...EmbeddingOption) ([][]float32, error) {
 	var resolved EmbeddingOptions
 	for _, opt := range opts {
@@ -886,19 +1024,19 @@ func (c *ChatClient) createEmbeddings(ctx context.Context, orgID string, model s
 		return nil, fmt.Errorf("at least one input is required")
 	}
 
-	// Truncate inputs that exceed token limits
-	// Embedding models have 8192 token limit, using ~3 chars/token as conservative estimate
-	const maxChars = 24_000
-	truncatedInputs := make([]string, len(inputs))
-	for i, input := range inputs {
-		if len(input) > maxChars {
-			c.logger.WarnContext(ctx, fmt.Sprintf("truncating input for embedding, orgID: %s, model: %s, input length: %d", orgID, model, len(input)))
-			truncatedInputs[i] = input[:maxChars]
-		} else {
-			truncatedInputs[i] = input
-		}
+	inputs, truncatedCount, err := limitEmbeddingInputs(model, inputs)
+	if err != nil {
+		return nil, err
 	}
-	inputs = truncatedInputs
+	if truncatedCount > 0 {
+		c.logger.WarnContext(
+			ctx,
+			"truncated oversized embedding inputs",
+			attr.SlogGenAIRequestModel(model),
+			attr.SlogEmbeddingInputCount(len(inputs)),
+			attr.SlogEmbeddingTruncatedInputCount(truncatedCount),
+		)
+	}
 
 	orClient := or_base.New(or_base.WithSecurity(openrouterKey))
 	result, err := orClient.Embeddings.Generate(ctx, or_operations.CreateEmbeddingsRequest{
@@ -911,7 +1049,7 @@ func (c *ChatClient) createEmbeddings(ctx context.Context, orgID string, model s
 		InputType:      nil,
 	})
 	if err != nil {
-		return nil, fmt.Errorf("create embeddings error: %w", err)
+		return nil, fmt.Errorf("create embeddings error: %w", classifySDKError(ctx, err))
 	}
 
 	// The new SDK returns errors via err, not via HTTPMeta
