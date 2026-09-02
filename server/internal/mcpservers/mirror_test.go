@@ -18,6 +18,7 @@ import (
 	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	oauthrepo "github.com/speakeasy-api/gram/server/internal/oauth/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 )
 
@@ -202,12 +203,14 @@ func TestDeleteMcpServer_ToolsetBacked_ClearsToolsetHosting(t *testing.T) {
 	require.False(t, after.McpIsPublic)
 	require.False(t, after.CustomDomainID.Valid)
 
-	endpoints, err := mcpendpointsrepo.New(ti.conn).ListMCPEndpointsByMCPServerID(ctx, mcpendpointsrepo.ListMCPEndpointsByMCPServerIDParams{
-		ProjectID:   *authCtx.ProjectID,
-		McpServerID: serverID,
-	})
+	// Tombstoned, not hard-deleted: the rows survive with deleted set.
+	wrapperDeleted, err := testrepo.New(ti.conn).GetMCPServerDeletedFixture(ctx, testrepo.GetMCPServerDeletedFixtureParams{ID: serverID, ProjectID: *authCtx.ProjectID})
 	require.NoError(t, err)
-	require.Empty(t, endpoints)
+	require.True(t, wrapperDeleted)
+	endpointCounts, err := testrepo.New(ti.conn).CountMCPEndpointsByDeletedFixture(ctx, testrepo.CountMCPEndpointsByDeletedFixtureParams{McpServerID: uuid.NullUUID{UUID: serverID, Valid: true}, ProjectID: *authCtx.ProjectID})
+	require.NoError(t, err)
+	require.Equal(t, int32(0), endpointCounts.Live)
+	require.Equal(t, int32(1), endpointCounts.Tombstoned)
 
 	endpointDeletesAfter, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionMcpEndpointDelete)
 	require.NoError(t, err)

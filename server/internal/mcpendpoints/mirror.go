@@ -11,6 +11,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	customdomainsrepo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
 	"github.com/speakeasy-api/gram/server/internal/hostedmcp"
 	"github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
@@ -70,8 +71,29 @@ func (s *Service) syncBackingToolsetAddress(ctx context.Context, tx pgx.Tx, auth
 	slug := pgtype.Text{String: "", Valid: false}
 	customDomainID := uuid.NullUUID{UUID: uuid.Nil, Valid: false}
 	if primary := PrimaryEndpoint(endpoints); primary != nil {
-		slug = pgtype.Text{String: primary.Slug, Valid: true}
-		customDomainID = primary.CustomDomainID
+		// The primary's domain is locked (org-scoped) so a concurrent domain
+		// delete cannot leave the toolset pointing at a tombstoned domain, and
+		// the address is claimed the way every other toolset slug writer does.
+		if primary.CustomDomainID.Valid {
+			if _, err := customdomainsrepo.New(tx).LockCustomDomainByIDAndOrganization(ctx, customdomainsrepo.LockCustomDomainByIDAndOrganizationParams{ID: primary.CustomDomainID.UUID, OrganizationID: authCtx.ActiveOrganizationID}); err != nil {
+				if errors.Is(err, pgx.ErrNoRows) {
+					primary = nil
+				} else {
+					return fmt.Errorf("lock custom domain: %w", err)
+				}
+			}
+		}
+		if primary != nil {
+			err := hostedmcp.ClaimAddress(ctx, tx, authCtx.ActiveOrganizationID, toolsetID, serverID, primary.CustomDomainID, primary.Slug)
+			switch {
+			case errors.Is(err, hostedmcp.ErrAddressTaken):
+				return oops.E(oops.CodeConflict, err, "this slug is already taken").LogWarn(ctx, s.logger)
+			case err != nil:
+				return fmt.Errorf("claim mcp address for toolset: %w", err)
+			}
+			slug = pgtype.Text{String: primary.Slug, Valid: true}
+			customDomainID = primary.CustomDomainID
+		}
 	}
 	if err := s.toolsetMirror(authCtx).SetToolsetAddress(ctx, tx, *authCtx.ProjectID, toolsetID, slug, customDomainID); err != nil && !errors.Is(err, pgx.ErrNoRows) {
 		return fmt.Errorf("mirror endpoint address onto toolset: %w", err)

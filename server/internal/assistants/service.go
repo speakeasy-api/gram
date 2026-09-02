@@ -1101,7 +1101,16 @@ func writeAssistantToolsets(
 	if _, err := queries.AddAssistantToolsets(ctx, rows); err != nil {
 		return fmt.Errorf("insert assistant toolsets: %w", err)
 	}
-	// The runtime reaches attached toolsets through their MCP server, so attach enables it.
+	// The runtime reaches attached toolsets through their MCP server, so attach
+	// enables it. All toolset locks are taken in id order before any wrapper
+	// write so this cannot deadlock with another mirror operation.
+	lockIDs := make([]uuid.NullUUID, 0, len(toolsetIDs))
+	for _, id := range toolsetIDs {
+		lockIDs = append(lockIDs, uuid.NullUUID{UUID: id, Valid: true})
+	}
+	if err := hostedmcp.LockToolsets(ctx, tx, projectID, lockIDs...); err != nil {
+		return fmt.Errorf("lock assistant toolsets: %w", err)
+	}
 	for _, toolsetID := range toolsetIDs {
 		if err := mirror.EnableToolsetMCP(ctx, tx, projectID, toolsetID); err != nil {
 			return fmt.Errorf("enable mcp for assistant toolset: %w", err)

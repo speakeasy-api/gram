@@ -501,7 +501,7 @@ func (s *Service) UpdateToolset(ctx context.Context, payload *gen.UpdateToolsetP
 		}
 
 		// Domain rows lock before the slug scope, the order the endpoint writers use.
-		if _, err := s.lockLiveCustomDomains(ctx, dbtx, []uuid.NullUUID{domainID}); err != nil {
+		if _, err := s.lockLiveCustomDomains(ctx, dbtx, authCtx.ActiveOrganizationID, []uuid.NullUUID{domainID}); err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "lock custom domain").LogError(ctx, logger)
 		}
 		if err := mcpendpoints.LockSlugScope(ctx, dbtx, domainID, slug); err != nil {

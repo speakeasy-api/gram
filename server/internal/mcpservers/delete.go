@@ -83,22 +83,22 @@ func TombstoneMCPServerInTransaction(ctx context.Context, tx pgx.Tx, auditLogger
 	}
 	actor := urn.NewPrincipal(urn.PrincipalTypeUser, input.ActorUserID)
 
+	// Children first: the endpoint FK only cascades on hard deletes, and
+	// nothing may resolve to a deleted server after commit.
+	deletedEndpoints, err := mcpendpointsrepo.New(tx).SoftDeleteMCPEndpointsByMCPServerID(ctx, mcpendpointsrepo.SoftDeleteMCPEndpointsByMCPServerIDParams{
+		McpServerID: locked.Server.ID,
+		ProjectID:   input.ProjectID,
+	})
+	if err != nil {
+		return repo.McpServer{}, fmt.Errorf("delete child mcp endpoints: %w", err)
+	}
+
 	deleted, err := repo.New(tx).DeleteMCPServer(ctx, repo.DeleteMCPServerParams{
 		ID:        locked.Server.ID,
 		ProjectID: input.ProjectID,
 	})
 	if err != nil {
 		return repo.McpServer{}, fmt.Errorf("delete mcp server: %w", err)
-	}
-
-	// The endpoint FK only cascades on hard deletes; tombstone explicitly so
-	// nothing resolves to a deleted server after commit.
-	deletedEndpoints, err := mcpendpointsrepo.New(tx).SoftDeleteMCPEndpointsByMCPServerID(ctx, mcpendpointsrepo.SoftDeleteMCPEndpointsByMCPServerIDParams{
-		McpServerID: deleted.ID,
-		ProjectID:   input.ProjectID,
-	})
-	if err != nil {
-		return repo.McpServer{}, fmt.Errorf("delete child mcp endpoints: %w", err)
 	}
 	if err := LogMCPServerRootAutoClears(ctx, tx, auditLogger, input.OrganizationID, actor, input.ActorEmail, locked.RootEndpoints); err != nil {
 		return repo.McpServer{}, fmt.Errorf("log automatic root endpoint cleanup: %w", err)

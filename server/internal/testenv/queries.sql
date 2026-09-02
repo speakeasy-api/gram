@@ -855,3 +855,17 @@ INSERT INTO user_session_issuers (
 )
 VALUES (NULL, @organization_id, @slug, @authn_challenge_mode, @session_duration)
 RETURNING id;
+
+-- name: GetMCPServerDeletedFixture :one
+-- Reads the tombstone flag regardless of deleted, which the service queries
+-- filter out.
+SELECT deleted
+FROM mcp_servers
+WHERE id = @id AND project_id = @project_id;
+
+-- name: CountMCPEndpointsByDeletedFixture :one
+SELECT
+    count(*) FILTER (WHERE deleted IS FALSE)::int AS live,
+    count(*) FILTER (WHERE deleted)::int AS tombstoned
+FROM mcp_endpoints
+WHERE mcp_server_id = @mcp_server_id AND project_id = @project_id;

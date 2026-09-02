@@ -14,6 +14,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/visibility"
 	"github.com/speakeasy-api/gram/server/internal/mv"
@@ -24,6 +25,34 @@ import (
 
 // MaxToolsetSlugLength is the toolsets.mcp_slug CHECK bound.
 const MaxToolsetSlugLength = 60
+
+// ErrAddressTaken reports a (custom_domain_id, slug) held by another server or toolset.
+var ErrAddressTaken = errors.New("mcp address already taken")
+
+// ClaimAddress takes the slug-scope advisory lock and runs the unified
+// availability check for one address a toolset and its wrapper are about to
+// hold, so every mirror write claims addresses the way API writers do.
+func ClaimAddress(ctx context.Context, db mcpendpointsrepo.DBTX, organizationID string, toolsetID, serverID uuid.UUID, customDomainID uuid.NullUUID, slug string) error {
+	q := mcpendpointsrepo.New(db)
+	if err := q.LockSlugScope(ctx, mcpendpointsrepo.LockSlugScopeParams{CustomDomainID: customDomainID, Slug: slug}); err != nil {
+		return fmt.Errorf("lock mcp slug scope: %w", err)
+	}
+	available, err := q.CheckUnifiedSlugAvailability(ctx, mcpendpointsrepo.CheckUnifiedSlugAvailabilityParams{
+		SkipDomainCheck:    false,
+		CustomDomainID:     customDomainID,
+		OrganizationID:     organizationID,
+		Slug:               slug,
+		ExcludeToolsetID:   uuid.NullUUID{UUID: toolsetID, Valid: true},
+		ExcludeMcpServerID: uuid.NullUUID{UUID: serverID, Valid: true},
+	})
+	if err != nil {
+		return fmt.Errorf("check unified mcp slug availability: %w", err)
+	}
+	if !available.Valid || !available.Bool {
+		return ErrAddressTaken
+	}
+	return nil
+}
 
 // VisibilityForToolset maps the toolset flag pair onto mcp_servers.visibility.
 func VisibilityForToolset(mcpEnabled, mcpIsPublic bool) string {
@@ -101,8 +130,13 @@ func (m Mirror) SyncToolsetFromWrapper(ctx context.Context, tx pgx.Tx, server mc
 }
 
 // SetToolsetAddress writes the wrapper's primary endpoint address onto the
-// toolset; a null slug means the wrapper has no addressable endpoint.
+// toolset; a null slug, or one the toolsets.mcp_slug CHECK cannot hold, means
+// the wrapper has no address the toolset can carry.
 func (m Mirror) SetToolsetAddress(ctx context.Context, tx pgx.Tx, projectID, toolsetID uuid.UUID, slug pgtype.Text, customDomainID uuid.NullUUID) error {
+	if slug.Valid && len(slug.String) > MaxToolsetSlugLength {
+		slug = pgtype.Text{String: "", Valid: false}
+		customDomainID = uuid.NullUUID{UUID: uuid.Nil, Valid: false}
+	}
 	after, err := toolsetsrepo.New(tx).SetToolsetHostedAddress(ctx, toolsetsrepo.SetToolsetHostedAddressParams{
 		McpSlug:        slug,
 		CustomDomainID: customDomainID,
@@ -133,8 +167,10 @@ func (m Mirror) ClearToolsetHosting(ctx context.Context, tx pgx.Tx, projectID, t
 	return m.logToolsetUpdate(ctx, tx, after)
 }
 
-// EnableToolsetMCP enables MCP on an addressable toolset and lifts its wrapper
-// out of disabled, the way attaching the toolset to an assistant needs.
+// EnableToolsetMCP enables MCP on an addressable toolset and brings its wrapper
+// in line (visibility, issuer, variations group), the way attaching the toolset
+// to an assistant needs. The wrapper is reconciled even when the toolset flag
+// was already set, so a stale disabled wrapper never leaves the endpoint dark.
 func (m Mirror) EnableToolsetMCP(ctx context.Context, tx pgx.Tx, projectID, toolsetID uuid.UUID) error {
 	q := toolsetsrepo.New(tx)
 	toolset, err := q.LockToolsetByID(ctx, toolsetsrepo.LockToolsetByIDParams{ID: toolsetID, ProjectID: projectID})
@@ -143,22 +179,24 @@ func (m Mirror) EnableToolsetMCP(ctx context.Context, tx pgx.Tx, projectID, tool
 		return nil
 	case err != nil:
 		return fmt.Errorf("lock toolset: %w", err)
-	case toolset.McpEnabled || !toolset.McpSlug.Valid:
+	case !toolset.McpSlug.Valid:
 		return nil
 	}
-	enabled, err := q.SyncToolsetHostingFromWrapper(ctx, toolsetsrepo.SyncToolsetHostingFromWrapperParams{
-		McpEnabled:            true,
-		McpIsPublic:           toolset.McpIsPublic,
-		UserSessionIssuerID:   toolset.UserSessionIssuerID,
-		ToolVariationsGroupID: toolset.ToolVariationsGroupID,
-		ID:                    toolset.ID,
-		ProjectID:             projectID,
-	})
-	if err != nil {
-		return fmt.Errorf("enable toolset mcp: %w", err)
-	}
-	if err := m.logToolsetUpdate(ctx, tx, enabled); err != nil {
-		return err
+	if !toolset.McpEnabled {
+		toolset, err = q.SyncToolsetHostingFromWrapper(ctx, toolsetsrepo.SyncToolsetHostingFromWrapperParams{
+			McpEnabled:            true,
+			McpIsPublic:           toolset.McpIsPublic,
+			UserSessionIssuerID:   toolset.UserSessionIssuerID,
+			ToolVariationsGroupID: toolset.ToolVariationsGroupID,
+			ID:                    toolset.ID,
+			ProjectID:             projectID,
+		})
+		if err != nil {
+			return fmt.Errorf("enable toolset mcp: %w", err)
+		}
+		if err := m.logToolsetUpdate(ctx, tx, toolset); err != nil {
+			return err
+		}
 	}
 
 	servers := mcpserversrepo.New(tx)
@@ -168,7 +206,9 @@ func (m Mirror) EnableToolsetMCP(ctx context.Context, tx pgx.Tx, projectID, tool
 		return nil
 	case err != nil:
 		return fmt.Errorf("get mcp server for toolset: %w", err)
-	case wrapper.Visibility != visibility.Disabled:
+	}
+	wantVisibility := VisibilityForToolset(true, toolset.McpIsPublic)
+	if wrapper.Visibility == wantVisibility && wrapper.UserSessionIssuerID == toolset.UserSessionIssuerID && wrapper.ToolVariationsGroupID == toolset.ToolVariationsGroupID {
 		return nil
 	}
 	locked, err := servers.LockMCPServerByIDAndProjectID(ctx, mcpserversrepo.LockMCPServerByIDAndProjectIDParams{ID: wrapper.ID, ProjectID: projectID})
@@ -184,16 +224,26 @@ func (m Mirror) EnableToolsetMCP(ctx context.Context, tx pgx.Tx, projectID, tool
 		TunneledMcpServerID:   locked.TunneledMcpServerID,
 		ToolsetID:             locked.ToolsetID,
 		UnproxiedMcpServerID:  locked.UnproxiedMcpServerID,
-		ToolVariationsGroupID: locked.ToolVariationsGroupID,
-		Visibility:            VisibilityForToolset(true, enabled.McpIsPublic),
+		ToolVariationsGroupID: toolset.ToolVariationsGroupID,
+		Visibility:            wantVisibility,
 		ID:                    locked.ID,
 		ProjectID:             projectID,
 	})
 	if err != nil {
 		return fmt.Errorf("enable mcp server for toolset: %w", err)
 	}
+	if updated.UserSessionIssuerID != toolset.UserSessionIssuerID {
+		updated, err = servers.SetMCPServerUserSessionIssuer(ctx, mcpserversrepo.SetMCPServerUserSessionIssuerParams{
+			UserSessionIssuerID: toolset.UserSessionIssuerID,
+			ID:                  updated.ID,
+			ProjectID:           projectID,
+		})
+		if err != nil {
+			return fmt.Errorf("set mcp server issuer for toolset: %w", err)
+		}
+	}
 	if err := m.Audit.LogMcpServerUpdate(ctx, tx, audit.LogMcpServerUpdateEvent{
-		OrganizationID:          enabled.OrganizationID,
+		OrganizationID:          toolset.OrganizationID,
 		ProjectID:               projectID,
 		Actor:                   m.actor(),
 		ActorDisplayName:        m.ActorEmail,

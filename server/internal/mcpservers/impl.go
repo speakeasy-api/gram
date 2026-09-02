@@ -939,6 +939,15 @@ func (s *Service) DeleteMcpServer(ctx context.Context, payload *gen.DeleteMcpSer
 		return oops.E(oops.CodeUnexpected, err, "delete mcp server").LogError(ctx, logger)
 	}
 
+	// The toolset outlives its wrapper as a build artifact; only its hosting
+	// goes, and it goes before the issuer cascade so a toolset that shared the
+	// wrapper's issuer no longer counts as an owner.
+	if deleted.ToolsetID.Valid {
+		if err := s.toolsetMirror(authCtx).ClearToolsetHosting(ctx, dbtx, *authCtx.ProjectID, deleted.ToolsetID.UUID); err != nil && !errors.Is(err, pgx.ErrNoRows) {
+			return oops.E(oops.CodeUnexpected, err, "clear toolset hosting").LogError(ctx, logger)
+		}
+	}
+
 	// Remote- and tunneled-backed servers own the issuer minted with them.
 	// An issuer may also be referenced by another server or toolset, so only
 	// cascade once this deletion leaves it without an active owner.
@@ -1005,13 +1014,6 @@ func (s *Service) DeleteMcpServer(ctx context.Context, payload *gen.DeleteMcpSer
 					return oops.E(oops.CodeUnexpected, err, "log mcp server issuer deletion").LogError(ctx, logger)
 				}
 			}
-		}
-	}
-
-	// The toolset outlives its wrapper as a build artifact; only its hosting goes.
-	if deleted.ToolsetID.Valid {
-		if err := s.toolsetMirror(authCtx).ClearToolsetHosting(ctx, dbtx, *authCtx.ProjectID, deleted.ToolsetID.UUID); err != nil && !errors.Is(err, pgx.ErrNoRows) {
-			return oops.E(oops.CodeUnexpected, err, "clear toolset hosting").LogError(ctx, logger)
 		}
 	}
 
