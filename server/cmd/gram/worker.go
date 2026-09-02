@@ -686,7 +686,11 @@ func newWorkerCommand() *cli.Command {
 			)
 			telemetryLogger.AddObserver(spendUsageTrigger)
 
-			completionsClient := openrouter.NewUnifiedClient(
+			aiAccess, err := newAIAccessEnforcement(db, meterProvider, logger)
+			if err != nil {
+				return err
+			}
+			completionsClient, err := openrouter.NewUnifiedClient(
 				logger,
 				guardianPolicy,
 				openRouter,
@@ -695,12 +699,11 @@ func newWorkerCommand() *cli.Command {
 				chat.NewDefaultUsageTrackingStrategy(db, logger, billingTracker),
 				&background.TemporalChatTitleGenerator{TemporalEnv: temporalEnv},
 				telemetryLogger,
+				aiAccess.hostedInference,
 			)
-			aiAccess, err := newAIAccessEnforcement(db, meterProvider, logger)
 			if err != nil {
 				return err
 			}
-			completionsClient = completionsClient.WithHostedInferenceCheckpoint(aiAccess.hostedInference)
 
 			ragService := rag.NewToolsetVectorStore(logger, tracerProvider, db, completionsClient)
 			mcpRegistryClient, err := newMCPRegistryClient(logger, tracerProvider, guardianPolicy, mcpRegistryClientOptions{

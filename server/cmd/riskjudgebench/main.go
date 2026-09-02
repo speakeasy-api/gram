@@ -2,7 +2,7 @@
 // ("LLM-judge") risk policy evaluation in the promptpolicy OpenRouter evaluator.
 //
 // Unlike a hand-rolled HTTP client, this drives the REAL production
-// openrouter.ChatClient (NewUnifiedClient to GetObjectCompletion), so every
+// openrouter.ChatClient (NewUncheckedUnifiedClient to GetObjectCompletion), so every
 // model runs under prod-equivalent conditions:
 //   - reasoning disabled (Effort:"none"), as the object-completion path forces,
 //   - the production model allowlist + ResolveModel fallback,
@@ -144,7 +144,7 @@ func main() {
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	policy := guardian.NewDefaultPolicy(tracenoop.NewTracerProvider())
 	prov := &devProvisioner{apiKey: apiKey} // returns the dev key for any org
-	client := openrouter.NewUnifiedClient(
+	client := openrouter.NewUncheckedUnifiedClient(
 		logger,
 		policy,
 		prov,

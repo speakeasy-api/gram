@@ -988,7 +988,7 @@ func newStartCommand() *cli.Command {
 				return err
 			}
 
-			completionsClient := openrouter.NewUnifiedClient(
+			completionsClient, err := openrouter.NewUnifiedClient(
 				logger,
 				guardianPolicy,
 				openRouter,
@@ -997,8 +997,11 @@ func newStartCommand() *cli.Command {
 				chat.NewDefaultUsageTrackingStrategy(db, logger, billingTracker),
 				&background.TemporalChatTitleGenerator{TemporalEnv: temporalEnv},
 				telemLogger,
+				aiAccess.hostedInference,
 			)
-			completionsClient = completionsClient.WithHostedInferenceCheckpoint(aiAccess.hostedInference)
+			if err != nil {
+				return err
+			}
 
 			memorySvc := memory.NewMemoryService(
 				logger,

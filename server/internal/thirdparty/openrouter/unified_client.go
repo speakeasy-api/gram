@@ -55,8 +55,32 @@ type ChatClient struct {
 	inferenceCheckpoint    hostedinference.AttemptCheckpoint
 }
 
-// NewUnifiedClient creates a new UnifiedClient with the given strategies.
+// NewUnifiedClient creates a client that cannot egress without the
+// production hosted-inference checkpoint.
 func NewUnifiedClient(
+	logger *slog.Logger,
+	guardianPolicy *guardian.Policy,
+	provisioner Provisioner,
+	keyResolver KeyResolver,
+	captureStrategy MessageCaptureStrategy,
+	trackingStrategy UsageTrackingStrategy,
+	chatTitleGenerator ChatTitleGenerator,
+	telemetryLogger TelemetryLogger,
+	checkpoint hostedinference.AttemptCheckpoint,
+) (*ChatClient, error) {
+	if checkpoint == nil {
+		return nil, hostedinference.ErrCheckpointUnavailable
+	}
+	return NewUncheckedUnifiedClient(
+		logger, guardianPolicy, provisioner, keyResolver, captureStrategy,
+		trackingStrategy, chatTitleGenerator, telemetryLogger,
+	).WithHostedInferenceCheckpoint(checkpoint), nil
+}
+
+// NewUncheckedUnifiedClient creates a client without hosted-inference
+// enforcement. It is restricted to tests and explicitly inventoried standalone
+// commands that do not serve production traffic.
+func NewUncheckedUnifiedClient(
 	logger *slog.Logger,
 	guardianPolicy *guardian.Policy,
 	provisioner Provisioner,
@@ -82,14 +106,11 @@ func NewUnifiedClient(
 		usageTrackingStrategy:  trackingStrategy,
 		chatTitleGenerator:     chatTitleGenerator,
 		telemetryLogger:        telemetryLogger,
-		inferenceCheckpoint:    nil,
 	}
 }
 
 // WithHostedInferenceCheckpoint returns a client copy with the production
-// pre-provider checkpoint installed. NewUnifiedClient deliberately leaves it
-// unset so tests, local tooling, and non-production composition retain their
-// existing behavior unless they opt in explicitly.
+// pre-provider checkpoint installed.
 func (c *ChatClient) WithHostedInferenceCheckpoint(checkpoint hostedinference.AttemptCheckpoint) *ChatClient {
 	if c == nil {
 		return nil

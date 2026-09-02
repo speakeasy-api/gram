@@ -55,6 +55,21 @@ func (r *countingKeyResolver) ResolveKey(context.Context, string, string, billin
 	return ResolvedKey{Key: "key"}, nil
 }
 
+func TestProductionUnifiedClientRequiresCheckpoint(t *testing.T) {
+	t.Parallel()
+	policy, err := guardian.NewUnsafePolicy(testenv.NewTracerProvider(t), nil)
+	require.NoError(t, err)
+
+	client, err := NewUnifiedClient(testenv.NewLogger(t), policy, nil, &countingKeyResolver{}, nil, nil, nil, nil, nil)
+	require.ErrorIs(t, err, hostedinference.ErrCheckpointUnavailable)
+	require.Nil(t, client)
+
+	checkpoint := &scriptedInferenceCheckpoint{}
+	client, err = NewUnifiedClient(testenv.NewLogger(t), policy, nil, &countingKeyResolver{}, nil, nil, nil, nil, checkpoint)
+	require.NoError(t, err)
+	require.Same(t, checkpoint, client.inferenceCheckpoint)
+}
+
 func TestUnifiedClientDoesNotFollowProviderRedirects(t *testing.T) {
 	t.Parallel()
 
@@ -75,7 +90,7 @@ func TestUnifiedClientDoesNotFollowProviderRedirects(t *testing.T) {
 
 			policy, err := guardian.NewUnsafePolicy(testenv.NewTracerProvider(t), nil)
 			require.NoError(t, err)
-			client := NewUnifiedClient(testenv.NewLogger(t), policy, nil, &countingKeyResolver{}, nil, nil, nil, nil)
+			client := NewUncheckedUnifiedClient(testenv.NewLogger(t), policy, nil, &countingKeyResolver{}, nil, nil, nil, nil)
 			resp, err := client.httpClient.Get(redirect.URL)
 			require.NoError(t, err)
 			require.Equal(t, status, resp.StatusCode)
@@ -180,7 +195,8 @@ func TestEmbeddingSDKRetryRechecksHostedInferenceBeforeHTTPAttempt(t *testing.T)
 	resolver := &countingKeyResolver{}
 	denial := &typedCheckpointDenialError{}
 	checkpoint := &scriptedInferenceCheckpoint{errors: []error{nil, nil, denial}}
-	client := NewUnifiedClient(testenv.NewLogger(t), policy, nil, resolver, nil, nil, nil, nil).WithHostedInferenceCheckpoint(checkpoint)
+	client, err := NewUnifiedClient(testenv.NewLogger(t), policy, nil, resolver, nil, nil, nil, nil, checkpoint)
+	require.NoError(t, err)
 	client.httpClient = &http.Client{Transport: &testTransport{server: server}}
 
 	_, err = client.CreateEmbeddings(t.Context(), "org", "openai/text-embedding-3-small", []string{"hello"})
@@ -207,7 +223,8 @@ func TestHostedInferenceReevaluatesBeforeRetryAttempt(t *testing.T) {
 	capture := &mockMessageCaptureStrategy{}
 	retryDenied := errors.New("activated before retry")
 	checkpoint := &scriptedInferenceCheckpoint{errors: []error{nil, nil, retryDenied}}
-	client := NewUnifiedClient(testenv.NewLogger(t), policy, nil, resolver, capture, nil, nil, nil).WithHostedInferenceCheckpoint(checkpoint)
+	client, err := NewUnifiedClient(testenv.NewLogger(t), policy, nil, resolver, capture, nil, nil, nil, checkpoint)
+	require.NoError(t, err)
 	client.httpClient = &http.Client{Transport: &testTransport{server: server}}
 
 	_, err = client.GetCompletion(t.Context(), CompletionRequest{

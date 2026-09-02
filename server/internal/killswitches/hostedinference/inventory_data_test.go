@@ -42,11 +42,74 @@ var productionCallSiteInventory = []CallSiteClaim{
 	{"skills/suggest/judge.go", "Generate", "GetObjectCompletion", CallCategorySkillJudge},
 }
 
-// standaloneCommandExclusions are report/benchmark binaries that deliberately
-// construct an uninjected client. They are not production Gram compositions.
-var standaloneCommandExclusions = []string{
-	"risk-pi-report",
-	"riskjudgebench",
-	"skillefficacybench",
-	"skillsuggestbench",
+// ConstructorKind identifies one supported ChatClient construction mode.
+type ConstructorKind string
+
+const (
+	ConstructorProduction ConstructorKind = "NewUnifiedClient"
+	ConstructorUnchecked  ConstructorKind = "NewUncheckedUnifiedClient"
+)
+
+// ConstructorClaim is an allowed repository construction site. The unchecked
+// constructor is restricted to the explicit standalone commands above.
+type ConstructorClaim struct {
+	Path string
+	Kind ConstructorKind
+}
+
+var repositoryConstructorInventory = []ConstructorClaim{
+	{"cmd/gram/start.go", ConstructorProduction},
+	{"cmd/gram/streams.go", ConstructorProduction},
+	{"cmd/gram/worker.go", ConstructorProduction},
+	{"cmd/risk-pi-report/main.go", ConstructorUnchecked},
+	{"cmd/riskjudgebench/main.go", ConstructorUnchecked},
+	{"cmd/skillefficacybench/main.go", ConstructorUnchecked},
+	{"cmd/skillsuggestbench/main.go", ConstructorUnchecked},
+}
+
+type ClientConstructionClaim struct {
+	Path             string
+	Function         string
+	Allocations      int
+	CheckpointWrites int
+}
+
+var clientConstructionInventory = []ClientConstructionClaim{
+	{"internal/thirdparty/openrouter/unified_client.go", "NewUnifiedClient", 0, 0},
+	{"internal/thirdparty/openrouter/unified_client.go", "NewUncheckedUnifiedClient", 1, 0},
+	{"internal/thirdparty/openrouter/unified_client.go", "WithHostedInferenceCheckpoint", 1, 1},
+}
+
+const (
+	ProviderOperationHTTPDo        = "HTTPClient.Do"
+	ProviderOperationHTTPRoundTrip = "HTTP.RoundTrip"
+	ProviderOperationHTTPPackage   = "HTTP.PackageFunction"
+	ProviderOperationOpenRouterSDK = "OpenRouterSDK.Operation"
+)
+
+// ProviderOperationClaim identifies one typed network operation implemented
+// by the OpenRouter provider package. Calls in other packages are forbidden.
+type ProviderOperationClaim struct {
+	Path      string
+	Function  string
+	Operation string
+}
+
+// governedProviderOperationInventory contains model inference attempts that are
+// covered by the hosted-inference checkpoint.
+var governedProviderOperationInventory = []ProviderOperationClaim{
+	{"internal/thirdparty/openrouter/unified_client.go", "Do", ProviderOperationHTTPDo},
+	{"internal/thirdparty/openrouter/unified_client.go", "createEmbeddings", ProviderOperationOpenRouterSDK},
+	{"internal/thirdparty/openrouter/unified_client.go", "makeHTTPRequest", ProviderOperationHTTPDo},
+}
+
+// excludedProviderOperationInventory contains reviewed metadata, control-plane,
+// and background-accounting operations that do not perform hosted inference.
+var excludedProviderOperationInventory = []ProviderOperationClaim{
+	{"internal/thirdparty/openrouter/context_window.go", "fetchMin", ProviderOperationHTTPDo},
+	{"internal/thirdparty/openrouter/openrouter.go", "GetKeyUsage", ProviderOperationHTTPDo},
+	{"internal/thirdparty/openrouter/openrouter.go", "createOpenRouterAPIKey", ProviderOperationHTTPDo},
+	{"internal/thirdparty/openrouter/openrouter.go", "getGenerationDetails", ProviderOperationHTTPDo},
+	{"internal/thirdparty/openrouter/openrouter.go", "patchOpenRouterAPIKey", ProviderOperationHTTPDo},
+	{"internal/thirdparty/openrouter/spend.go", "doSpendRequest", ProviderOperationHTTPDo},
 }

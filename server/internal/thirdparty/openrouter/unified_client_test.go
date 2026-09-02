@@ -234,7 +234,7 @@ func TestChatClient_GetCompletion(t *testing.T) {
 	require.NoError(t, err)
 
 	// Create client
-	client := NewUnifiedClient(
+	client := NewUncheckedUnifiedClient(
 		testenv.NewLogger(t),
 		guardianPolicy,
 		provisioner,
@@ -381,7 +381,7 @@ func TestChatClient_GetCompletionStream(t *testing.T) {
 	require.NoError(t, err)
 
 	// Create client
-	client := NewUnifiedClient(
+	client := NewUncheckedUnifiedClient(
 		testenv.NewLogger(t),
 		guardianPolicy,
 		provisioner,
@@ -507,7 +507,7 @@ func TestChatClient_GetCompletionStream_FetchesFallbackUsageWhenFinalUsageChunkM
 	guardianPolicy, err := guardian.NewUnsafePolicy(tracerProvider, []string{})
 	require.NoError(t, err)
 
-	client := NewUnifiedClient(
+	client := NewUncheckedUnifiedClient(
 		testenv.NewLogger(t),
 		guardianPolicy,
 		provisioner,
@@ -602,7 +602,7 @@ func TestChatClient_GetCompletion_FetchesFallbackUsageWhenInlineCostMissing(t *t
 	guardianPolicy, err := guardian.NewUnsafePolicy(tracerProvider, []string{})
 	require.NoError(t, err)
 
-	client := NewUnifiedClient(
+	client := NewUncheckedUnifiedClient(
 		testenv.NewLogger(t),
 		guardianPolicy,
 		provisioner,
@@ -711,7 +711,7 @@ func TestChatClient_GetCompletion_WithToolCalls(t *testing.T) {
 	require.NoError(t, err)
 
 	// Create client
-	client := NewUnifiedClient(
+	client := NewUncheckedUnifiedClient(
 		testenv.NewLogger(t),
 		guardianPolicy,
 		provisioner,
@@ -810,7 +810,7 @@ func TestChatClient_NormalizesMixedAssistantOnlyForOpenRouterRequest(t *testing.
 	guardianPolicy, err := guardian.NewUnsafePolicy(tracerProvider, []string{})
 	require.NoError(t, err)
 
-	client := NewUnifiedClient(
+	client := NewUncheckedUnifiedClient(
 		testenv.NewLogger(t),
 		guardianPolicy,
 		&mockProvisioner{apiKey: "test-api-key"},
@@ -891,7 +891,7 @@ func TestChatClient_PassesMixedAssistantThroughWhenNormalizeFlagUnset(t *testing
 	guardianPolicy, err := guardian.NewUnsafePolicy(tracerProvider, []string{})
 	require.NoError(t, err)
 
-	client := NewUnifiedClient(
+	client := NewUncheckedUnifiedClient(
 		testenv.NewLogger(t),
 		guardianPolicy,
 		&mockProvisioner{apiKey: "test-api-key"},
@@ -972,7 +972,7 @@ func TestChatClient_ErrorHandling(t *testing.T) {
 			require.NoError(t, err)
 
 			// Create client
-			client := NewUnifiedClient(
+			client := NewUncheckedUnifiedClient(
 				testenv.NewLogger(t),
 				guardianPolicy,
 				provisioner,
@@ -1043,7 +1043,7 @@ func TestChatClient_MultipleCompletions_TitleAndResolutionScheduling(t *testing.
 	require.NoError(t, err)
 
 	// Create client
-	client := NewUnifiedClient(
+	client := NewUncheckedUnifiedClient(
 		testenv.NewLogger(t),
 		guardianPolicy,
 		provisioner,
@@ -1208,7 +1208,7 @@ func TestChatClient_NilChatID_ShouldNotScheduleTitleGeneration(t *testing.T) {
 	require.NoError(t, err)
 
 	titleGenerator := &trackingTitleGenerator{}
-	client := NewUnifiedClient(
+	client := NewUncheckedUnifiedClient(
 		testenv.NewLogger(t),
 		guardianPolicy,
 		&mockProvisioner{apiKey: "test-api-key"},
@@ -1255,7 +1255,7 @@ func TestChatClient_TitleGeneration_ScheduledPerCompletionWithValidChatID(t *tes
 
 	titleGenerator := &trackingTitleGenerator{}
 	tracker := newTrackingCaptureStrategy()
-	client := NewUnifiedClient(
+	client := NewUncheckedUnifiedClient(
 		testenv.NewLogger(t),
 		guardianPolicy,
 		&mockProvisioner{apiKey: "test-api-key"},
@@ -1320,7 +1320,7 @@ func TestChatClient_ReloadChat_NoDuplicateMessages(t *testing.T) {
 	require.NoError(t, err)
 
 	tracker := newTrackingCaptureStrategy()
-	client := NewUnifiedClient(
+	client := NewUncheckedUnifiedClient(
 		testenv.NewLogger(t),
 		guardianPolicy,
 		&mockProvisioner{apiKey: "test-api-key"},
@@ -1449,7 +1449,7 @@ func TestChatClient_GetCompletion_WithJSONSchema(t *testing.T) {
 	require.NoError(t, err)
 
 	// Create client
-	client := NewUnifiedClient(
+	client := NewUncheckedUnifiedClient(
 		testenv.NewLogger(t),
 		guardianPolicy,
 		provisioner,
@@ -1565,7 +1565,7 @@ func TestChatClient_GetCompletion_WithoutJSONSchema(t *testing.T) {
 	require.NoError(t, err)
 
 	// Create client
-	client := NewUnifiedClient(
+	client := NewUncheckedUnifiedClient(
 		testenv.NewLogger(t),
 		guardianPolicy,
 		provisioner,
@@ -1687,7 +1687,7 @@ func TestChatClient_GetCompletion_UnsupportedModelFallback(t *testing.T) {
 	guardianPolicy, err := guardian.NewUnsafePolicy(tracerProvider, []string{})
 	require.NoError(t, err)
 
-	client := NewUnifiedClient(
+	client := NewUncheckedUnifiedClient(
 		testenv.NewLogger(t),
 		guardianPolicy,
 		&mockProvisioner{apiKey: "test-api-key"},
@@ -1745,7 +1745,7 @@ func TestChatClient_GetCompletion_AttributionFields(t *testing.T) {
 	guardianPolicy, err := guardian.NewUnsafePolicy(testenv.NewTracerProvider(t), []string{})
 	require.NoError(t, err)
 
-	client := NewUnifiedClient(
+	client := NewUncheckedUnifiedClient(
 		testenv.NewLogger(t),
 		guardianPolicy,
 		&mockProvisioner{apiKey: "test-api-key"},

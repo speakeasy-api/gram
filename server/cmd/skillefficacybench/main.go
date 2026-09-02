@@ -125,7 +125,7 @@ func main() {
 
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	provisioner := openrouter.NewDevelopment(apiKey)
-	client := openrouter.NewUnifiedClient(
+	client := openrouter.NewUncheckedUnifiedClient(
 		logger,
 		guardian.NewDefaultPolicy(tracenoop.NewTracerProvider()),
 		provisioner,

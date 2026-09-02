@@ -27,15 +27,22 @@ func classifyChatInference(ctx context.Context, keySlot billing.ModelUsageSource
 	))
 }
 
-func classifySessionInference(ctx context.Context, governed, apiKey, nonOrdinary hostedinference.CallCategory) (context.Context, error) {
-	if _, ok := contextvalues.ValidatedGramSessionActingUser(ctx); ok {
-		return wrapHostedInferenceClassification(hostedinference.WithGovernedUser(ctx, governed))
-	}
-	authCtx, _ := contextvalues.GetAuthContext(ctx)
-	if authCtx != nil && authCtx.APIKeyID != "" {
-		return wrapHostedInferenceClassification(hostedinference.WithUnsupported(ctx, apiKey))
-	}
-	return wrapHostedInferenceClassification(hostedinference.WithUnsupported(ctx, nonOrdinary))
+func classifyChatSummaryInference(ctx context.Context) (context.Context, error) {
+	return wrapHostedInferenceClassification(hostedinference.WithGovernedUserOrUnsupported(
+		ctx,
+		hostedinference.CallCategoryChatSummary,
+		hostedinference.CallCategoryAPIKeyChatSummary,
+		hostedinference.CallCategoryNonOrdinarySessionChatSummary,
+	))
+}
+
+func classifyToolCallSummaryInference(ctx context.Context) (context.Context, error) {
+	return wrapHostedInferenceClassification(hostedinference.WithGovernedUserOrUnsupported(
+		ctx,
+		hostedinference.CallCategoryToolCallSummary,
+		hostedinference.CallCategoryAPIKeyToolCallSummary,
+		hostedinference.CallCategoryNonOrdinarySessionToolSummary,
+	))
 }
 
 func wrapHostedInferenceClassification(classified context.Context, err error) (context.Context, error) {

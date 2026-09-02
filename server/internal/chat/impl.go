@@ -2251,7 +2251,7 @@ func (s *Service) Summarize(ctx context.Context, payload *gen.SummarizePayload) 
 
 	summaryCtx, cancel := context.WithTimeout(ctx, summarizeCompletionTimeout)
 	defer cancel()
-	summaryCtx, err = classifySessionInference(summaryCtx, hostedinference.CallCategoryChatSummary, hostedinference.CallCategoryAPIKeyChatSummary, hostedinference.CallCategoryNonOrdinarySessionChatSummary)
+	summaryCtx, err = classifyChatSummaryInference(summaryCtx)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "classify chat summary inference").LogError(ctx, s.logger)
 	}
@@ -2447,7 +2447,7 @@ func (s *Service) SummarizeToolCall(ctx context.Context, payload *gen.SummarizeT
 
 	summaryCtx, cancel := context.WithTimeout(ctx, summarizeCompletionTimeout)
 	defer cancel()
-	summaryCtx, err = classifySessionInference(summaryCtx, hostedinference.CallCategoryToolCallSummary, hostedinference.CallCategoryAPIKeyToolCallSummary, hostedinference.CallCategoryNonOrdinarySessionToolSummary)
+	summaryCtx, err = classifyToolCallSummaryInference(summaryCtx)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "classify tool-call summary inference").LogError(ctx, s.logger)
 	}
