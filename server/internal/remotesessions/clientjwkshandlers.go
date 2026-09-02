@@ -198,9 +198,12 @@ func (s *Service) mutateProjectClientKeySet(ctx context.Context, logger *slog.Lo
 	}
 
 	existing, err := txRepo.GetRemoteSessionClientByID(ctx, repo.GetRemoteSessionClientByIDParams{
-		ID:             clientID,
-		ProjectID:      *authCtx.ProjectID,
-		OrganizationID: conv.ToPGTextEmpty(""),
+		ID:        clientID,
+		ProjectID: *authCtx.ProjectID,
+		// Empty on purpose, matching UpdateRemoteSessionClient: neither the
+		// organization-level client arm nor the organization-tier issuer arm can
+		// match, so an org-level client is invisible from the project surface.
+		OrganizationID: "",
 	})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
