@@ -107,12 +107,12 @@ export function GatewayOverviewTab({
         </Page.Section.Body>
       </Page.Section>
 
+      <GatewayMembersSection metaMcpServer={metaMcpServer} />
+
       <GatewayActivitySection
         metaMcpServerId={metaMcpServer.id}
         memberRows={rows}
       />
-
-      <GatewayMembersSection metaMcpServer={metaMcpServer} />
     </>
   );
 }

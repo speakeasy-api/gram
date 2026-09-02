@@ -164,7 +164,7 @@ export function GatewayActivitySection({
   return (
     <Page.Section>
       {/* Section heading under the Overview page title: no eyebrow, smaller
-          serif, matching the Members section below. */}
+          serif, matching the Members section above. */}
       <Page.Section.Title area="" className="text-display-xs">
         Activity
       </Page.Section.Title>
