@@ -22,6 +22,7 @@ package wellknown
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 
@@ -58,15 +59,33 @@ type OAuthProtectedResourceMetadata struct {
 }
 
 // OAuthServerMetadata represents OAuth 2.0 Authorization Server Metadata (RFC 8414).
+//
+// Every optional member is omitempty. A nil slice would otherwise marshal to
+// `null`, which clients modelling these as optional arrays reject outright, and
+// an empty slice asserts "supports none of these" rather than "not stated" —
+// for response_types_supported that means a client refuses `code`, and for
+// registration_endpoint an empty string is not the URL RFC 8414 promises. When
+// a value is genuinely unknown, saying nothing lets the client apply the RFC's
+// defaults; saying `[]` or `""` does not.
 type OAuthServerMetadata struct {
-	Issuer                        string   `json:"issuer"`
-	AuthorizationEndpoint         string   `json:"authorization_endpoint"`
-	TokenEndpoint                 string   `json:"token_endpoint"`
-	RegistrationEndpoint          string   `json:"registration_endpoint"`
-	ScopesSupported               []string `json:"scopes_supported,omitempty"`
-	ResponseTypesSupported        []string `json:"response_types_supported"`
-	GrantTypesSupported           []string `json:"grant_types_supported"`
-	CodeChallengeMethodsSupported []string `json:"code_challenge_methods_supported"`
+	Issuer                            string   `json:"issuer"`
+	AuthorizationEndpoint             string   `json:"authorization_endpoint"`
+	TokenEndpoint                     string   `json:"token_endpoint"`
+	RegistrationEndpoint              string   `json:"registration_endpoint,omitempty"`
+	RevocationEndpoint                string   `json:"revocation_endpoint,omitempty"`
+	JwksURI                           string   `json:"jwks_uri,omitempty"`
+	ScopesSupported                   []string `json:"scopes_supported,omitempty"`
+	ResponseTypesSupported            []string `json:"response_types_supported,omitempty"`
+	GrantTypesSupported               []string `json:"grant_types_supported,omitempty"`
+	TokenEndpointAuthMethodsSupported []string `json:"token_endpoint_auth_methods_supported,omitempty"`
+	CodeChallengeMethodsSupported     []string `json:"code_challenge_methods_supported,omitempty"`
+	ServiceDocumentation              string   `json:"service_documentation,omitempty"`
+	OpPolicyURI                       string   `json:"op_policy_uri,omitempty"`
+	OpTosURI                          string   `json:"op_tos_uri,omitempty"`
+	// Pointer so the CIMD draft's member is advertised only when the issuer
+	// actually supports it; false and absent mean the same thing to a client,
+	// and emitting false on every reconstruction would be noise.
+	ClientIDMetadataDocumentSupported *bool `json:"client_id_metadata_document_supported,omitempty"`
 }
 
 type OAuthServerMetadataResultKind string
@@ -149,6 +168,113 @@ func ResolveOAuthServerMetadataFromToolset(
 	}
 
 	return nil, nil
+}
+
+// cimdSupported returns a pointer only when the issuer advertises CIMD, so the
+// member is omitted rather than emitted as false.
+func cimdSupported(supported bool) *bool {
+	if !supported {
+		return nil
+	}
+	return &supported
+}
+
+// ErrIncompleteIssuerMetadata is a reconstruction that cannot describe a usable
+// authorization server, because the issuer has no captured snapshot and no
+// stored authorization or token endpoint either.
+var ErrIncompleteIssuerMetadata = errors.New("issuer has no authorization or token endpoint to advertise")
+
+// RemoteSessionIssuerMetadata is the part of a remote_session_issuers row the
+// well-known surface needs to describe an upstream authorization server. It is
+// a plain struct rather than the repo row so this package stays independent of
+// the remote sessions schema.
+type RemoteSessionIssuerMetadata struct {
+	AuthorizationEndpoint             string
+	TokenEndpoint                     string
+	RegistrationEndpoint              string
+	RevocationEndpoint                string
+	JwksURI                           string
+	ScopesSupported                   []string
+	ResponseTypesSupported            []string
+	GrantTypesSupported               []string
+	TokenEndpointAuthMethodsSupported []string
+	CodeChallengeMethodsSupported     []string
+	ServiceDocumentation              string
+	OpPolicyURI                       string
+	OpTosURI                          string
+	ClientIDMetadataDocumentSupported bool
+
+	// Snapshot is remote_session_issuers.metadata: the discovery document as
+	// the issuer served it, filtered to what Gram will republish. Empty for a
+	// row that predates capture or was configured by hand.
+	Snapshot json.RawMessage
+}
+
+// ResolveOAuthServerMetadataFromRemoteSessionIssuer builds the RFC 8414
+// authorization-server document an `upstream` MCP server serves, describing the
+// issuer's own authorization server rather than Gram's.
+//
+// resourceURL is the Gram URL the document is fetched from, and becomes the
+// served `issuer`. RFC 8414 §3.3 requires the two to be equal, so a
+// spec-compliant MCP client does not reject the metadata; the upstream's own
+// authorization, token, and registration endpoints are carried through
+// unchanged, which the RFC does not require to share the issuer's origin.
+//
+// The second return value reports whether the document came from the captured
+// snapshot. When it did not, the document was reconstructed from the typed
+// columns and is missing whatever OIDC extension fields the upstream advertises
+// that Gram does not model, which callers should log: it is serviceable but
+// degraded, and it resolves itself the next time the issuer is refreshed.
+func ResolveOAuthServerMetadataFromRemoteSessionIssuer(issuer RemoteSessionIssuerMetadata, resourceURL string) (*OAuthServerMetadataResult, bool, error) {
+	if len(issuer.Snapshot) > 0 {
+		rewritten, err := rewriteMetadataIssuer(issuer.Snapshot, resourceURL)
+		if err != nil {
+			return nil, false, fmt.Errorf("rewrite remote session issuer metadata: %w", err)
+		}
+		return &OAuthServerMetadataResult{
+			Kind:     OAuthServerMetadataResultKindRaw,
+			Static:   nil,
+			Raw:      rewritten,
+			ProxyURL: "",
+		}, true, nil
+	}
+
+	// RFC 8414 makes both of these REQUIRED, and a client cannot start a flow
+	// without them. An issuer that has neither a snapshot nor endpoints is a
+	// row discovery never completed for, so serving 200 with empty strings
+	// would advertise a broken authorization server rather than admit there is
+	// nothing to advertise. The caller turns this into a not-found.
+	if issuer.AuthorizationEndpoint == "" || issuer.TokenEndpoint == "" {
+		return nil, false, ErrIncompleteIssuerMetadata
+	}
+
+	return &OAuthServerMetadataResult{
+		Kind: OAuthServerMetadataResultKindStatic,
+		Static: &OAuthServerMetadata{
+			Issuer:                resourceURL,
+			AuthorizationEndpoint: issuer.AuthorizationEndpoint,
+			TokenEndpoint:         issuer.TokenEndpoint,
+			RegistrationEndpoint:  issuer.RegistrationEndpoint,
+			// Modelled by remote_session_issuers and therefore reconstructable.
+			// Omitting token_endpoint_auth_methods_supported in particular is
+			// not harmless: RFC 8414 makes its absence mean client_secret_basic,
+			// so a public client issuer advertising `none` would fail token
+			// exchange on this path while working on the snapshot path.
+			RevocationEndpoint:                issuer.RevocationEndpoint,
+			JwksURI:                           issuer.JwksURI,
+			ScopesSupported:                   issuer.ScopesSupported,
+			ResponseTypesSupported:            issuer.ResponseTypesSupported,
+			GrantTypesSupported:               issuer.GrantTypesSupported,
+			TokenEndpointAuthMethodsSupported: issuer.TokenEndpointAuthMethodsSupported,
+			CodeChallengeMethodsSupported:     issuer.CodeChallengeMethodsSupported,
+			ServiceDocumentation:              issuer.ServiceDocumentation,
+			OpPolicyURI:                       issuer.OpPolicyURI,
+			OpTosURI:                          issuer.OpTosURI,
+			ClientIDMetadataDocumentSupported: cimdSupported(issuer.ClientIDMetadataDocumentSupported),
+		},
+		Raw:      nil,
+		ProxyURL: "",
+	}, false, nil
 }
 
 // rewriteMetadataIssuer returns raw with its top-level "issuer" field set to

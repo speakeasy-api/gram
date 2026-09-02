@@ -28,7 +28,8 @@ INSERT INTO remote_session_issuers (
     code_challenge_methods_supported,
     client_id_metadata_document_supported,
     oidc,
-    passthrough
+    passthrough,
+    metadata
 )
 VALUES (
     @project_id,
@@ -56,7 +57,14 @@ VALUES (
     @code_challenge_methods_supported,
     @client_id_metadata_document_supported,
     @oidc,
-    @passthrough
+    @passthrough,
+    -- The issuer's own discovery document, for callers that already hold one.
+    -- The create handlers do not: they persist an operator-submitted form and
+    -- deliberately do no discovery of their own, so they pass NULL and the
+    -- well-known surface reconstructs from the typed columns above until a
+    -- refresh captures a document. Platform MCP's identity-provider attachment
+    -- does discover, and supplies it here.
+    sqlc.narg('metadata')::jsonb
 )
 RETURNING *;
 
@@ -319,6 +327,38 @@ SET
     token_endpoint_auth_methods_supported = COALESCE(sqlc.narg('token_endpoint_auth_methods_supported')::text[], token_endpoint_auth_methods_supported),
     code_challenge_methods_supported = COALESCE(sqlc.narg('code_challenge_methods_supported')::text[], code_challenge_methods_supported),
     client_id_metadata_document_supported = COALESCE(sqlc.narg('client_id_metadata_document_supported'), client_id_metadata_document_supported),
+    -- Cleared only when this edit actually moves a discovery-derived value.
+    -- The snapshot is what Gram advertises to MCP clients; the columns above
+    -- are what Gram dials, so an operator correcting an endpoint or repointing
+    -- issuer would otherwise leave Gram serving a document naming the old
+    -- authorization server while every remote session flow used the new one.
+    -- Refresh keeps the two coupled by writing both from one document; a manual
+    -- edit has no document to write, so it drops the snapshot and the
+    -- well-known surface reconstructs until the next refresh recaptures one.
+    --
+    -- Renaming an issuer, or changing its logo or setup documentation, moves
+    -- nothing the snapshot describes, so those edits keep it. Dropping it there
+    -- would silently degrade the served document to the typed columns for a
+    -- change that has nothing to do with them.
+    metadata = CASE
+        WHEN sqlc.narg('issuer')::text IS NOT NULL
+            OR sqlc.narg('authorization_endpoint')::text IS NOT NULL
+            OR sqlc.narg('token_endpoint')::text IS NOT NULL
+            OR sqlc.narg('revocation_endpoint')::text IS NOT NULL
+            OR sqlc.narg('registration_endpoint')::text IS NOT NULL
+            OR sqlc.narg('jwks_uri')::text IS NOT NULL
+            OR sqlc.narg('service_documentation')::text IS NOT NULL
+            OR sqlc.narg('op_policy_uri')::text IS NOT NULL
+            OR sqlc.narg('op_tos_uri')::text IS NOT NULL
+            OR sqlc.narg('scopes_supported')::text[] IS NOT NULL
+            OR sqlc.narg('grant_types_supported')::text[] IS NOT NULL
+            OR sqlc.narg('response_types_supported')::text[] IS NOT NULL
+            OR sqlc.narg('token_endpoint_auth_methods_supported')::text[] IS NOT NULL
+            OR sqlc.narg('code_challenge_methods_supported')::text[] IS NOT NULL
+            OR sqlc.narg('client_id_metadata_document_supported')::boolean IS NOT NULL
+        THEN NULL
+        ELSE metadata
+    END,
     oidc = COALESCE(sqlc.narg('oidc'), oidc),
     passthrough = COALESCE(sqlc.narg('passthrough'), passthrough),
     updated_at = clock_timestamp()
@@ -384,6 +424,13 @@ SET
     token_endpoint_auth_methods_supported = @token_endpoint_auth_methods_supported::text[],
     code_challenge_methods_supported = @code_challenge_methods_supported::text[],
     client_id_metadata_document_supported = @client_id_metadata_document_supported::boolean,
+    -- The document the typed columns above were derived from, so the well-known
+    -- surface can re-serve the OIDC extension fields they do not model. Written
+    -- in the same statement from the same document, which is what keeps what
+    -- Gram advertises consistent with what Gram dials. NULL only when the
+    -- caller could not produce a storable snapshot; the column is nullable
+    -- because rows created before capture existed have never had one.
+    metadata = sqlc.narg('metadata')::jsonb,
     updated_at = clock_timestamp()
 WHERE id = @id
   AND issuer = @issuer::text
@@ -1555,6 +1602,38 @@ SET
     token_endpoint_auth_methods_supported = COALESCE(sqlc.narg('token_endpoint_auth_methods_supported')::text[], token_endpoint_auth_methods_supported),
     code_challenge_methods_supported = COALESCE(sqlc.narg('code_challenge_methods_supported')::text[], code_challenge_methods_supported),
     client_id_metadata_document_supported = COALESCE(sqlc.narg('client_id_metadata_document_supported'), client_id_metadata_document_supported),
+    -- Cleared only when this edit actually moves a discovery-derived value.
+    -- The snapshot is what Gram advertises to MCP clients; the columns above
+    -- are what Gram dials, so an operator correcting an endpoint or repointing
+    -- issuer would otherwise leave Gram serving a document naming the old
+    -- authorization server while every remote session flow used the new one.
+    -- Refresh keeps the two coupled by writing both from one document; a manual
+    -- edit has no document to write, so it drops the snapshot and the
+    -- well-known surface reconstructs until the next refresh recaptures one.
+    --
+    -- Renaming an issuer, or changing its logo or setup documentation, moves
+    -- nothing the snapshot describes, so those edits keep it. Dropping it there
+    -- would silently degrade the served document to the typed columns for a
+    -- change that has nothing to do with them.
+    metadata = CASE
+        WHEN sqlc.narg('issuer')::text IS NOT NULL
+            OR sqlc.narg('authorization_endpoint')::text IS NOT NULL
+            OR sqlc.narg('token_endpoint')::text IS NOT NULL
+            OR sqlc.narg('revocation_endpoint')::text IS NOT NULL
+            OR sqlc.narg('registration_endpoint')::text IS NOT NULL
+            OR sqlc.narg('jwks_uri')::text IS NOT NULL
+            OR sqlc.narg('service_documentation')::text IS NOT NULL
+            OR sqlc.narg('op_policy_uri')::text IS NOT NULL
+            OR sqlc.narg('op_tos_uri')::text IS NOT NULL
+            OR sqlc.narg('scopes_supported')::text[] IS NOT NULL
+            OR sqlc.narg('grant_types_supported')::text[] IS NOT NULL
+            OR sqlc.narg('response_types_supported')::text[] IS NOT NULL
+            OR sqlc.narg('token_endpoint_auth_methods_supported')::text[] IS NOT NULL
+            OR sqlc.narg('code_challenge_methods_supported')::text[] IS NOT NULL
+            OR sqlc.narg('client_id_metadata_document_supported')::boolean IS NOT NULL
+        THEN NULL
+        ELSE metadata
+    END,
     oidc = COALESCE(sqlc.narg('oidc'), oidc),
     passthrough = COALESCE(sqlc.narg('passthrough'), passthrough),
     updated_at = clock_timestamp()
@@ -2065,6 +2144,38 @@ SET
     token_endpoint_auth_methods_supported = COALESCE(sqlc.narg('token_endpoint_auth_methods_supported')::text[], token_endpoint_auth_methods_supported),
     code_challenge_methods_supported = COALESCE(sqlc.narg('code_challenge_methods_supported')::text[], code_challenge_methods_supported),
     client_id_metadata_document_supported = COALESCE(sqlc.narg('client_id_metadata_document_supported'), client_id_metadata_document_supported),
+    -- Cleared only when this edit actually moves a discovery-derived value.
+    -- The snapshot is what Gram advertises to MCP clients; the columns above
+    -- are what Gram dials, so an operator correcting an endpoint or repointing
+    -- issuer would otherwise leave Gram serving a document naming the old
+    -- authorization server while every remote session flow used the new one.
+    -- Refresh keeps the two coupled by writing both from one document; a manual
+    -- edit has no document to write, so it drops the snapshot and the
+    -- well-known surface reconstructs until the next refresh recaptures one.
+    --
+    -- Renaming an issuer, or changing its logo or setup documentation, moves
+    -- nothing the snapshot describes, so those edits keep it. Dropping it there
+    -- would silently degrade the served document to the typed columns for a
+    -- change that has nothing to do with them.
+    metadata = CASE
+        WHEN sqlc.narg('issuer')::text IS NOT NULL
+            OR sqlc.narg('authorization_endpoint')::text IS NOT NULL
+            OR sqlc.narg('token_endpoint')::text IS NOT NULL
+            OR sqlc.narg('revocation_endpoint')::text IS NOT NULL
+            OR sqlc.narg('registration_endpoint')::text IS NOT NULL
+            OR sqlc.narg('jwks_uri')::text IS NOT NULL
+            OR sqlc.narg('service_documentation')::text IS NOT NULL
+            OR sqlc.narg('op_policy_uri')::text IS NOT NULL
+            OR sqlc.narg('op_tos_uri')::text IS NOT NULL
+            OR sqlc.narg('scopes_supported')::text[] IS NOT NULL
+            OR sqlc.narg('grant_types_supported')::text[] IS NOT NULL
+            OR sqlc.narg('response_types_supported')::text[] IS NOT NULL
+            OR sqlc.narg('token_endpoint_auth_methods_supported')::text[] IS NOT NULL
+            OR sqlc.narg('code_challenge_methods_supported')::text[] IS NOT NULL
+            OR sqlc.narg('client_id_metadata_document_supported')::boolean IS NOT NULL
+        THEN NULL
+        ELSE metadata
+    END,
     oidc = COALESCE(sqlc.narg('oidc'), oidc),
     passthrough = COALESCE(sqlc.narg('passthrough'), passthrough),
     updated_at = clock_timestamp()

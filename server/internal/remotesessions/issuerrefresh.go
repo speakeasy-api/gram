@@ -2,10 +2,12 @@ package remotesessions
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
 	"net/url"
+	"strings"
 
 	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/conv"
@@ -74,6 +76,67 @@ func buildIssuerDraft(doc rfc8414Document, issuerURL string, warnings []string) 
 	}
 }
 
+// sanitizeDiscoverySnapshot filters a discovery document down to what Gram is
+// willing to re-publish from its own origin, returning the JSON to store in
+// remote_session_issuers.metadata.
+//
+// The snapshot exists to preserve the OIDC extension fields the typed columns
+// do not model, so everything unrecognised is kept verbatim. What it must not
+// do is republish values the typed columns deliberately drop: buildIssuerDraft
+// and refreshIssuerMetadata discard a non-HTTPS revocation_endpoint (tokens are
+// credentials and must not be sent in the clear) and a service_documentation,
+// op_policy_uri or op_tos_uri that is not an absolute http(s) URL (downstream
+// surfaces render them as links). Storing them unfiltered would make the
+// snapshot laxer than the columns beside it, and the reconstruction fallback
+// stricter than the primary path, so the document a client received would
+// depend on whether the issuer had been refreshed yet.
+//
+// Key order is normalised by the map round trip, matching what
+// wellknown.rewriteMetadataIssuer already does to this document on the way out.
+func sanitizeDiscoverySnapshot(raw []byte) ([]byte, error) {
+	if len(raw) == 0 {
+		return nil, nil
+	}
+
+	fields := map[string]json.RawMessage{}
+	if err := json.Unmarshal(raw, &fields); err != nil {
+		return nil, fmt.Errorf("decode discovery document: %w", err)
+	}
+	if fields == nil {
+		return nil, errors.New("decode discovery document: expected a JSON object")
+	}
+
+	// Matched case-insensitively, and every variant is dropped together.
+	// encoding/json resolves a struct field case-insensitively, so
+	// attemptIssuerProbe validated whichever spelling the upstream sent, while
+	// this map preserves them all verbatim. Filtering only the canonical
+	// spelling therefore republished the exact variants validation had already
+	// looked at: a document carrying REVOCATION_ENDPOINT over plaintext http
+	// passed the probe and survived into the served snapshot untouched.
+	dropUnless := func(key string, allowed func(string) bool) {
+		for name, encoded := range fields {
+			if !strings.EqualFold(name, key) {
+				continue
+			}
+			var value string
+			if err := json.Unmarshal(encoded, &value); err != nil || !allowed(value) {
+				delete(fields, name)
+			}
+		}
+	}
+
+	dropUnless("revocation_endpoint", urls.IsAbsoluteHTTPSOrLoopback)
+	for _, key := range []string{"service_documentation", "op_policy_uri", "op_tos_uri"} {
+		dropUnless(key, urls.IsAbsoluteHTTP)
+	}
+
+	out, err := json.Marshal(fields)
+	if err != nil {
+		return nil, fmt.Errorf("encode discovery document: %w", err)
+	}
+	return out, nil
+}
+
 // issuerOrigin reduces an issuer URL to its scheme and host. Returns the input
 // unchanged when it does not parse as an absolute URL, so a caller comparing
 // against it simply finds no match rather than matching everything.
@@ -136,7 +199,7 @@ func mapDiscoveryError(ctx context.Context, logger *slog.Logger, err error, unre
 func refreshIssuerMetadata(ctx context.Context, policy *guardian.Policy, issuer repo.RemoteSessionIssuer) (repo.UpdateRemoteSessionIssuerDiscoveredMetadataParams, []string, error) {
 	var zero repo.UpdateRemoteSessionIssuerDiscoveredMetadataParams
 
-	doc, warnings, err := discoverIssuerMetadata(ctx, policy, issuer.Issuer)
+	doc, raw, warnings, err := discoverIssuerMetadata(ctx, policy, issuer.Issuer)
 	if err != nil {
 		return zero, nil, err
 	}
@@ -185,7 +248,21 @@ func refreshIssuerMetadata(ctx context.Context, policy *guardian.Policy, issuer 
 		}
 	}
 
+	// Runs only after the distrust gate above, so a document Gram refuses to
+	// adopt never replaces a snapshot that currently serves. The snapshot and
+	// the typed columns below are written from this one document in one
+	// statement, which is what keeps the served well-known document consistent
+	// with the endpoints Gram itself dials.
+	snapshot, err := sanitizeDiscoverySnapshot(raw)
+	if err != nil {
+		return zero, nil, &untrustedDocumentError{
+			reason: fmt.Sprintf("metadata document at %s could not be stored: %s", issuer.Issuer, err),
+		}
+	}
+
 	return repo.UpdateRemoteSessionIssuerDiscoveredMetadataParams{
+		Metadata: snapshot,
+
 		// An endpoint the issuer has stopped advertising arrives here as an
 		// empty string, which the query clears to NULL. Manual endpoint
 		// overrides are not preserved: they are rare to nonexistent, and

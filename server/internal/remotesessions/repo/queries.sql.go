@@ -680,7 +680,8 @@ INSERT INTO remote_session_issuers (
     code_challenge_methods_supported,
     client_id_metadata_document_supported,
     oidc,
-    passthrough
+    passthrough,
+    metadata
 )
 VALUES (
     $1,
@@ -708,7 +709,14 @@ VALUES (
     $20,
     $21,
     $22,
-    $23
+    $23,
+    -- The issuer's own discovery document, for callers that already hold one.
+    -- The create handlers do not: they persist an operator-submitted form and
+    -- deliberately do no discovery of their own, so they pass NULL and the
+    -- well-known surface reconstructs from the typed columns above until a
+    -- refresh captures a document. Platform MCP's identity-provider attachment
+    -- does discover, and supplies it here.
+    $24::jsonb
 )
 RETURNING id, project_id, organization_id, slug, issuer, authorization_endpoint, token_endpoint, revocation_endpoint, registration_endpoint, jwks_uri, service_documentation, op_policy_uri, op_tos_uri, scopes_supported, grant_types_supported, response_types_supported, token_endpoint_auth_methods_supported, code_challenge_methods_supported, client_id_metadata_document_supported, oidc, passthrough, tunneled_mcp_server_id, name, logo_asset_id, client_setup_documentation_url, metadata, created_at, updated_at, deleted_at, deleted
 `
@@ -737,6 +745,7 @@ type CreateRemoteSessionIssuerParams struct {
 	ClientIDMetadataDocumentSupported bool
 	Oidc                              bool
 	Passthrough                       bool
+	Metadata                          []byte
 }
 
 // Remote session issuers — upstream Authorization Server identity records
@@ -769,6 +778,7 @@ func (q *Queries) CreateRemoteSessionIssuer(ctx context.Context, arg CreateRemot
 		arg.ClientIDMetadataDocumentSupported,
 		arg.Oidc,
 		arg.Passthrough,
+		arg.Metadata,
 	)
 	var i RemoteSessionIssuer
 	err := row.Scan(
@@ -5016,6 +5026,38 @@ SET
     token_endpoint_auth_methods_supported = COALESCE($17::text[], token_endpoint_auth_methods_supported),
     code_challenge_methods_supported = COALESCE($18::text[], code_challenge_methods_supported),
     client_id_metadata_document_supported = COALESCE($19, client_id_metadata_document_supported),
+    -- Cleared only when this edit actually moves a discovery-derived value.
+    -- The snapshot is what Gram advertises to MCP clients; the columns above
+    -- are what Gram dials, so an operator correcting an endpoint or repointing
+    -- issuer would otherwise leave Gram serving a document naming the old
+    -- authorization server while every remote session flow used the new one.
+    -- Refresh keeps the two coupled by writing both from one document; a manual
+    -- edit has no document to write, so it drops the snapshot and the
+    -- well-known surface reconstructs until the next refresh recaptures one.
+    --
+    -- Renaming an issuer, or changing its logo or setup documentation, moves
+    -- nothing the snapshot describes, so those edits keep it. Dropping it there
+    -- would silently degrade the served document to the typed columns for a
+    -- change that has nothing to do with them.
+    metadata = CASE
+        WHEN $2::text IS NOT NULL
+            OR $6::text IS NOT NULL
+            OR $7::text IS NOT NULL
+            OR $8::text IS NOT NULL
+            OR $9::text IS NOT NULL
+            OR $10::text IS NOT NULL
+            OR $11::text IS NOT NULL
+            OR $12::text IS NOT NULL
+            OR $13::text IS NOT NULL
+            OR $14::text[] IS NOT NULL
+            OR $15::text[] IS NOT NULL
+            OR $16::text[] IS NOT NULL
+            OR $17::text[] IS NOT NULL
+            OR $18::text[] IS NOT NULL
+            OR $19::boolean IS NOT NULL
+        THEN NULL
+        ELSE metadata
+    END,
     oidc = COALESCE($20, oidc),
     passthrough = COALESCE($21, passthrough),
     updated_at = clock_timestamp()
@@ -5234,6 +5276,38 @@ SET
     token_endpoint_auth_methods_supported = COALESCE($17::text[], token_endpoint_auth_methods_supported),
     code_challenge_methods_supported = COALESCE($18::text[], code_challenge_methods_supported),
     client_id_metadata_document_supported = COALESCE($19, client_id_metadata_document_supported),
+    -- Cleared only when this edit actually moves a discovery-derived value.
+    -- The snapshot is what Gram advertises to MCP clients; the columns above
+    -- are what Gram dials, so an operator correcting an endpoint or repointing
+    -- issuer would otherwise leave Gram serving a document naming the old
+    -- authorization server while every remote session flow used the new one.
+    -- Refresh keeps the two coupled by writing both from one document; a manual
+    -- edit has no document to write, so it drops the snapshot and the
+    -- well-known surface reconstructs until the next refresh recaptures one.
+    --
+    -- Renaming an issuer, or changing its logo or setup documentation, moves
+    -- nothing the snapshot describes, so those edits keep it. Dropping it there
+    -- would silently degrade the served document to the typed columns for a
+    -- change that has nothing to do with them.
+    metadata = CASE
+        WHEN $2::text IS NOT NULL
+            OR $6::text IS NOT NULL
+            OR $7::text IS NOT NULL
+            OR $8::text IS NOT NULL
+            OR $9::text IS NOT NULL
+            OR $10::text IS NOT NULL
+            OR $11::text IS NOT NULL
+            OR $12::text IS NOT NULL
+            OR $13::text IS NOT NULL
+            OR $14::text[] IS NOT NULL
+            OR $15::text[] IS NOT NULL
+            OR $16::text[] IS NOT NULL
+            OR $17::text[] IS NOT NULL
+            OR $18::text[] IS NOT NULL
+            OR $19::boolean IS NOT NULL
+        THEN NULL
+        ELSE metadata
+    END,
     oidc = COALESCE($20, oidc),
     passthrough = COALESCE($21, passthrough),
     updated_at = clock_timestamp()
@@ -5483,6 +5557,38 @@ SET
     token_endpoint_auth_methods_supported = COALESCE($17::text[], token_endpoint_auth_methods_supported),
     code_challenge_methods_supported = COALESCE($18::text[], code_challenge_methods_supported),
     client_id_metadata_document_supported = COALESCE($19, client_id_metadata_document_supported),
+    -- Cleared only when this edit actually moves a discovery-derived value.
+    -- The snapshot is what Gram advertises to MCP clients; the columns above
+    -- are what Gram dials, so an operator correcting an endpoint or repointing
+    -- issuer would otherwise leave Gram serving a document naming the old
+    -- authorization server while every remote session flow used the new one.
+    -- Refresh keeps the two coupled by writing both from one document; a manual
+    -- edit has no document to write, so it drops the snapshot and the
+    -- well-known surface reconstructs until the next refresh recaptures one.
+    --
+    -- Renaming an issuer, or changing its logo or setup documentation, moves
+    -- nothing the snapshot describes, so those edits keep it. Dropping it there
+    -- would silently degrade the served document to the typed columns for a
+    -- change that has nothing to do with them.
+    metadata = CASE
+        WHEN $2::text IS NOT NULL
+            OR $6::text IS NOT NULL
+            OR $7::text IS NOT NULL
+            OR $8::text IS NOT NULL
+            OR $9::text IS NOT NULL
+            OR $10::text IS NOT NULL
+            OR $11::text IS NOT NULL
+            OR $12::text IS NOT NULL
+            OR $13::text IS NOT NULL
+            OR $14::text[] IS NOT NULL
+            OR $15::text[] IS NOT NULL
+            OR $16::text[] IS NOT NULL
+            OR $17::text[] IS NOT NULL
+            OR $18::text[] IS NOT NULL
+            OR $19::boolean IS NOT NULL
+        THEN NULL
+        ELSE metadata
+    END,
     oidc = COALESCE($20, oidc),
     passthrough = COALESCE($21, passthrough),
     updated_at = clock_timestamp()
@@ -5604,11 +5710,18 @@ SET
     token_endpoint_auth_methods_supported = $12::text[],
     code_challenge_methods_supported = $13::text[],
     client_id_metadata_document_supported = $14::boolean,
+    -- The document the typed columns above were derived from, so the well-known
+    -- surface can re-serve the OIDC extension fields they do not model. Written
+    -- in the same statement from the same document, which is what keeps what
+    -- Gram advertises consistent with what Gram dials. NULL only when the
+    -- caller could not produce a storable snapshot; the column is nullable
+    -- because rows created before capture existed have never had one.
+    metadata = $15::jsonb,
     updated_at = clock_timestamp()
-WHERE id = $15
-  AND issuer = $16::text
-  AND project_id IS NOT DISTINCT FROM $17::uuid
-  AND organization_id IS NOT DISTINCT FROM $18::text
+WHERE id = $16
+  AND issuer = $17::text
+  AND project_id IS NOT DISTINCT FROM $18::uuid
+  AND organization_id IS NOT DISTINCT FROM $19::text
   AND deleted IS FALSE
 RETURNING id, project_id, organization_id, slug, issuer, authorization_endpoint, token_endpoint, revocation_endpoint, registration_endpoint, jwks_uri, service_documentation, op_policy_uri, op_tos_uri, scopes_supported, grant_types_supported, response_types_supported, token_endpoint_auth_methods_supported, code_challenge_methods_supported, client_id_metadata_document_supported, oidc, passthrough, tunneled_mcp_server_id, name, logo_asset_id, client_setup_documentation_url, metadata, created_at, updated_at, deleted_at, deleted
 `
@@ -5628,6 +5741,7 @@ type UpdateRemoteSessionIssuerDiscoveredMetadataParams struct {
 	TokenEndpointAuthMethodsSupported []string
 	CodeChallengeMethodsSupported     []string
 	ClientIDMetadataDocumentSupported bool
+	Metadata                          []byte
 	ID                                uuid.UUID
 	Issuer                            string
 	ProjectID                         uuid.NullUUID
@@ -5692,6 +5806,7 @@ func (q *Queries) UpdateRemoteSessionIssuerDiscoveredMetadata(ctx context.Contex
 		arg.TokenEndpointAuthMethodsSupported,
 		arg.CodeChallengeMethodsSupported,
 		arg.ClientIDMetadataDocumentSupported,
+		arg.Metadata,
 		arg.ID,
 		arg.Issuer,
 		arg.ProjectID,

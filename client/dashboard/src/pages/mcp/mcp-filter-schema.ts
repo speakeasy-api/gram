@@ -24,6 +24,7 @@ export const MCP_FILTER_OPTIONS: OptionsById = {
   status: [
     { value: "public", label: "Public" },
     { value: "private", label: "Private" },
+    { value: "upstream", label: "Upstream auth" },
     { value: "disabled", label: "Disabled" },
   ],
   source: [
@@ -40,7 +41,7 @@ export const MCP_FILTER_OPTIONS: OptionsById = {
 
 export interface McpFacets {
   /** Absent for gateways, which have no visibility; an active status filter excludes them. */
-  status?: "public" | "private" | "disabled";
+  status?: "public" | "private" | "upstream" | "disabled";
   source:
     | "catalog"
     | "custom"
@@ -110,12 +111,18 @@ export function mcpServerFacets(
   server: McpServer,
   membership: PluginMembership,
 ): McpFacets {
-  const status =
+  // Mapped explicitly rather than defaulting the tail to "disabled": that
+  // default filed every value it did not recognise under Disabled, so an
+  // upstream server would have been hidden from every other status filter
+  // while showing up under one that says it is not served at all.
+  const status: McpFacets["status"] =
     server.visibility === "public"
       ? "public"
       : server.visibility === "private"
         ? "private"
-        : "disabled";
+        : server.visibility === "upstream"
+          ? "upstream"
+          : "disabled";
   const source = server.unproxiedMcpServerId
     ? "unproxied"
     : server.tunneledMcpServerId

@@ -34,6 +34,7 @@ export function MCPServerTableRow({
 
   const mcpEnabled = server.visibility !== "disabled";
   const mcpIsPublic = server.visibility === "public";
+  const mcpIsUpstream = server.visibility === "upstream";
   const isUnproxied = !!server.unproxiedMcpServerId;
 
   return (
@@ -73,6 +74,7 @@ export function MCPServerTableRow({
         <MCPStatusIndicator
           mcpEnabled={mcpEnabled}
           mcpIsPublic={mcpIsPublic}
+          mcpIsUpstream={mcpIsUpstream}
           size="sm"
         />
       </td>

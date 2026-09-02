@@ -607,6 +607,14 @@ func (s *Service) AddMetaMcpMember(ctx context.Context, payload *gen.AddMetaMcpM
 	if server.UnproxiedMcpServerID.Valid {
 		return nil, oops.E(oops.CodeInvalid, nil, "unproxied mcp servers cannot be meta mcp members").LogError(ctx, logger)
 	}
+	// A meta gateway is Gram-authenticated (meta_mcp_servers.visibility is only
+	// disabled or private), so it cannot present an upstream member's own
+	// authorization server to the caller. serve_meta_members already filters
+	// unrecognised visibilities, but silently: without this the member would be
+	// accepted here and then simply never appear in tools/list.
+	if server.Visibility == mcpservers.VisibilityUpstream {
+		return nil, oops.E(oops.CodeInvalid, nil, "mcp servers requiring upstream authorization cannot be meta mcp members").LogError(ctx, logger)
+	}
 
 	// The meta lock above serializes concurrent adds, so this sees every
 	// committed member.

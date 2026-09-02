@@ -30,6 +30,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
+	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	tunneledmcprepo "github.com/speakeasy-api/gram/server/internal/tunneledmcp/repo"
 	unproxiedmcprepo "github.com/speakeasy-api/gram/server/internal/unproxiedmcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -170,6 +171,25 @@ func seedTunneledMcpServer(t *testing.T, ctx context.Context, conn *pgxpool.Pool
 	require.NoError(t, err)
 
 	return server.ID
+}
+
+// seedToolsetBackend inserts a toolsets row so we have a valid hosted backend
+// FK for mcp_servers tests.
+func seedToolsetBackend(t *testing.T, ctx context.Context, conn *pgxpool.Pool, organizationID string, projectID uuid.UUID) uuid.UUID {
+	t.Helper()
+
+	slug := "toolset-" + uuid.NewString()[:8]
+	toolset, err := toolsetsrepo.New(conn).CreateToolset(ctx, toolsetsrepo.CreateToolsetParams{
+		OrganizationID: organizationID,
+		ProjectID:      projectID,
+		Name:           slug,
+		Slug:           slug,
+		McpSlug:        pgtype.Text{String: slug, Valid: true},
+		McpEnabled:     true,
+	})
+	require.NoError(t, err)
+
+	return toolset.ID
 }
 
 // seedUnproxiedMcpServer inserts an unproxied_mcp_servers row directly

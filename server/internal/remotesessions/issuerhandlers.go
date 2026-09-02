@@ -96,7 +96,7 @@ func (s *Service) FetchRemoteSessionIssuerMetadata(ctx context.Context, payload 
 		return nil, oops.E(oops.CodeBadRequest, nil, "invalid issuer url").LogError(ctx, logger)
 	}
 
-	doc, warnings, err := discoverIssuerMetadata(ctx, s.policy, issuerURL)
+	doc, _, warnings, err := discoverIssuerMetadata(ctx, s.policy, issuerURL)
 	if err != nil {
 		return nil, mapDiscoveryError(ctx, logger, err, oops.CodeBadRequest)
 	}
@@ -295,6 +295,10 @@ func (s *Service) CreateRemoteSessionIssuer(ctx context.Context, payload *gen.Cr
 		ClientIDMetadataDocumentSupported: conv.PtrValOr(payload.ClientIDMetadataDocumentSupported, false),
 		Oidc:                              conv.PtrValOr(payload.Oidc, false),
 		Passthrough:                       conv.PtrValOr(payload.Passthrough, false),
+		// Create does not discover, so it has no document to snapshot. The
+		// column is filled by the first refresh, and by callers that already
+		// hold a discovery document (see platformmcp's attachment).
+		Metadata: nil,
 	})
 	if err != nil {
 		if isRemoteSessionIssuerSlugConflict(err) {
@@ -878,6 +882,18 @@ type DiscoveredIssuerMetadata struct {
 	CodeChallengeMethodsSupported []string
 
 	ClientIDMetadataDocumentSupported bool
+
+	// Metadata is the discovery document these fields were projected from,
+	// filtered to what Gram is willing to re-publish, ready to store in
+	// remote_session_issuers.metadata. Callers that persist an issuer from this
+	// value should store it: they write the endpoints above from the same
+	// document, so the snapshot cannot disagree with them, and it carries the
+	// OIDC extension fields the typed columns do not model.
+	//
+	// Nil when the document could not be reduced to a storable snapshot, which
+	// is not an error: the issuer simply reconstructs its well-known document
+	// from the typed columns until a refresh captures one.
+	Metadata []byte
 }
 
 // DiscoverIssuerMetadata performs issuer metadata discovery through Guardian's
@@ -885,11 +901,17 @@ type DiscoveredIssuerMetadata struct {
 // Platform MCP provider attachment; browser and MCP callers must never supply
 // an issuer URL to it.
 func DiscoverIssuerMetadata(ctx context.Context, policy *guardian.Policy, issuerURL string) (DiscoveredIssuerMetadata, error) {
-	doc, _, err := discoverIssuerMetadata(ctx, policy, issuerURL)
+	doc, raw, _, err := discoverIssuerMetadata(ctx, policy, issuerURL)
 	if err != nil {
 		return DiscoveredIssuerMetadata{}, err
 	}
+	// A document that cannot be reduced to a storable snapshot still yields
+	// usable typed values, so the projection continues with a nil snapshot
+	// rather than failing the caller's attachment over it.
+	snapshot, _ := sanitizeDiscoverySnapshot(raw)
 	return DiscoveredIssuerMetadata{
+		Metadata: snapshot,
+
 		Issuer:                            doc.Issuer,
 		AuthorizationEndpoint:             doc.AuthorizationEndpoint,
 		TokenEndpoint:                     doc.TokenEndpoint,
@@ -910,10 +932,24 @@ func DiscoverIssuerMetadata(ctx context.Context, policy *guardian.Policy, issuer
 	}, nil
 }
 
-func discoverIssuerMetadata(ctx context.Context, policy *guardian.Policy, issuerURL string) (rfc8414Document, []string, error) {
+// discoveredDocument pairs a parsed metadata document with the exact bytes it
+// was parsed from.
+//
+// They travel as one value rather than as two variables because
+// discoverIssuerMetadata may return a document remembered from an earlier probe
+// candidate after later candidates fail. A `raw` tracked alongside the loop
+// would then hold the last probe's body while the returned document came from
+// an earlier one, and the snapshot persisted for the issuer would describe an
+// authorization server Gram never adopted.
+type discoveredDocument struct {
+	doc rfc8414Document
+	raw []byte
+}
+
+func discoverIssuerMetadata(ctx context.Context, policy *guardian.Policy, issuerURL string) (rfc8414Document, []byte, []string, error) {
 	candidates, err := IssuerMetadataProbeCandidates(issuerURL)
 	if err != nil {
-		return rfc8414Document{}, nil, &discoveryError{
+		return rfc8414Document{}, nil, nil, &discoveryError{
 			WellKnownURL: "",
 			Status:       0,
 			cause:        fmt.Errorf("compute well-known url: %w", err),
@@ -934,10 +970,10 @@ func discoverIssuerMetadata(ctx context.Context, policy *guardian.Policy, issuer
 	}
 
 	var firstErr *discoveryError
-	var fallbackDoc rfc8414Document
+	var fallback discoveredDocument
 	haveFallback := false
 	for _, wellKnown := range candidates {
-		doc, attemptErr := attemptIssuerProbe(reqCtx, client, wellKnown)
+		found, attemptErr := attemptIssuerProbe(reqCtx, client, wellKnown)
 		if attemptErr != nil {
 			if firstErr == nil {
 				firstErr = attemptErr
@@ -949,31 +985,39 @@ func discoverIssuerMetadata(ctx context.Context, policy *guardian.Policy, issuer
 		// always a catch-all answering our speculative candidate, not real
 		// metadata. Remember the first such document but keep probing — a later
 		// candidate (e.g. the origin-style fallback) may carry the real one.
-		if doc.AuthorizationEndpoint == "" || doc.TokenEndpoint == "" {
+		if found.doc.AuthorizationEndpoint == "" || found.doc.TokenEndpoint == "" {
 			if !haveFallback {
-				fallbackDoc = doc
+				fallback = found
 				haveFallback = true
 			}
 			continue
 		}
 
-		return doc, collectDiscoveryWarnings(issuerURL, doc), nil
+		return found.doc, found.raw, collectDiscoveryWarnings(issuerURL, found.doc), nil
 	}
 
 	if haveFallback {
-		return fallbackDoc, collectDiscoveryWarnings(issuerURL, fallbackDoc), nil
+		return fallback.doc, fallback.raw, collectDiscoveryWarnings(issuerURL, fallback.doc), nil
 	}
 
-	return rfc8414Document{}, nil, firstErr
+	return rfc8414Document{}, nil, nil, firstErr
 }
 
 // attemptIssuerProbe issues a single GET against an issuer well-known URL and
-// returns either the parsed RFC 8414 / OIDC document or a typed error annotated
-// with the probed URL and upstream status.
-func attemptIssuerProbe(ctx context.Context, client *guardian.HTTPClient, wellKnown string) (rfc8414Document, *discoveryError) {
+// returns either the parsed RFC 8414 / OIDC document, paired with the bytes it
+// was parsed from, or a typed error annotated with the probed URL and upstream
+// status.
+//
+// The raw body is returned so callers can persist a snapshot of what the issuer
+// actually advertised: the typed columns model only the fields Gram acts on, so
+// re-serving from them would drop the OIDC extension fields an MCP client may
+// rely on. It is only ever returned alongside a document that parsed and passed
+// validateIssuerMetadataEndpoints, so a stored snapshot has cleared the same
+// gate as the typed values beside it.
+func attemptIssuerProbe(ctx context.Context, client *guardian.HTTPClient, wellKnown string) (discoveredDocument, *discoveryError) {
 	requestURL, err := url.Parse(wellKnown)
 	if err != nil || !validIssuerDiscoveryURL(requestURL) {
-		return rfc8414Document{}, &discoveryError{
+		return discoveredDocument{}, &discoveryError{
 			WellKnownURL: wellKnown,
 			Status:       0,
 			cause:        errors.New("issuer discovery URL must use HTTPS outside local loopback"),
@@ -981,7 +1025,7 @@ func attemptIssuerProbe(ctx context.Context, client *guardian.HTTPClient, wellKn
 	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, wellKnown, nil)
 	if err != nil {
-		return rfc8414Document{}, &discoveryError{
+		return discoveredDocument{}, &discoveryError{
 			WellKnownURL: wellKnown,
 			Status:       0,
 			cause:        fmt.Errorf("build discovery request: %w", err),
@@ -991,7 +1035,7 @@ func attemptIssuerProbe(ctx context.Context, client *guardian.HTTPClient, wellKn
 
 	resp, err := client.Do(req)
 	if err != nil {
-		return rfc8414Document{}, &discoveryError{
+		return discoveredDocument{}, &discoveryError{
 			WellKnownURL: wellKnown,
 			Status:       0,
 			cause:        fmt.Errorf("fetch discovery document: %w", err),
@@ -1000,7 +1044,7 @@ func attemptIssuerProbe(ctx context.Context, client *guardian.HTTPClient, wellKn
 	defer o11y.NoLogDefer(func() error { return resp.Body.Close() })
 
 	if resp.StatusCode != http.StatusOK {
-		return rfc8414Document{}, &discoveryError{
+		return discoveredDocument{}, &discoveryError{
 			WellKnownURL: wellKnown,
 			Status:       resp.StatusCode,
 			cause:        fmt.Errorf("discovery returned status %d", resp.StatusCode),
@@ -1009,7 +1053,7 @@ func attemptIssuerProbe(ctx context.Context, client *guardian.HTTPClient, wellKn
 
 	body, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
 	if err != nil {
-		return rfc8414Document{}, &discoveryError{
+		return discoveredDocument{}, &discoveryError{
 			WellKnownURL: wellKnown,
 			Status:       resp.StatusCode,
 			cause:        fmt.Errorf("read discovery body: %w", err),
@@ -1018,21 +1062,21 @@ func attemptIssuerProbe(ctx context.Context, client *guardian.HTTPClient, wellKn
 
 	var doc rfc8414Document
 	if err := json.Unmarshal(body, &doc); err != nil {
-		return rfc8414Document{}, &discoveryError{
+		return discoveredDocument{}, &discoveryError{
 			WellKnownURL: wellKnown,
 			Status:       resp.StatusCode,
 			cause:        fmt.Errorf("decode discovery document: %w", err),
 		}
 	}
 	if err := validateIssuerMetadataEndpoints(doc, requestURL); err != nil {
-		return rfc8414Document{}, &discoveryError{
+		return discoveredDocument{}, &discoveryError{
 			WellKnownURL: wellKnown,
 			Status:       resp.StatusCode,
 			cause:        err,
 		}
 	}
 
-	return doc, nil
+	return discoveredDocument{doc: doc, raw: body}, nil
 }
 
 // IssuerMetadataProbeCandidates returns the ordered list of well-known metadata URLs to

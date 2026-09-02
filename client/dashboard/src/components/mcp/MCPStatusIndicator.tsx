@@ -5,6 +5,13 @@ import type { MetaMcpServerVisibility } from "@gram/client/models/components/met
 interface MCPStatusIndicatorProps {
   mcpEnabled: boolean | undefined;
   mcpIsPublic: boolean | undefined;
+  /**
+   * The server authenticates its clients against its own upstream
+   * authorization server. Optional because the toolset-backed callers have no
+   * such state; without it an upstream server reads as "Private", which is
+   * the one thing it is not.
+   */
+  mcpIsUpstream?: boolean;
   size?: "sm" | "md";
   className?: string;
 }
@@ -19,6 +26,7 @@ interface StatusConfig {
 function getStatusConfig(
   mcpEnabled: boolean | undefined,
   mcpIsPublic: boolean | undefined,
+  mcpIsUpstream: boolean | undefined,
 ): StatusConfig {
   if (!mcpEnabled) {
     return {
@@ -26,6 +34,16 @@ function getStatusConfig(
       pulseColor: "bg-destructive/60",
       label: "Disabled",
       animate: false,
+    };
+  }
+  // Checked before the public/private split, which this axis does not sit on:
+  // the server is reachable without a Gram credential, but it is not open.
+  if (mcpIsUpstream) {
+    return {
+      color: "bg-information-default",
+      pulseColor: "bg-information-default",
+      label: "Upstream auth",
+      animate: true,
     };
   }
   if (!mcpIsPublic) {
@@ -115,12 +133,13 @@ function StatusDotLabel({
 export function MCPStatusIndicator({
   mcpEnabled,
   mcpIsPublic,
+  mcpIsUpstream,
   size = "md",
   className,
 }: MCPStatusIndicatorProps): JSX.Element {
   return (
     <StatusDotLabel
-      status={getStatusConfig(mcpEnabled, mcpIsPublic)}
+      status={getStatusConfig(mcpEnabled, mcpIsPublic, mcpIsUpstream)}
       size={size}
       className={className}
     />

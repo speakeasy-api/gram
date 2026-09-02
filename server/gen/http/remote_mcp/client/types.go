@@ -8532,8 +8532,8 @@ func ValidateMcpServerResponseBody(body *McpServerResponseBody) (err error) {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.tool_variations_group_id", *body.ToolVariationsGroupID, goa.FormatUUID))
 	}
 	if body.Visibility != nil {
-		if !(*body.Visibility == "disabled" || *body.Visibility == "private" || *body.Visibility == "public") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.visibility", *body.Visibility, []any{"disabled", "private", "public"}))
+		if !(*body.Visibility == "disabled" || *body.Visibility == "private" || *body.Visibility == "public" || *body.Visibility == "upstream") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.visibility", *body.Visibility, []any{"disabled", "private", "public", "upstream"}))
 		}
 	}
 	if body.CreatedAt != nil {

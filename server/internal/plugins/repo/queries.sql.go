@@ -753,6 +753,17 @@ WITH intended AS (
       WHEN ps.mcp_server_id IS NOT NULL AND s.project_id <> p.project_id THEN 'mcp_server_wrong_project'
       WHEN ps.mcp_server_id IS NOT NULL AND s.deleted IS TRUE THEN 'mcp_server_deleted'
       WHEN ps.mcp_server_id IS NOT NULL AND s.visibility = 'disabled' THEN 'mcp_server_disabled'
+      -- Direct upstream authorization is served for hosted (toolset) backends
+      -- only. mcpservers.verifyUpstreamAuthorization rejects the other
+      -- backends at write time; this keeps an already-attached server that
+      -- somehow reaches that state off the marketplace rather than
+      -- advertising it as installable.
+      WHEN ps.mcp_server_id IS NOT NULL AND s.visibility = 'upstream' AND s.toolset_id IS NULL THEN 'upstream_backend_unsupported'
+      -- The other two invariants ResolveAuthorizationMode enforces. Without
+      -- them a malformed hosted row produces no compatibility issue at all,
+      -- so the plugin stays eligible while every request to it 404s.
+      WHEN ps.mcp_server_id IS NOT NULL AND s.visibility = 'upstream' AND s.remote_session_issuer_id IS NULL THEN 'upstream_issuer_missing'
+      WHEN ps.mcp_server_id IS NOT NULL AND s.visibility = 'upstream' AND s.user_session_issuer_id IS NOT NULL THEN 'upstream_user_session_issuer_conflict'
       WHEN ps.mcp_server_id IS NOT NULL AND s.remote_mcp_server_id IS NOT NULL AND (rms.id IS NULL OR rms.project_id <> p.project_id OR rms.deleted IS TRUE) THEN 'remote_backing_unresolved'
 	  WHEN ps.mcp_server_id IS NOT NULL AND s.remote_mcp_server_id IS NOT NULL AND rms.transport_type NOT IN ('streamable-http', 'sse') THEN 'remote_transport_unsupported'
 	  WHEN ps.mcp_server_id IS NOT NULL AND s.remote_mcp_server_id IS NOT NULL AND EXISTS (
@@ -1359,7 +1370,12 @@ SELECT
   ps.sort_order AS server_sort_order,
   ps.mcp_server_id,
 	(s.visibility = 'public')::bool AS mcp_server_is_public,
-	(s.user_session_issuer_id IS NOT NULL)::bool AS mcp_server_is_oauth,
+	-- Upstream servers are OAuth-protected even though they carry no
+	-- user_session_issuer_id: the authorization server is the upstream's, not
+	-- Gram's. Without this they read as neither public nor OAuth, and
+	-- plugins/generate.go emits a Gram API key config for a server whose only
+	-- accepted credential is an upstream bearer.
+	(s.user_session_issuer_id IS NOT NULL OR s.visibility = 'upstream')::bool AS mcp_server_is_oauth,
   COALESCE(ep.slug, '') AS endpoint_slug,
   ep.custom_domain AS endpoint_custom_domain,
   ump.url AS unproxied_url
@@ -1382,9 +1398,9 @@ LEFT JOIN LATERAL (
   ORDER BY (e.custom_domain_id IS NULL) ASC, e.created_at ASC
   LIMIT 1
 ) ep ON TRUE
-LEFT JOIN unproxied_mcp_servers ump ON ump.id = s.unproxied_mcp_server_id AND ump.project_id = p.project_id AND ump.deleted IS FALSE
-LEFT JOIN remote_mcp_servers rms ON rms.id = s.remote_mcp_server_id AND rms.project_id = p.project_id AND rms.deleted IS FALSE AND rms.transport_type IN ('streamable-http', 'sse')
-LEFT JOIN tunneled_mcp_servers tms ON tms.id = s.tunneled_mcp_server_id AND tms.project_id = p.project_id AND tms.deleted IS FALSE AND tms.status <> 'revoked' AND (s.visibility <> 'public' OR tms.allow_public IS TRUE)
+LEFT JOIN unproxied_mcp_servers ump ON ump.id = s.unproxied_mcp_server_id AND ump.project_id = p.project_id AND ump.deleted IS FALSE AND s.visibility <> 'upstream'
+LEFT JOIN remote_mcp_servers rms ON rms.id = s.remote_mcp_server_id AND rms.project_id = p.project_id AND rms.deleted IS FALSE AND rms.transport_type IN ('streamable-http', 'sse') AND s.visibility <> 'upstream'
+LEFT JOIN tunneled_mcp_servers tms ON tms.id = s.tunneled_mcp_server_id AND tms.project_id = p.project_id AND tms.deleted IS FALSE AND tms.status <> 'revoked' AND s.visibility <> 'upstream' AND (s.visibility <> 'public' OR tms.allow_public IS TRUE)
 LEFT JOIN toolsets mts ON mts.id = s.toolset_id AND mts.project_id = p.project_id AND mts.deleted IS FALSE AND mts.mcp_enabled IS TRUE
 WHERE p.project_id = $1
   AND p.deleted IS FALSE
@@ -1434,6 +1450,16 @@ type ListPluginsWithMcpServersForProjectRow struct {
 // usable endpoint nor an unproxied backing are dropped.
 // Scoped to project_id; the mcp_server must live in the same project as the
 // plugin, and disabled servers are excluded.
+// The upstream exclusions mirror the tunneled join below: direct upstream
+// authorization is served for hosted (toolset) backends only, so a remote or
+// unproxied row carrying it resolves no backend here. Without them
+// resolvePluginInfos emits a server that ResolveAuthorizationMode refuses as
+// not found, so the generated package points at a dead endpoint.
+// The visibility predicates gate anonymous serving: 'public' needs the tunnel
+// owner's allow_public consent, and 'upstream' is not servable on a tunneled
+// backend at all, so neither may resolve a tunnel here. Written as an explicit
+// exclusion rather than leaning on `<> 'public'`, which admits every value the
+// consent rule was never written for.
 func (q *Queries) ListPluginsWithMcpServersForProject(ctx context.Context, arg ListPluginsWithMcpServersForProjectParams) ([]ListPluginsWithMcpServersForProjectRow, error) {
 	rows, err := q.db.Query(ctx, listPluginsWithMcpServersForProject, arg.ProjectID, arg.PluginIds)
 	if err != nil {

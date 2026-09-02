@@ -923,12 +923,28 @@ type installContext struct {
 }
 
 // isPublic returns true when the install page is accessible without auth.
+//
+// Upstream servers never reach the mcpServer arm below: they are toolset-backed
+// by construction, so they take the toolset arm and inherit
+// toolset.McpIsPublic. That is false for a converted server, which is the
+// answer we want, but it is a coincidence rather than a rule — a backing
+// toolset left public would render the page as needing no credential while
+// resolveSecurityMode correctly reports OAuth. Worth revisiting when AIM-25
+// removes the toolset-keyed source of truth.
 // For toolset-backed installs the existing toolset.McpIsPublic flag wins,
 // even when reached via an mcp_server bridge — visibility on the
 // mcp_server is irrelevant to a toolset-backed install during the
 // dual-source phase. For Remote-MCP-backed installs the mcp_server's own
 // visibility flag is authoritative.
 func (ic *installContext) isPublic() bool {
+	// Checked before the toolset arm, which upstream servers otherwise take
+	// (they are toolset-backed by construction). A backing toolset left public
+	// would have rendered the page as needing no credential at all, while
+	// resolveSecurityMode correctly reported OAuth: two contradictory answers
+	// on one page, and the permissive one wins for anything gated on this.
+	if ic.mcpServer != nil && ic.mcpServer.Visibility == mcpservers.VisibilityUpstream {
+		return false
+	}
 	if ic.toolset != nil {
 		return ic.toolset.McpIsPublic
 	}
@@ -1710,10 +1726,15 @@ func (s *Service) loadToolsetFromContextAndSlug(ctx context.Context, mcpSlug str
 // which gates OAuth on UserSessionIssuerID.Valid from both sources. server is
 // nil when the install is not mcp_server-backed.
 func (s *Service) resolveSecurityMode(toolset *toolsets_repo.Toolset, server *mcpservers_repo.McpServer) securityMode {
+	// An upstream server is OAuth-protected even though it carries no issuer of
+	// Gram's: the authorization server is the upstream's. Without this the
+	// install page would tell the user to paste a Gram API key for a server
+	// whose only accepted credential is an upstream bearer.
 	oauthRequired := toolset.OauthProxyServerID.Valid ||
 		toolset.ExternalOauthServerID.Valid ||
 		toolset.UserSessionIssuerID.Valid ||
-		(server != nil && server.UserSessionIssuerID.Valid)
+		(server != nil && server.UserSessionIssuerID.Valid) ||
+		(server != nil && server.Visibility == mcpservers.VisibilityUpstream)
 	if oauthRequired {
 		return securityModeOAuth
 	}
