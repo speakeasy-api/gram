@@ -415,3 +415,11 @@ WHERE s.user_session_issuer_id = resolved.user_session_issuer_id
                 AND p.organization_id = @organization_id::text)
   AND s.deleted IS FALSE
   AND s.remote_session_issuer_id IS DISTINCT FROM resolved.remote_session_issuer_id;
+
+-- name: SetMCPServerUserSessionIssuer :one
+UPDATE mcp_servers
+SET
+    user_session_issuer_id = @user_session_issuer_id,
+    updated_at = clock_timestamp()
+WHERE id = @id AND project_id = @project_id AND deleted IS FALSE
+RETURNING *;

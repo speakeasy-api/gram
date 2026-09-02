@@ -1204,6 +1204,46 @@ func (q *Queries) SetMCPServerToolMetadata(ctx context.Context, arg SetMCPServer
 	return items, nil
 }
 
+const setMCPServerUserSessionIssuer = `-- name: SetMCPServerUserSessionIssuer :one
+UPDATE mcp_servers
+SET
+    user_session_issuer_id = $1,
+    updated_at = clock_timestamp()
+WHERE id = $2 AND project_id = $3 AND deleted IS FALSE
+RETURNING id, project_id, name, slug, environment_id, user_session_issuer_id, remote_session_issuer_id, remote_mcp_server_id, tunneled_mcp_server_id, toolset_id, unproxied_mcp_server_id, tool_variations_group_id, visibility, created_at, updated_at, deleted_at, deleted
+`
+
+type SetMCPServerUserSessionIssuerParams struct {
+	UserSessionIssuerID uuid.NullUUID
+	ID                  uuid.UUID
+	ProjectID           uuid.UUID
+}
+
+func (q *Queries) SetMCPServerUserSessionIssuer(ctx context.Context, arg SetMCPServerUserSessionIssuerParams) (McpServer, error) {
+	row := q.db.QueryRow(ctx, setMCPServerUserSessionIssuer, arg.UserSessionIssuerID, arg.ID, arg.ProjectID)
+	var i McpServer
+	err := row.Scan(
+		&i.ID,
+		&i.ProjectID,
+		&i.Name,
+		&i.Slug,
+		&i.EnvironmentID,
+		&i.UserSessionIssuerID,
+		&i.RemoteSessionIssuerID,
+		&i.RemoteMcpServerID,
+		&i.TunneledMcpServerID,
+		&i.ToolsetID,
+		&i.UnproxiedMcpServerID,
+		&i.ToolVariationsGroupID,
+		&i.Visibility,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
 const updateMCPServer = `-- name: UpdateMCPServer :one
 UPDATE mcp_servers
 SET

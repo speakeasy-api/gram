@@ -52,18 +52,9 @@ func TestToolsetsService_UpdateToolset_McpSlugTakenByEndpoint(t *testing.T) {
 
 	takenSlug := authCtx.OrganizationSlug + "-endpoint-owned"
 
-	wrapperID, err := uuid.NewV7()
-	require.NoError(t, err)
-	wrapper, err := mcpserversrepo.New(ti.conn).CreateMCPServer(ctx, mcpserversrepo.CreateMCPServerParams{
-		ID:                  wrapperID,
-		ProjectID:           *authCtx.ProjectID,
-		Name:                conv.ToPGText("wrapped hosted server"),
-		Slug:                conv.ToPGText("wrapped-hosted-" + uuid.NewString()),
-		EnvironmentID:       uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-		UserSessionIssuerID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-		RemoteMcpServerID:   uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-		ToolsetID:           uuid.NullUUID{UUID: uuid.MustParse(other.ID), Valid: true},
-		Visibility:          "private",
+	wrapper, err := mcpserversrepo.New(ti.conn).GetMCPServerByToolsetID(ctx, mcpserversrepo.GetMCPServerByToolsetIDParams{
+		ToolsetID: uuid.MustParse(other.ID),
+		ProjectID: *authCtx.ProjectID,
 	})
 	require.NoError(t, err)
 
@@ -178,45 +169,18 @@ func TestToolsetsService_UpdateToolset_DomainChangeProbesExistingSlug(t *testing
 	})
 	require.NoError(t, err)
 
-	domain, err := cdrepo.New(ti.conn).CreateCustomDomain(ctx, cdrepo.CreateCustomDomainParams{
-		OrganizationID:  authCtx.ActiveOrganizationID,
-		Domain:          "move.example.com",
-		IngressName:     conv.ToPGText("ingress-move"),
-		CertSecretName:  conv.ToPGText("cert-move"),
-		ProvisionerKind: "ingress",
-		IpAllowlist:     []string{},
-	})
-	require.NoError(t, err)
-	_, err = cdrepo.New(ti.conn).SetCustomDomainVerified(ctx, domain.ID)
-	require.NoError(t, err)
-	activated, err := cdrepo.New(ti.conn).ActivateVerifiedCustomDomain(ctx, cdrepo.ActivateVerifiedCustomDomainParams{
-		IngressName:     conv.ToPGText("ingress-move"),
-		CertSecretName:  conv.ToPGText("cert-move"),
-		ProvisionerKind: "ingress",
-		ID:              domain.ID,
-	})
-	require.NoError(t, err)
-	require.EqualValues(t, 1, activated)
+	domainID := seedActiveCustomDomain(t, ctx, ti.conn, authCtx.ActiveOrganizationID)
 
 	sharedSlug := authCtx.OrganizationSlug + "-shared-address"
 
-	wrapperID, err := uuid.NewV7()
-	require.NoError(t, err)
-	wrapper, err := mcpserversrepo.New(ti.conn).CreateMCPServer(ctx, mcpserversrepo.CreateMCPServerParams{
-		ID:                  wrapperID,
-		ProjectID:           *authCtx.ProjectID,
-		Name:                conv.ToPGText("domain hosted server"),
-		Slug:                conv.ToPGText("domain-hosted-" + uuid.NewString()),
-		EnvironmentID:       uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-		UserSessionIssuerID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-		RemoteMcpServerID:   uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-		ToolsetID:           uuid.NullUUID{UUID: uuid.MustParse(other.ID), Valid: true},
-		Visibility:          "private",
+	wrapper, err := mcpserversrepo.New(ti.conn).GetMCPServerByToolsetID(ctx, mcpserversrepo.GetMCPServerByToolsetIDParams{
+		ToolsetID: uuid.MustParse(other.ID),
+		ProjectID: *authCtx.ProjectID,
 	})
 	require.NoError(t, err)
 	_, err = mcpendpointsrepo.New(ti.conn).CreateMCPEndpoint(ctx, mcpendpointsrepo.CreateMCPEndpointParams{
 		ProjectID:       *authCtx.ProjectID,
-		CustomDomainID:  uuid.NullUUID{UUID: domain.ID, Valid: true},
+		CustomDomainID:  uuid.NullUUID{UUID: domainID, Valid: true},
 		McpServerID:     uuid.NullUUID{UUID: wrapper.ID, Valid: true},
 		MetaMcpServerID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 		Slug:            sharedSlug,
@@ -240,7 +204,7 @@ func TestToolsetsService_UpdateToolset_DomainChangeProbesExistingSlug(t *testing
 		McpSlug:                nil,
 		McpIsPublic:            nil,
 		McpEnabled:             nil,
-		CustomDomainID:         conv.PtrEmpty(domain.ID.String()),
+		CustomDomainID:         conv.PtrEmpty(domainID.String()),
 		ProjectSlugInput:       nil,
 	})
 	var shareable *oops.ShareableError

@@ -2,6 +2,7 @@ package metamcp
 
 import (
 	"context"
+	"fmt"
 	"errors"
 	"log/slog"
 	"math"
@@ -996,17 +997,10 @@ func rootDomainIDs(endpoints []mcpendpointsrepo.McpEndpoint) []uuid.UUID {
 }
 
 func (s *Service) reconcileCustomDomains(ctx context.Context, customDomainIDs []uuid.UUID) error {
-	if s.temporalEnv == nil {
-		return nil
+	if err := background.ReconcileCustomDomains(ctx, s.logger, s.temporalEnv, customDomainIDs); err != nil {
+		return fmt.Errorf("reconcile custom domains: %w", err)
 	}
-	var reconcileErrors []error
-	for _, customDomainID := range customDomainIDs {
-		_, err := (&background.CustomDomainRegistrationClient{TemporalEnv: s.temporalEnv}).ExecuteCustomDomainReconcile(ctx, customDomainID)
-		if err != nil {
-			reconcileErrors = append(reconcileErrors, oops.E(oops.CodeUnexpected, err, "start custom domain reconciliation").LogError(ctx, s.logger))
-		}
-	}
-	return errors.Join(reconcileErrors...)
+	return nil
 }
 
 // sortOrderValue bounds-checks an optional sort order before narrowing it to

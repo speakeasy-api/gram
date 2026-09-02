@@ -99,6 +99,7 @@ func (s *RemoteMCPProvisioningService) ProvisionDashboardRemoteMCP(ctx context.C
 		Name:                  displayName,
 		Visibility:            dashboardRemoteMCPInitialVisibility,
 		EnvironmentID:         uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		UserSessionIssuerID:   uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 		RemoteMCPServerID:     uuid.NullUUID{UUID: remote.ID, Valid: true},
 		TunneledMCPServerID:   uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 		ToolsetID:             uuid.NullUUID{UUID: uuid.Nil, Valid: false},
