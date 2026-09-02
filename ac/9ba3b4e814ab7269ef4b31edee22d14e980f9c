@@ -1,0 +1,22 @@
+server/internal/k8s/tailscale_network_ingress_provisioner_test.go
+  h_9630b74bdac540 1-15,17-74,79-91,95-102,116-117,119-120,122,126-134,157-172,174-200,208-213,215-216,218-278
+server/internal/k8s/network_ingress_provisioner_test.go
+  h_9630b74bdac540 1-4,6-34,36-43,48-78,85,89-101,103-106,108-110,112,114-116
+server/internal/k8s/network_ingress_provisioner.go
+  h_9630b74bdac540 1-4,7-9,11-61,64-84,92-142,151-153,155-156,160-185,187-192,194-207
+server/internal/k8s/network_ingress_metrics.go
+  h_9630b74bdac540 1-147,154-192
+server/internal/k8s/tailscale_network_ingress_provisioner.go
+  h_9630b74bdac540 1-8,10-11,13-88,90-153,155-157,159-191,203-208,237,240,248,253-258,260,262,269-270,277-278,280-281,283-284,286-287,294-295,302-303,310-311,318-319,326-327,334-351,355-370,374-498,500-513,515-606,608,610-617,619-621,623-628,630-666,672-695,706-707,709-710,712-740,755-790
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "ac9ba3b4e814ab7269ef4b31edee22d14e980f9c",
+  "prompts": {},
+  "humans": {
+    "h_9630b74bdac540": {
+      "author": "Tristan Cartledge <tristan@speakeasyapi.dev>"
+    }
+  }
+}
