@@ -389,7 +389,7 @@ export function EventMatchDialog({
 
   const summary = rationale?.trim() ? rationale.trim() : null;
 
-  if (!resultId || !hasRevealableEvent(matchRedacted)) {
+  if (!resultId || !matchRedacted || !hasRevealableEvent(matchRedacted)) {
     return summary ? <RationaleText text={summary} /> : <span>-</span>;
   }
 
