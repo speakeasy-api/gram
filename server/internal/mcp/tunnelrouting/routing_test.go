@@ -6,12 +6,14 @@ import (
 	"errors"
 	"net"
 	"net/http"
+	"syscall"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/constants"
+	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp/proxy"
 	"github.com/speakeasy-api/gram/tunnel/route"
 	"github.com/speakeasy-api/gram/tunnel/wire"
@@ -68,7 +70,7 @@ func TestRetryerDialFailureUnpublishesAndFailsOver(t *testing.T) {
 	require.NoError(t, routes.Publish(ctx, "tunnel-1", "127.0.0.1:1001", time.Minute))
 	require.NoError(t, routes.Publish(ctx, "tunnel-1", "127.0.0.1:1002", time.Minute))
 
-	dialErr := &net.OpError{Op: "dial", Net: "tcp", Err: errors.New("i/o timeout")}
+	dialErr := &net.OpError{Op: "dial", Net: "tcp", Err: syscall.ETIMEDOUT}
 	retry, err := Retryer(routes, "tunnel-1", "127.0.0.1:1001", "auth:stable", "forward-token")(ctx, nil, dialErr)
 	require.NoError(t, err)
 	require.NotNil(t, retry)
@@ -77,6 +79,24 @@ func TestRetryerDialFailureUnpublishesAndFailsOver(t *testing.T) {
 	candidates, err := routes.Candidates(ctx, "tunnel-1")
 	require.NoError(t, err)
 	require.Equal(t, []string{"127.0.0.1:1002"}, candidates)
+}
+
+func TestRetryerGuardianPolicyFailurePreservesRoute(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	routes := route.NewRouteTable()
+	require.NoError(t, routes.Publish(ctx, "tunnel-1", "127.0.0.1:1001", time.Minute))
+	require.NoError(t, routes.Publish(ctx, "tunnel-1", "127.0.0.1:1002", time.Minute))
+
+	blockedErr := &net.OpError{Op: "dial", Net: "tcp", Err: guardian.ErrBlockedIP}
+	retry, err := Retryer(routes, "tunnel-1", "127.0.0.1:1001", "auth:stable", "forward-token")(ctx, nil, blockedErr)
+	require.NoError(t, err)
+	require.Nil(t, retry)
+
+	candidates, err := routes.Candidates(ctx, "tunnel-1")
+	require.NoError(t, err)
+	require.ElementsMatch(t, []string{"127.0.0.1:1001", "127.0.0.1:1002"}, candidates)
 }
 
 func TestRetryerDoesNotReplayAfterConnectedTransportFailure(t *testing.T) {

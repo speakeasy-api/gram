@@ -10,6 +10,7 @@ import (
 	"os/signal"
 	"strconv"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 
@@ -78,12 +79,31 @@ func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
+	shutdownDone := make(chan struct{})
 	go func() {
+		defer close(shutdownDone)
 		<-ctx.Done()
+
 		shutCtx, cancel := context.WithTimeout(context.Background(), 25*time.Second)
 		defer cancel()
-		_ = publicSrv.Shutdown(shutCtx)
-		_ = forwardSrv.Shutdown(shutCtx)
+
+		var shutdowns sync.WaitGroup
+		shutdowns.Go(func() {
+			if err := publicSrv.Shutdown(shutCtx); err != nil {
+				logger.ErrorContext(shutCtx, "tunnel-gateway public listener shutdown failed", slog.Any("error", err))
+			}
+		})
+		shutdowns.Go(func() {
+			if err := forwardSrv.Shutdown(shutCtx); err != nil {
+				logger.ErrorContext(shutCtx, "tunnel-gateway forward listener shutdown failed", slog.Any("error", err))
+			}
+		})
+		shutdowns.Go(func() {
+			if err := gw.Shutdown(shutCtx); err != nil {
+				logger.ErrorContext(shutCtx, "tunnel-gateway session drain failed", slog.Any("error", err))
+			}
+		})
+		shutdowns.Wait()
 	}()
 
 	errCh := make(chan error, 2)
@@ -99,18 +119,10 @@ func main() {
 		if err := <-errCh; err != nil && serverErr == nil {
 			serverErr = err
 			stop()
-			shutCtx, cancel := context.WithTimeout(context.Background(), 25*time.Second)
-			_ = publicSrv.Shutdown(shutCtx)
-			_ = forwardSrv.Shutdown(shutCtx)
-			cancel()
 		}
 	}
-
-	drainCtx, cancelDrain := context.WithTimeout(context.Background(), 25*time.Second)
-	if err := gw.Shutdown(drainCtx); err != nil {
-		logger.ErrorContext(context.Background(), "tunnel-gateway session drain failed", slog.Any("error", err))
-	}
-	cancelDrain()
+	stop()
+	<-shutdownDone
 
 	if serverErr != nil {
 		logger.ErrorContext(context.Background(), "tunnel-gateway server error", slog.Any("error", serverErr))

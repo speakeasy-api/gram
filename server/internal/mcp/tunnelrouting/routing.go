@@ -6,14 +6,13 @@ import (
 	cryptorand "crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
-	"errors"
 	"fmt"
 	"math/big"
-	"net"
 	"net/http"
 	"net/url"
 	"strings"
 
+	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/mcp/httpheaders"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp/proxy"
 	"github.com/speakeasy-api/gram/tunnel/route"
@@ -106,8 +105,7 @@ func SelectRoute(clientAffinityKey string, candidates []string, exclude map[stri
 func Retryer(routes route.Store, tunnelID, selectedAddr, clientAffinityKey, forwardToken string) proxy.UpstreamRetryer {
 	return func(ctx context.Context, resp *http.Response, forwardErr error) (*proxy.UpstreamRetry, error) {
 		if forwardErr != nil {
-			var opErr *net.OpError
-			if ctx.Err() != nil || !errors.As(forwardErr, &opErr) || opErr.Op != "dial" {
+			if ctx.Err() != nil || !guardian.IsDeadPeerDialError(forwardErr) {
 				return nil, nil
 			}
 			if err := unpublishSelected(ctx, routes, tunnelID, selectedAddr); err != nil {
