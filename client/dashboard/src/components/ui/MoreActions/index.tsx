@@ -107,16 +107,16 @@ export function MoreActions({
             disabled={triggerLoading || triggerDisabled}
             aria-busy={triggerLoading === true}
             style={triggerStyle}
-            aria-label={
-              triggerLoading
-                ? "Action in progress"
-                : (triggerAriaLabel ?? "Open menu")
-            }
           >
             <Icon
               name={triggerLoading ? "loader-circle" : "ellipsis-vertical"}
               className={cn("size-4", triggerLoading && "animate-spin")}
             />
+            <span className="sr-only">
+              {triggerLoading
+                ? "Action in progress"
+                : (triggerAriaLabel ?? "Open menu")}
+            </span>
           </Button>
         )}
       </DropdownMenuTrigger>
