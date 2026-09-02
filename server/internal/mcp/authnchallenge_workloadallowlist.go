@@ -1,7 +1,12 @@
-// Admission for the workload assertion grant: deciding whether an assertion's
-// iss is an issuer this endpoint trusts, before anything is fetched. Sits in
-// front of workloadIssuerKeySource in authnchallenge_workloadauth.go, which
-// turns the row this produces into a key source.
+// Admission for the workload assertion grant: resolving an assertion's iss to
+// the issuer row the rest of the grant is built on. Sits in front of
+// workloadIssuerKeySource in authnchallenge_workloadauth.go, which reads that
+// row's stored jwks_uri, and ahead of the subject-level admission that decides
+// whether the workload itself is one this endpoint accepts.
+//
+// Resolving the issuer is not the same as admitting the workload, and this
+// stage only does the first. See errWorkloadIssuerUntrusted for why that
+// distinction is load-bearing rather than pedantic.
 
 package mcp
 
@@ -81,12 +86,19 @@ const (
 // need and far below what an attacker would want.
 var workloadIssuerLookupRate = ratelimit.PerMinute(120).WithBurst(30)
 
-// errWorkloadIssuerUntrusted reports an assertion whose iss names no issuer
-// this endpoint trusts.
+// errWorkloadIssuerUntrusted reports an assertion whose iss resolves to no
+// issuer row visible to the endpoint's tenancy.
 //
-// Signature verification proves an assertion is genuine, not that it was
-// meant for us: a CI provider's issuer mints valid tokens for every job on
-// its platform. This is where "genuinely signed" stops being enough.
+// "Visible to the tenancy" is deliberately weaker than "trusted by this
+// endpoint", and the gap between them is not pedantry. The lookup draws on the
+// project, organization and platform tiers, so a platform-curated row resolves
+// for every tenant in the fleet.
+//
+// That breadth is right for this stage, which establishes only that Gram knows
+// the issuer and holds keys for it. A CI provider's issuer mints valid tokens
+// for every job on its platform, and nothing here tells ours from anyone
+// else's. The subject-level admission that follows is what narrows it, and that
+// is the security boundary of the grant — not this.
 var errWorkloadIssuerUntrusted = errors.New("issuer is not trusted by this endpoint")
 
 // errWorkloadIssuerLookupRateLimited reports an admission lookup refused
@@ -201,9 +213,9 @@ func newWorkloadIssuerLookup(db remotesessions_repo.DBTX) workloadIssuerLookup {
 	}
 }
 
-// workloadIssuerAdmission answers whether an endpoint trusts an assertion's
-// issuer, remembering recent misses so a repeated unknown issuer costs
-// nothing beyond a map read.
+// workloadIssuerAdmission resolves an assertion's issuer to the row that
+// describes it, remembering recent rejections so a repeated unknown issuer
+// costs nothing beyond a map read.
 //
 // Safe for concurrent use; build one at wiring time.
 type workloadIssuerAdmission struct {
@@ -262,15 +274,19 @@ type workloadIssuerResolution struct {
 	row *remotesessions_repo.RemoteSessionIssuer
 }
 
-// admit resolves issuerURL to the trusted issuer row it names, or reports
+// admit resolves issuerURL to the issuer row it names, or reports
 // errWorkloadIssuerUntrusted.
 //
-// A rejection here costs no outbound request, and a repeated rejection costs
-// no query either. Both matter because this grant is reachable without
-// credentials by design: if an unrecognised iss reached discovery, anyone
-// could aim Gram's egress at a host of their choosing and spend its fetch
-// budget doing it, and if every rejection reached the database, the cheapest
-// possible request would still cost a query.
+// What a rejection costs is the whole point of this function, so it is worth
+// being exact about what that cost is. Nothing on this path fetches: the key
+// source reads a jwks_uri already stored on the row, so an unrecognised iss
+// cannot become an outbound request whatever admission does.
+//
+// What a miss actually costs is one indexed SELECT. Bounding that still matters,
+// because the grant is reachable without credentials by design, so the cheapest
+// request anyone can produce would otherwise buy a query. The rate limiter is
+// that bound. The miss cache sits on top of it and keeps a repeat of one
+// spelling from spending the budget at all.
 func (a *workloadIssuerAdmission) admit(ctx context.Context, endpoint *ResolvedMcpEndpoint, issuerURL string) (*remotesessions_repo.RemoteSessionIssuer, error) {
 	key := workloadIssuerMissKey(endpoint, issuerURL)
 	if reason, ok := a.misses.seen(key); ok {
