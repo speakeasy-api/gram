@@ -55,7 +55,7 @@ import {
   Server,
   Trash2,
 } from "lucide-react";
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Navigate, useNavigate, useParams } from "react-router";
 import { toast } from "sonner";
 import {
@@ -1074,17 +1074,23 @@ function PublicRateLimitsSection({
     toPublicRateDraft(tunneledMcpServer),
   );
   const [error, setError] = useState<string>();
+  // The stored values the draft was last synced from, so a refetch that
+  // changes them only replaces an untouched draft and never clobbers edits.
+  const syncedFrom = useRef(toPublicRateDraft(tunneledMcpServer));
 
   const { publicRequestRatePerSecond, publicRequestBurst } = tunneledMcpServer;
   useEffect(() => {
-    setDraft(toPublicRateDraft(tunneledMcpServer));
+    const next = toPublicRateDraft(tunneledMcpServer);
+    setDraft((current) => {
+      const untouched = PUBLIC_RATE_LIMIT_FIELDS.every(
+        ({ key }) => current[key] === syncedFrom.current[key],
+      );
+      syncedFrom.current = next;
+      return untouched ? next : current;
+    });
     // Resync only when a stored value changes, not on every refetch.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [publicRequestRatePerSecond, publicRequestBurst]);
-
-  if (!tunneledMcpServer.allowPublic) {
-    return null;
-  }
 
   // Omitted fields leave the stored value alone; a cleared field sends 0,
   // which the server treats as "back to the deployment default".
@@ -1157,6 +1163,9 @@ function PublicRateLimitsSection({
         caller, so it bounds the total load reaching your server rather than
         fairness between callers. Leave a field blank to use the deployment
         default.
+        {tunneledMcpServer.allowPublic
+          ? null
+          : " Takes effect once public access is enabled."}
       </Text>
 
       <dl className="mb-4 grid max-w-xl grid-cols-[auto_1fr] gap-x-6 gap-y-1">
