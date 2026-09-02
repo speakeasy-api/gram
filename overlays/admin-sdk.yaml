@@ -1,0 +1,24 @@
+overlay: 1.0.0
+x-speakeasy-jsonpath: rfc9535
+info:
+  title: Admin SDK policy
+  version: 0.0.0
+actions:
+  # Retain only operations owned by the standalone Admin service.
+  - target: $.paths.*[?count(@.tags[?@=='admin'])==0]
+    remove: true
+  - target: $.paths[?length(@)==0]
+    remove: true
+  - target: $.tags[?@.name!='admin']
+    remove: true
+  # Browser requests authenticate with the ambient same-origin Admin cookie.
+  - target: $.paths..security
+    remove: true
+  - target: $.components.securitySchemes["admin_auth_header_Authorization"]
+    remove: true
+  - target: $.servers[0].url
+    update: /
+  # These operations navigate the browser rather than making SDK requests.
+  - target: $.paths.*[?(@.operationId=='admin#login' || @.operationId=='admin#callback' || @.operationId=='adminOpenOrganizationInDashboard')]
+    update:
+      x-speakeasy-ignore: true
