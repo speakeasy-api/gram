@@ -40,6 +40,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp/remotemcptest"
 	remotemcprepo "github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
+	"github.com/speakeasy-api/gram/server/internal/requestorigin"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	tunneledmcprepo "github.com/speakeasy-api/gram/server/internal/tunneledmcp/repo"
@@ -556,6 +557,59 @@ func TestServePublic_PrivateOnlyEndpointDoesNotFallBackToLegacyToolset(t *testin
 	var shareErr *oops.ShareableError
 	require.ErrorAs(t, err, &shareErr)
 	require.Equal(t, oops.CodeNotFound, shareErr.Code)
+}
+
+func TestResolveMCPEndpointAndServerPrivateOriginUsesIngressNamespace(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	toolset := createPublicMCPToolset(t, ctx, toolsetsrepo.New(ti.conn), authCtx, "private-resolver-backend-"+uuid.NewString()[:8])
+	slug := "private-resolver-" + uuid.NewString()[:8]
+	server := createToolsetMcpEndpoint(t, ctx, ti.conn, *authCtx.ProjectID, toolset.ID, slug, "public", uuid.NullUUID{}, uuid.Nil)
+	rows, err := testrepo.New(ti.conn).SetMCPServerNetworkAccessModeFixture(ctx, testrepo.SetMCPServerNetworkAccessModeFixtureParams{
+		NetworkAccessMode: pgtype.Text{String: string(networkaccess.ModePrivateOnly), Valid: true},
+		ID:                server.ID,
+		ProjectID:         *authCtx.ProjectID,
+	})
+	require.NoError(t, err)
+	require.EqualValues(t, 1, rows)
+
+	_, _, _, err = ti.service.ResolveMCPEndpointAndServer(ctx, ti.logger, slug)
+	require.Error(t, err, "private-only endpoint must remain hidden on the public origin")
+
+	ingressID := uuid.New()
+	require.NoError(t, testrepo.New(ti.conn).InsertNetworkIngressFixture(ctx, testrepo.InsertNetworkIngressFixtureParams{
+		ID:             ingressID,
+		OrganizationID: authCtx.ActiveOrganizationID,
+		DnsName:        pgtype.Text{String: "private-resolver.example.ts.net", Valid: true},
+	}))
+	privateCtx := requestorigin.WithContext(ctx, requestorigin.Origin{
+		Surface:          requestorigin.SurfacePrivateNetwork,
+		BaseURL:          "https://private-resolver.example.ts.net",
+		OrganizationID:   authCtx.ActiveOrganizationID,
+		NetworkIngressID: ingressID,
+	})
+	_, err = customdomainsrepo.New(ti.conn).CreateCustomDomain(ctx, customdomainsrepo.CreateCustomDomainParams{
+		OrganizationID: authCtx.ActiveOrganizationID,
+		Domain:         "public-edge-lockdown.example.com",
+		IpAllowlist:    []string{"203.0.113.0/24"},
+	})
+	require.NoError(t, err)
+
+	endpoint, resolvedServer, metaServer, err := ti.service.ResolveMCPEndpointAndServer(privateCtx, ti.logger, slug)
+	require.NoError(t, err)
+	require.NotNil(t, endpoint)
+	require.NotNil(t, resolvedServer)
+	require.Nil(t, metaServer)
+	require.Equal(t, server.ID, resolvedServer.ID)
+
+	response, err := servePublicHTTP(t, privateCtx, ti, slug, makeInitializeBody(), "", nil)
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, response.Code)
 }
 
 func TestLoadResolvedMcpEndpointPrivateOnlyDoesNotFallBack(t *testing.T) {

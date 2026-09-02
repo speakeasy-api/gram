@@ -70,6 +70,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcpmetadata"
 	metadata_repo "github.com/speakeasy-api/gram/server/internal/mcpmetadata/repo"
 	"github.com/speakeasy-api/gram/server/internal/mv"
+	"github.com/speakeasy-api/gram/server/internal/netingress"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	oauth_repo "github.com/speakeasy-api/gram/server/internal/oauth/repo"
 	"github.com/speakeasy-api/gram/server/internal/oauth/wellknown"
@@ -506,6 +507,60 @@ func (s *Service) requestAccessURL(ctx context.Context, serverID string, serverN
 // keyed on "is this an MCP endpoint" has to match the pattern exactly rather
 // than as a prefix.
 const PublicServerRoute = "/mcp/{mcpSlug}"
+
+// AttachPrivate registers only the slug-scoped routes that may be reached from
+// a private network ingress. Deployment-global callbacks stay on the public
+// listener and resume private flows through their single-use state.
+func AttachPrivate(mux goahttp.Muxer, service *Service, metadataService *mcpmetadata.Service) {
+	for _, route := range netingress.PrivateRoutes(netingress.RouteSurfaceMCP) {
+		var handler http.Handler
+		switch route.ID {
+		case netingress.RouteRuntime:
+			switch route.Method {
+			case http.MethodDelete:
+				handler = oops.MCPErrHandle(service.logger, service.HandleDeleteServer)
+			case http.MethodGet:
+				handler = oops.MCPErrHandle(service.logger, func(w http.ResponseWriter, r *http.Request) error {
+					return service.HandleGetServer(w, r, metadataService)
+				})
+			case http.MethodPost:
+				handler = oops.MCPErrHandle(service.logger, service.ServePublic)
+			}
+		case netingress.RouteInstall:
+			handler = oops.ErrHandle(service.logger, metadataService.ServeInstallPage)
+		case netingress.RouteInstallScript:
+			handler = oops.ErrHandle(service.logger, metadataService.ServeInstallPageScript)
+		case netingress.RouteProtectedResource:
+			handler = oops.ErrHandle(service.logger, service.HandleGetProtectedResource)
+		case netingress.RouteAuthorizationServer:
+			handler = oops.ErrHandle(service.logger, service.HandleGetAuthorizationServer)
+		case netingress.RouteRegister:
+			handler = oops.ErrHandle(service.logger, service.HandleRegister)
+		case netingress.RouteAuthorize:
+			handler = oops.ErrHandle(service.logger, service.HandleAuthorize)
+		case netingress.RouteConnect:
+			handler = oops.ErrHandle(service.logger, service.HandleConsent)
+		case netingress.RouteConnectRemoteSession:
+			handler = oops.ErrHandle(service.logger, service.HandleConsentAction)
+		case netingress.RouteConnectMCP:
+			handler = oops.ErrHandle(service.logger, service.HandleConsentMCP)
+		case netingress.RouteConnectFirstParty:
+			handler = oops.ErrHandle(service.logger, service.HandleFirstPartyConnect)
+		case netingress.RouteConsentScript:
+			handler = oops.ErrHandle(service.logger, service.ServeConsentScript)
+		case netingress.RouteConsentToolsScript:
+			handler = oops.ErrHandle(service.logger, service.ServeConsentToolsScript)
+		case netingress.RouteToken:
+			handler = oops.ErrHandle(service.logger, service.HandleToken)
+		case netingress.RouteRevoke:
+			handler = oops.ErrHandle(service.logger, service.HandleRevoke)
+		}
+		if handler == nil {
+			panic(fmt.Sprintf("private MCP route %s %s has no handler", route.Method, route.Path))
+		}
+		o11y.AttachHandler(mux, route.Method, route.Path, handler.ServeHTTP)
+	}
+}
 
 func Attach(mux goahttp.Muxer, service *Service, metadataService *mcpmetadata.Service) {
 	o11y.AttachHandler(mux, "POST", PlatformToolsetRoute, oops.ErrHandle(service.logger, service.ServePlatformToolset).ServeHTTP)

@@ -249,14 +249,11 @@ func canonicalPrivateBaseURL(raw string) (string, error) {
 	if u.Port() != "" {
 		return "", fmt.Errorf("private network ingress origin must not include a port")
 	}
-	host, err := requestorigin.CanonicalHost(u.Host)
+	baseURL, err := requestorigin.HTTPSBaseURL(u.Host)
 	if err != nil {
 		return "", fmt.Errorf("canonicalize private network ingress origin: %w", err)
 	}
-	if strings.Contains(host, ":") {
-		host = "[" + host + "]"
-	}
-	return (&url.URL{Scheme: "https", Host: host}).String(), nil
+	return baseURL, nil
 }
 
 func expectedBaseURL(dnsName pgtype.Text) string {

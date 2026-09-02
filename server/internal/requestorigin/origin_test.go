@@ -42,6 +42,27 @@ func TestCanonicalHost(t *testing.T) {
 	}
 }
 
+func TestHTTPSBaseURL(t *testing.T) {
+	t.Parallel()
+
+	for _, test := range []struct {
+		name string
+		host string
+		want string
+	}{
+		{name: "DNS", host: "PRIVATE.EXAMPLE.COM:443", want: "https://private.example.com"},
+		{name: "IPv4", host: "192.0.2.1", want: "https://192.0.2.1"},
+		{name: "IPv6", host: "[2001:DB8::1]:443", want: "https://[2001:db8::1]"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			got, err := HTTPSBaseURL(test.host)
+			require.NoError(t, err)
+			require.Equal(t, test.want, got)
+		})
+	}
+}
+
 func TestContext(t *testing.T) {
 	t.Parallel()
 
