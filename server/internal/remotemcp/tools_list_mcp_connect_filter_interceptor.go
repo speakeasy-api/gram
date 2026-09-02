@@ -28,14 +28,16 @@ import (
 // tools/call enforcement does. A tool with no recorded metadata resolves to
 // the empty disposition, leaving a pure tool-name match.
 //
-// A catalog where every tool is authorized is not rewritten at all and
-// relays byte-for-byte. When filtering does remove tools, the rewrite
-// touches only the result's tools member; every other member of the
-// upstream result relays untouched, including members future protocol
-// revisions add. Should such a member ever carry tool identities the way
-// tools does, this filter will not scrub it. The kept tool objects,
-// however, are re-marshaled from [mcp.Tool], so per-tool members the SDK
-// does not model are dropped from a filtered catalog.
+// Every result this filter produces is per-principal, so both branches mark
+// it private (cacheScope: "private") to stop a shared cache from serving one
+// caller's inventory to another. A catalog where every tool is authorized
+// keeps its tools bytes byte-for-byte and only gains the cacheScope member.
+// When filtering does remove tools, the rewrite touches the tools member and
+// cacheScope; every other member of the upstream result relays untouched,
+// including members future protocol revisions add. Should such a member ever
+// carry tool identities the way tools does, this filter will not scrub it. The
+// kept tool objects, however, are re-marshaled from [mcp.Tool], so per-tool
+// members the SDK does not model are dropped from a filtered catalog.
 type ToolsListMCPConnectFilterInterceptor struct {
 	authz       *authz.Engine
 	resolver    ToolDispositionResolver
@@ -75,8 +77,8 @@ func (i *ToolsListMCPConnectFilterInterceptor) Name() string {
 //
 // When the response carries no tools the interceptor is a no-op. An
 // empty filtered result is a valid outcome — the caller has access to
-// nothing in this server — and is committed via [SetTools] as an empty
-// array.
+// nothing in this server — and is committed via [SetPrivateTools] as an
+// empty array.
 func (i *ToolsListMCPConnectFilterInterceptor) InterceptToolsListResponse(ctx context.Context, list *proxy.ToolsListResponse) error {
 	if i.authz == nil || list == nil || list.Result == nil {
 		return nil
@@ -116,16 +118,24 @@ func (i *ToolsListMCPConnectFilterInterceptor) InterceptToolsListResponse(ctx co
 		}
 	}
 
-	// Committing an unchanged catalog is not free: SetTools flips the
-	// message's dirty flag, which re-encodes the whole JSON-RPC message
-	// (re-marshaling each kept tool through mcp.Tool) before relaying.
-	// When every tool matched, skip the commit so the response relays
-	// byte-for-byte.
+	// This interceptor runs only for private-visibility servers, so every
+	// result it produces is per-principal and must not be publicly cacheable:
+	// MCP 2026-07-28 reads an absent cacheScope as public, which would let a
+	// shared intermediary serve one caller's inventory to another. Both
+	// branches therefore mark the result private.
+	//
+	// When every tool matched there is nothing to drop, so SetPrivate splices
+	// only cacheScope and leaves the tools bytes to relay unchanged — this
+	// keeps per-tool members the SDK does not model, which a full re-marshal
+	// through mcp.Tool would lose.
 	if len(allowed) == len(tools) {
+		if err := list.SetPrivate(); err != nil {
+			return fmt.Errorf("mark tools/list result private: %w", err)
+		}
 		return nil
 	}
 
-	if err := list.SetTools(allowed); err != nil {
+	if err := list.SetPrivateTools(allowed); err != nil {
 		return fmt.Errorf("commit filtered tools/list result: %w", err)
 	}
 	return nil

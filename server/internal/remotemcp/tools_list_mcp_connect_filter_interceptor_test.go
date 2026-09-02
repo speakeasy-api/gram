@@ -51,6 +51,36 @@ func newToolsListResponse(t *testing.T, tools []*mcp.Tool) *proxy.ToolsListRespo
 	}
 }
 
+// newRawToolsListResponse backs the typed view with a caller-supplied raw
+// result payload rather than one marshaled from mcp.ListToolsResult. Use it to
+// prove that a non-filtering path relays per-tool members the SDK does not
+// model. tools is the decoded view the interceptor reads; rawResult is what
+// the setters splice into and what relays on the wire.
+func newRawToolsListResponse(t *testing.T, rawResult string, tools []*mcp.Tool) *proxy.ToolsListResponse {
+	t.Helper()
+
+	rpcResp := &jsonrpc.Response{
+		ID:     jsonrpc.ID{},
+		Result: json.RawMessage(rawResult),
+		Error:  nil,
+	}
+	return &proxy.ToolsListResponse{
+		Error: nil,
+		RemoteMessage: &proxy.RemoteMessage{
+			UserHTTPRequest:    nil,
+			RemoteHTTPRequest:  nil,
+			RemoteHTTPResponse: nil,
+			Message:            rpcResp,
+		},
+		Request: nil,
+		Result: &mcp.ListToolsResult{
+			Meta:       nil,
+			NextCursor: "",
+			Tools:      tools,
+		},
+	}
+}
+
 func TestToolsListMCPConnectFilterInterceptor_Name(t *testing.T) {
 	t.Parallel()
 
@@ -98,13 +128,14 @@ func TestToolsListMCPConnectFilterInterceptor_KeepsOnlyGrantedTools(t *testing.T
 	require.Equal(t, "search_tickets", resp.Result.Tools[0].Name)
 }
 
-func TestToolsListMCPConnectFilterInterceptor_AllGrantedRelaysUnchangedBytes(t *testing.T) {
+func TestToolsListMCPConnectFilterInterceptor_AllGrantedMarksPrivateAndKeepsToolBytes(t *testing.T) {
 	t.Parallel()
 
-	// When every tool is authorized there is nothing to filter, and the
-	// interceptor must not commit: SetTools would re-marshal each kept
-	// tool through mcp.Tool, dropping per-tool members the SDK does not
-	// model. The wire payload must relay byte-for-byte.
+	// When every tool is authorized there is nothing to filter, but the result
+	// is still per-principal and must be marked private. SetPrivate splices
+	// only cacheScope, so the tools array relays unchanged — including a
+	// per-tool member the SDK does not model, which a full re-marshal through
+	// mcp.Tool would drop.
 	engine := newAuthzEngineForTest(t)
 	ctx := contextvalues.SetAuthContext(t.Context(), authzAuthContext(t))
 	ctx = authztest.WithExactGrants(t, ctx,
@@ -122,18 +153,50 @@ func TestToolsListMCPConnectFilterInterceptor_AllGrantedRelaysUnchangedBytes(t *
 
 	interceptor := remotemcp.NewToolsListMCPConnectFilterInterceptor(engine, emptyResolver(), testServerID, testProjectID, testenv.NewLogger(t))
 
-	resp := newToolsListResponse(t, []*mcp.Tool{
+	resp := newRawToolsListResponse(t, `{"tools":[{"name":"tool_a","inputSchema":{},"x-vendor":"keep-me"},{"name":"tool_b","inputSchema":{}}]}`, []*mcp.Tool{
 		{Name: "tool_a", InputSchema: map[string]any{}},
 		{Name: "tool_b", InputSchema: map[string]any{}},
 	})
 	rpcResp, ok := resp.RemoteMessage.Message.(*jsonrpc.Response)
 	require.True(t, ok)
-	original := string(rpcResp.Result)
 
 	require.NoError(t, interceptor.InterceptToolsListResponse(ctx, resp))
 
 	require.Len(t, resp.Result.Tools, 2, "no tool may be filtered when all are granted")
-	require.Equal(t, original, string(rpcResp.Result), "a fully authorized catalog must relay byte-for-byte, not be re-marshaled")
+	wire := string(rpcResp.Result)
+	require.Contains(t, wire, `"cacheScope":"private"`, "a per-principal catalog must be marked private")
+	require.Contains(t, wire, `"x-vendor":"keep-me"`, "an unmodeled per-tool member must survive when nothing is filtered")
+}
+
+func TestToolsListMCPConnectFilterInterceptor_FilteredResultMarkedPrivate(t *testing.T) {
+	t.Parallel()
+
+	// A filtered catalog varies with the caller's grants, so it must carry
+	// cacheScope: "private" to stop a shared cache from serving it to another
+	// principal.
+	engine := newAuthzEngineForTest(t)
+	ctx := contextvalues.SetAuthContext(t.Context(), authzAuthContext(t))
+	ctx = authztest.WithExactGrants(t, ctx,
+		authz.NewGrantWithSelector(authz.ScopeMCPConnect, authz.Selector{
+			"resource_kind": "mcp",
+			"resource_id":   testServerID,
+			"tool":          "search_tickets",
+		}),
+	)
+
+	interceptor := remotemcp.NewToolsListMCPConnectFilterInterceptor(engine, emptyResolver(), testServerID, testProjectID, testenv.NewLogger(t))
+
+	resp := newToolsListResponse(t, []*mcp.Tool{
+		{Name: "search_tickets", InputSchema: map[string]any{}},
+		{Name: "delete_ticket", InputSchema: map[string]any{}},
+	})
+	rpcResp, ok := resp.RemoteMessage.Message.(*jsonrpc.Response)
+	require.True(t, ok)
+
+	require.NoError(t, interceptor.InterceptToolsListResponse(ctx, resp))
+
+	require.Len(t, resp.Result.Tools, 1)
+	require.Contains(t, string(rpcResp.Result), `"cacheScope":"private"`, "a filtered catalog must be marked private")
 }
 
 func TestToolsListMCPConnectFilterInterceptor_EmptyArrayWhenNoGrantsMatch(t *testing.T) {

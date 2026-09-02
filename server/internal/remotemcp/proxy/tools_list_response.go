@@ -128,6 +128,39 @@ func (r *ToolsListResponse) SetPrivateTools(tools []*mcp.Tool) error {
 	return r.setTools(tools, true)
 }
 
+// SetPrivate marks a successful tools/list result private without rewriting
+// the tools array. It splices cacheScope: "private" into the original wire
+// payload and marks the message dirty so the proxy re-emits it. Use it when a
+// per-principal filter keeps every tool but the result still varies with the
+// caller's authorization: MCP defaults an absent cacheScope to public, so
+// relaying the unmodified upstream result could let a shared intermediary
+// serve one caller's inventory to another. Because only the cacheScope member
+// is added, the tools bytes relay unchanged and per-tool members the SDK does
+// not model survive — the fidelity a full re-marshal through [mcp.Tool] loses.
+//
+// Returns a [*MutationError] on the same conditions as [SetTools]: an
+// error-shaped response, an underlying message that is not a
+// *jsonrpc.Response, or a splice failure.
+func (r *ToolsListResponse) SetPrivate() error {
+	if r.Result == nil {
+		return &MutationError{Op: "set private", Cause: errors.New("response carries an error, not a result")}
+	}
+	rpcResp, ok := r.RemoteMessage.Message.(*jsonrpc.Response)
+	if !ok {
+		return &MutationError{Op: "set private", Cause: fmt.Errorf("underlying message is %T, want *jsonrpc.Response", r.RemoteMessage.Message)}
+	}
+
+	result, err := spliceTopLevelKey(rpcResp.Result, "cacheScope", json.RawMessage(`"private"`))
+	if err != nil {
+		return &MutationError{Op: "set private", Cause: fmt.Errorf("mark tools private: %w", err)}
+	}
+
+	r.Result.CacheScope = "private"
+	rpcResp.Result = result
+	r.RemoteMessage.dirty = true
+	return nil
+}
+
 func (r *ToolsListResponse) setTools(tools []*mcp.Tool, private bool) error {
 	if r.Result == nil {
 		return &MutationError{Op: "set tools", Cause: errors.New("response carries an error, not a result")}
