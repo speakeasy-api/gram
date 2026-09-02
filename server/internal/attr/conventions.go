@@ -408,6 +408,7 @@ const (
 	OpenRouterBackfillScannedKey      = attribute.Key("gram.openrouter.backfill.scanned")
 	OpenRouterBackfillUpdatedKey      = attribute.Key("gram.openrouter.backfill.updated")
 	EmbeddingInputCountKey            = attribute.Key("gram.openrouter.embedding.input_count")
+	EmbeddingFallbackStrategyKey      = attribute.Key("gram.openrouter.embedding.fallback_strategy")
 	EmbeddingTruncatedInputCountKey   = attribute.Key("gram.openrouter.embedding.truncated_input_count")
 	OpenRouterKeyLimitKey             = attribute.Key("gram.openrouter.key.limit")
 	OpenRouterKeyPreviousLimitKey     = attribute.Key("gram.openrouter.key.previous_limit")
@@ -1630,6 +1631,12 @@ func EmbeddingInputCount(v int) attribute.KeyValue {
 }
 func SlogEmbeddingInputCount(v int) slog.Attr {
 	return slog.Int(string(EmbeddingInputCountKey), v)
+}
+func EmbeddingFallbackStrategy(v string) attribute.KeyValue {
+	return EmbeddingFallbackStrategyKey.String(v)
+}
+func SlogEmbeddingFallbackStrategy(v string) slog.Attr {
+	return slog.String(string(EmbeddingFallbackStrategyKey), v)
 }
 
 func EmbeddingTruncatedInputCount(v int) attribute.KeyValue {

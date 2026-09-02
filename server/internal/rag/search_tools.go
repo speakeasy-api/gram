@@ -20,6 +20,7 @@ import (
 	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/rag/repo"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -117,6 +118,10 @@ func (s *ToolsetVectorStore) IndexToolset(ctx context.Context, toolset types.Too
 	if err != nil {
 		return fmt.Errorf("parse toolset id: %w", err)
 	}
+	projectUUID, err := uuid.Parse(toolset.ProjectID)
+	if err != nil {
+		return fmt.Errorf("parse project id: %w", err)
+	}
 
 	candidates, err := s.prepareEmbeddingCandidates(ctx, toolset.Tools)
 	if err != nil {
@@ -127,7 +132,7 @@ func (s *ToolsetVectorStore) IndexToolset(ctx context.Context, toolset types.Too
 		return nil
 	}
 
-	vectors, err := s.generateEmbeddings(ctx, toolset.OrganizationID, candidates)
+	vectors, err := s.generateEmbeddings(ctx, toolset, projectUUID, candidates)
 	if err != nil {
 		return err
 	}
@@ -142,7 +147,7 @@ func (s *ToolsetVectorStore) IndexToolset(ctx context.Context, toolset types.Too
 		vector := pgvector_go.NewVector(vectors[i])
 		if err := s.insertToolEmbedding(
 			ctx,
-			uuid.MustParse(toolset.ProjectID),
+			projectUUID,
 			toolsetUUID,
 			toolset.ToolsetVersion,
 			candidate.entryKey,
@@ -288,6 +293,7 @@ func (s *ToolsetVectorStore) SearchToolsetTools(ctx context.Context, toolset typ
 }
 
 type embeddingCandidate struct {
+	toolID    string
 	entryKey  string
 	payload   []byte
 	content   string
@@ -336,6 +342,7 @@ func (s *ToolsetVectorStore) prepareEmbeddingCandidates(ctx context.Context, too
 		}
 
 		candidates = append(candidates, embeddingCandidate{
+			toolID:   baseTool.ID,
 			entryKey: baseTool.ToolUrn,
 			payload:  payload,
 			content:  content,
@@ -416,7 +423,28 @@ type embeddingBatch struct {
 	endIdx   int
 }
 
-func selectEmbeddingCandidateContents(model string, candidates []embeddingCandidate) error {
+const (
+	embeddingFallbackStrategyTopLevelSchema  = "top_level_schema"
+	embeddingFallbackStrategyNameDescription = "name_description"
+	embeddingFallbackStrategyTokenTruncation = "token_truncation"
+)
+
+type embeddingFallbackSelection struct {
+	candidateIndex int
+	strategy       string
+}
+
+type embeddingFallbackLogContext struct {
+	organizationID   string
+	organizationSlug string
+	projectID        string
+	projectSlug      string
+	toolsetID        string
+	toolsetSlug      string
+	model            string
+}
+
+func selectEmbeddingCandidateContents(model string, candidates []embeddingCandidate) ([]embeddingFallbackSelection, error) {
 	inputs := make([]string, len(candidates))
 	inputFallbacks := make([][]string, len(candidates))
 	for i, candidate := range candidates {
@@ -424,23 +452,113 @@ func selectEmbeddingCandidateContents(model string, candidates []embeddingCandid
 		inputFallbacks[i] = candidate.fallbacks
 	}
 
-	selected, err := openrouter.SelectEmbeddingInputFallbacks(model, inputs, inputFallbacks)
+	selected, selectedFallbacks, err := openrouter.SelectEmbeddingInputFallbacks(model, inputs, inputFallbacks)
 	if err != nil {
-		return fmt.Errorf("select embedding input fallbacks: %w", err)
+		return nil, fmt.Errorf("select embedding input fallbacks: %w", err)
 	}
 	for i, content := range selected {
 		candidates[i].content = content
 	}
-	return nil
+
+	var fallbackSelections []embeddingFallbackSelection
+	for _, selection := range selectedFallbacks {
+		strategy := ""
+		switch {
+		case selection.RequiresTruncation:
+			strategy = embeddingFallbackStrategyTokenTruncation
+		case selection.FallbackIndex == 0:
+			strategy = embeddingFallbackStrategyTopLevelSchema
+		case selection.FallbackIndex > 0:
+			strategy = embeddingFallbackStrategyNameDescription
+		}
+		if strategy != "" {
+			fallbackSelections = append(fallbackSelections, embeddingFallbackSelection{
+				candidateIndex: selection.InputIndex,
+				strategy:       strategy,
+			})
+		}
+	}
+
+	return fallbackSelections, nil
 }
 
-func (s *ToolsetVectorStore) generateEmbeddings(ctx context.Context, orgID string, candidates []embeddingCandidate) ([][]float32, error) {
+func emitEmbeddingFallbackLogs(
+	ctx context.Context,
+	logger *slog.Logger,
+	logContext embeddingFallbackLogContext,
+	candidates []embeddingCandidate,
+	selections []embeddingFallbackSelection,
+) {
+	for _, selection := range selections {
+		candidate := candidates[selection.candidateIndex]
+		attrs := []any{
+			attr.SlogOrganizationID(logContext.organizationID),
+			attr.SlogProjectID(logContext.projectID),
+			attr.SlogToolsetID(logContext.toolsetID),
+			attr.SlogToolsetSlug(logContext.toolsetSlug),
+			attr.SlogToolID(candidate.toolID),
+			attr.SlogToolURN(candidate.entryKey),
+			attr.SlogGenAIRequestModel(logContext.model),
+			attr.SlogEmbeddingFallbackStrategy(selection.strategy),
+		}
+		if logContext.organizationSlug != "" {
+			attrs = append(attrs, attr.SlogOrganizationSlug(logContext.organizationSlug))
+		}
+		if logContext.projectSlug != "" {
+			attrs = append(attrs, attr.SlogProjectSlug(logContext.projectSlug))
+		}
+
+		logger.WarnContext(ctx, "tool embedding input exceeded token limit; using fallback", attrs...)
+	}
+}
+
+func (s *ToolsetVectorStore) logEmbeddingFallbacks(
+	ctx context.Context,
+	toolset types.Toolset,
+	projectID uuid.UUID,
+	candidates []embeddingCandidate,
+	selections []embeddingFallbackSelection,
+) {
+	logContext := embeddingFallbackLogContext{
+		organizationID:   toolset.OrganizationID,
+		organizationSlug: "",
+		projectID:        toolset.ProjectID,
+		projectSlug:      "",
+		toolsetID:        toolset.ID,
+		toolsetSlug:      string(toolset.Slug),
+		model:            s.embeddingModel,
+	}
+
+	metadata, err := projectsrepo.New(s.db).GetProjectWithOrganizationMetadata(ctx, projectID)
+	if err != nil {
+		s.logger.WarnContext(
+			ctx,
+			"failed to load project metadata for embedding fallback log",
+			attr.SlogError(err),
+			attr.SlogOrganizationID(toolset.OrganizationID),
+			attr.SlogProjectID(toolset.ProjectID),
+			attr.SlogToolsetID(toolset.ID),
+			attr.SlogToolsetSlug(string(toolset.Slug)),
+		)
+	} else {
+		logContext.organizationSlug = metadata.Slug
+		logContext.projectSlug = metadata.ProjectSlug
+	}
+
+	emitEmbeddingFallbackLogs(ctx, s.logger, logContext, candidates, selections)
+}
+
+func (s *ToolsetVectorStore) generateEmbeddings(ctx context.Context, toolset types.Toolset, projectID uuid.UUID, candidates []embeddingCandidate) ([][]float32, error) {
 	if len(candidates) == 0 {
 		return nil, nil
 	}
 
-	if err := selectEmbeddingCandidateContents(s.embeddingModel, candidates); err != nil {
+	fallbackSelections, err := selectEmbeddingCandidateContents(s.embeddingModel, candidates)
+	if err != nil {
 		return nil, err
+	}
+	if len(fallbackSelections) > 0 {
+		s.logEmbeddingFallbacks(ctx, toolset, projectID, candidates, fallbackSelections)
 	}
 
 	total := len(candidates)
@@ -487,7 +605,7 @@ func (s *ToolsetVectorStore) generateEmbeddings(ctx context.Context, orgID strin
 					inputs = append(inputs, candidates[i].content)
 				}
 
-				vectors, err := s.chatClient.CreateEmbeddings(ctx, orgID, s.embeddingModel, inputs)
+				vectors, err := s.chatClient.CreateEmbeddings(ctx, toolset.OrganizationID, s.embeddingModel, inputs)
 				if err != nil {
 					setErr(fmt.Errorf("create embeddings batch: %w", err))
 					return

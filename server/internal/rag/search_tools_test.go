@@ -1,11 +1,16 @@
 package rag
 
 import (
+	"bytes"
+	"context"
 	"encoding/json"
+	"log/slog"
 	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
+
+	"github.com/speakeasy-api/gram/server/internal/attr"
 )
 
 func TestBuildEmbeddableContent_SummarizesSchemaDeterministically(t *testing.T) {
@@ -120,9 +125,61 @@ func TestSelectEmbeddingCandidateContents_UsesSelectedSizeForBatching(t *testing
 	batchLimit := len(denseContent) * 2
 	require.Len(t, createBatchesWithinSize(candidates, batchLimit), 2)
 
-	require.NoError(t, selectEmbeddingCandidateContents(defaultEmbeddingModel, candidates))
+	selections, err := selectEmbeddingCandidateContents(defaultEmbeddingModel, candidates)
+	require.NoError(t, err)
+	require.Equal(t, []embeddingFallbackSelection{
+		{candidateIndex: 0, strategy: embeddingFallbackStrategyTopLevelSchema},
+		{candidateIndex: 1, strategy: embeddingFallbackStrategyTopLevelSchema},
+		{candidateIndex: 2, strategy: embeddingFallbackStrategyTopLevelSchema},
+	}, selections)
 	require.Equal(t, "compact-one", candidates[0].content)
 	require.Equal(t, "compact-two", candidates[1].content)
 	require.Equal(t, "compact-three", candidates[2].content)
 	require.Len(t, createBatchesWithinSize(candidates, batchLimit), 1)
+}
+
+func TestEmitEmbeddingFallbackLogs_IncludesCustomerAndToolContext(t *testing.T) {
+	t.Parallel()
+
+	var output bytes.Buffer
+	logger := slog.New(slog.NewJSONHandler(&output, nil))
+	candidates := []embeddingCandidate{{
+		toolID:   "tool-id",
+		entryKey: "urn:gram:tool:tool-id",
+	}}
+	logContext := embeddingFallbackLogContext{
+		organizationID:   "org-id",
+		organizationSlug: "org-slug",
+		projectID:        "project-id",
+		projectSlug:      "project-slug",
+		toolsetID:        "toolset-id",
+		toolsetSlug:      "toolset-slug",
+		model:            defaultEmbeddingModel,
+	}
+
+	emitEmbeddingFallbackLogs(
+		context.Background(),
+		logger,
+		logContext,
+		candidates,
+		[]embeddingFallbackSelection{{
+			candidateIndex: 0,
+			strategy:       embeddingFallbackStrategyNameDescription,
+		}},
+	)
+
+	var record map[string]any
+	require.NoError(t, json.Unmarshal(output.Bytes(), &record))
+	require.Equal(t, "WARN", record["level"])
+	require.Equal(t, "tool embedding input exceeded token limit; using fallback", record["msg"])
+	require.Equal(t, "org-id", record[string(attr.OrganizationIDKey)])
+	require.Equal(t, "org-slug", record[string(attr.OrganizationSlugKey)])
+	require.Equal(t, "project-id", record[string(attr.ProjectIDKey)])
+	require.Equal(t, "project-slug", record[string(attr.ProjectSlugKey)])
+	require.Equal(t, "toolset-id", record[string(attr.ToolsetIDKey)])
+	require.Equal(t, "toolset-slug", record[string(attr.ToolsetSlugKey)])
+	require.Equal(t, "tool-id", record[string(attr.ToolIDKey)])
+	require.Equal(t, "urn:gram:tool:tool-id", record[string(attr.ToolURNKey)])
+	require.Equal(t, defaultEmbeddingModel, record[string(attr.GenAIRequestModelKey)])
+	require.Equal(t, embeddingFallbackStrategyNameDescription, record[string(attr.EmbeddingFallbackStrategyKey)])
 }
