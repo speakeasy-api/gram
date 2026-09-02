@@ -6,12 +6,15 @@ import (
 	"crypto/x509"
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"net/http"
 	"net/http/httputil"
 	"net/url"
 	"os"
 	"strings"
+	"sync"
+	"time"
 	"unicode"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
@@ -49,6 +52,7 @@ type AttestorConfig struct {
 	TokenPath    string
 	Transport    http.RoundTripper
 	Logger       *slog.Logger
+	Telemetry    *Telemetry
 }
 
 func NewAttestorHandler(config AttestorConfig) (http.Handler, error) {
@@ -87,10 +91,28 @@ func NewAttestorHandler(config AttestorConfig) (http.Handler, error) {
 		FlushInterval: 0,
 		ErrorLog:      nil,
 		BufferPool:    nil,
-		ModifyResponse: func(*http.Response) error {
+		ModifyResponse: func(response *http.Response) error {
+			if response.Request == nil || response.Body == nil {
+				return nil
+			}
+			ctx := response.Request.Context()
+			started, _ := ctx.Value(proxyStartedKey{}).(time.Time)
+			response.Body = &telemetryResponseBody{
+				ReadCloser: response.Body,
+				once:       sync.Once{},
+				complete: func() {
+					config.Telemetry.Record(ctx, OperationProxy, ResultAllowed, ReasonNone, ProviderTailscale, time.Since(started))
+				},
+			}
 			return nil
 		},
 		ErrorHandler: func(w http.ResponseWriter, request *http.Request, proxyErr error) {
+			started, _ := request.Context().Value(proxyStartedKey{}).(time.Time)
+			duration := time.Duration(0)
+			if !started.IsZero() {
+				duration = time.Since(started)
+			}
+			config.Telemetry.Record(request.Context(), OperationProxy, ResultError, ReasonUpstreamFailed, ProviderTailscale, duration)
 			if config.Logger != nil {
 				config.Logger.ErrorContext(request.Context(), "private ingress attestor proxy error", attr.SlogError(proxyErr))
 			}
@@ -99,13 +121,17 @@ func NewAttestorHandler(config AttestorConfig) (http.Handler, error) {
 	}
 
 	return RouteGuard(http.HandlerFunc(func(w http.ResponseWriter, request *http.Request) {
+		started := time.Now()
+		request = request.WithContext(context.WithValue(request.Context(), proxyStartedKey{}, started))
 		host, hostErr := canonicalAuthority(request.Host)
 		if hostErr != nil || host != expectedHost {
+			config.Telemetry.Record(request.Context(), OperationProxy, ResultDenied, ReasonHostMismatch, ProviderTailscale, time.Since(started))
 			http.NotFound(w, request)
 			return
 		}
 		token, readErr := readProjectedToken(config.TokenPath)
 		if readErr != nil {
+			config.Telemetry.Record(request.Context(), OperationProxy, ResultError, ReasonTokenReadFailed, ProviderTailscale, time.Since(started))
 			if config.Logger != nil {
 				config.Logger.ErrorContext(request.Context(), "read projected private ingress token", attr.SlogError(readErr))
 			}
@@ -141,6 +167,34 @@ func readProjectedToken(path string) (string, error) {
 }
 
 type projectedTokenKey struct{}
+type proxyStartedKey struct{}
+
+type telemetryResponseBody struct {
+	io.ReadCloser
+	complete func()
+	once     sync.Once
+}
+
+func (b *telemetryResponseBody) Read(buffer []byte) (int, error) {
+	count, err := b.ReadCloser.Read(buffer)
+	if errors.Is(err, io.EOF) {
+		b.once.Do(b.complete)
+		return count, err //nolint:wrapcheck // io.Reader callers require the EOF sentinel.
+	}
+	if err != nil {
+		return count, fmt.Errorf("read proxied response body: %w", err)
+	}
+	return count, nil
+}
+
+func (b *telemetryResponseBody) Close() error {
+	err := b.ReadCloser.Close()
+	b.once.Do(b.complete)
+	if err != nil {
+		return fmt.Errorf("close proxied response body: %w", err)
+	}
+	return nil
+}
 
 func withProjectedToken(ctx context.Context, token string) context.Context {
 	return context.WithValue(ctx, projectedTokenKey{}, token)

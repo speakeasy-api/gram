@@ -31,7 +31,7 @@ type RequestCounter struct {
 func NewRequestCounter(meter metric.Meter, logger *slog.Logger) *RequestCounter {
 	requests, err := meter.Int64Counter(
 		InstrumentMCPRequest,
-		metric.WithDescription("MCP JSON-RPC requests observed at dispatch, by protocol revision, method, and surface"),
+		metric.WithDescription("MCP JSON-RPC requests observed at dispatch, by protocol revision, method, serving surface, and public/private network surface"),
 		metric.WithUnit("{request}"),
 	)
 	if err != nil {
@@ -80,5 +80,6 @@ func (c *RequestCounter) Record(ctx context.Context, protocolVersion, method str
 		attr.MCPNegotiatedProtocolVersion(mcpversions.Clamp(mcpversions.Sanitize(protocolVersion))),
 		attr.McpMethod(mcprequests.ClampMethod(method)),
 		attr.McpSurface(string(surface)),
+		attr.NetworkSurface(NetworkSurfaceFromContext(ctx)),
 	))
 }
