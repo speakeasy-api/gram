@@ -42,7 +42,7 @@ SELECT EXISTS (
   JOIN user_session_issuers AS usi ON usi.id = link.user_session_issuer_id
   WHERE link.remote_session_client_id = $1
     AND link.user_session_issuer_id = $2
-    AND usi.project_id = $3::uuid
+    AND (usi.project_id = $3::uuid OR (usi.project_id IS NULL AND usi.organization_id = $4::text))
     AND (c.project_id = $3::uuid OR (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = $4::text)))
     AND c.deleted IS FALSE
     AND usi.deleted IS FALSE
@@ -92,25 +92,33 @@ WITH due AS (
   JOIN remote_session_clients AS c ON c.id = s.remote_session_client_id AND c.deleted IS FALSE
   JOIN remote_session_issuers AS i ON i.id = c.remote_session_issuer_id AND i.deleted IS FALSE
   CROSS JOIN LATERAL (
-    SELECT p.organization_id
+    -- A project-tier issuer takes its organization from its project; an
+    -- organization-tier issuer has no project and carries it on the row.
+    SELECT COALESCE(p.organization_id, usi.organization_id) AS organization_id
     FROM remote_session_client_user_session_issuers AS link
     JOIN user_session_issuers AS usi ON usi.id = link.user_session_issuer_id AND usi.deleted IS FALSE
-    JOIN projects AS p ON p.id = usi.project_id AND p.deleted IS FALSE
+    LEFT JOIN projects AS p ON p.id = usi.project_id AND p.deleted IS FALSE
     WHERE link.remote_session_client_id = c.id
+      -- A project-tier issuer still requires a live project. The inner join
+      -- used to enforce that on its own; the LEFT JOIN no longer does.
+      AND (usi.project_id IS NULL OR p.id IS NOT NULL)
       -- The bound issuer must be entitled to the client under the same
       -- tenancy rule the interactive surfaces apply (its project's own
-      -- clients, org-level clients of its project's org, or clients from the
+      -- clients, org-level clients of its organization, or clients from the
       -- tenantless global catalog), so a binding row that ever crossed
       -- tenants cannot put this credential under a foreign organization's
-      -- refresh policy.
+      -- refresh policy. An organization-tier issuer owns no project, so only
+      -- the org-level and global arms can match for one.
       AND (
         c.project_id = usi.project_id
-        OR (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = p.organization_id))
+        OR (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = COALESCE(p.organization_id, usi.organization_id)))
       )
       AND EXISTS (
         SELECT 1 FROM user_sessions AS gs
-        WHERE gs.project_id = usi.project_id
-          AND gs.user_session_issuer_id = usi.id
+        -- Keyed on the issuer alone. The issuer id already fixes the
+        -- session's tenancy, and comparing gs.project_id to usi.project_id
+        -- matches nothing when an organization-tier issuer makes both NULL.
+        WHERE gs.user_session_issuer_id = usi.id
           AND gs.subject_urn = s.subject_urn
           AND gs.deleted IS FALSE
           AND gs.refresh_expires_at > $1::timestamptz
@@ -118,7 +126,7 @@ WITH due AS (
       AND (
         EXISTS (
           SELECT 1 FROM organization_features AS orgf
-          WHERE orgf.organization_id = p.organization_id
+          WHERE orgf.organization_id = COALESCE(p.organization_id, usi.organization_id)
             AND orgf.feature_name = 'remote_session_auto_refresh_enforced'
             AND orgf.deleted IS FALSE
         )
@@ -126,7 +134,7 @@ WITH due AS (
           s.auto_refresh IS TRUE
           AND EXISTS (
             SELECT 1 FROM organization_features AS orgf
-            WHERE orgf.organization_id = p.organization_id
+            WHERE orgf.organization_id = COALESCE(p.organization_id, usi.organization_id)
               AND orgf.feature_name = 'remote_session_auto_refresh'
               AND orgf.deleted IS FALSE
           )
@@ -1025,19 +1033,20 @@ DELETE FROM remote_session_client_user_session_issuers AS link
 USING user_session_issuers AS usi
 WHERE link.user_session_issuer_id = usi.id
   AND usi.id = $1
-  AND usi.project_id = $2::uuid
+  AND (usi.project_id = $2::uuid OR (usi.project_id IS NULL AND usi.organization_id = $3::text))
 `
 
 type DeleteRemoteSessionClientAttachmentsForUserSessionIssuerParams struct {
 	UserSessionIssuerID uuid.UUID
 	ProjectID           uuid.UUID
+	OrganizationID      string
 }
 
 // Drops every client binding an issuer holds. Runs only from the orphan
 // cascade, which must tombstone the sessions these rows still make reachable
 // before they go.
 func (q *Queries) DeleteRemoteSessionClientAttachmentsForUserSessionIssuer(ctx context.Context, arg DeleteRemoteSessionClientAttachmentsForUserSessionIssuerParams) error {
-	_, err := q.db.Exec(ctx, deleteRemoteSessionClientAttachmentsForUserSessionIssuer, arg.UserSessionIssuerID, arg.ProjectID)
+	_, err := q.db.Exec(ctx, deleteRemoteSessionClientAttachmentsForUserSessionIssuer, arg.UserSessionIssuerID, arg.ProjectID, arg.OrganizationID)
 	return err
 }
 
@@ -1248,17 +1257,22 @@ WHERE s.id = $1
     SELECT 1
     FROM remote_session_client_user_session_issuers AS link
     JOIN user_session_issuers AS usi ON usi.id = link.user_session_issuer_id AND usi.deleted IS FALSE
-    JOIN projects AS p ON p.id = usi.project_id AND p.deleted IS FALSE
+    LEFT JOIN projects AS p ON p.id = usi.project_id AND p.deleted IS FALSE
     WHERE link.remote_session_client_id = c.id
-      AND p.organization_id = $4
+      -- A project-tier issuer still requires a live project. The inner join
+      -- used to enforce that on its own; the LEFT JOIN no longer does.
+      AND (usi.project_id IS NULL OR p.id IS NOT NULL)
+      AND COALESCE(p.organization_id, usi.organization_id) = $4
       AND (
         c.project_id = usi.project_id
-        OR (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = p.organization_id))
+        OR (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = COALESCE(p.organization_id, usi.organization_id)))
       )
       AND EXISTS (
         SELECT 1 FROM user_sessions AS gs
-        WHERE gs.project_id = usi.project_id
-          AND gs.user_session_issuer_id = usi.id
+        -- Keyed on the issuer alone. The issuer id already fixes the
+        -- session's tenancy, and comparing gs.project_id to usi.project_id
+        -- matches nothing when an organization-tier issuer makes both NULL.
+        WHERE gs.user_session_issuer_id = usi.id
           AND gs.subject_urn = s.subject_urn
           AND gs.deleted IS FALSE
           AND gs.refresh_expires_at > $2::timestamptz
@@ -1266,7 +1280,7 @@ WHERE s.id = $1
       AND (
         EXISTS (
           SELECT 1 FROM organization_features AS orgf
-          WHERE orgf.organization_id = p.organization_id
+          WHERE orgf.organization_id = COALESCE(p.organization_id, usi.organization_id)
             AND orgf.feature_name = 'remote_session_auto_refresh_enforced'
             AND orgf.deleted IS FALSE
         )
@@ -1274,7 +1288,7 @@ WHERE s.id = $1
           s.auto_refresh IS TRUE
           AND EXISTS (
             SELECT 1 FROM organization_features AS orgf
-            WHERE orgf.organization_id = p.organization_id
+            WHERE orgf.organization_id = COALESCE(p.organization_id, usi.organization_id)
               AND orgf.feature_name = 'remote_session_auto_refresh'
               AND orgf.deleted IS FALSE
           )
@@ -1847,19 +1861,20 @@ SELECT s.id, s.subject_urn, s.user_session_issuer_id, s.remote_session_client_id
 FROM remote_sessions AS s
 JOIN remote_session_clients AS c ON c.id = s.remote_session_client_id
 JOIN user_session_issuers AS usi ON usi.id = s.user_session_issuer_id
-WHERE s.id = $1 AND usi.project_id = $2::uuid AND s.deleted IS FALSE AND c.deleted IS FALSE
+WHERE s.id = $1 AND (usi.project_id = $2::uuid OR (usi.project_id IS NULL AND usi.organization_id = $3::text)) AND s.deleted IS FALSE AND c.deleted IS FALSE
 `
 
 type GetRemoteSessionByIDParams struct {
-	ID        uuid.UUID
-	ProjectID uuid.UUID
+	ID             uuid.UUID
+	ProjectID      uuid.UUID
+	OrganizationID string
 }
 
 // Scoped by the session's user_session_issuer project (see
 // ListRemoteSessionsByProjectID), so an organization-level client's session is
 // reachable from the project whose user_session_issuer minted it.
 func (q *Queries) GetRemoteSessionByID(ctx context.Context, arg GetRemoteSessionByIDParams) (RemoteSession, error) {
-	row := q.db.QueryRow(ctx, getRemoteSessionByID, arg.ID, arg.ProjectID)
+	row := q.db.QueryRow(ctx, getRemoteSessionByID, arg.ID, arg.ProjectID, arg.OrganizationID)
 	var i RemoteSession
 	err := row.Scan(
 		&i.ID,
@@ -1892,18 +1907,18 @@ SELECT
         FROM remote_session_client_user_session_issuers AS link
         JOIN user_session_issuers AS usi ON usi.id = link.user_session_issuer_id
         WHERE link.remote_session_client_id = c.id
-          AND usi.project_id = $1::uuid
+          AND (usi.project_id = $1::uuid OR (usi.project_id IS NULL AND usi.organization_id = $2::text))
     )::uuid[] AS user_session_issuer_ids
 FROM remote_session_clients AS c
-WHERE c.id = $2
-  AND (c.project_id = $1::uuid OR (c.project_id IS NULL AND c.organization_id = $3))
+WHERE c.id = $3
+  AND (c.project_id = $1::uuid OR (c.project_id IS NULL AND c.organization_id = $2))
   AND c.deleted IS FALSE
 `
 
 type GetRemoteSessionClientByIDParams struct {
 	ProjectID      uuid.UUID
+	OrganizationID string
 	ID             uuid.UUID
-	OrganizationID pgtype.Text
 }
 
 type GetRemoteSessionClientByIDRow struct {
@@ -1912,7 +1927,7 @@ type GetRemoteSessionClientByIDRow struct {
 }
 
 func (q *Queries) GetRemoteSessionClientByID(ctx context.Context, arg GetRemoteSessionClientByIDParams) (GetRemoteSessionClientByIDRow, error) {
-	row := q.db.QueryRow(ctx, getRemoteSessionClientByID, arg.ProjectID, arg.ID, arg.OrganizationID)
+	row := q.db.QueryRow(ctx, getRemoteSessionClientByID, arg.ProjectID, arg.OrganizationID, arg.ID)
 	var i GetRemoteSessionClientByIDRow
 	err := row.Scan(
 		&i.RemoteSessionClient.ID,
@@ -2454,16 +2469,19 @@ func (q *Queries) GetTenantRemoteSessionIssuerByIDForUpdate(ctx context.Context,
 const getUserSessionIssuerForProject = `-- name: GetUserSessionIssuerForProject :one
 SELECT id
 FROM user_session_issuers
-WHERE id = $1 AND project_id = $2::uuid AND deleted IS FALSE
+WHERE id = $1
+  AND (project_id = $2::uuid OR (project_id IS NULL AND organization_id = $3::text))
+  AND deleted IS FALSE
 `
 
 type GetUserSessionIssuerForProjectParams struct {
-	ID        uuid.UUID
-	ProjectID uuid.UUID
+	ID             uuid.UUID
+	ProjectID      uuid.UUID
+	OrganizationID string
 }
 
 func (q *Queries) GetUserSessionIssuerForProject(ctx context.Context, arg GetUserSessionIssuerForProjectParams) (uuid.UUID, error) {
-	row := q.db.QueryRow(ctx, getUserSessionIssuerForProject, arg.ID, arg.ProjectID)
+	row := q.db.QueryRow(ctx, getUserSessionIssuerForProject, arg.ID, arg.ProjectID, arg.OrganizationID)
 	var id uuid.UUID
 	err := row.Scan(&id)
 	return id, err
@@ -3368,7 +3386,7 @@ SELECT
         FROM remote_session_client_user_session_issuers AS link
         JOIN user_session_issuers AS usi ON usi.id = link.user_session_issuer_id
         WHERE link.remote_session_client_id = c.id
-          AND usi.project_id = $1::uuid
+          AND (usi.project_id = $1::uuid OR (usi.project_id IS NULL AND usi.organization_id = $2::text))
     )::uuid[] AS user_session_issuer_ids
 FROM remote_session_clients AS c
 WHERE (c.project_id = $1::uuid OR (c.project_id IS NULL AND c.organization_id = $2))
@@ -3381,7 +3399,7 @@ LIMIT $5
 
 type ListRemoteSessionClientsByProjectIDParams struct {
 	ProjectID             uuid.UUID
-	OrganizationID        pgtype.Text
+	OrganizationID        string
 	RemoteSessionIssuerID uuid.NullUUID
 	Cursor                uuid.NullUUID
 	LimitValue            int32
@@ -3446,15 +3464,15 @@ SELECT
         FROM remote_session_client_user_session_issuers AS all_link
         JOIN user_session_issuers AS all_usi ON all_usi.id = all_link.user_session_issuer_id
         WHERE all_link.remote_session_client_id = c.id
-          AND all_usi.project_id = $1::uuid
+          AND (all_usi.project_id = $1::uuid OR (all_usi.project_id IS NULL AND all_usi.organization_id = $2::text))
     )::uuid[] AS user_session_issuer_ids
 FROM remote_session_client_user_session_issuers AS link
 JOIN remote_session_clients AS c ON c.id = link.remote_session_client_id
 JOIN user_session_issuers AS usi ON usi.id = link.user_session_issuer_id
-WHERE link.user_session_issuer_id = $2
-  AND usi.project_id = $1::uuid
+WHERE link.user_session_issuer_id = $3
+  AND (usi.project_id = $1::uuid OR (usi.project_id IS NULL AND usi.organization_id = $2::text))
   AND usi.deleted IS FALSE
-  AND (c.project_id = $1::uuid OR (c.project_id IS NULL AND c.organization_id = $3))
+  AND (c.project_id = $1::uuid OR (c.project_id IS NULL AND c.organization_id = $2))
   AND c.deleted IS FALSE
   AND ($4::uuid IS NULL OR c.remote_session_issuer_id = $4::uuid)
   AND ($5::uuid IS NULL OR c.id < $5::uuid)
@@ -3464,8 +3482,8 @@ LIMIT $6
 
 type ListRemoteSessionClientsByProjectIDForUserSessionIssuerParams struct {
 	ProjectID             uuid.UUID
+	OrganizationID        string
 	UserSessionIssuerID   uuid.UUID
-	OrganizationID        pgtype.Text
 	RemoteSessionIssuerID uuid.NullUUID
 	Cursor                uuid.NullUUID
 	LimitValue            int32
@@ -3484,8 +3502,8 @@ type ListRemoteSessionClientsByProjectIDForUserSessionIssuerRow struct {
 func (q *Queries) ListRemoteSessionClientsByProjectIDForUserSessionIssuer(ctx context.Context, arg ListRemoteSessionClientsByProjectIDForUserSessionIssuerParams) ([]ListRemoteSessionClientsByProjectIDForUserSessionIssuerRow, error) {
 	rows, err := q.db.Query(ctx, listRemoteSessionClientsByProjectIDForUserSessionIssuer,
 		arg.ProjectID,
-		arg.UserSessionIssuerID,
 		arg.OrganizationID,
+		arg.UserSessionIssuerID,
 		arg.RemoteSessionIssuerID,
 		arg.Cursor,
 		arg.LimitValue,
@@ -3554,7 +3572,7 @@ JOIN remote_session_issuers AS i ON i.id = c.remote_session_issuer_id
 JOIN user_session_issuers AS usi ON usi.id = link.user_session_issuer_id
 WHERE link.user_session_issuer_id = $1
   AND (c.project_id = $2 OR (c.project_id IS NULL AND c.organization_id = $3))
-  AND usi.project_id = $2
+  AND (usi.project_id = $2 OR (usi.project_id IS NULL AND usi.organization_id = $3::text))
   AND c.deleted IS FALSE
   AND i.deleted IS FALSE
   AND usi.deleted IS FALSE
@@ -3639,7 +3657,7 @@ FROM remote_session_client_user_session_issuers AS link
 JOIN remote_session_clients AS c ON c.id = link.remote_session_client_id
 JOIN user_session_issuers AS usi ON usi.id = link.user_session_issuer_id
 WHERE link.user_session_issuer_id = $1
-  AND usi.project_id = $2::uuid
+  AND (usi.project_id = $2::uuid OR (usi.project_id IS NULL AND usi.organization_id = $3::text))
   AND (c.project_id = $2::uuid OR (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = $3::text)))
   AND c.deleted IS FALSE
   AND NOT EXISTS (
@@ -3906,7 +3924,7 @@ JOIN remote_session_clients AS c ON c.id = link.remote_session_client_id
 JOIN user_session_issuers AS usi ON usi.id = link.user_session_issuer_id
 WHERE s.subject_urn = $1
   AND link.user_session_issuer_id = $2
-  AND usi.project_id = $3::uuid
+  AND (usi.project_id = $3::uuid OR (usi.project_id IS NULL AND usi.organization_id = $4::text))
   AND (c.project_id = $3::uuid OR (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = $4::text)))
   AND c.deleted IS FALSE
   AND usi.deleted IS FALSE
@@ -4004,18 +4022,19 @@ FROM remote_sessions AS s
 JOIN remote_session_clients AS c ON c.id = s.remote_session_client_id
 JOIN user_session_issuers AS usi ON usi.id = s.user_session_issuer_id
 LEFT JOIN users AS u ON s.subject_urn = 'user:' || u.id AND u.deleted_at IS NULL
-WHERE usi.project_id = $1::uuid
+WHERE (usi.project_id = $1::uuid OR (usi.project_id IS NULL AND usi.organization_id = $2::text))
   AND s.deleted IS FALSE
   AND c.deleted IS FALSE
-  AND ($2::text IS NULL OR s.subject_urn = $2::text)
-  AND ($3::uuid IS NULL OR s.remote_session_client_id = $3::uuid)
-  AND ($4::uuid IS NULL OR s.id < $4::uuid)
+  AND ($3::text IS NULL OR s.subject_urn = $3::text)
+  AND ($4::uuid IS NULL OR s.remote_session_client_id = $4::uuid)
+  AND ($5::uuid IS NULL OR s.id < $5::uuid)
 ORDER BY s.id DESC
-LIMIT $5
+LIMIT $6
 `
 
 type ListRemoteSessionsByProjectIDParams struct {
 	ProjectID             uuid.UUID
+	OrganizationID        string
 	SubjectUrn            pgtype.Text
 	RemoteSessionClientID uuid.NullUUID
 	Cursor                uuid.NullUUID
@@ -4036,6 +4055,7 @@ type ListRemoteSessionsByProjectIDRow struct {
 func (q *Queries) ListRemoteSessionsByProjectID(ctx context.Context, arg ListRemoteSessionsByProjectIDParams) ([]ListRemoteSessionsByProjectIDRow, error) {
 	rows, err := q.db.Query(ctx, listRemoteSessionsByProjectID,
 		arg.ProjectID,
+		arg.OrganizationID,
 		arg.SubjectUrn,
 		arg.RemoteSessionClientID,
 		arg.Cursor,
@@ -4261,7 +4281,7 @@ FROM remote_session_clients AS c
 JOIN remote_session_client_user_session_issuers AS link ON link.remote_session_client_id = c.id
 JOIN user_session_issuers AS usi ON usi.id = link.user_session_issuer_id
 WHERE link.user_session_issuer_id = $1
-  AND usi.project_id = $2::uuid
+  AND (usi.project_id = $2::uuid OR (usi.project_id IS NULL AND usi.organization_id = $3::text))
   AND (c.project_id = $2::uuid OR (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = $3::text)))
   AND c.deleted IS FALSE
 ORDER BY c.id
@@ -4399,15 +4419,16 @@ FROM remote_session_clients AS c, user_session_issuers AS usi
 WHERE s.id = $1
   AND s.remote_session_client_id = c.id
   AND usi.id = s.user_session_issuer_id
-  AND usi.project_id = $2::uuid
+  AND (usi.project_id = $2::uuid OR (usi.project_id IS NULL AND usi.organization_id = $3::text))
   AND s.deleted IS FALSE
   AND c.deleted IS FALSE
 RETURNING s.id, s.subject_urn, s.user_session_issuer_id, s.remote_session_client_id, s.access_token_encrypted, s.access_expires_at, s.refresh_token_encrypted, s.authorization_expires_at, s.refresh_expires_at, s.scopes, s.resource, s.auto_refresh, s.last_refresh_attempt_at, s.last_used_at, s.created_at, s.updated_at, s.deleted_at, s.deleted
 `
 
 type RevokeRemoteSessionParams struct {
-	ID        uuid.UUID
-	ProjectID uuid.UUID
+	ID             uuid.UUID
+	ProjectID      uuid.UUID
+	OrganizationID string
 }
 
 // Scoped by the session's user_session_issuer project (see
@@ -4415,7 +4436,7 @@ type RevokeRemoteSessionParams struct {
 // established through an organization-level client bound to their own
 // user_session_issuer, but not another project's session on a shared one.
 func (q *Queries) RevokeRemoteSession(ctx context.Context, arg RevokeRemoteSessionParams) (RemoteSession, error) {
-	row := q.db.QueryRow(ctx, revokeRemoteSession, arg.ID, arg.ProjectID)
+	row := q.db.QueryRow(ctx, revokeRemoteSession, arg.ID, arg.ProjectID, arg.OrganizationID)
 	var i RemoteSession
 	err := row.Scan(
 		&i.ID,
@@ -4580,7 +4601,7 @@ WHERE s.subject_urn = $2
   AND s.remote_session_client_id = $3
   AND link.remote_session_client_id = s.remote_session_client_id
   AND link.user_session_issuer_id = $4
-  AND usi.project_id = $5::uuid
+  AND (usi.project_id = $5::uuid OR (usi.project_id IS NULL AND usi.organization_id = $6::text))
   AND (c.project_id = $5::uuid OR (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = $6::text)))
   AND c.deleted IS FALSE
   AND usi.deleted IS FALSE
@@ -4655,7 +4676,7 @@ WHERE s.subject_urn = $1
   AND s.remote_session_client_id = $2
   AND link.remote_session_client_id = s.remote_session_client_id
   AND link.user_session_issuer_id = $3
-  AND usi.project_id = $4::uuid
+  AND (usi.project_id = $4::uuid OR (usi.project_id IS NULL AND usi.organization_id = $5::text))
   AND (c.project_id = $4::uuid OR (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = $5::text)))
   AND c.deleted IS FALSE
   AND usi.deleted IS FALSE
@@ -4797,7 +4818,7 @@ WHERE s.subject_urn = $1
   AND c.id = s.remote_session_client_id
   -- No liveness predicate on usi: a revoke must never fail open.
   AND usi.id = $2
-  AND usi.project_id = $3::uuid
+  AND (usi.project_id = $3::uuid OR (usi.project_id IS NULL AND usi.organization_id = $4::text))
   AND (c.project_id = $3::uuid OR (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = $4::text)))
   AND c.deleted IS FALSE
   AND (

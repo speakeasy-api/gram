@@ -882,7 +882,6 @@ func hostedServingFromToolset(toolset *toolsets_repo.Toolset) *hostedServing {
 // downstream tool dispatch doesn't 401 when the in-toolset gate is skipped.
 // The legacy /mcp path passes nil.
 //
-// The caller is responsible for closing r.Body.
 // callerToolSelection is the consent-screen tool policy resolved by a
 // caller-side issuer gate. Nil when the caller ran no gate or the session
 // carries no policy; the in-toolset gate below populates it for legacy-path
@@ -1074,7 +1073,13 @@ func (s *Service) serveToolsetResolved(w http.ResponseWriter, r *http.Request, t
 	}
 
 	if bodyDecodeErr != nil {
-		return oops.E(oops.CodeBadRequest, bodyDecodeErr, "failed to decode request body").LogError(ctx, s.logger)
+		// Only an unparseable body is a JSON-RPC parse error (-32700); valid
+		// JSON of the wrong shape/type stays an invalid request (-32600).
+		decodeCode := oops.CodeBadRequest
+		if !json.Valid(bodyBytes) {
+			decodeCode = oops.CodeParseError
+		}
+		return oops.E(decodeCode, bodyDecodeErr, "failed to decode request body").LogError(ctx, s.logger)
 	}
 	hostedCoverageRecorded := false
 	if isHostedToolsCall {

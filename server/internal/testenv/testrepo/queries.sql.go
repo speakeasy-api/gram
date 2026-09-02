@@ -1249,6 +1249,42 @@ func (q *Queries) InsertMdmDeviceFixture(ctx context.Context, arg InsertMdmDevic
 	return err
 }
 
+const insertOrganizationTierUserSessionIssuerFixture = `-- name: InsertOrganizationTierUserSessionIssuerFixture :one
+INSERT INTO user_session_issuers (
+    project_id,
+    organization_id,
+    slug,
+    authn_challenge_mode,
+    session_duration
+)
+VALUES (NULL, $1, $2, $3, $4)
+RETURNING id
+`
+
+type InsertOrganizationTierUserSessionIssuerFixtureParams struct {
+	OrganizationID     pgtype.Text
+	Slug               string
+	AuthnChallengeMode string
+	SessionDuration    pgtype.Interval
+}
+
+// Writes an issuer that belongs to an organization and to no project. No
+// production surface creates one: CreateUserSessionIssuer always writes a
+// project_id. Tests need such a row to exercise the organization-tier arm of
+// the issuer predicates, the delete path's sweep for owners in a project other
+// than the caller's included.
+func (q *Queries) InsertOrganizationTierUserSessionIssuerFixture(ctx context.Context, arg InsertOrganizationTierUserSessionIssuerFixtureParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, insertOrganizationTierUserSessionIssuerFixture,
+		arg.OrganizationID,
+		arg.Slug,
+		arg.AuthnChallengeMode,
+		arg.SessionDuration,
+	)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
+}
+
 const insertPluginAssignmentFixture = `-- name: InsertPluginAssignmentFixture :exec
 INSERT INTO plugin_assignments (plugin_id, organization_id, principal_urn)
 VALUES ($1, $2, $3)

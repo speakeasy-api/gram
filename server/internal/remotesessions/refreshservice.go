@@ -255,7 +255,7 @@ func (s *RefreshService) refresh(
 			attr.SlogCacheKey(lockKey),
 		)
 	default:
-		defer o11y.LogDefer(ctx, s.logger, func() error {
+		defer o11y.LogDefer(ctx, s.logger, "failed to release remote session refresh lock", func() error {
 			// Past TTL the key may be a new holder's lock. Skip delete; TTL reaps.
 			if time.Since(lockAcquiredAt) >= refreshLockTTL {
 				s.logger.WarnContext(ctx, "remote session refresh outlived its lock lease; leaving release to TTL",

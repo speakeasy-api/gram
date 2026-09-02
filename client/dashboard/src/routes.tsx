@@ -30,6 +30,8 @@ import Deployment from "./pages/deployments/deployment/Deployment";
 import Deployments, { DeploymentsRoot } from "./pages/deployments/Deployments";
 import UserSessions from "./pages/org/UserSessions";
 import EventFeed from "./pages/data/EventFeed";
+import DataExports from "./pages/data-exports/DataExports";
+import { LegacyDataRedirect } from "./pages/data-exports/LegacyDataRedirect";
 import DeviceAgent, { DeviceAgentRoot } from "./pages/device-agent/DeviceAgent";
 import MdmIntegrationDetail from "./pages/org/device-integrations/MdmIntegrationDetail";
 import EnvironmentPage from "./pages/environments/Environment";
@@ -1131,12 +1133,24 @@ const ORG_ROUTE_STRUCTURE = {
     icon: "file-text",
     component: OrgLogs,
   },
-  data: {
+  legacyData: {
     title: "Event Feed",
     url: "data",
     icon: "activity",
+    component: LegacyDataRedirect,
+  },
+  data: {
+    title: "Event Feed",
+    url: "data/event-feed",
+    icon: "activity",
     stage: "preview",
     component: EventFeed,
+  },
+  dataExports: {
+    title: "Exports",
+    url: "data/exports",
+    icon: "send",
+    component: DataExports,
   },
   skills: {
     title: "Skills",

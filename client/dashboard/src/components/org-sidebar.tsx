@@ -89,7 +89,9 @@ export function OrgSidebar({
     orgRoutes.encryptionKeys,
   ].some((r) => r.active);
 
-  const dataActive = [orgRoutes.data].some((r) => r.active);
+  const dataActive = [orgRoutes.data, orgRoutes.dataExports].some(
+    (route) => route.active,
+  );
 
   const secureActive = [
     orgRoutes.auditLogs,
@@ -136,6 +138,7 @@ export function OrgSidebar({
     orgRoutes.externalServices,
     orgRoutes.encryptionKeys,
     orgRoutes.data,
+    orgRoutes.dataExports,
     orgRoutes.auditLogs,
     orgRoutes.killswitch,
     orgRoutes.deviceAgent,
@@ -220,12 +223,15 @@ export function OrgSidebar({
                 ]}
               />
 
-              {/* Data group — org-wide ingested telemetry surfaces. The Event
-                  Feed item carries a Preview badge via its route's `stage`. */}
+              {/* Data group — org-level access to ingested events and
+                  project-scoped export configuration. */}
               <ScopeGatedNavGroup
                 label="Data"
                 Icon={(p) => <Icon {...p} name="database" />}
-                items={[{ item: orgRoutes.data, scope: orgReadOrAdmin }]}
+                items={[
+                  { item: orgRoutes.data, scope: orgReadOrAdmin },
+                  { item: orgRoutes.dataExports, scope: orgReadOrAdmin },
+                ]}
               />
 
               {/* Secure group */}
