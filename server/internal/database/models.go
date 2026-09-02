@@ -2937,7 +2937,9 @@ type TunneledMcpServer struct {
 	// Last persisted tunnel agent version reported for this source. Per-connection agent versions are stored in Redis.
 	AgentVersion pgtype.Text
 	// RFC 9728 protected-resource identifier of the tunneled server, recorded as the RFC 8707 resource on grants and used only for exact-match credential routing. Names a host inside the customer's private network — never dialed by Gram.
-	ResourceIdentifier pgtype.Text
+	ResourceIdentifier         pgtype.Text
+	PublicRequestRatePerSecond pgtype.Int4
+	PublicRequestBurst         pgtype.Int4
 	// Most recent persisted heartbeat time for the source, used when Redis liveness data is absent or expired.
 	LastSeenAt pgtype.Timestamptz
 	// Time when the tunneled MCP source was created.

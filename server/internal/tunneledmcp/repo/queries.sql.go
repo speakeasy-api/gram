@@ -31,7 +31,7 @@ func (q *Queries) CountActiveServersByOrganizationID(ctx context.Context, organi
 const createServer = `-- name: CreateServer :one
 INSERT INTO tunneled_mcp_servers (id, project_id, name, key_hash, key_prefix, resource_identifier)
 VALUES ($1, $2, $3, $4, $5, $6)
-RETURNING id, project_id, name, key_hash, key_prefix, status, allow_public, agent_version, resource_identifier, last_seen_at, created_at, updated_at, deleted_at, deleted
+RETURNING id, project_id, name, key_hash, key_prefix, status, allow_public, agent_version, resource_identifier, public_request_rate_per_second, public_request_burst, last_seen_at, created_at, updated_at, deleted_at, deleted
 `
 
 type CreateServerParams struct {
@@ -63,6 +63,8 @@ func (q *Queries) CreateServer(ctx context.Context, arg CreateServerParams) (Tun
 		&i.AllowPublic,
 		&i.AgentVersion,
 		&i.ResourceIdentifier,
+		&i.PublicRequestRatePerSecond,
+		&i.PublicRequestBurst,
 		&i.LastSeenAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
@@ -79,7 +81,7 @@ SET
     deleted_at = clock_timestamp(),
     updated_at = clock_timestamp()
 WHERE id = $1 AND project_id = $2 AND deleted IS FALSE
-RETURNING id, project_id, name, key_hash, key_prefix, status, allow_public, agent_version, resource_identifier, last_seen_at, created_at, updated_at, deleted_at, deleted
+RETURNING id, project_id, name, key_hash, key_prefix, status, allow_public, agent_version, resource_identifier, public_request_rate_per_second, public_request_burst, last_seen_at, created_at, updated_at, deleted_at, deleted
 `
 
 type DeleteServerParams struct {
@@ -100,6 +102,8 @@ func (q *Queries) DeleteServer(ctx context.Context, arg DeleteServerParams) (Tun
 		&i.AllowPublic,
 		&i.AgentVersion,
 		&i.ResourceIdentifier,
+		&i.PublicRequestRatePerSecond,
+		&i.PublicRequestBurst,
 		&i.LastSeenAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
@@ -110,7 +114,7 @@ func (q *Queries) DeleteServer(ctx context.Context, arg DeleteServerParams) (Tun
 }
 
 const getServerByID = `-- name: GetServerByID :one
-SELECT id, project_id, name, key_hash, key_prefix, status, allow_public, agent_version, resource_identifier, last_seen_at, created_at, updated_at, deleted_at, deleted
+SELECT id, project_id, name, key_hash, key_prefix, status, allow_public, agent_version, resource_identifier, public_request_rate_per_second, public_request_burst, last_seen_at, created_at, updated_at, deleted_at, deleted
 FROM tunneled_mcp_servers
 WHERE id = $1 AND project_id = $2 AND deleted IS FALSE
 `
@@ -133,6 +137,8 @@ func (q *Queries) GetServerByID(ctx context.Context, arg GetServerByIDParams) (T
 		&i.AllowPublic,
 		&i.AgentVersion,
 		&i.ResourceIdentifier,
+		&i.PublicRequestRatePerSecond,
+		&i.PublicRequestBurst,
 		&i.LastSeenAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
@@ -143,7 +149,7 @@ func (q *Queries) GetServerByID(ctx context.Context, arg GetServerByIDParams) (T
 }
 
 const getServerByIDForUpdate = `-- name: GetServerByIDForUpdate :one
-SELECT id, project_id, name, key_hash, key_prefix, status, allow_public, agent_version, resource_identifier, last_seen_at, created_at, updated_at, deleted_at, deleted
+SELECT id, project_id, name, key_hash, key_prefix, status, allow_public, agent_version, resource_identifier, public_request_rate_per_second, public_request_burst, last_seen_at, created_at, updated_at, deleted_at, deleted
 FROM tunneled_mcp_servers
 WHERE id = $1 AND project_id = $2 AND deleted IS FALSE
 FOR UPDATE
@@ -170,6 +176,8 @@ func (q *Queries) GetServerByIDForUpdate(ctx context.Context, arg GetServerByIDF
 		&i.AllowPublic,
 		&i.AgentVersion,
 		&i.ResourceIdentifier,
+		&i.PublicRequestRatePerSecond,
+		&i.PublicRequestBurst,
 		&i.LastSeenAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
@@ -194,7 +202,7 @@ func (q *Queries) GetTunneledMcpServerLimitByOrganizationID(ctx context.Context,
 }
 
 const listServersByProjectID = `-- name: ListServersByProjectID :many
-SELECT id, project_id, name, key_hash, key_prefix, status, allow_public, agent_version, resource_identifier, last_seen_at, created_at, updated_at, deleted_at, deleted
+SELECT id, project_id, name, key_hash, key_prefix, status, allow_public, agent_version, resource_identifier, public_request_rate_per_second, public_request_burst, last_seen_at, created_at, updated_at, deleted_at, deleted
 FROM tunneled_mcp_servers
 WHERE project_id = $1 AND deleted IS FALSE
 ORDER BY created_at DESC
@@ -219,6 +227,8 @@ func (q *Queries) ListServersByProjectID(ctx context.Context, projectID uuid.UUI
 			&i.AllowPublic,
 			&i.AgentVersion,
 			&i.ResourceIdentifier,
+			&i.PublicRequestRatePerSecond,
+			&i.PublicRequestBurst,
 			&i.LastSeenAt,
 			&i.CreatedAt,
 			&i.UpdatedAt,
@@ -257,7 +267,7 @@ SET
     last_seen_at = NULL,
     updated_at = clock_timestamp()
 WHERE id = $3 AND project_id = $4 AND deleted IS FALSE
-RETURNING id, project_id, name, key_hash, key_prefix, status, allow_public, agent_version, resource_identifier, last_seen_at, created_at, updated_at, deleted_at, deleted
+RETURNING id, project_id, name, key_hash, key_prefix, status, allow_public, agent_version, resource_identifier, public_request_rate_per_second, public_request_burst, last_seen_at, created_at, updated_at, deleted_at, deleted
 `
 
 type RotateServerKeyParams struct {
@@ -285,6 +295,8 @@ func (q *Queries) RotateServerKey(ctx context.Context, arg RotateServerKeyParams
 		&i.AllowPublic,
 		&i.AgentVersion,
 		&i.ResourceIdentifier,
+		&i.PublicRequestRatePerSecond,
+		&i.PublicRequestBurst,
 		&i.LastSeenAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
@@ -306,7 +318,7 @@ SET
     END,
     updated_at = clock_timestamp()
 WHERE id = $4 AND project_id = $5 AND deleted IS FALSE
-RETURNING id, project_id, name, key_hash, key_prefix, status, allow_public, agent_version, resource_identifier, last_seen_at, created_at, updated_at, deleted_at, deleted
+RETURNING id, project_id, name, key_hash, key_prefix, status, allow_public, agent_version, resource_identifier, public_request_rate_per_second, public_request_burst, last_seen_at, created_at, updated_at, deleted_at, deleted
 `
 
 type UpdateServerParams struct {
@@ -336,6 +348,8 @@ func (q *Queries) UpdateServer(ctx context.Context, arg UpdateServerParams) (Tun
 		&i.AllowPublic,
 		&i.AgentVersion,
 		&i.ResourceIdentifier,
+		&i.PublicRequestRatePerSecond,
+		&i.PublicRequestBurst,
 		&i.LastSeenAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
