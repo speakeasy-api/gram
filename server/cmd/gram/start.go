@@ -1000,7 +1000,7 @@ func newStartCommand() *cli.Command {
 				aiAccess.hostedInference,
 			)
 			if err != nil {
-				return err
+				return fmt.Errorf("create hosted inference client: %w", err)
 			}
 
 			memorySvc := memory.NewMemoryService(

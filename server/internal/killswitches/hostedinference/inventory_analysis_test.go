@@ -69,7 +69,7 @@ type inventoryAnalysis struct {
 var (
 	repositoryAnalysisOnce sync.Once
 	repositoryAnalysis     *inventoryAnalysis
-	repositoryAnalysisErr  error
+	errRepositoryAnalysis  error
 )
 
 func loadRepositoryAnalysis(t *testing.T) *inventoryAnalysis {
@@ -78,12 +78,12 @@ func loadRepositoryAnalysis(t *testing.T) *inventoryAnalysis {
 		root := repositoryRoot(t)
 		patterns, err := repositoryInventoryPatterns(root)
 		if err != nil {
-			repositoryAnalysisErr = err
+			errRepositoryAnalysis = err
 			return
 		}
-		repositoryAnalysis, repositoryAnalysisErr = loadInventoryAnalysis(root, patterns...)
+		repositoryAnalysis, errRepositoryAnalysis = loadInventoryAnalysis(root, patterns...)
 	})
-	require.NoError(t, repositoryAnalysisErr)
+	require.NoError(t, errRepositoryAnalysis)
 	return repositoryAnalysis
 }
 
@@ -108,7 +108,7 @@ func repositoryInventoryPatterns(root string) ([]string, error) {
 		}
 		source, err := os.ReadFile(path)
 		if err != nil {
-			return err
+			return fmt.Errorf("read inventory candidate %s: %w", path, err)
 		}
 		text := string(source)
 		relevant := strings.Contains(text, "NewUnifiedClient") ||
@@ -135,7 +135,7 @@ func repositoryInventoryPatterns(root string) ([]string, error) {
 		if relevant {
 			relative, err := filepath.Rel(root, filepath.Dir(path))
 			if err != nil {
-				return err
+				return fmt.Errorf("make inventory package path relative: %w", err)
 			}
 			patterns["./"+filepath.ToSlash(relative)] = true
 		}
@@ -458,6 +458,7 @@ func allowedCategories(primary CallCategory) map[CallCategory]struct{} {
 		categories = []CallCategory{CallCategoryRiskAuthoring, CallCategoryAPIKeyRiskAuthoring, CallCategoryNonOrdinarySessionRiskAuthoring}
 	case CallCategoryBusinessMemorySearchEmbedding:
 		categories = []CallCategory{CallCategoryBusinessMemorySearchEmbedding, CallCategoryAPIKeyBusinessMemorySearch, CallCategoryNonOrdinarySessionMemorySearch}
+	default:
 	}
 	result := make(map[CallCategory]struct{}, len(categories))
 	for _, category := range categories {
@@ -1169,15 +1170,17 @@ func (a *inventoryAnalysis) aggregateUsesOpenRouterURL(value ssa.Value, seen map
 		return false
 	}
 	for _, instruction := range *referrers {
+		var candidate ssa.Value
 		switch typed := instruction.(type) {
 		case *ssa.Store:
-			if a.valueUsesOpenRouterURL(typed.Val, seen) {
-				return true
-			}
-		case *ssa.IndexAddr, *ssa.Slice:
-			if a.valueUsesOpenRouterURL(typed.(ssa.Value), seen) {
-				return true
-			}
+			candidate = typed.Val
+		case *ssa.IndexAddr:
+			candidate = typed
+		case *ssa.Slice:
+			candidate = typed
+		}
+		if candidate != nil && a.valueUsesOpenRouterURL(candidate, seen) {
+			return true
 		}
 	}
 	return false
@@ -1248,7 +1251,8 @@ func requireNoInventoryIssues(t *testing.T, issues []inventoryIssue) {
 
 func writeMutationPackage(t *testing.T, source string) string {
 	t.Helper()
-	directory, err := os.MkdirTemp(filepath.Join(repositoryRoot(t), "server", "internal", "thirdparty", "openrouter", "testdata"), "inventorymutation")
+	fixtureRoot := filepath.Join(repositoryRoot(t), "server", "internal", "thirdparty", "openrouter", "testdata")
+	directory, err := os.MkdirTemp(fixtureRoot, "inventorymutation") //nolint:usetesting // packages.Load requires the fixture beneath the repository module.
 	require.NoError(t, err)
 	t.Cleanup(func() { require.NoError(t, os.RemoveAll(directory)) })
 	require.NoError(t, os.WriteFile(filepath.Join(directory, "mutation.go"), []byte(source), 0o600))

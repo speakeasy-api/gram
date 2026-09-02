@@ -411,7 +411,7 @@ func newStreamsCommand() *cli.Command {
 				aiAccess.hostedInference,
 			)
 			if err != nil {
-				return err
+				return fmt.Errorf("create hosted inference client: %w", err)
 			}
 			judgeRateLimiter := openrouter.NewJudgeRateLimiter(ratelimit.NewRedisStore(redisClient))
 

@@ -97,7 +97,7 @@ func NewUncheckedUnifiedClient(
 	httpClient.CheckRedirect = func(*http.Request, []*http.Request) error {
 		return http.ErrUseLastResponse
 	}
-	return &ChatClient{
+	return &ChatClient{ //nolint:exhaustruct // The explicit unchecked constructor intentionally leaves the checkpoint at its zero value.
 		logger:                 logger.With(attr.SlogComponent("openrouter_completions")),
 		httpClient:             httpClient,
 		provisioner:            provisioner,

@@ -112,6 +112,7 @@ func TestProviderOperationInventoryIsSynchronized(t *testing.T) {
 }
 
 func TestTypeAwareInventoryDetectsRegressions(t *testing.T) {
+	t.Parallel()
 	directory := writeMutationPackage(t, `package inventorymutation
 
 import (

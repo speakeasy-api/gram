@@ -702,7 +702,7 @@ func newWorkerCommand() *cli.Command {
 				aiAccess.hostedInference,
 			)
 			if err != nil {
-				return err
+				return fmt.Errorf("create hosted inference client: %w", err)
 			}
 
 			ragService := rag.NewToolsetVectorStore(logger, tracerProvider, db, completionsClient)
