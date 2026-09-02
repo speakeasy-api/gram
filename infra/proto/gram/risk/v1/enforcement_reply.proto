@@ -1,0 +1,51 @@
+edition = "2024";
+
+package gram.risk.v1;
+
+option go_package = "github.com/speakeasy-api/gram/infra/gen/gram/risk/v1;riskv1";
+
+enum EnforcementScanner {
+  ENFORCEMENT_SCANNER_UNSPECIFIED = 0;
+  ENFORCEMENT_SCANNER_GITLEAKS = 1;
+  ENFORCEMENT_SCANNER_PRESIDIO = 2;
+  ENFORCEMENT_SCANNER_PROMPT_INJECTION = 3;
+  ENFORCEMENT_SCANNER_JUDGE = 4;
+}
+
+enum EnforcementStatus {
+  ENFORCEMENT_STATUS_UNSPECIFIED = 0;
+  ENFORCEMENT_STATUS_OK = 1;
+  ENFORCEMENT_STATUS_ERROR = 2;
+  ENFORCEMENT_STATUS_DEAD_LETTER = 3;
+}
+
+message EnforcementFinding {
+  string rule_id = 1;
+  string category = 2;
+  double score = 3;
+  int32 start_pos = 4; // Byte position in string
+  int32 end_pos = 5; // Byte position in string
+  string surface = 6;
+  string field = 7;
+  string path = 8;
+  string tool_call_id = 9;
+  string masked_preview = 10;
+  string fingerprint = 11;
+}
+
+message EnforcementDiagnostics {
+  int64 scan_duration_ms = 1;
+  string consumer_id = 2;
+  int32 delivery_attempt = 3;
+}
+
+// EnforcementReply transits Redis only and never contains raw matched text.
+message EnforcementReply {
+  string correlation_id = 1;
+  EnforcementScanner scanner = 2;
+  EnforcementStatus status = 3;
+  string reason = 4; // Scanner error summary, limited to 256 Unicode characters.
+  repeated EnforcementFinding findings = 5;
+  EnforcementDiagnostics diagnostics = 6;
+  string policy_id = 7; // Empty except for the judge lane.
+}
