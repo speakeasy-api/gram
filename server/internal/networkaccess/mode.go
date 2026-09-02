@@ -112,14 +112,28 @@ func (m Mode) IsPublicOnly() bool {
 	return m == ModePublicOnly
 }
 
-// EligibilityChecker authorizes admission to a non-public network mode in two
-// phases. PreflightNetworkAccess performs checks that may use shared clients or
-// external services before the caller reserves a database connection.
-// CheckNetworkAccess then runs inside the caller's write transaction so safety-
-// sensitive implementations can hold admission locks through commit.
+// AdmissionFinalizer is minted only after preflight succeeds. Its zero value
+// fails closed, and callers invoke Finalize inside their write transaction so
+// safety-sensitive implementations can hold admission locks through commit.
+type AdmissionFinalizer struct {
+	finalize func(ctx context.Context, tx pgx.Tx) error
+}
+
+func NewAdmissionFinalizer(finalize func(ctx context.Context, tx pgx.Tx) error) AdmissionFinalizer {
+	return AdmissionFinalizer{finalize: finalize}
+}
+
+func (f AdmissionFinalizer) Finalize(ctx context.Context, tx pgx.Tx) error {
+	if f.finalize == nil {
+		return fmt.Errorf("network access admission finalizer is unavailable")
+	}
+	return f.finalize(ctx, tx)
+}
+
+// EligibilityChecker authorizes admission to a non-public network mode without
+// reserving a database connection, then returns the transaction-bound finalizer.
 type EligibilityChecker interface {
-	PreflightNetworkAccess(ctx context.Context, input EligibilityInput) error
-	CheckNetworkAccess(ctx context.Context, tx pgx.Tx, input EligibilityInput) error
+	PrepareNetworkAccess(ctx context.Context, input EligibilityInput) (AdmissionFinalizer, error)
 }
 
 type EligibilityInput struct {
@@ -129,10 +143,6 @@ type EligibilityInput struct {
 
 type DenyAllChecker struct{}
 
-func (DenyAllChecker) PreflightNetworkAccess(context.Context, EligibilityInput) error {
-	return fmt.Errorf("private network access is not enabled")
-}
-
-func (DenyAllChecker) CheckNetworkAccess(context.Context, pgx.Tx, EligibilityInput) error {
-	return fmt.Errorf("private network access is not enabled")
+func (DenyAllChecker) PrepareNetworkAccess(context.Context, EligibilityInput) (AdmissionFinalizer, error) {
+	return AdmissionFinalizer{}, fmt.Errorf("private network access is not enabled")
 }

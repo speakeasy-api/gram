@@ -39,16 +39,19 @@ func TestNetworkModeAdmissionRequiresEnabledIngress(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestService(t)
 	admission := networkingress.NewExpansionAdmission(ti.features, ti.flags, orgrepo.New(ti.conn), true)
+	finalize, err := admission.PrepareNetworkAccess(ctx, networkaccess.EligibilityInput{OrganizationID: ti.orgID, Mode: networkaccess.ModeDual})
+	require.NoError(t, err)
 
-	require.NoError(t, admission.PreflightNetworkAccess(ctx, networkaccess.EligibilityInput{OrganizationID: ti.orgID, Mode: networkaccess.ModeDual}))
-	require.Error(t, checkNetworkAccessInTransaction(ctx, ti, admission, networkaccess.ModeDual))
+	require.Error(t, finalizeNetworkAccessInTransaction(ctx, ti, finalize))
 	ti.create(t, ctx)
-	require.NoError(t, checkNetworkAccessInTransaction(ctx, ti, admission, networkaccess.ModeDual))
+	require.NoError(t, finalizeNetworkAccessInTransaction(ctx, ti, finalize))
 
 	disabled := false
-	_, err := ti.service.UpdateIngress(ctx, &gen.UpdateIngressPayload{Enabled: &disabled})
+	_, err = ti.service.UpdateIngress(ctx, &gen.UpdateIngressPayload{Enabled: &disabled})
 	require.NoError(t, err)
-	require.Error(t, checkNetworkAccessInTransaction(ctx, ti, admission, networkaccess.ModePrivateOnly))
+	finalize, err = admission.PrepareNetworkAccess(ctx, networkaccess.EligibilityInput{OrganizationID: ti.orgID, Mode: networkaccess.ModePrivateOnly})
+	require.NoError(t, err)
+	require.Error(t, finalizeNetworkAccessInTransaction(ctx, ti, finalize))
 }
 
 func TestNetworkModeAdmissionRequiresReconcilerReadiness(t *testing.T) {
@@ -56,7 +59,9 @@ func TestNetworkModeAdmissionRequiresReconcilerReadiness(t *testing.T) {
 	ctx, ti := newTestService(t)
 	ti.create(t, ctx)
 	admission := networkingress.NewExpansionAdmission(ti.features, ti.flags, orgrepo.New(ti.conn), false)
-	require.Error(t, admission.PreflightNetworkAccess(ctx, networkaccess.EligibilityInput{OrganizationID: ti.orgID, Mode: networkaccess.ModeDual}))
+	finalize, err := admission.PrepareNetworkAccess(ctx, networkaccess.EligibilityInput{OrganizationID: ti.orgID, Mode: networkaccess.ModeDual})
+	require.Error(t, err)
+	require.Error(t, finalize.Finalize(ctx, nil))
 }
 
 func TestNetworkModePublicRecoveryNeedsNoGates(t *testing.T) {
@@ -65,14 +70,15 @@ func TestNetworkModePublicRecoveryNeedsNoGates(t *testing.T) {
 	productfeaturestest.Disable(t, ctx, ti.conn, ti.features, ti.orgID, productfeatures.FeatureNetworkIngress)
 	ti.flags.SetFlag(feature.FlagNetworkIngressRollout, ti.orgID, false)
 	admission := networkingress.NewExpansionAdmission(ti.features, ti.flags, orgrepo.New(ti.conn), false)
-	require.NoError(t, admission.PreflightNetworkAccess(ctx, networkaccess.EligibilityInput{OrganizationID: ti.orgID, Mode: networkaccess.ModePublicOnly}))
-	require.NoError(t, admission.CheckNetworkAccess(ctx, nil, networkaccess.EligibilityInput{OrganizationID: ti.orgID, Mode: networkaccess.ModePublicOnly}))
+	finalize, err := admission.PrepareNetworkAccess(ctx, networkaccess.EligibilityInput{OrganizationID: ti.orgID, Mode: networkaccess.ModePublicOnly})
+	require.NoError(t, err)
+	require.NoError(t, finalize.Finalize(ctx, nil))
 }
 
-func checkNetworkAccessInTransaction(ctx context.Context, ti *testInstance, admission *networkingress.ExpansionAdmission, mode networkaccess.Mode) error {
+func finalizeNetworkAccessInTransaction(ctx context.Context, ti *testInstance, finalize networkaccess.AdmissionFinalizer) error {
 	if err := pgx.BeginFunc(ctx, ti.conn, func(tx pgx.Tx) error {
-		if err := admission.CheckNetworkAccess(ctx, tx, networkaccess.EligibilityInput{OrganizationID: ti.orgID, Mode: mode}); err != nil {
-			return fmt.Errorf("check network access admission: %w", err)
+		if err := finalize.Finalize(ctx, tx); err != nil {
+			return fmt.Errorf("finalize network access admission: %w", err)
 		}
 		return nil
 	}); err != nil {
