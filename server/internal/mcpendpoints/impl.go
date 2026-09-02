@@ -2,6 +2,7 @@ package mcpendpoints
 
 import (
 	"context"
+	"unicode/utf8"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -30,6 +31,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	customdomainsrepo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
+	"github.com/speakeasy-api/gram/server/internal/hostedmcp"
 	"github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
@@ -130,11 +132,19 @@ func (s *Service) CreateMcpEndpoint(ctx context.Context, payload *gen.CreateMcpE
 
 	txRepo := repo.New(dbtx)
 
+	backing, err := lockBackingToolsets(ctx, dbtx, *authCtx.ProjectID, UniqueIDs(mcpServerID))
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "lock backing toolsets").LogError(ctx, logger)
+	}
+	if _, hosted := backing[mcpServerID.UUID]; hosted && utf8.RuneCountInString(slug) > hostedmcp.MaxToolsetSlugLength {
+		return nil, oops.E(oops.CodeInvalid, nil, "hosted server slugs are at most %d characters", hostedmcp.MaxToolsetSlugLength).LogWarn(ctx, logger)
+	}
+
 	// Match the deletion and update paths' lock order — custom domains before
 	// backend rows — so a create racing a backend deletion cannot deadlock:
 	// the insert's FK share on the domain row must not be requested while
 	// this transaction already holds the backend row a deleter is waiting on.
-	if err := lockCustomDomains(ctx, dbtx, uniqueIDs(customDomainID)); err != nil {
+	if err := lockCustomDomains(ctx, dbtx, UniqueIDs(customDomainID)); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, oops.E(oops.CodeInvalid, err, "custom_domain_id does not reference a live custom domain").LogError(ctx, logger)
 		}
@@ -146,18 +156,24 @@ func (s *Service) CreateMcpEndpoint(ctx context.Context, payload *gen.CreateMcpE
 	// one transaction, so an unlocked create could validate a live backend,
 	// then insert after that cascade commits, leaving a live endpoint pointing
 	// at a tombstoned backend.
+	backingToolsetID := uuid.NullUUID{UUID: uuid.Nil, Valid: false}
 	if mcpServerID.Valid {
-		if _, err := mcpserversrepo.New(dbtx).LockMCPServerByIDAndProjectID(ctx, mcpserversrepo.LockMCPServerByIDAndProjectIDParams{
+		lockedServer, err := mcpserversrepo.New(dbtx).LockMCPServerByIDAndProjectID(ctx, mcpserversrepo.LockMCPServerByIDAndProjectIDParams{
 			ID:        mcpServerID.UUID,
 			ProjectID: *authCtx.ProjectID,
-		}); err != nil {
+		})
+		if err != nil {
 			if errors.Is(err, pgx.ErrNoRows) {
 				return nil, oops.E(oops.CodeInvalid, err, "mcp_server_id does not reference a resource in this project").LogError(ctx, logger)
 			}
 			return nil, oops.E(oops.CodeUnexpected, err, "lock mcp server").LogError(ctx, logger)
 		}
+		if err := verifyBacking(ctx, logger, lockedServer, backing); err != nil {
+			return nil, err
+		}
+		backingToolsetID = lockedServer.ToolsetID
 	}
-	if err := s.lockMetaMcpServers(ctx, dbtx, authCtx, uniqueIDs(metaMcpServerID), metaMcpServerID); err != nil {
+	if err := s.lockMetaMcpServers(ctx, dbtx, authCtx, UniqueIDs(metaMcpServerID), metaMcpServerID); err != nil {
 		return nil, err
 	}
 
@@ -210,6 +226,12 @@ func (s *Service) CreateMcpEndpoint(ctx context.Context, payload *gen.CreateMcpE
 		Slug:             created.Slug,
 	}); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "log mcp endpoint creation").LogError(ctx, logger)
+	}
+
+	if backingToolsetID.Valid {
+		if err := s.syncBackingToolsetAddress(ctx, dbtx, authCtx, mcpServerID.UUID, backingToolsetID.UUID); err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "mirror endpoint onto toolset").LogError(ctx, logger)
+		}
 	}
 
 	// Meta-MCP-backed endpoints never participate in default-plugin attachment
@@ -463,7 +485,15 @@ func (s *Service) UpdateMcpEndpoint(ctx context.Context, payload *gen.UpdateMcpE
 
 	txRepo := repo.New(dbtx)
 
-	domainIDs := uniqueIDs(preexisting.CustomDomainID, customDomainID)
+	backing, err := lockBackingToolsets(ctx, dbtx, *authCtx.ProjectID, UniqueIDs(preexisting.McpServerID, mcpServerID))
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "lock backing toolsets").LogError(ctx, logger)
+	}
+	if _, hosted := backing[mcpServerID.UUID]; hosted && utf8.RuneCountInString(slug) > hostedmcp.MaxToolsetSlugLength {
+		return nil, oops.E(oops.CodeInvalid, nil, "hosted server slugs are at most %d characters", hostedmcp.MaxToolsetSlugLength).LogWarn(ctx, logger)
+	}
+
+	domainIDs := UniqueIDs(preexisting.CustomDomainID, customDomainID)
 	if err := lockCustomDomains(ctx, dbtx, domainIDs); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, oops.E(oops.CodeInvalid, err, "custom_domain_id does not reference a live custom domain").LogError(ctx, logger)
@@ -488,7 +518,7 @@ func (s *Service) UpdateMcpEndpoint(ctx context.Context, payload *gen.UpdateMcpE
 	beforeView := mv.BuildMcpEndpointView(existing)
 
 	var targetServer *mcpserversrepo.McpServer
-	if serverIDs := uniqueIDs(existing.McpServerID, mcpServerID); len(serverIDs) > 0 {
+	if serverIDs := UniqueIDs(existing.McpServerID, mcpServerID); len(serverIDs) > 0 {
 		lockedServers, err := mcpserversrepo.New(dbtx).LockMCPServersByIDs(ctx, mcpserversrepo.LockMCPServersByIDsParams{
 			ProjectID: *authCtx.ProjectID,
 			Ids:       serverIDs,
@@ -497,9 +527,11 @@ func (s *Service) UpdateMcpEndpoint(ctx context.Context, payload *gen.UpdateMcpE
 			return nil, oops.E(oops.CodeUnexpected, err, "lock mcp servers").LogError(ctx, logger)
 		}
 		for i := range lockedServers {
+			if err := verifyBacking(ctx, logger, lockedServers[i], backing); err != nil {
+				return nil, err
+			}
 			if mcpServerID.Valid && lockedServers[i].ID == mcpServerID.UUID {
 				targetServer = &lockedServers[i]
-				break
 			}
 		}
 	}
@@ -507,7 +539,7 @@ func (s *Service) UpdateMcpEndpoint(ctx context.Context, payload *gen.UpdateMcpE
 		return nil, oops.E(oops.CodeInvalid, nil, "mcp_server_id does not reference a resource in this project").LogError(ctx, logger)
 	}
 
-	if err := s.lockMetaMcpServers(ctx, dbtx, authCtx, uniqueIDs(existing.MetaMcpServerID, metaMcpServerID), metaMcpServerID); err != nil {
+	if err := s.lockMetaMcpServers(ctx, dbtx, authCtx, UniqueIDs(existing.MetaMcpServerID, metaMcpServerID), metaMcpServerID); err != nil {
 		return nil, err
 	}
 
@@ -586,6 +618,19 @@ func (s *Service) UpdateMcpEndpoint(ctx context.Context, payload *gen.UpdateMcpE
 	if wasRoot && !keepRoot {
 		if err := s.logRootAutoClear(ctx, dbtx, authCtx, existing.CustomDomainID.UUID, existing.ID); err != nil {
 			return nil, err
+		}
+	}
+
+	// The vacated server syncs first so its toolset releases the slug before the target claims it.
+	syncOrder := []uuid.NullUUID{existing.McpServerID}
+	if mcpServerID != existing.McpServerID {
+		syncOrder = append(syncOrder, mcpServerID)
+	}
+	for _, serverID := range syncOrder {
+		if toolsetID, ok := backing[serverID.UUID]; ok && serverID.Valid {
+			if err := s.syncBackingToolsetAddress(ctx, dbtx, authCtx, serverID.UUID, toolsetID); err != nil {
+				return nil, oops.E(oops.CodeUnexpected, err, "mirror endpoint onto toolset").LogError(ctx, logger)
+			}
 		}
 	}
 
@@ -672,7 +717,12 @@ func (s *Service) DeleteMcpEndpoint(ctx context.Context, payload *gen.DeleteMcpE
 
 	txRepo := repo.New(dbtx)
 
-	if err := lockCustomDomains(ctx, dbtx, uniqueIDs(preexisting.CustomDomainID)); err != nil {
+	backing, err := lockBackingToolsets(ctx, dbtx, *authCtx.ProjectID, UniqueIDs(preexisting.McpServerID))
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "lock backing toolsets").LogError(ctx, logger)
+	}
+
+	if err := lockCustomDomains(ctx, dbtx, UniqueIDs(preexisting.CustomDomainID)); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "lock custom domain").LogError(ctx, logger)
 	}
 	existing, err := txRepo.LockMCPEndpointByID(ctx, repo.LockMCPEndpointByIDParams{
@@ -687,6 +737,20 @@ func (s *Service) DeleteMcpEndpoint(ctx context.Context, payload *gen.DeleteMcpE
 	}
 	if existing.CustomDomainID != preexisting.CustomDomainID {
 		return oops.E(oops.CodeConflict, nil, "mcp endpoint changed concurrently; retry the request").LogError(ctx, logger)
+	}
+	if existing.McpServerID.Valid {
+		lockedServer, err := mcpserversrepo.New(dbtx).LockMCPServerByIDAndProjectID(ctx, mcpserversrepo.LockMCPServerByIDAndProjectIDParams{
+			ID:        existing.McpServerID.UUID,
+			ProjectID: *authCtx.ProjectID,
+		})
+		if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+			return oops.E(oops.CodeUnexpected, err, "lock mcp server").LogError(ctx, logger)
+		}
+		if err == nil {
+			if err := verifyBacking(ctx, logger, lockedServer, backing); err != nil {
+				return err
+			}
+		}
 	}
 
 	deleted, err := txRepo.DeleteMCPEndpoint(ctx, repo.DeleteMCPEndpointParams{
@@ -716,6 +780,14 @@ func (s *Service) DeleteMcpEndpoint(ctx context.Context, payload *gen.DeleteMcpE
 	if wasRoot {
 		if err := s.logRootAutoClear(ctx, dbtx, authCtx, existing.CustomDomainID.UUID, existing.ID); err != nil {
 			return err
+		}
+	}
+
+	if existing.McpServerID.Valid {
+		if toolsetID, ok := backing[existing.McpServerID.UUID]; ok {
+			if err := s.syncBackingToolsetAddress(ctx, dbtx, authCtx, existing.McpServerID.UUID, toolsetID); err != nil {
+				return oops.E(oops.CodeUnexpected, err, "mirror endpoint onto toolset").LogError(ctx, logger)
+			}
 		}
 	}
 
@@ -776,7 +848,7 @@ func (s *Service) lockMetaMcpServers(ctx context.Context, dbtx pgx.Tx, authCtx *
 	return nil
 }
 
-func uniqueIDs(ids ...uuid.NullUUID) []uuid.UUID {
+func UniqueIDs(ids ...uuid.NullUUID) []uuid.UUID {
 	seen := make(map[uuid.UUID]struct{}, len(ids))
 	result := make([]uuid.UUID, 0, len(ids))
 	for _, id := range ids {
@@ -832,17 +904,10 @@ func (s *Service) logRootAutoClear(
 }
 
 func (s *Service) reconcileCustomDomains(ctx context.Context, customDomainIDs []uuid.UUID) error {
-	if s.temporalEnv == nil {
-		return nil
+	if err := background.ReconcileCustomDomains(ctx, s.logger, s.temporalEnv, customDomainIDs); err != nil {
+		return fmt.Errorf("reconcile custom domains: %w", err)
 	}
-	var reconcileErrors []error
-	for _, customDomainID := range customDomainIDs {
-		_, err := (&background.CustomDomainRegistrationClient{TemporalEnv: s.temporalEnv}).ExecuteCustomDomainReconcile(ctx, customDomainID)
-		if err != nil {
-			reconcileErrors = append(reconcileErrors, oops.E(oops.CodeUnexpected, err, "start custom domain reconciliation").LogError(ctx, s.logger))
-		}
-	}
-	return errors.Join(reconcileErrors...)
+	return nil
 }
 
 // validateSlugPrefix enforces that slugs not bound to a custom domain must be

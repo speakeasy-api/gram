@@ -17,13 +17,15 @@ import (
 // an MCP server in a caller-owned transaction. Callers select and authorize the
 // backing resource before entering this shared creation command.
 type MCPServerTransactionInput struct {
-	OrganizationID        string
-	ProjectID             uuid.UUID
-	ActorUserID           string
-	ActorEmail            *string
-	Name                  string
-	Visibility            string
-	EnvironmentID         uuid.NullUUID
+	OrganizationID string
+	ProjectID      uuid.UUID
+	ActorUserID    string
+	ActorEmail     *string
+	Name           string
+	Visibility     string
+	EnvironmentID  uuid.NullUUID
+	// Ignored by remote and tunneled backends, which mint their own.
+	UserSessionIssuerID   uuid.NullUUID
 	RemoteMCPServerID     uuid.NullUUID
 	TunneledMCPServerID   uuid.NullUUID
 	ToolsetID             uuid.NullUUID
@@ -44,12 +46,12 @@ func CreateMCPServerInTransaction(ctx context.Context, tx pgx.Tx, auditLogger *a
 	if err != nil {
 		return repo.McpServer{}, fmt.Errorf("generate MCP server ID: %w", err)
 	}
-	slug, err := computeServerSlug(input.Name, serverID)
+	slug, err := ComputeServerSlug(input.Name, serverID)
 	if err != nil {
 		return repo.McpServer{}, fmt.Errorf("compute MCP server slug: %w", err)
 	}
 
-	issuerID := uuid.NullUUID{UUID: uuid.Nil, Valid: false}
+	issuerID := input.UserSessionIssuerID
 	if input.RemoteMCPServerID.Valid || input.TunneledMCPServerID.Valid {
 		issuerID, err = MintServerUserSessionIssuer(ctx, tx, input.OrganizationID, input.ProjectID, slug)
 		if err != nil {

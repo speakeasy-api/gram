@@ -316,21 +316,6 @@ INSERT INTO assistant_toolsets (
   @project_id
 );
 
--- name: EnableMCPForToolsets :exec
--- Flips mcp_enabled to TRUE for the listed toolsets in a project. Every
--- toolset attached to an assistant must be MCP-reachable for the runtime's
--- startup config to build; we enable on attach so users don't have to do it
--- separately. mcp_slug is required for an MCP-reachable toolset, so we skip
--- rows that lack one.
-UPDATE toolsets
-SET mcp_enabled = TRUE,
-    updated_at = clock_timestamp()
-WHERE id = ANY(@toolset_ids::UUID[])
-  AND project_id = @project_id
-  AND mcp_enabled IS FALSE
-  AND mcp_slug IS NOT NULL
-  AND deleted IS FALSE;
-
 -- name: LoadAssistantMcpServers :many
 -- Hydrates assistant_mcp_servers with the fronting mcp_servers row, its
 -- Gram-hosted endpoint slug (custom_domain_id IS NULL), and the bound

@@ -519,3 +519,57 @@ func requireOopsCode(t *testing.T, err error, code oops.Code) {
 	require.ErrorAs(t, err, &oopsErr)
 	require.Equal(t, code, oopsErr.Code)
 }
+
+// Attaching a disabled toolset lifts its wrapper out of disabled too, so the
+// endpoint the assistant runtime addresses is served rather than a terminal 404.
+func TestServiceCreateAssistantLiftsDisabledWrapper(t *testing.T) {
+	t.Parallel()
+
+	svc, ctx, projectID, conn := newRBACServiceWithConn(t, "assistants_mcp_wrapper")
+	ctx = authztest.WithExactGrants(t, ctx, authz.Grant{
+		Scope:    authz.ScopeProjectWrite,
+		Selector: authz.NewSelector(authz.ScopeProjectWrite, projectID.String()),
+	})
+
+	ts, err := toolsetsRepo.New(conn).CreateToolset(t.Context(), toolsetsRepo.CreateToolsetParams{
+		OrganizationID: "org-test",
+		ProjectID:      projectID,
+		Name:           "Slack",
+		Slug:           "slack",
+		McpSlug:        pgtype.Text{String: "org-test-slack-wrapped", Valid: true},
+		McpEnabled:     false,
+	})
+	require.NoError(t, err)
+	serverID, err := uuid.NewV7()
+	require.NoError(t, err)
+	wrapper, err := mcpserversRepo.New(conn).CreateMCPServer(t.Context(), mcpserversRepo.CreateMCPServerParams{
+		ID:         serverID,
+		ProjectID:  projectID,
+		Name:       pgtype.Text{String: "Slack", Valid: true},
+		Slug:       pgtype.Text{String: "slack-" + serverID.String()[:8], Valid: true},
+		ToolsetID:  uuid.NullUUID{UUID: ts.ID, Valid: true},
+		Visibility: "disabled",
+	})
+	require.NoError(t, err)
+	_, err = mcpendpointsRepo.New(conn).CreateMCPEndpoint(t.Context(), mcpendpointsRepo.CreateMCPEndpointParams{
+		ProjectID:   projectID,
+		McpServerID: uuid.NullUUID{UUID: wrapper.ID, Valid: true},
+		Slug:        ts.McpSlug.String,
+	})
+	require.NoError(t, err)
+
+	_, err = svc.CreateAssistant(ctx, &gen.CreateAssistantPayload{
+		Name:         "Assistant",
+		Model:        "openai/gpt-4o-mini",
+		Instructions: "",
+		Toolsets:     []*types.AssistantToolsetRef{{ToolsetSlug: ts.Slug, EnvironmentSlug: nil}},
+	})
+	require.NoError(t, err)
+
+	lifted, err := mcpserversRepo.New(conn).GetMCPServerByToolsetID(t.Context(), mcpserversRepo.GetMCPServerByToolsetIDParams{ToolsetID: ts.ID, ProjectID: projectID})
+	require.NoError(t, err)
+	require.Equal(t, "private", lifted.Visibility)
+	endpoints, err := mcpendpointsRepo.New(conn).ListMCPEndpointsByMCPServerID(t.Context(), mcpendpointsRepo.ListMCPEndpointsByMCPServerIDParams{ProjectID: projectID, McpServerID: wrapper.ID})
+	require.NoError(t, err)
+	require.Len(t, endpoints, 1)
+}

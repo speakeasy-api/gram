@@ -15,12 +15,12 @@ import (
 // helper.
 const slugSuffixLen = 4
 
-// computeServerSlug derives the slug stored on an mcp_servers row from its
+// ComputeServerSlug derives the slug stored on an mcp_servers row from its
 // name and ID. The name is run through [conv.ToSlug] to produce a URL-safe
 // base, then the last [slugSuffixLen] hex characters of the ID are appended
 // so two servers in the same project with the same name still land on
 // distinct slugs. name is expected to already be trimmed and non-empty.
-func computeServerSlug(name string, id uuid.UUID) (string, error) {
+func ComputeServerSlug(name string, id uuid.UUID) (string, error) {
 	idStr := id.String()
 	if len(idStr) < slugSuffixLen {
 		return "", fmt.Errorf("uuid string too short for slug suffix: %d", len(idStr))

@@ -55,6 +55,17 @@ func (s *Service) SetUserSessionIssuer(ctx context.Context, payload *gen.SetUser
 	}
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 
+	before, err := s.repo.WithTx(dbtx).LockToolset(ctx, repo.LockToolsetParams{
+		Slug:      string(payload.Slug),
+		ProjectID: *authCtx.ProjectID,
+	})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, oops.E(oops.CodeNotFound, err, "toolset not found").LogError(ctx, s.logger)
+		}
+		return nil, oops.E(oops.CodeUnexpected, err, "lock toolset").LogError(ctx, s.logger)
+	}
+
 	// Validate that the target USI lives in the caller's project before
 	// writing the FK so a request can't graft an unrelated tenant's USI
 	// onto this toolset via cross-project id.
@@ -71,15 +82,19 @@ func (s *Service) SetUserSessionIssuer(ctx context.Context, payload *gen.SetUser
 		}
 	}
 
-	if _, err := s.repo.WithTx(dbtx).UpdateToolsetUserSessionIssuer(ctx, repo.UpdateToolsetUserSessionIssuerParams{
+	updated, err := s.repo.WithTx(dbtx).UpdateToolsetUserSessionIssuer(ctx, repo.UpdateToolsetUserSessionIssuerParams{
 		UserSessionIssuerID: usiID,
 		Slug:                string(payload.Slug),
 		ProjectID:           *authCtx.ProjectID,
-	}); err != nil {
+	})
+	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, oops.E(oops.CodeNotFound, err, "toolset not found").LogError(ctx, s.logger)
 		}
 		return nil, oops.E(oops.CodeUnexpected, err, "update toolset user_session_issuer").LogError(ctx, s.logger)
+	}
+	if _, err := s.mirrorToolset(ctx, dbtx, authCtx, before, updated); err != nil {
+		return nil, err
 	}
 
 	afterView, err := mv.DescribeToolset(ctx, s.logger, dbtx, mv.ProjectID(*authCtx.ProjectID), mv.ToolsetSlug(payload.Slug), new(s.toolsetCache.SkipCache()), nil)

@@ -844,32 +844,6 @@ func (q *Queries) DeleteProjectManagedAssistant(ctx context.Context, projectID u
 	return err
 }
 
-const enableMCPForToolsets = `-- name: EnableMCPForToolsets :exec
-UPDATE toolsets
-SET mcp_enabled = TRUE,
-    updated_at = clock_timestamp()
-WHERE id = ANY($1::UUID[])
-  AND project_id = $2
-  AND mcp_enabled IS FALSE
-  AND mcp_slug IS NOT NULL
-  AND deleted IS FALSE
-`
-
-type EnableMCPForToolsetsParams struct {
-	ToolsetIds []uuid.UUID
-	ProjectID  uuid.UUID
-}
-
-// Flips mcp_enabled to TRUE for the listed toolsets in a project. Every
-// toolset attached to an assistant must be MCP-reachable for the runtime's
-// startup config to build; we enable on attach so users don't have to do it
-// separately. mcp_slug is required for an MCP-reachable toolset, so we skip
-// rows that lack one.
-func (q *Queries) EnableMCPForToolsets(ctx context.Context, arg EnableMCPForToolsetsParams) error {
-	_, err := q.db.Exec(ctx, enableMCPForToolsets, arg.ToolsetIds, arg.ProjectID)
-	return err
-}
-
 const failAssistantThreadEvent = `-- name: FailAssistantThreadEvent :exec
 UPDATE assistant_thread_events
 SET

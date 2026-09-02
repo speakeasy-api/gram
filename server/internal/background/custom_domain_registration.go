@@ -4,12 +4,14 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/speakeasy-api/gram/server/internal/background/activities"
 	customdomainsrepo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
 	"github.com/speakeasy-api/gram/server/internal/k8s"
+	"github.com/speakeasy-api/gram/server/internal/oops"
 	tenv "github.com/speakeasy-api/gram/server/internal/temporal"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	"go.temporal.io/api/enums/v1"
@@ -558,4 +560,19 @@ func CustomDomainDeletionWorkflow(ctx workflow.Context, params CustomDomainDelet
 	}
 
 	return nil
+}
+
+// ReconcileCustomDomains starts a reconcile per domain; call only after the
+// transaction that changed their roots committed.
+func ReconcileCustomDomains(ctx context.Context, logger *slog.Logger, env *tenv.Environment, customDomainIDs []uuid.UUID) error {
+	if env == nil {
+		return nil
+	}
+	var errs []error
+	for _, id := range customDomainIDs {
+		if _, err := (&CustomDomainRegistrationClient{TemporalEnv: env}).ExecuteCustomDomainReconcile(ctx, id); err != nil {
+			errs = append(errs, oops.E(oops.CodeUnexpected, err, "start custom domain reconciliation").LogError(ctx, logger))
+		}
+	}
+	return errors.Join(errs...)
 }

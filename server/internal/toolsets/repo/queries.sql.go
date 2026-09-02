@@ -44,6 +44,52 @@ func (q *Queries) CheckMCPSlugAvailability(ctx context.Context, mcpSlug pgtype.T
 	return column_1, err
 }
 
+const clearToolsetHosting = `-- name: ClearToolsetHosting :one
+UPDATE toolsets
+SET
+    mcp_slug = NULL
+  , mcp_enabled = FALSE
+  , mcp_is_public = FALSE
+  , custom_domain_id = NULL
+  , user_session_issuer_id = NULL
+  , updated_at = clock_timestamp()
+WHERE id = $1 AND project_id = $2 AND deleted IS FALSE
+RETURNING id, organization_id, project_id, name, slug, description, default_environment_slug, mcp_slug, mcp_is_public, mcp_enabled, tool_selection_mode, custom_domain_id, external_oauth_server_id, oauth_proxy_server_id, user_session_issuer_id, tool_variations_group_id, created_at, updated_at, deleted_at, deleted
+`
+
+type ClearToolsetHostingParams struct {
+	ID        uuid.UUID
+	ProjectID uuid.UUID
+}
+
+func (q *Queries) ClearToolsetHosting(ctx context.Context, arg ClearToolsetHostingParams) (Toolset, error) {
+	row := q.db.QueryRow(ctx, clearToolsetHosting, arg.ID, arg.ProjectID)
+	var i Toolset
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.ProjectID,
+		&i.Name,
+		&i.Slug,
+		&i.Description,
+		&i.DefaultEnvironmentSlug,
+		&i.McpSlug,
+		&i.McpIsPublic,
+		&i.McpEnabled,
+		&i.ToolSelectionMode,
+		&i.CustomDomainID,
+		&i.ExternalOauthServerID,
+		&i.OauthProxyServerID,
+		&i.UserSessionIssuerID,
+		&i.ToolVariationsGroupID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
 const clearToolsetOAuthServers = `-- name: ClearToolsetOAuthServers :one
 UPDATE toolsets
 SET
@@ -1339,6 +1385,86 @@ func (q *Queries) ListToolsetsWithVersionsByOrganization(ctx context.Context, or
 	return items, nil
 }
 
+const lockToolset = `-- name: LockToolset :one
+SELECT id, organization_id, project_id, name, slug, description, default_environment_slug, mcp_slug, mcp_is_public, mcp_enabled, tool_selection_mode, custom_domain_id, external_oauth_server_id, oauth_proxy_server_id, user_session_issuer_id, tool_variations_group_id, created_at, updated_at, deleted_at, deleted
+FROM toolsets
+WHERE slug = $1 AND project_id = $2 AND deleted IS FALSE
+FOR UPDATE
+`
+
+type LockToolsetParams struct {
+	Slug      string
+	ProjectID uuid.UUID
+}
+
+func (q *Queries) LockToolset(ctx context.Context, arg LockToolsetParams) (Toolset, error) {
+	row := q.db.QueryRow(ctx, lockToolset, arg.Slug, arg.ProjectID)
+	var i Toolset
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.ProjectID,
+		&i.Name,
+		&i.Slug,
+		&i.Description,
+		&i.DefaultEnvironmentSlug,
+		&i.McpSlug,
+		&i.McpIsPublic,
+		&i.McpEnabled,
+		&i.ToolSelectionMode,
+		&i.CustomDomainID,
+		&i.ExternalOauthServerID,
+		&i.OauthProxyServerID,
+		&i.UserSessionIssuerID,
+		&i.ToolVariationsGroupID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
+const lockToolsetByID = `-- name: LockToolsetByID :one
+SELECT id, organization_id, project_id, name, slug, description, default_environment_slug, mcp_slug, mcp_is_public, mcp_enabled, tool_selection_mode, custom_domain_id, external_oauth_server_id, oauth_proxy_server_id, user_session_issuer_id, tool_variations_group_id, created_at, updated_at, deleted_at, deleted
+FROM toolsets
+WHERE id = $1 AND project_id = $2 AND deleted IS FALSE
+FOR UPDATE
+`
+
+type LockToolsetByIDParams struct {
+	ID        uuid.UUID
+	ProjectID uuid.UUID
+}
+
+func (q *Queries) LockToolsetByID(ctx context.Context, arg LockToolsetByIDParams) (Toolset, error) {
+	row := q.db.QueryRow(ctx, lockToolsetByID, arg.ID, arg.ProjectID)
+	var i Toolset
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.ProjectID,
+		&i.Name,
+		&i.Slug,
+		&i.Description,
+		&i.DefaultEnvironmentSlug,
+		&i.McpSlug,
+		&i.McpIsPublic,
+		&i.McpEnabled,
+		&i.ToolSelectionMode,
+		&i.CustomDomainID,
+		&i.ExternalOauthServerID,
+		&i.OauthProxyServerID,
+		&i.UserSessionIssuerID,
+		&i.ToolVariationsGroupID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
 const setToolsetCustomDomain = `-- name: SetToolsetCustomDomain :exec
 UPDATE toolsets
 SET
@@ -1358,6 +1484,56 @@ type SetToolsetCustomDomainParams struct {
 func (q *Queries) SetToolsetCustomDomain(ctx context.Context, arg SetToolsetCustomDomainParams) error {
 	_, err := q.db.Exec(ctx, setToolsetCustomDomain, arg.CustomDomainID, arg.Slug, arg.ProjectID)
 	return err
+}
+
+const setToolsetHostedAddress = `-- name: SetToolsetHostedAddress :one
+UPDATE toolsets
+SET
+    mcp_slug = $1
+  , custom_domain_id = $2
+  , updated_at = clock_timestamp()
+WHERE id = $3 AND project_id = $4 AND deleted IS FALSE
+RETURNING id, organization_id, project_id, name, slug, description, default_environment_slug, mcp_slug, mcp_is_public, mcp_enabled, tool_selection_mode, custom_domain_id, external_oauth_server_id, oauth_proxy_server_id, user_session_issuer_id, tool_variations_group_id, created_at, updated_at, deleted_at, deleted
+`
+
+type SetToolsetHostedAddressParams struct {
+	McpSlug        pgtype.Text
+	CustomDomainID uuid.NullUUID
+	ID             uuid.UUID
+	ProjectID      uuid.UUID
+}
+
+func (q *Queries) SetToolsetHostedAddress(ctx context.Context, arg SetToolsetHostedAddressParams) (Toolset, error) {
+	row := q.db.QueryRow(ctx, setToolsetHostedAddress,
+		arg.McpSlug,
+		arg.CustomDomainID,
+		arg.ID,
+		arg.ProjectID,
+	)
+	var i Toolset
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.ProjectID,
+		&i.Name,
+		&i.Slug,
+		&i.Description,
+		&i.DefaultEnvironmentSlug,
+		&i.McpSlug,
+		&i.McpIsPublic,
+		&i.McpEnabled,
+		&i.ToolSelectionMode,
+		&i.CustomDomainID,
+		&i.ExternalOauthServerID,
+		&i.OauthProxyServerID,
+		&i.UserSessionIssuerID,
+		&i.ToolVariationsGroupID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
 }
 
 const setToolsetMCPEnabledByID = `-- name: SetToolsetMCPEnabledByID :exec
@@ -1408,6 +1584,62 @@ type SetToolsetMCPPublicBySlugParams struct {
 func (q *Queries) SetToolsetMCPPublicBySlug(ctx context.Context, arg SetToolsetMCPPublicBySlugParams) error {
 	_, err := q.db.Exec(ctx, setToolsetMCPPublicBySlug, arg.McpIsPublic, arg.McpSlug)
 	return err
+}
+
+const syncToolsetHostingFromWrapper = `-- name: SyncToolsetHostingFromWrapper :one
+UPDATE toolsets
+SET
+    mcp_enabled = $1
+  , mcp_is_public = $2
+  , user_session_issuer_id = $3
+  , tool_variations_group_id = $4
+  , updated_at = clock_timestamp()
+WHERE id = $5 AND project_id = $6 AND deleted IS FALSE
+RETURNING id, organization_id, project_id, name, slug, description, default_environment_slug, mcp_slug, mcp_is_public, mcp_enabled, tool_selection_mode, custom_domain_id, external_oauth_server_id, oauth_proxy_server_id, user_session_issuer_id, tool_variations_group_id, created_at, updated_at, deleted_at, deleted
+`
+
+type SyncToolsetHostingFromWrapperParams struct {
+	McpEnabled            bool
+	McpIsPublic           bool
+	UserSessionIssuerID   uuid.NullUUID
+	ToolVariationsGroupID uuid.NullUUID
+	ID                    uuid.UUID
+	ProjectID             uuid.UUID
+}
+
+func (q *Queries) SyncToolsetHostingFromWrapper(ctx context.Context, arg SyncToolsetHostingFromWrapperParams) (Toolset, error) {
+	row := q.db.QueryRow(ctx, syncToolsetHostingFromWrapper,
+		arg.McpEnabled,
+		arg.McpIsPublic,
+		arg.UserSessionIssuerID,
+		arg.ToolVariationsGroupID,
+		arg.ID,
+		arg.ProjectID,
+	)
+	var i Toolset
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.ProjectID,
+		&i.Name,
+		&i.Slug,
+		&i.Description,
+		&i.DefaultEnvironmentSlug,
+		&i.McpSlug,
+		&i.McpIsPublic,
+		&i.McpEnabled,
+		&i.ToolSelectionMode,
+		&i.CustomDomainID,
+		&i.ExternalOauthServerID,
+		&i.OauthProxyServerID,
+		&i.UserSessionIssuerID,
+		&i.ToolVariationsGroupID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
 }
 
 const toolsetHasExternalMCPProxy = `-- name: ToolsetHasExternalMCPProxy :one
