@@ -845,6 +845,19 @@ type SummarizeRemoteSessionClientsForJsonWebKeySetRow struct {
 // referenced by more clients than the cap reports a truncated list against a
 // full count. array_agg returns NULL over an empty group, hence the COALESCE.
 // Ordered oldest first so the listing is stable across calls.
+//
+// The slice is applied to the finished aggregate, so array_agg does build all N
+// elements before 50 survive. That is deliberate. Capping inside instead (a
+// LIMIT 50 subquery beside a separate COUNT) was measured and is worse: the
+// index is (organization_id, json_web_key_set_id) and does not cover
+// created_at/id, so the ordered listing sorts every matching row either way,
+// and the capped form pays a second scan of the same rows to do it. At 5000
+// references it ran 2.75ms against 0.96ms with double the buffer reads; at a
+// realistic 5 it was a wash on time and still double the buffers. The only
+// thing it improves is sort memory, 458kB down to 28kB, and N cannot get large
+// here: json_web_key_set_id is only ever set by attachKeySet, one client per
+// call, behind the customer_managed_encryption_keys entitlement, so references
+// accrue one deliberate administrator action at a time.
 func (q *Queries) SummarizeRemoteSessionClientsForJsonWebKeySet(ctx context.Context, arg SummarizeRemoteSessionClientsForJsonWebKeySetParams) (SummarizeRemoteSessionClientsForJsonWebKeySetRow, error) {
 	row := q.db.QueryRow(ctx, summarizeRemoteSessionClientsForJsonWebKeySet, arg.LimitValue, arg.OrganizationID, arg.JsonWebKeySetID)
 	var i SummarizeRemoteSessionClientsForJsonWebKeySetRow
