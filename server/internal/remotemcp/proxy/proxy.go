@@ -84,6 +84,9 @@ type ServerIdentity struct {
 	RemoteMCPServerID   string
 	TunneledMCPServerID string
 	McpServerID         string
+	// MetaMCPServerID is set when the proxy call was dispatched through a
+	// gateway (meta MCP server). Attribution only.
+	MetaMCPServerID string
 }
 
 func (i ServerIdentity) SourceID() string {
@@ -103,7 +106,7 @@ func (i ServerIdentity) ToolURNKind() string {
 }
 
 func (i ServerIdentity) SlogAttrs() []slog.Attr {
-	attrs := make([]slog.Attr, 0, 3)
+	attrs := make([]slog.Attr, 0, 4)
 	if i.RemoteMCPServerID != "" {
 		attrs = append(attrs, attr.SlogRemoteMCPServerID(i.RemoteMCPServerID))
 	}
@@ -113,9 +116,15 @@ func (i ServerIdentity) SlogAttrs() []slog.Attr {
 	if i.McpServerID != "" {
 		attrs = append(attrs, attr.SlogMcpServerID(i.McpServerID))
 	}
+	if i.MetaMCPServerID != "" {
+		attrs = append(attrs, attr.SlogMetaMcpServerID(i.MetaMCPServerID))
+	}
 	return attrs
 }
 
+// AppendAttributes deliberately omits MetaMCPServerID: it labels OTEL metric
+// instruments, and a per-gateway dimension there is a cardinality cost the
+// counters must not pay. Per-gateway analytics live in ClickHouse.
 func (i ServerIdentity) AppendAttributes(attrs []attribute.KeyValue) []attribute.KeyValue {
 	if i.RemoteMCPServerID != "" {
 		attrs = append(attrs, attr.RemoteMCPServerID(i.RemoteMCPServerID))

@@ -308,6 +308,8 @@ type mcpInputs struct {
 	// described toolset when non-nil (wrapper visibility governs). Nil falls
 	// back to the toolset flag.
 	wrapperIsPublic *bool
+	// metaMcpServerID is the gateway the call was dispatched through; attribution only.
+	metaMcpServerID string
 	// tags is the parsed ?tags= filter. When non-empty, tools/list and
 	// tools/call expose only tools whose variation row carries one of these
 	// tags. Empty means no filtering.
@@ -1151,6 +1153,7 @@ func (s *Service) serveToolsetResolved(w http.ResponseWriter, r *http.Request, t
 		mcpServerID:              cfg.mcpServerID,
 		wrapperRBACResourceID:    wrapperRBACResourceID,
 		wrapperIsPublic:          wrapperIsPublic,
+		metaMcpServerID:          "",
 		skipProxyTools:           false,
 		tags:                     tags,
 		protocolVersion:          mcpversions.Resolve(mcprequests.DeclaredProtocolVersion(r.Header.Get(mcpversions.HTTPHeader), req.Params), mcpversions.SupportedHostedToolset()),

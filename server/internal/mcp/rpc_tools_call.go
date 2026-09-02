@@ -383,6 +383,7 @@ func handleToolsCall(
 			MCPURL:                &mcpURL,
 			MCPSessionID:          &payload.sessionID,
 			ChatID:                conv.PtrEmpty(payload.chatID),
+			MetaMCPServerID:       conv.PtrEmpty(payload.metaMcpServerID),
 			Type:                  plan.BillingType,
 			ResourceURI:           "",
 			FunctionCPUUsage:      functionCPU,
@@ -414,6 +415,9 @@ func handleToolsCall(
 		logAttrs.RecordToolsetSlug(payload.toolset)
 		if payload.mcpServerID != nil {
 			logAttrs[attr.McpServerIDKey] = payload.mcpServerID.String()
+		}
+		if payload.metaMcpServerID != "" {
+			logAttrs[attr.MetaMcpServerIDKey] = payload.metaMcpServerID
 		}
 		logAttrs.RecordMCPURL(mcpURL)
 		params := tm.LogParams{

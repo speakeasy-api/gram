@@ -124,6 +124,8 @@ func TestServePublic_MetaEndpoint_ExecuteTool_TunneledMemberRoutesOwnToken(t *te
 	forwarded := gateway.forwardFor(`"tools/call"`)
 	require.Equal(t, "Bearer token-tunnel", forwarded.Get("Authorization"),
 		"the member's own keyed token must reach the tunnel gateway as its bearer")
+	// The tunneled member's tool_call row carries the gateway id.
+	requireTelemetryRowCount(t, `meta_mcp_server_id = ? AND event_source = 'tool_call' AND tool_name = 'ping'`, 1, meta.ID.String())
 
 	// A sibling credential for some other upstream must not disturb routing:
 	// the member still forwards its own keyed token.

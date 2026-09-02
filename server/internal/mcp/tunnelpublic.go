@@ -520,6 +520,7 @@ func (s *Service) serveTunneledPublicSession(
 			RemoteMCPServerID:   "",
 			TunneledMCPServerID: tunnelID,
 			McpServerID:         mcpServerID,
+			MetaMCPServerID:     "",
 		},
 		session.GatewayAddr,
 		headers,

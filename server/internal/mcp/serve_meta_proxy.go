@@ -27,6 +27,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/mcp/mcpmetrics"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcprequests"
 	"github.com/speakeasy-api/gram/server/internal/mcp/metamcp"
 	"github.com/speakeasy-api/gram/server/internal/mcp/tunnelrouting"
@@ -142,12 +143,14 @@ func (s *Service) dialMetaMember(
 		}
 		upstreamToken, terr := routeMetaMemberToken(gate.tokens, member, strings.TrimRight(remoteServer.Url, "/"))
 		if terr != nil {
+			s.metrics.RecordMetaMemberDispatch(ctx, "remote", mcpmetrics.MetaDispatchAmbiguous)
 			return nil, terr
 		}
+		s.metrics.RecordMetaMemberDispatch(ctx, "remote", dispatchOutcome(upstreamToken))
 		return func(context.Context) (*proxy.Proxy, error) {
 			// No WWW-Authenticate relay: a member's auth challenge must not
 			// invite the client to re-authenticate against the meta MCP.
-			p := s.remoteProxyManager.Build(logger, &remoteServer, member.serverID.String(), headers, member.visibility, gate.organizationID, gate.projectID.String(), upstreamToken, "", gate.toolSelection, remotemcp.WithoutToolsCallIdentityCoverage())
+			p := s.remoteProxyManager.Build(logger, &remoteServer, member.serverID.String(), headers, member.visibility, gate.organizationID, gate.projectID.String(), upstreamToken, "", gate.toolSelection, remotemcp.WithoutToolsCallIdentityCoverage(), remotemcp.WithMetaMCPServerID(gate.metaServerID.String()))
 			// Meta-MCP-synthesized initializes are not client sessions.
 			p.InitializeRequestInterceptors = nil
 			return p, nil
@@ -156,13 +159,15 @@ func (s *Service) dialMetaMember(
 	case member.tunneledServerID.Valid:
 		upstreamToken, terr := routeMetaMemberToken(gate.tokens, member, strings.TrimRight(member.tunneledResourceIdentifier, "/"))
 		if terr != nil {
+			s.metrics.RecordMetaMemberDispatch(ctx, "tunneled", mcpmetrics.MetaDispatchAmbiguous)
 			return nil, terr
 		}
+		s.metrics.RecordMetaMemberDispatch(ctx, "tunneled", dispatchOutcome(upstreamToken))
 		// Per-member namespace so one caller's handshake, calls, and DELETE
 		// land on one tunnel gateway.
 		affinity := tunnelrouting.HashedClientAffinityKey("meta:"+member.serverID.String(), callerIdentity)
 		return func(ctx context.Context) (*proxy.Proxy, error) {
-			p, berr := s.tunnelManager.buildProxy(ctx, affinity, logger, gate.projectID, gate.organizationID, &serverRow, upstreamToken, "", gate.toolSelection, remotemcp.WithoutToolsCallIdentityCoverage())
+			p, berr := s.tunnelManager.buildProxy(ctx, affinity, logger, gate.projectID, gate.organizationID, &serverRow, upstreamToken, "", gate.toolSelection, remotemcp.WithoutToolsCallIdentityCoverage(), remotemcp.WithMetaMCPServerID(gate.metaServerID.String()))
 			if berr != nil {
 				return nil, fmt.Errorf("build tunnel proxy: %w", berr)
 			}
@@ -173,6 +178,13 @@ func (s *Service) dialMetaMember(
 	default:
 		return nil, &metaMemberError{message: fmt.Sprintf("server %q is not currently servable", member.slug)}
 	}
+}
+
+func dispatchOutcome(token string) mcpmetrics.MetaDispatchOutcome {
+	if token == "" {
+		return mcpmetrics.MetaDispatchAnonymous
+	}
+	return mcpmetrics.MetaDispatchCredentialed
 }
 
 // memberAttributionContext gives member exchanges the identity billing and

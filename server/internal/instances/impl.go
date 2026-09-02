@@ -418,6 +418,7 @@ func (s *Service) ExecuteInstanceTool(w http.ResponseWriter, r *http.Request) er
 			ResponseStatusCode:    interceptor.statusCode,
 			MCPURL:                nil, // Not applicable for direct tool calls
 			MCPSessionID:          nil, // Not applicable for direct tool calls
+			MetaMCPServerID:       nil,
 			ResourceURI:           "",
 			FunctionCPUUsage:      functionCPU,
 			FunctionMemUsage:      functionMem,

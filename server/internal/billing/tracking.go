@@ -157,6 +157,7 @@ type ToolCallUsageEvent struct {
 	ResponseStatusCode    int
 	ToolsetID             *string
 	MCPSessionID          *string
+	MetaMCPServerID       *string
 	FunctionCPUUsage      *float64
 	FunctionMemUsage      *float64
 	FunctionExecutionTime *float64
