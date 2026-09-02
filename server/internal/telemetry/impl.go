@@ -31,6 +31,7 @@ import (
 	hooksRepo "github.com/speakeasy-api/gram/server/internal/hooks/repo"
 	"github.com/speakeasy-api/gram/server/internal/identity"
 	mcpserversRepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
+	metamcpRepo "github.com/speakeasy-api/gram/server/internal/metamcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	orgsRepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
@@ -1951,6 +1952,67 @@ func (s *Service) CaptureEvent(ctx context.Context, payload *telem_gen.CaptureEv
 	}, nil
 }
 
+// GetMetaMcpServerUsage returns one gateway's discovery funnel and
+// per-member execution breakdown from gateway-attributed telemetry.
+func (s *Service) GetMetaMcpServerUsage(ctx context.Context, payload *telem_gen.GetMetaMcpServerUsagePayload) (*telem_gen.GetMetaMcpServerUsageResult, error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectRead, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+		return nil, err
+	}
+	logsEnabled, err := s.logsEnabled(ctx, authCtx.ActiveOrganizationID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "unable to check if logs are enabled")
+	}
+	if !logsEnabled {
+		return nil, oops.E(oops.CodeNotFound, telemetryerrs.ErrLogsDisabled, "logs are not enabled for this organization")
+	}
+	if payload.MetaMcpServerID == "" {
+		return nil, oops.E(oops.CodeBadRequest, nil, "meta_mcp_server_id is required")
+	}
+	timeStart, timeEnd, err := parseTimeRange(&payload.From, &payload.To)
+	if err != nil {
+		return nil, err
+	}
+
+	usage, err := s.chRepo.GetMetaMCPServerUsage(ctx, repo.GetMetaMCPServerUsageParams{
+		GramProjectID:   authCtx.ProjectID.String(),
+		MetaMCPServerID: payload.MetaMcpServerID,
+		TimeStart:       timeStart,
+		TimeEnd:         timeEnd,
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "error fetching meta mcp server usage")
+	}
+
+	members := make([]*telem_gen.MetaMcpMemberUsage, 0, len(usage.Members))
+	for _, row := range usage.Members {
+		entry := &telem_gen.MetaMcpMemberUsage{
+			McpServerID:  row.McpServerID,
+			ToolCalls:    uint64ToInt64(row.ToolCalls),
+			ErrorCount:   uint64ToInt64(row.ErrorCount),
+			LastCalledAt: nil,
+		}
+		if row.LastCalledUnixNano > 0 {
+			ts := time.Unix(0, row.LastCalledUnixNano).UTC().Format(time.RFC3339)
+			entry.LastCalledAt = &ts
+		}
+		members = append(members, entry)
+	}
+
+	return &telem_gen.GetMetaMcpServerUsageResult{
+		Funnel: &telem_gen.MetaMcpDiscoveryFunnel{
+			ListServers:    uint64ToInt64(usage.Funnel.ListServers),
+			DescribeServer: uint64ToInt64(usage.Funnel.DescribeServer),
+			DescribeTools:  uint64ToInt64(usage.Funnel.DescribeTools),
+			ExecuteTool:    uint64ToInt64(usage.Funnel.ExecuteTool),
+		},
+		Members: members,
+	}, nil
+}
+
 // GetObservabilityOverview retrieves aggregated observability metrics for the overview dashboard.
 func (s *Service) GetObservabilityOverview(ctx context.Context, payload *telem_gen.GetObservabilityOverviewPayload) (res *telem_gen.GetObservabilityOverviewResult, err error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
@@ -1983,6 +2045,7 @@ func (s *Service) GetObservabilityOverview(ctx context.Context, payload *telem_g
 	toolsetSlug := conv.PtrValOr(payload.ToolsetSlug, "")
 	remoteMCPServerID := conv.PtrValOr(payload.RemoteMcpServerID, "")
 	mcpServerID := conv.PtrValOr(payload.McpServerID, "")
+	metaMCPServerID := conv.PtrValOr(payload.MetaMcpServerID, "")
 	eventSource := conv.PtrValOr(payload.EventSource, "")
 	hookSource := conv.PtrValOr(payload.HookSource, "")
 	accountType := conv.PtrValOr(payload.AccountType, "")
@@ -2032,6 +2095,7 @@ func (s *Service) GetObservabilityOverview(ctx context.Context, payload *telem_g
 		ToolsetSlug:         toolsetSlug,
 		RemoteMCPServerID:   remoteMCPServerID,
 		MCPServerID:         mcpServerID,
+		MetaMCPServerID:     metaMCPServerID,
 		EventSource:         eventSource,
 		HookSource:          hookSource,
 		AccountType:         accountType,
@@ -2053,6 +2117,7 @@ func (s *Service) GetObservabilityOverview(ctx context.Context, payload *telem_g
 		ToolsetSlug:         toolsetSlug,
 		RemoteMCPServerID:   remoteMCPServerID,
 		MCPServerID:         mcpServerID,
+		MetaMCPServerID:     metaMCPServerID,
 		EventSource:         eventSource,
 		HookSource:          hookSource,
 		AccountType:         accountType,
@@ -2077,6 +2142,7 @@ func (s *Service) GetObservabilityOverview(ctx context.Context, payload *telem_g
 			ToolsetSlug:         toolsetSlug,
 			RemoteMCPServerID:   remoteMCPServerID,
 			MCPServerID:         mcpServerID,
+			MetaMCPServerID:     metaMCPServerID,
 			EventSource:         eventSource,
 			HookSource:          hookSource,
 			AccountType:         accountType,
@@ -2099,6 +2165,7 @@ func (s *Service) GetObservabilityOverview(ctx context.Context, payload *telem_g
 		ToolsetSlug:         toolsetSlug,
 		RemoteMCPServerID:   remoteMCPServerID,
 		MCPServerID:         mcpServerID,
+		MetaMCPServerID:     metaMCPServerID,
 		EventSource:         eventSource,
 		HookSource:          hookSource,
 		AccountType:         accountType,
@@ -2122,6 +2189,7 @@ func (s *Service) GetObservabilityOverview(ctx context.Context, payload *telem_g
 		ToolsetSlug:         toolsetSlug,
 		RemoteMCPServerID:   remoteMCPServerID,
 		MCPServerID:         mcpServerID,
+		MetaMCPServerID:     metaMCPServerID,
 		EventSource:         eventSource,
 		HookSource:          hookSource,
 		AccountType:         accountType,
@@ -3703,6 +3771,16 @@ func (s *Service) GetMcpServerActivity(ctx context.Context, payload *telem_gen.G
 		return nil, oops.E(oops.CodeUnexpected, err, "error fetching mcp server activity")
 	}
 
+	if err := s.resolveMetaMCPServerLabels(ctx, authCtx, rows); err != nil {
+		return nil, err
+	}
+	sort.SliceStable(rows, func(i, j int) bool {
+		if rows[i].TotalToolCalls != rows[j].TotalToolCalls {
+			return rows[i].TotalToolCalls > rows[j].TotalToolCalls
+		}
+		return rows[i].TargetLabel < rows[j].TargetLabel
+	})
+
 	activity := make([]*telem_gen.McpServerActivity, 0, len(rows))
 	for _, row := range rows {
 		entry := &telem_gen.McpServerActivity{
@@ -3725,6 +3803,41 @@ func (s *Service) GetMcpServerActivity(ctx context.Context, payload *telem_gen.G
 		RecentWindowDays: recentWindowDays,
 		LookbackDays:     mcpServerActivityLookbackDays,
 	}, nil
+}
+
+// resolveMetaMCPServerLabels swaps gateway rows' id label for the gateway
+// name; a deleted gateway keeps its id.
+func (s *Service) resolveMetaMCPServerLabels(ctx context.Context, authCtx *contextvalues.AuthContext, rows []repo.McpServerActivityRow) error {
+	hasGateway := false
+	for i := range rows {
+		if rows[i].TargetType == repo.ToolUsageTargetTypeMetaMCP {
+			hasGateway = true
+			break
+		}
+	}
+	if !hasGateway {
+		return nil
+	}
+	metaServers, err := metamcpRepo.New(s.db).ListMetaMCPServers(ctx, metamcpRepo.ListMetaMCPServersParams{
+		OrganizationID: authCtx.ActiveOrganizationID,
+		ProjectID:      *authCtx.ProjectID,
+	})
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "error listing meta mcp servers")
+	}
+	metaNames := make(map[string]string, len(metaServers))
+	for _, ms := range metaServers {
+		metaNames[ms.MetaMcpServer.ID.String()] = ms.MetaMcpServer.Name
+	}
+	for i := range rows {
+		if rows[i].TargetType != repo.ToolUsageTargetTypeMetaMCP {
+			continue
+		}
+		if name, ok := metaNames[rows[i].TargetID]; ok {
+			rows[i].TargetLabel = name
+		}
+	}
+	return nil
 }
 
 func (s *Service) toolUsageHostedMCPMatchers(ctx context.Context, projectID uuid.UUID) ([]repo.HostedMCPMatcher, error) {

@@ -53,6 +53,10 @@ type Client struct {
 	// the getObservabilityOverview endpoint.
 	GetObservabilityOverviewDoer goahttp.Doer
 
+	// GetMetaMcpServerUsage Doer is the HTTP client used to make requests to the
+	// getMetaMcpServerUsage endpoint.
+	GetMetaMcpServerUsageDoer goahttp.Doer
+
 	// GetProjectOverview Doer is the HTTP client used to make requests to the
 	// getProjectOverview endpoint.
 	GetProjectOverviewDoer goahttp.Doer
@@ -173,6 +177,7 @@ func NewClient(
 		GetUserMetricsSummaryDoer:            doer,
 		GetEmployeeDataFlowGraphDoer:         doer,
 		GetObservabilityOverviewDoer:         doer,
+		GetMetaMcpServerUsageDoer:            doer,
 		GetProjectOverviewDoer:               doer,
 		GetUnproxiedMcpServerUsageDoer:       doer,
 		GetUnproxiedMcpServerToolUsageDoer:   doer,
@@ -415,6 +420,30 @@ func (c *Client) GetObservabilityOverview() goa.Endpoint {
 		resp, err := c.GetObservabilityOverviewDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("telemetry", "getObservabilityOverview", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// GetMetaMcpServerUsage returns an endpoint that makes HTTP requests to the
+// telemetry service getMetaMcpServerUsage server.
+func (c *Client) GetMetaMcpServerUsage() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeGetMetaMcpServerUsageRequest(c.encoder)
+		decodeResponse = DecodeGetMetaMcpServerUsageResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildGetMetaMcpServerUsageRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.GetMetaMcpServerUsageDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("telemetry", "getMetaMcpServerUsage", err)
 		}
 		return decodeResponse(resp)
 	}

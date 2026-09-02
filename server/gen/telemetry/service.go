@@ -36,6 +36,9 @@ type Service interface {
 	// Get observability overview metrics including time series, tool breakdowns,
 	// and summary stats
 	GetObservabilityOverview(context.Context, *GetObservabilityOverviewPayload) (res *GetObservabilityOverviewResult, err error)
+	// Discovery funnel and per-member execution breakdown for one gateway (meta
+	// MCP server), from gateway-attributed telemetry.
+	GetMetaMcpServerUsage(context.Context, *GetMetaMcpServerUsagePayload) (res *GetMetaMcpServerUsageResult, err error)
 	// Get project-level overview including total chats, tool calls, active
 	// servers/users, and top lists
 	GetProjectOverview(context.Context, *GetProjectOverviewPayload) (res *GetProjectOverviewResult, err error)
@@ -130,7 +133,7 @@ const ServiceName = "telemetry"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [32]string{"searchLogs", "searchToolCalls", "searchChats", "searchUsers", "captureEvent", "getProjectMetricsSummary", "getUserMetricsSummary", "getEmployeeDataFlowGraph", "getObservabilityOverview", "getProjectOverview", "getUnproxiedMcpServerUsage", "getUnproxiedMcpServerToolUsage", "getUnproxiedMcpServerUserUsage", "getUnproxiedMcpServerClientUsage", "query", "queryTumDetails", "listSessions", "listFilterOptions", "listAttributeKeys", "getHooksSummary", "getToolUsageSummary", "getToolUsageTotals", "getToolUsageTargets", "getToolUsageUsers", "getToolUsageTargetTimeSeries", "getToolUsageUserTimeSeries", "getToolUsageUsersByTarget", "getToolUsageTargetToolBreakdown", "listToolUsageTraces", "getToolUsageFilterOptions", "getMcpServerActivity", "listHooksTraces"}
+var MethodNames = [33]string{"searchLogs", "searchToolCalls", "searchChats", "searchUsers", "captureEvent", "getProjectMetricsSummary", "getUserMetricsSummary", "getEmployeeDataFlowGraph", "getObservabilityOverview", "getMetaMcpServerUsage", "getProjectOverview", "getUnproxiedMcpServerUsage", "getUnproxiedMcpServerToolUsage", "getUnproxiedMcpServerUserUsage", "getUnproxiedMcpServerClientUsage", "query", "queryTumDetails", "listSessions", "listFilterOptions", "listAttributeKeys", "getHooksSummary", "getToolUsageSummary", "getToolUsageTotals", "getToolUsageTargets", "getToolUsageUsers", "getToolUsageTargetTimeSeries", "getToolUsageUserTimeSeries", "getToolUsageUsersByTarget", "getToolUsageTargetToolBreakdown", "listToolUsageTraces", "getToolUsageFilterOptions", "getMcpServerActivity", "listHooksTraces"}
 
 // CaptureEventPayload is the payload type of the telemetry service
 // captureEvent method.
@@ -310,13 +313,35 @@ type GetMcpServerActivityPayload struct {
 // GetMcpServerActivityResult is the result type of the telemetry service
 // getMcpServerActivity method.
 type GetMcpServerActivityResult struct {
-	// One entry per MCP server (hosted or tunneled) that has received at least one
-	// tool call within the lookback window
+	// One entry per MCP server (hosted, tunneled, or gateway) that has received at
+	// least one tool call within the lookback window
 	Activity []*McpServerActivity
 	// The recent-activity window size in days that was applied
 	RecentWindowDays int
 	// The overall lookback window size in days (bounded by telemetry retention)
 	LookbackDays int
+}
+
+// GetMetaMcpServerUsagePayload is the payload type of the telemetry service
+// getMetaMcpServerUsage method.
+type GetMetaMcpServerUsagePayload struct {
+	ApikeyToken      *string
+	SessionToken     *string
+	ProjectSlugInput *string
+	// The gateway (meta MCP server) ID
+	MetaMcpServerID string
+	// Start time in ISO 8601 format
+	From string
+	// End time in ISO 8601 format
+	To string
+}
+
+// GetMetaMcpServerUsageResult is the result type of the telemetry service
+// getMetaMcpServerUsage method.
+type GetMetaMcpServerUsageResult struct {
+	Funnel *MetaMcpDiscoveryFunnel
+	// Per-member execution breakdown, most active first
+	Members []*MetaMcpMemberUsage
 }
 
 // GetMetricsSummaryResult is the result type of the telemetry service
@@ -349,6 +374,9 @@ type GetObservabilityOverviewPayload struct {
 	// Optional MCP server ID filter (fronting server; spans both remote-backed and
 	// toolset-backed activity)
 	McpServerID *string
+	// Optional gateway (meta MCP server) ID filter; scopes to traffic dispatched
+	// through that gateway
+	MetaMcpServerID *string
 	// Optional event source filter (e.g. 'hook')
 	EventSource *string
 	// Optional hook source filter (e.g. 'cursor', 'claude-code')
@@ -1110,14 +1138,15 @@ type LogFilter struct {
 
 // Tool-call activity for one MCP server, keyed by the same target identifier
 // used elsewhere (toolset slug for hosted servers, MCP server slug for
-// tunneled/remote servers)
+// tunneled/remote servers, meta MCP server id for gateways)
 type McpServerActivity struct {
-	// Specific kind of MCP server target (hosted_mcp_server or tunneled_mcp_server)
+	// Specific kind of MCP server target
 	TargetType McpServerActivityTargetType
 	// Stable target identifier: toolset slug for hosted servers, MCP server slug
-	// for tunneled/remote servers
+	// for tunneled/remote servers, meta MCP server id for gateways
 	TargetID string
-	// User-facing label for the target
+	// User-facing label for the target. Gateway rows carry the gateway name,
+	// falling back to the meta MCP server id when the gateway no longer exists
 	TargetLabel string
 	// Number of tool calls observed across the whole lookback window
 	TotalToolCalls int64
@@ -1127,9 +1156,34 @@ type McpServerActivity struct {
 	LastToolCallAt *string
 }
 
-// MCP server activity target type. Only the two server-backed kinds this
-// endpoint reports are valid, unlike the broader tool-usage target types.
+// MCP server activity target type. Only the server-backed kinds this endpoint
+// reports are valid, unlike the broader tool-usage target types.
 type McpServerActivityTargetType string
+
+// Counts of each gateway drill-down stage in the window. Discovery stages come
+// from meta_discovery events; executions from gateway-attributed tool calls.
+type MetaMcpDiscoveryFunnel struct {
+	// list_servers calls
+	ListServers int64
+	// describe_server calls
+	DescribeServer int64
+	// describe_tools calls
+	DescribeTools int64
+	// Tool executions dispatched through the gateway
+	ExecuteTool int64
+}
+
+// Gateway-dispatched execution activity for one member server.
+type MetaMcpMemberUsage struct {
+	// The member's mcp_servers row id
+	McpServerID string
+	// Tool calls dispatched to this member through the gateway
+	ToolCalls int64
+	// Calls that returned an HTTP error status
+	ErrorCount int64
+	// ISO 8601 timestamp of the most recent call
+	LastCalledAt *string
+}
 
 // Model usage statistics
 type ModelUsage struct {
