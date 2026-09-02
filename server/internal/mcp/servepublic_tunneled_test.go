@@ -519,7 +519,7 @@ func TestServePublic_Tunneled_OAuthSurfaceIs404(t *testing.T) {
 	err = ti.service.ServeWellKnownAuthorizationServerForServer(w, req, logger, mcpEndpoint, mcpServer, "mcp")
 	requireNotFoundOops(t, err)
 
-	_, err = ti.service.LoadResolvedMcpEndpointBySlug(ctx, logger, fixture.endpointSlug, "mcp")
+	_, err = ti.service.LoadResolvedMcpEndpointBySlug(ctx, logger, fixture.endpointSlug)
 	requireNotFoundOops(t, err)
 }
 

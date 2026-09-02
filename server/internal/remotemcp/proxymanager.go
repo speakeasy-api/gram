@@ -73,10 +73,8 @@ type ProxyManager struct {
 	identityCoverage     *mcptoolexecution.IdentityCoverageCheckpoint
 	killswitchCheckpoint *mcptoolexecution.Checkpoint
 
-	// requestOTELCounterInterceptor emits the shared per-request census
-	// counter (mcp.request) for the remote- and tunnel-backed /x/mcp traffic,
-	// which never reaches the mcp package's dispatch where the hosted and
-	// platform surfaces emit it.
+	// requestOTELCounterInterceptor emits the shared per-request census for
+	// remote and tunneled proxy traffic.
 	requestOTELCounterInterceptor *RequestOTELCounterInterceptor
 
 	toolDispositions ToolDispositionResolver

@@ -57,9 +57,7 @@ type Metrics struct {
 	mcpInitializeCounter metric.Int64Counter
 
 	// requestCensus is the unsampled per-request census (mcp.request) emitted
-	// at the JSON-RPC dispatch sites for the hosted and platform surfaces. The
-	// remote/tunnel /x/mcp backends publish the same instrument from the
-	// proxy's request interceptor, which constructs its own [RequestCounter].
+	// by the hosted, meta, and platform dispatchers and the remote proxy interceptor.
 	requestCensus *RequestCounter
 
 	// metaMemberDispatchCounter counts proxied meta member dials by backend
@@ -289,11 +287,7 @@ func (m *Metrics) RecordMCPInitialize(ctx context.Context, requested, negotiated
 
 // RecordMCPRequest counts one dispatched MCP request on the per-request
 // census, dimensioned by clamped protocol revision, clamped method, and
-// surface. The census semantics — what counts, what the version dimension
-// means, and how this relates to `mcp.initialize` and `mcp.request.duration` —
-// are documented on [RequestCounter.Record], which the remote proxy's
-// interceptor invokes directly for the /x/mcp traffic that never reaches the
-// mcp dispatch.
+// surface. The census semantics are documented on [RequestCounter.Record].
 func (m *Metrics) RecordMCPRequest(ctx context.Context, protocolVersion, method string, surface Surface) {
 	if m == nil {
 		return

@@ -41,9 +41,7 @@ const (
 	LegacyFallbackWellKnownProtectedResource LegacyFallbackEntryPoint = "well_known_protected_resource"
 	// LegacyFallbackWellKnownAuthorizationServer: RFC 8414 metadata route.
 	LegacyFallbackWellKnownAuthorizationServer LegacyFallbackEntryPoint = "well_known_authorization_server"
-	// LegacyFallbackOAuth: the issuer-gated OAuth handler family resolving via
-	// LoadResolvedMcpEndpointBySlug (authorize, token, register, revoke,
-	// consent — on both the /mcp and /x/mcp surfaces).
+	// LegacyFallbackOAuth: the canonical issuer-gated OAuth handler family.
 	LegacyFallbackOAuth LegacyFallbackEntryPoint = "oauth"
 	// LegacyFallbackInstallPage: the install-page resolver in mcpmetadata.
 	LegacyFallbackInstallPage LegacyFallbackEntryPoint = "install_page"

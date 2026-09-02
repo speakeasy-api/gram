@@ -47,16 +47,14 @@ func (s *Service) HandleAuthorize(w http.ResponseWriter, r *http.Request) error 
 		return oops.E(oops.CodeBadRequest, nil, "an mcp slug must be provided").LogError(ctx, s.logger)
 	}
 	logger := s.logger.With(attr.SlogToolsetMCPSlug(mcpSlug))
-	endpoint, err := s.LoadResolvedMcpEndpointBySlug(ctx, logger, mcpSlug, "mcp")
+	endpoint, err := s.LoadResolvedMcpEndpointBySlug(ctx, logger, mcpSlug)
 	if err != nil {
 		return err
 	}
 	return s.ServeAuthorize(w, r, endpoint)
 }
 
-// ServeAuthorize is the post-resolution entry point for the OAuth 2.1
-// authorize endpoint, shared by /mcp's HandleAuthorize (toolset-keyed)
-// and /x/mcp's mcp_endpoint-keyed route registration.
+// ServeAuthorize handles the post-resolution authorization endpoint.
 func (s *Service) ServeAuthorize(w http.ResponseWriter, r *http.Request, endpoint *ResolvedMcpEndpoint) error {
 	ctx := r.Context()
 	logger := endpoint.LogWith(s.logger)
@@ -123,7 +121,7 @@ func (s *Service) ServeAuthorize(w http.ResponseWriter, r *http.Request, endpoin
 	// definition — the challenge below snapshots it — and it is what the AS
 	// metadata document advertises as the issuer, so both the error redirect
 	// below and every response built later in the flow agree on it.
-	baseURL := s.BaseURLForRequest(r)
+	baseURL := s.baseURLForRequest(r)
 
 	// The endpoint's canonical URI at the address this request arrived on. One
 	// value serves three contracts: the RFC 9207 `iss` on every authorization

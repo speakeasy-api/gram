@@ -1,7 +1,7 @@
 // serve_meta_test.go verifies MCP protocol termination for meta-MCP-backed
 // /mcp/{slug} endpoints: 2026-07-28 initialize and server/discover, the fixed
-// four-tool contract, per-request protocol-version declarations, the issuer
-// gate, and the no-/x/mcp-exposure rule.
+// four-tool contract, per-request protocol-version declarations, and the
+// issuer gate.
 package mcp_test
 
 import (
@@ -502,30 +502,6 @@ func TestServePublic_MetaEndpoint_IssuerGated_NoAuth_EmitsChallenge(t *testing.T
 	// The provisional version header (the surface's newest revision) is
 	// stamped before the issuer gate can bail out.
 	require.Equal(t, mcpversions.Version20251125, w.Header().Get(mcpversions.HTTPHeader))
-}
-
-func TestServeMCPEndpoint_MetaEndpoint_NoXmcpExposure(t *testing.T) {
-	t.Parallel()
-
-	ctx, ti := newTestMCPService(t)
-
-	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	require.True(t, ok)
-
-	slug := "meta-" + uuid.NewString()
-	createMetaMcpEndpoint(t, ctx, ti.conn, *authCtx.ProjectID, authCtx.ActiveOrganizationID, slug, uuid.Nil)
-
-	req := httptest.NewRequest(http.MethodPost, "/x/mcp/"+slug, nil)
-	rctx := chi.NewRouteContext()
-	rctx.URLParams.Add("mcpSlug", slug)
-	req = req.WithContext(context.WithValue(ctx, chi.RouteCtxKey, rctx))
-	w := httptest.NewRecorder()
-
-	err := ti.service.ServeMCPEndpoint(w, req, slug, "x/mcp")
-	require.Error(t, err)
-	var oopsErr *oops.ShareableError
-	require.ErrorAs(t, err, &oopsErr)
-	require.Equal(t, oops.CodeNotFound, oopsErr.Code)
 }
 
 func TestWellKnown_MetaEndpoint_IssuerGated_ServesMetadata(t *testing.T) {

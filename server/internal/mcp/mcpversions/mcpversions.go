@@ -71,10 +71,10 @@ func SupportedMetaServer() []string {
 	return slices.Clone(supportedMetaServer)
 }
 
-// SupportedHostedToolset returns the revisions supported on /mcp/{slug} and on
-// the toolset-backed /x/mcp/{slug}, which share a handler, oldest first. This
-// surface faces arbitrary third-party MCP clients, so changing the set is a
-// compatibility event with external blast radius.
+// SupportedHostedToolset returns the revisions supported on hosted
+// /mcp/{slug} endpoints, oldest first. This surface faces arbitrary third-party
+// MCP clients, so changing the set is a compatibility event with external
+// blast radius.
 func SupportedHostedToolset() []string {
 	return slices.Clone(supportedHostedToolset)
 }

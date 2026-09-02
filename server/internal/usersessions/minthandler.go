@@ -41,9 +41,8 @@ const (
 	dashboardMintRefreshTokenHashPrefix = "dashboard-mint"
 )
 
-// mintTarget is the issuer-gated audience the JWT is bound to, resolved from
-// either a toolset (/mcp) or a remote MCP server (/x/mcp) before the shared
-// mint+persist tail runs.
+// mintTarget is the issuer-gated audience the JWT is bound to, resolved from a
+// toolset or MCP server before the shared mint-and-persist tail runs.
 type mintTarget struct {
 	issuerID uuid.UUID
 	audience string
@@ -54,12 +53,10 @@ type mintTarget struct {
 	logAttr    slog.Attr
 }
 
-// MintUserSession issues a user-session JWT against an issuer-gated audience —
-// either a toolset (/mcp) or a remote MCP server (/x/mcp) — on behalf of the
-// authenticated dashboard user. Exactly one of toolset_id / mcp_server_id must
-// be set. The resulting JWT has the same shape as the one /token would emit
-// after a real OAuth dance, so the runtime gateway validates it through the
-// existing validateUserSessionToken path with no special-casing.
+// MintUserSession issues a user-session JWT against an issuer-gated toolset or
+// MCP server on behalf of the authenticated dashboard user. Exactly one target
+// must be set. The resulting JWT matches the token endpoint's shape, so the
+// runtime validates it through the same path as a real OAuth dance.
 //
 // Auth posture: dashboard session only (see design.go, which scopes the method
 // to security.Session). API-key callers are rejected at the security scheme

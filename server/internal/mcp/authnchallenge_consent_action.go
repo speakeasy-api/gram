@@ -35,14 +35,14 @@ func (s *Service) HandleConsentAction(w http.ResponseWriter, r *http.Request) er
 		return oops.E(oops.CodeBadRequest, nil, "an mcp slug must be provided").LogError(ctx, s.logger)
 	}
 	logger := s.logger.With(attr.SlogToolsetMCPSlug(mcpSlug))
-	endpoint, err := s.LoadResolvedMcpEndpointBySlug(ctx, logger, mcpSlug, "mcp")
+	endpoint, err := s.LoadResolvedMcpEndpointBySlug(ctx, logger, mcpSlug)
 	if err != nil {
 		return err
 	}
 	return s.ServeConsentAction(w, r, endpoint)
 }
 
-// ServeConsentAction is the post-resolution handler, shared with /x/mcp.
+// ServeConsentAction handles post-resolution consent submissions.
 func (s *Service) ServeConsentAction(w http.ResponseWriter, r *http.Request, endpoint *ResolvedMcpEndpoint) error {
 	ctx := r.Context()
 	logger := endpoint.LogWith(s.logger)

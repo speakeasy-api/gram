@@ -97,7 +97,6 @@ func RegisterDynamicClient(ctx context.Context, policy *guardian.Policy, serverU
 	redirectURIs := []string{
 		fmt.Sprintf("%s/oauth/callback", origin),
 		fmt.Sprintf("%s/mcp/remote_login_callback", origin),
-		fmt.Sprintf("%s/x/mcp/remote_login_callback", origin),
 	}
 
 	dcrReq := DCRRequest{

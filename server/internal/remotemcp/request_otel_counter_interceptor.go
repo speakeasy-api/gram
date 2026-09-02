@@ -11,10 +11,9 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/remotemcp/proxy"
 )
 
-// RequestOTELCounterInterceptor records the per-request MCP census (`mcp.request`)
-// for the remote- and tunnel-backed `/x/mcp` traffic, which bypasses the mcp
-// package's JSON-RPC dispatch where the hosted and platform surfaces emit the
-// same instrument. It is a [proxy.UserRequestInterceptor] so it observes every
+// RequestOTELCounterInterceptor records the per-request MCP census
+// (`mcp.request`) for proxy-backed traffic. It is a
+// [proxy.UserRequestInterceptor] so it observes every
 // parsed inbound message regardless of method, after routing and
 // authentication — matching the dispatch-site semantics on the other surfaces.
 //

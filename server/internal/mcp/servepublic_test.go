@@ -409,6 +409,22 @@ func TestServePublic_AttachedNotFoundReturnsMCPErrorWithNullID(t *testing.T) {
 	require.Equal(t, "mcp server not found", errorBody["message"])
 }
 
+func TestAttachDoesNotRegisterRetiredXMCPRoute(t *testing.T) {
+	t.Parallel()
+
+	_, ti := newTestMCPService(t)
+	router := goahttp.NewMuxer()
+	mcp.Attach(router, ti.service, nil)
+
+	req := httptest.NewRequest(http.MethodPost, "/x/mcp/retired", bytes.NewReader(makeInitializeBody()))
+	req.Header.Set("Accept", "application/json")
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusNotFound, w.Code)
+}
+
 func TestServePublic_ServerInstructionsInInitializeResponse(t *testing.T) {
 	t.Parallel()
 

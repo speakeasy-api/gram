@@ -38,8 +38,9 @@ import (
 // only after confirming the underlying endpoint is issuer-gated (the
 // user_session_issuer_id column is Valid).
 type ResolvedMcpEndpoint struct {
-	// AudienceURN is the JWT audience string used by ValidateBearer and
-	// Mint. /mcp uses urn.NewToolset(toolset.ID).String(); /x/mcp uses
+	// AudienceURN is the JWT audience string used by ValidateBearer and Mint.
+	// Toolset-backed legacy endpoints use urn.NewToolset(toolset.ID).String();
+	// mcp_server-backed endpoints use
 	// urn.NewUserSessionIssuer(issuerID).String().
 	AudienceURN string
 
@@ -84,9 +85,9 @@ type ResolvedMcpEndpoint struct {
 	// ProjectID owns the endpoint and scopes downstream queries.
 	ProjectID uuid.UUID
 
-	// RouteBase is "mcp" or "x/mcp" — drives URL construction in
-	// WriteAuthenticateChallenge, the issuer URL emitted by /token, the
-	// consent form action, and the redirect from idp_callback.
+	// RouteBase is the inbound URL path prefix. The public runtime currently
+	// accepts only "mcp"; keeping the value in cached references ensures a
+	// challenge minted by a retired surface cannot resume on this one.
 	RouteBase string
 
 	// Slug is the public-facing endpoint slug (mcp_slug or
@@ -195,7 +196,7 @@ func (e *ResolvedMcpEndpoint) ConsentURL(baseURL, stateID string) (string, error
 // re-resolve — not the resolved state itself — so re-entry on a subsequent
 // handler picks up mutations to the underlying row. baseURL is the
 // public base URL the challenge is being minted under (the caller's
-// BaseURLForRequest); it's snapshotted into the ref so handlers that
+// baseURLForRequest); it's snapshotted into the ref so handlers that
 // resume the challenge from a global URL (HandleIDPCallback) can
 // rebuild the consent redirect without re-deriving the origin.
 func (e *ResolvedMcpEndpoint) EndpointRef(baseURL string) EndpointRef {
@@ -281,14 +282,8 @@ func (e *ResolvedMcpEndpoint) ValidateRef(ref EndpointRef) error {
 	if e.CustomDomainID != ref.CustomDomainID {
 		return errToolsetEndpointMismatch
 	}
-	// The route surface is part of the endpoint's identity: the same slug can
-	// resolve on both /mcp and /x/mcp, and the RFC 9207 `iss` on every
-	// authorization response is built from the resolved endpoint's RouteBase.
-	// Resuming a challenge on the other surface would emit an issuer that
-	// differs from the one the client recorded at mint time, which an
-	// iss-validating client rejects as a mix-up. Empty ref.RouteBase is
-	// treated as "mcp" for states minted before EndpointRef.RouteBase existed.
-	if e.RouteBase != conv.Default(ref.RouteBase, "mcp") {
+	routeBase := conv.Default(ref.RouteBase, "mcp")
+	if routeBase != "mcp" || e.RouteBase != routeBase {
 		return errToolsetEndpointMismatch
 	}
 	return nil
@@ -301,9 +296,8 @@ func (e *ResolvedMcpEndpoint) ValidateRef(ref EndpointRef) error {
 // separate projects lookup since mcp_servers doesn't carry the org id
 // directly. AudienceURN is bound to the issuer URN rather than a
 // backend-specific id so tokens stay portable between toolset-backed and
-// remote-backed servers under the same issuer. routeBase is the URL surface
-// the request arrived under ("mcp" or "x/mcp") — always taken from the
-// inbound request or the cached ref, never assumed.
+// remote-backed servers under the same issuer. routeBase is derived from the
+// inbound request.
 func NewResolvedMcpEndpointFromMcpServer(
 	mcpEndpoint *mcpendpoints_repo.McpEndpoint,
 	mcpServer *mcpservers_repo.McpServer,
@@ -381,11 +375,8 @@ func NewResolvedMcpEndpointFromMetaMcpServer(
 
 // newResolvedMcpEndpointFromToolset materialises a ResolvedMcpEndpoint
 // from a resolved toolsets row. Caller is responsible for first checking
-// toolset.UserSessionIssuerID.Valid. routeBase is the URL surface the
-// request arrived under ("mcp" or "x/mcp") — passed explicitly because a
-// toolset-backed endpoint can be addressed from either /mcp/{slug} or
-// /x/mcp/{slug} and the WWW-Authenticate URL, OAuth issuer URL, and
-// consent form action all need to match the caller's surface.
+// toolset.UserSessionIssuerID.Valid. routeBase is derived from the inbound
+// request so authentication URLs remain rooted at the addressed endpoint.
 func newResolvedMcpEndpointFromToolset(toolset *toolsets_repo.Toolset, routeBase string) *ResolvedMcpEndpoint {
 	return &ResolvedMcpEndpoint{
 		AudienceURN: urn.NewToolset(toolset.ID).String(),
@@ -405,15 +396,10 @@ func newResolvedMcpEndpointFromToolset(toolset *toolsets_repo.Toolset, routeBase
 	}
 }
 
-// loadResolvedMcpEndpointByRef resolves the cached EndpointRef stored
-// on an in-flight AuthnChallengeState back to a fresh
-// ResolvedMcpEndpoint and verifies its issuer FK is still live.
-// Dispatches on the ref's McpServerID — when valid, resolves through the
-// /x/mcp mcp_endpoints → mcp_servers path; otherwise resolves through
-// the legacy /mcp toolsets path. Returns CodeNotFound when the
-// underlying row is missing or no longer issuer-gated. Used by
-// HandleIDPCallback (mounted under both route surfaces) to resume an
-// in-flight challenge against the addressing path it was minted under.
+// loadResolvedMcpEndpointByRef resolves a cached EndpointRef to a fresh
+// ResolvedMcpEndpoint and verifies its issuer FK is still live. Server-backed
+// refs resolve through mcp_endpoints → mcp_servers; legacy refs resolve through
+// toolsets. Retired route bases fail closed.
 func (s *Service) loadResolvedMcpEndpointByRef(ctx context.Context, ref EndpointRef) (*ResolvedMcpEndpoint, error) {
 	endpoint, err := s.buildResolvedMcpEndpointByRef(ctx, ref)
 	if err != nil {
@@ -426,6 +412,9 @@ func (s *Service) loadResolvedMcpEndpointByRef(ctx context.Context, ref Endpoint
 }
 
 func (s *Service) buildResolvedMcpEndpointByRef(ctx context.Context, ref EndpointRef) (*ResolvedMcpEndpoint, error) {
+	if ref.RouteBase != "" && ref.RouteBase != "mcp" {
+		return nil, oops.E(oops.CodeNotFound, errToolsetEndpointMismatch, "not found")
+	}
 	if ref.MetaMcpServerID.Valid {
 		return s.buildResolvedMetaMcpEndpointByRef(ctx, ref)
 	}
@@ -474,9 +463,7 @@ func (s *Service) buildResolvedMcpEndpointByRef(ctx context.Context, ref Endpoin
 		case err != nil:
 			return nil, oops.E(oops.CodeUnexpected, err, "load project").LogError(ctx, s.logger)
 		}
-		// Refs cached before EndpointRef.RouteBase existed were only ever
-		// minted on the /x/mcp surface for server-keyed endpoints.
-		endpoint := NewResolvedMcpEndpointFromMcpServer(&mcpEndpoint, &mcpServer, project.OrganizationID, conv.Default(ref.RouteBase, "x/mcp"))
+		endpoint := NewResolvedMcpEndpointFromMcpServer(&mcpEndpoint, &mcpServer, project.OrganizationID, conv.Default(ref.RouteBase, "mcp"))
 		upstreamResource, err := s.resolveUpstreamResource(ctx, s.logger, mcpEndpoint.ProjectID, &mcpServer)
 		if err != nil {
 			return nil, err
@@ -497,8 +484,8 @@ func (s *Service) buildResolvedMcpEndpointByRef(ctx context.Context, ref Endpoin
 		return nil, oops.E(oops.CodeNotFound, nil, "not found")
 	}
 	// Honour the surface the challenge was minted under so the resumed
-	// endpoint's URLs match the original mint. Empty ref.RouteBase falls
-	// back to "mcp" for states cached before EndpointRef.RouteBase existed.
+	// endpoint's URLs match the original mint. Empty RouteBase values predate
+	// the field and resolve to the canonical public surface.
 	routeBase := ref.RouteBase
 	if routeBase == "" {
 		routeBase = "mcp"
@@ -506,15 +493,10 @@ func (s *Service) buildResolvedMcpEndpointByRef(ctx context.Context, ref Endpoin
 	return newResolvedMcpEndpointFromToolset(toolset, routeBase), nil
 }
 
-// loadResolvedMcpEndpointByToolsetSlug resolves an mcp_slug to a
-// ResolvedMcpEndpoint via the legacy toolsets path and verifies its
-// issuer FK is still live. Returns CodeNotFound when either no toolset
-// matches the slug or the toolset is not issuer-gated. routeBase ("mcp"
-// or "x/mcp") is the surface the request arrived under and propagates
-// into the resolved endpoint's URL building. Used as the fallback leaf
-// of LoadResolvedMcpEndpointBySlug for slugs with no mcp_endpoint →
-// mcp_server row yet (issuer-gated toolset-backed servers predating the
-// toolsets → mcp_servers migration).
+// loadResolvedMcpEndpointByToolsetSlug resolves an mcp_slug through the legacy
+// toolsets path and verifies its issuer FK is still live. It is the fallback
+// leaf of LoadResolvedMcpEndpointBySlug for slugs with no mcp_endpoint-backed
+// address yet.
 func (s *Service) loadResolvedMcpEndpointByToolsetSlug(ctx context.Context, mcpSlug, routeBase string) (*ResolvedMcpEndpoint, error) {
 	var customDomainID uuid.NullUUID
 	if domainCtx := customdomains.FromContext(ctx); domainCtx != nil {
@@ -579,10 +561,7 @@ func (s *Service) buildResolvedMetaMcpEndpointByRef(ctx context.Context, ref End
 		return nil, oops.E(oops.CodeNotFound, nil, "not found")
 	}
 
-	routeBase := ref.RouteBase
-	if routeBase == "" {
-		routeBase = "mcp"
-	}
+	routeBase := conv.Default(ref.RouteBase, "mcp")
 	// The denormalized org id is authoritative — the composite FK on
 	// meta_mcp_servers pins (organization_id, project_id) to the projects
 	// row, and BuildResolvedMcpEndpointForMetaServer already relies on it.

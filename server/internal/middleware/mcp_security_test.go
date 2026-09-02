@@ -196,7 +196,6 @@ func TestMCPSecurity_CoversEveryMCPJSONRPCRoute(t *testing.T) {
 
 	for _, path := range []string{
 		"/mcp/petstore",              // toolset-backed and meta-MCP-backed
-		"/x/mcp/petstore",            // experimental runtime
 		"/platform/mcp/gram-billing", // platform toolsets
 		"/platform-mcp",              // Gram's own platform MCP server
 	} {
@@ -216,8 +215,8 @@ func TestMCPSecurity_CoversEveryMCPJSONRPCRoute(t *testing.T) {
 }
 
 // The OAuth callbacks and hashed browser assets registered directly under
-// /mcp/ and /x/mcp/ sit in the same one-segment shape as a slug, so the
-// original predicate read them as MCP endpoints and origin-checked them.
+// /mcp/ sit in the same one-segment shape as a slug, so the original predicate
+// read them as MCP endpoints and origin-checked them.
 //
 // A callback is reached by the browser following the upstream IdP's redirect,
 // which is cross-site by construction and, being a top-level navigation,
@@ -231,8 +230,6 @@ func TestMCPSecurity_AllowsOAuthCallbackNavigation(t *testing.T) {
 	for _, path := range []string{
 		"/mcp/idp_callback",
 		"/mcp/remote_login_callback",
-		"/x/mcp/idp_callback",
-		"/x/mcp/remote_login_callback",
 	} {
 		t.Run(path, func(t *testing.T) {
 			t.Parallel()

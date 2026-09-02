@@ -179,10 +179,9 @@ type Service struct {
 	// interactive /connect cards and the /remote_login_callback handler.
 	remoteChallengeMgr *remotesessions.ChallengeManager
 	// remoteProxyManager builds configured remotemcp proxies wired with the
-	// MCP-aware interceptor stack. Only consulted by ServeMCPEndpoint's
-	// remote-backed branch; may be nil in non-HTTP contexts (e.g. the
-	// Temporal worker, which constructs *Service for its programmatic
-	// helpers but never serves a runtime request).
+	// MCP-aware interceptor stack. It may be nil in non-HTTP contexts (e.g. the
+	// Temporal worker, which constructs *Service for its programmatic helpers
+	// but never serves a runtime request).
 	remoteProxyManager *remotemcp.ProxyManager
 	tunnelManager      *tunnelManager
 	// Nil when no Redis was wired; every public tunneled request then fails closed.
@@ -546,11 +545,8 @@ func Attach(mux goahttp.Muxer, service *Service, metadataService *mcpmetadata.Se
 	o11y.AttachHandler(mux, "GET", PublicServerRoute+"/remote_login_callback", oops.ErrHandle(service.logger, service.HandleRemoteLoginCallback).ServeHTTP)
 }
 
-// HandleRemoteLoginCallback is the chi handler at
-// `GET /mcp/remote_login_callback` (plus the legacy per-slug variant). Thin
-// passthrough to remotesessions.ChallengeManager so /x/mcp can reuse the
-// same handler via the public method instead of reaching into the
-// unexported manager field.
+// HandleRemoteLoginCallback delegates the canonical and legacy per-slug
+// callback routes to the remote-session challenge manager.
 func (s *Service) HandleRemoteLoginCallback(w http.ResponseWriter, r *http.Request) error {
 	return s.remoteChallengeMgr.HandleRemoteLoginCallback(w, r) //nolint:wrapcheck // thin passthrough; the inner handler already writes the HTTP response.
 }
@@ -754,13 +750,12 @@ func writeOAuthProtectedResourceMetadataResponse(ctx context.Context, logger *sl
 	return httpcache.WriteCacheableJSON(ctx, w, r, logger, "application/json", metadataCacheMaxAgeSeconds, body)
 }
 
-// ServePublic serves /mcp/{mcpSlug}. Resolution tries mcp_endpoints
-// first — a slug bound to a custom-domain request resolves only against
-// that domain; a slug arriving on the platform domain resolves only
-// against (custom_domain_id IS NULL) endpoints. On a hit, dispatch
-// matches /x/mcp: issuer-gated mcp_servers run the JWT gate before
-// backend dispatch, then RemoteMcpServerID-backed rows proxy via
-// remotemcp and ToolsetID-backed rows delegate to ServeToolsetResolved.
+// ServePublic serves /mcp/{mcpSlug}. Resolution tries mcp_endpoints first — a
+// slug bound to a custom-domain request resolves only against that domain; a
+// slug arriving on the platform domain resolves only against
+// (custom_domain_id IS NULL) endpoints. On a hit, issuer-gated mcp_servers run
+// the JWT gate before backend dispatch; remote and tunneled rows proxy, while
+// toolset-backed rows delegate to ServeToolsetResolved.
 //
 // Only a true address miss — no matching mcp_endpoint row — falls back to
 // the legacy toolsets.mcp_slug lookup. A matching endpoint whose backend is
@@ -871,10 +866,8 @@ func hostedServingFromToolset(toolset *toolsets_repo.Toolset) *hostedServing {
 // serveToolsetResolved serves an MCP runtime request after the slug has
 // already been resolved to a toolset, under the hosting configuration cfg.
 //
-// mcpSlug and mcpRouteBase are used to build the WWW-Authenticate
-// resource_metadata URL. mcpRouteBase is the route segment that sits
-// between the well-known prefix and the slug — "mcp" for /mcp/{slug} or
-// "x/mcp" for /x/mcp/{slug}, no leading or trailing slashes.
+// mcpSlug and mcpRouteBase build the WWW-Authenticate resource_metadata URL.
+// The route base is derived from the inbound request.
 //
 // extraUpstreamTokens are the upstream remote-session access tokens
 // collected by a caller-side issuer gate, keyed by remote_session_issuer_id.
@@ -938,11 +931,7 @@ func (s *Service) serveToolsetResolved(w http.ResponseWriter, r *http.Request, t
 	runInToolsetGate := cfg.runInToolsetGate
 	callerAlreadyGated := cfg.callerGated
 	if runInToolsetGate {
-		// Pass mcpRouteBase (the surface the request arrived under) rather
-		// than letting the constructor default to "mcp": when called from
-		// /x/mcp the WWW-Authenticate URL, issuer URL, and consent action
-		// all need to match the caller's surface, not the toolset's
-		// canonical /mcp surface.
+		// Preserve the inbound route base in authentication and consent URLs.
 		endpoint := newResolvedMcpEndpointFromToolset(toolset, mcpRouteBase)
 		newCtx, authentication, gateToolSelection, err := s.authenticateIssuerGate(ctx, w, authToken, baseURL, endpoint)
 		if err != nil {

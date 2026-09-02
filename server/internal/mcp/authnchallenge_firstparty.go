@@ -13,12 +13,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 )
 
-// HandleFirstPartyConnect is the chi handler at
-// `GET /mcp/{mcpSlug}/connect/first-party` on the toolset-keyed surface. It
-// resolves the slug to a `/mcp`-keyed ResolvedMcpEndpoint and delegates to
-// ServeFirstPartyConnect — the dashboard's entry point for linking an
-// issuer-gated toolset's upstream sessions. /x/mcp registers the equivalent
-// via its mcp_endpoint-keyed adapter (see xmcp.Service.handleFirstPartyConnect).
+// HandleFirstPartyConnect is the dashboard entry point for linking an
+// issuer-gated endpoint's upstream sessions.
 func (s *Service) HandleFirstPartyConnect(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
 	mcpSlug := chi.URLParam(r, "mcpSlug")
@@ -26,7 +22,7 @@ func (s *Service) HandleFirstPartyConnect(w http.ResponseWriter, r *http.Request
 		return oops.E(oops.CodeBadRequest, nil, "an mcp slug must be provided").LogError(ctx, s.logger)
 	}
 	logger := s.logger.With(attr.SlogToolsetMCPSlug(mcpSlug))
-	endpoint, err := s.LoadResolvedMcpEndpointBySlug(ctx, logger, mcpSlug, "mcp")
+	endpoint, err := s.LoadResolvedMcpEndpointBySlug(ctx, logger, mcpSlug)
 	if err != nil {
 		return err
 	}
@@ -35,9 +31,8 @@ func (s *Service) HandleFirstPartyConnect(w http.ResponseWriter, r *http.Request
 
 // ServeFirstPartyConnect is the dashboard's entry point for establishing the
 // upstream remote_sessions an issuer-gated MCP server needs. It mints a
-// first-party authn challenge and bounces through the gram server's own IDP
-// login — the same flow a real MCP client runs via /x/mcp/{slug}/authorize —
-// rather than borrowing the dashboard's gram_session.
+// first-party authn challenge and bounces through the Gram server's own IDP
+// login rather than borrowing the dashboard's gram_session.
 //
 // This is deliberately decoupled from the dashboard session: the subject is
 // stamped onto the challenge by HandleIDPCallback from authoritative IDP
@@ -58,7 +53,7 @@ func (s *Service) ServeFirstPartyConnect(w http.ResponseWriter, r *http.Request,
 		return oops.E(oops.CodeUnexpected, err, "generate consent csrf token").LogError(ctx, logger)
 	}
 
-	baseURL := s.BaseURLForRequest(r)
+	baseURL := s.baseURLForRequest(r)
 	flowID := uuid.NewString()
 	challengeID := uuid.NewString()
 	challengeState := AuthnChallengeState{
