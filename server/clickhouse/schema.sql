@@ -61,7 +61,8 @@ CREATE TABLE IF NOT EXISTS telemetry_logs (
     external_org_id String MATERIALIZED toString(attributes.gram.external_org_id) COMMENT 'Provider organization id for the account the user was logged into on-device (e.g. Claude organization.id). Distinct from the Gram org. Personal-account tracking discriminator. Normalized by ingest (materialized from attributes.gram.external_org_id).',
     account_type String MATERIALIZED toString(attributes.gram.account_type) COMMENT 'team (company/enterprise account) or personal (individual account). Set by ingest. Empty until classified (materialized from attributes.gram.account_type).',
     billing_mode String MATERIALIZED toString(attributes.gram.billing_mode) COMMENT 'How the account is billed: metered (pay-per-token, cost is real spend) | flat_rate (subscription seat, cost is an estimate) | unknown | empty. Resolved by ingest from admin-declared config (materialized from attributes.gram.billing_mode).',
-    event_urn String MATERIALIZED toString(attributes.gram.event.urn) COMMENT 'Canonical event identity in the form urn:telemetry:<origin>:<kind>:<type> where origin is the observation channel (provider_otel | provider_api | agent_hook | gram_service | unknown), kind is the signal shape (log | metric | span) and type is the producer event type lowercased. Stamped by telemetry.Logger. Empty on rows written before the column existed (materialized from attributes.gram.event.urn).'
+    event_urn String MATERIALIZED toString(attributes.gram.event.urn) COMMENT 'Canonical event identity in the form urn:telemetry:<origin>:<kind>:<type> where origin is the observation channel (provider_otel | provider_api | agent_hook | gram_service | unknown), kind is the signal shape (log | metric | span) and type is the producer event type lowercased. Stamped by telemetry.Logger. Empty on rows written before the column existed (materialized from attributes.gram.event.urn).',
+    meta_mcp_server_id String MATERIALIZED toString(attributes.gram.meta_mcp_server.id) COMMENT 'Meta MCP server (Gateway Endpoint) ID when the call was dispatched through a gateway (materialized from attributes.gram.meta_mcp_server.id).'
 ) ENGINE = MergeTree
 PARTITION BY toYYYYMMDD(fromUnixTimestamp64Nano(time_unix_nano))
 ORDER BY (gram_project_id, time_unix_nano, id)
@@ -96,6 +97,7 @@ CREATE INDEX IF NOT EXISTS idx_telemetry_logs_mat_hook_source ON telemetry_logs 
 CREATE INDEX IF NOT EXISTS idx_telemetry_logs_mat_hook_block_reason ON telemetry_logs (hook_block_reason) TYPE bloom_filter(0.01) GRANULARITY 1;
 CREATE INDEX IF NOT EXISTS idx_telemetry_logs_mat_remote_mcp_server_id ON telemetry_logs (remote_mcp_server_id) TYPE bloom_filter(0.01) GRANULARITY 1;
 CREATE INDEX IF NOT EXISTS idx_telemetry_logs_mat_mcp_server_id ON telemetry_logs (mcp_server_id) TYPE bloom_filter(0.01) GRANULARITY 1;
+CREATE INDEX IF NOT EXISTS idx_telemetry_logs_mat_meta_mcp_server_id ON telemetry_logs (meta_mcp_server_id) TYPE bloom_filter(0.01) GRANULARITY 1;
 CREATE INDEX IF NOT EXISTS idx_telemetry_logs_mat_skill_name ON telemetry_logs (skill_name) TYPE bloom_filter(0.01) GRANULARITY 1;
 CREATE INDEX IF NOT EXISTS idx_telemetry_logs_mat_external_org_id ON telemetry_logs (external_org_id) TYPE bloom_filter(0.01) GRANULARITY 1;
 CREATE INDEX IF NOT EXISTS idx_telemetry_logs_mat_account_type ON telemetry_logs (account_type) TYPE set(0) GRANULARITY 4;
@@ -220,14 +222,16 @@ CREATE TABLE IF NOT EXISTS trace_summaries (
     -- telemetry_logs from attributes.gram.account_type. Only a subset of a
     -- trace's rows carry it (e.g. usage/tool rows), so max() lets a non-empty
     -- value win over empty siblings across part merges, mirroring user_id.
-    -- Kept last so an ALTER ADD COLUMN (which appends) stays positionally aligned
-    -- with this schema and the MV's projection.
     account_type SimpleAggregateFunction(max, String),
     -- AI provider for the account ('anthropic' | 'openai' | 'cursor'),
     -- materialized on telemetry_logs from attributes.gram.provider. Carried (not
     -- a sort key) — a trace is a single session = single account, so provider is
     -- constant within a trace_id; max() keeps a non-empty value over empties.
-    provider SimpleAggregateFunction(max, String)
+    provider SimpleAggregateFunction(max, String),
+    -- Meta MCP server (Gateway Endpoint) the trace was dispatched through,
+    -- materialized on telemetry_logs from attributes.gram.meta_mcp_server.id.
+    -- Carried, not a sort key; max() keeps the non-empty value over empties.
+    meta_mcp_server_id SimpleAggregateFunction(max, String)
 ) ENGINE = AggregatingMergeTree
 ORDER BY (gram_project_id, trace_id)
 TTL fromUnixTimestamp64Nano(start_time_unix_nano) + INTERVAL 90 DAY
@@ -277,7 +281,8 @@ SELECT
     max(if(toString(attributes.gram.hook.block_reason) != '', 1, 0)) AS has_block,
     anyIf(toString(attributes.gram.hook.block_reason), toString(attributes.gram.hook.block_reason) != '') AS block_reason,
     anyIf(account_type, account_type != '') AS account_type,
-    anyIf(provider, provider != '') AS provider
+    anyIf(provider, provider != '') AS provider,
+    anyIf(meta_mcp_server_id, meta_mcp_server_id != '') AS meta_mcp_server_id
 FROM telemetry_logs
 WHERE trace_id IS NOT NULL AND trace_id != '' AND NOT startsWith(telemetry_logs.gram_urn, 'urn:uuid:')
 GROUP BY trace_id, gram_project_id;
