@@ -1,0 +1,508 @@
+lockVersion: 2.0.0
+id: 28456435-1d04-45f4-ad18-f45f4724a5a5
+management:
+  docVersion: 0.0.1
+  speakeasyVersion: 1.796.1
+  generationVersion: 2.933.0
+  releaseVersion: 0.33.8
+features:
+  typescript:
+    additionalDependencies: 0.1.0
+    core: 3.31.6
+    defaultEnabledRetries: 0.1.0
+    devContainers: 2.90.1
+    enumUnions: 0.1.0
+    envVarSecurityUsage: 0.1.2
+    globalSecurityCallbacks: 0.1.0
+    globalServerURLs: 2.83.1
+    ignores: 2.81.1
+    methodArguments: 0.1.2
+    nameOverrides: 2.81.4
+    pagination: 2.83.2
+    reactQueryHooks: 0.3.0
+    responseFormat: 0.3.0
+    retries: 2.83.1
+    sdkHooks: 0.4.0
+trackedFiles:
+  FUNCTIONS.md: {}
+  REACT_QUERY.md: {}
+  src/core.ts: {}
+  src/funcs/adminAdminBulkUpdateAccountType.ts: {}
+  src/funcs/adminAdminCancelStripeSubscription.ts: {}
+  src/funcs/adminAdminCreateOrganization.ts: {}
+  src/funcs/adminAdminDisableOrganization.ts: {}
+  src/funcs/adminAdminEnableOrganization.ts: {}
+  src/funcs/adminAdminExtendTrial.ts: {}
+  src/funcs/adminAdminGetInferenceKeys.ts: {}
+  src/funcs/adminAdminGetInferenceSpendHistory.ts: {}
+  src/funcs/adminAdminGetOrganization.ts: {}
+  src/funcs/adminAdminGetOrganizationChatAnalysisSettings.ts: {}
+  src/funcs/adminAdminGetOrganizationFeatures.ts: {}
+  src/funcs/adminAdminGetOrganizationStats.ts: {}
+  src/funcs/adminAdminGetPaygBillingSummary.ts: {}
+  src/funcs/adminAdminGetProject.ts: {}
+  src/funcs/adminAdminGetSession.ts: {}
+  src/funcs/adminAdminGetStripeSubscription.ts: {}
+  src/funcs/adminAdminListOrganizationActivity.ts: {}
+  src/funcs/adminAdminListOrganizationMembers.ts: {}
+  src/funcs/adminAdminListOrganizationProjects.ts: {}
+  src/funcs/adminAdminListOrganizations.ts: {}
+  src/funcs/adminAdminLogout.ts: {}
+  src/funcs/adminAdminMarkEnterpriseTrialConverted.ts: {}
+  src/funcs/adminAdminRearmTrial.ts: {}
+  src/funcs/adminAdminResumeStripeSubscription.ts: {}
+  src/funcs/adminAdminSetInferenceKeyMonthlyLimit.ts: {}
+  src/funcs/adminAdminSetOrganizationChatAnalysisSettings.ts: {}
+  src/funcs/adminAdminSetOrganizationFeature.ts: {}
+  src/funcs/adminAdminTriggerOrganizationChatAnalysis.ts: {}
+  src/funcs/adminAdminUpdateOrganization.ts: {}
+  src/hooks/hooks.ts: {}
+  src/hooks/types.ts: {}
+  src/index.ts: {}
+  src/lib/base64.ts: {}
+  src/lib/config.ts: {}
+  src/lib/encodings.ts: {}
+  src/lib/env.ts: {}
+  src/lib/files.ts: {}
+  src/lib/http.ts: {}
+  src/lib/logger.ts: {}
+  src/lib/matchers.ts: {}
+  src/lib/primitives.ts: {}
+  src/lib/retries.ts: {}
+  src/lib/schemas.ts: {}
+  src/lib/sdks.ts: {}
+  src/lib/security.ts: {}
+  src/lib/url.ts: {}
+  src/models/components/adminbulkupdateaccounttyperesult.ts: {}
+  src/models/components/adminchatanalysissettings.ts: {}
+  src/models/components/adminchatanalysistriggerresult.ts: {}
+  src/models/components/admininferencekey.ts: {}
+  src/models/components/admininferencekeylimit.ts: {}
+  src/models/components/admininferencespendmonth.ts: {}
+  src/models/components/adminlistorganizationactivityresult.ts: {}
+  src/models/components/adminlistorganizationmembersresult.ts: {}
+  src/models/components/adminlistorganizationprojectsresult.ts: {}
+  src/models/components/adminlistorganizationsresult.ts: {}
+  src/models/components/adminorganization.ts: {}
+  src/models/components/adminorganizationmember.ts: {}
+  src/models/components/adminorganizationstats.ts: {}
+  src/models/components/adminpaygbillingsummary.ts: {}
+  src/models/components/adminproject.ts: {}
+  src/models/components/adminprojectdetail.ts: {}
+  src/models/components/adminsession.ts: {}
+  src/models/components/adminstripesubscription.ts: {}
+  src/models/components/auditlog.ts: {}
+  src/models/components/bulkupdateaccounttyperequestbody.ts: {}
+  src/models/components/cancelstripesubscriptionrequestbody.ts: {}
+  src/models/components/createorganizationrequestbody.ts: {}
+  src/models/components/disableorganizationrequestbody.ts: {}
+  src/models/components/enableorganizationrequestbody.ts: {}
+  src/models/components/extendtrialrequestbody.ts: {}
+  src/models/components/markenterprisetrialconvertedrequestbody.ts: {}
+  src/models/components/markenterprisetrialconvertedresult.ts: {}
+  src/models/components/productfeatures.ts: {}
+  src/models/components/rearmtrialrequestbody.ts: {}
+  src/models/components/resumestripesubscriptionrequestbody.ts: {}
+  src/models/components/setinferencekeymonthlylimitrequestbody.ts: {}
+  src/models/components/setorganizationchatanalysissettingsrequestbody.ts: {}
+  src/models/components/setorganizationfeaturerequestbody.ts: {}
+  src/models/components/triggerorganizationchatanalysisrequestbody.ts: {}
+  src/models/components/updateorganizationrequestbody.ts: {}
+  src/models/errors/apierror.ts: {}
+  src/models/errors/gramerror.ts: {}
+  src/models/errors/httpclienterrors.ts: {}
+  src/models/errors/responsevalidationerror.ts: {}
+  src/models/errors/sdkvalidationerror.ts: {}
+  src/models/errors/serviceerror.ts: {}
+  src/models/operations/admingetinferencekeys.ts: {}
+  src/models/operations/admingetinferencespendhistory.ts: {}
+  src/models/operations/admingetorganization.ts: {}
+  src/models/operations/admingetorganizationchatanalysissettings.ts: {}
+  src/models/operations/admingetorganizationfeatures.ts: {}
+  src/models/operations/admingetpaygbillingsummary.ts: {}
+  src/models/operations/admingetproject.ts: {}
+  src/models/operations/admingetstripesubscription.ts: {}
+  src/models/operations/adminlistorganizationactivity.ts: {}
+  src/models/operations/adminlistorganizationmembers.ts: {}
+  src/models/operations/adminlistorganizationprojects.ts: {}
+  src/models/operations/adminlistorganizations.ts: {}
+  src/react-query/_context.tsx: {}
+  src/react-query/_types.ts: {}
+  src/react-query/adminAdminBulkUpdateAccountType.ts: {}
+  src/react-query/adminAdminCancelStripeSubscription.ts: {}
+  src/react-query/adminAdminCreateOrganization.ts: {}
+  src/react-query/adminAdminDisableOrganization.ts: {}
+  src/react-query/adminAdminEnableOrganization.ts: {}
+  src/react-query/adminAdminExtendTrial.ts: {}
+  src/react-query/adminAdminGetInferenceKeys.core.ts: {}
+  src/react-query/adminAdminGetInferenceKeys.ts: {}
+  src/react-query/adminAdminGetInferenceSpendHistory.core.ts: {}
+  src/react-query/adminAdminGetInferenceSpendHistory.ts: {}
+  src/react-query/adminAdminGetOrganization.core.ts: {}
+  src/react-query/adminAdminGetOrganization.ts: {}
+  src/react-query/adminAdminGetOrganizationChatAnalysisSettings.core.ts: {}
+  src/react-query/adminAdminGetOrganizationChatAnalysisSettings.ts: {}
+  src/react-query/adminAdminGetOrganizationStats.core.ts: {}
+  src/react-query/adminAdminGetOrganizationStats.ts: {}
+  src/react-query/adminAdminGetPaygBillingSummary.core.ts: {}
+  src/react-query/adminAdminGetPaygBillingSummary.ts: {}
+  src/react-query/adminAdminGetProject.core.ts: {}
+  src/react-query/adminAdminGetProject.ts: {}
+  src/react-query/adminAdminGetSession.core.ts: {}
+  src/react-query/adminAdminGetSession.ts: {}
+  src/react-query/adminAdminGetStripeSubscription.core.ts: {}
+  src/react-query/adminAdminGetStripeSubscription.ts: {}
+  src/react-query/adminAdminListOrganizationActivity.core.ts: {}
+  src/react-query/adminAdminListOrganizationActivity.ts: {}
+  src/react-query/adminAdminListOrganizationMembers.core.ts: {}
+  src/react-query/adminAdminListOrganizationMembers.ts: {}
+  src/react-query/adminAdminListOrganizationProjects.core.ts: {}
+  src/react-query/adminAdminListOrganizationProjects.ts: {}
+  src/react-query/adminAdminListOrganizations.core.ts: {}
+  src/react-query/adminAdminListOrganizations.ts: {}
+  src/react-query/adminAdminLogout.ts: {}
+  src/react-query/adminAdminMarkEnterpriseTrialConverted.ts: {}
+  src/react-query/adminAdminRearmTrial.ts: {}
+  src/react-query/adminAdminResumeStripeSubscription.ts: {}
+  src/react-query/adminAdminSetInferenceKeyMonthlyLimit.ts: {}
+  src/react-query/adminAdminSetOrganizationChatAnalysisSettings.ts: {}
+  src/react-query/adminAdminTriggerOrganizationChatAnalysis.ts: {}
+  src/react-query/adminAdminUpdateOrganization.ts: {}
+  src/react-query/adminOrganizationFeatures.core.ts: {}
+  src/react-query/adminOrganizationFeatures.ts: {}
+  src/react-query/index.ts: {}
+  src/react-query/setAdminOrganizationFeature.ts: {}
+  src/sdk/admin.ts: {}
+  src/sdk/sdk.ts: {}
+  src/types/async.ts: {}
+  src/types/blobs.ts: {}
+  src/types/constdatetime.ts: {}
+  src/types/enums.ts: {}
+  src/types/fp.ts: {}
+  src/types/operations.ts: {}
+  src/types/rfcdate.ts: {}
+  src/types/streams.ts: {}
+  src/types/unrecognized.ts: {}
+examples:
+  adminBulkUpdateAccountType:
+    speakeasy-default-admin-bulk-update-account-type:
+      requestBody:
+        application/json: {"account_type": "pro", "ids": ["<value 1>", "<value 2>", "<value 3>"]}
+      responses:
+        "200":
+          application/json: {"missing_ids": ["<value 1>", "<value 2>"], "updated_ids": ["<value 1>", "<value 2>"]}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+  adminCancelStripeSubscription:
+    speakeasy-default-admin-cancel-stripe-subscription:
+      requestBody:
+        application/json: {"organization_id": "<id>"}
+      responses:
+        "200":
+          application/json: {"cancel_at_period_end": false, "current_period_end": "2025-08-22T18:39:55.519Z", "current_period_start": "2024-05-10T03:23:28.687Z", "payment_failed": true, "status": "trialing"}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+  adminCreateOrganization:
+    speakeasy-default-admin-create-organization:
+      requestBody:
+        application/json: {"name": "<value>"}
+      responses:
+        "200":
+          application/json: {"account_type": "<value>", "created_at": "2026-04-25T22:31:08.399Z", "id": "<id>", "member_count": 479220, "name": "<value>", "slug": "<value>", "updated_at": "2026-02-08T04:37:48.396Z", "whitelisted": false}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+  adminDisableOrganization:
+    speakeasy-default-admin-disable-organization:
+      requestBody:
+        application/json: {"id": "<id>"}
+      responses:
+        "200":
+          application/json: {"account_type": "<value>", "created_at": "2024-08-26T05:04:39.814Z", "id": "<id>", "member_count": 952695, "name": "<value>", "slug": "<value>", "updated_at": "2025-06-25T20:07:54.737Z", "whitelisted": false}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+  adminEnableOrganization:
+    speakeasy-default-admin-enable-organization:
+      requestBody:
+        application/json: {"id": "<id>"}
+      responses:
+        "200":
+          application/json: {"account_type": "<value>", "created_at": "2025-11-13T13:09:17.603Z", "id": "<id>", "member_count": 10607, "name": "<value>", "slug": "<value>", "updated_at": "2026-08-01T04:20:06.780Z", "whitelisted": true}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+  adminExtendTrial:
+    speakeasy-default-admin-extend-trial:
+      requestBody:
+        application/json: {"days": 407458, "id": "<id>"}
+      responses:
+        "200":
+          application/json: {"account_type": "<value>", "created_at": "2024-11-25T09:55:18.007Z", "id": "<id>", "member_count": 797561, "name": "<value>", "slug": "<value>", "updated_at": "2025-08-13T19:34:29.924Z", "whitelisted": false}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+  adminGetInferenceKeys:
+    speakeasy-default-admin-get-inference-keys:
+      parameters:
+        query:
+          organization_id: "<id>"
+      responses:
+        "200":
+          application/json: [{"credits_used": 3496.71, "disable_causes_classified": true, "disabled": true, "key_type": "<value>", "monthly_credits": 635244}]
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+  adminGetInferenceSpendHistory:
+    speakeasy-default-admin-get-inference-spend-history:
+      parameters:
+        query:
+          organization_id: "<id>"
+      responses:
+        "200":
+          application/json: [{"period_end": "2025-05-06", "period_start": "2025-08-23", "spend_usd": "<value>"}]
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+  adminGetOrganization:
+    speakeasy-default-admin-get-organization:
+      parameters:
+        query:
+          id_or_slug: "<value>"
+      responses:
+        "200":
+          application/json: {"account_type": "<value>", "created_at": "2026-12-05T06:45:37.658Z", "id": "<id>", "member_count": 207672, "name": "<value>", "slug": "<value>", "updated_at": "2024-12-21T22:32:48.688Z", "whitelisted": false}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+  adminGetOrganizationChatAnalysisSettings:
+    speakeasy-default-admin-get-organization-chat-analysis-settings:
+      parameters:
+        query:
+          organization_id: "<id>"
+      responses:
+        "200":
+          application/json: {"business_memory_daily_cap": 440854, "business_memory_enabled": true, "is_default": true, "organization_id": "<id>", "work_units_daily_cap": 452185, "work_units_enabled": true}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+  adminGetOrganizationFeatures:
+    speakeasy-default-admin-get-organization-features:
+      parameters:
+        query:
+          organization_id: "<id>"
+      responses:
+        "200":
+          application/json: {"ai_platform_push_integrations_enabled": false, "authz_challenge_logging_enabled": false, "consent_tool_filtering_enabled": true, "custom_model_keys_enabled": true, "customer_managed_encryption_keys_enabled": true, "device_agent": true, "hooks_browser_login_enabled": true, "hooks_fail_open_enabled": true, "logs_enabled": true, "platform_mcp_enabled": false, "remote_session_auto_refresh_enabled": false, "remote_session_auto_refresh_enforced_enabled": false, "scim_enabled": false, "session_capture_enabled": false, "session_portability_enabled": false, "skill_capture_metadata_only": false, "skills_enabled": false, "sso_enabled": true, "tool_io_logs_enabled": true}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+  adminGetOrganizationStats:
+    speakeasy-default-admin-get-organization-stats:
+      responses:
+        "200":
+          application/json: {"created_last_7_days": 757990, "customers": 363815, "customers_created_last_7_days": 950793, "disabled": 972479, "disabled_last_7_days": 201493, "total": 778656, "trials_ending_soon": 515987}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+  adminGetPaygBillingSummary:
+    speakeasy-default-admin-get-payg-billing-summary:
+      parameters:
+        query:
+          organization_id: "<id>"
+      responses:
+        "200":
+          application/json: {"estimated_total_usd": "<value>", "other_inference_spend_usd": "<value>", "period_end": "2026-07-21T11:21:18.623Z", "period_start": "2025-09-06T19:59:31.956Z", "tum_cost_usd": "<value>", "tum_tokens": 397843, "tum_unit_price_usd": "<value>"}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+  adminGetProject:
+    speakeasy-default-admin-get-project:
+      parameters:
+        query:
+          id_or_slug: "<value>"
+      responses:
+        "200":
+          application/json: {"api_key_count": 206794, "assistant_count": 961450, "created_at": "2025-10-13T09:47:35.317Z", "deployment_count": 711544, "environment_count": 475554, "http_tool_count": 691880, "id": "<id>", "name": "<value>", "organization_id": "<id>", "slug": "<value>", "toolset_count": 170532, "updated_at": "2025-03-26T03:04:23.537Z"}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+  adminGetSession:
+    speakeasy-default-admin-get-session:
+      responses:
+        "200":
+          application/json: {"email": "Wyatt.Crona18@gmail.com"}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+  adminGetStripeSubscription:
+    speakeasy-default-admin-get-stripe-subscription:
+      parameters:
+        query:
+          organization_id: "<id>"
+      responses:
+        "200":
+          application/json: {"cancel_at_period_end": true, "current_period_end": "2025-09-11T18:07:59.935Z", "current_period_start": "2026-01-11T06:38:19.761Z", "payment_failed": true, "status": "incomplete_expired"}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+  adminListOrganizationActivity:
+    speakeasy-default-admin-list-organization-activity:
+      parameters:
+        query:
+          organization_id: "<id>"
+      responses:
+        "200":
+          application/json: {"logs": [{"acting_surface": "<value>", "action": "<value>", "actor_id": "<id>", "actor_type": "<value>", "created_at": "2025-07-02T03:58:14.417Z", "id": "<id>", "subject_id": "<id>", "subject_type": "<value>"}]}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+  adminListOrganizationMembers:
+    speakeasy-default-admin-list-organization-members:
+      parameters:
+        query:
+          organization_id: "<id>"
+      responses:
+        "200":
+          application/json: {"members": [{"created_at": "2026-07-04T02:21:20.209Z", "display_name": "June17", "email": "Eleanora.Wintheiser@hotmail.com", "id": "<id>", "updated_at": "2025-11-26T08:20:41.649Z"}]}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+  adminListOrganizationProjects:
+    speakeasy-default-admin-list-organization-projects:
+      parameters:
+        query:
+          organization_id: "<id>"
+      responses:
+        "200":
+          application/json: {"projects": [{"created_at": "2026-01-09T21:55:06.458Z", "id": "<id>", "mcp_server_count": 314962, "name": "<value>", "slug": "<value>", "updated_at": "2025-11-23T13:04:15.777Z"}]}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+  adminListOrganizations:
+    speakeasy-default-admin-list-organizations:
+      responses:
+        "200":
+          application/json: {"organizations": [], "total": 992254}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+  adminLogout:
+    speakeasy-default-admin-logout:
+      responses:
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+  adminMarkEnterpriseTrialConverted:
+    speakeasy-default-admin-mark-enterprise-trial-converted:
+      requestBody:
+        application/json: {"id": "<id>"}
+      responses:
+        "200":
+          application/json: {"converted_at": "2025-11-22T09:47:40.403Z", "organization_id": "<id>"}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+  adminRearmTrial:
+    speakeasy-default-admin-rearm-trial:
+      requestBody:
+        application/json: {"days": 225644, "id": "<id>"}
+      responses:
+        "200":
+          application/json: {"account_type": "<value>", "created_at": "2026-07-09T05:13:00.469Z", "id": "<id>", "member_count": 418893, "name": "<value>", "slug": "<value>", "updated_at": "2025-12-04T19:10:44.289Z", "whitelisted": true}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+  adminResumeStripeSubscription:
+    speakeasy-default-admin-resume-stripe-subscription:
+      requestBody:
+        application/json: {"organization_id": "<id>"}
+      responses:
+        "200":
+          application/json: {"cancel_at_period_end": false, "current_period_end": "2025-04-19T17:46:16.593Z", "current_period_start": "2026-04-14T16:39:28.016Z", "payment_failed": false, "status": "trialing"}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+  adminSetInferenceKeyMonthlyLimit:
+    speakeasy-default-admin-set-inference-key-monthly-limit:
+      requestBody:
+        application/json: {"key_type": "chat", "monthly_credits": 649153, "organization_id": "<id>"}
+      responses:
+        "200":
+          application/json: {"key_type": "<value>", "monthly_credits": 857083}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+  adminSetOrganizationChatAnalysisSettings:
+    speakeasy-default-admin-set-organization-chat-analysis-settings:
+      requestBody:
+        application/json: {"daily_cap": 488030, "enabled": false, "judge": "work_units", "organization_id": "<id>"}
+      responses:
+        "200":
+          application/json: {"business_memory_daily_cap": 982419, "business_memory_enabled": false, "is_default": false, "organization_id": "<id>", "work_units_daily_cap": 119468, "work_units_enabled": true}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+  adminSetOrganizationFeature:
+    speakeasy-default-admin-set-organization-feature:
+      requestBody:
+        application/json: {"enabled": false, "feature_name": "consent_tool_filtering", "organization_id": "<id>"}
+      responses:
+        "200":
+          application/json: {"ai_platform_push_integrations_enabled": false, "authz_challenge_logging_enabled": true, "consent_tool_filtering_enabled": false, "custom_model_keys_enabled": true, "customer_managed_encryption_keys_enabled": false, "device_agent": false, "hooks_browser_login_enabled": false, "hooks_fail_open_enabled": true, "logs_enabled": true, "platform_mcp_enabled": false, "remote_session_auto_refresh_enabled": false, "remote_session_auto_refresh_enforced_enabled": true, "scim_enabled": true, "session_capture_enabled": true, "session_portability_enabled": true, "skill_capture_metadata_only": false, "skills_enabled": false, "sso_enabled": false, "tool_io_logs_enabled": true}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+  adminTriggerOrganizationChatAnalysis:
+    speakeasy-default-admin-trigger-organization-chat-analysis:
+      requestBody:
+        application/json: {"organization_id": "<id>"}
+      responses:
+        "200":
+          application/json: {"projects_signaled": 93343}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+  adminUpdateOrganization:
+    speakeasy-default-admin-update-organization:
+      requestBody:
+        application/json: {"id": "<id>"}
+      responses:
+        "200":
+          application/json: {"account_type": "<value>", "created_at": "2025-09-23T01:12:49.084Z", "id": "<id>", "member_count": 997342, "name": "<value>", "slug": "<value>", "updated_at": "2026-04-10T17:39:44.868Z", "whitelisted": false}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+examplesVersion: 1.0.2
+generatedTests: {}
