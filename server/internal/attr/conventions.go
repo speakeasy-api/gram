@@ -407,6 +407,8 @@ const (
 	OpenRouterBackfillModeKey         = attribute.Key("gram.openrouter.backfill.mode")
 	OpenRouterBackfillScannedKey      = attribute.Key("gram.openrouter.backfill.scanned")
 	OpenRouterBackfillUpdatedKey      = attribute.Key("gram.openrouter.backfill.updated")
+	EmbeddingInputCountKey            = attribute.Key("gram.openrouter.embedding.input_count")
+	EmbeddingTruncatedInputCountKey   = attribute.Key("gram.openrouter.embedding.truncated_input_count")
 	OpenRouterKeyLimitKey             = attribute.Key("gram.openrouter.key.limit")
 	OpenRouterKeyPreviousLimitKey     = attribute.Key("gram.openrouter.key.previous_limit")
 	OpenRouterKeyTypeKey              = attribute.Key("gram.openrouter.key.type")
@@ -1619,6 +1621,20 @@ func SlogOpenRouterBackfillScanned(v int64) slog.Attr {
 
 func SlogOpenRouterBackfillUpdated(v int64) slog.Attr {
 	return slog.Int64(string(OpenRouterBackfillUpdatedKey), v)
+}
+
+func EmbeddingInputCount(v int) attribute.KeyValue {
+	return EmbeddingInputCountKey.Int(v)
+}
+func SlogEmbeddingInputCount(v int) slog.Attr {
+	return slog.Int(string(EmbeddingInputCountKey), v)
+}
+
+func EmbeddingTruncatedInputCount(v int) attribute.KeyValue {
+	return EmbeddingTruncatedInputCountKey.Int(v)
+}
+func SlogEmbeddingTruncatedInputCount(v int) slog.Attr {
+	return slog.Int(string(EmbeddingTruncatedInputCountKey), v)
 }
 
 func OpenRouterKeyLimit(v int) attribute.KeyValue { return OpenRouterKeyLimitKey.Int(v) }

@@ -10,9 +10,11 @@ import (
 	"net/http"
 	"slices"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/tiktoken-go/tokenizer"
 	"go.opentelemetry.io/otel/trace"
 
 	or_base "github.com/OpenRouterTeam/go-sdk"
@@ -37,7 +39,15 @@ type TelemetryLogger interface {
 
 const (
 	DefaultChatModel = "anthropic/claude-opus-5"
+
+	openAITextEmbedding3Small     = "openai/text-embedding-3-small"
+	maxOpenAIEmbeddingInputTokens = 8_000
+	legacyMaxEmbeddingInputBytes  = 24_000
 )
+
+var loadOpenAIEmbeddingCodec = sync.OnceValues(func() (tokenizer.Codec, error) {
+	return tokenizer.Get(tokenizer.Cl100kBase)
+})
 
 // ChatClient is the single HTTP client for all OpenRouter communication.
 // It applies pluggable strategies for message capture and usage tracking.
@@ -863,6 +873,75 @@ func completionTelemetryIdentity(source string) (resourceURN, normalizedSource s
 	}
 }
 
+func limitEmbeddingInputs(model string, inputs []string) ([]string, int, error) {
+	if model == openAITextEmbedding3Small {
+		return limitOpenAIEmbeddingInputs(inputs)
+	}
+
+	var limited []string
+	truncatedCount := 0
+	for i, input := range inputs {
+		if len(input) <= legacyMaxEmbeddingInputBytes {
+			continue
+		}
+		if limited == nil {
+			limited = slices.Clone(inputs)
+		}
+		limited[i] = input[:legacyMaxEmbeddingInputBytes]
+		truncatedCount++
+	}
+	if limited == nil {
+		return inputs, 0, nil
+	}
+	return limited, truncatedCount, nil
+}
+
+func limitOpenAIEmbeddingInputs(inputs []string) ([]string, int, error) {
+	var (
+		codec          tokenizer.Codec
+		limited        []string
+		truncatedCount int
+	)
+
+	for i, input := range inputs {
+		// A tokenizer cannot emit more tokens than there are input bytes.
+		if len(input) <= maxOpenAIEmbeddingInputTokens {
+			continue
+		}
+
+		if codec == nil {
+			var err error
+			codec, err = loadOpenAIEmbeddingCodec()
+			if err != nil {
+				return nil, 0, fmt.Errorf("load OpenAI embedding tokenizer: %w", err)
+			}
+		}
+
+		tokenIDs, _, err := codec.Encode(input)
+		if err != nil {
+			return nil, 0, fmt.Errorf("tokenize embedding input %d: %w", i, err)
+		}
+		if len(tokenIDs) <= maxOpenAIEmbeddingInputTokens {
+			continue
+		}
+
+		truncated, err := codec.Decode(tokenIDs[:maxOpenAIEmbeddingInputTokens])
+		if err != nil {
+			return nil, 0, fmt.Errorf("decode truncated embedding input %d: %w", i, err)
+		}
+		if limited == nil {
+			limited = slices.Clone(inputs)
+		}
+		limited[i] = truncated
+		truncatedCount++
+	}
+
+	if limited == nil {
+		return inputs, 0, nil
+	}
+	return limited, truncatedCount, nil
+}
+
 func (c *ChatClient) CreateEmbeddings(ctx context.Context, orgID string, model string, inputs []string, opts ...EmbeddingOption) ([][]float32, error) {
 	var resolved EmbeddingOptions
 	for _, opt := range opts {
@@ -886,19 +965,19 @@ func (c *ChatClient) createEmbeddings(ctx context.Context, orgID string, model s
 		return nil, fmt.Errorf("at least one input is required")
 	}
 
-	// Truncate inputs that exceed token limits
-	// Embedding models have 8192 token limit, using ~3 chars/token as conservative estimate
-	const maxChars = 24_000
-	truncatedInputs := make([]string, len(inputs))
-	for i, input := range inputs {
-		if len(input) > maxChars {
-			c.logger.WarnContext(ctx, fmt.Sprintf("truncating input for embedding, orgID: %s, model: %s, input length: %d", orgID, model, len(input)))
-			truncatedInputs[i] = input[:maxChars]
-		} else {
-			truncatedInputs[i] = input
-		}
+	inputs, truncatedCount, err := limitEmbeddingInputs(model, inputs)
+	if err != nil {
+		return nil, err
 	}
-	inputs = truncatedInputs
+	if truncatedCount > 0 {
+		c.logger.WarnContext(
+			ctx,
+			"truncated oversized embedding inputs",
+			attr.SlogGenAIRequestModel(model),
+			attr.SlogEmbeddingInputCount(len(inputs)),
+			attr.SlogEmbeddingTruncatedInputCount(truncatedCount),
+		)
+	}
 
 	orClient := or_base.New(or_base.WithSecurity(openrouterKey))
 	result, err := orClient.Embeddings.Generate(ctx, or_operations.CreateEmbeddingsRequest{
@@ -911,7 +990,7 @@ func (c *ChatClient) createEmbeddings(ctx context.Context, orgID string, model s
 		InputType:      nil,
 	})
 	if err != nil {
-		return nil, fmt.Errorf("create embeddings error: %w", err)
+		return nil, fmt.Errorf("create embeddings error: %w", classifySDKError(ctx, err))
 	}
 
 	// The new SDK returns errors via err, not via HTTPMeta
