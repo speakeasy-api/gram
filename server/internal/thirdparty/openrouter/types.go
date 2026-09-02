@@ -288,10 +288,13 @@ type ChunkChoice struct {
 
 // StreamingChunk represents a streaming response chunk from OpenAI
 type StreamingChunk struct {
-	ID                string        `json:"id"`
-	Object            string        `json:"object"`
-	Created           int64         `json:"created"`
-	Model             string        `json:"model"`
+	ID      string `json:"id"`
+	Object  string `json:"object"`
+	Created int64  `json:"created"`
+	Model   string `json:"model"`
+
+	// Provider is the exact provider identity reported for this chunk.
+	Provider          string        `json:"provider,omitempty"`
 	SystemFingerprint string        `json:"system_fingerprint"`
 	Choices           []ChunkChoice `json:"choices"`
 	Usage             *Usage        `json:"usage"`
@@ -332,10 +335,13 @@ type GramMetadata struct {
 
 // OpenAIChatResponse represents the response structure from OpenAI for non-streaming responses
 type OpenAIChatResponse struct {
-	ID           string           `json:"id"`
-	Object       string           `json:"object"`
-	Created      int64            `json:"created"`
-	Model        string           `json:"model"`
+	ID      string `json:"id"`
+	Object  string `json:"object"`
+	Created int64  `json:"created"`
+	Model   string `json:"model"`
+
+	// Provider is the exact provider identity reported for this completion.
+	Provider     string           `json:"provider,omitempty"`
 	Choices      []ResponseChoice `json:"choices"`
 	Usage        *Usage           `json:"usage,omitempty"`
 	GramMetadata *GramMetadata    `json:"gram_metadata,omitempty"`

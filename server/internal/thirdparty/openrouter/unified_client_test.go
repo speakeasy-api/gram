@@ -206,6 +206,7 @@ func TestChatClient_GetCompletion(t *testing.T) {
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write([]byte(`{
 			"id": "msg_123",
+			"provider": "Amazon Bedrock",
 			"model": "openai/gpt-5.4",
 			"choices": [{
 				"message": {
@@ -280,6 +281,7 @@ func TestChatClient_GetCompletion(t *testing.T) {
 	// Verify response
 	assert.Equal(t, "msg_123", resp.MessageID)
 	assert.Equal(t, "openai/gpt-5.4", resp.Model)
+	assert.Equal(t, "Amazon Bedrock", resp.Provider)
 	assert.Equal(t, "Hello, world!", resp.Content)
 	assert.Equal(t, 10, resp.Usage.PromptTokens)
 	assert.Equal(t, 5, resp.Usage.CompletionTokens)
@@ -317,6 +319,7 @@ func TestChatClient_GetCompletion(t *testing.T) {
 
 	// Verify captured data - inline usage payload flows through to the tracker.
 	assert.Equal(t, "msg_123", captureStrategy.capturedResponse.MessageID)
+	assert.Equal(t, "Amazon Bedrock", captureStrategy.capturedResponse.Provider)
 	require.NotNil(t, trackingStrategy.usage)
 	assert.Equal(t, "openai/gpt-5.4", trackingStrategy.usage.Model)
 	assert.Equal(t, 10, trackingStrategy.usage.TokensPrompt)
@@ -361,7 +364,7 @@ func TestChatClient_GetCompletionStream(t *testing.T) {
 		}
 
 		// Send initial chunk with ID and model
-		_, _ = fmt.Fprintf(w, "data: {\"id\":\"msg_456\",\"model\":\"openai/gpt-5.4\",\"choices\":[{\"delta\":{\"content\":\"Hello\"}}]}\n\n")
+		_, _ = fmt.Fprintf(w, "data: {\"id\":\"msg_456\",\"model\":\"openai/gpt-5.4\",\"provider\":\"Amazon Bedrock\",\"choices\":[{\"delta\":{\"content\":\"Hello\"}}]}\n\n")
 		flusher.Flush()
 
 		// Send content chunk
@@ -469,6 +472,7 @@ func TestChatClient_GetCompletionStream(t *testing.T) {
 	// Verify captured data
 	assert.Equal(t, "msg_456", captureStrategy.capturedResponse.MessageID)
 	assert.Equal(t, "openai/gpt-5.4", captureStrategy.capturedResponse.Model)
+	assert.Equal(t, "Amazon Bedrock", captureStrategy.capturedResponse.Provider)
 	assert.Equal(t, "Hello streaming", captureStrategy.capturedResponse.Content)
 	assert.Equal(t, 10, captureStrategy.capturedResponse.Usage.PromptTokens)
 	assert.Equal(t, 5, captureStrategy.capturedResponse.Usage.CompletionTokens)
