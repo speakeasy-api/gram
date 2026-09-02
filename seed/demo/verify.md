@@ -98,6 +98,15 @@ Connector` appears under **Inactive** with no connections. Its row menu's
     **System**, follows the bounded row's deadline, and exposes no internal note
     in the organization-visible audit snapshot.
 
+13. **Gateway overview Activity** — open MCP → **Acme Agent Gateway** → Overview.
+    The Activity section shows non-zero tool calls over the last 7 days, a
+    Gateway tool usage chart with all four tools populated, the three discovery tools
+    decreasing (list_servers > describe_server > describe_tools) and
+    execute_tool counting the member calls, and a Calls-by-member
+    table listing Acme Support Tools, Acme Ops, Linear, and Slack with Acme Ops
+    carrying most of the errors. Back on the MCP listing, the gateway card
+    shows no "never used" marker.
+
 ## On failure
 
 Fix the seed SQL (see rules in `PAGES.md`), then re-run the target that owns
