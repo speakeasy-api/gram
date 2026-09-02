@@ -46,7 +46,7 @@ const (
 // signalRelay resolves and caches customer-defined OTLP destinations, then
 // delivers one signal's protobuf export requests to its configured endpoint.
 type signalRelay struct {
-	readReplica      *pgxpool.Pool
+	db               *pgxpool.Pool
 	encryptionClient *encryption.Client
 	policy           *guardian.Policy
 	endpointPath     string
@@ -95,14 +95,14 @@ func (e *relayExportError) Unwrap() error {
 }
 
 func newSignalRelay(
-	readReplica *pgxpool.Pool,
+	db *pgxpool.Pool,
 	encryptionClient *encryption.Client,
 	policy *guardian.Policy,
 	endpointPath string,
 	signalName string,
 ) *signalRelay {
 	return &signalRelay{
-		readReplica:      readReplica,
+		db:               db,
 		encryptionClient: encryptionClient,
 		policy:           policy,
 		endpointPath:     endpointPath,
@@ -160,7 +160,7 @@ func relayRouteLoadKey(key relayRouteKey) string {
 }
 
 func (r *signalRelay) loadDestination(ctx context.Context, key relayRouteKey) (*relayDestination, error) {
-	config, err := dataexportsrepo.New(r.readReplica).GetActiveOtelRouteDestination(ctx, dataexportsrepo.GetActiveOtelRouteDestinationParams{
+	config, err := dataexportsrepo.New(r.db).GetActiveOtelRouteDestination(ctx, dataexportsrepo.GetActiveOtelRouteDestinationParams{
 		OrganizationID: key.organizationID,
 		ProjectID:      key.projectID,
 		DataSource:     relayDataSourceProductTelemetry,
