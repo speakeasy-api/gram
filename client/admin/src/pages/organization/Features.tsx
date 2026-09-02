@@ -60,6 +60,13 @@ const PRODUCT_FEATURES: FeatureDefinition[] = [
       "Allows this organization to authenticate to and use Platform MCP, including manual setup. Disabling it denies runtime access without removing existing setup records.",
   },
   {
+    featureName: "network_ingress",
+    enabledKey: "network_ingress_enabled",
+    label: "Private Network Ingress",
+    description:
+      "Staff-managed entitlement for private MCP ingress. Provider changes still require organization-targeted rollout clearance and infrastructure readiness.",
+  },
+  {
     featureName: "remote_session_auto_refresh",
     enabledKey: "remote_session_auto_refresh_enabled",
     label: "Automatic Remote Session Refresh",

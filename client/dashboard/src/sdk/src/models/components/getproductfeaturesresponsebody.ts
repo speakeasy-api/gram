@@ -46,6 +46,10 @@ export type GetProductFeaturesResponseBody = {
    */
   logsEnabled: boolean;
   /**
+   * Whether the organization has the staff-managed private network ingress entitlement
+   */
+  networkIngressEnabled: boolean;
+  /**
    * Whether the organization can use the Gram Platform MCP capability
    */
   platformMcpEnabled: boolean;
@@ -102,6 +106,7 @@ export const GetProductFeaturesResponseBody$inboundSchema: z.ZodMiniType<
     hooks_browser_login_enabled: z.boolean(),
     hooks_fail_open_enabled: z.boolean(),
     logs_enabled: z.boolean(),
+    network_ingress_enabled: z.boolean(),
     platform_mcp_enabled: z.boolean(),
     remote_session_auto_refresh_enabled: z.boolean(),
     remote_session_auto_refresh_enforced_enabled: z.boolean(),
@@ -126,6 +131,7 @@ export const GetProductFeaturesResponseBody$inboundSchema: z.ZodMiniType<
       "hooks_browser_login_enabled": "hooksBrowserLoginEnabled",
       "hooks_fail_open_enabled": "hooksFailOpenEnabled",
       "logs_enabled": "logsEnabled",
+      "network_ingress_enabled": "networkIngressEnabled",
       "platform_mcp_enabled": "platformMcpEnabled",
       "remote_session_auto_refresh_enabled": "remoteSessionAutoRefreshEnabled",
       "remote_session_auto_refresh_enforced_enabled":

@@ -81,6 +81,9 @@ type GetProductFeaturesResponseBody struct {
 	// sharing links, move reporting with lineage, and picker title enrichment via
 	// the device agent
 	SessionPortabilityEnabled *bool `form:"session_portability_enabled,omitempty" json:"session_portability_enabled,omitempty" xml:"session_portability_enabled,omitempty"`
+	// Whether the organization has the staff-managed private network ingress
+	// entitlement
+	NetworkIngressEnabled *bool `form:"network_ingress_enabled,omitempty" json:"network_ingress_enabled,omitempty" xml:"network_ingress_enabled,omitempty"`
 	// Whether the organization uses the device agent (any device has polled
 	// agent.getPlugins). Derived from device-agent syncs, not an admin-settable
 	// feature.
@@ -694,6 +697,7 @@ func NewGetProductFeaturesResultOK(body *GetProductFeaturesResponseBody) *featur
 		RemoteSessionAutoRefreshEnforcedEnabled: *body.RemoteSessionAutoRefreshEnforcedEnabled,
 		ConsentToolFilteringEnabled:             *body.ConsentToolFilteringEnabled,
 		SessionPortabilityEnabled:               *body.SessionPortabilityEnabled,
+		NetworkIngressEnabled:                   *body.NetworkIngressEnabled,
 		DeviceAgent:                             *body.DeviceAgent,
 	}
 
@@ -1206,6 +1210,9 @@ func ValidateGetProductFeaturesResponseBody(body *GetProductFeaturesResponseBody
 	}
 	if body.SessionPortabilityEnabled == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("session_portability_enabled", "body"))
+	}
+	if body.NetworkIngressEnabled == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("network_ingress_enabled", "body"))
 	}
 	if body.DeviceAgent == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("device_agent", "body"))

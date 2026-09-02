@@ -1,14 +1,14 @@
-import { QueryClient } from "@tanstack/react-query";
-import { cleanup, fireEvent, screen, waitFor } from "@testing-library/react";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-
-import { organizationFeaturesQuery } from "@/lib/adminQueries";
 import type {
   AdminOrganizationChatAnalysisSettings,
   AdminOrganizationFeatures,
 } from "@/lib/gramAdminApi";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { cleanup, fireEvent, screen, waitFor } from "@testing-library/react";
+
 import { Features } from "@/pages/organization/Features";
+import { QueryClient } from "@tanstack/react-query";
 import { anOrganization } from "@/test/fixtures";
+import { organizationFeaturesQuery } from "@/lib/adminQueries";
 import { renderWithApp } from "@/test/harness";
 
 const mocks = vi.hoisted(() => ({
@@ -39,6 +39,7 @@ const FEATURES: AdminOrganizationFeatures = {
   customer_managed_encryption_keys_enabled: false,
   custom_model_keys_enabled: true,
   platform_mcp_enabled: true,
+  network_ingress_enabled: false,
   remote_session_auto_refresh_enabled: false,
   session_portability_enabled: false,
   sso_enabled: true,
@@ -85,6 +86,7 @@ describe("Features", () => {
       "Customer-Managed Encryption Keys",
       "Custom Model Provider Keys",
       "Platform MCP access",
+      "Private Network Ingress",
       "Automatic Remote Session Refresh",
       "SSO",
       "SCIM",
