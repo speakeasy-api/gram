@@ -60,19 +60,27 @@ const memberColumns: Column<MemberUsageRow>[] = [
   {
     key: "lastCalledAt",
     header: "Last call",
-    width: "132px",
-    render: (row) => (
-      <Text muted className="whitespace-nowrap">
-        {row.lastCalledAt
-          ? row.lastCalledAt.toLocaleString([], {
-              month: "short",
-              day: "numeric",
-              hour: "numeric",
-              minute: "2-digit",
-            })
-          : "—"}
-      </Text>
-    ),
+    // Sized to content: a localized timestamp has no fixed width.
+    width: "auto",
+    render: (row) => {
+      const label = row.lastCalledAt
+        ? row.lastCalledAt.toLocaleString([], {
+            month: "short",
+            day: "numeric",
+            hour: "numeric",
+            minute: "2-digit",
+          })
+        : "—";
+      return (
+        <Text
+          muted
+          className="block truncate whitespace-nowrap"
+          title={row.lastCalledAt?.toLocaleString()}
+        >
+          {label}
+        </Text>
+      );
+    },
   },
 ];
 
