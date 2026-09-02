@@ -10,7 +10,6 @@ import (
 	"net/http"
 	"slices"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -44,10 +43,6 @@ const (
 	maxOpenAIEmbeddingInputTokens = 8_000
 	legacyMaxEmbeddingInputBytes  = 24_000
 )
-
-var loadOpenAIEmbeddingCodec = sync.OnceValues(func() (tokenizer.Codec, error) {
-	return tokenizer.Get(tokenizer.Cl100kBase)
-})
 
 // ChatClient is the single HTTP client for all OpenRouter communication.
 // It applies pluggable strategies for message capture and usage tracking.
@@ -897,8 +892,11 @@ func limitEmbeddingInputs(model string, inputs []string) ([]string, int, error) 
 }
 
 // SelectEmbeddingInputFallbacks selects the first representation for each
-// input that fits the model's per-input token limit. If every representation
-// is oversized, it returns the final fallback for the client to truncate.
+// input that fits the model's per-input token limit. Selection is currently
+// supported only for openai/text-embedding-3-small; other models are returned
+// unchanged because their tokenizer and token limit are not declared here. If
+// every representation is oversized, the final fallback is returned for the
+// client to truncate.
 func SelectEmbeddingInputFallbacks(model string, inputs []string, inputFallbacks [][]string) ([]string, error) {
 	if model != openAITextEmbedding3Small || len(inputFallbacks) == 0 {
 		return inputs, nil
@@ -989,7 +987,7 @@ func embeddingInputTokensOverLimit(codec *tokenizer.Codec, input string, index i
 	}
 
 	if *codec == nil {
-		loaded, err := loadOpenAIEmbeddingCodec()
+		loaded, err := tokenizer.Get(tokenizer.Cl100kBase)
 		if err != nil {
 			return nil, false, fmt.Errorf("load OpenAI embedding tokenizer: %w", err)
 		}

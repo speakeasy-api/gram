@@ -2,6 +2,7 @@ package openrouter
 
 import (
 	"strings"
+	"sync"
 	"testing"
 	"unicode/utf8"
 
@@ -59,10 +60,51 @@ func TestLimitEmbeddingInputs_OtherModelsPreserveLegacyByteLimit(t *testing.T) {
 	t.Parallel()
 
 	input := strings.Repeat("x", legacyMaxEmbeddingInputBytes+1)
-	limited, truncatedCount, err := limitEmbeddingInputs("qwen/qwen3-embedding-8b", []string{input})
+	selected, err := SelectEmbeddingInputFallbacks(
+		"qwen/qwen3-embedding-8b",
+		[]string{input},
+		[][]string{{"fallback"}},
+	)
+	require.NoError(t, err)
+	require.Equal(t, input, selected[0])
+
+	limited, truncatedCount, err := limitEmbeddingInputs("qwen/qwen3-embedding-8b", selected)
 	require.NoError(t, err)
 	require.Equal(t, 1, truncatedCount)
 	require.Len(t, limited[0], legacyMaxEmbeddingInputBytes)
+}
+
+func TestLimitEmbeddingInputs_OpenAIDecodesConcurrently(t *testing.T) {
+	t.Parallel()
+
+	input := strings.Repeat("😀", maxOpenAIEmbeddingInputTokens)
+	type result struct {
+		output         string
+		truncatedCount int
+		err            error
+	}
+
+	const workers = 16
+	results := make(chan result, workers)
+	var wg sync.WaitGroup
+	for range workers {
+		wg.Go(func() {
+			limited, truncatedCount, err := limitEmbeddingInputs(openAITextEmbedding3Small, []string{input})
+			var output string
+			if len(limited) > 0 {
+				output = limited[0]
+			}
+			results <- result{output: output, truncatedCount: truncatedCount, err: err}
+		})
+	}
+	wg.Wait()
+	close(results)
+
+	for result := range results {
+		require.NoError(t, result.err)
+		require.Equal(t, 1, result.truncatedCount)
+		require.True(t, utf8.ValidString(result.output))
+	}
 }
 
 func TestSelectEmbeddingInputFallbacks_OpenAIUsesOrderedFallbacks(t *testing.T) {

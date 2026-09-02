@@ -190,7 +190,11 @@ func classifySDKError(ctx context.Context, err error) error {
 	if !ok {
 		return err
 	}
-	return classifyHTTPError(ctx, status, http.Header{}, []byte(err.Error()))
+	header := http.Header{}
+	if apiErr, found := errors.AsType[*sdkerrors.APIError](err); found && apiErr.RawResponse != nil {
+		header = apiErr.RawResponse.Header
+	}
+	return classifyHTTPError(ctx, status, header, []byte(err.Error()))
 }
 
 func sdkErrorStatus(err error) (int, bool) {
@@ -239,7 +243,7 @@ func sdkErrorStatus(err error) (int, bool) {
 	if _, ok := errors.AsType[*sdkerrors.ProviderOverloadedResponseError](err); ok {
 		return 529, true
 	}
-	if apiErr, ok := errors.AsType[*sdkerrors.APIError](err); ok {
+	if apiErr, ok := errors.AsType[*sdkerrors.APIError](err); ok && apiErr.StatusCode >= http.StatusBadRequest {
 		return apiErr.StatusCode, true
 	}
 	return 0, false
