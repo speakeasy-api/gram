@@ -1,4 +1,4 @@
-h1:MU+PxXlyWSzXJcLArncH1k8LYWhbjOc/ppbHEOnRm70=
+h1:IWQHUOtLdQ5R1RqY4bIr/w0kdKB9mNLuZ2gMg4BN/W0=
 20250502122425_initial-tables.sql h1:Hu3O60/bB4fjZpUay8FzyOjw6vngp087zU+U/wVKn7k=
 20250502130852_initial-indexes.sql h1:oYbnwi9y9PPTqu7uVbSPSALhCY8XF3rv03nDfG4b7mo=
 20250502154250_relax-http-security-fields.sql h1:0+OYIDq7IHmx7CP5BChVwfpF2rOSrRDxnqawXio2EVo=
@@ -380,3 +380,4 @@ h1:MU+PxXlyWSzXJcLArncH1k8LYWhbjOc/ppbHEOnRm70=
 20260831170736_tunneled-mcp-server-resource-identifier.sql h1:knIZQZflX4azED7sFXe+uPiJJexkH2eTDfteUGnaKXg=
 20260831182126_aim-78-remote-session-client-jwks.sql h1:s39s09GZ0Zjh20gDECQj9ZmkSOsXZsHxpADmdM8uRrI=
 20260901222548_remote-session-issuer-tunnel-binding.sql h1:3JREClrlXOmZInBZO8aup9+fz/QjQka7XxTuJmGnzjA=
+20260902173039_mcp-servers-one-wrapper-per-toolset.sql h1:ndJSqB0yiPWZcnh1ruC+63K4p4NuaS6kilmnBvxc0UA=
