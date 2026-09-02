@@ -2,18 +2,21 @@ package chat_test
 
 import (
 	"context"
+	"slices"
 	"testing"
 
 	or "github.com/OpenRouterTeam/go-sdk/models/components"
 	"github.com/OpenRouterTeam/go-sdk/optionalnullable"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
+	meteringv1 "github.com/speakeasy-api/gram/infra/gen/gram/metering/v1"
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/assets/assetstest"
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/chat"
 	"github.com/speakeasy-api/gram/server/internal/chat/repo"
+	"github.com/speakeasy-api/gram/server/internal/metering"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
@@ -112,6 +115,72 @@ func listAllMessages(t *testing.T, ctx context.Context, conn *pgxpool.Pool, chat
 	})
 	require.NoError(t, err)
 	return rows
+}
+
+func assistantStorageReading(t *testing.T, ti *chatTestInstance, chatID, projectID uuid.UUID) *meteringv1.MeterReading {
+	t.Helper()
+
+	messages := listAllMessages(t, t.Context(), ti.conn, chatID, projectID)
+	assistantID := uuid.Nil
+	for _, message := range slices.Backward(messages) {
+		if message.Role == "assistant" {
+			assistantID = message.ID
+			break
+		}
+	}
+	require.NotEqual(t, uuid.Nil, assistantID)
+
+	operationID := "chat_message:" + assistantID.String()
+	for _, reading := range meterMessages(t, ti) {
+		if reading.GetOperationId() == operationID {
+			return reading
+		}
+	}
+	require.FailNow(t, "assistant storage reading not found", operationID)
+	return nil
+}
+
+func TestCaptureMessage_PropagatesReportedProviderToStorageReading(t *testing.T) {
+	t.Parallel()
+
+	ti := newTestChatService(t)
+	s := newCaptureStrategy(t, ti.conn)
+	chatID := uuid.New()
+	response := makeResponse("provider attributed")
+	response.Provider = "Amazon Bedrock"
+
+	runTurn(
+		t,
+		t.Context(),
+		s,
+		makeRequest(chatID, ti.projectID, ti.orgID, openrouter.CreateMessageUser("Hello")),
+		response,
+	)
+
+	reading := assistantStorageReading(t, ti, chatID, ti.projectID)
+	require.Equal(t, "Amazon Bedrock", reading.GetAttributes()[metering.AttributeProvider])
+}
+
+func TestCaptureMessage_OmitsUnknownProviderFromStorageReading(t *testing.T) {
+	t.Parallel()
+
+	ti := newTestChatService(t)
+	s := newCaptureStrategy(t, ti.conn)
+	chatID := uuid.New()
+	response := makeResponse("provider unknown")
+	response.Model = "anthropic/claude-haiku-4.5"
+	response.Provider = ""
+
+	runTurn(
+		t,
+		t.Context(),
+		s,
+		makeRequest(chatID, ti.projectID, ti.orgID, openrouter.CreateMessageUser("Hello")),
+		response,
+	)
+
+	reading := assistantStorageReading(t, ti, chatID, ti.projectID)
+	require.NotContains(t, reading.GetAttributes(), metering.AttributeProvider)
 }
 
 // Clean append: reload with full history + new message should insert only the
