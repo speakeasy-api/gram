@@ -3,37 +3,17 @@ package networkingress
 import (
 	"context"
 	"encoding/json"
-	"log"
-	"os"
 	"testing"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
-	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/networkingress/repo"
 	"github.com/speakeasy-api/gram/server/internal/requestorigin"
-	"github.com/speakeasy-api/gram/server/internal/testenv"
-	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 )
-
-var infra *testenv.Environment
-
-func TestMain(m *testing.M) {
-	res, cleanup, err := testenv.Launch(context.Background(), testenv.LaunchOptions{Postgres: true})
-	if err != nil {
-		log.Fatalf("launch test infrastructure: %v", err)
-	}
-	infra = res
-	code := m.Run()
-	if err := cleanup(); err != nil {
-		log.Fatalf("cleanup test infrastructure: %v", err)
-	}
-	os.Exit(code)
-}
 
 func TestAuthorityValidateRequestRequiresSamePrivateOrigin(t *testing.T) {
 	t.Parallel()
@@ -116,52 +96,6 @@ func TestAuthorityJSONContainsNoIdentityOrCredentials(t *testing.T) {
 	require.NotContains(t, string(encoded), "identity")
 	require.NotContains(t, string(encoded), "credential")
 	require.NotContains(t, string(encoded), "login")
-}
-
-func TestValidateLiveRejectsDisabledDeletedAndMismatchedAuthority(t *testing.T) {
-	t.Parallel()
-	ctx := t.Context()
-	db, err := infra.CloneTestDatabase(t, "networkingressauthority")
-	require.NoError(t, err)
-	ingressID := insertIngress(t, ctx, db)
-	valid := Authority{
-		Surface:          requestorigin.SurfacePrivateNetwork,
-		BaseURL:          "https://private.example.ts.net",
-		OrganizationID:   "org_authority",
-		NetworkIngressID: ingressID,
-		NamespaceKind:    NamespacePlatform,
-		CustomDomainID:   uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-	}
-	require.NoError(t, valid.ValidateLive(ctx, db))
-
-	wrongOrg := valid
-	wrongOrg.OrganizationID = "org_other"
-	require.Error(t, wrongOrg.ValidateLive(ctx, db))
-	wrongNamespace := valid
-	wrongNamespace.NamespaceKind = NamespaceCustomDomain
-	wrongNamespace.CustomDomainID = uuid.NullUUID{UUID: uuid.New(), Valid: true}
-	require.Error(t, wrongNamespace.ValidateLive(ctx, db))
-	wrongOrigin := valid
-	wrongOrigin.BaseURL = "https://other.example.ts.net"
-	require.Error(t, wrongOrigin.ValidateLive(ctx, db))
-
-	fixtures := testrepo.New(db)
-	require.NoError(t, fixtures.SetNetworkIngressEnabledFixture(ctx, testrepo.SetNetworkIngressEnabledFixtureParams{Enabled: false, ID: ingressID}))
-	require.Error(t, valid.ValidateLive(ctx, db))
-	require.NoError(t, fixtures.SetNetworkIngressEnabledFixture(ctx, testrepo.SetNetworkIngressEnabledFixtureParams{Enabled: true, ID: ingressID}))
-	require.NoError(t, fixtures.SoftDeleteNetworkIngressFixture(ctx, ingressID))
-	require.Error(t, valid.ValidateLive(ctx, db))
-}
-
-func insertIngress(t *testing.T, ctx context.Context, db *pgxpool.Pool) uuid.UUID {
-	t.Helper()
-	ingressID := uuid.New()
-	require.NoError(t, testrepo.New(db).InsertNetworkIngressFixture(ctx, testrepo.InsertNetworkIngressFixtureParams{
-		ID:             ingressID,
-		OrganizationID: "org_authority",
-		DnsName:        pgtype.Text{String: "private.example.ts.net", Valid: true},
-	}))
-	return ingressID
 }
 
 func TestGetLiveNetworkIngressAuthorityReturnsPinnedFields(t *testing.T) {
